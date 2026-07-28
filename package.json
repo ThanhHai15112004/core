@@ -8,9 +8,9 @@
     "node": ">=24.18.0 <25"
   },
   "scripts": {
-    "build": "node node_modules/typescript/bin/tsc -p tsconfig.json",
-    "start": "node dist/main.js",
-    "typecheck": "node node_modules/typescript/bin/tsc --noEmit -p tsconfig.json",
+    "build": "node -e \"const p = require('path').resolve(process.env.INIT_CWD || '.', 'node_modules/typescript/bin/tsc'); process.chdir(process.env.INIT_CWD || '.'); require(p);\"",
+    "start": "node -e \"const { pathToFileURL } = require('node:url'); const p = require('node:path').resolve(process.env.INIT_CWD || '.', 'dist/main.js'); import(pathToFileURL(p).href);\"",
+    "typecheck": "node -e \"const p = require('path').resolve(process.env.INIT_CWD || '.', 'node_modules/typescript/bin/tsc'); process.chdir(process.env.INIT_CWD || '.'); require(p);\" -- --noEmit",
     "check": "npm run typecheck && npm run build"
   },
   "devDependencies": {
