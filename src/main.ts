@@ -1,11 +1,27 @@
 import { NestFactory } from '@nestjs/core';
+import {
+  FastifyAdapter,
+  type NestFastifyApplication,
+} from '@nestjs/platform-fastify';
+
 import { AppModule } from './app.module.js';
 
-async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
-  const port = process.env.PORT ?? 3000;
-  await app.listen(port);
-  console.log(`NestJS application is running on port ${port}`);
+async function bootstrap(): Promise<void> {
+  const port = Number(process.env.PORT ?? 3000);
+
+  if (!Number.isInteger(port) || port <= 0) {
+    throw new Error('PORT must be a valid positive integer');
+  }
+
+  const app = await NestFactory.create<NestFastifyApplication>(
+    AppModule,
+    new FastifyAdapter(),
+  );
+
+  app.enableShutdownHooks();
+
+  await app.listen(port, '0.0.0.0');
+  console.log(`NestJS Fastify application is running on port ${port}`);
 }
 
-bootstrap();
+void bootstrap();
