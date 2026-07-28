@@ -8,9 +8,9 @@
     "node": ">=24.18.0 <25"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "node node_modules/typescript/bin/tsc -p tsconfig.json",
     "start": "node dist/main.js",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "node node_modules/typescript/bin/tsc --noEmit -p tsconfig.json",
     "check": "npm run typecheck && npm run build"
   },
   "devDependencies": {
