@@ -1,19 +1,20 @@
 {
   "name": "core",
   "version": "1.0.0",
-  "description": "",
-  "main": "dist/main.js",
-  "scripts": {
-    "build": "tsc",
-    "start": "node dist/main.js",
-    "dev": "tsc --watch"
+  "private": true,
+  "description": "Reusable Node.js foundation for small web applications",
+  "type": "module",
+  "engines": {
+    "node": ">=24.18.0 <25"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "commonjs",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/main.js",
+    "typecheck": "tsc --noEmit",
+    "check": "npm run typecheck && npm run build"
+  },
   "devDependencies": {
-    "@types/node": "^24.13.3",
-    "typescript": "^6.0.3"
+    "@types/node": "^24.0.0",
+    "typescript": "^6.0.0"
   }
 }
