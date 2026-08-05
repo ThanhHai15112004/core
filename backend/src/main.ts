@@ -1,8 +1,5 @@
 import { NestFactory } from '@nestjs/core';
-import {
-  FastifyAdapter,
-  type NestFastifyApplication,
-} from '@nestjs/platform-fastify';
+import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
 
 import { ApiModule } from './apps/api/api.module.js';
 
@@ -13,10 +10,7 @@ async function bootstrap(): Promise<void> {
     throw new Error('PORT must be a valid positive integer');
   }
 
-  const app = await NestFactory.create<NestFastifyApplication>(
-    ApiModule,
-    new FastifyAdapter(),
-  );
+  const app = await NestFactory.create<NestFastifyApplication>(ApiModule, new FastifyAdapter());
 
   app.enableShutdownHooks();
 
