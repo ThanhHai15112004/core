@@ -8,7 +8,7 @@
     "node": ">=22.0.0 <25"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "tsc -p tsconfig.build.json && tsc-alias",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "node dist/main.js",
     "dev": "nest start --watch",
@@ -48,6 +48,7 @@
     "ts-jest": "^29.2.5",
     "ts-loader": "^9.5.2",
     "ts-node": "^10.9.2",
+    "tsc-alias": "^1.9.1",
     "tsconfig-paths": "^4.2.0",
     "typescript": "^6.0.0",
     "typescript-eslint": "^8.20.0"
@@ -69,6 +70,14 @@
       ]
     },
     "moduleNameMapper": {
+      "^@apps/(.*)\\.js$": "<rootDir>/apps/$1",
+      "^@apps/(.*)$": "<rootDir>/apps/$1",
+      "^@packages/(.*)\\.js$": "<rootDir>/packages/$1",
+      "^@packages/(.*)$": "<rootDir>/packages/$1",
+      "^@modules/(.*)\\.js$": "<rootDir>/modules/$1",
+      "^@modules/(.*)$": "<rootDir>/modules/$1",
+      "^@project-modules/(.*)\\.js$": "<rootDir>/project-modules/$1",
+      "^@project-modules/(.*)$": "<rootDir>/project-modules/$1",
       "^(\\.{1,2}/.*)\\.js$": "$1"
     },
     "collectCoverageFrom": [
