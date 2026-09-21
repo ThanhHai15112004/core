@@ -1,18 +1,31 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import { CoreConfigService } from '@packages/config/index.js';
 import type { TokenPayload, UserIdentity } from '../contracts/auth.contract.js';
 import type { TokenVerificationStrategy } from '../strategies/jwt.strategy.js';
+import { SecretService } from './secret.service.js';
 
 @Injectable()
 export class TokenService implements TokenVerificationStrategy {
-  private readonly accessSecret: string;
+  private accessSecret: string;
 
-  constructor(private readonly configService: CoreConfigService) {
-    this.accessSecret = this.configService.auth.jwt.accessSecret;
+  constructor(
+    @Optional() private readonly configService?: CoreConfigService,
+    @Optional() private readonly secretService?: SecretService,
+  ) {
+    this.accessSecret = this.configService?.auth.jwt.accessSecret ?? '';
+  }
+
+  public async getAccessSecret(): Promise<string> {
+    if (this.secretService) {
+      const secret = await this.secretService.getSecret('jwt.accessSecret');
+      if (secret) return secret;
+    }
+    return this.accessSecret;
   }
 
   public async verify(token: string): Promise<TokenPayload | null> {
-    if (!token || !this.accessSecret) return null;
+    const secret = await this.getAccessSecret();
+    if (!token || !secret) return null;
     // Skeleton token parsing for base chassis
     return { sub: 'system-user', roles: ['user'] };
   }
