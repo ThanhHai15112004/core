@@ -1,63 +1,226 @@
-# Core
+# Core Framework
 
-Dự án **Core** - Cấu trúc nền tảng sử dụng Node.js & TypeScript.
+**Application Chassis — Khung gầm ứng dụng Node.js/TypeScript chuẩn sản xuất**
+
+Dự án **Core** cung cấp toàn bộ hạ tầng kỹ thuật cần thiết (Infrastructure & Cross-cutting Concerns) để bạn có thể cắm (plug-in) bất kỳ mã nguồn nghiệp vụ nào vào một cách nhanh chóng — mà không bao giờ phải viết lại hạ tầng từ đầu.
 
 ---
 
-## 📁 Cấu trúc thư mục (Directory Structure)
+## Tech Stack
+
+| Lớp | Công nghệ |
+| :--- | :--- |
+| **Runtime** | Node.js ≥ 22 (ESM `"type": "module"`) |
+| **Ngôn ngữ** | TypeScript 5.8+ (strict mode, NodeNext) |
+| **Backend Framework** | NestJS 11 + Fastify Adapter |
+| **ORM** | TypeORM 1.x — hỗ trợ MySQL, PostgreSQL, MSSQL, SQLite |
+| **Validation** | Zod v4 |
+| **Frontend** | React 19 + Vite 8 |
+| **Linter FE** | oxlint |
+| **Containerization** | Docker + Docker Compose v2 |
+| **Reverse Proxy** | Nginx (production) |
+| **SSL** | Let's Encrypt + Certbot |
+| **Package Manager** | npm (workspace) + pnpm (monorepo) |
+| **Git Hooks** | Husky + Commitlint + Lint-Staged |
+
+---
+
+## Cấu Trúc Thư Mục
 
 ```text
-.
-├── backend/            # NestJS Backend Application
-│   ├── src/            # Mã nguồn chính
-│   ├── test/           # Unit & E2E Tests
-│   └── package.json    # Package dependencies
-├── frontend/           # Frontend Application (React)
-├── .gitignore          # Cấu hình danh sách các file/thư mục git bỏ qua
-└── README.md           # Tài liệu hướng dẫn dự án
+core/
+├── .agents/                     # Quy tắc & hướng dẫn cho AI Agent
+├── backend/                     # Backend NestJS + Fastify
+│   ├── src/
+│   │   ├── apps/                  # 4 Runtime entrypoints độc lập
+│   │   │   ├── api/               #   HTTP API Server (:3005)
+│   │   │   ├── worker/            #   Message Queue Consumer
+│   │   │   ├── scheduler/         #   Cron Task Runner
+│   │   │   └── cli/               #   CLI Command Tool
+│   │   ├── packages/              # Core hạ tầng (domain-agnostic)
+│   │   │   ├── kernel/            #   Base classes, contracts, types
+│   │   │   ├── config/            #   Environment config (Fail-Fast)
+│   │   │   ├── http/              #   HTTP filter, interceptor, decorator
+│   │   │   ├── database/          #   TypeORM multi-driver
+│   │   │   ├── logging/           #   Structured logging (correlation-id, redaction)
+│   │   │   ├── security/          #   JWT Auth, SecretService (env/file driver)
+│   │   │   ├── messaging/         #   Message Queue publisher
+│   │   │   ├── cache/             #   Redis abstraction
+│   │   │   ├── storage/           #   Object storage (local/S3)
+│   │   │   ├── http-client/       #   Outbound HTTP client
+│   │   │   └── i18n/              #   Internationalization
+│   │   ├── modules/               # Modules nghiệp vụ dùng chung
+│   │   │   ├── health/            #   GET /api/v1/health
+│   │   │   └── system-ops/        #   Dashboard quản trị hạ tầng /api/v1/ops/*
+│   │   └── project-modules/       # Modules nghiệp vụ riêng của dự án (cắm vào)
+│   └── test/                    # Test suite (unit + feature)
+├── frontend/                    # React 19 + Vite 8
+│   └── src/
+│       ├── core/                  # UI + kỹ thuật dùng chung (copy được sang dự án khác)
+│       └── modules/               # UI nghiệp vụ (home, system-ops)
+├── docker/                      # Dockerfiles + Nginx config
+├── deploy/                      # Scripts VPS setup + systemd service
+├── docker-compose.yml
+├── docker-compose.dev.yml
+├── docker-compose.prod.yml
+├── docker-dev.sh                # Helper quản lý dev containers
+└── docker-prod.sh               # Helper 1-click deploy production
 ```
 
 ---
 
-## 🚀 Cài đặt & Khởi chạy Backend (Backend Getting Started)
+## Khởi Chạy Development
 
-### 1. Truy cập thư mục Backend
+### Yêu cầu
+- Docker & Docker Compose v2
+- MySQL và Redis đang chạy trên host (WSL2 hoặc máy local)
+
+### Bước 1: Tạo file cấu hình môi trường
 ```bash
-cd backend
+cp .env.docker.dev.example .env.docker.dev
 ```
 
-### 2. Cài đặt phụ thuộc (Install Dependencies)
+Chỉnh sửa `.env.docker.dev` — các giá trị quan trọng cần đổi:
+```env
+DB_DATABASE=core_db          # Tên database (phải tạo sẵn trong MySQL)
+DB_PASSWORD=your_password
+REDIS_PREFIX=core:
+JWT_ACCESS_SECRET=...        # Tối thiểu 32 ký tự (openssl rand -base64 32)
+JWT_REFRESH_SECRET=...       # Tối thiểu 32 ký tự, khác ACCESS
+```
+
+### Bước 2: Khởi động containers
 ```bash
-npm install
+./docker-dev.sh up
+```
+
+Truy cập:
+- **Backend API**: http://localhost:3005/api/v1/health
+- **System-Ops Dashboard**: http://localhost:3005/api/v1/ops/packages
+- **Frontend**: http://localhost:5175
+
+### Các lệnh Docker Dev thường dùng
+```bash
+./docker-dev.sh up                  # Khởi động toàn bộ (BE + FE)
+./docker-dev.sh up backend          # Chỉ khởi động backend
+./docker-dev.sh logs backend        # Xem log realtime
+./docker-dev.sh bash backend        # Vào shell container
+./docker-dev.sh restart backend     # Restart service
+./docker-dev.sh down                # Dừng và xóa containers
+./docker-dev.sh ps                  # Xem trạng thái
 ```
 
 ---
 
-## 🛠 Lệnh có sẵn cho Backend (Available Scripts)
+## Phát Triển Cục Bộ (Không Docker)
 
-Trong thư mục `backend/`, bạn có thể thực hiện các lệnh sau:
+```bash
+# Cài dependencies
+cd backend && npm install
+cd ../frontend && npm install
 
-- **Chế độ phát triển (`npm run dev` hoặc `npm run start:dev`)**:  
-  Khởi chạy NestJS ở chế độ Watch mode (tự động reload khi sửa code).
-  ```bash
-  npm run dev
-  # hoặc
-  npm run start:dev
-  ```
+# Chạy backend (cần file backend/.env.development)
+cd backend && npm run dev:api
 
-- **Biên dịch TypeScript (`npm run build`)**:  
-  Biên dịch các file mã nguồn `.ts` trong thư mục `src/` sang mã JavaScript trong thư mục `dist/`.
-  ```bash
-  npm run build
-  ```
+# Chạy frontend
+cd frontend && npm run dev
+```
 
-- **Khởi chạy sản phẩm (`npm start`)**:  
-  Chạy ứng dụng bằng Node.js từ thư mục `dist/main.js`.
-  ```bash
-  npm start
-  ```
+### Scripts Backend
+```bash
+npm run dev:api       # API HTTP server (watch mode)
+npm run dev:worker    # Worker (watch mode)
+npm run dev:scheduler # Scheduler (watch mode)
+npm run build         # Build production
+npm run typecheck     # TypeScript check
+npm run lint          # ESLint + auto-fix
+npm test              # Chạy toàn bộ tests
+npm run test:unit     # Chỉ Unit tests
+npm run test:feature  # Chỉ Feature/API tests
+npm run check         # lint + typecheck + test + build
+```
 
 ---
 
-## 📄 Giấy phép (License)
+## Deploy Production (VPS)
+
+### Bước 1: Chuẩn bị VPS (Ubuntu/Debian) — chạy 1 lần
+```bash
+sudo bash deploy/setup-vps.sh
+# Cài Docker, cấu hình UFW (22/80/443), tạo Swap 2GB
+```
+
+### Bước 2: Clone và cấu hình
+```bash
+git clone <repo-url> /var/www/core
+cd /var/www/core
+cp .env.docker.prod.example .env.docker.prod
+nano .env.docker.prod   # Điền DOMAIN_NAME, DB_*, JWT_*, CERTBOT_EMAIL
+```
+
+### Bước 3: Khởi động và cấp SSL
+```bash
+./docker-prod.sh up          # Build & khởi động toàn bộ
+./docker-prod.sh ssl-init    # Cấp SSL Let's Encrypt (chạy sau khi DNS trỏ đúng)
+```
+
+### Bước 4 (tùy chọn): Auto-start khi reboot
+```bash
+sudo cp deploy/core-framework.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable core-framework
+```
+
+### Các lệnh Docker Prod thường dùng
+```bash
+./docker-prod.sh status      # Trạng thái + RAM/CPU realtime
+./docker-prod.sh logs nginx  # Xem log nginx
+./docker-prod.sh restart backend
+./docker-prod.sh down
+```
+
+---
+
+## Thêm Nghiệp Vụ Mới
+
+### Backend — Tạo module nghiệp vụ
+1. Tạo thư mục `backend/src/project-modules/<ten-module>/`
+2. Xây dựng theo cấu trúc: `entities/`, `requests/`, `responses/`, `repositories/`, `services/`, `controllers/`, `<module>.module.ts`
+3. Đăng ký vào [`api.module.ts`](backend/src/apps/api/api.module.ts):
+   ```typescript
+   @Module({ imports: [..., YourModule] })
+   export class ApiModule {}
+   ```
+
+### Frontend — Tạo trang nghiệp vụ
+1. Tạo thư mục `frontend/src/modules/<ten-module>/pages/`, `components/`, `services/`
+2. Thêm vào [`App.tsx`](frontend/src/App.tsx) để điều hướng đến trang mới
+
+---
+
+## Kiến Trúc Nổi Bật
+
+### ManageablePackage Pattern
+Mỗi package hạ tầng tự báo cáo trạng thái (`healthy/warning/error`) về System-Ops dashboard thông qua interface `ManageablePackage`. Xem thêm tại [`.agents/AGENTS.md`](.agents/AGENTS.md) — Mục 12.
+
+### Multi-Runtime Architecture
+Cùng 1 codebase phục vụ 4 chế độ chạy độc lập: `api` (HTTP), `worker` (queue consumer), `scheduler` (cron), `cli` (command line).
+
+### Response Envelope chuẩn hóa
+```json
+{ "success": true, "statusCode": 200, "data": {}, "timestamp": "..." }
+{ "success": false, "statusCode": 404, "error": { "code": "...", "message": "..." } }
+```
+
+---
+
+## Tài Liệu Thêm
+
+- [`.agents/AGENTS.md`](.agents/AGENTS.md) — Hướng dẫn đầy đủ cho AI Assistant & Developer
+- [`backend/test/README.md`](backend/test/README.md) — Kiến trúc & quy chuẩn test
+
+---
+
+## Giấy Phép
+
 ISC License
