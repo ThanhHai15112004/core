@@ -1,4 +1,9 @@
-export type SecretDriver = 'env' | 'file' | 'vault' | 'custom';
+export enum SecretDriver {
+  ENV = 'env',
+  FILE = 'file',
+  VAULT = 'vault',
+  CUSTOM = 'custom',
+}
 
 export interface SecretOptions {
   /**

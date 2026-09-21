@@ -16,6 +16,7 @@ import { StorageModule } from '@packages/storage/index.js';
 import { HttpClientModule } from '@packages/http-client/index.js';
 import { I18nModule } from '@packages/i18n/index.js';
 import { HealthModule } from '@modules/health/index.js';
+import { SystemOpsModule } from '@modules/system-ops/index.js';
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { HealthModule } from '@modules/health/index.js';
     HttpClientModule,
     I18nModule,
     HealthModule,
+    SystemOpsModule,
   ],
   providers: [
     {

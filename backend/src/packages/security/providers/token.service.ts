@@ -3,6 +3,7 @@ import { CoreConfigService } from '@packages/config/index.js';
 import type { TokenPayload, UserIdentity } from '../contracts/auth.contract.js';
 import type { TokenVerificationStrategy } from '../strategies/jwt.strategy.js';
 import { SecretService } from './secret.service.js';
+import { DEFAULT_JWT_ACCESS_SECRET_KEY } from '../constants/secret.constant.js';
 
 @Injectable()
 export class TokenService implements TokenVerificationStrategy {
@@ -17,7 +18,7 @@ export class TokenService implements TokenVerificationStrategy {
 
   public async getAccessSecret(): Promise<string> {
     if (this.secretService) {
-      const secret = await this.secretService.getSecret('jwt.accessSecret');
+      const secret = await this.secretService.getSecret(DEFAULT_JWT_ACCESS_SECRET_KEY);
       if (secret) return secret;
     }
     return this.accessSecret;

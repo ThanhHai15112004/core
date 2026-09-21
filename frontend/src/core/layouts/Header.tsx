@@ -1,35 +1,41 @@
 import React from 'react';
-import { APP_NAME } from '../constants/index';
+import { APP_NAME, NAVIGATION_ITEMS, type NavigationTabId } from '../constants/index';
 
-export const Header: React.FC = () => {
+interface HeaderProps {
+  activeTab?: NavigationTabId;
+  onTabChange?: (tab: NavigationTabId) => void;
+}
+
+export const Header: React.FC<HeaderProps> = ({ activeTab = 'home', onTabChange }) => {
   return (
-    <header className="glass" style={{ position: 'sticky', top: 0, zIndex: 100, padding: '16px 32px' }}>
-      <div style={{ maxWidth: '1200px', margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div style={{
-            width: '36px',
-            height: '36px',
-            borderRadius: '10px',
-            background: 'linear-gradient(135deg, #6366f1, #a855f7)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontWeight: 'bold',
-            color: '#fff',
-            fontSize: '18px',
-          }}>
+    <header className="glass header-root">
+      <div className="header-content">
+        <div
+          onClick={() => onTabChange?.('home')}
+          className="header-brand"
+        >
+          <div className="header-logo-badge">
             C
           </div>
-          <span style={{ fontSize: '20px', fontWeight: '700', letterSpacing: '-0.5px' }} className="gradient-text">
+          <span className="gradient-text header-brand-name">
             {APP_NAME}
           </span>
         </div>
 
-        <nav style={{ display: 'flex', gap: '24px', alignItems: 'center' }}>
-          <a href="#features" style={{ color: 'var(--text-muted)', textDecoration: 'none', fontWeight: '500', transition: 'var(--transition-fast)' }}>Features</a>
-          <a href="#architecture" style={{ color: 'var(--text-muted)', textDecoration: 'none', fontWeight: '500', transition: 'var(--transition-fast)' }}>Architecture</a>
-          <a href="#docs" style={{ color: 'var(--text-muted)', textDecoration: 'none', fontWeight: '500', transition: 'var(--transition-fast)' }}>Docs</a>
-          <button className="btn-primary" style={{ padding: '8px 18px', fontSize: '14px' }}>Get Started</button>
+        <nav className="header-nav">
+          {NAVIGATION_ITEMS.map((item) => {
+            const isActive = activeTab === item.id;
+            return (
+              <button
+                key={item.id}
+                onClick={() => onTabChange?.(item.id)}
+                className={`nav-tab-btn ${isActive ? 'nav-tab-btn-active' : ''}`}
+              >
+                <span>{item.icon}</span>
+                <span>{item.label}</span>
+              </button>
+            );
+          })}
         </nav>
       </div>
     </header>

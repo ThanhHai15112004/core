@@ -4,6 +4,11 @@ import path from 'node:path';
 import { Injectable, Optional } from '@nestjs/common';
 import type { SecretProvider } from '../contracts/secret-provider.contract.js';
 
+import {
+  DEFAULT_LINUX_SECRET_DIR,
+  DEFAULT_LOCAL_SECRET_DIR,
+} from '../constants/secret.constant.js';
+
 @Injectable()
 export class FileSecretProvider implements SecretProvider {
   private readonly secretDir: string;
@@ -13,12 +18,12 @@ export class FileSecretProvider implements SecretProvider {
       this.secretDir = path.resolve(customDir);
     } else if (process.env.SECRET_DIR) {
       this.secretDir = path.resolve(process.env.SECRET_DIR);
-    } else if (fs.existsSync('/run/secrets')) {
+    } else if (fs.existsSync(DEFAULT_LINUX_SECRET_DIR)) {
       // Chuẩn Linux Docker Swarm / Kubernetes Secrets mount
-      this.secretDir = '/run/secrets';
+      this.secretDir = DEFAULT_LINUX_SECRET_DIR;
     } else {
       // Local development fallback
-      this.secretDir = path.resolve(process.cwd(), 'secrets');
+      this.secretDir = path.resolve(process.cwd(), DEFAULT_LOCAL_SECRET_DIR);
     }
   }
 

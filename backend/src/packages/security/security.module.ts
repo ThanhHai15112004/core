@@ -6,6 +6,8 @@ import { SecretService } from './providers/secret.service.js';
 import { TokenService } from './providers/token.service.js';
 import { AuthGuard } from './guards/auth.guard.js';
 
+import { SecretDriver } from './types/secret.types.js';
+
 @Global()
 @Module({
   providers: [
@@ -15,7 +17,7 @@ import { AuthGuard } from './guards/auth.guard.js';
       provide: SECRET_PROVIDER,
       useFactory: (envProvider: EnvironmentSecretProvider, fileProvider: FileSecretProvider) => {
         const driver = process.env.SECRET_DRIVER?.toLowerCase();
-        if (driver === 'file') {
+        if (driver === SecretDriver.FILE) {
           return fileProvider;
         }
         return envProvider;
