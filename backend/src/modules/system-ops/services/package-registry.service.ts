@@ -6,6 +6,7 @@ import type {
 } from '@packages/kernel/index.js';
 import { CacheManageableAdapter } from '@packages/cache/index.js';
 import { LoggingManageableAdapter } from '@packages/logging/index.js';
+import { DatabaseManageableAdapter } from '@packages/database/index.js';
 
 export interface PackageSummaryDto {
   packageId: string;
@@ -23,12 +24,14 @@ export class PackageRegistryService implements OnModuleInit {
   constructor(
     private readonly cacheAdapter: CacheManageableAdapter,
     private readonly loggingAdapter: LoggingManageableAdapter,
+    private readonly databaseAdapter: DatabaseManageableAdapter,
   ) {}
 
   public onModuleInit(): void {
     // Đăng ký các adapter cốt lõi đã có
     this.register(this.cacheAdapter);
     this.register(this.loggingAdapter);
+    this.register(this.databaseAdapter);
   }
 
   /**

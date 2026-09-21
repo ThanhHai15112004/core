@@ -7,4 +7,5 @@ export * from './errors/app.exception.js';
 export * from './errors/domain.exception.js';
 export * from './types/result.type.js';
 export * from './types/manageable-package.enum.js';
+export * from './types/database-driver.enum.js';
 export * from './kernel.module.js';

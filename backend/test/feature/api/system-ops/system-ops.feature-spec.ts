@@ -48,6 +48,10 @@ describe('Feature: System Ops API (/ops/packages)', () => {
     const loggingPkg = body.data.find((p) => p.packageId === CorePackageId.LOGGING);
     expect(loggingPkg).toBeDefined();
     expect(loggingPkg?.category).toBe(PackageCategory.LOGGING);
+
+    const dbPkg = body.data.find((p) => p.packageId === CorePackageId.DATABASE);
+    expect(dbPkg).toBeDefined();
+    expect(dbPkg?.category).toBe(PackageCategory.DATABASE);
   });
 
   it('GET /ops/packages/:packageId should return single package details', async () => {

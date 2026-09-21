@@ -8,7 +8,7 @@
     "node": ">=22.0.0 <25"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json && tsc-alias",
+    "build": "rm -rf dist && tsc -p tsconfig.build.json && tsc-alias",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "format:check": "prettier --check \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "node dist/main.js",
@@ -38,8 +38,12 @@
     "@nestjs/config": "^4.0.4",
     "@nestjs/core": "^11.0.0",
     "@nestjs/platform-fastify": "^11.0.0",
+    "@nestjs/typeorm": "^12.0.1",
+    "mysql2": "^3.24.4",
+    "pg": "^8.23.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
+    "typeorm": "^1.1.1",
     "zod": "^4.4.3"
   },
   "devDependencies": {
@@ -52,6 +56,7 @@
     "@types/express": "^5.0.0",
     "@types/jest": "^29.5.14",
     "@types/node": "^24.0.0",
+    "@types/pg": "^8.23.1",
     "@types/supertest": "^6.0.2",
     "eslint": "^9.18.0",
     "eslint-config-prettier": "^10.1.8",
@@ -86,7 +91,9 @@
         {
           "useESM": true,
           "diagnostics": {
-            "ignoreCodes": [151002]
+            "ignoreCodes": [
+              151002
+            ]
           },
           "tsconfig": {
             "rootDir": "./",
