@@ -16,6 +16,12 @@ export async function bootstrapApi(): Promise<NestFastifyApplication> {
   const host = configService.app.host;
   const prefix = configService.app.apiPrefix;
 
+  app.enableCors({
+    origin: true,
+    methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
+    credentials: true,
+  });
+
   app.setGlobalPrefix(prefix);
   app.enableShutdownHooks();
 

@@ -1,0 +1,38 @@
+# ==============================================================================
+# Stage 1: Build React 19 Frontend bằng Vite
+# ==============================================================================
+FROM node:22-alpine AS builder
+
+WORKDIR /app
+
+# Copy các file cấu hình frontend
+COPY frontend/package*.json ./
+COPY frontend/tsconfig*.json ./
+COPY frontend/vite.config.ts ./
+COPY frontend/index.html ./
+
+# Cài đặt dependencies phục vụ build
+RUN npm install
+
+# Copy mã nguồn frontend
+COPY frontend/src ./src
+COPY frontend/public ./public 2>/dev/null || true
+
+# Nhận biến API URL lúc build (mặc định trỏ về /api/v1 tương đối qua Nginx)
+ARG VITE_API_BASE_URL=/api/v1
+ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
+
+# Biên dịch ra thư mục tĩnh dist/
+RUN npm run build
+
+# ==============================================================================
+# Stage 2: Đồng bộ file tĩnh ra Volume cho Nginx phục vụ
+# ==============================================================================
+FROM alpine:3.21
+
+WORKDIR /app
+
+COPY --from=builder /app/dist /app/dist
+
+# Khi container khởi động, copy code build sang volume chia sẻ và duy trì trạng thái
+CMD ["sh", "-c", "echo '📦 Đang đồng bộ Frontend dist ra Nginx volume...' && cp -rf /app/dist/* /var/www/frontend/ && echo '✅ Đồng bộ hoàn tất.' && tail -f /dev/null"]

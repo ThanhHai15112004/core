@@ -1,0 +1,25 @@
+# ==============================================================================
+# Systemd Service Tự Động Bật Core Framework Production Khi VPS Reboot
+# ==============================================================================
+# Cài đặt:
+#   sudo cp deploy/core-framework.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable core-framework
+# ==============================================================================
+
+[Unit]
+Description=Core Framework Production Docker Compose Application
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/var/www/core
+ExecStart=/usr/bin/docker compose -f docker-compose.prod.yml up -d
+ExecStop=/usr/bin/docker compose -f docker-compose.prod.yml down
+TimeoutStartSec=0
+
+[Install]
+WantedBy=multi-user.target

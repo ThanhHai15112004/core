@@ -1,0 +1,110 @@
+name: core-framework-prod
+
+services:
+  # ==============================================================================
+  # 1. Nginx Reverse Proxy (Cổng tiếp nhận duy nhất từ Internet: 80 & 443)
+  # ==============================================================================
+  nginx:
+    container_name: core-nginx-prod
+    build:
+      context: .
+      dockerfile: docker/nginx/Dockerfile
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - frontend_dist:/var/www/frontend:ro
+      - certbot_www:/var/www/certbot:ro
+      - certbot_conf:/etc/letsencrypt:ro
+      - nginx_logs:/var/log/nginx
+    mem_limit: 128m
+    restart: always
+    depends_on:
+      backend:
+        condition: service_started
+      frontend:
+        condition: service_started
+    networks:
+      - core_prod_net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ==============================================================================
+  # 2. Backend Fastify API Server (Chạy ngầm trong mạng nội bộ, cổng 3005)
+  # ==============================================================================
+  backend:
+    container_name: core-backend-prod
+    build:
+      context: .
+      dockerfile: docker/backend/Dockerfile.prod
+    environment:
+      - NODE_ENV=production
+    env_file:
+      - .env.docker.prod
+    mem_limit: 512m
+    mem_reservation: 256m
+    restart: always
+    networks:
+      - core_prod_net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ==============================================================================
+  # 3. Frontend React Vite (Build tĩnh và cung cấp file cho Nginx)
+  # ==============================================================================
+  frontend:
+    container_name: core-frontend-prod
+    build:
+      context: .
+      dockerfile: docker/frontend/Dockerfile.prod
+      args:
+        - VITE_API_BASE_URL=/api/v1
+    volumes:
+      - frontend_dist:/var/www/frontend
+    mem_limit: 128m
+    restart: always
+    networks:
+      - core_prod_net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
+
+  # ==============================================================================
+  # 4. Certbot Daemon (Tự động gia hạn chứng chỉ SSL Let's Encrypt mỗi 12h)
+  # ==============================================================================
+  certbot:
+    container_name: core-certbot-prod
+    image: certbot/certbot:latest
+    volumes:
+      - certbot_www:/var/www/certbot
+      - certbot_conf:/etc/letsencrypt
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot --quiet; sleep 12h & wait $${!}; done;'"
+    restart: always
+    networks:
+      - core_prod_net
+
+# ==============================================================================
+# Volumes & Networks
+# ==============================================================================
+volumes:
+  frontend_dist:
+    name: core_prod_frontend_dist
+  certbot_www:
+    name: core_prod_certbot_www
+  certbot_conf:
+    name: core_prod_certbot_conf
+  nginx_logs:
+    name: core_prod_nginx_logs
+
+networks:
+  core_prod_net:
+    name: core_prod_network
+    driver: bridge

@@ -1,0 +1,22 @@
+FROM node:22-alpine
+
+# Cài đặt bash và curl phục vụ kiểm tra kết nối & quản trị
+RUN apk add --no-cache bash curl
+
+WORKDIR /app/backend
+
+# Copy cấu hình package backend
+COPY backend/package*.json ./
+
+# Cài đặt dependencies cho Backend
+RUN npm install
+
+# Copy mã nguồn backend ban đầu
+COPY backend ./
+COPY docker/backend/entrypoint.dev.sh /app/docker/backend/entrypoint.dev.sh
+
+RUN chmod +x /app/docker/backend/entrypoint.dev.sh
+
+EXPOSE 3005
+
+ENTRYPOINT ["/app/docker/backend/entrypoint.dev.sh"]

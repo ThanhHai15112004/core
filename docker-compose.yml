@@ -12,4 +12,6 @@ services:
       - NODE_ENV=production
       - PORT=3005
       - HOST=0.0.0.0
+    mem_limit: 512m
+    mem_reservation: 256m
     restart: unless-stopped
