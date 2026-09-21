@@ -1,0 +1,442 @@
+/* ==========================================================================
+   SYSTEM CONTROL PLANE REUSABLE UI COMPONENTS
+   Scoped strictly under .console-root
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   Status Pill / Badges
+   -------------------------------------------------------------------------- */
+.console-root .status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1;
+  text-transform: capitalize;
+  letter-spacing: 0.01em;
+}
+
+.console-root .status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.console-root .status-pill.status-healthy,
+.console-root .status-pill.status-ok {
+  background-color: var(--scp-success-bg);
+  color: var(--scp-success-text);
+  border: 1px solid var(--scp-success-border);
+}
+.console-root .status-pill.status-healthy .status-dot,
+.console-root .status-pill.status-ok .status-dot {
+  background-color: var(--scp-success);
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
+}
+
+.console-root .status-pill.status-warning,
+.console-root .status-pill.status-degraded {
+  background-color: var(--scp-warning-bg);
+  color: var(--scp-warning-text);
+  border: 1px solid var(--scp-warning-border);
+}
+.console-root .status-pill.status-warning .status-dot,
+.console-root .status-pill.status-degraded .status-dot {
+  background-color: var(--scp-warning);
+}
+
+.console-root .status-pill.status-error,
+.console-root .status-pill.status-down {
+  background-color: var(--scp-danger-bg);
+  color: var(--scp-danger-text);
+  border: 1px solid var(--scp-danger-border);
+}
+.console-root .status-pill.status-error .status-dot,
+.console-root .status-pill.status-down .status-dot {
+  background-color: var(--scp-danger);
+}
+
+.console-root .status-pill.status-idle {
+  background-color: var(--scp-bg-surface-subtle);
+  color: var(--scp-text-muted);
+  border: 1px solid var(--scp-border-subtle);
+}
+.console-root .status-pill.status-idle .status-dot {
+  background-color: var(--scp-text-muted);
+}
+
+/* --------------------------------------------------------------------------
+   Stat Card
+   -------------------------------------------------------------------------- */
+.console-root .stat-card {
+  background-color: var(--scp-bg-surface);
+  border: 1px solid var(--scp-border-subtle);
+  border-radius: 12px;
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  box-shadow: var(--scp-shadow-sm);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.console-root .stat-card:hover {
+  box-shadow: var(--scp-shadow-md);
+  border-color: var(--scp-border-strong);
+}
+
+.console-root .stat-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
+.console-root .stat-card-title {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--scp-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.console-root .stat-card-icon {
+  font-size: 1.25rem;
+  opacity: 0.85;
+}
+
+.console-root .stat-card-value {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--scp-text-primary);
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
+
+.console-root .stat-card-subtext {
+  font-size: 0.75rem;
+  color: var(--scp-text-secondary);
+  margin-top: 0.35rem;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+/* --------------------------------------------------------------------------
+   Section Header
+   -------------------------------------------------------------------------- */
+.console-root .section-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 1.5rem;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.console-root .section-title-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.console-root .section-title {
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: var(--scp-text-primary);
+  letter-spacing: -0.02em;
+  margin: 0 0 0.25rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.console-root .section-description {
+  font-size: 0.85rem;
+  color: var(--scp-text-secondary);
+  margin: 0;
+}
+
+.console-root .section-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* --------------------------------------------------------------------------
+   Buttons
+   -------------------------------------------------------------------------- */
+.console-root .scp-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0.85rem;
+  border-radius: 6px;
+  font-size: 0.825rem;
+  font-weight: 600;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  line-height: 1.2;
+}
+
+.console-root .scp-btn-primary {
+  background-color: var(--scp-primary);
+  color: #ffffff;
+}
+.console-root .scp-btn-primary:hover:not(:disabled) {
+  background-color: var(--scp-primary-hover);
+}
+
+.console-root .scp-btn-secondary {
+  background-color: var(--scp-bg-surface);
+  border-color: var(--scp-border-subtle);
+  color: var(--scp-text-primary);
+}
+.console-root .scp-btn-secondary:hover:not(:disabled) {
+  background-color: var(--scp-bg-surface-subtle);
+  border-color: var(--scp-border-strong);
+}
+
+.console-root .scp-btn-danger {
+  background-color: var(--scp-danger-bg);
+  border-color: var(--scp-danger-border);
+  color: var(--scp-danger-text);
+}
+.console-root .scp-btn-danger:hover:not(:disabled) {
+  background-color: var(--scp-danger);
+  color: #ffffff;
+}
+
+.console-root .scp-btn-sm {
+  padding: 0.35rem 0.6rem;
+  font-size: 0.75rem;
+}
+
+.console-root .scp-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* --------------------------------------------------------------------------
+   Cards and Panels
+   -------------------------------------------------------------------------- */
+.console-root .scp-panel {
+  background-color: var(--scp-bg-surface);
+  border: 1px solid var(--scp-border-subtle);
+  border-radius: 12px;
+  padding: 1.25rem;
+  box-shadow: var(--scp-shadow-sm);
+  margin-bottom: 1.25rem;
+}
+
+.console-root .scp-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 0.85rem;
+  margin-bottom: 1rem;
+  border-bottom: 1px solid var(--scp-border-subtle);
+}
+
+.console-root .scp-panel-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--scp-text-primary);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* --------------------------------------------------------------------------
+   Sparkline Flexbox (No External Lib)
+   -------------------------------------------------------------------------- */
+.console-root .sparkline-container {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 28px;
+  padding: 2px 0;
+}
+
+.console-root .sparkline-bar {
+  flex: 1;
+  min-width: 3px;
+  background-color: var(--scp-primary);
+  border-radius: 2px 2px 0 0;
+  opacity: 0.75;
+  transition: height 0.2s ease, opacity 0.15s ease;
+}
+
+.console-root .sparkline-bar:hover {
+  opacity: 1;
+}
+
+/* --------------------------------------------------------------------------
+   Modal
+   -------------------------------------------------------------------------- */
+.console-root .modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: 1rem;
+  animation: scpFadeIn 0.15s ease-out;
+}
+
+.console-root .modal-box {
+  background-color: var(--scp-bg-surface);
+  border: 1px solid var(--scp-border-strong);
+  border-radius: 12px;
+  width: 100%;
+  max-width: 480px;
+  box-shadow: var(--scp-shadow-modal);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: scpSlideUp 0.15s ease-out;
+}
+
+.console-root .modal-header {
+  padding: 1.25rem 1.25rem 1rem;
+  border-bottom: 1px solid var(--scp-border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.console-root .modal-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--scp-text-primary);
+  margin: 0;
+}
+
+.console-root .modal-body {
+  padding: 1.25rem;
+  font-size: 0.875rem;
+  color: var(--scp-text-secondary);
+  line-height: 1.5;
+}
+
+.console-root .modal-footer {
+  padding: 1rem 1.25rem;
+  background-color: var(--scp-bg-surface-subtle);
+  border-top: 1px solid var(--scp-border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.75rem;
+}
+
+/* --------------------------------------------------------------------------
+   Detail Drawer (Slide from right)
+   -------------------------------------------------------------------------- */
+.console-root .drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(2px);
+  z-index: 90;
+  animation: scpFadeIn 0.2s ease-out;
+}
+
+.console-root .detail-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 480px;
+  max-width: 90vw;
+  background-color: var(--scp-bg-surface);
+  border-left: 1px solid var(--scp-border-strong);
+  box-shadow: var(--scp-shadow-modal);
+  z-index: 95;
+  display: flex;
+  flex-direction: column;
+  animation: scpSlideLeft 0.2s ease-out;
+}
+
+.console-root .drawer-header {
+  padding: 1.25rem;
+  border-bottom: 1px solid var(--scp-border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.console-root .drawer-body {
+  padding: 1.25rem;
+  overflow-y: auto;
+  flex: 1;
+}
+
+/* --------------------------------------------------------------------------
+   Toast Notifications
+   -------------------------------------------------------------------------- */
+.console-root .toast-container {
+  position: fixed;
+  bottom: 1.5rem;
+  right: 1.5rem;
+  z-index: 120;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  pointer-events: none;
+}
+
+.console-root .toast-item {
+  pointer-events: auto;
+  background-color: var(--scp-bg-surface);
+  border: 1px solid var(--scp-border-subtle);
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  box-shadow: var(--scp-shadow-lg);
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  min-width: 280px;
+  max-width: 400px;
+  animation: scpSlideUp 0.2s ease;
+}
+
+.console-root .toast-item.toast-success {
+  border-left: 4px solid var(--scp-success);
+}
+.console-root .toast-item.toast-error {
+  border-left: 4px solid var(--scp-danger);
+}
+.console-root .toast-item.toast-info {
+  border-left: 4px solid var(--scp-info);
+}
+.console-root .toast-item.toast-warning {
+  border-left: 4px solid var(--scp-warning);
+}
+
+/* --------------------------------------------------------------------------
+   Keyframes
+   -------------------------------------------------------------------------- */
+@keyframes scpFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes scpSlideUp {
+  from { transform: translateY(10px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes scpSlideLeft {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}

@@ -1,0 +1,125 @@
+/* ==========================================================================
+   SYSTEM CONTROL PLANE THEME TOKENS
+   Scoped strictly under .console-root to avoid interfering with Home page
+   ========================================================================== */
+
+/* Light Theme (Default) */
+.console-root[data-theme="light"] {
+  --scp-bg-page: #f8fafc;
+  --scp-bg-surface: #ffffff;
+  --scp-bg-surface-subtle: #f1f5f9;
+  --scp-bg-surface-hover: #e2e8f0;
+  --scp-bg-header: rgba(255, 255, 255, 0.95);
+  --scp-bg-sidebar: #ffffff;
+
+  --scp-border-subtle: #e2e8f0;
+  --scp-border-strong: #cbd5e1;
+  --scp-border-focus: #3b82f6;
+
+  --scp-text-primary: #0f172a;
+  --scp-text-secondary: #475569;
+  --scp-text-muted: #94a3b8;
+  --scp-text-inverse: #ffffff;
+
+  --scp-primary: #2563eb;
+  --scp-primary-hover: #1d4ed8;
+  --scp-primary-subtle: #eff6ff;
+  --scp-primary-text: #1e40af;
+
+  --scp-success: #059669;
+  --scp-success-bg: #ecfdf5;
+  --scp-success-border: #a7f3d0;
+  --scp-success-text: #065f46;
+
+  --scp-warning: #d97706;
+  --scp-warning-bg: #fffbeb;
+  --scp-warning-border: #fde68a;
+  --scp-warning-text: #92400e;
+
+  --scp-danger: #dc2626;
+  --scp-danger-bg: #fef2f2;
+  --scp-danger-border: #fecaca;
+  --scp-danger-text: #991b1b;
+
+  --scp-info: #0284c7;
+  --scp-info-bg: #f0f9ff;
+  --scp-info-border: #bae6fd;
+  --scp-info-text: #0369a1;
+
+  --scp-shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --scp-shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.07), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
+  --scp-shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -4px rgba(0, 0, 0, 0.04);
+  --scp-shadow-modal: 0 20px 25px -5px rgba(0, 0, 0, 0.15), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+
+  --scp-terminal-bg: #0f172a;
+  --scp-terminal-text: #e2e8f0;
+  --scp-terminal-border: #334155;
+}
+
+/* Dark Theme */
+.console-root[data-theme="dark"] {
+  --scp-bg-page: #0b0f19;
+  --scp-bg-surface: #131b2e;
+  --scp-bg-surface-subtle: #1c2640;
+  --scp-bg-surface-hover: #253354;
+  --scp-bg-header: rgba(19, 27, 46, 0.95);
+  --scp-bg-sidebar: #0f172a;
+
+  --scp-border-subtle: #1e293b;
+  --scp-border-strong: #334155;
+  --scp-border-focus: #60a5fa;
+
+  --scp-text-primary: #f8fafc;
+  --scp-text-secondary: #94a3b8;
+  --scp-text-muted: #64748b;
+  --scp-text-inverse: #0f172a;
+
+  --scp-primary: #3b82f6;
+  --scp-primary-hover: #60a5fa;
+  --scp-primary-subtle: rgba(59, 130, 246, 0.15);
+  --scp-primary-text: #93c5fd;
+
+  --scp-success: #10b981;
+  --scp-success-bg: rgba(16, 185, 129, 0.15);
+  --scp-success-border: rgba(16, 185, 129, 0.3);
+  --scp-success-text: #34d399;
+
+  --scp-warning: #f59e0b;
+  --scp-warning-bg: rgba(245, 158, 11, 0.15);
+  --scp-warning-border: rgba(245, 158, 11, 0.3);
+  --scp-warning-text: #fbbf24;
+
+  --scp-danger: #ef4444;
+  --scp-danger-bg: rgba(239, 68, 68, 0.15);
+  --scp-danger-border: rgba(239, 68, 68, 0.3);
+  --scp-danger-text: #f87171;
+
+  --scp-info: #38bdf8;
+  --scp-info-bg: rgba(56, 189, 248, 0.15);
+  --scp-info-border: rgba(56, 189, 248, 0.3);
+  --scp-info-text: #7dd3fc;
+
+  --scp-shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.4);
+  --scp-shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.5), 0 2px 4px -2px rgba(0, 0, 0, 0.4);
+  --scp-shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.6), 0 4px 6px -4px rgba(0, 0, 0, 0.5);
+  --scp-shadow-modal: 0 20px 25px -5px rgba(0, 0, 0, 0.8), 0 8px 10px -6px rgba(0, 0, 0, 0.6);
+
+  --scp-terminal-bg: #090d16;
+  --scp-terminal-text: #cbd5e1;
+  --scp-terminal-border: #1e293b;
+}
+
+/* Base resets within console-root */
+.console-root {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  color: var(--scp-text-primary);
+  background-color: var(--scp-bg-page);
+  min-height: 100vh;
+  box-sizing: border-box;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.console-root * {
+  box-sizing: border-box;
+}

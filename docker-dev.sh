@@ -12,7 +12,7 @@ case "$1" in
       docker compose $COMPOSE_FILES up -d --build "$SERVICE"
     else
       echo "🚀 Đang khởi động toàn bộ Core Framework Development (BE Fastify :3005 + FE Vite :5175)..."
-      docker compose $COMPOSE_FILES up -d --build
+      docker compose $COMPOSE_FILES up -d --build backend frontend
       echo ""
       echo "✅ Các container đã sẵn sàng:"
       echo "   👉 Backend API (core-backend-dev):   http://localhost:3005/api/v1"
@@ -23,8 +23,16 @@ case "$1" in
     fi
     ;;
   down)
-    echo "🛑 Đang dừng toàn bộ Core App Development Containers..."
+    echo "🛑 Đang gỡ bỏ toàn bộ Core App Development Containers..."
     docker compose $COMPOSE_FILES down
+    ;;
+  stop)
+    echo "⏸️ Đang tạm dừng toàn bộ Core App Development Containers..."
+    docker compose $COMPOSE_FILES stop backend frontend
+    ;;
+  start)
+    echo "▶️ Đang tiếp tục chạy toàn bộ Core App Development Containers..."
+    docker compose $COMPOSE_FILES start backend frontend
     ;;
   logs)
     if [ -n "$SERVICE" ]; then
@@ -54,7 +62,7 @@ case "$1" in
     docker compose $COMPOSE_FILES config
     ;;
   *)
-    echo "Cách dùng: ./docker-dev.sh {up|down|logs|restart|ps|bash|config} [backend|frontend]"
+    echo "Cách dùng: ./docker-dev.sh {up|down|stop|start|logs|restart|ps|bash|config} [backend|frontend]"
     echo ""
     echo "Ví dụ:"
     echo "  ./docker-dev.sh up                  # Khởi động cả 2 service"

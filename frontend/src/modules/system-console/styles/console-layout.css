@@ -1,0 +1,324 @@
+/* ==========================================================================
+   SYSTEM CONTROL PLANE LAYOUT (Sidebar, TopBar, Main Content)
+   Scoped strictly under .console-root
+   ========================================================================== */
+
+.console-root .console-layout {
+  display: flex;
+  min-height: 100vh;
+  width: 100%;
+  background-color: var(--scp-bg-page);
+  position: relative;
+}
+
+/* --------------------------------------------------------------------------
+   Sidebar
+   -------------------------------------------------------------------------- */
+.console-root .console-sidebar {
+  width: 260px;
+  min-width: 260px;
+  background-color: var(--scp-bg-sidebar);
+  border-right: 1px solid var(--scp-border-subtle);
+  display: flex;
+  flex-direction: column;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  z-index: 40;
+  transition: transform 0.2s ease, width 0.2s ease;
+}
+
+.console-root .sidebar-header {
+  padding: 1.25rem 1.25rem 1rem;
+  border-bottom: 1px solid var(--scp-border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.console-root .brand-title {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.console-root .brand-logo-badge {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, var(--scp-primary), #4f46e5);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 1.1rem;
+  box-shadow: var(--scp-shadow-sm);
+}
+
+.console-root .brand-meta {
+  display: flex;
+  flex-direction: column;
+}
+
+.console-root .brand-name {
+  font-weight: 700;
+  font-size: 0.95rem;
+  letter-spacing: -0.01em;
+  color: var(--scp-text-primary);
+  line-height: 1.2;
+}
+
+.console-root .brand-subtitle {
+  font-size: 0.75rem;
+  color: var(--scp-text-muted);
+  font-family: monospace;
+}
+
+.console-root .sidebar-nav {
+  flex: 1;
+  padding: 1rem 0.75rem;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.console-root .nav-group-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--scp-text-muted);
+  padding: 0.75rem 0.5rem 0.35rem;
+}
+
+.console-root .nav-item-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.6rem 0.75rem;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: var(--scp-text-secondary);
+  font-size: 0.875rem;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  position: relative;
+}
+
+.console-root .nav-item-btn:hover {
+  background-color: var(--scp-bg-surface-subtle);
+  color: var(--scp-text-primary);
+}
+
+.console-root .nav-item-btn.active {
+  background-color: var(--scp-primary-subtle);
+  color: var(--scp-primary-text);
+  font-weight: 600;
+}
+
+.console-root .nav-item-btn.active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 15%;
+  bottom: 15%;
+  width: 3px;
+  background-color: var(--scp-primary);
+  border-radius: 0 4px 4px 0;
+}
+
+.console-root .nav-item-icon {
+  font-size: 1.1rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.console-root .nav-item-text {
+  flex: 1;
+}
+
+.console-root .nav-item-badge {
+  font-size: 0.7rem;
+  padding: 0.15rem 0.45rem;
+  border-radius: 9999px;
+  background-color: var(--scp-bg-surface-hover);
+  color: var(--scp-text-secondary);
+  font-weight: 600;
+}
+
+.console-root .sidebar-footer {
+  padding: 1rem;
+  border-top: 1px solid var(--scp-border-subtle);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.console-root .return-home-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.6rem;
+  border-radius: 8px;
+  border: 1px solid var(--scp-border-subtle);
+  background: var(--scp-bg-surface);
+  color: var(--scp-text-secondary);
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  text-decoration: none;
+  transition: all 0.15s ease;
+}
+
+.console-root .return-home-btn:hover {
+  background-color: var(--scp-bg-surface-hover);
+  color: var(--scp-text-primary);
+  border-color: var(--scp-border-strong);
+}
+
+/* --------------------------------------------------------------------------
+   Top Bar
+   -------------------------------------------------------------------------- */
+.console-root .console-main-wrapper {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow-x: hidden;
+}
+
+.console-root .console-topbar {
+  height: 60px;
+  background-color: var(--scp-bg-header);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--scp-border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 1.75rem;
+  position: sticky;
+  top: 0;
+  z-index: 30;
+}
+
+.console-root .topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.console-root .breadcrumb-area {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+}
+
+.console-root .breadcrumb-parent {
+  color: var(--scp-text-muted);
+  font-weight: 500;
+}
+
+.console-root .breadcrumb-separator {
+  color: var(--scp-text-muted);
+  font-size: 0.75rem;
+}
+
+.console-root .breadcrumb-current {
+  color: var(--scp-text-primary);
+  font-weight: 600;
+}
+
+.console-root .topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+}
+
+.console-root .control-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  height: 34px;
+  padding: 0 0.75rem;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  border: 1px solid var(--scp-border-subtle);
+  background: var(--scp-bg-surface);
+  color: var(--scp-text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.console-root .control-btn:hover:not(:disabled) {
+  background-color: var(--scp-bg-surface-subtle);
+  color: var(--scp-text-primary);
+  border-color: var(--scp-border-strong);
+}
+
+.console-root .control-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.console-root .control-select {
+  height: 34px;
+  padding: 0 0.6rem;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  border: 1px solid var(--scp-border-subtle);
+  background: var(--scp-bg-surface);
+  color: var(--scp-text-secondary);
+  cursor: pointer;
+  outline: none;
+}
+
+.console-root .control-select:focus {
+  border-color: var(--scp-border-focus);
+}
+
+/* --------------------------------------------------------------------------
+   Content Area
+   -------------------------------------------------------------------------- */
+.console-root .console-content-container {
+  flex: 1;
+  padding: 1.75rem;
+  max-width: 1440px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+@media (max-width: 1024px) {
+  .console-root .console-sidebar {
+    width: 210px;
+    min-width: 210px;
+  }
+  .console-root .console-content-container {
+    padding: 1.25rem;
+  }
+}
+
+@media (max-width: 768px) {
+  .console-root .console-layout {
+    flex-direction: column;
+  }
+  .console-root .console-sidebar {
+    width: 100%;
+    height: auto;
+    position: relative;
+    border-right: none;
+    border-bottom: 1px solid var(--scp-border-subtle);
+  }
+}

@@ -36,6 +36,24 @@ export const Header: React.FC<HeaderProps> = ({ activeTab = 'home', onTabChange 
               </button>
             );
           })}
+
+          <button
+            type="button"
+            onClick={() => {
+              window.location.hash = '#system-console';
+            }}
+            className="nav-tab-btn"
+            style={{
+              background: 'linear-gradient(135deg, rgba(37, 99, 235, 0.15), rgba(79, 70, 229, 0.25))',
+              border: '1px solid rgba(59, 130, 246, 0.4)',
+              color: '#93c5fd',
+              fontWeight: 600,
+            }}
+            title="Open Infrastructure Control Plane"
+          >
+            <span>⚡</span>
+            <span>System Console</span>
+          </button>
         </nav>
       </div>
     </header>

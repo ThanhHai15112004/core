@@ -86,6 +86,58 @@ export const Home: React.FC = () => {
         </div>
       </section>
 
+      {/* Control Plane Callout Banner */}
+      <section
+        style={{
+          background: 'linear-gradient(135deg, rgba(37, 99, 235, 0.12), rgba(79, 70, 229, 0.12))',
+          border: '1px solid rgba(59, 130, 246, 0.3)',
+          borderRadius: 'var(--radius-lg)',
+          padding: '24px 32px',
+          marginBottom: '60px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '16px',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <div
+            style={{
+              width: '48px',
+              height: '48px',
+              borderRadius: '12px',
+              background: 'linear-gradient(135deg, #2563eb, #4f46e5)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '24px',
+            }}
+          >
+            ⚡
+          </div>
+          <div>
+            <h3 style={{ margin: '0 0 4px', fontSize: '18px', fontWeight: 700, color: 'var(--text-main)' }}>
+              Developer & DevOps System Control Plane
+            </h3>
+            <p style={{ margin: 0, fontSize: '14px', color: 'var(--text-muted)' }}>
+              Dedicated infrastructure dashboard for monitoring multi-runtimes, live logs, database ping, redis cache, workers, and cron tasks.
+            </p>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          className="btn-primary"
+          onClick={() => {
+            window.location.hash = '#system-console';
+          }}
+          style={{ padding: '10px 20px', fontSize: '14px', fontWeight: 600 }}
+        >
+          Launch System Console →
+        </button>
+      </section>
+
       {/* Feature Grid */}
       <section id="features" style={{ marginBottom: '80px' }}>
         <h2 style={{ fontSize: '24px', fontWeight: '700', marginBottom: '28px', color: 'var(--text-main)' }}>
