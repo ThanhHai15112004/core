@@ -12,7 +12,7 @@
     "lib": ["ES2023"],
     "sourceMap": true,
     "outDir": "./dist",
-    "rootDir": "./src",
+    "rootDir": "./",
     "paths": {
       "@apps/*": ["./src/apps/*"],
       "@packages/*": ["./src/packages/*"],
@@ -33,6 +33,6 @@
     "resolveJsonModule": true,
     "types": ["node", "jest"]
   },
-  "include": ["src/**/*.ts"],
+  "include": ["src/**/*.ts", "test/**/*.ts"],
   "exclude": ["node_modules", "dist", "coverage"]
 }

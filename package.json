@@ -5,9 +5,16 @@
   "type": "module",
   "scripts": {
     "dev": "npm --prefix backend run dev",
+    "dev:fe": "npm --prefix frontend run dev",
+    "dev:api": "npm --prefix backend run dev:api",
+    "dev:worker": "npm --prefix backend run dev:worker",
+    "dev:scheduler": "npm --prefix backend run dev:scheduler",
+    "cli": "npm --prefix backend run cli",
     "build": "npm --prefix backend run build",
+    "build:fe": "npm --prefix frontend run build",
     "start": "npm --prefix backend run start",
     "test": "npm --prefix backend run test",
+    "test:e2e": "npm --prefix backend run test:e2e",
     "check": "npm --prefix backend run check"
   },
   "devDependencies": {

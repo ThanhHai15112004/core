@@ -16,13 +16,21 @@
     "start:dev": "npm run build && nest start --watch --exec \"tsc-alias && node dist/main.js\"",
     "start:debug": "npm run build && nest start --watch --debug --exec \"tsc-alias && node dist/main.js\"",
     "start:prod": "node dist/main.js",
+    "start:api": "node dist/apps/api/main.js",
+    "dev:api": "npm run build && nest start --watch --exec \"tsc-alias && node dist/apps/api/main.js\"",
+    "start:worker": "node dist/apps/worker/main.js",
+    "dev:worker": "npm run build && nest start --watch --exec \"tsc-alias && node dist/apps/worker/main.js\"",
+    "start:scheduler": "node dist/apps/scheduler/main.js",
+    "dev:scheduler": "npm run build && nest start --watch --exec \"tsc-alias && node dist/apps/scheduler/main.js\"",
+    "cli": "node dist/apps/cli/main.js",
     "lint": "eslint \"{src,test}/**/*.ts\" --fix",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "jest --passWithNoTests",
-    "test:watch": "jest --watch",
-    "test:cov": "jest --coverage",
+    "test": "NODE_OPTIONS=\"--experimental-vm-modules\" jest --passWithNoTests --runInBand",
+    "test:unit": "NODE_OPTIONS=\"--experimental-vm-modules\" jest --testPathPattern=\"test/unit\" --runInBand",
+    "test:feature": "NODE_OPTIONS=\"--experimental-vm-modules\" jest --testPathPattern=\"test/feature\" --runInBand",
+    "test:watch": "NODE_OPTIONS=\"--experimental-vm-modules\" jest --watch",
+    "test:cov": "NODE_OPTIONS=\"--experimental-vm-modules\" jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
-    "test:e2e": "jest --config ./test/jest-e2e.json",
     "check": "npm run lint && npm run typecheck && npm run test && npm run build"
   },
   "dependencies": {
@@ -67,31 +75,43 @@
       "json",
       "ts"
     ],
-    "rootDir": "src",
-    "testRegex": ".*\\.spec\\.ts$",
+    "rootDir": ".",
+    "testMatch": [
+      "<rootDir>/test/**/*.spec.ts",
+      "<rootDir>/test/**/*.feature-spec.ts"
+    ],
     "transform": {
       "^.+\\.(t|j)s$": [
         "ts-jest",
         {
-          "useESM": true
+          "useESM": true,
+          "diagnostics": {
+            "ignoreCodes": [151002]
+          },
+          "tsconfig": {
+            "rootDir": "./",
+            "outDir": "./dist",
+            "isolatedModules": true
+          }
         }
       ]
     },
     "moduleNameMapper": {
-      "^@apps/(.*)\\.js$": "<rootDir>/apps/$1",
-      "^@apps/(.*)$": "<rootDir>/apps/$1",
-      "^@packages/(.*)\\.js$": "<rootDir>/packages/$1",
-      "^@packages/(.*)$": "<rootDir>/packages/$1",
-      "^@modules/(.*)\\.js$": "<rootDir>/modules/$1",
-      "^@modules/(.*)$": "<rootDir>/modules/$1",
-      "^@project-modules/(.*)\\.js$": "<rootDir>/project-modules/$1",
-      "^@project-modules/(.*)$": "<rootDir>/project-modules/$1",
+      "^@apps/(.*)\\.js$": "<rootDir>/src/apps/$1",
+      "^@apps/(.*)$": "<rootDir>/src/apps/$1",
+      "^@packages/(.*)\\.js$": "<rootDir>/src/packages/$1",
+      "^@packages/(.*)$": "<rootDir>/src/packages/$1",
+      "^@modules/(.*)\\.js$": "<rootDir>/src/modules/$1",
+      "^@modules/(.*)$": "<rootDir>/src/modules/$1",
+      "^@project-modules/(.*)\\.js$": "<rootDir>/src/project-modules/$1",
+      "^@project-modules/(.*)$": "<rootDir>/src/project-modules/$1",
       "^(\\.{1,2}/.*)\\.js$": "$1"
     },
     "collectCoverageFrom": [
-      "**/*.(t|j)s"
+      "src/**/*.(t|j)s",
+      "!src/**/*.module.ts"
     ],
-    "coverageDirectory": "../coverage",
+    "coverageDirectory": "./coverage",
     "testEnvironment": "node",
     "extensionsToTreatAsEsm": [
       ".ts"

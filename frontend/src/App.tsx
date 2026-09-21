@@ -1,14 +1,15 @@
-import { Header } from './components/common/Header';
-import { Home } from './pages/Home';
-import { Footer } from './components/common/Footer';
+import { Header } from './core/layouts/Header';
+import { Footer } from './core/layouts/Footer';
+import { Home } from './modules/home/pages/Home';
+import { AppProviders } from './providers/index';
 
 function App() {
   return (
-    <>
+    <AppProviders>
       <Header />
       <Home />
       <Footer />
-    </>
+    </AppProviders>
   );
 }
 
