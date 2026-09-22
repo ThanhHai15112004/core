@@ -160,11 +160,23 @@ export class RuntimesService {
     return Object.fromEntries(entries);
   }
 
-  public async getLogs(rawId: string, limit: number, level?: string): Promise<RuntimeLogDto[]> {
+  public async getLogs(
+    rawId: string,
+    limit: number,
+    filter: { level?: string | undefined; correlationId?: string | undefined } = {},
+  ): Promise<RuntimeLogDto[]> {
     const id = rawId === 'cli' ? 'cli' : this.assertRuntimeId(rawId);
     if (!this.store.isAvailable()) return [];
-    const logs = await this.store.logs(id, limit).catch(() => []);
-    return level ? logs.filter((l) => l.level === level) : logs;
+    const { level, correlationId } = filter;
+    // Có bộ lọc thì quét toàn bộ ring buffer rồi mới cắt `limit`, để không bỏ sót log cũ hơn.
+    const scan = level || correlationId ? this.config.runtime.logRetention : limit;
+    const logs = await this.store.logs(id, scan).catch(() => []);
+    return logs
+      .filter(
+        (l) =>
+          (!level || l.level === level) && (!correlationId || l.correlationId === correlationId),
+      )
+      .slice(0, limit);
   }
 
   public async getCliHistory(limit: number): Promise<CliExecution[]> {

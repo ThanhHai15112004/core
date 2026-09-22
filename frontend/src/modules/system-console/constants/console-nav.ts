@@ -24,7 +24,7 @@ export const NAV_TREE: NavGroup[] = [
     icon: 'activity',
     children: [
       { id: 'runtimes', status: 'ready' },
-      { id: 'http-traffic', status: 'planned' },
+      { id: 'http-traffic', status: 'ready' },
       { id: 'performance', status: 'planned' },
     ],
   },

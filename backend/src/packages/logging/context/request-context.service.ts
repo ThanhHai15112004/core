@@ -19,6 +19,11 @@ export class RequestContextService {
     return RequestContextService.storage.getStore();
   }
 
+  /** Dùng ở nơi không inject được (vd. logger khởi tạo sớm). */
+  public static currentCorrelationId(): string | undefined {
+    return RequestContextService.storage.getStore()?.correlationId;
+  }
+
   public getCorrelationId(): string {
     return this.getStore()?.correlationId ?? 'unknown-correlation-id';
   }

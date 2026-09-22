@@ -8,7 +8,6 @@ import { useLocale } from '../../../core/i18n/index';
 
 /** Trang đã có dữ liệu thật liên quan, để người dùng không bị "ngõ cụt". */
 const RELATED: Partial<Record<ConsoleSectionId, ConsolePath>> = {
-  'http-traffic': 'runtimes/api',
   performance: 'runtimes',
   storage: 'packages',
   messaging: 'runtimes/worker',

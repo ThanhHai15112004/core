@@ -5,6 +5,7 @@ import {
   type LoggerService as NestLoggerService,
 } from '@nestjs/common';
 import type { LoggerContract } from '../contracts/logger.contract.js';
+import { RequestContextService } from '../context/request-context.service.js';
 import { LOG_SINK, type LogEntryLevel, type LogSink } from '../contracts/log-sink.contract.js';
 import { LogLevel } from '../constants/logging.constant.js';
 
@@ -100,10 +101,12 @@ export class CoreLoggerService implements NestLoggerService, LoggerContract {
     CONSOLE[level](
       `${t} ${level.toUpperCase()} ${context ? `[${context}] ` : ''}${text}${trace ? `\n${trace}` : ''}`,
     );
+    const correlationId = RequestContextService.currentCorrelationId();
     this.sink?.write({
       t,
       level,
       ...(context ? { context } : {}),
+      ...(correlationId ? { correlationId } : {}),
       message: trace ? `${text}\n${trace}` : text,
     });
   }

@@ -5,6 +5,7 @@ import { authConfig, type AuthConfig } from './auth.config.js';
 import { cacheConfig, type CacheConfig } from './cache.config.js';
 import { storageConfig, type StorageConfig } from './storage.config.js';
 import { runtimeConfig, type RuntimeConfig } from './runtime.config.js';
+import { trafficConfig, type TrafficConfig } from './traffic.config.js';
 
 @Injectable()
 export class CoreConfigService {
@@ -14,6 +15,7 @@ export class CoreConfigService {
   public readonly cache: CacheConfig;
   public readonly storage: StorageConfig;
   public readonly runtime: RuntimeConfig;
+  public readonly traffic: TrafficConfig;
 
   constructor() {
     this.app = appConfig();
@@ -22,6 +24,7 @@ export class CoreConfigService {
     this.cache = cacheConfig();
     this.storage = storageConfig();
     this.runtime = runtimeConfig();
+    this.traffic = trafficConfig();
   }
 
   public get isProduction(): boolean {
@@ -48,6 +51,7 @@ export class CoreConfigService {
       cache: this.cache,
       storage: this.storage,
       runtime: this.runtime,
+      traffic: this.traffic,
     };
     const parts = path.split('.');
     let current: unknown = root;

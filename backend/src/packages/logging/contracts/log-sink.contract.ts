@@ -5,6 +5,8 @@ export interface LogEntry {
   t: string;
   level: LogEntryLevel;
   context?: string;
+  /** Có khi log phát sinh trong một HTTP request — dùng để nối Traffic → Logs. */
+  correlationId?: string;
   message: string;
 }
 

@@ -21,7 +21,8 @@ export const runtimesApi = {
   series: (range: MetricRange) => fetchApi<RuntimeSeries>(R.METRICS_ALL(range)),
   runtimeSeries: (id: RuntimeId, range: MetricRange) => fetchApi<RuntimeSeries>(R.METRICS(id, range)),
   events: (limit: number, runtime?: RuntimeId) => fetchApi<RuntimeEvent[]>(R.EVENTS(limit, runtime)),
-  logs: (id: RuntimeId | 'cli', limit: number, level?: string) => fetchApi<RuntimeLog[]>(R.LOGS(id, limit, level)),
+  logs: (id: RuntimeId | 'cli', limit: number, level?: string, correlationId?: string) =>
+    fetchApi<RuntimeLog[]>(R.LOGS(id, limit, level, correlationId)),
   cliHistory: (limit: number) => fetchApi<CliExecution[]>(R.CLI_HISTORY(limit)),
   command: (commandId: string) => fetchApi<RuntimeCommand>(R.COMMAND(commandId)),
   restart: (id: RuntimeId, mode: RestartMode) =>

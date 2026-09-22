@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Sliders, Play, Pause, Download, Trash2 } from 'lucide-react';
+import { Sliders, Play, Pause, Download, Trash2, X } from 'lucide-react';
 import type { OpsEventLog } from '../types/console.types';
 import { useConsoleData } from '../context/console-data-context';
 import { SectionHeader } from '../components/common/SectionHeader';
@@ -29,6 +29,7 @@ export const LogViewerSection: React.FC = () => {
   const { route, navigate } = useConsoleRoute();
   const querySource = route.query.get('runtime');
   const source: LogSource = isLogSource(querySource) ? querySource : 'session';
+  const correlationId = route.query.get('correlationId') ?? undefined;
   const { events, clearEvents, executeAction } = useConsoleData();
   const { pkg: loggingPkg, metric } = usePackage('logging');
 
@@ -77,8 +78,17 @@ export const LogViewerSection: React.FC = () => {
         ))}
       </div>
 
+      {source !== 'session' && correlationId && (
+        <div className="tr-filter-chip">
+          {t('console.logs.correlationFilter')} <code>{correlationId}</code>
+          <button type="button" className="rt-icon-btn" aria-label={t('common.close')} onClick={() => navigate(`logs?runtime=${source}`)}>
+            <X size={13} />
+          </button>
+        </div>
+      )}
+
       {source !== 'session' ? (
-        <RuntimeLogsPanel runtime={source} limit={500} />
+        <RuntimeLogsPanel runtime={source} limit={500} {...(correlationId ? { correlationId } : {})} />
       ) : (
       <>
 

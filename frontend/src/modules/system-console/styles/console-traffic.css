@@ -1,0 +1,689 @@
+/* ==========================================================================
+   HTTP TRAFFIC (prefix `tr-`) — dùng lại token/tone của Console
+   ========================================================================== */
+
+.console-root .tr-live {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.console-root .tr-live-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--scp-success-text);
+  background-color: var(--scp-success-bg);
+  border: 1px solid var(--scp-success-border);
+}
+
+.console-root .tr-live-badge.is-paused {
+  color: var(--scp-text-secondary);
+  background-color: var(--scp-bg-surface-subtle);
+  border-color: var(--scp-border-subtle);
+}
+
+.console-root .tr-controls {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--scp-border-subtle);
+}
+
+.console-root .tr-controls .rt-tabs {
+  border-bottom: none;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.console-root .tr-controls .ov-segmented {
+  margin-bottom: 0.4rem;
+}
+
+/* Filter bar -------------------------------------------------------------- */
+.console-root .tr-filters {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.console-root .tr-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.console-root .tr-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.25rem 0.5rem;
+  border: 1px solid var(--scp-border-subtle);
+  border-radius: 8px;
+  background-color: var(--scp-bg-surface);
+  font-size: 0.78rem;
+  color: var(--scp-text-secondary);
+}
+
+.console-root .tr-field span {
+  font-weight: 600;
+}
+
+.console-root .tr-field select,
+.console-root .tr-field input {
+  border: none;
+  background: transparent;
+  color: var(--scp-text-primary);
+  font-size: 0.8rem;
+  outline: none;
+  min-width: 0;
+}
+
+.console-root .tr-field select option {
+  background-color: var(--scp-bg-surface);
+  color: var(--scp-text-primary);
+}
+
+.console-root .tr-field:focus-within {
+  border-color: var(--scp-primary);
+}
+
+.console-root .tr-field-search {
+  flex: 1 1 240px;
+  max-width: 380px;
+}
+
+.console-root .tr-field-search input {
+  flex: 1;
+}
+
+.console-root .tr-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+  color: var(--scp-text-secondary);
+  cursor: pointer;
+}
+
+.console-root .scp-btn.is-active {
+  border-color: var(--scp-primary);
+  color: var(--scp-primary-text);
+}
+
+.console-root .tr-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.75rem;
+}
+
+.console-root .tr-toolbar-label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--scp-text-secondary);
+}
+
+.console-root .tr-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+/* Badges ------------------------------------------------------------------ */
+.console-root .tr-method {
+  display: inline-block;
+  min-width: 3.4rem;
+  padding: 0.08rem 0.35rem;
+  border-radius: 5px;
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-align: center;
+  color: var(--scp-info-text);
+  background-color: var(--scp-info-bg);
+}
+
+.console-root .tr-method-post { color: var(--scp-success-text); background-color: var(--scp-success-bg); }
+.console-root .tr-method-put,
+.console-root .tr-method-patch { color: var(--scp-warning-text); background-color: var(--scp-warning-bg); }
+.console-root .tr-method-delete { color: var(--scp-danger-text); background-color: var(--scp-danger-bg); }
+
+.console-root .tr-code {
+  display: inline-block;
+  padding: 0.05rem 0.4rem;
+  border-radius: 5px;
+  font-size: 0.74rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--tone-text);
+  background-color: var(--tone-bg);
+  border: 1px solid var(--tone-border);
+}
+
+.console-root .tr-tag {
+  padding: 0.02rem 0.35rem;
+  border-radius: 4px;
+  font-size: 0.66rem;
+  font-weight: 600;
+  color: var(--scp-text-muted);
+  border: 1px solid var(--scp-border-subtle);
+}
+
+.console-root .tr-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-left: 0.35rem;
+  border-radius: 50%;
+  background-color: var(--scp-primary);
+  vertical-align: middle;
+}
+
+/* Tables ------------------------------------------------------------------ */
+.console-root .tr-table td,
+.console-root .tr-table th {
+  white-space: nowrap;
+}
+
+.console-root .tr-table .is-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.console-root .tr-table tr.is-idle td {
+  color: var(--scp-text-muted);
+}
+
+.console-root .tr-endpoint {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.console-root .tr-endpoint code {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 0.8rem;
+  color: var(--scp-text-primary);
+}
+
+.console-root .tr-empty-cell {
+  padding: 1.25rem !important;
+  text-align: center;
+  color: var(--scp-text-muted);
+}
+
+.console-root .tr-mono {
+  font-family: "JetBrains Mono", Consolas, "Courier New", monospace;
+  font-size: 0.76rem;
+}
+
+.console-root .tr-muted { color: var(--scp-text-muted); }
+.console-root .tr-bad { color: var(--scp-danger-text); font-weight: 700; }
+.console-root .tr-warn-text { color: var(--scp-warning-text); font-weight: 600; }
+
+/* Chart stats ------------------------------------------------------------- */
+.console-root .tr-chart-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin: 0.75rem 0 0;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--scp-border-subtle);
+}
+
+.console-root .tr-chart-stats dt {
+  font-size: 0.72rem;
+  color: var(--scp-text-muted);
+}
+
+.console-root .tr-chart-stats dd {
+  margin: 0.15rem 0 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--scp-text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.console-root .tr-chart-stats small {
+  font-weight: 500;
+  color: var(--scp-text-muted);
+}
+
+/* Status distribution ----------------------------------------------------- */
+.console-root .tr-class-list,
+.console-root .tr-status-list,
+.console-root .tr-rank-list,
+.console-root .tr-problem-list,
+.console-root .tr-reasons,
+.console-root .tr-waterfall,
+.console-root .tr-timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.console-root .tr-class-row {
+  display: grid;
+  grid-template-columns: 2.4rem minmax(0, 1fr) 3.6rem;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  padding: 0.35rem 0;
+  border: none;
+  background: transparent;
+  color: var(--scp-text-primary);
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.console-root .tr-class-row:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.console-root .tr-class-name { font-weight: 700; }
+.console-root .tr-class-value { text-align: right; font-variant-numeric: tabular-nums; }
+
+.console-root .tr-bar {
+  display: block;
+  height: 8px;
+  border-radius: 999px;
+  background-color: var(--scp-bg-surface-subtle);
+  overflow: hidden;
+}
+
+.console-root .tr-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+}
+
+.console-root .tr-subtitle {
+  margin: 1rem 0 0.5rem;
+  font-size: 0.74rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--scp-text-muted);
+}
+
+.console-root .tr-status-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.console-root .tr-status-list button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.25rem 0.5rem;
+  border: 1px solid var(--scp-border-subtle);
+  border-radius: 8px;
+  background-color: var(--scp-bg-surface);
+  color: var(--scp-text-primary);
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.console-root .tr-status-list button:hover,
+.console-root .tr-rank-list button:hover {
+  border-color: var(--scp-primary);
+}
+
+/* Rank lists (errors, security) ------------------------------------------- */
+.console-root .tr-rank-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.console-root .tr-rank-list button,
+.console-root .tr-rank-static {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--scp-border-subtle);
+  border-radius: 8px;
+  background-color: var(--scp-bg-surface);
+  color: var(--scp-text-primary);
+  font-size: 0.8rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.console-root .tr-rank-static { cursor: default; }
+.console-root .tr-rank-list button:disabled { cursor: default; opacity: 0.7; }
+
+.console-root .tr-rank-values {
+  display: inline-flex;
+  flex-shrink: 0;
+  white-space: nowrap;
+  gap: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.console-root .tr-error-grid {
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) minmax(0, 2fr) minmax(0, 2fr);
+  gap: 1.25rem;
+}
+
+.console-root .tr-error-totals {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin: 0;
+}
+
+.console-root .tr-error-totals dt {
+  font-size: 0.74rem;
+  color: var(--scp-text-muted);
+}
+
+.console-root .tr-error-totals dd {
+  margin: 0.1rem 0 0;
+  font-size: 1.35rem;
+  font-weight: 750;
+  color: var(--scp-text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Problems ---------------------------------------------------------------- */
+.console-root .tr-problems-ok {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--scp-success-text);
+}
+
+.console-root .tr-problem-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.console-root .tr-problem {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 0.6rem;
+  padding: 0.65rem 0.75rem;
+  border-radius: 9px;
+  border: 1px solid var(--tone-border);
+  background-color: var(--tone-bg);
+  color: var(--tone-text);
+}
+
+.console-root .tr-problem > div {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.console-root .tr-problem strong {
+  display: block;
+  font-size: 0.85rem;
+  color: var(--scp-text-primary);
+}
+
+.console-root .tr-problem p {
+  margin: 0.2rem 0 0;
+  font-size: 0.8rem;
+  line-height: 1.4;
+  color: var(--scp-text-secondary);
+}
+
+.console-root .tr-problem small {
+  font-size: 0.72rem;
+  color: var(--scp-text-muted);
+}
+
+/* Notes / empty ----------------------------------------------------------- */
+.console-root .tr-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin: 0.75rem 0;
+  padding: 0.6rem 0.75rem;
+  border-radius: 8px;
+  background-color: var(--scp-bg-surface-subtle);
+  font-size: 0.8rem;
+  line-height: 1.45;
+  color: var(--scp-text-secondary);
+}
+
+.console-root .tr-note p { margin: 0.15rem 0 0; }
+.console-root .tr-note svg { flex-shrink: 0; margin-top: 2px; }
+
+.console-root .tr-note-inline {
+  margin: 0.6rem 0 0;
+  font-size: 0.74rem;
+  color: var(--scp-text-muted);
+}
+
+.console-root .tr-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 3rem 1.5rem;
+  border: 1px dashed var(--scp-border-strong);
+  border-radius: 12px;
+  text-align: center;
+  color: var(--scp-text-muted);
+}
+
+.console-root .tr-empty-state h2 {
+  margin: 0.25rem 0 0;
+  font-size: 1.05rem;
+  color: var(--scp-text-primary);
+}
+
+.console-root .tr-empty-state p { margin: 0; font-size: 0.86rem; }
+
+.console-root .tr-footnote {
+  margin: 0;
+  font-size: 0.72rem;
+  line-height: 1.5;
+  color: var(--scp-text-muted);
+}
+
+.console-root .tr-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.75rem;
+  padding: 0.25rem 0.35rem 0.25rem 0.65rem;
+  border: 1px solid var(--scp-primary);
+  border-radius: 999px;
+  font-size: 0.78rem;
+  color: var(--scp-primary-text);
+}
+
+.console-root .tr-filter-chip code { font-size: 0.74rem; }
+
+/* Endpoint detail --------------------------------------------------------- */
+.console-root .tr-endpoint-title {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  margin: 0;
+  font-size: 1.15rem;
+  color: var(--scp-text-primary);
+}
+
+.console-root .tr-endpoint-title code {
+  word-break: break-all;
+}
+
+.console-root .tr-reasons {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  margin-top: 0.4rem;
+  font-size: 0.8rem;
+  color: var(--scp-warning-text);
+}
+
+.console-root .tr-kv-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+/* Request detail drawer --------------------------------------------------- */
+.console-root .detail-drawer.tr-drawer {
+  width: 720px;
+}
+
+.console-root .tr-drawer-title {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.console-root .tr-drawer-title code {
+  font-size: 0.9rem;
+  word-break: break-all;
+  color: var(--scp-text-primary);
+}
+
+.console-root .tr-drawer-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.78rem;
+  color: var(--scp-text-muted);
+}
+
+.console-root .tr-drawer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.console-root .tr-drawer-content {
+  padding-top: 1rem;
+}
+
+.console-root .tr-drawer-content .rt-kv dd {
+  max-width: 65%;
+  word-break: break-all;
+}
+
+.console-root .tr-kv-table th {
+  width: 35%;
+  font-weight: 600;
+  text-transform: none;
+  white-space: nowrap;
+}
+
+.console-root .tr-kv-table code {
+  font-size: 0.76rem;
+  word-break: break-all;
+}
+
+.console-root .tr-code-block {
+  margin: 0;
+  padding: 0.75rem;
+  border-radius: 8px;
+  background-color: var(--scp-terminal-bg);
+  color: var(--scp-terminal-text);
+  font-family: "JetBrains Mono", Consolas, "Courier New", monospace;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  overflow: auto;
+  max-height: 420px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.console-root .tr-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  border-left: 2px solid var(--scp-border-subtle);
+  padding-left: 0.9rem;
+}
+
+.console-root .tr-timeline li {
+  display: grid;
+  grid-template-columns: 5rem minmax(0, 1fr);
+  gap: 0.5rem;
+  font-size: 0.82rem;
+  color: var(--scp-text-primary);
+}
+
+.console-root .tr-waterfall {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.console-root .tr-waterfall li {
+  display: grid;
+  grid-template-columns: minmax(0, 11rem) minmax(0, 1fr) 4.5rem;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.78rem;
+  color: var(--scp-text-secondary);
+}
+
+.console-root .tr-waterfall .tr-mono { text-align: right; }
+
+.console-root .tr-waterfall-track {
+  position: relative;
+  height: 10px;
+  border-radius: 4px;
+  background-color: var(--scp-bg-surface-subtle);
+}
+
+.console-root .tr-waterfall-track > span {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-radius: 4px;
+  background-color: var(--scp-series-1);
+}
+
+/* Responsive -------------------------------------------------------------- */
+@media (max-width: 1280px) {
+  .console-root .tr-kv-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .console-root .tr-error-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .console-root .tr-error-totals { grid-column: 1 / -1; flex-direction: row; gap: 2rem; }
+}
+
+@media (max-width: 640px) {
+  .console-root .tr-controls { flex-direction: column; align-items: stretch; }
+  .console-root .tr-controls .rt-tabs { width: 100%; max-width: 100%; }
+  .console-root .tr-controls .ov-segmented { max-width: 100%; overflow-x: auto; align-self: flex-start; }
+  .console-root .tr-chart-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .console-root .tr-kv-row,
+  .console-root .tr-error-grid { grid-template-columns: minmax(0, 1fr); }
+  .console-root .tr-field-search { max-width: none; }
+  .console-root .tr-waterfall li { grid-template-columns: minmax(0, 7rem) minmax(0, 1fr) 4rem; }
+  .console-root .detail-drawer.tr-drawer { width: 100vw; max-width: 100vw; }
+}

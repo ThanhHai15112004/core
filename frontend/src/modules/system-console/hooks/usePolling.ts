@@ -12,8 +12,14 @@ export interface PollingState<T> {
 /**
  * Gọi `fetcher` ngay và định kỳ (tạm dừng khi tab ẩn, tải lại khi quay lại).
  * Giữ dữ liệu lần thành công gần nhất khi lần sau lỗi. `key` đổi → tải lại từ đầu.
+ * `paused` chỉ ngừng cập nhật định kỳ (vd. "Pause live"), không xoá dữ liệu đang hiển thị.
  */
-export function usePolling<T>(fetcher: () => Promise<T>, key: string, intervalMs = POLL_INTERVAL_MS): PollingState<T> {
+export function usePolling<T>(
+  fetcher: () => Promise<T>,
+  key: string,
+  intervalMs = POLL_INTERVAL_MS,
+  paused = false,
+): PollingState<T> {
   const [data, setData] = useState<T | null>(null);
   const [error, setError] = useState<Error | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -37,6 +43,10 @@ export function usePolling<T>(fetcher: () => Promise<T>, key: string, intervalMs
     setIsLoading(true);
     setData(null);
     void reload();
+  }, [key, reload]);
+
+  useEffect(() => {
+    if (paused) return;
     const interval = setInterval(() => {
       if (!document.hidden) void reload();
     }, intervalMs);
@@ -48,7 +58,7 @@ export function usePolling<T>(fetcher: () => Promise<T>, key: string, intervalMs
       clearInterval(interval);
       document.removeEventListener('visibilitychange', onVisible);
     };
-  }, [key, intervalMs, reload]);
+  }, [intervalMs, reload, paused]);
 
   return { data, error, isLoading, lastUpdated, reload };
 }

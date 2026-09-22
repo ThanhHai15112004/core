@@ -3,6 +3,11 @@ import * as os from 'node:os';
 import { CoreConfigService } from '@packages/config/index.js';
 import { DatabaseAction } from '@packages/database/index.js';
 import { CoreI18nService } from '@packages/i18n/index.js';
+import {
+  TrafficService,
+  type TrafficProblemDto,
+  type TrafficSummaryDto,
+} from '@modules/traffic/index.js';
 import { HttpMetricsService, type HttpMetricsSnapshot } from '@packages/logging/index.js';
 import { CorePackageId, PackageStatus } from '@packages/kernel/index.js';
 import { PackageRegistryService, type PackageSummaryDto } from './package-registry.service.js';
@@ -49,6 +54,8 @@ const RUNTIME_MAP_STATUS: Record<string, HealthMapItemDto['status']> = {
 /** Một thành phần đang có vấn đề (package hoặc runtime). */
 interface Problem {
   key: string;
+  /** `traffic` không phải một service nên không trừ vào số service ổn định. */
+  kind: 'service' | 'traffic';
   name: string;
   severity: 'error' | 'warning';
   section: string;
@@ -78,6 +85,8 @@ interface OverviewContext {
   /** Worker/Scheduler từ runtime telemetry (API chính là process hiện tại). */
   runtimes: Map<string, RuntimeSummaryDto>;
   problems: Problem[];
+  /** HTTP traffic 15 phút gần nhất; `null` khi không có telemetry. */
+  traffic: { summary: TrafficSummaryDto | null; problems: TrafficProblemDto[] };
   /** `null` = không ping được hoặc không có package database. */
   dbPingMs: number | null;
 }
@@ -91,13 +100,20 @@ export class SystemOverviewService {
     private readonly i18n: CoreI18nService,
     private readonly events: OpsEventService,
     private readonly runtimes: RuntimesService,
+    private readonly traffic: TrafficService,
   ) {}
 
   public async getOverview(): Promise<SystemOverviewResponseDto> {
-    const [packages, dbPingMs, runtimeList] = await Promise.all([
+    const trafficQuery = { range: '15m', includeInternal: true } as const;
+    const [packages, dbPingMs, runtimeList, trafficProblems, trafficSummary] = await Promise.all([
       this.registryService.getAllSummaries(),
       this.pingDatabase(),
       this.runtimes.getSummaries().catch(() => [] as RuntimeSummaryDto[]),
+      this.traffic
+        .getInsights(trafficQuery)
+        .then((i) => i.problems)
+        .catch(() => [] as TrafficProblemDto[]),
+      this.traffic.getSummary(trafficQuery).catch(() => null),
     ]);
     const runtimes = new Map(runtimeList.map((r) => [r.id, r]));
     const ctx: OverviewContext = {
@@ -105,7 +121,8 @@ export class SystemOverviewService {
       http: this.httpMetrics.snapshot(),
       packages,
       runtimes,
-      problems: this.collectProblems(packages, runtimes),
+      problems: this.collectProblems(packages, runtimes, trafficProblems),
+      traffic: { summary: trafficSummary, problems: trafficProblems },
       dbPingMs,
     };
 
@@ -178,9 +195,48 @@ export class SystemOverviewService {
     };
   }
 
+  /** Sức khỏe request đi qua API (khác với sức khỏe process API). */
+  private trafficItem(ctx: OverviewContext): HealthMapItemDto {
+    const { summary, problems } = ctx.traffic;
+    const base = {
+      id: 'runtime-traffic',
+      name: this.i18n.t('overview.map.traffic.name'),
+      category: 'runtime' as const,
+      targetSection: 'http-traffic',
+      icon: 'activity',
+    };
+    if (!summary) {
+      return {
+        ...base,
+        status: 'unknown',
+        subtext: this.i18n.t('overview.map.traffic.unavailable'),
+        metric: UNAVAILABLE,
+      };
+    }
+    const status = problems.some((p) => p.severity === 'critical')
+      ? 'critical'
+      : problems.length > 0
+        ? 'warning'
+        : summary.stats.requests > 0
+          ? 'healthy'
+          : 'unknown';
+    const { stats } = summary;
+    return {
+      ...base,
+      status,
+      subtext: problems[0]?.title ?? this.i18n.t('overview.map.traffic.subtext'),
+      metric: this.i18n.t('overview.map.traffic.metric', {
+        rps: stats.requestsPerSecond,
+        p95: stats.p95LatencyMs ?? UNAVAILABLE,
+        errors: stats.errorRatePercent,
+      }),
+    };
+  }
+
   private collectProblems(
     packages: PackageSummaryDto[],
     runtimes: Map<string, RuntimeSummaryDto>,
+    traffic: TrafficProblemDto[],
   ): Problem[] {
     const fromPackages: Problem[] = packages
       .filter(
@@ -192,6 +248,7 @@ export class SystemOverviewService {
         const since = this.events.getStatusSince(p.packageId);
         return {
           key: `pkg-${p.packageId}`,
+          kind: 'service' as const,
           name: p.displayName,
           severity: p.statusReport.status === PackageStatus.ERROR ? 'error' : 'warning',
           section: sectionOf(p.packageId),
@@ -206,6 +263,7 @@ export class SystemOverviewService {
       )
       .map((r) => ({
         key: `rt-${r.id}`,
+        kind: 'service' as const,
         name: r.name,
         severity: RUNTIME_MAP_STATUS[r.status] === 'critical' ? 'error' : 'warning',
         section: `runtimes/${r.id}`,
@@ -213,9 +271,19 @@ export class SystemOverviewService {
           r.reasons.map((x) => x.message).join(' • ') ||
           this.i18n.t(`overview.runtime.status.${r.status}`),
       }));
+    const fromTraffic: Problem[] = traffic.map((t, i) => ({
+      key: `traffic-${t.kind}-${t.routeId ?? i}`,
+      kind: 'traffic',
+      name: t.title,
+      severity: t.severity === 'critical' ? 'error' : 'warning',
+      section: t.routeId ? `http-traffic/endpoints/${t.routeId}` : 'http-traffic',
+      description: t.message,
+      ...(t.since ? { since: new Date(t.since) } : {}),
+    }));
     return [
       ...fromPackages.filter((p) => p.severity === 'error'),
       ...fromRuntimes,
+      ...fromTraffic,
       ...fromPackages.filter((p) => p.severity === 'warning'),
     ].sort((a, b) => (a.severity === b.severity ? 0 : a.severity === 'error' ? -1 : 1));
   }
@@ -227,7 +295,8 @@ export class SystemOverviewService {
     // Runtime chưa có telemetry không được tính là "ổn định".
     const unknownRuntimes = managedRuntimes.filter((r) => r.status === 'unknown').length;
     const base = {
-      healthyServices: total - problems.length - unknownRuntimes,
+      healthyServices:
+        total - problems.filter((p) => p.kind === 'service').length - unknownRuntimes,
       totalServices: total,
       uptimeSeconds: ctx.runtime.uptimeSeconds,
     };
@@ -408,6 +477,7 @@ export class SystemOverviewService {
         targetSection: 'runtimes/api',
         icon: 'globe',
       },
+      this.trafficItem(ctx),
       runtimeItem('worker', 'cpu'),
       runtimeItem('scheduler', 'clock'),
       {

@@ -172,6 +172,8 @@ export interface RuntimeLog {
   t: string;
   level: string;
   context?: string;
+  /** Có khi log phát sinh trong một HTTP request. */
+  correlationId?: string;
   message: string;
 }
 

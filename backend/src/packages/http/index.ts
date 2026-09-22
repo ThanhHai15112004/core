@@ -4,3 +4,4 @@ export * from './decorators/public.decorator.js';
 export * from './filters/global-exception.filter.js';
 export * from './interceptors/transform-response.interceptor.js';
 export * from './http.module.js';
+export * from './utils/request-annotations.js';

@@ -5,5 +5,6 @@ export * from './auth.config.js';
 export * from './cache.config.js';
 export * from './storage.config.js';
 export * from './runtime.config.js';
+export * from './traffic.config.js';
 export * from './config.service.js';
 export * from './config.module.js';

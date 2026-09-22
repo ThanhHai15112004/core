@@ -22,9 +22,23 @@ export const API_ROUTES = {
       COMMAND: (commandId: string) => `${OPS_PREFIX}/runtimes/commands/${commandId}`,
       DETAIL: (id: string) => `${OPS_PREFIX}/runtimes/${id}`,
       METRICS: (id: string, range: string) => `${OPS_PREFIX}/runtimes/${id}/metrics?range=${range}`,
-      LOGS: (id: string, limit: number, level?: string) =>
-        `${OPS_PREFIX}/runtimes/${id}/logs?limit=${limit}${level ? `&level=${level}` : ''}`,
+      LOGS: (id: string, limit: number, level?: string, correlationId?: string) =>
+        `${OPS_PREFIX}/runtimes/${id}/logs?limit=${limit}${level ? `&level=${level}` : ''}${
+          correlationId ? `&correlationId=${encodeURIComponent(correlationId)}` : ''
+        }`,
       ACTION: (id: string, action: 'restart' | 'stop' | 'start') => `${OPS_PREFIX}/runtimes/${id}/${action}`,
+    },
+    TRAFFIC: {
+      SUMMARY: (qs: string) => `${OPS_PREFIX}/traffic/summary?${qs}`,
+      TIMESERIES: (qs: string) => `${OPS_PREFIX}/traffic/timeseries?${qs}`,
+      ENDPOINTS: (qs: string) => `${OPS_PREFIX}/traffic/endpoints?${qs}`,
+      ENDPOINT_DETAIL: (routeId: string, qs: string) => `${OPS_PREFIX}/traffic/endpoints/${routeId}?${qs}`,
+      REQUESTS: (qs: string) => `${OPS_PREFIX}/traffic/requests?${qs}`,
+      REQUEST_DETAIL: (requestId: string) => `${OPS_PREFIX}/traffic/requests/${encodeURIComponent(requestId)}`,
+      SLOW: (qs: string) => `${OPS_PREFIX}/traffic/slow?${qs}`,
+      ERRORS: (qs: string) => `${OPS_PREFIX}/traffic/errors?${qs}`,
+      ACTIVE: (qs: string) => `${OPS_PREFIX}/traffic/active?${qs}`,
+      INSIGHTS: (qs: string) => `${OPS_PREFIX}/traffic/insights?${qs}`,
     },
   },
 } as const;

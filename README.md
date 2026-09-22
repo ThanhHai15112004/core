@@ -225,6 +225,15 @@ Cùng 1 codebase phục vụ 4 chế độ chạy độc lập: `api` (HTTP), `w
   - **Stop/Start**: tạm dừng/tiếp tục xử lý (Worker ngừng lấy job, Scheduler ngừng cron), process vẫn sống; trạng thái Stop được giữ qua restart. API không thể Stop.
 - `/ops/*` chưa có RBAC → đặt `OPS_RUNTIME_ACTIONS_ENABLED=false` ở production cho tới khi có xác thực.
 
+### HTTP Traffic (System Console → HTTP Traffic)
+- `packages/traffic` gắn hook ở tầng Fastify → mọi route của mọi module (kể cả 401 từ guard, 404) được đo tự động,
+  module nghiệp vụ mới **không cần import hay decorator**. Endpoint được tự phát hiện từ controller của Nest.
+- Aggregate theo endpoint (count, status, histogram latency → P50/P95/P99) ở 3 tầng: 10s (2h), 1 phút (25h), 1 giờ (8 ngày).
+- Log nhẹ cho mọi request (`TRAFFIC_REQUEST_LOG_SIZE`); chi tiết (header/body đã che, timeline) chỉ cho request chậm/lỗi/lấy mẫu, giữ 24h.
+- Request ↔ log nối qua correlation ID (`#system-console/logs?runtime=api&correlationId=...`).
+- API: `GET /ops/traffic/{summary,timeseries,endpoints,endpoints/:routeId,requests,requests/:id,slow,errors,active,insights}`.
+- Cấu hình: nhóm biến `TRAFFIC_*` trong `.env*.example`. Rate limiting chưa có nên UI hiện "chưa cấu hình".
+
 ### Response Envelope chuẩn hóa
 ```json
 { "success": true, "statusCode": 200, "data": {}, "timestamp": "..." }

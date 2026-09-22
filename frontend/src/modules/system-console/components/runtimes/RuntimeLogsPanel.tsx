@@ -10,14 +10,19 @@ const LEVELS = ['', 'info', 'warn', 'error', 'debug'] as const;
 interface RuntimeLogsPanelProps {
   runtime: RuntimeId | 'cli';
   limit?: number;
+  /** Chỉ hiện log của một request (nối từ HTTP Traffic). */
+  correlationId?: string;
   onOpenLogViewer?: () => void;
 }
 
 /** Log gần nhất của một runtime (ring buffer Redis), lọc sẵn theo runtime. */
-export const RuntimeLogsPanel: React.FC<RuntimeLogsPanelProps> = ({ runtime, limit = 100, onOpenLogViewer }) => {
+export const RuntimeLogsPanel: React.FC<RuntimeLogsPanelProps> = ({ runtime, limit = 100, correlationId, onOpenLogViewer }) => {
   const { t, formatTime } = useLocale();
   const [level, setLevel] = useState<(typeof LEVELS)[number]>('');
-  const { data, error } = usePolling(() => runtimesApi.logs(runtime, limit, level || undefined), `${runtime}:${level}:${limit}`);
+  const { data, error } = usePolling(
+    () => runtimesApi.logs(runtime, limit, level || undefined, correlationId),
+    `${runtime}:${level}:${limit}:${correlationId ?? ''}`,
+  );
 
   return (
     <section className="ov-card ov-section">
@@ -34,7 +39,9 @@ export const RuntimeLogsPanel: React.FC<RuntimeLogsPanelProps> = ({ runtime, lim
 
       <div className="log-viewer-stream rt-log-stream">
         {error && !data && <div className="rt-log-empty">{error.message}</div>}
-        {data?.length === 0 && <div className="rt-log-empty">{t('rt.logs.empty')}</div>}
+        {data?.length === 0 && (
+          <div className="rt-log-empty">{correlationId ? t('rt.logs.emptyCorrelation') : t('rt.logs.empty')}</div>
+        )}
         {data?.map((l, i) => (
           <div key={`${l.t}-${i}`} className="log-line">
             <span className="log-time">{formatTime(l.t)}</span>

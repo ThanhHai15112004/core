@@ -6,6 +6,7 @@ import { ConsoleRouteContext, type ConsoleRoute } from './context/console-route-
 import { ConsoleLayout } from './layouts/ConsoleLayout';
 import { OverviewSection } from './sections/OverviewSection';
 import { RuntimesSection } from './sections/runtimes/RuntimesSection';
+import { TrafficSection } from './sections/traffic/TrafficSection';
 import { PackagesSection } from './sections/PackagesSection';
 import { LogViewerSection } from './sections/LogViewerSection';
 import { DatabaseSection } from './sections/DatabaseSection';
@@ -74,6 +75,8 @@ export const SystemConsoleRouter: React.FC = () => {
     switch (route.section) {
       case 'runtimes':
         return <RuntimesSection />;
+      case 'http-traffic':
+        return <TrafficSection />;
       case 'packages':
         return <PackagesSection />;
       case 'logs':

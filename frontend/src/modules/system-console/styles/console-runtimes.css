@@ -311,6 +311,11 @@
   margin-bottom: 1rem;
 }
 
+.console-root .rt-perf-controls .ov-segmented {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
 .console-root .rt-row-link {
   cursor: pointer;
 }

@@ -71,5 +71,9 @@
   "overview.snapshot.jobsPerMinute": "Job/phút",
   "overview.snapshot.tasks": "Số task",
   "overview.snapshot.runningTasks": "Đang chạy",
-  "overview.snapshot.failedToday": "Lỗi hôm nay"
+  "overview.snapshot.failedToday": "Lỗi hôm nay",
+  "overview.map.traffic.name": "HTTP Traffic",
+  "overview.map.traffic.subtext": "Request qua API · 15 phút",
+  "overview.map.traffic.unavailable": "Không có telemetry HTTP",
+  "overview.map.traffic.metric": "{rps} req/s • P95 {p95} ms • 5xx {errors}%"
 }

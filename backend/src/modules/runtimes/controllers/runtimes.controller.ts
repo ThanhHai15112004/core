@@ -101,12 +101,12 @@ export class RuntimesController {
     @Param('runtimeId') runtimeId: string,
     @Query('limit') limit?: string,
     @Query('level') level?: string,
+    @Query('correlationId') correlationId?: string,
   ): Promise<RuntimeLogDto[]> {
-    return this.runtimes.getLogs(
-      runtimeId,
-      parse(limitSchema(1000, 100), limit),
-      level ? parse(z.enum(LOG_LEVELS), level) : undefined,
-    );
+    return this.runtimes.getLogs(runtimeId, parse(limitSchema(1000, 100), limit), {
+      level: level ? parse(z.enum(LOG_LEVELS), level) : undefined,
+      correlationId: correlationId ? parse(z.string().max(128), correlationId) : undefined,
+    });
   }
 
   @Public()

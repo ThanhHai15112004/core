@@ -130,6 +130,7 @@ export interface RuntimeLogDto {
   t: string;
   level: string;
   context?: string;
+  correlationId?: string;
   message: string;
 }
 

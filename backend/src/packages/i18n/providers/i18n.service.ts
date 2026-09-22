@@ -9,6 +9,8 @@ import enOverview from '../locales/en/overview.json' with { type: 'json' };
 import viOverview from '../locales/vi/overview.json' with { type: 'json' };
 import enRuntime from '../locales/en/runtime.json' with { type: 'json' };
 import viRuntime from '../locales/vi/runtime.json' with { type: 'json' };
+import enTraffic from '../locales/en/traffic.json' with { type: 'json' };
+import viTraffic from '../locales/vi/traffic.json' with { type: 'json' };
 
 type Dictionary = Record<string, string>;
 
@@ -16,8 +18,8 @@ type Dictionary = Record<string, string>;
 export class CoreI18nService implements I18nContract {
   private readonly defaultLocale: SupportedLocale = 'vi';
   private readonly dictionaries: Record<SupportedLocale, Dictionary> = {
-    en: { ...enCommon, ...enOps, ...enOverview, ...enRuntime },
-    vi: { ...viCommon, ...viOps, ...viOverview, ...viRuntime },
+    en: { ...enCommon, ...enOps, ...enOverview, ...enRuntime, ...enTraffic },
+    vi: { ...viCommon, ...viOps, ...viOverview, ...viRuntime, ...viTraffic },
   };
 
   public getDefaultLocale(): SupportedLocale {
