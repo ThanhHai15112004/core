@@ -268,6 +268,22 @@ Cùng 1 codebase phục vụ 4 chế độ chạy độc lập: `api` (HTTP), `w
 - API: `GET /ops/cache/{overview,metrics,namespaces[/:name],keys,keys/detail?key=,memory,ttl,clients,events,errors,operations,config,
   flush/impact}`, `POST /ops/cache/{ping,namespaces/:name/clear,flush}`, `DELETE /ops/cache/keys?key=`.
 
+### Storage (System Console → Storage)
+- `BaseStorageProvider` (API `StorageContract` không đổi) chọn driver theo `STORAGE_DRIVER`: `local` ghi file thật dưới
+  `STORAGE_LOCAL_PATH` (ghi tạm rồi rename, chặn path traversal/symlink), `s3` cho AWS S3/MinIO (`@aws-sdk/client-s3`,
+  multipart có tiến độ cho file lớn). Credentials đọc qua `SecretService`, không bao giờ trả ra API.
+- Mọi thao tác được đo (PUT/GET/DELETE/HEAD, bytes, lỗi theo loại, HTTP status với S3, theo container = prefix cấp 1);
+  upload đang chạy được báo lên Redis để thấy tiến độ.
+- `StorageMonitoringService` theo capability: local (duyệt thư mục có cursor, capacity thật qua `statfs`), S3 (ListObjectsV2 theo
+  continuation token, multipart dở, lifecycle/versioning/object lock chỉ đọc, signed URL). Monitor nền quét usage có giới hạn
+  (`STORAGE_SCAN_MAX_OBJECTS`), lưu điểm theo giờ để tính tăng trưởng, và đánh giá cảnh báo.
+- Thao tác: Test Storage (connect → write → read → verify → delete), Delete object/version (`DELETE` / gõ lại key), Download,
+  Signed URL, Preview (ảnh ≤ 2 MB, text 4 KB đầu, JSON đã che field nhạy cảm; prefix nhạy cảm không preview), Abort multipart
+  (`ABORT`) — mỗi thao tác bật/tắt bằng `OPS_STORAGE_*` và ghi audit.
+- API: `GET /ops/storage/{overview,metrics,traffic,usage,containers[/:id],objects,objects/detail?key=,objects/download?key=,
+  objects/preview?key=,uploads,lifecycle,errors,events,operations,config}`, `POST /ops/storage/{test,objects/signed-url,
+  uploads/abort}`, `DELETE /ops/storage/objects?key=&versionId=`.
+
 ### Response Envelope chuẩn hóa
 ```json
 { "success": true, "statusCode": 200, "data": {}, "timestamp": "..." }

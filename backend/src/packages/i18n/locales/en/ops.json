@@ -33,5 +33,11 @@
   "ops.status.healthy": "Healthy",
   "ops.status.warning": "Warning",
   "ops.status.error": "Error",
-  "ops.status.idle": "Idle"
+  "ops.status.idle": "Idle",
+  "ops.storage.displayName": "Storage",
+  "ops.storage.summary": "{product}, {state}.",
+  "ops.storage.test.label": "Test Storage",
+  "ops.storage.test.description": "Write, read, verify and delete a temporary object to check storage.",
+  "ops.storage.test.ok": "Storage is operational ({ms} ms).",
+  "ops.storage.test.failed": "Storage check failed at step {step}."
 }

@@ -17,6 +17,7 @@ const TrafficSection = lazy(() => import('./sections/traffic/TrafficSection').th
 const PerformanceSection = lazy(() => import('./sections/performance/PerformanceSection').then((m) => ({ default: m.PerformanceSection })));
 const DatabaseSection = lazy(() => import('./sections/database/DatabaseSection').then((m) => ({ default: m.DatabaseSection })));
 const CacheSection = lazy(() => import('./sections/cache/CacheSection').then((m) => ({ default: m.CacheSection })));
+const StorageSection = lazy(() => import('./sections/storage/StorageSection').then((m) => ({ default: m.StorageSection })));
 
 const HASH_PREFIX = ROUTES.SYSTEM_CONSOLE.replace(/^#/, '');
 
@@ -90,6 +91,8 @@ export const SystemConsoleRouter: React.FC = () => {
         return <DatabaseSection />;
       case 'cache':
         return <CacheSection />;
+      case 'storage':
+        return <StorageSection />;
       case 'security':
         return <SecuritySection />;
       default:

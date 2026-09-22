@@ -12,6 +12,7 @@ import type { DatabaseManageableAdapter } from '@packages/database/index.js';
 import { CoreI18nService } from '@packages/i18n/index.js';
 import { OpsEventService } from '@modules/system-ops/services/ops-event.service.js';
 import type { SecurityManageableAdapter } from '@packages/security/index.js';
+import type { StorageManageableAdapter } from '@packages/storage/index.js';
 
 describe('PackageRegistryService Unit Tests', () => {
   let mockCacheAdapter: jest.Mocked<CacheManageableAdapter>;
@@ -86,12 +87,26 @@ describe('PackageRegistryService Unit Tests', () => {
       })),
     } as unknown as jest.Mocked<SecurityManageableAdapter>;
 
+    const mockStorageAdapter = {
+      packageId: CorePackageId.STORAGE,
+      displayName: 'Storage',
+      category: PackageCategory.STORAGE,
+      icon: 'hard-drive',
+      getStatus: jest.fn().mockImplementation(async () => ({
+        status: PackageStatus.HEALTHY,
+        summary: 'Local Filesystem, connected.',
+        metrics: { driver: 'local' },
+      })),
+      getActions: jest.fn().mockReturnValue([]),
+    } as unknown as jest.Mocked<StorageManageableAdapter>;
+
     const i18n = new CoreI18nService();
     service = new PackageRegistryService(
       mockCacheAdapter,
       mockLoggingAdapter,
       mockDatabaseAdapter,
       mockSecurityAdapter,
+      mockStorageAdapter,
       i18n,
       new OpsEventService(i18n),
     );
@@ -100,7 +115,7 @@ describe('PackageRegistryService Unit Tests', () => {
 
   it('should auto-register default adapters on module init', async () => {
     const summaries = await service.getAllSummaries();
-    expect(summaries).toHaveLength(4);
+    expect(summaries).toHaveLength(5);
 
     const cacheSummary = summaries.find((s) => s.packageId === CorePackageId.CACHE);
     expect(cacheSummary).toBeDefined();
@@ -133,7 +148,7 @@ describe('PackageRegistryService Unit Tests', () => {
     service.register(newElasticSearchPackage);
 
     const summaries = await service.getAllSummaries();
-    expect(summaries).toHaveLength(5);
+    expect(summaries).toHaveLength(6);
 
     const searchSummary = summaries.find((s) => s.packageId === 'elasticsearch');
     expect(searchSummary).toBeDefined();
@@ -158,7 +173,7 @@ describe('PackageRegistryService Unit Tests', () => {
     expect(service.getPackage(CorePackageId.CACHE)).toBeUndefined();
 
     const summaries = await service.getAllSummaries();
-    expect(summaries).toHaveLength(3);
+    expect(summaries).toHaveLength(4);
     expect(summaries.some((s) => s.packageId === CorePackageId.LOGGING)).toBe(true);
     expect(summaries.some((s) => s.packageId === CorePackageId.DATABASE)).toBe(true);
   });
@@ -169,7 +184,7 @@ describe('PackageRegistryService Unit Tests', () => {
     const summaries = await service.getAllSummaries();
     const cacheSummary = summaries.find((s) => s.packageId === CorePackageId.CACHE);
 
-    expect(summaries).toHaveLength(4);
+    expect(summaries).toHaveLength(5);
     expect(cacheSummary?.statusReport.status).toBe(PackageStatus.ERROR);
     expect(cacheSummary?.statusReport.summary).toBe('Redis down');
   });

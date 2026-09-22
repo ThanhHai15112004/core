@@ -29,7 +29,7 @@
   "overview.map.cache.name": "Bộ nhớ đệm",
   "overview.map.storage.name": "Lưu trữ",
   "overview.map.storage.subtext": "Driver: {driver}",
-  "overview.map.storage.secondary": "Chưa có health check",
+  "overview.map.storage.secondary": "Chưa có số liệu usage",
   "overview.map.security.name": "Bảo mật & Xác thực",
   "overview.map.security.subtext": "JWT • AuthGuard toàn cục",
   "overview.incident.title": "{name} báo sự cố",
@@ -79,5 +79,6 @@
   "overview.map.performance.name": "Performance",
   "overview.map.performance.subtext": "Không phát hiện điểm nghẽn",
   "overview.map.performance.metric": "{count} điểm nghẽn",
-  "overview.map.performance.unavailable": "Không có số đo hiệu năng"
+  "overview.map.performance.unavailable": "Không có số đo hiệu năng",
+  "overview.map.storage.metric": "{objects} object • {size}"
 }

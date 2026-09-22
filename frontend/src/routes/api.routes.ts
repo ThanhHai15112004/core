@@ -46,6 +46,9 @@ export const API_ROUTES = {
     CACHE: {
       path: (path: string, qs = '') => `${OPS_PREFIX}/cache/${path}${qs ? `?${qs}` : ''}`,
     },
+    STORAGE: {
+      path: (path: string, qs = '') => `${OPS_PREFIX}/storage/${path}${qs ? `?${qs}` : ''}`,
+    },
     PERFORMANCE: {
       OVERVIEW: (qs: string) => `${OPS_PREFIX}/performance/overview?${qs}`,
       TIMESERIES: (qs: string) => `${OPS_PREFIX}/performance/timeseries?${qs}`,

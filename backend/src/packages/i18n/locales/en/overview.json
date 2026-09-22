@@ -29,7 +29,7 @@
   "overview.map.cache.name": "Cache",
   "overview.map.storage.name": "Storage",
   "overview.map.storage.subtext": "Driver: {driver}",
-  "overview.map.storage.secondary": "No health check available",
+  "overview.map.storage.secondary": "No usage data yet",
   "overview.map.security.name": "Security & Auth",
   "overview.map.security.subtext": "JWT • Global AuthGuard",
   "overview.incident.title": "{name} reported an issue",
@@ -79,5 +79,6 @@
   "overview.map.performance.name": "Performance",
   "overview.map.performance.subtext": "No bottlenecks detected",
   "overview.map.performance.metric": "{count} bottlenecks",
-  "overview.map.performance.unavailable": "No performance telemetry"
+  "overview.map.performance.unavailable": "No performance telemetry",
+  "overview.map.storage.metric": "{objects} objects • {size}"
 }

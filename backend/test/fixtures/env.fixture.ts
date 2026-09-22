@@ -23,7 +23,8 @@ export const testEnvFixture: Record<string, string> = {
   REDIS_PORT: '6379',
   REDIS_PREFIX: 'core_test:',
   STORAGE_DRIVER: 'local',
-  STORAGE_LOCAL_PATH: './storage/test-uploads',
+  // Thư mục tạm của hệ điều hành (test/setup-env.ts) — test không ghi file vào repo.
+  STORAGE_LOCAL_PATH: process.env['STORAGE_LOCAL_PATH'] ?? '',
 };
 
 /**

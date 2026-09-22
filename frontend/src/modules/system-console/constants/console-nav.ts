@@ -34,7 +34,7 @@ export const NAV_TREE: NavGroup[] = [
     children: [
       { id: 'database', status: 'ready' },
       { id: 'cache', status: 'ready' },
-      { id: 'storage', status: 'planned' },
+      { id: 'storage', status: 'ready' },
       { id: 'messaging', status: 'planned' },
     ],
   },

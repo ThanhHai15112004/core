@@ -33,5 +33,11 @@
   "ops.status.healthy": "Hoạt động tốt",
   "ops.status.warning": "Cảnh báo",
   "ops.status.error": "Lỗi",
-  "ops.status.idle": "Chờ"
+  "ops.status.idle": "Chờ",
+  "ops.storage.displayName": "Lưu trữ (Storage)",
+  "ops.storage.summary": "{product}, {state}.",
+  "ops.storage.test.label": "Test Storage",
+  "ops.storage.test.description": "Ghi, đọc, so khớp và xoá một object tạm để kiểm tra storage.",
+  "ops.storage.test.ok": "Storage hoạt động tốt ({ms} ms).",
+  "ops.storage.test.failed": "Kiểm tra storage thất bại ở bước {step}."
 }

@@ -25,6 +25,7 @@ import { TrafficOpsModule } from '@modules/traffic/index.js';
 import { PerformanceOpsModule } from '@modules/performance/index.js';
 import { DatabaseOpsModule } from '@modules/database-ops/index.js';
 import { CacheOpsModule } from '@modules/cache-ops/index.js';
+import { StorageOpsModule } from '@modules/storage-ops/index.js';
 import { ApiRuntimeContributor } from './runtime/api-runtime.contributor.js';
 
 @Module({
@@ -50,6 +51,7 @@ import { ApiRuntimeContributor } from './runtime/api-runtime.contributor.js';
     PerformanceOpsModule,
     DatabaseOpsModule,
     CacheOpsModule,
+    StorageOpsModule,
   ],
   providers: [
     ApiRuntimeContributor,

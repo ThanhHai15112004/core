@@ -462,9 +462,12 @@ export class SystemOverviewService {
   }
 
   private buildHealthMap(ctx: OverviewContext): HealthMapItemDto[] {
-    const { app, database, storage } = this.configService;
+    const { app, database } = this.configService;
     const pkg = (id: string) => ctx.packages.find((p) => p.packageId === id);
     const cachePackage = pkg(CorePackageId.CACHE);
+    const storagePackage = pkg(CorePackageId.STORAGE);
+    const storageObjects = storagePackage?.statusReport.metrics['objects'];
+    const storageBytes = storagePackage?.statusReport.metrics['bytes'];
     const securityPackage = pkg(CorePackageId.SECURITY);
     const cacheKeys = cachePackage?.statusReport.metrics['keys'];
     const cacheHitRate = cachePackage?.statusReport.metrics['hitRatePercent'];
@@ -565,13 +568,19 @@ export class SystemOverviewService {
         id: 'infra-storage',
         name: this.i18n.t('overview.map.storage.name'),
         category: 'infrastructure',
-        status: 'unknown',
-        subtext: this.i18n.t('overview.map.storage.subtext', {
-          driver: storage.driver.toUpperCase(),
+        status: toHealthMapStatus(storagePackage?.statusReport.status),
+        subtext: storagePackage?.statusReport.summary ?? UNAVAILABLE,
+        secondarySubtext: this.i18n.t('overview.map.storage.subtext', {
+          driver: String(storagePackage?.statusReport.metrics['product'] ?? UNAVAILABLE),
         }),
-        secondarySubtext: this.i18n.t('overview.map.storage.secondary'),
-        metric: this.i18n.t('overview.map.noHealthCheck'),
-        targetSection: 'packages',
+        metric:
+          typeof storageObjects === 'number' && typeof storageBytes === 'number'
+            ? this.i18n.t('overview.map.storage.metric', {
+                objects: storageObjects,
+                size: `${(storageBytes / 1024 ** 2).toFixed(1)} MB`,
+              })
+            : this.i18n.t('overview.map.storage.secondary'),
+        targetSection: 'storage',
         icon: 'hard-drive',
       },
       {
