@@ -234,6 +234,15 @@ Cùng 1 codebase phục vụ 4 chế độ chạy độc lập: `api` (HTTP), `w
 - API: `GET /ops/traffic/{summary,timeseries,endpoints,endpoints/:routeId,requests,requests/:id,slow,errors,active,insights}`.
 - Cấu hình: nhóm biến `TRAFFIC_*` trong `.env*.example`. Rate limiting chưa có nên UI hiện "chưa cấu hình".
 
+### Performance (System Console → Performance)
+- `packages/telemetry` (`MetricRecorder`, cung cấp qua `RuntimeAgentModule`) ghi số đo theo bucket 10s/1m/1h giống traffic:
+  runtime (CPU, RSS/heap, event loop, GC), database (latency query, lỗi, pool, slow query), cache, worker/queue, message publish.
+- Database được đo bằng cách bọc `driver.createQueryRunner` của TypeORM `DataSource` (không phụ thuộc driver, không lưu params).
+  Hiện chưa có `DataSource` thật nên thành phần Database hiện "không khả dụng" — cấu hình TypeORM là tự có số liệu.
+- Traffic gộp thêm thời gian theo giai đoạn (routing, guard, handler, DB, cache, gửi) → phân rã latency trung bình/request.
+- Rule engine theo ngưỡng `PERF_*` (không có "điểm số"); `PerformanceMonitor` (API, lock Redis) ghi sự kiện bắt đầu/hồi phục nghẽn.
+- API: `GET /ops/performance/{overview,timeseries,bottlenecks,events,components/:id}`.
+
 ### Response Envelope chuẩn hóa
 ```json
 { "success": true, "statusCode": 200, "data": {}, "timestamp": "..." }

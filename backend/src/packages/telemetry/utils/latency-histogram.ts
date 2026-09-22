@@ -1,4 +1,4 @@
-import { HISTOGRAM_SIZE, LATENCY_BUCKETS_MS } from '../contracts/traffic.types.js';
+import { HISTOGRAM_SIZE, LATENCY_BUCKETS_MS } from '../contracts/telemetry.types.js';
 
 export type Histogram = number[];
 

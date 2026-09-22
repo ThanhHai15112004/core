@@ -30,7 +30,8 @@ import {
   type TrafficRoute,
   type TrafficTier,
 } from '../contracts/traffic.types.js';
-import { histogramIndex } from '../utils/latency-histogram.js';
+import { histogramIndex } from '@packages/telemetry/index.js';
+import type { RequestContextStore } from '@packages/logging/index.js';
 import { buildRoute, matchesGlob } from '../utils/route-key.js';
 import { captureBody, maskHeaders, maskIp, redactQuery } from '../utils/capture.js';
 
@@ -51,6 +52,8 @@ interface RequestState {
   marks: Partial<Record<TimelinePhase, number>>;
   requestBody?: unknown;
   responsePayload?: unknown;
+  /** Context ALS của request (có thời gian DB/cache do instrumentation cộng dồn). */
+  context?: RequestContextStore;
 }
 
 interface PendingBucket {
@@ -77,6 +80,40 @@ const PHASE_ORDER: TimelinePhase[] = [
   'send',
   'finished',
 ];
+
+/** Đơn vị lưu thời gian breakdown: 0.1 ms (HINCRBY chỉ nhận số nguyên). */
+export const BREAKDOWN_UNIT_MS = 0.1;
+const units = (ms: number) => Math.max(0, Math.round(ms / BREAKDOWN_UNIT_MS));
+
+/**
+ * Thời gian theo từng giai đoạn của request đã vào tới handler (field `b.*`):
+ * routing/middleware → guards → handler (trong đó DB/cache) → serialize/gửi.
+ * Request bị chặn trước handler (401/404) không có đủ mốc nên không tính vào breakdown.
+ */
+function breakdownOf(state: RequestState): [string, number][] {
+  const { routed, handlerStart, handlerEnd, finished } = state.marks;
+  if (
+    routed === undefined ||
+    handlerStart === undefined ||
+    handlerEnd === undefined ||
+    finished === undefined
+  )
+    return [];
+  const handlerMs = handlerEnd - handlerStart;
+  const t = state.context?.timings;
+  const dbMs = Math.min(t?.dbMs ?? 0, handlerMs);
+  const cacheMs = Math.min(t?.cacheMs ?? 0, Math.max(0, handlerMs - dbMs));
+  return [
+    ['b.n', 1],
+    ['b.route', units(routed)],
+    ['b.guard', units(handlerStart - routed)],
+    ['b.app', units(handlerMs - dbMs - cacheMs)],
+    ['b.db', units(dbMs)],
+    ['b.cache', units(cacheMs)],
+    ['b.send', units(finished - handlerEnd)],
+    ['b.dbq', t?.dbQueries ?? 0],
+  ];
+}
 
 /**
  * Thu thập HTTP traffic của instance hiện tại: aggregate theo bucket (10s/1m/1h) cho từng endpoint,
@@ -163,6 +200,12 @@ export class TrafficCollectorService implements OnModuleInit, BeforeApplicationS
     }
   }
 
+  /** Gắn context ALS để lúc kết thúc (ngoài async context) vẫn đọc được thời gian DB/cache. */
+  public attachContext(raw: object, context: RequestContextStore | undefined): void {
+    const state = this.states.get(raw);
+    if (state && context) state.context = context;
+  }
+
   public keepRequestBody(req: FastifyRequest): void {
     const state = this.states.get(req.raw);
     if (state && this.cfg.captureBodies) state.requestBody = req.body;
@@ -213,7 +256,7 @@ export class TrafficCollectorService implements OnModuleInit, BeforeApplicationS
       captured: reason !== null,
     };
 
-    this.aggregate(summary);
+    this.aggregate(summary, breakdownOf(state));
     this.pendingLog.push(summary);
     if (this.pendingLog.length > this.cfg.requestLogSize) {
       this.pendingLog = this.pendingLog.slice(-this.cfg.requestLogSize);
@@ -312,13 +355,14 @@ export class TrafficCollectorService implements OnModuleInit, BeforeApplicationS
     return this.routes.get(route.id)!;
   }
 
-  private aggregate(s: RequestSummary): void {
+  private aggregate(s: RequestSummary, breakdown: [string, number][]): void {
     const atSec = Math.floor(s.at / 1000);
     const fields: [string, number][] = [
       ['n', 1],
       ['ms', Math.round(s.durationMs)],
       [`h${histogramIndex(s.durationMs)}`, 1],
       [`s${s.status}`, 1],
+      ...breakdown,
     ];
     if (s.errorCode) fields.push([`x${s.errorCode}`, 1]);
 

@@ -1,4 +1,5 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
+import { MetricRecorder } from '@packages/telemetry/index.js';
 import type {
   MessageEnvelope,
   MessagePublisherContract,
@@ -11,7 +12,10 @@ import { QueueRegistry } from './queue-registry.service.js';
 export class BaseMessagePublisherProvider implements MessagePublisherContract {
   private readonly logger = new Logger(BaseMessagePublisherProvider.name);
 
-  constructor(private readonly queues: QueueRegistry) {}
+  constructor(
+    private readonly queues: QueueRegistry,
+    @Optional() private readonly recorder?: MetricRecorder,
+  ) {}
 
   public async publish<T>(
     topic: string,
@@ -26,6 +30,7 @@ export class BaseMessagePublisherProvider implements MessagePublisherContract {
         removeOnFail: { count: 1000 },
       }),
     );
+    this.recorder?.count('msg.published');
     this.logger.log(`[EventPublished] ${queue}/${topic} ID:${envelope.id}`);
     return envelope;
   }

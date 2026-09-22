@@ -12,6 +12,18 @@ export interface ChartSeries {
   /** CSS color, vd. `var(--scp-series-1)` */
   color: string;
   points: ChartPoint[];
+  /** Series vẽ theo trục phải (đơn vị khác, vd. so sánh CPU với latency). */
+  axis?: 'left' | 'right';
+  dashed?: boolean;
+  /** Đơn vị riêng trong tooltip (mặc định `unit` của biểu đồ). */
+  unit?: string;
+}
+
+/** Mốc sự kiện trên trục thời gian (restart, bắt đầu nghẽn…). */
+export interface ChartMarker {
+  t: number;
+  label: string;
+  color: string;
 }
 
 interface LineChartProps {
@@ -21,9 +33,11 @@ interface LineChartProps {
   emptyText: string;
   height?: number;
   ariaLabel: string;
+  markers?: ChartMarker[];
 }
 
 const PAD = { top: 12, right: 12, bottom: 26, left: 44 };
+const RIGHT_AXIS_PAD = 48;
 const Y_TICKS = 4;
 const X_LABELS = 5;
 
@@ -38,7 +52,7 @@ function formatTick(value: number): string {
 }
 
 /** Biểu đồ đường nhiều series, trục thời gian thật; vẽ theo kích thước thật của khung. */
-export const LineChart: React.FC<LineChartProps> = ({ series, unit, formatTime, emptyText, height = 220, ariaLabel }) => {
+export const LineChart: React.FC<LineChartProps> = ({ series, unit, formatTime, emptyText, height = 220, ariaLabel, markers = [] }) => {
   const wrapRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(600);
   const [hoverT, setHoverT] = useState<number | null>(null);
@@ -58,20 +72,31 @@ export const LineChart: React.FC<LineChartProps> = ({ series, unit, formatTime, 
     const minT = Math.min(...all.map((p) => p.t));
     const maxT = Math.max(...all.map((p) => p.t));
     const spanT = Math.max(1, maxT - minT);
-    const plotW = Math.max(1, width - PAD.left - PAD.right);
+    const hasRight = visible.some((s) => s.axis === 'right');
+    const padRight = hasRight ? RIGHT_AXIS_PAD : PAD.right;
+    const plotW = Math.max(1, width - PAD.left - padRight);
     const plotH = height - PAD.top - PAD.bottom;
-    const max = niceMax(Math.max(0, ...all.map((p) => p.value)) * 1.1);
+    const maxOf = (axis: 'left' | 'right') =>
+      niceMax(Math.max(0, ...visible.filter((s) => (s.axis ?? 'left') === axis).flatMap((s) => s.points.map((p) => p.value))) * 1.1);
+    const max = maxOf('left');
+    const maxRight = maxOf('right');
     const x = (t: number) => PAD.left + (all.length === 1 ? plotW / 2 : ((t - minT) / spanT) * plotW);
-    const y = (v: number) => PAD.top + plotH - (v / max) * plotH;
+    const yFor = (axisMax: number) => (v: number) => PAD.top + plotH - (v / axisMax) * plotH;
 
-    const lines = visible.map((s) => ({
-      ...s,
-      coords: s.points.map((p) => ({ x: x(p.t), y: y(p.value), p })),
-    }));
-    const yTicks = Array.from({ length: Y_TICKS + 1 }, (_, i) => ({ value: (max / Y_TICKS) * i, y: PAD.top + plotH - (plotH / Y_TICKS) * i }));
-    const xTicks = Array.from({ length: X_LABELS }, (_, i) => minT + (spanT / (X_LABELS - 1)) * i);
-    return { lines, yTicks, xTicks, x, minT, maxT, plotW };
-  }, [visible, width, height]);
+    const lines = visible.map((s) => {
+      const y = yFor(s.axis === 'right' ? maxRight : max);
+      return { ...s, coords: s.points.map((p) => ({ x: x(p.t), y: y(p.value), p })) };
+    });
+    const ticksOf = (axisMax: number) =>
+      Array.from({ length: Y_TICKS + 1 }, (_, i) => ({ value: (axisMax / Y_TICKS) * i, y: PAD.top + plotH - (plotH / Y_TICKS) * i }));
+    const yTicks = ticksOf(max);
+    const rightTicks = hasRight ? ticksOf(maxRight) : [];
+    // Màn hẹp: ít nhãn thời gian hơn để không chồng chữ.
+    const xLabels = width < 480 ? 3 : X_LABELS;
+    const xTicks = Array.from({ length: xLabels }, (_, i) => minT + (spanT / (xLabels - 1)) * i);
+    const marks = markers.filter((m) => m.t >= minT && m.t <= maxT).map((m) => ({ ...m, x: x(m.t) }));
+    return { lines, yTicks, rightTicks, xTicks, x, minT, maxT, plotW, padRight, marks };
+  }, [visible, width, height, markers]);
 
   const handleMove = (e: React.MouseEvent<SVGSVGElement>) => {
     const px = e.clientX - e.currentTarget.getBoundingClientRect().left;
@@ -100,10 +125,22 @@ export const LineChart: React.FC<LineChartProps> = ({ series, unit, formatTime, 
           <svg width={width} height={height} onMouseMove={handleMove} onMouseLeave={() => setHoverT(null)} role="img" aria-label={ariaLabel}>
             {chart.yTicks.map((tick) => (
               <g key={tick.y}>
-                <line x1={PAD.left} x2={width - PAD.right} y1={tick.y} y2={tick.y} className="lc-grid" />
+                <line x1={PAD.left} x2={width - chart.padRight} y1={tick.y} y2={tick.y} className="lc-grid" />
                 <text x={PAD.left - 8} y={tick.y + 4} textAnchor="end" className="lc-axis">
                   {formatTick(tick.value)}
                 </text>
+              </g>
+            ))}
+            {chart.rightTicks.map((tick) => (
+              <text key={`r${tick.y}`} x={width - chart.padRight + 8} y={tick.y + 4} textAnchor="start" className="lc-axis">
+                {formatTick(tick.value)}
+              </text>
+            ))}
+            {chart.marks.map((m) => (
+              <g key={`${m.t}-${m.label}`} className="lc-marker">
+                <title>{`${formatTime(m.t)} — ${m.label}`}</title>
+                <line x1={m.x} x2={m.x} y1={PAD.top} y2={height - PAD.bottom} stroke={m.color} strokeDasharray="3 3" strokeWidth={1.5} />
+                <path d={`M${m.x - 5},${PAD.top - 2} L${m.x + 5},${PAD.top - 2} L${m.x},${PAD.top + 5} Z`} fill={m.color} />
               </g>
             ))}
             {chart.xTicks.map((t, i) => (
@@ -124,11 +161,12 @@ export const LineChart: React.FC<LineChartProps> = ({ series, unit, formatTime, 
                   d={line.coords.map((c, i) => `${i === 0 ? 'M' : 'L'}${c.x.toFixed(1)},${c.y.toFixed(1)}`).join(' ')}
                   fill="none"
                   stroke={line.color}
-                  strokeWidth={2}
+                  strokeWidth={line.dashed ? 1.5 : 2}
+                  strokeDasharray={line.dashed ? '5 4' : undefined}
                   strokeLinejoin="round"
                   strokeLinecap="round"
                 />
-                {line.coords.length <= 60 && line.coords.map((c) => <circle key={c.p.t} cx={c.x} cy={c.y} r={2.2} fill={line.color} />)}
+                {!line.dashed && line.coords.length <= 60 && line.coords.map((c) => <circle key={c.p.t} cx={c.x} cy={c.y} r={2.2} fill={line.color} />)}
               </g>
             ))}
 
@@ -148,7 +186,7 @@ export const LineChart: React.FC<LineChartProps> = ({ series, unit, formatTime, 
               {hovered.map(({ line, point }) => (
                 <span key={line.id} className="lc-tooltip-row">
                   <i style={{ background: line.color }} />
-                  {line.label}: <strong>{point.p.value} {unit}</strong>
+                  {line.label}: <strong>{point.p.value} {line.unit ?? unit}</strong>
                 </span>
               ))}
             </div>
@@ -159,7 +197,7 @@ export const LineChart: React.FC<LineChartProps> = ({ series, unit, formatTime, 
       {visible.length > 1 && (
         <ul className="lc-legend">
           {visible.map((s) => (
-            <li key={s.id}>
+            <li key={s.id} className={s.dashed ? 'is-dashed' : undefined}>
               <i style={{ background: s.color }} />
               {s.label}
             </li>

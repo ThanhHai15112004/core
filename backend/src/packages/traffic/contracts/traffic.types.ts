@@ -1,14 +1,10 @@
-/** Cận trên (ms) của từng ô histogram latency; ô cuối cùng là "> 10s". */
-export const LATENCY_BUCKETS_MS = [5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000] as const;
-export const HISTOGRAM_SIZE = LATENCY_BUCKETS_MS.length + 1;
+import { TELEMETRY_TIERS, type TelemetryTier } from '@packages/telemetry/index.js';
 
-/** Các tầng lưu aggregate: độ phân giải và thời gian giữ. */
-export const TRAFFIC_TIERS = {
-  s10: { seconds: 10, ttlSec: 2 * 3600 },
-  m1: { seconds: 60, ttlSec: 25 * 3600 },
-  h1: { seconds: 3600, ttlSec: 8 * 24 * 3600 },
-} as const;
-export type TrafficTier = keyof typeof TRAFFIC_TIERS;
+export { LATENCY_BUCKETS_MS, HISTOGRAM_SIZE } from '@packages/telemetry/index.js';
+
+/** Các tầng lưu aggregate của traffic — dùng chung tầng với số đo hiệu năng. */
+export const TRAFFIC_TIERS = TELEMETRY_TIERS;
+export type TrafficTier = TelemetryTier;
 
 /** Endpoint không khớp route nào (404) — gom chung để không đưa URL thô vào key. */
 export const UNMATCHED_ROUTE = '(unmatched)';

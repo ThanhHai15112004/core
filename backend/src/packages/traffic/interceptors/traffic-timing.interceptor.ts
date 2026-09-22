@@ -7,6 +7,7 @@ import {
 import type { FastifyRequest } from 'fastify';
 import type { Observable } from 'rxjs';
 import { finalize } from 'rxjs/operators';
+import { RequestContextService } from '@packages/logging/index.js';
 import { TrafficCollectorService } from '../providers/traffic-collector.service.js';
 
 /** Đánh dấu mốc handler trong timeline (sau guard/pipe → trước/sau controller). */
@@ -18,6 +19,8 @@ export class TrafficTimingInterceptor implements NestInterceptor {
     if (context.getType() !== 'http') return next.handle();
     const raw = context.switchToHttp().getRequest<FastifyRequest>().raw;
     this.collector.mark(raw, 'handlerStart');
+    // Interceptor chạy trong async context của request → lấy được store mà instrumentation DB/cache ghi vào.
+    this.collector.attachContext(raw, RequestContextService.current());
     return next.handle().pipe(finalize(() => this.collector.mark(raw, 'handlerEnd')));
   }
 }

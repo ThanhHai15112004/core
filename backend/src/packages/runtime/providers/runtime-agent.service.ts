@@ -9,6 +9,7 @@ import {
 import * as os from 'node:os';
 import { CoreConfigService } from '@packages/config/index.js';
 import { RedisService } from '@packages/redis/index.js';
+import { MetricRecorder } from '@packages/telemetry/index.js';
 import { ResourceSampler } from './resource-sampler.js';
 import { COMMAND_TTL_SEC, runtimeKeys } from '../constants/runtime.keys.js';
 import { RUNTIME_IDENTITY } from '../constants/runtime.tokens.js';
@@ -59,6 +60,7 @@ export class RuntimeAgentService implements OnApplicationBootstrap, BeforeApplic
     private readonly redis: RedisService,
     private readonly config: CoreConfigService,
     private readonly sampler: ResourceSampler,
+    private readonly recorder: MetricRecorder,
   ) {
     this.keys = runtimeKeys(redis);
   }
@@ -273,9 +275,27 @@ export class RuntimeAgentService implements OnApplicationBootstrap, BeforeApplic
     );
   }
 
+  /** Số đo tài nguyên cho trang Performance (bucket 10s/1m/1h theo instance). */
+  private recordResources(r: RuntimeResources): void {
+    const m = (name: string) => `rt.${name}`;
+    this.recorder.gauge(m('cpu'), r.cpuPercent);
+    this.recorder.gauge(m('rss'), r.rssMb);
+    this.recorder.gauge(m('heapUsed'), r.heapUsedMb);
+    this.recorder.gauge(m('heapTotal'), r.heapTotalMb);
+    this.recorder.gauge(m('external'), r.externalMb);
+    if (r.memoryPercent !== null) this.recorder.gauge(m('memPct'), r.memoryPercent);
+    if (r.memoryLimitMb !== null) this.recorder.gauge(m('memLimit'), r.memoryLimitMb);
+    this.recorder.gauge(m('elMean'), r.eventLoopMeanMs);
+    this.recorder.gauge(m('elP99'), r.eventLoopP99Ms);
+    this.recorder.count(m('gcCount'), r.gcCount);
+    this.recorder.count(m('gcPause'), r.gcPauseMs);
+    if (r.gcCount > 0) this.recorder.gauge(m('gcMaxPause'), r.gcMaxPauseMs);
+  }
+
   private async buildHeartbeat(): Promise<RuntimeHeartbeat> {
     const resources = this.sampler.sample();
     this.lastResources = resources;
+    this.recordResources(resources);
     const [metrics, issues, details] = await Promise.all([
       this.contributor?.collectMetrics().catch(() => ({})) ??
         Promise.resolve({} as Record<string, MetricValue>),

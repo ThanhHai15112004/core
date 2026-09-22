@@ -4,3 +4,6 @@ export * from './providers/database.provider.js';
 export * from './providers/typeorm-config.service.js';
 export * from './providers/database-manageable.adapter.js';
 export * from './database.module.js';
+export * from './instrumentation/query-instrument.service.js';
+export * from './instrumentation/sql-normalize.js';
+export * from './instrumentation/pool-stats.js';

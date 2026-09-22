@@ -29,6 +29,8 @@ export interface RuntimeResources {
   /** Tổng thời gian GC pause kể từ mẫu trước. */
   gcPauseMs: number;
   gcCount: number;
+  /** GC pause dài nhất kể từ mẫu trước. */
+  gcMaxPauseMs: number;
   activeHandles: number;
 }
 

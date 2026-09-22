@@ -7,6 +7,7 @@ import { ConsoleLayout } from './layouts/ConsoleLayout';
 import { OverviewSection } from './sections/OverviewSection';
 import { RuntimesSection } from './sections/runtimes/RuntimesSection';
 import { TrafficSection } from './sections/traffic/TrafficSection';
+import { PerformanceSection } from './sections/performance/PerformanceSection';
 import { PackagesSection } from './sections/PackagesSection';
 import { LogViewerSection } from './sections/LogViewerSection';
 import { DatabaseSection } from './sections/DatabaseSection';
@@ -77,6 +78,8 @@ export const SystemConsoleRouter: React.FC = () => {
         return <RuntimesSection />;
       case 'http-traffic':
         return <TrafficSection />;
+      case 'performance':
+        return <PerformanceSection />;
       case 'packages':
         return <PackagesSection />;
       case 'logs':

@@ -22,6 +22,7 @@ import { RedisModule } from '@packages/redis/index.js';
 import { RuntimeAgentModule } from '@packages/runtime/index.js';
 import { TrafficModule } from '@packages/traffic/index.js';
 import { TrafficOpsModule } from '@modules/traffic/index.js';
+import { PerformanceOpsModule } from '@modules/performance/index.js';
 import { ApiRuntimeContributor } from './runtime/api-runtime.contributor.js';
 
 @Module({
@@ -44,6 +45,7 @@ import { ApiRuntimeContributor } from './runtime/api-runtime.contributor.js';
     SystemOpsModule,
     RuntimesModule,
     TrafficOpsModule,
+    PerformanceOpsModule,
   ],
   providers: [
     ApiRuntimeContributor,

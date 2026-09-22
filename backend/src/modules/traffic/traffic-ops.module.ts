@@ -7,6 +7,6 @@ import { TrafficService } from './services/traffic.service.js';
 @Module({
   controllers: [TrafficController],
   providers: [TrafficStoreService, TrafficService],
-  exports: [TrafficService],
+  exports: [TrafficService, TrafficStoreService],
 })
 export class TrafficOpsModule {}

@@ -8,6 +8,7 @@ import { Worker, type Job } from 'bullmq';
 import { CoreConfigService } from '@packages/config/index.js';
 import { RedisService } from '@packages/redis/index.js';
 import { QUEUES, type MessageEnvelope } from '@packages/messaging/index.js';
+import { MetricRecorder } from '@packages/telemetry/index.js';
 import { SystemProcessor } from '../processors/system/system.processor.js';
 
 const THROUGHPUT_WINDOW_MS = 60_000;
@@ -29,6 +30,7 @@ export class QueueConsumerService implements OnApplicationBootstrap, OnApplicati
     private readonly redis: RedisService,
     private readonly config: CoreConfigService,
     private readonly processor: SystemProcessor,
+    private readonly recorder: MetricRecorder,
   ) {}
 
   public readonly queueName = QUEUES.SYSTEM_EVENTS;
@@ -101,6 +103,7 @@ export class QueueConsumerService implements OnApplicationBootstrap, OnApplicati
 
   private track(kind: 'completed' | 'failed', job: Job | undefined): void {
     const now = Date.now();
+    this.recorder.count(kind === 'completed' ? 'worker.completed' : 'worker.failed');
     if (kind === 'completed') {
       this.completedTotal++;
       this.completedAt.push(now);
@@ -110,6 +113,7 @@ export class QueueConsumerService implements OnApplicationBootstrap, OnApplicati
     }
     if (job?.processedOn && job.finishedOn) {
       this.durations.push(job.finishedOn - job.processedOn);
+      this.recorder.timing('worker.job', job.finishedOn - job.processedOn);
       if (this.durations.length > DURATION_SAMPLES) this.durations.shift();
     }
   }

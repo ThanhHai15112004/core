@@ -36,6 +36,7 @@ const workerHeartbeat = (overrides: Partial<RuntimeHeartbeat> = {}): RuntimeHear
     eventLoopP99Ms: 3,
     gcPauseMs: 0,
     gcCount: 0,
+    gcMaxPauseMs: 0,
     activeHandles: 5,
   },
   metrics: { activeJobs: 2, waitingJobs: 7 },

@@ -25,7 +25,7 @@ export const NAV_TREE: NavGroup[] = [
     children: [
       { id: 'runtimes', status: 'ready' },
       { id: 'http-traffic', status: 'ready' },
-      { id: 'performance', status: 'planned' },
+      { id: 'performance', status: 'ready' },
     ],
   },
   {

@@ -75,5 +75,9 @@
   "overview.map.traffic.name": "HTTP Traffic",
   "overview.map.traffic.subtext": "Request qua API · 15 phút",
   "overview.map.traffic.unavailable": "Không có telemetry HTTP",
-  "overview.map.traffic.metric": "{rps} req/s • P95 {p95} ms • 5xx {errors}%"
+  "overview.map.traffic.metric": "{rps} req/s • P95 {p95} ms • 5xx {errors}%",
+  "overview.map.performance.name": "Performance",
+  "overview.map.performance.subtext": "Không phát hiện điểm nghẽn",
+  "overview.map.performance.metric": "{count} điểm nghẽn",
+  "overview.map.performance.unavailable": "Không có số đo hiệu năng"
 }

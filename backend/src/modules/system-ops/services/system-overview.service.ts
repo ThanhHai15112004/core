@@ -8,6 +8,7 @@ import {
   type TrafficProblemDto,
   type TrafficSummaryDto,
 } from '@modules/traffic/index.js';
+import { PerformanceService, type BottleneckDto } from '@modules/performance/index.js';
 import { HttpMetricsService, type HttpMetricsSnapshot } from '@packages/logging/index.js';
 import { CorePackageId, PackageStatus } from '@packages/kernel/index.js';
 import { PackageRegistryService, type PackageSummaryDto } from './package-registry.service.js';
@@ -54,8 +55,8 @@ const RUNTIME_MAP_STATUS: Record<string, HealthMapItemDto['status']> = {
 /** Một thành phần đang có vấn đề (package hoặc runtime). */
 interface Problem {
   key: string;
-  /** `traffic` không phải một service nên không trừ vào số service ổn định. */
-  kind: 'service' | 'traffic';
+  /** `traffic`/`performance` không phải một service nên không trừ vào số service ổn định. */
+  kind: 'service' | 'traffic' | 'performance';
   name: string;
   severity: 'error' | 'warning';
   section: string;
@@ -87,6 +88,8 @@ interface OverviewContext {
   problems: Problem[];
   /** HTTP traffic 15 phút gần nhất; `null` khi không có telemetry. */
   traffic: { summary: TrafficSummaryDto | null; problems: TrafficProblemDto[] };
+  /** Điểm nghẽn hiệu năng; `null` khi không có telemetry. */
+  bottlenecks: BottleneckDto[] | null;
   /** `null` = không ping được hoặc không có package database. */
   dbPingMs: number | null;
 }
@@ -101,28 +104,32 @@ export class SystemOverviewService {
     private readonly events: OpsEventService,
     private readonly runtimes: RuntimesService,
     private readonly traffic: TrafficService,
+    private readonly performance: PerformanceService,
   ) {}
 
   public async getOverview(): Promise<SystemOverviewResponseDto> {
     const trafficQuery = { range: '15m', includeInternal: true } as const;
-    const [packages, dbPingMs, runtimeList, trafficProblems, trafficSummary] = await Promise.all([
-      this.registryService.getAllSummaries(),
-      this.pingDatabase(),
-      this.runtimes.getSummaries().catch(() => [] as RuntimeSummaryDto[]),
-      this.traffic
-        .getInsights(trafficQuery)
-        .then((i) => i.problems)
-        .catch(() => [] as TrafficProblemDto[]),
-      this.traffic.getSummary(trafficQuery).catch(() => null),
-    ]);
+    const [packages, dbPingMs, runtimeList, trafficProblems, trafficSummary, bottlenecks] =
+      await Promise.all([
+        this.registryService.getAllSummaries(),
+        this.pingDatabase(),
+        this.runtimes.getSummaries().catch(() => [] as RuntimeSummaryDto[]),
+        this.traffic
+          .getInsights(trafficQuery)
+          .then((i) => i.problems)
+          .catch(() => [] as TrafficProblemDto[]),
+        this.traffic.getSummary(trafficQuery).catch(() => null),
+        this.performance.getBottlenecks().catch(() => null),
+      ]);
     const runtimes = new Map(runtimeList.map((r) => [r.id, r]));
     const ctx: OverviewContext = {
       runtime: this.readRuntime(),
       http: this.httpMetrics.snapshot(),
       packages,
       runtimes,
-      problems: this.collectProblems(packages, runtimes, trafficProblems),
+      problems: this.collectProblems(packages, runtimes, trafficProblems, bottlenecks ?? []),
       traffic: { summary: trafficSummary, problems: trafficProblems },
+      bottlenecks,
       dbPingMs,
     };
 
@@ -233,10 +240,41 @@ export class SystemOverviewService {
     };
   }
 
+  /** Hiệu năng toàn hệ thống: có điểm nghẽn nào không. */
+  private performanceItem(ctx: OverviewContext): HealthMapItemDto {
+    const base = {
+      id: 'runtime-performance',
+      name: this.i18n.t('overview.map.performance.name'),
+      category: 'runtime' as const,
+      targetSection: 'performance',
+      icon: 'performance',
+    };
+    const list = ctx.bottlenecks;
+    if (!list) {
+      return {
+        ...base,
+        status: 'unknown',
+        subtext: this.i18n.t('overview.map.performance.unavailable'),
+        metric: UNAVAILABLE,
+      };
+    }
+    return {
+      ...base,
+      status: list.some((b) => b.severity === 'critical')
+        ? 'critical'
+        : list.length > 0
+          ? 'warning'
+          : 'healthy',
+      subtext: list[0]?.title ?? this.i18n.t('overview.map.performance.subtext'),
+      metric: this.i18n.t('overview.map.performance.metric', { count: list.length }),
+    };
+  }
+
   private collectProblems(
     packages: PackageSummaryDto[],
     runtimes: Map<string, RuntimeSummaryDto>,
     traffic: TrafficProblemDto[],
+    bottlenecks: BottleneckDto[],
   ): Problem[] {
     const fromPackages: Problem[] = packages
       .filter(
@@ -280,10 +318,24 @@ export class SystemOverviewService {
       description: t.message,
       ...(t.since ? { since: new Date(t.since) } : {}),
     }));
+    // API latency/lỗi đã có ở HTTP Traffic; runtime đã báo vấn đề thì không nhắc lại cùng runtime.
+    const reported = new Set(fromRuntimes.map((r) => r.key.slice('rt-'.length)));
+    const fromPerformance: Problem[] = bottlenecks
+      .filter((b) => b.component !== 'api' && !(b.runtime && reported.has(b.runtime)))
+      .map((b) => ({
+        key: `perf-${b.id}`,
+        kind: 'performance',
+        name: b.title,
+        severity: b.severity === 'critical' ? 'error' : 'warning',
+        section: b.target,
+        description: b.message,
+        ...(b.since ? { since: new Date(b.since) } : {}),
+      }));
     return [
       ...fromPackages.filter((p) => p.severity === 'error'),
       ...fromRuntimes,
       ...fromTraffic,
+      ...fromPerformance,
       ...fromPackages.filter((p) => p.severity === 'warning'),
     ].sort((a, b) => (a.severity === b.severity ? 0 : a.severity === 'error' ? -1 : 1));
   }
@@ -478,6 +530,7 @@ export class SystemOverviewService {
         icon: 'globe',
       },
       this.trafficItem(ctx),
+      this.performanceItem(ctx),
       runtimeItem('worker', 'cpu'),
       runtimeItem('scheduler', 'clock'),
       {

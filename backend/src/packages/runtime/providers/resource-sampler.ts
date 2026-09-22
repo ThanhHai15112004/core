@@ -55,6 +55,7 @@ export class ResourceSampler {
   private gcObserver: PerformanceObserver | null = null;
   private gcPauseMs = 0;
   private gcCount = 0;
+  private gcMaxPauseMs = 0;
   private readonly cgroupLimit = readCgroupMemoryLimit();
 
   public start(): void {
@@ -64,6 +65,7 @@ export class ResourceSampler {
       for (const entry of list.getEntries()) {
         this.gcPauseMs += entry.duration;
         this.gcCount++;
+        this.gcMaxPauseMs = Math.max(this.gcMaxPauseMs, entry.duration);
       }
     });
     this.gcObserver.observe({ entryTypes: ['gc'] });
@@ -103,12 +105,14 @@ export class ResourceSampler {
       eventLoopP99Ms: this.histogram ? round(this.histogram.percentile(99) / NS_PER_MS, 2) : 0,
       gcPauseMs: round(this.gcPauseMs, 2),
       gcCount: this.gcCount,
+      gcMaxPauseMs: round(this.gcMaxPauseMs, 2),
       activeHandles: process.getActiveResourcesInfo().length,
     };
 
     this.histogram?.reset();
     this.gcPauseMs = 0;
     this.gcCount = 0;
+    this.gcMaxPauseMs = 0;
     return resources;
   }
 

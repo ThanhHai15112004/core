@@ -8,6 +8,7 @@ import {
   type RuntimeDescriptor,
   type RuntimeIssue,
 } from '@packages/runtime/index.js';
+import { MetricRecorder } from '@packages/telemetry/index.js';
 import { QueueConsumerService } from '../consumers/queue-consumer.service.js';
 
 @Injectable()
@@ -16,6 +17,7 @@ export class WorkerRuntimeContributor implements RuntimeContributor, OnModuleIni
     private readonly agent: RuntimeAgentService,
     private readonly consumer: QueueConsumerService,
     private readonly queues: QueueRegistry,
+    private readonly recorder: MetricRecorder,
   ) {}
 
   public onModuleInit(): void {
@@ -42,6 +44,13 @@ export class WorkerRuntimeContributor implements RuntimeContributor, OnModuleIni
       this.queues.withTimeout(queue.getWorkersCount()).catch(() => null),
     ]);
     const stats = this.consumer.stats();
+    // Độ sâu queue là số toàn cục (không cộng giữa các worker) — đọc ra lấy giá trị lớn nhất giữa instance.
+    if (counts) {
+      this.recorder.gauge('queue.waiting', counts['waiting'] ?? 0);
+      this.recorder.gauge('queue.active', counts['active'] ?? 0);
+      this.recorder.gauge('queue.delayed', counts['delayed'] ?? 0);
+    }
+    this.recorder.gauge('worker.concurrency', this.consumer.concurrency);
 
     return {
       activeJobs: counts?.['active'] ?? null,

@@ -4,6 +4,8 @@ import { Injectable } from '@nestjs/common';
 export interface RequestContextStore {
   correlationId: string;
   userId?: string;
+  /** Thời gian request dành cho database/cache — do instrumentation cộng dồn (xem packages/telemetry). */
+  timings?: { dbMs: number; dbQueries: number; cacheMs: number; cacheOps: number };
   [key: string]: unknown;
 }
 
@@ -16,6 +18,11 @@ export class RequestContextService {
   }
 
   public getStore(): RequestContextStore | undefined {
+    return RequestContextService.storage.getStore();
+  }
+
+  /** Store của request hiện tại cho code không inject được (instrumentation DB/cache). */
+  public static current(): RequestContextStore | undefined {
     return RequestContextService.storage.getStore();
   }
 

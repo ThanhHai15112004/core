@@ -40,5 +40,11 @@ export const API_ROUTES = {
       ACTIVE: (qs: string) => `${OPS_PREFIX}/traffic/active?${qs}`,
       INSIGHTS: (qs: string) => `${OPS_PREFIX}/traffic/insights?${qs}`,
     },
+    PERFORMANCE: {
+      OVERVIEW: (qs: string) => `${OPS_PREFIX}/performance/overview?${qs}`,
+      TIMESERIES: (qs: string) => `${OPS_PREFIX}/performance/timeseries?${qs}`,
+      EVENTS: (qs: string) => `${OPS_PREFIX}/performance/events?${qs}`,
+      COMPONENT: (id: string, qs: string) => `${OPS_PREFIX}/performance/components/${id}?${qs}`,
+    },
   },
 } as const;

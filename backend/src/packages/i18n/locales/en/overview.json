@@ -75,5 +75,9 @@
   "overview.map.traffic.name": "HTTP Traffic",
   "overview.map.traffic.subtext": "Requests through the API · 15 min",
   "overview.map.traffic.unavailable": "HTTP telemetry unavailable",
-  "overview.map.traffic.metric": "{rps} req/s • P95 {p95} ms • 5xx {errors}%"
+  "overview.map.traffic.metric": "{rps} req/s • P95 {p95} ms • 5xx {errors}%",
+  "overview.map.performance.name": "Performance",
+  "overview.map.performance.subtext": "No bottlenecks detected",
+  "overview.map.performance.metric": "{count} bottlenecks",
+  "overview.map.performance.unavailable": "No performance telemetry"
 }

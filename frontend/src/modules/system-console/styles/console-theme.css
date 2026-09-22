@@ -72,6 +72,8 @@
   --scp-series-1: #2563eb;
   --scp-series-2: #d97706;
   --scp-series-3: #7c3aed;
+  --scp-series-4: #0d9488;
+  --scp-series-5: #db2777;
   --scp-chart-fill-start: rgba(37, 99, 235, 0.18);
   --scp-chart-fill-end: rgba(37, 99, 235, 0.0);
   --scp-chart-point: #2563eb;
@@ -154,6 +156,8 @@
   --scp-series-1: #60a5fa;
   --scp-series-2: #fbbf24;
   --scp-series-3: #a78bfa;
+  --scp-series-4: #2dd4bf;
+  --scp-series-5: #f472b6;
   --scp-chart-fill-start: rgba(59, 130, 246, 0.25);
   --scp-chart-fill-end: rgba(59, 130, 246, 0.0);
   --scp-chart-point: #60a5fa;

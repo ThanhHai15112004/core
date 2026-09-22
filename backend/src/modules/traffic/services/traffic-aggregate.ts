@@ -21,6 +21,8 @@ export interface EndpointAgg {
   hist: Histogram;
   status: Map<number, number>;
   codes: Map<string, number>;
+  /** Field `b.*` của breakdown theo giai đoạn (đơn vị 0.1 ms, riêng `b.n`/`b.dbq` là số đếm). */
+  breakdown: Map<string, number>;
 }
 
 export interface BucketAgg {
@@ -36,6 +38,7 @@ export const emptyAgg = (): EndpointAgg => ({
   hist: emptyHistogram(),
   status: new Map(),
   codes: new Map(),
+  breakdown: new Map(),
 });
 
 const addTo = <K>(map: Map<K, number>, key: K, value: number) =>
@@ -67,6 +70,7 @@ export function parseBucketHash(hash: Record<string, string>, into: BucketAgg): 
     else if (kind === 'h') agg.hist[Number(rest)] = (agg.hist[Number(rest)] ?? 0) + value;
     else if (kind === 's') addTo(agg.status, Number(rest), value);
     else if (kind === 'x') addTo(agg.codes, rest, value);
+    else if (metric.startsWith('b.')) addTo(agg.breakdown, metric, value);
   }
 }
 
@@ -76,6 +80,7 @@ export function mergeAgg(target: EndpointAgg, source: EndpointAgg): EndpointAgg 
   mergeHistogram(target.hist, source.hist);
   for (const [k, v] of source.status) addTo(target.status, k, v);
   for (const [k, v] of source.codes) addTo(target.codes, k, v);
+  for (const [k, v] of source.breakdown) addTo(target.breakdown, k, v);
   return target;
 }
 
