@@ -2,25 +2,39 @@ import { Injectable } from '@nestjs/common';
 import {
   type ManageablePackage,
   type PackageActionDescriptor,
+  type PackageActionResult,
   type PackageStatusReport,
   PackageStatus,
   PackageCategory,
   CorePackageId,
 } from '@packages/kernel/index.js';
 import { CoreConfigService } from '@packages/config/index.js';
+import { CoreI18nService } from '@packages/i18n/index.js';
 import { BaseDatabaseProvider } from './database.provider.js';
+
+export const DatabaseAction = {
+  PING: 'ping',
+} as const;
 
 @Injectable()
 export class DatabaseManageableAdapter implements ManageablePackage {
   public readonly packageId = CorePackageId.DATABASE;
-  public readonly displayName = 'Relational Database';
   public readonly category = PackageCategory.DATABASE;
   public readonly icon = 'database';
 
   constructor(
     private readonly configService: CoreConfigService,
     private readonly databaseProvider: BaseDatabaseProvider,
+    private readonly i18n: CoreI18nService,
   ) {}
+
+  public get displayName(): string {
+    return this.i18n.t('ops.database.displayName');
+  }
+
+  private get driver(): string {
+    return this.configService.database.connection.toUpperCase();
+  }
 
   public async getStatus(): Promise<PackageStatusReport> {
     const db = this.configService.database;
@@ -28,14 +42,20 @@ export class DatabaseManageableAdapter implements ManageablePackage {
 
     return {
       status: isConnected ? PackageStatus.HEALTHY : PackageStatus.WARNING,
-      summary: `Động cơ ${db.connection.toUpperCase()} tại ${db.host}:${db.port}/${db.database}`,
+      summary: this.i18n.t('ops.database.summary', {
+        driver: this.driver,
+        host: db.host,
+        port: db.port,
+        database: db.database,
+      }),
       metrics: {
-        driver: db.connection.toUpperCase(),
+        driver: this.driver,
         host: db.host,
         port: db.port,
         database: db.database,
         poolLimit: db.maxConnections,
         synchronize: db.synchronize,
+        isConnected,
       },
     };
   }
@@ -43,30 +63,28 @@ export class DatabaseManageableAdapter implements ManageablePackage {
   public getActions(): PackageActionDescriptor[] {
     return [
       {
-        id: 'ping',
-        label: 'Ping Database',
-        description: 'Kiểm tra độ trễ và phản hồi của kết nối cơ sở dữ liệu',
+        id: DatabaseAction.PING,
+        label: this.i18n.t('ops.database.ping.label'),
+        description: this.i18n.t('ops.database.ping.description'),
         isDanger: false,
       },
     ];
   }
 
-  public async executeAction(
-    actionId: string,
-  ): Promise<{ success: boolean; message: string; data?: unknown }> {
-    if (actionId === 'ping') {
+  public async executeAction(actionId: string): Promise<PackageActionResult> {
+    if (actionId === DatabaseAction.PING) {
       const isAlive = await this.databaseProvider.ping();
       return {
         success: isAlive,
         message: isAlive
-          ? `Kết nối tới Database [${this.configService.database.connection.toUpperCase()}] phản hồi thành công.`
-          : 'Không thể ping tới cơ sở dữ liệu.',
+          ? this.i18n.t('ops.database.ping.success', { driver: this.driver })
+          : this.i18n.t('ops.database.ping.failed'),
       };
     }
 
     return {
       success: false,
-      message: `Hành động [${actionId}] không được hỗ trợ trên Database.`,
+      message: this.i18n.t('ops.action.unsupported', { actionId, packageId: this.packageId }),
     };
   }
 }

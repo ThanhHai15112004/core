@@ -1,6 +1,6 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
-import { useConsoleData } from '../../context/ConsoleDataContext';
+import { useConsoleData } from '../../context/console-data-context';
 import { X } from 'lucide-react';
 
 export const ToastContainer: React.FC = () => {

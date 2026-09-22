@@ -58,9 +58,7 @@ describe('packages/config Unit Tests', () => {
       expect(config.database.username).toBe('test_user');
       expect(config.database.password).toBe('test_password');
       expect(config.database.maxConnections).toBe(5);
-      expect(config.auth.jwt.accessSecret).toBe(
-        'test_access_secret_key_at_least_32_chars_long!!',
-      );
+      expect(config.auth.jwt.accessSecret).toBe('test_access_secret_key_at_least_32_chars_long!!');
       expect(config.cache.redis.host).toBe('127.0.0.1');
       expect(config.cache.redis.port).toBe(6379);
       expect(config.cache.redis.prefix).toBe('core_test:');

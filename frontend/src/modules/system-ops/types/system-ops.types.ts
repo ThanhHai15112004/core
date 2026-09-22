@@ -40,3 +40,9 @@ export interface PackageSummary {
   statusReport: PackageStatusReport;
   actions: PackageActionDescriptor[];
 }
+
+export interface PackageActionResult {
+  success: boolean;
+  message: string;
+  data?: unknown;
+}

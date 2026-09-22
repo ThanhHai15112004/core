@@ -47,9 +47,7 @@ describe('SecretService Unit Tests', () => {
   it('should throw [SecretError] in getRequiredSecret when secret is empty string', async () => {
     mockGetSecret.mockResolvedValue('');
 
-    await expect(secretService.getRequiredSecret('empty_secret')).rejects.toThrow(
-      '[SecretError]',
-    );
+    await expect(secretService.getRequiredSecret('empty_secret')).rejects.toThrow('[SecretError]');
   });
 
   it('should return secret in getRequiredSecret when secret exists', async () => {

@@ -1,6 +1,7 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
 import { AlertTriangle, X } from 'lucide-react';
+import { useLocale } from '../../../../core/i18n/index';
 
 interface ConfirmModalProps {
   isOpen: boolean;
@@ -18,13 +19,14 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
   isOpen,
   title,
   message,
-  confirmText = 'Confirm',
-  cancelText = 'Cancel',
+  confirmText,
+  cancelText,
   isDanger = false,
   isLoading = false,
   onConfirm,
   onCancel,
 }) => {
+  const { t } = useLocale();
   if (!isOpen || typeof document === 'undefined') return null;
 
   return createPortal(
@@ -61,7 +63,7 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
             disabled={isLoading}
             onClick={onCancel}
           >
-            {cancelText}
+            {cancelText ?? t('common.cancel')}
           </button>
           <button
             type="button"
@@ -69,7 +71,7 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
             disabled={isLoading}
             onClick={onConfirm}
           >
-            {isLoading ? 'Executing...' : confirmText}
+            {isLoading ? t('console.common.executing') : (confirmText ?? t('common.confirm'))}
           </button>
         </div>
       </div>

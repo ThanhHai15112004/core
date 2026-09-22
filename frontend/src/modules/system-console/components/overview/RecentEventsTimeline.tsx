@@ -15,7 +15,7 @@ export const RecentEventsTimeline: React.FC<RecentEventsTimelineProps> = ({
   events,
   onNavigate,
 }) => {
-  const { t } = useLocale();
+  const { t, formatTime } = useLocale();
   const [filter, setFilter] = useState<FilterLevel>('all');
 
   const filteredEvents = events.filter((ev) => {
@@ -68,10 +68,10 @@ export const RecentEventsTimeline: React.FC<RecentEventsTimelineProps> = ({
         ) : (
           filteredEvents.map((ev) => (
             <div key={ev.id} className="recent-event-item">
-              <span className="recent-event-time">{ev.time}</span>
+              <span className="recent-event-time">{formatTime(ev.time)}</span>
               <StatusPill
                 status={ev.level === 'warn' ? 'warning' : ev.level}
-                label={ev.level.toUpperCase()}
+                label={t(`console.logs.level.${ev.level}`).toUpperCase()}
               />
               <span className="recent-event-source">{ev.source}</span>
               <span className="recent-event-msg" title={ev.message}>

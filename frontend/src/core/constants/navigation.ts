@@ -4,7 +4,8 @@ export type NavigationTabId = 'home' | 'ops';
 
 export interface NavigationItem {
   id: NavigationTabId;
-  label: string;
+  /** Khóa i18n */
+  labelKey: string;
   icon: string;
   route: string;
 }
@@ -12,13 +13,13 @@ export interface NavigationItem {
 export const NAVIGATION_ITEMS: readonly NavigationItem[] = [
   {
     id: 'home',
-    label: 'Trang chủ',
+    labelKey: 'header.home',
     icon: '🏠',
     route: ROUTES.HOME,
   },
   {
     id: 'ops',
-    label: 'Quản lý System Ops',
+    labelKey: 'header.systemOps',
     icon: '⚙️',
     route: ROUTES.SYSTEM_OPS,
   },

@@ -7,3 +7,4 @@ export * from './providers/logger.service.js';
 export * from './providers/logging-manageable.adapter.js';
 export * from './redaction/redact.util.js';
 export * from './logging.module.js';
+export * from './metrics/http-metrics.service.js';

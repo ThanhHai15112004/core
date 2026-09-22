@@ -1,6 +1,6 @@
 import React from 'react';
 import type { ConsoleSectionId } from '../types/console.types';
-import { useConsoleTheme } from '../context/ConsoleThemeContext';
+import { useConsoleTheme } from '../context/console-theme-context';
 import { ConsoleSidebar } from './ConsoleSidebar';
 import { ConsoleTopBar } from './ConsoleTopBar';
 import { ToastContainer } from '../components/common/Toast';

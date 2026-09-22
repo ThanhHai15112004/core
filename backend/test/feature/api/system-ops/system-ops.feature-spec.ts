@@ -118,4 +118,75 @@ describe('Feature: System Ops API (/ops/packages)', () => {
     expect(body.data.success).toBe(true);
     expect(body.data.data.level).toBe(LogLevel.DEBUG);
   });
+
+  describe('i18n (Accept-Language)', () => {
+    it('should translate 404 error message into English', async () => {
+      const response = await context.app.inject({
+        method: 'GET',
+        url: SYSTEM_OPS_ROUTES.buildPackageDetailPath('unknown_pkg_xyz'),
+        headers: { 'accept-language': 'en-US,en;q=0.9' },
+      });
+
+      const body = JSON.parse(response.payload) as { error: { code: string; message: string } };
+      expect(body.error.code).toBe('NOT_FOUND');
+      expect(body.error.message).toBe('Package [unknown_pkg_xyz] does not exist in the system.');
+    });
+
+    it('should default 404 error message to Vietnamese', async () => {
+      const response = await context.app.inject({
+        method: 'GET',
+        url: SYSTEM_OPS_ROUTES.buildPackageDetailPath('unknown_pkg_xyz'),
+      });
+
+      const body = JSON.parse(response.payload) as { error: { message: string } };
+      expect(body.error.message).toBe('Package [unknown_pkg_xyz] không tồn tại trong hệ thống.');
+    });
+
+    it('should translate package display names and actions', async () => {
+      const response = await context.app.inject({
+        method: 'GET',
+        url: SYSTEM_OPS_ROUTES.buildPackageDetailPath(CorePackageId.CACHE),
+        headers: { 'accept-language': 'en' },
+      });
+
+      const body = JSON.parse(response.payload) as {
+        data: { displayName: string; actions: Array<{ label: string }> };
+      };
+      expect(body.data.displayName).toBe('Cache');
+      expect(body.data.actions[0]?.label).toBe('Flush all cache');
+    });
+  });
+});
+
+describe('Feature: System Ops overview (/ops/overview)', () => {
+  let context: TestAppContext;
+
+  beforeAll(async () => {
+    context = await createTestApp();
+  });
+
+  afterAll(async () => {
+    await context?.close();
+  });
+
+  it('should return real counts and localized labels', async () => {
+    const response = await context.app.inject({
+      method: 'GET',
+      url: SYSTEM_OPS_ROUTES.buildOverviewPath(),
+      headers: { 'accept-language': 'en' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.payload) as {
+      data: {
+        overallHealth: { totalServices: number };
+        keyMetrics: Array<{ id: string; label: string }>;
+        healthMap: Array<{ id: string; status: string }>;
+      };
+    };
+
+    expect(body.data.overallHealth.totalServices).toBe(4);
+    expect(body.data.keyMetrics.find((m) => m.id === 'req_sec')?.label).toBe('Requests / Sec');
+    expect(body.data.healthMap.find((m) => m.id === 'runtime-worker')?.status).toBe('unknown');
+  });
 });

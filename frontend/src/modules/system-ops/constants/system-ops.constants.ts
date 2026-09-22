@@ -1,33 +1,27 @@
 import { PackageCategory, PackageStatus } from '../types/system-ops.types';
 
-export const SYSTEM_OPS_ENDPOINTS = {
-  PACKAGES: '/ops/packages',
-  PACKAGE_DETAIL: (packageId: string) => `/ops/packages/${packageId}`,
-  EXECUTE_ACTION: (packageId: string, actionId: string) =>
-    `/ops/packages/${packageId}/actions/${actionId}`,
-} as const;
-
 export interface StatusTheme {
   className: string;
-  label: string;
+  /** Khóa i18n */
+  labelKey: string;
 }
 
 export const STATUS_THEME_CONFIG: Record<PackageStatus, StatusTheme> = {
   [PackageStatus.HEALTHY]: {
     className: 'ops-status-healthy',
-    label: 'Hoạt động tốt',
+    labelKey: 'console.status.healthy',
   },
   [PackageStatus.WARNING]: {
     className: 'ops-status-warning',
-    label: 'Cảnh báo',
+    labelKey: 'console.status.warning',
   },
   [PackageStatus.ERROR]: {
     className: 'ops-status-error',
-    label: 'Lỗi',
+    labelKey: 'console.status.error',
   },
   [PackageStatus.IDLE]: {
     className: 'ops-status-idle',
-    label: 'Chờ',
+    labelKey: 'console.status.idle',
   },
 };
 

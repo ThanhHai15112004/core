@@ -1,12 +1,17 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
-import type {
-  ManageablePackage,
-  PackageStatusReport,
-  PackageActionDescriptor,
+import {
+  type ManageablePackage,
+  type PackageStatusReport,
+  type PackageActionDescriptor,
+  type PackageActionResult,
+  NotFoundAppException,
+  PackageStatus,
 } from '@packages/kernel/index.js';
+import { CoreI18nService } from '@packages/i18n/index.js';
 import { CacheManageableAdapter } from '@packages/cache/index.js';
 import { LoggingManageableAdapter } from '@packages/logging/index.js';
 import { DatabaseManageableAdapter } from '@packages/database/index.js';
+import { SecurityManageableAdapter } from '@packages/security/index.js';
 
 export interface PackageSummaryDto {
   packageId: string;
@@ -25,86 +30,83 @@ export class PackageRegistryService implements OnModuleInit {
     private readonly cacheAdapter: CacheManageableAdapter,
     private readonly loggingAdapter: LoggingManageableAdapter,
     private readonly databaseAdapter: DatabaseManageableAdapter,
+    private readonly securityAdapter: SecurityManageableAdapter,
+    private readonly i18n: CoreI18nService,
   ) {}
 
   public onModuleInit(): void {
-    // Đăng ký các adapter cốt lõi đã có
     this.register(this.cacheAdapter);
     this.register(this.loggingAdapter);
     this.register(this.databaseAdapter);
+    this.register(this.securityAdapter);
   }
 
-  /**
-   * Đăng ký thêm một package vào hệ thống quản trị
-   */
   public register(pkg: ManageablePackage): void {
     this.packages.set(pkg.packageId, pkg);
   }
 
-  /**
-   * Hủy đăng ký package
-   */
   public unregister(packageId: string): void {
     this.packages.delete(packageId);
   }
 
-  /**
-   * Lấy package theo định danh
-   */
   public getPackage(packageId: string): ManageablePackage | undefined {
     return this.packages.get(packageId);
   }
 
-  /**
-   * Lấy danh sách tóm tắt toàn bộ package đã đăng ký kèm status và actions
-   */
-  public async getAllSummaries(): Promise<PackageSummaryDto[]> {
-    const summaries: PackageSummaryDto[] = [];
-
-    for (const pkg of this.packages.values()) {
-      try {
-        const statusReport = await pkg.getStatus();
-        const actions = pkg.getActions ? pkg.getActions() : [];
-
-        summaries.push({
-          packageId: pkg.packageId,
-          displayName: pkg.displayName,
-          category: pkg.category,
-          icon: pkg.icon,
-          statusReport,
-          actions,
-        });
-      } catch {
-        continue;
-      }
+  /** Lấy package hoặc ném 404 nếu chưa được đăng ký. */
+  public getPackageOrFail(packageId: string): ManageablePackage {
+    const pkg = this.packages.get(packageId);
+    if (!pkg) {
+      throw new NotFoundAppException('ops.package.notFound', { packageId });
     }
-
-    return summaries;
+    return pkg;
   }
 
-  /**
-   * Thực thi hành động trên một package cụ thể
-   */
+  public async getAllSummaries(): Promise<PackageSummaryDto[]> {
+    return Promise.all([...this.packages.values()].map((pkg) => this.toSummary(pkg)));
+  }
+
+  public async getSummary(packageId: string): Promise<PackageSummaryDto> {
+    return this.toSummary(this.getPackageOrFail(packageId));
+  }
+
   public async executeAction(
     packageId: string,
     actionId: string,
     params?: unknown,
-  ): Promise<{ success: boolean; message: string; data?: unknown }> {
+  ): Promise<PackageActionResult> {
     const pkg = this.getPackage(packageId);
     if (!pkg) {
-      return {
-        success: false,
-        message: `Package [${packageId}] không tồn tại trong hệ thống quản trị.`,
-      };
+      return { success: false, message: this.i18n.t('ops.package.notFound', { packageId }) };
     }
 
     if (!pkg.executeAction) {
-      return {
-        success: false,
-        message: `Package [${packageId}] không hỗ trợ bất kỳ hành động điều khiển nào.`,
-      };
+      return { success: false, message: this.i18n.t('ops.package.noActions', { packageId }) };
     }
 
     return pkg.executeAction(actionId, params);
+  }
+
+  /** Package lỗi khi lấy status vẫn được trả về với trạng thái ERROR thay vì bị ẩn đi. */
+  private async toSummary(pkg: ManageablePackage): Promise<PackageSummaryDto> {
+    let statusReport: PackageStatusReport;
+    try {
+      statusReport = await pkg.getStatus();
+    } catch (error) {
+      statusReport = {
+        status: PackageStatus.ERROR,
+        summary: error instanceof Error ? error.message : String(error),
+        metrics: {},
+      };
+    }
+
+    return {
+      packageId: pkg.packageId,
+      displayName: pkg.displayName,
+      category: pkg.category,
+      icon: pkg.icon,
+      statusReport,
+      actions: pkg.getActions?.() ?? [],
+    };
   }
 }

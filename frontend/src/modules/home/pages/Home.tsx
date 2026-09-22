@@ -1,35 +1,25 @@
 import React, { useState } from 'react';
 import { Card } from '../../../core/components/card/Card';
+import { useLocale } from '../../../core/i18n/index';
+import { ROUTES } from '../../../routes/index';
+
+const FEATURES = [
+  { key: 'react', icon: '⚡', badge: 'React 19' },
+  { key: 'vite', icon: '🚀', badge: 'Vite 8' },
+  { key: 'modular', icon: '🧩', badge: 'Chassis' },
+  { key: 'backend', icon: '🔗', badge: 'NestJS 11' },
+] as const;
 
 export const Home: React.FC = () => {
+  const { t } = useLocale();
   const [count, setCount] = useState<number>(0);
 
-  const features = [
-    {
-      title: 'React 19 & TypeScript',
-      description: 'Built with the latest React release and strict type checking for robust applications.',
-      icon: '⚡',
-      badge: 'v19.0',
-    },
-    {
-      title: 'Vite Build Tool',
-      description: 'Lightning fast HMR (Hot Module Replacement) and optimized production builds.',
-      icon: '🚀',
-      badge: 'Vite 6',
-    },
-    {
-      title: 'Modular Architecture',
-      description: 'Clean separation of concerns with core reusable platform and isolated business modules.',
-      icon: '🧩',
-      badge: 'Chassis Platform',
-    },
-    {
-      title: 'Backend Ready',
-      description: 'Configured API service structure ready to integrate with NestJS Fastify backend.',
-      icon: '🔗',
-      badge: 'NestJS Sync',
-    },
-  ];
+  const features = FEATURES.map((f) => ({
+    icon: f.icon,
+    badge: f.badge,
+    title: t(`home.features.${f.key}.title`),
+    description: t(`home.features.${f.key}.description`),
+  }));
 
   return (
     <main style={{ maxWidth: '1200px', margin: '0 auto', padding: '60px 24px 80px', width: '100%' }}>
@@ -50,7 +40,7 @@ export const Home: React.FC = () => {
             marginBottom: '24px',
           }}
         >
-          ✨ Core Framework Initialized Successfully
+          ✨ {t('home.badge')}
         </div>
         <h1
           style={{
@@ -61,8 +51,8 @@ export const Home: React.FC = () => {
             letterSpacing: '-1px',
           }}
         >
-          Modern Web Development <br />
-          <span className="gradient-text">Powered by React + Vite</span>
+          {t('home.heroTitle')} <br />
+          <span className="gradient-text">{t('home.heroHighlight')}</span>
         </h1>
         <p
           style={{
@@ -73,15 +63,15 @@ export const Home: React.FC = () => {
             lineHeight: '1.7',
           }}
         >
-          Your frontend structure is ready for production. Clean architecture, modern design system, and full TypeScript integration.
+          {t('home.heroDescription')}
         </p>
 
         <div style={{ display: 'flex', gap: '16px', justifyContent: 'center', alignItems: 'center' }}>
           <button className="btn-primary" onClick={() => setCount((c) => c + 1)}>
-            Interactive State: {count}
+            {t('home.counter', { count })}
           </button>
           <button className="btn-secondary" onClick={() => setCount(0)}>
-            Reset Count
+            {t('home.resetCounter')}
           </button>
         </div>
       </section>
@@ -94,10 +84,10 @@ export const Home: React.FC = () => {
           </div>
           <div>
             <h3 className="home-console-banner-title">
-              Developer & DevOps System Control Plane
+              {t('home.consoleTitle')}
             </h3>
             <p className="home-console-banner-desc">
-              Dedicated infrastructure dashboard for monitoring multi-runtimes, live logs, database ping, redis cache, workers, and cron tasks.
+              {t('home.consoleDescription')}
             </p>
           </div>
         </div>
@@ -106,17 +96,17 @@ export const Home: React.FC = () => {
           type="button"
           className="btn-primary home-console-banner-btn"
           onClick={() => {
-            window.location.hash = '#system-console';
+            window.location.hash = ROUTES.SYSTEM_CONSOLE;
           }}
         >
-          Launch System Console →
+          {t('home.consoleLaunch')} →
         </button>
       </section>
 
       {/* Feature Grid */}
       <section id="features" style={{ marginBottom: '80px' }}>
         <h2 style={{ fontSize: '24px', fontWeight: '700', marginBottom: '28px', color: 'var(--text-main)' }}>
-          Project Structure & Features
+          {t('home.featuresTitle')}
         </h2>
         <div
           style={{
@@ -126,7 +116,7 @@ export const Home: React.FC = () => {
           }}
         >
           {features.map((item, index) => (
-            <Card key={index} {...item} />
+            <Card key={FEATURES[index]?.key} {...item} />
           ))}
         </div>
       </section>
@@ -134,7 +124,7 @@ export const Home: React.FC = () => {
       {/* Folder Structure Overview */}
       <section id="architecture" className="glass" style={{ padding: '36px', borderRadius: 'var(--radius-lg)' }}>
         <h2 style={{ fontSize: '22px', fontWeight: '700', marginBottom: '16px' }}>
-          📁 Frontend Directory Layout (AGENTS.md)
+          📁 {t('home.layoutTitle')}
         </h2>
         <pre
           style={{

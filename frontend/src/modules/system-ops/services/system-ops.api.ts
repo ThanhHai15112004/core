@@ -1,29 +1,18 @@
 import { fetchApi } from '../../../core/services/api';
-import type { PackageSummary } from '../types/system-ops.types';
-import { SYSTEM_OPS_ENDPOINTS } from '../constants/system-ops.constants';
+import { API_ROUTES } from '../../../routes/index';
+import type { PackageActionResult, PackageSummary } from '../types/system-ops.types';
 
-interface ApiResponse<T> {
-  success: boolean;
-  data: T;
-  message?: string;
+export function getSystemOpsPackages(): Promise<PackageSummary[]> {
+  return fetchApi<PackageSummary[]>(API_ROUTES.OPS.PACKAGES);
 }
 
-export async function getSystemOpsPackages(): Promise<PackageSummary[]> {
-  const res = await fetchApi<ApiResponse<PackageSummary[]>>(SYSTEM_OPS_ENDPOINTS.PACKAGES);
-  return res.data;
-}
-
-export async function executePackageAction(
+export function executePackageAction(
   packageId: string,
   actionId: string,
   params?: unknown,
-): Promise<{ success: boolean; message: string; data?: unknown }> {
-  const res = await fetchApi<ApiResponse<{ success: boolean; message: string; data?: unknown }>>(
-    SYSTEM_OPS_ENDPOINTS.EXECUTE_ACTION(packageId, actionId),
-    {
-      method: 'POST',
-      body: JSON.stringify(params ?? {}),
-    },
-  );
-  return res.data;
+): Promise<PackageActionResult> {
+  return fetchApi<PackageActionResult>(API_ROUTES.OPS.EXECUTE_ACTION(packageId, actionId), {
+    method: 'POST',
+    body: JSON.stringify(params ?? {}),
+  });
 }

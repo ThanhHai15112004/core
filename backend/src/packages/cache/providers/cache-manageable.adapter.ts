@@ -2,38 +2,43 @@ import { Injectable } from '@nestjs/common';
 import {
   type ManageablePackage,
   type PackageActionDescriptor,
+  type PackageActionResult,
   type PackageStatusReport,
   PackageStatus,
   PackageCategory,
   CorePackageId,
 } from '@packages/kernel/index.js';
 import { CoreConfigService } from '@packages/config/index.js';
+import { CoreI18nService } from '@packages/i18n/index.js';
 import { BaseCacheProvider } from './cache.provider.js';
 import { CacheAction } from '../constants/cache.constant.js';
 
 @Injectable()
 export class CacheManageableAdapter implements ManageablePackage {
   public readonly packageId = CorePackageId.CACHE;
-  public readonly displayName = 'Bộ nhớ đệm (Redis Cache)';
   public readonly category = PackageCategory.CACHE;
   public readonly icon = 'database-zap';
 
   constructor(
     private readonly cacheProvider: BaseCacheProvider,
     private readonly configService: CoreConfigService,
+    private readonly i18n: CoreI18nService,
   ) {}
+
+  public get displayName(): string {
+    return this.i18n.t('ops.cache.displayName');
+  }
 
   public async getStatus(): Promise<PackageStatusReport> {
     const { host, port, prefix } = this.configService.cache.redis;
 
     return {
       status: PackageStatus.HEALTHY,
-      summary: `Kết nối Redis ${host}:${port} với tiền tố "${prefix}"`,
+      summary: this.i18n.t('ops.cache.summary', { host, port, prefix }),
       metrics: {
-        host,
-        port,
+        driver: 'memory',
+        configuredRedis: `${host}:${port}`,
         prefix,
-        status: 'online',
       },
     };
   }
@@ -42,27 +47,22 @@ export class CacheManageableAdapter implements ManageablePackage {
     return [
       {
         id: CacheAction.FLUSH_ALL,
-        label: 'Xoá toàn bộ Cache',
-        description: 'Xoá sạch toàn bộ các key trong bộ nhớ đệm Redis',
+        label: this.i18n.t('ops.cache.flush.label'),
+        description: this.i18n.t('ops.cache.flush.description'),
         isDanger: true,
       },
     ];
   }
 
-  public async executeAction(
-    actionId: string,
-  ): Promise<{ success: boolean; message: string; data?: unknown }> {
+  public async executeAction(actionId: string): Promise<PackageActionResult> {
     if (actionId === CacheAction.FLUSH_ALL) {
       await this.cacheProvider.clear();
-      return {
-        success: true,
-        message: 'Đã xoá sạch toàn bộ bộ nhớ đệm Cache thành công.',
-      };
+      return { success: true, message: this.i18n.t('ops.cache.flush.success') };
     }
 
     return {
       success: false,
-      message: `Hành động "${actionId}" không được hỗ trợ bởi Cache package.`,
+      message: this.i18n.t('ops.action.unsupported', { actionId, packageId: this.packageId }),
     };
   }
 }

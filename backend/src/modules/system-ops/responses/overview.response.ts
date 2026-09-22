@@ -28,7 +28,8 @@ export interface HealthMapItemDto {
   id: string;
   name: string;
   category: 'runtime' | 'infrastructure' | 'governance';
-  status: 'healthy' | 'warning' | 'critical' | 'down';
+  /** `unknown`: thành phần chưa có health check thật. */
+  status: 'healthy' | 'warning' | 'critical' | 'down' | 'unknown';
   subtext: string;
   secondarySubtext?: string;
   targetSection: string;
@@ -61,6 +62,7 @@ export interface InfraSnapshotItemDto {
 
 export interface RecentActivityEventDto {
   id: string;
+  /** ISO 8601 — client tự format theo locale. */
   time: string;
   level: 'info' | 'warn' | 'error' | 'success';
   source: string;

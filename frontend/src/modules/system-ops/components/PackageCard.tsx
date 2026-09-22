@@ -5,6 +5,7 @@ import {
   CATEGORY_ICON_CONFIG,
   STATUS_THEME_CONFIG,
 } from '../constants/system-ops.constants';
+import { useLocale } from '../../../core/i18n/index';
 
 interface PackageCardProps {
   pkg: PackageSummary;
@@ -12,6 +13,7 @@ interface PackageCardProps {
 }
 
 export const PackageCard: React.FC<PackageCardProps> = ({ pkg, onExecuteAction }) => {
+  const { t } = useLocale();
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
 
   const icon = CATEGORY_ICON_CONFIG[pkg.category as PackageCategory] || '🧩';
@@ -22,7 +24,7 @@ export const PackageCard: React.FC<PackageCardProps> = ({ pkg, onExecuteAction }
   const handleActionClick = async (action: PackageActionDescriptor) => {
     if (action.isDanger) {
       const confirm = window.confirm(
-        `CẢNH BÁO NGUY HIỂM: Bạn có chắc chắn muốn thực hiện hành động "${action.label}" trên package [${pkg.displayName}]?`,
+        t('systemOps.dangerConfirm', { action: action.label, pkg: pkg.displayName }),
       );
       if (!confirm) return;
     }
@@ -49,7 +51,7 @@ export const PackageCard: React.FC<PackageCardProps> = ({ pkg, onExecuteAction }
           </div>
 
           <span className={`ops-status-badge ${statusTheme.className}`}>
-            ● {statusTheme.label}
+            ● {t(statusTheme.labelKey)}
           </span>
         </div>
 
@@ -85,7 +87,7 @@ export const PackageCard: React.FC<PackageCardProps> = ({ pkg, onExecuteAction }
                 onClick={() => handleActionClick(action)}
                 className={`ops-action-btn ${btnVariantClass}`}
               >
-                {isLoading ? 'Đang thực thi...' : action.label}
+                {isLoading ? t('systemOps.executing') : action.label}
               </button>
             );
           })}

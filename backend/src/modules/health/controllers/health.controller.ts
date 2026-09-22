@@ -1,7 +1,7 @@
 import { Controller, Get } from '@nestjs/common';
 import { Public } from '@packages/http/index.js';
 import { HealthService, type HealthCheckResult } from '../services/health.service.js';
-import { HEALTH_ROUTES } from '../constants/health.constant.js';
+import { HEALTH_ROUTES } from '../routes/health.routes.js';
 
 @Controller(HEALTH_ROUTES.PREFIX)
 export class HealthController {

@@ -28,17 +28,9 @@ export const OverallHealthBanner: React.FC<OverallHealthBannerProps> = ({
     startedAgo,
   } = healthReport;
 
-  const displayTitle =
-    status === 'healthy'
-      ? t('overview.allOperational')
-      : status === 'degraded'
-      ? t('overview.systemDegraded')
-      : t('overview.systemCritical') || title;
-
-  const displayMessage =
-    status === 'healthy'
-      ? t('overview.systemsNominal')
-      : message;
+  // title/message đã được dịch sẵn (backend theo Accept-Language, fallback theo t()).
+  const displayTitle = title;
+  const displayMessage = message;
 
   const getStatusIcon = () => {
     switch (status) {
@@ -55,7 +47,7 @@ export const OverallHealthBanner: React.FC<OverallHealthBannerProps> = ({
   return (
     <section
       className={`overall-health-banner status-${status}`}
-      aria-label="Overall System Health Status"
+      aria-label={t('overview.title')}
     >
       <div className="overall-health-left">
         <div className="overall-health-icon-box" aria-hidden="true">

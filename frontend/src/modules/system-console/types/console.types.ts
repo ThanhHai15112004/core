@@ -53,15 +53,13 @@ export interface ToastMessage {
 
 export interface NavigationItem {
   id: ConsoleSectionId;
-  label: string;
   icon: string;
   badgeCount?: number;
-  description: string;
 }
 
 /* ==========================================================================
    OPERATIONAL OVERVIEW DATA MODEL
-   Aligned with future GET /ops/overview backend contract
+   Khớp với response của GET /ops/overview (backend/src/modules/system-ops/responses)
    ========================================================================== */
 
 export type SystemEnvironment = 'production' | 'staging' | 'development';
@@ -97,7 +95,8 @@ export interface HealthMapItem {
   id: string;
   name: string;
   category: HealthMapCategory;
-  status: 'healthy' | 'warning' | 'critical' | 'down';
+  /** `unknown`: thành phần chưa có health check thật. */
+  status: 'healthy' | 'warning' | 'critical' | 'down' | 'unknown';
   subtext: string;
   secondarySubtext?: string;
   targetSection: ConsoleSectionId;
@@ -138,6 +137,7 @@ export interface InfraSnapshotItem {
 
 export interface RecentActivityEvent {
   id: string;
+  /** ISO 8601 */
   time: string;
   level: EventLogLevel;
   source: string;
@@ -160,7 +160,8 @@ export interface SystemInfo {
 }
 
 export interface OverviewData {
-  environment: SystemEnvironment;
+  /** `null` khi chưa lấy được từ backend. */
+  environment: SystemEnvironment | null;
   lastUpdated: Date;
   isOffline: boolean;
   lastSuccessfulSync?: Date | null;

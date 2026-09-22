@@ -441,3 +441,83 @@
   from { transform: translateX(100%); }
   to { transform: translateX(0); }
 }
+
+/* Alert banner dùng chung cho các section */
+.console-root .scp-alert {
+  margin-bottom: 1.25rem;
+  padding: 0.85rem 1.25rem;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+.console-root .scp-alert-danger {
+  background-color: var(--scp-danger-bg);
+  border: 1px solid var(--scp-danger-border);
+  color: var(--scp-danger-text);
+}
+
+.console-root .scp-alert-info {
+  background-color: var(--scp-bg-surface-subtle);
+  border: 1px solid var(--scp-border-subtle);
+  color: var(--scp-text-secondary);
+}
+
+.console-root .scp-textarea {
+  width: 100%;
+  padding: 0.65rem;
+  border-radius: 6px;
+  border: 1px solid var(--scp-border-subtle);
+  background-color: var(--scp-bg-surface-subtle);
+  color: var(--scp-text-primary);
+  font-family: monospace;
+  font-size: 0.8rem;
+  outline: none;
+  resize: vertical;
+}
+
+.console-root .scp-json {
+  margin: 0;
+  font-size: 0.75rem;
+  font-family: monospace;
+  color: var(--scp-text-primary);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.console-root .scp-table-wrap {
+  border: 1px solid var(--scp-border-subtle);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.console-root .scp-table .cell-strong {
+  font-weight: 600;
+}
+
+.console-root .scp-table .cell-muted {
+  color: var(--scp-text-secondary);
+  font-size: 0.8rem;
+}
+
+.console-root .log-viewer-search {
+  padding: 0.25rem 0.6rem;
+  border-radius: 4px;
+  border: 1px solid var(--scp-terminal-border);
+  background-color: rgba(0, 0, 0, 0.4);
+  color: var(--scp-terminal-text);
+  font-size: 0.75rem;
+  width: 180px;
+  outline: none;
+}
+
+.console-root .packages-search-input {
+  padding: 0.45rem 0.85rem;
+  border-radius: 6px;
+  border: 1px solid var(--scp-border-subtle);
+  background-color: var(--scp-bg-surface);
+  color: var(--scp-text-primary);
+  font-size: 0.825rem;
+  width: 240px;
+  outline: none;
+}

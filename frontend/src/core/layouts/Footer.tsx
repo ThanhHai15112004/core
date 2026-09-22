@@ -34,7 +34,7 @@ export const Footer: React.FC = () => {
           <a
             href={ROUTES.SYSTEM_CONSOLE}
             className="footer-link"
-            title="Open Infrastructure Control Plane"
+            title={t('footer.controlPlane')}
           >
             <Terminal size={14} />
             <span>{t('footer.controlPlane')}</span>
@@ -43,7 +43,7 @@ export const Footer: React.FC = () => {
           <a
             href="#architecture"
             className="footer-link"
-            title="View Architecture Structure"
+            title={t('footer.architecture')}
           >
             <Code2 size={14} />
             <span>{t('footer.architecture')}</span>
@@ -54,7 +54,7 @@ export const Footer: React.FC = () => {
             target="_blank"
             rel="noopener noreferrer"
             className="footer-link"
-            title="View Source Repository"
+            title={t('footer.documentation')}
           >
             <BookOpen size={14} />
             <span>{t('footer.documentation')}</span>

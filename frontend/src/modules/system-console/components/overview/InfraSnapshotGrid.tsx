@@ -16,44 +16,8 @@ export const InfraSnapshotGrid: React.FC<InfraSnapshotGridProps> = ({
 }) => {
   const { t } = useLocale();
 
-  const getSnapshotTitle = (item: InfraSnapshotItem) => {
-    switch (item.targetSection) {
-      case 'runtime':
-        return t('snapshots.api');
-      case 'worker':
-        return t('snapshots.worker');
-      case 'database':
-        return t('snapshots.database');
-      case 'cache':
-        return t('snapshots.cache');
-      case 'scheduler':
-        return t('snapshots.scheduler');
-      default:
-        return item.title;
-    }
-  };
-
-  const getMetricLabel = (label: string) => {
-    const l = label.toLowerCase();
-    if (l.includes('port')) return t('snapshots.port');
-    if (l.includes('heap used')) return t('snapshots.heapUsed');
-    if (l.includes('heap total')) return t('snapshots.heapTotal');
-    if (l.includes('driver')) return t('snapshots.driver');
-    if (l.includes('pool')) return t('snapshots.poolMax');
-    if (l.includes('latency') || l.includes('ping')) return t('snapshots.pingLatency');
-    if (l.includes('synchronize') || l.includes('sync')) return t('snapshots.sync');
-    if (l.includes('host')) return t('snapshots.host');
-    if (l.includes('prefix')) return t('snapshots.prefix');
-    if (l.includes('concurrency')) return t('snapshots.concurrency');
-    if (l.includes('retry')) return t('snapshots.retryStrategy');
-    if (l.includes('dead letter')) return t('snapshots.deadLetter');
-    if (l.includes('timezone')) return t('snapshots.timezone');
-    if (l.includes('state') || l.includes('status')) return t('snapshots.state');
-    return label;
-  };
-
   return (
-    <section className="infra-snapshot-panel" aria-label="Runtime and Infrastructure Snapshot">
+    <section className="infra-snapshot-panel" aria-label={t('snapshots.title')}>
       <div className="infra-snapshot-header">
         <h3 className="infra-snapshot-title">
           <Activity size={17} style={{ color: 'var(--scp-primary)' }} />
@@ -72,13 +36,13 @@ export const InfraSnapshotGrid: React.FC<InfraSnapshotGridProps> = ({
                 <span style={{ display: 'inline-flex', alignItems: 'center' }}>
                   <ConsoleIcon name={item.targetSection} size={16} />
                 </span>
-                <span>{getSnapshotTitle(item)}</span>
+                <span>{item.title}</span>
               </h4>
 
               <div className="snapshot-metric-list" style={{ marginTop: '0.75rem' }}>
                 {item.metrics.map((m, idx) => (
                   <div key={idx} className="snapshot-metric-row">
-                    <span className="snapshot-metric-label">{getMetricLabel(m.label)}</span>
+                    <span className="snapshot-metric-label">{m.label}</span>
                     <span className={`snapshot-metric-val ${m.isWarn ? 'is-warn' : ''}`}>
                       {m.value}
                     </span>

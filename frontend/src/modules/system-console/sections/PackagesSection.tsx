@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import type { PackageSummary, PackageActionDescriptor } from '../types/console.types';
-import { useConsoleData } from '../context/ConsoleDataContext';
+import { useConsoleData } from '../context/console-data-context';
 import { SectionHeader } from '../components/common/SectionHeader';
 import { StatusPill } from '../components/common/StatusPill';
 import { EmptyState } from '../components/common/EmptyState';
@@ -8,6 +8,7 @@ import { DetailDrawer } from '../components/common/DetailDrawer';
 import { ConfirmModal } from '../components/common/ConfirmModal';
 import { resolvePackageIcon } from '../constants/console.constants';
 import { Search, Boxes } from 'lucide-react';
+import { useLocale } from '../../../core/i18n/index';
 
 interface PackagesSectionProps {
   initialSelectedPackageId?: string | null;
@@ -18,6 +19,7 @@ export const PackagesSection: React.FC<PackagesSectionProps> = ({
   initialSelectedPackageId,
   onClearSelectedPackageId,
 }) => {
+  const { t } = useLocale();
   const { packages, executeAction, refresh, isRefreshing } = useConsoleData();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -96,8 +98,8 @@ export const PackagesSection: React.FC<PackagesSectionProps> = ({
   return (
     <div>
       <SectionHeader
-        title="Manageable Packages"
-        description="Inspect and control registered framework infrastructure packages implementing the ManageablePackage contract."
+        title={t('console.packages.title')}
+        description={t('console.packages.description')}
         actions={
           <button
             type="button"
@@ -105,7 +107,7 @@ export const PackagesSection: React.FC<PackagesSectionProps> = ({
             onClick={() => refresh()}
             disabled={isRefreshing}
           >
-            {isRefreshing ? 'Refreshing...' : 'Refresh Packages'}
+            {isRefreshing ? t('common.refreshing') : t('common.refresh')}
           </button>
         }
       />
@@ -120,26 +122,18 @@ export const PackagesSection: React.FC<PackagesSectionProps> = ({
               className={`filter-pill-btn ${selectedCategory === cat ? 'active' : ''}`}
               onClick={() => setSelectedCategory(cat)}
             >
-              {cat.toUpperCase()}
+              {t(`console.packages.category.${cat}`).toUpperCase()}
             </button>
           ))}
         </div>
 
         <input
-          type="text"
-          placeholder="Filter by name, ID or status..."
+          type="search"
+          className="packages-search-input"
+          placeholder={t('console.packages.searchPlaceholder')}
+          aria-label={t('console.packages.searchPlaceholder')}
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          style={{
-            padding: '0.45rem 0.85rem',
-            borderRadius: '6px',
-            border: '1px solid var(--scp-border-subtle)',
-            backgroundColor: 'var(--scp-bg-surface)',
-            color: 'var(--scp-text-primary)',
-            fontSize: '0.825rem',
-            width: '240px',
-            outline: 'none',
-          }}
         />
       </div>
 
@@ -186,7 +180,7 @@ export const PackagesSection: React.FC<PackagesSectionProps> = ({
                   style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}
                 >
                   <Search size={13} />
-                  <span>Inspect Details</span>
+                  <span>{t('console.packages.inspect')}</span>
                 </button>
 
                 {pkg.actions.map((act) => {
@@ -200,7 +194,7 @@ export const PackagesSection: React.FC<PackagesSectionProps> = ({
                       onClick={() => handleActionClick(pkg, act)}
                       title={act.description || act.label}
                     >
-                      {isExecuting ? 'Running...' : act.label}
+                      {isExecuting ? t('console.packages.running') : act.label}
                     </button>
                   );
                 })}
@@ -211,11 +205,11 @@ export const PackagesSection: React.FC<PackagesSectionProps> = ({
       ) : (
         <EmptyState
           icon={<Boxes size={36} style={{ color: 'var(--scp-text-muted)' }} />}
-          title="No packages found"
+          title={t('console.packages.emptyTitle')}
           description={
             searchQuery
-              ? `No packages match your search filter "${searchQuery}".`
-              : 'There are currently no manageable packages registered with the System Ops module.'
+              ? t('console.packages.emptyFiltered', { query: searchQuery })
+              : t('console.packages.emptyNone')
           }
           action={
             searchQuery ? (
@@ -224,7 +218,7 @@ export const PackagesSection: React.FC<PackagesSectionProps> = ({
                 className="scp-btn scp-btn-secondary scp-btn-sm"
                 onClick={() => setSearchQuery('')}
               >
-                Clear Search
+                {t('console.packages.clearSearch')}
               </button>
             ) : undefined
           }
@@ -245,9 +239,13 @@ export const PackagesSection: React.FC<PackagesSectionProps> = ({
       {/* Confirmation Modal */}
       <ConfirmModal
         isOpen={confirmModalState.isOpen}
-        title={`Dangerous Action: ${confirmModalState.action?.label}`}
-        message={`Are you sure you want to execute "${confirmModalState.action?.label}" on package [${confirmModalState.pkgName}]?\n\nDescription: ${confirmModalState.action?.description || 'This operation may affect active runtime state.'}`}
-        confirmText="Confirm & Execute"
+        title={t('console.packages.dangerTitle', { action: confirmModalState.action?.label ?? '' })}
+        message={t('console.packages.dangerMessage', {
+          action: confirmModalState.action?.label ?? '',
+          pkg: confirmModalState.pkgName,
+          description: confirmModalState.action?.description || t('console.packages.dangerDefaultDescription'),
+        })}
+        confirmText={t('console.packages.dangerConfirm')}
         isDanger={true}
         isLoading={executingActionId === confirmModalState.action?.id}
         onConfirm={() => {

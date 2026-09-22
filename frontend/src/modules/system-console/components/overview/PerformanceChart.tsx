@@ -130,7 +130,7 @@ export const PerformanceChart: React.FC<PerformanceChartProps> = ({
               className={`perf-time-btn ${timeRange === range ? 'is-active' : ''}`}
               onClick={() => onTimeRangeChange(range)}
             >
-              {range}
+              {t(`chart.range${range}`)}
             </button>
           ))}
         </div>
@@ -151,6 +151,12 @@ export const PerformanceChart: React.FC<PerformanceChartProps> = ({
           <span className="perf-stat-value">{stats.peak}</span>
         </div>
       </div>
+
+      {series.length === 0 && (
+        <div className="scp-alert scp-alert-info" style={{ margin: '0.75rem 0 0' }}>
+          {t('chart.noSamples')}
+        </div>
+      )}
 
       {/* Interactive SVG Chart */}
       <div className="perf-svg-wrapper">

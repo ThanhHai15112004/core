@@ -4,6 +4,7 @@ import { CoreLoggerService } from './providers/logger.service.js';
 import { LoggingInterceptor } from './interceptors/logging.interceptor.js';
 import { CorrelationIdMiddleware } from './middleware/correlation-id.middleware.js';
 import { LoggingManageableAdapter } from './providers/logging-manageable.adapter.js';
+import { HttpMetricsService } from './metrics/http-metrics.service.js';
 
 @Global()
 @Module({
@@ -13,6 +14,7 @@ import { LoggingManageableAdapter } from './providers/logging-manageable.adapter
     LoggingInterceptor,
     CorrelationIdMiddleware,
     LoggingManageableAdapter,
+    HttpMetricsService,
   ],
   exports: [
     RequestContextService,
@@ -20,6 +22,7 @@ import { LoggingManageableAdapter } from './providers/logging-manageable.adapter
     LoggingInterceptor,
     CorrelationIdMiddleware,
     LoggingManageableAdapter,
+    HttpMetricsService,
   ],
 })
 export class LoggingModule {}

@@ -1,14 +1,7 @@
-import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import type { ConsoleTheme } from '../types/console.types';
 import { CONSOLE_STORAGE_KEYS } from '../constants/console.constants';
-
-export interface ConsoleThemeContextValue {
-  theme: ConsoleTheme;
-  toggleTheme: () => void;
-  setTheme: (theme: ConsoleTheme) => void;
-}
-
-export const ConsoleThemeContext = createContext<ConsoleThemeContextValue | null>(null);
+import { ConsoleThemeContext } from './console-theme-context';
 
 export const ConsoleThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [theme, setThemeState] = useState<ConsoleTheme>(() => {
@@ -36,12 +29,4 @@ export const ConsoleThemeProvider: React.FC<{ children: React.ReactNode }> = ({ 
       {children}
     </ConsoleThemeContext.Provider>
   );
-};
-
-export const useConsoleTheme = (): ConsoleThemeContextValue => {
-  const context = useContext(ConsoleThemeContext);
-  if (!context) {
-    throw new Error('useConsoleTheme must be used within a ConsoleThemeProvider');
-  }
-  return context;
 };

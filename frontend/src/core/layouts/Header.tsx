@@ -41,7 +41,7 @@ export const Header: React.FC<HeaderProps> = ({ activeTab = 'home', onTabChange 
         <nav className="header-nav">
           {NAVIGATION_ITEMS.map((item) => {
             const isActive = activeTab === item.id;
-            const label = item.id === 'home' ? t('header.home') : item.label;
+            const label = t(item.labelKey);
             return (
               <button
                 key={item.id}

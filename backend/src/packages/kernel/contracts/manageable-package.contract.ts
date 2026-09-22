@@ -14,6 +14,12 @@ export interface PackageStatusReport {
   metrics: Record<string, string | number | boolean>;
 }
 
+export interface PackageActionResult {
+  success: boolean;
+  message: string;
+  data?: unknown;
+}
+
 export interface ManageablePackage {
   readonly packageId: string;
   readonly displayName: string;
@@ -22,10 +28,7 @@ export interface ManageablePackage {
 
   getStatus(): Promise<PackageStatusReport>;
   getActions?(): PackageActionDescriptor[];
-  executeAction?(
-    actionId: string,
-    params?: unknown,
-  ): Promise<{ success: boolean; message: string; data?: unknown }>;
+  executeAction?(actionId: string, params?: unknown): Promise<PackageActionResult>;
 }
 
 export const MANAGEABLE_PACKAGE = Symbol('MANAGEABLE_PACKAGE');

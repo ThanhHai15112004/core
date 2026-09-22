@@ -1,126 +1,91 @@
 import React, { useState, useMemo } from 'react';
-import type { EventLogLevel } from '../types/console.types';
-import { useConsoleData } from '../context/ConsoleDataContext';
+import { Sliders, Play, Pause, Download, Trash2 } from 'lucide-react';
+import type { OpsEventLog } from '../types/console.types';
+import { useConsoleData } from '../context/console-data-context';
 import { SectionHeader } from '../components/common/SectionHeader';
-import { Sliders, Play, Pause, Download, Trash2, PlusCircle } from 'lucide-react';
+import { usePackage } from '../hooks/usePackage';
+import { useLocale } from '../../../core/i18n/index';
+
+const LEVEL_FILTERS = ['all', 'info', 'warn', 'error', 'success'] as const;
+type LevelFilter = (typeof LEVEL_FILTERS)[number];
+
+function downloadJson(data: unknown, filename: string): void {
+  const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
 
 export const LogViewerSection: React.FC = () => {
-  const { events, clearEvents, addEvent, packages, executeAction } = useConsoleData();
+  const { t, formatTime } = useLocale();
+  const { events, clearEvents, executeAction } = useConsoleData();
+  const { pkg: loggingPkg, metric } = usePackage('logging');
 
-  const [selectedLevel, setSelectedLevel] = useState<string>('all');
+  const [selectedLevel, setSelectedLevel] = useState<LevelFilter>('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [isPaused, setIsPaused] = useState(false);
+  const [pausedSnapshot, setPausedSnapshot] = useState<OpsEventLog[] | null>(null);
   const [isChangingLevel, setIsChangingLevel] = useState(false);
 
-  // Find logging package if registered
-  const loggingPkg = packages.find((p) => p.packageId === 'logging');
-  const currentLogLevel = String(loggingPkg?.statusReport.metrics['currentLevel'] || 'info');
+  const currentLogLevel = String(metric('currentLevel') ?? '--');
+  const visibleEvents = pausedSnapshot ?? events;
 
   const filteredEvents = useMemo(() => {
-    return events.filter((evt) => {
-      const matchLevel = selectedLevel === 'all' || evt.level === selectedLevel;
-      const q = searchQuery.toLowerCase().trim();
-      const matchQuery =
-        !q ||
-        evt.message.toLowerCase().includes(q) ||
-        evt.source.toLowerCase().includes(q);
-      return matchLevel && matchQuery;
-    });
-  }, [events, selectedLevel, searchQuery]);
+    const q = searchQuery.toLowerCase().trim();
+    return visibleEvents.filter(
+      (evt) =>
+        (selectedLevel === 'all' || evt.level === selectedLevel) &&
+        (!q || evt.message.toLowerCase().includes(q) || evt.source.toLowerCase().includes(q)),
+    );
+  }, [visibleEvents, selectedLevel, searchQuery]);
 
-  const handleSetLogLevel = async (level: string) => {
+  const handleRunLoggingAction = async (actionId: string) => {
     try {
       setIsChangingLevel(true);
-      await executeAction('logging', 'set_level', { level });
-      addEvent('info', 'logging', `Log level dynamically set to ${level.toUpperCase()}`);
+      await executeAction('logging', actionId);
     } finally {
       setIsChangingLevel(false);
     }
   };
 
-  const handleSimulateLog = () => {
-    const sources = ['kernel', 'http', 'database', 'worker', 'auth'];
-    const levels: EventLogLevel[] = ['info', 'warn', 'error', 'success'];
-    const sampleMsgs = [
-      'HTTP GET /api/v1/health 200 OK - 8ms',
-      'Slow query detected on users table - 120ms',
-      'Worker processor [NotificationProcessor] processed job #1042 in 45ms',
-      'JWT token validated successfully for sub:usr_8928',
-      'Redis connection pool idle timeout refreshed',
-    ];
-
-    const randomSource = sources[Math.floor(Math.random() * sources.length)] || 'kernel';
-    const randomLevel = levels[Math.floor(Math.random() * levels.length)] || 'info';
-    const randomMsg = sampleMsgs[Math.floor(Math.random() * sampleMsgs.length)] || 'Sample log entry';
-
-    addEvent(randomLevel, randomSource, randomMsg);
-  };
-
-  const handleExportJson = () => {
-    const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(events, null, 2));
-    const downloadAnchor = document.createElement('a');
-    downloadAnchor.setAttribute('href', dataStr);
-    downloadAnchor.setAttribute('download', `system-console-logs-${Date.now()}.json`);
-    document.body.appendChild(downloadAnchor);
-    downloadAnchor.click();
-    downloadAnchor.remove();
-  };
-
   return (
     <div>
-      <SectionHeader
-        title="Structured Log Viewer"
-        description="Live operational telemetry, structured log message streams, level filtering, and dynamic Pino reconfiguration."
-        badge="Real-time"
-      />
+      <SectionHeader title={t('console.logs.title')} description={t('console.logs.description')} />
 
-      {/* Log Level Control Panel */}
       {loggingPkg && (
         <div className="scp-panel" style={{ marginBottom: '1.25rem', padding: '1rem 1.25rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
               <Sliders size={18} style={{ color: 'var(--scp-primary)' }} />
-              <div>
-                <strong style={{ fontSize: '0.9rem', color: 'var(--scp-text-primary)' }}>
-                  Active Logging Engine Level:
-                </strong>{' '}
-                <span className="code-badge" style={{ textTransform: 'uppercase', fontWeight: 700 }}>
-                  {currentLogLevel}
-                </span>
-                <span style={{ fontSize: '0.75rem', color: 'var(--scp-text-muted)', marginLeft: '0.5rem' }}>
-                  (Dynamic Pino runtime reconfiguration)
-                </span>
-              </div>
+              <strong style={{ fontSize: '0.9rem', color: 'var(--scp-text-primary)' }}>{t('console.logs.currentLevel')}</strong>
+              <span className="code-badge" style={{ textTransform: 'uppercase', fontWeight: 700 }}>
+                {currentLogLevel}
+              </span>
             </div>
 
-            <div style={{ display: 'flex', gap: '0.4rem' }}>
-              {['debug', 'info', 'warn', 'error'].map((lvl) => {
-                const isCurrent = currentLogLevel.toLowerCase() === lvl;
-                return (
-                  <button
-                    key={lvl}
-                    type="button"
-                    disabled={isChangingLevel || isCurrent}
-                    className={`scp-btn scp-btn-sm ${isCurrent ? 'scp-btn-primary' : 'scp-btn-secondary'}`}
-                    onClick={() => handleSetLogLevel(lvl)}
-                    style={{ textTransform: 'uppercase', fontSize: '0.75rem', padding: '0.25rem 0.55rem' }}
-                  >
-                    Set {lvl}
-                  </button>
-                );
-              })}
+            <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+              {loggingPkg.actions.map((action) => (
+                <button
+                  key={action.id}
+                  type="button"
+                  disabled={isChangingLevel}
+                  title={action.description}
+                  className="scp-btn scp-btn-sm scp-btn-secondary"
+                  onClick={() => handleRunLoggingAction(action.id)}
+                >
+                  {action.label}
+                </button>
+              ))}
             </div>
           </div>
         </div>
       )}
 
-      {/* Terminal Log Viewer Box */}
       <div className="log-viewer-wrapper">
-        {/* Toolbar */}
         <div className="log-viewer-toolbar">
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-            {/* Level filters */}
-            {['all', 'info', 'warn', 'error', 'success'].map((lvl) => (
+            {LEVEL_FILTERS.map((lvl) => (
               <button
                 key={lvl}
                 type="button"
@@ -128,26 +93,17 @@ export const LogViewerSection: React.FC = () => {
                 onClick={() => setSelectedLevel(lvl)}
                 style={{ textTransform: 'uppercase', fontSize: '0.7rem', padding: '0.2rem 0.5rem' }}
               >
-                {lvl}
+                {t(`console.logs.level.${lvl}`)}
               </button>
             ))}
 
-            {/* Search */}
             <input
-              type="text"
-              placeholder="Search in logs..."
+              type="search"
+              className="log-viewer-search"
+              placeholder={t('console.logs.searchPlaceholder')}
+              aria-label={t('console.logs.searchPlaceholder')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              style={{
-                padding: '0.25rem 0.6rem',
-                borderRadius: '4px',
-                border: '1px solid var(--scp-terminal-border)',
-                backgroundColor: 'rgba(0, 0, 0, 0.4)',
-                color: 'var(--scp-terminal-text)',
-                fontSize: '0.75rem',
-                width: '180px',
-                outline: 'none',
-              }}
             />
           </div>
 
@@ -155,48 +111,40 @@ export const LogViewerSection: React.FC = () => {
             <button
               type="button"
               className="scp-btn scp-btn-sm scp-btn-secondary"
-              onClick={handleSimulateLog}
-              title="Add a sample log line"
+              onClick={() => setPausedSnapshot(pausedSnapshot ? null : events)}
               style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}
             >
-              <PlusCircle size={13} />
-              <span>Emit Test Log</span>
+              {pausedSnapshot ? <Play size={13} /> : <Pause size={13} />}
+              <span>{pausedSnapshot ? t('console.logs.resume') : t('console.logs.pause')}</span>
             </button>
             <button
               type="button"
               className="scp-btn scp-btn-sm scp-btn-secondary"
-              onClick={() => setIsPaused(!isPaused)}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}
-            >
-              {isPaused ? <Play size={13} /> : <Pause size={13} />}
-              <span>{isPaused ? 'Resume' : 'Pause'}</span>
-            </button>
-            <button
-              type="button"
-              className="scp-btn scp-btn-sm scp-btn-secondary"
-              onClick={handleExportJson}
+              onClick={() => downloadJson(events, `system-console-logs-${Date.now()}.json`)}
               style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}
             >
               <Download size={13} />
-              <span>Export JSON</span>
+              <span>{t('console.logs.export')}</span>
             </button>
             <button
               type="button"
               className="scp-btn scp-btn-sm scp-btn-danger"
-              onClick={clearEvents}
+              onClick={() => {
+                clearEvents();
+                setPausedSnapshot(null);
+              }}
               style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}
             >
               <Trash2 size={13} />
-              <span>Clear</span>
+              <span>{t('console.logs.clear')}</span>
             </button>
           </div>
         </div>
 
-        {/* Log Lines Stream */}
         <div className="log-viewer-stream">
           {filteredEvents.map((evt) => (
             <div key={evt.id} className="log-line">
-              <span className="log-time">{evt.timestamp.toLocaleTimeString()}</span>
+              <span className="log-time">{formatTime(evt.timestamp)}</span>
               <span className={`log-chip level-${evt.level}`}>{evt.level}</span>
               <span className="log-source">[{evt.source}]</span>
               <span className="log-msg">{evt.message}</span>
@@ -205,7 +153,7 @@ export const LogViewerSection: React.FC = () => {
 
           {filteredEvents.length === 0 && (
             <div style={{ color: 'var(--scp-text-muted)', textAlign: 'center', padding: '3rem 0', fontStyle: 'italic' }}>
-              No log lines matching current filter.
+              {t('console.logs.empty')}
             </div>
           )}
         </div>

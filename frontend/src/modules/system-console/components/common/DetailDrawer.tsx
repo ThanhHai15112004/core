@@ -4,6 +4,7 @@ import type { PackageSummary } from '../../types/console.types';
 import { StatusPill } from './StatusPill';
 import { resolvePackageIcon } from '../../constants/console.constants';
 import { X, AlertTriangle, Check, Copy } from 'lucide-react';
+import { useLocale } from '../../../../core/i18n/index';
 
 interface DetailDrawerProps {
   pkg: PackageSummary | null;
@@ -12,6 +13,7 @@ interface DetailDrawerProps {
 }
 
 export const DetailDrawer: React.FC<DetailDrawerProps> = ({ pkg, onClose, onExecuteAction }) => {
+  const { t } = useLocale();
   const [copied, setCopied] = useState(false);
 
   if (!pkg || typeof document === 'undefined') return null;
@@ -65,7 +67,7 @@ export const DetailDrawer: React.FC<DetailDrawerProps> = ({ pkg, onClose, onExec
           {/* Summary */}
           <div style={{ marginBottom: '1.25rem' }}>
             <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--scp-text-muted)', textTransform: 'uppercase' }}>
-              Summary
+              {t('console.drawer.summary')}
             </label>
             <p style={{ margin: '0.35rem 0 0', fontSize: '0.875rem', color: 'var(--scp-text-secondary)', lineHeight: 1.5 }}>
               {pkg.statusReport.summary}
@@ -75,7 +77,7 @@ export const DetailDrawer: React.FC<DetailDrawerProps> = ({ pkg, onClose, onExec
           {/* Metrics Table */}
           <div style={{ marginBottom: '1.5rem' }}>
             <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--scp-text-muted)', textTransform: 'uppercase' }}>
-              Reported Metrics ({Object.keys(pkg.statusReport.metrics).length})
+              {t('console.drawer.metrics', { count: Object.keys(pkg.statusReport.metrics).length })}
             </label>
             <div style={{ marginTop: '0.5rem', border: '1px solid var(--scp-border-subtle)', borderRadius: '8px', overflow: 'hidden' }}>
               <table className="scp-table">
@@ -93,7 +95,7 @@ export const DetailDrawer: React.FC<DetailDrawerProps> = ({ pkg, onClose, onExec
                   {Object.keys(pkg.statusReport.metrics).length === 0 && (
                     <tr>
                       <td colSpan={2} style={{ textAlign: 'center', color: 'var(--scp-text-muted)' }}>
-                        No metrics reported.
+                        {t('console.drawer.noMetrics')}
                       </td>
                     </tr>
                   )}
@@ -106,7 +108,7 @@ export const DetailDrawer: React.FC<DetailDrawerProps> = ({ pkg, onClose, onExec
           {pkg.actions.length > 0 && (
             <div style={{ marginBottom: '1.5rem' }}>
               <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--scp-text-muted)', textTransform: 'uppercase' }}>
-                Available Operations ({pkg.actions.length})
+                {t('console.drawer.actions', { count: pkg.actions.length })}
               </label>
               <div style={{ marginTop: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                 {pkg.actions.map((act) => (
@@ -139,10 +141,10 @@ export const DetailDrawer: React.FC<DetailDrawerProps> = ({ pkg, onClose, onExec
                       {act.isDanger ? (
                         <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                           <AlertTriangle size={13} />
-                          <span>Execute</span>
+                          <span>{t('console.drawer.execute')}</span>
                         </span>
                       ) : (
-                        'Run'
+                        t('console.drawer.run')
                       )}
                     </button>
                   </div>
@@ -155,7 +157,7 @@ export const DetailDrawer: React.FC<DetailDrawerProps> = ({ pkg, onClose, onExec
           <div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
               <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--scp-text-muted)', textTransform: 'uppercase' }}>
-                Raw Descriptor (JSON)
+                {t('console.drawer.rawJson')}
               </label>
               <button
                 className="scp-btn scp-btn-sm scp-btn-secondary"
@@ -164,12 +166,12 @@ export const DetailDrawer: React.FC<DetailDrawerProps> = ({ pkg, onClose, onExec
                 {copied ? (
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: 'var(--scp-success)' }}>
                     <Check size={13} />
-                    <span>Copied!</span>
+                    <span>{t('console.drawer.copied')}</span>
                   </span>
                 ) : (
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                     <Copy size={13} />
-                    <span>Copy JSON</span>
+                    <span>{t('console.drawer.copyJson')}</span>
                   </span>
                 )}
               </button>

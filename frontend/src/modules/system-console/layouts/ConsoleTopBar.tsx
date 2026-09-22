@@ -1,8 +1,8 @@
 import React from 'react';
 import type { ConsoleSectionId, RefreshIntervalMs } from '../types/console.types';
-import { CONSOLE_NAV_ITEMS, REFRESH_OPTIONS } from '../constants/console.constants';
-import { useConsoleTheme } from '../context/ConsoleThemeContext';
-import { useConsoleData } from '../context/ConsoleDataContext';
+import { REFRESH_OPTIONS } from '../constants/console.constants';
+import { useConsoleTheme } from '../context/console-theme-context';
+import { useConsoleData } from '../context/console-data-context';
 import { ConsoleIcon } from '../components/common/ConsoleIcon';
 import { useLocale } from '../../../core/i18n/index';
 import { RefreshCw, Moon, Sun, Globe } from 'lucide-react';
@@ -22,8 +22,7 @@ export const ConsoleTopBar: React.FC<ConsoleTopBarProps> = ({ currentSection }) 
     currentLatency,
   } = useConsoleData();
 
-  const activeNavItem = CONSOLE_NAV_ITEMS.find((item) => item.id === currentSection);
-  const sectionLabel = t(`nav.${currentSection}`) || activeNavItem?.label || currentSection;
+  const sectionLabel = t(`nav.${currentSection}`);
 
   const getLatencyColor = (ms: number) => {
     if (ms < 30) return 'var(--scp-success)';
@@ -60,7 +59,7 @@ export const ConsoleTopBar: React.FC<ConsoleTopBarProps> = ({ currentSection }) 
             fontSize: '0.75rem',
             fontWeight: 600,
           }}
-          title="Roundtrip API latency to /health"
+          title={t('console.topbar.latency')}
         >
           <span
             style={{
@@ -79,11 +78,11 @@ export const ConsoleTopBar: React.FC<ConsoleTopBarProps> = ({ currentSection }) 
           className="control-select"
           value={refreshInterval}
           onChange={(e) => setRefreshInterval(Number(e.target.value) as RefreshIntervalMs)}
-          title="Auto-refresh interval"
+          title={t('console.topbar.refreshInterval')}
         >
           {REFRESH_OPTIONS.map((opt) => (
             <option key={opt.value} value={opt.value}>
-              {opt.value === 0 ? t('common.off') : `${t('common.autoRefresh')}: ${opt.label}`}
+              {opt.value === 0 ? t('common.off') : `${t('common.autoRefresh')}: ${opt.value / 1000}s`}
             </option>
           ))}
         </select>
@@ -94,7 +93,7 @@ export const ConsoleTopBar: React.FC<ConsoleTopBarProps> = ({ currentSection }) 
           className="control-btn"
           onClick={() => refresh()}
           disabled={isRefreshing}
-          title="Refresh live metrics now"
+          title={t('console.topbar.refreshNow')}
         >
           <RefreshCw
             size={13}
@@ -122,10 +121,10 @@ export const ConsoleTopBar: React.FC<ConsoleTopBarProps> = ({ currentSection }) 
           type="button"
           className="control-btn"
           onClick={toggleTheme}
-          title={`Switch to ${theme === 'light' ? 'Dark' : 'Light'} Mode`}
+          title={t('header.themeToggle')}
         >
           {theme === 'light' ? <Moon size={14} /> : <Sun size={14} />}
-          <span>{theme === 'light' ? 'Dark' : 'Light'}</span>
+          <span>{theme === 'light' ? t('console.topbar.dark') : t('console.topbar.light')}</span>
         </button>
       </div>
     </header>

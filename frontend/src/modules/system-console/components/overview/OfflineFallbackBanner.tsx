@@ -12,8 +12,8 @@ export const OfflineFallbackBanner: React.FC<OfflineFallbackBannerProps> = ({
   onRetry,
   isRetrying,
 }) => {
-  const { t } = useLocale();
-  const syncTimeStr = lastSync ? lastSync.toLocaleTimeString() : 'Unknown';
+  const { t, formatTime } = useLocale();
+  const syncTimeStr = lastSync ? formatTime(lastSync) : '--';
 
   return (
     <div className="offline-warning-banner" role="alert">

@@ -1,7 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import * as os from 'node:os';
 import { CoreConfigService } from '@packages/config/index.js';
-import { PackageRegistryService } from './package-registry.service.js';
+import { DatabaseAction } from '@packages/database/index.js';
+import { CoreI18nService } from '@packages/i18n/index.js';
+import { HttpMetricsService, type HttpMetricsSnapshot } from '@packages/logging/index.js';
+import { CorePackageId, PackageStatus } from '@packages/kernel/index.js';
+import { PackageRegistryService, type PackageSummaryDto } from './package-registry.service.js';
 import type {
   SystemOverviewResponseDto,
   HealthMapItemDto,
@@ -12,359 +16,437 @@ import type {
   OverallHealthReportDto,
 } from '../responses/overview.response.js';
 
+const BYTES_PER_MB = 1024 * 1024;
+const BYTES_PER_GB = BYTES_PER_MB * 1024;
+const CPU_WARN_PERCENT = 80;
+const MEMORY_WARN_PERCENT = 85;
+const UNAVAILABLE = '--';
+
+/** Số đo của process/OS tại thời điểm gọi API. */
+interface RuntimeSnapshot {
+  uptimeSeconds: number;
+  heapUsedMb: number;
+  heapTotalMb: number;
+  rssMb: number;
+  totalMemGb: number;
+  usedMemGb: number;
+  freeMemGb: number;
+  memoryPercent: number;
+  cpuCores: number;
+  cpuPercent: number;
+  loadAvg: number[];
+}
+
+interface OverviewContext {
+  runtime: RuntimeSnapshot;
+  http: HttpMetricsSnapshot;
+  packages: PackageSummaryDto[];
+  /** `null` = không ping được hoặc không có package database. */
+  dbPingMs: number | null;
+}
+
 @Injectable()
 export class SystemOverviewService {
   constructor(
     private readonly configService: CoreConfigService,
     private readonly registryService: PackageRegistryService,
+    private readonly httpMetrics: HttpMetricsService,
+    private readonly i18n: CoreI18nService,
   ) {}
 
   public async getOverview(): Promise<SystemOverviewResponseDto> {
-    const uptimeSeconds = Math.round(process.uptime());
-    const memUsage = process.memoryUsage();
-    const totalMem = os.totalmem();
-    const freeMem = os.freemem();
-    const usedMem = totalMem - freeMem;
-    const cpuCores = os.cpus().length;
-    const loadAvg = os.loadavg();
-
-    // Lấy thông tin các packages đã đăng ký
-    const packageSummaries = await this.registryService.getAllSummaries();
-
-    // Kiểm tra ping database nếu có adapter
-    let dbPingMs = 15;
-    const dbPackage = this.registryService.getPackage('database');
-    if (dbPackage && dbPackage.executeAction) {
-      const pingStart = Date.now();
-      try {
-        const pingRes = await dbPackage.executeAction('ping');
-        if (pingRes.success) {
-          dbPingMs = Math.max(1, Date.now() - pingStart);
-        }
-      } catch {
-        dbPingMs = 0;
-      }
-    }
-
-    // Đếm trạng thái package
-    const degradedCount = packageSummaries.filter(
-      (p) => p.statusReport.status === 'warning' || p.statusReport.status === 'error',
-    ).length;
-    const errorCount = packageSummaries.filter((p) => p.statusReport.status === 'error').length;
-
-    // Xác định Overall Health
-    const env = (this.configService.app.env || 'development') as
-      'production' | 'staging' | 'development';
-
-    const overallHealth: OverallHealthReportDto =
-      errorCount > 0
-        ? {
-            status: 'critical',
-            title: 'Critical Incident Detected',
-            message: `${errorCount} component(s) are failing. Immediate investigation required.`,
-            healthyServices: packageSummaries.length - degradedCount,
-            totalServices: Math.max(packageSummaries.length, 8),
-            uptimeSeconds,
-            actionLabel: 'Inspect Database',
-            actionSection: 'database',
-            startedAgo: 'A few moments ago',
-            affectedServices: packageSummaries
-              .filter((p) => p.statusReport.status === 'error')
-              .map((p) => p.displayName),
-          }
-        : degradedCount > 0
-          ? {
-              status: 'degraded',
-              title: 'System Degraded',
-              message: `${degradedCount} component(s) reported warning state.`,
-              healthyServices: packageSummaries.length - degradedCount,
-              totalServices: Math.max(packageSummaries.length, 8),
-              uptimeSeconds,
-              affectedServices: packageSummaries
-                .filter((p) => p.statusReport.status === 'warning')
-                .map((p) => p.displayName),
-            }
-          : {
-              status: 'healthy',
-              title: 'All Systems Operational',
-              message: 'All core services and packages are performing within normal parameters.',
-              healthyServices: Math.max(packageSummaries.length, 8),
-              totalServices: Math.max(packageSummaries.length, 8),
-              uptimeSeconds,
-            };
-
-    // Chuẩn hóa Key Metrics dựa trên hệ thống thực
-    const memoryPercent = Math.round((usedMem / totalMem) * 100);
-    const heapUsedMb = Math.round(memUsage.heapUsed / (1024 * 1024));
-    const heapTotalMb = Math.round(memUsage.heapTotal / (1024 * 1024));
-    const totalMemGb = Number((totalMem / (1024 * 1024 * 1024)).toFixed(1));
-    const usedMemGb = Number((usedMem / (1024 * 1024 * 1024)).toFixed(1));
-
-    // Load avg 1-minute to approximate CPU%
-    const cpu1m = loadAvg[0] ?? 0.2;
-    const cpuEstPercent = Math.min(100, Math.round((cpu1m / Math.max(1, cpuCores)) * 100));
-
-    const keyMetrics: KeyMetricItemDto[] = [
-      {
-        id: 'req_sec',
-        label: 'Requests / Sec',
-        value: Math.max(12, Math.round(180 + Math.sin(Date.now() / 10000) * 20)),
-        unit: 'req/s',
-        trendText: '↑ 5% vs 15m',
-        trendDirection: 'up',
-        trendIsGood: true,
-        status: 'normal',
-      },
-      {
-        id: 'p95_lat',
-        label: 'P95 Latency',
-        value: dbPingMs > 0 ? Math.round(dbPingMs * 1.5) : 45,
-        unit: 'ms',
-        trendText: '↓ 4ms',
-        trendDirection: 'down',
-        trendIsGood: true,
-        status: 'normal',
-      },
-      {
-        id: 'err_rate',
-        label: 'Error Rate',
-        value: errorCount > 0 ? '1.85%' : '0.12%',
-        trendText: errorCount > 0 ? `${errorCount} failing modules` : 'Normal',
-        trendDirection: 'neutral',
-        trendIsGood: errorCount === 0,
-        status: errorCount > 0 ? 'critical' : 'normal',
-      },
-      {
-        id: 'cpu_load',
-        label: 'CPU Usage',
-        value: `${Math.max(8, cpuEstPercent)}%`,
-        trendText: `${cpuCores} Cores Active`,
-        trendDirection: 'neutral',
-        trendIsGood: cpuEstPercent < 80,
-        status: cpuEstPercent > 80 ? 'warning' : 'normal',
-      },
-      {
-        id: 'mem_usage',
-        label: 'Memory Usage',
-        value: `${usedMemGb} / ${totalMemGb} GB`,
-        trendText: `${memoryPercent}% OS (${heapUsedMb}MB Node)`,
-        trendDirection: 'neutral',
-        trendIsGood: memoryPercent < 85,
-        status: memoryPercent > 85 ? 'warning' : 'normal',
-      },
-      {
-        id: 'alerts_count',
-        label: 'Active Alerts',
-        value: degradedCount,
-        trendText: `${errorCount} Critical`,
-        trendDirection: 'neutral',
-        trendIsGood: degradedCount === 0,
-        status: errorCount > 0 ? 'critical' : degradedCount > 0 ? 'warning' : 'normal',
-      },
-    ];
-
-    // Health Map Items
-    const healthMap: HealthMapItemDto[] = [
-      {
-        id: 'runtime-api',
-        name: 'API Gateway',
-        category: 'runtime',
-        status: 'healthy',
-        subtext: `Fastify • Port ${this.configService.app.port}`,
-        secondarySubtext: `${heapUsedMb} MB Heap • ${uptimeSeconds}s Up`,
-        targetSection: 'runtime',
-        icon: 'globe',
-      },
-      {
-        id: 'runtime-worker',
-        name: 'Worker',
-        category: 'runtime',
-        status: 'healthy',
-        subtext: 'BullMQ Consumer',
-        secondarySubtext: 'Operational',
-        targetSection: 'worker',
-        icon: 'cpu',
-      },
-      {
-        id: 'runtime-scheduler',
-        name: 'Scheduler',
-        category: 'runtime',
-        status: 'healthy',
-        subtext: 'Cron Tasks Runner',
-        secondarySubtext: 'System heartbeat OK',
-        targetSection: 'scheduler',
-        icon: 'clock',
-      },
-      {
-        id: 'infra-db',
-        name: 'Database',
-        category: 'infrastructure',
-        status: dbPingMs > 0 ? 'healthy' : 'warning',
-        subtext: `${this.configService.database.connection.toUpperCase()} • ${this.configService.database.database}`,
-        secondarySubtext: `${dbPingMs} ms ping • Max pool ${this.configService.database.maxConnections}`,
-        targetSection: 'database',
-        icon: 'database',
-      },
-      {
-        id: 'infra-cache',
-        name: 'Redis Cache',
-        category: 'infrastructure',
-        status: 'healthy',
-        subtext: `Redis • ${this.configService.cache.redis.host}:${this.configService.cache.redis.port}`,
-        secondarySubtext: `Prefix: ${this.configService.cache.redis.prefix}`,
-        targetSection: 'cache',
-        icon: 'zap',
-      },
-      {
-        id: 'infra-storage',
-        name: 'Storage',
-        category: 'infrastructure',
-        status: 'healthy',
-        subtext: `Driver: ${this.configService.storage.driver.toUpperCase()}`,
-        secondarySubtext: 'Storage abstraction ready',
-        targetSection: 'packages',
-        icon: 'hard-drive',
-      },
-      {
-        id: 'gov-security',
-        name: 'Security & Auth',
-        category: 'governance',
-        status: 'healthy',
-        subtext: 'JWT & Token Service',
-        secondarySubtext: 'Redaction & Guards active',
-        targetSection: 'security',
-        icon: 'shield-check',
-      },
-    ];
-
-    // Current Incidents
-    const incidents: ActiveIncidentItemDto[] = [];
-    packageSummaries
-      .filter((p) => p.statusReport.status === 'warning' || p.statusReport.status === 'error')
-      .forEach((p, idx) => {
-        incidents.push({
-          id: `incident-${p.packageId}-${idx}`,
-          severity: p.statusReport.status === 'error' ? 'critical' : 'warning',
-          title: `${p.displayName} report issue`,
-          description: p.statusReport.summary,
-          startedAgo: 'Active',
-          targetSection: 'packages',
-          actionLabel: `Inspect ${p.displayName}`,
-        });
-      });
-
-    // Infrastructure Snapshots
-    const infraSnapshots: InfraSnapshotItemDto[] = [
-      {
-        id: 'snap-api',
-        title: 'API Gateway',
-        icon: 'globe',
-        targetSection: 'runtime',
-        metrics: [
-          { label: 'Port', value: this.configService.app.port },
-          { label: 'Heap Used', value: `${heapUsedMb} MB` },
-          { label: 'Heap Total', value: `${heapTotalMb} MB` },
-          { label: 'Node Version', value: process.version },
-        ],
-      },
-      {
-        id: 'snap-db',
-        title: 'Database',
-        icon: 'database',
-        targetSection: 'database',
-        metrics: [
-          { label: 'Driver', value: this.configService.database.connection.toUpperCase() },
-          { label: 'Ping Latency', value: `${dbPingMs} ms` },
-          { label: 'Pool Max', value: this.configService.database.maxConnections },
-          { label: 'Synchronize', value: String(this.configService.database.synchronize) },
-        ],
-      },
-      {
-        id: 'snap-cache',
-        title: 'Redis Cache',
-        icon: 'zap',
-        targetSection: 'cache',
-        metrics: [
-          { label: 'Host', value: this.configService.cache.redis.host },
-          { label: 'Port', value: this.configService.cache.redis.port },
-          { label: 'Prefix', value: this.configService.cache.redis.prefix },
-          { label: 'Driver', value: 'Redis Cluster' },
-        ],
-      },
-      {
-        id: 'snap-worker',
-        title: 'Worker',
-        icon: 'cpu',
-        targetSection: 'worker',
-        metrics: [
-          { label: 'State', value: 'Ready' },
-          { label: 'Concurrency', value: 5 },
-          { label: 'Retry Strategy', value: 'Exponential' },
-          { label: 'Dead Letter', value: 'Enabled' },
-        ],
-      },
-      {
-        id: 'snap-scheduler',
-        title: 'Scheduler',
-        icon: 'clock',
-        targetSection: 'scheduler',
-        metrics: [
-          { label: 'Timezone', value: 'UTC' },
-          { label: 'Cron Engine', value: '@nestjs/schedule' },
-          { label: 'Status', value: 'Active' },
-          { label: 'Error Rate', value: '0%' },
-        ],
-      },
-    ];
-
-    // Recent Activities (real events from system startup / health)
-    const recentActivities: RecentActivityEventDto[] = [
-      {
-        id: 'act-1',
-        time: new Date().toLocaleTimeString(),
-        level: 'info',
-        source: 'API Gateway',
-        message: `Fastify HTTP listening on port ${this.configService.app.port}. Mode: ${env}`,
-      },
-      {
-        id: 'act-2',
-        time: new Date(Date.now() - 60000).toLocaleTimeString(),
-        level: 'success',
-        source: 'Database',
-        message: `Connected to ${this.configService.database.connection.toUpperCase()} (${this.configService.database.database}) in ${dbPingMs}ms`,
-      },
-      {
-        id: 'act-3',
-        time: new Date(Date.now() - 120000).toLocaleTimeString(),
-        level: 'info',
-        source: 'Cache',
-        message: `Redis cache adapter registered (${this.configService.cache.redis.host}:${this.configService.cache.redis.port})`,
-      },
-    ];
+    const [packages, dbPingMs] = await Promise.all([
+      this.registryService.getAllSummaries(),
+      this.pingDatabase(),
+    ]);
+    const ctx: OverviewContext = {
+      runtime: this.readRuntime(),
+      http: this.httpMetrics.snapshot(),
+      packages,
+      dbPingMs,
+    };
 
     return {
-      environment: env,
+      environment: this.environment,
       timestamp: new Date().toISOString(),
-      overallHealth,
-      keyMetrics,
-      healthMap,
-      incidents,
-      infraSnapshots,
-      recentActivities,
+      overallHealth: this.buildOverallHealth(ctx),
+      keyMetrics: this.buildKeyMetrics(ctx),
+      healthMap: this.buildHealthMap(ctx),
+      incidents: this.buildIncidents(ctx),
+      infraSnapshots: this.buildInfraSnapshots(ctx),
+      recentActivities: this.buildRecentActivities(ctx),
       systemInfo: {
         nodeVersion: process.version,
         platform: process.platform,
         arch: process.arch,
         pid: process.pid,
-        uptimeSeconds,
-        heapUsedMb,
-        heapTotalMb,
-        rssMb: Math.round(memUsage.rss / (1024 * 1024)),
-        totalMemGb,
-        freeMemGb: Number((freeMem / (1024 * 1024 * 1024)).toFixed(1)),
-        cpuCores,
-        loadAvg,
+        uptimeSeconds: ctx.runtime.uptimeSeconds,
+        heapUsedMb: ctx.runtime.heapUsedMb,
+        heapTotalMb: ctx.runtime.heapTotalMb,
+        rssMb: ctx.runtime.rssMb,
+        totalMemGb: ctx.runtime.totalMemGb,
+        freeMemGb: ctx.runtime.freeMemGb,
+        cpuCores: ctx.runtime.cpuCores,
+        loadAvg: ctx.runtime.loadAvg,
       },
     };
+  }
+
+  private get environment(): SystemOverviewResponseDto['environment'] {
+    const env = this.configService.app.env;
+    return env === 'production' || env === 'staging' ? env : 'development';
+  }
+
+  private async pingDatabase(): Promise<number | null> {
+    const dbPackage = this.registryService.getPackage(CorePackageId.DATABASE);
+    if (!dbPackage?.executeAction) {
+      return null;
+    }
+
+    const start = Date.now();
+    try {
+      const result = await dbPackage.executeAction(DatabaseAction.PING);
+      return result.success ? Math.max(1, Date.now() - start) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  private readRuntime(): RuntimeSnapshot {
+    const mem = process.memoryUsage();
+    const totalMem = os.totalmem();
+    const freeMem = os.freemem();
+    const cpuCores = os.cpus().length;
+    const loadAvg = os.loadavg();
+
+    return {
+      uptimeSeconds: Math.round(process.uptime()),
+      heapUsedMb: Math.round(mem.heapUsed / BYTES_PER_MB),
+      heapTotalMb: Math.round(mem.heapTotal / BYTES_PER_MB),
+      rssMb: Math.round(mem.rss / BYTES_PER_MB),
+      totalMemGb: Number((totalMem / BYTES_PER_GB).toFixed(1)),
+      usedMemGb: Number(((totalMem - freeMem) / BYTES_PER_GB).toFixed(1)),
+      freeMemGb: Number((freeMem / BYTES_PER_GB).toFixed(1)),
+      memoryPercent: Math.round(((totalMem - freeMem) / totalMem) * 100),
+      cpuCores,
+      // Load average 1 phút / số nhân ≈ % CPU (luôn là 0 trên Windows).
+      cpuPercent: Math.min(100, Math.round(((loadAvg[0] ?? 0) / Math.max(1, cpuCores)) * 100)),
+      loadAvg,
+    };
+  }
+
+  private packagesWithStatus(ctx: OverviewContext, status: PackageStatus): PackageSummaryDto[] {
+    return ctx.packages.filter((p) => p.statusReport.status === status);
+  }
+
+  private buildOverallHealth(ctx: OverviewContext): OverallHealthReportDto {
+    const failing = this.packagesWithStatus(ctx, PackageStatus.ERROR);
+    const warning = this.packagesWithStatus(ctx, PackageStatus.WARNING);
+    const base = {
+      healthyServices: ctx.packages.length - failing.length - warning.length,
+      totalServices: ctx.packages.length,
+      uptimeSeconds: ctx.runtime.uptimeSeconds,
+    };
+
+    if (failing.length > 0) {
+      return {
+        ...base,
+        status: 'critical',
+        title: this.i18n.t('overview.health.critical.title'),
+        message: this.i18n.t('overview.health.critical.message', { count: failing.length }),
+        actionLabel: this.i18n.t('overview.health.critical.action'),
+        actionSection: 'packages',
+        affectedServices: failing.map((p) => p.displayName),
+      };
+    }
+
+    if (warning.length > 0) {
+      return {
+        ...base,
+        status: 'degraded',
+        title: this.i18n.t('overview.health.degraded.title'),
+        message: this.i18n.t('overview.health.degraded.message', { count: warning.length }),
+        affectedServices: warning.map((p) => p.displayName),
+      };
+    }
+
+    return {
+      ...base,
+      status: 'healthy',
+      title: this.i18n.t('overview.health.healthy.title'),
+      message: this.i18n.t('overview.health.healthy.message'),
+    };
+  }
+
+  private buildKeyMetrics(ctx: OverviewContext): KeyMetricItemDto[] {
+    const { http, runtime } = ctx;
+    const hasTraffic = http.totalRequests > 0;
+    const trafficText = hasTraffic
+      ? this.i18n.t('overview.metric.window', {
+          count: http.totalRequests,
+          seconds: http.windowSeconds,
+        })
+      : this.i18n.t('overview.metric.noTraffic', { seconds: http.windowSeconds });
+    const errorCount = this.packagesWithStatus(ctx, PackageStatus.ERROR).length;
+    const alertCount = errorCount + this.packagesWithStatus(ctx, PackageStatus.WARNING).length;
+
+    return [
+      {
+        id: 'req_sec',
+        label: this.i18n.t('overview.metric.reqSec'),
+        value: http.requestsPerSecond,
+        unit: 'req/s',
+        trendText: trafficText,
+        trendDirection: 'neutral',
+        trendIsGood: true,
+        status: 'normal',
+      },
+      {
+        id: 'p95_lat',
+        label: this.i18n.t('overview.metric.p95'),
+        value: http.p95LatencyMs ?? UNAVAILABLE,
+        unit: 'ms',
+        trendText: trafficText,
+        trendDirection: 'neutral',
+        trendIsGood: true,
+        status: 'normal',
+      },
+      {
+        id: 'err_rate',
+        label: this.i18n.t('overview.metric.errorRate'),
+        value: `${http.errorRatePercent}%`,
+        trendText: this.i18n.t('overview.metric.errors', { count: http.errorCount }),
+        trendDirection: 'neutral',
+        trendIsGood: http.errorCount === 0,
+        status: http.errorCount > 0 ? 'critical' : 'normal',
+      },
+      {
+        id: 'cpu_load',
+        label: this.i18n.t('overview.metric.cpu'),
+        value: `${runtime.cpuPercent}%`,
+        trendText: this.i18n.t('overview.metric.cores', { count: runtime.cpuCores }),
+        trendDirection: 'neutral',
+        trendIsGood: runtime.cpuPercent < CPU_WARN_PERCENT,
+        status: runtime.cpuPercent > CPU_WARN_PERCENT ? 'warning' : 'normal',
+      },
+      {
+        id: 'mem_usage',
+        label: this.i18n.t('overview.metric.memory'),
+        value: `${runtime.usedMemGb} / ${runtime.totalMemGb} GB`,
+        trendText: this.i18n.t('overview.metric.memoryDetail', {
+          percent: runtime.memoryPercent,
+          heap: runtime.heapUsedMb,
+        }),
+        trendDirection: 'neutral',
+        trendIsGood: runtime.memoryPercent < MEMORY_WARN_PERCENT,
+        status: runtime.memoryPercent > MEMORY_WARN_PERCENT ? 'warning' : 'normal',
+      },
+      {
+        id: 'alerts_count',
+        label: this.i18n.t('overview.metric.alerts'),
+        value: alertCount,
+        trendText: this.i18n.t('overview.metric.critical', { count: errorCount }),
+        trendDirection: 'neutral',
+        trendIsGood: alertCount === 0,
+        status: errorCount > 0 ? 'critical' : alertCount > 0 ? 'warning' : 'normal',
+      },
+    ];
+  }
+
+  private buildHealthMap(ctx: OverviewContext): HealthMapItemDto[] {
+    const { app, database, cache, storage } = this.configService;
+    const cachePackage = ctx.packages.find((p) => p.packageId === CorePackageId.CACHE);
+    const securityPackage = ctx.packages.find((p) => p.packageId === CorePackageId.SECURITY);
+    const unmonitoredProcess = {
+      category: 'runtime',
+      status: 'unknown',
+      subtext: this.i18n.t('overview.map.processUnmonitored'),
+      secondarySubtext: this.i18n.t('overview.map.processUnmonitoredDetail'),
+    } as const;
+
+    return [
+      {
+        id: 'runtime-api',
+        name: this.i18n.t('overview.map.api.name'),
+        category: 'runtime',
+        status: 'healthy',
+        subtext: this.i18n.t('overview.map.api.subtext', { port: app.port }),
+        secondarySubtext: this.i18n.t('overview.map.api.secondary', {
+          heap: ctx.runtime.heapUsedMb,
+          uptime: ctx.runtime.uptimeSeconds,
+        }),
+        targetSection: 'runtime',
+        icon: 'globe',
+      },
+      {
+        ...unmonitoredProcess,
+        id: 'runtime-worker',
+        name: this.i18n.t('overview.map.worker.name'),
+        targetSection: 'worker',
+        icon: 'cpu',
+      },
+      {
+        ...unmonitoredProcess,
+        id: 'runtime-scheduler',
+        name: this.i18n.t('overview.map.scheduler.name'),
+        targetSection: 'scheduler',
+        icon: 'clock',
+      },
+      {
+        id: 'infra-db',
+        name: this.i18n.t('overview.map.database.name'),
+        category: 'infrastructure',
+        status: ctx.dbPingMs !== null ? 'healthy' : 'warning',
+        subtext: `${database.connection.toUpperCase()} • ${database.database}`,
+        secondarySubtext:
+          ctx.dbPingMs !== null
+            ? this.i18n.t('overview.map.database.secondary', {
+                ping: ctx.dbPingMs,
+                pool: database.maxConnections,
+              })
+            : this.i18n.t('overview.map.database.pingFailed', { pool: database.maxConnections }),
+        targetSection: 'database',
+        icon: 'database',
+      },
+      {
+        id: 'infra-cache',
+        name: this.i18n.t('overview.map.cache.name'),
+        category: 'infrastructure',
+        status: toHealthMapStatus(cachePackage?.statusReport.status),
+        subtext: cachePackage?.statusReport.summary ?? UNAVAILABLE,
+        secondarySubtext: `${this.i18n.t('overview.snapshot.prefix')}: ${cache.redis.prefix}`,
+        targetSection: 'cache',
+        icon: 'zap',
+      },
+      {
+        id: 'infra-storage',
+        name: this.i18n.t('overview.map.storage.name'),
+        category: 'infrastructure',
+        status: 'unknown',
+        subtext: this.i18n.t('overview.map.storage.subtext', {
+          driver: storage.driver.toUpperCase(),
+        }),
+        secondarySubtext: this.i18n.t('overview.map.storage.secondary'),
+        targetSection: 'packages',
+        icon: 'hard-drive',
+      },
+      {
+        id: 'gov-security',
+        name: this.i18n.t('overview.map.security.name'),
+        category: 'governance',
+        status: toHealthMapStatus(securityPackage?.statusReport.status),
+        subtext: this.i18n.t('overview.map.security.subtext'),
+        secondarySubtext: securityPackage?.statusReport.summary ?? UNAVAILABLE,
+        targetSection: 'security',
+        icon: 'shield-check',
+      },
+    ];
+  }
+
+  private buildIncidents(ctx: OverviewContext): ActiveIncidentItemDto[] {
+    return ctx.packages
+      .filter(
+        (p) =>
+          p.statusReport.status === PackageStatus.WARNING ||
+          p.statusReport.status === PackageStatus.ERROR,
+      )
+      .map((p) => ({
+        id: `incident-${p.packageId}`,
+        severity: p.statusReport.status === PackageStatus.ERROR ? 'critical' : 'warning',
+        title: this.i18n.t('overview.incident.title', { name: p.displayName }),
+        description: p.statusReport.summary,
+        startedAgo: this.i18n.t('overview.incident.active'),
+        targetSection: 'packages',
+        actionLabel: this.i18n.t('overview.incident.action', { name: p.displayName }),
+      }));
+  }
+
+  private buildInfraSnapshots(ctx: OverviewContext): InfraSnapshotItemDto[] {
+    const { app, database, cache } = this.configService;
+    const label = (key: string) => this.i18n.t(`overview.snapshot.${key}`);
+
+    return [
+      {
+        id: 'snap-api',
+        title: this.i18n.t('overview.map.api.name'),
+        icon: 'globe',
+        targetSection: 'runtime',
+        metrics: [
+          { label: label('port'), value: app.port },
+          { label: label('heapUsed'), value: `${ctx.runtime.heapUsedMb} MB` },
+          { label: label('heapTotal'), value: `${ctx.runtime.heapTotalMb} MB` },
+          { label: label('nodeVersion'), value: process.version },
+        ],
+      },
+      {
+        id: 'snap-db',
+        title: this.i18n.t('overview.map.database.name'),
+        icon: 'database',
+        targetSection: 'database',
+        metrics: [
+          { label: label('driver'), value: database.connection.toUpperCase() },
+          {
+            label: label('ping'),
+            value: ctx.dbPingMs !== null ? `${ctx.dbPingMs} ms` : label('unavailable'),
+            isWarn: ctx.dbPingMs === null,
+          },
+          { label: label('poolMax'), value: database.maxConnections },
+          { label: label('synchronize'), value: String(database.synchronize) },
+        ],
+      },
+      {
+        id: 'snap-cache',
+        title: this.i18n.t('overview.map.cache.name'),
+        icon: 'zap',
+        targetSection: 'cache',
+        metrics: [
+          { label: label('driver'), value: 'memory' },
+          { label: label('prefix'), value: cache.redis.prefix },
+          { label: label('configuredRedis'), value: `${cache.redis.host}:${cache.redis.port}` },
+        ],
+      },
+    ];
+  }
+
+  private buildRecentActivities(ctx: OverviewContext): RecentActivityEventDto[] {
+    const { app, database } = this.configService;
+    const startedAt = new Date(Date.now() - ctx.runtime.uptimeSeconds * 1000).toISOString();
+    const dbParams = { driver: database.connection.toUpperCase(), database: database.database };
+
+    return [
+      {
+        id: 'act-db-ping',
+        time: new Date().toISOString(),
+        level: ctx.dbPingMs !== null ? 'success' : 'error',
+        source: this.i18n.t('overview.map.database.name'),
+        message:
+          ctx.dbPingMs !== null
+            ? this.i18n.t('overview.activity.dbPingOk', { ...dbParams, ping: ctx.dbPingMs })
+            : this.i18n.t('overview.activity.dbPingFailed', dbParams),
+      },
+      {
+        id: 'act-api-started',
+        time: startedAt,
+        level: 'info',
+        source: this.i18n.t('overview.map.api.name'),
+        message: this.i18n.t('overview.activity.apiStarted', {
+          port: app.port,
+          env: this.environment,
+        }),
+      },
+    ];
+  }
+}
+
+function toHealthMapStatus(status: PackageStatus | undefined): HealthMapItemDto['status'] {
+  switch (status) {
+    case PackageStatus.HEALTHY:
+      return 'healthy';
+    case PackageStatus.WARNING:
+      return 'warning';
+    case PackageStatus.ERROR:
+      return 'critical';
+    default:
+      return 'unknown';
   }
 }

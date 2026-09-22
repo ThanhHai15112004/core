@@ -1,6 +1,7 @@
 {
   "INTERNAL_SERVER_ERROR": "Đã xảy ra lỗi không mong muốn",
   "BAD_REQUEST": "Dữ liệu yêu cầu không hợp lệ",
+  "VALIDATION_FAILED": "Dữ liệu không vượt qua kiểm tra hợp lệ",
   "NOT_FOUND": "Không tìm thấy dữ liệu yêu cầu",
   "UNAUTHORIZED": "Truy cập không được phép",
   "FORBIDDEN": "Bị từ chối quyền truy cập"

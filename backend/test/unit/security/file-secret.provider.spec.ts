@@ -15,21 +15,9 @@ describe('FileSecretProvider Unit Tests', () => {
       'super-secure-jwt-token-value\n',
       'utf8',
     );
-    fs.writeFileSync(
-      path.join(tempDir, 'db_password'),
-      'db_super_password_123',
-      'utf8',
-    );
-    fs.writeFileSync(
-      path.join(tempDir, 'db_username'),
-      'postgres_admin',
-      'utf8',
-    );
-    fs.writeFileSync(
-      path.join(tempDir, 'api-third-party-key'),
-      'api_key_xyz987',
-      'utf8',
-    );
+    fs.writeFileSync(path.join(tempDir, 'db_password'), 'db_super_password_123', 'utf8');
+    fs.writeFileSync(path.join(tempDir, 'db_username'), 'postgres_admin', 'utf8');
+    fs.writeFileSync(path.join(tempDir, 'api-third-party-key'), 'api_key_xyz987', 'utf8');
 
     provider = new FileSecretProvider(tempDir);
   });

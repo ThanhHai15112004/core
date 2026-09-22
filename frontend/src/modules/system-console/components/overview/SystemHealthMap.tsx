@@ -87,7 +87,7 @@ export const SystemHealthMap: React.FC<SystemHealthMapProps> = ({
                     type="button"
                     className="health-map-card"
                     onClick={() => onNavigate(item.targetSection)}
-                    title={`Click to open ${getItemName(item)} details`}
+                    title={t('console.healthMap.openDetails', { name: getItemName(item) })}
                   >
                     <div className="health-map-card-top">
                       <span className="health-map-card-name">
@@ -98,7 +98,7 @@ export const SystemHealthMap: React.FC<SystemHealthMapProps> = ({
                       </span>
                       <span
                         className={`health-status-dot dot-${item.status}`}
-                        aria-label={`Status: ${item.status}`}
+                        aria-label={t(`console.status.${item.status}`)}
                       />
                     </div>
 

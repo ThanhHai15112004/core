@@ -1,7 +1,7 @@
 import React from 'react';
 import type { ConsoleSectionId } from '../types/console.types';
 import { CONSOLE_NAV_ITEMS } from '../constants/console.constants';
-import { useConsoleData } from '../context/ConsoleDataContext';
+import { useConsoleData } from '../context/console-data-context';
 import { ConsoleIcon } from '../components/common/ConsoleIcon';
 import { useLocale } from '../../../core/i18n/index';
 import { Server, ArrowLeft } from 'lucide-react';
@@ -60,7 +60,7 @@ export const ConsoleSidebar: React.FC<ConsoleSidebarProps> = ({
         {coreNav.map((item) => {
           const isActive = currentSection === item.id;
           const badge = getBadge(item.id);
-          const label = t(`nav.${item.id}`) || item.label;
+          const label = t(`nav.${item.id}`);
           return (
             <button
               key={item.id}
@@ -80,7 +80,7 @@ export const ConsoleSidebar: React.FC<ConsoleSidebarProps> = ({
         <div className="nav-group-label">{t('healthMap.infrastructure')}</div>
         {infraNav.map((item) => {
           const isActive = currentSection === item.id;
-          const label = t(`nav.${item.id}`) || item.label;
+          const label = t(`nav.${item.id}`);
           return (
             <button
               key={item.id}
@@ -99,7 +99,7 @@ export const ConsoleSidebar: React.FC<ConsoleSidebarProps> = ({
         <div className="nav-group-label">{t('healthMap.governance')}</div>
         {secNav.map((item) => {
           const isActive = currentSection === item.id;
-          const label = t(`nav.${item.id}`) || item.label;
+          const label = t(`nav.${item.id}`);
           return (
             <button
               key={item.id}
@@ -128,7 +128,7 @@ export const ConsoleSidebar: React.FC<ConsoleSidebarProps> = ({
             color: 'var(--scp-text-muted)',
           }}
         >
-          <span>API Gateway</span>
+          <span>{t('healthMap.apiGateway')}</span>
           <span
             style={{
               color: isApiOk ? 'var(--scp-success-text)' : 'var(--scp-danger-text)',
@@ -147,7 +147,7 @@ export const ConsoleSidebar: React.FC<ConsoleSidebarProps> = ({
                 display: 'inline-block',
               }}
             />
-            {health.status.toUpperCase()}
+            {t(`console.healthStatus.${health.status}`).toUpperCase()}
           </span>
         </div>
 
@@ -155,7 +155,7 @@ export const ConsoleSidebar: React.FC<ConsoleSidebarProps> = ({
           type="button"
           className="return-home-btn"
           onClick={handleReturnHome}
-          title="Return to main application"
+          title={t('nav.backToHome')}
         >
           <ArrowLeft size={14} />
           <span>{t('nav.backToHome')}</span>

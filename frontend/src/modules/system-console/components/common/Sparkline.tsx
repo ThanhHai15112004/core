@@ -1,5 +1,6 @@
 import React from 'react';
 import type { LatencyDataPoint } from '../../types/console.types';
+import { useLocale } from '../../../../core/i18n/index';
 
 interface SparklineProps {
   data: LatencyDataPoint[] | number[];
@@ -12,8 +13,9 @@ export const Sparkline: React.FC<SparklineProps> = ({
   color = 'var(--scp-primary)',
   height = 28,
 }) => {
+  const { t } = useLocale();
   if (!data || data.length === 0) {
-    return <div style={{ height, color: 'var(--scp-text-muted)', fontSize: '0.75rem' }}>No data</div>;
+    return <div style={{ height, color: 'var(--scp-text-muted)', fontSize: '0.75rem' }}>{t('console.fallback.noData')}</div>;
   }
 
   const values = data.map((d) => (typeof d === 'number' ? d : d.latencyMs));

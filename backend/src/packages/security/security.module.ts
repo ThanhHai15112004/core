@@ -5,6 +5,7 @@ import { FileSecretProvider } from './providers/file-secret.provider.js';
 import { SecretService } from './providers/secret.service.js';
 import { TokenService } from './providers/token.service.js';
 import { AuthGuard } from './guards/auth.guard.js';
+import { SecurityManageableAdapter } from './providers/security-manageable.adapter.js';
 
 import { SecretDriver } from './types/secret.types.js';
 
@@ -27,6 +28,7 @@ import { SecretDriver } from './types/secret.types.js';
     SecretService,
     TokenService,
     AuthGuard,
+    SecurityManageableAdapter,
   ],
   exports: [
     SECRET_PROVIDER,
@@ -35,6 +37,7 @@ import { SecretDriver } from './types/secret.types.js';
     SecretService,
     TokenService,
     AuthGuard,
+    SecurityManageableAdapter,
   ],
 })
 export class SecurityModule {}

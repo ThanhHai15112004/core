@@ -1,6 +1,6 @@
 import React from 'react';
-import type { ConsoleSectionId, SystemEnvironment } from '../types/console.types';
-import { useConsoleData } from '../context/ConsoleDataContext';
+import type { ConsoleSectionId } from '../types/console.types';
+import { useConsoleData } from '../context/console-data-context';
 import { OverallHealthBanner } from '../components/overview/OverallHealthBanner';
 import { KeyMetricsGrid } from '../components/overview/KeyMetricsGrid';
 import { SystemHealthMap } from '../components/overview/SystemHealthMap';
@@ -21,7 +21,7 @@ interface OverviewSectionProps {
 export const OverviewSection: React.FC<OverviewSectionProps> = ({
   onNavigate,
 }) => {
-  const { t } = useLocale();
+  const { t, formatTime } = useLocale();
   const {
     overviewData,
     performanceSeries,
@@ -36,17 +36,7 @@ export const OverviewSection: React.FC<OverviewSectionProps> = ({
     isOffline,
     lastSuccessfulSync,
     environment,
-    setEnvironment,
   } = useConsoleData();
-
-  const handleCycleEnvironment = () => {
-    const envCycle: Record<SystemEnvironment, SystemEnvironment> = {
-      production: 'staging',
-      staging: 'development',
-      development: 'production',
-    };
-    setEnvironment(envCycle[environment]);
-  };
 
   return (
     <div className="overview-page-root">
@@ -55,12 +45,9 @@ export const OverviewSection: React.FC<OverviewSectionProps> = ({
         <div className="overview-header-left">
           <div className="overview-title-wrap">
             <h1 className="overview-main-title">{t('overview.title')}</h1>
-            <button
-              type="button"
-              className={`overview-env-badge is-${environment}`}
-              onClick={handleCycleEnvironment}
-              title="Click to toggle environment simulation"
-              style={{ cursor: 'pointer', border: 'none' }}
+            <span
+              className={`overview-env-badge is-${environment ?? 'unknown'}`}
+              title={t('overview.envBadge')}
             >
               <span
                 style={{
@@ -71,15 +58,15 @@ export const OverviewSection: React.FC<OverviewSectionProps> = ({
                   display: 'inline-block',
                 }}
               />
-              <span>{environment.toUpperCase()}</span>
-            </button>
+              <span>{environment ? environment.toUpperCase() : '--'}</span>
+            </span>
           </div>
           <p className="overview-subtitle">{t('overview.subtitle')}</p>
         </div>
 
         <div className="overview-header-actions">
           <span className="overview-last-updated">
-            {t('common.lastUpdated')}: {overviewData.lastUpdated.toLocaleTimeString()}
+            {t('common.lastUpdated')}: {formatTime(overviewData.lastUpdated)}
           </span>
 
           <button
