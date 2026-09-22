@@ -12,6 +12,27 @@ interface MetricSample {
   values: Record<PerformanceMetricKey, number | null>;
 }
 
+export interface MetricTrend {
+  /** Chênh lệch tuyệt đối so với mốc so sánh. */
+  delta: number;
+  /** Chênh lệch %, `null` khi mốc bằng 0. */
+  deltaPercent: number | null;
+  /** Mốc so sánh cách đây bao nhiêu phút (tối đa 15). */
+  minutesAgo: number;
+}
+
+/** KPI id của backend → metric được lưu lịch sử. */
+export const KPI_METRIC: Record<string, PerformanceMetricKey> = {
+  req_sec: 'requests',
+  p95_lat: 'latency',
+  err_rate: 'errors',
+  cpu_load: 'cpu',
+  mem_usage: 'memory',
+};
+
+const TREND_WINDOW_MS = 15 * 60_000;
+const MIN_TREND_AGE_MS = 60_000;
+
 export interface PerformanceStats {
   current: string;
   average: string;
@@ -103,5 +124,27 @@ export function useMetricHistory() {
     [samples],
   );
 
-  return { recordOverview, buildSeries };
+  /** So sánh giá trị mới nhất với mẫu gần mốc 15 phút trước nhất (cần mẫu cũ hơn ít nhất 1 phút). */
+  const getTrend = useCallback(
+    (metric: PerformanceMetricKey): MetricTrend | null => {
+      const withValue = samples.filter((s) => s.values[metric] !== null);
+      const latest = withValue[withValue.length - 1];
+      if (!latest) return null;
+
+      const target = latest.at - TREND_WINDOW_MS;
+      const baseline = withValue.find((s) => s.at >= target && latest.at - s.at >= MIN_TREND_AGE_MS);
+      if (!baseline) return null;
+
+      const current = latest.values[metric] as number;
+      const previous = baseline.values[metric] as number;
+      return {
+        delta: Number((current - previous).toFixed(2)),
+        deltaPercent: previous === 0 ? null : Math.round(((current - previous) / previous) * 100),
+        minutesAgo: Math.max(1, Math.round((latest.at - baseline.at) / 60_000)),
+      };
+    },
+    [samples],
+  );
+
+  return { recordOverview, buildSeries, getTrend };
 }

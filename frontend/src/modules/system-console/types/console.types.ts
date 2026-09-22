@@ -18,8 +18,6 @@ export type ConsoleSectionId =
 
 export type ConsoleTheme = 'light' | 'dark';
 
-export type RefreshIntervalMs = 0 | 5000 | 10000 | 30000;
-
 export interface HealthData {
   status: 'ok' | 'degraded' | 'down';
   uptime: number;
@@ -73,9 +71,12 @@ export interface OverallHealthReport {
   totalServices: number;
   uptimeSeconds: number;
   affectedServices?: string[];
+  affectedComponents?: Array<{ name: string; status: string; section: ConsoleSectionId }>;
   actionLabel?: string;
   actionSection?: ConsoleSectionId;
   startedAgo?: string;
+  /** ISO 8601 */
+  startedAt?: string;
 }
 
 export interface KeyMetricItem {
@@ -99,6 +100,8 @@ export interface HealthMapItem {
   status: 'healthy' | 'warning' | 'critical' | 'down' | 'unknown';
   subtext: string;
   secondarySubtext?: string;
+  /** Chỉ số ngắn gọn nhất của thành phần. */
+  metric?: string;
   targetSection: ConsoleSectionId;
   icon: string;
 }
@@ -117,6 +120,8 @@ export interface ActiveIncidentItem {
   title: string;
   description: string;
   startedAgo: string;
+  /** ISO 8601 */
+  startedAt?: string;
   targetSection: ConsoleSectionId;
   actionLabel: string;
 }
@@ -133,6 +138,8 @@ export interface InfraSnapshotItem {
   icon: string;
   targetSection: ConsoleSectionId;
   metrics: InfraSnapshotMetric[];
+  /** Runtime chưa expose số liệu. */
+  unavailable?: boolean;
 }
 
 export interface RecentActivityEvent {

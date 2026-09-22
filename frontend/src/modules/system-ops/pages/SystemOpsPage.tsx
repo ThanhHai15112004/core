@@ -6,6 +6,9 @@ import { PackageCard } from '../components/PackageCard';
 import { useLocale } from '../../../core/i18n/index';
 import '../styles/system-ops.css';
 
+/** Chu kỳ tự cập nhật danh sách package. */
+const POLL_INTERVAL_MS = 5000;
+
 export const SystemOpsPage: React.FC = () => {
   const { t } = useLocale();
   const [packages, setPackages] = useState<PackageSummary[]>([]);
@@ -15,10 +18,9 @@ export const SystemOpsPage: React.FC = () => {
 
   const loadPackages = useCallback(async () => {
     try {
-      setLoading(true);
-      setError(null);
       const data = await getSystemOpsPackages();
       setPackages(data);
+      setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : t('systemOps.connectError'));
     } finally {
@@ -26,8 +28,13 @@ export const SystemOpsPage: React.FC = () => {
     }
   }, [t]);
 
+  // Tự cập nhật định kỳ; tạm dừng khi tab bị ẩn.
   useEffect(() => {
     void loadPackages();
+    const interval = setInterval(() => {
+      if (!document.hidden) void loadPackages();
+    }, POLL_INTERVAL_MS);
+    return () => clearInterval(interval);
   }, [loadPackages]);
 
   const handleExecuteAction = async (packageId: string, actionId: string) => {
@@ -64,13 +71,6 @@ export const SystemOpsPage: React.FC = () => {
           <p className="ops-subtitle">{t('systemOps.subtitle')}</p>
         </div>
 
-        <button
-          onClick={() => void loadPackages()}
-          disabled={loading}
-          className="btn-secondary ops-refresh-btn"
-        >
-          {loading ? t('common.refreshing') : `🔄 ${t('common.refresh')}`}
-        </button>
       </div>
 
       {/* Notification Toast */}
@@ -127,9 +127,7 @@ export const SystemOpsPage: React.FC = () => {
             {t('systemOps.loadFailed')}
           </h3>
           <p style={{ fontSize: '14px', color: 'var(--text-muted)', marginBottom: '16px' }}>{error}</p>
-          <button onClick={() => void loadPackages()} className="btn-primary">
-            {t('common.retry')}
-          </button>
+          <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>{t('systemOps.autoRetry')}</p>
         </div>
       )}
 
@@ -142,7 +140,7 @@ export const SystemOpsPage: React.FC = () => {
       )}
 
       {/* Packages Grid */}
-      {!loading && !error && (
+      {!error && packages.length > 0 && (
         <div className="ops-packages-grid">
           {packages.map((pkg) => (
             <PackageCard key={pkg.packageId} pkg={pkg} onExecuteAction={handleExecuteAction} />

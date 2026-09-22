@@ -31,6 +31,7 @@ export class CacheManageableAdapter implements ManageablePackage {
 
   public async getStatus(): Promise<PackageStatusReport> {
     const { host, port, prefix } = this.configService.cache.redis;
+    const stats = this.cacheProvider.getStats();
 
     return {
       status: PackageStatus.HEALTHY,
@@ -39,6 +40,10 @@ export class CacheManageableAdapter implements ManageablePackage {
         driver: 'memory',
         configuredRedis: `${host}:${port}`,
         prefix,
+        keys: stats.keys,
+        hits: stats.hits,
+        misses: stats.misses,
+        hitRatePercent: stats.hitRatePercent ?? 'n/a',
       },
     };
   }

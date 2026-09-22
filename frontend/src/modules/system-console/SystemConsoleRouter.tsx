@@ -42,7 +42,6 @@ export const SystemConsoleRouter: React.FC = () => {
   };
 
   const [currentSection, setCurrentSection] = useState<ConsoleSectionId>(parseSectionFromHash);
-  const [selectedPackageId, setSelectedPackageId] = useState<string | null>(null);
 
   useEffect(() => {
     const handleHashChange = () => {
@@ -60,28 +59,17 @@ export const SystemConsoleRouter: React.FC = () => {
     window.location.hash = `#system-console/${section}`;
   }, []);
 
-  const handleOpenPackageDetail = useCallback((packageId: string) => {
-    setSelectedPackageId(packageId);
-    handleSelectSection('packages');
-  }, [handleSelectSection]);
-
   const renderSection = () => {
     switch (currentSection) {
       case 'overview':
         return (
-          <OverviewSection
-            onNavigate={handleSelectSection}
-            onOpenPackageDetail={handleOpenPackageDetail}
-          />
+<OverviewSection onNavigate={handleSelectSection} />
         );
       case 'runtime':
         return <RuntimeSection />;
       case 'packages':
         return (
-          <PackagesSection
-            initialSelectedPackageId={selectedPackageId}
-            onClearSelectedPackageId={() => setSelectedPackageId(null)}
-          />
+          <PackagesSection />
         );
       case 'logs':
         return <LogViewerSection />;
@@ -97,10 +85,7 @@ export const SystemConsoleRouter: React.FC = () => {
         return <SecuritySection />;
       default:
         return (
-          <OverviewSection
-            onNavigate={handleSelectSection}
-            onOpenPackageDetail={handleOpenPackageDetail}
-          />
+<OverviewSection onNavigate={handleSelectSection} />
         );
     }
   };

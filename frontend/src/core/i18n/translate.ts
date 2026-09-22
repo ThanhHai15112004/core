@@ -61,6 +61,25 @@ export function translate(locale: SupportedLocale, path: string, params?: Transl
   );
 }
 
+const RELATIVE_UNITS: Array<[Intl.RelativeTimeFormatUnit, number]> = [
+  ['day', 86_400],
+  ['hour', 3_600],
+  ['minute', 60],
+  ['second', 1],
+];
+
+/** "5 phút trước" / "5 minutes ago" theo locale. */
+export function formatRelative(value: Date | string | number, locale: SupportedLocale, now = Date.now()): string {
+  const seconds = Math.round((new Date(value).getTime() - now) / 1000);
+  const rtf = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' });
+  for (const [unit, size] of RELATIVE_UNITS) {
+    if (Math.abs(seconds) >= size || unit === 'second') {
+      return rtf.format(Math.round(seconds / size), unit);
+    }
+  }
+  return rtf.format(0, 'second');
+}
+
 /** Format thời gian theo locale đang chọn. */
 export function formatTime(value: Date | string | number, locale: SupportedLocale, withSeconds = true): string {
   return new Date(value).toLocaleTimeString(locale === 'vi' ? 'vi-VN' : 'en-US', {

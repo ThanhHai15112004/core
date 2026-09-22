@@ -29,6 +29,7 @@ const HEALTH_MAP_SKELETON: Array<Pick<HealthMapItem, 'id' | 'category' | 'target
   { id: 'infra-db', category: 'infrastructure', targetSection: 'database', icon: 'database' },
   { id: 'infra-cache', category: 'infrastructure', targetSection: 'cache', icon: 'zap' },
   { id: 'infra-storage', category: 'infrastructure', targetSection: 'packages', icon: 'hard-drive' },
+  { id: 'infra-messaging', category: 'infrastructure', targetSection: 'packages', icon: 'radio' },
   { id: 'gov-security', category: 'governance', targetSection: 'security', icon: 'shield-check' },
 ];
 
@@ -58,8 +59,6 @@ export function buildFallbackOverview({
           healthyServices: 0,
           totalServices: 0,
           uptimeSeconds: 0,
-          actionLabel: t('overview.retryConnection'),
-          actionSection: 'overview',
         }
       : {
           status: 'degraded',
@@ -93,7 +92,7 @@ export function buildFallbackOverview({
             description: t('console.fallback.offlineMessage', { url: apiBaseUrl }),
             startedAgo: lastSuccessfulSync ? lastSuccessfulSync.toLocaleTimeString() : NO_VALUE,
             targetSection: 'overview',
-            actionLabel: t('overview.retryConnection'),
+            actionLabel: '',
           },
         ]
       : [],

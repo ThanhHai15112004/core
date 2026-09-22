@@ -12,6 +12,7 @@ import { CacheManageableAdapter } from '@packages/cache/index.js';
 import { LoggingManageableAdapter } from '@packages/logging/index.js';
 import { DatabaseManageableAdapter } from '@packages/database/index.js';
 import { SecurityManageableAdapter } from '@packages/security/index.js';
+import { OpsEventService } from './ops-event.service.js';
 
 export interface PackageSummaryDto {
   packageId: string;
@@ -32,6 +33,7 @@ export class PackageRegistryService implements OnModuleInit {
     private readonly databaseAdapter: DatabaseManageableAdapter,
     private readonly securityAdapter: SecurityManageableAdapter,
     private readonly i18n: CoreI18nService,
+    private readonly events: OpsEventService,
   ) {}
 
   public onModuleInit(): void {
@@ -84,7 +86,14 @@ export class PackageRegistryService implements OnModuleInit {
       return { success: false, message: this.i18n.t('ops.package.noActions', { packageId }) };
     }
 
-    return pkg.executeAction(actionId, params);
+    const result = await pkg.executeAction(actionId, params);
+    this.events.record(
+      result.success ? 'success' : 'warn',
+      pkg.displayName,
+      result.success ? 'ops.event.actionSucceeded' : 'ops.event.actionFailed',
+      { actionId, message: result.message },
+    );
+    return result;
   }
 
   /** Package lỗi khi lấy status vẫn được trả về với trạng thái ERROR thay vì bị ẩn đi. */
@@ -99,6 +108,8 @@ export class PackageRegistryService implements OnModuleInit {
         metrics: {},
       };
     }
+
+    this.events.trackStatus(pkg.packageId, pkg.displayName, statusReport.status);
 
     return {
       packageId: pkg.packageId,

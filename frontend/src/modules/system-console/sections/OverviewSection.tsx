@@ -9,115 +9,75 @@ import { CurrentProblemsPanel } from '../components/overview/CurrentProblemsPane
 import { InfraSnapshotGrid } from '../components/overview/InfraSnapshotGrid';
 import { RecentEventsTimeline } from '../components/overview/RecentEventsTimeline';
 import { OfflineFallbackBanner } from '../components/overview/OfflineFallbackBanner';
-
+import { EnvironmentBadge } from '../components/common/EnvironmentBadge';
 import { useLocale } from '../../../core/i18n/index';
-import { RefreshCw } from 'lucide-react';
+import { useNow } from '../../../core/hooks/useNow';
 
 interface OverviewSectionProps {
   onNavigate: (section: ConsoleSectionId) => void;
-  onOpenPackageDetail?: (packageId: string) => void;
 }
 
-export const OverviewSection: React.FC<OverviewSectionProps> = ({
-  onNavigate,
-}) => {
-  const { t, formatTime } = useLocale();
+/**
+ * Màn điều hành chính: Health → Metrics → Health map → Trend + Problems → Snapshot → Events.
+ * Chỉ giữ thông tin vận hành; cấu hình chi tiết nằm ở các trang con.
+ */
+export const OverviewSection: React.FC<OverviewSectionProps> = ({ onNavigate }) => {
+  const { t, formatRelative } = useLocale();
+  const now = useNow();
   const {
     overviewData,
     performanceSeries,
     performanceStats,
+    metricTrends,
     activePerformanceMetric,
     setActivePerformanceMetric,
     performanceTimeRange,
     setPerformanceTimeRange,
-    isRefreshing,
     isLoading,
-    refresh,
     isOffline,
+    isShowingLastKnown,
     lastSuccessfulSync,
     environment,
   } = useConsoleData();
 
   return (
-    <div className="overview-page-root">
-      {/* Header Row: Title, Subtitle, Environment Badge, Refresh */}
-      <div className="overview-header-row">
-        <div className="overview-header-left">
-          <div className="overview-title-wrap">
-            <h1 className="overview-main-title">{t('overview.title')}</h1>
-            <span
-              className={`overview-env-badge is-${environment ?? 'unknown'}`}
-              title={t('overview.envBadge')}
-            >
-              <span
-                style={{
-                  width: '6px',
-                  height: '6px',
-                  borderRadius: '50%',
-                  backgroundColor: 'currentColor',
-                  display: 'inline-block',
-                }}
-              />
-              <span>{environment ? environment.toUpperCase() : '--'}</span>
-            </span>
+    <div className="ov-page">
+      <header className="ov-page-head">
+        <div>
+          <div className="ov-page-title-row">
+            <h1 className="ov-page-title">{t('overview.title')}</h1>
+            <EnvironmentBadge environment={environment} />
           </div>
-          <p className="overview-subtitle">{t('overview.subtitle')}</p>
+          <p className="ov-page-subtitle">{t('overview.subtitle')}</p>
         </div>
 
-        <div className="overview-header-actions">
-          <span className="overview-last-updated">
-            {t('common.lastUpdated')}: {formatTime(overviewData.lastUpdated)}
+        <div className="ov-page-actions">
+          <span className="ov-page-updated">
+            {t('ov.page.autoUpdated')}{' · '}
+            <time dateTime={(lastSuccessfulSync ?? overviewData.lastUpdated).toISOString()}>
+              {lastSuccessfulSync ? formatRelative(lastSuccessfulSync, now) : '--'}
+            </time>
           </span>
-
-          <button
-            type="button"
-            className="scp-btn scp-btn-secondary scp-btn-sm"
-            onClick={() => refresh()}
-            disabled={isRefreshing}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-          >
-            <RefreshCw
-              size={13}
-              style={{
-                animation: isRefreshing ? 'spin 1s linear infinite' : 'none',
-              }}
-            />
-            <span>{isRefreshing ? t('common.refreshing') : t('common.refresh')}</span>
-          </button>
         </div>
-      </div>
+      </header>
 
-      {/* Offline Alert when API Gateway is down */}
       {isOffline && (
         <OfflineFallbackBanner
           lastSync={lastSuccessfulSync}
-          onRetry={() => refresh()}
-          isRetrying={isRefreshing}
+          now={now}
+          isShowingLastKnown={isShowingLastKnown}
         />
       )}
 
-      {/* Main Operational 7-Zone Layout */}
-      <div className={isOffline ? 'is-offline-dimmed' : ''}>
-        {/* Zone 1: Overall System Health Banner */}
-        <OverallHealthBanner
-          healthReport={overviewData.overallHealth}
-          onNavigate={onNavigate}
-        />
+      <div className={`ov-body ${isOffline ? 'is-stale' : ''}`}>
+        {/* Chưa từng có dữ liệu thì banner offline phía trên đã đủ, tránh báo trùng */}
+        {(!isOffline || isShowingLastKnown) && (
+          <OverallHealthBanner healthReport={overviewData.overallHealth} now={now} onNavigate={onNavigate} />
+        )}
+        <KeyMetricsGrid metrics={overviewData.keyMetrics} trends={metricTrends} isLoading={isLoading} />
+        <SystemHealthMap items={overviewData.healthMap} onNavigate={onNavigate} />
 
-        {/* Zone 2: Key System Metrics (6 KPIs) */}
-        <KeyMetricsGrid
-          metrics={overviewData.keyMetrics}
-          isLoading={isLoading}
-        />
-
-        {/* Zone 3: System Health Map (Grouped) */}
-        <SystemHealthMap
-          items={overviewData.healthMap}
-          onNavigate={onNavigate}
-        />
-
-        {/* Zone 4 & 5: Middle Split (Performance Chart 70% | Problems & Alerts 30%) */}
-        <div className="overview-middle-split">
+        <div className="ov-split">
           <PerformanceChart
             activeMetric={activePerformanceMetric}
             onMetricChange={setActivePerformanceMetric}
@@ -126,24 +86,11 @@ export const OverviewSection: React.FC<OverviewSectionProps> = ({
             series={performanceSeries}
             stats={performanceStats}
           />
-
-          <CurrentProblemsPanel
-            incidents={overviewData.incidents}
-            onNavigate={onNavigate}
-          />
+          <CurrentProblemsPanel incidents={overviewData.incidents} now={now} onNavigate={onNavigate} />
         </div>
 
-        {/* Zone 6: Runtime & Infrastructure Snapshot */}
-        <InfraSnapshotGrid
-          snapshots={overviewData.infraSnapshots}
-          onNavigate={onNavigate}
-        />
-
-        {/* Zone 7: Recent Activity Timeline */}
-        <RecentEventsTimeline
-          events={overviewData.recentActivities}
-          onNavigate={onNavigate}
-        />
+        <InfraSnapshotGrid snapshots={overviewData.infraSnapshots} onNavigate={onNavigate} />
+        <RecentEventsTimeline events={overviewData.recentActivities} onNavigate={onNavigate} />
       </div>
     </div>
   );

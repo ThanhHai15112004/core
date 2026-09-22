@@ -23,5 +23,15 @@
   "ops.database.ping.success": "Database [{driver}] responded successfully.",
   "ops.database.ping.failed": "Unable to ping the database.",
   "ops.security.displayName": "Security & Auth",
-  "ops.security.skeletonWarning": "TokenService.verify() is still a skeleton: JWT signatures are not verified and any non-empty token is accepted."
+  "ops.security.skeletonWarning": "TokenService.verify() is still a skeleton: JWT signatures are not verified and any non-empty token is accepted.",
+  "ops.event.apiStarted": "API process started",
+  "ops.event.statusDetected": "Detected {status} state",
+  "ops.event.statusChanged": "Status changed from {from} to {to}",
+  "ops.event.statusRecovered": "Recovered ({from} → {to})",
+  "ops.event.actionSucceeded": "Action [{actionId}] succeeded: {message}",
+  "ops.event.actionFailed": "Action [{actionId}] did not succeed: {message}",
+  "ops.status.healthy": "Healthy",
+  "ops.status.warning": "Warning",
+  "ops.status.error": "Error",
+  "ops.status.idle": "Idle"
 }

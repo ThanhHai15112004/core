@@ -1,162 +1,90 @@
-import React from 'react';
+import React, { useMemo } from 'react';
+import { Server, ArrowLeft } from 'lucide-react';
 import type { ConsoleSectionId } from '../types/console.types';
-import { CONSOLE_NAV_ITEMS } from '../constants/console.constants';
 import { useConsoleData } from '../context/console-data-context';
 import { ConsoleIcon } from '../components/common/ConsoleIcon';
+import { worstTone, type StatusTone } from '../utils/status-tone';
 import { useLocale } from '../../../core/i18n/index';
-import { Server, ArrowLeft } from 'lucide-react';
 
 interface ConsoleSidebarProps {
   currentSection: ConsoleSectionId;
   onSelectSection: (section: ConsoleSectionId) => void;
 }
 
-export const ConsoleSidebar: React.FC<ConsoleSidebarProps> = ({
-  currentSection,
-  onSelectSection,
-}) => {
-  const { packages, health } = useConsoleData();
+const NAV_GROUPS: Array<{ id: string; items: ConsoleSectionId[] }> = [
+  { id: 'monitor', items: ['overview', 'runtime', 'logs', 'packages'] },
+  { id: 'infra', items: ['database', 'cache', 'worker', 'scheduler'] },
+  { id: 'governance', items: ['security'] },
+];
+
+export const ConsoleSidebar: React.FC<ConsoleSidebarProps> = ({ currentSection, onSelectSection }) => {
   const { t } = useLocale();
+  const { overviewData, packages, health, currentLatency, isOffline } = useConsoleData();
 
-  // Categorize nav items into groups for professional organization
-  const coreNav = CONSOLE_NAV_ITEMS.filter((item) =>
-    ['overview', 'runtime', 'packages', 'logs'].includes(item.id),
-  );
-  const infraNav = CONSOLE_NAV_ITEMS.filter((item) =>
-    ['database', 'cache', 'worker', 'scheduler'].includes(item.id),
-  );
-  const secNav = CONSOLE_NAV_ITEMS.filter((item) => ['security'].includes(item.id));
+  /* Chấm trạng thái của mỗi mục = trạng thái tệ nhất của các thành phần trỏ về section đó. */
+  const sectionTone = useMemo(() => {
+    const map = new Map<ConsoleSectionId, StatusTone>();
+    for (const section of NAV_GROUPS.flatMap((g) => g.items)) {
+      const tone = worstTone(overviewData.healthMap.filter((i) => i.targetSection === section).map((i) => i.status));
+      if (tone && tone !== 'unknown') map.set(section, tone);
+    }
+    return map;
+  }, [overviewData.healthMap]);
 
-  const getBadge = (id: ConsoleSectionId) => {
-    if (id === 'packages') return packages.length;
-    if (id === 'runtime') return 4;
-    return undefined;
-  };
-
-  const handleReturnHome = () => {
-    window.location.hash = '';
-  };
-
-  const isApiOk = health.status === 'ok';
+  const problemPackages = packages.filter((p) => p.statusReport.status === 'warning' || p.statusReport.status === 'error').length;
+  const apiTone: StatusTone = isOffline ? 'crit' : health.status === 'ok' ? 'ok' : 'warn';
 
   return (
     <aside className="console-sidebar">
-      {/* Brand Header */}
-      <div className="sidebar-header">
-        <div className="brand-title">
-          <div className="brand-logo-badge" aria-hidden="true">
-            <Server size={18} />
-          </div>
-          <div className="brand-meta">
-            <span className="brand-name">{t('nav.systemConsole')}</span>
-            <span className="brand-subtitle">Control Plane v1.0</span>
-          </div>
-        </div>
+      <div className="sb-brand">
+        <span className="sb-brand-logo" aria-hidden="true">
+          <Server size={17} />
+        </span>
+        <span className="sb-brand-text">
+          <span className="sb-brand-name">System Console</span>
+          <span className="sb-brand-sub">{t('ov.sidebar.subtitle')}</span>
+        </span>
       </div>
 
-      {/* Navigation Groups */}
-      <nav className="sidebar-nav">
-        <div className="nav-group-label">{t('healthMap.runtimes')}</div>
-        {coreNav.map((item) => {
-          const isActive = currentSection === item.id;
-          const badge = getBadge(item.id);
-          const label = t(`nav.${item.id}`);
-          return (
-            <button
-              key={item.id}
-              type="button"
-              className={`nav-item-btn ${isActive ? 'active' : ''}`}
-              onClick={() => onSelectSection(item.id)}
-            >
-              <span className="nav-item-icon">
-                <ConsoleIcon name={item.id} size={17} />
-              </span>
-              <span className="nav-item-text">{label}</span>
-              {badge !== undefined && <span className="nav-item-badge">{badge}</span>}
-            </button>
-          );
-        })}
-
-        <div className="nav-group-label">{t('healthMap.infrastructure')}</div>
-        {infraNav.map((item) => {
-          const isActive = currentSection === item.id;
-          const label = t(`nav.${item.id}`);
-          return (
-            <button
-              key={item.id}
-              type="button"
-              className={`nav-item-btn ${isActive ? 'active' : ''}`}
-              onClick={() => onSelectSection(item.id)}
-            >
-              <span className="nav-item-icon">
-                <ConsoleIcon name={item.id} size={17} />
-              </span>
-              <span className="nav-item-text">{label}</span>
-            </button>
-          );
-        })}
-
-        <div className="nav-group-label">{t('healthMap.governance')}</div>
-        {secNav.map((item) => {
-          const isActive = currentSection === item.id;
-          const label = t(`nav.${item.id}`);
-          return (
-            <button
-              key={item.id}
-              type="button"
-              className={`nav-item-btn ${isActive ? 'active' : ''}`}
-              onClick={() => onSelectSection(item.id)}
-            >
-              <span className="nav-item-icon">
-                <ConsoleIcon name={item.id} size={17} />
-              </span>
-              <span className="nav-item-text">{label}</span>
-            </button>
-          );
-        })}
+      <nav className="sb-nav" aria-label={t('nav.systemConsole')}>
+        {NAV_GROUPS.map((group) => (
+          <div key={group.id} className="sb-group">
+            <div className="sb-group-label">{t(`ov.sidebar.group.${group.id}`)}</div>
+            {group.items.map((id) => {
+              const tone = sectionTone.get(id);
+              const isActive = currentSection === id;
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  className={`sb-item ${isActive ? 'is-active' : ''}`}
+                  aria-current={isActive ? 'page' : undefined}
+                  onClick={() => onSelectSection(id)}
+                >
+                  <ConsoleIcon name={id} size={16} />
+                  <span className="sb-item-label">{t(`nav.${id}`)}</span>
+                  {id === 'packages' && problemPackages > 0 && (
+                    <span className="sb-item-count" title={t('ov.sidebar.problemPackages')}>
+                      {problemPackages}
+                    </span>
+                  )}
+                  {tone && tone !== 'ok' && <span className={`sb-item-dot ov-tone-${tone}`} aria-label={t(`ov.tone.${tone}`)} />}
+                </button>
+              );
+            })}
+          </div>
+        ))}
       </nav>
 
-      {/* Footer Return Home */}
-      <div className="sidebar-footer">
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            padding: '0 0.25rem 0.5rem',
-            fontSize: '0.75rem',
-            color: 'var(--scp-text-muted)',
-          }}
-        >
-          <span>{t('healthMap.apiGateway')}</span>
-          <span
-            style={{
-              color: isApiOk ? 'var(--scp-success-text)' : 'var(--scp-danger-text)',
-              fontWeight: 600,
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-            }}
-          >
-            <span
-              style={{
-                width: '6px',
-                height: '6px',
-                borderRadius: '50%',
-                backgroundColor: isApiOk ? 'var(--scp-success)' : 'var(--scp-danger)',
-                display: 'inline-block',
-              }}
-            />
-            {t(`console.healthStatus.${health.status}`).toUpperCase()}
+      <div className="sb-footer">
+        <div className={`sb-api ov-tone-${apiTone}`}>
+          <span className="ov-dot" aria-hidden="true" />
+          <span className="sb-api-label">{t('healthMap.apiGateway')}</span>
+          <span className="sb-api-value">
+            {isOffline ? t('console.healthStatus.down') : `${currentLatency} ms`}
           </span>
         </div>
-
-        <button
-          type="button"
-          className="return-home-btn"
-          onClick={handleReturnHome}
-          title={t('nav.backToHome')}
-        >
+        <button type="button" className="sb-home" onClick={() => (window.location.hash = '')}>
           <ArrowLeft size={14} />
           <span>{t('nav.backToHome')}</span>
         </button>

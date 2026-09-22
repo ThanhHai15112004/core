@@ -1,114 +1,55 @@
 import React from 'react';
 import type { ConsoleSectionId, HealthMapCategory, HealthMapItem } from '../../types/console.types';
 import { ConsoleIcon } from '../common/ConsoleIcon';
+import { toneOf } from '../../utils/status-tone';
 import { useLocale } from '../../../../core/i18n/index';
-import { Layers } from 'lucide-react';
 
 interface SystemHealthMapProps {
   items: HealthMapItem[];
   onNavigate: (section: ConsoleSectionId) => void;
 }
 
-const resolveHealthMapIcon = (id: string, fallbackSection: ConsoleSectionId) => {
-  if (id === 'runtime-api') return <ConsoleIcon name="api" size={16} />;
-  if (id === 'infra-storage') return <ConsoleIcon name="storage" size={16} />;
-  if (id === 'infra-messaging') return <ConsoleIcon name="messaging" size={16} />;
-  return <ConsoleIcon name={fallbackSection} size={16} />;
-};
+const CATEGORIES: HealthMapCategory[] = ['runtime', 'infrastructure', 'governance'];
 
-export const SystemHealthMap: React.FC<SystemHealthMapProps> = ({
-  items,
-  onNavigate,
-}) => {
+/** Vùng ③: mỗi thành phần có sống không — click để drill-down. */
+export const SystemHealthMap: React.FC<SystemHealthMapProps> = ({ items, onNavigate }) => {
   const { t } = useLocale();
-  const categories: HealthMapCategory[] = ['runtime', 'infrastructure', 'governance'];
-
-  const getCategoryLabel = (category: HealthMapCategory) => {
-    switch (category) {
-      case 'runtime':
-        return t('healthMap.runtimes');
-      case 'infrastructure':
-        return t('healthMap.infrastructure');
-      case 'governance':
-        return t('healthMap.governance');
-    }
-  };
-
-  const getItemName = (item: HealthMapItem) => {
-    switch (item.id) {
-      case 'runtime-api':
-        return t('healthMap.apiGateway');
-      case 'runtime-worker':
-        return t('healthMap.worker');
-      case 'runtime-scheduler':
-        return t('healthMap.scheduler');
-      case 'infra-db':
-        return t('healthMap.database');
-      case 'infra-cache':
-        return t('healthMap.cache');
-      case 'infra-storage':
-        return t('healthMap.storage');
-      case 'infra-messaging':
-        return t('healthMap.messaging');
-      case 'gov-security':
-        return t('healthMap.security');
-      default:
-        return item.name;
-    }
-  };
 
   return (
-    <section className="health-map-panel" aria-label="System Health Map">
-      <div className="health-map-header">
-        <h3 className="health-map-title">
-          <Layers size={17} style={{ color: 'var(--scp-primary)' }} />
-          <span>{t('healthMap.title')}</span>
-        </h3>
-        <span style={{ fontSize: '0.75rem', color: 'var(--scp-text-muted)' }}>
-          {t('healthMap.subtitle')}
-        </span>
-      </div>
+    <section className="ov-card ov-section" aria-labelledby="ov-map-title">
+      <header className="ov-section-head">
+        <h3 id="ov-map-title">{t('healthMap.title')}</h3>
+        <span className="ov-section-hint">{t('ov.map.hint')}</span>
+      </header>
 
-      <div className="health-map-groups">
-        {categories.map((category) => {
-          const groupItems = items.filter((item) => item.category === category);
-          if (groupItems.length === 0) return null;
-
+      <div className="ov-map">
+        {CATEGORIES.map((category) => {
+          const group = items.filter((i) => i.category === category);
+          if (group.length === 0) return null;
           return (
-            <div key={category} className="health-map-group">
-              <div className="health-map-group-label">
-                {getCategoryLabel(category)}
-              </div>
-
-              <div className="health-map-cards-row">
-                {groupItems.map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    className="health-map-card"
-                    onClick={() => onNavigate(item.targetSection)}
-                    title={t('console.healthMap.openDetails', { name: getItemName(item) })}
-                  >
-                    <div className="health-map-card-top">
-                      <span className="health-map-card-name">
-                        <span style={{ display: 'inline-flex', alignItems: 'center' }}>
-                          {resolveHealthMapIcon(item.id, item.targetSection)}
-                        </span>
-                        <span>{getItemName(item)}</span>
+            <div key={category} className="ov-map-group">
+              <h4 className="ov-map-group-title">{t(`ov.map.category.${category}`)}</h4>
+              <div className="ov-map-items">
+                {group.map((item) => {
+                  const tone = toneOf(item.status);
+                  const name = item.name === item.id ? t(`ov.map.item.${item.id}`) : item.name;
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      className={`ov-map-item ov-tone-${tone}`}
+                      onClick={() => onNavigate(item.targetSection)}
+                      title={item.secondarySubtext ?? item.subtext}
+                    >
+                      <span className="ov-map-item-head">
+                        <ConsoleIcon name={item.icon} size={15} />
+                        <span className="ov-map-item-name">{name}</span>
+                        <span className="ov-dot" aria-label={t(`console.status.${item.status}`)} />
                       </span>
-                      <span
-                        className={`health-status-dot dot-${item.status}`}
-                        aria-label={t(`console.status.${item.status}`)}
-                      />
-                    </div>
-
-                    <div className="health-map-card-subtext">{item.subtext}</div>
-
-                    {item.secondarySubtext && (
-                      <div className="health-map-card-detail">{item.secondarySubtext}</div>
-                    )}
-                  </button>
-                ))}
+                      <span className="ov-map-item-metric">{item.metric ?? t(`console.status.${item.status}`)}</span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           );

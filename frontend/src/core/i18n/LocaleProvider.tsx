@@ -5,6 +5,7 @@ import {
   type TranslateParams,
   LOCALE_STORAGE_KEY,
   formatTime,
+  formatRelative,
   isSupportedLocale,
   readStoredLocale,
   setActiveLocale,
@@ -50,6 +51,7 @@ export const LocaleProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       toggleLocale,
       t: (path: string, params?: TranslateParams) => translate(locale, path, params),
       formatTime: (v: Date | string | number, withSeconds?: boolean) => formatTime(v, locale, withSeconds),
+      formatRelative: (v: Date | string | number, now?: number) => formatRelative(v, locale, now),
     }),
     [locale, setLocale, toggleLocale],
   );

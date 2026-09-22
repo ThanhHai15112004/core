@@ -1,0 +1,888 @@
+/* ==========================================================================
+   OVERVIEW — màn điều hành chính (prefix `ov-`)
+   ========================================================================== */
+
+.console-root .ov-page {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.console-root .ov-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  transition: opacity 0.2s ease, filter 0.2s ease;
+}
+
+/* Offline: vẫn giữ giá trị gần nhất nhưng làm mờ */
+.console-root .ov-body.is-stale {
+  opacity: var(--scp-offline-dim);
+  filter: grayscale(0.6);
+  pointer-events: none;
+}
+
+.console-root .ov-spin {
+  animation: spin 1s linear infinite;
+}
+
+/* --------------------------------------------------------------------------
+   Page header
+   -------------------------------------------------------------------------- */
+.console-root .ov-page-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.console-root .ov-page-title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.console-root .ov-page-title {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--scp-text-primary);
+}
+
+.console-root .ov-page-subtitle {
+  margin: 0.3rem 0 0;
+  font-size: 0.875rem;
+  color: var(--scp-text-secondary);
+}
+
+.console-root .ov-page-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.console-root .ov-page-updated {
+  font-size: 0.8rem;
+  color: var(--scp-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.console-root .ov-page-updated time {
+  color: var(--scp-text-secondary);
+  font-weight: 600;
+}
+
+
+/* --------------------------------------------------------------------------
+   Shared card / section
+   -------------------------------------------------------------------------- */
+.console-root .ov-card {
+  background-color: var(--scp-bg-surface);
+  border: 1px solid var(--scp-border-subtle);
+  border-radius: 12px;
+  box-shadow: var(--scp-shadow-sm);
+}
+
+.console-root .ov-section {
+  padding: 1.1rem 1.25rem 1.25rem;
+  min-width: 0;
+}
+
+.console-root .ov-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+
+.console-root .ov-section-head h3 {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 650;
+  color: var(--scp-text-primary);
+}
+
+.console-root .ov-section-hint {
+  font-size: 0.78rem;
+  color: var(--scp-text-muted);
+}
+
+.console-root .ov-section-foot {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 0.75rem;
+}
+
+.console-root .ov-count {
+  min-width: 20px;
+  padding: 0 6px;
+  border-radius: 10px;
+  font-size: 0.72rem;
+  line-height: 20px;
+  text-align: center;
+  color: var(--scp-warning-text);
+  background-color: var(--scp-warning-bg);
+}
+
+.console-root .ov-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--scp-primary);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.console-root .ov-link:hover {
+  text-decoration: underline;
+}
+
+.console-root .ov-empty-line {
+  margin: 0;
+  padding: 1rem 0;
+  text-align: center;
+  font-size: 0.85rem;
+  color: var(--scp-text-muted);
+}
+
+.console-root .ov-segmented {
+  display: inline-flex;
+  padding: 3px;
+  gap: 2px;
+  border-radius: 8px;
+  background-color: var(--scp-bg-surface-subtle);
+}
+
+.console-root .ov-segmented button {
+  padding: 0.3rem 0.7rem;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--scp-text-secondary);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.console-root .ov-segmented button:hover {
+  color: var(--scp-text-primary);
+}
+
+.console-root .ov-segmented button.is-active {
+  background-color: var(--scp-bg-surface);
+  color: var(--scp-primary-text);
+  box-shadow: var(--scp-shadow-sm);
+}
+
+.console-root .ov-skeleton {
+  display: block;
+  border-radius: 6px;
+  background: linear-gradient(90deg, var(--scp-skeleton-bg) 25%, var(--scp-skeleton-shine) 50%, var(--scp-skeleton-bg) 75%);
+  background-size: 200% 100%;
+  animation: ov-shimmer 1.4s ease infinite;
+}
+
+@keyframes ov-shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+
+/* --------------------------------------------------------------------------
+   ① Overall health banner
+   -------------------------------------------------------------------------- */
+.console-root .ov-health {
+  display: flex;
+  justify-content: space-between;
+  gap: 1.5rem;
+  padding: 1.25rem 1.5rem;
+  border: 1px solid var(--tone-border);
+  border-left: 4px solid var(--tone);
+  border-radius: 12px;
+  background-color: var(--tone-bg);
+}
+
+.console-root .ov-health-main {
+  display: flex;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.console-root .ov-health-icon {
+  flex-shrink: 0;
+  color: var(--tone);
+}
+
+.console-root .ov-health-title {
+  margin: 0;
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--scp-text-primary);
+}
+
+.console-root .ov-health-message {
+  margin: 0.25rem 0 0;
+  font-size: 0.875rem;
+  color: var(--scp-text-secondary);
+}
+
+.console-root .ov-health-meta {
+  margin: 0.6rem 0 0;
+  font-size: 0.78rem;
+  color: var(--tone-text);
+  font-weight: 600;
+}
+
+.console-root .ov-health-affected {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.console-root .ov-link-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.3rem 0.35rem 0.3rem 0.7rem;
+  border: 1px solid var(--scp-border-subtle);
+  border-radius: 999px;
+  background-color: var(--scp-bg-surface);
+  color: var(--scp-text-primary);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.console-root .ov-link-chip:hover {
+  border-color: var(--tone);
+}
+
+.console-root .ov-health-side {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  flex-shrink: 0;
+}
+
+.console-root .ov-health-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.console-root .ov-health-stat-value {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--scp-text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.console-root .ov-health-stat-label {
+  font-size: 0.72rem;
+  color: var(--scp-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.console-root .ov-health-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+/* --------------------------------------------------------------------------
+   ② KPI grid
+   -------------------------------------------------------------------------- */
+.console-root .ov-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 0.9rem;
+}
+
+.console-root .ov-kpi {
+  display: flex;
+  flex-direction: column;
+  padding: 0.95rem 1rem;
+  border-top: 3px solid var(--tone, var(--scp-border-subtle));
+  min-width: 0;
+}
+
+.console-root .ov-kpi.ov-tone-ok {
+  border-top-color: var(--scp-border-subtle);
+}
+
+.console-root .ov-kpi-label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--scp-text-muted);
+}
+
+.console-root .ov-kpi-value {
+  margin-top: 0.45rem;
+  font-size: clamp(1.2rem, 1.6vw, 1.6rem);
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  color: var(--scp-text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.console-root .ov-kpi-value small {
+  margin-left: 0.25rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--scp-text-muted);
+}
+
+.console-root .ov-kpi-sub,
+.console-root .ov-kpi-trend {
+  margin-top: 0.45rem;
+  font-size: 0.75rem;
+  color: var(--scp-text-muted);
+  line-height: 1.35;
+}
+
+.console-root .ov-kpi-trend {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  font-weight: 600;
+}
+
+.console-root .ov-kpi-trend.is-good { color: var(--scp-success-text); }
+.console-root .ov-kpi-trend.is-bad { color: var(--scp-danger-text); }
+.console-root .ov-kpi-trend.is-neutral { color: var(--scp-text-secondary); }
+
+/* --------------------------------------------------------------------------
+   ③ Health map
+   -------------------------------------------------------------------------- */
+.console-root .ov-map {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.console-root .ov-map-group {
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr);
+  align-items: start;
+  gap: 1rem;
+}
+
+.console-root .ov-map-group-title {
+  margin: 0.8rem 0 0;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--scp-text-muted);
+}
+
+.console-root .ov-map-items {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 0.6rem;
+}
+
+.console-root .ov-map-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--scp-border-subtle);
+  border-radius: 9px;
+  background-color: var(--scp-bg-surface);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+}
+
+.console-root .ov-map-item:hover {
+  border-color: var(--tone);
+  box-shadow: var(--scp-shadow-md);
+}
+
+.console-root .ov-map-item:focus-visible {
+  outline: 2px solid var(--scp-border-focus);
+  outline-offset: 1px;
+}
+
+.console-root .ov-map-item.ov-tone-warn,
+.console-root .ov-map-item.ov-tone-crit {
+  border-color: var(--tone-border);
+  background-color: var(--tone-bg);
+}
+
+.console-root .ov-map-item-head {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: var(--scp-text-secondary);
+}
+
+.console-root .ov-map-item-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: var(--scp-text-primary);
+}
+
+.console-root .ov-map-item-metric {
+  font-size: 0.75rem;
+  color: var(--scp-text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.console-root .ov-map-item.ov-tone-warn .ov-map-item-metric,
+.console-root .ov-map-item.ov-tone-crit .ov-map-item-metric {
+  color: var(--tone-text);
+}
+
+/* --------------------------------------------------------------------------
+   ④ Chart + ⑤ Problems
+   -------------------------------------------------------------------------- */
+.console-root .ov-split {
+  display: grid;
+  grid-template-columns: minmax(0, 7fr) minmax(280px, 3fr);
+  gap: 1.25rem;
+  align-items: stretch;
+}
+
+.console-root .ov-chart-metrics {
+  margin-bottom: 0.9rem;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.console-root .ov-chart-stats {
+  display: flex;
+  gap: 2rem;
+  margin: 0 0 0.75rem;
+}
+
+.console-root .ov-chart-stats dt {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--scp-text-muted);
+}
+
+.console-root .ov-chart-stats dd {
+  margin: 0.15rem 0 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--scp-text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.console-root .ov-chart-canvas {
+  position: relative;
+  width: 100%;
+  min-height: 220px;
+}
+
+.console-root .ov-chart-canvas svg {
+  display: block;
+  cursor: crosshair;
+}
+
+.console-root .ov-chart-grid {
+  stroke: var(--scp-chart-grid);
+  stroke-width: 1;
+}
+
+.console-root .ov-chart-axis {
+  fill: var(--scp-text-muted);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.console-root .ov-chart-cursor {
+  stroke: var(--scp-primary);
+  stroke-dasharray: 3 3;
+}
+
+.console-root .ov-chart-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 220px;
+  padding: 0 2rem;
+  border: 1px dashed var(--scp-border-subtle);
+  border-radius: 9px;
+  text-align: center;
+  font-size: 0.82rem;
+  color: var(--scp-text-muted);
+}
+
+.console-root .ov-chart-tooltip {
+  position: absolute;
+  transform: translate(-50%, calc(-100% - 12px));
+  display: flex;
+  flex-direction: column;
+  padding: 0.35rem 0.6rem;
+  border-radius: 6px;
+  border: 1px solid var(--scp-chart-tooltip-border);
+  background-color: var(--scp-chart-tooltip-bg);
+  color: var(--scp-chart-tooltip-text);
+  font-size: 0.72rem;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: var(--scp-shadow-md);
+}
+
+.console-root .ov-problems {
+  display: flex;
+  flex-direction: column;
+}
+
+.console-root .ov-problems-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  padding: 2rem 1rem;
+  text-align: center;
+  color: var(--scp-success);
+}
+
+.console-root .ov-problems-empty strong {
+  color: var(--scp-text-primary);
+  font-size: 0.9rem;
+}
+
+.console-root .ov-problems-empty span {
+  font-size: 0.8rem;
+  color: var(--scp-text-muted);
+}
+
+.console-root .ov-problems-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.console-root .ov-problem {
+  padding: 0.75rem 0.85rem;
+  border: 1px solid var(--tone-border);
+  border-left: 3px solid var(--tone);
+  border-radius: 8px;
+  background-color: var(--tone-bg);
+}
+
+.console-root .ov-problem-severity {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--tone-text);
+}
+
+.console-root .ov-problem-title {
+  display: block;
+  margin-top: 0.2rem;
+  font-size: 0.86rem;
+  color: var(--scp-text-primary);
+}
+
+.console-root .ov-problem-desc {
+  margin: 0.3rem 0 0;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: var(--scp-text-secondary);
+}
+
+.console-root .ov-problem-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-top: 0.55rem;
+  font-size: 0.74rem;
+  color: var(--scp-text-muted);
+}
+
+/* --------------------------------------------------------------------------
+   ⑥ Snapshot
+   -------------------------------------------------------------------------- */
+.console-root .ov-snap-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.9rem;
+}
+
+.console-root .ov-snap {
+  display: flex;
+  flex-direction: column;
+  padding: 0.85rem 0.95rem;
+  border: 1px solid var(--scp-border-subtle);
+  border-radius: 9px;
+  background-color: var(--scp-bg-surface-subtle);
+  min-width: 0;
+}
+
+.console-root .ov-snap-title {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin: 0 0 0.65rem;
+  font-size: 0.85rem;
+  font-weight: 650;
+  color: var(--scp-text-primary);
+}
+
+.console-root .ov-snap-metrics {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin: 0 0 0.75rem;
+}
+
+.console-root .ov-snap-metrics div {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+}
+
+.console-root .ov-snap-metrics dt {
+  color: var(--scp-text-secondary);
+}
+
+.console-root .ov-snap-metrics dd {
+  margin: 0;
+  font-weight: 600;
+  color: var(--scp-text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.console-root .ov-snap-metrics .is-warn dd {
+  color: var(--scp-danger-text);
+}
+
+.console-root .ov-snap.is-unavailable {
+  background-color: transparent;
+  border-style: dashed;
+}
+
+.console-root .ov-snap-empty {
+  flex: 1;
+  margin: 0 0 0.75rem;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: var(--scp-text-muted);
+}
+
+/* --------------------------------------------------------------------------
+   ⑦ Recent events
+   -------------------------------------------------------------------------- */
+.console-root .ov-events {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.console-root .ov-event {
+  display: grid;
+  grid-template-columns: 72px 88px 150px minmax(0, 1fr);
+  align-items: baseline;
+  gap: 0.75rem;
+  padding: 0.55rem 0.25rem;
+  border-bottom: 1px solid var(--scp-border-subtle);
+  font-size: 0.82rem;
+}
+
+.console-root .ov-event:last-child {
+  border-bottom: none;
+}
+
+.console-root .ov-event time {
+  font-family: "JetBrains Mono", Consolas, monospace;
+  font-size: 0.76rem;
+  color: var(--scp-text-muted);
+}
+
+.console-root .ov-event-level {
+  justify-self: start;
+  white-space: nowrap;
+  padding: 0.1rem 0.45rem;
+  border-radius: 4px;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--tone-text);
+  background-color: var(--tone-bg);
+}
+
+.console-root .ov-event.ov-tone-unknown .ov-event-level {
+  color: var(--scp-info-text);
+  background-color: var(--scp-info-bg);
+}
+
+.console-root .ov-event-source {
+  font-weight: 600;
+  color: var(--scp-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.console-root .ov-event-msg {
+  color: var(--scp-text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* --------------------------------------------------------------------------
+   Offline banner
+   -------------------------------------------------------------------------- */
+.console-root .ov-offline {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  padding: 1.1rem 1.25rem;
+  border: 1px solid var(--scp-danger-border);
+  border-left: 4px solid var(--scp-danger);
+  border-radius: 12px;
+  background-color: var(--scp-danger-bg);
+}
+
+.console-root .ov-offline-icon {
+  flex-shrink: 0;
+  color: var(--scp-danger);
+}
+
+.console-root .ov-offline-body {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.84rem;
+  color: var(--scp-text-secondary);
+}
+
+.console-root .ov-offline-body h2 {
+  margin: 0 0 0.3rem;
+  font-size: 1.05rem;
+  color: var(--scp-danger-text);
+}
+
+.console-root .ov-offline-body p {
+  margin: 0.15rem 0;
+}
+
+.console-root .ov-offline-causes-title {
+  margin-top: 0.6rem !important;
+  font-weight: 600;
+  color: var(--scp-text-primary);
+}
+
+.console-root .ov-offline-retry {
+  font-weight: 600;
+  color: var(--scp-danger-text);
+}
+
+.console-root .ov-offline-causes {
+  margin: 0.2rem 0 0;
+  padding-left: 1.1rem;
+}
+
+
+/* --------------------------------------------------------------------------
+   Responsive
+   -------------------------------------------------------------------------- */
+@media (max-width: 1280px) {
+  .console-root .ov-kpi-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .console-root .ov-snap-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1024px) {
+  .console-root .ov-split {
+    grid-template-columns: 1fr;
+  }
+  .console-root .ov-health {
+    flex-direction: column;
+  }
+  .console-root .ov-health-side {
+    justify-content: flex-start;
+  }
+  .console-root .ov-health-stat {
+    align-items: flex-start;
+  }
+  .console-root .ov-event {
+    grid-template-columns: 64px 80px minmax(0, 1fr);
+  }
+  .console-root .ov-event-msg {
+    grid-column: 1 / -1;
+    white-space: normal;
+  }
+}
+
+@media (max-width: 640px) {
+  .console-root .ov-map-group {
+    grid-template-columns: 1fr;
+    gap: 0.4rem;
+  }
+  .console-root .ov-map-group-title {
+    margin: 0;
+  }
+  .console-root .ov-kpi-grid,
+  .console-root .ov-snap-grid {
+    grid-template-columns: 1fr;
+  }
+  .console-root .ov-page-head {
+    align-items: flex-start;
+  }
+  .console-root .ov-health-side {
+    flex-wrap: wrap;
+  }
+  .console-root .ov-chart-stats {
+    gap: 1rem;
+  }
+  .console-root .ov-offline {
+    flex-direction: column;
+  }
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}

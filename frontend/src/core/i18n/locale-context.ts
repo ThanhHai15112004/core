@@ -7,6 +7,7 @@ export interface LocaleContextValue {
   toggleLocale: () => void;
   t: (path: string, params?: TranslateParams) => string;
   formatTime: (value: Date | string | number, withSeconds?: boolean) => string;
+  formatRelative: (value: Date | string | number, now?: number) => string;
 }
 
 export const LocaleContext = createContext<LocaleContextValue | null>(null);

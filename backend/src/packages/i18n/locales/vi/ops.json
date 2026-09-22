@@ -23,5 +23,15 @@
   "ops.database.ping.success": "Kết nối tới Database [{driver}] phản hồi thành công.",
   "ops.database.ping.failed": "Không thể ping tới cơ sở dữ liệu.",
   "ops.security.displayName": "Bảo mật & Xác thực",
-  "ops.security.skeletonWarning": "TokenService.verify() mới là bản skeleton: chưa xác minh chữ ký JWT, mọi token không rỗng đều được chấp nhận."
+  "ops.security.skeletonWarning": "TokenService.verify() mới là bản skeleton: chưa xác minh chữ ký JWT, mọi token không rỗng đều được chấp nhận.",
+  "ops.event.apiStarted": "API process khởi động",
+  "ops.event.statusDetected": "Phát hiện trạng thái {status}",
+  "ops.event.statusChanged": "Trạng thái đổi từ {from} sang {to}",
+  "ops.event.statusRecovered": "Đã hồi phục ({from} → {to})",
+  "ops.event.actionSucceeded": "Thực thi [{actionId}] thành công: {message}",
+  "ops.event.actionFailed": "Thực thi [{actionId}] không thành công: {message}",
+  "ops.status.healthy": "Hoạt động tốt",
+  "ops.status.warning": "Cảnh báo",
+  "ops.status.error": "Lỗi",
+  "ops.status.idle": "Chờ"
 }

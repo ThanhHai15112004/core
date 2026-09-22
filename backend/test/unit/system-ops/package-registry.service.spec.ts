@@ -10,6 +10,7 @@ import { type CacheManageableAdapter, CacheAction } from '@packages/cache/index.
 import type { LoggingManageableAdapter } from '@packages/logging/index.js';
 import type { DatabaseManageableAdapter } from '@packages/database/index.js';
 import { CoreI18nService } from '@packages/i18n/index.js';
+import { OpsEventService } from '@modules/system-ops/services/ops-event.service.js';
 import type { SecurityManageableAdapter } from '@packages/security/index.js';
 
 describe('PackageRegistryService Unit Tests', () => {
@@ -85,12 +86,14 @@ describe('PackageRegistryService Unit Tests', () => {
       })),
     } as unknown as jest.Mocked<SecurityManageableAdapter>;
 
+    const i18n = new CoreI18nService();
     service = new PackageRegistryService(
       mockCacheAdapter,
       mockLoggingAdapter,
       mockDatabaseAdapter,
       mockSecurityAdapter,
-      new CoreI18nService(),
+      i18n,
+      new OpsEventService(i18n),
     );
     service.onModuleInit();
   });

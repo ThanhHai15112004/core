@@ -9,21 +9,16 @@ import type {
   PerformanceDataPoint,
   PerformanceMetricKey,
   PerformanceTimeRange,
-  RefreshIntervalMs,
   SystemEnvironment,
   ToastMessage,
 } from '../types/console.types';
 import type { PackageActionResult } from '../../system-ops/types/system-ops.types';
-import type { PerformanceStats } from '../hooks/useMetricHistory';
+import type { MetricTrend, PerformanceStats } from '../hooks/useMetricHistory';
 
 export interface ConsoleDataContextValue {
   health: HealthData;
   packages: PackageSummary[];
   isLoading: boolean;
-  isRefreshing: boolean;
-  refreshInterval: RefreshIntervalMs;
-  setRefreshInterval: (ms: RefreshIntervalMs) => void;
-  refresh: () => Promise<void>;
   executeAction: (packageId: string, actionId: string, params?: unknown) => Promise<PackageActionResult>;
   lastUpdated: Date;
   latencyHistory: LatencyDataPoint[];
@@ -47,6 +42,10 @@ export interface ConsoleDataContextValue {
   overviewData: OverviewData;
   performanceSeries: PerformanceDataPoint[];
   performanceStats: PerformanceStats;
+  /** Xu hướng theo KPI id (`req_sec`, `p95_lat`...), `null` khi chưa đủ dữ liệu. */
+  metricTrends: Record<string, MetricTrend | null>;
+  /** `true` khi đang offline nhưng vẫn hiển thị giá trị lần đồng bộ gần nhất. */
+  isShowingLastKnown: boolean;
 }
 
 export const ConsoleDataContext = createContext<ConsoleDataContextValue | null>(null);

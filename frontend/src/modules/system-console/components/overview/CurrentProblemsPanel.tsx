@@ -1,87 +1,55 @@
 import React from 'react';
-import type { ConsoleSectionId, ActiveIncidentItem } from '../../types/console.types';
+import { CheckCircle2, ArrowRight } from 'lucide-react';
+import type { ActiveIncidentItem, ConsoleSectionId } from '../../types/console.types';
+import { toneOf } from '../../utils/status-tone';
 import { useLocale } from '../../../../core/i18n/index';
-import { AlertTriangle, CheckCircle2 } from 'lucide-react';
 
 interface CurrentProblemsPanelProps {
   incidents: ActiveIncidentItem[];
+  now: number;
   onNavigate: (section: ConsoleSectionId) => void;
 }
 
-export const CurrentProblemsPanel: React.FC<CurrentProblemsPanelProps> = ({
-  incidents,
-  onNavigate,
-}) => {
-  const { t } = useLocale();
+/** Vùng ⑤: danh sách vấn đề cần xử lý — không bao giờ để trống. */
+export const CurrentProblemsPanel: React.FC<CurrentProblemsPanelProps> = ({ incidents, now, onNavigate }) => {
+  const { t, formatRelative } = useLocale();
 
   return (
-    <div className="problems-panel">
-      <div className="problems-header">
-        <h3 className="problems-title">
-          <AlertTriangle size={17} style={{ color: 'var(--scp-warning)' }} />
-          <span>{t('problems.title')}</span>
-          {incidents.length > 0 && (
-            <span
-              className="code-badge"
-              style={{
-                backgroundColor: 'var(--scp-warning-bg)',
-                color: 'var(--scp-warning-text)',
-                border: '1px solid var(--scp-warning-border)',
-                fontWeight: 700,
-              }}
-            >
-              {incidents.length}
-            </span>
-          )}
+    <section className="ov-card ov-section ov-problems" aria-labelledby="ov-problems-title">
+      <header className="ov-section-head">
+        <h3 id="ov-problems-title">
+          {t('ov.problems.title')}
+          {incidents.length > 0 && <span className="ov-count">{incidents.length}</span>}
         </h3>
+      </header>
 
-        <button
-          type="button"
-          className="scp-btn scp-btn-sm scp-btn-ghost"
-          onClick={() => onNavigate('logs')}
-        >
-          {t('timeline.filterAll')} logs →
-        </button>
-      </div>
-
-      <div className="problems-list">
-        {incidents.length === 0 ? (
-          <div className="problems-empty">
-            <div className="problems-empty-icon" aria-hidden="true">
-              <CheckCircle2 size={32} style={{ color: 'var(--scp-success)' }} />
-            </div>
-            <h4 className="problems-empty-title">{t('overview.noActiveIncidents')}</h4>
-            <p className="problems-empty-desc">
-              {t('overview.systemsNominal')}
-            </p>
-          </div>
-        ) : (
-          incidents.map((inc) => (
-            <div
-              key={inc.id}
-              className={`problem-card severity-${inc.severity}`}
-            >
-              <div className="problem-card-top">
-                <span className={`problem-severity-tag sev-${inc.severity}`}>
-                  {inc.severity}
+      {incidents.length === 0 ? (
+        <div className="ov-problems-empty">
+          <CheckCircle2 size={28} />
+          <strong>{t('overview.noActiveIncidents')}</strong>
+          <span>{t('overview.systemsNominal')}</span>
+        </div>
+      ) : (
+        <ul className="ov-problems-list">
+          {incidents.map((inc) => (
+            <li key={inc.id} className={`ov-problem ov-tone-${toneOf(inc.severity)}`}>
+              <span className="ov-problem-severity">{t(`console.status.${inc.severity}`)}</span>
+              <strong className="ov-problem-title">{inc.title}</strong>
+              <p className="ov-problem-desc">{inc.description}</p>
+              <div className="ov-problem-foot">
+                <span>
+                  {inc.startedAt ? t('ov.health.startedAt', { ago: formatRelative(inc.startedAt, now) }) : inc.startedAgo}
                 </span>
-                <span className="problem-time">{inc.startedAgo}</span>
+                {inc.actionLabel && (
+                  <button type="button" className="ov-link" onClick={() => onNavigate(inc.targetSection)}>
+                    {inc.actionLabel} <ArrowRight size={13} />
+                  </button>
+                )}
               </div>
-
-              <h4 className="problem-title">{inc.title}</h4>
-              <p className="problem-desc">{inc.description}</p>
-
-              <button
-                type="button"
-                className="problem-action-btn"
-                onClick={() => onNavigate(inc.targetSection)}
-              >
-                {inc.actionLabel} →
-              </button>
-            </div>
-          ))
-        )}
-      </div>
-    </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 };

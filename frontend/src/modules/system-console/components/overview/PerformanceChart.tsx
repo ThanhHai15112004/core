@@ -1,10 +1,6 @@
-import React, { useState, useMemo } from 'react';
-import type {
-  PerformanceMetricKey,
-  PerformanceTimeRange,
-  PerformanceDataPoint,
-} from '../../types/console.types';
-
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import type { PerformanceDataPoint, PerformanceMetricKey, PerformanceTimeRange } from '../../types/console.types';
+import type { PerformanceStats } from '../../hooks/useMetricHistory';
 import { useLocale } from '../../../../core/i18n/index';
 
 interface PerformanceChartProps {
@@ -13,12 +9,29 @@ interface PerformanceChartProps {
   timeRange: PerformanceTimeRange;
   onTimeRangeChange: (range: PerformanceTimeRange) => void;
   series: PerformanceDataPoint[];
-  stats: { current: string; average: string; peak: string };
+  stats: PerformanceStats;
 }
 
-const METRIC_KEYS: PerformanceMetricKey[] = ['requests', 'latency', 'errors', 'cpu', 'memory'];
-const TIME_TABS: PerformanceTimeRange[] = ['15m', '1h', '6h', '24h'];
+const METRICS: PerformanceMetricKey[] = ['requests', 'latency', 'errors', 'cpu', 'memory'];
+const RANGES: PerformanceTimeRange[] = ['15m', '1h', '6h', '24h'];
+const UNITS: Record<PerformanceMetricKey, string> = { requests: 'req/s', latency: 'ms', errors: '%', cpu: '%', memory: 'GB' };
 
+const HEIGHT = 220;
+const PAD = { top: 12, right: 12, bottom: 26, left: 44 };
+const Y_TICKS = 4;
+const X_LABELS = 5;
+
+function niceMax(value: number): number {
+  if (value <= 0) return 1;
+  const magnitude = 10 ** Math.floor(Math.log10(value));
+  return Math.ceil(value / magnitude) * magnitude;
+}
+
+function formatTick(value: number): string {
+  return Number.isInteger(value) ? String(value) : value.toFixed(value < 1 ? 2 : 1);
+}
+
+/** Vùng ④: một biểu đồ lớn, đổi metric/khoảng thời gian — vẽ theo kích thước thật của khung. */
 export const PerformanceChart: React.FC<PerformanceChartProps> = ({
   activeMetric,
   onMetricChange,
@@ -28,257 +41,154 @@ export const PerformanceChart: React.FC<PerformanceChartProps> = ({
   stats,
 }) => {
   const { t } = useLocale();
-  const [hoverIndex, setHoverIndex] = useState<number | null>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(600);
+  const [hover, setHover] = useState<number | null>(null);
 
-  const getMetricLabel = (key: PerformanceMetricKey) => {
-    switch (key) {
-      case 'requests':
-        return t('chart.requests');
-      case 'latency':
-        return t('chart.latency');
-      case 'errors':
-        return t('chart.errors');
-      case 'cpu':
-        return t('chart.cpu');
-      case 'memory':
-        return t('chart.memory');
-    }
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver(([entry]) => entry && setWidth(entry.contentRect.width));
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  const chart = useMemo(() => {
+    const plotW = Math.max(1, width - PAD.left - PAD.right);
+    const plotH = HEIGHT - PAD.top - PAD.bottom;
+    const max = niceMax(Math.max(0, ...series.map((p) => p.value)) * 1.1);
+    const points = series.map((p, i) => ({
+      x: PAD.left + (series.length === 1 ? plotW / 2 : (i / (series.length - 1)) * plotW),
+      y: PAD.top + plotH - (p.value / max) * plotH,
+      point: p,
+    }));
+    const line = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+    const baseY = PAD.top + plotH;
+    const area = points.length > 1 ? `${line} L${points[points.length - 1]!.x},${baseY} L${points[0]!.x},${baseY} Z` : '';
+    const yTicks = Array.from({ length: Y_TICKS + 1 }, (_, i) => ({ value: (max / Y_TICKS) * i, y: PAD.top + plotH - (plotH / Y_TICKS) * i }));
+    const step = Math.max(1, Math.floor((points.length - 1) / (X_LABELS - 1)));
+    const xLabels = points.filter((_, i) => i % step === 0 || i === points.length - 1);
+    return { points, line, area, yTicks, xLabels, plotW };
+  }, [series, width]);
+
+  const handleMove = (e: React.MouseEvent<SVGSVGElement>) => {
+    if (chart.points.length === 0) return;
+    const x = e.clientX - e.currentTarget.getBoundingClientRect().left;
+    const ratio = (x - PAD.left) / chart.plotW;
+    setHover(Math.min(chart.points.length - 1, Math.max(0, Math.round(ratio * (chart.points.length - 1)))));
   };
 
-  const { points, areaPath, linePath } = useMemo(() => {
-    if (!series || series.length === 0) {
-      return { points: [], areaPath: '', linePath: '' };
-    }
-
-    const width = 600;
-    const height = 180;
-    const paddingX = 20;
-    const paddingTop = 15;
-    const paddingBottom = 25;
-    const usableHeight = height - paddingTop - paddingBottom;
-    const usableWidth = width - paddingX * 2;
-
-    const values = series.map((s) => s.value);
-    const rawMin = Math.min(...values);
-    const rawMax = Math.max(...values);
-    const buffer = (rawMax - rawMin) * 0.15 || 5;
-    const min = Math.max(0, rawMin - buffer);
-    const max = rawMax + buffer;
-
-    const coords = series.map((item, idx) => {
-      const x = paddingX + (idx / (series.length - 1 || 1)) * usableWidth;
-      const normalizedY = max > min ? (item.value - min) / (max - min) : 0.5;
-      const y = height - paddingBottom - normalizedY * usableHeight;
-      return { x, y, item };
-    });
-
-    let lPath = '';
-    coords.forEach((pt, idx) => {
-      lPath += idx === 0 ? `M ${pt.x},${pt.y}` : ` L ${pt.x},${pt.y}`;
-    });
-
-    const aPath = `${lPath} L ${coords[coords.length - 1]?.x ?? width},${height - paddingBottom} L ${coords[0]?.x ?? 0},${height - paddingBottom} Z`;
-
-    return {
-      points: coords,
-      areaPath: aPath,
-      linePath: lPath,
-      minVal: Math.round(min),
-      maxVal: Math.round(max),
-    };
-  }, [series]);
-
-  const handleMouseMove = (e: React.MouseEvent<SVGSVGElement>) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const mouseX = e.clientX - rect.left;
-    const ratio = mouseX / rect.width;
-    const idx = Math.min(
-      Math.max(0, Math.round(ratio * (series.length - 1))),
-      series.length - 1,
-    );
-    setHoverIndex(idx);
-  };
-
-  const handleMouseLeave = () => {
-    setHoverIndex(null);
-  };
-
-  const hoveredPoint = hoverIndex !== null ? points[hoverIndex] : null;
+  const hovered = hover !== null ? chart.points[hover] : undefined;
+  const unit = UNITS[activeMetric];
 
   return (
-    <div className="perf-chart-panel">
-      {/* Header: Metric Switcher & Time Range */}
-      <div className="perf-chart-header">
-        <div className="perf-metric-tabs">
-          {METRIC_KEYS.map((key) => (
-            <button
-              key={key}
-              type="button"
-              className={`perf-tab-btn ${activeMetric === key ? 'is-active' : ''}`}
-              onClick={() => onMetricChange(key)}
-            >
-              {getMetricLabel(key)}
-            </button>
-          ))}
-        </div>
-
-        <div className="perf-time-tabs">
-          {TIME_TABS.map((range) => (
+    <section className="ov-card ov-section ov-chart" aria-labelledby="ov-chart-title">
+      <header className="ov-section-head">
+        <h3 id="ov-chart-title">{t('ov.chart.title')}</h3>
+        <div className="ov-segmented" role="tablist" aria-label={t('ov.chart.range')}>
+          {RANGES.map((range) => (
             <button
               key={range}
               type="button"
-              className={`perf-time-btn ${timeRange === range ? 'is-active' : ''}`}
+              role="tab"
+              aria-selected={timeRange === range}
+              className={timeRange === range ? 'is-active' : ''}
               onClick={() => onTimeRangeChange(range)}
             >
               {t(`chart.range${range}`)}
             </button>
           ))}
         </div>
-      </div>
+      </header>
 
-      {/* Stats Summary Bar */}
-      <div className="perf-stats-bar">
-        <div className="perf-stat-item">
-          <span className="perf-stat-label">{t('chart.current')}:</span>
-          <span className="perf-stat-value">{stats.current}</span>
-        </div>
-        <div className="perf-stat-item">
-          <span className="perf-stat-label">{t('chart.average')}:</span>
-          <span className="perf-stat-value">{stats.average}</span>
-        </div>
-        <div className="perf-stat-item">
-          <span className="perf-stat-label">{t('chart.peak')}:</span>
-          <span className="perf-stat-value">{stats.peak}</span>
-        </div>
-      </div>
-
-      {series.length === 0 && (
-        <div className="scp-alert scp-alert-info" style={{ margin: '0.75rem 0 0' }}>
-          {t('chart.noSamples')}
-        </div>
-      )}
-
-      {/* Interactive SVG Chart */}
-      <div className="perf-svg-wrapper">
-        <svg
-          viewBox="0 0 600 180"
-          preserveAspectRatio="none"
-          onMouseMove={handleMouseMove}
-          onMouseLeave={handleMouseLeave}
-          style={{ cursor: 'crosshair' }}
-        >
-          <defs>
-            <linearGradient id="perfChartAreaGradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="var(--scp-chart-fill-start)" />
-              <stop offset="100%" stopColor="var(--scp-chart-fill-end)" />
-            </linearGradient>
-          </defs>
-
-          {/* Grid lines */}
-          <line
-            x1="20"
-            y1="30"
-            x2="580"
-            y2="30"
-            stroke="var(--scp-chart-grid)"
-            strokeDasharray="4 4"
-          />
-          <line
-            x1="20"
-            y1="90"
-            x2="580"
-            y2="90"
-            stroke="var(--scp-chart-grid)"
-            strokeDasharray="4 4"
-          />
-          <line
-            x1="20"
-            y1="155"
-            x2="580"
-            y2="155"
-            stroke="var(--scp-chart-grid)"
-          />
-
-          {/* Area Fill */}
-          {areaPath && <path d={areaPath} fill="url(#perfChartAreaGradient)" />}
-
-          {/* Line Stroke */}
-          {linePath && (
-            <path
-              d={linePath}
-              fill="none"
-              stroke="var(--scp-chart-line)"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          )}
-
-          {/* Data Points */}
-          {points.map((pt, idx) => (
-            <circle
-              key={idx}
-              cx={pt.x}
-              cy={pt.y}
-              r={hoverIndex === idx ? 5 : 2.5}
-              fill={hoverIndex === idx ? 'var(--scp-primary)' : 'var(--scp-chart-point)'}
-              stroke="var(--scp-bg-surface)"
-              strokeWidth="1.5"
-            />
-          ))}
-
-          {/* Hover Crosshair & Indicator */}
-          {hoveredPoint && (
-            <g>
-              <line
-                x1={hoveredPoint.x}
-                y1="15"
-                x2={hoveredPoint.x}
-                y2="155"
-                stroke="var(--scp-primary)"
-                strokeDasharray="3 3"
-                strokeWidth="1.5"
-              />
-              <circle
-                cx={hoveredPoint.x}
-                cy={hoveredPoint.y}
-                r="6"
-                fill="var(--scp-primary)"
-                stroke="var(--scp-bg-surface)"
-                strokeWidth="2"
-              />
-            </g>
-          )}
-        </svg>
-
-        {/* Hover Tooltip Popup */}
-        {hoveredPoint && (
-          <div
-            style={{
-              position: 'absolute',
-              left: `${(hoveredPoint.x / 600) * 100}%`,
-              top: `${(hoveredPoint.y / 180) * 100}%`,
-              transform: 'translate(-50%, -120%)',
-              backgroundColor: 'var(--scp-chart-tooltip-bg)',
-              color: 'var(--scp-chart-tooltip-text)',
-              border: '1px solid var(--scp-chart-tooltip-border)',
-              borderRadius: '6px',
-              padding: '0.3rem 0.6rem',
-              fontSize: '0.75rem',
-              fontWeight: 600,
-              pointerEvents: 'none',
-              boxShadow: 'var(--scp-shadow-md)',
-              whiteSpace: 'nowrap',
-              zIndex: 10,
-            }}
+      <div className="ov-segmented ov-chart-metrics" role="tablist" aria-label={t('ov.chart.metric')}>
+        {METRICS.map((metric) => (
+          <button
+            key={metric}
+            type="button"
+            role="tab"
+            aria-selected={activeMetric === metric}
+            className={activeMetric === metric ? 'is-active' : ''}
+            onClick={() => onMetricChange(metric)}
           >
-            <div>{hoveredPoint.item.time}</div>
-            <div style={{ color: 'var(--scp-primary-text)', fontWeight: 700 }}>
-              {hoveredPoint.item.value} {activeMetric === 'requests' ? 'req/s' : activeMetric === 'latency' ? 'ms' : activeMetric === 'errors' ? '%' : activeMetric === 'cpu' ? '%' : 'GB'}
-            </div>
+            {t(`chart.${metric}`)}
+          </button>
+        ))}
+      </div>
+
+      <dl className="ov-chart-stats">
+        <div>
+          <dt>{t('chart.current')}</dt>
+          <dd>{stats.current}</dd>
+        </div>
+        <div>
+          <dt>{t('chart.average')}</dt>
+          <dd>{stats.average}</dd>
+        </div>
+        <div>
+          <dt>{t('chart.peak')}</dt>
+          <dd>{stats.peak}</dd>
+        </div>
+      </dl>
+
+      <div ref={wrapRef} className="ov-chart-canvas">
+        {series.length === 0 ? (
+          <div className="ov-chart-empty">{t('chart.noSamples')}</div>
+        ) : (
+          <svg width={width} height={HEIGHT} onMouseMove={handleMove} onMouseLeave={() => setHover(null)} role="img" aria-label={t('ov.chart.title')}>
+            <defs>
+              <linearGradient id="ovChartFill" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="var(--scp-chart-fill-start)" />
+                <stop offset="100%" stopColor="var(--scp-chart-fill-end)" />
+              </linearGradient>
+            </defs>
+
+            {chart.yTicks.map((tick) => (
+              <g key={tick.y}>
+                <line x1={PAD.left} x2={width - PAD.right} y1={tick.y} y2={tick.y} className="ov-chart-grid" />
+                <text x={PAD.left - 8} y={tick.y + 4} textAnchor="end" className="ov-chart-axis">
+                  {formatTick(tick.value)}
+                </text>
+              </g>
+            ))}
+            {chart.xLabels.map((p, i) => (
+              <text
+                key={p.x}
+                x={p.x}
+                y={HEIGHT - 6}
+                textAnchor={i === 0 ? 'start' : i === chart.xLabels.length - 1 ? 'end' : 'middle'}
+                className="ov-chart-axis"
+              >
+                {p.point.time}
+              </text>
+            ))}
+
+            {chart.area && <path d={chart.area} fill="url(#ovChartFill)" />}
+            <path d={chart.line} fill="none" stroke="var(--scp-chart-line)" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
+            {chart.points.length <= 60 &&
+              chart.points.map((p) => <circle key={p.x} cx={p.x} cy={p.y} r={2.5} fill="var(--scp-chart-point)" />)}
+
+            {hovered && (
+              <g>
+                <line x1={hovered.x} x2={hovered.x} y1={PAD.top} y2={HEIGHT - PAD.bottom} className="ov-chart-cursor" />
+                <circle cx={hovered.x} cy={hovered.y} r={5} fill="var(--scp-primary)" stroke="var(--scp-bg-surface)" strokeWidth={2} />
+              </g>
+            )}
+          </svg>
+        )}
+
+        {hovered && (
+          <div
+            className="ov-chart-tooltip"
+            style={{ left: Math.min(Math.max(hovered.x, 60), width - 60), top: hovered.y }}
+          >
+            <span>{hovered.point.time}</span>
+            <strong>
+              {hovered.point.value} {unit}
+            </strong>
           </div>
         )}
       </div>
-    </div>
+    </section>
   );
 };

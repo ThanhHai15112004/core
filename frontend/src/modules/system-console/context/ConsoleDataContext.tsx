@@ -2,14 +2,13 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import type {
   HealthData,
   PackageSummary,
-  RefreshIntervalMs,
   ToastMessage,
   OverviewData,
   PerformanceMetricKey,
   PerformanceTimeRange,
 } from '../types/console.types';
 import type { PackageActionResult } from '../../system-ops/types/system-ops.types';
-import { CONSOLE_STORAGE_KEYS, REFRESH_OPTIONS } from '../constants/console.constants';
+import { POLL_INTERVAL_MS } from '../constants/console.constants';
 import { frontendConfig } from '../../../config/index';
 import { useLocale } from '../../../core/i18n/index';
 import {
@@ -21,29 +20,17 @@ import {
 } from '../services/console.api';
 import { useLatencyTracker } from '../hooks/useLatencyTracker';
 import { useEventLog } from '../hooks/useEventLog';
-import { useMetricHistory } from '../hooks/useMetricHistory';
+import { KPI_METRIC, useMetricHistory } from '../hooks/useMetricHistory';
 import { buildFallbackOverview } from '../utils/fallback-overview';
 import { ConsoleDataContext, type ConsoleDataContextValue } from './console-data-context';
 
 const TOAST_DURATION_MS = 4000;
-const DEFAULT_REFRESH_INTERVAL: RefreshIntervalMs = 10000;
 
 const INITIAL_HEALTH: HealthData = {
   status: 'ok',
   uptime: 0,
   timestamp: new Date().toISOString(),
 };
-
-function readRefreshInterval(): RefreshIntervalMs {
-  try {
-    const saved = Number(localStorage.getItem(CONSOLE_STORAGE_KEYS.REFRESH_INTERVAL));
-    const match = REFRESH_OPTIONS.find((o) => o.value === saved);
-    if (match) return match.value;
-  } catch {
-    // Ignore
-  }
-  return DEFAULT_REFRESH_INTERVAL;
-}
 
 export const ConsoleDataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { t, formatTime } = useLocale();
@@ -52,17 +39,15 @@ export const ConsoleDataProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const [packages, setPackages] = useState<PackageSummary[]>([]);
   const [rawOverview, setRawOverview] = useState<OverviewPayload | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastSuccessfulSync, setLastSuccessfulSync] = useState<Date | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [activePerformanceMetric, setActivePerformanceMetric] = useState<PerformanceMetricKey>('requests');
   const [performanceTimeRange, setPerformanceTimeRange] = useState<PerformanceTimeRange>('15m');
-  const [refreshInterval, setRefreshIntervalState] = useState<RefreshIntervalMs>(readRefreshInterval);
 
   const { latencyHistory, currentLatency, avgLatency, recordLatency } = useLatencyTracker();
   const { events, addEvent, clearEvents } = useEventLog();
-  const { recordOverview, buildSeries } = useMetricHistory();
+  const { recordOverview, buildSeries, getTrend } = useMetricHistory();
 
   const isOffline = health.status === 'down';
   const wasOfflineRef = useRef(false);
@@ -79,18 +64,8 @@ export const ConsoleDataProvider: React.FC<{ children: React.ReactNode }> = ({ c
     setToasts((prev) => prev.filter((item) => item.id !== id));
   }, []);
 
-  const setRefreshInterval = useCallback((ms: RefreshIntervalMs) => {
-    setRefreshIntervalState(ms);
-    try {
-      localStorage.setItem(CONSOLE_STORAGE_KEYS.REFRESH_INTERVAL, String(ms));
-    } catch {
-      // Ignore
-    }
-  }, []);
-
   const loadData = useCallback(
-    async (silent = false) => {
-      if (!silent) setIsRefreshing(true);
+    async () => {
       try {
         const [healthRes, pkgs, overview] = await Promise.all([
           fetchHealth(),
@@ -124,26 +99,32 @@ export const ConsoleDataProvider: React.FC<{ children: React.ReactNode }> = ({ c
         recordLatency(healthRes.latencyMs);
         setLastSuccessfulSync(new Date());
         if (pkgs) setPackages(pkgs);
-        setRawOverview(overview);
+        // Giữ bản overview gần nhất nếu lần này lỗi, để UI hiển thị "giá trị gần nhất".
+        if (overview) setRawOverview(overview);
         if (overview) recordOverview({ ...overview, lastUpdated: new Date(), isOffline: false });
       } finally {
         setIsLoading(false);
-        setIsRefreshing(false);
       }
     },
     // `t` đổi theo ngôn ngữ → tự tải lại, vì text trong overview do backend dịch sẵn.
     [addToast, recordLatency, recordOverview, t],
   );
 
+  // Tự cập nhật định kỳ; tạm dừng khi tab bị ẩn và tải lại ngay khi người dùng quay lại.
   useEffect(() => {
-    void loadData(false);
+    void loadData();
+    const interval = setInterval(() => {
+      if (!document.hidden) void loadData();
+    }, POLL_INTERVAL_MS);
+    const handleVisibility = () => {
+      if (!document.hidden) void loadData();
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
   }, [loadData]);
-
-  useEffect(() => {
-    if (refreshInterval <= 0) return;
-    const interval = setInterval(() => void loadData(true), refreshInterval);
-    return () => clearInterval(interval);
-  }, [refreshInterval, loadData]);
 
   const executeAction = useCallback(
     async (packageId: string, actionId: string, params?: unknown): Promise<PackageActionResult> => {
@@ -158,7 +139,7 @@ export const ConsoleDataProvider: React.FC<{ children: React.ReactNode }> = ({ c
           addEvent('warn', packageId, t('console.event.warning', { ...eventParams, message: result.message }));
           addToast({ type: 'warning', title: t('console.toast.actionWarning'), message: result.message });
         }
-        await loadData(true);
+        await loadData();
         return result;
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);
@@ -175,8 +156,13 @@ export const ConsoleDataProvider: React.FC<{ children: React.ReactNode }> = ({ c
     [buildSeries, activePerformanceMetric, performanceTimeRange, formatTime],
   );
 
+  const metricTrends = useMemo(
+    () => Object.fromEntries(Object.entries(KPI_METRIC).map(([id, metric]) => [id, getTrend(metric)])),
+    [getTrend],
+  );
+
   const overviewData = useMemo<OverviewData>(() => {
-    if (rawOverview && !isOffline) {
+    if (rawOverview) {
       return { ...rawOverview, lastUpdated, isOffline, lastSuccessfulSync };
     }
     return buildFallbackOverview({
@@ -193,10 +179,6 @@ export const ConsoleDataProvider: React.FC<{ children: React.ReactNode }> = ({ c
       health,
       packages,
       isLoading,
-      isRefreshing,
-      refreshInterval,
-      setRefreshInterval,
-      refresh: () => loadData(false),
       executeAction,
       lastUpdated,
       latencyHistory,
@@ -218,15 +200,13 @@ export const ConsoleDataProvider: React.FC<{ children: React.ReactNode }> = ({ c
       overviewData,
       performanceSeries,
       performanceStats,
+      metricTrends,
+      isShowingLastKnown: isOffline && rawOverview !== null,
     }),
     [
       health,
       packages,
       isLoading,
-      isRefreshing,
-      refreshInterval,
-      setRefreshInterval,
-      loadData,
       executeAction,
       lastUpdated,
       latencyHistory,
@@ -245,6 +225,8 @@ export const ConsoleDataProvider: React.FC<{ children: React.ReactNode }> = ({ c
       overviewData,
       performanceSeries,
       performanceStats,
+      metricTrends,
+      rawOverview,
     ],
   );
 

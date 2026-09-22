@@ -6,12 +6,13 @@ import { CoreI18nService } from '@packages/i18n/index.js';
 import { HttpMetricsService, type HttpMetricsSnapshot } from '@packages/logging/index.js';
 import { CorePackageId, PackageStatus } from '@packages/kernel/index.js';
 import { PackageRegistryService, type PackageSummaryDto } from './package-registry.service.js';
+import { OpsEventService } from './ops-event.service.js';
 import type {
+  AffectedComponentDto,
   SystemOverviewResponseDto,
   HealthMapItemDto,
   ActiveIncidentItemDto,
   InfraSnapshotItemDto,
-  RecentActivityEventDto,
   KeyMetricItemDto,
   OverallHealthReportDto,
 } from '../responses/overview.response.js';
@@ -21,6 +22,16 @@ const BYTES_PER_GB = BYTES_PER_MB * 1024;
 const CPU_WARN_PERCENT = 80;
 const MEMORY_WARN_PERCENT = 85;
 const UNAVAILABLE = '--';
+
+/** Section của System Console dùng để drill-down theo package. */
+const PACKAGE_SECTION: Record<string, string> = {
+  [CorePackageId.CACHE]: 'cache',
+  [CorePackageId.DATABASE]: 'database',
+  [CorePackageId.LOGGING]: 'logs',
+  [CorePackageId.SECURITY]: 'security',
+};
+
+const sectionOf = (packageId: string): string => PACKAGE_SECTION[packageId] ?? 'packages';
 
 /** Số đo của process/OS tại thời điểm gọi API. */
 interface RuntimeSnapshot {
@@ -52,6 +63,7 @@ export class SystemOverviewService {
     private readonly registryService: PackageRegistryService,
     private readonly httpMetrics: HttpMetricsService,
     private readonly i18n: CoreI18nService,
+    private readonly events: OpsEventService,
   ) {}
 
   public async getOverview(): Promise<SystemOverviewResponseDto> {
@@ -74,7 +86,7 @@ export class SystemOverviewService {
       healthMap: this.buildHealthMap(ctx),
       incidents: this.buildIncidents(ctx),
       infraSnapshots: this.buildInfraSnapshots(ctx),
-      recentActivities: this.buildRecentActivities(ctx),
+      recentActivities: this.events.getRecent(20),
       systemInfo: {
         nodeVersion: process.version,
         platform: process.platform,
@@ -142,39 +154,51 @@ export class SystemOverviewService {
   private buildOverallHealth(ctx: OverviewContext): OverallHealthReportDto {
     const failing = this.packagesWithStatus(ctx, PackageStatus.ERROR);
     const warning = this.packagesWithStatus(ctx, PackageStatus.WARNING);
+    const problems = [...failing, ...warning];
     const base = {
-      healthyServices: ctx.packages.length - failing.length - warning.length,
+      healthyServices: ctx.packages.length - problems.length,
       totalServices: ctx.packages.length,
       uptimeSeconds: ctx.runtime.uptimeSeconds,
     };
 
-    if (failing.length > 0) {
+    const firstProblem = problems[0];
+    if (!firstProblem) {
       return {
         ...base,
-        status: 'critical',
-        title: this.i18n.t('overview.health.critical.title'),
-        message: this.i18n.t('overview.health.critical.message', { count: failing.length }),
-        actionLabel: this.i18n.t('overview.health.critical.action'),
-        actionSection: 'packages',
-        affectedServices: failing.map((p) => p.displayName),
+        status: 'healthy',
+        title: this.i18n.t('overview.health.healthy.title'),
+        message: this.i18n.t('overview.health.healthy.message'),
       };
     }
 
-    if (warning.length > 0) {
-      return {
-        ...base,
-        status: 'degraded',
-        title: this.i18n.t('overview.health.degraded.title'),
-        message: this.i18n.t('overview.health.degraded.message', { count: warning.length }),
-        affectedServices: warning.map((p) => p.displayName),
-      };
-    }
+    const affectedComponents: AffectedComponentDto[] = problems.map((p) => ({
+      name: p.displayName,
+      status: p.statusReport.status,
+      section: sectionOf(p.packageId),
+    }));
+    const startedAt = problems
+      .map((p) => this.events.getStatusSince(p.packageId))
+      .filter((d): d is Date => d !== undefined)
+      .sort((a, b) => a.getTime() - b.getTime())[0];
+    const isCritical = failing.length > 0;
 
     return {
       ...base,
-      status: 'healthy',
-      title: this.i18n.t('overview.health.healthy.title'),
-      message: this.i18n.t('overview.health.healthy.message'),
+      status: isCritical ? 'critical' : 'degraded',
+      title: this.i18n.t(
+        isCritical ? 'overview.health.critical.title' : 'overview.health.degraded.title',
+      ),
+      message: this.i18n.t(
+        isCritical ? 'overview.health.critical.message' : 'overview.health.degraded.message',
+        {
+          count: isCritical ? failing.length : warning.length,
+        },
+      ),
+      affectedServices: problems.map((p) => p.displayName),
+      affectedComponents,
+      actionLabel: this.i18n.t('overview.health.inspect', { name: firstProblem.displayName }),
+      actionSection: sectionOf(firstProblem.packageId),
+      ...(startedAt ? { startedAt: startedAt.toISOString() } : {}),
     };
   }
 
@@ -254,15 +278,28 @@ export class SystemOverviewService {
   }
 
   private buildHealthMap(ctx: OverviewContext): HealthMapItemDto[] {
-    const { app, database, cache, storage } = this.configService;
-    const cachePackage = ctx.packages.find((p) => p.packageId === CorePackageId.CACHE);
-    const securityPackage = ctx.packages.find((p) => p.packageId === CorePackageId.SECURITY);
-    const unmonitoredProcess = {
+    const { app, database, storage } = this.configService;
+    const pkg = (id: string) => ctx.packages.find((p) => p.packageId === id);
+    const cachePackage = pkg(CorePackageId.CACHE);
+    const securityPackage = pkg(CorePackageId.SECURITY);
+    const cacheKeys = cachePackage?.statusReport.metrics['keys'];
+    const cacheHitRate = cachePackage?.statusReport.metrics['hitRatePercent'];
+    const unmonitored = (
+      id: string,
+      nameKey: string,
+      targetSection: string,
+      icon: string,
+    ): HealthMapItemDto => ({
+      id,
+      name: this.i18n.t(nameKey),
       category: 'runtime',
       status: 'unknown',
       subtext: this.i18n.t('overview.map.processUnmonitored'),
       secondarySubtext: this.i18n.t('overview.map.processUnmonitoredDetail'),
-    } as const;
+      metric: this.i18n.t('overview.map.notMonitored'),
+      targetSection,
+      icon,
+    });
 
     return [
       {
@@ -275,28 +312,17 @@ export class SystemOverviewService {
           heap: ctx.runtime.heapUsedMb,
           uptime: ctx.runtime.uptimeSeconds,
         }),
+        metric: `${ctx.http.requestsPerSecond} req/s • P95 ${ctx.http.p95LatencyMs ?? UNAVAILABLE} ms`,
         targetSection: 'runtime',
         icon: 'globe',
       },
-      {
-        ...unmonitoredProcess,
-        id: 'runtime-worker',
-        name: this.i18n.t('overview.map.worker.name'),
-        targetSection: 'worker',
-        icon: 'cpu',
-      },
-      {
-        ...unmonitoredProcess,
-        id: 'runtime-scheduler',
-        name: this.i18n.t('overview.map.scheduler.name'),
-        targetSection: 'scheduler',
-        icon: 'clock',
-      },
+      unmonitored('runtime-worker', 'overview.map.worker.name', 'worker', 'cpu'),
+      unmonitored('runtime-scheduler', 'overview.map.scheduler.name', 'scheduler', 'clock'),
       {
         id: 'infra-db',
         name: this.i18n.t('overview.map.database.name'),
         category: 'infrastructure',
-        status: ctx.dbPingMs !== null ? 'healthy' : 'warning',
+        status: ctx.dbPingMs !== null ? 'healthy' : 'critical',
         subtext: `${database.connection.toUpperCase()} • ${database.database}`,
         secondarySubtext:
           ctx.dbPingMs !== null
@@ -305,6 +331,13 @@ export class SystemOverviewService {
                 pool: database.maxConnections,
               })
             : this.i18n.t('overview.map.database.pingFailed', { pool: database.maxConnections }),
+        metric:
+          ctx.dbPingMs !== null
+            ? this.i18n.t('overview.map.database.metric', {
+                ping: ctx.dbPingMs,
+                pool: database.maxConnections,
+              })
+            : this.i18n.t('overview.map.database.unreachable'),
         targetSection: 'database',
         icon: 'database',
       },
@@ -314,7 +347,10 @@ export class SystemOverviewService {
         category: 'infrastructure',
         status: toHealthMapStatus(cachePackage?.statusReport.status),
         subtext: cachePackage?.statusReport.summary ?? UNAVAILABLE,
-        secondarySubtext: `${this.i18n.t('overview.snapshot.prefix')}: ${cache.redis.prefix}`,
+        metric: this.i18n.t('overview.map.cache.metric', {
+          keys: String(cacheKeys ?? UNAVAILABLE),
+          hitRate: typeof cacheHitRate === 'number' ? `${cacheHitRate}%` : UNAVAILABLE,
+        }),
         targetSection: 'cache',
         icon: 'zap',
       },
@@ -327,8 +363,19 @@ export class SystemOverviewService {
           driver: storage.driver.toUpperCase(),
         }),
         secondarySubtext: this.i18n.t('overview.map.storage.secondary'),
+        metric: this.i18n.t('overview.map.noHealthCheck'),
         targetSection: 'packages',
         icon: 'hard-drive',
+      },
+      {
+        id: 'infra-messaging',
+        name: this.i18n.t('overview.map.messaging.name'),
+        category: 'infrastructure',
+        status: 'unknown',
+        subtext: this.i18n.t('overview.map.messaging.subtext'),
+        metric: this.i18n.t('overview.map.noHealthCheck'),
+        targetSection: 'packages',
+        icon: 'radio',
       },
       {
         id: 'gov-security',
@@ -337,6 +384,10 @@ export class SystemOverviewService {
         status: toHealthMapStatus(securityPackage?.statusReport.status),
         subtext: this.i18n.t('overview.map.security.subtext'),
         secondarySubtext: securityPackage?.statusReport.summary ?? UNAVAILABLE,
+        metric:
+          securityPackage?.statusReport.metrics['tokenVerification'] === 'skeleton'
+            ? this.i18n.t('overview.map.security.skeleton')
+            : this.i18n.t('overview.map.security.subtext'),
         targetSection: 'security',
         icon: 'shield-check',
       },
@@ -350,20 +401,35 @@ export class SystemOverviewService {
           p.statusReport.status === PackageStatus.WARNING ||
           p.statusReport.status === PackageStatus.ERROR,
       )
-      .map((p) => ({
-        id: `incident-${p.packageId}`,
-        severity: p.statusReport.status === PackageStatus.ERROR ? 'critical' : 'warning',
-        title: this.i18n.t('overview.incident.title', { name: p.displayName }),
-        description: p.statusReport.summary,
-        startedAgo: this.i18n.t('overview.incident.active'),
-        targetSection: 'packages',
-        actionLabel: this.i18n.t('overview.incident.action', { name: p.displayName }),
-      }));
+      .map((p) => {
+        const since = this.events.getStatusSince(p.packageId);
+        return {
+          id: `incident-${p.packageId}`,
+          severity: p.statusReport.status === PackageStatus.ERROR ? 'critical' : 'warning',
+          title: this.i18n.t('overview.incident.title', { name: p.displayName }),
+          description: p.statusReport.summary,
+          startedAgo: this.i18n.t('overview.incident.active'),
+          ...(since ? { startedAt: since.toISOString() } : {}),
+          targetSection: sectionOf(p.packageId),
+          actionLabel: this.i18n.t('overview.incident.action', { name: p.displayName }),
+        };
+      });
   }
 
   private buildInfraSnapshots(ctx: OverviewContext): InfraSnapshotItemDto[] {
-    const { app, database, cache } = this.configService;
+    const { database } = this.configService;
     const label = (key: string) => this.i18n.t(`overview.snapshot.${key}`);
+    const cacheMetrics =
+      ctx.packages.find((p) => p.packageId === CorePackageId.CACHE)?.statusReport.metrics ?? {};
+    const hitRate = cacheMetrics['hitRatePercent'];
+    const unavailable = (id: string, nameKey: string, targetSection: string, icon: string) => ({
+      id,
+      title: this.i18n.t(nameKey),
+      icon,
+      targetSection,
+      metrics: [],
+      unavailable: true,
+    });
 
     return [
       {
@@ -372,26 +438,33 @@ export class SystemOverviewService {
         icon: 'globe',
         targetSection: 'runtime',
         metrics: [
-          { label: label('port'), value: app.port },
-          { label: label('heapUsed'), value: `${ctx.runtime.heapUsedMb} MB` },
-          { label: label('heapTotal'), value: `${ctx.runtime.heapTotalMb} MB` },
-          { label: label('nodeVersion'), value: process.version },
+          {
+            label: label('cpu'),
+            value: `${ctx.runtime.cpuPercent}%`,
+            isWarn: ctx.runtime.cpuPercent > CPU_WARN_PERCENT,
+          },
+          { label: label('memory'), value: `${ctx.runtime.rssMb} MB` },
+          { label: label('traffic'), value: `${ctx.http.requestsPerSecond} req/s` },
+          {
+            label: label('p95'),
+            value: ctx.http.p95LatencyMs !== null ? `${ctx.http.p95LatencyMs} ms` : UNAVAILABLE,
+          },
         ],
       },
+      unavailable('snap-worker', 'overview.map.worker.name', 'worker', 'cpu'),
       {
         id: 'snap-db',
         title: this.i18n.t('overview.map.database.name'),
         icon: 'database',
         targetSection: 'database',
         metrics: [
-          { label: label('driver'), value: database.connection.toUpperCase() },
           {
             label: label('ping'),
             value: ctx.dbPingMs !== null ? `${ctx.dbPingMs} ms` : label('unavailable'),
             isWarn: ctx.dbPingMs === null,
           },
           { label: label('poolMax'), value: database.maxConnections },
-          { label: label('synchronize'), value: String(database.synchronize) },
+          { label: label('driver'), value: database.connection.toUpperCase() },
         ],
       },
       {
@@ -400,40 +473,16 @@ export class SystemOverviewService {
         icon: 'zap',
         targetSection: 'cache',
         metrics: [
-          { label: label('driver'), value: 'memory' },
-          { label: label('prefix'), value: cache.redis.prefix },
-          { label: label('configuredRedis'), value: `${cache.redis.host}:${cache.redis.port}` },
+          { label: label('keys'), value: Number(cacheMetrics['keys'] ?? 0) },
+          {
+            label: label('hitRate'),
+            value: typeof hitRate === 'number' ? `${hitRate}%` : UNAVAILABLE,
+          },
+          { label: label('hits'), value: Number(cacheMetrics['hits'] ?? 0) },
+          { label: label('misses'), value: Number(cacheMetrics['misses'] ?? 0) },
         ],
       },
-    ];
-  }
-
-  private buildRecentActivities(ctx: OverviewContext): RecentActivityEventDto[] {
-    const { app, database } = this.configService;
-    const startedAt = new Date(Date.now() - ctx.runtime.uptimeSeconds * 1000).toISOString();
-    const dbParams = { driver: database.connection.toUpperCase(), database: database.database };
-
-    return [
-      {
-        id: 'act-db-ping',
-        time: new Date().toISOString(),
-        level: ctx.dbPingMs !== null ? 'success' : 'error',
-        source: this.i18n.t('overview.map.database.name'),
-        message:
-          ctx.dbPingMs !== null
-            ? this.i18n.t('overview.activity.dbPingOk', { ...dbParams, ping: ctx.dbPingMs })
-            : this.i18n.t('overview.activity.dbPingFailed', dbParams),
-      },
-      {
-        id: 'act-api-started',
-        time: startedAt,
-        level: 'info',
-        source: this.i18n.t('overview.map.api.name'),
-        message: this.i18n.t('overview.activity.apiStarted', {
-          port: app.port,
-          env: this.environment,
-        }),
-      },
+      unavailable('snap-scheduler', 'overview.map.scheduler.name', 'scheduler', 'clock'),
     ];
   }
 }

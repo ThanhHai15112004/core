@@ -20,7 +20,7 @@ export const PackagesSection: React.FC<PackagesSectionProps> = ({
   onClearSelectedPackageId,
 }) => {
   const { t } = useLocale();
-  const { packages, executeAction, refresh, isRefreshing } = useConsoleData();
+  const { packages, executeAction } = useConsoleData();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
@@ -100,16 +100,6 @@ export const PackagesSection: React.FC<PackagesSectionProps> = ({
       <SectionHeader
         title={t('console.packages.title')}
         description={t('console.packages.description')}
-        actions={
-          <button
-            type="button"
-            className="scp-btn scp-btn-secondary scp-btn-sm"
-            onClick={() => refresh()}
-            disabled={isRefreshing}
-          >
-            {isRefreshing ? t('common.refreshing') : t('common.refresh')}
-          </button>
-        }
       />
 
       {/* Filter and Search Bar */}

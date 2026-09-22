@@ -1,66 +1,49 @@
 import React from 'react';
+import { ArrowRight } from 'lucide-react';
 import type { ConsoleSectionId, InfraSnapshotItem } from '../../types/console.types';
-
-import { useLocale } from '../../../../core/i18n/index';
 import { ConsoleIcon } from '../common/ConsoleIcon';
-import { Activity } from 'lucide-react';
+import { useLocale } from '../../../../core/i18n/index';
 
 interface InfraSnapshotGridProps {
   snapshots: InfraSnapshotItem[];
   onNavigate: (section: ConsoleSectionId) => void;
 }
 
-export const InfraSnapshotGrid: React.FC<InfraSnapshotGridProps> = ({
-  snapshots,
-  onNavigate,
-}) => {
+/** Vùng ⑥: mỗi thành phần đang làm việc thế nào. */
+export const InfraSnapshotGrid: React.FC<InfraSnapshotGridProps> = ({ snapshots, onNavigate }) => {
   const { t } = useLocale();
+  if (snapshots.length === 0) return null;
 
   return (
-    <section className="infra-snapshot-panel" aria-label={t('snapshots.title')}>
-      <div className="infra-snapshot-header">
-        <h3 className="infra-snapshot-title">
-          <Activity size={17} style={{ color: 'var(--scp-primary)' }} />
-          <span>{t('snapshots.title')}</span>
-        </h3>
-        <span style={{ fontSize: '0.75rem', color: 'var(--scp-text-muted)' }}>
-          {t('snapshots.subtitle')}
-        </span>
-      </div>
+    <section className="ov-card ov-section" aria-labelledby="ov-snap-title">
+      <header className="ov-section-head">
+        <h3 id="ov-snap-title">{t('snapshots.title')}</h3>
+        <span className="ov-section-hint">{t('snapshots.subtitle')}</span>
+      </header>
 
-      <div className="infra-snapshot-grid">
-        {snapshots.map((item) => (
-          <div key={item.id} className="snapshot-card">
-            <div>
-              <h4 className="snapshot-card-title">
-                <span style={{ display: 'inline-flex', alignItems: 'center' }}>
-                  <ConsoleIcon name={item.targetSection} size={16} />
-                </span>
-                <span>{item.title}</span>
-              </h4>
-
-              <div className="snapshot-metric-list" style={{ marginTop: '0.75rem' }}>
-                {item.metrics.map((m, idx) => (
-                  <div key={idx} className="snapshot-metric-row">
-                    <span className="snapshot-metric-label">{m.label}</span>
-                    <span className={`snapshot-metric-val ${m.isWarn ? 'is-warn' : ''}`}>
-                      {m.value}
-                    </span>
+      <div className="ov-snap-grid">
+        {snapshots.map((snap) => (
+          <article key={snap.id} className={`ov-snap ${snap.unavailable ? 'is-unavailable' : ''}`}>
+            <h4 className="ov-snap-title">
+              <ConsoleIcon name={snap.icon} size={15} />
+              {snap.title}
+            </h4>
+            {snap.unavailable ? (
+              <p className="ov-snap-empty">{t('ov.snapshot.notMonitored')}</p>
+            ) : (
+              <dl className="ov-snap-metrics">
+                {snap.metrics.map((m) => (
+                  <div key={m.label} className={m.isWarn ? 'is-warn' : ''}>
+                    <dt>{m.label}</dt>
+                    <dd>{m.value}</dd>
                   </div>
                 ))}
-              </div>
-            </div>
-
-            <div style={{ paddingTop: '0.5rem', borderTop: '1px solid var(--scp-border-subtle)' }}>
-              <button
-                type="button"
-                className="snapshot-card-link"
-                onClick={() => onNavigate(item.targetSection)}
-              >
-                {t('common.viewDetails')} →
-              </button>
-            </div>
-          </div>
+              </dl>
+            )}
+            <button type="button" className="ov-link" onClick={() => onNavigate(snap.targetSection)}>
+              {t('common.viewDetails')} <ArrowRight size={13} />
+            </button>
+          </article>
         ))}
       </div>
     </section>

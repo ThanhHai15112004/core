@@ -1,8 +1,7 @@
-import type { NavigationItem, RefreshIntervalMs } from '../types/console.types';
+import type { NavigationItem } from '../types/console.types';
 
 export const CONSOLE_STORAGE_KEYS = {
   THEME: 'core_sys_console_theme',
-  REFRESH_INTERVAL: 'core_sys_console_refresh_ms',
   LAST_SECTION: 'core_sys_console_last_section',
 } as const;
 
@@ -46,12 +45,8 @@ export const CONSOLE_NAV_ITEMS: NavigationItem[] = [
   },
 ];
 
-export const REFRESH_OPTIONS: { value: RefreshIntervalMs }[] = [
-  { value: 0 },
-  { value: 5000 },
-  { value: 10000 },
-  { value: 30000 },
-];
+/** Chu kỳ tự cập nhật số liệu; người dùng không cần bấm làm mới. */
+export const POLL_INTERVAL_MS = 5000;
 
 export const resolvePackageIcon = (pkg?: { category?: string; icon?: string } | null): string => {
   if (!pkg) return 'packages';
