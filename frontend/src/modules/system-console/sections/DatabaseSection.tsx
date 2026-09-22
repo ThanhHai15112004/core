@@ -4,6 +4,7 @@ import { SectionHeader } from '../components/common/SectionHeader';
 import { StatusPill } from '../components/common/StatusPill';
 import { StatCard } from '../components/common/StatCard';
 import { Sparkline } from '../components/common/Sparkline';
+import { Database, Server, Layers, Activity, Sliders, AlertTriangle } from 'lucide-react';
 
 export const DatabaseSection: React.FC = () => {
   const { packages, executeAction } = useConsoleData();
@@ -20,7 +21,11 @@ export const DatabaseSection: React.FC = () => {
 
   const [pingHistory, setPingHistory] = useState<number[]>([4, 6, 5, 8, 4, 7, 5, 4]);
   const [isPinging, setIsPinging] = useState(false);
-  const [lastPingResult, setLastPingResult] = useState<string | null>(null);
+  const [pingResult, setPingResult] = useState<string | null>(null);
+
+  const avgPing = Math.round(
+    pingHistory.reduce((a, b) => a + b, 0) / (pingHistory.length || 1),
+  );
 
   const handlePing = async () => {
     try {
@@ -29,31 +34,26 @@ export const DatabaseSection: React.FC = () => {
       const res = await executeAction('database', 'ping');
       const latencyMs = Math.max(1, Math.round(performance.now() - start));
       setPingHistory((prev) => [...prev.slice(-15), latencyMs]);
-      setLastPingResult(`${res.message || 'PONG'} in ${latencyMs}ms`);
-    } catch {
-      setLastPingResult('Ping failed');
+      setPingResult(`${res.message || 'PONG'} in ${latencyMs}ms`);
     } finally {
       setIsPinging(false);
     }
   };
 
-  const avgPing = Math.round(
-    pingHistory.reduce((a, b) => a + b, 0) / (pingHistory.length || 1),
-  );
-
   return (
     <div>
       <SectionHeader
-        title="Database & TypeORM ORM Engine"
-        description="Monitor relational database connections, connection pool limits, ping latency, and schema synchronization safety."
+        title="Relational Database (TypeORM)"
+        description="TypeORM connection pool status, driver configuration, latency tracking, and schema sync inspection"
+        badge="PostgreSQL / MySQL"
         actions={
           <button
             type="button"
-            className="scp-btn scp-btn-primary scp-btn-sm"
-            disabled={isPinging}
+            className="scp-btn scp-btn-secondary"
             onClick={handlePing}
+            disabled={isPinging}
           >
-            {isPinging ? 'Testing Ping...' : '⚡ Test Database Ping'}
+            {isPinging ? 'Pinging...' : 'Ping Database'}
           </button>
         }
       />
@@ -62,25 +62,23 @@ export const DatabaseSection: React.FC = () => {
       {synchronize && (
         <div
           style={{
-            padding: '1rem',
-            borderRadius: '8px',
-            backgroundColor: 'var(--scp-warning-bg)',
-            border: '1px solid var(--scp-warning-border)',
-            color: 'var(--scp-warning-text)',
-            fontSize: '0.85rem',
             marginBottom: '1.25rem',
-            display: 'flex',
-            alignItems: 'flex-start',
-            gap: '0.75rem',
+            padding: '0.85rem 1.25rem',
+            borderRadius: '8px',
+            backgroundColor: 'var(--scp-danger-bg)',
+            border: '1px solid var(--scp-danger-border)',
+            color: 'var(--scp-danger-text)',
+            fontSize: '0.85rem',
+            lineHeight: 1.5,
           }}
         >
-          <span style={{ fontSize: '1.2rem' }}>⚠️</span>
-          <div>
-            <strong>TypeORM Schema Synchronize is ENABLED (`synchronize: true`)</strong>
-            <p style={{ margin: '0.25rem 0 0', fontSize: '0.8rem', lineHeight: 1.4 }}>
-              Automatic schema synchronization is active for local development. Never enable this in staging or production environments to avoid accidental table drops.
-            </p>
-          </div>
+          <strong style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+            <AlertTriangle size={16} />
+            <span>DANGER: Database synchronize is enabled in active configuration!</span>
+          </strong>
+          <p style={{ margin: '0.25rem 0 0' }}>
+            Entities can alter tables automatically on startup. This MUST be set to FALSE in staging and production environments.
+          </p>
         </div>
       )}
 
@@ -89,7 +87,7 @@ export const DatabaseSection: React.FC = () => {
         <StatCard
           title="Connection State"
           value={isConnected ? 'Connected' : 'Disconnected'}
-          icon="🗄️"
+          icon={<Database size={18} />}
           subtext={
             <StatusPill
               status={isConnected ? 'healthy' : 'error'}
@@ -101,21 +99,21 @@ export const DatabaseSection: React.FC = () => {
         <StatCard
           title="Engine & Driver"
           value={driver.toUpperCase()}
-          icon="🐬"
+          icon={<Server size={18} />}
           subtext={`Host: ${host}:${port}`}
         />
 
         <StatCard
           title="Connection Pool"
           value={`${poolLimit} Max`}
-          icon="🏊"
+          icon={<Layers size={18} />}
           subtext="TypeORM Connection Pool Size"
         />
 
         <StatCard
-          title="Query Ping Latency"
+          title="Ping Latency"
           value={`${pingHistory[pingHistory.length - 1] ?? 0} ms`}
-          icon="⚡"
+          icon={<Activity size={18} />}
           subtext={<span>Average: <strong>{avgPing} ms</strong></span>}
         >
           <Sparkline data={pingHistory} height={28} />
@@ -126,11 +124,14 @@ export const DatabaseSection: React.FC = () => {
       <div className="scp-panel">
         <div className="scp-panel-header">
           <h3 className="scp-panel-title">
-            <span>⚙️ Connection Parameters & Environment</span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+              <Sliders size={16} />
+              <span>Connection Parameters & Environment</span>
+            </span>
           </h3>
-          {lastPingResult && (
+          {pingResult && (
             <span style={{ fontSize: '0.8rem', color: 'var(--scp-success)', fontWeight: 600 }}>
-              Last ping: {lastPingResult}
+              Last ping: {pingResult}
             </span>
           )}
         </div>

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { SectionHeader } from '../components/common/SectionHeader';
 import { StatCard } from '../components/common/StatCard';
 import { StatusPill } from '../components/common/StatusPill';
+import { Key, Clock, RefreshCw, ShieldCheck, Search, AlertTriangle } from 'lucide-react';
 
 export const SecuritySection: React.FC = () => {
   const [tokenInput, setTokenInput] = useState('');
@@ -30,58 +31,45 @@ export const SecuritySection: React.FC = () => {
     try {
       const parts = tokenStr.trim().split('.');
       if (parts.length !== 3) {
-        setDecodedToken({ error: 'Invalid JWT format (must have 3 dot-separated segments).' });
+        setDecodedToken({ error: 'Invalid JWT format (must have 3 parts separated by dots).' });
         return;
       }
 
-      const decodeBase64 = (str: string) => {
-        const base64 = str.replace(/-/g, '+').replace(/_/g, '/');
-        const json = decodeURIComponent(
-          atob(base64)
-            .split('')
-            .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
-            .join(''),
-        );
-        return JSON.parse(json);
-      };
-
-      const header = decodeBase64(parts[0] || '');
-      const payload = decodeBase64(parts[1] || '');
-
-      let isExpired = false;
-      if (typeof payload['exp'] === 'number') {
-        isExpired = Date.now() >= payload['exp'] * 1000;
-      }
+      const header = JSON.parse(atob(parts[0]!));
+      const payload = JSON.parse(atob(parts[1]!));
+      const now = Math.floor(Date.now() / 1000);
+      const isExpired = payload.exp && typeof payload.exp === 'number' ? payload.exp < now : false;
 
       setDecodedToken({ header, payload, isExpired });
-    } catch (e: unknown) {
-      setDecodedToken({ error: `Decode failed: ${e instanceof Error ? e.message : String(e)}` });
+    } catch {
+      setDecodedToken({ error: 'Failed to decode base64 JWT payload.' });
     }
   };
 
   const handleGenerateSample = () => {
-    // Generate sample valid JWT (signed dummy)
-    const header = btoa(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).replace(/=/g, '');
-    const nowSec = Math.floor(Date.now() / 1000);
-    const payloadObj = {
-      sub: 'usr_core_admin_01',
-      username: 'thanhhai',
-      role: 'super_admin',
-      permissions: ['ops:read', 'ops:write', 'system:manage'],
-      iat: nowSec,
-      exp: nowSec + 3600,
-      iss: 'core-api-gateway',
-    };
-    const payload = btoa(JSON.stringify(payloadObj)).replace(/=/g, '');
-    const sig = 'signature_mock_for_validation_inspection_only';
-    handleDecode(`${header}.${payload}.${sig}`);
+    // Generate an illustrative JWT with HS256 algorithm and mock claims
+    const sampleHeader = btoa(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
+    const samplePayload = btoa(
+      JSON.stringify({
+        sub: 'usr_01hq49a9bx',
+        role: 'operator',
+        iat: Math.floor(Date.now() / 1000) - 300,
+        exp: Math.floor(Date.now() / 1000) + 3300,
+        iss: 'core-security-vault',
+        aud: 'core-system-console',
+      }),
+    );
+    const mockSig = 'c3VwZXJfc2VjcmV0X2htYWNfc2lnbmF0dXJl';
+    const sampleJwt = `${sampleHeader}.${samplePayload}.${mockSig}`;
+    handleDecode(sampleJwt);
   };
 
   return (
     <div>
       <SectionHeader
-        title="Security, Authentication & Token Governance"
-        description="Inspect security headers, global guards, JWT configuration policies, and test token payload validity."
+        title="Security & Vault Governance"
+        description="Inspect Fastify Helmet headers, JWT auth policies, cryptographic token decoding, and sensitive data redaction status."
+        badge="Zero-Trust"
       />
 
       {/* 4 Stat Cards */}
@@ -89,28 +77,28 @@ export const SecuritySection: React.FC = () => {
         <StatCard
           title="JWT Sign Algorithm"
           value="HS256"
-          icon="🔑"
+          icon={<Key size={18} />}
           subtext="HMAC with SHA-256 (or RS256 ready)"
         />
 
         <StatCard
           title="Access Token TTL"
           value="1 Hour"
-          icon="⏳"
+          icon={<Clock size={18} />}
           subtext="3,600 seconds sliding expiry"
         />
 
         <StatCard
           title="Refresh Token TTL"
           value="7 Days"
-          icon="🔄"
+          icon={<RefreshCw size={18} />}
           subtext="Stored with Redis session validation"
         />
 
         <StatCard
           title="Security Headers"
           value="5 Active"
-          icon="🛡️"
+          icon={<ShieldCheck size={18} />}
           subtext={<StatusPill status="healthy" label="Hardened" />}
         />
       </div>
@@ -119,7 +107,10 @@ export const SecuritySection: React.FC = () => {
       <div className="scp-panel">
         <div className="scp-panel-header">
           <h3 className="scp-panel-title">
-            <span>🛡️ Fastify HTTP Security Headers</span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+              <ShieldCheck size={16} />
+              <span>Fastify HTTP Security Headers</span>
+            </span>
           </h3>
           <span style={{ fontSize: '0.75rem', color: 'var(--scp-text-muted)' }}>
             @fastify/helmet integration
@@ -158,7 +149,10 @@ export const SecuritySection: React.FC = () => {
       <div className="scp-panel">
         <div className="scp-panel-header">
           <h3 className="scp-panel-title">
-            <span>🔍 Interactive JWT Token Decoder & Tester</span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+              <Search size={16} />
+              <span>Interactive JWT Token Decoder & Tester</span>
+            </span>
           </h3>
           <button
             type="button"
@@ -196,8 +190,9 @@ export const SecuritySection: React.FC = () => {
         {decodedToken && (
           <div style={{ marginTop: '1rem' }}>
             {decodedToken.error ? (
-              <div style={{ color: 'var(--scp-danger)', fontSize: '0.85rem' }}>
-                ⚠️ {decodedToken.error}
+              <div style={{ color: 'var(--scp-danger)', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <AlertTriangle size={15} />
+                <span>{decodedToken.error}</span>
               </div>
             ) : (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1rem' }}>

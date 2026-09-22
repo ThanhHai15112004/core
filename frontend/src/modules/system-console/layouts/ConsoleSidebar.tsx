@@ -2,6 +2,9 @@ import React from 'react';
 import type { ConsoleSectionId } from '../types/console.types';
 import { CONSOLE_NAV_ITEMS } from '../constants/console.constants';
 import { useConsoleData } from '../context/ConsoleDataContext';
+import { ConsoleIcon } from '../components/common/ConsoleIcon';
+import { useLocale } from '../../../core/i18n/index';
+import { Server, ArrowLeft } from 'lucide-react';
 
 interface ConsoleSidebarProps {
   currentSection: ConsoleSectionId;
@@ -13,6 +16,7 @@ export const ConsoleSidebar: React.FC<ConsoleSidebarProps> = ({
   onSelectSection,
 }) => {
   const { packages, health } = useConsoleData();
+  const { t } = useLocale();
 
   // Categorize nav items into groups for professional organization
   const coreNav = CONSOLE_NAV_ITEMS.filter((item) =>
@@ -33,14 +37,18 @@ export const ConsoleSidebar: React.FC<ConsoleSidebarProps> = ({
     window.location.hash = '';
   };
 
+  const isApiOk = health.status === 'ok';
+
   return (
     <aside className="console-sidebar">
       {/* Brand Header */}
       <div className="sidebar-header">
         <div className="brand-title">
-          <div className="brand-logo-badge">C</div>
+          <div className="brand-logo-badge" aria-hidden="true">
+            <Server size={18} />
+          </div>
           <div className="brand-meta">
-            <span className="brand-name">System Console</span>
+            <span className="brand-name">{t('nav.systemConsole')}</span>
             <span className="brand-subtitle">Control Plane v1.0</span>
           </div>
         </div>
@@ -48,10 +56,11 @@ export const ConsoleSidebar: React.FC<ConsoleSidebarProps> = ({
 
       {/* Navigation Groups */}
       <nav className="sidebar-nav">
-        <div className="nav-group-label">Core Monitoring</div>
+        <div className="nav-group-label">{t('healthMap.runtimes')}</div>
         {coreNav.map((item) => {
           const isActive = currentSection === item.id;
           const badge = getBadge(item.id);
+          const label = t(`nav.${item.id}`) || item.label;
           return (
             <button
               key={item.id}
@@ -59,16 +68,19 @@ export const ConsoleSidebar: React.FC<ConsoleSidebarProps> = ({
               className={`nav-item-btn ${isActive ? 'active' : ''}`}
               onClick={() => onSelectSection(item.id)}
             >
-              <span className="nav-item-icon">{item.icon}</span>
-              <span className="nav-item-text">{item.label}</span>
+              <span className="nav-item-icon">
+                <ConsoleIcon name={item.id} size={17} />
+              </span>
+              <span className="nav-item-text">{label}</span>
               {badge !== undefined && <span className="nav-item-badge">{badge}</span>}
             </button>
           );
         })}
 
-        <div className="nav-group-label">Infrastructure & Queues</div>
+        <div className="nav-group-label">{t('healthMap.infrastructure')}</div>
         {infraNav.map((item) => {
           const isActive = currentSection === item.id;
+          const label = t(`nav.${item.id}`) || item.label;
           return (
             <button
               key={item.id}
@@ -76,15 +88,18 @@ export const ConsoleSidebar: React.FC<ConsoleSidebarProps> = ({
               className={`nav-item-btn ${isActive ? 'active' : ''}`}
               onClick={() => onSelectSection(item.id)}
             >
-              <span className="nav-item-icon">{item.icon}</span>
-              <span className="nav-item-text">{item.label}</span>
+              <span className="nav-item-icon">
+                <ConsoleIcon name={item.id} size={17} />
+              </span>
+              <span className="nav-item-text">{label}</span>
             </button>
           );
         })}
 
-        <div className="nav-group-label">Governance</div>
+        <div className="nav-group-label">{t('healthMap.governance')}</div>
         {secNav.map((item) => {
           const isActive = currentSection === item.id;
+          const label = t(`nav.${item.id}`) || item.label;
           return (
             <button
               key={item.id}
@@ -92,8 +107,10 @@ export const ConsoleSidebar: React.FC<ConsoleSidebarProps> = ({
               className={`nav-item-btn ${isActive ? 'active' : ''}`}
               onClick={() => onSelectSection(item.id)}
             >
-              <span className="nav-item-icon">{item.icon}</span>
-              <span className="nav-item-text">{item.label}</span>
+              <span className="nav-item-icon">
+                <ConsoleIcon name={item.id} size={17} />
+              </span>
+              <span className="nav-item-text">{label}</span>
             </button>
           );
         })}
@@ -101,14 +118,47 @@ export const ConsoleSidebar: React.FC<ConsoleSidebarProps> = ({
 
       {/* Footer Return Home */}
       <div className="sidebar-footer">
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 0.25rem 0.5rem', fontSize: '0.75rem', color: 'var(--scp-text-muted)' }}>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '0 0.25rem 0.5rem',
+            fontSize: '0.75rem',
+            color: 'var(--scp-text-muted)',
+          }}
+        >
           <span>API Gateway</span>
-          <span style={{ color: health.status === 'ok' ? 'var(--scp-success)' : 'var(--scp-danger)', fontWeight: 600 }}>
-            ● {health.status.toUpperCase()}
+          <span
+            style={{
+              color: isApiOk ? 'var(--scp-success-text)' : 'var(--scp-danger-text)',
+              fontWeight: 600,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+            }}
+          >
+            <span
+              style={{
+                width: '6px',
+                height: '6px',
+                borderRadius: '50%',
+                backgroundColor: isApiOk ? 'var(--scp-success)' : 'var(--scp-danger)',
+                display: 'inline-block',
+              }}
+            />
+            {health.status.toUpperCase()}
           </span>
         </div>
-        <button type="button" className="return-home-btn" onClick={handleReturnHome}>
-          <span>←</span> Back to Application
+
+        <button
+          type="button"
+          className="return-home-btn"
+          onClick={handleReturnHome}
+          title="Return to main application"
+        >
+          <ArrowLeft size={14} />
+          <span>{t('nav.backToHome')}</span>
         </button>
       </div>
     </aside>

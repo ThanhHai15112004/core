@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { PackageSummary } from '../../types/console.types';
 import { StatusPill } from './StatusPill';
 import { resolvePackageIcon } from '../../constants/console.constants';
+import { X, AlertTriangle, Check, Copy } from 'lucide-react';
 
 interface DetailDrawerProps {
   pkg: PackageSummary | null;
@@ -12,7 +14,7 @@ interface DetailDrawerProps {
 export const DetailDrawer: React.FC<DetailDrawerProps> = ({ pkg, onClose, onExecuteAction }) => {
   const [copied, setCopied] = useState(false);
 
-  if (!pkg) return null;
+  if (!pkg || typeof document === 'undefined') return null;
 
   const handleCopyJson = () => {
     navigator.clipboard.writeText(JSON.stringify(pkg, null, 2));
@@ -20,7 +22,7 @@ export const DetailDrawer: React.FC<DetailDrawerProps> = ({ pkg, onClose, onExec
     setTimeout(() => setCopied(false), 2000);
   };
 
-  return (
+  return createPortal(
     <>
       <div className="drawer-backdrop" onClick={onClose} />
       <div className="detail-drawer">
@@ -43,10 +45,13 @@ export const DetailDrawer: React.FC<DetailDrawerProps> = ({ pkg, onClose, onExec
               border: 'none',
               cursor: 'pointer',
               color: 'var(--scp-text-muted)',
-              fontSize: '1.25rem',
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '2px',
             }}
           >
-            ✕
+            <X size={18} />
           </button>
         </div>
 
@@ -131,7 +136,14 @@ export const DetailDrawer: React.FC<DetailDrawerProps> = ({ pkg, onClose, onExec
                       className={`scp-btn scp-btn-sm ${act.isDanger ? 'scp-btn-danger' : 'scp-btn-primary'}`}
                       onClick={() => onExecuteAction(pkg.packageId, act.id)}
                     >
-                      {act.isDanger ? 'Execute ⚠️' : 'Run'}
+                      {act.isDanger ? (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                          <AlertTriangle size={13} />
+                          <span>Execute</span>
+                        </span>
+                      ) : (
+                        'Run'
+                      )}
                     </button>
                   </div>
                 ))}
@@ -149,7 +161,17 @@ export const DetailDrawer: React.FC<DetailDrawerProps> = ({ pkg, onClose, onExec
                 className="scp-btn scp-btn-sm scp-btn-secondary"
                 onClick={handleCopyJson}
               >
-                {copied ? 'Copied! ✓' : 'Copy JSON'}
+                {copied ? (
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: 'var(--scp-success)' }}>
+                    <Check size={13} />
+                    <span>Copied!</span>
+                  </span>
+                ) : (
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                    <Copy size={13} />
+                    <span>Copy JSON</span>
+                  </span>
+                )}
               </button>
             </div>
             <pre
@@ -170,6 +192,7 @@ export const DetailDrawer: React.FC<DetailDrawerProps> = ({ pkg, onClose, onExec
           </div>
         </div>
       </div>
-    </>
+    </>,
+    document.body
   );
 };

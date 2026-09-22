@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import type { EventLogLevel } from '../types/console.types';
 import { useConsoleData } from '../context/ConsoleDataContext';
 import { SectionHeader } from '../components/common/SectionHeader';
+import { Sliders, Play, Pause, Download, Trash2, PlusCircle } from 'lucide-react';
 
 export const LogViewerSection: React.FC = () => {
   const { events, clearEvents, addEvent, packages, executeAction } = useConsoleData();
@@ -27,22 +28,11 @@ export const LogViewerSection: React.FC = () => {
     });
   }, [events, selectedLevel, searchQuery]);
 
-  const handleExportJson = () => {
-    const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(events, null, 2));
-    const downloadAnchor = document.createElement('a');
-    downloadAnchor.setAttribute('href', dataStr);
-    downloadAnchor.setAttribute('download', `system-console-logs-${new Date().toISOString()}.json`);
-    document.body.appendChild(downloadAnchor);
-    downloadAnchor.click();
-    downloadAnchor.remove();
-  };
-
-  const handleSetLogLevel = async (level: 'debug' | 'info' | 'warn') => {
-    if (!loggingPkg) return;
-    const actionId = `set_level_${level}`;
+  const handleSetLogLevel = async (level: string) => {
     try {
       setIsChangingLevel(true);
-      await executeAction('logging', actionId);
+      await executeAction('logging', 'set_level', { level });
+      addEvent('info', 'logging', `Log level dynamically set to ${level.toUpperCase()}`);
     } finally {
       setIsChangingLevel(false);
     }
@@ -66,11 +56,22 @@ export const LogViewerSection: React.FC = () => {
     addEvent(randomLevel, randomSource, randomMsg);
   };
 
+  const handleExportJson = () => {
+    const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(events, null, 2));
+    const downloadAnchor = document.createElement('a');
+    downloadAnchor.setAttribute('href', dataStr);
+    downloadAnchor.setAttribute('download', `system-console-logs-${Date.now()}.json`);
+    document.body.appendChild(downloadAnchor);
+    downloadAnchor.click();
+    downloadAnchor.remove();
+  };
+
   return (
     <div>
       <SectionHeader
-        title="Structured Log Viewer & Audit Stream"
-        description="Inspect application events, fastify access logs, correlation traces, and adjust Pino structured logging levels on the fly."
+        title="Structured Log Viewer"
+        description="Live operational telemetry, structured log message streams, level filtering, and dynamic Pino reconfiguration."
+        badge="Real-time"
       />
 
       {/* Log Level Control Panel */}
@@ -78,7 +79,7 @@ export const LogViewerSection: React.FC = () => {
         <div className="scp-panel" style={{ marginBottom: '1.25rem', padding: '1rem 1.25rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-              <span style={{ fontSize: '1.2rem' }}>🎛️</span>
+              <Sliders size={18} style={{ color: 'var(--scp-primary)' }} />
               <div>
                 <strong style={{ fontSize: '0.9rem', color: 'var(--scp-text-primary)' }}>
                   Active Logging Engine Level:
@@ -93,30 +94,21 @@ export const LogViewerSection: React.FC = () => {
             </div>
 
             <div style={{ display: 'flex', gap: '0.4rem' }}>
-              <button
-                type="button"
-                className={`scp-btn scp-btn-sm ${currentLogLevel === 'debug' ? 'scp-btn-primary' : 'scp-btn-secondary'}`}
-                disabled={isChangingLevel}
-                onClick={() => handleSetLogLevel('debug')}
-              >
-                Set DEBUG
-              </button>
-              <button
-                type="button"
-                className={`scp-btn scp-btn-sm ${currentLogLevel === 'info' ? 'scp-btn-primary' : 'scp-btn-secondary'}`}
-                disabled={isChangingLevel}
-                onClick={() => handleSetLogLevel('info')}
-              >
-                Set INFO
-              </button>
-              <button
-                type="button"
-                className={`scp-btn scp-btn-sm ${currentLogLevel === 'warn' ? 'scp-btn-primary' : 'scp-btn-secondary'}`}
-                disabled={isChangingLevel}
-                onClick={() => handleSetLogLevel('warn')}
-              >
-                Set WARN
-              </button>
+              {['debug', 'info', 'warn', 'error'].map((lvl) => {
+                const isCurrent = currentLogLevel.toLowerCase() === lvl;
+                return (
+                  <button
+                    key={lvl}
+                    type="button"
+                    disabled={isChangingLevel || isCurrent}
+                    className={`scp-btn scp-btn-sm ${isCurrent ? 'scp-btn-primary' : 'scp-btn-secondary'}`}
+                    onClick={() => handleSetLogLevel(lvl)}
+                    style={{ textTransform: 'uppercase', fontSize: '0.75rem', padding: '0.25rem 0.55rem' }}
+                  >
+                    Set {lvl}
+                  </button>
+                );
+              })}
             </div>
           </div>
         </div>
@@ -151,7 +143,7 @@ export const LogViewerSection: React.FC = () => {
                 borderRadius: '4px',
                 border: '1px solid var(--scp-terminal-border)',
                 backgroundColor: 'rgba(0, 0, 0, 0.4)',
-                color: '#fff',
+                color: 'var(--scp-terminal-text)',
                 fontSize: '0.75rem',
                 width: '180px',
                 outline: 'none',
@@ -165,29 +157,37 @@ export const LogViewerSection: React.FC = () => {
               className="scp-btn scp-btn-sm scp-btn-secondary"
               onClick={handleSimulateLog}
               title="Add a sample log line"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}
             >
-              + Emit Test Log
+              <PlusCircle size={13} />
+              <span>Emit Test Log</span>
             </button>
             <button
               type="button"
               className="scp-btn scp-btn-sm scp-btn-secondary"
               onClick={() => setIsPaused(!isPaused)}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}
             >
-              {isPaused ? '▶ Resume' : '⏸ Pause'}
+              {isPaused ? <Play size={13} /> : <Pause size={13} />}
+              <span>{isPaused ? 'Resume' : 'Pause'}</span>
             </button>
             <button
               type="button"
               className="scp-btn scp-btn-sm scp-btn-secondary"
               onClick={handleExportJson}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}
             >
-              💾 Export JSON
+              <Download size={13} />
+              <span>Export JSON</span>
             </button>
             <button
               type="button"
               className="scp-btn scp-btn-sm scp-btn-danger"
               onClick={clearEvents}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}
             >
-              🗑 Clear
+              <Trash2 size={13} />
+              <span>Clear</span>
             </button>
           </div>
         </div>
@@ -204,7 +204,7 @@ export const LogViewerSection: React.FC = () => {
           ))}
 
           {filteredEvents.length === 0 && (
-            <div style={{ color: '#64748b', textAlign: 'center', padding: '3rem 0', fontStyle: 'italic' }}>
+            <div style={{ color: 'var(--scp-text-muted)', textAlign: 'center', padding: '3rem 0', fontStyle: 'italic' }}>
               No log lines matching current filter.
             </div>
           )}

@@ -3,6 +3,7 @@ import { useConsoleData } from '../context/ConsoleDataContext';
 import { SectionHeader } from '../components/common/SectionHeader';
 import { StatusPill } from '../components/common/StatusPill';
 import { StatCard } from '../components/common/StatCard';
+import { Layers, Cpu, Zap, CheckCircle, AlertTriangle } from 'lucide-react';
 
 export const WorkerSection: React.FC = () => {
   const { addEvent, addToast } = useConsoleData();
@@ -115,25 +116,25 @@ export const WorkerSection: React.FC = () => {
         <StatCard
           title="Active Consumers"
           value="3 Processors"
-          icon="⚙️"
+          icon={<Cpu size={18} />}
           subtext="Total Concurrency: 10 threads"
         />
         <StatCard
           title="Jobs in Flight"
           value={totalActive}
-          icon="⚡"
+          icon={<Zap size={18} />}
           subtext={<span>Waiting in queue: <strong>{totalWaiting}</strong></span>}
         />
         <StatCard
           title="Total Completed"
           value={totalCompleted.toLocaleString()}
-          icon="✓"
+          icon={<CheckCircle size={18} />}
           subtext={<span style={{ color: 'var(--scp-success)' }}>99.9% Success rate</span>}
         />
         <StatCard
           title="Dead Letter Queue"
           value={totalFailed}
-          icon="⚠️"
+          icon={<AlertTriangle size={18} />}
           subtext={<span>Failed retries: {totalFailed}</span>}
         />
       </div>
@@ -142,7 +143,10 @@ export const WorkerSection: React.FC = () => {
       <div className="scp-panel">
         <div className="scp-panel-header">
           <h3 className="scp-panel-title">
-            <span>📬 Managed Queues (Redis Transport)</span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+              <Layers size={16} />
+              <span>Managed Queues (Redis Transport)</span>
+            </span>
           </h3>
         </div>
 
@@ -199,7 +203,10 @@ export const WorkerSection: React.FC = () => {
       <div className="scp-panel">
         <div className="scp-panel-header">
           <h3 className="scp-panel-title">
-            <span>🧩 Registered Domain Processors</span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+              <Cpu size={16} />
+              <span>Registered Domain Processors</span>
+            </span>
           </h3>
           <span style={{ fontSize: '0.75rem', color: 'var(--scp-text-muted)', fontFamily: 'monospace' }}>
             apps/worker/processors/

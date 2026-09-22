@@ -7,6 +7,7 @@ import { EmptyState } from '../components/common/EmptyState';
 import { DetailDrawer } from '../components/common/DetailDrawer';
 import { ConfirmModal } from '../components/common/ConfirmModal';
 import { resolvePackageIcon } from '../constants/console.constants';
+import { Search, Boxes } from 'lucide-react';
 
 interface PackagesSectionProps {
   initialSelectedPackageId?: string | null;
@@ -182,8 +183,10 @@ export const PackagesSection: React.FC<PackagesSectionProps> = ({
                   type="button"
                   className="scp-btn scp-btn-sm scp-btn-secondary"
                   onClick={() => setActiveDrawerPkg(pkg)}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}
                 >
-                  🔍 Inspect Details
+                  <Search size={13} />
+                  <span>Inspect Details</span>
                 </button>
 
                 {pkg.actions.map((act) => {
@@ -207,7 +210,7 @@ export const PackagesSection: React.FC<PackagesSectionProps> = ({
         </div>
       ) : (
         <EmptyState
-          icon="📦"
+          icon={<Boxes size={36} style={{ color: 'var(--scp-text-muted)' }} />}
           title="No packages found"
           description={
             searchQuery

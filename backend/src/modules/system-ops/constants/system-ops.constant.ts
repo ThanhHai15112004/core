@@ -3,8 +3,10 @@ export const SYSTEM_OPS_ROUTES = {
   PACKAGES: 'packages',
   PACKAGE_DETAIL: 'packages/:packageId',
   EXECUTE_ACTION: 'packages/:packageId/actions/:actionId',
+  OVERVIEW: 'overview',
   buildPackagesPath: () => `/ops/packages`,
   buildPackageDetailPath: (packageId: string) => `/ops/packages/${packageId}`,
   buildExecuteActionPath: (packageId: string, actionId: string) =>
     `/ops/packages/${packageId}/actions/${actionId}`,
+  buildOverviewPath: () => `/ops/overview`,
 } as const;

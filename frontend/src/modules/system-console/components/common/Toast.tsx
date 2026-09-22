@@ -1,12 +1,14 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { useConsoleData } from '../../context/ConsoleDataContext';
+import { X } from 'lucide-react';
 
 export const ToastContainer: React.FC = () => {
   const { toasts, removeToast } = useConsoleData();
 
-  if (toasts.length === 0) return null;
+  if (toasts.length === 0 || typeof document === 'undefined') return null;
 
-  return (
+  return createPortal(
     <div className="toast-container">
       {toasts.map((toast) => (
         <div key={toast.id} className={`toast-item toast-${toast.type}`}>
@@ -27,14 +29,17 @@ export const ToastContainer: React.FC = () => {
               border: 'none',
               cursor: 'pointer',
               color: 'var(--scp-text-muted)',
-              fontSize: '1rem',
-              padding: 0,
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '2px',
             }}
           >
-            ✕
+            <X size={14} />
           </button>
         </div>
       ))}
-    </div>
+    </div>,
+    document.body
   );
 };

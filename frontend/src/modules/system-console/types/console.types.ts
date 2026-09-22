@@ -58,3 +58,119 @@ export interface NavigationItem {
   badgeCount?: number;
   description: string;
 }
+
+/* ==========================================================================
+   OPERATIONAL OVERVIEW DATA MODEL
+   Aligned with future GET /ops/overview backend contract
+   ========================================================================== */
+
+export type SystemEnvironment = 'production' | 'staging' | 'development';
+export type SystemHealthStatus = 'healthy' | 'degraded' | 'critical' | 'down';
+
+export interface OverallHealthReport {
+  status: SystemHealthStatus;
+  title: string;
+  message: string;
+  healthyServices: number;
+  totalServices: number;
+  uptimeSeconds: number;
+  affectedServices?: string[];
+  actionLabel?: string;
+  actionSection?: ConsoleSectionId;
+  startedAgo?: string;
+}
+
+export interface KeyMetricItem {
+  id: string;
+  label: string;
+  value: string | number;
+  unit?: string;
+  trendText: string;
+  trendDirection: 'up' | 'down' | 'neutral';
+  trendIsGood: boolean;
+  status: 'normal' | 'warning' | 'critical';
+}
+
+export type HealthMapCategory = 'runtime' | 'infrastructure' | 'governance';
+
+export interface HealthMapItem {
+  id: string;
+  name: string;
+  category: HealthMapCategory;
+  status: 'healthy' | 'warning' | 'critical' | 'down';
+  subtext: string;
+  secondarySubtext?: string;
+  targetSection: ConsoleSectionId;
+  icon: string;
+}
+
+export type PerformanceMetricKey = 'requests' | 'latency' | 'errors' | 'cpu' | 'memory';
+export type PerformanceTimeRange = '15m' | '1h' | '6h' | '24h';
+
+export interface PerformanceDataPoint {
+  time: string;
+  value: number;
+}
+
+export interface ActiveIncidentItem {
+  id: string;
+  severity: 'critical' | 'warning' | 'info';
+  title: string;
+  description: string;
+  startedAgo: string;
+  targetSection: ConsoleSectionId;
+  actionLabel: string;
+}
+
+export interface InfraSnapshotMetric {
+  label: string;
+  value: string | number;
+  isWarn?: boolean;
+}
+
+export interface InfraSnapshotItem {
+  id: string;
+  title: string;
+  icon: string;
+  targetSection: ConsoleSectionId;
+  metrics: InfraSnapshotMetric[];
+}
+
+export interface RecentActivityEvent {
+  id: string;
+  time: string;
+  level: EventLogLevel;
+  source: string;
+  message: string;
+}
+
+export interface SystemInfo {
+  nodeVersion: string;
+  platform: string;
+  arch: string;
+  pid: number;
+  uptimeSeconds: number;
+  heapUsedMb: number;
+  heapTotalMb: number;
+  rssMb: number;
+  totalMemGb: number;
+  freeMemGb: number;
+  cpuCores: number;
+  loadAvg: number[];
+}
+
+export interface OverviewData {
+  environment: SystemEnvironment;
+  lastUpdated: Date;
+  isOffline: boolean;
+  lastSuccessfulSync?: Date | null;
+  overallHealth: OverallHealthReport;
+  keyMetrics: KeyMetricItem[];
+  healthMap: HealthMapItem[];
+  incidents: ActiveIncidentItem[];
+  infraSnapshots: InfraSnapshotItem[];
+  recentActivities: RecentActivityEvent[];
+  systemInfo?: SystemInfo;
+}
+
+

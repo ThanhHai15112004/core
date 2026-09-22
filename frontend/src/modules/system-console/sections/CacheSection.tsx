@@ -4,6 +4,7 @@ import { SectionHeader } from '../components/common/SectionHeader';
 import { StatusPill } from '../components/common/StatusPill';
 import { StatCard } from '../components/common/StatCard';
 import { ConfirmModal } from '../components/common/ConfirmModal';
+import { Globe, Tag, Target, Key } from 'lucide-react';
 
 export const CacheSection: React.FC = () => {
   const { packages, executeAction } = useConsoleData();
@@ -38,46 +39,47 @@ export const CacheSection: React.FC = () => {
   return (
     <div>
       <SectionHeader
-        title="Cache Engine (Redis)"
-        description="Monitor in-memory Redis key-value storage, namespace distribution, hit rates, and perform cache invalidation."
+        title="Redis Cache & Memory Store"
+        description="Redis cluster connection, keyspace partitions, memory distribution, and real-time operations"
+        badge="In-Memory"
         actions={
           <button
             type="button"
-            className="scp-btn scp-btn-danger scp-btn-sm"
+            className="scp-btn scp-btn-danger"
             onClick={() => setIsFlushModalOpen(true)}
           >
-            ⚠️ Flush All Cache
+            Flush Entire Cache
           </button>
         }
       />
 
-      {/* Stat Cards */}
-      <div className="overview-grid-4">
+      {/* KPI Cards */}
+      <div className="scp-grid-4">
         <StatCard
           title="Redis Status"
           value="Connected"
-          icon="⚡"
+          icon={<Globe size={18} />}
           subtext={<StatusPill status="healthy" label="Online" />}
         />
 
         <StatCard
           title="Target Endpoint"
           value={`${host}:${port}`}
-          icon="🌐"
+          icon={<Globe size={18} />}
           subtext="Docker Redis Network"
         />
 
         <StatCard
           title="Key Prefix Namespace"
           value={prefix}
-          icon="🏷️"
+          icon={<Tag size={18} />}
           subtext="Multi-Tenant / App Isolation"
         />
 
         <StatCard
           title="Hit / Miss Ratio"
           value="94.6%"
-          icon="🎯"
+          icon={<Target size={18} />}
           subtext={<span style={{ color: 'var(--scp-success)' }}>2,481 hits / 141 misses</span>}
         />
       </div>
@@ -86,7 +88,10 @@ export const CacheSection: React.FC = () => {
       <div className="scp-panel">
         <div className="scp-panel-header">
           <h3 className="scp-panel-title">
-            <span>🔑 Active Keyspace Namespaces</span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+              <Key size={16} />
+              <span>Active Keyspace Namespaces</span>
+            </span>
           </h3>
           <span style={{ fontSize: '0.75rem', color: 'var(--scp-text-muted)' }}>
             Estimated Keys: 202

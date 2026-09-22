@@ -54,6 +54,32 @@
   --scp-terminal-bg: #0f172a;
   --scp-terminal-text: #e2e8f0;
   --scp-terminal-border: #334155;
+
+  /* Environment Badges */
+  --scp-badge-prod-bg: #fef2f2;
+  --scp-badge-prod-border: #f87171;
+  --scp-badge-prod-text: #991b1b;
+  --scp-badge-staging-bg: #fffbeb;
+  --scp-badge-staging-border: #fcd34d;
+  --scp-badge-staging-text: #92400e;
+  --scp-badge-dev-bg: #eff6ff;
+  --scp-badge-dev-border: #93c5fd;
+  --scp-badge-dev-text: #1e40af;
+
+  /* Performance Chart */
+  --scp-chart-grid: rgba(0, 0, 0, 0.06);
+  --scp-chart-line: #2563eb;
+  --scp-chart-fill-start: rgba(37, 99, 235, 0.18);
+  --scp-chart-fill-end: rgba(37, 99, 235, 0.0);
+  --scp-chart-point: #2563eb;
+  --scp-chart-tooltip-bg: #0f172a;
+  --scp-chart-tooltip-border: #334155;
+  --scp-chart-tooltip-text: #f8fafc;
+
+  /* Skeleton Loading */
+  --scp-skeleton-bg: #e2e8f0;
+  --scp-skeleton-shine: #f1f5f9;
+  --scp-offline-dim: 0.45;
 }
 
 /* Dark Theme */
@@ -107,6 +133,32 @@
   --scp-terminal-bg: #090d16;
   --scp-terminal-text: #cbd5e1;
   --scp-terminal-border: #1e293b;
+
+  /* Environment Badges */
+  --scp-badge-prod-bg: rgba(220, 38, 38, 0.18);
+  --scp-badge-prod-border: rgba(239, 68, 68, 0.45);
+  --scp-badge-prod-text: #fca5a5;
+  --scp-badge-staging-bg: rgba(217, 119, 6, 0.18);
+  --scp-badge-staging-border: rgba(245, 158, 11, 0.45);
+  --scp-badge-staging-text: #fde68a;
+  --scp-badge-dev-bg: rgba(37, 99, 235, 0.18);
+  --scp-badge-dev-border: rgba(96, 165, 250, 0.45);
+  --scp-badge-dev-text: #93c5fd;
+
+  /* Performance Chart */
+  --scp-chart-grid: rgba(255, 255, 255, 0.06);
+  --scp-chart-line: #3b82f6;
+  --scp-chart-fill-start: rgba(59, 130, 246, 0.25);
+  --scp-chart-fill-end: rgba(59, 130, 246, 0.0);
+  --scp-chart-point: #60a5fa;
+  --scp-chart-tooltip-bg: #1e293b;
+  --scp-chart-tooltip-border: #475569;
+  --scp-chart-tooltip-text: #f8fafc;
+
+  /* Skeleton Loading */
+  --scp-skeleton-bg: #1e293b;
+  --scp-skeleton-shine: #334155;
+  --scp-offline-dim: 0.35;
 }
 
 /* Base resets within console-root */

@@ -1,14 +1,15 @@
 import React from 'react';
+import { Search } from 'lucide-react';
 
 interface EmptyStateProps {
-  icon?: string;
+  icon?: React.ReactNode;
   title: string;
   description?: string;
   action?: React.ReactNode;
 }
 
 export const EmptyState: React.FC<EmptyStateProps> = ({
-  icon = '🔍',
+  icon = <Search size={36} style={{ color: 'var(--scp-text-muted)' }} />,
   title,
   description,
   action,

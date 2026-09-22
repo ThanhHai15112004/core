@@ -1,4 +1,6 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
+import { AlertTriangle, X } from 'lucide-react';
 
 interface ConfirmModalProps {
   isOpen: boolean;
@@ -23,15 +25,15 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
   onConfirm,
   onCancel,
 }) => {
-  if (!isOpen) return null;
+  if (!isOpen || typeof document === 'undefined') return null;
 
-  return (
+  return createPortal(
     <div className="modal-backdrop" onClick={onCancel}>
       <div className="modal-box" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h3 className="modal-title" style={{ color: isDanger ? 'var(--scp-danger)' : 'inherit' }}>
-            {isDanger ? '⚠️ ' : ''}
-            {title}
+          <h3 className="modal-title" style={{ color: isDanger ? 'var(--scp-danger)' : 'inherit', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            {isDanger && <AlertTriangle size={18} />}
+            <span>{title}</span>
           </h3>
           <button
             onClick={onCancel}
@@ -40,11 +42,13 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
               border: 'none',
               cursor: 'pointer',
               color: 'var(--scp-text-muted)',
-              fontSize: '1.2rem',
-              lineHeight: 1,
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '2px',
             }}
           >
-            ✕
+            <X size={16} />
           </button>
         </div>
         <div className="modal-body">
@@ -69,6 +73,7 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

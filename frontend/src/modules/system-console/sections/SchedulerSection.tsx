@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useConsoleData } from '../context/ConsoleDataContext';
 import { SectionHeader } from '../components/common/SectionHeader';
+import { FlaskConical, Play } from 'lucide-react';
 
 interface CronTask {
   id: string;
@@ -165,7 +166,14 @@ export const SchedulerSection: React.FC = () => {
                         disabled={isRunning}
                         onClick={() => handleTriggerTask(task)}
                       >
-                        {isRunning ? 'Running...' : '⚡ Trigger Now'}
+                        {isRunning ? (
+                          'Running...'
+                        ) : (
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                            <Play size={12} />
+                            <span>Trigger Now</span>
+                          </span>
+                        )}
                       </button>
                     </td>
                   </tr>
@@ -180,7 +188,10 @@ export const SchedulerSection: React.FC = () => {
       <div className="scp-panel">
         <div className="scp-panel-header">
           <h3 className="scp-panel-title">
-            <span>🧪 Interactive Cron Expression Tester</span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+              <FlaskConical size={16} />
+              <span>Interactive Cron Expression Tester</span>
+            </span>
           </h3>
         </div>
 

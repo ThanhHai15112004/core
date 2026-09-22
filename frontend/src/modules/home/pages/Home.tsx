@@ -42,9 +42,9 @@ export const Home: React.FC = () => {
             gap: '8px',
             padding: '6px 16px',
             borderRadius: '30px',
-            background: 'rgba(99, 102, 241, 0.1)',
-            border: '1px solid rgba(99, 102, 241, 0.2)',
-            color: '#818cf8',
+            background: 'var(--primary-glow)',
+            border: '1px solid var(--border-hover)',
+            color: 'var(--primary)',
             fontSize: '13px',
             fontWeight: '600',
             marginBottom: '24px',
@@ -87,40 +87,16 @@ export const Home: React.FC = () => {
       </section>
 
       {/* Control Plane Callout Banner */}
-      <section
-        style={{
-          background: 'linear-gradient(135deg, rgba(37, 99, 235, 0.12), rgba(79, 70, 229, 0.12))',
-          border: '1px solid rgba(59, 130, 246, 0.3)',
-          borderRadius: 'var(--radius-lg)',
-          padding: '24px 32px',
-          marginBottom: '60px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          flexWrap: 'wrap',
-          gap: '16px',
-        }}
-      >
+      <section className="home-console-banner">
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <div
-            style={{
-              width: '48px',
-              height: '48px',
-              borderRadius: '12px',
-              background: 'linear-gradient(135deg, #2563eb, #4f46e5)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: '24px',
-            }}
-          >
+          <div className="home-console-banner-icon">
             ⚡
           </div>
           <div>
-            <h3 style={{ margin: '0 0 4px', fontSize: '18px', fontWeight: 700, color: 'var(--text-main)' }}>
+            <h3 className="home-console-banner-title">
               Developer & DevOps System Control Plane
             </h3>
-            <p style={{ margin: 0, fontSize: '14px', color: 'var(--text-muted)' }}>
+            <p className="home-console-banner-desc">
               Dedicated infrastructure dashboard for monitoring multi-runtimes, live logs, database ping, redis cache, workers, and cron tasks.
             </p>
           </div>
@@ -128,11 +104,10 @@ export const Home: React.FC = () => {
 
         <button
           type="button"
-          className="btn-primary"
+          className="btn-primary home-console-banner-btn"
           onClick={() => {
             window.location.hash = '#system-console';
           }}
-          style={{ padding: '10px 20px', fontSize: '14px', fontWeight: 600 }}
         >
           Launch System Console →
         </button>
@@ -163,14 +138,15 @@ export const Home: React.FC = () => {
         </h2>
         <pre
           style={{
-            background: 'rgba(0, 0, 0, 0.4)',
+            background: 'var(--bg-primary)',
             padding: '20px',
             borderRadius: 'var(--radius-md)',
-            color: '#a7f3d0',
+            color: 'var(--accent-cyan)',
             fontFamily: 'monospace',
             fontSize: '14px',
             overflowX: 'auto',
             lineHeight: '1.6',
+            border: '1px solid var(--border-color)',
           }}
         >
 {`frontend/src/

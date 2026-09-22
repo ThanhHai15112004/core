@@ -10,55 +10,55 @@ export const CONSOLE_NAV_ITEMS: NavigationItem[] = [
   {
     id: 'overview',
     label: 'Overview',
-    icon: '📊',
+    icon: 'overview',
     description: 'System-wide health, runtimes status, and metrics summary',
   },
   {
     id: 'runtime',
     label: 'Runtime Monitor',
-    icon: '⚡',
+    icon: 'runtime',
     description: 'API, Worker, Scheduler, and CLI execution runtimes',
   },
   {
     id: 'packages',
     label: 'Packages',
-    icon: '📦',
+    icon: 'packages',
     description: 'Manageable infrastructure packages and live actions',
   },
   {
     id: 'logs',
     label: 'Log Viewer',
-    icon: '📋',
+    icon: 'logs',
     description: 'Structured log inspection, level filters, and live stream',
   },
   {
     id: 'worker',
     label: 'Worker & Queue',
-    icon: '⚙️',
+    icon: 'worker',
     description: 'Job processors, queue depth, message dispatching',
   },
   {
     id: 'scheduler',
     label: 'Scheduler (Cron)',
-    icon: '⏱️',
+    icon: 'scheduler',
     description: 'Scheduled cron tasks, execution frequency, triggers',
   },
   {
     id: 'database',
     label: 'Database',
-    icon: '🗄️',
+    icon: 'database',
     description: 'TypeORM connection pool, ping latency, entity status',
   },
   {
     id: 'cache',
     label: 'Cache (Redis)',
-    icon: '⚡',
+    icon: 'cache',
     description: 'Redis memory, connection state, keyspace, flush controls',
   },
   {
     id: 'security',
     label: 'Security & Auth',
-    icon: '🛡️',
+    icon: 'security',
     description: 'JWT policies, global guards, security headers, token inspection',
   },
 ];
@@ -71,21 +71,21 @@ export const REFRESH_OPTIONS: { label: string; value: number }[] = [
 ];
 
 export const resolvePackageIcon = (pkg?: { category?: string; icon?: string } | null): string => {
-  if (!pkg) return '📦';
+  if (!pkg) return 'packages';
   switch (pkg.category) {
     case 'cache':
-      return '⚡';
+      return 'cache';
     case 'logging':
-      return '📜';
+      return 'logs';
     case 'queue':
-      return '📨';
+      return 'messaging';
     case 'database':
-      return '🗄️';
+      return 'database';
     case 'storage':
-      return '📦';
+      return 'storage';
     case 'custom':
-      return '🧩';
+      return 'packages';
     default:
-      return '📦';
+      return 'packages';
   }
 };

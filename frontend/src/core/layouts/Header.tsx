@@ -1,5 +1,8 @@
 import React from 'react';
 import { APP_NAME, NAVIGATION_ITEMS, type NavigationTabId } from '../constants/index';
+import { ROUTES } from '../../routes/index';
+import { useLocale } from '../i18n/index';
+import { Home, Sliders, Terminal, Boxes, Globe } from 'lucide-react';
 
 interface HeaderProps {
   activeTab?: NavigationTabId;
@@ -7,6 +10,19 @@ interface HeaderProps {
 }
 
 export const Header: React.FC<HeaderProps> = ({ activeTab = 'home', onTabChange }) => {
+  const { locale, toggleLocale, t } = useLocale();
+
+  const resolveNavIcon = (id: NavigationTabId) => {
+    switch (id) {
+      case 'home':
+        return <Home size={15} />;
+      case 'ops':
+        return <Sliders size={15} />;
+      default:
+        return <Home size={15} />;
+    }
+  };
+
   return (
     <header className="glass header-root">
       <div className="header-content">
@@ -14,8 +30,8 @@ export const Header: React.FC<HeaderProps> = ({ activeTab = 'home', onTabChange 
           onClick={() => onTabChange?.('home')}
           className="header-brand"
         >
-          <div className="header-logo-badge">
-            C
+          <div className="header-logo-badge" aria-hidden="true">
+            <Boxes size={18} />
           </div>
           <span className="gradient-text header-brand-name">
             {APP_NAME}
@@ -25,14 +41,18 @@ export const Header: React.FC<HeaderProps> = ({ activeTab = 'home', onTabChange 
         <nav className="header-nav">
           {NAVIGATION_ITEMS.map((item) => {
             const isActive = activeTab === item.id;
+            const label = item.id === 'home' ? t('header.home') : item.label;
             return (
               <button
                 key={item.id}
+                type="button"
                 onClick={() => onTabChange?.(item.id)}
                 className={`nav-tab-btn ${isActive ? 'nav-tab-btn-active' : ''}`}
               >
-                <span>{item.icon}</span>
-                <span>{item.label}</span>
+                <span style={{ display: 'inline-flex', alignItems: 'center' }}>
+                  {resolveNavIcon(item.id)}
+                </span>
+                <span>{label}</span>
               </button>
             );
           })}
@@ -40,19 +60,25 @@ export const Header: React.FC<HeaderProps> = ({ activeTab = 'home', onTabChange 
           <button
             type="button"
             onClick={() => {
-              window.location.hash = '#system-console';
+              window.location.hash = ROUTES.SYSTEM_CONSOLE;
             }}
-            className="nav-tab-btn"
-            style={{
-              background: 'linear-gradient(135deg, rgba(37, 99, 235, 0.15), rgba(79, 70, 229, 0.25))',
-              border: '1px solid rgba(59, 130, 246, 0.4)',
-              color: '#93c5fd',
-              fontWeight: 600,
-            }}
+            className="nav-tab-btn nav-tab-btn-console"
             title="Open Infrastructure Control Plane"
           >
-            <span>⚡</span>
-            <span>System Console</span>
+            <Terminal size={15} />
+            <span>{t('header.systemConsole')}</span>
+          </button>
+
+          {/* Language Switch Button */}
+          <button
+            type="button"
+            onClick={toggleLocale}
+            className="nav-tab-btn"
+            title={t('header.languageToggle')}
+            style={{ padding: '0.4rem 0.65rem', minWidth: 'unset' }}
+          >
+            <Globe size={14} />
+            <span style={{ textTransform: 'uppercase', fontWeight: 600 }}>{locale}</span>
           </button>
         </nav>
       </div>

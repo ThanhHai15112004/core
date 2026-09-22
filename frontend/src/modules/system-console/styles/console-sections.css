@@ -4,80 +4,987 @@
    ========================================================================== */
 
 /* --------------------------------------------------------------------------
-   Overview Section
+   Overview Operational Command Center
+   All colors derived strictly from --scp-* CSS variables
    -------------------------------------------------------------------------- */
-.console-root .status-banner {
+
+/* Header & Environment Badge */
+.console-root .overview-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+  flex-wrap: wrap;
+}
+
+.console-root .overview-header-left {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.console-root .overview-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.console-root .overview-main-title {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: var(--scp-text-primary);
+  margin: 0;
+  letter-spacing: -0.02em;
+}
+
+.console-root .overview-subtitle {
+  font-size: 0.875rem;
+  color: var(--scp-text-secondary);
+  margin: 0;
+}
+
+.console-root .overview-env-badge {
+  font-size: 0.725rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 0.25rem 0.65rem;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.console-root .overview-env-badge.is-production {
+  background-color: var(--scp-badge-prod-bg);
+  border: 1px solid var(--scp-badge-prod-border);
+  color: var(--scp-badge-prod-text);
+}
+
+.console-root .overview-env-badge.is-staging {
+  background-color: var(--scp-badge-staging-bg);
+  border: 1px solid var(--scp-badge-staging-border);
+  color: var(--scp-badge-staging-text);
+}
+
+.console-root .overview-env-badge.is-development {
+  background-color: var(--scp-badge-dev-bg);
+  border: 1px solid var(--scp-badge-dev-border);
+  color: var(--scp-badge-dev-text);
+}
+
+.console-root .overview-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.console-root .overview-last-updated {
+  font-size: 0.775rem;
+  color: var(--scp-text-muted);
+}
+
+/* Zone 1: Overall System Health Banner */
+.console-root .overall-health-banner {
   background-color: var(--scp-bg-surface);
   border: 1px solid var(--scp-border-subtle);
   border-radius: 12px;
-  padding: 1.5rem;
+  padding: 1.25rem 1.5rem;
   margin-bottom: 1.5rem;
   display: flex;
   align-items: center;
   justify-content: space-between;
   box-shadow: var(--scp-shadow-sm);
   flex-wrap: wrap;
-  gap: 1rem;
+  gap: 1.25rem;
+  transition: border-color 0.2s ease, background-color 0.2s ease;
 }
 
-.console-root .status-banner-left {
+.console-root .overall-health-banner.status-healthy {
+  border-left: 5px solid var(--scp-success);
+  background-color: var(--scp-bg-surface);
+}
+
+.console-root .overall-health-banner.status-degraded {
+  border-left: 5px solid var(--scp-warning);
+  background-color: var(--scp-warning-bg);
+  border-color: var(--scp-warning-border);
+}
+
+.console-root .overall-health-banner.status-critical,
+.console-root .overall-health-banner.status-down {
+  border-left: 5px solid var(--scp-danger);
+  background-color: var(--scp-danger-bg);
+  border-color: var(--scp-danger-border);
+}
+
+.console-root .overall-health-left {
   display: flex;
   align-items: center;
   gap: 1rem;
 }
 
-.console-root .status-banner-icon-box {
-  width: 48px;
-  height: 48px;
+.console-root .overall-health-icon-box {
+  width: 46px;
+  height: 46px;
   border-radius: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.6rem;
+  font-size: 1.5rem;
+  flex-shrink: 0;
 }
 
-.console-root .status-banner.is-ok .status-banner-icon-box {
+.console-root .overall-health-banner.status-healthy .overall-health-icon-box {
   background-color: var(--scp-success-bg);
-  color: var(--scp-success);
-}
-.console-root .status-banner.is-warning .status-banner-icon-box {
-  background-color: var(--scp-warning-bg);
-  color: var(--scp-warning);
-}
-.console-root .status-banner.is-down .status-banner-icon-box {
-  background-color: var(--scp-danger-bg);
-  color: var(--scp-danger);
+  color: var(--scp-success-text);
+  border: 1px solid var(--scp-success-border);
 }
 
-.console-root .status-banner-title {
-  font-size: 1.25rem;
+.console-root .overall-health-banner.status-degraded .overall-health-icon-box {
+  background-color: var(--scp-warning-bg);
+  color: var(--scp-warning-text);
+  border: 1px solid var(--scp-warning-border);
+}
+
+.console-root .overall-health-banner.status-critical .overall-health-icon-box,
+.console-root .overall-health-banner.status-down .overall-health-icon-box {
+  background-color: var(--scp-danger-bg);
+  color: var(--scp-danger-text);
+  border: 1px solid var(--scp-danger-border);
+}
+
+.console-root .overall-health-title {
+  font-size: 1.2rem;
   font-weight: 700;
   color: var(--scp-text-primary);
-  margin: 0 0 0.2rem;
+  margin: 0 0 0.25rem;
 }
 
-.console-root .status-banner-meta {
-  font-size: 0.825rem;
+.console-root .overall-health-desc {
+  font-size: 0.85rem;
   color: var(--scp-text-secondary);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
 }
 
-.console-root .overview-grid-4 {
+.console-root .overall-health-right {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.console-root .overall-uptime-pill {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--scp-text-secondary);
+  background-color: var(--scp-bg-surface-subtle);
+  border: 1px solid var(--scp-border-subtle);
+  padding: 0.35rem 0.75rem;
+  border-radius: 8px;
+}
+
+/* Zone 2: Key System Metrics Grid */
+.console-root .overview-kpi-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(6, 1fr);
   gap: 1rem;
   margin-bottom: 1.5rem;
 }
 
-@media (max-width: 1024px) {
-  .console-root .overview-grid-4 {
+@media (max-width: 1400px) {
+  .console-root .overview-kpi-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .console-root .overview-kpi-grid {
     grid-template-columns: repeat(2, 1fr);
   }
 }
-@media (max-width: 640px) {
-  .console-root .overview-grid-4 {
+
+@media (max-width: 480px) {
+  .console-root .overview-kpi-grid {
     grid-template-columns: 1fr;
   }
 }
+
+.console-root .kpi-metric-card {
+  background-color: var(--scp-bg-surface);
+  border: 1px solid var(--scp-border-subtle);
+  border-radius: 10px;
+  padding: 1rem 1.15rem;
+  box-shadow: var(--scp-shadow-sm);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.console-root .kpi-metric-card:hover {
+  border-color: var(--scp-border-strong);
+  background-color: var(--scp-bg-surface-subtle);
+}
+
+.console-root .kpi-metric-card.is-warning {
+  border-color: var(--scp-warning-border);
+}
+
+.console-root .kpi-metric-card.is-critical {
+  border-color: var(--scp-danger-border);
+}
+
+.console-root .kpi-card-header {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--scp-text-secondary);
+  margin-bottom: 0.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.console-root .kpi-card-value-wrap {
+  display: flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  margin-bottom: 0.4rem;
+}
+
+.console-root .kpi-card-value {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: var(--scp-text-primary);
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+
+.console-root .kpi-card-unit {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--scp-text-muted);
+}
+
+.console-root .kpi-card-trend {
+  font-size: 0.775rem;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-weight: 500;
+}
+
+.console-root .kpi-card-trend.trend-good {
+  color: var(--scp-success-text);
+}
+
+.console-root .kpi-card-trend.trend-bad {
+  color: var(--scp-danger-text);
+}
+
+.console-root .kpi-card-trend.trend-neutral {
+  color: var(--scp-text-muted);
+}
+
+/* Zone 3: System Health Map */
+.console-root .health-map-panel {
+  background-color: var(--scp-bg-surface);
+  border: 1px solid var(--scp-border-subtle);
+  border-radius: 12px;
+  padding: 1.25rem 1.5rem;
+  margin-bottom: 1.5rem;
+  box-shadow: var(--scp-shadow-sm);
+}
+
+.console-root .health-map-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.console-root .health-map-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--scp-text-primary);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.console-root .health-map-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.console-root .health-map-group-label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--scp-text-muted);
+  margin-bottom: 0.5rem;
+}
+
+.console-root .health-map-cards-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 0.85rem;
+}
+
+.console-root .health-map-card {
+  background-color: var(--scp-bg-surface-subtle);
+  border: 1px solid var(--scp-border-subtle);
+  border-radius: 8px;
+  padding: 0.85rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+  text-align: left;
+  position: relative;
+}
+
+.console-root .health-map-card:hover {
+  background-color: var(--scp-bg-surface-hover);
+  border-color: var(--scp-primary);
+}
+
+.console-root .health-map-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.console-root .health-map-card-name {
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: var(--scp-text-primary);
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.console-root .health-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.console-root .health-status-dot.dot-healthy {
+  background-color: var(--scp-success);
+  box-shadow: 0 0 6px var(--scp-success);
+}
+
+.console-root .health-status-dot.dot-warning {
+  background-color: var(--scp-warning);
+  box-shadow: 0 0 6px var(--scp-warning);
+}
+
+.console-root .health-status-dot.dot-critical,
+.console-root .health-status-dot.dot-down {
+  background-color: var(--scp-danger);
+  box-shadow: 0 0 6px var(--scp-danger);
+}
+
+.console-root .health-map-card-subtext {
+  font-size: 0.775rem;
+  color: var(--scp-text-secondary);
+}
+
+.console-root .health-map-card-detail {
+  font-size: 0.725rem;
+  color: var(--scp-text-muted);
+}
+
+/* Zone 4 & 5: Middle Split (Performance Chart 70% | Problems & Alerts 30%) */
+.console-root .overview-middle-split {
+  display: grid;
+  grid-template-columns: 7fr 3fr;
+  gap: 1.25rem;
+  margin-bottom: 1.5rem;
+}
+
+@media (max-width: 1024px) {
+  .console-root .overview-middle-split {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Performance Chart Panel */
+.console-root .perf-chart-panel {
+  background-color: var(--scp-bg-surface);
+  border: 1px solid var(--scp-border-subtle);
+  border-radius: 12px;
+  padding: 1.25rem 1.5rem;
+  box-shadow: var(--scp-shadow-sm);
+  display: flex;
+  flex-direction: column;
+}
+
+.console-root .perf-chart-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.console-root .perf-metric-tabs {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  background-color: var(--scp-bg-surface-subtle);
+  padding: 0.25rem;
+  border-radius: 8px;
+  border: 1px solid var(--scp-border-subtle);
+}
+
+.console-root .perf-tab-btn {
+  background: transparent;
+  border: none;
+  color: var(--scp-text-secondary);
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 0.35rem 0.75rem;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: color 0.15s ease, background-color 0.15s ease;
+}
+
+.console-root .perf-tab-btn:hover {
+  color: var(--scp-text-primary);
+}
+
+.console-root .perf-tab-btn.is-active {
+  background-color: var(--scp-bg-surface);
+  color: var(--scp-primary);
+  box-shadow: var(--scp-shadow-sm);
+}
+
+.console-root .perf-time-tabs {
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+  background-color: var(--scp-bg-surface-subtle);
+  padding: 0.2rem;
+  border-radius: 6px;
+  border: 1px solid var(--scp-border-subtle);
+}
+
+.console-root .perf-time-btn {
+  background: transparent;
+  border: none;
+  color: var(--scp-text-muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.25rem 0.55rem;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.console-root .perf-time-btn:hover {
+  color: var(--scp-text-primary);
+}
+
+.console-root .perf-time-btn.is-active {
+  background-color: var(--scp-primary);
+  color: var(--scp-text-inverse);
+}
+
+.console-root .perf-stats-bar {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 0.65rem 1rem;
+  background-color: var(--scp-bg-surface-subtle);
+  border-radius: 8px;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+
+.console-root .perf-stat-item {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+}
+
+.console-root .perf-stat-label {
+  font-size: 0.75rem;
+  color: var(--scp-text-muted);
+  font-weight: 600;
+}
+
+.console-root .perf-stat-value {
+  font-size: 0.95rem;
+  color: var(--scp-text-primary);
+  font-weight: 700;
+}
+
+.console-root .perf-svg-wrapper {
+  position: relative;
+  width: 100%;
+  height: 200px;
+}
+
+.console-root .perf-svg-wrapper svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+/* Zone 5: Current Problems & Alerts Panel */
+.console-root .problems-panel {
+  background-color: var(--scp-bg-surface);
+  border: 1px solid var(--scp-border-subtle);
+  border-radius: 12px;
+  padding: 1.25rem 1.5rem;
+  box-shadow: var(--scp-shadow-sm);
+  display: flex;
+  flex-direction: column;
+}
+
+.console-root .problems-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.console-root .problems-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--scp-text-primary);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.console-root .problems-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  flex-grow: 1;
+}
+
+.console-root .problem-card {
+  background-color: var(--scp-bg-surface-subtle);
+  border-radius: 8px;
+  padding: 0.85rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  border-left: 4px solid var(--scp-warning);
+  border-top: 1px solid var(--scp-border-subtle);
+  border-right: 1px solid var(--scp-border-subtle);
+  border-bottom: 1px solid var(--scp-border-subtle);
+}
+
+.console-root .problem-card.severity-critical {
+  border-left-color: var(--scp-danger);
+  background-color: var(--scp-danger-bg);
+}
+
+.console-root .problem-card.severity-warning {
+  border-left-color: var(--scp-warning);
+  background-color: var(--scp-warning-bg);
+}
+
+.console-root .problem-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.console-root .problem-severity-tag {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 0.15rem 0.45rem;
+  border-radius: 4px;
+}
+
+.console-root .problem-severity-tag.sev-warning {
+  background-color: var(--scp-warning);
+  color: var(--scp-text-inverse);
+}
+
+.console-root .problem-severity-tag.sev-critical {
+  background-color: var(--scp-danger);
+  color: var(--scp-text-inverse);
+}
+
+.console-root .problem-time {
+  font-size: 0.725rem;
+  color: var(--scp-text-muted);
+}
+
+.console-root .problem-title {
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: var(--scp-text-primary);
+  margin: 0;
+}
+
+.console-root .problem-desc {
+  font-size: 0.775rem;
+  color: var(--scp-text-secondary);
+  margin: 0;
+  line-height: 1.4;
+}
+
+.console-root .problem-action-btn {
+  align-self: flex-start;
+  margin-top: 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--scp-primary);
+  background: transparent;
+  border: 1px solid var(--scp-border-subtle);
+  padding: 0.25rem 0.6rem;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.console-root .problem-action-btn:hover {
+  background-color: var(--scp-primary-subtle);
+  border-color: var(--scp-primary);
+}
+
+.console-root .problems-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem 1rem;
+  text-align: center;
+  gap: 0.5rem;
+  border: 1px dashed var(--scp-border-subtle);
+  border-radius: 8px;
+  background-color: var(--scp-bg-surface-subtle);
+  flex-grow: 1;
+}
+
+.console-root .problems-empty-icon {
+  font-size: 1.8rem;
+  color: var(--scp-success);
+}
+
+.console-root .problems-empty-title {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--scp-text-primary);
+  margin: 0;
+}
+
+.console-root .problems-empty-desc {
+  font-size: 0.775rem;
+  color: var(--scp-text-muted);
+  margin: 0;
+}
+
+/* Zone 6: Runtime & Infrastructure Snapshot */
+.console-root .infra-snapshot-panel {
+  background-color: var(--scp-bg-surface);
+  border: 1px solid var(--scp-border-subtle);
+  border-radius: 12px;
+  padding: 1.25rem 1.5rem;
+  margin-bottom: 1.5rem;
+  box-shadow: var(--scp-shadow-sm);
+}
+
+.console-root .infra-snapshot-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.console-root .infra-snapshot-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--scp-text-primary);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.console-root .infra-snapshot-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 1rem;
+}
+
+@media (max-width: 1200px) {
+  .console-root .infra-snapshot-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .console-root .infra-snapshot-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 480px) {
+  .console-root .infra-snapshot-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.console-root .snapshot-card {
+  background-color: var(--scp-bg-surface-subtle);
+  border: 1px solid var(--scp-border-subtle);
+  border-radius: 10px;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.console-root .snapshot-card-title {
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: var(--scp-text-primary);
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0;
+}
+
+.console-root .snapshot-metric-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.console-root .snapshot-metric-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.775rem;
+}
+
+.console-root .snapshot-metric-label {
+  color: var(--scp-text-secondary);
+}
+
+.console-root .snapshot-metric-val {
+  font-weight: 700;
+  color: var(--scp-text-primary);
+}
+
+.console-root .snapshot-metric-val.is-warn {
+  color: var(--scp-warning-text);
+}
+
+.console-root .snapshot-card-link {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--scp-primary);
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  transition: color 0.15s ease;
+}
+
+.console-root .snapshot-card-link:hover {
+  color: var(--scp-primary-hover);
+  text-decoration: underline;
+}
+
+/* Zone 7: Recent Activity Timeline */
+.console-root .recent-events-panel {
+  background-color: var(--scp-bg-surface);
+  border: 1px solid var(--scp-border-subtle);
+  border-radius: 12px;
+  padding: 1.25rem 1.5rem;
+  box-shadow: var(--scp-shadow-sm);
+  margin-bottom: 1.5rem;
+}
+
+.console-root .recent-events-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.console-root .recent-events-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--scp-text-primary);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.console-root .recent-events-filters {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.console-root .recent-filter-btn {
+  background: var(--scp-bg-surface-subtle);
+  border: 1px solid var(--scp-border-subtle);
+  color: var(--scp-text-secondary);
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.2rem 0.55rem;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.console-root .recent-filter-btn:hover {
+  color: var(--scp-text-primary);
+}
+
+.console-root .recent-filter-btn.is-active {
+  background-color: var(--scp-primary);
+  border-color: var(--scp-primary);
+  color: var(--scp-text-inverse);
+}
+
+.console-root .recent-events-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.console-root .recent-event-item {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 0.65rem 0.85rem;
+  border-radius: 8px;
+  background-color: var(--scp-bg-surface-subtle);
+  border: 1px solid var(--scp-border-subtle);
+  font-size: 0.8rem;
+}
+
+.console-root .recent-event-time {
+  font-family: monospace;
+  font-size: 0.75rem;
+  color: var(--scp-text-muted);
+  flex-shrink: 0;
+}
+
+.console-root .recent-event-source {
+  font-weight: 700;
+  color: var(--scp-text-primary);
+  flex-shrink: 0;
+  min-width: 80px;
+}
+
+.console-root .recent-event-msg {
+  color: var(--scp-text-secondary);
+  flex-grow: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.console-root .recent-events-footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 1rem;
+}
+
+/* Offline & Fallback Banner */
+.console-root .offline-warning-banner {
+  background-color: var(--scp-danger-bg);
+  border: 1px solid var(--scp-danger-border);
+  border-radius: 12px;
+  padding: 1.25rem 1.5rem;
+  margin-bottom: 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.console-root .offline-warning-left {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.console-root .offline-warning-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--scp-danger-text);
+  margin: 0 0 0.2rem;
+}
+
+.console-root .offline-warning-desc {
+  font-size: 0.825rem;
+  color: var(--scp-text-secondary);
+  margin: 0;
+}
+
+.console-root .is-offline-dimmed {
+  opacity: var(--scp-offline-dim);
+  filter: grayscale(0.2);
+  pointer-events: none;
+  user-select: none;
+  transition: opacity 0.3s ease;
+}
+
+/* Skeleton Loading Shimmer */
+.console-root .scp-skeleton {
+  background: var(--scp-skeleton-bg);
+  background-image: linear-gradient(
+    90deg,
+    var(--scp-skeleton-bg) 0px,
+    var(--scp-skeleton-shine) 40px,
+    var(--scp-skeleton-bg) 80px
+  );
+  background-size: 600px;
+  animation: scp-shimmer 1.6s infinite ease-out;
+  border-radius: 6px;
+  display: inline-block;
+}
+
+@keyframes scp-shimmer {
+  0% {
+    background-position: -300px 0;
+  }
+  100% {
+    background-position: 300px 0;
+  }
+}
+
 
 /* --------------------------------------------------------------------------
    Packages Section
@@ -135,12 +1042,13 @@
   box-shadow: var(--scp-shadow-sm);
   display: flex;
   flex-direction: column;
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  transition: border-color 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .console-root .package-card:hover {
   box-shadow: var(--scp-shadow-md);
   border-color: var(--scp-border-strong);
+  background-color: var(--scp-bg-surface-subtle);
 }
 
 .console-root .package-card-header {
