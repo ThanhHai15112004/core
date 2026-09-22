@@ -31,7 +31,7 @@
   "performance.component.worker": "Worker",
   "performance.component.messaging": "Messaging",
   "performance.component.noLoad": "Không có tải trong khoảng thời gian này",
-  "performance.component.database.noDataSource": "Chưa có kết nối database thật (TypeORM DataSource chưa được khởi tạo) — chưa đo được query",
+  "performance.component.database.noDataSource": "Chưa kết nối được database — chưa đo được query",
   "performance.component.cache.hitRate": "Hit rate {rate}%",
   "performance.component.worker.notRunning": "Worker không chạy",
   "performance.component.messaging.waiting": "{count} job đang chờ",

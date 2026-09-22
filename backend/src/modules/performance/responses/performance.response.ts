@@ -136,7 +136,8 @@ export interface ThroughputDto {
 export interface PerformanceOverviewDto {
   range: PerfRange;
   generatedAt: string;
-  telemetry: { performance: boolean; traffic: boolean; database: 'active' | 'no-datasource' };
+  /** `database`: đã kết nối database thật hay chưa (chưa kết nối → không có số liệu query). */
+  telemetry: { performance: boolean; traffic: boolean; database: 'active' | 'unavailable' };
   status: { level: PerfLevel; reasons: string[] };
   kpis: {
     apiP95Ms: KpiDto;

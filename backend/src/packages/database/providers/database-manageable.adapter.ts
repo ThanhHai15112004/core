@@ -10,7 +10,7 @@ import {
 } from '@packages/kernel/index.js';
 import { CoreConfigService } from '@packages/config/index.js';
 import { CoreI18nService } from '@packages/i18n/index.js';
-import { BaseDatabaseProvider } from './database.provider.js';
+import { DatabaseConnectionService } from './database-connection.service.js';
 
 export const DatabaseAction = {
   PING: 'ping',
@@ -24,7 +24,7 @@ export class DatabaseManageableAdapter implements ManageablePackage {
 
   constructor(
     private readonly configService: CoreConfigService,
-    private readonly databaseProvider: BaseDatabaseProvider,
+    private readonly connection: DatabaseConnectionService,
     private readonly i18n: CoreI18nService,
   ) {}
 
@@ -38,10 +38,17 @@ export class DatabaseManageableAdapter implements ManageablePackage {
 
   public async getStatus(): Promise<PackageStatusReport> {
     const db = this.configService.database;
-    const isConnected = this.databaseProvider.isConnected();
+    const status = this.connection.getStatus();
+    const isConnected = status.state === 'connected';
 
     return {
-      status: isConnected ? PackageStatus.HEALTHY : PackageStatus.WARNING,
+      status: isConnected
+        ? PackageStatus.HEALTHY
+        : status.state === 'disabled'
+          ? PackageStatus.WARNING
+          : status.state === 'connecting'
+            ? PackageStatus.WARNING
+            : PackageStatus.ERROR,
       summary: this.i18n.t('ops.database.summary', {
         driver: this.driver,
         host: db.host,
@@ -50,12 +57,11 @@ export class DatabaseManageableAdapter implements ManageablePackage {
       }),
       metrics: {
         driver: this.driver,
-        host: db.host,
-        port: db.port,
         database: db.database,
+        state: status.state,
         poolLimit: db.maxConnections,
-        synchronize: db.synchronize,
         isConnected,
+        lastPingMs: status.lastPingMs ?? 'n/a',
       },
     };
   }
@@ -73,7 +79,7 @@ export class DatabaseManageableAdapter implements ManageablePackage {
 
   public async executeAction(actionId: string): Promise<PackageActionResult> {
     if (actionId === DatabaseAction.PING) {
-      const isAlive = await this.databaseProvider.ping();
+      const isAlive = (await this.connection.ping()).ok;
       return {
         success: isAlive,
         message: isAlive

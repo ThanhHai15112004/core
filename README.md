@@ -238,10 +238,21 @@ Cùng 1 codebase phục vụ 4 chế độ chạy độc lập: `api` (HTTP), `w
 - `packages/telemetry` (`MetricRecorder`, cung cấp qua `RuntimeAgentModule`) ghi số đo theo bucket 10s/1m/1h giống traffic:
   runtime (CPU, RSS/heap, event loop, GC), database (latency query, lỗi, pool, slow query), cache, worker/queue, message publish.
 - Database được đo bằng cách bọc `driver.createQueryRunner` của TypeORM `DataSource` (không phụ thuộc driver, không lưu params).
-  Hiện chưa có `DataSource` thật nên thành phần Database hiện "không khả dụng" — cấu hình TypeORM là tự có số liệu.
 - Traffic gộp thêm thời gian theo giai đoạn (routing, guard, handler, DB, cache, gửi) → phân rã latency trung bình/request.
 - Rule engine theo ngưỡng `PERF_*` (không có "điểm số"); `PerformanceMonitor` (API, lock Redis) ghi sự kiện bắt đầu/hồi phục nghẽn.
 - API: `GET /ops/performance/{overview,timeseries,bottlenecks,events,components/:id}`.
+
+### Database (System Console → Database)
+- Kết nối TypeORM thật (`TypeOrmModule.forRootAsync`, `manualInitialization`) do `DatabaseConnectionService` mở nền có retry:
+  API vẫn chạy khi DB chưa sẵn sàng; trạng thái connecting/connected/reconnecting/unavailable theo từng runtime. Module nghiệp vụ dùng
+  `TypeOrmModule.forFeature` / `@InjectRepository` như thường; migration đặt ở `src/database/migrations/`.
+- `DatabaseMonitoringService` chọn provider theo driver: MySQL (performance_schema, không cần quyền PROCESS), PostgreSQL
+  (pg_stat_*, pg_stat_statements nếu có), driver khác chỉ phần chung. Phần không hỗ trợ trả lý do, không có số giả.
+- Session được gắn tên runtime (`core-api`, `core-worker`…) để biết runtime nào giữ kết nối. SQL hiển thị đã bỏ literal.
+- Thao tác: Test Connection, Cancel Query (`CANCEL`), Terminate Session (`TERMINATE`), Run Migrations (`MIGRATE`) — bật/tắt bằng
+  `OPS_DATABASE_ACTIONS_ENABLED`, `OPS_DATABASE_MIGRATIONS_ENABLED`; chỉ tác động session của user DB của app.
+- API: `GET /ops/database/{overview,metrics,queries,queries/stats,queries/stats/:digest[/explain],connections[/:id],transactions,
+  tables[/:name],storage,migrations,events,errors,config}`, `POST /ops/database/{ping,queries/:id/cancel,connections/:id/terminate,migrations/run}`.
 
 ### Response Envelope chuẩn hóa
 ```json

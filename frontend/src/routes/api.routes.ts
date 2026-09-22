@@ -40,6 +40,9 @@ export const API_ROUTES = {
       ACTIVE: (qs: string) => `${OPS_PREFIX}/traffic/active?${qs}`,
       INSIGHTS: (qs: string) => `${OPS_PREFIX}/traffic/insights?${qs}`,
     },
+    DATABASE: {
+      path: (path: string, qs = '') => `${OPS_PREFIX}/database/${path}${qs ? `?${qs}` : ''}`,
+    },
     PERFORMANCE: {
       OVERVIEW: (qs: string) => `${OPS_PREFIX}/performance/overview?${qs}`,
       TIMESERIES: (qs: string) => `${OPS_PREFIX}/performance/timeseries?${qs}`,

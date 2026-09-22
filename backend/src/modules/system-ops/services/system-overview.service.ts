@@ -1,7 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import * as os from 'node:os';
 import { CoreConfigService } from '@packages/config/index.js';
-import { DatabaseAction } from '@packages/database/index.js';
 import { CoreI18nService } from '@packages/i18n/index.js';
 import {
   TrafficService,
@@ -9,6 +8,7 @@ import {
   type TrafficSummaryDto,
 } from '@modules/traffic/index.js';
 import { PerformanceService, type BottleneckDto } from '@modules/performance/index.js';
+import { DatabaseConnectionService } from '@packages/database/index.js';
 import { HttpMetricsService, type HttpMetricsSnapshot } from '@packages/logging/index.js';
 import { CorePackageId, PackageStatus } from '@packages/kernel/index.js';
 import { PackageRegistryService, type PackageSummaryDto } from './package-registry.service.js';
@@ -105,6 +105,7 @@ export class SystemOverviewService {
     private readonly runtimes: RuntimesService,
     private readonly traffic: TrafficService,
     private readonly performance: PerformanceService,
+    private readonly dbConnection: DatabaseConnectionService,
   ) {}
 
   public async getOverview(): Promise<SystemOverviewResponseDto> {
@@ -164,19 +165,10 @@ export class SystemOverviewService {
     return env === 'production' || env === 'staging' ? env : 'development';
   }
 
+  /** Latency của health check `SELECT 1` gần nhất; `null` khi database chưa kết nối được. */
   private async pingDatabase(): Promise<number | null> {
-    const dbPackage = this.registryService.getPackage(CorePackageId.DATABASE);
-    if (!dbPackage?.executeAction) {
-      return null;
-    }
-
-    const start = Date.now();
-    try {
-      const result = await dbPackage.executeAction(DatabaseAction.PING);
-      return result.success ? Math.max(1, Date.now() - start) : null;
-    } catch {
-      return null;
-    }
+    const status = this.dbConnection.getStatus();
+    return status.state === 'connected' ? (status.lastPingMs ?? null) : null;
   }
 
   private readRuntime(): RuntimeSnapshot {

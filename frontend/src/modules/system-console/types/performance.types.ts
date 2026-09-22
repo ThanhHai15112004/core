@@ -114,7 +114,7 @@ export interface Throughput {
 export interface PerformanceOverview {
   range: PerfRange;
   generatedAt: string;
-  telemetry: { performance: boolean; traffic: boolean; database: 'active' | 'no-datasource' };
+  telemetry: { performance: boolean; traffic: boolean; database: 'active' | 'unavailable' };
   status: { level: PerfLevel; reasons: string[] };
   kpis: {
     apiP95Ms: Kpi;

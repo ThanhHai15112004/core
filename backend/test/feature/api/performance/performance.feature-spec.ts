@@ -71,8 +71,8 @@ describe('Performance (/ops/performance)', () => {
       'cache',
       'send',
     ]);
-    // Không có TypeORM DataSource → database không khả dụng, không có số giả.
-    expect(d.telemetry.database).toBe('no-datasource');
+    // Test không có database thật → không khả dụng, không có số giả.
+    expect(d.telemetry.database).toBe('unavailable');
     const db = d.components.find((c) => c.id === 'database')!;
     expect(db.status).toBe('unavailable');
     expect(d.throughput.dbQueriesPerSec).toBeNull();

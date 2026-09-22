@@ -1,54 +1,25 @@
-import { Injectable, Logger, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common';
-import { CoreConfigService } from '@packages/config/index.js';
+import { Injectable } from '@nestjs/common';
 import type { DatabaseConnectionContract } from '../contracts/database.contract.js';
+import { DatabaseConnectionService } from './database-connection.service.js';
 
+/** Hợp đồng kết nối cũ, nay đọc trạng thái thật từ `DatabaseConnectionService` (không còn cờ giả). */
 @Injectable()
-export class BaseDatabaseProvider
-  implements DatabaseConnectionContract, OnModuleInit, OnModuleDestroy
-{
-  private readonly logger = new Logger('DatabaseProvider');
-  private connected = false;
-  private readonly connection: string;
-  private readonly host: string;
-  private readonly port: number;
-  private readonly database: string;
-  private readonly username: string;
-  private readonly maxConnections: number;
-
-  constructor(private readonly configService: CoreConfigService) {
-    this.connection = this.configService.database.connection;
-    this.host = this.configService.database.host;
-    this.port = this.configService.database.port;
-    this.database = this.configService.database.database;
-    this.username = this.configService.database.username;
-    this.maxConnections = this.configService.database.maxConnections;
-  }
+export class BaseDatabaseProvider implements DatabaseConnectionContract {
+  constructor(private readonly connection: DatabaseConnectionService) {}
 
   public async connect(): Promise<void> {
-    this.logger.log(
-      `Initializing ${this.connection} connection to ${this.host}:${this.port}/${this.database} (pool: ${this.maxConnections})...`,
-    );
-    this.connected = true;
+    // Kết nối được mở nền lúc khởi động (có retry) — xem DatabaseConnectionService.
   }
 
   public async disconnect(): Promise<void> {
-    this.logger.log('Closing database connection...');
-    this.connected = false;
+    // TypeOrmModule tự đóng DataSource khi app tắt.
   }
 
   public isConnected(): boolean {
-    return this.connected;
+    return this.connection.isConnected();
   }
 
   public async ping(): Promise<boolean> {
-    return this.connected;
-  }
-
-  public async onModuleInit(): Promise<void> {
-    await this.connect();
-  }
-
-  public async onModuleDestroy(): Promise<void> {
-    await this.disconnect();
+    return (await this.connection.ping()).ok;
   }
 }

@@ -23,7 +23,7 @@ export const ConsoleTopBar: React.FC<ConsoleTopBarProps> = ({ currentSection }) 
   const { route, navigate } = useConsoleRoute();
   const group = groupOf(currentSection);
   const detail = route.params[0];
-  /** Nhãn của segment con: tên runtime, tab của HTTP Traffic hoặc thành phần của Performance. */
+  /** Nhãn của segment con: tên runtime, tab của HTTP Traffic/Database hoặc thành phần của Performance. */
   const detailLabel = detail
     ? currentSection === 'runtimes'
       ? t(`rt.name.${detail}`)
@@ -31,7 +31,9 @@ export const ConsoleTopBar: React.FC<ConsoleTopBarProps> = ({ currentSection }) 
         ? t(`tr.tab.${detail}`)
         : currentSection === 'performance' && route.params[1]
           ? t(`perf.component.${route.params[1]}`)
-          : detail
+          : currentSection === 'database'
+            ? t(`db.tab.${detail}`)
+            : detail
     : '';
 
   const latencyTone = isOffline

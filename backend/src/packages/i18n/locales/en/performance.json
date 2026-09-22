@@ -31,7 +31,7 @@
   "performance.component.worker": "Worker",
   "performance.component.messaging": "Messaging",
   "performance.component.noLoad": "No load in this time range",
-  "performance.component.database.noDataSource": "No real database connection yet (TypeORM DataSource is not initialized) — queries cannot be measured",
+  "performance.component.database.noDataSource": "Database is not connected — queries cannot be measured",
   "performance.component.cache.hitRate": "Hit rate {rate}%",
   "performance.component.worker.notRunning": "Worker is not running",
   "performance.component.messaging.waiting": "{count} jobs waiting",

@@ -1,0 +1,25 @@
+const PREFIX = 'ops/database';
+
+export const DATABASE_OPS_ROUTES = {
+  PREFIX,
+  OVERVIEW: 'overview',
+  METRICS: 'metrics',
+  QUERIES: 'queries',
+  QUERY_STATS: 'queries/stats',
+  QUERY_DETAIL: 'queries/stats/:digest',
+  QUERY_EXPLAIN: 'queries/stats/:digest/explain',
+  QUERY_CANCEL: 'queries/:sessionId/cancel',
+  CONNECTIONS: 'connections',
+  CONNECTION_DETAIL: 'connections/:sessionId',
+  CONNECTION_TERMINATE: 'connections/:sessionId/terminate',
+  TRANSACTIONS: 'transactions',
+  TABLES: 'tables',
+  TABLE_DETAIL: 'tables/:name',
+  STORAGE: 'storage',
+  MIGRATIONS: 'migrations',
+  MIGRATIONS_RUN: 'migrations/run',
+  EVENTS: 'events',
+  ERRORS: 'errors',
+  CONFIG: 'config',
+  PING: 'ping',
+} as const;

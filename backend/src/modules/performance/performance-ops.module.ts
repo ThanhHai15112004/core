@@ -11,6 +11,6 @@ import { PerformanceMonitorService } from './services/performance-monitor.servic
   imports: [TrafficOpsModule, RuntimesModule],
   controllers: [PerformanceController],
   providers: [PerformanceStoreService, PerformanceService, PerformanceMonitorService],
-  exports: [PerformanceService],
+  exports: [PerformanceService, PerformanceStoreService],
 })
 export class PerformanceOpsModule {}

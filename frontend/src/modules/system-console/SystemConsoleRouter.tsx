@@ -10,7 +10,7 @@ import { TrafficSection } from './sections/traffic/TrafficSection';
 import { PerformanceSection } from './sections/performance/PerformanceSection';
 import { PackagesSection } from './sections/PackagesSection';
 import { LogViewerSection } from './sections/LogViewerSection';
-import { DatabaseSection } from './sections/DatabaseSection';
+import { DatabaseSection } from './sections/database/DatabaseSection';
 import { CacheSection } from './sections/CacheSection';
 import { SecuritySection } from './sections/SecuritySection';
 import { PlannedSection } from './sections/PlannedSection';

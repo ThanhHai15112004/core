@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { CoreConfigService } from '@packages/config/index.js';
 import { CoreI18nService } from '@packages/i18n/index.js';
-import { QueryInstrumentService } from '@packages/database/index.js';
+import { DatabaseConnectionService } from '@packages/database/index.js';
 import { LONG_RUNNING_RUNTIMES } from '@packages/runtime/index.js';
 import {
   TELEMETRY_TIERS,
@@ -144,13 +144,17 @@ export class PerformanceService {
     private readonly store: PerformanceStoreService,
     private readonly traffic: TrafficStoreService,
     private readonly runtimes: RuntimesService,
-    private readonly db: QueryInstrumentService,
+    private readonly db: DatabaseConnectionService,
     private readonly config: CoreConfigService,
     private readonly i18n: CoreI18nService,
   ) {}
 
   private get cfg() {
     return this.config.performance;
+  }
+
+  private get dbState(): 'active' | 'unavailable' {
+    return this.db.isConnected() ? 'active' : 'unavailable';
   }
 
   // ─── Overview ─────────────────────────────────────────────────────────────
@@ -210,7 +214,7 @@ export class PerformanceService {
       telemetry: {
         performance: this.cfg.enabled,
         traffic: this.config.traffic.enabled,
-        database: this.db.state,
+        database: this.dbState,
       },
       status: {
         level: this.levelOf(bottlenecks, current, summaries),
@@ -688,7 +692,7 @@ export class PerformanceService {
     const waiting = gaugeWindow(perf, 'queue.waiting', { mode: 'max' }).current;
     const workerAlive = summaries.some((s) => s.id === 'worker' && s.resources !== null);
 
-    const dbUnavailable = db.n === 0 && this.db.state === 'no-datasource';
+    const dbUnavailable = db.n === 0 && this.dbState === 'unavailable';
     const workerUnavailable = !workerAlive && completed + failed === 0;
 
     return [
@@ -885,7 +889,7 @@ export class PerformanceService {
     const perMin = (n: number) => (minutes > 0 ? round(n / minutes, 2) : null);
     return {
       httpPerSec: current ? perSec(http) : null,
-      dbQueriesPerSec: this.db.state === 'no-datasource' && db === 0 ? null : perSec(db),
+      dbQueriesPerSec: this.dbState === 'unavailable' && db === 0 ? null : perSec(db),
       cacheOpsPerSec: perSec(cache),
       jobsPerMin: this.hasRuntime(perf, 'worker') || jobs > 0 ? perMin(jobs) : null,
       messagesPerMin: perMin(published),
@@ -1074,7 +1078,7 @@ export class PerformanceService {
           build('http', label('http'), '/s', (g) => g.http.n / g.seconds),
           build('db', label('db'), '/s', (g) => {
             const n = mergedOf(g.perf, 'db.query').n;
-            return n ? n / g.seconds : this.db.state === 'active' ? 0 : null;
+            return n ? n / g.seconds : this.dbState === 'active' ? 0 : null;
           }),
           build('cache', label('cache'), '/s', (g) => (ops(g) ? ops(g) / g.seconds : null)),
           build('jobs', label('jobs'), '/s', (g) => {

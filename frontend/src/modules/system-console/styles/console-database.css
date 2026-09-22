@@ -1,0 +1,364 @@
+/* Database Monitor — dùng token màu & tone chung của System Console. */
+
+.console-root .ov-kpi-grid.db-kpi-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+/* ─── Health ─── */
+.console-root .db-health {
+  flex-wrap: wrap;
+}
+.console-root .db-health-body {
+  flex: 1 1 320px;
+  min-width: 0;
+}
+.console-root .db-health-meta {
+  display: block;
+  margin-top: 0.15rem;
+  font-size: 0.8rem;
+  color: var(--scp-text-secondary);
+}
+.console-root .db-health-reasons {
+  margin: 0.4rem 0 0;
+  padding-left: 1.1rem;
+  font-size: 0.82rem;
+  color: var(--scp-text-secondary);
+}
+.console-root .db-health-last {
+  margin: 0.3rem 0 0;
+  font-size: 0.78rem;
+  color: var(--scp-text-muted);
+}
+.console-root .db-health-test {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.35rem;
+  max-width: 100%;
+}
+.console-root .db-test-result {
+  font-size: 0.78rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.console-root .db-test-result.is-ok {
+  color: var(--scp-success-text);
+}
+.console-root .db-test-result.is-fail {
+  color: var(--scp-danger-text);
+}
+
+/* ─── Section state ─── */
+.console-root .db-section-state {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  padding: 0.7rem 0.85rem;
+  border: 1px dashed var(--scp-border-subtle);
+  border-radius: 10px;
+  font-size: 0.83rem;
+  color: var(--scp-text-secondary);
+}
+.console-root .db-section-state.is-error {
+  border-color: var(--scp-warning-border);
+  color: var(--scp-warning-text);
+}
+
+/* ─── Bảng session / query ─── */
+.console-root .db-sql-cell {
+  max-width: 520px;
+  min-width: 220px;
+}
+.console-root .db-sql-cell code {
+  display: block;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 0.76rem;
+}
+.console-root .db-sql-cell span {
+  display: block;
+  margin-bottom: 0.2rem;
+  font-size: 0.8rem;
+}
+.console-root .db-stats-table .db-sql-cell code,
+.console-root .db-session-table .db-sql-cell code {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.console-root .db-sql-cell .pf-chip {
+  display: inline-flex;
+  margin-top: 0.3rem;
+}
+.console-root .db-actions-cell {
+  white-space: nowrap;
+  text-align: right;
+}
+.console-root .rt-icon-btn.is-danger:not(:disabled):hover {
+  color: var(--scp-danger-text);
+}
+.console-root .db-session-table tr.is-clickable,
+.console-root .db-stats-table tr.is-clickable {
+  cursor: pointer;
+}
+.console-root .db-row-warn td {
+  background: var(--scp-warning-bg);
+}
+.console-root .db-sql-block {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ─── Cảnh báo ─── */
+.console-root .db-alerts {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+.console-root .db-alerts li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 0.55rem;
+  font-size: 0.83rem;
+}
+.console-root .db-alerts li .ov-dot {
+  margin-top: 0.35rem;
+}
+.console-root .db-alerts li.is-ok {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  color: var(--scp-success-text);
+}
+.console-root .db-alert-body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.console-root .db-alert-body span {
+  color: var(--scp-text-secondary);
+}
+.console-root .db-alert-body small {
+  color: var(--scp-text-muted);
+}
+
+/* ─── Pool / số liệu ─── */
+.console-root .db-split-even {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.console-root .db-pool-big {
+  margin: 0 0 0.5rem;
+  font-size: 1.8rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.console-root .db-pool-big small {
+  font-size: 1rem;
+  color: var(--scp-text-muted);
+}
+.console-root .db-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 0.75rem 1rem;
+  margin: 0.75rem 0 0;
+}
+.console-root .db-stat-grid dt {
+  font-size: 0.72rem;
+  color: var(--scp-text-muted);
+}
+.console-root .db-stat-grid dd {
+  margin: 0.15rem 0 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.console-root .db-stat-grid dd.is-warn {
+  color: var(--scp-warning-text);
+}
+.console-root .db-stat-compact {
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+}
+.console-root .db-report td,
+.console-root .db-report th {
+  font-variant-numeric: tabular-nums;
+}
+.console-root .db-capacity {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin-top: 0.9rem;
+}
+
+/* ─── Kết nối theo runtime ─── */
+.console-root .db-runtime-bars {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.console-root .db-runtime-bars button {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  width: 100%;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.console-root .db-runtime-bars button:hover,
+.console-root .db-runtime-bars button.is-active {
+  border-color: var(--scp-primary);
+  background: var(--scp-bg-surface-subtle);
+}
+
+/* ─── Chuỗi chặn ─── */
+.console-root .db-block-tree,
+.console-root .db-block-tree ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.console-root .db-block-tree ul {
+  margin-left: 1.1rem;
+  padding-left: 0.9rem;
+  border-left: 2px dashed var(--scp-warning-border);
+}
+.console-root .db-block-tree li {
+  margin: 0.45rem 0;
+}
+.console-root .db-block-node {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  width: 100%;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--scp-border-subtle);
+  border-radius: 8px;
+  background: var(--scp-bg-surface);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.console-root .db-block-node.is-root {
+  border-color: var(--scp-danger-border);
+}
+.console-root .db-block-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  font-size: 0.82rem;
+}
+.console-root .db-block-sql {
+  font-size: 0.75rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--scp-text-secondary);
+}
+
+/* ─── Execution plan ─── */
+.console-root .db-explain-cost {
+  margin: 0.5rem 0;
+  font-size: 0.83rem;
+  font-weight: 600;
+}
+.console-root .db-explain {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.console-root .db-explain li {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding-top: 0.4rem;
+  padding-bottom: 0.4rem;
+  border-bottom: 1px solid var(--scp-border-subtle);
+  font-size: 0.82rem;
+}
+.console-root .db-explain li.is-warn .db-explain-op strong {
+  color: var(--scp-warning-text);
+}
+.console-root .db-explain-op {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+.console-root .db-explain-meta {
+  color: var(--scp-text-secondary);
+  font-size: 0.76rem;
+}
+.console-root .db-explain-cond {
+  font-size: 0.72rem;
+  color: var(--scp-text-muted);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ─── Modal ─── */
+.console-root .db-modal-context {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 0.35rem 0.8rem;
+  margin: 0 0 0.8rem;
+  font-size: 0.83rem;
+}
+.console-root .db-modal-context dt {
+  color: var(--scp-text-muted);
+}
+.console-root .db-modal-context dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.console-root .db-modal-sql {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 0.75rem;
+}
+.console-root .scp-alert-warning {
+  padding: 0.7rem 0.9rem;
+  border: 1px solid var(--scp-warning-border);
+  border-radius: 10px;
+  background: var(--scp-warning-bg);
+  color: var(--scp-warning-text);
+  font-size: 0.85rem;
+}
+
+/* ─── Responsive ─── */
+@media (max-width: 1280px) {
+  .console-root .ov-kpi-grid.db-kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 1024px) {
+  .console-root .db-split-even {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 640px) {
+  .console-root .db-health-test {
+    align-items: flex-start;
+  }
+  .console-root .db-sql-cell {
+    min-width: 180px;
+  }
+}
