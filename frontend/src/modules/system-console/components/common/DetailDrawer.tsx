@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
-import { createPortal } from 'react-dom';
 import type { PackageSummary } from '../../types/console.types';
 import { StatusPill } from './StatusPill';
 import { resolvePackageIcon } from '../../constants/console.constants';
 import { X, AlertTriangle, Check, Copy } from 'lucide-react';
 import { useLocale } from '../../../../core/i18n/index';
+import { ConsolePortal } from './ConsolePortal';
 
 interface DetailDrawerProps {
   pkg: PackageSummary | null;
@@ -24,7 +24,8 @@ export const DetailDrawer: React.FC<DetailDrawerProps> = ({ pkg, onClose, onExec
     setTimeout(() => setCopied(false), 2000);
   };
 
-  return createPortal(
+  return (
+    <ConsolePortal>
     <>
       <div className="drawer-backdrop" onClick={onClose} />
       <div className="detail-drawer">
@@ -194,7 +195,7 @@ export const DetailDrawer: React.FC<DetailDrawerProps> = ({ pkg, onClose, onExec
           </div>
         </div>
       </div>
-    </>,
-    document.body
+    </>
+    </ConsolePortal>
   );
 };

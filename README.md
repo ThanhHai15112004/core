@@ -97,11 +97,15 @@ JWT_REFRESH_SECRET=...       # Tối thiểu 32 ký tự, khác ACCESS
 Truy cập:
 - **Backend API**: http://localhost:3005/api/v1/health
 - **System-Ops Dashboard**: http://localhost:3005/api/v1/ops/packages
-- **Frontend**: http://localhost:5175
+- **Runtimes API**: http://localhost:3005/api/v1/ops/runtimes
+- **Frontend**: http://localhost:5175 (System Console: `#system-console/runtimes`)
+
+> `./docker-dev.sh up` chạy 4 service: `backend` (API, build + watch), `worker`, `scheduler`
+> (dùng chung thư mục `dist` do `backend` build) và `frontend`. Cần Redis đang chạy (container `redis` trên WSL, cổng 6379).
 
 ### Các lệnh Docker Dev thường dùng
 ```bash
-./docker-dev.sh up                  # Khởi động toàn bộ (BE + FE)
+./docker-dev.sh up                  # Khởi động api, worker, scheduler, frontend
 ./docker-dev.sh up backend          # Chỉ khởi động backend
 ./docker-dev.sh logs backend        # Xem log realtime
 ./docker-dev.sh bash backend        # Vào shell container
@@ -119,8 +123,15 @@ Truy cập:
 cd backend && npm install
 cd ../frontend && npm install
 
-# Chạy backend (cần file backend/.env.development)
+# Chạy backend (cần file backend/.env.development và Redis)
 cd backend && npm run dev:api
+# Worker / Scheduler (terminal khác, sau khi đã build dist)
+npm run start:worker
+npm run start:scheduler
+
+# CLI
+npm run cli -- queue:publish demo.ping '{"n":1}'   # đẩy job cho Worker
+npm run cli -- runtime:status                      # xem heartbeat các runtime
 
 # Chạy frontend
 cd frontend && npm run dev
@@ -204,7 +215,15 @@ sudo systemctl enable core-framework
 Mỗi package hạ tầng tự báo cáo trạng thái (`healthy/warning/error`) về System-Ops dashboard thông qua interface `ManageablePackage`. Xem thêm tại [`.agents/AGENTS.md`](.agents/AGENTS.md) — Mục 12.
 
 ### Multi-Runtime Architecture
-Cùng 1 codebase phục vụ 4 chế độ chạy độc lập: `api` (HTTP), `worker` (queue consumer), `scheduler` (cron), `cli` (command line).
+Cùng 1 codebase phục vụ 4 chế độ chạy độc lập: `api` (HTTP), `worker` (queue consumer BullMQ), `scheduler` (cron), `cli` (command line).
+
+### Runtime Operations (System Console → Runtimes)
+- Mỗi runtime chạy `RuntimeAgentModule` (`packages/runtime`): gửi heartbeat, time-series CPU/RAM/event loop, sự kiện vòng đời và log vào **Redis** (mọi key dưới `REDIS_PREFIX`, không dùng `FLUSHDB` — Redis có thể dùng chung).
+- API tổng hợp ở `modules/runtimes` → `GET /ops/runtimes`, `/ops/runtimes/:id`, `/metrics`, `/events`, `/logs`, `/cli/history`.
+- Điều khiển: `POST /ops/runtimes/:id/restart {mode: graceful|force}`, `/stop {confirm: "STOP"}`, `/start`.
+  - **Restart**: runtime tự dừng (graceful chờ request/job/task đang chạy) rồi thoát; supervisor (`RUNTIME_SUPERVISOR=docker|pm2|systemd`) dựng lại. Không có supervisor → Restart bị khoá.
+  - **Stop/Start**: tạm dừng/tiếp tục xử lý (Worker ngừng lấy job, Scheduler ngừng cron), process vẫn sống; trạng thái Stop được giữ qua restart. API không thể Stop.
+- `/ops/*` chưa có RBAC → đặt `OPS_RUNTIME_ACTIONS_ENABLED=false` ở production cho tới khi có xác thực.
 
 ### Response Envelope chuẩn hóa
 ```json

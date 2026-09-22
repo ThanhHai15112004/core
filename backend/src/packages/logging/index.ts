@@ -1,4 +1,5 @@
 export * from './contracts/logger.contract.js';
+export * from './contracts/log-sink.contract.js';
 export * from './constants/logging.constant.js';
 export * from './context/request-context.service.js';
 export * from './middleware/correlation-id.middleware.js';

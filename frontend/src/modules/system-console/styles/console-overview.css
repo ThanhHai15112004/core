@@ -500,61 +500,12 @@
   font-variant-numeric: tabular-nums;
 }
 
-.console-root .ov-chart-canvas {
-  position: relative;
-  width: 100%;
-  min-height: 220px;
-}
 
-.console-root .ov-chart-canvas svg {
-  display: block;
-  cursor: crosshair;
-}
 
-.console-root .ov-chart-grid {
-  stroke: var(--scp-chart-grid);
-  stroke-width: 1;
-}
 
-.console-root .ov-chart-axis {
-  fill: var(--scp-text-muted);
-  font-size: 10.5px;
-  font-variant-numeric: tabular-nums;
-}
 
-.console-root .ov-chart-cursor {
-  stroke: var(--scp-primary);
-  stroke-dasharray: 3 3;
-}
 
-.console-root .ov-chart-empty {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 220px;
-  padding: 0 2rem;
-  border: 1px dashed var(--scp-border-subtle);
-  border-radius: 9px;
-  text-align: center;
-  font-size: 0.82rem;
-  color: var(--scp-text-muted);
-}
 
-.console-root .ov-chart-tooltip {
-  position: absolute;
-  transform: translate(-50%, calc(-100% - 12px));
-  display: flex;
-  flex-direction: column;
-  padding: 0.35rem 0.6rem;
-  border-radius: 6px;
-  border: 1px solid var(--scp-chart-tooltip-border);
-  background-color: var(--scp-chart-tooltip-bg);
-  color: var(--scp-chart-tooltip-text);
-  font-size: 0.72rem;
-  white-space: nowrap;
-  pointer-events: none;
-  box-shadow: var(--scp-shadow-md);
-}
 
 .console-root .ov-problems {
   display: flex;
@@ -864,7 +815,9 @@
   .console-root .ov-map-group-title {
     margin: 0;
   }
-  .console-root .ov-kpi-grid,
+  .console-root .ov-kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
   .console-root .ov-snap-grid {
     grid-template-columns: 1fr;
   }

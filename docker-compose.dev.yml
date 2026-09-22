@@ -10,6 +10,8 @@ services:
       - "3005:3005"
     environment:
       - NODE_ENV=development
+      - RUNTIME=api
+      - RUNTIME_SUPERVISOR=docker
     extra_hosts:
       - "host.docker.internal:host-gateway"
     env_file:
@@ -23,6 +25,52 @@ services:
     mem_limit: 768m
     mem_reservation: 384m
     restart: unless-stopped
+
+  # Worker runtime: consumer BullMQ (dùng dist do service backend build)
+  worker:
+    container_name: core-worker-dev
+    build:
+      context: .
+      dockerfile: docker/backend/Dockerfile.dev
+    environment:
+      - NODE_ENV=development
+      - RUNTIME=worker
+      - RUNTIME_SUPERVISOR=docker
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    env_file:
+      - .env.docker.dev
+    volumes:
+      - ./backend:/app/backend
+      - backend_node_modules:/app/backend/node_modules
+    mem_limit: 512m
+    mem_reservation: 256m
+    restart: unless-stopped
+    depends_on:
+      - backend
+
+  # Scheduler runtime: cron task (dùng dist do service backend build)
+  scheduler:
+    container_name: core-scheduler-dev
+    build:
+      context: .
+      dockerfile: docker/backend/Dockerfile.dev
+    environment:
+      - NODE_ENV=development
+      - RUNTIME=scheduler
+      - RUNTIME_SUPERVISOR=docker
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    env_file:
+      - .env.docker.dev
+    volumes:
+      - ./backend:/app/backend
+      - backend_node_modules:/app/backend/node_modules
+    mem_limit: 256m
+    mem_reservation: 128m
+    restart: unless-stopped
+    depends_on:
+      - backend
 
   frontend:
     container_name: core-frontend-dev

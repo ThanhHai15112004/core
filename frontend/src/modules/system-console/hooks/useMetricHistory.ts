@@ -99,12 +99,11 @@ export function useMetricHistory() {
     (
       metric: PerformanceMetricKey,
       range: PerformanceTimeRange,
-      formatTime: (at: number) => string,
     ): { series: PerformanceDataPoint[]; stats: PerformanceStats } => {
       const cutoff = Date.now() - RANGE_MS[range];
       const series = samples
         .filter((s) => s.at >= cutoff && s.values[metric] !== null)
-        .map((s) => ({ time: formatTime(s.at), value: s.values[metric] as number }));
+        .map((s) => ({ t: s.at, value: s.values[metric] as number }));
 
       if (series.length === 0) {
         return { series, stats: EMPTY_STATS };

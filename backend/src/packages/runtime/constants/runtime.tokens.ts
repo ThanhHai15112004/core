@@ -1,0 +1,1 @@
+export const RUNTIME_IDENTITY = Symbol('RUNTIME_IDENTITY');

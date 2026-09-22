@@ -17,11 +17,17 @@ import { HttpClientModule } from '@packages/http-client/index.js';
 import { I18nModule } from '@packages/i18n/index.js';
 import { HealthModule } from '@modules/health/index.js';
 import { SystemOpsModule } from '@modules/system-ops/index.js';
+import { RuntimesModule } from '@modules/runtimes/index.js';
+import { RedisModule } from '@packages/redis/index.js';
+import { RuntimeAgentModule } from '@packages/runtime/index.js';
+import { ApiRuntimeContributor } from './runtime/api-runtime.contributor.js';
 
 @Module({
   imports: [
     KernelModule,
     ConfigModule,
+    RedisModule,
+    RuntimeAgentModule.forRuntime({ id: 'api', kind: 'long-running' }),
     HttpModule,
     DatabaseModule,
     LoggingModule,
@@ -33,8 +39,10 @@ import { SystemOpsModule } from '@modules/system-ops/index.js';
     I18nModule,
     HealthModule,
     SystemOpsModule,
+    RuntimesModule,
   ],
   providers: [
+    ApiRuntimeContributor,
     {
       provide: APP_FILTER,
       useClass: GlobalExceptionFilter,

@@ -7,6 +7,7 @@ import { HttpMetricsService, type HttpMetricsSnapshot } from '@packages/logging/
 import { CorePackageId, PackageStatus } from '@packages/kernel/index.js';
 import { PackageRegistryService, type PackageSummaryDto } from './package-registry.service.js';
 import { OpsEventService } from './ops-event.service.js';
+import { RuntimesService, type RuntimeSummaryDto } from '@modules/runtimes/index.js';
 import type {
   AffectedComponentDto,
   SystemOverviewResponseDto,
@@ -33,6 +34,28 @@ const PACKAGE_SECTION: Record<string, string> = {
 
 const sectionOf = (packageId: string): string => PACKAGE_SECTION[packageId] ?? 'packages';
 
+/** Trạng thái runtime → trạng thái health map / mức độ sự cố. */
+const RUNTIME_MAP_STATUS: Record<string, HealthMapItemDto['status']> = {
+  healthy: 'healthy',
+  starting: 'warning',
+  degraded: 'warning',
+  stopping: 'warning',
+  restarting: 'warning',
+  stopped: 'warning',
+  crashed: 'critical',
+  unknown: 'unknown',
+};
+
+/** Một thành phần đang có vấn đề (package hoặc runtime). */
+interface Problem {
+  key: string;
+  name: string;
+  severity: 'error' | 'warning';
+  section: string;
+  description: string;
+  since?: Date;
+}
+
 /** Số đo của process/OS tại thời điểm gọi API. */
 interface RuntimeSnapshot {
   uptimeSeconds: number;
@@ -52,6 +75,9 @@ interface OverviewContext {
   runtime: RuntimeSnapshot;
   http: HttpMetricsSnapshot;
   packages: PackageSummaryDto[];
+  /** Worker/Scheduler từ runtime telemetry (API chính là process hiện tại). */
+  runtimes: Map<string, RuntimeSummaryDto>;
+  problems: Problem[];
   /** `null` = không ping được hoặc không có package database. */
   dbPingMs: number | null;
 }
@@ -64,17 +90,22 @@ export class SystemOverviewService {
     private readonly httpMetrics: HttpMetricsService,
     private readonly i18n: CoreI18nService,
     private readonly events: OpsEventService,
+    private readonly runtimes: RuntimesService,
   ) {}
 
   public async getOverview(): Promise<SystemOverviewResponseDto> {
-    const [packages, dbPingMs] = await Promise.all([
+    const [packages, dbPingMs, runtimeList] = await Promise.all([
       this.registryService.getAllSummaries(),
       this.pingDatabase(),
+      this.runtimes.getSummaries().catch(() => [] as RuntimeSummaryDto[]),
     ]);
+    const runtimes = new Map(runtimeList.map((r) => [r.id, r]));
     const ctx: OverviewContext = {
       runtime: this.readRuntime(),
       http: this.httpMetrics.snapshot(),
       packages,
+      runtimes,
+      problems: this.collectProblems(packages, runtimes),
       dbPingMs,
     };
 
@@ -147,17 +178,57 @@ export class SystemOverviewService {
     };
   }
 
-  private packagesWithStatus(ctx: OverviewContext, status: PackageStatus): PackageSummaryDto[] {
-    return ctx.packages.filter((p) => p.statusReport.status === status);
+  private collectProblems(
+    packages: PackageSummaryDto[],
+    runtimes: Map<string, RuntimeSummaryDto>,
+  ): Problem[] {
+    const fromPackages: Problem[] = packages
+      .filter(
+        (p) =>
+          p.statusReport.status === PackageStatus.ERROR ||
+          p.statusReport.status === PackageStatus.WARNING,
+      )
+      .map((p) => {
+        const since = this.events.getStatusSince(p.packageId);
+        return {
+          key: `pkg-${p.packageId}`,
+          name: p.displayName,
+          severity: p.statusReport.status === PackageStatus.ERROR ? 'error' : 'warning',
+          section: sectionOf(p.packageId),
+          description: p.statusReport.summary,
+          ...(since ? { since } : {}),
+        };
+      });
+    const fromRuntimes: Problem[] = [...runtimes.values()]
+      .filter(
+        (r) =>
+          r.id !== 'api' && ['critical', 'warning'].includes(RUNTIME_MAP_STATUS[r.status] ?? ''),
+      )
+      .map((r) => ({
+        key: `rt-${r.id}`,
+        name: r.name,
+        severity: RUNTIME_MAP_STATUS[r.status] === 'critical' ? 'error' : 'warning',
+        section: `runtimes/${r.id}`,
+        description:
+          r.reasons.map((x) => x.message).join(' • ') ||
+          this.i18n.t(`overview.runtime.status.${r.status}`),
+      }));
+    return [
+      ...fromPackages.filter((p) => p.severity === 'error'),
+      ...fromRuntimes,
+      ...fromPackages.filter((p) => p.severity === 'warning'),
+    ].sort((a, b) => (a.severity === b.severity ? 0 : a.severity === 'error' ? -1 : 1));
   }
 
   private buildOverallHealth(ctx: OverviewContext): OverallHealthReportDto {
-    const failing = this.packagesWithStatus(ctx, PackageStatus.ERROR);
-    const warning = this.packagesWithStatus(ctx, PackageStatus.WARNING);
-    const problems = [...failing, ...warning];
+    const problems = ctx.problems;
+    const managedRuntimes = [...ctx.runtimes.values()].filter((r) => r.id !== 'api');
+    const total = ctx.packages.length + managedRuntimes.length;
+    // Runtime chưa có telemetry không được tính là "ổn định".
+    const unknownRuntimes = managedRuntimes.filter((r) => r.status === 'unknown').length;
     const base = {
-      healthyServices: ctx.packages.length - problems.length,
-      totalServices: ctx.packages.length,
+      healthyServices: total - problems.length - unknownRuntimes,
+      totalServices: total,
       uptimeSeconds: ctx.runtime.uptimeSeconds,
     };
 
@@ -171,16 +242,12 @@ export class SystemOverviewService {
       };
     }
 
-    const affectedComponents: AffectedComponentDto[] = problems.map((p) => ({
-      name: p.displayName,
-      status: p.statusReport.status,
-      section: sectionOf(p.packageId),
-    }));
+    const failingCount = problems.filter((p) => p.severity === 'error').length;
+    const isCritical = failingCount > 0;
     const startedAt = problems
-      .map((p) => this.events.getStatusSince(p.packageId))
+      .map((p) => p.since)
       .filter((d): d is Date => d !== undefined)
       .sort((a, b) => a.getTime() - b.getTime())[0];
-    const isCritical = failing.length > 0;
 
     return {
       ...base,
@@ -191,13 +258,17 @@ export class SystemOverviewService {
       message: this.i18n.t(
         isCritical ? 'overview.health.critical.message' : 'overview.health.degraded.message',
         {
-          count: isCritical ? failing.length : warning.length,
+          count: isCritical ? failingCount : problems.length,
         },
       ),
-      affectedServices: problems.map((p) => p.displayName),
-      affectedComponents,
-      actionLabel: this.i18n.t('overview.health.inspect', { name: firstProblem.displayName }),
-      actionSection: sectionOf(firstProblem.packageId),
+      affectedServices: problems.map((p) => p.name),
+      affectedComponents: problems.map<AffectedComponentDto>((p) => ({
+        name: p.name,
+        status: p.severity,
+        section: p.section,
+      })),
+      actionLabel: this.i18n.t('overview.health.inspect', { name: firstProblem.name }),
+      actionSection: firstProblem.section,
       ...(startedAt ? { startedAt: startedAt.toISOString() } : {}),
     };
   }
@@ -211,8 +282,8 @@ export class SystemOverviewService {
           seconds: http.windowSeconds,
         })
       : this.i18n.t('overview.metric.noTraffic', { seconds: http.windowSeconds });
-    const errorCount = this.packagesWithStatus(ctx, PackageStatus.ERROR).length;
-    const alertCount = errorCount + this.packagesWithStatus(ctx, PackageStatus.WARNING).length;
+    const errorCount = ctx.problems.filter((p) => p.severity === 'error').length;
+    const alertCount = ctx.problems.length;
 
     return [
       {
@@ -284,22 +355,43 @@ export class SystemOverviewService {
     const securityPackage = pkg(CorePackageId.SECURITY);
     const cacheKeys = cachePackage?.statusReport.metrics['keys'];
     const cacheHitRate = cachePackage?.statusReport.metrics['hitRatePercent'];
-    const unmonitored = (
-      id: string,
-      nameKey: string,
-      targetSection: string,
-      icon: string,
-    ): HealthMapItemDto => ({
-      id,
-      name: this.i18n.t(nameKey),
-      category: 'runtime',
-      status: 'unknown',
-      subtext: this.i18n.t('overview.map.processUnmonitored'),
-      secondarySubtext: this.i18n.t('overview.map.processUnmonitoredDetail'),
-      metric: this.i18n.t('overview.map.notMonitored'),
-      targetSection,
-      icon,
-    });
+    const runtimeItem = (id: 'worker' | 'scheduler', icon: string): HealthMapItemDto => {
+      const rt = ctx.runtimes.get(id);
+      const nameKey = `overview.map.${id}.name`;
+      if (!rt || rt.status === 'unknown') {
+        return {
+          id: `runtime-${id}`,
+          name: this.i18n.t(nameKey),
+          category: 'runtime',
+          status: 'unknown',
+          subtext: rt?.reasons[0]?.message ?? this.i18n.t('overview.map.processUnmonitored'),
+          metric: this.i18n.t('overview.map.notMonitored'),
+          targetSection: `runtimes/${id}`,
+          icon,
+        };
+      }
+      const m = rt.metrics;
+      return {
+        id: `runtime-${id}`,
+        name: rt.name,
+        category: 'runtime',
+        status: RUNTIME_MAP_STATUS[rt.status] ?? 'unknown',
+        subtext: this.i18n.t(`overview.runtime.status.${rt.status}`),
+        ...(rt.reasons[0] ? { secondarySubtext: rt.reasons[0].message } : {}),
+        metric:
+          id === 'worker'
+            ? this.i18n.t('overview.map.worker.metric', {
+                active: String(m['activeJobs'] ?? UNAVAILABLE),
+                waiting: String(m['waitingJobs'] ?? UNAVAILABLE),
+              })
+            : this.i18n.t('overview.map.scheduler.metric', {
+                running: String(m['runningTasks'] ?? UNAVAILABLE),
+                failed: String(m['failedToday'] ?? UNAVAILABLE),
+              }),
+        targetSection: `runtimes/${id}`,
+        icon,
+      };
+    };
 
     return [
       {
@@ -313,11 +405,11 @@ export class SystemOverviewService {
           uptime: ctx.runtime.uptimeSeconds,
         }),
         metric: `${ctx.http.requestsPerSecond} req/s • P95 ${ctx.http.p95LatencyMs ?? UNAVAILABLE} ms`,
-        targetSection: 'runtime',
+        targetSection: 'runtimes/api',
         icon: 'globe',
       },
-      unmonitored('runtime-worker', 'overview.map.worker.name', 'worker', 'cpu'),
-      unmonitored('runtime-scheduler', 'overview.map.scheduler.name', 'scheduler', 'clock'),
+      runtimeItem('worker', 'cpu'),
+      runtimeItem('scheduler', 'clock'),
       {
         id: 'infra-db',
         name: this.i18n.t('overview.map.database.name'),
@@ -395,25 +487,16 @@ export class SystemOverviewService {
   }
 
   private buildIncidents(ctx: OverviewContext): ActiveIncidentItemDto[] {
-    return ctx.packages
-      .filter(
-        (p) =>
-          p.statusReport.status === PackageStatus.WARNING ||
-          p.statusReport.status === PackageStatus.ERROR,
-      )
-      .map((p) => {
-        const since = this.events.getStatusSince(p.packageId);
-        return {
-          id: `incident-${p.packageId}`,
-          severity: p.statusReport.status === PackageStatus.ERROR ? 'critical' : 'warning',
-          title: this.i18n.t('overview.incident.title', { name: p.displayName }),
-          description: p.statusReport.summary,
-          startedAgo: this.i18n.t('overview.incident.active'),
-          ...(since ? { startedAt: since.toISOString() } : {}),
-          targetSection: sectionOf(p.packageId),
-          actionLabel: this.i18n.t('overview.incident.action', { name: p.displayName }),
-        };
-      });
+    return ctx.problems.map((p) => ({
+      id: `incident-${p.key}`,
+      severity: p.severity === 'error' ? 'critical' : 'warning',
+      title: this.i18n.t('overview.incident.title', { name: p.name }),
+      description: p.description,
+      startedAgo: this.i18n.t('overview.incident.active'),
+      ...(p.since ? { startedAt: p.since.toISOString() } : {}),
+      targetSection: p.section,
+      actionLabel: this.i18n.t('overview.incident.action', { name: p.name }),
+    }));
   }
 
   private buildInfraSnapshots(ctx: OverviewContext): InfraSnapshotItemDto[] {
@@ -422,21 +505,50 @@ export class SystemOverviewService {
     const cacheMetrics =
       ctx.packages.find((p) => p.packageId === CorePackageId.CACHE)?.statusReport.metrics ?? {};
     const hitRate = cacheMetrics['hitRatePercent'];
-    const unavailable = (id: string, nameKey: string, targetSection: string, icon: string) => ({
-      id,
-      title: this.i18n.t(nameKey),
-      icon,
-      targetSection,
-      metrics: [],
-      unavailable: true,
-    });
+    const runtimeSnapshot = (id: 'worker' | 'scheduler', icon: string): InfraSnapshotItemDto => {
+      const rt = ctx.runtimes.get(id);
+      const base = {
+        id: `snap-${id}`,
+        title: this.i18n.t(`overview.map.${id}.name`),
+        icon,
+        targetSection: `runtimes/${id}`,
+      };
+      if (!rt?.resources) return { ...base, metrics: [], unavailable: true };
+      const m = rt.metrics;
+      const value = (v: unknown) =>
+        v === null || v === undefined ? UNAVAILABLE : (v as string | number);
+      const specific =
+        id === 'worker'
+          ? [
+              { label: label('activeJobs'), value: value(m['activeJobs']) },
+              { label: label('waitingJobs'), value: value(m['waitingJobs']) },
+              { label: label('jobsPerMinute'), value: value(m['jobsPerMinute']) },
+            ]
+          : [
+              { label: label('tasks'), value: value(m['registeredTasks']) },
+              { label: label('runningTasks'), value: value(m['runningTasks']) },
+              {
+                label: label('failedToday'),
+                value: value(m['failedToday']),
+                isWarn: Number(m['failedToday'] ?? 0) > 0,
+              },
+            ];
+      return {
+        ...base,
+        metrics: [
+          { label: label('cpu'), value: `${rt.resources.cpuPercent}%` },
+          { label: label('memory'), value: `${rt.resources.rssMb} MB` },
+          ...specific,
+        ],
+      };
+    };
 
     return [
       {
         id: 'snap-api',
         title: this.i18n.t('overview.map.api.name'),
         icon: 'globe',
-        targetSection: 'runtime',
+        targetSection: 'runtimes/api',
         metrics: [
           {
             label: label('cpu'),
@@ -451,7 +563,7 @@ export class SystemOverviewService {
           },
         ],
       },
-      unavailable('snap-worker', 'overview.map.worker.name', 'worker', 'cpu'),
+      runtimeSnapshot('worker', 'cpu'),
       {
         id: 'snap-db',
         title: this.i18n.t('overview.map.database.name'),
@@ -482,7 +594,7 @@ export class SystemOverviewService {
           { label: label('misses'), value: Number(cacheMetrics['misses'] ?? 0) },
         ],
       },
-      unavailable('snap-scheduler', 'overview.map.scheduler.name', 'scheduler', 'clock'),
+      runtimeSnapshot('scheduler', 'clock'),
     ];
   }
 }

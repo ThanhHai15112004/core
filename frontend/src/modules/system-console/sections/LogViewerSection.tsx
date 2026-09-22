@@ -5,6 +5,12 @@ import { useConsoleData } from '../context/console-data-context';
 import { SectionHeader } from '../components/common/SectionHeader';
 import { usePackage } from '../hooks/usePackage';
 import { useLocale } from '../../../core/i18n/index';
+import { useConsoleRoute } from '../context/console-route-context';
+import { RuntimeLogsPanel } from '../components/runtimes/RuntimeLogsPanel';
+
+const LOG_SOURCES = ['session', 'api', 'worker', 'scheduler', 'cli'] as const;
+type LogSource = (typeof LOG_SOURCES)[number];
+const isLogSource = (v: string | null): v is LogSource => LOG_SOURCES.includes(v as LogSource);
 
 const LEVEL_FILTERS = ['all', 'info', 'warn', 'error', 'success'] as const;
 type LevelFilter = (typeof LEVEL_FILTERS)[number];
@@ -20,6 +26,9 @@ function downloadJson(data: unknown, filename: string): void {
 
 export const LogViewerSection: React.FC = () => {
   const { t, formatTime } = useLocale();
+  const { route, navigate } = useConsoleRoute();
+  const querySource = route.query.get('runtime');
+  const source: LogSource = isLogSource(querySource) ? querySource : 'session';
   const { events, clearEvents, executeAction } = useConsoleData();
   const { pkg: loggingPkg, metric } = usePackage('logging');
 
@@ -52,6 +61,26 @@ export const LogViewerSection: React.FC = () => {
   return (
     <div>
       <SectionHeader title={t('console.logs.title')} description={t('console.logs.description')} />
+
+      <div className="ov-segmented" role="tablist" aria-label={t('console.logs.source')} style={{ marginBottom: '1rem' }}>
+        {LOG_SOURCES.map((s) => (
+          <button
+            key={s}
+            type="button"
+            role="tab"
+            aria-selected={source === s}
+            className={source === s ? 'is-active' : ''}
+            onClick={() => navigate(s === 'session' ? 'logs' : `logs?runtime=${s}`)}
+          >
+            {s === 'session' ? t('console.logs.sessionSource') : t(`rt.name.${s}`)}
+          </button>
+        ))}
+      </div>
+
+      {source !== 'session' ? (
+        <RuntimeLogsPanel runtime={source} limit={500} />
+      ) : (
+      <>
 
       {loggingPkg && (
         <div className="scp-panel" style={{ marginBottom: '1.25rem', padding: '1rem 1.25rem' }}>
@@ -158,6 +187,8 @@ export const LogViewerSection: React.FC = () => {
           )}
         </div>
       </div>
+      </>
+      )}
     </div>
   );
 };

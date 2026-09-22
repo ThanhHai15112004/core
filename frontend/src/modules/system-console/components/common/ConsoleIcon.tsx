@@ -25,6 +25,11 @@ import {
   Search,
   Sliders,
   Home,
+  Gauge,
+  Network,
+  ListChecks,
+  KeyRound,
+  Settings2,
 } from 'lucide-react';
 import type { ConsoleSectionId } from '../../types/console.types';
 
@@ -61,8 +66,20 @@ export const ConsoleIcon: React.FC<ConsoleIconProps> = ({
   switch (name) {
     case 'overview':
       return <LayoutDashboard size={size} className={className} />;
-    case 'runtime':
+    case 'runtimes':
+      return <Server size={size} className={className} />;
+    case 'http-traffic':
+      return <Network size={size} className={className} />;
+    case 'performance':
+      return <Gauge size={size} className={className} />;
+    case 'activity':
       return <Activity size={size} className={className} />;
+    case 'jobs':
+      return <ListChecks size={size} className={className} />;
+    case 'secrets':
+      return <KeyRound size={size} className={className} />;
+    case 'configuration':
+      return <Settings2 size={size} className={className} />;
     case 'packages':
       return <Boxes size={size} className={className} />;
     case 'logs':

@@ -38,8 +38,8 @@
    Sidebar
    -------------------------------------------------------------------------- */
 .console-root .console-sidebar {
-  width: 232px;
-  min-width: 232px;
+  width: 248px;
+  min-width: 248px;
   height: 100vh;
   position: sticky;
   top: 0;
@@ -98,7 +98,7 @@
   padding: 0.75rem 0.6rem;
   display: flex;
   flex-direction: column;
-  gap: 0.9rem;
+  gap: 0.35rem;
 }
 
 .console-root .sb-group {
@@ -107,14 +107,6 @@
   gap: 2px;
 }
 
-.console-root .sb-group-label {
-  padding: 0 0.6rem 0.3rem;
-  font-size: 0.68rem;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--scp-text-muted);
-}
 
 .console-root .sb-item {
   position: relative;
@@ -407,9 +399,15 @@
   .console-root .sb-group {
     flex-direction: row;
   }
-  .console-root .sb-group-label,
+  .console-root .sb-group-toggle,
   .console-root .sb-footer {
     display: none;
+  }
+  .console-root .sb-children {
+    flex-direction: row;
+    margin: 0;
+    padding: 0;
+    border: none;
   }
   .console-root .sb-item {
     width: auto;
@@ -422,5 +420,116 @@
   }
   .console-root .console-content-container {
     padding: 1rem;
+  }
+}
+
+/* Sidebar cha-con */
+.console-root .sb-group-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  width: 100%;
+  padding: 0.5rem 0.6rem;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--scp-text-primary);
+  font-size: 0.8rem;
+  font-weight: 650;
+  text-align: left;
+  cursor: pointer;
+}
+
+.console-root .sb-group-toggle:hover {
+  background-color: var(--scp-bg-surface-subtle);
+}
+
+.console-root .sb-group-toggle:focus-visible {
+  outline: 2px solid var(--scp-border-focus);
+  outline-offset: 1px;
+}
+
+.console-root .sb-chevron {
+  color: var(--scp-text-muted);
+  transition: transform 0.15s ease;
+}
+
+.console-root .sb-chevron.is-open {
+  transform: rotate(90deg);
+}
+
+.console-root .sb-children {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 2px 0 0 1.05rem;
+  padding-left: 0.6rem;
+  border-left: 1px solid var(--scp-border-subtle);
+}
+
+.console-root .sb-item.is-nested {
+  padding: 0.4rem 0.6rem;
+  font-size: 0.82rem;
+}
+
+.console-root .sb-item.is-planned .sb-item-label {
+  color: var(--scp-text-muted);
+}
+
+.console-root .sb-item-planned {
+  padding: 0 5px;
+  border-radius: 4px;
+  font-size: 0.62rem;
+  font-weight: 600;
+  line-height: 16px;
+  color: var(--scp-text-muted);
+  background-color: var(--scp-bg-surface-subtle);
+  white-space: nowrap;
+}
+
+.console-root .tb-crumb-link {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--scp-text-secondary);
+  font-size: inherit;
+  cursor: pointer;
+}
+
+.console-root .tb-crumb-link:hover {
+  color: var(--scp-primary);
+  text-decoration: underline;
+}
+
+/* Tên nhóm dài được xuống dòng thay vì bị cắt */
+.console-root .sb-group-toggle .sb-item-label {
+  white-space: normal;
+  line-height: 1.3;
+}
+
+.console-root .sb-children.is-collapsed {
+  display: none;
+}
+
+/* Mobile: nav ngang cuộn được, chỉ các mục lá (đặt cuối file để thắng các rule sidebar cha-con). */
+@media (max-width: 768px) {
+  .console-root .sb-group-toggle {
+    display: none;
+  }
+  .console-root .sb-children,
+  .console-root .sb-children.is-collapsed {
+    display: flex;
+    flex-direction: row;
+    margin: 0;
+    padding: 0;
+    border: none;
+  }
+  .console-root .sb-item,
+  .console-root .sb-item.is-nested {
+    width: auto;
+    white-space: nowrap;
+  }
+  .console-root .sb-item.is-planned {
+    display: none;
   }
 }

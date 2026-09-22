@@ -48,7 +48,7 @@ describe('i18n', () => {
           ).default,
         ).sort();
 
-      for (const ns of ['common', 'ops', 'overview']) {
+      for (const ns of ['common', 'ops', 'overview', 'runtime']) {
         expect(await load('en', ns)).toEqual(await load('vi', ns));
       }
     });

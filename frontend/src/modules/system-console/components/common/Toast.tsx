@@ -1,14 +1,15 @@
 import React from 'react';
-import { createPortal } from 'react-dom';
 import { useConsoleData } from '../../context/console-data-context';
 import { X } from 'lucide-react';
+import { ConsolePortal } from './ConsolePortal';
 
 export const ToastContainer: React.FC = () => {
   const { toasts, removeToast } = useConsoleData();
 
   if (toasts.length === 0 || typeof document === 'undefined') return null;
 
-  return createPortal(
+  return (
+    <ConsolePortal>
     <div className="toast-container">
       {toasts.map((toast) => (
         <div key={toast.id} className={`toast-item toast-${toast.type}`}>
@@ -39,7 +40,7 @@ export const ToastContainer: React.FC = () => {
           </button>
         </div>
       ))}
-    </div>,
-    document.body
+    </div>
+    </ConsolePortal>
   );
 };

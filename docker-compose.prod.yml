@@ -42,10 +42,58 @@ services:
       dockerfile: docker/backend/Dockerfile.prod
     environment:
       - NODE_ENV=production
+      - RUNTIME_SUPERVISOR=docker
     env_file:
       - .env.docker.prod
     mem_limit: 512m
     mem_reservation: 256m
+    restart: always
+    networks:
+      - core_prod_net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ==============================================================================
+  # 2b. Worker runtime (consumer BullMQ) & Scheduler runtime (cron) — cùng image backend
+  # ==============================================================================
+  worker:
+    container_name: core-worker-prod
+    build:
+      context: .
+      dockerfile: docker/backend/Dockerfile.prod
+    command: ["node", "dist/apps/worker/main.js"]
+    environment:
+      - NODE_ENV=production
+      - RUNTIME_SUPERVISOR=docker
+    env_file:
+      - .env.docker.prod
+    mem_limit: 512m
+    mem_reservation: 256m
+    restart: always
+    networks:
+      - core_prod_net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  scheduler:
+    container_name: core-scheduler-prod
+    build:
+      context: .
+      dockerfile: docker/backend/Dockerfile.prod
+    command: ["node", "dist/apps/scheduler/main.js"]
+    environment:
+      - NODE_ENV=production
+      - RUNTIME_SUPERVISOR=docker
+    env_file:
+      - .env.docker.prod
+    mem_limit: 256m
+    mem_reservation: 128m
     restart: always
     networks:
       - core_prod_net

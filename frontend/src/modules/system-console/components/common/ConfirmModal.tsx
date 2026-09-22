@@ -1,7 +1,7 @@
 import React from 'react';
-import { createPortal } from 'react-dom';
 import { AlertTriangle, X } from 'lucide-react';
 import { useLocale } from '../../../../core/i18n/index';
+import { ConsolePortal } from './ConsolePortal';
 
 interface ConfirmModalProps {
   isOpen: boolean;
@@ -29,7 +29,8 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
   const { t } = useLocale();
   if (!isOpen || typeof document === 'undefined') return null;
 
-  return createPortal(
+  return (
+    <ConsolePortal>
     <div className="modal-backdrop" onClick={onCancel}>
       <div className="modal-box" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
@@ -75,7 +76,7 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
           </button>
         </div>
       </div>
-    </div>,
-    document.body
+    </div>
+    </ConsolePortal>
   );
 };

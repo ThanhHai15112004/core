@@ -521,3 +521,83 @@
   width: 240px;
   outline: none;
 }
+
+/* LineChart dùng chung */
+.console-root .lc-canvas {
+  position: relative;
+  width: 100%;
+}
+
+.console-root .lc-canvas svg {
+  display: block;
+  cursor: crosshair;
+}
+
+.console-root .lc-grid {
+  stroke: var(--scp-chart-grid);
+  stroke-width: 1;
+}
+
+.console-root .lc-axis {
+  fill: var(--scp-text-muted);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.console-root .lc-cursor {
+  stroke: var(--scp-text-muted);
+  stroke-dasharray: 3 3;
+}
+
+.console-root .lc-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 2rem;
+  border: 1px dashed var(--scp-border-subtle);
+  border-radius: 9px;
+  text-align: center;
+  font-size: 0.82rem;
+  color: var(--scp-text-muted);
+}
+
+.console-root .lc-tooltip {
+  position: absolute;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0.4rem 0.6rem;
+  border-radius: 6px;
+  border: 1px solid var(--scp-chart-tooltip-border);
+  background-color: var(--scp-chart-tooltip-bg);
+  color: var(--scp-chart-tooltip-text);
+  font-size: 0.72rem;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: var(--scp-shadow-md);
+}
+
+.console-root .lc-tooltip-row,
+.console-root .lc-legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.console-root .lc-tooltip-row i,
+.console-root .lc-legend i {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+}
+
+.console-root .lc-legend {
+  display: flex;
+  gap: 1rem;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.75rem;
+  color: var(--scp-text-secondary);
+}

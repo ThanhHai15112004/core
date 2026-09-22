@@ -1,12 +1,12 @@
 import React from 'react';
-import type { ConsoleSectionId, HealthMapCategory, HealthMapItem } from '../../types/console.types';
+import type { ConsolePath, HealthMapCategory, HealthMapItem } from '../../types/console.types';
 import { ConsoleIcon } from '../common/ConsoleIcon';
 import { toneOf } from '../../utils/status-tone';
 import { useLocale } from '../../../../core/i18n/index';
 
 interface SystemHealthMapProps {
   items: HealthMapItem[];
-  onNavigate: (section: ConsoleSectionId) => void;
+  onNavigate: (path: ConsolePath) => void;
 }
 
 const CATEGORIES: HealthMapCategory[] = ['runtime', 'infrastructure', 'governance'];

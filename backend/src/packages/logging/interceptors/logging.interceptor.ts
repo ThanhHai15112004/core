@@ -6,7 +6,7 @@ import {
   type NestInterceptor,
 } from '@nestjs/common';
 import type { Observable } from 'rxjs';
-import { tap } from 'rxjs/operators';
+import { finalize, tap } from 'rxjs/operators';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { RequestContextService } from '../context/request-context.service.js';
 import { HttpMetricsService } from '../metrics/http-metrics.service.js';
@@ -30,7 +30,9 @@ export class LoggingInterceptor implements NestInterceptor {
     const url = req.url;
     const correlationId = this.contextService.getCorrelationId();
 
+    this.metrics.begin();
     return next.handle().pipe(
+      finalize(() => this.metrics.end()),
       tap({
         next: () => {
           const duration = Date.now() - startTime;

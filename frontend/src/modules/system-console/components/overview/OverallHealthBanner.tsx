@@ -1,6 +1,6 @@
 import React from 'react';
 import { CheckCircle2, AlertTriangle, XCircle, ArrowRight } from 'lucide-react';
-import type { ConsoleSectionId, OverallHealthReport } from '../../types/console.types';
+import type { ConsolePath, OverallHealthReport } from '../../types/console.types';
 import { UptimeCounter } from '../common/UptimeCounter';
 import { StatusPill } from '../common/StatusPill';
 import { toneOf } from '../../utils/status-tone';
@@ -9,7 +9,7 @@ import { useLocale } from '../../../../core/i18n/index';
 interface OverallHealthBannerProps {
   healthReport: OverallHealthReport;
   now: number;
-  onNavigate: (section: ConsoleSectionId) => void;
+  onNavigate: (path: ConsolePath) => void;
 }
 
 const ICONS = { ok: CheckCircle2, warn: AlertTriangle, crit: XCircle, unknown: AlertTriangle } as const;

@@ -1,13 +1,13 @@
 import React from 'react';
 import { CheckCircle2, ArrowRight } from 'lucide-react';
-import type { ActiveIncidentItem, ConsoleSectionId } from '../../types/console.types';
+import type { ActiveIncidentItem, ConsolePath } from '../../types/console.types';
 import { toneOf } from '../../utils/status-tone';
 import { useLocale } from '../../../../core/i18n/index';
 
 interface CurrentProblemsPanelProps {
   incidents: ActiveIncidentItem[];
   now: number;
-  onNavigate: (section: ConsoleSectionId) => void;
+  onNavigate: (path: ConsolePath) => void;
 }
 
 /** Vùng ⑤: danh sách vấn đề cần xử lý — không bao giờ để trống. */

@@ -1,4 +1,4 @@
-import { Global, Module } from '@nestjs/common';
+import { Global, Module, type MiddlewareConsumer, type NestModule } from '@nestjs/common';
 import { RequestContextService } from './context/request-context.service.js';
 import { CoreLoggerService } from './providers/logger.service.js';
 import { LoggingInterceptor } from './interceptors/logging.interceptor.js';
@@ -25,4 +25,8 @@ import { HttpMetricsService } from './metrics/http-metrics.service.js';
     HttpMetricsService,
   ],
 })
-export class LoggingModule {}
+export class LoggingModule implements NestModule {
+  public configure(consumer: MiddlewareConsumer): void {
+    consumer.apply(CorrelationIdMiddleware).forRoutes('{*path}');
+  }
+}

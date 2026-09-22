@@ -69,6 +69,9 @@
   /* Performance Chart */
   --scp-chart-grid: rgba(0, 0, 0, 0.06);
   --scp-chart-line: #2563eb;
+  --scp-series-1: #2563eb;
+  --scp-series-2: #d97706;
+  --scp-series-3: #7c3aed;
   --scp-chart-fill-start: rgba(37, 99, 235, 0.18);
   --scp-chart-fill-end: rgba(37, 99, 235, 0.0);
   --scp-chart-point: #2563eb;
@@ -148,6 +151,9 @@
   /* Performance Chart */
   --scp-chart-grid: rgba(255, 255, 255, 0.06);
   --scp-chart-line: #3b82f6;
+  --scp-series-1: #60a5fa;
+  --scp-series-2: #fbbf24;
+  --scp-series-3: #a78bfa;
   --scp-chart-fill-start: rgba(59, 130, 246, 0.25);
   --scp-chart-fill-end: rgba(59, 130, 246, 0.0);
   --scp-chart-point: #60a5fa;
@@ -174,4 +180,10 @@
 
 .console-root * {
   box-sizing: border-box;
+}
+
+/* Lớp bọc cho modal/drawer/toast render qua portal */
+.console-root.console-portal {
+  min-height: 0;
+  background-color: transparent;
 }

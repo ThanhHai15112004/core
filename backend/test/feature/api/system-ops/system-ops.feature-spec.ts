@@ -179,13 +179,15 @@ describe('Feature: System Ops overview (/ops/overview)', () => {
     expect(response.statusCode).toBe(200);
     const body = JSON.parse(response.payload) as {
       data: {
-        overallHealth: { totalServices: number };
+        overallHealth: { totalServices: number; healthyServices: number };
         keyMetrics: Array<{ id: string; label: string }>;
         healthMap: Array<{ id: string; status: string }>;
       };
     };
 
-    expect(body.data.overallHealth.totalServices).toBe(4);
+    // 4 package + worker + scheduler (chưa có telemetry trong test → không tính là ổn định)
+    expect(body.data.overallHealth.totalServices).toBe(6);
+    expect(body.data.overallHealth.healthyServices).toBe(3);
     expect(body.data.keyMetrics.find((m) => m.id === 'req_sec')?.label).toBe('Requests / Sec');
     expect(body.data.healthMap.find((m) => m.id === 'runtime-worker')?.status).toBe('unknown');
   });

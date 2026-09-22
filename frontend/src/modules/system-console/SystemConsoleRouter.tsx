@@ -1,82 +1,83 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import type { ConsoleSectionId } from './types/console.types';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import type { ConsolePath, ConsoleSectionId } from './types/console.types';
 import { CONSOLE_STORAGE_KEYS } from './constants/console.constants';
+import { findNavLeaf, LEGACY_SECTION_ALIASES } from './constants/console-nav';
+import { ConsoleRouteContext, type ConsoleRoute } from './context/console-route-context';
 import { ConsoleLayout } from './layouts/ConsoleLayout';
 import { OverviewSection } from './sections/OverviewSection';
-import { RuntimeSection } from './sections/RuntimeSection';
+import { RuntimesSection } from './sections/runtimes/RuntimesSection';
 import { PackagesSection } from './sections/PackagesSection';
 import { LogViewerSection } from './sections/LogViewerSection';
-import { WorkerSection } from './sections/WorkerSection';
-import { SchedulerSection } from './sections/SchedulerSection';
 import { DatabaseSection } from './sections/DatabaseSection';
 import { CacheSection } from './sections/CacheSection';
 import { SecuritySection } from './sections/SecuritySection';
+import { PlannedSection } from './sections/PlannedSection';
+import { ROUTES } from '../../routes/index';
 
-const VALID_SECTIONS: ConsoleSectionId[] = [
-  'overview',
-  'runtime',
-  'packages',
-  'logs',
-  'worker',
-  'scheduler',
-  'database',
-  'cache',
-  'security',
-];
+const HASH_PREFIX = ROUTES.SYSTEM_CONSOLE.replace(/^#/, '');
+
+function readLastSection(): string | null {
+  try {
+    return localStorage.getItem(CONSOLE_STORAGE_KEYS.LAST_SECTION);
+  } catch {
+    return null;
+  }
+}
+
+function resolveSection(raw: string | null | undefined): ConsoleSectionId | null {
+  if (!raw) return null;
+  const id = LEGACY_SECTION_ALIASES[raw] ?? raw;
+  return findNavLeaf(id)?.id ?? null;
+}
+
+/** `#system-console/runtimes/worker/metrics?x=1` → `{ section, params, query }`. */
+function parseRoute(): ConsoleRoute {
+  const [pathPart = '', queryPart = ''] = window.location.hash.replace(/^#\/?/, '').split('?');
+  const segments = pathPart.split('/').filter(Boolean);
+  const inConsole = segments[0] === HASH_PREFIX;
+  const section = (inConsole ? resolveSection(segments[1]) : null) ?? resolveSection(readLastSection()) ?? 'overview';
+  return {
+    section,
+    params: inConsole && resolveSection(segments[1]) ? segments.slice(2) : [],
+    query: new URLSearchParams(queryPart),
+  };
+}
 
 export const SystemConsoleRouter: React.FC = () => {
-  const parseSectionFromHash = (): ConsoleSectionId => {
-    const hash = window.location.hash.replace(/^#\/?/, '');
-    // hash could be "system-console" or "system-console/packages" or "system-console/database"
-    if (hash.startsWith('system-console/')) {
-      const sub = hash.replace('system-console/', '').toLowerCase() as ConsoleSectionId;
-      if (VALID_SECTIONS.includes(sub)) {
-        return sub;
-      }
-    }
-    const saved = localStorage.getItem(CONSOLE_STORAGE_KEYS.LAST_SECTION) as ConsoleSectionId;
-    if (saved && VALID_SECTIONS.includes(saved)) {
-      return saved;
-    }
-    return 'overview';
-  };
-
-  const [currentSection, setCurrentSection] = useState<ConsoleSectionId>(parseSectionFromHash);
+  const [route, setRoute] = useState<ConsoleRoute>(parseRoute);
 
   useEffect(() => {
-    const handleHashChange = () => {
-      const section = parseSectionFromHash();
-      setCurrentSection(section);
-    };
-
+    const handleHashChange = () => setRoute(parseRoute());
     window.addEventListener('hashchange', handleHashChange);
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, []);
 
-  const handleSelectSection = useCallback((section: ConsoleSectionId) => {
-    setCurrentSection(section);
-    localStorage.setItem(CONSOLE_STORAGE_KEYS.LAST_SECTION, section);
-    window.location.hash = `#system-console/${section}`;
+  const navigate = useCallback((path: ConsolePath) => {
+    const clean = path.replace(/^\/+/, '');
+    const section = resolveSection(clean.split(/[/?]/)[0]);
+    if (section) {
+      try {
+        localStorage.setItem(CONSOLE_STORAGE_KEYS.LAST_SECTION, section);
+      } catch {
+        // Ignore
+      }
+    }
+    window.location.hash = `#${HASH_PREFIX}/${clean}`;
   }, []);
 
+  const value = useMemo(() => ({ route, navigate }), [route, navigate]);
+
   const renderSection = () => {
-    switch (currentSection) {
-      case 'overview':
-        return (
-<OverviewSection onNavigate={handleSelectSection} />
-        );
-      case 'runtime':
-        return <RuntimeSection />;
+    const leaf = findNavLeaf(route.section);
+    if (leaf?.status === 'planned') return <PlannedSection sectionId={route.section} />;
+
+    switch (route.section) {
+      case 'runtimes':
+        return <RuntimesSection />;
       case 'packages':
-        return (
-          <PackagesSection />
-        );
+        return <PackagesSection />;
       case 'logs':
         return <LogViewerSection />;
-      case 'worker':
-        return <WorkerSection />;
-      case 'scheduler':
-        return <SchedulerSection />;
       case 'database':
         return <DatabaseSection />;
       case 'cache':
@@ -84,18 +85,15 @@ export const SystemConsoleRouter: React.FC = () => {
       case 'security':
         return <SecuritySection />;
       default:
-        return (
-<OverviewSection onNavigate={handleSelectSection} />
-        );
+        return <OverviewSection onNavigate={navigate} />;
     }
   };
 
   return (
-    <ConsoleLayout
-      currentSection={currentSection}
-      onSelectSection={handleSelectSection}
-    >
-      {renderSection()}
-    </ConsoleLayout>
+    <ConsoleRouteContext.Provider value={value}>
+      <ConsoleLayout currentSection={route.section} onNavigate={navigate}>
+        {renderSection()}
+      </ConsoleLayout>
+    </ConsoleRouteContext.Provider>
   );
 };

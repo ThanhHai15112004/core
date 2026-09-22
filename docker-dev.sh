@@ -12,14 +12,14 @@ case "$1" in
       docker compose $COMPOSE_FILES up -d --build "$SERVICE"
     else
       echo "🚀 Đang khởi động toàn bộ Core Framework Development (BE Fastify :3005 + FE Vite :5175)..."
-      docker compose $COMPOSE_FILES up -d --build backend frontend
+      docker compose $COMPOSE_FILES up -d --build backend worker scheduler frontend
       echo ""
       echo "✅ Các container đã sẵn sàng:"
       echo "   👉 Backend API (core-backend-dev):   http://localhost:3005/api/v1"
       echo "   👉 Frontend UI (core-frontend-dev):  http://localhost:5175"
       echo "   👉 Ops Registry:                     http://localhost:3005/api/v1/ops/packages"
       echo ""
-      echo "Xem log với: ./docker-dev.sh logs [backend|frontend]"
+      echo "Xem log với: ./docker-dev.sh logs [backend|worker|scheduler|frontend]"
     fi
     ;;
   down)
@@ -28,11 +28,11 @@ case "$1" in
     ;;
   stop)
     echo "⏸️ Đang tạm dừng toàn bộ Core App Development Containers..."
-    docker compose $COMPOSE_FILES stop backend frontend
+    docker compose $COMPOSE_FILES stop backend worker scheduler frontend
     ;;
   start)
     echo "▶️ Đang tiếp tục chạy toàn bộ Core App Development Containers..."
-    docker compose $COMPOSE_FILES start backend frontend
+    docker compose $COMPOSE_FILES start backend worker scheduler frontend
     ;;
   logs)
     if [ -n "$SERVICE" ]; then
@@ -62,10 +62,10 @@ case "$1" in
     docker compose $COMPOSE_FILES config
     ;;
   *)
-    echo "Cách dùng: ./docker-dev.sh {up|down|stop|start|logs|restart|ps|bash|config} [backend|frontend]"
+    echo "Cách dùng: ./docker-dev.sh {up|down|stop|start|logs|restart|ps|bash|config} [backend|worker|scheduler|frontend]"
     echo ""
     echo "Ví dụ:"
-    echo "  ./docker-dev.sh up                  # Khởi động cả 2 service"
+    echo "  ./docker-dev.sh up                  # Khởi động api, worker, scheduler, frontend"
     echo "  ./docker-dev.sh up backend          # Chỉ khởi động backend"
     echo "  ./docker-dev.sh logs backend        # Xem log backend"
     echo "  ./docker-dev.sh bash frontend       # Vào shell của frontend"

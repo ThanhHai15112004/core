@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
 import { ArrowRight } from 'lucide-react';
-import type { ConsoleSectionId, RecentActivityEvent } from '../../types/console.types';
+import type { ConsolePath, RecentActivityEvent } from '../../types/console.types';
 import { toneOf } from '../../utils/status-tone';
 import { useLocale } from '../../../../core/i18n/index';
 
 interface RecentEventsTimelineProps {
   events: RecentActivityEvent[];
-  onNavigate: (section: ConsoleSectionId) => void;
+  onNavigate: (path: ConsolePath) => void;
 }
 
 const FILTERS = ['all', 'error', 'warn'] as const;

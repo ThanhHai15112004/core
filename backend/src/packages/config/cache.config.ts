@@ -5,6 +5,8 @@ export const cacheConfig = () => ({
     host: env('REDIS_HOST'),
     port: env.number('REDIS_PORT'),
     prefix: env('REDIS_PREFIX'),
+    password: env('REDIS_PASSWORD', false) || undefined,
+    db: env.number('REDIS_DB', false),
   },
 });
 

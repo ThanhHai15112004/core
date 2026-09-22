@@ -1,3 +1,5 @@
+import type { QueueName } from '../constants/queues.constant.js';
+
 export interface MessageEnvelope<T = unknown> {
   readonly id: string;
   readonly topic: string;
@@ -6,5 +8,6 @@ export interface MessageEnvelope<T = unknown> {
 }
 
 export interface MessagePublisherContract {
-  publish<T>(topic: string, payload: T): Promise<void>;
+  /** Đưa message vào queue (mặc định `system.events`); tên job = `topic`. Trả về envelope đã gửi. */
+  publish<T>(topic: string, payload: T, queue?: QueueName): Promise<MessageEnvelope<T>>;
 }

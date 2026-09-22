@@ -1,5 +1,5 @@
 import React from 'react';
-import type { ConsoleSectionId } from '../types/console.types';
+import type { ConsolePath, ConsoleSectionId } from '../types/console.types';
 import { useConsoleTheme } from '../context/console-theme-context';
 import { ConsoleSidebar } from './ConsoleSidebar';
 import { ConsoleTopBar } from './ConsoleTopBar';
@@ -7,13 +7,13 @@ import { ToastContainer } from '../components/common/Toast';
 
 interface ConsoleLayoutProps {
   currentSection: ConsoleSectionId;
-  onSelectSection: (section: ConsoleSectionId) => void;
+  onNavigate: (path: ConsolePath) => void;
   children: React.ReactNode;
 }
 
 export const ConsoleLayout: React.FC<ConsoleLayoutProps> = ({
   currentSection,
-  onSelectSection,
+  onNavigate,
   children,
 }) => {
   const { theme } = useConsoleTheme();
@@ -23,7 +23,7 @@ export const ConsoleLayout: React.FC<ConsoleLayoutProps> = ({
       <div className="console-layout">
         <ConsoleSidebar
           currentSection={currentSection}
-          onSelectSection={onSelectSection}
+          onNavigate={onNavigate}
         />
         <div className="console-main-wrapper">
           <ConsoleTopBar currentSection={currentSection} />

@@ -33,7 +33,7 @@ const INITIAL_HEALTH: HealthData = {
 };
 
 export const ConsoleDataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { t, formatTime } = useLocale();
+  const { t } = useLocale();
 
   const [health, setHealth] = useState<HealthData>(INITIAL_HEALTH);
   const [packages, setPackages] = useState<PackageSummary[]>([]);
@@ -152,8 +152,8 @@ export const ConsoleDataProvider: React.FC<{ children: React.ReactNode }> = ({ c
   );
 
   const { series: performanceSeries, stats: performanceStats } = useMemo(
-    () => buildSeries(activePerformanceMetric, performanceTimeRange, (at) => formatTime(at, false)),
-    [buildSeries, activePerformanceMetric, performanceTimeRange, formatTime],
+    () => buildSeries(activePerformanceMetric, performanceTimeRange),
+    [buildSeries, activePerformanceMetric, performanceTimeRange],
   );
 
   const metricTrends = useMemo(

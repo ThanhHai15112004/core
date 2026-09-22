@@ -11,10 +11,14 @@ export function toneOf(status: string | undefined): StatusTone {
     case 'warning':
     case 'warn':
     case 'degraded':
+    case 'starting':
+    case 'restarting':
+    case 'stopping':
       return 'warn';
     case 'error':
     case 'critical':
     case 'down':
+    case 'crashed':
       return 'crit';
     default:
       return 'unknown';

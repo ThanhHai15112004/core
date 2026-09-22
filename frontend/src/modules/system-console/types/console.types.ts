@@ -7,14 +7,24 @@ export type {
 
 export type ConsoleSectionId =
   | 'overview'
-  | 'runtime'
-  | 'packages'
-  | 'logs'
-  | 'worker'
-  | 'scheduler'
+  | 'runtimes'
+  | 'http-traffic'
+  | 'performance'
   | 'database'
   | 'cache'
-  | 'security';
+  | 'storage'
+  | 'messaging'
+  | 'worker'
+  | 'scheduler'
+  | 'jobs'
+  | 'logs'
+  | 'security'
+  | 'secrets'
+  | 'configuration'
+  | 'packages';
+
+/** Đường dẫn trong console, vd. `runtimes/worker/metrics` hoặc `logs?runtime=api`. */
+export type ConsolePath = string;
 
 export type ConsoleTheme = 'light' | 'dark';
 
@@ -49,12 +59,6 @@ export interface ToastMessage {
   message?: string;
 }
 
-export interface NavigationItem {
-  id: ConsoleSectionId;
-  icon: string;
-  badgeCount?: number;
-}
-
 /* ==========================================================================
    OPERATIONAL OVERVIEW DATA MODEL
    Khớp với response của GET /ops/overview (backend/src/modules/system-ops/responses)
@@ -71,9 +75,9 @@ export interface OverallHealthReport {
   totalServices: number;
   uptimeSeconds: number;
   affectedServices?: string[];
-  affectedComponents?: Array<{ name: string; status: string; section: ConsoleSectionId }>;
+  affectedComponents?: Array<{ name: string; status: string; section: ConsolePath }>;
   actionLabel?: string;
-  actionSection?: ConsoleSectionId;
+  actionSection?: ConsolePath;
   startedAgo?: string;
   /** ISO 8601 */
   startedAt?: string;
@@ -102,7 +106,7 @@ export interface HealthMapItem {
   secondarySubtext?: string;
   /** Chỉ số ngắn gọn nhất của thành phần. */
   metric?: string;
-  targetSection: ConsoleSectionId;
+  targetSection: ConsolePath;
   icon: string;
 }
 
@@ -110,7 +114,8 @@ export type PerformanceMetricKey = 'requests' | 'latency' | 'errors' | 'cpu' | '
 export type PerformanceTimeRange = '15m' | '1h' | '6h' | '24h';
 
 export interface PerformanceDataPoint {
-  time: string;
+  /** epoch ms */
+  t: number;
   value: number;
 }
 
@@ -122,7 +127,7 @@ export interface ActiveIncidentItem {
   startedAgo: string;
   /** ISO 8601 */
   startedAt?: string;
-  targetSection: ConsoleSectionId;
+  targetSection: ConsolePath;
   actionLabel: string;
 }
 
@@ -136,7 +141,7 @@ export interface InfraSnapshotItem {
   id: string;
   title: string;
   icon: string;
-  targetSection: ConsoleSectionId;
+  targetSection: ConsolePath;
   metrics: InfraSnapshotMetric[];
   /** Runtime chưa expose số liệu. */
   unavailable?: boolean;

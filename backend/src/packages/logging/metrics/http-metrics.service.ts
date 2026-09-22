@@ -22,6 +22,20 @@ interface RequestSample {
 export class HttpMetricsService {
   private readonly windowMs = 60_000;
   private samples: RequestSample[] = [];
+  private active = 0;
+
+  /** Gọi khi request bắt đầu / kết thúc để đếm request đang xử lý. */
+  public begin(): void {
+    this.active++;
+  }
+
+  public end(): void {
+    this.active = Math.max(0, this.active - 1);
+  }
+
+  public activeRequests(): number {
+    return this.active;
+  }
 
   public record(durationMs: number, statusCode: number): void {
     const now = Date.now();

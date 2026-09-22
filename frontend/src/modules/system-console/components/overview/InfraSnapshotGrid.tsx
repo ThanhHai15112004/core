@@ -1,12 +1,12 @@
 import React from 'react';
 import { ArrowRight } from 'lucide-react';
-import type { ConsoleSectionId, InfraSnapshotItem } from '../../types/console.types';
+import type { ConsolePath, InfraSnapshotItem } from '../../types/console.types';
 import { ConsoleIcon } from '../common/ConsoleIcon';
 import { useLocale } from '../../../../core/i18n/index';
 
 interface InfraSnapshotGridProps {
   snapshots: InfraSnapshotItem[];
-  onNavigate: (section: ConsoleSectionId) => void;
+  onNavigate: (path: ConsolePath) => void;
 }
 
 /** Vùng ⑥: mỗi thành phần đang làm việc thế nào. */

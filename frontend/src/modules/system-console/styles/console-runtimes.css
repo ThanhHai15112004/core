@@ -1,0 +1,660 @@
+/* ==========================================================================
+   RUNTIMES — Runtime Operations Monitor (prefix `rt-`)
+   ========================================================================== */
+
+.console-root .rt-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border-radius: 999px;
+  font-weight: 650;
+  white-space: nowrap;
+  color: var(--tone-text);
+  background-color: var(--tone-bg);
+  border: 1px solid var(--tone-border);
+}
+
+.console-root .rt-status-md { padding: 0.2rem 0.6rem; font-size: 0.75rem; }
+.console-root .rt-status-sm { padding: 0.1rem 0.45rem; font-size: 0.7rem; }
+
+.console-root .rt-card-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.console-root .rt-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--scp-border-subtle);
+  border-top: 3px solid var(--tone, var(--scp-border-subtle));
+  border-radius: 12px;
+  background-color: var(--scp-bg-surface);
+  box-shadow: var(--scp-shadow-sm);
+  min-width: 0;
+}
+
+.console-root .rt-card.ov-tone-ok {
+  border-top-color: var(--scp-success);
+}
+
+.console-root .rt-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.console-root .rt-card-head h3 {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+  font-size: 0.98rem;
+  font-weight: 700;
+  color: var(--scp-text-primary);
+}
+
+.console-root .rt-card-reason {
+  margin: 0;
+  padding: 0.45rem 0.6rem;
+  border-radius: 7px;
+  font-size: 0.78rem;
+  line-height: 1.4;
+  color: var(--tone-text, var(--scp-text-secondary));
+  background-color: var(--tone-bg, var(--scp-bg-surface-subtle));
+}
+
+.console-root .rt-card-empty {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--scp-text-muted);
+}
+
+.console-root .rt-card-meta {
+  margin: 0;
+  font-size: 0.74rem;
+  color: var(--scp-text-muted);
+}
+
+.console-root .rt-card-foot {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  margin-top: auto;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--scp-border-subtle);
+}
+
+.console-root .rt-card-foot .scp-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.console-root .rt-card-foot .rt-menu {
+  margin-left: auto;
+}
+
+/* Bảng key/value */
+.console-root .rt-kv {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin: 0;
+}
+
+.console-root .rt-kv > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-size: 0.83rem;
+}
+
+.console-root .rt-kv dt {
+  color: var(--scp-text-secondary);
+}
+
+.console-root .rt-kv dd {
+  margin: 0;
+  font-weight: 600;
+  color: var(--scp-text-primary);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  word-break: break-word;
+}
+
+.console-root .rt-kv-specific {
+  padding-top: 0.6rem;
+  border-top: 1px dashed var(--scp-border-subtle);
+}
+
+.console-root .rt-kv-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 0.5rem 1.5rem;
+}
+
+.console-root .rt-kv-grid > div {
+  padding: 0.45rem 0;
+  border-bottom: 1px solid var(--scp-border-subtle);
+}
+
+.console-root .rt-kv-grid > div.is-warn dd,
+.console-root .rt-bad {
+  color: var(--scp-danger-text);
+}
+
+.console-root .rt-ok {
+  color: var(--scp-success-text);
+}
+
+.console-root .rt-kv-inline {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 0.75rem 1.5rem;
+}
+
+.console-root .rt-kv-inline > div {
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.console-root .rt-kv-inline dd {
+  text-align: left;
+}
+
+/* Alerts */
+.console-root .rt-alerts {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.console-root .rt-alert {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  width: 100%;
+  padding: 0.65rem 0.9rem;
+  border: 1px solid var(--tone-border);
+  border-left: 4px solid var(--tone);
+  border-radius: 9px;
+  background-color: var(--tone-bg);
+  color: var(--scp-text-primary);
+  font-size: 0.84rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.console-root .rt-alert svg {
+  color: var(--tone);
+  flex-shrink: 0;
+}
+
+.console-root .rt-alert small {
+  margin-left: auto;
+  color: var(--tone-text);
+  font-weight: 600;
+}
+
+/* Resource bars */
+.console-root .rt-resource-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.console-root .rt-resource-row {
+  display: grid;
+  grid-template-columns: 140px minmax(0, 1fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 1.25rem;
+}
+
+.console-root .rt-resource-label {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  margin-bottom: 0.3rem;
+  font-size: 0.78rem;
+  color: var(--scp-text-secondary);
+}
+
+.console-root .rt-resource-label b {
+  color: var(--scp-text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.console-root .rt-resource-label small {
+  color: var(--scp-text-muted);
+}
+
+.console-root .rt-bar {
+  display: block;
+  height: 8px;
+  border-radius: 99px;
+  overflow: hidden;
+  background-color: var(--scp-bg-surface-subtle);
+}
+
+.console-root .rt-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: 99px;
+  background-color: var(--scp-primary);
+  transition: width 0.3s ease;
+}
+
+.console-root .rt-bar.is-high > span {
+  background-color: var(--scp-danger);
+}
+
+.console-root .rt-bar.is-empty {
+  background-image: repeating-linear-gradient(45deg, transparent 0 6px, var(--scp-border-subtle) 6px 8px);
+}
+
+.console-root .rt-resource-warn {
+  display: inline-block;
+  margin-top: 0.3rem;
+  font-size: 0.72rem;
+  font-weight: 650;
+  color: var(--scp-danger-text);
+}
+
+/* Distribution */
+.console-root .rt-stack {
+  display: flex;
+  height: 12px;
+  border-radius: 99px;
+  overflow: hidden;
+  margin-bottom: 1rem;
+  background-color: var(--scp-bg-surface-subtle);
+}
+
+.console-root .rt-dist-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.console-root .rt-dist-list li {
+  display: grid;
+  grid-template-columns: 10px 1fr auto auto;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.84rem;
+}
+
+.console-root .rt-dist-list i {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+}
+
+.console-root .rt-dist-list small {
+  color: var(--scp-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.console-root .rt-perf-controls {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+
+.console-root .rt-row-link {
+  cursor: pointer;
+}
+
+.console-root .rt-row-link:hover td {
+  background-color: var(--scp-bg-surface-subtle);
+}
+
+.console-root .rt-event-compact {
+  grid-template-columns: 110px 88px minmax(0, 1fr);
+}
+
+.console-root .rt-cli-history summary {
+  margin-top: 1rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--scp-primary);
+  cursor: pointer;
+}
+
+.console-root .rt-cli-history .scp-table-wrap {
+  margin-top: 0.6rem;
+}
+
+/* Menu + buttons */
+.console-root .rt-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--scp-border-subtle);
+  border-radius: 7px;
+  background: var(--scp-bg-surface);
+  color: var(--scp-text-secondary);
+  cursor: pointer;
+}
+
+.console-root .rt-icon-btn:hover {
+  color: var(--scp-text-primary);
+  border-color: var(--scp-border-strong);
+}
+
+.console-root .rt-menu {
+  position: relative;
+}
+
+.console-root .rt-menu-list {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 6px);
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  min-width: 240px;
+  padding: 0.35rem;
+  border: 1px solid var(--scp-border-subtle);
+  border-radius: 9px;
+  background-color: var(--scp-bg-surface);
+  box-shadow: var(--scp-shadow-lg);
+}
+
+.console-root .rt-menu-item {
+  display: grid;
+  grid-template-columns: 16px 1fr;
+  align-items: center;
+  column-gap: 0.5rem;
+  padding: 0.5rem 0.6rem;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--scp-text-primary);
+  font-size: 0.83rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.console-root .rt-menu-item:hover:not(:disabled) {
+  background-color: var(--scp-bg-surface-subtle);
+}
+
+.console-root .rt-menu-item:disabled {
+  color: var(--scp-text-muted);
+  cursor: not-allowed;
+}
+
+.console-root .rt-menu-item small {
+  grid-column: 2;
+  font-size: 0.7rem;
+  line-height: 1.35;
+  color: var(--scp-text-muted);
+}
+
+.console-root .rt-actions {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.console-root .rt-actions .scp-btn,
+.console-root .rt-detail-actions .scp-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+/* Detail */
+.console-root .rt-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  align-self: flex-start;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--scp-text-secondary);
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.console-root .rt-back:hover {
+  color: var(--scp-primary);
+}
+
+.console-root .rt-detail-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.console-root .rt-detail-actions {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.console-root .rt-tabs {
+  display: flex;
+  gap: 0.25rem;
+  border-bottom: 1px solid var(--scp-border-subtle);
+  overflow-x: auto;
+}
+
+.console-root .rt-tabs button {
+  padding: 0.6rem 0.9rem;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--scp-text-secondary);
+  font-size: 0.85rem;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.console-root .rt-tabs button:hover {
+  color: var(--scp-text-primary);
+}
+
+.console-root .rt-tabs button.is-active {
+  color: var(--scp-primary-text);
+  border-bottom-color: var(--scp-primary);
+}
+
+.console-root .rt-log-stream {
+  max-height: 420px;
+  overflow-y: auto;
+  border-radius: 8px;
+}
+
+.console-root .rt-log-empty {
+  padding: 2rem 0;
+  text-align: center;
+  font-style: italic;
+  color: var(--scp-terminal-text);
+  opacity: 0.7;
+}
+
+/* Modal */
+.console-root .rt-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background-color: rgba(15, 23, 42, 0.55);
+}
+
+.console-root .rt-modal {
+  width: 100%;
+  max-width: 480px;
+  border-radius: 12px;
+  background-color: var(--scp-bg-surface);
+  box-shadow: var(--scp-shadow-modal);
+  color: var(--scp-text-primary);
+}
+
+.console-root .rt-modal-head,
+.console-root .rt-modal-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 1rem 1.25rem;
+}
+
+.console-root .rt-modal-head {
+  border-bottom: 1px solid var(--scp-border-subtle);
+}
+
+.console-root .rt-modal-head h3 {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+  font-size: 1rem;
+}
+
+.console-root .rt-modal-head svg {
+  color: var(--scp-warning);
+}
+
+.console-root .rt-modal-foot {
+  justify-content: flex-end;
+  border-top: 1px solid var(--scp-border-subtle);
+}
+
+.console-root .rt-modal-body {
+  padding: 1rem 1.25rem;
+  font-size: 0.86rem;
+}
+
+.console-root .rt-modal-context-title {
+  margin: 0 0 0.35rem;
+  font-weight: 650;
+}
+
+.console-root .rt-modal-context {
+  margin: 0 0 0.75rem;
+  padding-left: 1.1rem;
+  color: var(--scp-text-secondary);
+}
+
+.console-root .rt-modal-warning {
+  margin: 0 0 1rem;
+  padding: 0.6rem 0.75rem;
+  border-radius: 7px;
+  color: var(--scp-warning-text);
+  background-color: var(--scp-warning-bg);
+}
+
+.console-root .rt-modal-modes {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+.console-root .rt-modal-modes legend {
+  margin-bottom: 0.4rem;
+  font-weight: 650;
+}
+
+.console-root .rt-modal-modes label {
+  display: flex;
+  gap: 0.6rem;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--scp-border-subtle);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.console-root .rt-modal-modes label.is-selected {
+  border-color: var(--scp-primary);
+  background-color: var(--scp-primary-subtle);
+}
+
+.console-root .rt-modal-modes label span {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.console-root .rt-modal-modes small {
+  color: var(--scp-text-secondary);
+  line-height: 1.4;
+}
+
+.console-root .rt-modal-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  font-weight: 600;
+}
+
+.console-root .rt-modal-confirm input {
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--scp-border-strong);
+  border-radius: 7px;
+  background-color: var(--scp-bg-surface);
+  color: var(--scp-text-primary);
+  font-family: monospace;
+  font-size: 0.9rem;
+  letter-spacing: 0.1em;
+}
+
+.console-root .rt-modal-confirm input:focus {
+  outline: 2px solid var(--scp-border-focus);
+}
+
+@media (max-width: 1280px) {
+  .console-root .rt-card-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .console-root .rt-card-grid {
+    grid-template-columns: 1fr;
+  }
+  .console-root .rt-resource-row {
+    grid-template-columns: 1fr;
+    gap: 0.4rem;
+  }
+}
+
+/* Log trong panel hẹp: message xuống dòng riêng thay vì bị bóp theo cột */
+.console-root .rt-log-stream .log-line {
+  flex-wrap: wrap;
+  row-gap: 0.15rem;
+}
+
+.console-root .rt-log-stream .log-msg {
+  flex-basis: 100%;
+  min-width: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.console-root .ov-section-head .ov-segmented {
+  flex-wrap: wrap;
+}

@@ -1,5 +1,5 @@
 import React from 'react';
-import type { ConsoleSectionId } from '../types/console.types';
+import type { ConsolePath } from '../types/console.types';
 import { useConsoleData } from '../context/console-data-context';
 import { OverallHealthBanner } from '../components/overview/OverallHealthBanner';
 import { KeyMetricsGrid } from '../components/overview/KeyMetricsGrid';
@@ -14,7 +14,7 @@ import { useLocale } from '../../../core/i18n/index';
 import { useNow } from '../../../core/hooks/useNow';
 
 interface OverviewSectionProps {
-  onNavigate: (section: ConsoleSectionId) => void;
+  onNavigate: (path: ConsolePath) => void;
 }
 
 /**
