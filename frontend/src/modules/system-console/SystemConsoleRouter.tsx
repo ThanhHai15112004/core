@@ -1,20 +1,22 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { Suspense, lazy, useState, useEffect, useCallback, useMemo } from 'react';
 import type { ConsolePath, ConsoleSectionId } from './types/console.types';
 import { CONSOLE_STORAGE_KEYS } from './constants/console.constants';
 import { findNavLeaf, LEGACY_SECTION_ALIASES } from './constants/console-nav';
 import { ConsoleRouteContext, type ConsoleRoute } from './context/console-route-context';
 import { ConsoleLayout } from './layouts/ConsoleLayout';
 import { OverviewSection } from './sections/OverviewSection';
-import { RuntimesSection } from './sections/runtimes/RuntimesSection';
-import { TrafficSection } from './sections/traffic/TrafficSection';
-import { PerformanceSection } from './sections/performance/PerformanceSection';
 import { PackagesSection } from './sections/PackagesSection';
 import { LogViewerSection } from './sections/LogViewerSection';
-import { DatabaseSection } from './sections/database/DatabaseSection';
-import { CacheSection } from './sections/CacheSection';
 import { SecuritySection } from './sections/SecuritySection';
 import { PlannedSection } from './sections/PlannedSection';
 import { ROUTES } from '../../routes/index';
+
+// Các trang lớn tải theo nhu cầu (tách chunk) để bundle ban đầu nhỏ.
+const RuntimesSection = lazy(() => import('./sections/runtimes/RuntimesSection').then((m) => ({ default: m.RuntimesSection })));
+const TrafficSection = lazy(() => import('./sections/traffic/TrafficSection').then((m) => ({ default: m.TrafficSection })));
+const PerformanceSection = lazy(() => import('./sections/performance/PerformanceSection').then((m) => ({ default: m.PerformanceSection })));
+const DatabaseSection = lazy(() => import('./sections/database/DatabaseSection').then((m) => ({ default: m.DatabaseSection })));
+const CacheSection = lazy(() => import('./sections/cache/CacheSection').then((m) => ({ default: m.CacheSection })));
 
 const HASH_PREFIX = ROUTES.SYSTEM_CONSOLE.replace(/^#/, '');
 
@@ -98,7 +100,7 @@ export const SystemConsoleRouter: React.FC = () => {
   return (
     <ConsoleRouteContext.Provider value={value}>
       <ConsoleLayout currentSection={route.section} onNavigate={navigate}>
-        {renderSection()}
+        <Suspense fallback={<p className="ov-empty-line">…</p>}>{renderSection()}</Suspense>
       </ConsoleLayout>
     </ConsoleRouteContext.Provider>
   );

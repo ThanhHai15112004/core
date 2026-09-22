@@ -9,10 +9,13 @@ describe('Feature: System Ops API (/ops/packages)', () => {
   let context: TestAppContext;
 
   beforeAll(async () => {
+    // Flush cache mặc định tắt (chưa có RBAC) — bật riêng cho test thao tác của Package Registry.
+    process.env['OPS_CACHE_FLUSH_ENABLED'] = 'true';
     context = await createTestApp();
   });
 
   afterAll(async () => {
+    delete process.env['OPS_CACHE_FLUSH_ENABLED'];
     if (context) {
       await context.close();
     }
@@ -153,7 +156,7 @@ describe('Feature: System Ops API (/ops/packages)', () => {
         data: { displayName: string; actions: Array<{ label: string }> };
       };
       expect(body.data.displayName).toBe('Cache');
-      expect(body.data.actions[0]?.label).toBe('Flush all cache');
+      expect(body.data.actions[0]?.label).toBe('Flush core cache');
     });
   });
 });

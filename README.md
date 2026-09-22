@@ -254,6 +254,20 @@ Cùng 1 codebase phục vụ 4 chế độ chạy độc lập: `api` (HTTP), `w
 - API: `GET /ops/database/{overview,metrics,queries,queries/stats,queries/stats/:digest[/explain],connections[/:id],transactions,
   tables[/:name],storage,migrations,events,errors,config}`, `POST /ops/database/{ping,queries/:id/cancel,connections/:id/terminate,migrations/run}`.
 
+### Cache (System Console → Cache)
+- `BaseCacheProvider` (API `CacheContract` không đổi) chọn driver theo `CACHE_DRIVER`: `redis` dùng chung giữa các runtime,
+  key `<REDIS_PREFIX>cache:*`, value JSON; `memory` là Map riêng từng process. Lỗi Redis không ném ra caller (đọc = miss, ghi bỏ qua).
+- Mọi thao tác được đo theo namespace (`cache.ns.<ns>.hit|miss|set|del`, latency, lỗi theo loại). Namespace = tối đa
+  `CACHE_NAMESPACE_DEPTH` segment đầu, dừng ở segment trông như id (`data:users:12` → `data:users`).
+- Monitor nền (API, lock Redis) quét keyspace bằng `SCAN` có giới hạn (không `KEYS`): số key, dung lượng (`MEMORY USAGE`), TTL,
+  key lớn, key sắp hết hạn; đọc `INFO`/`CLIENT LIST` (chỉ đọc, không `CONFIG SET`) và đánh giá cảnh báo (hit rate so với baseline,
+  miss storm kèm tải DB, bộ nhớ, eviction, expiration spike, key lớn). Số liệu server Redis gắn nhãn "dùng chung" khi Redis dùng chung.
+- Thao tác: Delete Key (`DELETE`), Clear Namespace (gõ tên namespace), Flush cache của core (`FLUSH CACHE`) — `SCAN` + `UNLINK`
+  chỉ trong vùng cache, không bao giờ `FLUSHDB`; ghi audit. Bật/tắt bằng `OPS_CACHE_ACTIONS_ENABLED`, `OPS_CACHE_FLUSH_ENABLED`;
+  xem trước value (đã che field nhạy cảm, namespace session/token luôn ẩn) bằng `OPS_CACHE_VALUE_PREVIEW`.
+- API: `GET /ops/cache/{overview,metrics,namespaces[/:name],keys,keys/detail?key=,memory,ttl,clients,events,errors,operations,config,
+  flush/impact}`, `POST /ops/cache/{ping,namespaces/:name/clear,flush}`, `DELETE /ops/cache/keys?key=`.
+
 ### Response Envelope chuẩn hóa
 ```json
 { "success": true, "statusCode": 200, "data": {}, "timestamp": "..." }

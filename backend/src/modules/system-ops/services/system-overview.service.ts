@@ -700,7 +700,10 @@ export class SystemOverviewService {
         icon: 'zap',
         targetSection: 'cache',
         metrics: [
-          { label: label('keys'), value: Number(cacheMetrics['keys'] ?? 0) },
+          {
+            label: label('keys'),
+            value: typeof cacheMetrics['keys'] === 'number' ? cacheMetrics['keys'] : UNAVAILABLE,
+          },
           {
             label: label('hitRate'),
             value: typeof hitRate === 'number' ? `${hitRate}%` : UNAVAILABLE,

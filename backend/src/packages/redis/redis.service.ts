@@ -1,7 +1,8 @@
-import { Inject, Injectable, Logger, type OnApplicationShutdown } from '@nestjs/common';
+import { Inject, Injectable, Logger, Optional, type OnApplicationShutdown } from '@nestjs/common';
 import type { Redis, RedisOptions } from 'ioredis';
 import type { ConnectionOptions } from 'bullmq';
 import { CoreConfigService } from '@packages/config/index.js';
+import { RUNTIME_IDENTITY } from '@packages/runtime/constants/runtime.tokens.js';
 import { REDIS_CLIENT_FACTORY, type RedisClientFactory } from './redis.constants.js';
 
 const MAX_RETRY_DELAY_MS = 5000;
@@ -20,17 +21,23 @@ export class RedisService implements OnApplicationShutdown {
   private readonly subscribers: Redis[] = [];
   private lastError: string | null = null;
   public readonly client: Redis;
+  /** Tên kết nối `core-<runtime>` (CLIENT SETNAME). */
+  public readonly clientName: string;
 
   constructor(
     config: CoreConfigService,
     @Inject(REDIS_CLIENT_FACTORY) private readonly factory: RedisClientFactory,
+    @Optional() @Inject(RUNTIME_IDENTITY) identity?: { id: string },
   ) {
     const { host, port, password, db, prefix } = config.cache.redis;
     this.prefix = prefix;
+    this.clientName = `core-${identity?.id ?? 'app'}`;
     this.options = {
       host,
       port,
       db,
+      // CLIENT LIST → biết kết nối thuộc runtime nào (Cache Monitor).
+      connectionName: this.clientName,
       ...(password ? { password } : {}),
       lazyConnect: true,
       enableOfflineQueue: false,
@@ -38,6 +45,11 @@ export class RedisService implements OnApplicationShutdown {
       retryStrategy: (times) => Math.min(times * 500, MAX_RETRY_DELAY_MS),
     };
     this.client = this.createClient();
+  }
+
+  /** Số DB Redis đang dùng (SELECT). */
+  public get db(): number {
+    return this.options.db ?? 0;
   }
 
   public isReady(): boolean {
@@ -80,6 +92,7 @@ export class RedisService implements OnApplicationShutdown {
       host,
       port,
       db,
+      connectionName: `${this.clientName}-bull`,
       ...(password ? { password } : {}),
       maxRetriesPerRequest: null,
       retryStrategy: (times: number) => Math.min(times * 500, MAX_RETRY_DELAY_MS),

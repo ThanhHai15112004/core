@@ -1,0 +1,299 @@
+/* Cache Monitor — dùng lại khung của Database (db-*) và token màu chung của System Console. */
+
+/* ─── Hiệu quả cache ─── */
+.console-root .cache-effect {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.4rem 1rem;
+}
+.console-root .cache-effect .db-pool-big {
+  margin: 0;
+}
+.console-root .cache-effect.ov-tone-warn .db-pool-big {
+  color: var(--scp-warning-text);
+}
+.console-root .cache-effect.ov-tone-ok .db-pool-big {
+  color: var(--scp-success-text);
+}
+.console-root .cache-effect-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin: 0;
+  font-size: 0.83rem;
+  color: var(--scp-text-secondary);
+}
+.console-root .db-pool-big.is-warn {
+  color: var(--scp-warning-text);
+}
+.console-root .cache-impact dd {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+.console-root .cache-impact small {
+  font-size: 0.72rem;
+  color: var(--scp-text-muted);
+}
+
+/* ─── Thanh ngang (TTL, bộ nhớ theo namespace) ─── */
+.console-root .cache-bars {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+.console-root .cache-bars li {
+  display: grid;
+  grid-template-columns: minmax(90px, 34%) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.82rem;
+}
+.console-root .cache-bar-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+}
+.console-root .cache-bar-track {
+  position: relative;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--scp-bg-surface-subtle);
+  overflow: hidden;
+}
+.console-root .cache-bar-track span {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: inherit;
+  background: var(--scp-primary);
+}
+.console-root .cache-bars li.is-warn .cache-bar-track span {
+  background: var(--scp-warning);
+}
+.console-root .cache-bars li.is-muted .cache-bar-track span {
+  background: var(--scp-text-muted);
+}
+.console-root .cache-bar-value {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* ─── Namespace / key ─── */
+.console-root .cache-sort {
+  margin-bottom: 0.7rem;
+  flex-wrap: wrap;
+}
+.console-root .cache-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  margin-left: 0.4rem;
+  vertical-align: middle;
+}
+.console-root .cache-rate {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.console-root .cache-rate.ov-tone-warn {
+  color: var(--scp-warning-text);
+}
+.console-root .cache-rate.ov-tone-crit {
+  color: var(--scp-danger-text);
+}
+.console-root .cache-ns-table tr.is-clickable,
+.console-root .cache-key-table tr.is-clickable {
+  cursor: pointer;
+}
+.console-root .cache-key-cell {
+  max-width: 460px;
+  min-width: 200px;
+}
+.console-root .cache-key-cell code {
+  word-break: break-all;
+}
+.console-root .cache-key-table td.is-warn {
+  color: var(--scp-warning-text);
+  font-weight: 600;
+}
+.console-root .cache-key-title {
+  word-break: break-all;
+}
+.console-root .cache-key-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.8rem;
+}
+.console-root .cache-search {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex: 1 1 240px;
+  min-width: 0;
+  padding: 0.35rem 0.6rem;
+  border: 1px solid var(--scp-border-subtle);
+  border-radius: 8px;
+  background: var(--scp-bg-surface);
+  color: var(--scp-text-muted);
+}
+.console-root .cache-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--scp-text-primary);
+  font: inherit;
+  font-size: 0.85rem;
+}
+.console-root .cache-key-filters select {
+  padding: 0.38rem 0.5rem;
+  border: 1px solid var(--scp-border-subtle);
+  border-radius: 8px;
+  background: var(--scp-bg-surface);
+  color: var(--scp-text-primary);
+  font: inherit;
+  font-size: 0.83rem;
+}
+.console-root .cache-chip-btn {
+  border: 0;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.78rem;
+}
+.console-root .cache-keys-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.8rem;
+}
+
+/* ─── Drawer ─── */
+.console-root .cache-drawer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0.9rem 0;
+}
+.console-root .cache-mini-chart h4,
+.console-root .tr-drawer-content h4,
+.console-root .cache-config-group h4 {
+  margin: 1rem 0 0.4rem;
+  font-size: 0.82rem;
+  color: var(--scp-text-secondary);
+}
+.console-root .cache-key-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.8rem;
+}
+.console-root .cache-key-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+.console-root .cache-key-list code {
+  word-break: break-all;
+  text-align: left;
+}
+.console-root .cache-key-list .is-warn {
+  color: var(--scp-warning-text);
+  font-weight: 600;
+}
+.console-root .cache-value {
+  max-height: 320px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.console-root .cache-value-hidden {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.8rem;
+  border: 1px dashed var(--scp-border-subtle);
+  border-radius: 10px;
+  color: var(--scp-text-secondary);
+}
+.console-root .cache-value-hidden span {
+  display: flex;
+  flex-direction: column;
+}
+.console-root .cache-value-hidden small {
+  font-size: 0.78rem;
+  color: var(--scp-text-muted);
+}
+.console-root .scp-alert-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4rem;
+}
+.console-root .rt-modal-warning {
+  white-space: pre-line;
+}
+
+/* ─── Trạng thái ổn / Danger Zone ─── */
+.console-root .cache-ok-line {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0;
+  color: var(--scp-success-text);
+  font-size: 0.85rem;
+}
+.console-root .cache-danger {
+  border-color: var(--scp-danger-border);
+}
+.console-root .cache-danger h3 {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--scp-danger-text);
+}
+.console-root .cache-danger-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+.console-root .cache-danger-row p {
+  margin: 0.25rem 0 0;
+  font-size: 0.83rem;
+  color: var(--scp-text-secondary);
+}
+.console-root .ov-kpi-grid.cache-error-kpis {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+@media (max-width: 1280px) {
+  .console-root .ov-kpi-grid.cache-error-kpis {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@media (max-width: 640px) {
+  .console-root .ov-kpi-grid.cache-error-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .console-root .cache-bars li {
+    grid-template-columns: minmax(80px, 40%) minmax(0, 1fr) auto;
+  }
+  .console-root .cache-key-cell {
+    min-width: 160px;
+  }
+}

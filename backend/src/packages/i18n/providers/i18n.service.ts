@@ -15,6 +15,8 @@ import enPerformance from '../locales/en/performance.json' with { type: 'json' }
 import viPerformance from '../locales/vi/performance.json' with { type: 'json' };
 import enDatabase from '../locales/en/database.json' with { type: 'json' };
 import viDatabase from '../locales/vi/database.json' with { type: 'json' };
+import enCache from '../locales/en/cache.json' with { type: 'json' };
+import viCache from '../locales/vi/cache.json' with { type: 'json' };
 
 type Dictionary = Record<string, string>;
 
@@ -30,6 +32,7 @@ export class CoreI18nService implements I18nContract {
       ...enTraffic,
       ...enPerformance,
       ...enDatabase,
+      ...enCache,
     },
     vi: {
       ...viCommon,
@@ -39,6 +42,7 @@ export class CoreI18nService implements I18nContract {
       ...viTraffic,
       ...viPerformance,
       ...viDatabase,
+      ...viCache,
     },
   };
 

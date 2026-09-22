@@ -8,11 +8,17 @@ import {
   PackageCategory,
   CorePackageId,
 } from '@packages/kernel/index.js';
-import { CoreConfigService } from '@packages/config/index.js';
 import { CoreI18nService } from '@packages/i18n/index.js';
-import { BaseCacheProvider } from './cache.provider.js';
 import { CacheAction } from '../constants/cache.constant.js';
+import { BaseCacheProvider } from './cache.provider.js';
+import { CacheConnectionService } from './cache-connection.service.js';
+import { CacheMonitoringService } from '../monitoring/cache-monitoring.service.js';
+import {
+  CacheOperationError,
+  CacheOperationsService,
+} from '../operations/cache-operations.service.js';
 
+/** Trạng thái/thao tác cơ bản cho Package Registry. Chi tiết nằm ở trang Cache (`/ops/cache/*`). */
 @Injectable()
 export class CacheManageableAdapter implements ManageablePackage {
   public readonly packageId = CorePackageId.CACHE;
@@ -20,8 +26,10 @@ export class CacheManageableAdapter implements ManageablePackage {
   public readonly icon = 'database-zap';
 
   constructor(
-    private readonly cacheProvider: BaseCacheProvider,
-    private readonly configService: CoreConfigService,
+    private readonly cache: BaseCacheProvider,
+    private readonly connection: CacheConnectionService,
+    private readonly monitoring: CacheMonitoringService,
+    private readonly operations: CacheOperationsService,
     private readonly i18n: CoreI18nService,
   ) {}
 
@@ -30,17 +38,25 @@ export class CacheManageableAdapter implements ManageablePackage {
   }
 
   public async getStatus(): Promise<PackageStatusReport> {
-    const { host, port, prefix } = this.configService.cache.redis;
-    const stats = this.cacheProvider.getStats();
-
+    const status = this.connection.getStatus();
+    const keyspace = await this.monitoring.storedKeyspace().catch(() => null);
+    const up = status.state === 'connected';
+    // Hit/miss của process đang phục vụ (API) từ lúc khởi động; chi tiết toàn hệ thống ở trang Cache.
+    const stats = this.cache.getStats();
     return {
-      status: PackageStatus.HEALTHY,
-      summary: this.i18n.t('ops.cache.summary', { host, port, prefix }),
+      status: up
+        ? PackageStatus.HEALTHY
+        : status.state === 'unavailable'
+          ? PackageStatus.ERROR
+          : PackageStatus.WARNING,
+      summary: this.i18n.t('ops.cache.summary', {
+        driver: this.monitoring.driver,
+        state: this.i18n.t(`cache.connection.${status.state}`),
+      }),
       metrics: {
-        driver: 'memory',
-        configuredRedis: `${host}:${port}`,
-        prefix,
-        keys: stats.keys,
+        driver: this.monitoring.driver,
+        state: status.state,
+        ...(keyspace ? { keys: keyspace.totalKeys } : {}),
         hits: stats.hits,
         misses: stats.misses,
         hitRatePercent: stats.hitRatePercent ?? 'n/a',
@@ -60,14 +76,20 @@ export class CacheManageableAdapter implements ManageablePackage {
   }
 
   public async executeAction(actionId: string): Promise<PackageActionResult> {
-    if (actionId === CacheAction.FLUSH_ALL) {
-      await this.cacheProvider.clear();
-      return { success: true, message: this.i18n.t('ops.cache.flush.success') };
+    if (actionId !== CacheAction.FLUSH_ALL)
+      return {
+        success: false,
+        message: this.i18n.t('ops.action.unsupported', { actionId, packageId: this.packageId }),
+      };
+    try {
+      const { record } = await this.operations.flushAll({ ip: null, actor: null });
+      return {
+        success: true,
+        message: this.i18n.t('ops.cache.flush.success', { count: record.affected }),
+      };
+    } catch (err) {
+      const code = err instanceof CacheOperationError ? err.code : 'FAILED';
+      return { success: false, message: this.i18n.t(`cache.error.${code}`) };
     }
-
-    return {
-      success: false,
-      message: this.i18n.t('ops.action.unsupported', { actionId, packageId: this.packageId }),
-    };
   }
 }
