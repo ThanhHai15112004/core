@@ -468,6 +468,9 @@ export class SystemOverviewService {
     const storagePackage = pkg(CorePackageId.STORAGE);
     const storageObjects = storagePackage?.statusReport.metrics['objects'];
     const storageBytes = storagePackage?.statusReport.metrics['bytes'];
+    const messagingPackage = pkg(CorePackageId.MESSAGING);
+    const messagingBacklog = messagingPackage?.statusReport.metrics['backlog'];
+    const messagingDeadLetter = messagingPackage?.statusReport.metrics['deadLetter'];
     const securityPackage = pkg(CorePackageId.SECURITY);
     const cacheKeys = cachePackage?.statusReport.metrics['keys'];
     const cacheHitRate = cachePackage?.statusReport.metrics['hitRatePercent'];
@@ -587,10 +590,17 @@ export class SystemOverviewService {
         id: 'infra-messaging',
         name: this.i18n.t('overview.map.messaging.name'),
         category: 'infrastructure',
-        status: 'unknown',
-        subtext: this.i18n.t('overview.map.messaging.subtext'),
-        metric: this.i18n.t('overview.map.noHealthCheck'),
-        targetSection: 'packages',
+        status: toHealthMapStatus(messagingPackage?.statusReport.status),
+        subtext: messagingPackage?.statusReport.summary ?? UNAVAILABLE,
+        secondarySubtext: this.i18n.t('overview.map.messaging.subtext'),
+        metric:
+          typeof messagingBacklog === 'number' && typeof messagingDeadLetter === 'number'
+            ? this.i18n.t('overview.map.messaging.metric', {
+                backlog: messagingBacklog,
+                deadLetter: messagingDeadLetter,
+              })
+            : this.i18n.t('overview.map.messaging.secondary'),
+        targetSection: 'messaging',
         icon: 'radio',
       },
       {

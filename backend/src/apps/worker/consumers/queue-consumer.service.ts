@@ -7,7 +7,7 @@ import {
 import { Worker, type Job } from 'bullmq';
 import { CoreConfigService } from '@packages/config/index.js';
 import { RedisService } from '@packages/redis/index.js';
-import { QUEUES, type MessageEnvelope } from '@packages/messaging/index.js';
+import { MessageConsumerRunner, QUEUES } from '@packages/messaging/index.js';
 import { MetricRecorder } from '@packages/telemetry/index.js';
 import { SystemProcessor } from '../processors/system/system.processor.js';
 
@@ -31,7 +31,11 @@ export class QueueConsumerService implements OnApplicationBootstrap, OnApplicati
     private readonly config: CoreConfigService,
     private readonly processor: SystemProcessor,
     private readonly recorder: MetricRecorder,
+    private readonly runner: MessageConsumerRunner,
   ) {}
+
+  /** Tên consumer hiển thị ở trang Messaging. */
+  public readonly consumerName = SystemProcessor.name;
 
   public readonly queueName = QUEUES.SYSTEM_EVENTS;
 
@@ -40,14 +44,20 @@ export class QueueConsumerService implements OnApplicationBootstrap, OnApplicati
   }
 
   public onApplicationBootstrap(): void {
+    // Runner đo thời gian xử lý, ghi vòng đời message, phân biệt retry / Dead Letter (trang Messaging).
     this.worker = new Worker(
       this.queueName,
-      async (job: Job<MessageEnvelope>) => this.processor.processJob(job.name, job.data),
+      async (job: Job) =>
+        this.runner.process(this.consumerName, job, (envelope) =>
+          this.processor.processJob(envelope.topic, envelope),
+        ),
       {
         connection: this.redis.bullConnection(),
         prefix: this.redis.bullPrefix(),
         concurrency: this.concurrency,
         autorun: false,
+        // Tên kết nối worker trên broker = runtime (Messaging → Consumers → Instances).
+        name: 'worker',
       },
     );
     this.worker.on('completed', (job) => this.track('completed', job));
@@ -57,24 +67,34 @@ export class QueueConsumerService implements OnApplicationBootstrap, OnApplicati
     });
     this.worker.on('error', (err) => this.logger.warn(`Worker error: ${err.message}`));
 
-    if (!this.paused) void this.worker.run();
+    this.runner.register({
+      consumer: this.consumerName,
+      queue: this.queueName,
+      concurrency: this.concurrency,
+      idempotent: this.processor.idempotent,
+    });
+    if (this.paused) this.runner.setPaused(this.consumerName, true);
+    else void this.worker.run();
   }
 
   /** Ngừng lấy job mới, chờ job đang chạy xong (Stop từ Console). */
   public async pause(): Promise<void> {
     this.paused = true;
+    this.runner.setPaused(this.consumerName, true);
     if (this.worker?.isRunning()) await this.worker.pause();
   }
 
   /** BullMQ `resume()` tự chạy lại vòng lặp nếu nó đã dừng (hoặc chưa từng chạy). */
   public async resume(): Promise<void> {
     this.paused = false;
+    this.runner.setPaused(this.consumerName, false);
     await this.worker?.resume();
   }
 
   /** Đóng worker sau khi hoàn tất job đang xử lý (graceful restart). */
   public async drain(): Promise<void> {
     await this.worker?.close();
+    await this.runner.unregister(this.consumerName);
   }
 
   public async onApplicationShutdown(): Promise<void> {

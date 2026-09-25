@@ -284,6 +284,25 @@ Cùng 1 codebase phục vụ 4 chế độ chạy độc lập: `api` (HTTP), `w
   objects/preview?key=,uploads,lifecycle,errors,events,operations,config}`, `POST /ops/storage/{test,objects/signed-url,
   uploads/abort}`, `DELETE /ops/storage/objects?key=&versionId=`.
 
+### Messaging (System Console → Messaging)
+- Transport là BullMQ trên Redis. `MessagePublisherContract.publish()` không đổi; envelope thêm `producer` (runtime) và
+  `correlationId` (của request/tác vụ đã publish). Retry theo `MESSAGING_MAX_ATTEMPTS` + backoff; hết lượt → Dead Letter
+  (failed set của BullMQ, giữ `MESSAGING_KEEP_DEAD_LETTER`).
+- Consumer chạy qua `MessageConsumerRunner`: kiểm tra envelope (hỏng → dead letter ngay, không retry), chạy handler trong
+  correlation ID của producer (log nối được), đo thời gian xử lý theo channel, ghi vòng đời vào job log
+  (nhận → lỗi → hẹn retry → dead letter / replay), báo consumer đang chạy lên Redis. Processor tự khai báo `idempotent`.
+- Monitor nền trong API (mỗi 15s, lock Redis): PING broker, gauge lag/độ sâu queue/dead letter, cảnh báo: broker
+  unavailable, không có consumer, consumer tạm dừng, lag cao/đang tăng, tỷ lệ lỗi, publish lỗi, consumer chậm, dead
+  letter, message lớn.
+- Theo capability của provider (BullMQ: queue depth, consumer, browse, lifecycle, retry, dead letter, replay, discard,
+  broker info); Kafka/RabbitMQ sau này thêm partitions/consumer groups/exchanges mà UI không phải đổi.
+- Thao tác bật/tắt bằng env, có xác nhận và audit: Test Broker (queue `core.healthcheck` riêng: connect → publish →
+  consume → ack), Retry ngay, Replay dead letter (gõ `REPLAY`, cảnh báo idempotency), Discard (gõ lại message ID),
+  xem payload (đã che password/token/secret/thẻ, email).
+- API: `GET /ops/messaging/{overview,metrics,channels[/:id],producers,consumers[/:id],messages[/:id[/payload]],retries,
+  dead-letter,broker,errors,events,operations,config}`, `POST /ops/messaging/{test,messages/:id/retry,
+  dead-letter/:id/replay}`, `DELETE /ops/messaging/dead-letter/:id`.
+
 ### Response Envelope chuẩn hóa
 ```json
 { "success": true, "statusCode": 200, "data": {}, "timestamp": "..." }

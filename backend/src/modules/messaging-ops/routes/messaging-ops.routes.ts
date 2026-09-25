@@ -1,0 +1,26 @@
+const PREFIX = 'ops/messaging';
+
+export const MESSAGING_OPS_ROUTES = {
+  PREFIX,
+  OVERVIEW: 'overview',
+  METRICS: 'metrics',
+  CHANNELS: 'channels',
+  CHANNEL_DETAIL: 'channels/:id',
+  PRODUCERS: 'producers',
+  CONSUMERS: 'consumers',
+  CONSUMER_DETAIL: 'consumers/:id',
+  MESSAGES: 'messages',
+  MESSAGE_DETAIL: 'messages/:id',
+  MESSAGE_PAYLOAD: 'messages/:id/payload',
+  MESSAGE_RETRY: 'messages/:id/retry',
+  RETRIES: 'retries',
+  DEAD_LETTER: 'dead-letter',
+  DEAD_LETTER_REPLAY: 'dead-letter/:id/replay',
+  DEAD_LETTER_DISCARD: 'dead-letter/:id',
+  BROKER: 'broker',
+  ERRORS: 'errors',
+  EVENTS: 'events',
+  OPERATIONS: 'operations',
+  CONFIG: 'config',
+  TEST: 'test',
+} as const;

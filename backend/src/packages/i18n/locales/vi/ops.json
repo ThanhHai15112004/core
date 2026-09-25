@@ -39,5 +39,11 @@
   "ops.storage.test.label": "Test Storage",
   "ops.storage.test.description": "Ghi, đọc, so khớp và xoá một object tạm để kiểm tra storage.",
   "ops.storage.test.ok": "Storage hoạt động tốt ({ms} ms).",
-  "ops.storage.test.failed": "Kiểm tra storage thất bại ở bước {step}."
+  "ops.storage.test.failed": "Kiểm tra storage thất bại ở bước {step}.",
+  "ops.messaging.displayName": "Messaging",
+  "ops.messaging.summary": "{product}, {state}.",
+  "ops.messaging.test.label": "Test Broker",
+  "ops.messaging.test.description": "Publish một message kiểm tra riêng, consume và ack để đo round trip của broker.",
+  "ops.messaging.test.ok": "Messaging hoạt động bình thường (round trip {ms} ms).",
+  "ops.messaging.test.failed": "Kiểm tra messaging thất bại ở bước {step}."
 }

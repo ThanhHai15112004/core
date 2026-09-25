@@ -1,0 +1,146 @@
+/* Messaging Monitor — dùng lại khung Database/Cache/Storage (db-*, cache-*, st-*) và token màu chung. */
+
+.console-root .ov-kpi-grid.msg-kpi-4 {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.console-root .ov-kpi-grid.msg-error-kpis {
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+.console-root .ov-kpi-value.msg-kpi-text {
+  font-size: 1rem;
+  overflow-wrap: anywhere;
+}
+
+/* ─── Dòng trạng thái / cảnh báo ngắn ─── */
+.console-root .msg-status-line,
+.console-root .msg-idempotency {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0.5rem 0 0.75rem;
+  font-size: 0.82rem;
+  color: var(--scp-text-secondary);
+}
+.console-root .msg-status-line.ov-tone-warn,
+.console-root .msg-idempotency.ov-tone-warn {
+  color: var(--scp-warning-text);
+}
+.console-root .msg-status-line.ov-tone-crit {
+  color: var(--scp-danger-text);
+}
+.console-root .msg-status-line.ov-tone-ok,
+.console-root .msg-idempotency.ov-tone-ok {
+  color: var(--scp-success-text);
+}
+.console-root .msg-balance dd {
+  font-size: 1.15rem;
+}
+
+/* ─── Vòng đời message ─── */
+.console-root .msg-timeline {
+  list-style: none;
+  margin: 0.25rem 0 0.75rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.console-root .msg-timeline li {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: 0.6rem;
+  padding: 0.2rem 0;
+}
+.console-root .msg-timeline li .ov-dot {
+  margin-top: 0.35rem;
+}
+.console-root .msg-timeline li > div {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.2rem 0.5rem;
+  font-size: 0.83rem;
+}
+.console-root .msg-timeline time {
+  font-variant-numeric: tabular-nums;
+  color: var(--scp-text-secondary);
+}
+.console-root .msg-timeline small {
+  color: var(--scp-text-secondary);
+}
+.console-root .msg-timeline .msg-timeline-error {
+  flex-basis: 100%;
+  color: var(--scp-danger-text);
+  overflow-wrap: anywhere;
+}
+.console-root .msg-timeline-gap {
+  grid-column: 1 / -1;
+  padding-left: 1.1rem;
+  font-size: 0.72rem;
+  color: var(--scp-text-secondary);
+}
+
+/* ─── Stack / payload ─── */
+.console-root .msg-stack summary {
+  cursor: pointer;
+  font-size: 0.8rem;
+  color: var(--scp-text-secondary);
+}
+.console-root .msg-stack pre,
+.console-root .msg-payload {
+  max-height: 320px;
+  overflow: auto;
+  margin: 0.5rem 0;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid var(--scp-border-subtle);
+  border-radius: 8px;
+  background: var(--scp-bg-surface-subtle);
+  font-size: 0.78rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* ─── Producer ─── */
+.console-root .msg-producers {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 0.9rem;
+}
+.console-root .msg-producer {
+  padding: 0.8rem 0.9rem;
+  border: 1px solid var(--scp-border-subtle);
+  border-radius: 10px;
+}
+.console-root .msg-producer > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+/* ─── Hàng thao tác trong bảng ─── */
+.console-root .msg-row-actions {
+  display: inline-flex;
+  gap: 0.6rem;
+  white-space: nowrap;
+}
+.console-root .ov-link.is-danger {
+  color: var(--scp-danger-text);
+}
+
+@media (max-width: 1280px) {
+  .console-root .ov-kpi-grid.msg-error-kpis {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+@media (max-width: 640px) {
+  .console-root .ov-kpi-grid.msg-kpi-4,
+  .console-root .ov-kpi-grid.msg-error-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .console-root .msg-producers {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

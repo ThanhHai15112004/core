@@ -774,7 +774,7 @@ export class PerformanceService {
         latencyMs: null,
         latencyKind: 'avg',
         errorPercent: null,
-        target: 'runtimes/worker',
+        target: 'messaging',
       },
     ];
   }

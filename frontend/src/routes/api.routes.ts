@@ -49,6 +49,9 @@ export const API_ROUTES = {
     STORAGE: {
       path: (path: string, qs = '') => `${OPS_PREFIX}/storage/${path}${qs ? `?${qs}` : ''}`,
     },
+    MESSAGING: {
+      path: (path: string, qs = '') => `${OPS_PREFIX}/messaging/${path}${qs ? `?${qs}` : ''}`,
+    },
     PERFORMANCE: {
       OVERVIEW: (qs: string) => `${OPS_PREFIX}/performance/overview?${qs}`,
       TIMESERIES: (qs: string) => `${OPS_PREFIX}/performance/timeseries?${qs}`,

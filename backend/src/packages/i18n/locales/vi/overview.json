@@ -80,5 +80,7 @@
   "overview.map.performance.subtext": "Không phát hiện điểm nghẽn",
   "overview.map.performance.metric": "{count} điểm nghẽn",
   "overview.map.performance.unavailable": "Không có số đo hiệu năng",
-  "overview.map.storage.metric": "{objects} object • {size}"
+  "overview.map.storage.metric": "{objects} object • {size}",
+  "overview.map.messaging.metric": "{backlog} đang chờ • {deadLetter} dead letter",
+  "overview.map.messaging.secondary": "Không kết nối được broker"
 }

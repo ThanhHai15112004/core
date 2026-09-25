@@ -80,5 +80,7 @@
   "overview.map.performance.subtext": "No bottlenecks detected",
   "overview.map.performance.metric": "{count} bottlenecks",
   "overview.map.performance.unavailable": "No performance telemetry",
-  "overview.map.storage.metric": "{objects} objects • {size}"
+  "overview.map.storage.metric": "{objects} objects • {size}",
+  "overview.map.messaging.metric": "{backlog} waiting • {deadLetter} dead letter",
+  "overview.map.messaging.secondary": "Broker not reachable"
 }

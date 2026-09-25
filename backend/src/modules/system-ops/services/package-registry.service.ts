@@ -13,6 +13,7 @@ import { LoggingManageableAdapter } from '@packages/logging/index.js';
 import { DatabaseManageableAdapter } from '@packages/database/index.js';
 import { SecurityManageableAdapter } from '@packages/security/index.js';
 import { StorageManageableAdapter } from '@packages/storage/index.js';
+import { MessagingManageableAdapter } from '@packages/messaging/index.js';
 import { OpsEventService } from './ops-event.service.js';
 
 export interface PackageSummaryDto {
@@ -34,6 +35,7 @@ export class PackageRegistryService implements OnModuleInit {
     private readonly databaseAdapter: DatabaseManageableAdapter,
     private readonly securityAdapter: SecurityManageableAdapter,
     private readonly storageAdapter: StorageManageableAdapter,
+    private readonly messagingAdapter: MessagingManageableAdapter,
     private readonly i18n: CoreI18nService,
     private readonly events: OpsEventService,
   ) {}
@@ -44,6 +46,7 @@ export class PackageRegistryService implements OnModuleInit {
     this.register(this.databaseAdapter);
     this.register(this.securityAdapter);
     this.register(this.storageAdapter);
+    this.register(this.messagingAdapter);
   }
 
   public register(pkg: ManageablePackage): void {

@@ -5,6 +5,10 @@ export interface MessageEnvelope<T = unknown> {
   readonly topic: string;
   readonly payload: T;
   readonly timestamp: string;
+  /** Runtime đã publish (api, scheduler, cli…) — để trang Messaging biết producer. */
+  readonly producer?: string | null;
+  /** Correlation ID của request/tác vụ đã publish — consumer chạy trong cùng correlation để lần theo log. */
+  readonly correlationId?: string | null;
 }
 
 export interface MessagePublisherContract {

@@ -39,5 +39,11 @@
   "ops.storage.test.label": "Test Storage",
   "ops.storage.test.description": "Write, read, verify and delete a temporary object to check storage.",
   "ops.storage.test.ok": "Storage is operational ({ms} ms).",
-  "ops.storage.test.failed": "Storage check failed at step {step}."
+  "ops.storage.test.failed": "Storage check failed at step {step}.",
+  "ops.messaging.displayName": "Messaging",
+  "ops.messaging.summary": "{product}, {state}.",
+  "ops.messaging.test.label": "Test Broker",
+  "ops.messaging.test.description": "Publish a dedicated health message, consume and acknowledge it to measure the broker round trip.",
+  "ops.messaging.test.ok": "Messaging is operational (round trip {ms} ms).",
+  "ops.messaging.test.failed": "Messaging health check failed at step {step}."
 }
