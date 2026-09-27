@@ -9,7 +9,7 @@ import type {
   MessagePublisherContract,
 } from '../contracts/message-publisher.contract.js';
 import { QUEUES, type QueueName } from '../constants/queues.constant.js';
-import { channelMetric, messagingKeys } from '../constants/messaging.keys.js';
+import { channelMetric, jobMetric, messagingKeys } from '../constants/messaging.keys.js';
 import { ChannelTracker } from '../utils/channel-tracker.js';
 import { envelopeSize, serializeMessage } from '../serializers/message.serializer.js';
 import {
@@ -59,6 +59,8 @@ export class BaseMessagePublisherProvider implements MessagePublisherContract {
     }
     const size = envelopeSize(envelope);
     this.recorder?.count('msg.published');
+    this.recorder?.count('wq.in');
+    this.recorder?.count(jobMetric(queue, 'in'));
     this.recorder?.count(channelMetric(channel, 'pub'));
     this.recorder?.timing('msg.publish', performance.now() - started);
     this.recorder?.gauge('msg.size', size);

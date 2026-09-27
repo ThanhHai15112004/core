@@ -15,7 +15,7 @@ import { RUNTIME_IDENTITY, type RuntimeIdentity } from '@packages/runtime/index.
 import { MetricRecorder } from '@packages/telemetry/index.js';
 import type { MessageEnvelope } from '../contracts/message-publisher.contract.js';
 import type { ConsumerRegistration } from '../contracts/messaging-events.types.js';
-import { channelMetric, messagingKeys } from '../constants/messaging.keys.js';
+import { channelMetric, jobMetric, messagingKeys } from '../constants/messaging.keys.js';
 import { parseEnvelope } from '../serializers/message.serializer.js';
 import { ChannelTracker } from '../utils/channel-tracker.js';
 import { logLifecycle } from '../utils/lifecycle.js';
@@ -152,6 +152,13 @@ export class MessageConsumerRunner implements OnApplicationBootstrap, OnApplicat
     const base = { runtime: this.runtime, consumer, attempt };
     logLifecycle(job, 'received', base);
     if (reg) reg.inFlight++;
+    const queue = job.queueName;
+    // Thời gian chờ trong queue (tạo job → worker nhận) — trang Worker & Queue.
+    if (job.processedOn) {
+      const wait = Math.max(0, job.processedOn - job.timestamp);
+      this.recorder?.timing('wq.wait', wait);
+      this.recorder?.timing(jobMetric(queue, 'wait'), wait);
+    }
     const started = performance.now();
     try {
       if (!envelope)
@@ -165,7 +172,14 @@ export class MessageConsumerRunner implements OnApplicationBootstrap, OnApplicat
       this.recorder?.count(channelMetric(channel, 'con'));
       this.recorder?.timing('msg.process', ms);
       this.recorder?.timing(channelMetric(channel, 'proc'), ms);
-      if (attempt > 1) this.recorder?.count('msg.recovered');
+      this.recorder?.count('wq.done');
+      this.recorder?.count(jobMetric(queue, 'done'));
+      this.recorder?.timing('wq.proc', ms);
+      this.recorder?.timing(jobMetric(queue, 'proc'), ms);
+      if (attempt > 1) {
+        this.recorder?.count('msg.recovered');
+        this.recorder?.count('wq.recovered');
+      }
       logLifecycle(job, 'completed', { ...base, ms: Number(ms.toFixed(1)) });
       return result;
     } catch (err) {
@@ -200,6 +214,10 @@ export class MessageConsumerRunner implements OnApplicationBootstrap, OnApplicat
     this.recorder?.count(`msg.err.${kind}`);
     this.recorder?.count(channelMetric(channel, 'fail'));
     this.recorder?.timing('msg.process.failed', ms);
+    this.recorder?.count('wq.fail');
+    this.recorder?.count(jobMetric(job.queueName, 'fail'));
+    this.recorder?.count(final ? 'wq.exhausted' : 'wq.retry');
+    this.recorder?.count(jobMetric(job.queueName, final ? 'exhausted' : 'retry'));
     logLifecycle(job, 'failed', { ...base, ms: Number(ms.toFixed(1)) });
     if (final) {
       this.recorder?.count('msg.dlq');

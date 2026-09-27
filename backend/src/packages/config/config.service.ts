@@ -5,6 +5,7 @@ import { authConfig, type AuthConfig } from './auth.config.js';
 import { cacheConfig, type CacheConfig } from './cache.config.js';
 import { storageConfig, type StorageConfig } from './storage.config.js';
 import { messagingConfig, type MessagingConfig } from './messaging.config.js';
+import { queueConfig, type QueueConfig } from './queue.config.js';
 import { runtimeConfig, type RuntimeConfig } from './runtime.config.js';
 import { trafficConfig, type TrafficConfig } from './traffic.config.js';
 import { performanceConfig, type PerformanceConfig } from './performance.config.js';
@@ -17,6 +18,7 @@ export class CoreConfigService {
   public readonly cache: CacheConfig;
   public readonly storage: StorageConfig;
   public readonly messaging: MessagingConfig;
+  public readonly queue: QueueConfig;
   public readonly runtime: RuntimeConfig;
   public readonly traffic: TrafficConfig;
   public readonly performance: PerformanceConfig;
@@ -28,6 +30,7 @@ export class CoreConfigService {
     this.cache = cacheConfig();
     this.storage = storageConfig();
     this.messaging = messagingConfig();
+    this.queue = queueConfig();
     this.runtime = runtimeConfig();
     this.traffic = trafficConfig();
     this.performance = performanceConfig();
@@ -57,6 +60,7 @@ export class CoreConfigService {
       cache: this.cache,
       storage: this.storage,
       messaging: this.messaging,
+      queue: this.queue,
       runtime: this.runtime,
       traffic: this.traffic,
       performance: this.performance,

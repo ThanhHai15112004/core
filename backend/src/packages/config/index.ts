@@ -5,6 +5,7 @@ export * from './auth.config.js';
 export * from './cache.config.js';
 export * from './storage.config.js';
 export * from './messaging.config.js';
+export * from './queue.config.js';
 export * from './runtime.config.js';
 export * from './traffic.config.js';
 export * from './performance.config.js';
