@@ -19,11 +19,12 @@ services:
     volumes:
       # Bind mount mã nguồn backend từ host để hot-reload khi chỉnh sửa code
       - ./backend:/app/backend
+      - ./docker/backend/entrypoint.dev.sh:/app/docker/backend/entrypoint.dev.sh
       # Giữ node_modules độc lập trong container để tránh ghi đè với host
       - backend_node_modules:/app/backend/node_modules
     # Giới hạn tài nguyên bộ nhớ cho Backend API Server
-    mem_limit: 768m
-    mem_reservation: 384m
+    mem_limit: 1536m
+    mem_reservation: 512m
     restart: unless-stopped
 
   # Worker runtime: consumer BullMQ (dùng dist do service backend build)
@@ -42,6 +43,7 @@ services:
       - .env.docker.dev
     volumes:
       - ./backend:/app/backend
+      - ./docker/backend/entrypoint.dev.sh:/app/docker/backend/entrypoint.dev.sh
       - backend_node_modules:/app/backend/node_modules
     mem_limit: 512m
     mem_reservation: 256m
@@ -65,6 +67,7 @@ services:
       - .env.docker.dev
     volumes:
       - ./backend:/app/backend
+      - ./docker/backend/entrypoint.dev.sh:/app/docker/backend/entrypoint.dev.sh
       - backend_node_modules:/app/backend/node_modules
     mem_limit: 256m
     mem_reservation: 128m

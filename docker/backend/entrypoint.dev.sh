@@ -4,10 +4,15 @@ set -e
 # RUNTIME: api | worker | scheduler (mặc định api)
 RUNTIME="${RUNTIME:-api}"
 
-# Đảm bảo dependencies đã có trong anonymous volume
-if [ ! -d "/app/backend/node_modules/@nestjs" ]; then
-  echo "📦 [Core Backend] Đang cài đặt dependencies..."
+# Đảm bảo dependencies đã có và tự động đồng bộ khi package.json thay đổi
+PKG_HASH_FILE="/app/backend/node_modules/.package_json_hash"
+CURRENT_HASH=$(md5sum /app/backend/package.json 2>/dev/null | cut -d' ' -f1 || echo "")
+SAVED_HASH=$(cat "$PKG_HASH_FILE" 2>/dev/null || echo "")
+
+if [ ! -d "/app/backend/node_modules/@nestjs" ] || [ "$CURRENT_HASH" != "$SAVED_HASH" ]; then
+  echo "📦 [Core Backend] Đang cài đặt/cập nhật dependencies..."
   npm install
+  echo "$CURRENT_HASH" > "$PKG_HASH_FILE"
 fi
 
 if [ "$RUNTIME" = "api" ]; then
