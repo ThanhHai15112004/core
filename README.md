@@ -319,6 +319,25 @@ Cùng 1 codebase phục vụ 4 chế độ chạy độc lập: `api` (HTTP), `w
 - API: `GET /ops/workers[/:id]`, `GET /ops/workers/{overview,metrics,failures,delayed,events,operations,config}`,
   `GET /ops/queues[/:name[/metrics|/jobs|/failures|/events]]`, `POST /ops/queues/:name/{pause,resume,retry-failed,drain}`.
 
+### Scheduler (System Console → Scheduler)
+- Scheduler trả lời "khi nào công việc phải được kích hoạt"; Worker & Queue trả lời "công việc nền đã tạo có được xử lý
+  tốt không". Task nặng chỉ nên trigger / enqueue (khai báo `downstreamQueue`), Worker xử lý.
+- Task khai báo trong code qua `ScheduledTaskRegistry` (`apps/scheduler/registry`): kiểu `cron` (theo múi giờ
+  `SCHEDULER_TIMEZONE`, DST-aware), `interval` (căn mốc theo epoch) hoặc `one_time`; overlap policy (`skip` = Prevent,
+  `allow`), misfire policy (`run_once`, `skip`), thời lượng dự kiến. Lịch sai → task "Misconfigured", không được lên lịch.
+- Runtime (`TaskRunnerService`) ghi mỗi lần chạy vào Redis (`packages/scheduler`): scheduled / manual / recovery,
+  success / failed / skipped / missed, drift so với lịch, instance, correlation ID (log và job enqueue mang cùng ID), job
+  đã tạo. Nhiều instance: mỗi mốc lịch một instance nhận + lock Redis chống chạy chồng. Khởi động lại sau khi ngừng quá
+  30s → ghi một bản ghi `missed` gộp số lần lỡ và áp dụng misfire policy. Lịch sử giữ `SCHEDULER_HISTORY_RETENTION_DAYS`
+  (task `scheduler.history-prune` dọn chỉ mục mỗi giờ); số đo tổng hợp `sch.*` qua telemetry.
+- Monitor nền trong API (mỗi 15s, lock Redis): mất heartbeat, lỗi liên tiếp, nhiều lần lỗi trong 1 giờ, chạy lâu bất
+  thường (có thể bị treo — không tự huỷ), lỡ lịch, quá hạn, chạy chồng, chạy trùng, lock lỗi, trễ bắt đầu cao, cấu hình
+  sai; lần chạy của instance đã chết → `failed / Interrupted`. Ngưỡng: `SCHEDULER_*`.
+- Thao tác (bật/tắt bằng env, audit + sự kiện): Run Now (gửi lệnh tới runtime qua Redis, tôn trọng overlap policy),
+  Enable / Disable (giữ định nghĩa task, không huỷ lần đang chạy). Không có sửa / xoá lịch.
+- API: `GET /ops/scheduler/{overview,metrics,tasks[/:id[/executions]],executions[/:id],upcoming,timeline,failures,
+  events,operations,config,cron}`, `POST /ops/scheduler/tasks/:id/{run,enable,disable}`.
+
 ### Response Envelope chuẩn hóa
 ```json
 { "success": true, "statusCode": 200, "data": {}, "timestamp": "..." }

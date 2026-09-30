@@ -10,7 +10,10 @@ import { StorageModule } from '@packages/storage/index.js';
 import { MessagingModule } from '@packages/messaging/index.js';
 import { RedisModule } from '@packages/redis/index.js';
 import { RuntimeAgentModule } from '@packages/runtime/index.js';
+import { SchedulerStoreModule } from '@packages/scheduler/index.js';
+import { ScheduledTaskRegistry } from './registry/scheduled-task.registry.js';
 import { SystemTask } from './tasks/system/system.task.js';
+import { HistoryPruneTask } from './tasks/system/history-prune.task.js';
 import { TaskRunnerService } from './runner/task-runner.service.js';
 import { SchedulerRuntimeContributor } from './runtime/scheduler-runtime.contributor.js';
 
@@ -27,8 +30,15 @@ import { SchedulerRuntimeContributor } from './runtime/scheduler-runtime.contrib
     CacheModule,
     StorageModule,
     MessagingModule,
+    SchedulerStoreModule,
   ],
-  providers: [SystemTask, TaskRunnerService, SchedulerRuntimeContributor],
-  exports: [SystemTask],
+  providers: [
+    ScheduledTaskRegistry,
+    SystemTask,
+    HistoryPruneTask,
+    TaskRunnerService,
+    SchedulerRuntimeContributor,
+  ],
+  exports: [ScheduledTaskRegistry, SystemTask],
 })
 export class SchedulerModule {}

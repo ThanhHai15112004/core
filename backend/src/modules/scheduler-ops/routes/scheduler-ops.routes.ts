@@ -1,0 +1,21 @@
+/** Scheduler: lịch chạy, lịch sử thực thi, sự cố và thao tác task (`/ops/scheduler`). */
+export const SCHEDULER_OPS_ROUTES = {
+  PREFIX: 'ops/scheduler',
+  OVERVIEW: 'overview',
+  METRICS: 'metrics',
+  TASKS: 'tasks',
+  TASK_DETAIL: 'tasks/:id',
+  TASK_EXECUTIONS: 'tasks/:id/executions',
+  TASK_RUN: 'tasks/:id/run',
+  TASK_ENABLE: 'tasks/:id/enable',
+  TASK_DISABLE: 'tasks/:id/disable',
+  EXECUTIONS: 'executions',
+  EXECUTION_DETAIL: 'executions/:id',
+  UPCOMING: 'upcoming',
+  TIMELINE: 'timeline',
+  FAILURES: 'failures',
+  EVENTS: 'events',
+  OPERATIONS: 'operations',
+  CONFIG: 'config',
+  CRON: 'cron',
+} as const;

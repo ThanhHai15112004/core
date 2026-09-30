@@ -1,0 +1,261 @@
+/* Scheduler — dùng lại khung Database/Cache/Messaging/Worker (db-*, cache-*, msg-*, wq-*) và token màu chung. */
+
+.console-root .ov-kpi-grid.sch-kpi-6 {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+.console-root .ov-kpi-grid.sch-kpi-4 {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+/* ─── Bảng task: lịch cho người đọc + biểu thức cron nhỏ bên dưới ─── */
+.console-root .sch-schedule {
+  display: inline-flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.console-root .sch-task-id {
+  font-size: 0.8rem;
+  font-weight: 400;
+  color: var(--scp-text-muted);
+}
+.console-root .sch-detail-schedule {
+  margin: 0.4rem 0 0;
+}
+.console-root .sch-health {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.75rem;
+  color: var(--scp-text-secondary);
+}
+.console-root .sch-result.ov-tone-crit {
+  color: var(--scp-danger-text);
+}
+.console-root .sch-result.ov-tone-warn {
+  color: var(--scp-warning-text);
+}
+.console-root .sch-task-table td:last-child {
+  white-space: nowrap;
+}
+.console-root td.is-warn,
+.console-root span.is-warn {
+  color: var(--scp-warning-text);
+}
+
+/* ─── Bộ lọc task ─── */
+.console-root .sch-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1rem;
+  margin-bottom: 0.75rem;
+}
+.console-root .sch-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.75rem;
+  color: var(--scp-text-secondary);
+}
+
+/* ─── Biểu đồ: Current / Peak / Average ─── */
+.console-root .sch-chart-stats {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-bottom: 0.5rem;
+}
+
+/* ─── Execution Detail ─── */
+.console-root .sch-failure {
+  margin: 0.75rem 0;
+  padding: 0.75rem;
+  border: 1px solid var(--scp-danger-border);
+  border-radius: 8px;
+  background: var(--scp-danger-bg);
+}
+.console-root .sch-failure h4 {
+  margin: 0 0 0.5rem;
+  color: var(--scp-danger-text);
+}
+.console-root .sch-error-message {
+  margin: 0.5rem 0 0;
+  padding: 0.5rem 0.65rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 0.8rem;
+  background: var(--scp-bg-surface);
+  border-radius: 6px;
+}
+.console-root .cache-key-list li.is-muted {
+  opacity: 0.6;
+}
+
+/* ─── Timeline (gantt mini) ─── */
+.console-root .sch-gantt {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  overflow-x: auto;
+}
+.console-root .sch-gantt-axis,
+.console-root .sch-gantt-lane {
+  display: grid;
+  grid-template-columns: minmax(120px, 180px) minmax(480px, 1fr);
+  align-items: center;
+  gap: 0.75rem;
+}
+.console-root .sch-gantt-axis .sch-gantt-track {
+  height: 1.4rem;
+  background: none;
+  border: none;
+}
+.console-root .sch-gantt-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+  font-size: 0.8rem;
+}
+.console-root .sch-gantt-track {
+  position: relative;
+  height: 1.6rem;
+  border-radius: 6px;
+  background: var(--scp-bg-surface-subtle);
+  border: 1px solid var(--scp-border-subtle);
+}
+.console-root .sch-gantt-tick,
+.console-root .sch-gantt-now {
+  position: absolute;
+  top: 0.15rem;
+  transform: translateX(-50%);
+  font-size: 0.7rem;
+  color: var(--scp-text-muted);
+  white-space: nowrap;
+}
+.console-root .sch-gantt-tick:first-child {
+  transform: none;
+}
+.console-root .sch-gantt-now {
+  font-weight: 600;
+  color: var(--scp-primary);
+}
+.console-root .sch-gantt-nowline {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  width: 0;
+  border-left: 2px solid var(--scp-primary);
+  opacity: 0.6;
+}
+.console-root .sch-gantt-bar {
+  position: absolute;
+  top: 0.3rem;
+  bottom: 0.3rem;
+  min-width: 3px;
+  padding: 0;
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+  background: var(--scp-success);
+}
+.console-root .sch-gantt-bar.ov-tone-crit {
+  background: var(--scp-danger);
+}
+.console-root .sch-gantt-bar.ov-tone-warn {
+  background: var(--scp-warning);
+}
+.console-root .sch-gantt-bar.is-running {
+  background-image: repeating-linear-gradient(45deg, transparent 0 4px, rgba(255, 255, 255, 0.35) 4px 8px);
+}
+.console-root .sch-gantt-bar:hover,
+.console-root .sch-gantt-mark:hover {
+  filter: brightness(1.15);
+  outline: 2px solid var(--scp-border-focus);
+}
+.console-root .sch-gantt-mark {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 0.8rem;
+  line-height: 1;
+  color: var(--scp-text-muted);
+}
+.console-root .sch-gantt-mark.is-missed {
+  color: var(--scp-warning);
+}
+.console-root .sch-gantt-next {
+  position: absolute;
+  top: 0.2rem;
+  bottom: 0.2rem;
+  width: 0;
+  border-left: 2px dotted var(--scp-text-muted);
+}
+.console-root .sch-gantt-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1rem;
+}
+.console-root .sch-legend.is-ok {
+  color: var(--scp-success);
+}
+.console-root .sch-legend.is-crit {
+  color: var(--scp-danger);
+}
+.console-root .sch-legend.is-warn {
+  color: var(--scp-warning);
+}
+
+/* ─── Cron Inspector / danh sách lần chạy kế tiếp ─── */
+.console-root .sch-cron-form {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+.console-root .sch-cron-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.75rem;
+  color: var(--scp-text-secondary);
+}
+.console-root .sch-cron-form input {
+  padding: 0.45rem 0.6rem;
+  font: inherit;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.85rem;
+  color: var(--scp-text-primary);
+  background: var(--scp-bg-surface);
+  border: 1px solid var(--scp-border-strong);
+  border-radius: 6px;
+}
+.console-root .sch-cron-form input:focus {
+  outline: none;
+  border-color: var(--scp-border-focus);
+}
+.console-root .sch-cron-next {
+  margin: 0.25rem 0 0.75rem;
+  padding-left: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 1280px) {
+  .console-root .ov-kpi-grid.sch-kpi-6 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@media (max-width: 900px) {
+  .console-root .ov-kpi-grid.sch-kpi-6,
+  .console-root .ov-kpi-grid.sch-kpi-4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .console-root .sch-cron-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

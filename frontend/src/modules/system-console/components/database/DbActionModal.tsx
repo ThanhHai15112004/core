@@ -11,13 +11,15 @@ interface DbActionModalProps {
   confirmLabel: string;
   /** Từ phải gõ để xác nhận (thao tác nguy hiểm); không có → chỉ cần bấm. */
   confirmWord?: string;
+  /** Không cho xác nhận (vd. task đang chạy, overlap Prevent) — modal chỉ để giải thích. */
+  confirmDisabled?: boolean;
   busy: boolean;
   onCancel: () => void;
   onConfirm: (typed: string) => void;
 }
 
 /** Xác nhận thao tác database (Cancel Query, Terminate Session, Run Migrations). */
-export const DbActionModal: React.FC<DbActionModalProps> = ({ title, context, warning, confirmLabel, confirmWord, busy, onCancel, onConfirm }) => {
+export const DbActionModal: React.FC<DbActionModalProps> = ({ title, context, warning, confirmLabel, confirmWord, confirmDisabled = false, busy, onCancel, onConfirm }) => {
   const { t } = useLocale();
   const [typed, setTyped] = useState('');
 
@@ -27,7 +29,7 @@ export const DbActionModal: React.FC<DbActionModalProps> = ({ title, context, wa
     return () => window.removeEventListener('keydown', onKey);
   }, [onCancel]);
 
-  const canConfirm = !busy && (!confirmWord || typed === confirmWord);
+  const canConfirm = !busy && !confirmDisabled && (!confirmWord || typed === confirmWord);
   return (
     <ConsolePortal>
       <div className="rt-modal-backdrop" onClick={onCancel}>

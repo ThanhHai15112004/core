@@ -58,6 +58,9 @@ export const API_ROUTES = {
     QUEUES: {
       path: (path: string, qs = '') => `${OPS_PREFIX}/queues${path ? `/${path}` : ''}${qs ? `?${qs}` : ''}`,
     },
+    SCHEDULER: {
+      path: (path: string, qs = '') => `${OPS_PREFIX}/scheduler/${path}${qs ? `?${qs}` : ''}`,
+    },
     PERFORMANCE: {
       OVERVIEW: (qs: string) => `${OPS_PREFIX}/performance/overview?${qs}`,
       TIMESERIES: (qs: string) => `${OPS_PREFIX}/performance/timeseries?${qs}`,

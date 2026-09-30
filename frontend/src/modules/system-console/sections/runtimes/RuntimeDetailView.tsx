@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ArrowLeft, FileText } from 'lucide-react';
+import { ArrowLeft, ArrowRight, FileText } from 'lucide-react';
 import type { RuntimeAction, RuntimeDetail, RuntimeId } from '../../types/runtime.types';
 import { runtimesApi } from '../../services/runtimes.api';
 import { usePolling } from '../../hooks/usePolling';
@@ -229,6 +229,9 @@ export const RuntimeDetailView: React.FC<{ id: RuntimeId; tab: DetailTab }> = ({
               <section className="ov-card ov-section">
                 <header className="ov-section-head">
                   <h3>{t('rt.tasks.title')}</h3>
+                  <button type="button" className="ov-link" onClick={() => navigate('scheduler')}>
+                    {t('rt.tasks.openScheduler')} <ArrowRight size={13} />
+                  </button>
                 </header>
                 {tasks.length === 0 ? (
                   <p className="ov-empty-line">{t('rt.tasks.empty')}</p>

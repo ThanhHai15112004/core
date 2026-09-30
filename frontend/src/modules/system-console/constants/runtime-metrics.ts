@@ -53,7 +53,7 @@ export const RUNTIME_SHORTCUTS: Record<RuntimeId, Array<{ key: string; path: (id
     { key: 'logs', path: (id) => `runtimes/${id}/logs` },
   ],
   scheduler: [
-    { key: 'tasks', path: (id) => `runtimes/${id}/overview` },
+    { key: 'tasks', path: () => 'scheduler/tasks' },
     { key: 'logs', path: (id) => `runtimes/${id}/logs` },
   ],
 };

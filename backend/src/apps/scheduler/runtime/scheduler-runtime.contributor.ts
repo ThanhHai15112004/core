@@ -7,6 +7,7 @@ import {
   type RuntimeDescriptor,
   type RuntimeIssue,
 } from '@packages/runtime/index.js';
+import { CoreConfigService } from '@packages/config/index.js';
 import { TaskRunnerService } from '../runner/task-runner.service.js';
 
 /** Task lỗi trong khoảng này vẫn được coi là vấn đề đang diễn ra. */
@@ -17,6 +18,7 @@ export class SchedulerRuntimeContributor implements RuntimeContributor, OnModule
   constructor(
     private readonly agent: RuntimeAgentService,
     private readonly runner: TaskRunnerService,
+    private readonly config: CoreConfigService,
   ) {}
 
   public onModuleInit(): void {
@@ -30,7 +32,10 @@ export class SchedulerRuntimeContributor implements RuntimeContributor, OnModule
       adapter: withVersion('@nestjs/schedule', '@nestjs/schedule'),
       entrypoint: 'apps/scheduler/main.ts',
       sourcePath: 'backend/src/apps/scheduler/',
-      details: { timezone: Intl.DateTimeFormat().resolvedOptions().timeZone },
+      details: {
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        scheduleTimezone: this.config.scheduler.timezone,
+      },
     };
   }
 

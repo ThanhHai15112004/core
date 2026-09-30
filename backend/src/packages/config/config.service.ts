@@ -6,6 +6,7 @@ import { cacheConfig, type CacheConfig } from './cache.config.js';
 import { storageConfig, type StorageConfig } from './storage.config.js';
 import { messagingConfig, type MessagingConfig } from './messaging.config.js';
 import { queueConfig, type QueueConfig } from './queue.config.js';
+import { schedulerConfig, type SchedulerConfig } from './scheduler.config.js';
 import { runtimeConfig, type RuntimeConfig } from './runtime.config.js';
 import { trafficConfig, type TrafficConfig } from './traffic.config.js';
 import { performanceConfig, type PerformanceConfig } from './performance.config.js';
@@ -19,6 +20,7 @@ export class CoreConfigService {
   public readonly storage: StorageConfig;
   public readonly messaging: MessagingConfig;
   public readonly queue: QueueConfig;
+  public readonly scheduler: SchedulerConfig;
   public readonly runtime: RuntimeConfig;
   public readonly traffic: TrafficConfig;
   public readonly performance: PerformanceConfig;
@@ -31,6 +33,7 @@ export class CoreConfigService {
     this.storage = storageConfig();
     this.messaging = messagingConfig();
     this.queue = queueConfig();
+    this.scheduler = schedulerConfig();
     this.runtime = runtimeConfig();
     this.traffic = trafficConfig();
     this.performance = performanceConfig();
@@ -61,6 +64,7 @@ export class CoreConfigService {
       storage: this.storage,
       messaging: this.messaging,
       queue: this.queue,
+      scheduler: this.scheduler,
       runtime: this.runtime,
       traffic: this.traffic,
       performance: this.performance,
