@@ -7,6 +7,8 @@ import { storageConfig, type StorageConfig } from './storage.config.js';
 import { messagingConfig, type MessagingConfig } from './messaging.config.js';
 import { queueConfig, type QueueConfig } from './queue.config.js';
 import { schedulerConfig, type SchedulerConfig } from './scheduler.config.js';
+import { jobsConfig, type JobsConfig } from './jobs.config.js';
+import { logsConfig, type LogsConfig } from './logs.config.js';
 import { runtimeConfig, type RuntimeConfig } from './runtime.config.js';
 import { trafficConfig, type TrafficConfig } from './traffic.config.js';
 import { performanceConfig, type PerformanceConfig } from './performance.config.js';
@@ -21,6 +23,8 @@ export class CoreConfigService {
   public readonly messaging: MessagingConfig;
   public readonly queue: QueueConfig;
   public readonly scheduler: SchedulerConfig;
+  public readonly jobs: JobsConfig;
+  public readonly logs: LogsConfig;
   public readonly runtime: RuntimeConfig;
   public readonly traffic: TrafficConfig;
   public readonly performance: PerformanceConfig;
@@ -34,6 +38,8 @@ export class CoreConfigService {
     this.messaging = messagingConfig();
     this.queue = queueConfig();
     this.scheduler = schedulerConfig();
+    this.jobs = jobsConfig();
+    this.logs = logsConfig();
     this.runtime = runtimeConfig();
     this.traffic = trafficConfig();
     this.performance = performanceConfig();
@@ -65,6 +71,8 @@ export class CoreConfigService {
       messaging: this.messaging,
       queue: this.queue,
       scheduler: this.scheduler,
+      jobs: this.jobs,
+      logs: this.logs,
       runtime: this.runtime,
       traffic: this.traffic,
       performance: this.performance,

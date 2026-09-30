@@ -520,15 +520,24 @@ export class TaskRunnerService implements OnApplicationBootstrap, BeforeApplicat
       recordJob: (job) => record.jobs.push(job),
     };
     try {
-      await this.context.run({ correlationId: id }, () =>
-        Promise.resolve().then(() => rt.def.handler(ctx)),
+      await this.context.run(
+        { correlationId: id, source: { kind: 'scheduler', id, name: rt.meta.id } },
+        () => Promise.resolve().then(() => rt.def.handler(ctx)),
       );
       record.status = 'success';
     } catch (err) {
       record.status = 'failed';
       record.error = classifyTaskError(err);
       this.logger.error(
-        `Task ${rt.meta.id} failed (${record.error.type}): ${record.error.message}`,
+        {
+          message: `Task ${rt.meta.id} failed: ${record.error.message}`,
+          executionId: id,
+          correlationId: id,
+          taskId: rt.meta.id,
+          errorType: record.error.type,
+          durationMs: Date.now() - startedAt,
+        },
+        err instanceof Error ? err.stack : undefined,
       );
     } finally {
       if (refresh) clearInterval(refresh);

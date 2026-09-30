@@ -687,3 +687,16 @@
   .console-root .tr-waterfall li { grid-template-columns: minmax(0, 7rem) minmax(0, 1fr) 4rem; }
   .console-root .detail-drawer.tr-drawer { width: 100vw; max-width: 100vw; }
 }
+
+/* Job nền được tạo trong request (HTTP → Jobs). */
+.console-root .tr-drawer-jobs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.9rem;
+  margin: 0 0 0.75rem;
+  padding: 0.5rem 0.7rem;
+  font-size: 0.8rem;
+  border-radius: 6px;
+  background: var(--scp-bg-surface-subtle);
+}

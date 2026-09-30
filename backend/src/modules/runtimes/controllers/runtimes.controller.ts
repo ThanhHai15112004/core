@@ -102,10 +102,12 @@ export class RuntimesController {
     @Query('limit') limit?: string,
     @Query('level') level?: string,
     @Query('correlationId') correlationId?: string,
+    @Query('jobId') jobId?: string,
   ): Promise<RuntimeLogDto[]> {
     return this.runtimes.getLogs(runtimeId, parse(limitSchema(1000, 100), limit), {
       level: level ? parse(z.enum(LOG_LEVELS), level) : undefined,
       correlationId: correlationId ? parse(z.string().max(128), correlationId) : undefined,
+      jobId: jobId ? parse(z.string().max(128), jobId) : undefined,
     });
   }
 

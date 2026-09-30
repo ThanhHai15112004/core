@@ -163,7 +163,8 @@ export const TrafficSection: React.FC = () => {
           key={openRequestId}
           requestId={openRequestId}
           onClose={closeDrawer}
-          onOpenLogs={(cid) => navigate(`logs?runtime=api&correlationId=${encodeURIComponent(cid)}`)}
+          onOpenLogs={(cid) => navigate(`logs/explorer?correlationId=${encodeURIComponent(cid)}`)}
+          onOpenJob={(id, queue) => navigate(`jobs/job/${encodeURIComponent(id)}?queue=${encodeURIComponent(queue)}`)}
           onOpenEndpoint={(routeId) => {
             setDrawerId(null);
             go(['endpoints', routeId]);

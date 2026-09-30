@@ -1,3 +1,4 @@
+import type { JobMeta, PublishOptions } from './job-meta.types.js';
 import type { QueueName } from '../constants/queues.constant.js';
 
 export interface MessageEnvelope<T = unknown> {
@@ -9,9 +10,16 @@ export interface MessageEnvelope<T = unknown> {
   readonly producer?: string | null;
   /** Correlation ID của request/tác vụ đã publish — consumer chạy trong cùng correlation để lần theo log. */
   readonly correlationId?: string | null;
+  /** Nguồn tạo job, idempotency key, field index… (envelope cũ không có). */
+  readonly meta?: JobMeta | null;
 }
 
 export interface MessagePublisherContract {
   /** Đưa message vào queue (mặc định `system.events`); tên job = `topic`. Trả về envelope đã gửi. */
-  publish<T>(topic: string, payload: T, queue?: QueueName): Promise<MessageEnvelope<T>>;
+  publish<T>(
+    topic: string,
+    payload: T,
+    queue?: QueueName,
+    options?: PublishOptions,
+  ): Promise<MessageEnvelope<T>>;
 }

@@ -1,0 +1,407 @@
+/* Jobs — dùng lại khung Database/Worker/Scheduler (db-*, wq-*, sch-*) và token màu chung (--tone* do ov-tone-* đặt). */
+
+.console-root .ov-muted {
+  color: var(--scp-text-muted);
+}
+.console-root .job-note {
+  margin: 0.25rem 0 0.75rem;
+  font-size: 0.78rem;
+}
+
+/* ─── Header ─── */
+.console-root .job-page-status {
+  margin-left: 0.6rem;
+  vertical-align: middle;
+  font-size: 0.75rem;
+}
+.console-root .job-chip-lg {
+  font-size: 0.85rem;
+  padding: 0.2rem 0.65rem;
+  vertical-align: middle;
+}
+.console-root .job-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin-bottom: 0.5rem;
+}
+.console-root .job-detail-head {
+  align-items: flex-start;
+  gap: 1.5rem;
+}
+.console-root .job-detail-head .ov-page-subtitle {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  word-break: break-all;
+}
+.console-root .job-detail-meta {
+  margin: 0.35rem 0 0;
+  font-size: 0.82rem;
+  color: var(--scp-text-secondary);
+}
+.console-root .job-detail-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.6rem;
+  min-width: 260px;
+}
+.console-root .job-detail-side .db-stat-grid {
+  grid-template-columns: repeat(4, minmax(0, auto));
+  margin: 0;
+}
+.console-root .job-actions-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+/* ─── KPI dạng nút (bấm → Explorer) ─── */
+.console-root button.job-kpi {
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  background: var(--scp-bg-surface);
+}
+.console-root button.job-kpi:hover {
+  background: var(--scp-bg-surface-hover);
+}
+.console-root button.job-kpi:focus-visible {
+  outline: 2px solid var(--scp-border-focus);
+  outline-offset: 2px;
+}
+
+/* ─── Tìm kiếm & bộ lọc ─── */
+.console-root .job-overview-search {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1rem;
+  margin-bottom: 1rem;
+}
+.console-root .job-overview-search .job-search {
+  flex: 1 1 420px;
+}
+.console-root .job-status-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+.console-root .job-search {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex: 1 1 360px;
+  min-width: 0;
+  padding: 0.25rem 0.3rem 0.25rem 0.65rem;
+  border: 1px solid var(--scp-border-strong);
+  border-radius: 8px;
+  background: var(--scp-bg-surface);
+  color: var(--scp-text-muted);
+}
+.console-root .job-search:focus-within {
+  border-color: var(--scp-border-focus);
+}
+.console-root .job-search input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  font: inherit;
+  font-size: 0.85rem;
+  color: var(--scp-text-primary);
+}
+.console-root .job-filterbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem 1rem;
+  margin-bottom: 0.75rem;
+}
+.console-root .job-filterbar-more {
+  padding: 0.75rem;
+  border: 1px dashed var(--scp-border-subtle);
+  border-radius: 8px;
+  background: var(--scp-bg-surface-subtle);
+}
+.console-root .job-filterbar select,
+.console-root .job-input {
+  padding: 0.3rem 0.5rem;
+  font: inherit;
+  font-size: 0.8rem;
+  color: var(--scp-text-primary);
+  background: var(--scp-bg-surface);
+  border: 1px solid var(--scp-border-strong);
+  border-radius: 6px;
+}
+.console-root .job-input {
+  width: 150px;
+}
+.console-root .job-input-sm {
+  width: 80px;
+}
+.console-root .job-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-left: 0.4rem;
+}
+.console-root .job-status-tabs {
+  margin: 0.25rem 0 0.4rem;
+  overflow-x: auto;
+}
+.console-root .job-bulkbar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0.5rem 0;
+  padding: 0.5rem 0.75rem;
+  border-radius: 8px;
+  background: var(--scp-primary-subtle);
+  font-size: 0.82rem;
+}
+.console-root .job-pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+/* ─── Bảng job ─── */
+.console-root .job-table td {
+  vertical-align: top;
+}
+.console-root .job-type {
+  font-weight: 600;
+  word-break: break-word;
+}
+.console-root .job-error {
+  color: var(--scp-danger-text);
+}
+.console-root .job-select {
+  width: 2rem;
+}
+.console-root tr.is-warn-row td:first-child {
+  box-shadow: inset 3px 0 0 var(--scp-warning);
+}
+.console-root .job-source {
+  font-size: 0.8rem;
+}
+.console-root .job-progress {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  max-width: 320px;
+}
+.console-root .job-progress.is-compact {
+  max-width: 140px;
+}
+.console-root .job-progress-track {
+  flex: 1;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--scp-bg-surface-subtle);
+  border: 1px solid var(--scp-border-subtle);
+  overflow: hidden;
+}
+.console-root .job-progress-fill {
+  display: block;
+  height: 100%;
+  background: var(--scp-primary);
+}
+.console-root .job-progress-value {
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+}
+.console-root .job-bar-cell {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 120px;
+}
+.console-root .job-bar {
+  display: block;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--scp-danger);
+  opacity: 0.75;
+}
+.console-root .job-top-types {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.console-root .job-top-types li {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) 2fr;
+  align-items: center;
+  gap: 0.75rem;
+}
+.console-root .job-top-types .job-bar {
+  background: var(--scp-primary);
+}
+
+/* ─── Lifecycle / Retry timeline ─── */
+.console-root .job-lifecycle {
+  display: flex;
+  flex-direction: column;
+  margin: 0.25rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+.console-root .job-lifecycle li {
+  display: flex;
+  flex-direction: column;
+}
+.console-root .job-lifecycle-gap {
+  margin-left: 7.4rem;
+  padding: 0.15rem 0 0.15rem 0.9rem;
+  border-left: 2px solid var(--scp-border-subtle);
+  font-size: 0.75rem;
+  color: var(--scp-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.console-root .job-lifecycle-step {
+  display: grid;
+  grid-template-columns: 7rem 0.8rem 1fr;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+.console-root .job-lifecycle-step time {
+  font-size: 0.78rem;
+  color: var(--scp-text-muted);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.console-root .job-lifecycle-step .ov-dot {
+  background: var(--tone, var(--scp-text-muted));
+}
+.console-root .job-lifecycle-body {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem 0.6rem;
+  font-size: 0.85rem;
+}
+.console-root .job-lifecycle li.is-current .job-lifecycle-body strong {
+  color: var(--scp-primary);
+}
+.console-root .job-subhead {
+  margin: 1.25rem 0 0.5rem;
+}
+.console-root .job-retry-timeline {
+  margin-top: 0.5rem;
+}
+
+/* ─── Lỗi / stack / payload ─── */
+.console-root .job-stack {
+  margin-top: 0.6rem;
+}
+.console-root .job-stack-head {
+  display: flex;
+  gap: 1rem;
+}
+.console-root .job-stack-head .ov-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+.console-root .job-pre {
+  max-height: 420px;
+  margin: 0.5rem 0 0;
+  padding: 0.65rem 0.8rem;
+  overflow: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.76rem;
+  line-height: 1.5;
+  white-space: pre;
+  color: var(--scp-terminal-text);
+  background: var(--scp-terminal-bg);
+  border: 1px solid var(--scp-terminal-border);
+  border-radius: 6px;
+}
+.console-root .job-attempt-detail td {
+  background: var(--scp-bg-surface-subtle);
+}
+.console-root .job-storm {
+  border-left: 4px solid var(--scp-danger);
+}
+.console-root .job-storm h3 {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0 0 0.35rem;
+  color: var(--scp-danger-text);
+}
+.console-root .job-flow {
+  margin: 0.75rem 0 0;
+  padding: 0.5rem 0.65rem;
+  font-size: 0.8rem;
+  border-radius: 6px;
+  background: var(--scp-bg-surface-subtle);
+  color: var(--scp-text-secondary);
+  white-space: pre-wrap;
+}
+.console-root .job-phases {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1.25rem;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.85rem;
+}
+.console-root .job-phases .is-done {
+  color: var(--scp-success-text);
+}
+.console-root .job-phases .is-active {
+  color: var(--scp-primary);
+  font-weight: 600;
+}
+.console-root .job-phases .is-failed {
+  color: var(--scp-danger-text);
+}
+.console-root .job-phases .is-pending {
+  color: var(--scp-text-muted);
+}
+.console-root .job-tree-root {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 0.5rem;
+}
+.console-root .job-bulk-preview {
+  margin: 0.5rem 0 0;
+  padding-left: 1.1rem;
+  font-size: 0.8rem;
+  max-height: 180px;
+  overflow: auto;
+}
+
+@media (max-width: 900px) {
+  .console-root .job-detail-side {
+    align-items: stretch;
+    min-width: 0;
+  }
+  .console-root .job-detail-side .db-stat-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .console-root .job-lifecycle-step {
+    grid-template-columns: 5.5rem 0.8rem 1fr;
+  }
+  .console-root .job-lifecycle-gap {
+    margin-left: 5.9rem;
+  }
+  .console-root .job-top-types li {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

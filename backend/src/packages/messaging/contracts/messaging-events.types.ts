@@ -66,7 +66,10 @@ export type LifecycleType =
   | 'retry_scheduled'
   | 'dead_lettered'
   | 'retried_manually'
-  | 'replayed';
+  | 'replayed'
+  | 'cancel_requested'
+  | 'cancelled'
+  | 'stalled';
 
 export interface LifecycleEntry {
   at: number;
@@ -78,6 +81,14 @@ export interface LifecycleEntry {
   error: string | null;
   /** retry_scheduled: độ trễ trước lần thử kế tiếp. */
   delayMs: number | null;
+  /** Instance worker (`worker@host:pid`) — có từ bản ghi mới. */
+  instance?: string | null;
+  /** failed: loại lỗi đã phân loại, có retry được không, hệ phụ thuộc gây lỗi. */
+  errorType?: string | null;
+  retryable?: boolean | null;
+  dependency?: string | null;
+  /** Người thao tác (retry / huỷ thủ công). */
+  actor?: string | null;
 }
 
 /** Một consumer đang chạy trong một runtime (mỗi runtime tự báo lên Redis, có TTL). */
@@ -91,6 +102,8 @@ export interface ConsumerRegistration {
   paused: boolean;
   /** Processor tự khai báo idempotent; null = không rõ. */
   idempotent: boolean | null;
+  /** Processor hỗ trợ huỷ hợp tác (AbortSignal); bản ghi cũ không có. */
+  cancellable?: boolean;
   /** epoch ms */
   startedAt: number;
   /** Message đang xử lý trong instance này. */

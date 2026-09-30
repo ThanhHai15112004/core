@@ -127,10 +127,14 @@ export interface RuntimesOverviewDto {
 export type RuntimeSeriesDto = Record<string, RuntimeSample[]>;
 
 export interface RuntimeLogDto {
+  /** ID log (mở chi tiết ở trang Logs); log cũ ghi trước khi có ID thì không có. */
+  id?: string;
   t: string;
   level: string;
   context?: string;
   correlationId?: string;
+  jobId?: string;
+  /** Message kèm stack trace (nếu có) — tab Logs của runtime hiện dạng terminal. */
   message: string;
 }
 

@@ -11,7 +11,17 @@ export class SystemProcessor {
    */
   public readonly idempotent: boolean | null = true;
 
-  public async processJob(topic: string, envelope: MessageEnvelope): Promise<void> {
+  /**
+   * Handler có dừng khi nhận `signal` (huỷ hợp tác từ Console) không. Xử lý tức thì nên không cần — Console sẽ báo
+   * "không hỗ trợ huỷ" cho job đang chạy. Processor chạy lâu nên kiểm tra `signal.aborted` / `throwIfAborted()`.
+   */
+  public readonly cancellable = false;
+
+  public async processJob(
+    topic: string,
+    envelope: MessageEnvelope,
+    _signal?: AbortSignal,
+  ): Promise<void> {
     this.logger.log(
       `Processing message "${topic}" (${envelope.id}) from ${envelope.producer ?? 'unknown'}`,
     );

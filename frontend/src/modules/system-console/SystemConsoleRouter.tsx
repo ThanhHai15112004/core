@@ -6,7 +6,6 @@ import { ConsoleRouteContext, type ConsoleRoute } from './context/console-route-
 import { ConsoleLayout } from './layouts/ConsoleLayout';
 import { OverviewSection } from './sections/OverviewSection';
 import { PackagesSection } from './sections/PackagesSection';
-import { LogViewerSection } from './sections/LogViewerSection';
 import { SecuritySection } from './sections/SecuritySection';
 import { PlannedSection } from './sections/PlannedSection';
 import { ROUTES } from '../../routes/index';
@@ -21,6 +20,8 @@ const StorageSection = lazy(() => import('./sections/storage/StorageSection').th
 const MessagingSection = lazy(() => import('./sections/messaging/MessagingSection').then((m) => ({ default: m.MessagingSection })));
 const WorkerSection = lazy(() => import('./sections/worker/WorkerSection').then((m) => ({ default: m.WorkerSection })));
 const SchedulerSection = lazy(() => import('./sections/scheduler/SchedulerSection').then((m) => ({ default: m.SchedulerSection })));
+const JobsSection = lazy(() => import('./sections/jobs/JobsSection').then((m) => ({ default: m.JobsSection })));
+const LogsSection = lazy(() => import('./sections/logs/LogsSection').then((m) => ({ default: m.LogsSection })));
 
 const HASH_PREFIX = ROUTES.SYSTEM_CONSOLE.replace(/^#/, '');
 
@@ -89,7 +90,7 @@ export const SystemConsoleRouter: React.FC = () => {
       case 'packages':
         return <PackagesSection />;
       case 'logs':
-        return <LogViewerSection />;
+        return <LogsSection />;
       case 'database':
         return <DatabaseSection />;
       case 'cache':
@@ -102,6 +103,8 @@ export const SystemConsoleRouter: React.FC = () => {
         return <WorkerSection />;
       case 'scheduler':
         return <SchedulerSection />;
+      case 'jobs':
+        return <JobsSection />;
       case 'security':
         return <SecuritySection />;
       default:

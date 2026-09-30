@@ -1,0 +1,752 @@
+/* Logs — Investigation Center. Dùng lại khung chung (ov-*, rt-*, tr-*, db-*, job-*) và token màu --scp-*. */
+
+.console-root .lg-note {
+  margin: 0.35rem 0 0.6rem;
+  font-size: 0.78rem;
+  color: var(--scp-text-muted);
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  flex-wrap: wrap;
+}
+.console-root .lg-hint {
+  margin: 0.4rem 0 0;
+  font-size: 0.75rem;
+  color: var(--scp-text-muted);
+}
+.console-root .lg-err {
+  color: var(--scp-danger);
+}
+.console-root .lg-sub {
+  margin: 1rem 0 0.5rem;
+  font-size: 0.82rem;
+  color: var(--scp-text-secondary);
+}
+.console-root .lg-grid-2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+.console-root .lg-grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+}
+.console-root .lg-grid-2 > .ov-section,
+.console-root .lg-grid-3 > .ov-section {
+  margin-bottom: 1rem;
+}
+
+/* ─── Level chip ─── */
+.console-root .lg-level {
+  display: inline-block;
+  min-width: 3.4rem;
+  padding: 0.05rem 0.4rem;
+  border-radius: 4px;
+  font:
+    700 0.68rem/1.5 ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    monospace;
+  letter-spacing: 0.02em;
+  text-align: center;
+  border: 1px solid var(--scp-border-subtle);
+  color: var(--scp-text-secondary);
+  background: var(--scp-bg-surface-subtle);
+}
+.console-root .lg-level-error,
+.console-root .lg-level-fatal {
+  color: var(--scp-danger-text);
+  background: var(--scp-danger-bg);
+  border-color: var(--scp-danger-border);
+}
+.console-root .lg-level-fatal {
+  color: var(--scp-text-inverse);
+  background: var(--scp-danger);
+}
+.console-root .lg-level-warn {
+  color: var(--scp-warning-text);
+  background: var(--scp-warning-bg);
+  border-color: var(--scp-warning-border);
+}
+.console-root .lg-level-debug,
+.console-root .lg-level-verbose {
+  color: var(--scp-text-muted);
+  background: transparent;
+}
+
+/* ─── Log table ─── */
+.console-root .lg-scroll {
+  max-height: 62vh;
+  overflow: auto;
+  border: 1px solid var(--scp-border-subtle);
+  border-radius: 8px;
+}
+.console-root .lg-scroll .lg-table-wrap {
+  border: 0;
+}
+.console-root .lg-table {
+  font-size: 0.8rem;
+}
+.console-root .lg-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--scp-bg-surface);
+}
+.console-root .lg-table td {
+  vertical-align: top;
+  padding-top: 0.35rem;
+  padding-bottom: 0.35rem;
+}
+.console-root .lg-col-time {
+  white-space: nowrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--scp-text-muted);
+  width: 7.5rem;
+}
+.console-root .lg-col-level {
+  width: 4.5rem;
+}
+.console-root .lg-col-source {
+  width: 5.5rem;
+  white-space: nowrap;
+}
+.console-root .lg-col-context {
+  width: 9rem;
+  white-space: nowrap;
+}
+.console-root .lg-col-context code {
+  font-size: 0.74rem;
+}
+.console-root .lg-col-message {
+  word-break: break-word;
+}
+.console-root .lg-row {
+  cursor: pointer;
+}
+.console-root .lg-row:hover td {
+  background: var(--scp-bg-surface-hover);
+}
+.console-root .lg-row.is-selected td {
+  background: var(--scp-primary-subtle);
+}
+.console-root .lg-row.is-fresh td {
+  animation: lg-fresh 1.6s ease-out;
+}
+@keyframes lg-fresh {
+  from {
+    background: var(--scp-info-bg);
+  }
+  to {
+    background: transparent;
+  }
+}
+.console-root .lg-row-error td:first-child,
+.console-root .lg-row-fatal td:first-child {
+  box-shadow: inset 3px 0 0 var(--scp-danger);
+}
+.console-root .lg-row-warn td:first-child {
+  box-shadow: inset 3px 0 0 var(--scp-warning);
+}
+.console-root .lg-row-debug .lg-message,
+.console-root .lg-row-verbose .lg-message {
+  color: var(--scp-text-muted);
+}
+.console-root .lg-module {
+  color: var(--scp-text-muted);
+  margin-right: 0.35rem;
+}
+.console-root .lg-message {
+  color: var(--scp-text-primary);
+}
+.console-root .lg-icon {
+  margin-left: 0.35rem;
+  vertical-align: -2px;
+  color: var(--scp-text-muted);
+}
+.console-root .lg-tag {
+  display: inline-block;
+  margin: 0 0.25rem 0.15rem 0.35rem;
+  padding: 0 0.35rem;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  border: 1px solid var(--scp-border-subtle);
+  color: var(--scp-text-secondary);
+  background: var(--scp-bg-surface-subtle);
+}
+.console-root .lg-tag-err {
+  color: var(--scp-danger-text);
+  border-color: var(--scp-danger-border);
+  background: var(--scp-danger-bg);
+}
+.console-root .lg-table-compact {
+  font-size: 0.76rem;
+}
+
+/* ─── Search / filters ─── */
+.console-root .lg-search-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+.console-root .lg-search-box {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.45rem 0.7rem;
+  border: 1px solid var(--scp-border-strong);
+  border-radius: 8px;
+  background: var(--scp-bg-surface);
+  color: var(--scp-text-muted);
+}
+.console-root .lg-search-box:focus-within {
+  border-color: var(--scp-border-focus);
+}
+.console-root .lg-search-box input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--scp-text-primary);
+  font:
+    0.86rem ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    monospace;
+}
+.console-root .lg-search-sm {
+  flex: 0 1 280px;
+  padding: 0.3rem 0.6rem;
+}
+.console-root .lg-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: flex-end;
+  margin-top: 0.85rem;
+}
+.console-root .lg-filter-row label,
+.console-root .lg-more label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.72rem;
+  color: var(--scp-text-muted);
+}
+.console-root .lg-filter-row select,
+.console-root .lg-filter-row input,
+.console-root .lg-more input,
+.console-root .lg-export select,
+.console-root .lg-inline-select select,
+.console-root .lg-modal-field select {
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--scp-border-strong);
+  border-radius: 6px;
+  background: var(--scp-bg-surface);
+  color: var(--scp-text-primary);
+  font-size: 0.8rem;
+}
+.console-root .lg-more {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 0.6rem 0.75rem;
+  margin-top: 0.85rem;
+  padding-top: 0.85rem;
+  border-top: 1px dashed var(--scp-border-subtle);
+}
+.console-root .lg-more-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.console-root .lg-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+  margin-top: 0.75rem;
+}
+.console-root .lg-chips .tr-filter-chip {
+  margin: 0;
+}
+.console-root .lg-resolved,
+.console-root .lg-pending {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+.console-root .lg-pending {
+  justify-content: space-between;
+  margin: 0.5rem 0;
+}
+.console-root .lg-results-head {
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+.console-root .lg-live-controls,
+.console-root .lg-export {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+.console-root .lg-inline-check,
+.console-root .lg-inline-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.78rem;
+  color: var(--scp-text-secondary);
+}
+.console-root .lg-older {
+  display: flex;
+  justify-content: center;
+  margin-top: 0.75rem;
+}
+.console-root .lg-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 2.5rem 1rem;
+  color: var(--scp-text-muted);
+  text-align: center;
+}
+.console-root .lg-empty strong {
+  color: var(--scp-text-primary);
+}
+.console-root .lg-empty ul {
+  margin: 0.35rem 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.8rem;
+}
+
+/* ─── Overview ─── */
+.console-root .lg-chart {
+  position: relative;
+}
+.console-root .lg-axis {
+  font-size: 10px;
+  fill: var(--scp-text-muted);
+}
+.console-root .lg-spike-mark {
+  font-size: 10px;
+  fill: var(--scp-danger);
+}
+.console-root .lg-chart-tip {
+  position: absolute;
+  top: 0.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 150px;
+  padding: 0.4rem 0.55rem;
+  border: 1px solid var(--scp-chart-tooltip-border);
+  border-radius: 6px;
+  background: var(--scp-chart-tooltip-bg);
+  color: var(--scp-chart-tooltip-text);
+  font-size: 0.72rem;
+  pointer-events: none;
+  box-shadow: var(--scp-shadow-md);
+}
+.console-root .lg-chart-tip i,
+.console-root .lg-legend i {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  margin-right: 0.25rem;
+}
+.console-root .lg-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.85rem;
+  margin-top: 0.35rem;
+  font-size: 0.72rem;
+  color: var(--scp-text-muted);
+}
+.console-root .lg-spike {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+.console-root .lg-issues {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.console-root .lg-issues li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.45rem 0.65rem;
+  border-radius: 6px;
+  border: 1px solid var(--scp-border-subtle);
+  font-size: 0.84rem;
+}
+.console-root .lg-issues li > svg {
+  flex: none;
+  color: var(--tone, var(--scp-text-muted));
+}
+.console-root .lg-issues li > span {
+  flex: 1;
+}
+.console-root .lg-mini-table {
+  font-size: 0.8rem;
+}
+.console-root .lg-mini-table .num,
+.console-root .lg-groups .num {
+  text-align: right;
+}
+.console-root .lg-err-link {
+  color: var(--scp-danger);
+}
+.console-root .lg-levels,
+.console-root .lg-modules {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  font-size: 0.8rem;
+}
+.console-root .lg-levels li {
+  display: grid;
+  grid-template-columns: 4.5rem 3.5rem 1fr 4rem;
+  align-items: center;
+  gap: 0.5rem;
+}
+.console-root .lg-levels-pct,
+.console-root .lg-levels-count {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--scp-text-secondary);
+}
+.console-root .lg-modules li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  justify-content: space-between;
+}
+.console-root .lg-modules li > :first-child {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+}
+.console-root .lg-bar {
+  display: block;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--scp-bg-surface-subtle);
+  overflow: hidden;
+}
+.console-root .lg-bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+  background: var(--scp-info);
+}
+.console-root .lg-bar-crit {
+  background: var(--scp-danger);
+}
+.console-root .lg-bar-warn {
+  background: var(--scp-warning);
+}
+.console-root .lg-spark polyline {
+  stroke: var(--scp-danger);
+}
+.console-root .lg-spark-warn polyline {
+  stroke: var(--scp-warning);
+}
+.console-root .lg-spark-info polyline {
+  stroke: var(--scp-info);
+}
+.console-root .lg-groups .lg-spark {
+  display: block;
+  margin-top: 0.3rem;
+}
+
+/* ─── Error groups ─── */
+.console-root .lg-group-cell strong {
+  display: block;
+}
+.console-root .lg-group-template {
+  display: block;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.76rem;
+  color: var(--scp-text-secondary);
+  word-break: break-word;
+}
+.console-root .lg-group-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.console-root .lg-affected {
+  max-width: 16rem;
+}
+.console-root .lg-callout {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  border-left: 3px solid var(--tone, var(--scp-warning));
+}
+.console-root .lg-callout h3 {
+  margin: 0 0 0.25rem;
+  font-size: 0.9rem;
+}
+.console-root .lg-callout .ov-link {
+  text-align: left;
+}
+
+/* ─── Drawer ─── */
+.console-root .detail-drawer.lg-drawer {
+  width: 760px;
+}
+.console-root .lg-drawer-level {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.78rem;
+  color: var(--scp-text-secondary);
+}
+.console-root .lg-drawer-message {
+  font-size: 0.95rem;
+  word-break: break-word;
+}
+.console-root .lg-drawer-section {
+  margin-top: 1.1rem;
+}
+.console-root .lg-drawer-section h4 {
+  margin: 0 0 0.5rem;
+  font-size: 0.82rem;
+  color: var(--scp-text-secondary);
+}
+.console-root .lg-section-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.4rem;
+}
+.console-root .lg-section-head h4 {
+  margin: 0;
+}
+.console-root .lg-json,
+.console-root .lg-stack {
+  max-height: 320px;
+  overflow: auto;
+  font-size: 0.76rem;
+}
+.console-root .lg-collapsible-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.4rem;
+}
+
+/* ─── Trace ─── */
+.console-root .lg-trace-stats {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin: 0.25rem 0 1rem;
+}
+.console-root .lg-trace-stats div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+.console-root .lg-trace-stats span {
+  font-size: 0.72rem;
+  color: var(--scp-text-muted);
+}
+.console-root .lg-trace-stats strong {
+  font-size: 1.15rem;
+}
+.console-root .lg-flow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+.console-root .lg-flow-arrow {
+  color: var(--scp-text-muted);
+}
+.console-root .lg-flow-node {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.1rem;
+  padding: 0.4rem 0.65rem;
+  border: 1px solid var(--scp-border-strong);
+  border-radius: 8px;
+  background: var(--scp-bg-surface);
+  color: var(--scp-text-primary);
+  font-size: 0.8rem;
+  cursor: pointer;
+  max-width: 16rem;
+  text-align: left;
+}
+.console-root .lg-flow-node:disabled {
+  cursor: default;
+}
+.console-root .lg-flow-node small {
+  font-size: 0.66rem;
+  text-transform: uppercase;
+  color: var(--scp-text-muted);
+}
+.console-root .lg-flow-node span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 15rem;
+}
+.console-root .lg-flow-node.is-error {
+  border-color: var(--scp-danger-border);
+  background: var(--scp-danger-bg);
+  color: var(--scp-danger-text);
+}
+.console-root .lg-timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-left: 2px solid var(--scp-border-subtle);
+}
+.console-root .lg-timeline li {
+  position: relative;
+  display: grid;
+  grid-template-columns: 7.5rem 5.5rem 1fr auto;
+  gap: 0.6rem;
+  align-items: baseline;
+  padding: 0.35rem 0 0.35rem 0.9rem;
+  font-size: 0.8rem;
+}
+.console-root .lg-timeline li::before {
+  content: '';
+  position: absolute;
+  left: -5px;
+  top: 0.7rem;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--scp-border-strong);
+}
+.console-root .lg-timeline li.lg-tl-error::before {
+  background: var(--scp-danger);
+}
+.console-root .lg-timeline li.lg-tl-warn::before {
+  background: var(--scp-warning);
+}
+.console-root .lg-timeline time {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--scp-text-muted);
+}
+.console-root .lg-tl-comp {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  color: var(--scp-text-secondary);
+}
+.console-root .lg-tl-body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  word-break: break-word;
+}
+.console-root .lg-tl-error .lg-tl-body > span {
+  color: var(--scp-danger);
+}
+.console-root .lg-tl-actions {
+  display: flex;
+  gap: 0.5rem;
+  white-space: nowrap;
+}
+.console-root .lg-trace-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+}
+.console-root .lg-trace-list li {
+  display: grid;
+  grid-template-columns: minmax(8rem, 16rem) 1fr auto;
+  gap: 0.6rem;
+  align-items: baseline;
+}
+.console-root .lg-trace-list code {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: block;
+  max-width: 16rem;
+}
+
+/* ─── Config ─── */
+.console-root .lg-level-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+.console-root .lg-modal-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin: 0.75rem 0 0;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--scp-border-subtle);
+  border-radius: 8px;
+  font-size: 0.82rem;
+}
+.console-root .lg-modal-field legend {
+  padding: 0 0.3rem;
+  font-size: 0.75rem;
+  color: var(--scp-text-muted);
+}
+.console-root .lg-modal-field label {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+@media (max-width: 900px) {
+  .console-root .lg-grid-2,
+  .console-root .lg-grid-3 {
+    grid-template-columns: 1fr;
+  }
+  .console-root .lg-trace-stats {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .console-root .lg-timeline li {
+    grid-template-columns: 6.5rem 1fr;
+  }
+  .console-root .lg-tl-comp,
+  .console-root .lg-tl-actions {
+    grid-column: 2;
+  }
+  .console-root .lg-col-context,
+  .console-root .lg-col-source {
+    display: none;
+  }
+}
+
+.console-root .scp-alert-success {
+  color: var(--scp-success-text);
+  background: var(--scp-success-bg);
+  border: 1px solid var(--scp-success-border);
+}

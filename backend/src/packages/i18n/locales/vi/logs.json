@@ -1,0 +1,12 @@
+{
+  "logs.error.LOG_NOT_FOUND": "Không tìm thấy log {id} — có thể đã bị ghi đè trong buffer log.",
+  "logs.error.ERROR_GROUP_NOT_FOUND": "Không tìm thấy nhóm lỗi {fingerprint} — có thể đã hết hạn lưu.",
+  "logs.error.TRACE_NOT_FOUND": "Không tìm thấy gì cho {id}: không request, job, lần chạy Scheduler hay log nào đang lưu mang ID này.",
+  "logs.error.UNAVAILABLE": "Không kết nối được kho log — tạm thời không truy vấn được log. Giám sát trực tiếp ở các màn khác vẫn hoạt động.",
+  "logs.error.EXPORT_DISABLED": "Export log đang tắt (OPS_LOGS_EXPORT_ENABLED=false).",
+  "logs.error.LEVEL_DISABLED": "Đổi log level đang tắt (OPS_LOGS_LEVEL_ENABLED=false).",
+  "logs.error.LEVEL_PERMANENT_DISABLED": "Không cho phép đặt level không hết hạn (OPS_LOGS_LEVEL_PERMANENT_ENABLED=false) — hãy chọn thời hạn.",
+  "logs.error.RUNTIME_NOT_RUNNING": "Runtime {runtime} không chạy — không đổi được log level.",
+  "logs.error.NO_OVERRIDE": "Runtime {runtime} không có log level tạm thời để trả lại.",
+  "logs.error.AUDIT_DISABLED": "Xem audit log đang tắt (OPS_LOGS_AUDIT_ENABLED=false)."
+}

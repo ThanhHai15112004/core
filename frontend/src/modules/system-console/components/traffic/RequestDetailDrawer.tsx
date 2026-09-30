@@ -2,7 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { Check, Copy, FileText, Filter, Info, X } from 'lucide-react';
 import type { CapturedBody, RequestDetailResponse, TimelinePhase } from '../../types/traffic.types';
 import type { RuntimeLog } from '../../types/runtime.types';
+import type { JobRow } from '../../types/jobs.types';
 import { trafficApi } from '../../services/traffic.api';
+import { jobsApi } from '../../services/jobs.api';
 import { ApiError } from '../../../../core/services/api';
 import { formatMs } from '../../utils/traffic-format';
 import { NO_VALUE } from '../../utils/runtime-format';
@@ -19,6 +21,8 @@ interface RequestDetailDrawerProps {
   onClose: () => void;
   onOpenLogs: (correlationId: string) => void;
   onOpenEndpoint: (routeId: string) => void;
+  /** Mở Job Detail của job được tạo trong request này. */
+  onOpenJob?: (id: string, queue: string) => void;
 }
 
 const CopyButton: React.FC<{ value: string; label: string }> = ({ value, label }) => {
@@ -66,12 +70,26 @@ const BodyView: React.FC<{ body: CapturedBody }> = ({ body }) => {
 };
 
 /** Chi tiết một request: summary, timeline vòng đời thật, header/body đã mask, response, log cùng correlation id. */
-export const RequestDetailDrawer: React.FC<RequestDetailDrawerProps> = ({ requestId, onClose, onOpenLogs, onOpenEndpoint }) => {
+export const RequestDetailDrawer: React.FC<RequestDetailDrawerProps> = ({ requestId, onClose, onOpenLogs, onOpenEndpoint, onOpenJob }) => {
   const { t, formatTime } = useLocale();
   const [tab, setTab] = useState<DetailTab>('summary');
   const [data, setData] = useState<RequestDetailResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [logs, setLogs] = useState<RuntimeLog[] | null>(null);
+  const [jobs, setJobs] = useState<JobRow[]>([]);
+
+  // Job nền được tạo trong request này (chỉ mục request ID của Jobs) — HTTP → Job.
+  useEffect(() => {
+    let cancelled = false;
+    setJobs([]);
+    jobsApi
+      .search({ search: requestId }, null, 20)
+      .then((r) => !cancelled && r.matchedBy === 'request' && setJobs(r.jobs))
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [requestId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -282,6 +300,16 @@ export const RequestDetailDrawer: React.FC<RequestDetailDrawerProps> = ({ reques
                     <Filter size={13} /> {t('tr.detail.openEndpoint')}
                   </button>
                 </div>
+                {jobs.length > 0 && (
+                  <div className="tr-drawer-jobs">
+                    <strong>{t('tr.detail.generatedJobs', { count: jobs.length })}</strong>
+                    {jobs.map((j) => (
+                      <button key={`${j.queue}|${j.id}`} type="button" className="ov-link" onClick={() => onOpenJob?.(j.id, j.queue)}>
+                        <code>#{j.id.slice(0, 8)}</code> {j.type} · {t(`jobs.status.${j.status}`)}
+                      </button>
+                    ))}
+                  </div>
+                )}
                 <nav className="rt-tabs" role="tablist">
                   {DETAIL_TABS.map((id) => (
                     <button key={id} type="button" role="tab" aria-selected={tab === id} className={tab === id ? 'is-active' : ''} onClick={() => setTab(id)}>

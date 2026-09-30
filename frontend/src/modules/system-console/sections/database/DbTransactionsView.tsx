@@ -135,7 +135,7 @@ export const DbTransactionsView: React.FC<{
                     <button
                       type="button"
                       className="ov-link"
-                      onClick={() => navigate(`logs?runtime=${d.runtime ?? 'api'}&correlationId=${encodeURIComponent(d.correlationId!)}`)}
+                      onClick={() => navigate(`logs/explorer?correlationId=${encodeURIComponent(d.correlationId!)}`)}
                     >
                       <FileText size={12} /> {t('db.query.openLogs')}
                     </button>

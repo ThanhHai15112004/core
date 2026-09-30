@@ -54,7 +54,7 @@ const FailureTable: React.FC<{ items: StorageErrorItem[]; emptyText: string; nav
                   <button
                     type="button"
                     className="ov-link"
-                    onClick={() => navigate(`logs?runtime=${e.runtime ?? 'api'}&correlationId=${encodeURIComponent(e.correlationId!)}`)}
+                    onClick={() => navigate(`logs/explorer?correlationId=${encodeURIComponent(e.correlationId!)}`)}
                   >
                     <FileText size={12} /> {t('db.query.openLogs')}
                   </button>

@@ -16,6 +16,11 @@ export function logLifecycle(
     ms: entry.ms ?? null,
     error: entry.error ?? null,
     delayMs: entry.delayMs ?? null,
+    ...(entry.instance !== undefined ? { instance: entry.instance } : {}),
+    ...(entry.errorType !== undefined ? { errorType: entry.errorType } : {}),
+    ...(entry.retryable !== undefined ? { retryable: entry.retryable } : {}),
+    ...(entry.dependency !== undefined ? { dependency: entry.dependency } : {}),
+    ...(entry.actor !== undefined ? { actor: entry.actor } : {}),
   };
   void Promise.resolve()
     .then(() => job.log(JSON.stringify(row)))

@@ -17,7 +17,8 @@ export const runtimeConfig = () => {
     sampleIntervalMs: env.number('RUNTIME_SAMPLE_INTERVAL_MS', false) || 15000,
     /** Số mẫu time-series giữ lại cho mỗi runtime (mặc định 24h với mẫu 15s). */
     sampleRetention: env.number('RUNTIME_SAMPLE_RETENTION', false) || 5760,
-    logRetention: env.number('RUNTIME_LOG_RETENTION', false) || 1000,
+    /** Ring buffer log mỗi runtime (Redis) — cũng là phạm vi tìm kiếm của trang Logs. */
+    logRetention: env.number('RUNTIME_LOG_RETENTION', false) || 5000,
     eventRetention: env.number('RUNTIME_EVENT_RETENTION', false) || 2000,
     thresholds: {
       memoryPercent: env.number('RUNTIME_MEMORY_WARN_PERCENT', false) || 85,

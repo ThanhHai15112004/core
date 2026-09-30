@@ -200,6 +200,12 @@ export class TrafficCollectorService implements OnModuleInit, BeforeApplicationS
     }
   }
 
+  /** Request ID + route của request đang chạy (để job được tạo trong request biết nguồn). */
+  public identify(raw: object): { id: string; method: string; route: string } | null {
+    const state = this.states.get(raw);
+    return state ? { id: state.id, method: state.route.method, route: state.route.route } : null;
+  }
+
   /** Gắn context ALS để lúc kết thúc (ngoài async context) vẫn đọc được thời gian DB/cache. */
   public attachContext(raw: object, context: RequestContextStore | undefined): void {
     const state = this.states.get(raw);

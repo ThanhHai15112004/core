@@ -44,8 +44,8 @@ export const WorkerSection: React.FC = () => {
   const product = data ? `${data.provider.product} (${data.provider.backend})` : '';
   const queueNames = data?.queues.available ? data.queues.data.map((q) => q.name) : [];
 
-  /** Chưa có Job Explorer: job trên broker cũng là message → mở chi tiết (vòng đời, retry) ở Messaging. */
-  const openJob = (j: Pick<JobRow, 'id' | 'queue'>) => navigate(`messaging/messages/${encodeURIComponent(j.id)}?q=${encodeURIComponent(j.queue)}`);
+  /** Job cụ thể → Job Detail (vòng đời, lần thử, lỗi, nguồn, retry / huỷ). */
+  const openJob = (j: Pick<JobRow, 'id' | 'queue'>) => navigate(`jobs/job/${encodeURIComponent(j.id)}?queue=${encodeURIComponent(j.queue)}`);
   const openAlert = (a: WorkerAlert) => (a.queue ? openQueue(a.queue, a.tab === 'failures' ? 'failures' : 'overview') : go(a.tab));
   const openEvent = (e: WorkerEvent) => (e.queue ? openQueue(e.queue) : e.tab ? go(e.tab) : undefined);
 

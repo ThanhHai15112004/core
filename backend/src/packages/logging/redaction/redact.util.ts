@@ -22,6 +22,9 @@ const SENSITIVE_KEYS = new Set([
 ]);
 
 /** So khớp không phân biệt hoa thường và bỏ `-`/`_`: `X-Api-Key`, `api_key`, `apiKey` đều nhạy cảm. */
+/** Tên field luôn bị che (đã chuẩn hoá: chữ thường, bỏ `-` / `_`). */
+export const SENSITIVE_KEY_NAMES: readonly string[] = [...SENSITIVE_KEYS];
+
 export function isSensitiveKey(key: string): boolean {
   const normalized = key.toLowerCase().replace(/[-_]/g, '');
   return SENSITIVE_KEYS.has(normalized) || SENSITIVE_KEYS.has(key.toLowerCase());

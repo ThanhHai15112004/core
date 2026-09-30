@@ -156,7 +156,7 @@ export const RuntimeDetailView: React.FC<{ id: RuntimeId; tab: DetailTab }> = ({
           />
         );
       case 'logs':
-        return <RuntimeLogsPanel runtime={id} limit={200} onOpenLogViewer={() => navigate(`logs?runtime=${id}`)} />;
+        return <RuntimeLogsPanel runtime={id} limit={200} onOpenLogViewer={() => navigate(`logs/explorer?runtime=${id}`)} />;
       case 'configuration': {
         const desc = d.descriptor;
         return (

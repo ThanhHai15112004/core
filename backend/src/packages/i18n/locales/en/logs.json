@@ -1,0 +1,12 @@
+{
+  "logs.error.LOG_NOT_FOUND": "Log {id} was not found — it may have been overwritten in the log buffer.",
+  "logs.error.ERROR_GROUP_NOT_FOUND": "Error group {fingerprint} was not found — it may have expired.",
+  "logs.error.TRACE_NOT_FOUND": "Nothing was found for {id}: no request, job, scheduler run or log carries this ID in the retained data.",
+  "logs.error.UNAVAILABLE": "The log store is not reachable — logs cannot be queried right now. Live monitoring on other screens still works.",
+  "logs.error.EXPORT_DISABLED": "Exporting logs is disabled (OPS_LOGS_EXPORT_ENABLED=false).",
+  "logs.error.LEVEL_DISABLED": "Changing the log level is disabled (OPS_LOGS_LEVEL_ENABLED=false).",
+  "logs.error.LEVEL_PERMANENT_DISABLED": "A level without expiry is not allowed (OPS_LOGS_LEVEL_PERMANENT_ENABLED=false) — choose a duration.",
+  "logs.error.RUNTIME_NOT_RUNNING": "Runtime {runtime} is not running — its log level cannot be changed.",
+  "logs.error.NO_OVERRIDE": "Runtime {runtime} has no temporary log level to revert.",
+  "logs.error.AUDIT_DISABLED": "Viewing audit logs is disabled (OPS_LOGS_AUDIT_ENABLED=false)."
+}

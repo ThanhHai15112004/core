@@ -13,6 +13,6 @@ import { WorkerMonitorService } from './services/worker-monitor.service.js';
   imports: [PerformanceOpsModule, RuntimesModule],
   controllers: [WorkerOpsController, QueueOpsController],
   providers: [WorkerOpsService, WorkerMetricsService, WorkerStoreService, WorkerMonitorService],
-  exports: [WorkerOpsService],
+  exports: [WorkerOpsService, WorkerMetricsService],
 })
 export class WorkerOpsModule {}

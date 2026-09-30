@@ -121,7 +121,7 @@ export const ExecutionDrawer: React.FC<{
                   </thead>
                   <tbody>
                     {data.jobs.map((j) => (
-                      <tr key={j.id} className="is-clickable" onClick={() => navigate(`messaging/messages/${encodeURIComponent(j.id)}?q=${encodeURIComponent(j.queue)}`)}>
+                      <tr key={j.id} className="is-clickable" onClick={() => navigate(`jobs/job/${encodeURIComponent(j.id)}?queue=${encodeURIComponent(j.queue)}`)}>
                         <td>
                           <code title={j.id}>#{shortJobId(j.id)}</code>
                           <small className="pf-row-note">{j.topic}</small>
@@ -161,7 +161,7 @@ export const ExecutionDrawer: React.FC<{
 
           <div className="cache-drawer-actions">
             {e.correlationId && (
-              <button type="button" className="scp-btn scp-btn-sm scp-btn-secondary" onClick={() => navigate(`logs?runtime=scheduler&correlationId=${encodeURIComponent(e.correlationId!)}`)}>
+              <button type="button" className="scp-btn scp-btn-sm scp-btn-secondary" onClick={() => navigate(`logs/explorer?correlationId=${encodeURIComponent(e.correlationId!)}`)}>
                 <FileText size={13} /> {t('sch.exec.openLogs')}
               </button>
             )}

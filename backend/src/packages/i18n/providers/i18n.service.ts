@@ -25,6 +25,10 @@ import enWorker from '../locales/en/worker.json' with { type: 'json' };
 import viWorker from '../locales/vi/worker.json' with { type: 'json' };
 import enScheduler from '../locales/en/scheduler.json' with { type: 'json' };
 import viScheduler from '../locales/vi/scheduler.json' with { type: 'json' };
+import enJobs from '../locales/en/jobs.json' with { type: 'json' };
+import viJobs from '../locales/vi/jobs.json' with { type: 'json' };
+import enLogs from '../locales/en/logs.json' with { type: 'json' };
+import viLogs from '../locales/vi/logs.json' with { type: 'json' };
 
 type Dictionary = Record<string, string>;
 
@@ -45,6 +49,8 @@ export class CoreI18nService implements I18nContract {
       ...enMessaging,
       ...enWorker,
       ...enScheduler,
+      ...enJobs,
+      ...enLogs,
     },
     vi: {
       ...viCommon,
@@ -59,6 +65,8 @@ export class CoreI18nService implements I18nContract {
       ...viMessaging,
       ...viWorker,
       ...viScheduler,
+      ...viJobs,
+      ...viLogs,
     },
   };
 

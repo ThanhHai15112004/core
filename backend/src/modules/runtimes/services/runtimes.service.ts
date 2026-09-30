@@ -163,20 +163,35 @@ export class RuntimesService {
   public async getLogs(
     rawId: string,
     limit: number,
-    filter: { level?: string | undefined; correlationId?: string | undefined } = {},
+    filter: {
+      level?: string | undefined;
+      correlationId?: string | undefined;
+      jobId?: string | undefined;
+    } = {},
   ): Promise<RuntimeLogDto[]> {
     const id = rawId === 'cli' ? 'cli' : this.assertRuntimeId(rawId);
     if (!this.store.isAvailable()) return [];
-    const { level, correlationId } = filter;
+    const { level, correlationId, jobId } = filter;
     // Có bộ lọc thì quét toàn bộ ring buffer rồi mới cắt `limit`, để không bỏ sót log cũ hơn.
-    const scan = level || correlationId ? this.config.runtime.logRetention : limit;
+    const scan = level || correlationId || jobId ? this.config.runtime.logRetention : limit;
     const logs = await this.store.logs(id, scan).catch(() => []);
     return logs
       .filter(
         (l) =>
-          (!level || l.level === level) && (!correlationId || l.correlationId === correlationId),
+          (!level || l.level === level) &&
+          (!correlationId || l.correlationId === correlationId) &&
+          (!jobId || l.jobId === jobId),
       )
-      .slice(0, limit);
+      .slice(0, limit)
+      .map((l) => ({
+        ...(l.id ? { id: l.id } : {}),
+        t: l.t,
+        level: l.level,
+        ...(l.context ? { context: l.context } : {}),
+        ...(l.correlationId ? { correlationId: l.correlationId } : {}),
+        ...(l.jobId ? { jobId: l.jobId } : {}),
+        message: l.stack ? `${l.message}\n${l.stack}` : l.message,
+      }));
   }
 
   public async getCliHistory(limit: number): Promise<CliExecution[]> {

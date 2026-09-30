@@ -22,10 +22,10 @@ export const API_ROUTES = {
       COMMAND: (commandId: string) => `${OPS_PREFIX}/runtimes/commands/${commandId}`,
       DETAIL: (id: string) => `${OPS_PREFIX}/runtimes/${id}`,
       METRICS: (id: string, range: string) => `${OPS_PREFIX}/runtimes/${id}/metrics?range=${range}`,
-      LOGS: (id: string, limit: number, level?: string, correlationId?: string) =>
+      LOGS: (id: string, limit: number, level?: string, correlationId?: string, jobId?: string) =>
         `${OPS_PREFIX}/runtimes/${id}/logs?limit=${limit}${level ? `&level=${level}` : ''}${
           correlationId ? `&correlationId=${encodeURIComponent(correlationId)}` : ''
-        }`,
+        }${jobId ? `&jobId=${encodeURIComponent(jobId)}` : ''}`,
       ACTION: (id: string, action: 'restart' | 'stop' | 'start') => `${OPS_PREFIX}/runtimes/${id}/${action}`,
     },
     TRAFFIC: {
@@ -60,6 +60,12 @@ export const API_ROUTES = {
     },
     SCHEDULER: {
       path: (path: string, qs = '') => `${OPS_PREFIX}/scheduler/${path}${qs ? `?${qs}` : ''}`,
+    },
+    JOBS: {
+      path: (path: string, qs = '') => `${OPS_PREFIX}/jobs${path ? `/${path}` : ''}${qs ? `?${qs}` : ''}`,
+    },
+    LOGS_CENTER: {
+      path: (path: string, qs = '') => `${OPS_PREFIX}/logs${path ? `/${path}` : ''}${qs ? `?${qs}` : ''}`,
     },
     PERFORMANCE: {
       OVERVIEW: (qs: string) => `${OPS_PREFIX}/performance/overview?${qs}`,

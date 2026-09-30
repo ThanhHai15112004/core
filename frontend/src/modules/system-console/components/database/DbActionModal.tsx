@@ -16,10 +16,12 @@ interface DbActionModalProps {
   busy: boolean;
   onCancel: () => void;
   onConfirm: (typed: string) => void;
+  /** Nội dung phụ dưới cảnh báo (ô nhập lý do, danh sách xem trước…). */
+  children?: React.ReactNode;
 }
 
 /** Xác nhận thao tác database (Cancel Query, Terminate Session, Run Migrations). */
-export const DbActionModal: React.FC<DbActionModalProps> = ({ title, context, warning, confirmLabel, confirmWord, confirmDisabled = false, busy, onCancel, onConfirm }) => {
+export const DbActionModal: React.FC<DbActionModalProps> = ({ title, context, warning, confirmLabel, confirmWord, confirmDisabled = false, busy, onCancel, onConfirm, children }) => {
   const { t } = useLocale();
   const [typed, setTyped] = useState('');
 
@@ -53,6 +55,7 @@ export const DbActionModal: React.FC<DbActionModalProps> = ({ title, context, wa
               ))}
             </dl>
             <p className="rt-modal-warning">{warning}</p>
+            {children}
             {confirmWord && (
               <label className="rt-modal-confirm">
                 <span>{t('db.modal.typeToConfirm', { word: confirmWord })}</span>

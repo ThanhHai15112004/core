@@ -132,7 +132,7 @@ export const ComponentDrawer: React.FC<ComponentDrawerProps> = ({ id, range, pau
                               <button
                                 type="button"
                                 className="ov-link"
-                                onClick={() => navigate(`logs?runtime=${q.instance.split('@')[0]}&correlationId=${encodeURIComponent(q.correlationId!)}`)}
+                                onClick={() => navigate(`logs/explorer?correlationId=${encodeURIComponent(q.correlationId!)}`)}
                               >
                                 <FileText size={12} /> {t('perf.drawer.openLogs')}
                               </button>

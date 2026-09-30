@@ -126,7 +126,7 @@ export const QueryDrawer: React.FC<{ id: string; range: DbRange; onClose: () => 
                       <td>{r.instance.split('@')[0]}</td>
                       <td>
                         {r.correlationId && (
-                          <button type="button" className="ov-link" onClick={() => navigate(`logs?runtime=${r.instance.split('@')[0]}&correlationId=${encodeURIComponent(r.correlationId!)}`)}>
+                          <button type="button" className="ov-link" onClick={() => navigate(`logs/explorer?correlationId=${encodeURIComponent(r.correlationId!)}`)}>
                             <FileText size={12} /> {t('db.query.openLogs')}
                           </button>
                         )}

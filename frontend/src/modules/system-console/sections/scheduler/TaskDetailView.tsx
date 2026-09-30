@@ -415,13 +415,13 @@ export const ExecutionFilters: React.FC<{
 
 const TaskLogsPanel: React.FC<{ data: TaskDetail; navigate: (path: string) => void; openExecution: (e: Execution) => void }> = ({ data, navigate, openExecution }) => {
   const { t, formatTime } = useLocale();
-  const logsOf = (correlationId: string) => navigate(`logs?runtime=scheduler&correlationId=${encodeURIComponent(correlationId)}`);
+  const logsOf = (correlationId: string) => navigate(`logs/explorer?correlationId=${encodeURIComponent(correlationId)}`);
   const runs = data.recent.filter((r) => r.correlationId);
   return (
     <section className="ov-card ov-section">
       <header className="ov-section-head">
         <h3>{t('sch.logs.title')}</h3>
-        <button type="button" className="scp-btn scp-btn-sm scp-btn-secondary" onClick={() => navigate('logs?runtime=scheduler')}>
+        <button type="button" className="scp-btn scp-btn-sm scp-btn-secondary" onClick={() => navigate('logs/explorer?runtime=scheduler')}>
           <FileText size={13} /> {t('sch.logs.runtime')}
         </button>
       </header>

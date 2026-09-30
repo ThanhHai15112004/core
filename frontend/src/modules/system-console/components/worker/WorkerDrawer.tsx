@@ -92,7 +92,7 @@ export const WorkerDrawer: React.FC<{
             <button type="button" className="scp-btn scp-btn-sm scp-btn-secondary" onClick={() => navigate('runtimes/worker')}>
               <Activity size={13} /> {t('wq.worker.viewRuntime')}
             </button>
-            <button type="button" className="scp-btn scp-btn-sm scp-btn-secondary" onClick={() => navigate('logs?runtime=worker')}>
+            <button type="button" className="scp-btn scp-btn-sm scp-btn-secondary" onClick={() => navigate('logs/explorer?runtime=worker')}>
               <FileText size={13} /> {t('wq.worker.viewLogs')}
             </button>
           </div>

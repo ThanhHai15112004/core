@@ -8,6 +8,7 @@ import { ResourceSampler } from './providers/resource-sampler.js';
 import { RuntimeAgentService } from './providers/runtime-agent.service.js';
 import { CliHistoryService } from './providers/cli-history.service.js';
 import { RuntimeLogSink } from './providers/runtime-log.sink.js';
+import { RuntimeLogControl } from './providers/runtime-log-control.js';
 
 /**
  * Gắn runtime agent vào một app (api/worker/scheduler/cli). Yêu cầu RedisModule & ConfigModule.
@@ -34,6 +35,7 @@ export class RuntimeAgentModule {
         RuntimeAgentService,
         CliHistoryService,
         RuntimeLogSink,
+        RuntimeLogControl,
         { provide: LOG_SINK, useExisting: RuntimeLogSink },
       ],
       exports: [

@@ -39,7 +39,17 @@ export const ConsoleTopBar: React.FC<ConsoleTopBarProps> = ({ currentSection }) 
                 ? t(`storage.tab.${detail}`)
                 : currentSection === 'messaging'
                   ? t(`messaging.tab.${detail}`)
-                  : detail
+                  : currentSection === 'worker'
+                    ? t(`wq.tab.${detail}`)
+                    : currentSection === 'scheduler'
+                      ? t(`sch.tab.${detail}`)
+                      : currentSection === 'jobs'
+                        ? detail === 'job'
+                          ? `#${(route.params[1] ?? '').slice(0, 8)}`
+                          : t(`jobs.tab.${detail}`)
+                        : currentSection === 'logs'
+                          ? t(`logs.tab.${detail}`)
+                          : detail
     : '';
 
   const latencyTone = isOffline ? 'crit' : currentLatency >= LATENCY_CRIT_MS ? 'crit' : currentLatency >= LATENCY_WARN_MS ? 'warn' : 'ok';

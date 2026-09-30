@@ -171,6 +171,9 @@ export const QueueDetailView: React.FC<Props> = (props) => {
                 <h3>{t('wq.related.title')}</h3>
               </header>
               <div className="cache-drawer-actions">
+                <button type="button" className="scp-btn scp-btn-sm scp-btn-secondary" onClick={() => navigate(`jobs/explorer?queue=${encodeURIComponent(name)}`)}>
+                  <ExternalLink size={13} /> {t('wq.related.jobs')}
+                </button>
                 <button type="button" className="scp-btn scp-btn-sm scp-btn-secondary" onClick={() => navigate(`messaging/messages?queue=${encodeURIComponent(name)}`)}>
                   <ExternalLink size={13} /> {t('wq.related.messaging')}
                 </button>

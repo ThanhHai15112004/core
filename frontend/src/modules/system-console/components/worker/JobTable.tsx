@@ -8,8 +8,7 @@ import { useLocale } from '../../../../core/i18n/index';
 export type JobColumn = 'id' | 'queue' | 'type' | 'state' | 'attempt' | 'duration' | 'running' | 'runAt' | 'reason' | 'worker' | 'error' | 'time';
 
 /**
- * Bảng job (tóm tắt): chưa có Job Explorer riêng nên bấm job → mở chi tiết ở Messaging (cùng một job trên broker,
- * có vòng đời và thao tác retry/replay).
+ * Bảng job (tóm tắt) trong Worker & Queue: bấm job → Job Detail ở trang Jobs (vòng đời, lần thử, lỗi, retry / huỷ).
  */
 export const JobTable: React.FC<{ rows: JobRow[]; columns: JobColumn[]; onOpen?: (job: JobRow) => void; emptyText: string; now: number }> = ({
   rows,

@@ -20,7 +20,12 @@ export class TrafficTimingInterceptor implements NestInterceptor {
     const raw = context.switchToHttp().getRequest<FastifyRequest>().raw;
     this.collector.mark(raw, 'handlerStart');
     // Interceptor chạy trong async context của request → lấy được store mà instrumentation DB/cache ghi vào.
-    this.collector.attachContext(raw, RequestContextService.current());
+    const store = RequestContextService.current();
+    this.collector.attachContext(raw, store);
+    // Job publish trong request này ghi nguồn = HTTP request (Jobs → Open Request).
+    const req = this.collector.identify(raw);
+    if (store && req && !store.source)
+      store.source = { kind: 'http', id: req.id, name: `${req.method} ${req.route}` };
     return next.handle().pipe(finalize(() => this.collector.mark(raw, 'handlerEnd')));
   }
 }

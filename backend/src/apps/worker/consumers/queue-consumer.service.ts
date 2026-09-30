@@ -7,7 +7,7 @@ import {
 import { Worker, type Job } from 'bullmq';
 import { CoreConfigService } from '@packages/config/index.js';
 import { RedisService } from '@packages/redis/index.js';
-import { MessageConsumerRunner, QUEUES } from '@packages/messaging/index.js';
+import { JOB_LOCK_DURATION_MS, MessageConsumerRunner, QUEUES } from '@packages/messaging/index.js';
 import { MetricRecorder } from '@packages/telemetry/index.js';
 import { SystemProcessor } from '../processors/system/system.processor.js';
 
@@ -47,15 +47,20 @@ export class QueueConsumerService implements OnApplicationBootstrap, OnApplicati
     // Runner đo thời gian xử lý, ghi vòng đời message, phân biệt retry / Dead Letter (trang Messaging).
     this.worker = new Worker(
       this.queueName,
-      async (job: Job) =>
-        this.runner.process(this.consumerName, job, (envelope) =>
-          this.processor.processJob(envelope.topic, envelope),
+      async (job: Job, _token?: string, signal?: AbortSignal) =>
+        this.runner.process(
+          this.consumerName,
+          job,
+          (envelope, _job, sig) => this.processor.processJob(envelope.topic, envelope, sig),
+          signal,
         ),
       {
         connection: this.redis.bullConnection(),
         prefix: this.redis.bullPrefix(),
         concurrency: this.concurrency,
         autorun: false,
+        // Khoá job được gia hạn định kỳ; hết hạn mà không gia hạn = stalled (trang Jobs đọc TTL khoá này).
+        lockDuration: JOB_LOCK_DURATION_MS,
         // Tên kết nối worker trên broker = runtime (Messaging → Consumers → Instances).
         name: 'worker',
       },
@@ -63,15 +68,22 @@ export class QueueConsumerService implements OnApplicationBootstrap, OnApplicati
     this.worker.on('completed', (job) => this.track('completed', job));
     this.worker.on('failed', (job, err) => {
       this.track('failed', job);
-      this.logger.error(`Job ${job?.id ?? '?'} (${job?.name ?? '?'}) failed: ${err.message}`);
+      // Log lỗi chi tiết (có ngữ cảnh job, loại lỗi, stack) do MessageConsumerRunner ghi — ở đây chỉ ghi vết.
+      this.logger.debug({
+        message: `Job ${job?.name ?? '?'} failed: ${err.message}`,
+        jobId: job?.id,
+      });
     });
     this.worker.on('error', (err) => this.logger.warn(`Worker error: ${err.message}`));
+    this.worker.on('stalled', (jobId) => this.runner.onStalled(this.queueName, jobId));
 
     this.runner.register({
       consumer: this.consumerName,
       queue: this.queueName,
       concurrency: this.concurrency,
       idempotent: this.processor.idempotent,
+      cancellable: this.processor.cancellable,
+      cancel: (jobId, reason) => this.worker?.cancelJob(jobId, reason) ?? false,
     });
     if (this.paused) this.runner.setPaused(this.consumerName, true);
     else void this.worker.run();

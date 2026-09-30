@@ -338,6 +338,45 @@ Cùng 1 codebase phục vụ 4 chế độ chạy độc lập: `api` (HTTP), `w
 - API: `GET /ops/scheduler/{overview,metrics,tasks[/:id[/executions]],executions[/:id],upcoming,timeline,failures,
   events,operations,config,cron}`, `POST /ops/scheduler/tasks/:id/{run,enable,disable}`.
 
+### Jobs (System Console → Jobs)
+- Worker & Queue trả lời "queue nào nghẽn, worker nào quá tải"; Jobs trả lời "job cụ thể nào có vấn đề": được tạo từ đâu,
+  chờ bao lâu, worker nào xử lý, chạy bao lâu, retry mấy lần, vì sao lỗi, retry / huỷ được không.
+- Publisher ghi metadata vào envelope: nguồn (HTTP request / lần chạy Scheduler / job cha / CLI / hệ thống — lấy từ
+  request context), request ID, idempotency key, field nghiệp vụ được index và schema (`publish(topic, payload, queue,
+  { idempotencyKey, index: { orderId }, schema, delayMs, priority })`). Chỉ mục Redis `jobs:idx:*` (TTL
+  `JOBS_INDEX_RETENTION_DAYS`) cho tìm theo correlation / request / idempotency / `field=value` mà không quét payload.
+- Consumer (`MessageConsumerRunner`): handler chạy trong context có `jobId` (log worker lọc được theo job), vòng đời mỗi
+  lần thử ghi vào job log (instance, loại lỗi, retryable, dependency). Lỗi nghiệp vụ nên ném `JobError(type, message,
+  { retryable, dependency })` — `retryable: false` không bị retry vô ích và Console tắt nút Retry. Tiến độ:
+  `reportJobProgress(job, { processed, total, step, phases })` (không báo → Console không hiện %).
+- Huỷ: job chưa chạy → xoá khỏi queue, giữ bản ghi Cancelled (`JOBS_CANCELLED_RETENTION_DAYS`); job đang chạy → yêu cầu
+  huỷ hợp tác qua Redis pub/sub tới worker đang giữ job (BullMQ `cancelJob` → AbortSignal), chỉ khi processor khai báo
+  `cancellable = true`. Không kill process. Stalled = job active mất khoá (không heartbeat); chạy lâu = vẫn heartbeat
+  nhưng vượt `JOBS_LONG_RUNNING_*`.
+- Thao tác (bật/tắt bằng env, audit + sự kiện): Retry, Retry nhiều job lỗi đã chọn (tối đa `OPS_JOBS_BULK_RETRY_MAX`),
+  Cancel, Remove record (mặc định tắt), xem payload đã redact.
+- API: `GET /ops/jobs` (lọc `status, queue, type, search, window, worker, source, minAttempts, minDurationMs, errorType,
+  priority`, phân trang `cursor` + `limit`), `GET /ops/jobs/{overview,metrics,failures,report,events,operations,config}`,
+  `GET /ops/jobs/:id[/attempts|/events|/payload]`, `POST /ops/jobs/:id/{retry,cancel}`, `POST /ops/jobs/retry`,
+  `DELETE /ops/jobs/:id`.
+
+### Logs (System Console → Logs)
+- Investigation Center: tổng quan (volume, error, spike, nguồn / level / module), Explorer (tìm có cú pháp
+  `level:error source:worker jobId:… status:5xx "cụm từ"`, dán một ID bất kỳ, More Filters, live tail với rolling buffer,
+  Pause vẫn đếm log mới, cursor "Load older"), nhóm lỗi, trace theo correlation, audit hợp nhất, cấu hình.
+- `CoreLoggerService` ghi log có cấu trúc: message + metadata + ngữ cảnh từ request context (correlation, request, job,
+  message, lần chạy Scheduler, user) + lỗi (loại, mã, stack, fingerprint). Dữ liệu nhạy cảm (tên field như `password`,
+  `authorization`… và mẫu trong chuỗi: Bearer, JWT, mật khẩu trong URL, `key=value`) bị che **trước** khi ghi console hay
+  Redis. Nên log `logger.error({ message: 'Job processing failed', jobId, queue, attempt }, err.stack, 'ReportProcessor')`
+  thay vì `JSON.stringify(object)`. `LOG_FORMAT=json` cho collector stdout.
+- Lưu trữ: ring buffer Redis mỗi runtime (`RUNTIME_LOG_RETENTION`) — trang nói rõ tìm kiếm lịch sử có giới hạn; volume theo
+  level / module / nhóm lỗi đo bằng telemetry (giữ 8 ngày); nhóm lỗi = loại lỗi + module + message chuẩn hoá + khung stack.
+  Log bị mất (buffer đầy / Redis lỗi) được đếm và báo.
+- Level tạm thời: `PUT /ops/logs/level { runtime, level, durationMin, modules? }` — runtime áp dụng trong 5 giây, tự hết
+  hạn (có thể chỉ cho vài module), có audit; `DELETE /ops/logs/level/:runtime` trả lại.
+- API: `GET /ops/logs` (lọc + `cursor`), `/ops/logs/{overview,metrics,tail,export,errors,errors/:fp,trace/:id,audit,report,
+  config}`, `/ops/logs/entries/:id`. Màn khác mở Logs đã lọc qua URL: `logs/explorer?jobId=…` / `?correlationId=…`.
+
 ### Response Envelope chuẩn hóa
 ```json
 { "success": true, "statusCode": 200, "data": {}, "timestamp": "..." }

@@ -165,7 +165,7 @@ export const MessagingSection: React.FC = () => {
           </div>
         </section>
       ) : (
-        data && <MessagingHealthBanner data={data} now={now} onTested={bump} onOpenLogs={() => navigate('logs?runtime=api')} />
+        data && <MessagingHealthBanner data={data} now={now} onTested={bump} onOpenLogs={() => navigate('logs/explorer?runtime=api&level=warn,error,fatal')} />
       )}
 
       <div className="tr-controls">

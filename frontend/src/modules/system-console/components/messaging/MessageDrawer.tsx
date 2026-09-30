@@ -61,7 +61,6 @@ export const MessageDrawer: React.FC<{
       setLoadingPayload(false);
     }
   };
-  const logsRuntime = (d: MessageDetail) => [...d.lifecycle].reverse().find((e) => e.type !== 'published' && e.runtime)?.runtime ?? d.producer ?? 'api';
 
   return (
     <DbDrawer
@@ -157,7 +156,7 @@ export const MessageDrawer: React.FC<{
               <button
                 type="button"
                 className="scp-btn scp-btn-sm scp-btn-secondary"
-                onClick={() => navigate(`logs?runtime=${logsRuntime(data)}&correlationId=${encodeURIComponent(data.correlationId!)}`)}
+                onClick={() => navigate(`logs/explorer?correlationId=${encodeURIComponent(data.correlationId!)}`)}
               >
                 <FileText size={13} /> {t('messaging.message.openLogs')}
               </button>

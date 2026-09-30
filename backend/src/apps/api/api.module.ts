@@ -30,6 +30,8 @@ import { StorageOpsModule } from '@modules/storage-ops/index.js';
 import { MessagingOpsModule } from '@modules/messaging-ops/index.js';
 import { WorkerOpsModule } from '@modules/worker-ops/index.js';
 import { SchedulerOpsModule } from '@modules/scheduler-ops/index.js';
+import { JobsOpsModule } from '@modules/jobs-ops/index.js';
+import { LogsOpsModule } from '@modules/logs-ops/index.js';
 import { ApiRuntimeContributor } from './runtime/api-runtime.contributor.js';
 
 @Module({
@@ -60,6 +62,8 @@ import { ApiRuntimeContributor } from './runtime/api-runtime.contributor.js';
     MessagingOpsModule,
     WorkerOpsModule,
     SchedulerOpsModule,
+    JobsOpsModule,
+    LogsOpsModule,
   ],
   providers: [
     ApiRuntimeContributor,

@@ -12,16 +12,18 @@ interface RuntimeLogsPanelProps {
   limit?: number;
   /** Chỉ hiện log của một request (nối từ HTTP Traffic). */
   correlationId?: string;
+  /** Chỉ hiện log worker ghi khi xử lý một job (nối từ Jobs). */
+  jobId?: string;
   onOpenLogViewer?: () => void;
 }
 
 /** Log gần nhất của một runtime (ring buffer Redis), lọc sẵn theo runtime. */
-export const RuntimeLogsPanel: React.FC<RuntimeLogsPanelProps> = ({ runtime, limit = 100, correlationId, onOpenLogViewer }) => {
+export const RuntimeLogsPanel: React.FC<RuntimeLogsPanelProps> = ({ runtime, limit = 100, correlationId, jobId, onOpenLogViewer }) => {
   const { t, formatTime } = useLocale();
   const [level, setLevel] = useState<(typeof LEVELS)[number]>('');
   const { data, error } = usePolling(
-    () => runtimesApi.logs(runtime, limit, level || undefined, correlationId),
-    `${runtime}:${level}:${limit}:${correlationId ?? ''}`,
+    () => runtimesApi.logs(runtime, limit, level || undefined, correlationId, jobId),
+    `${runtime}:${level}:${limit}:${correlationId ?? ''}:${jobId ?? ''}`,
   );
 
   return (
@@ -40,7 +42,7 @@ export const RuntimeLogsPanel: React.FC<RuntimeLogsPanelProps> = ({ runtime, lim
       <div className="log-viewer-stream rt-log-stream">
         {error && !data && <div className="rt-log-empty">{error.message}</div>}
         {data?.length === 0 && (
-          <div className="rt-log-empty">{correlationId ? t('rt.logs.emptyCorrelation') : t('rt.logs.empty')}</div>
+          <div className="rt-log-empty">{correlationId || jobId ? t('rt.logs.emptyCorrelation') : t('rt.logs.empty')}</div>
         )}
         {data?.map((l, i) => (
           <div key={`${l.t}-${i}`} className="log-line">

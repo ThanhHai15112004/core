@@ -7,6 +7,6 @@ import { RuntimeCommandService } from './services/runtime-command.service.js';
 @Module({
   controllers: [RuntimesController],
   providers: [RuntimeStoreService, RuntimesService, RuntimeCommandService],
-  exports: [RuntimesService],
+  exports: [RuntimesService, RuntimeStoreService],
 })
 export class RuntimesModule {}
