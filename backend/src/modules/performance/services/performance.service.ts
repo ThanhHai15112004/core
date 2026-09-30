@@ -754,7 +754,7 @@ export class PerformanceService {
         latencyMs: r1(meanOf(job)),
         latencyKind: 'avg',
         errorPercent: completed + failed > 0 ? round((failed / (completed + failed)) * 100) : null,
-        target: 'runtimes/worker',
+        target: 'worker',
       },
       {
         id: 'messaging',
@@ -1276,7 +1276,8 @@ export class PerformanceService {
     if (rule === 'API_ERROR_RATE') return 'http-traffic/errors';
     if (rule.startsWith('API_')) return 'http-traffic/endpoints?sort=p95';
     if (rule.startsWith('DB_')) return 'performance/components/database';
-    if (rule === 'QUEUE_BACKLOG' || rule === 'WORKER_FAILURES') return 'runtimes/worker';
+    if (rule === 'QUEUE_BACKLOG') return 'worker/queues';
+    if (rule === 'WORKER_FAILURES') return 'worker/failures';
     return runtime ? `runtimes/${runtime}` : 'runtimes';
   }
 

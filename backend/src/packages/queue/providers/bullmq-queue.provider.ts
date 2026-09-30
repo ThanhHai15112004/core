@@ -74,6 +74,16 @@ export function toJobSummary(job: Job, state: BullState, runAt: number | null = 
     waitMs: processedAt !== null ? Math.max(0, processedAt - job.timestamp) : null,
     error: job.failedReason || null,
     correlationId: env?.correlationId ?? null,
+    processedBy: job.processedBy ?? null,
+    stalledCount: job.stalledCounter ?? 0,
+    delayReason:
+      state !== 'delayed'
+        ? null
+        : job.attemptsMade > 0
+          ? 'retry'
+          : job.repeatJobKey
+            ? 'repeat'
+            : 'delay',
   };
 }
 

@@ -76,7 +76,7 @@ describe('MessageConsumerRunner', () => {
       { id: 1 },
       { producer: 'api', correlationId: 'corr-1' },
     );
-    const { job, logs } = fakeJob(env);
+    const { job, logs } = fakeJob(env, { timestamp: 1000, processedOn: 1250 });
     let seen: string | undefined;
     await runner.process('UserConsumer', job, async () => {
       seen = RequestContextService.currentCorrelationId();
@@ -85,7 +85,17 @@ describe('MessageConsumerRunner', () => {
     expect(seen).toBe('corr-1');
     expect(m.counts.get('msg.consumed')).toBe(1);
     expect(m.counts.get('msg.ch.user.created.con')).toBe(1);
-    expect(m.timings).toEqual(['msg.process', 'msg.ch.user.created.proc']);
+    expect(m.timings).toEqual([
+      'wq.wait',
+      'wq.q.system.events.wait',
+      'msg.process',
+      'msg.ch.user.created.proc',
+      'wq.proc',
+      'wq.q.system.events.proc',
+    ]);
+    // Số đo trang Worker & Queue (theo queue).
+    expect(m.counts.get('wq.done')).toBe(1);
+    expect(m.counts.get('wq.q.system.events.done')).toBe(1);
     expect(types(logs)).toEqual(['received', 'completed']);
   });
 
@@ -103,6 +113,8 @@ describe('MessageConsumerRunner', () => {
     expect(m.counts.get('msg.retry')).toBe(1);
     expect(m.counts.get('msg.dlq')).toBeUndefined();
     expect(m.counts.get('msg.err.timeout')).toBe(1);
+    expect(m.counts.get('wq.q.system.events.retry')).toBe(1);
+    expect(m.counts.get('wq.exhausted')).toBeUndefined();
     const rows = logs.map((l) => JSON.parse(l) as LifecycleEntry);
     expect(rows.map((r) => r.type)).toEqual(['received', 'failed', 'retry_scheduled']);
     expect(rows[2]!.delayMs).toBe(2000);
@@ -130,6 +142,8 @@ describe('MessageConsumerRunner', () => {
     ).rejects.toThrow('boom');
     await flush();
     expect(m.counts.get('msg.dlq')).toBe(1);
+    expect(m.counts.get('wq.fail')).toBe(1);
+    expect(m.counts.get('wq.q.system.events.exhausted')).toBe(1);
     expect(types(logs)).toEqual(['received', 'failed', 'dead_lettered']);
     const events = (await redis.client.lrange(messagingKeys(redis).events(), 0, -1)).map(
       (r) => JSON.parse(r) as MessagingEventRecord,

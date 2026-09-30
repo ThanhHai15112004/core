@@ -21,6 +21,8 @@ import enStorage from '../locales/en/storage.json' with { type: 'json' };
 import viStorage from '../locales/vi/storage.json' with { type: 'json' };
 import enMessaging from '../locales/en/messaging.json' with { type: 'json' };
 import viMessaging from '../locales/vi/messaging.json' with { type: 'json' };
+import enWorker from '../locales/en/worker.json' with { type: 'json' };
+import viWorker from '../locales/vi/worker.json' with { type: 'json' };
 
 type Dictionary = Record<string, string>;
 
@@ -39,6 +41,7 @@ export class CoreI18nService implements I18nContract {
       ...enCache,
       ...enStorage,
       ...enMessaging,
+      ...enWorker,
     },
     vi: {
       ...viCommon,
@@ -51,6 +54,7 @@ export class CoreI18nService implements I18nContract {
       ...viCache,
       ...viStorage,
       ...viMessaging,
+      ...viWorker,
     },
   };
 

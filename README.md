@@ -303,6 +303,22 @@ Cùng 1 codebase phục vụ 4 chế độ chạy độc lập: `api` (HTTP), `w
   dead-letter,broker,errors,events,operations,config}`, `POST /ops/messaging/{test,messages/:id/retry,
   dead-letter/:id/replay}`, `DELETE /ops/messaging/dead-letter/:id`.
 
+### Worker & Queue (System Console → Worker & Queue)
+- Messaging trả lời "message có đi từ producer tới consumer không"; Worker & Queue trả lời "công việc nền có được worker
+  thực thi kịp và thành công không". Queue provider (`packages/queue`, hiện là BullMQ) tách khỏi messaging provider về
+  khái niệm, UI hiện phần tương ứng theo capability (workers, jobs, delayed, priority, stalled, pause, retry, drain).
+- Số đo `wq.*` do consumer/publisher ghi (nhận vào, hoàn tất, lỗi, retry, hết lượt, thời gian chờ & xử lý theo queue);
+  monitor nền trong API (mỗi 15s, lock Redis) ghi độ sâu từng queue và cảnh báo: backend unavailable, không có worker,
+  queue tạm dừng còn job chờ, backlog, job chờ quá lâu, tỷ lệ lỗi, xử lý chậm, job treo, retry storm, gần hết
+  concurrency, worker thiếu tài nguyên. Ngưỡng: `WORKER_QUEUE_*`.
+- Worker instance lấy từ consumer tự báo (concurrency, job đang chạy) + telemetry tài nguyên theo instance; lịch sử
+  restart lấy từ Runtime Monitor.
+- Thao tác bật/tắt bằng env, có xác nhận và audit: Pause/Resume queue (toàn cục — worker làm xong job đang chạy rồi
+  ngừng lấy job mới), Retry job lỗi (tối đa `OPS_QUEUE_RETRY_FAILED_MAX` mỗi lần, có xem trước), Drain (gõ `DRAIN`,
+  mặc định tắt).
+- API: `GET /ops/workers[/:id]`, `GET /ops/workers/{overview,metrics,failures,delayed,events,operations,config}`,
+  `GET /ops/queues[/:name[/metrics|/jobs|/failures|/events]]`, `POST /ops/queues/:name/{pause,resume,retry-failed,drain}`.
+
 ### Response Envelope chuẩn hóa
 ```json
 { "success": true, "statusCode": 200, "data": {}, "timestamp": "..." }

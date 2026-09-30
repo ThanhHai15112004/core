@@ -11,9 +11,8 @@ const RELATED: Partial<Record<ConsoleSectionId, ConsolePath>> = {
   performance: 'runtimes',
   storage: 'packages',
   messaging: 'runtimes/worker',
-  worker: 'runtimes/worker',
   scheduler: 'runtimes/scheduler',
-  jobs: 'runtimes/worker',
+  jobs: 'worker/queues',
   secrets: 'security',
   configuration: 'runtimes/api/configuration',
 };

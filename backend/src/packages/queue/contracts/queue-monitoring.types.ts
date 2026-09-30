@@ -82,7 +82,16 @@ export interface JobSummary {
   waitMs: number | null;
   error: string | null;
   correlationId: string | null;
+  /** Tên worker đang/đã xử lý (BullMQ `processedBy`); null = provider không cho biết. */
+  processedBy: string | null;
+  /** Số lần job bị coi là stalled (worker mất khoá giữa chừng). */
+  stalledCount: number;
+  /** delayed / retrying: vì sao job đang hẹn giờ. */
+  delayReason: DelayReason | null;
 }
+
+/** `retry`: chờ lần thử kế tiếp; `repeat`: job lặp (repeatable/scheduler); `delay`: hẹn giờ khi tạo. */
+export type DelayReason = 'retry' | 'repeat' | 'delay';
 
 /** Option mặc định khi tạo job (retry, backoff, retention). */
 export interface QueueJobDefaults {

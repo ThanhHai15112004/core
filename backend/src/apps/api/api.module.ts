@@ -11,6 +11,7 @@ import { DatabaseModule } from '@packages/database/index.js';
 import { LoggingInterceptor, LoggingModule } from '@packages/logging/index.js';
 import { AuthGuard, SecurityModule } from '@packages/security/index.js';
 import { MessagingModule } from '@packages/messaging/index.js';
+import { QueueModule } from '@packages/queue/index.js';
 import { CacheModule } from '@packages/cache/index.js';
 import { StorageModule } from '@packages/storage/index.js';
 import { HttpClientModule } from '@packages/http-client/index.js';
@@ -27,6 +28,7 @@ import { DatabaseOpsModule } from '@modules/database-ops/index.js';
 import { CacheOpsModule } from '@modules/cache-ops/index.js';
 import { StorageOpsModule } from '@modules/storage-ops/index.js';
 import { MessagingOpsModule } from '@modules/messaging-ops/index.js';
+import { WorkerOpsModule } from '@modules/worker-ops/index.js';
 import { ApiRuntimeContributor } from './runtime/api-runtime.contributor.js';
 
 @Module({
@@ -41,6 +43,7 @@ import { ApiRuntimeContributor } from './runtime/api-runtime.contributor.js';
     LoggingModule,
     SecurityModule,
     MessagingModule,
+    QueueModule,
     CacheModule,
     StorageModule,
     HttpClientModule,
@@ -54,6 +57,7 @@ import { ApiRuntimeContributor } from './runtime/api-runtime.contributor.js';
     CacheOpsModule,
     StorageOpsModule,
     MessagingOpsModule,
+    WorkerOpsModule,
   ],
   providers: [
     ApiRuntimeContributor,

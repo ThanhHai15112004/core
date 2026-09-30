@@ -52,6 +52,12 @@ export const API_ROUTES = {
     MESSAGING: {
       path: (path: string, qs = '') => `${OPS_PREFIX}/messaging/${path}${qs ? `?${qs}` : ''}`,
     },
+    WORKERS: {
+      path: (path: string, qs = '') => `${OPS_PREFIX}/workers${path ? `/${path}` : ''}${qs ? `?${qs}` : ''}`,
+    },
+    QUEUES: {
+      path: (path: string, qs = '') => `${OPS_PREFIX}/queues${path ? `/${path}` : ''}${qs ? `?${qs}` : ''}`,
+    },
     PERFORMANCE: {
       OVERVIEW: (qs: string) => `${OPS_PREFIX}/performance/overview?${qs}`,
       TIMESERIES: (qs: string) => `${OPS_PREFIX}/performance/timeseries?${qs}`,

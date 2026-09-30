@@ -42,7 +42,7 @@ export const NAV_TREE: NavGroup[] = [
     id: 'background',
     icon: 'worker',
     children: [
-      { id: 'worker', status: 'planned' },
+      { id: 'worker', status: 'ready' },
       { id: 'scheduler', status: 'planned' },
       { id: 'jobs', status: 'planned' },
     ],

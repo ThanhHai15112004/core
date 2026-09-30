@@ -7,8 +7,8 @@ interface SectionStateProps<T> {
   section: Section<T> | null | undefined;
   driver?: string;
   onRetry?: () => void;
-  /** Nhóm câu chữ i18n (`db` / `cache` / `storage` / `messaging`). */
-  scope?: 'db' | 'cache' | 'storage' | 'messaging';
+  /** Nhóm câu chữ i18n (`db` / `cache` / `storage` / `messaging` / `wq`). */
+  scope?: 'db' | 'cache' | 'storage' | 'messaging' | 'wq';
   children: (data: T) => React.ReactNode;
 }
 

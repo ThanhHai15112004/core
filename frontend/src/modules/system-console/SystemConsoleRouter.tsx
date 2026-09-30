@@ -19,6 +19,7 @@ const DatabaseSection = lazy(() => import('./sections/database/DatabaseSection')
 const CacheSection = lazy(() => import('./sections/cache/CacheSection').then((m) => ({ default: m.CacheSection })));
 const StorageSection = lazy(() => import('./sections/storage/StorageSection').then((m) => ({ default: m.StorageSection })));
 const MessagingSection = lazy(() => import('./sections/messaging/MessagingSection').then((m) => ({ default: m.MessagingSection })));
+const WorkerSection = lazy(() => import('./sections/worker/WorkerSection').then((m) => ({ default: m.WorkerSection })));
 
 const HASH_PREFIX = ROUTES.SYSTEM_CONSOLE.replace(/^#/, '');
 
@@ -96,6 +97,8 @@ export const SystemConsoleRouter: React.FC = () => {
         return <StorageSection />;
       case 'messaging':
         return <MessagingSection />;
+      case 'worker':
+        return <WorkerSection />;
       case 'security':
         return <SecuritySection />;
       default:
