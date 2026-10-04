@@ -60,22 +60,22 @@ export const SecretsSection: React.FC = () => {
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
         <StatCard
-          label="Tổng Secret Keys"
+          title="Tổng Secret Keys"
           value={stats.total}
           icon={<KeyRound size={20} color="var(--scp-primary, #6366f1)" />}
         />
         <StatCard
-          label="Đã cấu hình"
+          title="Đã cấu hình"
           value={stats.present}
           icon={<CheckCircle2 size={20} color="var(--scp-success, #22c55e)" />}
         />
         <StatCard
-          label="Còn thiếu"
+          title="Còn thiếu"
           value={stats.missing}
           icon={<XCircle size={20} color={stats.missing > 0 ? 'var(--scp-danger, #ef4444)' : 'var(--scp-text-muted)'} />}
         />
         <StatCard
-          label="Storage Driver"
+          title="Storage Driver"
           value={stats.driver}
           icon={<ShieldAlert size={20} color="var(--scp-warning, #f59e0b)" />}
         />

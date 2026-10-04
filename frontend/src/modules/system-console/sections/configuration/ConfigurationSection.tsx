@@ -122,22 +122,22 @@ export const ConfigurationSection: React.FC = () => {
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
         <StatCard
-          label="Tổng tham số cấu hình"
+          title="Tổng tham số cấu hình"
           value={stats.total}
           icon={<Sliders size={20} color="var(--scp-primary, #6366f1)" />}
         />
         <StatCard
-          label="Nguồn Environment (ENV)"
+          title="Nguồn Environment (ENV)"
           value={stats.fromEnv}
           icon={<Terminal size={20} color="var(--scp-success, #22c55e)" />}
         />
         <StatCard
-          label="Giá trị mặc định"
+          title="Giá trị mặc định"
           value={stats.fromDefault}
           icon={<Check size={20} color="var(--scp-text-muted)" />}
         />
         <StatCard
-          label="Dữ liệu nhạy cảm"
+          title="Dữ liệu nhạy cảm"
           value={stats.sensitive}
           icon={<Shield size={20} color="var(--scp-danger, #ef4444)" />}
         />
