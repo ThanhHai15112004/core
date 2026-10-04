@@ -2,8 +2,6 @@ import { describe, beforeAll, afterAll, it, expect } from '@jest/globals';
 import { createTestApp, type TestAppContext } from '../../../concerns/test-app.concern.js';
 import { PERFORMANCE_ROUTES } from '@modules/performance/index.js';
 import { RedisService } from '@packages/redis/index.js';
-import { TrafficCollectorService } from '@packages/traffic/index.js';
-import { MetricRecorder } from '@packages/telemetry/index.js';
 import { BaseCacheProvider } from '@packages/cache/index.js';
 
 interface Envelope<T> {
@@ -25,17 +23,12 @@ describe('Performance (/ops/performance)', () => {
   beforeAll(async () => {
     context = await createTestApp();
     await context.app.get(RedisService).client.flushall();
-    // Tải thật: request HTTP (đi tới handler → có breakdown), thao tác cache, mẫu CPU của runtime API.
+    // Tải thật: request HTTP (đi tới handler → có breakdown), thao tác cache.
     for (let i = 0; i < 5; i++) await context.app.inject({ method: 'GET', url: '/health' });
     const cache = context.app.get(BaseCacheProvider);
     await cache.set('k', 1);
     await cache.get('k');
     await cache.get('missing');
-    const recorder = context.app.get(MetricRecorder);
-    recorder.gauge('rt.cpu', 12);
-    recorder.gauge('rt.rss', 150);
-    await context.app.get(TrafficCollectorService).flush();
-    await recorder.flush();
   });
 
   afterAll(async () => {

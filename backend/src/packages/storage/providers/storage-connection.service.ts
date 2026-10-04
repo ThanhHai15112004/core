@@ -14,7 +14,6 @@ import type {
   StorageConnectionStatus,
 } from '../contracts/storage-events.types.js';
 import { LocalStorageDriver } from '../drivers/local-storage.driver.js';
-import { recordStorageEvent } from '../utils/storage-events.js';
 import { sanitizeStorageMessage, storageErrorCode } from '../utils/storage-errors.js';
 import { BaseStorageProvider } from './storage.provider.js';
 
@@ -83,17 +82,7 @@ export class StorageConnectionService implements OnApplicationBootstrap, OnModul
     this.failures = 0;
     this.lastError = null;
     this.set('connected');
-    if (this.lostAt === null) return;
-    const lostAt = this.lostAt;
     this.lostAt = null;
-    if (this.identity?.id !== 'api') return;
-    void recordStorageEvent(this.redis, {
-      type: 'connection_recovered',
-      severity: 'success',
-      params: { seconds: Math.max(1, Math.round((now - lostAt) / 1000)) },
-      runtime: this.identity.id,
-      at: now,
-    });
   }
 
   private markFailure(err: unknown): void {
@@ -108,13 +97,6 @@ export class StorageConnectionService implements OnApplicationBootstrap, OnModul
     );
     if (wasUp) {
       this.lostAt = Date.now();
-      if (this.identity?.id === 'api')
-        void recordStorageEvent(this.redis, {
-          type: 'connection_lost',
-          severity: 'critical',
-          params: { error: this.lastError },
-          runtime: this.identity.id,
-        });
     }
   }
 

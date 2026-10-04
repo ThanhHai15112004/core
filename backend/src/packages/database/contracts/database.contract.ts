@@ -4,3 +4,13 @@ export interface DatabaseConnectionContract {
   isConnected(): boolean;
   ping(): Promise<boolean>;
 }
+
+export interface SlowQueryRecord {
+  at: number;
+  sql: string;
+  durationMs: number;
+  failed: boolean;
+  instance: string;
+  correlationId: string | null;
+}
+

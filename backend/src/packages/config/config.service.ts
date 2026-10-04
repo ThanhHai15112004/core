@@ -12,6 +12,7 @@ import { logsConfig, type LogsConfig } from './logs.config.js';
 import { runtimeConfig, type RuntimeConfig } from './runtime.config.js';
 import { trafficConfig, type TrafficConfig } from './traffic.config.js';
 import { performanceConfig, type PerformanceConfig } from './performance.config.js';
+import { metricsConfig, type MetricsConfig } from './metrics.config.js';
 
 @Injectable()
 export class CoreConfigService {
@@ -28,6 +29,7 @@ export class CoreConfigService {
   public readonly runtime: RuntimeConfig;
   public readonly traffic: TrafficConfig;
   public readonly performance: PerformanceConfig;
+  public readonly metrics: MetricsConfig;
 
   constructor() {
     this.app = appConfig();
@@ -43,6 +45,7 @@ export class CoreConfigService {
     this.runtime = runtimeConfig();
     this.traffic = trafficConfig();
     this.performance = performanceConfig();
+    this.metrics = metricsConfig();
   }
 
   public get isProduction(): boolean {
@@ -76,6 +79,7 @@ export class CoreConfigService {
       runtime: this.runtime,
       traffic: this.traffic,
       performance: this.performance,
+      metrics: this.metrics,
     };
     const parts = path.split('.');
     let current: unknown = root;

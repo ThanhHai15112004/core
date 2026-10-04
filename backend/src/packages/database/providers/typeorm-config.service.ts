@@ -6,6 +6,8 @@ import { CoreConfigService } from '@packages/config/index.js';
 import { DatabaseDriver } from '@packages/kernel/index.js';
 import { RUNTIME_IDENTITY, type RuntimeIdentity } from '@packages/runtime/index.js';
 
+import { TypeOrmPinoLogger } from './typeorm-pino.logger.js';
+
 const currentFile = fileURLToPath(import.meta.url);
 /** `src/database/migrations/*.ts` khi chạy từ source (test/dev), `dist/database/migrations/*.js` khi đã build. */
 const MIGRATIONS_GLOB = path.join(
@@ -32,7 +34,8 @@ export class TypeOrmConfigService implements TypeOrmOptionsFactory {
 
     const baseOptions = {
       synchronize: db.synchronize,
-      logging: db.logging,
+      logger: new TypeOrmPinoLogger(db.logging),
+      maxQueryExecutionTime: db.slowQueryMs ?? 500,
       autoLoadEntities: true,
       // Kết nối do DatabaseConnectionService mở nền (có retry) → API vẫn chạy khi database chưa sẵn sàng.
       manualInitialization: true,

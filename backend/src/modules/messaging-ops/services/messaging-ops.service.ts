@@ -20,7 +20,7 @@ import {
   type OperationContext,
   type QueueSnapshot,
 } from '@packages/messaging/index.js';
-import { TELEMETRY_TIERS, type MetricBucket } from '@packages/telemetry/index.js';
+import { TELEMETRY_TIERS, type MetricBucket } from '@modules/system-ops/telemetry-compat.js';
 import {
   changePercent,
   counterOf,
@@ -420,7 +420,7 @@ export class MessagingOpsService {
           : Promise.resolve(null),
         this.alerts(),
         this.eventsSince(now - DAY),
-        this.monitoring.section('deadLetter', () => this.monitoring.provider.deadLetters(3)),
+        this.monitoring.section('deadLetter', () => this.monitoring.deadLetters(3)),
       ]);
     const delivery = this.metrics.delivery(win);
     const queues = this.queueRows(live, now);
@@ -450,9 +450,9 @@ export class MessagingOpsService {
     return {
       generatedAt: new Date(now).toISOString(),
       range,
-      provider: this.monitoring.provider.info(),
+      provider: this.monitoring.info(),
       environment: this.config.app.env,
-      capabilities: [...this.monitoring.provider.capabilities],
+      capabilities: [...this.monitoring.capabilities],
       health: this.health(alerts),
       kpis: {
         publishedPerSec: pub,
@@ -507,7 +507,7 @@ export class MessagingOpsService {
           : s.state === 'reconnecting'
             ? 'reconnecting'
             : 'unknown';
-    const info = this.monitoring.provider.info();
+    const info = this.monitoring.info();
     const reasons =
       s.state !== 'connected'
         ? [
@@ -731,7 +731,7 @@ export class MessagingOpsService {
 
   private recentMessages(filter: MessageFilter): Promise<SectionDto<MessageRowDto[]>> {
     return this.monitoring.section('browse', async () => {
-      const page = await this.monitoring.provider.listMessages(filter, RECENT_LIMIT);
+      const page = await this.monitoring.listMessages(filter, RECENT_LIMIT);
       return page.messages.slice(0, RECENT_LIMIT).map((m) => this.messageRow(m));
     });
   }
@@ -842,7 +842,7 @@ export class MessagingOpsService {
 
   public async getMessages(filter: MessageFilter, perState: number): Promise<MessagingMessagesDto> {
     const page = await this.monitoring.section('browse', () =>
-      this.monitoring.provider.listMessages(filter, perState),
+      this.monitoring.listMessages(filter, perState),
     );
     return {
       messages: page.available
@@ -855,7 +855,7 @@ export class MessagingOpsService {
 
   public async getMessageDetail(id: string, queue: string | null): Promise<MessageDetailDto> {
     const [res, consumers] = await Promise.all([
-      this.monitoring.section('browse', () => this.monitoring.provider.message(id, queue)),
+      this.monitoring.section('browse', () => this.monitoring.message(id, queue)),
       this.monitoring.consumers().catch(() => [] as ConsumerRegistration[]),
     ]);
     if (!res.available) throw this.sectionError(res);
@@ -899,7 +899,7 @@ export class MessagingOpsService {
   public async getRetries(): Promise<MessagingRetriesDto> {
     const now = Date.now();
     const [list, todayWin] = await Promise.all([
-      this.monitoring.section('retry', () => this.monitoring.provider.retrying(RETRY_LIMIT)),
+      this.monitoring.section('retry', () => this.monitoring.retrying(RETRY_LIMIT)),
       this.metrics.window(startOfDay(now), now, now),
     ]);
     const d = this.metrics.delivery(todayWin);
@@ -933,9 +933,7 @@ export class MessagingOpsService {
   public async getDeadLetter(): Promise<MessagingDeadLetterDto> {
     const now = Date.now();
     const [items, live, todayWin] = await Promise.all([
-      this.monitoring.section('deadLetter', () =>
-        this.monitoring.provider.deadLetters(DEAD_LETTER_LIMIT),
-      ),
+      this.monitoring.section('deadLetter', () => this.monitoring.deadLetters(DEAD_LETTER_LIMIT)),
       this.live(),
       this.metrics.window(startOfDay(now), now, now),
     ]);
@@ -966,7 +964,7 @@ export class MessagingOpsService {
 
   public async getBroker(): Promise<MessagingBrokerDto> {
     return {
-      broker: await this.monitoring.section('brokerInfo', () => this.monitoring.provider.broker()),
+      broker: await this.monitoring.section('brokerInfo', () => this.monitoring.broker()),
     };
   }
 
@@ -1016,7 +1014,7 @@ export class MessagingOpsService {
 
   public getConfig(): MessagingConfigDto {
     const c = this.cfg;
-    const info = this.monitoring.provider.info();
+    const info = this.monitoring.info();
     const redis = this.config.cache.redis;
     return {
       items: [
@@ -1176,7 +1174,7 @@ export class MessagingOpsService {
         return new MessagingActionRejectedException(
           err.code,
           'messaging.error.UNSUPPORTED',
-          { product: this.monitoring.provider.info().product },
+          { product: this.monitoring.info().product },
           422,
         );
       case 'FAILED':

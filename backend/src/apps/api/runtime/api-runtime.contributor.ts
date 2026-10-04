@@ -1,7 +1,6 @@
 import { Injectable, type OnModuleInit } from '@nestjs/common';
 import type { Server } from 'node:http';
 import { CoreConfigService } from '@packages/config/index.js';
-import { HttpMetricsService } from '@packages/logging/index.js';
 import {
   RuntimeAgentService,
   withVersion,
@@ -20,7 +19,6 @@ export class ApiRuntimeContributor implements RuntimeContributor, OnModuleInit {
 
   constructor(
     private readonly agent: RuntimeAgentService,
-    private readonly http: HttpMetricsService,
     private readonly config: CoreConfigService,
   ) {}
 
@@ -45,16 +43,9 @@ export class ApiRuntimeContributor implements RuntimeContributor, OnModuleInit {
     };
   }
 
+  /** RPS / p95 / tỉ lệ lỗi HTTP nằm ở Prometheus (`http_request_duration_seconds`). */
   public async collectMetrics(): Promise<Record<string, MetricValue>> {
-    const snapshot = this.http.snapshot();
     return {
-      requestsPerSecond: snapshot.requestsPerSecond,
-      p95LatencyMs: snapshot.p95LatencyMs,
-      errorRatePercent: snapshot.errorRatePercent,
-      errorCount: snapshot.errorCount,
-      totalRequests: snapshot.totalRequests,
-      windowSeconds: snapshot.windowSeconds,
-      activeRequests: this.http.activeRequests(),
       openConnections: await this.countConnections(),
     };
   }

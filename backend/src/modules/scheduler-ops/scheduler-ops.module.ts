@@ -1,22 +1,15 @@
 import { Module } from '@nestjs/common';
-import { PerformanceOpsModule } from '@modules/performance/index.js';
-import { SchedulerStoreModule } from '@packages/scheduler/index.js';
+import { QueueModule } from '@packages/queue/index.js';
+import { RedisModule } from '@packages/redis/index.js';
 import { SchedulerOpsController } from './controllers/scheduler-ops.controller.js';
 import { SchedulerOpsService } from './services/scheduler-ops.service.js';
 import { SchedulerOperationsService } from './services/scheduler-operations.service.js';
-import { SchedulerMetricsService } from './services/scheduler-metrics.service.js';
-import { SchedulerMonitorService } from './services/scheduler-monitor.service.js';
 
-/** API Scheduler cho System Console (`/ops/scheduler/*`) + monitor nền (cảnh báo, lần chạy mồ côi). */
+/** API Scheduler cho System Console (`/ops/scheduler/*`) dựa trên BullMQ Job Scheduler. */
 @Module({
-  imports: [PerformanceOpsModule, SchedulerStoreModule],
+  imports: [QueueModule, RedisModule],
   controllers: [SchedulerOpsController],
-  providers: [
-    SchedulerOpsService,
-    SchedulerOperationsService,
-    SchedulerMetricsService,
-    SchedulerMonitorService,
-  ],
-  exports: [SchedulerOpsService],
+  providers: [SchedulerOpsService, SchedulerOperationsService],
+  exports: [SchedulerOpsService, SchedulerOperationsService],
 })
 export class SchedulerOpsModule {}

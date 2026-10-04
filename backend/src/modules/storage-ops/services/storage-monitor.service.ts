@@ -12,11 +12,10 @@ import {
   StorageMonitoringService,
   containerMetric,
   growthSince,
-  recordStorageEvent,
   type MultipartUpload,
   type UsageSnapshot,
 } from '@packages/storage/index.js';
-import { MetricRecorder } from '@packages/telemetry/index.js';
+import { MetricRecorder } from '@modules/system-ops/telemetry-compat.js';
 import { round } from '@modules/performance/index.js';
 import { StorageMetricsService } from './storage-metrics.service.js';
 import { StorageStoreService } from './storage-store.service.js';
@@ -205,25 +204,5 @@ export class StorageMonitorService implements OnApplicationBootstrap, OnModuleDe
     for (const [id, state] of set) pipe.hset(key, id, JSON.stringify(state));
     if (recovered.length) pipe.hdel(key, ...recovered.map((r) => r.id));
     await pipe.exec();
-    for (const v of started) {
-      if (v.severity === 'info') continue;
-      await recordStorageEvent(this.redis, {
-        type: 'alert_started',
-        severity: v.severity,
-        params: { rule: v.id, value: v.value, threshold: v.threshold, unit: v.unit, ...v.extra },
-        runtime: null,
-        at: now,
-      });
-    }
-    for (const r of recovered) {
-      if (r.alert.severity === 'info') continue;
-      await recordStorageEvent(this.redis, {
-        type: 'alert_recovered',
-        severity: 'success',
-        params: { rule: r.id, minutes: Math.max(1, Math.round(r.durationMs / 60_000)) },
-        runtime: null,
-        at: now,
-      });
-    }
   }
 }

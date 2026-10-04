@@ -12,7 +12,7 @@ case "$1" in
       docker compose $COMPOSE_FILES up -d --build "$SERVICE"
     else
       echo "🚀 Đang khởi động toàn bộ Core Framework Development (BE Fastify :3005 + FE Vite :5175)..."
-      docker compose $COMPOSE_FILES up -d --build backend worker scheduler frontend
+      docker compose $COMPOSE_FILES up -d --build backend worker scheduler frontend prometheus
       echo ""
       echo "✅ Các container đã sẵn sàng:"
       echo "   👉 Backend API (core-backend-dev):   http://localhost:3005/api/v1"
@@ -28,11 +28,11 @@ case "$1" in
     ;;
   stop)
     echo "⏸️ Đang tạm dừng toàn bộ Core App Development Containers..."
-    docker compose $COMPOSE_FILES stop backend worker scheduler frontend
+    docker compose $COMPOSE_FILES stop backend worker scheduler frontend prometheus
     ;;
   start)
     echo "▶️ Đang tiếp tục chạy toàn bộ Core App Development Containers..."
-    docker compose $COMPOSE_FILES start backend worker scheduler frontend
+    docker compose $COMPOSE_FILES start backend worker scheduler frontend prometheus
     ;;
   logs)
     if [ -n "$SERVICE" ]; then

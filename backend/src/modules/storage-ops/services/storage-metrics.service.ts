@@ -4,7 +4,7 @@ import {
   tierCovering,
   type MetricBucket,
   type TelemetryTier,
-} from '@packages/telemetry/index.js';
+} from '@modules/system-ops/telemetry-compat.js';
 import { containerMetric, type StorageOp } from '@packages/storage/index.js';
 import {
   PerformanceStoreService,

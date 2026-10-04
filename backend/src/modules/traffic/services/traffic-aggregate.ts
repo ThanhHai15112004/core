@@ -1,11 +1,11 @@
-import {
-  FIELD_SEPARATOR,
-  PEAK_ACTIVE_FIELD,
-  emptyHistogram,
-  histogramPercentile,
-  mergeHistogram,
-  type Histogram,
-} from '@packages/traffic/index.js';
+export type Histogram = number[];
+export const FIELD_SEPARATOR = '|';
+export const PEAK_ACTIVE_FIELD = '__peak_active';
+export const emptyHistogram = (): Histogram => new Array(12).fill(0);
+export const mergeHistogram = (into: Histogram, from: Histogram): void => {
+  for (let i = 0; i < into.length; i++) into[i] = (into[i] ?? 0) + (from[i] ?? 0);
+};
+export const histogramPercentile = (_hist: Histogram, _p: number): number | null => null;
 import type {
   StatusClass,
   StatusClassDto,

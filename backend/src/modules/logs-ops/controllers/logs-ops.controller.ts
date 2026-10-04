@@ -1,8 +1,7 @@
 import { Body, Controller, Delete, Get, Param, Put, Query, Req, Res } from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import { Public } from '@packages/http/index.js';
-import { maskIp } from '@packages/traffic/utils/capture.js';
+import { Public, maskIp } from '@packages/http/index.js';
 import { LONG_RUNNING_RUNTIMES } from '@packages/runtime/index.js';
 import { LOGS_OPS_ROUTES as R } from '../routes/logs-ops.routes.js';
 import {

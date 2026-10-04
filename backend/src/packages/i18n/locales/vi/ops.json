@@ -45,5 +45,9 @@
   "ops.messaging.test.label": "Test Broker",
   "ops.messaging.test.description": "Publish một message kiểm tra riêng, consume và ack để đo round trip của broker.",
   "ops.messaging.test.ok": "Messaging hoạt động bình thường (round trip {ms} ms).",
-  "ops.messaging.test.failed": "Kiểm tra messaging thất bại ở bước {step}."
+  "ops.messaging.test.failed": "Kiểm tra messaging thất bại ở bước {step}.",
+  "ops.metrics.displayName": "Metrics (Prometheus)",
+  "ops.metrics.summary": "Registry prom-client, Prometheus {state}.",
+  "ops.queue.displayName": "Queue (BullMQ)",
+  "ops.queue.summary": "{count} queue, {state}."
 }

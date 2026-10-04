@@ -15,7 +15,7 @@ import {
   type ConsumerRegistration,
   type QueueSnapshot,
 } from '@packages/messaging/index.js';
-import { MetricRecorder } from '@packages/telemetry/index.js';
+import { MetricRecorder } from '@modules/system-ops/telemetry-compat.js';
 import { MessagingMetricsService } from './messaging-metrics.service.js';
 import { MessagingStoreService } from './messaging-store.service.js';
 import {
@@ -97,7 +97,7 @@ export class MessagingMonitorService implements OnApplicationBootstrap, OnModule
       if (locked !== 'OK') return;
       await this.connection.check();
       const queues = this.monitoring.usable()
-        ? await this.monitoring.provider.queues().catch((err) => {
+        ? await this.monitoring.queues().catch((err) => {
             this.logger.warn(`Queue snapshot failed: ${err instanceof Error ? err.message : err}`);
             return null;
           })

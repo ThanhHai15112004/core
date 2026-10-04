@@ -3,8 +3,7 @@ import { RedisService } from '@packages/redis/index.js';
 import { cacheKeys } from '@packages/cache/index.js';
 import { storageKeys } from '@packages/storage/index.js';
 import { queueKeys } from '@packages/queue/index.js';
-import { jobKeys, messagingKeys } from '@packages/messaging/index.js';
-import { schedulerKeys } from '@packages/scheduler/index.js';
+import { messagingKeys } from '@packages/messaging/index.js';
 import { databaseKeys, type DbEventRecord } from '@packages/database/index.js';
 import { logsKeys } from '@packages/logging/index.js';
 import { runtimeKeys } from '@packages/runtime/index.js';
@@ -72,8 +71,7 @@ export class LogAuditService {
       { domain: 'storage', key: storageKeys(r).operations() },
       { domain: 'queue', key: queueKeys(r).operations() },
       { domain: 'messaging', key: messagingKeys(r).operations() },
-      { domain: 'scheduler', key: schedulerKeys(r).operations() },
-      { domain: 'jobs', key: jobKeys(r).operations() },
+      { domain: 'scheduler', key: 'scheduler:operations' },
       { domain: 'logs', key: logsKeys(r).operations() },
     ];
   }

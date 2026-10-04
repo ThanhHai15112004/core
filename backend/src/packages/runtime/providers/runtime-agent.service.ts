@@ -9,8 +9,6 @@ import {
 import * as os from 'node:os';
 import { CoreConfigService } from '@packages/config/index.js';
 import { RedisService } from '@packages/redis/index.js';
-import { MetricRecorder } from '@packages/telemetry/index.js';
-import { ResourceSampler } from './resource-sampler.js';
 import { COMMAND_TTL_SEC, runtimeKeys } from '../constants/runtime.keys.js';
 import { RUNTIME_IDENTITY } from '../constants/runtime.tokens.js';
 import type { RuntimeContributor } from '../contracts/runtime-contributor.contract.js';
@@ -18,7 +16,6 @@ import type {
   AgentState,
   MetricValue,
   RuntimeAlert,
-  RuntimeAlertKey,
   RuntimeCommand,
   RuntimeCommandResult,
   RuntimeEventData,
@@ -26,15 +23,15 @@ import type {
   RuntimeHeartbeat,
   RuntimeIdentity,
   RuntimeIssue,
+  RuntimeProcessInfo,
   RuntimeResources,
-  RuntimeSample,
 } from '../contracts/runtime.types.js';
 
 const REDIS_BOOT_WAIT_MS = 5000;
 
 /**
  * Agent chạy trong mỗi runtime chạy liên tục (API, Worker, Scheduler):
- * gửi heartbeat + time-series + sự kiện vòng đời vào Redis, và nhận lệnh
+ * gửi heartbeat định kỳ và sự kiện vòng đời vào Redis, nhận lệnh
  * pause/resume/restart từ System Console qua pub/sub.
  */
 @Injectable()
@@ -48,8 +45,6 @@ export class RuntimeAgentService implements OnApplicationBootstrap, BeforeApplic
   private state: AgentState = 'starting';
   private stopReason: string | null = null;
   private startCount = 0;
-  private lastResources: RuntimeResources | null = null;
-  private readonly alertSince = new Map<RuntimeAlertKey, string>();
   private timers: NodeJS.Timeout[] = [];
   private started = false;
   private registered = false;
@@ -59,8 +54,6 @@ export class RuntimeAgentService implements OnApplicationBootstrap, BeforeApplic
     @Inject(RUNTIME_IDENTITY) public readonly identity: RuntimeIdentity,
     private readonly redis: RedisService,
     private readonly config: CoreConfigService,
-    private readonly sampler: ResourceSampler,
-    private readonly recorder: MetricRecorder,
   ) {
     this.keys = runtimeKeys(redis);
   }
@@ -93,16 +86,14 @@ export class RuntimeAgentService implements OnApplicationBootstrap, BeforeApplic
     if (this.identity.kind !== 'long-running' || this.started) return;
     this.started = true;
     this.state = 'running';
-    this.sampler.start();
     await this.subscribeCommands();
 
     // Redis có thể chưa sẵn sàng lúc boot; khi đó việc đăng ký được làm lại ở heartbeat kế tiếp.
     if (await this.redis.waitUntilReady(REDIS_BOOT_WAIT_MS)) await this.register();
 
-    const { heartbeatMs, sampleIntervalMs } = this.config.runtime;
+    const { heartbeatMs } = this.config.runtime;
     await this.beat();
     this.timers.push(setInterval(() => void this.beat(), heartbeatMs));
-    this.timers.push(setInterval(() => void this.storeSample(), sampleIntervalMs));
     for (const timer of this.timers) timer.unref();
   }
 
@@ -129,23 +120,24 @@ export class RuntimeAgentService implements OnApplicationBootstrap, BeforeApplic
     });
   }
 
-  public async beforeApplicationShutdown(signal?: string): Promise<void> {
-    if (!this.started) return;
-    this.started = false;
-    this.state = 'stopping';
-    this.timers.forEach(clearInterval);
+  public async beforeApplicationShutdown(): Promise<void> {
+    for (const timer of this.timers) clearInterval(timer);
     this.timers = [];
-    this.sampler.stop();
-
+    if (!this.started) return;
+    this.state = 'stopping';
     await this.recordEvent('stopped', {
-      reason: this.stopReason ?? (signal ? 'signal' : 'shutdown'),
-      signal: signal ?? null,
-      exitCode: this.stopReason === 'force_restart' ? 1 : 0,
+      reason: this.stopReason ?? 'graceful_shutdown',
+      uptimeSec: Math.round(process.uptime()),
     });
     await this.safe(() => this.redis.client.del(this.keys.heartbeat(this.identity.id)));
+    this.started = false;
   }
 
+  /**
+   * Đăng ký nhận lệnh điều khiển (restart, pause, resume) gửi qua pub/sub Redis.
+   */
   private async subscribeCommands(): Promise<void> {
+    if (!this.redis.isReady()) return;
     const channel = this.keys.commandChannel(this.identity.id);
     const subscriber = this.redis.createSubscriber();
     subscriber.on('message', (ch: string, raw: string) => {
@@ -196,7 +188,6 @@ export class RuntimeAgentService implements OnApplicationBootstrap, BeforeApplic
           break;
         case 'restart':
           await reply('accepted');
-          // Process sẽ thoát; không gửi heartbeat nữa.
           await this.restart(command);
           return;
       }
@@ -254,48 +245,43 @@ export class RuntimeAgentService implements OnApplicationBootstrap, BeforeApplic
     );
   }
 
-  private async storeSample(): Promise<void> {
-    const r = this.lastResources;
-    if (!r) return;
-    const sample: RuntimeSample = {
-      t: Date.now(),
-      cpu: r.cpuPercent,
-      mem: r.rssMb,
-      heap: r.heapUsedMb,
-      elp99: r.eventLoopP99Ms,
-      starts: this.startCount,
+  private buildResources(): RuntimeResources {
+    const mem = process.memoryUsage();
+    return {
+      cpuPercent: 0,
+      rssMb: Math.round((mem.rss / 1024 / 1024) * 10) / 10,
+      heapUsedMb: Math.round((mem.heapUsed / 1024 / 1024) * 10) / 10,
+      heapTotalMb: Math.round((mem.heapTotal / 1024 / 1024) * 10) / 10,
+      externalMb: Math.round((mem.external / 1024 / 1024) * 10) / 10,
+      memoryLimitMb: null,
+      memoryLimitSource: 'v8-heap',
+      memoryPercent: null,
+      eventLoopMeanMs: 0,
+      eventLoopP99Ms: 0,
+      gcPauseMs: 0,
+      gcCount: 0,
+      gcMaxPauseMs: 0,
+      activeHandles:
+        (process as unknown as { _getActiveHandles?: () => unknown[] })._getActiveHandles?.()
+          ?.length ?? 0,
     };
-    const key = this.keys.samples(this.identity.id);
-    await this.safe(() =>
-      this.redis.client
-        .multi()
-        .lpush(key, JSON.stringify(sample))
-        .ltrim(key, 0, this.config.runtime.sampleRetention - 1)
-        .exec(),
-    );
   }
 
-  /** Số đo tài nguyên cho trang Performance (bucket 10s/1m/1h theo instance). */
-  private recordResources(r: RuntimeResources): void {
-    const m = (name: string) => `rt.${name}`;
-    this.recorder.gauge(m('cpu'), r.cpuPercent);
-    this.recorder.gauge(m('rss'), r.rssMb);
-    this.recorder.gauge(m('heapUsed'), r.heapUsedMb);
-    this.recorder.gauge(m('heapTotal'), r.heapTotalMb);
-    this.recorder.gauge(m('external'), r.externalMb);
-    if (r.memoryPercent !== null) this.recorder.gauge(m('memPct'), r.memoryPercent);
-    if (r.memoryLimitMb !== null) this.recorder.gauge(m('memLimit'), r.memoryLimitMb);
-    this.recorder.gauge(m('elMean'), r.eventLoopMeanMs);
-    this.recorder.gauge(m('elP99'), r.eventLoopP99Ms);
-    this.recorder.count(m('gcCount'), r.gcCount);
-    this.recorder.count(m('gcPause'), r.gcPauseMs);
-    if (r.gcCount > 0) this.recorder.gauge(m('gcMaxPause'), r.gcMaxPauseMs);
+  private buildProcessInfo(): RuntimeProcessInfo {
+    return {
+      pid: process.pid,
+      ppid: process.ppid,
+      user: os.userInfo?.().username ?? 'node',
+      hostname: os.hostname(),
+      platform: process.platform,
+      arch: process.arch,
+      nodeVersion: process.version,
+      execArgv: process.execArgv,
+    };
   }
 
   private async buildHeartbeat(): Promise<RuntimeHeartbeat> {
-    const resources = this.sampler.sample();
-    this.lastResources = resources;
-    this.recordResources(resources);
+    const resources = this.buildResources();
     const [metrics, issues, details] = await Promise.all([
       this.contributor?.collectMetrics().catch(() => ({})) ??
         Promise.resolve({} as Record<string, MetricValue>),
@@ -303,6 +289,8 @@ export class RuntimeAgentService implements OnApplicationBootstrap, BeforeApplic
       this.contributor?.collectDetails?.().catch(() => ({})) ??
         Promise.resolve({} as Record<string, unknown>),
     ]);
+
+    const alerts: RuntimeAlert[] = [];
 
     return {
       id: this.identity.id,
@@ -313,83 +301,55 @@ export class RuntimeAgentService implements OnApplicationBootstrap, BeforeApplic
       uptimeSec: Math.round(process.uptime()),
       supervisor: this.config.runtime.supervisor,
       environment: this.config.app.env,
-      process: this.sampler.processInfo(),
+      process: this.buildProcessInfo(),
       resources,
       metrics,
       details,
       issues,
-      alerts: await this.evaluateAlerts(resources),
+      alerts,
       descriptor: this.contributor?.describe() ?? {
-        type: 'cli',
+        type: 'http',
         framework: 'NestJS',
-        entrypoint: `apps/${this.identity.id}/main.ts`,
-        sourcePath: `backend/src/apps/${this.identity.id}/`,
+        entrypoint: 'unknown',
+        sourcePath: 'unknown',
       },
       capabilities: {
-        pause: Boolean(this.contributor?.pause),
-        restart: this.config.runtime.supervisor !== 'none',
+        pause: typeof this.contributor?.pause === 'function',
+        restart: true,
       },
       startCount: this.startCount,
     };
   }
 
-  /** So ngưỡng cấu hình; phát sự kiện khi bắt đầu vượt / hồi phục, giữ lại thời điểm bắt đầu. */
-  private async evaluateAlerts(r: RuntimeResources): Promise<RuntimeAlert[]> {
-    const { thresholds } = this.config.runtime;
-    const checks: Array<{ key: RuntimeAlertKey; value: number | null; threshold: number }> = [
-      { key: 'memory', value: r.memoryPercent, threshold: thresholds.memoryPercent },
-      { key: 'cpu', value: r.cpuPercent, threshold: thresholds.cpuPercent },
-      { key: 'eventLoop', value: r.eventLoopP99Ms, threshold: thresholds.eventLoopMs },
-    ];
-
-    const alerts: RuntimeAlert[] = [];
-    for (const { key, value, threshold } of checks) {
-      const exceeded = value !== null && value > threshold;
-      const since = this.alertSince.get(key);
-      if (exceeded && value !== null) {
-        const start = since ?? new Date().toISOString();
-        if (!since) {
-          this.alertSince.set(key, start);
-          await this.recordEvent('threshold_exceeded', { metric: key, value, threshold });
-        }
-        alerts.push({ key, value, threshold, since: start });
-      } else if (since) {
-        this.alertSince.delete(key);
-        await this.recordEvent('threshold_recovered', {
-          metric: key,
-          value: value ?? 0,
-          threshold,
-        });
-      }
-    }
-    return alerts;
-  }
-
-  private async recordEvent(type: RuntimeEventType, data: RuntimeEventData = {}): Promise<void> {
-    await this.safe(() =>
-      this.redis.client.xadd(
+  /**
+   * Lưu sự kiện vòng đời vào Redis Stream (tối đa `eventRetention` bản ghi).
+   */
+  public async recordEvent(type: RuntimeEventType, data: RuntimeEventData = {}): Promise<void> {
+    await this.safe(async () => {
+      const payload = {
+        runtime: this.identity.id,
+        instance: this.instance,
+        type,
+        at: new Date().toISOString(),
+        data: JSON.stringify(data),
+      };
+      await this.redis.client.xadd(
         this.keys.events(),
         'MAXLEN',
         '~',
-        String(this.config.runtime.eventRetention),
+        this.config.runtime.eventRetention,
         '*',
-        'runtime',
-        this.identity.id,
-        'type',
-        type,
-        'at',
-        new Date().toISOString(),
-        'data',
-        JSON.stringify(data),
-      ),
-    );
+        ...Object.entries(payload).flat(),
+      );
+    });
   }
 
-  /** Lệnh Redis thất bại (mất kết nối) không được làm hỏng runtime. */
-  private async safe<T>(fn: () => Promise<T>): Promise<T | undefined> {
+  private async safe<T>(op: () => Promise<T>): Promise<T | undefined> {
     try {
-      return await fn();
-    } catch {
+      if (!this.redis.isReady()) return undefined;
+      return await op();
+    } catch (error) {
+      this.logger.warn(`Redis operation failed: ${error instanceof Error ? error.message : error}`);
       return undefined;
     }
   }

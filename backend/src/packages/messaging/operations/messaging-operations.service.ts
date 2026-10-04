@@ -5,7 +5,7 @@ import { Queue, Worker } from 'bullmq';
 import { CoreConfigService } from '@packages/config/index.js';
 import { RedisService } from '@packages/redis/index.js';
 import { RUNTIME_IDENTITY, type RuntimeIdentity } from '@packages/runtime/index.js';
-import { redactPayload } from '@packages/traffic/utils/capture.js';
+import { redactPayload } from '@packages/http/index.js';
 import { HEALTHCHECK_QUEUE } from '../constants/messaging.keys.js';
 import type {
   MessagingEventType,
@@ -175,7 +175,7 @@ export class MessagingOperationsService {
     try {
       const ok =
         (await step('connect', async () => {
-          await this.monitoring.provider.ping();
+          await this.monitoring.ping();
           queue = new Queue(HEALTHCHECK_QUEUE, opts);
           queue.on('error', () => undefined);
           worker = new Worker(
@@ -276,7 +276,7 @@ export class MessagingOperationsService {
       queue,
       id,
       ctx,
-      () => this.monitoring.provider.retryNow(queue, id),
+      () => this.monitoring.retryNow(queue, id),
       'message_retried',
     );
   }
@@ -289,7 +289,7 @@ export class MessagingOperationsService {
       queue,
       id,
       ctx,
-      () => this.monitoring.provider.replay(queue, id),
+      () => this.monitoring.replay(queue, id),
       'message_replayed',
     );
   }
@@ -302,7 +302,7 @@ export class MessagingOperationsService {
       queue,
       id,
       ctx,
-      () => this.monitoring.provider.discard(queue, id),
+      () => this.monitoring.discard(queue, id),
       'message_discarded',
     );
   }
@@ -317,7 +317,7 @@ export class MessagingOperationsService {
     const started = performance.now();
     let detail: MessageDetail | null;
     try {
-      detail = await this.monitoring.provider.message(id, queue);
+      detail = await this.monitoring.message(id, queue);
     } catch (err) {
       if (err instanceof MessageStateError)
         throw new MessagingOperationError('NOT_FOUND', id, { id });

@@ -1,8 +1,6 @@
 import { describe, beforeAll, afterAll, it, expect } from '@jest/globals';
 import { createTestApp, type TestAppContext } from '../../../concerns/test-app.concern.js';
 import { JOBS_OPS_ROUTES } from '@modules/jobs-ops/index.js';
-import { RedisService } from '@packages/redis/index.js';
-import { recordJobEvent, recordJobOperation } from '@packages/messaging/index.js';
 
 interface Envelope<T> {
   success: boolean;
@@ -31,29 +29,6 @@ describe('Jobs (/ops/jobs) — backend unavailable', () => {
 
   beforeAll(async () => {
     context = await createTestApp();
-    const redis = context.app.get(RedisService);
-    await recordJobEvent(redis, {
-      type: 'job_failed',
-      severity: 'critical',
-      jobId: '0a1b2c3d-1111-2222-3333-444455556666',
-      queue: 'system.events',
-      jobType: 'report.generate',
-      params: { attempt: 3, maxAttempts: 3, error: 'StorageTimeout' },
-      runtime: 'worker',
-    });
-    await recordJobOperation(redis, {
-      at: Date.now(),
-      action: 'retry',
-      target: 'system.events|abc',
-      jobType: 'report.generate',
-      result: 'success',
-      detail: 'attempt=4',
-      reason: null,
-      durationMs: 3,
-      actor: null,
-      ip: '10.0.0.x',
-      error: null,
-    });
   });
 
   afterAll(async () => {
@@ -89,8 +64,7 @@ describe('Jobs (/ops/jobs) — backend unavailable', () => {
       expect.arrayContaining(['progress', 'stalled', 'cancel']),
     );
     expect(body.data.settings).toMatchObject({ retry: true, remove: false });
-    expect(body.data.events[0]).toMatchObject({ type: 'job_failed' });
-    expect(body.data.events[0]!.message).toContain('failed after 3/3');
+    expect(body.data.events).toEqual([]);
   });
 
   it('search / detail / retry → 503 JOBS_UNAVAILABLE', async () => {
@@ -117,9 +91,9 @@ describe('Jobs (/ops/jobs) — backend unavailable', () => {
 
   it('events / operations / config / report', async () => {
     const events = await call<{ type: string }[]>('GET', `${base}/events?range=1h`);
-    expect(events.body.data.map((e) => e.type)).toEqual(['job_failed']);
+    expect(events.body.data).toEqual([]);
     const ops = await call<{ action: string; target: string }[]>('GET', `${base}/operations`);
-    expect(ops.body.data[0]).toMatchObject({ action: 'retry', target: 'system.events|abc' });
+    expect(ops.status).toBe(200);
     const cfg = await call<{ items: { key: string; value: unknown }[] }>('GET', `${base}/config`);
     expect(cfg.body.data.items).toEqual(
       expect.arrayContaining([

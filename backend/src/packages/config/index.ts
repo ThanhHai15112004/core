@@ -12,5 +12,7 @@ export * from './logs.config.js';
 export * from './runtime.config.js';
 export * from './traffic.config.js';
 export * from './performance.config.js';
+export * from './metrics.config.js';
 export * from './config.service.js';
+export * from './config-inspector.service.js';
 export * from './config.module.js';

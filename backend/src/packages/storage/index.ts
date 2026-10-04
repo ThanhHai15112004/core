@@ -6,7 +6,6 @@ export * from './drivers/local-storage.driver.js';
 export * from './drivers/s3-storage.driver.js';
 export * from './utils/object-kind.js';
 export * from './utils/storage-errors.js';
-export * from './utils/storage-events.js';
 export * from './monitoring/monitoring.types.js';
 export * from './monitoring/usage.js';
 export * from './monitoring/local-monitoring.provider.js';

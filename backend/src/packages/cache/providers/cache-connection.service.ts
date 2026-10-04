@@ -11,7 +11,6 @@ import type {
   CacheConnectionState,
   CacheConnectionStatus,
 } from '../contracts/cache-events.types.js';
-import { recordCacheEvent } from '../utils/cache-events.js';
 import { BaseCacheProvider } from './cache.provider.js';
 
 /**
@@ -69,26 +68,7 @@ export class CacheConnectionService implements OnApplicationBootstrap, OnModuleD
     const now = Date.now();
     this.set('connected');
     this.lastSuccessAt = now;
-    if (this.lostAt === null) return;
-    const lostAt = this.lostAt;
     this.lostAt = null;
-    // Lúc mất kết nối không ghi được vào Redis → ghi cả hai sự kiện khi đã khôi phục.
-    if (this.identity?.id !== 'api') return;
-    void recordCacheEvent(this.redis, {
-      type: 'connection_lost',
-      severity: 'critical',
-      params: { error: this.redis?.getLastError() ?? '' },
-      runtime: this.identity.id,
-      at: lostAt,
-    }).then(() =>
-      recordCacheEvent(this.redis, {
-        type: 'connection_recovered',
-        severity: 'success',
-        params: { seconds: Math.max(1, Math.round((now - lostAt) / 1000)) },
-        runtime: this.identity?.id ?? null,
-        at: now,
-      }),
-    );
   }
 
   private onLost(): void {

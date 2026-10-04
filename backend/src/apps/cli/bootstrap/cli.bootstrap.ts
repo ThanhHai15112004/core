@@ -1,6 +1,6 @@
 import { NestFactory } from '@nestjs/core';
 import { Logger } from '@nestjs/common';
-import { CoreLoggerService } from '@packages/logging/index.js';
+import { PinoNestLogger } from '@packages/logging/index.js';
 import { RedisService } from '@packages/redis/index.js';
 import { CliHistoryService } from '@packages/runtime/index.js';
 import { CliModule } from '../cli.module.js';
@@ -11,7 +11,7 @@ const REDIS_READY_TIMEOUT_MS = 3000;
 export async function bootstrapCli(args: string[] = process.argv.slice(2)): Promise<void> {
   const logger = new Logger('CliBootstrap');
   const app = await NestFactory.createApplicationContext(CliModule, { bufferLogs: true });
-  app.useLogger(app.get(CoreLoggerService));
+  app.useLogger(app.get(PinoNestLogger));
 
   const command = app.get(SystemCommand);
   const history = app.get(CliHistoryService);

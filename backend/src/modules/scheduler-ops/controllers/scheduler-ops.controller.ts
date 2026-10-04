@@ -1,20 +1,15 @@
 import { Controller, Get, HttpCode, HttpStatus, Param, Post, Query, Req } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import { Public } from '@packages/http/index.js';
-import { maskIp } from '@packages/traffic/utils/capture.js';
+import { Public, maskIp } from '@packages/http/index.js';
 import {
   EXECUTION_STATUSES,
   EXECUTION_TRIGGERS,
   type ExecutionStatus,
   type ExecutionTrigger,
-} from '@packages/scheduler/index.js';
+} from '../contracts/scheduler.types.js';
 import { SCHEDULER_OPS_ROUTES as R } from '../routes/scheduler-ops.routes.js';
-import {
-  SCHEDULER_METRICS,
-  SCHEDULER_RANGES,
-  SchedulerOpsService,
-} from '../services/scheduler-ops.service.js';
+import { SCHEDULER_RANGES, SchedulerOpsService } from '../services/scheduler-ops.service.js';
 import type { SchedulerOperationContext } from '../services/scheduler-operations.service.js';
 import { SchedulerValidationException } from '../exceptions/scheduler-ops.exceptions.js';
 import type { SchedulerMetric, SchedulerRange } from '../responses/scheduler-ops.response.js';
@@ -40,7 +35,10 @@ const rangeSchema = z.object({ range: range('24h') });
 const metricsSchema = z.object({
   range: range('24h'),
   metric: z
-    .enum(SCHEDULER_METRICS as [SchedulerMetric, ...SchedulerMetric[]])
+    .enum(['executions', 'duration', 'failures', 'missed'] as [
+      SchedulerMetric,
+      ...SchedulerMetric[],
+    ])
     .default('executions'),
   task: idSchema.optional(),
 });

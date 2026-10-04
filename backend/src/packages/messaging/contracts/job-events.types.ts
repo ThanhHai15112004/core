@@ -41,21 +41,3 @@ export interface JobOperationRecord {
   ip: string | null;
   error: string | null;
 }
-
-/** Lệnh gửi worker qua pub/sub. */
-export interface JobCommand {
-  id: string;
-  action: 'cancel';
-  queue: string;
-  jobId: string;
-  reason: string;
-  requestedAt: number;
-}
-
-export interface JobCommandResult {
-  id: string;
-  /** `accepted`: worker đang xử lý job đã nhận yêu cầu huỷ. */
-  status: 'accepted';
-  instance: string;
-  at: number;
-}

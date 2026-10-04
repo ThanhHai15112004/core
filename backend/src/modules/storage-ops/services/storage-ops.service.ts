@@ -24,7 +24,7 @@ import {
   type UsagePoint,
   type UsageSnapshot,
 } from '@packages/storage/index.js';
-import { TELEMETRY_TIERS, type MetricBucket } from '@packages/telemetry/index.js';
+import { TELEMETRY_TIERS, type MetricBucket } from '@modules/system-ops/telemetry-compat.js';
 import {
   changePercent,
   counterOf,
@@ -34,7 +34,7 @@ import {
   round,
 } from '@modules/performance/index.js';
 import { TrafficStoreService, statsOf, totalOf } from '@modules/traffic/index.js';
-import { redactPayload } from '@packages/traffic/utils/capture.js';
+import { redactPayload } from '@packages/http/index.js';
 import {
   STORAGE_OPS,
   StorageMetricsService,

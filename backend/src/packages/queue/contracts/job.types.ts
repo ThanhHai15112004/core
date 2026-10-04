@@ -144,14 +144,6 @@ export interface JobDetailRaw {
   malformed: boolean;
 }
 
-/** Bản ghi job bị huỷ khi còn chờ (BullMQ đã xoá job). */
-export interface CancelledJobRecord {
-  record: JobRecord;
-  cancelledAt: number;
-  actor: string | null;
-  reason: string | null;
-}
-
 export interface JobProvider {
   readonly capabilities: ReadonlySet<JobCapability>;
   queues(): string[];

@@ -7,7 +7,6 @@ export * from './drivers/memory-cache.driver.js';
 export * from './drivers/redis-cache.driver.js';
 export * from './utils/namespace.js';
 export * from './utils/cache-errors.js';
-export * from './utils/cache-events.js';
 export * from './monitoring/monitoring.types.js';
 export * from './monitoring/keyspace.js';
 export * from './monitoring/redis-info.js';

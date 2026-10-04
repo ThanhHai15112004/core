@@ -18,7 +18,7 @@ import {
   type DbTable,
   type DbTransaction,
 } from '@packages/database/index.js';
-import { MetricRecorder } from '@packages/telemetry/index.js';
+import { MetricRecorder } from '@modules/system-ops/telemetry-compat.js';
 import { gaugeWindow } from '@modules/performance/index.js';
 import { DatabaseMetricsService } from './database-metrics.service.js';
 import { DatabaseStoreService, type StorageSnapshot } from './database-store.service.js';

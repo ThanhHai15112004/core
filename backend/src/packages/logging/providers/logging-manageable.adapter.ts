@@ -9,7 +9,7 @@ import {
   CorePackageId,
 } from '@packages/kernel/index.js';
 import { CoreI18nService } from '@packages/i18n/index.js';
-import { CoreLoggerService } from './logger.service.js';
+import { LogLevelService } from './log-level.service.js';
 import { LogLevel, LoggingAction } from '../constants/logging.constant.js';
 
 /** Mỗi action đổi log level: action id → level + prefix key i18n. */
@@ -28,7 +28,7 @@ export class LoggingManageableAdapter implements ManageablePackage {
   public readonly icon = 'scroll-text';
 
   constructor(
-    private readonly loggerService: CoreLoggerService,
+    private readonly levels: LogLevelService,
     private readonly i18n: CoreI18nService,
   ) {}
 
@@ -37,7 +37,7 @@ export class LoggingManageableAdapter implements ManageablePackage {
   }
 
   public async getStatus(): Promise<PackageStatusReport> {
-    const currentLevel = this.loggerService.getLogLevel();
+    const currentLevel = this.levels.current();
 
     return {
       status: PackageStatus.HEALTHY,
@@ -45,7 +45,7 @@ export class LoggingManageableAdapter implements ManageablePackage {
       metrics: {
         currentLevel,
         redaction: 'enabled',
-        transport: 'console/json',
+        transport: 'pino → stdout + redis-stream',
       },
     };
   }
@@ -68,7 +68,7 @@ export class LoggingManageableAdapter implements ManageablePackage {
     }
 
     const { level } = LEVEL_ACTIONS[actionId as LevelActionId];
-    this.loggerService.setLogLevel(level);
+    this.levels.setBaseLevel(level);
     return {
       success: true,
       message: this.i18n.t('ops.logging.setLevel.success', { level }),

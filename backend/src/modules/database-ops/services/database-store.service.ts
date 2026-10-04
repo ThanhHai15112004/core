@@ -6,7 +6,7 @@ import {
   type DbErrorRecord,
   type DbEventRecord,
 } from '@packages/database/index.js';
-import { telemetryKeys, type SlowQueryRecord } from '@packages/telemetry/index.js';
+import { telemetryKeys, type SlowQueryRecord } from '@modules/system-ops/telemetry-compat.js';
 import type { StoredAlert } from './database-rules.js';
 
 export interface StorageSnapshot {

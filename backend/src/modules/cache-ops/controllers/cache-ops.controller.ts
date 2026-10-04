@@ -12,8 +12,7 @@ import {
 } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import { Public } from '@packages/http/index.js';
-import { maskIp } from '@packages/traffic/utils/capture.js';
+import { Public, maskIp } from '@packages/http/index.js';
 import type { OperationContext } from '@packages/cache/index.js';
 import { CACHE_OPS_ROUTES as R } from '../routes/cache-ops.routes.js';
 import { CACHE_METRICS, CACHE_RANGES, CacheOpsService } from '../services/cache-ops.service.js';

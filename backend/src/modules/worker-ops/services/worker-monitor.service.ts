@@ -21,7 +21,7 @@ import {
   type JobSummary,
   type QueueInfo,
 } from '@packages/queue/index.js';
-import { MetricRecorder } from '@packages/telemetry/index.js';
+import { MetricRecorder } from '@modules/system-ops/telemetry-compat.js';
 import { counterOf } from '@modules/performance/index.js';
 import { WorkerMetricsService } from './worker-metrics.service.js';
 import { WorkerStoreService } from './worker-store.service.js';

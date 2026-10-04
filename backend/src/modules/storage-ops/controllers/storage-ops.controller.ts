@@ -13,8 +13,7 @@ import {
 } from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import { Public } from '@packages/http/index.js';
-import { maskIp } from '@packages/traffic/utils/capture.js';
+import { Public, maskIp } from '@packages/http/index.js';
 import {
   OBJECT_KINDS,
   type ObjectFilter,

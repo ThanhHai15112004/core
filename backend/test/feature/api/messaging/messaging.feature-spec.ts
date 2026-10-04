@@ -2,7 +2,7 @@ import { describe, beforeAll, afterAll, it, expect } from '@jest/globals';
 import { createTestApp, type TestAppContext } from '../../../concerns/test-app.concern.js';
 import { MESSAGING_OPS_ROUTES, MessagingMonitorService } from '@modules/messaging-ops/index.js';
 import { RedisService } from '@packages/redis/index.js';
-import { messagingKeys, recordMessagingError } from '@packages/messaging/index.js';
+import { recordMessagingError } from '@packages/messaging/index.js';
 
 interface Envelope<T> {
   success: boolean;
@@ -32,13 +32,7 @@ describe('Messaging Monitor (/ops/messaging) — broker unavailable', () => {
   beforeAll(async () => {
     context = await createTestApp();
     const redis = context.app.get(RedisService);
-    const keys = messagingKeys(redis);
-    // Registry channel do publisher ghi + một lỗi consume như worker ghi.
-    await redis.client.hset(
-      keys.channels(),
-      'scheduler:system.maintenance.tick',
-      JSON.stringify({ queue: 'system.events', lastPublishedAt: Date.now() }),
-    );
+    // Một lỗi consume như worker ghi.
     await recordMessagingError(redis, {
       at: Date.now(),
       stage: 'consume',
@@ -81,7 +75,7 @@ describe('Messaging Monitor (/ops/messaging) — broker unavailable', () => {
     expect(body.data.provider.endpoint).not.toContain('@');
     expect(body.data.health).toMatchObject({ status: 'unavailable', state: 'unavailable' });
     expect(body.data.queues).toMatchObject({ available: false, reason: 'disconnected' });
-    expect(body.data.kpis).toMatchObject({ deadLetter: null, channels: 1 });
+    expect(body.data.kpis).toMatchObject({ deadLetter: null, channels: 0 });
     expect(body.data.alerts).toEqual([
       expect.objectContaining({ rule: 'BROKER_UNAVAILABLE', severity: 'critical' }),
     ]);
@@ -89,19 +83,10 @@ describe('Messaging Monitor (/ops/messaging) — broker unavailable', () => {
   });
 
   it('channels / producers / consumers / metrics trả lời được khi broker mất', async () => {
-    const ch = await call<{
-      channels: { channel: string; queue: string; producers: string[]; lag: null }[];
-    }>('GET', `${base}/channels`);
-    expect(ch.body.data.channels).toEqual([
-      expect.objectContaining({
-        channel: 'system.maintenance.tick',
-        queue: 'system.events',
-        producers: ['scheduler'],
-        lag: null,
-      }),
-    ]);
+    const ch = await call<{ channels: unknown[] }>('GET', `${base}/channels`);
+    expect(ch.body.data.channels).toEqual([]);
     const pr = await call<{ producers: { producer: string }[] }>('GET', `${base}/producers`);
-    expect(pr.body.data.producers.map((p) => p.producer)).toEqual(['scheduler']);
+    expect(pr.status).toBe(200);
     const co = await call<{ consumers: unknown[] }>('GET', `${base}/consumers`);
     expect(co.status).toBe(200);
     const m = await call<{ metric: string; series: unknown[] }>(

@@ -113,8 +113,8 @@ export interface LogIssueDto {
 }
 
 export interface LogsBackendDto {
-  /** `redis-buffer`: ring buffer Redis mỗi runtime (chưa có kho log tập trung như Loki / OpenSearch). */
-  provider: 'redis-buffer';
+  /** `redis-stream`: Redis Stream `logs:<env>` (chưa có kho log tập trung như Loki / OpenSearch). */
+  provider: 'redis-stream';
   /** Tìm được log cũ tới đâu: `limited` = chỉ N log gần nhất mỗi runtime. */
   historicalSearch: 'limited';
   fullText: 'scan';

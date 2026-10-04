@@ -9,11 +9,12 @@ import {
 } from '@modules/traffic/index.js';
 import { PerformanceService, type BottleneckDto } from '@modules/performance/index.js';
 import { DatabaseConnectionService } from '@packages/database/index.js';
-import { HttpMetricsService, type HttpMetricsSnapshot } from '@packages/logging/index.js';
+import { HttpMetricsReader, type HttpMetricsSnapshot } from '@packages/metrics/index.js';
 import { CorePackageId, PackageStatus } from '@packages/kernel/index.js';
 import { PackageRegistryService, type PackageSummaryDto } from './package-registry.service.js';
 import { OpsEventService } from './ops-event.service.js';
 import { RuntimesService, type RuntimeSummaryDto } from '@modules/runtimes/index.js';
+import { HealthService } from '@modules/health/index.js';
 import type {
   AffectedComponentDto,
   SystemOverviewResponseDto,
@@ -99,18 +100,19 @@ export class SystemOverviewService {
   constructor(
     private readonly configService: CoreConfigService,
     private readonly registryService: PackageRegistryService,
-    private readonly httpMetrics: HttpMetricsService,
+    private readonly httpMetrics: HttpMetricsReader,
     private readonly i18n: CoreI18nService,
     private readonly events: OpsEventService,
     private readonly runtimes: RuntimesService,
     private readonly traffic: TrafficService,
     private readonly performance: PerformanceService,
     private readonly dbConnection: DatabaseConnectionService,
+    private readonly healthService: HealthService,
   ) {}
 
   public async getOverview(): Promise<SystemOverviewResponseDto> {
     const trafficQuery = { range: '15m', includeInternal: true } as const;
-    const [packages, dbPingMs, runtimeList, trafficProblems, trafficSummary, bottlenecks] =
+    const [packages, dbPingMs, runtimeList, trafficProblems, trafficSummary, bottlenecks, http, health] =
       await Promise.all([
         this.registryService.getAllSummaries(),
         this.pingDatabase(),
@@ -121,11 +123,13 @@ export class SystemOverviewService {
           .catch(() => [] as TrafficProblemDto[]),
         this.traffic.getSummary(trafficQuery).catch(() => null),
         this.performance.getBottlenecks().catch(() => null),
+        this.httpMetrics.snapshot(),
+        this.healthService.check().catch(() => null),
       ]);
     const runtimes = new Map(runtimeList.map((r) => [r.id, r]));
     const ctx: OverviewContext = {
       runtime: this.readRuntime(),
-      http: this.httpMetrics.snapshot(),
+      http,
       packages,
       runtimes,
       problems: this.collectProblems(packages, runtimes, trafficProblems, bottlenecks ?? []),

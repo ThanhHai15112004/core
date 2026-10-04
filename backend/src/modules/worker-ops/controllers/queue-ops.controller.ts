@@ -11,8 +11,7 @@ import {
 } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import { Public } from '@packages/http/index.js';
-import { maskIp } from '@packages/traffic/utils/capture.js';
+import { Public, maskIp } from '@packages/http/index.js';
 import { JOB_STATES, type JobState, type QueueOperationContext } from '@packages/queue/index.js';
 import { QUEUE_OPS_ROUTES as R } from '../routes/worker-ops.routes.js';
 import { WorkerOpsService } from '../services/worker-ops.service.js';

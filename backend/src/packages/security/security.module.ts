@@ -9,6 +9,8 @@ import { SecurityManageableAdapter } from './providers/security-manageable.adapt
 
 import { SecretDriver } from './types/secret.types.js';
 
+import { SecretRegistryService } from './providers/secret-registry.service.js';
+
 @Global()
 @Module({
   providers: [
@@ -26,6 +28,7 @@ import { SecretDriver } from './types/secret.types.js';
       inject: [EnvironmentSecretProvider, FileSecretProvider],
     },
     SecretService,
+    SecretRegistryService,
     TokenService,
     AuthGuard,
     SecurityManageableAdapter,
@@ -35,6 +38,7 @@ import { SecretDriver } from './types/secret.types.js';
     EnvironmentSecretProvider,
     FileSecretProvider,
     SecretService,
+    SecretRegistryService,
     TokenService,
     AuthGuard,
     SecurityManageableAdapter,

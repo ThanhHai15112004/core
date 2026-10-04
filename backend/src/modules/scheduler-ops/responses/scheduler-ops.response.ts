@@ -9,7 +9,7 @@ import type {
   SchedulerEventType,
   SchedulerOperationAction,
   SchedulerTaskType,
-} from '@packages/scheduler/index.js';
+} from '../contracts/scheduler.types.js';
 
 export type SchedulerRange = '1h' | '6h' | '24h' | '7d';
 export type SchedulerMetric = 'executions' | 'duration' | 'failures' | 'missed';

@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, jest } from '@jest/globals';
+import type { DiscoveryService } from '@nestjs/core';
 import { PackageRegistryService } from '@modules/system-ops/services/package-registry.service.js';
 import {
   type ManageablePackage,
@@ -115,16 +116,18 @@ describe('PackageRegistryService Unit Tests', () => {
     } as unknown as jest.Mocked<MessagingManageableAdapter>;
 
     const i18n = new CoreI18nService();
-    service = new PackageRegistryService(
+    const adapters = [
       mockCacheAdapter,
       mockLoggingAdapter,
       mockDatabaseAdapter,
       mockSecurityAdapter,
       mockStorageAdapter,
       mockMessagingAdapter,
-      i18n,
-      new OpsEventService(i18n),
-    );
+    ];
+    const discovery = {
+      getProviders: () => [...adapters, { notAPackage: true }].map((instance) => ({ instance })),
+    } as unknown as DiscoveryService;
+    service = new PackageRegistryService(discovery, i18n, new OpsEventService(i18n));
     service.onModuleInit();
   });
 

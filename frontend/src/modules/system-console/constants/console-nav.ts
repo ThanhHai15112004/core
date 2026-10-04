@@ -53,8 +53,8 @@ export const NAV_TREE: NavGroup[] = [
     children: [
       { id: 'logs', status: 'ready' },
       { id: 'security', status: 'ready' },
-      { id: 'secrets', status: 'planned' },
-      { id: 'configuration', status: 'planned' },
+      { id: 'secrets', status: 'ready' },
+      { id: 'configuration', status: 'ready' },
       { id: 'packages', status: 'ready' },
     ],
   },

@@ -21,4 +21,8 @@ export enum CorePackageId {
   DATABASE = 'database',
   STORAGE = 'storage',
   SECURITY = 'security',
+  METRICS = 'metrics',
+  QUEUE = 'queue',
+  RUNTIME = 'runtime',
+  REDIS = 'redis',
 }

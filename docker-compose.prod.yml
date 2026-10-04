@@ -43,6 +43,7 @@ services:
     environment:
       - NODE_ENV=production
       - RUNTIME_SUPERVISOR=docker
+      - PROMETHEUS_URL=http://prometheus:9090
     env_file:
       - .env.docker.prod
     mem_limit: 512m
@@ -68,6 +69,7 @@ services:
     environment:
       - NODE_ENV=production
       - RUNTIME_SUPERVISOR=docker
+      - METRICS_PORT=9101
     env_file:
       - .env.docker.prod
     mem_limit: 512m
@@ -90,6 +92,7 @@ services:
     environment:
       - NODE_ENV=production
       - RUNTIME_SUPERVISOR=docker
+      - METRICS_PORT=9102
     env_file:
       - .env.docker.prod
     mem_limit: 256m
@@ -139,10 +142,35 @@ services:
     networks:
       - core_prod_net
 
+  # ==============================================================================
+  # 5. Prometheus (chỉ trong mạng nội bộ — không expose ra Internet)
+  # ==============================================================================
+  prometheus:
+    container_name: core-prometheus-prod
+    image: prom/prometheus:v3.5.0
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=7d
+    volumes:
+      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    mem_limit: 256m
+    restart: always
+    networks:
+      - core_prod_net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
+
 # ==============================================================================
 # Volumes & Networks
 # ==============================================================================
 volumes:
+  prometheus_data:
+    name: core_prod_prometheus_data
   frontend_dist:
     name: core_prod_frontend_dist
   certbot_www:

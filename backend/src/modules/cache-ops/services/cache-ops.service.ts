@@ -22,10 +22,10 @@ import {
   type ServerInfo,
   type ValueSample,
 } from '@packages/cache/index.js';
-import { TELEMETRY_TIERS, type MetricBucket } from '@packages/telemetry/index.js';
+import { TELEMETRY_TIERS, type MetricBucket } from '@modules/system-ops/telemetry-compat.js';
 import { changePercent, counterOf, gaugeOf, mergedOf, round } from '@modules/performance/index.js';
 import { TrafficStoreService, statsOf, totalOf } from '@modules/traffic/index.js';
-import { redactPayload } from '@packages/traffic/utils/capture.js';
+import { redactPayload } from '@packages/http/index.js';
 import {
   CacheMetricsService,
   hitRate,

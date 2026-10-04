@@ -21,7 +21,7 @@ export interface RequestContextStore {
   /** Job đang xử lý (worker) — log trong lúc xử lý mang `jobId` để lọc theo job. */
   jobId?: string;
   source?: RequestSource;
-  /** Thời gian request dành cho database/cache — do instrumentation cộng dồn (xem packages/telemetry). */
+  /** Thời gian request dành cho database/cache. */
   timings?: { dbMs: number; dbQueries: number; cacheMs: number; cacheOps: number };
   [key: string]: unknown;
 }
@@ -31,6 +31,11 @@ export class RequestContextService {
   private static readonly storage = new AsyncLocalStorage<RequestContextStore>();
 
   public run<R>(store: RequestContextStore, callback: () => R): R {
+    return RequestContextService.storage.run(store, callback);
+  }
+
+  /** Dùng ở nơi không inject được (middleware dạng hàm). */
+  public static runWith<R>(store: RequestContextStore, callback: () => R): R {
     return RequestContextService.storage.run(store, callback);
   }
 
