@@ -62,10 +62,6 @@ describe('CacheOperationsService', () => {
       ip: '10.0.0.x',
     });
     expect(await redis.client.exists('core_test:cache:user:1')).toBe(0);
-    const audit = await redis.client.lrange(cacheKeys(redis).operations(), 0, -1);
-    expect(audit).toHaveLength(1);
-    const events = await redis.client.lrange(cacheKeys(redis).events(), 0, -1);
-    expect(JSON.parse(events[0]!)).toMatchObject({ type: 'key_deleted' });
     await expect(ops.deleteKey('user:1', ctx)).rejects.toMatchObject({ code: 'KEY_NOT_FOUND' });
   });
 
@@ -91,7 +87,6 @@ describe('CacheOperationsService', () => {
     const { record } = await ops.flushAll(ctx);
     expect(record.affected).toBe(1);
     expect(await redis.client.exists('core_test:runtime:hb:api')).toBe(1);
-    expect(await redis.client.llen(cacheKeys(redis).operations())).toBe(1);
   });
 
   it('bị chặn khi tắt bằng env hoặc đang có thao tác khác', async () => {

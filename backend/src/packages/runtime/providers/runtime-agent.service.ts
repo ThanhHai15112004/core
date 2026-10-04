@@ -123,12 +123,14 @@ export class RuntimeAgentService implements OnApplicationBootstrap, BeforeApplic
   public async beforeApplicationShutdown(): Promise<void> {
     for (const timer of this.timers) clearInterval(timer);
     this.timers = [];
-    if (!this.started || this.state === 'stopping') return;
+    if (!this.started) return;
     this.state = 'stopping';
     await this.recordEvent('stopped', {
       reason: this.stopReason ?? 'graceful_shutdown',
       uptimeSec: Math.round(process.uptime()),
     });
+    await this.safe(() => this.redis.client.del(this.keys.heartbeat(this.identity.id)));
+    this.started = false;
   }
 
   /**

@@ -14,8 +14,7 @@ import { RedisService } from '@packages/redis/index.js';
 import { RUNTIME_IDENTITY, type RuntimeIdentity } from '@packages/runtime/index.js';
 import { databaseKeys } from '../constants/database.keys.js';
 import type { ConnectionState, ConnectionStatus } from '../contracts/database-events.types.js';
-import { errorCodeOf, sanitizeDbMessage } from '../instrumentation/error-classify.js';
-import { QueryInstrumentService } from '../instrumentation/query-instrument.service.js';
+import { errorCodeOf, sanitizeDbMessage } from '../utils/error-classify.js';
 import { recordDbEvent } from '../monitoring/db-events.js';
 
 const RETRY_MIN_MS = 1000;
@@ -45,7 +44,6 @@ export class DatabaseConnectionService implements OnApplicationBootstrap, OnAppl
   constructor(
     private readonly moduleRef: ModuleRef,
     private readonly config: CoreConfigService,
-    private readonly instrument: QueryInstrumentService,
     @Optional() private readonly redis?: RedisService,
     @Optional() @Inject(RUNTIME_IDENTITY) private readonly identity?: RuntimeIdentity,
   ) {
@@ -125,7 +123,7 @@ export class DatabaseConnectionService implements OnApplicationBootstrap, OnAppl
     }
     const startedAt = performance.now();
     try {
-      await this.instrument.untracked(() => ds.query('SELECT 1'));
+      await ds.query('SELECT 1');
       const latencyMs = Math.round((performance.now() - startedAt) * 10) / 10;
       return { ok: true, latencyMs, error: null };
     } catch (err) {

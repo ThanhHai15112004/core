@@ -7,7 +7,6 @@ import { CoreConfigService } from '@packages/config/index.js';
 import { RedisService } from '@packages/redis/index.js';
 import {
   DatabaseConnectionService,
-  QueryInstrumentService,
   databaseKeys,
   type DbEventRecord,
 } from '@packages/database/index.js';
@@ -57,8 +56,7 @@ describe('DatabaseConnectionService', () => {
 
   const create = (ds: DataSource) => {
     const moduleRef = { get: () => ds } as unknown as ModuleRef;
-    const instrument = new QueryInstrumentService(moduleRef, config, redis);
-    return new DatabaseConnectionService(moduleRef, config, instrument, redis);
+    return new DatabaseConnectionService(moduleRef, config, redis);
   };
   const advance = async (ms: number) => {
     await jest.advanceTimersByTimeAsync(ms);

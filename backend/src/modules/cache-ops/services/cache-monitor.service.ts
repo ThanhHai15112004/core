@@ -11,7 +11,6 @@ import {
   CacheConnectionService,
   CacheMonitoringService,
   namespaceMetric,
-  recordCacheEvent,
   type CacheClient,
   type KeyspaceSnapshot,
   type ServerInfo,
@@ -251,37 +250,5 @@ export class CacheMonitorService implements OnApplicationBootstrap, OnModuleDest
     for (const [id, state] of set) pipe.hset(key, id, JSON.stringify(state));
     if (recovered.length) pipe.hdel(key, ...recovered.map((r) => r.id));
     await pipe.exec();
-    for (const v of started) {
-      // Thông tin (key không TTL) không cần vào timeline sự kiện mỗi lần.
-      if (v.severity === 'info') continue;
-      await recordCacheEvent(this.redis, {
-        type: 'alert_started',
-        severity: v.severity,
-        params: {
-          rule: v.rule,
-          value: v.value,
-          threshold: v.threshold,
-          unit: v.unit,
-          namespace: v.namespace ?? '',
-          ...v.extra,
-        },
-        runtime: null,
-        at: now,
-      });
-    }
-    for (const r of recovered) {
-      if (r.alert.severity === 'info') continue;
-      await recordCacheEvent(this.redis, {
-        type: 'alert_recovered',
-        severity: 'success',
-        params: {
-          rule: r.alert.rule,
-          namespace: r.alert.namespace ?? '',
-          minutes: Math.max(1, Math.round(r.durationMs / 60_000)),
-        },
-        runtime: null,
-        at: now,
-      });
-    }
   }
 }

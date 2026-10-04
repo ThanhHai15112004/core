@@ -1,8 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { CoreConfigService } from '@packages/config/index.js';
 import { DatabaseConnectionService } from '../providers/database-connection.service.js';
-import { QueryInstrumentService } from '../instrumentation/query-instrument.service.js';
-import { sanitizeDbMessage } from '../instrumentation/error-classify.js';
+import { sanitizeDbMessage } from '../utils/error-classify.js';
 import { BasicMonitoringProvider } from './basic.provider.js';
 import { MysqlMonitoringProvider } from './mysql.provider.js';
 import { PostgresMonitoringProvider } from './postgres.provider.js';
@@ -30,7 +29,6 @@ export class DatabaseMonitoringService {
 
   constructor(
     private readonly connection: DatabaseConnectionService,
-    private readonly instrument: QueryInstrumentService,
     private readonly config: CoreConfigService,
   ) {}
 
@@ -49,21 +47,19 @@ export class DatabaseMonitoringService {
   public async withContext<T>(fn: (ctx: MonitoringContext) => Promise<T>): Promise<T> {
     const ds = this.connection.connected();
     if (!ds) throw new DatabaseUnavailableError(this.connection.getStatus().state);
-    return this.instrument.untracked(async () => {
-      const runner = ds.createQueryRunner();
-      try {
-        await runner.connect();
-        const ctx: MonitoringContext = {
-          run: (sql, params) => runner.query(sql, params) as Promise<never[]>,
-          database: this.config.database.database,
-          user: this.config.database.username,
-        };
-        await this.provider.prepare?.(ctx);
-        return await fn(ctx);
-      } finally {
-        await runner.release().catch(() => undefined);
-      }
-    });
+    const runner = ds.createQueryRunner();
+    try {
+      await runner.connect();
+      const ctx: MonitoringContext = {
+        run: (sql, params) => runner.query(sql, params) as Promise<never[]>,
+        database: this.config.database.database,
+        user: this.config.database.username,
+      };
+      await this.provider.prepare?.(ctx);
+      return await fn(ctx);
+    } finally {
+      await runner.release().catch(() => undefined);
+    }
   }
 
   /**

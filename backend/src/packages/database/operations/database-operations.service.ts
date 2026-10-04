@@ -3,7 +3,7 @@ import { CoreConfigService } from '@packages/config/index.js';
 import { RedisService } from '@packages/redis/index.js';
 import { databaseKeys } from '../constants/database.keys.js';
 import { DatabaseConnectionService } from '../providers/database-connection.service.js';
-import { sanitizeDbMessage } from '../instrumentation/error-classify.js';
+import { sanitizeDbMessage } from '../utils/error-classify.js';
 import {
   DatabaseMonitoringService,
   DatabaseUnavailableError,

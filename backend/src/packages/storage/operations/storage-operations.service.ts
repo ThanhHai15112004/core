@@ -17,7 +17,6 @@ import { StorageConnectionService } from '../providers/storage-connection.servic
 import { StorageMonitoringService } from '../monitoring/storage-monitoring.service.js';
 import type { ObjectDetail } from '../monitoring/monitoring.types.js';
 import { isTextual, isValidKey, kindOf } from '../utils/object-kind.js';
-import { recordStorageEvent, recordStorageOperation } from '../utils/storage-events.js';
 import { storageErrorCode } from '../utils/storage-errors.js';
 
 export type StorageOperationErrorCode =
@@ -109,13 +108,14 @@ export class StorageOperationsService {
     started: number,
     detail: string | null,
     error: string | null,
-    event?: {
+    _event?: {
       type: StorageEventType;
       severity: 'info' | 'warning';
       params: Record<string, string | number>;
     },
   ): Promise<StorageOperationRecord> {
-    const record = await recordStorageOperation(this.redis, {
+    const record: StorageOperationRecord = {
+      id: `sop_${randomBytes(6).toString('hex')}`,
       at: Date.now(),
       action,
       target,
@@ -125,9 +125,7 @@ export class StorageOperationsService {
       actor: ctx.actor,
       ip: ctx.ip,
       error,
-    });
-    if (!error && event)
-      await recordStorageEvent(this.redis, { ...event, runtime: this.identity?.id ?? null });
+    };
     return record;
   }
 

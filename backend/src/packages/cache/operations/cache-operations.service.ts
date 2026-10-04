@@ -1,4 +1,5 @@
 import { performance } from 'node:perf_hooks';
+import { randomBytes } from 'node:crypto';
 import { Inject, Injectable, Optional } from '@nestjs/common';
 import { CoreConfigService } from '@packages/config/index.js';
 import { RedisService } from '@packages/redis/index.js';
@@ -13,7 +14,6 @@ import { unlinkMatching } from '../drivers/redis-cache.driver.js';
 import { BaseCacheProvider } from '../providers/cache.provider.js';
 import { CacheConnectionService } from '../providers/cache-connection.service.js';
 import { CacheMonitoringService } from '../monitoring/cache-monitoring.service.js';
-import { recordCacheEvent, recordCacheOperation } from '../utils/cache-events.js';
 import { sanitizeCacheMessage } from '../utils/cache-errors.js';
 import { namespaceOf, namespacePattern } from '../utils/namespace.js';
 
@@ -168,21 +168,11 @@ export class CacheOperationsService {
       ip: ctx.ip,
       error,
     };
-    const record = this.redis?.isReady()
-      ? await recordCacheOperation(this.redis, base)
-      : { id: 'local', ...base };
+    const record: CacheOperationRecord = {
+      id: `cop_${randomBytes(6).toString('hex')}`,
+      ...base,
+    };
     if (!error) {
-      await recordCacheEvent(this.redis, {
-        type:
-          action === 'delete_key'
-            ? 'key_deleted'
-            : action === 'clear_namespace'
-              ? 'namespace_cleared'
-              : 'cache_flushed',
-        severity: action === 'flush_all' ? 'warning' : 'info',
-        params: { target, affected },
-        runtime: this.identity?.id ?? null,
-      });
       // Số liệu keyspace cập nhật ngay sau thao tác.
       await this.monitoring.refreshKeyspace().catch(() => undefined);
     }

@@ -1,4 +1,4 @@
-import { normalizeSql } from '../instrumentation/sql-normalize.js';
+import { normalizeSql } from '../utils/sql-normalize.js';
 import {
   runtimeOfProgram,
   toNumber,

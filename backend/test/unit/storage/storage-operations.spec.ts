@@ -71,7 +71,6 @@ describe('StorageOperationsService (local)', () => {
     expect(res.steps.map((s) => s.step)).toEqual(['connect', 'write', 'read', 'verify', 'delete']);
     expect(await fs.readdir(dir)).toEqual(['.core-healthcheck']);
     expect(await fs.readdir(path.join(dir, '.core-healthcheck'))).toEqual([]);
-    expect(await redis.client.llen(storageKeys(redis).operations())).toBe(1);
   });
 
   it('upload qua StorageContract được đo; xoá có audit + sự kiện; không tồn tại → NOT_FOUND', async () => {
@@ -81,8 +80,6 @@ describe('StorageOperationsService (local)', () => {
     const record = await ops.deleteObject('docs/a.txt', null, ctx);
     expect(record).toMatchObject({ action: 'delete_object', result: 'success', ip: '10.0.0.x' });
     expect(await storage.exists('docs/a.txt')).toBe(false);
-    const events = await redis.client.lrange(storageKeys(redis).events(), 0, -1);
-    expect(JSON.parse(events[0]!)).toMatchObject({ type: 'object_deleted' });
     await expect(ops.deleteObject('docs/a.txt', null, ctx)).rejects.toMatchObject({
       code: 'NOT_FOUND',
     });
