@@ -39,7 +39,6 @@ const CAPABILITIES: JobCapability[] = [
   'retry',
   'cancel',
   'remove',
-  'children',
 ];
 /** Điểm của zset `delayed` = thời điểm chạy × 0x1000 + bộ đếm (BullMQ). */
 const DELAY_SCORE_FACTOR = 0x1000;

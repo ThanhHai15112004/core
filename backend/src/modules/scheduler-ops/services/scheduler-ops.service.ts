@@ -843,7 +843,7 @@ export class SchedulerOpsService {
       return { items: r.jobs.map(blank), reason: this.i18n.t('scheduler.downstream.disconnected') };
     const items = await Promise.all(
       r.jobs.map(async (j) => {
-        const m = await this.messaging.provider.message(j.id, j.queue).catch(() => null);
+        const m = await this.messaging.message(j.id, j.queue).catch(() => null);
         return m
           ? {
               ...j,

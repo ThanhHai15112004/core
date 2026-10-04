@@ -1,23 +1,36 @@
-import { Injectable, Optional, type OnApplicationShutdown } from '@nestjs/common';
-import { Queue, type JobsOptions } from 'bullmq';
+import { Injectable, Optional, type OnModuleInit } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
+import { getQueueToken } from '@nestjs/bullmq';
+import type { JobsOptions, Queue } from 'bullmq';
 import type { Redis } from 'ioredis';
 import { CoreConfigService } from '@packages/config/index.js';
-import { RedisService } from '@packages/redis/index.js';
 import { QUEUES, type QueueName } from '../constants/queues.constant.js';
 
 /** Client Redis của BullMQ (backend Redis) — dùng cho PING và đọc zset `delayed`. */
 export const rawClient = (q: Queue): Promise<Redis> =>
   q.getBackend().client as unknown as Promise<Redis>;
 
-/** Giữ một BullMQ `Queue` cho mỗi queue khai báo trong `QUEUES` (tạo khi dùng lần đầu). */
+/**
+ * Tra cứu `Queue` đã đăng ký qua `BullModule.registerQueue` (vòng đời do `@nestjs/bullmq` quản lý) + option mặc
+ * định của message. Không tự tạo/đóng kết nối.
+ */
 @Injectable()
-export class QueueRegistry implements OnApplicationShutdown {
+export class QueueRegistry implements OnModuleInit {
   private readonly queues = new Map<QueueName, Queue>();
 
   constructor(
-    private readonly redis: RedisService,
+    private readonly moduleRef: ModuleRef,
     @Optional() private readonly config?: CoreConfigService,
   ) {}
+
+  public onModuleInit(): void {
+    for (const name of this.names()) {
+      const queue = this.moduleRef.get<Queue>(getQueueToken(name), { strict: false });
+      // Lỗi kết nối được báo qua `error` — không có listener thì Node coi là lỗi chưa xử lý.
+      queue.on('error', () => undefined);
+      this.queues.set(name, queue);
+    }
+  }
 
   public names(): QueueName[] {
     return Object.values(QUEUES);
@@ -28,15 +41,8 @@ export class QueueRegistry implements OnApplicationShutdown {
   }
 
   public get(name: QueueName): Queue {
-    let queue = this.queues.get(name);
-    if (!queue) {
-      queue = new Queue(name, {
-        connection: this.redis.bullConnection(),
-        prefix: this.redis.bullPrefix(),
-      });
-      queue.on('error', () => undefined);
-      this.queues.set(name, queue);
-    }
+    const queue = this.queues.get(name);
+    if (!queue) throw new Error(`Queue "${name}" is not registered`);
     return queue;
   }
 
@@ -69,9 +75,5 @@ export class QueueRegistry implements OnApplicationShutdown {
     } finally {
       clearTimeout(timer);
     }
-  }
-
-  public async onApplicationShutdown(): Promise<void> {
-    await Promise.allSettled([...this.queues.values()].map((q) => q.close()));
   }
 }

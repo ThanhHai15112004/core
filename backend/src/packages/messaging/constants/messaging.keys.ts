@@ -10,11 +10,6 @@ export const messagingKeys = (redis: RedisService) => ({
   operations: () => redis.key('msgmon', 'ops'),
   /** Hash ruleId → cảnh báo đang diễn ra. */
   activeAlerts: () => redis.key('msgmon', 'alerts'),
-  /** Hash channel → { queue, producers, lastPublishedAt } (publisher cập nhật có throttle). */
-  channels: () => redis.key('msgmon', 'channels'),
-  /** Consumer đang chạy của từng runtime (JSON, TTL). */
-  consumers: (instance: string) => redis.key('msgmon', 'consumers', instance),
-  consumersPattern: () => redis.key('msgmon', 'consumers', '*'),
   collectLock: () => redis.key('msgmon', 'lock', 'collect'),
 });
 

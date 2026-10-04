@@ -11,7 +11,6 @@ import { RedisModule } from '@packages/redis/index.js';
 import { RuntimeAgentModule } from '@packages/runtime/index.js';
 import { MetricsModule } from '@packages/metrics/index.js';
 import { SystemProcessor } from './processors/system/system.processor.js';
-import { QueueConsumerService } from './consumers/queue-consumer.service.js';
 import { WorkerRuntimeContributor } from './runtime/worker-runtime.contributor.js';
 
 @Module({
@@ -28,7 +27,7 @@ import { WorkerRuntimeContributor } from './runtime/worker-runtime.contributor.j
     CacheModule,
     StorageModule,
   ],
-  providers: [SystemProcessor, QueueConsumerService, WorkerRuntimeContributor],
+  providers: [SystemProcessor, WorkerRuntimeContributor],
   exports: [SystemProcessor],
 })
 export class WorkerModule {}

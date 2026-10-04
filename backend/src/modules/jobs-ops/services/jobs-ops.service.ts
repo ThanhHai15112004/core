@@ -15,7 +15,6 @@ import {
   JobOperationError,
   JobOperationsService,
   QueueMonitoringService,
-  cancellableConsumers,
   type JobDetailRaw,
   type JobOperationContext,
   type JobPriorityLevel,
@@ -68,7 +67,6 @@ const FAILED_SAMPLE = 200;
 const PRIORITY_SAMPLE = 200;
 const LOOKUP_LIMIT = 200;
 const OVERVIEW_EVENTS = 8;
-const CHILDREN_LIMIT = 50;
 const LOG_LIMIT = 50;
 const RESULT_MAX_BYTES = 4096;
 const PRIORITY_ORDER: JobPriorityLevel[] = ['critical', 'high', 'normal', 'low'];
@@ -217,30 +215,13 @@ export class JobsOpsService {
 
   // ─── Search ───────────────────────────────────────────────────────────────
 
+  /** Tra thẳng theo job ID (`getJob`); không còn chỉ mục phụ trong Redis — còn lại quét có giới hạn. */
   private async lookup(
     search: string,
     queue: string | null,
   ): Promise<{ jobs: JobRecord[]; matchedBy: SearchMatch } | null> {
-    const entity = /^([A-Za-z_][\w.-]{0,49})\s*=\s*(.+)$/.exec(search);
-    if (entity) {
-      const refs = await this.jobs.lookup(`e:${entity[1]}`, entity[2]!.trim(), LOOKUP_LIMIT);
-      return { jobs: await this.jobs.records(refs), matchedBy: 'entity' };
-    }
     const direct = await this.jobs.get(search, queue).catch(() => null);
-    if (direct) return { jobs: [direct], matchedBy: 'id' };
-    const indexes: [string, SearchMatch][] = [
-      ['corr', 'correlation'],
-      ['req', 'request'],
-      ['idem', 'idempotency'],
-      ['exec', 'execution'],
-    ];
-    for (const [field, matchedBy] of indexes) {
-      const refs = await this.jobs.lookup(field, search, LOOKUP_LIMIT);
-      if (refs.length) return { jobs: await this.jobs.records(refs), matchedBy };
-    }
-    const children = await this.jobs.children(search, LOOKUP_LIMIT);
-    if (children.length) return { jobs: await this.jobs.records(children), matchedBy: 'parent' };
-    return null;
+    return direct ? { jobs: [direct], matchedBy: 'id' } : null;
   }
 
   public async search(
@@ -275,16 +256,7 @@ export class JobsOpsService {
       {
         list: (queue, state, start, count, asc) =>
           this.jobs.provider.list(queue, state, start, count, asc),
-        cancelled: async (offset, count, from) =>
-          (await this.jobs.cancelled(offset, count, from)).map((t) => ({
-            ...t.record,
-            status: 'cancelled' as const,
-            state: 'removed' as const,
-            heartbeat: null,
-            cancelledAt: t.cancelledAt,
-            cancelledBy: t.actor,
-            cancelReason: t.reason,
-          })),
+        cancelled: async () => [],
       },
       this.jobs.provider.queues(),
       { ...filter, typeContains: q || filter.typeContains },
@@ -796,12 +768,12 @@ export class JobsOpsService {
     const raw = await this.load(id, queue);
     const now = Date.now();
     const j = raw.record;
-    const [b, consumers, childRefs] = await Promise.all([
+    const [b, consumers] = await Promise.all([
       this.baselines(now),
       this.messaging.consumers().catch(() => [] as ConsumerRegistration[]),
-      this.jobs.children(j.id, CHILDREN_LIMIT).catch(() => []),
     ]);
-    const [children, logs] = await Promise.all([this.jobs.records(childRefs), this.relatedLogs(j)]);
+    const children: JobRecord[] = [];
+    const logs = await this.relatedLogs(j);
     const row = this.row(j, b);
     const attempts = this.attempts(raw);
     const lastFailed = [...attempts].reverse().find((a) => a.result === 'failed');
@@ -860,10 +832,7 @@ export class JobsOpsService {
         : null;
     if (failure && failure.retryable !== null && j.retryable === null)
       row.retryable = failure.retryable;
-    const cancellable =
-      ['waiting', 'delayed', 'retrying'].includes(j.status) ||
-      (['active', 'stalled'].includes(j.status) &&
-        cancellableConsumers(consumers, j.queue).length > 0);
+    const cancellable = ['waiting', 'delayed', 'retrying'].includes(j.status);
     return {
       job: row,
       capabilities: [...this.jobs.provider.capabilities],

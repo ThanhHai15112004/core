@@ -47,5 +47,7 @@
   "ops.messaging.test.ok": "Messaging hoạt động bình thường (round trip {ms} ms).",
   "ops.messaging.test.failed": "Kiểm tra messaging thất bại ở bước {step}.",
   "ops.metrics.displayName": "Metrics (Prometheus)",
-  "ops.metrics.summary": "Registry prom-client, Prometheus {state}."
+  "ops.metrics.summary": "Registry prom-client, Prometheus {state}.",
+  "ops.queue.displayName": "Queue (BullMQ)",
+  "ops.queue.summary": "{count} queue, {state}."
 }

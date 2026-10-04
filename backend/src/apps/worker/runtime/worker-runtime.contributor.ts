@@ -1,28 +1,27 @@
 import { Injectable, type OnModuleInit } from '@nestjs/common';
-import { QueueRegistry } from '@packages/messaging/index.js';
+import { QUEUES, QueueRegistry } from '@packages/messaging/index.js';
 import {
   RuntimeAgentService,
   withVersion,
   type MetricValue,
   type RuntimeContributor,
   type RuntimeDescriptor,
-  type RuntimeIssue,
 } from '@packages/runtime/index.js';
-import { MetricRecorder } from '@packages/telemetry/index.js';
-import { QueueConsumerService } from '../consumers/queue-consumer.service.js';
+import { SystemProcessor } from '../processors/system/system.processor.js';
 
 @Injectable()
 export class WorkerRuntimeContributor implements RuntimeContributor, OnModuleInit {
   constructor(
     private readonly agent: RuntimeAgentService,
-    private readonly consumer: QueueConsumerService,
+    private readonly processor: SystemProcessor,
     private readonly queues: QueueRegistry,
-    private readonly recorder: MetricRecorder,
   ) {}
 
   public onModuleInit(): void {
     this.agent.registerContributor(this);
   }
+
+  private readonly queueName = QUEUES.SYSTEM_EVENTS;
 
   public describe(): RuntimeDescriptor {
     return {
@@ -31,38 +30,27 @@ export class WorkerRuntimeContributor implements RuntimeContributor, OnModuleIni
       adapter: withVersion('BullMQ', 'bullmq'),
       entrypoint: 'apps/worker/main.ts',
       sourcePath: 'backend/src/apps/worker/',
-      details: { queue: this.consumer.queueName, concurrency: this.consumer.concurrency },
+      details: { queue: this.queueName, concurrency: this.processor.concurrency },
     };
   }
 
+  /** Số job đọc thẳng từ BullMQ (`getJobCounts`, `getWorkersCount`); throughput/thời gian xử lý ở Prometheus. */
   public async collectMetrics(): Promise<Record<string, MetricValue>> {
-    const queue = this.queues.get(this.consumer.queueName);
+    const queue = this.queues.get(this.queueName);
     const [counts, consumers] = await Promise.all([
       this.queues
         .withTimeout(queue.getJobCounts('active', 'waiting', 'delayed', 'failed', 'completed'))
         .catch(() => null),
       this.queues.withTimeout(queue.getWorkersCount()).catch(() => null),
     ]);
-    const stats = this.consumer.stats();
-    // Độ sâu queue là số toàn cục (không cộng giữa các worker) — đọc ra lấy giá trị lớn nhất giữa instance.
-    if (counts) {
-      this.recorder.gauge('queue.waiting', counts['waiting'] ?? 0);
-      this.recorder.gauge('queue.active', counts['active'] ?? 0);
-      this.recorder.gauge('queue.delayed', counts['delayed'] ?? 0);
-    }
-    this.recorder.gauge('worker.concurrency', this.consumer.concurrency);
-
     return {
       activeJobs: counts?.['active'] ?? null,
       waitingJobs: counts?.['waiting'] ?? null,
       delayedJobs: counts?.['delayed'] ?? null,
       failedJobs: counts?.['failed'] ?? null,
       completedJobs: counts?.['completed'] ?? null,
-      jobsPerMinute: stats.jobsPerMinute,
-      avgJobDurationMs: stats.avgDurationMs,
-      failedLastMinute: stats.failedLastMinute,
       consumers,
-      concurrency: this.consumer.concurrency,
+      concurrency: this.processor.concurrency,
     };
   }
 
@@ -78,28 +66,23 @@ export class WorkerRuntimeContributor implements RuntimeContributor, OnModuleIni
               .getJobCounts('active', 'waiting', 'delayed', 'failed', 'completed'),
           )
           .catch(() => null),
-        consumed: name === this.consumer.queueName,
+        consumed: name === this.queueName,
       })),
     );
-    return { queues, paused: this.consumer.isPaused() };
+    return { queues, paused: this.processor.worker.isPaused() };
   }
 
-  public async collectIssues(): Promise<RuntimeIssue[]> {
-    const { failedLastMinute } = this.consumer.stats();
-    return failedLastMinute > 0
-      ? [{ key: 'runtime.issue.jobsFailing', params: { count: failedLastMinute } }]
-      : [];
+  /** Ngừng lấy job mới, chờ job đang chạy xong (lệnh pause từ Console). */
+  public async pause(): Promise<void> {
+    await this.processor.worker.pause();
   }
 
-  public pause(): Promise<void> {
-    return this.consumer.pause();
+  public async resume(): Promise<void> {
+    this.processor.worker.resume();
   }
 
-  public resume(): Promise<void> {
-    return this.consumer.resume();
-  }
-
-  public drain(): Promise<void> {
-    return this.consumer.drain();
+  /** Đóng worker sau khi hoàn tất job đang xử lý. */
+  public async drain(): Promise<void> {
+    await this.processor.worker.close();
   }
 }

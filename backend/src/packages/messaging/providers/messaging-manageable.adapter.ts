@@ -35,7 +35,7 @@ export class MessagingManageableAdapter implements ManageablePackage {
 
   public async getStatus(): Promise<PackageStatusReport> {
     const status = this.connection.getStatus();
-    const info = this.monitoring.provider.info();
+    const info = this.monitoring.info();
     const queues = this.monitoring.usable()
       ? await this.monitoring.queues().catch(() => null)
       : null;

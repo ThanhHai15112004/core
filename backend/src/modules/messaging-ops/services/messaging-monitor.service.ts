@@ -97,7 +97,7 @@ export class MessagingMonitorService implements OnApplicationBootstrap, OnModule
       if (locked !== 'OK') return;
       await this.connection.check();
       const queues = this.monitoring.usable()
-        ? await this.monitoring.provider.queues().catch((err) => {
+        ? await this.monitoring.queues().catch((err) => {
             this.logger.warn(`Queue snapshot failed: ${err instanceof Error ? err.message : err}`);
             return null;
           })

@@ -3,12 +3,14 @@ import { QueueMonitoringService } from './monitoring/queue-monitoring.service.js
 import { QueueOperationsService } from './operations/queue-operations.service.js';
 import { JobMonitoringService } from './monitoring/job-monitoring.service.js';
 import { JobOperationsService } from './operations/job-operations.service.js';
+import { QueueManageableAdapter } from './providers/queue-manageable.adapter.js';
 
 const PROVIDERS = [
   QueueMonitoringService,
   QueueOperationsService,
   JobMonitoringService,
   JobOperationsService,
+  QueueManageableAdapter,
 ];
 
 /**

@@ -47,5 +47,7 @@
   "ops.messaging.test.ok": "Messaging is operational (round trip {ms} ms).",
   "ops.messaging.test.failed": "Messaging health check failed at step {step}.",
   "ops.metrics.displayName": "Metrics (Prometheus)",
-  "ops.metrics.summary": "prom-client registry, Prometheus {state}."
+  "ops.metrics.summary": "prom-client registry, Prometheus {state}.",
+  "ops.queue.displayName": "Queue (BullMQ)",
+  "ops.queue.summary": "{count} queues, {state}."
 }

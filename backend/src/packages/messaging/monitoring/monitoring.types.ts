@@ -147,21 +147,3 @@ export interface BrokerInfo {
   /** Kết nối BullMQ theo runtime (`core-<runtime>-bull`). */
   connections: { runtime: string; count: number }[];
 }
-
-export interface MessagingMonitoringProvider {
-  readonly capabilities: ReadonlySet<MessagingCapability>;
-  info(): MessagingProviderInfo;
-  ping(): Promise<number>;
-  queues(): Promise<QueueSnapshot[]>;
-  backlog(limit: number): Promise<BacklogSample>;
-  listMessages(filter: MessageFilter, perState: number): Promise<MessagePage>;
-  message(id: string, queue?: string | null): Promise<MessageDetail | null>;
-  retrying(limit: number): Promise<MessageSummary[]>;
-  deadLetters(limit: number): Promise<MessageSummary[]>;
-  /** Chạy lại ngay một message đang chờ retry (hoặc hẹn giờ). */
-  retryNow(queue: string, id: string): Promise<void>;
-  /** Đưa message từ Dead Letter về hàng đợi, đặt lại số lần thử. */
-  replay(queue: string, id: string): Promise<void>;
-  discard(queue: string, id: string): Promise<void>;
-  broker(): Promise<BrokerInfo>;
-}
