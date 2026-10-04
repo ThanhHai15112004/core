@@ -8,6 +8,7 @@ export * from './providers/token.service.js';
 export * from './providers/env-secret.provider.js';
 export * from './providers/file-secret.provider.js';
 export * from './providers/secret.service.js';
+export * from './providers/secret-registry.service.js';
 export * from './decorators/current-user.decorator.js';
 export * from './guards/auth.guard.js';
 export * from './security.module.js';

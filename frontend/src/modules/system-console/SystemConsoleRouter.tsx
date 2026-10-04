@@ -22,6 +22,8 @@ const WorkerSection = lazy(() => import('./sections/worker/WorkerSection').then(
 const SchedulerSection = lazy(() => import('./sections/scheduler/SchedulerSection').then((m) => ({ default: m.SchedulerSection })));
 const JobsSection = lazy(() => import('./sections/jobs/JobsSection').then((m) => ({ default: m.JobsSection })));
 const LogsSection = lazy(() => import('./sections/logs/LogsSection').then((m) => ({ default: m.LogsSection })));
+const SecretsSection = lazy(() => import('./sections/secrets/SecretsSection').then((m) => ({ default: m.SecretsSection })));
+const ConfigurationSection = lazy(() => import('./sections/configuration/ConfigurationSection').then((m) => ({ default: m.ConfigurationSection })));
 
 const HASH_PREFIX = ROUTES.SYSTEM_CONSOLE.replace(/^#/, '');
 
@@ -107,6 +109,10 @@ export const SystemConsoleRouter: React.FC = () => {
         return <JobsSection />;
       case 'security':
         return <SecuritySection />;
+      case 'secrets':
+        return <SecretsSection />;
+      case 'configuration':
+        return <ConfigurationSection />;
       default:
         return <OverviewSection onNavigate={navigate} />;
     }
