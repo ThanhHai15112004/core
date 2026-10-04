@@ -7,7 +7,7 @@ import {
   type JobOperationAction,
   type JobOperationRecord,
 } from '@packages/messaging/index.js';
-import { redactPayload } from '@packages/traffic/utils/capture.js';
+import { redactPayload } from '@packages/http/index.js';
 import { JobMonitoringService } from '../monitoring/job-monitoring.service.js';
 import { JobOperationError } from '../utils/job-errors.js';
 import type { JobRecord } from '../contracts/job.types.js';

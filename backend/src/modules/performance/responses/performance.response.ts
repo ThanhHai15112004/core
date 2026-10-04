@@ -1,4 +1,4 @@
-import type { SlowQueryRecord } from '@packages/telemetry/index.js';
+import type { SlowQueryRecord } from '@packages/database/index.js';
 import type { RuntimeStatus } from '@modules/runtimes/index.js';
 
 export type PerfRange = '5m' | '15m' | '1h' | '6h' | '24h' | '7d';

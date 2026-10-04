@@ -16,7 +16,7 @@ import {
   type MultipartUpload,
   type UsageSnapshot,
 } from '@packages/storage/index.js';
-import { MetricRecorder } from '@packages/telemetry/index.js';
+import { MetricRecorder } from '@modules/system-ops/telemetry-compat.js';
 import { round } from '@modules/performance/index.js';
 import { StorageMetricsService } from './storage-metrics.service.js';
 import { StorageStoreService } from './storage-store.service.js';

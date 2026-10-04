@@ -7,7 +7,6 @@ import {
 } from '@nestjs/common';
 import { CoreConfigService } from '@packages/config/index.js';
 import { RedisService } from '@packages/redis/index.js';
-import { MetricRecorder } from '@packages/telemetry/index.js';
 import { cacheKeys } from '../constants/cache.keys.js';
 import { MemoryCacheDriver } from '../drivers/memory-cache.driver.js';
 import { BaseCacheProvider } from '../providers/cache.provider.js';
@@ -48,7 +47,6 @@ export class CacheMonitoringService implements OnApplicationBootstrap, OnModuleD
     private readonly connection: CacheConnectionService,
     private readonly config: CoreConfigService,
     @Optional() private readonly redis?: RedisService,
-    @Optional() private readonly recorder?: MetricRecorder,
   ) {
     const depth = this.config.cache.namespaceDepth;
     const driver = this.cache.driver;
@@ -59,7 +57,7 @@ export class CacheMonitoringService implements OnApplicationBootstrap, OnModuleD
   }
 
   public onApplicationBootstrap(): void {
-    if (this.provider.driver !== 'memory' || !this.recorder?.instance || this.config.isTest) return;
+    if (this.provider.driver !== 'memory' || this.config.isTest) return;
     this.timer = setInterval(() => void this.publishMemorySnapshot(), MEMORY_PUBLISH_MS);
     this.timer.unref();
     void this.publishMemorySnapshot();
@@ -118,7 +116,7 @@ export class CacheMonitoringService implements OnApplicationBootstrap, OnModuleD
     });
     if (this.provider.driver !== 'memory') return own;
     const others = (await this.memorySnapshots()).filter(
-      (s) => s.instance !== this.recorder?.instance,
+      (s) => s.instance !== `${process.pid}`,
     );
     return mergeKeyspaceSnapshots([own, ...others.map((s) => s.snapshot)], now) ?? own;
   }
@@ -166,8 +164,8 @@ export class CacheMonitoringService implements OnApplicationBootstrap, OnModuleD
 
   /** Driver memory: mỗi runtime tự publish snapshot của Map mình (API đọc để gộp). */
   public async publishMemorySnapshot(): Promise<void> {
-    const instance = this.recorder?.instance;
-    if (!instance || !this.redis?.isReady() || this.provider.driver !== 'memory') return;
+    const instance = `${process.pid}`;
+    if (!this.redis?.isReady() || this.provider.driver !== 'memory') return;
     try {
       const { keys, total, truncated } = await this.provider.scanAll(this.config.cache.scanMaxKeys);
       const snapshot = buildKeyspaceSnapshot({

@@ -15,7 +15,7 @@ import {
   type ConsumerRegistration,
   type QueueSnapshot,
 } from '@packages/messaging/index.js';
-import { MetricRecorder } from '@packages/telemetry/index.js';
+import { MetricRecorder } from '@modules/system-ops/telemetry-compat.js';
 import { MessagingMetricsService } from './messaging-metrics.service.js';
 import { MessagingStoreService } from './messaging-store.service.js';
 import {

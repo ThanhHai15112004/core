@@ -21,7 +21,7 @@ import {
   histogramPercentile,
   mergeMetric,
   emptyMetric,
-} from '@packages/telemetry/index.js';
+} from '@modules/system-ops/telemetry-compat.js';
 import {
   counterOf,
   gaugeOf,

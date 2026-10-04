@@ -20,7 +20,7 @@ import {
   type QueueOperationRecord,
 } from '@packages/queue/index.js';
 import type { RuntimeHeartbeat } from '@packages/runtime/index.js';
-import { TELEMETRY_TIERS, type MetricBucket } from '@packages/telemetry/index.js';
+import { TELEMETRY_TIERS, type MetricBucket } from '@modules/system-ops/telemetry-compat.js';
 import {
   counterOf,
   gaugeWindow,

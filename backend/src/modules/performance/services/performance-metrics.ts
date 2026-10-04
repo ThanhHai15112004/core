@@ -1,10 +1,27 @@
-import {
-  emptyMetric,
-  histogramPercentile,
-  mergeMetric,
-  type MetricBucket,
-  type MetricValueAgg,
-} from '@packages/telemetry/index.js';
+export interface MetricValueAgg {
+  c: number;
+  n: number;
+  s: number;
+  x: number | null;
+  hist: number[] | null;
+}
+
+export interface MetricBucket {
+  start: number;
+  metrics: Map<string, MetricValueAgg>;
+  byInstance: Map<string, Map<string, MetricValueAgg>>;
+}
+
+export const emptyMetric = (): MetricValueAgg => ({ c: 0, n: 0, s: 0, x: null, hist: null });
+
+export const mergeMetric = (into: MetricValueAgg, from: MetricValueAgg): void => {
+  into.c += from.c;
+  into.n += from.n;
+  into.s += from.s;
+  if (from.x !== null) into.x = into.x === null ? from.x : Math.max(into.x, from.x);
+};
+
+export const histogramPercentile = (_hist: number[], _p: number): number | null => null;
 
 /** Instance có dạng `<runtime>@<host>:<pid>`. */
 export const runtimeOfInstance = (instance: string): string => instance.split('@')[0] ?? instance;

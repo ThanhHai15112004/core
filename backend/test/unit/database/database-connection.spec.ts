@@ -5,7 +5,6 @@ import { applyTestEnv } from '../../fixtures/env.fixture.js';
 import { mockRedisFactory } from '../../concerns/test-app.concern.js';
 import { CoreConfigService } from '@packages/config/index.js';
 import { RedisService } from '@packages/redis/index.js';
-import { MetricRecorder } from '@packages/telemetry/index.js';
 import {
   DatabaseConnectionService,
   QueryInstrumentService,
@@ -58,12 +57,8 @@ describe('DatabaseConnectionService', () => {
 
   const create = (ds: DataSource) => {
     const moduleRef = { get: () => ds } as unknown as ModuleRef;
-    const recorder = new MetricRecorder(config, redis, 'api@test:1');
-    const instrument = new QueryInstrumentService(moduleRef, config, recorder, redis);
-    return new DatabaseConnectionService(moduleRef, config, instrument, redis, recorder, {
-      id: 'api',
-      kind: 'long-running',
-    });
+    const instrument = new QueryInstrumentService(moduleRef, config, redis);
+    return new DatabaseConnectionService(moduleRef, config, instrument, redis);
   };
   const advance = async (ms: number) => {
     await jest.advanceTimersByTimeAsync(ms);

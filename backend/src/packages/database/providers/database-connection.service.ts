@@ -12,7 +12,6 @@ import { DataSource } from 'typeorm';
 import { CoreConfigService } from '@packages/config/index.js';
 import { RedisService } from '@packages/redis/index.js';
 import { RUNTIME_IDENTITY, type RuntimeIdentity } from '@packages/runtime/index.js';
-import { MetricRecorder } from '@packages/telemetry/index.js';
 import { databaseKeys } from '../constants/database.keys.js';
 import type { ConnectionState, ConnectionStatus } from '../contracts/database-events.types.js';
 import { errorCodeOf, sanitizeDbMessage } from '../instrumentation/error-classify.js';
@@ -48,7 +47,6 @@ export class DatabaseConnectionService implements OnApplicationBootstrap, OnAppl
     private readonly config: CoreConfigService,
     private readonly instrument: QueryInstrumentService,
     @Optional() private readonly redis?: RedisService,
-    @Optional() private readonly recorder?: MetricRecorder,
     @Optional() @Inject(RUNTIME_IDENTITY) private readonly identity?: RuntimeIdentity,
   ) {
     this.status = {
@@ -129,7 +127,6 @@ export class DatabaseConnectionService implements OnApplicationBootstrap, OnAppl
     try {
       await this.instrument.untracked(() => ds.query('SELECT 1'));
       const latencyMs = Math.round((performance.now() - startedAt) * 10) / 10;
-      this.recorder?.gauge('db.ping', latencyMs);
       return { ok: true, latencyMs, error: null };
     } catch (err) {
       return {
@@ -259,8 +256,8 @@ export class DatabaseConnectionService implements OnApplicationBootstrap, OnAppl
 
   /** Báo trạng thái lên Redis (TTL = 3 chu kỳ) để Console gộp theo runtime. */
   private async publish(): Promise<void> {
-    const instance = this.recorder?.instance;
-    if (!this.redis?.isReady() || !instance) return;
+    const instance = `${process.pid}`;
+    if (!this.redis?.isReady()) return;
     const ttl = Math.max(15, Math.ceil((this.config.database.healthIntervalMs * 3) / 1000));
     await this.redis.client
       .set(databaseKeys(this.redis).connection(instance), JSON.stringify(this.status), 'EX', ttl)

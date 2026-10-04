@@ -2,7 +2,6 @@ import { describe, beforeAll, afterAll, it, expect } from '@jest/globals';
 import { createTestApp, type TestAppContext } from '../../../concerns/test-app.concern.js';
 import { TRAFFIC_ROUTES } from '@modules/traffic/index.js';
 import { RedisService } from '@packages/redis/index.js';
-import { TrafficCollectorService } from '@packages/traffic/index.js';
 
 interface Envelope<T> {
   success: boolean;
@@ -32,7 +31,6 @@ describe('HTTP Traffic (/ops/traffic)', () => {
       headers: { authorization: 'Bearer super-secret', 'content-type': 'application/json' },
       payload: { password: 'hunter2', confirm: 'nope' },
     });
-    await context.app.get(TrafficCollectorService).flush();
   });
 
   afterAll(async () => {

@@ -21,7 +21,7 @@ import {
   type JobRecord,
   type QueueInfo,
 } from '@packages/queue/index.js';
-import { redactPayload } from '@packages/traffic/utils/capture.js';
+import { redactPayload } from '@packages/http/index.js';
 import { counterOf, round } from '@modules/performance/index.js';
 import { RuntimesService } from '@modules/runtimes/index.js';
 import { WORKER_RANGES, WorkerOpsService, type WorkerMetric } from '@modules/worker-ops/index.js';

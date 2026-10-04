@@ -1,8 +1,15 @@
 import { isSensitiveKey, redactSensitiveData } from '@packages/logging/index.js';
-import type { CapturedBody } from '../contracts/traffic.types.js';
 
 export const MASK = '••••••••';
 const EMAIL = /^([^@\s])[^@\s]*(@[^@\s]+\.[^@\s]+)$/;
+
+export interface CapturedBody {
+  kind: 'json' | 'text' | 'none';
+  value?: unknown;
+  truncated: boolean;
+  omitted?: 'disabled' | 'empty' | 'binary';
+  sizeBytes: number | null;
+}
 
 /** Header nhạy cảm (Authorization, Cookie, x-api-key…) chỉ giữ scheme, không bao giờ lộ giá trị. */
 export function maskHeaders(
@@ -23,7 +30,7 @@ export function maskHeaders(
 }
 
 /** `user@example.com` → `u***@example.com`. */
-function maskEmails<T>(input: T): T {
+export function maskEmails<T>(input: T): T {
   if (typeof input === 'string') return input.replace(EMAIL, '$1***$2') as T;
   if (Array.isArray(input)) return input.map((v: unknown) => maskEmails(v)) as T;
   if (input && typeof input === 'object') {
@@ -34,7 +41,7 @@ function maskEmails<T>(input: T): T {
   return input;
 }
 
-/** Redact theo tên field (dùng chung philosophy với log) + che email. */
+/** Redact theo tên field (dùng chung logic với log) + che email. */
 export function redactPayload<T>(input: T): T {
   return maskEmails(redactSensitiveData(input));
 }
@@ -42,8 +49,7 @@ export function redactPayload<T>(input: T): T {
 const byteLength = (s: string) => Buffer.byteLength(s, 'utf8');
 
 /**
- * Chuẩn hoá body để lưu: JSON được redact; text dài bị cắt; binary không lưu.
- * `raw` là object đã parse (request) hoặc payload chuỗi đã serialize (response).
+ * Chuẩn hoá body: JSON được redact; text dài bị cắt; binary không lưu.
  */
 export function captureBody(
   raw: unknown,
@@ -87,7 +93,6 @@ export function captureBody(
   const serialized = JSON.stringify(redacted) ?? '';
   const size = byteLength(serialized);
   if (size > maxBytes) {
-    // Không lưu JSON cắt dở (không parse được); lưu bản xem trước dạng text đã redact.
     return { kind: 'text', value: serialized.slice(0, maxBytes), truncated: true, sizeBytes: size };
   }
   return { kind: 'json', value: redacted, truncated: false, sizeBytes: size };

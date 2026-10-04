@@ -5,7 +5,7 @@ import { Queue, Worker } from 'bullmq';
 import { CoreConfigService } from '@packages/config/index.js';
 import { RedisService } from '@packages/redis/index.js';
 import { RUNTIME_IDENTITY, type RuntimeIdentity } from '@packages/runtime/index.js';
-import { redactPayload } from '@packages/traffic/utils/capture.js';
+import { redactPayload } from '@packages/http/index.js';
 import { HEALTHCHECK_QUEUE } from '../constants/messaging.keys.js';
 import type {
   MessagingEventType,

@@ -1,9 +1,83 @@
-import type {
-  ActiveRequest,
-  RequestDetail,
-  RequestSummary,
-  TrafficRoute,
-} from '@packages/traffic/index.js';
+export interface TrafficRoute {
+  id: string;
+  method: string;
+  route: string;
+  module: string;
+  internal: boolean;
+}
+
+export type TimelinePhase =
+  | 'received'
+  | 'routed'
+  | 'handlerStart'
+  | 'handlerEnd'
+  | 'send'
+  | 'finished';
+
+export interface TimelineMark {
+  phase: TimelinePhase;
+  offsetMs: number;
+}
+
+export interface RequestErrorInfo {
+  code: string;
+  name: string;
+  message: string;
+}
+
+export interface RequestSummary {
+  id: string;
+  at: number;
+  method: string;
+  routeId: string;
+  route: string;
+  path: string;
+  status: number;
+  durationMs: number;
+  instance: string;
+  correlationId: string | null;
+  errorCode: string | null;
+  captured: boolean;
+}
+
+export type CaptureReason = 'slow' | 'error' | 'sampled';
+
+export interface CapturedBody {
+  kind: 'json' | 'text' | 'none';
+  value?: unknown;
+  truncated: boolean;
+  omitted?: 'disabled' | 'empty' | 'binary' | 'tooLarge';
+  sizeBytes: number | null;
+}
+
+export interface RequestDetail extends RequestSummary {
+  captureReason: CaptureReason;
+  query: Record<string, unknown>;
+  ip: string | null;
+  userAgent: string | null;
+  headers: Record<string, string>;
+  responseHeaders: Record<string, string>;
+  requestBody: CapturedBody;
+  responseBody: CapturedBody;
+  timeline: TimelineMark[];
+  error: RequestErrorInfo | null;
+}
+
+export interface ActiveRequest {
+  id: string;
+  method: string;
+  route: string;
+  routeId: string;
+  path: string;
+  startedAt: number;
+  instance: string;
+}
+
+export interface ActiveSnapshot {
+  instance: string;
+  at: number;
+  active: ActiveRequest[];
+}
 
 export type EndpointStatus = 'healthy' | 'slow' | 'high_error' | 'failing' | 'idle' | 'low_traffic';
 export type StatusClass = '2xx' | '3xx' | '4xx' | '5xx';

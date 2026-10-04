@@ -21,7 +21,6 @@ import { SystemOpsModule } from '@modules/system-ops/index.js';
 import { RuntimesModule } from '@modules/runtimes/index.js';
 import { RedisModule } from '@packages/redis/index.js';
 import { RuntimeAgentModule } from '@packages/runtime/index.js';
-import { TrafficModule } from '@packages/traffic/index.js';
 import { TrafficOpsModule } from '@modules/traffic/index.js';
 import { PerformanceOpsModule } from '@modules/performance/index.js';
 import { DatabaseOpsModule } from '@modules/database-ops/index.js';
@@ -43,7 +42,6 @@ import { HttpMetricsInterceptor, MetricsModule } from '@packages/metrics/index.j
     RuntimeAgentModule.forRuntime({ id: 'api', kind: 'long-running' }),
     MetricsModule.forRuntime({ runtime: 'api' }),
     HttpModule,
-    TrafficModule,
     DatabaseModule,
     LoggingModule.forRoot({ runtime: 'api' }),
     SecurityModule,

@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { MAX_TRACKED_CHANNELS, jobMetric } from '@packages/messaging/index.js';
-import type { MetricBucket } from '@packages/telemetry/index.js';
+import type { MetricBucket } from '@modules/system-ops/telemetry-compat.js';
 import { counterOf, mergedOf, meanOf, percentileOf, round } from '@modules/performance/index.js';
 import { WorkerMetricsService, type MetricWindow } from '@modules/worker-ops/index.js';
 import type { JobTypeRowDto, JobsReportDto } from '../responses/jobs-ops.response.js';

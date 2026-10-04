@@ -1,6 +1,4 @@
 import { type DynamicModule, Module } from '@nestjs/common';
-import * as os from 'node:os';
-import { MetricRecorder, TELEMETRY_INSTANCE } from '@packages/telemetry/index.js';
 import { RUNTIME_IDENTITY } from './constants/runtime.tokens.js';
 import type { RuntimeIdentity } from './contracts/runtime.types.js';
 import { RuntimeAgentService } from './providers/runtime-agent.service.js';
@@ -18,14 +16,6 @@ export class RuntimeAgentModule {
       global: true,
       providers: [
         { provide: RUNTIME_IDENTITY, useValue: identity },
-        {
-          provide: TELEMETRY_INSTANCE,
-          useValue:
-            identity.kind === 'long-running'
-              ? `${identity.id}@${os.hostname()}:${process.pid}`
-              : null,
-        },
-        MetricRecorder,
         RuntimeAgentService,
         CliHistoryService,
         RuntimeManageableAdapter,
@@ -35,7 +25,6 @@ export class RuntimeAgentModule {
         RuntimeAgentService,
         CliHistoryService,
         RuntimeManageableAdapter,
-        MetricRecorder,
       ],
     };
   }

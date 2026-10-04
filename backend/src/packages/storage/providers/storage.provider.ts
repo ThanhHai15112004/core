@@ -13,7 +13,6 @@ import { RedisService } from '@packages/redis/index.js';
 import { RequestContextService } from '@packages/logging/index.js';
 import { RUNTIME_IDENTITY, type RuntimeIdentity } from '@packages/runtime/index.js';
 import { SecretService } from '@packages/security/index.js';
-import { MetricRecorder } from '@packages/telemetry/index.js';
 import type { StorageContract } from '../contracts/storage.contract.js';
 import type {
   ActiveUpload,
@@ -64,7 +63,6 @@ export class BaseStorageProvider
   constructor(
     private readonly configService: CoreConfigService,
     @Optional() private readonly redis?: RedisService,
-    @Optional() private readonly recorder?: MetricRecorder,
     @Optional() private readonly secrets?: SecretService,
     @Optional() @Inject(RUNTIME_IDENTITY) private readonly identity?: RuntimeIdentity,
   ) {
@@ -84,7 +82,7 @@ export class BaseStorageProvider
   }
 
   public onApplicationBootstrap(): void {
-    if (!this.recorder?.instance || this.configService.isTest) return;
+    if (this.configService.isTest) return;
     this.timer = setInterval(() => void this.publishActive(), ACTIVE_PUBLISH_MS);
     this.timer.unref();
   }
@@ -107,29 +105,18 @@ export class BaseStorageProvider
       throw new StorageObjectError('INVALID_KEY', `Invalid storage key: ${key}`);
   }
 
-  /** Chạy một thao tác và ghi số đo; lỗi được phân loại, lưu rồi ném lại cho caller. */
+  /** Chạy một thao tác; lỗi được phân loại, lưu rồi ném lại cho caller. */
   private async measure<T>(
     op: StorageOp,
     key: string,
     size: number | null,
     fn: () => Promise<T>,
-    bytesOf?: (r: T) => number,
+    _bytesOf?: (r: T) => number,
   ): Promise<T> {
     const started = performance.now();
     const container = this.trackedContainer(key);
     try {
-      const result = await fn();
-      const ms = performance.now() - started;
-      this.recorder?.timing(`storage.${op}`, ms);
-      this.recorder?.count(containerMetric(container, op));
-      if (this.driver.name === 's3') this.recorder?.count('storage.http.2xx');
-      const bytes = bytesOf?.(result) ?? 0;
-      if (bytes > 0) {
-        const dir = op === 'put' ? 'up' : 'down';
-        this.recorder?.count(`storage.bytes.${dir}`, bytes);
-        this.recorder?.count(containerMetric(container, `bytes.${dir}`), bytes);
-      }
-      return result;
+      return await fn();
     } catch (err) {
       this.fail(op, key, container, size, err, performance.now() - started);
       throw err;
@@ -142,16 +129,10 @@ export class BaseStorageProvider
     container: string,
     size: number | null,
     err: unknown,
-    ms: number,
+    _ms: number,
   ): void {
     const kind = classifyStorageError(err);
     const status = storageHttpStatus(err);
-    this.recorder?.count('storage.errors');
-    this.recorder?.count(`storage.errors.${op}`);
-    this.recorder?.count(`storage.err.${kind}`);
-    this.recorder?.count(containerMetric(container, 'errors'));
-    this.recorder?.timing(`storage.${op}.failed`, ms);
-    if (status !== null) this.recorder?.count(`storage.http.${Math.floor(status / 100)}xx`);
     const root = this.driver instanceof LocalStorageDriver ? this.driver.root : undefined;
     const message = sanitizeStorageMessage(err, root);
     if (this.lastLoggedError !== message)
@@ -217,7 +198,6 @@ export class BaseStorageProvider
           }),
         () => buf.length,
       );
-      if (res.multipart) this.recorder?.count('storage.multipart');
       return path;
     } finally {
       this.active.delete(id);
@@ -257,8 +237,8 @@ export class BaseStorageProvider
   }
 
   private async publishActive(): Promise<void> {
-    const instance = this.recorder?.instance;
-    if (!instance || !this.redis?.isReady()) return;
+    const instance = `${process.pid}`;
+    if (!this.redis?.isReady()) return;
     if (!this.activeDirty && this.active.size === 0) return;
     this.activeDirty = false;
     const key = storageKeys(this.redis).active(instance);

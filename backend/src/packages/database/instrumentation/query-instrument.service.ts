@@ -14,12 +14,7 @@ import { CoreConfigService } from '@packages/config/index.js';
 import { RedisService } from '@packages/redis/index.js';
 import { RequestContextService } from '@packages/logging/index.js';
 import { RUNTIME_IDENTITY, type RuntimeIdentity } from '@packages/runtime/index.js';
-import {
-  MetricRecorder,
-  addRequestTiming,
-  telemetryKeys,
-  type SlowQueryRecord,
-} from '@packages/telemetry/index.js';
+import type { SlowQueryRecord } from '../contracts/database.contract.js';
 import { ERROR_LOG_SIZE, databaseKeys } from '../constants/database.keys.js';
 import type { DbErrorRecord } from '../contracts/database-events.types.js';
 import { recordDbEvent } from '../monitoring/db-events.js';
@@ -48,7 +43,6 @@ export class QueryInstrumentService implements OnApplicationBootstrap, OnModuleD
   constructor(
     private readonly moduleRef: ModuleRef,
     private readonly config: CoreConfigService,
-    @Optional() private readonly recorder?: MetricRecorder,
     @Optional() private readonly redis?: RedisService,
     @Optional() @Inject(RUNTIME_IDENTITY) private readonly identity?: RuntimeIdentity,
   ) {}
@@ -87,8 +81,6 @@ export class QueryInstrumentService implements OnApplicationBootstrap, OnModuleD
     const createQueryRunner = driver.createQueryRunner.bind(driver);
     driver.createQueryRunner = (mode) => this.wrap(createQueryRunner(mode));
 
-    this.timer = setInterval(() => this.samplePool(), this.config.performance.flushMs);
-    this.timer.unref();
     this.logger.log(`Query instrumentation attached (${dataSource.options.type})`);
   }
 
@@ -133,38 +125,21 @@ export class QueryInstrumentService implements OnApplicationBootstrap, OnModuleD
         }
       };
     };
-    wrapTx('startTransaction', (ok) => {
-      if (!ok) return;
-      txStartedAt = performance.now();
-      this.recorder?.count('db.tx.started');
-    });
-    const finish = (kind: 'committed' | 'rolledback') => (ok: boolean) => {
-      if (!ok) return;
-      this.recorder?.count(`db.tx.${kind}`);
-      if (txStartedAt !== null)
-        this.recorder?.timing('db.tx.duration', performance.now() - txStartedAt);
-      txStartedAt = null;
-    };
-    wrapTx('commitTransaction', finish('committed'));
-    wrapTx('rollbackTransaction', finish('rolledback'));
+    wrapTx('startTransaction', () => {});
+    wrapTx('commitTransaction', () => {});
+    wrapTx('rollbackTransaction', () => {});
     return runner;
   }
 
   /** Ghi số đo một query (public để test). */
-  public observe(sql: string, ms: number, failed: boolean, error: unknown = null): void {
-    this.recorder?.timing('db.query', ms);
-    if (ms >= this.config.database.slowQueryMs) this.recorder?.count('db.slow');
-    addRequestTiming('db', ms);
+  public observe(sql: string, _ms: number, failed: boolean, error: unknown = null): void {
     if (failed) {
-      this.recorder?.count('db.errors');
       this.recordError(sql, error);
     }
-    if (ms >= this.config.performance.dbSlowMs) this.storeSlow(sql, ms, failed);
   }
 
   private recordError(sql: string, error: unknown): void {
     const kind = classifyDbError(error);
-    this.recorder?.count(`db.err.${kind}`);
     if (!this.redis?.isReady()) return;
     const record: DbErrorRecord = {
       at: Date.now(),
@@ -173,7 +148,7 @@ export class QueryInstrumentService implements OnApplicationBootstrap, OnModuleD
       message: sanitizeDbMessage(error),
       sql: normalizeSql(sql),
       runtime: this.identity?.id ?? null,
-      instance: this.recorder?.instance ?? null,
+      instance: `${process.pid}`,
       correlationId: RequestContextService.currentCorrelationId() ?? null,
     };
     const key = databaseKeys(this.redis).errors();
@@ -191,34 +166,5 @@ export class QueryInstrumentService implements OnApplicationBootstrap, OnModuleD
         runtime: record.runtime,
       });
     }
-  }
-
-  private storeSlow(sql: string, ms: number, failed: boolean): void {
-    if (!this.redis?.isReady() || !this.recorder?.enabled) return;
-    const record: SlowQueryRecord = {
-      at: Date.now(),
-      sql: normalizeSql(sql),
-      durationMs: Math.round(ms * 10) / 10,
-      failed,
-      instance: this.recorder.instance ?? 'unknown',
-      correlationId: RequestContextService.currentCorrelationId() ?? null,
-    };
-    const key = telemetryKeys(this.redis).slowQueries();
-    void this.redis.client
-      .multi()
-      .lpush(key, JSON.stringify(record))
-      .ltrim(key, 0, this.config.performance.dbSlowLogSize - 1)
-      .exec()
-      .catch(() => undefined);
-  }
-
-  private samplePool(): void {
-    if (!this.dataSource?.isInitialized) return;
-    const stats = readPoolStats(this.dataSource.driver);
-    if (!stats) return;
-    this.recorder?.gauge('db.pool.used', stats.used);
-    this.recorder?.gauge('db.pool.idle', stats.idle);
-    this.recorder?.gauge('db.pool.waiting', stats.waiting);
-    this.recorder?.gauge('db.pool.limit', this.poolLimit());
   }
 }

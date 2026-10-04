@@ -4,7 +4,6 @@ import { CoreConfigService } from '@packages/config/index.js';
 import { RedisService } from '@packages/redis/index.js';
 import { RequestContextService } from '@packages/logging/index.js';
 import { RUNTIME_IDENTITY, type RuntimeIdentity } from '@packages/runtime/index.js';
-import { MetricRecorder, addRequestTiming } from '@packages/telemetry/index.js';
 import type { CacheContract } from '../contracts/cache.contract.js';
 import type { CacheErrorRecord } from '../contracts/cache-events.types.js';
 import { CACHE_ERROR_LOG_SIZE, cacheKeys } from '../constants/cache.keys.js';
@@ -53,7 +52,6 @@ export class BaseCacheProvider implements CacheContract {
   constructor(
     private readonly configService: CoreConfigService,
     @Optional() private readonly redis?: RedisService,
-    @Optional() private readonly recorder?: MetricRecorder,
     @Optional() @Inject(RUNTIME_IDENTITY) private readonly identity?: RuntimeIdentity,
   ) {
     const cfg = this.configService.cache;
@@ -77,20 +75,14 @@ export class BaseCacheProvider implements CacheContract {
     return ns;
   }
 
-  /** Ghi số đo một thao tác: tổng theo loại, theo namespace, thời gian, và cộng vào request hiện tại. */
-  private track(kind: OpKind, key: string, startedAt: number): void {
-    const ms = performance.now() - startedAt;
-    this.recorder?.count(`cache.${kind}`);
-    this.recorder?.count(namespaceMetric(this.trackedNamespace(key), kind));
-    this.recorder?.timing('cache.op', ms);
-    addRequestTiming('cache', ms);
+  /** Ghi số đo một thao tác. */
+  private track(_kind: OpKind, _key: string, _startedAt: number): void {
+    // Metric do Prometheus & Redis exporter đảm nhiệm
   }
 
   private fail(operation: CacheErrorRecord['operation'], key: string | null, err: unknown): void {
     const kind = classifyCacheError(err);
     const message = sanitizeCacheMessage(err);
-    this.recorder?.count('cache.errors');
-    this.recorder?.count(`cache.err.${kind}`);
     if (this.lastLoggedError !== message) this.logger.warn(`Cache ${operation} failed: ${message}`);
     this.lastLoggedError = message;
 
@@ -104,7 +96,7 @@ export class BaseCacheProvider implements CacheContract {
       namespace: key === null ? '*' : this.namespaceOf(key),
       message,
       runtime: this.identity?.id ?? null,
-      instance: this.recorder?.instance ?? null,
+      instance: null,
       correlationId: RequestContextService.currentCorrelationId() ?? null,
     };
     const listKey = cacheKeys(this.redis).errors();

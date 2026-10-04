@@ -20,7 +20,7 @@ import {
   type OperationContext,
   type QueueSnapshot,
 } from '@packages/messaging/index.js';
-import { TELEMETRY_TIERS, type MetricBucket } from '@packages/telemetry/index.js';
+import { TELEMETRY_TIERS, type MetricBucket } from '@modules/system-ops/telemetry-compat.js';
 import {
   changePercent,
   counterOf,

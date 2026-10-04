@@ -16,7 +16,7 @@ import {
   type KeyspaceSnapshot,
   type ServerInfo,
 } from '@packages/cache/index.js';
-import { MetricRecorder } from '@packages/telemetry/index.js';
+import { MetricRecorder } from '@modules/system-ops/telemetry-compat.js';
 import { mergedOf, round } from '@modules/performance/index.js';
 import { CacheMetricsService, hitRate } from './cache-metrics.service.js';
 import { CacheStoreService } from './cache-store.service.js';
