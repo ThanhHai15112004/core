@@ -27,7 +27,7 @@ import { SchedulerRuntimeContributor } from './runtime/scheduler-runtime.contrib
     MetricsModule.forRuntime({ runtime: 'scheduler', port: 9102 }),
     ScheduleModule.forRoot(),
     I18nModule,
-    LoggingModule,
+    LoggingModule.forRoot({ runtime: 'scheduler' }),
     DatabaseModule,
     CacheModule,
     StorageModule,

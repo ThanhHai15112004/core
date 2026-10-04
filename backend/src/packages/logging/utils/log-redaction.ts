@@ -1,5 +1,5 @@
 import { isSensitiveKey } from '../redaction/redact.util.js';
-import type { LogMetadata, LogMetadataValue } from '../contracts/log-sink.contract.js';
+import type { LogMetadata, LogMetadataValue } from '../contracts/log-entry.types.js';
 
 export const REDACTED = '[REDACTED]';
 

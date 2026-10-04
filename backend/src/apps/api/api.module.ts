@@ -8,7 +8,7 @@ import {
   TransformResponseInterceptor,
 } from '@packages/http/index.js';
 import { DatabaseModule } from '@packages/database/index.js';
-import { LoggingInterceptor, LoggingModule } from '@packages/logging/index.js';
+import { LoggingModule } from '@packages/logging/index.js';
 import { AuthGuard, SecurityModule } from '@packages/security/index.js';
 import { MessagingModule } from '@packages/messaging/index.js';
 import { QueueModule } from '@packages/queue/index.js';
@@ -45,7 +45,7 @@ import { HttpMetricsInterceptor, MetricsModule } from '@packages/metrics/index.j
     HttpModule,
     TrafficModule,
     DatabaseModule,
-    LoggingModule,
+    LoggingModule.forRoot({ runtime: 'api' }),
     SecurityModule,
     MessagingModule,
     QueueModule,
@@ -76,10 +76,6 @@ import { HttpMetricsInterceptor, MetricsModule } from '@packages/metrics/index.j
     {
       provide: APP_INTERCEPTOR,
       useClass: HttpMetricsInterceptor,
-    },
-    {
-      provide: APP_INTERCEPTOR,
-      useClass: LoggingInterceptor,
     },
     {
       provide: APP_INTERCEPTOR,

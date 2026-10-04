@@ -22,7 +22,7 @@ import { WorkerRuntimeContributor } from './runtime/worker-runtime.contributor.j
     RuntimeAgentModule.forRuntime({ id: 'worker', kind: 'long-running' }),
     MetricsModule.forRuntime({ runtime: 'worker', port: 9101 }),
     I18nModule,
-    LoggingModule,
+    LoggingModule.forRoot({ runtime: 'worker' }),
     DatabaseModule,
     MessagingModule,
     CacheModule,

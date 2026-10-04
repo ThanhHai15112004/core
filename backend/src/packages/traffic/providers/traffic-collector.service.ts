@@ -9,7 +9,6 @@ import {
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { CoreConfigService } from '@packages/config/index.js';
 import { RedisService } from '@packages/redis/index.js';
-import { HttpMetricsService } from '@packages/logging/index.js';
 import { readRequestError } from '@packages/http/index.js';
 import {
   FIELD_SEPARATOR,
@@ -138,7 +137,6 @@ export class TrafficCollectorService implements OnModuleInit, BeforeApplicationS
   constructor(
     private readonly config: CoreConfigService,
     private readonly redis: RedisService,
-    private readonly http: HttpMetricsService,
   ) {
     this.keys = trafficKeys(redis);
   }
@@ -189,7 +187,6 @@ export class TrafficCollectorService implements OnModuleInit, BeforeApplicationS
       startedAt: state.at,
       instance: this.cfg.instanceId,
     });
-    this.http.begin();
     this.updatePeaks(state.at);
   }
 
@@ -228,12 +225,10 @@ export class TrafficCollectorService implements OnModuleInit, BeforeApplicationS
     if (!state) return;
     this.states.delete(req.raw);
     this.active.delete(state.id);
-    this.http.end();
 
     const durationMs = round1(performance.now() - state.start);
     state.marks.finished = durationMs;
     const status = reply ? reply.statusCode : CLIENT_CLOSED_STATUS;
-    this.http.record(durationMs, status);
     if (!this.cfg.enabled) return;
 
     const error = readRequestError(req.raw) ?? null;

@@ -2,6 +2,7 @@ import { Global, Module, type DynamicModule, type Provider } from '@nestjs/commo
 import { METRICS_OPTIONS, type MetricsModuleOptions } from './contracts/metrics.types.js';
 import { MetricsRegistryService } from './providers/metrics-registry.service.js';
 import { PrometheusQueryClient } from './providers/prometheus-query.client.js';
+import { HttpMetricsReader } from './providers/http-metrics.reader.js';
 import { MetricsServer } from './providers/metrics-server.js';
 import { MetricsController } from './providers/metrics.controller.js';
 import { MetricsManageableAdapter } from './providers/metrics-manageable.adapter.js';
@@ -20,6 +21,7 @@ export class MetricsModule {
       { provide: METRICS_OPTIONS, useValue: options },
       MetricsRegistryService,
       PrometheusQueryClient,
+      HttpMetricsReader,
       MetricsManageableAdapter,
       HttpMetricsInterceptor,
       ...(options.port ? [MetricsServer] : []),
@@ -31,6 +33,7 @@ export class MetricsModule {
       exports: [
         MetricsRegistryService,
         PrometheusQueryClient,
+        HttpMetricsReader,
         MetricsManageableAdapter,
         HttpMetricsInterceptor,
       ],

@@ -10,7 +10,7 @@ import {
   type RuntimeId,
   type RuntimeSample,
 } from '@packages/runtime/index.js';
-import type { LogEntry } from '@packages/logging/index.js';
+import { LogStreamReader, type LogEntry } from '@packages/logging/index.js';
 
 const EVENT_SCAN_LIMIT = 2000;
 
@@ -28,7 +28,10 @@ function parseJson<T>(raw: string | null | undefined): T | null {
 export class RuntimeStoreService {
   private readonly keys: ReturnType<typeof runtimeKeys>;
 
-  constructor(private readonly redis: RedisService) {
+  constructor(
+    private readonly redis: RedisService,
+    private readonly logStream: LogStreamReader,
+  ) {
     this.keys = runtimeKeys(redis);
   }
 
@@ -77,10 +80,10 @@ export class RuntimeStoreService {
       .reverse();
   }
 
-  /** Log mới nhất trước. */
-  public async logs(id: RuntimeId, limit: number): Promise<LogEntry[]> {
-    const raws = await this.redis.client.lrange(this.keys.logs(id), 0, limit - 1);
-    return raws.map((r) => parseJson<LogEntry>(r)).filter((e): e is LogEntry => e !== null);
+  /** Log mới nhất trước của một runtime (quét `scan` log gần nhất trong stream chung). */
+  public async logs(id: RuntimeId, limit: number, scan = limit * 5): Promise<LogEntry[]> {
+    const entries = await this.logStream.recent(Math.max(limit, scan));
+    return entries.filter((e) => e.runtime === id).slice(0, limit);
   }
 
   public async cliHistory(limit = 200): Promise<CliExecution[]> {

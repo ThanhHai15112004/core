@@ -20,7 +20,7 @@ import { SystemCommand } from './commands/system/system.command.js';
     RuntimeAgentModule.forRuntime({ id: 'cli', kind: 'on-demand' }),
     MetricsModule.forRuntime({ runtime: 'cli' }),
     I18nModule,
-    LoggingModule,
+    LoggingModule.forRoot({ runtime: 'cli' }),
     DatabaseModule,
     CacheModule,
     StorageModule,

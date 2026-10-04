@@ -1,14 +1,11 @@
 import { type DynamicModule, Module } from '@nestjs/common';
 import * as os from 'node:os';
-import { LOG_SINK } from '@packages/logging/index.js';
 import { MetricRecorder, TELEMETRY_INSTANCE } from '@packages/telemetry/index.js';
 import { RUNTIME_IDENTITY } from './constants/runtime.tokens.js';
 import type { RuntimeIdentity } from './contracts/runtime.types.js';
 import { ResourceSampler } from './providers/resource-sampler.js';
 import { RuntimeAgentService } from './providers/runtime-agent.service.js';
 import { CliHistoryService } from './providers/cli-history.service.js';
-import { RuntimeLogSink } from './providers/runtime-log.sink.js';
-import { RuntimeLogControl } from './providers/runtime-log-control.js';
 
 /**
  * Gắn runtime agent vào một app (api/worker/scheduler/cli). Yêu cầu RedisModule & ConfigModule.
@@ -34,15 +31,11 @@ export class RuntimeAgentModule {
         ResourceSampler,
         RuntimeAgentService,
         CliHistoryService,
-        RuntimeLogSink,
-        RuntimeLogControl,
-        { provide: LOG_SINK, useExisting: RuntimeLogSink },
       ],
       exports: [
         RUNTIME_IDENTITY,
         RuntimeAgentService,
         CliHistoryService,
-        LOG_SINK,
         ResourceSampler,
         MetricRecorder,
       ],

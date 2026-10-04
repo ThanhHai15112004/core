@@ -5,7 +5,5 @@ export * from './constants/runtime.tokens.js';
 export * from './providers/resource-sampler.js';
 export * from './providers/runtime-agent.service.js';
 export * from './providers/cli-history.service.js';
-export * from './providers/runtime-log.sink.js';
-export * from './providers/runtime-log-control.js';
 export * from './runtime-agent.module.js';
 export * from './providers/package-version.js';

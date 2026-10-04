@@ -34,6 +34,11 @@ export class RequestContextService {
     return RequestContextService.storage.run(store, callback);
   }
 
+  /** Dùng ở nơi không inject được (middleware dạng hàm). */
+  public static runWith<R>(store: RequestContextStore, callback: () => R): R {
+    return RequestContextService.storage.run(store, callback);
+  }
+
   public getStore(): RequestContextStore | undefined {
     return RequestContextService.storage.getStore();
   }
