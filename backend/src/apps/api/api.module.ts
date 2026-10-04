@@ -18,19 +18,8 @@ import { HttpClientModule } from '@packages/http-client/index.js';
 import { I18nModule } from '@packages/i18n/index.js';
 import { HealthModule } from '@modules/health/index.js';
 import { SystemOpsModule } from '@modules/system-ops/index.js';
-import { RuntimesModule } from '@modules/runtimes/index.js';
 import { RedisModule } from '@packages/redis/index.js';
 import { RuntimeAgentModule } from '@packages/runtime/index.js';
-import { TrafficOpsModule } from '@modules/traffic/index.js';
-import { PerformanceOpsModule } from '@modules/performance/index.js';
-import { DatabaseOpsModule } from '@modules/database-ops/index.js';
-import { CacheOpsModule } from '@modules/cache-ops/index.js';
-import { StorageOpsModule } from '@modules/storage-ops/index.js';
-import { MessagingOpsModule } from '@modules/messaging-ops/index.js';
-import { WorkerOpsModule } from '@modules/worker-ops/index.js';
-import { SchedulerOpsModule } from '@modules/scheduler-ops/index.js';
-import { JobsOpsModule } from '@modules/jobs-ops/index.js';
-import { LogsOpsModule } from '@modules/logs-ops/index.js';
 import { ApiRuntimeContributor } from './runtime/api-runtime.contributor.js';
 import { HttpMetricsInterceptor, MetricsModule } from '@packages/metrics/index.js';
 
@@ -53,17 +42,6 @@ import { HttpMetricsInterceptor, MetricsModule } from '@packages/metrics/index.j
     I18nModule,
     HealthModule,
     SystemOpsModule,
-    RuntimesModule,
-    TrafficOpsModule,
-    PerformanceOpsModule,
-    DatabaseOpsModule,
-    CacheOpsModule,
-    StorageOpsModule,
-    MessagingOpsModule,
-    WorkerOpsModule,
-    SchedulerOpsModule,
-    JobsOpsModule,
-    LogsOpsModule,
   ],
   providers: [
     ApiRuntimeContributor,

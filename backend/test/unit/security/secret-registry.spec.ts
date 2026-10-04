@@ -21,7 +21,7 @@ describe('SecretRegistryService', () => {
 
     // Quan trọng nhất: kiểm tra mọi item trong list không có thuộc tính value hoặc rò rỉ secret
     for (const item of list) {
-      expect((item as Record<string, unknown>)['value']).toBeUndefined();
+      expect((item as unknown as Record<string, unknown>)['value']).toBeUndefined();
       expect(JSON.stringify(item)).not.toContain('super-secret-key-123456');
     }
   });

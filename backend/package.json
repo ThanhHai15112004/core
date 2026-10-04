@@ -42,6 +42,7 @@
     "@nestjs/config": "^4.0.4",
     "@nestjs/core": "^11.0.0",
     "@nestjs/platform-fastify": "^11.0.0",
+    "@nestjs/terminus": "^12.1.0",
     "@nestjs/typeorm": "^12.0.1",
     "bullmq": "^6.3.8",
     "ioredis": "^5.11.1",

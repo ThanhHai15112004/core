@@ -9,7 +9,7 @@ export class HealthController {
 
   @Public()
   @Get(HEALTH_ROUTES.CHECK)
-  public check(): HealthCheckResult {
+  public async check(): Promise<HealthCheckResult> {
     return this.healthService.check();
   }
 }

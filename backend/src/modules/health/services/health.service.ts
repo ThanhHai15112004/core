@@ -1,4 +1,5 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
+import { HealthCheckService } from '@nestjs/terminus';
 
 export interface HealthCheckResult {
   status: 'ok' | 'degraded';
@@ -8,7 +9,17 @@ export interface HealthCheckResult {
 
 @Injectable()
 export class HealthService {
-  public check(): HealthCheckResult {
+  constructor(@Optional() private readonly health?: HealthCheckService) {}
+
+  public async check(): Promise<HealthCheckResult> {
+    if (this.health) {
+      const res = await this.health.check([]).catch(() => ({ status: 'error' }));
+      return {
+        status: res.status === 'ok' ? 'ok' : 'degraded',
+        uptime: process.uptime(),
+        timestamp: new Date().toISOString(),
+      };
+    }
     return {
       status: 'ok',
       uptime: process.uptime(),
