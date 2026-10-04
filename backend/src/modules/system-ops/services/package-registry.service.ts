@@ -1,4 +1,5 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
+import { DiscoveryService } from '@nestjs/core';
 import {
   type ManageablePackage,
   type PackageStatusReport,
@@ -8,13 +9,17 @@ import {
   PackageStatus,
 } from '@packages/kernel/index.js';
 import { CoreI18nService } from '@packages/i18n/index.js';
-import { CacheManageableAdapter } from '@packages/cache/index.js';
-import { LoggingManageableAdapter } from '@packages/logging/index.js';
-import { DatabaseManageableAdapter } from '@packages/database/index.js';
-import { SecurityManageableAdapter } from '@packages/security/index.js';
-import { StorageManageableAdapter } from '@packages/storage/index.js';
-import { MessagingManageableAdapter } from '@packages/messaging/index.js';
 import { OpsEventService } from './ops-event.service.js';
+
+/** Provider nào có `packageId` + `getStatus()` là một package quản lý được (ManageablePackage). */
+function isManageable(value: unknown): value is ManageablePackage {
+  return (
+    !!value &&
+    typeof value === 'object' &&
+    typeof (value as ManageablePackage).packageId === 'string' &&
+    typeof (value as ManageablePackage).getStatus === 'function'
+  );
+}
 
 export interface PackageSummaryDto {
   packageId: string;
@@ -30,23 +35,16 @@ export class PackageRegistryService implements OnModuleInit {
   private readonly packages = new Map<string, ManageablePackage>();
 
   constructor(
-    private readonly cacheAdapter: CacheManageableAdapter,
-    private readonly loggingAdapter: LoggingManageableAdapter,
-    private readonly databaseAdapter: DatabaseManageableAdapter,
-    private readonly securityAdapter: SecurityManageableAdapter,
-    private readonly storageAdapter: StorageManageableAdapter,
-    private readonly messagingAdapter: MessagingManageableAdapter,
+    private readonly discovery: DiscoveryService,
     private readonly i18n: CoreI18nService,
     private readonly events: OpsEventService,
   ) {}
 
+  /** Tự đăng ký mọi adapter `*-manageable.adapter.ts` của các package đã import vào runtime. */
   public onModuleInit(): void {
-    this.register(this.cacheAdapter);
-    this.register(this.loggingAdapter);
-    this.register(this.databaseAdapter);
-    this.register(this.securityAdapter);
-    this.register(this.storageAdapter);
-    this.register(this.messagingAdapter);
+    for (const wrapper of this.discovery.getProviders()) {
+      if (isManageable(wrapper.instance)) this.register(wrapper.instance);
+    }
   }
 
   public register(pkg: ManageablePackage): void {

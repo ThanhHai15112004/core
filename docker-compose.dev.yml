@@ -12,6 +12,7 @@ services:
       - NODE_ENV=development
       - RUNTIME=api
       - RUNTIME_SUPERVISOR=docker
+      - PROMETHEUS_URL=http://prometheus:9090
     extra_hosts:
       - "host.docker.internal:host-gateway"
     env_file:
@@ -37,6 +38,7 @@ services:
       - NODE_ENV=development
       - RUNTIME=worker
       - RUNTIME_SUPERVISOR=docker
+      - METRICS_PORT=9101
     extra_hosts:
       - "host.docker.internal:host-gateway"
     env_file:
@@ -61,6 +63,7 @@ services:
       - NODE_ENV=development
       - RUNTIME=scheduler
       - RUNTIME_SUPERVISOR=docker
+      - METRICS_PORT=9102
     extra_hosts:
       - "host.docker.internal:host-gateway"
     env_file:
@@ -97,6 +100,23 @@ services:
     depends_on:
       - backend
 
+  # Prometheus: scrape /metrics của api/worker/scheduler, nguồn lịch sử cho biểu đồ System Console
+  prometheus:
+    container_name: core-prometheus-dev
+    image: prom/prometheus:v3.5.0
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=7d
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    mem_limit: 256m
+    restart: unless-stopped
+
 volumes:
   backend_node_modules:
   frontend_node_modules:
+  prometheus_data:

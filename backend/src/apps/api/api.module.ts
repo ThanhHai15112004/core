@@ -33,6 +33,7 @@ import { SchedulerOpsModule } from '@modules/scheduler-ops/index.js';
 import { JobsOpsModule } from '@modules/jobs-ops/index.js';
 import { LogsOpsModule } from '@modules/logs-ops/index.js';
 import { ApiRuntimeContributor } from './runtime/api-runtime.contributor.js';
+import { HttpMetricsInterceptor, MetricsModule } from '@packages/metrics/index.js';
 
 @Module({
   imports: [
@@ -40,6 +41,7 @@ import { ApiRuntimeContributor } from './runtime/api-runtime.contributor.js';
     ConfigModule,
     RedisModule,
     RuntimeAgentModule.forRuntime({ id: 'api', kind: 'long-running' }),
+    MetricsModule.forRuntime({ runtime: 'api' }),
     HttpModule,
     TrafficModule,
     DatabaseModule,
@@ -70,6 +72,10 @@ import { ApiRuntimeContributor } from './runtime/api-runtime.contributor.js';
     {
       provide: APP_FILTER,
       useClass: GlobalExceptionFilter,
+    },
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: HttpMetricsInterceptor,
     },
     {
       provide: APP_INTERCEPTOR,

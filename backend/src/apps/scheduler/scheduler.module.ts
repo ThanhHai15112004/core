@@ -10,6 +10,7 @@ import { StorageModule } from '@packages/storage/index.js';
 import { MessagingModule } from '@packages/messaging/index.js';
 import { RedisModule } from '@packages/redis/index.js';
 import { RuntimeAgentModule } from '@packages/runtime/index.js';
+import { MetricsModule } from '@packages/metrics/index.js';
 import { SchedulerStoreModule } from '@packages/scheduler/index.js';
 import { ScheduledTaskRegistry } from './registry/scheduled-task.registry.js';
 import { SystemTask } from './tasks/system/system.task.js';
@@ -23,6 +24,7 @@ import { SchedulerRuntimeContributor } from './runtime/scheduler-runtime.contrib
     ConfigModule,
     RedisModule,
     RuntimeAgentModule.forRuntime({ id: 'scheduler', kind: 'long-running' }),
+    MetricsModule.forRuntime({ runtime: 'scheduler', port: 9102 }),
     ScheduleModule.forRoot(),
     I18nModule,
     LoggingModule,

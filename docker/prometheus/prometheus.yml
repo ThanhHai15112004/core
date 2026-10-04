@@ -1,0 +1,22 @@
+# Prometheus chạy nền: scrape /metrics của 3 runtime, giữ lịch sử cho biểu đồ System Console.
+# Nhãn `runtime` do chính ứng dụng gắn (prom-client default labels) — honor_labels giữ nguyên nhãn đó.
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: api
+    honor_labels: true
+    metrics_path: /api/v1/metrics
+    static_configs:
+      - targets: ['backend:3005']
+
+  - job_name: worker
+    honor_labels: true
+    static_configs:
+      - targets: ['worker:9101']
+
+  - job_name: scheduler
+    honor_labels: true
+    static_configs:
+      - targets: ['scheduler:9102']

@@ -9,6 +9,7 @@ import { CacheModule } from '@packages/cache/index.js';
 import { StorageModule } from '@packages/storage/index.js';
 import { RedisModule } from '@packages/redis/index.js';
 import { RuntimeAgentModule } from '@packages/runtime/index.js';
+import { MetricsModule } from '@packages/metrics/index.js';
 import { SystemProcessor } from './processors/system/system.processor.js';
 import { QueueConsumerService } from './consumers/queue-consumer.service.js';
 import { WorkerRuntimeContributor } from './runtime/worker-runtime.contributor.js';
@@ -19,6 +20,7 @@ import { WorkerRuntimeContributor } from './runtime/worker-runtime.contributor.j
     ConfigModule,
     RedisModule,
     RuntimeAgentModule.forRuntime({ id: 'worker', kind: 'long-running' }),
+    MetricsModule.forRuntime({ runtime: 'worker', port: 9101 }),
     I18nModule,
     LoggingModule,
     DatabaseModule,
