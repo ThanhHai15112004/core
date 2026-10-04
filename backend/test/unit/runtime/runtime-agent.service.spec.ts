@@ -3,9 +3,7 @@ import { applyTestEnv } from '../../fixtures/env.fixture.js';
 import { mockRedisFactory } from '../../concerns/test-app.concern.js';
 import { CoreConfigService } from '@packages/config/index.js';
 import { RedisService } from '@packages/redis/index.js';
-import { MetricRecorder } from '@packages/telemetry/index.js';
 import {
-  ResourceSampler,
   RuntimeAgentService,
   runtimeKeys,
   type RuntimeCommand,
@@ -50,8 +48,6 @@ describe('RuntimeAgentService', () => {
       { id: 'worker', kind: 'long-running' },
       redis,
       config,
-      new ResourceSampler(),
-      new MetricRecorder(config, redis, 'worker@test:1'),
     );
     agent.registerContributor(contributor);
     await agent.onApplicationBootstrap();

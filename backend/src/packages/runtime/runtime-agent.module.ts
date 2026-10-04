@@ -3,13 +3,12 @@ import * as os from 'node:os';
 import { MetricRecorder, TELEMETRY_INSTANCE } from '@packages/telemetry/index.js';
 import { RUNTIME_IDENTITY } from './constants/runtime.tokens.js';
 import type { RuntimeIdentity } from './contracts/runtime.types.js';
-import { ResourceSampler } from './providers/resource-sampler.js';
 import { RuntimeAgentService } from './providers/runtime-agent.service.js';
 import { CliHistoryService } from './providers/cli-history.service.js';
+import { RuntimeManageableAdapter } from './providers/runtime-manageable.adapter.js';
 
 /**
  * Gắn runtime agent vào một app (api/worker/scheduler/cli). Yêu cầu RedisModule & ConfigModule.
- * Cung cấp luôn `MetricRecorder` (global) để các package (database, cache, messaging…) ghi số đo hiệu năng.
  */
 @Module({})
 export class RuntimeAgentModule {
@@ -19,7 +18,6 @@ export class RuntimeAgentModule {
       global: true,
       providers: [
         { provide: RUNTIME_IDENTITY, useValue: identity },
-        // Runtime chạy theo yêu cầu (CLI) không ghi số đo hiệu năng.
         {
           provide: TELEMETRY_INSTANCE,
           useValue:
@@ -28,15 +26,15 @@ export class RuntimeAgentModule {
               : null,
         },
         MetricRecorder,
-        ResourceSampler,
         RuntimeAgentService,
         CliHistoryService,
+        RuntimeManageableAdapter,
       ],
       exports: [
         RUNTIME_IDENTITY,
         RuntimeAgentService,
         CliHistoryService,
-        ResourceSampler,
+        RuntimeManageableAdapter,
         MetricRecorder,
       ],
     };
