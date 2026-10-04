@@ -4,7 +4,7 @@ import type {
   ExecutionRecord,
   SchedulerInstanceRecord,
   TaskStateRecord,
-} from '@packages/scheduler/index.js';
+} from '../contracts/scheduler.types.js';
 
 export const MINUTE = 60_000;
 export const HOUR = 60 * MINUTE;

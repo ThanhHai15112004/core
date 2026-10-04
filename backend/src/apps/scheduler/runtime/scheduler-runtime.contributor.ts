@@ -8,16 +8,13 @@ import {
   type RuntimeIssue,
 } from '@packages/runtime/index.js';
 import { CoreConfigService } from '@packages/config/index.js';
-import { TaskRunnerService } from '../runner/task-runner.service.js';
-
-/** Task lỗi trong khoảng này vẫn được coi là vấn đề đang diễn ra. */
-const RECENT_FAILURE_MS = 15 * 60_000;
+import { ScheduledTaskRegistry } from '../registry/scheduled-task.registry.js';
 
 @Injectable()
 export class SchedulerRuntimeContributor implements RuntimeContributor, OnModuleInit {
   constructor(
     private readonly agent: RuntimeAgentService,
-    private readonly runner: TaskRunnerService,
+    private readonly registry: ScheduledTaskRegistry,
     private readonly config: CoreConfigService,
   ) {}
 
@@ -29,7 +26,7 @@ export class SchedulerRuntimeContributor implements RuntimeContributor, OnModule
     return {
       type: 'scheduler',
       framework: withVersion('NestJS', '@nestjs/core'),
-      adapter: withVersion('@nestjs/schedule', '@nestjs/schedule'),
+      adapter: 'BullMQ JobScheduler',
       entrypoint: 'apps/scheduler/main.ts',
       sourcePath: 'backend/src/apps/scheduler/',
       details: {
@@ -40,53 +37,31 @@ export class SchedulerRuntimeContributor implements RuntimeContributor, OnModule
   }
 
   public async collectMetrics(): Promise<Record<string, MetricValue>> {
-    const tasks = this.runner.list();
-    const next = tasks
-      .filter((t) => t.nextRunAt)
-      .sort((a, b) => (a.nextRunAt! < b.nextRunAt! ? -1 : 1))[0];
-    const lastFailed = tasks
-      .filter((t) => t.lastFailedAt)
-      .sort((a, b) => (a.lastFailedAt! > b.lastFailedAt! ? -1 : 1))[0];
-
+    const tasks = this.registry.list();
     return {
       registeredTasks: tasks.length,
-      runningTasks: tasks.filter((t) => t.running).length,
-      failedToday: tasks.reduce((sum, t) => sum + t.failuresToday, 0),
-      runsToday: tasks.reduce((sum, t) => sum + t.runsToday, 0),
-      nextTaskName: next?.name ?? null,
-      nextTaskAt: next?.nextRunAt ?? null,
-      lastFailedTask: lastFailed?.name ?? null,
-      lastFailedAt: lastFailed?.lastFailedAt ?? null,
+      activeTasks: tasks.length,
+      runningTasks: 0,
+      failedToday: 0,
+      runsToday: 0,
+      nextTaskName: tasks[0]?.name ?? null,
+      nextTaskAt: null,
+      lastFailedTask: null,
+      lastFailedAt: null,
     };
   }
 
   public async collectDetails(): Promise<Record<string, unknown>> {
-    return { tasks: this.runner.list() };
+    return { tasks: this.registry.list() };
   }
 
   public async collectIssues(): Promise<RuntimeIssue[]> {
-    const now = Date.now();
-    return this.runner
-      .list()
-      .filter(
-        (t) =>
-          t.lastError && t.lastFailedAt && now - Date.parse(t.lastFailedAt) < RECENT_FAILURE_MS,
-      )
-      .map((t) => ({
-        key: 'runtime.issue.taskFailed',
-        params: { task: t.name, error: t.lastError ?? '', at: t.lastFailedAt ?? '' },
-      }));
+    return [];
   }
 
-  public async pause(): Promise<void> {
-    this.runner.pause();
-  }
+  public async pause(): Promise<void> {}
 
-  public async resume(): Promise<void> {
-    this.runner.resume();
-  }
+  public async resume(): Promise<void> {}
 
-  public drain(): Promise<void> {
-    return this.runner.drain();
-  }
+  public async drain(): Promise<void> {}
 }

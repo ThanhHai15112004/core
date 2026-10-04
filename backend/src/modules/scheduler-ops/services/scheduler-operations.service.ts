@@ -1,19 +1,12 @@
 import { performance } from 'node:perf_hooks';
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { CoreConfigService } from '@packages/config/index.js';
 import { RedisService } from '@packages/redis/index.js';
-import {
-  SchedulerStore,
-  recordSchedulerEvent,
-  recordSchedulerOperation,
-  schedulerId,
-  type ScheduledTaskMeta,
-  type SchedulerCommand,
-  type SchedulerCommandResult,
-  type SchedulerOperationAction,
-  type SchedulerOperationRecord,
-} from '@packages/scheduler/index.js';
-import { liveness } from './scheduler-utils.js';
+import { QueueRegistry } from '@packages/queue/index.js';
+import type {
+  SchedulerOperationAction,
+  SchedulerOperationRecord,
+} from '../contracts/scheduler.types.js';
 import {
   SchedulerActionRejectedException,
   SchedulerNotFoundException,
@@ -25,31 +18,31 @@ export interface SchedulerOperationContext {
   actor: string | null;
 }
 
-/** Chờ scheduler xác nhận lệnh Run Now tối đa chừng này. */
-const COMMAND_WAIT_MS = 4000;
-const COMMAND_POLL_MS = 100;
+const OPERATIONS_KEY = 'scheduler:operations';
+const MAX_OPERATIONS = 100;
 
-/**
- * Thao tác của người vận hành trên task: Run Now (gửi lệnh tới Scheduler runtime qua Redis, runtime tự áp dụng
- * overlap policy), Enable / Disable (giữ task nhưng không trigger theo lịch — không xoá định nghĩa, không huỷ lần
- * đang chạy). Bật/tắt bằng env, ghi audit + sự kiện. Không sửa lịch: lịch được khai báo trong code.
- */
+interface TaskDefinitionJson {
+  id: string;
+  queue: string;
+  name?: string | undefined;
+  description?: string | undefined;
+  pattern?: string | undefined;
+  every?: number | undefined;
+  tz?: string | undefined;
+  data?: Record<string, unknown> | undefined;
+}
+
 @Injectable()
 export class SchedulerOperationsService {
+  private readonly logger = new Logger(SchedulerOperationsService.name);
+
   constructor(
-    private readonly store: SchedulerStore,
     private readonly config: CoreConfigService,
     private readonly redis: RedisService,
+    private readonly queueRegistry: QueueRegistry,
   ) {}
 
-  private async task(id: string): Promise<ScheduledTaskMeta> {
-    if (!this.store.isAvailable()) throw new SchedulerUnavailableException('STORE_UNAVAILABLE');
-    const meta = await this.store.task(id);
-    if (!meta) throw new SchedulerNotFoundException('scheduler.error.taskNotFound', { id });
-    return meta;
-  }
-
-  private audit(
+  private async audit(
     action: SchedulerOperationAction,
     target: string,
     ctx: SchedulerOperationContext,
@@ -58,7 +51,8 @@ export class SchedulerOperationsService {
     error: string | null,
     executionId: string | null = null,
   ): Promise<SchedulerOperationRecord> {
-    return recordSchedulerOperation(this.redis, {
+    const record: SchedulerOperationRecord = {
+      id: `sch_op_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
       at: Date.now(),
       action,
       target,
@@ -69,166 +63,201 @@ export class SchedulerOperationsService {
       ip: ctx.ip,
       error,
       executionId,
-    });
+    };
+
+    try {
+      if (this.redis.isReady()) {
+        await this.redis.client
+          .pipeline()
+          .lpush(OPERATIONS_KEY, JSON.stringify(record))
+          .ltrim(OPERATIONS_KEY, 0, MAX_OPERATIONS - 1)
+          .exec();
+      }
+    } catch (err) {
+      this.logger.warn(
+        `Failed to save audit record: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+
+    return record;
   }
 
-  /** Chạy thủ công ngay (trigger = manual). Task đang chạy mà overlap = Prevent → từ chối, không chạy chồng. */
+  public async getOperations(): Promise<SchedulerOperationRecord[]> {
+    if (!this.redis.isReady()) return [];
+    try {
+      const raw = await this.redis.client.lrange(OPERATIONS_KEY, 0, MAX_OPERATIONS - 1);
+      return raw.map((item) => JSON.parse(item) as SchedulerOperationRecord);
+    } catch {
+      return [];
+    }
+  }
+
+  private async findTaskDefinition(taskId: string): Promise<TaskDefinitionJson | null> {
+    if (!this.redis.isReady()) return null;
+    const raw = await this.redis.client.hget('scheduler:definitions', taskId);
+    if (raw) {
+      try {
+        return JSON.parse(raw) as TaskDefinitionJson;
+      } catch {
+        // continue search
+      }
+    }
+
+    // Nếu không có trong cache định nghĩa, tìm trong các queue của BullMQ
+    const queues = this.queueRegistry.getQueues();
+    for (const [queueName, queue] of queues.entries()) {
+      try {
+        const schedulers = await queue.getJobSchedulers();
+        const found = schedulers.find(
+          (s: { id?: string | null; key?: string }) => s.id === taskId || s.key === taskId,
+        );
+        if (found) {
+          return {
+            id: taskId,
+            queue: queueName,
+            name: found.name || taskId,
+            pattern: found.pattern,
+            every: found.every,
+            tz: found.tz,
+            data: (found.template?.data as Record<string, unknown>) ?? {},
+          };
+        }
+      } catch {
+        // next queue
+      }
+    }
+
+    return null;
+  }
+
+  /** Run Now: Kích hoạt ngay một job trong queue đích của scheduler */
   public async runNow(
     taskId: string,
     ctx: SchedulerOperationContext,
   ): Promise<{ record: SchedulerOperationRecord; executionId: string; instance: string }> {
-    if (!this.config.scheduler.run) throw new SchedulerActionRejectedException('RUN_DISABLED');
-    const meta = await this.task(taskId);
+    if (!this.config.scheduler.run) {
+      throw new SchedulerActionRejectedException('RUN_DISABLED');
+    }
     const started = performance.now();
-    const fail = async (err: Error, detail: string | null = null) => {
-      await this.audit('run', taskId, ctx, started, detail, err.message);
-      return err;
-    };
-    if (meta.error)
-      throw await fail(
-        new SchedulerActionRejectedException('MISCONFIGURED', { error: meta.error }),
-      );
-    const live = liveness(
-      await this.store.instances(),
-      Date.now(),
-      this.config.scheduler.rules.heartbeatTimeoutSec,
-    );
-    if (live.alive.length === 0)
-      throw await fail(new SchedulerUnavailableException('RUNTIME_DOWN'));
-    if (live.paused) throw await fail(new SchedulerActionRejectedException('RUNTIME_PAUSED'));
-    if (meta.overlap === 'skip') {
-      const holder = await this.store.client.get(this.store.keys.lock(taskId));
-      if (holder) {
-        const executionId = holder.split('|')[0] ?? '';
-        const running = await this.store.execution(executionId);
-        throw await fail(
-          new SchedulerActionRejectedException('TASK_RUNNING', {
-            execution: executionId,
-            startedAt: running?.startedAt ? new Date(running.startedAt).toISOString() : '',
-          }),
-        );
-      }
+    const task = await this.findTaskDefinition(taskId);
+    if (!task) {
+      const err = new SchedulerNotFoundException('scheduler.error.taskNotFound', { id: taskId });
+      await this.audit('run', taskId, ctx, started, null, err.message);
+      throw err;
     }
-    const cmd: SchedulerCommand = {
-      id: schedulerId('scmd'),
-      action: 'run',
-      taskId,
-      executionId: schedulerId('sch'),
-      actor: ctx.actor,
-      ip: ctx.ip,
-      requestedAt: Date.now(),
-    };
-    const receivers = await this.store.client.publish(
-      this.store.keys.commandChannel(),
-      JSON.stringify(cmd),
-    );
-    if (receivers === 0) throw await fail(new SchedulerUnavailableException('RUNTIME_DOWN'));
-    const result = await this.waitResult(cmd.id);
-    if (!result) throw await fail(new SchedulerUnavailableException('NO_RESPONSE'));
-    if (result.status === 'rejected')
-      throw await fail(
-        new SchedulerActionRejectedException(result.code ?? 'REJECTED', result.params),
-        `instance=${result.instance}`,
+
+    try {
+      const queue = this.queueRegistry.getQueue(task.queue);
+      const job = await queue.add(task.name ?? taskId, {
+        ...(task.data ?? {}),
+        _triggeredBy: 'manual',
+        _requestedAt: new Date().toISOString(),
+      });
+
+      const execId = String(job.id);
+      const record = await this.audit(
+        'run',
+        taskId,
+        ctx,
+        started,
+        `Job dispatched to queue "${task.queue}" (id: ${execId})`,
+        null,
+        execId,
       );
-    const executionId = result.executionId ?? cmd.executionId!;
-    const record = await this.audit(
-      'run',
-      taskId,
-      ctx,
-      started,
-      `instance=${result.instance}`,
-      null,
-      executionId,
-    );
-    await recordSchedulerEvent(this.redis, {
-      type: 'manual_run',
-      severity: 'info',
-      taskId,
-      executionId,
-      params: { task: meta.name, ...(ctx.actor ? { actor: ctx.actor } : {}) },
-    });
-    return { record, executionId, instance: result.instance };
-  }
 
-  private async waitResult(id: string): Promise<SchedulerCommandResult | null> {
-    const deadline = Date.now() + COMMAND_WAIT_MS;
-    while (Date.now() < deadline) {
-      const raw = await this.store.client.get(this.store.keys.commandResult(id));
-      if (raw) {
-        try {
-          return JSON.parse(raw) as SchedulerCommandResult;
-        } catch {
-          return null;
-        }
-      }
-      await new Promise((r) => setTimeout(r, COMMAND_POLL_MS));
+      return {
+        record,
+        executionId: execId,
+        instance: 'api',
+      };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      await this.audit('run', taskId, ctx, started, null, msg);
+      throw new SchedulerUnavailableException('STORE_UNAVAILABLE', { error: msg });
     }
-    return null;
   }
 
-  public enable(taskId: string, ctx: SchedulerOperationContext) {
-    return this.toggle(taskId, true, ctx);
-  }
-
-  public disable(taskId: string, ctx: SchedulerOperationContext) {
-    return this.toggle(taskId, false, ctx);
-  }
-
-  /** Ghi trạng thái bật/tắt vào Redis (bền qua restart) rồi báo runtime lên lịch lại. */
-  private async toggle(
+  /** Enable task */
+  public async enable(
     taskId: string,
-    enable: boolean,
     ctx: SchedulerOperationContext,
   ): Promise<SchedulerOperationRecord> {
-    if (!this.config.scheduler.toggle)
+    if (!this.config.scheduler.toggle) {
       throw new SchedulerActionRejectedException('TOGGLE_DISABLED');
-    const meta = await this.task(taskId);
-    const started = performance.now();
-    const key = this.store.keys.disabled();
-    const isDisabled = (await this.store.client.hexists(key, taskId)) === 1;
-    if (enable !== isDisabled)
-      throw new SchedulerActionRejectedException(enable ? 'ALREADY_ENABLED' : 'ALREADY_DISABLED', {
-        task: meta.name,
-      });
-    const action = enable ? 'enable' : 'disable';
-    try {
-      if (enable) await this.store.client.hdel(key, taskId);
-      else
-        await this.store.client.hset(
-          key,
-          taskId,
-          JSON.stringify({ at: Date.now(), actor: ctx.actor, ip: ctx.ip }),
-        );
-      const cmd: SchedulerCommand = {
-        id: schedulerId('scmd'),
-        action: 'refresh',
-        taskId,
-        executionId: null,
-        actor: ctx.actor,
-        ip: ctx.ip,
-        requestedAt: Date.now(),
-      };
-      await this.store.client.publish(this.store.keys.commandChannel(), JSON.stringify(cmd));
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      await this.audit(action, taskId, ctx, started, null, message);
-      throw new SchedulerActionRejectedException('FAILED', { message }, 502);
     }
-    const state = (await this.store.states()).get(taskId);
-    const record = await this.audit(
-      action,
-      taskId,
-      ctx,
-      started,
-      state?.nextRunAt ? `nextRunAt=${new Date(state.nextRunAt).toISOString()}` : null,
-      null,
-    );
-    await recordSchedulerEvent(this.redis, {
-      type: enable ? 'task_enabled' : 'task_disabled',
-      severity: enable ? 'info' : 'warning',
-      taskId,
-      params: { task: meta.name, ...(ctx.actor ? { actor: ctx.actor } : {}) },
-    });
-    return record;
+    const started = performance.now();
+    const task = await this.findTaskDefinition(taskId);
+    if (!task) {
+      const err = new SchedulerNotFoundException('scheduler.error.taskNotFound', { id: taskId });
+      await this.audit('enable', taskId, ctx, started, null, err.message);
+      throw err;
+    }
+
+    try {
+      await this.redis.client.srem('scheduler:disabled', taskId);
+
+      // Upsert scheduler vào BullMQ
+      const queue = this.queueRegistry.getQueue(task.queue);
+      const repeatOpts: { pattern?: string; every?: number; tz?: string } = {};
+      if (task.pattern) repeatOpts.pattern = task.pattern;
+      if (task.every) repeatOpts.every = task.every;
+      repeatOpts.tz = task.tz || this.config.scheduler.timezone;
+
+      await queue.upsertJobScheduler(taskId, repeatOpts, {
+        name: task.name ?? taskId,
+        data: task.data ?? {},
+      });
+
+      return await this.audit(
+        'enable',
+        taskId,
+        ctx,
+        started,
+        `Task "${taskId}" enabled and upserted to queue "${task.queue}"`,
+        null,
+      );
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      await this.audit('enable', taskId, ctx, started, null, msg);
+      throw new SchedulerUnavailableException('STORE_UNAVAILABLE', { error: msg });
+    }
+  }
+
+  /** Disable task */
+  public async disable(
+    taskId: string,
+    ctx: SchedulerOperationContext,
+  ): Promise<SchedulerOperationRecord> {
+    if (!this.config.scheduler.toggle) {
+      throw new SchedulerActionRejectedException('TOGGLE_DISABLED');
+    }
+    const started = performance.now();
+
+    try {
+      await this.redis.client.sadd('scheduler:disabled', taskId);
+
+      // Gỡ scheduler khỏi BullMQ queue
+      const queues = this.queueRegistry.getQueues();
+      for (const queue of queues.values()) {
+        try {
+          await queue.removeJobScheduler(taskId);
+        } catch {
+          // ignore
+        }
+      }
+
+      return await this.audit(
+        'disable',
+        taskId,
+        ctx,
+        started,
+        `Task "${taskId}" disabled and removed from BullMQ`,
+        null,
+      );
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      await this.audit('disable', taskId, ctx, started, null, msg);
+      throw new SchedulerUnavailableException('STORE_UNAVAILABLE', { error: msg });
+    }
   }
 }

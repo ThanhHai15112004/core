@@ -12,4 +12,5 @@ export * from './operations/queue-operations.service.js';
 export * from './monitoring/job-monitoring.service.js';
 export * from './operations/job-operations.service.js';
 export * from './providers/queue-manageable.adapter.js';
+export { QueueRegistry } from '@packages/messaging/index.js';
 export * from './queue.module.js';

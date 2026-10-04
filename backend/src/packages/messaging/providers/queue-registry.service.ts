@@ -46,6 +46,14 @@ export class QueueRegistry implements OnModuleInit {
     return queue;
   }
 
+  public getQueue(name: string): Queue {
+    return this.get(name as QueueName);
+  }
+
+  public getQueues(): Map<QueueName, Queue> {
+    return this.queues;
+  }
+
   /**
    * Option mặc định của message: retry theo cấu hình, giữ message đã xong/Dead Letter có giới hạn,
    * giữ log vòng đời. `jobId` = id envelope để tra cứu được theo message ID.
