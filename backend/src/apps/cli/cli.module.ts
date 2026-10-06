@@ -9,7 +9,6 @@ import { StorageModule } from '@packages/storage/index.js';
 import { MessagingModule } from '@packages/messaging/index.js';
 import { RedisModule } from '@packages/redis/index.js';
 import { RuntimeAgentModule } from '@packages/runtime/index.js';
-import { MetricsModule } from '@packages/metrics/index.js';
 import { SystemCommand } from './commands/system/system.command.js';
 
 @Module({
@@ -18,7 +17,6 @@ import { SystemCommand } from './commands/system/system.command.js';
     ConfigModule,
     RedisModule,
     RuntimeAgentModule.forRuntime({ id: 'cli', kind: 'on-demand' }),
-    MetricsModule.forRuntime({ runtime: 'cli' }),
     I18nModule,
     LoggingModule.forRoot({ runtime: 'cli' }),
     DatabaseModule,

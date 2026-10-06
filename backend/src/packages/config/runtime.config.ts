@@ -14,9 +14,6 @@ export const runtimeConfig = () => {
     /** Tiến trình nào sẽ dựng lại runtime sau khi nó tự thoát (restart). */
     supervisor: SUPERVISORS.includes(supervisor) ? supervisor : 'none',
     heartbeatMs: env.number('RUNTIME_HEARTBEAT_MS', false) || 5000,
-    sampleIntervalMs: env.number('RUNTIME_SAMPLE_INTERVAL_MS', false) || 15000,
-    /** Số mẫu time-series giữ lại cho mỗi runtime (mặc định 24h với mẫu 15s). */
-    sampleRetention: env.number('RUNTIME_SAMPLE_RETENTION', false) || 5760,
     /** Ring buffer log mỗi runtime (Redis) — cũng là phạm vi tìm kiếm của trang Logs. */
     logRetention: env.number('RUNTIME_LOG_RETENTION', false) || 5000,
     eventRetention: env.number('RUNTIME_EVENT_RETENTION', false) || 2000,

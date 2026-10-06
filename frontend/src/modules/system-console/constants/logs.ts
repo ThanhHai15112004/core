@@ -6,7 +6,6 @@ export const LOGS_RANGES: LogsRange[] = ['15m', '1h', '6h', '24h', '7d'];
 export const DEFAULT_LOGS_RANGE: LogsRange = '1h';
 export const LOGS_WINDOWS: LogsWindow[] = ['5m', '15m', '1h', '6h', '24h', '7d'];
 export const DEFAULT_LOGS_WINDOW: LogsWindow = '1h';
-export const LOG_LEVELS: LogLevel[] = ['fatal', 'error', 'warn', 'info', 'debug', 'verbose'];
 export const RUNTIMES = ['api', 'worker', 'scheduler', 'cli'] as const;
 export const OVERRIDE_LEVELS: OverrideLevel[] = ['DEBUG', 'INFO', 'WARN'];
 export const LEVEL_DURATIONS = [15, 30, 60, 120] as const;

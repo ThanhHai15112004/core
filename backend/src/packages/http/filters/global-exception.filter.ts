@@ -6,11 +6,10 @@ import {
   HttpStatus,
   Logger,
 } from '@nestjs/common';
-import type { FastifyReply, FastifyRequest } from 'fastify';
+import type { FastifyReply } from 'fastify';
 import { AppException } from '@packages/kernel/index.js';
 import { CoreI18nService } from '@packages/i18n/index.js';
 import type { ApiErrorResponse } from '../contracts/api-response.contract.js';
-import { annotateRequestError } from '../utils/request-annotations.js';
 
 interface NormalizedError {
   statusCode: number;
@@ -28,16 +27,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
   public catch(exception: unknown, host: ArgumentsHost): void {
     const http = host.switchToHttp();
     const response = http.getResponse<FastifyReply>();
-    const request = http.getRequest<FastifyRequest | undefined>();
     const { statusCode, code, message, details } = this.normalize(exception);
-
-    if (request?.raw) {
-      annotateRequestError(request.raw, {
-        code,
-        name: exception instanceof Error ? exception.constructor.name : typeof exception,
-        message,
-      });
-    }
 
     if (statusCode >= 500) {
       this.logger.error(

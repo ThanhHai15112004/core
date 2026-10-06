@@ -1,4 +1,3 @@
-export * from './contracts/logger.contract.js';
 export * from './contracts/log-entry.types.js';
 export * from './contracts/log-store.types.js';
 export * from './contracts/logging-options.js';

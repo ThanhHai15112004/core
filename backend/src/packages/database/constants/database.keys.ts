@@ -18,7 +18,6 @@ export const databaseKeys = (redis: RedisService) => ({
   migrateLock: () => redis.key('db', 'lock', 'migrate'),
 });
 
-export const ERROR_LOG_SIZE = 500;
 export const EVENT_LOG_SIZE = 1000;
 /** Snapshot dung lượng mỗi giờ, giữ 90 ngày. */
 export const STORAGE_SNAPSHOT_LIMIT = 90 * 24;

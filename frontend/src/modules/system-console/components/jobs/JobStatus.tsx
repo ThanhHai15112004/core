@@ -32,9 +32,3 @@ export const JobProgressBar: React.FC<{
     </span>
   );
 };
-
-/** Nhãn nguồn job (HTTP Request / Scheduler / Another Job / Manual / System). */
-export const JobSourceLabel: React.FC<{ job: Pick<JobRow, 'source'> }> = ({ job }) => {
-  const { t } = useLocale();
-  return <span className="job-source">{t(`jobs.source.${job.source.kind}`)}</span>;
-};

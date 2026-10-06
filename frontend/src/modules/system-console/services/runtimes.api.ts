@@ -1,7 +1,6 @@
 import { fetchApi } from '../../../core/services/api';
 import { API_ROUTES } from '../../../routes/index';
 import type {
-  CliExecution,
   MetricRange,
   RestartMode,
   RuntimeCommand,
@@ -23,7 +22,6 @@ export const runtimesApi = {
   events: (limit: number, runtime?: RuntimeId) => fetchApi<RuntimeEvent[]>(R.EVENTS(limit, runtime)),
   logs: (id: RuntimeId | 'cli', limit: number, level?: string, correlationId?: string, jobId?: string) =>
     fetchApi<RuntimeLog[]>(R.LOGS(id, limit, level, correlationId, jobId)),
-  cliHistory: (limit: number) => fetchApi<CliExecution[]>(R.CLI_HISTORY(limit)),
   command: (commandId: string) => fetchApi<RuntimeCommand>(R.COMMAND(commandId)),
   restart: (id: RuntimeId, mode: RestartMode) =>
     fetchApi<RuntimeCommand>(R.ACTION(id, 'restart'), { method: 'POST', body: JSON.stringify({ mode }) }),

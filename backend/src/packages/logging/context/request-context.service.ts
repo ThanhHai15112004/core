@@ -21,8 +21,6 @@ export interface RequestContextStore {
   /** Job đang xử lý (worker) — log trong lúc xử lý mang `jobId` để lọc theo job. */
   jobId?: string;
   source?: RequestSource;
-  /** Thời gian request dành cho database/cache. */
-  timings?: { dbMs: number; dbQueries: number; cacheMs: number; cacheOps: number };
   [key: string]: unknown;
 }
 
@@ -51,9 +49,5 @@ export class RequestContextService {
   /** Dùng ở nơi không inject được (vd. logger khởi tạo sớm). */
   public static currentCorrelationId(): string | undefined {
     return RequestContextService.storage.getStore()?.correlationId;
-  }
-
-  public getCorrelationId(): string {
-    return this.getStore()?.correlationId ?? 'unknown-correlation-id';
   }
 }
