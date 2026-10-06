@@ -4,7 +4,7 @@ import type { StatusTone } from '../utils/status-tone';
 export const DB_TABS: DbTab[] = ['overview', 'queries', 'connections', 'transactions', 'tables', 'migrations', 'errors', 'configuration'];
 export const DB_RANGES: DbRange[] = ['15m', '1h', '6h', '24h'];
 export const DEFAULT_DB_RANGE: DbRange = '1h';
-export const DB_METRICS: DbMetric[] = ['queries', 'latency', 'connections', 'errors', 'transactions'];
+export const DB_METRICS: DbMetric[] = ['queries', 'latency', 'connections', 'errors'];
 /** Mốc lọc query chậm (ms). */
 export const SLOW_THRESHOLDS = [0, 250, 500, 1000, 3000] as const;
 

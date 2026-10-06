@@ -1,6 +1,6 @@
 export type DbRange = '15m' | '1h' | '6h' | '24h';
 export type DbHealthStatus = 'healthy' | 'degraded' | 'unavailable' | 'reconnecting' | 'unknown' | 'disabled';
-export type DbMetric = 'queries' | 'latency' | 'connections' | 'errors' | 'transactions';
+export type DbMetric = 'queries' | 'latency' | 'connections' | 'errors';
 export type DbTab = 'overview' | 'queries' | 'connections' | 'transactions' | 'tables' | 'migrations' | 'errors' | 'configuration';
 export type MonitoringCapability =
   | 'serverInfo'
@@ -91,11 +91,9 @@ export interface DbPool {
 }
 
 export interface DbReport {
-  queries: number;
+  queries: number | null;
   avgMs: number | null;
-  p95Ms: number | null;
-  slowQueries: number;
-  failedQueries: number;
+  failedQueries: number | null;
   peakConnections: number | null;
   deadlocks: number;
   growthBytes: number | null;
@@ -133,13 +131,11 @@ export interface DbOverview {
   kpis: {
     connections: { used: number | null; limit: number; percent: number | null };
     sessions: number | null;
-    p50Ms: number | null;
-    p95Ms: number | null;
-    p99Ms: number | null;
+    /** Trung bình mỗi câu lệnh (delta digest của database). */
+    avgMs: number | null;
     queriesPerSec: number | null;
     errorRatePercent: number | null;
-    failedQueries: number;
-    slowQueries: number;
+    failedQueries: number | null;
     activeTransactions: number | null;
     lockWaits: number | null;
     deadlocks24h: number;
@@ -148,7 +144,7 @@ export interface DbOverview {
   pool: DbPool;
   alerts: DbAlert[];
   liveQueries: Section<DbSession[]>;
-  transactions: { active: number | null; longestSec: number | null; committedPerMin: number | null; rolledBackPerMin: number | null };
+  transactions: { active: number | null; longestSec: number | null };
   largestTables: Section<DbTable[]>;
   report: { today: DbReport; yesterday: DbReport };
   events: DbEvent[];
@@ -185,15 +181,11 @@ export interface DbQueryStat {
   firstSeen: string | null;
   lastSeen: string | null;
   explainable: boolean;
-  rangeCalls: number | null;
-  rangeAvgMs: number | null;
   slow: boolean;
 }
 
 export interface DbQueryDetail {
   stat: DbQueryStat;
-  history: { calls: DbSeries; avgMs: DbSeries };
-  relatedSlow: { at: number; durationMs: number; correlationId: string | null; instance: string }[];
 }
 
 export type ExplainFlag = 'full_scan' | 'high_rows' | 'filesort' | 'temporary' | 'no_index';
@@ -279,7 +271,7 @@ export interface DbConnectionDetail {
 
 export interface DbTransactions {
   transactions: Section<DbTransaction[]>;
-  stats: { active: number | null; longestSec: number | null; committedPerMin: number | null; rolledBackPerMin: number | null; avgDurationMs: number | null };
+  stats: { active: number | null; longestSec: number | null };
   lockWaits: Section<DbLockWait[]>;
   blockingChains: BlockingNode[];
   deadlocks: { today: number; last24h: number; recent: DbErrorRecord[] };

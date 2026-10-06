@@ -11,6 +11,7 @@ import {
   DatabaseConnectionService,
   DatabaseMonitoringService,
   STORAGE_SNAPSHOT_LIMIT,
+  readPoolStats,
   recordDbEvent,
   type DbDigestStat,
   type DbLockWait,
@@ -18,8 +19,6 @@ import {
   type DbTable,
   type DbTransaction,
 } from '@packages/database/index.js';
-import { MetricRecorder } from '@modules/system-ops/telemetry-compat.js';
-import { gaugeWindow } from '@modules/performance/index.js';
 import { DatabaseMetricsService } from './database-metrics.service.js';
 import { DatabaseStoreService, type StorageSnapshot } from './database-store.service.js';
 import {
@@ -33,12 +32,8 @@ const TICK_MS = 30_000;
 const STORAGE_EVERY_MS = 60 * 60_000;
 const DIGEST_LIMIT = 50;
 const TABLE_IO_TTL_SEC = 300;
-const RULE_WINDOW_MS = 5 * 60_000;
-const SLOW_WINDOW_MS = 15 * 60_000;
+const RULE_WINDOW_MIN = 5;
 const STORAGE_TOP_TABLES = 20;
-
-/** Tên metric lịch sử của một digest (dùng cho biểu đồ Performance History của query). */
-export const digestMetric = (id: string, kind: 'calls' | 'ms') => `dbq.${id}.${kind}`;
 
 interface Snapshot {
   sessions: DbSession[] | null;
@@ -49,15 +44,18 @@ interface Snapshot {
 }
 
 /**
- * Chạy nền trong API (một instance mỗi chu kỳ nhờ lock Redis): chụp số liệu database định kỳ để có lịch sử
- * (query theo digest, đọc/ghi theo bảng, dung lượng theo giờ) và đánh giá cảnh báo → sự kiện bắt đầu/hồi phục.
+ * Chạy nền trong API (một instance mỗi chu kỳ nhờ lock Redis): chụp số liệu database định kỳ — delta digest và
+ * pool TypeORM ghi sang Prometheus, đọc/ghi theo bảng, dung lượng theo giờ — và đánh giá cảnh báo.
  */
 @Injectable()
 export class DatabaseMonitorService implements OnApplicationBootstrap, OnModuleDestroy {
   private readonly logger = new Logger('DatabaseMonitor');
   private timer: NodeJS.Timeout | null = null;
   private running = false;
-  private prevDigests = new Map<string, { calls: number; totalMs: number | null }>();
+  private prevDigests = new Map<
+    string,
+    { calls: number; totalMs: number | null; errors: number }
+  >();
   private prevIo = new Map<string, { reads: number; writes: number; at: number }>();
 
   constructor(
@@ -66,7 +64,6 @@ export class DatabaseMonitorService implements OnApplicationBootstrap, OnModuleD
     private readonly metrics: DatabaseMetricsService,
     private readonly store: DatabaseStoreService,
     private readonly config: CoreConfigService,
-    @Optional() private readonly recorder?: MetricRecorder,
     @Optional() private readonly redis?: RedisService,
   ) {}
 
@@ -121,14 +118,8 @@ export class DatabaseMonitorService implements OnApplicationBootstrap, OnModuleD
         tables: await safe('tables', () => p.tables(ctx)),
       };
 
-      if (snapshot.sessions) {
-        const own = snapshot.sessions.filter((s) => !s.isSelf);
-        this.recorder?.gauge('db.sessions', own.length);
-        this.recorder?.gauge(
-          'db.sessions.active',
-          own.filter((s) => s.state === 'active' || s.state === 'blocked').length,
-        );
-      }
+      if (snapshot.sessions)
+        this.metrics.recordSessions(snapshot.sessions.filter((s) => !s.isSelf).length);
       if (snapshot.digests) this.recordDigests(snapshot.digests);
       if (snapshot.tables) await this.recordTableIo(snapshot.tables, now);
       if (snapshot.tables && this.monitoring.supports('storage')) {
@@ -140,20 +131,26 @@ export class DatabaseMonitorService implements OnApplicationBootstrap, OnModuleD
     });
   }
 
-  /** Delta của bộ đếm digest (cộng dồn từ lúc DB khởi động) → số lần chạy & tổng thời gian theo bucket. */
+  /**
+   * Delta bộ đếm digest (cộng dồn từ lúc DB khởi động) giữa hai chu kỳ → counter Prometheus (số câu lệnh, thời gian,
+   * lỗi). Chỉ tính digest có ở cả hai lần chụp (top theo tổng thời gian) nên là số gần đúng của tải thật.
+   */
   private recordDigests(digests: DbDigestStat[]): void {
-    const next = new Map<string, { calls: number; totalMs: number | null }>();
+    const next = new Map<string, { calls: number; totalMs: number | null; errors: number }>();
+    let calls = 0;
+    let ms: number | null = 0;
+    let errors = 0;
     for (const d of digests) {
-      next.set(d.id, { calls: d.calls, totalMs: d.totalMs });
+      next.set(d.id, { calls: d.calls, totalMs: d.totalMs, errors: d.errors });
       const prev = this.prevDigests.get(d.id);
-      if (!prev) continue;
-      const calls = d.calls - prev.calls;
-      // Bộ đếm bị reset (DB restart / truncate) → bỏ qua lần này.
-      if (calls <= 0) continue;
-      this.recorder?.count(digestMetric(d.id, 'calls'), calls);
-      const ms = d.totalMs !== null && prev.totalMs !== null ? d.totalMs - prev.totalMs : null;
-      if (ms !== null && ms >= 0) this.recorder?.count(digestMetric(d.id, 'ms'), ms);
+      // Bộ đếm bị reset (DB restart / truncate) → bỏ qua digest này lần này.
+      if (!prev || d.calls < prev.calls) continue;
+      calls += d.calls - prev.calls;
+      errors += Math.max(0, d.errors - prev.errors);
+      const dm = d.totalMs !== null && prev.totalMs !== null ? d.totalMs - prev.totalMs : null;
+      ms = ms === null || dm === null || dm < 0 ? null : ms + dm;
     }
+    if (this.prevDigests.size > 0) this.metrics.recordStatements(calls, ms, errors);
     this.prevDigests = next;
   }
 
@@ -204,13 +201,12 @@ export class DatabaseMonitorService implements OnApplicationBootstrap, OnModuleD
   }
 
   private async evaluate(snapshot: Snapshot | null, now: number): Promise<void> {
-    const [win, slowWin, active] = await Promise.all([
-      this.metrics.window(now - RULE_WINDOW_MS, now, now, 's10'),
-      this.metrics.window(now - SLOW_WINDOW_MS, now, now, 's10'),
+    const [stats, active] = await Promise.all([
+      this.metrics.stats(RULE_WINDOW_MIN),
       this.store.activeAlerts(),
     ]);
-    const stats = this.metrics.stats(win);
-    const pool = win?.buckets.length ? win.buckets : [];
+    const pool = readPoolStats(this.connection.connected()?.driver);
+    this.metrics.recordPool(pool, this.config.database.maxConnections);
     const [storageLatest] = await this.store
       .storageSnapshots()
       .catch(() => [] as StorageSnapshot[]);
@@ -220,14 +216,13 @@ export class DatabaseMonitorService implements OnApplicationBootstrap, OnModuleD
     const input: DbRuleInput = {
       connection: this.connection.getStatus().state,
       pool: {
-        used: gaugeWindow(pool, 'db.pool.used').current,
+        used: pool?.used ?? null,
         limit: this.config.database.maxConnections,
-        waiting: gaugeWindow(pool, 'db.pool.waiting').current,
+        waiting: pool?.waiting ?? null,
       },
       queries: stats.queries,
-      p95Ms: stats.p95Ms,
+      avgMs: stats.avgMs,
       errorRatePercent: stats.errorRatePercent,
-      slowQueries15m: this.metrics.stats(slowWin).slow,
       longestTransactionSec: snapshot?.transactions ? longest : null,
       lockWaits: snapshot?.lockWaits
         ? {

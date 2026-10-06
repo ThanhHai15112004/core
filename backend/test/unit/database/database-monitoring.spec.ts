@@ -248,7 +248,7 @@ describe('MysqlMonitoringProvider', () => {
 
 describe('evaluateDbRules / diffAlerts', () => {
   const cfg = {
-    db: { slowQueryAlertCount: 10, longTransactionSec: 10, storageWarnPercent: 80 },
+    db: { longTransactionSec: 10, storageWarnPercent: 80 },
     dbP95Ms: { warn: 300, crit: 1000 },
     dbPoolPercent: { warn: 85, crit: 95 },
     errorRatePercent: { warn: 2, crit: 10 },
@@ -258,9 +258,8 @@ describe('evaluateDbRules / diffAlerts', () => {
     connection: 'connected',
     pool: { used: 2, limit: 10, waiting: 0 },
     queries: 100,
-    p95Ms: 40,
+    avgMs: 40,
     errorRatePercent: 0,
-    slowQueries15m: 0,
     longestTransactionSec: 1,
     lockWaits: { count: 0, maxWaitMs: 0 },
     storage: { bytes: 10, limitBytes: null },
@@ -269,7 +268,7 @@ describe('evaluateDbRules / diffAlerts', () => {
   it('khoẻ → không cảnh báo; mất kết nối → chỉ DB_UNAVAILABLE', () => {
     expect(evaluateDbRules(base, cfg)).toEqual([]);
     expect(
-      evaluateDbRules({ ...base, connection: 'unavailable', p95Ms: 5000 }, cfg).map((v) => v.id),
+      evaluateDbRules({ ...base, connection: 'unavailable', avgMs: 5000 }, cfg).map((v) => v.id),
     ).toEqual(['DB_UNAVAILABLE']);
   });
 
@@ -278,11 +277,10 @@ describe('evaluateDbRules / diffAlerts', () => {
       {
         ...base,
         pool: { used: 9.6, limit: 10, waiting: 3 },
-        p95Ms: 400,
+        avgMs: 400,
         longestTransactionSec: 70,
         lockWaits: { count: 2, maxWaitMs: 1000 },
         storage: { bytes: 85, limitBytes: 100 },
-        slowQueries15m: 12,
       },
       cfg,
     );
@@ -291,18 +289,17 @@ describe('evaluateDbRules / diffAlerts', () => {
       ['LONG_TRANSACTION', 'critical'],
       ['POOL_WAITING', 'warning'],
       ['QUERY_LATENCY', 'warning'],
-      ['SLOW_QUERIES', 'warning'],
       ['LOCK_WAITS', 'warning'],
       ['STORAGE', 'warning'],
     ]);
   });
 
   it('không kết luận latency khi quá ít query', () => {
-    expect(evaluateDbRules({ ...base, queries: 3, p95Ms: 9000 }, cfg)).toEqual([]);
+    expect(evaluateDbRules({ ...base, queries: 3, avgMs: 9000 }, cfg)).toEqual([]);
   });
 
   it('diffAlerts: bắt đầu, giữ nguyên thời điểm since, hồi phục', () => {
-    const v = evaluateDbRules({ ...base, p95Ms: 400 }, cfg);
+    const v = evaluateDbRules({ ...base, avgMs: 400 }, cfg);
     const first = diffAlerts(v, new Map(), 1000);
     expect(first.started.map((s) => s.id)).toEqual(['QUERY_LATENCY']);
     const second = diffAlerts(v, first.set, 5000);

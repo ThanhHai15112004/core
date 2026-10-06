@@ -2,18 +2,16 @@ import React, { useEffect, useState } from 'react';
 import { Check, Copy, FileText } from 'lucide-react';
 import type { DbExplain, DbQueryDetail, DbRange } from '../../types/database.types';
 import { databaseApi } from '../../services/database.api';
-import { DB_SERIES_COLORS } from '../../constants/database';
 import { formatCompact, formatDuration } from '../../utils/database-format';
 import { NO_VALUE } from '../../utils/runtime-format';
-import { LineChart } from '../common/LineChart';
 import { DbDrawer } from './DbDrawer';
 import { ExplainPlan } from './ExplainPlan';
 import { useLocale } from '../../../../core/i18n/index';
 
-const TABS = ['summary', 'plan', 'history', 'related'] as const;
+const TABS = ['summary', 'plan'] as const;
 type Tab = (typeof TABS)[number];
 
-/** Chi tiết một câu query (theo digest): thống kê, SQL chuẩn hoá, execution plan, lịch sử, request liên quan. */
+/** Chi tiết một câu query (theo digest): thống kê cộng dồn của DB, SQL chuẩn hoá, execution plan; slow query ở Logs. */
 export const QueryDrawer: React.FC<{ id: string; range: DbRange; onClose: () => void; navigate: (path: string) => void }> = ({ id, range, onClose, navigate }) => {
   const { t, locale, formatTime } = useLocale();
   const [tab, setTab] = useState<Tab>('summary');
@@ -80,7 +78,6 @@ export const QueryDrawer: React.FC<{ id: string; range: DbRange; onClose: () => 
                 <div><dt>{t('db.query.avg')}</dt><dd>{ms(s.avgMs)}</dd></div>
                 <div><dt>{t('db.query.max')}</dt><dd>{ms(s.maxMs)}</dd></div>
                 <div><dt>{t('db.query.calls')}</dt><dd>{formatCompact(s.calls, locale)}</dd></div>
-                <div><dt>{t('db.query.rangeCalls', { range: t(`tr.range.${range}`) })}</dt><dd>{s.rangeCalls === null ? NO_VALUE : formatCompact(s.rangeCalls, locale)}</dd></div>
                 <div><dt>{t('db.query.rowsExamined')}</dt><dd>{formatCompact(s.rowsExamined, locale)}</dd></div>
                 <div><dt>{t('db.query.rowsReturned')}</dt><dd>{formatCompact(s.rowsReturned, locale)}</dd></div>
                 <div><dt>{t('db.query.noIndex')}</dt><dd>{formatCompact(s.noIndexUsed, locale)}</dd></div>
@@ -88,54 +85,12 @@ export const QueryDrawer: React.FC<{ id: string; range: DbRange; onClose: () => 
                 <div><dt>{t('db.query.lastSeen')}</dt><dd>{s.lastSeen ? `${new Date(s.lastSeen).toLocaleDateString()} ${formatTime(Date.parse(s.lastSeen))}` : NO_VALUE}</dd></div>
               </dl>
               <p className="pf-chart-note">{t('db.query.cumulativeNote')}</p>
+              <button type="button" className="ov-link" onClick={() => navigate('logs/explorer?module=TypeORM')}>
+                <FileText size={12} /> {t('db.query.openLogs')}
+              </button>
             </>
           )}
           {tab === 'plan' && <ExplainPlan explain={explain} />}
-          {tab === 'history' && (
-            <>
-              <h4 className="pf-drawer-h">{data.history.calls.label}</h4>
-              <LineChart
-                series={[{ id: 'calls', label: data.history.calls.label, color: DB_SERIES_COLORS['callsPerMin']!, points: data.history.calls.points }]}
-                unit="/min"
-                height={160}
-                formatTime={(ts) => formatTime(ts)}
-                emptyText={t('db.query.noHistory')}
-                ariaLabel={data.history.calls.label}
-              />
-              <h4 className="pf-drawer-h">{data.history.avgMs.label}</h4>
-              <LineChart
-                series={[{ id: 'avg', label: data.history.avgMs.label, color: DB_SERIES_COLORS['avgMs']!, points: data.history.avgMs.points }]}
-                unit="ms"
-                height={160}
-                formatTime={(ts) => formatTime(ts)}
-                emptyText={s.timingReliable ? t('db.query.noHistory') : t('db.query.unreliable')}
-                ariaLabel={data.history.avgMs.label}
-              />
-            </>
-          )}
-          {tab === 'related' &&
-            (data.relatedSlow.length === 0 ? (
-              <p className="ov-empty-line">{t('db.query.noRelated')}</p>
-            ) : (
-              <table className="scp-table">
-                <tbody>
-                  {data.relatedSlow.map((r) => (
-                    <tr key={`${r.at}-${r.instance}`}>
-                      <td>{formatTime(r.at, true)}</td>
-                      <td>{formatDuration(r.durationMs)}</td>
-                      <td>{r.instance.split('@')[0]}</td>
-                      <td>
-                        {r.correlationId && (
-                          <button type="button" className="ov-link" onClick={() => navigate(`logs/explorer?correlationId=${encodeURIComponent(r.correlationId!)}`)}>
-                            <FileText size={12} /> {t('db.query.openLogs')}
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            ))}
         </>
       )}
     </DbDrawer>

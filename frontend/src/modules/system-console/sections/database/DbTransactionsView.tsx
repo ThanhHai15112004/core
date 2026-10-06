@@ -26,9 +26,6 @@ export const DbTransactionsView: React.FC<{
           {[
             ['active', data.stats.active ?? NO_VALUE],
             ['longest', data.stats.longestSec === null ? NO_VALUE : formatDuration(data.stats.longestSec * 1000)],
-            ['committedPerMin', data.stats.committedPerMin ?? NO_VALUE],
-            ['rolledBackPerMin', data.stats.rolledBackPerMin ?? NO_VALUE],
-            ['avgDuration', formatDuration(data.stats.avgDurationMs)],
             ['deadlocksToday', data.deadlocks.today],
           ].map(([key, value]) => (
             <div key={String(key)} className={`ov-card ov-kpi ov-tone-${key === 'longest' && (data.stats.longestSec ?? 0) >= longSec ? 'warn' : 'unknown'}`}>

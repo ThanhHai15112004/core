@@ -6,7 +6,6 @@ import {
   type DbErrorRecord,
   type DbEventRecord,
 } from '@packages/database/index.js';
-import { telemetryKeys, type SlowQueryRecord } from '@modules/system-ops/telemetry-compat.js';
 import type { StoredAlert } from './database-rules.js';
 
 export interface StorageSnapshot {
@@ -59,12 +58,6 @@ export class DatabaseStoreService {
 
   public async errors(): Promise<DbErrorRecord[]> {
     return parseList<DbErrorRecord>(await this.redis.client.lrange(this.keys.errors(), 0, -1));
-  }
-
-  public async slowQueries(): Promise<SlowQueryRecord[]> {
-    return parseList<SlowQueryRecord>(
-      await this.redis.client.lrange(telemetryKeys(this.redis).slowQueries(), 0, -1),
-    );
   }
 
   public async storageSnapshots(): Promise<StorageSnapshot[]> {

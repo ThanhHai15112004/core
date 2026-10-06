@@ -129,14 +129,6 @@ export const DbOverviewView: React.FC<Props> = ({ data, now, paused, go, actions
                   </dd>
                 </div>
                 <div>
-                  <dt>{t('db.tx.committedPerMin')}</dt>
-                  <dd>{data.transactions.committedPerMin ?? NO_VALUE}</dd>
-                </div>
-                <div>
-                  <dt>{t('db.tx.rolledBackPerMin')}</dt>
-                  <dd>{data.transactions.rolledBackPerMin ?? NO_VALUE}</dd>
-                </div>
-                <div>
                   <dt>{t('db.kpi.deadlocks')}</dt>
                   <dd>{data.kpis.deadlocks24h}</dd>
                 </div>
@@ -207,8 +199,6 @@ export const DbOverviewView: React.FC<Props> = ({ data, now, paused, go, actions
                   <tbody>
                     {reportRow('queries', (v) => formatCompact(v, locale), null)}
                     {reportRow('avgMs', (v) => formatUnit(v, 'ms'), true)}
-                    {reportRow('p95Ms', (v) => formatUnit(v, 'ms'), true)}
-                    {reportRow('slowQueries', (v) => String(v ?? NO_VALUE), true)}
                     {reportRow('failedQueries', (v) => String(v ?? NO_VALUE), true)}
                     {reportRow('peakConnections', (v) => (v === null ? NO_VALUE : String(Math.round(v))), null)}
                     {reportRow('deadlocks', (v) => String(v ?? NO_VALUE), true)}

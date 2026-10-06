@@ -121,7 +121,6 @@ export const DbQueriesView: React.FC<Props> = ({ range, paused, driver, canCance
                       <th>{t('db.query.avg')}</th>
                       <th>{t('db.query.max')}</th>
                       <th>{t('db.query.calls')}</th>
-                      <th>{t('db.stats.rangeCalls')}</th>
                       <th>{t('db.query.noIndex')}</th>
                       <th>{t('db.query.lastSeen')}</th>
                     </tr>
@@ -138,7 +137,6 @@ export const DbQueriesView: React.FC<Props> = ({ range, paused, driver, canCance
                         </td>
                         <td>{q.timingReliable ? formatDuration(q.maxMs) : NO_VALUE}</td>
                         <td>{formatCompact(q.calls, locale)}</td>
-                        <td>{q.rangeCalls === null ? NO_VALUE : formatCompact(q.rangeCalls, locale)}</td>
                         <td>{q.noIndexUsed ? formatCompact(q.noIndexUsed, locale) : NO_VALUE}</td>
                         <td>{q.lastSeen ? formatRelative(new Date(q.lastSeen), now) : NO_VALUE}</td>
                       </tr>

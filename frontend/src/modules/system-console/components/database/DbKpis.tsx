@@ -34,15 +34,14 @@ export const DbKpis: React.FC<{ data: DbOverview | null }> = ({ data }) => {
       sub: k.sessions === null ? t('db.kpi.poolSub') : t('db.kpi.sessionsSub', { count: k.sessions }),
       tone: alert('POOL_PRESSURE', 'POOL_WAITING') ?? (k.connections.used === null ? 'unknown' : 'ok'),
     },
-    { key: 'p95', value: formatUnit(k.p95Ms, 'ms'), sub: t('db.kpi.latencySub', { p50: formatUnit(k.p50Ms, 'ms'), p99: formatUnit(k.p99Ms, 'ms') }), tone: alert('QUERY_LATENCY') ?? (k.p95Ms === null ? 'unknown' : 'ok') },
+    { key: 'avgMs', value: formatUnit(k.avgMs, 'ms'), sub: t('db.kpi.avgSub'), tone: alert('QUERY_LATENCY') ?? (k.avgMs === null ? 'unknown' : 'ok') },
     { key: 'qps', value: formatUnit(k.queriesPerSec, '/s'), sub: t('db.kpi.fromApp', { range }), tone: 'unknown' },
     {
       key: 'errorRate',
       value: formatUnit(k.errorRatePercent, '%'),
-      sub: t('db.kpi.failedSub', { count: formatCompact(k.failedQueries, locale) }),
+      sub: t('db.kpi.failedSub', { count: k.failedQueries === null ? NO_VALUE : formatCompact(k.failedQueries, locale) }),
       tone: alert('ERROR_RATE') ?? (k.errorRatePercent === null ? 'unknown' : 'ok'),
     },
-    { key: 'slow', value: String(k.slowQueries), sub: t('db.kpi.slowSub', { ms: data.settings.slowQueryMs, range }), tone: alert('SLOW_QUERIES') ?? 'ok' },
     {
       key: 'transactions',
       value: k.activeTransactions === null ? NO_VALUE : String(k.activeTransactions),

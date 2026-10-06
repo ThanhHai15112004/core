@@ -467,6 +467,8 @@ export const vi = {
       message: 'Driver {{driver}} chưa có số liệu cho phần này. Các số liệu chung (latency, throughput, lỗi) vẫn có ở tab Tổng quan.',
     },
     kpi: {
+      avgMs: 'TB mỗi câu lệnh',
+      avgSub: 'Từ bộ đếm digest của database',
       connections: 'Kết nối (pool)',
       p95: 'Query P95',
       qps: 'Query / giây',
@@ -478,7 +480,7 @@ export const vi = {
       poolSub: 'Pool của các runtime',
       sessionsSub: '{{count}} session của app trên database',
       latencySub: 'P50 {{p50}} · P99 {{p99}}',
-      fromApp: 'Query của app, {{range}} qua',
+      fromApp: 'Câu lệnh đã chạy (top digest), {{range}} gần nhất',
       failedSub: '{{count}} query lỗi',
       slowSub: '> {{ms}} ms trong {{range}} qua',
       txSub: 'Transaction đang mở',

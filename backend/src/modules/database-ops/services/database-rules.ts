@@ -8,7 +8,6 @@ export type DbRule =
   | 'POOL_WAITING'
   | 'QUERY_LATENCY'
   | 'ERROR_RATE'
-  | 'SLOW_QUERIES'
   | 'LONG_TRANSACTION'
   | 'LOCK_WAITS'
   | 'STORAGE';
@@ -20,7 +19,6 @@ export const RULE_TAB: Record<DbRule, string> = {
   POOL_WAITING: 'connections',
   QUERY_LATENCY: 'queries',
   ERROR_RATE: 'errors',
-  SLOW_QUERIES: 'queries',
   LONG_TRANSACTION: 'transactions',
   LOCK_WAITS: 'transactions',
   STORAGE: 'tables',
@@ -29,17 +27,18 @@ export const RULE_TAB: Record<DbRule, string> = {
 export interface DbRuleInput {
   connection: ConnectionState;
   pool: { used: number | null; limit: number; waiting: number | null };
-  queries: number;
-  p95Ms: number | null;
+  /** Số câu lệnh 5 phút gần nhất (delta digest); null khi Prometheus chưa có dữ liệu. */
+  queries: number | null;
+  /** Thời gian trung bình mỗi câu lệnh (delta digest) — database không lộ phân vị. */
+  avgMs: number | null;
   errorRatePercent: number | null;
-  slowQueries15m: number;
   longestTransactionSec: number | null;
   lockWaits: { count: number; maxWaitMs: number } | null;
   storage: { bytes: number | null; limitBytes: number | null };
 }
 
 export interface DbRuleConfig {
-  db: Pick<DatabaseConfig, 'slowQueryAlertCount' | 'longTransactionSec' | 'storageWarnPercent'>;
+  db: Pick<DatabaseConfig, 'longTransactionSec' | 'storageWarnPercent'>;
   dbP95Ms: RuleLevel;
   dbPoolPercent: RuleLevel;
   errorRatePercent: RuleLevel;
@@ -95,12 +94,12 @@ export function evaluateDbRules(input: DbRuleInput, cfg: DbRuleConfig): DbViolat
   );
   if ((input.pool.waiting ?? 0) > 0) add('POOL_WAITING', 'warning', input.pool.waiting, 0, '');
 
-  if (input.queries >= cfg.minQueries) {
-    const s = level(input.p95Ms, cfg.dbP95Ms);
+  if ((input.queries ?? 0) >= cfg.minQueries) {
+    const s = level(input.avgMs, cfg.dbP95Ms);
     add(
       'QUERY_LATENCY',
       s,
-      input.p95Ms,
+      input.avgMs,
       s === 'critical' ? cfg.dbP95Ms.crit : cfg.dbP95Ms.warn,
       'ms',
     );
@@ -113,9 +112,6 @@ export function evaluateDbRules(input: DbRuleInput, cfg: DbRuleConfig): DbViolat
       '%',
     );
   }
-
-  if (input.slowQueries15m >= cfg.db.slowQueryAlertCount)
-    add('SLOW_QUERIES', 'warning', input.slowQueries15m, cfg.db.slowQueryAlertCount, '');
 
   const tx = input.longestTransactionSec;
   if (tx !== null && tx >= cfg.db.longTransactionSec) {

@@ -3,12 +3,16 @@ import type { Logger as ITypeOrmLogger, QueryRunner } from 'typeorm';
 
 /**
  * Custom TypeORM Logger chuyển log sang Pino qua NestJS Logger.
- * Luôn ghi log slow query (dựa trên maxQueryExecutionTime) và query error.
+ * Luôn ghi log slow query (dựa trên maxQueryExecutionTime) và query error; lỗi query còn được chuyển cho
+ * `onQueryError` (lưu danh sách lỗi cho trang Database).
  */
 export class TypeOrmPinoLogger implements ITypeOrmLogger {
   private readonly logger = new Logger('TypeORM');
 
-  constructor(private readonly loggingEnabled = false) {}
+  constructor(
+    private readonly loggingEnabled = false,
+    private readonly onQueryError?: (error: unknown, query: string) => void,
+  ) {}
 
   public logQuery(query: string, parameters?: unknown[], _queryRunner?: QueryRunner): void {
     if (this.loggingEnabled) {
@@ -24,6 +28,7 @@ export class TypeOrmPinoLogger implements ITypeOrmLogger {
   ): void {
     const msg = error instanceof Error ? error.message : String(error);
     this.logger.error({ query, parameters, error: msg }, `[Query Error] ${msg}`);
+    this.onQueryError?.(error, query);
   }
 
   public logQuerySlow(

@@ -15,28 +15,18 @@ import {
   type MonitoringCapability,
   type MonitoringContext,
   type SessionAction,
+  readPoolStats,
 } from '@packages/database/index.js';
+import { LONG_RUNNING_RUNTIMES } from '@packages/runtime/index.js';
+import { round } from '@modules/performance/index.js';
 import {
-  TELEMETRY_TIERS,
-  histogramPercentile,
-  mergeMetric,
-  emptyMetric,
-} from '@modules/system-ops/telemetry-compat.js';
-import {
-  counterOf,
-  gaugeOf,
-  gaugeWindow,
-  round,
-  runtimeOfInstance,
-} from '@modules/performance/index.js';
-import {
+  DB_PROM,
   DatabaseMetricsService,
+  type DbSeriesDef,
   type DbWindowStats,
-  type MetricWindow,
 } from './database-metrics.service.js';
 import { DatabaseStoreService, type StorageSnapshot } from './database-store.service.js';
 import { RULE_TAB, type DbRule } from './database-rules.js';
-import { digestMetric } from './database-monitor.service.js';
 import {
   DatabaseActionRejectedException,
   DatabaseNotConnectedException,
@@ -65,7 +55,6 @@ import type {
   DbRange,
   DbReasonDto,
   DbReportDto,
-  DbSeriesDto,
   DbStorageDto,
   DbTableDetailDto,
   DbTableRowDto,
@@ -75,22 +64,14 @@ import type {
 } from '../responses/database-ops.response.js';
 
 export const DB_RANGES: Record<DbRange, number> = { '15m': 15, '1h': 60, '6h': 360, '24h': 1440 };
-export const DB_METRICS: DbMetric[] = [
-  'queries',
-  'latency',
-  'connections',
-  'errors',
-  'transactions',
-];
+export const DB_METRICS: DbMetric[] = ['queries', 'latency', 'connections', 'errors'];
 
 const MINUTE = 60_000;
 const DAY = 24 * 60 * MINUTE;
-const MAX_POINTS = 120;
 const LIVE_QUERY_LIMIT = 8;
 const LARGEST_TABLES = 5;
 const OVERVIEW_EVENTS = 8;
 const QUERY_STATS_LIMIT = 100;
-const RELATED_SLOW_LIMIT = 20;
 const ERROR_LIST_LIMIT = 200;
 const ERROR_KINDS: DbErrorKind[] = [
   'query',
@@ -107,12 +88,6 @@ const startOfDay = (t: number) => {
   d.setHours(0, 0, 0, 0);
   return d.getTime();
 };
-/** So khớp SQL do app chuẩn hoá với DIGEST_TEXT của DB (bỏ quote, khoảng trắng, hoa/thường). */
-const fuzzySql = (sql: string) =>
-  sql
-    .toLowerCase()
-    .replace(/[`"\s]/g, '')
-    .replace(/\$\d+/g, '?');
 
 /**
  * Database Monitor: health, hiệu năng query, session, transaction/lock, bảng/dung lượng, migration, lỗi & sự kiện.
@@ -138,28 +113,28 @@ export class DatabaseOpsService {
 
   public async getOverview(range: DbRange): Promise<DbOverviewDto> {
     const now = Date.now();
-    const len = DB_RANGES[range] * MINUTE;
     const today = startOfDay(now);
     const status = this.connection.getStatus();
 
-    const [win, todayWin, yesterdayWin, snapshot, events, alerts, runtimes, storage] =
+    const sinceToday = Math.max(1, (now - today) / MINUTE);
+    const [stats, todayStats, yesterdayStats, snapshot, events, alerts, runtimes, storage, errors] =
       await Promise.all([
-        this.metrics.window(now - len, now, now),
-        this.metrics.window(today, now, now),
-        this.metrics.window(today - DAY, today, now),
+        this.metrics.stats(DB_RANGES[range]),
+        this.metrics.stats(sinceToday),
+        this.metrics.stats(24 * 60, sinceToday),
         this.snapshot(),
         this.eventsSince(now - DAY),
         this.alerts(),
-        this.runtimeConnections(now),
+        this.runtimeConnections(),
         this.store.storageSnapshots().catch(() => [] as StorageSnapshot[]),
+        this.errorsSince(today - DAY),
       ]);
-    const stats = this.metrics.stats(win);
-    const pool = this.pool(win, this.metrics.stats(todayWin));
+    const pool = this.pool(todayStats);
     const sessions = snapshot.sessions;
     const tx = snapshot.transactions.available ? snapshot.transactions.data : null;
-    const deadlocks24h = (await this.errorsSince(now - DAY)).filter(
-      (e) => e.kind === 'deadlock',
-    ).length;
+    const deadlocks = (from: number, to = now) =>
+      errors.filter((e) => e.kind === 'deadlock' && e.at >= from && e.at < to).length;
+    const deadlocks24h = deadlocks(now - DAY);
     const sizeBytes = snapshot.storage.available
       ? snapshot.storage.data.totalBytes
       : (storage[0]?.totalBytes ?? null);
@@ -184,13 +159,10 @@ export class DatabaseOpsService {
       kpis: {
         connections: { used: pool.used, limit: pool.limit, percent: pool.percent },
         sessions: sessions.available ? sessions.data.filter((s) => !s.isSelf).length : null,
-        p50Ms: stats.p50Ms,
-        p95Ms: stats.p95Ms,
-        p99Ms: stats.p99Ms,
+        avgMs: stats.avgMs,
         queriesPerSec: stats.queriesPerSec,
         errorRatePercent: stats.errorRatePercent,
         failedQueries: stats.failed,
-        slowQueries: stats.slow,
         activeTransactions: tx ? tx.length : null,
         lockWaits: snapshot.locks.available ? snapshot.locks.data.length : null,
         deadlocks24h,
@@ -207,8 +179,6 @@ export class DatabaseOpsService {
       transactions: {
         active: tx ? tx.length : null,
         longestSec: tx && tx.length ? Math.max(...tx.map((t) => t.ageSec)) : null,
-        committedPerMin: win ? round(stats.committed / (win.seconds / 60), 2) : null,
-        rolledBackPerMin: win ? round(stats.rolledBack / (win.seconds / 60), 2) : null,
       },
       largestTables: this.mapSection(snapshot.tables, (list) =>
         list
@@ -216,8 +186,14 @@ export class DatabaseOpsService {
           .map((t) => ({ ...t, growthPercent: this.growthPercent(t, storage, now) })),
       ),
       report: {
-        today: this.report(this.metrics.stats(todayWin), storage, today, now),
-        yesterday: this.report(this.metrics.stats(yesterdayWin), storage, today - DAY, today),
+        today: this.report(todayStats, deadlocks(today), storage, today, now),
+        yesterday: this.report(
+          yesterdayStats,
+          deadlocks(today - DAY, today),
+          storage,
+          today - DAY,
+          today,
+        ),
       },
       events: events.slice(0, OVERVIEW_EVENTS).map((e) => this.eventDto(e)),
       settings: {
@@ -308,12 +284,14 @@ export class DatabaseOpsService {
       .sort((a, b) => (a.severity === b.severity ? 0 : a.severity === 'critical' ? -1 : 1));
   }
 
-  private async runtimeConnections(now: number) {
-    const instances = await this.metrics.liveInstances(now - MINUTE);
-    const statuses = await this.store.connections(instances).catch(() => new Map());
-    return [...statuses.entries()].map(([instance, s]) => ({
-      instance,
-      runtime: runtimeOfInstance(instance),
+  /** Trạng thái kết nối database mà từng runtime tự báo (key TTL — runtime đã tắt tự biến mất). */
+  private async runtimeConnections() {
+    const statuses = await this.store
+      .connections([...LONG_RUNNING_RUNTIMES])
+      .catch(() => new Map());
+    return [...statuses.entries()].map(([runtime, s]) => ({
+      instance: runtime,
+      runtime,
       state: s.state,
       lastPingMs: s.lastPingMs,
       lastSuccessAt: s.lastSuccessAt,
@@ -321,22 +299,23 @@ export class DatabaseOpsService {
     }));
   }
 
-  private pool(win: MetricWindow | null, todayStats: DbWindowStats): DbPoolDto {
-    const b = win?.buckets ?? [];
-    const used = gaugeWindow(b, 'db.pool.used').current;
-    const limit = gaugeWindow(b, 'db.pool.limit').current ?? this.db.maxConnections;
+  /** Pool TypeORM của runtime API (đọc trực tiếp từ driver); `peakToday` từ lịch sử Prometheus. */
+  private pool(todayStats: DbWindowStats): DbPoolDto {
+    const stats = readPoolStats(this.connection.connected()?.driver);
+    const limit = this.db.maxConnections;
     return {
-      used: used === null ? null : round(used, 1),
-      idle: gaugeWindow(b, 'db.pool.idle').current,
-      waiting: gaugeWindow(b, 'db.pool.waiting').current,
+      used: stats?.used ?? null,
+      idle: stats?.idle ?? null,
+      waiting: stats?.waiting ?? null,
       limit,
-      percent: used === null || !limit ? null : round((used / limit) * 100, 1),
+      percent: stats && limit ? round((stats.used / limit) * 100, 1) : null,
       peakToday: todayStats.poolPeak,
     };
   }
 
   private report(
     stats: DbWindowStats,
+    deadlocks: number,
     storage: StorageSnapshot[],
     from: number,
     to: number,
@@ -344,11 +323,9 @@ export class DatabaseOpsService {
     return {
       queries: stats.queries,
       avgMs: stats.avgMs,
-      p95Ms: stats.p95Ms,
-      slowQueries: stats.slow,
       failedQueries: stats.failed,
       peakConnections: stats.poolPeak,
-      deadlocks: stats.deadlocks,
+      deadlocks,
       growthBytes: this.growthBetween(storage, from, to),
     };
   }
@@ -369,86 +346,33 @@ export class DatabaseOpsService {
 
   // ─── Metrics chart ────────────────────────────────────────────────────────
 
+  /** Biểu đồ đọc từ Prometheus (counter/gauge do monitor ghi); không có dữ liệu → series rỗng. */
   public async getMetrics(range: DbRange, metric: DbMetric): Promise<DbMetricsDto> {
-    const now = Date.now();
-    const win = await this.metrics.window(now - DB_RANGES[range] * MINUTE, now, now);
-    const tierSec = win ? TELEMETRY_TIERS[win.tier].seconds : 0;
-    const buckets = win?.buckets ?? [];
-    const size = Math.max(1, Math.ceil(buckets.length / MAX_POINTS));
-    const groups: { t: number; b: typeof buckets; seconds: number }[] = [];
-    for (let i = 0; i < buckets.length; i += size) {
-      const b = buckets.slice(i, i + size);
-      groups.push({
-        t: b[0]!.start,
-        b,
-        seconds: Math.max(1, Math.min(b.length * tierSec, (now - b[0]!.start) / 1000)),
-      });
-    }
-    const label = (id: string) => this.i18n.t(`database.series.${id}`);
-    const series = (
-      id: string,
-      unit: string,
-      value: (g: (typeof groups)[number]) => number | null,
-    ): DbSeriesDto => ({
-      id,
-      label: label(id),
-      unit,
-      points: groups
-        .map((g) => ({ t: g.t, value: value(g) }))
-        .filter(
-          (p): p is { t: number; value: number } => p.value !== null && Number.isFinite(p.value),
-        )
-        .map((p) => ({ t: p.t, value: round(p.value, 3) })),
-    });
-    const merged = (g: (typeof groups)[number]) => {
-      const m = emptyMetric();
-      for (const b of g.b) {
-        const a = b.metrics.get('db.query');
-        if (a) mergeMetric(m, a);
-      }
-      return m;
-    };
-    const gaugeAvg = (g: (typeof groups)[number], name: string) => {
-      const values = g.b.map((b) => gaugeOf(b, name)).filter((v): v is number => v !== null);
-      return values.length ? values.reduce((a, v) => a + v, 0) / values.length : null;
-    };
-    const perMin = (g: (typeof groups)[number], name: string) =>
-      counterOf(g.b, name) / (g.seconds / 60);
-
-    const byMetric: Record<DbMetric, () => DbSeriesDto[]> = {
-      queries: () => [
-        series('queriesPerSec', '/s', (g) => merged(g).n / g.seconds),
-        series('slowPerMin', '/min', (g) => perMin(g, 'db.slow')),
+    const p = DB_PROM;
+    const defs: Record<DbMetric, DbSeriesDef[]> = {
+      queries: [{ id: 'queriesPerSec', unit: '/s', expr: `sum(rate(${p.statements}[$w]))` }],
+      latency: [
+        {
+          id: 'avgMs',
+          unit: 'ms',
+          expr: `1000 * sum(rate(${p.seconds}[$w])) / sum(rate(${p.statements}[$w]))`,
+        },
       ],
-      latency: () =>
-        [95, 50, 99].map((p) =>
-          series(`p${p}`, 'ms', (g) =>
-            merged(g).hist ? histogramPercentile(merged(g).hist!, p) : null,
-          ),
-        ),
-      connections: () => [
-        series('poolUsed', '', (g) => gaugeAvg(g, 'db.pool.used')),
-        series('sessions', '', (g) => gaugeAvg(g, 'db.sessions')),
-        series('poolWaiting', '', (g) => gaugeAvg(g, 'db.pool.waiting')),
+      connections: [
+        { id: 'poolUsed', unit: '', expr: `max(${p.pool}{state="used"})` },
+        { id: 'sessions', unit: '', expr: `max(${p.sessions})` },
+        { id: 'poolWaiting', unit: '', expr: `max(${p.pool}{state="waiting"})` },
       ],
-      errors: () => [
-        series('failedPerMin', '/min', (g) => perMin(g, 'db.errors')),
-        series('deadlocksPerMin', '/min', (g) => perMin(g, 'db.err.deadlock')),
-        series('timeoutsPerMin', '/min', (g) => perMin(g, 'db.err.timeout')),
-      ],
-      transactions: () => [
-        series('committedPerMin', '/min', (g) => perMin(g, 'db.tx.committed')),
-        series('rolledBackPerMin', '/min', (g) => perMin(g, 'db.tx.rolledback')),
-      ],
+      errors: [{ id: 'failedPerMin', unit: '/min', expr: `sum(rate(${p.errors}[$w])) * 60` }],
     };
-    const list = byMetric[metric]().filter((s, i) => i === 0 || s.points.length > 0);
-    return {
-      metric,
-      range,
-      resolutionSec: win ? tierSec : null,
-      unit: list[0]?.unit ?? '',
-      series: list,
-    };
+    const { series, resolutionSec } = await this.metrics.series(DB_RANGES[range], defs[metric]);
+    const list = series.map((s) => ({
+      id: s.id,
+      label: this.i18n.t(`database.series.${s.id}`),
+      unit: s.unit,
+      points: s.points,
+    }));
+    return { metric, range, resolutionSec, unit: list[0]?.unit ?? '', series: list };
   }
 
   // ─── Queries ──────────────────────────────────────────────────────────────
@@ -471,23 +395,17 @@ export class DatabaseOpsService {
   public async getQueryStats(range: DbRange, minMs: number): Promise<DbQueryStatsDto> {
     const now = Date.now();
     const from = now - DB_RANGES[range] * MINUTE;
-    const [stats, win] = await Promise.all([
-      this.section('digestStats', (ctx) =>
-        this.monitoring.provider.digestStats(ctx, QUERY_STATS_LIMIT),
-      ),
-      this.metrics.window(from, now, now),
-    ]);
+    const stats = await this.section('digestStats', (ctx) =>
+      this.monitoring.provider.digestStats(ctx, QUERY_STATS_LIMIT),
+    );
     return {
       stats: this.mapSection(stats, (list) =>
         list
-          .map((d) => this.withRange(d, win))
+          .map((d) => this.statDto(d))
           .filter(
             (d) =>
               (d.lastSeen === null || Date.parse(d.lastSeen) >= from) &&
-              (minMs <= 0 ||
-                (d.avgMs ?? 0) >= minMs ||
-                (d.maxMs ?? 0) >= minMs ||
-                (d.rangeAvgMs ?? 0) >= minMs),
+              (minMs <= 0 || (d.avgMs ?? 0) >= minMs || (d.maxMs ?? 0) >= minMs),
           ),
       ),
       minMs,
@@ -496,16 +414,12 @@ export class DatabaseOpsService {
     };
   }
 
-  private withRange(d: DbDigestStat, win: MetricWindow | null): DbQueryStatDto {
-    const calls = win ? counterOf(win.buckets, digestMetric(d.id, 'calls')) : 0;
-    const ms = win ? counterOf(win.buckets, digestMetric(d.id, 'ms')) : 0;
+  private statDto(d: DbDigestStat): DbQueryStatDto {
     return {
       ...d,
       avgMs: d.avgMs === null ? null : round(d.avgMs, 2),
       totalMs: d.totalMs === null ? null : round(d.totalMs, 1),
       maxMs: d.maxMs === null ? null : round(d.maxMs, 2),
-      rangeCalls: win && calls > 0 ? calls : null,
-      rangeAvgMs: calls > 0 ? round(ms / calls, 2) : null,
       slow: this.digestSlow(d),
     };
   }
@@ -514,59 +428,15 @@ export class DatabaseOpsService {
     return d.avgMs !== null && d.avgMs >= this.db.slowQueryMs;
   }
 
-  public async getQueryDetail(digest: string, range: DbRange): Promise<DbQueryDetailDto> {
-    const now = Date.now();
-    const [stats, win, slow] = await Promise.all([
-      this.section('digestStats', (ctx) =>
-        this.monitoring.provider.digestStats(ctx, QUERY_STATS_LIMIT * 2),
-      ),
-      this.metrics.window(now - DB_RANGES[range] * MINUTE, now, now),
-      this.store.slowQueries().catch(() => []),
-    ]);
+  /** Bộ đếm cộng dồn của digest; lịch sử từng câu và slow query nằm ở Logs (TypeORM ghi qua Pino). */
+  public async getQueryDetail(digest: string, _range: DbRange): Promise<DbQueryDetailDto> {
+    const stats = await this.section('digestStats', (ctx) =>
+      this.monitoring.provider.digestStats(ctx, QUERY_STATS_LIMIT * 2),
+    );
     if (!stats.available) throw this.sectionError(stats);
     const found = stats.data.find((d) => d.id === digest);
     if (!found) throw new DatabaseNotFoundException('database.error.queryNotFound', { id: digest });
-    const stat = this.withRange(found, win);
-    const tierSec = win ? TELEMETRY_TIERS[win.tier].seconds : 60;
-    const history = (kind: 'calls' | 'ms'): DbSeriesDto['points'] =>
-      (win?.buckets ?? []).map((b) => ({
-        t: b.start,
-        value: b.metrics.get(digestMetric(digest, kind))?.c ?? 0,
-      }));
-    const calls = history('calls');
-    const ms = history('ms');
-    const key = fuzzySql(found.sql);
-    return {
-      stat,
-      history: {
-        calls: {
-          id: 'calls',
-          label: this.i18n.t('database.series.callsPerMin'),
-          unit: '/min',
-          points: calls.map((p) => ({ t: p.t, value: round(p.value / (tierSec / 60), 2) })),
-        },
-        avgMs: {
-          id: 'avgMs',
-          label: this.i18n.t('database.series.avgMs'),
-          unit: 'ms',
-          points: calls
-            .map((p, i) => ({
-              t: p.t,
-              value: p.value > 0 ? round((ms[i]?.value ?? 0) / p.value, 2) : 0,
-            }))
-            .filter((p, i) => (calls[i]?.value ?? 0) > 0),
-        },
-      },
-      relatedSlow: slow
-        .filter((s) => fuzzySql(s.sql) === key)
-        .slice(0, RELATED_SLOW_LIMIT)
-        .map((s) => ({
-          at: s.at,
-          durationMs: s.durationMs,
-          correlationId: s.correlationId,
-          instance: s.instance,
-        })),
-    };
+    return { stat: this.statDto(found) };
   }
 
   public async getExplain(digest: string): Promise<DbExplainDto> {
@@ -588,13 +458,12 @@ export class DatabaseOpsService {
   public async getConnections(): Promise<DbConnectionsDto> {
     const now = Date.now();
     const p = this.monitoring.provider;
-    const [{ sessions, server }, win, todayWin] = await Promise.all([
+    const [{ sessions, server }, todayStats] = await Promise.all([
       this.monitoring.batch(async (part) => ({
         sessions: await part('sessions', (ctx) => p.sessions(ctx)),
         server: await part('serverInfo', (ctx) => p.serverInfo(ctx)),
       })),
-      this.metrics.window(now - 5 * MINUTE, now, now),
-      this.metrics.window(startOfDay(now), now, now),
+      this.metrics.stats(Math.max(1, (now - startOfDay(now)) / MINUTE)),
     ]);
     const byRuntime = new Map<string, { count: number; active: number }>();
     if (sessions.available) {
@@ -612,7 +481,7 @@ export class DatabaseOpsService {
       byRuntime: [...byRuntime.entries()]
         .map(([runtime, v]) => ({ runtime, ...v }))
         .sort((a, b) => b.count - a.count),
-      pool: this.pool(win, this.metrics.stats(todayWin)),
+      pool: this.pool(todayStats),
       maxConnections: server.available ? server.data.maxConnections : null,
       actionsEnabled: this.db.actionsEnabled,
     };
@@ -643,16 +512,13 @@ export class DatabaseOpsService {
   public async getTransactions(): Promise<DbTransactionsDto> {
     const now = Date.now();
     const p = this.monitoring.provider;
-    const [{ transactions, lockWaits }, win, errors] = await Promise.all([
+    const [{ transactions, lockWaits }, errors] = await Promise.all([
       this.monitoring.batch(async (part) => ({
         transactions: await part('transactions', (ctx) => p.transactions(ctx)),
         lockWaits: await part('locks', (ctx) => p.lockWaits(ctx)),
       })),
-      this.metrics.window(now - 15 * MINUTE, now, now),
       this.errorsSince(now - DAY),
     ]);
-    const stats = this.metrics.stats(win);
-    const minutes = (win?.seconds ?? 0) / 60;
     const deadlocks = errors.filter((e) => e.kind === 'deadlock');
     const tx = transactions.available ? transactions.data : null;
     return {
@@ -660,9 +526,6 @@ export class DatabaseOpsService {
       stats: {
         active: tx ? tx.length : null,
         longestSec: tx && tx.length ? Math.max(...tx.map((t) => t.ageSec)) : null,
-        committedPerMin: minutes > 0 ? round(stats.committed / minutes, 2) : null,
-        rolledBackPerMin: minutes > 0 ? round(stats.rolledBack / minutes, 2) : null,
-        avgDurationMs: stats.txAvgMs,
       },
       lockWaits,
       blockingChains: lockWaits.available ? buildBlockingChains(lockWaits.data) : [],
@@ -801,15 +664,9 @@ export class DatabaseOpsService {
 
   public async getErrors(range: DbRange): Promise<DbErrorsDto> {
     const now = Date.now();
-    const [errors, win] = await Promise.all([
-      this.errorsSince(now - DB_RANGES[range] * MINUTE),
-      this.metrics.window(now - DB_RANGES[range] * MINUTE, now, now),
-    ]);
+    const errors = await this.errorsSince(now - DB_RANGES[range] * MINUTE);
     const counts = Object.fromEntries(
-      ERROR_KINDS.map((k) => [
-        k,
-        win ? counterOf(win.buckets, `db.err.${k}`) : errors.filter((e) => e.kind === k).length,
-      ]),
+      ERROR_KINDS.map((k) => [k, errors.filter((e) => e.kind === k).length]),
     ) as Record<DbErrorKind, number>;
     return {
       counts,

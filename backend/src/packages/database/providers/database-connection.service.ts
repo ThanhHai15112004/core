@@ -252,9 +252,9 @@ export class DatabaseConnectionService implements OnApplicationBootstrap, OnAppl
     void this.publish();
   }
 
-  /** Báo trạng thái lên Redis (TTL = 3 chu kỳ) để Console gộp theo runtime. */
+  /** Báo trạng thái lên Redis theo runtime (TTL = 3 chu kỳ) để Console gộp theo runtime. */
   private async publish(): Promise<void> {
-    const instance = `${process.pid}`;
+    const instance = this.identity?.id ?? 'app';
     if (!this.redis?.isReady()) return;
     const ttl = Math.max(15, Math.ceil((this.config.database.healthIntervalMs * 3) / 1000));
     await this.redis.client

@@ -62,11 +62,9 @@ export interface DbPoolDto {
 }
 
 export interface DbReportDto {
-  queries: number;
+  queries: number | null;
   avgMs: number | null;
-  p95Ms: number | null;
-  slowQueries: number;
-  failedQueries: number;
+  failedQueries: number | null;
   peakConnections: number | null;
   deadlocks: number;
   growthBytes: number | null;
@@ -92,13 +90,11 @@ export interface DbOverviewDto {
   kpis: {
     connections: { used: number | null; limit: number; percent: number | null };
     sessions: number | null;
-    p50Ms: number | null;
-    p95Ms: number | null;
-    p99Ms: number | null;
+    /** Thời gian trung bình mỗi câu lệnh (delta digest của database) — database không lộ phân vị. */
+    avgMs: number | null;
     queriesPerSec: number | null;
     errorRatePercent: number | null;
-    failedQueries: number;
-    slowQueries: number;
+    failedQueries: number | null;
     activeTransactions: number | null;
     lockWaits: number | null;
     deadlocks24h: number;
@@ -110,8 +106,6 @@ export interface DbOverviewDto {
   transactions: {
     active: number | null;
     longestSec: number | null;
-    committedPerMin: number | null;
-    rolledBackPerMin: number | null;
   };
   largestTables: SectionDto<(DbTable & { growthPercent: number | null })[]>;
   report: { today: DbReportDto; yesterday: DbReportDto };
@@ -131,7 +125,7 @@ export interface DbSeriesDto {
   points: { t: number; value: number }[];
 }
 
-export type DbMetric = 'queries' | 'latency' | 'connections' | 'errors' | 'transactions';
+export type DbMetric = 'queries' | 'latency' | 'connections' | 'errors';
 
 export interface DbMetricsDto {
   metric: DbMetric;
@@ -148,9 +142,6 @@ export interface DbLiveQueriesDto {
 }
 
 export interface DbQueryStatDto extends DbDigestStat {
-  /** Số lần chạy / thời gian TB trong khoảng đang chọn (từ snapshot định kỳ); `null` khi chưa có lịch sử. */
-  rangeCalls: number | null;
-  rangeAvgMs: number | null;
   slow: boolean;
 }
 
@@ -163,8 +154,6 @@ export interface DbQueryStatsDto {
 
 export interface DbQueryDetailDto {
   stat: DbQueryStatDto;
-  history: { calls: DbSeriesDto; avgMs: DbSeriesDto };
-  relatedSlow: { at: number; durationMs: number; correlationId: string | null; instance: string }[];
 }
 
 export interface DbExplainDto {
@@ -203,9 +192,6 @@ export interface DbTransactionsDto {
   stats: {
     active: number | null;
     longestSec: number | null;
-    committedPerMin: number | null;
-    rolledBackPerMin: number | null;
-    avgDurationMs: number | null;
   };
   lockWaits: SectionDto<DbLockWait[]>;
   blockingChains: BlockingNodeDto[];

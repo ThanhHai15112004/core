@@ -469,6 +469,8 @@ export const en: TranslationKey = {
       message: 'Driver {{driver}} has no data for this part yet. Common metrics (latency, throughput, errors) are still on the Overview tab.',
     },
     kpi: {
+      avgMs: 'Avg per statement',
+      avgSub: 'From database digest counters',
       connections: 'Connections (pool)',
       p95: 'Query P95',
       qps: 'Queries / sec',
@@ -480,7 +482,7 @@ export const en: TranslationKey = {
       poolSub: 'Pools of all runtimes',
       sessionsSub: '{{count}} app sessions on the database',
       latencySub: 'P50 {{p50}} · P99 {{p99}}',
-      fromApp: 'App queries, last {{range}}',
+      fromApp: 'Statements executed (top digests), last {{range}}',
       failedSub: '{{count}} failed queries',
       slowSub: '> {{ms}} ms in the last {{range}}',
       txSub: 'Open transactions',

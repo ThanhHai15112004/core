@@ -32,7 +32,6 @@ export const databaseConfig = () => {
     /** Ngưỡng query chậm của trang Database. */
     slowQueryMs: numberOr('DB_SLOW_QUERY_MS', 500),
     /** Số query chậm trong 15 phút để bật cảnh báo "query chậm tăng". */
-    slowQueryAlertCount: numberOr('DB_SLOW_QUERY_ALERT_COUNT', 10),
     /** Transaction mở lâu hơn ngưỡng này được đánh dấu "dài". */
     longTransactionSec: numberOr('DB_LONG_TX_SEC', 10),
     /** Dung lượng tối đa cấp cho database (GB) để tính % sử dụng; 0 = không biết. */
