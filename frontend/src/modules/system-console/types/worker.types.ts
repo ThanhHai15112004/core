@@ -116,8 +116,6 @@ export interface WorkerRow {
   queues: string[];
   processors: string[];
   paused: boolean;
-  completedToday: number;
-  failedToday: number;
   connections: number | null;
 }
 

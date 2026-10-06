@@ -63,14 +63,6 @@ export const WorkerDrawer: React.FC<{
               <dd>{t('wq.worker.processingValue', { active: w.active, concurrency: w.concurrency })}</dd>
             </div>
             <div>
-              <dt>{t('wq.worker.completedToday')}</dt>
-              <dd>{n(w.completedToday)}</dd>
-            </div>
-            <div>
-              <dt>{t('wq.worker.failedToday')}</dt>
-              <dd className={w.failedToday > 0 ? 'is-warn' : ''}>{n(w.failedToday)}</dd>
-            </div>
-            <div>
               <dt>{t('wq.processing.avg')}</dt>
               <dd>{formatMs(data.processing.avgMs)}</dd>
             </div>

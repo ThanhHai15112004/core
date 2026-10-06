@@ -168,7 +168,6 @@ export interface JobsOverview {
     retrying: number | null;
     delayed: number | null;
     stalled: number | null;
-    cancelledToday: number;
     successRatePercent: number | null;
     failedNow: number | null;
   };
@@ -188,7 +187,6 @@ export interface JobsReport {
   completed: number;
   failed: number;
   retried: number;
-  cancelled: number;
   successRatePercent: number | null;
   avgWaitMs: number | null;
   avgProcessingMs: number | null;
@@ -210,7 +208,6 @@ export interface JobsReportResponse {
   today: JobsReport;
   yesterday: JobsReport;
   types: JobTypeRow[];
-  trackedTypes: number;
 }
 
 export interface JobsFailures {

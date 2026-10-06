@@ -27,6 +27,3 @@ export const channelMetric = (channel: string, kind: string) =>
 /** Metric theo queue, vd. `msg.q.system.events.waiting`. */
 export const queueMetric = (queue: string, kind: string) =>
   `msg.q.${queue.replace(/\|/g, '_')}.${kind}`;
-/** Metric job theo queue (trang Worker & Queue), vd. `wq.q.system.events.done`. */
-export const jobMetric = (queue: string, kind: string) =>
-  `wq.q.${queue.replace(/\|/g, '_')}.${kind}`;

@@ -13,7 +13,6 @@ const ROWS: (keyof JobsReport)[] = [
   'completed',
   'failed',
   'retried',
-  'cancelled',
   'successRatePercent',
   'avgWaitMs',
   'avgProcessingMs',
@@ -127,7 +126,6 @@ export const JobsPerformanceView: React.FC<{
             </table>
           </div>
         )}
-        {data && <p className="pf-chart-note">{t('jobs.types.note', { max: data.trackedTypes })}</p>}
       </section>
     </>
   );

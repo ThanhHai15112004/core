@@ -22,6 +22,11 @@ export class SystemProcessor extends WorkerHost implements OnApplicationBootstra
   private readonly logger = new Logger(SystemProcessor.name);
   private readonly consumed: Counter<'queue' | 'channel' | 'result'>;
   private readonly duration: Histogram<'queue' | 'channel'>;
+  private readonly wait: Histogram<'queue'>;
+  private readonly attemptFailures: Counter<'queue' | 'final'>;
+  private readonly recovered: Counter<'queue'>;
+  /** Số job đã xử lý xong (thành công hoặc lỗi) từ khi process chạy — để tính job/phút. */
+  public processed = 0;
 
   constructor(
     private readonly config: CoreConfigService,
@@ -36,6 +41,15 @@ export class SystemProcessor extends WorkerHost implements OnApplicationBootstra
     this.duration = metrics.histogram('job_duration_seconds', 'Job processing duration', [
       'queue',
       'channel',
+    ]);
+    this.wait = metrics.histogram('job_wait_seconds', 'Time from enqueue to processing', ['queue']);
+    this.attemptFailures = metrics.counter(
+      'job_attempt_failures_total',
+      'Failed job attempts (final = no attempts left)',
+      ['queue', 'final'],
+    );
+    this.recovered = metrics.counter('job_recovered_total', 'Jobs that succeeded after a retry', [
+      'queue',
     ]);
   }
 
@@ -54,6 +68,12 @@ export class SystemProcessor extends WorkerHost implements OnApplicationBootstra
       this.consumed.inc({ queue: job.queueName, channel: job.name, result: 'failed' });
       throw new UnrecoverableError(`Malformed envelope for job ${job.id ?? '?'}`);
     }
+    if (job.timestamp > 0) {
+      this.wait.observe(
+        { queue: job.queueName },
+        Math.max(0, ((job.processedOn ?? Date.now()) - job.timestamp) / 1000),
+      );
+    }
     const end = this.duration.startTimer({ queue: job.queueName, channel: envelope.topic });
     try {
       await RequestContextService.runWith(
@@ -65,10 +85,14 @@ export class SystemProcessor extends WorkerHost implements OnApplicationBootstra
         () => this.handle(envelope),
       );
       this.consumed.inc({ queue: job.queueName, channel: envelope.topic, result: 'success' });
+      if (job.attemptsMade > 0) this.recovered.inc({ queue: job.queueName });
     } catch (err) {
       this.consumed.inc({ queue: job.queueName, channel: envelope.topic, result: 'failed' });
+      const final = job.attemptsMade + 1 >= (job.opts.attempts ?? 1);
+      this.attemptFailures.inc({ queue: job.queueName, final: String(final) });
       throw err;
     } finally {
+      this.processed++;
       end();
     }
   }

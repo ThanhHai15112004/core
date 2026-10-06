@@ -30,7 +30,6 @@ const base = (patch: Partial<WorkerRuleInput> = {}): WorkerRuleInput => ({
   queues: [],
   stalled: null,
   retries: { perMin: 0, queue: null, error: null },
-  pressure: [],
   ...patch,
 });
 
@@ -138,12 +137,11 @@ describe('evaluateWorkerRules', () => {
     expect(v.some((x) => x.id === 'CAPACITY:audit')).toBe(false);
   });
 
-  it('job treo, retry storm (kèm queue & lỗi chính), áp lực tài nguyên worker', () => {
+  it('job treo, retry storm (kèm queue & lỗi chính)', () => {
     const v = evaluateWorkerRules(
       base({
         stalled: { count: 3, oldestMin: 42.2, queue: 'exports' },
         retries: { perMin: 482, queue: 'reports', error: 'StorageTimeout' },
-        pressure: [{ key: 'memory', value: 91, threshold: 85 }],
       }),
       cfg,
     );
@@ -155,7 +153,6 @@ describe('evaluateWorkerRules', () => {
       severity: 'critical',
       extra: { queue: 'reports', error: 'StorageTimeout' },
     });
-    expect(v.find((x) => x.id === 'WORKER_PRESSURE:memory')).toMatchObject({ unit: '%' });
   });
 });
 

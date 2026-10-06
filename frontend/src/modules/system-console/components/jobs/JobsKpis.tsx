@@ -78,7 +78,7 @@ export const JobsKpis: React.FC<{
     {
       key: 'successRate',
       value: k.successRatePercent === null ? NO_VALUE : `${k.successRatePercent}%`,
-      sub: t('jobs.kpi.successSub', { count: n(k.cancelledToday) }),
+      sub: NO_VALUE,
       tone: k.successRatePercent === null ? 'unknown' : k.successRatePercent < 95 ? 'warn' : 'ok',
     },
   ];

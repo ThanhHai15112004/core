@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import { Injectable, Logger } from '@nestjs/common';
 import { CoreConfigService } from '@packages/config/index.js';
+import { RedisService } from '@packages/redis/index.js';
 import {
   sanitizeMessagingMessage,
   type JobOperationAction,
@@ -10,6 +11,7 @@ import {
 import { redactPayload } from '@packages/http/index.js';
 import { JobMonitoringService } from '../monitoring/job-monitoring.service.js';
 import { JobOperationError } from '../utils/job-errors.js';
+import { JOB_OPERATION_LOG_SIZE, queueKeys } from '../constants/queue.keys.js';
 import type { JobRecord } from '../contracts/job.types.js';
 
 const MAX_REASON = 200;
@@ -47,6 +49,7 @@ export class JobOperationsService {
   constructor(
     private readonly jobs: JobMonitoringService,
     private readonly config: CoreConfigService,
+    private readonly redis: RedisService,
   ) {}
 
   private get cfg() {
@@ -97,6 +100,13 @@ export class JobOperationsService {
       error,
     };
     this.logger.log({ msg: `job ${action} ${target}`, audit: { domain: 'jobs', ...record } });
+    const key = queueKeys(this.redis).jobOperations();
+    void this.redis.client
+      .multi()
+      .lpush(key, JSON.stringify(record))
+      .ltrim(key, 0, JOB_OPERATION_LOG_SIZE - 1)
+      .exec()
+      .catch(() => undefined);
     return record;
   }
 

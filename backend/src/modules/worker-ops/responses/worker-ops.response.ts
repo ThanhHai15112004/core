@@ -122,8 +122,6 @@ export interface WorkerRowDto {
   queues: string[];
   processors: string[];
   paused: boolean;
-  completedToday: number;
-  failedToday: number;
   /** Kết nối broker của instance (addr) nếu khớp được. */
   connections: number | null;
 }

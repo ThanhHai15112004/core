@@ -1,7 +1,6 @@
 import {
   Injectable,
   Logger,
-  Optional,
   type OnApplicationBootstrap,
   type OnModuleDestroy,
 } from '@nestjs/common';
@@ -10,7 +9,6 @@ import { RedisService } from '@packages/redis/index.js';
 import {
   MessagingConnectionService,
   MessagingMonitoringService,
-  jobMetric,
   messagingKeys,
   type ConsumerRegistration,
   type MessagingErrorRecord,
@@ -21,8 +19,6 @@ import {
   type JobSummary,
   type QueueInfo,
 } from '@packages/queue/index.js';
-import { MetricRecorder } from '@modules/system-ops/telemetry-compat.js';
-import { counterOf } from '@modules/performance/index.js';
 import { WorkerMetricsService } from './worker-metrics.service.js';
 import { WorkerStoreService } from './worker-store.service.js';
 import {
@@ -31,7 +27,7 @@ import {
   type QueueRuleInput,
   type WorkerViolation,
 } from './worker-rules.js';
-import { MINUTE, readWorkerHeartbeat, reasonOf, waitingOf } from './worker-utils.js';
+import { MINUTE, reasonOf, waitingOf } from './worker-utils.js';
 
 const TICK_MS = 15_000;
 const RULE_WINDOW_MS = 15 * MINUTE;
@@ -77,7 +73,6 @@ export class WorkerMonitorService implements OnApplicationBootstrap, OnModuleDes
     private readonly store: WorkerStoreService,
     private readonly config: CoreConfigService,
     private readonly redis: RedisService,
-    @Optional() private readonly recorder?: MetricRecorder,
   ) {}
 
   public onApplicationBootstrap(): void {
@@ -117,7 +112,7 @@ export class WorkerMonitorService implements OnApplicationBootstrap, OnModuleDes
           ])
         : [null, null];
       const consumers = await this.messaging.consumers().catch(() => [] as ConsumerRegistration[]);
-      if (queues) this.record(queues, now);
+      if (queues) this.record(queues);
       await this.evaluate(queues, active, consumers, now);
     } catch (err) {
       this.logger.warn(
@@ -128,22 +123,8 @@ export class WorkerMonitorService implements OnApplicationBootstrap, OnModuleDes
     }
   }
 
-  private record(queues: QueueInfo[], now: number): void {
-    const g = (name: string, v: number) => this.recorder?.gauge(name, v, now);
-    const total = { waiting: 0, active: 0, delayed: 0, failed: 0, workers: 0 };
-    for (const q of queues) {
-      const waiting = waitingOf(q);
-      total.waiting += waiting;
-      total.active += q.counts.active;
-      total.delayed += q.counts.delayed;
-      total.failed += q.counts.failed;
-      total.workers += q.workers?.length ?? 0;
-      g(jobMetric(q.name, 'waiting'), waiting);
-      g(jobMetric(q.name, 'active'), q.counts.active);
-      g(jobMetric(q.name, 'delayed'), q.counts.delayed);
-      g(jobMetric(q.name, 'failed'), q.counts.failed);
-    }
-    for (const [k, v] of Object.entries(total)) g(`wq.${k}`, v);
+  private record(queues: QueueInfo[]): void {
+    this.metrics.recordQueues(queues);
   }
 
   private async recentErrors(since: number): Promise<MessagingErrorRecord[]> {
@@ -170,11 +151,10 @@ export class WorkerMonitorService implements OnApplicationBootstrap, OnModuleDes
     now: number,
   ): Promise<void> {
     const rules = this.config.queue.rules;
-    const [win, minuteWin, alerts, hb] = await Promise.all([
-      this.metrics.window(now - RULE_WINDOW_MS, now, now, 's10'),
-      this.metrics.window(now - MINUTE, now, now, 's10'),
+    const [win, minuteWin, alerts] = await Promise.all([
+      this.metrics.window(now - RULE_WINDOW_MS, now, now),
+      this.metrics.window(now - MINUTE, now, now),
       this.store.activeAlerts(),
-      readWorkerHeartbeat(this.redis),
     ]);
     const queueInputs: QueueRuleInput[] | null = queues
       ? queues.map((q) => {
@@ -195,11 +175,10 @@ export class WorkerMonitorService implements OnApplicationBootstrap, OnModuleDes
         })
       : null;
     const stalled = active ? stalledJobs(active, rules.stalledMin, now) : [];
-    const mb = minuteWin?.buckets ?? [];
-    const retriesPerMin = counterOf(mb, 'wq.retry');
+    const retriesPerMin = this.metrics.counts(minuteWin).retried;
     const topRetryQueue =
       queues
-        ?.map((q) => ({ q: q.name, n: counterOf(mb, jobMetric(q.name, 'retry')) }))
+        ?.map((q) => ({ q: q.name, n: this.metrics.counts(minuteWin, q.name).retried }))
         .sort((a, b) => b.n - a.n)[0] ?? null;
     const primary =
       retriesPerMin >= rules.retryStormPerMin
@@ -221,11 +200,6 @@ export class WorkerMonitorService implements OnApplicationBootstrap, OnModuleDes
           queue: topRetryQueue && topRetryQueue.n > 0 ? topRetryQueue.q : null,
           error: primary,
         },
-        pressure: (hb?.alerts ?? []).map((a) => ({
-          key: a.key,
-          value: a.value,
-          threshold: a.threshold,
-        })),
       },
       rules,
     );

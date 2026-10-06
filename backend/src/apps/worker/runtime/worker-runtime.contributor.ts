@@ -22,6 +22,17 @@ export class WorkerRuntimeContributor implements RuntimeContributor, OnModuleIni
   }
 
   private readonly queueName = QUEUES.SYSTEM_EVENTS;
+  private last: { processed: number; at: number } | null = null;
+
+  /** Job/phút giữa hai lần thu thập (null ở lần đầu). */
+  private jobsPerMinute(): number | null {
+    const now = Date.now();
+    const cur = { processed: this.processor.processed, at: now };
+    const prev = this.last;
+    this.last = cur;
+    if (!prev || now <= prev.at) return null;
+    return Math.round(((cur.processed - prev.processed) / (now - prev.at)) * 60_000 * 100) / 100;
+  }
 
   public describe(): RuntimeDescriptor {
     return {
@@ -51,6 +62,7 @@ export class WorkerRuntimeContributor implements RuntimeContributor, OnModuleIni
       completedJobs: counts?.['completed'] ?? null,
       consumers,
       concurrency: this.processor.concurrency,
+      jobsPerMinute: this.jobsPerMinute(),
     };
   }
 

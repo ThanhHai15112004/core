@@ -4,7 +4,6 @@ import { CoreI18nService } from '@packages/i18n/index.js';
 import { RedisService } from '@packages/redis/index.js';
 import {
   MessagingMonitoringService,
-  jobMetric,
   type ConsumerRegistration,
 } from '@packages/messaging/index.js';
 import {
@@ -20,20 +19,11 @@ import {
   type QueueOperationRecord,
 } from '@packages/queue/index.js';
 import type { RuntimeHeartbeat } from '@packages/runtime/index.js';
-import { TELEMETRY_TIERS, type MetricBucket } from '@modules/system-ops/telemetry-compat.js';
-import {
-  counterOf,
-  gaugeWindow,
-  mergedOf,
-  meanOf,
-  percentileOf,
-  round,
-} from '@modules/performance/index.js';
+import { round } from '@modules/performance/index.js';
 import { RuntimesService, type RuntimeDetailDto } from '@modules/runtimes/index.js';
 import {
   WorkerMetricsService,
-  instanceCounter,
-  instanceGauge,
+  QUEUE_JOBS_METRIC,
   type MetricWindow,
 } from './worker-metrics.service.js';
 import { WorkerStoreService } from './worker-store.service.js';
@@ -108,7 +98,6 @@ export const WORKER_METRICS: WorkerMetric[] = [
   'retries',
 ];
 
-const MAX_POINTS = 120;
 const OVERVIEW_EVENTS = 8;
 const RECENT_JOBS = 20;
 const JOB_SAMPLE = 100;
@@ -127,28 +116,13 @@ const RUNTIME_EVENT_TYPES: Record<string, WorkerEventDto['type']> = {
   crashed: 'worker_crashed',
 };
 
-type Group = { t: number; b: MetricBucket[]; seconds: number };
-type SeriesDef = { id: string; unit: string; value: (g: Group) => number | null };
+type SeriesDef = { id: string; unit: string; expr: string };
 
 interface Live {
   queues: SectionDto<QueueInfo[]>;
   consumers: ConsumerRegistration[];
   hb: RuntimeHeartbeat | null;
 }
-
-/** `wq.<kind>` hoặc `wq.q.<queue>.<kind>`. */
-const mk = (kind: string, queue: string | null) => (queue ? jobMetric(queue, kind) : `wq.${kind}`);
-const hostPid = (instance: string) => {
-  const at = instance.indexOf('@');
-  const rest = at >= 0 ? instance.slice(at + 1) : instance;
-  const i = rest.lastIndexOf(':');
-  const pid = i >= 0 ? Number(rest.slice(i + 1)) : NaN;
-  return {
-    host: i >= 0 ? rest.slice(0, i) : rest,
-    pid: Number.isFinite(pid) ? pid : null,
-    key: rest,
-  };
-};
 
 /**
  * Worker & Queue: công việc nền có được worker thực thi kịp và thành công không — worker online, backlog,
@@ -286,26 +260,25 @@ export class WorkerOpsService {
   }
 
   /** Một dòng cho mỗi worker instance đang chạy (mỗi instance tự báo, TTL ngắn = còn sống). */
-  private workerRows(
-    live: Live,
-    today: MetricWindow | null,
-    recent: MetricWindow | null,
-    now: number,
-  ): WorkerRowDto[] {
+  private workerRows(live: Live, now: number): WorkerRowDto[] {
     const groups = new Map<string, ConsumerRegistration[]>();
     for (const c of live.consumers) groups.set(c.instance, [...(groups.get(c.instance) ?? []), c]);
     const th = this.config.runtime.thresholds;
-    const tb = today?.buckets ?? [];
-    const rb = recent?.buckets ?? [];
+    // `instance` của BullMQ là địa chỉ kết nối (ip:port) — chỉ ghép heartbeat khi runtime có đúng 1 kết nối.
+    const perRuntime = new Map<string, number>();
+    for (const regs of groups.values()) {
+      const rt = regs[0]!.runtime;
+      if (rt) perRuntime.set(rt, (perRuntime.get(rt) ?? 0) + 1);
+    }
     const brokers = live.queues.available ? live.queues.data.flatMap((q) => q.workers ?? []) : null;
     return [...groups.entries()]
       .map(([instance, regs]) => {
-        const { host, pid, key } = hostPid(instance);
-        const hb = live.hb && live.hb.instance === key ? live.hb : null;
-        const cpu = hb?.resources.cpuPercent ?? instanceGauge(rb, 'rt.cpu', instance);
-        const mem = hb?.resources.rssMb ?? instanceGauge(rb, 'rt.rss', instance);
-        const limit = hb?.resources.memoryLimitMb ?? instanceGauge(rb, 'rt.memLimit', instance);
-        const memPct = hb?.resources.memoryPercent ?? instanceGauge(rb, 'rt.memPct', instance);
+        const rt = regs[0]!.runtime;
+        const hb = live.hb && rt && live.hb.id === rt && perRuntime.get(rt) === 1 ? live.hb : null;
+        const cpu = hb?.resources.cpuPercent ?? null;
+        const mem = hb?.resources.rssMb ?? null;
+        const limit = hb?.resources.memoryLimitMb ?? null;
+        const memPct = hb?.resources.memoryPercent ?? null;
         const active = regs.reduce((s, r) => s + r.inFlight, 0);
         const concurrency = regs.reduce((s, r) => s + r.concurrency, 0);
         const utilization = concurrency > 0 ? round((active / concurrency) * 100, 1) : null;
@@ -324,8 +297,8 @@ export class WorkerOpsService {
         return {
           id: instance,
           runtime,
-          host,
-          pid: hb?.process.pid ?? pid,
+          host: hb?.process.hostname ?? instance,
+          pid: hb?.process.pid ?? null,
           status,
           active,
           concurrency,
@@ -339,8 +312,6 @@ export class WorkerOpsService {
           queues: [...new Set(regs.map((r) => r.queue))].sort(),
           processors: [...new Set(regs.map((r) => r.consumer))].sort(),
           paused,
-          completedToday: instanceCounter(tb, 'wq.done', instance),
-          failedToday: instanceCounter(tb, 'wq.fail', instance),
           connections: brokers ? brokers.filter((b) => b.name === runtime).length : null,
         };
       })
@@ -439,35 +410,24 @@ export class WorkerOpsService {
   public async getOverview(range: WorkerRange): Promise<WorkerOverviewDto> {
     const now = Date.now();
     const today = startOfDay(now);
-    const [
-      win,
-      todayWin,
-      yesterdayWin,
-      recentWin,
-      live,
-      alerts,
-      events,
-      retrying,
-      active,
-      stability,
-    ] = await Promise.all([
-      this.rangeWindow(range, now),
-      this.metrics.window(today, now, now),
-      this.metrics.window(today - DAY, today, now),
-      this.metrics.window(now - 2 * MINUTE, now, now, 's10'),
-      this.live(),
-      this.alerts(),
-      this.eventsSince(now - DAY, null),
-      this.monitoring.usable()
-        ? this.monitoring.provider.jobs(null, ['retrying'], RETRYING_SCAN).catch(() => null)
-        : Promise.resolve(null),
-      this.monitoring.usable()
-        ? this.monitoring.provider.jobs(null, ['active'], STALLED_SCAN).catch(() => null)
-        : Promise.resolve(null),
-      this.stability(now),
-    ]);
+    const [win, todayWin, yesterdayWin, live, alerts, events, retrying, active, stability] =
+      await Promise.all([
+        this.rangeWindow(range, now),
+        this.metrics.window(today, now, now),
+        this.metrics.window(today - DAY, today, now),
+        this.live(),
+        this.alerts(),
+        this.eventsSince(now - DAY, null),
+        this.monitoring.usable()
+          ? this.monitoring.provider.jobs(null, ['retrying'], RETRYING_SCAN).catch(() => null)
+          : Promise.resolve(null),
+        this.monitoring.usable()
+          ? this.monitoring.provider.jobs(null, ['active'], STALLED_SCAN).catch(() => null)
+          : Promise.resolve(null),
+        this.stability(now),
+      ]);
     const queues = this.queueRows(live, win, now);
-    const workers = this.workerRows(live, todayWin, recentWin, now);
+    const workers = this.workerRows(live, now);
     const counts = this.metrics.counts(win);
     const processing = this.metrics.processing(win);
     const sum = (k: 'waiting' | 'active' | 'delayed' | 'failed') =>
@@ -662,76 +622,82 @@ export class WorkerOpsService {
 
   // ─── Chart ────────────────────────────────────────────────────────────────
 
-  private async series(range: WorkerRange, defs: SeriesDef[]) {
-    const now = Date.now();
-    const win = await this.rangeWindow(range, now);
-    const tierSec = win ? TELEMETRY_TIERS[win.tier].seconds : 0;
-    const buckets = win?.buckets ?? [];
-    const size = Math.max(1, Math.ceil(buckets.length / MAX_POINTS));
-    const groups: Group[] = [];
-    for (let i = 0; i < buckets.length; i += size) {
-      const b = buckets.slice(i, i + size);
-      groups.push({
-        t: b[0]!.start,
-        b,
-        seconds: Math.max(1, Math.min(b.length * tierSec, (now - b[0]!.start) / 1000)),
-      });
-    }
-    return {
-      resolutionSec: win ? tierSec : null,
-      series: defs.map((d): WorkerSeriesDto => ({
-        id: d.id,
-        label: this.i18n.t(`worker.series.${d.id}`),
-        unit: d.unit,
-        points: groups
-          .map((g) => ({ t: g.t, value: d.value(g) }))
-          .filter(
-            (p): p is { t: number; value: number } => p.value !== null && Number.isFinite(p.value),
-          )
-          .map((p) => ({ t: p.t, value: round(p.value, 3) })),
-      })),
-    };
-  }
-
   public async getMetrics(
     range: WorkerRange,
     metric: WorkerMetric,
     queue: string | null,
   ): Promise<WorkerMetricsDto> {
     if (queue) this.assertQueue(queue);
-    const q = queue;
-    const perMin = (kind: string) => (g: Group) => counterOf(g.b, mk(kind, q)) / (g.seconds / 60);
-    const pct = (kind: string, p: number) => (g: Group) =>
-      percentileOf(mergedOf(g.b, mk(kind, q)), p);
-    const gauge = (kind: string) => (g: Group) =>
-      gaugeWindow(g.b, mk(kind, q), { mode: 'max' }).avg;
+    // `assertQueue` đã kiểm tra tên queue có thật — vẫn bỏ dấu nháy để PromQL an toàn.
+    const q = queue?.replaceAll('"', '') ?? null;
+    const sel = q ? `{queue="${q}"}` : '';
+    const and = (extra: string) => (q ? `{queue="${q}",${extra}}` : `{${extra}}`);
+    const perMin = (m: string) => `sum(rate(${m}[$w])) * 60`;
+    const pct = (h: string, p: number) =>
+      `histogram_quantile(${p}, sum by (le) (rate(${h}_bucket${sel}[$w]))) * 1000`;
+    const gauge = (state: string) => `sum(${QUEUE_JOBS_METRIC}${and(`state="${state}"`)})`;
     const defs: Record<WorkerMetric, SeriesDef[]> = {
       throughput: [
-        { id: 'incoming', unit: '/min', value: perMin('in') },
-        { id: 'completed', unit: '/min', value: perMin('done') },
-        { id: 'failed', unit: '/min', value: perMin('fail') },
+        {
+          id: 'incoming',
+          unit: '/min',
+          expr: perMin(`messages_published_total${and('result="success"')}`),
+        },
+        {
+          id: 'completed',
+          unit: '/min',
+          expr: perMin(`messages_consumed_total${and('result="success"')}`),
+        },
+        {
+          id: 'failed',
+          unit: '/min',
+          expr: perMin(`messages_consumed_total${and('result="failed"')}`),
+        },
       ],
       waiting: [
-        { id: 'waiting', unit: 'jobs', value: gauge('waiting') },
-        { id: 'active', unit: 'jobs', value: gauge('active') },
-        { id: 'delayed', unit: 'jobs', value: gauge('delayed') },
+        { id: 'waiting', unit: 'jobs', expr: gauge('waiting') },
+        { id: 'active', unit: 'jobs', expr: gauge('active') },
+        { id: 'delayed', unit: 'jobs', expr: gauge('delayed') },
       ],
       duration: [
-        { id: 'processingAvg', unit: 'ms', value: (g) => meanOf(mergedOf(g.b, mk('proc', q))) },
-        { id: 'processingP95', unit: 'ms', value: pct('proc', 95) },
-        { id: 'processingP99', unit: 'ms', value: pct('proc', 99) },
-        { id: 'waitP95', unit: 'ms', value: pct('wait', 95) },
+        {
+          id: 'processingAvg',
+          unit: 'ms',
+          expr: `sum(rate(job_duration_seconds_sum${sel}[$w])) / sum(rate(job_duration_seconds_count${sel}[$w])) * 1000`,
+        },
+        { id: 'processingP95', unit: 'ms', expr: pct('job_duration_seconds', 0.95) },
+        { id: 'processingP99', unit: 'ms', expr: pct('job_duration_seconds', 0.99) },
+        { id: 'waitP95', unit: 'ms', expr: pct('job_wait_seconds', 0.95) },
       ],
       failures: [
-        { id: 'failed', unit: '/min', value: perMin('fail') },
-        { id: 'exhausted', unit: '/min', value: perMin('exhausted') },
+        {
+          id: 'failed',
+          unit: '/min',
+          expr: perMin(`messages_consumed_total${and('result="failed"')}`),
+        },
+        {
+          id: 'exhausted',
+          unit: '/min',
+          expr: perMin(`job_attempt_failures_total${and('final="true"')}`),
+        },
       ],
       retries: [
-        { id: 'retried', unit: '/min', value: perMin('retry') },
-        ...(q ? [] : [{ id: 'recovered', unit: '/min', value: perMin('recovered') }]),
+        {
+          id: 'retried',
+          unit: '/min',
+          expr: perMin(`job_attempt_failures_total${and('final="false"')}`),
+        },
+        { id: 'recovered', unit: '/min', expr: perMin(`job_recovered_total${sel}`) },
       ],
     };
-    const { series, resolutionSec } = await this.series(range, defs[metric]);
+    const res = await this.metrics.series(WORKER_RANGES[range], defs[metric]);
+    const series = res.series.map((s): WorkerSeriesDto => ({
+      id: s.id,
+      label: this.i18n.t(`worker.series.${s.id}`),
+      unit: s.unit,
+      points: s.points,
+    }));
+    const resolutionSec = res.resolutionSec;
     const list = series.filter((s, i) => i === 0 || s.points.length > 0);
     return { metric, range, queue, resolutionSec, unit: list[0]?.unit ?? '', series: list };
   }
@@ -739,12 +705,11 @@ export class WorkerOpsService {
   // ─── Workers ──────────────────────────────────────────────────────────────
 
   private async workerContext(now: number) {
-    const [todayWin, recentWin, live] = await Promise.all([
+    const [todayWin, live] = await Promise.all([
       this.metrics.window(startOfDay(now), now, now),
-      this.metrics.window(now - 2 * MINUTE, now, now, 's10'),
       this.live(),
     ]);
-    return { todayWin, recentWin, live, rows: this.workerRows(live, todayWin, recentWin, now) };
+    return { todayWin, live, rows: this.workerRows(live, now) };
   }
 
   public async getWorkers(): Promise<WorkersListDto> {
@@ -778,12 +743,11 @@ export class WorkerOpsService {
     ]);
     const worker = rows.find((w) => w.id === id);
     if (!worker) throw new WorkerNotFoundException('worker.error.workerNotFound', { id });
-    const tb = todayWin?.buckets ?? [];
-    const perQueue = worker.queues.map((q) => ({
-      queue: q,
-      completed: instanceCounter(tb, jobMetric(q, 'done'), id),
-      failed: instanceCounter(tb, jobMetric(q, 'fail'), id),
-    }));
+    // Prometheus đếm theo queue (không theo kết nối) — phân bổ là của các queue worker này tiêu thụ.
+    const perQueue = worker.queues.map((q) => {
+      const c = this.metrics.counts(todayWin, q);
+      return { queue: q, completed: c.completed, failed: c.failed };
+    });
     const total = perQueue.reduce((s, q) => s + q.completed, 0);
     const own =
       live.hb && worker.pid !== null && live.hb.process.pid === worker.pid ? live.hb : null;
@@ -793,7 +757,7 @@ export class WorkerOpsService {
         ...q,
         percent: total > 0 ? round((q.completed / total) * 100, 1) : 0,
       })),
-      processing: this.metrics.processing(todayWin, null, worker.runtime ?? undefined),
+      processing: this.metrics.processing(todayWin),
       runtimeStatus: own ? (runtime?.status ?? null) : null,
       runtimeAlerts: own
         ? own.alerts.map((a) => ({ key: a.key, value: a.value, threshold: a.threshold }))
@@ -823,10 +787,8 @@ export class WorkerOpsService {
   public async getQueue(name: string, range: WorkerRange): Promise<QueueDetailDto> {
     this.assertQueue(name);
     const now = Date.now();
-    const [win, todayWin, recentWin, live, alerts, recent] = await Promise.all([
+    const [win, live, alerts, recent] = await Promise.all([
       this.rangeWindow(range, now),
-      this.metrics.window(startOfDay(now), now, now),
-      this.metrics.window(now - 2 * MINUTE, now, now, 's10'),
       this.live(),
       this.alerts(),
       this.jobs(
@@ -861,9 +823,7 @@ export class WorkerOpsService {
         percentOfWarn: r.backlogWarn > 0 ? round((row.waiting / r.backlogWarn) * 100, 1) : 0,
       },
       concurrency: this.concurrency(live, name),
-      workers: this.workerRows(live, todayWin, recentWin, now).filter((w) =>
-        w.queues.includes(name),
-      ),
+      workers: this.workerRows(live, now).filter((w) => w.queues.includes(name)),
       brokerWorkers: info.workers,
       recentJobs: recent.available
         ? {
@@ -902,7 +862,7 @@ export class WorkerOpsService {
       await Promise.all([
         this.rangeWindow(range, now),
         this.metrics.window(startOfDay(now), now, now),
-        this.metrics.window(now - SPIKE_WINDOW_MS, now, now, 's10'),
+        this.metrics.window(now - SPIKE_WINDOW_MS, now, now),
         this.metrics.window(now - SPIKE_WINDOW_MS - 60 * MINUTE, now - SPIKE_WINDOW_MS, now),
         this.live(),
         this.alerts(),

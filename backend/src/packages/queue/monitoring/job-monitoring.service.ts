@@ -8,6 +8,7 @@ import {
   type JobOperationRecord,
 } from '@packages/messaging/index.js';
 import { BullMqJobProvider } from '../providers/bullmq-job.provider.js';
+import { queueKeys } from '../constants/queue.keys.js';
 import type {
   JobCapability,
   JobDetailRaw,
@@ -27,7 +28,7 @@ export class JobMonitoringService {
   constructor(
     registry: QueueRegistry,
     private readonly connection: MessagingConnectionService,
-    redis: RedisService,
+    private readonly redis: RedisService,
   ) {
     this.provider = new BullMqJobProvider(registry, redis);
   }
@@ -82,8 +83,15 @@ export class JobMonitoringService {
     return [];
   }
 
-  /** Audit thao tác nằm trong Logs (field `audit`). */
+  /** Audit thao tác job (mới nhất trước) — `JobOperationsService` ghi. */
   public async operations(): Promise<JobOperationRecord[]> {
-    return [];
+    const raws = await this.redis.client.lrange(queueKeys(this.redis).jobOperations(), 0, -1);
+    return raws.flatMap((r) => {
+      try {
+        return [JSON.parse(r) as JobOperationRecord];
+      } catch {
+        return [];
+      }
+    });
   }
 }

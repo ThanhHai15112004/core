@@ -22,7 +22,7 @@ import {
   type QueueInfo,
 } from '@packages/queue/index.js';
 import { redactPayload } from '@packages/http/index.js';
-import { counterOf, round } from '@modules/performance/index.js';
+import { round } from '@modules/performance/index.js';
 import { RuntimesService } from '@modules/runtimes/index.js';
 import { WORKER_RANGES, WorkerOpsService, type WorkerMetric } from '@modules/worker-ops/index.js';
 import { JobsMetricsService } from './jobs-metrics.service.js';
@@ -411,7 +411,7 @@ export class JobsOpsService {
         this.metrics.window(now - JOBS_RANGES[range] * MINUTE, now, now),
         this.metrics.window(today, now, now),
         this.metrics.window(now - 60 * MINUTE, now, now),
-        this.metrics.window(now - MINUTE, now, now, 's10'),
+        this.metrics.window(now - MINUTE, now, now),
         this.activeJobs(),
         this.delayedJobs(),
         this.failedSample(null),
@@ -432,9 +432,9 @@ export class JobsOpsService {
         ?.filter((j) => j.longRunning)
         .sort((x, y) => (y.runningMs ?? 0) - (x.runningMs ?? 0)) ?? null;
     const t = this.metrics.report(todayWin);
-    const rw = win?.buckets ?? [];
-    const incoming = counterOf(rw, 'wq.in');
-    const completed = counterOf(rw, 'wq.done') + counterOf(rw, 'wq.exhausted');
+    const rc = this.metrics.counts(win);
+    const incoming = rc.incoming;
+    const completed = rc.completed + rc.exhausted;
     const perMin = (n: number) => (win ? round((n / win.seconds) * 60, 2) : null);
     const inPer = perMin(incoming);
     const outPer = perMin(completed);
@@ -463,8 +463,8 @@ export class JobsOpsService {
       stalled,
       longRunning,
       groups,
-      failuresHour: counterOf(hourWin?.buckets ?? [], 'wq.exhausted'),
-      retriesMinute: counterOf(minuteWin?.buckets ?? [], 'wq.retry'),
+      failuresHour: this.metrics.counts(hourWin).exhausted,
+      retriesMinute: this.metrics.counts(minuteWin).retried,
       rate,
       priorities: priorities.available ? priorities.data : [],
       now,
@@ -502,7 +502,6 @@ export class JobsOpsService {
             ? Math.max(0, delayedTotal - retrying)
             : delayedTotal,
         stalled: stalled ? stalled.length : null,
-        cancelledToday: t.cancelled,
         successRatePercent: t.successRatePercent,
         failedNow: sum((q) => q.counts.failed),
       },
@@ -687,7 +686,7 @@ export class JobsOpsService {
     const [win, todayWin, minuteWin, info, failed, delayed] = await Promise.all([
       this.metrics.window(now - JOBS_RANGES[range] * MINUTE, now, now),
       this.metrics.window(startOfDay(now), now, now),
-      this.metrics.window(now - MINUTE, now, now, 's10'),
+      this.metrics.window(now - MINUTE, now, now),
       this.queues.section(null, () => this.queues.queues()),
       this.failedSample(queue),
       this.delayedJobs(),
@@ -697,19 +696,17 @@ export class JobsOpsService {
       : null;
     const failedJobs = failed.available ? failed.data.filter((j) => j.status === 'failed') : null;
     const groups = this.failureGroups([...(failedJobs ?? []), ...(retrying ?? [])]);
-    const rb = win?.buckets ?? [];
-    const key = (kind: string) =>
-      queue ? `wq.q.${queue.replace(/\|/g, '_')}.${kind}` : `wq.${kind}`;
-    const done = counterOf(rb, key('done'));
-    const exhausted = counterOf(rb, key('exhausted'));
-    const retriesMinute = counterOf(minuteWin?.buckets ?? [], 'wq.retry');
+    const rc = this.metrics.counts(win, queue);
+    const tc = this.metrics.counts(todayWin, queue);
+    const done = rc.completed;
+    const exhausted = rc.exhausted;
+    const retriesMinute = this.metrics.counts(minuteWin).retried;
     const threshold = this.config.queue.rules.retryStormPerMin;
-    const today = todayWin?.buckets ?? [];
     return {
       range,
       queue,
       stats: {
-        failedToday: counterOf(today, key('exhausted')),
+        failedToday: tc.exhausted,
         failureRatePercent:
           done + exhausted > 0 ? round((exhausted / (done + exhausted)) * 100, 2) : null,
         failedNow: info.available
@@ -720,7 +717,7 @@ export class JobsOpsService {
         retryable: failedJobs ? failedJobs.filter((j) => j.retryable !== false).length : null,
         nonRetryable: failedJobs ? failedJobs.filter((j) => j.retryable === false).length : null,
         retryingNow: retrying ? retrying.length : null,
-        retriedToday: counterOf(today, key('retry')),
+        retriedToday: tc.retried,
       },
       groups: failed.available ? { available: true, data: groups } : failed,
       sampled: (failedJobs?.length ?? 0) + (retrying?.length ?? 0),
@@ -740,17 +737,16 @@ export class JobsOpsService {
   public async getReport(range: JobsRange): Promise<JobsReportResponseDto> {
     const now = Date.now();
     const today = startOfDay(now);
-    const [todayWin, yesterdayWin, win] = await Promise.all([
+    const [todayWin, yesterdayWin, types] = await Promise.all([
       this.metrics.window(today, now, now),
       this.metrics.window(today - DAY, today, now),
-      this.metrics.window(now - JOBS_RANGES[range] * MINUTE, now, now),
+      this.metrics.types(JOBS_RANGES[range]),
     ]);
     return {
       range,
       today: this.metrics.report(todayWin),
       yesterday: this.metrics.report(yesterdayWin),
-      types: this.metrics.types(win),
-      trackedTypes: this.metrics.trackedTypes,
+      types,
     };
   }
 

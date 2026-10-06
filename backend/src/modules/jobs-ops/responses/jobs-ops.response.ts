@@ -128,7 +128,6 @@ export interface JobsKpisDto {
   retrying: number | null;
   delayed: number | null;
   stalled: number | null;
-  cancelledToday: number;
   successRatePercent: number | null;
   /** Job đang nằm trong danh sách failed (chưa retry / chưa dọn). */
   failedNow: number | null;
@@ -158,7 +157,6 @@ export interface JobsReportDto {
   completed: number;
   failed: number;
   retried: number;
-  cancelled: number;
   successRatePercent: number | null;
   avgWaitMs: number | null;
   avgProcessingMs: number | null;
@@ -180,8 +178,6 @@ export interface JobsReportResponseDto {
   today: JobsReportDto;
   yesterday: JobsReportDto;
   types: JobTypeRowDto[];
-  /** Tối đa bao nhiêu loại job được đếm riêng (phần dư gộp `(other)`). */
-  trackedTypes: number;
 }
 
 export interface JobsFailuresDto {

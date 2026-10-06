@@ -9,7 +9,11 @@ export const queueKeys = (redis: RedisService) => ({
   /** Hash alertId → cảnh báo đang diễn ra. */
   activeAlerts: () => redis.key('wqmon', 'alerts'),
   collectLock: () => redis.key('wqmon', 'lock', 'collect'),
+  /** LIST audit thao tác từng job (retry / cancel / remove / payload). */
+  jobOperations: () => redis.key('wqmon', 'jobops'),
 });
+
+export const JOB_OPERATION_LOG_SIZE = 500;
 
 export const QUEUE_EVENT_LOG_SIZE = 1000;
 export const QUEUE_OPERATION_LOG_SIZE = 500;

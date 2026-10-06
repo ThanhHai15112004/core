@@ -12,8 +12,7 @@ export type WorkerRule =
   | 'SLOW_PROCESSING'
   | 'STALLED_JOBS'
   | 'RETRY_STORM'
-  | 'CAPACITY'
-  | 'WORKER_PRESSURE';
+  | 'CAPACITY';
 
 /** Tab mở khi bấm cảnh báo (cảnh báo có `target` là queue → mở thẳng Queue Detail). */
 export const RULE_TAB: Record<WorkerRule, string> = {
@@ -27,7 +26,6 @@ export const RULE_TAB: Record<WorkerRule, string> = {
   STALLED_JOBS: 'failures',
   RETRY_STORM: 'failures',
   CAPACITY: 'workers',
-  WORKER_PRESSURE: 'workers',
 };
 
 /** Rule có đối tượng là queue (target = tên queue). */
@@ -66,8 +64,6 @@ export interface WorkerRuleInput {
   /** Job active chạy lâu hơn ngưỡng stalled. */
   stalled: { count: number; oldestMin: number; queue: string } | null;
   retries: { perMin: number; queue: string | null; error: string | null };
-  /** Cảnh báo tài nguyên của runtime worker (memory/cpu/eventLoop) do chính process báo. */
-  pressure: { key: string; value: number; threshold: number }[];
 }
 
 export type WorkerRuleConfig = QueueConfig['rules'];
@@ -176,19 +172,6 @@ export function evaluateWorkerRules(
       cfg.retryStormPerMin,
       '/min',
       { queue: r.queue ?? '', error: r.error ?? '' },
-    );
-
-  for (const p of input.pressure)
-    add(
-      'WORKER_PRESSURE',
-      p.key,
-      'warning',
-      p.value,
-      p.threshold,
-      p.key === 'eventLoop' ? 'ms' : '%',
-      {
-        metric: p.key,
-      },
     );
 
   const rank = { critical: 0, warning: 1, info: 2 } as const;
