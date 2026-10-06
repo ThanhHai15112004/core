@@ -73,7 +73,6 @@ export interface RuntimeIssue {
 
 export interface RuntimeCapabilities {
   pause: boolean;
-  restart: boolean;
 }
 
 export interface RuntimeHeartbeat {
@@ -130,14 +129,12 @@ export interface RuntimeEvent {
   data: RuntimeEventData;
 }
 
-export type RuntimeCommandAction = 'restart' | 'pause' | 'resume';
-export type RestartMode = 'graceful' | 'force';
+export type RuntimeCommandAction = 'pause' | 'resume';
 
 export interface RuntimeCommand {
   id: string;
   runtime: LongRunningRuntimeId;
   action: RuntimeCommandAction;
-  mode?: RestartMode;
   requestedAt: string;
 }
 

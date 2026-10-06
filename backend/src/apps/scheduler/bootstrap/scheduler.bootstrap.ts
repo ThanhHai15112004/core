@@ -11,7 +11,6 @@ export async function bootstrapScheduler(): Promise<void> {
   app.enableShutdownHooks();
 
   const agent = app.get(RuntimeAgentService);
-  agent.attachApp(app);
   agent.installCrashHandlers();
 
   logger.log('Cron Scheduler started');

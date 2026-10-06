@@ -11,8 +11,7 @@ export type RuntimeStatus =
   | 'crashed'
   | 'unknown';
 export type MetricValue = number | string | boolean | null;
-export type RestartMode = 'graceful' | 'force';
-export type RuntimeAction = 'restart' | 'stop' | 'start';
+export type RuntimeAction = 'stop' | 'start';
 export type MetricRange = '15m' | '1h' | '6h' | '24h';
 
 export interface RuntimeResources {
@@ -180,8 +179,7 @@ export interface RuntimeLog {
 export interface RuntimeCommand {
   id: string;
   runtime: RuntimeId;
-  action: 'restart' | 'pause' | 'resume';
-  mode?: RestartMode;
+  action: 'pause' | 'resume';
   requestedAt: string;
   status: 'pending' | 'accepted' | 'completed' | 'failed';
   message?: string;

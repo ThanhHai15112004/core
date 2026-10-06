@@ -11,7 +11,6 @@ export async function bootstrapWorker(): Promise<void> {
   app.enableShutdownHooks();
 
   const agent = app.get(RuntimeAgentService);
-  agent.attachApp(app);
   agent.installCrashHandlers();
 
   logger.log('Background Worker started, consuming queue jobs');

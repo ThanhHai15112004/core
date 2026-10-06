@@ -60,7 +60,7 @@ describe('RuntimeAgentService', () => {
     expect(hb.state).toBe('running');
     expect(hb.metrics).toEqual({ activeJobs: 2 });
     expect(hb.resources.rssMb).toBeGreaterThan(0);
-    expect(hb.capabilities).toEqual({ pause: true, restart: true });
+    expect(hb.capabilities).toEqual({ pause: true });
     expect(await redis.client.ttl(keys.heartbeat('worker'))).toBeGreaterThan(0);
   });
 
@@ -86,17 +86,4 @@ describe('RuntimeAgentService', () => {
     expect(await redis.client.exists(keys.paused('worker'))).toBe(0);
   });
 
-  it('force restart records the stop and exits with code 1', async () => {
-    const exit = jest.spyOn(process, 'exit').mockImplementation((() => undefined) as never);
-    await send({ id: 'c3', action: 'restart', mode: 'force' });
-    expect(exit).toHaveBeenCalledWith(1);
-    expect(JSON.parse((await redis.client.get(keys.commandResult('c3')))!)).toMatchObject({
-      status: 'accepted',
-    });
-    const events = await redis.client.xrevrange(keys.events(), '+', '-');
-    const types = events.map(([, fields]) => fields[fields.indexOf('type') + 1]);
-    expect(types.slice(0, 2)).toEqual(['stopped', 'restart_requested']);
-    expect(await redis.client.exists(keys.heartbeat('worker'))).toBe(0);
-    exit.mockRestore();
-  });
 });

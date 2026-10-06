@@ -8,7 +8,6 @@ import type {
   RuntimeSample,
   RuntimeCommandStatus,
   RuntimeCommandAction,
-  RestartMode,
 } from '@packages/runtime/index.js';
 
 /** Trạng thái hiển thị (suy ra từ heartbeat + sự kiện). */
@@ -41,7 +40,6 @@ export interface RuntimeActionAvailabilityDto {
 }
 
 export interface RuntimeActionsDto {
-  restart: RuntimeActionAvailabilityDto;
   stop: RuntimeActionAvailabilityDto;
   start: RuntimeActionAvailabilityDto;
 }
@@ -142,7 +140,6 @@ export interface RuntimeCommandDto {
   id: string;
   runtime: string;
   action: RuntimeCommandAction;
-  mode?: RestartMode;
   requestedAt: string;
   status: RuntimeCommandStatus;
   message?: string;

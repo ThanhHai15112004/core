@@ -13,6 +13,8 @@ export interface RuntimeContributor {
   /** Ngừng nhận việc mới nhưng process vẫn sống (Stop từ Console). */
   pause?(): Promise<void>;
   resume?(): Promise<void>;
-  /** Chờ việc đang chạy hoàn tất trước khi graceful restart. */
+  /** Khả năng điều khiển; không khai báo thì pause được coi là hỗ trợ khi có cả `pause` và `resume`. */
+  capabilities?(): { pause: boolean };
+  /** Chờ việc đang chạy hoàn tất trước khi tắt process (graceful shutdown). */
   drain?(): Promise<void>;
 }

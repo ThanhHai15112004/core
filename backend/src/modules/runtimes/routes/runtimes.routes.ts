@@ -10,7 +10,6 @@ export const RUNTIMES_ROUTES = {
   DETAIL: ':runtimeId',
   METRICS: ':runtimeId/metrics',
   LOGS: ':runtimeId/logs',
-  RESTART: ':runtimeId/restart',
   STOP: ':runtimeId/stop',
   START: ':runtimeId/start',
   buildListPath: () => `/${PREFIX}`,
@@ -21,6 +20,5 @@ export const RUNTIMES_ROUTES = {
   buildDetailPath: (id: string) => `/${PREFIX}/${id}`,
   buildMetricsPath: (id: string) => `/${PREFIX}/${id}/metrics`,
   buildLogsPath: (id: string) => `/${PREFIX}/${id}/logs`,
-  buildActionPath: (id: string, action: 'restart' | 'stop' | 'start') =>
-    `/${PREFIX}/${id}/${action}`,
+  buildActionPath: (id: string, action: 'stop' | 'start') => `/${PREFIX}/${id}/${action}`,
 } as const;

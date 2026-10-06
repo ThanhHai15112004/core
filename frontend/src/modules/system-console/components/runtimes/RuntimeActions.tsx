@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { MoreVertical, Play, RotateCw, Square } from 'lucide-react';
+import { MoreVertical, Play, Square } from 'lucide-react';
 import type { RuntimeAction, RuntimeSummary } from '../../types/runtime.types';
 import type { PendingCommand } from '../../hooks/useRuntimeCommand';
 import { useLocale } from '../../../../core/i18n/index';
@@ -13,11 +13,10 @@ interface RuntimeActionsProps {
 }
 
 const ICONS: Record<RuntimeAction, React.ComponentType<{ size?: number }>> = {
-  restart: RotateCw,
   stop: Square,
   start: Play,
 };
-const ORDER: RuntimeAction[] = ['restart', 'stop', 'start'];
+const ORDER: RuntimeAction[] = ['stop', 'start'];
 
 /** Các action vận hành; action không được phép bị disable kèm lý do từ backend. */
 export const RuntimeActions: React.FC<RuntimeActionsProps> = ({ runtime, pending, onAction, variant }) => {

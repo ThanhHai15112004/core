@@ -3,7 +3,6 @@ import {
   Injectable,
   Logger,
   type BeforeApplicationShutdown,
-  type INestApplicationContext,
   type OnApplicationBootstrap,
 } from '@nestjs/common';
 import * as os from 'node:os';
@@ -32,7 +31,7 @@ const REDIS_BOOT_WAIT_MS = 5000;
 /**
  * Agent chạy trong mỗi runtime chạy liên tục (API, Worker, Scheduler):
  * gửi heartbeat định kỳ và sự kiện vòng đời vào Redis, nhận lệnh
- * pause/resume/restart từ System Console qua pub/sub.
+ * pause/resume từ System Console qua pub/sub (restart do Docker / supervisor quản lý).
  */
 @Injectable()
 export class RuntimeAgentService implements OnApplicationBootstrap, BeforeApplicationShutdown {
@@ -41,14 +40,12 @@ export class RuntimeAgentService implements OnApplicationBootstrap, BeforeApplic
   private readonly instance = `${os.hostname()}:${process.pid}`;
   private readonly startedAt = new Date();
   private contributor: RuntimeContributor | null = null;
-  private app: INestApplicationContext | null = null;
   private state: AgentState = 'starting';
   private stopReason: string | null = null;
   private startCount = 0;
   private timers: NodeJS.Timeout[] = [];
   private started = false;
   private registered = false;
-  private exiting = false;
 
   constructor(
     @Inject(RUNTIME_IDENTITY) public readonly identity: RuntimeIdentity,
@@ -61,11 +58,6 @@ export class RuntimeAgentService implements OnApplicationBootstrap, BeforeApplic
   /** Contributor tự đăng ký trong `onModuleInit` của nó. */
   public registerContributor(contributor: RuntimeContributor): void {
     this.contributor = contributor;
-  }
-
-  /** Bootstrap gắn app để graceful restart có thể đóng app đúng vòng đời. */
-  public attachApp(app: INestApplicationContext): void {
-    this.app = app;
   }
 
   /** Ghi sự kiện `crashed` trước khi process chết vì lỗi không bắt được. */
@@ -134,7 +126,7 @@ export class RuntimeAgentService implements OnApplicationBootstrap, BeforeApplic
   }
 
   /**
-   * Đăng ký nhận lệnh điều khiển (restart, pause, resume) gửi qua pub/sub Redis.
+   * Đăng ký nhận lệnh điều khiển (pause, resume) gửi qua pub/sub Redis.
    */
   private async subscribeCommands(): Promise<void> {
     if (!this.redis.isReady()) return;
@@ -186,10 +178,6 @@ export class RuntimeAgentService implements OnApplicationBootstrap, BeforeApplic
           await this.recordEvent('resumed', { commandId: command.id });
           await reply('completed');
           break;
-        case 'restart':
-          await reply('accepted');
-          await this.restart(command);
-          return;
       }
       await this.beat();
     } catch (error) {
@@ -201,34 +189,6 @@ export class RuntimeAgentService implements OnApplicationBootstrap, BeforeApplic
       });
       await reply('failed', message);
     }
-  }
-
-  /** Graceful: chờ việc đang chạy rồi đóng app; Force: thoát ngay. Supervisor sẽ dựng lại process. */
-  private async restart(command: RuntimeCommand): Promise<void> {
-    if (this.exiting) return;
-    this.exiting = true;
-    const mode = command.mode ?? 'graceful';
-    this.state = 'stopping';
-    await this.recordEvent('restart_requested', { commandId: command.id, mode });
-    await this.beat();
-
-    if (mode === 'force') {
-      this.stopReason = 'force_restart';
-      await this.beforeApplicationShutdown();
-      process.exit(1);
-    }
-
-    this.stopReason = 'manual_restart';
-    const timeout = setTimeout(() => {
-      this.logger.warn('Graceful restart timed out, forcing exit');
-      process.exit(1);
-    }, this.config.runtime.gracefulTimeoutMs);
-    timeout.unref();
-
-    await this.contributor?.drain?.();
-    if (this.app) await this.app.close();
-    else await this.beforeApplicationShutdown();
-    process.exit(0);
   }
 
   private async beat(): Promise<void> {
@@ -314,8 +274,10 @@ export class RuntimeAgentService implements OnApplicationBootstrap, BeforeApplic
         sourcePath: 'unknown',
       },
       capabilities: {
-        pause: typeof this.contributor?.pause === 'function',
-        restart: true,
+        pause:
+          this.contributor?.capabilities?.().pause ??
+          (typeof this.contributor?.pause === 'function' &&
+            typeof this.contributor?.resume === 'function'),
       },
       startCount: this.startCount,
     };

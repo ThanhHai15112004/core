@@ -17,7 +17,6 @@ export async function bootstrapApi(): Promise<NestFastifyApplication> {
   app.useLogger(app.get(PinoNestLogger));
 
   const agent = app.get(RuntimeAgentService);
-  agent.attachApp(app);
   agent.installCrashHandlers();
   app.get(ApiRuntimeContributor).attachServer(app.getHttpServer());
 

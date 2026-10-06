@@ -276,22 +276,17 @@ export class RuntimesService {
     const deny = (key: string) => ({ allowed: false, reason: this.i18n.t(key) });
     if (!this.config.runtime.actionsEnabled) {
       const disabled = deny('runtime.action.disabled');
-      return { restart: disabled, stop: disabled, start: disabled };
+      return { stop: disabled, start: disabled };
     }
     if (!hb) {
       const down = deny(
         status === 'unknown' ? 'runtime.action.noTelemetry' : 'runtime.action.processDown',
       );
-      return { restart: down, stop: down, start: down };
+      return { stop: down, start: down };
     }
 
     const busy = hb.state === 'stopping';
     return {
-      restart: busy
-        ? deny('runtime.action.busy')
-        : hb.capabilities.restart
-          ? { allowed: true }
-          : deny('runtime.action.noSupervisor'),
       stop:
         id === 'api'
           ? deny('runtime.action.apiStop')

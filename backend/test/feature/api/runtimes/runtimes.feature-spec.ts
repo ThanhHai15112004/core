@@ -49,7 +49,7 @@ const workerHeartbeat = (overrides: Partial<RuntimeHeartbeat> = {}): RuntimeHear
     entrypoint: 'apps/worker/main.ts',
     sourcePath: 'backend/src/apps/worker/',
   },
-  capabilities: { pause: true, restart: true },
+  capabilities: { pause: true },
   startCount: 3,
   ...overrides,
 });

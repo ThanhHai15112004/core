@@ -2,7 +2,7 @@ import { useCallback, useState } from 'react';
 import { runtimesApi } from '../services/runtimes.api';
 import { useConsoleData } from '../context/console-data-context';
 import { useLocale } from '../../../core/i18n/index';
-import type { RestartMode, RuntimeAction, RuntimeCommand, RuntimeId } from '../types/runtime.types';
+import type { RuntimeAction, RuntimeCommand, RuntimeId } from '../types/runtime.types';
 
 const POLL_MS = 1000;
 /* Khớp RESTART_TIMEOUT_MS phía backend (2 phút) + dư. */
@@ -14,29 +14,24 @@ export interface PendingCommand {
   status: RuntimeCommand['status'];
 }
 
-/** Gửi lệnh Restart/Stop/Start rồi theo dõi tới khi hoàn tất hoặc thất bại, báo bằng toast. */
+/** Gửi lệnh Stop/Start rồi theo dõi tới khi hoàn tất hoặc thất bại, báo bằng toast. */
 export function useRuntimeCommand(onSettled?: () => void) {
   const { t } = useLocale();
   const { addToast } = useConsoleData();
   const [pending, setPending] = useState<PendingCommand | null>(null);
 
   const run = useCallback(
-    async (runtime: RuntimeId, action: RuntimeAction, options: { mode?: RestartMode; confirm?: string } = {}) => {
+    async (runtime: RuntimeId, action: RuntimeAction, options: { confirm?: string } = {}) => {
       const name = t(`rt.name.${runtime}`);
       const label = t(`rt.action.${action}`);
       try {
         let command =
-          action === 'restart'
-            ? await runtimesApi.restart(runtime, options.mode ?? 'graceful')
-            : action === 'stop'
-              ? await runtimesApi.stop(runtime, options.confirm ?? '')
-              : await runtimesApi.start(runtime);
+          action === 'stop' ? await runtimesApi.stop(runtime, options.confirm ?? '') : await runtimesApi.start(runtime);
         setPending({ runtime, action, status: command.status });
 
         const deadline = Date.now() + MAX_WAIT_MS;
         while ((command.status === 'pending' || command.status === 'accepted') && Date.now() < deadline) {
           await new Promise((r) => setTimeout(r, POLL_MS));
-          // API restart: request có thể lỗi trong lúc API đang khởi động lại — thử tiếp.
           command = await runtimesApi.command(command.id).catch(() => command);
           setPending({ runtime, action, status: command.status });
           onSettled?.();

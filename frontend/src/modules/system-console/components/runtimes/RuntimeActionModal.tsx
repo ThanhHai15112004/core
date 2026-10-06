@@ -1,29 +1,28 @@
 import React, { useEffect, useState } from 'react';
 import { AlertTriangle, X } from 'lucide-react';
-import type { RestartMode, RuntimeSummary } from '../../types/runtime.types';
+import type { RuntimeSummary } from '../../types/runtime.types';
 import { BUSY_METRICS } from '../../constants/runtime-metrics';
 import { formatMetric } from '../../utils/runtime-format';
 import { useLocale } from '../../../../core/i18n/index';
 import { ConsolePortal } from '../common/ConsolePortal';
 
-export type ModalAction = 'restart' | 'stop';
+export type ModalAction = 'stop';
 
 interface RuntimeActionModalProps {
   runtime: RuntimeSummary;
   action: ModalAction;
   onCancel: () => void;
-  onConfirm: (options: { mode?: RestartMode; confirm?: string }) => void;
+  onConfirm: (options: { confirm: string }) => void;
 }
 
 const STOP_CONFIRM = 'STOP';
 
 /**
- * Xác nhận Restart (chọn graceful/force) hoặc Stop (gõ STOP).
+ * Xác nhận Stop (gõ STOP). Restart do Docker / supervisor quản lý, không điều khiển từ Console.
  * Ngữ cảnh ("12 active requests", "5 jobs đang chạy"...) lấy từ metric thật của runtime.
  */
 export const RuntimeActionModal: React.FC<RuntimeActionModalProps> = ({ runtime, action, onCancel, onConfirm }) => {
   const { t } = useLocale();
-  const [mode, setMode] = useState<RestartMode>('graceful');
   const [typed, setTyped] = useState('');
 
   useEffect(() => {
@@ -33,7 +32,7 @@ export const RuntimeActionModal: React.FC<RuntimeActionModalProps> = ({ runtime,
   }, [onCancel]);
 
   const busy = BUSY_METRICS[runtime.id].map((key) => ({ key, value: runtime.metrics[key] }));
-  const canConfirm = action === 'restart' || typed === STOP_CONFIRM;
+  const canConfirm = typed === STOP_CONFIRM;
   const name = runtime.name;
 
   return (
@@ -61,20 +60,6 @@ export const RuntimeActionModal: React.FC<RuntimeActionModalProps> = ({ runtime,
             </ul>
             <p className="rt-modal-warning">{t(`rt.modal.${action}.impact.${runtime.id}`)}</p>
 
-            {action === 'restart' ? (
-              <fieldset className="rt-modal-modes">
-                <legend>{t('rt.modal.restart.modeLabel')}</legend>
-                {(['graceful', 'force'] as const).map((m) => (
-                  <label key={m} className={mode === m ? 'is-selected' : ''}>
-                    <input type="radio" name="restart-mode" value={m} checked={mode === m} onChange={() => setMode(m)} />
-                    <span>
-                      <strong>{t(`rt.modal.restart.${m}.label`)}</strong>
-                      <small>{t(`rt.modal.restart.${m}.description.${runtime.id}`)}</small>
-                    </span>
-                  </label>
-                ))}
-              </fieldset>
-            ) : (
               <label className="rt-modal-confirm">
                 <span>{t('rt.modal.stop.typeToConfirm', { word: STOP_CONFIRM })}</span>
                 <input
@@ -85,7 +70,6 @@ export const RuntimeActionModal: React.FC<RuntimeActionModalProps> = ({ runtime,
                   aria-label={t('rt.modal.stop.typeToConfirm', { word: STOP_CONFIRM })}
                 />
               </label>
-            )}
           </div>
 
           <footer className="rt-modal-foot">
@@ -96,7 +80,7 @@ export const RuntimeActionModal: React.FC<RuntimeActionModalProps> = ({ runtime,
               type="button"
               className="scp-btn scp-btn-danger"
               disabled={!canConfirm}
-              onClick={() => onConfirm(action === 'restart' ? { mode } : { confirm: typed })}
+              onClick={() => onConfirm({ confirm: typed })}
             >
               {t(`rt.modal.${action}.confirm`)}
             </button>

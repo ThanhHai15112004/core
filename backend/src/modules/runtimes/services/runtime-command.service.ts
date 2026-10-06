@@ -6,24 +6,21 @@ import { RedisService } from '@packages/redis/index.js';
 import {
   COMMAND_TTL_SEC,
   runtimeKeys,
-  type RestartMode,
   type RuntimeCommand,
   type RuntimeCommandAction,
   type RuntimeCommandResult,
-  type RuntimeHeartbeat,
 } from '@packages/runtime/index.js';
 import { RuntimesService } from './runtimes.service.js';
-import { RESTART_TIMEOUT_MS } from './runtime-status.js';
 import {
   RuntimeActionNotAllowedException,
   RuntimeTelemetryUnavailableException,
 } from '../exceptions/runtime.exceptions.js';
 import type { RuntimeCommandDto } from '../responses/runtime.response.js';
 
-export type ConsoleAction = 'restart' | 'stop' | 'start';
+/** Restart không còn điều khiển từ Console — Docker / supervisor quản lý vòng đời process. */
+export type ConsoleAction = 'stop' | 'start';
 
 const ACTION_TO_COMMAND: Record<ConsoleAction, RuntimeCommandAction> = {
-  restart: 'restart',
   stop: 'pause',
   start: 'resume',
 };
@@ -41,11 +38,7 @@ export class RuntimeCommandService {
     this.keys = runtimeKeys(redis);
   }
 
-  public async dispatch(
-    rawId: string,
-    action: ConsoleAction,
-    mode?: RestartMode,
-  ): Promise<RuntimeCommandDto> {
+  public async dispatch(rawId: string, action: ConsoleAction): Promise<RuntimeCommandDto> {
     const id = this.runtimes.assertRuntimeId(rawId);
     if (!this.redis.isReady()) throw new RuntimeTelemetryUnavailableException();
 
@@ -62,7 +55,6 @@ export class RuntimeCommandService {
       id: randomUUID(),
       runtime: id,
       action: ACTION_TO_COMMAND[action],
-      ...(action === 'restart' ? { mode: mode ?? 'graceful' } : {}),
       requestedAt: new Date().toISOString(),
     };
     const pending: RuntimeCommandResult = {
@@ -98,7 +90,6 @@ export class RuntimeCommandService {
     return this.getCommand(command.id);
   }
 
-  /** Restart được coi là hoàn tất khi runtime gửi heartbeat mới với `startedAt` sau thời điểm yêu cầu. */
   public async getCommand(commandId: string): Promise<RuntimeCommandDto> {
     if (!this.redis.isReady()) throw new RuntimeTelemetryUnavailableException();
     const [rawCommand, rawResult] = await this.redis.client.mget(
@@ -109,25 +100,14 @@ export class RuntimeCommandService {
       throw new NotFoundAppException('runtime.error.commandNotFound', { id: commandId });
 
     const command = JSON.parse(rawCommand) as RuntimeCommand;
-    let result: RuntimeCommandResult = rawResult
+    const result: RuntimeCommandResult = rawResult
       ? (JSON.parse(rawResult) as RuntimeCommandResult)
       : { id: commandId, status: 'pending', at: command.requestedAt };
-
-    if (command.action === 'restart' && result.status === 'accepted') {
-      const hbRaw = await this.redis.client.get(this.keys.heartbeat(command.runtime));
-      const hb = hbRaw ? (JSON.parse(hbRaw) as RuntimeHeartbeat) : null;
-      if (hb && Date.parse(hb.startedAt) > Date.parse(command.requestedAt)) {
-        result = { ...result, status: 'completed', at: hb.startedAt };
-      } else if (Date.now() - Date.parse(command.requestedAt) > RESTART_TIMEOUT_MS) {
-        result = { ...result, status: 'failed', message: 'runtime.command.restartTimeout' };
-      }
-    }
 
     return {
       id: command.id,
       runtime: command.runtime,
       action: command.action,
-      ...(command.mode ? { mode: command.mode } : {}),
       requestedAt: command.requestedAt,
       status: result.status,
       ...(result.message ? { message: this.i18n.t(result.message) } : {}),

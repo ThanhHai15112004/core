@@ -25,7 +25,6 @@ const rangeSchema = z
   .default('15m');
 const limitSchema = (max: number, fallback: number) =>
   z.coerce.number().int().min(1).max(max).default(fallback);
-const restartSchema = z.object({ mode: z.enum(['graceful', 'force']).default('graceful') });
 const stopSchema = z.object({ confirm: z.literal('STOP') });
 
 function parse<T>(schema: z.ZodType<T>, value: unknown): T {
@@ -109,17 +108,6 @@ export class RuntimesController {
       correlationId: correlationId ? parse(z.string().max(128), correlationId) : undefined,
       jobId: jobId ? parse(z.string().max(128), jobId) : undefined,
     });
-  }
-
-  @Public()
-  @Post(RUNTIMES_ROUTES.RESTART)
-  @HttpCode(HttpStatus.ACCEPTED)
-  public restart(
-    @Param('runtimeId') runtimeId: string,
-    @Body() body?: unknown,
-  ): Promise<RuntimeCommandDto> {
-    const { mode } = parse(restartSchema, body ?? {});
-    return this.commands.dispatch(runtimeId, 'restart', mode);
   }
 
   @Public()
