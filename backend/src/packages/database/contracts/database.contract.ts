@@ -13,4 +13,3 @@ export interface SlowQueryRecord {
   instance: string;
   correlationId: string | null;
 }
-

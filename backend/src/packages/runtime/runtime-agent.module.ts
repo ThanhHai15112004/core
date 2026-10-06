@@ -20,12 +20,7 @@ export class RuntimeAgentModule {
         CliHistoryService,
         RuntimeManageableAdapter,
       ],
-      exports: [
-        RUNTIME_IDENTITY,
-        RuntimeAgentService,
-        CliHistoryService,
-        RuntimeManageableAdapter,
-      ],
+      exports: [RUNTIME_IDENTITY, RuntimeAgentService, CliHistoryService, RuntimeManageableAdapter],
     };
   }
 }

@@ -244,7 +244,7 @@ export class CacheMonitorService implements OnApplicationBootstrap, OnModuleDest
     active: Awaited<ReturnType<CacheStoreService['activeAlerts']>>,
     now: number,
   ): Promise<void> {
-    const { started, set, recovered } = diffCacheAlerts(violations, active, now);
+    const { set, recovered } = diffCacheAlerts(violations, active, now);
     const key = this.store.keys.activeAlerts();
     const pipe = this.store.client.pipeline();
     for (const [id, state] of set) pipe.hset(key, id, JSON.stringify(state));

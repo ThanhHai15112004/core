@@ -1,8 +1,4 @@
-import {
-  Injectable,
-  type OnApplicationBootstrap,
-  type OnModuleDestroy,
-} from '@nestjs/common';
+import { Injectable, type OnApplicationBootstrap, type OnModuleDestroy } from '@nestjs/common';
 
 /**
  * PerformanceMonitorService — tiến trình nền đánh giá hiệu năng (tương thích ngược).

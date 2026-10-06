@@ -80,5 +80,7 @@ export class MetricRecorder {
   public timing(_name: string, _ms: number, ..._rest: unknown[]): void {}
   public increment(_name: string, _value = 1, ..._rest: unknown[]): void {}
   public sample(_name: string, _value: number, ..._rest: unknown[]): void {}
-  public flush(): Promise<void> { return Promise.resolve(); }
+  public flush(): Promise<void> {
+    return Promise.resolve();
+  }
 }

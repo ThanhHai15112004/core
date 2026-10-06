@@ -14,7 +14,6 @@ import { CorePackageId, PackageStatus } from '@packages/kernel/index.js';
 import { PackageRegistryService, type PackageSummaryDto } from './package-registry.service.js';
 import { OpsEventService } from './ops-event.service.js';
 import { RuntimesService, type RuntimeSummaryDto } from '@modules/runtimes/index.js';
-import { HealthService } from '@modules/health/index.js';
 import type {
   AffectedComponentDto,
   SystemOverviewResponseDto,
@@ -107,12 +106,11 @@ export class SystemOverviewService {
     private readonly traffic: TrafficService,
     private readonly performance: PerformanceService,
     private readonly dbConnection: DatabaseConnectionService,
-    private readonly healthService: HealthService,
   ) {}
 
   public async getOverview(): Promise<SystemOverviewResponseDto> {
     const trafficQuery = { range: '15m', includeInternal: true } as const;
-    const [packages, dbPingMs, runtimeList, trafficProblems, trafficSummary, bottlenecks, http, health] =
+    const [packages, dbPingMs, runtimeList, trafficProblems, trafficSummary, bottlenecks, http] =
       await Promise.all([
         this.registryService.getAllSummaries(),
         this.pingDatabase(),
@@ -124,7 +122,6 @@ export class SystemOverviewService {
         this.traffic.getSummary(trafficQuery).catch(() => null),
         this.performance.getBottlenecks().catch(() => null),
         this.httpMetrics.snapshot(),
-        this.healthService.check().catch(() => null),
       ]);
     const runtimes = new Map(runtimeList.map((r) => [r.id, r]));
     const ctx: OverviewContext = {

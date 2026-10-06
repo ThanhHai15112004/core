@@ -198,7 +198,7 @@ export class StorageMonitorService implements OnApplicationBootstrap, OnModuleDe
     active: Awaited<ReturnType<StorageStoreService['activeAlerts']>>,
     now: number,
   ): Promise<void> {
-    const { started, set, recovered } = diffStorageAlerts(violations, active, now);
+    const { set, recovered } = diffStorageAlerts(violations, active, now);
     const key = this.store.keys.activeAlerts();
     const pipe = this.store.client.pipeline();
     for (const [id, state] of set) pipe.hset(key, id, JSON.stringify(state));

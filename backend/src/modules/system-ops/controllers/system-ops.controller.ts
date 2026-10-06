@@ -63,9 +63,7 @@ export class SystemOpsController {
 
   @Public()
   @Get(SYSTEM_OPS_ROUTES.CONFIGURATION_DOMAIN)
-  public async getConfigurationDomain(
-    @Param('domain') domain: string,
-  ): Promise<ConfigItemDto[]> {
+  public async getConfigurationDomain(@Param('domain') domain: string): Promise<ConfigItemDto[]> {
     return this.configInspector.inspectDomain(domain);
   }
 }

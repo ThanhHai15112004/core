@@ -188,10 +188,10 @@ describe('Feature: System Ops overview (/ops/overview)', () => {
       };
     };
 
-    // 5 package + worker + scheduler; trong test không có telemetry runtime, không có database thật
-    // (database đang kết nối/không khả dụng) và broker messaging không kết nối được → không tính là ổn định.
-    expect(body.data.overallHealth.totalServices).toBe(8);
-    expect(body.data.overallHealth.healthyServices).toBe(3);
+    // 10 package + worker + scheduler; trong test không có telemetry runtime (worker/scheduler unknown), không có
+    // database thật, broker không kết nối được (messaging + queue lỗi) và security cảnh báo → 6 ổn định.
+    expect(body.data.overallHealth.totalServices).toBe(12);
+    expect(body.data.overallHealth.healthyServices).toBe(6);
     expect(body.data.keyMetrics.find((m) => m.id === 'req_sec')?.label).toBe('Requests / Sec');
     expect(body.data.healthMap.find((m) => m.id === 'runtime-worker')?.status).toBe('unknown');
   });

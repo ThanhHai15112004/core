@@ -44,11 +44,7 @@ describe('RuntimeAgentService', () => {
       pause: jest.fn(async () => undefined),
       resume: jest.fn(async () => undefined),
     } as unknown as jest.Mocked<RuntimeContributor>;
-    agent = new RuntimeAgentService(
-      { id: 'worker', kind: 'long-running' },
-      redis,
-      config,
-    );
+    agent = new RuntimeAgentService({ id: 'worker', kind: 'long-running' }, redis, config);
     agent.registerContributor(contributor);
     await agent.onApplicationBootstrap();
   });
