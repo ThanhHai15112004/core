@@ -181,6 +181,34 @@ function pathOf(e: LogEntry): string {
   return `${typeof p === 'string' ? p : ''} ${e.route ?? ''}`.toLowerCase();
 }
 
+/**
+ * Route template của Fastify (`/api/v1/users/:id`, `/files/*`) → regex khớp path thật. Trang Traffic gom số liệu
+ * theo template nên link sang Logs truyền template; chuỗi thường vẫn khớp kiểu "chứa".
+ */
+const matchers = new Map<string, (path: string) => boolean>();
+
+function endpointMatcher(endpoint: string): (path: string) => boolean {
+  const cached = matchers.get(endpoint);
+  if (cached) return cached;
+  if (matchers.size > 100) matchers.clear();
+  const needle = endpoint.toLowerCase();
+  if (!/[:*]/.test(needle)) return (path) => path.includes(needle);
+  const pattern = needle
+    .split('/')
+    .map((seg) =>
+      seg.startsWith(':')
+        ? '[^/?\\s]+'
+        : seg === '*'
+          ? '\\S*'
+          : seg.replace(/[.+?^${}()|[\]\\]/g, '\\$&'),
+    )
+    .join('/');
+  const re = new RegExp(`(^|\\s)${pattern}(\\?|\\s|$)`);
+  const match = (path: string) => re.test(path);
+  matchers.set(endpoint, match);
+  return match;
+}
+
 export function entryTime(e: LogEntry): number {
   return Date.parse(e.t);
 }
@@ -214,7 +242,7 @@ export function matchesLog(e: LogEntry, f: LogFilter): boolean {
     if ('exact' in f.status ? s !== f.status.exact : Math.floor(s / 100) !== f.status.class)
       return false;
   }
-  if (f.endpoint && !pathOf(e).includes(f.endpoint.toLowerCase())) return false;
+  if (f.endpoint && !endpointMatcher(f.endpoint)(pathOf(e))) return false;
   if (f.errorType && (e.errorType ?? '').toLowerCase() !== f.errorType.toLowerCase()) return false;
   if (f.instance && !(e.instance ?? '').includes(f.instance)) return false;
   if (f.fingerprint && e.fingerprint !== f.fingerprint) return false;

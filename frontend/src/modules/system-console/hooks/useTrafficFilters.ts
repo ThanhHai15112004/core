@@ -48,7 +48,8 @@ export function useTrafficFilters() {
   const pathTo = useCallback(
     (segments: string[], patch: Partial<TrafficFilters> = {}) => {
       const qs = queryOf({ ...filters, ...patch });
-      return `${[SECTION, ...segments].join('/')}${qs ? `?${qs}` : ''}`;
+      // Id endpoint dạng `GET /api/v1/x` chứa `/` và dấu cách — mã hoá từng đoạn để router không cắt sai.
+      return `${[SECTION, ...segments.map(encodeURIComponent)].join('/')}${qs ? `?${qs}` : ''}`;
     },
     [filters, queryOf],
   );

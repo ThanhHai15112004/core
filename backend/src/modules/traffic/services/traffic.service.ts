@@ -8,17 +8,13 @@ import {
 } from '@packages/metrics/index.js';
 import {
   TrafficEndpointNotFoundException,
-  TrafficRequestNotFoundException,
   TrafficTelemetryUnavailableException,
 } from '../exceptions/traffic.exceptions.js';
 import type {
-  ActiveRequestsDto,
   EndpointDetailDto,
   EndpointRowDto,
   EndpointStatus,
   ErrorAnalysisDto,
-  RequestDetailDto,
-  RequestListDto,
   StatusClass,
   TimeseriesDto,
   TimeseriesMetric,
@@ -68,16 +64,6 @@ export interface TrafficQuery {
   includeInternal: boolean;
 }
 
-export interface RequestQuery extends Omit<TrafficQuery, 'range'> {
-  range?: TrafficRange | undefined;
-  status?: string | undefined;
-  search?: string | undefined;
-  minMs?: number | undefined;
-  kind?: 'failed' | 'slow' | 'notable' | undefined;
-  offset: number;
-  limit: number;
-}
-
 @Injectable()
 export class TrafficService {
   constructor(
@@ -85,10 +71,6 @@ export class TrafficService {
     private readonly config: CoreConfigService,
     private readonly i18n: CoreI18nService,
   ) {}
-
-  public slowThresholdMs(): number {
-    return 1000;
-  }
 
   /** Prometheus không cấu hình/không trả lời → 503, thay vì số 0 trông như "không có traffic". */
   private async must<T>(task: Promise<T>): Promise<T> {
@@ -367,19 +349,6 @@ export class TrafficService {
     };
   }
 
-  public async getRequests(_q: RequestQuery): Promise<RequestListDto> {
-    return {
-      items: [],
-      total: 0,
-      nextOffset: null,
-      retained: 0,
-    };
-  }
-
-  public async getRequest(requestId: string): Promise<RequestDetailDto> {
-    throw new TrafficRequestNotFoundException(requestId);
-  }
-
   public async getErrors(q: TrafficQuery): Promise<ErrorAnalysisDto> {
     const summary = await this.getSummary(q);
     const endpoints = await this.getEndpoints({ ...q, includeInternal: true }, 'errors');
@@ -399,14 +368,6 @@ export class TrafficService {
       topRoutes,
       topCodes: [],
       topStatuses: summary.topStatuses,
-    };
-  }
-
-  public async getActive(_q: unknown): Promise<ActiveRequestsDto> {
-    return {
-      generatedAt: new Date().toISOString(),
-      longRunningMs: 5000,
-      items: [],
     };
   }
 

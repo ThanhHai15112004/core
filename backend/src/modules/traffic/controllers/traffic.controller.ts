@@ -6,18 +6,14 @@ import {
   ENDPOINT_SORTS,
   TRAFFIC_RANGES,
   TrafficService,
-  type RequestQuery,
   type TrafficQuery,
   type TrafficRange,
 } from '../services/traffic.service.js';
 import { TrafficValidationException } from '../exceptions/traffic.exceptions.js';
 import type {
-  ActiveRequestsDto,
   EndpointDetailDto,
   EndpointRowDto,
   ErrorAnalysisDto,
-  RequestDetailDto,
-  RequestListDto,
   TimeseriesDto,
   TrafficInsightsDto,
   TrafficSummaryDto,
@@ -45,19 +41,6 @@ const filterSchema = z.object({
 
 const trafficSchema = filterSchema.extend({ range: rangeEnum.default('15m') });
 
-const requestSchema = filterSchema.extend({
-  range: rangeEnum.optional(),
-  status: z
-    .string()
-    .regex(/^([1-5]xx|\d{3})$/i)
-    .optional(),
-  q: optionalText,
-  kind: z.enum(['failed', 'slow', 'notable']).optional(),
-  minMs: z.coerce.number().min(0).optional(),
-  offset: z.coerce.number().int().min(0).default(0),
-  limit: z.coerce.number().int().min(1).max(200).default(50),
-});
-
 type RawQuery = Record<string, string | undefined>;
 
 function parse<T>(schema: z.ZodType<T>, value: unknown): T {
@@ -69,11 +52,6 @@ function parse<T>(schema: z.ZodType<T>, value: unknown): T {
 function toTrafficQuery(raw: RawQuery): TrafficQuery {
   const { internal, ...rest } = parse(trafficSchema, raw);
   return { ...rest, includeInternal: internal };
-}
-
-function toRequestQuery(raw: RawQuery, minMsFallback?: number): RequestQuery {
-  const { internal, q, minMs, ...rest } = parse(requestSchema, raw);
-  return { ...rest, search: q, minMs: minMs ?? minMsFallback, includeInternal: internal };
 }
 
 /**
@@ -117,34 +95,9 @@ export class TrafficController {
   }
 
   @Public()
-  @Get(TRAFFIC_ROUTES.REQUESTS)
-  public getRequests(@Query() query: RawQuery): Promise<RequestListDto> {
-    return this.traffic.getRequests(toRequestQuery(query));
-  }
-
-  @Public()
-  @Get(TRAFFIC_ROUTES.REQUEST_DETAIL)
-  public getRequest(@Param('requestId') requestId: string): Promise<RequestDetailDto> {
-    return this.traffic.getRequest(requestId);
-  }
-
-  @Public()
-  @Get(TRAFFIC_ROUTES.SLOW)
-  public getSlow(@Query() query: RawQuery): Promise<RequestListDto> {
-    return this.traffic.getRequests(toRequestQuery(query, this.traffic.slowThresholdMs()));
-  }
-
-  @Public()
   @Get(TRAFFIC_ROUTES.ERRORS)
   public getErrors(@Query() query: RawQuery): Promise<ErrorAnalysisDto> {
     return this.traffic.getErrors(toTrafficQuery(query));
-  }
-
-  @Public()
-  @Get(TRAFFIC_ROUTES.ACTIVE)
-  public getActive(@Query() query: RawQuery): Promise<ActiveRequestsDto> {
-    const { internal, ...rest } = parse(filterSchema, query);
-    return this.traffic.getActive({ ...rest, includeInternal: internal });
   }
 
   @Public()

@@ -1,9 +1,9 @@
-import type { EndpointSort, RequestKind, TimeseriesMetric, TrafficRange } from '../types/traffic.types';
+import type { EndpointSort, TimeseriesMetric, TrafficRange } from '../types/traffic.types';
 
-export const TRAFFIC_TABS = ['overview', 'endpoints', 'requests', 'slow', 'errors'] as const;
+export const TRAFFIC_TABS = ['overview', 'endpoints', 'errors'] as const;
 export type TrafficTab = (typeof TRAFFIC_TABS)[number];
 
-export const ENDPOINT_TABS = ['overview', 'requests', 'errors', 'latency', 'status'] as const;
+export const ENDPOINT_TABS = ['overview', 'errors', 'latency', 'status'] as const;
 export type EndpointTab = (typeof ENDPOINT_TABS)[number];
 
 export const TRAFFIC_RANGES: TrafficRange[] = ['5m', '15m', '1h', '6h', '24h', '7d'];
@@ -12,16 +12,8 @@ export const CHART_METRICS: TimeseriesMetric[] = ['requests', 'latency', 'errors
 export const ENDPOINT_SORTS: EndpointSort[] = ['traffic', 'latency', 'p95', 'errors'];
 export const HTTP_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] as const;
 export const STATUS_FILTERS = ['2xx', '3xx', '4xx', '5xx'] as const;
-/** Mốc lọc request chậm (ms). */
-export const SLOW_THRESHOLDS = [250, 500, 1000, 3000] as const;
-export const REQUEST_KINDS: RequestKind[] = ['failed', 'slow', 'notable'];
-
-/** Số request mỗi trang của bảng request. */
-export const REQUEST_PAGE_SIZE = 50;
 /** Số endpoint hiển thị ở tab Overview. */
 export const OVERVIEW_ENDPOINT_LIMIT = 8;
-/** Số request chậm/lỗi gần nhất ở tab Overview. */
-export const OVERVIEW_REQUEST_LIMIT = 10;
 /** Cận trên histogram latency phía backend — giá trị bằng mốc này nghĩa là "≥". */
 export const LATENCY_CEILING_MS = 10_000;
 

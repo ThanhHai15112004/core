@@ -33,11 +33,8 @@ export const API_ROUTES = {
       SUMMARY: (qs: string) => `${OPS_PREFIX}/traffic/summary?${qs}`,
       TIMESERIES: (qs: string) => `${OPS_PREFIX}/traffic/timeseries?${qs}`,
       ENDPOINTS: (qs: string) => `${OPS_PREFIX}/traffic/endpoints?${qs}`,
-      ENDPOINT_DETAIL: (routeId: string, qs: string) => `${OPS_PREFIX}/traffic/endpoints/${routeId}?${qs}`,
-      REQUESTS: (qs: string) => `${OPS_PREFIX}/traffic/requests?${qs}`,
-      REQUEST_DETAIL: (requestId: string) => `${OPS_PREFIX}/traffic/requests/${encodeURIComponent(requestId)}`,
+      ENDPOINT_DETAIL: (routeId: string, qs: string) => `${OPS_PREFIX}/traffic/endpoints/${encodeURIComponent(routeId)}?${qs}`,
       ERRORS: (qs: string) => `${OPS_PREFIX}/traffic/errors?${qs}`,
-      ACTIVE: (qs: string) => `${OPS_PREFIX}/traffic/active?${qs}`,
       INSIGHTS: (qs: string) => `${OPS_PREFIX}/traffic/insights?${qs}`,
     },
     DATABASE: {

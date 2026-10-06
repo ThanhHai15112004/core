@@ -6,74 +6,6 @@ export interface TrafficRoute {
   internal: boolean;
 }
 
-export type TimelinePhase =
-  'received' | 'routed' | 'handlerStart' | 'handlerEnd' | 'send' | 'finished';
-
-export interface TimelineMark {
-  phase: TimelinePhase;
-  offsetMs: number;
-}
-
-export interface RequestErrorInfo {
-  code: string;
-  name: string;
-  message: string;
-}
-
-export interface RequestSummary {
-  id: string;
-  at: number;
-  method: string;
-  routeId: string;
-  route: string;
-  path: string;
-  status: number;
-  durationMs: number;
-  instance: string;
-  correlationId: string | null;
-  errorCode: string | null;
-  captured: boolean;
-}
-
-export type CaptureReason = 'slow' | 'error' | 'sampled';
-
-export interface CapturedBody {
-  kind: 'json' | 'text' | 'none';
-  value?: unknown;
-  truncated: boolean;
-  omitted?: 'disabled' | 'empty' | 'binary' | 'tooLarge';
-  sizeBytes: number | null;
-}
-
-export interface RequestDetail extends RequestSummary {
-  captureReason: CaptureReason;
-  query: Record<string, unknown>;
-  ip: string | null;
-  userAgent: string | null;
-  headers: Record<string, string>;
-  responseHeaders: Record<string, string>;
-  requestBody: CapturedBody;
-  responseBody: CapturedBody;
-  timeline: TimelineMark[];
-  error: RequestErrorInfo | null;
-}
-
-export interface ActiveRequest {
-  id: string;
-  method: string;
-  route: string;
-  routeId: string;
-  path: string;
-  startedAt: number;
-  instance: string;
-}
-
-export interface ActiveSnapshot {
-  instance: string;
-  at: number;
-  active: ActiveRequest[];
-}
-
 export type EndpointStatus = 'healthy' | 'slow' | 'high_error' | 'failing' | 'idle' | 'low_traffic';
 export type StatusClass = '2xx' | '3xx' | '4xx' | '5xx';
 
@@ -183,21 +115,6 @@ export interface EndpointDetailDto extends EndpointRowDto {
   topErrorCodes: { code: string; count: number }[];
 }
 
-export interface RequestListDto {
-  items: RequestSummary[];
-  total: number;
-  nextOffset: number | null;
-  /** Số request tối đa được giữ trong log (cũ hơn thì không còn). */
-  retained: number;
-}
-
-export interface RequestDetailDto {
-  summary: RequestSummary;
-  /** `null` khi request không được lưu chi tiết (không chậm/lỗi/lấy mẫu) hoặc đã hết hạn. */
-  detail: RequestDetail | null;
-  route: TrafficRoute | null;
-}
-
 export interface ErrorAnalysisDto {
   range: string;
   stats: TrafficStatsDto;
@@ -210,17 +127,6 @@ export interface ErrorAnalysisDto {
   }[];
   topCodes: { code: string; count: number }[];
   topStatuses: StatusCountDto[];
-}
-
-export interface ActiveRequestDto extends ActiveRequest {
-  runningMs: number;
-  longRunning: boolean;
-}
-
-export interface ActiveRequestsDto {
-  generatedAt: string;
-  longRunningMs: number;
-  items: ActiveRequestDto[];
 }
 
 export type ProblemKind =

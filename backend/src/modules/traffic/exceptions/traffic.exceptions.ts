@@ -26,14 +26,6 @@ export class TrafficTelemetryDisabledException extends AppException {
   }
 }
 
-export class TrafficRequestNotFoundException extends AppException {
-  public override readonly code = 'TRAFFIC_REQUEST_NOT_FOUND';
-
-  constructor(id: string) {
-    super('traffic.error.requestNotFound', 404, [], { id });
-  }
-}
-
 export class TrafficEndpointNotFoundException extends AppException {
   public override readonly code = 'TRAFFIC_ENDPOINT_NOT_FOUND';
 

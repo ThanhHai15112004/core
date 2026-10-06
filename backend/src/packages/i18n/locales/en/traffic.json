@@ -23,6 +23,5 @@
   "traffic.rateLimit.notConfigured": "Rate limiting is not configured — no requests are being throttled. 429 responses (if any) are counted above.",
   "traffic.error.telemetryUnavailable": "Prometheus is unreachable or PROMETHEUS_URL is not set, so HTTP telemetry is unavailable.",
   "traffic.error.disabled": "Request metrics collection has not been enabled (TRAFFIC_ENABLED=false).",
-  "traffic.error.requestNotFound": "Request {id} not found — it may have expired.",
   "traffic.error.endpointNotFound": "Endpoint {id} not found."
 }

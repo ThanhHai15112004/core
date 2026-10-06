@@ -5,9 +5,8 @@ import { usePolling } from '../../hooks/usePolling';
 import { useTrafficFilters } from '../../hooks/useTrafficFilters';
 import { ENDPOINT_TABS, TRAFFIC_RANGES, TRAFFIC_TABS, type EndpointTab, type TrafficTab } from '../../constants/traffic';
 import { TrafficFilterBar } from '../../components/traffic/TrafficFilterBar';
-import { RequestDetailDrawer } from '../../components/traffic/RequestDetailDrawer';
 import { TrafficOverviewView, type TrafficViewProps } from './TrafficOverviewView';
-import { EndpointsView, ErrorsView, RequestsView, SlowRequestsView } from './TrafficListViews';
+import { EndpointsView, ErrorsView } from './TrafficListViews';
 import { EndpointDetailView } from './EndpointDetailView';
 import { ApiError } from '../../../../core/services/api';
 import { useLocale } from '../../../../core/i18n/index';
@@ -15,37 +14,33 @@ import { useNow } from '../../../../core/hooks/useNow';
 import '../../styles/console-runtimes.css';
 import '../../styles/console-traffic.css';
 
-const REQUEST_FILTER_TABS = new Set<TrafficTab>(['requests', 'slow', 'errors']);
 const DISABLED_CODE = 'TRAFFIC_TELEMETRY_DISABLED';
 
 /**
- * HTTP Traffic: `http-traffic/<tab>`, `http-traffic/endpoints/<routeId>/<tab>`, `http-traffic/requests/<requestId>`.
- * Bộ lọc nằm trên query của hash; Pause live chỉ dừng cập nhật UI.
+ * HTTP Traffic: `http-traffic/<tab>`, `http-traffic/endpoints/<routeId>/<tab>`. Không lưu từng request — chi tiết
+ * request xem ở Logs (lọc theo route/status). Bộ lọc nằm trên query của hash; Pause live chỉ dừng cập nhật UI.
  */
 export const TrafficSection: React.FC = () => {
   const { t, formatRelative } = useLocale();
   const now = useNow();
   const { filters, params, setFilters, go, navigate } = useTrafficFilters();
   const [paused, setPaused] = useState(false);
-  const [drawerId, setDrawerId] = useState<string | null>(null);
 
-  const [rawTab, id, sub] = params;
+  const [rawTab, rawId, sub] = params;
+  const id = rawId ? decodeURIComponent(rawId) : undefined;
   const tab: TrafficTab = TRAFFIC_TABS.includes(rawTab as TrafficTab) ? (rawTab as TrafficTab) : 'overview';
-  const requestFromPath = tab === 'requests' && id ? id : null;
-  const openRequestId = drawerId ?? requestFromPath;
 
   const scope = JSON.stringify([filters.range, filters.method, filters.module, filters.instance, filters.internal]);
   const summary = usePolling(() => trafficApi.summary(filters), `summary:${scope}`, undefined, paused);
 
-  const openRequest = useCallback((requestId: string) => setDrawerId(requestId), []);
-  const closeDrawer = () => {
-    setDrawerId(null);
-    if (requestFromPath) go(['requests']);
-  };
+  const openLogs = useCallback(
+    (query: Record<string, string>) => navigate(`logs/explorer?${new URLSearchParams(query).toString()}`),
+    [navigate],
+  );
 
   const unavailable = summary.error instanceof ApiError && summary.error.status === 503 ? summary.error : null;
   const data = summary.data;
-  const viewProps: TrafficViewProps = { filters, summary: data, paused, now, go, openRequest, navigate };
+  const viewProps: TrafficViewProps = { filters, summary: data, paused, now, go, openLogs, navigate };
 
   const renderContent = () => {
     if (unavailable) {
@@ -86,10 +81,6 @@ export const TrafficSection: React.FC = () => {
         }
         return <EndpointsView {...viewProps} setFilters={setFilters} />;
       }
-      case 'requests':
-        return <RequestsView {...viewProps} />;
-      case 'slow':
-        return <SlowRequestsView {...viewProps} setFilters={setFilters} />;
       case 'errors':
         return <ErrorsView {...viewProps} />;
       default:
@@ -136,41 +127,12 @@ export const TrafficSection: React.FC = () => {
       </div>
 
       {!unavailable && (
-        <TrafficFilterBar
-          filters={filters}
-          instances={data?.instances ?? []}
-          modules={data?.modules ?? []}
-          setFilters={setFilters}
-          requestFilters={REQUEST_FILTER_TABS.has(tab) || (tab === 'endpoints' && Boolean(id))}
-        />
+        <TrafficFilterBar filters={filters} setFilters={setFilters} />
       )}
 
       {renderContent()}
 
-      {data && (
-        <p className="tr-footnote">
-          {t('tr.footnote', {
-            slow: data.settings.slowMs,
-            sample: data.settings.sampleRate * 100,
-            flush: data.settings.flushMs / 1000,
-            bodies: t(data.settings.captureBodies ? 'tr.footnoteBodiesOn' : 'tr.footnoteBodiesOff'),
-          })}
-        </p>
-      )}
 
-      {openRequestId && (
-        <RequestDetailDrawer
-          key={openRequestId}
-          requestId={openRequestId}
-          onClose={closeDrawer}
-          onOpenLogs={(cid) => navigate(`logs/explorer?correlationId=${encodeURIComponent(cid)}`)}
-          onOpenJob={(id, queue) => navigate(`jobs/job/${encodeURIComponent(id)}?queue=${encodeURIComponent(queue)}`)}
-          onOpenEndpoint={(routeId) => {
-            setDrawerId(null);
-            go(['endpoints', routeId]);
-          }}
-        />
-      )}
     </div>
   );
 };

@@ -1,10 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import type {
-  ActiveSnapshot,
-  RequestDetail,
-  RequestSummary,
-  TrafficRoute,
-} from '../responses/traffic.response.js';
+import type { TrafficRoute } from '../responses/traffic.response.js';
 
 /**
  * TrafficStoreService — cung cấp interface đọc dữ liệu traffic (tương thích ngược).
@@ -30,22 +25,6 @@ export class TrafficStoreService {
     _toMs: number,
     _instances: readonly string[],
   ): Promise<any[]> {
-    return [];
-  }
-
-  public async requestLog(): Promise<RequestSummary[]> {
-    return [];
-  }
-
-  public async latestRequest(): Promise<RequestSummary | null> {
-    return null;
-  }
-
-  public async requestDetail(_id: string): Promise<RequestDetail | null> {
-    return null;
-  }
-
-  public async active(_now: number): Promise<ActiveSnapshot[]> {
     return [];
   }
 }

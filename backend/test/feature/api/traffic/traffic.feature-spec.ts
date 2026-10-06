@@ -77,13 +77,9 @@ describe('HTTP Traffic (/ops/traffic)', () => {
       }
     });
 
-    it('request không tồn tại → 404; tham số sai → 400', async () => {
-      const missing = await get(`${base}/requests/req_missing`, { 'accept-language': 'en' });
-      expect(missing.status).toBe(404);
-      expect(missing.body.error?.code).toBe('TRAFFIC_REQUEST_NOT_FOUND');
-      expect(missing.body.error?.message).toContain('may have expired');
+    it('tham số sai → 400; route chi tiết request đã bỏ → 404', async () => {
       expect((await get(`${base}/summary?range=2d`)).status).toBe(400);
-      expect((await get(`${base}/requests?status=abc`)).status).toBe(400);
+      expect((await get(`${base}/requests`)).status).toBe(404);
     });
   });
 

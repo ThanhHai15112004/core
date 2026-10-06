@@ -6,7 +6,6 @@ import { usePolling } from '../../hooks/usePolling';
 import { ENDPOINT_TABS, type EndpointTab } from '../../constants/traffic';
 import { TrafficChart } from '../../components/traffic/TrafficChart';
 import { EndpointStatusBadge, HttpStatusBadge, MethodBadge } from '../../components/traffic/TrafficBadges';
-import { RequestsPanel } from './RequestsPanel';
 import { formatCount, formatDelta, formatMs, formatPct, formatRps } from '../../utils/traffic-format';
 import type { TrafficViewProps } from './TrafficOverviewView';
 import { useLocale } from '../../../../core/i18n/index';
@@ -60,10 +59,9 @@ export const EndpointDetailView: React.FC<TrafficViewProps & { routeId: string; 
   routeId,
   tab,
   filters,
-  summary,
   paused,
   go,
-  openRequest,
+  openLogs,
 }) => {
   const { t, locale } = useLocale();
   const { data, error } = usePolling(() => trafficApi.endpoint(routeId, filters), `endpoint:${routeId}:${filters.range}:${filters.instance ?? ''}`, undefined, paused);
@@ -72,11 +70,7 @@ export const EndpointDetailView: React.FC<TrafficViewProps & { routeId: string; 
     range: filters.range,
     internal: true,
     ...(filters.instance ? { instance: filters.instance } : {}),
-    ...(filters.status ? { status: filters.status } : {}),
-    ...(filters.q ? { q: filters.q } : {}),
-    ...(filters.minMs ? { minMs: filters.minMs } : {}),
   };
-  const slowMs = summary?.settings.slowMs;
 
   const back = (
     <button type="button" className="rt-back" onClick={() => go(['endpoints'])}>
@@ -99,55 +93,26 @@ export const EndpointDetailView: React.FC<TrafficViewProps & { routeId: string; 
 
   const renderTab = () => {
     switch (tab) {
-      case 'requests':
-        return <RequestsPanel filters={endpointFilters} paused={paused} routeId={routeId} title={t('tr.endpoint.tab.requests')} onOpen={openRequest} {...(slowMs !== undefined ? { slowMs } : {})} />;
       case 'errors':
         return (
           <>
-            <div className="ov-split">
-              <TrafficChart filters={endpointFilters} paused={paused} routeId={routeId} metrics={['errors']} title={t('tr.endpoint.errorChart')} />
-              <section className="ov-card ov-section">
-                <header className="ov-section-head">
-                  <h3>{t('tr.errors.topCodes')}</h3>
-                </header>
-                {d.topErrorCodes.length === 0 ? (
-                  <p className="ov-empty-line">{t('tr.errors.none')}</p>
-                ) : (
-                  <ul className="tr-rank-list">
-                    {d.topErrorCodes.map((c) => (
-                      <li key={c.code} className="tr-rank-static">
-                        <code>{c.code}</code>
-                        <span>{c.count.toLocaleString()}</span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </section>
-            </div>
-            <RequestsPanel filters={endpointFilters} paused={paused} routeId={routeId} kind="failed" title={t('tr.errors.failedTitle')} emptyText={t('tr.errors.failedEmpty')} onOpen={openRequest} />
+            <TrafficChart filters={endpointFilters} paused={paused} routeId={routeId} metrics={['errors']} title={t('tr.endpoint.errorChart')} />
+            <button type="button" className="ov-link" onClick={() => openLogs({ endpoint: d.route, status: '5xx' })}>
+              {t('tr.openLogs')}
+            </button>
           </>
         );
       case 'latency':
         return (
           <>
             <TrafficChart filters={endpointFilters} paused={paused} routeId={routeId} metrics={['latency']} title={t('tr.endpoint.latencyChart')} />
-            <RequestsPanel
-              filters={endpointFilters}
-              paused={paused}
-              routeId={routeId}
-              kind="slow"
-              title={t('tr.slow.title', { value: formatMs(slowMs ?? null) })}
-              emptyText={t('tr.slow.empty', { value: formatMs(slowMs ?? null) })}
-              onOpen={openRequest}
-              {...(slowMs !== undefined ? { slowMs } : {})}
-            />
           </>
         );
       case 'status':
         return (
           <div className="ov-split">
             <TrafficChart filters={endpointFilters} paused={paused} routeId={routeId} metrics={['status']} title={t('tr.endpoint.statusChart')} />
-            <StatusList title={t('tr.status.top')} items={d.topStatuses} empty={t('tr.status.empty')} onSelect={(status) => go(['endpoints', routeId, 'requests'], { status })} />
+            <StatusList title={t('tr.status.top')} items={d.topStatuses} empty={t('tr.status.empty')} onSelect={(status) => openLogs({ endpoint: d.route, status: String(status) })} />
           </div>
         );
       default:

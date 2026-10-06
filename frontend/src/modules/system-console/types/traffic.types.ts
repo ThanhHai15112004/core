@@ -5,7 +5,6 @@ export type TimeseriesMetric = 'requests' | 'latency' | 'errors' | 'status';
 export type EndpointSort = 'traffic' | 'latency' | 'p95' | 'errors';
 export type EndpointStatus = 'healthy' | 'slow' | 'high_error' | 'failing' | 'idle' | 'low_traffic';
 export type StatusClass = '2xx' | '3xx' | '4xx' | '5xx';
-export type RequestKind = 'failed' | 'slow' | 'notable';
 
 export interface TrafficRoute {
   id: string;
@@ -100,81 +99,12 @@ export interface EndpointDetail extends EndpointRow {
   topErrorCodes: { code: string; count: number }[];
 }
 
-export interface RequestSummary {
-  id: string;
-  at: number;
-  method: string;
-  routeId: string;
-  route: string;
-  path: string;
-  status: number;
-  durationMs: number;
-  instance: string;
-  correlationId: string | null;
-  errorCode: string | null;
-  captured: boolean;
-}
-
-export interface RequestList {
-  items: RequestSummary[];
-  total: number;
-  nextOffset: number | null;
-  retained: number;
-}
-
-export type TimelinePhase = 'received' | 'routed' | 'handlerStart' | 'handlerEnd' | 'send' | 'finished';
-
-export interface CapturedBody {
-  kind: 'json' | 'text' | 'none';
-  value?: unknown;
-  truncated: boolean;
-  omitted?: 'disabled' | 'empty' | 'binary' | 'tooLarge';
-  sizeBytes: number | null;
-}
-
-export interface RequestDetailRecord extends RequestSummary {
-  captureReason: 'slow' | 'error' | 'sampled';
-  query: Record<string, unknown>;
-  ip: string | null;
-  userAgent: string | null;
-  headers: Record<string, string>;
-  responseHeaders: Record<string, string>;
-  requestBody: CapturedBody;
-  responseBody: CapturedBody;
-  timeline: { phase: TimelinePhase; offsetMs: number }[];
-  error: { code: string; name: string; message: string } | null;
-}
-
-export interface RequestDetailResponse {
-  summary: RequestSummary;
-  detail: RequestDetailRecord | null;
-  route: TrafficRoute | null;
-}
-
 export interface ErrorAnalysis {
   range: TrafficRange;
   stats: TrafficStats;
   topRoutes: { routeId: string; method: string; route: string; clientErrors: number; serverErrors: number }[];
   topCodes: { code: string; count: number }[];
   topStatuses: StatusCount[];
-}
-
-export interface ActiveRequest {
-  id: string;
-  method: string;
-  route: string;
-  routeId: string;
-  path: string;
-  startedAt: number;
-  instance: string;
-  runningMs: number;
-  longRunning: boolean;
-}
-
-export interface ActiveRequests {
-  generatedAt: string;
-  longRunningMs: number;
-  items: ActiveRequest[];
 }
 
 export interface TrafficProblem {
