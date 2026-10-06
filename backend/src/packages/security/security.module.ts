@@ -1,4 +1,5 @@
 import { Global, Module } from '@nestjs/common';
+import { CoreConfigService } from '@packages/config/index.js';
 import { SECRET_PROVIDER } from './contracts/secret-provider.contract.js';
 import { EnvironmentSecretProvider } from './providers/env-secret.provider.js';
 import { FileSecretProvider } from './providers/file-secret.provider.js';
@@ -18,14 +19,12 @@ import { SecretRegistryService } from './providers/secret-registry.service.js';
     FileSecretProvider,
     {
       provide: SECRET_PROVIDER,
-      useFactory: (envProvider: EnvironmentSecretProvider, fileProvider: FileSecretProvider) => {
-        const driver = process.env.SECRET_DRIVER?.toLowerCase();
-        if (driver === SecretDriver.FILE) {
-          return fileProvider;
-        }
-        return envProvider;
-      },
-      inject: [EnvironmentSecretProvider, FileSecretProvider],
+      useFactory: (
+        envProvider: EnvironmentSecretProvider,
+        fileProvider: FileSecretProvider,
+        config: CoreConfigService,
+      ) => (config.auth.secretDriver === SecretDriver.FILE ? fileProvider : envProvider),
+      inject: [EnvironmentSecretProvider, FileSecretProvider, CoreConfigService],
     },
     SecretService,
     SecretRegistryService,

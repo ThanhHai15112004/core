@@ -2,8 +2,7 @@ import type { Section } from './database.types';
 
 export type { Section };
 export type StorageRange = '15m' | '1h' | '6h' | '24h';
-export type StorageMetric = 'upload' | 'download' | 'latency' | 'operations' | 'errors';
-export type StorageTab = 'overview' | 'traffic' | 'containers' | 'objects' | 'uploads' | 'usage' | 'lifecycle' | 'errors' | 'operations' | 'configuration';
+export type StorageTab = 'overview' | 'containers' | 'objects' | 'uploads' | 'usage' | 'lifecycle' | 'errors' | 'operations' | 'configuration';
 export type StorageHealthStatus = 'healthy' | 'degraded' | 'unavailable' | 'reconnecting' | 'unknown';
 export type StorageCapability =
   | 'listObjects'
@@ -56,26 +55,6 @@ export interface StorageAlert {
   container: string | null;
 }
 
-export interface TransferPerf {
-  bytes: number;
-  bytesPerSec: number | null;
-  ops: number;
-  opsPerMin: number | null;
-  avgMs: number | null;
-  p95Ms: number | null;
-  failures: number;
-  failureRatePercent: number | null;
-}
-
-export interface OperationRow {
-  op: StorageOp;
-  ops: number;
-  perMin: number | null;
-  avgMs: number | null;
-  p95Ms: number | null;
-  failures: number;
-}
-
 export interface Capacity {
   totalBytes: number | null;
   freeBytes: number | null;
@@ -99,9 +78,6 @@ export interface ContainerRow {
   bytes: number;
   growth24hBytes: number | null;
   createdToday: number;
-  uploadBytes: number;
-  downloadBytes: number;
-  ops: number;
   errors: number;
   newest: string | null;
 }
@@ -110,10 +86,6 @@ export interface StorageReport {
   usedBytes: number | null;
   growthBytes: number | null;
   objects: number | null;
-  uploads: number;
-  downloads: number;
-  uploadedBytes: number;
-  downloadedBytes: number;
   failedOps: number;
 }
 
@@ -157,23 +129,15 @@ export interface StorageOverview {
     usedBytes: number | null;
     objects: number | null;
     objectsTruncated: boolean;
-    uploadBytesPerSec: number | null;
-    downloadBytesPerSec: number | null;
-    opsPerSec: number | null;
-    errorRatePercent: number | null;
     failedOps: number;
     growthTodayBytes: number | null;
     containers: number | null;
   };
   capacity: Section<Capacity>;
   growth: Growth;
-  upload: TransferPerf;
-  download: TransferPerf;
-  operations: OperationRow[];
   topContainers: ContainerRow[];
-  uploads: { active: number; completedPerMin: number | null; failed: number; stale: number | null; multipart: number | null };
+  uploads: { active: number; failed: number; stale: number | null; multipart: number | null };
   alerts: StorageAlert[];
-  relatedImpact: { apiP95Ms: { current: number | null; baseline: number | null; changePercent: number | null }; queueWaiting: number | null };
   report: { today: StorageReport; yesterday: StorageReport };
   events: StorageEvent[];
   usageAt: string | null;
@@ -188,14 +152,6 @@ export interface StorageSeries {
   points: { t: number; value: number }[];
 }
 
-export interface StorageMetrics {
-  metric: StorageMetric;
-  range: StorageRange;
-  resolutionSec: number | null;
-  unit: string;
-  series: StorageSeries[];
-}
-
 export interface StorageErrorItem {
   at: string;
   op: StorageOp;
@@ -208,15 +164,6 @@ export interface StorageErrorItem {
   message: string;
   runtime: string | null;
   correlationId: string | null;
-}
-
-export interface StorageTraffic {
-  range: StorageRange;
-  upload: TransferPerf;
-  download: TransferPerf;
-  operations: OperationRow[];
-  http: Section<{ classes: { cls: string; count: number; percent: number | null }[]; topErrors: { code: string; count: number }[] }>;
-  errorsByKind: Record<StorageErrorKind, number>;
 }
 
 export interface LargestObject {
@@ -258,7 +205,6 @@ export interface ContainerDetail {
   byKind: { kind: ObjectKind; objects: number; bytes: number }[];
   largest: LargestObject[];
   recentErrors: StorageErrorItem[];
-  traffic: { upload: StorageSeries; download: StorageSeries };
 }
 
 export interface ObjectRow {
@@ -331,8 +277,6 @@ export interface StorageUploads {
   multipart: Section<MultipartUpload[]>;
   failedUploads: StorageErrorItem[];
   failedDownloads: StorageErrorItem[];
-  completedPerMin: number | null;
-  avgUploadMs: number | null;
   staleUploadMin: number;
   abortEnabled: boolean;
 }

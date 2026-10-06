@@ -10,7 +10,6 @@ import { StorageHealthBanner } from '../../components/storage/StorageHealthBanne
 import { ContainerDrawer } from '../../components/storage/ContainerDrawer';
 import { ObjectDrawer } from '../../components/storage/ObjectDrawer';
 import { StorageOverviewView } from './StorageOverviewView';
-import { StorageTrafficView } from './StorageTrafficView';
 import { StorageContainersView } from './StorageContainersView';
 import { StorageObjectsView } from './StorageObjectsView';
 import { StorageLifecycleView, StorageUploadsView, StorageUsageView } from './StorageInsightViews';
@@ -80,8 +79,6 @@ export const StorageSection: React.FC = () => {
       );
     }
     switch (tab) {
-      case 'traffic':
-        return <StorageTrafficView range={range} paused={paused} driver={driver} product={product} />;
       case 'containers':
         return <StorageContainersView range={range} paused={paused} driver={driver} reloadKey={reloadKey} go={go} />;
       case 'objects':
@@ -107,7 +104,7 @@ export const StorageSection: React.FC = () => {
       case 'configuration':
         return <StorageConfigView />;
       default:
-        return <StorageOverviewView data={data} now={now} paused={paused} go={go} navigate={navigate} />;
+        return <StorageOverviewView data={data} now={now} go={go} />;
     }
   };
 

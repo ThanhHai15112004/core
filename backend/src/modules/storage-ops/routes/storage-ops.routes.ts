@@ -3,8 +3,6 @@ const PREFIX = 'ops/storage';
 export const STORAGE_OPS_ROUTES = {
   PREFIX,
   OVERVIEW: 'overview',
-  METRICS: 'metrics',
-  TRAFFIC: 'traffic',
   USAGE: 'usage',
   CONTAINERS: 'containers',
   CONTAINER_DETAIL: 'containers/:id',

@@ -49,9 +49,6 @@ export const storageConfig = () => ({
     growthFactor: numberOr('STORAGE_GROWTH_FACTOR', 3),
     /** Bỏ qua tăng trưởng dưới mức này (MB) để không báo động với storage nhỏ. */
     growthMinMb: numberOr('STORAGE_GROWTH_MIN_MB', 100),
-    failureRatePercent: numberOr('STORAGE_FAILURE_RATE_PERCENT', 5),
-    minOps: numberOr('STORAGE_RULE_MIN_OPS', 20),
-    putP95Ms: numberOr('STORAGE_PUT_P95_MS', 3000),
     staleUploads: numberOr('STORAGE_STALE_UPLOADS', 1),
   },
   delete: booleanOr('OPS_STORAGE_DELETE_ENABLED', true),

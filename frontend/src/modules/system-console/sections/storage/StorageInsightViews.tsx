@@ -9,7 +9,6 @@ import { CapacityCard } from '../../components/storage/CapacityCard';
 import { LineChart } from '../../components/common/LineChart';
 import { AGE_BUCKETS } from '../../constants/storage';
 import { formatBytes, formatCompact, formatDuration } from '../../utils/database-format';
-import { formatUnit } from '../../utils/performance-format';
 import { formatGrowth, toStorageChart } from '../../utils/storage-format';
 import { NO_VALUE } from '../../utils/runtime-format';
 import { useLocale } from '../../../../core/i18n/index';
@@ -86,9 +85,7 @@ export const StorageUploadsView: React.FC<{
       <div className="ov-kpi-grid db-kpi-grid">
         {[
           { key: 'active', value: data ? String(data.active.length) : NO_VALUE, tone: 'unknown' },
-          { key: 'completedPerMin', value: formatUnit(data?.completedPerMin ?? null, '/min'), tone: 'unknown' },
           { key: 'failed', value: data ? String(data.failedUploads.length) : NO_VALUE, tone: (data?.failedUploads.length ?? 0) > 0 ? 'warn' : 'ok' },
-          { key: 'avgDuration', value: formatUnit(data?.avgUploadMs ?? null, 'ms'), tone: 'unknown' },
         ].map((k) => (
           <div key={k.key} className={`ov-card ov-kpi ov-tone-${k.tone}`}>
             <span className="ov-kpi-label">{t(`storage.uploads.${k.key}`)}</span>

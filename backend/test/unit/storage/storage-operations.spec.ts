@@ -121,8 +121,6 @@ describe('evaluateStorageRules', () => {
     connection: 'connected',
     capacityPercent: 40,
     growth: { last24h: null, avgDaily7d: null, topContainer: null, topContainerBytes: null },
-    upload: { ops: 100, failureRatePercent: 0, p95Ms: 200 },
-    download: { ops: 100, failureRatePercent: 0 },
     staleMultipart: { count: 0, bytes: 0 },
     largestObject: null,
   };
@@ -134,7 +132,7 @@ describe('evaluateStorageRules', () => {
     ).toEqual(['STORAGE_UNAVAILABLE']);
   });
 
-  it('capacity, tăng bất thường, upload lỗi/chậm, multipart treo, object lớn', () => {
+  it('capacity, tăng bất thường, multipart treo, object lớn', () => {
     const GB = 1024 ** 3;
     const v = evaluateStorageRules(
       {
@@ -146,7 +144,6 @@ describe('evaluateStorageRules', () => {
           topContainer: 'uploads',
           topContainerBytes: 14 * GB,
         },
-        upload: { ops: 100, failureRatePercent: 25, p95Ms: 4200 },
         staleMultipart: { count: 2, bytes: GB },
         largestObject: { key: 'video/x.mp4', size: 4 * GB },
       },
@@ -155,19 +152,12 @@ describe('evaluateStorageRules', () => {
     const byId = Object.fromEntries(v.map((x) => [x.id, x]));
     expect(byId['CAPACITY']!.severity).toBe('critical');
     expect(byId['RAPID_GROWTH']!.extra['container']).toBe('uploads');
-    expect(byId['UPLOAD_FAILURE_RATE']!.severity).toBe('critical');
-    expect(byId['UPLOAD_LATENCY']).toBeDefined();
     expect(byId['STALE_MULTIPART']!.value).toBe(2);
     expect(byId['LARGE_OBJECT']!.severity).toBe('info');
   });
 
-  it('ít thao tác → không kết luận tỷ lệ lỗi; diff bắt đầu/hồi phục', () => {
-    expect(
-      evaluateStorageRules(
-        { ...base, upload: { ops: 3, failureRatePercent: 100, p95Ms: 9000 } },
-        cfg,
-      ),
-    ).toEqual([]);
+  it('bình thường → không cảnh báo; diff bắt đầu/hồi phục', () => {
+    expect(evaluateStorageRules(base, cfg)).toEqual([]);
     const [violation] = evaluateStorageRules({ ...base, capacityPercent: 85 }, cfg);
     const first = diffStorageAlerts([violation!], new Map(), 0);
     expect(first.started).toHaveLength(1);

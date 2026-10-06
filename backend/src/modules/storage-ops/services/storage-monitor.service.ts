@@ -1,4 +1,5 @@
 import {
+  Inject,
   Injectable,
   Logger,
   Optional,
@@ -10,24 +11,20 @@ import { RedisService } from '@packages/redis/index.js';
 import {
   StorageConnectionService,
   StorageMonitoringService,
-  containerMetric,
   growthSince,
+  recordStorageEvent,
   type MultipartUpload,
   type UsageSnapshot,
 } from '@packages/storage/index.js';
-import { MetricRecorder } from '@modules/system-ops/telemetry-compat.js';
+import { RUNTIME_IDENTITY, type RuntimeIdentity } from '@packages/runtime/index.js';
 import { round } from '@modules/performance/index.js';
-import { StorageMetricsService } from './storage-metrics.service.js';
 import { StorageStoreService } from './storage-store.service.js';
 import { diffStorageAlerts, evaluateStorageRules, type StorageViolation } from './storage-rules.js';
 
 const TICK_MS = 60_000;
 /** Quét usage (có thể nặng với bucket lớn) mỗi 5 phút; các chu kỳ khác dùng snapshot đã lưu. */
 const USAGE_EVERY_MS = 5 * 60_000;
-const RULE_WINDOW_MS = 15 * 60_000;
 const DAY = 86_400_000;
-/** Số container có lịch sử dung lượng/số object. */
-export const CONTAINER_HISTORY_LIMIT = 30;
 
 export const capacityPercent = (used: number | null, total: number | null) =>
   used !== null && total ? round((used / total) * 100, 1) : null;
@@ -49,10 +46,9 @@ export class StorageMonitorService implements OnApplicationBootstrap, OnModuleDe
   constructor(
     private readonly connection: StorageConnectionService,
     private readonly monitoring: StorageMonitoringService,
-    private readonly metrics: StorageMetricsService,
     private readonly store: StorageStoreService,
     private readonly config: CoreConfigService,
-    @Optional() private readonly recorder?: MetricRecorder,
+    @Optional() @Inject(RUNTIME_IDENTITY) private readonly identity?: RuntimeIdentity,
     @Optional() private readonly redis?: RedisService,
   ) {}
 
@@ -92,8 +88,6 @@ export class StorageMonitorService implements OnApplicationBootstrap, OnModuleDe
         usable && this.monitoring.supports('multipart')
           ? await this.monitoring.provider.multipart().catch(() => null)
           : null;
-      const active = await this.monitoring.activeUploads().catch(() => []);
-      this.record(usage, multipart, active.length, now);
       await this.evaluate(usage, multipart, now);
     } catch (err) {
       this.logger.warn(
@@ -104,49 +98,19 @@ export class StorageMonitorService implements OnApplicationBootstrap, OnModuleDe
     }
   }
 
-  private record(
-    usage: UsageSnapshot | null,
-    multipart: MultipartUpload[] | null,
-    active: number,
-    now: number,
-  ): void {
-    const g = (name: string, v: number | null | undefined) => {
-      if (v !== null && v !== undefined) this.recorder?.gauge(name, v, now);
-    };
-    if (usage) {
-      g('storage.used', usage.totalBytes);
-      g('storage.objects', usage.totalObjects);
-      for (const c of usage.containers.slice(0, CONTAINER_HISTORY_LIMIT)) {
-        g(containerMetric(c.name, 'size'), c.bytes);
-        g(containerMetric(c.name, 'count'), c.objects);
-      }
-    }
-    g('storage.active', active);
-    if (multipart) {
-      g('storage.multipart.open', multipart.length);
-      g(
-        'storage.multipart.stale',
-        staleOf(multipart, this.config.storage.staleUploadMin, now).length,
-      );
-    }
-  }
-
   private async evaluate(
     usage: UsageSnapshot | null,
     multipart: MultipartUpload[] | null,
     now: number,
   ): Promise<void> {
     const cfg = this.config.storage;
-    const [win, active, capacity, points] = await Promise.all([
-      this.metrics.window(now - RULE_WINDOW_MS, now, now, 's10'),
+    const [active, capacity, points] = await Promise.all([
       this.store.activeAlerts(),
       this.monitoring.usable()
         ? this.monitoring.provider.capacity().catch(() => null)
         : Promise.resolve(null),
       this.monitoring.points(8 * 24 + 1).catch(() => []),
     ]);
-    const up = this.metrics.transfer(win, 'up');
-    const down = this.metrics.transfer(win, 'down');
     const current = usage ? { bytes: usage.totalBytes, objects: usage.totalObjects } : null;
     const last24h = current ? growthSince(points, current, now - DAY) : null;
     const week = current ? growthSince(points, current, now - 8 * DAY) : null;
@@ -179,8 +143,6 @@ export class StorageMonitorService implements OnApplicationBootstrap, OnModuleDe
           capacity?.totalBytes ?? null,
         ),
         growth: { last24h: last24h?.bytes ?? null, avgDaily7d, topContainer, topContainerBytes },
-        upload: { ops: up.ops, failureRatePercent: up.failureRatePercent, p95Ms: up.p95Ms },
-        download: { ops: down.ops, failureRatePercent: down.failureRatePercent },
         staleMultipart: stale
           ? { count: stale.length, bytes: stale.reduce((s, u) => s + (u.uploadedBytes ?? 0), 0) }
           : null,
@@ -198,11 +160,28 @@ export class StorageMonitorService implements OnApplicationBootstrap, OnModuleDe
     active: Awaited<ReturnType<StorageStoreService['activeAlerts']>>,
     now: number,
   ): Promise<void> {
-    const { set, recovered } = diffStorageAlerts(violations, active, now);
+    const { started, set, recovered } = diffStorageAlerts(violations, active, now);
     const key = this.store.keys.activeAlerts();
     const pipe = this.store.client.pipeline();
     for (const [id, state] of set) pipe.hset(key, id, JSON.stringify(state));
     if (recovered.length) pipe.hdel(key, ...recovered.map((r) => r.id));
     await pipe.exec();
+    const runtime = this.identity?.id ?? null;
+    for (const v of started.filter((x) => x.severity !== 'info'))
+      await recordStorageEvent(this.redis, {
+        type: 'alert_started',
+        severity: v.severity,
+        params: { rule: v.id, value: v.value, threshold: v.threshold, unit: v.unit, ...v.extra },
+        runtime,
+        at: now,
+      });
+    for (const r of recovered.filter((x) => x.alert.severity !== 'info'))
+      await recordStorageEvent(this.redis, {
+        type: 'alert_recovered',
+        severity: 'success',
+        params: { rule: r.id, minutes: Math.max(1, Math.round(r.durationMs / 60_000)) },
+        runtime,
+        at: now,
+      });
   }
 }

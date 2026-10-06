@@ -19,7 +19,6 @@ import type {
 } from '@packages/storage/index.js';
 
 export type StorageRange = '15m' | '1h' | '6h' | '24h';
-export type StorageMetric = 'upload' | 'download' | 'latency' | 'operations' | 'errors';
 export type StorageSeverity = 'warning' | 'critical' | 'info';
 export type StorageHealthStatus =
   'healthy' | 'degraded' | 'unavailable' | 'reconnecting' | 'unknown';
@@ -50,26 +49,6 @@ export interface StorageHealthDto {
 }
 
 /** Hiệu năng một chiều (upload hoặc download) trong khoảng đang xem. */
-export interface TransferPerfDto {
-  bytes: number;
-  bytesPerSec: number | null;
-  ops: number;
-  opsPerMin: number | null;
-  avgMs: number | null;
-  p95Ms: number | null;
-  failures: number;
-  failureRatePercent: number | null;
-}
-
-export interface OperationRowDto {
-  op: StorageOp;
-  ops: number;
-  perMin: number | null;
-  avgMs: number | null;
-  p95Ms: number | null;
-  failures: number;
-}
-
 export interface CapacityDto extends Capacity {
   usedBytes: number | null;
   percent: number | null;
@@ -92,9 +71,7 @@ export interface ContainerRowDto {
   bytes: number;
   growth24hBytes: number | null;
   createdToday: number;
-  uploadBytes: number;
-  downloadBytes: number;
-  ops: number;
+  /** Lỗi ghi nhận cho container trong khoảng (danh sách lỗi gần nhất). */
   errors: number;
   newest: string | null;
 }
@@ -103,10 +80,6 @@ export interface StorageReportDto {
   usedBytes: number | null;
   growthBytes: number | null;
   objects: number | null;
-  uploads: number;
-  downloads: number;
-  uploadedBytes: number;
-  downloadedBytes: number;
   failedOps: number;
 }
 
@@ -142,65 +115,25 @@ export interface StorageOverviewDto {
     usedBytes: number | null;
     objects: number | null;
     objectsTruncated: boolean;
-    uploadBytesPerSec: number | null;
-    downloadBytesPerSec: number | null;
-    opsPerSec: number | null;
-    errorRatePercent: number | null;
     failedOps: number;
     growthTodayBytes: number | null;
     containers: number | null;
   };
   capacity: SectionDto<CapacityDto>;
   growth: GrowthDto;
-  upload: TransferPerfDto;
-  download: TransferPerfDto;
-  operations: OperationRowDto[];
   topContainers: ContainerRowDto[];
   uploads: {
     active: number;
-    completedPerMin: number | null;
     failed: number;
     stale: number | null;
     multipart: number | null;
   };
   alerts: StorageAlertDto[];
-  relatedImpact: {
-    apiP95Ms: { current: number | null; baseline: number | null; changePercent: number | null };
-    queueWaiting: number | null;
-  };
   report: { today: StorageReportDto; yesterday: StorageReportDto };
   events: StorageEventDto[];
   usageAt: string | null;
   usageTruncated: boolean;
   settings: StorageSettingsDto;
-}
-
-export interface StorageSeriesDto {
-  id: string;
-  label: string;
-  unit: string;
-  points: { t: number; value: number }[];
-}
-
-export interface StorageMetricsDto {
-  metric: StorageMetric;
-  range: StorageRange;
-  resolutionSec: number | null;
-  unit: string;
-  series: StorageSeriesDto[];
-}
-
-export interface StorageTrafficDto {
-  range: StorageRange;
-  upload: TransferPerfDto;
-  download: TransferPerfDto;
-  operations: OperationRowDto[];
-  /** Chỉ provider HTTP (S3): phân bố 2xx/4xx/5xx và mã lỗi hay gặp. */
-  http: SectionDto<{
-    classes: { cls: string; count: number; percent: number | null }[];
-    topErrors: { code: string; count: number }[];
-  }>;
-  errorsByKind: Record<StorageErrorKind, number>;
 }
 
 export interface StorageUsageDto {
@@ -233,7 +166,6 @@ export interface ContainerDetailDto {
   byKind: { kind: ObjectKind; objects: number; bytes: number }[];
   largest: (LargestObject & { large: boolean })[];
   recentErrors: StorageErrorDto[];
-  traffic: { upload: StorageSeriesDto; download: StorageSeriesDto };
 }
 
 export interface ObjectRowDto {
@@ -290,8 +222,6 @@ export interface StorageUploadsDto {
   >;
   failedUploads: StorageErrorDto[];
   failedDownloads: StorageErrorDto[];
-  completedPerMin: number | null;
-  avgUploadMs: number | null;
   staleUploadMin: number;
   abortEnabled: boolean;
 }

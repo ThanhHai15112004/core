@@ -1,9 +1,8 @@
-import type { AgeBucket, ObjectAge, ObjectKind, StorageCapability, StorageHealthStatus, StorageMetric, StorageRange, StorageTab } from '../types/storage.types';
+import type { AgeBucket, ObjectAge, ObjectKind, StorageCapability, StorageHealthStatus, StorageRange, StorageTab } from '../types/storage.types';
 import type { StatusTone } from '../utils/status-tone';
 
 export const STORAGE_TABS: StorageTab[] = [
   'overview',
-  'traffic',
   'containers',
   'objects',
   'uploads',
@@ -15,7 +14,6 @@ export const STORAGE_TABS: StorageTab[] = [
 ];
 export const STORAGE_RANGES: StorageRange[] = ['15m', '1h', '6h', '24h'];
 export const DEFAULT_STORAGE_RANGE: StorageRange = '1h';
-export const STORAGE_METRICS: StorageMetric[] = ['upload', 'download', 'latency', 'operations', 'errors'];
 export const OBJECT_KINDS: ObjectKind[] = ['image', 'video', 'audio', 'document', 'archive', 'text', 'other'];
 export const OBJECT_AGES: ObjectAge[] = ['lt1d', '1to7d', '7to30d', 'gt30d', 'gt90d'];
 export const AGE_BUCKETS: AgeBucket[] = ['lt1d', '1to7d', '7to30d', '30to90d', 'gt90d', 'unknown'];

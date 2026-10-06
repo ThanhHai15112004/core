@@ -1,4 +1,5 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
+import { SecretService } from '@packages/security/index.js';
 import { CoreConfigService } from '@packages/config/index.js';
 import { CoreI18nService } from '@packages/i18n/index.js';
 import {
@@ -8,7 +9,6 @@ import {
   StorageMonitoringService,
   StorageOperationError,
   StorageOperationsService,
-  containerMetric,
   growthSince,
   isTextual,
   isValidKey,
@@ -24,23 +24,8 @@ import {
   type UsagePoint,
   type UsageSnapshot,
 } from '@packages/storage/index.js';
-import { TELEMETRY_TIERS, type MetricBucket } from '@modules/system-ops/telemetry-compat.js';
-import {
-  changePercent,
-  counterOf,
-  gaugeWindow,
-  mergedOf,
-  percentileOf,
-  round,
-} from '@modules/performance/index.js';
-import { TrafficStoreService, statsOf, totalOf } from '@modules/traffic/index.js';
+import { round } from '@modules/performance/index.js';
 import { redactPayload } from '@packages/http/index.js';
-import {
-  STORAGE_OPS,
-  StorageMetricsService,
-  opsOf,
-  type MetricWindow,
-} from './storage-metrics.service.js';
 import { StorageStoreService } from './storage-store.service.js';
 import { RULE_TAB, type StorageRule, type StoredStorageAlert } from './storage-rules.js';
 import { capacityPercent, staleOf } from './storage-monitor.service.js';
@@ -64,17 +49,13 @@ import type {
   StorageEventDto,
   StorageHealthDto,
   StorageLifecycleDto,
-  StorageMetric,
-  StorageMetricsDto,
   StorageObjectsDto,
   StorageOperationDto,
   StorageOverviewDto,
   StorageRange,
   StorageReportDto,
-  StorageSeriesDto,
   StorageSettingsDto,
   StorageTestDto,
-  StorageTrafficDto,
   StorageUploadsDto,
   StorageUsageDto,
 } from '../responses/storage-ops.response.js';
@@ -85,23 +66,15 @@ export const STORAGE_RANGES: Record<StorageRange, number> = {
   '6h': 360,
   '24h': 1440,
 };
-export const STORAGE_METRICS: StorageMetric[] = [
-  'upload',
-  'download',
-  'latency',
-  'operations',
-  'errors',
-];
+/** Thao tác storage có thể ghi lỗi (dùng để đếm lỗi theo thao tác). */
+export const STORAGE_OPS: StorageOp[] = ['put', 'get', 'delete', 'head', 'list'];
 
 const MINUTE = 60_000;
 const DAY = 24 * 60 * MINUTE;
-const MAX_POINTS = 120;
 const OVERVIEW_EVENTS = 8;
 const OVERVIEW_CONTAINERS = 6;
 const ERROR_LIST_LIMIT = 200;
 const LIFECYCLE_ESTIMATE_LIMIT = 1000;
-const IMPACT_WINDOW_MIN = 5;
-const IMPACT_BASELINE_MIN = 60;
 const ERROR_KINDS: StorageErrorKind[] = [
   'not_found',
   'permission',
@@ -132,11 +105,9 @@ export function formatBytes(bytes: number): string {
   return `${v >= 100 ? v.toFixed(0) : v.toFixed(1)} ${units[i]}`;
 }
 
-type Group = { t: number; b: MetricBucket[]; seconds: number };
-
 /**
- * Storage Monitor: health, capacity & tăng trưởng, traffic upload/download, container, object explorer,
- * upload/multipart, lifecycle, lỗi & sự kiện, thao tác có kiểm soát. Phần provider không hỗ trợ trả lý do.
+ * Storage Monitor: health, capacity & tăng trưởng (list/head của provider), container, object explorer,
+ * upload/multipart, lifecycle, lỗi & sự kiện, thao tác có kiểm soát. Không tự đo traffic upload/download.
  */
 @Injectable()
 export class StorageOpsService {
@@ -144,11 +115,10 @@ export class StorageOpsService {
     private readonly connection: StorageConnectionService,
     private readonly monitoring: StorageMonitoringService,
     private readonly operations: StorageOperationsService,
-    private readonly metrics: StorageMetricsService,
     private readonly store: StorageStoreService,
-    private readonly traffic: TrafficStoreService,
     private readonly config: CoreConfigService,
     private readonly i18n: CoreI18nService,
+    @Optional() private readonly secrets?: SecretService,
   ) {}
 
   private get cfg() {
@@ -213,12 +183,11 @@ export class StorageOpsService {
   private containerRows(
     usage: UsageSnapshot | null,
     points: UsagePoint[],
-    win: MetricWindow | null,
+    errors: StorageErrorRecord[],
     now: number,
   ): ContainerRowDto[] {
     const dayAgo = points.find((p) => p.at <= now - DAY);
     return (usage?.containers ?? []).map((c) => {
-      const m = this.metrics.container(win, c.name);
       const before = dayAgo?.containers[c.name];
       return {
         name: c.name,
@@ -226,61 +195,54 @@ export class StorageOpsService {
         bytes: c.bytes,
         growth24hBytes: dayAgo ? c.bytes - (before?.bytes ?? 0) : null,
         createdToday: c.createdToday,
-        uploadBytes: m.uploadBytes,
-        downloadBytes: m.downloadBytes,
-        ops: m.ops,
-        errors: m.errors,
+        errors: errors.filter((e) => e.container === c.name).length,
         newest: iso(c.newest),
       };
     });
   }
 
   private report(
-    w: MetricWindow | null,
     points: UsagePoint[],
+    errors: StorageErrorRecord[],
     from: number,
     to: number,
   ): StorageReportDto {
-    const b = w?.buckets ?? [];
     const end = pointAtOrBefore(points, to);
     const start = pointAtOrBefore(points, from);
     return {
       usedBytes: end?.bytes ?? null,
       growthBytes: end && start && end.at > start.at ? end.bytes - start.bytes : null,
       objects: end?.objects ?? null,
-      uploads: opsOf(b, 'put'),
-      downloads: opsOf(b, 'get'),
-      uploadedBytes: counterOf(b, 'storage.bytes.up'),
-      downloadedBytes: counterOf(b, 'storage.bytes.down'),
-      failedOps: counterOf(b, 'storage.errors'),
+      failedOps: errors.filter((e) => e.at >= from && e.at < to).length,
     };
+  }
+
+  private errorsSince(from: number): Promise<StorageErrorRecord[]> {
+    return this.store
+      .errors()
+      .then((list) => list.filter((e) => e.at >= from))
+      .catch(() => [] as StorageErrorRecord[]);
   }
 
   // ─── Overview ─────────────────────────────────────────────────────────────
 
   public async getOverview(range: StorageRange): Promise<StorageOverviewDto> {
     const now = Date.now();
-    const len = STORAGE_RANGES[range] * MINUTE;
+    const from = now - STORAGE_RANGES[range] * MINUTE;
     const today = startOfDay(now);
-    const [win, todayWin, yesterdayWin, usage, points, alerts, events, active, multipart, impact] =
-      await Promise.all([
-        this.metrics.window(now - len, now, now),
-        this.metrics.window(today, now, now),
-        this.metrics.window(today - DAY, today, now),
-        this.monitoring.usage(),
-        this.monitoring.points().catch(() => [] as UsagePoint[]),
-        this.alerts(),
-        this.eventsSince(now - DAY),
-        this.monitoring.activeUploads().catch(() => []),
-        this.monitoring.section('multipart', () => this.monitoring.provider.multipart()),
-        this.relatedImpact(now),
-      ]);
+    const [usage, points, alerts, events, active, multipart, allErrors] = await Promise.all([
+      this.monitoring.usage(),
+      this.monitoring.points().catch(() => [] as UsagePoint[]),
+      this.alerts(),
+      this.eventsSince(now - DAY),
+      this.monitoring.activeUploads().catch(() => []),
+      this.monitoring.section('multipart', () => this.monitoring.provider.multipart()),
+      this.errorsSince(today - DAY),
+    ]);
     const capacity = await this.capacity(usage);
-    const up = this.metrics.transfer(win, 'up');
-    const down = this.metrics.transfer(win, 'down');
-    const totals = this.metrics.totals(win);
+    const errors = allErrors.filter((e) => e.at >= from);
     const growth = this.growth(usage, points, now);
-    const rows = this.containerRows(usage, points, win, now);
+    const rows = this.containerRows(usage, points, errors, now);
     return {
       generatedAt: new Date(now).toISOString(),
       range,
@@ -292,34 +254,25 @@ export class StorageOpsService {
         usedBytes: usage?.totalBytes ?? null,
         objects: usage?.totalObjects ?? null,
         objectsTruncated: usage?.truncated ?? false,
-        uploadBytesPerSec: up.bytesPerSec,
-        downloadBytesPerSec: down.bytesPerSec,
-        opsPerSec: totals.opsPerSec,
-        errorRatePercent: totals.errorRatePercent,
-        failedOps: totals.errors,
+        failedOps: errors.length,
         growthTodayBytes: growth.todayBytes,
         containers: usage ? usage.containers.length : null,
       },
       capacity,
       growth,
-      upload: up,
-      download: down,
-      operations: this.metrics.operations(win),
       topContainers: rows.slice(0, OVERVIEW_CONTAINERS),
       uploads: {
         active: active.length,
-        completedPerMin: win ? round((up.ops - up.failures) / (win.seconds / 60), 2) : null,
-        failed: up.failures,
+        failed: errors.filter((e) => e.op === 'put').length,
         stale: multipart.available
           ? staleOf(multipart.data, this.cfg.staleUploadMin, now).length
           : null,
         multipart: multipart.available ? multipart.data.length : null,
       },
       alerts,
-      relatedImpact: impact,
       report: {
-        today: this.report(todayWin, points, today, now),
-        yesterday: this.report(yesterdayWin, points, today - DAY, today),
+        today: this.report(points, allErrors, today, now),
+        yesterday: this.report(points, allErrors, today - DAY, today),
       },
       events: events.slice(0, OVERVIEW_EVENTS).map((e) => this.eventDto(e)),
       usageAt: iso(usage?.at),
@@ -403,160 +356,6 @@ export class StorageOpsService {
     });
   }
 
-  private async relatedImpact(now: number): Promise<StorageOverviewDto['relatedImpact']> {
-    const winFrom = now - IMPACT_WINDOW_MIN * MINUTE;
-    const baseFrom = winFrom - IMPACT_BASELINE_MIN * MINUTE;
-    const [perf, instances] = await Promise.all([
-      this.metrics.window(winFrom, now, now, 's10'),
-      this.traffic.instances(baseFrom).catch(() => [] as string[]),
-    ]);
-    const [cur, base] = await Promise.all([
-      this.traffic.buckets('s10', winFrom, now, instances).catch(() => []),
-      this.traffic.buckets('s10', baseFrom, winFrom, instances).catch(() => []),
-    ]);
-    const p95 = (b: typeof cur, seconds: number) => {
-      const agg = totalOf(b, () => true);
-      return agg.n > 0 ? statsOf(agg, seconds).p95LatencyMs : null;
-    };
-    const current = p95(cur, IMPACT_WINDOW_MIN * 60);
-    const baseline = p95(base, IMPACT_BASELINE_MIN * 60);
-    return {
-      apiP95Ms: { current, baseline, changePercent: changePercent(current, baseline) },
-      queueWaiting: gaugeWindow(perf?.buckets ?? [], 'queue.waiting').current,
-    };
-  }
-
-  // ─── Chart / Traffic ──────────────────────────────────────────────────────
-
-  private async series(
-    range: StorageRange,
-    defs: { id: string; unit: string; value: (g: Group) => number | null }[],
-  ): Promise<{ series: StorageSeriesDto[]; resolutionSec: number | null }> {
-    const now = Date.now();
-    const win = await this.metrics.window(now - STORAGE_RANGES[range] * MINUTE, now, now);
-    const tierSec = win ? TELEMETRY_TIERS[win.tier].seconds : 0;
-    const buckets = win?.buckets ?? [];
-    const size = Math.max(1, Math.ceil(buckets.length / MAX_POINTS));
-    const groups: Group[] = [];
-    for (let i = 0; i < buckets.length; i += size) {
-      const b = buckets.slice(i, i + size);
-      groups.push({
-        t: b[0]!.start,
-        b,
-        seconds: Math.max(1, Math.min(b.length * tierSec, (now - b[0]!.start) / 1000)),
-      });
-    }
-    return {
-      resolutionSec: win ? tierSec : null,
-      series: defs.map((d) => ({
-        id: d.id,
-        label: this.i18n.t(`storage.series.${d.id}`),
-        unit: d.unit,
-        points: groups
-          .map((g) => ({ t: g.t, value: d.value(g) }))
-          .filter(
-            (p): p is { t: number; value: number } => p.value !== null && Number.isFinite(p.value),
-          )
-          .map((p) => ({ t: p.t, value: round(p.value, 3) })),
-      })),
-    };
-  }
-
-  public async getMetrics(range: StorageRange, metric: StorageMetric): Promise<StorageMetricsDto> {
-    const perSec = (name: string) => (g: Group) => counterOf(g.b, name) / g.seconds;
-    const perMin = (fn: (b: MetricBucket[]) => number) => (g: Group) => fn(g.b) / (g.seconds / 60);
-    const p95 = (name: string) => (g: Group) => percentileOf(mergedOf(g.b, name), 95);
-    const defs: Record<
-      StorageMetric,
-      { id: string; unit: string; value: (g: Group) => number | null }[]
-    > = {
-      upload: [
-        { id: 'uploadBytes', unit: 'B/s', value: perSec('storage.bytes.up') },
-        { id: 'uploadsPerMin', unit: '/min', value: perMin((b) => opsOf(b, 'put')) },
-      ],
-      download: [
-        { id: 'downloadBytes', unit: 'B/s', value: perSec('storage.bytes.down') },
-        { id: 'downloadsPerMin', unit: '/min', value: perMin((b) => opsOf(b, 'get')) },
-      ],
-      latency: [
-        { id: 'putP95', unit: 'ms', value: p95('storage.put') },
-        { id: 'getP95', unit: 'ms', value: p95('storage.get') },
-        { id: 'deleteP95', unit: 'ms', value: p95('storage.delete') },
-      ],
-      operations: STORAGE_OPS.map((op) => ({
-        id: `${op}PerMin`,
-        unit: '/min',
-        value: perMin((b) => opsOf(b, op)),
-      })),
-      errors: [
-        { id: 'errorsPerMin', unit: '/min', value: perMin((b) => counterOf(b, 'storage.errors')) },
-        {
-          id: 'uploadErrorsPerMin',
-          unit: '/min',
-          value: perMin((b) => counterOf(b, 'storage.errors.put')),
-        },
-        {
-          id: 'downloadErrorsPerMin',
-          unit: '/min',
-          value: perMin((b) => counterOf(b, 'storage.errors.get')),
-        },
-      ],
-    };
-    const { series, resolutionSec } = await this.series(range, defs[metric]);
-    const list = series.filter((s, i) => i === 0 || s.points.length > 0);
-    return { metric, range, resolutionSec, unit: list[0]?.unit ?? '', series: list };
-  }
-
-  public async getTraffic(range: StorageRange): Promise<StorageTrafficDto> {
-    const now = Date.now();
-    const from = now - STORAGE_RANGES[range] * MINUTE;
-    const [win, errors] = await Promise.all([
-      this.metrics.window(from, now, now),
-      this.store.errors().catch(() => [] as StorageErrorRecord[]),
-    ]);
-    const b = win?.buckets ?? [];
-    let http: StorageTrafficDto['http'];
-    if (!this.monitoring.supports('httpStatus'))
-      http = {
-        available: false,
-        reason: 'unsupported',
-        message: this.monitoring.provider.info().product,
-      };
-    else {
-      const counts = ['2xx', '4xx', '5xx'].map((cls) => ({
-        cls,
-        count: counterOf(b, `storage.http.${cls}`),
-      }));
-      const total = counts.reduce((s, c) => s + c.count, 0);
-      const top = new Map<string, number>();
-      for (const e of errors)
-        if (e.at >= from && e.code) top.set(e.code, (top.get(e.code) ?? 0) + 1);
-      http = {
-        available: true,
-        data: {
-          classes: counts.map((c) => ({
-            ...c,
-            percent: total ? round((c.count / total) * 100, 2) : null,
-          })),
-          topErrors: [...top.entries()]
-            .map(([code, count]) => ({ code, count }))
-            .sort((a, c) => c.count - a.count)
-            .slice(0, 8),
-        },
-      };
-    }
-    return {
-      range,
-      upload: this.metrics.transfer(win, 'up'),
-      download: this.metrics.transfer(win, 'down'),
-      operations: this.metrics.operations(win),
-      http,
-      errorsByKind: Object.fromEntries(
-        ERROR_KINDS.map((k) => [k, counterOf(b, `storage.err.${k}`)]),
-      ) as Record<StorageErrorKind, number>,
-    };
-  }
-
   // ─── Usage / Containers ───────────────────────────────────────────────────
 
   public async getUsage(): Promise<StorageUsageDto> {
@@ -589,13 +388,13 @@ export class StorageOpsService {
 
   public async getContainers(range: StorageRange): Promise<StorageContainersDto> {
     const now = Date.now();
-    const [usage, points, win] = await Promise.all([
+    const [usage, points, errors] = await Promise.all([
       this.monitoring.usage(),
       this.monitoring.points(26).catch(() => [] as UsagePoint[]),
-      this.metrics.window(now - STORAGE_RANGES[range] * MINUTE, now, now),
+      this.errorsSince(now - STORAGE_RANGES[range] * MINUTE),
     ]);
     return {
-      containers: this.containerRows(usage, points, win, now),
+      containers: this.containerRows(usage, points, errors, now),
       range,
       usageAt: iso(usage?.at),
       truncated: usage?.truncated ?? false,
@@ -605,26 +404,19 @@ export class StorageOpsService {
 
   public async getContainerDetail(name: string, range: StorageRange): Promise<ContainerDetailDto> {
     const now = Date.now();
-    const [usage, points, win, errors] = await Promise.all([
+    const [usage, points, errors] = await Promise.all([
       this.monitoring.usage(),
       this.monitoring.points().catch(() => [] as UsagePoint[]),
-      this.metrics.window(now - STORAGE_RANGES[range] * MINUTE, now, now),
       this.store.errors().catch(() => [] as StorageErrorRecord[]),
     ]);
-    const row = this.containerRows(usage, points, win, now).find((c) => c.name === name);
+    const from = now - STORAGE_RANGES[range] * MINUTE;
+    const row = this.containerRows(
+      usage,
+      points,
+      errors.filter((e) => e.at >= from),
+      now,
+    ).find((c) => c.name === name);
     if (!row) throw new StorageNotFoundException('storage.error.containerNotFound', { name });
-    const { series } = await this.series(range, [
-      {
-        id: 'uploadBytes',
-        unit: 'B/s',
-        value: (g) => counterOf(g.b, containerMetric(name, 'bytes.up')) / g.seconds,
-      },
-      {
-        id: 'downloadBytes',
-        unit: 'B/s',
-        value: (g) => counterOf(g.b, containerMetric(name, 'bytes.down')) / g.seconds,
-      },
-    ]);
     const usageRow = usage?.containers.find((c) => c.name === name);
     return {
       container: row,
@@ -648,7 +440,6 @@ export class StorageOpsService {
         .filter((e) => e.container === name)
         .slice(0, 20)
         .map((e) => this.errorDto(e)),
-      traffic: { upload: series[0]!, download: series[1]! },
     };
   }
 
@@ -728,13 +519,11 @@ export class StorageOpsService {
   public async getUploads(range: StorageRange): Promise<StorageUploadsDto> {
     const now = Date.now();
     const from = now - STORAGE_RANGES[range] * MINUTE;
-    const [active, multipart, errors, win] = await Promise.all([
+    const [active, multipart, errors] = await Promise.all([
       this.monitoring.activeUploads().catch(() => []),
       this.monitoring.section('multipart', () => this.monitoring.provider.multipart()),
       this.store.errors().catch(() => [] as StorageErrorRecord[]),
-      this.metrics.window(from, now, now),
     ]);
-    const up = this.metrics.transfer(win, 'up');
     const staleMs = this.cfg.staleUploadMin * MINUTE;
     const recent = errors.filter((e) => e.at >= from);
     return {
@@ -767,11 +556,6 @@ export class StorageOpsService {
         .filter((e) => e.op === 'get')
         .slice(0, 50)
         .map((e) => this.errorDto(e)),
-      completedPerMin:
-        up.opsPerMin === null || !win
-          ? null
-          : round(Math.max(0, (up.ops - up.failures) / (win.seconds / 60)), 2),
-      avgUploadMs: up.avgMs,
       staleUploadMin: this.cfg.staleUploadMin,
       abortEnabled: this.settings().abortUpload,
     };
@@ -821,20 +605,12 @@ export class StorageOpsService {
   public async getErrors(range: StorageRange): Promise<StorageErrorsDto> {
     const now = Date.now();
     const from = now - STORAGE_RANGES[range] * MINUTE;
-    const [errors, win] = await Promise.all([
-      this.store.errors().catch(() => [] as StorageErrorRecord[]),
-      this.metrics.window(from, now, now),
-    ]);
-    const b = win?.buckets ?? [];
-    const recent = errors.filter((e) => e.at >= from);
+    const recent = await this.errorsSince(from);
     const counts = Object.fromEntries(
-      ERROR_KINDS.map((k) => [
-        k,
-        win ? counterOf(b, `storage.err.${k}`) : recent.filter((e) => e.kind === k).length,
-      ]),
+      ERROR_KINDS.map((k) => [k, recent.filter((e) => e.kind === k).length]),
     ) as Record<StorageErrorKind, number>;
     const byOp = Object.fromEntries(
-      STORAGE_OPS.map((op) => [op, counterOf(b, `storage.errors.${op}`)]),
+      STORAGE_OPS.map((op) => [op, recent.filter((e) => e.op === op).length]),
     ) as Record<StorageOp, number>;
     return {
       counts,
@@ -856,13 +632,15 @@ export class StorageOpsService {
     return ops.map((o) => ({ ...o, at: new Date(o.at).toISOString() }));
   }
 
-  public getConfig(): StorageConfigDto {
+  public async getConfig(): Promise<StorageConfigDto> {
     const c = this.cfg;
     const info = this.monitoring.provider.info();
     const s3 = info.driver === 's3';
-    const hasCreds = Boolean(
-      process.env[c.s3.accessKeySecret] || process.env[c.s3.secretKeySecret],
-    );
+    const present = (key: string) =>
+      this.secrets ? this.secrets.getSecret(key).then(Boolean, () => false) : false;
+    const hasCreds = s3
+      ? (await present(c.s3.accessKeySecret)) && (await present(c.s3.secretKeySecret))
+      : false;
     return {
       items: [
         { group: 'provider', key: 'driver', value: info.driver },
@@ -878,7 +656,7 @@ export class StorageOpsService {
               {
                 group: 'connection',
                 key: 'credentialsSource',
-                value: process.env['SECRET_DRIVER'] || 'env',
+                value: this.config.auth.secretDriver,
               },
             ]
           : [{ group: 'connection', key: 'root', value: info.location }]),
@@ -891,8 +669,6 @@ export class StorageOpsService {
         { group: 'thresholds', key: 'capacityWarnPercent', value: c.rules.capacityWarnPercent },
         { group: 'thresholds', key: 'capacityCritPercent', value: c.rules.capacityCritPercent },
         { group: 'thresholds', key: 'growthFactor', value: c.rules.growthFactor },
-        { group: 'thresholds', key: 'failureRatePercent', value: c.rules.failureRatePercent },
-        { group: 'thresholds', key: 'putP95Ms', value: c.rules.putP95Ms },
         { group: 'thresholds', key: 'staleUploads', value: c.rules.staleUploads },
         { group: 'actions', key: 'delete', value: c.delete },
         { group: 'actions', key: 'download', value: c.download },

@@ -1,5 +1,6 @@
 import { describe, it, expect } from '@jest/globals';
 import { SecretRegistryService } from '@packages/security/index.js';
+import { CoreConfigService } from '@packages/config/index.js';
 import { EnvironmentSecretProvider } from '@packages/security/providers/env-secret.provider.js';
 import { SecretService } from '@packages/security/providers/secret.service.js';
 
@@ -8,7 +9,7 @@ describe('SecretRegistryService', () => {
     process.env['JWT_ACCESS_SECRET'] = 'super-secret-key-123456';
     const envProvider = new EnvironmentSecretProvider();
     const secretService = new SecretService(envProvider);
-    const registry = new SecretRegistryService(secretService);
+    const registry = new SecretRegistryService(secretService, new CoreConfigService());
 
     const list = await registry.listSecrets();
     expect(list.length).toBeGreaterThan(0);

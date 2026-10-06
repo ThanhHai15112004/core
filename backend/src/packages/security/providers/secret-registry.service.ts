@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
+import { CoreConfigService } from '@packages/config/index.js';
 import { SecretService } from './secret.service.js';
-import { SecretDriver } from '../types/secret.types.js';
 
 export interface SecretItemMeta {
   key: string;
@@ -29,7 +29,10 @@ const DEFAULT_KNOWN_SECRET_KEYS = [
 export class SecretRegistryService {
   private readonly registeredKeys = new Set<string>(DEFAULT_KNOWN_SECRET_KEYS);
 
-  constructor(private readonly secretService: SecretService) {}
+  constructor(
+    private readonly secretService: SecretService,
+    private readonly config: CoreConfigService,
+  ) {}
 
   /**
    * Đăng ký thêm secret key vào registry.
@@ -44,10 +47,7 @@ export class SecretRegistryService {
    * Liệt kê tất cả metadata của các secret key đã đăng ký.
    */
   public async listSecrets(): Promise<SecretItemMeta[]> {
-    const driver =
-      process.env.SECRET_DRIVER?.toLowerCase() === SecretDriver.FILE
-        ? ('file' as const)
-        : ('env' as const);
+    const driver = this.config.auth.secretDriver;
 
     const now = new Date().toISOString();
     const items: SecretItemMeta[] = [];

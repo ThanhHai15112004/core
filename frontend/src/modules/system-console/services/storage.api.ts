@@ -11,14 +11,11 @@ import type {
   StorageErrors,
   StorageEvent,
   StorageLifecycle,
-  StorageMetric,
-  StorageMetrics,
   StorageObjects,
   StorageOperation,
   StorageOverview,
   StorageRange,
   StorageTest,
-  StorageTraffic,
   StorageUploads,
   StorageUsage,
 } from '../types/storage.types';
@@ -29,8 +26,6 @@ const send = <T>(method: 'POST' | 'DELETE', path: string, qs = '', body: object 
 
 export const storageApi = {
   overview: (range: StorageRange) => fetchApi<StorageOverview>(S('overview', toQuery({ range }))),
-  metrics: (range: StorageRange, metric: StorageMetric) => fetchApi<StorageMetrics>(S('metrics', toQuery({ range, metric }))),
-  traffic: (range: StorageRange) => fetchApi<StorageTraffic>(S('traffic', toQuery({ range }))),
   usage: () => fetchApi<StorageUsage>(S('usage')),
   containers: (range: StorageRange) => fetchApi<StorageContainers>(S('containers', toQuery({ range }))),
   container: (name: string, range: StorageRange) => fetchApi<ContainerDetail>(S(`containers/${encodeURIComponent(name)}`, toQuery({ range }))),

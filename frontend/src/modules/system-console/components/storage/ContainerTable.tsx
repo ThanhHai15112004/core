@@ -4,7 +4,7 @@ import { formatBytes, formatCompact } from '../../utils/database-format';
 import { formatGrowth } from '../../utils/storage-format';
 import { useLocale } from '../../../../core/i18n/index';
 
-const SORTS = ['size', 'objects', 'growth', 'errors', 'traffic'] as const;
+const SORTS = ['size', 'objects', 'growth', 'errors'] as const;
 type Sort = (typeof SORTS)[number];
 const value = (c: ContainerRow, s: Sort) =>
   s === 'size'
@@ -13,11 +13,9 @@ const value = (c: ContainerRow, s: Sort) =>
       ? c.objects
       : s === 'growth'
         ? (c.growth24hBytes ?? -Infinity)
-        : s === 'errors'
-          ? c.errors
-          : c.uploadBytes + c.downloadBytes;
+        : c.errors;
 
-/** Bảng container (bucket prefix / thư mục gốc) — sort theo size, object, tăng trưởng, lỗi, traffic. */
+/** Bảng container (bucket prefix / thư mục gốc) — sort theo size, object, tăng trưởng, lỗi. */
 export const ContainerTable: React.FC<{ rows: ContainerRow[]; onOpen: (name: string) => void; sortable?: boolean; emptyText: string }> = ({
   rows,
   onOpen,
@@ -47,7 +45,6 @@ export const ContainerTable: React.FC<{ rows: ContainerRow[]; onOpen: (name: str
               <th>{t('storage.container.objects')}</th>
               <th>{t('storage.container.size')}</th>
               <th>{t('storage.container.growth')}</th>
-              <th>{t('storage.container.traffic')}</th>
               <th>{t('storage.container.errors')}</th>
             </tr>
           </thead>
@@ -60,9 +57,6 @@ export const ContainerTable: React.FC<{ rows: ContainerRow[]; onOpen: (name: str
                 <td>{formatCompact(c.objects, locale)}</td>
                 <td>{formatBytes(c.bytes)}</td>
                 <td>{formatGrowth(c.growth24hBytes)}</td>
-                <td>
-                  ↑ {formatBytes(c.uploadBytes)} · ↓ {formatBytes(c.downloadBytes)}
-                </td>
                 <td className={c.errors > 0 ? 'is-warn' : ''}>{c.errors}</td>
               </tr>
             ))}

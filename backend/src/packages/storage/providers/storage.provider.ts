@@ -38,13 +38,9 @@ const ERROR_RECORDS_PER_SEC = 5;
 const ACTIVE_PUBLISH_MS = 2000;
 const ACTIVE_TTL_SEC = 10;
 
-/** Metric theo container, vd. `storage.c.uploads.put`. */
-export const containerMetric = (container: string, kind: string) =>
-  `storage.c.${container.replace(/\|/g, '_')}.${kind}`;
-
 /**
  * Storage của Core. Driver chọn theo `STORAGE_DRIVER` (local filesystem / S3-compatible), `StorageContract`
- * không đổi. Mọi thao tác được đo (latency, bytes, lỗi theo loại, theo container) và upload đang chạy được
+ * không đổi. Lỗi được phân loại và lưu theo container; upload đang chạy được
  * báo lên Redis để trang Storage thấy tiến độ.
  */
 @Injectable()

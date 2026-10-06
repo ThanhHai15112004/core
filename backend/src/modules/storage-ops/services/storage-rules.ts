@@ -3,22 +3,12 @@ import type { StorageConnectionState } from '@packages/storage/index.js';
 import type { StorageSeverity } from '../responses/storage-ops.response.js';
 
 export type StorageRule =
-  | 'STORAGE_UNAVAILABLE'
-  | 'CAPACITY'
-  | 'RAPID_GROWTH'
-  | 'UPLOAD_FAILURE_RATE'
-  | 'DOWNLOAD_FAILURE_RATE'
-  | 'UPLOAD_LATENCY'
-  | 'STALE_MULTIPART'
-  | 'LARGE_OBJECT';
+  'STORAGE_UNAVAILABLE' | 'CAPACITY' | 'RAPID_GROWTH' | 'STALE_MULTIPART' | 'LARGE_OBJECT';
 
 export const RULE_TAB: Record<StorageRule, string> = {
   STORAGE_UNAVAILABLE: 'overview',
   CAPACITY: 'usage',
   RAPID_GROWTH: 'containers',
-  UPLOAD_FAILURE_RATE: 'errors',
-  DOWNLOAD_FAILURE_RATE: 'errors',
-  UPLOAD_LATENCY: 'traffic',
   STALE_MULTIPART: 'uploads',
   LARGE_OBJECT: 'usage',
 };
@@ -33,8 +23,6 @@ export interface StorageRuleInput {
     topContainer: string | null;
     topContainerBytes: number | null;
   };
-  upload: { ops: number; failureRatePercent: number | null; p95Ms: number | null };
-  download: { ops: number; failureRatePercent: number | null };
   staleMultipart: { count: number; bytes: number } | null;
   largestObject: { key: string; size: number } | null;
 }
@@ -91,31 +79,6 @@ export function evaluateStorageRules(
         containerBytes: g.topContainerBytes ?? 0,
       });
   }
-
-  if (
-    input.upload.ops >= cfg.minOps &&
-    (input.upload.failureRatePercent ?? 0) >= cfg.failureRatePercent
-  )
-    add(
-      'UPLOAD_FAILURE_RATE',
-      input.upload.failureRatePercent! >= cfg.failureRatePercent * 4 ? 'critical' : 'warning',
-      input.upload.failureRatePercent!,
-      cfg.failureRatePercent,
-      '%',
-    );
-  if (
-    input.download.ops >= cfg.minOps &&
-    (input.download.failureRatePercent ?? 0) >= cfg.failureRatePercent
-  )
-    add(
-      'DOWNLOAD_FAILURE_RATE',
-      'warning',
-      input.download.failureRatePercent!,
-      cfg.failureRatePercent,
-      '%',
-    );
-  if (input.upload.ops >= cfg.minOps && (input.upload.p95Ms ?? 0) >= cfg.putP95Ms)
-    add('UPLOAD_LATENCY', 'warning', input.upload.p95Ms!, cfg.putP95Ms, 'ms');
 
   if (input.staleMultipart && input.staleMultipart.count >= cfg.staleUploads)
     add('STALE_MULTIPART', 'warning', input.staleMultipart.count, cfg.staleUploads, '', {

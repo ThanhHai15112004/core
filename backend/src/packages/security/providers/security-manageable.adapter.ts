@@ -8,7 +8,6 @@ import {
 } from '@packages/kernel/index.js';
 import { CoreConfigService } from '@packages/config/index.js';
 import { CoreI18nService } from '@packages/i18n/index.js';
-import { SecretDriver } from '../types/secret.types.js';
 
 @Injectable()
 export class SecurityManageableAdapter implements ManageablePackage {
@@ -35,7 +34,7 @@ export class SecurityManageableAdapter implements ManageablePackage {
       metrics: {
         accessExpiration: jwt.accessExpiration,
         refreshExpiration: jwt.refreshExpiration,
-        secretDriver: process.env['SECRET_DRIVER']?.toLowerCase() || SecretDriver.ENV,
+        secretDriver: this.configService.auth.secretDriver,
         globalAuthGuard: true,
         tokenVerification: 'skeleton',
       },

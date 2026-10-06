@@ -10,7 +10,7 @@ import { formatBytes, formatCompact } from '../../utils/database-format';
 import { formatGrowth, toStorageChart } from '../../utils/storage-format';
 import { useLocale } from '../../../../core/i18n/index';
 
-/** Chi tiết container: KPI, tăng trưởng, traffic, loại file, object lớn, lỗi gần đây, Browse / Lifecycle. */
+/** Chi tiết container: KPI, tăng trưởng, loại file, object lớn, lỗi gần đây, Browse / Lifecycle. */
 export const ContainerDrawer: React.FC<{
   name: string;
   range: StorageRange;
@@ -26,7 +26,6 @@ export const ContainerDrawer: React.FC<{
   const history = data
     ? toStorageChart([{ id: 'bytes', label: t('storage.usage.size'), unit: 'B', points: data.history.map((h) => ({ t: h.t, value: h.bytes })) }])
     : null;
-  const traffic = data ? toStorageChart([data.traffic.upload, data.traffic.download]) : null;
   return (
     <DbDrawer title={<code>{name === '(root)' ? t('storage.container.root') : `${name}/`}</code>} meta={t('storage.container.drawerMeta')} onClose={onClose}>
       {error && !data && <p className="scp-alert scp-alert-danger">{error.message}</p>}
@@ -50,12 +49,8 @@ export const ContainerDrawer: React.FC<{
               <dd>{formatCompact(c.createdToday, locale)}</dd>
             </div>
             <div>
-              <dt>{t('storage.transfer.upload')}</dt>
-              <dd>{formatBytes(c.uploadBytes)}</dd>
-            </div>
-            <div>
-              <dt>{t('storage.transfer.download')}</dt>
-              <dd>{formatBytes(c.downloadBytes)}</dd>
+              <dt>{t('storage.container.errors')}</dt>
+              <dd className={c.errors > 0 ? 'is-warn' : ''}>{c.errors}</dd>
             </div>
           </dl>
           <div className="cache-drawer-actions">
@@ -78,19 +73,6 @@ export const ContainerDrawer: React.FC<{
                 formatTime={(ts) => formatTime(ts)}
                 emptyText={t('storage.usage.noHistory')}
                 ariaLabel={t('storage.usage.growthChart')}
-              />
-            </div>
-          )}
-          {traffic && (
-            <div className="cache-mini-chart">
-              <h4>{t('storage.container.trafficChart')}</h4>
-              <LineChart
-                series={traffic.series}
-                unit={traffic.unit}
-                height={140}
-                formatTime={(ts) => formatTime(ts, range === '15m')}
-                emptyText={t('storage.chart.empty')}
-                ariaLabel={t('storage.container.trafficChart')}
               />
             </div>
           )}

@@ -2,14 +2,9 @@ import type { ChartSeries } from '../components/common/LineChart';
 import type { StorageSeries } from '../types/storage.types';
 import { STORAGE_SERIES_COLORS } from '../constants/storage';
 import { FALLBACK_COLORS } from '../constants/performance';
-import { formatBytes, formatSignedBytes } from './database-format';
-import { NO_VALUE } from './runtime-format';
+import { formatSignedBytes } from './database-format';
 
 const MB = 1024 * 1024;
-
-/** Tốc độ truyền: `28.4 MB/s`. */
-export const formatRate = (bytesPerSec: number | null | undefined) =>
-  bytesPerSec === null || bytesPerSec === undefined ? NO_VALUE : `${formatBytes(Math.round(bytesPerSec))}/s`;
 
 export const formatGrowth = (bytes: number | null | undefined) => formatSignedBytes(bytes);
 

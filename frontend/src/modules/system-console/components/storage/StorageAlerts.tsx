@@ -14,7 +14,7 @@ export const StorageAlerts: React.FC<{ data: StorageOverview; now: number; onOpe
   const ok: string[] = [];
   if (data.health.state === 'connected') ok.push(t('storage.alerts.connected'));
   if (data.capacity.available && data.capacity.data.percent !== null && !rules.has('CAPACITY')) ok.push(t('storage.alerts.capacityOk'));
-  if (data.upload.ops > 0 && data.upload.failures === 0) ok.push(t('storage.alerts.noFailedUploads'));
+  if (data.uploads.failed === 0) ok.push(t('storage.alerts.noFailedUploads'));
   if (data.uploads.stale === 0) ok.push(t('storage.alerts.noStale'));
   return (
     <section className="ov-card ov-section">

@@ -21,22 +21,15 @@ import {
   type OperationContext,
 } from '@packages/storage/index.js';
 import { STORAGE_OPS_ROUTES as R } from '../routes/storage-ops.routes.js';
-import {
-  STORAGE_METRICS,
-  STORAGE_RANGES,
-  StorageOpsService,
-} from '../services/storage-ops.service.js';
+import { STORAGE_RANGES, StorageOpsService } from '../services/storage-ops.service.js';
 import { StorageValidationException } from '../exceptions/storage-ops.exceptions.js';
-import type { StorageMetric, StorageRange } from '../responses/storage-ops.response.js';
+import type { StorageRange } from '../responses/storage-ops.response.js';
 
 const DAY = 86_400_000;
 const printable = (s: string) =>
   ![...s].some((c) => c.charCodeAt(0) < 32 || c.charCodeAt(0) === 127);
 const rangeSchema = z.object({
   range: z.enum(Object.keys(STORAGE_RANGES) as [StorageRange, ...StorageRange[]]).default('1h'),
-});
-const metricsSchema = rangeSchema.extend({
-  metric: z.enum(STORAGE_METRICS as [StorageMetric, ...StorageMetric[]]).default('upload'),
 });
 /** Key tương đối (kiểm tra kỹ ở tầng storage: không `..`, không `/` đầu). */
 const keySchema = z.string().min(1).max(1024).refine(printable);
@@ -100,19 +93,6 @@ export class StorageOpsController {
   @Get(R.OVERVIEW)
   public overview(@Query() q: Record<string, string>) {
     return this.storage.getOverview(parse(rangeSchema, q).range);
-  }
-
-  @Public()
-  @Get(R.METRICS)
-  public metrics(@Query() q: Record<string, string>) {
-    const { range, metric } = parse(metricsSchema, q);
-    return this.storage.getMetrics(range, metric);
-  }
-
-  @Public()
-  @Get(R.TRAFFIC)
-  public traffic(@Query() q: Record<string, string>) {
-    return this.storage.getTraffic(parse(rangeSchema, q).range);
   }
 
   @Public()

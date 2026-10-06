@@ -2,7 +2,7 @@ import React from 'react';
 import type { StorageOverview } from '../../types/storage.types';
 import { formatBytes, formatCompact } from '../../utils/database-format';
 import { formatUnit } from '../../utils/performance-format';
-import { formatGrowth, formatRate } from '../../utils/storage-format';
+import { formatGrowth } from '../../utils/storage-format';
 import type { StatusTone } from '../../utils/status-tone';
 import { NO_VALUE } from '../../utils/runtime-format';
 import { useLocale } from '../../../../core/i18n/index';
@@ -43,24 +43,6 @@ export const StorageKpis: React.FC<{ data: StorageOverview | null }> = ({ data }
       value: k.objects === null ? NO_VALUE : `${formatCompact(k.objects, locale)}${k.objectsTruncated ? '+' : ''}`,
       sub: data.growth.createdToday === null ? NO_VALUE : t('storage.kpi.createdToday', { count: formatCompact(data.growth.createdToday, locale) }),
       tone: 'unknown',
-    },
-    {
-      key: 'upload',
-      value: formatRate(k.uploadBytesPerSec),
-      sub: t('storage.kpi.transferSub', { ops: formatUnit(data.upload.opsPerMin, '/min'), range }),
-      tone: 'unknown',
-    },
-    {
-      key: 'download',
-      value: formatRate(k.downloadBytesPerSec),
-      sub: t('storage.kpi.transferSub', { ops: formatUnit(data.download.opsPerMin, '/min'), range }),
-      tone: 'unknown',
-    },
-    {
-      key: 'errorRate',
-      value: formatUnit(k.errorRatePercent, '%'),
-      sub: t('storage.kpi.opsSub', { ops: formatUnit(k.opsPerSec, '/s') }),
-      tone: alert('UPLOAD_FAILURE_RATE', 'DOWNLOAD_FAILURE_RATE') ?? (k.errorRatePercent === null ? 'unknown' : k.errorRatePercent > 0 ? 'warn' : 'ok'),
     },
     { key: 'failed', value: String(k.failedOps), sub: t('storage.kpi.failedSub', { range }), tone: k.failedOps > 0 ? 'warn' : 'ok' },
     {
