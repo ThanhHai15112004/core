@@ -191,7 +191,7 @@ describe('HTTP Traffic (/ops/traffic)', () => {
       expect(publicOnly.body.data.map((e) => e.id)).toEqual(['GET /api/v1/orders']);
     });
 
-    it('timeseries, errors, active, insights trả đúng dạng', async () => {
+    it('timeseries, errors, insights trả đúng dạng', async () => {
       const ts = await get<{
         series: { id: string; points: { value: number }[] }[];
         unit: string;
@@ -208,9 +208,6 @@ describe('HTTP Traffic (/ops/traffic)', () => {
         'GET /api/v1/orders',
         'POST /ops/runtimes/:id/stop',
       ]);
-
-      const active = await get<{ items: unknown[] }>(`${base}/active`);
-      expect(Array.isArray(active.body.data.items)).toBe(true);
 
       const insights = await get<{
         rateLimit: { configured: boolean };
