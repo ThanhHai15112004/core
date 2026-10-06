@@ -198,7 +198,16 @@ export class MessagingMonitoringService {
     return Number((performance.now() - started).toFixed(2));
   }
 
+  /** Broker mất kết nối → lỗi ngay, không xếp lệnh BullMQ chờ hết timeout từng cái. */
+  private disconnected(): Promise<never> | null {
+    return this.usable()
+      ? null
+      : Promise.reject(new Error(`Broker ${this.connection.getStatus().state}`));
+  }
+
   public queues(): Promise<QueueSnapshot[]> {
+    const down = this.disconnected();
+    if (down) return down;
     const now = Date.now();
     if (!this.queueCache || now - this.queueCache.at > SNAPSHOT_TTL_MS) {
       const data = Promise.all(this.all().map((q) => this.snapshot(q)));
@@ -245,6 +254,8 @@ export class MessagingMonitoringService {
   }
 
   public backlog(): Promise<BacklogSample> {
+    const down = this.disconnected();
+    if (down) return down;
     const now = Date.now();
     if (!this.backlogCache || now - this.backlogCache.at > SNAPSHOT_TTL_MS) {
       const data = this.sampleBacklog(this.config.messaging.backlogSample);

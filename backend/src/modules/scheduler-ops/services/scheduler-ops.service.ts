@@ -3,12 +3,14 @@ import { CronExpressionParser } from 'cron-parser';
 import { CoreConfigService } from '@packages/config/index.js';
 import { RedisService } from '@packages/redis/index.js';
 import { QueueRegistry } from '@packages/queue/index.js';
+import { MessagingConnectionService } from '@packages/messaging/index.js';
 import {
   SchedulerOperationsService,
   type SchedulerOperationContext,
 } from './scheduler-operations.service.js';
 import { type ExecutionStatus, type ExecutionTrigger } from '../contracts/scheduler.types.js';
 import { SchedulerNotFoundException } from '../exceptions/scheduler-ops.exceptions.js';
+import { liveQueues } from './scheduler-utils.js';
 import type {
   CronInspectDto,
   ExecutionDetailDto,
@@ -61,6 +63,7 @@ export class SchedulerOpsService {
     private readonly redis: RedisService,
     private readonly queueRegistry: QueueRegistry,
     private readonly operations: SchedulerOperationsService,
+    private readonly connection: MessagingConnectionService,
   ) {}
 
   private get settings(): SchedulerSettingsDto {
@@ -90,7 +93,7 @@ export class SchedulerOpsService {
     }
 
     // Đọc BullMQ schedulers từ mọi queue đã đăng ký
-    const queues = this.queueRegistry.getQueues();
+    const queues = liveQueues(this.queueRegistry, this.connection);
     const liveSchedulers: Array<{
       queueName: string;
       id: string;
@@ -103,7 +106,7 @@ export class SchedulerOpsService {
 
     for (const [queueName, queue] of queues.entries()) {
       try {
-        const schedulers = await queue.getJobSchedulers();
+        const schedulers = await this.queueRegistry.withTimeout(queue.getJobSchedulers());
         for (const s of schedulers) {
           const sId = s.id ?? s.key;
           liveSchedulers.push({
@@ -383,15 +386,13 @@ export class SchedulerOpsService {
     limit?: number;
   }): Promise<ExecutionsListDto> {
     const limit = filter.limit ?? 50;
-    const queues = this.queueRegistry.getQueues();
+    const queues = liveQueues(this.queueRegistry, this.connection);
     const items: ExecutionDto[] = [];
 
     for (const [queueName, queue] of queues.entries()) {
       try {
-        const jobs = await queue.getJobs(
-          ['completed', 'failed', 'active', 'delayed', 'waiting'],
-          0,
-          limit,
+        const jobs = await this.queueRegistry.withTimeout(
+          queue.getJobs(['completed', 'failed', 'active', 'delayed', 'waiting'], 0, limit),
         );
 
         for (const j of jobs) {
@@ -461,10 +462,10 @@ export class SchedulerOpsService {
   }
 
   public async getExecution(id: string): Promise<ExecutionDetailDto> {
-    const queues = this.queueRegistry.getQueues();
+    const queues = liveQueues(this.queueRegistry, this.connection);
     for (const [queueName, queue] of queues.entries()) {
       try {
-        const j = await queue.getJob(id);
+        const j = await this.queueRegistry.withTimeout(queue.getJob(id));
         if (j) {
           const isAct = await j.isActive();
           const isComp = await j.isCompleted();

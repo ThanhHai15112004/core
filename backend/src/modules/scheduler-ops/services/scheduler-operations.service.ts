@@ -3,6 +3,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { CoreConfigService } from '@packages/config/index.js';
 import { RedisService } from '@packages/redis/index.js';
 import { QueueRegistry } from '@packages/queue/index.js';
+import { MessagingConnectionService } from '@packages/messaging/index.js';
 import type {
   SchedulerOperationAction,
   SchedulerOperationRecord,
@@ -12,6 +13,7 @@ import {
   SchedulerNotFoundException,
   SchedulerUnavailableException,
 } from '../exceptions/scheduler-ops.exceptions.js';
+import { liveQueues } from './scheduler-utils.js';
 
 export interface SchedulerOperationContext {
   ip: string | null;
@@ -40,7 +42,12 @@ export class SchedulerOperationsService {
     private readonly config: CoreConfigService,
     private readonly redis: RedisService,
     private readonly queueRegistry: QueueRegistry,
+    private readonly connection: MessagingConnectionService,
   ) {}
+
+  private brokerConnected(): boolean {
+    return this.connection.getStatus().state === 'connected';
+  }
 
   private async audit(
     action: SchedulerOperationAction,
@@ -104,10 +111,10 @@ export class SchedulerOperationsService {
     }
 
     // Nếu không có trong cache định nghĩa, tìm trong các queue của BullMQ
-    const queues = this.queueRegistry.getQueues();
+    const queues = liveQueues(this.queueRegistry, this.connection);
     for (const [queueName, queue] of queues.entries()) {
       try {
-        const schedulers = await queue.getJobSchedulers();
+        const schedulers = await this.queueRegistry.withTimeout(queue.getJobSchedulers());
         const found = schedulers.find(
           (s: { id?: string | null; key?: string }) => s.id === taskId || s.key === taskId,
         );
@@ -147,12 +154,15 @@ export class SchedulerOperationsService {
     }
 
     try {
+      if (!this.brokerConnected()) throw new Error(`Broker ${this.connection.getStatus().state}`);
       const queue = this.queueRegistry.getQueue(task.queue);
-      const job = await queue.add(task.name ?? taskId, {
-        ...(task.data ?? {}),
-        _triggeredBy: 'manual',
-        _requestedAt: new Date().toISOString(),
-      });
+      const job = await this.queueRegistry.withTimeout(
+        queue.add(task.name ?? taskId, {
+          ...(task.data ?? {}),
+          _triggeredBy: 'manual',
+          _requestedAt: new Date().toISOString(),
+        }),
+      );
 
       const execId = String(job.id);
       const record = await this.audit(
@@ -196,6 +206,18 @@ export class SchedulerOperationsService {
     try {
       await this.redis.client.srem('scheduler:disabled', taskId);
 
+      // `scheduler:disabled` là nguồn sự thật; broker mất kết nối → ScheduleSyncService đồng bộ lại sau.
+      if (!this.brokerConnected()) {
+        return await this.audit(
+          'enable',
+          taskId,
+          ctx,
+          started,
+          `Task "${taskId}" enabled; BullMQ will sync when the broker is available`,
+          null,
+        );
+      }
+
       // Upsert scheduler vào BullMQ
       const queue = this.queueRegistry.getQueue(task.queue);
       const repeatOpts: { pattern?: string; every?: number; tz?: string } = {};
@@ -203,10 +225,12 @@ export class SchedulerOperationsService {
       if (task.every) repeatOpts.every = task.every;
       repeatOpts.tz = task.tz || this.config.scheduler.timezone;
 
-      await queue.upsertJobScheduler(taskId, repeatOpts, {
-        name: task.name ?? taskId,
-        data: task.data ?? {},
-      });
+      await this.queueRegistry.withTimeout(
+        queue.upsertJobScheduler(taskId, repeatOpts, {
+          name: task.name ?? taskId,
+          data: task.data ?? {},
+        }),
+      );
 
       return await this.audit(
         'enable',
@@ -237,10 +261,10 @@ export class SchedulerOperationsService {
       await this.redis.client.sadd('scheduler:disabled', taskId);
 
       // Gỡ scheduler khỏi BullMQ queue
-      const queues = this.queueRegistry.getQueues();
+      const queues = liveQueues(this.queueRegistry, this.connection);
       for (const queue of queues.values()) {
         try {
-          await queue.removeJobScheduler(taskId);
+          await this.queueRegistry.withTimeout(queue.removeJobScheduler(taskId));
         } catch {
           // ignore
         }

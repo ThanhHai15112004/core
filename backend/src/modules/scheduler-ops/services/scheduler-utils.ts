@@ -1,3 +1,9 @@
+import type { Queue } from 'bullmq';
+import type {
+  MessagingConnectionService,
+  QueueName,
+  QueueRegistry,
+} from '@packages/messaging/index.js';
 import type { RedisService } from '@packages/redis/index.js';
 import { runtimeKeys, type RuntimeHeartbeat } from '@packages/runtime/index.js';
 import type {
@@ -11,6 +17,17 @@ export const HOUR = 60 * MINUTE;
 export const DAY = 24 * HOUR;
 /** Lịch kế tiếp quá hạn hơn chừng này (scheduler vẫn sống) → task "overdue". */
 export const OVERDUE_GRACE_MS = MINUTE;
+
+/**
+ * Queue BullMQ đọc được ngay. BullMQ chờ Redis vô hạn — broker chưa kết nối thì trả rỗng để request
+ * không bị treo (lệnh vẫn bọc `withTimeout` phòng kết nối chập chờn).
+ */
+export function liveQueues(
+  registry: QueueRegistry,
+  connection: MessagingConnectionService,
+): Map<QueueName, Queue> {
+  return connection.getStatus().state === 'connected' ? registry.getQueues() : new Map();
+}
 
 export const startOfDay = (t: number) => {
   const d = new Date(t);
