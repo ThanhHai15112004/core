@@ -1,4 +1,3 @@
-import { performance } from 'node:perf_hooks';
 import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { CoreConfigService } from '@packages/config/index.js';
 import { RedisService } from '@packages/redis/index.js';
@@ -10,32 +9,16 @@ import { CACHE_ERROR_LOG_SIZE, cacheKeys } from '../constants/cache.keys.js';
 import type { CacheDriver } from '../drivers/cache-driver.js';
 import { MemoryCacheDriver } from '../drivers/memory-cache.driver.js';
 import { RedisCacheDriver } from '../drivers/redis-cache.driver.js';
-import { OTHER_NAMESPACE, namespaceOf } from '../utils/namespace.js';
+import { namespaceOf } from '../utils/namespace.js';
 import { classifyCacheError, sanitizeCacheMessage } from '../utils/cache-errors.js';
 
-export interface CacheStats {
-  keys: number | null;
-  hits: number;
-  misses: number;
-  /** `null` khi chưa có lượt đọc nào. */
-  hitRatePercent: number | null;
-}
-
-type OpKind = 'hit' | 'miss' | 'set' | 'del';
-
-/** Số namespace tối đa có bộ đếm riêng (phần dư gộp vào `(other)`) — tránh bùng số field telemetry. */
-export const MAX_TRACKED_NAMESPACES = 200;
 /** Tối đa số lỗi ghi vào Redis mỗi giây (Redis sập → mọi lệnh lỗi, không ghi tràn). */
 const ERROR_RECORDS_PER_SEC = 5;
 
-/** Tên metric theo namespace, vd. `cache.ns.data:users.hit`. */
-export const namespaceMetric = (ns: string, kind: OpKind | 'keys' | 'bytes') =>
-  `cache.ns.${ns.replace(/\|/g, '_')}.${kind}`;
-
 /**
  * Cache của Core. Driver chọn theo `CACHE_DRIVER` (redis dùng chung giữa runtime / memory riêng từng process),
- * API không đổi. Mọi thao tác được đo (hit/miss/set/del theo namespace, latency, lỗi) và lỗi của backend
- * cache không bao giờ ném ra caller: đọc lỗi = miss, ghi lỗi = bỏ qua.
+ * API không đổi. Hit/miss đọc từ `INFO` của Redis (không tự đếm); lỗi được ghi lại cho trang Cache và không bao
+ * giờ ném ra caller: đọc lỗi = miss, ghi lỗi = bỏ qua.
  */
 @Injectable()
 export class BaseCacheProvider implements CacheContract {
@@ -43,9 +26,6 @@ export class BaseCacheProvider implements CacheContract {
   public readonly driver: CacheDriver;
   private readonly depth: number;
   private readonly defaultTtlSec: number;
-  private readonly namespaces = new Set<string>();
-  private hits = 0;
-  private misses = 0;
   private errorWindow = { at: 0, n: 0 };
   private lastLoggedError: string | null = null;
 
@@ -65,19 +45,6 @@ export class BaseCacheProvider implements CacheContract {
 
   public namespaceOf(key: string): string {
     return namespaceOf(key, this.depth);
-  }
-
-  private trackedNamespace(key: string): string {
-    const ns = this.namespaceOf(key);
-    if (this.namespaces.has(ns)) return ns;
-    if (this.namespaces.size >= MAX_TRACKED_NAMESPACES) return OTHER_NAMESPACE;
-    this.namespaces.add(ns);
-    return ns;
-  }
-
-  /** Ghi số đo một thao tác. */
-  private track(_kind: OpKind, _key: string, _startedAt: number): void {
-    // Metric do Prometheus & Redis exporter đảm nhiệm
   }
 
   private fail(operation: CacheErrorRecord['operation'], key: string | null, err: unknown): void {
@@ -109,36 +76,26 @@ export class BaseCacheProvider implements CacheContract {
   }
 
   public async get<T>(key: string): Promise<T | null> {
-    const startedAt = performance.now();
     try {
       const result = await this.driver.get(key);
-      if (result.found) this.hits++;
-      else this.misses++;
-      this.track(result.found ? 'hit' : 'miss', key, startedAt);
       return result.found ? (result.value as T) : null;
     } catch (err) {
-      this.misses++;
-      this.track('miss', key, startedAt);
       this.fail('get', key, err);
       return null;
     }
   }
 
   public async set<T>(key: string, value: T, ttlSeconds?: number): Promise<void> {
-    const startedAt = performance.now();
     try {
       await this.driver.set(key, value, ttlSeconds ?? this.defaultTtlSec);
-      this.track('set', key, startedAt);
     } catch (err) {
       this.fail('set', key, err);
     }
   }
 
   public async delete(key: string): Promise<void> {
-    const startedAt = performance.now();
     try {
       await this.driver.delete(key);
-      this.track('del', key, startedAt);
     } catch (err) {
       this.fail('delete', key, err);
     }
@@ -160,16 +117,5 @@ export class BaseCacheProvider implements CacheContract {
   /** Xoá toàn bộ cache của core (không đụng dữ liệu khác trong Redis), trả số key đã xoá. Lỗi được ném ra. */
   public flush(): Promise<number> {
     return this.driver.clear();
-  }
-
-  /** Thống kê đọc của process hiện tại từ lúc khởi động; `keys` chỉ biết với driver memory. */
-  public getStats(): CacheStats {
-    const reads = this.hits + this.misses;
-    return {
-      keys: this.driver instanceof MemoryCacheDriver ? this.driver.entries().length : null,
-      hits: this.hits,
-      misses: this.misses,
-      hitRatePercent: reads === 0 ? null : Number(((this.hits / reads) * 100).toFixed(1)),
-    };
   }
 }

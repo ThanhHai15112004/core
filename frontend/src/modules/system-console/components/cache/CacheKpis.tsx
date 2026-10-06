@@ -29,7 +29,7 @@ export const CacheKpis: React.FC<{ data: CacheOverview | null }> = ({ data }) =>
     return hits.some((a) => a.severity === 'critical') ? 'crit' : hits.some((a) => a.severity === 'warning') ? 'warn' : null;
   };
   const range = t(`tr.range.${data.range}`);
-  const reads = k.hits + k.misses;
+  const reads = (k.hits ?? 0) + (k.misses ?? 0);
   const mem = k.memory;
   const memValue =
     mem.limitSource === 'config'
@@ -64,7 +64,7 @@ export const CacheKpis: React.FC<{ data: CacheOverview | null }> = ({ data }) =>
     {
       key: 'ops',
       value: formatUnit(k.opsPerSec, '/s'),
-      sub: t('cache.kpi.opsSub', { get: formatUnit(k.getsPerSec, '/s'), set: formatUnit(k.setsPerSec, '/s'), del: formatUnit(k.deletesPerSec, '/s') }),
+      sub: t('cache.kpi.serverWide', { total: k.serverOpsPerSec ?? NO_VALUE }),
       tone: 'unknown',
     },
     { key: 'missRate', value: formatPercent(k.missRatePercent), sub: t('cache.kpi.missSub', { range }), tone: alert('MISS_STORM') ?? 'unknown' },

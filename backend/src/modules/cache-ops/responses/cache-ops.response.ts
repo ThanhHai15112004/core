@@ -52,7 +52,8 @@ export interface HitRateContextDto {
   currentPercent: number | null;
   baselinePercent: number | null;
   changePoints: number | null;
-  reads: number;
+  /** Lượt đọc toàn Redis server trong 5 phút gần nhất; null khi Prometheus chưa có dữ liệu. */
+  reads: number | null;
   /** `insufficient` = chưa đủ lượt đọc để đánh giá. */
   status: 'normal' | 'low' | 'insufficient';
 }
@@ -80,14 +81,11 @@ export interface CacheMemoryKpiDto {
 export interface CacheKpisDto {
   hitRatePercent: number | null;
   missRatePercent: number | null;
-  hits: number;
-  misses: number;
+  /** Hit/miss lấy từ `INFO keyspace_hits/misses` — toàn Redis server, không theo namespace. */
+  hits: number | null;
+  misses: number | null;
   opsPerSec: number | null;
-  getsPerSec: number | null;
-  setsPerSec: number | null;
-  deletesPerSec: number | null;
-  avgOpMs: number | null;
-  p95OpMs: number | null;
+  /** Lỗi cache ghi nhận trong khoảng (danh sách lỗi gần nhất). */
   errors: number;
   keys: number | null;
   keysTruncated: boolean;
@@ -124,39 +122,16 @@ export interface NamespaceRowDto {
   persistent: number;
   avgTtlMs: number | null;
   expiringSoon: number;
-  hits: number;
-  misses: number;
-  hitRatePercent: number | null;
-  sets: number;
   /** Namespace chứa session (flush có thể đăng xuất user). */
   session: boolean;
   /** Value luôn ẩn. */
   sensitive: boolean;
-  /** Có key/cảnh báo đáng chú ý. */
-  alert: string | null;
-}
-
-export interface ImpactItemDto {
-  current: number | null;
-  baseline: number | null;
-  changePercent: number | null;
-  unit: string;
-}
-
-export interface RelatedImpactDto {
-  dbQueriesPerSec: ImpactItemDto;
-  apiP95Ms: ImpactItemDto;
-  missRatePercent: ImpactItemDto;
-  windowMin: number;
-  baselineMin: number;
 }
 
 export interface CacheReportDto {
-  hits: number;
-  misses: number;
+  hits: number | null;
+  misses: number | null;
   hitRatePercent: number | null;
-  sets: number;
-  deletes: number;
   errors: number;
   peakMemoryBytes: number | null;
   evictions: number | null;
@@ -197,7 +172,6 @@ export interface CacheOverviewDto {
   topNamespaces: NamespaceRowDto[];
   server: SectionDto<ServerMemoryDto>;
   largestNamespace: { name: string; bytes: number } | null;
-  relatedImpact: RelatedImpactDto;
   report: { today: CacheReportDto; yesterday: CacheReportDto };
   events: CacheEventDto[];
   settings: CacheSettingsDto;
@@ -230,12 +204,6 @@ export interface CacheNamespacesDto {
 export interface NamespaceDetailDto {
   namespace: NamespaceRowDto;
   range: CacheRange;
-  history: {
-    keys: CacheSeriesDto;
-    bytes: CacheSeriesDto;
-    hits: CacheSeriesDto;
-    misses: CacheSeriesDto;
-  };
   largestKeys: LargeKeyDto[];
   actionsEnabled: boolean;
 }

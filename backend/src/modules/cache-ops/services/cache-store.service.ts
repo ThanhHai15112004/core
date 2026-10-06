@@ -14,6 +14,8 @@ export interface ServerCounters {
   evicted: number | null;
   expired: number | null;
   rejected: number | null;
+  hits: number | null;
+  misses: number | null;
   uptimeSec: number | null;
 }
 

@@ -58,7 +58,7 @@ describe('BaseCacheProvider (driver redis, ioredis-mock)', () => {
     cache = new BaseCacheProvider(config, redis);
   });
 
-  it('lưu JSON dưới <prefix>cache:, có TTL, đếm hit/miss', async () => {
+  it('lưu JSON dưới <prefix>cache:, có TTL', async () => {
     await cache.set('user:1', { name: 'A' }, 60);
     await cache.set('config', true);
     expect(await cache.get('user:1')).toEqual({ name: 'A' });
@@ -66,14 +66,12 @@ describe('BaseCacheProvider (driver redis, ioredis-mock)', () => {
     expect(await redis.client.get('core_test:cache:user:1')).toBe('{"name":"A"}');
     expect(await redis.client.pttl('core_test:cache:user:1')).toBeGreaterThan(59_000);
     expect(await redis.client.pttl('core_test:cache:config')).toBe(-1);
-    expect(cache.getStats()).toMatchObject({ hits: 1, misses: 1, hitRatePercent: 50 });
   });
 
   it('Redis chưa sẵn sàng → đọc là miss, ghi bỏ qua, không ném lỗi', async () => {
     Object.defineProperty(redis.client, 'status', { value: 'reconnecting', configurable: true });
     await expect(cache.set('user:1', 1)).resolves.toBeUndefined();
     expect(await cache.get('user:1')).toBeNull();
-    expect(cache.getStats().misses).toBe(1);
   });
 
   it('flush chỉ xoá vùng cache của core, không đụng telemetry hay key project khác', async () => {
@@ -112,6 +110,6 @@ describe('BaseCacheProvider (driver memory)', () => {
     await new Promise((r) => setTimeout(r, 5));
     expect(await cache.get('a:1')).toBeNull();
     expect(await cache.get('b:1')).toBe('y');
-    expect(cache.getStats().keys).toBe(1);
+    expect((cache.driver as MemoryCacheDriver).entries()).toHaveLength(1);
   });
 });

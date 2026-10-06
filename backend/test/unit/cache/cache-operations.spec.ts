@@ -105,8 +105,6 @@ describe('evaluateCacheRules', () => {
     connection: 'connected',
     hitRate: { current: 95, baseline: 96, reads: 1000 },
     missRate: { current: 5, baseline: 4 },
-    dbQps: { current: null, baseline: null },
-    namespaces: [],
     memory: { percent: 30 },
     evictionsPerMin: 0,
     rejectedDelta: 0,
@@ -126,14 +124,12 @@ describe('evaluateCacheRules', () => {
     ).toEqual(['CACHE_UNAVAILABLE']);
   });
 
-  it('hit rate thấp, miss tăng kèm DB tăng, namespace, bộ nhớ, eviction, key lớn', () => {
+  it('hit rate thấp, miss tăng, bộ nhớ, eviction, key lớn', () => {
     const v = evaluateCacheRules(
       {
         ...base,
         hitRate: { current: 52, baseline: 95, reads: 500 },
         missRate: { current: 48, baseline: 5 },
-        dbQps: { current: 30, baseline: 10 },
-        namespaces: [{ name: 'data:products', hitRate: 40, reads: 200 }],
         memory: { percent: 92 },
         evictionsPerMin: 428,
         expiringNext60s: 5000,
@@ -144,8 +140,7 @@ describe('evaluateCacheRules', () => {
     );
     const byId = Object.fromEntries(v.map((x) => [x.id, x]));
     expect(byId['HIT_RATE_LOW']!.severity).toBe('critical');
-    expect(byId['MISS_STORM']).toMatchObject({ severity: 'critical', extra: { dbChange: 200 } });
-    expect(byId['NAMESPACE_HIT_RATE_LOW:data:products']!.namespace).toBe('data:products');
+    expect(byId['MISS_STORM']).toMatchObject({ severity: 'warning', value: 48, threshold: 5 });
     expect(byId['MEMORY_PRESSURE']!.severity).toBe('critical');
     expect(byId['EVICTIONS']!.severity).toBe('critical');
     expect(byId['EXPIRY_SPIKE']).toBeDefined();

@@ -78,7 +78,7 @@ export const CacheSection: React.FC = () => {
     }
     switch (tab) {
       case 'namespaces':
-        return <CacheNamespacesView range={range} paused={paused} warnPercent={data?.settings.hitRateWarnPercent ?? 80} reloadKey={reloadKey} go={go} />;
+        return <CacheNamespacesView range={range} paused={paused} reloadKey={reloadKey} go={go} />;
       case 'keys':
         return (
           <CacheKeysView

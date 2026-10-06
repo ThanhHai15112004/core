@@ -47,14 +47,10 @@ export interface CacheMemoryKpi {
 export interface CacheKpis {
   hitRatePercent: number | null;
   missRatePercent: number | null;
-  hits: number;
-  misses: number;
+  /** Toàn Redis server (INFO keyspace_hits/misses), không theo namespace. */
+  hits: number | null;
+  misses: number | null;
   opsPerSec: number | null;
-  getsPerSec: number | null;
-  setsPerSec: number | null;
-  deletesPerSec: number | null;
-  avgOpMs: number | null;
-  p95OpMs: number | null;
   errors: number;
   keys: number | null;
   keysTruncated: boolean;
@@ -88,28 +84,14 @@ export interface NamespaceRow {
   persistent: number;
   avgTtlMs: number | null;
   expiringSoon: number;
-  hits: number;
-  misses: number;
-  hitRatePercent: number | null;
-  sets: number;
   session: boolean;
   sensitive: boolean;
-  alert: string | null;
-}
-
-export interface ImpactItem {
-  current: number | null;
-  baseline: number | null;
-  changePercent: number | null;
-  unit: string;
 }
 
 export interface CacheReport {
-  hits: number;
-  misses: number;
+  hits: number | null;
+  misses: number | null;
   hitRatePercent: number | null;
-  sets: number;
-  deletes: number;
   errors: number;
   peakMemoryBytes: number | null;
   evictions: number | null;
@@ -149,7 +131,7 @@ export interface CacheOverview {
     currentPercent: number | null;
     baselinePercent: number | null;
     changePoints: number | null;
-    reads: number;
+    reads: number | null;
     status: 'normal' | 'low' | 'insufficient';
   };
   alerts: CacheAlert[];
@@ -157,13 +139,6 @@ export interface CacheOverview {
   topNamespaces: NamespaceRow[];
   server: Section<ServerMemory>;
   largestNamespace: { name: string; bytes: number } | null;
-  relatedImpact: {
-    dbQueriesPerSec: ImpactItem;
-    apiP95Ms: ImpactItem;
-    missRatePercent: ImpactItem;
-    windowMin: number;
-    baselineMin: number;
-  };
   report: { today: CacheReport; yesterday: CacheReport };
   events: CacheEvent[];
   settings: {
@@ -211,7 +186,6 @@ export interface LargeKey {
 export interface NamespaceDetail {
   namespace: NamespaceRow;
   range: CacheRange;
-  history: { keys: CacheSeries; bytes: CacheSeries; hits: CacheSeries; misses: CacheSeries };
   largestKeys: LargeKey[];
   actionsEnabled: boolean;
 }

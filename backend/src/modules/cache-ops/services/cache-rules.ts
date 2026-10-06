@@ -6,7 +6,6 @@ export type CacheRule =
   | 'CACHE_UNAVAILABLE'
   | 'HIT_RATE_LOW'
   | 'MISS_STORM'
-  | 'NAMESPACE_HIT_RATE_LOW'
   | 'MEMORY_PRESSURE'
   | 'EVICTIONS'
   | 'REJECTED_CONNECTIONS'
@@ -20,7 +19,6 @@ export const RULE_TAB: Record<CacheRule, string> = {
   CACHE_UNAVAILABLE: 'overview',
   HIT_RATE_LOW: 'namespaces',
   MISS_STORM: 'namespaces',
-  NAMESPACE_HIT_RATE_LOW: 'namespaces',
   MEMORY_PRESSURE: 'memory',
   EVICTIONS: 'memory',
   REJECTED_CONNECTIONS: 'connections',
@@ -32,12 +30,9 @@ export const RULE_TAB: Record<CacheRule, string> = {
 
 export interface CacheRuleInput {
   connection: CacheConnectionState;
-  /** Hit rate cửa sổ hiện tại (5 phút) và baseline (60 phút trước đó). */
+  /** Hit rate toàn Redis server từ lần tick trước (delta INFO) và baseline 60 phút trước đó (Prometheus). */
   hitRate: { current: number | null; baseline: number | null; reads: number };
   missRate: { current: number | null; baseline: number | null };
-  /** DB query/s hiện tại và baseline — để biết miss có đẩy tải xuống database không. */
-  dbQps: { current: number | null; baseline: number | null };
-  namespaces: { name: string; hitRate: number | null; reads: number }[];
   memory: { percent: number | null };
   evictionsPerMin: number | null;
   rejectedDelta: number | null;
@@ -62,11 +57,8 @@ export interface CacheViolation {
   extra: Record<string, string | number>;
 }
 
-/** Số namespace tối đa bật cảnh báo hit rate riêng cùng lúc. */
-const NAMESPACE_ALERT_LIMIT = 3;
 const EVICTION_CRIT_PER_MIN = 100;
 const HIT_RATE_CRIT_GAP = 20;
-const DB_IMPACT_PERCENT = 50;
 
 /** Rule cảnh báo cache theo ngưỡng cấu hình. Không đủ lượt đọc → không kết luận. */
 export function evaluateCacheRules(input: CacheRuleInput, cfg: CacheRuleConfig): CacheViolation[] {
@@ -115,30 +107,8 @@ export function evaluateCacheRules(input: CacheRuleInput, cfg: CacheRuleConfig):
     missBase !== null &&
     missNow - missBase >= cfg.hitRateDropPoints
   ) {
-    const dbChange =
-      input.dbQps.current !== null && input.dbQps.baseline
-        ? ((input.dbQps.current - input.dbQps.baseline) / input.dbQps.baseline) * 100
-        : null;
-    add(
-      'MISS_STORM',
-      dbChange !== null && dbChange >= DB_IMPACT_PERCENT ? 'critical' : 'warning',
-      missNow,
-      missBase,
-      '%',
-      null,
-      dbChange === null ? {} : { dbChange: Math.round(dbChange) },
-    );
+    add('MISS_STORM', 'warning', missNow, missBase, '%');
   }
-
-  input.namespaces
-    .filter(
-      (n) => n.reads >= cfg.minReads && n.hitRate !== null && n.hitRate < cfg.hitRateWarnPercent,
-    )
-    .sort((a, b) => (a.hitRate ?? 0) - (b.hitRate ?? 0))
-    .slice(0, NAMESPACE_ALERT_LIMIT)
-    .forEach((n) =>
-      add('NAMESPACE_HIT_RATE_LOW', 'warning', n.hitRate!, cfg.hitRateWarnPercent, '%', n.name),
-    );
 
   const mem = input.memory.percent;
   if (mem !== null && mem >= cfg.memoryWarnPercent)

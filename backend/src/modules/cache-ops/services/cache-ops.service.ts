@@ -9,7 +9,6 @@ import {
   CacheOperationsService,
   cacheKeys,
   matchesNamespace,
-  namespaceMetric,
   namespaceOf,
   type CacheErrorKind,
   type CacheErrorRecord,
@@ -22,15 +21,13 @@ import {
   type ServerInfo,
   type ValueSample,
 } from '@packages/cache/index.js';
-import { TELEMETRY_TIERS, type MetricBucket } from '@modules/system-ops/telemetry-compat.js';
-import { changePercent, counterOf, gaugeOf, mergedOf, round } from '@modules/performance/index.js';
-import { TrafficStoreService, statsOf, totalOf } from '@modules/traffic/index.js';
+import { round } from '@modules/performance/index.js';
 import { redactPayload } from '@packages/http/index.js';
 import {
+  CACHE_GAUGES,
   CacheMetricsService,
-  hitRate,
+  type CacheSeriesDef,
   type CacheWindowStats,
-  type MetricWindow,
 } from './cache-metrics.service.js';
 import { CacheStoreService } from './cache-store.service.js';
 import { RULE_TAB, type CacheRule, type StoredCacheAlert } from './cache-rules.js';
@@ -60,14 +57,12 @@ import type {
   CacheSeriesDto,
   CacheTtlDto,
   FlushImpactDto,
-  ImpactItemDto,
   KeyDetailDto,
   KeyspaceSummaryDto,
   LargeKeyDto,
   NamespaceDetailDto,
   NamespaceRowDto,
   PingResultDto,
-  RelatedImpactDto,
   SectionDto,
   ServerMemoryDto,
 } from '../responses/cache-ops.response.js';
@@ -89,15 +84,13 @@ export const CACHE_METRICS: CacheMetric[] = [
 
 const MINUTE = 60_000;
 const DAY = 24 * 60 * MINUTE;
-const MAX_POINTS = 120;
 const OVERVIEW_EVENTS = 8;
 const OVERVIEW_NAMESPACES = 6;
 const ERROR_LIST_LIMIT = 200;
 /** Snapshot keyspace cũ hơn mức này thì quét lại khi đọc. */
 const KEYSPACE_MAX_AGE_MS = 90_000;
-const IMPACT_WINDOW_MIN = 5;
-const IMPACT_BASELINE_MIN = 60;
-/** Baseline hit rate = 60 phút trước cửa sổ hiện tại (bucket 1 phút, không chồng lên 5 phút gần nhất). */
+/** Hit rate "hiện tại" = 5 phút gần nhất; baseline = 60 phút trước đó (không chồng lên nhau). */
+const CURRENT_MIN = 5;
 const BASELINE_MIN = 60;
 const PREVIEW_MAX_BYTES = 2048;
 const PREVIEW_MAX_ITEMS = 50;
@@ -134,7 +127,6 @@ export class CacheOpsService {
     private readonly operations: CacheOperationsService,
     private readonly metrics: CacheMetricsService,
     private readonly store: CacheStoreService,
-    private readonly traffic: TrafficStoreService,
     private readonly redis: RedisService,
     private readonly config: CoreConfigService,
     private readonly i18n: CoreI18nService,
@@ -197,36 +189,26 @@ export class CacheOpsService {
     return this.isSession(ns) || matchesNamespace(ns, this.cfg.sensitiveNamespaces);
   }
 
-  private namespaceRows(k: KeyspaceSnapshot | null, win: MetricWindow | null): NamespaceRowDto[] {
-    const counters = this.metrics.namespaces(win);
-    const names = new Set([...(k?.namespaces.map((n) => n.name) ?? []), ...counters.keys()]);
-    return [...names]
-      .map((name) => {
-        const s = k?.namespaces.find((n) => n.name === name);
-        const c = counters.get(name) ?? { hits: 0, misses: 0, sets: 0, deletes: 0 };
-        const reads = c.hits + c.misses;
-        const rate = hitRate(c.hits, reads);
-        const low =
-          reads >= this.cfg.rules.minReads &&
-          rate !== null &&
-          rate < this.cfg.rules.hitRateWarnPercent;
-        return {
-          name,
-          keys: s?.keys ?? 0,
-          bytes: s?.bytes ?? 0,
-          persistent: s?.persistent ?? 0,
-          avgTtlMs: s?.avgTtlMs ?? null,
-          expiringSoon: s?.expiringSoon ?? 0,
-          hits: c.hits,
-          misses: c.misses,
-          hitRatePercent: rate,
-          sets: c.sets,
-          session: this.isSession(name),
-          sensitive: this.isSensitive(name),
-          alert: low ? 'lowHitRate' : null,
-        };
-      })
-      .sort((a, b) => b.keys - a.keys || b.hits + b.misses - (a.hits + a.misses));
+  /** Namespace từ snapshot keyspace (SCAN). Hit/miss theo namespace không có nguồn chuẩn nên không hiển thị. */
+  private namespaceRows(k: KeyspaceSnapshot | null): NamespaceRowDto[] {
+    return (k?.namespaces ?? [])
+      .map((s) => ({
+        name: s.name,
+        keys: s.keys,
+        bytes: s.bytes,
+        persistent: s.persistent,
+        avgTtlMs: s.avgTtlMs,
+        expiringSoon: s.expiringSoon,
+        session: this.isSession(s.name),
+        sensitive: this.isSensitive(s.name),
+      }))
+      .sort((a, b) => b.keys - a.keys || b.bytes - a.bytes);
+  }
+
+  /** Số lỗi cache trong khoảng, đếm từ danh sách lỗi đã ghi. */
+  private async errorCount(from: number, to = Date.now()): Promise<number> {
+    const errors = await this.store.errors().catch(() => [] as CacheErrorRecord[]);
+    return errors.filter((e) => e.at >= from && e.at < to).length;
   }
 
   private largeKeyDto(k: LargeKey): LargeKeyDto {
@@ -237,48 +219,44 @@ export class CacheOpsService {
 
   public async getOverview(range: CacheRange): Promise<CacheOverviewDto> {
     const now = Date.now();
-    const len = CACHE_RANGES[range] * MINUTE;
+    const minutes = CACHE_RANGES[range];
     const today = startOfDay(now);
+    const sinceToday = Math.max(1, (now - today) / MINUTE);
     const [
-      win,
-      hrNow,
-      hrBase,
-      todayWin,
-      yesterdayWin,
+      stats,
+      cur,
+      base,
+      todayStats,
+      yesterdayStats,
       keyspace,
       server,
       clients,
       alerts,
       events,
-      impact,
     ] = await Promise.all([
-      this.metrics.window(now - len, now, now),
-      this.metrics.window(now - IMPACT_WINDOW_MIN * MINUTE, now, now, 's10'),
-      this.metrics.window(
-        now - (IMPACT_WINDOW_MIN + BASELINE_MIN) * MINUTE,
-        now - IMPACT_WINDOW_MIN * MINUTE,
-        now,
-        'm1',
-      ),
-      this.metrics.window(today, now, now),
-      this.metrics.window(today - DAY, today, now),
+      this.metrics.stats(minutes),
+      this.metrics.stats(CURRENT_MIN),
+      this.metrics.stats(BASELINE_MIN, CURRENT_MIN),
+      this.metrics.stats(sinceToday),
+      this.metrics.stats(24 * 60, sinceToday),
       this.keyspace(),
       this.serverSection(),
       this.monitoring.section('clients', () => this.monitoring.provider.clients()),
       this.alerts(),
       this.eventsSince(now - DAY),
-      this.relatedImpact(now),
     ]);
-    const stats = this.metrics.stats(win);
-    const cur = this.metrics.stats(hrNow);
-    const base = this.metrics.stats(hrBase);
+    const [errors, errorsToday, errorsYesterday] = await Promise.all([
+      this.errorCount(now - minutes * MINUTE),
+      this.errorCount(today),
+      this.errorCount(today - DAY, today),
+    ]);
     const serverData = server.available ? server.data : null;
     const mem = memoryUsage(serverData, keyspace?.totalBytes ?? null, this.cfg.memoryLimitMb);
-    const rows = this.namespaceRows(keyspace, win);
+    const rows = this.namespaceRows(keyspace);
     const largestNs = [...(keyspace?.namespaces ?? [])].sort((a, b) => b.bytes - a.bytes)[0];
-    const minutes = win ? win.seconds / 60 : null;
-    const enough = cur.reads >= this.cfg.rules.minReads;
-    const baseline = base.reads >= this.cfg.rules.minReads ? base.hitRatePercent : null;
+    const enough = (cur.reads ?? 0) >= this.cfg.rules.minReads;
+    const baseline = (base.reads ?? 0) >= this.cfg.rules.minReads ? base.hitRatePercent : null;
+    const perMin = (n: number | null) => (n === null ? null : round(n / minutes, 2));
 
     return {
       generatedAt: new Date(now).toISOString(),
@@ -293,12 +271,7 @@ export class CacheOpsService {
         hits: stats.hits,
         misses: stats.misses,
         opsPerSec: stats.opsPerSec,
-        getsPerSec: stats.getsPerSec,
-        setsPerSec: stats.setsPerSec,
-        deletesPerSec: stats.deletesPerSec,
-        avgOpMs: stats.avgOpMs,
-        p95OpMs: stats.p95OpMs,
-        errors: stats.errors,
+        errors,
         keys: keyspace?.totalKeys ?? null,
         keysTruncated: keyspace?.truncated ?? false,
         memory: {
@@ -307,10 +280,9 @@ export class CacheOpsService {
           limitSource: mem.source,
           percent: mem.percent,
         },
-        evictionsPerMin:
-          stats.evicted !== null && minutes ? round(stats.evicted / minutes, 2) : null,
+        evictionsPerMin: perMin(stats.evicted),
         evictedInRange: stats.evicted,
-        expiredPerMin: stats.expired !== null && minutes ? round(stats.expired / minutes, 2) : null,
+        expiredPerMin: perMin(stats.expired),
         connections: clients.available ? clients.data.length : null,
         serverOpsPerSec: serverData?.opsPerSec ?? null,
       },
@@ -335,10 +307,9 @@ export class CacheOpsService {
       topNamespaces: rows.slice(0, OVERVIEW_NAMESPACES),
       server: server.available ? { available: true, data: this.serverMemory(server.data) } : server,
       largestNamespace: largestNs ? { name: largestNs.name, bytes: largestNs.bytes } : null,
-      relatedImpact: impact,
       report: {
-        today: this.report(this.metrics.stats(todayWin)),
-        yesterday: this.report(this.metrics.stats(yesterdayWin)),
+        today: this.report(todayStats, errorsToday),
+        yesterday: this.report(yesterdayStats, errorsYesterday),
       },
       events: events.slice(0, OVERVIEW_EVENTS).map((e) => this.eventDto(e)),
       settings: {
@@ -414,11 +385,10 @@ export class CacheOpsService {
       .sort((a, b) => rank[a.severity] - rank[b.severity]);
   }
 
-  /** Câu mô tả cảnh báo; `p` gồm value/threshold/namespace và tham số thêm của rule (key, dbChange…). */
+  /** Câu mô tả cảnh báo; `p` gồm value/threshold/namespace và tham số thêm của rule (key…). */
   private alertMessage(rule: string, p: Record<string, unknown>): string {
     const value = Number(p['value'] ?? 0);
     const threshold = Number(p['threshold'] ?? 0);
-    const dbChange = p['dbChange'];
     return this.i18n.t(`cache.alert.${rule}.message`, {
       value,
       threshold,
@@ -426,66 +396,15 @@ export class CacheOpsService {
       key: String(p['key'] ?? ''),
       size: rule === 'LARGE_KEY' ? formatBytes(value) : '',
       limit: rule === 'LARGE_KEY' ? formatBytes(threshold) : '',
-      dbChange:
-        dbChange !== undefined && dbChange !== ''
-          ? this.i18n.t('cache.alert.MISS_STORM.dbImpact', { change: Number(dbChange) })
-          : '',
     });
   }
 
-  private async relatedImpact(now: number): Promise<RelatedImpactDto> {
-    const winFrom = now - IMPACT_WINDOW_MIN * MINUTE;
-    const baseFrom = winFrom - IMPACT_BASELINE_MIN * MINUTE;
-    const [cur, base, httpInstances] = await Promise.all([
-      this.metrics.window(winFrom, now, now, 's10'),
-      this.metrics.window(baseFrom, winFrom, now, 's10'),
-      this.traffic.instances(baseFrom).catch(() => [] as string[]),
-    ]);
-    const [httpCur, httpBase] = await Promise.all([
-      this.traffic.buckets('s10', winFrom, now, httpInstances).catch(() => []),
-      this.traffic.buckets('s10', baseFrom, winFrom, httpInstances).catch(() => []),
-    ]);
-    const qps = (w: MetricWindow | null) => {
-      const n = mergedOf(w?.buckets ?? [], 'db.query').n;
-      return w && n > 0 ? round(n / w.seconds, 3) : null;
-    };
-    const p95 = (b: typeof httpCur, seconds: number) => {
-      const agg = totalOf(b, () => true);
-      return agg.n > 0 ? statsOf(agg, seconds).p95LatencyMs : null;
-    };
-    const item = (
-      current: number | null,
-      baseline: number | null,
-      unit: string,
-    ): ImpactItemDto => ({
-      current,
-      baseline,
-      changePercent: changePercent(current, baseline),
-      unit,
-    });
-    const statsCur = this.metrics.stats(cur);
-    const statsBase = this.metrics.stats(base);
-    return {
-      dbQueriesPerSec: item(qps(cur), qps(base), '/s'),
-      apiP95Ms: item(
-        p95(httpCur, IMPACT_WINDOW_MIN * 60),
-        p95(httpBase, IMPACT_BASELINE_MIN * 60),
-        'ms',
-      ),
-      missRatePercent: item(statsCur.missRatePercent, statsBase.missRatePercent, '%'),
-      windowMin: IMPACT_WINDOW_MIN,
-      baselineMin: IMPACT_BASELINE_MIN,
-    };
-  }
-
-  private report(s: CacheWindowStats): CacheReportDto {
+  private report(s: CacheWindowStats, errors: number): CacheReportDto {
     return {
       hits: s.hits,
       misses: s.misses,
       hitRatePercent: s.hitRatePercent,
-      sets: s.sets,
-      deletes: s.deletes,
-      errors: s.errors,
+      errors,
       peakMemoryBytes: s.peakServerMemory,
       evictions: s.evicted,
       expired: s.expired,
@@ -495,142 +414,69 @@ export class CacheOpsService {
 
   // ─── Chart ────────────────────────────────────────────────────────────────
 
-  private async series(
-    range: CacheRange,
-    defs: { id: string; unit: string; value: (g: Group) => number | null }[],
-    labelPrefix = 'cache.series',
-  ): Promise<{ series: CacheSeriesDto[]; resolutionSec: number | null }> {
-    const now = Date.now();
-    const win = await this.metrics.window(now - CACHE_RANGES[range] * MINUTE, now, now);
-    const tierSec = win ? TELEMETRY_TIERS[win.tier].seconds : 0;
-    const buckets = win?.buckets ?? [];
-    const size = Math.max(1, Math.ceil(buckets.length / MAX_POINTS));
-    const groups: Group[] = [];
-    for (let i = 0; i < buckets.length; i += size) {
-      const b = buckets.slice(i, i + size);
-      groups.push({
-        t: b[0]!.start,
-        b,
-        seconds: Math.max(1, Math.min(b.length * tierSec, (now - b[0]!.start) / 1000)),
-      });
-    }
-    return {
-      resolutionSec: win ? tierSec : null,
-      series: defs.map((d) => ({
-        id: d.id,
-        label: this.i18n.t(`${labelPrefix}.${d.id}`),
-        unit: d.unit,
-        points: groups
-          .map((g) => ({ t: g.t, value: d.value(g) }))
-          .filter(
-            (p): p is { t: number; value: number } => p.value !== null && Number.isFinite(p.value),
-          )
-          .map((p) => ({ t: p.t, value: round(p.value, 3) })),
-      })),
-    };
-  }
-
+  /** Biểu đồ đọc từ Prometheus (gauge do monitor ghi); không có dữ liệu → series rỗng, `resolutionSec` null. */
   public async getMetrics(range: CacheRange, metric: CacheMetric): Promise<CacheMetricsDto> {
-    const perSec = (name: string) => (g: Group) => counterOf(g.b, name) / g.seconds;
-    const perMin = (name: string) => (g: Group) => counterOf(g.b, name) / (g.seconds / 60);
-    const serverPerMin = (name: string) => (g: Group) =>
-      g.b.some((b) => b.metrics.has('redis.used')) ? counterOf(g.b, name) / (g.seconds / 60) : null;
-    const gauge = (name: string) => (g: Group) => groupGauge(g.b, name);
-    const defs: Record<
-      CacheMetric,
-      { id: string; unit: string; value: (g: Group) => number | null }[]
-    > = {
+    const g = CACHE_GAUGES;
+    const perMin = (name: string) => `max(rate(${name}[$w])) * 60`;
+    const defs: Record<CacheMetric, CacheSeriesDef[]> = {
       hitRate: [
         {
           id: 'hitRate',
           unit: '%',
-          value: (g) => {
-            const hits = counterOf(g.b, 'cache.hit');
-            return hitRate(hits, hits + counterOf(g.b, 'cache.miss'));
-          },
+          expr: `100 * max(rate(${g.hits}[$w])) / (max(rate(${g.hits}[$w])) + max(rate(${g.misses}[$w])))`,
         },
       ],
       reads: [
-        { id: 'hitsPerMin', unit: '/min', value: perMin('cache.hit') },
-        { id: 'missesPerMin', unit: '/min', value: perMin('cache.miss') },
+        { id: 'hitsPerMin', unit: '/min', expr: perMin(g.hits) },
+        { id: 'missesPerMin', unit: '/min', expr: perMin(g.misses) },
       ],
-      operations: [
-        {
-          id: 'getsPerSec',
-          unit: '/s',
-          value: (g) => (counterOf(g.b, 'cache.hit') + counterOf(g.b, 'cache.miss')) / g.seconds,
-        },
-        { id: 'setsPerSec', unit: '/s', value: perSec('cache.set') },
-        { id: 'deletesPerSec', unit: '/s', value: perSec('cache.del') },
-        { id: 'errorsPerSec', unit: '/s', value: perSec('cache.errors') },
-      ],
+      operations: [{ id: 'opsPerSec', unit: '/s', expr: `max(${g.opsPerSec})` }],
       memory: [
-        { id: 'cacheBytes', unit: 'B', value: gauge('cache.bytes') },
-        { id: 'serverUsed', unit: 'B', value: gauge('redis.used') },
+        { id: 'cacheBytes', unit: 'B', expr: `max(${g.bytes})` },
+        { id: 'serverUsed', unit: 'B', expr: `max(${g.usedMemory})` },
       ],
-      keys: [
-        { id: 'keys', unit: '', value: gauge('cache.keys') },
-        { id: 'expiring', unit: '', value: gauge('cache.expiring') },
-      ],
+      keys: [{ id: 'keys', unit: '', expr: `max(${g.keys})` }],
       evictions: [
-        { id: 'evictedPerMin', unit: '/min', value: serverPerMin('redis.evicted') },
-        { id: 'expiredPerMin', unit: '/min', value: serverPerMin('redis.expired') },
+        { id: 'evictedPerMin', unit: '/min', expr: perMin(g.evicted) },
+        { id: 'expiredPerMin', unit: '/min', expr: perMin(g.expired) },
       ],
     };
-    const { series, resolutionSec } = await this.series(range, defs[metric]);
-    const list = series.filter((s, i) => i === 0 || s.points.length > 0);
+    const { series, resolutionSec } = await this.metrics.series(CACHE_RANGES[range], defs[metric]);
+    const list: CacheSeriesDto[] = series.map((s) => ({
+      id: s.id,
+      label: this.i18n.t(`cache.series.${s.id}`),
+      unit: s.unit,
+      points: s.points,
+    }));
     return {
       metric,
       range,
       resolutionSec,
       unit: list[0]?.unit ?? '',
       series: list,
-      serverWide: metric === 'evictions',
+      serverWide: metric !== 'memory' && metric !== 'keys',
     };
   }
 
   // ─── Namespaces ───────────────────────────────────────────────────────────
 
   public async getNamespaces(range: CacheRange): Promise<CacheNamespacesDto> {
-    const now = Date.now();
-    const [keyspace, win] = await Promise.all([
-      this.keyspace(),
-      this.metrics.window(now - CACHE_RANGES[range] * MINUTE, now, now),
-    ]);
+    const keyspace = await this.keyspace();
     return {
       keyspace: this.summary(keyspace),
-      namespaces: this.namespaceRows(keyspace, win),
+      namespaces: this.namespaceRows(keyspace),
       range,
       depth: this.cfg.namespaceDepth,
     };
   }
 
   public async getNamespaceDetail(name: string, range: CacheRange): Promise<NamespaceDetailDto> {
-    const now = Date.now();
-    const [keyspace, win] = await Promise.all([
-      this.keyspace(),
-      this.metrics.window(now - CACHE_RANGES[range] * MINUTE, now, now),
-    ]);
-    const row = this.namespaceRows(keyspace, win).find((n) => n.name === name);
+    const keyspace = await this.keyspace();
+    const row = this.namespaceRows(keyspace).find((n) => n.name === name);
     if (!row) throw new CacheNotFoundException('cache.error.namespaceNotFound', { name });
-    const { series } = await this.series(range, [
-      { id: 'keys', unit: '', value: (g) => groupGauge(g.b, namespaceMetric(name, 'keys')) },
-      { id: 'bytes', unit: 'B', value: (g) => groupGauge(g.b, namespaceMetric(name, 'bytes')) },
-      {
-        id: 'hitsPerMin',
-        unit: '/min',
-        value: (g) => counterOf(g.b, namespaceMetric(name, 'hit')) / (g.seconds / 60),
-      },
-      {
-        id: 'missesPerMin',
-        unit: '/min',
-        value: (g) => counterOf(g.b, namespaceMetric(name, 'miss')) / (g.seconds / 60),
-      },
-    ]);
     return {
       namespace: row,
       range,
-      history: { keys: series[0]!, bytes: series[1]!, hits: series[2]!, misses: series[3]! },
       largestKeys: (keyspace?.largestKeys ?? [])
         .filter((k) => k.namespace === name)
         .map((k) => this.largeKeyDto(k)),
@@ -708,17 +554,15 @@ export class CacheOpsService {
   // ─── Memory / TTL / Clients ───────────────────────────────────────────────
 
   public async getMemory(range: CacheRange): Promise<CacheMemoryDto> {
-    const now = Date.now();
-    const [keyspace, server, win] = await Promise.all([
+    const minutes = CACHE_RANGES[range];
+    const [keyspace, server, stats] = await Promise.all([
       this.keyspace(),
       this.serverSection(),
-      this.metrics.window(now - CACHE_RANGES[range] * MINUTE, now, now),
+      this.metrics.stats(minutes),
     ]);
-    const stats = this.metrics.stats(win);
     const serverData = server.available ? server.data : null;
     const mem = memoryUsage(serverData, keyspace?.totalBytes ?? null, this.cfg.memoryLimitMb);
     const total = keyspace?.totalBytes ?? 0;
-    const minutes = win ? win.seconds / 60 : null;
     return {
       cacheBytes: keyspace ? keyspace.totalBytes : null,
       bytesPartial: keyspace?.bytesPartial ?? false,
@@ -742,7 +586,7 @@ export class CacheOpsService {
         ? {
             available: true,
             data: {
-              perMin: stats.evicted !== null && minutes ? round(stats.evicted / minutes, 2) : null,
+              perMin: stats.evicted !== null ? round(stats.evicted / minutes, 2) : null,
               inRange: stats.evicted,
               total: server.data.evictedKeys,
               policy: server.data.maxMemoryPolicy,
@@ -755,12 +599,7 @@ export class CacheOpsService {
   }
 
   public async getTtl(): Promise<CacheTtlDto> {
-    const now = Date.now();
-    const [keyspace, win] = await Promise.all([
-      this.keyspace(),
-      this.metrics.window(now - 15 * MINUTE, now, now),
-    ]);
-    const stats = this.metrics.stats(win);
+    const [keyspace, stats] = await Promise.all([this.keyspace(), this.metrics.stats(15)]);
     const ns = keyspace?.namespaces ?? [];
     return {
       keyspace: this.summary(keyspace),
@@ -772,8 +611,7 @@ export class CacheOpsService {
         .filter((n) => n.expiringSoon > 0)
         .sort((a, b) => b.expiringSoon - a.expiringSoon)
         .map((n) => ({ name: n.name, count: n.expiringSoon })),
-      expiredPerMin:
-        stats.expired !== null && win ? round(stats.expired / (win.seconds / 60), 2) : null,
+      expiredPerMin: stats.expired !== null ? round(stats.expired / 15, 2) : null,
       expirySpikeKeys: this.cfg.rules.expirySpikeKeys,
     };
   }
@@ -832,16 +670,10 @@ export class CacheOpsService {
   public async getErrors(range: CacheRange): Promise<CacheErrorsDto> {
     const now = Date.now();
     const from = now - CACHE_RANGES[range] * MINUTE;
-    const [errors, win] = await Promise.all([
-      this.store.errors().catch(() => [] as CacheErrorRecord[]),
-      this.metrics.window(from, now, now),
-    ]);
+    const errors = await this.store.errors().catch(() => [] as CacheErrorRecord[]);
     const recent = errors.filter((e) => e.at >= from);
     const counts = Object.fromEntries(
-      ERROR_KINDS.map((k) => [
-        k,
-        win ? counterOf(win.buckets, `cache.err.${k}`) : recent.filter((e) => e.kind === k).length,
-      ]),
+      ERROR_KINDS.map((k) => [k, recent.filter((e) => e.kind === k).length]),
     ) as Record<CacheErrorKind, number>;
     return {
       counts,
@@ -1038,16 +870,6 @@ export class CacheOpsService {
         return new CacheActionRejectedException(err.code, `cache.error.${err.code}`);
     }
   }
-}
-
-type Group = { t: number; b: MetricBucket[]; seconds: number };
-
-/** Trung bình gauge của collector trong một nhóm bucket (đọc theo max giữa instance). */
-function groupGauge(buckets: readonly MetricBucket[], name: string): number | null {
-  const values = buckets
-    .map((b) => gaugeOf(b, name, { mode: 'max' }))
-    .filter((v): v is number => v !== null);
-  return values.length ? values.reduce((a, v) => a + v, 0) / values.length : null;
 }
 
 /** Che field nhạy cảm (password, token…) và email trong mẫu value. */

@@ -7,14 +7,13 @@ import { BarList } from '../../components/cache/TtlDistribution';
 import { formatBytes, formatCompact } from '../../utils/database-format';
 import { useLocale } from '../../../../core/i18n/index';
 
-/** Namespace do backend gom thật theo prefix của key (không hard-code): số key, dung lượng, hit rate, TTL. */
+/** Namespace do backend gom thật theo prefix của key (không hard-code): số key, dung lượng, TTL. */
 export const CacheNamespacesView: React.FC<{
   range: CacheRange;
   paused: boolean;
-  warnPercent: number;
   reloadKey: number;
   go: (tab: CacheTab, id?: string | null) => void;
-}> = ({ range, paused, warnPercent, reloadKey, go }) => {
+}> = ({ range, paused, reloadKey, go }) => {
   const { t, locale, formatTime } = useLocale();
   const { data, error } = usePolling(() => cacheApi.namespaces(range), `ns:${range}:${reloadKey}`, 30_000, paused);
   const ks = data?.keyspace;
@@ -38,7 +37,6 @@ export const CacheNamespacesView: React.FC<{
           {data && (
             <NamespaceTable
               rows={data.namespaces}
-              warnPercent={warnPercent}
               onOpen={(name) => go('namespaces', name)}
               emptyText={ks?.totalKeys === 0 ? t('cache.empty.title') : t('cache.ns.empty')}
             />

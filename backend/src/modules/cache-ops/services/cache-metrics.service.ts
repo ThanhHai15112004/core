@@ -1,142 +1,151 @@
 import { Injectable } from '@nestjs/common';
-import {
-  TELEMETRY_TIERS,
-  tierCovering,
-  type MetricBucket,
-  type TelemetryTier,
-} from '@modules/system-ops/telemetry-compat.js';
-import {
-  PerformanceStoreService,
-  counterOf,
-  gaugeWindow,
-  mergedOf,
-  meanOf,
-  percentileOf,
-  round,
-} from '@modules/performance/index.js';
+import type { Gauge } from 'prom-client';
+import type { KeyspaceSnapshot, ServerInfo } from '@packages/cache/index.js';
+import { MetricsRegistryService, PrometheusQueryClient } from '@packages/metrics/index.js';
+import { round } from '@modules/performance/index.js';
 
-export interface MetricWindow {
-  tier: TelemetryTier;
-  buckets: MetricBucket[];
-  /** Số giây thực tế (tới hiện tại). */
-  seconds: number;
-}
-
-/** Tổng hợp số đo cache trong một khoảng (từ bucket của MetricRecorder). */
+/**
+ * Số đo cache trong một khoảng, đọc lại từ Prometheus. Nguồn là Redis `INFO` (toàn server, không theo namespace)
+ * và snapshot keyspace — `null` khi Prometheus chưa có dữ liệu, không bao giờ là 0 giả.
+ */
 export interface CacheWindowStats {
-  hits: number;
-  misses: number;
-  reads: number;
-  sets: number;
-  deletes: number;
+  hits: number | null;
+  misses: number | null;
+  reads: number | null;
   hitRatePercent: number | null;
   missRatePercent: number | null;
   opsPerSec: number | null;
-  getsPerSec: number | null;
-  setsPerSec: number | null;
-  deletesPerSec: number | null;
-  avgOpMs: number | null;
-  p95OpMs: number | null;
-  errors: number;
-  /** Toàn Redis server (delta do collector ghi). */
   evicted: number | null;
   expired: number | null;
-  rejected: number | null;
   peakServerMemory: number | null;
-  peakCacheBytes: number | null;
   peakKeys: number | null;
 }
 
-export interface NamespaceCounters {
-  hits: number;
-  misses: number;
-  sets: number;
-  deletes: number;
+export interface CacheSeriesDef {
+  id: string;
+  unit: string;
+  /** PromQL; `$w` được thay bằng cửa sổ rate theo độ phân giải. */
+  expr: string;
 }
 
-const NS_PREFIX = 'cache.ns.';
-const KINDS = { hit: 'hits', miss: 'misses', set: 'sets', del: 'deletes' } as const;
+/** Gauge Prometheus của cache (chỉ instance giữ lock của monitor ghi mỗi chu kỳ). */
+export const CACHE_GAUGES = {
+  hits: 'core_redis_keyspace_hits',
+  misses: 'core_redis_keyspace_misses',
+  evicted: 'core_redis_evicted_keys',
+  expired: 'core_redis_expired_keys',
+  usedMemory: 'core_redis_used_memory_bytes',
+  clients: 'core_redis_connected_clients',
+  opsPerSec: 'core_redis_ops_per_sec',
+  keys: 'core_cache_keys',
+  bytes: 'core_cache_bytes',
+} as const;
 
-/** Gauge của collector (một instance ghi mỗi chu kỳ) → đọc theo max để không cộng trùng giữa instance. */
-export const collectorGauge = (buckets: readonly MetricBucket[], metric: string) =>
-  gaugeWindow(buckets, metric, { mode: 'max' });
+const MAX_POINTS = 120;
 
-export const hitRate = (hits: number, reads: number) =>
-  reads > 0 ? round((hits / reads) * 100, 2) : null;
+export const hitRate = (hits: number | null, reads: number | null) =>
+  hits !== null && reads ? round((hits / reads) * 100, 2) : null;
 
-/** Đọc số đo cache đã ghi trong Redis (dùng chung bucket với trang Performance). */
 @Injectable()
 export class CacheMetricsService {
-  constructor(private readonly perf: PerformanceStoreService) {}
+  private readonly gauges: Record<keyof typeof CACHE_GAUGES, Gauge>;
 
-  public async window(
-    fromMs: number,
-    toMs: number,
-    now: number,
-    forceTier?: TelemetryTier,
-  ): Promise<MetricWindow | null> {
-    const tier = forceTier ?? tierCovering(fromMs, now);
-    if (!tier) return null;
-    const instances = await this.perf
-      .instances(fromMs - TELEMETRY_TIERS[tier].seconds * 1000)
-      .catch(() => [] as string[]);
-    const buckets = await this.perf.buckets(tier, fromMs, toMs, instances);
-    return { tier, buckets, seconds: Math.max(1, (Math.min(toMs, now) - fromMs) / 1000) };
+  constructor(
+    registry: MetricsRegistryService,
+    private readonly prom: PrometheusQueryClient,
+  ) {
+    const help: Record<keyof typeof CACHE_GAUGES, string> = {
+      hits: 'Redis INFO keyspace_hits (cumulative, server-wide)',
+      misses: 'Redis INFO keyspace_misses (cumulative, server-wide)',
+      evicted: 'Redis INFO evicted_keys (cumulative)',
+      expired: 'Redis INFO expired_keys (cumulative)',
+      usedMemory: 'Redis INFO used_memory',
+      clients: 'Redis INFO connected_clients',
+      opsPerSec: 'Redis INFO instantaneous_ops_per_sec',
+      keys: 'Keys in the cache keyspace (SCAN)',
+      bytes: 'Approximate bytes of the cache keyspace (MEMORY USAGE)',
+    };
+    this.gauges = Object.fromEntries(
+      Object.entries(CACHE_GAUGES).map(([k, name]) => [
+        k,
+        registry.gauge(name, help[k as keyof typeof CACHE_GAUGES]),
+      ]),
+    ) as Record<keyof typeof CACHE_GAUGES, Gauge>;
   }
 
-  public stats(w: MetricWindow | null): CacheWindowStats {
-    const b = w?.buckets ?? [];
-    const hits = counterOf(b, 'cache.hit');
-    const misses = counterOf(b, 'cache.miss');
-    const sets = counterOf(b, 'cache.set');
-    const deletes = counterOf(b, 'cache.del');
-    const reads = hits + misses;
-    const op = mergedOf(b, 'cache.op');
-    const perSec = (n: number) => (w ? round(n / w.seconds, 3) : null);
-    const r = (n: number | null, d = 2) => (n === null ? null : round(n, d));
-    // Số liệu server chỉ có khi collector đã đọc được INFO (driver redis) trong cửa sổ.
-    const hasServer = b.some((x) => x.metrics.has('redis.used'));
-    const serverCounter = (name: string) => (hasServer ? counterOf(b, name) : null);
+  /** Ghi gauge từ snapshot của monitor (giá trị null → không ghi, Prometheus giữ khoảng trống). */
+  public record(server: ServerInfo | null, keyspace: KeyspaceSnapshot | null): void {
+    const set = (k: keyof typeof CACHE_GAUGES, v: number | null | undefined) => {
+      if (v !== null && v !== undefined && Number.isFinite(v)) this.gauges[k].set(v);
+    };
+    set('hits', server?.keyspaceHits);
+    set('misses', server?.keyspaceMisses);
+    set('evicted', server?.evictedKeys);
+    set('expired', server?.expiredKeys);
+    set('usedMemory', server?.usedMemory);
+    set('clients', server?.connectedClients);
+    set('opsPerSec', server?.opsPerSec);
+    set('keys', keyspace?.totalKeys);
+    set('bytes', keyspace?.totalBytes);
+  }
+
+  /** Thống kê `minutes` phút, kết thúc trước hiện tại `offsetMin` phút. */
+  public async stats(minutes: number, offsetMin = 0): Promise<CacheWindowStats> {
+    const w = `${Math.max(1, Math.round(minutes))}m`;
+    const off = offsetMin > 0 ? ` offset ${Math.round(offsetMin)}m` : '';
+    const g = CACHE_GAUGES;
+    const v = (expr: string) => this.prom.value(expr);
+    const [hits, misses, opsPerSec, evicted, expired, peakMem, peakKeys] = await Promise.all([
+      v(`max(increase(${g.hits}[${w}]${off}))`),
+      v(`max(increase(${g.misses}[${w}]${off}))`),
+      v(`max(avg_over_time(${g.opsPerSec}[${w}]${off}))`),
+      v(`max(increase(${g.evicted}[${w}]${off}))`),
+      v(`max(increase(${g.expired}[${w}]${off}))`),
+      v(`max(max_over_time(${g.usedMemory}[${w}]${off}))`),
+      v(`max(max_over_time(${g.keys}[${w}]${off}))`),
+    ]);
+    const r = (n: number | null) => (n === null ? null : Math.round(n));
+    const reads = hits !== null && misses !== null ? r(hits + misses) : null;
     return {
-      hits,
-      misses,
+      hits: r(hits),
+      misses: r(misses),
       reads,
-      sets,
-      deletes,
       hitRatePercent: hitRate(hits, reads),
-      missRatePercent: reads > 0 ? round((misses / reads) * 100, 2) : null,
-      opsPerSec: perSec(reads + sets + deletes),
-      getsPerSec: perSec(reads),
-      setsPerSec: perSec(sets),
-      deletesPerSec: perSec(deletes),
-      avgOpMs: r(meanOf(op), 3),
-      p95OpMs: r(percentileOf(op, 95), 3),
-      errors: counterOf(b, 'cache.errors'),
-      evicted: serverCounter('redis.evicted'),
-      expired: serverCounter('redis.expired'),
-      rejected: serverCounter('redis.rejected'),
-      peakServerMemory: collectorGauge(b, 'redis.used').peak,
-      peakCacheBytes: collectorGauge(b, 'cache.bytes').peak,
-      peakKeys: collectorGauge(b, 'cache.keys').peak,
+      missRatePercent: misses !== null && reads ? round((misses / reads) * 100, 2) : null,
+      opsPerSec: opsPerSec === null ? null : round(opsPerSec, 2),
+      evicted: r(evicted),
+      expired: r(expired),
+      peakServerMemory: r(peakMem),
+      peakKeys: r(peakKeys),
     };
   }
 
-  /** Bộ đếm hit/miss/set/del theo namespace trong cửa sổ. */
-  public namespaces(w: MetricWindow | null): Map<string, NamespaceCounters> {
-    const out = new Map<string, NamespaceCounters>();
-    for (const bucket of w?.buckets ?? []) {
-      for (const [name, agg] of bucket.metrics) {
-        if (!name.startsWith(NS_PREFIX)) continue;
-        const dot = name.lastIndexOf('.');
-        const kind = name.slice(dot + 1) as keyof typeof KINDS;
-        const field = KINDS[kind];
-        if (!field) continue;
-        const ns = name.slice(NS_PREFIX.length, dot);
-        const acc = out.get(ns) ?? { hits: 0, misses: 0, sets: 0, deletes: 0 };
-        acc[field] += agg.c;
-        out.set(ns, acc);
-      }
-    }
-    return out;
+  /** Chuỗi thời gian `minutes` phút gần nhất; `resolutionSec` null khi không có điểm nào. */
+  public async series(
+    minutes: number,
+    defs: CacheSeriesDef[],
+  ): Promise<{
+    resolutionSec: number | null;
+    series: (CacheSeriesDef & { points: { t: number; value: number }[] })[];
+  }> {
+    const stepSec = Math.max(15, Math.ceil((minutes * 60) / MAX_POINTS));
+    const rateWindow = `${Math.max(60, stepSec * 2)}s`;
+    const series = await Promise.all(
+      defs.map(async (d) => {
+        const res = await this.prom.safeRange(
+          d.expr.replaceAll('$w', rateWindow),
+          minutes,
+          stepSec,
+        );
+        return {
+          ...d,
+          points: (res[0]?.points ?? []).map((p) => ({ t: p.t, value: round(p.v, 3) })),
+        };
+      }),
+    );
+    return {
+      resolutionSec: series.some((s) => s.points.length > 0) ? stepSec : null,
+      series,
+    };
   }
 }

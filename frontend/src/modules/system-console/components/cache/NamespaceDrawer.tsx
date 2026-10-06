@@ -4,9 +4,8 @@ import type { CacheRange, NamespaceRow } from '../../types/cache.types';
 import { cacheApi } from '../../services/cache.api';
 import { usePolling } from '../../hooks/usePolling';
 import { DbDrawer } from '../database/DbDrawer';
-import { LineChart } from '../common/LineChart';
 import { formatBytes, formatCompact } from '../../utils/database-format';
-import { formatPercent, formatTtl, toChartSeries } from '../../utils/cache-format';
+import { formatTtl } from '../../utils/cache-format';
 import { NO_VALUE } from '../../utils/runtime-format';
 import { useLocale } from '../../../../core/i18n/index';
 
@@ -20,25 +19,9 @@ export const NamespaceDrawer: React.FC<{
   onOpenKey: (key: string) => void;
   onClear: (row: NamespaceRow) => void;
 }> = ({ name, range, reloadKey, onClose, onBrowse, onOpenKey, onClear }) => {
-  const { t, locale, formatTime } = useLocale();
+  const { t, locale } = useLocale();
   const { data, error } = usePolling(() => cacheApi.namespace(name, range), `${name}:${range}:${reloadKey}`, 30_000);
   const n = data?.namespace;
-  const chart = (list: Parameters<typeof toChartSeries>[0], title: string) => {
-    const { series, unit } = toChartSeries(list);
-    return (
-      <div className="cache-mini-chart">
-        <h4>{title}</h4>
-        <LineChart
-          series={series}
-          unit={unit}
-          height={140}
-          formatTime={(ts) => formatTime(ts, range === '15m')}
-          emptyText={t('cache.chart.empty')}
-          ariaLabel={title}
-        />
-      </div>
-    );
-  };
   return (
     <DbDrawer title={<code>{name}</code>} meta={n?.session ? t('cache.ns.sessionHint') : t('cache.ns.drawerMeta')} onClose={onClose}>
       {error && !data && <p className="scp-alert scp-alert-danger">{error.message}</p>}
@@ -54,18 +37,8 @@ export const NamespaceDrawer: React.FC<{
               <dd>{formatBytes(n.bytes)}</dd>
             </div>
             <div>
-              <dt>{t('cache.ns.hitRate')}</dt>
-              <dd>{formatPercent(n.hitRatePercent)}</dd>
-            </div>
-            <div>
               <dt>{t('cache.ns.avgTtl')}</dt>
               <dd>{n.avgTtlMs === null ? (n.keys ? t('cache.ttl.none') : NO_VALUE) : formatTtl(n.avgTtlMs)}</dd>
-            </div>
-            <div>
-              <dt>{t('cache.ns.hitsMisses')}</dt>
-              <dd>
-                {formatCompact(n.hits, locale)} / {formatCompact(n.misses, locale)}
-              </dd>
             </div>
             <div>
               <dt>{t('cache.ns.persistent')}</dt>
@@ -91,9 +64,6 @@ export const NamespaceDrawer: React.FC<{
               <KeyRound size={13} /> {t('cache.ns.sessionWarning')}
             </p>
           )}
-          {chart([data.history.keys], t('cache.ns.historyKeys'))}
-          {chart([data.history.bytes], t('cache.ns.historyBytes'))}
-          {chart([data.history.hits, data.history.misses], t('cache.ns.historyHits'))}
           {data.largestKeys.length > 0 && (
             <>
               <h4>{t('cache.memory.largestKeys')}</h4>

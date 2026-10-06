@@ -1,4 +1,5 @@
 import {
+  Inject,
   Injectable,
   Logger,
   Optional,
@@ -10,13 +11,13 @@ import { RedisService } from '@packages/redis/index.js';
 import {
   CacheConnectionService,
   CacheMonitoringService,
-  namespaceMetric,
+  recordCacheEvent,
   type CacheClient,
   type KeyspaceSnapshot,
   type ServerInfo,
 } from '@packages/cache/index.js';
-import { MetricRecorder } from '@modules/system-ops/telemetry-compat.js';
-import { mergedOf, round } from '@modules/performance/index.js';
+import { RUNTIME_IDENTITY, type RuntimeIdentity } from '@packages/runtime/index.js';
+import { round } from '@modules/performance/index.js';
 import { CacheMetricsService, hitRate } from './cache-metrics.service.js';
 import { CacheStoreService } from './cache-store.service.js';
 import {
@@ -27,11 +28,9 @@ import {
 } from './cache-rules.js';
 
 const TICK_MS = 30_000;
-const RULE_WINDOW_MS = 5 * 60_000;
-/** Baseline = 60 phút trước cửa sổ đánh giá (bucket 1 phút). */
-const BASELINE_MS = 60 * 60_000;
-/** Số namespace có lịch sử key/dung lượng (theo số key). */
-export const NAMESPACE_HISTORY_LIMIT = 50;
+/** Baseline hit/miss = 60 phút trước 5 phút gần nhất (đọc lại từ Prometheus). */
+const BASELINE_MIN = 60;
+const BASELINE_OFFSET_MIN = 5;
 
 interface Collected {
   keyspace: KeyspaceSnapshot | null;
@@ -39,6 +38,8 @@ interface Collected {
   clients: CacheClient[] | null;
   evictionsPerMin: number | null;
   rejectedDelta: number | null;
+  /** Lượt đọc (hit + miss) toàn server từ lần tick trước — delta `INFO keyspace_hits/misses`. */
+  reads: { hits: number; misses: number } | null;
 }
 
 /** Hạn mức bộ nhớ và % sử dụng: maxmemory của server (so với used) hoặc hạn mức cấu hình (so với cache). */
@@ -66,7 +67,7 @@ export function memoryUsage(
 
 /**
  * Chạy nền trong API (một instance mỗi chu kỳ nhờ lock Redis): quét keyspace của cache, đọc INFO của Redis,
- * ghi gauge (key, dung lượng theo namespace, bộ nhớ server, eviction) để có lịch sử, rồi đánh giá cảnh báo.
+ * ghi gauge Prometheus (lịch sử biểu đồ), đánh giá cảnh báo và ghi sự kiện bắt đầu / hồi phục.
  */
 @Injectable()
 export class CacheMonitorService implements OnApplicationBootstrap, OnModuleDestroy {
@@ -80,8 +81,8 @@ export class CacheMonitorService implements OnApplicationBootstrap, OnModuleDest
     private readonly metrics: CacheMetricsService,
     private readonly store: CacheStoreService,
     private readonly config: CoreConfigService,
-    @Optional() private readonly recorder?: MetricRecorder,
     @Optional() private readonly redis?: RedisService,
+    @Optional() @Inject(RUNTIME_IDENTITY) private readonly identity?: RuntimeIdentity,
   ) {}
 
   public onApplicationBootstrap(): void {
@@ -122,19 +123,6 @@ export class CacheMonitorService implements OnApplicationBootstrap, OnModuleDest
 
   private async collect(now: number): Promise<Collected> {
     const keyspace = await this.monitoring.refreshKeyspace().catch(() => null);
-    const g = (name: string, v: number | null | undefined) => {
-      if (v !== null && v !== undefined) this.recorder?.gauge(name, v, now);
-    };
-    if (keyspace) {
-      g('cache.keys', keyspace.totalKeys);
-      g('cache.bytes', keyspace.totalBytes);
-      g('cache.expiring', keyspace.expiring);
-      g('cache.expiringSoon', keyspace.expiringNext60s);
-      for (const ns of keyspace.namespaces.slice(0, NAMESPACE_HISTORY_LIMIT)) {
-        g(namespaceMetric(ns.name, 'keys'), ns.keys);
-        g(namespaceMetric(ns.name, 'bytes'), ns.bytes);
-      }
-    }
 
     const out: Collected = {
       keyspace,
@@ -142,20 +130,18 @@ export class CacheMonitorService implements OnApplicationBootstrap, OnModuleDest
       clients: null,
       evictionsPerMin: null,
       rejectedDelta: null,
+      reads: null,
     };
-    if (!this.monitoring.supports('serverStats')) return out;
+    if (!this.monitoring.supports('serverStats')) {
+      this.metrics.record(null, keyspace);
+      return out;
+    }
 
     out.server = await this.monitoring.provider.serverInfo().catch(() => null);
     out.clients = await this.monitoring.provider.clients().catch(() => null);
     const s = out.server;
+    this.metrics.record(s, keyspace);
     if (s) {
-      g('redis.used', s.usedMemory);
-      g('redis.peak', s.peakMemory);
-      g('redis.max', s.maxMemory);
-      g('redis.frag', s.fragmentationRatio);
-      g('redis.clients', s.connectedClients);
-      g('redis.blocked', s.blockedClients);
-      g('redis.opsps', s.opsPerSec);
       const prev = await this.store.serverCounters().catch(() => null);
       // Server khởi động lại (uptime giảm) → bộ đếm reset, bỏ qua delta lần này.
       const restarted =
@@ -163,11 +149,10 @@ export class CacheMonitorService implements OnApplicationBootstrap, OnModuleDest
       const delta = (cur: number | null, old: number | null | undefined) =>
         prev && !restarted && cur !== null && old != null && cur >= old ? cur - old : null;
       const evicted = delta(s.evictedKeys, prev?.evicted);
-      const expired = delta(s.expiredKeys, prev?.expired);
       const rejected = delta(s.rejectedConnections, prev?.rejected);
-      if (evicted !== null) this.recorder?.count('redis.evicted', evicted, now);
-      if (expired !== null) this.recorder?.count('redis.expired', expired, now);
-      if (rejected !== null) this.recorder?.count('redis.rejected', rejected, now);
+      const hits = delta(s.keyspaceHits, prev?.hits);
+      const misses = delta(s.keyspaceMisses, prev?.misses);
+      out.reads = hits !== null && misses !== null ? { hits, misses } : null;
       const minutes = prev ? Math.max(1 / 60, (now - prev.at) / 60_000) : null;
       out.evictionsPerMin = evicted !== null && minutes ? round(evicted / minutes, 2) : null;
       out.rejectedDelta = rejected;
@@ -176,26 +161,24 @@ export class CacheMonitorService implements OnApplicationBootstrap, OnModuleDest
         evicted: s.evictedKeys,
         expired: s.expiredKeys,
         rejected: s.rejectedConnections,
+        hits: s.keyspaceHits,
+        misses: s.keyspaceMisses,
         uptimeSec: s.uptimeSec,
       });
     }
-    if (out.clients) g('cache.clients', out.clients.length);
     return out;
   }
 
   private async evaluate(c: Collected | null, now: number): Promise<void> {
-    const [win, base, active] = await Promise.all([
-      this.metrics.window(now - RULE_WINDOW_MS, now, now, 's10'),
-      this.metrics.window(now - BASELINE_MS - RULE_WINDOW_MS, now - RULE_WINDOW_MS, now, 'm1'),
+    const [base, active] = await Promise.all([
+      this.metrics.stats(BASELINE_MIN, BASELINE_OFFSET_MIN),
       this.store.activeAlerts(),
     ]);
-    const cur = this.metrics.stats(win);
-    const prev = this.metrics.stats(base);
     const cfg = this.config.cache;
-    const dbQps = (w: typeof win) => {
-      const n = mergedOf(w?.buckets ?? [], 'db.query').n;
-      return w && n > 0 ? n / w.seconds : null;
-    };
+    const reads = c?.reads ?? null;
+    const total = reads ? reads.hits + reads.misses : 0;
+    const curHit = reads ? hitRate(reads.hits, total) : null;
+    const curMiss = reads && total ? round((reads.misses / total) * 100, 2) : null;
     const ks = c?.keyspace ?? null;
     const topPersistent = ks?.namespaces
       .filter((n) => n.persistent > 0)
@@ -204,17 +187,11 @@ export class CacheMonitorService implements OnApplicationBootstrap, OnModuleDest
 
     const input: CacheRuleInput = {
       connection: this.connection.getStatus().state,
-      hitRate: { current: cur.hitRatePercent, baseline: prev.hitRatePercent, reads: cur.reads },
+      hitRate: { current: curHit, baseline: base.hitRatePercent, reads: total },
       missRate: {
-        current: cur.missRatePercent,
-        baseline: prev.reads >= cfg.rules.minReads ? prev.missRatePercent : null,
+        current: curMiss,
+        baseline: (base.reads ?? 0) >= cfg.rules.minReads ? base.missRatePercent : null,
       },
-      dbQps: { current: dbQps(win), baseline: dbQps(base) },
-      namespaces: [...this.metrics.namespaces(win).entries()].map(([name, n]) => ({
-        name,
-        reads: n.hits + n.misses,
-        hitRate: hitRate(n.hits, n.hits + n.misses),
-      })),
       memory: {
         percent: memoryUsage(c?.server ?? null, ks?.totalBytes ?? null, cfg.memoryLimitMb).percent,
       },
@@ -244,11 +221,40 @@ export class CacheMonitorService implements OnApplicationBootstrap, OnModuleDest
     active: Awaited<ReturnType<CacheStoreService['activeAlerts']>>,
     now: number,
   ): Promise<void> {
-    const { set, recovered } = diffCacheAlerts(violations, active, now);
+    const { started, set, recovered } = diffCacheAlerts(violations, active, now);
     const key = this.store.keys.activeAlerts();
     const pipe = this.store.client.pipeline();
     for (const [id, state] of set) pipe.hset(key, id, JSON.stringify(state));
     if (recovered.length) pipe.hdel(key, ...recovered.map((r) => r.id));
     await pipe.exec();
+    const runtime = this.identity?.id ?? null;
+    // Cảnh báo mức info (key không TTL…) không cần vào timeline mỗi lần.
+    for (const v of started.filter((x) => x.severity !== 'info'))
+      await recordCacheEvent(this.redis, {
+        type: 'alert_started',
+        severity: v.severity,
+        params: {
+          rule: v.rule,
+          value: v.value,
+          threshold: v.threshold,
+          unit: v.unit,
+          namespace: v.namespace ?? '',
+          ...v.extra,
+        },
+        runtime,
+        at: now,
+      });
+    for (const r of recovered.filter((x) => x.alert.severity !== 'info'))
+      await recordCacheEvent(this.redis, {
+        type: 'alert_recovered',
+        severity: 'success',
+        params: {
+          rule: r.alert.rule,
+          namespace: r.alert.namespace ?? '',
+          minutes: Math.max(1, Math.round(r.durationMs / 60_000)),
+        },
+        runtime,
+        at: now,
+      });
   }
 }

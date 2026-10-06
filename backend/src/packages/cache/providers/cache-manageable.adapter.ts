@@ -41,8 +41,6 @@ export class CacheManageableAdapter implements ManageablePackage {
     const status = this.connection.getStatus();
     const keyspace = await this.monitoring.storedKeyspace().catch(() => null);
     const up = status.state === 'connected';
-    // Hit/miss của process đang phục vụ (API) từ lúc khởi động; chi tiết toàn hệ thống ở trang Cache.
-    const stats = this.cache.getStats();
     return {
       status: up
         ? PackageStatus.HEALTHY
@@ -57,9 +55,6 @@ export class CacheManageableAdapter implements ManageablePackage {
         driver: this.monitoring.driver,
         state: status.state,
         ...(keyspace ? { keys: keyspace.totalKeys } : {}),
-        hits: stats.hits,
-        misses: stats.misses,
-        hitRatePercent: stats.hitRatePercent ?? 'n/a',
       },
     };
   }

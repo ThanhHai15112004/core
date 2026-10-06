@@ -1,6 +1,6 @@
 import React from 'react';
 import { ArrowRight, TrendingDown, TrendingUp } from 'lucide-react';
-import type { CacheOverview, CacheReport, CacheTab, ImpactItem } from '../../types/cache.types';
+import type { CacheOverview, CacheReport, CacheTab } from '../../types/cache.types';
 import { CacheKpis } from '../../components/cache/CacheKpis';
 import { CacheChart } from '../../components/cache/CacheChart';
 import { CacheAlerts } from '../../components/cache/CacheAlerts';
@@ -9,7 +9,7 @@ import { NamespaceTable } from '../../components/cache/NamespaceTable';
 import { TtlDistribution } from '../../components/cache/TtlDistribution';
 import { SectionState } from '../../components/database/SectionState';
 import { formatBytes, formatCompact } from '../../utils/database-format';
-import { formatUnit, trendOf } from '../../utils/performance-format';
+import { trendOf } from '../../utils/performance-format';
 import { formatPercent, formatTtl } from '../../utils/cache-format';
 import { NO_VALUE } from '../../utils/runtime-format';
 import { useLocale } from '../../../../core/i18n/index';
@@ -28,7 +28,7 @@ const pct = (a: number | null, b: number | null) => (a === null || b === null ||
  * Tổng quan: KPI → biểu đồ → hiệu quả (hit rate có baseline) + vấn đề → namespace → bộ nhớ + TTL →
  * ảnh hưởng tới hệ thống → báo cáo hôm nay → sự kiện.
  */
-export const CacheOverviewView: React.FC<Props> = ({ data, now, paused, go, navigate }) => {
+export const CacheOverviewView: React.FC<Props> = ({ data, now, paused, go }) => {
   const { t, locale } = useLocale();
   if (!data) return <CacheKpis data={null} />;
   const hr = data.hitRate;
@@ -43,19 +43,6 @@ export const CacheOverviewView: React.FC<Props> = ({ data, now, paused, go, navi
         <td>{fmt(yesterday)}</td>
         <td>{trend ? <span className={`ov-kpi-trend is-${trend.tone}`}>{trend.text}</span> : NO_VALUE}</td>
       </tr>
-    );
-  };
-  const impactRow = (key: 'missRatePercent' | 'dbQueriesPerSec' | 'apiP95Ms', item: ImpactItem) => {
-    const trend = trendOf(item.changePercent, true);
-    return (
-      <div key={key}>
-        <dt>{t(`cache.impact.${key}`)}</dt>
-        <dd>
-          {formatUnit(item.current, item.unit)}
-          {trend && <span className={`ov-kpi-trend is-${trend.tone}`}>{trend.text}</span>}
-        </dd>
-        <small>{t('cache.impact.baseline', { value: formatUnit(item.baseline, item.unit) })}</small>
-      </div>
     );
   };
   const mem = data.kpis.memory;
@@ -77,7 +64,7 @@ export const CacheOverviewView: React.FC<Props> = ({ data, now, paused, go, navi
             <p className="db-pool-big">{formatPercent(hr.currentPercent)}</p>
             <p className="cache-effect-status">
               {hr.status === 'low' ? <TrendingDown size={14} /> : hr.status === 'normal' ? <TrendingUp size={14} /> : null}
-              {t(`cache.effect.status.${hr.status}`, { reads: hr.reads, min: 5 })}
+              {t(`cache.effect.status.${hr.status}`, { reads: hr.reads ?? 0, min: 5 })}
             </p>
           </div>
           <dl className="db-stat-grid db-stat-compact">
@@ -100,10 +87,6 @@ export const CacheOverviewView: React.FC<Props> = ({ data, now, paused, go, navi
               <dd>{formatCompact(data.kpis.misses, locale)}</dd>
             </div>
             <div>
-              <dt>{t('cache.effect.avgOp')}</dt>
-              <dd>{formatUnit(data.kpis.avgOpMs, 'ms')}</dd>
-            </div>
-            <div>
               <dt>{t('cache.effect.errors')}</dt>
               <dd className={data.kpis.errors > 0 ? 'is-warn' : ''}>{data.kpis.errors}</dd>
             </div>
@@ -122,7 +105,6 @@ export const CacheOverviewView: React.FC<Props> = ({ data, now, paused, go, navi
         </header>
         <NamespaceTable
           rows={data.topNamespaces}
-          warnPercent={data.settings.hitRateWarnPercent}
           sortable={false}
           onOpen={(name) => go('namespaces', name)}
           emptyText={data.keyspace?.totalKeys === 0 ? t('cache.empty.title') : t('cache.ns.empty')}
@@ -203,20 +185,6 @@ export const CacheOverviewView: React.FC<Props> = ({ data, now, paused, go, navi
       <div className="ov-split db-split-even">
         <section className="ov-card ov-section">
           <header className="ov-section-head">
-            <h3>{t('cache.impact.title')}</h3>
-            <button type="button" className="ov-link" onClick={() => navigate('performance')}>
-              {t('cache.impact.open')} <ArrowRight size={13} />
-            </button>
-          </header>
-          <dl className="db-stat-grid cache-impact">
-            {impactRow('missRatePercent', data.relatedImpact.missRatePercent)}
-            {impactRow('dbQueriesPerSec', data.relatedImpact.dbQueriesPerSec)}
-            {impactRow('apiP95Ms', data.relatedImpact.apiP95Ms)}
-          </dl>
-          <p className="pf-chart-note">{t('cache.impact.note', { window: data.relatedImpact.windowMin, baseline: data.relatedImpact.baselineMin })}</p>
-        </section>
-        <section className="ov-card ov-section">
-          <header className="ov-section-head">
             <h3>{t('cache.report.title')}</h3>
             <span className="ov-section-hint">{t('db.report.hint')}</span>
           </header>
@@ -234,7 +202,6 @@ export const CacheOverviewView: React.FC<Props> = ({ data, now, paused, go, navi
                 {reportRow('hits', (v) => formatCompact(v, locale), null)}
                 {reportRow('misses', (v) => formatCompact(v, locale), true)}
                 {reportRow('hitRatePercent', (v) => formatPercent(v), false)}
-                {reportRow('sets', (v) => formatCompact(v, locale), null)}
                 {reportRow('errors', (v) => String(v ?? NO_VALUE), true)}
                 {reportRow('peakMemoryBytes', formatBytes, true)}
                 {reportRow('peakKeys', (v) => formatCompact(v, locale), null)}
