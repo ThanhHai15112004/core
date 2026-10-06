@@ -1,10 +1,15 @@
 import { Injectable } from '@nestjs/common';
 import { CoreConfigService } from '@packages/config/index.js';
 import { CoreI18nService } from '@packages/i18n/index.js';
-import { PrometheusQueryClient } from '@packages/metrics/index.js';
+import {
+  PrometheusQueryClient,
+  PrometheusUnavailableError,
+  type PromSample,
+} from '@packages/metrics/index.js';
 import {
   TrafficEndpointNotFoundException,
   TrafficRequestNotFoundException,
+  TrafficTelemetryUnavailableException,
 } from '../exceptions/traffic.exceptions.js';
 import type {
   ActiveRequestsDto,
@@ -35,6 +40,24 @@ export type TrafficRange = keyof typeof TRAFFIC_RANGES;
 
 export const ENDPOINT_SORTS = ['traffic', 'latency', 'p95', 'errors'] as const;
 export type EndpointSort = (typeof ENDPOINT_SORTS)[number];
+
+const STATUS_CLASSES: StatusClass[] = ['2xx', '3xx', '4xx', '5xx'];
+
+const routeKey = (labels: Record<string, string>) =>
+  `${labels['method'] || 'GET'} ${labels['route'] || '/'}`;
+
+const byRoute = (samples: PromSample[]) =>
+  new Map(samples.map((item) => [routeKey(item.labels), item.value]));
+
+const toMs = (sec: number | null | undefined) =>
+  sec === null || sec === undefined ? null : Math.round(sec * 1000);
+
+/** Route nội bộ (System Console, health check) — cùng quy ước với cột `internal` của endpoint. */
+const isInternal = (route: string) => route.includes('/ops/') || route.includes('/health');
+const INTERNAL_ROUTE_RE = '.*(/ops/|/health).*';
+
+const percentOf = (part: number, total: number) =>
+  total > 0 ? Number(((part / total) * 100).toFixed(2)) : 0;
 
 export interface TrafficQuery {
   range: TrafficRange;
@@ -67,46 +90,59 @@ export class TrafficService {
     return 1000;
   }
 
+  /** Prometheus không cấu hình/không trả lời → 503, thay vì số 0 trông như "không có traffic". */
+  private async must<T>(task: Promise<T>): Promise<T> {
+    try {
+      return await task;
+    } catch (err) {
+      if (err instanceof PrometheusUnavailableError)
+        throw new TrafficTelemetryUnavailableException();
+      throw err;
+    }
+  }
+
   public async getSummary(q: TrafficQuery): Promise<TrafficSummaryDto> {
     const minutes = TRAFFIC_RANGES[q.range] ?? 15;
     const w = `${minutes}m`;
+    const sel = q.includeInternal ? '' : `{route!~"${INTERNAL_ROUTE_RE}"}`;
 
-    const [total, errors5xx, errors4xx, sumDuration, p50, p95, p99, statusSamples] =
-      await Promise.all([
-        this.prom.value(`sum(increase(http_request_duration_seconds_count[${w}]))`),
-        this.prom.value(`sum(increase(http_request_duration_seconds_count{status=~"5.."}[${w}]))`),
-        this.prom.value(`sum(increase(http_request_duration_seconds_count{status=~"4.."}[${w}]))`),
-        this.prom.value(`sum(increase(http_request_duration_seconds_sum[${w}]))`),
-        this.prom.value(
-          `histogram_quantile(0.50, sum by (le) (rate(http_request_duration_seconds_bucket[${w}])))`,
+    const [statusSamples, sumDuration, p50, p95, p99] = await Promise.all([
+      this.must(
+        this.prom.query(
+          `sum by (status) (increase(http_request_duration_seconds_count${sel}[${w}]))`,
         ),
-        this.prom.value(
-          `histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket[${w}])))`,
-        ),
-        this.prom.value(
-          `histogram_quantile(0.99, sum by (le) (rate(http_request_duration_seconds_bucket[${w}])))`,
-        ),
-        this.prom.safeQuery(
-          `sum by (status) (increase(http_request_duration_seconds_count[${w}]))`,
-        ),
-      ]);
+      ),
+      this.prom.value(`sum(increase(http_request_duration_seconds_sum${sel}[${w}]))`),
+      this.prom.value(
+        `histogram_quantile(0.50, sum by (le) (rate(http_request_duration_seconds_bucket${sel}[${w}])))`,
+      ),
+      this.prom.value(
+        `histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket${sel}[${w}])))`,
+      ),
+      this.prom.value(
+        `histogram_quantile(0.99, sum by (le) (rate(http_request_duration_seconds_bucket${sel}[${w}])))`,
+      ),
+    ]);
 
-    const requests = Math.round(total ?? 0);
-    const serverErrors = Math.round(errors5xx ?? 0);
-    const clientErrors = Math.round(errors4xx ?? 0);
+    const classCounts = new Map<StatusClass, number>(STATUS_CLASSES.map((c) => [c, 0]));
+    for (const s of statusSamples) {
+      const cls = `${s.labels['status']?.[0] ?? ''}xx` as StatusClass;
+      if (classCounts.has(cls)) classCounts.set(cls, classCounts.get(cls)! + Math.round(s.value));
+    }
+    const requests = [...classCounts.values()].reduce((a, b) => a + b, 0);
+    const serverErrors = classCounts.get('5xx')!;
+    const clientErrors = classCounts.get('4xx')!;
     const durationSec = minutes * 60;
     const requestsPerSecond = Number((requests / durationSec).toFixed(2));
     const avgLatencyMs =
       requests > 0 && sumDuration !== null
         ? Number(((sumDuration / requests) * 1000).toFixed(1))
         : null;
-    const p50LatencyMs = p50 !== null ? Math.round(p50 * 1000) : null;
-    const p95LatencyMs = p95 !== null ? Math.round(p95 * 1000) : null;
-    const p99LatencyMs = p99 !== null ? Math.round(p99 * 1000) : null;
-    const errorRatePercent =
-      requests > 0 ? Number(((serverErrors / requests) * 100).toFixed(2)) : 0;
-    const clientErrorRatePercent =
-      requests > 0 ? Number(((clientErrors / requests) * 100).toFixed(2)) : 0;
+    const p50LatencyMs = toMs(p50);
+    const p95LatencyMs = toMs(p95);
+    const p99LatencyMs = toMs(p99);
+    const errorRatePercent = percentOf(serverErrors, requests);
+    const clientErrorRatePercent = percentOf(clientErrors, requests);
 
     const stats: TrafficStatsDto = {
       requests,
@@ -121,29 +157,14 @@ export class TrafficService {
       clientErrorRatePercent,
     };
 
-    const status2xx = Math.max(0, requests - clientErrors - serverErrors);
-    const statusClasses: { class: StatusClass; count: number; percent: number }[] = [
-      {
-        class: '2xx',
-        count: status2xx,
-        percent: requests > 0 ? Number(((status2xx / requests) * 100).toFixed(1)) : 100,
-      },
-      {
-        class: '3xx',
-        count: 0,
-        percent: 0,
-      },
-      {
-        class: '4xx',
-        count: clientErrors,
-        percent: requests > 0 ? Number(((clientErrors / requests) * 100).toFixed(1)) : 0,
-      },
-      {
-        class: '5xx',
-        count: serverErrors,
-        percent: requests > 0 ? Number(((serverErrors / requests) * 100).toFixed(1)) : 0,
-      },
-    ];
+    const statusClasses = STATUS_CLASSES.map((cls) => {
+      const count = classCounts.get(cls)!;
+      return {
+        class: cls,
+        count,
+        percent: requests > 0 ? Number(((count / requests) * 100).toFixed(1)) : 0,
+      };
+    });
 
     const topStatuses = statusSamples
       .map((s) => ({
@@ -201,7 +222,7 @@ export class TrafficService {
       unit = 'rps';
     }
 
-    const seriesList = await this.prom.safeRange(expr, minutes, stepSec);
+    const seriesList = await this.must(this.prom.range(expr, minutes, stepSec));
     const points =
       seriesList[0]?.points.map((p) => ({ t: p.t, value: Number(p.v.toFixed(2)) })) ?? [];
     const values = points.map((p) => p.value);
@@ -231,13 +252,22 @@ export class TrafficService {
     const w = `${minutes}m`;
     const durationSec = minutes * 60;
 
-    const [counts, p95s, errors5xx, errors4xx] = await Promise.all([
+    const quantile = (q: number) =>
       this.prom.safeQuery(
-        `sum by (route, method) (increase(http_request_duration_seconds_count[${w}]))`,
+        `histogram_quantile(${q}, sum by (le, route, method) (rate(http_request_duration_seconds_bucket[${w}])))`,
+      );
+    const [counts, sums, p50s, p95s, p99s, errors5xx, errors4xx] = await Promise.all([
+      this.must(
+        this.prom.query(
+          `sum by (route, method) (increase(http_request_duration_seconds_count[${w}]))`,
+        ),
       ),
       this.prom.safeQuery(
-        `histogram_quantile(0.95, sum by (le, route, method) (rate(http_request_duration_seconds_bucket[${w}])))`,
+        `sum by (route, method) (increase(http_request_duration_seconds_sum[${w}]))`,
       ),
+      quantile(0.5),
+      quantile(0.95),
+      quantile(0.99),
       this.prom.safeQuery(
         `sum by (route, method) (increase(http_request_duration_seconds_count{status=~"5.."}[${w}]))`,
       ),
@@ -245,38 +275,31 @@ export class TrafficService {
         `sum by (route, method) (increase(http_request_duration_seconds_count{status=~"4.."}[${w}]))`,
       ),
     ]);
-
-    const p95Map = new Map<string, number>();
-    for (const item of p95s) {
-      const key = `${item.labels['method'] || 'GET'} ${item.labels['route'] || '/'}`;
-      p95Map.set(key, item.value);
-    }
-    const errMap = new Map<string, number>();
-    for (const item of errors5xx) {
-      const key = `${item.labels['method'] || 'GET'} ${item.labels['route'] || '/'}`;
-      errMap.set(key, item.value);
-    }
-    const clientErrMap = new Map<string, number>();
-    for (const item of errors4xx) {
-      const key = `${item.labels['method'] || 'GET'} ${item.labels['route'] || '/'}`;
-      clientErrMap.set(key, item.value);
-    }
+    const sumMap = byRoute(sums);
+    const p50Map = byRoute(p50s);
+    const p95Map = byRoute(p95s);
+    const p99Map = byRoute(p99s);
+    const errMap = byRoute(errors5xx);
+    const clientErrMap = byRoute(errors4xx);
 
     const rows: EndpointRowDto[] = [];
     for (const item of counts) {
       const method = item.labels['method'] || 'GET';
       const route = item.labels['route'] || '/';
-      const key = `${method} ${route}`;
+      const key = routeKey(item.labels);
       const reqCount = Math.round(item.value);
-      const rawP95 = p95Map.get(key) ?? null;
-      const p95LatencyMs = rawP95 !== null ? Math.round(rawP95 * 1000) : null;
+      const sumSec = sumMap.get(key);
+      const avgLatencyMs =
+        reqCount > 0 && sumSec !== undefined
+          ? Number(((sumSec / reqCount) * 1000).toFixed(1))
+          : null;
+      const p95LatencyMs = toMs(p95Map.get(key));
       const serverErr = Math.round(errMap.get(key) ?? 0);
       const clientErr = Math.round(clientErrMap.get(key) ?? 0);
-      const errorRatePercent = reqCount > 0 ? Number(((serverErr / reqCount) * 100).toFixed(2)) : 0;
-      const clientErrorRatePercent =
-        reqCount > 0 ? Number(((clientErr / reqCount) * 100).toFixed(2)) : 0;
+      const errorRatePercent = percentOf(serverErr, reqCount);
+      const clientErrorRatePercent = percentOf(clientErr, reqCount);
 
-      const internal = route.includes('/ops/') || route.includes('/health');
+      const internal = isInternal(route);
       if (!q.includeInternal && internal) continue;
       if (q.method && q.method !== method) continue;
       if (q.routeId && q.routeId !== key) continue;
@@ -298,10 +321,10 @@ export class TrafficService {
         stats: {
           requests: reqCount,
           requestsPerSecond: Number((reqCount / durationSec).toFixed(2)),
-          avgLatencyMs: p95LatencyMs,
-          p50LatencyMs: p95LatencyMs ? Math.round(p95LatencyMs * 0.7) : null,
+          avgLatencyMs,
+          p50LatencyMs: toMs(p50Map.get(key)),
           p95LatencyMs,
-          p99LatencyMs: p95LatencyMs ? Math.round(p95LatencyMs * 1.3) : null,
+          p99LatencyMs: toMs(p99Map.get(key)),
           clientErrors: clientErr,
           serverErrors: serverErr,
           errorRatePercent,

@@ -1,5 +1,5 @@
 {
-  "performance.error.telemetryUnavailable": "Không kết nối được Redis nên không có số đo hiệu năng.",
+  "performance.error.telemetryUnavailable": "Không kết nối được Prometheus (hoặc chưa đặt PROMETHEUS_URL) nên không có số đo hiệu năng.",
   "performance.error.componentNotFound": "Không có thành phần {id}.",
   "performance.none": "không có",
   "performance.metric.latency": "Latency",
@@ -31,6 +31,7 @@
   "performance.component.worker": "Worker",
   "performance.component.messaging": "Messaging",
   "performance.component.noLoad": "Không có tải trong khoảng thời gian này",
+  "performance.component.notMeasured": "Chưa có số đo qua Prometheus",
   "performance.component.database.noDataSource": "Chưa kết nối được database — chưa đo được query",
   "performance.component.cache.hitRate": "Hit rate {rate}%",
   "performance.component.worker.notRunning": "Worker không chạy",

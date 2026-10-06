@@ -7,12 +7,7 @@ export interface TrafficRoute {
 }
 
 export type TimelinePhase =
-  | 'received'
-  | 'routed'
-  | 'handlerStart'
-  | 'handlerEnd'
-  | 'send'
-  | 'finished';
+  'received' | 'routed' | 'handlerStart' | 'handlerEnd' | 'send' | 'finished';
 
 export interface TimelineMark {
   phase: TimelinePhase;

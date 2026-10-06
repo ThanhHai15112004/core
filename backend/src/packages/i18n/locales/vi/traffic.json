@@ -21,7 +21,7 @@
   "traffic.problem.endpoint.failing.title": "Endpoint đang lỗi: {endpoint}",
   "traffic.problem.none": "Không có baseline",
   "traffic.rateLimit.notConfigured": "Chưa cấu hình rate limiting — hệ thống chưa chặn request nào theo tần suất. Response 429 (nếu có) được đếm ở trên.",
-  "traffic.error.telemetryUnavailable": "Không kết nối được Redis nên không có telemetry HTTP.",
+  "traffic.error.telemetryUnavailable": "Không kết nối được Prometheus (hoặc chưa đặt PROMETHEUS_URL) nên không có telemetry HTTP.",
   "traffic.error.disabled": "Chưa bật thu thập metric request (TRAFFIC_ENABLED=false).",
   "traffic.error.requestNotFound": "Không tìm thấy request {id} — có thể đã hết thời gian lưu.",
   "traffic.error.endpointNotFound": "Không tìm thấy endpoint {id}."

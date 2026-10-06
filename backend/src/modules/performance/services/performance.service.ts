@@ -1,11 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { CoreConfigService } from '@packages/config/index.js';
 import { CoreI18nService } from '@packages/i18n/index.js';
-import { PrometheusQueryClient } from '@packages/metrics/index.js';
+import { PrometheusQueryClient, PrometheusUnavailableError } from '@packages/metrics/index.js';
 import { RuntimesService } from '@modules/runtimes/index.js';
 import { TRAFFIC_RANGES } from '@modules/traffic/index.js';
 import { PerformanceStoreService } from './performance-store.service.js';
-import { PerformanceComponentNotFoundException } from '../exceptions/performance.exceptions.js';
+import {
+  PerformanceComponentNotFoundException,
+  PerformanceTelemetryUnavailableException,
+} from '../exceptions/performance.exceptions.js';
 import type {
   BaselineMode,
   BottleneckDto,
@@ -49,6 +52,17 @@ export class PerformanceService {
     private readonly store: PerformanceStoreService,
   ) {}
 
+  /** Prometheus không cấu hình/không trả lời → 503, thay vì KPI rỗng trông như hệ thống nhàn rỗi. */
+  private async must<T>(task: Promise<T>): Promise<T> {
+    try {
+      return await task;
+    } catch (err) {
+      if (err instanceof PrometheusUnavailableError)
+        throw new PerformanceTelemetryUnavailableException();
+      throw err;
+    }
+  }
+
   public async getOverview(range: PerfRange): Promise<PerformanceOverviewDto> {
     const minutes = TRAFFIC_RANGES[range] ?? 60;
     const w = `${minutes}m`;
@@ -57,7 +71,9 @@ export class PerformanceService {
       this.prom.value(
         `histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket[${w}])))`,
       ),
-      this.prom.value(`sum(rate(http_request_duration_seconds_count[${w}]))`),
+      this.must(this.prom.query(`sum(rate(http_request_duration_seconds_count[${w}]))`)).then(
+        (r) => r[0]?.value ?? null,
+      ),
       this.prom.value(`sum(rate(http_request_duration_seconds_count{status=~"5.."}[${w}]))`),
       this.prom.value(`sum(rate(process_cpu_seconds_total[${w}])) * 100`),
       this.prom.value(`sum(process_resident_memory_bytes)`),
@@ -101,11 +117,27 @@ export class PerformanceService {
       };
     });
 
+    // Chỉ HTTP có số đo qua Prometheus; thành phần khác chưa có metric → "unavailable", không báo "normal" giả.
+    const notMeasured = (
+      id: Exclude<ComponentId, 'api'>,
+      loadUnit: string,
+      target: string,
+    ): ComponentRowDto => ({
+      id,
+      status: 'unavailable',
+      note: this.i18n.t('performance.component.notMeasured'),
+      load: null,
+      loadUnit,
+      latencyMs: null,
+      latencyKind: 'avg',
+      errorPercent: null,
+      target,
+    });
     const components: ComponentRowDto[] = [
       {
         id: 'api',
-        status: 'normal',
-        note: null,
+        status: throughputRps ? 'normal' : 'idle',
+        note: throughputRps ? null : this.i18n.t('performance.component.noLoad'),
         load: throughputRps,
         loadUnit: 'rps',
         latencyMs: p95LatencyMs,
@@ -113,50 +145,10 @@ export class PerformanceService {
         errorPercent: errorRatePercent,
         target: 'http-traffic',
       },
-      {
-        id: 'database',
-        status: 'normal',
-        note: null,
-        load: null,
-        loadUnit: 'qps',
-        latencyMs: null,
-        latencyKind: 'avg',
-        errorPercent: 0,
-        target: 'database',
-      },
-      {
-        id: 'cache',
-        status: 'normal',
-        note: null,
-        load: null,
-        loadUnit: 'ops/s',
-        latencyMs: null,
-        latencyKind: 'avg',
-        errorPercent: 0,
-        target: 'cache',
-      },
-      {
-        id: 'worker',
-        status: 'normal',
-        note: null,
-        load: null,
-        loadUnit: 'jobs/s',
-        latencyMs: null,
-        latencyKind: 'avg',
-        errorPercent: 0,
-        target: 'workers',
-      },
-      {
-        id: 'messaging',
-        status: 'normal',
-        note: null,
-        load: null,
-        loadUnit: 'msg/s',
-        latencyMs: null,
-        latencyKind: 'avg',
-        errorPercent: 0,
-        target: 'messaging',
-      },
+      notMeasured('database', 'qps', 'database'),
+      notMeasured('cache', 'ops/s', 'cache'),
+      notMeasured('worker', 'jobs/s', 'workers'),
+      notMeasured('messaging', 'msg/s', 'messaging'),
     ];
 
     const budgets: BudgetDto[] = [
@@ -192,34 +184,22 @@ export class PerformanceService {
         unit: '%',
         runtime: null,
       },
-      {
-        key: 'memory',
-        used: memoryMb,
-        limit: 2048,
-        percent: memoryMb !== null ? Number(((memoryMb / 2048) * 100).toFixed(1)) : null,
-        unit: 'MB',
-        runtime: null,
-      },
+      // Không có giới hạn bộ nhớ thật (cgroup/container) qua Prometheus → không tự đặt ngưỡng.
+      { key: 'memory', used: memoryMb, limit: null, percent: null, unit: 'MB', runtime: null },
     ];
 
+    // Prometheus chỉ có tổng thời gian request, không có từng giai đoạn (route/guard/db/…) → không chia ước lượng.
     const breakdown: BreakdownDto = {
       requests: Math.round((throughputRps ?? 0) * minutes * 60),
-      avgTotalMs: p95LatencyMs,
-      phases: [
-        { phase: 'route', avgMs: 1, percent: 5 },
-        { phase: 'guard', avgMs: 1, percent: 5 },
-        { phase: 'app', avgMs: (p95LatencyMs ?? 10) * 0.7, percent: 70 },
-        { phase: 'db', avgMs: (p95LatencyMs ?? 10) * 0.15, percent: 15 },
-        { phase: 'cache', avgMs: (p95LatencyMs ?? 10) * 0.05, percent: 5 },
-        { phase: 'send', avgMs: 0.5, percent: 0 },
-      ],
+      avgTotalMs: null,
+      phases: [],
       dbQueriesPerRequest: null,
     };
 
     return {
       range,
       generatedAt: new Date().toISOString(),
-      telemetry: { performance: true, traffic: true, database: 'active' },
+      telemetry: { performance: true, traffic: true, database: 'unavailable' },
       status: { level: 'normal', reasons: [] },
       kpis: {
         apiP95Ms: { value: p95LatencyMs, previous: null, changePercent: null },
@@ -229,8 +209,8 @@ export class PerformanceService {
           value: memoryMb,
           previous: null,
           changePercent: null,
-          percent: memoryMb ? Number(((memoryMb / 2048) * 100).toFixed(1)) : null,
-          limitMb: 2048,
+          percent: null,
+          limitMb: null,
         },
         errorRatePercent: { value: errorRatePercent, previous: null, changePercent: null },
         bottlenecks: { count: 0, components: [] },
@@ -321,7 +301,7 @@ export class PerformanceService {
     };
 
     const main = getExpr(metric);
-    const seriesList = await this.prom.safeRange(main.expr, minutes, stepSec);
+    const seriesList = await this.must(this.prom.range(main.expr, minutes, stepSec));
     const points =
       seriesList[0]?.points.map((p) => ({ t: p.t, value: Number(p.v.toFixed(2)) })) ?? [];
     const values = points.map((p) => p.value);

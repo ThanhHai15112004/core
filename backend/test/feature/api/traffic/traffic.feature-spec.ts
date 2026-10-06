@@ -1,7 +1,7 @@
 import { describe, beforeAll, afterAll, it, expect } from '@jest/globals';
 import { createTestApp, type TestAppContext } from '../../../concerns/test-app.concern.js';
+import { sample, stubPrometheus } from '../../../concerns/prometheus.concern.js';
 import { TRAFFIC_ROUTES } from '@modules/traffic/index.js';
-import { RedisService } from '@packages/redis/index.js';
 
 interface Envelope<T> {
   success: boolean;
@@ -10,6 +10,42 @@ interface Envelope<T> {
 }
 
 const base = `/${TRAFFIC_ROUTES.PREFIX}`;
+
+const HEALTH = { method: 'GET', route: '/health' };
+const STOP = { method: 'POST', route: '/ops/runtimes/:id/stop' };
+const ORDERS = { method: 'GET', route: '/api/v1/orders' };
+
+/**
+ * Prometheus giả: 3×200 + 1×302 trên route nội bộ, 1×400 trên route nội bộ, 1×500 trên route công khai.
+ * Query có `route!~` (ẩn nội bộ) chỉ thấy request công khai.
+ */
+function promql(expr: string) {
+  const external = expr.includes('route!~');
+  if (expr.includes('sum by (status)'))
+    return external
+      ? [sample(1, { status: '500' })]
+      : [
+          sample(3, { status: '200' }),
+          sample(1, { status: '302' }),
+          sample(1, { status: '400' }),
+          sample(1, { status: '500' }),
+        ];
+  if (expr.startsWith('sum(increase(http_request_duration_seconds_sum'))
+    return [sample(external ? 0.2 : 0.6)];
+  if (expr.includes('route, method)')) {
+    if (expr.includes('status=~"5..')) return [sample(1, ORDERS)];
+    if (expr.includes('status=~"4..')) return [sample(1, STOP)];
+    if (expr.includes('_sum[')) return [sample(0.03, HEALTH), sample(0.2, ORDERS)];
+    if (expr.includes('_count[')) return [sample(4, HEALTH), sample(1, STOP), sample(1, ORDERS)];
+    if (expr.startsWith('histogram_quantile(0.5,')) return [sample(0.004, HEALTH)];
+    if (expr.startsWith('histogram_quantile(0.95,')) return [sample(0.02, HEALTH)];
+    if (expr.startsWith('histogram_quantile(0.99,')) return [sample(0.03, HEALTH)];
+  }
+  if (expr.startsWith('histogram_quantile(0.50,')) return [sample(0.01)];
+  if (expr.startsWith('histogram_quantile(0.95,')) return [sample(0.05)];
+  if (expr.startsWith('histogram_quantile(0.99,')) return [sample(0.2)];
+  return [];
+}
 
 describe('HTTP Traffic (/ops/traffic)', () => {
   let context: TestAppContext;
@@ -21,116 +57,171 @@ describe('HTTP Traffic (/ops/traffic)', () => {
 
   beforeAll(async () => {
     context = await createTestApp();
-    await context.app.get(RedisService).client.flushall();
-    // Traffic thật đi qua app: 200, 404 (không khớp route), 400 (validation, có body nhạy cảm).
-    for (let i = 0; i < 3; i++) await context.app.inject({ method: 'GET', url: '/health' });
-    await context.app.inject({ method: 'GET', url: '/khong-ton-tai' });
-    await context.app.inject({
-      method: 'POST',
-      url: '/ops/runtimes/worker/stop',
-      headers: { authorization: 'Bearer super-secret', 'content-type': 'application/json' },
-      payload: { password: 'hunter2', confirm: 'nope' },
-    });
   });
 
   afterAll(async () => {
     await context.close();
   });
 
-  it('summary tính cả 404 và 400 (không bỏ sót request lỗi ngoài controller)', async () => {
-    const { status, body } = await get<{
-      stats: { requests: number; clientErrors: number };
-      hasTraffic: boolean;
-      statusClasses: { class: string; count: number }[];
-    }>(`${base}/summary?range=15m`);
-    expect(status).toBe(200);
-    expect(body.data.hasTraffic).toBe(true);
-    expect(body.data.stats.requests).toBe(5);
-    expect(body.data.stats.clientErrors).toBe(2);
-    expect(body.data.statusClasses.find((c) => c.class === '2xx')?.count).toBe(3);
+  describe('Prometheus chưa cấu hình (PROMETHEUS_URL trống)', () => {
+    it('summary / timeseries / endpoints → 503 telemetry unavailable, không trả số 0 giả', async () => {
+      for (const url of [
+        `${base}/summary?range=15m`,
+        `${base}/timeseries?range=5m&metric=latency`,
+        `${base}/endpoints?range=15m`,
+      ]) {
+        const res = await get(url, { 'accept-language': 'en' });
+        expect(res.status).toBe(503);
+        expect(res.body.error?.code).toBe('TRAFFIC_TELEMETRY_UNAVAILABLE');
+        expect(res.body.error?.message).toContain('Prometheus');
+      }
+    });
+
+    it('request không tồn tại → 404; tham số sai → 400', async () => {
+      const missing = await get(`${base}/requests/req_missing`, { 'accept-language': 'en' });
+      expect(missing.status).toBe(404);
+      expect(missing.body.error?.code).toBe('TRAFFIC_REQUEST_NOT_FOUND');
+      expect(missing.body.error?.message).toContain('may have expired');
+      expect((await get(`${base}/summary?range=2d`)).status).toBe(400);
+      expect((await get(`${base}/requests?status=abc`)).status).toBe(400);
+    });
   });
 
-  it('endpoints: tự phát hiện route (kể cả chưa có request) và gom 404 vào (unmatched)', async () => {
-    const { body } = await get<
-      { route: string; method: string; status: string; stats: { requests: number } }[]
-    >(`${base}/endpoints?range=15m`);
-    const routes = body.data.map((r) => `${r.method} ${r.route}`);
-    expect(routes).toContain('GET /health');
-    expect(routes).toContain('GET (unmatched)');
-    const idle = body.data.find((r) => r.route === '/ops/traffic/insights');
-    expect(idle?.status).toBe('idle');
-    expect(body.data[0]!.stats.requests).toBeGreaterThanOrEqual(body.data[1]!.stats.requests);
-  });
+  describe('số liệu từ Prometheus', () => {
+    let restore: () => void;
 
-  it('ẩn traffic nội bộ khi internal=false', async () => {
-    const { body } = await get<{ stats: { requests: number } }>(
-      `${base}/summary?range=15m&internal=false`,
-    );
-    // /health và /ops/* là nội bộ → chỉ còn request không khớp route.
-    expect(body.data.stats.requests).toBe(1);
-  });
+    beforeAll(() => {
+      restore = stubPrometheus(context.app, {
+        query: promql,
+        range: () => [
+          {
+            labels: {},
+            points: [
+              { t: 1_000, v: 12.345 },
+              { t: 2_000, v: 40 },
+              { t: 3_000, v: 20 },
+            ],
+          },
+        ],
+      });
+    });
 
-  it('requests lọc theo status và request detail đã mask header/body', async () => {
-    const list = await get<{ items: { id: string; status: number; errorCode: string | null }[] }>(
-      `${base}/requests?status=4xx`,
-    );
-    expect(list.body.data.items.map((r) => r.status).sort()).toEqual([400, 404]);
-    const failed = list.body.data.items.find((r) => r.status === 400)!;
-    expect(failed.errorCode).toBe('VALIDATION_FAILED');
+    afterAll(() => restore());
 
-    const detail = await get<{
-      detail: {
-        headers: Record<string, string>;
-        requestBody: { value: unknown };
-        correlationId: string;
-      };
-    }>(`${base}/requests/${failed.id}`);
-    const raw = JSON.stringify(detail.body.data);
-    expect(raw).not.toContain('super-secret');
-    expect(raw).not.toContain('hunter2');
-    expect(detail.body.data.detail.requestBody.value).toMatchObject({ password: '[REDACTED]' });
-    expect(detail.body.data.detail.correlationId).toBeTruthy();
-  });
+    it('summary: đếm theo lớp status thật (kể cả 3xx), độ trễ trung bình và phân vị', async () => {
+      const { status, body } = await get<{
+        hasTraffic: boolean;
+        stats: {
+          requests: number;
+          clientErrors: number;
+          serverErrors: number;
+          avgLatencyMs: number;
+          p50LatencyMs: number;
+          p95LatencyMs: number;
+          p99LatencyMs: number;
+        };
+        statusClasses: { class: string; count: number }[];
+        topStatuses: { status: number; count: number }[];
+      }>(`${base}/summary?range=15m`);
+      expect(status).toBe(200);
+      expect(body.data.hasTraffic).toBe(true);
+      expect(body.data.stats).toMatchObject({
+        requests: 6,
+        clientErrors: 1,
+        serverErrors: 1,
+        avgLatencyMs: 100,
+        p50LatencyMs: 10,
+        p95LatencyMs: 50,
+        p99LatencyMs: 200,
+      });
+      expect(Object.fromEntries(body.data.statusClasses.map((c) => [c.class, c.count]))).toEqual({
+        '2xx': 3,
+        '3xx': 1,
+        '4xx': 1,
+        '5xx': 1,
+      });
+      expect(body.data.topStatuses[0]).toEqual({ status: 200, count: 3 });
+    });
 
-  it('request không tồn tại → 404; tham số sai → 400', async () => {
-    const missing = await get(`${base}/requests/req_missing`, { 'accept-language': 'en' });
-    expect(missing.status).toBe(404);
-    expect(missing.body.error?.code).toBe('TRAFFIC_REQUEST_NOT_FOUND');
-    expect(missing.body.error?.message).toContain('may have expired');
-    expect((await get(`${base}/summary?range=2d`)).status).toBe(400);
-    expect((await get(`${base}/requests?status=abc`)).status).toBe(400);
-  });
+    it('ẩn traffic nội bộ khi internal=false', async () => {
+      const { body } = await get<{ stats: { requests: number; serverErrors: number } }>(
+        `${base}/summary?range=15m&internal=false`,
+      );
+      expect(body.data.stats).toMatchObject({ requests: 1, serverErrors: 1 });
+    });
 
-  it('timeseries, errors, active, insights trả đúng dạng', async () => {
-    const ts = await get<{ series: { id: string }[]; unit: string }>(
-      `${base}/timeseries?range=5m&metric=latency`,
-    );
-    expect(ts.body.data.unit).toBe('ms');
-    expect(ts.body.data.series.map((s) => s.id)).toEqual(['p95', 'p50', 'p99']);
+    it('endpoints: phân vị và độ trễ trung bình thật theo route, lọc route nội bộ', async () => {
+      const { body } = await get<
+        {
+          id: string;
+          internal: boolean;
+          status: string;
+          stats: {
+            requests: number;
+            avgLatencyMs: number | null;
+            p50LatencyMs: number | null;
+            p95LatencyMs: number | null;
+            p99LatencyMs: number | null;
+            clientErrors: number;
+            serverErrors: number;
+          };
+        }[]
+      >(`${base}/endpoints?range=15m`);
+      expect(body.data.map((e) => e.id)).toEqual([
+        'GET /health',
+        'POST /ops/runtimes/:id/stop',
+        'GET /api/v1/orders',
+      ]);
+      expect(body.data[0]!.stats).toMatchObject({
+        requests: 4,
+        avgLatencyMs: 7.5,
+        p50LatencyMs: 4,
+        p95LatencyMs: 20,
+        p99LatencyMs: 30,
+      });
+      // Không có histogram cho route → không suy ra phân vị.
+      const orders = body.data.find((e) => e.id === 'GET /api/v1/orders')!;
+      expect(orders.stats).toMatchObject({
+        avgLatencyMs: 200,
+        p50LatencyMs: null,
+        p95LatencyMs: null,
+        p99LatencyMs: null,
+        serverErrors: 1,
+      });
+      expect(orders.status).toBe('failing');
+      expect(body.data.find((e) => e.id === 'POST /ops/runtimes/:id/stop')!.internal).toBe(true);
 
-    const errors = await get<{ topCodes: { code: string }[] }>(`${base}/errors?range=15m`);
-    expect(errors.body.data.topCodes.map((c) => c.code)).toContain('VALIDATION_FAILED');
+      const publicOnly = await get<{ id: string }[]>(`${base}/endpoints?range=15m&internal=false`);
+      expect(publicOnly.body.data.map((e) => e.id)).toEqual(['GET /api/v1/orders']);
+    });
 
-    const active = await get<{ items: unknown[] }>(`${base}/active`);
-    expect(Array.isArray(active.body.data.items)).toBe(true);
+    it('timeseries, errors, active, insights trả đúng dạng', async () => {
+      const ts = await get<{
+        series: { id: string; points: { value: number }[] }[];
+        unit: string;
+        current: number;
+        peak: number;
+      }>(`${base}/timeseries?range=5m&metric=latency`);
+      expect(ts.body.data.unit).toBe('ms');
+      expect(ts.body.data.series.map((s) => s.id)).toEqual(['latency']);
+      expect(ts.body.data.series[0]!.points.map((p) => p.value)).toEqual([12.35, 40, 20]);
+      expect(ts.body.data).toMatchObject({ current: 20, peak: 40 });
 
-    const insights = await get<{
-      rateLimit: { configured: boolean };
-      security: { status: number }[];
-    }>(`${base}/insights?range=15m`);
-    expect(insights.body.data.rateLimit.configured).toBe(false);
-    expect(insights.body.data.security.map((s) => s.status)).toEqual([401, 403, 429]);
-  });
+      const errors = await get<{ topRoutes: { routeId: string }[] }>(`${base}/errors?range=15m`);
+      expect(errors.body.data.topRoutes.map((r) => r.routeId).sort()).toEqual([
+        'GET /api/v1/orders',
+        'POST /ops/runtimes/:id/stop',
+      ]);
 
-  it('Redis không sẵn sàng → 503 telemetry unavailable', async () => {
-    const client = context.app.get(RedisService).client;
-    Object.defineProperty(client, 'status', { value: 'reconnecting', configurable: true });
-    try {
-      const res = await get(`${base}/summary`);
-      expect(res.status).toBe(503);
-      expect(res.body.error?.code).toBe('TRAFFIC_TELEMETRY_UNAVAILABLE');
-    } finally {
-      Object.defineProperty(client, 'status', { value: 'ready', configurable: true });
-    }
+      const active = await get<{ items: unknown[] }>(`${base}/active`);
+      expect(Array.isArray(active.body.data.items)).toBe(true);
+
+      const insights = await get<{
+        rateLimit: { configured: boolean };
+        last24h: { total: number; serverErrors: number };
+      }>(`${base}/insights?range=15m`);
+      expect(insights.body.data.rateLimit.configured).toBe(false);
+      expect(insights.body.data.last24h).toMatchObject({ total: 6, serverErrors: 1 });
+    });
   });
 });

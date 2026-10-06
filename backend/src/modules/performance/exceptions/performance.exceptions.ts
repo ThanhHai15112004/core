@@ -8,7 +8,7 @@ export class PerformanceValidationException extends AppException {
   }
 }
 
-/** Redis không kết nối được — không đọc được số đo nào. */
+/** Prometheus chưa cấu hình (`PROMETHEUS_URL`) hoặc không trả lời — không đọc được số đo nào. */
 export class PerformanceTelemetryUnavailableException extends AppException {
   public override readonly code = 'PERFORMANCE_TELEMETRY_UNAVAILABLE';
 

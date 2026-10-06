@@ -1,5 +1,5 @@
 {
-  "performance.error.telemetryUnavailable": "Redis is unreachable, so no performance telemetry is available.",
+  "performance.error.telemetryUnavailable": "Prometheus is unreachable or PROMETHEUS_URL is not set, so no performance telemetry is available.",
   "performance.error.componentNotFound": "Component {id} does not exist.",
   "performance.none": "none",
   "performance.metric.latency": "Latency",
@@ -31,6 +31,7 @@
   "performance.component.worker": "Worker",
   "performance.component.messaging": "Messaging",
   "performance.component.noLoad": "No load in this time range",
+  "performance.component.notMeasured": "Not measured via Prometheus yet",
   "performance.component.database.noDataSource": "Database is not connected — queries cannot be measured",
   "performance.component.cache.hitRate": "Hit rate {rate}%",
   "performance.component.worker.notRunning": "Worker is not running",

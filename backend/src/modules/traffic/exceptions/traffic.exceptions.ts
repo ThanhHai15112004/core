@@ -8,7 +8,7 @@ export class TrafficValidationException extends AppException {
   }
 }
 
-/** Redis không kết nối được. */
+/** Prometheus chưa cấu hình (`PROMETHEUS_URL`) hoặc không trả lời. */
 export class TrafficTelemetryUnavailableException extends AppException {
   public override readonly code = 'TRAFFIC_TELEMETRY_UNAVAILABLE';
 
