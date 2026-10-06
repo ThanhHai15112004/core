@@ -115,9 +115,7 @@ export class CacheMonitoringService implements OnApplicationBootstrap, OnModuleD
       durationMs: Date.now() - started,
     });
     if (this.provider.driver !== 'memory') return own;
-    const others = (await this.memorySnapshots()).filter(
-      (s) => s.instance !== `${process.pid}`,
-    );
+    const others = (await this.memorySnapshots()).filter((s) => s.instance !== `${process.pid}`);
     return mergeKeyspaceSnapshots([own, ...others.map((s) => s.snapshot)], now) ?? own;
   }
 

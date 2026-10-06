@@ -184,7 +184,7 @@ export class BaseStorageProvider
     });
     this.activeDirty = true;
     try {
-      const res = await this.measure(
+      await this.measure(
         'put',
         path,
         buf.length,

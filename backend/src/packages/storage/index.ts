@@ -16,3 +16,4 @@ export * from './providers/storage.provider.js';
 export * from './providers/storage-connection.service.js';
 export * from './providers/storage-manageable.adapter.js';
 export * from './storage.module.js';
+export * from './utils/storage-events.js';
