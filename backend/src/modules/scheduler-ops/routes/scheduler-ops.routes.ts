@@ -14,7 +14,6 @@ export const SCHEDULER_OPS_ROUTES = {
   UPCOMING: 'upcoming',
   TIMELINE: 'timeline',
   FAILURES: 'failures',
-  EVENTS: 'events',
   OPERATIONS: 'operations',
   CONFIG: 'config',
   CRON: 'cron',

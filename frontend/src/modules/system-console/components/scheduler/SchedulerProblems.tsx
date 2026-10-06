@@ -14,11 +14,7 @@ export const SchedulerProblems: React.FC<{ alerts: SchedulerAlert[]; data?: Sche
   const { t, formatRelative } = useLocale();
   const rules = new Set(alerts.map((a) => a.rule));
   const ok: string[] = [];
-  if (data && data.health.aliveInstances > 0) {
-    if (!rules.has('OVERLAP') && !rules.has('DUPLICATE_EXECUTION')) ok.push(t('sch.problems.noOverlap'));
-    if (!rules.has('MISSED_RUN') && !rules.has('OVERDUE')) ok.push(t('sch.problems.noMissed'));
-    if (!rules.has('LONG_RUNNING')) ok.push(t('sch.problems.noLongRunning'));
-  }
+  if (data && data.instance && !rules.has('CONSECUTIVE_FAILURES')) ok.push(t('sch.problems.noFailures'));
   const allGood = data && alerts.length === 0 && data.health.status === 'healthy';
   return (
     <section className="ov-card ov-section">

@@ -60,7 +60,7 @@ export const SchedulerHistoryView: React.FC<ViewProps & { tasks: TaskRow[]; open
       {data && (
         <ExecutionTable
           rows={data.items}
-          columns={['time', 'task', 'result', 'duration', 'trigger', 'drift', 'instance', 'id']}
+          columns={['time', 'task', 'result', 'duration', 'trigger', 'id']}
           onOpen={openExecution}
           emptyText={t('sch.history.empty')}
         />
@@ -86,11 +86,6 @@ export const SchedulerFailuresView: React.FC<
         <div className={`ov-card ov-kpi ov-tone-${data.failed > 0 ? 'warn' : 'ok'}`}>
           <span className="ov-kpi-label">{t('sch.failures.failed')}</span>
           <span className="ov-kpi-value">{n(data.failed)}</span>
-          <span className="ov-kpi-sub">{t(`tr.range.${range}`)}</span>
-        </div>
-        <div className={`ov-card ov-kpi ov-tone-${data.missed > 0 ? 'warn' : 'ok'}`}>
-          <span className="ov-kpi-label">{t('sch.failures.missed')}</span>
-          <span className="ov-kpi-value">{n(data.missed)}</span>
           <span className="ov-kpi-sub">{t(`tr.range.${range}`)}</span>
         </div>
         <div className="ov-card ov-kpi">
@@ -154,7 +149,6 @@ export const SchedulerFailuresView: React.FC<
                   <tr>
                     <th>{t('sch.exec.col.task')}</th>
                     <th>{t('sch.failures.failed')}</th>
-                    <th>{t('sch.failures.missed')}</th>
                     <th>{t('sch.failures.consecutive')}</th>
                   </tr>
                 </thead>
@@ -163,7 +157,6 @@ export const SchedulerFailuresView: React.FC<
                     <tr key={x.taskId} className="is-clickable" onClick={() => openTask(x.taskId)}>
                       <td className="cell-strong">{x.taskName}</td>
                       <td>{n(x.failed)}</td>
-                      <td>{n(x.missed)}</td>
                       <td className={x.consecutive > 0 ? 'is-warn' : ''}>{x.consecutive}</td>
                     </tr>
                   ))}

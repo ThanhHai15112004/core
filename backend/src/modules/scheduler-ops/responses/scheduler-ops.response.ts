@@ -1,48 +1,42 @@
 import type {
   ExecutionError,
-  ExecutionReason,
   ExecutionStatus,
   ExecutionTrigger,
   GeneratedJobRef,
-  MisfirePolicy,
-  OverlapPolicy,
-  SchedulerEventType,
   SchedulerOperationAction,
   SchedulerTaskType,
 } from '../contracts/scheduler.types.js';
 
 export type SchedulerRange = '1h' | '6h' | '24h' | '7d';
-export type SchedulerMetric = 'executions' | 'duration' | 'failures' | 'missed';
+export type SchedulerMetric = 'executions' | 'duration' | 'failures';
 export type SchedulerSeverity = 'warning' | 'critical' | 'info';
-/** Trạng thái tổng của Scheduler runtime. */
+/** Trạng thái tổng của Scheduler runtime (theo heartbeat). */
 export type SchedulerStatus = 'healthy' | 'degraded' | 'down' | 'paused' | 'unknown';
 /** Trạng thái hiển thị của task (một giá trị ưu tiên nhất) — `enabled` + `health` giữ riêng. */
-export type TaskDisplayStatus =
-  'running' | 'failing' | 'overdue' | 'misconfigured' | 'disabled' | 'completed' | 'enabled';
+export type TaskDisplayStatus = 'running' | 'failing' | 'disabled' | 'enabled';
 export type TaskHealth = 'healthy' | 'warning' | 'error' | 'unknown';
 
 export interface ScheduleDto {
   type: SchedulerTaskType;
   expression: string | null;
   intervalMs: number | null;
-  runAt: string | null;
   timezone: string;
+  /** Lệch UTC hiện tại của múi giờ lịch, vd. `+07:00`. */
   utcOffset: string;
-  /** Mô tả cho người đọc (theo ngôn ngữ của request), vd. "Every day at 01:00". */
   description: string;
 }
 
+/**
+ * Một task: định nghĩa (scheduler runtime ghi), lịch BullMQ (`next`) và thống kê tính từ job còn giữ trên broker
+ * (theo retention của queue) — `null` khi không có job nào để tính.
+ */
 export interface TaskRowDto {
   id: string;
   name: string;
   description: string | null;
-  group: string;
   type: SchedulerTaskType;
   schedule: ScheduleDto;
-  /** Trạng thái vận hành (bật/tắt) — tách với `health`. */
   enabled: boolean;
-  disabledAt: string | null;
-  disabledBy: string | null;
   running: number;
   status: TaskDisplayStatus;
   health: TaskHealth;
@@ -53,17 +47,14 @@ export interface TaskRowDto {
   lastExecutionId: string | null;
   lastSuccessAt: string | null;
   nextRunAt: string | null;
+  /** Số lần đã chạy theo BullMQ Job Scheduler (`iterationCount`). */
+  iterations: number | null;
   consecutiveFailures: number;
-  /** Số lần chạy / lỗi / tỉ lệ thành công 24 giờ qua (telemetry). */
   executions24h: number;
   failures24h: number;
   successRatePercent: number | null;
   avgDurationMs: number | null;
-  overlap: OverlapPolicy;
-  misfire: MisfirePolicy;
-  expectedDurationMs: number | null;
   downstreamQueue: string | null;
-  error: string | null;
 }
 
 export interface ExecutionDto {
@@ -78,18 +69,10 @@ export interface ExecutionDto {
   durationMs: number | null;
   /** Đang chạy: đã chạy bao lâu. */
   runningMs: number | null;
-  driftMs: number | null;
-  instance: string | null;
-  correlationId: string | null;
+  attempts: number;
+  correlationId: string;
   error: ExecutionError | null;
-  reason: ExecutionReason | null;
-  missedCount: number | null;
-  missedUntil: string | null;
   jobs: GeneratedJobRef[];
-  actor: string | null;
-  blockedBy: string | null;
-  /** Đang chạy lâu hơn thời lượng dự kiến (có thể bị treo — không khẳng định). */
-  longRunning: boolean;
 }
 
 export interface SchedulerAlertDto {
@@ -108,16 +91,6 @@ export interface SchedulerAlertDto {
   tab: string;
 }
 
-export interface SchedulerEventDto {
-  id: string;
-  at: string;
-  type: SchedulerEventType;
-  severity: 'info' | 'warning' | 'critical' | 'success';
-  message: string;
-  taskId: string | null;
-  executionId: string | null;
-}
-
 export interface SchedulerOperationDto {
   id: string;
   at: string;
@@ -132,6 +105,7 @@ export interface SchedulerOperationDto {
   executionId: string | null;
 }
 
+/** Process scheduler theo heartbeat của runtime agent. */
 export interface SchedulerInstanceDto {
   instance: string;
   host: string;
@@ -140,11 +114,7 @@ export interface SchedulerInstanceDto {
   lastSeenAt: string;
   heartbeatAgeSec: number;
   uptimeSec: number;
-  alive: boolean;
   paused: boolean;
-  tasks: number;
-  running: number;
-  timezone: string;
 }
 
 export interface SchedulerHealthDto {
@@ -152,7 +122,6 @@ export interface SchedulerHealthDto {
   reasons: { code: string; message: string; taskId: string | null }[];
   lastHeartbeatAt: string | null;
   heartbeatAgeSec: number | null;
-  aliveInstances: number;
 }
 
 export interface UpcomingDto {
@@ -176,15 +145,12 @@ export interface TimezoneDto {
   schedule: string;
   scheduleOffset: string;
   runtime: string | null;
-  dst: boolean;
 }
 
 export interface SchedulerReportDto {
   executions: number;
   successful: number;
   failed: number;
-  skipped: number;
-  missed: number;
   successRatePercent: number | null;
   avgDurationMs: number | null;
   p95DurationMs: number | null;
@@ -196,21 +162,13 @@ export interface SchedulerSettingsDto {
   toggle: boolean;
 }
 
-export interface SchedulerRuntimeDto {
-  instances: SchedulerInstanceDto[];
-  /** Chạy nhiều instance: mỗi mốc lịch một instance nhận + lock chống chạy chồng (không có leader). */
-  strategy: 'distributed_lock';
-  lockProvider: string;
-  runtimeState: string | null;
-  uptimeSec: number | null;
-}
-
 export interface SchedulerOverviewDto {
   generatedAt: string;
   range: SchedulerRange;
   environment: string;
   timezone: TimezoneDto;
   health: SchedulerHealthDto;
+  instance: SchedulerInstanceDto | null;
   kpis: {
     registered: number;
     enabled: number;
@@ -221,21 +179,18 @@ export interface SchedulerOverviewDto {
     successRatePercent: number | null;
     avgDurationMs: number | null;
     p95DurationMs: number | null;
-    missedToday: number;
-    skippedToday: number;
     nextExecutionAt: string | null;
     nextExecutionTask: string | null;
   };
-  drift: { avgMs: number | null; p95Ms: number | null };
-  runtime: SchedulerRuntimeDto;
   alerts: SchedulerAlertDto[];
   upcoming: UpcomingDto[];
   concentration: ConcentrationDto[];
   tasks: TaskRowDto[];
   running: ExecutionDto[];
   recent: ExecutionDto[];
-  events: SchedulerEventDto[];
   report: { today: SchedulerReportDto; yesterday: SchedulerReportDto };
+  /** Lịch sử chỉ gồm job còn giữ trên broker (retention của queue), không lưu riêng. */
+  historyNote: { keepCompleted: number; keepFailed: number };
   settings: SchedulerSettingsDto;
 }
 
@@ -246,7 +201,7 @@ export interface TasksListDto {
 
 export interface DownstreamDto {
   queue: string;
-  /** null = không đọc được queue (backend chưa kết nối / queue không tồn tại) — `reason` nói rõ. */
+  /** null = không đọc được queue (broker chưa kết nối) — `reason` nói rõ. */
   state: {
     waiting: number;
     active: number;
@@ -260,16 +215,10 @@ export interface DownstreamDto {
 
 export interface TaskDetailDto {
   task: TaskRowDto;
-  className: string;
-  sourcePath: string | null;
-  registeredAt: string;
-  lockTtlMs: number;
   kpis: {
     executions: number;
     successful: number;
     failed: number;
-    skipped: number;
-    missed: number;
     successRatePercent: number | null;
     avgDurationMs: number | null;
     p95DurationMs: number | null;
@@ -277,20 +226,12 @@ export interface TaskDetailDto {
     sampled: number;
   };
   consecutive: { count: number; firstFailedAt: string | null; lastSuccessAt: string | null } | null;
-  expected: { durationMs: number | null; source: 'configured' | 'baseline' | null };
   running: ExecutionDto[];
   next: string[];
-  lock: {
-    strategy: 'distributed_lock' | 'none';
-    provider: string | null;
-    ttlMs: number;
-    owner: { executionId: string; instance: string } | null;
-  };
   downstream: DownstreamDto | null;
   durations: { t: number; durationMs: number; status: ExecutionStatus }[];
   recent: ExecutionDto[];
   alerts: SchedulerAlertDto[];
-  events: SchedulerEventDto[];
   settings: SchedulerSettingsDto;
 }
 
@@ -299,30 +240,16 @@ export interface ExecutionsListDto {
   truncated: boolean;
 }
 
-export interface TriggeredJobDto extends GeneratedJobRef {
-  /** Trạng thái hiện tại trên broker; null = không còn (đã dọn theo retention) hoặc không đọc được. */
-  status: string | null;
-  attempts: number | null;
-  finishedAt: string | null;
-  error: string | null;
-}
-
 export interface ExecutionDetailDto {
   execution: ExecutionDto;
   task: TaskRowDto | null;
-  jobs: TriggeredJobDto[];
-  /** Lý do không tra được trạng thái job (broker chưa kết nối…). */
-  jobsReason: string | null;
   downstream: DownstreamDto | null;
-  /** Lần chạy chặn lần này (bản ghi `skipped`). */
-  blocking: ExecutionDto | null;
   settings: SchedulerSettingsDto;
 }
 
 export interface FailuresDto {
   range: SchedulerRange;
   failed: number;
-  missed: number;
   byType: {
     type: string;
     count: number;
@@ -330,13 +257,7 @@ export interface FailuresDto {
     lastAt: string;
     sampleExecutionId: string;
   }[];
-  byTask: {
-    taskId: string;
-    taskName: string;
-    failed: number;
-    missed: number;
-    consecutive: number;
-  }[];
+  byTask: { taskId: string; taskName: string; failed: number; consecutive: number }[];
   items: ExecutionDto[];
   truncated: boolean;
   alerts: SchedulerAlertDto[];
@@ -397,5 +318,4 @@ export interface SchedulerConfigDto {
 export interface RunNowDto {
   operation: SchedulerOperationDto;
   executionId: string;
-  instance: string;
 }

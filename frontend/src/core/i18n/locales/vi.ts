@@ -3398,6 +3398,7 @@ export const vi = {
       },
     },
     problems: {
+      noFailures: 'Không có lỗi liên tiếp',
       title: 'Vấn đề hiện tại',
       allGood: 'Scheduler hoạt động bình thường',
       allGoodHint: 'Không có task lỡ lịch, lỗi hay chạy lâu bất thường.',
@@ -3534,7 +3535,7 @@ export const vi = {
         p95Duration: 'Thời lượng P95',
         nextRun: 'Lần tới',
         failuresToday: 'Lỗi hôm nay',
-        missedSub: '{{missed}} lỡ lịch · {{skipped}} bỏ qua',
+        failedSub: '{{count}} lỗi trong mẫu',
       },
       expected: {
         configured: 'Dự kiến < {{value}}',

@@ -9,6 +9,7 @@ import {
   JOB_LOCK_DURATION_MS,
   QUEUES,
   parseEnvelope,
+  scheduledEnvelope,
   type MessageEnvelope,
 } from '@packages/messaging/index.js';
 
@@ -47,7 +48,8 @@ export class SystemProcessor extends WorkerHost implements OnApplicationBootstra
   }
 
   public async process(job: Job): Promise<void> {
-    const envelope = parseEnvelope(job.data);
+    // Job từ Job Scheduler / Run Now không có envelope — dựng từ chính job (xem `scheduledEnvelope`).
+    const envelope = parseEnvelope(job.data) ?? scheduledEnvelope(job);
     if (!envelope) {
       this.consumed.inc({ queue: job.queueName, channel: job.name, result: 'failed' });
       throw new UnrecoverableError(`Malformed envelope for job ${job.id ?? '?'}`);

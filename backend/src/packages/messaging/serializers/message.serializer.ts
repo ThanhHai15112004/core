@@ -63,6 +63,33 @@ export function parseEnvelope(data: unknown): MessageEnvelope | null {
   };
 }
 
+/** Prefix jobId của lần chạy thủ công (Run Now) từ System Console. */
+export const MANUAL_RUN_PREFIX = 'manual:';
+
+/**
+ * Job do BullMQ Job Scheduler (có `repeatJobKey`) hoặc Run Now (`manual:<task>:<ts>`) tạo không mang envelope —
+ * dựng envelope từ chính job: id = job id (mỗi lần chạy khác nhau), topic = tên job, payload = data.
+ */
+export function scheduledEnvelope(job: {
+  id?: string | undefined;
+  name: string;
+  data: unknown;
+  timestamp: number;
+  repeatJobKey?: string | undefined;
+}): MessageEnvelope | null {
+  const id = job.id ?? '';
+  if (!id || (!job.repeatJobKey && !id.startsWith(MANUAL_RUN_PREFIX))) return null;
+  return {
+    id,
+    topic: job.name,
+    payload: job.data ?? {},
+    timestamp: new Date(job.timestamp).toISOString(),
+    producer: 'scheduler',
+    correlationId: id,
+    meta: null,
+  };
+}
+
 /** Kích thước (bytes) của envelope khi lưu vào broker. */
 export const envelopeSize = (envelope: unknown): number => {
   try {

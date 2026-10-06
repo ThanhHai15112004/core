@@ -8,14 +8,21 @@ import {
   type RuntimeIssue,
 } from '@packages/runtime/index.js';
 import { CoreConfigService } from '@packages/config/index.js';
+import { schedulerKeys } from '@packages/queue/index.js';
+import { RedisService } from '@packages/redis/index.js';
 import { ScheduledTaskRegistry } from '../registry/scheduled-task.registry.js';
 
+/**
+ * Scheduler runtime chỉ đồng bộ lịch sang BullMQ Job Scheduler — job được BullMQ tạo, worker xử lý. Số lần chạy /
+ * lỗi xem ở trang Scheduler (đọc từ job trên broker). Không pause được từ Console (lịch nằm trên broker).
+ */
 @Injectable()
 export class SchedulerRuntimeContributor implements RuntimeContributor, OnModuleInit {
   constructor(
     private readonly agent: RuntimeAgentService,
     private readonly registry: ScheduledTaskRegistry,
     private readonly config: CoreConfigService,
+    private readonly redis: RedisService,
   ) {}
 
   public onModuleInit(): void {
@@ -38,16 +45,14 @@ export class SchedulerRuntimeContributor implements RuntimeContributor, OnModule
 
   public async collectMetrics(): Promise<Record<string, MetricValue>> {
     const tasks = this.registry.list();
+    const disabled = this.redis.isReady()
+      ? new Set(
+          await this.redis.client.smembers(schedulerKeys(this.redis).disabled()).catch(() => []),
+        )
+      : null;
     return {
       registeredTasks: tasks.length,
-      activeTasks: tasks.length,
-      runningTasks: 0,
-      failedToday: 0,
-      runsToday: 0,
-      nextTaskName: tasks[0]?.name ?? null,
-      nextTaskAt: null,
-      lastFailedTask: null,
-      lastFailedAt: null,
+      activeTasks: disabled ? tasks.filter((t) => !disabled.has(t.id)).length : null,
     };
   }
 
@@ -59,9 +64,7 @@ export class SchedulerRuntimeContributor implements RuntimeContributor, OnModule
     return [];
   }
 
-  public async pause(): Promise<void> {}
-
-  public async resume(): Promise<void> {}
-
-  public async drain(): Promise<void> {}
+  public capabilities(): { pause: boolean } {
+    return { pause: false };
+  }
 }

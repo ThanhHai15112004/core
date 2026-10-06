@@ -16,7 +16,6 @@ function useNextAfterEnable(task: TaskRow | null) {
     setNext(null);
     if (!task) return;
     const s = task.schedule;
-    if (s.type === 'one_time') return setNext(s.runAt && Date.parse(s.runAt) > Date.now() ? s.runAt : null);
     if (s.type === 'interval' && s.intervalMs) return setNext(new Date(Math.ceil((Date.now() + 1) / s.intervalMs) * s.intervalMs).toISOString());
     if (!s.expression) return;
     let alive = true;
@@ -72,7 +71,6 @@ export function useSchedulerActions(
   if (pending) {
     const { action, task } = pending;
     const now = Date.now();
-    const blocked = action === 'run' && task.running > 0 && task.overlap === 'skip';
     const last = task.lastRunAt
       ? `${task.lastStatus ? t(`sch.exec.status.${task.lastStatus}`) : ''} · ${formatRelative(new Date(task.lastRunAt), now)}`
       : t('sch.task.never');
@@ -82,7 +80,6 @@ export function useSchedulerActions(
         { label: t('sch.modal.environment'), value: <strong>{environment.toUpperCase()}</strong> },
         { label: t('sch.modal.lastRun'), value: last },
         { label: t('sch.modal.state'), value: task.running > 0 ? t('sch.modal.running', { count: task.running }) : t('sch.modal.idle') },
-        { label: t('sch.task.overlap'), value: t(`sch.overlap.${task.overlap}`) },
       ],
       disable: [
         { label: t('sch.modal.nextScheduled'), value: next(task.nextRunAt) },
@@ -90,7 +87,6 @@ export function useSchedulerActions(
       ],
       enable: [
         { label: t('sch.modal.nextAfterEnable'), value: next(nextAfterEnable) },
-        { label: t('sch.task.misfire'), value: t(`sch.misfire.${task.misfire}`) },
       ],
     }[action];
     modal = (
@@ -101,9 +97,8 @@ export function useSchedulerActions(
           { label: t('sch.task.schedule'), value: `${task.schedule.description} · ${task.schedule.timezone}` },
           ...context,
         ]}
-        warning={blocked ? t('sch.modal.run.blocked') : t(`sch.modal.${action}.warning`)}
+        warning={t(`sch.modal.${action}.warning`)}
         confirmLabel={t(`sch.modal.${action}.confirm`)}
-        confirmDisabled={blocked}
         busy={busy}
         onCancel={() => setPending(null)}
         onConfirm={() => void run()}

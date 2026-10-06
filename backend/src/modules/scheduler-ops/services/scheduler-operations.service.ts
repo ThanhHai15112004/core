@@ -2,8 +2,8 @@ import { performance } from 'node:perf_hooks';
 import { Injectable, Logger } from '@nestjs/common';
 import { CoreConfigService } from '@packages/config/index.js';
 import { RedisService } from '@packages/redis/index.js';
-import { QueueRegistry } from '@packages/queue/index.js';
-import { MessagingConnectionService } from '@packages/messaging/index.js';
+import { QueueRegistry, schedulerKeys } from '@packages/queue/index.js';
+import { MANUAL_RUN_PREFIX, MessagingConnectionService } from '@packages/messaging/index.js';
 import type {
   SchedulerOperationAction,
   SchedulerOperationRecord,
@@ -20,7 +20,6 @@ export interface SchedulerOperationContext {
   actor: string | null;
 }
 
-const OPERATIONS_KEY = 'scheduler:operations';
 const MAX_OPERATIONS = 100;
 
 interface TaskDefinitionJson {
@@ -44,6 +43,10 @@ export class SchedulerOperationsService {
     private readonly queueRegistry: QueueRegistry,
     private readonly connection: MessagingConnectionService,
   ) {}
+
+  private get keys() {
+    return schedulerKeys(this.redis);
+  }
 
   private brokerConnected(): boolean {
     return this.connection.getStatus().state === 'connected';
@@ -76,8 +79,8 @@ export class SchedulerOperationsService {
       if (this.redis.isReady()) {
         await this.redis.client
           .pipeline()
-          .lpush(OPERATIONS_KEY, JSON.stringify(record))
-          .ltrim(OPERATIONS_KEY, 0, MAX_OPERATIONS - 1)
+          .lpush(this.keys.operations(), JSON.stringify(record))
+          .ltrim(this.keys.operations(), 0, MAX_OPERATIONS - 1)
           .exec();
       }
     } catch (err) {
@@ -92,45 +95,22 @@ export class SchedulerOperationsService {
   public async getOperations(): Promise<SchedulerOperationRecord[]> {
     if (!this.redis.isReady()) return [];
     try {
-      const raw = await this.redis.client.lrange(OPERATIONS_KEY, 0, MAX_OPERATIONS - 1);
+      const raw = await this.redis.client.lrange(this.keys.operations(), 0, MAX_OPERATIONS - 1);
       return raw.map((item) => JSON.parse(item) as SchedulerOperationRecord);
     } catch {
       return [];
     }
   }
 
+  /** Định nghĩa do scheduler runtime ghi; task đã xoá khỏi code bị gỡ khỏi hash nên không Run Now được nữa. */
   private async findTaskDefinition(taskId: string): Promise<TaskDefinitionJson | null> {
     if (!this.redis.isReady()) return null;
-    const raw = await this.redis.client.hget('scheduler:definitions', taskId);
+    const raw = await this.redis.client.hget(this.keys.definitions(), taskId);
     if (raw) {
       try {
         return JSON.parse(raw) as TaskDefinitionJson;
       } catch {
         // continue search
-      }
-    }
-
-    // Nếu không có trong cache định nghĩa, tìm trong các queue của BullMQ
-    const queues = liveQueues(this.queueRegistry, this.connection);
-    for (const [queueName, queue] of queues.entries()) {
-      try {
-        const schedulers = await this.queueRegistry.withTimeout(queue.getJobSchedulers());
-        const found = schedulers.find(
-          (s: { id?: string | null; key?: string }) => s.id === taskId || s.key === taskId,
-        );
-        if (found) {
-          return {
-            id: taskId,
-            queue: queueName,
-            name: found.name || taskId,
-            pattern: found.pattern,
-            every: found.every,
-            tz: found.tz,
-            data: (found.template?.data as Record<string, unknown>) ?? {},
-          };
-        }
-      } catch {
-        // next queue
       }
     }
 
@@ -141,7 +121,7 @@ export class SchedulerOperationsService {
   public async runNow(
     taskId: string,
     ctx: SchedulerOperationContext,
-  ): Promise<{ record: SchedulerOperationRecord; executionId: string; instance: string }> {
+  ): Promise<{ record: SchedulerOperationRecord; executionId: string }> {
     if (!this.config.scheduler.run) {
       throw new SchedulerActionRejectedException('RUN_DISABLED');
     }
@@ -156,11 +136,11 @@ export class SchedulerOperationsService {
     try {
       if (!this.brokerConnected()) throw new Error(`Broker ${this.connection.getStatus().state}`);
       const queue = this.queueRegistry.getQueue(task.queue);
+      // jobId `manual:<task>:<ts>` để trang Scheduler nhận ra lần chạy thủ công; worker dựng envelope từ job.
       const job = await this.queueRegistry.withTimeout(
-        queue.add(task.name ?? taskId, {
-          ...(task.data ?? {}),
-          _triggeredBy: 'manual',
-          _requestedAt: new Date().toISOString(),
+        queue.add(task.name ?? taskId, task.data ?? {}, {
+          ...this.queueRegistry.retentionOptions(),
+          jobId: `${MANUAL_RUN_PREFIX}${taskId}:${Date.now()}`,
         }),
       );
 
@@ -175,11 +155,7 @@ export class SchedulerOperationsService {
         execId,
       );
 
-      return {
-        record,
-        executionId: execId,
-        instance: 'api',
-      };
+      return { record, executionId: execId };
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       await this.audit('run', taskId, ctx, started, null, msg);
@@ -204,9 +180,9 @@ export class SchedulerOperationsService {
     }
 
     try {
-      await this.redis.client.srem('scheduler:disabled', taskId);
+      await this.redis.client.srem(this.keys.disabled(), taskId);
 
-      // `scheduler:disabled` là nguồn sự thật; broker mất kết nối → ScheduleSyncService đồng bộ lại sau.
+      // Set disabled là nguồn sự thật; broker mất kết nối → scheduler đồng bộ lại khi khởi động.
       if (!this.brokerConnected()) {
         return await this.audit(
           'enable',
@@ -258,7 +234,7 @@ export class SchedulerOperationsService {
     const started = performance.now();
 
     try {
-      await this.redis.client.sadd('scheduler:disabled', taskId);
+      await this.redis.client.sadd(this.keys.disabled(), taskId);
 
       // Gỡ scheduler khỏi BullMQ queue
       const queues = liveQueues(this.queueRegistry, this.connection);

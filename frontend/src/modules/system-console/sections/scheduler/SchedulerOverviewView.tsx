@@ -1,6 +1,6 @@
 import React from 'react';
 import { ArrowRight, CalendarClock } from 'lucide-react';
-import type { Execution, SchedulerAlert, SchedulerEvent, SchedulerOverview, SchedulerRange, SchedulerReport, SchedulerTab, TaskRow } from '../../types/scheduler.types';
+import type { Execution, SchedulerAlert, SchedulerOverview, SchedulerRange, SchedulerReport, SchedulerTab, TaskRow } from '../../types/scheduler.types';
 import type { TaskAction } from '../../hooks/useSchedulerActions';
 import { SchedulerKpis } from '../../components/scheduler/SchedulerKpis';
 import { SchedulerChart } from '../../components/scheduler/SchedulerChart';
@@ -8,7 +8,6 @@ import { SchedulerProblems } from '../../components/scheduler/SchedulerProblems'
 import { ConcentrationNotes, UpcomingList } from '../../components/scheduler/UpcomingList';
 import { TaskTable } from '../../components/scheduler/TaskTable';
 import { ExecutionTable } from '../../components/scheduler/ExecutionTable';
-import { SchedulerEventList } from '../../components/scheduler/SchedulerEventList';
 import { RuntimePanel } from '../../components/scheduler/RuntimePanel';
 import { formatCompact } from '../../utils/database-format';
 import { trendOf } from '../../utils/performance-format';
@@ -24,7 +23,6 @@ interface Props {
   go: (tab: SchedulerTab) => void;
   openTask: (taskId: string) => void;
   openAlert: (a: SchedulerAlert) => void;
-  openEvent: (e: SchedulerEvent) => void;
   openExecution: (e: Execution) => void;
   onAction: (action: TaskAction, task: TaskRow) => void;
   canRun: boolean;
@@ -37,7 +35,7 @@ const pct = (a: number | null, b: number | null) => (a === null || b === null ||
  * Monitor: KPI → Scheduler Activity → Current Problems + Upcoming → Tasks → lần chạy gần đây + runtime →
  * báo cáo hôm nay / hôm qua → sự kiện. Luồng: phát hiện vấn đề → Task → History → Execution Detail → Run Now / Disable.
  */
-export const SchedulerOverviewView: React.FC<Props> = ({ data, paused, now, go, openTask, openAlert, openEvent, openExecution, onAction, canRun, navigate }) => {
+export const SchedulerOverviewView: React.FC<Props> = ({ data, paused, now, go, openTask, openAlert, openExecution, onAction, canRun, navigate }) => {
   const { t, locale } = useLocale();
   if (!data) return <SchedulerKpis data={null} now={now} />;
   const n = (v: number | null) => (v === null ? NO_VALUE : formatCompact(v, locale));
@@ -63,7 +61,7 @@ export const SchedulerOverviewView: React.FC<Props> = ({ data, paused, now, go, 
         <section className="tr-empty-state" role="status">
           <CalendarClock size={28} />
           <h2>{t('sch.empty.title')}</h2>
-          <p>{data.health.aliveInstances > 0 ? t('sch.empty.noTasks') : t('sch.empty.noRuntime')}</p>
+          <p>{data.instance !== null ? t('sch.empty.noTasks') : t('sch.empty.noRuntime')}</p>
         </section>
       )}
 
@@ -89,7 +87,7 @@ export const SchedulerOverviewView: React.FC<Props> = ({ data, paused, now, go, 
             <h3>{t('sch.running.title')}</h3>
             <span className="ov-count">{data.running.length}</span>
           </header>
-          <ExecutionTable rows={data.running} columns={['time', 'task', 'result', 'duration', 'trigger', 'instance']} onOpen={openExecution} emptyText="" />
+          <ExecutionTable rows={data.running} columns={['time', 'task', 'result', 'duration', 'trigger']} onOpen={openExecution} emptyText="" />
           <p className="pf-chart-note">{t('sch.running.note')}</p>
         </section>
       )}
@@ -136,8 +134,6 @@ export const SchedulerOverviewView: React.FC<Props> = ({ data, paused, now, go, 
               {reportRow('executions', n, null)}
               {reportRow('successful', n, null)}
               {reportRow('failed', n, true)}
-              {reportRow('skipped', n, true)}
-              {reportRow('missed', n, true)}
               {reportRow('successRatePercent', (v) => (v === null ? NO_VALUE : `${v}%`), false)}
               {reportRow('avgDurationMs', formatMs, true)}
               {reportRow('p95DurationMs', formatMs, true)}
@@ -145,16 +141,6 @@ export const SchedulerOverviewView: React.FC<Props> = ({ data, paused, now, go, 
             </tbody>
           </table>
         </div>
-      </section>
-
-      <section className="ov-card ov-section">
-        <header className="ov-section-head">
-          <h3>{t('sch.events.title')}</h3>
-          <button type="button" className="ov-link" onClick={() => go('events')}>
-            {t('db.events.viewAll')} <ArrowRight size={13} />
-          </button>
-        </header>
-        <SchedulerEventList events={data.events} onOpen={openEvent} emptyText={t('sch.events.empty')} />
       </section>
     </>
   );

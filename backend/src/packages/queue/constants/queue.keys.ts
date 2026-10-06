@@ -13,3 +13,13 @@ export const queueKeys = (redis: RedisService) => ({
 
 export const QUEUE_EVENT_LOG_SIZE = 1000;
 export const QUEUE_OPERATION_LOG_SIZE = 500;
+
+/** Key Redis của Scheduler (định nghĩa task, task bị tắt, audit thao tác) — đã có REDIS_PREFIX. */
+export const schedulerKeys = (redis: RedisService) => ({
+  /** Hash taskId → định nghĩa (scheduler runtime ghi khi đồng bộ). */
+  definitions: () => redis.key('scheduler', 'definitions'),
+  /** SET taskId đang tắt — nguồn sự thật cho bật/tắt, đồng bộ sang BullMQ khi scheduler khởi động. */
+  disabled: () => redis.key('scheduler', 'disabled'),
+  /** LIST audit thao tác (Run Now / Enable / Disable). */
+  operations: () => redis.key('scheduler', 'operations'),
+});

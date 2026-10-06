@@ -6,7 +6,7 @@ import { NO_VALUE } from '../../utils/runtime-format';
 import { ExecutionStatusChip } from './TaskStatus';
 import { useLocale } from '../../../../core/i18n/index';
 
-export type ExecColumn = 'time' | 'task' | 'result' | 'duration' | 'trigger' | 'drift' | 'instance' | 'error' | 'id';
+export type ExecColumn = 'time' | 'task' | 'result' | 'duration' | 'trigger' | 'error' | 'id';
 
 /** Lịch sử thực thi: thời điểm, task, kết quả, thời lượng, trigger (bấm → Execution Detail). */
 export const ExecutionTable: React.FC<{ rows: Execution[]; columns: ExecColumn[]; onOpen: (e: Execution) => void; emptyText: string }> = ({
@@ -36,22 +36,16 @@ export const ExecutionTable: React.FC<{ rows: Execution[]; columns: ExecColumn[]
         return (
           <>
             <ExecutionStatusChip exec={e} />
-            {e.status === 'missed' && e.missedCount !== null && e.missedCount > 1 && <small className="pf-row-note">×{e.missedCount}</small>}
-            {e.reason && e.status !== 'failed' && <small className="pf-row-note">{t(`sch.reason.${e.reason}`)}</small>}
           </>
         );
       case 'duration':
         return e.status === 'running' ? (
-          <span className={e.longRunning ? 'is-warn' : ''}>{formatMs(e.runningMs)}</span>
+          <span>{formatMs(e.runningMs)}</span>
         ) : (
           formatMs(e.durationMs)
         );
       case 'trigger':
         return t(`sch.exec.trigger.${e.trigger}`);
-      case 'drift':
-        return e.driftMs === null ? NO_VALUE : formatMs(e.driftMs);
-      case 'instance':
-        return e.instance ? <code>{e.instance}</code> : NO_VALUE;
       case 'error':
         return e.error ? (
           <span className="wq-error">

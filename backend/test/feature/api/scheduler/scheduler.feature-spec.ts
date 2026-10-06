@@ -2,6 +2,8 @@ import { describe, beforeAll, afterAll, it, expect } from '@jest/globals';
 import { createTestApp, type TestAppContext } from '../../../concerns/test-app.concern.js';
 import { SCHEDULER_OPS_ROUTES } from '@modules/scheduler-ops/index.js';
 import { RedisService } from '@packages/redis/index.js';
+import { schedulerKeys } from '@packages/queue/index.js';
+import { runtimeKeys } from '@packages/runtime/index.js';
 
 interface Envelope<T> {
   success: boolean;
@@ -26,7 +28,7 @@ describe('Scheduler (/ops/scheduler)', () => {
 
     // Lưu định nghĩa task vào Redis giống như ScheduleSyncService làm
     await redis.client.hset(
-      'scheduler:definitions',
+      schedulerKeys(redis).definitions(),
       'system.maintenance',
       JSON.stringify({
         id: 'system.maintenance',
@@ -43,12 +45,34 @@ describe('Scheduler (/ops/scheduler)', () => {
     await context.close();
   });
 
-  it('GET /overview — trả về tổng quan scheduler', async () => {
-    const { status, body } = await call<any>('GET', `${base}/overview?range=24h`);
-    expect(status).toBe(200);
-    expect(body.success).toBe(true);
-    expect(body.data.health.status).toBe('healthy');
-    expect(body.data.kpis.registered).toBeGreaterThanOrEqual(1);
+  it('GET /overview — chưa có heartbeat → down (không báo healthy giả); có heartbeat → instance thật', async () => {
+    const first = await call<any>('GET', `${base}/overview?range=24h`);
+    expect(first.status).toBe(200);
+    expect(first.body.data.health.status).toBe('down');
+    expect(first.body.data.health.reasons[0].code).toBe('neverStarted');
+    expect(first.body.data.instance).toBeNull();
+    expect(first.body.data.kpis.registered).toBeGreaterThanOrEqual(1);
+    // Broker không kết nối trong test → không có lần chạy nào, tỉ lệ thành công không bịa 100%.
+    expect(first.body.data.kpis.successRatePercent).toBeNull();
+
+    await redis.client.set(
+      runtimeKeys(redis).heartbeat('scheduler'),
+      JSON.stringify({
+        instance: 'sched-host:4242',
+        state: 'running',
+        at: new Date().toISOString(),
+        startedAt: new Date(Date.now() - 120_000).toISOString(),
+        uptimeSec: 120,
+        process: { hostname: 'sched-host', pid: 4242 },
+      }),
+    );
+    const second = await call<any>('GET', `${base}/overview?range=24h`);
+    expect(second.body.data.health.status).toBe('healthy');
+    expect(second.body.data.instance).toMatchObject({
+      host: 'sched-host',
+      pid: 4242,
+      uptimeSec: 120,
+    });
   });
 
   it('GET /tasks — trả về danh sách task', async () => {
@@ -85,7 +109,10 @@ describe('Scheduler (/ops/scheduler)', () => {
     expect(disRes.body.success).toBe(true);
     expect(disRes.body.data.action).toBe('disable');
 
-    const isMember = await redis.client.sismember('scheduler:disabled', 'system.maintenance');
+    const isMember = await redis.client.sismember(
+      schedulerKeys(redis).disabled(),
+      'system.maintenance',
+    );
     expect(isMember).toBe(1);
 
     const enRes = await call<any>('POST', `${base}/tasks/system.maintenance/enable`);
@@ -93,7 +120,10 @@ describe('Scheduler (/ops/scheduler)', () => {
     expect(enRes.body.success).toBe(true);
     expect(enRes.body.data.action).toBe('enable');
 
-    const isMemberAfter = await redis.client.sismember('scheduler:disabled', 'system.maintenance');
+    const isMemberAfter = await redis.client.sismember(
+      schedulerKeys(redis).disabled(),
+      'system.maintenance',
+    );
     expect(isMemberAfter).toBe(0);
   });
 });

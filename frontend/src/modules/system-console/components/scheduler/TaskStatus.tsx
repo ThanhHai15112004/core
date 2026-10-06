@@ -24,9 +24,9 @@ export const TaskHealthDot: React.FC<{ task: Pick<TaskRow, 'health'> }> = ({ tas
   );
 };
 
-export const ExecutionStatusChip: React.FC<{ exec: Pick<Execution, 'status' | 'longRunning'> }> = ({ exec }) => {
+export const ExecutionStatusChip: React.FC<{ exec: Pick<Execution, 'status'> }> = ({ exec }) => {
   const { t } = useLocale();
-  const tone = exec.longRunning ? 'warn' : EXECUTION_TONE[exec.status];
+  const tone = EXECUTION_TONE[exec.status];
   return (
     <span className={`pf-chip ov-tone-${tone}`}>
       {EXECUTION_ICON[exec.status]} {t(`sch.exec.status.${exec.status}`)}

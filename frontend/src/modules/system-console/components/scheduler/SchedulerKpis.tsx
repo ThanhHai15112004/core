@@ -7,13 +7,13 @@ import { formatIn, secondsUntil } from '../../utils/scheduler-format';
 import { NO_VALUE } from '../../utils/runtime-format';
 import { useLocale } from '../../../../core/i18n/index';
 
-/** Registered · Enabled · Running · Failed today / Success rate · Avg duration · Missed runs · Next execution. */
+/** Registered · Enabled · Running · Failed today · Success rate · Avg duration · Next execution (từ job trên broker). */
 export const SchedulerKpis: React.FC<{ data: SchedulerOverview | null; now: number }> = ({ data, now }) => {
   const { t, locale } = useLocale();
   if (!data) {
     return (
       <div className="ov-kpi-grid db-kpi-grid">
-        {Array.from({ length: 8 }, (_, i) => (
+        {Array.from({ length: 7 }, (_, i) => (
           <div key={i} className="ov-card ov-kpi">
             <span className="ov-skeleton" style={{ width: '60%', height: 12 }} />
             <span className="ov-skeleton" style={{ width: '45%', height: 28, marginTop: 14 }} />
@@ -28,28 +28,27 @@ export const SchedulerKpis: React.FC<{ data: SchedulerOverview | null; now: numb
     const hits = data.alerts.filter((a) => rules.includes(a.rule));
     return hits.some((a) => a.severity === 'critical') ? 'crit' : hits.length ? 'warn' : null;
   };
-  const longRunning = data.running.filter((r) => r.longRunning).length;
   const nextTask = data.tasks.find((x) => x.id === k.nextExecutionTask);
   const range = t(`tr.range.${data.range}`);
   const items: { key: string; value: string; sub: string; tone: StatusTone }[] = [
     {
       key: 'registered',
       value: n(k.registered),
-      sub: k.registered === 0 ? t('sch.kpi.registeredNone') : t('sch.kpi.registeredSub', { groups: new Set(data.tasks.map((x) => x.group)).size }),
-      tone: alert('MISCONFIGURED') ?? (k.registered > 0 ? 'ok' : 'unknown'),
+      sub: k.registered === 0 ? t('sch.kpi.registeredNone') : t('sch.kpi.enabledSub', { count: k.disabled }),
+      tone: k.registered > 0 ? 'ok' : 'unknown',
     },
     { key: 'enabled', value: `${n(k.enabled)} / ${n(k.registered)}`, sub: t('sch.kpi.enabledSub', { count: k.disabled }), tone: k.disabled > 0 ? 'unknown' : 'ok' },
     {
       key: 'running',
       value: n(k.running),
-      sub: longRunning > 0 ? t('sch.kpi.runningLong', { count: longRunning }) : t('sch.kpi.runningSub'),
-      tone: alert('LONG_RUNNING', 'OVERLAP') ?? 'unknown',
+      sub: t('sch.kpi.runningSub'),
+      tone: 'unknown',
     },
     {
       key: 'failedToday',
       value: n(k.failedToday),
       sub: t('sch.kpi.failedSub', { count: n(k.executionsToday) }),
-      tone: alert('CONSECUTIVE_FAILURES', 'RECENT_FAILURES') ?? (k.failedToday > 0 ? 'warn' : 'ok'),
+      tone: alert('CONSECUTIVE_FAILURES') ?? (k.failedToday > 0 ? 'warn' : 'ok'),
     },
     {
       key: 'successRate',
@@ -58,12 +57,6 @@ export const SchedulerKpis: React.FC<{ data: SchedulerOverview | null; now: numb
       tone: k.successRatePercent === null ? 'unknown' : k.successRatePercent < 95 ? 'warn' : 'ok',
     },
     { key: 'avgDuration', value: formatMs(k.avgDurationMs), sub: t('sch.kpi.durationSub', { p95: formatMs(k.p95DurationMs), range }), tone: 'unknown' },
-    {
-      key: 'missed',
-      value: n(k.missedToday),
-      sub: t('sch.kpi.missedSub', { count: n(k.skippedToday) }),
-      tone: alert('MISSED_RUN', 'OVERDUE', 'HEARTBEAT_MISSING') ?? (k.missedToday > 0 ? 'warn' : 'ok'),
-    },
     {
       key: 'next',
       value: k.nextExecutionAt ? formatIn(secondsUntil(k.nextExecutionAt, now)) : NO_VALUE,

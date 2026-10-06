@@ -20,16 +20,13 @@ function timezoneOr(key: string): string {
   }
 }
 
-/** Scheduler: múi giờ lịch chạy, lưu lịch sử thực thi, ngưỡng giám sát và quyền thao tác từ System Console. */
+/**
+ * Scheduler (BullMQ Job Scheduler): múi giờ lịch chạy, ngưỡng giám sát và quyền thao tác từ System Console. Lịch sử
+ * thực thi là job còn giữ trên broker (retention của messaging) — không lưu riêng.
+ */
 export const schedulerConfig = () => ({
   /** Múi giờ mặc định của lịch cron (task có thể khai báo riêng). */
   timezone: timezoneOr('SCHEDULER_TIMEZONE'),
-  /** Lịch sử thực thi chi tiết giữ bao nhiêu ngày (số đo tổng hợp theo telemetry — 8 ngày). */
-  historyRetentionDays: Math.max(1, numberOr('SCHEDULER_HISTORY_RETENTION_DAYS', 7)),
-  /** Số lần chạy tối đa giữ cho mỗi task (task chạy dày không làm phình Redis). */
-  historyMaxPerTask: Math.max(100, numberOr('SCHEDULER_HISTORY_MAX_PER_TASK', 2000)),
-  /** TTL mặc định của lock chống chạy chồng (được gia hạn khi task còn chạy). */
-  lockTtlMs: Math.max(5000, numberOr('SCHEDULER_LOCK_TTL_MS', 10 * 60_000)),
   rules: {
     /** Không nhận heartbeat của scheduler instance nào quá chừng này (giây) → runtime down. */
     heartbeatTimeoutSec: numberOr('SCHEDULER_HEARTBEAT_TIMEOUT_SEC', 30),
@@ -38,12 +35,6 @@ export const schedulerConfig = () => ({
     consecutiveFailuresCrit: numberOr('SCHEDULER_CONSECUTIVE_FAILURES_CRIT', 5),
     /** Số lần chạy lỗi trong 1 giờ (mọi task) → scheduler degraded. */
     recentFailuresWarn: numberOr('SCHEDULER_RECENT_FAILURES_WARN', 3),
-    /** Task không khai báo thời lượng dự kiến: chạy lâu hơn p95 lịch sử × hệ số này → có thể bị treo. */
-    longRunningFactor: numberOr('SCHEDULER_LONG_RUNNING_FACTOR', 3),
-    /** Ngưỡng tối thiểu (giây) trước khi coi một lần chạy là "chạy lâu bất thường". */
-    longRunningMinSec: numberOr('SCHEDULER_LONG_RUNNING_MIN_SEC', 60),
-    /** Độ trễ bắt đầu so với lịch (p95, 15 phút) → cảnh báo. */
-    driftP95Ms: numberOr('SCHEDULER_DRIFT_P95_WARN_MS', 5000),
     /** Số task khác nhau cùng rơi vào một cửa sổ 5 phút → cảnh báo dồn lịch. */
     concentrationTasks: numberOr('SCHEDULER_CONCENTRATION_TASKS', 5),
   },

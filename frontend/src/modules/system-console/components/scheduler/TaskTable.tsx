@@ -10,14 +10,14 @@ import { ScheduleCell, TaskHealthDot, TaskStatusChip } from './TaskStatus';
 import { useLocale } from '../../../../core/i18n/index';
 
 const STATUS_FILTERS = ['all', 'enabled', 'disabled', 'failing'] as const;
-const TYPE_FILTERS = ['all', 'cron', 'interval', 'one_time'] as const;
+const TYPE_FILTERS = ['all', 'cron', 'interval'] as const;
 const HEALTH_FILTERS = ['all', 'healthy', 'warning', 'error'] as const;
 const SORTS = ['next', 'failures', 'duration', 'name'] as const;
 type StatusFilter = (typeof STATUS_FILTERS)[number];
 type Sort = (typeof SORTS)[number];
 
 const matchStatus = (x: TaskRow, f: StatusFilter) =>
-  f === 'all' || (f === 'enabled' ? x.enabled : f === 'disabled' ? !x.enabled : x.consecutiveFailures > 0 || x.status === 'misconfigured');
+  f === 'all' || (f === 'enabled' ? x.enabled : f === 'disabled' ? !x.enabled : x.consecutiveFailures > 0);
 
 function compare(a: TaskRow, b: TaskRow, s: Sort): number {
   switch (s) {
@@ -141,7 +141,7 @@ export const TaskTable: React.FC<Props> = ({ rows, now, onOpen, onAction, canRun
                   </td>
                   {onAction && (
                     <td onClick={(e) => e.stopPropagation()}>
-                      {canRun && x.status !== 'misconfigured' && (
+                      {canRun && (
                         <button type="button" className="scp-btn scp-btn-sm scp-btn-secondary" onClick={() => onAction('run', x)} title={t('sch.action.run')}>
                           <Play size={12} /> {t('sch.action.run')}
                         </button>

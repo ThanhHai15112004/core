@@ -3400,6 +3400,7 @@ export const en: TranslationKey = {
       },
     },
     problems: {
+      noFailures: 'No consecutive failures',
       title: 'Current Problems',
       allGood: 'Scheduler operating normally',
       allGoodHint: 'No missed, failed or long-running tasks detected.',
@@ -3536,7 +3537,7 @@ export const en: TranslationKey = {
         p95Duration: 'P95 duration',
         nextRun: 'Next run',
         failuresToday: 'Failures today',
-        missedSub: '{{missed}} missed · {{skipped}} skipped',
+        failedSub: '{{count}} failed in sample',
       },
       expected: {
         configured: 'Expected < {{value}}',

@@ -1,6 +1,6 @@
 import React, { useCallback, useState } from 'react';
 import { Pause, Play, Radio, RefreshCw, WifiOff } from 'lucide-react';
-import type { Execution, SchedulerAlert, SchedulerEvent } from '../../types/scheduler.types';
+import type { Execution, SchedulerAlert, SchedulerTab } from '../../types/scheduler.types';
 import { schedulerApi } from '../../services/scheduler.api';
 import { usePolling } from '../../hooks/usePolling';
 import { useSchedulerRoute } from '../../hooks/useSchedulerRoute';
@@ -50,8 +50,7 @@ export const SchedulerSection: React.FC = () => {
   const actions = useSchedulerActions(data?.settings, data?.environment ?? '', onDone);
 
   const openExecution = (e: Pick<Execution, 'id'>) => setExec(e.id);
-  const openAlert = (a: SchedulerAlert) => (a.taskId ? openTask(a.taskId) : go(a.tab));
-  const openEvent = (e: SchedulerEvent) => (e.executionId ? setExec(e.executionId) : e.taskId ? openTask(e.taskId) : undefined);
+  const openAlert = (a: SchedulerAlert) => (a.taskId ? openTask(a.taskId) : go(a.tab as SchedulerTab));
 
   const renderTab = () => {
     const common = { range, paused, reloadKey, now };
@@ -79,7 +78,7 @@ export const SchedulerSection: React.FC = () => {
       case 'failures':
         return <SchedulerFailuresView {...common} openExecution={openExecution} openTask={openTask} openAlert={openAlert} />;
       case 'events':
-        return <SchedulerEventsView {...common} openEvent={openEvent} openExecution={(id) => setExec(id)} />;
+        return <SchedulerEventsView paused={paused} reloadKey={reloadKey} openExecution={(id) => setExec(id)} />;
       case 'configuration':
         return <SchedulerConfigView now={now} defaultTimezone={data?.timezone.schedule ?? 'UTC'} openTask={openTask} />;
       default:
@@ -90,7 +89,6 @@ export const SchedulerSection: React.FC = () => {
             go={go}
             openTask={openTask}
             openAlert={openAlert}
-            openEvent={openEvent}
             openExecution={openExecution}
             onAction={actions.request}
             canRun={actions.canRun}
@@ -165,10 +163,8 @@ export const SchedulerSection: React.FC = () => {
         <ExecutionDrawer
           key={exec}
           id={exec}
-          now={now}
           onClose={() => setExec(null)}
           onOpenTask={(id) => openTask(id)}
-          onOpenExecution={(id) => setExec(id)}
           onAction={actions.request}
           navigate={navigate}
         />

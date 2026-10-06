@@ -35,10 +35,7 @@ const rangeSchema = z.object({ range: range('24h') });
 const metricsSchema = z.object({
   range: range('24h'),
   metric: z
-    .enum(['executions', 'duration', 'failures', 'missed'] as [
-      SchedulerMetric,
-      ...SchedulerMetric[],
-    ])
+    .enum(['executions', 'duration', 'failures'] as [SchedulerMetric, ...SchedulerMetric[]])
     .default('executions'),
   task: idSchema.optional(),
 });
@@ -49,7 +46,6 @@ const executionsSchema = z.object({
   trigger: csv<ExecutionTrigger>(EXECUTION_TRIGGERS),
   limit: z.coerce.number().int().min(10).max(500).default(100),
 });
-const eventsSchema = z.object({ range: range('24h'), task: idSchema.optional() });
 const upcomingSchema = z.object({ hours: z.coerce.number().int().min(1).max(168).default(24) });
 const timelineSchema = z.object({ range: range('6h') });
 const cronSchema = z.object({
@@ -143,13 +139,6 @@ export class SchedulerOpsController {
   @Get(R.FAILURES)
   public failures(@Query() q: Record<string, string>) {
     return this.scheduler.getFailures(parse(rangeSchema, q).range);
-  }
-
-  @Public()
-  @Get(R.EVENTS)
-  public events(@Query() q: Record<string, string>) {
-    const { range, task } = parse(eventsSchema, q);
-    return this.scheduler.getEvents(range, task ?? null);
   }
 
   @Public()

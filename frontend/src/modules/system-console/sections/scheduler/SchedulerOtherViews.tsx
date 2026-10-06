@@ -1,35 +1,23 @@
 import React, { useState } from 'react';
 import { Check, Copy } from 'lucide-react';
-import type { SchedulerEvent, SchedulerRange } from '../../types/scheduler.types';
 import { schedulerApi } from '../../services/scheduler.api';
 import { usePolling } from '../../hooks/usePolling';
-import { SchedulerEventList } from '../../components/scheduler/SchedulerEventList';
 import { CronInspector } from '../../components/scheduler/CronInspector';
 import { formatCompact, formatDuration } from '../../utils/database-format';
 import { formatMs } from '../../utils/worker-format';
 import { NO_VALUE } from '../../utils/runtime-format';
 import { useLocale } from '../../../../core/i18n/index';
 
-/** Scheduler Events + audit mọi thao tác (Run Now / Enable / Disable: ai, khi nào, task, kết quả). */
+/** Audit mọi thao tác (Run Now / Enable / Disable: ai, khi nào, task, kết quả). */
 export const SchedulerEventsView: React.FC<{
-  range: SchedulerRange;
   paused: boolean;
   reloadKey: number;
-  openEvent: (e: SchedulerEvent) => void;
   openExecution: (id: string) => void;
-}> = ({ range, paused, reloadKey, openEvent, openExecution }) => {
+}> = ({ paused, reloadKey, openExecution }) => {
   const { t, formatTime } = useLocale();
-  const events = usePolling(() => schedulerApi.events(range), `sch-events:${range}:${reloadKey}`, undefined, paused);
   const ops = usePolling(() => schedulerApi.operations(), `sch-ops:${reloadKey}`, undefined, paused);
   return (
     <>
-      <section className="ov-card ov-section">
-        <header className="ov-section-head">
-          <h3>{t('sch.events.title')}</h3>
-          <span className="ov-section-hint">{t(`tr.range.${range}`)}</span>
-        </header>
-        <SchedulerEventList events={events.data} onOpen={openEvent} emptyText={t('sch.events.empty')} />
-      </section>
       <section className="ov-card ov-section">
         <header className="ov-section-head">
           <h3>{t('sch.audit.title')}</h3>

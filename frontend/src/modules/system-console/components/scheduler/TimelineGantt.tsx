@@ -62,27 +62,13 @@ export const TimelineGantt: React.FC<{ data: SchedulerTimeline; now: number; onO
               const start = Date.parse(e.startedAt ?? e.scheduledAt ?? e.finishedAt ?? '');
               if (!Number.isFinite(start)) return null;
               const label = `${e.taskName} · ${t(`sch.exec.status.${e.status}`)} · ${formatTime(start, true)}${e.durationMs !== null ? ` · ${formatMs(e.durationMs)}` : ''}`;
-              if (e.status === 'missed' || e.status === 'skipped')
-                return (
-                  <button
-                    key={e.id}
-                    type="button"
-                    className={`sch-gantt-mark is-${e.status} ov-tone-${EXECUTION_TONE[e.status]}`}
-                    style={{ left: pos(start) }}
-                    title={label}
-                    aria-label={label}
-                    onClick={() => onOpen(e)}
-                  >
-                    {e.status === 'missed' ? '◆' : '↷'}
-                  </button>
-                );
               const end = e.status === 'running' ? now : Date.parse(e.finishedAt ?? '') || start + (e.durationMs ?? 0);
               const width = Math.max(0.35, ((end - start) / total) * 100);
               return (
                 <button
                   key={e.id}
                   type="button"
-                  className={`sch-gantt-bar ov-tone-${e.longRunning ? 'warn' : EXECUTION_TONE[e.status]} ${e.status === 'running' ? 'is-running' : ''}`}
+                  className={`sch-gantt-bar ov-tone-${EXECUTION_TONE[e.status]} ${e.status === 'running' ? 'is-running' : ''}`}
                   style={{ left: pos(start), width: `${width}%` }}
                   title={label}
                   aria-label={label}

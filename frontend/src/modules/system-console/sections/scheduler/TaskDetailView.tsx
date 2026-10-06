@@ -9,7 +9,6 @@ import { LineChart } from '../../components/common/LineChart';
 import { SchedulerChart } from '../../components/scheduler/SchedulerChart';
 import { SchedulerProblems } from '../../components/scheduler/SchedulerProblems';
 import { ExecutionTable } from '../../components/scheduler/ExecutionTable';
-import { SchedulerEventList } from '../../components/scheduler/SchedulerEventList';
 import { ExecutionStatusChip, ScheduleCell, TaskHealthDot, TaskStatusChip } from '../../components/scheduler/TaskStatus';
 import { formatCompact } from '../../utils/database-format';
 import { formatMs } from '../../utils/worker-format';
@@ -88,7 +87,7 @@ export const TaskDetailView: React.FC<Props> = (props) => {
               {task.description && <p className="pf-chart-note">{task.description}</p>}
             </div>
             <div className="cache-drawer-actions">
-              {data.settings.run && task.status !== 'misconfigured' && (
+              {data.settings.run && (
                 <button type="button" className="scp-btn scp-btn-sm scp-btn-primary" onClick={() => onAction('run', task)}>
                   <Play size={13} /> {t('sch.action.run')}
                 </button>
@@ -105,16 +104,6 @@ export const TaskDetailView: React.FC<Props> = (props) => {
                 ))}
             </div>
           </header>
-          {task.error && (
-            <p className="msg-status-line ov-tone-crit">
-              <AlertTriangle size={14} /> {t('sch.detail.misconfigured', { error: task.error })}
-            </p>
-          )}
-          {!task.enabled && task.disabledAt && (
-            <p className="msg-status-line ov-tone-unknown">
-              {t('sch.detail.disabledNote', { time: new Date(task.disabledAt).toLocaleString(), actor: task.disabledBy ?? t('cache.ops.anonymous') })}
-            </p>
-          )}
         </section>
       )}
       {task && (
@@ -159,11 +148,11 @@ const TaskOverviewPanel: React.FC<{
     {
       key: 'p95Duration',
       value: formatMs(kpis.p95DurationMs),
-      sub: data.expected.durationMs !== null ? t(`sch.detail.expected.${data.expected.source ?? 'configured'}`, { value: formatMs(data.expected.durationMs) }) : NO_VALUE,
+      sub: NO_VALUE,
       tone: 'unknown',
     },
     { key: 'nextRun', value: task.nextRunAt ? formatIn(secondsUntil(task.nextRunAt, now)) : NO_VALUE, sub: task.nextRunAt ? new Date(task.nextRunAt).toLocaleString() : t(`sch.task.status.${task.status}`), tone: 'unknown' },
-    { key: 'failuresToday', value: n(kpis.failuresToday), sub: t('sch.detail.kpi.missedSub', { missed: n(kpis.missed), skipped: n(kpis.skipped) }), tone: kpis.failuresToday > 0 ? 'warn' : 'ok' },
+    { key: 'failuresToday', value: n(kpis.failuresToday), sub: t('sch.detail.kpi.failedSub', { count: n(kpis.failed) }), tone: kpis.failuresToday > 0 ? 'warn' : 'ok' },
   ];
   const failures = data.durations.filter((d) => d.status === 'failed');
   return (
@@ -211,11 +200,10 @@ const TaskOverviewPanel: React.FC<{
             <h3>{t('sch.running.title')}</h3>
           </header>
           {data.running.map((r) => (
-            <p key={r.id} className={`msg-status-line ov-tone-${r.longRunning ? 'warn' : 'ok'}`}>
+            <p key={r.id} className={`msg-status-line ov-tone-ok`}>
               <ExecutionStatusChip exec={r} />
               <span>
-                {r.longRunning ? t('sch.detail.running.long') : t('sch.detail.running.normal')} · {t('sch.detail.running.for', { duration: formatMs(r.runningMs) })}
-                {data.expected.durationMs !== null && ` · ${t('sch.detail.running.expected', { value: formatMs(data.expected.durationMs) })}`}
+                {t('sch.detail.running.normal')} · {t('sch.detail.running.for', { duration: formatMs(r.runningMs) })}
                 {r.startedAt && ` · ${t('sch.detail.running.started', { time: formatTime(Date.parse(r.startedAt), true) })}`}
               </span>
               <button type="button" className="ov-link" onClick={() => openExecution(r)}>
@@ -258,41 +246,6 @@ const TaskOverviewPanel: React.FC<{
               ))}
             </ol>
           )}
-          <h4>{t('sch.detail.lock.title')}</h4>
-          <dl className="db-stat-grid db-stat-compact">
-            <div>
-              <dt>{t('sch.task.overlap')}</dt>
-              <dd>{t(`sch.overlap.${task.overlap}`)}</dd>
-            </div>
-            <div>
-              <dt>{t('sch.detail.lock.strategy')}</dt>
-              <dd>{t(`sch.detail.lock.${data.lock.strategy}`)}</dd>
-            </div>
-            <div>
-              <dt>{t('sch.detail.lock.provider')}</dt>
-              <dd>{data.lock.provider ?? NO_VALUE}</dd>
-            </div>
-            <div>
-              <dt>{t('sch.detail.lock.ttl')}</dt>
-              <dd>{formatMs(data.lock.ttlMs)}</dd>
-            </div>
-            <div>
-              <dt>{t('sch.detail.lock.owner')}</dt>
-              <dd>
-                {data.lock.owner ? (
-                  <button type="button" className="ov-link" onClick={() => openExecution({ id: data.lock.owner!.executionId })}>
-                    <code>{data.lock.owner.instance}</code>
-                  </button>
-                ) : (
-                  t('sch.detail.lock.free')
-                )}
-              </dd>
-            </div>
-            <div>
-              <dt>{t('sch.task.misfire')}</dt>
-              <dd>{t(`sch.misfire.${task.misfire}`)}</dd>
-            </div>
-          </dl>
         </section>
         <section className="ov-card ov-section">
           <header className="ov-section-head">
@@ -348,14 +301,7 @@ const TaskOverviewPanel: React.FC<{
             {t('sch.recent.viewAll')}
           </button>
         </header>
-        <ExecutionTable rows={data.recent} columns={['time', 'result', 'duration', 'trigger', 'drift', 'instance']} onOpen={openExecution} emptyText={t('sch.recent.empty')} />
-      </section>
-
-      <section className="ov-card ov-section">
-        <header className="ov-section-head">
-          <h3>{t('sch.events.title')}</h3>
-        </header>
-        <SchedulerEventList events={data.events} onOpen={(e) => (e.executionId ? openExecution({ id: e.executionId }) : undefined)} emptyText={t('sch.events.empty')} />
+        <ExecutionTable rows={data.recent} columns={['time', 'result', 'duration', 'trigger']} onOpen={openExecution} emptyText={t('sch.recent.empty')} />
       </section>
     </>
   );
@@ -381,7 +327,7 @@ const TaskHistoryPanel: React.FC<{ taskId: string; range: SchedulerRange; paused
       </header>
       {error && !data && <p className="scp-alert scp-alert-danger">{error.message}</p>}
       {data && (
-        <ExecutionTable rows={data.items} columns={['time', 'result', 'duration', 'trigger', 'drift', 'instance', 'error']} onOpen={openExecution} emptyText={t('sch.history.empty')} />
+        <ExecutionTable rows={data.items} columns={['time', 'result', 'duration', 'trigger', 'error']} onOpen={openExecution} emptyText={t('sch.history.empty')} />
       )}
       {data?.truncated && <p className="pf-chart-note">{t('sch.history.truncated', { count: data.items.length })}</p>}
     </section>
@@ -471,17 +417,10 @@ const TaskConfigPanel: React.FC<{ data: TaskDetail }> = ({ data }) => {
   const x = data.task;
   const rows: [string, React.ReactNode][] = [
     ['taskId', <code key="taskId">{x.id}</code>],
-    ['className', <code key="className">{data.className}</code>],
     ['type', t(`sch.type.${x.type}`)],
-    ['schedule', x.schedule.expression ? <code key="schedule">{x.schedule.expression}</code> : x.schedule.intervalMs ? formatInterval(x.schedule.intervalMs) : (x.schedule.runAt ?? NO_VALUE)],
+    ['schedule', x.schedule.expression ? <code key="schedule">{x.schedule.expression}</code> : x.schedule.intervalMs ? formatInterval(x.schedule.intervalMs) : NO_VALUE],
     ['timezone', `${x.schedule.timezone} (${x.schedule.utcOffset})`],
-    ['overlap', t(`sch.overlap.${x.overlap}`)],
-    ['misfire', t(`sch.misfire.${x.misfire}`)],
-    ['expectedDurationMs', x.expectedDurationMs === null ? t('sch.config.derived') : formatMs(x.expectedDurationMs)],
-    ['lockTtlMs', formatMs(data.lockTtlMs)],
     ['downstreamQueue', x.downstreamQueue ? <code key="downstreamQueue">{x.downstreamQueue}</code> : NO_VALUE],
-    ['registeredAt', new Date(data.registeredAt).toLocaleString()],
-    ['sourcePath', data.sourcePath ? <code key="sourcePath">{data.sourcePath}</code> : NO_VALUE],
   ];
   return (
     <section className="ov-card ov-section">

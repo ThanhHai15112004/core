@@ -1,8 +1,6 @@
 import React from 'react';
 import { ExternalLink, FileText, Layers, Play } from 'lucide-react';
-import type { Execution, TaskRow } from '../../types/scheduler.types';
-import type { MessageStatus } from '../../types/messaging.types';
-import { MESSAGE_STATUS_TONE } from '../../constants/messaging';
+import type { TaskRow } from '../../types/scheduler.types';
 import type { TaskAction } from '../../hooks/useSchedulerActions';
 import { schedulerApi } from '../../services/scheduler.api';
 import { usePolling } from '../../hooks/usePolling';
@@ -14,19 +12,17 @@ import { ExecutionStatusChip } from './TaskStatus';
 import { useLocale } from '../../../../core/i18n/index';
 
 /**
- * Execution Detail: lịch vs thực tế (drift), kết quả / lỗi, instance, correlation ID → log; job đã tạo và trạng thái
+ * Execution Detail: lịch vs thực tế, kết quả / lỗi, correlation ID → log; job đã tạo và trạng thái
  * hiện tại (trigger thành công ≠ job thành công) → Messaging / Queue. Run Again dùng cùng quy tắc với Run Now.
  */
 export const ExecutionDrawer: React.FC<{
   id: string;
-  now: number;
   onClose: () => void;
   onOpenTask: (taskId: string) => void;
-  onOpenExecution: (id: string) => void;
   onAction?: (action: TaskAction, task: TaskRow) => void;
   navigate: (path: string) => void;
-}> = ({ id, now, onClose, onOpenTask, onOpenExecution, onAction, navigate }) => {
-  const { t, formatTime, formatRelative, locale } = useLocale();
+}> = ({ id, onClose, onOpenTask, onAction, navigate }) => {
+  const { t, formatTime, locale } = useLocale();
   const { data, error } = usePolling(() => schedulerApi.execution(id), `sch-exec:${id}`, 5000);
   const e = data?.execution;
   const at = (v: string | null) =>
@@ -42,11 +38,6 @@ export const ExecutionDrawer: React.FC<{
       <dt>{label}</dt>
       <dd>{value}</dd>
     </div>
-  );
-  const blocking = (b: Execution) => (
-    <button type="button" className="ov-link" onClick={() => onOpenExecution(b.id)}>
-      <code>{b.id}</code> · {b.startedAt ? formatRelative(new Date(b.startedAt), now) : NO_VALUE}
-    </button>
   );
   return (
     <DbDrawer title={<code>{t('sch.exec.title', { id })}</code>} meta={e ? e.taskName : undefined} onClose={onClose}>
@@ -69,13 +60,9 @@ export const ExecutionDrawer: React.FC<{
             {row(t('sch.exec.startedAt'), at(e.startedAt))}
             {row(t('sch.exec.finishedAt'), at(e.finishedAt))}
             {row(t('sch.exec.col.duration'), e.status === 'running' ? formatMs(e.runningMs) : formatMs(e.durationMs))}
-            {row(t('sch.exec.col.drift'), e.driftMs === null ? NO_VALUE : formatMs(e.driftMs))}
-            {row(t('sch.exec.col.instance'), e.instance ? <code>{e.instance}</code> : NO_VALUE)}
             {row(t('sch.exec.correlation'), e.correlationId ? <code>{e.correlationId}</code> : NO_VALUE)}
-            {e.actor !== null && row(t('sch.exec.actor'), e.actor)}
           </dl>
 
-          {e.longRunning && <p className="msg-status-line ov-tone-warn">{t('sch.exec.longRunningNote')}</p>}
 
           {e.error && (
             <section className="sch-failure">
@@ -88,21 +75,6 @@ export const ExecutionDrawer: React.FC<{
             </section>
           )}
 
-          {e.status === 'missed' && (
-            <p className="msg-status-line ov-tone-warn">
-              {t('sch.exec.missedNote', {
-                count: e.missedCount ?? 1,
-                from: e.scheduledAt ? new Date(e.scheduledAt).toLocaleString() : NO_VALUE,
-                until: e.missedUntil ? new Date(e.missedUntil).toLocaleString() : NO_VALUE,
-              })}
-            </p>
-          )}
-          {e.status === 'skipped' && (
-            <p className="msg-status-line ov-tone-unknown">
-              {t('sch.exec.skippedNote', { reason: e.reason ? t(`sch.reason.${e.reason}`) : NO_VALUE })}
-              {data.blocking && <> · {blocking(data.blocking)}</>}
-            </p>
-          )}
 
           <h4>{t('sch.exec.jobs')}</h4>
           {e.jobs.length === 0 ? (
@@ -116,11 +88,10 @@ export const ExecutionDrawer: React.FC<{
                     <tr>
                       <th>{t('sch.exec.job.id')}</th>
                       <th>{t('sch.exec.job.queue')}</th>
-                      <th>{t('sch.exec.job.state')}</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {data.jobs.map((j) => (
+                    {e.jobs.map((j) => (
                       <tr key={j.id} className="is-clickable" onClick={() => navigate(`jobs/job/${encodeURIComponent(j.id)}?queue=${encodeURIComponent(j.queue)}`)}>
                         <td>
                           <code title={j.id}>#{shortJobId(j.id)}</code>
@@ -129,16 +100,11 @@ export const ExecutionDrawer: React.FC<{
                         <td>
                           <code>{j.queue}</code>
                         </td>
-                        <td>
-                          {j.status ? <span className={`pf-chip ov-tone-${MESSAGE_STATUS_TONE[j.status as MessageStatus] ?? 'unknown'}`}>{t(`messaging.status.${j.status}`)}</span> : NO_VALUE}
-                          {j.error && <small className="pf-row-note wq-error">{j.error}</small>}
-                        </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-              {data.jobsReason && <p className="pf-chart-note">{data.jobsReason}</p>}
             </>
           )}
 

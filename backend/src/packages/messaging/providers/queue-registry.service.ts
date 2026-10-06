@@ -59,9 +59,13 @@ export class QueueRegistry implements OnModuleInit {
    * giữ log vòng đời. `jobId` = id envelope để tra cứu được theo message ID.
    */
   public jobOptions(jobId: string): JobsOptions {
+    return { jobId, ...this.retentionOptions() };
+  }
+
+  /** Retry + giới hạn job đã xong/thất bại — dùng cả cho job do Job Scheduler / Run Now tạo (không có `jobId`). */
+  public retentionOptions(): Omit<JobsOptions, 'jobId'> {
     const m = this.config?.messaging;
     return {
-      jobId,
       attempts: m?.maxAttempts ?? 1,
       ...(m && m.maxAttempts > 1 && m.backoffDelayMs > 0
         ? { backoff: { type: m.backoff, delay: m.backoffDelayMs } }

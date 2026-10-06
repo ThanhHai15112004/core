@@ -1,19 +1,18 @@
 /** Kiểu dữ liệu trang Scheduler — khớp `backend/src/modules/scheduler-ops/responses`. */
 
 export type SchedulerRange = '1h' | '6h' | '24h' | '7d';
-export type SchedulerMetric = 'executions' | 'duration' | 'failures' | 'missed';
+export type SchedulerMetric = 'executions' | 'duration' | 'failures';
+/** `events` = audit thao tác (Run Now / Enable / Disable). */
 export type SchedulerTab = 'overview' | 'tasks' | 'history' | 'timeline' | 'failures' | 'events' | 'configuration';
 export type TaskDetailTab = 'overview' | 'history' | 'metrics' | 'logs' | 'configuration';
 export type SchedulerSeverity = 'warning' | 'critical' | 'info';
 export type SchedulerStatus = 'healthy' | 'degraded' | 'down' | 'paused' | 'unknown';
-export type TaskType = 'cron' | 'interval' | 'one_time';
-export type TaskDisplayStatus = 'running' | 'failing' | 'overdue' | 'misconfigured' | 'disabled' | 'completed' | 'enabled';
+export type TaskType = 'cron' | 'interval';
+export type TaskDisplayStatus = 'running' | 'failing' | 'disabled' | 'enabled';
 export type TaskHealth = 'healthy' | 'warning' | 'error' | 'unknown';
-export type OverlapPolicy = 'skip' | 'allow';
-export type MisfirePolicy = 'run_once' | 'skip';
-export type ExecutionTrigger = 'scheduled' | 'manual' | 'recovery';
-export type ExecutionStatus = 'running' | 'success' | 'failed' | 'skipped' | 'missed';
-export type ExecutionReason = 'previous_running' | 'lock_unavailable' | 'runtime_down' | 'interrupted';
+export type ExecutionTrigger = 'scheduled' | 'manual';
+/** Trạng thái job trên BullMQ: `scheduled` = delayed/waiting. */
+export type ExecutionStatus = 'scheduled' | 'running' | 'success' | 'failed';
 
 export interface ExecutionError {
   type: string;
@@ -30,7 +29,6 @@ export interface Schedule {
   type: TaskType;
   expression: string | null;
   intervalMs: number | null;
-  runAt: string | null;
   timezone: string;
   utcOffset: string;
   description: string;
@@ -40,12 +38,9 @@ export interface TaskRow {
   id: string;
   name: string;
   description: string | null;
-  group: string;
   type: TaskType;
   schedule: Schedule;
   enabled: boolean;
-  disabledAt: string | null;
-  disabledBy: string | null;
   running: number;
   status: TaskDisplayStatus;
   health: TaskHealth;
@@ -56,16 +51,14 @@ export interface TaskRow {
   lastExecutionId: string | null;
   lastSuccessAt: string | null;
   nextRunAt: string | null;
+  /** Số lần đã chạy theo BullMQ Job Scheduler. */
+  iterations: number | null;
   consecutiveFailures: number;
   executions24h: number;
   failures24h: number;
   successRatePercent: number | null;
   avgDurationMs: number | null;
-  overlap: OverlapPolicy;
-  misfire: MisfirePolicy;
-  expectedDurationMs: number | null;
   downstreamQueue: string | null;
-  error: string | null;
 }
 
 export interface Execution {
@@ -79,17 +72,10 @@ export interface Execution {
   finishedAt: string | null;
   durationMs: number | null;
   runningMs: number | null;
-  driftMs: number | null;
-  instance: string | null;
-  correlationId: string | null;
+  attempts: number;
+  correlationId: string;
   error: ExecutionError | null;
-  reason: ExecutionReason | null;
-  missedCount: number | null;
-  missedUntil: string | null;
   jobs: GeneratedJob[];
-  actor: string | null;
-  blockedBy: string | null;
-  longRunning: boolean;
 }
 
 export interface SchedulerAlert {
@@ -104,17 +90,7 @@ export interface SchedulerAlert {
   since: string;
   taskId: string | null;
   executionId: string | null;
-  tab: SchedulerTab;
-}
-
-export interface SchedulerEvent {
-  id: string;
-  at: string;
-  type: string;
-  severity: 'info' | 'warning' | 'critical' | 'success';
-  message: string;
-  taskId: string | null;
-  executionId: string | null;
+  tab: string;
 }
 
 export interface SchedulerOperation {
@@ -139,11 +115,7 @@ export interface SchedulerInstance {
   lastSeenAt: string;
   heartbeatAgeSec: number;
   uptimeSec: number;
-  alive: boolean;
   paused: boolean;
-  tasks: number;
-  running: number;
-  timezone: string;
 }
 
 export interface SchedulerHealth {
@@ -151,7 +123,6 @@ export interface SchedulerHealth {
   reasons: { code: string; message: string; taskId: string | null }[];
   lastHeartbeatAt: string | null;
   heartbeatAgeSec: number | null;
-  aliveInstances: number;
 }
 
 export interface Upcoming {
@@ -174,8 +145,6 @@ export interface SchedulerReport {
   executions: number;
   successful: number;
   failed: number;
-  skipped: number;
-  missed: number;
   successRatePercent: number | null;
   avgDurationMs: number | null;
   p95DurationMs: number | null;
@@ -191,8 +160,9 @@ export interface SchedulerOverview {
   generatedAt: string;
   range: SchedulerRange;
   environment: string;
-  timezone: { schedule: string; scheduleOffset: string; runtime: string | null; dst: boolean };
+  timezone: { schedule: string; scheduleOffset: string; runtime: string | null };
   health: SchedulerHealth;
+  instance: SchedulerInstance | null;
   kpis: {
     registered: number;
     enabled: number;
@@ -203,18 +173,8 @@ export interface SchedulerOverview {
     successRatePercent: number | null;
     avgDurationMs: number | null;
     p95DurationMs: number | null;
-    missedToday: number;
-    skippedToday: number;
     nextExecutionAt: string | null;
     nextExecutionTask: string | null;
-  };
-  drift: { avgMs: number | null; p95Ms: number | null };
-  runtime: {
-    instances: SchedulerInstance[];
-    strategy: 'distributed_lock';
-    lockProvider: string;
-    runtimeState: string | null;
-    uptimeSec: number | null;
   };
   alerts: SchedulerAlert[];
   upcoming: Upcoming[];
@@ -222,8 +182,9 @@ export interface SchedulerOverview {
   tasks: TaskRow[];
   running: Execution[];
   recent: Execution[];
-  events: SchedulerEvent[];
   report: { today: SchedulerReport; yesterday: SchedulerReport };
+  /** Lịch sử = job còn giữ trên broker theo retention. */
+  historyNote: { keepCompleted: number; keepFailed: number };
   settings: SchedulerSettings;
 }
 
@@ -240,16 +201,10 @@ export interface Downstream {
 
 export interface TaskDetail {
   task: TaskRow;
-  className: string;
-  sourcePath: string | null;
-  registeredAt: string;
-  lockTtlMs: number;
   kpis: {
     executions: number;
     successful: number;
     failed: number;
-    skipped: number;
-    missed: number;
     successRatePercent: number | null;
     avgDurationMs: number | null;
     p95DurationMs: number | null;
@@ -257,15 +212,12 @@ export interface TaskDetail {
     sampled: number;
   };
   consecutive: { count: number; firstFailedAt: string | null; lastSuccessAt: string | null } | null;
-  expected: { durationMs: number | null; source: 'configured' | 'baseline' | null };
   running: Execution[];
   next: string[];
-  lock: { strategy: 'distributed_lock' | 'none'; provider: string | null; ttlMs: number; owner: { executionId: string; instance: string } | null };
   downstream: Downstream | null;
   durations: { t: number; durationMs: number; status: ExecutionStatus }[];
   recent: Execution[];
   alerts: SchedulerAlert[];
-  events: SchedulerEvent[];
   settings: SchedulerSettings;
 }
 
@@ -274,29 +226,18 @@ export interface ExecutionsList {
   truncated: boolean;
 }
 
-export interface TriggeredJob extends GeneratedJob {
-  status: string | null;
-  attempts: number | null;
-  finishedAt: string | null;
-  error: string | null;
-}
-
 export interface ExecutionDetail {
   execution: Execution;
   task: TaskRow | null;
-  jobs: TriggeredJob[];
-  jobsReason: string | null;
   downstream: Downstream | null;
-  blocking: Execution | null;
   settings: SchedulerSettings;
 }
 
 export interface SchedulerFailures {
   range: SchedulerRange;
   failed: number;
-  missed: number;
   byType: { type: string; count: number; tasks: string[]; lastAt: string; sampleExecutionId: string }[];
-  byTask: { taskId: string; taskName: string; failed: number; missed: number; consecutive: number }[];
+  byTask: { taskId: string; taskName: string; failed: number; consecutive: number }[];
   items: Execution[];
   truncated: boolean;
   alerts: SchedulerAlert[];
@@ -353,5 +294,4 @@ export interface SchedulerConfig {
 export interface RunNowResult {
   operation: SchedulerOperation;
   executionId: string;
-  instance: string;
 }
