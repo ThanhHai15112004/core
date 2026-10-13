@@ -19,8 +19,6 @@ export function useTrafficFilters() {
       range: range && TRAFFIC_RANGES.includes(range) ? range : DEFAULT_RANGE,
       internal: q.get('internal') !== 'false',
       ...(q.get('method') ? { method: q.get('method')! } : {}),
-      ...(q.get('module') ? { module: q.get('module')! } : {}),
-      ...(q.get('instance') ? { instance: q.get('instance')! } : {}),
       ...(q.get('status') ? { status: q.get('status')! } : {}),
       ...(q.get('q') ? { q: q.get('q')! } : {}),
       ...(Number.isFinite(minMs) && minMs > 0 ? { minMs } : {}),
@@ -33,8 +31,6 @@ export function useTrafficFilters() {
       toQuery({
         range: f.range === DEFAULT_RANGE ? undefined : f.range,
         method: f.method,
-        module: f.module,
-        instance: f.instance,
         internal: f.internal === false ? 'false' : undefined,
         status: f.status,
         q: f.q,

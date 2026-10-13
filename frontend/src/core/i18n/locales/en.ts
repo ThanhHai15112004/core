@@ -321,7 +321,6 @@ export const en: TranslationKey = {
       p50: 'P50 latency',
       p95: 'P95 latency',
       errorRate: 'Error rate (5xx)',
-      active: 'Active requests',
       today: 'Requests today',
       rateSub: '{{count}} requests in {{range}}',
       vsPrevious: '{{delta}} vs previous period',
@@ -329,7 +328,6 @@ export const en: TranslationKey = {
       p99: 'P99 {{value}}',
       overThreshold: 'Above threshold {{threshold}}',
       errorSub: '{{errors}} 5xx errors / {{total}} requests · {{client}} 4xx',
-      peak: 'Peak {{value}} in {{range}}',
       todaySub: 'Since midnight',
     },
     chart: {
@@ -342,7 +340,7 @@ export const en: TranslationKey = {
       step: 'Resolution',
       stepValue: '{{seconds}}s per point',
     },
-    series: { requests: 'Requests/sec', p50: 'P50', p95: 'P95', p99: 'P99', '2xx': '2xx', '3xx': '3xx', '4xx': '4xx', '5xx': '5xx' },
+    series: { requests: 'Requests/sec', errors: 'Error rate (5xx)', p50: 'P50', p95: 'P95', p99: 'P99', '2xx': '2xx', '3xx': '3xx', '4xx': '4xx', '5xx': '5xx' },
     col: {
       endpoint: 'Endpoint',
       module: 'Module',
@@ -405,7 +403,7 @@ export const en: TranslationKey = {
       title: 'Error analysis',
       rate: '5xx error rate',
       topRoutes: 'Top error endpoints',
-      topCodes: 'Top error codes',
+      topStatuses: 'Top error statuses',
       none: 'No errors.',
       failedTitle: 'Failed requests (4xx/5xx)',
       failedEmpty: 'No failed requests.',

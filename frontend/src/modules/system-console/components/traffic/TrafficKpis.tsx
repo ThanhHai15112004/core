@@ -18,7 +18,7 @@ export const TrafficKpis: React.FC<{ summary: TrafficSummary | null }> = ({ summ
   if (!summary) {
     return (
       <div className="ov-kpi-grid">
-        {Array.from({ length: 6 }, (_, i) => (
+        {Array.from({ length: 5 }, (_, i) => (
           <div key={i} className="ov-card ov-kpi">
             <span className="ov-skeleton" style={{ width: '60%', height: 12 }} />
             <span className="ov-skeleton" style={{ width: '45%', height: 28, marginTop: 14 }} />
@@ -75,12 +75,6 @@ export const TrafficKpis: React.FC<{ summary: TrafficSummary | null }> = ({ summ
               ? 'ok'
               : 'unknown',
       trend: errDelta ? { text: t('tr.kpi.vsPrevious', { delta: errDelta }), good: (cmp.errorRateDelta ?? 0) <= 0 } : null,
-    },
-    {
-      key: 'active',
-      value: String(summary.activeRequests),
-      sub: t('tr.kpi.peak', { value: summary.peakActiveRequests, range }),
-      tone: 'unknown',
     },
     {
       key: 'today',

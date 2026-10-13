@@ -38,31 +38,23 @@ export interface StatusCount {
   count: number;
 }
 
+/** Ngưỡng đánh giá từ cấu hình `TRAFFIC_*`. */
 export interface TrafficSettings {
   slowMs: number;
-  longRunningMs: number;
   endpointP95WarnMs: number;
   errorRateWarnPercent: number;
   errorRateCritPercent: number;
-  sampleRate: number;
-  captureBodies: boolean;
-  flushMs: number;
-  requestLogSize: number;
-  retention: { tier: string; resolutionSec: number; retentionHours: number }[];
+  minRequestsForStatus: number;
 }
 
 export interface TrafficSummary {
   range: TrafficRange;
   generatedAt: string;
-  instances: string[];
-  modules: string[];
   stats: TrafficStats;
   comparison: TrafficComparison;
-  activeRequests: number;
-  peakActiveRequests: number;
-  requestsToday: number;
+  /** Từ 0 giờ hôm nay; null khi Prometheus không trả lời. */
+  requestsToday: number | null;
   hasTraffic: boolean;
-  lastRequestAt: string | null;
   statusClasses: { class: StatusClass; count: number; percent: number }[];
   topStatuses: StatusCount[];
   settings: TrafficSettings;
@@ -94,16 +86,15 @@ export interface EndpointRow extends TrafficRoute {
 export interface EndpointDetail extends EndpointRow {
   range: TrafficRange;
   comparison: TrafficComparison;
-  requestsToday: number;
+  requestsToday: number | null;
   topStatuses: StatusCount[];
-  topErrorCodes: { code: string; count: number }[];
 }
 
 export interface ErrorAnalysis {
   range: TrafficRange;
   stats: TrafficStats;
   topRoutes: { routeId: string; method: string; route: string; clientErrors: number; serverErrors: number }[];
-  topCodes: { code: string; count: number }[];
+  /** Status lỗi (≥ 400) nhiều nhất. */
   topStatuses: StatusCount[];
 }
 
@@ -139,8 +130,6 @@ export interface TrafficInsights {
 export interface TrafficFilters {
   range: TrafficRange;
   method?: string;
-  module?: string;
-  instance?: string;
   /** `false` = ẩn traffic nội bộ của System Console (/ops, /health). */
   internal: boolean;
   status?: string;

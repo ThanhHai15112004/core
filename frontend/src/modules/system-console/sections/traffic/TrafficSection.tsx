@@ -30,7 +30,7 @@ export const TrafficSection: React.FC = () => {
   const id = rawId ? decodeURIComponent(rawId) : undefined;
   const tab: TrafficTab = TRAFFIC_TABS.includes(rawTab as TrafficTab) ? (rawTab as TrafficTab) : 'overview';
 
-  const scope = JSON.stringify([filters.range, filters.method, filters.module, filters.instance, filters.internal]);
+  const scope = JSON.stringify([filters.range, filters.method, filters.internal]);
   const summary = usePolling(() => trafficApi.summary(filters), `summary:${scope}`, undefined, paused);
 
   const openLogs = useCallback(

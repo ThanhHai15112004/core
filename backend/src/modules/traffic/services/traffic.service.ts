@@ -15,12 +15,18 @@ import type {
   EndpointRowDto,
   EndpointStatus,
   ErrorAnalysisDto,
+  ReasonDto,
+  SecurityTrafficDto,
   StatusClass,
+  StatusCountDto,
   TimeseriesDto,
   TimeseriesMetric,
+  TrafficComparisonDto,
   TrafficInsightsDto,
+  TrafficProblemDto,
   TrafficSettingsDto,
   TrafficStatsDto,
+  TrafficSummary24hDto,
   TrafficSummaryDto,
 } from '../responses/traffic.response.js';
 
@@ -38,32 +44,47 @@ export const ENDPOINT_SORTS = ['traffic', 'latency', 'p95', 'errors'] as const;
 export type EndpointSort = (typeof ENDPOINT_SORTS)[number];
 
 const STATUS_CLASSES: StatusClass[] = ['2xx', '3xx', '4xx', '5xx'];
+const SECURITY_STATUSES = [401, 403, 429] as const;
+const H = 'http_request_duration_seconds';
+/** Cửa sổ "hiện tại" của phát hiện bất thường và baseline liền trước. */
+const RECENT_MIN = 5;
+const BASELINE_MIN = 60;
+const MAX_POINTS = 60;
+const PROBLEM_ENDPOINTS = 5;
 
 const routeKey = (labels: Record<string, string>) =>
   `${labels['method'] || 'GET'} ${labels['route'] || '/'}`;
-
 const byRoute = (samples: PromSample[]) =>
   new Map(samples.map((item) => [routeKey(item.labels), item.value]));
-
 const toMs = (sec: number | null | undefined) =>
-  sec === null || sec === undefined ? null : Math.round(sec * 1000);
-
-/** Route nội bộ (System Console, health check) — cùng quy ước với cột `internal` của endpoint. */
-const isInternal = (route: string) => route.includes('/ops/') || route.includes('/health');
-const INTERNAL_ROUTE_RE = '.*(/ops/|/health).*';
-
-const percentOf = (part: number, total: number) =>
-  total > 0 ? Number(((part / total) * 100).toFixed(2)) : 0;
+  sec === null || sec === undefined || !Number.isFinite(sec) ? null : Math.round(sec * 1000);
+const round = (n: number, d = 2) => Number(n.toFixed(d));
+const percentOf = (part: number, total: number) => (total > 0 ? round((part / total) * 100) : 0);
+const percentDelta = (current: number | null, previous: number | null) =>
+  current === null || previous === null || previous === 0
+    ? null
+    : round(((current - previous) / previous) * 100, 1);
+/** Giá trị nhãn an toàn trong PromQL. */
+const lv = (v: string) => v.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+const escapeRe = (v: string) => v.replace(/[.*+?^${}()|[\]\\]/g, '\\\\$&');
 
 export interface TrafficQuery {
   range: TrafficRange;
-  instance?: string | undefined;
   method?: string | undefined;
-  module?: string | undefined;
   routeId?: string | undefined;
   includeInternal: boolean;
 }
 
+/** Số liệu thô của một cửa sổ (tổng hoặc một endpoint). */
+interface WindowStats {
+  statuses: StatusCountDto[];
+  stats: TrafficStatsDto;
+}
+
+/**
+ * HTTP Traffic từ Prometheus: histogram `http_request_duration_seconds{method,route,status}` do hook Fastify ghi.
+ * Mọi con số có nguồn PromQL; Prometheus không trả lời → 503, không trả 0 giả.
+ */
 @Injectable()
 export class TrafficService {
   constructor(
@@ -71,6 +92,35 @@ export class TrafficService {
     private readonly config: CoreConfigService,
     private readonly i18n: CoreI18nService,
   ) {}
+
+  private get cfg() {
+    return this.config.traffic;
+  }
+
+  /** Route nội bộ = segment thuộc `TRAFFIC_INTERNAL_MODULES` (mặc định ops, health). */
+  private get internalRe(): string {
+    const mods = this.cfg.internalModules.map(escapeRe).join('|') || 'ops|health';
+    return `.*/(${mods})(/.*)?`;
+  }
+
+  private isInternal(route: string): boolean {
+    return new RegExp(`^${this.internalRe.replace(/\\\\/g, '\\')}$`).test(route);
+  }
+
+  /** Bộ lọc nhãn theo query (+ điều kiện thêm), vd. `{route!~"…",method="GET",status=~"5.."}`. */
+  private sel(q: Omit<TrafficQuery, 'range'>, ...extra: string[]): string {
+    const parts = [...extra];
+    if (!q.includeInternal) parts.push(`route!~"${this.internalRe}"`);
+    if (q.method) parts.push(`method="${lv(q.method)}"`);
+    if (q.routeId) {
+      const i = q.routeId.indexOf(' ');
+      if (i > 0) {
+        parts.push(`method="${lv(q.routeId.slice(0, i))}"`);
+        parts.push(`route="${lv(q.routeId.slice(i + 1))}"`);
+      }
+    }
+    return parts.length ? `{${parts.join(',')}}` : '';
+  }
 
   /** Prometheus không cấu hình/không trả lời → 503, thay vì số 0 trông như "không có traffic". */
   private async must<T>(task: Promise<T>): Promise<T> {
@@ -83,179 +133,243 @@ export class TrafficService {
     }
   }
 
-  public async getSummary(q: TrafficQuery): Promise<TrafficSummaryDto> {
-    const minutes = TRAFFIC_RANGES[q.range] ?? 15;
-    const w = `${minutes}m`;
-    const sel = q.includeInternal ? '' : `{route!~"${INTERNAL_ROUTE_RE}"}`;
+  private settings(): TrafficSettingsDto {
+    const th = this.cfg.thresholds;
+    return {
+      slowMs: this.cfg.slowMs,
+      endpointP95WarnMs: th.endpointP95Ms,
+      errorRateWarnPercent: th.errorRateWarnPercent,
+      errorRateCritPercent: th.errorRateCritPercent,
+      minRequestsForStatus: th.minRequestsForStatus,
+    };
+  }
 
+  /** Thống kê một cửa sổ `seconds` kết thúc trước hiện tại `offsetSec` giây. */
+  private async window(
+    selector: string,
+    seconds: number,
+    offsetSec = 0,
+    strict = true,
+  ): Promise<WindowStats> {
+    const w = `${Math.max(60, Math.round(seconds))}s`;
+    const off = offsetSec > 0 ? ` offset ${Math.round(offsetSec)}s` : '';
+    const quant = (p: number) =>
+      this.prom.value(
+        `histogram_quantile(${p}, sum by (le) (rate(${H}_bucket${selector}[${w}]${off})))`,
+      );
+    const statusQuery = this.prom.query(
+      `sum by (status) (increase(${H}_count${selector}[${w}]${off}))`,
+    );
     const [statusSamples, sumDuration, p50, p95, p99] = await Promise.all([
-      this.must(
-        this.prom.query(
-          `sum by (status) (increase(http_request_duration_seconds_count${sel}[${w}]))`,
-        ),
-      ),
-      this.prom.value(`sum(increase(http_request_duration_seconds_sum${sel}[${w}]))`),
-      this.prom.value(
-        `histogram_quantile(0.50, sum by (le) (rate(http_request_duration_seconds_bucket${sel}[${w}])))`,
-      ),
-      this.prom.value(
-        `histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket${sel}[${w}])))`,
-      ),
-      this.prom.value(
-        `histogram_quantile(0.99, sum by (le) (rate(http_request_duration_seconds_bucket${sel}[${w}])))`,
-      ),
+      strict ? this.must(statusQuery) : statusQuery.catch(() => [] as PromSample[]),
+      this.prom.value(`sum(increase(${H}_sum${selector}[${w}]${off}))`),
+      quant(0.5),
+      quant(0.95),
+      quant(0.99),
     ]);
-
-    const classCounts = new Map<StatusClass, number>(STATUS_CLASSES.map((c) => [c, 0]));
-    for (const s of statusSamples) {
-      const cls = `${s.labels['status']?.[0] ?? ''}xx` as StatusClass;
-      if (classCounts.has(cls)) classCounts.set(cls, classCounts.get(cls)! + Math.round(s.value));
-    }
-    const requests = [...classCounts.values()].reduce((a, b) => a + b, 0);
-    const serverErrors = classCounts.get('5xx')!;
-    const clientErrors = classCounts.get('4xx')!;
-    const durationSec = minutes * 60;
-    const requestsPerSecond = Number((requests / durationSec).toFixed(2));
-    const avgLatencyMs =
-      requests > 0 && sumDuration !== null
-        ? Number(((sumDuration / requests) * 1000).toFixed(1))
-        : null;
-    const p50LatencyMs = toMs(p50);
-    const p95LatencyMs = toMs(p95);
-    const p99LatencyMs = toMs(p99);
-    const errorRatePercent = percentOf(serverErrors, requests);
-    const clientErrorRatePercent = percentOf(clientErrors, requests);
-
-    const stats: TrafficStatsDto = {
-      requests,
-      requestsPerSecond,
-      avgLatencyMs,
-      p50LatencyMs,
-      p95LatencyMs,
-      p99LatencyMs,
-      clientErrors,
-      serverErrors,
-      errorRatePercent,
-      clientErrorRatePercent,
+    const statuses = statusSamples
+      .map((s) => ({ status: Number(s.labels['status']) || 0, count: Math.round(s.value) }))
+      .filter((s) => s.status > 0 && s.count > 0)
+      .sort((a, b) => b.count - a.count || a.status - b.status);
+    const requests = statuses.reduce((n, s) => n + s.count, 0);
+    const count = (from: number, to: number) =>
+      statuses.filter((s) => s.status >= from && s.status < to).reduce((n, s) => n + s.count, 0);
+    const clientErrors = count(400, 500);
+    const serverErrors = count(500, 600);
+    return {
+      statuses,
+      stats: {
+        requests,
+        requestsPerSecond: round(requests / seconds, 3),
+        avgLatencyMs:
+          requests > 0 && sumDuration !== null ? round((sumDuration / requests) * 1000, 1) : null,
+        p50LatencyMs: toMs(p50),
+        p95LatencyMs: toMs(p95),
+        p99LatencyMs: toMs(p99),
+        clientErrors,
+        serverErrors,
+        errorRatePercent: percentOf(serverErrors, requests),
+        clientErrorRatePercent: percentOf(clientErrors, requests),
+      },
     };
+  }
 
-    const statusClasses = STATUS_CLASSES.map((cls) => {
-      const count = classCounts.get(cls)!;
-      return {
-        class: cls,
-        count,
-        percent: requests > 0 ? Number(((count / requests) * 100).toFixed(1)) : 0,
-      };
+  private compare(current: TrafficStatsDto, previous: TrafficStatsDto): TrafficComparisonDto {
+    if (previous.requests === 0)
+      return { requestsPercent: null, p95Percent: null, errorRateDelta: null };
+    return {
+      requestsPercent: percentDelta(current.requests, previous.requests),
+      p95Percent: percentDelta(current.p95LatencyMs, previous.p95LatencyMs),
+      errorRateDelta: round(current.errorRatePercent - previous.errorRatePercent),
+    };
+  }
+
+  /** Số request từ 0 giờ hôm nay (giờ của server). */
+  private requestsToday(selector: string): Promise<number | null> {
+    const midnight = new Date();
+    midnight.setHours(0, 0, 0, 0);
+    const sec = Math.max(60, Math.round((Date.now() - midnight.getTime()) / 1000));
+    return this.prom
+      .value(`sum(increase(${H}_count${selector}[${sec}s]))`)
+      .then((v) => (v === null ? null : Math.round(v)));
+  }
+
+  private classes(statuses: StatusCountDto[], total: number) {
+    return STATUS_CLASSES.map((cls) => {
+      const count = statuses
+        .filter((s) => `${String(s.status)[0]}xx` === cls)
+        .reduce((n, s) => n + s.count, 0);
+      return { class: cls, count, percent: total > 0 ? round((count / total) * 100, 1) : 0 };
     });
+  }
 
-    const topStatuses = statusSamples
-      .map((s) => ({
-        status: Number(s.labels['status']) || 200,
-        count: Math.round(s.value),
-      }))
-      .filter((s) => s.count > 0)
-      .sort((a, b) => b.count - a.count);
-
-    const settings: TrafficSettingsDto = {
-      slowMs: 1000,
-      longRunningMs: 5000,
-      endpointP95WarnMs: 500,
-      errorRateWarnPercent: 1,
-      errorRateCritPercent: 5,
-      sampleRate: 1,
-      captureBodies: false,
-      flushMs: 5000,
-      requestLogSize: 1000,
-      retention: [],
-    };
-
+  public async getSummary(q: TrafficQuery): Promise<TrafficSummaryDto> {
+    const seconds = TRAFFIC_RANGES[q.range] * 60;
+    const selector = this.sel(q);
+    const [current, previous, today] = await Promise.all([
+      this.window(selector, seconds),
+      this.window(selector, seconds, seconds, false),
+      this.requestsToday(selector),
+    ]);
     return {
       range: q.range,
       generatedAt: new Date().toISOString(),
-      instances: ['api'],
-      modules: ['core'],
-      stats,
-      comparison: { requestsPercent: null, p95Percent: null, errorRateDelta: null },
-      activeRequests: 0,
-      peakActiveRequests: 0,
-      requestsToday: requests,
-      hasTraffic: requests > 0,
-      lastRequestAt: requests > 0 ? new Date().toISOString() : null,
-      statusClasses,
-      topStatuses,
-      settings,
+      stats: current.stats,
+      comparison: this.compare(current.stats, previous.stats),
+      requestsToday: today,
+      hasTraffic: current.stats.requests > 0 || (today ?? 0) > 0,
+      statusClasses: this.classes(current.statuses, current.stats.requests),
+      topStatuses: current.statuses.slice(0, 10),
+      settings: this.settings(),
     };
   }
 
   public async getTimeseries(q: TrafficQuery, metric: TimeseriesMetric): Promise<TimeseriesDto> {
-    const minutes = TRAFFIC_RANGES[q.range] ?? 15;
-    const stepSec = Math.max(10, Math.round((minutes * 60) / 60));
+    const minutes = TRAFFIC_RANGES[q.range];
+    const stepSec = Math.max(15, Math.round((minutes * 60) / MAX_POINTS));
+    const w = `${Math.max(60, stepSec * 2)}s`;
+    const selector = this.sel(q);
+    const rate = (extra?: string) =>
+      `sum(rate(${H}_count${extra ? this.sel(q, extra) : selector}[${w}]))`;
 
-    let expr = '';
-    let unit: 'rps' | 'ms' | 'percent' = 'rps';
-    if (metric === 'latency') {
-      expr = `histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket[1m]))) * 1000`;
+    let unit: TimeseriesDto['unit'] = 'rps';
+    let series: TimeseriesDto['series'];
+    // Series đầu tiên là series chính để tính current/average/peak (status: tổng các lớp).
+    let main: { t: number; value: number }[];
+    if (metric === 'status') {
+      const [total, ...byClass] = await Promise.all([
+        this.must(this.prom.range(rate(), minutes, stepSec)),
+        ...STATUS_CLASSES.map((cls) =>
+          this.prom.safeRange(rate(`status=~"${cls[0]}.."`), minutes, stepSec),
+        ),
+      ]);
+      series = STATUS_CLASSES.map((cls, i) => ({
+        id: cls,
+        points: this.points(byClass[i]?.[0]?.points),
+      }));
+      main = this.points(total[0]?.points);
+    } else if (metric === 'latency') {
       unit = 'ms';
-    } else if (metric === 'errors') {
-      expr = `sum(rate(http_request_duration_seconds_count{status=~"5.."}[1m]))`;
-      unit = 'rps';
+      const quant = (p: number) =>
+        `histogram_quantile(${p}, sum by (le) (rate(${H}_bucket${selector}[${w}]))) * 1000`;
+      const [p95, p50, p99] = await Promise.all([
+        this.must(this.prom.range(quant(0.95), minutes, stepSec)),
+        this.prom.safeRange(quant(0.5), minutes, stepSec),
+        this.prom.safeRange(quant(0.99), minutes, stepSec),
+      ]);
+      series = [
+        { id: 'p95', points: this.points(p95[0]?.points) },
+        { id: 'p50', points: this.points(p50[0]?.points) },
+        { id: 'p99', points: this.points(p99[0]?.points) },
+      ];
+      main = series[0]!.points;
     } else {
-      expr = `sum(rate(http_request_duration_seconds_count[1m]))`;
-      unit = 'rps';
+      const expr = metric === 'errors' ? `${rate('status=~"5.."')} / ${rate()} * 100` : rate();
+      unit = metric === 'errors' ? 'percent' : 'rps';
+      const res = await this.must(this.prom.range(expr, minutes, stepSec));
+      series = [{ id: metric, points: this.points(res[0]?.points) }];
+      main = series[0]!.points;
     }
 
-    const seriesList = await this.must(this.prom.range(expr, minutes, stepSec));
-    const points =
-      seriesList[0]?.points.map((p) => ({ t: p.t, value: Number(p.v.toFixed(2)) })) ?? [];
-    const values = points.map((p) => p.value);
-    const current = values.length > 0 ? (values.at(-1) ?? null) : null;
-    const average =
-      values.length > 0
-        ? Number((values.reduce((a, b) => a + b, 0) / values.length).toFixed(2))
-        : null;
-    const peak = values.length > 0 ? Math.max(...values) : null;
-    const peakAt = peak !== null ? (points.find((p) => p.value === peak)?.t ?? null) : null;
-
+    const values = main.map((p) => p.value);
+    const peak = values.length ? Math.max(...values) : null;
     return {
       range: q.range,
       metric,
       stepSec,
       unit,
-      series: [{ id: metric, points }],
-      current,
-      average,
+      series,
+      current: values.at(-1) ?? null,
+      average: values.length ? round(values.reduce((a, b) => a + b, 0) / values.length) : null,
       peak,
-      peakAt,
+      peakAt: peak !== null ? (main.find((p) => p.value === peak)?.t ?? null) : null,
     };
   }
 
-  public async getEndpoints(q: TrafficQuery, sort: EndpointSort): Promise<EndpointRowDto[]> {
-    const minutes = TRAFFIC_RANGES[q.range] ?? 15;
-    const w = `${minutes}m`;
-    const durationSec = minutes * 60;
+  private points(list: { t: number; v: number }[] | undefined) {
+    return (list ?? [])
+      .filter((p) => Number.isFinite(p.v))
+      .map((p) => ({ t: p.t, value: round(p.v) }));
+  }
 
-    const quantile = (q: number) =>
+  private status(stats: TrafficStatsDto): { status: EndpointStatus; reasons: ReasonDto[] } {
+    const th = this.cfg.thresholds;
+    const reason = (code: string, params: Record<string, string | number>) => ({
+      code,
+      message: this.i18n.t(`traffic.reason.${code}`, params),
+    });
+    if (stats.requests === 0) return { status: 'idle', reasons: [reason('idle', {})] };
+    if (stats.requests < th.minRequestsForStatus)
+      return {
+        status: 'low_traffic',
+        reasons: [reason('lowTraffic', { count: stats.requests, min: th.minRequestsForStatus })],
+      };
+    if (stats.errorRatePercent >= th.errorRateCritPercent)
+      return {
+        status: 'failing',
+        reasons: [
+          reason('failing', {
+            rate: stats.errorRatePercent,
+            threshold: th.errorRateCritPercent,
+          }),
+        ],
+      };
+    if (stats.errorRatePercent >= th.errorRateWarnPercent)
+      return {
+        status: 'high_error',
+        reasons: [
+          reason('highError', {
+            rate: stats.errorRatePercent,
+            threshold: th.errorRateWarnPercent,
+          }),
+        ],
+      };
+    if (stats.p95LatencyMs !== null && stats.p95LatencyMs >= th.endpointP95Ms)
+      return {
+        status: 'slow',
+        reasons: [reason('slow', { p95: stats.p95LatencyMs, threshold: th.endpointP95Ms })],
+      };
+    return { status: 'healthy', reasons: [] };
+  }
+
+  public async getEndpoints(q: TrafficQuery, sort: EndpointSort): Promise<EndpointRowDto[]> {
+    const seconds = TRAFFIC_RANGES[q.range] * 60;
+    const w = `${seconds}s`;
+    const selector = this.sel(q);
+    const by = (extra?: string, metric = '_count') =>
+      `sum by (route, method) (increase(${H}${metric}${extra ? this.sel(q, extra) : selector}[${w}]))`;
+    const quantile = (p: number) =>
       this.prom.safeQuery(
-        `histogram_quantile(${q}, sum by (le, route, method) (rate(http_request_duration_seconds_bucket[${w}])))`,
+        `histogram_quantile(${p}, sum by (le, route, method) (rate(${H}_bucket${selector}[${w}])))`,
       );
     const [counts, sums, p50s, p95s, p99s, errors5xx, errors4xx] = await Promise.all([
-      this.must(
-        this.prom.query(
-          `sum by (route, method) (increase(http_request_duration_seconds_count[${w}]))`,
-        ),
-      ),
-      this.prom.safeQuery(
-        `sum by (route, method) (increase(http_request_duration_seconds_sum[${w}]))`,
-      ),
+      this.must(this.prom.query(by())),
+      this.prom.safeQuery(by(undefined, '_sum')),
       quantile(0.5),
       quantile(0.95),
       quantile(0.99),
-      this.prom.safeQuery(
-        `sum by (route, method) (increase(http_request_duration_seconds_count{status=~"5.."}[${w}]))`,
-      ),
-      this.prom.safeQuery(
-        `sum by (route, method) (increase(http_request_duration_seconds_count{status=~"4.."}[${w}]))`,
-      ),
+      this.prom.safeQuery(by('status=~"5.."')),
+      this.prom.safeQuery(by('status=~"4.."')),
     ]);
     const sumMap = byRoute(sums);
     const p50Map = byRoute(p50s);
@@ -264,70 +378,46 @@ export class TrafficService {
     const errMap = byRoute(errors5xx);
     const clientErrMap = byRoute(errors4xx);
 
-    const rows: EndpointRowDto[] = [];
-    for (const item of counts) {
+    const rows = counts.map((item): EndpointRowDto => {
       const method = item.labels['method'] || 'GET';
       const route = item.labels['route'] || '/';
       const key = routeKey(item.labels);
-      const reqCount = Math.round(item.value);
+      const requests = Math.round(item.value);
       const sumSec = sumMap.get(key);
-      const avgLatencyMs =
-        reqCount > 0 && sumSec !== undefined
-          ? Number(((sumSec / reqCount) * 1000).toFixed(1))
-          : null;
-      const p95LatencyMs = toMs(p95Map.get(key));
-      const serverErr = Math.round(errMap.get(key) ?? 0);
-      const clientErr = Math.round(clientErrMap.get(key) ?? 0);
-      const errorRatePercent = percentOf(serverErr, reqCount);
-      const clientErrorRatePercent = percentOf(clientErr, reqCount);
-
-      const internal = isInternal(route);
-      if (!q.includeInternal && internal) continue;
-      if (q.method && q.method !== method) continue;
-      if (q.routeId && q.routeId !== key) continue;
-
+      const serverErrors = Math.round(errMap.get(key) ?? 0);
+      const clientErrors = Math.round(clientErrMap.get(key) ?? 0);
       const segments = route.split('/').filter(Boolean);
-      const moduleName = segments[1] || segments[0] || 'root';
-
-      let status: EndpointStatus = 'healthy';
-      if (errorRatePercent > 10) status = 'failing';
-      else if (p95LatencyMs && p95LatencyMs > 1000) status = 'slow';
-      else if (reqCount === 0) status = 'idle';
-
-      rows.push({
+      const stats: TrafficStatsDto = {
+        requests,
+        requestsPerSecond: round(requests / seconds, 3),
+        avgLatencyMs:
+          requests > 0 && sumSec !== undefined ? round((sumSec / requests) * 1000, 1) : null,
+        p50LatencyMs: toMs(p50Map.get(key)),
+        p95LatencyMs: toMs(p95Map.get(key)),
+        p99LatencyMs: toMs(p99Map.get(key)),
+        clientErrors,
+        serverErrors,
+        errorRatePercent: percentOf(serverErrors, requests),
+        clientErrorRatePercent: percentOf(clientErrors, requests),
+      };
+      return {
         id: key,
         method,
         route,
-        module: moduleName,
-        internal,
-        stats: {
-          requests: reqCount,
-          requestsPerSecond: Number((reqCount / durationSec).toFixed(2)),
-          avgLatencyMs,
-          p50LatencyMs: toMs(p50Map.get(key)),
-          p95LatencyMs,
-          p99LatencyMs: toMs(p99Map.get(key)),
-          clientErrors: clientErr,
-          serverErrors: serverErr,
-          errorRatePercent,
-          clientErrorRatePercent,
-        },
-        status,
-        reasons: [],
-      });
-    }
+        module: segments[1] ?? segments[0] ?? 'root',
+        internal: this.isInternal(route),
+        stats,
+        ...this.status(stats),
+      };
+    });
 
-    if (sort === 'p95') {
-      rows.sort((a, b) => (b.stats.p95LatencyMs ?? 0) - (a.stats.p95LatencyMs ?? 0));
-    } else if (sort === 'latency') {
-      rows.sort((a, b) => (b.stats.avgLatencyMs ?? 0) - (a.stats.avgLatencyMs ?? 0));
-    } else if (sort === 'errors') {
-      rows.sort((a, b) => b.stats.errorRatePercent - a.stats.errorRatePercent);
-    } else {
-      rows.sort((a, b) => b.stats.requests - a.stats.requests);
-    }
-
-    return rows;
+    const metricOf: Record<EndpointSort, (r: EndpointRowDto) => number> = {
+      traffic: (r) => r.stats.requests,
+      latency: (r) => r.stats.avgLatencyMs ?? 0,
+      p95: (r) => r.stats.p95LatencyMs ?? 0,
+      errors: (r) => r.stats.errorRatePercent,
+    };
+    return rows.sort((a, b) => metricOf[sort](b) - metricOf[sort](a) || a.id.localeCompare(b.id));
   }
 
   public async getEndpoint(routeId: string, q: TrafficQuery): Promise<EndpointDetailDto> {
@@ -335,57 +425,219 @@ export class TrafficService {
     const ep =
       endpoints.find((e) => e.id === routeId || e.route === routeId) ??
       endpoints.find((e) => e.id.toLowerCase() === routeId.toLowerCase());
-    if (!ep) {
-      throw new TrafficEndpointNotFoundException(routeId);
-    }
-
+    if (!ep) throw new TrafficEndpointNotFoundException(routeId);
+    const seconds = TRAFFIC_RANGES[q.range] * 60;
+    const selector = this.sel({ includeInternal: true, routeId: ep.id });
+    const [current, previous, today] = await Promise.all([
+      this.window(selector, seconds),
+      this.window(selector, seconds, seconds, false),
+      this.requestsToday(selector),
+    ]);
     return {
       ...ep,
       range: q.range,
-      comparison: { requestsPercent: null, p95Percent: null, errorRateDelta: null },
-      requestsToday: ep.stats.requests,
-      topStatuses: [{ status: 200, count: ep.stats.requests }],
-      topErrorCodes: [],
+      comparison: this.compare(current.stats, previous.stats),
+      requestsToday: today,
+      topStatuses: current.statuses.slice(0, 10),
     };
   }
 
   public async getErrors(q: TrafficQuery): Promise<ErrorAnalysisDto> {
-    const summary = await this.getSummary(q);
-    const endpoints = await this.getEndpoints({ ...q, includeInternal: true }, 'errors');
-    const topRoutes = endpoints
-      .filter((e) => e.stats.serverErrors > 0 || e.stats.clientErrors > 0)
-      .map((e) => ({
-        routeId: e.id,
-        method: e.method,
-        route: e.route,
-        clientErrors: e.stats.clientErrors,
-        serverErrors: e.stats.serverErrors,
-      }));
-
+    const [summary, endpoints] = await Promise.all([
+      this.getSummary(q),
+      this.getEndpoints(q, 'errors'),
+    ]);
     return {
       range: q.range,
       stats: summary.stats,
-      topRoutes,
-      topCodes: [],
-      topStatuses: summary.topStatuses,
+      topRoutes: endpoints
+        .filter((e) => e.stats.serverErrors > 0 || e.stats.clientErrors > 0)
+        .sort(
+          (a, b) =>
+            b.stats.serverErrors - a.stats.serverErrors ||
+            b.stats.clientErrors - a.stats.clientErrors,
+        )
+        .map((e) => ({
+          routeId: e.id,
+          method: e.method,
+          route: e.route,
+          clientErrors: e.stats.clientErrors,
+          serverErrors: e.stats.serverErrors,
+        })),
+      topStatuses: summary.topStatuses.filter((s) => s.status >= 400),
     };
   }
 
   public async getInsights(q: TrafficQuery): Promise<TrafficInsightsDto> {
-    const summary = await this.getSummary(q);
+    const selector = this.sel(q);
+    const [problems, security, last24h] = await Promise.all([
+      this.problems(q, selector),
+      this.security(q),
+      this.last24h(selector),
+    ]);
     return {
       generatedAt: new Date().toISOString(),
-      problems: [],
-      security: [],
-      rateLimit: { configured: false, message: 'Rate limit not configured' },
-      last24h: {
-        total: summary.stats.requests,
-        successful: Math.max(0, summary.stats.requests - summary.stats.serverErrors),
-        clientErrors: summary.stats.clientErrors,
-        serverErrors: summary.stats.serverErrors,
-        peak: null,
-        slowest: null,
-      },
+      problems,
+      security,
+      rateLimit: { configured: false, message: this.i18n.t('traffic.rateLimit.notConfigured') },
+      last24h,
+    };
+  }
+
+  /**
+   * Bất thường theo rule: `RECENT_MIN` phút gần nhất so với `BASELINE_MIN` phút liền trước (lưu lượng tăng vọt, 5xx
+   * vượt ngưỡng, P95 tăng vọt), cộng các endpoint đang slow / high_error / failing trong khoảng đang xem.
+   */
+  private async problems(q: TrafficQuery, selector: string): Promise<TrafficProblemDto[]> {
+    const th = this.cfg.thresholds;
+    const [recent, baseline, endpoints, recentEndpoints] = await Promise.all([
+      this.window(selector, RECENT_MIN * 60),
+      this.window(selector, BASELINE_MIN * 60, RECENT_MIN * 60, false),
+      this.getEndpoints(q, 'errors'),
+      this.getEndpoints({ ...q, range: '5m' }, 'errors'),
+    ]);
+    const now = new Date().toISOString();
+    const out: TrafficProblemDto[] = [];
+    const add = (
+      kind: TrafficProblemDto['kind'],
+      severity: TrafficProblemDto['severity'],
+      params: Record<string, string | number>,
+      routeId: string | null = null,
+    ) =>
+      out.push({
+        kind,
+        severity,
+        title: this.i18n.t(`traffic.problem.${kind}.title`, params),
+        message: this.i18n.t(`traffic.problem.${kind}.message`, params),
+        routeId,
+        since: now,
+      });
+    const none = this.i18n.t('traffic.problem.none');
+
+    const r = recent.stats;
+    const b = baseline.stats;
+    const growth = percentDelta(r.requestsPerSecond, b.requestsPerSecond);
+    if (
+      r.requestsPerSecond >= th.minRpsForAlert &&
+      growth !== null &&
+      growth >= th.spikeIncreasePercent
+    )
+      add('trafficSpike', 'warning', {
+        percent: growth,
+        current: r.requestsPerSecond,
+        baseline: b.requestsPerSecond,
+      });
+
+    if (r.requests >= th.minRequestsForStatus && r.errorRatePercent >= th.errorRateWarnPercent) {
+      const top = recentEndpoints.find((e) => e.stats.serverErrors > 0);
+      add(
+        'errorSpike',
+        r.errorRatePercent >= th.errorRateCritPercent ? 'critical' : 'warning',
+        {
+          baseline: b.requests > 0 ? b.errorRatePercent : none,
+          current: r.errorRatePercent,
+          endpoint: top?.id ?? none,
+        },
+        top?.id ?? null,
+      );
+    }
+
+    const p95 = r.p95LatencyMs;
+    const p95Base = b.p95LatencyMs;
+    if (
+      r.requests >= th.minRequestsForStatus &&
+      p95 !== null &&
+      p95 >= this.cfg.slowMs &&
+      (p95Base === null || p95 >= p95Base * (1 + th.spikeIncreasePercent / 100))
+    ) {
+      const slow = recentEndpoints
+        .filter((e) => (e.stats.p95LatencyMs ?? 0) >= th.endpointP95Ms)
+        .slice(0, 3)
+        .map((e) => e.id);
+      add('latency', 'warning', {
+        baseline: p95Base ?? none,
+        current: p95,
+        endpoints: slow.join(', ') || none,
+      });
+    }
+
+    for (const e of endpoints
+      .filter((x) => x.status === 'failing' || x.status === 'high_error' || x.status === 'slow')
+      .slice(0, PROBLEM_ENDPOINTS)) {
+      const kind = `endpoint.${e.status}` as TrafficProblemDto['kind'];
+      out.push({
+        kind,
+        severity: e.status === 'failing' ? 'critical' : 'warning',
+        title: this.i18n.t(`traffic.problem.${kind}.title`, { endpoint: e.id }),
+        message: e.reasons[0]?.message ?? '',
+        routeId: e.id,
+        since: null,
+      });
+    }
+    const rank = { critical: 0, warning: 1 } as const;
+    return out.sort((a, b2) => rank[a.severity] - rank[b2.severity]);
+  }
+
+  /** 401 / 403 / 429 trong khoảng đang xem, kèm endpoint nhận nhiều nhất. */
+  private async security(q: TrafficQuery): Promise<SecurityTrafficDto[]> {
+    const w = `${TRAFFIC_RANGES[q.range] * 60}s`;
+    const rows = await this.prom.safeQuery(
+      `sum by (status, method, route) (increase(${H}_count${this.sel(q, 'status=~"401|403|429"')}[${w}]))`,
+    );
+    return SECURITY_STATUSES.map((status) => {
+      const list = rows
+        .filter((x) => Number(x.labels['status']) === status)
+        .map((x) => ({ labels: x.labels, count: Math.round(x.value) }))
+        .filter((x) => x.count > 0)
+        .sort((a, b) => b.count - a.count);
+      const top = list[0];
+      return {
+        status,
+        count: list.reduce((n, x) => n + x.count, 0),
+        topRoute: top
+          ? {
+              routeId: routeKey(top.labels),
+              method: top.labels['method'] || 'GET',
+              route: top.labels['route'] || '/',
+              count: top.count,
+            }
+          : null,
+      };
+    });
+  }
+
+  /** Đúng 24 giờ gần nhất: tổng, thành công (2xx/3xx), lỗi, giờ cao điểm và khung giờ chậm nhất. */
+  private async last24h(selector: string): Promise<TrafficSummary24hDto> {
+    const DAY_MIN = 1440;
+    const [day, rps, p95] = await Promise.all([
+      this.window(selector, DAY_MIN * 60, 0, false),
+      this.prom.safeRange(`sum(rate(${H}_count${selector}[10m]))`, DAY_MIN, 600),
+      this.prom.safeRange(
+        `histogram_quantile(0.95, sum by (le) (rate(${H}_bucket${selector}[1h])))`,
+        DAY_MIN,
+        3600,
+      ),
+    ]);
+    const s = day.stats;
+    const peak = (rps[0]?.points ?? [])
+      .filter((p) => Number.isFinite(p.v) && p.v > 0)
+      .reduce<{ t: number; v: number } | null>((m, p) => (!m || p.v > m.v ? p : m), null);
+    const slow = (p95[0]?.points ?? [])
+      .filter((p) => Number.isFinite(p.v))
+      .reduce<{ t: number; v: number } | null>((m, p) => (!m || p.v > m.v ? p : m), null);
+    return {
+      total: s.requests,
+      successful: Math.max(0, s.requests - s.clientErrors - s.serverErrors),
+      clientErrors: s.clientErrors,
+      serverErrors: s.serverErrors,
+      peak: peak ? { at: new Date(peak.t).toISOString(), requestsPerSecond: round(peak.v) } : null,
+      slowest: slow
+        ? {
+            from: new Date(slow.t - 3_600_000).toISOString(),
+            to: new Date(slow.t).toISOString(),
+            p95LatencyMs: Math.round(slow.v * 1000),
+          }
+        : null,
     };
   }
 }

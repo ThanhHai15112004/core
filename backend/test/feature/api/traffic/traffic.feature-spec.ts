@@ -15,12 +15,18 @@ const HEALTH = { method: 'GET', route: '/health' };
 const STOP = { method: 'POST', route: '/ops/runtimes/:id/stop' };
 const ORDERS = { method: 'GET', route: '/api/v1/orders' };
 
+/** Mọi PromQL đã gửi (để kiểm tra bộ lọc được đưa vào truy vấn). */
+const sent: string[] = [];
+
 /**
  * Prometheus giả: 3×200 + 1×302 trên route nội bộ, 1×400 trên route nội bộ, 1×500 trên route công khai.
  * Query có `route!~` (ẩn nội bộ) chỉ thấy request công khai.
  */
 function promql(expr: string) {
+  sent.push(expr);
   const external = expr.includes('route!~');
+  const pub = (list: ReturnType<typeof sample>[]) =>
+    external ? list.filter((x) => !String(x.labels['route']).match(/\/(ops|health)/)) : list;
   if (expr.includes('sum by (status)'))
     return external
       ? [sample(1, { status: '500' })]
@@ -33,15 +39,16 @@ function promql(expr: string) {
   if (expr.startsWith('sum(increase(http_request_duration_seconds_sum'))
     return [sample(external ? 0.2 : 0.6)];
   if (expr.includes('route, method)')) {
-    if (expr.includes('status=~"5..')) return [sample(1, ORDERS)];
-    if (expr.includes('status=~"4..')) return [sample(1, STOP)];
-    if (expr.includes('_sum[')) return [sample(0.03, HEALTH), sample(0.2, ORDERS)];
-    if (expr.includes('_count[')) return [sample(4, HEALTH), sample(1, STOP), sample(1, ORDERS)];
-    if (expr.startsWith('histogram_quantile(0.5,')) return [sample(0.004, HEALTH)];
-    if (expr.startsWith('histogram_quantile(0.95,')) return [sample(0.02, HEALTH)];
-    if (expr.startsWith('histogram_quantile(0.99,')) return [sample(0.03, HEALTH)];
+    if (expr.includes('status=~"5..')) return pub([sample(1, ORDERS)]);
+    if (expr.includes('status=~"4..')) return pub([sample(1, STOP)]);
+    if (/_sum(\{[^}]*\})?\[/.test(expr)) return pub([sample(0.03, HEALTH), sample(0.2, ORDERS)]);
+    if (/_count(\{[^}]*\})?\[/.test(expr))
+      return pub([sample(4, HEALTH), sample(1, STOP), sample(1, ORDERS)]);
+    if (expr.startsWith('histogram_quantile(0.5,')) return pub([sample(0.004, HEALTH)]);
+    if (expr.startsWith('histogram_quantile(0.95,')) return pub([sample(0.02, HEALTH)]);
+    if (expr.startsWith('histogram_quantile(0.99,')) return pub([sample(0.03, HEALTH)]);
   }
-  if (expr.startsWith('histogram_quantile(0.50,')) return [sample(0.01)];
+  if (expr.startsWith('histogram_quantile(0.5,')) return [sample(0.01)];
   if (expr.startsWith('histogram_quantile(0.95,')) return [sample(0.05)];
   if (expr.startsWith('histogram_quantile(0.99,')) return [sample(0.2)];
   return [];
@@ -89,16 +96,19 @@ describe('HTTP Traffic (/ops/traffic)', () => {
     beforeAll(() => {
       restore = stubPrometheus(context.app, {
         query: promql,
-        range: () => [
-          {
-            labels: {},
-            points: [
-              { t: 1_000, v: 12.345 },
-              { t: 2_000, v: 40 },
-              { t: 3_000, v: 20 },
-            ],
-          },
-        ],
+        range: (expr) => {
+          sent.push(expr);
+          return [
+            {
+              labels: {},
+              points: [
+                { t: 1_000, v: 12.345 },
+                { t: 2_000, v: 40 },
+                { t: 3_000, v: 20 },
+              ],
+            },
+          ];
+        },
       });
     });
 
@@ -163,10 +173,11 @@ describe('HTTP Traffic (/ops/traffic)', () => {
           };
         }[]
       >(`${base}/endpoints?range=15m`);
+      // Sắp theo lưu lượng, bằng nhau thì theo tên.
       expect(body.data.map((e) => e.id)).toEqual([
         'GET /health',
-        'POST /ops/runtimes/:id/stop',
         'GET /api/v1/orders',
+        'POST /ops/runtimes/:id/stop',
       ]);
       expect(body.data[0]!.stats).toMatchObject({
         requests: 4,
@@ -184,7 +195,8 @@ describe('HTTP Traffic (/ops/traffic)', () => {
         p99LatencyMs: null,
         serverErrors: 1,
       });
-      expect(orders.status).toBe('failing');
+      // 1 request < TRAFFIC_MIN_REQUESTS_FOR_STATUS → chưa đủ dữ liệu để kết luận failing.
+      expect(orders.status).toBe('low_traffic');
       expect(body.data.find((e) => e.id === 'POST /ops/runtimes/:id/stop')!.internal).toBe(true);
 
       const publicOnly = await get<{ id: string }[]>(`${base}/endpoints?range=15m&internal=false`);
@@ -199,7 +211,7 @@ describe('HTTP Traffic (/ops/traffic)', () => {
         peak: number;
       }>(`${base}/timeseries?range=5m&metric=latency`);
       expect(ts.body.data.unit).toBe('ms');
-      expect(ts.body.data.series.map((s) => s.id)).toEqual(['latency']);
+      expect(ts.body.data.series.map((s) => s.id)).toEqual(['p95', 'p50', 'p99']);
       expect(ts.body.data.series[0]!.points.map((p) => p.value)).toEqual([12.35, 40, 20]);
       expect(ts.body.data).toMatchObject({ current: 20, peak: 40 });
 
@@ -209,12 +221,43 @@ describe('HTTP Traffic (/ops/traffic)', () => {
         'POST /ops/runtimes/:id/stop',
       ]);
 
+      const status = await get<{ series: { id: string }[]; unit: string }>(
+        `${base}/timeseries?range=15m&metric=status`,
+      );
+      expect(status.body.data.series.map((x) => x.id)).toEqual(['2xx', '3xx', '4xx', '5xx']);
+
+      const pct = await get<{ unit: string }>(`${base}/timeseries?range=15m&metric=errors`);
+      expect(pct.body.data.unit).toBe('percent');
+
       const insights = await get<{
         rateLimit: { configured: boolean };
         last24h: { total: number; serverErrors: number };
       }>(`${base}/insights?range=15m`);
       expect(insights.body.data.rateLimit.configured).toBe(false);
       expect(insights.body.data.last24h).toMatchObject({ total: 6, serverErrors: 1 });
+    });
+
+    it('bộ lọc method / route nội bộ được đưa vào PromQL của timeseries', async () => {
+      sent.length = 0;
+      await get(`${base}/timeseries?range=15m&metric=requests&method=POST&internal=false`);
+      expect(sent.some((e) => e.includes('method="POST"') && e.includes('route!~'))).toBe(true);
+    });
+
+    it('summary: so sánh với kỳ trước bằng offset, ngưỡng lấy từ cấu hình', async () => {
+      sent.length = 0;
+      const { body } = await get<{
+        settings: Record<string, number>;
+        comparison: { requestsPercent: number | null };
+      }>(`${base}/summary?range=15m`);
+      expect(sent.some((e) => e.includes('offset 900s'))).toBe(true);
+      expect(body.data.comparison.requestsPercent).toBe(0);
+      expect(body.data.settings).toEqual({
+        slowMs: 500,
+        endpointP95WarnMs: 500,
+        errorRateWarnPercent: 2,
+        errorRateCritPercent: 10,
+        minRequestsForStatus: 20,
+      });
     });
   });
 });

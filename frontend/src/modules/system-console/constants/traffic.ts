@@ -19,6 +19,7 @@ export const LATENCY_CEILING_MS = 10_000;
 
 export const SERIES_COLORS: Record<string, string> = {
   requests: 'var(--scp-series-1)',
+  errors: 'var(--scp-danger)',
   p50: 'var(--scp-series-1)',
   p95: 'var(--scp-series-2)',
   p99: 'var(--scp-series-3)',

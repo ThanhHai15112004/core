@@ -60,19 +60,8 @@ export const ErrorAnalysisPanel: React.FC<ErrorAnalysisPanelProps> = ({ data, on
             )}
           </div>
           <div>
-            <h4 className="tr-subtitle">{t('tr.errors.topCodes')}</h4>
-            {data.topCodes.length === 0 ? (
-              <p className="ov-empty-line">{t('tr.errors.none')}</p>
-            ) : (
-              <ul className="tr-rank-list">
-                {data.topCodes.map((c) => (
-                  <li key={c.code} className="tr-rank-static">
-                    <code>{c.code}</code>
-                    <span>{c.count.toLocaleString()}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
+            <h4 className="tr-subtitle">{t('tr.errors.topStatuses')}</h4>
+            {data.topStatuses.length === 0 && <p className="ov-empty-line">{t('tr.errors.none')}</p>}
             {data.topStatuses.length > 0 && (
               <ul className="tr-status-list">
                 {data.topStatuses.map((s) => (

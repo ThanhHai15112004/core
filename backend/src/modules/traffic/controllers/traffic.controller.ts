@@ -32,9 +32,7 @@ const booleanFlag = z
   .transform((v) => v === undefined || v === 'true' || v === '1');
 
 const filterSchema = z.object({
-  instance: optionalText,
   method: optionalText,
-  module: optionalText,
   routeId: optionalText,
   internal: booleanFlag,
 });
@@ -55,7 +53,7 @@ function toTrafficQuery(raw: RawQuery): TrafficQuery {
 }
 
 /**
- * HTTP Traffic — lưu lượng, latency, lỗi theo endpoint và request cụ thể.
+ * HTTP Traffic — lưu lượng, latency, lỗi theo endpoint (Prometheus). Chi tiết từng request xem ở trang Logs.
  * Lưu ý: /ops/* chưa có RBAC (TokenService còn là skeleton).
  */
 @Controller(TRAFFIC_ROUTES.PREFIX)

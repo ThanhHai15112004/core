@@ -29,8 +29,6 @@ export function toQuery(params: Params): string {
 const scope = (f: TrafficFilters): Params => ({
   range: f.range,
   method: f.method,
-  module: f.module,
-  instance: f.instance,
   internal: f.internal === false ? 'false' : undefined,
 });
 
@@ -41,7 +39,7 @@ export const trafficApi = {
   endpoints: (f: TrafficFilters, sort: EndpointSort) =>
     fetchApi<EndpointRow[]>(T.ENDPOINTS(toQuery({ ...scope(f), sort }))),
   endpoint: (routeId: string, f: TrafficFilters) =>
-    fetchApi<EndpointDetail>(T.ENDPOINT_DETAIL(routeId, toQuery({ range: f.range, instance: f.instance }))),
+    fetchApi<EndpointDetail>(T.ENDPOINT_DETAIL(routeId, toQuery({ range: f.range }))),
   errors: (f: TrafficFilters) => fetchApi<ErrorAnalysis>(T.ERRORS(toQuery(scope(f)))),
   insights: (f: TrafficFilters) => fetchApi<TrafficInsights>(T.INSIGHTS(toQuery(scope(f)))),
 };

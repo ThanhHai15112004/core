@@ -319,7 +319,6 @@ export const vi = {
       p50: 'Latency P50',
       p95: 'Latency P95',
       errorRate: 'Tỷ lệ lỗi (5xx)',
-      active: 'Đang xử lý',
       today: 'Request hôm nay',
       rateSub: '{{count}} request trong {{range}}',
       vsPrevious: '{{delta}} so với kỳ trước',
@@ -327,7 +326,6 @@ export const vi = {
       p99: 'P99 {{value}}',
       overThreshold: 'Vượt ngưỡng {{threshold}}',
       errorSub: '{{errors}} lỗi 5xx / {{total}} request · {{client}} lỗi 4xx',
-      peak: 'Đỉnh {{value}} trong {{range}}',
       todaySub: 'Tính từ 0h hôm nay',
     },
     chart: {
@@ -340,7 +338,7 @@ export const vi = {
       step: 'Độ phân giải',
       stepValue: '{{seconds}} giây/điểm',
     },
-    series: { requests: 'Requests/giây', p50: 'P50', p95: 'P95', p99: 'P99', '2xx': '2xx', '3xx': '3xx', '4xx': '4xx', '5xx': '5xx' },
+    series: { requests: 'Requests/giây', errors: 'Tỷ lệ lỗi (5xx)', p50: 'P50', p95: 'P95', p99: 'P99', '2xx': '2xx', '3xx': '3xx', '4xx': '4xx', '5xx': '5xx' },
     col: {
       endpoint: 'Endpoint',
       module: 'Module',
@@ -403,7 +401,7 @@ export const vi = {
       title: 'Phân tích lỗi',
       rate: 'Tỷ lệ lỗi 5xx',
       topRoutes: 'Endpoint lỗi nhiều nhất',
-      topCodes: 'Mã lỗi nhiều nhất',
+      topStatuses: 'Status lỗi nhiều nhất',
       none: 'Không có lỗi.',
       failedTitle: 'Request lỗi (4xx/5xx)',
       failedEmpty: 'Không có request lỗi nào.',

@@ -49,33 +49,24 @@ export interface StatusClassDto {
   percent: number;
 }
 
+/** Ngưỡng đánh giá lấy từ cấu hình `TRAFFIC_*`. */
 export interface TrafficSettingsDto {
   slowMs: number;
-  longRunningMs: number;
   endpointP95WarnMs: number;
   errorRateWarnPercent: number;
   errorRateCritPercent: number;
-  sampleRate: number;
-  captureBodies: boolean;
-  flushMs: number;
-  requestLogSize: number;
-  /** Tầng lưu: độ phân giải (giây) và thời gian giữ (giờ). */
-  retention: { tier: string; resolutionSec: number; retentionHours: number }[];
+  minRequestsForStatus: number;
 }
 
 export interface TrafficSummaryDto {
   range: string;
   generatedAt: string;
-  instances: string[];
-  modules: string[];
   stats: TrafficStatsDto;
   comparison: TrafficComparisonDto;
-  activeRequests: number;
-  peakActiveRequests: number;
-  requestsToday: number;
-  /** Có bất kỳ request nào trong thời gian lưu (để phân biệt "chưa có traffic"). */
+  /** Từ 0 giờ hôm nay (giờ server); null khi Prometheus không trả lời. */
+  requestsToday: number | null;
+  /** Có request trong khoảng đang xem hoặc trong hôm nay (để phân biệt "chưa có traffic"). */
   hasTraffic: boolean;
-  lastRequestAt: string | null;
   statusClasses: StatusClassDto[];
   topStatuses: StatusCountDto[];
   settings: TrafficSettingsDto;
@@ -94,7 +85,7 @@ export interface TimeseriesDto {
   stepSec: number;
   unit: 'rps' | 'ms' | 'percent';
   series: { id: string; points: SeriesPointDto[] }[];
-  /** Thống kê của series chính (requests: rps, latency: p95, errors: 5xx %, status: tổng rps). */
+  /** Thống kê của series chính (requests: rps, latency: p95, errors: 5xx %, status: tổng rps — series đầu). */
   current: number | null;
   average: number | null;
   peak: number | null;
@@ -110,9 +101,8 @@ export interface EndpointRowDto extends TrafficRoute {
 export interface EndpointDetailDto extends EndpointRowDto {
   range: string;
   comparison: TrafficComparisonDto;
-  requestsToday: number;
+  requestsToday: number | null;
   topStatuses: StatusCountDto[];
-  topErrorCodes: { code: string; count: number }[];
 }
 
 export interface ErrorAnalysisDto {
@@ -125,7 +115,7 @@ export interface ErrorAnalysisDto {
     clientErrors: number;
     serverErrors: number;
   }[];
-  topCodes: { code: string; count: number }[];
+  /** Status lỗi (≥ 400) nhiều nhất. */
   topStatuses: StatusCountDto[];
 }
 

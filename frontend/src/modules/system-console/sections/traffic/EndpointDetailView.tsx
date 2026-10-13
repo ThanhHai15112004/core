@@ -64,13 +64,9 @@ export const EndpointDetailView: React.FC<TrafficViewProps & { routeId: string; 
   openLogs,
 }) => {
   const { t, locale } = useLocale();
-  const { data, error } = usePolling(() => trafficApi.endpoint(routeId, filters), `endpoint:${routeId}:${filters.range}:${filters.instance ?? ''}`, undefined, paused);
-  // Trong một endpoint, bộ lọc method/module/nội bộ không còn ý nghĩa; giữ range, instance và filter request.
-  const endpointFilters: TrafficFilters = {
-    range: filters.range,
-    internal: true,
-    ...(filters.instance ? { instance: filters.instance } : {}),
-  };
+  const { data, error } = usePolling(() => trafficApi.endpoint(routeId, filters), `endpoint:${routeId}:${filters.range}`, undefined, paused);
+  // Trong một endpoint, bộ lọc method/nội bộ không còn ý nghĩa; chỉ giữ range.
+  const endpointFilters: TrafficFilters = { range: filters.range, internal: true };
 
   const back = (
     <button type="button" className="rt-back" onClick={() => go(['endpoints'])}>
