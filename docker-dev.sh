@@ -22,6 +22,15 @@ case "$1" in
       echo "Xem log với: ./docker-dev.sh logs [backend|worker|scheduler|frontend]"
     fi
     ;;
+  build)
+    if [ -n "$SERVICE" ]; then
+      echo "🔨 Đang build service [$SERVICE]..."
+      docker compose $COMPOSE_FILES build "$SERVICE"
+    else
+      echo "🔨 Đang build toàn bộ services..."
+      docker compose $COMPOSE_FILES build
+    fi
+    ;;
   down)
     echo "🛑 Đang gỡ bỏ toàn bộ Core App Development Containers..."
     docker compose $COMPOSE_FILES down
@@ -62,10 +71,12 @@ case "$1" in
     docker compose $COMPOSE_FILES config
     ;;
   *)
-    echo "Cách dùng: ./docker-dev.sh {up|down|stop|start|logs|restart|ps|bash|config} [backend|worker|scheduler|frontend]"
+    echo "Cách dùng: ./docker-dev.sh {up|down|build|stop|start|logs|restart|ps|bash|config} [backend|worker|scheduler|frontend]"
     echo ""
     echo "Ví dụ:"
     echo "  ./docker-dev.sh up                  # Khởi động api, worker, scheduler, frontend"
+    echo "  ./docker-dev.sh build               # Build lại toàn bộ images"
+    echo "  ./docker-dev.sh build frontend      # Chỉ build image frontend"
     echo "  ./docker-dev.sh up backend          # Chỉ khởi động backend"
     echo "  ./docker-dev.sh logs backend        # Xem log backend"
     echo "  ./docker-dev.sh bash frontend       # Vào shell của frontend"

@@ -91,11 +91,12 @@ services:
     volumes:
       # Bind mount mã nguồn frontend từ host để hot-reload khi chỉnh sửa code
       - ./frontend:/app/frontend
+      - ./docker/frontend/entrypoint.dev.sh:/app/docker/frontend/entrypoint.dev.sh
       # Giữ node_modules độc lập trong container để tránh ghi đè với host
       - frontend_node_modules:/app/frontend/node_modules
-    # Giới hạn tài nguyên bộ nhớ cho Frontend Vite Server
-    mem_limit: 384m
-    mem_reservation: 192m
+    # Giới hạn tài nguyên bộ nhớ cho Frontend Vite Server (cần đủ cho esbuild optimizer bundle ECharts, Radix UI)
+    mem_limit: 1024m
+    mem_reservation: 384m
     restart: unless-stopped
     depends_on:
       - backend

@@ -1,4 +1,4 @@
-{
+8 {
   "$schema": "https://json.nest-cli.com/v1/schema.json",
   "collection": "@nestjs/schematics",
   "sourceRoot": "src",
