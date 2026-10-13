@@ -123,7 +123,6 @@ export const SecretsSection: React.FC = () => {
                 <th style={{ padding: '0.75rem 1rem', fontSize: '0.85rem' }}>Độ dài</th>
                 <th style={{ padding: '0.75rem 1rem', fontSize: '0.85rem' }}>Driver</th>
                 <th style={{ padding: '0.75rem 1rem', fontSize: '0.85rem' }}>Giá trị</th>
-                <th style={{ padding: '0.75rem 1rem', fontSize: '0.85rem' }}>Thời điểm đọc</th>
               </tr>
             </thead>
             <tbody>
@@ -180,9 +179,6 @@ export const SecretsSection: React.FC = () => {
                   </td>
                   <td style={{ padding: '0.75rem 1rem', fontFamily: 'monospace', color: 'var(--scp-text-muted)', fontSize: '0.85rem' }}>
                     ••••••••••••
-                  </td>
-                  <td style={{ padding: '0.75rem 1rem', fontSize: '0.8rem', color: 'var(--scp-text-muted)' }}>
-                    {item.lastReadAt ? new Date(item.lastReadAt).toLocaleTimeString() : '--'}
                   </td>
                 </tr>
               ))}

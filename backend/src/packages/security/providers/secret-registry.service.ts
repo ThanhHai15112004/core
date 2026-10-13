@@ -7,7 +7,6 @@ export interface SecretItemMeta {
   driver: 'env' | 'file';
   present: boolean;
   length?: number;
-  lastReadAt?: string;
 }
 
 const DEFAULT_KNOWN_SECRET_KEYS = [
@@ -48,8 +47,6 @@ export class SecretRegistryService {
    */
   public async listSecrets(): Promise<SecretItemMeta[]> {
     const driver = this.config.auth.secretDriver;
-
-    const now = new Date().toISOString();
     const items: SecretItemMeta[] = [];
 
     for (const key of this.registeredKeys) {
@@ -60,7 +57,6 @@ export class SecretRegistryService {
         driver,
         present,
         ...(present ? { length: val.length } : {}),
-        lastReadAt: now,
       });
     }
 

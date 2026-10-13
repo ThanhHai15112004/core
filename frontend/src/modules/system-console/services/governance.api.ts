@@ -6,7 +6,6 @@ export interface SecretItem {
   driver: 'env' | 'file';
   present: boolean;
   length?: number;
-  lastReadAt?: string;
 }
 
 export interface ConfigItem {

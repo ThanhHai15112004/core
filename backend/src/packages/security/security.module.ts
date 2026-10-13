@@ -16,7 +16,12 @@ import { SecretRegistryService } from './providers/secret-registry.service.js';
 @Module({
   providers: [
     EnvironmentSecretProvider,
-    FileSecretProvider,
+    {
+      provide: FileSecretProvider,
+      useFactory: (config: CoreConfigService) =>
+        new FileSecretProvider(config.auth.secretDir || undefined),
+      inject: [CoreConfigService],
+    },
     {
       provide: SECRET_PROVIDER,
       useFactory: (

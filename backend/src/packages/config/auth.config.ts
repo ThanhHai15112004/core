@@ -5,6 +5,8 @@ export const authConfig = () => ({
   secretDriver: ((env('SECRET_DRIVER', false) || 'env').toLowerCase() === 'file'
     ? 'file'
     : 'env') as 'env' | 'file',
+  /** Thư mục secret của driver `file`; trống = `/run/secrets` (nếu có) hoặc `./secrets`. */
+  secretDir: env('SECRET_DIR', false) || '',
   jwt: {
     accessSecret: env('JWT_ACCESS_SECRET'),
     refreshSecret: env('JWT_REFRESH_SECRET'),

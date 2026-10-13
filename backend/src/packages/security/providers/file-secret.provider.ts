@@ -9,6 +9,7 @@ import {
   DEFAULT_LOCAL_SECRET_DIR,
 } from '../constants/secret.constant.js';
 
+/** Đọc secret từ file trong thư mục `SECRET_DIR` (Docker / Kubernetes secrets). Thư mục truyền vào từ config. */
 @Injectable()
 export class FileSecretProvider implements SecretProvider {
   private readonly secretDir: string;
@@ -16,8 +17,6 @@ export class FileSecretProvider implements SecretProvider {
   constructor(@Optional() customDir?: string) {
     if (customDir) {
       this.secretDir = path.resolve(customDir);
-    } else if (process.env.SECRET_DIR) {
-      this.secretDir = path.resolve(process.env.SECRET_DIR);
     } else if (fs.existsSync(DEFAULT_LINUX_SECRET_DIR)) {
       // Chuẩn Linux Docker Swarm / Kubernetes Secrets mount
       this.secretDir = DEFAULT_LINUX_SECRET_DIR;
