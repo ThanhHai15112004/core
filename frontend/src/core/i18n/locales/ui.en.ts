@@ -96,6 +96,23 @@ export const uiEn: UiTranslation = {
     noData: 'No data in this range',
     threshold: 'Threshold',
   },
+  feed: {
+    all: 'All',
+    empty: 'No activity yet',
+  },
+  compare: {
+    metric: 'Metric',
+    current: 'Today',
+    previous: 'Yesterday',
+    change: 'Change',
+  },
+  alerts: {
+    none: 'No problems',
+    okChecks: '{{count}} checks passing',
+  },
+  json: {
+    empty: 'No data',
+  },
   status: {
     ok: 'Healthy',
     warn: 'Warning',

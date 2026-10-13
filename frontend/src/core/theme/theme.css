@@ -167,6 +167,11 @@
     cursor: pointer;
   }
 
+  html[data-theme] ol,
+  html[data-theme] ul {
+    list-style: none;
+  }
+
   html[data-theme] :focus-visible {
     outline: 2px solid var(--ui-focus);
     outline-offset: 1px;

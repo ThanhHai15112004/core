@@ -17,7 +17,8 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const SCAN_DIRS = ['src/core', 'src/modules/system-console'];
-const SKIP_DIRS = ['src/core/theme', 'src/core/i18n'];
+// theme = nơi duy nhất có mã màu; i18n = nơi chứa chữ; ui/kit = trang demo chỉ có ở dev (dữ liệu mẫu).
+const SKIP_DIRS = ['src/core/theme', 'src/core/i18n', 'src/core/ui/kit'];
 const EXTENSIONS = ['.ts', '.tsx', '.css'];
 const BASELINE_FILE = join(ROOT, 'scripts', 'hardcode-baseline.json');
 const SUPPRESS = 'hardcode-ok';

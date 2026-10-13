@@ -1,4 +1,4 @@
-import React, { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
+import React, { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react';
 import type { ConsolePath } from './types/console.types';
 import { CONSOLE_STORAGE_KEYS } from './constants/console.constants';
 import { ConsoleRouteContext, type ConsoleRoute } from './context/console-route-context';
@@ -7,6 +7,11 @@ import { resolveSection, sectionDef } from './shell/sections';
 import { ROUTES } from '../../routes/index';
 
 const HASH_PREFIX = ROUTES.SYSTEM_CONSOLE.replace(/^#/, '');
+
+/** Trang duyệt bộ UI dùng chung — chỉ có ở dev (`#system-console/_kit`). */
+const KIT_SEGMENT = '_kit';
+const KitPage = import.meta.env.DEV ? lazy(() => import('@core/ui/kit/KitPage').then((m) => ({ default: m.KitPage }))) : null;
+const isKitRoute = () => KitPage !== null && window.location.hash.replace(/^#\/?/, '').split(/[/?]/)[1] === KIT_SEGMENT;
 
 function readLastSection(): string | null {
   try {
@@ -53,12 +58,13 @@ export const SystemConsoleRouter: React.FC = () => {
 
   const value = useMemo(() => ({ route, navigate }), [route, navigate]);
   const Section = sectionDef(route.section).component;
+  const showKit = KitPage !== null && isKitRoute();
 
   return (
     <ConsoleRouteContext.Provider value={value}>
       <ConsoleShell>
         <Suspense fallback={null}>
-          <Section key={route.section} />
+          {showKit && KitPage ? <KitPage /> : <Section key={route.section} />}
         </Suspense>
       </ConsoleShell>
     </ConsoleRouteContext.Provider>

@@ -58,3 +58,6 @@ export const UI_STORAGE_KEYS = {
   refreshMs: 'ui_refresh_ms',
   timeRange: 'ui_time_range',
 } as const;
+
+/** Chu kỳ cập nhật text thời gian tương đối ("x giây trước"). */
+export const RELATIVE_TIME_TICK_MS = 15_000;

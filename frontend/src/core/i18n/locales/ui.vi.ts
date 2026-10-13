@@ -95,6 +95,23 @@ export const uiVi = {
     noData: 'Không có dữ liệu trong khoảng này',
     threshold: 'Ngưỡng',
   },
+  feed: {
+    all: 'Tất cả',
+    empty: 'Chưa có hoạt động nào',
+  },
+  compare: {
+    metric: 'Chỉ số',
+    current: 'Hôm nay',
+    previous: 'Hôm qua',
+    change: 'Thay đổi',
+  },
+  alerts: {
+    none: 'Không có vấn đề nào',
+    okChecks: '{{count}} kiểm tra đạt',
+  },
+  json: {
+    empty: 'Không có dữ liệu',
+  },
   status: {
     ok: 'Ổn định',
     warn: 'Cảnh báo',
