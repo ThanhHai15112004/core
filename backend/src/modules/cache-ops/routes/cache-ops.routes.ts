@@ -10,7 +10,6 @@ export const CACHE_OPS_ROUTES = {
   KEYS: 'keys',
   KEY_DETAIL: 'keys/detail',
   MEMORY: 'memory',
-  TTL: 'ttl',
   CLIENTS: 'clients',
   EVENTS: 'events',
   ERRORS: 'errors',

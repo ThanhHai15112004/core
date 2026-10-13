@@ -19,9 +19,6 @@ export interface CacheAlert {
   severity: CacheSeverity;
   title: string;
   message: string;
-  value: number;
-  threshold: number;
-  unit: string;
   since: string;
   tab: CacheTab;
   namespace: string | null;
@@ -31,10 +28,8 @@ export interface CacheHealth {
   status: CacheHealthStatus;
   reasons: { code: string; message: string }[];
   state: 'connected' | 'connecting' | 'reconnecting' | 'unavailable';
-  since: string;
   lastSuccessAt: string | null;
   pingMs: number | null;
-  lastError: string | null;
 }
 
 export interface CacheMemoryKpi {
@@ -67,14 +62,11 @@ export interface KeyspaceSummary {
   totalKeys: number;
   scannedKeys: number;
   truncated: boolean;
-  totalBytes: number;
-  bytesPartial: boolean;
   persistent: number;
   expiring: number;
   avgTtlMs: number | null;
   expiringNext60s: number;
   ttlDistribution: Record<TtlBucketId, number>;
-  durationMs: number;
 }
 
 export interface NamespaceRow {
@@ -113,14 +105,11 @@ export interface ServerMemory {
   usedBytes: number | null;
   peakBytes: number | null;
   maxBytes: number | null;
-  percent: number | null;
   policy: string | null;
   fragmentationRatio: number | null;
-  rssBytes: number | null;
 }
 
 export interface CacheOverview {
-  generatedAt: string;
   range: CacheRange;
   driver: 'redis' | 'memory';
   environment: string;
@@ -140,11 +129,9 @@ export interface CacheOverview {
   server: Section<ServerMemory>;
   largestNamespace: { name: string; bytes: number } | null;
   report: { today: CacheReport; yesterday: CacheReport };
-  events: CacheEvent[];
   settings: {
     actionsEnabled: boolean;
     flushEnabled: boolean;
-    valuePreview: boolean;
     largeKeyBytes: number;
     expirySpikeKeys: number;
     hitRateWarnPercent: number;
@@ -159,9 +146,6 @@ export interface CacheSeries {
 }
 
 export interface CacheMetrics {
-  metric: CacheMetric;
-  range: CacheRange;
-  resolutionSec: number | null;
   unit: string;
   series: CacheSeries[];
   serverWide: boolean;
@@ -170,7 +154,6 @@ export interface CacheMetrics {
 export interface CacheNamespaces {
   keyspace: KeyspaceSummary | null;
   namespaces: NamespaceRow[];
-  range: CacheRange;
   depth: number;
 }
 
@@ -185,7 +168,6 @@ export interface LargeKey {
 
 export interface NamespaceDetail {
   namespace: NamespaceRow;
-  range: CacheRange;
   largestKeys: LargeKey[];
   actionsEnabled: boolean;
 }
@@ -203,7 +185,6 @@ export interface CacheKeys {
   cursor: string;
   done: boolean;
   examined: number;
-  prefix: string;
 }
 
 export type ValueSample =
@@ -226,23 +207,8 @@ export interface KeyDetail {
 }
 
 export interface CacheMemory {
-  cacheBytes: number | null;
-  bytesPartial: boolean;
-  limit: CacheMemoryKpi;
-  server: Section<ServerMemory>;
-  byNamespace: { name: string; bytes: number; keys: number; percent: number | null }[];
   largestKeys: LargeKey[];
-  evictions: Section<{ perMin: number | null; inRange: number | null; total: number | null; policy: string | null }>;
-  scannedAt: string | null;
   largeKeyBytes: number;
-}
-
-export interface CacheTtl {
-  keyspace: KeyspaceSummary | null;
-  persistentByNamespace: { name: string; persistent: number; keys: number }[];
-  expiringSoonByNamespace: { name: string; count: number }[];
-  expiredPerMin: number | null;
-  expirySpikeKeys: number;
 }
 
 export interface CacheClient {
@@ -271,7 +237,6 @@ export interface CacheClients {
 
 export interface CacheErrors {
   counts: Record<CacheErrorKind, number>;
-  total: number;
   items: {
     at: string;
     kind: CacheErrorKind;
@@ -281,7 +246,6 @@ export interface CacheErrors {
     runtime: string | null;
     correlationId: string | null;
   }[];
-  range: CacheRange;
 }
 
 export interface CacheOperation {
@@ -304,8 +268,6 @@ export interface FlushImpact {
   truncated: boolean;
   sessionKeys: number;
   sessionNamespaces: string[];
-  flushEnabled: boolean;
-  scannedAt: string | null;
 }
 
 export interface CacheConfig {

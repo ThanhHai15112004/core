@@ -131,7 +131,6 @@ export const CacheSection: React.FC = () => {
 
       <NamespaceSheet
         name={page.nsId}
-        range={page.range}
         onClose={() => page.openNamespace(null)}
         onBrowse={(ns) => page.browseKeys({ namespace: ns })}
         onOpenKey={page.openKey}

@@ -266,7 +266,7 @@ Cùng 1 codebase phục vụ 4 chế độ chạy độc lập: `api` (HTTP), `w
 - Thao tác: Delete Key (`DELETE`), Clear Namespace (gõ tên namespace), Flush cache của core (`FLUSH CACHE`) — `SCAN` + `UNLINK`
   chỉ trong vùng cache, không bao giờ `FLUSHDB`; ghi audit. Bật/tắt bằng `OPS_CACHE_ACTIONS_ENABLED`, `OPS_CACHE_FLUSH_ENABLED`;
   xem trước value (đã che field nhạy cảm, namespace session/token luôn ẩn) bằng `OPS_CACHE_VALUE_PREVIEW`.
-- API: `GET /ops/cache/{overview,metrics,namespaces[/:name],keys,keys/detail?key=,memory,ttl,clients,events,errors,operations,config,
+- API: `GET /ops/cache/{overview,metrics,namespaces[/:name],keys,keys/detail?key=,memory,clients,events,errors,operations,config,
   flush/impact}`, `POST /ops/cache/{ping,namespaces/:name/clear,flush}`, `DELETE /ops/cache/keys?key=`.
 
 ### Storage (System Console → Storage)

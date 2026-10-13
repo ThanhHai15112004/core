@@ -14,7 +14,6 @@ import type {
   CacheOverview,
   CachePing,
   CacheRange,
-  CacheTtl,
   FlushImpact,
   KeyDetail,
   KeyFilter,
@@ -29,8 +28,8 @@ const send = <T>(method: 'POST' | 'DELETE', path: string, qs = '', confirm?: str
 export const cacheApi = {
   overview: (range: CacheRange) => fetchApi<CacheOverview>(C('overview', toQuery({ range }))),
   metrics: (range: CacheRange, metric: CacheMetric) => fetchApi<CacheMetrics>(C('metrics', toQuery({ range, metric }))),
-  namespaces: (range: CacheRange) => fetchApi<CacheNamespaces>(C('namespaces', toQuery({ range }))),
-  namespace: (name: string, range: CacheRange) => fetchApi<NamespaceDetail>(C(`namespaces/${encodeURIComponent(name)}`, toQuery({ range }))),
+  namespaces: () => fetchApi<CacheNamespaces>(C('namespaces')),
+  namespace: (name: string) => fetchApi<NamespaceDetail>(C(`namespaces/${encodeURIComponent(name)}`)),
   keys: (f: KeyFilter, cursor: string, count = 100) =>
     fetchApi<CacheKeys>(
       C(
@@ -48,8 +47,7 @@ export const cacheApi = {
   key: (key: string) => fetchApi<KeyDetail>(C('keys/detail', toQuery({ key }))),
   deleteKey: (key: string) => send<CacheOperation>('DELETE', 'keys', toQuery({ key }), 'DELETE'),
   clearNamespace: (name: string, confirm: string) => send<CacheOperation>('POST', `namespaces/${encodeURIComponent(name)}/clear`, '', confirm),
-  memory: (range: CacheRange) => fetchApi<CacheMemory>(C('memory', toQuery({ range }))),
-  ttl: () => fetchApi<CacheTtl>(C('ttl')),
+  memory: () => fetchApi<CacheMemory>(C('memory')),
   clients: () => fetchApi<CacheClients>(C('clients')),
   events: (range: CacheRange) => fetchApi<CacheEvent[]>(C('events', toQuery({ range }))),
   errors: (range: CacheRange) => fetchApi<CacheErrors>(C('errors', toQuery({ range }))),

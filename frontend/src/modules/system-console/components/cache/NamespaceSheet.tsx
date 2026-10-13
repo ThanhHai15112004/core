@@ -5,13 +5,12 @@ import { useFormat } from '@core/hooks/useFormat';
 import { Button, Hint } from '@core/ui/primitives';
 import { DetailSection, DetailSheet, KeyValueGrid, QueryView, StatusBanner } from '@core/ui/blocks';
 import { BarList } from '@core/ui/charts';
-import type { CacheRange, NamespaceRow } from '../../types/cache.types';
+import type { NamespaceRow } from '../../types/cache.types';
 import { cacheApi } from '../../services/cache.api';
 import { cacheKeys } from '../../sections/cache/cache-keys';
 
 interface NamespaceSheetProps {
   name: string | null;
-  range: CacheRange;
   onClose: () => void;
   onBrowse: (ns: string) => void;
   onOpenKey: (key: string) => void;
@@ -19,10 +18,10 @@ interface NamespaceSheetProps {
 }
 
 /** Chi tiết namespace: số key, dung lượng, TTL, key lớn nhất; Duyệt key / Xoá namespace. */
-export function NamespaceSheet({ name, range, onClose, onBrowse, onOpenKey, onClear }: NamespaceSheetProps) {
+export function NamespaceSheet({ name, onClose, onBrowse, onOpenKey, onClear }: NamespaceSheetProps) {
   const { t } = useLocale();
   const f = useFormat();
-  const query = useLiveQuery(cacheKeys.namespace(name ?? '', range), () => cacheApi.namespace(name ?? '', range), { tier: 'slow', enabled: Boolean(name), keepPrevious: false });
+  const query = useLiveQuery(cacheKeys.namespace(name ?? ''), () => cacheApi.namespace(name ?? ''), { tier: 'slow', enabled: Boolean(name), keepPrevious: false });
   const d = query.data;
   const n = d?.namespace;
   const canClear = Boolean(d?.actionsEnabled) && (n?.keys ?? 0) > 0;

@@ -27,9 +27,6 @@ export interface CacheAlertDto {
   severity: CacheSeverity;
   title: string;
   message: string;
-  value: number;
-  threshold: number;
-  unit: string;
   /** ISO */
   since: string;
   tab: string;
@@ -41,10 +38,8 @@ export interface CacheHealthDto {
   status: CacheHealthStatus;
   reasons: CacheReasonDto[];
   state: CacheConnectionState;
-  since: string;
   lastSuccessAt: string | null;
   pingMs: number | null;
-  lastError: string | null;
 }
 
 /** Hit rate hiện tại (5 phút gần nhất) so với baseline (60 phút trước đó). */
@@ -62,10 +57,8 @@ export interface ServerMemoryDto {
   usedBytes: number | null;
   peakBytes: number | null;
   maxBytes: number | null;
-  percent: number | null;
   policy: string | null;
   fragmentationRatio: number | null;
-  rssBytes: number | null;
 }
 
 export interface CacheMemoryKpiDto {
@@ -105,14 +98,11 @@ export interface KeyspaceSummaryDto {
   totalKeys: number;
   scannedKeys: number;
   truncated: boolean;
-  totalBytes: number;
-  bytesPartial: boolean;
   persistent: number;
   expiring: number;
   avgTtlMs: number | null;
   expiringNext60s: number;
   ttlDistribution: Record<TtlBucketId, number>;
-  durationMs: number;
 }
 
 export interface NamespaceRowDto {
@@ -152,14 +142,12 @@ export interface CacheEventDto {
 export interface CacheSettingsDto {
   actionsEnabled: boolean;
   flushEnabled: boolean;
-  valuePreview: boolean;
   largeKeyBytes: number;
   expirySpikeKeys: number;
   hitRateWarnPercent: number;
 }
 
 export interface CacheOverviewDto {
-  generatedAt: string;
   range: CacheRange;
   driver: string;
   environment: string;
@@ -173,7 +161,6 @@ export interface CacheOverviewDto {
   server: SectionDto<ServerMemoryDto>;
   largestNamespace: { name: string; bytes: number } | null;
   report: { today: CacheReportDto; yesterday: CacheReportDto };
-  events: CacheEventDto[];
   settings: CacheSettingsDto;
 }
 
@@ -185,9 +172,6 @@ export interface CacheSeriesDto {
 }
 
 export interface CacheMetricsDto {
-  metric: CacheMetric;
-  range: CacheRange;
-  resolutionSec: number | null;
   unit: string;
   series: CacheSeriesDto[];
   /** Series lấy từ toàn Redis server (dùng chung). */
@@ -197,13 +181,11 @@ export interface CacheMetricsDto {
 export interface CacheNamespacesDto {
   keyspace: KeyspaceSummaryDto | null;
   namespaces: NamespaceRowDto[];
-  range: CacheRange;
   depth: number;
 }
 
 export interface NamespaceDetailDto {
   namespace: NamespaceRowDto;
-  range: CacheRange;
   largestKeys: LargeKeyDto[];
   actionsEnabled: boolean;
 }
@@ -230,7 +212,6 @@ export interface CacheKeysDto {
   cursor: string;
   done: boolean;
   examined: number;
-  prefix: string;
 }
 
 export interface KeyDetailDto {
@@ -250,28 +231,8 @@ export interface KeyDetailDto {
 }
 
 export interface CacheMemoryDto {
-  cacheBytes: number | null;
-  bytesPartial: boolean;
-  limit: CacheMemoryKpiDto;
-  server: SectionDto<ServerMemoryDto>;
-  byNamespace: { name: string; bytes: number; keys: number; percent: number | null }[];
   largestKeys: LargeKeyDto[];
-  evictions: SectionDto<{
-    perMin: number | null;
-    inRange: number | null;
-    total: number | null;
-    policy: string | null;
-  }>;
-  scannedAt: string | null;
   largeKeyBytes: number;
-}
-
-export interface CacheTtlDto {
-  keyspace: KeyspaceSummaryDto | null;
-  persistentByNamespace: { name: string; persistent: number; keys: number }[];
-  expiringSoonByNamespace: { name: string; count: number }[];
-  expiredPerMin: number | null;
-  expirySpikeKeys: number;
 }
 
 export interface CacheClientDto {
@@ -310,9 +271,7 @@ export interface CacheErrorRecordDto {
 
 export interface CacheErrorsDto {
   counts: Record<CacheErrorKind, number>;
-  total: number;
   items: CacheErrorRecordDto[];
-  range: CacheRange;
 }
 
 export interface CacheOperationDto {
@@ -335,8 +294,6 @@ export interface FlushImpactDto {
   truncated: boolean;
   sessionKeys: number;
   sessionNamespaces: string[];
-  flushEnabled: boolean;
-  scannedAt: string | null;
 }
 
 export interface CacheConfigDto {

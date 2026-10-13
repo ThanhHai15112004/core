@@ -16,7 +16,7 @@ const OTHER_ID = '__other';
 export function CacheNamespacesTab({ page }: { page: CachePage }) {
   const { t, formatTime } = useLocale();
   const f = useFormat();
-  const query = useLiveQuery(cacheKeys.namespaces(page.range), () => cacheApi.namespaces(page.range), { tier: 'slow' });
+  const query = useLiveQuery(cacheKeys.namespaces(), () => cacheApi.namespaces(), { tier: 'slow' });
   const d = query.data;
   const ks = d?.keyspace;
 

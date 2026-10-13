@@ -54,7 +54,6 @@ import type {
   CacheRange,
   CacheReportDto,
   CacheSeriesDto,
-  CacheTtlDto,
   FlushImpactDto,
   KeyDetailDto,
   KeyspaceSummaryDto,
@@ -84,7 +83,6 @@ export const CACHE_METRICS: CacheMetric[] = [
 
 const MINUTE = 60_000;
 const DAY = 24 * 60 * MINUTE;
-const OVERVIEW_EVENTS = 8;
 const OVERVIEW_NAMESPACES = 6;
 const ERROR_LIST_LIMIT = 200;
 /** Snapshot keyspace cũ hơn mức này thì quét lại khi đọc. */
@@ -153,14 +151,11 @@ export class CacheOpsService {
       totalKeys: k.totalKeys,
       scannedKeys: k.scannedKeys,
       truncated: k.truncated,
-      totalBytes: k.totalBytes,
-      bytesPartial: k.bytesPartial,
       persistent: k.persistent,
       expiring: k.expiring,
       avgTtlMs: k.avgTtlMs,
       expiringNext60s: k.expiringNext60s,
       ttlDistribution: k.ttlDistribution,
-      durationMs: k.durationMs,
     };
   }
 
@@ -173,11 +168,8 @@ export class CacheOpsService {
       usedBytes: s.usedMemory,
       peakBytes: s.peakMemory,
       maxBytes: s.maxMemory,
-      percent:
-        s.maxMemory && s.usedMemory !== null ? round((s.usedMemory / s.maxMemory) * 100, 1) : null,
       policy: s.maxMemoryPolicy,
       fragmentationRatio: s.fragmentationRatio,
-      rssBytes: s.rssMemory,
     };
   }
 
@@ -222,29 +214,18 @@ export class CacheOpsService {
     const minutes = CACHE_RANGES[range];
     const today = startOfDay(now);
     const sinceToday = Math.max(1, (now - today) / MINUTE);
-    const [
-      stats,
-      cur,
-      base,
-      todayStats,
-      yesterdayStats,
-      keyspace,
-      server,
-      clients,
-      alerts,
-      events,
-    ] = await Promise.all([
-      this.metrics.stats(minutes),
-      this.metrics.stats(CURRENT_MIN),
-      this.metrics.stats(BASELINE_MIN, CURRENT_MIN),
-      this.metrics.stats(sinceToday),
-      this.metrics.stats(24 * 60, sinceToday),
-      this.keyspace(),
-      this.serverSection(),
-      this.monitoring.section('clients', () => this.monitoring.provider.clients()),
-      this.alerts(),
-      this.eventsSince(now - DAY),
-    ]);
+    const [stats, cur, base, todayStats, yesterdayStats, keyspace, server, clients, alerts] =
+      await Promise.all([
+        this.metrics.stats(minutes),
+        this.metrics.stats(CURRENT_MIN),
+        this.metrics.stats(BASELINE_MIN, CURRENT_MIN),
+        this.metrics.stats(sinceToday),
+        this.metrics.stats(24 * 60, sinceToday),
+        this.keyspace(),
+        this.serverSection(),
+        this.monitoring.section('clients', () => this.monitoring.provider.clients()),
+        this.alerts(),
+      ]);
     const [errors, errorsToday, errorsYesterday] = await Promise.all([
       this.errorCount(now - minutes * MINUTE),
       this.errorCount(today),
@@ -259,7 +240,6 @@ export class CacheOpsService {
     const perMin = (n: number | null) => (n === null ? null : round(n / minutes, 2));
 
     return {
-      generatedAt: new Date(now).toISOString(),
       range,
       driver: this.monitoring.driver,
       environment: this.config.app.env,
@@ -311,11 +291,9 @@ export class CacheOpsService {
         today: this.report(todayStats, errorsToday),
         yesterday: this.report(yesterdayStats, errorsYesterday),
       },
-      events: events.slice(0, OVERVIEW_EVENTS).map((e) => this.eventDto(e)),
       settings: {
         actionsEnabled: this.cfg.actionsEnabled,
         flushEnabled: this.cfg.flushEnabled,
-        valuePreview: this.cfg.valuePreview,
         largeKeyBytes: this.cfg.rules.largeKeyBytes,
         expirySpikeKeys: this.cfg.rules.expirySpikeKeys,
         hitRateWarnPercent: this.cfg.rules.hitRateWarnPercent,
@@ -353,10 +331,8 @@ export class CacheOpsService {
       status: state,
       reasons,
       state: fresh.state,
-      since: fresh.since,
       lastSuccessAt: fresh.lastSuccessAt,
       pingMs,
-      lastError: fresh.lastError,
     };
   }
 
@@ -375,9 +351,6 @@ export class CacheOpsService {
           threshold: s.threshold,
           namespace: s.namespace ?? s.extra['namespace'] ?? '',
         }),
-        value: s.value,
-        threshold: s.threshold,
-        unit: s.unit,
         since: new Date(s.since).toISOString(),
         tab: RULE_TAB[s.rule] ?? 'overview',
         namespace: s.namespace,
@@ -414,7 +387,7 @@ export class CacheOpsService {
 
   // ─── Chart ────────────────────────────────────────────────────────────────
 
-  /** Biểu đồ đọc từ Prometheus (gauge do monitor ghi); không có dữ liệu → series rỗng, `resolutionSec` null. */
+  /** Biểu đồ đọc từ Prometheus (gauge do monitor ghi); không có dữ liệu → series rỗng. */
   public async getMetrics(range: CacheRange, metric: CacheMetric): Promise<CacheMetricsDto> {
     const g = CACHE_GAUGES;
     const perMin = (name: string) => `max(rate(${name}[$w])) * 60`;
@@ -441,7 +414,7 @@ export class CacheOpsService {
         { id: 'expiredPerMin', unit: '/min', expr: perMin(g.expired) },
       ],
     };
-    const { series, resolutionSec } = await this.metrics.series(CACHE_RANGES[range], defs[metric]);
+    const series = await this.metrics.series(CACHE_RANGES[range], defs[metric]);
     const list: CacheSeriesDto[] = series.map((s) => ({
       id: s.id,
       label: this.i18n.t(`cache.series.${s.id}`),
@@ -449,9 +422,6 @@ export class CacheOpsService {
       points: s.points,
     }));
     return {
-      metric,
-      range,
-      resolutionSec,
       unit: list[0]?.unit ?? '',
       series: list,
       serverWide: metric !== 'memory' && metric !== 'keys',
@@ -460,23 +430,21 @@ export class CacheOpsService {
 
   // ─── Namespaces ───────────────────────────────────────────────────────────
 
-  public async getNamespaces(range: CacheRange): Promise<CacheNamespacesDto> {
+  public async getNamespaces(): Promise<CacheNamespacesDto> {
     const keyspace = await this.keyspace();
     return {
       keyspace: this.summary(keyspace),
       namespaces: this.namespaceRows(keyspace),
-      range,
       depth: this.cfg.namespaceDepth,
     };
   }
 
-  public async getNamespaceDetail(name: string, range: CacheRange): Promise<NamespaceDetailDto> {
+  public async getNamespaceDetail(name: string): Promise<NamespaceDetailDto> {
     const keyspace = await this.keyspace();
     const row = this.namespaceRows(keyspace).find((n) => n.name === name);
     if (!row) throw new CacheNotFoundException('cache.error.namespaceNotFound', { name });
     return {
       namespace: row,
-      range,
       largestKeys: (keyspace?.largestKeys ?? [])
         .filter((k) => k.namespace === name)
         .map((k) => this.largeKeyDto(k)),
@@ -507,7 +475,6 @@ export class CacheOpsService {
       cursor: page.available ? page.data.cursor : '0',
       done: page.available ? page.data.cursor === '0' : true,
       examined: page.available ? page.data.examined : 0,
-      prefix: this.monitoring.driver === 'redis' ? cacheKeys(this.redis).dataPrefix() : '',
     };
   }
 
@@ -551,68 +518,13 @@ export class CacheOpsService {
     };
   }
 
-  // ─── Memory / TTL / Clients ───────────────────────────────────────────────
+  // ─── Memory / Clients ─────────────────────────────────────────────────────
 
-  public async getMemory(range: CacheRange): Promise<CacheMemoryDto> {
-    const minutes = CACHE_RANGES[range];
-    const [keyspace, server, stats] = await Promise.all([
-      this.keyspace(),
-      this.serverSection(),
-      this.metrics.stats(minutes),
-    ]);
-    const serverData = server.available ? server.data : null;
-    const mem = memoryUsage(serverData, keyspace?.totalBytes ?? null, this.cfg.memoryLimitMb);
-    const total = keyspace?.totalBytes ?? 0;
+  public async getMemory(): Promise<CacheMemoryDto> {
+    const keyspace = await this.keyspace();
     return {
-      cacheBytes: keyspace ? keyspace.totalBytes : null,
-      bytesPartial: keyspace?.bytesPartial ?? false,
-      limit: {
-        cacheBytes: keyspace ? keyspace.totalBytes : null,
-        limitBytes: mem.limitBytes,
-        limitSource: mem.source,
-        percent: mem.percent,
-      },
-      server: server.available ? { available: true, data: this.serverMemory(server.data) } : server,
-      byNamespace: [...(keyspace?.namespaces ?? [])]
-        .sort((a, b) => b.bytes - a.bytes)
-        .map((n) => ({
-          name: n.name,
-          bytes: n.bytes,
-          keys: n.keys,
-          percent: total > 0 ? round((n.bytes / total) * 100, 1) : null,
-        })),
       largestKeys: (keyspace?.largestKeys ?? []).map((k) => this.largeKeyDto(k)),
-      evictions: server.available
-        ? {
-            available: true,
-            data: {
-              perMin: stats.evicted !== null ? round(stats.evicted / minutes, 2) : null,
-              inRange: stats.evicted,
-              total: server.data.evictedKeys,
-              policy: server.data.maxMemoryPolicy,
-            },
-          }
-        : server,
-      scannedAt: keyspace ? new Date(keyspace.at).toISOString() : null,
       largeKeyBytes: this.cfg.rules.largeKeyBytes,
-    };
-  }
-
-  public async getTtl(): Promise<CacheTtlDto> {
-    const [keyspace, stats] = await Promise.all([this.keyspace(), this.metrics.stats(15)]);
-    const ns = keyspace?.namespaces ?? [];
-    return {
-      keyspace: this.summary(keyspace),
-      persistentByNamespace: ns
-        .filter((n) => n.persistent > 0)
-        .sort((a, b) => b.persistent - a.persistent)
-        .map((n) => ({ name: n.name, persistent: n.persistent, keys: n.keys })),
-      expiringSoonByNamespace: ns
-        .filter((n) => n.expiringSoon > 0)
-        .sort((a, b) => b.expiringSoon - a.expiringSoon)
-        .map((n) => ({ name: n.name, count: n.expiringSoon })),
-      expiredPerMin: stats.expired !== null ? round(stats.expired / 15, 2) : null,
-      expirySpikeKeys: this.cfg.rules.expirySpikeKeys,
     };
   }
 
@@ -677,7 +589,6 @@ export class CacheOpsService {
     ) as Record<CacheErrorKind, number>;
     return {
       counts,
-      total: Object.values(counts).reduce((a, b) => a + b, 0),
       items: recent.slice(0, ERROR_LIST_LIMIT).map((e) => ({
         at: new Date(e.at).toISOString(),
         kind: e.kind,
@@ -687,7 +598,6 @@ export class CacheOpsService {
         runtime: e.runtime,
         correlationId: e.correlationId,
       })),
-      range,
     };
   }
 
@@ -759,8 +669,6 @@ export class CacheOpsService {
       truncated: keyspace?.truncated ?? false,
       sessionKeys: sessions.reduce((a, n) => a + n.keys, 0),
       sessionNamespaces: sessions.map((n) => n.name),
-      flushEnabled: this.cfg.flushEnabled,
-      scannedAt: keyspace ? new Date(keyspace.at).toISOString() : null,
     };
   }
 

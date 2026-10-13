@@ -59,7 +59,7 @@ function parse<T>(schema: z.ZodType<T>, value: unknown): T {
 const context = (req: FastifyRequest): OperationContext => ({ ip: maskIp(req.ip), actor: null });
 
 /**
- * Cache Monitor — hiệu quả, keyspace/namespace/TTL, bộ nhớ, kết nối, lỗi & sự kiện, thao tác.
+ * Cache Monitor — hiệu quả, keyspace/namespace, bộ nhớ, kết nối, lỗi & sự kiện, thao tác.
  * Thao tác xoá yêu cầu body xác nhận và có thể tắt bằng env; chỉ tác động vùng cache của core.
  */
 @Controller(R.PREFIX)
@@ -81,14 +81,14 @@ export class CacheOpsController {
 
   @Public()
   @Get(R.NAMESPACES)
-  public namespaces(@Query() q: Record<string, string>) {
-    return this.cache.getNamespaces(parse(rangeSchema, q).range);
+  public namespaces() {
+    return this.cache.getNamespaces();
   }
 
   @Public()
   @Get(R.NAMESPACE_DETAIL)
-  public namespace(@Param('name') name: string, @Query() q: Record<string, string>) {
-    return this.cache.getNamespaceDetail(parse(namespaceSchema, name), parse(rangeSchema, q).range);
+  public namespace(@Param('name') name: string) {
+    return this.cache.getNamespaceDetail(parse(namespaceSchema, name));
   }
 
   @Public()
@@ -132,14 +132,8 @@ export class CacheOpsController {
 
   @Public()
   @Get(R.MEMORY)
-  public memory(@Query() q: Record<string, string>) {
-    return this.cache.getMemory(parse(rangeSchema, q).range);
-  }
-
-  @Public()
-  @Get(R.TTL)
-  public ttl() {
-    return this.cache.getTtl();
+  public memory() {
+    return this.cache.getMemory();
   }
 
   @Public()

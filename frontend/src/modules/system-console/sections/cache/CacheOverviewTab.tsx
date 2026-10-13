@@ -61,7 +61,7 @@ export function CacheOverviewTab({ page, query }: { page: CachePage; query: UseQ
   const [metric, setMetric] = useState<CacheMetric>('hitRate');
   const [clientsOpen, setClientsOpen] = useState(false);
   const metrics = useLiveQuery(cacheKeys.metrics(range, metric), () => cacheApi.metrics(range, metric));
-  const memory = useLiveQuery(cacheKeys.memory(range), () => cacheApi.memory(range), { tier: 'slow' });
+  const memory = useLiveQuery(cacheKeys.memory(), () => cacheApi.memory(), { tier: 'slow' });
   const clients = useLiveQuery(cacheKeys.clients(), () => cacheApi.clients());
 
   const unit = metrics.data?.series[0]?.unit ?? metrics.data?.unit ?? '';

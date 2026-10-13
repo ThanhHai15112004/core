@@ -139,12 +139,12 @@ describe('Cache Monitor (/ops/cache)', () => {
     expect(ping.body.data.ok).toBe(true);
     const cfg = await call<{ items: { key: string; value: unknown }[] }>('GET', `${base}/config`);
     expect(cfg.body.data.items.find((i) => i.key === 'password')!.value).toBe(false);
-    const metrics = await call<{ series: { id: string }[]; resolutionSec: number | null }>(
+    const metrics = await call<{ series: { id: string; points: unknown[] }[] }>(
       'GET',
       `${base}/metrics?metric=operations`,
     );
     expect(metrics.body.data.series[0]!.id).toBe('opsPerSec');
-    expect(metrics.body.data.resolutionSec).toBeNull();
+    expect(metrics.body.data.series[0]!.points).toEqual([]);
     const impact = await call<{ keys: number; sessionKeys: number }>('GET', `${base}/flush/impact`);
     expect(impact.body.data).toMatchObject({ keys: 2, sessionKeys: 1 });
   });
