@@ -11,7 +11,6 @@
   "src/modules/system-console/components/messaging/ConsumerTable.tsx",
   "src/modules/system-console/components/messaging/MessageDrawer.tsx",
   "src/modules/system-console/components/runtimes/ResourceDistribution.tsx",
-  "src/modules/system-console/components/scheduler/RuntimePanel.tsx",
   "src/modules/system-console/components/storage/ObjectDrawer.tsx",
   "src/modules/system-console/components/worker/QueueTable.tsx",
   "src/modules/system-console/components/worker/RateBalance.tsx",

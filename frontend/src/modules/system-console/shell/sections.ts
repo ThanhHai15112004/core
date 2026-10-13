@@ -24,6 +24,7 @@ import { LOGS_RANGES } from '../constants/logs';
 import { OVERVIEW_RANGES } from '../constants/overview';
 import { TRAFFIC_RANGES, TRAFFIC_TABS } from '../constants/traffic';
 import { routeIdOf } from '../utils/traffic-format';
+import { SCHEDULER_RANGES, SCHEDULER_TABS } from '../constants/scheduler';
 
 type Translate = (path: string, params?: Record<string, string | number>) => string;
 
@@ -90,7 +91,15 @@ export const SECTIONS: SectionDef[] = [
   { id: 'storage', group: 'infrastructure', icon: HardDrive, component: load(() => import('../sections/storage/StorageSection'), 'StorageSection'), crumb: tabCrumb('storage'), keywords: ['file', 's3'] },
   { id: 'messaging', group: 'infrastructure', icon: Radio, component: load(() => import('../sections/messaging/MessagingSection'), 'MessagingSection'), crumb: tabCrumb('messaging'), keywords: ['queue', 'broker'] },
   { id: 'worker', group: 'background', icon: Boxes, component: load(() => import('../sections/worker/WorkerSection'), 'WorkerSection'), crumb: tabCrumb('wq'), keywords: ['queue', 'bullmq'] },
-  { id: 'scheduler', group: 'background', icon: Clock, component: load(() => import('../sections/scheduler/SchedulerSection'), 'SchedulerSection'), crumb: tabCrumb('sch'), keywords: ['cron'] },
+  {
+    id: 'scheduler',
+    group: 'background',
+    icon: Clock,
+    component: load(() => import('../sections/scheduler/SchedulerSection'), 'SchedulerSection'),
+    controls: { ranges: SCHEDULER_RANGES },
+    crumb: (p, t) => (p[0] === 'tasks' && p[1] ? p[1] : (SCHEDULER_TABS as readonly string[]).includes(p[0] ?? '') ? t(`sch.tab.${p[0]}`) : null),
+    keywords: ['cron', 'task'],
+  },
   {
     id: 'jobs',
     group: 'background',

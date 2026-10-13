@@ -1,46 +1,27 @@
-import type { ChartSeries } from '../components/common/LineChart';
-import type { SchedulerSeries } from '../types/scheduler.types';
-import { SCHEDULER_SERIES_COLORS } from '../constants/scheduler';
-import { FALLBACK_COLORS } from '../constants/performance';
-import { NO_VALUE } from './runtime-format';
+import { NO_VALUE, UNIT } from '@core/lib/format';
+import type { Execution } from '../types/scheduler.types';
 
-/** Khoảng thời gian tới lần chạy kế tiếp: `42s`, `4m`, `2h 18m`, `6d`. */
+/** Khoảng thời gian tới lần chạy kế tiếp: `42s`, `4m`, `2h 18m`, `6d 3h`. */
 export function formatIn(sec: number | null | undefined): string {
   if (sec === null || sec === undefined) return NO_VALUE;
-  if (sec < 60) return `${Math.max(0, Math.round(sec))}s`;
+  if (sec < 60) return `${Math.max(0, Math.round(sec))}${UNIT.s}`;
   const m = Math.floor(sec / 60);
-  if (m < 60) return `${m}m`;
+  if (m < 60) return `${m}${UNIT.m}`;
   const h = Math.floor(m / 60);
-  if (h < 24) return m % 60 ? `${h}h ${m % 60}m` : `${h}h`;
-  return `${Math.floor(h / 24)}d${h % 24 ? ` ${h % 24}h` : ''}`;
+  if (h < 24) return m % 60 ? `${h}${UNIT.h} ${m % 60}${UNIT.m}` : `${h}${UNIT.h}`;
+  return `${Math.floor(h / 24)}${UNIT.d}${h % 24 ? ` ${h % 24}${UNIT.h}` : ''}`;
 }
 
 /** Giây tới một thời điểm ISO (âm → 0). */
 export const secondsUntil = (at: string | null | undefined, now: number) => (at ? Math.max(0, (Date.parse(at) - now) / 1000) : null);
 
-/** Interval (ms) → `30s`, `5m`, `1h`. */
-export function formatInterval(ms: number | null): string {
-  if (!ms) return NO_VALUE;
-  if (ms % 3_600_000 === 0) return `${ms / 3_600_000}h`;
-  if (ms % 60_000 === 0) return `${ms / 60_000}m`;
-  if (ms % 1000 === 0) return `${ms / 1000}s`;
-  return `${ms}ms`;
+/** `13/10 14:21:42` theo locale (giờ trình duyệt). */
+export function formatDateTime(v: string | number, locale: string, withSeconds = true): string {
+  return new Intl.DateTimeFormat(locale, { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', ...(withSeconds ? { second: '2-digit' } : {}), hour12: false }).format(new Date(v));
 }
 
-/** Execution id `sch_8f1a2b3c4d5e` → gọn cho bảng. */
-export const shortExecId = (id: string) => (id.length > 14 ? `${id.slice(0, 10)}…` : id);
+/** Thời điểm đại diện của một lần chạy (bắt đầu → theo lịch → kết thúc). */
+export const execAt = (e: Pick<Execution, 'startedAt' | 'scheduledAt' | 'finishedAt'>): string | null => e.startedAt ?? e.scheduledAt ?? e.finishedAt;
 
-export function toSchedulerChart(list: SchedulerSeries[]): { series: ChartSeries[]; unit: string } {
-  const first = list[0]?.unit ?? '';
-  return {
-    unit: first,
-    series: list.map((s, i) => ({
-      id: s.id,
-      label: s.label,
-      unit: s.unit,
-      ...(s.unit !== first ? { axis: 'right' as const } : {}),
-      color: SCHEDULER_SERIES_COLORS[s.id] ?? FALLBACK_COLORS[i % FALLBACK_COLORS.length]!,
-      points: s.points,
-    })),
-  };
-}
+/** Thời lượng hiển thị: đang chạy → đã chạy bao lâu. */
+export const execDurationMs = (e: Pick<Execution, 'status' | 'runningMs' | 'durationMs'>): number | null => (e.status === 'running' ? e.runningMs : e.durationMs);

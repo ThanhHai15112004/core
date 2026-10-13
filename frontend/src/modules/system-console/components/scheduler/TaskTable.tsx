@@ -1,159 +1,145 @@
-import React, { useState } from 'react';
-import { Play, Search } from 'lucide-react';
-import type { TaskHealth, TaskRow, TaskType } from '../../types/scheduler.types';
-import type { TaskAction } from '../../hooks/useSchedulerActions';
-import { EXECUTION_ICON, EXECUTION_TONE } from '../../constants/scheduler';
-import { formatMs } from '../../utils/worker-format';
+import { useMemo } from 'react';
+import { createColumnHelper } from '@tanstack/react-table';
+import { Play, Power, PowerOff } from 'lucide-react';
+import { useLocale } from '@core/i18n/index';
+import { useFormat } from '@core/hooks/useFormat';
+import { useTicker } from '@core/hooks/useTicker';
+import { NO_VALUE } from '@core/lib/format';
+import { cn } from '@core/lib/cn';
+import { TONE_CLASS } from '@core/theme';
+import { Button, Hint } from '@core/ui/primitives';
+import { DataTable, RelativeTime } from '@core/ui/blocks';
+import type { TaskRow } from '../../types/scheduler.types';
+import { COUNTDOWN_TICK_MS, EXECUTION_TONE, SUCCESS_RATE_WARN_PERCENT } from '../../constants/scheduler';
 import { formatIn, secondsUntil } from '../../utils/scheduler-format';
-import { NO_VALUE } from '../../utils/runtime-format';
-import { ScheduleCell, TaskHealthDot, TaskStatusChip } from './TaskStatus';
-import { useLocale } from '../../../../core/i18n/index';
+import type { TaskAction } from '../../sections/scheduler/useTaskActions';
+import { ScheduleText, TaskHealthLabel, TaskStatusBadge } from './SchedulerBadges';
 
-const STATUS_FILTERS = ['all', 'enabled', 'disabled', 'failing'] as const;
-const TYPE_FILTERS = ['all', 'cron', 'interval'] as const;
-const HEALTH_FILTERS = ['all', 'healthy', 'warning', 'error'] as const;
-const SORTS = ['next', 'failures', 'duration', 'name'] as const;
-type StatusFilter = (typeof STATUS_FILTERS)[number];
-type Sort = (typeof SORTS)[number];
-
-const matchStatus = (x: TaskRow, f: StatusFilter) =>
-  f === 'all' || (f === 'enabled' ? x.enabled : f === 'disabled' ? !x.enabled : x.consecutiveFailures > 0);
-
-function compare(a: TaskRow, b: TaskRow, s: Sort): number {
-  switch (s) {
-    case 'next':
-      return (a.nextRunAt ? Date.parse(a.nextRunAt) : Infinity) - (b.nextRunAt ? Date.parse(b.nextRunAt) : Infinity) || a.name.localeCompare(b.name);
-    case 'failures':
-      return b.consecutiveFailures - a.consecutiveFailures || b.failures24h - a.failures24h;
-    case 'duration':
-      return (b.avgDurationMs ?? -1) - (a.avgDurationMs ?? -1);
-    default:
-      return a.name.localeCompare(b.name);
-  }
-}
+const col = createColumnHelper<TaskRow>();
+const ts = (iso: string | null, empty: number) => (iso ? Date.parse(iso) : empty);
 
 interface Props {
   rows: TaskRow[];
-  now: number;
-  onOpen: (taskId: string) => void;
+  onOpen: (id: string) => void;
   onAction?: (action: TaskAction, task: TaskRow) => void;
   canRun?: boolean;
-  /** Bộ lọc + sắp xếp (trang Tasks); Overview dùng bản gọn. */
-  tools?: boolean;
-  emptyText: string;
+  canToggle?: boolean;
+  emptyMessage?: string;
 }
 
-/** Bảng task: lịch (cho người đọc), lần chạy gần nhất + kết quả, lần kế tiếp, tỉ lệ thành công, trạng thái vận hành + sức khoẻ. */
-export const TaskTable: React.FC<Props> = ({ rows, now, onOpen, onAction, canRun = false, tools = false, emptyText }) => {
-  const { t, formatRelative } = useLocale();
-  const [search, setSearch] = useState('');
-  const [status, setStatus] = useState<StatusFilter>('all');
-  const [type, setType] = useState<'all' | TaskType>('all');
-  const [health, setHealth] = useState<'all' | TaskHealth>('all');
-  const [sort, setSort] = useState<Sort>('next');
-  if (rows.length === 0) return <p className="ov-empty-line">{emptyText}</p>;
-  const q = search.trim().toLowerCase();
-  const list = tools
-    ? rows
-        .filter(
-          (x) =>
-            (!q || x.name.toLowerCase().includes(q) || x.id.toLowerCase().includes(q)) &&
-            matchStatus(x, status) &&
-            (type === 'all' || x.type === type) &&
-            (health === 'all' || x.health === health),
-        )
-        .sort((a, b) => compare(a, b, sort))
-    : rows;
-  const segmented = <T extends string>(label: string, values: readonly T[], value: T, set: (v: T) => void, key: string) => (
-    <div className="sch-filter">
-      <span>{label}</span>
-      <div className="ov-segmented" role="tablist" aria-label={label}>
-        {values.map((v) => (
-          <button key={v} type="button" role="tab" aria-selected={value === v} className={value === v ? 'is-active' : ''} onClick={() => set(v)}>
-            {t(`sch.filter.${key}.${v}`)}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-  return (
-    <>
-      {tools && (
-        <div className="sch-tools">
-          <label className="wq-search">
-            <Search size={13} />
-            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t('sch.task.search')} aria-label={t('sch.task.search')} />
-          </label>
-          {segmented(t('sch.filter.status.label'), STATUS_FILTERS, status, setStatus, 'status')}
-          {segmented(t('sch.filter.type.label'), TYPE_FILTERS, type, setType, 'type')}
-          {segmented(t('sch.filter.health.label'), HEALTH_FILTERS, health, setHealth, 'health')}
-          {segmented(t('sch.filter.sort.label'), SORTS, sort, setSort, 'sort')}
-        </div>
-      )}
-      {list.length === 0 ? (
-        <p className="ov-empty-line">{t('sch.task.noMatch')}</p>
-      ) : (
-        <div className="scp-table-wrap">
-          <table className="scp-table sch-task-table">
-            <thead>
-              <tr>
-                <th>{t('sch.task.name')}</th>
-                <th>{t('sch.task.schedule')}</th>
-                <th>{t('sch.task.lastRun')}</th>
-                <th>{t('sch.task.nextRun')}</th>
-                <th>{t('sch.task.success24h')}</th>
-                <th>{t('sch.task.status.label')}</th>
-                {onAction && <th aria-label={t('sch.task.actions')} />}
-              </tr>
-            </thead>
-            <tbody>
-              {list.map((x) => (
-                <tr key={x.id} className="is-clickable" onClick={() => onOpen(x.id)}>
-                  <td>
-                    <span className="cell-strong">{x.name}</span>
-                    <small className="pf-row-note">
-                      <code>{x.id}</code>
-                      {x.type !== 'cron' && ` · ${t(`sch.type.${x.type}`)}`}
-                    </small>
-                  </td>
-                  <td>
-                    <ScheduleCell schedule={x.schedule} />
-                  </td>
-                  <td>
-                    {x.lastRunAt ? formatRelative(new Date(x.lastRunAt), now) : t('sch.task.never')}
-                    {x.lastStatus && (
-                      <small className={`pf-row-note sch-result ov-tone-${EXECUTION_TONE[x.lastStatus]}`}>
-                        {EXECUTION_ICON[x.lastStatus]} {t(`sch.exec.status.${x.lastStatus}`)}
-                        {x.lastDurationMs !== null && ` · ${formatMs(x.lastDurationMs)}`}
-                      </small>
+/** Bảng task: lịch, lần chạy gần nhất + kết quả, lần tới, tỉ lệ thành công 24h, trạng thái + sức khoẻ, thao tác nhanh. */
+export function TaskTable({ rows, onOpen, onAction, canRun = false, canToggle = false, emptyMessage }: Props) {
+  const { t } = useLocale();
+  const f = useFormat();
+  const now = useTicker(COUNTDOWN_TICK_MS);
+  const columns = useMemo(
+    () => [
+      col.accessor('name', {
+        header: t('sch.task.name'),
+        cell: (c) => (
+          <div className="min-w-0">
+            <div className="truncate font-medium text-fg">{c.getValue()}</div>
+            <div className="truncate font-mono text-2xs text-faint">
+              {c.row.original.id}
+              {c.row.original.type !== 'cron' && ` · ${t(`sch.type.${c.row.original.type}`)}`}
+            </div>
+          </div>
+        ),
+        meta: { width: '22%' },
+      }),
+      col.display({ id: 'schedule', header: t('sch.task.schedule'), cell: (c) => <ScheduleText schedule={c.row.original.schedule} /> }),
+      col.accessor((x) => ts(x.lastRunAt, 0), {
+        id: 'lastRun',
+        header: t('sch.task.lastRun'),
+        cell: (c) => {
+          const x = c.row.original;
+          if (!x.lastRunAt) return <span className="text-faint">{t('sch.task.never')}</span>;
+          return (
+            <div className="min-w-0">
+              <RelativeTime value={x.lastRunAt} className="text-fg-2" />
+              {x.lastStatus && (
+                <div className={cn('truncate text-2xs', TONE_CLASS[EXECUTION_TONE[x.lastStatus]].fg)}>
+                  {t(`sch.exec.status.${x.lastStatus}`)}
+                  {x.lastDurationMs !== null && <span className="font-mono"> · {f.duration(x.lastDurationMs)}</span>}
+                </div>
+              )}
+            </div>
+          );
+        },
+      }),
+      col.accessor((x) => ts(x.nextRunAt, Number.MAX_SAFE_INTEGER), {
+        id: 'next',
+        header: t('sch.task.nextRun'),
+        cell: (c) => formatIn(secondsUntil(c.row.original.nextRunAt, now)),
+        meta: { mono: true, align: 'right', width: '96px' },
+      }),
+      col.accessor((x) => x.successRatePercent ?? -1, {
+        id: 'success',
+        header: t('sch.task.success24h'),
+        cell: (c) => {
+          const x = c.row.original;
+          const warn = x.successRatePercent !== null && x.successRatePercent < SUCCESS_RATE_WARN_PERCENT;
+          return (
+            <div>
+              <div className={cn('font-mono text-xs tabular-nums', warn ? 'text-warn-fg' : 'text-fg-2')}>{x.successRatePercent === null ? NO_VALUE : f.percent(x.successRatePercent)}</div>
+              {x.executions24h > 0 && <div className="text-2xs text-faint">{t('sch.task.runs', { count: f.compact(x.executions24h) })}</div>}
+            </div>
+          );
+        },
+        meta: { align: 'right', width: '120px' },
+      }),
+      col.accessor('status', {
+        header: t('sch.task.status.label'),
+        cell: (c) => (
+          <div className="flex flex-col items-start gap-0.5">
+            <TaskStatusBadge task={c.row.original} />
+            <TaskHealthLabel health={c.row.original.health} />
+          </div>
+        ),
+        meta: { width: '130px' },
+      }),
+      ...(onAction && (canRun || canToggle)
+        ? [
+            col.display({
+              id: 'actions',
+              header: '',
+              cell: (c) => {
+                const x = c.row.original;
+                return (
+                  <div className="flex justify-end gap-1" onClick={(e) => e.stopPropagation()}>
+                    {canRun && (
+                      <Button size="xs" onClick={() => onAction('run', x)}>
+                        <Play />
+                        {t('sch.action.run')}
+                      </Button>
                     )}
-                  </td>
-                  <td>{x.nextRunAt ? formatIn(secondsUntil(x.nextRunAt, now)) : NO_VALUE}</td>
-                  <td className={x.successRatePercent !== null && x.successRatePercent < 95 ? 'is-warn' : ''}>
-                    {x.successRatePercent === null ? NO_VALUE : `${x.successRatePercent}%`}
-                    {x.executions24h > 0 && <small className="pf-row-note">{t('sch.task.runs', { count: x.executions24h })}</small>}
-                  </td>
-                  <td>
-                    <TaskStatusChip task={x} />
-                    <small className="pf-row-note">
-                      <TaskHealthDot task={x} />
-                    </small>
-                  </td>
-                  {onAction && (
-                    <td onClick={(e) => e.stopPropagation()}>
-                      {canRun && (
-                        <button type="button" className="scp-btn scp-btn-sm scp-btn-secondary" onClick={() => onAction('run', x)} title={t('sch.action.run')}>
-                          <Play size={12} /> {t('sch.action.run')}
-                        </button>
-                      )}
-                    </td>
-                  )}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </>
+                    {canToggle && (
+                      <Hint content={t(`sch.action.${x.enabled ? 'disable' : 'enable'}`)}>
+                        <Button size="icon-xs" variant="ghost" aria-label={t(`sch.action.${x.enabled ? 'disable' : 'enable'}`)} onClick={() => onAction(x.enabled ? 'disable' : 'enable', x)}>
+                          {x.enabled ? <PowerOff /> : <Power />}
+                        </Button>
+                      </Hint>
+                    )}
+                  </div>
+                );
+              },
+              meta: { width: '130px', align: 'right' },
+            }),
+          ]
+        : []),
+    ],
+    [t, f, now, onAction, canRun, canToggle],
   );
-};
+
+  return (
+    <DataTable
+      data={rows}
+      columns={columns}
+      getRowId={(x) => x.id}
+      onRowClick={(x) => onOpen(x.id)}
+      rowTone={(x) => (x.health === 'error' ? 'crit' : x.consecutiveFailures > 0 ? 'warn' : undefined)}
+      initialSorting={[{ id: 'next', desc: false }]}
+      emptyMessage={emptyMessage ?? t('sch.task.empty')}
+    />
+  );
+}
