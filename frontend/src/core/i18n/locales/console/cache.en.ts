@@ -285,11 +285,6 @@ export const cacheEn = {
   config: {
     title: 'Cache configuration',
     note: 'Loaded from environment variables (read-only) — change .env and restart.',
-    copy: 'Copy (without secrets)',
-    configured: 'Configured',
-    notConfigured: 'Not configured',
-    yes: 'Yes',
-    no: 'No',
     group: { driver: 'Driver', connection: 'Connection', server: 'Redis server', behavior: 'Behavior', thresholds: 'Alert thresholds', actions: 'Actions' },
     key: {
       driver: 'Driver',

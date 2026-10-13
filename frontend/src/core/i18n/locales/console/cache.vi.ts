@@ -285,11 +285,6 @@ export const cacheVi = {
   config: {
     title: 'Cấu hình cache',
     note: 'Nạp từ biến môi trường (chỉ đọc) — đổi trong .env rồi khởi động lại.',
-    copy: 'Copy (không gồm bí mật)',
-    configured: 'Đã cấu hình',
-    notConfigured: 'Chưa cấu hình',
-    yes: 'Có',
-    no: 'Không',
     group: { driver: 'Driver', connection: 'Kết nối', server: 'Redis server', behavior: 'Hành vi', thresholds: 'Ngưỡng cảnh báo', actions: 'Thao tác' },
     key: {
       driver: 'Driver',

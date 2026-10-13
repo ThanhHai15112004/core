@@ -42,17 +42,12 @@ import {
 } from '../../constants/cache';
 import { NamespaceTable } from '../../components/cache/NamespaceTable';
 import { ClientsSheet } from '../../components/cache/ClientsSheet';
+import { alertTone } from '../../utils/alert-tone';
 import { cacheKeys } from './cache-keys';
 import type { CachePage } from './useCachePage';
 
 const runtimeCol = createColumnHelper<{ runtime: string; connections: number; blocked: number; bull: number }>();
 const largeCol = createColumnHelper<LargeKey>();
-
-/** Tông của một ô theo cảnh báo backend đang mở (rule tương ứng). */
-function alertTone(data: CacheOverview, rules: readonly string[]): Tone | null {
-  const hits = data.alerts.filter((a) => rules.includes(a.rule));
-  return hits.some((a) => a.severity === 'critical') ? 'crit' : hits.some((a) => a.severity === 'warning') ? 'warn' : null;
-}
 
 /**
  * Tổng quan Cache: 6 chỉ số → biểu đồ + vấn đề → hiệu quả / bộ nhớ / TTL → namespace + kết nối → key lớn + báo cáo.
@@ -135,7 +130,7 @@ export function CacheOverviewTab({ page, query }: { page: CachePage; query: UseQ
   const server = data.server.available ? data.server.data : null;
   const rangeLabel = t(`ui.time.ranges.${data.range}`);
   const hitTone: Tone =
-    alertTone(data, KPI_ALERT_RULES.hitRate) ??
+    alertTone(data.alerts, KPI_ALERT_RULES.hitRate) ??
     (k.hitRatePercent === null
       ? 'unknown'
       : k.hitRatePercent < data.settings.hitRateWarnPercent - HIT_RATE_CRIT_GAP
@@ -196,7 +191,7 @@ export function CacheOverviewTab({ page, query }: { page: CachePage; query: UseQ
           label={t('cache.kpi.memory')}
           value={memValue}
           sub={memSub}
-          tone={alertTone(data, KPI_ALERT_RULES.memory) ?? undefined}
+          tone={alertTone(data.alerts, KPI_ALERT_RULES.memory) ?? undefined}
           onClick={() => setMetric('memory')}
         />
         <StatTile
@@ -217,7 +212,7 @@ export function CacheOverviewTab({ page, query }: { page: CachePage; query: UseQ
           value={redis ? f.rate(k.evictionsPerMin, 'min') : t('cache.kpi.notApplicable')}
           sub={redis ? t('cache.kpi.inRange', { count: f.compact(k.evictedInRange) }) : t('cache.kpi.memoryDriver')}
           hint={t('cache.kpi.serverWideHint')}
-          tone={alertTone(data, KPI_ALERT_RULES.evictions) ?? undefined}
+          tone={alertTone(data.alerts, KPI_ALERT_RULES.evictions) ?? undefined}
           onClick={redis ? () => setMetric('evictions') : undefined}
         />
         <StatTile
@@ -225,7 +220,7 @@ export function CacheOverviewTab({ page, query }: { page: CachePage; query: UseQ
           value={k.connections === null ? (redis ? NO_VALUE : t('cache.kpi.notApplicable')) : f.number(k.connections)}
           sub={data.health.pingMs !== null ? t('cache.kpi.ping', { value: f.duration(data.health.pingMs) }) : undefined}
           hint={t('cache.kpi.connectionsHint')}
-          tone={alertTone(data, KPI_ALERT_RULES.connections) ?? undefined}
+          tone={alertTone(data.alerts, KPI_ALERT_RULES.connections) ?? undefined}
           onClick={redis ? () => setClientsOpen(true) : undefined}
         />
       </StatGrid>

@@ -125,6 +125,13 @@ export const uiEn: UiTranslation = {
     disconnected: 'Not connected — no data yet',
     error: 'Could not read this part',
   },
+  config: {
+    configured: 'Configured',
+    notConfigured: 'Not configured',
+    yes: 'Yes',
+    no: 'No',
+    copy: 'Copy (without secrets)',
+  },
   status: {
     ok: 'Healthy',
     warn: 'Warning',

@@ -124,6 +124,13 @@ export const uiVi = {
     disconnected: 'Chưa kết nối — chưa có dữ liệu',
     error: 'Không đọc được phần này',
   },
+  config: {
+    configured: 'Đã cấu hình',
+    notConfigured: 'Chưa cấu hình',
+    yes: 'Có',
+    no: 'Không',
+    copy: 'Sao chép (không gồm bí mật)',
+  },
   status: {
     ok: 'Ổn định',
     warn: 'Cảnh báo',

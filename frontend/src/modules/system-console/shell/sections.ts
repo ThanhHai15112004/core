@@ -32,6 +32,7 @@ import { DB_RANGES, DB_TABS } from '../constants/database';
 import { WORKER_PAGE_TABS, WORKER_RANGES } from '../constants/worker';
 import { JOBS_RANGES, JOBS_TABS, SHORT_ID_HEAD } from '../constants/jobs';
 import { CACHE_RANGES } from '../constants/cache';
+import { STORAGE_RANGES } from '../constants/storage';
 
 type Translate = (path: string, params?: Record<string, string | number>) => string;
 
@@ -114,7 +115,15 @@ export const SECTIONS: SectionDef[] = [
     crumb: tabCrumb('cache'),
     keywords: ['redis', 'namespace', 'key'],
   },
-  { id: 'storage', group: 'infrastructure', icon: HardDrive, component: load(() => import('../sections/storage/StorageSection'), 'StorageSection'), crumb: tabCrumb('storage'), keywords: ['file', 's3'] },
+  {
+    id: 'storage',
+    group: 'infrastructure',
+    icon: HardDrive,
+    component: load(() => import('../sections/storage/StorageSection'), 'StorageSection'),
+    controls: { ranges: STORAGE_RANGES },
+    crumb: tabCrumb('storage'),
+    keywords: ['file', 's3', 'bucket', 'upload'],
+  },
   {
     id: 'messaging',
     group: 'infrastructure',

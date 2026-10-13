@@ -1,68 +1,66 @@
-import React, { useState } from 'react';
+import { useMemo } from 'react';
+import { createColumnHelper } from '@tanstack/react-table';
+import { useLocale } from '@core/i18n/index';
+import { useFormat } from '@core/hooks/useFormat';
+import { DataTable, RelativeTime } from '@core/ui/blocks';
 import type { ContainerRow } from '../../types/storage.types';
-import { formatBytes, formatCompact } from '../../utils/database-format';
-import { formatGrowth } from '../../utils/storage-format';
-import { useLocale } from '../../../../core/i18n/index';
+import { useContainerLabel } from './useContainerLabel';
 
-const SORTS = ['size', 'objects', 'growth', 'errors'] as const;
-type Sort = (typeof SORTS)[number];
-const value = (c: ContainerRow, s: Sort) =>
-  s === 'size'
-    ? c.bytes
-    : s === 'objects'
-      ? c.objects
-      : s === 'growth'
-        ? (c.growth24hBytes ?? -Infinity)
-        : c.errors;
+const col = createColumnHelper<ContainerRow>();
 
-/** Bảng container (bucket prefix / thư mục gốc) — sort theo size, object, tăng trưởng, lỗi. */
-export const ContainerTable: React.FC<{ rows: ContainerRow[]; onOpen: (name: string) => void; sortable?: boolean; emptyText: string }> = ({
-  rows,
-  onOpen,
-  sortable = true,
-  emptyText,
-}) => {
-  const { t, locale } = useLocale();
-  const [sort, setSort] = useState<Sort>('size');
-  if (rows.length === 0) return <p className="ov-empty-line">{emptyText}</p>;
-  const list = sortable ? [...rows].sort((a, b) => value(b, sort) - value(a, sort)) : rows;
-  return (
-    <>
-      {sortable && (
-        <div className="ov-segmented cache-sort" role="tablist" aria-label={t('cache.ns.sort')}>
-          {SORTS.map((s) => (
-            <button key={s} type="button" role="tab" aria-selected={sort === s} className={sort === s ? 'is-active' : ''} onClick={() => setSort(s)}>
-              {t(`storage.container.sortBy.${s}`)}
-            </button>
-          ))}
-        </div>
-      )}
-      <div className="scp-table-wrap">
-        <table className="scp-table cache-ns-table">
-          <thead>
-            <tr>
-              <th>{t('storage.container.name')}</th>
-              <th>{t('storage.container.objects')}</th>
-              <th>{t('storage.container.size')}</th>
-              <th>{t('storage.container.growth')}</th>
-              <th>{t('storage.container.errors')}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {list.map((c) => (
-              <tr key={c.name} className="is-clickable" onClick={() => onOpen(c.name)}>
-                <td>
-                  <code>{c.name === '(root)' ? t('storage.container.root') : `${c.name}/`}</code>
-                </td>
-                <td>{formatCompact(c.objects, locale)}</td>
-                <td>{formatBytes(c.bytes)}</td>
-                <td>{formatGrowth(c.growth24hBytes)}</td>
-                <td className={c.errors > 0 ? 'is-warn' : ''}>{c.errors}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </>
+interface ContainerTableProps {
+  rows: ContainerRow[];
+  onOpen: (row: ContainerRow) => void;
+  activeName?: string | null;
+  emptyMessage: string;
+  /** Chỉ cột chính (Tổng quan). */
+  compact?: boolean;
+}
+
+/** Bảng container (prefix cấp 1 trong bucket / thư mục gốc): object, dung lượng, tăng 24h, lỗi — sort theo header. */
+export function ContainerTable({ rows, onOpen, activeName, emptyMessage, compact }: ContainerTableProps) {
+  const { t } = useLocale();
+  const f = useFormat();
+  const label = useContainerLabel();
+  const columns = useMemo(
+    () => [
+      col.accessor('name', { header: t('storage.container.name'), cell: (c) => <span className="font-mono text-xs text-fg">{label(c.getValue())}</span>, meta: { truncate: true } }),
+      col.accessor('objects', { header: t('storage.container.objects'), cell: (c) => f.compact(c.getValue()), meta: { align: 'right', mono: true, width: '90px' } }),
+      col.accessor('bytes', { header: t('storage.container.size'), cell: (c) => f.bytes(c.getValue()), meta: { align: 'right', mono: true, width: '100px' } }),
+      col.accessor((r) => r.growth24hBytes ?? Number.NEGATIVE_INFINITY, {
+        id: 'growth',
+        header: t('storage.container.growth'),
+        cell: (c) => f.signedBytes(c.row.original.growth24hBytes),
+        meta: { align: 'right', mono: true, width: '110px' },
+      }),
+      ...(compact
+        ? []
+        : [
+            col.accessor('createdToday', { header: t('storage.container.createdToday'), cell: (c) => f.compact(c.getValue()), meta: { align: 'right', mono: true, width: '100px' } }),
+            col.accessor('newest', {
+              header: t('storage.container.newest'),
+              cell: (c) => <RelativeTime value={c.getValue()} className="text-xs text-muted" />,
+              meta: { align: 'right', width: '120px' },
+            }),
+          ]),
+      col.accessor('errors', {
+        header: t('storage.container.errors'),
+        cell: (c) => <span className={c.getValue() > 0 ? 'text-crit-fg' : 'text-faint'}>{f.number(c.getValue())}</span>,
+        meta: { align: 'right', mono: true, width: '70px' },
+      }),
+    ],
+    [t, f, label, compact],
   );
-};
+  return (
+    <DataTable
+      data={rows}
+      columns={columns}
+      getRowId={(r) => r.name}
+      onRowClick={onOpen}
+      activeRowId={activeName ?? undefined}
+      rowTone={(r) => (r.errors > 0 ? 'warn' : undefined)}
+      initialSorting={compact ? [] : [{ id: 'bytes', desc: true }]}
+      emptyMessage={emptyMessage}
+    />
+  );
+}

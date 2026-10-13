@@ -1,194 +1,147 @@
-import React, { useCallback, useMemo, useState } from 'react';
-import { Ban, Pause, Play, Radio, RefreshCw, WifiOff } from 'lucide-react';
-import type { ObjectFilter } from '../../types/storage.types';
+import React, { useState } from 'react';
+import { HardDrive, PlugZap, RefreshCw, X } from 'lucide-react';
+import { useLocale } from '@core/i18n/index';
+import { useAppMutation, useLiveQuery } from '@core/data';
+import { useFormat } from '@core/hooks/useFormat';
+import { Badge, Button } from '@core/ui/primitives';
+import { PageHeader, PageTabs, RelativeTime, StatusBanner, type PageTab } from '@core/ui/blocks';
+import type { StorageTest } from '../../types/storage.types';
 import { storageApi } from '../../services/storage.api';
-import { usePolling } from '../../hooks/usePolling';
-import { useStorageRoute } from '../../hooks/useStorageRoute';
-import { useStorageActions } from '../../hooks/useStorageActions';
-import { OBJECT_AGES, OBJECT_KINDS, STORAGE_RANGES, STORAGE_TABS, TAB_CAPABILITY } from '../../constants/storage';
-import { StorageHealthBanner } from '../../components/storage/StorageHealthBanner';
-import { ContainerDrawer } from '../../components/storage/ContainerDrawer';
-import { ObjectDrawer } from '../../components/storage/ObjectDrawer';
-import { StorageOverviewView } from './StorageOverviewView';
-import { StorageContainersView } from './StorageContainersView';
-import { StorageObjectsView } from './StorageObjectsView';
-import { StorageLifecycleView, StorageUploadsView, StorageUsageView } from './StorageInsightViews';
-import { StorageConfigView, StorageErrorsView, StorageOperationsView } from './StorageOtherViews';
-import { useLocale } from '../../../../core/i18n/index';
-import { useNow } from '../../../../core/hooks/useNow';
-import '../../styles/console-runtimes.css';
-import '../../styles/console-traffic.css';
-import '../../styles/console-performance.css';
-import '../../styles/console-database.css';
-import '../../styles/console-cache.css';
-import '../../styles/console-storage.css';
+import { STORAGE_HEALTH_TONE, STORAGE_TABS, type StoragePageTab } from '../../constants/storage';
+import { KNOWN_ENVIRONMENTS } from '../../constants/cache';
+import { ContainerSheet } from '../../components/storage/ContainerSheet';
+import { ObjectSheet } from '../../components/storage/ObjectSheet';
+import { useStoragePage } from './useStoragePage';
+import { useStorageActions } from './useStorageActions';
+import { storageKeys } from './storage-keys';
+import { StorageOverviewTab } from './StorageOverviewTab';
+import { StorageObjectsTab } from './StorageObjectsTab';
+import { StorageUploadsTab } from './StorageUploadsTab';
+import { StorageActivityTab } from './StorageActivityTab';
+import { StorageConfigSheet } from './StorageConfigSheet';
 
 /**
- * Storage: `storage/<tab>/<id>` — health, capacity & tăng trưởng, traffic, container, object explorer, upload,
- * lifecycle, lỗi & sự kiện, audit, cấu hình. Phần provider không hỗ trợ hiện rõ lý do (theo capability).
+ * Storage — Tổng quan (dung lượng, tăng trưởng, lifecycle) · Container & Object · Upload · Hoạt động (lỗi, sự kiện, audit).
+ * Chi tiết container / object mở drawer (`?detail=`, `?object=`) ở mọi tab; cấu hình mở dạng sheet (⚙).
  */
 export const StorageSection: React.FC = () => {
-  const { t, formatRelative } = useLocale();
-  const now = useNow();
-  const { tab, id, range, query, go, setRange, setQuery, navigate } = useStorageRoute();
-  const [paused, setPaused] = useState(false);
-  const [reloadKey, setReloadKey] = useState(0);
-  const overview = usePolling(() => storageApi.overview(range), `storage:${range}:${reloadKey}`, undefined, paused);
-  const bump = useCallback(() => setReloadKey((k) => k + 1), []);
-  const actions = useStorageActions((action) => {
-    // Object vừa xoá không còn → đóng drawer thay vì tải lại (404).
-    if (action === 'delete' && id && tab === 'objects') go(tab, null, query);
-    bump();
-  });
+  const { t } = useLocale();
+  const f = useFormat();
+  const page = useStoragePage();
+  const overview = useLiveQuery(storageKeys.overview(page.range), () => storageApi.overview(page.range));
   const data = overview.data;
-  const caps = new Set(data?.capabilities ?? []);
-  const product = data?.provider.product ?? '';
-  const driver = data?.provider.driver ?? '';
-  const closeDrawer = () => go(tab, null, tab === 'objects' ? query : {});
+  const [result, setResult] = useState<StorageTest | null>(null);
+  const actions = useStorageActions((versioned) => {
+    if (!versioned) page.openObject(null);
+  });
+  const test = useAppMutation({ mutationFn: () => storageApi.test(), success: false, invalidate: [storageKeys.all], onSuccess: setResult });
 
-  const filter = useMemo<ObjectFilter>(
-    () => ({
-      container: query['container'] ?? '',
-      prefix: query['prefix'] ?? '',
-      kind: OBJECT_KINDS.includes(query['kind'] as never) ? (query['kind'] as ObjectFilter['kind']) : '',
-      age: OBJECT_AGES.includes(query['age'] as never) ? (query['age'] as ObjectFilter['age']) : '',
-      minSizeMb: query['minSizeMb'] ?? '',
-    }),
-    [query],
-  );
-  const setFilter = (patch: Partial<ObjectFilter>) => {
-    const next = { ...filter, ...patch };
-    setQuery({
-      container: next.container || undefined,
-      prefix: next.prefix || undefined,
-      kind: next.kind || undefined,
-      age: next.age || undefined,
-      minSizeMb: next.minSizeMb || undefined,
-    });
-  };
+  const problems = data?.alerts.filter((a) => a.severity !== 'info').length ?? 0;
+  const tabs: PageTab<StoragePageTab>[] = STORAGE_TABS.map((id) => ({
+    id,
+    label: t(`storage.tab.${id}`),
+    ...(id === 'overview' ? { count: problems, countTone: data?.alerts.some((a) => a.severity === 'critical') ? ('crit' as const) : ('warn' as const) } : {}),
+    ...(id === 'uploads' ? { count: data?.uploads.stale ?? null, countTone: 'warn' as const } : {}),
+    ...(id === 'activity' ? { count: data?.kpis.failedOps ?? null, countTone: 'crit' as const } : {}),
+  }));
+  const health = data?.health;
+  const tone = health ? STORAGE_HEALTH_TONE[health.status] : undefined;
+  const env = data ? (KNOWN_ENVIRONMENTS.includes(data.environment) ? t(`ov.env.${data.environment}`) : data.environment) : '';
 
   const renderTab = () => {
-    const cap = TAB_CAPABILITY[tab];
-    if (data && cap && !caps.has(cap)) {
-      return (
-        <section className="tr-empty-state" role="status">
-          <Ban size={28} />
-          <h2>{t('storage.unsupported.title')}</h2>
-          <p>{t('storage.unsupported.message', { product })}</p>
-        </section>
-      );
-    }
-    switch (tab) {
-      case 'containers':
-        return <StorageContainersView range={range} paused={paused} driver={driver} reloadKey={reloadKey} go={go} />;
+    switch (page.tab) {
       case 'objects':
-        return (
-          <StorageObjectsView
-            product={product}
-            filter={filter}
-            setFilter={setFilter}
-            reloadKey={reloadKey}
-            go={(nextTab, nextId, q) => go(nextTab, nextId, { ...query, ...q })}
-          />
-        );
+        return <StorageObjectsTab page={page} data={data} />;
       case 'uploads':
-        return <StorageUploadsView range={range} paused={paused} product={product} reloadKey={reloadKey} navigate={navigate} onAbort={actions.requestAbort} />;
-      case 'usage':
-        return <StorageUsageView product={product} reloadKey={reloadKey} go={go} />;
-      case 'lifecycle':
-        return <StorageLifecycleView product={product} />;
-      case 'errors':
-        return <StorageErrorsView range={range} paused={paused} reloadKey={reloadKey} go={go} navigate={navigate} />;
-      case 'operations':
-        return <StorageOperationsView paused={paused} reloadKey={reloadKey} />;
-      case 'configuration':
-        return <StorageConfigView />;
+        return <StorageUploadsTab page={page} product={data?.provider.product} onAbort={actions.requestAbort} />;
+      case 'activity':
+        return <StorageActivityTab page={page} driver={data?.provider.driver} />;
       default:
-        return <StorageOverviewView data={data} now={now} go={go} />;
+        return <StorageOverviewTab page={page} query={overview} />;
     }
   };
 
   return (
-    <div className="ov-page">
-      <header className="ov-page-head">
-        <div>
-          <h1 className="ov-page-title">{t('nav.storage')}</h1>
-          <p className="ov-page-subtitle">{t('storage.subtitle')}</p>
-        </div>
-        <div className="tr-live">
-          <span className={`tr-live-badge ${paused ? 'is-paused' : ''}`}>
-            {paused ? <Pause size={12} /> : <Radio size={12} />}
-            {paused ? t('tr.live.paused') : t('tr.live.live')}
-          </span>
-          <span className="ov-page-updated">
-            <time>{overview.lastUpdated ? formatRelative(overview.lastUpdated, now) : '--'}</time>
-          </span>
-          <button type="button" className="scp-btn scp-btn-sm scp-btn-secondary" onClick={bump}>
-            <RefreshCw size={13} /> {t('cache.refresh')}
-          </button>
-          <button type="button" className="scp-btn scp-btn-sm scp-btn-secondary" onClick={() => setPaused((p) => !p)} aria-pressed={paused}>
-            {paused ? <Play size={13} /> : <Pause size={13} />} {paused ? t('tr.live.resume') : t('tr.live.pause')}
-          </button>
-        </div>
-      </header>
+    <div>
+      <PageHeader
+        title={t('nav.storage')}
+        icon={HardDrive}
+        status={health && tone ? { tone, label: t(`storage.health.${health.status}`) } : undefined}
+        actions={
+          <>
+            {data && (
+              <Badge variant="outline" className="hidden max-w-80 truncate font-mono sm:inline-flex" title={data.provider.location}>
+                {data.provider.product} · {env} · {data.provider.location}
+              </Badge>
+            )}
+            <Button size="sm" onClick={() => test.mutate()} disabled={test.isPending}>
+              <PlugZap />
+              {test.isPending ? t('storage.test.running') : t('storage.test.button')}
+            </Button>
+          </>
+        }
+        onSettings={() => page.setSettings(true)}
+      />
 
-      {overview.error && !data ? (
-        <section className="ov-offline" role="alert">
-          <WifiOff size={22} className="ov-offline-icon" />
-          <div className="ov-offline-body">
-            <h2>{t('ov.offline.title')}</h2>
-            <p>{overview.error.message}</p>
-          </div>
-        </section>
-      ) : (
-        data && <StorageHealthBanner data={data} now={now} onTested={bump} />
+      {overview.isError && !data && page.tab !== 'overview' && (
+        <StatusBanner
+          tone="crit"
+          title={t('ov.offline.title')}
+          description={overview.error instanceof Error ? overview.error.message : undefined}
+          actions={
+            <Button size="xs" onClick={() => void overview.refetch()}>
+              <RefreshCw />
+              {t('ui.state.retry')}
+            </Button>
+          }
+        />
+      )}
+      {health && tone && tone !== 'ok' && (
+        <StatusBanner
+          tone={tone}
+          title={t(`storage.health.${health.status}`)}
+          reasons={health.reasons.map((r) => ({ id: r.code, text: r.message }))}
+          meta={
+            <span>
+              {health.pingMs !== null && `${t('storage.health.ping', { value: f.duration(health.pingMs) })} · `}
+              {health.lastSuccessAt && (
+                <>
+                  {t('storage.health.lastSuccess')} <RelativeTime value={health.lastSuccessAt} />
+                </>
+              )}
+            </span>
+          }
+        />
+      )}
+      {result && (
+        <StatusBanner
+          tone={result.ok ? 'ok' : 'crit'}
+          title={result.ok ? t('storage.test.ok', { ms: f.duration(result.totalMs) }) : t('storage.test.fail', { step: t(`storage.test.step.${result.failedStep}`) })}
+          description={result.steps
+            .map((s) => `${s.ok ? '' : `${t('storage.test.failed')}: `}${t(`storage.test.step.${s.step}`)}${s.ms === null ? '' : ` ${f.duration(s.ms)}`}${s.error ? ` (${s.error})` : ''}`)
+            .join(' · ')}
+          actions={
+            <Button size="icon-xs" variant="ghost" onClick={() => setResult(null)} aria-label={t('ui.action.close')}>
+              <X />
+            </Button>
+          }
+        />
       )}
 
-      <div className="tr-controls">
-        <nav className="rt-tabs" role="tablist" aria-label={t('nav.storage')}>
-          {STORAGE_TABS.map((x) => (
-            <button key={x} type="button" role="tab" aria-selected={tab === x} className={tab === x ? 'is-active' : ''} onClick={() => go(x)}>
-              {t(`storage.tab.${x}`)}
-              {x === 'overview' && data && data.alerts.filter((a) => a.severity !== 'info').length > 0 && (
-                <span className="ov-count">{data.alerts.filter((a) => a.severity !== 'info').length}</span>
-              )}
-            </button>
-          ))}
-        </nav>
-        <div className="ov-segmented" role="tablist" aria-label={t('ov.chart.range')}>
-          {STORAGE_RANGES.map((r) => (
-            <button key={r} type="button" role="tab" aria-selected={range === r} className={range === r ? 'is-active' : ''} onClick={() => setRange(r)}>
-              {r}
-            </button>
-          ))}
-        </div>
-      </div>
-
+      <PageTabs tabs={tabs} value={page.tab} onChange={(tab) => page.go(tab)} />
       {renderTab()}
 
-      {id && tab === 'containers' && (
-        <ContainerDrawer
-          key={id}
-          name={id}
-          range={range}
-          canLifecycle={caps.has('lifecycle')}
-          onClose={closeDrawer}
-          onBrowse={(c) => go('objects', null, { container: c })}
-          onLifecycle={() => go('lifecycle')}
-          onOpenObject={(key) => go('objects', key, { container: id })}
-        />
-      )}
-      {id && tab === 'objects' && (
-        <ObjectDrawer
-          key={id}
-          objectKey={id}
-          reloadKey={reloadKey}
-          onClose={closeDrawer}
-          onDelete={actions.requestDelete}
-          onOpenContainer={(c) => go('containers', c)}
-        />
-      )}
-      {actions.modal}
+      <ContainerSheet
+        name={page.containerId}
+        range={page.range}
+        driver={data?.provider.driver}
+        onClose={() => page.openContainer(null)}
+        onBrowse={(c) => page.browseObjects({ container: c })}
+        onOpenObject={page.openObject}
+      />
+      <ObjectSheet objectKey={page.objectId} onClose={() => page.openObject(null)} onDelete={actions.requestDelete} onOpenContainer={page.openContainer} />
+      <StorageConfigSheet open={page.settingsOpen} onOpenChange={page.setSettings} />
+      {actions.dialog}
     </div>
   );
 };
