@@ -1,5 +1,5 @@
 import { useCallback, useMemo } from 'react';
-import { setHashQuery } from '@core/hooks/useQueryState';
+import { setSearchParams } from '@core/router';
 import { useTimeRange } from '@core/data';
 import type { LogFilters, LogsRange, LogsTab, LogsWindow } from '../../types/logs.types';
 import { FILTER_KEYS, LOGS_RANGES, LOGS_TABS, LOGS_WINDOWS } from '../../constants/logs';
@@ -46,8 +46,8 @@ export function useLogsPage() {
   const openError = useCallback((fp: string) => r.go('errors', [fp]), [r]);
   const openTrace = useCallback((id?: string) => navigate(id ? `logs/traces/${encodeURIComponent(id)}` : 'logs/traces'), [navigate]);
   /** Drawer / sheet: thêm vào lịch sử để nút Back đóng được. */
-  const openLog = useCallback((id: string | null) => setHashQuery({ log: id }, id ? 'push' : 'replace'), []);
-  const setSettings = useCallback((open: boolean) => setHashQuery({ settings: open ? '1' : null }, open ? 'push' : 'replace'), []);
+  const openLog = useCallback((id: string | null) => setSearchParams({ log: id }, id ? 'push' : 'replace'), []);
+  const setSettings = useCallback((open: boolean) => setSearchParams({ settings: open ? '1' : null }, open ? 'push' : 'replace'), []);
 
   return {
     tab,

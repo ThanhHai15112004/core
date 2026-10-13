@@ -36,7 +36,7 @@ const columns = [
 ];
 const MIN = 60_000;
 
-/** Trang duyệt bộ UI dùng chung (chỉ bật ở dev: `#system-console/_kit`). */
+/** Trang duyệt bộ UI dùng chung (chỉ bật ở dev: `/system-console/_kit`). */
 export function KitPage() {
   const [confirm, setConfirm] = useState(false);
   const [sheet, setSheet] = useState(false);

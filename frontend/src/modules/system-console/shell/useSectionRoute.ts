@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo } from 'react';
+import { navigateTo } from '@core/router';
+import { ROUTES } from '../../../routes/index';
 import { useConsoleRoute } from '../context/console-route-context';
 
 export interface TabAlias<T extends string> {
@@ -18,7 +20,7 @@ function toQueryString(query?: QueryInput): string {
 }
 
 /**
- * Route của một section: `#system-console/<section>/<tab>/<...params>?query`.
+ * Route của một section: `/system-console/<section>/<tab>/<...params>?query`.
  * Tab mặc định (phần tử đầu) không ghi lên URL. Link cũ theo `aliases` được đổi sang tab mới (replace, không thêm lịch sử).
  */
 export function useSectionRoute<T extends string>(tabs: readonly T[], aliases: Partial<Record<string, TabAlias<T>>> = {}) {
@@ -51,8 +53,7 @@ export function useSectionRoute<T extends string>(tabs: readonly T[], aliases: P
     if (!alias) return;
     const merged: QueryInput = { ...Object.fromEntries(route.query.entries()), ...alias.query };
     const parts = [route.section, alias.tab, ...params].join('/');
-    window.history.replaceState(window.history.state, '', `#system-console/${parts}${toQueryString(merged)}`);
-    window.dispatchEvent(new HashChangeEvent('hashchange'));
+    navigateTo(`${ROUTES.SYSTEM_CONSOLE}/${parts}${toQueryString(merged)}`, 'replace');
   }, [alias, params, route.query, route.section]);
 
   return { section: route.section, tab, params, query: route.query, go, setQuery, navigate };

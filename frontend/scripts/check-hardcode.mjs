@@ -84,7 +84,8 @@ function check(rel) {
     if (isTsx && INLINE_COLOR.test(line)) problems.push({ line: idx + 1, rule: 'inline-color', text: raw.trim() });
     if (isTsx) {
       const m = JSX_TEXT.exec(line);
-      if (m && !/[=;()&|'"`]/.test(m[1]) && !/\b(?:typeof|extends|keyof)\b/.test(m[1])) problems.push({ line: idx + 1, rule: 'jsx-text', text: raw.trim() });
+      // Loại trừ biểu thức TS/JSX bị bắt nhầm: generic, toán tử 3 ngôi giữa hai element (`<A /> : x ? <B`).
+      if (m && !/[=;()&|'"`]/.test(m[1]) && !/\s[?:]\s/.test(m[1]) && !/\b(?:typeof|extends|keyof)\b/.test(m[1])) problems.push({ line: idx + 1, rule: 'jsx-text', text: raw.trim() });
       if (LITERAL_ATTR.test(line)) problems.push({ line: idx + 1, rule: 'literal-attr', text: raw.trim() });
     }
   });

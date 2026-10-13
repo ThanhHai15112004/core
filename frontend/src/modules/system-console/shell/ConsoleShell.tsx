@@ -21,14 +21,14 @@ import {
   type Crumb,
   type NavGroup,
 } from '@core/ui/layout';
+import { navigateTo } from '@core/router';
+import { ROUTES } from '../../../routes/index';
 import { useConsoleData } from '../context/console-data-context';
 import { useConsoleRoute } from '../context/console-route-context';
 import { ENV_TONE } from '../constants/console.constants';
 import { SECTION_GROUPS, SECTIONS, sectionDef } from './sections';
 
-const goHome = () => {
-  window.location.hash = '';
-};
+const goHome = () => navigateTo(ROUTES.HOME);
 
 /** Khung System Console: sidebar theo registry, breadcrumb, bộ điều khiển chung, Ctrl K. */
 export const ConsoleShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {

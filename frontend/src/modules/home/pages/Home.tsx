@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Card } from '../../../core/components/card/Card';
 import { useLocale } from '../../../core/i18n/index';
 import { ROUTES } from '../../../routes/index';
+import { navigateTo } from '../../../core/router/index';
 
 const FEATURES = [
   { key: 'react', icon: '⚡', badge: 'React 19' },
@@ -96,7 +97,7 @@ export const Home: React.FC = () => {
           type="button"
           className="btn-primary home-console-banner-btn"
           onClick={() => {
-            window.location.hash = ROUTES.SYSTEM_CONSOLE;
+            navigateTo(ROUTES.SYSTEM_CONSOLE);
           }}
         >
           {t('home.consoleLaunch')} →

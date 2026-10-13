@@ -3,6 +3,7 @@ import { APP_NAME, NAVIGATION_ITEMS, type NavigationTabId } from '../constants/i
 import { ROUTES } from '../../routes/index';
 import { useLocale } from '../i18n/index';
 import { Home, Terminal, Boxes, Globe } from 'lucide-react';
+import { navigateTo } from '../router/index';
 
 interface HeaderProps {
   activeTab?: NavigationTabId;
@@ -57,7 +58,7 @@ export const Header: React.FC<HeaderProps> = ({ activeTab = 'home', onTabChange 
           <button
             type="button"
             onClick={() => {
-              window.location.hash = ROUTES.SYSTEM_CONSOLE;
+              navigateTo(ROUTES.SYSTEM_CONSOLE);
             }}
             className="nav-tab-btn nav-tab-btn-console"
             title="Open Infrastructure Control Plane"

@@ -1,4 +1,5 @@
-import React, { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react';
+import React, { Suspense, lazy, useCallback, useEffect, useMemo } from 'react';
+import { navigateTo, useLocation } from '@core/router';
 import type { ConsolePath } from './types/console.types';
 import { CONSOLE_STORAGE_KEYS } from './constants/console.constants';
 import { ConsoleRouteContext, type ConsoleRoute } from './context/console-route-context';
@@ -6,12 +7,11 @@ import { ConsoleShell } from './shell/ConsoleShell';
 import { resolveSection, sectionDef } from './shell/sections';
 import { ROUTES } from '../../routes/index';
 
-const HASH_PREFIX = ROUTES.SYSTEM_CONSOLE.replace(/^#/, '');
+const BASE = ROUTES.SYSTEM_CONSOLE;
 
-/** Trang duyệt bộ UI dùng chung — chỉ có ở dev (`#system-console/_kit`). */
+/** Trang duyệt bộ UI dùng chung — chỉ có ở dev (`/system-console/_kit`). */
 const KIT_SEGMENT = '_kit';
 const KitPage = import.meta.env.DEV ? lazy(() => import('@core/ui/kit/KitPage').then((m) => ({ default: m.KitPage }))) : null;
-const isKitRoute = () => KitPage !== null && window.location.hash.replace(/^#\/?/, '').split(/[/?]/)[1] === KIT_SEGMENT;
 
 function readLastSection(): string | null {
   try {
@@ -21,51 +21,58 @@ function readLastSection(): string | null {
   }
 }
 
-/** `#system-console/runtimes/worker/metrics?x=1` → `{ section, params, query }`. */
-function parseRoute(): ConsoleRoute {
-  const [pathPart = '', queryPart = ''] = window.location.hash.replace(/^#\/?/, '').split('?');
-  const segments = pathPart.split('/').filter(Boolean).map(decodeURIComponent);
-  const inConsole = segments[0] === HASH_PREFIX;
-  const fromUrl = inConsole ? resolveSection(segments[1]) : null;
-  return {
-    section: fromUrl ?? resolveSection(readLastSection()) ?? 'overview',
-    params: fromUrl ? segments.slice(2) : [],
-    query: new URLSearchParams(queryPart),
-  };
+function rememberSection(section: string): void {
+  try {
+    localStorage.setItem(CONSOLE_STORAGE_KEYS.LAST_SECTION, section);
+  } catch {
+    /* chỉ giữ trong phiên */
+  }
 }
 
-export const SystemConsoleRouter: React.FC = () => {
-  const [route, setRoute] = useState<ConsoleRoute>(parseRoute);
+/** Các segment sau `/system-console` (đã decode). */
+const segmentsOf = (pathname: string) => pathname.slice(BASE.length).split('/').filter(Boolean).map(decodeURIComponent);
 
+/**
+ * Router của System Console trên đường dẫn thật: `/system-console/<section>/<...params>?query`.
+ * `/system-console` (không section) mở section dùng gần nhất.
+ */
+export const SystemConsoleRouter: React.FC = () => {
+  const { pathname, search } = useLocation();
+  const segments = useMemo(() => segmentsOf(pathname), [pathname]);
+  const fromUrl = resolveSection(segments[0]);
+  const isKit = KitPage !== null && segments[0] === KIT_SEGMENT;
+
+  // Không có / sai section → chuyển sang section gần nhất (replace, không thêm lịch sử).
   useEffect(() => {
-    const handleHashChange = () => setRoute(parseRoute());
-    window.addEventListener('hashchange', handleHashChange);
-    return () => window.removeEventListener('hashchange', handleHashChange);
-  }, []);
+    if (fromUrl || isKit) return;
+    navigateTo(`${BASE}/${resolveSection(readLastSection()) ?? 'overview'}${window.location.search}`, 'replace');
+  }, [fromUrl, isKit]);
+
+  // Đổi trang (không phải đổi query) → về đầu trang.
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [pathname]);
+
+  const route: ConsoleRoute = useMemo(
+    () => ({ section: fromUrl ?? 'overview', params: fromUrl ? segments.slice(1) : [], query: search }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [fromUrl, segments, search.toString()],
+  );
 
   const navigate = useCallback((path: ConsolePath) => {
     const clean = path.replace(/^\/+/, '');
     const section = resolveSection(clean.split(/[/?]/)[0]);
-    if (section) {
-      try {
-        localStorage.setItem(CONSOLE_STORAGE_KEYS.LAST_SECTION, section);
-      } catch {
-        /* chỉ giữ trong phiên */
-      }
-    }
-    window.location.hash = `#${HASH_PREFIX}/${clean}`;
+    if (section) rememberSection(section);
+    navigateTo(`${BASE}/${clean}`);
   }, []);
 
   const value = useMemo(() => ({ route, navigate }), [route, navigate]);
   const Section = sectionDef(route.section).component;
-  const showKit = KitPage !== null && isKitRoute();
 
   return (
     <ConsoleRouteContext.Provider value={value}>
       <ConsoleShell>
-        <Suspense fallback={null}>
-          {showKit && KitPage ? <KitPage /> : <Section key={route.section} />}
-        </Suspense>
+        <Suspense fallback={null}>{isKit && KitPage ? <KitPage /> : fromUrl ? <Section key={route.section} /> : null}</Suspense>
       </ConsoleShell>
     </ConsoleRouteContext.Provider>
   );
