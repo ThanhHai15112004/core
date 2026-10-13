@@ -73,13 +73,4 @@ describe('Governance (/ops/secrets, /ops/configuration)', () => {
     for (const i of body.data) expect(['env', 'default']).toContain(i.source);
     for (const v of SECRET_VALUES) expect(raw).not.toContain(v);
   });
-
-  it('configuration/:domain: chỉ domain đó; domain không tồn tại → rỗng', async () => {
-    const db = await get<ConfigItem[]>('/ops/configuration/database');
-    expect(db.status).toBe(200);
-    expect(db.body.data.length).toBeGreaterThan(0);
-    expect(new Set(db.body.data.map((i) => i.domain))).toEqual(new Set(['database']));
-    const none = await get<ConfigItem[]>('/ops/configuration/nope');
-    expect(none.body.data).toEqual([]);
-  });
 });

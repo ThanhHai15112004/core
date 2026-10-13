@@ -5,7 +5,6 @@ import {
   type PackageStatusReport,
   type PackageActionDescriptor,
   type PackageActionResult,
-  NotFoundAppException,
   PackageStatus,
 } from '@packages/kernel/index.js';
 import { CoreI18nService } from '@packages/i18n/index.js';
@@ -59,21 +58,8 @@ export class PackageRegistryService implements OnModuleInit {
     return this.packages.get(packageId);
   }
 
-  /** Lấy package hoặc ném 404 nếu chưa được đăng ký. */
-  public getPackageOrFail(packageId: string): ManageablePackage {
-    const pkg = this.packages.get(packageId);
-    if (!pkg) {
-      throw new NotFoundAppException('ops.package.notFound', { packageId });
-    }
-    return pkg;
-  }
-
   public async getAllSummaries(): Promise<PackageSummaryDto[]> {
     return Promise.all([...this.packages.values()].map((pkg) => this.toSummary(pkg)));
-  }
-
-  public async getSummary(packageId: string): Promise<PackageSummaryDto> {
-    return this.toSummary(this.getPackageOrFail(packageId));
   }
 
   public async executeAction(

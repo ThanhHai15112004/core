@@ -199,5 +199,4 @@ import { ApiModule }            from '@apps/api/api.module.js';
 | :----- | :------- | :---- |
 | `GET` | `/api/v1/health` | Health check — trạng thái hệ thống |
 | `GET` | `/api/v1/ops/packages` | Danh sách package + trạng thái tổng quan |
-| `GET` | `/api/v1/ops/packages/:packageId` | Chi tiết 1 package |
 | `POST` | `/api/v1/ops/packages/:packageId/actions/:actionId` | Thực thi action quản trị |

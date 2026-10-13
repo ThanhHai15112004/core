@@ -206,11 +206,4 @@ describe('PackageRegistryService Unit Tests', () => {
     expect(cacheSummary?.statusReport.status).toBe(PackageStatus.ERROR);
     expect(cacheSummary?.statusReport.summary).toBe('Redis down');
   });
-
-  it('should throw NOT_FOUND when requesting summary of an unknown package', async () => {
-    await expect(service.getSummary('unknown_pkg')).rejects.toMatchObject({
-      code: 'NOT_FOUND',
-      statusCode: 404,
-    });
-  });
 });

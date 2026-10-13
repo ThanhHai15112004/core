@@ -13,8 +13,7 @@ export const API_ROUTES = {
     EXECUTE_ACTION: (packageId: string, actionId: string) =>
       `${OPS_PREFIX}/packages/${packageId}/actions/${actionId}`,
     SECRETS: `${OPS_PREFIX}/secrets`,
-    CONFIGURATION: (domain?: string) =>
-      domain ? `${OPS_PREFIX}/configuration/${domain}` : `${OPS_PREFIX}/configuration`,
+    CONFIGURATION: `${OPS_PREFIX}/configuration`,
     RUNTIMES: {
       LIST: `${OPS_PREFIX}/runtimes`,
       METRICS_ALL: (range: string) => `${OPS_PREFIX}/runtimes/metrics?range=${range}`,

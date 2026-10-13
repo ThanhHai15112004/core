@@ -170,11 +170,11 @@ describe('Messaging Monitor (/ops/messaging) — broker unavailable', () => {
   });
 
   it('Package Registry: messaging có trạng thái thật', async () => {
-    const { body } = await call<{ statusReport: { status: string; metrics: { driver: string } } }>(
-      'GET',
-      '/ops/packages/messaging',
-    );
-    expect(body.data.statusReport).toMatchObject({
+    const { body } = await call<
+      { packageId: string; statusReport: { status: string; metrics: { driver: string } } }[]
+    >('GET', '/ops/packages');
+    const messaging = body.data.find((p) => p.packageId === 'messaging');
+    expect(messaging?.statusReport).toMatchObject({
       status: 'error',
       metrics: { driver: 'bullmq' },
     });

@@ -20,6 +20,6 @@ export function fetchSecrets(): Promise<SecretItem[]> {
   return fetchApi<SecretItem[]>(API_ROUTES.OPS.SECRETS);
 }
 
-export function fetchConfiguration(domain?: string): Promise<ConfigItem[]> {
-  return fetchApi<ConfigItem[]>(API_ROUTES.OPS.CONFIGURATION(domain));
+export function fetchConfiguration(): Promise<ConfigItem[]> {
+  return fetchApi<ConfigItem[]>(API_ROUTES.OPS.CONFIGURATION);
 }

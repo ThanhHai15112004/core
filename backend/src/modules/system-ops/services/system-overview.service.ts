@@ -1,5 +1,4 @@
 import { Injectable } from '@nestjs/common';
-import * as os from 'node:os';
 import { CoreConfigService } from '@packages/config/index.js';
 import { CoreI18nService } from '@packages/i18n/index.js';
 import {
@@ -16,17 +15,14 @@ import { PackageRegistryService, type PackageSummaryDto } from './package-regist
 import { OpsEventService } from './ops-event.service.js';
 import { RuntimesService, type RuntimeSummaryDto } from '@modules/runtimes/index.js';
 import type {
-  AffectedComponentDto,
   SystemOverviewResponseDto,
   HealthMapItemDto,
   ActiveIncidentItemDto,
-  InfraSnapshotItemDto,
   KeyMetricItemDto,
   OverallHealthReportDto,
 } from '../responses/overview.response.js';
 
 const BYTES_PER_MB = 1024 * 1024;
-const BYTES_PER_GB = BYTES_PER_MB * 1024;
 const UNAVAILABLE = '--';
 
 /** Section của System Console dùng để drill-down theo package. */
@@ -63,16 +59,10 @@ interface Problem {
   since?: Date;
 }
 
-/** Thông tin process API và máy chủ tại thời điểm gọi (chỉ cho mục "System info"). */
+/** Thông tin process API tại thời điểm gọi. */
 interface RuntimeSnapshot {
   uptimeSeconds: number;
   heapUsedMb: number;
-  heapTotalMb: number;
-  rssMb: number;
-  totalMemGb: number;
-  freeMemGb: number;
-  cpuCores: number;
-  loadAvg: number[];
 }
 
 interface OverviewContext {
@@ -146,27 +136,11 @@ export class SystemOverviewService {
 
     return {
       environment: this.environment,
-      timestamp: new Date().toISOString(),
       overallHealth: this.buildOverallHealth(ctx),
       keyMetrics: this.buildKeyMetrics(ctx),
       healthMap: this.buildHealthMap(ctx),
       incidents: this.buildIncidents(ctx),
-      infraSnapshots: this.buildInfraSnapshots(ctx),
       recentActivities: this.events.getRecent(20),
-      systemInfo: {
-        nodeVersion: process.version,
-        platform: process.platform,
-        arch: process.arch,
-        pid: process.pid,
-        uptimeSeconds: ctx.runtime.uptimeSeconds,
-        heapUsedMb: ctx.runtime.heapUsedMb,
-        heapTotalMb: ctx.runtime.heapTotalMb,
-        rssMb: ctx.runtime.rssMb,
-        totalMemGb: ctx.runtime.totalMemGb,
-        freeMemGb: ctx.runtime.freeMemGb,
-        cpuCores: ctx.runtime.cpuCores,
-        loadAvg: ctx.runtime.loadAvg,
-      },
     };
   }
 
@@ -182,18 +156,9 @@ export class SystemOverviewService {
   }
 
   private readRuntime(): RuntimeSnapshot {
-    const mem = process.memoryUsage();
-    const totalMem = os.totalmem();
-    const freeMem = os.freemem();
     return {
       uptimeSeconds: Math.round(process.uptime()),
-      heapUsedMb: Math.round(mem.heapUsed / BYTES_PER_MB),
-      heapTotalMb: Math.round(mem.heapTotal / BYTES_PER_MB),
-      rssMb: Math.round(mem.rss / BYTES_PER_MB),
-      totalMemGb: Number((totalMem / BYTES_PER_GB).toFixed(1)),
-      freeMemGb: Number((freeMem / BYTES_PER_GB).toFixed(1)),
-      cpuCores: os.cpus().length,
-      loadAvg: os.loadavg(),
+      heapUsedMb: Math.round(process.memoryUsage().heapUsed / BYTES_PER_MB),
     };
   }
 
@@ -221,7 +186,6 @@ export class SystemOverviewService {
       name: this.i18n.t('overview.map.traffic.name'),
       category: 'runtime' as const,
       targetSection: 'http-traffic',
-      icon: 'activity',
     };
     if (!summary) {
       return {
@@ -258,7 +222,6 @@ export class SystemOverviewService {
       name: this.i18n.t('overview.map.performance.name'),
       category: 'runtime' as const,
       targetSection: 'performance',
-      icon: 'performance',
     };
     const list = ctx.bottlenecks;
     if (!list) {
@@ -370,38 +333,18 @@ export class SystemOverviewService {
         ...base,
         status: 'healthy',
         title: this.i18n.t('overview.health.healthy.title'),
-        message: this.i18n.t('overview.health.healthy.message'),
       };
     }
 
-    const failingCount = problems.filter((p) => p.severity === 'error').length;
-    const isCritical = failingCount > 0;
-    const startedAt = problems
-      .map((p) => p.since)
-      .filter((d): d is Date => d !== undefined)
-      .sort((a, b) => a.getTime() - b.getTime())[0];
-
+    const isCritical = problems.some((p) => p.severity === 'error');
     return {
       ...base,
       status: isCritical ? 'critical' : 'degraded',
       title: this.i18n.t(
         isCritical ? 'overview.health.critical.title' : 'overview.health.degraded.title',
       ),
-      message: this.i18n.t(
-        isCritical ? 'overview.health.critical.message' : 'overview.health.degraded.message',
-        {
-          count: isCritical ? failingCount : problems.length,
-        },
-      ),
-      affectedServices: problems.map((p) => p.name),
-      affectedComponents: problems.map<AffectedComponentDto>((p) => ({
-        name: p.name,
-        status: p.severity,
-        section: p.section,
-      })),
       actionLabel: this.i18n.t('overview.health.inspect', { name: firstProblem.name }),
       actionSection: firstProblem.section,
-      ...(startedAt ? { startedAt: startedAt.toISOString() } : {}),
     };
   }
 
@@ -441,8 +384,6 @@ export class SystemOverviewService {
         value: http.requestsPerSecond ?? UNAVAILABLE,
         unit: 'req/s',
         trendText: trafficText,
-        trendDirection: 'neutral',
-        trendIsGood: true,
         status: 'normal',
       },
       {
@@ -451,8 +392,6 @@ export class SystemOverviewService {
         value: http.p95LatencyMs ?? UNAVAILABLE,
         unit: 'ms',
         trendText: trafficText,
-        trendDirection: 'neutral',
-        trendIsGood: L(http.p95LatencyMs, rules.apiP95Ms) === 'normal',
         status: L(http.p95LatencyMs, rules.apiP95Ms),
       },
       {
@@ -463,8 +402,6 @@ export class SystemOverviewService {
           http.errorCount === null
             ? noData
             : this.i18n.t('overview.metric.errors', { count: http.errorCount }),
-        trendDirection: 'neutral',
-        trendIsGood: (http.errorCount ?? 0) === 0,
         status: L(http.errorRatePercent, {
           warn: th.errorRateWarnPercent,
           crit: th.errorRateCritPercent,
@@ -477,8 +414,6 @@ export class SystemOverviewService {
         trendText: cpu
           ? this.i18n.t('overview.metric.cpuDetail', { runtime: cpu.name })
           : noRuntime,
-        trendDirection: 'neutral',
-        trendIsGood: L(cpuValue, rules.cpuPercent) === 'normal',
         status: L(cpuValue, rules.cpuPercent),
       },
       {
@@ -497,8 +432,6 @@ export class SystemOverviewService {
               ),
             })
           : noRuntime,
-        trendDirection: 'neutral',
-        trendIsGood: L(memPercent, rules.memoryPercent) === 'normal',
         status: L(memPercent, rules.memoryPercent),
       },
       {
@@ -506,8 +439,6 @@ export class SystemOverviewService {
         label: this.i18n.t('overview.metric.alerts'),
         value: alertCount,
         trendText: this.i18n.t('overview.metric.critical', { count: errorCount }),
-        trendDirection: 'neutral',
-        trendIsGood: alertCount === 0,
         status: errorCount > 0 ? 'critical' : alertCount > 0 ? 'warning' : 'normal',
       },
     ];
@@ -541,7 +472,6 @@ export class SystemOverviewService {
       }),
       metric: `${rps ?? UNAVAILABLE} req/s • P95 ${ctx.http.p95LatencyMs ?? UNAVAILABLE} ms`,
       targetSection: 'runtimes/api',
-      icon: 'globe',
     };
   }
 
@@ -558,7 +488,7 @@ export class SystemOverviewService {
     const securityPackage = pkg(CorePackageId.SECURITY);
     const cacheKeys = cachePackage?.statusReport.metrics['keys'];
     const cacheHitRate = cachePackage?.statusReport.metrics['hitRatePercent'];
-    const runtimeItem = (id: 'worker' | 'scheduler', icon: string): HealthMapItemDto => {
+    const runtimeItem = (id: 'worker' | 'scheduler'): HealthMapItemDto => {
       const rt = ctx.runtimes.get(id);
       const nameKey = `overview.map.${id}.name`;
       if (!rt || rt.status === 'unknown') {
@@ -570,7 +500,6 @@ export class SystemOverviewService {
           subtext: rt?.reasons[0]?.message ?? this.i18n.t('overview.map.processUnmonitored'),
           metric: this.i18n.t('overview.map.notMonitored'),
           targetSection: `runtimes/${id}`,
-          icon,
         };
       }
       const m = rt.metrics;
@@ -592,7 +521,6 @@ export class SystemOverviewService {
                 failed: String(m['failedToday'] ?? UNAVAILABLE),
               }),
         targetSection: `runtimes/${id}`,
-        icon,
       };
     };
 
@@ -600,8 +528,8 @@ export class SystemOverviewService {
       this.apiItem(ctx),
       this.trafficItem(ctx),
       this.performanceItem(ctx),
-      runtimeItem('worker', 'cpu'),
-      runtimeItem('scheduler', 'clock'),
+      runtimeItem('worker'),
+      runtimeItem('scheduler'),
       {
         id: 'infra-db',
         name: this.i18n.t('overview.map.database.name'),
@@ -623,7 +551,6 @@ export class SystemOverviewService {
               })
             : this.i18n.t('overview.map.database.unreachable'),
         targetSection: 'database',
-        icon: 'database',
       },
       {
         id: 'infra-cache',
@@ -636,7 +563,6 @@ export class SystemOverviewService {
           hitRate: typeof cacheHitRate === 'number' ? `${cacheHitRate}%` : UNAVAILABLE,
         }),
         targetSection: 'cache',
-        icon: 'zap',
       },
       {
         id: 'infra-storage',
@@ -655,7 +581,6 @@ export class SystemOverviewService {
               })
             : this.i18n.t('overview.map.storage.secondary'),
         targetSection: 'storage',
-        icon: 'hard-drive',
       },
       {
         id: 'infra-messaging',
@@ -672,7 +597,6 @@ export class SystemOverviewService {
               })
             : this.i18n.t('overview.map.messaging.secondary'),
         targetSection: 'messaging',
-        icon: 'radio',
       },
       {
         id: 'gov-security',
@@ -686,7 +610,6 @@ export class SystemOverviewService {
             ? this.i18n.t('overview.map.security.skeleton')
             : this.i18n.t('overview.map.security.subtext'),
         targetSection: 'security',
-        icon: 'shield-check',
       },
     ];
   }
@@ -697,131 +620,9 @@ export class SystemOverviewService {
       severity: p.severity === 'error' ? 'critical' : 'warning',
       title: this.i18n.t('overview.incident.title', { name: p.name }),
       description: p.description,
-      startedAgo: this.i18n.t('overview.incident.active'),
       ...(p.since ? { startedAt: p.since.toISOString() } : {}),
       targetSection: p.section,
-      actionLabel: this.i18n.t('overview.incident.action', { name: p.name }),
     }));
-  }
-
-  private buildInfraSnapshots(ctx: OverviewContext): InfraSnapshotItemDto[] {
-    const { database } = this.configService;
-    const label = (key: string) => this.i18n.t(`overview.snapshot.${key}`);
-    const cacheMetrics =
-      ctx.packages.find((p) => p.packageId === CorePackageId.CACHE)?.statusReport.metrics ?? {};
-    const hitRate = cacheMetrics['hitRatePercent'];
-    const cpuOf = (rt: RuntimeSummaryDto) => {
-      const cpu = rt.resources?.cpuPercent ?? null;
-      return {
-        label: label('cpu'),
-        value: cpu === null ? UNAVAILABLE : `${cpu}%`,
-        isWarn: cpu !== null && cpu >= this.configService.performance.rules.cpuPercent.warn,
-      };
-    };
-    const runtimeSnapshot = (id: 'worker' | 'scheduler', icon: string): InfraSnapshotItemDto => {
-      const rt = ctx.runtimes.get(id);
-      const base = {
-        id: `snap-${id}`,
-        title: this.i18n.t(`overview.map.${id}.name`),
-        icon,
-        targetSection: `runtimes/${id}`,
-      };
-      if (!rt?.resources) return { ...base, metrics: [], unavailable: true };
-      const m = rt.metrics;
-      const value = (v: unknown) =>
-        v === null || v === undefined ? UNAVAILABLE : (v as string | number);
-      const specific =
-        id === 'worker'
-          ? [
-              { label: label('activeJobs'), value: value(m['activeJobs']) },
-              { label: label('waitingJobs'), value: value(m['waitingJobs']) },
-              { label: label('jobsPerMinute'), value: value(m['jobsPerMinute']) },
-            ]
-          : [
-              { label: label('tasks'), value: value(m['registeredTasks']) },
-              { label: label('runningTasks'), value: value(m['runningTasks']) },
-              {
-                label: label('failedToday'),
-                value: value(m['failedToday']),
-                isWarn: Number(m['failedToday'] ?? 0) > 0,
-              },
-            ];
-      return {
-        ...base,
-        metrics: [
-          cpuOf(rt),
-          { label: label('memory'), value: `${rt.resources.rssMb} MB` },
-          ...specific,
-        ],
-      };
-    };
-
-    const api = ctx.runtimes.get('api');
-    return [
-      {
-        id: 'snap-api',
-        title: this.i18n.t('overview.map.api.name'),
-        icon: 'globe',
-        targetSection: 'runtimes/api',
-        metrics: [
-          api ? cpuOf(api) : { label: label('cpu'), value: UNAVAILABLE },
-          { label: label('memory'), value: `${ctx.runtime.rssMb} MB` },
-          {
-            label: label('traffic'),
-            value:
-              ctx.http.requestsPerSecond === null
-                ? UNAVAILABLE
-                : `${ctx.http.requestsPerSecond} req/s`,
-          },
-          {
-            label: label('p95'),
-            value: ctx.http.p95LatencyMs !== null ? `${ctx.http.p95LatencyMs} ms` : UNAVAILABLE,
-          },
-        ],
-      },
-      runtimeSnapshot('worker', 'cpu'),
-      {
-        id: 'snap-db',
-        title: this.i18n.t('overview.map.database.name'),
-        icon: 'database',
-        targetSection: 'database',
-        metrics: [
-          {
-            label: label('ping'),
-            value: ctx.dbPingMs !== null ? `${ctx.dbPingMs} ms` : label('unavailable'),
-            isWarn: ctx.dbPingMs === null,
-          },
-          { label: label('poolMax'), value: database.maxConnections },
-          { label: label('driver'), value: database.connection.toUpperCase() },
-        ],
-      },
-      {
-        id: 'snap-cache',
-        title: this.i18n.t('overview.map.cache.name'),
-        icon: 'zap',
-        targetSection: 'cache',
-        metrics: [
-          {
-            label: label('keys'),
-            value: typeof cacheMetrics['keys'] === 'number' ? cacheMetrics['keys'] : UNAVAILABLE,
-          },
-          {
-            label: label('hitRate'),
-            value: typeof hitRate === 'number' ? `${hitRate}%` : UNAVAILABLE,
-          },
-          {
-            label: label('hits'),
-            value: typeof cacheMetrics['hits'] === 'number' ? cacheMetrics['hits'] : UNAVAILABLE,
-          },
-          {
-            label: label('misses'),
-            value:
-              typeof cacheMetrics['misses'] === 'number' ? cacheMetrics['misses'] : UNAVAILABLE,
-          },
-        ],
-      },
-      runtimeSnapshot('scheduler', 'clock'),
-    ];
   }
 }
 

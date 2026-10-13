@@ -4,9 +4,6 @@ import type { HealthData, OverviewData } from '../types/console.types';
 
 export { fetchPackages, executePackageAction } from './packages.api';
 
-/** Overview từ backend chưa có các trường client-side (`lastUpdated`, `isOffline`...). */
-export type OverviewPayload = Omit<OverviewData, 'lastUpdated' | 'isOffline' | 'lastSuccessfulSync'>;
-
 /** Gọi `/health` và đo round-trip; không ném lỗi mà trả `status: 'down'` khi mất kết nối. */
 export async function fetchHealth(): Promise<{ data: HealthData; latencyMs: number }> {
   const start = performance.now();
@@ -22,6 +19,6 @@ export async function fetchHealth(): Promise<{ data: HealthData; latencyMs: numb
   }
 }
 
-export function fetchOverview(): Promise<OverviewPayload> {
-  return fetchApi<OverviewPayload>(API_ROUTES.OPS.OVERVIEW);
+export function fetchOverview(): Promise<OverviewData> {
+  return fetchApi<OverviewData>(API_ROUTES.OPS.OVERVIEW);
 }

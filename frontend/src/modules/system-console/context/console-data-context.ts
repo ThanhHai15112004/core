@@ -1,7 +1,6 @@
 import { createContext, useContext } from 'react';
-import type { HealthData, PackageSummary, SystemEnvironment, ToastMessage } from '../types/console.types';
+import type { HealthData, OverviewData, PackageSummary, SystemEnvironment, ToastMessage } from '../types/console.types';
 import type { PackageActionResult } from '../types/packages.types';
-import type { OverviewPayload } from '../services/console.api';
 
 export interface ConsoleDataContextValue {
   health: HealthData;
@@ -16,7 +15,7 @@ export interface ConsoleDataContextValue {
   isOffline: boolean;
   lastSuccessfulSync: Date | null;
   /** `/ops/overview` gần nhất lấy được (giữ lại khi lần sau lỗi); `null` = chưa lấy được lần nào. */
-  overview: OverviewPayload | null;
+  overview: OverviewData | null;
   overviewLoading: boolean;
   overviewError: unknown;
   refetchOverview: () => void;

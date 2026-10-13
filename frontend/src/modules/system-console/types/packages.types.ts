@@ -1,22 +1,6 @@
-export const PackageStatus = {
-  HEALTHY: 'healthy',
-  WARNING: 'warning',
-  ERROR: 'error',
-  IDLE: 'idle',
-} as const;
+export type PackageStatus = 'healthy' | 'warning' | 'error' | 'idle';
 
-export type PackageStatus = (typeof PackageStatus)[keyof typeof PackageStatus];
-
-export const PackageCategory = {
-  CACHE: 'cache',
-  QUEUE: 'queue',
-  LOGGING: 'logging',
-  DATABASE: 'database',
-  STORAGE: 'storage',
-  CUSTOM: 'custom',
-} as const;
-
-export type PackageCategory = (typeof PackageCategory)[keyof typeof PackageCategory];
+export type PackageCategory = 'cache' | 'queue' | 'logging' | 'database' | 'storage' | 'custom';
 
 export interface PackageActionDescriptor {
   id: string;

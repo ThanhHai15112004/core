@@ -33,12 +33,6 @@ export class SystemOpsController {
   }
 
   @Public()
-  @Get(SYSTEM_OPS_ROUTES.PACKAGE_DETAIL)
-  public async getPackage(@Param('packageId') packageId: string): Promise<PackageSummaryDto> {
-    return this.registryService.getSummary(packageId);
-  }
-
-  @Public()
   @Post(SYSTEM_OPS_ROUTES.EXECUTE_ACTION)
   @HttpCode(HttpStatus.OK)
   public async executeAction(
@@ -59,11 +53,5 @@ export class SystemOpsController {
   @Get(SYSTEM_OPS_ROUTES.CONFIGURATION)
   public async getConfiguration(): Promise<ConfigItemDto[]> {
     return this.configInspector.inspectAll();
-  }
-
-  @Public()
-  @Get(SYSTEM_OPS_ROUTES.CONFIGURATION_DOMAIN)
-  public async getConfigurationDomain(@Param('domain') domain: string): Promise<ConfigItemDto[]> {
-    return this.configInspector.inspectDomain(domain);
   }
 }

@@ -57,32 +57,6 @@ describe('Feature: System Ops API (/ops/packages)', () => {
     expect(dbPkg?.category).toBe(PackageCategory.DATABASE);
   });
 
-  it('GET /ops/packages/:packageId should return single package details', async () => {
-    const response = await context.app.inject({
-      method: 'GET',
-      url: SYSTEM_OPS_ROUTES.buildPackageDetailPath(CorePackageId.CACHE),
-    });
-
-    expect(response.statusCode).toBe(200);
-
-    const body = JSON.parse(response.payload) as {
-      success: boolean;
-      data: { packageId: string; displayName: string };
-    };
-
-    expect(body.success).toBe(true);
-    expect(body.data.packageId).toBe(CorePackageId.CACHE);
-  });
-
-  it('GET /ops/packages/:packageId should return 404 for unknown package', async () => {
-    const response = await context.app.inject({
-      method: 'GET',
-      url: SYSTEM_OPS_ROUTES.buildPackageDetailPath('unknown_pkg_xyz'),
-    });
-
-    expect(response.statusCode).toBe(404);
-  });
-
   it('POST /ops/packages/:packageId/actions/:actionId should execute action successfully', async () => {
     const response = await context.app.inject({
       method: 'POST',
@@ -123,40 +97,43 @@ describe('Feature: System Ops API (/ops/packages)', () => {
   });
 
   describe('i18n (Accept-Language)', () => {
-    it('should translate 404 error message into English', async () => {
-      const response = await context.app.inject({
-        method: 'GET',
-        url: SYSTEM_OPS_ROUTES.buildPackageDetailPath('unknown_pkg_xyz'),
-        headers: { 'accept-language': 'en-US,en;q=0.9' },
+    const runUnknown = (headers?: Record<string, string>) =>
+      context.app.inject({
+        method: 'POST',
+        url: SYSTEM_OPS_ROUTES.buildExecuteActionPath('unknown_pkg_xyz', 'noop'),
+        ...(headers ? { headers } : {}),
       });
 
-      const body = JSON.parse(response.payload) as { error: { code: string; message: string } };
-      expect(body.error.code).toBe('NOT_FOUND');
-      expect(body.error.message).toBe('Package [unknown_pkg_xyz] does not exist in the system.');
+    it('should translate the unknown-package message into English', async () => {
+      const response = await runUnknown({ 'accept-language': 'en-US,en;q=0.9' });
+
+      const body = JSON.parse(response.payload) as {
+        data: { success: boolean; message: string };
+      };
+      expect(body.data.success).toBe(false);
+      expect(body.data.message).toBe('Package [unknown_pkg_xyz] does not exist in the system.');
     });
 
-    it('should default 404 error message to Vietnamese', async () => {
-      const response = await context.app.inject({
-        method: 'GET',
-        url: SYSTEM_OPS_ROUTES.buildPackageDetailPath('unknown_pkg_xyz'),
-      });
+    it('should default the unknown-package message to Vietnamese', async () => {
+      const response = await runUnknown();
 
-      const body = JSON.parse(response.payload) as { error: { message: string } };
-      expect(body.error.message).toBe('Package [unknown_pkg_xyz] không tồn tại trong hệ thống.');
+      const body = JSON.parse(response.payload) as { data: { message: string } };
+      expect(body.data.message).toBe('Package [unknown_pkg_xyz] không tồn tại trong hệ thống.');
     });
 
     it('should translate package display names and actions', async () => {
       const response = await context.app.inject({
         method: 'GET',
-        url: SYSTEM_OPS_ROUTES.buildPackageDetailPath(CorePackageId.CACHE),
+        url: SYSTEM_OPS_ROUTES.buildPackagesPath(),
         headers: { 'accept-language': 'en' },
       });
 
       const body = JSON.parse(response.payload) as {
-        data: { displayName: string; actions: Array<{ label: string }> };
+        data: Array<{ packageId: string; displayName: string; actions: Array<{ label: string }> }>;
       };
-      expect(body.data.displayName).toBe('Cache');
-      expect(body.data.actions[0]?.label).toBe('Flush core cache');
+      const cache = body.data.find((p) => p.packageId === CorePackageId.CACHE);
+      expect(cache?.displayName).toBe('Cache');
+      expect(cache?.actions[0]?.label).toBe('Flush core cache');
     });
   });
 });
