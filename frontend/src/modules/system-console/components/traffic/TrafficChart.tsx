@@ -1,89 +1,84 @@
 import React, { useState } from 'react';
-import type { TimeseriesMetric, TrafficFilters } from '../../types/traffic.types';
+import { useLocale } from '@core/i18n/index';
+import { useLiveQuery } from '@core/data';
+import { CHART_GROUP, TIME_RANGE_MS } from '@core/constants/ui.constants';
+import { MetricChart, type MetricStat, type TimeSeries } from '@core/ui/charts';
+import type { Timeseries, TimeseriesMetric, TrafficFilters } from '../../types/traffic.types';
 import { trafficApi } from '../../services/traffic.api';
-import { usePolling } from '../../hooks/usePolling';
-import { CHART_METRICS, SERIES_COLORS } from '../../constants/traffic';
-import { LineChart, type ChartSeries } from '../common/LineChart';
-import { formatMs, formatPct, formatRps } from '../../utils/traffic-format';
-import { NO_VALUE } from '../../utils/runtime-format';
-import { useLocale } from '../../../../core/i18n/index';
-
-const UNIT_LABEL = { rps: 'req/s', ms: 'ms', percent: '%' } as const;
+import { LATENCY_SERIES_ORDER, SERIES_COLOR } from '../../constants/traffic';
+import { trafficKeys } from '../../sections/traffic/traffic-keys';
+import { useTrafficFormat } from './useTrafficFormat';
 
 interface TrafficChartProps {
+  title: string;
   filters: TrafficFilters;
-  paused: boolean;
-  /** Giới hạn trong một endpoint (trang chi tiết endpoint). */
+  /** Từ 2 chỉ số → có nút chuyển. */
+  metrics: TimeseriesMetric[];
+  /** Giới hạn trong một endpoint. */
   routeId?: string;
-  metrics?: TimeseriesMetric[];
-  title?: string;
+  /** Ngưỡng P95 cảnh báo (ms) — vẽ đường ngưỡng trên biểu đồ latency. */
+  latencyThresholdMs?: number;
+  height?: 'sm' | 'md';
+  actions?: React.ReactNode;
+  className?: string;
 }
 
-/** Biểu đồ chính: Requests / Latency (P50-P95-P99) / Errors / Status codes theo thời gian. */
-export const TrafficChart: React.FC<TrafficChartProps> = ({ filters, paused, routeId, metrics = CHART_METRICS, title }) => {
+const sortLatency = (series: Timeseries['series']) => [...series].sort((a, b) => LATENCY_SERIES_ORDER.indexOf(a.id) - LATENCY_SERIES_ORDER.indexOf(b.id));
+
+/** Biểu đồ traffic theo thời gian: requests / latency P50-P95-P99 / tỷ lệ 5xx / status 2xx–5xx (cột chồng). */
+export function TrafficChart({ title, filters, metrics, routeId, latencyThresholdMs, height = 'md', actions, className }: TrafficChartProps) {
   const { t, formatTime } = useLocale();
+  const tf = useTrafficFormat();
   const [metric, setMetric] = useState<TimeseriesMetric>(metrics[0] ?? 'requests');
-  const key = `${metric}:${routeId ?? ''}:${JSON.stringify(filters)}`;
-  const { data } = usePolling(() => trafficApi.timeseries(filters, metric, routeId), key, undefined, paused);
+  const q = useLiveQuery(trafficKeys.timeseries(filters, metric, routeId), () => trafficApi.timeseries(filters, metric, routeId));
+  const d = q.data?.metric === metric ? q.data : undefined;
 
-  const series: ChartSeries[] = (data?.series ?? []).map((s) => ({
-    id: s.id,
-    label: t(`tr.series.${s.id}`),
-    color: SERIES_COLORS[s.id] ?? 'var(--scp-series-1)',
-    points: s.points,
-  }));
-  const fmt = (v: number | null) =>
-    v === null
-      ? NO_VALUE
-      : data?.unit === 'ms' ? formatMs(v) : data?.unit === 'percent' ? formatPct(v) : `${formatRps(v)} req/s`;
-  const showSeconds = filters.range === '5m' || filters.range === '15m';
+  const fmt = (v: number | null) => (d?.unit === 'ms' ? tf.latency(v) : d?.unit === 'percent' ? tf.rate(v) : tf.rps(v));
+  const series: TimeSeries[] | undefined = d
+    ? (d.metric === 'latency' ? sortLatency(d.series) : d.series).map((s) => ({
+        id: s.id,
+        label: t(`tr.series.${s.id}`),
+        color: SERIES_COLOR[s.id],
+        area: d.metric === 'requests' || d.metric === 'errors',
+        points: s.points.map((p) => ({ t: p.t, v: p.value })),
+      }))
+    : undefined;
 
+  const stats: MetricStat[] | undefined = d
+    ? [
+        { label: t('ui.chart.current'), value: fmt(d.current) },
+        { label: t(`tr.chart.average.${d.metric}`), value: fmt(d.average) },
+        { label: t('ui.chart.peak'), value: d.peakAt !== null ? `${fmt(d.peak)} · ${formatTime(d.peakAt, false)}` : fmt(d.peak) },
+      ]
+    : undefined;
+
+  const now = q.dataUpdatedAt || Date.now();
   return (
-    <section className="ov-card ov-section">
-      <header className="ov-section-head">
-        <h3>{title ?? t('tr.chart.title')}</h3>
-        {metrics.length > 1 && (
-          <div className="ov-segmented" role="tablist" aria-label={t('ov.chart.metric')}>
-            {metrics.map((m) => (
-              <button key={m} type="button" role="tab" aria-selected={metric === m} className={metric === m ? 'is-active' : ''} onClick={() => setMetric(m)}>
-                {t(`tr.chart.metric.${m}`)}
-              </button>
-            ))}
-          </div>
-        )}
-      </header>
-
-      <LineChart
-        series={series}
-        unit={data ? UNIT_LABEL[data.unit] : ''}
-        formatTime={(ts) => formatTime(ts, showSeconds)}
-        emptyText={t('tr.chart.empty')}
-        ariaLabel={title ?? t('tr.chart.title')}
-      />
-
-      {data && (
-        <dl className="tr-chart-stats">
-          <div>
-            <dt>{t('tr.chart.current')}</dt>
-            <dd>{fmt(data.current)}</dd>
-          </div>
-          <div>
-            <dt>{t(`tr.chart.average.${data.metric}`)}</dt>
-            <dd>{fmt(data.average)}</dd>
-          </div>
-          <div>
-            <dt>{t('tr.chart.peak')}</dt>
-            <dd>
-              {fmt(data.peak)}
-              {data.peakAt !== null && <small> · {formatTime(data.peakAt, false)}</small>}
-            </dd>
-          </div>
-          <div>
-            <dt>{t('tr.chart.step')}</dt>
-            <dd>{t('tr.chart.stepValue', { seconds: data.stepSec })}</dd>
-          </div>
-        </dl>
-      )}
-    </section>
+    <MetricChart
+      title={title}
+      hint={d ? t('tr.chart.step', { seconds: d.stepSec }) : undefined}
+      className={className}
+      metrics={metrics.map((m) => ({ id: m, label: t(`tr.chart.metric.${m}`) }))}
+      value={metric}
+      onChange={setMetric}
+      series={series}
+      error={d ? undefined : q.error}
+      onRetry={() => void q.refetch()}
+      stats={stats}
+      actions={actions}
+      format={fmt}
+      height={height}
+      kind={d?.metric === 'status' ? 'bar' : 'line'}
+      stacked={d?.metric === 'status'}
+      legend={d?.metric === 'status' || d?.metric === 'latency'}
+      thresholds={
+        d?.metric === 'latency' && latencyThresholdMs !== undefined
+          ? [{ value: latencyThresholdMs, label: t('tr.chart.threshold', { value: tf.latency(latencyThresholdMs) }), tone: 'warn' }]
+          : undefined
+      }
+      emptyMessage={t('tr.chart.empty')}
+      group={CHART_GROUP}
+      xRange={{ from: now - TIME_RANGE_MS[filters.range], to: now }}
+    />
   );
-};
+}

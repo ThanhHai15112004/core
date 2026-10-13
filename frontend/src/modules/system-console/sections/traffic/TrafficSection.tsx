@@ -1,138 +1,95 @@
-import React, { useCallback, useState } from 'react';
-import { Activity, Pause, Play, Radio, WifiOff } from 'lucide-react';
+import React from 'react';
+import { Globe, RefreshCw } from 'lucide-react';
+import { useLocale } from '@core/i18n/index';
+import { useLiveQuery, errorMessage, errorStatus } from '@core/data';
+import { worstTone, type Tone } from '@core/theme';
+import { ApiError } from '@core/services/api';
+import { Button } from '@core/ui/primitives';
+import { PageHeader, PageTabs, StatusBanner, type PageTab } from '@core/ui/blocks';
+import type { TrafficSummary } from '../../types/traffic.types';
 import { trafficApi } from '../../services/traffic.api';
-import { usePolling } from '../../hooks/usePolling';
-import { useTrafficFilters } from '../../hooks/useTrafficFilters';
-import { ENDPOINT_TABS, TRAFFIC_RANGES, TRAFFIC_TABS, type EndpointTab, type TrafficTab } from '../../constants/traffic';
+import { errorRateTone } from '../../utils/traffic-format';
+import { TELEMETRY_DISABLED_CODE, TELEMETRY_UNAVAILABLE_STATUS, TRAFFIC_TABS, type TrafficTab } from '../../constants/traffic';
 import { TrafficFilterBar } from '../../components/traffic/TrafficFilterBar';
-import { TrafficOverviewView, type TrafficViewProps } from './TrafficOverviewView';
-import { EndpointsView, ErrorsView } from './TrafficListViews';
-import { EndpointDetailView } from './EndpointDetailView';
-import { ApiError } from '../../../../core/services/api';
-import { useLocale } from '../../../../core/i18n/index';
-import { useNow } from '../../../../core/hooks/useNow';
-import '../../styles/console-runtimes.css';
-import '../../styles/console-traffic.css';
+import { useTrafficPage } from './useTrafficPage';
+import { trafficKeys } from './traffic-keys';
+import { TrafficOverviewTab } from './TrafficOverviewTab';
+import { TrafficEndpointsTab } from './TrafficEndpointsTab';
+import { TrafficErrorsTab } from './TrafficErrorsTab';
+import { EndpointDetailPage } from './EndpointDetailPage';
 
-const DISABLED_CODE = 'TRAFFIC_TELEMETRY_DISABLED';
+/** Trạng thái chung của traffic: tệ nhất giữa tỷ lệ 5xx và P95 so với ngưỡng cấu hình. */
+function overallTone(s: TrafficSummary): Tone {
+  if (!s.hasTraffic || s.stats.requests === 0) return 'unknown';
+  const p95 = s.stats.p95LatencyMs;
+  const latency: Tone = p95 !== null && p95 > s.settings.endpointP95WarnMs ? 'warn' : 'ok';
+  return worstTone([errorRateTone(s) ?? 'ok', latency]) ?? 'unknown';
+}
 
 /**
- * HTTP Traffic: `http-traffic/<tab>`, `http-traffic/endpoints/<routeId>/<tab>`. Không lưu từng request — chi tiết
- * request xem ở Logs (lọc theo route/status). Bộ lọc nằm trên query của hash; Pause live chỉ dừng cập nhật UI.
+ * HTTP Traffic — số liệu tổng hợp từ Prometheus (không lưu từng request; chi tiết request xem ở Logs):
+ * Tổng quan · Endpoints · Lỗi; chi tiết một endpoint là trang con `endpoints/<routeId>`.
+ * Không có telemetry (503) → nói rõ lý do, không làm chết trang.
  */
 export const TrafficSection: React.FC = () => {
-  const { t, formatRelative } = useLocale();
-  const now = useNow();
-  const { filters, params, setFilters, go, navigate } = useTrafficFilters();
-  const [paused, setPaused] = useState(false);
+  const { t } = useLocale();
+  const page = useTrafficPage();
+  const summary = useLiveQuery(trafficKeys.summary(page.filters), () => trafficApi.summary(page.filters));
+  const data = summary.data;
+  const unavailable = !data && errorStatus(summary.error) === TELEMETRY_UNAVAILABLE_STATUS;
+  const disabled = unavailable && summary.error instanceof ApiError && summary.error.code === TELEMETRY_DISABLED_CODE;
+  const isDetail = page.routeId !== null;
 
-  const [rawTab, rawId, sub] = params;
-  const id = rawId ? decodeURIComponent(rawId) : undefined;
-  const tab: TrafficTab = TRAFFIC_TABS.includes(rawTab as TrafficTab) ? (rawTab as TrafficTab) : 'overview';
+  const tabs: PageTab<TrafficTab>[] = TRAFFIC_TABS.map((id) => ({ id, label: t(`tr.tab.${id}`) }));
+  const tone = data ? overallTone(data) : unavailable ? 'crit' : undefined;
 
-  const scope = JSON.stringify([filters.range, filters.method, filters.internal]);
-  const summary = usePolling(() => trafficApi.summary(filters), `summary:${scope}`, undefined, paused);
-
-  const openLogs = useCallback(
-    (query: Record<string, string>) => navigate(`logs/explorer?${new URLSearchParams(query).toString()}`),
-    [navigate],
+  const retry = (
+    <Button size="xs" onClick={() => void summary.refetch()}>
+      <RefreshCw />
+      {t('ui.state.retry')}
+    </Button>
   );
 
-  const unavailable = summary.error instanceof ApiError && summary.error.status === 503 ? summary.error : null;
-  const data = summary.data;
-  const viewProps: TrafficViewProps = { filters, summary: data, paused, now, go, openLogs, navigate };
-
-  const renderContent = () => {
-    if (unavailable) {
-      const disabled = unavailable.code === DISABLED_CODE;
-      return (
-        <section className="tr-empty-state" role="status">
-          <WifiOff size={28} />
-          <h2>{t(disabled ? 'tr.empty.disabledTitle' : 'tr.empty.unavailableTitle')}</h2>
-          <p>{unavailable.message}</p>
-        </section>
-      );
-    }
-    if (summary.error && !data) {
-      return (
-        <section className="ov-offline" role="alert">
-          <WifiOff size={22} className="ov-offline-icon" />
-          <div className="ov-offline-body">
-            <h2>{t('ov.offline.title')}</h2>
-            <p>{summary.error.message}</p>
-          </div>
-        </section>
-      );
-    }
-    if (data && !data.hasTraffic) {
-      return (
-        <section className="tr-empty-state" role="status">
-          <Activity size={28} />
-          <h2>{t('tr.empty.noTrafficTitle')}</h2>
-          <p>{t('tr.empty.noTrafficMessage')}</p>
-        </section>
-      );
-    }
-    switch (tab) {
-      case 'endpoints': {
-        if (id) {
-          const endpointTab: EndpointTab = ENDPOINT_TABS.includes(sub as EndpointTab) ? (sub as EndpointTab) : 'overview';
-          return <EndpointDetailView key={id} {...viewProps} routeId={id} tab={endpointTab} />;
-        }
-        return <EndpointsView {...viewProps} setFilters={setFilters} />;
-      }
+  const renderTab = () => {
+    if (page.routeId) return <EndpointDetailPage key={page.routeId} page={page} routeId={page.routeId} settings={data?.settings} />;
+    switch (page.tab) {
+      case 'endpoints':
+        return <TrafficEndpointsTab page={page} />;
       case 'errors':
-        return <ErrorsView {...viewProps} />;
+        return <TrafficErrorsTab page={page} summary={data} />;
       default:
-        return <TrafficOverviewView {...viewProps} />;
+        return <TrafficOverviewTab page={page} summary={summary} />;
     }
   };
 
   return (
-    <div className="ov-page">
-      <header className="ov-page-head">
-        <div>
-          <h1 className="ov-page-title">{t('nav.http-traffic')}</h1>
-          <p className="ov-page-subtitle">{t('tr.subtitle')}</p>
-        </div>
-        <div className="tr-live">
-          <span className={`tr-live-badge ${paused ? 'is-paused' : ''}`}>
-            {paused ? <Pause size={12} /> : <Radio size={12} />}
-            {paused ? t('tr.live.paused') : t('tr.live.live')}
-          </span>
-          <span className="ov-page-updated">
-            <time>{summary.lastUpdated ? formatRelative(summary.lastUpdated, now) : '--'}</time>
-          </span>
-          <button type="button" className="scp-btn scp-btn-sm scp-btn-secondary" onClick={() => setPaused((p) => !p)} aria-pressed={paused}>
-            {paused ? <Play size={13} /> : <Pause size={13} />} {paused ? t('tr.live.resume') : t('tr.live.pause')}
-          </button>
-        </div>
-      </header>
+    <div>
+      <PageHeader
+        title={t('nav.http-traffic')}
+        icon={Globe}
+        status={
+          tone && !isDetail
+            ? { tone, label: data && !data.hasTraffic ? t('tr.state.noTraffic') : unavailable ? t('tr.state.unavailable') : t(`ui.status.${tone}`) }
+            : undefined
+        }
+      />
 
-      <div className="tr-controls">
-        <nav className="rt-tabs" role="tablist" aria-label={t('nav.http-traffic')}>
-          {TRAFFIC_TABS.map((tabId) => (
-            <button key={tabId} type="button" role="tab" aria-selected={tab === tabId} className={tab === tabId ? 'is-active' : ''} onClick={() => go(tabId === 'overview' ? [] : [tabId])}>
-              {t(`tr.tab.${tabId}`)}
-            </button>
-          ))}
-        </nav>
-        <div className="ov-segmented" role="tablist" aria-label={t('ov.chart.range')}>
-          {TRAFFIC_RANGES.map((r) => (
-            <button key={r} type="button" role="tab" aria-selected={filters.range === r} className={filters.range === r ? 'is-active' : ''} onClick={() => setFilters({ range: r })}>
-              {r}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {!unavailable && (
-        <TrafficFilterBar filters={filters} setFilters={setFilters} />
+      {unavailable && (
+        <StatusBanner
+          tone="crit"
+          title={t(disabled ? 'tr.empty.disabledTitle' : 'tr.empty.unavailableTitle')}
+          description={errorMessage(summary.error)}
+          actions={retry}
+        />
       )}
+      {!unavailable && summary.isError && !data && (
+        <StatusBanner tone="crit" title={t('tr.empty.errorTitle')} description={errorMessage(summary.error)} actions={retry} />
+      )}
+      {data && !data.hasTraffic && <StatusBanner tone="info" title={t('tr.empty.noTrafficTitle')} description={t('tr.empty.noTrafficMessage')} />}
 
-      {renderContent()}
-
-
+      {!isDetail && <PageTabs tabs={tabs} value={page.tab} onChange={page.go} />}
+      {!isDetail && page.tab !== 'endpoints' && <TrafficFilterBar page={page} />}
+      {renderTab()}
     </div>
   );
 };

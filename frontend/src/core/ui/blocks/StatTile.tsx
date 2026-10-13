@@ -29,13 +29,15 @@ export interface StatTileProps {
   hint?: React.ReactNode;
   onClick?: () => void;
   loading?: boolean;
+  /** Ô hẹp: cho đơn vị / thay đổi xuống dòng thay vì cắt số (mặc định: một dòng, cắt số). */
+  wrap?: boolean;
   className?: string;
 }
 
 const DELTA_CLASS = (good: boolean | null) => (good === null ? 'text-muted' : good ? 'text-ok-fg' : 'text-crit-fg');
 
 /** Ô số liệu: nhãn, giá trị lớn, đơn vị, thay đổi so với kỳ trước, sparkline. */
-export function StatTile({ label, value, unit, sub, tone, delta, trend, hint, onClick, loading, className }: StatTileProps) {
+export function StatTile({ label, value, unit, sub, tone, delta, trend, hint, onClick, loading, wrap, className }: StatTileProps) {
   const interactive = Boolean(onClick);
   const Comp = interactive ? 'button' : 'div';
   return (
@@ -66,11 +68,19 @@ export function StatTile({ label, value, unit, sub, tone, delta, trend, hint, on
         </>
       ) : (
         <>
-          <div className="flex items-baseline gap-1.5">
-            <span className={cn('truncate font-mono text-xl font-semibold tabular-nums', tone === 'warn' || tone === 'crit' ? TONE_CLASS[tone].fg : 'text-fg')}>{value}</span>
+          <div className={cn('flex items-baseline gap-1.5', wrap && 'flex-wrap gap-y-0.5')}>
+            <span
+              className={cn(
+                'font-mono text-xl font-semibold tabular-nums',
+                wrap ? 'shrink-0' : 'truncate',
+                tone === 'warn' || tone === 'crit' ? TONE_CLASS[tone].fg : 'text-fg',
+              )}
+            >
+              {value}
+            </span>
             {unit && <span className="text-sm text-muted">{unit}</span>}
             {delta && (
-              <span className={cn('ml-auto inline-flex items-center gap-0.5 font-mono text-xs', DELTA_CLASS(delta.good))}>
+              <span className={cn('ml-auto inline-flex items-center gap-0.5 font-mono text-xs', wrap && 'whitespace-nowrap', DELTA_CLASS(delta.good))}>
                 {delta.direction === 'up' ? <ArrowUpRight className="size-3.5" /> : delta.direction === 'down' ? <ArrowDownRight className="size-3.5" /> : null}
                 {delta.text}
               </span>

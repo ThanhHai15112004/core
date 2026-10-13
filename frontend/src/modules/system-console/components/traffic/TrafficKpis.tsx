@@ -1,99 +1,91 @@
-import React from 'react';
+import { useLocale } from '@core/i18n/index';
+import { NO_VALUE } from '@core/lib/format';
+import { StatGrid, StatTile } from '@core/ui/blocks';
 import type { TrafficSummary } from '../../types/traffic.types';
-import { formatCount, formatDelta, formatMs, formatPct, formatRps } from '../../utils/traffic-format';
-import { useLocale } from '../../../../core/i18n/index';
+import { errorRateTone, formatRps, statDelta } from '../../utils/traffic-format';
+import { useTrafficFormat } from './useTrafficFormat';
 
-interface Kpi {
-  key: string;
-  value: string;
-  sub: string;
-  tone: 'ok' | 'warn' | 'crit' | 'unknown';
-  trend?: { text: string; good: boolean } | null;
-}
-
-/** 6 KPI: tốc độ request, P50, P95, tỷ lệ lỗi, đang xử lý, hôm nay — số của khoảng thời gian đang chọn. */
-export const TrafficKpis: React.FC<{ summary: TrafficSummary | null }> = ({ summary }) => {
-  const { t, locale } = useLocale();
-
-  if (!summary) {
-    return (
-      <div className="ov-kpi-grid">
-        {Array.from({ length: 5 }, (_, i) => (
-          <div key={i} className="ov-card ov-kpi">
-            <span className="ov-skeleton" style={{ width: '60%', height: 12 }} />
-            <span className="ov-skeleton" style={{ width: '45%', height: 28, marginTop: 14 }} />
-          </div>
-        ))}
-      </div>
-    );
-  }
-
-  const { stats, comparison: cmp, settings } = summary;
-  const range = t(`tr.range.${summary.range}`);
-  const requestsDelta = formatDelta(cmp.requestsPercent);
-  const p95Delta = formatDelta(cmp.p95Percent);
-  const errDelta = formatDelta(cmp.errorRateDelta, ' pp');
-  const p95Slow = stats.p95LatencyMs !== null && stats.p95LatencyMs > settings.endpointP95WarnMs;
-
-  const items: Kpi[] = [
-    {
-      key: 'rate',
-      value: `${formatRps(stats.requestsPerSecond)} req/s`,
-      sub: t('tr.kpi.rateSub', { count: formatCount(stats.requests, locale), range }),
-      tone: 'unknown',
-      trend: requestsDelta ? { text: t('tr.kpi.vsPrevious', { delta: requestsDelta }), good: true } : null,
-    },
-    {
-      key: 'p50',
-      value: formatMs(stats.p50LatencyMs),
-      sub: t('tr.kpi.avg', { value: formatMs(stats.avgLatencyMs) }),
-      tone: 'unknown',
-    },
-    {
-      key: 'p95',
-      value: formatMs(stats.p95LatencyMs),
-      sub: p95Slow
-        ? t('tr.kpi.overThreshold', { threshold: formatMs(settings.endpointP95WarnMs) })
-        : t('tr.kpi.p99', { value: formatMs(stats.p99LatencyMs) }),
-      tone: stats.p95LatencyMs === null ? 'unknown' : p95Slow ? 'warn' : 'ok',
-      trend: p95Delta ? { text: t('tr.kpi.vsPrevious', { delta: p95Delta }), good: (cmp.p95Percent ?? 0) <= 0 } : null,
-    },
-    {
-      key: 'errorRate',
-      value: formatPct(stats.errorRatePercent),
-      sub: t('tr.kpi.errorSub', {
-        errors: formatCount(stats.serverErrors, locale),
-        total: formatCount(stats.requests, locale),
-        client: formatCount(stats.clientErrors, locale),
-      }),
-      tone:
-        stats.errorRatePercent >= settings.errorRateCritPercent
-          ? 'crit'
-          : stats.errorRatePercent >= settings.errorRateWarnPercent
-            ? 'warn'
-            : stats.requests > 0
-              ? 'ok'
-              : 'unknown',
-      trend: errDelta ? { text: t('tr.kpi.vsPrevious', { delta: errDelta }), good: (cmp.errorRateDelta ?? 0) <= 0 } : null,
-    },
-    {
-      key: 'today',
-      value: formatCount(summary.requestsToday, locale),
-      sub: t('tr.kpi.todaySub'),
-      tone: 'unknown',
-    },
-  ];
+/** 5 số chính của khoảng đang xem: tốc độ request, P50, P95, tỷ lệ 5xx (kèm số 5xx / 4xx), request hôm nay. */
+export function TrafficKpis({
+  summary,
+  failed,
+  onErrors,
+}: {
+  summary: TrafficSummary | undefined;
+  /** Tải lỗi → ô hiện `—` thay vì khung chờ (banner lỗi ở đầu trang). */
+  failed?: boolean;
+  onErrors?: () => void;
+}) {
+  const { t } = useLocale();
+  const tf = useTrafficFormat();
+  const s = summary?.stats;
+  const cmp = summary?.comparison;
+  const set = summary?.settings;
+  const loading = !summary && !failed;
+  const p95Slow = s && set && s.p95LatencyMs !== null && s.p95LatencyMs > set.endpointP95WarnMs;
+  const pp = t('tr.unit.pp');
 
   return (
-    <div className="ov-kpi-grid">
-      {items.map((item) => (
-        <div key={item.key} className={`ov-card ov-kpi ov-tone-${item.tone}`}>
-          <span className="ov-kpi-label">{t(`tr.kpi.${item.key}`)}</span>
-          <span className="ov-kpi-value">{item.value}</span>
-          {item.trend && <span className={`ov-kpi-trend is-${item.trend.good ? 'good' : 'bad'}`}>{item.trend.text}</span>}
-          <span className="ov-kpi-sub">{item.sub}</span>
-        </div>
-      ))}
-    </div>
+    <StatGrid columns={5}>
+      <StatTile
+        wrap
+        label={t('tr.kpi.rate')}
+        value={s ? formatRps(s.requestsPerSecond) : NO_VALUE}
+        unit={t('tr.unit.rps')}
+        sub={s ? t('tr.kpi.requests', { count: tf.count(s.requests) }) : undefined}
+        delta={statDelta(cmp?.requestsPercent, null)}
+        hint={t('tr.kpi.rateHint')}
+        loading={loading}
+      />
+      <StatTile
+        wrap
+        label={t('tr.kpi.p50')}
+        value={tf.latency(s?.p50LatencyMs)}
+        sub={s ? t('tr.kpi.avg', { value: tf.latency(s.avgLatencyMs) }) : undefined}
+        loading={loading}
+      />
+      <StatTile
+        wrap
+        label={t('tr.kpi.p95')}
+        value={tf.latency(s?.p95LatencyMs)}
+        sub={s ? t('tr.kpi.p99', { value: tf.latency(s.p99LatencyMs) }) : undefined}
+        tone={!s || s.p95LatencyMs === null ? undefined : p95Slow ? 'warn' : 'ok'}
+        delta={statDelta(cmp?.p95Percent, true)}
+        hint={
+          set
+            ? t('tr.kpi.p95Hint', {
+                threshold: tf.latency(set.endpointP95WarnMs),
+              })
+            : undefined
+        }
+        loading={loading}
+      />
+      <StatTile
+        wrap
+        label={t('tr.kpi.errorRate')}
+        value={tf.rate(s?.errorRatePercent)}
+        sub={
+          s
+            ? t('tr.kpi.errorCounts', {
+                server: tf.count(s.serverErrors),
+                client: tf.count(s.clientErrors),
+              })
+            : undefined
+        }
+        tone={summary ? errorRateTone(summary) : undefined}
+        delta={statDelta(cmp?.errorRateDelta, true, ` ${pp}`)}
+        hint={
+          set
+            ? t('tr.kpi.errorRateHint', {
+                warn: set.errorRateWarnPercent,
+                crit: set.errorRateCritPercent,
+              })
+            : undefined
+        }
+        onClick={onErrors}
+        loading={loading}
+      />
+      <StatTile wrap label={t('tr.kpi.today')} value={tf.count(summary?.requestsToday)} hint={t('tr.kpi.todayHint')} loading={loading} />
+    </StatGrid>
   );
-};
+}

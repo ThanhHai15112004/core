@@ -13,8 +13,6 @@
   "src/modules/system-console/components/runtimes/ResourceDistribution.tsx",
   "src/modules/system-console/components/scheduler/RuntimePanel.tsx",
   "src/modules/system-console/components/storage/ObjectDrawer.tsx",
-  "src/modules/system-console/components/traffic/EndpointTable.tsx",
-  "src/modules/system-console/components/traffic/ErrorAnalysisPanel.tsx",
   "src/modules/system-console/components/worker/QueueTable.tsx",
   "src/modules/system-console/components/worker/RateBalance.tsx",
   "src/modules/system-console/components/worker/WorkerDrawer.tsx",

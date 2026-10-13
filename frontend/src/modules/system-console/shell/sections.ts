@@ -22,6 +22,8 @@ import type { TimeRange } from '@core/constants/ui.constants';
 import type { ConsoleSectionId } from '../types/console.types';
 import { LOGS_RANGES } from '../constants/logs';
 import { OVERVIEW_RANGES } from '../constants/overview';
+import { TRAFFIC_RANGES, TRAFFIC_TABS } from '../constants/traffic';
+import { routeIdOf } from '../utils/traffic-format';
 
 type Translate = (path: string, params?: Record<string, string | number>) => string;
 
@@ -72,7 +74,8 @@ export const SECTIONS: SectionDef[] = [
     group: 'runtime-traffic',
     icon: Globe,
     component: load(() => import('../sections/traffic/TrafficSection'), 'TrafficSection'),
-    crumb: tabCrumb('tr'),
+    controls: { ranges: TRAFFIC_RANGES },
+    crumb: (p, t) => (p[0] === 'endpoints' && p.length > 1 ? routeIdOf(p.slice(1)) : p[0] && (TRAFFIC_TABS as readonly string[]).includes(p[0]) ? t(`tr.tab.${p[0]}`) : null),
     keywords: ['http', 'request', 'endpoint'],
   },
   {

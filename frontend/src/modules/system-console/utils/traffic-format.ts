@@ -1,15 +1,22 @@
-import type { EndpointStatus } from '../types/traffic.types';
-import type { StatusTone } from './status-tone';
+import type { Tone } from '@core/theme';
+import type { StatDelta } from '@core/ui/blocks';
+import { NO_VALUE, UNIT, formatDelta, formatDuration } from '@core/lib/format';
 import { LATENCY_CEILING_MS } from '../constants/traffic';
-import { NO_VALUE } from './runtime-format';
+import type { TrafficSummary } from '../types/traffic.types';
 
-/** Latency: `842 ms`, `1.82 s`, giá trị chạm trần histogram → `≥ 10 s`. */
+/** Latency: `842 ms`, `1.82 s`, giá trị chạm trần histogram → `≥ 10 s`. (Performance dùng chung.) */
 export function formatMs(ms: number | null | undefined): string {
   if (ms === null || ms === undefined) return NO_VALUE;
-  if (ms >= LATENCY_CEILING_MS) return `≥ ${LATENCY_CEILING_MS / 1000} s`;
-  if (ms < 1) return `${ms.toFixed(1)} ms`;
-  if (ms < 1000) return `${Math.round(ms)} ms`;
-  return `${(ms / 1000).toFixed(2)} s`;
+  if (ms >= LATENCY_CEILING_MS) return `≥ ${LATENCY_CEILING_MS / 1000} ${UNIT.s}`;
+  if (ms < 1) return `${ms.toFixed(1)} ${UNIT.ms}`;
+  if (ms < 1000) return `${Math.round(ms)} ${UNIT.ms}`;
+  return `${(ms / 1000).toFixed(2)} ${UNIT.s}`;
+}
+
+/** Latency cho trang Traffic: như `formatDuration` nhưng giá trị chạm trần histogram hiện `≥`. */
+export function formatLatency(ms: number | null | undefined): string {
+  if (ms !== null && ms !== undefined && ms >= LATENCY_CEILING_MS) return `≥ ${formatDuration(LATENCY_CEILING_MS)}`;
+  return formatDuration(ms);
 }
 
 export function formatRps(rps: number | null | undefined): string {
@@ -19,38 +26,43 @@ export function formatRps(rps: number | null | undefined): string {
   return rps < 10 ? rps.toFixed(2) : rps.toFixed(1);
 }
 
-/** 8420000 → "8,4 Tr" / "8.4M" theo locale. */
-export function formatCount(n: number | null | undefined, locale: string): string {
-  if (n === null || n === undefined) return NO_VALUE;
-  if (n < 10_000) return n.toLocaleString(locale);
-  return new Intl.NumberFormat(locale, { notation: 'compact', maximumFractionDigits: 1 }).format(n);
-}
-
-export const formatPct = (n: number | null | undefined, digits = 2) =>
-  n === null || n === undefined ? NO_VALUE : `${Number(n.toFixed(digits))}%`;
-
-/** `+12%` / `-8%`; `null` → không có kỳ trước. */
-export function formatDelta(n: number | null | undefined, suffix = '%'): string | null {
-  if (n === null || n === undefined) return null;
-  const rounded = Number(n.toFixed(1));
-  return `${rounded > 0 ? '+' : ''}${rounded}${suffix}`;
-}
-
-export function httpStatusTone(status: number): StatusTone {
+/** Tông của một HTTP status code. */
+export function httpStatusTone(status: number): Tone {
   if (status >= 500 || status === 0) return 'crit';
   if (status >= 400) return 'warn';
   if (status >= 200 && status < 300) return 'ok';
-  return 'unknown';
+  return 'info';
 }
 
-export const ENDPOINT_TONE: Record<EndpointStatus, StatusTone> = {
-  healthy: 'ok',
-  slow: 'warn',
-  high_error: 'warn',
-  failing: 'crit',
-  idle: 'unknown',
-  low_traffic: 'unknown',
-};
+/** Tông tỷ lệ lỗi 5xx theo ngưỡng cấu hình `TRAFFIC_*`; chưa có request → không tô. */
+export function errorRateTone(s: TrafficSummary): Tone | undefined {
+  if (s.stats.requests === 0) return undefined;
+  if (s.stats.errorRatePercent >= s.settings.errorRateCritPercent) return 'crit';
+  if (s.stats.errorRatePercent >= s.settings.errorRateWarnPercent) return 'warn';
+  return 'ok';
+}
+
+/**
+ * Thay đổi so với kỳ trước cho StatTile. `higherIsWorse`: true = tăng là xấu (latency, lỗi), null = trung tính
+ * (lưu lượng). Không có kỳ trước → null (ẩn).
+ */
+export function statDelta(v: number | null | undefined, higherIsWorse: boolean | null, suffix: string = UNIT.percent): StatDelta | null {
+  const text = formatDelta(v, 1, suffix);
+  if (text === null || v === null || v === undefined) return null;
+  const direction = v > 0 ? 'up' : v < 0 ? 'down' : 'flat';
+  const good = higherIsWorse === null || v === 0 ? null : higherIsWorse ? v < 0 : v > 0;
+  return { text, direction, good };
+}
+
+/**
+ * Id endpoint dạng `GET /api/v1/x`. Link mã hoá đúng → một segment (có `/` sau khi decode), phần sau là tab con cũ
+ * (bỏ qua). Link không mã hoá (`endpoints/GET /api/v1/x`) bị router tách theo `/` → ghép lại.
+ */
+export function routeIdOf(params: string[]): string | null {
+  if (params.length === 0) return null;
+  if (params.length === 1 || params[0].includes('/')) return params[0];
+  return params.join('/');
+}
 
 /** Bỏ API prefix khỏi route cho gọn khi hiển thị trong bảng. */
 export function shortRoute(route: string): string {
