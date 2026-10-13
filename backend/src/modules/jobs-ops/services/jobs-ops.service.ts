@@ -1242,7 +1242,6 @@ export class JobsOpsService {
         { group: 'retention', key: 'removeOnFail', value: d.removeOnFail },
         { group: 'retention', key: 'indexRetentionDays', value: c.indexRetentionDays },
         { group: 'retention', key: 'cancelledRetentionDays', value: c.cancelledRetentionDays },
-        { group: 'retention', key: 'metricsRetentionDays', value: 8 },
         { group: 'thresholds', key: 'longRunningFactor', value: r.longRunningFactor },
         { group: 'thresholds', key: 'longRunningMinSec', value: r.longRunningMinSec },
         { group: 'thresholds', key: 'longWaitFactor', value: r.longWaitFactor },

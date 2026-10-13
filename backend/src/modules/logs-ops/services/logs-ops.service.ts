@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { CoreConfigService } from '@packages/config/index.js';
 import {
+  LOGS_STREAM_MAXLEN,
   LOG_ENTRY_LEVELS,
   SENSITIVE_KEY_NAMES,
   TEXT_REDACTION_PATTERNS,
@@ -148,8 +149,7 @@ export class LogsOpsService {
       provider: 'redis-stream',
       historicalSearch: 'limited',
       fullText: 'scan',
-      bufferPerRuntime: this.store.capacity,
-      metricsRetentionDays: 0,
+      bufferSize: LOGS_STREAM_MAXLEN,
       consoleFormat: this.config.logs.format,
     };
   }
@@ -191,6 +191,8 @@ export class LogsOpsService {
     }
     const span = Math.max(1, now - from);
     const mid = from + span / 2;
+    const halfMin = span / 2 / 60_000;
+    const rules = this.config.logs.rules;
     const newSince = now - this.config.logs.rules.newErrorMin * 60_000;
     return [...byFp]
       .map(([fingerprint, list]) => {
@@ -230,7 +232,11 @@ export class LogsOpsService {
           trend,
           changePercent,
           isNew,
-          spiking: early > 0 && late >= this.config.logs.rules.spikeFactor * early && late >= 5,
+          // Nửa sau gấp `spikeFactor` lần nửa đầu và đủ `spikeMinPerMin` lỗi/phút.
+          spiking:
+            early > 0 &&
+            late >= rules.spikeFactor * early &&
+            late / halfMin >= rules.spikeMinPerMin,
           runtimes: countBy(list.map((e) => e.runtime)).map((c) => c.name),
           jobTypes: countBy(list.map((e) => e.jobType)).map((c) => c.name),
           routes: countBy(list.map((e) => e.route)).map((c) => c.name),
@@ -275,7 +281,6 @@ export class LogsOpsService {
           uniqueErrors: 0,
           traceablePercent: null,
           dropped: null,
-          redacted: null,
         },
         levels: [],
         sources: [],
@@ -392,7 +397,6 @@ export class LogsOpsService {
         uniqueErrors: groupRows.length,
         traceablePercent: pct(traceable, total),
         dropped: live.length ? dropped : null,
-        redacted: null,
       },
       levels: LOG_ENTRY_LEVELS.filter(
         (l) => counts[l] > 0 || l === 'info' || l === 'warn' || l === 'error',
@@ -858,8 +862,6 @@ export class LogsOpsService {
           overrideModules: s.overrideModules,
           dropped: s.dropped,
           written: s.written,
-          suppressed: s.suppressed,
-          redacted: s.redacted,
           lastSuccessAt: iso(s.lastSuccessAt),
           lastErrorAt: iso(s.lastErrorAt),
           lastError: s.lastError,
@@ -893,9 +895,9 @@ export class LogsOpsService {
       environment: this.config.app.env,
       runtimes,
       buffers: snap ? this.coverage(snap) : [],
-      storage: { todayBytes: null, weekBytes: null, avgPerDayBytes: null, bySource: [] },
       retention: [
-        { key: 'stream', value: length ?? 0 },
+        ...(length !== null ? [{ key: 'stream', value: length }] : []),
+        { key: 'streamMax', value: LOGS_STREAM_MAXLEN },
         { key: 'scan', value: this.store.capacity },
       ],
       redaction: this.redaction(),

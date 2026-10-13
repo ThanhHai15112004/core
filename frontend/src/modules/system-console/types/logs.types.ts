@@ -113,11 +113,11 @@ export interface LogIssue {
 }
 
 export interface LogsBackend {
-  provider: 'redis-buffer';
+  provider: 'redis-stream';
   historicalSearch: 'limited';
   fullText: 'scan';
-  bufferPerRuntime: number;
-  metricsRetentionDays: number;
+  /** Số log gần nhất được giữ trong stream, chung cho mọi runtime. */
+  bufferSize: number;
   consoleFormat: 'json' | 'text';
 }
 
@@ -223,8 +223,6 @@ export interface LevelState {
     overrideModules: string[];
     dropped: number;
     written: number;
-    suppressed: number;
-    redacted: number;
     lastSuccessAt: string | null;
     lastErrorAt: string | null;
     lastError: string | null;
@@ -257,7 +255,6 @@ export interface LogsOverview {
     uniqueErrors: number;
     traceablePercent: number | null;
     dropped: number | null;
-    redacted: number | null;
   };
   levels: { level: LogLevel; count: number; percent: number | null }[];
   sources: { runtime: string; total: number; perMin: number | null; errors: number; warnings: number; instances: number }[];
@@ -331,12 +328,6 @@ export interface LogsConfig {
   environment: string;
   runtimes: LevelState[];
   buffers: LogCoverage[];
-  storage: {
-    todayBytes: number | null;
-    weekBytes: number | null;
-    avgPerDayBytes: number | null;
-    bySource: { runtime: string; bytes: number; percent: number | null }[];
-  };
   retention: { key: string; value: string | number }[];
   redaction: Redaction;
   permissions: { levelChange: boolean; levelPermanent: boolean; export: boolean; exportMax: number; details: boolean; audit: boolean };

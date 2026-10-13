@@ -99,9 +99,7 @@ export class LogLevelService implements OnApplicationBootstrap, OnApplicationShu
         baseLevel: this.baseLevel,
         overrideUntil: this.override?.until ?? null,
         overrideModules: this.override?.modules ?? [],
-        suppressed: 0,
         written: redisStream.written,
-        redacted: 0,
         updatedAt: now,
       };
       await this.redis.client.hset(k.ingest(), this.ingestField, JSON.stringify(state));

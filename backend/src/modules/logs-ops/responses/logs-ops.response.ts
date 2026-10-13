@@ -115,12 +115,11 @@ export interface LogIssueDto {
 export interface LogsBackendDto {
   /** `redis-stream`: Redis Stream `logs:<env>` (chưa có kho log tập trung như Loki / OpenSearch). */
   provider: 'redis-stream';
-  /** Tìm được log cũ tới đâu: `limited` = chỉ N log gần nhất mỗi runtime. */
+  /** Tìm được log cũ tới đâu: `limited` = chỉ khoảng `bufferSize` log gần nhất (mọi runtime chung một stream). */
   historicalSearch: 'limited';
   fullText: 'scan';
-  bufferPerRuntime: number;
-  /** Số đo volume / nhóm lỗi giữ lâu hơn buffer (telemetry). */
-  metricsRetentionDays: number;
+  /** `MAXLEN ~` của stream — số log gần nhất được giữ, chung cho mọi runtime. */
+  bufferSize: number;
   consoleFormat: 'json' | 'text';
 }
 
@@ -135,7 +134,6 @@ export interface LogsKpisDto {
   uniqueErrors: number;
   traceablePercent: number | null;
   dropped: number | null;
-  redacted: number | null;
 }
 
 export interface LogSourceDto {
@@ -276,8 +274,6 @@ export interface LevelStateDto {
     overrideModules: string[];
     dropped: number;
     written: number;
-    suppressed: number;
-    redacted: number;
     lastSuccessAt: string | null;
     lastErrorAt: string | null;
     lastError: string | null;
@@ -383,12 +379,7 @@ export interface LogsConfigDto {
   environment: string;
   runtimes: LevelStateDto[];
   buffers: LogCoverageDto[];
-  storage: {
-    todayBytes: number | null;
-    weekBytes: number | null;
-    avgPerDayBytes: number | null;
-    bySource: { runtime: string; bytes: number; percent: number | null }[];
-  };
+  /** `stream` = số log đang có, `streamMax` = sức chứa stream, `scan` = số log đọc mỗi lần phân tích. */
   retention: { key: string; value: string | number }[];
   redaction: { enabled: true; keys: string[]; patterns: string[] };
   permissions: {

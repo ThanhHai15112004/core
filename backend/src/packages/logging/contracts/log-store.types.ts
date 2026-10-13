@@ -25,9 +25,7 @@ export interface LogIngestState {
   baseLevel: string;
   overrideUntil: number | null;
   overrideModules: string[];
-  suppressed: number;
   written: number;
-  redacted: number;
   updatedAt: number;
 }
 
