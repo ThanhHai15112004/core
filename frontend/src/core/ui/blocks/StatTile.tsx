@@ -67,7 +67,7 @@ export function StatTile({ label, value, unit, sub, tone, delta, trend, hint, on
       ) : (
         <>
           <div className="flex items-baseline gap-1.5">
-            <span className={cn('truncate font-mono text-xl font-semibold tabular-nums', tone && tone !== 'unknown' ? TONE_CLASS[tone].fg : 'text-fg')}>{value}</span>
+            <span className={cn('truncate font-mono text-xl font-semibold tabular-nums', tone === 'warn' || tone === 'crit' ? TONE_CLASS[tone].fg : 'text-fg')}>{value}</span>
             {unit && <span className="text-sm text-muted">{unit}</span>}
             {delta && (
               <span className={cn('ml-auto inline-flex items-center gap-0.5 font-mono text-xs', DELTA_CLASS(delta.good))}>

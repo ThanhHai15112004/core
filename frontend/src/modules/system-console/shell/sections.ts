@@ -21,6 +21,7 @@ import {
 import type { TimeRange } from '@core/constants/ui.constants';
 import type { ConsoleSectionId } from '../types/console.types';
 import { LOGS_RANGES } from '../constants/logs';
+import { OVERVIEW_RANGES } from '../constants/overview';
 
 type Translate = (path: string, params?: Record<string, string | number>) => string;
 
@@ -55,7 +56,8 @@ export const SECTIONS: SectionDef[] = [
     id: 'overview',
     group: null,
     icon: LayoutDashboard,
-    component: load(() => import('./OverviewEntry'), 'OverviewEntry'),
+    component: load(() => import('../sections/overview/OverviewSection'), 'OverviewSection'),
+    controls: { ranges: OVERVIEW_RANGES },
   },
   {
     id: 'runtimes',

@@ -70,7 +70,7 @@ function RecentFailing({ page }: { page: LogsPage }) {
     return [...seen.entries()].slice(0, RECENT_FAILING_SIZE);
   }, [query.data]);
   return (
-    <Panel title={t('logs.trace.recentFailing')} description={t('logs.window.24h')}>
+    <Panel title={t('logs.trace.recentFailing')} hint={t('logs.window.24h')}>
       <QueryView query={query} isEmpty={() => failing.length === 0} emptyMessage={t('logs.trace.noneFailing')}>
         {() => (
           <ul className="flex flex-col divide-y divide-border">
@@ -112,7 +112,7 @@ function TraceView({ id, page }: { id: string; page: LogsPage }) {
                 {t('logs.trace.title')} <span className="font-mono text-xs font-normal text-fg-2">{d.correlationId ?? d.id}</span>
               </span>
             }
-            description={t('logs.trace.resolved', { kinds: d.resolvedFrom.map((k) => t(`logs.ctx.${k}`)).join(', ') || NO_VALUE })}
+            hint={t('logs.trace.resolved', { kinds: d.resolvedFrom.map((k) => t(`logs.ctx.${k}`)).join(', ') || NO_VALUE })}
           >
             <StatGrid columns={6} className="mb-3">
               <StatTile label={t('logs.trace.title')} value={t(`logs.trace.status.${d.status}`)} tone={TRACE_TONE[d.status]} />
@@ -175,7 +175,7 @@ function TraceView({ id, page }: { id: string; page: LogsPage }) {
             </div>
           </Panel>
 
-          <Panel title={t('logs.trace.timeline')} description={t('logs.trace.events', { count: d.events.length })} flush>
+          <Panel title={`${t('logs.trace.timeline')} · ${t('logs.trace.events', { count: d.events.length })}`} flush>
             <ol className="flex flex-col">
               {d.events.map((e, i) => (
                 <li key={i} className="flex items-start gap-3 border-b border-border px-3 py-2 last:border-b-0">

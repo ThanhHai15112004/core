@@ -1,223 +1,87 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import type {
-  HealthData,
-  PackageSummary,
-  ToastMessage,
-  OverviewData,
-  PerformanceMetricKey,
-  PerformanceTimeRange,
-} from '../types/console.types';
-import type { PackageActionResult } from '../types/packages.types';
-import { POLL_INTERVAL_MS } from '../constants/console.constants';
-import { frontendConfig } from '../../../config/index';
-import { useLocale } from '../../../core/i18n/index';
-import {
-  fetchHealth,
-  fetchPackages,
-  fetchOverview,
-  executePackageAction,
-  type OverviewPayload,
-} from '../services/console.api';
-import { useLatencyTracker } from '../hooks/useLatencyTracker';
-import { useEventLog } from '../hooks/useEventLog';
-import { KPI_METRIC, useMetricHistory } from '../hooks/useMetricHistory';
-import { buildFallbackOverview } from '../utils/fallback-overview';
-import { ConsoleDataContext, type ConsoleDataContextValue } from './console-data-context';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast as sonnerToast } from 'sonner';
+import { useQueryClient } from '@tanstack/react-query';
+import { useLocale } from '@core/i18n/index';
+import { useLiveQuery } from '@core/data';
+import type { HealthData, ToastMessage } from '../types/console.types';
+import type { PackageActionResult } from '../types/packages.types';
+import { fetchHealth, fetchPackages, fetchOverview, executePackageAction } from '../services/console.api';
+import { ConsoleDataContext, consoleKeys, type ConsoleDataContextValue } from './console-data-context';
 
+const INITIAL_HEALTH: HealthData = { status: 'ok', uptime: 0, timestamp: new Date().toISOString() };
 
-const INITIAL_HEALTH: HealthData = {
-  status: 'ok',
-  uptime: 0,
-  timestamp: new Date().toISOString(),
-};
-
+/**
+ * Dữ liệu chung của cả console (health, packages, overview) — dùng cho thanh trên, sidebar và trang Tổng quan.
+ * Làm mới theo bộ điều khiển chung trên thanh trên cùng.
+ */
 export const ConsoleDataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { t } = useLocale();
+  const { t, locale } = useLocale();
+  const queryClient = useQueryClient();
 
-  const [health, setHealth] = useState<HealthData>(INITIAL_HEALTH);
-  const [packages, setPackages] = useState<PackageSummary[]>([]);
-  const [rawOverview, setRawOverview] = useState<OverviewPayload | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [lastSuccessfulSync, setLastSuccessfulSync] = useState<Date | null>(null);
-  const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
-  const [activePerformanceMetric, setActivePerformanceMetric] = useState<PerformanceMetricKey>('requests');
-  const [performanceTimeRange, setPerformanceTimeRange] = useState<PerformanceTimeRange>('15m');
-
-  const { latencyHistory, currentLatency, avgLatency, recordLatency } = useLatencyTracker();
-  const { events, addEvent, clearEvents } = useEventLog();
-  const { recordOverview, buildSeries, getTrend } = useMetricHistory();
-
+  const healthQ = useLiveQuery(consoleKeys.health, fetchHealth);
+  const health = healthQ.data?.data ?? INITIAL_HEALTH;
   const isOffline = health.status === 'down';
-  const wasOfflineRef = useRef(false);
+  const reachable = healthQ.data !== undefined && !isOffline;
 
-  /** Thông báo dùng chung (sonner) — giữ API cũ cho các trang chưa viết lại. */
+  const packagesQ = useLiveQuery(consoleKeys.packages, fetchPackages, { tier: 'slow', enabled: reachable });
+  const overviewQ = useLiveQuery(consoleKeys.overview(locale), fetchOverview, { enabled: reachable });
+
+  const [lastSuccessfulSync, setLastSuccessfulSync] = useState<Date | null>(null);
+  useEffect(() => {
+    if (reachable) setLastSuccessfulSync(new Date(healthQ.dataUpdatedAt));
+  }, [reachable, healthQ.dataUpdatedAt]);
+
   const addToast = useCallback((toast: Omit<ToastMessage, 'id'>) => {
     const notify = toast.type === 'warning' ? sonnerToast.warning : sonnerToast[toast.type];
     notify(toast.title, { description: toast.message });
   }, []);
 
-
-  const loadData = useCallback(
-    async () => {
-      try {
-        const [healthRes, pkgs, overview] = await Promise.all([
-          fetchHealth(),
-          fetchPackages().catch((err: unknown) => {
-            console.error('Failed to load packages:', err);
-            return null;
-          }),
-          fetchOverview().catch((err: unknown) => {
-            console.warn('Failed to load overview:', err);
-            return null;
-          }),
-        ]);
-
-        const reachable = healthRes.data.status !== 'down';
-        setHealth(healthRes.data);
-        setLastUpdated(new Date());
-
-        const justWentOffline = !reachable && !wasOfflineRef.current;
-        wasOfflineRef.current = !reachable;
-
-        if (!reachable) {
-          if (!justWentOffline) return;
-          addToast({
-            type: 'error',
-            title: t('console.toast.connectionLostTitle'),
-            message: t('console.toast.connectionLostMessage'),
-          });
-          return;
-        }
-
-        recordLatency(healthRes.latencyMs);
-        setLastSuccessfulSync(new Date());
-        if (pkgs) setPackages(pkgs);
-        // Giữ bản overview gần nhất nếu lần này lỗi, để UI hiển thị "giá trị gần nhất".
-        if (overview) setRawOverview(overview);
-        if (overview) recordOverview({ ...overview, lastUpdated: new Date(), isOffline: false });
-      } finally {
-        setIsLoading(false);
-      }
-    },
-    // `t` đổi theo ngôn ngữ → tự tải lại, vì text trong overview do backend dịch sẵn.
-    [addToast, recordLatency, recordOverview, t],
-  );
-
-  // Tự cập nhật định kỳ; tạm dừng khi tab bị ẩn và tải lại ngay khi người dùng quay lại.
+  /* Báo một lần khi vừa mất kết nối. */
+  const wasOffline = useRef(false);
   useEffect(() => {
-    void loadData();
-    const interval = setInterval(() => {
-      if (!document.hidden) void loadData();
-    }, POLL_INTERVAL_MS);
-    const handleVisibility = () => {
-      if (!document.hidden) void loadData();
-    };
-    document.addEventListener('visibilitychange', handleVisibility);
-    return () => {
-      clearInterval(interval);
-      document.removeEventListener('visibilitychange', handleVisibility);
-    };
-  }, [loadData]);
+    if (isOffline && !wasOffline.current) {
+      addToast({ type: 'error', title: t('console.toast.connectionLostTitle'), message: t('console.toast.connectionLostMessage') });
+    }
+    wasOffline.current = isOffline;
+  }, [isOffline, addToast, t]);
 
   const executeAction = useCallback(
     async (packageId: string, actionId: string, params?: unknown): Promise<PackageActionResult> => {
-      const eventParams = { action: actionId };
       try {
-        addEvent('info', packageId, t('console.event.executing', eventParams));
         const result = await executePackageAction(packageId, actionId, params);
-        if (result.success) {
-          addEvent('success', packageId, t('console.event.succeeded', { ...eventParams, message: result.message }), result.data);
-          addToast({ type: 'success', title: t('console.toast.actionSucceeded'), message: result.message });
-        } else {
-          addEvent('warn', packageId, t('console.event.warning', { ...eventParams, message: result.message }));
-          addToast({ type: 'warning', title: t('console.toast.actionWarning'), message: result.message });
-        }
-        await loadData();
+        addToast(
+          result.success
+            ? { type: 'success', title: t('console.toast.actionSucceeded'), message: result.message }
+            : { type: 'warning', title: t('console.toast.actionWarning'), message: result.message },
+        );
+        await queryClient.invalidateQueries({ queryKey: ['console'] });
         return result;
       } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : String(err);
-        addEvent('error', packageId, t('console.event.failed', { ...eventParams, message }));
-        addToast({ type: 'error', title: t('console.toast.actionFailed'), message });
+        addToast({ type: 'error', title: t('console.toast.actionFailed'), message: err instanceof Error ? err.message : String(err) });
         throw err;
       }
     },
-    [addEvent, addToast, loadData, t],
+    [addToast, queryClient, t],
   );
 
-  const { series: performanceSeries, stats: performanceStats } = useMemo(
-    () => buildSeries(activePerformanceMetric, performanceTimeRange),
-    [buildSeries, activePerformanceMetric, performanceTimeRange],
-  );
-
-  const metricTrends = useMemo(
-    () => Object.fromEntries(Object.entries(KPI_METRIC).map(([id, metric]) => [id, getTrend(metric)])),
-    [getTrend],
-  );
-
-  const overviewData = useMemo<OverviewData>(() => {
-    if (rawOverview) {
-      return { ...rawOverview, lastUpdated, isOffline, lastSuccessfulSync };
-    }
-    return buildFallbackOverview({
-      t,
-      isOffline,
-      apiBaseUrl: frontendConfig.apiBaseUrl,
-      lastUpdated,
-      lastSuccessfulSync,
-    });
-  }, [rawOverview, isOffline, lastUpdated, lastSuccessfulSync, t]);
-
+  const overview = overviewQ.data ?? null;
+  const refetchOverview = overviewQ.refetch;
   const value = useMemo<ConsoleDataContextValue>(
     () => ({
       health,
-      packages,
-      isLoading,
+      packages: packagesQ.data ?? [],
       executeAction,
-      lastUpdated,
-      latencyHistory,
-      currentLatency,
-      avgLatency,
-      events,
-      addEvent,
-      clearEvents,
+      currentLatency: healthQ.data?.latencyMs ?? 0,
       addToast,
-      environment: overviewData.environment,
+      environment: overview?.environment ?? null,
       isOffline,
       lastSuccessfulSync,
-      activePerformanceMetric,
-      setActivePerformanceMetric,
-      performanceTimeRange,
-      setPerformanceTimeRange,
-      overviewData,
-      performanceSeries,
-      performanceStats,
-      metricTrends,
-      isShowingLastKnown: isOffline && rawOverview !== null,
+      overview,
+      overviewLoading: overviewQ.isPending,
+      overviewError: overviewQ.error,
+      refetchOverview: () => void refetchOverview(),
     }),
-    [
-      health,
-      packages,
-      isLoading,
-      executeAction,
-      lastUpdated,
-      latencyHistory,
-      currentLatency,
-      avgLatency,
-      events,
-      addEvent,
-      clearEvents,
-      addToast,
-      isOffline,
-      lastSuccessfulSync,
-      activePerformanceMetric,
-      performanceTimeRange,
-      overviewData,
-      performanceSeries,
-      performanceStats,
-      metricTrends,
-      rawOverview,
-    ],
+    [health, packagesQ.data, executeAction, healthQ.data, addToast, overview, isOffline, lastSuccessfulSync, overviewQ.isPending, overviewQ.error, refetchOverview],
   );
 
   return <ConsoleDataContext.Provider value={value}>{children}</ConsoleDataContext.Provider>;

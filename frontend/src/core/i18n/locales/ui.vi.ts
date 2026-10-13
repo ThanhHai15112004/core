@@ -92,6 +92,10 @@ export const uiVi = {
     menu: 'Mở menu',
   },
   chart: {
+    metric: 'Chỉ số',
+    current: 'Hiện tại',
+    average: 'Trung bình',
+    peak: 'Đỉnh',
     noData: 'Không có dữ liệu trong khoảng này',
     threshold: 'Ngưỡng',
   },

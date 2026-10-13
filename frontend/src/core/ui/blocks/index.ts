@@ -24,3 +24,4 @@ export { LOG_LEVEL_CLASS, type LogLevel } from './log-level';
 export { UsageBar } from './UsageBar';
 export { SearchInput } from './SearchInput';
 export { FilterBar } from './FilterBar';
+export { HealthGrid, type HealthGridGroup, type HealthGridItem } from './HealthGrid';

@@ -5,3 +5,4 @@ export { Heatmap } from './Heatmap';
 export { Gantt, type GanttItem, type GanttRow } from './Gantt';
 export { EChart } from './EChart';
 export { resolveColor, type ChartColor } from './colors';
+export { MetricChart, type MetricChartProps, type MetricOption, type MetricStat } from './MetricChart';

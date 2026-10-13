@@ -35,7 +35,7 @@ export function LogsAuditTab({ page }: { page: LogsPage }) {
   const active = domain !== ALL || result !== ALL || win !== ALL || q !== '';
 
   return (
-    <Panel title={t('logs.audit.title')} description={t('logs.audit.subtitle')} flush>
+    <Panel title={t('logs.audit.title')} hint={t('logs.audit.subtitle')} flush>
       <div className="border-b border-border px-3 pt-3">
         <FilterBar
           active={active}

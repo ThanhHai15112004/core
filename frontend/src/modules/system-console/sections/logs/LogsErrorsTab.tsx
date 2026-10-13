@@ -171,7 +171,7 @@ export function ErrorGroupDetail({ page, fingerprint }: { page: LogsPage; finger
               ))}
             </PanelGrid>
 
-            <Panel title={t('logs.groups.samples')} description={t('logs.groups.samplesHint')} flush>
+            <Panel title={t('logs.groups.samples')} hint={t('logs.groups.samplesHint')} flush>
               <LogTable rows={d.samples} onOpen={page.openLog} activeId={page.logId} emptyMessage={t('logs.groups.noSamples')} />
             </Panel>
           </>

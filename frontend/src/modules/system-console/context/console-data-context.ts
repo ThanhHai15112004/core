@@ -1,50 +1,33 @@
 import { createContext, useContext } from 'react';
-import type {
-  EventLogLevel,
-  HealthData,
-  LatencyDataPoint,
-  OpsEventLog,
-  OverviewData,
-  PackageSummary,
-  PerformanceDataPoint,
-  PerformanceMetricKey,
-  PerformanceTimeRange,
-  SystemEnvironment,
-  ToastMessage,
-} from '../types/console.types';
+import type { HealthData, PackageSummary, SystemEnvironment, ToastMessage } from '../types/console.types';
 import type { PackageActionResult } from '../types/packages.types';
-import type { MetricTrend, PerformanceStats } from '../hooks/useMetricHistory';
+import type { OverviewPayload } from '../services/console.api';
 
 export interface ConsoleDataContextValue {
   health: HealthData;
   packages: PackageSummary[];
-  isLoading: boolean;
   executeAction: (packageId: string, actionId: string, params?: unknown) => Promise<PackageActionResult>;
-  lastUpdated: Date;
-  latencyHistory: LatencyDataPoint[];
+  /** Round-trip lần gọi `/health` gần nhất (ms). */
   currentLatency: number;
-  avgLatency: number;
-  events: OpsEventLog[];
-  addEvent: (level: EventLogLevel, source: string, message: string, data?: unknown) => void;
-  clearEvents: () => void;
   addToast: (toast: Omit<ToastMessage, 'id'>) => void;
 
   /** Môi trường do backend báo; `null` khi chưa kết nối được. */
   environment: SystemEnvironment | null;
   isOffline: boolean;
   lastSuccessfulSync: Date | null;
-  activePerformanceMetric: PerformanceMetricKey;
-  setActivePerformanceMetric: (metric: PerformanceMetricKey) => void;
-  performanceTimeRange: PerformanceTimeRange;
-  setPerformanceTimeRange: (range: PerformanceTimeRange) => void;
-  overviewData: OverviewData;
-  performanceSeries: PerformanceDataPoint[];
-  performanceStats: PerformanceStats;
-  /** Xu hướng theo KPI id (`req_sec`, `p95_lat`...), `null` khi chưa đủ dữ liệu. */
-  metricTrends: Record<string, MetricTrend | null>;
-  /** `true` khi đang offline nhưng vẫn hiển thị giá trị lần đồng bộ gần nhất. */
-  isShowingLastKnown: boolean;
+  /** `/ops/overview` gần nhất lấy được (giữ lại khi lần sau lỗi); `null` = chưa lấy được lần nào. */
+  overview: OverviewPayload | null;
+  overviewLoading: boolean;
+  overviewError: unknown;
+  refetchOverview: () => void;
 }
+
+export const consoleKeys = {
+  health: ['console', 'health'] as const,
+  packages: ['console', 'packages'] as const,
+  /** Text trong overview do backend dịch sẵn → key theo ngôn ngữ. */
+  overview: (locale: string) => ['console', 'overview', locale] as const,
+};
 
 export const ConsoleDataContext = createContext<ConsoleDataContextValue | null>(null);
 

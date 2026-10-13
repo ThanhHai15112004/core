@@ -36,20 +36,20 @@ export const ConsoleShell: React.FC<{ children: React.ReactNode }> = ({ children
   const { toggleTheme } = useTheme();
   const { refreshNow } = useLive();
   const { route, navigate } = useConsoleRoute();
-  const { overviewData, packages, currentLatency, isOffline, environment } = useConsoleData();
+  const { overview, packages, currentLatency, isOffline, environment } = useConsoleData();
   const def = sectionDef(route.section);
   const effectiveRange = useTimeRange(def.controls?.ranges);
 
   /* Chấm trạng thái = tông tệ nhất của các thành phần trong health map trỏ về section. */
   const sectionTone = useMemo(() => {
     const map = new Map<string, Tone>();
-    for (const item of overviewData.healthMap) {
+    for (const item of overview?.healthMap ?? []) {
       const id = item.targetSection.split(/[/?]/)[0] ?? '';
       const tone = worstTone([map.get(id), toneOf(item.status)].filter((x): x is Tone => Boolean(x)));
       if (tone) map.set(id, tone);
     }
     return map;
-  }, [overviewData.healthMap]);
+  }, [overview?.healthMap]);
 
   const problemPackages = packages.filter((p) => p.statusReport.status === 'warning' || p.statusReport.status === 'error').length;
 

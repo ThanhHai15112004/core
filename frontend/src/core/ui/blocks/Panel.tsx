@@ -10,8 +10,6 @@ export interface PanelProps {
   title?: React.ReactNode;
   /** Giải thích ngắn: nguồn dữ liệu, công thức… (tooltip ⓘ). */
   hint?: React.ReactNode;
-  /** Dòng mô tả dưới tiêu đề. */
-  description?: React.ReactNode;
   actions?: React.ReactNode;
   /** Cho phép phóng to nội dung (biểu đồ, bảng dài). */
   expandable?: boolean;
@@ -23,7 +21,7 @@ export interface PanelProps {
 }
 
 /** Khung chứa chuẩn: tiêu đề + ⓘ + hành động + thân. */
-export function Panel({ title, hint, description, actions, expandable, flush, className, bodyClassName, children }: PanelProps) {
+export function Panel({ title, hint, actions, expandable, flush, className, bodyClassName, children }: PanelProps) {
   const { t } = useLocale();
   const [expanded, setExpanded] = useState(false);
   const hasHead = title || actions || expandable;
@@ -42,7 +40,6 @@ export function Panel({ title, hint, description, actions, expandable, flush, cl
                 </Hint>
               )}
             </div>
-            {description && <p className="truncate text-xs text-muted">{description}</p>}
           </div>
           {actions && <div className="flex shrink-0 items-center gap-1.5">{actions}</div>}
           {expandable && (

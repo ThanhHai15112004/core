@@ -93,6 +93,10 @@ export const uiEn: UiTranslation = {
     menu: 'Open menu',
   },
   chart: {
+    metric: 'Metric',
+    current: 'Current',
+    average: 'Average',
+    peak: 'Peak',
     noData: 'No data in this range',
     threshold: 'Threshold',
   },

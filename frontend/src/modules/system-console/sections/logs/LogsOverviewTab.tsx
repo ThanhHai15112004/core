@@ -119,7 +119,7 @@ export function LogsOverviewTab({ page, data }: { page: LogsPage; data: LogsOver
       )}
 
       <StatGrid columns={6}>
-        <StatTile label={t('logs.kpi.perMin')} value={f.compact(k?.logsPerMin)} sub={t('logs.kpi.perMinSub')} loading={!k} onClick={() => go('explorer')} />
+        <StatTile label={t('logs.kpi.perMin')} value={f.compact(k?.logsPerMin)} hint={t('logs.kpi.perMinSub')} loading={!k} onClick={() => go('explorer')} />
         <StatTile
           label={t('logs.kpi.errors')}
           value={f.compact(k?.errors)}
@@ -131,7 +131,7 @@ export function LogsOverviewTab({ page, data }: { page: LogsPage; data: LogsOver
         <StatTile
           label={t('logs.kpi.warnings')}
           value={f.compact(k?.warnings)}
-          sub={t('logs.kpi.warningsSub')}
+          hint={t('logs.kpi.warningsSub')}
           tone={k ? ((k.warnings ?? 0) > 0 ? 'warn' : 'ok') : undefined}
           loading={!k}
           onClick={() => explore({ level: 'warn' })}
@@ -139,15 +139,15 @@ export function LogsOverviewTab({ page, data }: { page: LogsPage; data: LogsOver
         <StatTile
           label={t('logs.kpi.errorRate')}
           value={k?.errorRatePercent === null || k?.errorRatePercent === undefined ? NO_VALUE : f.percent(k.errorRatePercent)}
-          sub={t('logs.kpi.errorRateSub')}
+          hint={t('logs.kpi.errorRateSub')}
           tone={k?.errorRatePercent === null || k?.errorRatePercent === undefined ? undefined : k.errorRatePercent >= ERROR_RATE_WARN ? 'warn' : 'ok'}
           loading={!k}
         />
-        <StatTile label={t('logs.kpi.unique')} value={k ? String(k.uniqueErrors) : NO_VALUE} sub={t('logs.kpi.uniqueSub')} tone={k ? (k.uniqueErrors > 0 ? 'warn' : 'ok') : undefined} loading={!k} onClick={() => go('errors')} />
+        <StatTile label={t('logs.kpi.unique')} value={k ? String(k.uniqueErrors) : NO_VALUE} hint={t('logs.kpi.uniqueSub')} tone={k ? (k.uniqueErrors > 0 ? 'warn' : 'ok') : undefined} loading={!k} onClick={() => go('errors')} />
         <StatTile
           label={t('logs.kpi.dropped')}
           value={f.compact(k?.dropped)}
-          sub={t('logs.kpi.droppedSub')}
+          hint={t('logs.kpi.droppedSub')}
           tone={k?.dropped === null || k?.dropped === undefined ? undefined : k.dropped > 0 ? 'crit' : 'ok'}
           loading={!k}
           onClick={() => setSettings(true)}
@@ -158,7 +158,6 @@ export function LogsOverviewTab({ page, data }: { page: LogsPage; data: LogsOver
         <Panel
           title={t('logs.chart.title')}
           hint={t('logs.page.volumeHint', { sec: series.data?.bucketSec ?? 60 })}
-          description={t('logs.chart.note', { sec: series.data?.bucketSec ?? 60 })}
           expandable
           actions={
             <ToggleGroup type="single" value={mode} onValueChange={(v) => v && setMode(v as VolumeMode)}>
@@ -195,7 +194,7 @@ export function LogsOverviewTab({ page, data }: { page: LogsPage; data: LogsOver
       </PanelGrid>
 
       <PanelGrid>
-        <Panel title={t('logs.sources.title')} description={t(`ui.time.last`, { range: t(`ui.time.ranges.${range}`) })} flush>
+        <Panel title={t('logs.sources.title')} flush>
           <DataTable data={data?.sources ?? []} columns={sourceCols} getRowId={(s) => s.runtime} emptyMessage={t('logs.sources.empty')} initialSorting={[{ id: 'errors', desc: true }]} />
         </Panel>
         <Panel title={t('logs.levels.title')}>
@@ -252,7 +251,7 @@ export function LogsOverviewTab({ page, data }: { page: LogsPage; data: LogsOver
         >
           <AuditTable rows={data?.recentAudit ?? []} navigate={navigate} compact />
         </Panel>
-        <Panel title={t('logs.report.title')} description={t('logs.report.hint')}>
+        <Panel title={t('logs.report.title')} hint={t('logs.report.hint')}>
           <QueryView query={report} isEmpty={(d) => !d.available} emptyMessage={t('logs.report.unavailable')}>
             {(rep) => (
               <>

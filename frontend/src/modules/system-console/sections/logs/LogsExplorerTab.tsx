@@ -233,7 +233,7 @@ export function LogsExplorerTab({ page, overview }: { page: LogsPage; overview: 
               ? t('logs.explorer.summary', { shown: f.compact(stream.rows.length), matched: f.compact(meta.matched), scanned: f.compact(meta.scanned) })
               : t('nav.logs')
           }
-          description={`${stream.live ? `${t('logs.page.liveHint', { sec: LIVE_POLL_MS / 1000 })} · ` : ''}${t('logs.filter.timezone', { tz: browserTimeZone() })}`}
+          hint={`${stream.live ? `${t('logs.page.liveHint', { sec: LIVE_POLL_MS / 1000 })} · ` : ''}${t('logs.filter.timezone', { tz: browserTimeZone() })}`}
           actions={
             <>
               <Hint content={fixed ? t('logs.live.fixed') : undefined}>

@@ -3,7 +3,7 @@ import { FileText, GitBranch, RefreshCw } from 'lucide-react';
 import { useLocale } from '@core/i18n/index';
 import { useLiveQuery } from '@core/data';
 import { Button } from '@core/ui/primitives';
-import { PageHeader, PageTabs, RelativeTime, StatusBanner, type PageTab } from '@core/ui/blocks';
+import { PageHeader, PageTabs, StatusBanner, type PageTab } from '@core/ui/blocks';
 import type { LogsTab } from '../../types/logs.types';
 import { logsApi } from '../../services/logs.api';
 import { LOGS_STATUS_TONE, LOGS_TABS } from '../../constants/logs';
@@ -53,21 +53,6 @@ export const LogsSection: React.FC = () => {
         title={t('nav.logs')}
         icon={FileText}
         status={data ? { tone: LOGS_STATUS_TONE[data.status] ?? 'unknown', label: t(`logs.state.${data.status}`) } : undefined}
-        description={t('logs.subtitle')}
-        meta={
-          data && (
-            <>
-              {data.environment.toUpperCase()} · {t('logs.backend.redis')}
-              {data.lastEventAt && (
-                <>
-                  {' · '}
-                  {t('logs.lastEvent', { when: '' })}
-                  <RelativeTime value={data.lastEventAt} />
-                </>
-              )}
-            </>
-          )
-        }
         actions={
           <Button size="sm" onClick={() => page.openTrace()}>
             <GitBranch />
