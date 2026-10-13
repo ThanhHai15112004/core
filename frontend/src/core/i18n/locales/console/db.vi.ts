@@ -38,12 +38,6 @@ export const dbVi = {
     failTitle: 'Không kiểm tra được kết nối',
     ping: 'ping {{ms}}',
   },
-  section: {
-    unsupported: 'Driver {{driver}} chưa hỗ trợ số liệu này.',
-    disconnected: 'Database chưa kết nối — chưa có số liệu.',
-    error: 'Không đọc được phần số liệu này: {{message}}',
-    retry: 'Thử lại',
-  },
   unsupported: {
     message: 'Driver {{driver}} chưa có số liệu cho phần này. Số liệu chung (latency, throughput, lỗi) vẫn có ở tab Tổng quan.',
   },
@@ -72,8 +66,6 @@ export const dbVi = {
   },
   alerts: {
     title: 'Vấn đề hiện tại',
-    since: 'Bắt đầu {{time}}',
-    inspect: 'Kiểm tra',
     noDeadlocks: 'Không có deadlock trong 24 giờ qua',
     noLocks: 'Không có query nào đang bị chặn',
     connected: 'Kết nối database ổn định',
@@ -122,7 +114,6 @@ export const dbVi = {
     failed: 'Thao tác thất bại',
   },
   modal: {
-    typeToConfirm: 'Gõ {{word}} để xác nhận',
     cancel: {
       title: 'Huỷ query đang chạy?',
       warning: 'Query này sẽ bị dừng giữa chừng; ứng dụng nhận lỗi "query interrupted". Session vẫn giữ kết nối.',
@@ -319,8 +310,6 @@ export const dbVi = {
   errors: {
     title: 'Lỗi query',
     hint: 'Message đã bỏ giá trị cụ thể; không lưu tham số',
-    time: 'Thời điểm',
-    type: 'Loại',
     message: 'Lỗi',
     context: 'Ngữ cảnh',
     code: 'Mã lỗi',

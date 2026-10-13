@@ -37,16 +37,9 @@ export const wqVi = {
     inspectWorkers: 'Xem Workers',
     inspectRuntime: 'Xem Runtime',
   },
-  section: {
-    unsupported: '{{driver}} không cung cấp dữ liệu/thao tác này.',
-    disconnected: 'Chưa kết nối được backend queue — chưa có dữ liệu.',
-    error: 'Không đọc được phần này: {{message}}',
-  },
   unsupported: {
-    title: 'Queue provider hiện tại không hỗ trợ',
     message: '{{product}} không có phần này.',
   },
-  severity: { warning: 'Warning', critical: 'Critical', info: 'Info' },
   kpi: {
     workers: 'Workers',
     waiting: 'Đang chờ',

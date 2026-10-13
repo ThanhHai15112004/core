@@ -17,12 +17,6 @@ export const jobsEn = {
     title: 'Job telemetry unavailable',
     message: 'The queue provider ({{product}}) is not connected ({{state}}). No job data is shown until it is reachable.',
   },
-  unavailableSection: 'Not available — {{reason}}',
-  reason: {
-    unsupported: 'the queue provider does not support this',
-    disconnected: 'the queue provider is not connected',
-    error: 'reading from the queue provider failed',
-  },
   status: {
     waiting: 'Waiting',
     active: 'Active',

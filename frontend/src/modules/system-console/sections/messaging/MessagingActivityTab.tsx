@@ -5,11 +5,10 @@ import { useLocale } from '@core/i18n/index';
 import { useLiveQuery } from '@core/data';
 import { useFormat } from '@core/hooks/useFormat';
 import { Badge, Button } from '@core/ui/primitives';
-import { ActivityFeed, DataTable, Panel, PanelState, StatGrid, StatTile, type ActivityItem } from '@core/ui/blocks';
+import { ActivityFeed, DataTable, Panel, PanelState, StatGrid, StatTile, type ActivityItem, AvailableView } from '@core/ui/blocks';
 import type { MessagingError } from '../../types/messaging.types';
 import { messagingApi } from '../../services/messaging.api';
 import { ACTIVITY_MAX_HEIGHT_PX, MESSAGE_TABLE_HEIGHT_PX, MESSAGING_ERROR_KINDS, SEVERITY_TONE } from '../../constants/messaging';
-import { BrokerSection } from '../../components/messaging/BrokerSection';
 import { messagingKeys } from './messaging-keys';
 import type { MessagingPage } from './useMessagingPage';
 
@@ -156,7 +155,7 @@ export function MessagingActivityTab({ page, product }: { page: MessagingPage; p
           <PanelState status={errors.isError ? 'error' : 'loading'} error={errors.error} onRetry={() => void errors.refetch()} className="p-3" />
         ) : (
           <div className={d.items.available ? undefined : 'p-3'}>
-            <BrokerSection section={d.items} product={product} onRetry={() => void errors.refetch()}>
+            <AvailableView source={d.items} product={product} onRetry={() => void errors.refetch()}>
               {(items) => (
                 <DataTable
                   data={items}
@@ -168,7 +167,7 @@ export function MessagingActivityTab({ page, product }: { page: MessagingPage; p
                   maxHeight={MESSAGE_TABLE_HEIGHT_PX}
                 />
               )}
-            </BrokerSection>
+            </AvailableView>
           </div>
         )}
       </Panel>

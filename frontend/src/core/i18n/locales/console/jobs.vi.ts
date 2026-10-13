@@ -17,12 +17,6 @@ export const jobsVi = {
     title: 'Không có số liệu job',
     message: 'Queue provider ({{product}}) chưa kết nối ({{state}}). Không hiển thị dữ liệu job cho tới khi kết nối lại.',
   },
-  unavailableSection: 'Không khả dụng — {{reason}}',
-  reason: {
-    unsupported: 'queue provider không hỗ trợ',
-    disconnected: 'queue provider chưa kết nối',
-    error: 'đọc từ queue provider thất bại',
-  },
   status: {
     waiting: 'Đang chờ',
     active: 'Đang chạy',

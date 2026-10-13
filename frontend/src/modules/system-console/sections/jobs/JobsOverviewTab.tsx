@@ -6,7 +6,7 @@ import { useLiveQuery } from '@core/data';
 import { useFormat } from '@core/hooks/useFormat';
 import { NO_VALUE } from '@core/lib/format';
 import { Button } from '@core/ui/primitives';
-import { AlertList, ComparisonTable, DataTable, Panel, PanelGrid, PanelState, QueryView, StatGrid, StatTile, type AlertItem, type ComparisonRow } from '@core/ui/blocks';
+import { AlertList, ComparisonTable, DataTable, Panel, PanelGrid, PanelState, QueryView, StatGrid, StatTile, type AlertItem, type ComparisonRow, AvailableView } from '@core/ui/blocks';
 import { BarList } from '@core/ui/charts';
 import type { JobPriorityLevel, JobProblem, JobsOverview, JobsReport, JobTypeRow } from '../../types/jobs.types';
 import { jobsApi } from '../../services/jobs.api';
@@ -25,7 +25,6 @@ import {
 } from '../../constants/jobs';
 import { JobTable } from '../../components/jobs/JobTable';
 import { FailureGroups } from '../../components/jobs/FailureGroups';
-import { ProviderSection } from '../../components/jobs/ProviderSection';
 import { JobsActivityChart } from './JobsActivityChart';
 import { jobsKeys } from './jobs-keys';
 import type { JobsPage } from './useJobsPage';
@@ -172,12 +171,12 @@ function OverviewBody({ page, data }: { page: JobsPage; data: JobsOverview }) {
             </Button>
           }
         >
-          <ProviderSection section={data.failureGroups}>
+          <AvailableView source={data.failureGroups}>
             {(groups) => <FailureGroups groups={groups.slice(0, OVERVIEW_GROUP_LIMIT)} onOpen={(g) => explore({ status: 'failed', errorType: g.errorType })} />}
-          </ProviderSection>
+          </AvailableView>
         </Panel>
         <Panel title={t('jobs.priority.title')} hint={t('jobs.priority.note')} flush>
-          <ProviderSection section={data.priorities}>
+          <AvailableView source={data.priorities}>
             {(rows) => (
               <DataTable
                 data={rows}
@@ -187,20 +186,20 @@ function OverviewBody({ page, data }: { page: JobsPage; data: JobsOverview }) {
                 emptyMessage={t('jobs.priority.none')}
               />
             )}
-          </ProviderSection>
+          </AvailableView>
         </Panel>
       </PanelGrid>
 
       <PanelGrid>
         <Panel title={t('jobs.longRunning.title')} flush>
-          <ProviderSection section={data.longRunning}>
+          <AvailableView source={data.longRunning}>
             {(rows) => <JobTable rows={rows} columns={LONG_RUNNING_COLUMNS} onOpen={(j) => openJob(j.id, j.queue)} emptyMessage={t('jobs.longRunning.none')} />}
-          </ProviderSection>
+          </AvailableView>
         </Panel>
         <Panel title={t('jobs.stalled.title')} hint={t('jobs.stalled.hint')} flush>
-          <ProviderSection section={data.stalled}>
+          <AvailableView source={data.stalled}>
             {(rows) => <JobTable rows={rows} columns={STALLED_COLUMNS} onOpen={(j) => openJob(j.id, j.queue)} emptyMessage={t('jobs.stalled.none')} />}
-          </ProviderSection>
+          </AvailableView>
         </Panel>
       </PanelGrid>
 

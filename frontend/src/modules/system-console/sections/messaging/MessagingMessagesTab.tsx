@@ -4,12 +4,11 @@ import { useLocale } from '@core/i18n/index';
 import { useLiveQuery } from '@core/data';
 import { useFormat } from '@core/hooks/useFormat';
 import { Button, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, ToggleGroup, ToggleGroupItem } from '@core/ui/primitives';
-import { FilterBar, Panel, PanelGrid, PanelState, SearchInput, StatGrid, StatTile } from '@core/ui/blocks';
+import { FilterBar, Panel, PanelGrid, PanelState, SearchInput, StatGrid, StatTile, AvailableView } from '@core/ui/blocks';
 import { BarList } from '@core/ui/charts';
 import type { MessageFilter, MessagingOverview } from '../../types/messaging.types';
 import { messagingApi } from '../../services/messaging.api';
 import { MESSAGE_MAX_COUNT, MESSAGE_PAGE_SIZE, MESSAGE_STATES, MESSAGE_STATUSES, MESSAGE_TABLE_HEIGHT_PX, VIEW_CAPABILITY, type MessageState } from '../../constants/messaging';
-import { BrokerSection } from '../../components/messaging/BrokerSection';
 import { MessageTable } from '../../components/messaging/MessageTable';
 import { formatAge, messageRowId } from '../../utils/messaging-format';
 import { messagingKeys } from './messaging-keys';
@@ -111,7 +110,7 @@ function ExplorerView({ page, product }: { page: MessagingPage; product: string 
         <PanelState status={query.isError ? 'error' : 'loading'} error={query.error} onRetry={() => void query.refetch()} className="p-3" />
       ) : (
         <div className={res.messages.available ? undefined : 'p-3'}>
-          <BrokerSection section={res.messages} product={product} onRetry={() => void query.refetch()}>
+          <AvailableView source={res.messages} product={product} onRetry={() => void query.refetch()}>
             {() => (
               <MessageTable
                 rows={rows}
@@ -134,7 +133,7 @@ function ExplorerView({ page, product }: { page: MessagingPage; product: string 
                 }
               />
             )}
-          </BrokerSection>
+          </AvailableView>
         </div>
       )}
     </Panel>
@@ -162,7 +161,7 @@ function RetryView({ page, product, onAction }: { page: MessagingPage; product: 
           <PanelState status={query.isError ? 'error' : 'loading'} error={query.error} onRetry={() => void query.refetch()} className="p-3" />
         ) : (
           <div className={d.retrying.available ? undefined : 'p-3'}>
-            <BrokerSection section={d.retrying} product={product} onRetry={() => void query.refetch()}>
+            <AvailableView source={d.retrying} product={product} onRetry={() => void query.refetch()}>
               {(rows) => (
                 <MessageTable
                   rows={rows}
@@ -192,7 +191,7 @@ function RetryView({ page, product, onAction }: { page: MessagingPage; product: 
                   }
                 />
               )}
-            </BrokerSection>
+            </AvailableView>
           </div>
         )}
       </Panel>
@@ -227,7 +226,7 @@ function DeadLetterView({ page, product, onAction }: { page: MessagingPage; prod
             <PanelState status={query.isError ? 'error' : 'loading'} error={query.error} onRetry={() => void query.refetch()} className="p-3" />
           ) : (
             <div className={d.items.available ? undefined : 'p-3'}>
-              <BrokerSection section={d.items} product={product} onRetry={() => void query.refetch()}>
+              <AvailableView source={d.items} product={product} onRetry={() => void query.refetch()}>
                 {(rows) => (
                   <MessageTable
                     rows={rows}
@@ -257,7 +256,7 @@ function DeadLetterView({ page, product, onAction }: { page: MessagingPage; prod
                     }
                   />
                 )}
-              </BrokerSection>
+              </AvailableView>
             </div>
           )}
         </Panel>

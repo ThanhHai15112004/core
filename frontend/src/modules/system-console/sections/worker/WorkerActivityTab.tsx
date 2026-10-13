@@ -5,12 +5,11 @@ import { useLiveQuery } from '@core/data';
 import { useFormat } from '@core/hooks/useFormat';
 import { NO_VALUE } from '@core/lib/format';
 import { Badge, ToggleGroup, ToggleGroupItem } from '@core/ui/primitives';
-import { ActivityFeed, DataTable, Panel, PanelState, QueryView, RelativeTime, StatGrid, StatTile, type ActivityItem } from '@core/ui/blocks';
+import { ActivityFeed, DataTable, Panel, PanelState, QueryView, RelativeTime, StatGrid, StatTile, type ActivityItem, AvailableView } from '@core/ui/blocks';
 import type { WorkerAlert, WorkerEvent, WorkerOperation, WorkerOverview } from '../../types/worker.types';
 import { workerApi } from '../../services/worker.api';
 import { ACTIVITY_VIEWS, DELAY_REASONS, EVENT_TONE, FEED_MAX_HEIGHT_PX, JOB_TABLE_MAX_HEIGHT_PX, type ActivityView } from '../../constants/worker';
 import { JobTable } from '../../components/worker/JobTable';
-import { SectionGate } from '../../components/worker/SectionGate';
 import { WorkerFailuresView } from './WorkerFailuresView';
 import { workerKeys } from './worker-keys';
 import type { WorkerPage } from './useWorkerPage';
@@ -90,7 +89,7 @@ function DelayedView({ page, product }: { page: WorkerPage; product: string | un
             ))}
           </StatGrid>
           <Panel title={t('wq.delayed.title')} hint={t('wq.delayed.note')} flush>
-            <SectionGate section={d.jobs} product={product} className="p-3">
+            <AvailableView source={d.jobs} product={product} className="p-3">
               {(rows) => (
                 <JobTable
                   rows={rows}
@@ -100,7 +99,7 @@ function DelayedView({ page, product }: { page: WorkerPage; product: string | un
                   maxHeight={JOB_TABLE_MAX_HEIGHT_PX}
                 />
               )}
-            </SectionGate>
+            </AvailableView>
           </Panel>
         </>
       )}

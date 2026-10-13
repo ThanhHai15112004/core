@@ -1,13 +1,5 @@
 [
   "src/core/components/card/Card.tsx",
   "src/core/layouts/Footer.tsx",
-  "src/core/layouts/Header.tsx",
-  "src/modules/system-console/components/common/ConfirmModal.tsx",
-  "src/modules/system-console/components/common/EmptyState.tsx",
-  "src/modules/system-console/components/common/LineChart.tsx",
-  "src/modules/system-console/styles/console-components.css",
-  "src/modules/system-console/styles/console-layout.css",
-  "src/modules/system-console/styles/console-runtimes.css",
-  "src/modules/system-console/styles/console-scheduler.css",
-  "src/modules/system-console/styles/console-sections.css"
+  "src/core/layouts/Header.tsx"
 ]

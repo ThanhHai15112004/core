@@ -33,11 +33,6 @@ export const messagingVi = {
     fail: 'Kiểm tra messaging thất bại ở bước {{step}}',
     step: { connect: 'Kết nối', publish: 'Publish', consume: 'Consume', ack: 'Acknowledgement' },
   },
-  section: {
-    unsupported: '{{driver}} không cung cấp dữ liệu/thao tác này.',
-    disconnected: 'Broker chưa kết nối — chưa có dữ liệu.',
-    error: 'Không đọc được phần này',
-  },
   unsupported: '{{product}} không hỗ trợ phần này.',
   kpi: {
     published: 'Publish / giây',

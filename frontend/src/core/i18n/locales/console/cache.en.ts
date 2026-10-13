@@ -1,5 +1,4 @@
 export const cacheEn = {
-  refresh: 'Refresh',
   driver: { redis: 'Redis', memory: 'In-Memory (per runtime)' },
   tab: {
     overview: 'Overview',
@@ -96,7 +95,6 @@ export const cacheEn = {
     sensitiveLabel: 'Sensitive data',
     yes: 'Yes',
     no: 'No',
-    sort: 'Sort',
     empty: 'No namespaces yet.',
     scanned: '{{count}} keys · scanned at {{time}}',
     truncated: 'details measured for the first {{count}} keys only',
@@ -116,10 +114,8 @@ export const cacheEn = {
     anyType: 'Any type',
     ttl: { any: 'Any TTL', expiring: 'With TTL', persistent: 'No TTL', lt1m: 'Expires < 1 min' },
     clearNamespace: 'Remove namespace filter',
-    apply: 'Filter',
     noMatch: 'No keys match the filter (in the scanned part).',
     showing: '{{count}} keys · scanned {{examined}}',
-    loadMore: 'Load more',
     end: 'Scan complete',
   },
   key: {
@@ -236,10 +232,7 @@ export const cacheEn = {
     blockedCmd: 'waiting',
   },
   ops: {
-    actor: 'User',
     anonymous: 'Console (not signed in)',
-    action: 'Action',
-    result: 'Result',
     affectedKeys: '{{count}} keys',
     kind: { delete_key: 'Delete key', clear_namespace: 'Clear namespace', flush_all: 'Flush all cache' },
     status: { success: 'Success', failed: 'Failed' },

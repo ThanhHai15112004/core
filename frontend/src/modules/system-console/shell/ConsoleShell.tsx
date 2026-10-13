@@ -70,7 +70,6 @@ export const ConsoleShell: React.FC<{ children: React.ReactNode }> = ({ children
   const crumbs: Crumb[] = useMemo(() => {
     const detail = def.crumb?.(route.params, t) ?? null;
     const list: Crumb[] = [{ label: t('nav.systemConsole'), onClick: () => navigate('overview') }];
-    if (def.group) list.push({ label: t(`nav.group.${def.group}`) });
     list.push({ label: t(`nav.${def.id}`), onClick: detail ? () => navigate(def.id) : undefined });
     if (detail) list.push({ label: detail });
     return list;
@@ -140,7 +139,6 @@ export const ConsoleShell: React.FC<{ children: React.ReactNode }> = ({ children
 
   return (
     <AppShell
-      className="console-root"
       topbar={topbar}
       sidebar={({ rail, onNavigate }) => (
         <Sidebar

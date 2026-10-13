@@ -177,7 +177,6 @@ export const perfEn = {
     title: 'Performance events',
     hint: 'Bottleneck start / recovery and runtime events',
     empty: 'No events in this range',
-    open: 'Open',
     kind: {
       performance: 'Performance',
       runtime: 'Runtime',

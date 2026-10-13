@@ -60,5 +60,3 @@ export const CAPACITY_FULL_PERCENT = 100;
 export const OVERVIEW_BOTTLENECKS = 4;
 export const EVENTS_MAX_HEIGHT_PX = 640;
 
-/** @deprecated Màu CSS cũ — chỉ còn cho các section chưa viết lại (cache, storage, worker, messaging, database). */
-export const FALLBACK_COLORS = ['var(--scp-series-1)', 'var(--scp-series-2)', 'var(--scp-series-3)', 'var(--scp-series-4)'];

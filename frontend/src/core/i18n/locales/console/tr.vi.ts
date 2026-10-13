@@ -1,8 +1,6 @@
 export const trVi = {
   openLogs: 'Xem request trong Logs',
   /** Dùng chung với các trang cũ (Performance, Cache, Worker…). */
-  live: { live: 'LIVE', paused: 'Đã tạm dừng', pause: 'Tạm dừng live', resume: 'Tiếp tục live' },
-  range: { '5m': '5 phút', '15m': '15 phút', '1h': '1 giờ', '6h': '6 giờ', '24h': '24 giờ', '7d': '7 ngày' },
   tab: { overview: 'Tổng quan', endpoints: 'Endpoints', errors: 'Lỗi' },
   internal: 'Nội bộ',
   unit: { rps: 'req/s', pp: 'điểm %' },

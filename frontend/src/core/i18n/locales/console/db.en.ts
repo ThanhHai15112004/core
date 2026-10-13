@@ -38,12 +38,6 @@ export const dbEn = {
     failTitle: 'Could not test the connection',
     ping: 'ping {{ms}}',
   },
-  section: {
-    unsupported: 'Driver {{driver}} does not support this metric yet.',
-    disconnected: 'Database is not connected — no data yet.',
-    error: 'Could not read this part: {{message}}',
-    retry: 'Retry',
-  },
   unsupported: {
     message: 'Driver {{driver}} has no data for this part yet. Common metrics (latency, throughput, errors) are still on the Overview tab.',
   },
@@ -72,8 +66,6 @@ export const dbEn = {
   },
   alerts: {
     title: 'Current problems',
-    since: 'Started {{time}}',
-    inspect: 'Inspect',
     noDeadlocks: 'No deadlocks in the last 24 hours',
     noLocks: 'No blocked queries',
     connected: 'Database connection stable',
@@ -122,7 +114,6 @@ export const dbEn = {
     failed: 'Action failed',
   },
   modal: {
-    typeToConfirm: 'Type {{word}} to confirm',
     cancel: {
       title: 'Cancel running query?',
       warning: 'The query will be interrupted; the application receives a "query interrupted" error. The session stays connected.',
@@ -319,8 +310,6 @@ export const dbEn = {
   errors: {
     title: 'Query error',
     hint: 'Literal values removed; parameters are never stored',
-    time: 'Time',
-    type: 'Type',
     message: 'Error',
     context: 'Context',
     code: 'Error code',

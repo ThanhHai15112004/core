@@ -28,8 +28,7 @@ import {
   StatusBanner,
   StatusDot,
   UsageBar,
-  type PageTab,
-} from '@core/ui/blocks';
+  type PageTab, AvailableView } from '@core/ui/blocks';
 import type { JobState, QueueDetail } from '../../types/worker.types';
 import { workerApi } from '../../services/worker.api';
 import { DEFAULT_JOB_STATES, JOB_STATES, JOB_TABLE_MAX_HEIGHT_PX, QUEUE_JOBS_LIMIT, QUEUE_PAGE_TABS, QUEUE_STATUS_TONE, type QueuePageTab } from '../../constants/worker';
@@ -38,7 +37,6 @@ import { QueueMetricChart } from '../../components/worker/QueueMetricChart';
 import { RateBalance } from '../../components/worker/RateBalance';
 import { WorkerTable } from '../../components/worker/WorkerTable';
 import { ConcurrencyPanel } from '../../components/worker/ConcurrencyPanel';
-import { SectionGate } from '../../components/worker/SectionGate';
 import { DENSE_GRID, toAlertItems } from '../../components/worker/worker-ui';
 import { WorkerFailuresView } from './WorkerFailuresView';
 import { workerKeys } from './worker-keys';
@@ -232,9 +230,9 @@ function QueueOverview({ page, d, product }: { page: WorkerPage; d: QueueDetail;
             </Button>
           }
         >
-          <SectionGate section={d.recentJobs} product={product} className="p-3">
+          <AvailableView source={d.recentJobs} product={product} className="p-3">
             {(rows) => <JobTable rows={rows} columns={['id', 'type', 'state', 'attempt', 'duration', 'time']} onOpen={page.openJob} emptyMessage={t('wq.job.none')} />}
-          </SectionGate>
+          </AvailableView>
         </Panel>
         <Panel title={t('wq.detail.connections')} hint={product}>
           {d.brokerWorkers === null ? (
@@ -283,7 +281,7 @@ function QueueJobsPanel({ page, name }: { page: WorkerPage; name: string }) {
     >
       <QueryView query={query}>
         {(d) => (
-          <SectionGate section={d.jobs} className="p-3">
+          <AvailableView source={d.jobs} className="p-3">
             {(rows) => (
               <JobTable
                 rows={rows}
@@ -294,7 +292,7 @@ function QueueJobsPanel({ page, name }: { page: WorkerPage; name: string }) {
                 footer={t('wq.job.limitNote', { limit: d.limit })}
               />
             )}
-          </SectionGate>
+          </AvailableView>
         )}
       </QueryView>
     </Panel>

@@ -4,13 +4,12 @@ import { useLiveQuery } from '@core/data';
 import { useFormat } from '@core/hooks/useFormat';
 import { cn } from '@core/lib/cn';
 import { Button } from '@core/ui/primitives';
-import { DetailSection, DetailSheet, KeyValueGrid, QueryView } from '@core/ui/blocks';
+import { DetailSection, DetailSheet, KeyValueGrid, QueryView, AvailableView } from '@core/ui/blocks';
 import type { ChannelDetail, MessageRow, MessagingRange } from '../../types/messaging.types';
 import { messagingApi } from '../../services/messaging.api';
 import { CHANNEL_STATUS_TONE } from '../../constants/messaging';
 import { formatAge, formatMsgRate } from '../../utils/messaging-format';
 import { messagingKeys } from '../../sections/messaging/messaging-keys';
-import { BrokerSection } from './BrokerSection';
 import { ConsumerTable } from './ConsumerTable';
 import { MessageTable } from './MessageTable';
 import { RecentErrors, SeriesSection } from './DetailParts';
@@ -81,13 +80,13 @@ function Body({ d, range, at, onOpenConsumer, onOpenMessage }: { d: ChannelDetai
       </DetailSection>
       <RecentErrors errors={d.recentErrors} />
       <DetailSection title={t('messaging.message.recent')}>
-        <BrokerSection section={d.recentMessages}>
+        <AvailableView source={d.recentMessages}>
           {(rows) => (
             <div className="overflow-hidden rounded-md border border-border">
               <MessageTable rows={rows} onOpen={onOpenMessage} columns={['time', 'id', 'status', 'duration']} emptyMessage={t('messaging.message.none')} />
             </div>
           )}
-        </BrokerSection>
+        </AvailableView>
       </DetailSection>
     </>
   );

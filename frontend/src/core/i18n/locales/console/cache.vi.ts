@@ -1,5 +1,4 @@
 export const cacheVi = {
-  refresh: 'Làm mới',
   driver: { redis: 'Redis', memory: 'In-Memory (riêng từng runtime)' },
   tab: {
     overview: 'Tổng quan',
@@ -96,7 +95,6 @@ export const cacheVi = {
     sensitiveLabel: 'Dữ liệu nhạy cảm',
     yes: 'Có',
     no: 'Không',
-    sort: 'Sắp xếp',
     empty: 'Chưa có namespace nào.',
     scanned: '{{count}} key · quét lúc {{time}}',
     truncated: 'chỉ đo chi tiết {{count}} key đầu',
@@ -116,10 +114,8 @@ export const cacheVi = {
     anyType: 'Mọi type',
     ttl: { any: 'Mọi TTL', expiring: 'Có TTL', persistent: 'Không TTL', lt1m: 'Hết hạn < 1 phút' },
     clearNamespace: 'Bỏ lọc namespace',
-    apply: 'Lọc',
     noMatch: 'Không có key khớp bộ lọc (trong phần đã quét).',
     showing: '{{count}} key · đã quét {{examined}}',
-    loadMore: 'Tải thêm',
     end: 'Đã quét hết',
   },
   key: {
@@ -236,10 +232,7 @@ export const cacheVi = {
     blockedCmd: 'đang chờ',
   },
   ops: {
-    actor: 'Người thực hiện',
     anonymous: 'Console (chưa đăng nhập)',
-    action: 'Thao tác',
-    result: 'Kết quả',
     affectedKeys: '{{count}} key',
     kind: { delete_key: 'Xoá key', clear_namespace: 'Xoá namespace', flush_all: 'Flush toàn bộ cache' },
     status: { success: 'Thành công', failed: 'Thất bại' },

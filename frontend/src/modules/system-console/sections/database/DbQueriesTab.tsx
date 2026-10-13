@@ -17,8 +17,7 @@ import {
   StatGrid,
   StatTile,
   StatusDot,
-  UsageBar,
-} from '@core/ui/blocks';
+  UsageBar, AvailableView } from '@core/ui/blocks';
 import { BarList } from '@core/ui/charts';
 import type { DbOverview, DbQueryStat, DbSession, DbTransaction } from '../../types/database.types';
 import { databaseApi } from '../../services/database.api';
@@ -32,7 +31,6 @@ import {
 } from '../../constants/database';
 import { SessionTable } from '../../components/database/SessionTable';
 import { BlockingTree } from '../../components/database/BlockingTree';
-import { DbSectionGate } from '../../components/database/DbSectionGate';
 import { runtimeLabel } from '../../components/database/db-labels';
 import { DbCapabilityGate, DbViewSwitch } from './DbViewSwitch';
 import { dbKeys } from './database-keys';
@@ -133,7 +131,7 @@ function QueriesView({ page, overview, actions }: TabProps) {
       >
         <QueryView query={live}>
           {(d) => (
-            <DbSectionGate section={d.sessions} driver={driver} onRetry={() => void live.refetch()}>
+            <AvailableView source={d.sessions} product={driver} onRetry={() => void live.refetch()}>
               {(list) => (
                 <SessionTable
                   sessions={list.filter((s) => matchesState(s, page.stateFilter, d.slowQueryMs))}
@@ -148,7 +146,7 @@ function QueriesView({ page, overview, actions }: TabProps) {
                   maxHeight={DB_TABLE_MAX_HEIGHT_PX}
                 />
               )}
-            </DbSectionGate>
+            </AvailableView>
           )}
         </QueryView>
       </Panel>
@@ -169,7 +167,7 @@ function QueriesView({ page, overview, actions }: TabProps) {
       >
         <QueryView query={stats}>
           {(d) => (
-            <DbSectionGate section={d.stats} driver={driver} onRetry={() => void stats.refetch()}>
+            <AvailableView source={d.stats} product={driver} onRetry={() => void stats.refetch()}>
               {(list) => (
                 <DataTable
                   data={list}
@@ -183,7 +181,7 @@ function QueriesView({ page, overview, actions }: TabProps) {
                   emptyMessage={page.minMs > 0 ? t('db.stats.noSlow', { ms: f.duration(page.minMs), range: t(`ui.time.ranges.${page.range}`) }) : t('db.stats.empty')}
                 />
               )}
-            </DbSectionGate>
+            </AvailableView>
           )}
         </QueryView>
       </Panel>
@@ -262,7 +260,7 @@ function ConnectionsView({ page, overview, actions }: TabProps) {
       <Panel title={t('db.conn.title')} flush actions={filter ? <Badge tone="info">{runtimeLabel(filter, t)}</Badge> : undefined}>
         <QueryView query={q}>
           {(data) => (
-            <DbSectionGate section={data.sessions} driver={overview?.driver} onRetry={() => void q.refetch()}>
+            <AvailableView source={data.sessions} product={overview?.driver} onRetry={() => void q.refetch()}>
               {(list) => (
                 <SessionTable
                   sessions={list.filter((s) => !filter || (s.runtime ?? 'other') === filter)}
@@ -278,7 +276,7 @@ function ConnectionsView({ page, overview, actions }: TabProps) {
                   maxHeight={DB_TABLE_MAX_HEIGHT_PX}
                 />
               )}
-            </DbSectionGate>
+            </AvailableView>
           )}
         </QueryView>
       </Panel>
@@ -350,7 +348,7 @@ function TransactionsView({ page, overview }: Omit<TabProps, 'actions'>) {
       <Panel title={t('db.tx.list')} hint={longSec !== null ? t('db.tx.hint', { sec: longSec }) : undefined} flush className="mb-4">
         <QueryView query={q}>
           {(data) => (
-            <DbSectionGate section={data.transactions} driver={overview?.driver} onRetry={() => void q.refetch()}>
+            <AvailableView source={data.transactions} product={overview?.driver} onRetry={() => void q.refetch()}>
               {(list) => (
                 <DataTable
                   data={list}
@@ -364,7 +362,7 @@ function TransactionsView({ page, overview }: Omit<TabProps, 'actions'>) {
                   maxHeight={DB_TABLE_MAX_HEIGHT_PX}
                 />
               )}
-            </DbSectionGate>
+            </AvailableView>
           )}
         </QueryView>
       </Panel>
@@ -373,7 +371,7 @@ function TransactionsView({ page, overview }: Omit<TabProps, 'actions'>) {
         <Panel title={t('db.locks.title')}>
           <QueryView query={q} compact>
             {(data) => (
-              <DbSectionGate section={data.lockWaits} driver={overview?.driver}>
+              <AvailableView source={data.lockWaits} product={overview?.driver}>
                 {(waits) =>
                   waits.length === 0 ? (
                     <PanelState status="empty" compact message={t('db.locks.none')} />
@@ -381,7 +379,7 @@ function TransactionsView({ page, overview }: Omit<TabProps, 'actions'>) {
                     <BlockingTree nodes={data.blockingChains} onOpen={(id) => page.openSession(id)} />
                   )
                 }
-              </DbSectionGate>
+              </AvailableView>
             )}
           </QueryView>
         </Panel>

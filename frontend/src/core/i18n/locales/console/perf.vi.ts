@@ -177,7 +177,6 @@ export const perfVi = {
     title: 'Sự kiện hiệu năng',
     hint: 'Điểm nghẽn bắt đầu / hồi phục và sự kiện runtime',
     empty: 'Chưa có sự kiện nào trong khoảng thời gian này',
-    open: 'Mở',
     kind: {
       performance: 'Hiệu năng',
       runtime: 'Runtime',

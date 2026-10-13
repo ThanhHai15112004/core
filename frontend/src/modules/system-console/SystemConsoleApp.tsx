@@ -1,6 +1,5 @@
 import React from 'react';
 import '@core/theme/theme.css';
-import './styles/index.css';
 import { Toaster } from 'sonner';
 import { ThemeProvider, useTheme } from '@core/theme';
 import { DataProvider } from '@core/data';

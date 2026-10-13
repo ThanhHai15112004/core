@@ -37,16 +37,9 @@ export const wqEn = {
     inspectWorkers: 'Inspect Workers',
     inspectRuntime: 'Inspect Runtime',
   },
-  section: {
-    unsupported: '{{driver}} does not provide this data/action.',
-    disconnected: 'Queue backend is not connected — no data yet.',
-    error: 'Could not read this section: {{message}}',
-  },
   unsupported: {
-    title: 'Not supported by the current queue provider',
     message: '{{product}} does not have this section.',
   },
-  severity: { warning: 'Warning', critical: 'Critical', info: 'Info' },
   kpi: {
     workers: 'Workers',
     waiting: 'Waiting',

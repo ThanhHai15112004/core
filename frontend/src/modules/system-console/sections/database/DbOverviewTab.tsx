@@ -20,12 +20,10 @@ import {
   UsageBar,
   type ActivityItem,
   type AlertItem,
-  type ComparisonRow,
-} from '@core/ui/blocks';
+  type ComparisonRow, AvailableView } from '@core/ui/blocks';
 import type { DbOverview, DbReport, DbTable } from '../../types/database.types';
 import { ALERT_TONE, DB_OVERVIEW_EVENTS, DB_PREVIEW_MAX_HEIGHT_PX, EVENT_TONE, POOL_USAGE_THRESHOLDS } from '../../constants/database';
 import { SessionTable } from '../../components/database/SessionTable';
-import { DbSectionGate } from '../../components/database/DbSectionGate';
 import { DbMetricChart } from './DbMetricChart';
 import type { DatabasePage } from './useDatabasePage';
 import type { DbActions } from './useDbActions';
@@ -168,7 +166,7 @@ export function DbOverviewTab({ page, overview, actions }: { page: DatabasePage;
           }
         >
           {data ? (
-            <DbSectionGate section={data.liveQueries} driver={data.driver}>
+            <AvailableView source={data.liveQueries} product={data.driver}>
               {(list) => (
                 <SessionTable
                   sessions={list}
@@ -182,7 +180,7 @@ export function DbOverviewTab({ page, overview, actions }: { page: DatabasePage;
                   maxHeight={DB_PREVIEW_MAX_HEIGHT_PX}
                 />
               )}
-            </DbSectionGate>
+            </AvailableView>
           ) : (
             pending('p-3')
           )}
@@ -237,9 +235,9 @@ export function DbOverviewTab({ page, overview, actions }: { page: DatabasePage;
           }
         >
           {data ? (
-            <DbSectionGate section={data.largestTables} driver={data.driver}>
+            <AvailableView source={data.largestTables} product={data.driver}>
               {(list) => <DataTable data={list} columns={tableColumns} getRowId={(r) => r.name} onRowClick={(r) => page.openTable(r.name)} emptyMessage={t('db.tables.empty')} />}
-            </DbSectionGate>
+            </AvailableView>
           ) : (
             pending('p-3')
           )}

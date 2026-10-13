@@ -33,11 +33,6 @@ export const messagingEn = {
     fail: 'Messaging health check failed at stage {{step}}',
     step: { connect: 'Connection', publish: 'Publish', consume: 'Consume', ack: 'Acknowledgement' },
   },
-  section: {
-    unsupported: '{{driver}} does not provide this data/action.',
-    disconnected: 'Broker is not connected — no data yet.',
-    error: 'Could not read this section',
-  },
   unsupported: '{{product}} does not support this view.',
   kpi: {
     published: 'Published / sec',

@@ -14,14 +14,6 @@ import { govVi } from './console/gov.vi';
 
 export const vi = {
   ui: uiVi,
-  common: {
-    loading: 'Đang tải...',
-    viewDetails: 'Xem chi tiết',
-    close: 'Đóng',
-    cancel: 'Hủy',
-    confirm: 'Xác nhận',
-    uptime: 'Thời gian hoạt động',
-  },
   nav: {
     overview: 'Tổng quan',
     runtimes: 'Runtimes',
@@ -50,9 +42,6 @@ export const vi = {
   },
   overview: {
     title: 'Tổng quan hệ thống',
-    subtitle: 'Sức khỏe và hiệu năng thời gian thực của nền tảng Core.',
-    noActiveIncidents: 'Không có sự cố nào đang diễn ra',
-    systemsNominal: 'Tất cả các thành phần hạ tầng đang hoạt động trong ngưỡng an toàn.',
   },
   kpi: {
     reqSec: 'Request / giây',
@@ -62,38 +51,9 @@ export const vi = {
     memoryUsage: 'Mức dùng RAM',
     activeAlerts: 'Cảnh báo',
   },
-  healthMap: {
-    title: 'Bản đồ sức khỏe',
-    apiGateway: 'Cổng API Gateway',
-  },
-  chart: {
-    noSamples: 'Chưa có mẫu đo nào trong khoảng thời gian này. Số liệu được thu thập từ lúc mở trang, mỗi lần làm mới.',
-    requests: 'Lưu lượng',
-    latency: 'Độ trễ',
-    errors: 'Lỗi',
-    cpu: 'CPU',
-    memory: 'Bộ nhớ',
-    current: 'Hiện tại',
-    average: 'Trung bình',
-    peak: 'Đỉnh cao',
-    range15m: '15 phút',
-    range1h: '1 giờ',
-    range6h: '6 giờ',
-    range24h: '24 giờ',
-  },
-  snapshots: {
-    title: 'Runtime & hạ tầng',
-    subtitle: 'Mỗi thành phần đang làm việc thế nào',
-  },
-  timeline: {
-    title: 'Sự kiện gần đây',
-    openLogViewer: 'Xem toàn bộ nhật ký',
-    emptyEvents: 'Không có sự kiện nào được ghi nhận cho bộ lọc này',
-  },
   header: {
     systemConsole: 'System Console',
     home: 'Trang chủ',
-    themeToggle: 'Chuyển giao diện sáng/tối',
     languageToggle: 'Ngôn ngữ',
   },
   footer: {
@@ -104,7 +64,6 @@ export const vi = {
     copyright: 'Bản quyền thuộc về Core Architecture Team. Sẵn sàng cho Microservices.',
   },
   console: {
-    common: { executing: 'Đang thực thi...', status: 'Trạng thái' },
     status: {
       healthy: 'Hoạt động tốt',
       warning: 'Cảnh báo',
@@ -119,14 +78,7 @@ export const vi = {
       active: 'Đang chạy',
       info: 'Thông tin',
     },
-    healthStatus: { ok: 'Ổn định', degraded: 'Suy giảm', down: 'Mất kết nối' },
-    fallback: {
-      noData: 'Chưa có dữ liệu',
-      offlineTitle: 'Mất kết nối API Gateway',
-      offlineMessage: 'Không nhận được phản hồi từ {{url}}.',
-      overviewUnavailableTitle: 'Không tải được dữ liệu tổng quan',
-      overviewUnavailableMessage: 'API Gateway vẫn phản hồi nhưng /ops/overview bị lỗi. Các chỉ số bên dưới chưa có dữ liệu.',
-    },
+    healthStatus: { down: 'Mất kết nối' },
     toast: {
       connectionLostTitle: 'Mất kết nối',
       connectionLostMessage: 'Không kết nối được Core API Gateway. Đang hiển thị trạng thái gần nhất.',
@@ -136,13 +88,7 @@ export const vi = {
     },
     topbar: {
       latency: 'Độ trễ round-trip tới /health',
-      dark: 'Tối',
-      light: 'Sáng',
     },
-    logs: {
-      level: { all: 'Tất cả', info: 'Info', warn: 'Cảnh báo', error: 'Lỗi', success: 'Thành công' },
-    },
-    drawer: { copied: 'Đã copy!' },
   },
   home: {
     badge: 'Core Framework đã khởi tạo thành công',
@@ -171,13 +117,11 @@ export const vi = {
       unknown: 'Chưa rõ môi trường',
       tooltip: 'Môi trường backend đang kết nối',
     },
-    tone: { ok: 'Ổn định', warn: 'Có cảnh báo', crit: 'Nghiêm trọng', unknown: 'Chưa rõ' },
     sidebar: {
       subtitle: 'Core Control Plane',
       problemPackages: 'Số package đang cảnh báo/lỗi',
     },
     page: {
-      autoUpdated: 'Tự động cập nhật',
       healthyCount: '{{healthy}}/{{total}} ổn định',
       components: 'Thành phần',
       problems: 'Cần chú ý',
@@ -188,13 +132,7 @@ export const vi = {
       overviewError: 'Không tải được dữ liệu tổng quan',
       metric: { throughput: 'Lưu lượng', latency: 'Độ trễ P95', errors: 'Tỷ lệ lỗi', cpu: 'CPU' },
     },
-    health: {
-      servicesHealthy: 'Dịch vụ ổn định',
-      startedAt: 'Bắt đầu {{ago}}',
-    },
-    kpi: { trend: '{{change}} so với {{minutes}} phút trước' },
     map: {
-      hint: 'Bấm vào thành phần để xem chi tiết',
       category: { runtime: 'Runtime', infrastructure: 'Hạ tầng', governance: 'Bảo mật' },
       item: {
         'runtime-api': 'API Gateway',
@@ -207,45 +145,9 @@ export const vi = {
         'gov-security': 'Bảo mật & Xác thực',
       },
     },
-    chart: { title: 'Hiệu năng hệ thống', metric: 'Chỉ số', range: 'Khoảng thời gian' },
-    problems: { title: 'Cần chú ý' },
-    snapshot: { notMonitored: 'Runtime này chưa gửi số liệu cho API.' },
     offline: {
       title: 'Không kết nối được Core API',
-      lastSync: 'Lần kết nối thành công gần nhất: {{time}} ({{ago}}).',
       neverSynced: 'Chưa kết nối thành công lần nào trong phiên này.',
-      lastKnown: 'Đang hiển thị giá trị gần nhất (làm mờ) — số liệu không còn là thời gian thực.',
-      noData: 'System Console không lấy được số liệu trực tiếp.',
-      causesTitle: 'Nguyên nhân có thể:',
-      autoRetry: 'Hệ thống tự thử kết nối lại mỗi {{seconds}} giây.',
-      cause: {
-        stopped: 'API runtime đã dừng',
-        network: 'Mất kết nối mạng hoặc sai VITE_API_BASE_URL',
-        restarting: 'Backend đang khởi động lại',
-      },
-    },
-  },
-  planned: {
-    badge: 'Sắp có',
-    title: 'Tính năng chưa được triển khai',
-    message: 'Trang này đã có vị trí trong System Console nhưng chưa có dữ liệu thật. Không hiển thị số liệu mô phỏng.',
-    description: {
-      storage: 'Dung lượng và thao tác trên object storage.',
-      messaging: 'Queue, topic và luồng message.',
-      worker: 'Chi tiết queue, job và consumer.',
-      scheduler: 'Danh sách cron task, lịch chạy và lịch sử.',
-      jobs: 'Tra cứu và thao tác từng job.',
-      secrets: 'Nguồn secret và vòng đời khoá.',
-      configuration: 'Cấu hình đã nạp của từng runtime.',
-    },
-    related: {
-      storage: 'Xem packages hạ tầng',
-      messaging: 'Xem Worker runtime',
-      worker: 'Xem Worker runtime',
-      scheduler: 'Xem Scheduler runtime',
-      jobs: 'Xem Worker & Queue',
-      secrets: 'Xem trang Bảo mật',
-      configuration: 'Xem cấu hình API runtime',
     },
   },
   tr: trVi,

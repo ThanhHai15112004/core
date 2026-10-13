@@ -2,11 +2,10 @@ import { useLocale } from '@core/i18n/index';
 import { useLiveQuery } from '@core/data';
 import { useFormat } from '@core/hooks/useFormat';
 import { Badge } from '@core/ui/primitives';
-import { ConfigSheet, CopyButton, DetailSection, KeyValueGrid, QueryView } from '@core/ui/blocks';
+import { ConfigSheet, CopyButton, DetailSection, KeyValueGrid, QueryView, AvailableView } from '@core/ui/blocks';
 import type { BrokerInfo, MessagingConfig } from '../../types/messaging.types';
 import { messagingApi } from '../../services/messaging.api';
 import { CONFIG_LABELLED_KEYS, CONFIG_MS_KEYS } from '../../constants/messaging';
-import { BrokerSection } from '../../components/messaging/BrokerSection';
 import { messagingKeys } from './messaging-keys';
 
 type ConfigItem = MessagingConfig['items'][number];
@@ -21,9 +20,9 @@ export function MessagingConfigSheet({ open, onOpenChange, product }: { open: bo
       <DetailSection title={t('messaging.broker.title')}>
         <QueryView query={broker} compact>
           {(b) => (
-            <BrokerSection section={b.broker} product={product} onRetry={() => void broker.refetch()}>
+            <AvailableView source={b.broker} product={product} onRetry={() => void broker.refetch()}>
               {(info) => <BrokerFacts info={info} />}
-            </BrokerSection>
+            </AvailableView>
           )}
         </QueryView>
       </DetailSection>

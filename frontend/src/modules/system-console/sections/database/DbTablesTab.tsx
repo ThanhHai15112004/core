@@ -6,12 +6,11 @@ import { useLiveQuery } from '@core/data';
 import { useFormat } from '@core/hooks/useFormat';
 import { formatSignedBytes, NO_VALUE, UNIT } from '@core/lib/format';
 import { Badge, Button, Hint } from '@core/ui/primitives';
-import { DataTable, KeyValueGrid, Panel, PanelGrid, QueryView, RelativeTime, StatGrid, StatTile, StatusBanner, UsageBar } from '@core/ui/blocks';
+import { DataTable, KeyValueGrid, Panel, PanelGrid, QueryView, RelativeTime, StatGrid, StatTile, StatusBanner, UsageBar, AvailableView } from '@core/ui/blocks';
 import { MetricChart, type TimeSeries } from '@core/ui/charts';
 import type { DbMigrations, DbOverview, DbTable } from '../../types/database.types';
 import { databaseApi } from '../../services/database.api';
 import { DB_TABLE_MAX_HEIGHT_PX, DB_TABLE_VIEWS, STORAGE_USAGE_THRESHOLDS } from '../../constants/database';
-import { DbSectionGate } from '../../components/database/DbSectionGate';
 import { dateTime } from '../../components/database/db-labels';
 import { DbCapabilityGate, DbViewSwitch } from './DbViewSwitch';
 import { dbKeys } from './database-keys';
@@ -79,7 +78,7 @@ function TablesView({ page, overview }: Omit<TabProps, 'actions'>) {
         <Panel title={t('db.storage.title')} hint={t('db.storage.hint')}>
           <QueryView query={storage} compact>
             {(data) => (
-              <DbSectionGate section={data.storage} driver={overview?.driver}>
+              <AvailableView source={data.storage} product={overview?.driver}>
                 {(s) => (
                   <div className="flex flex-col gap-4">
                     <KeyValueGrid
@@ -101,7 +100,7 @@ function TablesView({ page, overview }: Omit<TabProps, 'actions'>) {
                     </div>
                   </div>
                 )}
-              </DbSectionGate>
+              </AvailableView>
             )}
           </QueryView>
         </Panel>
@@ -121,7 +120,7 @@ function TablesView({ page, overview }: Omit<TabProps, 'actions'>) {
       <Panel title={t('db.tables.title')} hint={t('db.tables.note')} flush>
         <QueryView query={tables}>
           {(data) => (
-            <DbSectionGate section={data.tables} driver={overview?.driver} onRetry={() => void tables.refetch()}>
+            <AvailableView source={data.tables} product={overview?.driver} onRetry={() => void tables.refetch()}>
               {(list) => (
                 <DataTable
                   data={list}
@@ -135,7 +134,7 @@ function TablesView({ page, overview }: Omit<TabProps, 'actions'>) {
                   footer={t('ui.table.rows', { count: list.length })}
                 />
               )}
-            </DbSectionGate>
+            </AvailableView>
           )}
         </QueryView>
       </Panel>

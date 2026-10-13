@@ -15,14 +15,6 @@ import { uiEn } from './ui.en';
 
 export const en: TranslationKey = {
   ui: uiEn,
-  common: {
-    loading: 'Loading...',
-    viewDetails: 'View details',
-    close: 'Close',
-    cancel: 'Cancel',
-    confirm: 'Confirm',
-    uptime: 'Uptime',
-  },
   nav: {
     overview: 'Overview',
     runtimes: 'Runtimes',
@@ -51,9 +43,6 @@ export const en: TranslationKey = {
   },
   overview: {
     title: 'System Overview',
-    subtitle: 'Real-time health and performance of the Core platform.',
-    noActiveIncidents: 'No active incidents',
-    systemsNominal: 'All infrastructure components are operating within normal parameters.',
   },
   kpi: {
     reqSec: 'Requests / Sec',
@@ -63,38 +52,9 @@ export const en: TranslationKey = {
     memoryUsage: 'Memory Usage',
     activeAlerts: 'Active Alerts',
   },
-  healthMap: {
-    title: 'System Health Map',
-    apiGateway: 'API Gateway',
-  },
-  chart: {
-    noSamples: 'No samples in this time range yet. Metrics are collected from the moment this page is opened, on every refresh.',
-    requests: 'Requests',
-    latency: 'Latency',
-    errors: 'Errors',
-    cpu: 'CPU',
-    memory: 'Memory',
-    current: 'Current',
-    average: 'Average',
-    peak: 'Peak',
-    range15m: '15m',
-    range1h: '1h',
-    range6h: '6h',
-    range24h: '24h',
-  },
-  snapshots: {
-    title: 'Runtime & Infrastructure Snapshot',
-    subtitle: 'How each component is performing right now',
-  },
-  timeline: {
-    title: 'Recent Events',
-    openLogViewer: 'View all logs',
-    emptyEvents: 'No operational events recorded matching the current filter',
-  },
   header: {
     systemConsole: 'System Console',
     home: 'Home',
-    themeToggle: 'Toggle light / dark mode',
     languageToggle: 'Language',
   },
   footer: {
@@ -105,7 +65,6 @@ export const en: TranslationKey = {
     copyright: 'Core Architecture Platform. Designed for Microservices.',
   },
   console: {
-    common: { executing: 'Executing...', status: 'Status' },
     status: {
       healthy: 'Healthy',
       warning: 'Warning',
@@ -120,14 +79,7 @@ export const en: TranslationKey = {
       active: 'Active',
       info: 'Info',
     },
-    healthStatus: { ok: 'OK', degraded: 'Degraded', down: 'Offline' },
-    fallback: {
-      noData: 'No data',
-      offlineTitle: 'API Gateway unreachable',
-      offlineMessage: 'No response from {{url}}.',
-      overviewUnavailableTitle: 'Overview data unavailable',
-      overviewUnavailableMessage: 'The API Gateway responds but /ops/overview failed. Metrics below have no data.',
-    },
+    healthStatus: { down: 'Offline' },
     toast: {
       connectionLostTitle: 'Connection lost',
       connectionLostMessage: 'Unable to reach Core API Gateway. Showing last known state.',
@@ -137,13 +89,7 @@ export const en: TranslationKey = {
     },
     topbar: {
       latency: 'Round-trip latency to /health',
-      dark: 'Dark',
-      light: 'Light',
     },
-    logs: {
-      level: { all: 'All', info: 'Info', warn: 'Warn', error: 'Error', success: 'Success' },
-    },
-    drawer: { copied: 'Copied!' },
   },
   home: {
     badge: 'Core Framework initialized successfully',
@@ -172,13 +118,11 @@ export const en: TranslationKey = {
       unknown: 'Unknown environment',
       tooltip: 'Backend environment currently connected',
     },
-    tone: { ok: 'Healthy', warn: 'Needs attention', crit: 'Critical', unknown: 'Unknown' },
     sidebar: {
       subtitle: 'Core Control Plane',
       problemPackages: 'Packages in warning/error state',
     },
     page: {
-      autoUpdated: 'Auto-updated',
       healthyCount: '{{healthy}}/{{total}} healthy',
       components: 'Components',
       problems: 'Needs attention',
@@ -189,13 +133,7 @@ export const en: TranslationKey = {
       overviewError: 'Could not load overview data',
       metric: { throughput: 'Throughput', latency: 'P95 latency', errors: 'Error rate', cpu: 'CPU' },
     },
-    health: {
-      servicesHealthy: 'Services healthy',
-      startedAt: 'Started {{ago}}',
-    },
-    kpi: { trend: '{{change}} vs {{minutes}} min ago' },
     map: {
-      hint: 'Click a component to drill down',
       category: { runtime: 'Runtime', infrastructure: 'Infrastructure', governance: 'Governance' },
       item: {
         'runtime-api': 'API Gateway',
@@ -208,45 +146,9 @@ export const en: TranslationKey = {
         'gov-security': 'Security & Auth',
       },
     },
-    chart: { title: 'System Performance', metric: 'Metric', range: 'Time range' },
-    problems: { title: 'Needs Attention' },
-    snapshot: { notMonitored: 'This runtime does not report metrics to the API yet.' },
     offline: {
       title: 'Unable to reach Core API',
-      lastSync: 'Last successful connection: {{time}} ({{ago}}).',
       neverSynced: 'No successful connection in this session yet.',
-      lastKnown: 'Showing last known values (dimmed) — data is no longer live.',
-      noData: 'The System Console cannot retrieve live metrics.',
-      causesTitle: 'Possible causes:',
-      autoRetry: 'Reconnecting automatically every {{seconds}} seconds.',
-      cause: {
-        stopped: 'API runtime stopped',
-        network: 'Network unavailable or wrong VITE_API_BASE_URL',
-        restarting: 'Backend restarting',
-      },
-    },
-  },
-  planned: {
-    badge: 'Soon',
-    title: 'Not implemented yet',
-    message: 'This page has its place in the System Console but no real data source yet. No simulated numbers are shown.',
-    description: {
-      storage: 'Object storage usage and operations.',
-      messaging: 'Queues, topics and message flow.',
-      worker: 'Queue, job and consumer details.',
-      scheduler: 'Cron tasks, schedules and history.',
-      jobs: 'Inspect and act on individual jobs.',
-      secrets: 'Secret sources and key lifecycle.',
-      configuration: 'Loaded configuration of each runtime.',
-    },
-    related: {
-      storage: 'See infrastructure packages',
-      messaging: 'See Worker runtime',
-      worker: 'See Worker runtime',
-      scheduler: 'See Scheduler runtime',
-      jobs: 'See Worker & Queue',
-      secrets: 'See Security page',
-      configuration: 'See API runtime configuration',
     },
   },
   tr: trEn,

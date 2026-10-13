@@ -121,25 +121,6 @@ export const WORKER_SERIES_COLOR: Record<string, ChartColor> = {
   recovered: 'ok',
 };
 
-/**
- * Màu series cho biểu đồ cũ (`components/worker/WorkerChart`, còn được trang Jobs dùng).
- * Xoá cùng `WorkerChart` khi Jobs chuyển sang bộ chart chung.
- */
-export const WORKER_SERIES_COLORS: Record<string, string> = {
-  incoming: 'var(--scp-series-1)',
-  completed: 'var(--scp-series-4)',
-  failed: 'var(--scp-danger)',
-  waiting: 'var(--scp-warning)',
-  active: 'var(--scp-series-4)',
-  delayed: 'var(--scp-series-3)',
-  processingAvg: 'var(--scp-series-1)',
-  processingP95: 'var(--scp-series-2)',
-  processingP99: 'var(--scp-series-3)',
-  waitP95: 'var(--scp-warning)',
-  exhausted: 'var(--scp-series-5)',
-  retried: 'var(--scp-warning)',
-  recovered: 'var(--scp-series-4)',
-};
 
 /** Ngưỡng hiển thị phía giao diện (cảnh báo thật do backend tính). */
 export const CONCURRENCY_WARN_PERCENT = 90;

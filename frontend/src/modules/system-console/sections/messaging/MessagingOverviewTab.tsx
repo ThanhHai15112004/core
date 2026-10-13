@@ -15,8 +15,7 @@ import {
   StatTile,
   type AlertItem,
   type ComparisonRow,
-  type StatDelta,
-} from '@core/ui/blocks';
+  type StatDelta, AvailableView } from '@core/ui/blocks';
 import { MetricChart, type MetricStat } from '@core/ui/charts';
 import type { MessagingMetric, MessagingOverview, MessagingReport } from '../../types/messaging.types';
 import type { Tone } from '@core/theme';
@@ -25,7 +24,6 @@ import { CONSUMER_RULES, DEAD_LETTER_RULES, FAILURE_RULES, LAG_RULES, MESSAGING_
 import { ChannelTable } from '../../components/messaging/ChannelTable';
 import { QueueDepthTable } from '../../components/messaging/QueueDepthTable';
 import { MessageTable } from '../../components/messaging/MessageTable';
-import { BrokerSection } from '../../components/messaging/BrokerSection';
 import { formatMsgRate, formatSignedRate, seriesFormatter, toTimeSeries } from '../../utils/messaging-format';
 import { messagingKeys } from './messaging-keys';
 import type { MessagingPage } from './useMessagingPage';
@@ -207,9 +205,9 @@ export function MessagingOverviewTab({ page, data, error, onRetry }: Props) {
       <Panel title={t('messaging.queue.title')} hint={t('messaging.queue.hint')} flush className="mb-4">
         {data ? (
           <div className={data.queues.available ? undefined : 'p-3'}>
-            <BrokerSection section={data.queues} product={data.provider.product}>
+            <AvailableView source={data.queues} product={data.provider.product}>
               {(rows) => <QueueDepthTable rows={rows} emptyMessage={t('messaging.queue.empty')} />}
-            </BrokerSection>
+            </AvailableView>
           </div>
         ) : (
           pending('p-3')
@@ -259,9 +257,9 @@ export function MessagingOverviewTab({ page, data, error, onRetry }: Props) {
       >
         {data ? (
           <div className={data.deadLetter.available ? undefined : 'p-3'}>
-            <BrokerSection section={data.deadLetter} product={data.provider.product}>
+            <AvailableView source={data.deadLetter} product={data.provider.product}>
               {(dl) => <MessageTable rows={dl.latest} onOpen={openMessage} columns={['time', 'id', 'channel', 'attempts', 'error']} emptyMessage={t('messaging.deadLetter.empty')} />}
-            </BrokerSection>
+            </AvailableView>
           </div>
         ) : (
           pending('p-3')

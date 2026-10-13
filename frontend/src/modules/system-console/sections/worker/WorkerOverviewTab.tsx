@@ -5,14 +5,13 @@ import { useFormat } from '@core/hooks/useFormat';
 import { NO_VALUE } from '@core/lib/format';
 import type { Tone } from '@core/theme';
 import { Button } from '@core/ui/primitives';
-import { AlertList, ComparisonTable, Panel, PanelGrid, PanelState, StatGrid, StatTile, type ComparisonRow } from '@core/ui/blocks';
+import { AlertList, ComparisonTable, Panel, PanelGrid, PanelState, StatGrid, StatTile, type ComparisonRow, AvailableView } from '@core/ui/blocks';
 import { BarList } from '@core/ui/charts';
 import type { WorkerAlert, WorkerOverview, WorkerReport } from '../../types/worker.types';
 import { DISTRIBUTION_WARN_PERCENT, OVERVIEW_QUEUE_LIMIT, QUEUE_STATUS_RANK } from '../../constants/worker';
 import { QueueMetricChart } from '../../components/worker/QueueMetricChart';
 import { QueueTable } from '../../components/worker/QueueTable';
 import { RateBalance } from '../../components/worker/RateBalance';
-import { SectionGate } from '../../components/worker/SectionGate';
 import { toAlertItems } from '../../components/worker/worker-ui';
 import type { WorkerPage } from './useWorkerPage';
 
@@ -182,11 +181,11 @@ export function WorkerOverviewTab({ page, overview, openAlert }: Props) {
         }
       >
         {data ? (
-          <SectionGate section={data.queues} product={data.provider.product} className="p-3">
+          <AvailableView source={data.queues} product={data.provider.product} className="p-3">
             {(rows) => (
               <QueueTable compact rows={[...rows].sort((a, b) => QUEUE_STATUS_RANK[a.status] - QUEUE_STATUS_RANK[b.status]).slice(0, OVERVIEW_QUEUE_LIMIT)} onOpen={(q) => page.openQueue(q)} />
             )}
-          </SectionGate>
+          </AvailableView>
         ) : (
           <div className="p-3">{fallback}</div>
         )}

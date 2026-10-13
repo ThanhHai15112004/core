@@ -1,8 +1,6 @@
 export const trEn = {
   openLogs: 'View requests in Logs',
   /** Shared with legacy pages (Performance, Cache, Worker…). */
-  live: { live: 'LIVE', paused: 'Paused', pause: 'Pause live', resume: 'Resume live' },
-  range: { '5m': '5 min', '15m': '15 min', '1h': '1 hour', '6h': '6 hours', '24h': '24 hours', '7d': '7 days' },
   tab: { overview: 'Overview', endpoints: 'Endpoints', errors: 'Errors' },
   internal: 'Internal',
   unit: { rps: 'req/s', pp: 'pp' },

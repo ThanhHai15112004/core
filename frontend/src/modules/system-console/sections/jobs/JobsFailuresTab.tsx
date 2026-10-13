@@ -5,12 +5,11 @@ import { useLiveQuery } from '@core/data';
 import { useFormat } from '@core/hooks/useFormat';
 import { NO_VALUE } from '@core/lib/format';
 import { Button, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@core/ui/primitives';
-import { Panel, QueryView, StatGrid, StatTile, StatusBanner } from '@core/ui/blocks';
+import { Panel, QueryView, StatGrid, StatTile, StatusBanner, AvailableView } from '@core/ui/blocks';
 import type { JobsFailures } from '../../types/jobs.types';
 import { jobsApi } from '../../services/jobs.api';
 import { DEPENDENCY_PATH, FAILURE_RATE_WARN_PERCENT } from '../../constants/jobs';
 import { FailureGroups } from '../../components/jobs/FailureGroups';
-import { ProviderSection } from '../../components/jobs/ProviderSection';
 import { jobsKeys } from './jobs-keys';
 import type { JobsPage } from './useJobsPage';
 
@@ -114,9 +113,9 @@ function FailuresBody({ page, data, queues, queue, setQueue }: { page: JobsPage;
           ) : undefined
         }
       >
-        <ProviderSection section={data.groups}>
+        <AvailableView source={data.groups}>
           {(groups) => <FailureGroups groups={groups} detailed onOpen={(g) => explore({ status: 'failed', errorType: g.errorType, queue: q })} />}
-        </ProviderSection>
+        </AvailableView>
       </Panel>
     </>
   );

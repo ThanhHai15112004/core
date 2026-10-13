@@ -6,13 +6,12 @@ import { useLiveQuery } from '@core/data';
 import { useFormat } from '@core/hooks/useFormat';
 import { NO_VALUE } from '@core/lib/format';
 import { Button, Hint } from '@core/ui/primitives';
-import { AlertList, DataTable, Panel, PanelGrid, QueryView, RelativeTime, StatGrid, StatTile, StatusBanner } from '@core/ui/blocks';
+import { AlertList, DataTable, Panel, PanelGrid, QueryView, RelativeTime, StatGrid, StatTile, StatusBanner, AvailableView } from '@core/ui/blocks';
 import type { FailureReason, Failures, JobRow, WorkerAlert, WorkerRange } from '../../types/worker.types';
 import { workerApi } from '../../services/worker.api';
 import { FAILURE_METRICS, JOB_TABLE_MAX_HEIGHT_PX } from '../../constants/worker';
 import { JobTable } from '../../components/worker/JobTable';
 import { QueueMetricChart } from '../../components/worker/QueueMetricChart';
-import { SectionGate } from '../../components/worker/SectionGate';
 import type { QueueActionRequest } from '../../components/worker/QueueActionDialog';
 import { toAlertItems } from '../../components/worker/worker-ui';
 import { workerKeys } from './worker-keys';
@@ -184,7 +183,7 @@ export function WorkerFailuresView({ range, product, queue, queues = [], onActio
               flush
               className="mb-4"
             >
-              <SectionGate section={d.retrying} product={product} className="p-3">
+              <AvailableView source={d.retrying} product={product} className="p-3">
                 {(rows) => (
                   <JobTable
                     rows={rows}
@@ -194,7 +193,7 @@ export function WorkerFailuresView({ range, product, queue, queues = [], onActio
                     maxHeight={JOB_TABLE_MAX_HEIGHT_PX}
                   />
                 )}
-              </SectionGate>
+              </AvailableView>
             </Panel>
 
             <Panel
@@ -211,7 +210,7 @@ export function WorkerFailuresView({ range, product, queue, queues = [], onActio
                 ) : undefined
               }
             >
-              <SectionGate section={d.failedJobs} product={product} className="p-3">
+              <AvailableView source={d.failedJobs} product={product} className="p-3">
                 {(rows) => (
                   <JobTable
                     rows={rows}
@@ -221,10 +220,10 @@ export function WorkerFailuresView({ range, product, queue, queues = [], onActio
                     maxHeight={JOB_TABLE_MAX_HEIGHT_PX}
                   />
                 )}
-              </SectionGate>
+              </AvailableView>
             </Panel>
             <Panel title={t('wq.stalled.title')} hint={`${t('wq.stalled.hint')} · ${t('wq.stalled.note')}`} flush className="mb-4">
-              <SectionGate section={d.stalled} product={product} className="p-3">
+              <AvailableView source={d.stalled} product={product} className="p-3">
                 {(rows) => (
                   <JobTable
                     rows={rows}
@@ -234,7 +233,7 @@ export function WorkerFailuresView({ range, product, queue, queues = [], onActio
                     maxHeight={JOB_TABLE_MAX_HEIGHT_PX}
                   />
                 )}
-              </SectionGate>
+              </AvailableView>
             </Panel>
           </>
         );
