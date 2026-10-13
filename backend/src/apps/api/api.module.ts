@@ -21,7 +21,7 @@ import { SystemOpsModule } from '@modules/system-ops/index.js';
 import { RedisModule } from '@packages/redis/index.js';
 import { RuntimeAgentModule } from '@packages/runtime/index.js';
 import { ApiRuntimeContributor } from './runtime/api-runtime.contributor.js';
-import { HttpMetricsInterceptor, MetricsModule } from '@packages/metrics/index.js';
+import { MetricsModule } from '@packages/metrics/index.js';
 
 @Module({
   imports: [
@@ -48,10 +48,6 @@ import { HttpMetricsInterceptor, MetricsModule } from '@packages/metrics/index.j
     {
       provide: APP_FILTER,
       useClass: GlobalExceptionFilter,
-    },
-    {
-      provide: APP_INTERCEPTOR,
-      useClass: HttpMetricsInterceptor,
     },
     {
       provide: APP_INTERCEPTOR,
