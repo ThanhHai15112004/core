@@ -25,6 +25,7 @@ import { OVERVIEW_RANGES } from '../constants/overview';
 import { TRAFFIC_RANGES, TRAFFIC_TABS } from '../constants/traffic';
 import { routeIdOf } from '../utils/traffic-format';
 import { SCHEDULER_RANGES, SCHEDULER_TABS } from '../constants/scheduler';
+import { RUNTIME_RANGES } from '../constants/runtime-metrics';
 
 type Translate = (path: string, params?: Record<string, string | number>) => string;
 
@@ -67,6 +68,7 @@ export const SECTIONS: SectionDef[] = [
     group: 'runtime-traffic',
     icon: Cpu,
     component: load(() => import('../sections/runtimes/RuntimesSection'), 'RuntimesSection'),
+    controls: { ranges: RUNTIME_RANGES },
     crumb: (p, t) => (p[0] ? t(`rt.name.${p[0]}`) : null),
     keywords: ['api', 'worker', 'scheduler', 'process'],
   },

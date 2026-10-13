@@ -1,80 +1,70 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { MoreVertical, Play, Square } from 'lucide-react';
+import { useState } from 'react';
+import { Loader2, Play, Square } from 'lucide-react';
+import { useLocale } from '@core/i18n/index';
+import { Button, Hint } from '@core/ui/primitives';
+import { ConfirmDialog } from '@core/ui/blocks';
 import type { RuntimeAction, RuntimeSummary } from '../../types/runtime.types';
-import type { PendingCommand } from '../../hooks/useRuntimeCommand';
-import { useLocale } from '../../../../core/i18n/index';
+import { BUSY_METRICS, STOP_CONFIRM_WORD } from '../../constants/runtime-metrics';
+import { useRuntimeCommand } from '../../sections/runtimes/useRuntimeCommand';
+import { useMetricFormat } from './runtime-view';
 
-interface RuntimeActionsProps {
-  runtime: RuntimeSummary;
-  pending: PendingCommand | null;
-  onAction: (action: RuntimeAction) => void;
-  /** `menu`: nút ⋮ mở danh sách (card); `buttons`: hiện nút trực tiếp (trang chi tiết). */
-  variant: 'menu' | 'buttons';
-}
+const ICON = { start: Play, stop: Square } as const;
+const ORDER: RuntimeAction[] = ['start', 'stop'];
 
-const ICONS: Record<RuntimeAction, React.ComponentType<{ size?: number }>> = {
-  stop: Square,
-  start: Play,
-};
-const ORDER: RuntimeAction[] = ['stop', 'start'];
-
-/** Các action vận hành; action không được phép bị disable kèm lý do từ backend. */
-export const RuntimeActions: React.FC<RuntimeActionsProps> = ({ runtime, pending, onAction, variant }) => {
+/**
+ * Nút Start / Stop của một runtime. Stop cần xác nhận (gõ STOP) kèm ngữ cảnh "đang bận" thật;
+ * thao tác không được phép → nút mờ, lý do từ backend ở tooltip. Theo dõi lệnh tới khi xong.
+ */
+export function RuntimeActions({ runtime, size = 'xs' }: { runtime: RuntimeSummary; size?: 'xs' | 'sm' }) {
   const { t } = useLocale();
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  const isPending = pending?.runtime === runtime.id;
+  const metric = useMetricFormat();
+  const { run, active, pending } = useRuntimeCommand();
+  const [confirmStop, setConfirmStop] = useState(false);
+  const name = t(`rt.name.${runtime.id}`);
 
-  useEffect(() => {
-    if (!open) return;
-    const close = (e: MouseEvent) => !ref.current?.contains(e.target as Node) && setOpen(false);
-    document.addEventListener('mousedown', close);
-    return () => document.removeEventListener('mousedown', close);
-  }, [open]);
-
-  const items = ORDER.map((action) => {
-    const availability = runtime.actions[action];
-    const Icon = ICONS[action];
-    const running = isPending && pending?.action === action;
-    return (
-      <button
-        key={action}
-        type="button"
-        role={variant === 'menu' ? 'menuitem' : undefined}
-        className={variant === 'menu' ? 'rt-menu-item' : `scp-btn scp-btn-sm ${action === 'start' && availability.allowed ? 'scp-btn-primary' : 'scp-btn-secondary'}`}
-        disabled={!availability.allowed || isPending}
-        title={availability.allowed ? undefined : availability.reason}
-        onClick={() => {
-          setOpen(false);
-          onAction(action);
-        }}
-      >
-        <Icon size={13} />
-        <span>{running ? t(`rt.pending.${action}`) : t(`rt.action.${action}`)}</span>
-        {variant === 'menu' && !availability.allowed && <small>{availability.reason}</small>}
-      </button>
-    );
-  });
-
-  if (variant === 'buttons') return <div className="rt-actions">{items}</div>;
-
+  // Chặn click (kể cả từ dialog qua portal) lan lên thẻ / hàng chứa nút.
   return (
-    <div className="rt-menu" ref={ref}>
-      <button
-        type="button"
-        className="rt-icon-btn"
-        aria-haspopup="menu"
-        aria-expanded={open}
-        aria-label={t('rt.actionsMenu')}
-        onClick={() => setOpen((o) => !o)}
-      >
-        <MoreVertical size={16} />
-      </button>
-      {open && (
-        <div className="rt-menu-list" role="menu">
-          {items}
-        </div>
-      )}
+    <div className="flex flex-wrap items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+      {ORDER.map((action) => {
+        const availability = runtime.actions[action];
+        if (!availability) return null;
+        const running = active === action;
+        const Icon = running ? Loader2 : ICON[action];
+        const button = (
+          <Button
+            size={size}
+            variant={action === 'stop' ? 'danger-outline' : 'secondary'}
+            disabled={!availability.allowed || Boolean(active)}
+            onClick={() => {
+              if (action === 'stop') setConfirmStop(true);
+              else run({ runtime: runtime.id, action });
+            }}
+          >
+            <Icon className={running ? 'animate-spin' : undefined} />
+            {running ? t(`rt.pending.${action}`) : t(`rt.action.${action}`)}
+          </Button>
+        );
+        return (
+          <Hint key={action} content={running && pending ? t(`rt.commandStatus.${pending.status}`) : availability.allowed ? undefined : availability.reason}>
+            {/* span giữ tooltip khi nút bị disable */}
+            <span className="inline-flex">{button}</span>
+          </Hint>
+        );
+      })}
+      <ConfirmDialog
+        open={confirmStop}
+        onOpenChange={setConfirmStop}
+        title={t('rt.stop.title', { name })}
+        description={BUSY_METRICS[runtime.id].map((key) => `${t(`rt.metric.${key}`)}: ${metric(runtime, key)}`).join(' · ')}
+        impact={[t(`rt.stop.impact.${runtime.id}`)]}
+        confirmLabel={t('rt.stop.confirm')}
+        tone="danger"
+        typeToConfirm={STOP_CONFIRM_WORD}
+        onConfirm={() => {
+          setConfirmStop(false);
+          run({ runtime: runtime.id, action: 'stop' });
+        }}
+      />
     </div>
   );
-};
+}
