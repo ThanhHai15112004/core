@@ -1,8 +1,7 @@
 import { describe, beforeAll, afterAll, it, expect } from '@jest/globals';
 import { createTestApp, type TestAppContext } from '../../../concerns/test-app.concern.js';
+import { sample, stubPrometheus } from '../../../concerns/prometheus.concern.js';
 import { MESSAGING_OPS_ROUTES, MessagingMonitorService } from '@modules/messaging-ops/index.js';
-import { RedisService } from '@packages/redis/index.js';
-import { recordMessagingError } from '@packages/messaging/index.js';
 
 interface Envelope<T> {
   success: boolean;
@@ -11,6 +10,24 @@ interface Envelope<T> {
 }
 
 const base = `/${MESSAGING_OPS_ROUTES.PREFIX}`;
+
+const CH = { queue: 'system.events', channel: 'user.created' };
+
+/** Prometheus giả: 30 publish (+2 lỗi), 27 consume (+3 lỗi), 4 retry, 1 vào Dead Letter, 2 phục hồi. */
+function promql(expr: string) {
+  if (expr.startsWith('sum by (queue, channel, result) (increase(messages_published_total'))
+    return [sample(30, { ...CH, result: 'success' }), sample(2, { ...CH, result: 'failed' })];
+  if (expr.startsWith('sum by (queue, channel, result) (increase(messages_consumed_total'))
+    return [sample(27, { ...CH, result: 'success' }), sample(3, { ...CH, result: 'failed' })];
+  if (expr.startsWith('sum by (queue, channel, final)'))
+    return [sample(4, { ...CH, final: 'false' }), sample(1, { ...CH, final: 'true' })];
+  if (expr.startsWith('sum by (queue) (increase(job_recovered_total'))
+    return [sample(2, { queue: CH.queue })];
+  if (expr.startsWith('sum (increase(job_duration_seconds_sum')) return [sample(6)];
+  if (expr.startsWith('sum (increase(job_duration_seconds_count')) return [sample(30)];
+  if (expr.startsWith('histogram_quantile(0.95, sum by (le)')) return [sample(0.5)];
+  return [];
+}
 
 /**
  * Messaging Monitor khi broker không tới được (test trỏ BullMQ vào cổng đóng — xem test/setup-env.ts):
@@ -31,24 +48,6 @@ describe('Messaging Monitor (/ops/messaging) — broker unavailable', () => {
 
   beforeAll(async () => {
     context = await createTestApp();
-    const redis = context.app.get(RedisService);
-    // Một lỗi consume như worker ghi.
-    await recordMessagingError(redis, {
-      at: Date.now(),
-      stage: 'consume',
-      kind: 'timeout',
-      channel: 'system.maintenance.tick',
-      queue: 'system.events',
-      messageId: 'msg-1',
-      consumer: 'SystemProcessor',
-      runtime: 'worker',
-      attempt: 3,
-      maxAttempts: 3,
-      final: true,
-      code: null,
-      message: 'StorageTimeout',
-      correlationId: 'corr-1',
-    });
     await context.app.get(MessagingMonitorService).tick();
   });
 
@@ -60,7 +59,14 @@ describe('Messaging Monitor (/ops/messaging) — broker unavailable', () => {
     const { status, body } = await call<{
       provider: { driver: string; product: string; broker: string; endpoint: string };
       health: { status: string; state: string };
-      kpis: { lag: number | null; deadLetter: number | null; channels: number };
+      kpis: {
+        lag: number | null;
+        failed: number | null;
+        deadLetter: number | null;
+        channels: number;
+      };
+      delivery: unknown;
+      report: { today: unknown; yesterday: unknown };
       queues: { available: boolean; reason: string };
       alerts: { rule: string; severity: string }[];
       events: { type: string }[];
@@ -75,18 +81,21 @@ describe('Messaging Monitor (/ops/messaging) — broker unavailable', () => {
     expect(body.data.provider.endpoint).not.toContain('@');
     expect(body.data.health).toMatchObject({ status: 'unavailable', state: 'unavailable' });
     expect(body.data.queues).toMatchObject({ available: false, reason: 'disconnected' });
-    expect(body.data.kpis).toMatchObject({ deadLetter: null, channels: 0 });
+    // Không có Prometheus → số đếm theo thời gian là null, không phải 0.
+    expect(body.data.kpis).toMatchObject({ failed: null, deadLetter: null, channels: 0 });
+    expect(body.data.delivery).toBeNull();
+    expect(body.data.report).toEqual({ today: null, yesterday: null });
     expect(body.data.alerts).toEqual([
       expect.objectContaining({ rule: 'BROKER_UNAVAILABLE', severity: 'critical' }),
     ]);
     expect(body.data.events.map((e) => e.type)).toContain('alert_started');
   });
 
-  it('channels / producers / consumers / metrics trả lời được khi broker mất', async () => {
+  it('channels / consumers / metrics trả lời được khi broker mất; producers đã bỏ', async () => {
     const ch = await call<{ channels: unknown[] }>('GET', `${base}/channels`);
     expect(ch.body.data.channels).toEqual([]);
-    const pr = await call<{ producers: { producer: string }[] }>('GET', `${base}/producers`);
-    expect(pr.status).toBe(200);
+    const pr = await call('GET', `${base}/producers`);
+    expect(pr.status).toBe(404);
     const co = await call<{ consumers: unknown[] }>('GET', `${base}/consumers`);
     expect(co.status).toBe(200);
     const m = await call<{ metric: string; series: unknown[] }>(
@@ -96,18 +105,20 @@ describe('Messaging Monitor (/ops/messaging) — broker unavailable', () => {
     expect(m.body.data.metric).toBe('lag');
     const bad = await call('GET', `${base}/metrics?metric=nope`);
     expect(bad.status).toBe(400);
+    const size = await call('GET', `${base}/metrics?metric=size`);
+    expect(size.status).toBe(400);
   });
 
-  it('lỗi & sự kiện; config không lộ mật khẩu', async () => {
-    const e = await call<{ items: { messageId: string; kind: string; final: boolean }[] }>(
-      'GET',
-      `${base}/errors?range=1h`,
-    );
-    expect(e.body.data.items[0]).toMatchObject({
-      messageId: 'msg-1',
-      kind: 'timeout',
-      final: true,
-    });
+  it('lỗi đọc từ job lỗi của broker → broker mất thì nói rõ lý do; config không lộ mật khẩu', async () => {
+    const e = await call<{
+      counts: unknown;
+      byStage: { publish: number | null; consume: number | null };
+      items: { available: boolean; reason: string };
+    }>('GET', `${base}/errors?range=1h`);
+    expect(e.status).toBe(200);
+    expect(e.body.data.items).toMatchObject({ available: false, reason: 'disconnected' });
+    expect(e.body.data.counts).toBeNull();
+    expect(e.body.data.byStage).toEqual({ publish: null, consume: null });
     const c = await call<{ items: { key: string; value: unknown; sensitive?: boolean }[] }>(
       'GET',
       `${base}/config`,
@@ -170,5 +181,80 @@ describe('Messaging Monitor (/ops/messaging) — broker unavailable', () => {
       status: 'error',
       metrics: { driver: 'bullmq' },
     });
+  });
+});
+
+describe('Messaging Monitor (/ops/messaging) — số liệu từ Prometheus', () => {
+  let context: TestAppContext;
+  let restore: () => void;
+
+  const get = async <T>(url: string) => {
+    const res = await context.app.inject({ method: 'GET', url });
+    return { status: res.statusCode, body: res.json<Envelope<T>>() };
+  };
+
+  beforeAll(async () => {
+    context = await createTestApp();
+    restore = stubPrometheus(context.app, {
+      query: promql,
+      range: () => [{ labels: {}, points: [{ t: 1_000, v: 0.5 }] }],
+    });
+  });
+
+  afterAll(async () => {
+    restore();
+    await context.close();
+  });
+
+  it('overview: delivery, tốc độ và thời gian xử lý lấy từ counter/histogram', async () => {
+    const { status, body } = await get<{
+      kpis: { publishedPerSec: number | null; failed: number | null };
+      delivery: Record<string, number | null>;
+      processing: { avgMs: number | null; p95Ms: number | null };
+    }>(`${base}/overview?range=15m`);
+    expect(status).toBe(200);
+    expect(body.data.delivery).toEqual({
+      published: 30,
+      consumed: 27,
+      failed: 3,
+      retried: 4,
+      deadLettered: 1,
+      recovered: 2,
+      publishFailures: 2,
+      failureRatePercent: 10,
+    });
+    expect(body.data.kpis).toMatchObject({ publishedPerSec: 0.033, failed: 5 });
+    expect(body.data.processing).toMatchObject({ avgMs: 200, p95Ms: 500 });
+  });
+
+  it('channels: channel có lưu lượng trong Prometheus xuất hiện dù broker không có message chờ', async () => {
+    const { body } = await get<{
+      channels: { channel: string; queue: string | null; published: number; lag: unknown }[];
+    }>(`${base}/channels?range=15m`);
+    expect(body.data.channels).toEqual([
+      expect.objectContaining({
+        channel: 'user.created',
+        queue: 'system.events',
+        published: 30,
+        lag: null,
+      }),
+    ]);
+  });
+
+  it('errors: số lần lỗi theo giai đoạn từ Prometheus', async () => {
+    const { body } = await get<{ byStage: { publish: number; consume: number } }>(
+      `${base}/errors?range=15m`,
+    );
+    expect(body.data.byStage).toEqual({ publish: 2, consume: 3 });
+  });
+
+  it('metrics: biểu đồ đọc bằng range query', async () => {
+    const { body } = await get<{
+      resolutionSec: number | null;
+      series: { id: string; points: { value: number }[] }[];
+    }>(`${base}/metrics?metric=throughput&range=1h`);
+    expect(body.data.resolutionSec).not.toBeNull();
+    expect(body.data.series.map((x) => x.id)).toEqual(['published', 'consumed', 'failed']);
+    expect(body.data.series[0]!.points).toEqual([{ t: 1_000, value: 0.5 }]);
   });
 });

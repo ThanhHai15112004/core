@@ -30,12 +30,13 @@ export const MessagingKpis: React.FC<{ data: MessagingOverview | null }> = ({ da
   const range = t(`tr.range.${data.range}`);
   const n = (v: number | null) => (v === null ? NO_VALUE : formatCompact(v, locale));
   const lagChange = data.lagTrend.changePercent;
+  const d = data.delivery;
   const items: { key: string; value: string; sub: string; tone: StatusTone }[] = [
-    { key: 'published', value: formatMsgRate(k.publishedPerSec), sub: t('messaging.kpi.totalSub', { count: n(data.delivery.published), range }), tone: 'unknown' },
+    { key: 'published', value: formatMsgRate(k.publishedPerSec), sub: t('messaging.kpi.totalSub', { count: n(d?.published ?? null), range }), tone: 'unknown' },
     {
       key: 'consumed',
       value: formatMsgRate(k.consumedPerSec),
-      sub: t('messaging.kpi.totalSub', { count: n(data.delivery.consumed), range }),
+      sub: t('messaging.kpi.totalSub', { count: n(d?.consumed ?? null), range }),
       tone: data.balance.state === 'growing' ? 'warn' : 'unknown',
     },
     {
@@ -49,15 +50,15 @@ export const MessagingKpis: React.FC<{ data: MessagingOverview | null }> = ({ da
     },
     {
       key: 'failed',
-      value: String(k.failed),
-      sub: t('messaging.kpi.failedSub', { rate: formatUnit(data.delivery.failureRatePercent, '%'), range }),
-      tone: alert('FAILURE_RATE', 'PUBLISH_FAILURES') ?? (k.failed > 0 ? 'warn' : 'ok'),
+      value: n(k.failed),
+      sub: t('messaging.kpi.failedSub', { rate: formatUnit(d?.failureRatePercent ?? null, '%'), range }),
+      tone: alert('FAILURE_RATE', 'PUBLISH_FAILURES') ?? (k.failed === null ? 'unknown' : k.failed > 0 ? 'warn' : 'ok'),
     },
-    { key: 'retrying', value: n(k.retrying), sub: t('messaging.kpi.retryingSub', { count: n(data.delivery.retried), range }), tone: (k.retrying ?? 0) > 0 ? 'warn' : 'unknown' },
+    { key: 'retrying', value: n(k.retrying), sub: t('messaging.kpi.retryingSub', { count: n(d?.retried ?? null), range }), tone: (k.retrying ?? 0) > 0 ? 'warn' : 'unknown' },
     {
       key: 'deadLetter',
       value: n(k.deadLetter),
-      sub: t('messaging.kpi.deadLetterSub', { count: n(data.delivery.deadLettered), range }),
+      sub: t('messaging.kpi.deadLetterSub', { count: n(d?.deadLettered ?? null), range }),
       tone: alert('DEAD_LETTER') ?? ((k.deadLetter ?? 0) > 0 ? 'warn' : k.deadLetter === null ? 'unknown' : 'ok'),
     },
     {

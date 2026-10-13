@@ -4,12 +4,20 @@ import type { Job, JobState, Queue } from 'bullmq';
 import { CoreConfigService } from '@packages/config/index.js';
 import { RedisService } from '@packages/redis/index.js';
 import { parseClientList, parseInfo } from '@packages/cache/index.js';
-import type { ConsumerRegistration } from '../contracts/messaging-events.types.js';
+import type {
+  ConsumerRegistration,
+  MessagingErrorRecord,
+} from '../contracts/messaging-events.types.js';
 import { QueueRegistry, rawClient } from '../providers/queue-registry.service.js';
 import { MessagingConnectionService } from '../providers/messaging-connection.service.js';
 import { envelopeSize, parseEnvelope } from '../serializers/message.serializer.js';
 import { logLifecycle, parseLifecycle } from '../utils/lifecycle.js';
-import { MessageStateError, sanitizeMessagingMessage } from '../utils/messaging-errors.js';
+import { errorTypeOf } from '../utils/job-error.js';
+import {
+  MessageStateError,
+  errorKindOf,
+  sanitizeMessagingMessage,
+} from '../utils/messaging-errors.js';
 import type {
   BacklogSample,
   BrokerInfo,
@@ -59,13 +67,6 @@ const ALL_STATES: ListState[] = [
   'completed',
   'failed',
 ];
-
-export interface ChannelRegistryEntry {
-  channel: string;
-  producer: string;
-  queue: string;
-  lastPublishedAt: number;
-}
 
 /** Trạng thái BullMQ → trạng thái messaging (delayed có lượt đã thử = đang chờ retry). */
 export function statusOf(
@@ -305,20 +306,8 @@ export class MessagingMonitoringService {
         idempotent: null,
         cancellable: false,
         startedAt: w.ageSec !== null ? now - w.ageSec * 1000 : now,
-        inFlight: 0,
       })),
     );
-  }
-
-  /** Channel đã thấy trong backlog hiện tại (không còn registry tự lưu). */
-  public async channelRegistry(): Promise<ChannelRegistryEntry[]> {
-    const backlog = await this.backlog().catch(() => null);
-    return (backlog?.channels ?? []).map((c) => ({
-      channel: c.channel,
-      producer: 'unknown',
-      queue: c.queue,
-      lastPublishedAt: c.oldestAt ?? 0,
-    }));
   }
 
   private async listState(q: Queue, state: ListState, count: number): Promise<MessageSummary[]> {
@@ -403,6 +392,30 @@ export class MessagingMonitoringService {
   public async deadLetters(limit: number): Promise<MessageSummary[]> {
     const lists = await Promise.all(this.all().map((q) => this.listState(q, 'failed', limit)));
     return lists.flat().sort((a, b) => (b.finishedAt ?? 0) - (a.finishedAt ?? 0));
+  }
+
+  /**
+   * Lỗi consume gần đây = job lỗi còn trong broker: Dead Letter (failed) + đang chờ retry (delayed có lượt đã
+   * thử). Tối đa `limit` mỗi loại mỗi queue, mới nhất trước.
+   */
+  public async failures(limit: number): Promise<MessagingErrorRecord[]> {
+    const [dead, retrying] = await Promise.all([this.deadLetters(limit), this.retrying(limit)]);
+    return [...dead, ...retrying]
+      .filter((m) => m.error)
+      .map((m) => ({
+        at: m.finishedAt ?? m.processedAt ?? m.publishedAt,
+        kind: errorKindOf(m.error!),
+        channel: m.channel,
+        queue: m.queue,
+        messageId: m.id,
+        attempt: m.attempts,
+        maxAttempts: m.maxAttempts,
+        final: m.status === 'dead_letter',
+        code: errorTypeOf(m.error),
+        message: m.error!,
+        correlationId: m.correlationId,
+      }))
+      .sort((a, b) => b.at - a.at);
   }
 
   private async jobIn(queue: string, id: string, expected: JobState[]): Promise<Job> {

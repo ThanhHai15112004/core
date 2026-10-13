@@ -38,8 +38,6 @@
   "messaging.alert.SLOW_CONSUMER.message": "Processing P95 {value} ms (threshold {threshold} ms).",
   "messaging.alert.DEAD_LETTER.title": "Dead letter growing",
   "messaging.alert.DEAD_LETTER.message": "{value} messages in dead letter (threshold {threshold}).",
-  "messaging.alert.LARGE_MESSAGE.title": "Large message",
-  "messaging.alert.LARGE_MESSAGE.message": "A {value} message was published (threshold {threshold}) — large messages add latency and broker pressure.",
   "messaging.event.connection_lost": "Lost broker connection ({error})",
   "messaging.event.connection_recovered": "Broker connection recovered after {seconds}s",
   "messaging.event.alert_started": "{alert}",
@@ -62,7 +60,5 @@
   "messaging.series.processingAvg": "Average",
   "messaging.series.processingP95": "P95",
   "messaging.series.processingP99": "P99",
-  "messaging.series.sizeAvg": "Average size",
-  "messaging.series.sizeMax": "Largest",
   "messaging.series.consumedPerMin": "Consumed/min"
 }

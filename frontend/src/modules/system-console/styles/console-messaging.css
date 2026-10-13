@@ -4,7 +4,7 @@
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 .console-root .ov-kpi-grid.msg-error-kpis {
-  grid-template-columns: repeat(7, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 .console-root .ov-kpi-value.msg-kpi-text {
   font-size: 1rem;
@@ -101,25 +101,6 @@
   overflow-wrap: anywhere;
 }
 
-/* ─── Producer ─── */
-.console-root .msg-producers {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
-  gap: 0.9rem;
-}
-.console-root .msg-producer {
-  padding: 0.8rem 0.9rem;
-  border: 1px solid var(--scp-border-subtle);
-  border-radius: 10px;
-}
-.console-root .msg-producer > header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-  margin-bottom: 0.5rem;
-}
-
 /* ─── Hàng thao tác trong bảng ─── */
 .console-root .msg-row-actions {
   display: inline-flex;
@@ -132,15 +113,12 @@
 
 @media (max-width: 1280px) {
   .console-root .ov-kpi-grid.msg-error-kpis {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 @media (max-width: 640px) {
   .console-root .ov-kpi-grid.msg-kpi-4,
   .console-root .ov-kpi-grid.msg-error-kpis {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .console-root .msg-producers {
-    grid-template-columns: minmax(0, 1fr);
   }
 }

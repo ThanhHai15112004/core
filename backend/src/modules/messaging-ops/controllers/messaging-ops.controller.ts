@@ -94,12 +94,6 @@ export class MessagingOpsController {
   }
 
   @Public()
-  @Get(R.PRODUCERS)
-  public producers(@Query() q: Record<string, string>) {
-    return this.messaging.getProducers(parse(rangeSchema, q).range);
-  }
-
-  @Public()
   @Get(R.CONSUMERS)
   public consumers(@Query() q: Record<string, string>) {
     return this.messaging.getConsumers(parse(rangeSchema, q).range);

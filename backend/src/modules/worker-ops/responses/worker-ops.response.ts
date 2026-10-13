@@ -109,8 +109,8 @@ export interface WorkerRowDto {
   host: string | null;
   pid: number | null;
   status: WorkerInstanceStatus;
-  /** Job đang xử lý trong instance này. */
-  active: number;
+  /** Job đang xử lý — null khi instance chung queue với instance khác (broker chỉ đếm theo queue). */
+  active: number | null;
   concurrency: number;
   utilizationPercent: number | null;
   cpuPercent: number | null;

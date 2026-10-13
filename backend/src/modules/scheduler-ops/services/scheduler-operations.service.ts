@@ -3,7 +3,11 @@ import { Injectable, Logger } from '@nestjs/common';
 import { CoreConfigService } from '@packages/config/index.js';
 import { RedisService } from '@packages/redis/index.js';
 import { QueueRegistry, schedulerKeys } from '@packages/queue/index.js';
-import { MANUAL_RUN_PREFIX, MessagingConnectionService } from '@packages/messaging/index.js';
+import {
+  BaseMessagePublisherProvider,
+  MANUAL_RUN_PREFIX,
+  MessagingConnectionService,
+} from '@packages/messaging/index.js';
 import type {
   SchedulerOperationAction,
   SchedulerOperationRecord,
@@ -42,6 +46,7 @@ export class SchedulerOperationsService {
     private readonly redis: RedisService,
     private readonly queueRegistry: QueueRegistry,
     private readonly connection: MessagingConnectionService,
+    private readonly publisher: BaseMessagePublisherProvider,
   ) {}
 
   private get keys() {
@@ -133,16 +138,23 @@ export class SchedulerOperationsService {
       throw err;
     }
 
+    const channel = task.name ?? taskId;
     try {
       if (!this.brokerConnected()) throw new Error(`Broker ${this.connection.getStatus().state}`);
       const queue = this.queueRegistry.getQueue(task.queue);
       // jobId `manual:<task>:<ts>` để trang Scheduler nhận ra lần chạy thủ công; worker dựng envelope từ job.
-      const job = await this.queueRegistry.withTimeout(
-        queue.add(task.name ?? taskId, task.data ?? {}, {
-          ...this.queueRegistry.retentionOptions(),
-          jobId: `${MANUAL_RUN_PREFIX}${taskId}:${Date.now()}`,
-        }),
-      );
+      const job = await this.queueRegistry
+        .withTimeout(
+          queue.add(channel, task.data ?? {}, {
+            ...this.queueRegistry.retentionOptions(),
+            jobId: `${MANUAL_RUN_PREFIX}${taskId}:${Date.now()}`,
+          }),
+        )
+        .catch((err: unknown) => {
+          this.publisher.recordPublished(task.queue, channel, false);
+          throw err;
+        });
+      this.publisher.recordPublished(task.queue, channel, true);
 
       const execId = String(job.id);
       const record = await this.audit(

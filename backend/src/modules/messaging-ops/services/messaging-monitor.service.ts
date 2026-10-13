@@ -10,12 +10,10 @@ import { RedisService } from '@packages/redis/index.js';
 import {
   MessagingConnectionService,
   MessagingMonitoringService,
-  queueMetric,
   recordMessagingEvent,
   type ConsumerRegistration,
   type QueueSnapshot,
 } from '@packages/messaging/index.js';
-import { MetricRecorder } from '@modules/system-ops/telemetry-compat.js';
 import { MessagingMetricsService } from './messaging-metrics.service.js';
 import { MessagingStoreService } from './messaging-store.service.js';
 import {
@@ -25,9 +23,8 @@ import {
   type QueueRuleInput,
 } from './messaging-rules.js';
 
-/** Lag là số liệu nổi bật nhất — lấy mẫu dày hơn các monitor khác. */
 const TICK_MS = 15_000;
-const RULE_WINDOW_MS = 15 * 60_000;
+const RULE_WINDOW_MIN = 15;
 
 /** Message đang chờ của queue (waiting + prioritized). */
 export const waitingOf = (q: QueueSnapshot) => q.counts.waiting + q.counts.prioritized;
@@ -52,8 +49,8 @@ export function queueRuleInputs(
 }
 
 /**
- * Chạy nền trong API (một instance mỗi chu kỳ nhờ lock Redis): PING broker, ghi gauge lag/độ sâu queue/
- * Dead Letter/consumer để vẽ lịch sử, và đánh giá cảnh báo.
+ * Chạy nền trong API (một instance mỗi chu kỳ nhờ lock Redis): PING broker và đánh giá cảnh báo. Độ sâu queue cho
+ * biểu đồ do monitor Worker & Queue ghi vào gauge `core_queue_jobs`; tốc độ/lỗi/thời gian xử lý đọc bằng PromQL.
  */
 @Injectable()
 export class MessagingMonitorService implements OnApplicationBootstrap, OnModuleDestroy {
@@ -67,7 +64,6 @@ export class MessagingMonitorService implements OnApplicationBootstrap, OnModule
     private readonly metrics: MessagingMetricsService,
     private readonly store: MessagingStoreService,
     private readonly config: CoreConfigService,
-    @Optional() private readonly recorder?: MetricRecorder,
     @Optional() private readonly redis?: RedisService,
   ) {}
 
@@ -103,7 +99,6 @@ export class MessagingMonitorService implements OnApplicationBootstrap, OnModule
           })
         : null;
       const consumers = await this.monitoring.consumers().catch(() => []);
-      if (queues) this.record(queues, now);
       await this.evaluate(queues, consumers, now);
     } catch (err) {
       this.logger.warn(
@@ -114,57 +109,32 @@ export class MessagingMonitorService implements OnApplicationBootstrap, OnModule
     }
   }
 
-  private record(queues: QueueSnapshot[], now: number): void {
-    const g = (name: string, v: number) => this.recorder?.gauge(name, v, now);
-    let lag = 0;
-    let failed = 0;
-    let workers = 0;
-    for (const q of queues) {
-      const waiting = waitingOf(q);
-      lag += waiting;
-      failed += q.counts.failed;
-      workers += q.workers?.length ?? 0;
-      g(queueMetric(q.name, 'waiting'), waiting);
-      g(queueMetric(q.name, 'active'), q.counts.active);
-      g(queueMetric(q.name, 'delayed'), q.counts.delayed);
-      g(queueMetric(q.name, 'failed'), q.counts.failed);
-    }
-    g('msg.lag', lag);
-    g('msg.dlq.size', failed);
-    g('msg.consumers', workers);
-  }
-
   private async evaluate(
     queues: QueueSnapshot[] | null,
     consumers: ConsumerRegistration[],
     now: number,
   ): Promise<void> {
-    const cfg = this.config.messaging;
-    const [win, active] = await Promise.all([
-      this.metrics.window(now - RULE_WINDOW_MS, now, now, 's10'),
+    const [win, lagAgo, active] = await Promise.all([
+      this.metrics.window(now - RULE_WINDOW_MIN * 60_000, now, now, false),
+      this.metrics.lagAgo(RULE_WINDOW_MIN),
       this.store.activeAlerts(),
     ]);
     const delivery = this.metrics.delivery(win);
-    const processing = this.metrics.processing(win);
-    const lag = this.metrics.lag(win);
-    const payload = this.metrics.payload(win);
-    const lagNow = queues ? queues.reduce((s, q) => s + waitingOf(q), 0) : lag.current;
+    const lagNow = queues ? queues.reduce((s, q) => s + waitingOf(q), 0) : null;
     const violations = evaluateMessagingRules(
       {
         connection: this.connection.getStatus().state,
         queues: queues ? queueRuleInputs(queues, consumers, now) : null,
-        lag: { now: lagNow, ago15m: lag.points[0]?.value ?? null },
-        consume: {
+        lag: { now: lagNow, ago15m: lagAgo },
+        consume: delivery && {
           ops: delivery.consumed + delivery.failed,
           failureRatePercent: delivery.failureRatePercent,
-          p95Ms: processing.p95Ms,
+          p95Ms: this.metrics.processing(win).p95Ms,
         },
-        publish: { ops: delivery.published, failures: delivery.publishFailures },
+        publish: delivery && { ops: delivery.published, failures: delivery.publishFailures },
         deadLetter: queues ? queues.reduce((s, q) => s + q.counts.failed, 0) : null,
-        largestMessage:
-          payload.maxBytes === null ? null : { bytes: payload.maxBytes, channel: null },
       },
-      { ...cfg.rules, largeMessageBytes: cfg.largeMessageKb * 1024 },
+      this.config.messaging.rules,
     );
     await this.applyAlerts(violations, active, now);
   }

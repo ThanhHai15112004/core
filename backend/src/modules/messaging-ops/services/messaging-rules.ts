@@ -11,8 +11,7 @@ export type MessagingRule =
   | 'FAILURE_RATE'
   | 'PUBLISH_FAILURES'
   | 'SLOW_CONSUMER'
-  | 'DEAD_LETTER'
-  | 'LARGE_MESSAGE';
+  | 'DEAD_LETTER';
 
 export const RULE_TAB: Record<MessagingRule, string> = {
   BROKER_UNAVAILABLE: 'overview',
@@ -24,10 +23,9 @@ export const RULE_TAB: Record<MessagingRule, string> = {
   PUBLISH_FAILURES: 'errors',
   SLOW_CONSUMER: 'consumers',
   DEAD_LETTER: 'dead-letter',
-  LARGE_MESSAGE: 'channels',
 };
 
-/** Alert id = rule hoặc `rule:đối tượng` (vd. `NO_CONSUMER:system.notifications`). */
+/** Alert id = rule hoặc `rule:đối tượng` (vd. `NO_CONSUMER:system.events`). */
 export const ruleOf = (alertId: string) => alertId.split(':')[0] as MessagingRule;
 
 export interface QueueRuleInput {
@@ -46,13 +44,13 @@ export interface MessagingRuleInput {
   connection: MessagingConnectionState;
   queues: QueueRuleInput[] | null;
   lag: { now: number | null; ago15m: number | null };
-  consume: { ops: number; failureRatePercent: number | null; p95Ms: number | null };
-  publish: { ops: number; failures: number };
+  /** Từ Prometheus — null khi không có số liệu. */
+  consume: { ops: number; failureRatePercent: number | null; p95Ms: number | null } | null;
+  publish: { ops: number; failures: number } | null;
   deadLetter: number | null;
-  largestMessage: { bytes: number; channel: string | null } | null;
 }
 
-export type MessagingRuleConfig = MessagingConfig['rules'] & { largeMessageBytes: number };
+export type MessagingRuleConfig = MessagingConfig['rules'];
 
 export interface MessagingViolation {
   id: string;
@@ -126,7 +124,7 @@ export function evaluateMessagingRules(
     add('LAG_GROWING', null, 'warning', now, ago15m, '', { ago: Math.round(ago15m) });
 
   const c = input.consume;
-  if (c.ops >= cfg.minOps && (c.failureRatePercent ?? 0) >= cfg.failureRatePercent)
+  if (c && c.ops >= cfg.minOps && (c.failureRatePercent ?? 0) >= cfg.failureRatePercent)
     add(
       'FAILURE_RATE',
       null,
@@ -135,12 +133,12 @@ export function evaluateMessagingRules(
       cfg.failureRatePercent,
       '%',
     );
-  if (c.ops >= cfg.minOps && (c.p95Ms ?? 0) >= cfg.processingP95Ms)
+  if (c && c.ops >= cfg.minOps && (c.p95Ms ?? 0) >= cfg.processingP95Ms)
     add('SLOW_CONSUMER', null, 'warning', c.p95Ms!, cfg.processingP95Ms, 'ms');
 
   const p = input.publish;
-  const pubTotal = p.ops + p.failures;
-  if (p.failures > 0 && pubTotal > 0) {
+  const pubTotal = p ? p.ops + p.failures : 0;
+  if (p && p.failures > 0 && pubTotal > 0) {
     const rate = (p.failures / pubTotal) * 100;
     if (rate >= cfg.failureRatePercent)
       add('PUBLISH_FAILURES', null, 'warning', rate, cfg.failureRatePercent, '%', {
@@ -150,11 +148,6 @@ export function evaluateMessagingRules(
 
   if (input.deadLetter !== null && input.deadLetter >= cfg.deadLetterWarn)
     add('DEAD_LETTER', null, 'warning', input.deadLetter, cfg.deadLetterWarn, '');
-
-  if (input.largestMessage && input.largestMessage.bytes >= cfg.largeMessageBytes)
-    add('LARGE_MESSAGE', null, 'info', input.largestMessage.bytes, cfg.largeMessageBytes, 'B', {
-      channel: input.largestMessage.channel ?? '',
-    });
 
   const rank = { critical: 0, warning: 1, info: 2 } as const;
   return out.sort((a, b) => rank[a.severity] - rank[b.severity]);

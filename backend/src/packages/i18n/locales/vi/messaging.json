@@ -38,8 +38,6 @@
   "messaging.alert.SLOW_CONSUMER.message": "P95 thời gian xử lý {value} ms (ngưỡng {threshold} ms).",
   "messaging.alert.DEAD_LETTER.title": "Dead letter tăng",
   "messaging.alert.DEAD_LETTER.message": "{value} message trong dead letter (ngưỡng {threshold}).",
-  "messaging.alert.LARGE_MESSAGE.title": "Message lớn",
-  "messaging.alert.LARGE_MESSAGE.message": "Có message {value} được publish (ngưỡng {threshold}) — message lớn làm tăng độ trễ và tải broker.",
   "messaging.event.connection_lost": "Mất kết nối broker ({error})",
   "messaging.event.connection_recovered": "Kết nối broker đã phục hồi sau {seconds}s",
   "messaging.event.alert_started": "{alert}",
@@ -62,7 +60,5 @@
   "messaging.series.processingAvg": "Trung bình",
   "messaging.series.processingP95": "P95",
   "messaging.series.processingP99": "P99",
-  "messaging.series.sizeAvg": "Kích thước TB",
-  "messaging.series.sizeMax": "Lớn nhất",
   "messaging.series.consumedPerMin": "Consume/phút"
 }

@@ -16,14 +16,18 @@ import {
 /**
  * Consumer của queue `system.events` (`@nestjs/bullmq`). Mỗi job chạy trong correlation của envelope để lần theo
  * log; đếm `messages_consumed_total{queue,channel,result}` + histogram thời gian xử lý.
+ *
+ * Job do BullMQ Job Scheduler tạo ra không đi qua publisher nào trong app, nên được đếm vào
+ * `messages_published_total` ở lần nhận đầu tiên — để publish/consume trên trang Messaging cân nhau.
  */
 @Processor(QUEUES.SYSTEM_EVENTS, { lockDuration: JOB_LOCK_DURATION_MS, name: 'worker' })
 export class SystemProcessor extends WorkerHost implements OnApplicationBootstrap {
   private readonly logger = new Logger(SystemProcessor.name);
   private readonly consumed: Counter<'queue' | 'channel' | 'result'>;
+  private readonly published: Counter<'queue' | 'channel' | 'result'>;
   private readonly duration: Histogram<'queue' | 'channel'>;
   private readonly wait: Histogram<'queue'>;
-  private readonly attemptFailures: Counter<'queue' | 'final'>;
+  private readonly attemptFailures: Counter<'queue' | 'channel' | 'final'>;
   private readonly recovered: Counter<'queue'>;
   /** Số job đã xử lý xong (thành công hoặc lỗi) từ khi process chạy — để tính job/phút. */
   public processed = 0;
@@ -38,6 +42,11 @@ export class SystemProcessor extends WorkerHost implements OnApplicationBootstra
       'channel',
       'result',
     ]);
+    this.published = metrics.counter('messages_published_total', 'Messages published', [
+      'queue',
+      'channel',
+      'result',
+    ]);
     this.duration = metrics.histogram('job_duration_seconds', 'Job processing duration', [
       'queue',
       'channel',
@@ -46,7 +55,7 @@ export class SystemProcessor extends WorkerHost implements OnApplicationBootstra
     this.attemptFailures = metrics.counter(
       'job_attempt_failures_total',
       'Failed job attempts (final = no attempts left)',
-      ['queue', 'final'],
+      ['queue', 'channel', 'final'],
     );
     this.recovered = metrics.counter('job_recovered_total', 'Jobs that succeeded after a retry', [
       'queue',
@@ -67,6 +76,9 @@ export class SystemProcessor extends WorkerHost implements OnApplicationBootstra
     if (!envelope) {
       this.consumed.inc({ queue: job.queueName, channel: job.name, result: 'failed' });
       throw new UnrecoverableError(`Malformed envelope for job ${job.id ?? '?'}`);
+    }
+    if (job.repeatJobKey && job.attemptsMade === 0 && job.attemptsStarted <= 1) {
+      this.published.inc({ queue: job.queueName, channel: envelope.topic, result: 'success' });
     }
     if (job.timestamp > 0) {
       this.wait.observe(
@@ -89,7 +101,11 @@ export class SystemProcessor extends WorkerHost implements OnApplicationBootstra
     } catch (err) {
       this.consumed.inc({ queue: job.queueName, channel: envelope.topic, result: 'failed' });
       const final = job.attemptsMade + 1 >= (job.opts.attempts ?? 1);
-      this.attemptFailures.inc({ queue: job.queueName, final: String(final) });
+      this.attemptFailures.inc({
+        queue: job.queueName,
+        channel: envelope.topic,
+        final: String(final),
+      });
       throw err;
     } finally {
       this.processed++;

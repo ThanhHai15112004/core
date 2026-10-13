@@ -11,7 +11,7 @@ import { ChannelDrawer } from '../../components/messaging/ChannelDrawer';
 import { ConsumerDrawer } from '../../components/messaging/ConsumerDrawer';
 import { MessageDrawer } from '../../components/messaging/MessageDrawer';
 import { MessagingOverviewView } from './MessagingOverviewView';
-import { MessagingChannelsView, MessagingConsumersView, MessagingProducersView } from './MessagingFlowViews';
+import { MessagingChannelsView, MessagingConsumersView } from './MessagingFlowViews';
 import { MessagingMessagesView } from './MessagingMessagesView';
 import { MessagingDeadLetterView, MessagingRetriesView } from './MessagingDeliveryViews';
 import { MessagingConfigView, MessagingErrorsView, MessagingOperationsView } from './MessagingOtherViews';
@@ -100,8 +100,6 @@ export const MessagingSection: React.FC = () => {
     switch (tab) {
       case 'channels':
         return <MessagingChannelsView {...common} />;
-      case 'producers':
-        return <MessagingProducersView {...common} />;
       case 'consumers':
         return <MessagingConsumersView {...common} navigate={navigate} />;
       case 'messages':

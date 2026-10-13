@@ -271,6 +271,14 @@ export class WorkerOpsService {
       if (rt) perRuntime.set(rt, (perRuntime.get(rt) ?? 0) + 1);
     }
     const brokers = live.queues.available ? live.queues.data.flatMap((q) => q.workers ?? []) : null;
+    // BullMQ chỉ cho biết số job active theo queue — gán cho instance khi nó là instance duy nhất của queue.
+    const queueActive = new Map(
+      live.queues.available ? live.queues.data.map((q) => [q.name, q.counts.active]) : [],
+    );
+    const instancesOf = new Map<string, number>();
+    for (const regs of groups.values())
+      for (const q of new Set(regs.map((r) => r.queue)))
+        instancesOf.set(q, (instancesOf.get(q) ?? 0) + 1);
     return [...groups.entries()]
       .map(([instance, regs]) => {
         const rt = regs[0]!.runtime;
@@ -279,9 +287,13 @@ export class WorkerOpsService {
         const mem = hb?.resources.rssMb ?? null;
         const limit = hb?.resources.memoryLimitMb ?? null;
         const memPct = hb?.resources.memoryPercent ?? null;
-        const active = regs.reduce((s, r) => s + r.inFlight, 0);
+        const own = [...new Set(regs.map((r) => r.queue))];
+        const active = own.every((q) => instancesOf.get(q) === 1 && queueActive.has(q))
+          ? own.reduce((s, q) => s + queueActive.get(q)!, 0)
+          : null;
         const concurrency = regs.reduce((s, r) => s + r.concurrency, 0);
-        const utilization = concurrency > 0 ? round((active / concurrency) * 100, 1) : null;
+        const utilization =
+          active !== null && concurrency > 0 ? round((active / concurrency) * 100, 1) : null;
         const paused = regs.every((r) => r.paused);
         const startedAt = Math.min(...regs.map((r) => r.startedAt));
         const status: WorkerInstanceStatus = paused
@@ -322,12 +334,10 @@ export class WorkerOpsService {
     const regs = live.consumers.filter((c) => (!queue || c.queue === queue) && !c.paused);
     const configured = regs.reduce((s, c) => s + c.concurrency, 0);
     if (configured === 0) return null;
-    const queues = live.queues.available
-      ? live.queues.data.filter((q) => !queue || q.name === queue)
-      : null;
-    const active = queues
-      ? queues.reduce((s, q) => s + q.counts.active, 0)
-      : regs.reduce((s, c) => s + c.inFlight, 0);
+    if (!live.queues.available) return null;
+    const active = live.queues.data
+      .filter((q) => !queue || q.name === queue)
+      .reduce((s, q) => s + q.counts.active, 0);
     return {
       configured,
       active,

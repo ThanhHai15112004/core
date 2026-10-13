@@ -2,7 +2,6 @@ import { Injectable } from '@nestjs/common';
 import { RedisService } from '@packages/redis/index.js';
 import {
   messagingKeys,
-  type MessagingErrorRecord,
   type MessagingEventRecord,
   type MessagingOperationRecord,
 } from '@packages/messaging/index.js';
@@ -20,7 +19,7 @@ function parseJson<T>(raw: string | null | undefined): T | null {
 const parseList = <T>(raws: string[]) =>
   raws.map((r) => parseJson<T>(r)).filter((x): x is T => x !== null);
 
-/** Dữ liệu Messaging Monitor trong Redis (sự kiện, lỗi, audit, cảnh báo). */
+/** Dữ liệu Messaging Monitor trong Redis (sự kiện, audit, cảnh báo). */
 @Injectable()
 export class MessagingStoreService {
   public readonly keys: ReturnType<typeof messagingKeys>;
@@ -40,12 +39,6 @@ export class MessagingStoreService {
   public async events(): Promise<MessagingEventRecord[]> {
     return parseList<MessagingEventRecord>(
       await this.redis.client.lrange(this.keys.events(), 0, -1),
-    );
-  }
-
-  public async errors(): Promise<MessagingErrorRecord[]> {
-    return parseList<MessagingErrorRecord>(
-      await this.redis.client.lrange(this.keys.errors(), 0, -1),
     );
   }
 

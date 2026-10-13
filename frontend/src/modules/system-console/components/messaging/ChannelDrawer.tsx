@@ -9,7 +9,7 @@ import { LineChart } from '../common/LineChart';
 import { SectionState } from '../database/SectionState';
 import { ConsumerTable } from './ConsumerTable';
 import { MessageTable } from './MessageTable';
-import { formatBytes, formatCompact } from '../../utils/database-format';
+import { formatCompact } from '../../utils/database-format';
 import { formatUnit } from '../../utils/performance-format';
 import { formatAge, formatMsgRate, toMessagingChart } from '../../utils/messaging-format';
 import { NO_VALUE } from '../../utils/runtime-format';
@@ -58,12 +58,12 @@ export const ChannelDrawer: React.FC<{
             </div>
             <div>
               <dt>{t('messaging.channel.failureRate')}</dt>
-              <dd className={c.failed > 0 ? 'is-warn' : ''}>{formatUnit(c.failureRatePercent, '%')}</dd>
+              <dd className={(c.failed ?? 0) > 0 ? 'is-warn' : ''}>{formatUnit(c.failureRatePercent, '%')}</dd>
             </div>
             <div>
               <dt>{t('messaging.channel.retries')}</dt>
               <dd>
-                {c.retried} · DLQ {c.deadLettered}
+                {c.retried ?? NO_VALUE} · DLQ {c.deadLettered ?? NO_VALUE}
               </dd>
             </div>
             <div>
@@ -73,14 +73,6 @@ export const ChannelDrawer: React.FC<{
             <div>
               <dt>P95</dt>
               <dd>{formatUnit(c.p95Ms, 'ms')}</dd>
-            </div>
-            <div>
-              <dt>{t('messaging.payload.avg')}</dt>
-              <dd>{c.avgSizeBytes === null ? NO_VALUE : formatBytes(c.avgSizeBytes)}</dd>
-            </div>
-            <div>
-              <dt>{t('messaging.channel.producers')}</dt>
-              <dd>{c.producers.length ? c.producers.map((p) => t(`rt.name.${p}`)).join(', ') : NO_VALUE}</dd>
             </div>
           </dl>
           <div className="cache-drawer-actions">

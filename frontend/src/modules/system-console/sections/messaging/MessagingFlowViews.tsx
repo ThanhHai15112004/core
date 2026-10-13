@@ -8,8 +8,7 @@ import { ConsumerTable } from '../../components/messaging/ConsumerTable';
 import { QueueDepthTable } from '../../components/messaging/QueueDepthTable';
 import { SectionState } from '../../components/database/SectionState';
 import { formatBytes, formatCompact } from '../../utils/database-format';
-import { formatUnit } from '../../utils/performance-format';
-import { formatAge, formatMsgRate } from '../../utils/messaging-format';
+import { formatAge } from '../../utils/messaging-format';
 import { formatUptime, NO_VALUE } from '../../utils/runtime-format';
 import { useLocale } from '../../../../core/i18n/index';
 
@@ -52,81 +51,6 @@ export const MessagingChannelsView: React.FC<ViewProps> = ({ range, paused, relo
         </SectionState>
       </section>
     </>
-  );
-};
-
-/** Ai đang publish: theo runtime (API, Worker, Scheduler, CLI), tốc độ, lỗi và channel. */
-export const MessagingProducersView: React.FC<ViewProps> = ({ range, paused, reloadKey, go }) => {
-  const { t, locale, formatRelative } = useLocale();
-  const now = Date.now();
-  const { data, error } = usePolling(() => messagingApi.producers(range), `producers:${range}:${reloadKey}`, 15_000, paused);
-  return (
-    <section className="ov-card ov-section">
-      <header className="ov-section-head">
-        <h3>{t('messaging.producer.title')}</h3>
-        <span className="ov-section-hint">{t('messaging.producer.hint')}</span>
-      </header>
-      {error && !data && <p className="scp-alert scp-alert-danger">{error.message}</p>}
-      {data && data.producers.length === 0 && <p className="ov-empty-line">{t('messaging.producer.empty')}</p>}
-      <div className="msg-producers">
-        {data?.producers.map((p) => (
-          <article key={p.producer} className="msg-producer">
-            <header>
-              <strong>{t(`rt.name.${p.producer}`)}</strong>
-              <span className={`pf-chip ov-tone-${p.failures > 0 ? 'warn' : 'ok'}`}>
-                {p.failures > 0 ? t('messaging.producer.failures', { count: p.failures }) : t('messaging.producer.noFailures')}
-              </span>
-            </header>
-            <dl className="db-stat-grid db-stat-compact">
-              <div>
-                <dt>{t('messaging.producer.rate')}</dt>
-                <dd>{formatMsgRate(p.perSec)}</dd>
-              </div>
-              <div>
-                <dt>{t('messaging.producer.published')}</dt>
-                <dd>{formatCompact(p.published, locale)}</dd>
-              </div>
-              <div>
-                <dt>{t('messaging.channel.failureRate')}</dt>
-                <dd>{formatUnit(p.failureRatePercent, '%')}</dd>
-              </div>
-              <div>
-                <dt>{t('messaging.producer.lastPublished')}</dt>
-                <dd>{p.lastPublishedAt ? formatRelative(new Date(p.lastPublishedAt), now) : NO_VALUE}</dd>
-              </div>
-              <div>
-                <dt>{t('messaging.producer.lastFailure')}</dt>
-                <dd>{p.lastFailureAt ? formatRelative(new Date(p.lastFailureAt), now) : NO_VALUE}</dd>
-              </div>
-            </dl>
-            <div className="scp-table-wrap">
-              <table className="scp-table">
-                <thead>
-                  <tr>
-                    <th>{t('messaging.channel.name')}</th>
-                    <th>{t('messaging.producer.rate')}</th>
-                    <th>{t('messaging.producer.published')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {p.channels.map((c) => (
-                    <tr key={c.channel} className="is-clickable" onClick={() => go('channels', c.channel)}>
-                      <td>
-                        <code>{c.channel}</code>
-                        <small className="pf-row-note">{t('messaging.channel.via', { queue: c.queue })}</small>
-                      </td>
-                      <td>{formatMsgRate(c.perSec)}</td>
-                      <td>{formatCompact(c.published, locale)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </article>
-        ))}
-      </div>
-      <p className="pf-chart-note">{t('messaging.producer.note', { range: t(`tr.range.${range}`) })}</p>
-    </section>
   );
 };
 

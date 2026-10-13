@@ -38,9 +38,9 @@ export const ConsumerTable: React.FC<{ rows: ConsumerRow[]; onOpen: (name: strin
               <td>{formatMsgRate(c.perSec)}</td>
               <td className={(c.lag ?? 0) > 0 ? 'is-warn' : ''}>{c.lag === null ? NO_VALUE : formatCompact(c.lag, locale)}</td>
               <td>{formatUnit(c.p95Ms, 'ms')}</td>
-              <td className={c.failed > 0 ? 'is-warn' : ''}>
-                {c.failed}
-                {c.failureRatePercent !== null && c.failed > 0 && <small className="pf-row-note">{formatUnit(c.failureRatePercent, '%')}</small>}
+              <td className={(c.failed ?? 0) > 0 ? 'is-warn' : ''}>
+                {c.failed ?? NO_VALUE}
+                {c.failureRatePercent !== null && (c.failed ?? 0) > 0 && <small className="pf-row-note">{formatUnit(c.failureRatePercent, '%')}</small>}
               </td>
               <td>
                 {c.instances.length}

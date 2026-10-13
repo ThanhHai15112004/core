@@ -72,11 +72,15 @@ export const ConsumerDrawer: React.FC<{
             </div>
             <div>
               <dt>{t('messaging.channel.failureRate')}</dt>
-              <dd className={c.failed > 0 ? 'is-warn' : ''}>{formatUnit(c.failureRatePercent, '%')}</dd>
+              <dd className={(c.failed ?? 0) > 0 ? 'is-warn' : ''}>{formatUnit(c.failureRatePercent, '%')}</dd>
             </div>
             <div>
               <dt>{t('messaging.consumer.retry')}</dt>
-              <dd>{t('messaging.consumer.retrySummary', { retried: data.retry.retried, recovered: data.retry.recovered, dlq: data.retry.deadLettered })}</dd>
+              <dd>
+                {data.retry
+                  ? t('messaging.consumer.retrySummary', { retried: data.retry.retried, recovered: data.retry.recovered, dlq: data.retry.deadLettered })
+                  : NO_VALUE}
+              </dd>
             </div>
             <div>
               <dt>{t('messaging.message.idempotency')}</dt>
@@ -103,7 +107,6 @@ export const ConsumerDrawer: React.FC<{
                 <tr>
                   <th>{t('messaging.consumer.instance')}</th>
                   <th>{t('messaging.consumer.concurrencyCol')}</th>
-                  <th>{t('messaging.consumer.inFlight')}</th>
                   <th>{t('messaging.consumer.started')}</th>
                 </tr>
               </thead>
@@ -115,7 +118,6 @@ export const ConsumerDrawer: React.FC<{
                       {i.paused && <small className="pf-row-note">{t('messaging.consumer.statusOf.paused')}</small>}
                     </td>
                     <td>{i.concurrency}</td>
-                    <td>{i.inFlight}</td>
                     <td>{formatRelative(new Date(i.startedAt), now)}</td>
                   </tr>
                 ))}

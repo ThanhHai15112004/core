@@ -14,11 +14,11 @@ const value = (c: ChannelRow, s: Sort) =>
   s === 'status'
     ? -STATUS_RANK[c.status]
     : s === 'throughput'
-      ? c.published + c.consumed
+      ? (c.published ?? 0) + (c.consumed ?? 0)
       : s === 'lag'
         ? (c.lag ?? -1)
         : s === 'errors'
-          ? c.failed + c.deadLettered
+          ? (c.failed ?? 0) + (c.deadLettered ?? 0)
           : (c.failureRatePercent ?? -1);
 
 /** Bảng channel (topic): publish/consume, lag, lỗi, trạng thái — sort theo throughput, lag, lỗi, tỷ lệ lỗi. */
@@ -67,9 +67,9 @@ export const ChannelTable: React.FC<{ rows: ChannelRow[]; onOpen: (name: string)
                 <td className={(c.lag ?? 0) > 0 ? 'is-warn' : ''}>
                   {c.lag === null ? NO_VALUE : formatCompact(c.lag, locale)}
                 </td>
-                <td className={c.failed + c.deadLettered > 0 ? 'is-warn' : ''}>
-                  {c.failed}
-                  {c.failureRatePercent !== null && c.failed > 0 && <small className="pf-row-note">{formatUnit(c.failureRatePercent, '%')}</small>}
+                <td className={(c.failed ?? 0) + (c.deadLettered ?? 0) > 0 ? 'is-warn' : ''}>
+                  {c.failed ?? NO_VALUE}
+                  {c.failureRatePercent !== null && (c.failed ?? 0) > 0 && <small className="pf-row-note">{formatUnit(c.failureRatePercent, '%')}</small>}
                 </td>
                 <td>
                   <span className={`pf-chip ov-tone-${CHANNEL_STATUS_TONE[c.status]}`}>{t(`messaging.channel.statusOf.${c.status}`)}</span>

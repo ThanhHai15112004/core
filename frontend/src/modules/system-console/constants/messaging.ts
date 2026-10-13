@@ -13,7 +13,6 @@ import type { StatusTone } from '../utils/status-tone';
 export const MESSAGING_TABS: MessagingTab[] = [
   'overview',
   'channels',
-  'producers',
   'consumers',
   'messages',
   'retries',
@@ -24,7 +23,7 @@ export const MESSAGING_TABS: MessagingTab[] = [
 ];
 export const MESSAGING_RANGES: MessagingRange[] = ['15m', '1h', '6h', '24h'];
 export const DEFAULT_MESSAGING_RANGE: MessagingRange = '1h';
-export const MESSAGING_METRICS: MessagingMetric[] = ['throughput', 'lag', 'failures', 'processing', 'size'];
+export const MESSAGING_METRICS: MessagingMetric[] = ['throughput', 'lag', 'failures', 'processing'];
 export const MESSAGE_STATUSES: MessageStatus[] = ['queued', 'scheduled', 'processing', 'retrying', 'delivered', 'dead_letter'];
 export const MESSAGE_PAGE_SIZE = 100;
 
@@ -84,8 +83,6 @@ export const MESSAGING_SERIES_COLORS: Record<string, string> = {
   processingAvg: 'var(--scp-series-1)',
   processingP95: 'var(--scp-series-2)',
   processingP99: 'var(--scp-series-3)',
-  sizeAvg: 'var(--scp-series-1)',
-  sizeMax: 'var(--scp-series-3)',
   consumedPerMin: 'var(--scp-series-4)',
 };
 

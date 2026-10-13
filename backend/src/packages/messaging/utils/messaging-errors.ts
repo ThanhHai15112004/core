@@ -21,30 +21,18 @@ export function messagingErrorCode(err: unknown): string | null {
   return null;
 }
 
-const CONNECTION = new Set([
-  'ECONNREFUSED',
-  'ECONNRESET',
-  'EHOSTUNREACH',
-  'ENOTFOUND',
-  'EPIPE',
-  'EAI_AGAIN',
-  'NR_CLOSED',
-]);
-const TIMEOUT = new Set(['ETIMEDOUT', 'TimeoutError', 'AbortError']);
-
-export function classifyMessagingError(
-  err: unknown,
-  stage: 'publish' | 'consume',
-): MessagingErrorKind {
-  if (err instanceof MessageDeserializeError) return 'deserialize';
-  const code = messagingErrorCode(err) ?? '';
-  const message = String((err as ErrorLike | null)?.message ?? '');
+/** Loại lỗi suy ra từ `failedReason` của job (BullMQ chỉ giữ message, không giữ code). */
+export function errorKindOf(message: string): MessagingErrorKind {
   if (/stalled/i.test(message)) return 'stalled';
-  if (CONNECTION.has(code) || /ECONNREFUSED|Connection is closed|connect ETIMEDOUT/i.test(message))
+  if (
+    /ECONNREFUSED|ECONNRESET|EHOSTUNREACH|ENOTFOUND|EPIPE|EAI_AGAIN|NR_CLOSED|Connection is closed/.test(
+      message,
+    )
+  )
     return 'connection';
-  if (TIMEOUT.has(code) || /timed? ?out/i.test(message)) return 'timeout';
-  if (stage === 'publish') return 'publish';
-  if (/JSON|Unexpected token|deserializ/i.test(message)) return 'deserialize';
+  if (/timed? ?out|ETIMEDOUT|TimeoutError|AbortError/i.test(message)) return 'timeout';
+  if (/Malformed envelope|MessageDeserializeError|JSON|Unexpected token|deserializ/i.test(message))
+    return 'deserialize';
   return 'processing';
 }
 

@@ -9,7 +9,6 @@ import { RedisService } from '@packages/redis/index.js';
 import {
   MessagingConnectionService,
   MessagingMonitoringService,
-  messagingKeys,
   type ConsumerRegistration,
   type MessagingErrorRecord,
 } from '@packages/messaging/index.js';
@@ -127,21 +126,10 @@ export class WorkerMonitorService implements OnApplicationBootstrap, OnModuleDes
     this.metrics.recordQueues(queues);
   }
 
+  /** Lỗi consume trong `since` → nay, đọc từ job lỗi còn trong broker (Dead Letter + chờ retry). */
   private async recentErrors(since: number): Promise<MessagingErrorRecord[]> {
-    const raws = await this.redis.client
-      .lrange(messagingKeys(this.redis).errors(), 0, 199)
-      .catch(() => [] as string[]);
-    return raws
-      .map((r) => {
-        try {
-          return JSON.parse(r) as MessagingErrorRecord;
-        } catch {
-          return null;
-        }
-      })
-      .filter(
-        (e): e is MessagingErrorRecord => e !== null && e.stage === 'consume' && e.at >= since,
-      );
+    const list = await this.messaging.failures(50).catch(() => [] as MessagingErrorRecord[]);
+    return list.filter((e) => e.at >= since);
   }
 
   private async evaluate(

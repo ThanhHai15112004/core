@@ -35,7 +35,6 @@ export const MessagingMessagesView: React.FC<Props> = ({ product, filter, setFil
   const channels = usePolling(() => messagingApi.channels('24h'), 'message-channels', 60_000);
   const channelNames = channels.data?.channels.map((c) => c.channel) ?? [];
   const queues = channels.data?.queues.available ? channels.data.queues.data.map((q) => q.name) : [];
-  const producers = [...new Set(channels.data?.channels.flatMap((c) => c.producers) ?? [])];
 
   const load = async (n: number) => {
     const id = ++seq.current;
@@ -60,6 +59,8 @@ export const MessagingMessagesView: React.FC<Props> = ({ product, filter, setFil
   }, [filter.queue, filter.channel, filter.status, filter.producer, filter.search, reloadKey]);
 
   const rows = res?.messages.available ? res.messages.data : [];
+  // Producer ghi trong envelope của message đã tải (giữ lựa chọn hiện tại dù trang không còn message của nó).
+  const producers = [...new Set([...rows.map((m) => m.producer), filter.producer || null].filter((p): p is string => Boolean(p)))].sort();
   const filtered = Boolean(filter.queue || filter.channel || filter.status || filter.producer || filter.search);
   return (
     <section className="ov-card ov-section">

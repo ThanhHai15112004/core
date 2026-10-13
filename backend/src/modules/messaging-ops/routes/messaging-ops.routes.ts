@@ -6,7 +6,6 @@ export const MESSAGING_OPS_ROUTES = {
   METRICS: 'metrics',
   CHANNELS: 'channels',
   CHANNEL_DETAIL: 'channels/:id',
-  PRODUCERS: 'producers',
   CONSUMERS: 'consumers',
   CONSUMER_DETAIL: 'consumers/:id',
   MESSAGES: 'messages',

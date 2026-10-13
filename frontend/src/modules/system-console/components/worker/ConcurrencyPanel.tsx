@@ -36,7 +36,7 @@ export const ConcurrencyPanel: React.FC<{ concurrency: Concurrency | null; worke
       {workers.length > 0 && (
         <ul className="cache-bars">
           {workers.map((w) => {
-            const pct = w.concurrency > 0 ? Math.min(100, (w.active / w.concurrency) * 100) : 0;
+            const pct = w.active !== null && w.concurrency > 0 ? Math.min(100, (w.active / w.concurrency) * 100) : 0;
             return (
               <li key={w.id} className={pct >= warnPercent ? 'is-warn' : ''}>
                 <span className="cache-bar-label">{instanceLabel(w.id)}</span>
@@ -44,7 +44,7 @@ export const ConcurrencyPanel: React.FC<{ concurrency: Concurrency | null; worke
                   <span style={{ width: `${pct}%` }} />
                 </span>
                 <span className="cache-bar-value">
-                  {w.active} / {w.concurrency}
+                  {w.active ?? NO_VALUE} / {w.concurrency}
                 </span>
               </li>
             );

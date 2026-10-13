@@ -2,11 +2,10 @@ import type { Section } from './database.types';
 
 export type { Section };
 export type MessagingRange = '15m' | '1h' | '6h' | '24h';
-export type MessagingMetric = 'throughput' | 'lag' | 'failures' | 'processing' | 'size';
+export type MessagingMetric = 'throughput' | 'lag' | 'failures' | 'processing';
 export type MessagingTab =
   | 'overview'
   | 'channels'
-  | 'producers'
   | 'consumers'
   | 'messages'
   | 'retries'
@@ -31,7 +30,7 @@ export type MessagingCapability =
 export type MessageStatus = 'queued' | 'scheduled' | 'processing' | 'retrying' | 'delivered' | 'dead_letter' | 'unknown';
 export type ChannelStatus = 'healthy' | 'lagging' | 'high_failure' | 'no_consumer' | 'idle';
 export type ConsumerStatus = 'healthy' | 'lagging' | 'high_failure' | 'slow' | 'paused' | 'offline';
-export type MessagingErrorKind = 'processing' | 'timeout' | 'deserialize' | 'publish' | 'connection' | 'stalled' | 'other';
+export type MessagingErrorKind = 'processing' | 'timeout' | 'deserialize' | 'connection' | 'stalled';
 export type MessagingEventType =
   | 'connection_lost'
   | 'connection_recovered'
@@ -94,14 +93,15 @@ export interface QueueRow {
   oldestWaitingSec: number | null;
 }
 
+/** Số đếm theo cửa sổ lấy từ Prometheus — null khi không có số liệu. */
 export interface ChannelRow {
   channel: string;
   queue: string | null;
-  published: number;
-  consumed: number;
-  failed: number;
-  retried: number;
-  deadLettered: number;
+  published: number | null;
+  consumed: number | null;
+  failed: number | null;
+  retried: number | null;
+  deadLettered: number | null;
   publishPerSec: number | null;
   consumePerSec: number | null;
   failureRatePercent: number | null;
@@ -109,22 +109,8 @@ export interface ChannelRow {
   oldestWaitingSec: number | null;
   avgMs: number | null;
   p95Ms: number | null;
-  avgSizeBytes: number | null;
-  producers: string[];
   consumers: string[];
   status: ChannelStatus;
-  lastPublishedAt: string | null;
-}
-
-export interface ProducerRow {
-  producer: string;
-  published: number;
-  perSec: number | null;
-  failures: number;
-  failureRatePercent: number | null;
-  channels: { channel: string; queue: string; published: number; perSec: number | null }[];
-  lastPublishedAt: string | null;
-  lastFailureAt: string | null;
 }
 
 export interface ConsumerInstance {
@@ -132,7 +118,6 @@ export interface ConsumerInstance {
   runtime: string | null;
   concurrency: number;
   paused: boolean;
-  inFlight: number;
   startedAt: string;
 }
 
@@ -142,8 +127,8 @@ export interface ConsumerRow {
   runtime: string | null;
   instances: ConsumerInstance[];
   brokerWorkers: number | null;
-  consumed: number;
-  failed: number;
+  consumed: number | null;
+  failed: number | null;
   perSec: number | null;
   failureRatePercent: number | null;
   avgMs: number | null;
@@ -257,7 +242,7 @@ export interface MessagingOverview {
     publishedPerSec: number | null;
     consumedPerSec: number | null;
     lag: number | null;
-    failed: number;
+    failed: number | null;
     retrying: number | null;
     deadLetter: number | null;
     consumers: number | null;
@@ -272,14 +257,14 @@ export interface MessagingOverview {
   };
   lagTrend: { current: number | null; ago15m: number | null; changePercent: number | null; direction: 'up' | 'down' | 'flat' | null };
   processing: { avgMs: number | null; p95Ms: number | null; p99Ms: number | null };
-  payload: { avgBytes: number | null; maxBytes: number | null; largeBytes: number };
-  delivery: Delivery;
+  /** null khi Prometheus không trả lời. */
+  delivery: Delivery | null;
   queues: Section<QueueRow[]>;
   topChannels: ChannelRow[];
   consumers: ConsumerRow[];
   deadLetter: Section<{ total: number; latest: MessageRow[] }>;
   alerts: MessagingAlert[];
-  report: { today: MessagingReport; yesterday: MessagingReport };
+  report: { today: MessagingReport | null; yesterday: MessagingReport | null };
   events: MessagingEvent[];
   settings: MessagingSettings;
 }
@@ -307,17 +292,15 @@ export interface MessagingChannels {
   backlogTruncated: boolean;
 }
 
+/** Lỗi consume dựng từ job lỗi còn trong broker (Dead Letter + đang chờ retry). */
 export interface MessagingError {
   at: string;
-  stage: 'publish' | 'consume';
   kind: MessagingErrorKind;
   channel: string;
   queue: string;
-  messageId: string | null;
-  consumer: string | null;
-  runtime: string | null;
-  attempt: number | null;
-  maxAttempts: number | null;
+  messageId: string;
+  attempt: number;
+  maxAttempts: number;
   final: boolean;
   code: string | null;
   message: string;
@@ -334,11 +317,6 @@ export interface ChannelDetail {
   recentMessages: Section<MessageRow[]>;
 }
 
-export interface MessagingProducers {
-  range: MessagingRange;
-  producers: ProducerRow[];
-}
-
 export interface MessagingConsumers {
   range: MessagingRange;
   consumers: ConsumerRow[];
@@ -353,7 +331,7 @@ export interface ConsumerDetail {
   lag: MessagingSeries[];
   recentErrors: MessagingError[];
   recentMessages: Section<MessageRow[]>;
-  retry: { retried: number; recovered: number; deadLettered: number };
+  retry: { retried: number; recovered: number; deadLettered: number } | null;
 }
 
 export interface MessageFilter {
@@ -372,7 +350,7 @@ export interface MessagingMessages {
 
 export interface MessagingRetries {
   retrying: Section<MessageRow[]>;
-  stats: { retryingNow: number | null; retriedToday: number; recoveredToday: number; deadLetteredToday: number };
+  stats: { retryingNow: number | null; retriedToday: number | null; recoveredToday: number | null; deadLetteredToday: number | null };
   policy: { maxAttempts: number; backoff: string; initialDelayMs: number; maxDelayMs: number };
   retryEnabled: boolean;
 }
@@ -380,17 +358,18 @@ export interface MessagingRetries {
 export interface MessagingDeadLetter {
   items: Section<MessageRow[]>;
   total: number | null;
-  addedToday: number;
+  addedToday: number | null;
   oldestSec: number | null;
   bySource: { channel: string; count: number }[];
   settings: MessagingSettings;
 }
 
 export interface MessagingErrors {
-  counts: Record<MessagingErrorKind, number>;
-  byStage: { publish: number; consume: number };
-  total: number;
-  items: MessagingError[];
+  /** Theo loại, trên các job lỗi đọc được từ broker; null khi broker mất. */
+  counts: Record<MessagingErrorKind, number> | null;
+  /** Lần publish / consume lỗi trong khoảng (Prometheus); null khi không có số liệu. */
+  byStage: { publish: number | null; consume: number | null };
+  items: Section<MessagingError[]>;
   range: MessagingRange;
 }
 

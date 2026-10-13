@@ -74,14 +74,22 @@ export class BaseMessagePublisherProvider implements MessagePublisherContract {
     try {
       await this.queues.withTimeout(this.queues.get(queue).add(topic, envelope, opts));
     } catch (err) {
-      this.published?.inc({ queue, channel: topic, result: 'failed' });
+      this.recordPublished(queue, topic, false);
       this.logger.warn(`Publish ${queue}/${topic} failed: ${sanitizeMessagingMessage(err)}`);
       throw err;
     }
-    this.published?.inc({ queue, channel: topic, result: 'success' });
-    this.connection?.markPublished();
+    this.recordPublished(queue, topic, true);
     this.logger.log(`[EventPublished] ${queue}/${topic} ID:${envelope.id}`);
     return envelope;
+  }
+
+  /**
+   * Đếm một lần đưa job vào queue. Nơi buộc phải tự `queue.add` (Run Now của Scheduler cần `jobId` riêng) gọi hàm
+   * này để `messages_published_total` không bỏ sót.
+   */
+  public recordPublished(queue: string, channel: string, ok: boolean): void {
+    this.published?.inc({ queue, channel, result: ok ? 'success' : 'failed' });
+    if (ok) this.connection?.markPublished();
   }
 
   private meta(producer: string | null, options: PublishOptions): JobMeta {

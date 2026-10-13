@@ -16,7 +16,8 @@ export interface PrometheusFixture {
 /**
  * Test Concern: stubPrometheus
  * Thay `query`/`range` của PrometheusQueryClient trong app test bằng dữ liệu cố định — test không cần Prometheus
- * thật. `value`/`safeQuery`/`safeRange` đi qua hai hàm này nên cũng nhận dữ liệu giả. Trả về hàm khôi phục.
+ * thật. `value`/`safeQuery`/`safeRange` đi qua hai hàm này nên cũng nhận dữ liệu giả; `configured` báo true như khi
+ * có `PROMETHEUS_URL`. Trả về hàm khôi phục.
  */
 export function stubPrometheus(app: INestApplication, fixture: PrometheusFixture): () => void {
   const client = app.get(PrometheusQueryClient);
@@ -26,9 +27,11 @@ export function stubPrometheus(app: INestApplication, fixture: PrometheusFixture
   const range = jest
     .spyOn(client, 'range')
     .mockImplementation((expr: string) => Promise.resolve(fixture.range?.(expr) ?? []));
+  const configured = jest.spyOn(client, 'configured', 'get').mockReturnValue(true);
   return () => {
     query.mockRestore();
     range.mockRestore();
+    configured.mockRestore();
   };
 }
 

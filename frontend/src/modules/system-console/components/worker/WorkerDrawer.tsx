@@ -60,7 +60,7 @@ export const WorkerDrawer: React.FC<{
             </div>
             <div>
               <dt>{t('wq.worker.processing')}</dt>
-              <dd>{t('wq.worker.processingValue', { active: w.active, concurrency: w.concurrency })}</dd>
+              <dd>{t('wq.worker.processingValue', { active: w.active ?? NO_VALUE, concurrency: w.concurrency })}</dd>
             </div>
             <div>
               <dt>{t('wq.processing.avg')}</dt>

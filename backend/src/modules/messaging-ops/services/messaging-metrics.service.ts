@@ -1,137 +1,216 @@
 import { Injectable } from '@nestjs/common';
-import {
-  TELEMETRY_TIERS,
-  tierCovering,
-  type MetricBucket,
-  type TelemetryTier,
-} from '@modules/system-ops/telemetry-compat.js';
-import { channelMetric } from '@packages/messaging/index.js';
-import {
-  PerformanceStoreService,
-  counterOf,
-  gaugeWindow,
-  mergedOf,
-  meanOf,
-  percentileOf,
-  round,
-} from '@modules/performance/index.js';
+import { PrometheusQueryClient, type PromSample } from '@packages/metrics/index.js';
+import { round } from '@modules/performance/index.js';
+import { QUEUE_JOBS_METRIC, WorkerMetricsService } from '@modules/worker-ops/index.js';
 import type { DeliveryDto } from '../responses/messaging-ops.response.js';
 
-export interface MetricWindow {
-  tier: TelemetryTier;
-  buckets: MetricBucket[];
-  seconds: number;
+export interface Timing {
+  avgMs: number | null;
+  p95Ms: number | null;
+  p99Ms: number | null;
 }
 
-const r = (n: number | null, d = 2) => (n === null ? null : round(n, d));
-const rate = (part: number, total: number) => (total > 0 ? round((part / total) * 100, 2) : null);
+/** Luồng message của một channel / queue / tổng trong cửa sổ. */
+export interface Flow {
+  published: number;
+  publishFailures: number;
+  consumed: number;
+  failed: number;
+  retried: number;
+  deadLettered: number;
+  recovered: number;
+  processing: Timing;
+}
 
-/** Đọc số đo messaging đã ghi trong Redis (dùng chung bucket với trang Performance). */
+/** Cửa sổ thời gian đã đọc sẵn từ PromQL — `null` khi Prometheus không trả lời. */
+export interface MetricWindow {
+  seconds: number;
+  total: Flow & { lag: { avg: number | null; peak: number | null } };
+  channels: Map<string, Flow>;
+  queues: Map<string, Flow>;
+  /** Queue mà channel đi qua (theo nhãn của counter). */
+  channelQueue: Map<string, string>;
+}
+
+const WAITING = `max by (queue) (${QUEUE_JOBS_METRIC}{state="waiting"})`;
+
+const r = (n: number | null, d = 2) => (n === null || !Number.isFinite(n) ? null : round(n, d));
+const rate = (part: number, total: number) => (total > 0 ? round((part / total) * 100, 2) : null);
+const emptyFlow = (): Flow => ({
+  published: 0,
+  publishFailures: 0,
+  consumed: 0,
+  failed: 0,
+  retried: 0,
+  deadLettered: 0,
+  recovered: 0,
+  processing: { avgMs: null, p95Ms: null, p99Ms: null },
+});
+
+/** Giá trị nhãn an toàn trong PromQL (`{channel="…"}`). */
+export const labelValue = (v: string) => v.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+
+/**
+ * Số đo messaging đọc bằng PromQL: counter `messages_published_total` (publisher) / `messages_consumed_total`,
+ * `job_attempt_failures_total`, `job_recovered_total`, histogram `job_duration_seconds` (worker) và gauge
+ * `core_queue_jobs` (monitor Worker & Queue) — không tự lưu time-series.
+ */
 @Injectable()
 export class MessagingMetricsService {
-  constructor(private readonly perf: PerformanceStoreService) {}
+  constructor(
+    private readonly prom: PrometheusQueryClient,
+    private readonly worker: WorkerMetricsService,
+  ) {}
 
+  /** `detail` = false bỏ thời gian xử lý theo channel/queue (đánh giá rule, báo cáo ngày chỉ cần tổng). */
   public async window(
     fromMs: number,
     toMs: number,
     now: number,
-    forceTier?: TelemetryTier,
+    detail = true,
   ): Promise<MetricWindow | null> {
-    const tier = forceTier ?? tierCovering(fromMs, now);
-    if (!tier) return null;
-    const instances = await this.perf
-      .instances(fromMs - TELEMETRY_TIERS[tier].seconds * 1000)
-      .catch(() => [] as string[]);
-    const buckets = await this.perf.buckets(tier, fromMs, toMs, instances);
-    return { tier, buckets, seconds: Math.max(1, (Math.min(toMs, now) - fromMs) / 1000) };
+    if (!this.prom.configured) return null;
+    const seconds = Math.max(1, (Math.min(toMs, now) - fromMs) / 1000);
+    const w = `${Math.max(60, Math.round(seconds))}s`;
+    const offSec = Math.round((now - Math.min(toMs, now)) / 1000);
+    const off = offSec > 0 ? ` offset ${offSec}s` : '';
+    const step = `${Math.max(15, Math.round(seconds / 120))}s`;
+    const inc = (m: string) => `increase(${m}[${w}]${off})`;
+    const q = (expr: string) => this.prom.query(expr);
+    const quant = (p: number, by: string) =>
+      `histogram_quantile(${p}, sum by (${by ? `${by}, ` : ''}le) (${inc('job_duration_seconds_bucket')}))`;
+    const sumBy = (by: string) => (by ? `sum by (${by})` : 'sum');
+    const timing = (by: string) => [
+      q(`${sumBy(by)} (${inc('job_duration_seconds_sum')})`),
+      q(`${sumBy(by)} (${inc('job_duration_seconds_count')})`),
+      q(quant(0.95, by)),
+      q(quant(0.99, by)),
+    ];
+
+    let rows: PromSample[][];
+    try {
+      rows = await Promise.all([
+        q(`sum by (queue, channel, result) (${inc('messages_published_total')})`),
+        q(`sum by (queue, channel, result) (${inc('messages_consumed_total')})`),
+        q(`sum by (queue, channel, final) (${inc('job_attempt_failures_total')})`),
+        q(`sum by (queue) (${inc('job_recovered_total')})`),
+        q(`avg_over_time(sum(${WAITING})[${w}:${step}]${off})`),
+        q(`max_over_time(sum(${WAITING})[${w}:${step}]${off})`),
+        ...timing(''),
+        ...(detail ? [...timing('channel'), ...timing('queue')] : []),
+      ]);
+    } catch {
+      // Prometheus không trả lời → không có số liệu (null), không phải 0.
+      return null;
+    }
+    const [published, consumed, attempts, recovered, lagAvg, lagPeak, ...hist] = rows;
+
+    const total = {
+      ...emptyFlow(),
+      lag: {
+        avg: r(lagAvg![0]?.value ?? null, 1),
+        peak: lagPeak![0] ? Math.round(lagPeak![0].value) : null,
+      },
+    };
+    const channels = new Map<string, Flow>();
+    const queues = new Map<string, Flow>();
+    const channelQueue = new Map<string, string>();
+    const of = (map: Map<string, Flow>, key: string | undefined) => {
+      if (!key) return null;
+      let f = map.get(key);
+      if (!f) map.set(key, (f = emptyFlow()));
+      return f;
+    };
+    type Counted = Exclude<keyof Flow, 'processing'>;
+    const add = (key: Counted, labels: Record<string, string>, v: number) => {
+      const n = Math.round(v);
+      total[key] += n;
+      if (labels['channel'] && labels['queue'])
+        channelQueue.set(labels['channel'], labels['queue']);
+      const c = of(channels, labels['channel']);
+      if (c) c[key] += n;
+      const qf = of(queues, labels['queue']);
+      if (qf) qf[key] += n;
+    };
+    for (const x of published!)
+      add(x.labels['result'] === 'success' ? 'published' : 'publishFailures', x.labels, x.value);
+    for (const x of consumed!)
+      add(x.labels['result'] === 'success' ? 'consumed' : 'failed', x.labels, x.value);
+    for (const x of attempts!)
+      add(x.labels['final'] === 'true' ? 'deadLettered' : 'retried', x.labels, x.value);
+    for (const x of recovered!) add('recovered', x.labels, x.value);
+
+    // Mỗi nhóm 4 truy vấn: sum, count, p95, p99 (tổng, rồi theo channel, theo queue).
+    const apply = (group: PromSample[][], label: string, target: (k: string) => Flow | null) => {
+      const [sum, count, p95, p99] = group;
+      const pick = (list: PromSample[] | undefined, k: string) =>
+        list?.find((x) => (x.labels[label] ?? '') === k)?.value ?? null;
+      const keys = new Set(group.flatMap((list) => list.map((x) => x.labels[label] ?? '')));
+      for (const k of keys) {
+        const f = target(k);
+        if (!f) continue;
+        const n = pick(count, k);
+        const s = pick(sum, k);
+        const ms = (v: number | null) => (v === null ? null : v * 1000);
+        f.processing = {
+          avgMs: r(n && s !== null ? (s / n) * 1000 : null),
+          p95Ms: r(ms(pick(p95, k))),
+          p99Ms: r(ms(pick(p99, k))),
+        };
+      }
+    };
+    apply(hist.slice(0, 4), '', () => total);
+    if (detail) {
+      apply(hist.slice(4, 8), 'channel', (k) => of(channels, k));
+      apply(hist.slice(8, 12), 'queue', (k) => of(queues, k));
+    }
+    return { seconds, total, channels, queues, channelQueue };
   }
 
-  public perSec(w: MetricWindow | null, n: number): number | null {
-    return w ? round(n / w.seconds, 3) : null;
+  /** Tổng message đang chờ `minutes` phút trước (gauge `core_queue_jobs`). */
+  public lagAgo(minutes: number): Promise<number | null> {
+    return this.prom.value(`sum(${WAITING} offset ${minutes}m)`);
   }
 
-  public delivery(w: MetricWindow | null): DeliveryDto {
-    const b = w?.buckets ?? [];
-    const consumed = counterOf(b, 'msg.consumed');
-    const failed = counterOf(b, 'msg.consume.failed');
+  /** Chuỗi thời gian (`$w` = cửa sổ rate) — dùng chung cách lấy mẫu với Worker & Queue. */
+  public series<D extends { expr: string }>(minutes: number, defs: D[]) {
+    return this.worker.series(minutes, defs);
+  }
+
+  public perSec(w: MetricWindow | null, n: number | null): number | null {
+    return w && n !== null ? round(n / w.seconds, 3) : null;
+  }
+
+  public delivery(w: MetricWindow | null): DeliveryDto | null {
+    if (!w) return null;
+    const t = w.total;
     return {
-      published: counterOf(b, 'msg.published'),
-      consumed,
-      failed,
-      retried: counterOf(b, 'msg.retry'),
-      deadLettered: counterOf(b, 'msg.dlq'),
-      recovered: counterOf(b, 'msg.recovered'),
-      publishFailures: counterOf(b, 'msg.publish.failed'),
-      failureRatePercent: rate(failed, consumed + failed),
+      published: t.published,
+      consumed: t.consumed,
+      failed: t.failed,
+      retried: t.retried,
+      deadLettered: t.deadLettered,
+      recovered: t.recovered,
+      publishFailures: t.publishFailures,
+      failureRatePercent: rate(t.failed, t.consumed + t.failed),
     };
   }
 
-  public processing(w: MetricWindow | null, runtime?: string) {
-    const agg = mergedOf(w?.buckets ?? [], 'msg.process', runtime);
-    return {
-      avgMs: r(meanOf(agg)),
-      p95Ms: r(percentileOf(agg, 95)),
-      p99Ms: r(percentileOf(agg, 99)),
-    };
+  public processing(w: MetricWindow | null, queue?: string): Timing {
+    const f = queue ? w?.queues.get(queue) : w?.total;
+    return f?.processing ?? emptyFlow().processing;
   }
 
-  /** Kích thước message (gauge `msg.size`): trung bình và lớn nhất trong cửa sổ. */
-  public payload(w: MetricWindow | null, channel?: string) {
-    const agg = mergedOf(w?.buckets ?? [], channel ? channelMetric(channel, 'size') : 'msg.size');
-    return { avgBytes: agg.n > 0 ? Math.round(agg.s / agg.n) : null, maxBytes: agg.x };
+  /** Luồng của một channel; `null` khi không có Prometheus, số 0 khi channel không có lưu lượng. */
+  public channel(w: MetricWindow | null, name: string): Flow | null {
+    return w ? (w.channels.get(name) ?? emptyFlow()) : null;
   }
 
-  public channel(w: MetricWindow | null, name: string) {
-    const b = w?.buckets ?? [];
-    const c = (k: string) => counterOf(b, channelMetric(name, k));
-    const proc = mergedOf(b, channelMetric(name, 'proc'));
-    const consumed = c('con');
-    const failed = c('fail');
-    return {
-      published: c('pub'),
-      consumed,
-      failed,
-      retried: c('retry'),
-      deadLettered: c('dlq'),
-      publishFailures: c('pubfail'),
-      failureRatePercent: rate(failed, consumed + failed),
-      avgMs: r(meanOf(proc)),
-      p95Ms: r(percentileOf(proc, 95)),
-      avgSizeBytes: this.payload(w, name).avgBytes,
-    };
+  public queue(w: MetricWindow | null, name: string): Flow | null {
+    return w ? (w.queues.get(name) ?? emptyFlow()) : null;
   }
 
-  /** Publish của một producer (runtime) — tổng và theo channel. */
-  public producer(w: MetricWindow | null, runtime: string, channels: string[]) {
-    const b = w?.buckets ?? [];
-    return {
-      published: counterOf(b, 'msg.published', runtime),
-      failures: counterOf(b, 'msg.publish.failed', runtime),
-      channels: channels.map((ch) => ({
-        channel: ch,
-        published: counterOf(b, channelMetric(ch, 'pub'), runtime),
-      })),
-    };
-  }
-
-  /** Tiêu thụ của consumer chạy trong `runtime`. */
-  public consumer(w: MetricWindow | null, runtime: string | undefined) {
-    const b = w?.buckets ?? [];
-    const consumed = counterOf(b, 'msg.consumed', runtime);
-    const failed = counterOf(b, 'msg.consume.failed', runtime);
-    return {
-      consumed,
-      failed,
-      retried: counterOf(b, 'msg.retry', runtime),
-      recovered: counterOf(b, 'msg.recovered', runtime),
-      deadLettered: counterOf(b, 'msg.dlq', runtime),
-      failureRatePercent: rate(failed, consumed + failed),
-      ...this.processing(w, runtime),
-    };
-  }
-
-  /** Lag tổng (gauge do monitor nền ghi). */
-  public lag(w: MetricWindow | null) {
-    return gaugeWindow(w?.buckets ?? [], 'msg.lag', { mode: 'max' });
+  public failureRate(f: Flow | null): number | null {
+    return f ? rate(f.failed, f.consumed + f.failed) : null;
   }
 }

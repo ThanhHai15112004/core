@@ -6,10 +6,7 @@ import {
   MessagingMonitoringService,
   MessagingOperationError,
   MessagingOperationsService,
-  channelMetric,
-  queueMetric,
   type BacklogSample,
-  type ChannelRegistryEntry,
   type ConsumerRegistration,
   type MessageFilter,
   type MessageSummary,
@@ -20,17 +17,13 @@ import {
   type OperationContext,
   type QueueSnapshot,
 } from '@packages/messaging/index.js';
-import { TELEMETRY_TIERS, type MetricBucket } from '@modules/system-ops/telemetry-compat.js';
+import { changePercent, round } from '@modules/performance/index.js';
+import { QUEUE_JOBS_METRIC } from '@modules/worker-ops/index.js';
 import {
-  changePercent,
-  counterOf,
-  gaugeWindow,
-  mergedOf,
-  meanOf,
-  percentileOf,
-  round,
-} from '@modules/performance/index.js';
-import { MessagingMetricsService, type MetricWindow } from './messaging-metrics.service.js';
+  MessagingMetricsService,
+  labelValue,
+  type MetricWindow,
+} from './messaging-metrics.service.js';
 import { MessagingStoreService } from './messaging-store.service.js';
 import { waitingOf } from './messaging-monitor.service.js';
 import {
@@ -69,14 +62,12 @@ import type {
   MessagingMetricsDto,
   MessagingOperationDto,
   MessagingOverviewDto,
-  MessagingProducersDto,
   MessagingRange,
   MessagingReportDto,
   MessagingRetriesDto,
   MessagingSeriesDto,
   MessagingSettingsDto,
   MessagingTestDto,
-  ProducerRowDto,
   QueueRowDto,
   SectionDto,
 } from '../responses/messaging-ops.response.js';
@@ -87,35 +78,25 @@ export const MESSAGING_RANGES: Record<MessagingRange, number> = {
   '6h': 360,
   '24h': 1440,
 };
-export const MESSAGING_METRICS: MessagingMetric[] = [
-  'throughput',
-  'lag',
-  'failures',
-  'processing',
-  'size',
-];
+export const MESSAGING_METRICS: MessagingMetric[] = ['throughput', 'lag', 'failures', 'processing'];
 
 const MINUTE = 60_000;
 const DAY = 24 * 60 * MINUTE;
-const MAX_POINTS = 120;
 const OVERVIEW_EVENTS = 8;
 const OVERVIEW_CHANNELS = 8;
 const ERROR_LIST_LIMIT = 200;
 const RECENT_LIMIT = 20;
 const DEAD_LETTER_LIMIT = 200;
 const RETRY_LIMIT = 200;
-const LAG_TREND_MS = 15 * MINUTE;
+const LAG_TREND_MIN = 15;
 /** Chênh lệch publish − consume nhỏ hơn mức này (msg/s) coi là cân bằng. */
 const BALANCE_EPSILON = 0.01;
-const CHANNEL_KINDS = ['pub', 'con', 'fail', 'retry', 'dlq', 'pubfail', 'proc', 'size'];
 const ERROR_KINDS: MessagingErrorKind[] = [
   'processing',
   'timeout',
   'deserialize',
-  'publish',
   'connection',
   'stalled',
-  'other',
 ];
 
 const startOfDay = (t: number) => {
@@ -128,41 +109,16 @@ const iso = (t: number | null | undefined) =>
 const secondsSince = (t: number | null, now: number) =>
   t === null ? null : Math.max(0, Math.round((now - t) / 1000));
 
-export function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  const units = ['KB', 'MB', 'GB'];
-  let v = bytes / 1024;
-  let i = 0;
-  while (v >= 1024 && i < units.length - 1) {
-    v /= 1024;
-    i++;
-  }
-  return `${v >= 100 ? v.toFixed(0) : v.toFixed(1)} ${units[i]}`;
-}
-
-/** Tên channel có trong bucket (`msg.ch.<channel>.<kind>` — kind không chứa dấu chấm). */
-export function channelsInBuckets(buckets: readonly MetricBucket[]): Set<string> {
-  const out = new Set<string>();
-  for (const b of buckets)
-    for (const key of b.metrics.keys()) {
-      if (!key.startsWith('msg.ch.')) continue;
-      const i = key.lastIndexOf('.');
-      if (CHANNEL_KINDS.includes(key.slice(i + 1))) out.add(key.slice('msg.ch.'.length, i));
-    }
-  return out;
-}
-
-type Group = { t: number; b: MetricBucket[]; seconds: number };
-type SeriesDef = { id: string; unit: string; value: (g: Group) => number | null };
+type SeriesDef = { id: string; unit: string; expr: string };
 interface Live {
   queues: SectionDto<QueueSnapshot[]>;
   consumers: ConsumerRegistration[];
 }
 
 /**
- * Messaging Monitor: health broker, throughput publish/consume, lag, channel/producer/consumer, message
- * explorer + vòng đời, retry, Dead Letter, lỗi & sự kiện, thao tác có kiểm soát. Không có số liệu giả:
- * phần broker không hỗ trợ trả lý do.
+ * Messaging Monitor: health broker, throughput publish/consume, lag, channel/consumer, message explorer + vòng đời,
+ * retry, Dead Letter, lỗi & sự kiện, thao tác có kiểm soát. Trạng thái hiện tại đọc từ BullMQ, lịch sử từ
+ * Prometheus. Không có số liệu giả: thiếu nguồn → `null` hoặc lý do.
  */
 @Injectable()
 export class MessagingOpsService {
@@ -233,55 +189,46 @@ export class MessagingOpsService {
     };
   }
 
+  /** Channel = nhãn `channel` có lưu lượng trong Prometheus ∪ channel có message đang chờ trong broker. */
   private channelRows(
     win: MetricWindow | null,
-    registry: ChannelRegistryEntry[],
     backlog: BacklogSample | null,
     live: Live,
     now: number,
   ): ChannelRowDto[] {
     const names = new Set<string>([
-      ...registry.map((r) => r.channel),
       ...(backlog?.channels.map((c) => c.channel) ?? []),
-      ...channelsInBuckets(win?.buckets ?? []),
+      ...(win?.channels.keys() ?? []),
     ]);
     const queues = live.queues.available ? live.queues.data : null;
     const rows = [...names].map((name): ChannelRowDto => {
       const m = this.metrics.channel(win, name);
-      const reg = registry.filter((r) => r.channel === name);
       const waiting = backlog?.channels.filter((c) => c.channel === name) ?? [];
-      const queue = reg[0]?.queue ?? waiting[0]?.queue ?? null;
+      const queue = waiting[0]?.queue ?? win?.channelQueue.get(name) ?? null;
       const lag = backlog ? waiting.reduce((s, c) => s + c.waiting, 0) : null;
       const oldest = waiting.reduce<number | null>(
         (min, c) => (c.oldestAt !== null && (min === null || c.oldestAt < min) ? c.oldestAt : min),
         null,
       );
       const q = queues?.find((x) => x.name === queue) ?? null;
-      const lastPublished = reg.reduce<number | null>(
-        (max, r) => (max === null || r.lastPublishedAt > max ? r.lastPublishedAt : max),
-        null,
-      );
       const row: Omit<ChannelRowDto, 'status'> = {
         channel: name,
         queue,
-        published: m.published,
-        consumed: m.consumed,
-        failed: m.failed,
-        retried: m.retried,
-        deadLettered: m.deadLettered,
-        publishPerSec: this.metrics.perSec(win, m.published),
-        consumePerSec: this.metrics.perSec(win, m.consumed),
-        failureRatePercent: m.failureRatePercent,
+        published: m?.published ?? null,
+        consumed: m?.consumed ?? null,
+        failed: m?.failed ?? null,
+        retried: m?.retried ?? null,
+        deadLettered: m?.deadLettered ?? null,
+        publishPerSec: this.metrics.perSec(win, m?.published ?? null),
+        consumePerSec: this.metrics.perSec(win, m?.consumed ?? null),
+        failureRatePercent: this.metrics.failureRate(m),
         lag,
         oldestWaitingSec: secondsSince(oldest, now),
-        avgMs: m.avgMs,
-        p95Ms: m.p95Ms,
-        avgSizeBytes: m.avgSizeBytes,
-        producers: [...new Set(reg.map((r) => r.producer))].sort(),
+        avgMs: m?.processing.avgMs ?? null,
+        p95Ms: m?.processing.p95Ms ?? null,
         consumers: [
           ...new Set(live.consumers.filter((c) => c.queue === queue).map((c) => c.consumer)),
         ],
-        lastPublishedAt: iso(lastPublished),
       };
       return { ...row, status: this.channelStatus(row, q) };
     });
@@ -292,10 +239,11 @@ export class MessagingOpsService {
       healthy: 3,
       idle: 4,
     };
+    const traffic = (r: ChannelRowDto) => (r.published ?? 0) + (r.consumed ?? 0);
     return rows.sort(
       (a, b) =>
         rank[a.status] - rank[b.status] ||
-        b.published + b.consumed - (a.published + a.consumed) ||
+        traffic(b) - traffic(a) ||
         a.channel.localeCompare(b.channel),
     );
   }
@@ -305,15 +253,13 @@ export class MessagingOpsService {
     q: QueueSnapshot | null,
   ): ChannelStatus {
     const r = this.cfg.rules;
+    const ops = (row.consumed ?? 0) + (row.failed ?? 0);
     if ((row.lag ?? 0) > 0 && q && q.workers !== null && q.workers.length === 0)
       return 'no_consumer';
-    if (
-      row.consumed + row.failed >= r.minOps &&
-      (row.failureRatePercent ?? 0) >= r.failureRatePercent
-    )
+    if (ops >= r.minOps && (row.failureRatePercent ?? 0) >= r.failureRatePercent)
       return 'high_failure';
     if ((row.lag ?? 0) >= r.lagWarn) return 'lagging';
-    if (row.published + row.consumed + row.failed === 0 && !row.lag) return 'idle';
+    if (row.published === 0 && ops === 0 && !row.lag) return 'idle';
     return 'healthy';
   }
 
@@ -327,20 +273,21 @@ export class MessagingOpsService {
     const r = this.cfg.rules;
     return [...groups.values()].map((regs) => {
       const first = regs[0]!;
-      const runtime = first.runtime ?? undefined;
-      const m = this.metrics.consumer(win, runtime);
+      // Số đo theo queue: mỗi queue chỉ có một loại consumer (processor) tiêu thụ.
+      const m = this.metrics.queue(win, first.queue);
+      const failureRate = this.metrics.failureRate(m);
       const q = queues?.find((x) => x.name === first.queue) ?? null;
       const lag = q ? waitingOf(q) : null;
       const brokerWorkers = q?.workers?.length ?? null;
-      const ops = m.consumed + m.failed;
+      const ops = m ? m.consumed + m.failed : 0;
       const status: ConsumerStatus =
         brokerWorkers === 0
           ? 'offline'
           : regs.every((x) => x.paused)
             ? 'paused'
-            : ops >= r.minOps && (m.failureRatePercent ?? 0) >= r.failureRatePercent
+            : ops >= r.minOps && (failureRate ?? 0) >= r.failureRatePercent
               ? 'high_failure'
-              : ops >= r.minOps && (m.p95Ms ?? 0) >= r.processingP95Ms
+              : ops >= r.minOps && (m?.processing.p95Ms ?? 0) >= r.processingP95Ms
                 ? 'slow'
                 : (lag ?? 0) >= r.lagWarn
                   ? 'lagging'
@@ -354,17 +301,16 @@ export class MessagingOpsService {
           runtime: x.runtime,
           concurrency: x.concurrency,
           paused: x.paused,
-          inFlight: x.inFlight,
           startedAt: new Date(x.startedAt).toISOString(),
         })),
         brokerWorkers,
-        consumed: m.consumed,
-        failed: m.failed,
-        perSec: this.metrics.perSec(win, m.consumed),
-        failureRatePercent: m.failureRatePercent,
-        avgMs: m.avgMs,
-        p95Ms: m.p95Ms,
-        p99Ms: m.p99Ms,
+        consumed: m?.consumed ?? null,
+        failed: m?.failed ?? null,
+        perSec: this.metrics.perSec(win, m?.consumed ?? null),
+        failureRatePercent: failureRate,
+        avgMs: m?.processing.avgMs ?? null,
+        p95Ms: m?.processing.p95Ms ?? null,
+        p99Ms: m?.processing.p99Ms ?? null,
         lag,
         idempotent: regs.some((x) => x.idempotent === false)
           ? false
@@ -387,9 +333,9 @@ export class MessagingOpsService {
     };
   }
 
-  private report(w: MetricWindow | null): MessagingReportDto {
+  private report(w: MetricWindow | null): MessagingReportDto | null {
     const d = this.metrics.delivery(w);
-    const lag = this.metrics.lag(w);
+    if (!w || !d) return null;
     return {
       published: d.published,
       consumed: d.consumed,
@@ -397,8 +343,8 @@ export class MessagingOpsService {
       retried: d.retried,
       deadLettered: d.deadLettered,
       avgProcessingMs: this.metrics.processing(w).avgMs,
-      avgLag: lag.avg === null ? null : round(lag.avg, 1),
-      peakLag: lag.peak,
+      avgLag: w.total.lag.avg,
+      peakLag: w.total.lag.peak,
     };
   }
 
@@ -407,14 +353,13 @@ export class MessagingOpsService {
   public async getOverview(range: MessagingRange): Promise<MessagingOverviewDto> {
     const now = Date.now();
     const today = startOfDay(now);
-    const [win, lagWin, todayWin, yesterdayWin, live, registry, backlog, alerts, events, dlq] =
+    const [win, ago, todayWin, yesterdayWin, live, backlog, alerts, events, dlq] =
       await Promise.all([
         this.rangeWindow(range, now),
-        this.metrics.window(now - LAG_TREND_MS, now, now, 's10'),
-        this.metrics.window(today, now, now),
-        this.metrics.window(today - DAY, today, now),
+        this.metrics.lagAgo(LAG_TREND_MIN),
+        this.metrics.window(today, now, now, false),
+        this.metrics.window(today - DAY, today, now, false),
         this.live(),
-        this.monitoring.channelRegistry().catch(() => [] as ChannelRegistryEntry[]),
         this.monitoring.usable()
           ? this.monitoring.backlog().catch(() => null)
           : Promise.resolve(null),
@@ -424,27 +369,22 @@ export class MessagingOpsService {
       ]);
     const delivery = this.metrics.delivery(win);
     const queues = this.queueRows(live, now);
-    const channels = this.channelRows(win, registry, backlog, live, now);
-    const lagGauge = this.metrics.lag(lagWin);
-    const lagNow = queues.available
-      ? queues.data.reduce((s, q) => s + q.waiting, 0)
-      : lagGauge.current;
-    const ago = lagGauge.points[0]?.value ?? null;
+    const channels = this.channelRows(win, backlog, live, now);
+    const lagNow = queues.available ? queues.data.reduce((s, q) => s + q.waiting, 0) : null;
     const lagChange = changePercent(lagNow, ago);
-    const pub = this.metrics.perSec(win, delivery.published);
-    const con = this.metrics.perSec(win, delivery.consumed);
+    const pub = this.metrics.perSec(win, delivery?.published ?? null);
+    const con = this.metrics.perSec(win, delivery?.consumed ?? null);
     const diff = pub !== null && con !== null ? round(pub - con, 3) : null;
     const direction =
       lagNow === null || ago === null ? null : lagNow > ago ? 'up' : lagNow < ago ? 'down' : 'flat';
     const balanceState =
-      diff === null || (delivery.published === 0 && delivery.consumed === 0)
+      diff === null || !delivery || (delivery.published === 0 && delivery.consumed === 0)
         ? null
         : diff > BALANCE_EPSILON && (lagNow ?? 0) > 0
           ? 'growing'
           : diff < -BALANCE_EPSILON && (lagNow ?? 0) > 0
             ? 'draining'
             : 'stable';
-    const payload = this.metrics.payload(win);
     const sum = (k: 'delayed' | 'failed' | 'workers') =>
       queues.available ? queues.data.reduce((s, q) => s + (q[k] ?? 0), 0) : null;
     return {
@@ -458,7 +398,7 @@ export class MessagingOpsService {
         publishedPerSec: pub,
         consumedPerSec: con,
         lag: lagNow,
-        failed: delivery.failed + delivery.publishFailures,
+        failed: delivery ? delivery.failed + delivery.publishFailures : null,
         retrying: sum('delayed'),
         deadLetter: sum('failed'),
         consumers: sum('workers'),
@@ -473,7 +413,6 @@ export class MessagingOpsService {
       },
       lagTrend: { current: lagNow, ago15m: ago, changePercent: lagChange, direction },
       processing: this.metrics.processing(win),
-      payload: { ...payload, largeBytes: this.largeBytes },
       delivery,
       queues,
       topChannels: channels.slice(0, OVERVIEW_CHANNELS),
@@ -559,17 +498,13 @@ export class MessagingOpsService {
   }
 
   private alertMessage(rule: string, p: Record<string, unknown>): string {
-    const value = Number(p['value'] ?? 0);
-    const threshold = Number(p['threshold'] ?? 0);
-    const bytes = rule === 'LARGE_MESSAGE';
     return this.i18n.t(`messaging.alert.${rule}.message`, {
-      value: bytes ? formatBytes(value) : value,
-      threshold: bytes ? formatBytes(threshold) : threshold,
+      value: Number(p['value'] ?? 0),
+      threshold: Number(p['threshold'] ?? 0),
       target: String(p['target'] ?? ''),
       oldestMin: String(p['oldestMin'] ?? 0),
       ago: String(p['ago'] ?? 0),
       failures: String(p['failures'] ?? 0),
-      channel: String(p['channel'] ?? ''),
     });
   }
 
@@ -579,80 +514,73 @@ export class MessagingOpsService {
     range: MessagingRange,
     defs: SeriesDef[],
   ): Promise<{ series: MessagingSeriesDto[]; resolutionSec: number | null }> {
-    const now = Date.now();
-    const win = await this.rangeWindow(range, now);
-    const tierSec = win ? TELEMETRY_TIERS[win.tier].seconds : 0;
-    const buckets = win?.buckets ?? [];
-    const size = Math.max(1, Math.ceil(buckets.length / MAX_POINTS));
-    const groups: Group[] = [];
-    for (let i = 0; i < buckets.length; i += size) {
-      const b = buckets.slice(i, i + size);
-      groups.push({
-        t: b[0]!.start,
-        b,
-        seconds: Math.max(1, Math.min(b.length * tierSec, (now - b[0]!.start) / 1000)),
-      });
-    }
+    const { resolutionSec, series } = await this.metrics.series(MESSAGING_RANGES[range], defs);
     return {
-      resolutionSec: win ? tierSec : null,
-      series: defs.map((d) => ({
+      resolutionSec,
+      series: series.map((d) => ({
         id: d.id,
         label: this.i18n.t(`messaging.series.${d.id}`),
         unit: d.unit,
-        points: groups
-          .map((g) => ({ t: g.t, value: d.value(g) }))
-          .filter(
-            (p): p is { t: number; value: number } => p.value !== null && Number.isFinite(p.value),
-          )
-          .map((p) => ({ t: p.t, value: round(p.value, 3) })),
+        points: d.points,
       })),
     };
   }
 
-  private static perSec = (name: string) => (g: Group) => counterOf(g.b, name) / g.seconds;
-  private static perMin = (name: string, runtime?: string) => (g: Group) =>
-    counterOf(g.b, name, runtime) / (g.seconds / 60);
-  private static pct = (name: string, p: number, runtime?: string) => (g: Group) =>
-    percentileOf(mergedOf(g.b, name, runtime), p);
-  private static gauge = (name: string) => (g: Group) =>
-    gaugeWindow(g.b, name, { mode: 'max' }).avg;
+  /**
+   * Định nghĩa PromQL cho biểu đồ; `filter` thêm điều kiện nhãn (vd. `channel="x"`) cho trang chi tiết.
+   * `$w` là cửa sổ rate do `series` chọn theo độ phân giải.
+   */
+  private static defs(filter = '') {
+    const sel = (m: string, extra = '') => {
+      const parts = [filter, extra].filter(Boolean).join(',');
+      return parts ? `${m}{${parts}}` : m;
+    };
+    const perSec = (m: string, extra = '') => `sum(rate(${sel(m, extra)}[$w]))`;
+    const perMin = (m: string, extra = '') => `sum(rate(${sel(m, extra)}[$w])) * 60`;
+    const quant = (p: number) =>
+      `histogram_quantile(${p}, sum by (le) (rate(${sel('job_duration_seconds_bucket')}[$w]))) * 1000`;
+    return {
+      published: perSec('messages_published_total', 'result="success"'),
+      consumed: perSec('messages_consumed_total', 'result="success"'),
+      failed: perSec('messages_consumed_total', 'result="failed"'),
+      failedPerMin: perMin('messages_consumed_total', 'result="failed"'),
+      consumedPerMin: perMin('messages_consumed_total', 'result="success"'),
+      retriedPerMin: perMin('job_attempt_failures_total', 'final="false"'),
+      deadLetteredPerMin: perMin('job_attempt_failures_total', 'final="true"'),
+      publishFailedPerMin: perMin('messages_published_total', 'result="failed"'),
+      processingAvg: `sum(rate(${sel('job_duration_seconds_sum')}[$w])) / sum(rate(${sel('job_duration_seconds_count')}[$w])) * 1000`,
+      processingP95: quant(0.95),
+      processingP99: quant(0.99),
+    };
+  }
 
   public async getMetrics(
     range: MessagingRange,
     metric: MessagingMetric,
   ): Promise<MessagingMetricsDto> {
-    const S = MessagingOpsService;
+    const e = MessagingOpsService.defs();
+    const waiting = (state: string) =>
+      `sum(max by (queue) (${QUEUE_JOBS_METRIC}{state="${state}"}))`;
     const defs: Record<MessagingMetric, SeriesDef[]> = {
       throughput: [
-        { id: 'published', unit: '/s', value: S.perSec('msg.published') },
-        { id: 'consumed', unit: '/s', value: S.perSec('msg.consumed') },
-        { id: 'failed', unit: '/s', value: S.perSec('msg.consume.failed') },
+        { id: 'published', unit: '/s', expr: e.published },
+        { id: 'consumed', unit: '/s', expr: e.consumed },
+        { id: 'failed', unit: '/s', expr: e.failed },
       ],
       lag: [
-        { id: 'lag', unit: 'msgs', value: S.gauge('msg.lag') },
-        { id: 'deadLetterSize', unit: 'msgs', value: S.gauge('msg.dlq.size') },
+        { id: 'lag', unit: 'msgs', expr: waiting('waiting') },
+        { id: 'deadLetterSize', unit: 'msgs', expr: waiting('failed') },
       ],
       failures: [
-        { id: 'failedPerMin', unit: '/min', value: S.perMin('msg.consume.failed') },
-        { id: 'retriedPerMin', unit: '/min', value: S.perMin('msg.retry') },
-        { id: 'deadLetteredPerMin', unit: '/min', value: S.perMin('msg.dlq') },
-        { id: 'publishFailedPerMin', unit: '/min', value: S.perMin('msg.publish.failed') },
+        { id: 'failedPerMin', unit: '/min', expr: e.failedPerMin },
+        { id: 'retriedPerMin', unit: '/min', expr: e.retriedPerMin },
+        { id: 'deadLetteredPerMin', unit: '/min', expr: e.deadLetteredPerMin },
+        { id: 'publishFailedPerMin', unit: '/min', expr: e.publishFailedPerMin },
       ],
       processing: [
-        { id: 'processingAvg', unit: 'ms', value: (g) => meanOf(mergedOf(g.b, 'msg.process')) },
-        { id: 'processingP95', unit: 'ms', value: S.pct('msg.process', 95) },
-        { id: 'processingP99', unit: 'ms', value: S.pct('msg.process', 99) },
-      ],
-      size: [
-        {
-          id: 'sizeAvg',
-          unit: 'B',
-          value: (g) => {
-            const a = mergedOf(g.b, 'msg.size');
-            return a.n > 0 ? a.s / a.n : null;
-          },
-        },
-        { id: 'sizeMax', unit: 'B', value: (g) => mergedOf(g.b, 'msg.size').x },
+        { id: 'processingAvg', unit: 'ms', expr: e.processingAvg },
+        { id: 'processingP95', unit: 'ms', expr: e.processingP95 },
+        { id: 'processingP99', unit: 'ms', expr: e.processingP99 },
       ],
     };
     const { series, resolutionSec } = await this.series(range, defs[metric]);
@@ -660,26 +588,25 @@ export class MessagingOpsService {
     return { metric, range, resolutionSec, unit: list[0]?.unit ?? '', series: list };
   }
 
-  // ─── Channels / Producers / Consumers ─────────────────────────────────────
+  // ─── Channels / Consumers ────────────────────────────────────────────────
 
   private async channelContext(range: MessagingRange, now: number) {
-    const [win, live, registry, backlog] = await Promise.all([
+    const [win, live, backlog] = await Promise.all([
       this.rangeWindow(range, now),
       this.live(),
-      this.monitoring.channelRegistry().catch(() => [] as ChannelRegistryEntry[]),
       this.monitoring.usable()
         ? this.monitoring.backlog().catch(() => null)
         : Promise.resolve(null),
     ]);
-    return { win, live, registry, backlog };
+    return { win, live, backlog };
   }
 
   public async getChannels(range: MessagingRange): Promise<MessagingChannelsDto> {
     const now = Date.now();
-    const { win, live, registry, backlog } = await this.channelContext(range, now);
+    const { win, live, backlog } = await this.channelContext(range, now);
     return {
       range,
-      channels: this.channelRows(win, registry, backlog, live, now),
+      channels: this.channelRows(win, backlog, live, now),
       queues: this.queueRows(live, now),
       backlogSampled: backlog?.sampled ?? null,
       backlogTruncated: backlog?.truncated ?? false,
@@ -688,25 +615,21 @@ export class MessagingOpsService {
 
   public async getChannelDetail(name: string, range: MessagingRange): Promise<ChannelDetailDto> {
     const now = Date.now();
-    const { win, live, registry, backlog } = await this.channelContext(range, now);
-    const row = this.channelRows(win, registry, backlog, live, now).find((c) => c.channel === name);
+    const { win, live, backlog } = await this.channelContext(range, now);
+    const row = this.channelRows(win, backlog, live, now).find((c) => c.channel === name);
     if (!row) throw new MessagingNotFoundException('messaging.error.channelNotFound', { name });
-    const S = MessagingOpsService;
+    const e = MessagingOpsService.defs(`channel="${labelValue(name)}"`);
     const [{ series: throughput }, { series: processing }, errors, recent] = await Promise.all([
       this.series(range, [
-        { id: 'published', unit: '/s', value: S.perSec(channelMetric(name, 'pub')) },
-        { id: 'consumed', unit: '/s', value: S.perSec(channelMetric(name, 'con')) },
-        { id: 'failed', unit: '/s', value: S.perSec(channelMetric(name, 'fail')) },
+        { id: 'published', unit: '/s', expr: e.published },
+        { id: 'consumed', unit: '/s', expr: e.consumed },
+        { id: 'failed', unit: '/s', expr: e.failed },
       ]),
       this.series(range, [
-        {
-          id: 'processingAvg',
-          unit: 'ms',
-          value: (g) => meanOf(mergedOf(g.b, channelMetric(name, 'proc'))),
-        },
-        { id: 'processingP95', unit: 'ms', value: S.pct(channelMetric(name, 'proc'), 95) },
+        { id: 'processingAvg', unit: 'ms', expr: e.processingAvg },
+        { id: 'processingP95', unit: 'ms', expr: e.processingP95 },
       ]),
-      this.store.errors().catch(() => [] as MessagingErrorRecord[]),
+      this.recentFailures(),
       this.recentMessages({
         queue: row.queue,
         channel: name,
@@ -722,9 +645,9 @@ export class MessagingOpsService {
       processing,
       consumers: this.consumerRows(win, live).filter((c) => c.queue === row.queue),
       recentErrors: errors
-        .filter((e) => e.channel === name)
+        .filter((x) => x.channel === name)
         .slice(0, RECENT_LIMIT)
-        .map((e) => this.errorDto(e)),
+        .map((x) => this.errorDto(x)),
       recentMessages: recent,
     };
   }
@@ -736,44 +659,11 @@ export class MessagingOpsService {
     });
   }
 
-  public async getProducers(range: MessagingRange): Promise<MessagingProducersDto> {
-    const now = Date.now();
-    const [win, registry, errors] = await Promise.all([
-      this.rangeWindow(range, now),
-      this.monitoring.channelRegistry().catch(() => [] as ChannelRegistryEntry[]),
-      this.store.errors().catch(() => [] as MessagingErrorRecord[]),
-    ]);
-    const producers = [...new Set(registry.map((r) => r.producer))];
-    const rows: ProducerRowDto[] = producers.map((producer) => {
-      const regs = registry.filter((r) => r.producer === producer);
-      const m = this.metrics.producer(
-        win,
-        producer,
-        regs.map((r) => r.channel),
-      );
-      const lastFail = errors.find((e) => e.stage === 'publish' && e.runtime === producer);
-      return {
-        producer,
-        published: m.published,
-        perSec: this.metrics.perSec(win, m.published),
-        failures: m.failures,
-        failureRatePercent:
-          m.published + m.failures > 0
-            ? round((m.failures / (m.published + m.failures)) * 100, 2)
-            : null,
-        channels: m.channels
-          .map((c) => ({
-            channel: c.channel,
-            queue: regs.find((r) => r.channel === c.channel)?.queue ?? '',
-            published: c.published,
-            perSec: this.metrics.perSec(win, c.published),
-          }))
-          .sort((a, b) => b.published - a.published || a.channel.localeCompare(b.channel)),
-        lastPublishedAt: iso(Math.max(...regs.map((r) => r.lastPublishedAt))),
-        lastFailureAt: iso(lastFail?.at),
-      };
-    });
-    return { range, producers: rows.sort((a, b) => b.published - a.published) };
+  /** Job lỗi còn trong broker; broker mất kết nối → rỗng (trang chi tiết đã báo mất kết nối ở phần khác). */
+  private recentFailures(): Promise<MessagingErrorRecord[]> {
+    return this.monitoring.usable()
+      ? this.monitoring.failures(ERROR_LIST_LIMIT).catch(() => [] as MessagingErrorRecord[])
+      : Promise.resolve([]);
   }
 
   public async getConsumers(range: MessagingRange): Promise<MessagingConsumersDto> {
@@ -794,26 +684,26 @@ export class MessagingOpsService {
     const [win, live] = await Promise.all([this.rangeWindow(range, now), this.live()]);
     const row = this.consumerRows(win, live).find((c) => c.consumer === name);
     if (!row) throw new MessagingNotFoundException('messaging.error.consumerNotFound', { name });
-    const rt = row.runtime ?? undefined;
-    const S = MessagingOpsService;
+    const queue = labelValue(row.queue);
+    const e = MessagingOpsService.defs(`queue="${queue}"`);
     const [{ series: processing }, { series: throughput }, { series: lag }, errors, recent] =
       await Promise.all([
         this.series(range, [
+          { id: 'processingAvg', unit: 'ms', expr: e.processingAvg },
+          { id: 'processingP95', unit: 'ms', expr: e.processingP95 },
+        ]),
+        this.series(range, [
+          { id: 'consumedPerMin', unit: '/min', expr: e.consumedPerMin },
+          { id: 'failedPerMin', unit: '/min', expr: e.failedPerMin },
+        ]),
+        this.series(range, [
           {
-            id: 'processingAvg',
-            unit: 'ms',
-            value: (g) => meanOf(mergedOf(g.b, 'msg.process', rt)),
+            id: 'lag',
+            unit: 'msgs',
+            expr: `max(${QUEUE_JOBS_METRIC}{queue="${queue}",state="waiting"})`,
           },
-          { id: 'processingP95', unit: 'ms', value: S.pct('msg.process', 95, rt) },
         ]),
-        this.series(range, [
-          { id: 'consumedPerMin', unit: '/min', value: S.perMin('msg.consumed', rt) },
-          { id: 'failedPerMin', unit: '/min', value: S.perMin('msg.consume.failed', rt) },
-        ]),
-        this.series(range, [
-          { id: 'lag', unit: 'msgs', value: S.gauge(queueMetric(row.queue, 'waiting')) },
-        ]),
-        this.store.errors().catch(() => [] as MessagingErrorRecord[]),
+        this.recentFailures(),
         this.recentMessages({
           queue: row.queue,
           channel: null,
@@ -822,7 +712,7 @@ export class MessagingOpsService {
           search: '',
         }),
       ]);
-    const m = this.metrics.consumer(win, rt);
+    const m = this.metrics.queue(win, row.queue);
     return {
       range,
       consumer: row,
@@ -830,11 +720,13 @@ export class MessagingOpsService {
       throughput,
       lag,
       recentErrors: errors
-        .filter((e) => e.consumer === name)
+        .filter((x) => x.queue === row.queue)
         .slice(0, RECENT_LIMIT)
-        .map((e) => this.errorDto(e)),
+        .map((x) => this.errorDto(x)),
       recentMessages: recent,
-      retry: { retried: m.retried, recovered: m.recovered, deadLettered: m.deadLettered },
+      retry: m
+        ? { retried: m.retried, recovered: m.recovered, deadLettered: m.deadLettered }
+        : null,
     };
   }
 
@@ -900,7 +792,7 @@ export class MessagingOpsService {
     const now = Date.now();
     const [list, todayWin] = await Promise.all([
       this.monitoring.section('retry', () => this.monitoring.retrying(RETRY_LIMIT)),
-      this.metrics.window(startOfDay(now), now, now),
+      this.metrics.window(startOfDay(now), now, now, false),
     ]);
     const d = this.metrics.delivery(todayWin);
     const c = this.cfg;
@@ -910,9 +802,9 @@ export class MessagingOpsService {
         : list,
       stats: {
         retryingNow: list.available ? list.data.length : null,
-        retriedToday: d.retried,
-        recoveredToday: d.recovered,
-        deadLetteredToday: d.deadLettered,
+        retriedToday: d?.retried ?? null,
+        recoveredToday: d?.recovered ?? null,
+        deadLetteredToday: d?.deadLettered ?? null,
       },
       policy: {
         maxAttempts: c.maxAttempts,
@@ -935,7 +827,7 @@ export class MessagingOpsService {
     const [items, live, todayWin] = await Promise.all([
       this.monitoring.section('deadLetter', () => this.monitoring.deadLetters(DEAD_LETTER_LIMIT)),
       this.live(),
-      this.metrics.window(startOfDay(now), now, now),
+      this.metrics.window(startOfDay(now), now, now, false),
     ]);
     const bySource = new Map<string, number>();
     if (items.available)
@@ -953,7 +845,7 @@ export class MessagingOpsService {
       total: live.queues.available
         ? live.queues.data.reduce((s, q) => s + q.counts.failed, 0)
         : null,
-      addedToday: this.metrics.delivery(todayWin).deadLettered,
+      addedToday: this.metrics.delivery(todayWin)?.deadLettered ?? null,
       oldestSec: secondsSince(oldest, now),
       bySource: [...bySource.entries()]
         .map(([channel, count]) => ({ channel, count }))
@@ -973,30 +865,22 @@ export class MessagingOpsService {
   public async getErrors(range: MessagingRange): Promise<MessagingErrorsDto> {
     const now = Date.now();
     const from = now - MESSAGING_RANGES[range] * MINUTE;
-    const [errors, win] = await Promise.all([
-      this.store.errors().catch(() => [] as MessagingErrorRecord[]),
+    const [items, win] = await Promise.all([
+      this.monitoring.section('deadLetter', () => this.monitoring.failures(ERROR_LIST_LIMIT)),
       this.rangeWindow(range, now),
     ]);
-    const b = win?.buckets ?? [];
-    const recent = errors.filter((e) => e.at >= from);
-    const counts = Object.fromEntries(
-      ERROR_KINDS.map((k) => [
-        k,
-        k === 'publish'
-          ? counterOf(b, 'msg.publish.failed')
-          : win
-            ? counterOf(b, `msg.err.${k}`)
-            : recent.filter((e) => e.kind === k).length,
-      ]),
-    ) as Record<MessagingErrorKind, number>;
+    const recent = items.available ? items.data.filter((e) => e.at >= from) : null;
+    const d = this.metrics.delivery(win);
     return {
-      counts,
-      byStage: {
-        publish: counterOf(b, 'msg.publish.failed'),
-        consume: counterOf(b, 'msg.consume.failed'),
-      },
-      total: Object.values(counts).reduce((s, n) => s + n, 0),
-      items: recent.slice(0, ERROR_LIST_LIMIT).map((e) => this.errorDto(e)),
+      counts: recent
+        ? (Object.fromEntries(
+            ERROR_KINDS.map((k) => [k, recent.filter((e) => e.kind === k).length]),
+          ) as Record<MessagingErrorKind, number>)
+        : null,
+      byStage: { publish: d?.publishFailures ?? null, consume: d?.failed ?? null },
+      items: recent
+        ? { available: true, data: recent.slice(0, ERROR_LIST_LIMIT).map((e) => this.errorDto(e)) }
+        : (items as Extract<typeof items, { available: false }>),
       range,
     };
   }

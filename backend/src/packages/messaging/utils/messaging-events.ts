@@ -1,13 +1,11 @@
 import { randomBytes } from 'node:crypto';
 import type { RedisService } from '@packages/redis/index.js';
 import {
-  MESSAGING_ERROR_LOG_SIZE,
   MESSAGING_EVENT_LOG_SIZE,
   MESSAGING_OPERATION_LOG_SIZE,
   messagingKeys,
 } from '../constants/messaging.keys.js';
 import type {
-  MessagingErrorRecord,
   MessagingEventRecord,
   MessagingOperationRecord,
 } from '../contracts/messaging-events.types.js';
@@ -41,24 +39,4 @@ export async function recordMessagingOperation(
   if (redis?.isReady())
     await push(redis, messagingKeys(redis).operations(), record, MESSAGING_OPERATION_LOG_SIZE);
   return record;
-}
-
-export async function recordMessagingError(
-  redis: RedisService | undefined,
-  record: MessagingErrorRecord,
-): Promise<void> {
-  if (!redis?.isReady()) return;
-  await push(redis, messagingKeys(redis).errors(), record, MESSAGING_ERROR_LOG_SIZE);
-}
-
-/** Giới hạn số bản ghi lỗi mỗi giây (một đợt lỗi hàng loạt không làm ngập Redis). */
-export class ErrorRateLimiter {
-  private window = { at: 0, n: 0 };
-
-  constructor(private readonly perSec: number) {}
-
-  public allow(now = Date.now()): boolean {
-    if (now - this.window.at >= 1000) this.window = { at: now, n: 0 };
-    return ++this.window.n <= this.perSec;
-  }
 }

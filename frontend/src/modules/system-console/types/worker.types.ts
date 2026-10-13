@@ -104,7 +104,8 @@ export interface WorkerRow {
   host: string | null;
   pid: number | null;
   status: WorkerInstanceStatus;
-  active: number;
+  /** null khi instance chung queue với instance khác (broker chỉ đếm job active theo queue). */
+  active: number | null;
   concurrency: number;
   utilizationPercent: number | null;
   cpuPercent: number | null;

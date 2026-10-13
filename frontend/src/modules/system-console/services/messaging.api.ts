@@ -18,7 +18,6 @@ import type {
   MessagingMetrics,
   MessagingOperation,
   MessagingOverview,
-  MessagingProducers,
   MessagingRange,
   MessagingRetries,
   MessagingTest,
@@ -34,7 +33,6 @@ export const messagingApi = {
   metrics: (range: MessagingRange, metric: MessagingMetric) => fetchApi<MessagingMetrics>(M('metrics', toQuery({ range, metric }))),
   channels: (range: MessagingRange) => fetchApi<MessagingChannels>(M('channels', toQuery({ range }))),
   channel: (name: string, range: MessagingRange) => fetchApi<ChannelDetail>(M(`channels/${id(name)}`, toQuery({ range }))),
-  producers: (range: MessagingRange) => fetchApi<MessagingProducers>(M('producers', toQuery({ range }))),
   consumers: (range: MessagingRange) => fetchApi<MessagingConsumers>(M('consumers', toQuery({ range }))),
   consumer: (name: string, range: MessagingRange) => fetchApi<ConsumerDetail>(M(`consumers/${id(name)}`, toQuery({ range }))),
   messages: (f: MessageFilter, count = 100) =>

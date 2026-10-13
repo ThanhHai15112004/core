@@ -1,21 +1,17 @@
 export type MessagingErrorKind =
-  'processing' | 'timeout' | 'deserialize' | 'publish' | 'connection' | 'stalled' | 'other';
+  'processing' | 'timeout' | 'deserialize' | 'connection' | 'stalled';
 
-/** Lỗi publish/consume một message — không chứa payload. */
+/** Lỗi consume một message, dựng từ job lỗi của broker (failed / chờ retry) — không chứa payload. */
 export interface MessagingErrorRecord {
-  /** epoch ms */
+  /** epoch ms — lần thử lỗi gần nhất. */
   at: number;
-  stage: 'publish' | 'consume';
   kind: MessagingErrorKind;
   channel: string;
   queue: string;
-  messageId: string | null;
-  /** Consumer (tên processor) hoặc null khi lỗi ở phía publish. */
-  consumer: string | null;
-  runtime: string | null;
-  attempt: number | null;
-  maxAttempts: number | null;
-  /** Lần thử cuối → message vào Dead Letter. */
+  messageId: string;
+  attempt: number;
+  maxAttempts: number;
+  /** Hết lượt thử → message nằm trong Dead Letter. */
   final: boolean;
   code: string | null;
   message: string;
@@ -91,7 +87,7 @@ export interface LifecycleEntry {
   actor?: string | null;
 }
 
-/** Một consumer đang chạy trong một runtime (mỗi runtime tự báo lên Redis, có TTL). */
+/** Một worker đang lắng nghe queue (đọc từ `getWorkers()` của broker). */
 export interface ConsumerRegistration {
   /** Tên consumer (processor), vd. `SystemProcessor`. */
   consumer: string;
@@ -106,8 +102,6 @@ export interface ConsumerRegistration {
   cancellable?: boolean;
   /** epoch ms */
   startedAt: number;
-  /** Message đang xử lý trong instance này. */
-  inFlight: number;
 }
 
 export type MessagingConnectionState = 'connecting' | 'connected' | 'reconnecting' | 'unavailable';

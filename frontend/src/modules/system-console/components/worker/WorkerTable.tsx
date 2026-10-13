@@ -33,8 +33,8 @@ export const WorkerTable: React.FC<{ rows: WorkerRow[]; onOpen: (id: string) => 
               <td>
                 <span className={`pf-chip ov-tone-${WORKER_STATUS_TONE[w.status]}`}>{t(`wq.worker.statusOf.${w.status}`)}</span>
               </td>
-              <td className={w.active > w.concurrency ? 'is-crit' : ''}>
-                {w.active} / {w.concurrency}
+              <td className={(w.active ?? 0) > w.concurrency ? 'is-crit' : ''}>
+                {w.active ?? NO_VALUE} / {w.concurrency}
                 {w.utilizationPercent !== null && <small className="pf-row-note">{w.utilizationPercent}%</small>}
               </td>
               <td className={w.status === 'high_cpu' ? 'is-warn' : ''}>{w.cpuPercent === null ? NO_VALUE : `${w.cpuPercent}%`}</td>

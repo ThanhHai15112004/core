@@ -9,7 +9,7 @@ import { ChannelTable } from '../../components/messaging/ChannelTable';
 import { ConsumerTable } from '../../components/messaging/ConsumerTable';
 import { QueueDepthTable } from '../../components/messaging/QueueDepthTable';
 import { SectionState } from '../../components/database/SectionState';
-import { formatBytes, formatCompact } from '../../utils/database-format';
+import { formatCompact } from '../../utils/database-format';
 import { formatUnit, trendOf } from '../../utils/performance-format';
 import { formatMsgRate, shortId } from '../../utils/messaging-format';
 import { NO_VALUE } from '../../utils/runtime-format';
@@ -28,15 +28,15 @@ const pct = (a: number | null, b: number | null) => (a === null || b === null ||
 
 /**
  * Tổng quan: KPI → throughput → cân bằng publish/consume + lag + vấn đề → channel → consumer + độ sâu queue →
- * dead letter + xử lý/kích thước → báo cáo hôm nay/hôm qua → sự kiện.
+ * dead letter + thời gian xử lý → báo cáo hôm nay/hôm qua → sự kiện.
  */
 export const MessagingOverviewView: React.FC<Props> = ({ data, now, paused, go, openEvent, openMessage }) => {
   const { t, locale } = useLocale();
   if (!data) return <MessagingKpis data={null} />;
   const n = (v: number | null) => (v === null ? NO_VALUE : formatCompact(v, locale));
   const reportRow = (key: keyof MessagingReport, fmt: (v: number | null) => string, higherIsWorse: boolean | null) => {
-    const today = data.report.today[key];
-    const yesterday = data.report.yesterday[key];
+    const today = data.report.today?.[key] ?? null;
+    const yesterday = data.report.yesterday?.[key] ?? null;
     const trend = trendOf(pct(today, yesterday), higherIsWorse);
     return (
       <tr key={key}>
@@ -187,21 +187,11 @@ export const MessagingOverviewView: React.FC<Props> = ({ data, now, paused, go, 
               <dd>{formatUnit(data.processing.p99Ms, 'ms')}</dd>
             </div>
             <div>
-              <dt>{t('messaging.payload.avg')}</dt>
-              <dd>{data.payload.avgBytes === null ? NO_VALUE : formatBytes(data.payload.avgBytes)}</dd>
-            </div>
-            <div>
-              <dt>{t('messaging.payload.max')}</dt>
-              <dd className={(data.payload.maxBytes ?? 0) >= data.payload.largeBytes ? 'is-warn' : ''}>
-                {data.payload.maxBytes === null ? NO_VALUE : formatBytes(data.payload.maxBytes)}
-              </dd>
-            </div>
-            <div>
               <dt>{t('messaging.delivery.recovered')}</dt>
-              <dd>{t('messaging.delivery.recoveredOf', { recovered: data.delivery.recovered, retried: data.delivery.retried })}</dd>
+              <dd>{data.delivery ? t('messaging.delivery.recoveredOf', { recovered: data.delivery.recovered, retried: data.delivery.retried }) : NO_VALUE}</dd>
             </div>
           </dl>
-          <p className="pf-chart-note">{t('messaging.processing.note', { size: formatBytes(data.payload.largeBytes) })}</p>
+          <p className="pf-chart-note">{t('messaging.processing.note')}</p>
         </section>
       </div>
 

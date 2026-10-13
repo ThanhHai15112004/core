@@ -4,14 +4,18 @@ import type { MessagingErrorKind, MessagingEvent, MessagingRange } from '../../t
 import { messagingApi } from '../../services/messaging.api';
 import { usePolling } from '../../hooks/usePolling';
 import { MessagingEventList } from '../../components/messaging/MessagingEventList';
+import { SectionState } from '../../components/database/SectionState';
 import { formatCompact, formatDuration } from '../../utils/database-format';
 import { shortId } from '../../utils/messaging-format';
 import { NO_VALUE } from '../../utils/runtime-format';
 import { useLocale } from '../../../../core/i18n/index';
 
-const KINDS: MessagingErrorKind[] = ['processing', 'timeout', 'deserialize', 'publish', 'connection', 'stalled', 'other'];
+const KINDS: MessagingErrorKind[] = ['processing', 'timeout', 'deserialize', 'connection', 'stalled'];
 
-/** Lỗi theo loại & giai đoạn (publish/consume), bảng lỗi (→ message, → log), dòng thời gian sự kiện. */
+/**
+ * Lỗi consume = job lỗi broker còn giữ (Dead Letter + chờ retry), theo loại; số lần publish/consume lỗi từ
+ * Prometheus; bảng lỗi (→ message, → log); dòng thời gian sự kiện.
+ */
 export const MessagingErrorsView: React.FC<{
   range: MessagingRange;
   paused: boolean;
@@ -28,79 +32,79 @@ export const MessagingErrorsView: React.FC<{
     <>
       <div className="ov-kpi-grid st-error-kpis msg-error-kpis">
         {KINDS.map((k) => (
-          <div key={k} className={`ov-card ov-kpi ov-tone-${(d?.counts[k] ?? 0) > 0 ? 'warn' : 'ok'}`}>
+          <div key={k} className={`ov-card ov-kpi ov-tone-${!d?.counts ? 'unknown' : d.counts[k] > 0 ? 'warn' : 'ok'}`}>
             <span className="ov-kpi-label">{t(`messaging.errors.kind.${k}`)}</span>
-            <span className="ov-kpi-value">{d ? d.counts[k] : NO_VALUE}</span>
+            <span className="ov-kpi-value">{d?.counts ? d.counts[k] : NO_VALUE}</span>
           </div>
         ))}
       </div>
       <section className="ov-card ov-section">
         <header className="ov-section-head">
           <h3>{t('messaging.errors.title')}</h3>
-          <span className="ov-section-hint">{d ? t('messaging.errors.byStage', { publish: d.byStage.publish, consume: d.byStage.consume }) : ''}</span>
+          <span className="ov-section-hint">
+            {d ? t('messaging.errors.byStage', { publish: d.byStage.publish ?? NO_VALUE, consume: d.byStage.consume ?? NO_VALUE }) : ''}
+          </span>
         </header>
-        {d && d.items.length === 0 ? (
-          <p className="ov-empty-line">{t('messaging.errors.empty', { range: t(`tr.range.${range}`) })}</p>
-        ) : (
-          <div className="scp-table-wrap">
-            <table className="scp-table">
-              <thead>
-                <tr>
-                  <th>{t('db.errors.time')}</th>
-                  <th>{t('messaging.errors.component')}</th>
-                  <th>{t('messaging.message.channel')}</th>
-                  <th>{t('db.errors.type')}</th>
-                  <th>{t('messaging.message.id')}</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {d?.items.map((e, i) => (
-                  <tr key={`${e.at}-${i}`}>
-                    <td>{formatTime(Date.parse(e.at), true)}</td>
-                    <td>
-                      {e.consumer ?? (e.runtime ? t(`rt.name.${e.runtime}`) : NO_VALUE)}
-                      <small className="pf-row-note">{t(`messaging.errors.stage.${e.stage}`)}</small>
-                    </td>
-                    <td className="cache-key-cell">
-                      <code>{e.channel}</code>
-                      <small className="pf-row-note">{e.message}</small>
-                    </td>
-                    <td>
-                      <span className={`pf-chip ov-tone-${e.final ? 'crit' : 'warn'}`}>{t(`messaging.errors.kind.${e.kind}`)}</span>
-                      {e.attempt !== null && (
-                        <small className="pf-row-note">
-                          {t('messaging.errors.attempt', { attempt: e.attempt, max: e.maxAttempts ?? '?' })}
-                          {e.final && ` · ${t('messaging.errors.final')}`}
-                        </small>
-                      )}
-                    </td>
-                    <td>
-                      {e.messageId ? (
-                        <button type="button" className="ov-link" onClick={() => openMessage(e.messageId!, e.queue)}>
-                          <code>{shortId(e.messageId)}</code>
-                        </button>
-                      ) : (
-                        NO_VALUE
-                      )}
-                    </td>
-                    <td>
-                      {e.correlationId && (
-                        <button
-                          type="button"
-                          className="ov-link"
-                          onClick={() => navigate(`logs/explorer?correlationId=${encodeURIComponent(e.correlationId!)}`)}
-                        >
-                          <FileText size={12} /> {t('db.query.openLogs')}
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+        <SectionState section={d?.items} scope="messaging">
+          {(items) =>
+            items.length === 0 ? (
+              <p className="ov-empty-line">{t('messaging.errors.empty', { range: t(`tr.range.${range}`) })}</p>
+            ) : (
+              <div className="scp-table-wrap">
+                <table className="scp-table">
+                  <thead>
+                    <tr>
+                      <th>{t('db.errors.time')}</th>
+                      <th>{t('messaging.errors.component')}</th>
+                      <th>{t('messaging.message.channel')}</th>
+                      <th>{t('db.errors.type')}</th>
+                      <th>{t('messaging.message.id')}</th>
+                      <th />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {items.map((e) => (
+                      <tr key={`${e.queue}:${e.messageId}`}>
+                        <td>{formatTime(Date.parse(e.at), true)}</td>
+                        <td>
+                          <code>{e.queue}</code>
+                        </td>
+                        <td className="cache-key-cell">
+                          <code>{e.channel}</code>
+                          <small className="pf-row-note">{e.message}</small>
+                        </td>
+                        <td>
+                          <span className={`pf-chip ov-tone-${e.final ? 'crit' : 'warn'}`}>{t(`messaging.errors.kind.${e.kind}`)}</span>
+                          <small className="pf-row-note">
+                            {t('messaging.errors.attempt', { attempt: e.attempt, max: e.maxAttempts })}
+                            {e.final && ` · ${t('messaging.errors.final')}`}
+                          </small>
+                        </td>
+                        <td>
+                          <button type="button" className="ov-link" onClick={() => openMessage(e.messageId, e.queue)}>
+                            <code>{shortId(e.messageId)}</code>
+                          </button>
+                        </td>
+                        <td>
+                          {e.correlationId && (
+                            <button
+                              type="button"
+                              className="ov-link"
+                              onClick={() => navigate(`logs/explorer?correlationId=${encodeURIComponent(e.correlationId!)}`)}
+                            >
+                              <FileText size={12} /> {t('db.query.openLogs')}
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )
+          }
+        </SectionState>
+        <p className="pf-chart-note">{t('messaging.errors.source')}</p>
       </section>
       <section className="ov-card ov-section">
         <header className="ov-section-head">

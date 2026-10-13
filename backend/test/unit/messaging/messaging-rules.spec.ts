@@ -19,7 +19,6 @@ const cfg: MessagingRuleConfig = {
   processingP95Ms: 5000,
   deadLetterWarn: 100,
   oldestWaitingMin: 10,
-  largeMessageBytes: 256 * 1024,
 };
 
 const base = (patch: Partial<MessagingRuleInput> = {}): MessagingRuleInput => ({
@@ -29,7 +28,6 @@ const base = (patch: Partial<MessagingRuleInput> = {}): MessagingRuleInput => ({
   consume: { ops: 0, failureRatePercent: null, p95Ms: null },
   publish: { ops: 0, failures: 0 },
   deadLetter: 0,
-  largestMessage: null,
   ...patch,
 });
 
@@ -51,8 +49,19 @@ describe('evaluateMessagingRules', () => {
     expect(v[0]!.severity).toBe('critical');
   });
 
-  it('không đủ dữ liệu → không kết luận', () => {
-    expect(evaluateMessagingRules(base({ queues: null, deadLetter: null }), cfg)).toEqual([]);
+  it('không đủ dữ liệu (broker không trả queue, Prometheus không trả lời) → không kết luận', () => {
+    expect(
+      evaluateMessagingRules(
+        base({
+          queues: null,
+          deadLetter: null,
+          consume: null,
+          publish: null,
+          lag: { now: null, ago15m: null },
+        }),
+        cfg,
+      ),
+    ).toEqual([]);
   });
 
   it('queue có message nhưng không có worker → NO_CONSUMER theo từng queue; chờ lâu → critical', () => {
@@ -60,7 +69,7 @@ describe('evaluateMessagingRules', () => {
       base({
         queues: [
           queue({
-            name: 'system.notifications',
+            name: 'system.delayed',
             waiting: 42,
             workers: 0,
             registeredConsumers: 0,
@@ -74,11 +83,11 @@ describe('evaluateMessagingRules', () => {
     );
     expect(v).toHaveLength(1);
     expect(v[0]).toMatchObject({
-      id: 'NO_CONSUMER:system.notifications',
+      id: 'NO_CONSUMER:system.delayed',
       rule: 'NO_CONSUMER',
       severity: 'critical',
       value: 42,
-      extra: { target: 'system.notifications', oldestMin: 18 },
+      extra: { target: 'system.delayed', oldestMin: 18 },
     });
     expect(ruleOf(v[0]!.id)).toBe('NO_CONSUMER');
   });
@@ -101,13 +110,12 @@ describe('evaluateMessagingRules', () => {
     expect(evaluateMessagingRules(base({ lag: { now: 150, ago15m: 100 } }), cfg)).toEqual([]);
   });
 
-  it('tỷ lệ lỗi, consumer chậm, publish lỗi, dead letter, message lớn', () => {
+  it('tỷ lệ lỗi, consumer chậm, publish lỗi, dead letter', () => {
     const v = evaluateMessagingRules(
       base({
         consume: { ops: 100, failureRatePercent: 25, p95Ms: 8000 },
         publish: { ops: 10, failures: 5 },
         deadLetter: 120,
-        largestMessage: { bytes: 3 * 1024 * 1024, channel: null },
       }),
       cfg,
     );
@@ -116,10 +124,8 @@ describe('evaluateMessagingRules', () => {
       'SLOW_CONSUMER',
       'PUBLISH_FAILURES',
       'DEAD_LETTER',
-      'LARGE_MESSAGE',
     ]);
     expect(v[0]!.severity).toBe('critical');
-    expect(v.at(-1)!.severity).toBe('info');
   });
 
   it('ít lượt xử lý (< minOps) → không kết luận tỷ lệ lỗi/độ chậm', () => {
@@ -190,7 +196,6 @@ describe('diffMessagingAlerts / queueRuleInputs', () => {
       paused,
       idempotent: true,
       startedAt: 0,
-      inFlight: 0,
     });
     expect(queueRuleInputs([snap], [reg(false), reg(true)], 120_000)).toEqual([
       {
