@@ -25,3 +25,4 @@ export { UsageBar } from './UsageBar';
 export { SearchInput } from './SearchInput';
 export { FilterBar } from './FilterBar';
 export { HealthGrid, type HealthGridGroup, type HealthGridItem } from './HealthGrid';
+export { MaskedValue } from './MaskedValue';

@@ -10,6 +10,7 @@ import { logsVi } from './console/logs.vi';
 import { schVi } from './console/sch.vi';
 import { perfVi } from './console/perf.vi';
 import { rtVi } from './console/rt.vi';
+import { govVi } from './console/gov.vi';
 
 export const vi = {
   ui: uiVi,
@@ -103,7 +104,7 @@ export const vi = {
     copyright: 'Bản quyền thuộc về Core Architecture Team. Sẵn sàng cho Microservices.',
   },
   console: {
-    common: { enabled: 'Đang bật', executing: 'Đang thực thi...', status: 'Trạng thái' },
+    common: { executing: 'Đang thực thi...', status: 'Trạng thái' },
     status: {
       healthy: 'Hoạt động tốt',
       warning: 'Cảnh báo',
@@ -133,76 +134,15 @@ export const vi = {
       actionWarning: 'Thực thi có cảnh báo',
       actionFailed: 'Thực thi thất bại',
     },
-    event: {
-      executing: 'Đang thực thi [{{action}}]...',
-      succeeded: '[{{action}}] thành công: {{message}}',
-      warning: '[{{action}}] trả về cảnh báo: {{message}}',
-      failed: '[{{action}}] thất bại: {{message}}',
-    },
     topbar: {
       latency: 'Độ trễ round-trip tới /health',
       dark: 'Tối',
       light: 'Sáng',
     },
-    packages: {
-      title: 'Package hạ tầng',
-      description: 'Xem và điều khiển các package hạ tầng đã đăng ký theo contract ManageablePackage.',
-      searchPlaceholder: 'Lọc theo tên, ID hoặc trạng thái...',
-      inspect: 'Xem chi tiết',
-      running: 'Đang chạy...',
-      emptyTitle: 'Không có package nào',
-      emptyFiltered: 'Không có package khớp bộ lọc "{{query}}".',
-      emptyNone: 'Chưa có package nào được đăng ký với module System Ops.',
-      clearSearch: 'Xoá bộ lọc',
-      dangerTitle: 'Hành động nguy hiểm: {{action}}',
-      dangerMessage: 'Bạn có chắc muốn thực hiện "{{action}}" trên package [{{pkg}}]?\n\nMô tả: {{description}}',
-      dangerDefaultDescription: 'Thao tác này có thể ảnh hưởng tới trạng thái đang chạy.',
-      dangerConfirm: 'Xác nhận thực thi',
-      category: {
-        all: 'Tất cả',
-        cache: 'Cache',
-        queue: 'Hàng đợi',
-        logging: 'Logging',
-        database: 'Database',
-        storage: 'Lưu trữ',
-        custom: 'Khác',
-      },
-    },
     logs: {
       level: { all: 'Tất cả', info: 'Info', warn: 'Cảnh báo', error: 'Lỗi', success: 'Thành công' },
     },
-    security: {
-      title: 'Bảo mật & Xác thực',
-      description: 'Cấu hình JWT, secret driver, AuthGuard và công cụ giải mã token.',
-      skeletonTitle: 'Xác thực JWT chưa được triển khai',
-      accessTtl: 'Hạn access token',
-      refreshTtl: 'Hạn refresh token',
-      secretDriver: 'Secret driver',
-      authGuard: 'AuthGuard toàn cục',
-      verificationSkeleton: 'Verify skeleton',
-      decoder: {
-        title: 'Giải mã JWT',
-        clientOnly: 'Chỉ giải mã trên trình duyệt, không xác minh chữ ký',
-        inputLabel: 'Dán JWT:',
-        invalidFormat: 'JWT không đúng định dạng (phải có 3 phần ngăn bởi dấu chấm).',
-        decodeFailed: 'Không giải mã được payload base64url.',
-        header: 'Header',
-        payload: 'Payload (claims)',
-        expired: 'Hết hạn',
-        notVerified: 'Chưa xác minh',
-      },
-    },
-    drawer: {
-      summary: 'Tóm tắt',
-      metrics: 'Metric báo cáo ({{count}})',
-      noMetrics: 'Không có metric nào.',
-      actions: 'Thao tác khả dụng ({{count}})',
-      execute: 'Thực thi',
-      run: 'Chạy',
-      rawJson: 'Dữ liệu gốc (JSON)',
-      copied: 'Đã copy!',
-      copyJson: 'Copy JSON',
-    },
+    drawer: { copied: 'Đã copy!' },
   },
   home: {
     badge: 'Core Framework đã khởi tạo thành công',
@@ -319,6 +259,7 @@ export const vi = {
   sch: schVi,
   perf: perfVi,
   rt: rtVi,
+  gov: govVi,
 };
 
 export type TranslationKey = typeof vi;

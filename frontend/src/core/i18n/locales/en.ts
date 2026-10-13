@@ -10,6 +10,7 @@ import { logsEn } from './console/logs.en';
 import { schEn } from './console/sch.en';
 import { perfEn } from './console/perf.en';
 import { rtEn } from './console/rt.en';
+import { govEn } from './console/gov.en';
 import { uiEn } from './ui.en';
 
 export const en: TranslationKey = {
@@ -104,7 +105,7 @@ export const en: TranslationKey = {
     copyright: 'Core Architecture Platform. Designed for Microservices.',
   },
   console: {
-    common: { enabled: 'Enabled', executing: 'Executing...', status: 'Status' },
+    common: { executing: 'Executing...', status: 'Status' },
     status: {
       healthy: 'Healthy',
       warning: 'Warning',
@@ -134,76 +135,15 @@ export const en: TranslationKey = {
       actionWarning: 'Action warning',
       actionFailed: 'Execution failed',
     },
-    event: {
-      executing: 'Executing [{{action}}]...',
-      succeeded: '[{{action}}] succeeded: {{message}}',
-      warning: '[{{action}}] returned a warning: {{message}}',
-      failed: '[{{action}}] failed: {{message}}',
-    },
     topbar: {
       latency: 'Round-trip latency to /health',
       dark: 'Dark',
       light: 'Light',
     },
-    packages: {
-      title: 'Manageable Packages',
-      description: 'Inspect and control infrastructure packages registered through the ManageablePackage contract.',
-      searchPlaceholder: 'Filter by name, ID or status...',
-      inspect: 'Inspect details',
-      running: 'Running...',
-      emptyTitle: 'No packages found',
-      emptyFiltered: 'No packages match your filter "{{query}}".',
-      emptyNone: 'No manageable packages are registered with the System Ops module.',
-      clearSearch: 'Clear search',
-      dangerTitle: 'Dangerous action: {{action}}',
-      dangerMessage: 'Are you sure you want to execute "{{action}}" on package [{{pkg}}]?\n\nDescription: {{description}}',
-      dangerDefaultDescription: 'This operation may affect active runtime state.',
-      dangerConfirm: 'Confirm & execute',
-      category: {
-        all: 'All',
-        cache: 'Cache',
-        queue: 'Queue',
-        logging: 'Logging',
-        database: 'Database',
-        storage: 'Storage',
-        custom: 'Custom',
-      },
-    },
     logs: {
       level: { all: 'All', info: 'Info', warn: 'Warn', error: 'Error', success: 'Success' },
     },
-    security: {
-      title: 'Security & Auth',
-      description: 'JWT configuration, secret driver, AuthGuard and a token decoder.',
-      skeletonTitle: 'JWT verification is not implemented',
-      accessTtl: 'Access token TTL',
-      refreshTtl: 'Refresh token TTL',
-      secretDriver: 'Secret driver',
-      authGuard: 'Global AuthGuard',
-      verificationSkeleton: 'Skeleton verifier',
-      decoder: {
-        title: 'JWT Decoder',
-        clientOnly: 'Decoded in the browser only, signature is not verified',
-        inputLabel: 'Paste JWT:',
-        invalidFormat: 'Invalid JWT format (must have 3 dot-separated parts).',
-        decodeFailed: 'Failed to decode the base64url payload.',
-        header: 'Header',
-        payload: 'Payload (claims)',
-        expired: 'Expired',
-        notVerified: 'Not verified',
-      },
-    },
-    drawer: {
-      summary: 'Summary',
-      metrics: 'Reported metrics ({{count}})',
-      noMetrics: 'No metrics reported.',
-      actions: 'Available operations ({{count}})',
-      execute: 'Execute',
-      run: 'Run',
-      rawJson: 'Raw descriptor (JSON)',
-      copied: 'Copied!',
-      copyJson: 'Copy JSON',
-    },
+    drawer: { copied: 'Copied!' },
   },
   home: {
     badge: 'Core Framework initialized successfully',
@@ -320,4 +260,5 @@ export const en: TranslationKey = {
   sch: schEn,
   perf: perfEn,
   rt: rtEn,
+  gov: govEn,
 };

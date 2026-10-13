@@ -104,16 +104,38 @@ export const SECTIONS: SectionDef[] = [
     crumb: (p, t) => (p[0] === 'traces' ? t('logs.tab.traces') : p[0] ? t(`logs.tab.${p[0]}`) : null),
     keywords: ['log', 'error', 'trace', 'audit'],
   },
-  { id: 'security', group: 'governance', icon: ShieldCheck, component: load(() => import('../sections/SecuritySection'), 'SecuritySection'), keywords: ['jwt', 'auth'] },
-  { id: 'secrets', group: 'governance', icon: KeyRound, component: load(() => import('../sections/secrets/SecretsSection'), 'SecretsSection') },
+  {
+    id: 'security',
+    group: 'governance',
+    icon: ShieldCheck,
+    component: load(() => import('../sections/security/SecuritySection'), 'SecuritySection'),
+    controls: {},
+    keywords: ['jwt', 'auth'],
+  },
+  {
+    id: 'secrets',
+    group: 'governance',
+    icon: KeyRound,
+    component: load(() => import('../sections/security/SecretsSection'), 'SecretsSection'),
+    controls: {},
+    keywords: ['secret', 'key'],
+  },
   {
     id: 'configuration',
     group: 'governance',
     icon: Settings2,
-    component: load(() => import('../sections/configuration/ConfigurationSection'), 'ConfigurationSection'),
+    component: load(() => import('../sections/security/ConfigurationSection'), 'ConfigurationSection'),
+    controls: {},
     keywords: ['env', 'config'],
   },
-  { id: 'packages', group: 'governance', icon: Package, component: load(() => import('../sections/PackagesSection'), 'PackagesSection') },
+  {
+    id: 'packages',
+    group: 'governance',
+    icon: Package,
+    component: load(() => import('../sections/packages/PackagesSection'), 'PackagesSection'),
+    controls: {},
+    keywords: ['package', 'action'],
+  },
 ];
 
 const SECTION_MAP = new Map<string, SectionDef>(SECTIONS.map((s) => [s.id, s]));

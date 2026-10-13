@@ -116,6 +116,9 @@ export const uiVi = {
   json: {
     empty: 'Không có dữ liệu',
   },
+  mask: {
+    hidden: 'Giá trị bí mật — luôn được che',
+  },
   status: {
     ok: 'Ổn định',
     warn: 'Cảnh báo',

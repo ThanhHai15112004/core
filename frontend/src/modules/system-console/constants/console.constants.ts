@@ -7,25 +7,5 @@ export const CONSOLE_STORAGE_KEYS = {
 /** Chu kỳ tự cập nhật số liệu; người dùng không cần bấm làm mới. */
 export const POLL_INTERVAL_MS = 5000;
 
-export const resolvePackageIcon = (pkg?: { category?: string; icon?: string } | null): string => {
-  if (!pkg) return 'packages';
-  switch (pkg.category) {
-    case 'cache':
-      return 'cache';
-    case 'logging':
-      return 'logs';
-    case 'queue':
-      return 'messaging';
-    case 'database':
-      return 'database';
-    case 'storage':
-      return 'storage';
-    case 'custom':
-      return 'packages';
-    default:
-      return 'packages';
-  }
-};
-
 /** Tông màu theo môi trường backend — production đỏ để tránh thao tác nhầm. */
 export const ENV_TONE = { production: 'crit', staging: 'warn', development: 'info' } as const;

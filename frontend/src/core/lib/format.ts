@@ -6,6 +6,9 @@
 /** Ký hiệu "không có dữ liệu". */
 export const NO_VALUE = '—';
 
+/** Ký hiệu thay cho giá trị bí mật (không bao giờ hiển thị giá trị thật). */
+export const MASKED_VALUE = '••••••••';
+
 /** Ký hiệu đơn vị kỹ thuật (không dịch). */
 export const UNIT = {
   ms: 'ms',

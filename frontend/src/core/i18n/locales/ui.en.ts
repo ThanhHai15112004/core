@@ -117,6 +117,9 @@ export const uiEn: UiTranslation = {
   json: {
     empty: 'No data',
   },
+  mask: {
+    hidden: 'Secret value — always masked',
+  },
   status: {
     ok: 'Healthy',
     warn: 'Warning',
