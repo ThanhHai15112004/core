@@ -60,9 +60,6 @@ export interface MessagingAlert {
   severity: 'warning' | 'critical' | 'info';
   title: string;
   message: string;
-  value: number;
-  threshold: number;
-  unit: string;
   since: string;
   tab: MessagingTab;
   target: string | null;
@@ -72,11 +69,9 @@ export interface MessagingHealth {
   status: MessagingHealthStatus;
   reasons: { code: string; message: string }[];
   state: 'connecting' | 'connected' | 'reconnecting' | 'unavailable';
-  since: string;
   lastSuccessAt: string | null;
   lastPublishAt: string | null;
   pingMs: number | null;
-  lastError: string | null;
   failures: number;
 }
 
@@ -86,7 +81,6 @@ export interface QueueRow {
   active: number;
   delayed: number;
   failed: number;
-  completed: number;
   paused: boolean;
   workers: number | null;
   consumers: string[];
@@ -97,8 +91,6 @@ export interface QueueRow {
 export interface ChannelRow {
   channel: string;
   queue: string | null;
-  published: number | null;
-  consumed: number | null;
   failed: number | null;
   retried: number | null;
   deadLettered: number | null;
@@ -109,13 +101,11 @@ export interface ChannelRow {
   oldestWaitingSec: number | null;
   avgMs: number | null;
   p95Ms: number | null;
-  consumers: string[];
   status: ChannelStatus;
 }
 
 export interface ConsumerInstance {
   instance: string;
-  runtime: string | null;
   concurrency: number;
   paused: boolean;
   startedAt: string;
@@ -127,7 +117,6 @@ export interface ConsumerRow {
   runtime: string | null;
   instances: ConsumerInstance[];
   brokerWorkers: number | null;
-  consumed: number | null;
   failed: number | null;
   perSec: number | null;
   failureRatePercent: number | null;
@@ -175,8 +164,6 @@ export interface MessagingSettings {
   replay: boolean;
   discard: boolean;
   payload: boolean;
-  maxAttempts: number;
-  largeMessageBytes: number;
 }
 
 export interface MessageDetail extends MessageRow {
@@ -201,11 +188,9 @@ export interface MessagePayload {
 export interface Delivery {
   published: number;
   consumed: number;
-  failed: number;
   retried: number;
   deadLettered: number;
   recovered: number;
-  publishFailures: number;
   failureRatePercent: number | null;
 }
 
@@ -232,10 +217,7 @@ export interface MessagingEvent {
 }
 
 export interface MessagingOverview {
-  generatedAt: string;
-  range: MessagingRange;
   provider: MessagingProviderInfo;
-  environment: string;
   capabilities: MessagingCapability[];
   health: MessagingHealth;
   kpis: {
@@ -261,12 +243,9 @@ export interface MessagingOverview {
   delivery: Delivery | null;
   queues: Section<QueueRow[]>;
   topChannels: ChannelRow[];
-  consumers: ConsumerRow[];
   deadLetter: Section<{ total: number; latest: MessageRow[] }>;
   alerts: MessagingAlert[];
   report: { today: MessagingReport | null; yesterday: MessagingReport | null };
-  events: MessagingEvent[];
-  settings: MessagingSettings;
 }
 
 export interface MessagingSeries {
@@ -277,15 +256,10 @@ export interface MessagingSeries {
 }
 
 export interface MessagingMetrics {
-  metric: MessagingMetric;
-  range: MessagingRange;
-  resolutionSec: number | null;
-  unit: string;
   series: MessagingSeries[];
 }
 
 export interface MessagingChannels {
-  range: MessagingRange;
   channels: ChannelRow[];
   queues: Section<QueueRow[]>;
   backlogSampled: number | null;
@@ -308,7 +282,6 @@ export interface MessagingError {
 }
 
 export interface ChannelDetail {
-  range: MessagingRange;
   channel: ChannelRow;
   throughput: MessagingSeries[];
   processing: MessagingSeries[];
@@ -318,13 +291,11 @@ export interface ChannelDetail {
 }
 
 export interface MessagingConsumers {
-  range: MessagingRange;
   consumers: ConsumerRow[];
   unconsumed: QueueRow[];
 }
 
 export interface ConsumerDetail {
-  range: MessagingRange;
   consumer: ConsumerRow;
   processing: MessagingSeries[];
   throughput: MessagingSeries[];
@@ -370,7 +341,6 @@ export interface MessagingErrors {
   /** Lần publish / consume lỗi trong khoảng (Prometheus); null khi không có số liệu. */
   byStage: { publish: number | null; consume: number | null };
   items: Section<MessagingError[]>;
-  range: MessagingRange;
 }
 
 export interface MessagingOperation {
@@ -411,5 +381,4 @@ export interface MessagingTest {
   totalMs: number;
   roundTripMs: number | null;
   failedStep: BrokerTestStep | null;
-  at: string;
 }

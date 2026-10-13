@@ -82,7 +82,6 @@ export const MESSAGING_METRICS: MessagingMetric[] = ['throughput', 'lag', 'failu
 
 const MINUTE = 60_000;
 const DAY = 24 * 60 * MINUTE;
-const OVERVIEW_EVENTS = 8;
 const OVERVIEW_CHANNELS = 8;
 const ERROR_LIST_LIMIT = 200;
 const RECENT_LIMIT = 20;
@@ -149,8 +148,6 @@ export class MessagingOpsService {
       replay: c.replay && s('replay'),
       discard: c.discard && s('discard'),
       payload: c.payload && s('browse'),
-      maxAttempts: c.maxAttempts,
-      largeMessageBytes: this.largeBytes,
     };
   }
 
@@ -178,7 +175,6 @@ export class MessagingOpsService {
         active: q.counts.active,
         delayed: q.counts.delayed,
         failed: q.counts.failed,
-        completed: q.counts.completed,
         paused: q.paused,
         workers: q.workers?.length ?? null,
         consumers: [
@@ -201,7 +197,7 @@ export class MessagingOpsService {
       ...(win?.channels.keys() ?? []),
     ]);
     const queues = live.queues.available ? live.queues.data : null;
-    const rows = [...names].map((name): ChannelRowDto => {
+    const rows = [...names].map((name) => {
       const m = this.metrics.channel(win, name);
       const waiting = backlog?.channels.filter((c) => c.channel === name) ?? [];
       const queue = waiting[0]?.queue ?? win?.channelQueue.get(name) ?? null;
@@ -211,26 +207,26 @@ export class MessagingOpsService {
         null,
       );
       const q = queues?.find((x) => x.name === queue) ?? null;
+      const published = m?.published ?? null;
+      const consumed = m?.consumed ?? null;
       const row: Omit<ChannelRowDto, 'status'> = {
         channel: name,
         queue,
-        published: m?.published ?? null,
-        consumed: m?.consumed ?? null,
         failed: m?.failed ?? null,
         retried: m?.retried ?? null,
         deadLettered: m?.deadLettered ?? null,
-        publishPerSec: this.metrics.perSec(win, m?.published ?? null),
-        consumePerSec: this.metrics.perSec(win, m?.consumed ?? null),
+        publishPerSec: this.metrics.perSec(win, published),
+        consumePerSec: this.metrics.perSec(win, consumed),
         failureRatePercent: this.metrics.failureRate(m),
         lag,
         oldestWaitingSec: secondsSince(oldest, now),
         avgMs: m?.processing.avgMs ?? null,
         p95Ms: m?.processing.p95Ms ?? null,
-        consumers: [
-          ...new Set(live.consumers.filter((c) => c.queue === queue).map((c) => c.consumer)),
-        ],
       };
-      return { ...row, status: this.channelStatus(row, q) };
+      return {
+        row: { ...row, status: this.channelStatus(row, published, consumed, q) },
+        traffic: (published ?? 0) + (consumed ?? 0),
+      };
     });
     const rank: Record<ChannelStatus, number> = {
       no_consumer: 0,
@@ -239,27 +235,30 @@ export class MessagingOpsService {
       healthy: 3,
       idle: 4,
     };
-    const traffic = (r: ChannelRowDto) => (r.published ?? 0) + (r.consumed ?? 0);
-    return rows.sort(
-      (a, b) =>
-        rank[a.status] - rank[b.status] ||
-        traffic(b) - traffic(a) ||
-        a.channel.localeCompare(b.channel),
-    );
+    return rows
+      .sort(
+        (a, b) =>
+          rank[a.row.status] - rank[b.row.status] ||
+          b.traffic - a.traffic ||
+          a.row.channel.localeCompare(b.row.channel),
+      )
+      .map((x) => x.row);
   }
 
   private channelStatus(
     row: Omit<ChannelRowDto, 'status'>,
+    published: number | null,
+    consumed: number | null,
     q: QueueSnapshot | null,
   ): ChannelStatus {
     const r = this.cfg.rules;
-    const ops = (row.consumed ?? 0) + (row.failed ?? 0);
+    const ops = (consumed ?? 0) + (row.failed ?? 0);
     if ((row.lag ?? 0) > 0 && q && q.workers !== null && q.workers.length === 0)
       return 'no_consumer';
     if (ops >= r.minOps && (row.failureRatePercent ?? 0) >= r.failureRatePercent)
       return 'high_failure';
     if ((row.lag ?? 0) >= r.lagWarn) return 'lagging';
-    if (row.published === 0 && ops === 0 && !row.lag) return 'idle';
+    if (published === 0 && ops === 0 && !row.lag) return 'idle';
     return 'healthy';
   }
 
@@ -298,13 +297,11 @@ export class MessagingOpsService {
         runtime: first.runtime,
         instances: regs.map((x) => ({
           instance: x.instance,
-          runtime: x.runtime,
           concurrency: x.concurrency,
           paused: x.paused,
           startedAt: new Date(x.startedAt).toISOString(),
         })),
         brokerWorkers,
-        consumed: m?.consumed ?? null,
         failed: m?.failed ?? null,
         perSec: this.metrics.perSec(win, m?.consumed ?? null),
         failureRatePercent: failureRate,
@@ -353,20 +350,18 @@ export class MessagingOpsService {
   public async getOverview(range: MessagingRange): Promise<MessagingOverviewDto> {
     const now = Date.now();
     const today = startOfDay(now);
-    const [win, ago, todayWin, yesterdayWin, live, backlog, alerts, events, dlq] =
-      await Promise.all([
-        this.rangeWindow(range, now),
-        this.metrics.lagAgo(LAG_TREND_MIN),
-        this.metrics.window(today, now, now, false),
-        this.metrics.window(today - DAY, today, now, false),
-        this.live(),
-        this.monitoring.usable()
-          ? this.monitoring.backlog().catch(() => null)
-          : Promise.resolve(null),
-        this.alerts(),
-        this.eventsSince(now - DAY),
-        this.monitoring.section('deadLetter', () => this.monitoring.deadLetters(3)),
-      ]);
+    const [win, ago, todayWin, yesterdayWin, live, backlog, alerts, dlq] = await Promise.all([
+      this.rangeWindow(range, now),
+      this.metrics.lagAgo(LAG_TREND_MIN),
+      this.metrics.window(today, now, now, false),
+      this.metrics.window(today - DAY, today, now, false),
+      this.live(),
+      this.monitoring.usable()
+        ? this.monitoring.backlog().catch(() => null)
+        : Promise.resolve(null),
+      this.alerts(),
+      this.monitoring.section('deadLetter', () => this.monitoring.deadLetters(3)),
+    ]);
     const delivery = this.metrics.delivery(win);
     const queues = this.queueRows(live, now);
     const channels = this.channelRows(win, backlog, live, now);
@@ -388,10 +383,7 @@ export class MessagingOpsService {
     const sum = (k: 'delayed' | 'failed' | 'workers') =>
       queues.available ? queues.data.reduce((s, q) => s + (q[k] ?? 0), 0) : null;
     return {
-      generatedAt: new Date(now).toISOString(),
-      range,
       provider: this.monitoring.info(),
-      environment: this.config.app.env,
       capabilities: [...this.monitoring.capabilities],
       health: this.health(alerts),
       kpis: {
@@ -413,10 +405,16 @@ export class MessagingOpsService {
       },
       lagTrend: { current: lagNow, ago15m: ago, changePercent: lagChange, direction },
       processing: this.metrics.processing(win),
-      delivery,
+      delivery: delivery && {
+        published: delivery.published,
+        consumed: delivery.consumed,
+        retried: delivery.retried,
+        deadLettered: delivery.deadLettered,
+        recovered: delivery.recovered,
+        failureRatePercent: delivery.failureRatePercent,
+      },
       queues,
       topChannels: channels.slice(0, OVERVIEW_CHANNELS),
-      consumers: this.consumerRows(win, live),
       deadLetter: dlq.available
         ? {
             available: true,
@@ -428,8 +426,6 @@ export class MessagingOpsService {
         : dlq,
       alerts,
       report: { today: this.report(todayWin), yesterday: this.report(yesterdayWin) },
-      events: events.slice(0, OVERVIEW_EVENTS).map((e) => this.eventDto(e)),
-      settings: this.settings(),
     };
   }
 
@@ -463,11 +459,9 @@ export class MessagingOpsService {
       status,
       reasons,
       state: s.state,
-      since: s.since,
       lastSuccessAt: s.lastSuccessAt,
       lastPublishAt: s.lastPublishAt,
       pingMs: s.lastPingMs,
-      lastError: s.lastError,
       failures: s.failures,
     };
   }
@@ -486,9 +480,6 @@ export class MessagingOpsService {
           severity: s.severity,
           title: this.i18n.t(`messaging.alert.${rule}.title`),
           message: this.alertMessage(rule, { ...s.extra, value: s.value, threshold: s.threshold }),
-          value: s.value,
-          threshold: s.threshold,
-          unit: s.unit,
           since: new Date(s.since).toISOString(),
           tab: RULE_TAB[rule] ?? 'overview',
           target: typeof s.extra['target'] === 'string' ? s.extra['target'] : null,
@@ -510,20 +501,14 @@ export class MessagingOpsService {
 
   // ─── Chart ────────────────────────────────────────────────────────────────
 
-  private async series(
-    range: MessagingRange,
-    defs: SeriesDef[],
-  ): Promise<{ series: MessagingSeriesDto[]; resolutionSec: number | null }> {
-    const { resolutionSec, series } = await this.metrics.series(MESSAGING_RANGES[range], defs);
-    return {
-      resolutionSec,
-      series: series.map((d) => ({
-        id: d.id,
-        label: this.i18n.t(`messaging.series.${d.id}`),
-        unit: d.unit,
-        points: d.points,
-      })),
-    };
+  private async series(range: MessagingRange, defs: SeriesDef[]): Promise<MessagingSeriesDto[]> {
+    const { series } = await this.metrics.series(MESSAGING_RANGES[range], defs);
+    return series.map((d) => ({
+      id: d.id,
+      label: this.i18n.t(`messaging.series.${d.id}`),
+      unit: d.unit,
+      points: d.points,
+    }));
   }
 
   /**
@@ -583,9 +568,8 @@ export class MessagingOpsService {
         { id: 'processingP99', unit: 'ms', expr: e.processingP99 },
       ],
     };
-    const { series, resolutionSec } = await this.series(range, defs[metric]);
-    const list = series.filter((s, i) => i === 0 || s.points.length > 0);
-    return { metric, range, resolutionSec, unit: list[0]?.unit ?? '', series: list };
+    const series = await this.series(range, defs[metric]);
+    return { series: series.filter((s, i) => i === 0 || s.points.length > 0) };
   }
 
   // ─── Channels / Consumers ────────────────────────────────────────────────
@@ -605,7 +589,6 @@ export class MessagingOpsService {
     const now = Date.now();
     const { win, live, backlog } = await this.channelContext(range, now);
     return {
-      range,
       channels: this.channelRows(win, backlog, live, now),
       queues: this.queueRows(live, now),
       backlogSampled: backlog?.sampled ?? null,
@@ -619,7 +602,7 @@ export class MessagingOpsService {
     const row = this.channelRows(win, backlog, live, now).find((c) => c.channel === name);
     if (!row) throw new MessagingNotFoundException('messaging.error.channelNotFound', { name });
     const e = MessagingOpsService.defs(`channel="${labelValue(name)}"`);
-    const [{ series: throughput }, { series: processing }, errors, recent] = await Promise.all([
+    const [throughput, processing, errors, recent] = await Promise.all([
       this.series(range, [
         { id: 'published', unit: '/s', expr: e.published },
         { id: 'consumed', unit: '/s', expr: e.consumed },
@@ -639,7 +622,6 @@ export class MessagingOpsService {
       }),
     ]);
     return {
-      range,
       channel: row,
       throughput,
       processing,
@@ -671,7 +653,6 @@ export class MessagingOpsService {
     const [win, live] = await Promise.all([this.rangeWindow(range, now), this.live()]);
     const queues = this.queueRows(live, now);
     return {
-      range,
       consumers: this.consumerRows(win, live),
       unconsumed: queues.available
         ? queues.data.filter((q) => q.waiting > 0 && q.consumers.length === 0 && !q.workers)
@@ -686,35 +667,33 @@ export class MessagingOpsService {
     if (!row) throw new MessagingNotFoundException('messaging.error.consumerNotFound', { name });
     const queue = labelValue(row.queue);
     const e = MessagingOpsService.defs(`queue="${queue}"`);
-    const [{ series: processing }, { series: throughput }, { series: lag }, errors, recent] =
-      await Promise.all([
-        this.series(range, [
-          { id: 'processingAvg', unit: 'ms', expr: e.processingAvg },
-          { id: 'processingP95', unit: 'ms', expr: e.processingP95 },
-        ]),
-        this.series(range, [
-          { id: 'consumedPerMin', unit: '/min', expr: e.consumedPerMin },
-          { id: 'failedPerMin', unit: '/min', expr: e.failedPerMin },
-        ]),
-        this.series(range, [
-          {
-            id: 'lag',
-            unit: 'msgs',
-            expr: `max(${QUEUE_JOBS_METRIC}{queue="${queue}",state="waiting"})`,
-          },
-        ]),
-        this.recentFailures(),
-        this.recentMessages({
-          queue: row.queue,
-          channel: null,
-          status: null,
-          producer: null,
-          search: '',
-        }),
-      ]);
+    const [processing, throughput, lag, errors, recent] = await Promise.all([
+      this.series(range, [
+        { id: 'processingAvg', unit: 'ms', expr: e.processingAvg },
+        { id: 'processingP95', unit: 'ms', expr: e.processingP95 },
+      ]),
+      this.series(range, [
+        { id: 'consumedPerMin', unit: '/min', expr: e.consumedPerMin },
+        { id: 'failedPerMin', unit: '/min', expr: e.failedPerMin },
+      ]),
+      this.series(range, [
+        {
+          id: 'lag',
+          unit: 'msgs',
+          expr: `max(${QUEUE_JOBS_METRIC}{queue="${queue}",state="waiting"})`,
+        },
+      ]),
+      this.recentFailures(),
+      this.recentMessages({
+        queue: row.queue,
+        channel: null,
+        status: null,
+        producer: null,
+        search: '',
+      }),
+    ]);
     const m = this.metrics.queue(win, row.queue);
     return {
-      range,
       consumer: row,
       processing,
       throughput,
@@ -881,7 +860,6 @@ export class MessagingOpsService {
       items: recent
         ? { available: true, data: recent.slice(0, ERROR_LIST_LIMIT).map((e) => this.errorDto(e)) }
         : (items as Extract<typeof items, { available: false }>),
-      range,
     };
   }
 
@@ -940,7 +918,7 @@ export class MessagingOpsService {
   public async test(ctx: OperationContext): Promise<MessagingTestDto> {
     const result = await this.operations.test(ctx);
     this.monitoring.invalidate();
-    return { ...result, at: new Date().toISOString() };
+    return result;
   }
 
   public retry(queue: string, id: string, ctx: OperationContext) {

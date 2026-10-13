@@ -69,8 +69,6 @@ describe('Messaging Monitor (/ops/messaging) — broker unavailable', () => {
       report: { today: unknown; yesterday: unknown };
       queues: { available: boolean; reason: string };
       alerts: { rule: string; severity: string }[];
-      events: { type: string }[];
-      settings: { replay: boolean; payload: boolean };
     }>('GET', `${base}/overview?range=15m`);
     expect(status).toBe(200);
     expect(body.data.provider).toMatchObject({
@@ -88,7 +86,8 @@ describe('Messaging Monitor (/ops/messaging) — broker unavailable', () => {
     expect(body.data.alerts).toEqual([
       expect.objectContaining({ rule: 'BROKER_UNAVAILABLE', severity: 'critical' }),
     ]);
-    expect(body.data.events.map((e) => e.type)).toContain('alert_started');
+    const ev = await call<{ type: string }[]>('GET', `${base}/events?range=1h`);
+    expect(ev.body.data.map((e) => e.type)).toContain('alert_started');
   });
 
   it('channels / consumers / metrics trả lời được khi broker mất; producers đã bỏ', async () => {
@@ -98,11 +97,9 @@ describe('Messaging Monitor (/ops/messaging) — broker unavailable', () => {
     expect(pr.status).toBe(404);
     const co = await call<{ consumers: unknown[] }>('GET', `${base}/consumers`);
     expect(co.status).toBe(200);
-    const m = await call<{ metric: string; series: unknown[] }>(
-      'GET',
-      `${base}/metrics?metric=lag&range=1h`,
-    );
-    expect(m.body.data.metric).toBe('lag');
+    const m = await call<{ series: { id: string }[] }>('GET', `${base}/metrics?metric=lag&range=1h`);
+    expect(m.status).toBe(200);
+    expect(m.body.data.series[0]?.id).toBe('lag');
     const bad = await call('GET', `${base}/metrics?metric=nope`);
     expect(bad.status).toBe(400);
     const size = await call('GET', `${base}/metrics?metric=size`);
@@ -216,11 +213,9 @@ describe('Messaging Monitor (/ops/messaging) — số liệu từ Prometheus', (
     expect(body.data.delivery).toEqual({
       published: 30,
       consumed: 27,
-      failed: 3,
       retried: 4,
       deadLettered: 1,
       recovered: 2,
-      publishFailures: 2,
       failureRatePercent: 10,
     });
     expect(body.data.kpis).toMatchObject({ publishedPerSec: 0.033, failed: 5 });
@@ -229,13 +224,13 @@ describe('Messaging Monitor (/ops/messaging) — số liệu từ Prometheus', (
 
   it('channels: channel có lưu lượng trong Prometheus xuất hiện dù broker không có message chờ', async () => {
     const { body } = await get<{
-      channels: { channel: string; queue: string | null; published: number; lag: unknown }[];
+      channels: { channel: string; queue: string | null; publishPerSec: number; lag: unknown }[];
     }>(`${base}/channels?range=15m`);
     expect(body.data.channels).toEqual([
       expect.objectContaining({
         channel: 'user.created',
         queue: 'system.events',
-        published: 30,
+        publishPerSec: 0.033,
         lag: null,
       }),
     ]);
@@ -250,10 +245,8 @@ describe('Messaging Monitor (/ops/messaging) — số liệu từ Prometheus', (
 
   it('metrics: biểu đồ đọc bằng range query', async () => {
     const { body } = await get<{
-      resolutionSec: number | null;
       series: { id: string; points: { value: number }[] }[];
     }>(`${base}/metrics?metric=throughput&range=1h`);
-    expect(body.data.resolutionSec).not.toBeNull();
     expect(body.data.series.map((x) => x.id)).toEqual(['published', 'consumed', 'failed']);
     expect(body.data.series[0]!.points).toEqual([{ t: 1_000, value: 0.5 }]);
   });
