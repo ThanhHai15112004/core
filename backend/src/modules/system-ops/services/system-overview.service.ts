@@ -8,6 +8,7 @@ import {
   type TrafficSummaryDto,
 } from '@modules/traffic/index.js';
 import { PerformanceService, type BottleneckDto } from '@modules/performance/index.js';
+import { HealthService, type HealthCheckResult } from '@modules/health/index.js';
 import { DatabaseConnectionService } from '@packages/database/index.js';
 import { HttpMetricsReader, type HttpMetricsSnapshot } from '@packages/metrics/index.js';
 import { CorePackageId, PackageStatus } from '@packages/kernel/index.js';
@@ -26,8 +27,6 @@ import type {
 
 const BYTES_PER_MB = 1024 * 1024;
 const BYTES_PER_GB = BYTES_PER_MB * 1024;
-const CPU_WARN_PERCENT = 80;
-const MEMORY_WARN_PERCENT = 85;
 const UNAVAILABLE = '--';
 
 /** Section của System Console dùng để drill-down theo package. */
@@ -64,23 +63,22 @@ interface Problem {
   since?: Date;
 }
 
-/** Số đo của process/OS tại thời điểm gọi API. */
+/** Thông tin process API và máy chủ tại thời điểm gọi (chỉ cho mục "System info"). */
 interface RuntimeSnapshot {
   uptimeSeconds: number;
   heapUsedMb: number;
   heapTotalMb: number;
   rssMb: number;
   totalMemGb: number;
-  usedMemGb: number;
   freeMemGb: number;
-  memoryPercent: number;
   cpuCores: number;
-  cpuPercent: number;
   loadAvg: number[];
 }
 
 interface OverviewContext {
   runtime: RuntimeSnapshot;
+  /** Kết quả `/health` (terminus: database, redis, heap). */
+  health: HealthCheckResult | null;
   http: HttpMetricsSnapshot;
   packages: PackageSummaryDto[];
   /** Worker/Scheduler từ runtime telemetry (API chính là process hiện tại). */
@@ -106,26 +104,37 @@ export class SystemOverviewService {
     private readonly traffic: TrafficService,
     private readonly performance: PerformanceService,
     private readonly dbConnection: DatabaseConnectionService,
+    private readonly healthService: HealthService,
   ) {}
 
   public async getOverview(): Promise<SystemOverviewResponseDto> {
     const trafficQuery = { range: '15m', includeInternal: true } as const;
-    const [packages, dbPingMs, runtimeList, trafficProblems, trafficSummary, bottlenecks, http] =
-      await Promise.all([
-        this.registryService.getAllSummaries(),
-        this.pingDatabase(),
-        this.runtimes.getSummaries().catch(() => [] as RuntimeSummaryDto[]),
-        this.traffic
-          .getInsights(trafficQuery)
-          .then((i) => i.problems)
-          .catch(() => [] as TrafficProblemDto[]),
-        this.traffic.getSummary(trafficQuery).catch(() => null),
-        this.performance.getBottlenecks().catch(() => null),
-        this.httpMetrics.snapshot(),
-      ]);
+    const [
+      packages,
+      dbPingMs,
+      runtimeList,
+      trafficProblems,
+      trafficSummary,
+      bottlenecks,
+      http,
+      health,
+    ] = await Promise.all([
+      this.registryService.getAllSummaries(),
+      this.pingDatabase(),
+      this.runtimes.getSummaries().catch(() => [] as RuntimeSummaryDto[]),
+      this.traffic
+        .getInsights(trafficQuery)
+        .then((i) => i.problems)
+        .catch(() => [] as TrafficProblemDto[]),
+      this.traffic.getSummary(trafficQuery).catch(() => null),
+      this.performance.getBottlenecks().catch(() => null),
+      this.httpMetrics.snapshot(),
+      this.healthService.check().catch(() => null),
+    ]);
     const runtimes = new Map(runtimeList.map((r) => [r.id, r]));
     const ctx: OverviewContext = {
       runtime: this.readRuntime(),
+      health,
       http,
       packages,
       runtimes,
@@ -176,23 +185,32 @@ export class SystemOverviewService {
     const mem = process.memoryUsage();
     const totalMem = os.totalmem();
     const freeMem = os.freemem();
-    const cpuCores = os.cpus().length;
-    const loadAvg = os.loadavg();
-
     return {
       uptimeSeconds: Math.round(process.uptime()),
       heapUsedMb: Math.round(mem.heapUsed / BYTES_PER_MB),
       heapTotalMb: Math.round(mem.heapTotal / BYTES_PER_MB),
       rssMb: Math.round(mem.rss / BYTES_PER_MB),
       totalMemGb: Number((totalMem / BYTES_PER_GB).toFixed(1)),
-      usedMemGb: Number(((totalMem - freeMem) / BYTES_PER_GB).toFixed(1)),
       freeMemGb: Number((freeMem / BYTES_PER_GB).toFixed(1)),
-      memoryPercent: Math.round(((totalMem - freeMem) / totalMem) * 100),
-      cpuCores,
-      // Load average 1 phút / số nhân ≈ % CPU (luôn là 0 trên Windows).
-      cpuPercent: Math.min(100, Math.round(((loadAvg[0] ?? 0) / Math.max(1, cpuCores)) * 100)),
-      loadAvg,
+      cpuCores: os.cpus().length,
+      loadAvg: os.loadavg(),
     };
+  }
+
+  /** Mức theo cặp ngưỡng warn/crit; `null` → chưa có số liệu. */
+  private static level(
+    value: number | null,
+    t: { warn: number; crit: number },
+  ): KeyMetricItemDto['status'] {
+    if (value === null) return 'normal';
+    return value >= t.crit ? 'critical' : value >= t.warn ? 'warning' : 'normal';
+  }
+
+  /** Runtime có giá trị lớn nhất theo heartbeat (CPU% / RAM%) — số đo của process, không phải của máy chủ. */
+  private busiest(ctx: OverviewContext, key: 'cpuPercent' | 'memoryPercent') {
+    return [...ctx.runtimes.values()]
+      .filter((r) => r.resources && r.resources[key] !== null)
+      .sort((a, b) => (b.resources![key] ?? 0) - (a.resources![key] ?? 0))[0];
   }
 
   /** Sức khỏe request đi qua API (khác với sức khỏe process API). */
@@ -388,22 +406,39 @@ export class SystemOverviewService {
   }
 
   private buildKeyMetrics(ctx: OverviewContext): KeyMetricItemDto[] {
-    const { http, runtime } = ctx;
-    const hasTraffic = http.totalRequests > 0;
-    const trafficText = hasTraffic
-      ? this.i18n.t('overview.metric.window', {
-          count: http.totalRequests,
-          seconds: http.windowSeconds,
-        })
-      : this.i18n.t('overview.metric.noTraffic', { seconds: http.windowSeconds });
+    const { http } = ctx;
+    const rules = this.configService.performance.rules;
+    const th = this.configService.traffic.thresholds;
+    const noData = this.i18n.t('overview.metric.telemetryUnavailable');
+    const trafficText =
+      http.totalRequests === null
+        ? noData
+        : http.totalRequests > 0
+          ? this.i18n.t('overview.metric.window', {
+              count: http.totalRequests,
+              seconds: http.windowSeconds,
+            })
+          : this.i18n.t('overview.metric.noTraffic', { seconds: http.windowSeconds });
     const errorCount = ctx.problems.filter((p) => p.severity === 'error').length;
     const alertCount = ctx.problems.length;
+    const cpu = this.busiest(ctx, 'cpuPercent');
+    const mem = this.busiest(ctx, 'memoryPercent');
+    const cpuValue = cpu?.resources?.cpuPercent ?? null;
+    const memRes = mem?.resources ?? null;
+    const memPercent = memRes?.memoryPercent ?? null;
+    const memUsed = memRes
+      ? memRes.memoryLimitSource === 'cgroup'
+        ? memRes.rssMb
+        : memRes.heapUsedMb
+      : null;
+    const noRuntime = this.i18n.t('overview.metric.noRuntime');
+    const L = SystemOverviewService.level;
 
     return [
       {
         id: 'req_sec',
         label: this.i18n.t('overview.metric.reqSec'),
-        value: http.requestsPerSecond,
+        value: http.requestsPerSecond ?? UNAVAILABLE,
         unit: 'req/s',
         trendText: trafficText,
         trendDirection: 'neutral',
@@ -417,38 +452,54 @@ export class SystemOverviewService {
         unit: 'ms',
         trendText: trafficText,
         trendDirection: 'neutral',
-        trendIsGood: true,
-        status: 'normal',
+        trendIsGood: L(http.p95LatencyMs, rules.apiP95Ms) === 'normal',
+        status: L(http.p95LatencyMs, rules.apiP95Ms),
       },
       {
         id: 'err_rate',
         label: this.i18n.t('overview.metric.errorRate'),
-        value: `${http.errorRatePercent}%`,
-        trendText: this.i18n.t('overview.metric.errors', { count: http.errorCount }),
+        value: http.errorRatePercent === null ? UNAVAILABLE : `${http.errorRatePercent}%`,
+        trendText:
+          http.errorCount === null
+            ? noData
+            : this.i18n.t('overview.metric.errors', { count: http.errorCount }),
         trendDirection: 'neutral',
-        trendIsGood: http.errorCount === 0,
-        status: http.errorCount > 0 ? 'critical' : 'normal',
+        trendIsGood: (http.errorCount ?? 0) === 0,
+        status: L(http.errorRatePercent, {
+          warn: th.errorRateWarnPercent,
+          crit: th.errorRateCritPercent,
+        }),
       },
       {
         id: 'cpu_load',
         label: this.i18n.t('overview.metric.cpu'),
-        value: `${runtime.cpuPercent}%`,
-        trendText: this.i18n.t('overview.metric.cores', { count: runtime.cpuCores }),
+        value: cpuValue === null ? UNAVAILABLE : `${cpuValue}%`,
+        trendText: cpu
+          ? this.i18n.t('overview.metric.cpuDetail', { runtime: cpu.name })
+          : noRuntime,
         trendDirection: 'neutral',
-        trendIsGood: runtime.cpuPercent < CPU_WARN_PERCENT,
-        status: runtime.cpuPercent > CPU_WARN_PERCENT ? 'warning' : 'normal',
+        trendIsGood: L(cpuValue, rules.cpuPercent) === 'normal',
+        status: L(cpuValue, rules.cpuPercent),
       },
       {
         id: 'mem_usage',
         label: this.i18n.t('overview.metric.memory'),
-        value: `${runtime.usedMemGb} / ${runtime.totalMemGb} GB`,
-        trendText: this.i18n.t('overview.metric.memoryDetail', {
-          percent: runtime.memoryPercent,
-          heap: runtime.heapUsedMb,
-        }),
+        value:
+          memRes && memUsed !== null && memRes.memoryLimitMb !== null
+            ? `${Math.round(memUsed)} / ${Math.round(memRes.memoryLimitMb)} MB`
+            : UNAVAILABLE,
+        trendText: mem
+          ? this.i18n.t('overview.metric.memoryDetail', {
+              runtime: mem.name,
+              percent: memPercent ?? UNAVAILABLE,
+              source: this.i18n.t(
+                `overview.metric.limit.${memRes?.memoryLimitSource ?? 'v8-heap'}`,
+              ),
+            })
+          : noRuntime,
         trendDirection: 'neutral',
-        trendIsGood: runtime.memoryPercent < MEMORY_WARN_PERCENT,
-        status: runtime.memoryPercent > MEMORY_WARN_PERCENT ? 'warning' : 'normal',
+        trendIsGood: L(memPercent, rules.memoryPercent) === 'normal',
+        status: L(memPercent, rules.memoryPercent),
       },
       {
         id: 'alerts_count',
@@ -462,8 +513,40 @@ export class SystemOverviewService {
     ];
   }
 
+  /** API: trạng thái theo health check (terminus) — không mặc định "healthy". */
+  private apiItem(ctx: OverviewContext): HealthMapItemDto {
+    const { app } = this.configService;
+    const down = Object.entries(ctx.health?.checks ?? {})
+      .filter(([, c]) => c.status === 'down')
+      .map(([k]) => k);
+    const status: HealthMapItemDto['status'] = !ctx.health
+      ? 'unknown'
+      : ctx.health.status === 'ok'
+        ? 'healthy'
+        : down.includes('database') || down.includes('redis')
+          ? 'critical'
+          : 'warning';
+    const rps = ctx.http.requestsPerSecond;
+    return {
+      id: 'runtime-api',
+      name: this.i18n.t('overview.map.api.name'),
+      category: 'runtime',
+      status,
+      subtext: down.length
+        ? this.i18n.t('overview.map.api.degraded', { checks: down.join(', ') })
+        : this.i18n.t('overview.map.api.subtext', { port: app.port }),
+      secondarySubtext: this.i18n.t('overview.map.api.secondary', {
+        heap: ctx.runtime.heapUsedMb,
+        uptime: ctx.runtime.uptimeSeconds,
+      }),
+      metric: `${rps ?? UNAVAILABLE} req/s • P95 ${ctx.http.p95LatencyMs ?? UNAVAILABLE} ms`,
+      targetSection: 'runtimes/api',
+      icon: 'globe',
+    };
+  }
+
   private buildHealthMap(ctx: OverviewContext): HealthMapItemDto[] {
-    const { app, database } = this.configService;
+    const { database } = this.configService;
     const pkg = (id: string) => ctx.packages.find((p) => p.packageId === id);
     const cachePackage = pkg(CorePackageId.CACHE);
     const storagePackage = pkg(CorePackageId.STORAGE);
@@ -514,20 +597,7 @@ export class SystemOverviewService {
     };
 
     return [
-      {
-        id: 'runtime-api',
-        name: this.i18n.t('overview.map.api.name'),
-        category: 'runtime',
-        status: 'healthy',
-        subtext: this.i18n.t('overview.map.api.subtext', { port: app.port }),
-        secondarySubtext: this.i18n.t('overview.map.api.secondary', {
-          heap: ctx.runtime.heapUsedMb,
-          uptime: ctx.runtime.uptimeSeconds,
-        }),
-        metric: `${ctx.http.requestsPerSecond} req/s • P95 ${ctx.http.p95LatencyMs ?? UNAVAILABLE} ms`,
-        targetSection: 'runtimes/api',
-        icon: 'globe',
-      },
+      this.apiItem(ctx),
       this.trafficItem(ctx),
       this.performanceItem(ctx),
       runtimeItem('worker', 'cpu'),
@@ -640,6 +710,14 @@ export class SystemOverviewService {
     const cacheMetrics =
       ctx.packages.find((p) => p.packageId === CorePackageId.CACHE)?.statusReport.metrics ?? {};
     const hitRate = cacheMetrics['hitRatePercent'];
+    const cpuOf = (rt: RuntimeSummaryDto) => {
+      const cpu = rt.resources?.cpuPercent ?? null;
+      return {
+        label: label('cpu'),
+        value: cpu === null ? UNAVAILABLE : `${cpu}%`,
+        isWarn: cpu !== null && cpu >= this.configService.performance.rules.cpuPercent.warn,
+      };
+    };
     const runtimeSnapshot = (id: 'worker' | 'scheduler', icon: string): InfraSnapshotItemDto => {
       const rt = ctx.runtimes.get(id);
       const base = {
@@ -671,13 +749,14 @@ export class SystemOverviewService {
       return {
         ...base,
         metrics: [
-          { label: label('cpu'), value: `${rt.resources.cpuPercent}%` },
+          cpuOf(rt),
           { label: label('memory'), value: `${rt.resources.rssMb} MB` },
           ...specific,
         ],
       };
     };
 
+    const api = ctx.runtimes.get('api');
     return [
       {
         id: 'snap-api',
@@ -685,13 +764,15 @@ export class SystemOverviewService {
         icon: 'globe',
         targetSection: 'runtimes/api',
         metrics: [
-          {
-            label: label('cpu'),
-            value: `${ctx.runtime.cpuPercent}%`,
-            isWarn: ctx.runtime.cpuPercent > CPU_WARN_PERCENT,
-          },
+          api ? cpuOf(api) : { label: label('cpu'), value: UNAVAILABLE },
           { label: label('memory'), value: `${ctx.runtime.rssMb} MB` },
-          { label: label('traffic'), value: `${ctx.http.requestsPerSecond} req/s` },
+          {
+            label: label('traffic'),
+            value:
+              ctx.http.requestsPerSecond === null
+                ? UNAVAILABLE
+                : `${ctx.http.requestsPerSecond} req/s`,
+          },
           {
             label: label('p95'),
             value: ctx.http.p95LatencyMs !== null ? `${ctx.http.p95LatencyMs} ms` : UNAVAILABLE,
@@ -728,8 +809,15 @@ export class SystemOverviewService {
             label: label('hitRate'),
             value: typeof hitRate === 'number' ? `${hitRate}%` : UNAVAILABLE,
           },
-          { label: label('hits'), value: Number(cacheMetrics['hits'] ?? 0) },
-          { label: label('misses'), value: Number(cacheMetrics['misses'] ?? 0) },
+          {
+            label: label('hits'),
+            value: typeof cacheMetrics['hits'] === 'number' ? cacheMetrics['hits'] : UNAVAILABLE,
+          },
+          {
+            label: label('misses'),
+            value:
+              typeof cacheMetrics['misses'] === 'number' ? cacheMetrics['misses'] : UNAVAILABLE,
+          },
         ],
       },
       runtimeSnapshot('scheduler', 'clock'),

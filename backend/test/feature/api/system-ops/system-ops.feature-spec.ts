@@ -183,8 +183,8 @@ describe('Feature: System Ops overview (/ops/overview)', () => {
     const body = JSON.parse(response.payload) as {
       data: {
         overallHealth: { totalServices: number; healthyServices: number };
-        keyMetrics: Array<{ id: string; label: string }>;
-        healthMap: Array<{ id: string; status: string }>;
+        keyMetrics: Array<{ id: string; label: string; value: string | number }>;
+        healthMap: Array<{ id: string; status: string; subtext: string }>;
       };
     };
 
@@ -194,5 +194,12 @@ describe('Feature: System Ops overview (/ops/overview)', () => {
     expect(body.data.overallHealth.healthyServices).toBe(6);
     expect(body.data.keyMetrics.find((m) => m.id === 'req_sec')?.label).toBe('Requests / Sec');
     expect(body.data.healthMap.find((m) => m.id === 'runtime-worker')?.status).toBe('unknown');
+    // API theo health check thật: database của test không chạy → không báo "healthy" giả.
+    const api = body.data.healthMap.find((m) => m.id === 'runtime-api');
+    expect(api?.status).toBe('critical');
+    expect(api?.subtext).toContain('database');
+    // Không có Prometheus → KPI HTTP không có số liệu ("--"), không phải 0.
+    expect(body.data.keyMetrics.find((m) => m.id === 'req_sec')?.value).toBe('--');
+    expect(body.data.keyMetrics.find((m) => m.id === 'err_rate')?.value).toBe('--');
   });
 });
