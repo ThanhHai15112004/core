@@ -77,13 +77,13 @@ describe('BaseCacheProvider (driver redis, ioredis-mock)', () => {
   it('flush chỉ xoá vùng cache của core, không đụng telemetry hay key project khác', async () => {
     await cache.set('user:1', 1);
     await cache.set('data:users:2', 2);
-    await redis.client.set('core_test:perf:b:s10:1:api', 'x');
+    await redis.client.set('core_test:perf:events', 'x');
     await redis.client.set('core_test:cachemon:events', 'y');
     await redis.client.set('coaching:session:1', 'z');
     expect(await cache.flush()).toBe(2);
     expect(await redis.client.keys('*')).toEqual(
       expect.arrayContaining([
-        'core_test:perf:b:s10:1:api',
+        'core_test:perf:events',
         'core_test:cachemon:events',
         'coaching:session:1',
       ]),
