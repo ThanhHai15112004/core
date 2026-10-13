@@ -85,6 +85,7 @@ export class CacheMonitorService implements OnApplicationBootstrap, OnModuleDest
     @Optional() @Inject(RUNTIME_IDENTITY) private readonly identity?: RuntimeIdentity,
   ) {}
 
+  /** Thực thi tác vụ khởi động sau khi toàn bộ ứng dụng hoàn tất bootstrap */
   public onApplicationBootstrap(): void {
     if (this.config.isTest) return;
     this.timer = setInterval(() => void this.tick(), TICK_MS);
@@ -92,6 +93,7 @@ export class CacheMonitorService implements OnApplicationBootstrap, OnModuleDest
     setTimeout(() => void this.tick(), 5000).unref();
   }
 
+  /** Dọn dẹp tài nguyên và ngắt kết nối khi module bị hủy */
   public onModuleDestroy(): void {
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
@@ -121,6 +123,7 @@ export class CacheMonitorService implements OnApplicationBootstrap, OnModuleDest
     }
   }
 
+  /** Thu thập các chỉ số đo lường định kỳ từ hệ thống */
   private async collect(now: number): Promise<Collected> {
     const keyspace = await this.monitoring.refreshKeyspace().catch(() => null);
 
@@ -146,6 +149,7 @@ export class CacheMonitorService implements OnApplicationBootstrap, OnModuleDest
       // Server khởi động lại (uptime giảm) → bộ đếm reset, bỏ qua delta lần này.
       const restarted =
         prev?.uptimeSec != null && s.uptimeSec != null && s.uptimeSec < prev.uptimeSec;
+      /** Tính toán độ chênh lệch giữa hai mốc đo */
       const delta = (cur: number | null, old: number | null | undefined) =>
         prev && !restarted && cur !== null && old != null && cur >= old ? cur - old : null;
       const evicted = delta(s.evictedKeys, prev?.evicted);
@@ -169,6 +173,7 @@ export class CacheMonitorService implements OnApplicationBootstrap, OnModuleDest
     return out;
   }
 
+  /** Đánh giá các điều kiện và phát hiện cảnh báo bất thường */
   private async evaluate(c: Collected | null, now: number): Promise<void> {
     const [base, active] = await Promise.all([
       this.metrics.stats(BASELINE_MIN, BASELINE_OFFSET_MIN),
@@ -216,6 +221,7 @@ export class CacheMonitorService implements OnApplicationBootstrap, OnModuleDest
     await this.applyAlerts(violations, active, now);
   }
 
+  /** Cập nhật danh sách các cảnh báo hiện thời của hệ thống */
   private async applyAlerts(
     violations: CacheViolation[],
     active: Awaited<ReturnType<CacheStoreService['activeAlerts']>>,

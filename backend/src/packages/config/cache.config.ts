@@ -1,11 +1,14 @@
 import { env } from './env.js';
 
+/** Chuyển đổi giá trị sang kiểu số hoặc trả về giá trị mặc định */
 const numberOr = (key: string, fallback: number): number => {
   const raw = env(key, false);
   return raw === '' ? fallback : env.number(key);
 };
+/** Chuyển đổi giá trị sang kiểu boolean hoặc trả về giá trị mặc định */
 const booleanOr = (key: string, fallback: boolean): boolean =>
   env(key, false) ? env.boolean(key) : fallback;
+/** Chuyển đổi giá trị sang mảng danh sách hoặc trả về giá trị mặc định */
 const listOr = (key: string, fallback: string[]): string[] => {
   const raw = env(key, false);
   if (!raw) return fallback;
@@ -17,6 +20,7 @@ const listOr = (key: string, fallback: string[]): string[] => {
 
 export type CacheDriverName = 'redis' | 'memory';
 
+/** Lấy thông tin cấu hình bộ nhớ đệm */
 export const cacheConfig = () => ({
   redis: {
     host: env('REDIS_HOST'),

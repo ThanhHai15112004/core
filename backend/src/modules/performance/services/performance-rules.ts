@@ -53,6 +53,7 @@ export interface Violation {
 /** Tỷ lệ tối thiểu bước tăng để coi là "tăng liên tục". */
 export const GROWTH_RATIO = 0.8;
 
+/** Xác định mức độ nghiêm trọng của sự cố dựa trên ngưỡng đo */
 export function severityOf(value: number | null, level: RuleLevel): PerfSeverity | null {
   if (value === null) return null;
   if (value >= level.crit) return 'critical';
@@ -68,6 +69,7 @@ type Rules = PerformanceConfig['rules'];
  */
 export function evaluateRules(s: RuleSnapshot, rules: Rules): Violation[] {
   const out: Violation[] = [];
+  /** Thêm một sự kiện mới vào danh sách và duy trì giới hạn kích thước tối đa */
   const push = (
     rule: RuleKey,
     component: Violation['component'],

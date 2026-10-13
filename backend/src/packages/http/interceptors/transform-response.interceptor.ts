@@ -11,6 +11,7 @@ import type { ApiSuccessResponse } from '../contracts/api-response.contract.js';
 
 @Injectable()
 export class TransformResponseInterceptor<T> implements NestInterceptor<T, ApiSuccessResponse<T>> {
+  /** Chặn và can thiệp vào luồng xử lý yêu cầu hoặc phản hồi HTTP */
   public intercept(
     context: ExecutionContext,
     next: CallHandler<T>,

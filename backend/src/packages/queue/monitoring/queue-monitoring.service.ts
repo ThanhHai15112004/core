@@ -39,14 +39,17 @@ export class QueueMonitoringService {
     this.provider = new BullMqQueueProvider(registry, redis, `${host}:${port}/${db}`);
   }
 
+  /** Kiểm tra xem tính năng chỉ định có được hỗ trợ hay không */
   public supports(cap: QueueCapability): boolean {
     return this.provider.capabilities.has(cap);
   }
 
+  /** Lấy trạng thái vận hành hiện tại của dịch vụ */
   public status(): MessagingConnectionStatus {
     return this.connection.getStatus();
   }
 
+  /** Kiểm tra dịch vụ có đủ điều kiện để sẵn sàng sử dụng hay không */
   public usable(): boolean {
     return this.status().state === 'connected';
   }
@@ -67,6 +70,7 @@ export class QueueMonitoringService {
     }
   }
 
+  /** Lấy danh sách các hàng đợi tin nhắn hiện có */
   public queues(): Promise<QueueInfo[]> {
     const now = Date.now();
     if (!this.cache || now - this.cache.at > SNAPSHOT_TTL_MS) {
@@ -77,6 +81,7 @@ export class QueueMonitoringService {
     return this.cache.data;
   }
 
+  /** Kiểm tra xem lỗi phát sinh có phải là lỗi không tìm thấy hay không */
   public isNotFound(err: unknown): boolean {
     return err instanceof QueueOperationError && err.code === 'NOT_FOUND';
   }

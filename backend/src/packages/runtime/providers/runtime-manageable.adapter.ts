@@ -26,6 +26,7 @@ export class RuntimeManageableAdapter implements ManageablePackage {
     return this.i18n.t('ops.runtime.displayName');
   }
 
+  /** Lấy báo cáo tình trạng hoạt động và các chỉ số của package */
   public async getStatus(): Promise<PackageStatusReport> {
     if (!this.redis.isReady()) {
       return {

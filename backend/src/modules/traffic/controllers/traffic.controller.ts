@@ -41,12 +41,14 @@ const trafficSchema = filterSchema.extend({ range: rangeEnum.default('15m') });
 
 type RawQuery = Record<string, string | undefined>;
 
+/** Xác thực và ép kiểu dữ liệu đầu vào theo schema Zod */
 function parse<T>(schema: z.ZodType<T>, value: unknown): T {
   const result = schema.safeParse(value);
   if (!result.success) throw new TrafficValidationException(result.error.issues);
   return result.data;
 }
 
+/** Chuyển đổi tham số truy vấn HTTP sang đối tượng truy vấn lưu lượng */
 function toTrafficQuery(raw: RawQuery): TrafficQuery {
   const { internal, ...rest } = parse(trafficSchema, raw);
   return { ...rest, includeInternal: internal };
@@ -60,12 +62,14 @@ function toTrafficQuery(raw: RawQuery): TrafficQuery {
 export class TrafficController {
   constructor(private readonly traffic: TrafficService) {}
 
+  /** Lấy dữ liệu tóm tắt lưu lượng và hiệu năng truy cập */
   @Public()
   @Get(TRAFFIC_ROUTES.SUMMARY)
   public getSummary(@Query() query: RawQuery): Promise<TrafficSummaryDto> {
     return this.traffic.getSummary(toTrafficQuery(query));
   }
 
+  /** Lấy dữ liệu chuỗi thời gian của lưu lượng mạng */
   @Public()
   @Get(TRAFFIC_ROUTES.TIMESERIES)
   public getTimeseries(@Query() query: RawQuery): Promise<TimeseriesDto> {
@@ -76,6 +80,7 @@ export class TrafficController {
     return this.traffic.getTimeseries(toTrafficQuery(query), metric);
   }
 
+  /** Lấy danh sách thống kê hiệu năng theo từng endpoint API */
   @Public()
   @Get(TRAFFIC_ROUTES.ENDPOINTS)
   public getEndpoints(@Query() query: RawQuery): Promise<EndpointRowDto[]> {
@@ -83,6 +88,7 @@ export class TrafficController {
     return this.traffic.getEndpoints(toTrafficQuery(query), sort);
   }
 
+  /** Lấy thông tin chi tiết về lưu lượng và lỗi của một endpoint API */
   @Public()
   @Get(TRAFFIC_ROUTES.ENDPOINT_DETAIL)
   public getEndpoint(
@@ -92,12 +98,14 @@ export class TrafficController {
     return this.traffic.getEndpoint(routeId, toTrafficQuery(query));
   }
 
+  /** Lấy danh sách thống kê các lỗi HTTP ghi nhận được */
   @Public()
   @Get(TRAFFIC_ROUTES.ERRORS)
   public getErrors(@Query() query: RawQuery): Promise<ErrorAnalysisDto> {
     return this.traffic.getErrors(toTrafficQuery(query));
   }
 
+  /** Phân tích và đưa ra các nhận định chuyên sâu về lưu lượng mạng */
   @Public()
   @Get(TRAFFIC_ROUTES.INSIGHTS)
   public getInsights(@Query() query: RawQuery): Promise<TrafficInsightsDto> {

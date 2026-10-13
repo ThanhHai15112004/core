@@ -22,6 +22,7 @@ const TASK_ID = /^[a-z0-9][a-z0-9._-]{0,99}$/;
 export class ScheduledTaskRegistry {
   private readonly tasks = new Map<string, ScheduledTaskDefinition>();
 
+  /** Đăng ký một định nghĩa scheduled task mới vào registry */
   public register(def: ScheduledTaskDefinition): void {
     if (!TASK_ID.test(def.id)) {
       throw new Error(`Invalid scheduled task id "${def.id}"`);
@@ -32,10 +33,12 @@ export class ScheduledTaskRegistry {
     this.tasks.set(def.id, def);
   }
 
+  /** Lấy danh sách toàn bộ các định nghĩa scheduled task đã đăng ký */
   public list(): ScheduledTaskDefinition[] {
     return [...this.tasks.values()];
   }
 
+  /** Tìm kiếm định nghĩa scheduled task theo mã định danh (ID) */
   public get(id: string): ScheduledTaskDefinition | undefined {
     return this.tasks.get(id);
   }

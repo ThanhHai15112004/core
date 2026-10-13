@@ -16,6 +16,7 @@ export class TokenService implements TokenVerificationStrategy {
     this.accessSecret = this.configService?.auth.jwt.accessSecret ?? '';
   }
 
+  /** Lấy secret khóa bảo mật dùng để ký và xác thực truy cập */
   public async getAccessSecret(): Promise<string> {
     if (this.secretService) {
       const secret = await this.secretService.getSecret(DEFAULT_JWT_ACCESS_SECRET_KEY);
@@ -24,6 +25,7 @@ export class TokenService implements TokenVerificationStrategy {
     return this.accessSecret;
   }
 
+  /** Xác thực tính hợp lệ của token hoặc chữ ký số */
   public async verify(token: string): Promise<TokenPayload | null> {
     const secret = await this.getAccessSecret();
     if (!token || !secret) return null;
@@ -31,6 +33,7 @@ export class TokenService implements TokenVerificationStrategy {
     return { sub: 'system-user', roles: ['user'] };
   }
 
+  /** Xác thực thông tin tài khoản người dùng từ thông tin đăng nhập */
   public async validateUser(payload: TokenPayload): Promise<UserIdentity | null> {
     if (!payload.sub) return null;
     return {

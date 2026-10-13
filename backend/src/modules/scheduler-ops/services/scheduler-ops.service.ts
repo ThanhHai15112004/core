@@ -100,7 +100,9 @@ interface Snapshot {
   brokerUp: boolean;
 }
 
+/** Định dạng mốc thời gian sang chuỗi chuẩn ISO 8601 */
 const iso = (t: number | null | undefined) => (t ? new Date(t).toISOString() : null);
+/** Tính toán giá trị phân vị (p50, p90, p95, p99) của chuỗi dữ liệu */
 const percentile = (sorted: number[], p: number) =>
   sorted.length
     ? sorted[Math.min(sorted.length - 1, Math.floor((p / 100) * sorted.length))]!
@@ -220,6 +222,7 @@ export class SchedulerOpsService {
     return out;
   }
 
+  /** Cung cấp thông tin mô tả chi tiết về cấu hình và trạng thái của thành phần */
   private describe(def: TaskDefinition): ScheduleDto {
     const timezone = def.tz ?? this.config.scheduler.timezone;
     const expression = def.pattern ?? null;
@@ -253,6 +256,7 @@ export class SchedulerOpsService {
     return this.i18n.t('scheduler.schedule.custom', { expression: expr });
   }
 
+  /** Chuyển đổi danh sách scheduled task thành các dòng hiển thị bảng */
   private taskRows(s: Snapshot): TaskRowDto[] {
     const now = Date.now();
     const rules = this.config.scheduler.rules;
@@ -305,6 +309,7 @@ export class SchedulerOpsService {
     });
   }
 
+  /** Tạo báo cáo chi tiết về tình trạng hoạt động của dịch vụ */
   private report(list: ExecutionDto[]): SchedulerReportDto {
     const done = list.filter((e) => e.status === 'success' || e.status === 'failed');
     const failed = done.filter((e) => e.status === 'failed').length;
@@ -327,6 +332,7 @@ export class SchedulerOpsService {
     };
   }
 
+  /** Kiểm tra mốc thời gian có nằm trong dải truy vấn cho phép hay không */
   private inRange(list: ExecutionDto[], from: number, to = Date.now()) {
     return list.filter((e) => {
       const t = Date.parse(e.scheduledAt ?? '');
@@ -334,6 +340,7 @@ export class SchedulerOpsService {
     });
   }
 
+  /** Kiểm tra và đánh giá tình trạng sức khỏe của dịch vụ */
   private async health(): Promise<{
     health: SchedulerHealthDto;
     instance: SchedulerInstanceDto | null;
@@ -443,6 +450,7 @@ export class SchedulerOpsService {
     return out;
   }
 
+  /** Kiểm tra tình trạng sẵn sàng của các dịch vụ phụ thuộc phía dưới */
   private async downstream(queueName: string): Promise<DownstreamDto> {
     const queues = liveQueues(this.queueRegistry, this.connection);
     if (!this.queueRegistry.isKnown(queueName))
@@ -458,6 +466,7 @@ export class SchedulerOpsService {
         reason: this.i18n.t('scheduler.downstream.disconnected'),
       };
     const q = this.queueRegistry.get(queueName);
+    /** Bọc Promise với cơ chế timeout an toàn */
     const t = <T>(p: Promise<T>) => this.queueRegistry.withTimeout(p);
     try {
       const [counts, paused, workers] = await Promise.all([
@@ -488,6 +497,7 @@ export class SchedulerOpsService {
     return { tasks: this.taskRows(await this.snapshot()), settings: this.settings };
   }
 
+  /** Lấy dữ liệu tổng quan trạng thái hệ thống */
   public async getOverview(range: SchedulerRange): Promise<SchedulerOverviewDto> {
     const now = Date.now();
     const today = startOfDay(now);
@@ -553,6 +563,7 @@ export class SchedulerOpsService {
       buckets.set(t, [...(buckets.get(t) ?? []), e]);
     }
     const times = [...buckets.keys()].sort((a, b) => a - b);
+    /** Tạo chuỗi dữ liệu biểu đồ theo các mốc thời gian đều đặn */
     const series = (id: string, value: (list: ExecutionDto[]) => number | null) => ({
       id,
       label: this.i18n.t(`scheduler.series.${id}`),
@@ -583,6 +594,7 @@ export class SchedulerOpsService {
     };
   }
 
+  /** Lấy thông tin chi tiết một scheduled task theo ID */
   public async getTask(id: string, range: SchedulerRange): Promise<TaskDetailDto> {
     const s = await this.snapshot();
     const task = this.taskRows(s).find((t) => t.id === id);
@@ -631,6 +643,7 @@ export class SchedulerOpsService {
     };
   }
 
+  /** Lấy danh sách lịch sử thực thi của scheduled task */
   public async getExecutions(filter: {
     range: SchedulerRange;
     taskId?: string | null;
@@ -650,6 +663,7 @@ export class SchedulerOpsService {
     return { items: items.slice(0, limit), truncated: items.length > limit };
   }
 
+  /** Lấy chi tiết thông tin một lần thực thi của scheduled task */
   public async getExecution(id: string): Promise<ExecutionDetailDto> {
     const s = await this.snapshot();
     const execution = s.executions.find((e) => e.id === id);
@@ -665,6 +679,7 @@ export class SchedulerOpsService {
     };
   }
 
+  /** Tính toán các mốc thời gian chạy dự kiến tiếp theo của task */
   private nextRuns(def: TaskDefinition, count: number): string[] {
     if (!def.pattern) return [];
     try {
@@ -677,6 +692,7 @@ export class SchedulerOpsService {
     }
   }
 
+  /** Lấy danh sách các lần thực thi dự kiến sắp tới */
   private upcoming(tasks: TaskRowDto[], hours: number): UpcomingListDto {
     const now = Date.now();
     const until = now + hours * 60 * MINUTE;
@@ -725,10 +741,12 @@ export class SchedulerOpsService {
     return { hours, items: items.slice(0, 100), concentration, truncated: items.length > 100 };
   }
 
+  /** Lấy danh sách các lần thực thi dự kiến sắp diễn ra */
   public async getUpcoming(hours: number): Promise<UpcomingListDto> {
     return this.upcoming(this.taskRows(await this.snapshot()), hours);
   }
 
+  /** Lấy dữ liệu dòng thời gian thực thi của các scheduled task */
   public async getTimeline(range: SchedulerRange): Promise<TimelineDto> {
     const now = Date.now();
     const s = await this.snapshot();
@@ -752,6 +770,7 @@ export class SchedulerOpsService {
     };
   }
 
+  /** Lấy danh sách các lần thực thi bị thất bại */
   public async getFailures(range: SchedulerRange): Promise<FailuresDto> {
     const s = await this.snapshot();
     const tasks = this.taskRows(s);
@@ -782,10 +801,12 @@ export class SchedulerOpsService {
     };
   }
 
+  /** Lấy thông tin operations của hệ thống */
   public async getOperations(): Promise<SchedulerOperationDto[]> {
     return (await this.operations.getOperations()).map((op) => this.operationDto(op));
   }
 
+  /** Lấy thông tin cấu hình hoạt động của dịch vụ */
   public async getConfig(): Promise<SchedulerConfigDto> {
     const s = await this.snapshot();
     const m = this.config.messaging;
@@ -815,6 +836,7 @@ export class SchedulerOpsService {
     };
   }
 
+  /** Phân tích cú pháp biểu thức Cron và giải thích ý nghĩa bằng văn bản */
   public inspectCron(expression: string, timezone?: string | null): CronInspectDto {
     const tz = timezone || this.config.scheduler.timezone;
     try {
@@ -840,19 +862,23 @@ export class SchedulerOpsService {
     }
   }
 
+  /** Chuyển đổi thông tin thao tác sang đối tượng Operation DTO */
   private operationDto(op: SchedulerOperationRecord): SchedulerOperationDto {
     return { ...op, at: new Date(op.at).toISOString() };
   }
 
+  /** Kích hoạt chạy ngay một scheduled task ngoài lịch định kỳ */
   public async runNow(taskId: string, ctx: SchedulerOperationContext): Promise<RunNowDto> {
     const res = await this.operations.runNow(taskId, ctx);
     return { executionId: res.executionId };
   }
 
+  /** Kích hoạt một tác vụ hoặc module trong hệ thống */
   public async enable(taskId: string, ctx: SchedulerOperationContext) {
     return this.operationDto(await this.operations.enable(taskId, ctx));
   }
 
+  /** Vô hiệu hóa một tác vụ hoặc module trong hệ thống */
   public async disable(taskId: string, ctx: SchedulerOperationContext) {
     return this.operationDto(await this.operations.disable(taskId, ctx));
   }

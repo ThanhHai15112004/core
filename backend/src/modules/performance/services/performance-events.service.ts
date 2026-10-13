@@ -20,6 +20,7 @@ export interface StoredPerfEvent {
   durationMs?: number;
 }
 
+/** Lấy danh sách các khóa đo lường hiệu năng của hệ thống */
 export const performanceKeys = (redis: RedisService) => ({
   /** LIST sự kiện nghẽn, mới nhất trước (giới hạn `PERF_EVENT_LOG_SIZE`). */
   events: () => redis.key('perf', 'events'),
@@ -28,6 +29,7 @@ export const performanceKeys = (redis: RedisService) => ({
   evaluateLock: () => redis.key('perf', 'lock', 'evaluate'),
 });
 
+/** Xác thực và ép kiểu dữ liệu đầu vào theo schema Zod */
 function parse<T>(raw: string | null | undefined): T | null {
   if (!raw) return null;
   try {
@@ -53,16 +55,19 @@ export class PerformanceEventsService {
     return this.redis.client;
   }
 
+  /** Kiểm tra dịch vụ hoặc kết nối có đang sẵn sàng hoạt động hay không */
   public isAvailable(): boolean {
     return this.redis.isReady();
   }
 
+  /** Truy vấn danh sách các sự kiện vận hành gần đây */
   public async events(): Promise<StoredPerfEvent[]> {
     if (!this.isAvailable()) return [];
     const raws = await this.redis.client.lrange(this.keys.events(), 0, -1).catch(() => []);
     return raws.map((r) => parse<StoredPerfEvent>(r)).filter((e): e is StoredPerfEvent => !!e);
   }
 
+  /** Kiểm tra hoặc lọc các thành phần đang hoạt động */
   public async active(): Promise<Map<string, ActiveBottleneck>> {
     const map = new Map<string, ActiveBottleneck>();
     if (!this.isAvailable()) return map;

@@ -18,6 +18,7 @@ export function liveQueues(
   return connection.getStatus().state === 'connected' ? registry.getQueues() : new Map();
 }
 
+/** Lấy mốc thời gian bắt đầu của ngày theo chuỗi ngày giờ */
 export const startOfDay = (t: number) => {
   const d = new Date(t);
   d.setHours(0, 0, 0, 0);

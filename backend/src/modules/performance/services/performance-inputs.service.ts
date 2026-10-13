@@ -59,14 +59,18 @@ export interface RuntimeWindow {
   memoryTrend: { windowMin: number; changeMb: number; growing: boolean } | null;
 }
 
+/** Chuyển đổi mốc thời gian sang đơn vị mili-giây */
 const ms = (sec: number | null) =>
   sec === null || !Number.isFinite(sec) ? null : round(sec * 1000, 1);
+/** Thực hiện phép chia an toàn tránh lỗi chia cho số 0 */
 const div = (a: number | null, b: number | null) =>
   a === null || b === null || b === 0 ? null : a / b;
+/** Tính toán tỷ lệ phần trăm (0 - 100%) giữa hai giá trị */
 const pct = (a: number | null, b: number | null) => {
   const v = div(a, b);
   return v === null ? null : round(v * 100, 2);
 };
+/** Làm tròn giá trị số đến 1 chữ số thập phân */
 const r1 = (v: number | null) => (v === null || !Number.isFinite(v) ? null : round(v, 1));
 
 /**
@@ -90,16 +94,19 @@ export class PerformanceInputsService {
     return `{route!~"${internalRouteRegex(this.config.traffic.internalModules)}"}`;
   }
 
+  /** Xác định dải thời gian truy vấn theo tham số yêu cầu */
   private range(seconds: number, offsetSec: number) {
     const w = `${Math.max(60, Math.round(seconds))}s`;
     const off = offsetSec > 0 ? ` offset ${Math.round(offsetSec)}s` : '';
     return { w, off, inc: (m: string) => `increase(${m}[${w}]${off})` };
   }
 
+  /** Trích xuất giá trị số từ đối tượng đo lường */
   private v(expr: string): Promise<number | null> {
     return this.prom.value(expr);
   }
 
+  /** Chuẩn hóa chuỗi truy vấn đầu vào */
   private q(expr: string): Promise<PromSample[]> {
     return this.prom.safeQuery(expr);
   }
@@ -109,6 +116,7 @@ export class PerformanceInputsService {
     const { w, off, inc } = this.range(seconds, offsetSec);
     const sel = this.httpSel;
     const sel5xx = sel.replace('{', '{status=~"5..",');
+    /** Làm tròn giá trị số theo độ chia nhỏ nhất (quantum) */
     const quant = (p: number) =>
       this.v(`histogram_quantile(${p}, sum by (le) (rate(${H}_bucket${sel}[${w}]${off})))`);
     const [
@@ -156,9 +164,12 @@ export class PerformanceInputsService {
       this.q(`sum by (state) (max by (queue, state) (core_queue_jobs${off}))`),
       this.q(`sum by (result) (${inc('messages_published_total')})`),
     ]);
+    /** Lấy thông tin trạng thái connection pool của dịch vụ */
     const poolOf = (state: string) => pool.find((x) => x.labels['state'] === state)?.value ?? null;
+    /** Phân nhóm hoặc đếm số lượng kết quả theo trạng thái */
     const byResult = (list: PromSample[], result: string) =>
       list.length ? (list.find((x) => x.labels['result'] === result)?.value ?? 0) : null;
+    /** Xác định trạng thái hoạt động dựa trên các chỉ số đo lường */
     const stateOf = (state: string) =>
       queueStates.length
         ? Math.round(queueStates.find((x) => x.labels['state'] === state)?.value ?? 0)
@@ -229,6 +240,7 @@ export class PerformanceInputsService {
       ),
     ]);
     const out = new Map<string, RuntimeWindow>();
+    /** Khởi tạo đối tượng từ giá trị đầu vào */
     const of = (id: string) => {
       let r = out.get(id);
       if (!r)
@@ -245,6 +257,7 @@ export class PerformanceInputsService {
         );
       return r;
     };
+    /** Lưu trữ một giá trị theo khóa định danh */
     const set = (list: PromSample[], key: keyof Omit<RuntimeWindow, 'memoryTrend'>) => {
       for (const x of list) if (x.labels['runtime']) of(x.labels['runtime'])[key] = r1(x.value);
     };
@@ -321,8 +334,10 @@ export class PerformanceInputsService {
       ...lists.flatMap((l) => l.map((x) => x.labels['runtime'] ?? '')).filter(Boolean),
       ...memoryPercent.keys(),
     ]);
+    /** Trích xuất giá trị dữ liệu từ đối tượng hoặc chuỗi */
     const val = (list: PromSample[], id: string) =>
       r1(list.find((x) => x.labels['runtime'] === id)?.value ?? null);
+    /** Tính tỷ lệ phần trăm các tác vụ bị thất bại */
     const failedPct = (w: WindowMetrics) => {
       const done = (w.worker.completed ?? 0) + (w.worker.failed ?? 0);
       return done > 0 ? ((w.worker.failed ?? 0) / done) * 100 : null;

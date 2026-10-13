@@ -68,6 +68,7 @@ export class DatabaseMetricsService {
     if (errors > 0) this.errors.inc(errors);
   }
 
+  /** Ghi nhận các chỉ số đo lường connection pool cơ sở dữ liệu */
   public recordPool(stats: PoolStats | null, limit: number): void {
     if (!stats) return;
     this.pool.set({ state: 'used' }, stats.used);
@@ -76,6 +77,7 @@ export class DatabaseMetricsService {
     this.pool.set({ state: 'limit' }, limit);
   }
 
+  /** Ghi nhận số lượng phiên kết nối cơ sở dữ liệu đang hoạt động */
   public recordSessions(count: number): void {
     this.sessions.set(count);
   }
@@ -84,6 +86,7 @@ export class DatabaseMetricsService {
   public async stats(minutes: number, offsetMin = 0): Promise<DbWindowStats> {
     const w = `${Math.max(1, Math.round(minutes))}m`;
     const off = offsetMin > 0 ? ` offset ${Math.round(offsetMin)}m` : '';
+    /** Trích xuất giá trị số từ đối tượng đo lường */
     const v = (expr: string) => this.prom.value(expr);
     const [queries, seconds, failed, poolPeak] = await Promise.all([
       v(`sum(increase(${DB_PROM.statements}[${w}]${off}))`),

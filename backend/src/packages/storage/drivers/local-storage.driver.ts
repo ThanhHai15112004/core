@@ -20,6 +20,7 @@ export class LocalStorageDriver implements StorageDriver {
     this.root = path.resolve(localPath);
   }
 
+  /** Xác định đường dẫn thư mục gốc thực tế trên đĩa cứng */
   private async realRoot(): Promise<string> {
     await fs.mkdir(this.root, { recursive: true });
     return fs.realpath(this.root);
@@ -44,6 +45,7 @@ export class LocalStorageDriver implements StorageDriver {
     return full;
   }
 
+  /** Lưu trữ một đối tượng hoặc tệp tin vào hệ thống lưu trữ */
   public async put(key: string, body: Buffer, opts: PutOptions): Promise<{ multipart: boolean }> {
     const full = await this.resolve(key, true);
     const tmp = path.join(
@@ -69,10 +71,12 @@ export class LocalStorageDriver implements StorageDriver {
     return { multipart: false };
   }
 
+  /** Lấy dữ liệu hoặc đối tượng theo khóa định danh */
   public async get(key: string): Promise<Buffer> {
     return fs.readFile(await this.resolve(key));
   }
 
+  /** Mở luồng đọc dữ liệu (stream) của tệp tin lưu trữ */
   public async stream(key: string, range?: { start: number; end: number }): Promise<ObjectStream> {
     const full = await this.resolve(key);
     const stat = await fs.stat(full);
@@ -84,10 +88,12 @@ export class LocalStorageDriver implements StorageDriver {
     };
   }
 
+  /** Xóa bản ghi khỏi hệ thống theo mã định danh */
   public async delete(key: string): Promise<void> {
     await fs.unlink(await this.resolve(key));
   }
 
+  /** Lấy thông tin metadata của đối tượng lưu trữ mà không tải nội dung */
   public async head(key: string): Promise<ObjectMeta | null> {
     try {
       const stat = await fs.lstat(await this.resolve(key));
@@ -109,11 +115,13 @@ export class LocalStorageDriver implements StorageDriver {
     }
   }
 
+  /** Kiểm tra trạng thái sẵn sàng và đo độ trễ kết nối */
   public async ping(): Promise<void> {
     const root = await this.realRoot();
     await fs.access(root, fs.constants.R_OK | fs.constants.W_OK);
   }
 
+  /** Lấy đường dẫn URL truy cập công khai của tệp tin lưu trữ */
   public url(key: string): string {
     return path.join(this.root, key);
   }

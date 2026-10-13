@@ -16,6 +16,7 @@ import { HttpMetricsHook } from './providers/http-metrics.hook.js';
 @Global()
 @Module({})
 export class MetricsModule {
+  /** Lọc hoặc áp dụng cấu hình riêng cho runtime chỉ định */
   public static forRuntime(options: MetricsModuleOptions): DynamicModule {
     const providers: Provider[] = [
       { provide: METRICS_OPTIONS, useValue: options },

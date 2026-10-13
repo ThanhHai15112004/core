@@ -68,6 +68,7 @@ export function evaluateMessagingRules(
   cfg: MessagingRuleConfig,
 ): MessagingViolation[] {
   const out: MessagingViolation[] = [];
+  /** Thêm mới một phần tử vào danh sách hoặc bộ sưu tập */
   const add = (
     rule: MessagingRule,
     subject: string | null,
@@ -162,6 +163,7 @@ export interface StoredMessagingAlert {
   extra: Record<string, string | number>;
 }
 
+/** So sánh và phát hiện sự thay đổi trong các cảnh báo messaging */
 export function diffMessagingAlerts(
   violations: readonly MessagingViolation[],
   active: ReadonlyMap<string, StoredMessagingAlert>,

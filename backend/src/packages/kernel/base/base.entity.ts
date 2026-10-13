@@ -21,10 +21,12 @@ export abstract class BaseEntity<TId = string> {
     return this._updatedAt;
   }
 
+  /** Cập nhật mốc thời gian truy cập gần nhất của bản ghi */
   public touch(): void {
     this._updatedAt = new Date();
   }
 
+  /** So sánh hai giá trị hoặc đối tượng xem có tương đương nhau hay không */
   public equals(other?: BaseEntity<TId>): boolean {
     if (other === null || other === undefined) {
       return false;

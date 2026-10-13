@@ -20,11 +20,13 @@ const parseKv = (s: string) =>
     }),
   ) as Record<string, number>;
 
+/** Trích xuất thông tin cấu hình máy chủ từ chuỗi phản hồi thô */
 export function serverInfoFrom(
   info: Map<string, string>,
   config: { maxMemory: number | null; policy: string | null; maxClients: number | null },
   currentDb: number,
 ): ServerInfo {
+  /** Chuyển đổi giá trị sang kiểu số an toàn với giá trị dự phòng */
   const n = (k: string) => toInt(info.get(k));
   const keyspace: ServerInfo['keyspace'] = [];
   for (const [k, v] of info) {

@@ -28,6 +28,7 @@ export interface RequestContextStore {
 export class RequestContextService {
   private static readonly storage = new AsyncLocalStorage<RequestContextStore>();
 
+  /** Thực thi thao tác vận hành với cơ chế theo dõi và xử lý lỗi */
   public run<R>(store: RequestContextStore, callback: () => R): R {
     return RequestContextService.storage.run(store, callback);
   }
@@ -37,6 +38,7 @@ export class RequestContextService {
     return RequestContextService.storage.run(store, callback);
   }
 
+  /** Lấy kho lưu trữ ngữ cảnh bất đồng bộ (AsyncLocalStorage) hiện tại */
   public getStore(): RequestContextStore | undefined {
     return RequestContextService.storage.getStore();
   }

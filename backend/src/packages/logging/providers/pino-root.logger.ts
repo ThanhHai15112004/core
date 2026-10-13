@@ -63,6 +63,7 @@ let root: Logger | null = null;
 
 /** stdout dạng chữ dễ đọc khi dev (`LOG_FORMAT=text`); production dùng `json` cho collector. */
 const textStdout: DestinationStream = {
+  /** Ghi dữ liệu vào luồng xuất (stream) hoặc tệp tin */
   write(line: string) {
     try {
       const o = JSON.parse(line) as Record<string, unknown> & {
@@ -114,12 +115,14 @@ export function createRootLogger(opts: RootLoggerOptions): Logger {
       redact: { paths: REDACT_PATHS, censor: '[REDACTED]' },
       mixin: contextFields,
       formatters: {
+        /** Ghi log thông điệp với mức độ tương ứng */
         log(obj) {
           if (typeof obj.stack === 'string') obj.stack = redactText(obj.stack).text;
           return obj;
         },
       },
       hooks: {
+        /** Ghi nhận thông điệp log theo phương thức chỉ định */
         logMethod(args, method) {
           for (let i = 0; i < args.length; i++) {
             const v: unknown = args[i];
@@ -137,6 +140,7 @@ export function createRootLogger(opts: RootLoggerOptions): Logger {
   return root;
 }
 
+/** Lấy thể hiện Logger gốc của hệ thống Pino */
 export function getRootLogger(): Logger | null {
   return root;
 }

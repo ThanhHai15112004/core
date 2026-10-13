@@ -25,11 +25,13 @@ const SENSITIVE_KEYS = new Set([
 /** Tên field luôn bị che (đã chuẩn hoá: chữ thường, bỏ `-` / `_`). */
 export const SENSITIVE_KEY_NAMES: readonly string[] = [...SENSITIVE_KEYS];
 
+/** Kiểm tra xem tên trường có chứa thông tin nhạy cảm cần che giấu hay không */
 export function isSensitiveKey(key: string): boolean {
   const normalized = key.toLowerCase().replace(/[-_]/g, '');
   return SENSITIVE_KEYS.has(normalized) || SENSITIVE_KEYS.has(key.toLowerCase());
 }
 
+/** Che giấu các trường dữ liệu nhạy cảm trong đối tượng trước khi ghi log */
 export function redactSensitiveData<T>(input: T): T {
   if (input === null || input === undefined) {
     return input;

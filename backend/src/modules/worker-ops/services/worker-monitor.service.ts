@@ -74,6 +74,7 @@ export class WorkerMonitorService implements OnApplicationBootstrap, OnModuleDes
     private readonly redis: RedisService,
   ) {}
 
+  /** Thực thi tác vụ khởi động sau khi toàn bộ ứng dụng hoàn tất bootstrap */
   public onApplicationBootstrap(): void {
     if (this.config.isTest) return;
     this.timer = setInterval(() => void this.tick(), TICK_MS);
@@ -81,11 +82,13 @@ export class WorkerMonitorService implements OnApplicationBootstrap, OnModuleDes
     setTimeout(() => void this.tick(), 6000).unref();
   }
 
+  /** Dọn dẹp tài nguyên và ngắt kết nối khi module bị hủy */
   public onModuleDestroy(): void {
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
   }
 
+  /** Thực hiện kiểm tra định kỳ và cập nhật trạng thái kết nối */
   public async tick(now = Date.now()): Promise<void> {
     if (this.running || !this.store.isAvailable()) return;
     this.running = true;
@@ -122,6 +125,7 @@ export class WorkerMonitorService implements OnApplicationBootstrap, OnModuleDes
     }
   }
 
+  /** Ghi nhận một sự kiện vận hành mới vào bộ nhớ */
   private record(queues: QueueInfo[]): void {
     this.metrics.recordQueues(queues);
   }
@@ -132,6 +136,7 @@ export class WorkerMonitorService implements OnApplicationBootstrap, OnModuleDes
     return list.filter((e) => e.at >= since);
   }
 
+  /** Đánh giá các điều kiện và phát hiện cảnh báo bất thường */
   private async evaluate(
     queues: QueueInfo[] | null,
     active: JobSummary[] | null,
@@ -194,6 +199,7 @@ export class WorkerMonitorService implements OnApplicationBootstrap, OnModuleDes
     await this.applyAlerts(violations, alerts, now);
   }
 
+  /** Cập nhật danh sách các cảnh báo hiện thời của hệ thống */
   private async applyAlerts(
     violations: WorkerViolation[],
     active: Awaited<ReturnType<WorkerStoreService['activeAlerts']>>,

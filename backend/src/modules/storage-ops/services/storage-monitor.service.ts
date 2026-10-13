@@ -26,6 +26,7 @@ const TICK_MS = 60_000;
 const USAGE_EVERY_MS = 5 * 60_000;
 const DAY = 86_400_000;
 
+/** Tính toán tỷ lệ phần trăm dung lượng lưu trữ đã sử dụng */
 export const capacityPercent = (used: number | null, total: number | null) =>
   used !== null && total ? round((used / total) * 100, 1) : null;
 
@@ -52,6 +53,7 @@ export class StorageMonitorService implements OnApplicationBootstrap, OnModuleDe
     @Optional() private readonly redis?: RedisService,
   ) {}
 
+  /** Thực thi tác vụ khởi động sau khi toàn bộ ứng dụng hoàn tất bootstrap */
   public onApplicationBootstrap(): void {
     if (this.config.isTest) return;
     this.timer = setInterval(() => void this.tick(), TICK_MS);
@@ -59,11 +61,13 @@ export class StorageMonitorService implements OnApplicationBootstrap, OnModuleDe
     setTimeout(() => void this.tick(), 5000).unref();
   }
 
+  /** Dọn dẹp tài nguyên và ngắt kết nối khi module bị hủy */
   public onModuleDestroy(): void {
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
   }
 
+  /** Thực hiện kiểm tra định kỳ và cập nhật trạng thái kết nối */
   public async tick(now = Date.now()): Promise<void> {
     if (this.running || !this.store.isAvailable()) return;
     this.running = true;
@@ -98,6 +102,7 @@ export class StorageMonitorService implements OnApplicationBootstrap, OnModuleDe
     }
   }
 
+  /** Đánh giá các điều kiện và phát hiện cảnh báo bất thường */
   private async evaluate(
     usage: UsageSnapshot | null,
     multipart: MultipartUpload[] | null,
@@ -155,6 +160,7 @@ export class StorageMonitorService implements OnApplicationBootstrap, OnModuleDe
     await this.applyAlerts(violations, active, now);
   }
 
+  /** Cập nhật danh sách các cảnh báo hiện thời của hệ thống */
   private async applyAlerts(
     violations: StorageViolation[],
     active: Awaited<ReturnType<StorageStoreService['activeAlerts']>>,

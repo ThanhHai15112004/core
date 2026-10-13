@@ -26,6 +26,7 @@ export class MetricsManageableAdapter implements ManageablePackage {
     return this.i18n.t('ops.metrics.displayName');
   }
 
+  /** Lấy báo cáo tình trạng hoạt động và các chỉ số của package */
   public async getStatus(): Promise<PackageStatusReport> {
     const prom = await this.prometheus.status();
     const state = !prom.configured ? 'disabled' : prom.up ? 'up' : 'down';

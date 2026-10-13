@@ -4,6 +4,7 @@ import { PinoNestLogger } from '@packages/logging/index.js';
 import { RuntimeAgentService } from '@packages/runtime/index.js';
 import { WorkerModule } from '../worker.module.js';
 
+/** Khởi tạo ApplicationContext và khởi chạy Background Worker runtime */
 export async function bootstrapWorker(): Promise<void> {
   const logger = new Logger('WorkerBootstrap');
   const app = await NestFactory.createApplicationContext(WorkerModule, { bufferLogs: true });

@@ -61,6 +61,7 @@ export interface UsagePoint {
   containers: Record<string, { bytes: number; objects: number }>;
 }
 
+/** Phân loại đối tượng lưu trữ theo nhóm độ tuổi (age bucket) */
 export function ageBucketOf(lastModified: number | null, now: number): AgeBucket {
   if (lastModified === null) return 'unknown';
   const age = now - lastModified;
@@ -71,6 +72,7 @@ export function ageBucketOf(lastModified: number | null, now: number): AgeBucket
   return 'gt90d';
 }
 
+/** Tạo bản chụp tổng hợp mức độ sử dụng dung lượng lưu trữ */
 export function buildUsageSnapshot(input: {
   objects: readonly ScannedObject[];
   total: number;
@@ -153,6 +155,7 @@ export function buildUsageSnapshot(input: {
   };
 }
 
+/** Chuyển đổi số liệu dung lượng thành điểm dữ liệu trên biểu đồ */
 export function toUsagePoint(s: UsageSnapshot): UsagePoint {
   return {
     at: s.at,

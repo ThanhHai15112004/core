@@ -91,6 +91,7 @@ export function statusOf(
   }
 }
 
+/** Tổng hợp trạng thái và số liệu thống kê truyền tin */
 export function summarize(job: Job, state: JobState | ListState | 'unknown'): MessageSummary {
   const env = parseEnvelope(job.data);
   const status = statusOf(state, job.attemptsMade);
@@ -135,6 +136,7 @@ export class MessagingMonitoringService {
     private readonly redis: RedisService,
   ) {}
 
+  /** Lấy thông tin tổng quan về trạng thái cấu hình và vận hành */
   public info(): MessagingProviderInfo {
     const { host, port, db } = this.config.cache.redis;
     return {
@@ -147,10 +149,12 @@ export class MessagingMonitoringService {
     };
   }
 
+  /** Kiểm tra xem tính năng chỉ định có được hỗ trợ hay không */
   public supports(cap: MessagingCapability): boolean {
     return this.capabilities.has(cap);
   }
 
+  /** Kiểm tra dịch vụ có đủ điều kiện để sẵn sàng sử dụng hay không */
   public usable(): boolean {
     return this.connection.getStatus().state === 'connected';
   }
@@ -175,15 +179,18 @@ export class MessagingMonitoringService {
     }
   }
 
+  /** Bọc Promise với cơ chế timeout an toàn */
   private t<T>(task: Promise<T>): Promise<T> {
     return this.registry.withTimeout(task);
   }
 
+  /** Lấy đối tượng hàng đợi (Queue) theo tên định danh */
   private queue(name: string): Queue {
     if (!this.registry.isKnown(name)) throw new MessageStateError('NOT_FOUND');
     return this.registry.get(name);
   }
 
+  /** Lấy danh sách toàn bộ các thành phần đang được quản lý */
   private all(filter?: string | null): Queue[] {
     return this.registry
       .names()
@@ -191,6 +198,7 @@ export class MessagingMonitoringService {
       .map((n) => this.registry.get(n));
   }
 
+  /** Kiểm tra trạng thái sẵn sàng và đo độ trễ kết nối */
   public async ping(): Promise<number> {
     const started = performance.now();
     const [first] = this.all();
@@ -206,6 +214,7 @@ export class MessagingMonitoringService {
       : Promise.reject(new Error(`Broker ${this.connection.getStatus().state}`));
   }
 
+  /** Lấy danh sách các hàng đợi tin nhắn hiện có */
   public queues(): Promise<QueueSnapshot[]> {
     const down = this.disconnected();
     if (down) return down;
@@ -218,6 +227,7 @@ export class MessagingMonitoringService {
     return this.queueCache.data;
   }
 
+  /** Chụp nhanh trạng thái hiện tại của hệ thống truyền tin */
   private async snapshot(q: Queue): Promise<QueueSnapshot> {
     const [counts, paused, workers, oldest] = await Promise.all([
       this.t(q.getJobCounts('waiting', 'active', 'delayed', 'failed', 'completed', 'prioritized')),
@@ -225,6 +235,7 @@ export class MessagingMonitoringService {
       this.t(q.getWorkers()).catch(() => null),
       this.t(q.getJobs(['waiting', 'prioritized'], 0, 0, true)).catch(() => []),
     ]);
+    /** Chuyển đổi giá trị sang kiểu số an toàn với giá trị dự phòng */
     const n = (k: string) => counts[k] ?? 0;
     return {
       name: q.name,
@@ -242,9 +253,11 @@ export class MessagingMonitoringService {
     };
   }
 
+  /** Lấy thông tin trạng thái hoạt động của Worker */
   private worker(w: Record<string, string>): BrokerWorker {
     const raw = w['rawname'] ?? '';
     const i = raw.indexOf(':w:');
+    /** Chuyển đổi giá trị sang kiểu số an toàn với giá trị dự phòng */
     const num = (v: string | undefined) => (v !== undefined && v !== '' ? Number(v) : null);
     return {
       name: i >= 0 ? raw.slice(i + 3) : null,
@@ -254,6 +267,7 @@ export class MessagingMonitoringService {
     };
   }
 
+  /** Tính toán tổng số lượng tin nhắn đang tồn đọng trong hàng đợi */
   public backlog(): Promise<BacklogSample> {
     const down = this.disconnected();
     if (down) return down;
@@ -266,6 +280,7 @@ export class MessagingMonitoringService {
     return this.backlogCache.data;
   }
 
+  /** Lấy danh sách mẫu các tin nhắn đang tồn đọng trong hàng đợi */
   private async sampleBacklog(limit: number): Promise<BacklogSample> {
     const map = new Map<string, ChannelBacklog>();
     let sampled = 0;
@@ -310,11 +325,13 @@ export class MessagingMonitoringService {
     );
   }
 
+  /** Lấy danh sách tin nhắn theo trạng thái cụ thể */
   private async listState(q: Queue, state: ListState, count: number): Promise<MessageSummary[]> {
     const jobs = (await this.t(q.getJobs([state], 0, count - 1, false))).filter(Boolean);
     return jobs.map((j) => summarize(j, state));
   }
 
+  /** Truy vấn danh sách tin nhắn theo điều kiện lọc và phân trang */
   public async listMessages(filter: MessageFilter, perState: number): Promise<MessagePage> {
     const search = filter.search.trim();
     const states = filter.status ? STATES_OF[filter.status] : ALL_STATES;
@@ -351,6 +368,7 @@ export class MessagingMonitoringService {
     return { messages: found, examined, truncated };
   }
 
+  /** Lấy thông tin chi tiết một tin nhắn theo mã định danh */
   public async message(id: string, queue?: string | null): Promise<MessageDetail | null> {
     for (const q of this.all(queue)) {
       const job = await this.t(q.getJob(id)).catch(() => undefined);
@@ -381,6 +399,7 @@ export class MessagingMonitoringService {
     return null;
   }
 
+  /** Lấy danh sách các tin nhắn đang trong quá trình thử lại */
   public async retrying(limit: number): Promise<MessageSummary[]> {
     const lists = await Promise.all(this.all().map((q) => this.listState(q, 'delayed', limit)));
     return lists
@@ -389,6 +408,7 @@ export class MessagingMonitoringService {
       .sort((a, b) => (a.nextAttemptAt ?? 0) - (b.nextAttemptAt ?? 0));
   }
 
+  /** Truy vấn danh sách tin nhắn trong hàng đợi Dead Letter */
   public async deadLetters(limit: number): Promise<MessageSummary[]> {
     const lists = await Promise.all(this.all().map((q) => this.listState(q, 'failed', limit)));
     return lists.flat().sort((a, b) => (b.finishedAt ?? 0) - (a.finishedAt ?? 0));
@@ -418,6 +438,7 @@ export class MessagingMonitoringService {
       .sort((a, b) => b.at - a.at);
   }
 
+  /** Tìm kiếm job trong hàng đợi theo mã định danh */
   private async jobIn(queue: string, id: string, expected: JobState[]): Promise<Job> {
     const job = await this.t(this.queue(queue).getJob(id));
     if (!job) throw new MessageStateError('NOT_FOUND');
@@ -440,17 +461,20 @@ export class MessagingMonitoringService {
     logLifecycle(job, 'replayed', {});
   }
 
+  /** Hủy bỏ và loại bỏ tin nhắn khỏi hàng đợi */
   public async discard(queue: string, id: string): Promise<void> {
     const job = await this.jobIn(queue, id, ['failed']);
     await this.t(job.remove());
   }
 
+  /** Lấy thông tin trạng thái hoạt động của broker truyền tin */
   public async broker(): Promise<BrokerInfo> {
     const [infoRaw, clientsRaw] = await Promise.all([
       this.redis.client.info(),
       (this.redis.client.client('LIST') as Promise<unknown>).then(String).catch(() => ''),
     ]);
     const info = parseInfo(infoRaw);
+    /** Chuyển đổi giá trị sang kiểu số an toàn với giá trị dự phòng */
     const num = (k: string) => {
       const v = Number(info.get(k));
       return info.has(k) && Number.isFinite(v) ? v : null;
@@ -478,6 +502,7 @@ export class MessagingMonitoringService {
     };
   }
 
+  /** Kiểm tra xem lỗi phát sinh có phải là lỗi không tìm thấy hay không */
   public isNotFound(err: unknown): boolean {
     return err instanceof MessageStateError && err.code === 'NOT_FOUND';
   }

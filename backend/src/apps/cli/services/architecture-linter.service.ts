@@ -213,6 +213,7 @@ export class ArchitectureLinterService {
     const visited = new Set<string>();
     const recStack: string[] = [];
 
+    /** Duyệt đồ thị theo chiều sâu để phát hiện chu trình phụ thuộc */
     const dfs = (node: string) => {
       visited.add(node);
       recStack.push(node);

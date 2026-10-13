@@ -66,10 +66,12 @@ export class SystemProcessor extends WorkerHost implements OnApplicationBootstra
     return this.config.runtime.worker.concurrency;
   }
 
+  /** Cấu hình mức độ concurrency cho BullMQ worker khi ứng dụng hoàn tất bootstrap */
   public onApplicationBootstrap(): void {
     this.worker.concurrency = this.concurrency;
   }
 
+  /** Tiếp nhận, xác thực envelope và thực thi xử lý một BullMQ job */
   public async process(job: Job): Promise<void> {
     // Job từ Job Scheduler / Run Now không có envelope — dựng từ chính job (xem `scheduledEnvelope`).
     const envelope = parseEnvelope(job.data) ?? scheduledEnvelope(job);

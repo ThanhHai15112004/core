@@ -98,13 +98,16 @@ const ERROR_KINDS: MessagingErrorKind[] = [
   'stalled',
 ];
 
+/** Lấy mốc thời gian bắt đầu của ngày theo chuỗi ngày giờ */
 const startOfDay = (t: number) => {
   const d = new Date(t);
   d.setHours(0, 0, 0, 0);
   return d.getTime();
 };
+/** Định dạng mốc thời gian sang chuỗi chuẩn ISO 8601 */
 const iso = (t: number | null | undefined) =>
   t === null || t === undefined ? null : new Date(t).toISOString();
+/** Tính toán số giây đã trôi qua kể từ một mốc thời gian */
 const secondsSince = (t: number | null, now: number) =>
   t === null ? null : Math.max(0, Math.round((now - t) / 1000));
 
@@ -139,8 +142,10 @@ export class MessagingOpsService {
     return this.cfg.largeMessageKb * 1024;
   }
 
+  /** Lấy các thiết lập cấu hình phân tích lưu lượng truy cập */
   private settings(): MessagingSettingsDto {
     const c = this.cfg;
+    /** Chuyển đổi khoảng thời gian sang đơn vị giây */
     const s = (cap: Parameters<MessagingMonitoringService['supports']>[0]) =>
       this.monitoring.supports(cap);
     return {
@@ -151,6 +156,7 @@ export class MessagingOpsService {
     };
   }
 
+  /** Xác định khoảng thời gian đầu và cuối theo dải thời gian yêu cầu */
   private rangeWindow(range: MessagingRange, now: number) {
     return this.metrics.window(now - MESSAGING_RANGES[range] * MINUTE, now, now);
   }
@@ -165,6 +171,7 @@ export class MessagingOpsService {
     return { queues, consumers };
   }
 
+  /** Chuyển đổi danh sách hàng đợi thành các dòng hiển thị bảng */
   private queueRows(live: Live, now: number): SectionDto<QueueRowDto[]> {
     if (!live.queues.available) return live.queues;
     return {
@@ -245,6 +252,7 @@ export class MessagingOpsService {
       .map((x) => x.row);
   }
 
+  /** Xác định trạng thái hoạt động của kênh truyền tin */
   private channelStatus(
     row: Omit<ChannelRowDto, 'status'>,
     published: number | null,
@@ -262,6 +270,7 @@ export class MessagingOpsService {
     return 'healthy';
   }
 
+  /** Chuyển đổi danh sách consumer thành các dòng hiển thị bảng */
   private consumerRows(win: MetricWindow | null, live: Live): ConsumerRowDto[] {
     const groups = new Map<string, ConsumerRegistration[]>();
     for (const c of live.consumers) {
@@ -319,6 +328,7 @@ export class MessagingOpsService {
     });
   }
 
+  /** Chuyển đổi thông tin tin nhắn thành dòng hiển thị bảng */
   private messageRow(m: MessageSummary): MessageRowDto {
     return {
       ...m,
@@ -330,6 +340,7 @@ export class MessagingOpsService {
     };
   }
 
+  /** Tạo báo cáo chi tiết về tình trạng hoạt động của dịch vụ */
   private report(w: MetricWindow | null): MessagingReportDto | null {
     const d = this.metrics.delivery(w);
     if (!w || !d) return null;
@@ -380,6 +391,7 @@ export class MessagingOpsService {
           : diff < -BALANCE_EPSILON && (lagNow ?? 0) > 0
             ? 'draining'
             : 'stable';
+    /** Tính tổng các giá trị trong mảng số liệu */
     const sum = (k: 'delayed' | 'failed' | 'workers') =>
       queues.available ? queues.data.reduce((s, q) => s + (q[k] ?? 0), 0) : null;
     return {
@@ -429,6 +441,7 @@ export class MessagingOpsService {
     };
   }
 
+  /** Kiểm tra và đánh giá tình trạng sức khỏe của dịch vụ */
   private health(alerts: MessagingAlertDto[]): MessagingHealthDto {
     const s = this.connection.getStatus();
     const problems = alerts.filter((a) => a.severity !== 'info');
@@ -466,6 +479,7 @@ export class MessagingOpsService {
     };
   }
 
+  /** Thu thập danh sách các cảnh báo đang hoạt động trong hệ thống */
   private async alerts(): Promise<MessagingAlertDto[]> {
     const active = await this.store
       .activeAlerts()
@@ -488,6 +502,7 @@ export class MessagingOpsService {
       .sort((a, b) => rank[a.severity] - rank[b.severity]);
   }
 
+  /** Tạo chuỗi thông điệp cảnh báo hiển thị cho người dùng */
   private alertMessage(rule: string, p: Record<string, unknown>): string {
     return this.i18n.t(`messaging.alert.${rule}.message`, {
       value: Number(p['value'] ?? 0),
@@ -516,12 +531,16 @@ export class MessagingOpsService {
    * `$w` là cửa sổ rate do `series` chọn theo độ phân giải.
    */
   private static defs(filter = '') {
+    /** Lọc hoặc chọn phần tử thỏa mãn điều kiện */
     const sel = (m: string, extra = '') => {
       const parts = [filter, extra].filter(Boolean).join(',');
       return parts ? `${m}{${parts}}` : m;
     };
+    /** Tính toán tần suất trung bình của tác vụ theo mỗi giây */
     const perSec = (m: string, extra = '') => `sum(rate(${sel(m, extra)}[$w]))`;
+    /** Tính toán tần suất trung bình của tác vụ theo mỗi phút */
     const perMin = (m: string, extra = '') => `sum(rate(${sel(m, extra)}[$w])) * 60`;
+    /** Làm tròn giá trị số theo độ chia nhỏ nhất (quantum) */
     const quant = (p: number) =>
       `histogram_quantile(${p}, sum by (le) (rate(${sel('job_duration_seconds_bucket')}[$w]))) * 1000`;
     return {
@@ -539,11 +558,13 @@ export class MessagingOpsService {
     };
   }
 
+  /** Lấy các chỉ số đo lường hiệu năng và vận hành của hệ thống */
   public async getMetrics(
     range: MessagingRange,
     metric: MessagingMetric,
   ): Promise<MessagingMetricsDto> {
     const e = MessagingOpsService.defs();
+    /** Lấy danh sách hoặc số lượng tin nhắn đang chờ xử lý */
     const waiting = (state: string) =>
       `sum(max by (queue) (${QUEUE_JOBS_METRIC}{state="${state}"}))`;
     const defs: Record<MessagingMetric, SeriesDef[]> = {
@@ -585,6 +606,7 @@ export class MessagingOpsService {
     return { win, live, backlog };
   }
 
+  /** Lấy danh sách các kênh truyền tin nhắn */
   public async getChannels(range: MessagingRange): Promise<MessagingChannelsDto> {
     const now = Date.now();
     const { win, live, backlog } = await this.channelContext(range, now);
@@ -596,6 +618,7 @@ export class MessagingOpsService {
     };
   }
 
+  /** Lấy thông tin chi tiết của một kênh truyền tin nhắn */
   public async getChannelDetail(name: string, range: MessagingRange): Promise<ChannelDetailDto> {
     const now = Date.now();
     const { win, live, backlog } = await this.channelContext(range, now);
@@ -634,6 +657,7 @@ export class MessagingOpsService {
     };
   }
 
+  /** Lấy danh sách các tin nhắn được phát hành gần đây */
   private recentMessages(filter: MessageFilter): Promise<SectionDto<MessageRowDto[]>> {
     return this.monitoring.section('browse', async () => {
       const page = await this.monitoring.listMessages(filter, RECENT_LIMIT);
@@ -648,6 +672,7 @@ export class MessagingOpsService {
       : Promise.resolve([]);
   }
 
+  /** Lấy danh sách các consumer đang lắng nghe tin nhắn */
   public async getConsumers(range: MessagingRange): Promise<MessagingConsumersDto> {
     const now = Date.now();
     const [win, live] = await Promise.all([this.rangeWindow(range, now), this.live()]);
@@ -660,6 +685,7 @@ export class MessagingOpsService {
     };
   }
 
+  /** Lấy thông tin chi tiết về một consumer chỉ định */
   public async getConsumerDetail(name: string, range: MessagingRange): Promise<ConsumerDetailDto> {
     const now = Date.now();
     const [win, live] = await Promise.all([this.rangeWindow(range, now), this.live()]);
@@ -724,6 +750,7 @@ export class MessagingOpsService {
     };
   }
 
+  /** Lấy thông tin chi tiết một tin nhắn trong hàng đợi */
   public async getMessageDetail(id: string, queue: string | null): Promise<MessageDetailDto> {
     const [res, consumers] = await Promise.all([
       this.monitoring.section('browse', () => this.monitoring.message(id, queue)),
@@ -801,6 +828,7 @@ export class MessagingOpsService {
     };
   }
 
+  /** Lấy danh sách các tin nhắn trong hàng đợi Dead Letter Queue */
   public async getDeadLetter(): Promise<MessagingDeadLetterDto> {
     const now = Date.now();
     const [items, live, todayWin] = await Promise.all([
@@ -833,6 +861,7 @@ export class MessagingOpsService {
     };
   }
 
+  /** Lấy thông tin trạng thái kết nối và hoạt động của broker */
   public async getBroker(): Promise<MessagingBrokerDto> {
     return {
       broker: await this.monitoring.section('brokerInfo', () => this.monitoring.broker()),
@@ -863,17 +892,20 @@ export class MessagingOpsService {
     };
   }
 
+  /** Truy vấn danh sách các sự kiện vận hành gần đây */
   public async getEvents(range: MessagingRange): Promise<MessagingEventDto[]> {
     return (await this.eventsSince(Date.now() - MESSAGING_RANGES[range] * MINUTE)).map((e) =>
       this.eventDto(e),
     );
   }
 
+  /** Lấy thông tin operations của hệ thống */
   public async getOperations(): Promise<MessagingOperationDto[]> {
     const ops = await this.store.operations().catch(() => [] as MessagingOperationRecord[]);
     return ops.map((o) => ({ ...o, at: new Date(o.at).toISOString() }));
   }
 
+  /** Lấy thông tin cấu hình hoạt động của dịch vụ */
   public getConfig(): MessagingConfigDto {
     const c = this.cfg;
     const info = this.monitoring.info();
@@ -921,22 +953,27 @@ export class MessagingOpsService {
     return result;
   }
 
+  /** Thực hiện thử lại một tác vụ hoặc job thất bại */
   public retry(queue: string, id: string, ctx: OperationContext) {
     return this.act(() => this.operations.retryMessage(queue, id, ctx));
   }
 
+  /** Phát lại một tin nhắn trong hàng đợi để xử lý lại */
   public replay(queue: string, id: string, ctx: OperationContext) {
     return this.act(() => this.operations.replayDeadLetter(queue, id, ctx));
   }
 
+  /** Hủy bỏ và loại bỏ tin nhắn khỏi hàng đợi */
   public discard(queue: string, id: string, ctx: OperationContext) {
     return this.act(() => this.operations.discardDeadLetter(queue, id, ctx));
   }
 
+  /** Xử lý và che giấu dữ liệu nhạy cảm trong payload trước khi trả về */
   public payload(id: string, queue: string | null, ctx: OperationContext) {
     return this.act(() => this.operations.payload(id, queue, ctx));
   }
 
+  /** Thực hiện thao tác vận hành kèm ghi nhận sự kiện */
   private async act<T>(fn: () => Promise<T>): Promise<T> {
     try {
       return await fn();
@@ -945,12 +982,14 @@ export class MessagingOpsService {
     }
   }
 
+  /** Lấy danh sách các sự kiện ghi nhận từ mốc thời gian chỉ định */
   private async eventsSince(from: number): Promise<MessagingEventRecord[]> {
     return (await this.store.events().catch(() => [] as MessagingEventRecord[])).filter(
       (e) => e.at >= from,
     );
   }
 
+  /** Chuyển đổi dữ liệu sự kiện nội bộ sang đối tượng Event DTO */
   private eventDto(e: MessagingEventRecord): MessagingEventDto {
     const alertId = typeof e.params['rule'] === 'string' ? e.params['rule'] : null;
     const rule = alertId ? ruleOf(alertId) : null;
@@ -995,10 +1034,12 @@ export class MessagingOpsService {
     };
   }
 
+  /** Chuyển đổi thông tin lỗi sang đối tượng Error DTO */
   private errorDto(e: MessagingErrorRecord): MessagingErrorDto {
     return { ...e, at: new Date(e.at).toISOString() };
   }
 
+  /** Tạo đối tượng lỗi phản hồi theo phân vùng chức năng */
   private sectionError(s: Extract<SectionDto<unknown>, { available: false }>): Error {
     if (s.reason === 'disconnected')
       return new MessagingNotConnectedException(s.message ?? 'unknown');
@@ -1017,6 +1058,7 @@ export class MessagingOpsService {
     );
   }
 
+  /** Tạo đối tượng lỗi phản hồi cho thao tác vận hành thất bại */
   private operationError(err: unknown): Error {
     if (!(err instanceof MessagingOperationError))
       return err instanceof Error ? err : new Error(String(err));

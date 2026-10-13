@@ -10,6 +10,7 @@ export class SystemTask implements OnModuleInit {
     private readonly config: CoreConfigService,
   ) {}
 
+  /** Đăng ký tác vụ bảo trì hệ thống định kỳ (maintenance tick) khi khởi tạo module */
   public onModuleInit(): void {
     this.registry.register({
       id: 'system.maintenance',

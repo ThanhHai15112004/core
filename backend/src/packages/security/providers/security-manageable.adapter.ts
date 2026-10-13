@@ -24,6 +24,7 @@ export class SecurityManageableAdapter implements ManageablePackage {
     return this.i18n.t('ops.security.displayName');
   }
 
+  /** Lấy báo cáo tình trạng hoạt động và các chỉ số của package */
   public async getStatus(): Promise<PackageStatusReport> {
     const { jwt } = this.configService.auth;
 

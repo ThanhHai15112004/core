@@ -35,6 +35,7 @@ export function errorCodeOf(err: unknown): string | null {
   return null;
 }
 
+/** Phân loại mã lỗi cơ sở dữ liệu thành các nhóm lỗi nghiệp vụ chuẩn */
 export function classifyDbError(err: unknown): DbErrorKind {
   const code = errorCodeOf(err);
   const errno = String(
@@ -42,6 +43,7 @@ export function classifyDbError(err: unknown): DbErrorKind {
       (err as { errno?: unknown })?.errno ??
       '',
   );
+  /** Kiểm tra sự tồn tại của một khóa trong bộ lưu trữ */
   const has = (set: Set<string>) => (code !== null && set.has(code)) || set.has(errno);
   if (has(DEADLOCK)) return 'deadlock';
   if (has(LOCK_TIMEOUT)) return 'lock_timeout';

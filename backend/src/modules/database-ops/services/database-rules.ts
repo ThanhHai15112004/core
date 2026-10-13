@@ -58,12 +58,14 @@ const LOCK_WAIT_CRIT_MS = 30_000;
 /** Transaction dài gấp chừng này ngưỡng thì nghiêm trọng. */
 const LONG_TX_CRIT_FACTOR = 6;
 
+/** Xác định mức độ nghiêm trọng (severity level) của sự kiện hoặc cảnh báo */
 const level = (value: number | null, l: RuleLevel): DbSeverity | null =>
   value === null ? null : value >= l.crit ? 'critical' : value >= l.warn ? 'warning' : null;
 
 /** Rule cảnh báo database theo ngưỡng cấu hình. Không đủ mẫu → không kết luận. */
 export function evaluateDbRules(input: DbRuleInput, cfg: DbRuleConfig): DbViolation[] {
   const out: DbViolation[] = [];
+  /** Thêm mới một phần tử vào danh sách hoặc bộ sưu tập */
   const add = (
     id: DbRule,
     severity: DbSeverity | null,

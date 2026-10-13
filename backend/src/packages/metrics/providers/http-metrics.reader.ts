@@ -20,6 +20,7 @@ const H = 'http_request_duration_seconds';
 export class HttpMetricsReader {
   constructor(private readonly prom: PrometheusQueryClient) {}
 
+  /** Chụp nhanh trạng thái hiện tại của hệ thống truyền tin */
   public async snapshot(windowSeconds = 60): Promise<HttpMetricsSnapshot> {
     const w = `${windowSeconds}s`;
     const [total, errors, p95] = await Promise.all([

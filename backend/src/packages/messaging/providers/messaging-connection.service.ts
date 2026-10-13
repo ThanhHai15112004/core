@@ -54,11 +54,13 @@ export class MessagingConnectionService implements OnApplicationBootstrap, OnMod
     this.timer.unref();
   }
 
+  /** Dọn dẹp tài nguyên và ngắt kết nối khi module bị hủy */
   public onModuleDestroy(): void {
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
   }
 
+  /** Lưu trữ một giá trị theo khóa định danh */
   private set(state: MessagingConnectionState): void {
     if (this.state === state) return;
     this.state = state;
@@ -90,11 +92,13 @@ export class MessagingConnectionService implements OnApplicationBootstrap, OnMod
     return this.getStatus();
   }
 
+  /** Ghi nhận số lượng tin nhắn vừa được phát hành */
   public markPublished(): void {
     this.lastPublishAt = Date.now();
     if (this.state !== 'connected') this.markSuccess();
   }
 
+  /** Ghi nhận tin nhắn đã được xử lý thành công */
   public markSuccess(pingMs: number | null = null): void {
     const now = Date.now();
     if (pingMs !== null) this.lastPingMs = pingMs;
@@ -115,6 +119,7 @@ export class MessagingConnectionService implements OnApplicationBootstrap, OnMod
     });
   }
 
+  /** Ghi nhận tin nhắn xử lý thất bại */
   private markFailure(err: unknown): void {
     const code = messagingErrorCode(err);
     this.lastError = `${code ? `${code}: ` : ''}${sanitizeMessagingMessage(err)}`;
@@ -134,7 +139,9 @@ export class MessagingConnectionService implements OnApplicationBootstrap, OnMod
       });
   }
 
+  /** Lấy báo cáo tình trạng hoạt động và các chỉ số của package */
   public getStatus(): MessagingConnectionStatus {
+    /** Định dạng mốc thời gian sang chuỗi chuẩn ISO 8601 */
     const iso = (t: number | null) => (t === null ? null : new Date(t).toISOString());
     return {
       state: this.state,

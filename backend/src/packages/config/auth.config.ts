@@ -1,5 +1,6 @@
 import { env } from './env.js';
 
+/** Lấy thông tin cấu hình xác thực và bảo mật */
 export const authConfig = () => ({
   /** Nguồn đọc secret: `env` (mặc định) hoặc `file` (Docker secrets / mount). */
   secretDriver: ((env('SECRET_DRIVER', false) || 'env').toLowerCase() === 'file'

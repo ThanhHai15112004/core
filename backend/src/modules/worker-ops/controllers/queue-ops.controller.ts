@@ -31,6 +31,7 @@ const drainSchema = z.object({
   includeDelayed: z.boolean().default(false),
 });
 
+/** Trích xuất thông tin ngữ cảnh yêu cầu (RequestContext) từ Fastify request */
 const context = (req: FastifyRequest): QueueOperationContext => ({
   ip: maskIp(req.ip),
   actor: null,
@@ -44,18 +45,21 @@ const context = (req: FastifyRequest): QueueOperationContext => ({
 export class QueueOpsController {
   constructor(private readonly workers: WorkerOpsService) {}
 
+  /** Lấy danh sách các phần tử theo điều kiện truy vấn */
   @Public()
   @Get(R.LIST)
   public list(@Query() q: Record<string, string>) {
     return this.workers.getQueues(parse(rangeSchema, q).range);
   }
 
+  /** Lấy thông tin chi tiết theo mã định danh */
   @Public()
   @Get(R.DETAIL)
   public detail(@Param('name') name: string, @Query() q: Record<string, string>) {
     return this.workers.getQueue(parse(nameSchema, name), parse(rangeSchema, q).range);
   }
 
+  /** Lấy các chỉ số đo lường hiệu năng và vận hành */
   @Public()
   @Get(R.METRICS)
   public metrics(@Param('name') name: string, @Query() q: Record<string, string>) {
@@ -63,6 +67,7 @@ export class QueueOpsController {
     return this.workers.getMetrics(range, metric, parse(nameSchema, name));
   }
 
+  /** Lấy danh sách các job trong hàng đợi */
   @Public()
   @Get(R.JOBS)
   public jobs(@Param('name') name: string, @Query() q: Record<string, string>) {
@@ -70,12 +75,14 @@ export class QueueOpsController {
     return this.workers.getQueueJobs(parse(nameSchema, name), state, limit);
   }
 
+  /** Lấy danh sách các lần thực thi hoặc job bị thất bại */
   @Public()
   @Get(R.FAILURES)
   public failures(@Param('name') name: string, @Query() q: Record<string, string>) {
     return this.workers.getFailures(parse(rangeSchema, q).range, parse(nameSchema, name));
   }
 
+  /** Tạm dừng tiếp nhận và xử lý các tác vụ mới */
   @Public()
   @Post(R.PAUSE)
   @HttpCode(HttpStatus.OK)
@@ -83,6 +90,7 @@ export class QueueOpsController {
     return this.workers.pause(parse(nameSchema, name), context(req));
   }
 
+  /** Tiếp tục tiếp nhận và xử lý tác vụ sau khi tạm dừng */
   @Public()
   @Post(R.RESUME)
   @HttpCode(HttpStatus.OK)

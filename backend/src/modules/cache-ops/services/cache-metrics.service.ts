@@ -42,6 +42,7 @@ export const CACHE_GAUGES = {
 
 const MAX_POINTS = 120;
 
+/** Tính toán tỷ lệ cache hit rate của hệ thống */
 export const hitRate = (hits: number | null, reads: number | null) =>
   hits !== null && reads ? round((hits / reads) * 100, 2) : null;
 
@@ -74,6 +75,7 @@ export class CacheMetricsService {
 
   /** Ghi gauge từ snapshot của monitor (giá trị null → không ghi, Prometheus giữ khoảng trống). */
   public record(server: ServerInfo | null, keyspace: KeyspaceSnapshot | null): void {
+    /** Lưu trữ một giá trị theo khóa định danh */
     const set = (k: keyof typeof CACHE_GAUGES, v: number | null | undefined) => {
       if (v !== null && v !== undefined && Number.isFinite(v)) this.gauges[k].set(v);
     };
@@ -93,6 +95,7 @@ export class CacheMetricsService {
     const w = `${Math.max(1, Math.round(minutes))}m`;
     const off = offsetMin > 0 ? ` offset ${Math.round(offsetMin)}m` : '';
     const g = CACHE_GAUGES;
+    /** Trích xuất giá trị số từ đối tượng đo lường */
     const v = (expr: string) => this.prom.value(expr);
     const [hits, misses, opsPerSec, evicted, expired, peakMem, peakKeys] = await Promise.all([
       v(`max(increase(${g.hits}[${w}]${off}))`),
@@ -103,6 +106,7 @@ export class CacheMetricsService {
       v(`max(max_over_time(${g.usedMemory}[${w}]${off}))`),
       v(`max(max_over_time(${g.keys}[${w}]${off}))`),
     ]);
+    /** Làm tròn giá trị số đến số chữ số thập phân chỉ định */
     const r = (n: number | null) => (n === null ? null : Math.round(n));
     const reads = hits !== null && misses !== null ? r(hits + misses) : null;
     return {

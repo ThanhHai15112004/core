@@ -45,8 +45,11 @@ export const QUEUE_JOBS_METRIC = 'core_queue_jobs';
 const MAX_POINTS = 120;
 const QUEUE_STATES = ['waiting', 'active', 'delayed', 'failed'] as const;
 
+/** Làm tròn giá trị số đến số chữ số thập phân chỉ định */
 const r = (n: number | null, d = 2) => (n === null || !Number.isFinite(n) ? null : round(n, d));
+/** Tính toán tỷ lệ phần trăm giữa hai đại lượng */
 const rate = (part: number, total: number) => (total > 0 ? round((part / total) * 100, 2) : null);
+/** Khởi tạo đối tượng thống kê với các giá trị đếm ban đầu bằng 0 */
 const emptyStats = (): QueueStats => ({
   incoming: 0,
   completed: 0,
@@ -88,14 +91,18 @@ export class WorkerMetricsService {
     }
   }
 
+  /** Xác định khung cửa sổ thời gian cho việc tính toán số liệu */
   public async window(fromMs: number, toMs: number, now: number): Promise<MetricWindow | null> {
     if (!this.prom.configured) return null;
     const seconds = Math.max(1, (Math.min(toMs, now) - fromMs) / 1000);
     const w = `${Math.max(60, Math.round(seconds))}s`;
     const offSec = Math.round((now - Math.min(toMs, now)) / 1000);
     const off = offSec > 0 ? ` offset ${offSec}s` : '';
+    /** Tăng giá trị bộ đếm lên một đơn vị */
     const inc = (m: string) => `increase(${m}[${w}]${off})`;
+    /** Chuẩn hóa chuỗi truy vấn đầu vào */
     const q = (expr: string) => this.prom.safeQuery(expr);
+    /** Làm tròn giá trị số theo độ chia nhỏ nhất (quantum) */
     const quant = (h: string, p: number, by: string) =>
       `histogram_quantile(${p}, sum by (${by}le) (${inc(`${h}_bucket`)}))`;
 
@@ -119,6 +126,7 @@ export class WorkerMetricsService {
 
     const total = emptyStats();
     const queues = new Map<string, QueueStats>();
+    /** Khởi tạo đối tượng từ giá trị đầu vào */
     const of = (labels: Record<string, string>) => {
       const name = labels['queue'];
       if (!name) return null;
@@ -126,6 +134,7 @@ export class WorkerMetricsService {
       if (!s) queues.set(name, (s = emptyStats()));
       return s;
     };
+    /** Thêm mới một phần tử vào danh sách hoặc bộ sưu tập */
     const add =
       (key: 'incoming' | 'completed' | 'failed' | 'retried' | 'exhausted' | 'recovered') =>
       (labels: Record<string, string>, v: number) => {
@@ -155,6 +164,7 @@ export class WorkerMetricsService {
       target: (labels: Record<string, string>) => QueueStats | null,
     ) => {
       const [dSum, dCount, p50, p95, p99, wSum, wCount, w95] = rows;
+      /** Trích xuất một tập hợp các thuộc tính chỉ định từ đối tượng */
       const pick = (list: typeof published | undefined, labels: Record<string, string>) =>
         list?.find((x) => (x.labels['queue'] ?? '') === (labels['queue'] ?? ''))?.value ?? null;
       const keys = new Map<string, Record<string, string>>();
@@ -163,6 +173,7 @@ export class WorkerMetricsService {
       for (const labels of keys.values()) {
         const s = target(labels);
         if (!s) continue;
+        /** Chuyển đổi mốc thời gian sang đơn vị mili-giây */
         const ms = (v: number | null) => (v === null ? null : v * 1000);
         const dc = pick(dCount, labels);
         const wc = pick(wCount, labels);
@@ -205,15 +216,18 @@ export class WorkerMetricsService {
     return { resolutionSec: series.some((s) => s.points.length > 0) ? stepSec : null, series };
   }
 
+  /** Tính toán tần suất trung bình của tác vụ theo mỗi phút */
   public perMin(w: MetricWindow | null, n: number): number | null {
     return w ? round((n / w.seconds) * 60, 2) : null;
   }
 
+  /** Lấy thông tin thống kê số liệu của hệ thống */
   private stats(w: MetricWindow | null, queue?: string | null): QueueStats {
     if (!w) return emptyStats();
     return queue ? (w.queues.get(queue) ?? emptyStats()) : w.total;
   }
 
+  /** Đếm số lượng bản ghi hoặc sự kiện theo từng trạng thái */
   public counts(w: MetricWindow | null, queue?: string | null): JobCounts {
     const s = this.stats(w, queue);
     return {

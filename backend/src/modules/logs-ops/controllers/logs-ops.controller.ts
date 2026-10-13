@@ -28,8 +28,10 @@ import {
 } from '../exceptions/logs-ops.exceptions.js';
 import type { AuditDomain, LogsRange } from '../responses/logs-ops.response.js';
 
+/** Định dạng chuỗi ký tự hiển thị an toàn không chứa ký tự điều khiển */
 const printable = (s: string) =>
   ![...s].some((c) => c.charCodeAt(0) < 32 || c.charCodeAt(0) === 127);
+/** Trích xuất hoặc chuẩn hóa nội dung văn bản */
 const text = (max: number) => z.string().max(max).refine(printable);
 /** Query rỗng (`?level=`) = không lọc. */
 const optional = <T extends z.ZodTypeAny>(s: T) =>
@@ -112,12 +114,14 @@ const levelSchema = z.object({
 });
 const idParam = z.string().min(1).max(256).refine(printable);
 
+/** Xác thực và ép kiểu dữ liệu đầu vào theo schema Zod */
 export function parse<T>(schema: z.ZodType<T>, value: unknown): T {
   const result = schema.safeParse(value);
   if (!result.success) throw new LogsValidationException(result.error.issues);
   return result.data;
 }
 
+/** Trích xuất thông tin ngữ cảnh yêu cầu (RequestContext) từ Fastify request */
 const context = (req: FastifyRequest): OperationContext => ({ ip: maskIp(req.ip), actor: null });
 
 /** Query → bộ lọc log (ô tìm kiếm có cú pháp `level:error jobId:…` + các ô lọc riêng). */
@@ -141,6 +145,7 @@ export function toFilter(f: z.infer<typeof filterSchema>, now = Date.now()): Log
   return f.q ? parseLogQuery(f.q, base) : base;
 }
 
+/** Tổng hợp số liệu thống kê tổng quan của dịch vụ */
 function summary(f: z.infer<typeof filterSchema>): string {
   return Object.entries(f)
     .filter(([, v]) => v !== undefined && v !== '')
@@ -160,18 +165,21 @@ export class LogsOpsController {
     private readonly audit: LogAuditService,
   ) {}
 
+  /** Lấy dữ liệu tổng quan cho trang quản trị vận hành */
   @Public()
   @Get(R.OVERVIEW)
   public overview(@Query() q: Record<string, string>) {
     return this.logs.getOverview(parse(rangeSchema, q).range);
   }
 
+  /** Lấy các chỉ số đo lường hiệu năng và vận hành */
   @Public()
   @Get(R.METRICS)
   public metrics(@Query() q: Record<string, string>) {
     return this.logs.getSeries(parse(rangeSchema, q).range);
   }
 
+  /** Xem luồng dòng log trực tiếp mới nhất */
   @Public()
   @Get(R.TAIL)
   public tail(@Query() q: Record<string, string>) {
@@ -179,6 +187,7 @@ export class LogsOpsController {
     return this.logs.tail(toFilter(f), f.after ?? null, f.limit);
   }
 
+  /** Xuất danh sách log ra tệp theo định dạng yêu cầu */
   @Public()
   @Get(R.EXPORT)
   public async export(
@@ -202,6 +211,7 @@ export class LogsOpsController {
       .send(out.body);
   }
 
+  /** Truy vấn danh sách các lỗi và ngoại lệ ghi nhận được */
   @Public()
   @Get(R.ERRORS)
   public errors(@Query() q: Record<string, string>) {
@@ -209,6 +219,7 @@ export class LogsOpsController {
     return this.logs.getErrors(range, search ?? null);
   }
 
+  /** Lấy thông tin nhóm lỗi theo mẫu lỗi tương tự nhau */
   @Public()
   @Get(R.ERROR_GROUP)
   public errorGroup(@Param('fingerprint') fingerprint: string, @Query() q: Record<string, string>) {
@@ -218,12 +229,14 @@ export class LogsOpsController {
     );
   }
 
+  /** Truy vết chuỗi sự kiện log theo correlation ID */
   @Public()
   @Get(R.TRACE)
   public trace(@Param('id') id: string) {
     return this.logs.getTrace(parse(idParam, id));
   }
 
+  /** Lấy danh sách nhật ký kiểm toán của các thao tác vận hành */
   @Public()
   @Get(R.AUDIT)
   public auditLog(@Query() q: Record<string, string>) {
@@ -241,18 +254,21 @@ export class LogsOpsController {
     });
   }
 
+  /** Tạo báo cáo chi tiết về tình trạng hoạt động của dịch vụ */
   @Public()
   @Get(R.REPORT)
   public report() {
     return this.logs.getReport();
   }
 
+  /** Lấy thông tin cấu hình hiện tại của dịch vụ */
   @Public()
   @Get(R.CONFIG)
   public config() {
     return this.logs.getConfig();
   }
 
+  /** Thiết lập mức độ ghi log (log level) động cho hệ thống */
   @Public()
   @Put(R.LEVEL)
   public setLevel(@Body() body: unknown, @Req() req: FastifyRequest) {
@@ -263,6 +279,7 @@ export class LogsOpsController {
     );
   }
 
+  /** Khôi phục mức độ ghi log mặc định của hệ thống */
   @Public()
   @Delete(R.LEVEL_REVERT)
   public revertLevel(@Param('runtime') runtime: string, @Req() req: FastifyRequest) {
@@ -272,12 +289,14 @@ export class LogsOpsController {
     );
   }
 
+  /** Tạo hoặc lấy thông tin một bản ghi bộ nhớ đệm kèm thời gian hết hạn */
   @Public()
   @Get(R.ENTRY)
   public entry(@Param('id') id: string) {
     return this.logs.getEntry(parse(idParam, id));
   }
 
+  /** Tìm kiếm các bản ghi theo từ khóa hoặc tiêu chí lọc */
   @Public()
   @Get(R.SEARCH)
   public search(@Query() q: Record<string, string>) {

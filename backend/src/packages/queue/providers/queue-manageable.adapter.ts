@@ -26,9 +26,11 @@ export class QueueManageableAdapter implements ManageablePackage {
     return this.i18n.t('ops.queue.displayName');
   }
 
+  /** Lấy báo cáo tình trạng hoạt động và các chỉ số của package */
   public async getStatus(): Promise<PackageStatusReport> {
     const state = this.queues.status().state;
     const list = this.queues.usable() ? await this.queues.queues().catch(() => null) : null;
+    /** Tính tổng các giá trị trong mảng số liệu */
     const sum = (pick: (c: QueueCounts) => number) =>
       (list ?? []).reduce((s, q) => s + pick(q.counts), 0);
     const workers = (list ?? []).reduce((s, q) => s + (q.workers?.length ?? 0), 0);

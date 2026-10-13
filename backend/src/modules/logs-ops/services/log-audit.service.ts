@@ -48,6 +48,7 @@ export interface AuditQuery {
   limit: number;
 }
 
+/** Xác thực và ép kiểu dữ liệu đầu vào theo schema Zod */
 function parse<T>(raw: string): T | null {
   try {
     return JSON.parse(raw) as T;
@@ -64,6 +65,7 @@ function parse<T>(raw: string): T | null {
 export class LogAuditService {
   constructor(private readonly redis: RedisService) {}
 
+  /** Lấy danh sách các nguồn phát sinh sự kiện hoặc log */
   private sources(): { domain: AuditDomain; key: string }[] {
     const r = this.redis;
     return [
@@ -87,6 +89,7 @@ export class LogAuditService {
     const results = (await pipe.exec()) ?? [];
     const items: AuditEventDto[] = [];
     const domains: AuditListDto['domains'] = [];
+    /** Thêm một sự kiện mới vào danh sách và duy trì giới hạn kích thước tối đa */
     const push = (domain: AuditDomain, list: AuditEventDto[]) => {
       items.push(...list);
       const oldest = list.reduce<number | null>((m, e) => {
@@ -172,6 +175,7 @@ export class LogAuditService {
     return { items, domains };
   }
 
+  /** Chuyển đổi thao tác vận hành thành sự kiện tương ứng */
   private fromOperation(domain: AuditDomain, o: OperationLike, index: number): AuditEventDto {
     const detail = [
       o.detail ?? null,
@@ -195,6 +199,7 @@ export class LogAuditService {
     };
   }
 
+  /** Lấy danh sách các phần tử theo điều kiện truy vấn */
   public async list(q: AuditQuery): Promise<AuditListDto> {
     const { items, domains } = await this.all();
     const text = q.q?.toLowerCase().trim() ?? '';

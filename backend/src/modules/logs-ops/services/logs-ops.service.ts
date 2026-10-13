@@ -87,23 +87,29 @@ export interface OperationContext {
   ip: string | null;
 }
 
+/** Định dạng mốc thời gian sang chuỗi chuẩn ISO 8601 */
 const iso = (ms: number | null | undefined) => (ms ? new Date(ms).toISOString() : null);
+/** Tính toán tỷ lệ phần trăm (0 - 100%) giữa hai giá trị */
 const pct = (part: number, total: number) =>
   total > 0 ? Math.round((part / total) * 1000) / 10 : null;
+/** Kiểm tra xem đối tượng hoặc kết quả có phải là lỗi hay không */
 const isError = (e: LogEntry) => e.level === 'error' || e.level === 'fatal';
 
+/** Định dạng và thoát ký tự an toàn cho ô dữ liệu CSV */
 function csvCell(v: unknown): string {
   if (v === null || v === undefined) return '';
   const s = String(v);
   return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
+/** Đếm số lượng bản ghi phân nhóm theo thuộc tính chỉ định */
 function countBy(values: (string | undefined)[]): CountShareDto[] {
   const m = new Map<string, number>();
   for (const v of values) if (v) m.set(v, (m.get(v) ?? 0) + 1);
   return [...m].map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count);
 }
 
+/** Tạo đối tượng khởi tạo các mức log với giá trị đếm bằng 0 */
 function emptyLevels(): Record<LogEntryLevel, number> {
   return { verbose: 0, debug: 0, info: 0, warn: 0, error: 0, fatal: 0 };
 }
@@ -140,10 +146,12 @@ export class LogsOpsService {
     return this.config.logs.audit;
   }
 
+  /** Kiểm tra và xác nhận dịch vụ đang sẵn sàng hoặc ném ngoại lệ */
   private assertAvailable(): void {
     if (!this.store.isAvailable()) throw new LogsUnavailableException();
   }
 
+  /** Xác định loại bộ lưu trữ log hiện đang được cấu hình */
   private backend(): LogsBackendDto {
     return {
       bufferSize: LOGS_STREAM_MAXLEN,
@@ -151,6 +159,7 @@ export class LogsOpsService {
     };
   }
 
+  /** Lấy cấu hình che giấu các trường dữ liệu nhạy cảm trong log */
   private redaction(): LogsConfigDto['redaction'] {
     return {
       keys: [...SENSITIVE_KEY_NAMES],
@@ -158,6 +167,7 @@ export class LogsOpsService {
     };
   }
 
+  /** Tính toán phạm vi thời gian lưu trữ log khả dụng */
   private coverage(snap: LogSnapshot): LogCoverageDto[] {
     return [...snap.byRuntime].map(([runtime, list]) => ({
       runtime,
@@ -167,6 +177,7 @@ export class LogsOpsService {
     }));
   }
 
+  /** Kiểm tra xem mốc thời gian có nằm trong khoảng cho phép hay không */
   private within(snap: LogSnapshot, from: number, to = Infinity): LogEntry[] {
     return snap.entries.filter((e) => {
       const t = entryTime(e);
@@ -304,6 +315,7 @@ export class LogsOpsService {
     // Cửa sổ thực tế có dữ liệu (stream chỉ giữ N log gần nhất).
     const oldest = entries.length ? entryTime(entries[entries.length - 1]!) : now;
     const minutes = Math.max(1, (now - Math.max(from, oldest)) / 60_000);
+    /** Tính toán tần suất trung bình của tác vụ theo mỗi phút */
     const perMin = (n: number) => Math.round((n / minutes) * 10) / 10;
     const live = ingest.filter((s) => s.updatedAt >= now - INGEST_TTL_MS);
     const dropped = live.reduce((a, s) => a + s.dropped, 0);
@@ -390,6 +402,7 @@ export class LogsOpsService {
     };
   }
 
+  /** Lấy chuỗi dữ liệu chuỗi thời gian (time series) theo dải thời gian */
   public async getSeries(range: LogsRange, now = Date.now()): Promise<LogsSeriesDto> {
     const bucketSec = BUCKET_SEC[range];
     const step = bucketSec * 1000;
@@ -454,6 +467,7 @@ export class LogsOpsService {
     };
   }
 
+  /** Thực hiện xuất danh sách log ra định dạng tệp yêu cầu */
   public async exportLogs(
     filter: LogFilter,
     format: ExportFormat,
@@ -468,6 +482,7 @@ export class LogsOpsService {
     const snap = await this.store.logs(true);
     const rows = snap.entries.filter((e) => matchesLog(e, filter)).slice(0, max);
     const withDetails = this.config.logs.details;
+    /** Kiểm tra xem hàng đợi hoặc bộ nhớ đã đầy tải hay chưa */
     const full = (e: LogEntry) =>
       withDetails ? e : { ...e, stack: undefined, metadata: undefined };
     let body: string;
@@ -561,6 +576,7 @@ export class LogsOpsService {
     };
   }
 
+  /** Tạo các liên kết điều hướng liên quan tới log */
   private links(e: LogEntry): LogLinksDto {
     const meta = e.metadata ?? {};
     const status = typeof meta.status === 'number' ? meta.status : null;
@@ -635,6 +651,7 @@ export class LogsOpsService {
     return { items, otherCount: 0 };
   }
 
+  /** Lấy thông tin chi tiết về một nhóm lỗi cụ thể */
   public async getErrorGroup(
     fingerprint: string,
     range: LogsRange,
@@ -766,6 +783,7 @@ export class LogsOpsService {
     const span = Math.max(60_000, now - from);
     const available = this.store.isAvailable();
     const snap = available ? await this.store.logs() : null;
+    /** Tổng hợp số lượng tổng của các danh mục dữ liệu */
     const totals = (a: number, b: number): LogsReportTotalsDto => {
       const list = snap ? this.within(snap, a, b) : [];
       const groups = this.groupRows(list, a, b);
@@ -830,6 +848,7 @@ export class LogsOpsService {
     });
   }
 
+  /** Lấy thông tin cấu hình hoạt động của dịch vụ */
   public async getConfig(now = Date.now()): Promise<LogsConfigDto> {
     const l = this.config.logs;
     const available = this.store.isAvailable();
@@ -866,6 +885,7 @@ export class LogsOpsService {
     };
   }
 
+  /** Thiết lập mức độ ghi log (log level) động cho hệ thống */
   public async setLevel(
     input: { runtime: string; level: OverrideLevel; durationMin: number | null; modules: string[] },
     ctx: OperationContext,
@@ -911,6 +931,7 @@ export class LogsOpsService {
     return (await this.levelStates(now)).find((s) => s.runtime === input.runtime)!;
   }
 
+  /** Khôi phục mức độ ghi log mặc định của hệ thống */
   public async revertLevel(
     runtime: string,
     ctx: OperationContext,

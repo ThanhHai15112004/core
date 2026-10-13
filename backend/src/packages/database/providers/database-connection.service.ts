@@ -57,6 +57,7 @@ export class DatabaseConnectionService implements OnApplicationBootstrap, OnAppl
     };
   }
 
+  /** Thực thi tác vụ khởi động sau khi toàn bộ ứng dụng hoàn tất bootstrap */
   public onApplicationBootstrap(): void {
     if (!this.config.database.enabled) return;
     try {
@@ -74,16 +75,19 @@ export class DatabaseConnectionService implements OnApplicationBootstrap, OnAppl
     this.schedule(0);
   }
 
+  /** Thực hiện dọn dẹp và ngắt các kết nối khi ứng dụng tắt */
   public async onApplicationShutdown(): Promise<void> {
     this.stopped = true;
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
   }
 
+  /** Lấy báo cáo tình trạng hoạt động và các chỉ số của package */
   public getStatus(): ConnectionStatus {
     return { ...this.status };
   }
 
+  /** Kiểm tra xem kết nối hiện tại có đang hoạt động hay không */
   public isConnected(): boolean {
     return this.status.state === 'connected';
   }
@@ -135,6 +139,7 @@ export class DatabaseConnectionService implements OnApplicationBootstrap, OnAppl
     }
   }
 
+  /** Lên lịch kiểm tra định kỳ trạng thái kết nối cơ sở dữ liệu */
   private schedule(delayMs: number): void {
     if (this.stopped) return;
     if (this.timer) clearTimeout(this.timer);
@@ -142,6 +147,7 @@ export class DatabaseConnectionService implements OnApplicationBootstrap, OnAppl
     this.timer.unref();
   }
 
+  /** Thực hiện kiểm tra định kỳ và cập nhật trạng thái kết nối */
   private async tick(): Promise<void> {
     if (this.stopped || !this.dataSource) return;
     if (!this.dataSource.isInitialized) {
@@ -167,6 +173,7 @@ export class DatabaseConnectionService implements OnApplicationBootstrap, OnAppl
     this.schedule(result.ok ? this.config.database.healthIntervalMs : retryDelayMs(this.failures));
   }
 
+  /** Khởi tạo kết nối và các thiết lập ban đầu cho dịch vụ */
   private initialize(): Promise<void> {
     this.initializing ??= (async () => {
       const ds = this.dataSource!;
@@ -219,6 +226,7 @@ export class DatabaseConnectionService implements OnApplicationBootstrap, OnAppl
     }
   }
 
+  /** Chuyển đổi trạng thái kết nối sang trạng thái mới */
   private transition(state: ConnectionState, error: ConnectionStatus['lastError']): void {
     const previous = this.status.state;
     this.status = {

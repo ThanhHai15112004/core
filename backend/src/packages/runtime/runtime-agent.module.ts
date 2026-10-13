@@ -10,6 +10,7 @@ import { RuntimeManageableAdapter } from './providers/runtime-manageable.adapter
  */
 @Module({})
 export class RuntimeAgentModule {
+  /** Lọc hoặc áp dụng cấu hình riêng cho runtime chỉ định */
   public static forRuntime(identity: RuntimeIdentity): DynamicModule {
     return {
       module: RuntimeAgentModule,

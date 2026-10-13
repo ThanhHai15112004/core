@@ -27,6 +27,7 @@ import {
 import { MessagingValidationException } from '../exceptions/messaging-ops.exceptions.js';
 import type { MessagingMetric, MessagingRange } from '../responses/messaging-ops.response.js';
 
+/** Định dạng chuỗi ký tự hiển thị an toàn không chứa ký tự điều khiển */
 const printable = (s: string) =>
   ![...s].some((c) => c.charCodeAt(0) < 32 || c.charCodeAt(0) === 127);
 const nameSchema = z.string().min(1).max(256).refine(printable);
@@ -51,12 +52,14 @@ const messagesSchema = z.object({
 });
 const actionSchema = z.object({ queue: nameSchema });
 
+/** Xác thực và ép kiểu dữ liệu đầu vào theo schema Zod */
 function parse<T>(schema: z.ZodType<T>, value: unknown): T {
   const result = schema.safeParse(value);
   if (!result.success) throw new MessagingValidationException(result.error.issues);
   return result.data;
 }
 
+/** Trích xuất thông tin ngữ cảnh yêu cầu (RequestContext) từ Fastify request */
 const context = (req: FastifyRequest): OperationContext => ({ ip: maskIp(req.ip), actor: null });
 
 /**
@@ -68,12 +71,14 @@ const context = (req: FastifyRequest): OperationContext => ({ ip: maskIp(req.ip)
 export class MessagingOpsController {
   constructor(private readonly messaging: MessagingOpsService) {}
 
+  /** Lấy dữ liệu tổng quan cho trang quản trị vận hành */
   @Public()
   @Get(R.OVERVIEW)
   public overview(@Query() q: Record<string, string>) {
     return this.messaging.getOverview(parse(rangeSchema, q).range);
   }
 
+  /** Lấy các chỉ số đo lường hiệu năng và vận hành */
   @Public()
   @Get(R.METRICS)
   public metrics(@Query() q: Record<string, string>) {
@@ -81,30 +86,35 @@ export class MessagingOpsController {
     return this.messaging.getMetrics(range, metric);
   }
 
+  /** Lấy danh sách các kênh truyền tin nhắn */
   @Public()
   @Get(R.CHANNELS)
   public channels(@Query() q: Record<string, string>) {
     return this.messaging.getChannels(parse(rangeSchema, q).range);
   }
 
+  /** Lấy thông tin chi tiết một kênh truyền tin nhắn */
   @Public()
   @Get(R.CHANNEL_DETAIL)
   public channel(@Param('id') id: string, @Query() q: Record<string, string>) {
     return this.messaging.getChannelDetail(parse(nameSchema, id), parse(rangeSchema, q).range);
   }
 
+  /** Lấy danh sách các consumer đang lắng nghe tin nhắn */
   @Public()
   @Get(R.CONSUMERS)
   public consumers(@Query() q: Record<string, string>) {
     return this.messaging.getConsumers(parse(rangeSchema, q).range);
   }
 
+  /** Lấy thông tin chi tiết một consumer */
   @Public()
   @Get(R.CONSUMER_DETAIL)
   public consumer(@Param('id') id: string, @Query() q: Record<string, string>) {
     return this.messaging.getConsumerDetail(parse(nameSchema, id), parse(rangeSchema, q).range);
   }
 
+  /** Lấy danh sách các tin nhắn trong hàng đợi */
   @Public()
   @Get(R.MESSAGES)
   public messages(@Query() q: Record<string, string>) {
@@ -121,6 +131,7 @@ export class MessagingOpsController {
     );
   }
 
+  /** Lấy thông tin chi tiết một tin nhắn theo mã định danh */
   @Public()
   @Get(R.MESSAGE_DETAIL)
   public message(@Param('id') id: string, @Query() q: Record<string, string>) {
@@ -145,6 +156,7 @@ export class MessagingOpsController {
     );
   }
 
+  /** Thực hiện thử lại một tác vụ hoặc job thất bại */
   @Public()
   @Post(R.MESSAGE_RETRY)
   @HttpCode(HttpStatus.OK)
@@ -153,12 +165,14 @@ export class MessagingOpsController {
     return this.messaging.retry(queue, parse(nameSchema, id), context(req));
   }
 
+  /** Lấy danh sách các lần thử lại hoặc thông tin retry */
   @Public()
   @Get(R.RETRIES)
   public retries() {
     return this.messaging.getRetries();
   }
 
+  /** Lấy danh sách các tin nhắn trong hàng đợi Dead Letter Queue (DLQ) */
   @Public()
   @Get(R.DEAD_LETTER)
   public deadLetter() {
@@ -184,36 +198,42 @@ export class MessagingOpsController {
     return this.messaging.discard(queue, messageId, context(req));
   }
 
+  /** Lấy thông tin trạng thái hoạt động của broker truyền tin */
   @Public()
   @Get(R.BROKER)
   public broker() {
     return this.messaging.getBroker();
   }
 
+  /** Truy vấn danh sách các lỗi và ngoại lệ ghi nhận được */
   @Public()
   @Get(R.ERRORS)
   public errors(@Query() q: Record<string, string>) {
     return this.messaging.getErrors(parse(rangeSchema, q).range);
   }
 
+  /** Truy vấn danh sách các sự kiện vận hành gần đây */
   @Public()
   @Get(R.EVENTS)
   public events(@Query() q: Record<string, string>) {
     return this.messaging.getEvents(parse(rangeSchema, q).range);
   }
 
+  /** Truy vấn lịch sử các thao tác vận hành đã thực hiện */
   @Public()
   @Get(R.OPERATIONS)
   public operations() {
     return this.messaging.getOperations();
   }
 
+  /** Lấy thông tin cấu hình hiện tại của dịch vụ */
   @Public()
   @Get(R.CONFIG)
   public config() {
     return this.messaging.getConfig();
   }
 
+  /** Kiểm tra khả năng kết nối và tính sẵn sàng của dịch vụ */
   @Public()
   @Post(R.TEST)
   @HttpCode(HttpStatus.OK)

@@ -70,6 +70,7 @@ export class CoreI18nService implements I18nContract {
     },
   };
 
+  /** Lấy mã ngôn ngữ mặc định được cấu hình trong hệ thống */
   public getDefaultLocale(): SupportedLocale {
     return this.defaultLocale;
   }

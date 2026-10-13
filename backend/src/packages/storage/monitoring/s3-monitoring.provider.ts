@@ -40,6 +40,7 @@ const PAGE_MAX_ROUNDS = 10;
 const MULTIPART_DETAIL_LIMIT = 50;
 const BUCKET_INFO_TTL_MS = 60_000;
 
+/** Trích xuất tên loại lỗi từ đối tượng ngoại lệ */
 const errorName = (err: unknown) => (err as { name?: string })?.name ?? '';
 
 /**
@@ -81,6 +82,7 @@ export class S3MonitoringProvider implements StorageMonitoringProvider {
     return this.driver.bucket;
   }
 
+  /** Lấy thông tin tổng quan về trạng thái cấu hình và vận hành */
   public info(): ProviderInfo {
     // Nhận diện MinIO chạy nền một lần; các lần gọi sau trả tên chính xác.
     void this.probeProduct();
@@ -107,6 +109,7 @@ export class S3MonitoringProvider implements StorageMonitoringProvider {
     }
   }
 
+  /** Kiểm tra trạng thái sẵn sàng và đo độ trễ kết nối */
   public async ping(): Promise<number> {
     const started = performance.now();
     await this.driver.ping();
@@ -115,6 +118,7 @@ export class S3MonitoringProvider implements StorageMonitoringProvider {
     return ms;
   }
 
+  /** Chuyển đổi đối tượng quét được sang DTO chuẩn */
   private toScanned(c: _Object): ScannedObject | null {
     if (!c.Key || c.Key.startsWith(HEALTHCHECK_PREFIX) || c.Key.endsWith('/')) return null;
     return {
@@ -125,6 +129,7 @@ export class S3MonitoringProvider implements StorageMonitoringProvider {
     };
   }
 
+  /** Quét và phân trang danh sách các khóa hoặc đối tượng */
   public async scan(limit: number) {
     const objects: ScannedObject[] = [];
     let token: string | undefined;
@@ -144,6 +149,7 @@ export class S3MonitoringProvider implements StorageMonitoringProvider {
     return { objects, total, truncated: Boolean(token) || total > objects.length };
   }
 
+  /** Lấy một trang danh sách các đối tượng theo con trỏ phân trang */
   public async listPage(filter: ObjectFilter, cursor: string, count: number): Promise<ObjectPage> {
     const now = Date.now();
     const root = filter.container === ROOT_CONTAINER;
@@ -175,6 +181,7 @@ export class S3MonitoringProvider implements StorageMonitoringProvider {
     return { objects, cursor: token ?? '', examined };
   }
 
+  /** Lấy thông tin chi tiết theo mã định danh */
   public async detail(key: string): Promise<ObjectDetail | null> {
     const meta = await this.driver.head(key);
     if (!meta) return null;
@@ -194,6 +201,7 @@ export class S3MonitoringProvider implements StorageMonitoringProvider {
     };
   }
 
+  /** Lấy danh sách các phiên bản của đối tượng lưu trữ */
   private async versions(key: string): Promise<ObjectVersion[]> {
     const res = await this.client.send(
       new ListObjectVersionsCommand({ Bucket: this.bucket, Prefix: key, MaxKeys: 100 }),
@@ -220,6 +228,7 @@ export class S3MonitoringProvider implements StorageMonitoringProvider {
     return out.sort((a, b) => (b.lastModified ?? 0) - (a.lastModified ?? 0));
   }
 
+  /** Kiểm tra hoặc thiết lập chính sách lưu giữ dữ liệu */
   private async retention(key: string): Promise<ObjectRetention> {
     const [ret, hold] = await Promise.all([
       this.client
@@ -236,12 +245,14 @@ export class S3MonitoringProvider implements StorageMonitoringProvider {
     };
   }
 
+  /** Tính toán dung lượng lưu trữ đã sử dụng và còn trống */
   public async capacity(): Promise<Capacity> {
     return this.cfg.capacityGb > 0
       ? { totalBytes: this.cfg.capacityGb * 1024 ** 3, freeBytes: null, source: 'config' }
       : { totalBytes: null, freeBytes: null, source: null };
   }
 
+  /** Khởi tạo hoặc quản lý tiến trình tải lên nhiều phần */
   public async multipart(): Promise<MultipartUpload[]> {
     const res = await this.client.send(
       new ListMultipartUploadsCommand({ Bucket: this.bucket, MaxUploads: 1000 }),
@@ -279,6 +290,7 @@ export class S3MonitoringProvider implements StorageMonitoringProvider {
     );
   }
 
+  /** Lấy thông tin chính sách vòng đời (lifecycle policy) của lưu trữ */
   public async lifecycle(): Promise<LifecycleInfo> {
     if (this.bucketInfo && Date.now() - this.bucketInfo.at < BUCKET_INFO_TTL_MS)
       return this.bucketInfo.value;
@@ -311,18 +323,21 @@ export class S3MonitoringProvider implements StorageMonitoringProvider {
     return value;
   }
 
+  /** Hủy bỏ tiến trình tải lên nhiều phần và xóa các phần tạm */
   public async abortMultipart(key: string, uploadId: string): Promise<void> {
     await this.client.send(
       new AbortMultipartUploadCommand({ Bucket: this.bucket, Key: key, UploadId: uploadId }),
     );
   }
 
+  /** Tạo URL có chữ ký để truy cập tệp tin tạm thời */
   public signedUrl(key: string, ttlSec: number): Promise<string> {
     return getSignedUrl(this.client, new GetObjectCommand({ Bucket: this.bucket, Key: key }), {
       expiresIn: ttlSec,
     });
   }
 
+  /** Đọc thông tin header và metadata của tệp tin lưu trữ */
   public async readHead(key: string, bytes: number): Promise<Buffer> {
     const res = await this.client.send(
       new GetObjectCommand({
@@ -335,6 +350,7 @@ export class S3MonitoringProvider implements StorageMonitoringProvider {
   }
 }
 
+/** Chuyển đổi quy tắc cấu hình sang định dạng chuẩn của hệ thống */
 function mapRule(r: S3LifecycleRule): LifecycleRule {
   const actions: LifecycleRule['actions'] = [];
   if (r.Expiration)

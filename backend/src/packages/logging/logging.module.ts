@@ -27,6 +27,7 @@ const QUIET_URL = /\/(metrics|health)(\/|\?|$)/;
 @Global()
 @Module({})
 export class LoggingModule implements NestModule {
+  /** Đăng ký dynamic module ở cấp root với cấu hình chỉ định */
   public static forRoot(options: LoggingModuleOptions): DynamicModule {
     return {
       module: LoggingModule,
@@ -68,6 +69,7 @@ export class LoggingModule implements NestModule {
     };
   }
 
+  /** Cập nhật cấu hình hoạt động của dịch vụ */
   public configure(consumer: MiddlewareConsumer): void {
     consumer.apply(requestContextMiddleware).forRoutes('{*path}');
   }

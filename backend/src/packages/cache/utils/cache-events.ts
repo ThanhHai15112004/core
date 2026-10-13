@@ -7,6 +7,7 @@ import {
 } from '../constants/cache.keys.js';
 import type { CacheEventRecord, CacheOperationRecord } from '../contracts/cache-events.types.js';
 
+/** Trích xuất hoặc tạo mã định danh duy nhất cho bản ghi */
 const id = (prefix: string) => `${prefix}_${randomBytes(6).toString('hex')}`;
 
 /** Ghi một sự kiện cache (bỏ qua khi Redis chưa sẵn sàng — không được làm hỏng luồng chính). */
@@ -25,6 +26,7 @@ export async function recordCacheEvent(
     .catch(() => undefined);
 }
 
+/** Ghi nhận lịch sử thao tác vận hành trên bộ nhớ đệm */
 export async function recordCacheOperation(
   redis: RedisService,
   op: Omit<CacheOperationRecord, 'id'>,

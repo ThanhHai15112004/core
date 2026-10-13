@@ -21,6 +21,7 @@ import type {
 const USAGE_MAX_AGE_MS = 5 * 60_000;
 const POINT_EVERY_MS = 60 * 60_000;
 
+/** Xác thực và ép kiểu dữ liệu đầu vào theo schema Zod */
 const parse = <T>(raw: string | null): T | null => {
   if (!raw) return null;
   try {
@@ -30,6 +31,7 @@ const parse = <T>(raw: string | null): T | null => {
   }
 };
 
+/** Lấy mốc thời gian bắt đầu của ngày theo chuỗi ngày giờ */
 const startOfDay = (t: number) => {
   const d = new Date(t);
   d.setHours(0, 0, 0, 0);
@@ -54,14 +56,17 @@ export class StorageMonitoringService {
         : new LocalMonitoringProvider(driver as LocalStorageDriver);
   }
 
+  /** Kiểm tra xem tính năng chỉ định có được hỗ trợ hay không */
   public supports(cap: StorageCapability): boolean {
     return this.provider.capabilities.has(cap);
   }
 
+  /** Kiểm tra dịch vụ có đủ điều kiện để sẵn sàng sử dụng hay không */
   public usable(): boolean {
     return this.connection.getStatus().state === 'connected';
   }
 
+  /** Trích xuất thông điệp mô tả lỗi từ đối tượng ngoại lệ */
   public errorMessage(err: unknown): string {
     const root =
       this.storage.driver instanceof LocalStorageDriver ? this.storage.driver.root : undefined;
@@ -90,6 +95,7 @@ export class StorageMonitoringService {
     }
   }
 
+  /** Quét và tổng hợp dung lượng lưu trữ của các đối tượng */
   public async scanUsage(now = Date.now()): Promise<UsageSnapshot> {
     const started = Date.now();
     const { objects, total, truncated } = await this.provider.scan(
@@ -106,6 +112,7 @@ export class StorageMonitoringService {
     });
   }
 
+  /** Lấy thông tin dung lượng lưu trữ đã được lưu lại từ trước */
   public async storedUsage(): Promise<UsageSnapshot | null> {
     if (!this.redis?.isReady()) return null;
     return parse<UsageSnapshot>(await this.redis.client.get(storageKeys(this.redis).usage()));

@@ -33,6 +33,7 @@ const PACKAGE_SECTION: Record<string, string> = {
   [CorePackageId.SECURITY]: 'security',
 };
 
+/** Xác định phân vùng (section) tương ứng trên System Console của package */
 const sectionOf = (packageId: string): string => PACKAGE_SECTION[packageId] ?? 'packages';
 
 /** Trạng thái runtime → trạng thái health map / mức độ sự cố. */
@@ -97,6 +98,7 @@ export class SystemOverviewService {
     private readonly healthService: HealthService,
   ) {}
 
+  /** Lấy dữ liệu tổng quan trạng thái hệ thống */
   public async getOverview(): Promise<SystemOverviewResponseDto> {
     const trafficQuery = { range: '15m', includeInternal: true } as const;
     const [
@@ -155,6 +157,7 @@ export class SystemOverviewService {
     return status.state === 'connected' ? (status.lastPingMs ?? null) : null;
   }
 
+  /** Đọc thông tin trạng thái của runtime process hiện tại */
   private readRuntime(): RuntimeSnapshot {
     return {
       uptimeSeconds: Math.round(process.uptime()),
@@ -244,6 +247,7 @@ export class SystemOverviewService {
     };
   }
 
+  /** Thu thập và tổng hợp danh sách các sự cố hiện có trong hệ thống */
   private collectProblems(
     packages: PackageSummaryDto[],
     runtimes: Map<string, RuntimeSummaryDto>,
@@ -314,6 +318,7 @@ export class SystemOverviewService {
     ].sort((a, b) => (a.severity === b.severity ? 0 : a.severity === 'error' ? -1 : 1));
   }
 
+  /** Xây dựng báo cáo đánh giá sức khỏe tổng thể của hệ thống */
   private buildOverallHealth(ctx: OverviewContext): OverallHealthReportDto {
     const problems = ctx.problems;
     const managedRuntimes = [...ctx.runtimes.values()].filter((r) => r.id !== 'api');
@@ -348,6 +353,7 @@ export class SystemOverviewService {
     };
   }
 
+  /** Tổng hợp danh sách các chỉ số vận hành then chốt (Key Metrics) */
   private buildKeyMetrics(ctx: OverviewContext): KeyMetricItemDto[] {
     const { http } = ctx;
     const rules = this.configService.performance.rules;
@@ -475,8 +481,10 @@ export class SystemOverviewService {
     };
   }
 
+  /** Xây dựng bản đồ sức khỏe (Health Map) cho các dịch vụ và runtime */
   private buildHealthMap(ctx: OverviewContext): HealthMapItemDto[] {
     const { database } = this.configService;
+    /** Lấy thông tin định nghĩa của package theo mã định danh */
     const pkg = (id: string) => ctx.packages.find((p) => p.packageId === id);
     const cachePackage = pkg(CorePackageId.CACHE);
     const storagePackage = pkg(CorePackageId.STORAGE);
@@ -488,6 +496,7 @@ export class SystemOverviewService {
     const securityPackage = pkg(CorePackageId.SECURITY);
     const cacheKeys = cachePackage?.statusReport.metrics['keys'];
     const cacheHitRate = cachePackage?.statusReport.metrics['hitRatePercent'];
+    /** Tạo đối tượng mô tả runtime item cho System Console */
     const runtimeItem = (id: 'worker' | 'scheduler'): HealthMapItemDto => {
       const rt = ctx.runtimes.get(id);
       const nameKey = `overview.map.${id}.name`;
@@ -614,6 +623,7 @@ export class SystemOverviewService {
     ];
   }
 
+  /** Tổng hợp danh sách các sự cố đang diễn ra cần chú ý */
   private buildIncidents(ctx: OverviewContext): ActiveIncidentItemDto[] {
     return ctx.problems.map((p) => ({
       id: `incident-${p.key}`,
@@ -626,6 +636,7 @@ export class SystemOverviewService {
   }
 }
 
+/** Ánh xạ trạng thái hoạt động sang trạng thái hiển thị trên bản đồ sức khỏe */
 function toHealthMapStatus(status: PackageStatus | undefined): HealthMapItemDto['status'] {
   switch (status) {
     case PackageStatus.HEALTHY:

@@ -77,12 +77,14 @@ function targetOf(v: Violation): string {
   return v.runtime ? `runtimes/${v.runtime}` : 'runtimes';
 }
 
+/** Tính toán các chỉ số đánh giá hiệu quả vận hành then chốt */
 const kpi = (value: number | null, previous: number | null): KpiDto => ({
   value,
   changePercent: changePercent(value, previous),
 });
 /** `runtime` chỉ dùng nội bộ — không trả cho console. */
 const toResponse = ({ runtime: _runtime, ...rest }: BottleneckDto): BottleneckResponseDto => rest;
+/** Tìm giá trị lớn nhất trong tập hợp các số liệu */
 const max = (values: (number | null)[]) => {
   const list = values.filter((v): v is number => v !== null);
   return list.length ? Math.max(...list) : null;
@@ -125,6 +127,7 @@ export class PerformanceService {
     }
   }
 
+  /** Tổng hợp thông tin hiệu năng của các thành phần hệ thống */
   private summaries(): Promise<RuntimeSummaryDto[]> {
     return this.runtimes.getSummaries().catch(() => [] as RuntimeSummaryDto[]);
   }
@@ -144,6 +147,7 @@ export class PerformanceService {
     }
   }
 
+  /** Xác định các điểm nghẽn hiệu năng trong hệ thống */
   private async bottlenecks(violations: Violation[]): Promise<BottleneckDto[]> {
     if (!violations.length) return [];
     const [active, endpoints, summaries] = await Promise.all([
@@ -153,6 +157,7 @@ export class PerformanceService {
         : Promise.resolve([]),
       this.summaries(),
     ]);
+    /** Lấy tên định danh hiển thị của thành phần hoặc package */
     const nameOf = (id: string | null) =>
       id ? (summaries.find((s) => s.id === id)?.name ?? id) : '';
     const none = this.i18n.t('performance.none');
@@ -186,6 +191,7 @@ export class PerformanceService {
     });
   }
 
+  /** Truy vấn danh sách các điểm nghẽn hiệu năng đã phát hiện */
   public async getBottlenecks(): Promise<BottleneckDto[]> {
     return this.bottlenecks((await this.evaluate()) ?? []);
   }
@@ -206,7 +212,9 @@ export class PerformanceService {
     return { status: 'normal', note: null };
   }
 
+  /** Lấy danh sách các thành phần đang được giám sát hiệu năng */
   private components(m: WindowMetrics, violations: Violation[]): ComponentRowDto[] {
+    /** Chuyển đổi bản ghi dữ liệu thành hàng hiển thị trên bảng */
     const row = (
       id: ComponentId,
       load: number | null,
@@ -281,6 +289,7 @@ export class PerformanceService {
     ];
   }
 
+  /** Lấy thông tin mức độ sử dụng tài nguyên (CPU, RAM, Event Loop) */
   private resources(
     summaries: RuntimeSummaryDto[],
     perRuntime: Awaited<ReturnType<PerformanceInputsService['runtimes']>>,
@@ -312,6 +321,7 @@ export class PerformanceService {
     });
   }
 
+  /** Lấy dữ liệu tổng quan trạng thái hệ thống */
   public async getOverview(range: PerfRange): Promise<PerformanceOverviewDto> {
     await this.must();
     const minutes = PERF_RANGES[range];
@@ -339,6 +349,7 @@ export class PerformanceService {
       running.length && running.every((r) => r.memoryLimitSource === 'cgroup')
         ? Math.round(running.reduce((a, r) => a + (r.memoryLimitMb ?? 0), 0))
         : null;
+    /** Kiểm tra mức độ tiêu thụ tài nguyên so với ngưỡng định mức cho phép */
     const budget = (key: BudgetDto['key'], current: number | null, unit: string): BudgetDto => ({
       key,
       target: budgetsCfg[key],
@@ -497,12 +508,14 @@ export class PerformanceService {
     }
   }
 
+  /** Chuyển đổi dữ liệu chuỗi thời gian thành các điểm trên biểu đồ */
   private toPoints(list: { t: number; v: number }[] | undefined, shiftMs = 0) {
     return (list ?? [])
       .filter((p) => Number.isFinite(p.v))
       .map((p) => ({ t: p.t + shiftMs, value: round(p.v, 2) }));
   }
 
+  /** Lấy dữ liệu chuỗi thời gian của lưu lượng mạng */
   public async getTimeseries(
     range: PerfRange,
     metric: TimeseriesMetric,
@@ -513,6 +526,7 @@ export class PerformanceService {
     const minutes = PERF_RANGES[range];
     const stepSec = Math.max(15, Math.round((minutes * 60) / MAX_POINTS));
     const w = `${Math.max(60, stepSec * 2)}s`;
+    /** Tạo chuỗi biểu thức logic hoặc truy vấn chuẩn hóa */
     const exprOf = (m: TimeseriesMetric) => {
       const e = this.metricExpr(m);
       return { ...e, expr: e.expr.replaceAll('$w', w) };
@@ -533,6 +547,7 @@ export class PerformanceService {
       this.markers(Date.now() - minutes * 60_000),
     ]);
     const points = this.toPoints(mainRes[0]?.points);
+    /** Tạo nhãn hiển thị mô tả cho dữ liệu biểu đồ */
     const label = (m: TimeseriesMetric) => this.i18n.t(`performance.metric.${m}`);
     const series: PerfSeriesDto[] = [
       { id: metric, label: label(metric), unit: main.unit, axis: 'left', kind: 'main', points },
@@ -641,6 +656,7 @@ export class PerformanceService {
     return [...perfEvents, ...runtimeEvents].sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
   }
 
+  /** Truy vấn danh sách các sự kiện vận hành gần đây */
   public getEvents(range: PerfRange): Promise<PerfEventDto[]> {
     return this.getEventsSince(Date.now() - PERF_RANGES[range] * 60_000);
   }
@@ -658,6 +674,7 @@ export class PerformanceService {
       this.evaluate(),
     ]);
     const own = (violations ?? []).filter((v) => v.component === id);
+    /** Khởi tạo hoặc cập nhật một chỉ số đo lường */
     const metric = (
       key: string,
       value: number | null,

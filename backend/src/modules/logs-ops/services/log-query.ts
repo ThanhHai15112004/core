@@ -171,11 +171,13 @@ export function parseLogQuery(raw: string, base: LogFilter = EMPTY_LOG_FILTER): 
   return f;
 }
 
+/** Xác định trạng thái của đối tượng theo các chỉ số hiện tại */
 function statusOf(e: LogEntry): number | null {
   const s = e.metadata?.status;
   return typeof s === 'number' ? s : null;
 }
 
+/** Lấy đường dẫn URL hoặc định danh đường dẫn của endpoint */
 function pathOf(e: LogEntry): string {
   const p = e.metadata?.path;
   return `${typeof p === 'string' ? p : ''} ${e.route ?? ''}`.toLowerCase();
@@ -187,6 +189,7 @@ function pathOf(e: LogEntry): string {
  */
 const matchers = new Map<string, (path: string) => boolean>();
 
+/** Tạo hàm kiểm tra so khớp mẫu đường dẫn endpoint */
 function endpointMatcher(endpoint: string): (path: string) => boolean {
   const cached = matchers.get(endpoint);
   if (cached) return cached;
@@ -204,15 +207,18 @@ function endpointMatcher(endpoint: string): (path: string) => boolean {
     )
     .join('/');
   const re = new RegExp(`(^|\\s)${pattern}(\\?|\\s|$)`);
+  /** Kiểm tra chuỗi đầu vào có khớp với mẫu quy định hay không */
   const match = (path: string) => re.test(path);
   matchers.set(endpoint, match);
   return match;
 }
 
+/** Trích xuất mốc thời gian ghi nhận của bản ghi log */
 export function entryTime(e: LogEntry): number {
   return Date.parse(e.t);
 }
 
+/** Kiểm tra xem dòng log có thỏa mãn bộ lọc tìm kiếm hay không */
 export function matchesLog(e: LogEntry, f: LogFilter): boolean {
   const at = entryTime(e);
   if (f.from !== null && at < f.from) return false;
@@ -265,10 +271,12 @@ export interface LogCursor {
   id: string;
 }
 
+/** Mã hóa con trỏ phân trang dòng log sang chuỗi an toàn */
 export function encodeLogCursor(e: LogEntry): string {
   return Buffer.from(JSON.stringify({ t: entryTime(e), id: e.id ?? '' })).toString('base64url');
 }
 
+/** Giải mã chuỗi con trỏ phân trang dòng log */
 export function decodeLogCursor(raw: string | null): LogCursor | null {
   if (!raw) return null;
   try {

@@ -42,6 +42,7 @@ export function inNamespace(key: string, ns: string, depth = 2): boolean {
 
 /** Pattern SCAN (đã escape ký tự glob) cho mọi key bắt đầu bằng `ns:`. */
 export function namespacePattern(dataPrefix: string, ns: string): string {
+  /** Thoát các ký tự đặc biệt trong chuỗi để hiển thị an toàn */
   const escape = (s: string) => s.replace(/[*?[\]\\]/g, '\\$&');
   return ns === ROOT_NAMESPACE ? `${escape(dataPrefix)}*` : `${escape(dataPrefix)}${escape(ns)}:*`;
 }

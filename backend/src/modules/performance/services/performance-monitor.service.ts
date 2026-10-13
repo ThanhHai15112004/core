@@ -25,6 +25,7 @@ export class PerformanceMonitorService implements OnApplicationBootstrap, OnModu
     private readonly config: CoreConfigService,
   ) {}
 
+  /** Thực thi tác vụ khởi động sau khi toàn bộ ứng dụng hoàn tất bootstrap */
   public onApplicationBootstrap(): void {
     if (this.config.isTest) return;
     const every = Math.max(5000, this.config.performance.evaluateMs);
@@ -33,11 +34,13 @@ export class PerformanceMonitorService implements OnApplicationBootstrap, OnModu
     setTimeout(() => void this.tick(), 10_000).unref();
   }
 
+  /** Dọn dẹp tài nguyên và ngắt kết nối khi module bị hủy */
   public onModuleDestroy(): void {
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
   }
 
+  /** Thực hiện kiểm tra định kỳ và cập nhật trạng thái kết nối */
   public async tick(now = Date.now()): Promise<void> {
     if (this.running || !this.events.isAvailable() || !this.performance.telemetryConfigured) return;
     this.running = true;
@@ -57,6 +60,7 @@ export class PerformanceMonitorService implements OnApplicationBootstrap, OnModu
       ]);
       if (violations === null) return; // Prometheus không trả lời → giữ nguyên trạng thái.
       const { started, escalated, next, recovered } = diffBottlenecks(violations, active, now);
+      /** Lấy giá trị cơ sở ban đầu để so sánh */
       const base = (v: (typeof violations)[number]) => ({
         at: now,
         bottleneckId: v.id,

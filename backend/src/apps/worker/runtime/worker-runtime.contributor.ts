@@ -17,6 +17,7 @@ export class WorkerRuntimeContributor implements RuntimeContributor, OnModuleIni
     private readonly queues: QueueRegistry,
   ) {}
 
+  /** Đăng ký contributor này với RuntimeAgentService khi khởi tạo module */
   public onModuleInit(): void {
     this.agent.registerContributor(this);
   }
@@ -34,6 +35,7 @@ export class WorkerRuntimeContributor implements RuntimeContributor, OnModuleIni
     return Math.round(((cur.processed - prev.processed) / (now - prev.at)) * 60_000 * 100) / 100;
   }
 
+  /** Cung cấp thông tin mô tả chi tiết về Worker runtime */
   public describe(): RuntimeDescriptor {
     return {
       type: 'queue-consumer',
@@ -89,6 +91,7 @@ export class WorkerRuntimeContributor implements RuntimeContributor, OnModuleIni
     await this.processor.worker.pause();
   }
 
+  /** Tiếp tục nhận và xử lý các job mới sau khi đã tạm dừng */
   public async resume(): Promise<void> {
     this.processor.worker.resume();
   }

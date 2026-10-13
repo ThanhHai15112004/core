@@ -53,10 +53,12 @@ export class SchedulerOperationsService {
     return schedulerKeys(this.redis);
   }
 
+  /** Kiểm tra xem broker truyền tin có đang duy trì kết nối hay không */
   private brokerConnected(): boolean {
     return this.connection.getStatus().state === 'connected';
   }
 
+  /** Ghi nhận nhật ký kiểm toán cho hành động nhạy cảm */
   private async audit(
     action: SchedulerOperationAction,
     target: string,
@@ -97,6 +99,7 @@ export class SchedulerOperationsService {
     return record;
   }
 
+  /** Lấy thông tin operations của hệ thống */
   public async getOperations(): Promise<SchedulerOperationRecord[]> {
     if (!this.redis.isReady()) return [];
     try {

@@ -7,6 +7,7 @@ import { RuntimeAgentService } from '@packages/runtime/index.js';
 import { ApiRuntimeContributor } from '../runtime/api-runtime.contributor.js';
 import { ApiModule } from '../api.module.js';
 
+/** Khởi tạo và khởi chạy HTTP API server với NestJS và Fastify */
 export async function bootstrapApi(): Promise<NestFastifyApplication> {
   const logger = new Logger('ApiBootstrap');
   const app = await NestFactory.create<NestFastifyApplication>(

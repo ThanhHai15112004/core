@@ -5,6 +5,7 @@ import { resolveHeaderLocale } from '../resolvers/header-locale.resolver.js';
 
 @Injectable()
 export class LocaleMiddleware implements NestMiddleware {
+  /** Thiết lập locale hoặc middleware hoạt động cho ngữ cảnh hiện tại */
   public use(req: FastifyRequest['raw'], _res: FastifyReply['raw'], next: () => void): void {
     const header = req.headers['accept-language'];
     const locale = resolveHeaderLocale(Array.isArray(header) ? header[0] : header);

@@ -33,6 +33,7 @@ export class StorageManageableAdapter implements ManageablePackage {
     return this.i18n.t('ops.storage.displayName');
   }
 
+  /** Lấy báo cáo tình trạng hoạt động và các chỉ số của package */
   public async getStatus(): Promise<PackageStatusReport> {
     const status = this.connection.getStatus();
     const info = this.monitoring.provider.info();
@@ -57,6 +58,7 @@ export class StorageManageableAdapter implements ManageablePackage {
     };
   }
 
+  /** Lấy danh sách các hành động (actions) vận hành được hỗ trợ */
   public getActions(): PackageActionDescriptor[] {
     return [
       {
@@ -68,6 +70,7 @@ export class StorageManageableAdapter implements ManageablePackage {
     ];
   }
 
+  /** Thực thi hành động vận hành tương ứng trên package */
   public async executeAction(actionId: string): Promise<PackageActionResult> {
     if (actionId !== STORAGE_TEST_ACTION)
       return {

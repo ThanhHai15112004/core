@@ -50,12 +50,14 @@ const keysSchema = z.object({
   count: z.coerce.number().int().min(10).max(500).default(100),
 });
 
+/** Xác thực và ép kiểu dữ liệu đầu vào theo schema Zod */
 function parse<T>(schema: z.ZodType<T>, value: unknown): T {
   const result = schema.safeParse(value);
   if (!result.success) throw new CacheValidationException(result.error.issues);
   return result.data;
 }
 
+/** Trích xuất thông tin ngữ cảnh yêu cầu (RequestContext) từ Fastify request */
 const context = (req: FastifyRequest): OperationContext => ({ ip: maskIp(req.ip), actor: null });
 
 /**
@@ -66,12 +68,14 @@ const context = (req: FastifyRequest): OperationContext => ({ ip: maskIp(req.ip)
 export class CacheOpsController {
   constructor(private readonly cache: CacheOpsService) {}
 
+  /** Lấy dữ liệu tổng quan cho trang quản trị vận hành */
   @Public()
   @Get(R.OVERVIEW)
   public overview(@Query() q: Record<string, string>) {
     return this.cache.getOverview(parse(rangeSchema, q).range);
   }
 
+  /** Lấy các chỉ số đo lường hiệu năng và vận hành */
   @Public()
   @Get(R.METRICS)
   public metrics(@Query() q: Record<string, string>) {
@@ -79,18 +83,21 @@ export class CacheOpsController {
     return this.cache.getMetrics(range, metric);
   }
 
+  /** Lấy danh sách các namespace trong bộ nhớ đệm */
   @Public()
   @Get(R.NAMESPACES)
   public namespaces() {
     return this.cache.getNamespaces();
   }
 
+  /** Lấy thông tin chi tiết một namespace trong bộ nhớ đệm */
   @Public()
   @Get(R.NAMESPACE_DETAIL)
   public namespace(@Param('name') name: string) {
     return this.cache.getNamespaceDetail(parse(namespaceSchema, name));
   }
 
+  /** Xóa toàn bộ các khóa thuộc một namespace trong bộ nhớ đệm */
   @Public()
   @Post(R.NAMESPACE_CLEAR)
   @HttpCode(HttpStatus.OK)
@@ -105,6 +112,7 @@ export class CacheOpsController {
     return this.cache.clearNamespace(ns, context(req));
   }
 
+  /** Lấy danh sách các khóa trong bộ nhớ đệm */
   @Public()
   @Get(R.KEYS)
   public keys(@Query() q: Record<string, string>) {
@@ -116,12 +124,14 @@ export class CacheOpsController {
     );
   }
 
+  /** Lấy thông tin chi tiết của một khóa trong bộ nhớ đệm */
   @Public()
   @Get(R.KEY_DETAIL)
   public key(@Query('key') key: string) {
     return this.cache.getKeyDetail(parse(keySchema, key));
   }
 
+  /** Xóa một khóa cụ thể khỏi bộ nhớ đệm */
   @Public()
   @Delete(R.KEYS)
   @HttpCode(HttpStatus.OK)
@@ -130,48 +140,56 @@ export class CacheOpsController {
     return this.cache.deleteKey(parse(keySchema, key), context(req));
   }
 
+  /** Lấy thông tin phân bổ và sử dụng bộ nhớ */
   @Public()
   @Get(R.MEMORY)
   public memory() {
     return this.cache.getMemory();
   }
 
+  /** Lấy danh sách các client đang kết nối tới dịch vụ */
   @Public()
   @Get(R.CLIENTS)
   public clients() {
     return this.cache.getClients();
   }
 
+  /** Truy vấn danh sách các sự kiện vận hành gần đây */
   @Public()
   @Get(R.EVENTS)
   public events(@Query() q: Record<string, string>) {
     return this.cache.getEvents(parse(rangeSchema, q).range);
   }
 
+  /** Truy vấn danh sách các lỗi và ngoại lệ ghi nhận được */
   @Public()
   @Get(R.ERRORS)
   public errors(@Query() q: Record<string, string>) {
     return this.cache.getErrors(parse(rangeSchema, q).range);
   }
 
+  /** Truy vấn lịch sử các thao tác vận hành đã thực hiện */
   @Public()
   @Get(R.OPERATIONS)
   public operations() {
     return this.cache.getOperations();
   }
 
+  /** Lấy thông tin cấu hình hiện tại của dịch vụ */
   @Public()
   @Get(R.CONFIG)
   public config() {
     return this.cache.getConfig();
   }
 
+  /** Ước lượng mức độ ảnh hưởng trước khi thực hiện xóa bộ nhớ đệm */
   @Public()
   @Get(R.FLUSH_IMPACT)
   public flushImpact() {
     return this.cache.getFlushImpact();
   }
 
+  /** Xóa toàn bộ dữ liệu trong bộ nhớ đệm */
   @Public()
   @Post(R.FLUSH)
   @HttpCode(HttpStatus.OK)
@@ -180,6 +198,7 @@ export class CacheOpsController {
     return this.cache.flush(context(req));
   }
 
+  /** Kiểm tra trạng thái sẵn sàng và đo độ trễ kết nối */
   @Public()
   @Post(R.PING)
   @HttpCode(HttpStatus.OK)

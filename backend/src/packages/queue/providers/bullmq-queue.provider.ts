@@ -37,6 +37,7 @@ const BULL_STATE: Record<JobState, BullState> = {
 /** Điểm của zset `delayed` = thời điểm chạy × 0x1000 + bộ đếm (BullMQ). */
 const DELAY_SCORE_FACTOR = 0x1000;
 
+/** Kiểm tra hoặc thiết lập chính sách lưu giữ dữ liệu */
 const retention = (v: unknown): string | null => {
   if (v === undefined || v === false) return null;
   if (v === true) return 'all';
@@ -100,6 +101,7 @@ export class BullMqQueueProvider implements QueueMonitoringProvider {
     private readonly endpoint: string,
   ) {}
 
+  /** Lấy thông tin tổng quan về trạng thái cấu hình và vận hành */
   public info(): QueueProviderInfo {
     return {
       driver: 'bullmq',
@@ -110,19 +112,23 @@ export class BullMqQueueProvider implements QueueMonitoringProvider {
     };
   }
 
+  /** Bọc Promise với cơ chế timeout an toàn */
   private t<T>(task: Promise<T>): Promise<T> {
     return this.registry.withTimeout(task);
   }
 
+  /** Kiểm tra xem tên hàng đợi hoặc kênh có hợp lệ trong danh mục hay không */
   public isKnown(name: string): boolean {
     return this.registry.isKnown(name);
   }
 
+  /** Lấy đối tượng hàng đợi (Queue) theo tên định danh */
   private queue(name: string): Queue {
     if (!this.registry.isKnown(name)) throw new QueueOperationError('NOT_FOUND');
     return this.registry.get(name);
   }
 
+  /** Lấy danh sách toàn bộ các thành phần đang được quản lý */
   private all(filter?: string | null): Queue[] {
     return this.registry
       .names()
@@ -130,6 +136,7 @@ export class BullMqQueueProvider implements QueueMonitoringProvider {
       .map((n) => this.registry.get(n));
   }
 
+  /** Kiểm tra trạng thái sẵn sàng và đo độ trễ kết nối */
   public async ping(): Promise<number> {
     const started = performance.now();
     const [first] = this.all();
@@ -138,6 +145,7 @@ export class BullMqQueueProvider implements QueueMonitoringProvider {
     return Number((performance.now() - started).toFixed(2));
   }
 
+  /** Lấy danh sách các hàng đợi tin nhắn hiện có */
   public async queues(): Promise<QueueInfo[]> {
     return Promise.all(
       this.all().map(async (q) => {
@@ -149,6 +157,7 @@ export class BullMqQueueProvider implements QueueMonitoringProvider {
           this.t(q.getWorkers()).catch(() => null),
           this.t(q.getJobs(['waiting', 'prioritized'], 0, 0, true)).catch(() => []),
         ]);
+        /** Chuyển đổi giá trị sang kiểu số an toàn với giá trị dự phòng */
         const n = (k: string) => counts[k] ?? 0;
         const first = oldest.find(Boolean);
         return {
@@ -170,9 +179,11 @@ export class BullMqQueueProvider implements QueueMonitoringProvider {
     );
   }
 
+  /** Lấy thông tin trạng thái hoạt động của Worker */
   private worker(w: Record<string, string>): QueueWorkerConnection {
     const raw = w['rawname'] ?? '';
     const i = raw.indexOf(':w:');
+    /** Chuyển đổi giá trị sang kiểu số an toàn với giá trị dự phòng */
     const num = (v: string | undefined) => (v !== undefined && v !== '' ? Number(v) : null);
     return {
       name: i >= 0 ? raw.slice(i + 3) : null,
@@ -197,6 +208,7 @@ export class BullMqQueueProvider implements QueueMonitoringProvider {
     return out;
   }
 
+  /** Lấy danh sách các job trong hàng đợi */
   public async jobs(queue: string | null, states: JobState[], limit: number) {
     if (queue && !this.registry.isKnown(queue)) throw new QueueOperationError('NOT_FOUND');
     const bull = [...new Set(states.map((s) => BULL_STATE[s]))];
@@ -220,6 +232,7 @@ export class BullMqQueueProvider implements QueueMonitoringProvider {
     return lists.flat().filter((j) => states.includes(j.state));
   }
 
+  /** Lấy các giá trị cấu hình mặc định của hệ thống */
   public defaults(): QueueJobDefaults {
     const o = this.registry.jobOptions('preview');
     const b = o.backoff;
@@ -236,14 +249,17 @@ export class BullMqQueueProvider implements QueueMonitoringProvider {
     };
   }
 
+  /** Tạm dừng tiếp nhận và xử lý các tác vụ mới */
   public async pause(queue: string): Promise<void> {
     await this.t(this.queue(queue).pause());
   }
 
+  /** Tiếp tục tiếp nhận và xử lý tác vụ sau khi tạm dừng */
   public async resume(queue: string): Promise<void> {
     await this.t(this.queue(queue).resume());
   }
 
+  /** Thực hiện thử lại toàn bộ các job đang ở trạng thái lỗi */
   public async retryFailed(queue: string, count: number): Promise<number> {
     const q = this.queue(queue);
     const jobs = (await this.t(q.getJobs(['failed'], 0, count - 1, true))).filter(Boolean);
@@ -259,6 +275,7 @@ export class BullMqQueueProvider implements QueueMonitoringProvider {
     return done;
   }
 
+  /** Đóng và dọn sạch các tác vụ trong hàng đợi khi kết thúc */
   public async drain(queue: string, includeDelayed: boolean): Promise<void> {
     await this.t(this.queue(queue).drain(includeDelayed));
   }

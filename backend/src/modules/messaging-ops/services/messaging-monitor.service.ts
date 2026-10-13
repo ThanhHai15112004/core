@@ -29,6 +29,7 @@ const RULE_WINDOW_MIN = 15;
 /** Message đang chờ của queue (waiting + prioritized). */
 export const waitingOf = (q: QueueSnapshot) => q.counts.waiting + q.counts.prioritized;
 
+/** Chuẩn hóa các tham số đầu vào cho quy tắc hàng đợi */
 export function queueRuleInputs(
   queues: QueueSnapshot[],
   consumers: ConsumerRegistration[],
@@ -67,6 +68,7 @@ export class MessagingMonitorService implements OnApplicationBootstrap, OnModule
     @Optional() private readonly redis?: RedisService,
   ) {}
 
+  /** Thực thi tác vụ khởi động sau khi toàn bộ ứng dụng hoàn tất bootstrap */
   public onApplicationBootstrap(): void {
     if (this.config.isTest) return;
     this.timer = setInterval(() => void this.tick(), TICK_MS);
@@ -74,11 +76,13 @@ export class MessagingMonitorService implements OnApplicationBootstrap, OnModule
     setTimeout(() => void this.tick(), 5000).unref();
   }
 
+  /** Dọn dẹp tài nguyên và ngắt kết nối khi module bị hủy */
   public onModuleDestroy(): void {
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
   }
 
+  /** Thực hiện kiểm tra định kỳ và cập nhật trạng thái kết nối */
   public async tick(now = Date.now()): Promise<void> {
     if (this.running || !this.store.isAvailable()) return;
     this.running = true;
@@ -109,6 +113,7 @@ export class MessagingMonitorService implements OnApplicationBootstrap, OnModule
     }
   }
 
+  /** Đánh giá các điều kiện và phát hiện cảnh báo bất thường */
   private async evaluate(
     queues: QueueSnapshot[] | null,
     consumers: ConsumerRegistration[],
@@ -139,6 +144,7 @@ export class MessagingMonitorService implements OnApplicationBootstrap, OnModule
     await this.applyAlerts(violations, active, now);
   }
 
+  /** Cập nhật danh sách các cảnh báo hiện thời của hệ thống */
   private async applyAlerts(
     violations: MessagingViolation[],
     active: Awaited<ReturnType<MessagingStoreService['activeAlerts']>>,

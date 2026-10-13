@@ -22,6 +22,7 @@ export class ApiRuntimeContributor implements RuntimeContributor, OnModuleInit {
     private readonly config: CoreConfigService,
   ) {}
 
+  /** Đăng ký contributor này với RuntimeAgentService khi khởi tạo module */
   public onModuleInit(): void {
     this.agent.registerContributor(this);
   }
@@ -31,6 +32,7 @@ export class ApiRuntimeContributor implements RuntimeContributor, OnModuleInit {
     this.server = server;
   }
 
+  /** Cung cấp thông tin mô tả chi tiết về HTTP API runtime */
   public describe(): RuntimeDescriptor {
     return {
       type: 'http',
@@ -50,6 +52,7 @@ export class ApiRuntimeContributor implements RuntimeContributor, OnModuleInit {
     };
   }
 
+  /** Đếm số lượng kết nối HTTP hiện đang mở tới server */
   private countConnections(): Promise<number | null> {
     const server = this.server;
     if (!server) return Promise.resolve(null);

@@ -4,10 +4,12 @@ import { HttpClientLoggingInterceptor } from '../interceptors/http-client-loggin
 
 @Injectable()
 export class BaseHttpClientProvider implements HttpClientContract {
+  /** Lấy dữ liệu hoặc đối tượng theo khóa định danh */
   public async get<T>(url: string, options?: HttpRequestOptions): Promise<T> {
     return this.request<T>('GET', url, undefined, options);
   }
 
+  /** Gửi yêu cầu HTTP POST tới dịch vụ bên ngoài */
   public async post<T, B = unknown>(
     url: string,
     body?: B,
@@ -16,6 +18,7 @@ export class BaseHttpClientProvider implements HttpClientContract {
     return this.request<T>('POST', url, body, options);
   }
 
+  /** Lưu trữ một đối tượng hoặc tệp tin vào hệ thống lưu trữ */
   public async put<T, B = unknown>(
     url: string,
     body?: B,
@@ -24,10 +27,12 @@ export class BaseHttpClientProvider implements HttpClientContract {
     return this.request<T>('PUT', url, body, options);
   }
 
+  /** Xóa bản ghi khỏi hệ thống theo mã định danh */
   public async delete<T>(url: string, options?: HttpRequestOptions): Promise<T> {
     return this.request<T>('DELETE', url, undefined, options);
   }
 
+  /** Thực thi yêu cầu HTTP tới dịch vụ bên ngoài kèm cấu hình timeout */
   private async request<T>(
     method: string,
     url: string,

@@ -46,22 +46,27 @@ export class PackageRegistryService implements OnModuleInit {
     }
   }
 
+  /** Đăng ký một thành phần hoặc package mới vào registry */
   public register(pkg: ManageablePackage): void {
     this.packages.set(pkg.packageId, pkg);
   }
 
+  /** Hủy đăng ký một thành phần khỏi registry theo mã định danh */
   public unregister(packageId: string): void {
     this.packages.delete(packageId);
   }
 
+  /** Tìm kiếm một manageable package theo mã định danh */
   public getPackage(packageId: string): ManageablePackage | undefined {
     return this.packages.get(packageId);
   }
 
+  /** Lấy danh sách tóm tắt trạng thái và các hành động của tất cả packages */
   public async getAllSummaries(): Promise<PackageSummaryDto[]> {
     return Promise.all([...this.packages.values()].map((pkg) => this.toSummary(pkg)));
   }
 
+  /** Thực thi hành động vận hành tương ứng trên package */
   public async executeAction(
     packageId: string,
     actionId: string,

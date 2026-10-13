@@ -33,12 +33,14 @@ export class MessagingManageableAdapter implements ManageablePackage {
     return this.i18n.t('ops.messaging.displayName');
   }
 
+  /** Lấy báo cáo tình trạng hoạt động và các chỉ số của package */
   public async getStatus(): Promise<PackageStatusReport> {
     const status = this.connection.getStatus();
     const info = this.monitoring.info();
     const queues = this.monitoring.usable()
       ? await this.monitoring.queues().catch(() => null)
       : null;
+    /** Tính tổng các giá trị trong mảng số liệu */
     const sum = (k: 'waiting' | 'failed' | 'active') =>
       queues?.reduce((s, q) => s + q.counts[k] + (k === 'waiting' ? q.counts.prioritized : 0), 0);
     const consumers = queues?.reduce((s, q) => s + (q.workers?.length ?? 0), 0);
@@ -68,6 +70,7 @@ export class MessagingManageableAdapter implements ManageablePackage {
     };
   }
 
+  /** Lấy danh sách các hành động (actions) vận hành được hỗ trợ */
   public getActions(): PackageActionDescriptor[] {
     return [
       {
@@ -79,6 +82,7 @@ export class MessagingManageableAdapter implements ManageablePackage {
     ];
   }
 
+  /** Thực thi hành động vận hành tương ứng trên package */
   public async executeAction(actionId: string): Promise<PackageActionResult> {
     if (actionId !== MESSAGING_TEST_ACTION)
       return {

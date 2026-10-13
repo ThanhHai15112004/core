@@ -84,14 +84,17 @@ const ERROR_KINDS: StorageErrorKind[] = [
   'other',
 ];
 
+/** Lấy mốc thời gian bắt đầu của ngày theo chuỗi ngày giờ */
 const startOfDay = (t: number) => {
   const d = new Date(t);
   d.setHours(0, 0, 0, 0);
   return d.getTime();
 };
+/** Định dạng mốc thời gian sang chuỗi chuẩn ISO 8601 */
 const iso = (t: number | null | undefined) =>
   t === null || t === undefined ? null : new Date(t).toISOString();
 
+/** Định dạng số byte thành chuỗi dung lượng dễ đọc (KB, MB, GB) */
 export function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   const units = ['KB', 'MB', 'GB', 'TB'];
@@ -128,6 +131,7 @@ export class StorageOpsService {
     return this.cfg.largeObjectMb * 1024 * 1024;
   }
 
+  /** Lấy các thiết lập cấu hình phân tích lưu lượng truy cập */
   private settings(): StorageSettingsDto {
     const c = this.cfg;
     return {
@@ -158,8 +162,10 @@ export class StorageOpsService {
     };
   }
 
+  /** Tính toán mức độ tăng trưởng dung lượng qua các thời kỳ */
   private growth(usage: UsageSnapshot | null, points: UsagePoint[], now: number): GrowthDto {
     const current = usage ? { bytes: usage.totalBytes, objects: usage.totalObjects } : null;
+    /** Lọc dữ liệu bắt đầu từ mốc thời gian chỉ định */
     const since = (t: number) => (current ? growthSince(points, current, t) : null);
     const today = since(startOfDay(now));
     const dayStart = pointAtOrBefore(points, startOfDay(now));
@@ -176,6 +182,7 @@ export class StorageOpsService {
     };
   }
 
+  /** Chuyển đổi danh sách container lưu trữ thành các dòng hiển thị bảng */
   private containerRows(
     usage: UsageSnapshot | null,
     points: UsagePoint[],
@@ -197,6 +204,7 @@ export class StorageOpsService {
     });
   }
 
+  /** Tạo báo cáo chi tiết về tình trạng hoạt động của dịch vụ */
   private report(
     points: UsagePoint[],
     errors: StorageErrorRecord[],
@@ -213,6 +221,7 @@ export class StorageOpsService {
     };
   }
 
+  /** Lấy danh sách các lỗi ghi nhận từ mốc thời gian chỉ định */
   private errorsSince(from: number): Promise<StorageErrorRecord[]> {
     return this.store
       .errors()
@@ -273,6 +282,7 @@ export class StorageOpsService {
     };
   }
 
+  /** Kiểm tra và đánh giá tình trạng sức khỏe của dịch vụ */
   private health(alerts: StorageAlertDto[]): StorageHealthDto {
     const s = this.connection.getStatus();
     const problems = alerts.filter((a) => a.severity !== 'info');
@@ -307,6 +317,7 @@ export class StorageOpsService {
     };
   }
 
+  /** Thu thập danh sách các cảnh báo đang hoạt động trong hệ thống */
   private async alerts(): Promise<StorageAlertDto[]> {
     const active = await this.store
       .activeAlerts()
@@ -329,6 +340,7 @@ export class StorageOpsService {
       .sort((a, b) => rank[a.severity] - rank[b.severity]);
   }
 
+  /** Tạo chuỗi thông điệp cảnh báo hiển thị cho người dùng */
   private alertMessage(rule: string, p: Record<string, unknown>): string {
     const value = Number(p['value'] ?? 0);
     const threshold = Number(p['threshold'] ?? 0);
@@ -371,6 +383,7 @@ export class StorageOpsService {
     };
   }
 
+  /** Lấy danh sách các bucket/container lưu trữ */
   public async getContainers(range: StorageRange): Promise<StorageContainersDto> {
     const now = Date.now();
     const [usage, points, errors] = await Promise.all([
@@ -386,6 +399,7 @@ export class StorageOpsService {
     };
   }
 
+  /** Lấy thông tin chi tiết về một bucket/container lưu trữ */
   public async getContainerDetail(name: string, range: StorageRange): Promise<ContainerDetailDto> {
     const now = Date.now();
     const [usage, points, errors] = await Promise.all([
@@ -450,6 +464,7 @@ export class StorageOpsService {
     };
   }
 
+  /** Lấy metadata và thông tin chi tiết của một đối tượng lưu trữ */
   public async getObjectDetail(key: string): Promise<ObjectDetailDto> {
     if (!isValidKey(key))
       throw new StorageActionRejectedException(
@@ -537,6 +552,7 @@ export class StorageOpsService {
     };
   }
 
+  /** Lấy thông tin cấu hình chính sách vòng đời lưu trữ */
   public async getLifecycle(): Promise<StorageLifecycleDto> {
     const lifecycle = await this.monitoring.section('lifecycle', () =>
       this.monitoring.provider.lifecycle(),
@@ -595,21 +611,25 @@ export class StorageOpsService {
     };
   }
 
+  /** Truy vấn danh sách các sự kiện vận hành gần đây */
   public async getEvents(range: StorageRange): Promise<StorageEventDto[]> {
     return (await this.eventsSince(Date.now() - STORAGE_RANGES[range] * MINUTE)).map((e) =>
       this.eventDto(e),
     );
   }
 
+  /** Lấy thông tin operations của hệ thống */
   public async getOperations(): Promise<StorageOperationDto[]> {
     const ops = await this.store.operations().catch(() => [] as StorageOperationRecord[]);
     return ops.map((o) => ({ ...o, at: new Date(o.at).toISOString() }));
   }
 
+  /** Lấy thông tin cấu hình hoạt động của dịch vụ */
   public async getConfig(): Promise<StorageConfigDto> {
     const c = this.cfg;
     const info = this.monitoring.provider.info();
     const s3 = info.driver === 's3';
+    /** Kiểm tra sự hiện diện của đối tượng lưu trữ */
     const present = (key: string) =>
       this.secrets ? this.secrets.getSecret(key).then(Boolean, () => false) : false;
     const hasCreds = s3
@@ -659,14 +679,17 @@ export class StorageOpsService {
     return this.operations.test(ctx);
   }
 
+  /** Xóa vĩnh viễn một đối tượng khỏi hệ thống lưu trữ */
   public async deleteObject(key: string, versionId: string | null, ctx: OperationContext) {
     return this.act(() => this.operations.deleteObject(key, versionId, ctx));
   }
 
+  /** Tạo URL có chữ ký để truy cập tệp tin tạm thời */
   public async signedUrl(key: string, ttlSec: number, ctx: OperationContext) {
     return this.act(() => this.operations.signedUrl(key, ttlSec, ctx));
   }
 
+  /** Tạo luồng dữ liệu xem trước tệp tin lưu trữ */
   public async preview(key: string, ctx: OperationContext) {
     const res = await this.act(() => this.operations.preview(key, ctx));
     if (res.kind !== 'text') return res;
@@ -685,14 +708,17 @@ export class StorageOpsService {
     return { ...res, redacted: false };
   }
 
+  /** Tải xuống nội dung tệp tin từ hệ thống lưu trữ */
   public download(key: string, ctx: OperationContext) {
     return this.act(() => this.operations.download(key, ctx));
   }
 
+  /** Hủy bỏ tiến trình tải lên tệp tin dang dở */
   public async abortUpload(key: string, uploadId: string, ctx: OperationContext) {
     return this.act(() => this.operations.abortUpload(key, uploadId, ctx));
   }
 
+  /** Thực hiện thao tác vận hành kèm ghi nhận sự kiện */
   private async act<T>(fn: () => Promise<T>): Promise<T> {
     try {
       return await fn();
@@ -701,12 +727,14 @@ export class StorageOpsService {
     }
   }
 
+  /** Lấy danh sách các sự kiện ghi nhận từ mốc thời gian chỉ định */
   private async eventsSince(from: number): Promise<StorageEventRecord[]> {
     return (await this.store.events().catch(() => [] as StorageEventRecord[])).filter(
       (e) => e.at >= from,
     );
   }
 
+  /** Chuyển đổi dữ liệu sự kiện nội bộ sang đối tượng Event DTO */
   private eventDto(e: StorageEventRecord): StorageEventDto {
     const rule = typeof e.params['rule'] === 'string' ? e.params['rule'] : null;
     const title = rule ? this.i18n.t(`storage.alert.${rule}.title`) : '';
@@ -735,10 +763,12 @@ export class StorageOpsService {
     };
   }
 
+  /** Chuyển đổi thông tin lỗi sang đối tượng Error DTO */
   private errorDto(e: StorageErrorRecord): StorageErrorDto {
     return { ...e, at: new Date(e.at).toISOString() };
   }
 
+  /** Tạo đối tượng lỗi phản hồi theo phân vùng chức năng */
   private sectionError(s: Extract<SectionDto<unknown>, { available: false }>): Error {
     if (s.reason === 'disconnected')
       return new StorageNotConnectedException(s.message ?? 'unknown');
@@ -757,6 +787,7 @@ export class StorageOpsService {
     );
   }
 
+  /** Tạo đối tượng lỗi phản hồi cho thao tác vận hành thất bại */
   private operationError(err: unknown): Error {
     if (!(err instanceof StorageOperationError))
       return err instanceof Error ? err : new Error(String(err));

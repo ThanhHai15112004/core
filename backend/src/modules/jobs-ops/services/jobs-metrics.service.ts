@@ -7,7 +7,9 @@ const MINUTE = 60_000;
 const TYPE_TTL_MS = 5 * MINUTE;
 const WAIT_TTL_MS = MINUTE;
 
+/** Làm tròn giá trị số đến 2 chữ số thập phân */
 const r2 = (n: number | null) => (n === null || !Number.isFinite(n) ? null : round(n, 2));
+/** Tính toán tỷ lệ phần trăm giữa hai đại lượng */
 const rate = (part: number, total: number) => (total > 0 ? round((part / total) * 100, 2) : null);
 
 /**
@@ -25,6 +27,7 @@ export class JobsMetricsService {
     private readonly prom: PrometheusQueryClient,
   ) {}
 
+  /** Xác định khung cửa sổ thời gian cho việc tính toán số liệu */
   public window(from: number, to: number, now: number) {
     return this.metrics.window(from, to, now);
   }
@@ -59,10 +62,12 @@ export class JobsMetricsService {
     return values;
   }
 
+  /** Đếm số lượng bản ghi hoặc sự kiện theo từng trạng thái */
   public counts(w: MetricWindow | null, queue?: string | null) {
     return this.metrics.counts(w, queue);
   }
 
+  /** Tạo báo cáo chi tiết về tình trạng hoạt động của dịch vụ */
   public report(w: MetricWindow | null): JobsReportDto {
     const c = this.metrics.counts(w);
     const p = this.metrics.processing(w);
@@ -81,6 +86,7 @@ export class JobsMetricsService {
   /** Hiệu năng theo loại job (`minutes` phút gần nhất): số lần chạy, lỗi, trung bình / p95 thời gian xử lý. */
   public async types(minutes: number): Promise<JobTypeRowDto[]> {
     const w = `${Math.max(1, Math.round(minutes))}m`;
+    /** Chuẩn hóa chuỗi truy vấn đầu vào */
     const q = (expr: string) => this.prom.safeQuery(expr);
     const [pub, con, sum, count, p95] = await Promise.all([
       q(`sum by (channel) (increase(messages_published_total{result="success"}[${w}]))`),
@@ -102,11 +108,13 @@ export class JobsMetricsService {
         p95: number | null;
       }
     >();
+    /** Chuyển đổi bản ghi dữ liệu thành hàng hiển thị trên bảng */
     const row = (type: string) => {
       let x = rows.get(type);
       if (!x) rows.set(type, (x = { created: 0, ok: 0, failed: 0, sum: 0, count: 0, p95: null }));
       return x;
     };
+    /** Duyệt qua từng phần tử trong danh sách và thực thi callback */
     const each = (
       list: typeof pub,
       fn: (x: ReturnType<typeof row>, v: number, l: Record<string, string>) => void,

@@ -26,10 +26,12 @@ export class FileSecretProvider implements SecretProvider {
     }
   }
 
+  /** Lấy đường dẫn thư mục lưu trữ các secret trên đĩa cứng */
   public getSecretDir(): string {
     return this.secretDir;
   }
 
+  /** Lấy giá trị giải mã của một secret theo khóa định danh */
   public async getSecret(key: string): Promise<string | null> {
     if (!key) return null;
 
@@ -56,6 +58,7 @@ export class FileSecretProvider implements SecretProvider {
     return null;
   }
 
+  /** Lấy danh sách các secret có tiền tố khóa chỉ định */
   public async getSecretsByPrefix(prefix: string): Promise<Record<string, string>> {
     const result: Record<string, string> = {};
 
@@ -89,6 +92,7 @@ export class FileSecretProvider implements SecretProvider {
     return result;
   }
 
+  /** Tạo danh sách các khóa dự tuyển để tìm kiếm cấu hình */
   private generateKeyCandidates(key: string): string[] {
     const direct = key;
     const decamel = key.replace(/([a-z\d])([A-Z])/g, '$1_$2');

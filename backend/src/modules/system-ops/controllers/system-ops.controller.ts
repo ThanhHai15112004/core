@@ -20,18 +20,21 @@ export class SystemOpsController {
     private readonly configInspector: ConfigInspectorService,
   ) {}
 
+  /** Lấy dữ liệu tổng quan trạng thái hệ thống */
   @Public()
   @Get(SYSTEM_OPS_ROUTES.OVERVIEW)
   public async getOverview(): Promise<SystemOverviewResponseDto> {
     return this.overviewService.getOverview();
   }
 
+  /** Lấy danh sách tóm tắt tất cả các packages hạ tầng đã đăng ký */
   @Public()
   @Get(SYSTEM_OPS_ROUTES.PACKAGES)
   public async getPackages(): Promise<PackageSummaryDto[]> {
     return this.registryService.getAllSummaries();
   }
 
+  /** Thực thi hành động vận hành tương ứng trên package */
   @Public()
   @Post(SYSTEM_OPS_ROUTES.EXECUTE_ACTION)
   @HttpCode(HttpStatus.OK)
@@ -43,12 +46,14 @@ export class SystemOpsController {
     return this.registryService.executeAction(packageId, actionId, body);
   }
 
+  /** Lấy danh sách metadata của các secret đã đăng ký trong hệ thống */
   @Public()
   @Get(SYSTEM_OPS_ROUTES.SECRETS)
   public async getSecrets(): Promise<SecretItemMeta[]> {
     return this.secretRegistry.listSecrets();
   }
 
+  /** Kiểm tra và lấy danh sách cấu hình hệ thống từ ConfigInspector */
   @Public()
   @Get(SYSTEM_OPS_ROUTES.CONFIGURATION)
   public async getConfiguration(): Promise<ConfigItemDto[]> {

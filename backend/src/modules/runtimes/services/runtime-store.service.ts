@@ -15,6 +15,7 @@ import { LogStreamReader, type LogEntry } from '@packages/logging/index.js';
 
 const EVENT_SCAN_LIMIT = 2000;
 
+/** Phân tích cú pháp chuỗi JSON an toàn với giá trị dự phòng */
 function parseJson<T>(raw: string | null | undefined): T | null {
   if (!raw) return null;
   try {
@@ -37,14 +38,17 @@ export class RuntimeStoreService {
     this.keys = runtimeKeys(redis);
   }
 
+  /** Kiểm tra dịch vụ hoặc kết nối có đang sẵn sàng hoạt động hay không */
   public isAvailable(): boolean {
     return this.redis.isReady();
   }
 
+  /** Lấy thông tin lỗi phát sinh gần đây nhất của tiến trình */
   public lastError(): string | null {
     return this.redis.getLastError();
   }
 
+  /** Lấy dữ liệu nhịp tim (heartbeat) định kỳ của các runtime process */
   public async heartbeats(
     ids: readonly LongRunningRuntimeId[],
   ): Promise<Map<RuntimeId, RuntimeHeartbeat>> {
@@ -136,6 +140,7 @@ export class RuntimeStoreService {
     return entries.filter((e) => e.runtime === id).slice(0, limit);
   }
 
+  /** Lấy lịch sử các lệnh CLI đã được thực thi */
   public async cliHistory(limit = 200): Promise<CliExecution[]> {
     const raws = await this.redis.client.lrange(this.keys.cliHistory(), 0, limit - 1);
     return raws.map((r) => parseJson<CliExecution>(r)).filter((e): e is CliExecution => e !== null);

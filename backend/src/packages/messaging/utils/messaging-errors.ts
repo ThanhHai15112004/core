@@ -13,6 +13,7 @@ export class MessageDeserializeError extends Error {
   public override readonly name = 'MessageDeserializeError';
 }
 
+/** Xác định mã lỗi chuẩn cho sự cố truyền tin */
 export function messagingErrorCode(err: unknown): string | null {
   const e = err as ErrorLike | null;
   for (const v of [e?.code, e?.name]) {

@@ -44,6 +44,7 @@ export class S3StorageDriver implements StorageDriver {
       });
   }
 
+  /** Lưu trữ một đối tượng hoặc tệp tin vào hệ thống lưu trữ */
   public async put(key: string, body: Buffer, opts: PutOptions): Promise<{ multipart: boolean }> {
     if (body.length <= MULTIPART_THRESHOLD) {
       await this.client.send(
@@ -71,11 +72,13 @@ export class S3StorageDriver implements StorageDriver {
     return { multipart: true };
   }
 
+  /** Lấy dữ liệu hoặc đối tượng theo khóa định danh */
   public async get(key: string): Promise<Buffer> {
     const res = await this.client.send(new GetObjectCommand({ Bucket: this.bucket, Key: key }));
     return Buffer.from(await res.Body!.transformToByteArray());
   }
 
+  /** Mở luồng đọc dữ liệu (stream) của tệp tin lưu trữ */
   public async stream(key: string, range?: { start: number; end: number }): Promise<ObjectStream> {
     const res = await this.client.send(
       new GetObjectCommand({
@@ -91,6 +94,7 @@ export class S3StorageDriver implements StorageDriver {
     };
   }
 
+  /** Xóa bản ghi khỏi hệ thống theo mã định danh */
   public async delete(key: string, versionId?: string): Promise<void> {
     await this.client.send(
       new DeleteObjectCommand({
@@ -101,6 +105,7 @@ export class S3StorageDriver implements StorageDriver {
     );
   }
 
+  /** Lấy thông tin metadata của đối tượng lưu trữ mà không tải nội dung */
   public async head(key: string, versionId?: string): Promise<ObjectMeta | null> {
     try {
       const r = await this.client.send(
@@ -129,10 +134,12 @@ export class S3StorageDriver implements StorageDriver {
     }
   }
 
+  /** Kiểm tra trạng thái sẵn sàng và đo độ trễ kết nối */
   public async ping(): Promise<void> {
     await this.client.send(new HeadBucketCommand({ Bucket: this.bucket }));
   }
 
+  /** Lấy đường dẫn URL truy cập công khai của tệp tin lưu trữ */
   public url(key: string): string {
     const base = this.cfg.endpoint ?? `https://${this.bucket}.s3.${this.cfg.region}.amazonaws.com`;
     return this.cfg.endpoint || this.cfg.forcePathStyle

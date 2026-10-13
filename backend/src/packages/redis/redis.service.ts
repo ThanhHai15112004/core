@@ -52,6 +52,7 @@ export class RedisService implements OnApplicationShutdown {
     return this.options.db ?? 0;
   }
 
+  /** Kiểm tra xem kết nối hoặc dịch vụ đã sẵn sàng tiếp nhận yêu cầu hay chưa */
   public isReady(): boolean {
     return this.client.status === 'ready';
   }
@@ -60,17 +61,20 @@ export class RedisService implements OnApplicationShutdown {
   public waitUntilReady(timeoutMs: number): Promise<boolean> {
     if (this.isReady()) return Promise.resolve(true);
     return new Promise((resolve) => {
+      /** Đánh dấu hoàn tất tiến trình hoặc giải phóng tài nguyên */
       const done = (ready: boolean) => {
         clearTimeout(timer);
         this.client.off('ready', onReady);
         resolve(ready);
       };
+      /** Xử lý sự kiện khi kết nối dịch vụ đã sẵn sàng hoạt động */
       const onReady = () => done(true);
       const timer = setTimeout(() => done(this.isReady()), timeoutMs);
       this.client.once('ready', onReady);
     });
   }
 
+  /** Lấy thông tin lỗi phát sinh gần nhất của dịch vụ */
   public getLastError(): string | null {
     return this.lastError;
   }
@@ -111,6 +115,7 @@ export class RedisService implements OnApplicationShutdown {
     await Promise.allSettled([this.client, ...this.subscribers].map((c) => c.quit()));
   }
 
+  /** Khởi tạo một client kết nối mới tới dịch vụ */
   private createClient(overrides: Partial<RedisOptions> = {}): Redis {
     const client = this.factory({ ...this.options, ...overrides });
     client.on('ready', () => {

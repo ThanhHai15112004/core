@@ -36,6 +36,7 @@ export class DatabaseManageableAdapter implements ManageablePackage {
     return this.configService.database.connection.toUpperCase();
   }
 
+  /** Lấy báo cáo tình trạng hoạt động và các chỉ số của package */
   public async getStatus(): Promise<PackageStatusReport> {
     const db = this.configService.database;
     const status = this.connection.getStatus();
@@ -66,6 +67,7 @@ export class DatabaseManageableAdapter implements ManageablePackage {
     };
   }
 
+  /** Lấy danh sách các hành động (actions) vận hành được hỗ trợ */
   public getActions(): PackageActionDescriptor[] {
     return [
       {
@@ -77,6 +79,7 @@ export class DatabaseManageableAdapter implements ManageablePackage {
     ];
   }
 
+  /** Thực thi hành động vận hành tương ứng trên package */
   public async executeAction(actionId: string): Promise<PackageActionResult> {
     if (actionId === DatabaseAction.PING) {
       const isAlive = (await this.connection.ping()).ok;

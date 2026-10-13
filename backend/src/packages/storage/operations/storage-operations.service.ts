@@ -89,19 +89,23 @@ export class StorageOperationsService {
     return this.config.storage;
   }
 
+  /** Đảm bảo dịch vụ hoặc điều kiện tiên quyết đã sẵn sàng */
   private ensure(enabled: boolean, code: StorageOperationErrorCode): void {
     if (!enabled) throw new StorageOperationError(code);
     if (!this.monitoring.usable()) throw new StorageOperationError('UNAVAILABLE');
   }
 
+  /** Kiểm tra tính hợp lệ và độ an toàn của khóa tệp tin */
   private assertKey(key: string): void {
     if (!isValidKey(key)) throw new StorageOperationError('INVALID_KEY', key);
   }
 
+  /** Kiểm tra xem dữ liệu có chứa thông tin nhạy cảm hay không */
   private isSensitive(key: string): boolean {
     return this.cfg.sensitivePrefixes.some((p) => key.startsWith(p));
   }
 
+  /** Ghi nhận nhật ký kiểm toán cho hành động nhạy cảm */
   private async audit(
     action: StorageOperationAction,
     target: string,
@@ -138,6 +142,7 @@ export class StorageOperationsService {
     const key = `${HEALTHCHECK_PREFIX}${Date.now()}-${randomBytes(4).toString('hex')}.txt`;
     const payload = Buffer.from(`core storage healthcheck ${new Date().toISOString()}`);
     const steps: StorageTestResult['steps'] = [];
+    /** Thực hiện một bước xử lý tuần tự trong quy trình */
     const step = async (name: TestStep, fn: () => Promise<void>) => {
       const t = performance.now();
       try {
@@ -266,6 +271,7 @@ export class StorageOperationsService {
     return { stream, detail };
   }
 
+  /** Tạo URL có chữ ký để truy cập tệp tin tạm thời */
   public async signedUrl(key: string, ttlSec: number, ctx: OperationContext) {
     this.ensure(this.cfg.signedUrl, 'SIGNED_URL_DISABLED');
     if (!this.monitoring.supports('signedUrl')) throw new StorageOperationError('UNSUPPORTED');
@@ -317,6 +323,7 @@ export class StorageOperationsService {
     return result;
   }
 
+  /** Hủy bỏ tiến trình tải lên tệp tin dang dở */
   public async abortUpload(key: string, uploadId: string, ctx: OperationContext) {
     this.ensure(this.cfg.abortUpload, 'ABORT_DISABLED');
     if (!this.monitoring.supports('multipart')) throw new StorageOperationError('UNSUPPORTED');

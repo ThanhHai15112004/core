@@ -19,10 +19,12 @@ const LOG_LEVELS = ['verbose', 'debug', 'info', 'warn', 'error', 'fatal'] as con
 const rangeSchema = z
   .enum(Object.keys(METRIC_RANGES) as [MetricRange, ...MetricRange[]])
   .default('15m');
+/** Giới hạn kích thước hoặc độ dài dữ liệu theo schema */
 const limitSchema = (max: number, fallback: number) =>
   z.coerce.number().int().min(1).max(max).default(fallback);
 const stopSchema = z.object({ confirm: z.literal('STOP') });
 
+/** Xác thực và ép kiểu dữ liệu đầu vào theo schema Zod */
 function parse<T>(schema: z.ZodType<T>, value: unknown): T {
   const result = schema.safeParse(value);
   if (!result.success)
@@ -41,18 +43,21 @@ export class RuntimesController {
     private readonly commands: RuntimeCommandService,
   ) {}
 
+  /** Lấy dữ liệu tổng quan trạng thái hệ thống */
   @Public()
   @Get(RUNTIMES_ROUTES.LIST)
   public getOverview(): Promise<RuntimesOverviewDto> {
     return this.runtimes.getOverview();
   }
 
+  /** Lấy toàn bộ các chỉ số đo lường hiệu năng của tất cả các runtimes */
   @Public()
   @Get(RUNTIMES_ROUTES.METRICS_ALL)
   public getAllMetrics(@Query('range') range?: string): Promise<RuntimeSeriesDto> {
     return this.runtimes.getSeries([...LONG_RUNNING_RUNTIMES], parse(rangeSchema, range));
   }
 
+  /** Truy vấn danh sách các sự kiện vận hành gần đây */
   @Public()
   @Get(RUNTIMES_ROUTES.EVENTS)
   public getEvents(
@@ -62,18 +67,21 @@ export class RuntimesController {
     return this.runtimes.getEvents(runtime || undefined, parse(limitSchema(500, 50), limit));
   }
 
+  /** Lấy thông tin chi tiết một lệnh điều khiển runtime theo ID */
   @Public()
   @Get(RUNTIMES_ROUTES.COMMAND)
   public getCommand(@Param('commandId') commandId: string): Promise<RuntimeCommandDto> {
     return this.commands.getCommand(commandId);
   }
 
+  /** Lấy thông tin chi tiết của một bản ghi theo mã định danh */
   @Public()
   @Get(RUNTIMES_ROUTES.DETAIL)
   public getDetail(@Param('runtimeId') runtimeId: string): Promise<RuntimeDetailDto> {
     return this.runtimes.getDetail(runtimeId);
   }
 
+  /** Lấy các chỉ số đo lường hiệu năng và vận hành của hệ thống */
   @Public()
   @Get(RUNTIMES_ROUTES.METRICS)
   public async getMetrics(
@@ -84,6 +92,7 @@ export class RuntimesController {
     return this.runtimes.getSeries([id], parse(rangeSchema, range));
   }
 
+  /** Lấy danh sách bản ghi log gần đây của runtime process */
   @Public()
   @Get(RUNTIMES_ROUTES.LOGS)
   public getLogs(
@@ -96,6 +105,7 @@ export class RuntimesController {
     });
   }
 
+  /** Gửi tín hiệu dừng một runtime process */
   @Public()
   @Post(RUNTIMES_ROUTES.STOP)
   @HttpCode(HttpStatus.ACCEPTED)
@@ -107,6 +117,7 @@ export class RuntimesController {
     return this.commands.dispatch(runtimeId, 'stop');
   }
 
+  /** Gửi tín hiệu khởi động một runtime process */
   @Public()
   @Post(RUNTIMES_ROUTES.START)
   @HttpCode(HttpStatus.ACCEPTED)

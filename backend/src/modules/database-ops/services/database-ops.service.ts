@@ -83,6 +83,7 @@ const ERROR_KINDS: DbErrorKind[] = [
 ];
 const TABLE_NAME = /^[\w$]{1,64}$/;
 
+/** Lấy mốc thời gian bắt đầu của ngày theo chuỗi ngày giờ */
 const startOfDay = (t: number) => {
   const d = new Date(t);
   d.setHours(0, 0, 0, 0);
@@ -132,6 +133,7 @@ export class DatabaseOpsService {
     const pool = this.pool(todayStats);
     const sessions = snapshot.sessions;
     const tx = snapshot.transactions.available ? snapshot.transactions.data : null;
+    /** Lấy danh sách hoặc thống kê tình trạng khóa chết (deadlocks) */
     const deadlocks = (from: number, to = now) =>
       errors.filter((e) => e.kind === 'deadlock' && e.at >= from && e.at < to).length;
     const deadlocks24h = deadlocks(now - DAY);
@@ -214,6 +216,7 @@ export class DatabaseOpsService {
     }));
   }
 
+  /** Phân chia và nhóm dữ liệu theo từng phân vùng chức năng */
   private section<T>(
     cap: MonitoringCapability,
     fn: (ctx: MonitoringContext) => Promise<T>,
@@ -221,10 +224,12 @@ export class DatabaseOpsService {
     return this.monitoring.section(cap, fn);
   }
 
+  /** Ánh xạ dữ liệu phân vùng sang cấu trúc phản hồi chuẩn */
   private mapSection<T, R>(s: SectionDto<T>, fn: (data: T) => R): SectionDto<R> {
     return s.available ? { available: true, data: fn(s.data) } : s;
   }
 
+  /** Đánh giá trạng thái sức khỏe tổng hợp của dịch vụ */
   private healthStatus(state: string, alerts: DbAlertDto[]): DbHealthStatus {
     switch (state) {
       case 'connected':
@@ -240,6 +245,7 @@ export class DatabaseOpsService {
     }
   }
 
+  /** Tổng hợp các nguyên nhân dẫn đến suy giảm sức khỏe dịch vụ */
   private healthReasons(
     status: ReturnType<DatabaseConnectionService['getStatus']>,
     alerts: DbAlertDto[],
@@ -258,6 +264,7 @@ export class DatabaseOpsService {
     return alerts.map((a) => ({ code: a.rule, message: a.message }));
   }
 
+  /** Thu thập danh sách các cảnh báo đang hoạt động trong hệ thống */
   private async alerts(): Promise<DbAlertDto[]> {
     const active = await this.store.activeAlerts().catch(() => new Map());
     return [...active.entries()]
@@ -306,6 +313,7 @@ export class DatabaseOpsService {
     };
   }
 
+  /** Tạo báo cáo chi tiết về tình trạng hoạt động của dịch vụ */
   private report(
     stats: DbWindowStats,
     deadlocks: number,
@@ -330,6 +338,7 @@ export class DatabaseOpsService {
     return inRange[0]!.totalBytes - inRange[inRange.length - 1]!.totalBytes;
   }
 
+  /** Tính toán tỷ lệ phần trăm tăng trưởng dung lượng lưu trữ */
   private growthPercent(t: DbTable, storage: StorageSnapshot[], now: number): number | null {
     const old = storage.find((s) => s.at <= now - DAY + MINUTE * 60);
     const before = old?.tables.find((x) => x.name === t.name)?.bytes;
@@ -385,6 +394,7 @@ export class DatabaseOpsService {
     };
   }
 
+  /** Truy vấn số liệu thống kê hiệu năng thực thi truy vấn */
   public async getQueryStats(range: DbRange, minMs: number): Promise<DbQueryStatsDto> {
     const now = Date.now();
     const from = now - DB_RANGES[range] * MINUTE;
@@ -404,6 +414,7 @@ export class DatabaseOpsService {
     };
   }
 
+  /** Chuyển đổi số liệu thống kê truy vấn thành đối tượng DTO */
   private statDto(d: DbDigestStat): DbQueryStatDto {
     return {
       ...d,
@@ -414,6 +425,7 @@ export class DatabaseOpsService {
     };
   }
 
+  /** Lọc và sắp xếp danh sách các truy vấn thực thi chậm nhất */
   private digestSlow(d: { avgMs: number | null }): boolean {
     return d.avgMs !== null && d.avgMs >= this.db.slowQueryMs;
   }
@@ -429,6 +441,7 @@ export class DatabaseOpsService {
     return { stat: this.statDto(found) };
   }
 
+  /** Lấy kế hoạch thực thi chi tiết của câu truy vấn chỉ định */
   public async getExplain(digest: string): Promise<DbExplainDto> {
     const result = await this.section('explain', (ctx) =>
       this.monitoring.provider.explain(ctx, digest),
@@ -477,6 +490,7 @@ export class DatabaseOpsService {
     };
   }
 
+  /** Lấy thông tin chi tiết của một kết nối cơ sở dữ liệu */
   public async getConnectionDetail(id: string): Promise<DbConnectionDetailDto> {
     const p = this.monitoring.provider;
     const data = await this.section('sessions', async (ctx) => ({
@@ -544,6 +558,7 @@ export class DatabaseOpsService {
     };
   }
 
+  /** Chuyển đổi dữ liệu bảng thành hàng hiển thị trên giao diện */
   private tableRow<T extends DbTable>(
     t: T,
     storage: StorageSnapshot[],
@@ -559,6 +574,7 @@ export class DatabaseOpsService {
     };
   }
 
+  /** Truy vấn chi tiết thông tin bảng trong cơ sở dữ liệu */
   public async getTableDetail(name: string): Promise<DbTableDetailDto> {
     if (!TABLE_NAME.test(name))
       throw new DatabaseNotFoundException('database.error.tableNotFound', { name });
@@ -573,6 +589,7 @@ export class DatabaseOpsService {
     return this.tableRow(detail.data, storage, io, now);
   }
 
+  /** Lấy dữ liệu tổng hợp về dung lượng lưu trữ cơ sở dữ liệu */
   public async getStorage(): Promise<DbStorageDto> {
     const now = Date.now();
     const [storage, snapshots] = await Promise.all([
@@ -615,6 +632,7 @@ export class DatabaseOpsService {
     }
   }
 
+  /** Thực thi các tệp migration cơ sở dữ liệu chưa được áp dụng */
   public async runMigrations() {
     try {
       return await this.operations.runMigrations();
@@ -629,6 +647,7 @@ export class DatabaseOpsService {
     return this.operations.testConnection();
   }
 
+  /** Thực hiện hành động vận hành trên một phiên kết nối cơ sở dữ liệu */
   public async sessionAction(action: SessionAction, id: string): Promise<{ ok: true }> {
     try {
       await this.operations.sessionAction(action, id);
@@ -645,6 +664,7 @@ export class DatabaseOpsService {
     return events.map((e) => this.eventDto(e));
   }
 
+  /** Lấy danh sách thống kê các lỗi HTTP ghi nhận được */
   public async getErrors(range: DbRange): Promise<DbErrorsDto> {
     const now = Date.now();
     const errors = await this.errorsSince(now - DB_RANGES[range] * MINUTE);
@@ -657,6 +677,7 @@ export class DatabaseOpsService {
     };
   }
 
+  /** Lấy thông tin cấu hình hoạt động của dịch vụ */
   public getConfig(): DbConfigDto {
     const db = this.db;
     return {
@@ -684,18 +705,21 @@ export class DatabaseOpsService {
     };
   }
 
+  /** Lấy danh sách các sự kiện ghi nhận từ mốc thời gian chỉ định */
   private async eventsSince(from: number): Promise<DbEventRecord[]> {
     return (await this.store.events().catch(() => [] as DbEventRecord[])).filter(
       (e) => e.at >= from,
     );
   }
 
+  /** Lấy danh sách các lỗi ghi nhận từ mốc thời gian chỉ định */
   private async errorsSince(from: number): Promise<DbErrorRecord[]> {
     return (await this.store.errors().catch(() => [] as DbErrorRecord[])).filter(
       (e) => e.at >= from,
     );
   }
 
+  /** Chuyển đổi dữ liệu sự kiện nội bộ sang đối tượng Event DTO */
   private eventDto(e: DbEventRecord): DbEventDto {
     const rule = typeof e.params['rule'] === 'string' ? e.params['rule'] : null;
     const params = {
@@ -727,6 +751,7 @@ export class DatabaseOpsService {
     };
   }
 
+  /** Chuyển đổi thông tin lỗi sang đối tượng Error DTO */
   private errorDto(e: DbErrorRecord): DbErrorRecordDto {
     return {
       at: new Date(e.at).toISOString(),
@@ -739,6 +764,7 @@ export class DatabaseOpsService {
     };
   }
 
+  /** Tạo đối tượng lỗi phản hồi theo phân vùng chức năng */
   private sectionError(s: Extract<SectionDto<unknown>, { available: false }>): Error {
     if (s.reason === 'disconnected')
       return new DatabaseNotConnectedException(s.message ?? 'unknown');
@@ -757,6 +783,7 @@ export class DatabaseOpsService {
     );
   }
 
+  /** Tạo đối tượng lỗi phản hồi cho thao tác vận hành thất bại */
   private operationError(err: unknown): Error {
     if (!(err instanceof DatabaseOperationError))
       return err instanceof Error ? err : new Error(String(err));
@@ -794,6 +821,7 @@ export function buildBlockingChains(waits: DbLockWait[]): BlockingNodeDto[] {
       info.set(w.waitingSession, { runtime: w.waitingRuntime, query: w.waitingQuery });
   }
   const waiting = new Set(waits.map((w) => w.waitingSession));
+  /** Khởi tạo hoặc xây dựng đối tượng dữ liệu hoàn chỉnh */
   const build = (session: string, via: DbLockWait | null, seen: Set<string>): BlockingNodeDto => {
     const next = new Set(seen).add(session);
     return {

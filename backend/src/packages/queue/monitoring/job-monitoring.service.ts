@@ -33,18 +33,22 @@ export class JobMonitoringService {
     this.provider = new BullMqJobProvider(registry, redis);
   }
 
+  /** Kiểm tra xem tính năng chỉ định có được hỗ trợ hay không */
   public supports(cap: JobCapability): boolean {
     return this.provider.capabilities.has(cap);
   }
 
+  /** Lấy trạng thái vận hành hiện tại của dịch vụ */
   public status() {
     return this.connection.getStatus();
   }
 
+  /** Kiểm tra dịch vụ có đủ điều kiện để sẵn sàng sử dụng hay không */
   public usable(): boolean {
     return this.status().state === 'connected';
   }
 
+  /** Phân chia và nhóm dữ liệu theo từng phân vùng chức năng */
   public async section<T>(
     cap: JobCapability | null,
     fn: () => Promise<T>,
@@ -60,10 +64,12 @@ export class JobMonitoringService {
     }
   }
 
+  /** Lấy dữ liệu hoặc đối tượng theo khóa định danh */
   public get(id: string, queue?: string | null): Promise<JobRecord | null> {
     return this.provider.get(id, queue);
   }
 
+  /** Lấy thông tin chi tiết theo mã định danh */
   public detail(id: string, queue?: string | null): Promise<JobDetailRaw | null> {
     return this.provider.detail(id, queue);
   }

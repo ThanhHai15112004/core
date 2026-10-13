@@ -1,14 +1,17 @@
 import { env } from './env.js';
 
+/** Chuyển đổi giá trị sang kiểu số hoặc trả về giá trị mặc định */
 const numberOr = (key: string, fallback: number): number => {
   const raw = env(key, false);
   return raw === '' ? fallback : env.number(key);
 };
+/** Chuyển đổi giá trị sang kiểu boolean hoặc trả về giá trị mặc định */
 const booleanOr = (key: string, fallback: boolean): boolean =>
   env(key, false) ? env.boolean(key) : fallback;
 
 export type MessagingBackoff = 'exponential' | 'fixed';
 
+/** Lấy thông tin cấu hình hệ thống truyền tin */
 export const messagingConfig = () => ({
   /** Số lần xử lý tối đa của một message (lần đầu + retry). Hết lượt → Dead Letter (failed set của BullMQ). */
   maxAttempts: Math.max(1, numberOr('MESSAGING_MAX_ATTEMPTS', 3)),

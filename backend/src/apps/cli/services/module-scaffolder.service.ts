@@ -66,6 +66,7 @@ export class ModuleScaffolderService {
 
     const createdFiles: string[] = [];
 
+    /** Ghi nội dung vào tệp đích và tạo thư mục cha nếu chưa tồn tại */
     const writeFile = async (relativePath: string, content: string) => {
       const fullPath = path.join(targetDir, relativePath);
       await fs.mkdir(path.dirname(fullPath), { recursive: true });

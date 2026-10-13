@@ -24,6 +24,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
 
   constructor(private readonly i18n: CoreI18nService) {}
 
+  /** Bắt và xử lý ngoại lệ phát sinh trong quá trình thực thi */
   public catch(exception: unknown, host: ArgumentsHost): void {
     const http = host.switchToHttp();
     const response = http.getResponse<FastifyReply>();
@@ -50,6 +51,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     void response.status(statusCode).send(payload);
   }
 
+  /** Chuẩn hóa định dạng dữ liệu đầu vào về dạng chuẩn của hệ thống */
   private normalize(exception: unknown): NormalizedError {
     if (exception instanceof AppException) {
       return {

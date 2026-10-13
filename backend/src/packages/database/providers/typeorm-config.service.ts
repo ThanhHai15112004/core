@@ -64,6 +64,7 @@ export class TypeOrmConfigService implements TypeOrmOptionsFactory {
     return `core-${this.identity?.id ?? 'app'}`;
   }
 
+  /** Tạo đối tượng cấu hình kết nối TypeORM từ thiết lập hệ thống */
   public createTypeOrmOptions(): TypeOrmModuleOptions {
     const db = this.configService.database;
     const driver = db.connection as DatabaseDriver;

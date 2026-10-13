@@ -146,8 +146,10 @@ export class WorkerOpsService {
     return this.config.queue;
   }
 
+  /** Lấy các thiết lập cấu hình phân tích lưu lượng truy cập */
   private settings(): WorkerSettingsDto {
     const c = this.cfg;
+    /** Chuyển đổi khoảng thời gian sang đơn vị giây */
     const s = (cap: Parameters<QueueMonitoringService['supports']>[0]) =>
       this.monitoring.supports(cap);
     return {
@@ -158,6 +160,7 @@ export class WorkerOpsService {
     };
   }
 
+  /** Xác định khoảng thời gian đầu và cuối theo dải thời gian yêu cầu */
   private rangeWindow(range: WorkerRange, now: number) {
     return this.metrics.window(now - WORKER_RANGES[range] * MINUTE, now, now);
   }
@@ -173,6 +176,7 @@ export class WorkerOpsService {
     return { queues, consumers, hb };
   }
 
+  /** Tính toán các tỷ lệ vận hành và thông lượng trung bình */
   private rates(
     w: MetricWindow | null,
     queue: string | null,
@@ -193,6 +197,7 @@ export class WorkerOpsService {
     return { incomingPerMin: incoming, processingPerMin: processing, diffPerMin: diff, state };
   }
 
+  /** Chuyển đổi thông tin hàng đợi thành dòng hiển thị bảng */
   private queueRow(q: QueueInfo, w: MetricWindow | null, live: Live, now: number): QueueRowDto {
     const c = this.metrics.counts(w, q.name);
     const p = this.metrics.processing(w, q.name);
@@ -219,6 +224,7 @@ export class WorkerOpsService {
     return { ...row, status: this.queueStatus(row, c.completed + c.failed + c.incoming) };
   }
 
+  /** Xác định trạng thái hoạt động của hàng đợi */
   private queueStatus(row: Omit<QueueRowDto, 'status'>, activity: number): QueueStatus {
     const r = this.cfg.rules;
     const ops = activity;
@@ -232,6 +238,7 @@ export class WorkerOpsService {
     return 'healthy';
   }
 
+  /** Chuyển đổi danh sách hàng đợi thành các dòng hiển thị bảng */
   private queueRows(live: Live, w: MetricWindow | null, now: number): SectionDto<QueueRowDto[]> {
     if (!live.queues.available) return live.queues;
     const rank: Record<QueueStatus, number> = {
@@ -321,6 +328,7 @@ export class WorkerOpsService {
       .sort((a, b) => a.id.localeCompare(b.id));
   }
 
+  /** Lấy mức độ đồng thời (concurrency) được cấu hình cho worker */
   private concurrency(live: Live, queue: string | null): ConcurrencyDto | null {
     const regs = live.consumers.filter((c) => (!queue || c.queue === queue) && !c.paused);
     const configured = regs.reduce((s, c) => s + c.concurrency, 0);
@@ -337,6 +345,7 @@ export class WorkerOpsService {
     };
   }
 
+  /** Chuyển đổi thông tin job thành dòng hiển thị bảng */
   private jobRow(j: JobSummary, now: number): JobRowDto {
     return {
       id: j.id,
@@ -358,12 +367,14 @@ export class WorkerOpsService {
     };
   }
 
+  /** Lấy danh sách các job trong hàng đợi */
   private jobs(queue: string | null, states: JobState[], limit: number, now: number) {
     return this.monitoring.section('jobs', async () =>
       (await this.monitoring.provider.jobs(queue, states, limit)).map((j) => this.jobRow(j, now)),
     );
   }
 
+  /** Tạo báo cáo chi tiết về tình trạng hoạt động của dịch vụ */
   private report(w: MetricWindow | null): WorkerReportDto {
     const c = this.metrics.counts(w);
     const p = this.metrics.processing(w);
@@ -382,6 +393,7 @@ export class WorkerOpsService {
     };
   }
 
+  /** Đánh giá mức độ ổn định của hệ thống dựa trên tỷ lệ lỗi */
   private async stability(now: number): Promise<WorkerStabilityDto> {
     const detail = await this.runtimes
       .getDetail('worker')
@@ -426,6 +438,7 @@ export class WorkerOpsService {
     const workers = this.workerRows(live, now);
     const counts = this.metrics.counts(win);
     const processing = this.metrics.processing(win);
+    /** Tính tổng các giá trị trong mảng số liệu */
     const sum = (k: 'waiting' | 'active' | 'delayed' | 'failed') =>
       queues.available ? queues.data.reduce((s, q) => s + q[k], 0) : null;
     const waiting = sum('waiting');
@@ -495,6 +508,7 @@ export class WorkerOpsService {
     };
   }
 
+  /** Kiểm tra và đánh giá tình trạng sức khỏe của dịch vụ */
   private health(
     live: Live,
     alerts: WorkerAlertDto[],
@@ -563,6 +577,7 @@ export class WorkerOpsService {
     return { ...base, status, reasons };
   }
 
+  /** Thu thập danh sách các cảnh báo đang hoạt động trong hệ thống */
   private async alerts(): Promise<WorkerAlertDto[]> {
     const active = await this.store
       .activeAlerts()
@@ -590,6 +605,7 @@ export class WorkerOpsService {
       .sort((a, b) => rank[a.severity] - rank[b.severity]);
   }
 
+  /** Tạo chuỗi thông điệp cảnh báo hiển thị cho người dùng */
   private alertMessage(rule: string, p: Record<string, unknown>): string {
     const metric = String(p['metric'] ?? '');
     return this.i18n.t(`worker.alert.${rule}.message`, {
@@ -616,10 +632,14 @@ export class WorkerOpsService {
     // `assertQueue` đã kiểm tra tên queue có thật — vẫn bỏ dấu nháy để PromQL an toàn.
     const q = queue?.replaceAll('"', '') ?? null;
     const sel = q ? `{queue="${q}"}` : '';
+    /** Kết hợp nhiều điều kiện logic với toán tử AND */
     const and = (extra: string) => (q ? `{queue="${q}",${extra}}` : `{${extra}}`);
+    /** Tính toán tần suất trung bình của tác vụ theo mỗi phút */
     const perMin = (m: string) => `sum(rate(${m}[$w])) * 60`;
+    /** Tính toán tỷ lệ phần trăm (0 - 100%) giữa hai giá trị */
     const pct = (h: string, p: number) =>
       `histogram_quantile(${p}, sum by (le) (rate(${h}_bucket${sel}[$w]))) * 1000`;
+    /** Khởi tạo hoặc cập nhật chỉ số đo lường Gauge cho Prometheus */
     const gauge = (state: string) => `sum(${QUEUE_JOBS_METRIC}${and(`state="${state}"`)})`;
     const defs: Record<WorkerMetric, SeriesDef[]> = {
       throughput: [
@@ -696,6 +716,7 @@ export class WorkerOpsService {
     return { todayWin, live, rows: this.workerRows(live, now) };
   }
 
+  /** Lấy danh sách các worker đang kết nối và xử lý job */
   public async getWorkers(): Promise<WorkersListDto> {
     const now = Date.now();
     const [{ live, rows }, stability] = await Promise.all([
@@ -718,6 +739,7 @@ export class WorkerOpsService {
     };
   }
 
+  /** Lấy thông tin chi tiết một worker cụ thể */
   public async getWorker(id: string): Promise<WorkerDetailDto> {
     const now = Date.now();
     const [{ todayWin, live, rows }, stability] = await Promise.all([
@@ -755,6 +777,7 @@ export class WorkerOpsService {
       throw new WorkerNotFoundException('worker.error.queueNotFound', { name });
   }
 
+  /** Lấy bản đồ (Map) toàn bộ các hàng đợi BullMQ đã đăng ký */
   public async getQueues(range: WorkerRange): Promise<QueuesListDto> {
     const now = Date.now();
     const [win, live] = await Promise.all([this.rangeWindow(range, now), this.live()]);
@@ -766,6 +789,7 @@ export class WorkerOpsService {
     };
   }
 
+  /** Lấy đối tượng hàng đợi BullMQ theo tên định danh */
   public async getQueue(name: string, range: WorkerRange): Promise<QueueDetailDto> {
     this.assertQueue(name);
     const now = Date.now();
@@ -785,6 +809,7 @@ export class WorkerOpsService {
     if (!info) throw new WorkerNotFoundException('worker.error.queueNotFound', { name });
     const row = this.queueRow(info, win, live, now);
     const r = this.cfg.rules;
+    /** Lấy danh sách các hoạt động hoặc sự kiện gần đây */
     const activity = (j: JobRowDto) =>
       Date.parse(j.finishedAt ?? j.processedAt ?? j.runAt ?? j.createdAt);
     return {
@@ -817,6 +842,7 @@ export class WorkerOpsService {
     };
   }
 
+  /** Lấy danh sách các job trong hàng đợi theo trạng thái lọc */
   public async getQueueJobs(
     name: string,
     states: JobState[],
@@ -927,6 +953,7 @@ export class WorkerOpsService {
     };
   }
 
+  /** Lấy danh sách các job đang bị trì hoãn trong hàng đợi */
   public async getDelayed(): Promise<DelayedDto> {
     const now = Date.now();
     const [live, jobs] = await Promise.all([
@@ -968,6 +995,7 @@ export class WorkerOpsService {
     return this.eventsSince(Date.now() - WORKER_RANGES[range] * MINUTE);
   }
 
+  /** Lấy danh sách các sự kiện ghi nhận từ mốc thời gian chỉ định */
   private async eventsSince(from: number): Promise<WorkerEventDto[]> {
     const [records, runtimeEvents] = await Promise.all([
       this.store.events().catch(() => [] as QueueEventRecord[]),
@@ -988,6 +1016,7 @@ export class WorkerOpsService {
     return [...own, ...rt].sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
   }
 
+  /** Chuyển đổi dữ liệu sự kiện nội bộ sang đối tượng Event DTO */
   private eventDto(e: QueueEventRecord): WorkerEventDto {
     const alertId = typeof e.params['rule'] === 'string' ? e.params['rule'] : null;
     const rule = alertId ? ruleOf(alertId) : null;
@@ -1018,15 +1047,18 @@ export class WorkerOpsService {
     };
   }
 
+  /** Lấy thông tin operations của hệ thống */
   public async getOperations(): Promise<WorkerOperationDto[]> {
     const ops = await this.store.operations().catch(() => [] as QueueOperationRecord[]);
     return ops.map((o) => this.operationDto(o));
   }
 
+  /** Chuyển đổi thông tin thao tác sang đối tượng Operation DTO */
   private operationDto(o: QueueOperationRecord): WorkerOperationDto {
     return { ...o, at: new Date(o.at).toISOString() };
   }
 
+  /** Lấy thông tin cấu hình hoạt động của dịch vụ */
   public async getConfig(): Promise<WorkerConfigDto> {
     const info = this.monitoring.provider.info();
     const d = this.monitoring.provider.defaults();
@@ -1079,10 +1111,12 @@ export class WorkerOpsService {
     return this.act(async () => this.operationDto(await this.operations.pause(queue, ctx)));
   }
 
+  /** Tiếp tục tiếp nhận và xử lý tác vụ sau khi tạm dừng */
   public resume(queue: string, ctx: QueueOperationContext) {
     return this.act(async () => this.operationDto(await this.operations.resume(queue, ctx)));
   }
 
+  /** Thực hiện thử lại toàn bộ các job đang ở trạng thái lỗi */
   public retryFailed(
     queue: string,
     count: number,
@@ -1094,12 +1128,14 @@ export class WorkerOpsService {
     });
   }
 
+  /** Đóng và dọn sạch các tác vụ trong hàng đợi khi kết thúc */
   public drain(queue: string, includeDelayed: boolean, ctx: QueueOperationContext) {
     return this.act(async () =>
       this.operationDto(await this.operations.drain(queue, includeDelayed, ctx)),
     );
   }
 
+  /** Thực hiện thao tác vận hành kèm ghi nhận sự kiện */
   private async act<T>(fn: () => Promise<T>): Promise<T> {
     try {
       return await fn();
@@ -1108,6 +1144,7 @@ export class WorkerOpsService {
     }
   }
 
+  /** Tạo đối tượng lỗi phản hồi theo phân vùng chức năng */
   private sectionError(s: Extract<SectionDto<unknown>, { available: false }>): Error {
     if (s.reason === 'disconnected') return new QueueNotConnectedException(s.message ?? 'unknown');
     if (s.reason === 'unsupported')
@@ -1125,6 +1162,7 @@ export class WorkerOpsService {
     );
   }
 
+  /** Tạo đối tượng lỗi phản hồi cho thao tác vận hành thất bại */
   private operationError(err: unknown): Error {
     if (!(err instanceof QueueOperationError))
       return err instanceof Error ? err : new Error(String(err));

@@ -46,6 +46,7 @@ export function evaluateStorageRules(
   cfg: StorageRuleConfig,
 ): StorageViolation[] {
   const out: StorageViolation[] = [];
+  /** Thêm mới một phần tử vào danh sách hoặc bộ sưu tập */
   const add = (
     id: StorageRule,
     severity: StorageSeverity,
@@ -103,6 +104,7 @@ export interface StoredStorageAlert {
   extra: Record<string, string | number>;
 }
 
+/** So sánh và cập nhật các cảnh báo liên quan tới lưu trữ */
 export function diffStorageAlerts(
   violations: readonly StorageViolation[],
   active: ReadonlyMap<string, StoredStorageAlert>,

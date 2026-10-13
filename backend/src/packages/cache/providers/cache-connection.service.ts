@@ -35,6 +35,7 @@ export class CacheConnectionService implements OnApplicationBootstrap, OnModuleD
     return this.cache.driver.name === 'redis' && Boolean(this.redis);
   }
 
+  /** Thực thi tác vụ khởi động sau khi toàn bộ ứng dụng hoàn tất bootstrap */
   public onApplicationBootstrap(): void {
     if (!this.usesRedis || !this.redis) {
       this.set('connected');
@@ -43,6 +44,7 @@ export class CacheConnectionService implements OnApplicationBootstrap, OnModuleD
     }
     const client = this.redis.client;
     if (this.redis.isReady()) this.onReady();
+    /** Đăng ký hàm lắng nghe sự kiện trên Event Emitter */
     const on = (event: string, fn: () => void) => {
       client.on(event, fn);
       this.off.push(() => client.off(event, fn));
@@ -53,17 +55,20 @@ export class CacheConnectionService implements OnApplicationBootstrap, OnModuleD
     on('end', () => this.set('unavailable'));
   }
 
+  /** Dọn dẹp tài nguyên và ngắt kết nối khi module bị hủy */
   public onModuleDestroy(): void {
     this.off.forEach((f) => f());
     this.off.length = 0;
   }
 
+  /** Lưu trữ một giá trị theo khóa định danh */
   private set(state: CacheConnectionState): void {
     if (this.state === state) return;
     this.state = state;
     this.since = Date.now();
   }
 
+  /** Xử lý sự kiện khi kết nối dịch vụ đã sẵn sàng hoạt động */
   private onReady(): void {
     const now = Date.now();
     this.set('connected');
@@ -71,6 +76,7 @@ export class CacheConnectionService implements OnApplicationBootstrap, OnModuleD
     this.lostAt = null;
   }
 
+  /** Xử lý sự kiện khi kết nối dịch vụ bị gián đoạn hoặc mất kết nối */
   private onLost(): void {
     if (this.state === 'connected') {
       this.lostAt = Date.now();
@@ -83,6 +89,7 @@ export class CacheConnectionService implements OnApplicationBootstrap, OnModuleD
     this.lastSuccessAt = at;
   }
 
+  /** Lấy báo cáo tình trạng hoạt động và các chỉ số của package */
   public getStatus(): CacheConnectionStatus {
     if (this.usesRedis && this.redis) {
       // Đồng bộ với trạng thái thật của client (phòng lỡ sự kiện).

@@ -23,6 +23,7 @@ export class QueueRegistry implements OnModuleInit {
     @Optional() private readonly config?: CoreConfigService,
   ) {}
 
+  /** Đăng ký và khởi tạo các thiết lập tài nguyên khi nạp module */
   public onModuleInit(): void {
     for (const name of this.names()) {
       const queue = this.moduleRef.get<Queue>(getQueueToken(name), { strict: false });
@@ -32,24 +33,29 @@ export class QueueRegistry implements OnModuleInit {
     }
   }
 
+  /** Lấy danh sách toàn bộ tên các hàng đợi đã đăng ký */
   public names(): QueueName[] {
     return Object.values(QUEUES);
   }
 
+  /** Kiểm tra xem tên hàng đợi hoặc kênh có hợp lệ trong danh mục hay không */
   public isKnown(name: string): name is QueueName {
     return (this.names() as string[]).includes(name);
   }
 
+  /** Lấy dữ liệu hoặc đối tượng theo khóa định danh */
   public get(name: QueueName): Queue {
     const queue = this.queues.get(name);
     if (!queue) throw new Error(`Queue "${name}" is not registered`);
     return queue;
   }
 
+  /** Lấy đối tượng hàng đợi BullMQ theo tên định danh */
   public getQueue(name: string): Queue {
     return this.get(name as QueueName);
   }
 
+  /** Lấy bản đồ (Map) toàn bộ các hàng đợi BullMQ đã đăng ký */
   public getQueues(): Map<QueueName, Queue> {
     return this.queues;
   }

@@ -56,6 +56,7 @@ export function priorityLevel(p: number): JobPriorityLevel {
   return 'low';
 }
 
+/** Chuyển đổi giá trị sang kiểu số an toàn với giá trị dự phòng */
 const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 
 /** Tiến độ do handler báo; mặc định BullMQ (0) = chưa báo → null (không giả %). */
@@ -111,6 +112,7 @@ export function sourceOf(env: MessageEnvelope | null): JobSource {
   }
 }
 
+/** Xác định phân loại lỗi từ chuỗi nguyên nhân thất bại */
 export function errorTypeOfReason(reason: string | null): string | null {
   if (!reason) return null;
   return (
@@ -123,6 +125,7 @@ export function errorTypeOfReason(reason: string | null): string | null {
   );
 }
 
+/** Tính toán khoảng thời gian chờ (backoff) cho lần thử lại tiếp theo */
 export function backoffOf(job: Pick<Job, 'opts'>): JobBackoff | null {
   const b = job.opts.backoff;
   if (b === undefined) return null;
@@ -131,6 +134,7 @@ export function backoffOf(job: Pick<Job, 'opts'>): JobBackoff | null {
     : { type: b.type, delayMs: b.delay ?? 0 };
 }
 
+/** Kiểm tra hoặc thiết lập chính sách lưu giữ dữ liệu */
 const retention = (v: unknown): string | null => {
   if (v === undefined || v === false) return null;
   if (v === true) return 'all';
@@ -260,24 +264,29 @@ export class BullMqJobProvider implements JobProvider {
     private readonly redis: RedisService,
   ) {}
 
+  /** Bọc Promise với cơ chế timeout an toàn */
   private t<T>(task: Promise<T>): Promise<T> {
     return this.registry.withTimeout(task);
   }
 
+  /** Lấy danh sách các hàng đợi tin nhắn hiện có */
   public queues(): string[] {
     return this.registry.names();
   }
 
+  /** Kiểm tra xem tên hàng đợi hoặc kênh có hợp lệ trong danh mục hay không */
   public isKnown(queue: string): boolean {
     return this.registry.isKnown(queue);
   }
 
+  /** Lấy đối tượng hàng đợi (Queue) theo tên định danh */
   private queue(name: string): Queue {
     if (!this.registry.isKnown(name))
       throw new JobOperationError('NOT_FOUND', name, { queue: name });
     return this.registry.get(name);
   }
 
+  /** Lấy danh sách toàn bộ các thành phần đang được quản lý */
   private all(filter?: string | null): Queue[] {
     return this.registry
       .names()
@@ -316,6 +325,7 @@ export class BullMqJobProvider implements JobProvider {
     return out;
   }
 
+  /** Gắn thêm thông tin chú giải (annotations) vào đối tượng dữ liệu */
   private async annotate(q: Queue, jobs: Job[], state: JobListState): Promise<JobRecord[]> {
     const ids = jobs.map((j) => String(j.id));
     const [at, locks] = await Promise.all([
@@ -334,6 +344,7 @@ export class BullMqJobProvider implements JobProvider {
     );
   }
 
+  /** Lấy danh sách các phần tử theo điều kiện truy vấn */
   public async list(
     queue: string,
     state: JobListState,
@@ -347,10 +358,12 @@ export class BullMqJobProvider implements JobProvider {
     return this.annotate(q, jobs, state);
   }
 
+  /** Đếm tổng số lượng phần tử theo điều kiện chỉ định */
   public async count(queue: string, state: JobListState): Promise<number> {
     return this.t(this.queue(queue).getJobCountByTypes(state));
   }
 
+  /** Xác định vị trí hàng đợi chứa job tương ứng */
   private async locate(id: string, queue?: string | null) {
     for (const q of this.all(queue)) {
       const job = await this.t(q.getJob(id)).catch(() => undefined);
@@ -368,6 +381,7 @@ export class BullMqJobProvider implements JobProvider {
     return null;
   }
 
+  /** Lấy dữ liệu hoặc đối tượng theo khóa định danh */
   public async get(id: string, queue?: string | null): Promise<JobRecord | null> {
     const found = await this.locate(id, queue);
     if (!found) return null;
@@ -376,6 +390,7 @@ export class BullMqJobProvider implements JobProvider {
     return record ?? null;
   }
 
+  /** Lấy thông tin chi tiết theo mã định danh */
   public async detail(id: string, queue?: string | null): Promise<JobDetailRaw | null> {
     const found = await this.locate(id, queue);
     if (!found) return null;
@@ -413,17 +428,20 @@ export class BullMqJobProvider implements JobProvider {
     };
   }
 
+  /** Tìm kiếm job trong hàng đợi theo mã định danh */
   private async jobIn(queue: string, id: string): Promise<Job> {
     const job = await this.t(this.queue(queue).getJob(id));
     if (!job) throw new JobOperationError('NOT_FOUND', id, { id });
     return job;
   }
 
+  /** Thực hiện thử lại một tác vụ hoặc job thất bại */
   public async retry(queue: string, id: string): Promise<void> {
     const job = await this.jobIn(queue, id);
     await this.t(job.retry('failed'));
   }
 
+  /** Loại bỏ một job khỏi hàng đợi đang chờ xử lý */
   public async removeQueued(queue: string, id: string): Promise<boolean> {
     const job = await this.jobIn(queue, id);
     const state = await this.t(job.getState());
@@ -435,11 +453,13 @@ export class BullMqJobProvider implements JobProvider {
     );
   }
 
+  /** Xóa phần tử khỏi hệ thống lưu trữ hoặc hàng đợi */
   public async remove(queue: string, id: string): Promise<void> {
     const job = await this.jobIn(queue, id);
     await this.t(job.remove());
   }
 
+  /** Ghi log thông điệp với mức độ tương ứng */
   public async log(
     queue: string,
     id: string,

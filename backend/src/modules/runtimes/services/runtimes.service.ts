@@ -51,9 +51,11 @@ interface RuntimeContext {
   events: RuntimeEvent[];
 }
 
+/** Kiểm tra xem mã định danh có phải là một runtime hợp lệ hay không */
 const isRuntimeId = (id: string): id is LongRunningRuntimeId =>
   (LONG_RUNNING_RUNTIMES as readonly string[]).includes(id);
 
+/** Lấy mốc thời gian bắt đầu của ngày hiện tại */
 const startOfToday = () => {
   const d = new Date();
   d.setHours(0, 0, 0, 0);
@@ -69,11 +71,13 @@ export class RuntimesService {
     private readonly i18n: CoreI18nService,
   ) {}
 
+  /** Kiểm tra và xác thực tính hợp lệ của mã định danh runtime */
   public assertRuntimeId(id: string): LongRunningRuntimeId {
     if (!isRuntimeId(id)) throw new NotFoundAppException('runtime.error.notFound', { id });
     return id;
   }
 
+  /** Lấy dữ liệu tổng quan trạng thái hệ thống */
   public async getOverview(): Promise<RuntimesOverviewDto> {
     const ctx = await this.loadContext();
     const runtimes = LONG_RUNNING_RUNTIMES.map((id) => this.buildSummary(id, ctx));
@@ -117,6 +121,7 @@ export class RuntimesService {
     };
   }
 
+  /** Lấy thông tin chi tiết của một bản ghi theo mã định danh */
   public async getDetail(rawId: string): Promise<RuntimeDetailDto> {
     const id = this.assertRuntimeId(rawId);
     const ctx = await this.loadContext();
@@ -137,6 +142,7 @@ export class RuntimesService {
     };
   }
 
+  /** Truy vấn danh sách các sự kiện vận hành gần đây */
   public async getEvents(runtime: string | undefined, limit: number): Promise<RuntimeEventDto[]> {
     if (runtime) this.assertRuntimeId(runtime);
     if (!this.store.isAvailable()) return [];
@@ -147,6 +153,7 @@ export class RuntimesService {
       .map((e) => this.toEventDto(e));
   }
 
+  /** Lấy chuỗi dữ liệu chuỗi thời gian (time series) theo dải thời gian */
   public async getSeries(
     ids: LongRunningRuntimeId[],
     range: MetricRange,
@@ -159,6 +166,7 @@ export class RuntimesService {
     return Object.fromEntries(entries);
   }
 
+  /** Lấy danh sách bản ghi log gần đây của runtime process */
   public async getLogs(
     rawId: string,
     limit: number,
@@ -196,11 +204,13 @@ export class RuntimesService {
     return LONG_RUNNING_RUNTIMES.map((id) => this.buildSummary(id, ctx));
   }
 
+  /** Lấy các ngưỡng giới hạn cảnh báo hiệu năng */
   private thresholds() {
     const { memoryPercent, cpuPercent, eventLoopMs } = this.config.runtime.thresholds;
     return { memoryPercent, cpuPercent, eventLoopMs };
   }
 
+  /** Nạp thông tin ngữ cảnh hoạt động của hệ thống */
   private async loadContext(): Promise<RuntimeContext> {
     if (!this.store.isAvailable()) return { telemetry: false, heartbeats: new Map(), events: [] };
     try {
@@ -214,10 +224,12 @@ export class RuntimesService {
     }
   }
 
+  /** Lọc danh sách các sự kiện liên quan tới một đối tượng cụ thể */
   private eventsFor(id: string, events: RuntimeEvent[]): RuntimeEvent[] {
     return events.filter((e) => e.runtime === id);
   }
 
+  /** Xây dựng thông tin tóm tắt trạng thái tổng thể */
   private buildSummary(id: LongRunningRuntimeId, ctx: RuntimeContext): RuntimeSummaryDto {
     const hb = ctx.heartbeats.get(id) ?? null;
     const events = this.eventsFor(id, ctx.events);
@@ -262,6 +274,7 @@ export class RuntimesService {
     hb: RuntimeHeartbeat | null,
     status: string,
   ): RuntimeActionsDto {
+    /** Từ chối yêu cầu và thiết lập mã phản hồi cấm truy cập */
     const deny = (key: string) => ({ allowed: false, reason: this.i18n.t(key) });
     if (!this.config.runtime.actionsEnabled) {
       const disabled = deny('runtime.action.disabled');
@@ -319,6 +332,7 @@ export class RuntimesService {
     return history.reverse();
   }
 
+  /** Xây dựng dữ liệu hiển thị cho bảng điều khiển CLI */
   private buildCliPanel(history: CliExecution[]): CliPanelDto {
     const today = history.filter((h) => Date.parse(h.startedAt) >= startOfToday());
     return {
@@ -329,6 +343,7 @@ export class RuntimesService {
     };
   }
 
+  /** Chuyển đổi thông tin lỗi thành lý do hiển thị thân thiện */
   private toReason(reason: StatusReason): RuntimeReasonDto {
     if (reason.code.startsWith('issue:')) {
       const key = reason.code.slice('issue:'.length);
@@ -340,6 +355,7 @@ export class RuntimesService {
     };
   }
 
+  /** Chuyển đổi dữ liệu sự kiện nội bộ sang đối tượng Event DTO */
   private toEventDto(e: RuntimeEvent): RuntimeEventDto {
     const d = e.data;
     const params: Record<string, string | number> = {

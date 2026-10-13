@@ -43,10 +43,12 @@ export class BaseCacheProvider implements CacheContract {
         : new MemoryCacheDriver();
   }
 
+  /** Xác định namespace tương ứng của khóa bộ nhớ đệm */
   public namespaceOf(key: string): string {
     return namespaceOf(key, this.depth);
   }
 
+  /** Ghi nhận lỗi vận hành và ném ra ngoại lệ tương ứng */
   private fail(operation: CacheErrorRecord['operation'], key: string | null, err: unknown): void {
     const kind = classifyCacheError(err);
     const message = sanitizeCacheMessage(err);
@@ -75,6 +77,7 @@ export class BaseCacheProvider implements CacheContract {
       .catch(() => undefined);
   }
 
+  /** Lấy dữ liệu hoặc đối tượng theo khóa định danh */
   public async get<T>(key: string): Promise<T | null> {
     try {
       const result = await this.driver.get(key);
@@ -85,6 +88,7 @@ export class BaseCacheProvider implements CacheContract {
     }
   }
 
+  /** Lưu trữ một giá trị theo khóa định danh */
   public async set<T>(key: string, value: T, ttlSeconds?: number): Promise<void> {
     try {
       await this.driver.set(key, value, ttlSeconds ?? this.defaultTtlSec);
@@ -93,6 +97,7 @@ export class BaseCacheProvider implements CacheContract {
     }
   }
 
+  /** Xóa bản ghi khỏi hệ thống theo mã định danh */
   public async delete(key: string): Promise<void> {
     try {
       await this.driver.delete(key);
@@ -101,6 +106,7 @@ export class BaseCacheProvider implements CacheContract {
     }
   }
 
+  /** Kiểm tra sự tồn tại của một khóa trong bộ lưu trữ */
   public async has(key: string): Promise<boolean> {
     try {
       return await this.driver.has(key);
@@ -110,6 +116,7 @@ export class BaseCacheProvider implements CacheContract {
     }
   }
 
+  /** Xóa sạch toàn bộ dữ liệu trong bộ lưu trữ */
   public async clear(): Promise<void> {
     await this.flush();
   }

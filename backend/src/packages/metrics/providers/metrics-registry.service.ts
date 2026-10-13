@@ -35,12 +35,14 @@ export class MetricsRegistryService {
     return new Counter({ name, help, labelNames, registers: [this.registry] });
   }
 
+  /** Khởi tạo hoặc cập nhật chỉ số đo lường Gauge cho Prometheus */
   public gauge<L extends string>(name: string, help: string, labelNames: L[] = []): Gauge<L> {
     const existing = this.registry.getSingleMetric(name);
     if (existing) return existing as Gauge<L>;
     return new Gauge({ name, help, labelNames, registers: [this.registry] });
   }
 
+  /** Khởi tạo hoặc lấy chỉ số đo lường Histogram cho Prometheus */
   public histogram<L extends string>(
     name: string,
     help: string,
@@ -61,6 +63,7 @@ export class MetricsRegistryService {
     return this.registry.metrics();
   }
 
+  /** Đếm tổng số lượng mẫu đo lường hiện có */
   public metricCount(): number {
     return this.registry.getMetricsAsArray().length;
   }

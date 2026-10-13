@@ -4,6 +4,7 @@ import { PinoNestLogger } from '@packages/logging/index.js';
 import { RuntimeAgentService } from '@packages/runtime/index.js';
 import { SchedulerModule } from '../scheduler.module.js';
 
+/** Khởi tạo ApplicationContext và khởi chạy BullMQ Scheduler runtime */
 export async function bootstrapScheduler(): Promise<void> {
   const logger = new Logger('SchedulerBootstrap');
   const app = await NestFactory.createApplicationContext(SchedulerModule, { bufferLogs: true });

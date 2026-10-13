@@ -21,6 +21,7 @@ export class PrometheusUnavailableError extends Error {
   }
 }
 
+/** Chuyển đổi giá trị sang kiểu số an toàn */
 const toNumber = (raw: string): number | null => {
   const n = Number(raw);
   return Number.isFinite(n) ? n : null;
@@ -113,6 +114,7 @@ export class PrometheusQueryClient {
     }
   }
 
+  /** Lấy trạng thái vận hành hiện tại của dịch vụ */
   public async status(): Promise<PrometheusStatus> {
     const url = this.config.metrics.prometheusUrl || null;
     if (!url) return { configured: false, up: false, url: null, error: null };
@@ -127,6 +129,7 @@ export class PrometheusQueryClient {
     return { configured: true, up: this.lastError === null, url, error: this.lastError };
   }
 
+  /** Thực thi yêu cầu HTTP tới dịch vụ bên ngoài kèm cấu hình timeout */
   private async request(
     path: 'query' | 'query_range',
     params: Record<string, string>,

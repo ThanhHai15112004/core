@@ -7,6 +7,7 @@ import { toLogEntry } from '../utils/log-entry.js';
 
 type StreamRow = [id: string, fields: string[]];
 
+/** Chuyển đổi đối tượng sang mảng các cặp [key, value] */
 const toEntries = (rows: StreamRow[]): LogEntry[] =>
   rows
     .map(([id, fields]) => {
@@ -27,6 +28,7 @@ export class LogStreamReader {
     return logsKeys(this.redis).stream(this.config.app.env);
   }
 
+  /** Kiểm tra dịch vụ hoặc kết nối có đang sẵn sàng hoạt động hay không */
   public isAvailable(): boolean {
     return this.redis.isReady();
   }
@@ -43,11 +45,13 @@ export class LogStreamReader {
     return toEntries(rows);
   }
 
+  /** Lấy dữ liệu hoặc đối tượng theo khóa định danh */
   public async get(id: string): Promise<LogEntry | null> {
     const rows = (await this.redis.client.xrange(this.key, id, id)) as StreamRow[];
     return toEntries(rows)[0] ?? null;
   }
 
+  /** Lấy độ dài của chuỗi hoặc số lượng phần tử trong tập hợp */
   public async length(): Promise<number> {
     return this.redis.client.xlen(this.key);
   }

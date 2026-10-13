@@ -1,13 +1,16 @@
 import { DatabaseDriver, DEFAULT_DATABASE_PORTS } from '@packages/kernel/index.js';
 import { env } from './env.js';
 
+/** Chuyển đổi giá trị sang kiểu số hoặc trả về giá trị mặc định */
 const numberOr = (key: string, fallback: number): number => {
   const raw = env(key, false);
   return raw === '' ? fallback : env.number(key);
 };
+/** Chuyển đổi giá trị sang kiểu boolean hoặc trả về giá trị mặc định */
 const booleanOr = (key: string, fallback: boolean): boolean =>
   env(key, false) ? env.boolean(key) : fallback;
 
+/** Lấy thông tin cấu hình cơ sở dữ liệu */
 export const databaseConfig = () => {
   const connection = (env('DB_CONNECTION', false) || DatabaseDriver.MYSQL) as DatabaseDriver;
   const defaultPort = DEFAULT_DATABASE_PORTS[connection] ?? 3306;

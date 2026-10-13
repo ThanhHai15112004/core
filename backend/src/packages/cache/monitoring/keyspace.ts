@@ -15,6 +15,7 @@ export const LARGEST_KEYS_LIMIT = 20;
 /** Số namespace tối đa trong snapshot (phần dư gộp vào `(other)`, sắp theo số key). */
 export const SNAPSHOT_NAMESPACE_LIMIT = 200;
 
+/** Phân loại khóa vào các nhóm thời gian sống (TTL bucket) tương ứng */
 export function ttlBucketOf(ttlMs: number | null): TtlBucketId {
   if (ttlMs === null) return 'none';
   if (ttlMs < MIN) return 'lt1m';
@@ -177,6 +178,7 @@ export function mergeKeyspaceSnapshots(
       acc.expiringSoon += n.expiringSoon;
       ns.set(n.name, acc);
     }
+  /** Tính tổng các giá trị trong mảng số liệu */
   const sum = (f: (s: KeyspaceSnapshot) => number) => list.reduce((a, s) => a + f(s), 0);
   const expiring = sum((s) => s.expiring);
   return {

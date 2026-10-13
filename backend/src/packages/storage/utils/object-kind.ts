@@ -59,6 +59,7 @@ const EXT: Record<string, { kind: ObjectKind; mime: string }> = {
   yaml: { kind: 'text', mime: 'text/yaml' },
 };
 
+/** Trích xuất phần mở rộng (extension) của tệp tin từ đường dẫn */
 const extOf = (key: string) => {
   const name = key.split('/').pop() ?? '';
   const i = name.lastIndexOf('.');
@@ -87,6 +88,7 @@ export const isTextual = (key: string, contentType?: string | null) =>
 
 /** Container của object = segment đầu (`uploads/a/b.png` → `uploads`); key không có `/` → `(root)`. */
 export const ROOT_CONTAINER = '(root)';
+/** Xác định tên bucket/container lưu trữ từ đường dẫn tệp tin */
 export function containerOf(key: string): string {
   const i = key.indexOf('/');
   return i > 0 ? key.slice(0, i) : ROOT_CONTAINER;

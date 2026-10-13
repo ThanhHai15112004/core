@@ -56,6 +56,7 @@ export class JobOperationsService {
     return this.config.jobs;
   }
 
+  /** Đảm bảo dịch vụ hoặc điều kiện tiên quyết đã sẵn sàng */
   private ensure(
     enabled: boolean,
     code: 'RETRY_DISABLED' | 'CANCEL_DISABLED' | 'REMOVE_DISABLED' | 'PAYLOAD_DISABLED',
@@ -64,6 +65,7 @@ export class JobOperationsService {
     if (!this.jobs.usable()) throw new JobOperationError('UNAVAILABLE');
   }
 
+  /** Tải dữ liệu log từ bộ lưu trữ */
   private async load(queue: string, id: string): Promise<JobRecord> {
     if (!this.jobs.provider.isKnown(queue)) throw new JobOperationError('NOT_FOUND', queue, { id });
     const job = await this.jobs.get(id, queue);
@@ -71,10 +73,12 @@ export class JobOperationsService {
     return job;
   }
 
+  /** Tạo đối tượng kết quả thông báo dữ liệu không hợp lệ */
   private invalid(job: JobRecord): JobOperationError {
     return new JobOperationError('INVALID_STATE', job.status, { id: job.id, state: job.status });
   }
 
+  /** Ghi nhận nhật ký kiểm toán cho hành động nhạy cảm */
   private audit(
     action: JobOperationAction,
     target: string,

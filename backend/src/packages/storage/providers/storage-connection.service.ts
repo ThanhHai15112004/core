@@ -52,11 +52,13 @@ export class StorageConnectionService implements OnApplicationBootstrap, OnModul
     this.timer.unref();
   }
 
+  /** Dọn dẹp tài nguyên và ngắt kết nối khi module bị hủy */
   public onModuleDestroy(): void {
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
   }
 
+  /** Lưu trữ một giá trị theo khóa định danh */
   private set(state: StorageConnectionState): void {
     if (this.state === state) return;
     this.state = state;
@@ -75,6 +77,7 @@ export class StorageConnectionService implements OnApplicationBootstrap, OnModul
     return this.getStatus();
   }
 
+  /** Ghi nhận tin nhắn đã được xử lý thành công */
   public markSuccess(pingMs: number | null = null): void {
     const now = Date.now();
     if (pingMs !== null) this.lastPingMs = pingMs;
@@ -85,6 +88,7 @@ export class StorageConnectionService implements OnApplicationBootstrap, OnModul
     this.lostAt = null;
   }
 
+  /** Ghi nhận tin nhắn xử lý thất bại */
   private markFailure(err: unknown): void {
     const root =
       this.storage.driver instanceof LocalStorageDriver ? this.storage.driver.root : undefined;
@@ -100,6 +104,7 @@ export class StorageConnectionService implements OnApplicationBootstrap, OnModul
     }
   }
 
+  /** Lấy báo cáo tình trạng hoạt động và các chỉ số của package */
   public getStatus(): StorageConnectionStatus {
     return {
       state: this.state,

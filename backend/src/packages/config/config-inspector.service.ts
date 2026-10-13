@@ -74,6 +74,7 @@ export class ConfigInspectorService {
     return items;
   }
 
+  /** Làm phẳng cấu trúc cấu hình phân cấp thành các cặp key-value phẳng */
   private flattenConfig(
     domain: string,
     prefix: string,

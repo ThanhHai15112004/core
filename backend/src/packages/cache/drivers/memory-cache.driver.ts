@@ -8,6 +8,7 @@ export interface MemoryEntry {
   bytes: number;
 }
 
+/** Tính toán kích thước của đối tượng dữ liệu theo byte */
 const sizeOf = (value: unknown): number => {
   try {
     return Buffer.byteLength(JSON.stringify(value) ?? '', 'utf8');
@@ -23,6 +24,7 @@ export class MemoryCacheDriver implements CacheDriver {
   /** Số key đã hết hạn và bị dọn (cộng dồn từ lúc khởi động). */
   public expiredTotal = 0;
 
+  /** Lấy dữ liệu hoặc đối tượng theo khóa định danh */
   public async get(key: string): Promise<CacheReadResult> {
     const entry = this.store.get(key);
     if (!entry) return { found: false, value: null };
@@ -34,6 +36,7 @@ export class MemoryCacheDriver implements CacheDriver {
     return { found: true, value: entry.value };
   }
 
+  /** Lưu trữ một giá trị theo khóa định danh */
   public async set(key: string, value: unknown, ttlSeconds: number): Promise<void> {
     this.store.set(key, {
       value,
@@ -42,14 +45,17 @@ export class MemoryCacheDriver implements CacheDriver {
     });
   }
 
+  /** Xóa bản ghi khỏi hệ thống theo mã định danh */
   public async delete(key: string): Promise<void> {
     this.store.delete(key);
   }
 
+  /** Kiểm tra sự tồn tại của một khóa trong bộ lưu trữ */
   public async has(key: string): Promise<boolean> {
     return (await this.get(key)).found;
   }
 
+  /** Xóa sạch toàn bộ dữ liệu trong bộ lưu trữ */
   public async clear(): Promise<number> {
     const n = this.store.size;
     this.store.clear();
@@ -79,6 +85,7 @@ export class MemoryCacheDriver implements CacheDriver {
     return [...this.store.entries()];
   }
 
+  /** Tạo hoặc lấy thông tin một bản ghi bộ nhớ đệm kèm thời gian hết hạn */
   public entry(key: string): MemoryEntry | null {
     const e = this.store.get(key);
     if (!e) return null;

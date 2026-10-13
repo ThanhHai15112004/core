@@ -24,6 +24,7 @@ export interface LogSnapshot {
   byRuntime: Map<string, LogEntry[]>;
 }
 
+/** Xác thực và ép kiểu dữ liệu đầu vào theo schema Zod */
 function parse<T>(raw: string | null | undefined): T | null {
   if (!raw) return null;
   try {
@@ -48,6 +49,7 @@ export class LogsStoreService {
     return logsKeys(this.redis);
   }
 
+  /** Kiểm tra dịch vụ hoặc kết nối có đang sẵn sàng hoạt động hay không */
   public isAvailable(): boolean {
     return this.redis.isReady();
   }
@@ -56,6 +58,7 @@ export class LogsStoreService {
     return LOG_SCAN_LIMIT;
   }
 
+  /** Lấy độ dài dòng dữ liệu log trong Redis stream */
   public streamLength(): Promise<number> {
     return this.stream.length();
   }
@@ -68,6 +71,7 @@ export class LogsStoreService {
     return this.loading;
   }
 
+  /** Tải dữ liệu log từ bộ lưu trữ */
   private async load(): Promise<LogSnapshot> {
     const entries = (await this.stream.recent(LOG_SCAN_LIMIT)).sort(compareNewestFirst);
     const byRuntime = new Map<string, LogEntry[]>();
@@ -81,6 +85,7 @@ export class LogsStoreService {
     return this.snapshot;
   }
 
+  /** Lấy dữ liệu hoặc đối tượng theo khóa định danh */
   public get(id: string): Promise<LogEntry | null> {
     return this.stream.get(id);
   }
@@ -92,6 +97,7 @@ export class LogsStoreService {
     return raw.map((r) => parse<LogIngestState>(r)).filter((s): s is LogIngestState => s !== null);
   }
 
+  /** Lấy danh sách các cấu hình ghi đè mức log đang kích hoạt */
   public async overrides(): Promise<Map<string, LogLevelOverrideRecord>> {
     const raw = await this.redis.client.hgetall(this.keys.level());
     const out = new Map<string, LogLevelOverrideRecord>();
@@ -102,14 +108,17 @@ export class LogsStoreService {
     return out;
   }
 
+  /** Thiết lập ghi đè mức log tạm thời cho hệ thống */
   public async setOverride(rec: LogLevelOverrideRecord): Promise<void> {
     await this.redis.client.hset(this.keys.level(), rec.runtime, JSON.stringify(rec));
   }
 
+  /** Hủy bỏ ghi đè mức log và đưa về mức mặc định */
   public async clearOverride(runtime: string): Promise<boolean> {
     return (await this.redis.client.hdel(this.keys.level(), runtime)) > 0;
   }
 
+  /** Ghi nhận thao tác vận hành log vào lịch sử */
   public async recordOperation(op: Omit<LogsOperationRecord, 'id'>): Promise<void> {
     const rec: LogsOperationRecord = { id: randomUUID(), ...op };
     await this.redis.client

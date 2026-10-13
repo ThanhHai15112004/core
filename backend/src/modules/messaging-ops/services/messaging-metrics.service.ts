@@ -33,8 +33,11 @@ export interface MetricWindow {
 
 const WAITING = `max by (queue) (${QUEUE_JOBS_METRIC}{state="waiting"})`;
 
+/** Làm tròn giá trị số đến số chữ số thập phân chỉ định */
 const r = (n: number | null, d = 2) => (n === null || !Number.isFinite(n) ? null : round(n, d));
+/** Tính toán tỷ lệ phần trăm giữa hai đại lượng */
 const rate = (part: number, total: number) => (total > 0 ? round((part / total) * 100, 2) : null);
+/** Tạo cấu trúc dữ liệu luồng xử lý trống ban đầu */
 const emptyFlow = (): Flow => ({
   published: 0,
   publishFailures: 0,
@@ -74,11 +77,16 @@ export class MessagingMetricsService {
     const offSec = Math.round((now - Math.min(toMs, now)) / 1000);
     const off = offSec > 0 ? ` offset ${offSec}s` : '';
     const step = `${Math.max(15, Math.round(seconds / 120))}s`;
+    /** Tăng giá trị bộ đếm lên một đơn vị */
     const inc = (m: string) => `increase(${m}[${w}]${off})`;
+    /** Chuẩn hóa chuỗi truy vấn đầu vào */
     const q = (expr: string) => this.prom.query(expr);
+    /** Làm tròn giá trị số theo độ chia nhỏ nhất (quantum) */
     const quant = (p: number, by: string) =>
       `histogram_quantile(${p}, sum by (${by ? `${by}, ` : ''}le) (${inc('job_duration_seconds_bucket')}))`;
+    /** Tính tổng các giá trị trong mảng theo thuộc tính chỉ định */
     const sumBy = (by: string) => (by ? `sum by (${by})` : 'sum');
+    /** Đo lường thời gian thực thi của một tác vụ */
     const timing = (by: string) => [
       q(`${sumBy(by)} (${inc('job_duration_seconds_sum')})`),
       q(`${sumBy(by)} (${inc('job_duration_seconds_count')})`),
@@ -114,6 +122,7 @@ export class MessagingMetricsService {
     const channels = new Map<string, Flow>();
     const queues = new Map<string, Flow>();
     const channelQueue = new Map<string, string>();
+    /** Khởi tạo đối tượng từ giá trị đầu vào */
     const of = (map: Map<string, Flow>, key: string | undefined) => {
       if (!key) return null;
       let f = map.get(key);
@@ -121,6 +130,7 @@ export class MessagingMetricsService {
       return f;
     };
     type Counted = Exclude<keyof Flow, 'processing'>;
+    /** Thêm mới một phần tử vào danh sách hoặc bộ sưu tập */
     const add = (key: Counted, labels: Record<string, string>, v: number) => {
       const n = Math.round(v);
       total[key] += n;
@@ -142,6 +152,7 @@ export class MessagingMetricsService {
     // Mỗi nhóm 4 truy vấn: sum, count, p95, p99 (tổng, rồi theo channel, theo queue).
     const apply = (group: PromSample[][], label: string, target: (k: string) => Flow | null) => {
       const [sum, count, p95, p99] = group;
+      /** Trích xuất một tập hợp các thuộc tính chỉ định từ đối tượng */
       const pick = (list: PromSample[] | undefined, k: string) =>
         list?.find((x) => (x.labels[label] ?? '') === k)?.value ?? null;
       const keys = new Set(group.flatMap((list) => list.map((x) => x.labels[label] ?? '')));
@@ -150,6 +161,7 @@ export class MessagingMetricsService {
         if (!f) continue;
         const n = pick(count, k);
         const s = pick(sum, k);
+        /** Chuyển đổi mốc thời gian sang đơn vị mili-giây */
         const ms = (v: number | null) => (v === null ? null : v * 1000);
         f.processing = {
           avgMs: r(n && s !== null ? (s / n) * 1000 : null),
@@ -176,10 +188,12 @@ export class MessagingMetricsService {
     return this.worker.series(minutes, defs);
   }
 
+  /** Tính toán tần suất trung bình của tác vụ theo mỗi giây */
   public perSec(w: MetricWindow | null, n: number | null): number | null {
     return w && n !== null ? round(n / w.seconds, 3) : null;
   }
 
+  /** Tính toán tỷ lệ và độ trễ phân phát tin nhắn */
   public delivery(w: MetricWindow | null): DeliveryDto | null {
     if (!w) return null;
     const t = w.total;
@@ -195,6 +209,7 @@ export class MessagingMetricsService {
     };
   }
 
+  /** Theo dõi trạng thái và thời gian xử lý tin nhắn */
   public processing(w: MetricWindow | null, queue?: string): Timing {
     const f = queue ? w?.queues.get(queue) : w?.total;
     return f?.processing ?? emptyFlow().processing;
@@ -205,10 +220,12 @@ export class MessagingMetricsService {
     return w ? (w.channels.get(name) ?? emptyFlow()) : null;
   }
 
+  /** Lấy đối tượng hàng đợi (Queue) theo tên định danh */
   public queue(w: MetricWindow | null, name: string): Flow | null {
     return w ? (w.queues.get(name) ?? emptyFlow()) : null;
   }
 
+  /** Tính toán tỷ lệ lỗi phát sinh trong khoảng thời gian đo */
   public failureRate(f: Flow | null): number | null {
     return f ? rate(f.failed, f.consumed + f.failed) : null;
   }

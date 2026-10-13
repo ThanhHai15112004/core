@@ -84,6 +84,7 @@ export function evaluateWorkerRules(
   cfg: WorkerRuleConfig,
 ): WorkerViolation[] {
   const out: WorkerViolation[] = [];
+  /** Thêm mới một phần tử vào danh sách hoặc bộ sưu tập */
   const add = (
     rule: WorkerRule,
     subject: string | null,
@@ -187,6 +188,7 @@ export interface StoredWorkerAlert {
   extra: Record<string, string | number>;
 }
 
+/** So sánh và cập nhật các cảnh báo liên quan tới Worker */
 export function diffWorkerAlerts(
   violations: readonly WorkerViolation[],
   active: ReadonlyMap<string, StoredWorkerAlert>,

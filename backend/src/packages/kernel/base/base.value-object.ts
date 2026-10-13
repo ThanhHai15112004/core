@@ -5,6 +5,7 @@ export abstract class BaseValueObject<TProps> {
     this.props = Object.freeze({ ...props });
   }
 
+  /** So sánh hai giá trị hoặc đối tượng xem có tương đương nhau hay không */
   public equals(other?: BaseValueObject<TProps>): boolean {
     if (other === null || other === undefined) {
       return false;

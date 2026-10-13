@@ -61,6 +61,7 @@ export function logFingerprint(
     .slice(0, 12);
 }
 
+/** Chuyển đổi giá trị sang kiểu chuỗi an toàn */
 const str = (v: unknown): string | undefined =>
   typeof v === 'string' && v ? v : typeof v === 'number' ? String(v) : undefined;
 
@@ -88,6 +89,7 @@ export function toLogEntry(id: string, raw: string): LogEntry | null {
   }
 
   const e: LogEntry = { id, t: new Date(time).toISOString(), level, message };
+  /** Lưu trữ một giá trị theo khóa định danh */
   const set = <K extends keyof LogEntry>(k: K, v: LogEntry[K] | undefined) => {
     if (v !== undefined) e[k] = v;
   };

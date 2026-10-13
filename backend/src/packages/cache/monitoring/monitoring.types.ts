@@ -164,6 +164,7 @@ export interface CacheMonitoringProvider {
   ping(): Promise<number>;
 }
 
+/** Chuyển đổi an toàn giá trị đầu vào sang kiểu số nguyên */
 export const toInt = (v: unknown): number | null => {
   if (v === null || v === undefined || v === '') return null;
   const n = Number(v);

@@ -19,6 +19,7 @@ export function storageErrorCode(err: unknown): string | null {
   return null;
 }
 
+/** Ánh xạ lỗi lưu trữ sang mã trạng thái HTTP tương ứng */
 export const storageHttpStatus = (err: unknown): number | null =>
   (err as ErrorLike | null)?.$metadata?.httpStatusCode ?? null;
 
@@ -45,6 +46,7 @@ const CONNECTION = new Set([
 const NO_SPACE = new Set(['ENOSPC', 'EDQUOT', 'XMinioStorageFull', 'EntityTooLarge']);
 const THROTTLED = new Set(['SlowDown', 'Throttling', 'TooManyRequests', 'ServiceUnavailable']);
 
+/** Phân loại mã lỗi phát sinh từ dịch vụ lưu trữ đối tượng */
 export function classifyStorageError(err: unknown): StorageErrorKind {
   const code = storageErrorCode(err) ?? '';
   const status = storageHttpStatus(err);

@@ -37,6 +37,7 @@ export class CacheManageableAdapter implements ManageablePackage {
     return this.i18n.t('ops.cache.displayName');
   }
 
+  /** Lấy báo cáo tình trạng hoạt động và các chỉ số của package */
   public async getStatus(): Promise<PackageStatusReport> {
     const status = this.connection.getStatus();
     const keyspace = await this.monitoring.storedKeyspace().catch(() => null);
@@ -59,6 +60,7 @@ export class CacheManageableAdapter implements ManageablePackage {
     };
   }
 
+  /** Lấy danh sách các hành động (actions) vận hành được hỗ trợ */
   public getActions(): PackageActionDescriptor[] {
     return [
       {
@@ -70,6 +72,7 @@ export class CacheManageableAdapter implements ManageablePackage {
     ];
   }
 
+  /** Thực thi hành động vận hành tương ứng trên package */
   public async executeAction(actionId: string): Promise<PackageActionResult> {
     if (actionId !== CacheAction.FLUSH_ALL)
       return {

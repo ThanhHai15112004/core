@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { MessageEnvelope } from '../contracts/message-publisher.contract.js';
 import type { JobMeta } from '../contracts/job-meta.types.js';
 
+/** Tuần tự hóa nội dung tin nhắn thành chuỗi JSON chuẩn */
 export function serializeMessage<T>(
   topic: string,
   payload: T,
@@ -18,10 +19,12 @@ export function serializeMessage<T>(
   };
 }
 
+/** Phân tích cú pháp chuỗi metadata thành đối tượng dữ liệu */
 function parseMeta(raw: unknown): JobMeta | null {
   if (!raw || typeof raw !== 'object') return null;
   const m = raw as Record<string, unknown>;
   const src = (m['source'] ?? null) as Record<string, unknown> | null;
+  /** Chuyển đổi giá trị sang kiểu chuỗi an toàn */
   const str = (v: unknown) => (typeof v === 'string' && v ? v : null);
   const kinds = ['http', 'scheduler', 'job', 'manual', 'system'];
   const index: Record<string, string> = {};

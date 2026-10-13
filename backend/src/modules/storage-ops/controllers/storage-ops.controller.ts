@@ -26,6 +26,7 @@ import { StorageValidationException } from '../exceptions/storage-ops.exceptions
 import type { StorageRange } from '../responses/storage-ops.response.js';
 
 const DAY = 86_400_000;
+/** Định dạng chuỗi ký tự hiển thị an toàn không chứa ký tự điều khiển */
 const printable = (s: string) =>
   ![...s].some((c) => c.charCodeAt(0) < 32 || c.charCodeAt(0) === 127);
 const rangeSchema = z.object({
@@ -70,12 +71,14 @@ const abortSchema = z.object({
   confirm: z.literal('ABORT'),
 });
 
+/** Xác thực và ép kiểu dữ liệu đầu vào theo schema Zod */
 function parse<T>(schema: z.ZodType<T>, value: unknown): T {
   const result = schema.safeParse(value);
   if (!result.success) throw new StorageValidationException(result.error.issues);
   return result.data;
 }
 
+/** Trích xuất thông tin ngữ cảnh yêu cầu (RequestContext) từ Fastify request */
 const context = (req: FastifyRequest): OperationContext => ({ ip: maskIp(req.ip), actor: null });
 /** Tên file an toàn cho Content-Disposition. */
 const fileName = (key: string) =>
@@ -89,30 +92,35 @@ const fileName = (key: string) =>
 export class StorageOpsController {
   constructor(private readonly storage: StorageOpsService) {}
 
+  /** Lấy dữ liệu tổng quan cho trang quản trị vận hành */
   @Public()
   @Get(R.OVERVIEW)
   public overview(@Query() q: Record<string, string>) {
     return this.storage.getOverview(parse(rangeSchema, q).range);
   }
 
+  /** Lấy thông tin thống kê mức độ sử dụng dung lượng lưu trữ */
   @Public()
   @Get(R.USAGE)
   public usage() {
     return this.storage.getUsage();
   }
 
+  /** Lấy danh sách các thùng chứa/bucket lưu trữ */
   @Public()
   @Get(R.CONTAINERS)
   public containers(@Query() q: Record<string, string>) {
     return this.storage.getContainers(parse(rangeSchema, q).range);
   }
 
+  /** Lấy thông tin chi tiết một container lưu trữ */
   @Public()
   @Get(R.CONTAINER_DETAIL)
   public container(@Param('id') id: string, @Query() q: Record<string, string>) {
     return this.storage.getContainerDetail(parse(containerSchema, id), parse(rangeSchema, q).range);
   }
 
+  /** Lấy danh sách các đối tượng trong thùng chứa lưu trữ */
   @Public()
   @Get(R.OBJECTS)
   public objects(@Query() q: Record<string, string>) {
@@ -130,12 +138,14 @@ export class StorageOpsController {
     return this.storage.getObjects(filter, o.cursor, o.count);
   }
 
+  /** Lấy thông tin metadata của một đối tượng lưu trữ */
   @Public()
   @Get(R.OBJECT_DETAIL)
   public object(@Query('key') key: string) {
     return this.storage.getObjectDetail(parse(keySchema, key));
   }
 
+  /** Xóa bản ghi khỏi hệ thống theo mã định danh */
   @Public()
   @Delete(R.OBJECTS)
   @HttpCode(HttpStatus.OK)
@@ -153,6 +163,7 @@ export class StorageOpsController {
     return this.storage.deleteObject(key, versionId ?? null, context(req));
   }
 
+  /** Tải xuống nội dung tệp tin từ hệ thống lưu trữ */
   @Public()
   @Get(R.OBJECT_DOWNLOAD)
   public async download(
@@ -170,12 +181,14 @@ export class StorageOpsController {
     return reply.send(stream.body);
   }
 
+  /** Tạo luồng dữ liệu xem trước tệp tin lưu trữ */
   @Public()
   @Get(R.OBJECT_PREVIEW)
   public preview(@Query('key') key: string, @Req() req: FastifyRequest) {
     return this.storage.preview(parse(keySchema, key), context(req));
   }
 
+  /** Tạo URL có chữ ký để truy cập tệp tin tạm thời */
   @Public()
   @Post(R.OBJECT_SIGNED_URL)
   @HttpCode(HttpStatus.OK)
@@ -184,12 +197,14 @@ export class StorageOpsController {
     return this.storage.signedUrl(key, ttlSec, context(req));
   }
 
+  /** Lấy danh sách các tiến trình tải lên nhiều phần đang dang dở */
   @Public()
   @Get(R.UPLOADS)
   public uploads(@Query() q: Record<string, string>) {
     return this.storage.getUploads(parse(rangeSchema, q).range);
   }
 
+  /** Hủy bỏ tiến trình tải lên nhiều phần (multipart upload) */
   @Public()
   @Post(R.UPLOAD_ABORT)
   @HttpCode(HttpStatus.OK)
@@ -198,36 +213,42 @@ export class StorageOpsController {
     return this.storage.abortUpload(key, uploadId, context(req));
   }
 
+  /** Lấy thông tin chính sách vòng đời (lifecycle policy) của lưu trữ */
   @Public()
   @Get(R.LIFECYCLE)
   public lifecycle() {
     return this.storage.getLifecycle();
   }
 
+  /** Truy vấn danh sách các lỗi và ngoại lệ ghi nhận được */
   @Public()
   @Get(R.ERRORS)
   public errors(@Query() q: Record<string, string>) {
     return this.storage.getErrors(parse(rangeSchema, q).range);
   }
 
+  /** Truy vấn danh sách các sự kiện vận hành gần đây */
   @Public()
   @Get(R.EVENTS)
   public events(@Query() q: Record<string, string>) {
     return this.storage.getEvents(parse(rangeSchema, q).range);
   }
 
+  /** Truy vấn lịch sử các thao tác vận hành đã thực hiện */
   @Public()
   @Get(R.OPERATIONS)
   public operations() {
     return this.storage.getOperations();
   }
 
+  /** Lấy thông tin cấu hình hiện tại của dịch vụ */
   @Public()
   @Get(R.CONFIG)
   public config() {
     return this.storage.getConfig();
   }
 
+  /** Kiểm tra khả năng kết nối và tính sẵn sàng của dịch vụ */
   @Public()
   @Post(R.TEST)
   @HttpCode(HttpStatus.OK)

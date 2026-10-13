@@ -188,6 +188,7 @@ export function runtimeOfProgram(program: string | null | undefined): string | n
   return match ? match[1]!.toLowerCase() : null;
 }
 
+/** Chuyển đổi giá trị sang kiểu số an toàn */
 export const toNumber = (v: unknown): number | null => {
   if (v === null || v === undefined || v === '') return null;
   const n = Number(v);

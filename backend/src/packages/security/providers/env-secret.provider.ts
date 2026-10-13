@@ -6,6 +6,7 @@ import type { SecretProvider } from '../contracts/secret-provider.contract.js';
 export class EnvironmentSecretProvider implements SecretProvider {
   constructor(@Optional() private readonly configService?: CoreConfigService) {}
 
+  /** Lấy giá trị giải mã của một secret theo khóa định danh */
   public async getSecret(key: string): Promise<string | null> {
     if (!key) return null;
 
@@ -31,6 +32,7 @@ export class EnvironmentSecretProvider implements SecretProvider {
     return null;
   }
 
+  /** Lấy danh sách các secret có tiền tố khóa chỉ định */
   public async getSecretsByPrefix(prefix: string): Promise<Record<string, string>> {
     const result: Record<string, string> = {};
     const normalizedPrefix = prefix.replace(/[.-]/g, '_').toUpperCase();

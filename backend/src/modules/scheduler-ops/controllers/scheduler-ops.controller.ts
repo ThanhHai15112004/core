@@ -14,11 +14,14 @@ import type { SchedulerOperationContext } from '../services/scheduler-operations
 import { SchedulerValidationException } from '../exceptions/scheduler-ops.exceptions.js';
 import type { SchedulerMetric, SchedulerRange } from '../responses/scheduler-ops.response.js';
 
+/** Định dạng chuỗi ký tự hiển thị an toàn không chứa ký tự điều khiển */
 const printable = (s: string) =>
   ![...s].some((c) => c.charCodeAt(0) < 32 || c.charCodeAt(0) === 127);
 const idSchema = z.string().min(1).max(200).refine(printable);
+/** Xác định dải thời gian truy vấn theo tham số yêu cầu */
 const range = (fallback: SchedulerRange) =>
   z.enum(Object.keys(SCHEDULER_RANGES) as [SchedulerRange, ...SchedulerRange[]]).default(fallback);
+/** Định dạng dữ liệu thành chuỗi tệp CSV */
 const csv = <T extends string>(values: readonly T[]) =>
   z
     .string()
@@ -53,12 +56,14 @@ const cronSchema = z.object({
   timezone: z.string().trim().min(1).max(64).refine(printable).optional(),
 });
 
+/** Xác thực và ép kiểu dữ liệu đầu vào theo schema Zod */
 function parse<T>(schema: z.ZodType<T>, value: unknown): T {
   const result = schema.safeParse(value);
   if (!result.success) throw new SchedulerValidationException(result.error.issues);
   return result.data;
 }
 
+/** Trích xuất thông tin ngữ cảnh yêu cầu (RequestContext) từ Fastify request */
 const context = (req: FastifyRequest): SchedulerOperationContext => ({
   ip: maskIp(req.ip),
   actor: null,
@@ -72,12 +77,14 @@ const context = (req: FastifyRequest): SchedulerOperationContext => ({
 export class SchedulerOpsController {
   constructor(private readonly scheduler: SchedulerOpsService) {}
 
+  /** Lấy dữ liệu tổng quan cho trang quản trị vận hành */
   @Public()
   @Get(R.OVERVIEW)
   public overview(@Query() q: Record<string, string>) {
     return this.scheduler.getOverview(parse(rangeSchema, q).range);
   }
 
+  /** Lấy các chỉ số đo lường hiệu năng và vận hành */
   @Public()
   @Get(R.METRICS)
   public metrics(@Query() q: Record<string, string>) {
@@ -85,18 +92,21 @@ export class SchedulerOpsController {
     return this.scheduler.getMetrics(range, metric, task ?? null);
   }
 
+  /** Lấy danh sách các scheduled task đã đăng ký */
   @Public()
   @Get(R.TASKS)
   public tasks() {
     return this.scheduler.getTasks();
   }
 
+  /** Lấy thông tin chi tiết một scheduled task theo ID */
   @Public()
   @Get(R.TASK_DETAIL)
   public task(@Param('id') id: string, @Query() q: Record<string, string>) {
     return this.scheduler.getTask(parse(idSchema, id), parse(rangeSchema, q).range);
   }
 
+  /** Lấy lịch sử các lần thực thi của scheduled task */
   @Public()
   @Get(R.EXECUTIONS)
   public executions(@Query() q: Record<string, string>) {
@@ -104,42 +114,49 @@ export class SchedulerOpsController {
     return this.scheduler.getExecutions({ range, taskId: task ?? null, status, trigger, limit });
   }
 
+  /** Lấy chi tiết một lần thực thi của scheduled task */
   @Public()
   @Get(R.EXECUTION_DETAIL)
   public execution(@Param('id') id: string) {
     return this.scheduler.getExecution(parse(idSchema, id));
   }
 
+  /** Lấy danh sách các lần thực thi dự kiến sắp tới */
   @Public()
   @Get(R.UPCOMING)
   public upcoming(@Query() q: Record<string, string>) {
     return this.scheduler.getUpcoming(parse(upcomingSchema, q).hours);
   }
 
+  /** Lấy dữ liệu dòng thời gian thực thi của các tác vụ */
   @Public()
   @Get(R.TIMELINE)
   public timeline(@Query() q: Record<string, string>) {
     return this.scheduler.getTimeline(parse(timelineSchema, q).range);
   }
 
+  /** Lấy danh sách các lần thực thi hoặc job bị thất bại */
   @Public()
   @Get(R.FAILURES)
   public failures(@Query() q: Record<string, string>) {
     return this.scheduler.getFailures(parse(rangeSchema, q).range);
   }
 
+  /** Truy vấn lịch sử các thao tác vận hành đã thực hiện */
   @Public()
   @Get(R.OPERATIONS)
   public operations() {
     return this.scheduler.getOperations();
   }
 
+  /** Lấy thông tin cấu hình hiện tại của dịch vụ */
   @Public()
   @Get(R.CONFIG)
   public config() {
     return this.scheduler.getConfig();
   }
 
+  /** Phân tích cú pháp biểu thức Cron và tính toán các mốc chạy tiếp theo */
   @Public()
   @Get(R.CRON)
   public cron(@Query() q: Record<string, string>) {
@@ -155,6 +172,7 @@ export class SchedulerOpsController {
     return this.scheduler.runNow(parse(idSchema, id), context(req));
   }
 
+  /** Kích hoạt một tác vụ hoặc module trong hệ thống */
   @Public()
   @Post(R.TASK_ENABLE)
   @HttpCode(HttpStatus.OK)

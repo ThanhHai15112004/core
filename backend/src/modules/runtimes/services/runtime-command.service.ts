@@ -38,6 +38,7 @@ export class RuntimeCommandService {
     this.keys = runtimeKeys(redis);
   }
 
+  /** Điều phối và phân phối lệnh tới handler xử lý tương ứng */
   public async dispatch(rawId: string, action: ConsoleAction): Promise<RuntimeCommandDto> {
     const id = this.runtimes.assertRuntimeId(rawId);
     if (!this.redis.isReady()) throw new RuntimeTelemetryUnavailableException();
@@ -90,6 +91,7 @@ export class RuntimeCommandService {
     return this.getCommand(command.id);
   }
 
+  /** Lấy thông tin chi tiết một lệnh điều khiển runtime theo ID */
   public async getCommand(commandId: string): Promise<RuntimeCommandDto> {
     if (!this.redis.isReady()) throw new RuntimeTelemetryUnavailableException();
     const [rawCommand, rawResult] = await this.redis.client.mget(

@@ -48,6 +48,7 @@ export class OpsEventService {
     );
   }
 
+  /** Ghi nhận một sự kiện vận hành mới vào bộ nhớ */
   public record(level: EventLevel, source: string, messageKey: string, params: Params = {}): void {
     this.push({ level, source, messageKey, params });
   }
@@ -87,6 +88,7 @@ export class OpsEventService {
     return this.statuses.get(packageId)?.since;
   }
 
+  /** Lấy danh sách các sự kiện vận hành gần đây */
   public getRecent(limit = 20): RecentActivityEventDto[] {
     return this.events.slice(0, limit).map((e) => ({
       id: e.id,
@@ -97,10 +99,12 @@ export class OpsEventService {
     }));
   }
 
+  /** Dịch các tham số là key i18n sang chuỗi văn bản theo ngôn ngữ hiện tại */
   private translateKeys(keyParams: Record<string, string> = {}): Params {
     return Object.fromEntries(Object.entries(keyParams).map(([k, key]) => [k, this.i18n.t(key)]));
   }
 
+  /** Thêm một sự kiện mới vào danh sách và duy trì giới hạn kích thước tối đa */
   private push(event: Omit<StoredEvent, 'id' | 'at'>, at = new Date()): void {
     this.sequence++;
     this.events = [{ ...event, id: `evt-${this.sequence}`, at }, ...this.events].slice(

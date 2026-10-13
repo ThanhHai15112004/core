@@ -12,6 +12,7 @@ import {
 import { CoreI18nService } from '@packages/i18n/index.js';
 import { RedisService } from './redis.service.js';
 
+/** Phân tích cú pháp một trường dữ liệu từ chuỗi đầu vào */
 const parseField = (info: string, field: string): string | undefined => {
   const match = info.match(new RegExp(`^${field}:(.+)$`, 'm'));
   return match && match[1] ? match[1].trim() : undefined;
@@ -32,6 +33,7 @@ export class RedisManageableAdapter implements ManageablePackage {
     return this.i18n?.t('ops.redis.displayName') ?? 'Redis';
   }
 
+  /** Lấy báo cáo tình trạng hoạt động và các chỉ số của package */
   public async getStatus(): Promise<PackageStatusReport> {
     if (!this.redis.isReady()) {
       const err = this.redis.getLastError();
@@ -92,6 +94,7 @@ export class RedisManageableAdapter implements ManageablePackage {
     }
   }
 
+  /** Lấy danh sách các hành động (actions) vận hành được hỗ trợ */
   public getActions(): PackageActionDescriptor[] {
     return [
       {
@@ -103,6 +106,7 @@ export class RedisManageableAdapter implements ManageablePackage {
     ];
   }
 
+  /** Thực thi hành động vận hành tương ứng trên package */
   public async executeAction(actionId: string): Promise<PackageActionResult> {
     if (actionId === 'ping') {
       try {

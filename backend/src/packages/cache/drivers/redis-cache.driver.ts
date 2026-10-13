@@ -18,10 +18,12 @@ export class RedisCacheDriver implements CacheDriver {
     this.keys = cacheKeys(redis);
   }
 
+  /** Đảm bảo kết nối tới dịch vụ đã sẵn sàng trước khi thực thi */
   private ensureReady(): void {
     if (!this.redis.isReady()) throw new CacheUnavailableError(this.redis.client.status);
   }
 
+  /** Lấy dữ liệu hoặc đối tượng theo khóa định danh */
   public async get(key: string): Promise<CacheReadResult> {
     this.ensureReady();
     const raw = await this.redis.client.get(this.keys.data(key));
@@ -29,6 +31,7 @@ export class RedisCacheDriver implements CacheDriver {
     return { found: true, value: JSON.parse(raw) as unknown };
   }
 
+  /** Lưu trữ một giá trị theo khóa định danh */
   public async set(key: string, value: unknown, ttlSeconds: number): Promise<void> {
     this.ensureReady();
     const raw = JSON.stringify(value ?? null);
@@ -37,22 +40,26 @@ export class RedisCacheDriver implements CacheDriver {
     else await this.redis.client.set(this.keys.data(key), raw);
   }
 
+  /** Xóa bản ghi khỏi hệ thống theo mã định danh */
   public async delete(key: string): Promise<void> {
     this.ensureReady();
     await this.redis.client.unlink(this.keys.data(key));
   }
 
+  /** Kiểm tra sự tồn tại của một khóa trong bộ lưu trữ */
   public async has(key: string): Promise<boolean> {
     this.ensureReady();
     return (await this.redis.client.exists(this.keys.data(key))) === 1;
   }
 
+  /** Xóa sạch toàn bộ dữ liệu trong bộ lưu trữ */
   public async clear(): Promise<number> {
     this.ensureReady();
     return unlinkMatching(this.redis, `${escapeGlob(this.keys.dataPrefix())}*`);
   }
 }
 
+/** Thoát các ký tự đặc biệt trong mẫu glob pattern */
 export const escapeGlob = (s: string) => s.replace(/[*?[\]\\]/g, '\\$&');
 
 /**
@@ -68,6 +75,7 @@ export async function unlinkMatching(
   let cursor = '0';
   let deleted = 0;
   let batch: string[] = [];
+  /** Đóng và dọn sạch các tác vụ trong hàng đợi khi kết thúc */
   const drain = async () => {
     if (batch.length === 0) return;
     deleted += await redis.client.unlink(...batch);

@@ -23,6 +23,7 @@ const PS_PER_MS = 1e9;
  * (hay gặp trên VM/WSL) → coi là không đáng tin.
  */
 const TIMER_OVERFLOW = 2 ** 63;
+/** Đo khoảng thời gian thực thi của một tác vụ tính bằng mili-giây */
 const timerMs = (v: unknown): number | null => {
   const n = toNumber(v);
   return n === null || n >= TIMER_OVERFLOW ? null : n / PS_PER_MS;
@@ -34,12 +35,14 @@ const EXPLAINABLE = /^\s*(SELECT|WITH)\b/i;
 const UNSAFE_FOR_EXPLAIN = /\b(INTO|FOR\s+UPDATE|FOR\s+SHARE|LOCK\s+IN\s+SHARE\s+MODE)\b/i;
 
 type Row = Record<string, unknown>;
+/** Chuyển đổi giá trị sang kiểu chuỗi an toàn */
 const str = (v: unknown): string | null => (v === null || v === undefined ? null : String(v));
 /** Epoch giây do server tính (`UNIX_TIMESTAMP`) → ISO; tránh lệch múi giờ của DATETIME. */
 const iso = (v: unknown): string | null => {
   const sec = toNumber(v);
   return sec === null || sec <= 0 ? null : new Date(sec * 1000).toISOString();
 };
+/** Trích xuất mã định danh phiên làm việc từ kết nối */
 const sessionId = (id: string) => {
   if (!/^\d+$/.test(id)) throw new Error('Invalid session id');
   return id;
@@ -66,11 +69,13 @@ export class MysqlMonitoringProvider implements DatabaseMonitoringProvider {
     'terminate',
   ]);
 
+  /** Chuẩn bị và thiết lập môi trường trước khi thực thi truy vấn */
   public async prepare(ctx: MonitoringContext): Promise<void> {
     // information_schema.TABLES mặc định cache thống kê 24h → đọc số mới nhất cho session này.
     await ctx.run('SET SESSION information_schema_stats_expiry = 0').catch(() => undefined);
   }
 
+  /** Lấy thông tin cấu hình và thống kê hoạt động của máy chủ */
   public async serverInfo(ctx: MonitoringContext) {
     const [row] = await ctx.run('SELECT VERSION() AS version, @@max_connections AS maxConnections');
     const uptime = await ctx.run("SHOW GLOBAL STATUS LIKE 'Uptime'").catch(() => [] as Row[]);
@@ -83,6 +88,7 @@ export class MysqlMonitoringProvider implements DatabaseMonitoringProvider {
     };
   }
 
+  /** Lấy danh sách các phiên kết nối đang hoạt động */
   public async sessions(ctx: MonitoringContext): Promise<DbSession[]> {
     const rows = await ctx.run(
       `SELECT t.PROCESSLIST_ID AS id, t.PROCESSLIST_USER AS user, t.PROCESSLIST_HOST AS host, t.PROCESSLIST_DB AS db,
@@ -139,6 +145,7 @@ export class MysqlMonitoringProvider implements DatabaseMonitoringProvider {
     });
   }
 
+  /** Tổng hợp thống kê tần suất và hiệu năng truy vấn theo digest */
   public async digestStats(ctx: MonitoringContext, limit: number): Promise<DbDigestStat[]> {
     const rows = await ctx.run(
       `SELECT DIGEST AS id, DIGEST_TEXT AS sqlText, COUNT_STAR AS calls, SUM_TIMER_WAIT AS total, AVG_TIMER_WAIT AS avg,
@@ -157,6 +164,7 @@ export class MysqlMonitoringProvider implements DatabaseMonitoringProvider {
       .map((r) => this.digestOf(r));
   }
 
+  /** Trích xuất và chuẩn hóa chuỗi digest của câu truy vấn */
   private digestOf(r: Row): DbDigestStat {
     const sample = String(r['sample'] ?? '');
     const total = timerMs(r['total']);
@@ -182,6 +190,7 @@ export class MysqlMonitoringProvider implements DatabaseMonitoringProvider {
     };
   }
 
+  /** Phân tích kế hoạch thực thi (EXPLAIN plan) của câu truy vấn */
   public async explain(ctx: MonitoringContext, digestId: string) {
     if (!/^[0-9a-f]{32,64}$/i.test(digestId)) return null;
     const [row] = await ctx.run(
@@ -202,6 +211,7 @@ export class MysqlMonitoringProvider implements DatabaseMonitoringProvider {
     return parseMysqlExplain(plan?.['EXPLAIN'] ?? Object.values(plan ?? {})[0]);
   }
 
+  /** Lấy danh sách các giao dịch đang hoạt động */
   public async transactions(ctx: MonitoringContext): Promise<DbTransaction[]> {
     const rows = await ctx.run(
       `SELECT tx.THREAD_ID AS threadId, tx.EVENT_ID AS eventId, t.PROCESSLIST_ID AS sessionId, tx.STATE AS state,
@@ -229,6 +239,7 @@ export class MysqlMonitoringProvider implements DatabaseMonitoringProvider {
     }));
   }
 
+  /** Lấy thông tin các truy vấn đang chờ khóa */
   public async lockWaits(ctx: MonitoringContext): Promise<DbLockWait[]> {
     const rows = await ctx.run(
       `SELECT rt.PROCESSLIST_ID AS waiting, rt.PROCESSLIST_INFO AS waitingInfo, rt.PROCESSLIST_TIME AS waitingTime,
@@ -258,6 +269,7 @@ export class MysqlMonitoringProvider implements DatabaseMonitoringProvider {
     }));
   }
 
+  /** Lấy danh sách các bảng và thông tin thống kê trong cơ sở dữ liệu */
   public async tables(ctx: MonitoringContext): Promise<DbTable[]> {
     const rows = await ctx.run(
       `SELECT t.TABLE_NAME AS name, t.TABLE_ROWS AS \`rows\`, t.DATA_LENGTH AS data, t.INDEX_LENGTH AS idx, t.ENGINE AS engine,
@@ -272,6 +284,7 @@ export class MysqlMonitoringProvider implements DatabaseMonitoringProvider {
     return rows.map((r) => this.tableOf(r));
   }
 
+  /** Chuyển đổi thông tin bảng thành đối tượng DTO chuẩn */
   private tableOf(r: Row): DbTable {
     const data = toNumber(r['data']);
     const idx = toNumber(r['idx']);
@@ -287,6 +300,7 @@ export class MysqlMonitoringProvider implements DatabaseMonitoringProvider {
     };
   }
 
+  /** Lấy chi tiết cấu trúc, trường dữ liệu và chỉ mục của bảng */
   public async tableDetail(ctx: MonitoringContext, name: string): Promise<DbTableDetail | null> {
     const table = (await this.tables(ctx)).find((t) => t.name === name);
     if (!table) return null;
@@ -333,6 +347,7 @@ export class MysqlMonitoringProvider implements DatabaseMonitoringProvider {
     };
   }
 
+  /** Lấy thông tin dung lượng và thống kê lưu trữ */
   public async storage(ctx: MonitoringContext) {
     const [row] = await ctx.run(
       `SELECT COUNT(*) AS tables, SUM(DATA_LENGTH) AS data, SUM(INDEX_LENGTH) AS idx
@@ -349,10 +364,12 @@ export class MysqlMonitoringProvider implements DatabaseMonitoringProvider {
     };
   }
 
+  /** Hủy bỏ tác vụ hoặc truy vấn đang thực thi */
   public async cancel(ctx: MonitoringContext, id: string): Promise<void> {
     await ctx.run(`KILL QUERY ${sessionId(id)}`);
   }
 
+  /** Ngắt cưỡng bức một kết nối hoặc tiến trình đang chạy */
   public async terminate(ctx: MonitoringContext, id: string): Promise<void> {
     await ctx.run(`KILL ${sessionId(id)}`);
   }

@@ -51,6 +51,7 @@ export class BaseMessagePublisherProvider implements MessagePublisherContract {
     ]);
   }
 
+  /** Phát hành một tin nhắn mới vào hàng đợi truyền tin */
   public async publish<T>(
     topic: string,
     payload: T,
@@ -92,6 +93,7 @@ export class BaseMessagePublisherProvider implements MessagePublisherContract {
     if (ok) this.connection?.markPublished();
   }
 
+  /** Trích xuất thông tin metadata từ đối tượng hoặc tin nhắn */
   private meta(producer: string | null, options: PublishOptions): JobMeta {
     const source = jobSourceOf(producer);
     const index: Record<string, string> = {};

@@ -8,6 +8,7 @@ export interface PoolStats {
   total: number;
 }
 
+/** Tính toán độ dài của chuỗi ký tự hoặc mảng dữ liệu */
 const lengthOf = (v: unknown): number | null => {
   if (Array.isArray(v)) return v.length;
   if (v && typeof v === 'object' && typeof (v as { length?: unknown }).length === 'number')

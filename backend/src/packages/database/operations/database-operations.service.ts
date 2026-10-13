@@ -60,6 +60,7 @@ export class DatabaseOperationsService {
     @Optional() private readonly redis?: RedisService,
   ) {}
 
+  /** Kiểm tra kết nối tới dịch vụ bộ nhớ đệm */
   public async testConnection() {
     const result = await this.connection.ping();
     return {
@@ -142,6 +143,7 @@ export class DatabaseOperationsService {
     return { items, lastRun: await this.lastRun() };
   }
 
+  /** Thực thi các tệp migration cơ sở dữ liệu chưa được áp dụng */
   public async runMigrations(): Promise<MigrationRun> {
     if (!this.config.database.migrationsEnabled)
       throw new DatabaseOperationError('MIGRATIONS_DISABLED', 'Running migrations is disabled');
@@ -197,6 +199,7 @@ export class DatabaseOperationsService {
     return run;
   }
 
+  /** Lấy mốc thời gian của lần thực thi gần nhất */
   private async lastRun(): Promise<MigrationRun | null> {
     if (!this.redis?.isReady()) return null;
     const raw = await this.redis.client

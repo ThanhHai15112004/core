@@ -67,12 +67,14 @@ export class DatabaseMonitorService implements OnApplicationBootstrap, OnModuleD
     @Optional() private readonly redis?: RedisService,
   ) {}
 
+  /** Thực thi tác vụ khởi động sau khi toàn bộ ứng dụng hoàn tất bootstrap */
   public onApplicationBootstrap(): void {
     if (!this.config.database.enabled || this.config.isTest) return;
     this.timer = setInterval(() => void this.tick(), TICK_MS);
     this.timer.unref();
   }
 
+  /** Dọn dẹp tài nguyên và ngắt kết nối khi module bị hủy */
   public onModuleDestroy(): void {
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
@@ -102,8 +104,10 @@ export class DatabaseMonitorService implements OnApplicationBootstrap, OnModuleD
     }
   }
 
+  /** Thu thập các chỉ số đo lường định kỳ từ hệ thống */
   private async collect(now: number): Promise<Snapshot> {
     const p = this.monitoring.provider;
+    /** Bọc lệnh thực thi với khối try-catch an toàn */
     const safe = async <T>(
       cap: Parameters<DatabaseMonitoringService['supports']>[0],
       fn: () => Promise<T>,
@@ -154,6 +158,7 @@ export class DatabaseMonitorService implements OnApplicationBootstrap, OnModuleD
     this.prevDigests = next;
   }
 
+  /** Ghi nhận số liệu thống kê I/O đọc/ghi của bảng */
   private async recordTableIo(tables: DbTable[], now: number): Promise<void> {
     const key = this.store.tableIoKey();
     const pipe = this.store.client.pipeline();
@@ -180,6 +185,7 @@ export class DatabaseMonitorService implements OnApplicationBootstrap, OnModuleD
     await pipe.exec();
   }
 
+  /** Chụp nhanh trạng thái dung lượng lưu trữ hiện tại */
   private async snapshotStorage(totalBytes: number, tables: DbTable[], now: number): Promise<void> {
     const [latest] = await this.store
       .storageSnapshots()
@@ -200,6 +206,7 @@ export class DatabaseMonitorService implements OnApplicationBootstrap, OnModuleD
       .exec();
   }
 
+  /** Đánh giá các điều kiện và phát hiện cảnh báo bất thường */
   private async evaluate(snapshot: Snapshot | null, now: number): Promise<void> {
     const [stats, active] = await Promise.all([
       this.metrics.stats(RULE_WINDOW_MIN),
@@ -245,6 +252,7 @@ export class DatabaseMonitorService implements OnApplicationBootstrap, OnModuleD
     await this.applyAlerts(violations, active, now);
   }
 
+  /** Cập nhật danh sách các cảnh báo hiện thời của hệ thống */
   private async applyAlerts(
     violations: DbViolation[],
     active: Awaited<ReturnType<DatabaseStoreService['activeAlerts']>>,

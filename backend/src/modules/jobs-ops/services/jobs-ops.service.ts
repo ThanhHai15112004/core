@@ -70,13 +70,16 @@ const LOG_LIMIT = 50;
 const RESULT_MAX_BYTES = 4096;
 const PRIORITY_ORDER: JobPriorityLevel[] = ['critical', 'high', 'normal', 'low'];
 
+/** Định dạng mốc thời gian sang chuỗi chuẩn ISO 8601 */
 const iso = (t: number | null | undefined) =>
   t === null || t === undefined ? null : new Date(t).toISOString();
+/** Lấy mốc thời gian bắt đầu của ngày theo chuỗi ngày giờ */
 const startOfDay = (t: number) => {
   const d = new Date(t);
   d.setHours(0, 0, 0, 0);
   return d.getTime();
 };
+/** Tính toán độ dài chuỗi ký tự theo đơn vị byte */
 const byteLength = (v: unknown) => {
   try {
     return Buffer.byteLength(JSON.stringify(v) ?? '', 'utf8');
@@ -87,6 +90,7 @@ const byteLength = (v: unknown) => {
 /** `StorageTimeout: upload failed` → `upload failed` (loại lỗi đã hiện riêng). */
 const stripType = (message: string, type: string | null) =>
   type && message.startsWith(`${type}: `) ? message.slice(type.length + 2) : message;
+/** Rút gọn chuỗi ID để hiển thị ngắn gọn trên giao diện */
 const shortId = (id: string | null) => (id ? (id.length > 12 ? id.slice(0, 8) : id) : '?');
 
 interface Baselines {
@@ -117,6 +121,7 @@ export class JobsOpsService {
     return this.config.jobs;
   }
 
+  /** Lấy các thiết lập cấu hình phân tích lưu lượng truy cập */
   public settings(): JobsSettingsDto {
     const c = this.cfg;
     return {
@@ -128,15 +133,18 @@ export class JobsOpsService {
     };
   }
 
+  /** Kiểm tra và xác nhận tính hợp lệ của hàng đợi chỉ định */
   private assertQueue(queue: string | null | undefined): void {
     if (queue && !this.jobs.provider.isKnown(queue)) throw new JobNotFoundException({ id: queue });
   }
 
+  /** Kiểm tra dịch vụ có đủ điều kiện sẵn sàng sử dụng hay không */
   private assertUsable(): void {
     if (!this.jobs.usable())
       throw new JobsUnavailableException({ state: this.jobs.status().state });
   }
 
+  /** Lấy các giá trị đường cơ sở (baselines) để so sánh hiệu năng */
   private async baselines(now: number): Promise<Baselines> {
     const [typical, wait] = await Promise.all([
       this.metrics.typicalByType(now),
@@ -163,6 +171,7 @@ export class JobsOpsService {
       : Math.max(min, this.config.queue.rules.oldestWaitingMin * MINUTE);
   }
 
+  /** Chuyển đổi bản ghi dữ liệu thành hàng hiển thị trên bảng */
   public row(j: JobRecord, b: Baselines): JobRowDto {
     const { now } = b;
     const running = j.status === 'active' || j.status === 'stalled';
@@ -222,6 +231,7 @@ export class JobsOpsService {
     return direct ? { jobs: [direct], matchedBy: 'id' } : null;
   }
 
+  /** Tìm kiếm các bản ghi theo từ khóa hoặc tiêu chí lọc */
   public async search(
     filter: JobFilter,
     search: string | null,
@@ -272,6 +282,7 @@ export class JobsOpsService {
     };
   }
 
+  /** Kiểm tra xem trạng thái có khớp với điều kiện lọc hay không */
   private statusMatches(j: JobRecord, f: JobFilter): boolean {
     if (!f.status) return true;
     return f.status === 'active'
@@ -293,6 +304,7 @@ export class JobsOpsService {
     );
   }
 
+  /** Lấy danh sách các job đang bị trì hoãn trong hàng đợi */
   private async delayedJobs(): Promise<SectionDto<JobRecord[]>> {
     return this.jobs.section('delayed', async () =>
       (
@@ -305,6 +317,7 @@ export class JobsOpsService {
     );
   }
 
+  /** Lấy mẫu danh sách các job bị thất bại gần đây */
   private async failedSample(queue: string | null): Promise<SectionDto<JobRecord[]>> {
     return this.jobs.section(null, async () =>
       (
@@ -351,12 +364,14 @@ export class JobsOpsService {
       .sort((a, b) => b.count - a.count || a.errorType.localeCompare(b.errorType));
   }
 
+  /** Lấy danh sách các mức độ ưu tiên của hàng đợi */
   private async priorities(
     queues: QueueInfo[],
     now: number,
   ): Promise<SectionDto<{ level: JobPriorityLevel; waiting: number; oldestSec: number | null }[]>> {
     return this.jobs.section('priority', async () => {
       const counts = new Map<JobPriorityLevel, { waiting: number; oldest: number | null }>();
+      /** Thêm mới một phần tử vào danh sách hoặc bộ sưu tập */
       const add = (level: JobPriorityLevel, n: number, oldest: number | null) => {
         const c = counts.get(level) ?? { waiting: 0, oldest: null };
         c.waiting += n;
@@ -392,6 +407,7 @@ export class JobsOpsService {
     });
   }
 
+  /** Lấy dữ liệu tổng quan trạng thái hệ thống */
   public async getOverview(range: JobsRange): Promise<JobsOverviewDto> {
     const now = Date.now();
     const today = startOfDay(now);
@@ -409,6 +425,7 @@ export class JobsOpsService {
       ],
     );
     const qs = info.available ? info.data : null;
+    /** Tính tổng các giá trị trong mảng số liệu */
     const sum = (f: (q: QueueInfo) => number) => (qs ? qs.reduce((s, q) => s + f(q), 0) : null);
     const waiting = sum((q) => q.counts.waiting + q.counts.prioritized);
     const delayedTotal = sum((q) => q.counts.delayed);
@@ -425,6 +442,7 @@ export class JobsOpsService {
     const rc = this.metrics.counts(win);
     const incoming = rc.incoming;
     const completed = rc.completed + rc.exhausted;
+    /** Tính toán tần suất trung bình của tác vụ theo mỗi phút */
     const perMin = (n: number) => (win ? round((n / win.seconds) * 60, 2) : null);
     const inPer = perMin(incoming);
     const outPer = perMin(completed);
@@ -507,6 +525,7 @@ export class JobsOpsService {
     };
   }
 
+  /** Thu thập danh sách các vấn đề và sự cố hiện có */
   private problems(ctx: {
     qs: QueueInfo[] | null;
     stalled: JobRowDto[] | null;
@@ -521,6 +540,7 @@ export class JobsOpsService {
     const r = this.cfg.rules;
     const q = this.config.queue.rules;
     const out: JobProblemDto[] = [];
+    /** Thêm mới một phần tử vào danh sách hoặc bộ sưu tập */
     const add = (p: Omit<JobProblemDto, 'message'>, params: Record<string, string | number>) =>
       out.push({ ...p, message: this.i18n.t(`jobs.problem.${p.code}`, params) });
     for (const info of ctx.qs ?? []) {
@@ -709,6 +729,7 @@ export class JobsOpsService {
     };
   }
 
+  /** Tạo báo cáo chi tiết về tình trạng hoạt động */
   public async getReport(range: JobsRange): Promise<JobsReportResponseDto> {
     const now = Date.now();
     const today = startOfDay(now);
@@ -734,6 +755,7 @@ export class JobsOpsService {
     return d;
   }
 
+  /** Lấy thông tin chi tiết một job cụ thể trong hàng đợi */
   public async getJob(id: string, queue: string | null): Promise<JobDetailDto> {
     const raw = await this.load(id, queue);
     const now = Date.now();
@@ -872,12 +894,14 @@ export class JobsOpsService {
     };
   }
 
+  /** Lấy danh sách các hành động có thể thực thi */
   private actions(
     j: JobRecord,
     cancellable: boolean,
     consumers: ConsumerRegistration[],
   ): JobDetailDto['actions'] {
     const c = this.cfg;
+    /** Lấy trạng thái hiện tại của đối tượng */
     const state = (allowed: boolean, reason: string | null): ActionStateDto => ({
       allowed,
       reason: allowed ? null : reason,
@@ -925,6 +949,7 @@ export class JobsOpsService {
   private async relatedLogs(
     j: JobRecord,
   ): Promise<{ logs: JobDetailDto['logs']; by: JobDetailDto['logsMatchedBy'] }> {
+    /** Trích xuất một tập hợp các thuộc tính chỉ định từ đối tượng */
     const pick = (l: { t: string; level: string; context?: string; message: string }) => ({
       t: l.t,
       level: l.level,
@@ -946,6 +971,7 @@ export class JobsOpsService {
   public attempts(raw: JobDetailRaw): AttemptDto[] {
     const j = raw.record;
     const map = new Map<number, AttemptDto>();
+    /** Lấy dữ liệu hoặc đối tượng theo khóa định danh */
     const get = (n: number) => {
       let a = map.get(n);
       if (!a) {
@@ -1040,8 +1066,10 @@ export class JobsOpsService {
     return list;
   }
 
+  /** Lấy thông tin chính sách vòng đời (lifecycle policy) của lưu trữ */
   public lifecycle(raw: JobDetailRaw, now: number): LifecycleStepDto[] {
     const j = raw.record;
+    /** Thực hiện một bước xử lý tuần tự trong quy trình */
     const step = (
       kind: LifecycleStepDto['kind'],
       at: number | null,
@@ -1141,21 +1169,25 @@ export class JobsOpsService {
     };
   }
 
+  /** Truy vấn danh sách các sự kiện vận hành gần đây */
   public async getEvents(range: JobsRange): Promise<JobEventDto[]> {
     const from = Date.now() - JOBS_RANGES[range] * MINUTE;
     const events = await this.jobs.events().catch(() => [] as JobEventRecord[]);
     return events.filter((e) => e.at >= from).map((e) => this.eventDto(e));
   }
 
+  /** Lấy thông tin operations của hệ thống */
   public async getOperations(): Promise<JobOperationDto[]> {
     const ops = await this.jobs.operations().catch(() => [] as JobOperationRecord[]);
     return ops.map((o) => this.operationDto(o));
   }
 
+  /** Chuyển đổi thông tin thao tác sang đối tượng Operation DTO */
   private operationDto({ durationMs: _durationMs, ...o }: JobOperationRecord): JobOperationDto {
     return { ...o, at: new Date(o.at).toISOString() };
   }
 
+  /** Lấy thông tin cấu hình hoạt động của dịch vụ */
   public async getConfig(): Promise<JobsConfigDto> {
     const info = this.queues.provider.info();
     const d = this.queues.provider.defaults();
@@ -1222,6 +1254,7 @@ export class JobsOpsService {
     return j.queue;
   }
 
+  /** Thực hiện thử lại một tác vụ hoặc job thất bại */
   public async retry(
     id: string,
     queue: string | null,
@@ -1233,6 +1266,7 @@ export class JobsOpsService {
     });
   }
 
+  /** Thực hiện thử lại hàng loạt tác vụ hoặc job thất bại */
   public async bulkRetry(
     items: { queue: string; id: string }[],
     ctx: JobOperationContext,
@@ -1243,6 +1277,7 @@ export class JobsOpsService {
     });
   }
 
+  /** Hủy bỏ tác vụ hoặc truy vấn đang thực thi */
   public async cancel(
     id: string,
     queue: string | null,
@@ -1256,6 +1291,7 @@ export class JobsOpsService {
     });
   }
 
+  /** Xóa phần tử khỏi hệ thống lưu trữ hoặc hàng đợi */
   public async remove(
     id: string,
     queue: string | null,
@@ -1266,12 +1302,14 @@ export class JobsOpsService {
     );
   }
 
+  /** Xử lý và che giấu dữ liệu nhạy cảm trong payload trước khi trả về */
   public async payload(id: string, queue: string | null, ctx: JobOperationContext) {
     return this.act(async () =>
       this.operations.payload(await this.resolveQueue(id, queue), id, ctx),
     );
   }
 
+  /** Thực hiện thao tác vận hành kèm ghi nhận sự kiện */
   private async act<T>(fn: () => Promise<T>): Promise<T> {
     try {
       return await fn();
@@ -1280,6 +1318,7 @@ export class JobsOpsService {
     }
   }
 
+  /** Tạo đối tượng lỗi phản hồi cho thao tác vận hành thất bại */
   private operationError(err: unknown): Error {
     if (!(err instanceof JobOperationError))
       return err instanceof Error ? err : new Error(String(err));

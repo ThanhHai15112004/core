@@ -7,7 +7,9 @@ const MB = 1024 * 1024;
 /** cgroup v1 báo "không giới hạn" bằng một số rất lớn (≈ 2^63, làm tròn theo trang). */
 const CGROUP_V1_UNLIMITED = 2 ** 60;
 
+/** Chuyển đổi số byte sang đơn vị Megabyte (MB) */
 const mb = (bytes: number) => Math.round((bytes / MB) * 10) / 10;
+/** Làm tròn giá trị mili-giây đến 1 chữ số thập phân */
 const ms1 = (v: number) => Math.round(v * 100) / 100;
 
 /** Giới hạn RAM của container (cgroup v2 `memory.max`, v1 `memory.limit_in_bytes`); null = không giới hạn. */
@@ -18,6 +20,7 @@ export function cgroupMemoryLimit(read: (path: string) => string = readText): nu
   return Number.isFinite(v1) && v1 > 0 && v1 < CGROUP_V1_UNLIMITED ? v1 : null;
 }
 
+/** Đọc toàn bộ nội dung tệp tin văn bản ở định dạng UTF-8 */
 function readText(path: string): string {
   try {
     return readFileSync(path, 'utf8');
@@ -26,6 +29,7 @@ function readText(path: string): string {
   }
 }
 
+/** Kiểm tra xem giá trị số có lớn hơn 0 hay không */
 const positive = (n: number) => (Number.isFinite(n) && n > 0 ? n : null);
 
 /**
@@ -51,12 +55,14 @@ export class ResourceSampler {
     });
   }
 
+  /** Gửi tín hiệu khởi động một runtime process */
   public start(): void {
     this.loop.enable();
     this.gcObserver.observe({ entryTypes: ['gc'] });
     this.cpu = { usage: process.cpuUsage(), at: performance.now() };
   }
 
+  /** Gửi tín hiệu dừng một runtime process */
   public stop(): void {
     this.loop.disable();
     this.gcObserver.disconnect();

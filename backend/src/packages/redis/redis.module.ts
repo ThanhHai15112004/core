@@ -4,6 +4,7 @@ import { REDIS_CLIENT_FACTORY, type RedisClientFactory } from './redis.constants
 import { RedisService } from './redis.service.js';
 import { RedisManageableAdapter } from './redis-manageable.adapter.js';
 
+/** Hàm khởi tạo giá trị mặc định cho cấu hình hoặc đối tượng */
 const defaultFactory: RedisClientFactory = (options) => new Redis(options);
 
 @Global()

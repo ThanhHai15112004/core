@@ -36,6 +36,7 @@ export class LoggingManageableAdapter implements ManageablePackage {
     return this.i18n.t('ops.logging.displayName');
   }
 
+  /** Lấy báo cáo tình trạng hoạt động và các chỉ số của package */
   public async getStatus(): Promise<PackageStatusReport> {
     const currentLevel = this.levels.current();
 
@@ -50,6 +51,7 @@ export class LoggingManageableAdapter implements ManageablePackage {
     };
   }
 
+  /** Lấy danh sách các hành động (actions) vận hành được hỗ trợ */
   public getActions(): PackageActionDescriptor[] {
     return (Object.keys(LEVEL_ACTIONS) as LevelActionId[]).map((id) => ({
       id,
@@ -59,6 +61,7 @@ export class LoggingManageableAdapter implements ManageablePackage {
     }));
   }
 
+  /** Thực thi hành động vận hành tương ứng trên package */
   public async executeAction(actionId: string): Promise<PackageActionResult> {
     if (!(actionId in LEVEL_ACTIONS)) {
       return {

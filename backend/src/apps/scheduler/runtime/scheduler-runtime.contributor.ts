@@ -25,10 +25,12 @@ export class SchedulerRuntimeContributor implements RuntimeContributor, OnModule
     private readonly redis: RedisService,
   ) {}
 
+  /** Đăng ký contributor này với RuntimeAgentService khi khởi tạo module */
   public onModuleInit(): void {
     this.agent.registerContributor(this);
   }
 
+  /** Cung cấp thông tin mô tả chi tiết về Scheduler runtime */
   public describe(): RuntimeDescriptor {
     return {
       type: 'scheduler',
@@ -43,6 +45,7 @@ export class SchedulerRuntimeContributor implements RuntimeContributor, OnModule
     };
   }
 
+  /** Thu thập các chỉ số đo lường (metrics) của scheduled tasks */
   public async collectMetrics(): Promise<Record<string, MetricValue>> {
     const tasks = this.registry.list();
     const disabled = this.redis.isReady()
@@ -56,14 +59,17 @@ export class SchedulerRuntimeContributor implements RuntimeContributor, OnModule
     };
   }
 
+  /** Thu thập thông tin chi tiết danh sách task đã đăng ký */
   public async collectDetails(): Promise<Record<string, unknown>> {
     return { tasks: this.registry.list() };
   }
 
+  /** Thu thập các sự cố hoặc cảnh báo bất thường trong runtime */
   public async collectIssues(): Promise<RuntimeIssue[]> {
     return [];
   }
 
+  /** Khai báo các tính năng điều khiển được hỗ trợ bởi scheduler runtime */
   public capabilities(): { pause: boolean } {
     return { pause: false };
   }

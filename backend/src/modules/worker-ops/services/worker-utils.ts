@@ -5,15 +5,18 @@ import type { QueueInfo } from '@packages/queue/index.js';
 export const MINUTE = 60_000;
 export const DAY = 24 * 60 * MINUTE;
 
+/** Lấy mốc thời gian bắt đầu của ngày theo chuỗi ngày giờ */
 export const startOfDay = (t: number) => {
   const d = new Date(t);
   d.setHours(0, 0, 0, 0);
   return d.getTime();
 };
 
+/** Định dạng mốc thời gian sang chuỗi chuẩn ISO 8601 */
 export const iso = (t: number | null | undefined) =>
   t === null || t === undefined ? null : new Date(t).toISOString();
 
+/** Tính toán số giây đã trôi qua kể từ một mốc thời gian */
 export const secondsSince = (t: number | null, now: number) =>
   t === null ? null : Math.max(0, Math.round((now - t) / 1000));
 

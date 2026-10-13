@@ -34,6 +34,7 @@ export class CliHistoryService {
     }
   }
 
+  /** Lưu trữ hoặc cập nhật thông tin đối tượng vào cơ sở dữ liệu */
   private async save(input: {
     command: string;
     args: string[];

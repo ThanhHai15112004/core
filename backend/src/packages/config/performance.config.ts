@@ -1,5 +1,6 @@
 import { env } from './env.js';
 
+/** Chuyển đổi giá trị sang kiểu số hoặc trả về giá trị mặc định */
 const numberOr = (key: string, fallback: number): number => {
   const raw = env(key, false);
   return raw === '' ? fallback : env.number(key);

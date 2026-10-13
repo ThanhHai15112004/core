@@ -29,6 +29,7 @@ const timeseriesSchema = rangeSchema.extend({
   baseline: z.enum(BASELINE_MODES as [BaselineMode, ...BaselineMode[]]).optional(),
 });
 
+/** Xác thực và ép kiểu dữ liệu đầu vào theo schema Zod */
 function parse<T>(schema: z.ZodType<T>, value: unknown): T {
   const result = schema.safeParse(value);
   if (!result.success) throw new PerformanceValidationException(result.error.issues);
@@ -43,12 +44,14 @@ function parse<T>(schema: z.ZodType<T>, value: unknown): T {
 export class PerformanceController {
   constructor(private readonly performance: PerformanceService) {}
 
+  /** Lấy dữ liệu tổng quan cho trang quản trị vận hành */
   @Public()
   @Get(PERFORMANCE_ROUTES.OVERVIEW)
   public async overview(@Query() raw: Record<string, string>): Promise<PerformanceOverviewDto> {
     return this.performance.getOverview(parse(rangeSchema, raw).range);
   }
 
+  /** Lấy dữ liệu chuỗi thời gian cho biểu đồ hiển thị */
   @Public()
   @Get(PERFORMANCE_ROUTES.TIMESERIES)
   public async timeseries(@Query() raw: Record<string, string>): Promise<PerfTimeseriesDto> {
@@ -56,12 +59,14 @@ export class PerformanceController {
     return this.performance.getTimeseries(q.range, q.metric, q.compare ?? null, q.baseline ?? null);
   }
 
+  /** Truy vấn danh sách các sự kiện vận hành gần đây */
   @Public()
   @Get(PERFORMANCE_ROUTES.EVENTS)
   public async events(@Query() raw: Record<string, string>): Promise<PerfEventDto[]> {
     return this.performance.getEvents(parse(rangeSchema, raw).range);
   }
 
+  /** Lấy thông tin hiệu năng của một thành phần cụ thể */
   @Public()
   @Get(PERFORMANCE_ROUTES.COMPONENT_DETAIL)
   public async component(

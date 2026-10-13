@@ -35,15 +35,18 @@ export class ScheduleSyncService implements OnApplicationBootstrap, OnModuleDest
     private readonly config: CoreConfigService,
   ) {}
 
+  /** Kích hoạt đồng bộ lịch tác vụ khi ứng dụng hoàn tất bootstrap */
   public onApplicationBootstrap(): void {
     void this.syncUntilDone();
   }
 
+  /** Hủy bỏ bộ hẹn giờ thử lại đồng bộ khi module bị hủy */
   public onModuleDestroy(): void {
     if (this.retry) clearTimeout(this.retry);
     this.retry = null;
   }
 
+  /** Thực hiện thử lại đồng bộ định kỳ cho đến khi kết nối thành công */
   private async syncUntilDone(): Promise<void> {
     const done = await this.sync().catch((err: unknown) => {
       this.logger.warn(
@@ -60,6 +63,7 @@ export class ScheduleSyncService implements OnApplicationBootstrap, OnModuleDest
   public async sync(): Promise<boolean> {
     if (!this.redis.isReady() || this.connection.getStatus().state !== 'connected') return false;
     const keys = schedulerKeys(this.redis);
+    /** Bọc Promise với timeout từ QueueRegistry */
     const t = <T>(task: Promise<T>) => this.queueRegistry.withTimeout(task);
     const tasks = this.taskRegistry.list();
     const disabled = new Set(await this.redis.client.smembers(keys.disabled()));

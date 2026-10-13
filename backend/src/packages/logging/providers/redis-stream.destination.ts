@@ -23,11 +23,13 @@ export class RedisStreamDestination {
   public lastErrorAt: number | null = null;
   public lastError: string | null = null;
 
+  /** Gắn một listener hoặc plugin vào luồng xử lý */
   public attach(redis: RedisService, key: string): void {
     this.redis = redis;
     this.key = key;
   }
 
+  /** Gỡ bỏ listener hoặc plugin khỏi luồng xử lý */
   public detach(redis: RedisService): void {
     if (this.redis !== redis) return;
     this.redis = null;
@@ -35,6 +37,7 @@ export class RedisStreamDestination {
     this.buffer = [];
   }
 
+  /** Ghi dữ liệu vào luồng xuất (stream) hoặc tệp tin */
   public write(line: string): void {
     if (!this.redis) return;
     if (this.buffer.length >= MAX_BUFFER) {
@@ -49,6 +52,7 @@ export class RedisStreamDestination {
     }
   }
 
+  /** Xóa toàn bộ dữ liệu trong bộ nhớ đệm */
   public async flush(): Promise<void> {
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;

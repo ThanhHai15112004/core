@@ -19,6 +19,7 @@ export interface ServerCounters {
   uptimeSec: number | null;
 }
 
+/** Phân tích cú pháp chuỗi JSON an toàn với giá trị dự phòng */
 function parseJson<T>(raw: string | null | undefined): T | null {
   if (!raw) return null;
   try {
@@ -28,6 +29,7 @@ function parseJson<T>(raw: string | null | undefined): T | null {
   }
 }
 
+/** Phân tích cú pháp chuỗi phân tách thành mảng danh sách */
 const parseList = <T>(raws: string[]) =>
   raws.map((r) => parseJson<T>(r)).filter((x): x is T => x !== null);
 
@@ -44,24 +46,29 @@ export class CacheStoreService {
     return this.redis.client;
   }
 
+  /** Kiểm tra dịch vụ hoặc kết nối có đang sẵn sàng hoạt động hay không */
   public isAvailable(): boolean {
     return this.redis.isReady();
   }
 
+  /** Truy vấn danh sách các sự kiện vận hành gần đây */
   public async events(): Promise<CacheEventRecord[]> {
     return parseList<CacheEventRecord>(await this.redis.client.lrange(this.keys.events(), 0, -1));
   }
 
+  /** Truy vấn danh sách các lỗi và ngoại lệ ghi nhận được */
   public async errors(): Promise<CacheErrorRecord[]> {
     return parseList<CacheErrorRecord>(await this.redis.client.lrange(this.keys.errors(), 0, -1));
   }
 
+  /** Truy vấn lịch sử các thao tác vận hành đã thực hiện */
   public async operations(): Promise<CacheOperationRecord[]> {
     return parseList<CacheOperationRecord>(
       await this.redis.client.lrange(this.keys.operations(), 0, -1),
     );
   }
 
+  /** Lấy danh sách các cảnh báo hệ thống đang hoạt động */
   public async activeAlerts(): Promise<Map<string, StoredCacheAlert>> {
     const hash = await this.redis.client.hgetall(this.keys.activeAlerts());
     const map = new Map<string, StoredCacheAlert>();
@@ -72,10 +79,12 @@ export class CacheStoreService {
     return map;
   }
 
+  /** Lấy các bộ đếm thống kê vận hành máy chủ */
   public async serverCounters(): Promise<ServerCounters | null> {
     return parseJson<ServerCounters>(await this.redis.client.get(this.keys.serverPrev()));
   }
 
+  /** Cập nhật các bộ đếm thống kê vận hành máy chủ */
   public async setServerCounters(c: ServerCounters): Promise<void> {
     await this.redis.client.set(this.keys.serverPrev(), JSON.stringify(c), 'EX', 3600);
   }

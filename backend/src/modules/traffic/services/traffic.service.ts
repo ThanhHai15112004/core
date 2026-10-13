@@ -52,20 +52,27 @@ const BASELINE_MIN = 60;
 const MAX_POINTS = 60;
 const PROBLEM_ENDPOINTS = 5;
 
+/** Tạo khóa định danh cho tuyến đường API (route) */
 const routeKey = (labels: Record<string, string>) =>
   `${labels['method'] || 'GET'} ${labels['route'] || '/'}`;
+/** Phân nhóm số liệu đo lường theo tuyến đường API */
 const byRoute = (samples: PromSample[]) =>
   new Map(samples.map((item) => [routeKey(item.labels), item.value]));
+/** Chuyển đổi giá trị thời gian sang đơn vị mili-giây */
 const toMs = (sec: number | null | undefined) =>
   sec === null || sec === undefined || !Number.isFinite(sec) ? null : Math.round(sec * 1000);
+/** Làm tròn giá trị số đến số chữ số chỉ định */
 const round = (n: number, d = 2) => Number(n.toFixed(d));
+/** Tính toán tỷ lệ phần trăm của một giá trị so với tổng số */
 const percentOf = (part: number, total: number) => (total > 0 ? round((part / total) * 100) : 0);
+/** Tính toán tỷ lệ phần trăm thay đổi giữa hai mốc đo */
 const percentDelta = (current: number | null, previous: number | null) =>
   current === null || previous === null || previous === 0
     ? null
     : round(((current - previous) / previous) * 100, 1);
 /** Giá trị nhãn an toàn trong PromQL. */
 const lv = (v: string) => v.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+/** Thoát các ký tự đặc biệt trong chuỗi để sử dụng trong Regular Expression */
 const escapeRe = (v: string) => v.replace(/[.*+?^${}()|[\]\\]/g, '\\\\$&');
 
 /** Regex PromQL (khớp toàn chuỗi) cho route nội bộ thuộc các module `TRAFFIC_INTERNAL_MODULES`. */
@@ -108,6 +115,7 @@ export class TrafficService {
     return internalRouteRegex(this.cfg.internalModules);
   }
 
+  /** Kiểm tra xem yêu cầu HTTP có phải là nội bộ hệ thống hay không */
   private isInternal(route: string): boolean {
     return new RegExp(`^${this.internalRe.replace(/\\\\/g, '\\')}$`).test(route);
   }
@@ -138,6 +146,7 @@ export class TrafficService {
     }
   }
 
+  /** Lấy các thiết lập cấu hình phân tích lưu lượng truy cập */
   private settings(): TrafficSettingsDto {
     const th = this.cfg.thresholds;
     return {
@@ -156,6 +165,7 @@ export class TrafficService {
   ): Promise<WindowStats> {
     const w = `${Math.max(60, Math.round(seconds))}s`;
     const off = offsetSec > 0 ? ` offset ${Math.round(offsetSec)}s` : '';
+    /** Làm tròn giá trị số theo độ chia nhỏ nhất (quantum) */
     const quant = (p: number) =>
       this.prom.value(
         `histogram_quantile(${p}, sum by (le) (rate(${H}_bucket${selector}[${w}]${off})))`,
@@ -175,6 +185,7 @@ export class TrafficService {
       .filter((s) => s.status > 0 && s.count > 0)
       .sort((a, b) => b.count - a.count || a.status - b.status);
     const requests = statuses.reduce((n, s) => n + s.count, 0);
+    /** Đếm tổng số lượng phần tử theo điều kiện chỉ định */
     const count = (from: number, to: number) =>
       statuses.filter((s) => s.status >= from && s.status < to).reduce((n, s) => n + s.count, 0);
     const clientErrors = count(400, 500);
@@ -197,6 +208,7 @@ export class TrafficService {
     };
   }
 
+  /** So sánh dữ liệu lưu lượng giữa hai khoảng thời gian */
   private compare(current: TrafficStatsDto, previous: TrafficStatsDto): TrafficComparisonDto {
     if (previous.requests === 0)
       return { requestsPercent: null, p95Percent: null, errorRateDelta: null };
@@ -217,6 +229,7 @@ export class TrafficService {
       .then((v) => (v === null ? null : Math.round(v)));
   }
 
+  /** Phân loại các mã trạng thái phản hồi HTTP */
   private classes(statuses: StatusCountDto[], total: number) {
     return STATUS_CLASSES.map((cls) => {
       const count = statuses
@@ -226,6 +239,7 @@ export class TrafficService {
     });
   }
 
+  /** Lấy dữ liệu tóm tắt lưu lượng và hiệu năng truy cập */
   public async getSummary(q: TrafficQuery): Promise<TrafficSummaryDto> {
     const seconds = TRAFFIC_RANGES[q.range] * 60;
     const selector = this.sel(q);
@@ -245,11 +259,13 @@ export class TrafficService {
     };
   }
 
+  /** Lấy dữ liệu chuỗi thời gian của lưu lượng mạng */
   public async getTimeseries(q: TrafficQuery, metric: TimeseriesMetric): Promise<TimeseriesDto> {
     const minutes = TRAFFIC_RANGES[q.range];
     const stepSec = Math.max(15, Math.round((minutes * 60) / MAX_POINTS));
     const w = `${Math.max(60, stepSec * 2)}s`;
     const selector = this.sel(q);
+    /** Tính toán tỷ lệ phần trăm giữa hai đại lượng */
     const rate = (extra?: string) =>
       `sum(rate(${H}_count${extra ? this.sel(q, extra) : selector}[${w}]))`;
 
@@ -271,6 +287,7 @@ export class TrafficService {
       main = this.points(total[0]?.points);
     } else if (metric === 'latency') {
       unit = 'ms';
+      /** Làm tròn giá trị số theo độ chia nhỏ nhất (quantum) */
       const quant = (p: number) =>
         `histogram_quantile(${p}, sum by (le) (rate(${H}_bucket${selector}[${w}]))) * 1000`;
       const [p95, p50, p99] = await Promise.all([
@@ -306,14 +323,17 @@ export class TrafficService {
     };
   }
 
+  /** Chuyển đổi dữ liệu đo lường thành các điểm tọa độ biểu đồ */
   private points(list: { t: number; v: number }[] | undefined) {
     return (list ?? [])
       .filter((p) => Number.isFinite(p.v))
       .map((p) => ({ t: p.t, value: round(p.v) }));
   }
 
+  /** Lấy trạng thái vận hành hiện tại của dịch vụ */
   private status(stats: TrafficStatsDto): { status: EndpointStatus; reasons: ReasonDto[] } {
     const th = this.cfg.thresholds;
+    /** Trích xuất chuỗi giải thích nguyên nhân lỗi hoặc cảnh báo */
     const reason = (code: string, params: Record<string, string | number>) => ({
       code,
       message: this.i18n.t(`traffic.reason.${code}`, params),
@@ -352,12 +372,15 @@ export class TrafficService {
     return { status: 'healthy', reasons: [] };
   }
 
+  /** Lấy danh sách thống kê hiệu năng theo từng endpoint API */
   public async getEndpoints(q: TrafficQuery, sort: EndpointSort): Promise<EndpointRowDto[]> {
     const seconds = TRAFFIC_RANGES[q.range] * 60;
     const w = `${seconds}s`;
     const selector = this.sel(q);
+    /** Sắp xếp hoặc phân nhóm dữ liệu theo thuộc tính chỉ định */
     const by = (extra?: string, metric = '_count') =>
       `sum by (route, method) (increase(${H}${metric}${extra ? this.sel(q, extra) : selector}[${w}]))`;
+    /** Tính toán giá trị phân vị xác suất của tập hợp số liệu */
     const quantile = (p: number) =>
       this.prom.safeQuery(
         `histogram_quantile(${p}, sum by (le, route, method) (rate(${H}_bucket${selector}[${w}])))`,
@@ -420,6 +443,7 @@ export class TrafficService {
     return rows.sort((a, b) => metricOf[sort](b) - metricOf[sort](a) || a.id.localeCompare(b.id));
   }
 
+  /** Lấy thông tin chi tiết về lưu lượng và lỗi của một endpoint API */
   public async getEndpoint(routeId: string, q: TrafficQuery): Promise<EndpointDetailDto> {
     const endpoints = await this.getEndpoints({ ...q, includeInternal: true }, 'traffic');
     const ep =
@@ -442,6 +466,7 @@ export class TrafficService {
     };
   }
 
+  /** Lấy danh sách thống kê các lỗi HTTP ghi nhận được */
   public async getErrors(q: TrafficQuery): Promise<ErrorAnalysisDto> {
     const [summary, endpoints] = await Promise.all([
       this.getSummary(q),
@@ -467,6 +492,7 @@ export class TrafficService {
     };
   }
 
+  /** Phân tích và đưa ra các nhận định chuyên sâu về lưu lượng mạng */
   public async getInsights(q: TrafficQuery): Promise<TrafficInsightsDto> {
     const selector = this.sel(q);
     const [problems, security, last24h] = await Promise.all([
@@ -496,6 +522,7 @@ export class TrafficService {
     ]);
     const now = new Date().toISOString();
     const out: TrafficProblemDto[] = [];
+    /** Thêm mới một phần tử vào danh sách hoặc bộ sưu tập */
     const add = (
       kind: TrafficProblemDto['kind'],
       severity: TrafficProblemDto['severity'],

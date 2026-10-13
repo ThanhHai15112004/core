@@ -57,6 +57,7 @@ export function errorTypeOf(message: string | null | undefined): string | null {
   return code ? code[1]! : null;
 }
 
+/** Kiểm tra xem loại lỗi phát sinh có thể thử lại được hay không */
 export function isRetryableType(type: string | null): boolean | null {
   if (!type) return null;
   return NON_RETRYABLE.has(type) ? false : null;
@@ -81,6 +82,7 @@ export function dependencyOf(text: string): JobDependency | null {
   return null;
 }
 
+/** Phân loại lỗi phát sinh trong quá trình xử lý job BullMQ */
 export function classifyJobError(err: unknown): JobErrorInfo {
   const message = sanitizeMessagingMessage(err);
   if (err instanceof JobError)

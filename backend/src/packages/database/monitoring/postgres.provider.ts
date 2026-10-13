@@ -16,7 +16,9 @@ import {
 } from './monitoring.types.js';
 
 type Row = Record<string, unknown>;
+/** Chuyển đổi giá trị sang kiểu chuỗi an toàn */
 const str = (v: unknown): string | null => (v === null || v === undefined ? null : String(v));
+/** Lấy mã định danh tiến trình (Process ID) của hệ thống */
 const pid = (id: string) => {
   if (!/^\d+$/.test(id)) throw new Error('Invalid session id');
   return Number(id);
@@ -44,6 +46,7 @@ export class PostgresMonitoringProvider implements DatabaseMonitoringProvider {
     'terminate',
   ]);
 
+  /** Lấy thông tin cấu hình và thống kê hoạt động của máy chủ */
   public async serverInfo(ctx: MonitoringContext) {
     const [row] = await ctx.run(
       `SELECT current_setting('server_version') AS version, current_setting('max_connections')::int AS max,
@@ -57,6 +60,7 @@ export class PostgresMonitoringProvider implements DatabaseMonitoringProvider {
     };
   }
 
+  /** Lấy danh sách các phiên kết nối đang hoạt động */
   public async sessions(ctx: MonitoringContext): Promise<DbSession[]> {
     const rows = await ctx.run(
       `SELECT pid, usename, client_addr::text AS client, application_name AS program, datname, state, query,
@@ -103,6 +107,7 @@ export class PostgresMonitoringProvider implements DatabaseMonitoringProvider {
     });
   }
 
+  /** Tổng hợp thống kê tần suất và hiệu năng truy vấn theo digest */
   public async digestStats(ctx: MonitoringContext, limit: number): Promise<DbDigestStat[]> {
     const ext = await ctx.run(`SELECT 1 FROM pg_extension WHERE extname = 'pg_stat_statements'`);
     if (ext.length === 0) throw new Error('pg_stat_statements extension is not installed');
@@ -135,10 +140,12 @@ export class PostgresMonitoringProvider implements DatabaseMonitoringProvider {
       }));
   }
 
+  /** Phân tích kế hoạch thực thi (EXPLAIN plan) của câu truy vấn */
   public async explain(): Promise<null> {
     return null;
   }
 
+  /** Lấy danh sách các giao dịch đang hoạt động */
   public async transactions(ctx: MonitoringContext): Promise<DbTransaction[]> {
     const rows = await ctx.run(
       `SELECT a.pid, a.application_name AS program, a.state, a.query, EXTRACT(EPOCH FROM now() - a.xact_start) AS age,
@@ -161,6 +168,7 @@ export class PostgresMonitoringProvider implements DatabaseMonitoringProvider {
     }));
   }
 
+  /** Lấy thông tin các truy vấn đang chờ khóa */
   public async lockWaits(ctx: MonitoringContext): Promise<DbLockWait[]> {
     const rows = await ctx.run(
       `SELECT w.pid AS waiting, w.query AS waiting_query, w.application_name AS waiting_program,
@@ -186,6 +194,7 @@ export class PostgresMonitoringProvider implements DatabaseMonitoringProvider {
     }));
   }
 
+  /** Lấy danh sách các bảng và thông tin thống kê trong cơ sở dữ liệu */
   public async tables(ctx: MonitoringContext): Promise<DbTable[]> {
     const rows = await ctx.run(
       `SELECT relname AS name, n_live_tup AS rows, pg_table_size(relid) AS data, pg_indexes_size(relid) AS idx,
@@ -196,6 +205,7 @@ export class PostgresMonitoringProvider implements DatabaseMonitoringProvider {
     return rows.map((r) => this.tableOf(r));
   }
 
+  /** Chuyển đổi thông tin bảng thành đối tượng DTO chuẩn */
   private tableOf(r: Row): DbTable {
     const data = toNumber(r['data']);
     const idx = toNumber(r['idx']);
@@ -211,6 +221,7 @@ export class PostgresMonitoringProvider implements DatabaseMonitoringProvider {
     };
   }
 
+  /** Lấy chi tiết cấu trúc, trường dữ liệu và chỉ mục của bảng */
   public async tableDetail(ctx: MonitoringContext, name: string): Promise<DbTableDetail | null> {
     const table = (await this.tables(ctx)).find((t) => t.name === name);
     if (!table) return null;
@@ -247,6 +258,7 @@ export class PostgresMonitoringProvider implements DatabaseMonitoringProvider {
     };
   }
 
+  /** Lấy thông tin dung lượng và thống kê lưu trữ */
   public async storage(ctx: MonitoringContext) {
     const [row] = await ctx.run(
       `SELECT pg_database_size(current_database()) AS total,
@@ -262,10 +274,12 @@ export class PostgresMonitoringProvider implements DatabaseMonitoringProvider {
     };
   }
 
+  /** Hủy bỏ tác vụ hoặc truy vấn đang thực thi */
   public async cancel(ctx: MonitoringContext, id: string): Promise<void> {
     await ctx.run('SELECT pg_cancel_backend($1)', [pid(id)]);
   }
 
+  /** Ngắt cưỡng bức một kết nối hoặc tiến trình đang chạy */
   public async terminate(ctx: MonitoringContext, id: string): Promise<void> {
     await ctx.run('SELECT pg_terminate_backend($1)', [pid(id)]);
   }

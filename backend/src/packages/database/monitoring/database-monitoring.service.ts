@@ -39,6 +39,7 @@ export class DatabaseMonitoringService {
     return this.cached;
   }
 
+  /** Kiểm tra xem tính năng chỉ định có được hỗ trợ hay không */
   public supports(capability: MonitoringCapability): boolean {
     return this.provider.capabilities.has(capability);
   }

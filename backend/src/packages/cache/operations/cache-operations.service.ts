@@ -66,6 +66,7 @@ export class CacheOperationsService {
     return this.cache.driver instanceof MemoryCacheDriver ? this.cache.driver : null;
   }
 
+  /** Kiểm tra kết nối tới dịch vụ bộ nhớ đệm */
   public async testConnection(): Promise<{
     ok: boolean;
     latencyMs: number | null;
@@ -87,12 +88,14 @@ export class CacheOperationsService {
     }
   }
 
+  /** Đảm bảo dịch vụ hoặc điều kiện tiên quyết đã sẵn sàng */
   private ensure(flush = false): void {
     if (flush ? !this.config.cache.flushEnabled : !this.config.cache.actionsEnabled)
       throw new CacheOperationError(flush ? 'FLUSH_DISABLED' : 'ACTIONS_DISABLED');
     if (!this.monitoring.usable()) throw new CacheOperationError('UNAVAILABLE');
   }
 
+  /** Xóa một khóa cụ thể khỏi bộ nhớ đệm */
   public async deleteKey(key: string, ctx: OperationContext): Promise<OperationResult> {
     this.ensure();
     const info = await this.monitoring.provider.keyInfo(key);
@@ -103,9 +106,11 @@ export class CacheOperationsService {
     });
   }
 
+  /** Xóa toàn bộ các khóa thuộc một namespace trong bộ nhớ đệm */
   public async clearNamespace(ns: string, ctx: OperationContext): Promise<OperationResult> {
     this.ensure();
     const depth = this.config.cache.namespaceDepth;
+    /** Kiểm tra xem đối tượng có thỏa mãn các tiêu chí lọc hay không */
     const matches = (k: string) => namespaceOf(k, depth) === ns;
     return this.locked(() =>
       this.run('clear_namespace', ns, ctx, async () => {
@@ -123,6 +128,7 @@ export class CacheOperationsService {
     );
   }
 
+  /** Xóa sạch toàn bộ dữ liệu trong bộ nhớ đệm */
   public async flushAll(ctx: OperationContext): Promise<OperationResult> {
     this.ensure(true);
     return this.locked(() => this.run('flush_all', '*', ctx, () => this.cache.flush()));
@@ -142,6 +148,7 @@ export class CacheOperationsService {
     }
   }
 
+  /** Thực thi thao tác vận hành với cơ chế theo dõi và xử lý lỗi */
   private async run(
     action: CacheOperationAction,
     target: string,

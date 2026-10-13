@@ -43,6 +43,7 @@ export class QueueOperationsService {
     return this.config.queue;
   }
 
+  /** Đảm bảo dịch vụ hoặc điều kiện tiên quyết đã sẵn sàng */
   private ensure(
     enabled: boolean,
     code: QueueOperationErrorCode,
@@ -56,6 +57,7 @@ export class QueueOperationsService {
       throw new QueueOperationError('NOT_FOUND', queue, { queue });
   }
 
+  /** Lấy giá trị hoặc trạng thái hiện tại của đối tượng */
   private async current(queue: string) {
     const all = await this.monitoring.provider.queues();
     const q = all.find((x) => x.name === queue);
@@ -63,6 +65,7 @@ export class QueueOperationsService {
     return q;
   }
 
+  /** Thực thi thao tác vận hành với cơ chế theo dõi và xử lý lỗi */
   private async run(
     action: QueueOperationAction,
     queue: string,
@@ -95,6 +98,7 @@ export class QueueOperationsService {
     return record;
   }
 
+  /** Ghi nhận nhật ký kiểm toán cho hành động nhạy cảm */
   private audit(
     action: QueueOperationAction,
     target: string,
@@ -135,6 +139,7 @@ export class QueueOperationsService {
     );
   }
 
+  /** Tiếp tục tiếp nhận và xử lý tác vụ sau khi tạm dừng */
   public async resume(queue: string, ctx: QueueOperationContext): Promise<QueueOperationRecord> {
     this.ensure(this.cfg.pause, 'PAUSE_DISABLED', 'pause', queue);
     const q = await this.current(queue);

@@ -58,6 +58,7 @@ export interface JobSourceReader {
 const CHUNK = 50;
 const FINISHED = new Set<SourceState>(['completed', 'failed', 'tombstone']);
 
+/** Lấy mốc thời gian hoạt động gần nhất của đối tượng */
 export const activityAt = (j: JobRecord) =>
   j.finishedAt ?? j.cancelledAt ?? j.startedAt ?? j.createdAt;
 
@@ -77,6 +78,7 @@ function ordering(status: JobStatus | null): { asc: boolean; key: (j: JobRecord)
   }
 }
 
+/** Kiểm tra xem bản ghi có khớp với bộ lọc tìm kiếm hay không */
 export function matchesFilter(j: JobRecord, f: JobFilter): boolean {
   if (f.status) {
     // Tab Active gồm cả job mất heartbeat (được đánh dấu stalled).
@@ -108,10 +110,12 @@ export function matchesFilter(j: JobRecord, f: JobFilter): boolean {
 /** Cursor = vị trí đã đọc của từng nguồn (`-1` = nguồn đã hết). */
 export type Cursor = Record<string, number>;
 
+/** Mã hóa con trỏ phân trang sang chuỗi Base64 an toàn */
 export function encodeCursor(c: Cursor): string {
   return Buffer.from(JSON.stringify(c)).toString('base64url');
 }
 
+/** Giải mã chuỗi con trỏ phân trang Base64 sang đối tượng dữ liệu */
 export function decodeCursor(raw: string | null | undefined): Cursor {
   if (!raw) return {};
   try {
@@ -178,6 +182,7 @@ export async function scanJobs(
       });
     }
   }
+  /** Điền các giá trị mặc định cho những khoảng thời gian còn thiếu */
   const fill = async (s: Source) => {
     if (s.ended || s.buffer.length) return;
     const items =

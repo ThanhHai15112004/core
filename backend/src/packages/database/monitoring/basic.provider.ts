@@ -1,5 +1,6 @@
 import type { DatabaseMonitoringProvider, MonitoringCapability } from './monitoring.types.js';
 
+/** Tạo đối tượng thông báo tính năng không được hỗ trợ trên driver hiện tại */
 const unsupported = async (): Promise<never> => {
   throw new Error('Not supported by this driver');
 };

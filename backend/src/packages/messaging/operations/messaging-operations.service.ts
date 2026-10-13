@@ -70,6 +70,7 @@ export interface RedactedPayload {
 /** Chờ tối đa cho mỗi bước của Test Broker. */
 export const TEST_STEP_TIMEOUT_MS = 5000;
 
+/** Kiểm tra xem mốc thời gian có nằm trong khoảng cho phép hay không */
 const within = <T>(task: Promise<T>, ms: number, label: string): Promise<T> => {
   let timer: NodeJS.Timeout | undefined;
   return Promise.race([
@@ -99,12 +100,14 @@ export class MessagingOperationsService {
     return this.config.messaging;
   }
 
+  /** Đảm bảo dịch vụ hoặc điều kiện tiên quyết đã sẵn sàng */
   private ensure(enabled: boolean, code: MessagingOperationErrorCode, cap: MessagingCapability) {
     if (!enabled) throw new MessagingOperationError(code);
     if (!this.monitoring.supports(cap)) throw new MessagingOperationError('UNSUPPORTED');
     if (!this.monitoring.usable()) throw new MessagingOperationError('UNAVAILABLE');
   }
 
+  /** Ghi nhận nhật ký kiểm toán cho hành động nhạy cảm */
   private async audit(
     action: MessagingOperationAction,
     target: string,
@@ -139,6 +142,7 @@ export class MessagingOperationsService {
   public async test(ctx: OperationContext): Promise<MessagingTestResult> {
     const started = performance.now();
     const steps: MessagingTestResult['steps'] = [];
+    /** Thực hiện một bước xử lý tuần tự trong quy trình */
     const step = async (name: BrokerTestStep, fn: () => Promise<void>) => {
       const t = performance.now();
       try {

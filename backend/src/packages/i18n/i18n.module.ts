@@ -8,6 +8,7 @@ import { LocaleMiddleware } from './middleware/locale.middleware.js';
   exports: [CoreI18nService],
 })
 export class I18nModule implements NestModule {
+  /** Cập nhật cấu hình hoạt động của dịch vụ */
   public configure(consumer: MiddlewareConsumer): void {
     consumer.apply(LocaleMiddleware).forRoutes('{*path}');
   }

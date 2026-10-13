@@ -23,6 +23,7 @@ export interface TableIoRate {
 
 export type ActiveAlertState = StoredAlert;
 
+/** Phân tích cú pháp chuỗi JSON an toàn với giá trị dự phòng */
 function parseJson<T>(raw: string | null | undefined): T | null {
   if (!raw) return null;
   try {
@@ -32,6 +33,7 @@ function parseJson<T>(raw: string | null | undefined): T | null {
   }
 }
 
+/** Phân tích cú pháp chuỗi phân tách thành mảng danh sách */
 const parseList = <T>(raws: string[]) =>
   raws.map((r) => parseJson<T>(r)).filter((x): x is T => x !== null);
 
@@ -48,22 +50,27 @@ export class DatabaseStoreService {
     return this.redis.client;
   }
 
+  /** Kiểm tra dịch vụ hoặc kết nối có đang sẵn sàng hoạt động hay không */
   public isAvailable(): boolean {
     return this.redis.isReady();
   }
 
+  /** Truy vấn danh sách các sự kiện vận hành gần đây */
   public async events(): Promise<DbEventRecord[]> {
     return parseList<DbEventRecord>(await this.redis.client.lrange(this.keys.events(), 0, -1));
   }
 
+  /** Truy vấn danh sách các lỗi và ngoại lệ ghi nhận được */
   public async errors(): Promise<DbErrorRecord[]> {
     return parseList<DbErrorRecord>(await this.redis.client.lrange(this.keys.errors(), 0, -1));
   }
 
+  /** Lấy các bản chụp lịch sử dung lượng lưu trữ */
   public async storageSnapshots(): Promise<StorageSnapshot[]> {
     return parseList<StorageSnapshot>(await this.redis.client.lrange(this.keys.storage(), 0, -1));
   }
 
+  /** Lấy số liệu thống kê I/O đọc/ghi của các bảng */
   public async tableIo(): Promise<Map<string, TableIoRate>> {
     const hash = await this.redis.client.hgetall(this.redis.key('db', 'tableio'));
     const map = new Map<string, TableIoRate>();
@@ -74,10 +81,12 @@ export class DatabaseStoreService {
     return map;
   }
 
+  /** Tạo khóa định danh cho dữ liệu thống kê I/O của bảng */
   public tableIoKey(): string {
     return this.redis.key('db', 'tableio');
   }
 
+  /** Lấy danh sách các cảnh báo hệ thống đang hoạt động */
   public async activeAlerts(): Promise<Map<string, ActiveAlertState>> {
     const hash = await this.redis.client.hgetall(this.keys.activeAlerts());
     const map = new Map<string, ActiveAlertState>();

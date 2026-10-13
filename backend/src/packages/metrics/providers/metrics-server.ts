@@ -26,6 +26,7 @@ export class MetricsServer implements OnApplicationBootstrap, OnApplicationShutd
     return this.config.metrics.port || this.options.port || 0;
   }
 
+  /** Thực thi tác vụ khởi động sau khi toàn bộ ứng dụng hoàn tất bootstrap */
   public onApplicationBootstrap(): void {
     const port = this.port;
     if (!port) return;
@@ -45,6 +46,7 @@ export class MetricsServer implements OnApplicationBootstrap, OnApplicationShutd
     );
   }
 
+  /** Thực hiện dọn dẹp và ngắt các kết nối khi ứng dụng tắt */
   public async onApplicationShutdown(): Promise<void> {
     const server = this.server;
     if (!server) return;

@@ -32,6 +32,7 @@ export function compareKeys(a: string, b: string): number {
   return x.length - y.length;
 }
 
+/** Kiểm tra xem có bỏ qua bước kiểm tra xác thực đối với yêu cầu hiện tại hay không */
 const skip = (name: string) => name.startsWith(LOCAL_TMP_PREFIX);
 
 /**
@@ -50,6 +51,7 @@ export class LocalMonitoringProvider implements StorageMonitoringProvider {
 
   constructor(private readonly driver: LocalStorageDriver) {}
 
+  /** Lấy thông tin tổng quan về trạng thái cấu hình và vận hành */
   public info(): ProviderInfo {
     return {
       driver: 'local',
@@ -60,6 +62,7 @@ export class LocalMonitoringProvider implements StorageMonitoringProvider {
     };
   }
 
+  /** Kiểm tra trạng thái sẵn sàng và đo độ trễ kết nối */
   public async ping(): Promise<number> {
     const started = performance.now();
     await this.driver.ping();
@@ -98,6 +101,7 @@ export class LocalMonitoringProvider implements StorageMonitoringProvider {
     }
   }
 
+  /** Quét và phân trang danh sách các khóa hoặc đối tượng */
   public async scan(limit: number) {
     const objects: ScannedObject[] = [];
     let total = 0;
@@ -109,6 +113,7 @@ export class LocalMonitoringProvider implements StorageMonitoringProvider {
     return { objects, total, truncated: total > objects.length };
   }
 
+  /** Lấy một trang danh sách các đối tượng theo con trỏ phân trang */
   public async listPage(filter: ObjectFilter, cursor: string, count: number): Promise<ObjectPage> {
     const now = Date.now();
     const objects: ScannedObject[] = [];
@@ -134,10 +139,12 @@ export class LocalMonitoringProvider implements StorageMonitoringProvider {
     return { objects, cursor: exhausted ? '' : (last ?? ''), examined };
   }
 
+  /** Lấy danh sách các tệp tin tại thư mục gốc lưu trữ */
   private async *rootFiles(after: string | null): AsyncGenerator<ScannedObject> {
     for await (const o of this.walk('', after)) if (!o.key.includes('/')) yield o;
   }
 
+  /** Lấy thông tin chi tiết theo mã định danh */
   public async detail(key: string): Promise<ObjectDetail | null> {
     const meta = await this.driver.head(key);
     if (!meta) return null;
@@ -150,27 +157,33 @@ export class LocalMonitoringProvider implements StorageMonitoringProvider {
     };
   }
 
+  /** Tính toán dung lượng lưu trữ đã sử dụng và còn trống */
   public async capacity(): Promise<Capacity> {
     const s = await fs.statfs(this.driver.root);
     return { totalBytes: s.blocks * s.bsize, freeBytes: s.bavail * s.bsize, source: 'filesystem' };
   }
 
+  /** Khởi tạo hoặc quản lý tiến trình tải lên nhiều phần */
   public async multipart(): Promise<MultipartUpload[]> {
     throw new StorageObjectError('UNSUPPORTED', 'multipart');
   }
 
+  /** Lấy thông tin chính sách vòng đời (lifecycle policy) của lưu trữ */
   public async lifecycle(): Promise<LifecycleInfo> {
     throw new StorageObjectError('UNSUPPORTED', 'lifecycle');
   }
 
+  /** Hủy bỏ tiến trình tải lên nhiều phần và xóa các phần tạm */
   public async abortMultipart(): Promise<void> {
     throw new StorageObjectError('UNSUPPORTED', 'multipart');
   }
 
+  /** Tạo URL có chữ ký để truy cập tệp tin tạm thời */
   public async signedUrl(): Promise<string> {
     throw new StorageObjectError('UNSUPPORTED', 'signedUrl');
   }
 
+  /** Đọc thông tin header và metadata của tệp tin lưu trữ */
   public async readHead(key: string, bytes: number): Promise<Buffer> {
     const handle = await fs.open(await this.driver.resolve(key), 'r');
     try {

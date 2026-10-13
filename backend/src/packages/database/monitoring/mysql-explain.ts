@@ -9,6 +9,7 @@ import {
 export const HIGH_ROWS = 10_000;
 
 type Json = Record<string, unknown>;
+/** Kiểm tra xem giá trị đầu vào có phải là một đối tượng (object) hợp lệ hay không */
 const isObj = (v: unknown): v is Json => typeof v === 'object' && v !== null && !Array.isArray(v);
 
 const ACCESS_LABEL: Record<string, string> = {
@@ -34,6 +35,7 @@ export function parseMysqlExplain(raw: unknown): ExplainResult {
   const totalCost =
     block && isObj(block['cost_info']) ? toNumber(block['cost_info']['query_cost']) : null;
 
+  /** Thực thi thao tác vận hành với cơ chế ghi log và bắt lỗi */
   const operation = (name: string, depth: number, flags: ExplainFlag[] = []) =>
     steps.push({
       depth,
@@ -49,6 +51,7 @@ export function parseMysqlExplain(raw: unknown): ExplainResult {
       flags,
     });
 
+  /** Lấy thông tin chi tiết về cấu trúc và chỉ mục của bảng */
   const table = (t: Json, depth: number) => {
     const accessType = typeof t['access_type'] === 'string' ? t['access_type'] : null;
     const rows = toNumber(t['rows_examined_per_scan']);
@@ -80,6 +83,7 @@ export function parseMysqlExplain(raw: unknown): ExplainResult {
       for (const s of t['attached_subqueries']) walk(s, depth + 1);
   };
 
+  /** Duyệt đệ quy qua cây thư mục hoặc cấu trúc đối tượng */
   const walk = (node: unknown, depth: number): void => {
     if (Array.isArray(node)) {
       for (const n of node) walk(n, depth);

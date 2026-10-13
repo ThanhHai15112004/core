@@ -65,6 +65,7 @@ export class RuntimeAgentService implements OnApplicationBootstrap, BeforeApplic
 
   /** Ghi sự kiện `crashed` trước khi process chết vì lỗi không bắt được. */
   public installCrashHandlers(): void {
+    /** Xử lý sự cố nghiêm trọng không thể phục hồi (fatal error) */
     const onFatal = (kind: string) => (error: unknown) => {
       const message = error instanceof Error ? error.message : String(error);
       this.logger.error(`${kind}: ${message}`, error instanceof Error ? error.stack : undefined);
@@ -77,6 +78,7 @@ export class RuntimeAgentService implements OnApplicationBootstrap, BeforeApplic
     process.on('unhandledRejection', onFatal('unhandledRejection'));
   }
 
+  /** Thực thi tác vụ khởi động sau khi toàn bộ ứng dụng hoàn tất bootstrap */
   public async onApplicationBootstrap(): Promise<void> {
     if (this.identity.kind !== 'long-running' || this.started) return;
     this.started = true;
@@ -116,6 +118,7 @@ export class RuntimeAgentService implements OnApplicationBootstrap, BeforeApplic
     });
   }
 
+  /** Thực hiện dọn dẹp tài nguyên trước khi ứng dụng tắt */
   public async beforeApplicationShutdown(): Promise<void> {
     for (const timer of this.timers) clearInterval(timer);
     this.timers = [];
@@ -148,7 +151,9 @@ export class RuntimeAgentService implements OnApplicationBootstrap, BeforeApplic
     await this.safe(() => subscriber.subscribe(channel));
   }
 
+  /** Tiếp nhận và xử lý lệnh điều khiển gửi tới runtime agent */
   private async handleCommand(command: RuntimeCommand): Promise<void> {
+    /** Gửi phản hồi cho lệnh điều khiển runtime */
     const reply = (status: RuntimeCommandResult['status'], message?: string) =>
       this.safe(() =>
         this.redis.client.set(
@@ -196,6 +201,7 @@ export class RuntimeAgentService implements OnApplicationBootstrap, BeforeApplic
     }
   }
 
+  /** Phát tín hiệu nhịp tim (heartbeat) định kỳ của runtime agent */
   private async beat(): Promise<void> {
     if (!this.registered && this.redis.isReady()) await this.register();
     const heartbeat = await this.buildHeartbeat();
@@ -213,6 +219,7 @@ export class RuntimeAgentService implements OnApplicationBootstrap, BeforeApplic
     );
   }
 
+  /** Thu thập thông tin tiến trình Node.js (PID, bộ nhớ, uptime) */
   private buildProcessInfo(): RuntimeProcessInfo {
     return {
       pid: process.pid,
@@ -226,6 +233,7 @@ export class RuntimeAgentService implements OnApplicationBootstrap, BeforeApplic
     };
   }
 
+  /** Xây dựng gói tin heartbeat chứa thông tin sức khỏe của tiến trình */
   private async buildHeartbeat(): Promise<RuntimeHeartbeat> {
     const resources = this.sampler.sample();
     const [metrics, issues, details] = await Promise.all([
@@ -292,6 +300,7 @@ export class RuntimeAgentService implements OnApplicationBootstrap, BeforeApplic
     });
   }
 
+  /** Bọc lệnh thực thi với khối try-catch an toàn */
   private async safe<T>(op: () => Promise<T>): Promise<T | undefined> {
     try {
       if (!this.redis.isReady()) return undefined;

@@ -23,6 +23,7 @@ export interface HealthCheckResult {
   checks: Record<string, { status: HealthIndicatorState } & Record<string, unknown>>;
 }
 
+/** Bọc Promise với thời gian timeout giới hạn */
 const withTimeout = <T>(task: Promise<T>, ms: number) =>
   Promise.race([
     task,
@@ -42,6 +43,7 @@ export class HealthService {
     private readonly redis: RedisService,
   ) {}
 
+  /** Thực hiện kiểm tra sức khỏe toàn diện các thành phần (DB, Redis, Heap) */
   public async check(): Promise<HealthCheckResult> {
     const result = await this.health
       .check([() => this.checkDatabase(), () => this.checkRedis(), () => this.checkHeap()])
@@ -60,6 +62,7 @@ export class HealthService {
     };
   }
 
+  /** Kiểm tra trạng thái kết nối và độ trễ tới cơ sở dữ liệu */
   private async checkDatabase(): Promise<HealthIndicatorResult> {
     const i = this.indicator.check('database');
     const state = this.database.getStatus().state;
@@ -70,6 +73,7 @@ export class HealthService {
       : i.down({ state, error: ping.error?.message ?? state });
   }
 
+  /** Kiểm tra kết nối ping tới dịch vụ Redis */
   private async checkRedis(): Promise<HealthIndicatorResult> {
     const i = this.indicator.check('redis');
     try {
@@ -80,6 +84,7 @@ export class HealthService {
     }
   }
 
+  /** Kiểm tra mức độ tiêu thụ bộ nhớ V8 Heap */
   private checkHeap(): Promise<HealthIndicatorResult> {
     return this.memory.checkHeap('heap', getHeapStatistics().heap_size_limit * HEAP_LIMIT_RATIO);
   }

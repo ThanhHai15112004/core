@@ -1,9 +1,11 @@
 import { env } from './env.js';
 
+/** Chuyển đổi giá trị sang kiểu số hoặc trả về giá trị mặc định */
 const numberOr = (key: string, fallback: number): number => {
   const raw = env(key, false);
   return raw === '' ? fallback : env.number(key);
 };
+/** Chuyển đổi giá trị sang kiểu boolean hoặc trả về giá trị mặc định */
 const booleanOr = (key: string, fallback: boolean): boolean =>
   env(key, false) ? env.boolean(key) : fallback;
 

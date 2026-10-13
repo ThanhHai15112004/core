@@ -20,6 +20,7 @@ export class HttpMetricsHook implements OnModuleInit {
     private readonly metrics: MetricsRegistryService,
   ) {}
 
+  /** Đăng ký và khởi tạo các thiết lập tài nguyên khi nạp module */
   public onModuleInit(): void {
     const instance = this.adapterHost.httpAdapter?.getInstance<FastifyInstance>();
     if (!instance?.addHook) {
@@ -32,6 +33,7 @@ export class HttpMetricsHook implements OnModuleInit {
     });
   }
 
+  /** Ghi nhận một sự kiện vận hành mới vào bộ nhớ */
   private record(req: FastifyRequest, reply: FastifyReply): void {
     const route = req.routeOptions?.url ?? UNMATCHED_ROUTE;
     if (route.endsWith('/metrics')) return;

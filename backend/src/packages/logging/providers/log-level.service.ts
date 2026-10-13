@@ -36,6 +36,7 @@ export class LogLevelService implements OnApplicationBootstrap, OnApplicationShu
     this.baseLevel = config.logs.level;
   }
 
+  /** Thực thi tác vụ khởi động sau khi toàn bộ ứng dụng hoàn tất bootstrap */
   public onApplicationBootstrap(): void {
     redisStream.attach(this.redis, logsKeys(this.redis).stream(this.config.app.env));
     if (this.options.runtime === 'cli') return;
@@ -44,6 +45,7 @@ export class LogLevelService implements OnApplicationBootstrap, OnApplicationShu
     this.timer.unref();
   }
 
+  /** Thực hiện dọn dẹp và ngắt các kết nối khi ứng dụng tắt */
   public async onApplicationShutdown(): Promise<void> {
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
@@ -59,6 +61,7 @@ export class LogLevelService implements OnApplicationBootstrap, OnApplicationShu
     return (lvl && LABEL_OF[lvl]) || this.baseLevel;
   }
 
+  /** Lấy mức độ ghi log cơ sở được cấu hình trong hệ thống */
   public getBaseLevel(): string {
     return this.baseLevel;
   }
@@ -73,6 +76,7 @@ export class LogLevelService implements OnApplicationBootstrap, OnApplicationShu
     return `${this.options.runtime}@${this.instance}`;
   }
 
+  /** Áp dụng các thay đổi cấu hình hoặc bộ lọc vào hệ thống */
   private apply(now = Date.now()): void {
     const o = this.override;
     const active = o && (o.until === null || o.until > now) ? o : null;

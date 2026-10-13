@@ -20,6 +20,7 @@ export class CacheCapabilityUnsupportedError extends Error {
   }
 }
 
+/** Xác định kiểu dữ liệu của đối tượng hoặc giá trị */
 const typeOf = (v: unknown) =>
   v === null ? 'null' : Array.isArray(v) ? 'array' : typeof v === 'object' ? 'object' : typeof v;
 
@@ -43,6 +44,7 @@ export class MemoryMonitoringProvider implements CacheMonitoringProvider {
     private readonly depth: number,
   ) {}
 
+  /** Chuyển đổi kết quả quét khóa sang đối tượng DTO chuẩn */
   private scanned(now = Date.now()): ScannedKey[] {
     return this.store.entries(now).map(([key, e]) => ({
       key,
@@ -52,11 +54,13 @@ export class MemoryMonitoringProvider implements CacheMonitoringProvider {
     }));
   }
 
+  /** Quét toàn bộ danh sách các khóa trong bộ lưu trữ */
   public async scanAll(limit: number) {
     const all = this.scanned();
     return { keys: all.slice(0, limit), total: all.length, truncated: all.length > limit };
   }
 
+  /** Quét một trang danh sách các khóa theo con trỏ phân trang */
   public async scanPage(filter: KeyFilter, cursor: string, count: number): Promise<KeyPage> {
     const offset = Number(cursor) || 0;
     const all = this.scanned().sort((a, b) => a.key.localeCompare(b.key));
@@ -74,6 +78,7 @@ export class MemoryMonitoringProvider implements CacheMonitoringProvider {
     return { keys: page, cursor: next, examined: page.length };
   }
 
+  /** Lấy thông tin chi tiết về kiểu dữ liệu, TTL và dung lượng của khóa */
   public async keyInfo(key: string): Promise<KeyTypeInfo | null> {
     const e = this.store.entry(key);
     if (!e) return null;
@@ -95,6 +100,7 @@ export class MemoryMonitoringProvider implements CacheMonitoringProvider {
     };
   }
 
+  /** Lấy mẫu dữ liệu đại diện từ bộ lưu trữ */
   public async sample(key: string, maxBytes: number): Promise<ValueSample | null> {
     const e = this.store.entry(key);
     if (!e) return null;
@@ -103,14 +109,17 @@ export class MemoryMonitoringProvider implements CacheMonitoringProvider {
     return { kind: 'text', value: text.slice(0, maxBytes), truncated: true };
   }
 
+  /** Lấy thông tin cấu hình và thống kê hoạt động của máy chủ */
   public async serverInfo(): Promise<ServerInfo> {
     throw new CacheCapabilityUnsupportedError('serverStats');
   }
 
+  /** Lấy danh sách các client đang kết nối tới dịch vụ */
   public async clients(): Promise<CacheClient[]> {
     throw new CacheCapabilityUnsupportedError('clients');
   }
 
+  /** Kiểm tra trạng thái sẵn sàng và đo độ trễ kết nối */
   public async ping(): Promise<number> {
     const started = performance.now();
     await this.store.has('__ping__');

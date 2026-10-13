@@ -69,10 +69,12 @@ export class RedisMonitoringProvider implements CacheMonitoringProvider {
     return this.redis.client;
   }
 
+  /** Loại bỏ tiền tố namespace khỏi khóa bộ nhớ đệm */
   private strip(fullKey: string): string {
     return fullKey.slice(this.prefix.length);
   }
 
+  /** Kiểm tra xem phiên bản máy chủ có hỗ trợ lệnh đo bộ nhớ hay không */
   private async memorySupported(sample: string): Promise<boolean> {
     if (this.memoryUsage !== null) return this.memoryUsage;
     try {
@@ -115,6 +117,7 @@ export class RedisMonitoringProvider implements CacheMonitoringProvider {
     return out;
   }
 
+  /** Quét toàn bộ danh sách các khóa trong bộ lưu trữ */
   public async scanAll(
     limit: number,
   ): Promise<{ keys: ScannedKey[]; total: number; truncated: boolean }> {
@@ -144,6 +147,7 @@ export class RedisMonitoringProvider implements CacheMonitoringProvider {
     };
   }
 
+  /** Quét một trang danh sách các khóa theo con trỏ phân trang */
   public async scanPage(filter: KeyFilter, cursor: string, count: number): Promise<KeyPage> {
     const pattern = filter.namespace
       ? namespacePattern(this.prefix, filter.namespace)
@@ -179,6 +183,7 @@ export class RedisMonitoringProvider implements CacheMonitoringProvider {
     return { keys: found, cursor, examined };
   }
 
+  /** Lấy thông tin chi tiết về kiểu dữ liệu, TTL và dung lượng của khóa */
   public async keyInfo(key: string): Promise<KeyTypeInfo | null> {
     const full = this.prefix + key;
     const type = await this.client.type(full);
@@ -203,6 +208,7 @@ export class RedisMonitoringProvider implements CacheMonitoringProvider {
     };
   }
 
+  /** Lấy mẫu dữ liệu đại diện từ bộ lưu trữ */
   public async sample(
     key: string,
     maxBytes: number,
@@ -274,6 +280,7 @@ export class RedisMonitoringProvider implements CacheMonitoringProvider {
     }
   }
 
+  /** Lấy thông tin cấu hình và thống kê hoạt động của máy chủ */
   public async serverInfo(): Promise<ServerInfo> {
     const raw = await this.client.info();
     const config = await this.readConfig();
@@ -282,6 +289,7 @@ export class RedisMonitoringProvider implements CacheMonitoringProvider {
 
   /** CONFIG GET có thể bị chặn (Redis managed) → bỏ qua; chỉ đọc, không bao giờ CONFIG SET. */
   private async readConfig() {
+    /** Lấy dữ liệu hoặc đối tượng theo khóa định danh */
     const get = async (name: string) => {
       try {
         const res = (await this.client.config('GET', name)) as unknown as string[];
@@ -323,6 +331,7 @@ export class RedisMonitoringProvider implements CacheMonitoringProvider {
       });
   }
 
+  /** Kiểm tra trạng thái sẵn sàng và đo độ trễ kết nối */
   public async ping(): Promise<number> {
     const started = performance.now();
     await this.client.ping();
@@ -333,6 +342,7 @@ export class RedisMonitoringProvider implements CacheMonitoringProvider {
 /** Đồng hồ lệch (vd. WSL) có thể làm `idle`/`age` âm → coi là 0. */
 const nonNegative = (n: number | null) => (n === null ? null : Math.max(0, n));
 
+/** Phân tích cú pháp chuỗi JSON nếu hợp lệ hoặc giữ nguyên chuỗi gốc */
 const parseMaybeJson = (s: string): unknown => {
   try {
     return JSON.parse(s) as unknown;

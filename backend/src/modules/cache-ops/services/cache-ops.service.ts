@@ -94,12 +94,14 @@ const PREVIEW_MAX_BYTES = 2048;
 const PREVIEW_MAX_ITEMS = 50;
 const ERROR_KINDS: CacheErrorKind[] = ['connection', 'timeout', 'command', 'oom', 'serialization'];
 
+/** Lấy mốc thời gian bắt đầu của ngày theo chuỗi ngày giờ */
 const startOfDay = (t: number) => {
   const d = new Date(t);
   d.setHours(0, 0, 0, 0);
   return d.getTime();
 };
 
+/** Định dạng số byte thành chuỗi dung lượng dễ đọc (KB, MB, GB) */
 export function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   const units = ['KB', 'MB', 'GB', 'TB'];
@@ -144,6 +146,7 @@ export class CacheOpsService {
     return this.monitoring.refreshKeyspace().catch(() => stored);
   }
 
+  /** Tổng hợp số liệu thống kê tổng quan của dịch vụ */
   private summary(k: KeyspaceSnapshot | null): KeyspaceSummaryDto | null {
     if (!k) return null;
     return {
@@ -159,10 +162,12 @@ export class CacheOpsService {
     };
   }
 
+  /** Trích xuất thông tin cấu hình máy chủ từ dữ liệu INFO */
   private serverSection(): Promise<SectionDto<ServerInfo>> {
     return this.monitoring.section('serverStats', () => this.monitoring.provider.serverInfo());
   }
 
+  /** Trích xuất thông tin sử dụng bộ nhớ của máy chủ */
   private serverMemory(s: ServerInfo): ServerMemoryDto {
     return {
       usedBytes: s.usedMemory,
@@ -173,10 +178,12 @@ export class CacheOpsService {
     };
   }
 
+  /** Kiểm tra xem khóa có phải là phiên làm việc (session) hay không */
   private isSession(ns: string) {
     return matchesNamespace(ns, this.cfg.sessionNamespaces);
   }
 
+  /** Kiểm tra xem dữ liệu có chứa thông tin nhạy cảm hay không */
   private isSensitive(ns: string) {
     return this.isSession(ns) || matchesNamespace(ns, this.cfg.sensitiveNamespaces);
   }
@@ -203,6 +210,7 @@ export class CacheOpsService {
     return errors.filter((e) => e.at >= from && e.at < to).length;
   }
 
+  /** Chuyển đổi thông tin khóa dung lượng lớn thành đối tượng DTO */
   private largeKeyDto(k: LargeKey): LargeKeyDto {
     return { ...k, large: k.bytes >= this.cfg.rules.largeKeyBytes };
   }
@@ -237,6 +245,7 @@ export class CacheOpsService {
     const largestNs = [...(keyspace?.namespaces ?? [])].sort((a, b) => b.bytes - a.bytes)[0];
     const enough = (cur.reads ?? 0) >= this.cfg.rules.minReads;
     const baseline = (base.reads ?? 0) >= this.cfg.rules.minReads ? base.hitRatePercent : null;
+    /** Tính toán tần suất trung bình của tác vụ theo mỗi phút */
     const perMin = (n: number | null) => (n === null ? null : round(n / minutes, 2));
 
     return {
@@ -301,6 +310,7 @@ export class CacheOpsService {
     };
   }
 
+  /** Kiểm tra và đánh giá tình trạng sức khỏe của dịch vụ */
   private async health(alerts: CacheAlertDto[]): Promise<CacheHealthDto> {
     const status = this.connection.getStatus();
     let pingMs: number | null = null;
@@ -336,6 +346,7 @@ export class CacheOpsService {
     };
   }
 
+  /** Thu thập danh sách các cảnh báo đang hoạt động trong hệ thống */
   private async alerts(): Promise<CacheAlertDto[]> {
     const active = await this.store.activeAlerts().catch(() => new Map<string, StoredCacheAlert>());
     const rank = { critical: 0, warning: 1, info: 2 } as const;
@@ -372,6 +383,7 @@ export class CacheOpsService {
     });
   }
 
+  /** Tạo báo cáo chi tiết về tình trạng hoạt động của dịch vụ */
   private report(s: CacheWindowStats, errors: number): CacheReportDto {
     return {
       hits: s.hits,
@@ -390,6 +402,7 @@ export class CacheOpsService {
   /** Biểu đồ đọc từ Prometheus (gauge do monitor ghi); không có dữ liệu → series rỗng. */
   public async getMetrics(range: CacheRange, metric: CacheMetric): Promise<CacheMetricsDto> {
     const g = CACHE_GAUGES;
+    /** Tính toán tần suất trung bình của tác vụ theo mỗi phút */
     const perMin = (name: string) => `max(rate(${name}[$w])) * 60`;
     const defs: Record<CacheMetric, CacheSeriesDef[]> = {
       hitRate: [
@@ -439,6 +452,7 @@ export class CacheOpsService {
     };
   }
 
+  /** Lấy thông tin chi tiết và thống kê của một namespace */
   public async getNamespaceDetail(name: string): Promise<NamespaceDetailDto> {
     const keyspace = await this.keyspace();
     const row = this.namespaceRows(keyspace).find((n) => n.name === name);
@@ -478,6 +492,7 @@ export class CacheOpsService {
     };
   }
 
+  /** Lấy thông tin chi tiết, TTL và nội dung của một khóa */
   public async getKeyDetail(key: string): Promise<KeyDetailDto> {
     const info = await this.monitoring.section('keyExplorer', () =>
       this.monitoring.provider.keyInfo(key),
@@ -528,6 +543,7 @@ export class CacheOpsService {
     };
   }
 
+  /** Lấy danh sách các client đang kết nối */
   public async getClients(): Promise<CacheClientsDto> {
     const [clients, server] = await Promise.all([
       this.monitoring.section('clients', () => this.monitoring.provider.clients()),
@@ -579,6 +595,7 @@ export class CacheOpsService {
     );
   }
 
+  /** Lấy danh sách thống kê các lỗi HTTP ghi nhận được */
   public async getErrors(range: CacheRange): Promise<CacheErrorsDto> {
     const now = Date.now();
     const from = now - CACHE_RANGES[range] * MINUTE;
@@ -601,11 +618,13 @@ export class CacheOpsService {
     };
   }
 
+  /** Lấy thông tin operations của hệ thống */
   public async getOperations(): Promise<CacheOperationDto[]> {
     const ops = await this.store.operations().catch(() => [] as CacheOperationRecord[]);
     return ops.map((o) => ({ ...o, at: new Date(o.at).toISOString() }));
   }
 
+  /** Lấy thông tin cấu hình hoạt động của dịch vụ */
   public async getConfig(): Promise<CacheConfigDto> {
     const r = this.cfg.redis;
     const redis = this.monitoring.driver === 'redis';
@@ -657,6 +676,7 @@ export class CacheOpsService {
     return { items };
   }
 
+  /** Đánh giá mức độ ảnh hưởng trước khi thực hiện xóa bộ nhớ đệm */
   public async getFlushImpact(): Promise<FlushImpactDto> {
     const keyspace = this.monitoring.usable()
       ? await this.monitoring.refreshKeyspace().catch(() => null)
@@ -679,18 +699,22 @@ export class CacheOpsService {
     return { ...res, at: new Date().toISOString() };
   }
 
+  /** Xóa một khóa cụ thể khỏi bộ nhớ đệm */
   public async deleteKey(key: string, ctx: OperationContext) {
     return this.act(() => this.operations.deleteKey(key, ctx), { key });
   }
 
+  /** Xóa toàn bộ các khóa thuộc một namespace trong bộ nhớ đệm */
   public async clearNamespace(name: string, ctx: OperationContext) {
     return this.act(() => this.operations.clearNamespace(name, ctx), { name });
   }
 
+  /** Xóa toàn bộ dữ liệu trong bộ nhớ đệm */
   public async flush(ctx: OperationContext) {
     return this.act(() => this.operations.flushAll(ctx), {});
   }
 
+  /** Thực hiện thao tác vận hành kèm ghi nhận sự kiện */
   private async act(
     fn: () => Promise<{ record: CacheOperationRecord }>,
     params: Record<string, string>,
@@ -703,12 +727,14 @@ export class CacheOpsService {
     }
   }
 
+  /** Lấy danh sách các sự kiện ghi nhận từ mốc thời gian chỉ định */
   private async eventsSince(from: number): Promise<CacheEventRecord[]> {
     return (await this.store.events().catch(() => [] as CacheEventRecord[])).filter(
       (e) => e.at >= from,
     );
   }
 
+  /** Chuyển đổi dữ liệu sự kiện nội bộ sang đối tượng Event DTO */
   private eventDto(e: CacheEventRecord): CacheEventDto {
     const rule = typeof e.params['rule'] === 'string' ? (e.params['rule'] as CacheRule) : null;
     const title = rule ? this.i18n.t(`cache.alert.${rule}.title`) : '';
@@ -738,6 +764,7 @@ export class CacheOpsService {
     };
   }
 
+  /** Tạo đối tượng lỗi phản hồi theo phân vùng chức năng */
   private sectionError(s: Extract<SectionDto<unknown>, { available: false }>): Error {
     if (s.reason === 'disconnected') return new CacheNotConnectedException(s.message ?? 'unknown');
     if (s.reason === 'unsupported')
@@ -755,6 +782,7 @@ export class CacheOpsService {
     );
   }
 
+  /** Tạo đối tượng lỗi phản hồi cho thao tác vận hành thất bại */
   private operationError(err: unknown, params: Record<string, string>): Error {
     if (!(err instanceof CacheOperationError))
       return err instanceof Error ? err : new Error(String(err));

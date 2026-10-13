@@ -25,6 +25,7 @@ import { JOBS_RANGES, JobsOpsService } from '../services/jobs-ops.service.js';
 import { JobsValidationException } from '../exceptions/jobs-ops.exceptions.js';
 import type { JobsRange } from '../responses/jobs-ops.response.js';
 
+/** Định dạng chuỗi ký tự hiển thị an toàn không chứa ký tự điều khiển */
 const printable = (s: string) =>
   ![...s].some((c) => c.charCodeAt(0) < 32 || c.charCodeAt(0) === 127);
 const idSchema = z.string().min(1).max(256).refine(printable);
@@ -68,12 +69,14 @@ const bulkSchema = z.object({
     .max(500),
 });
 
+/** Xác thực và ép kiểu dữ liệu đầu vào theo schema Zod */
 export function parse<T>(schema: z.ZodType<T>, value: unknown): T {
   const result = schema.safeParse(value);
   if (!result.success) throw new JobsValidationException(result.error.issues);
   return result.data;
 }
 
+/** Trích xuất thông tin ngữ cảnh yêu cầu (RequestContext) từ Fastify request */
 const context = (req: FastifyRequest): JobOperationContext => ({ ip: maskIp(req.ip), actor: null });
 
 /**
@@ -84,12 +87,14 @@ const context = (req: FastifyRequest): JobOperationContext => ({ ip: maskIp(req.
 export class JobsOpsController {
   constructor(private readonly jobs: JobsOpsService) {}
 
+  /** Lấy dữ liệu tổng quan cho trang quản trị vận hành */
   @Public()
   @Get(R.OVERVIEW)
   public overview(@Query() q: Record<string, string>) {
     return this.jobs.getOverview(parse(rangeSchema, q).range);
   }
 
+  /** Tìm kiếm các bản ghi theo từ khóa hoặc tiêu chí lọc */
   @Public()
   @Get(R.SEARCH)
   public search(@Query() q: Record<string, string>) {
@@ -115,6 +120,7 @@ export class JobsOpsController {
     );
   }
 
+  /** Lấy danh sách các lần thực thi hoặc job bị thất bại */
   @Public()
   @Get(R.FAILURES)
   public failures(@Query() q: Record<string, string>) {
@@ -122,24 +128,28 @@ export class JobsOpsController {
     return this.jobs.getFailures(range, queue ?? null);
   }
 
+  /** Tạo báo cáo chi tiết về tình trạng hoạt động của dịch vụ */
   @Public()
   @Get(R.REPORT)
   public report(@Query() q: Record<string, string>) {
     return this.jobs.getReport(parse(rangeSchema, q).range);
   }
 
+  /** Truy vấn danh sách các sự kiện vận hành gần đây */
   @Public()
   @Get(R.EVENTS)
   public events(@Query() q: Record<string, string>) {
     return this.jobs.getEvents(parse(rangeSchema, q).range);
   }
 
+  /** Truy vấn lịch sử các thao tác vận hành đã thực hiện */
   @Public()
   @Get(R.OPERATIONS)
   public operations() {
     return this.jobs.getOperations();
   }
 
+  /** Lấy thông tin cấu hình hiện tại của dịch vụ */
   @Public()
   @Get(R.CONFIG)
   public config() {
@@ -154,6 +164,7 @@ export class JobsOpsController {
     return this.jobs.bulkRetry(parse(bulkSchema, body ?? {}).jobs, context(req));
   }
 
+  /** Lấy thông tin chi tiết theo mã định danh */
   @Public()
   @Get(R.DETAIL)
   public detail(@Param('id') id: string, @Query() q: Record<string, string>) {
@@ -175,6 +186,7 @@ export class JobsOpsController {
     );
   }
 
+  /** Thực hiện thử lại một tác vụ hoặc job thất bại */
   @Public()
   @Post(R.RETRY)
   @HttpCode(HttpStatus.OK)
@@ -183,6 +195,7 @@ export class JobsOpsController {
     return this.jobs.retry(parse(idSchema, id), queue ?? null, context(req));
   }
 
+  /** Hủy bỏ tác vụ hoặc truy vấn đang thực thi */
   @Public()
   @Post(R.CANCEL)
   @HttpCode(HttpStatus.OK)

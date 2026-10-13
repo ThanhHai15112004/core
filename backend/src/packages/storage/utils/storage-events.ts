@@ -10,6 +10,7 @@ import type {
   StorageOperationRecord,
 } from '../contracts/storage-events.types.js';
 
+/** Trích xuất hoặc tạo mã định danh duy nhất cho bản ghi */
 const id = (prefix: string) => `${prefix}_${randomBytes(6).toString('hex')}`;
 
 /** Ghi một sự kiện storage (bỏ qua khi Redis chưa sẵn sàng). */
@@ -28,6 +29,7 @@ export async function recordStorageEvent(
     .catch(() => undefined);
 }
 
+/** Ghi nhận thao tác vận hành lưu trữ vào lịch sử */
 export async function recordStorageOperation(
   redis: RedisService | undefined,
   op: Omit<StorageOperationRecord, 'id'>,

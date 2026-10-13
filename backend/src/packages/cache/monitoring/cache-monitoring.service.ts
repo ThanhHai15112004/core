@@ -26,6 +26,7 @@ import type {
 const MEMORY_PUBLISH_MS = 30_000;
 const MEMORY_SNAPSHOT_TTL_SEC = 90;
 
+/** Xác thực và ép kiểu dữ liệu đầu vào theo schema Zod */
 const parse = <T>(raw: string | null): T | null => {
   if (!raw) return null;
   try {
@@ -56,6 +57,7 @@ export class CacheMonitoringService implements OnApplicationBootstrap, OnModuleD
         : new RedisMonitoringProvider(this.redis, depth);
   }
 
+  /** Thực thi tác vụ khởi động sau khi toàn bộ ứng dụng hoàn tất bootstrap */
   public onApplicationBootstrap(): void {
     if (this.provider.driver !== 'memory' || this.config.isTest) return;
     this.timer = setInterval(() => void this.publishMemorySnapshot(), MEMORY_PUBLISH_MS);
@@ -63,6 +65,7 @@ export class CacheMonitoringService implements OnApplicationBootstrap, OnModuleD
     void this.publishMemorySnapshot();
   }
 
+  /** Dọn dẹp tài nguyên và ngắt kết nối khi module bị hủy */
   public onModuleDestroy(): void {
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
@@ -72,6 +75,7 @@ export class CacheMonitoringService implements OnApplicationBootstrap, OnModuleD
     return this.provider.driver;
   }
 
+  /** Kiểm tra xem tính năng chỉ định có được hỗ trợ hay không */
   public supports(cap: CacheCapability): boolean {
     return this.provider.capabilities.has(cap);
   }
@@ -125,6 +129,7 @@ export class CacheMonitoringService implements OnApplicationBootstrap, OnModuleD
     return parse<KeyspaceSnapshot>(await this.redis.client.get(cacheKeys(this.redis).keyspace()));
   }
 
+  /** Lưu trữ thông tin thống kê keyspace vào bộ nhớ đệm */
   public async storeKeyspace(snapshot: KeyspaceSnapshot): Promise<void> {
     if (!this.redis?.isReady()) return;
     await this.redis.client.set(cacheKeys(this.redis).keyspace(), JSON.stringify(snapshot));
@@ -137,6 +142,7 @@ export class CacheMonitoringService implements OnApplicationBootstrap, OnModuleD
     return snapshot;
   }
 
+  /** Lấy các bản chụp thống kê sử dụng bộ nhớ theo thời gian */
   private async memorySnapshots(): Promise<{ instance: string; snapshot: KeyspaceSnapshot }[]> {
     if (!this.redis?.isReady()) return [];
     const keys = cacheKeys(this.redis);

@@ -63,6 +63,7 @@ const HIT_RATE_CRIT_GAP = 20;
 /** Rule cảnh báo cache theo ngưỡng cấu hình. Không đủ lượt đọc → không kết luận. */
 export function evaluateCacheRules(input: CacheRuleInput, cfg: CacheRuleConfig): CacheViolation[] {
   const out: CacheViolation[] = [];
+  /** Thêm mới một phần tử vào danh sách hoặc bộ sưu tập */
   const add = (
     rule: CacheRule,
     severity: CacheSeverity,

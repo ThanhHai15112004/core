@@ -8,6 +8,7 @@ import { MetricsRegistryService } from './metrics-registry.service.js';
 export class MetricsController {
   constructor(private readonly metrics: MetricsRegistryService) {}
 
+  /** Thu thập toàn bộ số liệu đo lường ở định dạng Prometheus exposition */
   @Public()
   @Get()
   public async scrape(@Res() reply: FastifyReply): Promise<void> {

@@ -10,8 +10,10 @@ import type {
   MessagingOperationRecord,
 } from '../contracts/messaging-events.types.js';
 
+/** Trích xuất hoặc tạo mã định danh duy nhất cho bản ghi */
 const id = (prefix: string) => `${prefix}_${randomBytes(6).toString('hex')}`;
 
+/** Thêm một sự kiện mới vào danh sách và duy trì giới hạn kích thước tối đa */
 async function push(redis: RedisService, key: string, value: unknown, size: number) {
   await redis.client
     .multi()
@@ -31,6 +33,7 @@ export async function recordMessagingEvent(
   await push(redis, messagingKeys(redis).events(), record, MESSAGING_EVENT_LOG_SIZE);
 }
 
+/** Ghi nhận thao tác vận hành messaging vào lịch sử */
 export async function recordMessagingOperation(
   redis: RedisService | undefined,
   op: Omit<MessagingOperationRecord, 'id'>,

@@ -72,22 +72,26 @@ export class BaseStorageProvider
         : new LocalStorageDriver(cfg.localPath);
   }
 
+  /** Lấy giá trị secret đã giải mã hoặc kiểm tra cấu hình */
   private async secret(name: string): Promise<string> {
     const fromSecrets = await this.secrets?.getSecret(name).catch(() => null);
     return fromSecrets || process.env[name] || '';
   }
 
+  /** Thực thi tác vụ khởi động sau khi toàn bộ ứng dụng hoàn tất bootstrap */
   public onApplicationBootstrap(): void {
     if (this.configService.isTest) return;
     this.timer = setInterval(() => void this.publishActive(), ACTIVE_PUBLISH_MS);
     this.timer.unref();
   }
 
+  /** Dọn dẹp tài nguyên và ngắt kết nối khi module bị hủy */
   public onModuleDestroy(): void {
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
   }
 
+  /** Lấy container lưu trữ đang được theo dõi */
   private trackedContainer(key: string): string {
     const c = containerOf(key);
     if (this.containers.has(c)) return c;
@@ -96,6 +100,7 @@ export class BaseStorageProvider
     return c;
   }
 
+  /** Kiểm tra tính hợp lệ và độ an toàn của khóa tệp tin */
   private assertKey(key: string): void {
     if (!isValidKey(key))
       throw new StorageObjectError('INVALID_KEY', `Invalid storage key: ${key}`);
@@ -119,6 +124,7 @@ export class BaseStorageProvider
     }
   }
 
+  /** Ghi nhận lỗi vận hành và ném ra ngoại lệ tương ứng */
   private fail(
     op: StorageOp,
     key: string,
@@ -160,6 +166,7 @@ export class BaseStorageProvider
       .catch(() => undefined);
   }
 
+  /** Tải tệp tin lên hệ thống lưu trữ đối tượng */
   public async upload(
     path: string,
     content: Buffer | Uint8Array,
@@ -201,6 +208,7 @@ export class BaseStorageProvider
     }
   }
 
+  /** Tải xuống nội dung tệp tin từ hệ thống lưu trữ */
   public async download(path: string): Promise<Buffer> {
     this.assertKey(path);
     return this.measure(
@@ -212,16 +220,19 @@ export class BaseStorageProvider
     );
   }
 
+  /** Xóa bản ghi khỏi hệ thống theo mã định danh */
   public async delete(path: string): Promise<void> {
     this.assertKey(path);
     await this.measure('delete', path, null, () => this.driver.delete(path));
   }
 
+  /** Lấy đường dẫn URL truy cập tới tệp tin lưu trữ */
   public async getUrl(path: string): Promise<string> {
     this.assertKey(path);
     return this.driver.url(path);
   }
 
+  /** Kiểm tra sự tồn tại của tệp tin trong hệ thống lưu trữ */
   public async exists(path: string): Promise<boolean> {
     this.assertKey(path);
     return (await this.measure('head', path, null, () => this.driver.head(path))) !== null;
@@ -232,6 +243,7 @@ export class BaseStorageProvider
     return [...this.active.values()];
   }
 
+  /** Phát hành thông báo kích hoạt sự kiện tới hệ thống */
   private async publishActive(): Promise<void> {
     const instance = `${process.pid}`;
     if (!this.redis?.isReady()) return;

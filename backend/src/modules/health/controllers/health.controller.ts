@@ -7,6 +7,7 @@ import { HEALTH_ROUTES } from '../routes/health.routes.js';
 export class HealthController {
   constructor(private readonly healthService: HealthService) {}
 
+  /** Kiểm tra trạng thái sức khỏe tổng thể của hệ thống */
   @Public()
   @Get(HEALTH_ROUTES.CHECK)
   public async check(): Promise<HealthCheckResult> {
