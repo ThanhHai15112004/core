@@ -136,3 +136,11 @@ export function changePercent(current: Nullable<number>, previous: Nullable<numb
   if (isNil(current) || isNil(previous) || previous === 0) return null;
   return ((current - previous) / previous) * 100;
 }
+
+/** Chu kỳ ngắn: 5000 → "5s", 60000 → "1m", 5400000 → "1.5h". */
+export function formatInterval(ms: number): string {
+  const s = ms / 1000;
+  if (s < 60) return `${round(s, 1)}${UNIT.s}`;
+  if (s < 3600) return `${round(s / 60, 1)}${UNIT.m}`;
+  return `${round(s / 3600, 1)}${UNIT.h}`;
+}

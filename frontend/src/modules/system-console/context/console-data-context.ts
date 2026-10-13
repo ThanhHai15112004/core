@@ -27,9 +27,7 @@ export interface ConsoleDataContextValue {
   events: OpsEventLog[];
   addEvent: (level: EventLogLevel, source: string, message: string, data?: unknown) => void;
   clearEvents: () => void;
-  toasts: ToastMessage[];
   addToast: (toast: Omit<ToastMessage, 'id'>) => void;
-  removeToast: (id: string) => void;
 
   /** Môi trường do backend báo; `null` khi chưa kết nối được. */
   environment: SystemEnvironment | null;

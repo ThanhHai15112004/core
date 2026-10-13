@@ -79,6 +79,8 @@ export const uiVi = {
     impact: 'Ảnh hưởng',
   },
   command: {
+    pages: 'Trang',
+    actions: 'Thao tác',
     open: 'Tìm nhanh',
     placeholder: 'Nhập tên trang, queue, task…',
     empty: 'Không tìm thấy',

@@ -23,8 +23,8 @@ import { useEventLog } from '../hooks/useEventLog';
 import { KPI_METRIC, useMetricHistory } from '../hooks/useMetricHistory';
 import { buildFallbackOverview } from '../utils/fallback-overview';
 import { ConsoleDataContext, type ConsoleDataContextValue } from './console-data-context';
+import { toast as sonnerToast } from 'sonner';
 
-const TOAST_DURATION_MS = 4000;
 
 const INITIAL_HEALTH: HealthData = {
   status: 'ok',
@@ -41,7 +41,6 @@ export const ConsoleDataProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const [isLoading, setIsLoading] = useState(true);
   const [lastSuccessfulSync, setLastSuccessfulSync] = useState<Date | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
-  const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [activePerformanceMetric, setActivePerformanceMetric] = useState<PerformanceMetricKey>('requests');
   const [performanceTimeRange, setPerformanceTimeRange] = useState<PerformanceTimeRange>('15m');
 
@@ -52,17 +51,12 @@ export const ConsoleDataProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const isOffline = health.status === 'down';
   const wasOfflineRef = useRef(false);
 
+  /** Thông báo dùng chung (sonner) — giữ API cũ cho các trang chưa viết lại. */
   const addToast = useCallback((toast: Omit<ToastMessage, 'id'>) => {
-    const id = `toast-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
-    setToasts((prev) => [...prev, { ...toast, id }]);
-    setTimeout(() => {
-      setToasts((prev) => prev.filter((item) => item.id !== id));
-    }, TOAST_DURATION_MS);
+    const notify = toast.type === 'warning' ? sonnerToast.warning : sonnerToast[toast.type];
+    notify(toast.title, { description: toast.message });
   }, []);
 
-  const removeToast = useCallback((id: string) => {
-    setToasts((prev) => prev.filter((item) => item.id !== id));
-  }, []);
 
   const loadData = useCallback(
     async () => {
@@ -187,9 +181,7 @@ export const ConsoleDataProvider: React.FC<{ children: React.ReactNode }> = ({ c
       events,
       addEvent,
       clearEvents,
-      toasts,
       addToast,
-      removeToast,
       environment: overviewData.environment,
       isOffline,
       lastSuccessfulSync,
@@ -215,9 +207,7 @@ export const ConsoleDataProvider: React.FC<{ children: React.ReactNode }> = ({ c
       events,
       addEvent,
       clearEvents,
-      toasts,
       addToast,
-      removeToast,
       isOffline,
       lastSuccessfulSync,
       activePerformanceMetric,

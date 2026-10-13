@@ -26,3 +26,6 @@ export const resolvePackageIcon = (pkg?: { category?: string; icon?: string } | 
       return 'packages';
   }
 };
+
+/** Tông màu theo môi trường backend — production đỏ để tránh thao tác nhầm. */
+export const ENV_TONE = { production: 'crit', staging: 'warn', development: 'info' } as const;

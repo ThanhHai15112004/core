@@ -80,6 +80,8 @@ export const uiEn: UiTranslation = {
     impact: 'Impact',
   },
   command: {
+    pages: 'Pages',
+    actions: 'Actions',
     open: 'Quick search',
     placeholder: 'Type a page, queue, task…',
     empty: 'Nothing found',

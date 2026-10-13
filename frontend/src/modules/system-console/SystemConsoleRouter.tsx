@@ -1,29 +1,10 @@
-import React, { Suspense, lazy, useState, useEffect, useCallback, useMemo } from 'react';
-import type { ConsolePath, ConsoleSectionId } from './types/console.types';
+import React, { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
+import type { ConsolePath } from './types/console.types';
 import { CONSOLE_STORAGE_KEYS } from './constants/console.constants';
-import { findNavLeaf, LEGACY_SECTION_ALIASES } from './constants/console-nav';
 import { ConsoleRouteContext, type ConsoleRoute } from './context/console-route-context';
-import { ConsoleLayout } from './layouts/ConsoleLayout';
-import { OverviewSection } from './sections/OverviewSection';
-import { PackagesSection } from './sections/PackagesSection';
-import { SecuritySection } from './sections/SecuritySection';
-import { PlannedSection } from './sections/PlannedSection';
+import { ConsoleShell } from './shell/ConsoleShell';
+import { resolveSection, sectionDef } from './shell/sections';
 import { ROUTES } from '../../routes/index';
-
-// Các trang lớn tải theo nhu cầu (tách chunk) để bundle ban đầu nhỏ.
-const RuntimesSection = lazy(() => import('./sections/runtimes/RuntimesSection').then((m) => ({ default: m.RuntimesSection })));
-const TrafficSection = lazy(() => import('./sections/traffic/TrafficSection').then((m) => ({ default: m.TrafficSection })));
-const PerformanceSection = lazy(() => import('./sections/performance/PerformanceSection').then((m) => ({ default: m.PerformanceSection })));
-const DatabaseSection = lazy(() => import('./sections/database/DatabaseSection').then((m) => ({ default: m.DatabaseSection })));
-const CacheSection = lazy(() => import('./sections/cache/CacheSection').then((m) => ({ default: m.CacheSection })));
-const StorageSection = lazy(() => import('./sections/storage/StorageSection').then((m) => ({ default: m.StorageSection })));
-const MessagingSection = lazy(() => import('./sections/messaging/MessagingSection').then((m) => ({ default: m.MessagingSection })));
-const WorkerSection = lazy(() => import('./sections/worker/WorkerSection').then((m) => ({ default: m.WorkerSection })));
-const SchedulerSection = lazy(() => import('./sections/scheduler/SchedulerSection').then((m) => ({ default: m.SchedulerSection })));
-const JobsSection = lazy(() => import('./sections/jobs/JobsSection').then((m) => ({ default: m.JobsSection })));
-const LogsSection = lazy(() => import('./sections/logs/LogsSection').then((m) => ({ default: m.LogsSection })));
-const SecretsSection = lazy(() => import('./sections/secrets/SecretsSection').then((m) => ({ default: m.SecretsSection })));
-const ConfigurationSection = lazy(() => import('./sections/configuration/ConfigurationSection').then((m) => ({ default: m.ConfigurationSection })));
 
 const HASH_PREFIX = ROUTES.SYSTEM_CONSOLE.replace(/^#/, '');
 
@@ -35,21 +16,15 @@ function readLastSection(): string | null {
   }
 }
 
-function resolveSection(raw: string | null | undefined): ConsoleSectionId | null {
-  if (!raw) return null;
-  const id = LEGACY_SECTION_ALIASES[raw] ?? raw;
-  return findNavLeaf(id)?.id ?? null;
-}
-
 /** `#system-console/runtimes/worker/metrics?x=1` → `{ section, params, query }`. */
 function parseRoute(): ConsoleRoute {
   const [pathPart = '', queryPart = ''] = window.location.hash.replace(/^#\/?/, '').split('?');
-  const segments = pathPart.split('/').filter(Boolean);
+  const segments = pathPart.split('/').filter(Boolean).map(decodeURIComponent);
   const inConsole = segments[0] === HASH_PREFIX;
-  const section = (inConsole ? resolveSection(segments[1]) : null) ?? resolveSection(readLastSection()) ?? 'overview';
+  const fromUrl = inConsole ? resolveSection(segments[1]) : null;
   return {
-    section,
-    params: inConsole && resolveSection(segments[1]) ? segments.slice(2) : [],
+    section: fromUrl ?? resolveSection(readLastSection()) ?? 'overview',
+    params: fromUrl ? segments.slice(2) : [],
     query: new URLSearchParams(queryPart),
   };
 }
@@ -70,59 +45,22 @@ export const SystemConsoleRouter: React.FC = () => {
       try {
         localStorage.setItem(CONSOLE_STORAGE_KEYS.LAST_SECTION, section);
       } catch {
-        // Ignore
+        /* chỉ giữ trong phiên */
       }
     }
     window.location.hash = `#${HASH_PREFIX}/${clean}`;
   }, []);
 
   const value = useMemo(() => ({ route, navigate }), [route, navigate]);
-
-  const renderSection = () => {
-    const leaf = findNavLeaf(route.section);
-    if (leaf?.status === 'planned') return <PlannedSection sectionId={route.section} />;
-
-    switch (route.section) {
-      case 'runtimes':
-        return <RuntimesSection />;
-      case 'http-traffic':
-        return <TrafficSection />;
-      case 'performance':
-        return <PerformanceSection />;
-      case 'packages':
-        return <PackagesSection />;
-      case 'logs':
-        return <LogsSection />;
-      case 'database':
-        return <DatabaseSection />;
-      case 'cache':
-        return <CacheSection />;
-      case 'storage':
-        return <StorageSection />;
-      case 'messaging':
-        return <MessagingSection />;
-      case 'worker':
-        return <WorkerSection />;
-      case 'scheduler':
-        return <SchedulerSection />;
-      case 'jobs':
-        return <JobsSection />;
-      case 'security':
-        return <SecuritySection />;
-      case 'secrets':
-        return <SecretsSection />;
-      case 'configuration':
-        return <ConfigurationSection />;
-      default:
-        return <OverviewSection onNavigate={navigate} />;
-    }
-  };
+  const Section = sectionDef(route.section).component;
 
   return (
     <ConsoleRouteContext.Provider value={value}>
-      <ConsoleLayout currentSection={route.section} onNavigate={navigate}>
-        <Suspense fallback={<p className="ov-empty-line">…</p>}>{renderSection()}</Suspense>
-      </ConsoleLayout>
+      <ConsoleShell>
+        <Suspense fallback={null}>
+          <Section key={route.section} />
+        </Suspense>
+      </ConsoleShell>
     </ConsoleRouteContext.Provider>
   );
 };

@@ -1,0 +1,118 @@
+import { lazy, type ComponentType, type LazyExoticComponent } from 'react';
+import type { LucideIcon } from 'lucide-react';
+import {
+  Boxes,
+  Clock,
+  Cpu,
+  Database,
+  FileText,
+  Gauge,
+  Globe,
+  HardDrive,
+  KeyRound,
+  LayoutDashboard,
+  ListChecks,
+  Package,
+  Radio,
+  Settings2,
+  ShieldCheck,
+  Zap,
+} from 'lucide-react';
+import type { TimeRange } from '@core/constants/ui.constants';
+import type { ConsoleSectionId } from '../types/console.types';
+
+type Translate = (path: string, params?: Record<string, string | number>) => string;
+
+export const SECTION_GROUPS = ['runtime-traffic', 'infrastructure', 'background', 'governance'] as const;
+export type SectionGroupId = (typeof SECTION_GROUPS)[number];
+
+export interface SectionDef {
+  id: ConsoleSectionId;
+  /** `null` = mục gốc đứng đầu (Overview). Nhãn: `nav.group.<id>`. */
+  group: SectionGroupId | null;
+  icon: LucideIcon;
+  component: LazyExoticComponent<ComponentType> | ComponentType;
+  /**
+   * Trang đã dùng bộ điều khiển chung trên thanh trên cùng (làm mới + khoảng thời gian).
+   * Bỏ trống = trang cũ tự quản lý → ẩn các bộ điều khiển đó.
+   */
+  controls?: { ranges?: readonly TimeRange[] };
+  /** Nhãn segment con trên breadcrumb (`params` = các segment sau id section). */
+  crumb?: (params: string[], t: Translate) => string | null;
+  /** Từ khoá tìm thêm trong Ctrl K. */
+  keywords?: string[];
+}
+
+const load = <K extends string>(loader: () => Promise<Record<K, ComponentType>>, name: K) =>
+  lazy(() => loader().then((m) => ({ default: m[name] })));
+
+const tabCrumb = (ns: string) => (params: string[], t: Translate) => (params[0] ? t(`${ns}.tab.${params[0]}`) : null);
+
+/** Danh mục section — nguồn duy nhất cho sidebar, router, breadcrumb và Ctrl K. Thứ tự = thứ tự trên sidebar. */
+export const SECTIONS: SectionDef[] = [
+  {
+    id: 'overview',
+    group: null,
+    icon: LayoutDashboard,
+    component: load(() => import('./OverviewEntry'), 'OverviewEntry'),
+  },
+  {
+    id: 'runtimes',
+    group: 'runtime-traffic',
+    icon: Cpu,
+    component: load(() => import('../sections/runtimes/RuntimesSection'), 'RuntimesSection'),
+    crumb: (p, t) => (p[0] ? t(`rt.name.${p[0]}`) : null),
+    keywords: ['api', 'worker', 'scheduler', 'process'],
+  },
+  {
+    id: 'http-traffic',
+    group: 'runtime-traffic',
+    icon: Globe,
+    component: load(() => import('../sections/traffic/TrafficSection'), 'TrafficSection'),
+    crumb: tabCrumb('tr'),
+    keywords: ['http', 'request', 'endpoint'],
+  },
+  {
+    id: 'performance',
+    group: 'runtime-traffic',
+    icon: Gauge,
+    component: load(() => import('../sections/performance/PerformanceSection'), 'PerformanceSection'),
+    crumb: (p, t) => (p[1] ? t(`perf.component.${p[1]}`) : null),
+  },
+  { id: 'database', group: 'infrastructure', icon: Database, component: load(() => import('../sections/database/DatabaseSection'), 'DatabaseSection'), crumb: tabCrumb('db'), keywords: ['mysql', 'sql'] },
+  { id: 'cache', group: 'infrastructure', icon: Zap, component: load(() => import('../sections/cache/CacheSection'), 'CacheSection'), crumb: tabCrumb('cache'), keywords: ['redis'] },
+  { id: 'storage', group: 'infrastructure', icon: HardDrive, component: load(() => import('../sections/storage/StorageSection'), 'StorageSection'), crumb: tabCrumb('storage'), keywords: ['file', 's3'] },
+  { id: 'messaging', group: 'infrastructure', icon: Radio, component: load(() => import('../sections/messaging/MessagingSection'), 'MessagingSection'), crumb: tabCrumb('messaging'), keywords: ['queue', 'broker'] },
+  { id: 'worker', group: 'background', icon: Boxes, component: load(() => import('../sections/worker/WorkerSection'), 'WorkerSection'), crumb: tabCrumb('wq'), keywords: ['queue', 'bullmq'] },
+  { id: 'scheduler', group: 'background', icon: Clock, component: load(() => import('../sections/scheduler/SchedulerSection'), 'SchedulerSection'), crumb: tabCrumb('sch'), keywords: ['cron'] },
+  {
+    id: 'jobs',
+    group: 'background',
+    icon: ListChecks,
+    component: load(() => import('../sections/jobs/JobsSection'), 'JobsSection'),
+    crumb: (p, t) => (p[0] === 'job' ? `#${(p[1] ?? '').slice(0, 8)}` : p[0] ? t(`jobs.tab.${p[0]}`) : null),
+  },
+  { id: 'logs', group: 'governance', icon: FileText, component: load(() => import('../sections/logs/LogsSection'), 'LogsSection'), crumb: tabCrumb('logs'), keywords: ['log', 'error', 'trace'] },
+  { id: 'security', group: 'governance', icon: ShieldCheck, component: load(() => import('../sections/SecuritySection'), 'SecuritySection'), keywords: ['jwt', 'auth'] },
+  { id: 'secrets', group: 'governance', icon: KeyRound, component: load(() => import('../sections/secrets/SecretsSection'), 'SecretsSection') },
+  {
+    id: 'configuration',
+    group: 'governance',
+    icon: Settings2,
+    component: load(() => import('../sections/configuration/ConfigurationSection'), 'ConfigurationSection'),
+    keywords: ['env', 'config'],
+  },
+  { id: 'packages', group: 'governance', icon: Package, component: load(() => import('../sections/PackagesSection'), 'PackagesSection') },
+];
+
+const SECTION_MAP = new Map<string, SectionDef>(SECTIONS.map((s) => [s.id, s]));
+
+/** Id cũ trong hash/localStorage → id mới. */
+const SECTION_ALIASES: Record<string, ConsoleSectionId> = { runtime: 'runtimes' };
+
+export function resolveSection(raw: string | null | undefined): ConsoleSectionId | null {
+  if (!raw) return null;
+  return SECTION_MAP.get(SECTION_ALIASES[raw] ?? raw)?.id ?? null;
+}
+
+export const sectionDef = (id: ConsoleSectionId): SectionDef => SECTION_MAP.get(id) ?? SECTIONS[0];
