@@ -74,97 +74,60 @@ export class RuntimeStoreService {
   }
 
   /**
-   * Truy vấn time-series CPU/RAM qua Prometheus PromQL chuẩn:
-   * - CPU: rate(process_cpu_seconds_total{runtime="<id>"}[1m]) * 100
-   * - RAM: process_resident_memory_bytes{runtime="<id>"} / (1024 * 1024)
-   * - Heap: nodejs_heap_size_used_bytes{runtime="<id>"} / (1024 * 1024)
+   * Time-series của runtime từ Prometheus (metric mặc định của prom-client, nhãn `runtime`): CPU %, RSS, heap,
+   * event loop p99 và số lần khởi động lại (`changes(process_start_time_seconds)`). Không có Prometheus → một điểm
+   * từ heartbeat hiện tại (số đo thật lúc này, không có lịch sử).
    */
   public async samples(id: RuntimeId, sinceMs: number): Promise<RuntimeSample[]> {
     const minutes = Math.max(1, Math.round((Date.now() - sinceMs) / 60_000));
-    const stepSec = Math.max(15, Math.round((minutes * 60) / 60)); // ~60 điểm đo
+    const stepSec = Math.max(15, Math.round((minutes * 60) / 60)); // ~60 điểm
+    const w = `${Math.max(60, stepSec * 2)}s`;
+    const sel = `{runtime="${id}"}`;
+    const queries = {
+      cpu: `sum(rate(process_cpu_seconds_total${sel}[${w}])) * 100`,
+      mem: `sum(process_resident_memory_bytes${sel}) / 1048576`,
+      heap: `sum(nodejs_heap_size_used_bytes${sel}) / 1048576`,
+      elp99: `max(nodejs_eventloop_lag_p99_seconds${sel}) * 1000`,
+      restarts: `sum(changes(process_start_time_seconds${sel}[${stepSec}s]))`,
+    } as const;
+    type Field = keyof typeof queries;
 
-    if (this.promClient) {
-      try {
-        const [cpuSeries, memSeries, heapSeries] = await Promise.all([
-          this.promClient.safeRange(
-            `rate(process_cpu_seconds_total{runtime="${id}"}[1m]) * 100`,
-            minutes,
-            stepSec,
-          ),
-          this.promClient.safeRange(
-            `process_resident_memory_bytes{runtime="${id}"} / 1048576`,
-            minutes,
-            stepSec,
-          ),
-          this.promClient.safeRange(
-            `nodejs_heap_size_used_bytes{runtime="${id}"} / 1048576`,
-            minutes,
-            stepSec,
-          ),
-        ]);
-
-        const cpuPoints = cpuSeries[0]?.points ?? [];
-        const memPoints = memSeries[0]?.points ?? [];
-        const heapPoints = heapSeries[0]?.points ?? [];
-
-        if (cpuPoints.length > 0 || memPoints.length > 0) {
-          const byTime = new Map<number, RuntimeSample>();
-          for (const p of cpuPoints) {
-            byTime.set(p.t, {
-              t: p.t,
-              cpu: Math.round(p.v * 10) / 10,
-              mem: 0,
-              heap: 0,
-              elp99: 0,
-              starts: 1,
-            });
-          }
-          for (const p of memPoints) {
-            const existing = byTime.get(p.t) ?? {
-              t: p.t,
-              cpu: 0,
-              mem: 0,
-              heap: 0,
-              elp99: 0,
-              starts: 1,
-            };
-            existing.mem = Math.round(p.v * 10) / 10;
-            byTime.set(p.t, existing);
-          }
-          for (const p of heapPoints) {
-            const existing = byTime.get(p.t);
-            if (existing) existing.heap = Math.round(p.v * 10) / 10;
-          }
-          return [...byTime.values()].sort((a, b) => a.t - b.t);
+    if (this.promClient?.configured) {
+      const fields = Object.keys(queries) as Field[];
+      const series = await Promise.all(
+        fields.map((f) => this.promClient!.safeRange(queries[f], minutes, stepSec)),
+      );
+      const byTime = new Map<number, RuntimeSample>();
+      fields.forEach((f, i) => {
+        for (const p of series[i]?.[0]?.points ?? []) {
+          const row = byTime.get(p.t) ?? {
+            t: p.t,
+            cpu: null,
+            mem: null,
+            heap: null,
+            elp99: null,
+            restarts: null,
+          };
+          row[f] = f === 'restarts' ? Math.round(p.v) : Math.round(p.v * 10) / 10;
+          byTime.set(p.t, row);
         }
-      } catch {
-        // query Prometheus thất bại hoặc chưa có dữ liệu
-      }
+      });
+      if (byTime.size > 0) return [...byTime.values()].sort((a, b) => a.t - b.t);
     }
 
-    // Dự phòng khi Prometheus chưa sẵn sàng: đọc từ heartbeat Redis
-    if (this.isAvailable()) {
-      const hb = await this.redis.client.get(this.keys.heartbeat(id));
-      if (hb) {
-        try {
-          const parsed = JSON.parse(hb) as RuntimeHeartbeat;
-          return [
-            {
-              t: Date.parse(parsed.at),
-              cpu: parsed.resources.cpuPercent,
-              mem: parsed.resources.rssMb,
-              heap: parsed.resources.heapUsedMb,
-              elp99: parsed.resources.eventLoopP99Ms,
-              starts: parsed.startCount,
-            },
-          ];
-        } catch {
-          // ignore
-        }
-      }
-    }
-
-    return [];
+    if (!this.isAvailable()) return [];
+    const hb = parseJson<RuntimeHeartbeat>(await this.redis.client.get(this.keys.heartbeat(id)));
+    if (!hb) return [];
+    return [
+      {
+        t: Date.parse(hb.at),
+        cpu: hb.resources.cpuPercent,
+        mem: hb.resources.rssMb,
+        heap: hb.resources.heapUsedMb,
+        elp99: hb.resources.eventLoopP99Ms,
+        restarts: null,
+      },
+    ];
   }
 
   /** Log mới nhất trước của một runtime (quét `scan` log gần nhất trong stream chung). */

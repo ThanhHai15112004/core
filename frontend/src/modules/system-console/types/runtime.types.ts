@@ -23,8 +23,9 @@ export interface RuntimeResources {
   memoryLimitMb: number | null;
   memoryLimitSource: 'cgroup' | 'v8-heap';
   memoryPercent: number | null;
-  eventLoopMeanMs: number;
-  eventLoopP99Ms: number;
+  /** null khi chưa có mẫu. */
+  eventLoopMeanMs: number | null;
+  eventLoopP99Ms: number | null;
   gcPauseMs: number;
   gcCount: number;
   activeHandles: number;
@@ -156,13 +157,15 @@ export interface RuntimesOverview {
   };
 }
 
+/** null = không có số đo ở thời điểm đó. */
 export interface RuntimeSample {
   t: number;
-  cpu: number;
-  mem: number;
-  heap: number;
-  elp99: number;
-  starts: number;
+  cpu: number | null;
+  mem: number | null;
+  heap: number | null;
+  elp99: number | null;
+  /** Số lần khởi động lại trong bước này. */
+  restarts: number | null;
 }
 
 export type RuntimeSeries = Partial<Record<RuntimeId, RuntimeSample[]>>;

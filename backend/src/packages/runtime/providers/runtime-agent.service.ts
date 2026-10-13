@@ -23,10 +23,12 @@ import type {
   RuntimeIdentity,
   RuntimeIssue,
   RuntimeProcessInfo,
-  RuntimeResources,
 } from '../contracts/runtime.types.js';
+import { ResourceSampler } from './resource-sampler.js';
 
 const REDIS_BOOT_WAIT_MS = 5000;
+/** Heartbeat sống tối thiểu chừng này (giây) — mất heartbeat 30s mới coi là runtime chết. */
+const HEARTBEAT_TTL_SEC = 30;
 
 /**
  * Agent chạy trong mỗi runtime chạy liên tục (API, Worker, Scheduler):
@@ -46,6 +48,7 @@ export class RuntimeAgentService implements OnApplicationBootstrap, BeforeApplic
   private timers: NodeJS.Timeout[] = [];
   private started = false;
   private registered = false;
+  private readonly sampler = new ResourceSampler();
 
   constructor(
     @Inject(RUNTIME_IDENTITY) public readonly identity: RuntimeIdentity,
@@ -78,6 +81,7 @@ export class RuntimeAgentService implements OnApplicationBootstrap, BeforeApplic
     if (this.identity.kind !== 'long-running' || this.started) return;
     this.started = true;
     this.state = 'running';
+    this.sampler.start();
     await this.subscribeCommands();
 
     // Redis có thể chưa sẵn sàng lúc boot; khi đó việc đăng ký được làm lại ở heartbeat kế tiếp.
@@ -116,6 +120,7 @@ export class RuntimeAgentService implements OnApplicationBootstrap, BeforeApplic
     for (const timer of this.timers) clearInterval(timer);
     this.timers = [];
     if (!this.started) return;
+    this.sampler.stop();
     this.state = 'stopping';
     await this.recordEvent('stopped', {
       reason: this.stopReason ?? 'graceful_shutdown',
@@ -194,7 +199,10 @@ export class RuntimeAgentService implements OnApplicationBootstrap, BeforeApplic
   private async beat(): Promise<void> {
     if (!this.registered && this.redis.isReady()) await this.register();
     const heartbeat = await this.buildHeartbeat();
-    const ttlSec = Math.ceil((this.config.runtime.heartbeatMs * 3) / 1000);
+    const ttlSec = Math.max(
+      HEARTBEAT_TTL_SEC,
+      Math.ceil((this.config.runtime.heartbeatMs * 2) / 1000),
+    );
     await this.safe(() =>
       this.redis.client.set(
         this.keys.heartbeat(this.identity.id),
@@ -203,28 +211,6 @@ export class RuntimeAgentService implements OnApplicationBootstrap, BeforeApplic
         ttlSec,
       ),
     );
-  }
-
-  private buildResources(): RuntimeResources {
-    const mem = process.memoryUsage();
-    return {
-      cpuPercent: 0,
-      rssMb: Math.round((mem.rss / 1024 / 1024) * 10) / 10,
-      heapUsedMb: Math.round((mem.heapUsed / 1024 / 1024) * 10) / 10,
-      heapTotalMb: Math.round((mem.heapTotal / 1024 / 1024) * 10) / 10,
-      externalMb: Math.round((mem.external / 1024 / 1024) * 10) / 10,
-      memoryLimitMb: null,
-      memoryLimitSource: 'v8-heap',
-      memoryPercent: null,
-      eventLoopMeanMs: 0,
-      eventLoopP99Ms: 0,
-      gcPauseMs: 0,
-      gcCount: 0,
-      gcMaxPauseMs: 0,
-      activeHandles:
-        (process as unknown as { _getActiveHandles?: () => unknown[] })._getActiveHandles?.()
-          ?.length ?? 0,
-    };
   }
 
   private buildProcessInfo(): RuntimeProcessInfo {
@@ -241,7 +227,7 @@ export class RuntimeAgentService implements OnApplicationBootstrap, BeforeApplic
   }
 
   private async buildHeartbeat(): Promise<RuntimeHeartbeat> {
-    const resources = this.buildResources();
+    const resources = this.sampler.sample();
     const [metrics, issues, details] = await Promise.all([
       this.contributor?.collectMetrics().catch(() => ({})) ??
         Promise.resolve({} as Record<string, MetricValue>),

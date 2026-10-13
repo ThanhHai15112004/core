@@ -16,19 +16,13 @@ const COLORS: Record<RuntimeId, string> = {
   scheduler: 'var(--scp-series-3)',
 };
 
-/** Chuyển mẫu thật thành điểm vẽ; `restarts` = số lần start tăng thêm giữa 2 mẫu liên tiếp. */
+const FIELD: Record<PerfMetric, keyof Omit<RuntimeSample, 't'>> = { cpu: 'cpu', memory: 'mem', restarts: 'restarts', eventLoop: 'elp99' };
+
+/** Chuyển mẫu thật thành điểm vẽ; bỏ điểm không có số đo (không vẽ 0 giả). */
 function toPoints(samples: RuntimeSample[], metric: PerfMetric): ChartPoint[] {
-  return samples.map((s, i) => {
-    switch (metric) {
-      case 'cpu':
-        return { t: s.t, value: s.cpu };
-      case 'memory':
-        return { t: s.t, value: s.mem };
-      case 'eventLoop':
-        return { t: s.t, value: s.elp99 };
-      case 'restarts':
-        return { t: s.t, value: i === 0 ? 0 : Math.max(0, s.starts - (samples[i - 1]?.starts ?? s.starts)) };
-    }
+  return samples.flatMap((s) => {
+    const value = s[FIELD[metric]];
+    return value === null ? [] : [{ t: s.t, value }];
   });
 }
 
@@ -38,7 +32,7 @@ interface RuntimePerformancePanelProps {
   names: Record<string, string>;
 }
 
-/** Biểu đồ chung so sánh các runtime theo CPU/RAM/Restart/Event loop, dữ liệu time-series thật từ Redis. */
+/** Biểu đồ chung so sánh các runtime theo CPU/RAM/Restart/Event loop, time-series từ Prometheus. */
 export const RuntimePerformancePanel: React.FC<RuntimePerformancePanelProps> = ({ runtime, names }) => {
   const { t, formatTime } = useLocale();
   const [metric, setMetric] = useState<PerfMetric>('cpu');

@@ -60,8 +60,12 @@ describe('RuntimeAgentService', () => {
     expect(hb.state).toBe('running');
     expect(hb.metrics).toEqual({ activeJobs: 2 });
     expect(hb.resources.rssMb).toBeGreaterThan(0);
+    expect(hb.resources.cpuPercent).toBeGreaterThanOrEqual(0);
+    expect(hb.resources.memoryLimitMb).toBeGreaterThan(0);
+    expect(hb.resources.memoryPercent).toBeGreaterThan(0);
     expect(hb.capabilities).toEqual({ pause: true });
-    expect(await redis.client.ttl(keys.heartbeat('worker'))).toBeGreaterThan(0);
+    // Heartbeat sống ít nhất 30s (mất heartbeat 30s mới coi runtime là chết).
+    expect(await redis.client.ttl(keys.heartbeat('worker'))).toBeGreaterThanOrEqual(29);
   });
 
   it('records a started event and increments the start counter', async () => {
@@ -85,5 +89,4 @@ describe('RuntimeAgentService', () => {
     expect(contributor.resume).toHaveBeenCalled();
     expect(await redis.client.exists(keys.paused('worker'))).toBe(0);
   });
-
 });

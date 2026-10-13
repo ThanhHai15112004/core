@@ -126,8 +126,8 @@ export const RuntimeDetailView: React.FC<{ id: RuntimeId; tab: DetailTab }> = ({
                 { label: t('rt.metric.external'), value: formatMb(r?.externalMb) },
                 {
                   label: t('rt.metric.eventLoop'),
-                  value: r ? `${r.eventLoopMeanMs} ms · p99 ${r.eventLoopP99Ms} ms` : NO_VALUE,
-                  warn: Boolean(r && r.eventLoopP99Ms >= d.thresholds.eventLoopMs),
+                  value: r && r.eventLoopMeanMs !== null ? `${r.eventLoopMeanMs} ms · p99 ${r.eventLoopP99Ms} ms` : NO_VALUE,
+                  warn: Boolean(r && (r.eventLoopP99Ms ?? 0) >= d.thresholds.eventLoopMs),
                 },
                 { label: t('rt.metric.gc'), value: r ? t('rt.metric.gcValue', { pause: r.gcPauseMs, count: r.gcCount }) : NO_VALUE },
                 { label: t('rt.metric.handles'), value: r?.activeHandles ?? NO_VALUE },

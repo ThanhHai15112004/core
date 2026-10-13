@@ -15,6 +15,7 @@ export type AgentState = 'starting' | 'running' | 'paused' | 'stopping';
 export type MetricValue = number | string | boolean | null;
 
 export interface RuntimeResources {
+  /** CPU kể từ heartbeat trước; 100 = một core. */
   cpuPercent: number;
   rssMb: number;
   heapUsedMb: number;
@@ -24,8 +25,9 @@ export interface RuntimeResources {
   /** `cgroup`: giới hạn container; `v8-heap`: giới hạn heap của V8 khi không chạy trong cgroup. */
   memoryLimitSource: 'cgroup' | 'v8-heap';
   memoryPercent: number | null;
-  eventLoopMeanMs: number;
-  eventLoopP99Ms: number;
+  /** Độ trễ event loop kể từ heartbeat trước; null khi chưa có mẫu. */
+  eventLoopMeanMs: number | null;
+  eventLoopP99Ms: number | null;
   /** Tổng thời gian GC pause kể từ mẫu trước. */
   gcPauseMs: number;
   gcCount: number;
@@ -96,14 +98,16 @@ export interface RuntimeHeartbeat {
   startCount: number;
 }
 
+/** Một điểm time-series của runtime; null = không có số đo ở thời điểm đó. */
 export interface RuntimeSample {
   /** epoch ms */
   t: number;
-  cpu: number;
-  mem: number;
-  heap: number;
-  elp99: number;
-  starts: number;
+  cpu: number | null;
+  mem: number | null;
+  heap: number | null;
+  elp99: number | null;
+  /** Số lần process khởi động lại trong bước này. */
+  restarts: number | null;
 }
 
 export type RuntimeEventType =
