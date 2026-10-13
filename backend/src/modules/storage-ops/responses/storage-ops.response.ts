@@ -30,9 +30,6 @@ export interface StorageAlertDto {
   severity: StorageSeverity;
   title: string;
   message: string;
-  value: number;
-  threshold: number;
-  unit: string;
   since: string;
   tab: string;
   container: string | null;
@@ -42,13 +39,10 @@ export interface StorageHealthDto {
   status: StorageHealthStatus;
   reasons: { code: string; message: string }[];
   state: StorageConnectionState;
-  since: string;
   lastSuccessAt: string | null;
   pingMs: number | null;
-  lastError: string | null;
 }
 
-/** Hiệu năng một chiều (upload hoặc download) trong khoảng đang xem. */
 export interface CapacityDto extends Capacity {
   usedBytes: number | null;
   percent: number | null;
@@ -98,14 +92,10 @@ export interface StorageSettingsDto {
   download: boolean;
   signedUrl: boolean;
   preview: boolean;
-  abortUpload: boolean;
   signedUrlMaxSec: number;
-  largeObjectBytes: number;
-  staleUploadMin: number;
 }
 
 export interface StorageOverviewDto {
-  generatedAt: string;
   range: StorageRange;
   provider: ProviderInfo;
   environment: string;
@@ -120,20 +110,18 @@ export interface StorageOverviewDto {
     containers: number | null;
   };
   capacity: SectionDto<CapacityDto>;
-  growth: GrowthDto;
+  growth: Pick<GrowthDto, 'createdToday' | 'd7Bytes'>;
   topContainers: ContainerRowDto[];
   uploads: {
     active: number;
     failed: number;
     stale: number | null;
-    multipart: number | null;
   };
   alerts: StorageAlertDto[];
   report: { today: StorageReportDto; yesterday: StorageReportDto };
-  events: StorageEventDto[];
   usageAt: string | null;
   usageTruncated: boolean;
-  settings: StorageSettingsDto;
+  settings: { largeObjectBytes: number };
 }
 
 export interface StorageUsageDto {
@@ -141,8 +129,6 @@ export interface StorageUsageDto {
   truncated: boolean;
   scannedObjects: number | null;
   totalObjects: number | null;
-  usedBytes: number | null;
-  capacity: SectionDto<CapacityDto>;
   growth: GrowthDto;
   history: { t: number; bytes: number; objects: number }[];
   byKind: { kind: ObjectKind; objects: number; bytes: number }[];
@@ -153,7 +139,6 @@ export interface StorageUsageDto {
 
 export interface StorageContainersDto {
   containers: ContainerRowDto[];
-  range: StorageRange;
   usageAt: string | null;
   truncated: boolean;
   location: string;
@@ -161,8 +146,7 @@ export interface StorageContainersDto {
 
 export interface ContainerDetailDto {
   container: ContainerRowDto;
-  range: StorageRange;
-  history: { t: number; bytes: number; objects: number }[];
+  history: { t: number; bytes: number }[];
   byKind: { kind: ObjectKind; objects: number; bytes: number }[];
   largest: (LargestObject & { large: boolean })[];
   recentErrors: StorageErrorDto[];
@@ -170,7 +154,6 @@ export interface ContainerDetailDto {
 
 export interface ObjectRowDto {
   key: string;
-  container: string;
   kind: ObjectKind;
   size: number;
   lastModified: string | null;
@@ -208,11 +191,10 @@ export interface ObjectDetailDto extends Omit<
   sensitive: boolean;
   previewable: boolean;
   settings: StorageSettingsDto;
-  capabilities: StorageCapability[];
 }
 
 export interface StorageUploadsDto {
-  active: (ActiveUpload & { startedAtIso: string; ageSec: number; percent: number | null })[];
+  active: (ActiveUpload & { ageSec: number; percent: number | null })[];
   multipart: SectionDto<
     (Omit<MultipartUpload, 'initiated'> & {
       initiated: string | null;
@@ -258,9 +240,7 @@ export interface StorageErrorDto {
 export interface StorageErrorsDto {
   counts: Record<StorageErrorKind, number>;
   byOp: Record<StorageOp, number>;
-  total: number;
   items: StorageErrorDto[];
-  range: StorageRange;
 }
 
 export interface StorageOperationDto {
@@ -285,4 +265,4 @@ export interface StorageConfigDto {
   }[];
 }
 
-export type StorageTestDto = StorageTestResult & { at: string };
+export type StorageTestDto = StorageTestResult;

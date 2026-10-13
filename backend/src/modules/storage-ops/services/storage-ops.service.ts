@@ -71,7 +71,6 @@ export const STORAGE_OPS: StorageOp[] = ['put', 'get', 'delete', 'head', 'list']
 
 const MINUTE = 60_000;
 const DAY = 24 * 60 * MINUTE;
-const OVERVIEW_EVENTS = 8;
 const OVERVIEW_CONTAINERS = 6;
 const ERROR_LIST_LIMIT = 200;
 const LIFECYCLE_ESTIMATE_LIMIT = 1000;
@@ -136,10 +135,7 @@ export class StorageOpsService {
       download: c.download && this.monitoring.supports('download'),
       signedUrl: c.signedUrl && this.monitoring.supports('signedUrl'),
       preview: c.preview && this.monitoring.supports('preview'),
-      abortUpload: c.abortUpload && this.monitoring.supports('multipart'),
       signedUrlMaxSec: c.signedUrlMaxSec,
-      largeObjectBytes: this.largeBytes,
-      staleUploadMin: c.staleUploadMin,
     };
   }
 
@@ -230,11 +226,10 @@ export class StorageOpsService {
     const now = Date.now();
     const from = now - STORAGE_RANGES[range] * MINUTE;
     const today = startOfDay(now);
-    const [usage, points, alerts, events, active, multipart, allErrors] = await Promise.all([
+    const [usage, points, alerts, active, multipart, allErrors] = await Promise.all([
       this.monitoring.usage(),
       this.monitoring.points().catch(() => [] as UsagePoint[]),
       this.alerts(),
-      this.eventsSince(now - DAY),
       this.monitoring.activeUploads().catch(() => []),
       this.monitoring.section('multipart', () => this.monitoring.provider.multipart()),
       this.errorsSince(today - DAY),
@@ -244,7 +239,6 @@ export class StorageOpsService {
     const growth = this.growth(usage, points, now);
     const rows = this.containerRows(usage, points, errors, now);
     return {
-      generatedAt: new Date(now).toISOString(),
       range,
       provider: this.monitoring.provider.info(),
       environment: this.config.app.env,
@@ -259,7 +253,7 @@ export class StorageOpsService {
         containers: usage ? usage.containers.length : null,
       },
       capacity,
-      growth,
+      growth: { createdToday: growth.createdToday, d7Bytes: growth.d7Bytes },
       topContainers: rows.slice(0, OVERVIEW_CONTAINERS),
       uploads: {
         active: active.length,
@@ -267,17 +261,15 @@ export class StorageOpsService {
         stale: multipart.available
           ? staleOf(multipart.data, this.cfg.staleUploadMin, now).length
           : null,
-        multipart: multipart.available ? multipart.data.length : null,
       },
       alerts,
       report: {
         today: this.report(points, allErrors, today, now),
         yesterday: this.report(points, allErrors, today - DAY, today),
       },
-      events: events.slice(0, OVERVIEW_EVENTS).map((e) => this.eventDto(e)),
       usageAt: iso(usage?.at),
       usageTruncated: usage?.truncated ?? false,
-      settings: this.settings(),
+      settings: { largeObjectBytes: this.largeBytes },
     };
   }
 
@@ -310,10 +302,8 @@ export class StorageOpsService {
       status,
       reasons,
       state: s.state,
-      since: s.since,
       lastSuccessAt: s.lastSuccessAt,
       pingMs: s.lastPingMs,
-      lastError: s.lastError,
     };
   }
 
@@ -329,9 +319,6 @@ export class StorageOpsService {
         severity: s.severity,
         title: this.i18n.t(`storage.alert.${id}.title`),
         message: this.alertMessage(id, { ...s.extra, value: s.value, threshold: s.threshold }),
-        value: s.value,
-        threshold: s.threshold,
-        unit: s.unit,
         since: new Date(s.since).toISOString(),
         tab: RULE_TAB[id as StorageRule] ?? 'overview',
         container:
@@ -369,8 +356,6 @@ export class StorageOpsService {
       truncated: usage?.truncated ?? false,
       scannedObjects: usage?.scannedObjects ?? null,
       totalObjects: usage?.totalObjects ?? null,
-      usedBytes: usage?.totalBytes ?? null,
-      capacity: await this.capacity(usage),
       growth: this.growth(usage, points, now),
       history: [...points].reverse().map((p) => ({ t: p.at, bytes: p.bytes, objects: p.objects })),
       byKind: OBJECT_KINDS.map((kind) => ({
@@ -395,7 +380,6 @@ export class StorageOpsService {
     ]);
     return {
       containers: this.containerRows(usage, points, errors, now),
-      range,
       usageAt: iso(usage?.at),
       truncated: usage?.truncated ?? false,
       location: this.monitoring.provider.info().location,
@@ -420,15 +404,10 @@ export class StorageOpsService {
     const usageRow = usage?.containers.find((c) => c.name === name);
     return {
       container: row,
-      range,
       history: [...points]
         .reverse()
         .filter((p) => p.containers[name])
-        .map((p) => ({
-          t: p.at,
-          bytes: p.containers[name]!.bytes,
-          objects: p.containers[name]!.objects,
-        })),
+        .map((p) => ({ t: p.at, bytes: p.containers[name]!.bytes })),
       byKind: OBJECT_KINDS.map((kind) => ({
         kind,
         ...(usageRow?.byKind[kind] ?? { objects: 0, bytes: 0 }),
@@ -459,7 +438,6 @@ export class StorageOpsService {
             available: true,
             data: page.data.objects.map((o) => ({
               key: o.key,
-              container: o.key.includes('/') ? o.key.slice(0, o.key.indexOf('/')) : '(root)',
               kind: kindOf(o.key, o.contentType),
               size: o.size,
               lastModified: iso(o.lastModified),
@@ -510,7 +488,6 @@ export class StorageOpsService {
           d.size <= 2 * 1024 * 1024) ||
           isTextual(key, ct)),
       settings: this.settings(),
-      capabilities: [...this.monitoring.provider.capabilities],
     };
   }
 
@@ -530,7 +507,6 @@ export class StorageOpsService {
       active: active
         .map((a) => ({
           ...a,
-          startedAtIso: new Date(a.startedAt).toISOString(),
           ageSec: Math.max(0, Math.round((now - a.startedAt) / 1000)),
           percent: a.size ? round((a.sentBytes / a.size) * 100, 1) : null,
         }))
@@ -557,7 +533,7 @@ export class StorageOpsService {
         .slice(0, 50)
         .map((e) => this.errorDto(e)),
       staleUploadMin: this.cfg.staleUploadMin,
-      abortEnabled: this.settings().abortUpload,
+      abortEnabled: this.cfg.abortUpload && this.monitoring.supports('multipart'),
     };
   }
 
@@ -615,9 +591,7 @@ export class StorageOpsService {
     return {
       counts,
       byOp,
-      total: Object.values(counts).reduce((s, n) => s + n, 0),
       items: recent.slice(0, ERROR_LIST_LIMIT).map((e) => this.errorDto(e)),
-      range,
     };
   }
 
@@ -681,8 +655,8 @@ export class StorageOpsService {
 
   // ─── Actions ──────────────────────────────────────────────────────────────
 
-  public async test(ctx: OperationContext): Promise<StorageTestDto> {
-    return { ...(await this.operations.test(ctx)), at: new Date().toISOString() };
+  public test(ctx: OperationContext): Promise<StorageTestDto> {
+    return this.operations.test(ctx);
   }
 
   public async deleteObject(key: string, versionId: string | null, ctx: OperationContext) {

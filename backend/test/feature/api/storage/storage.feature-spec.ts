@@ -69,7 +69,6 @@ describe('Storage Monitor (/ops/storage) — local', () => {
       health: { status: string };
       kpis: { usedBytes: number; objects: number; containers: number };
       capacity: { available: boolean; data: { source: string; totalBytes: number } };
-      settings: { signedUrl: boolean; preview: boolean };
     }>('GET', `${base}/overview?range=15m`);
     expect(status).toBe(200);
     expect(body.data.provider).toMatchObject({ driver: 'local', product: 'Local Filesystem' });
@@ -77,8 +76,6 @@ describe('Storage Monitor (/ops/storage) — local', () => {
     expect(body.data.kpis).toMatchObject({ objects: 4, containers: 3 });
     expect(body.data.kpis.usedBytes).toBe(2048 + 4096 + 18 + 5);
     expect(body.data.capacity.data.source).toBe('filesystem');
-    // Local không có signed URL dù env bật.
-    expect(body.data.settings).toMatchObject({ signedUrl: false, preview: false });
   });
 
   it('containers, object explorer (cursor), chi tiết, lỗi', async () => {
@@ -102,7 +99,13 @@ describe('Storage Monitor (/ops/storage) — local', () => {
     ]);
     expect(p1.body.data.done).toBe(true);
 
-    const d = await call<{ size: number; kind: string; contentType: string; versions: unknown }>(
+    const d = await call<{
+      size: number;
+      kind: string;
+      contentType: string;
+      versions: unknown;
+      settings: { signedUrl: boolean; preview: boolean };
+    }>(
       'GET',
       `${base}/objects/detail?key=${encodeURIComponent('uploads/report.pdf')}`,
     );
@@ -112,6 +115,8 @@ describe('Storage Monitor (/ops/storage) — local', () => {
       contentType: 'application/pdf',
       versions: null,
     });
+    // Local không có signed URL dù env bật.
+    expect(d.body.data.settings).toMatchObject({ signedUrl: false, preview: false });
 
     const e = await call<{ counts: { not_found: number }; items: { key: string; code: string }[] }>(
       'GET',

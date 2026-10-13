@@ -47,9 +47,6 @@ export interface StorageAlert {
   severity: 'warning' | 'critical' | 'info';
   title: string;
   message: string;
-  value: number;
-  threshold: number;
-  unit: string;
   since: string;
   tab: StorageTab;
   container: string | null;
@@ -104,14 +101,10 @@ export interface StorageSettings {
   download: boolean;
   signedUrl: boolean;
   preview: boolean;
-  abortUpload: boolean;
   signedUrlMaxSec: number;
-  largeObjectBytes: number;
-  staleUploadMin: number;
 }
 
 export interface StorageOverview {
-  generatedAt: string;
   range: StorageRange;
   provider: ProviderInfo;
   environment: string;
@@ -120,10 +113,8 @@ export interface StorageOverview {
     status: StorageHealthStatus;
     reasons: { code: string; message: string }[];
     state: 'connecting' | 'connected' | 'reconnecting' | 'unavailable';
-    since: string;
     lastSuccessAt: string | null;
     pingMs: number | null;
-    lastError: string | null;
   };
   kpis: {
     usedBytes: number | null;
@@ -134,15 +125,14 @@ export interface StorageOverview {
     containers: number | null;
   };
   capacity: Section<Capacity>;
-  growth: Growth;
+  growth: Pick<Growth, 'createdToday' | 'd7Bytes'>;
   topContainers: ContainerRow[];
-  uploads: { active: number; failed: number; stale: number | null; multipart: number | null };
+  uploads: { active: number; failed: number; stale: number | null };
   alerts: StorageAlert[];
   report: { today: StorageReport; yesterday: StorageReport };
-  events: StorageEvent[];
   usageAt: string | null;
   usageTruncated: boolean;
-  settings: StorageSettings;
+  settings: { largeObjectBytes: number };
 }
 
 export interface StorageSeries {
@@ -180,8 +170,6 @@ export interface StorageUsage {
   truncated: boolean;
   scannedObjects: number | null;
   totalObjects: number | null;
-  usedBytes: number | null;
-  capacity: Section<Capacity>;
   growth: Growth;
   history: { t: number; bytes: number; objects: number }[];
   byKind: { kind: ObjectKind; objects: number; bytes: number }[];
@@ -192,7 +180,6 @@ export interface StorageUsage {
 
 export interface StorageContainers {
   containers: ContainerRow[];
-  range: StorageRange;
   usageAt: string | null;
   truncated: boolean;
   location: string;
@@ -200,8 +187,7 @@ export interface StorageContainers {
 
 export interface ContainerDetail {
   container: ContainerRow;
-  range: StorageRange;
-  history: { t: number; bytes: number; objects: number }[];
+  history: { t: number; bytes: number }[];
   byKind: { kind: ObjectKind; objects: number; bytes: number }[];
   largest: LargestObject[];
   recentErrors: StorageErrorItem[];
@@ -209,7 +195,6 @@ export interface ContainerDetail {
 
 export interface ObjectRow {
   key: string;
-  container: string;
   kind: ObjectKind;
   size: number;
   lastModified: string | null;
@@ -240,7 +225,6 @@ export interface ObjectDetail {
   sensitive: boolean;
   previewable: boolean;
   settings: StorageSettings;
-  capabilities: StorageCapability[];
 }
 
 export type ObjectPreview =
@@ -254,7 +238,6 @@ export interface ActiveUpload {
   size: number | null;
   sentBytes: number;
   startedAt: number;
-  startedAtIso: string;
   ageSec: number;
   percent: number | null;
   multipart: boolean;
@@ -296,9 +279,7 @@ export interface StorageLifecycle {
 export interface StorageErrors {
   counts: Record<StorageErrorKind, number>;
   byOp: Record<StorageOp, number>;
-  total: number;
   items: StorageErrorItem[];
-  range: StorageRange;
 }
 
 export interface StorageOperation {
@@ -323,7 +304,6 @@ export interface StorageTest {
   steps: { step: 'connect' | 'write' | 'read' | 'verify' | 'delete'; ok: boolean; ms: number | null; error: string | null }[];
   totalMs: number;
   failedStep: string | null;
-  at: string;
 }
 
 export interface ObjectFilter {
