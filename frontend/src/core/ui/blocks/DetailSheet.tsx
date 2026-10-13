@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
+import { Info } from 'lucide-react';
 import { cn } from '../../lib/cn';
 import type { Tone } from '../../theme/tone';
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from '../primitives/sheet';
 import { Badge } from '../primitives/badge';
+import { Hint } from '../primitives/tooltip';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../primitives/tabs';
 import { StatusDot } from './StatusDot';
 
@@ -68,12 +70,34 @@ export function DetailSheet({ open, onOpenChange, title, subtitle, status, actio
   );
 }
 
-/** Nhóm nội dung trong drawer: tiêu đề nhỏ + thân. */
-export function DetailSection({ title, actions, children, className }: { title: React.ReactNode; actions?: React.ReactNode; children: React.ReactNode; className?: string }) {
+/** Nhóm nội dung trong drawer: tiêu đề nhỏ (+ ⓘ giải thích) + thân. */
+export function DetailSection({
+  title,
+  hint,
+  actions,
+  children,
+  className,
+}: {
+  title: React.ReactNode;
+  /** Giải thích ngắn (nguồn, công thức) — tooltip ⓘ cạnh tiêu đề. */
+  hint?: React.ReactNode;
+  actions?: React.ReactNode;
+  children: React.ReactNode;
+  className?: string;
+}) {
   return (
     <section className={cn('mb-5 last:mb-0', className)}>
       <div className="mb-2 flex items-center gap-2">
-        <h3 className="flex-1 text-xs font-semibold uppercase tracking-wide text-muted">{title}</h3>
+        <h3 className="flex flex-1 items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted">
+          {title}
+          {hint && (
+            <Hint content={hint}>
+              <span className="inline-flex text-faint normal-case hover:text-muted">
+                <Info className="size-3.5" />
+              </span>
+            </Hint>
+          )}
+        </h3>
         {actions}
       </div>
       {children}

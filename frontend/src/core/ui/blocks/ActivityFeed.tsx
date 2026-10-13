@@ -50,7 +50,7 @@ export function ActivityFeed({ items, kinds, emptyMessage, maxHeight, className 
       {(kinds || presentTones.length > 1) && (
         <div className="flex flex-wrap items-center gap-2">
           {kinds && (
-            <ToggleGroup type="single" value={kind} onValueChange={(v) => setKind(v || ALL)} className="max-w-full overflow-x-auto">
+            <ToggleGroup type="single" value={kind} onValueChange={(v) => setKind(v || ALL)} className="flex-wrap">
               <ToggleGroupItem value={ALL}>{t('ui.feed.all')}</ToggleGroupItem>
               {Object.entries(kinds).map(([id, label]) => (
                 <ToggleGroupItem key={id} value={id}>
@@ -60,7 +60,7 @@ export function ActivityFeed({ items, kinds, emptyMessage, maxHeight, className 
             </ToggleGroup>
           )}
           {presentTones.length > 1 && (
-            <ToggleGroup type="single" value={tone} onValueChange={(v) => setTone(v || ALL)} className="max-w-full overflow-x-auto">
+            <ToggleGroup type="single" value={tone} onValueChange={(v) => setTone(v || ALL)} className="flex-wrap">
               <ToggleGroupItem value={ALL}>{t('ui.feed.all')}</ToggleGroupItem>
               {presentTones.map((x) => (
                 <ToggleGroupItem key={x} value={x} aria-label={t(`ui.status.${x}`)}>

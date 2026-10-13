@@ -10,6 +10,8 @@ export interface ComparisonRow {
   format: (v: number | null) => string;
   /** Tăng là xấu (lỗi, độ trễ) → tăng tô đỏ. `null` = trung tính. */
   higherIsWorse?: boolean | null;
+  /** `false` = không tính % thay đổi (giá trị tự nó đã là mức thay đổi, vd. tăng dung lượng). Mặc định có. */
+  compare?: boolean;
 }
 
 /** So sánh kỳ này / kỳ trước (mặc định hôm nay / hôm qua) với % thay đổi. */
@@ -27,7 +29,7 @@ export function ComparisonTable({ rows, labels, className }: { rows: ComparisonR
       </thead>
       <tbody>
         {rows.map((r) => {
-          const change = changePercent(r.current, r.previous);
+          const change = r.compare === false ? null : changePercent(r.current, r.previous);
           const text = formatDelta(change);
           const worse = change !== null && r.higherIsWorse !== null && r.higherIsWorse !== undefined && change !== 0 ? (change > 0) === r.higherIsWorse : null;
           return (

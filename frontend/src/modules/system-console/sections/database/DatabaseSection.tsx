@@ -1,171 +1,148 @@
-import React, { useCallback, useState } from 'react';
-import { Ban, Pause, Play, Radio, WifiOff } from 'lucide-react';
+import React from 'react';
+import { Database, PlugZap, RefreshCw } from 'lucide-react';
+import { toast } from 'sonner';
+import { useLocale } from '@core/i18n/index';
+import { errorMessage, useAppMutation, useLiveQuery } from '@core/data';
+import { useFormat } from '@core/hooks/useFormat';
+import { Badge, Button } from '@core/ui/primitives';
+import { PageHeader, PageTabs, RelativeTime, StatusBanner, type PageTab } from '@core/ui/blocks';
+import type { DbPing } from '../../types/database.types';
 import { databaseApi } from '../../services/database.api';
-import { usePolling } from '../../hooks/usePolling';
-import { useDatabaseRoute } from '../../hooks/useDatabaseRoute';
-import { useSessionActions } from '../../hooks/useSessionActions';
-import { DB_RANGES, DB_TABS, TAB_CAPABILITY } from '../../constants/database';
-import { DbHealthBanner } from '../../components/database/DbHealthBanner';
-import { QueryDrawer } from '../../components/database/QueryDrawer';
-import { SessionDrawer } from '../../components/database/SessionDrawer';
-import { TableDrawer } from '../../components/database/TableDrawer';
-import { DbOverviewView } from './DbOverviewView';
-import { DbQueriesView } from './DbQueriesView';
-import { DbConnectionsView } from './DbConnectionsView';
-import { DbTransactionsView } from './DbTransactionsView';
-import { DbTablesView } from './DbTablesView';
-import { DbConfigView, DbErrorsView, DbMigrationsView } from './DbOtherViews';
-import { useLocale } from '../../../../core/i18n/index';
-import { useNow } from '../../../../core/hooks/useNow';
-import '../../styles/console-runtimes.css';
-import '../../styles/console-traffic.css';
-import '../../styles/console-performance.css';
-import '../../styles/console-database.css';
+import { DB_TABS, HEALTH_TONE, type DbPageTab } from '../../constants/database';
+import { QueryDetailSheet } from '../../components/database/QueryDetailSheet';
+import { SessionDetailSheet } from '../../components/database/SessionDetailSheet';
+import { TableDetailSheet } from '../../components/database/TableDetailSheet';
+import { useDatabasePage } from './useDatabasePage';
+import { useDbActions } from './useDbActions';
+import { dbKeys } from './database-keys';
+import { DbOverviewTab } from './DbOverviewTab';
+import { DbQueriesTab } from './DbQueriesTab';
+import { DbTablesTab } from './DbTablesTab';
+import { DbActivityTab } from './DbActivityTab';
+import { DbConfigSheet } from './DbConfigSheet';
+
+const ENVIRONMENTS = ['production', 'staging', 'development'];
 
 /**
- * Database: `database/<tab>/<id>` — health, query, session, transaction/lock, bảng/dung lượng, migration,
- * lỗi/sự kiện, cấu hình. Thao tác nguy hiểm có xác nhận; phần driver không hỗ trợ hiện rõ lý do.
+ * Database — Tổng quan · Queries & Sessions (query / kết nối / transaction) · Tables (bảng / migration) · Hoạt động.
+ * Chi tiết query / session / bảng mở drawer ở mọi tab; cấu hình mở dạng sheet. Phần driver không hỗ trợ nói rõ lý do.
  */
 export const DatabaseSection: React.FC = () => {
-  const { t, formatRelative } = useLocale();
-  const now = useNow();
-  const { tab, id, range, query, go, setRange, setQuery, navigate } = useDatabaseRoute();
-  const [paused, setPaused] = useState(false);
-  const [reloadKey, setReloadKey] = useState(0);
-  const overview = usePolling(() => databaseApi.overview(range), `db:${range}`, undefined, paused);
-  const bump = useCallback(() => setReloadKey((k) => k + 1), []);
-  const actions = useSessionActions(bump);
+  const { t, formatTime } = useLocale();
+  const f = useFormat();
+  const page = useDatabasePage();
+  const actions = useDbActions();
+  const overview = useLiveQuery(dbKeys.overview(page.range), () => databaseApi.overview(page.range));
   const data = overview.data;
   const caps = new Set(data?.capabilities ?? []);
-  const driver = data?.driver ?? '';
-  const slowMs = data?.settings.slowQueryMs ?? 500;
-  const closeDrawer = () => go(tab);
+  const health = data?.health;
+  const healthTone = health ? HEALTH_TONE[health.status] : undefined;
+
+  const ping = useAppMutation<void, DbPing>({
+    mutationFn: () => databaseApi.ping(),
+    success: false,
+    onSuccess: (r) => {
+      if (r.ok) toast.success(t('db.test.ok', { latency: f.duration(r.latencyMs), time: formatTime(r.checkedAt) }));
+      else toast.error(t('db.test.fail', { error: `${r.error?.code ?? ''} ${r.error?.message ?? ''}`.trim() }));
+    },
+    error: t('db.test.failTitle'),
+  });
+
+  const alerts = data?.alerts ?? [];
+  const tabs: PageTab<DbPageTab>[] = DB_TABS.map((id) => ({
+    id,
+    label: t(`db.tab.${id}`),
+    ...(id === 'overview' ? { count: alerts.length, countTone: alerts.some((a) => a.severity === 'critical') ? ('crit' as const) : ('warn' as const) } : {}),
+  }));
+
+  const product = data ? (data.server.available ? `${data.server.data.product} ${data.server.data.version}` : data.driver) : null;
+  const env = data ? (ENVIRONMENTS.includes(data.environment) ? t(`ov.env.${data.environment}`) : data.environment) : null;
 
   const renderTab = () => {
-    const cap = TAB_CAPABILITY[tab];
-    if (data && cap && !caps.has(cap)) {
-      return (
-        <section className="tr-empty-state" role="status">
-          <Ban size={28} />
-          <h2>{t('db.unsupported.title')}</h2>
-          <p>{t('db.unsupported.message', { driver })}</p>
-        </section>
-      );
-    }
-    switch (tab) {
+    switch (page.tab) {
       case 'queries':
-        return (
-          <DbQueriesView
-            range={range}
-            paused={paused}
-            driver={driver}
-            canCancel={caps.has('cancel')}
-            minMs={Number(query['minMs'] ?? 0) || 0}
-            stateFilter={query['state'] ?? 'all'}
-            setQuery={setQuery}
-            go={go}
-            actions={actions}
-            reloadKey={reloadKey}
-          />
-        );
-      case 'connections':
-        return (
-          <DbConnectionsView
-            paused={paused}
-            driver={driver}
-            slowMs={slowMs}
-            canCancel={caps.has('cancel')}
-            canTerminate={caps.has('terminate')}
-            runtimeFilter={query['runtime']}
-            setQuery={setQuery}
-            go={go}
-            actions={actions}
-            reloadKey={reloadKey}
-          />
-        );
-      case 'transactions':
-        return <DbTransactionsView paused={paused} driver={driver} go={go} navigate={navigate} />;
+        return <DbQueriesTab page={page} overview={data} actions={actions} />;
       case 'tables':
-        return <DbTablesView paused={paused} driver={driver} go={go} />;
-      case 'migrations':
-        return <DbMigrationsView paused={paused} />;
-      case 'errors':
-        return <DbErrorsView range={range} paused={paused} go={go} navigate={navigate} />;
-      case 'configuration':
-        return <DbConfigView />;
+        return <DbTablesTab page={page} overview={data} actions={actions} />;
+      case 'activity':
+        return <DbActivityTab page={page} />;
       default:
-        return <DbOverviewView data={data} now={now} paused={paused} go={go} actions={actions} />;
+        return <DbOverviewTab page={page} overview={overview} actions={actions} />;
     }
   };
 
   return (
-    <div className="ov-page">
-      <header className="ov-page-head">
-        <div>
-          <h1 className="ov-page-title">{t('nav.database')}</h1>
-          <p className="ov-page-subtitle">{t('db.subtitle')}</p>
-        </div>
-        <div className="tr-live">
-          <span className={`tr-live-badge ${paused ? 'is-paused' : ''}`}>
-            {paused ? <Pause size={12} /> : <Radio size={12} />}
-            {paused ? t('tr.live.paused') : t('tr.live.live')}
-          </span>
-          <span className="ov-page-updated">
-            <time>{overview.lastUpdated ? formatRelative(overview.lastUpdated, now) : '--'}</time>
-          </span>
-          <button type="button" className="scp-btn scp-btn-sm scp-btn-secondary" onClick={() => setPaused((p) => !p)} aria-pressed={paused}>
-            {paused ? <Play size={13} /> : <Pause size={13} />} {paused ? t('tr.live.resume') : t('tr.live.pause')}
-          </button>
-        </div>
-      </header>
+    <div>
+      <PageHeader
+        title={t('nav.database')}
+        icon={Database}
+        status={health && healthTone ? { tone: healthTone, label: t(`db.state.${health.status}`) } : undefined}
+        actions={
+          <>
+            {product && (
+              <Badge variant="outline" className="hidden font-mono md:inline-flex">
+                {product} · {data?.database}
+              </Badge>
+            )}
+            {env && <Badge variant="outline" className="hidden md:inline-flex">{env}</Badge>}
+            {health?.pingMs !== null && health?.pingMs !== undefined && (
+              <Badge variant="outline" className="hidden font-mono md:inline-flex">
+                {t('db.test.ping', { ms: f.duration(health.pingMs) })}
+              </Badge>
+            )}
+            <Button size="sm" onClick={() => ping.mutate()} disabled={ping.isPending}>
+              <PlugZap />
+              {ping.isPending ? t('db.test.running') : t('db.test.button')}
+            </Button>
+          </>
+        }
+        onSettings={() => page.setSettings(true)}
+      />
 
-      {overview.error && !data ? (
-        <section className="ov-offline" role="alert">
-          <WifiOff size={22} className="ov-offline-icon" />
-          <div className="ov-offline-body">
-            <h2>{t('ov.offline.title')}</h2>
-            <p>{overview.error.message}</p>
-          </div>
-        </section>
-      ) : (
-        data && <DbHealthBanner data={data} now={now} />
-      )}
-
-      <div className="tr-controls">
-        <nav className="rt-tabs" role="tablist" aria-label={t('nav.database')}>
-          {DB_TABS.map((x) => (
-            <button key={x} type="button" role="tab" aria-selected={tab === x} className={tab === x ? 'is-active' : ''} onClick={() => go(x)}>
-              {t(`db.tab.${x}`)}
-              {x === 'overview' && data && data.alerts.length > 0 && <span className="ov-count">{data.alerts.length}</span>}
-            </button>
-          ))}
-        </nav>
-        <div className="ov-segmented" role="tablist" aria-label={t('ov.chart.range')}>
-          {DB_RANGES.map((r) => (
-            <button key={r} type="button" role="tab" aria-selected={range === r} className={range === r ? 'is-active' : ''} onClick={() => setRange(r)}>
-              {r}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {renderTab()}
-
-      {id && tab === 'queries' && <QueryDrawer key={id} id={id} range={range} onClose={closeDrawer} navigate={navigate} />}
-      {id && tab === 'connections' && (
-        <SessionDrawer
-          key={`${id}:${reloadKey}`}
-          id={id}
-          canCancel={caps.has('cancel')}
-          canTerminate={caps.has('terminate')}
-          onClose={closeDrawer}
-          onCancel={actions.requestCancel}
-          onTerminate={actions.requestTerminate}
-          navigate={navigate}
+      {overview.isError && !data && (
+        <StatusBanner
+          tone="crit"
+          title={t('ov.offline.title')}
+          description={errorMessage(overview.error)}
+          actions={
+            <Button size="xs" onClick={() => void overview.refetch()}>
+              <RefreshCw />
+              {t('ui.state.retry')}
+            </Button>
+          }
         />
       )}
-      {id && tab === 'tables' && <TableDrawer key={id} name={id} onClose={closeDrawer} />}
-      {actions.modal}
+      {health && healthTone && healthTone !== 'ok' && (
+        <StatusBanner
+          tone={healthTone}
+          title={t(`db.health.${health.status}`)}
+          reasons={health.reasons.map((r) => ({ id: `${r.code}-${r.message}`, text: r.message }))}
+          meta={
+            health.status !== 'healthy' && health.lastSuccessAt ? (
+              <span>
+                {t('db.health.lastSuccessLabel')} <RelativeTime value={health.lastSuccessAt} />
+              </span>
+            ) : undefined
+          }
+        />
+      )}
+
+      <PageTabs tabs={tabs} value={page.tab} onChange={page.goTab} />
+      {renderTab()}
+
+      <QueryDetailSheet id={page.digestId} range={page.range} onClose={() => page.openQuery(null)} navigate={page.navigate} />
+      <SessionDetailSheet
+        id={page.sessionId}
+        canCancel={caps.has('cancel')}
+        canTerminate={caps.has('terminate')}
+        onClose={() => page.openSession(null)}
+        onCancel={actions.requestCancel}
+        onTerminate={actions.requestTerminate}
+        navigate={page.navigate}
+      />
+      <TableDetailSheet name={page.tableName} onClose={() => page.openTable(null)} />
+      <DbConfigSheet open={page.settingsOpen} onOpenChange={page.setSettings} />
+      {actions.dialog}
     </div>
   );
 };
