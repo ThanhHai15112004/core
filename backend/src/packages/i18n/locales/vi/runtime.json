@@ -27,12 +27,10 @@
   "runtime.action.noTelemetry": "Không có telemetry nên không gửi được lệnh.",
   "runtime.action.processDown": "Process không chạy; supervisor (Docker/PM2) cần dựng lại nó.",
   "runtime.action.busy": "Runtime đang dừng/khởi động lại.",
-  "runtime.action.noSupervisor": "Không có supervisor (RUNTIME_SUPERVISOR=none) nên process sẽ không tự chạy lại sau restart.",
   "runtime.action.apiStop": "Không thể dừng API vì System Console cần API để hoạt động.",
   "runtime.action.pauseUnsupported": "Runtime này không hỗ trợ tạm dừng.",
   "runtime.action.alreadyStopped": "Runtime đã dừng.",
   "runtime.action.notStopped": "Runtime đang chạy.",
-  "runtime.actionName.restart": "Restart",
   "runtime.actionName.stop": "Stop",
   "runtime.actionName.start": "Start",
   "runtime.stopReason.manual_restart": "Restart thủ công",
@@ -61,6 +59,5 @@
   "runtime.error.actionNotAllowed": "Không thể {action}: {reason}",
   "runtime.error.telemetryUnavailable": "Không kết nối được Redis nên không điều khiển được runtime.",
   "runtime.error.pauseUnsupported": "Runtime không hỗ trợ tạm dừng.",
-  "runtime.command.noReceiver": "Runtime không nhận lệnh (không có process nào đang lắng nghe).",
-  "runtime.command.restartTimeout": "Runtime không khởi động lại trong thời gian chờ."
+  "runtime.command.noReceiver": "Runtime không nhận lệnh (không có process nào đang lắng nghe)."
 }

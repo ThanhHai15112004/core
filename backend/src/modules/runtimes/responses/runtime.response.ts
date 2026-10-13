@@ -7,7 +7,6 @@ import type {
   RuntimeResources,
   RuntimeSample,
   RuntimeCommandStatus,
-  RuntimeCommandAction,
 } from '@packages/runtime/index.js';
 
 /** Trạng thái hiển thị (suy ra từ heartbeat + sự kiện). */
@@ -47,14 +46,12 @@ export interface RuntimeActionsDto {
 export interface RuntimeSummaryDto {
   id: string;
   name: string;
-  kind: 'long-running';
   status: RuntimeStatus;
   reasons: RuntimeReasonDto[];
   alerts: RuntimeAlertDto[];
   pid: number | null;
   uptimeSec: number | null;
   startedAt: string | null;
-  lastSeenAt: string | null;
   lastRestartAt: string | null;
   restartCount: number;
   resources: RuntimeResources | null;
@@ -112,7 +109,6 @@ export interface RuntimesOverviewDto {
     total: number;
     warnings: number;
     down: number;
-    unknown: number;
     restartsToday: number;
     totalCpuPercent: number | null;
     totalMemoryMb: number | null;
@@ -125,22 +121,15 @@ export interface RuntimesOverviewDto {
 export type RuntimeSeriesDto = Record<string, RuntimeSample[]>;
 
 export interface RuntimeLogDto {
-  /** ID log (mở chi tiết ở trang Logs); log cũ ghi trước khi có ID thì không có. */
-  id?: string;
   t: string;
   level: string;
   context?: string;
-  correlationId?: string;
-  jobId?: string;
-  /** Message kèm stack trace (nếu có) — tab Logs của runtime hiện dạng terminal. */
+  /** Message kèm stack trace (nếu có). */
   message: string;
 }
 
 export interface RuntimeCommandDto {
   id: string;
-  runtime: string;
-  action: RuntimeCommandAction;
-  requestedAt: string;
   status: RuntimeCommandStatus;
   message?: string;
 }

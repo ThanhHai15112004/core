@@ -106,9 +106,6 @@ export class RuntimeCommandService {
 
     return {
       id: command.id,
-      runtime: command.runtime,
-      action: command.action,
-      requestedAt: command.requestedAt,
       status: result.status,
       ...(result.message ? { message: this.i18n.t(result.message) } : {}),
     };

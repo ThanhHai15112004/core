@@ -220,9 +220,9 @@ Cùng 1 codebase phục vụ 4 chế độ chạy độc lập: `api` (HTTP), `w
 
 ### Runtime Operations (System Console → Runtimes)
 - Mỗi runtime chạy `RuntimeAgentModule` (`packages/runtime`): gửi heartbeat, time-series CPU/RAM/event loop, sự kiện vòng đời và log vào **Redis** (mọi key dưới `REDIS_PREFIX`, không dùng `FLUSHDB` — Redis có thể dùng chung).
-- API tổng hợp ở `modules/runtimes` → `GET /ops/runtimes`, `/ops/runtimes/:id`, `/metrics`, `/events`, `/logs`, `/cli/history`.
-- Điều khiển: `POST /ops/runtimes/:id/restart {mode: graceful|force}`, `/stop {confirm: "STOP"}`, `/start`.
-  - **Restart**: runtime tự dừng (graceful chờ request/job/task đang chạy) rồi thoát; supervisor (`RUNTIME_SUPERVISOR=docker|pm2|systemd`) dựng lại. Không có supervisor → Restart bị khoá.
+- API tổng hợp ở `modules/runtimes` → `GET /ops/runtimes`, `/ops/runtimes/:id`, `/metrics`, `/events`, `/logs`.
+- Điều khiển: `POST /ops/runtimes/:id/stop {confirm: "STOP"}`, `/start`; theo dõi lệnh qua `GET /ops/runtimes/commands/:id`.
+  - **Restart** không điều khiển từ Console: supervisor (`RUNTIME_SUPERVISOR=docker|pm2|systemd`) quản lý vòng đời process.
   - **Stop/Start**: tạm dừng/tiếp tục xử lý (Worker ngừng lấy job, Scheduler ngừng cron), process vẫn sống; trạng thái Stop được giữ qua restart. API không thể Stop.
 - `/ops/*` chưa có RBAC → đặt `OPS_RUNTIME_ACTIONS_ENABLED=false` ở production cho tới khi có xác thực.
 

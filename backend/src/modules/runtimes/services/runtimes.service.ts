@@ -91,7 +91,6 @@ export class RuntimesService {
         total: runtimes.length,
         warnings: runtimes.filter((r) => r.status === 'degraded').length,
         down: runtimes.filter((r) => DOWN_STATUSES.has(r.status)).length,
-        unknown: runtimes.filter((r) => r.status === 'unknown').length,
         restartsToday: LONG_RUNNING_RUNTIMES.reduce(
           (sum, id) =>
             sum +
@@ -184,19 +183,11 @@ export class RuntimesService {
       )
       .slice(0, limit)
       .map((l) => ({
-        ...(l.id ? { id: l.id } : {}),
         t: l.t,
         level: l.level,
         ...(l.context ? { context: l.context } : {}),
-        ...(l.correlationId ? { correlationId: l.correlationId } : {}),
-        ...(l.jobId ? { jobId: l.jobId } : {}),
         message: l.stack ? `${l.message}\n${l.stack}` : l.message,
       }));
-  }
-
-  public async getCliHistory(limit: number): Promise<CliExecution[]> {
-    if (!this.store.isAvailable()) return [];
-    return this.store.cliHistory(limit).catch(() => []);
   }
 
   /** Dữ liệu runtime dùng chung cho các module khác (vd. System Overview). */
@@ -247,7 +238,6 @@ export class RuntimesService {
     return {
       id,
       name: this.i18n.t(`runtime.name.${id}`),
-      kind: 'long-running',
       status,
       reasons: reasons.map((r) => this.toReason(r)),
       alerts: (hb?.alerts ?? []).map<RuntimeAlertDto>((a) => ({
@@ -257,7 +247,6 @@ export class RuntimesService {
       pid: hb?.process.pid ?? null,
       uptimeSec: hb?.uptimeSec ?? null,
       startedAt: hb?.startedAt ?? null,
-      lastSeenAt: hb?.at ?? null,
       lastRestartAt: lastRestart?.at ?? null,
       restartCount: history.length,
       resources: hb?.resources ?? null,

@@ -22,11 +22,9 @@ export const API_ROUTES = {
       COMMAND: (commandId: string) => `${OPS_PREFIX}/runtimes/commands/${commandId}`,
       DETAIL: (id: string) => `${OPS_PREFIX}/runtimes/${id}`,
       METRICS: (id: string, range: string) => `${OPS_PREFIX}/runtimes/${id}/metrics?range=${range}`,
-      LOGS: (id: string, limit: number, level?: string, correlationId?: string, jobId?: string) =>
-        `${OPS_PREFIX}/runtimes/${id}/logs?limit=${limit}${level ? `&level=${level}` : ''}${
-          correlationId ? `&correlationId=${encodeURIComponent(correlationId)}` : ''
-        }${jobId ? `&jobId=${encodeURIComponent(jobId)}` : ''}`,
-      ACTION: (id: string, action: 'restart' | 'stop' | 'start') => `${OPS_PREFIX}/runtimes/${id}/${action}`,
+      LOGS: (id: string, limit: number, level?: string) =>
+        `${OPS_PREFIX}/runtimes/${id}/logs?limit=${limit}${level ? `&level=${level}` : ''}`,
+      ACTION: (id: string, action: 'stop' | 'start') => `${OPS_PREFIX}/runtimes/${id}/${action}`,
     },
     TRAFFIC: {
       SUMMARY: (qs: string) => `${OPS_PREFIX}/traffic/summary?${qs}`,

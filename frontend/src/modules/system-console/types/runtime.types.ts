@@ -52,14 +52,12 @@ export interface ActionAvailability {
 export interface RuntimeSummary {
   id: RuntimeId;
   name: string;
-  kind: 'long-running';
   status: RuntimeStatus;
   reasons: RuntimeReason[];
   alerts: RuntimeAlert[];
   pid: number | null;
   uptimeSec: number | null;
   startedAt: string | null;
-  lastSeenAt: string | null;
   lastRestartAt: string | null;
   restartCount: number;
   resources: RuntimeResources | null;
@@ -142,7 +140,6 @@ export interface RuntimesOverview {
     total: number;
     warnings: number;
     down: number;
-    unknown: number;
     restartsToday: number;
     totalCpuPercent: number | null;
     totalMemoryMb: number | null;
@@ -174,16 +171,11 @@ export interface RuntimeLog {
   t: string;
   level: string;
   context?: string;
-  /** Có khi log phát sinh trong một HTTP request. */
-  correlationId?: string;
   message: string;
 }
 
 export interface RuntimeCommand {
   id: string;
-  runtime: RuntimeId;
-  action: 'pause' | 'resume';
-  requestedAt: string;
   status: 'pending' | 'accepted' | 'completed' | 'failed';
   message?: string;
 }

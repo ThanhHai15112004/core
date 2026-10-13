@@ -27,12 +27,10 @@
   "runtime.action.noTelemetry": "No telemetry, commands cannot be delivered.",
   "runtime.action.processDown": "Process is not running; the supervisor (Docker/PM2) must bring it back.",
   "runtime.action.busy": "Runtime is stopping or restarting.",
-  "runtime.action.noSupervisor": "No supervisor (RUNTIME_SUPERVISOR=none), so the process would not come back after a restart.",
   "runtime.action.apiStop": "The API cannot be stopped because the System Console depends on it.",
   "runtime.action.pauseUnsupported": "This runtime does not support pausing.",
   "runtime.action.alreadyStopped": "Runtime is already stopped.",
   "runtime.action.notStopped": "Runtime is running.",
-  "runtime.actionName.restart": "restart",
   "runtime.actionName.stop": "stop",
   "runtime.actionName.start": "start",
   "runtime.stopReason.manual_restart": "Manual restart",
@@ -61,6 +59,5 @@
   "runtime.error.actionNotAllowed": "Cannot {action}: {reason}",
   "runtime.error.telemetryUnavailable": "Redis is unreachable, runtimes cannot be controlled.",
   "runtime.error.pauseUnsupported": "Runtime does not support pausing.",
-  "runtime.command.noReceiver": "The runtime did not receive the command (no process is listening).",
-  "runtime.command.restartTimeout": "The runtime did not come back within the timeout."
+  "runtime.command.noReceiver": "The runtime did not receive the command (no process is listening)."
 }

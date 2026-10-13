@@ -1,11 +1,7 @@
 import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post, Query } from '@nestjs/common';
 import { z } from 'zod';
 import { Public } from '@packages/http/index.js';
-import {
-  LONG_RUNNING_RUNTIMES,
-  type CliExecution,
-  type LongRunningRuntimeId,
-} from '@packages/runtime/index.js';
+import { LONG_RUNNING_RUNTIMES, type LongRunningRuntimeId } from '@packages/runtime/index.js';
 import { RUNTIMES_ROUTES } from '../routes/runtimes.routes.js';
 import { RuntimesService, METRIC_RANGES, type MetricRange } from '../services/runtimes.service.js';
 import { RuntimeCommandService } from '../services/runtime-command.service.js';
@@ -67,12 +63,6 @@ export class RuntimesController {
   }
 
   @Public()
-  @Get(RUNTIMES_ROUTES.CLI_HISTORY)
-  public getCliHistory(@Query('limit') limit?: string): Promise<CliExecution[]> {
-    return this.runtimes.getCliHistory(parse(limitSchema(200, 50), limit));
-  }
-
-  @Public()
   @Get(RUNTIMES_ROUTES.COMMAND)
   public getCommand(@Param('commandId') commandId: string): Promise<RuntimeCommandDto> {
     return this.commands.getCommand(commandId);
@@ -100,13 +90,9 @@ export class RuntimesController {
     @Param('runtimeId') runtimeId: string,
     @Query('limit') limit?: string,
     @Query('level') level?: string,
-    @Query('correlationId') correlationId?: string,
-    @Query('jobId') jobId?: string,
   ): Promise<RuntimeLogDto[]> {
     return this.runtimes.getLogs(runtimeId, parse(limitSchema(1000, 100), limit), {
       level: level ? parse(z.enum(LOG_LEVELS), level) : undefined,
-      correlationId: correlationId ? parse(z.string().max(128), correlationId) : undefined,
-      jobId: jobId ? parse(z.string().max(128), jobId) : undefined,
     });
   }
 

@@ -168,7 +168,7 @@ describe('Feature: Runtimes API (/ops/runtimes)', () => {
       confirm: 'STOP',
     });
     expect(status).toBe(202);
-    expect(body.data).toMatchObject({ runtime: 'worker', action: 'pause', status: 'failed' });
+    expect(body.data).toMatchObject({ status: 'failed' });
 
     const command = await get(RUNTIMES_ROUTES.buildCommandPath(body.data.id));
     expect(command.body.data.message).toBe(

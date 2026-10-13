@@ -19,8 +19,7 @@ export const runtimesApi = {
   series: (range: MetricRange) => fetchApi<RuntimeSeries>(R.METRICS_ALL(range)),
   runtimeSeries: (id: RuntimeId, range: MetricRange) => fetchApi<RuntimeSeries>(R.METRICS(id, range)),
   events: (limit: number, runtime?: RuntimeId) => fetchApi<RuntimeEvent[]>(R.EVENTS(limit, runtime)),
-  logs: (id: RuntimeId | 'cli', limit: number, level?: string, correlationId?: string, jobId?: string) =>
-    fetchApi<RuntimeLog[]>(R.LOGS(id, limit, level, correlationId, jobId)),
+  logs: (id: RuntimeId | 'cli', limit: number, level?: string) => fetchApi<RuntimeLog[]>(R.LOGS(id, limit, level)),
   command: (commandId: string) => fetchApi<RuntimeCommand>(R.COMMAND(commandId)),
   stop: (id: RuntimeId, confirm: string) =>
     fetchApi<RuntimeCommand>(R.ACTION(id, 'stop'), { method: 'POST', body: JSON.stringify({ confirm }) }),
