@@ -45,15 +45,12 @@ export interface TaskRowDto {
   lastDurationMs: number | null;
   lastError: ExecutionError | null;
   lastExecutionId: string | null;
-  lastSuccessAt: string | null;
   nextRunAt: string | null;
   /** Số lần đã chạy theo BullMQ Job Scheduler (`iterationCount`). */
   iterations: number | null;
   consecutiveFailures: number;
   executions24h: number;
-  failures24h: number;
   successRatePercent: number | null;
-  avgDurationMs: number | null;
   downstreamQueue: string | null;
 }
 
@@ -81,9 +78,6 @@ export interface SchedulerAlertDto {
   severity: SchedulerSeverity;
   title: string;
   message: string;
-  value: number;
-  threshold: number;
-  unit: string;
   since: string;
   taskId: string | null;
   executionId: string | null;
@@ -110,7 +104,6 @@ export interface SchedulerInstanceDto {
   instance: string;
   host: string;
   pid: number;
-  startedAt: string;
   lastSeenAt: string;
   heartbeatAgeSec: number;
   uptimeSec: number;
@@ -120,15 +113,12 @@ export interface SchedulerInstanceDto {
 export interface SchedulerHealthDto {
   status: SchedulerStatus;
   reasons: { code: string; message: string; taskId: string | null }[];
-  lastHeartbeatAt: string | null;
-  heartbeatAgeSec: number | null;
 }
 
 export interface UpcomingDto {
   taskId: string;
   taskName: string;
   at: string;
-  inSec: number;
   expression: string | null;
   description: string;
 }
@@ -163,8 +153,6 @@ export interface SchedulerSettingsDto {
 }
 
 export interface SchedulerOverviewDto {
-  generatedAt: string;
-  range: SchedulerRange;
   environment: string;
   timezone: TimezoneDto;
   health: SchedulerHealthDto;
@@ -189,8 +177,6 @@ export interface SchedulerOverviewDto {
   running: ExecutionDto[];
   recent: ExecutionDto[];
   report: { today: SchedulerReportDto; yesterday: SchedulerReportDto };
-  /** Lịch sử chỉ gồm job còn giữ trên broker (retention của queue), không lưu riêng. */
-  historyNote: { keepCompleted: number; keepFailed: number };
   settings: SchedulerSettingsDto;
 }
 
@@ -248,23 +234,17 @@ export interface ExecutionDetailDto {
 }
 
 export interface FailuresDto {
-  range: SchedulerRange;
   failed: number;
   byType: {
     type: string;
     count: number;
     tasks: string[];
-    lastAt: string;
     sampleExecutionId: string;
   }[];
   byTask: { taskId: string; taskName: string; failed: number; consecutive: number }[];
-  items: ExecutionDto[];
-  truncated: boolean;
-  alerts: SchedulerAlertDto[];
 }
 
 export interface TimelineDto {
-  range: SchedulerRange;
   from: string;
   to: string;
   lanes: { taskId: string; taskName: string; executions: ExecutionDto[] }[];
@@ -282,22 +262,16 @@ export interface UpcomingListDto {
 export interface SchedulerSeriesDto {
   id: string;
   label: string;
-  unit: string;
   points: { t: number; value: number }[];
 }
 
 export interface SchedulerMetricsDto {
-  metric: SchedulerMetric;
-  range: SchedulerRange;
-  taskId: string | null;
-  resolutionSec: number | null;
   unit: string;
   series: SchedulerSeriesDto[];
   stats: { current: number | null; peak: number | null; average: number | null };
 }
 
 export interface CronInspectDto {
-  expression: string;
   timezone: string;
   utcOffset: string;
   valid: boolean;
@@ -316,6 +290,5 @@ export interface SchedulerConfigDto {
 }
 
 export interface RunNowDto {
-  operation: SchedulerOperationDto;
   executionId: string;
 }

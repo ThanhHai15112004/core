@@ -98,19 +98,6 @@ export class SchedulerOpsController {
   }
 
   @Public()
-  @Get(R.TASK_EXECUTIONS)
-  public taskExecutions(@Param('id') id: string, @Query() q: Record<string, string>) {
-    const { range, status, trigger, limit } = parse(executionsSchema, q);
-    return this.scheduler.getExecutions({
-      range,
-      taskId: parse(idSchema, id),
-      status,
-      trigger,
-      limit,
-    });
-  }
-
-  @Public()
   @Get(R.EXECUTIONS)
   public executions(@Query() q: Record<string, string>) {
     const { range, task, status, trigger, limit } = parse(executionsSchema, q);

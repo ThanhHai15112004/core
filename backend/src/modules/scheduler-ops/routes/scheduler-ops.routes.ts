@@ -5,7 +5,6 @@ export const SCHEDULER_OPS_ROUTES = {
   METRICS: 'metrics',
   TASKS: 'tasks',
   TASK_DETAIL: 'tasks/:id',
-  TASK_EXECUTIONS: 'tasks/:id/executions',
   TASK_RUN: 'tasks/:id/run',
   TASK_ENABLE: 'tasks/:id/enable',
   TASK_DISABLE: 'tasks/:id/disable',

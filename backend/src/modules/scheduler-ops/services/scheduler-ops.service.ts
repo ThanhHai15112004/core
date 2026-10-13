@@ -261,7 +261,6 @@ export class SchedulerOpsService {
       const runs = s.executions.filter((e) => e.taskId === def.id);
       const done = runs.filter((e) => e.status === 'success' || e.status === 'failed');
       const last = done[0] ?? null;
-      const lastSuccess = done.find((e) => e.status === 'success');
       let consecutive = 0;
       for (const e of done) {
         if (e.status !== 'failed') break;
@@ -269,7 +268,6 @@ export class SchedulerOpsService {
       }
       const day = done.filter((e) => Date.parse(e.scheduledAt ?? '') >= now - DAY);
       const failed24h = day.filter((e) => e.status === 'failed').length;
-      const durations = done.map((e) => e.durationMs).filter((d): d is number => d !== null);
       const running = runs.filter((e) => e.status === 'running').length;
       const live = s.schedulers.get(def.id);
       const health =
@@ -295,17 +293,12 @@ export class SchedulerOpsService {
         lastDurationMs: last?.durationMs ?? null,
         lastError: last?.error ?? null,
         lastExecutionId: last?.id ?? null,
-        lastSuccessAt: lastSuccess?.finishedAt ?? null,
         nextRunAt: enabled ? iso(live?.next) : null,
         iterations: live?.iterations ?? null,
         consecutiveFailures: consecutive,
         executions24h: day.length,
-        failures24h: failed24h,
         successRatePercent: day.length
           ? Math.round(((day.length - failed24h) / day.length) * 1000) / 10
-          : null,
-        avgDurationMs: durations.length
-          ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length)
           : null,
         downstreamQueue: def.queue ?? null,
       };
@@ -356,8 +349,6 @@ export class SchedulerOpsService {
               taskId: null,
             },
           ],
-          lastHeartbeatAt: null,
-          heartbeatAgeSec: null,
         },
         instance: null,
       };
@@ -373,8 +364,6 @@ export class SchedulerOpsService {
               taskId: null,
             },
           ],
-          lastHeartbeatAt: null,
-          heartbeatAgeSec: null,
         },
         instance: null,
       };
@@ -395,14 +384,11 @@ export class SchedulerOpsService {
           : paused
             ? [{ code: 'paused', message: this.i18n.t('scheduler.health.paused'), taskId: null }]
             : [],
-        lastHeartbeatAt: hb.at,
-        heartbeatAgeSec: age,
       },
       instance: {
         instance: hb.instance,
         host: hb.process.hostname,
         pid: hb.process.pid,
-        startedAt: hb.startedAt,
         lastSeenAt: hb.at,
         heartbeatAgeSec: age,
         uptimeSec: hb.uptimeSec,
@@ -411,24 +397,29 @@ export class SchedulerOpsService {
     };
   }
 
-  private alerts(tasks: TaskRowDto[], health: SchedulerHealthDto): SchedulerAlertDto[] {
+  /**
+   * Cảnh báo: heartbeat mất (chỉ khi đã từng có heartbeat — `instance` khác null) và task lỗi liên tiếp.
+   * `heartbeat` = null → bỏ qua cảnh báo heartbeat (trang task chỉ lấy cảnh báo của task).
+   */
+  private alerts(
+    tasks: TaskRowDto[],
+    heartbeat: { health: SchedulerHealthDto; instance: SchedulerInstanceDto | null } | null,
+  ): SchedulerAlertDto[] {
     const rules = this.config.scheduler.rules;
     const now = new Date().toISOString();
     const out: SchedulerAlertDto[] = [];
-    if (health.status === 'down' && health.heartbeatAgeSec !== null)
+    const inst = heartbeat?.instance ?? null;
+    if (heartbeat?.health.status === 'down' && inst)
       out.push({
         id: 'HEARTBEAT_MISSING',
         rule: 'HEARTBEAT_MISSING',
         severity: 'critical',
         title: this.i18n.t('scheduler.alert.HEARTBEAT_MISSING.title'),
         message: this.i18n.t('scheduler.alert.HEARTBEAT_MISSING.message', {
-          value: `${health.heartbeatAgeSec}s`,
+          value: `${inst.heartbeatAgeSec}s`,
           threshold: rules.heartbeatTimeoutSec,
         }),
-        value: health.heartbeatAgeSec,
-        threshold: rules.heartbeatTimeoutSec,
-        unit: 's',
-        since: health.lastHeartbeatAt ?? now,
+        since: inst.lastSeenAt,
         taskId: null,
         executionId: null,
         tab: 'overview',
@@ -444,9 +435,6 @@ export class SchedulerOpsService {
           value: t.consecutiveFailures,
           threshold: rules.consecutiveFailuresWarn,
         }),
-        value: t.consecutiveFailures,
-        threshold: rules.consecutiveFailuresWarn,
-        unit: '',
         since: t.lastRunAt ?? now,
         taskId: t.id,
         executionId: t.lastExecutionId,
@@ -510,10 +498,7 @@ export class SchedulerOpsService {
     const todayReport = this.report(todayRuns);
     const tz = this.config.scheduler.timezone;
     const failing = tasks.some((t) => t.health === 'error' || t.health === 'warning');
-    const m = this.config.messaging;
     return {
-      generatedAt: new Date(now).toISOString(),
-      range,
       environment: this.config.app.env,
       timezone: {
         schedule: tz,
@@ -535,7 +520,7 @@ export class SchedulerOpsService {
         nextExecutionAt: upcoming.items[0]?.at ?? null,
         nextExecutionTask: upcoming.items[0]?.taskName ?? null,
       },
-      alerts: this.alerts(tasks, health),
+      alerts: this.alerts(tasks, { health, instance }),
       upcoming: upcoming.items.slice(0, 10),
       concentration: upcoming.concentration,
       tasks,
@@ -545,7 +530,6 @@ export class SchedulerOpsService {
         today: todayReport,
         yesterday: this.report(this.inRange(s.executions, today - DAY, today)),
       },
-      historyNote: { keepCompleted: m.keepCompleted, keepFailed: m.keepDeadLetter },
       settings: this.settings,
     };
   }
@@ -569,30 +553,25 @@ export class SchedulerOpsService {
       buckets.set(t, [...(buckets.get(t) ?? []), e]);
     }
     const times = [...buckets.keys()].sort((a, b) => a - b);
-    const series = (id: string, unit: string, value: (list: ExecutionDto[]) => number | null) => ({
+    const series = (id: string, value: (list: ExecutionDto[]) => number | null) => ({
       id,
       label: this.i18n.t(`scheduler.series.${id}`),
-      unit,
       points: times
         .map((t) => ({ t, value: value(buckets.get(t)!) }))
         .filter((p): p is { t: number; value: number } => p.value !== null),
     });
     const list =
       metric === 'duration'
-        ? [series('durationAvg', 'ms', (l) => this.report(l).avgDurationMs)]
+        ? [series('durationAvg', (l) => this.report(l).avgDurationMs)]
         : metric === 'failures'
-          ? [series('failed', 'count', (l) => l.filter((e) => e.status === 'failed').length)]
+          ? [series('failed', (l) => l.filter((e) => e.status === 'failed').length)]
           : [
-              series('successful', 'count', (l) => l.filter((e) => e.status === 'success').length),
-              series('failed', 'count', (l) => l.filter((e) => e.status === 'failed').length),
+              series('successful', (l) => l.filter((e) => e.status === 'success').length),
+              series('failed', (l) => l.filter((e) => e.status === 'failed').length),
             ];
     const values = list[0]!.points.map((p) => p.value);
     return {
-      metric,
-      range,
-      taskId: task,
-      resolutionSec: values.length ? bucketMs / 1000 : null,
-      unit: list[0]!.unit,
+      unit: metric === 'duration' ? 'ms' : 'count',
       series: list,
       stats: {
         current: values.at(-1) ?? null,
@@ -613,7 +592,6 @@ export class SchedulerOpsService {
     const recent = this.inRange(runs, now - SCHEDULER_RANGES[range] * MINUTE);
     const report = this.report(recent);
     const def = s.defs.get(id)!;
-    const health = await this.health();
     return {
       task,
       kpis: {
@@ -633,7 +611,7 @@ export class SchedulerOpsService {
             firstFailedAt:
               runs.filter((e) => e.status === 'failed')[task.consecutiveFailures - 1]?.finishedAt ??
               null,
-            lastSuccessAt: task.lastSuccessAt,
+            lastSuccessAt: runs.find((e) => e.status === 'success')?.finishedAt ?? null,
           }
         : null,
       running: runs.filter((e) => e.status === 'running'),
@@ -648,7 +626,7 @@ export class SchedulerOpsService {
         }))
         .reverse(),
       recent: recent.slice(0, 20),
-      alerts: this.alerts([task], health.health).filter((a) => a.taskId === id),
+      alerts: this.alerts([task], null),
       settings: this.settings,
     };
   }
@@ -724,7 +702,6 @@ export class SchedulerOpsService {
           taskId: task.id,
           taskName: task.name,
           at: a,
-          inSec: Math.max(0, Math.round((t - now) / 1000)),
           expression: task.schedule.expression,
           description: task.schedule.description,
         });
@@ -767,7 +744,6 @@ export class SchedulerOpsService {
       lanes.set(e.taskId, lane);
     }
     return {
-      range,
       from: new Date(now - SCHEDULER_RANGES[range] * MINUTE).toISOString(),
       to: new Date(now).toISOString(),
       lanes: [...lanes.values()],
@@ -787,15 +763,12 @@ export class SchedulerOpsService {
       const type = e.error?.type ?? 'Error';
       byType.set(type, [...(byType.get(type) ?? []), e]);
     }
-    const health = await this.health();
     return {
-      range,
       failed: failed.length,
       byType: [...byType.entries()].map(([type, list]) => ({
         type,
         count: list.length,
         tasks: [...new Set(list.map((e) => e.taskName))],
-        lastAt: list[0]!.finishedAt ?? list[0]!.scheduledAt!,
         sampleExecutionId: list[0]!.id,
       })),
       byTask: tasks
@@ -806,9 +779,6 @@ export class SchedulerOpsService {
           consecutive: t.consecutiveFailures,
         }))
         .filter((t) => t.failed > 0 || t.consecutive > 0),
-      items: failed.slice(0, 100),
-      truncated: failed.length > 100,
-      alerts: this.alerts(tasks, health.health),
     };
   }
 
@@ -851,7 +821,6 @@ export class SchedulerOpsService {
       const interval = CronExpressionParser.parse(expression, { tz });
       const next = Array.from({ length: 5 }, () => interval.next().toDate().toISOString());
       return {
-        expression,
         timezone: tz,
         utcOffset: utcOffsetOf(tz),
         valid: true,
@@ -861,7 +830,6 @@ export class SchedulerOpsService {
       };
     } catch (err: unknown) {
       return {
-        expression,
         timezone: tz,
         utcOffset: utcOffsetOf(tz),
         valid: false,
@@ -878,7 +846,7 @@ export class SchedulerOpsService {
 
   public async runNow(taskId: string, ctx: SchedulerOperationContext): Promise<RunNowDto> {
     const res = await this.operations.runNow(taskId, ctx);
-    return { operation: this.operationDto(res.record), executionId: res.executionId };
+    return { executionId: res.executionId };
   }
 
   public async enable(taskId: string, ctx: SchedulerOperationContext) {

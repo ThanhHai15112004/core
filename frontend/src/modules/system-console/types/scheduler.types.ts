@@ -2,9 +2,6 @@
 
 export type SchedulerRange = '1h' | '6h' | '24h' | '7d';
 export type SchedulerMetric = 'executions' | 'duration' | 'failures';
-/** `events` = audit thao tác (Run Now / Enable / Disable). */
-export type SchedulerTab = 'overview' | 'tasks' | 'history' | 'timeline' | 'failures' | 'events' | 'configuration';
-export type TaskDetailTab = 'overview' | 'history' | 'metrics' | 'logs' | 'configuration';
 export type SchedulerSeverity = 'warning' | 'critical' | 'info';
 export type SchedulerStatus = 'healthy' | 'degraded' | 'down' | 'paused' | 'unknown';
 export type TaskType = 'cron' | 'interval';
@@ -49,15 +46,12 @@ export interface TaskRow {
   lastDurationMs: number | null;
   lastError: ExecutionError | null;
   lastExecutionId: string | null;
-  lastSuccessAt: string | null;
   nextRunAt: string | null;
   /** Số lần đã chạy theo BullMQ Job Scheduler. */
   iterations: number | null;
   consecutiveFailures: number;
   executions24h: number;
-  failures24h: number;
   successRatePercent: number | null;
-  avgDurationMs: number | null;
   downstreamQueue: string | null;
 }
 
@@ -84,9 +78,6 @@ export interface SchedulerAlert {
   severity: SchedulerSeverity;
   title: string;
   message: string;
-  value: number;
-  threshold: number;
-  unit: string;
   since: string;
   taskId: string | null;
   executionId: string | null;
@@ -111,7 +102,6 @@ export interface SchedulerInstance {
   instance: string;
   host: string;
   pid: number;
-  startedAt: string;
   lastSeenAt: string;
   heartbeatAgeSec: number;
   uptimeSec: number;
@@ -121,15 +111,12 @@ export interface SchedulerInstance {
 export interface SchedulerHealth {
   status: SchedulerStatus;
   reasons: { code: string; message: string; taskId: string | null }[];
-  lastHeartbeatAt: string | null;
-  heartbeatAgeSec: number | null;
 }
 
 export interface Upcoming {
   taskId: string;
   taskName: string;
   at: string;
-  inSec: number;
   expression: string | null;
   description: string;
 }
@@ -157,8 +144,6 @@ export interface SchedulerSettings {
 }
 
 export interface SchedulerOverview {
-  generatedAt: string;
-  range: SchedulerRange;
   environment: string;
   timezone: { schedule: string; scheduleOffset: string; runtime: string | null };
   health: SchedulerHealth;
@@ -183,8 +168,6 @@ export interface SchedulerOverview {
   running: Execution[];
   recent: Execution[];
   report: { today: SchedulerReport; yesterday: SchedulerReport };
-  /** Lịch sử = job còn giữ trên broker theo retention. */
-  historyNote: { keepCompleted: number; keepFailed: number };
   settings: SchedulerSettings;
 }
 
@@ -234,17 +217,12 @@ export interface ExecutionDetail {
 }
 
 export interface SchedulerFailures {
-  range: SchedulerRange;
   failed: number;
-  byType: { type: string; count: number; tasks: string[]; lastAt: string; sampleExecutionId: string }[];
+  byType: { type: string; count: number; tasks: string[]; sampleExecutionId: string }[];
   byTask: { taskId: string; taskName: string; failed: number; consecutive: number }[];
-  items: Execution[];
-  truncated: boolean;
-  alerts: SchedulerAlert[];
 }
 
 export interface SchedulerTimeline {
-  range: SchedulerRange;
   from: string;
   to: string;
   lanes: { taskId: string; taskName: string; executions: Execution[] }[];
@@ -262,22 +240,16 @@ export interface UpcomingList {
 export interface SchedulerSeries {
   id: string;
   label: string;
-  unit: string;
   points: { t: number; value: number }[];
 }
 
 export interface SchedulerMetrics {
-  metric: SchedulerMetric;
-  range: SchedulerRange;
-  taskId: string | null;
-  resolutionSec: number | null;
   unit: string;
   series: SchedulerSeries[];
   stats: { current: number | null; peak: number | null; average: number | null };
 }
 
 export interface CronInspect {
-  expression: string;
   timezone: string;
   utcOffset: string;
   valid: boolean;
@@ -292,6 +264,5 @@ export interface SchedulerConfig {
 }
 
 export interface RunNowResult {
-  operation: SchedulerOperation;
   executionId: string;
 }
