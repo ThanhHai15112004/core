@@ -21,6 +21,7 @@ import {
 import type { TimeRange } from '@core/constants/ui.constants';
 import type { ConsoleSectionId } from '../types/console.types';
 import { LOGS_RANGES } from '../constants/logs';
+import { MESSAGING_RANGES } from '../constants/messaging';
 import { OVERVIEW_RANGES } from '../constants/overview';
 import { TRAFFIC_RANGES, TRAFFIC_TABS } from '../constants/traffic';
 import { routeIdOf } from '../utils/traffic-format';
@@ -94,7 +95,15 @@ export const SECTIONS: SectionDef[] = [
   { id: 'database', group: 'infrastructure', icon: Database, component: load(() => import('../sections/database/DatabaseSection'), 'DatabaseSection'), crumb: tabCrumb('db'), keywords: ['mysql', 'sql'] },
   { id: 'cache', group: 'infrastructure', icon: Zap, component: load(() => import('../sections/cache/CacheSection'), 'CacheSection'), crumb: tabCrumb('cache'), keywords: ['redis'] },
   { id: 'storage', group: 'infrastructure', icon: HardDrive, component: load(() => import('../sections/storage/StorageSection'), 'StorageSection'), crumb: tabCrumb('storage'), keywords: ['file', 's3'] },
-  { id: 'messaging', group: 'infrastructure', icon: Radio, component: load(() => import('../sections/messaging/MessagingSection'), 'MessagingSection'), crumb: tabCrumb('messaging'), keywords: ['queue', 'broker'] },
+  {
+    id: 'messaging',
+    group: 'infrastructure',
+    icon: Radio,
+    component: load(() => import('../sections/messaging/MessagingSection'), 'MessagingSection'),
+    controls: { ranges: MESSAGING_RANGES },
+    crumb: tabCrumb('messaging'),
+    keywords: ['queue', 'broker'],
+  },
   { id: 'worker', group: 'background', icon: Boxes, component: load(() => import('../sections/worker/WorkerSection'), 'WorkerSection'), crumb: tabCrumb('wq'), keywords: ['queue', 'bullmq'] },
   {
     id: 'scheduler',

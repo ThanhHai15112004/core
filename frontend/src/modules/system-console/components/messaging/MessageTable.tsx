@@ -1,77 +1,125 @@
-import React from 'react';
+import React, { useMemo } from 'react';
+import { createColumnHelper, type ColumnDef } from '@tanstack/react-table';
+import { useLocale } from '@core/i18n/index';
+import { useFormat } from '@core/hooks/useFormat';
+import { cn } from '@core/lib/cn';
+import { Badge } from '@core/ui/primitives';
+import { DataTable, RelativeTime, type DataTableProps } from '@core/ui/blocks';
 import type { MessageRow } from '../../types/messaging.types';
 import { MESSAGE_STATUS_TONE } from '../../constants/messaging';
-import { formatBytes, formatDuration } from '../../utils/database-format';
-import { shortId } from '../../utils/messaging-format';
-import { NO_VALUE } from '../../utils/runtime-format';
-import { useLocale } from '../../../../core/i18n/index';
+import { messageRowId } from '../../utils/messaging-format';
 
-type Column = 'time' | 'id' | 'channel' | 'status' | 'attempts' | 'duration' | 'error' | 'next' | 'size';
+export type MessageColumn = 'time' | 'id' | 'channel' | 'status' | 'attempts' | 'next' | 'duration' | 'error' | 'size';
 
-/** Bảng message dùng chung (explorer, retry, dead letter, drawer) — cột chọn theo ngữ cảnh. */
-export const MessageTable: React.FC<{
+const col = createColumnHelper<MessageRow>();
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type Col = ColumnDef<MessageRow, any>;
+const when = (m: MessageRow) => m.finishedAt ?? m.processedAt ?? m.publishedAt;
+
+interface Props extends Pick<DataTableProps<MessageRow>, 'footer' | 'loadMore' | 'maxHeight' | 'virtual'> {
   rows: MessageRow[];
   onOpen: (m: MessageRow) => void;
-  columns?: Column[];
-  emptyText: string;
-  now: number;
+  columns?: MessageColumn[];
+  emptyMessage: string;
+  activeId?: string | null;
+  /** Nút thao tác cuối hàng (retry / replay / discard). */
   actions?: (m: MessageRow) => React.ReactNode;
-}> = ({ rows, onOpen, columns = ['time', 'id', 'channel', 'status', 'duration', 'size'], emptyText, now, actions }) => {
-  const { t, formatTime, formatRelative } = useLocale();
-  if (rows.length === 0) return <p className="ov-empty-line">{emptyText}</p>;
-  const has = (c: Column) => columns.includes(c);
-  const when = (m: MessageRow) => m.finishedAt ?? m.processedAt ?? m.publishedAt;
+}
+
+/** Bảng message dùng chung (explorer, retry, dead letter, drawer) — cột chọn theo ngữ cảnh. */
+export function MessageTable({ rows, onOpen, columns = ['time', 'id', 'channel', 'status', 'duration', 'size'], emptyMessage, activeId, actions, ...rest }: Props) {
+  const { t, formatTime } = useLocale();
+  const f = useFormat();
+  const colKey = columns.join(',');
+  const defs = useMemo(() => {
+    const all: Record<MessageColumn, Col> = {
+      time: col.accessor((m) => Date.parse(when(m)), {
+        id: 'time',
+        header: t('messaging.message.time'),
+        cell: (c) => formatTime(when(c.row.original), true),
+        meta: { mono: true, width: '96px' },
+      }),
+      id: col.accessor('id', {
+        header: t('messaging.message.id'),
+        cell: (c) => (
+          <span className="whitespace-nowrap font-mono text-xs text-fg" title={c.getValue()}>
+            {f.shortId(c.getValue())}
+          </span>
+        ),
+      }),
+      channel: col.accessor('channel', {
+        header: t('messaging.message.channel'),
+        cell: (c) => (
+          <div className="min-w-0">
+            <div className="truncate font-mono text-xs">{c.getValue()}</div>
+            {c.row.original.producer && <div className="truncate text-2xs text-faint">{t('messaging.message.from', { producer: t(`rt.name.${c.row.original.producer}`) })}</div>}
+          </div>
+        ),
+      }),
+      status: col.accessor('status', {
+        header: t('messaging.channel.status'),
+        cell: (c) => <Badge tone={MESSAGE_STATUS_TONE[c.row.original.status]}>{t(`messaging.status.${c.row.original.status}`)}</Badge>,
+      }),
+      attempts: col.accessor('attempts', {
+        header: t('messaging.message.attempts'),
+        cell: (c) => (
+          <span className={cn(c.getValue() > 1 && 'text-warn-fg')}>
+            {c.getValue()} / {c.row.original.maxAttempts}
+          </span>
+        ),
+        meta: { align: 'right', mono: true },
+      }),
+      next: col.accessor((m) => (m.nextAttemptAt ? Date.parse(m.nextAttemptAt) : Number.MAX_SAFE_INTEGER), {
+        id: 'next',
+        header: t('messaging.message.nextAttempt'),
+        cell: (c) => <RelativeTime value={c.row.original.nextAttemptAt} />,
+      }),
+      duration: col.accessor((m) => m.durationMs ?? -1, {
+        id: 'duration',
+        header: t('messaging.message.duration'),
+        cell: (c) => f.duration(c.row.original.durationMs),
+        meta: { align: 'right', mono: true },
+      }),
+      error: col.accessor('error', {
+        header: t('messaging.message.lastError'),
+        enableSorting: false,
+        cell: (c) => <span className="text-crit-fg">{c.getValue() ?? ''}</span>,
+        meta: { truncate: true, width: '40%' },
+      }),
+      size: col.accessor('size', {
+        header: t('messaging.message.size'),
+        cell: (c) => <span className={cn(c.row.original.large && 'text-warn-fg')}>{f.bytes(c.getValue())}</span>,
+        meta: { align: 'right', mono: true },
+      }),
+    };
+    const list = (colKey.split(',') as MessageColumn[]).map((c) => all[c]);
+    if (actions) {
+      list.push(
+        col.display({
+          id: 'actions',
+          header: '',
+          cell: (c) => (
+            <div className="flex justify-end gap-1" onClick={(e) => e.stopPropagation()}>
+              {actions(c.row.original)}
+            </div>
+          ),
+          meta: { align: 'right' },
+        }),
+      );
+    }
+    return list;
+  }, [t, f, formatTime, colKey, actions]);
+
   return (
-    <div className="scp-table-wrap">
-      <table className="scp-table cache-key-table">
-        <thead>
-          <tr>
-            {has('time') && <th>{t('db.errors.time')}</th>}
-            {has('id') && <th>{t('messaging.message.id')}</th>}
-            {has('channel') && <th>{t('messaging.message.channel')}</th>}
-            {has('status') && <th>{t('messaging.channel.status')}</th>}
-            {has('attempts') && <th>{t('messaging.message.attempts')}</th>}
-            {has('next') && <th>{t('messaging.message.nextAttempt')}</th>}
-            {has('duration') && <th>{t('messaging.message.duration')}</th>}
-            {has('error') && <th>{t('messaging.message.lastError')}</th>}
-            {has('size') && <th>{t('messaging.message.size')}</th>}
-            {actions && <th />}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((m) => (
-            <tr key={`${m.queue}:${m.id}`} className="is-clickable" onClick={() => onOpen(m)}>
-              {has('time') && <td>{formatTime(Date.parse(when(m)), true)}</td>}
-              {has('id') && (
-                <td>
-                  <code title={m.id}>{shortId(m.id)}</code>
-                </td>
-              )}
-              {has('channel') && (
-                <td className="cache-key-cell">
-                  <code>{m.channel}</code>
-                  {m.producer && <small className="pf-row-note">{t('messaging.message.from', { producer: m.producer })}</small>}
-                </td>
-              )}
-              {has('status') && (
-                <td>
-                  <span className={`pf-chip ov-tone-${MESSAGE_STATUS_TONE[m.status]}`}>{t(`messaging.status.${m.status}`)}</span>
-                </td>
-              )}
-              {has('attempts') && (
-                <td>
-                  {m.attempts} / {m.maxAttempts}
-                </td>
-              )}
-              {has('next') && <td>{m.nextAttemptAt ? formatRelative(new Date(m.nextAttemptAt), now) : NO_VALUE}</td>}
-              {has('duration') && <td>{m.durationMs === null ? NO_VALUE : formatDuration(m.durationMs)}</td>}
-              {has('error') && <td className="db-sql-cell">{m.error ?? NO_VALUE}</td>}
-              {has('size') && <td className={m.large ? 'is-warn' : ''}>{formatBytes(m.size)}</td>}
-              {actions && <td onClick={(e) => e.stopPropagation()}>{actions(m)}</td>}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <DataTable
+      data={rows}
+      columns={defs}
+      getRowId={messageRowId}
+      onRowClick={onOpen}
+      activeRowId={activeId}
+      rowTone={(m) => (m.status === 'dead_letter' ? 'crit' : m.status === 'retrying' ? 'warn' : undefined)}
+      emptyMessage={emptyMessage}
+      {...rest}
+    />
   );
-};
+}

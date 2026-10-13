@@ -1,84 +1,104 @@
-import React, { useState } from 'react';
+import React, { useMemo } from 'react';
+import { createColumnHelper } from '@tanstack/react-table';
+import { useLocale } from '@core/i18n/index';
+import { useFormat } from '@core/hooks/useFormat';
+import { cn } from '@core/lib/cn';
+import { Badge } from '@core/ui/primitives';
+import { DataTable } from '@core/ui/blocks';
 import type { ChannelRow } from '../../types/messaging.types';
-import { CHANNEL_STATUS_TONE } from '../../constants/messaging';
-import { formatCompact } from '../../utils/database-format';
-import { formatUnit } from '../../utils/performance-format';
+import { CHANNEL_STATUS_RANK, CHANNEL_STATUS_TONE } from '../../constants/messaging';
 import { formatMsgRate } from '../../utils/messaging-format';
-import { NO_VALUE } from '../../utils/runtime-format';
-import { useLocale } from '../../../../core/i18n/index';
 
-const SORTS = ['status', 'throughput', 'lag', 'errors', 'failureRate'] as const;
-type Sort = (typeof SORTS)[number];
-const STATUS_RANK = { no_consumer: 0, high_failure: 1, lagging: 2, healthy: 3, idle: 4 } as const;
-const value = (c: ChannelRow, s: Sort) =>
-  s === 'status'
-    ? -STATUS_RANK[c.status]
-    : s === 'throughput'
-      ? (c.published ?? 0) + (c.consumed ?? 0)
-      : s === 'lag'
-        ? (c.lag ?? -1)
-        : s === 'errors'
-          ? (c.failed ?? 0) + (c.deadLettered ?? 0)
-          : (c.failureRatePercent ?? -1);
+const col = createColumnHelper<ChannelRow>();
 
-/** Bảng channel (topic): publish/consume, lag, lỗi, trạng thái — sort theo throughput, lag, lỗi, tỷ lệ lỗi. */
-export const ChannelTable: React.FC<{ rows: ChannelRow[]; onOpen: (name: string) => void; sortable?: boolean; emptyText: string }> = ({
-  rows,
-  onOpen,
-  sortable = true,
-  emptyText,
-}) => {
-  const { t, locale } = useLocale();
-  const [sort, setSort] = useState<Sort>('status');
-  if (rows.length === 0) return <p className="ov-empty-line">{emptyText}</p>;
-  const list = sortable ? [...rows].sort((a, b) => value(b, sort) - value(a, sort)) : rows;
-  return (
-    <>
-      {sortable && (
-        <div className="ov-segmented cache-sort" role="tablist" aria-label={t('cache.ns.sort')}>
-          {SORTS.map((s) => (
-            <button key={s} type="button" role="tab" aria-selected={sort === s} className={sort === s ? 'is-active' : ''} onClick={() => setSort(s)}>
-              {t(`messaging.channel.sortBy.${s}`)}
-            </button>
-          ))}
-        </div>
-      )}
-      <div className="scp-table-wrap">
-        <table className="scp-table cache-ns-table">
-          <thead>
-            <tr>
-              <th>{t('messaging.channel.name')}</th>
-              <th>{t('messaging.channel.publish')}</th>
-              <th>{t('messaging.channel.consume')}</th>
-              <th>{t('messaging.channel.lag')}</th>
-              <th>{t('messaging.channel.errors')}</th>
-              <th>{t('messaging.channel.status')}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {list.map((c) => (
-              <tr key={c.channel} className="is-clickable" onClick={() => onOpen(c.channel)}>
-                <td>
-                  <code>{c.channel}</code>
-                  {c.queue && <small className="pf-row-note">{t('messaging.channel.via', { queue: c.queue })}</small>}
-                </td>
-                <td>{formatMsgRate(c.publishPerSec)}</td>
-                <td>{formatMsgRate(c.consumePerSec)}</td>
-                <td className={(c.lag ?? 0) > 0 ? 'is-warn' : ''}>
-                  {c.lag === null ? NO_VALUE : formatCompact(c.lag, locale)}
-                </td>
-                <td className={(c.failed ?? 0) + (c.deadLettered ?? 0) > 0 ? 'is-warn' : ''}>
-                  {c.failed ?? NO_VALUE}
-                  {c.failureRatePercent !== null && (c.failed ?? 0) > 0 && <small className="pf-row-note">{formatUnit(c.failureRatePercent, '%')}</small>}
-                </td>
-                <td>
-                  <span className={`pf-chip ov-tone-${CHANNEL_STATUS_TONE[c.status]}`}>{t(`messaging.channel.statusOf.${c.status}`)}</span>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </>
+interface Props {
+  rows: ChannelRow[];
+  onOpen: (name: string) => void;
+  activeId?: string | null;
+  /** Bản gọn cho Tổng quan: bỏ cột lỗi, không sort. */
+  compact?: boolean;
+  emptyMessage: string;
+  footer?: React.ReactNode;
+  maxHeight?: number;
+}
+
+/** Bảng channel (topic): publish / consume, lag, lỗi, trạng thái — sort bằng header, mặc định nặng nhất lên trước. */
+export function ChannelTable({ rows, onOpen, activeId, compact, emptyMessage, footer, maxHeight }: Props) {
+  const { t } = useLocale();
+  const f = useFormat();
+  const columns = useMemo(
+    () => [
+      col.accessor('channel', {
+        header: t('messaging.channel.name'),
+        enableSorting: !compact,
+        cell: (c) => (
+          <div className="min-w-0">
+            <div className="truncate font-mono text-xs text-fg">{c.getValue()}</div>
+            {c.row.original.queue && <div className="truncate text-2xs text-faint">{t('messaging.channel.via', { queue: c.row.original.queue })}</div>}
+          </div>
+        ),
+      }),
+      col.accessor((r) => r.publishPerSec ?? -1, {
+        id: 'publish',
+        header: t('messaging.channel.publish'),
+        enableSorting: !compact,
+        cell: (c) => formatMsgRate(c.row.original.publishPerSec, f.locale),
+        meta: { align: 'right', mono: true },
+      }),
+      col.accessor((r) => r.consumePerSec ?? -1, {
+        id: 'consume',
+        header: t('messaging.channel.consume'),
+        enableSorting: !compact,
+        cell: (c) => formatMsgRate(c.row.original.consumePerSec, f.locale),
+        meta: { align: 'right', mono: true },
+      }),
+      col.accessor((r) => r.lag ?? -1, {
+        id: 'lag',
+        header: t('messaging.channel.lag'),
+        enableSorting: !compact,
+        cell: (c) => <span className={cn((c.row.original.lag ?? 0) > 0 && 'text-warn-fg')}>{f.compact(c.row.original.lag)}</span>,
+        meta: { align: 'right', mono: true },
+      }),
+      ...(compact
+        ? []
+        : [
+            col.accessor((r) => (r.failed ?? 0) + (r.deadLettered ?? 0), {
+              id: 'errors',
+              header: t('messaging.channel.errors'),
+              cell: (c) => {
+                const r = c.row.original;
+                const bad = (r.failed ?? 0) + (r.deadLettered ?? 0) > 0;
+                return (
+                  <span className={cn(bad ? 'text-warn-fg' : 'text-faint')}>
+                    {f.compact(r.failed)}
+                    {r.failureRatePercent !== null && (r.failed ?? 0) > 0 && <span className="ml-1 text-2xs text-faint">{f.percent(r.failureRatePercent)}</span>}
+                  </span>
+                );
+              },
+              meta: { align: 'right' as const, mono: true },
+            }),
+          ]),
+      col.accessor((r) => CHANNEL_STATUS_RANK[r.status], {
+        id: 'status',
+        header: t('messaging.channel.status'),
+        enableSorting: !compact,
+        cell: (c) => <Badge tone={CHANNEL_STATUS_TONE[c.row.original.status]}>{t(`messaging.channel.statusOf.${c.row.original.status}`)}</Badge>,
+      }),
+    ],
+    [t, f, compact],
   );
-};
+  return (
+    <DataTable
+      data={rows}
+      columns={columns}
+      getRowId={(r) => r.channel}
+      onRowClick={(r) => onOpen(r.channel)}
+      activeRowId={activeId}
+      rowTone={(r) => CHANNEL_STATUS_TONE[r.status]}
+      initialSorting={compact ? [] : [{ id: 'status', desc: true }]}
+      emptyMessage={emptyMessage}
+      footer={footer}
+      maxHeight={maxHeight}
+    />
+  );
+}
