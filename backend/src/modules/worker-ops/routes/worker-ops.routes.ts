@@ -19,7 +19,6 @@ export const QUEUE_OPS_ROUTES = {
   METRICS: ':name/metrics',
   JOBS: ':name/jobs',
   FAILURES: ':name/failures',
-  EVENTS: ':name/events',
   PAUSE: ':name/pause',
   RESUME: ':name/resume',
   RETRY_FAILED: ':name/retry-failed',

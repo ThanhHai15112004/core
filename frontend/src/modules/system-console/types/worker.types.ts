@@ -18,11 +18,9 @@ export type Section<T> =
   | { available: false; reason: 'unsupported' | 'disconnected' | 'error'; message: string | null };
 
 export interface QueueProviderInfo {
-  driver: string;
   product: string;
   backend: string;
   endpoint: string;
-  prefix: string;
 }
 
 export interface WorkerAlert {
@@ -31,9 +29,6 @@ export interface WorkerAlert {
   severity: WorkerSeverity;
   title: string;
   message: string;
-  value: number;
-  threshold: number;
-  unit: string;
   since: string;
   tab: WorkerTab;
   queue: string | null;
@@ -44,7 +39,6 @@ export interface BackgroundHealth {
   reasons: { code: string; message: string; queue: string | null }[];
   state: ConnectionState;
   pingMs: number | null;
-  lastError: string | null;
   lastWorkerSeenAt: string | null;
 }
 
@@ -80,11 +74,9 @@ export interface QueueRow {
   name: string;
   status: QueueStatus;
   waiting: number;
-  prioritized: number;
   active: number;
   delayed: number;
   failed: number;
-  completed: number;
   paused: boolean;
   workers: number | null;
   concurrency: number;
@@ -111,13 +103,9 @@ export interface WorkerRow {
   cpuPercent: number | null;
   memoryMb: number | null;
   memoryLimitMb: number | null;
-  memoryPercent: number | null;
-  startedAt: string;
   uptimeSec: number;
   queues: string[];
   processors: string[];
-  paused: boolean;
-  connections: number | null;
 }
 
 export interface JobRow {
@@ -127,18 +115,14 @@ export interface JobRow {
   state: JobState;
   attempts: number;
   maxAttempts: number;
-  priority: number;
   createdAt: string;
   processedAt: string | null;
   finishedAt: string | null;
   runAt: string | null;
   durationMs: number | null;
-  waitMs: number | null;
   runningMs: number | null;
   error: string | null;
-  correlationId: string | null;
   worker: string | null;
-  stalledCount: number;
   delayReason: DelayReason | null;
 }
 
@@ -181,7 +165,6 @@ export interface WorkerEvent {
 export interface WorkerStability {
   restartsToday: number;
   crashesToday: number;
-  lastRestartAt: string | null;
   history: { at: string; reasonCode: string; reason: string; downtimeMs: number | null }[];
 }
 
@@ -209,12 +192,9 @@ export interface WorkerOverview {
   wait: WaitStats;
   concurrency: Concurrency | null;
   queues: Section<QueueRow[]>;
-  workers: WorkerRow[];
   distribution: { queue: string; completed: number; percent: number }[];
-  failures: { failed: number; failureRatePercent: number | null; retried: number; recovered: number; exhausted: number; stalled: number | null };
-  stability: WorkerStability;
+  failures: { stalled: number | null };
   alerts: WorkerAlert[];
-  events: WorkerEvent[];
   report: { today: WorkerReport; yesterday: WorkerReport };
   settings: WorkerSettings;
 }
@@ -227,10 +207,6 @@ export interface WorkerSeries {
 }
 
 export interface WorkerMetrics {
-  metric: WorkerMetric;
-  range: WorkerRange;
-  queue: string | null;
-  resolutionSec: number | null;
   unit: string;
   series: WorkerSeries[];
 }
@@ -247,7 +223,6 @@ export interface WorkerDetail {
   worker: WorkerRow;
   distribution: { queue: string; completed: number; failed: number; percent: number }[];
   processing: DurationStats;
-  runtimeStatus: string | null;
   runtimeAlerts: { key: string; value: number; threshold: number }[];
   stability: WorkerStability;
 }
@@ -266,7 +241,6 @@ export interface QueueJobDefaults {
 }
 
 export interface QueueDetail {
-  range: WorkerRange;
   queue: QueueRow;
   wait: WaitStats;
   processing: DurationStats;
@@ -276,22 +250,17 @@ export interface QueueDetail {
   workers: WorkerRow[];
   brokerWorkers: { name: string | null; addr: string | null; ageSec: number | null; idleSec: number | null }[] | null;
   recentJobs: Section<JobRow[]>;
-  failures: { failed: number; retried: number; exhausted: number; failureRatePercent: number | null };
   defaults: QueueJobDefaults;
   alerts: WorkerAlert[];
   settings: WorkerSettings;
 }
 
 export interface QueueJobs {
-  queue: string;
-  states: JobState[];
   jobs: Section<JobRow[]>;
   limit: number;
 }
 
 export interface Failures {
-  range: WorkerRange;
-  queue: string | null;
   stats: {
     failed: number;
     failureRatePercent: number | null;
@@ -338,7 +307,6 @@ export interface WorkerOperation {
 }
 
 export interface QueueRetryResult {
-  operation: WorkerOperation;
   requested: number;
   retried: number;
 }

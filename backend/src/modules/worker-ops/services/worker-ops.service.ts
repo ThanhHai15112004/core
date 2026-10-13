@@ -98,7 +98,6 @@ export const WORKER_METRICS: WorkerMetric[] = [
   'retries',
 ];
 
-const OVERVIEW_EVENTS = 8;
 const RECENT_JOBS = 20;
 const JOB_SAMPLE = 100;
 const STALLED_SCAN = 200;
@@ -202,11 +201,9 @@ export class WorkerOpsService {
     const row: Omit<QueueRowDto, 'status'> = {
       name: q.name,
       waiting,
-      prioritized: q.counts.prioritized,
       active: q.counts.active,
       delayed: q.counts.delayed,
       failed: q.counts.failed,
-      completed: q.counts.completed,
       paused: q.paused,
       workers: q.workers?.length ?? null,
       concurrency: concurrencyOf(live.consumers, q.name),
@@ -270,7 +267,6 @@ export class WorkerOpsService {
       const rt = regs[0]!.runtime;
       if (rt) perRuntime.set(rt, (perRuntime.get(rt) ?? 0) + 1);
     }
-    const brokers = live.queues.available ? live.queues.data.flatMap((q) => q.workers ?? []) : null;
     // BullMQ chỉ cho biết số job active theo queue — gán cho instance khi nó là instance duy nhất của queue.
     const queueActive = new Map(
       live.queues.available ? live.queues.data.map((q) => [q.name, q.counts.active]) : [],
@@ -305,10 +301,9 @@ export class WorkerOpsService {
               : (utilization ?? 0) >= this.cfg.rules.concurrencyPercent
                 ? 'busy'
                 : 'healthy';
-        const runtime = regs[0]!.runtime;
         return {
           id: instance,
-          runtime,
+          runtime: rt,
           host: hb?.process.hostname ?? instance,
           pid: hb?.process.pid ?? null,
           status,
@@ -318,13 +313,9 @@ export class WorkerOpsService {
           cpuPercent: cpu === null ? null : round(cpu, 1),
           memoryMb: mem === null ? null : round(mem, 1),
           memoryLimitMb: limit === null ? null : round(limit, 0),
-          memoryPercent: memPct === null ? null : round(memPct, 1),
-          startedAt: new Date(startedAt).toISOString(),
           uptimeSec: hb?.uptimeSec ?? Math.max(0, Math.round((now - startedAt) / 1000)),
           queues: [...new Set(regs.map((r) => r.queue))].sort(),
           processors: [...new Set(regs.map((r) => r.consumer))].sort(),
-          paused,
-          connections: brokers ? brokers.filter((b) => b.name === runtime).length : null,
         };
       })
       .sort((a, b) => a.id.localeCompare(b.id));
@@ -354,19 +345,15 @@ export class WorkerOpsService {
       state: j.state,
       attempts: j.attempts,
       maxAttempts: j.maxAttempts,
-      priority: j.priority,
       createdAt: new Date(j.createdAt).toISOString(),
       processedAt: iso(j.processedAt),
       finishedAt: iso(j.finishedAt),
       runAt: iso(j.runAt),
       durationMs: j.durationMs,
-      waitMs: j.waitMs,
       runningMs:
         j.state === 'active' && j.processedAt !== null ? Math.max(0, now - j.processedAt) : null,
       error: j.error,
-      correlationId: j.correlationId,
       worker: j.processedBy,
-      stalledCount: j.stalledCount,
       delayReason: j.delayReason,
     };
   }
@@ -405,7 +392,6 @@ export class WorkerOpsService {
       restartsToday: history.filter((h) => Date.parse(h.at) >= today).length,
       crashesToday: history.filter((h) => h.reasonCode === 'crash' && Date.parse(h.at) >= today)
         .length,
-      lastRestartAt: history[0]?.at ?? null,
       history: history.slice(0, 10).map((h) => ({
         at: h.at,
         reasonCode: h.reasonCode,
@@ -420,22 +406,22 @@ export class WorkerOpsService {
   public async getOverview(range: WorkerRange): Promise<WorkerOverviewDto> {
     const now = Date.now();
     const today = startOfDay(now);
-    const [win, todayWin, yesterdayWin, live, alerts, events, retrying, active, stability] =
-      await Promise.all([
+    const [win, todayWin, yesterdayWin, live, alerts, events, retrying, active] = await Promise.all(
+      [
         this.rangeWindow(range, now),
         this.metrics.window(today, now, now),
         this.metrics.window(today - DAY, today, now),
         this.live(),
         this.alerts(),
-        this.eventsSince(now - DAY, null),
+        this.eventsSince(now - DAY),
         this.monitoring.usable()
           ? this.monitoring.provider.jobs(null, ['retrying'], RETRYING_SCAN).catch(() => null)
           : Promise.resolve(null),
         this.monitoring.usable()
           ? this.monitoring.provider.jobs(null, ['active'], STALLED_SCAN).catch(() => null)
           : Promise.resolve(null),
-        this.stability(now),
-      ]);
+      ],
+    );
     const queues = this.queueRows(live, win, now);
     const workers = this.workerRows(live, now);
     const counts = this.metrics.counts(win);
@@ -464,10 +450,11 @@ export class WorkerOpsService {
         }))
       : [];
     const totalDone = perQueueDone.reduce((s, q) => s + q.completed, 0);
+    const { product, backend, endpoint } = this.monitoring.provider.info();
     return {
       generatedAt: new Date(now).toISOString(),
       range,
-      provider: this.monitoring.provider.info(),
+      provider: { product, backend, endpoint },
       environment: this.config.app.env,
       capabilities: [...this.monitoring.provider.capabilities],
       health: this.health(live, alerts, events, workers.length),
@@ -492,7 +479,6 @@ export class WorkerOpsService {
       },
       concurrency: this.concurrency(live, null),
       queues,
-      workers,
       distribution:
         totalDone > 0
           ? perQueueDone
@@ -501,16 +487,9 @@ export class WorkerOpsService {
               .sort((a, b) => b.completed - a.completed)
           : [],
       failures: {
-        failed: counts.failed,
-        failureRatePercent: counts.failureRatePercent,
-        retried: counts.retried,
-        recovered: counts.recovered,
-        exhausted: counts.exhausted,
         stalled: active ? stalledJobs(active, this.cfg.rules.stalledMin, now).length : null,
       },
-      stability,
       alerts,
-      events: events.slice(0, OVERVIEW_EVENTS),
       report: { today: this.report(todayWin), yesterday: this.report(yesterdayWin) },
       settings: this.settings(),
     };
@@ -526,7 +505,6 @@ export class WorkerOpsService {
     const base = {
       state: s.state,
       pingMs: s.lastPingMs,
-      lastError: s.lastError,
       lastWorkerSeenAt: live.hb?.at ?? null,
     };
     const info = this.monitoring.provider.info();
@@ -600,9 +578,6 @@ export class WorkerOpsService {
           severity: s.severity,
           title: this.i18n.t(`worker.alert.${rule}.title`),
           message: this.alertMessage(rule, { ...s.extra, value: s.value, threshold: s.threshold }),
-          value: s.value,
-          threshold: s.threshold,
-          unit: s.unit,
           since: new Date(s.since).toISOString(),
           tab: RULE_TAB[rule] ?? 'overview',
           queue: QUEUE_RULES.has(rule)
@@ -707,9 +682,8 @@ export class WorkerOpsService {
       unit: s.unit,
       points: s.points,
     }));
-    const resolutionSec = res.resolutionSec;
     const list = series.filter((s, i) => i === 0 || s.points.length > 0);
-    return { metric, range, queue, resolutionSec, unit: list[0]?.unit ?? '', series: list };
+    return { unit: list[0]?.unit ?? '', series: list };
   }
 
   // ─── Workers ──────────────────────────────────────────────────────────────
@@ -746,10 +720,9 @@ export class WorkerOpsService {
 
   public async getWorker(id: string): Promise<WorkerDetailDto> {
     const now = Date.now();
-    const [{ todayWin, live, rows }, stability, runtime] = await Promise.all([
+    const [{ todayWin, live, rows }, stability] = await Promise.all([
       this.workerContext(now),
       this.stability(now),
-      this.runtimes.getDetail('worker').catch(() => null as RuntimeDetailDto | null),
     ]);
     const worker = rows.find((w) => w.id === id);
     if (!worker) throw new WorkerNotFoundException('worker.error.workerNotFound', { id });
@@ -768,7 +741,6 @@ export class WorkerOpsService {
         percent: total > 0 ? round((q.completed / total) * 100, 1) : 0,
       })),
       processing: this.metrics.processing(todayWin),
-      runtimeStatus: own ? (runtime?.status ?? null) : null,
       runtimeAlerts: own
         ? own.alerts.map((a) => ({ key: a.key, value: a.value, threshold: a.threshold }))
         : [],
@@ -812,12 +784,10 @@ export class WorkerOpsService {
     const info = live.queues.data.find((q) => q.name === name);
     if (!info) throw new WorkerNotFoundException('worker.error.queueNotFound', { name });
     const row = this.queueRow(info, win, live, now);
-    const c = this.metrics.counts(win, name);
     const r = this.cfg.rules;
     const activity = (j: JobRowDto) =>
       Date.parse(j.finishedAt ?? j.processedAt ?? j.runAt ?? j.createdAt);
     return {
-      range,
       queue: row,
       wait: {
         ...this.metrics.wait(win, name),
@@ -841,12 +811,6 @@ export class WorkerOpsService {
             data: [...recent.data].sort((a, b) => activity(b) - activity(a)).slice(0, RECENT_JOBS),
           }
         : recent,
-      failures: {
-        failed: c.failed,
-        retried: c.retried,
-        exhausted: c.exhausted,
-        failureRatePercent: c.failureRatePercent,
-      },
       defaults: this.monitoring.provider.defaults(),
       alerts: alerts.filter((a) => a.queue === name),
       settings: this.settings(),
@@ -859,8 +823,7 @@ export class WorkerOpsService {
     limit: number,
   ): Promise<QueueJobsDto> {
     this.assertQueue(name);
-    const now = Date.now();
-    return { queue: name, states, limit, jobs: await this.jobs(name, states, limit, now) };
+    return { limit, jobs: await this.jobs(name, states, limit, Date.now()) };
   }
 
   // ─── Failures / Delayed ───────────────────────────────────────────────────
@@ -923,8 +886,6 @@ export class WorkerOpsService {
           }
         : null;
     return {
-      range,
-      queue,
       stats: {
         failed: c.failed,
         failureRatePercent: c.failureRatePercent,
@@ -966,12 +927,11 @@ export class WorkerOpsService {
     };
   }
 
-  public async getDelayed(queue: string | null): Promise<DelayedDto> {
-    if (queue) this.assertQueue(queue);
+  public async getDelayed(): Promise<DelayedDto> {
     const now = Date.now();
     const [live, jobs] = await Promise.all([
       this.live(),
-      this.jobs(queue, ['delayed', 'retrying'], DELAYED_LIMIT, now),
+      this.jobs(null, ['delayed', 'retrying'], DELAYED_LIMIT, now),
     ]);
     const byReason: Record<DelayReason, number> = { retry: 0, repeat: 0, delay: 0 };
     let next: number | null = null;
@@ -986,9 +946,7 @@ export class WorkerOpsService {
       }
     return {
       total: live.queues.available
-        ? live.queues.data
-            .filter((q) => !queue || q.name === queue)
-            .reduce((s, q) => s + q.counts.delayed, 0)
+        ? live.queues.data.reduce((s, q) => s + q.counts.delayed, 0)
         : null,
       nextDueAt: iso(next),
       oldestSec: secondsSince(oldest, now),
@@ -1006,20 +964,16 @@ export class WorkerOpsService {
 
   // ─── Events / Operations / Config ─────────────────────────────────────────
 
-  public async getEvents(range: WorkerRange, queue: string | null): Promise<WorkerEventDto[]> {
-    if (queue) this.assertQueue(queue);
-    return this.eventsSince(Date.now() - WORKER_RANGES[range] * MINUTE, queue);
+  public async getEvents(range: WorkerRange): Promise<WorkerEventDto[]> {
+    return this.eventsSince(Date.now() - WORKER_RANGES[range] * MINUTE);
   }
 
-  private async eventsSince(from: number, queue: string | null): Promise<WorkerEventDto[]> {
+  private async eventsSince(from: number): Promise<WorkerEventDto[]> {
     const [records, runtimeEvents] = await Promise.all([
       this.store.events().catch(() => [] as QueueEventRecord[]),
-      queue ? Promise.resolve([]) : this.runtimes.getEvents('worker', 200).catch(() => []),
+      this.runtimes.getEvents('worker', 200).catch(() => []),
     ]);
-    const own = records
-      .filter((e) => e.at >= from)
-      .map((e) => this.eventDto(e))
-      .filter((e) => !queue || e.queue === queue);
+    const own = records.filter((e) => e.at >= from).map((e) => this.eventDto(e));
     const rt: WorkerEventDto[] = runtimeEvents
       .filter((e) => RUNTIME_EVENT_TYPES[e.type] && Date.parse(e.at) >= from)
       .map((e) => ({
@@ -1136,7 +1090,7 @@ export class WorkerOpsService {
   ): Promise<QueueRetryDto> {
     return this.act(async () => {
       const r = await this.operations.retryFailed(queue, count, ctx);
-      return { operation: this.operationDto(r.record), requested: r.requested, retried: r.retried };
+      return { requested: r.requested, retried: r.retried };
     });
   }
 

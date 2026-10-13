@@ -6,7 +6,6 @@ import type {
   QueueEventType,
   QueueJobDefaults,
   QueueOperationAction,
-  QueueProviderInfo,
   QueueSection,
 } from '@packages/queue/index.js';
 
@@ -27,9 +26,6 @@ export interface WorkerAlertDto {
   severity: WorkerSeverity;
   title: string;
   message: string;
-  value: number;
-  threshold: number;
-  unit: string;
   since: string;
   tab: string;
   /** Queue liên quan (mở thẳng Queue Detail); null = cảnh báo toàn cục. */
@@ -42,7 +38,6 @@ export interface BackgroundHealthDto {
   reasons: { code: string; message: string; queue: string | null }[];
   state: MessagingConnectionState;
   pingMs: number | null;
-  lastError: string | null;
   /** Lần gần nhất thấy worker kết nối (runtime worker báo heartbeat). */
   lastWorkerSeenAt: string | null;
 }
@@ -82,11 +77,9 @@ export interface QueueRowDto {
   name: string;
   status: QueueStatus;
   waiting: number;
-  prioritized: number;
   active: number;
   delayed: number;
   failed: number;
-  completed: number;
   paused: boolean;
   /** Kết nối worker trên broker; null = provider không cho biết. */
   workers: number | null;
@@ -116,14 +109,9 @@ export interface WorkerRowDto {
   cpuPercent: number | null;
   memoryMb: number | null;
   memoryLimitMb: number | null;
-  memoryPercent: number | null;
-  startedAt: string;
   uptimeSec: number;
   queues: string[];
   processors: string[];
-  paused: boolean;
-  /** Kết nối broker của instance (addr) nếu khớp được. */
-  connections: number | null;
 }
 
 export interface JobRowDto {
@@ -133,19 +121,15 @@ export interface JobRowDto {
   state: JobState;
   attempts: number;
   maxAttempts: number;
-  priority: number;
   createdAt: string;
   processedAt: string | null;
   finishedAt: string | null;
   runAt: string | null;
   durationMs: number | null;
-  waitMs: number | null;
   /** active: đã chạy bao lâu. */
   runningMs: number | null;
   error: string | null;
-  correlationId: string | null;
   worker: string | null;
-  stalledCount: number;
   delayReason: DelayReason | null;
 }
 
@@ -188,14 +172,13 @@ export interface WorkerEventDto {
 export interface WorkerStabilityDto {
   restartsToday: number;
   crashesToday: number;
-  lastRestartAt: string | null;
   history: { at: string; reasonCode: string; reason: string; downtimeMs: number | null }[];
 }
 
 export interface WorkerOverviewDto {
   generatedAt: string;
   range: WorkerRange;
-  provider: QueueProviderInfo;
+  provider: { product: string; backend: string; endpoint: string };
   environment: string;
   capabilities: QueueCapability[];
   health: BackgroundHealthDto;
@@ -217,19 +200,10 @@ export interface WorkerOverviewDto {
   wait: WaitStatsDto;
   concurrency: ConcurrencyDto | null;
   queues: SectionDto<QueueRowDto[]>;
-  workers: WorkerRowDto[];
   distribution: { queue: string; completed: number; percent: number }[];
-  failures: {
-    failed: number;
-    failureRatePercent: number | null;
-    retried: number;
-    recovered: number;
-    exhausted: number;
-    stalled: number | null;
-  };
-  stability: WorkerStabilityDto;
+  /** Job đang chạy quá ngưỡng treo; null = không đọc được. */
+  failures: { stalled: number | null };
   alerts: WorkerAlertDto[];
-  events: WorkerEventDto[];
   report: { today: WorkerReportDto; yesterday: WorkerReportDto };
   settings: WorkerSettingsDto;
 }
@@ -242,10 +216,6 @@ export interface WorkerSeriesDto {
 }
 
 export interface WorkerMetricsDto {
-  metric: WorkerMetric;
-  range: WorkerRange;
-  queue: string | null;
-  resolutionSec: number | null;
   unit: string;
   series: WorkerSeriesDto[];
 }
@@ -263,7 +233,6 @@ export interface WorkerDetailDto {
   worker: WorkerRowDto;
   distribution: { queue: string; completed: number; failed: number; percent: number }[];
   processing: DurationStatsDto;
-  runtimeStatus: string | null;
   runtimeAlerts: { key: string; value: number; threshold: number }[];
   stability: WorkerStabilityDto;
 }
@@ -275,7 +244,6 @@ export interface QueuesListDto {
 }
 
 export interface QueueDetailDto {
-  range: WorkerRange;
   queue: QueueRowDto;
   wait: WaitStatsDto;
   processing: DurationStatsDto;
@@ -287,27 +255,17 @@ export interface QueueDetailDto {
     | { name: string | null; addr: string | null; ageSec: number | null; idleSec: number | null }[]
     | null;
   recentJobs: SectionDto<JobRowDto[]>;
-  failures: {
-    failed: number;
-    retried: number;
-    exhausted: number;
-    failureRatePercent: number | null;
-  };
   defaults: QueueJobDefaults;
   alerts: WorkerAlertDto[];
   settings: WorkerSettingsDto;
 }
 
 export interface QueueJobsDto {
-  queue: string;
-  states: JobState[];
   jobs: SectionDto<JobRowDto[]>;
   limit: number;
 }
 
 export interface FailuresDto {
-  range: WorkerRange;
-  queue: string | null;
   stats: {
     failed: number;
     failureRatePercent: number | null;
@@ -355,7 +313,6 @@ export interface WorkerOperationDto {
 }
 
 export interface QueueRetryDto {
-  operation: WorkerOperationDto;
   requested: number;
   retried: number;
 }

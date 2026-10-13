@@ -33,9 +33,8 @@ export const workerApi = {
   worker: (instance: string) => fetchApi<WorkerDetail>(W(id(instance))),
   failures: (range: WorkerRange, queue?: string) =>
     fetchApi<Failures>(queue ? Q(`${id(queue)}/failures`, toQuery({ range })) : W('failures', toQuery({ range }))),
-  delayed: (queue?: string) => fetchApi<Delayed>(W('delayed', toQuery({ queue }))),
-  events: (range: WorkerRange, queue?: string) =>
-    fetchApi<WorkerEvent[]>(queue ? Q(`${id(queue)}/events`, toQuery({ range })) : W('events', toQuery({ range }))),
+  delayed: () => fetchApi<Delayed>(W('delayed')),
+  events: (range: WorkerRange) => fetchApi<WorkerEvent[]>(W('events', toQuery({ range }))),
   operations: () => fetchApi<WorkerOperation[]>(W('operations')),
   config: () => fetchApi<WorkerConfig>(W('config')),
   queues: (range: WorkerRange) => fetchApi<QueuesList>(Q('', toQuery({ range }))),

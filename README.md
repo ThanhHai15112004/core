@@ -318,7 +318,7 @@ Cùng 1 codebase phục vụ 4 chế độ chạy độc lập: `api` (HTTP), `w
   ngừng lấy job mới), Retry job lỗi (tối đa `OPS_QUEUE_RETRY_FAILED_MAX` mỗi lần, có xem trước), Drain (gõ `DRAIN`,
   mặc định tắt).
 - API: `GET /ops/workers[/:id]`, `GET /ops/workers/{overview,metrics,failures,delayed,events,operations,config}`,
-  `GET /ops/queues[/:name[/metrics|/jobs|/failures|/events]]`, `POST /ops/queues/:name/{pause,resume,retry-failed,drain}`.
+  `GET /ops/queues[/:name[/metrics|/jobs|/failures]]`, `POST /ops/queues/:name/{pause,resume,retry-failed,drain}`.
 
 ### Scheduler (System Console → Scheduler)
 - Scheduler trả lời "khi nào công việc phải được kích hoạt"; Worker & Queue trả lời "công việc nền đã tạo có được xử lý

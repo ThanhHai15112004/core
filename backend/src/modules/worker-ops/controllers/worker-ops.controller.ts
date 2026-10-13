@@ -15,7 +15,6 @@ export const rangeSchema = z.object({
 export const metricsSchema = rangeSchema.extend({
   metric: z.enum(WORKER_METRICS as [WorkerMetric, ...WorkerMetric[]]).default('throughput'),
 });
-const queueFilter = z.object({ queue: nameSchema.optional() });
 
 export function parse<T>(schema: z.ZodType<T>, value: unknown): T {
   const result = schema.safeParse(value);
@@ -40,28 +39,26 @@ export class WorkerOpsController {
   @Public()
   @Get(R.METRICS)
   public metrics(@Query() q: Record<string, string>) {
-    const { range, metric, queue } = parse(metricsSchema.merge(queueFilter), q);
-    return this.workers.getMetrics(range, metric, queue ?? null);
+    const { range, metric } = parse(metricsSchema, q);
+    return this.workers.getMetrics(range, metric, null);
   }
 
   @Public()
   @Get(R.FAILURES)
   public failures(@Query() q: Record<string, string>) {
-    const { range, queue } = parse(rangeSchema.merge(queueFilter), q);
-    return this.workers.getFailures(range, queue ?? null);
+    return this.workers.getFailures(parse(rangeSchema, q).range, null);
   }
 
   @Public()
   @Get(R.DELAYED)
-  public delayed(@Query() q: Record<string, string>) {
-    return this.workers.getDelayed(parse(queueFilter, q).queue ?? null);
+  public delayed() {
+    return this.workers.getDelayed();
   }
 
   @Public()
   @Get(R.EVENTS)
   public events(@Query() q: Record<string, string>) {
-    const { range, queue } = parse(rangeSchema.merge(queueFilter), q);
-    return this.workers.getEvents(range, queue ?? null);
+    return this.workers.getEvents(parse(rangeSchema, q).range);
   }
 
   @Public()

@@ -57,20 +57,15 @@ describe('Worker & Queue (/ops/workers, /ops/queues) — backend unavailable', (
 
   it('overview: provider BullMQ, background processing down, số liệu queue có lý do "disconnected"', async () => {
     const { status, body } = await call<{
-      provider: { driver: string; product: string; backend: string; endpoint: string };
+      provider: { product: string; backend: string; endpoint: string };
       health: { status: string; state: string; reasons: { code: string }[] };
       kpis: { waiting: number | null; workers: number; retrying: number | null };
       queues: { available: boolean; reason: string };
       alerts: { rule: string; severity: string }[];
-      events: { type: string }[];
       settings: { pause: boolean; retryFailed: boolean; drain: boolean };
     }>('GET', `${workers}/overview?range=15m`);
     expect(status).toBe(200);
-    expect(body.data.provider).toMatchObject({
-      driver: 'bullmq',
-      product: 'BullMQ',
-      backend: 'Redis',
-    });
+    expect(body.data.provider).toMatchObject({ product: 'BullMQ', backend: 'Redis' });
     expect(body.data.provider.endpoint).not.toContain('@');
     expect(body.data.health).toMatchObject({ status: 'down', state: 'unavailable' });
     expect(body.data.health.reasons[0]!.code).toBe('unavailable');
@@ -79,7 +74,6 @@ describe('Worker & Queue (/ops/workers, /ops/queues) — backend unavailable', (
     expect(body.data.alerts).toEqual([
       expect.objectContaining({ rule: 'BROKER_UNAVAILABLE', severity: 'critical' }),
     ]);
-    expect(body.data.events.map((e) => e.type)).toContain('alert_started');
     // Drain mặc định tắt.
     expect(body.data.settings).toMatchObject({ pause: true, retryFailed: true, drain: false });
   });
@@ -101,11 +95,12 @@ describe('Worker & Queue (/ops/workers, /ops/queues) — backend unavailable', (
       `${workers}/delayed`,
     );
     expect(d.body.data).toMatchObject({ total: null, jobs: { available: false } });
-    const m = await call<{ metric: string; queue: string }>(
+    const m = await call<{ unit: string; series: { id: string }[] }>(
       'GET',
       `${queues}/system.events/metrics?metric=waiting&range=6h`,
     );
-    expect(m.body.data).toMatchObject({ metric: 'waiting', queue: 'system.events' });
+    expect(m.body.data.unit).toBe('jobs');
+    expect(m.body.data.series[0]?.id).toBe('waiting');
     expect((await call('GET', `${workers}/metrics?metric=nope`)).status).toBe(400);
   });
 

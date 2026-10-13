@@ -37,7 +37,7 @@ const context = (req: FastifyRequest): QueueOperationContext => ({
 });
 
 /**
- * Worker & Queue — nhìn theo queue: bảng queue, chi tiết, job, lỗi, sự kiện, số đo theo thời gian; và thao tác
+ * Worker & Queue — nhìn theo queue: bảng queue, chi tiết, job, lỗi, số đo theo thời gian; và thao tác
  * queue (pause / resume / retry job lỗi / drain) bật tắt bằng env, có xác nhận và audit.
  */
 @Controller(R.PREFIX)
@@ -74,12 +74,6 @@ export class QueueOpsController {
   @Get(R.FAILURES)
   public failures(@Param('name') name: string, @Query() q: Record<string, string>) {
     return this.workers.getFailures(parse(rangeSchema, q).range, parse(nameSchema, name));
-  }
-
-  @Public()
-  @Get(R.EVENTS)
-  public events(@Param('name') name: string, @Query() q: Record<string, string>) {
-    return this.workers.getEvents(parse(rangeSchema, q).range, parse(nameSchema, name));
   }
 
   @Public()
