@@ -2,7 +2,7 @@ import React from 'react';
 import { APP_NAME, NAVIGATION_ITEMS, type NavigationTabId } from '../constants/index';
 import { ROUTES } from '../../routes/index';
 import { useLocale } from '../i18n/index';
-import { Home, Sliders, Terminal, Boxes, Globe } from 'lucide-react';
+import { Home, Terminal, Boxes, Globe } from 'lucide-react';
 
 interface HeaderProps {
   activeTab?: NavigationTabId;
@@ -15,9 +15,6 @@ export const Header: React.FC<HeaderProps> = ({ activeTab = 'home', onTabChange 
   const resolveNavIcon = (id: NavigationTabId) => {
     switch (id) {
       case 'home':
-        return <Home size={15} />;
-      case 'ops':
-        return <Sliders size={15} />;
       default:
         return <Home size={15} />;
     }

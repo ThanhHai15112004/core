@@ -89,13 +89,14 @@ src/
 │       └── locales/vi|en/         #   Bản dịch chuỗi dùng chung (không thuộc module nào)
 │
 ├── modules/                       # Modules nghiệp vụ dùng chung (Bounded Context)
-│   ├── health/                    # Health check endpoint
+│   ├── health/                    # Health check endpoint (terminus: database, Redis, heap)
 │   │   ├── controllers/           #   GET /api/v1/health
 │   │   └── services/              #   HealthService
-│   └── system-ops/                # Dashboard quản trị hạ tầng
-│       ├── controllers/           #   GET|POST /api/v1/ops/packages/*
-│       ├── services/              #   PackageRegistryService
-│       └── constants/             #   Route constants
+│   ├── system-ops/                # Overview, packages, secrets, configuration cho System Console
+│   │   ├── controllers/           #   /api/v1/ops/overview, /ops/packages/*, /ops/secrets, /ops/configuration
+│   │   ├── services/              #   PackageRegistryService, SystemOverviewService
+│   │   └── routes/                #   Route constants
+│   └── *-ops, traffic, performance, runtimes  # API từng khu vực của System Console (/api/v1/ops/<area>)
 │
 └── project-modules/               # ← THÊM NGHIỆP VỤ MỚI VÀO ĐÂY
     └── .gitkeep                   #   Cắm module nghiệp vụ của dự án vào thư mục này

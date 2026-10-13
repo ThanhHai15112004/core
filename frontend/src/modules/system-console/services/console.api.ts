@@ -2,7 +2,7 @@ import { fetchApi } from '../../../core/services/api';
 import { API_ROUTES } from '../../../routes/index';
 import type { HealthData, OverviewData } from '../types/console.types';
 
-export { getSystemOpsPackages as fetchPackages, executePackageAction } from '../../system-ops/services/system-ops.api';
+export { fetchPackages, executePackageAction } from './packages.api';
 
 /** Overview từ backend chưa có các trường client-side (`lastUpdated`, `isOffline`...). */
 export type OverviewPayload = Omit<OverviewData, 'lastUpdated' | 'isOffline' | 'lastSuccessfulSync'>;

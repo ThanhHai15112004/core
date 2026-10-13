@@ -1,8 +1,9 @@
 import { fetchApi } from '../../../core/services/api';
 import { API_ROUTES } from '../../../routes/index';
-import type { PackageActionResult, PackageSummary } from '../types/system-ops.types';
+import type { PackageActionResult, PackageSummary } from '../types/packages.types';
 
-export function getSystemOpsPackages(): Promise<PackageSummary[]> {
+/** Package hạ tầng đã đăng ký (`ManageablePackage`) và trạng thái — mục Governance → Packages. */
+export function fetchPackages(): Promise<PackageSummary[]> {
   return fetchApi<PackageSummary[]>(API_ROUTES.OPS.PACKAGES);
 }
 

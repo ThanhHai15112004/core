@@ -7,7 +7,7 @@ import type {
   PerformanceMetricKey,
   PerformanceTimeRange,
 } from '../types/console.types';
-import type { PackageActionResult } from '../../system-ops/types/system-ops.types';
+import type { PackageActionResult } from '../types/packages.types';
 import { POLL_INTERVAL_MS } from '../constants/console.constants';
 import { frontendConfig } from '../../../config/index';
 import { useLocale } from '../../../core/i18n/index';

@@ -3,7 +3,7 @@ export type {
   PackageActionDescriptor,
   PackageStatus,
   PackageCategory,
-} from '../../system-ops/types/system-ops.types';
+} from './packages.types';
 
 export type ConsoleSectionId =
   | 'overview'

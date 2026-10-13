@@ -12,7 +12,7 @@ import type {
   SystemEnvironment,
   ToastMessage,
 } from '../types/console.types';
-import type { PackageActionResult } from '../../system-ops/types/system-ops.types';
+import type { PackageActionResult } from '../types/packages.types';
 import type { MetricTrend, PerformanceStats } from '../hooks/useMetricHistory';
 
 export interface ConsoleDataContextValue {

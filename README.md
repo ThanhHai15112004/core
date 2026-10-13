@@ -51,13 +51,14 @@ core/
 │   │   │   └── i18n/              #   Internationalization
 │   │   ├── modules/               # Modules nghiệp vụ dùng chung
 │   │   │   ├── health/            #   GET /api/v1/health
-│   │   │   └── system-ops/        #   Dashboard quản trị hạ tầng /api/v1/ops/*
+│   │   │   ├── system-ops/        #   Overview, packages, secrets, configuration (/api/v1/ops/*)
+│   │   │   └── *-ops, traffic, …  #   API từng khu vực của System Console (/api/v1/ops/<area>)
 │   │   └── project-modules/       # Modules nghiệp vụ riêng của dự án (cắm vào)
 │   └── test/                    # Test suite (unit + feature)
 ├── frontend/                    # React 19 + Vite 8
 │   └── src/
 │       ├── core/                  # UI + kỹ thuật dùng chung (copy được sang dự án khác)
-│       └── modules/               # UI nghiệp vụ (home, system-ops)
+│       └── modules/               # UI nghiệp vụ (home, system-console)
 ├── docker/                      # Dockerfiles + Nginx config
 ├── deploy/                      # Scripts VPS setup + systemd service
 ├── docker-compose.yml
@@ -96,7 +97,7 @@ JWT_REFRESH_SECRET=...       # Tối thiểu 32 ký tự, khác ACCESS
 
 Truy cập:
 - **Backend API**: http://localhost:3005/api/v1/health
-- **System-Ops Dashboard**: http://localhost:3005/api/v1/ops/packages
+- **Packages API**: http://localhost:3005/api/v1/ops/packages
 - **Runtimes API**: http://localhost:3005/api/v1/ops/runtimes
 - **Frontend**: http://localhost:5175 (System Console: `#system-console/runtimes`)
 
@@ -212,7 +213,7 @@ sudo systemctl enable core-framework
 ## Kiến Trúc Nổi Bật
 
 ### ManageablePackage Pattern
-Mỗi package hạ tầng tự báo cáo trạng thái (`healthy/warning/error`) về System-Ops dashboard thông qua interface `ManageablePackage`. Xem thêm tại [`.agents/AGENTS.md`](.agents/AGENTS.md) — Mục 12.
+Mỗi package hạ tầng tự báo cáo trạng thái (`healthy/warning/error`) về System Console (mục Governance → Packages) thông qua interface `ManageablePackage`. Xem thêm tại [`.agents/AGENTS.md`](.agents/AGENTS.md) — Mục 12.
 
 ### Multi-Runtime Architecture
 Cùng 1 codebase phục vụ 4 chế độ chạy độc lập: `api` (HTTP), `worker` (queue consumer BullMQ), `scheduler` (cron), `cli` (command line).

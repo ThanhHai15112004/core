@@ -29,9 +29,7 @@ src/
 │   ├── home/                      # Trang chủ demo
 │   │   └── pages/
 │   │       └── Home.tsx
-│   └── system-ops/                # Dashboard quản trị hạ tầng
-│       └── pages/
-│           └── SystemOpsPage.tsx  #   Gọi /api/v1/ops/packages và hiển thị
+│   └── system-console/            # System Console — giao diện quản lý hạ tầng duy nhất (#system-console)
 │
 ├── providers/                     # Provider gốc toàn app
 │   └── index.tsx                  #   AppProviders wrapper (ErrorBoundary, future: QueryClient)

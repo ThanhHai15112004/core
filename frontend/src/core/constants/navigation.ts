@@ -1,6 +1,6 @@
 import { ROUTES } from '../../routes/index';
 
-export type NavigationTabId = 'home' | 'ops';
+export type NavigationTabId = 'home';
 
 export interface NavigationItem {
   id: NavigationTabId;
@@ -16,11 +16,5 @@ export const NAVIGATION_ITEMS: readonly NavigationItem[] = [
     labelKey: 'header.home',
     icon: '🏠',
     route: ROUTES.HOME,
-  },
-  {
-    id: 'ops',
-    labelKey: 'header.systemOps',
-    icon: '⚙️',
-    route: ROUTES.SYSTEM_OPS,
   },
 ] as const;
