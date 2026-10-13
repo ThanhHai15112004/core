@@ -1,5 +1,5 @@
 export const CONSOLE_STORAGE_KEYS = {
-  THEME: 'core_sys_console_theme',
+  THEME: 'core_sys_console_theme_v2',
   LAST_SECTION: 'core_sys_console_last_section',
   NAV_COLLAPSED: 'core_sys_console_nav_collapsed',
 } as const;

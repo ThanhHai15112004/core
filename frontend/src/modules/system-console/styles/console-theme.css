@@ -1,179 +1,87 @@
 /* ==========================================================================
-   SYSTEM CONTROL PLANE THEME TOKENS
-   Scoped strictly under .console-root to avoid interfering with Home page
+   CẦU NỐI TẠM THỜI: token cũ `--scp-*` của các trang chưa viết lại → token theme mới (`--ui-*`,
+   src/core/theme/tokens.css). Không còn mã màu ở đây. Xoá file này ở phase dọn dẹp.
    ========================================================================== */
-
-/* Light Theme (Default) */
-.console-root[data-theme="light"] {
-  --scp-bg-page: #f8fafc;
-  --scp-bg-surface: #ffffff;
-  --scp-bg-surface-subtle: #f1f5f9;
-  --scp-bg-surface-hover: #e2e8f0;
-  --scp-bg-header: rgba(255, 255, 255, 0.95);
-  --scp-bg-sidebar: #ffffff;
-
-  --scp-border-subtle: #e2e8f0;
-  --scp-border-strong: #cbd5e1;
-  --scp-border-focus: #3b82f6;
-
-  --scp-text-primary: #0f172a;
-  --scp-text-secondary: #475569;
-  --scp-text-muted: #94a3b8;
-  --scp-text-inverse: #ffffff;
-
-  --scp-primary: #2563eb;
-  --scp-primary-hover: #1d4ed8;
-  --scp-primary-subtle: #eff6ff;
-  --scp-primary-text: #1e40af;
-
-  --scp-success: #059669;
-  --scp-success-bg: #ecfdf5;
-  --scp-success-border: #a7f3d0;
-  --scp-success-text: #065f46;
-
-  --scp-warning: #d97706;
-  --scp-warning-bg: #fffbeb;
-  --scp-warning-border: #fde68a;
-  --scp-warning-text: #92400e;
-
-  --scp-danger: #dc2626;
-  --scp-danger-bg: #fef2f2;
-  --scp-danger-border: #fecaca;
-  --scp-danger-text: #991b1b;
-
-  --scp-info: #0284c7;
-  --scp-info-bg: #f0f9ff;
-  --scp-info-border: #bae6fd;
-  --scp-info-text: #0369a1;
-
-  --scp-shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-  --scp-shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.07), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
-  --scp-shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -4px rgba(0, 0, 0, 0.04);
-  --scp-shadow-modal: 0 20px 25px -5px rgba(0, 0, 0, 0.15), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
-
-  --scp-terminal-bg: #0f172a;
-  --scp-terminal-text: #e2e8f0;
-  --scp-terminal-border: #334155;
-
-  /* Environment Badges */
-  --scp-badge-prod-bg: #fef2f2;
-  --scp-badge-prod-border: #f87171;
-  --scp-badge-prod-text: #991b1b;
-  --scp-badge-staging-bg: #fffbeb;
-  --scp-badge-staging-border: #fcd34d;
-  --scp-badge-staging-text: #92400e;
-  --scp-badge-dev-bg: #eff6ff;
-  --scp-badge-dev-border: #93c5fd;
-  --scp-badge-dev-text: #1e40af;
-
-  /* Performance Chart */
-  --scp-chart-grid: rgba(0, 0, 0, 0.06);
-  --scp-chart-line: #2563eb;
-  --scp-series-1: #2563eb;
-  --scp-series-2: #d97706;
-  --scp-series-3: #7c3aed;
-  --scp-series-4: #0d9488;
-  --scp-series-5: #db2777;
-  --scp-chart-fill-start: rgba(37, 99, 235, 0.18);
-  --scp-chart-fill-end: rgba(37, 99, 235, 0.0);
-  --scp-chart-point: #2563eb;
-  --scp-chart-tooltip-bg: #0f172a;
-  --scp-chart-tooltip-border: #334155;
-  --scp-chart-tooltip-text: #f8fafc;
-
-  /* Skeleton Loading */
-  --scp-skeleton-bg: #e2e8f0;
-  --scp-skeleton-shine: #f1f5f9;
-  --scp-offline-dim: 0.45;
-}
-
-/* Dark Theme */
-.console-root[data-theme="dark"] {
-  --scp-bg-page: #0b0f19;
-  --scp-bg-surface: #131b2e;
-  --scp-bg-surface-subtle: #1c2640;
-  --scp-bg-surface-hover: #253354;
-  --scp-bg-header: rgba(19, 27, 46, 0.95);
-  --scp-bg-sidebar: #0f172a;
-
-  --scp-border-subtle: #1e293b;
-  --scp-border-strong: #334155;
-  --scp-border-focus: #60a5fa;
-
-  --scp-text-primary: #f8fafc;
-  --scp-text-secondary: #94a3b8;
-  --scp-text-muted: #64748b;
-  --scp-text-inverse: #0f172a;
-
-  --scp-primary: #3b82f6;
-  --scp-primary-hover: #60a5fa;
-  --scp-primary-subtle: rgba(59, 130, 246, 0.15);
-  --scp-primary-text: #93c5fd;
-
-  --scp-success: #10b981;
-  --scp-success-bg: rgba(16, 185, 129, 0.15);
-  --scp-success-border: rgba(16, 185, 129, 0.3);
-  --scp-success-text: #34d399;
-
-  --scp-warning: #f59e0b;
-  --scp-warning-bg: rgba(245, 158, 11, 0.15);
-  --scp-warning-border: rgba(245, 158, 11, 0.3);
-  --scp-warning-text: #fbbf24;
-
-  --scp-danger: #ef4444;
-  --scp-danger-bg: rgba(239, 68, 68, 0.15);
-  --scp-danger-border: rgba(239, 68, 68, 0.3);
-  --scp-danger-text: #f87171;
-
-  --scp-info: #38bdf8;
-  --scp-info-bg: rgba(56, 189, 248, 0.15);
-  --scp-info-border: rgba(56, 189, 248, 0.3);
-  --scp-info-text: #7dd3fc;
-
-  --scp-shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.4);
-  --scp-shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.5), 0 2px 4px -2px rgba(0, 0, 0, 0.4);
-  --scp-shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.6), 0 4px 6px -4px rgba(0, 0, 0, 0.5);
-  --scp-shadow-modal: 0 20px 25px -5px rgba(0, 0, 0, 0.8), 0 8px 10px -6px rgba(0, 0, 0, 0.6);
-
-  --scp-terminal-bg: #090d16;
-  --scp-terminal-text: #cbd5e1;
-  --scp-terminal-border: #1e293b;
-
-  /* Environment Badges */
-  --scp-badge-prod-bg: rgba(220, 38, 38, 0.18);
-  --scp-badge-prod-border: rgba(239, 68, 68, 0.45);
-  --scp-badge-prod-text: #fca5a5;
-  --scp-badge-staging-bg: rgba(217, 119, 6, 0.18);
-  --scp-badge-staging-border: rgba(245, 158, 11, 0.45);
-  --scp-badge-staging-text: #fde68a;
-  --scp-badge-dev-bg: rgba(37, 99, 235, 0.18);
-  --scp-badge-dev-border: rgba(96, 165, 250, 0.45);
-  --scp-badge-dev-text: #93c5fd;
-
-  /* Performance Chart */
-  --scp-chart-grid: rgba(255, 255, 255, 0.06);
-  --scp-chart-line: #3b82f6;
-  --scp-series-1: #60a5fa;
-  --scp-series-2: #fbbf24;
-  --scp-series-3: #a78bfa;
-  --scp-series-4: #2dd4bf;
-  --scp-series-5: #f472b6;
-  --scp-chart-fill-start: rgba(59, 130, 246, 0.25);
-  --scp-chart-fill-end: rgba(59, 130, 246, 0.0);
-  --scp-chart-point: #60a5fa;
-  --scp-chart-tooltip-bg: #1e293b;
-  --scp-chart-tooltip-border: #475569;
-  --scp-chart-tooltip-text: #f8fafc;
-
-  /* Skeleton Loading */
-  --scp-skeleton-bg: #1e293b;
-  --scp-skeleton-shine: #334155;
-  --scp-offline-dim: 0.35;
-}
-
-/* Base resets within console-root */
 .console-root {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --scp-bg-page: var(--ui-bg);
+  --scp-bg-surface: var(--ui-panel);
+  --scp-bg-surface-subtle: var(--ui-panel-2);
+  --scp-bg-surface-hover: var(--ui-panel-3);
+  --scp-bg-header: var(--ui-elevated);
+  --scp-bg-sidebar: var(--ui-elevated);
+
+  --scp-border-subtle: var(--ui-border);
+  --scp-border-strong: var(--ui-border-strong);
+  --scp-border-focus: var(--ui-focus);
+
+  --scp-text-primary: var(--ui-text);
+  --scp-text-secondary: var(--ui-text-2);
+  --scp-text-muted: var(--ui-muted);
+  --scp-text-inverse: var(--ui-inverse);
+
+  --scp-primary: var(--ui-primary);
+  --scp-primary-hover: var(--ui-primary-hover);
+  --scp-primary-subtle: var(--ui-primary-subtle);
+  --scp-primary-text: var(--ui-info-fg);
+
+  --scp-success: var(--ui-ok);
+  --scp-success-bg: var(--ui-ok-bg);
+  --scp-success-border: var(--ui-ok-border);
+  --scp-success-text: var(--ui-ok-fg);
+
+  --scp-warning: var(--ui-warn);
+  --scp-warning-bg: var(--ui-warn-bg);
+  --scp-warning-border: var(--ui-warn-border);
+  --scp-warning-text: var(--ui-warn-fg);
+
+  --scp-danger: var(--ui-crit);
+  --scp-danger-bg: var(--ui-crit-bg);
+  --scp-danger-border: var(--ui-crit-border);
+  --scp-danger-text: var(--ui-crit-fg);
+
+  --scp-info: var(--ui-info);
+  --scp-info-bg: var(--ui-info-bg);
+  --scp-info-border: var(--ui-info-border);
+  --scp-info-text: var(--ui-info-fg);
+
+  --scp-shadow-sm: var(--ui-shadow-sm);
+  --scp-shadow-md: var(--ui-shadow-md);
+  --scp-shadow-lg: var(--ui-shadow-lg);
+  --scp-shadow-modal: var(--ui-shadow-lg);
+
+  --scp-terminal-bg: var(--ui-code-bg);
+  --scp-terminal-text: var(--ui-code-text);
+  --scp-terminal-border: var(--ui-border);
+
+  --scp-badge-prod-bg: var(--ui-crit-bg);
+  --scp-badge-prod-border: var(--ui-crit-border);
+  --scp-badge-prod-text: var(--ui-crit-fg);
+  --scp-badge-staging-bg: var(--ui-warn-bg);
+  --scp-badge-staging-border: var(--ui-warn-border);
+  --scp-badge-staging-text: var(--ui-warn-fg);
+  --scp-badge-dev-bg: var(--ui-info-bg);
+  --scp-badge-dev-border: var(--ui-info-border);
+  --scp-badge-dev-text: var(--ui-info-fg);
+
+  --scp-chart-grid: var(--ui-chart-grid);
+  --scp-chart-line: var(--ui-series-6);
+  --scp-series-1: var(--ui-series-6);
+  --scp-series-2: var(--ui-series-2);
+  --scp-series-3: var(--ui-series-7);
+  --scp-series-4: var(--ui-series-3);
+  --scp-series-5: var(--ui-series-5);
+  --scp-chart-fill-start: var(--ui-primary-subtle);
+  --scp-chart-fill-end: transparent;
+  --scp-chart-point: var(--ui-series-6);
+  --scp-chart-tooltip-bg: var(--ui-chart-tooltip-bg);
+  --scp-chart-tooltip-border: var(--ui-chart-tooltip-border);
+  --scp-chart-tooltip-text: var(--ui-chart-tooltip-text);
+
+  --scp-skeleton-bg: var(--ui-skeleton);
+  --scp-skeleton-shine: var(--ui-skeleton-shine);
+  --scp-offline-dim: 0.4;
+
+  font-family: var(--font-sans);
   color: var(--scp-text-primary);
   background-color: var(--scp-bg-page);
   min-height: 100vh;

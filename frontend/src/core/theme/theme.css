@@ -1,0 +1,183 @@
+/* ==========================================================================
+   ENTRY CSS của bộ UI dùng chung (core/ui). Chỉ import ở app dùng kit
+   (System Console) → trang Home không bị ảnh hưởng.
+   - Không dùng preflight toàn cục của Tailwind: reset nằm trong @layer base, phạm vi [data-theme].
+   - Xoá palette mặc định của Tailwind: chỉ còn màu từ tokens.css (không thể viết `text-red-500`).
+   ========================================================================== */
+@layer theme, base, components, utilities;
+
+@import 'tailwindcss/theme.css' layer(theme);
+@import 'tailwindcss/utilities.css' layer(utilities);
+
+@import '@fontsource-variable/inter';
+@import '@fontsource/jetbrains-mono/400.css';
+@import '@fontsource/jetbrains-mono/500.css';
+
+@import './tokens.css';
+
+@custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
+
+/* Thang đo không phụ thuộc theme */
+@theme {
+  --color-*: initial;
+  --font-*: initial;
+  --text-*: initial;
+  --radius-*: initial;
+  --shadow-*: initial;
+
+  --font-sans: 'Inter Variable', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --text-2xs: 0.6875rem;
+  --text-2xs--line-height: 1rem;
+  --text-xs: 0.75rem;
+  --text-xs--line-height: 1.125rem;
+  --text-sm: 0.8125rem;
+  --text-sm--line-height: 1.25rem;
+  --text-base: 0.875rem;
+  --text-base--line-height: 1.375rem;
+  --text-md: 1rem;
+  --text-md--line-height: 1.5rem;
+  --text-lg: 1.25rem;
+  --text-lg--line-height: 1.75rem;
+  --text-xl: 1.5rem;
+  --text-xl--line-height: 2rem;
+
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-full: 9999px;
+
+  --animate-shimmer: ui-shimmer 1.4s ease-in-out infinite;
+  @keyframes ui-shimmer {
+    0% {
+      background-position: -200% 0;
+    }
+    100% {
+      background-position: 200% 0;
+    }
+  }
+}
+
+/* Màu: map token theme → utility (bg-panel, text-muted, border-border, text-crit-fg…) */
+@theme inline {
+  --color-transparent: transparent;
+  --color-current: currentColor;
+
+  --color-bg: var(--ui-bg);
+  --color-elevated: var(--ui-elevated);
+  --color-panel: var(--ui-panel);
+  --color-panel-2: var(--ui-panel-2);
+  --color-panel-3: var(--ui-panel-3);
+  --color-overlay: var(--ui-overlay);
+
+  --color-border: var(--ui-border);
+  --color-border-strong: var(--ui-border-strong);
+  --color-focus: var(--ui-focus);
+
+  --color-fg: var(--ui-text);
+  --color-fg-2: var(--ui-text-2);
+  --color-muted: var(--ui-muted);
+  --color-faint: var(--ui-faint);
+  --color-inverse: var(--ui-inverse);
+
+  --color-primary: var(--ui-primary);
+  --color-primary-hover: var(--ui-primary-hover);
+  --color-primary-fg: var(--ui-primary-fg);
+  --color-primary-subtle: var(--ui-primary-subtle);
+
+  --color-ok: var(--ui-ok);
+  --color-ok-bg: var(--ui-ok-bg);
+  --color-ok-border: var(--ui-ok-border);
+  --color-ok-fg: var(--ui-ok-fg);
+  --color-warn: var(--ui-warn);
+  --color-warn-bg: var(--ui-warn-bg);
+  --color-warn-border: var(--ui-warn-border);
+  --color-warn-fg: var(--ui-warn-fg);
+  --color-crit: var(--ui-crit);
+  --color-crit-bg: var(--ui-crit-bg);
+  --color-crit-border: var(--ui-crit-border);
+  --color-crit-fg: var(--ui-crit-fg);
+  --color-info: var(--ui-info);
+  --color-info-bg: var(--ui-info-bg);
+  --color-info-border: var(--ui-info-border);
+  --color-info-fg: var(--ui-info-fg);
+  --color-unknown: var(--ui-unknown);
+  --color-unknown-bg: var(--ui-unknown-bg);
+  --color-unknown-border: var(--ui-unknown-border);
+  --color-unknown-fg: var(--ui-unknown-fg);
+
+  --color-level-fatal: var(--ui-level-fatal);
+  --color-level-error: var(--ui-level-error);
+  --color-level-warn: var(--ui-level-warn);
+  --color-level-info: var(--ui-level-info);
+  --color-level-debug: var(--ui-level-debug);
+
+  --color-series-1: var(--ui-series-1);
+  --color-series-2: var(--ui-series-2);
+  --color-series-3: var(--ui-series-3);
+  --color-series-4: var(--ui-series-4);
+  --color-series-5: var(--ui-series-5);
+  --color-series-6: var(--ui-series-6);
+  --color-series-7: var(--ui-series-7);
+  --color-series-8: var(--ui-series-8);
+
+  --color-skeleton: var(--ui-skeleton);
+  --color-skeleton-shine: var(--ui-skeleton-shine);
+  --color-code-bg: var(--ui-code-bg);
+  --color-code: var(--ui-code-text);
+
+  --shadow-sm: var(--ui-shadow-sm);
+  --shadow-md: var(--ui-shadow-md);
+  --shadow-lg: var(--ui-shadow-lg);
+}
+
+/* Reset + nền tảng trong phạm vi app dùng kit (kể cả nội dung portal của Radix nằm trong body) */
+@layer base {
+  html[data-theme] body {
+    background-color: var(--ui-bg);
+    color: var(--ui-text);
+    font-family: var(--font-sans);
+    font-size: var(--text-base);
+    line-height: var(--text-base--line-height);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  html[data-theme] body *,
+  html[data-theme] body *::before,
+  html[data-theme] body *::after {
+    box-sizing: border-box;
+    border-width: 0;
+    border-style: solid;
+    border-color: var(--ui-border);
+  }
+
+  html[data-theme] button,
+  html[data-theme] input,
+  html[data-theme] select,
+  html[data-theme] textarea {
+    font: inherit;
+    color: inherit;
+    background: transparent;
+  }
+
+  html[data-theme] button:not(:disabled),
+  html[data-theme] [role='button']:not(:disabled) {
+    cursor: pointer;
+  }
+
+  html[data-theme] :focus-visible {
+    outline: 2px solid var(--ui-focus);
+    outline-offset: 1px;
+  }
+
+  html[data-theme] ::selection {
+    background: var(--ui-primary-subtle);
+  }
+
+  html[data-theme] * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--ui-border-strong) transparent;
+  }
+}

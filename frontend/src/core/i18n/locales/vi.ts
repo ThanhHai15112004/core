@@ -1,4 +1,7 @@
+import { uiVi } from './ui.vi';
+
 export const vi = {
+  ui: uiVi,
   common: {
     loading: 'Đang tải...',
     viewDetails: 'Xem chi tiết',

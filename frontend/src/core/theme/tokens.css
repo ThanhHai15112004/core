@@ -1,0 +1,179 @@
+/* ==========================================================================
+   THEME TOKENS — nguồn màu DUY NHẤT của giao diện.
+   Component không bao giờ viết mã màu; chỉ dùng utility map từ các biến này
+   (xem tailwind.css) hoặc `var(--ui-*)`. Thêm theme mới = thêm một block giá trị.
+   ========================================================================== */
+
+/* Dark (mặc định) — bảng màu kiểu Grafana */
+[data-theme='dark'] {
+  color-scheme: dark;
+
+  /* Nền & bề mặt */
+  --ui-bg: #111217;
+  --ui-elevated: #181b1f;
+  --ui-panel: #181b1f;
+  --ui-panel-2: #202227;
+  --ui-panel-3: #2a2d33;
+  --ui-overlay: rgba(0, 0, 0, 0.62);
+
+  /* Viền */
+  --ui-border: #2a2d33;
+  --ui-border-strong: #3b3f46;
+  --ui-focus: #5794f2;
+
+  /* Chữ */
+  --ui-text: #d8d9e0;
+  --ui-text-2: #b2b4bf;
+  --ui-muted: #8e909c;
+  --ui-faint: #62646e;
+  --ui-inverse: #111217;
+
+  /* Hành động chính */
+  --ui-primary: #3d71d9;
+  --ui-primary-hover: #5a8ae6;
+  --ui-primary-fg: #ffffff;
+  --ui-primary-subtle: rgba(61, 113, 217, 0.16);
+
+  /* Trạng thái: base / nền nhạt / viền / chữ trên nền tối */
+  --ui-ok: #73bf69;
+  --ui-ok-bg: rgba(115, 191, 105, 0.12);
+  --ui-ok-border: rgba(115, 191, 105, 0.38);
+  --ui-ok-fg: #96d98d;
+
+  --ui-warn: #ff9830;
+  --ui-warn-bg: rgba(255, 152, 48, 0.12);
+  --ui-warn-border: rgba(255, 152, 48, 0.4);
+  --ui-warn-fg: #ffb357;
+
+  --ui-crit: #f2495c;
+  --ui-crit-bg: rgba(242, 73, 92, 0.13);
+  --ui-crit-border: rgba(242, 73, 92, 0.42);
+  --ui-crit-fg: #ff7383;
+
+  --ui-info: #5794f2;
+  --ui-info-bg: rgba(87, 148, 242, 0.13);
+  --ui-info-border: rgba(87, 148, 242, 0.4);
+  --ui-info-fg: #8ab8ff;
+
+  --ui-unknown: #6e7280;
+  --ui-unknown-bg: rgba(142, 144, 156, 0.12);
+  --ui-unknown-border: rgba(142, 144, 156, 0.32);
+  --ui-unknown-fg: #a8aab4;
+
+  /* Log level */
+  --ui-level-fatal: #c4162a;
+  --ui-level-error: #f2495c;
+  --ui-level-warn: #ff9830;
+  --ui-level-info: #5794f2;
+  --ui-level-debug: #8e909c;
+
+  /* Series biểu đồ (palette classic) */
+  --ui-series-1: #7eb26d;
+  --ui-series-2: #eab839;
+  --ui-series-3: #6ed0e0;
+  --ui-series-4: #ef843c;
+  --ui-series-5: #e24d42;
+  --ui-series-6: #1f78c1;
+  --ui-series-7: #ba43a9;
+  --ui-series-8: #705da0;
+
+  /* Biểu đồ */
+  --ui-chart-grid: rgba(204, 204, 220, 0.07);
+  --ui-chart-axis: #8e909c;
+  --ui-chart-tooltip-bg: #202227;
+  --ui-chart-tooltip-border: #3b3f46;
+  --ui-chart-tooltip-text: #d8d9e0;
+
+  /* Skeleton / bóng */
+  --ui-skeleton: #202227;
+  --ui-skeleton-shine: #2a2d33;
+  --ui-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --ui-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.45);
+  --ui-shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.6);
+
+  /* Code / terminal */
+  --ui-code-bg: #0b0c0f;
+  --ui-code-text: #c7c9d3;
+}
+
+/* Light */
+[data-theme='light'] {
+  color-scheme: light;
+
+  --ui-bg: #f4f5f5;
+  --ui-elevated: #ffffff;
+  --ui-panel: #ffffff;
+  --ui-panel-2: #f4f5f5;
+  --ui-panel-3: #e8e9eb;
+  --ui-overlay: rgba(24, 27, 31, 0.45);
+
+  --ui-border: #dcdee1;
+  --ui-border-strong: #c3c6cb;
+  --ui-focus: #3d71d9;
+
+  --ui-text: #24292e;
+  --ui-text-2: #444b52;
+  --ui-muted: #6c737a;
+  --ui-faint: #9da3a9;
+  --ui-inverse: #ffffff;
+
+  --ui-primary: #3d71d9;
+  --ui-primary-hover: #2f5fc0;
+  --ui-primary-fg: #ffffff;
+  --ui-primary-subtle: rgba(61, 113, 217, 0.1);
+
+  --ui-ok: #1b855e;
+  --ui-ok-bg: rgba(27, 133, 94, 0.1);
+  --ui-ok-border: rgba(27, 133, 94, 0.35);
+  --ui-ok-fg: #0f6b49;
+
+  --ui-warn: #c75b00;
+  --ui-warn-bg: rgba(255, 152, 48, 0.14);
+  --ui-warn-border: rgba(199, 91, 0, 0.38);
+  --ui-warn-fg: #9a4600;
+
+  --ui-crit: #d0273a;
+  --ui-crit-bg: rgba(208, 39, 58, 0.09);
+  --ui-crit-border: rgba(208, 39, 58, 0.36);
+  --ui-crit-fg: #a8172a;
+
+  --ui-info: #1f62e0;
+  --ui-info-bg: rgba(31, 98, 224, 0.09);
+  --ui-info-border: rgba(31, 98, 224, 0.34);
+  --ui-info-fg: #154ab0;
+
+  --ui-unknown: #7b8087;
+  --ui-unknown-bg: rgba(123, 128, 135, 0.1);
+  --ui-unknown-border: rgba(123, 128, 135, 0.32);
+  --ui-unknown-fg: #555b62;
+
+  --ui-level-fatal: #a8172a;
+  --ui-level-error: #d0273a;
+  --ui-level-warn: #c75b00;
+  --ui-level-info: #1f62e0;
+  --ui-level-debug: #6c737a;
+
+  --ui-series-1: #56a64b;
+  --ui-series-2: #c99a00;
+  --ui-series-3: #2fa5b8;
+  --ui-series-4: #e0752d;
+  --ui-series-5: #d0273a;
+  --ui-series-6: #1f62e0;
+  --ui-series-7: #a1309a;
+  --ui-series-8: #6550a8;
+
+  --ui-chart-grid: rgba(36, 41, 46, 0.08);
+  --ui-chart-axis: #6c737a;
+  --ui-chart-tooltip-bg: #ffffff;
+  --ui-chart-tooltip-border: #dcdee1;
+  --ui-chart-tooltip-text: #24292e;
+
+  --ui-skeleton: #e8e9eb;
+  --ui-skeleton-shine: #f4f5f5;
+  --ui-shadow-sm: 0 1px 2px rgba(24, 27, 31, 0.08);
+  --ui-shadow-md: 0 4px 12px rgba(24, 27, 31, 0.1);
+  --ui-shadow-lg: 0 12px 32px rgba(24, 27, 31, 0.16);
+
+  --ui-code-bg: #f4f5f5;
+  --ui-code-text: #24292e;
+}

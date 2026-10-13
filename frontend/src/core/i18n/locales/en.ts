@@ -1,6 +1,8 @@
 import type { TranslationKey } from './vi';
+import { uiEn } from './ui.en';
 
 export const en: TranslationKey = {
+  ui: uiEn,
   common: {
     loading: 'Loading...',
     viewDetails: 'View details',
