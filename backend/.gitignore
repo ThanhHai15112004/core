@@ -15,7 +15,7 @@ coverage/
 
 # Logs
 *.log
-logs/
+/logs/
 
 # Operating systems
 .DS_Store

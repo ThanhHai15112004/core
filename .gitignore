@@ -14,9 +14,11 @@ coverage/
 !.env.example
 !.env.*.example
 
-# Logs
+# Logs (chỉ thư mục log ở gốc — không bắt các thư mục mã nguồn tên `logs`)
 *.log
-logs/
+/logs/
+/backend/logs/
+/frontend/logs/
 
 # Operating systems
 .DS_Store
