@@ -45,6 +45,8 @@ export interface DataTableProps<T> {
   activeRowId?: string | null;
   /** Viền trái theo tông của hàng (vd. hàng lỗi). */
   rowTone?: (row: T) => Tone | undefined;
+  /** Class thêm cho hàng (vd. tô nhẹ dòng mới đến). */
+  rowClassName?: (row: T) => string | undefined;
   initialSorting?: SortingState;
   /** Sort phía server: truyền state + handler, bảng không tự sort. */
   sorting?: SortingState;
@@ -72,6 +74,7 @@ export function DataTable<T>({
   onRowClick,
   activeRowId,
   rowTone,
+  rowClassName,
   initialSorting = [],
   sorting: controlledSorting,
   onSortingChange,
@@ -111,7 +114,10 @@ export function DataTable<T>({
   const virtualRows = virtual ? virtualizer.getVirtualItems() : null;
   const padTop = virtualRows && virtualRows.length ? virtualRows[0].start : 0;
   const padBottom = virtualRows && virtualRows.length ? virtualizer.getTotalSize() - virtualRows[virtualRows.length - 1].end : 0;
-  const visible = useMemo(() => (virtualRows ? virtualRows.map((v) => rows[v.index]) : rows), [virtualRows, rows]);
+  const visible = useMemo(
+    () => (virtualRows ? virtualRows.map((v) => ({ row: rows[v.index], index: v.index })) : rows.map((row, index) => ({ row, index }))),
+    [virtualRows, rows],
+  );
   const colCount = table.getVisibleLeafColumns().length;
 
   return (
@@ -162,17 +168,20 @@ export function DataTable<T>({
                 <td colSpan={colCount} style={{ height: padTop }} />
               </tr>
             )}
-            {visible.map((row) => {
+            {visible.map(({ row, index }) => {
               const tone = rowTone?.(row.original);
               const active = activeRowId !== undefined && activeRowId === row.id;
               return (
                 <tr
                   key={row.id}
+                  ref={virtual ? virtualizer.measureElement : undefined}
+                  data-index={index}
                   onClick={onRowClick ? () => onRowClick(row.original) : undefined}
                   className={cn(
                     'border-b border-border last:border-b-0',
                     onRowClick && 'cursor-pointer hover:bg-panel-2',
                     active && 'bg-primary-subtle hover:bg-primary-subtle',
+                    rowClassName?.(row.original),
                   )}
                   style={{ height: TABLE_ROW_HEIGHT_PX }}
                 >

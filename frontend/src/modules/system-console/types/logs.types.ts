@@ -1,5 +1,5 @@
 export type LogsRange = '15m' | '1h' | '6h' | '24h' | '7d';
-export type LogsTab = 'overview' | 'explorer' | 'errors' | 'traces' | 'audit' | 'configuration';
+export type LogsTab = 'overview' | 'explorer' | 'errors' | 'audit';
 export type LogLevel = 'verbose' | 'debug' | 'info' | 'warn' | 'error' | 'fatal';
 export type LogsWindow = '5m' | '15m' | '1h' | '6h' | '24h' | '7d';
 export type LogMetadata = Record<string, unknown>;

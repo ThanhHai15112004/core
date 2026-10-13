@@ -2903,6 +2903,17 @@ export const en: TranslationKey = {
   },
   logs: {
     subtitle: 'Investigation center — search, filter, correlate and trace what happened across every runtime',
+    page: {
+      trace: 'Trace',
+      settingsTitle: 'Log settings',
+      overrideActive: 'Temporary log level active',
+      levelsHint: 'Logs per level in the last {{range}} — click to filter',
+      countsHidden: 'Remove other filters to see per-level counts',
+      exportAs: 'Export {{format}}',
+      liveHint: 'Fetches new logs every {{sec}} seconds',
+      volumeHint: 'Counted from the Redis log stream; one bar = {{sec}} seconds',
+    },
+    rail: { title: 'Level', all: 'All' },
     lastEvent: 'last event {{when}}',
     state: { streaming: 'Streaming', idle: 'Idle', degraded: 'Degraded', unavailable: 'Unavailable' },
     backend: { redis: 'Redis ring buffer per runtime' },

@@ -1,91 +1,128 @@
-import React from 'react';
+import { useMemo } from 'react';
+import { createColumnHelper } from '@tanstack/react-table';
 import { ArrowDownRight, ArrowRight, ArrowUpRight, Sparkles } from 'lucide-react';
+import { useLocale } from '@core/i18n/index';
+import { useFormat } from '@core/hooks/useFormat';
+import { Badge } from '@core/ui/primitives';
+import { DataTable, RelativeTime } from '@core/ui/blocks';
+import { Sparkline } from '@core/ui/charts';
 import type { ErrorGroupRow } from '../../types/logs.types';
-import { MiniSpark } from './LogBits';
-import { formatCompact } from '../../utils/database-format';
-import { useLocale } from '../../../../core/i18n/index';
 
-export const TrendBadge: React.FC<{ g: ErrorGroupRow }> = ({ g }) => {
+const col = createColumnHelper<ErrorGroupRow>();
+
+/** Xu hướng của nhóm lỗi: mới / tăng / giảm / ổn định (+ spike). */
+export function TrendBadge({ g }: { g: ErrorGroupRow }) {
   const { t } = useLocale();
   if (g.trend === 'new' || g.isNew)
     return (
-      <span className="pf-chip ov-tone-warn">
-        <Sparkles size={11} /> {t('logs.trend.new')}
-      </span>
+      <Badge tone="warn">
+        <Sparkles />
+        {t('logs.trend.new')}
+      </Badge>
     );
   const Icon = g.trend === 'up' ? ArrowUpRight : g.trend === 'down' ? ArrowDownRight : ArrowRight;
+  const tone = g.spiking || g.trend === 'up' ? 'crit' : g.trend === 'down' ? 'ok' : 'unknown';
   return (
-    <span className={`pf-chip ov-tone-${g.spiking || g.trend === 'up' ? 'crit' : g.trend === 'down' ? 'ok' : 'unknown'}`}>
-      <Icon size={11} /> {g.changePercent !== null && g.trend !== 'flat' ? `${g.changePercent > 0 ? '+' : ''}${g.changePercent}%` : t(`logs.trend.${g.trend}`)}
+    <Badge tone={tone}>
+      <Icon />
+      {g.changePercent !== null && g.trend !== 'flat' ? `${g.changePercent > 0 ? '+' : ''}${g.changePercent}%` : t(`logs.trend.${g.trend}`)}
       {g.spiking && ` · ${t('logs.trend.spike')}`}
-    </span>
+    </Badge>
   );
-};
+}
 
-/** Error Groups: gom 10.000 log cùng lỗi thành một dòng — số lần, lần cuối, xu hướng, runtime / job bị ảnh hưởng. */
-export const ErrorGroupTable: React.FC<{ rows: ErrorGroupRow[]; onOpen: (fp: string) => void; now: number; compact?: boolean }> = ({
-  rows,
-  onOpen,
-  now,
-  compact = false,
-}) => {
-  const { t, formatRelative, locale } = useLocale();
-  return (
-    <div className="scp-table-wrap">
-      <table className="scp-table lg-groups">
-        <thead>
-          <tr>
-            <th>{t('logs.groups.error')}</th>
-            <th className="num">{t('logs.groups.count')}</th>
-            <th>{t('logs.groups.lastSeen')}</th>
-            <th>{t('logs.groups.trend')}</th>
-            {!compact && <th>{t('logs.groups.affected')}</th>}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((g) => (
-            <tr
-              key={g.fingerprint}
-              className="lg-row"
-              onClick={() => onOpen(g.fingerprint)}
-              tabIndex={0}
-              onKeyDown={(e) => e.key === 'Enter' && onOpen(g.fingerprint)}
-            >
-              <td className="lg-group-cell">
-                <strong>{g.errorType ?? t('logs.groups.untyped')}</strong>
-                <span className="lg-group-template">{g.template}</span>
-                {g.module && (
-                  <small className="pf-row-note">
-                    {g.module}
-                    {g.frame ? ` · ${g.frame}` : ''}
-                  </small>
-                )}
-              </td>
-              <td className="num">
-                <strong>{formatCompact(g.count, locale)}</strong>
-                {g.total > g.count && <small className="pf-row-note">{t('logs.groups.total', { count: formatCompact(g.total, locale) })}</small>}
-              </td>
-              <td>
-                {g.lastSeen ? formatRelative(g.lastSeen, now) : '—'}
-                {g.firstSeen && <small className="pf-row-note">{t('logs.groups.firstSeen', { when: formatRelative(g.firstSeen, now) })}</small>}
-              </td>
-              <td>
-                <TrendBadge g={g} />
-                {!compact && <MiniSpark values={g.spark} />}
-              </td>
-              {!compact && (
-                <td className="lg-affected">
-                  {[...g.runtimes, ...g.jobTypes.slice(0, 2), ...g.routes.slice(0, 1)].map((x) => (
-                    <span key={x} className="lg-tag">
-                      {x}
-                    </span>
-                  ))}
-                </td>
+/** Nhóm lỗi: gom nhiều log cùng lỗi thành một dòng — số lần, lần cuối, xu hướng, nơi bị ảnh hưởng. */
+export function ErrorGroupTable({ rows, onOpen, compact }: { rows: ErrorGroupRow[]; onOpen: (fp: string) => void; compact?: boolean }) {
+  const { t, formatRelative } = useLocale();
+  const f = useFormat();
+  const columns = useMemo(
+    () => [
+      col.accessor('template', {
+        header: t('logs.groups.error'),
+        cell: (c) => {
+          const g = c.row.original;
+          return (
+            <div className="min-w-0">
+              <div className="truncate font-medium text-fg">{g.errorType ?? t('logs.groups.untyped')}</div>
+              <div className="line-clamp-2 break-words text-xs text-fg-2" title={g.template}>
+                {g.template}
+              </div>
+              {g.module && (
+                <div className="truncate font-mono text-2xs text-faint">
+                  {g.module}
+                  {g.frame ? ` · ${g.frame}` : ''}
+                </div>
               )}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+            </div>
+          );
+        },
+        enableSorting: false,
+      }),
+      col.accessor('count', {
+        header: t('logs.groups.count'),
+        cell: (c) => (
+          <div>
+            <div className="font-semibold text-fg">{f.compact(c.getValue())}</div>
+            {c.row.original.total > c.getValue() && <div className="text-2xs text-faint">{t('logs.groups.total', { count: f.compact(c.row.original.total) })}</div>}
+          </div>
+        ),
+        meta: { align: 'right', mono: true, width: '100px' },
+      }),
+      col.accessor((g) => (g.lastSeen ? Date.parse(g.lastSeen) : 0), {
+        id: 'lastSeen',
+        header: t('logs.groups.lastSeen'),
+        cell: (c) => (
+          <div className="text-xs">
+            <RelativeTime value={c.row.original.lastSeen} className="text-fg-2" />
+            {c.row.original.firstSeen && <div className="text-2xs text-faint">{t('logs.groups.firstSeen', { when: formatRelative(c.row.original.firstSeen) })}</div>}
+          </div>
+        ),
+        meta: { width: '140px' },
+      }),
+      col.display({
+        id: 'trend',
+        header: t('logs.groups.trend'),
+        cell: (c) => (
+          <div className="flex items-center gap-2">
+            <TrendBadge g={c.row.original} />
+            {!compact && <Sparkline values={c.row.original.spark} tone="crit" className="w-16" />}
+          </div>
+        ),
+        meta: { width: compact ? '130px' : '210px' },
+      }),
+      ...(compact
+        ? []
+        : [
+            col.display({
+              id: 'affected',
+              header: t('logs.groups.affected'),
+              cell: (c) => {
+                const g = c.row.original;
+                return (
+                  <div className="flex flex-wrap gap-1">
+                    {[...g.runtimes, ...g.jobTypes.slice(0, 2), ...g.routes.slice(0, 1)].map((x) => (
+                      <Badge key={x} size="xs" className="max-w-40 truncate font-mono">
+                        {x}
+                      </Badge>
+                    ))}
+                  </div>
+                );
+              },
+              meta: { width: '220px' },
+            }),
+          ]),
+    ],
+    [t, f, compact, formatRelative],
   );
-};
+  return (
+    <DataTable
+      data={rows}
+      columns={columns}
+      getRowId={(g) => g.fingerprint}
+      onRowClick={(g) => onOpen(g.fingerprint)}
+      rowTone={(g) => (g.spiking ? 'crit' : g.isNew ? 'warn' : undefined)}
+      initialSorting={[{ id: 'count', desc: true }]}
+      emptyMessage={t('logs.groups.empty')}
+    />
+  );
+}

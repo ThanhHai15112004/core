@@ -2902,6 +2902,17 @@ export const vi = {
   },
   logs: {
     subtitle: 'Trung tâm điều tra — tìm, lọc, liên kết và truy vết chuyện gì đã xảy ra trên mọi runtime',
+    page: {
+      trace: 'Trace',
+      settingsTitle: 'Cấu hình log',
+      overrideActive: 'Level tạm thời đang bật',
+      levelsHint: 'Số log theo level trong {{range}} gần nhất — bấm để lọc',
+      countsHidden: 'Bỏ bộ lọc khác để xem số đếm theo level',
+      exportAs: 'Export {{format}}',
+      liveHint: 'Tự tải log mới mỗi {{sec}} giây',
+      volumeHint: 'Đếm từ stream log Redis; mỗi cột {{sec}} giây',
+    },
+    rail: { title: 'Level', all: 'Tất cả' },
     lastEvent: 'log cuối {{when}}',
     state: { streaming: 'Đang nhận', idle: 'Không có log mới', degraded: 'Suy giảm', unavailable: 'Không khả dụng' },
     backend: { redis: 'Ring buffer Redis mỗi runtime' },

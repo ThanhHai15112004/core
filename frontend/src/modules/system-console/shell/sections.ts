@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import type { TimeRange } from '@core/constants/ui.constants';
 import type { ConsoleSectionId } from '../types/console.types';
+import { LOGS_RANGES } from '../constants/logs';
 
 type Translate = (path: string, params?: Record<string, string | number>) => string;
 
@@ -92,7 +93,15 @@ export const SECTIONS: SectionDef[] = [
     component: load(() => import('../sections/jobs/JobsSection'), 'JobsSection'),
     crumb: (p, t) => (p[0] === 'job' ? `#${(p[1] ?? '').slice(0, 8)}` : p[0] ? t(`jobs.tab.${p[0]}`) : null),
   },
-  { id: 'logs', group: 'governance', icon: FileText, component: load(() => import('../sections/logs/LogsSection'), 'LogsSection'), crumb: tabCrumb('logs'), keywords: ['log', 'error', 'trace'] },
+  {
+    id: 'logs',
+    group: 'governance',
+    icon: FileText,
+    component: load(() => import('../sections/logs/LogsSection'), 'LogsSection'),
+    controls: { ranges: LOGS_RANGES },
+    crumb: (p, t) => (p[0] === 'traces' ? t('logs.tab.traces') : p[0] ? t(`logs.tab.${p[0]}`) : null),
+    keywords: ['log', 'error', 'trace', 'audit'],
+  },
   { id: 'security', group: 'governance', icon: ShieldCheck, component: load(() => import('../sections/SecuritySection'), 'SecuritySection'), keywords: ['jwt', 'auth'] },
   { id: 'secrets', group: 'governance', icon: KeyRound, component: load(() => import('../sections/secrets/SecretsSection'), 'SecretsSection') },
   {

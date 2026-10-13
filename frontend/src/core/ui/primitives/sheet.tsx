@@ -35,6 +35,11 @@ export function SheetContent({ className, children, side = 'right', width = 'md'
       <SheetPrimitive.Overlay className="fixed inset-0 z-50 bg-overlay" />
       <SheetPrimitive.Content
         className={cn('fixed z-50 flex flex-col border-border-strong bg-panel text-fg shadow-lg outline-none', SIDE[side], WIDTH[width], className)}
+        // Focus vào khung drawer thay vì nút đóng (tránh viền focus nổi lên ngay khi mở).
+        onOpenAutoFocus={(e) => {
+          e.preventDefault();
+          (e.currentTarget as HTMLElement).focus();
+        }}
         {...props}
       >
         {children}

@@ -1,156 +1,121 @@
-import React, { useCallback, useState } from 'react';
-import { Pause, Play, Radio, RefreshCw, WifiOff } from 'lucide-react';
+import React from 'react';
+import { FileText, GitBranch, RefreshCw } from 'lucide-react';
+import { useLocale } from '@core/i18n/index';
+import { useLiveQuery } from '@core/data';
+import { Button } from '@core/ui/primitives';
+import { PageHeader, PageTabs, RelativeTime, StatusBanner, type PageTab } from '@core/ui/blocks';
+import type { LogsTab } from '../../types/logs.types';
 import { logsApi } from '../../services/logs.api';
-import { usePolling } from '../../hooks/usePolling';
-import { useLogsRoute } from '../../hooks/useLogsRoute';
-import { LOGS_RANGES, LOGS_STATUS_TONE, LOGS_TABS } from '../../constants/logs';
-import { LogDetailDrawer } from '../../components/logs/LogDetailDrawer';
-import { LogsOverviewView } from './LogsOverviewView';
-import { LogsExplorerView } from './LogsExplorerView';
-import { ErrorGroupDetailView, LogsErrorsView } from './LogsErrorsView';
-import { LogsTraceView } from './LogsTraceView';
-import { LogsAuditView } from './LogsAuditView';
-import { LogsConfigView } from './LogsConfigView';
-import { useLocale } from '../../../../core/i18n/index';
-import { useNow } from '../../../../core/hooks/useNow';
-import '../../styles/console-runtimes.css';
-import '../../styles/console-traffic.css';
-import '../../styles/console-performance.css';
-import '../../styles/console-database.css';
-import '../../styles/console-cache.css';
-import '../../styles/console-worker.css';
-import '../../styles/console-jobs.css';
-import '../../styles/console-logs.css';
+import { LOGS_STATUS_TONE, LOGS_TABS } from '../../constants/logs';
+import { LogDetailSheet } from '../../components/logs/LogDetailSheet';
+import { useLogsPage } from './useLogsPage';
+import { logsKeys } from './logs-keys';
+import { LogsOverviewTab } from './LogsOverviewTab';
+import { LogsExplorerTab } from './LogsExplorerTab';
+import { ErrorGroupDetail, LogsErrorsTab } from './LogsErrorsTab';
+import { LogsAuditTab } from './LogsAuditTab';
+import { LogsTracePage } from './LogsTracePage';
+import { LogsConfigSheet } from './LogsConfigSheet';
 
 /**
- * Logs — Investigation Center của System Console: `logs` (tổng quan), `logs/explorer?…` (tìm / lọc / live tail),
- * `logs/errors[/<fp>]` (nhóm lỗi), `logs/traces[/<id>]` (trace theo correlation), `logs/audit`, `logs/configuration`.
- * Chi tiết một log mở dạng drawer (`?log=<id>`) ở mọi tab. Kho log không truy vấn được → nói rõ, không làm chết Console.
+ * Logs — trung tâm điều tra: Tổng quan · Tìm kiếm · Nhóm lỗi · Audit; Trace là trang con; cấu hình mở dạng sheet;
+ * chi tiết một log mở drawer (`?log=<id>`) ở mọi tab. Kho log không truy vấn được → nói rõ, không làm chết trang.
  */
 export const LogsSection: React.FC = () => {
-  const { t, formatRelative } = useLocale();
-  const now = useNow();
-  const route = useLogsRoute();
-  const { tab, itemId, logId, range, filters, go, explore, openLog, openError, openTrace, setRange, navigate } = route;
-  const [paused, setPaused] = useState(false);
-  const [reloadKey, setReloadKey] = useState(0);
-  const bump = useCallback(() => setReloadKey((k) => k + 1), []);
-  const overview = usePolling(() => logsApi.overview(range), `logs:${range}:${reloadKey}`, undefined, paused);
+  const { t } = useLocale();
+  const page = useLogsPage();
+  const overview = useLiveQuery(logsKeys.overview(page.range), () => logsApi.overview(page.range));
   const data = overview.data;
 
+  const tabs: PageTab<LogsTab>[] = LOGS_TABS.map((id) => ({
+    id,
+    label: t(`logs.tab.${id}`),
+    ...(id === 'errors' ? { count: data?.kpis.uniqueErrors ?? null, countTone: 'crit' as const } : {}),
+  }));
+
   const renderTab = () => {
-    const common = { range, paused, reloadKey, now, navigate };
-    switch (tab) {
+    if (page.isTrace) return <LogsTracePage page={page} />;
+    switch (page.tab) {
       case 'explorer':
-        return (
-          <LogsExplorerView filters={filters} explore={explore} openLog={openLog} openTrace={openTrace} navigate={navigate} now={now} selectedId={logId} />
-        );
+        return <LogsExplorerTab page={page} overview={data} />;
       case 'errors':
-        return itemId ? (
-          <ErrorGroupDetailView {...common} fingerprint={itemId} onBack={() => go('errors')} openLog={openLog} explore={explore} />
-        ) : (
-          <LogsErrorsView {...common} openError={openError} />
-        );
-      case 'traces':
-        return <LogsTraceView id={itemId} openTrace={openTrace} openLog={openLog} navigate={navigate} now={now} />;
+        return page.itemId ? <ErrorGroupDetail page={page} fingerprint={page.itemId} /> : <LogsErrorsTab page={page} />;
       case 'audit':
-        return <LogsAuditView paused={paused} reloadKey={reloadKey} navigate={navigate} />;
-      case 'configuration':
-        return <LogsConfigView reloadKey={reloadKey} onChanged={bump} now={now} />;
+        return <LogsAuditTab page={page} />;
       default:
-        return <LogsOverviewView {...common} data={data} explore={explore} openError={openError} go={go} />;
+        return <LogsOverviewTab page={page} data={data} />;
     }
   };
 
-  const tone = data ? LOGS_STATUS_TONE[data.status] : 'unknown';
-  const showRange = tab === 'overview' || tab === 'errors';
   return (
-    <div className="ov-page">
-      <header className="ov-page-head">
-        <div>
-          <h1 className="ov-page-title">
-            {t('nav.logs')}
-            {data && (
-              <span className={`pf-chip ov-tone-${tone} job-page-status`}>
-                <span className="ov-dot" aria-hidden="true" /> {t(`logs.state.${data.status}`)}
-              </span>
-            )}
-          </h1>
-          <p className="ov-page-subtitle">
-            {t('logs.subtitle')}
-            {data && ` · ${data.environment.toUpperCase()} · ${t('logs.backend.redis')}`}
-            {data?.lastEventAt && ` · ${t('logs.lastEvent', { when: formatRelative(data.lastEventAt, now) })}`}
-          </p>
-        </div>
-        <div className="tr-live">
-          <span className={`tr-live-badge ${paused ? 'is-paused' : ''}`}>
-            {paused ? <Pause size={12} /> : <Radio size={12} />}
-            {paused ? t('tr.live.paused') : t('tr.live.live')}
-          </span>
-          <button type="button" className="scp-btn scp-btn-sm scp-btn-secondary" onClick={bump}>
-            <RefreshCw size={13} /> {t('cache.refresh')}
-          </button>
-          <button type="button" className="scp-btn scp-btn-sm scp-btn-secondary" onClick={() => setPaused((p) => !p)} aria-pressed={paused}>
-            {paused ? <Play size={13} /> : <Pause size={13} />} {paused ? t('tr.live.resume') : t('tr.live.pause')}
-          </button>
-        </div>
-      </header>
+    <div>
+      <PageHeader
+        title={t('nav.logs')}
+        icon={FileText}
+        status={data ? { tone: LOGS_STATUS_TONE[data.status] ?? 'unknown', label: t(`logs.state.${data.status}`) } : undefined}
+        description={t('logs.subtitle')}
+        meta={
+          data && (
+            <>
+              {data.environment.toUpperCase()} · {t('logs.backend.redis')}
+              {data.lastEventAt && (
+                <>
+                  {' · '}
+                  {t('logs.lastEvent', { when: '' })}
+                  <RelativeTime value={data.lastEventAt} />
+                </>
+              )}
+            </>
+          )
+        }
+        actions={
+          <Button size="sm" onClick={() => page.openTrace()}>
+            <GitBranch />
+            {t('logs.page.trace')}
+          </Button>
+        }
+        onSettings={() => page.setSettings(true)}
+      />
 
-      {overview.error && !data && (
-        <section className="ov-offline" role="alert">
-          <WifiOff size={22} className="ov-offline-icon" />
-          <div className="ov-offline-body">
-            <h2>{t('ov.offline.title')}</h2>
-            <p>{overview.error.message}</p>
-          </div>
-        </section>
-      )}
-      {data?.status === 'unavailable' && (
-        <section className="ov-offline" role="alert">
-          <WifiOff size={22} className="ov-offline-icon" />
-          <div className="ov-offline-body">
-            <h2>{t('logs.unavailable.title')}</h2>
-            <p>{t('logs.unavailable.message', { when: data.lastIngestAt ? formatRelative(data.lastIngestAt, now) : '—' })}</p>
-            <button type="button" className="scp-btn scp-btn-sm scp-btn-secondary" onClick={bump}>
-              <RefreshCw size={13} /> {t('logs.unavailable.retry')}
-            </button>
-          </div>
-        </section>
-      )}
-
-      <div className="tr-controls">
-        <nav className="rt-tabs" role="tablist" aria-label={t('nav.logs')}>
-          {LOGS_TABS.map((x) => (
-            <button key={x} type="button" role="tab" aria-selected={tab === x} className={tab === x ? 'is-active' : ''} onClick={() => go(x)}>
-              {t(`logs.tab.${x}`)}
-              {x === 'errors' && (data?.kpis.uniqueErrors ?? 0) > 0 && <span className="ov-count">{data!.kpis.uniqueErrors}</span>}
-            </button>
-          ))}
-        </nav>
-        {showRange && (
-          <div className="ov-segmented" role="tablist" aria-label={t('ov.chart.range')}>
-            {LOGS_RANGES.map((r) => (
-              <button key={r} type="button" role="tab" aria-selected={range === r} className={range === r ? 'is-active' : ''} onClick={() => setRange(r)}>
-                {r}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {renderTab()}
-
-      {logId && (
-        <LogDetailDrawer
-          key={logId}
-          logId={logId}
-          onClose={() => openLog(null)}
-          onOpenLog={openLog}
-          onTrace={openTrace}
-          onError={openError}
-          navigate={navigate}
+      {overview.isError && !data && (
+        <StatusBanner
+          tone="crit"
+          title={t('ov.offline.title')}
+          description={overview.error instanceof Error ? overview.error.message : undefined}
+          actions={
+            <Button size="xs" onClick={() => void overview.refetch()}>
+              <RefreshCw />
+              {t('ui.state.retry')}
+            </Button>
+          }
         />
       )}
+      {data?.status === 'unavailable' && (
+        <StatusBanner
+          tone="crit"
+          title={t('logs.unavailable.title')}
+          description={t('logs.unavailable.message', { when: data.lastIngestAt ? new Date(data.lastIngestAt).toLocaleString() : '' })}
+          actions={
+            <Button size="xs" onClick={() => void overview.refetch()}>
+              <RefreshCw />
+              {t('logs.unavailable.retry')}
+            </Button>
+          }
+        />
+      )}
+
+      {!page.isTrace && <PageTabs tabs={tabs} value={page.tab} onChange={page.go} />}
+      {renderTab()}
+
+      <LogDetailSheet
+        logId={page.logId}
+        onClose={() => page.openLog(null)}
+        onOpenLog={page.openLog}
+        onTrace={(id) => page.openTrace(id)}
+        onError={page.openError}
+        navigate={page.navigate}
+      />
+      <LogsConfigSheet open={page.settingsOpen} onOpenChange={page.setSettings} />
     </div>
   );
 };
