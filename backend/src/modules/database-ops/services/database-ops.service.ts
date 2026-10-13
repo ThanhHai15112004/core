@@ -18,7 +18,6 @@ import {
   readPoolStats,
 } from '@packages/database/index.js';
 import { LONG_RUNNING_RUNTIMES } from '@packages/runtime/index.js';
-import { round } from '@modules/performance/index.js';
 import {
   DB_PROM,
   DatabaseMetricsService,
@@ -62,6 +61,7 @@ import type {
   DbTransactionsDto,
   SectionDto,
 } from '../responses/database-ops.response.js';
+import { round } from '@packages/metrics/index.js';
 
 export const DB_RANGES: Record<DbRange, number> = { '15m': 15, '1h': 60, '6h': 360, '24h': 1440 };
 export const DB_METRICS: DbMetric[] = ['queries', 'latency', 'connections', 'errors'];

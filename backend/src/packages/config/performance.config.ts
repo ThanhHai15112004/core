@@ -4,8 +4,6 @@ const numberOr = (key: string, fallback: number): number => {
   const raw = env(key, false);
   return raw === '' ? fallback : env.number(key);
 };
-const booleanOr = (key: string, fallback: boolean): boolean =>
-  env(key, false) ? env.boolean(key) : fallback;
 
 /** Cặp ngưỡng cảnh báo/nghiêm trọng của một rule hiệu năng. */
 const level = (key: string, warn: number, crit: number) => ({
@@ -13,16 +11,14 @@ const level = (key: string, warn: number, crit: number) => ({
   crit: numberOr(`PERF_${key}_CRIT`, crit),
 });
 
-/** Cấu hình thu thập số đo hiệu năng (runtime, database, cache, worker) và rule phát hiện nghẽn. */
+/**
+ * Rule phát hiện nghẽn trên số đo Prometheus (HTTP, process, database, queue, worker) và mục tiêu hiệu năng.
+ * Monitor trong API đánh giá rule mỗi `evaluateMs` và ghi sự kiện bắt đầu / nặng thêm / hồi phục.
+ */
 export const performanceConfig = () => ({
-  /** Tắt thì không ghi số đo hiệu năng vào Redis (trang Performance hiện "không khả dụng"). */
-  enabled: booleanOr('PERF_ENABLED', true),
-  flushMs: numberOr('PERF_FLUSH_MS', 5000),
   /** Chu kỳ đánh giá rule để ghi sự kiện bắt đầu/hồi phục nghẽn. */
   evaluateMs: numberOr('PERF_EVALUATE_MS', 30_000),
-  /** Query chậm hơn ngưỡng này được lưu vào danh sách slow query (SQL đã chuẩn hoá, không có params). */
-  dbSlowMs: numberOr('PERF_DB_SLOW_MS', 200),
-  dbSlowLogSize: numberOr('PERF_DB_SLOW_LOG_SIZE', 200),
+  /** Số sự kiện nghẽn giữ lại (list Redis có giới hạn). */
   eventLogSize: numberOr('PERF_EVENT_LOG_SIZE', 1000),
   rules: {
     apiP95Ms: level('API_P95_MS', 500, 1000),
@@ -33,7 +29,8 @@ export const performanceConfig = () => ({
     eventLoopP99Ms: level('EVENT_LOOP_MS', 100, 250),
     /** Tổng thời gian GC pause mỗi phút. */
     gcPauseMsPerMin: level('GC_PAUSE_MS_PER_MIN', 1000, 3000),
-    dbP95Ms: level('DB_P95_MS', 300, 1000),
+    /** Thời gian trung bình mỗi query (delta digest của database — không có phân vị). */
+    dbAvgMs: level('DB_AVG_MS', 300, 1000),
     dbPoolPercent: level('DB_POOL_PERCENT', 85, 95),
     queueWaiting: level('QUEUE_WAITING', 500, 2000),
     workerFailedPercent: level('WORKER_FAILED_PERCENT', 5, 20),

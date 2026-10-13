@@ -39,7 +39,7 @@ export interface DbRuleInput {
 
 export interface DbRuleConfig {
   db: Pick<DatabaseConfig, 'longTransactionSec' | 'storageWarnPercent'>;
-  dbP95Ms: RuleLevel;
+  dbAvgMs: RuleLevel;
   dbPoolPercent: RuleLevel;
   errorRatePercent: RuleLevel;
   minQueries: number;
@@ -95,12 +95,12 @@ export function evaluateDbRules(input: DbRuleInput, cfg: DbRuleConfig): DbViolat
   if ((input.pool.waiting ?? 0) > 0) add('POOL_WAITING', 'warning', input.pool.waiting, 0, '');
 
   if ((input.queries ?? 0) >= cfg.minQueries) {
-    const s = level(input.avgMs, cfg.dbP95Ms);
+    const s = level(input.avgMs, cfg.dbAvgMs);
     add(
       'QUERY_LATENCY',
       s,
       input.avgMs,
-      s === 'critical' ? cfg.dbP95Ms.crit : cfg.dbP95Ms.warn,
+      s === 'critical' ? cfg.dbAvgMs.crit : cfg.dbAvgMs.warn,
       'ms',
     );
     const e = level(input.errorRatePercent, cfg.errorRatePercent);

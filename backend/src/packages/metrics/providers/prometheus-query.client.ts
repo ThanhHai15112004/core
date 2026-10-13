@@ -72,9 +72,17 @@ export class PrometheusQueryClient {
     }
   }
 
-  /** Range query trong `minutes` phút gần nhất, bước `stepSec` giây. */
-  public async range(expr: string, minutes: number, stepSec: number): Promise<PromSeries[]> {
-    const end = Math.floor(Date.now() / 1000);
+  /**
+   * Range query trong `minutes` phút gần nhất, bước `stepSec` giây. `offsetSec` > 0 lùi cả khoảng về quá khứ (vd.
+   * cùng giờ hôm qua) — thời điểm trả về vẫn là thời điểm thật của mẫu.
+   */
+  public async range(
+    expr: string,
+    minutes: number,
+    stepSec: number,
+    offsetSec = 0,
+  ): Promise<PromSeries[]> {
+    const end = Math.floor(Date.now() / 1000) - Math.max(0, Math.round(offsetSec));
     const start = end - minutes * 60;
     const data = await this.request('query_range', {
       query: expr,
@@ -92,9 +100,14 @@ export class PrometheusQueryClient {
   }
 
   /** Như `range` nhưng trả `[]` khi Prometheus không khả dụng. */
-  public async safeRange(expr: string, minutes: number, stepSec: number): Promise<PromSeries[]> {
+  public async safeRange(
+    expr: string,
+    minutes: number,
+    stepSec: number,
+    offsetSec = 0,
+  ): Promise<PromSeries[]> {
     try {
-      return await this.range(expr, minutes, stepSec);
+      return await this.range(expr, minutes, stepSec, offsetSec);
     } catch {
       return [];
     }

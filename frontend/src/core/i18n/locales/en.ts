@@ -3904,7 +3904,7 @@ export const en: TranslationKey = {
     capacity: {
       title: 'Utilization',
       hint: 'Only resources with a real limit',
-      cpu: 'CPU (all runtimes)',
+      cpu: 'CPU',
       memory: 'Memory',
       dbPool: 'DB connection pool',
       workerConcurrency: 'Worker concurrency',
@@ -3926,10 +3926,6 @@ export const en: TranslationKey = {
       change: 'Change',
       slowEndpoints: 'Slowest endpoints (P95)',
       requests: '{{count}} requests',
-      slowQueries: 'Recent slow queries',
-      noSlowQueries: 'No slow queries recorded.',
-      failed: 'failed',
-      openLogs: 'Related logs',
       openTarget: {
         api: 'Open HTTP Traffic',
         database: 'Open Database',

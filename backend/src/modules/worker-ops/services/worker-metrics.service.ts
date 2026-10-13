@@ -5,8 +5,8 @@ import {
   MetricsRegistryService,
   PrometheusQueryClient,
   type PromSample,
+  round,
 } from '@packages/metrics/index.js';
-import { round } from '@modules/performance/index.js';
 import type { DurationStatsDto } from '../responses/worker-ops.response.js';
 import { waitingOf } from './worker-utils.js';
 

@@ -3902,7 +3902,7 @@ export const vi = {
     capacity: {
       title: 'Mức sử dụng',
       hint: 'Chỉ tài nguyên có giới hạn thật',
-      cpu: 'CPU (tổng runtime)',
+      cpu: 'CPU',
       memory: 'Bộ nhớ',
       dbPool: 'Pool kết nối DB',
       workerConcurrency: 'Worker concurrency',
@@ -3924,10 +3924,6 @@ export const vi = {
       change: 'Thay đổi',
       slowEndpoints: 'Endpoint chậm nhất (P95)',
       requests: '{{count}} request',
-      slowQueries: 'Query chậm gần đây',
-      noSlowQueries: 'Chưa ghi nhận query chậm nào.',
-      failed: 'lỗi',
-      openLogs: 'Log liên quan',
       openTarget: {
         api: 'Mở HTTP Traffic',
         database: 'Mở Database',

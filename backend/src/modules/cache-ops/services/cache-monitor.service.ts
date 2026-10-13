@@ -17,7 +17,6 @@ import {
   type ServerInfo,
 } from '@packages/cache/index.js';
 import { RUNTIME_IDENTITY, type RuntimeIdentity } from '@packages/runtime/index.js';
-import { round } from '@modules/performance/index.js';
 import { CacheMetricsService, hitRate } from './cache-metrics.service.js';
 import { CacheStoreService } from './cache-store.service.js';
 import {
@@ -26,6 +25,7 @@ import {
   type CacheRuleInput,
   type CacheViolation,
 } from './cache-rules.js';
+import { round } from '@packages/metrics/index.js';
 
 const TICK_MS = 30_000;
 /** Baseline hit/miss = 60 phút trước 5 phút gần nhất (đọc lại từ Prometheus). */

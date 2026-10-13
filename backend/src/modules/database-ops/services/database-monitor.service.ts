@@ -237,7 +237,7 @@ export class DatabaseMonitorService implements OnApplicationBootstrap, OnModuleD
     };
     const violations = evaluateDbRules(input, {
       db: this.config.database,
-      dbP95Ms: this.config.performance.rules.dbP95Ms,
+      dbAvgMs: this.config.performance.rules.dbAvgMs,
       dbPoolPercent: this.config.performance.rules.dbPoolPercent,
       errorRatePercent: this.config.performance.rules.errorRatePercent,
       minQueries: this.config.performance.rules.minQueries,

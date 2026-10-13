@@ -1,7 +1,7 @@
 import type { PerformanceConfig, RuleLevel } from '@packages/config/index.js';
 import type { ComponentId, PerfSeverity, RuleKey } from '../responses/performance.response.js';
 
-/** Số đo đầu vào của rule engine (cửa sổ hiện tại + baseline). */
+/** Số đo đầu vào của rule engine (cửa sổ hiện tại + baseline 60 phút liền trước), đọc từ Prometheus. */
 export interface RuleSnapshot {
   api: {
     requests: number;
@@ -14,8 +14,10 @@ export interface RuleSnapshot {
   };
   runtimes: {
     id: string;
-    /** CPU theo bucket 10s trong khoảng `cpuSustainMin` gần nhất. */
-    cpuRecent: number[];
+    /** CPU thấp nhất trong `cpuSustainMin` phút gần nhất (vượt ngưỡng = vượt liên tục); null khi chưa đủ dữ liệu. */
+    cpuSustained: number | null;
+    /** CPU trung bình trong cửa sổ hiện tại. */
+    cpuAvg: number | null;
     cpuBaseline: number | null;
     memoryPercent: number | null;
     memoryBaseline: number | null;
@@ -27,8 +29,9 @@ export interface RuleSnapshot {
   }[];
   db: {
     queries: number;
-    p95: number | null;
-    baselineP95: number | null;
+    /** Thời gian trung bình mỗi query (delta digest — database không cho phân vị). */
+    avgMs: number | null;
+    baselineAvgMs: number | null;
     poolPercent: number | null;
   };
   queue: { waiting: number | null; baseline: number | null };
@@ -49,7 +52,6 @@ export interface Violation {
 
 /** Tỷ lệ tối thiểu bước tăng để coi là "tăng liên tục". */
 export const GROWTH_RATIO = 0.8;
-const SAMPLES_PER_MIN = 6;
 
 export function severityOf(value: number | null, level: RuleLevel): PerfSeverity | null {
   if (value === null) return null;
@@ -105,24 +107,21 @@ export function evaluateRules(s: RuleSnapshot, rules: Rules): Violation[] {
   }
 
   for (const r of s.runtimes) {
-    // CPU chỉ tính khi vượt ngưỡng liên tục đủ lâu, không phải một đỉnh nhất thời.
-    const needed = Math.max(1, rules.cpuSustainMin * SAMPLES_PER_MIN - 1);
-    if (r.cpuRecent.length >= needed) {
-      const sustained = Math.min(...r.cpuRecent);
-      const avg = r.cpuRecent.reduce((a, b) => a + b, 0) / r.cpuRecent.length;
-      const severity = severityOf(sustained, rules.cpuPercent);
-      if (severity)
-        out.push({
-          id: `CPU_HIGH:${r.id}`,
-          rule: 'CPU_HIGH',
-          component: 'runtime',
-          runtime: r.id,
-          severity,
-          value: Number(avg.toFixed(1)),
-          threshold: severity === 'critical' ? rules.cpuPercent.crit : rules.cpuPercent.warn,
-          unit: '%',
-          baseline: r.cpuBaseline === null ? null : Number(r.cpuBaseline.toFixed(1)),
-        });
+    // CPU chỉ tính khi vượt ngưỡng liên tục đủ lâu (giá trị thấp nhất trong cửa sổ vẫn vượt), không phải đỉnh.
+    const severity = severityOf(r.cpuSustained, rules.cpuPercent);
+    if (severity) {
+      const avg = r.cpuAvg ?? r.cpuSustained!;
+      out.push({
+        id: `CPU_HIGH:${r.id}`,
+        rule: 'CPU_HIGH',
+        component: 'runtime',
+        runtime: r.id,
+        severity,
+        value: Number(avg.toFixed(1)),
+        threshold: severity === 'critical' ? rules.cpuPercent.crit : rules.cpuPercent.warn,
+        unit: '%',
+        baseline: r.cpuBaseline === null ? null : Number(r.cpuBaseline.toFixed(1)),
+      });
     }
     push(
       'MEMORY_HIGH',
@@ -174,7 +173,7 @@ export function evaluateRules(s: RuleSnapshot, rules: Rules): Violation[] {
   }
 
   if (s.db.queries >= rules.minQueries)
-    push('DB_LATENCY', 'database', null, s.db.p95, rules.dbP95Ms, 'ms', s.db.baselineP95);
+    push('DB_LATENCY', 'database', null, s.db.avgMs, rules.dbAvgMs, 'ms', s.db.baselineAvgMs);
   push('DB_POOL', 'database', null, s.db.poolPercent, rules.dbPoolPercent, '%', null);
   push(
     'QUEUE_BACKLOG',
@@ -207,4 +206,29 @@ export function evaluateRules(s: RuleSnapshot, rules: Rules): Violation[] {
 export function overallLevel(violations: readonly Violation[]): 'normal' | 'degraded' | 'critical' {
   if (violations.some((v) => v.severity === 'critical')) return 'critical';
   return violations.length > 0 ? 'degraded' : 'normal';
+}
+
+/** Trạng thái một điểm nghẽn đang diễn ra (lưu Redis để biết `since` và phát hiện chuyển trạng thái). */
+export interface ActiveBottleneck {
+  since: number;
+  severity: PerfSeverity;
+}
+
+/** So vi phạm hiện tại với lần trước: mới bắt đầu, nặng lên critical, đã hồi phục. */
+export function diffBottlenecks(
+  violations: readonly Violation[],
+  active: ReadonlyMap<string, ActiveBottleneck>,
+  now: number,
+) {
+  const started = violations.filter((v) => !active.has(v.id));
+  const escalated = violations.filter(
+    (v) => v.severity === 'critical' && active.get(v.id)?.severity === 'warning',
+  );
+  const next = new Map<string, ActiveBottleneck>(
+    violations.map((v) => [v.id, { since: active.get(v.id)?.since ?? now, severity: v.severity }]),
+  );
+  const recovered = [...active.entries()]
+    .filter(([id]) => !next.has(id))
+    .map(([id, a]) => ({ id, durationMs: now - a.since, severity: a.severity }));
+  return { started, escalated, next, recovered };
 }

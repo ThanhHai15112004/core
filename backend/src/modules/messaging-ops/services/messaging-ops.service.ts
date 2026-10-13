@@ -17,7 +17,6 @@ import {
   type OperationContext,
   type QueueSnapshot,
 } from '@packages/messaging/index.js';
-import { changePercent, round } from '@modules/performance/index.js';
 import { QUEUE_JOBS_METRIC } from '@modules/worker-ops/index.js';
 import {
   MessagingMetricsService,
@@ -71,6 +70,7 @@ import type {
   QueueRowDto,
   SectionDto,
 } from '../responses/messaging-ops.response.js';
+import { changePercent, round } from '@packages/metrics/index.js';
 
 export const MESSAGING_RANGES: Record<MessagingRange, number> = {
   '15m': 15,

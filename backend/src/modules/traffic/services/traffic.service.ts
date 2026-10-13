@@ -68,6 +68,12 @@ const percentDelta = (current: number | null, previous: number | null) =>
 const lv = (v: string) => v.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 const escapeRe = (v: string) => v.replace(/[.*+?^${}()|[\]\\]/g, '\\\\$&');
 
+/** Regex PromQL (khớp toàn chuỗi) cho route nội bộ thuộc các module `TRAFFIC_INTERNAL_MODULES`. */
+export function internalRouteRegex(modules: readonly string[]): string {
+  const mods = modules.map(escapeRe).join('|') || 'ops|health';
+  return `.*/(${mods})(/.*)?`;
+}
+
 export interface TrafficQuery {
   range: TrafficRange;
   method?: string | undefined;
@@ -99,8 +105,7 @@ export class TrafficService {
 
   /** Route nội bộ = segment thuộc `TRAFFIC_INTERNAL_MODULES` (mặc định ops, health). */
   private get internalRe(): string {
-    const mods = this.cfg.internalModules.map(escapeRe).join('|') || 'ops|health';
-    return `.*/(${mods})(/.*)?`;
+    return internalRouteRegex(this.cfg.internalModules);
   }
 
   private isInternal(route: string): boolean {

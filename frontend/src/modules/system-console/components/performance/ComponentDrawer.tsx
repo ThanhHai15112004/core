@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { ArrowRight, FileText, X } from 'lucide-react';
+import { ArrowRight, X } from 'lucide-react';
 import type { ComponentId, PerfRange } from '../../types/performance.types';
 import { performanceApi } from '../../services/performance.api';
 import { usePolling } from '../../hooks/usePolling';
@@ -21,7 +21,7 @@ const HIGHER_IS_WORSE = new Set(['p50', 'p95', 'p99', 'avg', 'errorRate', 'error
 
 /** Tóm tắt hiệu năng của một thành phần + đường dẫn sang màn chuyên sâu. Không có thao tác nguy hiểm. */
 export const ComponentDrawer: React.FC<ComponentDrawerProps> = ({ id, range, paused, onClose, navigate }) => {
-  const { t, formatTime } = useLocale();
+  const { t } = useLocale();
   const { data, error } = usePolling(() => performanceApi.component(id, range), `${id}:${range}`, undefined, paused);
 
   useEffect(() => {
@@ -111,36 +111,6 @@ export const ComponentDrawer: React.FC<ComponentDrawerProps> = ({ id, range, pau
                         ))}
                       </tbody>
                     </table>
-                  </>
-                )}
-
-                {id === 'database' && (
-                  <>
-                    <h4 className="pf-drawer-h">{t('perf.drawer.slowQueries')}</h4>
-                    {data.slowQueries.length === 0 ? (
-                      <p className="ov-empty-line">{t('perf.drawer.noSlowQueries')}</p>
-                    ) : (
-                      <ul className="pf-slow-queries">
-                        {data.slowQueries.map((q) => (
-                          <li key={`${q.at}-${q.sql}`}>
-                            <span className="tr-drawer-meta">
-                              {formatTime(q.at, true)} · <strong>{formatUnit(q.durationMs, 'ms')}</strong>
-                              {q.failed && ` · ${t('perf.drawer.failed')}`}
-                            </span>
-                            <pre className="tr-code-block">{q.sql}</pre>
-                            {q.correlationId && (
-                              <button
-                                type="button"
-                                className="ov-link"
-                                onClick={() => navigate(`logs/explorer?correlationId=${encodeURIComponent(q.correlationId!)}`)}
-                              >
-                                <FileText size={12} /> {t('perf.drawer.openLogs')}
-                              </button>
-                            )}
-                          </li>
-                        ))}
-                      </ul>
-                    )}
                   </>
                 )}
 

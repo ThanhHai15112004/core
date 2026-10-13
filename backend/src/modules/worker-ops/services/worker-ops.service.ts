@@ -19,7 +19,6 @@ import {
   type QueueOperationRecord,
 } from '@packages/queue/index.js';
 import type { RuntimeHeartbeat } from '@packages/runtime/index.js';
-import { round } from '@modules/performance/index.js';
 import { RuntimesService, type RuntimeDetailDto } from '@modules/runtimes/index.js';
 import {
   WorkerMetricsService,
@@ -83,6 +82,7 @@ import type {
   WorkerStabilityDto,
   WorkersListDto,
 } from '../responses/worker-ops.response.js';
+import { round } from '@packages/metrics/index.js';
 
 export const WORKER_RANGES: Record<WorkerRange, number> = {
   '15m': 15,

@@ -24,7 +24,6 @@ import {
   type UsagePoint,
   type UsageSnapshot,
 } from '@packages/storage/index.js';
-import { round } from '@modules/performance/index.js';
 import { redactPayload } from '@packages/http/index.js';
 import { StorageStoreService } from './storage-store.service.js';
 import { RULE_TAB, type StorageRule, type StoredStorageAlert } from './storage-rules.js';
@@ -59,6 +58,7 @@ import type {
   StorageUploadsDto,
   StorageUsageDto,
 } from '../responses/storage-ops.response.js';
+import { round } from '@packages/metrics/index.js';
 
 export const STORAGE_RANGES: Record<StorageRange, number> = {
   '15m': 15,

@@ -1,8 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import type { Counter, Gauge } from 'prom-client';
 import type { PoolStats } from '@packages/database/index.js';
-import { MetricsRegistryService, PrometheusQueryClient } from '@packages/metrics/index.js';
-import { round } from '@modules/performance/index.js';
+import { MetricsRegistryService, PrometheusQueryClient, round } from '@packages/metrics/index.js';
 
 /**
  * Số đo database trong một khoảng, đọc lại từ Prometheus. Nguồn: delta bộ đếm digest của chính database

@@ -44,7 +44,7 @@ export const BudgetCapacityPanel: React.FC<{ budgets: Budget[]; capacity: Capaci
               <span className="rt-resource-label">
                 <span>
                   {t(`perf.capacity.${c.key}`)}
-                  {c.runtime && c.key === 'memory' && ` (${t(`rt.name.${c.runtime}`)})`}
+                  {c.runtime && (c.key === 'memory' || c.key === 'cpu') && ` (${t(`rt.name.${c.runtime}`)})`}
                 </span>
                 <b>
                   {c.percent === null

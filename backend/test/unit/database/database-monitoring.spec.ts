@@ -249,7 +249,7 @@ describe('MysqlMonitoringProvider', () => {
 describe('evaluateDbRules / diffAlerts', () => {
   const cfg = {
     db: { longTransactionSec: 10, storageWarnPercent: 80 },
-    dbP95Ms: { warn: 300, crit: 1000 },
+    dbAvgMs: { warn: 300, crit: 1000 },
     dbPoolPercent: { warn: 85, crit: 95 },
     errorRatePercent: { warn: 2, crit: 10 },
     minQueries: 20,

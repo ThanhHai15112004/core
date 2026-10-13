@@ -1,6 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { PrometheusQueryClient, type PromSample } from '@packages/metrics/index.js';
-import { round } from '@modules/performance/index.js';
+import { PrometheusQueryClient, type PromSample, round } from '@packages/metrics/index.js';
 import { QUEUE_JOBS_METRIC, WorkerMetricsService } from '@modules/worker-ops/index.js';
 import type { DeliveryDto } from '../responses/messaging-ops.response.js';
 

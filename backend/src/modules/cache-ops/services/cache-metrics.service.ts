@@ -1,8 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import type { Gauge } from 'prom-client';
 import type { KeyspaceSnapshot, ServerInfo } from '@packages/cache/index.js';
-import { MetricsRegistryService, PrometheusQueryClient } from '@packages/metrics/index.js';
-import { round } from '@modules/performance/index.js';
+import { MetricsRegistryService, PrometheusQueryClient, round } from '@packages/metrics/index.js';
 
 /**
  * Số đo cache trong một khoảng, đọc lại từ Prometheus. Nguồn là Redis `INFO` (toàn server, không theo namespace)

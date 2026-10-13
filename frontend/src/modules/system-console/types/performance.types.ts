@@ -179,15 +179,6 @@ export interface PerfEvent {
   target: string | null;
 }
 
-export interface SlowQuery {
-  at: number;
-  sql: string;
-  durationMs: number;
-  failed: boolean;
-  instance: string;
-  correlationId: string | null;
-}
-
 export interface ComponentDetail {
   id: ComponentId;
   name: string;
@@ -197,7 +188,6 @@ export interface ComponentDetail {
   metrics: { key: string; label: string; value: number | null; unit: string; baseline: number | null; changePercent: number | null }[];
   bottlenecks: Bottleneck[];
   endpoints: { routeId: string; method: string; route: string; p95Ms: number | null; requests: number }[];
-  slowQueries: SlowQuery[];
   target: string;
 }
 

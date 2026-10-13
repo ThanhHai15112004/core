@@ -1,4 +1,3 @@
-import type { SlowQueryRecord } from '@packages/database/index.js';
 import type { RuntimeStatus } from '@modules/runtimes/index.js';
 
 export type PerfRange = '5m' | '15m' | '1h' | '6h' | '24h' | '7d';
@@ -44,7 +43,7 @@ export interface BottleneckDto {
   unit: string;
   /** Giá trị trong 60 phút trước cửa sổ hiện tại; `null` khi không có dữ liệu. */
   baseline: number | null;
-  /** ISO — thời điểm bắt đầu vi phạm do Performance Monitor ghi; `null` khi chưa ghi nhận. */
+  /** ISO — thời điểm bắt đầu vi phạm do Performance Monitor ghi; `null` khi monitor chưa ghi nhận. */
   since: string | null;
   /** Endpoint bị ảnh hưởng nhiều nhất (theo thời gian DB hoặc P95). */
   impact: { routeId: string; method: string; route: string; valueMs: number }[];
@@ -248,7 +247,5 @@ export interface ComponentDetailDto {
     p95Ms: number | null;
     requests: number;
   }[];
-  /** Database: slow query gần nhất (SQL đã chuẩn hoá, không có params). */
-  slowQueries: SlowQueryRecord[];
   target: string;
 }

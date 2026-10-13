@@ -9,8 +9,8 @@ import {
 export interface PrometheusFixture {
   /** Trả mẫu cho instant query theo nội dung PromQL; `[]` = không có dữ liệu. */
   query: (expr: string) => PromSample[];
-  /** Trả chuỗi cho range query; mặc định không có dữ liệu. */
-  range?: (expr: string) => PromSeries[];
+  /** Trả chuỗi cho range query (`offsetSec` > 0 = khoảng lùi về quá khứ); mặc định không có dữ liệu. */
+  range?: (expr: string, offsetSec: number) => PromSeries[];
 }
 
 /**
@@ -26,7 +26,9 @@ export function stubPrometheus(app: INestApplication, fixture: PrometheusFixture
     .mockImplementation((expr: string) => Promise.resolve(fixture.query(expr)));
   const range = jest
     .spyOn(client, 'range')
-    .mockImplementation((expr: string) => Promise.resolve(fixture.range?.(expr) ?? []));
+    .mockImplementation((expr: string, _minutes: number, _step: number, offsetSec = 0) =>
+      Promise.resolve(fixture.range?.(expr, offsetSec) ?? []),
+    );
   const configured = jest.spyOn(client, 'configured', 'get').mockReturnValue(true);
   return () => {
     query.mockRestore();

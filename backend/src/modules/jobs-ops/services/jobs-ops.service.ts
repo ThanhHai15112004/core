@@ -22,7 +22,6 @@ import {
   type QueueInfo,
 } from '@packages/queue/index.js';
 import { redactPayload } from '@packages/http/index.js';
-import { round } from '@modules/performance/index.js';
 import { RuntimesService } from '@modules/runtimes/index.js';
 import { WORKER_RANGES, WorkerOpsService, type WorkerMetric } from '@modules/worker-ops/index.js';
 import { JobsMetricsService } from './jobs-metrics.service.js';
@@ -56,6 +55,7 @@ import type {
   SearchMatch,
   SectionDto,
 } from '../responses/jobs-ops.response.js';
+import { round } from '@packages/metrics/index.js';
 
 export const JOBS_RANGES = WORKER_RANGES;
 

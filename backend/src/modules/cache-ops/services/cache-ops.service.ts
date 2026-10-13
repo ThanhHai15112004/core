@@ -21,7 +21,6 @@ import {
   type ServerInfo,
   type ValueSample,
 } from '@packages/cache/index.js';
-import { round } from '@modules/performance/index.js';
 import { redactPayload } from '@packages/http/index.js';
 import {
   CACHE_GAUGES,
@@ -66,6 +65,7 @@ import type {
   SectionDto,
   ServerMemoryDto,
 } from '../responses/cache-ops.response.js';
+import { round } from '@packages/metrics/index.js';
 
 export const CACHE_RANGES: Record<CacheRange, number> = {
   '15m': 15,
