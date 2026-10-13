@@ -1,0 +1,40 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ProjectManifest",
+  "description": "Schema definition for Core Framework Project Manifest",
+  "type": "object",
+  "required": ["name", "version", "coreVersion", "enabledModules"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "name": {
+      "type": "string",
+      "description": "Tên dự án"
+    },
+    "version": {
+      "type": "string",
+      "description": "Phiên bản của dự án"
+    },
+    "coreVersion": {
+      "type": "string",
+      "description": "Phiên bản Core Framework Chassis đang sử dụng"
+    },
+    "description": { "type": "string" },
+    "environment": { "type": "string" },
+    "enabledModules": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Danh sách các module đang được kích hoạt trong dự án"
+    },
+    "settings": {
+      "type": "object",
+      "properties": {
+        "defaultLocale": { "type": "string" },
+        "supportedLocales": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,30 @@
+{
+  "$schema": "./src/packages/kernel/schemas/project.manifest.schema.json",
+  "name": "core-backend",
+  "version": "1.0.0",
+  "coreVersion": "1.0.0",
+  "description": "Unified Backend Core Chassis & Base Platform",
+  "environment": "development",
+  "enabledModules": [
+    "health",
+    "system-ops",
+    "database-ops",
+    "cache-ops",
+    "storage-ops",
+    "messaging-ops",
+    "worker-ops",
+    "scheduler-ops",
+    "jobs-ops",
+    "logs-ops",
+    "runtimes",
+    "traffic",
+    "performance"
+  ],
+  "settings": {
+    "defaultLocale": "vi",
+    "supportedLocales": [
+      "vi",
+      "en"
+    ]
+  }
+}

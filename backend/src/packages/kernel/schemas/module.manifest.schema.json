@@ -1,0 +1,63 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ModuleManifest",
+  "description": "Schema definition for Core Framework Module Manifest",
+  "type": "object",
+  "required": ["name", "displayName", "version", "type", "entryModule"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z0-9-]+$",
+      "description": "Tên module dạng kebab-case"
+    },
+    "displayName": { "type": "string" },
+    "version": { "type": "string" },
+    "description": { "type": "string" },
+    "type": {
+      "type": "string",
+      "enum": ["core", "project"],
+      "description": "Loại module: core nền tảng hoặc project nghiệp vụ"
+    },
+    "category": { "type": "string" },
+    "author": { "type": "string" },
+    "entryModule": {
+      "type": "string",
+      "description": "Tên class NestJS Module entrypoint (ví dụ: UsersModule)"
+    },
+    "dependencies": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": []
+    },
+    "permissions": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": []
+    },
+    "events": {
+      "type": "object",
+      "properties": {
+        "published": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "subscribed": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "database": {
+      "type": "object",
+      "properties": {
+        "hasMigrations": { "type": "boolean" },
+        "tables": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    }
+  },
+  "additionalProperties": false
+}

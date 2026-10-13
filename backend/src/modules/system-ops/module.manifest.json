@@ -1,0 +1,20 @@
+{
+  "$schema": "../../packages/kernel/schemas/module.manifest.schema.json",
+  "name": "system-ops",
+  "displayName": "System Operations Console",
+  "version": "1.0.0",
+  "description": "Module quản trị và vận hành toàn hệ thống (Overview, Packages, Secrets, Configuration)",
+  "type": "core",
+  "category": "operations",
+  "author": "Core Platform Team",
+  "entryModule": "SystemOpsModule",
+  "dependencies": ["redis", "runtime", "security", "config"],
+  "permissions": ["system.ops.read", "system.ops.manage"],
+  "events": {
+    "published": ["system.ops.action_executed"]
+  },
+  "database": {
+    "hasMigrations": false,
+    "tables": []
+  }
+}

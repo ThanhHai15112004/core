@@ -1,0 +1,18 @@
+{
+  "$schema": "../../packages/kernel/schemas/module.manifest.schema.json",
+  "name": "health",
+  "displayName": "Health Check",
+  "version": "1.0.0",
+  "description": "Module kiểm tra trạng thái hoạt động (Liveness & Readiness) của Database, Redis và Heap",
+  "type": "core",
+  "category": "infrastructure",
+  "author": "Core Platform Team",
+  "entryModule": "HealthModule",
+  "dependencies": ["database", "redis"],
+  "permissions": [],
+  "events": {},
+  "database": {
+    "hasMigrations": false,
+    "tables": []
+  }
+}

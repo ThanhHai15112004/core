@@ -9,4 +9,6 @@ export * from './errors/not-found.exception.js';
 export * from './types/result.type.js';
 export * from './types/manageable-package.enum.js';
 export * from './types/database-driver.enum.js';
+export * from './contracts/manifest.contract.js';
+export * from './schemas/manifest.schema.js';
 export * from './kernel.module.js';

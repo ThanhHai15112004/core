@@ -6,6 +6,10 @@ import {
   runtimeKeys,
   type RuntimeHeartbeat,
 } from '@packages/runtime/index.js';
+import {
+  type CliCommandDescriptor,
+  type ICliCommandProvider,
+} from '../../dispatcher/cli-dispatcher.service.js';
 
 type Handler = (args: string[]) => Promise<void>;
 
@@ -16,7 +20,7 @@ type Handler = (args: string[]) => Promise<void>;
  *   help
  */
 @Injectable()
-export class SystemCommand {
+export class SystemCommand implements ICliCommandProvider {
   private readonly logger = new Logger(SystemCommand.name);
   private readonly handlers: Record<string, Handler> = {
     'queue:publish': (args) => this.publish(args),
@@ -29,10 +33,32 @@ export class SystemCommand {
     private readonly redis: RedisService,
   ) {}
 
+  /** Khai báo danh mục các lệnh thuộc domain System & Messaging */
+  public getCommands(): CliCommandDescriptor[] {
+    return [
+      {
+        name: 'queue:publish',
+        domain: 'System & Messaging',
+        description: 'Đẩy job thử nghiệm vào queue',
+        usage: 'npm run cli -- queue:publish <topic> [jsonPayload] [queue]',
+        execute: (args) => this.publish(args),
+      },
+      {
+        name: 'runtime:status',
+        domain: 'System & Messaging',
+        description: 'In trạng thái heartbeat của các runtime từ Redis',
+        usage: 'npm run cli -- runtime:status',
+        execute: () => this.runtimeStatus(),
+      },
+    ];
+  }
+
+  /** Lấy tên lệnh đầu tiên từ mảng đối số */
   public commandName(args: string[]): string {
     return args[0] ?? 'help';
   }
 
+  /** Thực thi lệnh hệ thống theo tên được truyền vào */
   public async execute(args: string[]): Promise<void> {
     const [name = 'help', ...rest] = args;
     const handler = this.handlers[name];
@@ -40,6 +66,7 @@ export class SystemCommand {
     await handler(rest);
   }
 
+  /** Đẩy một message payload thử nghiệm vào queue BullMQ */
   private async publish([topic, rawPayload, queue]: string[]): Promise<void> {
     if (!topic) throw new Error('Usage: queue:publish <topic> [jsonPayload] [queue]');
     const queues = Object.values(QUEUES) as string[];
@@ -50,6 +77,7 @@ export class SystemCommand {
     this.logger.log(`Published ${topic} → ${queue ?? QUEUES.SYSTEM_EVENTS} (job ${envelope.id})`);
   }
 
+  /** Đọc và hiển thị thông tin heartbeat của các runtime từ Redis */
   private async runtimeStatus(): Promise<void> {
     const keys = runtimeKeys(this.redis);
     for (const id of LONG_RUNNING_RUNTIMES) {
@@ -65,6 +93,7 @@ export class SystemCommand {
     }
   }
 
+  /** In danh sách các lệnh hệ thống cơ bản */
   private help(): void {
     this.logger.log(
       'Commands: queue:publish <topic> [jsonPayload] [queue] | runtime:status | help',
