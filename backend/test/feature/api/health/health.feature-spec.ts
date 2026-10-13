@@ -29,13 +29,19 @@ describe('Feature: Health API (GET /health)', () => {
         status: string;
         uptime: number;
         timestamp: string;
+        checks: Record<string, { status: string }>;
       };
       timestamp: string;
     };
 
     expect(body.success).toBe(true);
     expect(body.statusCode).toBe(200);
-    expect(body.data.status).toBe('ok');
+    // DB test (core_test) không chạy trong môi trường test → health báo degraded thay vì ok giả;
+    // Redis (ioredis-mock) và heap vẫn up.
+    expect(body.data.status).toBe('degraded');
+    expect(body.data.checks['database']?.status).toBe('down');
+    expect(body.data.checks['redis']?.status).toBe('up');
+    expect(body.data.checks['heap']?.status).toBe('up');
     expect(typeof body.data.uptime).toBe('number');
     expect(typeof body.data.timestamp).toBe('string');
     expect(typeof body.timestamp).toBe('string');

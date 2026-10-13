@@ -32,6 +32,8 @@ export interface HealthData {
   status: 'ok' | 'degraded' | 'down';
   uptime: number;
   timestamp: string;
+  /** Kết quả từng phụ thuộc (database, redis, heap) — không có khi gọi `/health` thất bại. */
+  checks?: Record<string, { status: 'up' | 'down' } & Record<string, unknown>>;
   service?: string;
   version?: string;
 }
