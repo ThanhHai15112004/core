@@ -1,68 +1,77 @@
-import React from 'react';
+import { useMemo } from 'react';
+import { createColumnHelper, type ColumnDef } from '@tanstack/react-table';
+import { useLocale } from '@core/i18n/index';
+import { useFormat } from '@core/hooks/useFormat';
+import { Badge } from '@core/ui/primitives';
+import { DataTable, RelativeTime, UsageBar } from '@core/ui/blocks';
 import type { FailureGroup } from '../../types/jobs.types';
-import type { Section } from '../../types/worker.types';
-import { NO_VALUE } from '../../utils/runtime-format';
-import { useLocale } from '../../../../core/i18n/index';
 
-/** Failure Groups: gộp lỗi cùng loại — bấm → Explorer lọc đúng loại lỗi. */
-export const FailureGroups: React.FC<{
-  groups: Section<FailureGroup[]> | null;
-  onOpen: (g: FailureGroup) => void;
-  now: number;
-  limit?: number;
-  detailed?: boolean;
-}> = ({ groups, onOpen, now, limit, detailed }) => {
-  const { t, formatRelative } = useLocale();
-  if (!groups) return <p className="ov-empty-line">…</p>;
-  if (!groups.available)
-    return (
-      <p className="ov-empty-line">
-        {t('jobs.unavailableSection', {
-          reason: t(`jobs.reason.${groups.reason}`),
-        })}
-      </p>
+const col = createColumnHelper<FailureGroup>();
+
+/** Nhãn khả năng retry của một lỗi / nhóm lỗi. */
+export function RetryableBadge({ value }: { value: boolean | null }) {
+  const { t } = useLocale();
+  if (value === false) return <Badge tone="warn">{t('jobs.retryable.no')}</Badge>;
+  return <Badge tone={value ? 'ok' : undefined}>{t(value ? 'jobs.retryable.yes' : 'jobs.retryable.unknown')}</Badge>;
+}
+
+/** Nhóm lỗi: gộp lỗi cùng loại — bấm → Explorer lọc đúng loại lỗi. `detailed` = thêm loại job + lần cuối. */
+export function FailureGroups({ groups, onOpen, detailed, emptyMessage }: { groups: FailureGroup[]; onOpen: (g: FailureGroup) => void; detailed?: boolean; emptyMessage?: string }) {
+  const { t } = useLocale();
+  const f = useFormat();
+  const max = Math.max(1, ...groups.map((g) => g.count));
+  const columns = useMemo(() => {
+    const list: ColumnDef<FailureGroup, unknown>[] = [
+      col.accessor('errorType', {
+        header: t('jobs.failures.col.error'),
+        cell: (c) => (
+          <span className="flex min-w-0 items-baseline gap-2">
+            <span className="truncate font-mono text-xs text-crit-fg">{c.getValue()}</span>
+            {c.row.original.dependency && <span className="shrink-0 text-xs text-faint">{t(`jobs.dependency.${c.row.original.dependency}`)}</span>}
+          </span>
+        ),
+        meta: { truncate: true },
+      }) as ColumnDef<FailureGroup, unknown>,
+      col.accessor('count', {
+        header: t('jobs.failures.col.count'),
+        cell: (c) => (
+          <span className="flex items-center justify-end gap-2">
+            <UsageBar percent={(c.getValue() / max) * 100} tone="crit" showValue={false} className="w-16" />
+            <span className="w-10 text-right">{f.compact(c.getValue())}</span>
+          </span>
+        ),
+        meta: { align: 'right', mono: true, width: '140px' },
+      }) as ColumnDef<FailureGroup, unknown>,
+    ];
+    if (detailed) list.push(col.accessor((g) => g.types.join(', '), { id: 'types', header: t('jobs.failures.col.types'), meta: { truncate: true } }) as ColumnDef<FailureGroup, unknown>);
+    list.push(
+      col.accessor((g) => (g.retryable === null ? 1 : g.retryable ? 2 : 0), {
+        id: 'retry',
+        header: t('jobs.failures.col.retry'),
+        cell: (c) => <RetryableBadge value={c.row.original.retryable} />,
+        meta: { width: '130px' },
+      }) as ColumnDef<FailureGroup, unknown>,
     );
-  const rows = limit ? groups.data.slice(0, limit) : groups.data;
-  if (!rows.length) return <p className="ov-empty-line">{t('jobs.failures.noGroups')}</p>;
-  const max = Math.max(...rows.map((g) => g.count));
+    if (detailed)
+      list.push(
+        col.accessor((g) => (g.lastAt ? Date.parse(g.lastAt) : null), {
+          id: 'last',
+          header: t('jobs.failures.col.last'),
+          cell: (c) => <RelativeTime value={c.row.original.lastAt} />,
+          meta: { width: '120px' },
+        }) as ColumnDef<FailureGroup, unknown>,
+      );
+    return list;
+  }, [t, f, max, detailed]);
+
   return (
-    <div className="scp-table-wrap">
-      <table className="scp-table job-groups">
-        <thead>
-          <tr>
-            <th>{t('jobs.failures.col.error')}</th>
-            <th>{t('jobs.failures.col.count')}</th>
-            {detailed && <th>{t('jobs.failures.col.types')}</th>}
-            <th>{t('jobs.failures.col.retry')}</th>
-            {detailed && <th>{t('jobs.failures.col.last')}</th>}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((g) => (
-            <tr key={g.errorType} className="is-clickable" onClick={() => onOpen(g)}>
-              <td>
-                <code>{g.errorType}</code>
-                {g.dependency && <small className="pf-row-note">{t(`jobs.dependency.${g.dependency}`)}</small>}
-              </td>
-              <td className="job-bar-cell">
-                <span className="job-bar" style={{ width: `${Math.max(4, (g.count / max) * 100)}%` }} />
-                <span>{g.count}</span>
-              </td>
-              {detailed && <td>{g.types.join(', ')}</td>}
-              <td>
-                {g.retryable === false ? (
-                  <span className="is-warn">{t('jobs.retryable.no')}</span>
-                ) : g.retryable ? (
-                  t('jobs.retryable.yes')
-                ) : (
-                  t('jobs.retryable.unknown')
-                )}
-              </td>
-              {detailed && <td>{g.lastAt ? formatRelative(new Date(g.lastAt), now) : NO_VALUE}</td>}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <DataTable
+      data={groups}
+      columns={columns}
+      getRowId={(g) => g.errorType}
+      onRowClick={onOpen}
+      initialSorting={[{ id: 'count', desc: true }]}
+      emptyMessage={emptyMessage ?? t('jobs.failures.noGroups')}
+    />
   );
-};
+}

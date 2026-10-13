@@ -26,3 +26,4 @@ export { SearchInput } from './SearchInput';
 export { FilterBar } from './FilterBar';
 export { HealthGrid, type HealthGridGroup, type HealthGridItem } from './HealthGrid';
 export { MaskedValue } from './MaskedValue';
+export { Timeline, type TimelineItem } from './Timeline';

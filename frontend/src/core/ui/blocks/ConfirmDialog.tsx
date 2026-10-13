@@ -17,13 +17,15 @@ interface ConfirmDialogProps {
   tone?: 'danger' | 'primary';
   /** Bắt gõ đúng chuỗi này mới cho xác nhận (thao tác nguy hiểm). */
   typeToConfirm?: string;
+  /** Chặn nút xác nhận (vd. vượt giới hạn, không có quyền). */
+  confirmDisabled?: boolean;
   loading?: boolean;
   onConfirm: () => void;
   children?: React.ReactNode;
 }
 
 /** Hộp xác nhận chuẩn cho mọi thao tác thay đổi hệ thống. */
-export function ConfirmDialog({ open, onOpenChange, title, description, impact, confirmLabel, tone = 'primary', typeToConfirm, loading, onConfirm, children }: ConfirmDialogProps) {
+export function ConfirmDialog({ open, onOpenChange, title, description, impact, confirmLabel, tone = 'primary', typeToConfirm, confirmDisabled, loading, onConfirm, children }: ConfirmDialogProps) {
   const { t } = useLocale();
   const [typed, setTyped] = useState('');
   const blocked = Boolean(typeToConfirm) && typed !== typeToConfirm;
@@ -68,7 +70,7 @@ export function ConfirmDialog({ open, onOpenChange, title, description, impact, 
           <Button variant="secondary" onClick={() => onOpenChange(false)} disabled={loading}>
             {t('ui.action.cancel')}
           </Button>
-          <Button variant={tone === 'danger' ? 'danger' : 'primary'} onClick={onConfirm} disabled={blocked || loading}>
+          <Button variant={tone === 'danger' ? 'danger' : 'primary'} onClick={onConfirm} disabled={blocked || confirmDisabled || loading}>
             {confirmLabel}
           </Button>
         </DialogFooter>

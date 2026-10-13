@@ -7,8 +7,6 @@
   "src/modules/system-console/components/common/LineChart.tsx",
   "src/modules/system-console/components/storage/ObjectDrawer.tsx",
   "src/modules/system-console/sections/cache/CacheInsightViews.tsx",
-  "src/modules/system-console/sections/jobs/JobDetailView.tsx",
-  "src/modules/system-console/sections/jobs/JobsPerformanceView.tsx",
   "src/modules/system-console/sections/storage/StorageInsightViews.tsx",
   "src/modules/system-console/styles/console-components.css",
   "src/modules/system-console/styles/console-layout.css",

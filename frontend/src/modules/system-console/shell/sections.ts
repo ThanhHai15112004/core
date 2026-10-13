@@ -30,6 +30,7 @@ import { RUNTIME_RANGES } from '../constants/runtime-metrics';
 import { PERF_RANGES, PERF_TABS } from '../constants/performance';
 import { DB_RANGES, DB_TABS } from '../constants/database';
 import { WORKER_PAGE_TABS, WORKER_RANGES } from '../constants/worker';
+import { JOBS_RANGES, JOBS_TABS, SHORT_ID_HEAD } from '../constants/jobs';
 
 type Translate = (path: string, params?: Record<string, string | number>) => string;
 
@@ -137,7 +138,9 @@ export const SECTIONS: SectionDef[] = [
     group: 'background',
     icon: ListChecks,
     component: load(() => import('../sections/jobs/JobsSection'), 'JobsSection'),
-    crumb: (p, t) => (p[0] === 'job' ? `#${(p[1] ?? '').slice(0, 8)}` : p[0] ? t(`jobs.tab.${p[0]}`) : null),
+    controls: { ranges: JOBS_RANGES },
+    crumb: (p, t) => (p[0] === 'job' ? `#${(p[1] ?? '').slice(0, SHORT_ID_HEAD)}` : (JOBS_TABS as readonly string[]).includes(p[0]) ? t(`jobs.tab.${p[0]}`) : null),
+    keywords: ['job', 'retry', 'failed'],
   },
   {
     id: 'logs',
