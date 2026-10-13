@@ -104,12 +104,9 @@ export interface FailureGroup {
   errorType: string;
   count: number;
   retryable: boolean | null;
-  queues: string[];
   types: string[];
   dependency: string | null;
   lastAt: string | null;
-  sampleJobId: string | null;
-  sampleQueue: string | null;
 }
 
 export interface JobEvent {
@@ -132,7 +129,6 @@ export interface JobOperation {
   result: 'success' | 'failed';
   detail: string | null;
   reason: string | null;
-  durationMs: number;
   actor: string | null;
   ip: string | null;
   error: string | null;
@@ -149,13 +145,10 @@ export interface JobsSettings {
 export type JobsStatusValue = 'processing' | 'idle' | 'degraded' | 'critical' | 'unavailable';
 
 export interface JobsOverview {
-  generatedAt: string;
   environment: string;
-  range: JobsRange;
   provider: {
     product: string;
     backend: string;
-    endpoint: string;
     connection: string;
   };
   capabilities: JobCapability[];
@@ -177,7 +170,6 @@ export interface JobsOverview {
   priorities: Section<{ level: JobPriorityLevel; waiting: number; oldestSec: number | null }[]>;
   longRunning: Section<JobRow[]>;
   stalled: Section<JobRow[]>;
-  events: JobEvent[];
   queues: string[];
   settings: JobsSettings;
 }
@@ -204,15 +196,12 @@ export interface JobTypeRow {
 }
 
 export interface JobsReportResponse {
-  range: JobsRange;
   today: JobsReport;
   yesterday: JobsReport;
   types: JobTypeRow[];
 }
 
 export interface JobsFailures {
-  range: JobsRange;
-  queue: string | null;
   stats: {
     failedToday: number;
     failureRatePercent: number | null;
@@ -226,11 +215,9 @@ export interface JobsFailures {
   sampled: number;
   retryStorm: {
     retriesPerMin: number;
-    threshold: number;
     primaryType: string | null;
     primaryError: string | null;
   } | null;
-  settings: JobsSettings;
 }
 
 export type LifecycleKind =
@@ -256,7 +243,6 @@ export interface LifecycleStep {
   attempt: number | null;
   instance: string | null;
   runtime: string | null;
-  ms: number | null;
   delayMs: number | null;
   error: string | null;
   errorType: string | null;
@@ -273,7 +259,6 @@ export interface Attempt {
   durationMs: number | null;
   error: string | null;
   errorType: string | null;
-  dependency: string | null;
   retryable: boolean | null;
   instance: string | null;
   runtime: string | null;
@@ -289,7 +274,6 @@ export interface ActionState {
 
 export interface JobDetail {
   job: JobRow;
-  capabilities: JobCapability[];
   timing: {
     waitMs: number | null;
     processingMs: number | null;
@@ -350,16 +334,8 @@ export interface JobDetail {
   logs: { t: string; level: string; context?: string; message: string }[];
   logsMatchedBy: 'job' | 'correlation' | null;
   jobLogs: string[];
-  stalled: {
-    detected: boolean;
-    heartbeatAgeSec: number | null;
-    stalledCount: number;
-  };
-  longRunning: {
-    detected: boolean;
-    runningMs: number | null;
-    thresholdMs: number | null;
-  };
+  stalled: { heartbeatAgeSec: number | null };
+  longRunning: { detected: boolean; runningMs: number | null };
   actions: {
     retry: ActionState;
     cancel: ActionState & { mode: 'removed' | 'cooperative' | null };
@@ -378,14 +354,11 @@ export interface JobsConfig {
 }
 
 export interface JobCancelResult {
-  operation: JobOperation;
   mode: 'removed' | 'cooperative';
   delivered: boolean;
-  instance: string | null;
 }
 
 export interface JobBulkRetryResult {
-  operation: JobOperation;
   items: {
     queue: string;
     id: string;

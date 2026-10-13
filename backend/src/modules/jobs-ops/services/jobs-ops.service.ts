@@ -23,7 +23,7 @@ import {
 } from '@packages/queue/index.js';
 import { redactPayload } from '@packages/http/index.js';
 import { RuntimesService } from '@modules/runtimes/index.js';
-import { WORKER_RANGES, WorkerOpsService, type WorkerMetric } from '@modules/worker-ops/index.js';
+import { WORKER_RANGES } from '@modules/worker-ops/index.js';
 import { JobsMetricsService } from './jobs-metrics.service.js';
 import { activityAt, decodeCursor, scanJobs, type JobFilter } from './job-search.js';
 import {
@@ -34,6 +34,7 @@ import {
 import type {
   ActionStateDto,
   AttemptDto,
+  AttemptResponseDto,
   FailureGroupDto,
   JobBulkRetryDto,
   JobCancelDto,
@@ -41,7 +42,6 @@ import type {
   JobEventDto,
   JobOperationDto,
   JobProblemDto,
-  JobRetryDto,
   JobRowDto,
   JobSearchDto,
   JobsConfigDto,
@@ -66,7 +66,6 @@ const DELAYED_SCAN = 500;
 const FAILED_SAMPLE = 200;
 const PRIORITY_SAMPLE = 200;
 const LOOKUP_LIMIT = 200;
-const OVERVIEW_EVENTS = 8;
 const LOG_LIMIT = 50;
 const RESULT_MAX_BYTES = 4096;
 const PRIORITY_ORDER: JobPriorityLevel[] = ['critical', 'high', 'normal', 'low'];
@@ -109,7 +108,6 @@ export class JobsOpsService {
     private readonly queues: QueueMonitoringService,
     private readonly messaging: MessagingMonitoringService,
     private readonly metrics: JobsMetricsService,
-    private readonly workers: WorkerOpsService,
     private readonly runtimes: RuntimesService,
     private readonly config: CoreConfigService,
     private readonly i18n: CoreI18nService,
@@ -333,23 +331,15 @@ export class JobsOpsService {
           errorType: type,
           count: 0,
           retryable: null,
-          queues: [],
           types: [],
           dependency: dependencyOf(`${type} ${j.error ?? ''}`),
           lastAt: null,
-          sampleJobId: null,
-          sampleQueue: null,
           r: new Set<string>(),
         } as FailureGroupDto & { r: Set<string> });
       g.count++;
       g.r.add(String(j.status === 'retrying' ? true : j.retryable));
-      if (!g.queues.includes(j.queue)) g.queues.push(j.queue);
       if (!g.types.includes(j.type) && g.types.length < 5) g.types.push(j.type);
-      if (!g.lastAt || at > Date.parse(g.lastAt)) {
-        g.lastAt = new Date(at).toISOString();
-        g.sampleJobId = j.id;
-        g.sampleQueue = j.queue;
-      }
+      if (!g.lastAt || at > Date.parse(g.lastAt)) g.lastAt = new Date(at).toISOString();
       map.set(type, g);
     }
     return [...map.values()]
@@ -405,8 +395,8 @@ export class JobsOpsService {
   public async getOverview(range: JobsRange): Promise<JobsOverviewDto> {
     const now = Date.now();
     const today = startOfDay(now);
-    const [info, win, todayWin, hourWin, minuteWin, active, delayed, failed, events, b] =
-      await Promise.all([
+    const [info, win, todayWin, hourWin, minuteWin, active, delayed, failed, b] = await Promise.all(
+      [
         this.queues.section(null, () => this.queues.queues()),
         this.metrics.window(now - JOBS_RANGES[range] * MINUTE, now, now),
         this.metrics.window(today, now, now),
@@ -415,9 +405,9 @@ export class JobsOpsService {
         this.activeJobs(),
         this.delayedJobs(),
         this.failedSample(null),
-        this.jobs.events().catch(() => [] as JobEventRecord[]),
         this.baselines(now),
-      ]);
+      ],
+    );
     const qs = info.available ? info.data : null;
     const sum = (f: (q: QueueInfo) => number) => (qs ? qs.reduce((s, q) => s + f(q), 0) : null);
     const waiting = sum((q) => q.counts.waiting + q.counts.prioritized);
@@ -480,13 +470,10 @@ export class JobsOpsService {
             : 'idle';
     const provider = this.queues.provider.info();
     return {
-      generatedAt: new Date(now).toISOString(),
       environment: this.config.app.env,
-      range,
       provider: {
         product: provider.product,
         backend: provider.backend,
-        endpoint: provider.endpoint,
         connection: this.jobs.status().state,
       },
       capabilities: [...this.jobs.provider.capabilities],
@@ -515,10 +502,6 @@ export class JobsOpsService {
       stalled: activeRows
         ? { available: true, data: stalled!.slice(0, 10) }
         : (active as SectionDto<never>),
-      events: events
-        .filter((e) => e.at >= now - DAY)
-        .slice(0, OVERVIEW_EVENTS)
-        .map((e) => this.eventDto(e)),
       queues: this.jobs.provider.queues(),
       settings: this.settings(),
     };
@@ -674,10 +657,6 @@ export class JobsOpsService {
     return out;
   }
 
-  public getMetrics(range: JobsRange, metric: WorkerMetric, queue: string | null) {
-    return this.workers.getMetrics(range, metric, queue);
-  }
-
   // ─── Failures / Report ────────────────────────────────────────────────────
 
   public async getFailures(range: JobsRange, queue: string | null): Promise<JobsFailuresDto> {
@@ -703,8 +682,6 @@ export class JobsOpsService {
     const retriesMinute = this.metrics.counts(minuteWin).retried;
     const threshold = this.config.queue.rules.retryStormPerMin;
     return {
-      range,
-      queue,
       stats: {
         failedToday: tc.exhausted,
         failureRatePercent:
@@ -725,12 +702,10 @@ export class JobsOpsService {
         retriesMinute >= threshold
           ? {
               retriesPerMin: retriesMinute,
-              threshold,
               primaryType: groups[0]?.types[0] ?? null,
               primaryError: groups[0]?.errorType ?? null,
             }
           : null,
-      settings: this.settings(),
     };
   }
 
@@ -743,7 +718,6 @@ export class JobsOpsService {
       this.metrics.types(JOBS_RANGES[range]),
     ]);
     return {
-      range,
       today: this.metrics.report(todayWin),
       yesterday: this.metrics.report(yesterdayWin),
       types,
@@ -831,7 +805,6 @@ export class JobsOpsService {
     const cancellable = ['waiting', 'delayed', 'retrying'].includes(j.status);
     return {
       job: row,
-      capabilities: [...this.jobs.provider.capabilities],
       timing: {
         waitMs,
         processingMs,
@@ -844,7 +817,7 @@ export class JobsOpsService {
       },
       lifecycle: this.lifecycle(raw, now),
       lifecycleAvailable: raw.lifecycle.length > 0,
-      attempts,
+      attempts: attempts.map(({ dependency: _dependency, ...a }): AttemptResponseDto => a),
       failure,
       correlation: {
         correlationId: j.correlationId,
@@ -892,16 +865,8 @@ export class JobsOpsService {
       logs: logs.logs,
       logsMatchedBy: logs.by,
       jobLogs: raw.logs,
-      stalled: {
-        detected: j.status === 'stalled',
-        heartbeatAgeSec: row.heartbeatAgeSec,
-        stalledCount: j.stalledCount,
-      },
-      longRunning: {
-        detected: row.longRunning,
-        runningMs: row.runningMs,
-        thresholdMs: row.runningMs !== null ? this.longRunningThreshold(typicalMs) : null,
-      },
+      stalled: { heartbeatAgeSec: row.heartbeatAgeSec },
+      longRunning: { detected: row.longRunning, runningMs: row.runningMs },
       actions: this.actions(j, cancellable, consumers),
       settings: this.settings(),
     };
@@ -1087,7 +1052,6 @@ export class JobsOpsService {
       attempt: null,
       instance: null,
       runtime: null,
-      ms: null,
       delayMs: null,
       error: null,
       errorType: null,
@@ -1124,7 +1088,6 @@ export class JobsOpsService {
           attempt: e.attempt,
           instance: e.instance ?? null,
           runtime: e.runtime,
-          ms: e.ms,
           delayMs: e.delayMs,
           error: e.error,
           errorType: e.errorType ?? null,
@@ -1137,16 +1100,9 @@ export class JobsOpsService {
         steps.push(
           step('picked', j.startedAt, { attempt: Math.max(1, j.attempts), runtime: j.worker }),
         );
-      if (j.status === 'completed')
-        steps.push(step('completed', j.finishedAt, { ms: j.durationMs }));
+      if (j.status === 'completed') steps.push(step('completed', j.finishedAt));
       if (j.status === 'failed')
-        steps.push(
-          step('failed', j.finishedAt, {
-            ms: j.durationMs,
-            error: j.error,
-            errorType: j.errorType,
-          }),
-        );
+        steps.push(step('failed', j.finishedAt, { error: j.error, errorType: j.errorType }));
     }
     if (j.status === 'cancelled' && !steps.some((s) => s.kind === 'cancelled'))
       steps.push(step('cancelled', j.cancelledAt, { actor: j.cancelledBy, error: j.cancelReason }));
@@ -1159,14 +1115,6 @@ export class JobsOpsService {
     if ((j.status === 'retrying' || j.status === 'delayed') && j.availableAt)
       steps.push(step('scheduled', j.availableAt, { current: true }));
     return steps.sort((a, b) => (a.at && b.at ? Date.parse(a.at) - Date.parse(b.at) : 0));
-  }
-
-  public async getAttempts(id: string, queue: string | null): Promise<AttemptDto[]> {
-    return this.attempts(await this.load(id, queue));
-  }
-
-  public async getJobLifecycle(id: string, queue: string | null): Promise<LifecycleStepDto[]> {
-    return this.lifecycle(await this.load(id, queue), Date.now());
   }
 
   // ─── Events / Operations / Config ─────────────────────────────────────────
@@ -1193,12 +1141,10 @@ export class JobsOpsService {
     };
   }
 
-  public async getEvents(range: JobsRange, jobId: string | null = null): Promise<JobEventDto[]> {
+  public async getEvents(range: JobsRange): Promise<JobEventDto[]> {
     const from = Date.now() - JOBS_RANGES[range] * MINUTE;
     const events = await this.jobs.events().catch(() => [] as JobEventRecord[]);
-    return events
-      .filter((e) => (jobId ? e.jobId === jobId : e.at >= from))
-      .map((e) => this.eventDto(e));
+    return events.filter((e) => e.at >= from).map((e) => this.eventDto(e));
   }
 
   public async getOperations(): Promise<JobOperationDto[]> {
@@ -1206,7 +1152,7 @@ export class JobsOpsService {
     return ops.map((o) => this.operationDto(o));
   }
 
-  private operationDto(o: JobOperationRecord): JobOperationDto {
+  private operationDto({ durationMs: _durationMs, ...o }: JobOperationRecord): JobOperationDto {
     return { ...o, at: new Date(o.at).toISOString() };
   }
 
@@ -1280,14 +1226,10 @@ export class JobsOpsService {
     id: string,
     queue: string | null,
     ctx: JobOperationContext,
-  ): Promise<JobRetryDto> {
+  ): Promise<JobOperationDto> {
     return this.act(async () => {
-      const q = await this.resolveQueue(id, queue);
-      const r = await this.operations.retry(q, id, ctx);
-      return {
-        operation: this.operationDto(r.record),
-        job: this.row(r.job, await this.baselines(Date.now())),
-      };
+      const r = await this.operations.retry(await this.resolveQueue(id, queue), id, ctx);
+      return this.operationDto(r.record);
     });
   }
 
@@ -1297,7 +1239,7 @@ export class JobsOpsService {
   ): Promise<JobBulkRetryDto> {
     return this.act(async () => {
       const r = await this.operations.bulkRetry(items, ctx);
-      return { operation: this.operationDto(r.record), items: r.items };
+      return { items: r.items };
     });
   }
 
@@ -1310,12 +1252,7 @@ export class JobsOpsService {
     return this.act(async () => {
       const q = await this.resolveQueue(id, queue);
       const r = await this.operations.cancel(q, id, reason, ctx);
-      return {
-        operation: this.operationDto(r.record),
-        mode: r.mode,
-        delivered: r.delivered,
-        instance: r.instance,
-      };
+      return { mode: r.mode, delivered: r.delivered };
     });
   }
 

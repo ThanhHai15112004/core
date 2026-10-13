@@ -357,8 +357,8 @@ Cùng 1 codebase phục vụ 4 chế độ chạy độc lập: `api` (HTTP), `w
 - Thao tác (bật/tắt bằng env, audit + sự kiện): Retry, Retry nhiều job lỗi đã chọn (tối đa `OPS_JOBS_BULK_RETRY_MAX`),
   Cancel, Remove record (mặc định tắt), xem payload đã redact.
 - API: `GET /ops/jobs` (lọc `status, queue, type, search, window, worker, source, minAttempts, minDurationMs, errorType,
-  priority`, phân trang `cursor` + `limit`), `GET /ops/jobs/{overview,metrics,failures,report,events,operations,config}`,
-  `GET /ops/jobs/:id[/attempts|/events|/payload]`, `POST /ops/jobs/:id/{retry,cancel}`, `POST /ops/jobs/retry`,
+  priority`, phân trang `cursor` + `limit`), `GET /ops/jobs/{overview,failures,report,events,operations,config}`,
+  `GET /ops/jobs/:id[/payload]`, `POST /ops/jobs/:id/{retry,cancel}`, `POST /ops/jobs/retry`,
   `DELETE /ops/jobs/:id`.
 
 ### Logs (System Console → Logs)

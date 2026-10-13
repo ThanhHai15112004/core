@@ -61,7 +61,7 @@ describe('JobsOpsService — lần thử & vòng đời', () => {
   beforeAll(() => {
     applyTestEnv();
     const n = null as never;
-    service = new JobsOpsService(n, n, n, n, n, n, n, new CoreConfigService(), n);
+    service = new JobsOpsService(n, n, n, n, n, n, new CoreConfigService(), n);
   });
 
   const failedJob = raw(

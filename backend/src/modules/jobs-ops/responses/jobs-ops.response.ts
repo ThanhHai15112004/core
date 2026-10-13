@@ -89,12 +89,9 @@ export interface FailureGroupDto {
   count: number;
   /** false = không retry được; null = không rõ / lẫn lộn. */
   retryable: boolean | null;
-  queues: string[];
   types: string[];
   dependency: string | null;
   lastAt: string | null;
-  sampleJobId: string | null;
-  sampleQueue: string | null;
 }
 
 export interface JobEventDto {
@@ -108,7 +105,7 @@ export interface JobEventDto {
   jobType: string | null;
 }
 
-export type JobOperationDto = Omit<JobOperationRecord, 'at'> & { at: string };
+export type JobOperationDto = Omit<JobOperationRecord, 'at' | 'durationMs'> & { at: string };
 
 export interface JobsSettingsDto {
   retry: boolean;
@@ -134,10 +131,8 @@ export interface JobsKpisDto {
 }
 
 export interface JobsOverviewDto {
-  generatedAt: string;
   environment: string;
-  range: JobsRange;
-  provider: { product: string; backend: string; endpoint: string; connection: string };
+  provider: { product: string; backend: string; connection: string };
   capabilities: JobCapability[];
   status: JobsStatus;
   kpis: JobsKpisDto;
@@ -147,7 +142,6 @@ export interface JobsOverviewDto {
   priorities: SectionDto<{ level: JobPriorityLevel; waiting: number; oldestSec: number | null }[]>;
   longRunning: SectionDto<JobRowDto[]>;
   stalled: SectionDto<JobRowDto[]>;
-  events: JobEventDto[];
   queues: string[];
   settings: JobsSettingsDto;
 }
@@ -174,15 +168,12 @@ export interface JobTypeRowDto {
 }
 
 export interface JobsReportResponseDto {
-  range: JobsRange;
   today: JobsReportDto;
   yesterday: JobsReportDto;
   types: JobTypeRowDto[];
 }
 
 export interface JobsFailuresDto {
-  range: JobsRange;
-  queue: string | null;
   stats: {
     failedToday: number;
     failureRatePercent: number | null;
@@ -196,11 +187,9 @@ export interface JobsFailuresDto {
   sampled: number;
   retryStorm: {
     retriesPerMin: number;
-    threshold: number;
     primaryType: string | null;
     primaryError: string | null;
   } | null;
-  settings: JobsSettingsDto;
 }
 
 export type LifecycleStepKind =
@@ -226,7 +215,6 @@ export interface LifecycleStepDto {
   attempt: number | null;
   instance: string | null;
   runtime: string | null;
-  ms: number | null;
   delayMs: number | null;
   error: string | null;
   errorType: string | null;
@@ -254,6 +242,9 @@ export interface AttemptDto {
   stack: string | null;
 }
 
+/** Lần thử trả về client — `dependency` chỉ dùng nội bộ để suy ra phụ thuộc của lỗi cuối. */
+export type AttemptResponseDto = Omit<AttemptDto, 'dependency'>;
+
 export interface ActionStateDto {
   allowed: boolean;
   /** i18n key hậu tố giải thích vì sao không được. */
@@ -269,7 +260,6 @@ export interface RelatedLogDto {
 
 export interface JobDetailDto {
   job: JobRowDto;
-  capabilities: JobCapability[];
   timing: {
     waitMs: number | null;
     processingMs: number | null;
@@ -282,7 +272,7 @@ export interface JobDetailDto {
   };
   lifecycle: LifecycleStepDto[];
   lifecycleAvailable: boolean;
-  attempts: AttemptDto[];
+  attempts: AttemptResponseDto[];
   failure: {
     type: string;
     message: string;
@@ -328,8 +318,8 @@ export interface JobDetailDto {
   logs: RelatedLogDto[];
   logsMatchedBy: 'job' | 'correlation' | null;
   jobLogs: string[];
-  stalled: { detected: boolean; heartbeatAgeSec: number | null; stalledCount: number };
-  longRunning: { detected: boolean; runningMs: number | null; thresholdMs: number | null };
+  stalled: { heartbeatAgeSec: number | null };
+  longRunning: { detected: boolean; runningMs: number | null };
   actions: {
     retry: ActionStateDto;
     cancel: ActionStateDto & { mode: 'removed' | 'cooperative' | null };
@@ -343,20 +333,12 @@ export interface JobsConfigDto {
   items: { group: string; key: string; value: string | number | boolean | null }[];
 }
 
-export interface JobRetryDto {
-  operation: JobOperationDto;
-  job: JobRowDto;
-}
-
 export interface JobCancelDto {
-  operation: JobOperationDto;
   mode: 'removed' | 'cooperative';
   delivered: boolean;
-  instance: string | null;
 }
 
 export interface JobBulkRetryDto {
-  operation: JobOperationDto;
   items: {
     queue: string;
     id: string;

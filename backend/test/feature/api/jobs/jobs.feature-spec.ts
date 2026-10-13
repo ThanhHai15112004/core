@@ -35,7 +35,7 @@ describe('Jobs (/ops/jobs) — backend unavailable', () => {
     await context.close();
   });
 
-  it('overview: status unavailable, KPI live = null (không giả), sự kiện đọc được', async () => {
+  it('overview: status unavailable, KPI live = null (không giả)', async () => {
     const { status, body } = await call<{
       status: string;
       kpis: {
@@ -45,7 +45,6 @@ describe('Jobs (/ops/jobs) — backend unavailable', () => {
         completedToday: number;
       };
       failureGroups: { available: boolean; reason: string };
-      events: { type: string; message: string }[];
       provider: { product: string; connection: string };
       settings: { retry: boolean; remove: boolean };
       capabilities: string[];
@@ -64,7 +63,6 @@ describe('Jobs (/ops/jobs) — backend unavailable', () => {
       expect.arrayContaining(['progress', 'stalled', 'cancel']),
     );
     expect(body.data.settings).toMatchObject({ retry: true, remove: false });
-    expect(body.data.events).toEqual([]);
   });
 
   it('search / detail / retry → 503 JOBS_UNAVAILABLE', async () => {

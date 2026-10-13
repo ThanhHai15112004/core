@@ -2,7 +2,6 @@
 export const JOBS_OPS_ROUTES = {
   PREFIX: 'ops/jobs',
   OVERVIEW: 'overview',
-  METRICS: 'metrics',
   SEARCH: '',
   FAILURES: 'failures',
   REPORT: 'report',
@@ -11,8 +10,6 @@ export const JOBS_OPS_ROUTES = {
   CONFIG: 'config',
   BULK_RETRY: 'retry',
   DETAIL: ':id',
-  ATTEMPTS: ':id/attempts',
-  JOB_EVENTS: ':id/events',
   PAYLOAD: ':id/payload',
   RETRY: ':id/retry',
   CANCEL: ':id/cancel',

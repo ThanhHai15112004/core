@@ -20,7 +20,6 @@ import {
   type JobPriorityLevel,
   type JobStatus,
 } from '@packages/queue/index.js';
-import { WORKER_METRICS, type WorkerMetric } from '@modules/worker-ops/index.js';
 import { JOBS_OPS_ROUTES as R } from '../routes/jobs-ops.routes.js';
 import { JOBS_RANGES, JobsOpsService } from '../services/jobs-ops.service.js';
 import { JobsValidationException } from '../exceptions/jobs-ops.exceptions.js';
@@ -36,9 +35,6 @@ const rangeSchema = z.object({
   range: z.enum(Object.keys(JOBS_RANGES) as [JobsRange, ...JobsRange[]]).default('1h'),
 });
 const queueSchema = z.object({ queue: optional(idSchema) });
-const metricsSchema = rangeSchema.merge(queueSchema).extend({
-  metric: z.enum(WORKER_METRICS as [WorkerMetric, ...WorkerMetric[]]).default('throughput'),
-});
 /** Cửa sổ thời gian cho job đã kết thúc. */
 const WINDOWS = { '15m': 15, '1h': 60, '6h': 360, '24h': 1440, '7d': 10080 } as const;
 const searchSchema = z.object({
@@ -92,13 +88,6 @@ export class JobsOpsController {
   @Get(R.OVERVIEW)
   public overview(@Query() q: Record<string, string>) {
     return this.jobs.getOverview(parse(rangeSchema, q).range);
-  }
-
-  @Public()
-  @Get(R.METRICS)
-  public metrics(@Query() q: Record<string, string>) {
-    const { range, metric, queue } = parse(metricsSchema, q);
-    return this.jobs.getMetrics(range, metric, queue ?? null);
   }
 
   @Public()
@@ -169,24 +158,6 @@ export class JobsOpsController {
   @Get(R.DETAIL)
   public detail(@Param('id') id: string, @Query() q: Record<string, string>) {
     return this.jobs.getJob(parse(idSchema, id), parse(queueSchema, q).queue ?? null);
-  }
-
-  @Public()
-  @Get(R.ATTEMPTS)
-  public attempts(@Param('id') id: string, @Query() q: Record<string, string>) {
-    return this.jobs.getAttempts(parse(idSchema, id), parse(queueSchema, q).queue ?? null);
-  }
-
-  /** Vòng đời của job + sự kiện Console liên quan tới job. */
-  @Public()
-  @Get(R.JOB_EVENTS)
-  public async jobEvents(@Param('id') id: string, @Query() q: Record<string, string>) {
-    const jobId = parse(idSchema, id);
-    const [lifecycle, events] = await Promise.all([
-      this.jobs.getJobLifecycle(jobId, parse(queueSchema, q).queue ?? null),
-      this.jobs.getEvents('24h', jobId),
-    ]);
-    return { lifecycle, events };
   }
 
   /** Payload đã che field nhạy cảm — quyền riêng (`OPS_JOBS_PAYLOAD_ENABLED`), có audit. */

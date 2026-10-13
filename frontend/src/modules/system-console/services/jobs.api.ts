@@ -7,7 +7,6 @@ import type {
   JobEvent,
   JobFilters,
   JobOperation,
-  JobRow,
   JobSearchResult,
   JobsConfig,
   JobsFailures,
@@ -36,7 +35,7 @@ export const jobsApi = {
   events: (range: JobsRange) => fetchApi<JobEvent[]>(J('events', toQuery({ range }))),
   operations: () => fetchApi<JobOperation[]>(J('operations')),
   config: () => fetchApi<JobsConfig>(J('config')),
-  retry: (jobId: string, queue: string) => send<{ operation: JobOperation; job: JobRow }>('POST', `${id(jobId)}/retry`, { queue }),
+  retry: (jobId: string, queue: string) => send<JobOperation>('POST', `${id(jobId)}/retry`, { queue }),
   bulkRetry: (jobs: { queue: string; id: string }[]) => send<JobBulkRetryResult>('POST', 'retry', { jobs }),
   cancel: (jobId: string, queue: string, reason?: string) =>
     send<JobCancelResult>('POST', `${id(jobId)}/cancel`, {
