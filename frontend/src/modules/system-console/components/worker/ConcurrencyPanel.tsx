@@ -1,49 +1,53 @@
-import React from 'react';
+import { AlertTriangle } from 'lucide-react';
+import { useLocale } from '@core/i18n/index';
+import { useFormat } from '@core/hooks/useFormat';
+import { NO_VALUE } from '@core/lib/format';
+import { KeyValueGrid, PanelState, UsageBar } from '@core/ui/blocks';
 import type { Concurrency, WorkerRow } from '../../types/worker.types';
+import { CONCURRENCY_WARN_PERCENT } from '../../constants/worker';
 import { instanceLabel } from '../../utils/worker-format';
-import { NO_VALUE } from '../../utils/runtime-format';
-import { useLocale } from '../../../../core/i18n/index';
+import { DENSE_GRID } from './worker-ui';
+
+const THRESHOLDS = { warn: CONCURRENCY_WARN_PERCENT, crit: 100 };
 
 /**
- * Concurrency: cấu hình / đang dùng / còn trống + mức dùng theo từng worker (active ÷ concurrency cấu hình).
+ * Concurrency: cấu hình / đang dùng / còn trống / mức dùng + mức dùng từng worker (active ÷ concurrency).
  * Chỉ báo "gần giới hạn" — Console không tự đề xuất số instance cần scale.
  */
-export const ConcurrencyPanel: React.FC<{ concurrency: Concurrency | null; workers: WorkerRow[]; warnPercent?: number }> = ({ concurrency, workers, warnPercent = 90 }) => {
+export function ConcurrencyPanel({ concurrency, workers }: { concurrency: Concurrency | null; workers: WorkerRow[] }) {
   const { t } = useLocale();
-  if (!concurrency) return <p className="ov-empty-line">{t('wq.concurrency.none')}</p>;
-  const near = (concurrency.utilizationPercent ?? 0) >= warnPercent;
+  const f = useFormat();
+  if (!concurrency) return <PanelState status="empty" compact message={t('wq.concurrency.none')} />;
+  const near = (concurrency.utilizationPercent ?? 0) >= CONCURRENCY_WARN_PERCENT;
   return (
     <>
-      <dl className="db-stat-grid db-stat-compact">
-        <div>
-          <dt>{t('wq.concurrency.configured')}</dt>
-          <dd>{concurrency.configured}</dd>
-        </div>
-        <div>
-          <dt>{t('wq.concurrency.active')}</dt>
-          <dd>{concurrency.active}</dd>
-        </div>
-        <div>
-          <dt>{t('wq.concurrency.available')}</dt>
-          <dd>{concurrency.available}</dd>
-        </div>
-        <div>
-          <dt>{t('wq.concurrency.utilization')}</dt>
-          <dd className={near ? 'is-warn' : ''}>{concurrency.utilizationPercent === null ? NO_VALUE : `${concurrency.utilizationPercent}%`}</dd>
-        </div>
-      </dl>
-      {near && <p className="msg-status-line ov-tone-warn">{t('wq.concurrency.near')}</p>}
+      <KeyValueGrid
+        columns={4}
+        className={DENSE_GRID[4]}
+        items={[
+          { label: t('wq.concurrency.configured'), value: f.number(concurrency.configured), mono: true },
+          { label: t('wq.concurrency.active'), value: f.number(concurrency.active), mono: true },
+          { label: t('wq.concurrency.available'), value: f.number(concurrency.available), mono: true },
+          { label: t('wq.concurrency.utilization'), value: <span className={near ? 'text-warn-fg' : undefined}>{f.percent(concurrency.utilizationPercent)}</span>, mono: true },
+        ]}
+      />
+      {near && (
+        <p className="mt-2 flex items-center gap-1.5 text-xs text-warn-fg">
+          <AlertTriangle className="size-3.5" />
+          {t('wq.concurrency.near')}
+        </p>
+      )}
       {workers.length > 0 && (
-        <ul className="cache-bars">
+        <ul className="mt-3 flex flex-col gap-1.5">
           {workers.map((w) => {
-            const pct = w.active !== null && w.concurrency > 0 ? Math.min(100, (w.active / w.concurrency) * 100) : 0;
+            const pct = w.active !== null && w.concurrency > 0 ? (w.active / w.concurrency) * 100 : null;
             return (
-              <li key={w.id} className={pct >= warnPercent ? 'is-warn' : ''}>
-                <span className="cache-bar-label">{instanceLabel(w.id)}</span>
-                <span className="cache-bar-track">
-                  <span style={{ width: `${pct}%` }} />
+              <li key={w.id} className="flex items-center gap-2">
+                <span className="w-32 shrink-0 truncate font-mono text-xs text-fg-2" title={w.id}>
+                  {instanceLabel(w.id)}
                 </span>
-                <span className="cache-bar-value">
+                <UsageBar percent={pct} thresholds={THRESHOLDS} showValue={false} className="flex-1" />
+                <span className="w-16 shrink-0 text-right font-mono text-xs tabular-nums text-fg-2">
                   {w.active ?? NO_VALUE} / {w.concurrency}
                 </span>
               </li>
@@ -53,4 +57,4 @@ export const ConcurrencyPanel: React.FC<{ concurrency: Concurrency | null; worke
       )}
     </>
   );
-};
+}

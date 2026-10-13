@@ -1,245 +1,244 @@
-import React from 'react';
-import { AlertTriangle, RotateCcw } from 'lucide-react';
-import type { JobRow, QueueDetailTab, WorkerAlert, WorkerRange } from '../../types/worker.types';
-import type { QueueAction, QueueTarget } from '../../hooks/useQueueActions';
+import { useMemo } from 'react';
+import { createColumnHelper } from '@tanstack/react-table';
+import { RotateCcw } from 'lucide-react';
+import { useLocale } from '@core/i18n/index';
+import { useLiveQuery } from '@core/data';
+import { useFormat } from '@core/hooks/useFormat';
+import { NO_VALUE } from '@core/lib/format';
+import { Button, Hint } from '@core/ui/primitives';
+import { AlertList, DataTable, Panel, PanelGrid, QueryView, RelativeTime, StatGrid, StatTile, StatusBanner } from '@core/ui/blocks';
+import type { FailureReason, Failures, JobRow, WorkerAlert, WorkerRange } from '../../types/worker.types';
 import { workerApi } from '../../services/worker.api';
-import { usePolling } from '../../hooks/usePolling';
-import { WorkerChart } from '../../components/worker/WorkerChart';
-import { WorkerAlerts } from '../../components/worker/WorkerAlerts';
+import { FAILURE_METRICS, JOB_TABLE_MAX_HEIGHT_PX } from '../../constants/worker';
 import { JobTable } from '../../components/worker/JobTable';
-import { SectionState } from '../../components/database/SectionState';
-import { formatCompact } from '../../utils/database-format';
-import { formatMs, shortJobId } from '../../utils/worker-format';
-import { NO_VALUE } from '../../utils/runtime-format';
-import { useLocale } from '../../../../core/i18n/index';
+import { QueueMetricChart } from '../../components/worker/QueueMetricChart';
+import { SectionGate } from '../../components/worker/SectionGate';
+import type { QueueActionRequest } from '../../components/worker/QueueActionDialog';
+import { toAlertItems } from '../../components/worker/worker-ui';
+import { workerKeys } from './worker-keys';
 
-interface ViewProps {
+type ByQueue = Failures['byQueue'][number];
+const qCol = createColumnHelper<ByQueue>();
+const rCol = createColumnHelper<FailureReason>();
+
+interface Props {
   range: WorkerRange;
-  paused: boolean;
-  reloadKey: number;
-  product: string;
-  now: number;
+  product: string | undefined;
+  /** Có → chỉ lỗi của một queue (trang chi tiết queue). */
+  queue?: string;
+  queues?: string[];
+  onAction: (req: QueueActionRequest) => void;
   openJob: (j: Pick<JobRow, 'id' | 'queue'>) => void;
+  openQueue?: (name: string) => void;
+  openAlert?: (a: WorkerAlert) => void;
 }
 
+const retryTarget = (name: string, failed: number): QueueActionRequest => ({
+  action: 'retry',
+  target: { name, failed, waiting: 0, active: 0, delayed: 0, paused: false },
+});
+
 /**
- * Failures & Retry (toàn bộ hoặc một queue): số lỗi, tỷ lệ, đang retry, hồi phục, hết lượt thử; failure spike;
- * queue lỗi nhiều nhất; lý do lỗi gộp nhóm; biểu đồ; job đang chờ retry; job treo; job lỗi (dead letter).
- * Job treo không tự retry — side effect chưa rõ.
+ * Lỗi & Retry (toàn bộ hoặc một queue): số lỗi, tỷ lệ, đang retry, hồi phục, hết lượt; lỗi tăng đột biến; queue lỗi
+ * nhiều nhất; lý do lỗi gộp nhóm; biểu đồ; job chờ retry; job treo (không tự retry — side effect chưa rõ); job lỗi.
  */
-export const WorkerFailuresView: React.FC<
-  ViewProps & {
-    queue?: string;
-    queues?: string[];
-    openQueue?: (name: string, sub?: QueueDetailTab) => void;
-    openAlert?: (a: WorkerAlert) => void;
-    onAction: (action: QueueAction, target: QueueTarget) => void;
-  }
-> = ({ range, paused, reloadKey, product, now, queue, queues = [], openJob, openQueue, openAlert, onAction }) => {
-  const { t, locale, formatRelative } = useLocale();
-  const { data, error } = usePolling(() => workerApi.failures(range, queue), `failures:${queue ?? ''}:${range}:${reloadKey}`, 15_000, paused);
-  const n = (v: number | null) => (v === null ? NO_VALUE : formatCompact(v, locale));
-  const s = data?.stats;
-  const retryQueue = (name: string, failed: number) => onAction('retry', { name, failed, waiting: 0, active: 0, delayed: 0, paused: false });
-  const kpis: { key: string; value: string; sub: string; warn: boolean }[] = s
-    ? [
-        { key: 'failed', value: n(s.failed), sub: t('wq.failures.todaySub', { count: n(s.failedToday) }), warn: s.failed > 0 },
-        { key: 'rate', value: s.failureRatePercent === null ? NO_VALUE : `${s.failureRatePercent}%`, sub: t(`tr.range.${range}`), warn: (s.failureRatePercent ?? 0) > 0 },
-        { key: 'retrying', value: n(s.retryingNow), sub: t('wq.failures.retriedSub', { count: n(s.retried) }), warn: (s.retryingNow ?? 0) > 0 },
-        { key: 'recovered', value: n(s.recovered), sub: t('wq.failures.todaySub', { count: n(s.recoveredToday) }), warn: false },
-        { key: 'exhausted', value: n(s.exhausted), sub: t('wq.failures.todaySub', { count: n(s.exhaustedToday) }), warn: s.exhausted > 0 },
-        { key: 'deadLetter', value: n(s.deadLetter), sub: t('wq.failures.deadLetterSub'), warn: (s.deadLetter ?? 0) > 0 },
-      ]
-    : [];
-  return (
-    <>
-      {error && !data && <p className="scp-alert scp-alert-danger">{error.message}</p>}
-      {s && (
-        <div className="ov-kpi-grid wq-kpi-6">
-          {kpis.map((k) => (
-            <div key={k.key} className={`ov-card ov-kpi ov-tone-${k.warn ? 'warn' : 'ok'}`}>
-              <span className="ov-kpi-label">{t(`wq.failures.${k.key}`)}</span>
-              <span className="ov-kpi-value">{k.value}</span>
-              <span className="ov-kpi-sub">{k.sub}</span>
-            </div>
-          ))}
-        </div>
-      )}
-      {data?.spike && (
-        <section className="pf-status db-health ov-tone-warn" role="alert">
-          <AlertTriangle size={20} className="pf-status-icon" />
-          <div className="db-health-body">
-            <strong>{t('wq.failures.spikeTitle')}</strong>
-            <span>
-              {t('wq.failures.spike', {
-                from: data.spike.baselineRatePercent === null ? NO_VALUE : `${data.spike.baselineRatePercent}%`,
-                to: `${data.spike.recentRatePercent}%`,
-                min: data.spike.sinceMin,
-              })}
-              {!queue && data.byQueue[0] && ` · ${t('wq.failures.topQueue', { queue: data.byQueue[0].queue })}`}
+export function WorkerFailuresView({ range, product, queue, queues = [], onAction, openJob, openQueue, openAlert }: Props) {
+  const { t } = useLocale();
+  const f = useFormat();
+  const query = useLiveQuery(workerKeys.failures(range, queue), () => workerApi.failures(range, queue));
+  const n = (v: number | null) => f.compact(v);
+  const canRetry = query.data?.settings.retryFailed ?? false;
+
+  const queueCols = useMemo(
+    () => [
+      qCol.accessor('queue', { header: t('wq.queue.name'), meta: { mono: true, truncate: true } }),
+      qCol.accessor('failures', { header: t('wq.failures.failed'), cell: (c) => f.compact(c.getValue()), meta: { mono: true, align: 'right' } }),
+      qCol.accessor('failed', { header: t('wq.failures.deadLetter'), cell: (c) => f.compact(c.getValue()), meta: { mono: true, align: 'right' } }),
+      ...(canRetry
+        ? [
+            qCol.display({
+              id: 'retry',
+              header: '',
+              cell: (c) =>
+                c.row.original.failed > 0 ? (
+                  <Hint content={t('wq.action.retryFailed')}>
+                    <Button
+                      size="icon-xs"
+                      variant="ghost"
+                      aria-label={t('wq.action.retryFailed')}
+                      onClick={(e) => (e.stopPropagation(), onAction(retryTarget(c.row.original.queue, c.row.original.failed)))}
+                    >
+                      <RotateCcw />
+                    </Button>
+                  </Hint>
+                ) : null,
+              meta: { align: 'right' as const, width: '44px' },
+            }),
+          ]
+        : []),
+    ],
+    [t, f, canRetry, onAction],
+  );
+
+  const reasonCols = useMemo(
+    () => [
+      rCol.accessor('reason', { header: t('wq.failures.reason'), cell: (c) => <span className="text-crit-fg">{c.getValue()}</span>, meta: { mono: true, truncate: true, width: '46%' } }),
+      rCol.accessor('count', { header: t('wq.failures.count'), cell: (c) => f.compact(c.getValue()), meta: { mono: true, align: 'right' } }),
+      rCol.accessor((r) => r.queues.join(', '), { id: 'queues', header: t('wq.failures.queues'), meta: { mono: true, truncate: true } }),
+      rCol.accessor('lastAt', {
+        header: t('wq.failures.last'),
+        cell: (c) => {
+          const r = c.row.original;
+          return (
+            <span className="flex items-center gap-2 whitespace-nowrap">
+              <RelativeTime value={r.lastAt} className="text-xs" />
+              {r.sampleJobId && r.queues[0] && (
+                <button
+                  type="button"
+                  className="font-mono text-xs text-info-fg hover:underline"
+                  onClick={(e) => (e.stopPropagation(), openJob({ id: r.sampleJobId!, queue: r.queues[0]! }))}
+                >
+                  {f.shortId(r.sampleJobId)}
+                </button>
+              )}
             </span>
-          </div>
-        </section>
-      )}
-      {data && data.alerts.length > 0 && <WorkerAlerts alerts={data.alerts} now={now} onOpen={(a) => (openAlert ? openAlert(a) : undefined)} />}
-
-      <div className="ov-split db-split-even">
-        {!queue && (
-          <section className="ov-card ov-section">
-            <header className="ov-section-head">
-              <h3>{t('wq.failures.byQueue')}</h3>
-              <span className="ov-section-hint">{t(`tr.range.${range}`)}</span>
-            </header>
-            {data && data.byQueue.length === 0 ? (
-              <p className="cache-ok-line">{t('wq.failures.noneByQueue')}</p>
-            ) : (
-              <ul className="cache-key-list">
-                {data?.byQueue.map((b) => (
-                  <li key={b.queue}>
-                    <button type="button" className="ov-link" onClick={() => openQueue?.(b.queue, 'failures')}>
-                      <code>{b.queue}</code>
-                    </button>
-                    <span>
-                      {t('wq.failures.byQueueValue', { failures: n(b.failures), failed: n(b.failed) })}
-                      {data.settings.retryFailed && b.failed > 0 && (
-                        <button type="button" className="ov-link" onClick={() => retryQueue(b.queue, b.failed)}>
-                          <RotateCcw size={12} /> {t('wq.action.retryFailed')}
-                        </button>
-                      )}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-        )}
-        <section className="ov-card ov-section">
-          <header className="ov-section-head">
-            <h3>{t('wq.failures.reasons')}</h3>
-            {data && <span className="ov-section-hint">{t('wq.failures.sampled', { count: data.sampled })}</span>}
-          </header>
-          {data && data.reasons.length === 0 ? (
-            <p className="cache-ok-line">{t('wq.failures.noReasons')}</p>
-          ) : (
-            <div className="scp-table-wrap">
-              <table className="scp-table">
-                <thead>
-                  <tr>
-                    <th>{t('wq.failures.reason')}</th>
-                    <th>{t('wq.failures.count')}</th>
-                    <th>{t('wq.failures.queues')}</th>
-                    <th>{t('wq.failures.last')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data?.reasons.map((r) => (
-                    <tr key={r.reason}>
-                      <td className="cache-key-cell">
-                        <code>{r.reason}</code>
-                      </td>
-                      <td>{r.count}</td>
-                      <td>{r.queues.join(', ')}</td>
-                      <td>
-                        {r.lastAt ? formatRelative(new Date(r.lastAt), now) : NO_VALUE}
-                        {r.sampleJobId && (
-                          <button type="button" className="ov-link" onClick={() => openJob({ id: r.sampleJobId!, queue: r.queues[0]! })}>
-                            #{shortJobId(r.sampleJobId)}
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </section>
-      </div>
-
-      <WorkerChart range={range} paused={paused} queues={queues} {...(queue ? { queue } : {})} initial="failures" title={t('wq.failures.trend')} />
-
-      <section className="ov-card ov-section">
-        <header className="ov-section-head">
-          <h3>{t('wq.retry.title')}</h3>
-          {s && <span className="ov-section-hint">{t('wq.retry.today', { retried: n(s.retriedToday), recovered: n(s.recoveredToday), exhausted: n(s.exhaustedToday) })}</span>}
-        </header>
-        <SectionState section={data?.retrying} driver={product} scope="wq">
-          {(rows) => (
-            <JobTable rows={rows} columns={['id', 'queue', 'type', 'attempt', 'runAt', 'error']} onOpen={openJob} emptyText={t('wq.retry.none')} now={now} />
-          )}
-        </SectionState>
-      </section>
-
-      <section className="ov-card ov-section">
-        <header className="ov-section-head">
-          <h3>{t('wq.stalled.title')}</h3>
-          <span className="ov-section-hint">{t('wq.stalled.hint')}</span>
-        </header>
-        <SectionState section={data?.stalled} driver={product} scope="wq">
-          {(rows) => <JobTable rows={rows} columns={['id', 'queue', 'type', 'running', 'worker']} onOpen={openJob} emptyText={t('wq.stalled.none')} now={now} />}
-        </SectionState>
-        <p className="pf-chart-note">{t('wq.stalled.note')}</p>
-      </section>
-
-      <section className="ov-card ov-section">
-        <header className="ov-section-head">
-          <h3>{t('wq.failed.title')}</h3>
-          {queue && data?.settings.retryFailed && (s?.deadLetter ?? 0) > 0 && (
-            <button type="button" className="scp-btn scp-btn-sm scp-btn-secondary" onClick={() => retryQueue(queue, s!.deadLetter!)}>
-              <RotateCcw size={13} /> {t('wq.action.retryFailed')}
-            </button>
-          )}
-        </header>
-        <SectionState section={data?.failedJobs} driver={product} scope="wq">
-          {(rows) => <JobTable rows={rows} columns={['id', 'queue', 'type', 'attempt', 'time', 'error']} onOpen={openJob} emptyText={t('wq.failed.none')} now={now} />}
-        </SectionState>
-        <p className="pf-chart-note">{t('wq.failed.note')}</p>
-      </section>
-    </>
+          );
+        },
+        meta: { width: '170px' },
+      }),
+    ],
+    [t, f, openJob],
   );
-};
 
-/** Job hẹn giờ: tổng, lần chạy kế tiếp, lâu nhất; theo lý do (retry / lặp / delay). Không phải cron của Scheduler. */
-export const WorkerDelayedView: React.FC<ViewProps & { openQueue: (name: string, sub?: QueueDetailTab) => void }> = ({ paused, reloadKey, product, now, openJob }) => {
-  const { t, locale, formatTime, formatRelative } = useLocale();
-  const { data, error } = usePolling(() => workerApi.delayed(), `delayed:${reloadKey}`, 15_000, paused);
-  const n = (v: number | null) => (v === null ? NO_VALUE : formatCompact(v, locale));
+  const reasonsPanel = (d: Failures) => (
+    <Panel title={t('wq.failures.reasons')} hint={t('wq.failures.sampled', { count: d.sampled })} flush>
+      <DataTable data={d.reasons} columns={reasonCols} getRowId={(r) => r.reason} emptyMessage={t('wq.failures.noReasons')} initialSorting={[{ id: 'count', desc: true }]} />
+    </Panel>
+  );
+
   return (
-    <>
-      {error && !data && <p className="scp-alert scp-alert-danger">{error.message}</p>}
-      {data && (
-        <div className="ov-kpi-grid wq-kpi-6">
-          <div className="ov-card ov-kpi">
-            <span className="ov-kpi-label">{t('wq.delayed.total')}</span>
-            <span className="ov-kpi-value">{n(data.total)}</span>
-          </div>
-          <div className="ov-card ov-kpi">
-            <span className="ov-kpi-label">{t('wq.delayed.nextDue')}</span>
-            <span className="ov-kpi-value">{data.nextDueAt ? formatTime(Date.parse(data.nextDueAt)) : NO_VALUE}</span>
-            <span className="ov-kpi-sub">{data.nextDueAt ? formatRelative(new Date(data.nextDueAt), now) : ''}</span>
-          </div>
-          <div className="ov-card ov-kpi">
-            <span className="ov-kpi-label">{t('wq.delayed.oldest')}</span>
-            <span className="ov-kpi-value">{data.oldestSec === null ? NO_VALUE : formatMs(data.oldestSec * 1000)}</span>
-          </div>
-          {(['retry', 'repeat', 'delay'] as const).map((r) => (
-            <div key={r} className="ov-card ov-kpi">
-              <span className="ov-kpi-label">{t(`wq.delayed.reason.${r}`)}</span>
-              <span className="ov-kpi-value">{data.byReason[r]}</span>
-            </div>
-          ))}
-        </div>
-      )}
-      <section className="ov-card ov-section">
-        <header className="ov-section-head">
-          <h3>{t('wq.delayed.title')}</h3>
-          <span className="ov-section-hint">{t('wq.delayed.hint')}</span>
-        </header>
-        <SectionState section={data?.jobs} driver={product} scope="wq">
-          {(rows) => <JobTable rows={rows} columns={['id', 'queue', 'type', 'runAt', 'reason', 'attempt']} onOpen={openJob} emptyText={t('wq.delayed.none')} now={now} />}
-        </SectionState>
-        <p className="pf-chart-note">{t('wq.delayed.note')}</p>
-      </section>
-    </>
+    <QueryView query={query}>
+      {(d) => {
+        const s = d.stats;
+        return (
+          <>
+            <StatGrid columns={6}>
+              <StatTile label={t('wq.failures.failed')} value={n(s.failed)} sub={t('wq.failures.today', { count: n(s.failedToday) })} tone={s.failed > 0 ? 'warn' : 'ok'} />
+              <StatTile
+                label={t('wq.failures.rate')}
+                value={f.percent(s.failureRatePercent)}
+                hint={t('ui.time.last', { range: t(`ui.time.ranges.${range}`) })}
+                tone={(s.failureRatePercent ?? 0) > 0 ? 'warn' : s.failureRatePercent === null ? undefined : 'ok'}
+              />
+              <StatTile label={t('wq.failures.retrying')} value={n(s.retryingNow)} sub={t('wq.failures.retried', { count: n(s.retried) })} tone={(s.retryingNow ?? 0) > 0 ? 'warn' : undefined} />
+              <StatTile label={t('wq.failures.recovered')} value={n(s.recovered)} sub={t('wq.failures.today', { count: n(s.recoveredToday) })} />
+              <StatTile label={t('wq.failures.exhausted')} value={n(s.exhausted)} sub={t('wq.failures.today', { count: n(s.exhaustedToday) })} tone={s.exhausted > 0 ? 'crit' : undefined} />
+              <StatTile label={t('wq.failures.deadLetter')} value={n(s.deadLetter)} hint={t('wq.failures.deadLetterHint')} tone={(s.deadLetter ?? 0) > 0 ? 'crit' : undefined} />
+            </StatGrid>
+
+            {d.spike && (
+              <StatusBanner
+                tone="warn"
+                title={t('wq.failures.spikeTitle')}
+                description={[
+                  t('wq.failures.spike', {
+                    from: d.spike.baselineRatePercent === null ? NO_VALUE : f.percent(d.spike.baselineRatePercent),
+                    to: f.percent(d.spike.recentRatePercent),
+                    min: d.spike.sinceMin,
+                  }),
+                  !queue && d.byQueue[0] ? t('wq.failures.topQueue', { queue: d.byQueue[0].queue }) : null,
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
+              />
+            )}
+
+            {d.alerts.length > 0 && (
+              <Panel title={t('wq.alerts.title')} className="mb-4">
+                <AlertList items={toAlertItems(d.alerts, (a) => openAlert?.(a))} />
+              </Panel>
+            )}
+
+            {queue ? (
+              <div className="mb-4">{reasonsPanel(d)}</div>
+            ) : (
+              <PanelGrid layout="1-2">
+                <Panel title={t('wq.failures.byQueue')} hint={t('ui.time.last', { range: t(`ui.time.ranges.${range}`) })} flush>
+                  <DataTable
+                    data={d.byQueue}
+                    columns={queueCols}
+                    getRowId={(b) => b.queue}
+                    onRowClick={openQueue ? (b) => openQueue(b.queue) : undefined}
+                    emptyMessage={t('wq.failures.noneByQueue')}
+                  />
+                </Panel>
+                {reasonsPanel(d)}
+              </PanelGrid>
+            )}
+
+            <QueueMetricChart range={range} title={t('wq.failures.trend')} queue={queue} queues={queues} metrics={FAILURE_METRICS} className="mb-4" />
+
+            <Panel
+              title={t('wq.retry.title')}
+              hint={t('wq.retry.today', { retried: n(s.retriedToday), recovered: n(s.recoveredToday), exhausted: n(s.exhaustedToday) })}
+              flush
+              className="mb-4"
+            >
+              <SectionGate section={d.retrying} product={product} className="p-3">
+                {(rows) => (
+                  <JobTable
+                    rows={rows}
+                    columns={queue ? ['id', 'type', 'attempt', 'runAt', 'error'] : ['id', 'queue', 'type', 'attempt', 'runAt', 'error']}
+                    onOpen={openJob}
+                    emptyMessage={t('wq.retry.none')}
+                    maxHeight={JOB_TABLE_MAX_HEIGHT_PX}
+                  />
+                )}
+              </SectionGate>
+            </Panel>
+
+            <Panel
+              title={t('wq.failed.title')}
+              hint={t('wq.failed.note')}
+              flush
+              className="mb-4"
+              actions={
+                queue && canRetry && (s.deadLetter ?? 0) > 0 ? (
+                  <Button size="xs" variant="secondary" onClick={() => onAction(retryTarget(queue, s.deadLetter!))}>
+                    <RotateCcw />
+                    {t('wq.action.retryFailed')}
+                  </Button>
+                ) : undefined
+              }
+            >
+              <SectionGate section={d.failedJobs} product={product} className="p-3">
+                {(rows) => (
+                  <JobTable
+                    rows={rows}
+                    columns={queue ? ['id', 'type', 'attempt', 'time', 'error'] : ['id', 'queue', 'type', 'attempt', 'time', 'error']}
+                    onOpen={openJob}
+                    emptyMessage={t('wq.failed.none')}
+                    maxHeight={JOB_TABLE_MAX_HEIGHT_PX}
+                  />
+                )}
+              </SectionGate>
+            </Panel>
+            <Panel title={t('wq.stalled.title')} hint={`${t('wq.stalled.hint')} · ${t('wq.stalled.note')}`} flush className="mb-4">
+              <SectionGate section={d.stalled} product={product} className="p-3">
+                {(rows) => (
+                  <JobTable
+                    rows={rows}
+                    columns={queue ? ['id', 'type', 'running', 'worker'] : ['id', 'queue', 'type', 'running', 'worker']}
+                    onOpen={openJob}
+                    emptyMessage={t('wq.stalled.none')}
+                    maxHeight={JOB_TABLE_MAX_HEIGHT_PX}
+                  />
+                )}
+              </SectionGate>
+            </Panel>
+          </>
+        );
+      }}
+    </QueryView>
   );
-};
+}

@@ -29,6 +29,7 @@ import { SCHEDULER_RANGES, SCHEDULER_TABS } from '../constants/scheduler';
 import { RUNTIME_RANGES } from '../constants/runtime-metrics';
 import { PERF_RANGES, PERF_TABS } from '../constants/performance';
 import { DB_RANGES, DB_TABS } from '../constants/database';
+import { WORKER_PAGE_TABS, WORKER_RANGES } from '../constants/worker';
 
 type Translate = (path: string, params?: Record<string, string | number>) => string;
 
@@ -113,7 +114,15 @@ export const SECTIONS: SectionDef[] = [
     crumb: tabCrumb('messaging'),
     keywords: ['queue', 'broker'],
   },
-  { id: 'worker', group: 'background', icon: Boxes, component: load(() => import('../sections/worker/WorkerSection'), 'WorkerSection'), crumb: tabCrumb('wq'), keywords: ['queue', 'bullmq'] },
+  {
+    id: 'worker',
+    group: 'background',
+    icon: Boxes,
+    component: load(() => import('../sections/worker/WorkerSection'), 'WorkerSection'),
+    controls: { ranges: WORKER_RANGES },
+    crumb: (p, t) => (p[0] === 'queues' && p[1] ? p[1] : (WORKER_PAGE_TABS as readonly string[]).includes(p[0] ?? '') ? t(`wq.tab.${p[0]}`) : null),
+    keywords: ['queue', 'bullmq'],
+  },
   {
     id: 'scheduler',
     group: 'background',

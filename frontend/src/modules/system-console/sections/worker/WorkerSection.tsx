@@ -1,168 +1,136 @@
-import React, { useCallback, useState } from 'react';
-import { Ban, Pause, Play, Radio, RefreshCw, WifiOff } from 'lucide-react';
-import type { JobRow, WorkerAlert, WorkerEvent } from '../../types/worker.types';
+import React from 'react';
+import { ArrowRight, Boxes, RefreshCw } from 'lucide-react';
+import { useLocale } from '@core/i18n/index';
+import { useLiveQuery } from '@core/data';
+import { useFormat } from '@core/hooks/useFormat';
+import { Badge, Button, Hint } from '@core/ui/primitives';
+import { PageHeader, PageTabs, StatusBanner, type PageTab } from '@core/ui/blocks';
+import type { WorkerAlert, WorkerEvent } from '../../types/worker.types';
 import { workerApi } from '../../services/worker.api';
-import { usePolling } from '../../hooks/usePolling';
-import { useWorkerRoute } from '../../hooks/useWorkerRoute';
-import { useQueueActions } from '../../hooks/useQueueActions';
-import { TAB_CAPABILITY, WORKER_RANGES, WORKER_TABS } from '../../constants/worker';
-import { WorkerHealthBanner } from '../../components/worker/WorkerHealthBanner';
-import { WorkerDrawer } from '../../components/worker/WorkerDrawer';
-import { WorkerOverviewView } from './WorkerOverviewView';
-import { WorkerQueuesView, WorkerWorkersView } from './WorkerListViews';
-import { QueueDetailView } from './QueueDetailView';
-import { WorkerDelayedView, WorkerFailuresView } from './WorkerFailuresView';
-import { WorkerConfigView, WorkerEventsView } from './WorkerOtherViews';
-import { useLocale } from '../../../../core/i18n/index';
-import { useNow } from '../../../../core/hooks/useNow';
-import '../../styles/console-runtimes.css';
-import '../../styles/console-traffic.css';
-import '../../styles/console-performance.css';
-import '../../styles/console-database.css';
-import '../../styles/console-cache.css';
-import '../../styles/console-storage.css';
-import '../../styles/console-messaging.css';
-import '../../styles/console-worker.css';
+import { BACKGROUND_TONE, WORKER_PAGE_TABS, type WorkerPageTab } from '../../constants/worker';
+import { QueueActionDialog } from '../../components/worker/QueueActionDialog';
+import { WorkerDetailSheet } from '../../components/worker/WorkerDetailSheet';
+import { useWorkerPage } from './useWorkerPage';
+import { workerKeys } from './worker-keys';
+import { WorkerOverviewTab } from './WorkerOverviewTab';
+import { WorkerQueuesTab } from './WorkerQueuesTab';
+import { WorkerWorkersTab } from './WorkerWorkersTab';
+import { WorkerActivityTab } from './WorkerActivityTab';
+import { QueueDetailPage } from './QueueDetailPage';
+import { WorkerConfigSheet } from './WorkerConfigSheet';
 
 /**
- * Worker & Queue: `worker/<tab>/<id>/<sub>` — công việc nền có được worker thực thi kịp và thành công không:
- * worker online, backlog, incoming vs processing, thời gian chờ/xử lý, lỗi & retry, job treo, concurrency, sự kiện,
- * thao tác queue. Khác Messaging (message có đi từ producer tới consumer không) và Jobs (điều tra từng job).
- * Phần provider không hỗ trợ / không kết nối hiện rõ lý do — không có số liệu giả.
+ * Worker & Queue — công việc nền có được worker thực thi kịp và thành công không.
+ * Tổng quan · Queues · Workers · Lỗi & Hoạt động; chi tiết queue là trang con; worker instance mở drawer
+ * (`?item=`); cấu hình mở sheet ⚙. Phần provider không hỗ trợ / không kết nối nói rõ lý do — không số liệu giả.
  */
 export const WorkerSection: React.FC = () => {
-  const { t, formatRelative } = useLocale();
-  const now = useNow();
-  const { tab, id, sub, range, query, go, openQueue, setRange, navigate } = useWorkerRoute();
-  const [paused, setPaused] = useState(false);
-  const [reloadKey, setReloadKey] = useState(0);
-  const overview = usePolling(() => workerApi.overview(range), `worker:${range}:${reloadKey}`, undefined, paused);
-  const bump = useCallback(() => setReloadKey((k) => k + 1), []);
+  const { t, formatTime } = useLocale();
+  const f = useFormat();
+  const page = useWorkerPage();
+  const overview = useLiveQuery(workerKeys.overview(page.range), () => workerApi.overview(page.range));
   const data = overview.data;
-  const actions = useQueueActions(data?.settings, bump);
-  const caps = new Set(data?.capabilities ?? []);
-  const product = data ? `${data.provider.product} (${data.provider.backend})` : '';
-  const queueNames = data?.queues.available ? data.queues.data.map((q) => q.name) : [];
+  const health = data?.health;
+  const product = data?.provider.product;
 
-  /** Job cụ thể → Job Detail (vòng đời, lần thử, lỗi, nguồn, retry / huỷ). */
-  const openJob = (j: Pick<JobRow, 'id' | 'queue'>) => navigate(`jobs/job/${encodeURIComponent(j.id)}?queue=${encodeURIComponent(j.queue)}`);
-  const openAlert = (a: WorkerAlert) => (a.queue ? openQueue(a.queue, a.tab === 'failures' ? 'failures' : 'overview') : go(a.tab));
-  const openEvent = (e: WorkerEvent) => (e.queue ? openQueue(e.queue) : e.tab ? go(e.tab) : undefined);
+  const openAlert = (a: WorkerAlert) => (a.queue ? page.openQueue(a.queue, a.tab === 'failures' ? 'failures' : 'overview') : page.openLegacyTab(a.tab));
+  const openEvent = (e: WorkerEvent) => (e.queue ? page.openQueue(e.queue) : e.tab ? page.openLegacyTab(e.tab) : undefined);
+
+  const problems = data?.alerts.filter((a) => a.severity !== 'info').length ?? null;
+  const tabs: PageTab<WorkerPageTab>[] = WORKER_PAGE_TABS.map((id) => ({
+    id,
+    label: t(`wq.tab.${id}`),
+    ...(id === 'overview' ? { count: problems, countTone: 'warn' as const } : {}),
+    ...(id === 'activity' ? { count: data?.kpis.failed ?? null, countTone: 'crit' as const } : {}),
+  }));
+
+  const noWorkers = health?.reasons.some((r) => r.code.startsWith('NO_WORKER')) ?? false;
+  const queueProblems = new Set(health?.reasons.map((r) => r.queue).filter(Boolean)).size;
 
   const renderTab = () => {
-    const cap = TAB_CAPABILITY[tab];
-    if (data && cap && !caps.has(cap)) {
-      return (
-        <section className="tr-empty-state" role="status">
-          <Ban size={28} />
-          <h2>{t('wq.unsupported.title')}</h2>
-          <p>{t('wq.unsupported.message', { product })}</p>
-        </section>
-      );
-    }
-    const common = { range, paused, reloadKey, product, now };
-    switch (tab) {
-      case 'workers':
-        return <WorkerWorkersView {...common} openWorker={(w) => go('workers', w)} openQueue={openQueue} />;
+    if (page.queueName) return <QueueDetailPage key={page.queueName} page={page} name={page.queueName} product={product} />;
+    switch (page.tab) {
       case 'queues':
-        return id ? (
-          <QueueDetailView
-            key={id}
-            {...common}
-            name={id}
-            sub={sub}
-            onSub={(s) => openQueue(id, s, query)}
-            onBack={() => go('queues')}
-            onAction={actions.request}
-            openJob={openJob}
-            openWorker={(w) => go('workers', w)}
-            navigate={navigate}
-          />
-        ) : (
-          <WorkerQueuesView {...common} openQueue={openQueue} />
-        );
-      case 'failures':
-        return <WorkerFailuresView {...common} queues={queueNames} openJob={openJob} openQueue={openQueue} openAlert={openAlert} onAction={actions.request} />;
-      case 'delayed':
-        return <WorkerDelayedView {...common} openJob={openJob} openQueue={openQueue} />;
-      case 'events':
-        return <WorkerEventsView {...common} openEvent={openEvent} />;
-      case 'configuration':
-        return <WorkerConfigView />;
+        return <WorkerQueuesTab page={page} product={product} />;
+      case 'workers':
+        return <WorkerWorkersTab page={page} />;
+      case 'activity':
+        return <WorkerActivityTab page={page} data={data} openAlert={openAlert} openEvent={openEvent} />;
       default:
-        return <WorkerOverviewView data={data} {...common} go={go} openQueue={openQueue} openAlert={openAlert} openEvent={openEvent} openJob={openJob} />;
+        return <WorkerOverviewTab page={page} overview={overview} openAlert={openAlert} />;
     }
   };
 
-  const problems = data?.alerts.filter((a) => a.severity !== 'info').length ?? 0;
-  const failing = data?.kpis.failed ?? 0;
   return (
-    <div className="ov-page">
-      <header className="ov-page-head">
-        <div>
-          <h1 className="ov-page-title">{t('nav.worker')}</h1>
-          <p className="ov-page-subtitle">{t('wq.subtitle')}</p>
-        </div>
-        <div className="tr-live">
-          <span className={`tr-live-badge ${paused ? 'is-paused' : ''}`}>
-            {paused ? <Pause size={12} /> : <Radio size={12} />}
-            {paused ? t('tr.live.paused') : t('tr.live.live')}
-          </span>
-          <span className="ov-page-updated">
-            <time>{overview.lastUpdated ? formatRelative(overview.lastUpdated, now) : '--'}</time>
-          </span>
-          <button type="button" className="scp-btn scp-btn-sm scp-btn-secondary" onClick={bump}>
-            <RefreshCw size={13} /> {t('cache.refresh')}
-          </button>
-          <button type="button" className="scp-btn scp-btn-sm scp-btn-secondary" onClick={() => setPaused((p) => !p)} aria-pressed={paused}>
-            {paused ? <Play size={13} /> : <Pause size={13} />} {paused ? t('tr.live.resume') : t('tr.live.pause')}
-          </button>
-        </div>
-      </header>
+    <div>
+      <PageHeader
+        title={t('nav.worker')}
+        icon={Boxes}
+        status={health ? { tone: BACKGROUND_TONE[health.status], label: t(`wq.health.short.${health.status}`) } : undefined}
+        actions={
+          data ? (
+            <Hint
+              content={
+                <span className="font-mono">
+                  {data.provider.endpoint}
+                  {health?.pingMs !== null && health?.pingMs !== undefined && ` · ${t('wq.provider.ping', { value: f.duration(health.pingMs) })}`}
+                  {` · ${t('wq.provider.checked', { time: formatTime(data.generatedAt, true) })}`}
+                </span>
+              }
+            >
+              <Badge variant="outline" className="hidden font-mono sm:inline-flex">
+                {data.provider.product} · {data.provider.backend} · {data.environment}
+              </Badge>
+            </Hint>
+          ) : undefined
+        }
+        onSettings={() => page.setSettings(true)}
+      />
 
-      {overview.error && !data ? (
-        <section className="ov-offline" role="alert">
-          <WifiOff size={22} className="ov-offline-icon" />
-          <div className="ov-offline-body">
-            <h2>{t('ov.offline.title')}</h2>
-            <p>{overview.error.message}</p>
-          </div>
-        </section>
-      ) : (
-        data && (
-          <WorkerHealthBanner
-            data={data}
-            now={now}
-            onOpenQueue={(q) => openQueue(q)}
-            onInspectWorkers={() => go('workers')}
-            onInspectRuntime={() => navigate('runtimes/worker')}
-          />
-        )
+      {overview.isError && !data && (
+        <StatusBanner
+          tone="crit"
+          title={t('wq.offline')}
+          description={overview.error instanceof Error ? overview.error.message : undefined}
+          actions={
+            <Button size="xs" onClick={() => void overview.refetch()}>
+              <RefreshCw />
+              {t('ui.state.retry')}
+            </Button>
+          }
+        />
       )}
 
-      <div className="tr-controls">
-        <nav className="rt-tabs" role="tablist" aria-label={t('nav.worker')}>
-          {WORKER_TABS.map((x) => (
-            <button key={x} type="button" role="tab" aria-selected={tab === x} className={tab === x ? 'is-active' : ''} onClick={() => go(x)}>
-              {t(`wq.tab.${x}`)}
-              {x === 'overview' && problems > 0 && <span className="ov-count">{problems}</span>}
-              {x === 'failures' && failing > 0 && <span className="ov-count">{failing}</span>}
-            </button>
-          ))}
-        </nav>
-        <div className="ov-segmented" role="tablist" aria-label={t('ov.chart.range')}>
-          {WORKER_RANGES.map((r) => (
-            <button key={r} type="button" role="tab" aria-selected={range === r} className={range === r ? 'is-active' : ''} onClick={() => setRange(r)}>
-              {r}
-            </button>
-          ))}
-        </div>
-      </div>
+      {health && health.status !== 'healthy' && page.tab === 'overview' && !page.queueName && (
+        <StatusBanner
+          tone={BACKGROUND_TONE[health.status]}
+          title={t(`wq.health.${health.status}`)}
+          description={
+            [
+              health.status === 'degraded' && queueProblems > 0 ? t('wq.health.queuesNeedAttention', { count: queueProblems }) : null,
+              health.lastWorkerSeenAt ? t('wq.health.lastWorkerSeen', { time: formatTime(health.lastWorkerSeenAt, true) }) : null,
+            ]
+              .filter(Boolean)
+              .join(' · ') || undefined
+          }
+          reasons={health.reasons.map((r) => ({ id: `${r.code}-${r.queue ?? ''}`, text: r.message, onClick: r.queue ? () => page.openQueue(r.queue!) : undefined }))}
+          actions={
+            health.status === 'down' || noWorkers ? (
+              <Button size="xs" variant="secondary" onClick={() => (noWorkers ? page.go('workers') : page.navigate('runtimes/worker'))}>
+                {t(noWorkers ? 'wq.health.inspectWorkers' : 'wq.health.inspectRuntime')}
+                <ArrowRight />
+              </Button>
+            ) : undefined
+          }
+        />
+      )}
 
+      {!page.queueName && <PageTabs tabs={tabs} value={page.tab} onChange={page.go} />}
       {renderTab()}
 
-      {id && tab === 'workers' && <WorkerDrawer key={id} id={id} onClose={() => go('workers')} onOpenQueue={(q) => openQueue(q)} navigate={navigate} />}
-      {actions.modal}
+      <WorkerDetailSheet id={page.workerId} onClose={() => page.openWorker(null)} onOpenQueue={(q) => page.openQueue(q)} navigate={page.navigate} />
+      <WorkerConfigSheet open={page.settingsOpen} onOpenChange={page.setSettings} />
+      <QueueActionDialog request={page.action} settings={data?.settings} onClose={() => page.requestAction(null)} />
     </div>
   );
 };

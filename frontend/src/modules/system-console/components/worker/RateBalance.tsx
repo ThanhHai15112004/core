@@ -1,84 +1,90 @@
 import React from 'react';
-import { TrendingDown, TrendingUp } from 'lucide-react';
+import { TrendingDown, TrendingUp, Minus } from 'lucide-react';
+import { useLocale } from '@core/i18n/index';
+import { useFormat } from '@core/hooks/useFormat';
+import { cn } from '@core/lib/cn';
+import { TONE_CLASS } from '@core/theme';
+import { KeyValueGrid } from '@core/ui/blocks';
 import type { DurationStats, RateBalance as Rates, WaitStats } from '../../types/worker.types';
-import { formatJobRate, formatMs, formatSignedRate } from '../../utils/worker-format';
-import { useLocale } from '../../../../core/i18n/index';
+import { DENSE_GRID, signedRate } from './worker-ui';
+
+const STATE_ICON = { growing: TrendingUp, draining: TrendingDown, stable: Minus } as const;
+
+function SubTitle({ children }: { children: React.ReactNode }) {
+  return <h3 className="mb-1.5 mt-4 text-xs font-semibold uppercase tracking-wide text-muted">{children}</h3>;
+}
+
+interface Props {
+  rates: Rates;
+  wait: WaitStats;
+  processing: DurationStats;
+  /** Có job chờ lâu nhất → bấm số "lâu nhất" để mở Job Detail. */
+  onOpenOldest?: () => void;
+}
 
 /**
- * Incoming vs Processing (queue đang dồn hay đang xả), thời gian chờ trong queue và thời gian xử lý.
- * Trực quan hơn một con số "Waiting = 482": 500 job xử lý trong vài giây khác 500 job + cũ nhất 3 giờ.
+ * Nhận vào vs Xử lý (queue đang dồn hay đang xả) + thời gian chờ trong queue + thời gian xử lý.
+ * 500 job xử lý trong vài giây khác 500 job mà job cũ nhất đã chờ 3 giờ.
  */
-export const RateBalance: React.FC<{ rates: Rates; wait: WaitStats; processing: DurationStats; onOpenOldest?: (() => void) | undefined }> = ({
-  rates,
-  wait,
-  processing,
-  onOpenOldest,
-}) => {
+export function RateBalance({ rates, wait, processing, onOpenOldest }: Props) {
   const { t } = useLocale();
-  const Icon = rates.state === 'draining' ? TrendingDown : TrendingUp;
+  const f = useFormat();
+  const tone = rates.state === 'growing' ? 'warn' : 'ok';
+  const Icon = rates.state ? STATE_ICON[rates.state] : null;
+  const oldest = wait.oldestSec === null ? null : f.duration(wait.oldestSec * 1000);
   return (
     <>
-      <dl className="db-stat-grid msg-balance">
-        <div>
-          <dt>{t('wq.rates.incoming')}</dt>
-          <dd>{formatJobRate(rates.incomingPerMin)}</dd>
-        </div>
-        <div>
-          <dt>{t('wq.rates.processing')}</dt>
-          <dd>{formatJobRate(rates.processingPerMin)}</dd>
-        </div>
-        <div>
-          <dt>{t('wq.rates.diff')}</dt>
-          <dd className={rates.state === 'growing' ? 'is-warn' : ''}>{formatSignedRate(rates.diffPerMin)}</dd>
-        </div>
-      </dl>
-      {rates.state && (
-        <p className={`msg-status-line ov-tone-${rates.state === 'growing' ? 'warn' : 'ok'}`}>
-          {rates.state !== 'stable' && <Icon size={14} />} {t(`wq.rates.state.${rates.state}`)}
+      <KeyValueGrid
+        columns={3}
+        className={DENSE_GRID[3]}
+        items={[
+          { label: t('wq.rates.incoming'), value: f.rate(rates.incomingPerMin, 'min'), mono: true },
+          { label: t('wq.rates.processing'), value: f.rate(rates.processingPerMin, 'min'), mono: true },
+          {
+            label: t('wq.rates.diff'),
+            value: <span className={rates.state === 'growing' ? TONE_CLASS.warn.fg : undefined}>{signedRate(f, rates.diffPerMin)}</span>,
+            mono: true,
+          },
+        ]}
+      />
+      {rates.state && Icon && (
+        <p className={cn('mt-2 flex items-center gap-1.5 text-xs', TONE_CLASS[tone].fg)}>
+          <Icon className="size-3.5" />
+          {t(`wq.rates.state.${rates.state}`)}
         </p>
       )}
-      <h4>{t('wq.wait.title')}</h4>
-      <dl className="db-stat-grid db-stat-compact">
-        <div>
-          <dt>{t('wq.wait.avg')}</dt>
-          <dd>{formatMs(wait.avgMs)}</dd>
-        </div>
-        <div>
-          <dt>P95</dt>
-          <dd>{formatMs(wait.p95Ms)}</dd>
-        </div>
-        <div>
-          <dt>{t('wq.wait.oldest')}</dt>
-          <dd>
-            {wait.oldestSec !== null && onOpenOldest && wait.oldestJobId ? (
-              <button type="button" className="ov-link" onClick={onOpenOldest}>
-                {formatMs(wait.oldestSec * 1000)}
-              </button>
-            ) : (
-              formatMs(wait.oldestSec === null ? null : wait.oldestSec * 1000)
-            )}
-          </dd>
-        </div>
-      </dl>
-      <h4>{t('wq.processing.title')}</h4>
-      <dl className="db-stat-grid db-stat-compact">
-        <div>
-          <dt>{t('wq.processing.avg')}</dt>
-          <dd>{formatMs(processing.avgMs)}</dd>
-        </div>
-        <div>
-          <dt>P50</dt>
-          <dd>{formatMs(processing.p50Ms)}</dd>
-        </div>
-        <div>
-          <dt>P95</dt>
-          <dd>{formatMs(processing.p95Ms)}</dd>
-        </div>
-        <div>
-          <dt>P99</dt>
-          <dd>{formatMs(processing.p99Ms)}</dd>
-        </div>
-      </dl>
+      <SubTitle>{t('wq.wait.title')}</SubTitle>
+      <KeyValueGrid
+        columns={3}
+        className={DENSE_GRID[3]}
+        items={[
+          { label: t('wq.common.avg'), value: f.duration(wait.avgMs), mono: true },
+          { label: t('wq.common.p95'), value: f.duration(wait.p95Ms), mono: true },
+          {
+            label: t('wq.wait.oldest'),
+            value:
+              oldest && onOpenOldest ? (
+                <button type="button" className="text-info-fg hover:underline" onClick={onOpenOldest}>
+                  {oldest}
+                </button>
+              ) : (
+                oldest
+              ),
+            mono: true,
+          },
+        ]}
+      />
+      <SubTitle>{t('wq.processing.title')}</SubTitle>
+      <KeyValueGrid
+        columns={4}
+        className={DENSE_GRID[4]}
+        items={[
+          { label: t('wq.common.avg'), value: f.duration(processing.avgMs), mono: true },
+          { label: t('wq.common.p50'), value: f.duration(processing.p50Ms), mono: true },
+          { label: t('wq.common.p95'), value: f.duration(processing.p95Ms), mono: true },
+          { label: t('wq.common.p99'), value: f.duration(processing.p99Ms), mono: true },
+        ]}
+      />
     </>
   );
-};
+}
