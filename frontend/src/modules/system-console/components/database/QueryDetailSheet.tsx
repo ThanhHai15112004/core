@@ -5,7 +5,7 @@ import { useLiveQuery } from '@core/data';
 import { useFormat } from '@core/hooks/useFormat';
 import { Button } from '@core/ui/primitives';
 import { CodeBlock, DetailSection, DetailSheet, KeyValueGrid, QueryView } from '@core/ui/blocks';
-import type { DbQueryStat, DbRange } from '../../types/database.types';
+import type { DbQueryStat } from '../../types/database.types';
 import { databaseApi } from '../../services/database.api';
 import { DB_LOG_MODULE, DB_SQL_MAX_HEIGHT_PX } from '../../constants/database';
 import { dbKeys } from '../../sections/database/database-keys';
@@ -14,15 +14,14 @@ import { dateTime } from './db-labels';
 
 interface Props {
   id: string | null;
-  range: DbRange;
   onClose: () => void;
   navigate: (path: string) => void;
 }
 
 /** Chi tiết một dạng câu query (digest): SQL chuẩn hoá, thống kê cộng dồn của database, execution plan. */
-export function QueryDetailSheet({ id, range, onClose, navigate }: Props) {
+export function QueryDetailSheet({ id, onClose, navigate }: Props) {
   const { t } = useLocale();
-  const query = useLiveQuery(dbKeys.query(id ?? '', range), () => databaseApi.queryDetail(id!, range), { tier: 'static', enabled: Boolean(id), keepPrevious: false });
+  const query = useLiveQuery(dbKeys.query(id ?? ''), () => databaseApi.queryDetail(id!), { tier: 'static', enabled: Boolean(id), keepPrevious: false });
   const s = query.data?.stat;
   const body = (content: (stat: DbQueryStat) => ReactNode) => <QueryView query={query}>{(d) => content(d.stat)}</QueryView>;
   return (

@@ -33,8 +33,8 @@ export const databaseApi = {
   metrics: (range: DbRange, metric: DbMetric) => fetchApi<DbMetrics>(D('metrics', toQuery({ range, metric }))),
   liveQueries: () => fetchApi<{ sessions: Section<DbSession[]>; slowQueryMs: number; actionsEnabled: boolean }>(D('queries')),
   queryStats: (range: DbRange, minMs: number) =>
-    fetchApi<{ stats: Section<DbQueryStat[]>; minMs: number; range: DbRange }>(D('queries/stats', toQuery({ range, minMs }))),
-  queryDetail: (id: string, range: DbRange) => fetchApi<DbQueryDetail>(D(`queries/stats/${encodeURIComponent(id)}`, toQuery({ range }))),
+    fetchApi<{ stats: Section<DbQueryStat[]> }>(D('queries/stats', toQuery({ range, minMs }))),
+  queryDetail: (id: string) => fetchApi<DbQueryDetail>(D(`queries/stats/${encodeURIComponent(id)}`)),
   explain: (id: string) => fetchApi<DbExplain>(D(`queries/stats/${encodeURIComponent(id)}/explain`)),
   cancel: (sessionId: string) => post<{ ok: true }>(`queries/${sessionId}/cancel`, 'CANCEL'),
   connections: () => fetchApi<DbConnections>(D('connections')),

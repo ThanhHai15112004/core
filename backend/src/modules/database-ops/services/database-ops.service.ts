@@ -140,7 +140,6 @@ export class DatabaseOpsService {
       : (storage[0]?.totalBytes ?? null);
 
     return {
-      generatedAt: new Date(now).toISOString(),
       range,
       driver: this.connection.driver,
       environment: this.config.app.env,
@@ -149,15 +148,13 @@ export class DatabaseOpsService {
       health: {
         status: this.healthStatus(status.state, alerts),
         reasons: this.healthReasons(status, alerts),
-        since: status.since,
         lastSuccessAt: status.lastSuccessAt,
         pingMs: status.lastPingMs,
-        lastError: status.lastError,
       },
       server: snapshot.server,
       runtimes,
       kpis: {
-        connections: { used: pool.used, limit: pool.limit, percent: pool.percent },
+        connections: { used: pool.used, limit: pool.limit },
         sessions: sessions.available ? sessions.data.filter((s) => !s.isSelf).length : null,
         avgMs: stats.avgMs,
         queriesPerSec: stats.queriesPerSec,
@@ -200,7 +197,6 @@ export class DatabaseOpsService {
         slowQueryMs: this.db.slowQueryMs,
         longTransactionSec: this.db.longTransactionSec,
         actionsEnabled: this.db.actionsEnabled,
-        migrationsEnabled: this.db.migrationsEnabled,
       },
     };
   }
@@ -275,9 +271,6 @@ export class DatabaseOpsService {
           threshold: s.threshold,
           limit: this.db.maxConnections,
         }),
-        value: s.value,
-        threshold: s.threshold,
-        unit: s.unit,
         since: new Date(s.since).toISOString(),
         tab: RULE_TAB[rule as DbRule] ?? 'overview',
       }))
@@ -365,14 +358,14 @@ export class DatabaseOpsService {
       ],
       errors: [{ id: 'failedPerMin', unit: '/min', expr: `sum(rate(${p.errors}[$w])) * 60` }],
     };
-    const { series, resolutionSec } = await this.metrics.series(DB_RANGES[range], defs[metric]);
+    const series = await this.metrics.series(DB_RANGES[range], defs[metric]);
     const list = series.map((s) => ({
       id: s.id,
       label: this.i18n.t(`database.series.${s.id}`),
       unit: s.unit,
       points: s.points,
     }));
-    return { metric, range, resolutionSec, unit: list[0]?.unit ?? '', series: list };
+    return { metric, unit: list[0]?.unit ?? '', series: list };
   }
 
   // ─── Queries ──────────────────────────────────────────────────────────────
@@ -408,9 +401,6 @@ export class DatabaseOpsService {
               (minMs <= 0 || (d.avgMs ?? 0) >= minMs || (d.maxMs ?? 0) >= minMs),
           ),
       ),
-      minMs,
-      range,
-      note: 'cumulative',
     };
   }
 
@@ -429,7 +419,7 @@ export class DatabaseOpsService {
   }
 
   /** Bộ đếm cộng dồn của digest; lịch sử từng câu và slow query nằm ở Logs (TypeORM ghi qua Pino). */
-  public async getQueryDetail(digest: string, _range: DbRange): Promise<DbQueryDetailDto> {
+  public async getQueryDetail(digest: string): Promise<DbQueryDetailDto> {
     const stats = await this.section('digestStats', (ctx) =>
       this.monitoring.provider.digestStats(ctx, QUERY_STATS_LIMIT * 2),
     );
@@ -585,12 +575,8 @@ export class DatabaseOpsService {
 
   public async getStorage(): Promise<DbStorageDto> {
     const now = Date.now();
-    const p = this.monitoring.provider;
-    const [{ storage, tables }, snapshots] = await Promise.all([
-      this.monitoring.batch(async (part) => ({
-        storage: await part('storage', (ctx) => p.storage(ctx)),
-        tables: await part('tables', (ctx) => p.tables(ctx)),
-      })),
+    const [storage, snapshots] = await Promise.all([
+      this.section('storage', (ctx) => this.monitoring.provider.storage(ctx)),
       this.store.storageSnapshots().catch(() => [] as StorageSnapshot[]),
     ]);
     const current = storage.available
@@ -606,9 +592,6 @@ export class DatabaseOpsService {
       growthTodayBytes: current !== null && oldestToday ? current - oldestToday.totalBytes : null,
       growth30dBytes: current !== null && monthAgo ? current - monthAgo.totalBytes : null,
       history: [...snapshots].reverse().map((s) => ({ t: s.at, value: s.totalBytes })),
-      topTables: tables.available
-        ? tables.data.slice(0, 10).map((t) => ({ name: t.name, totalBytes: t.totalBytes }))
-        : [],
     };
   }
 
@@ -670,9 +653,7 @@ export class DatabaseOpsService {
     ) as Record<DbErrorKind, number>;
     return {
       counts,
-      total: Object.values(counts).reduce((a, b) => a + b, 0),
       items: errors.slice(0, ERROR_LIST_LIMIT).map((e) => this.errorDto(e)),
-      range,
     };
   }
 

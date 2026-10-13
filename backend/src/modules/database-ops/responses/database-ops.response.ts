@@ -35,9 +35,6 @@ export interface DbAlertDto {
   severity: DbSeverity;
   title: string;
   message: string;
-  value: number;
-  threshold: number;
-  unit: string;
   since: string | null;
   /** Tab của trang Database để xử lý. */
   tab: string;
@@ -71,7 +68,6 @@ export interface DbReportDto {
 }
 
 export interface DbOverviewDto {
-  generatedAt: string;
   range: DbRange;
   driver: string;
   environment: string;
@@ -80,15 +76,13 @@ export interface DbOverviewDto {
   health: {
     status: DbHealthStatus;
     reasons: DbReasonDto[];
-    since: string;
     lastSuccessAt: string | null;
     pingMs: number | null;
-    lastError: { code: string | null; message: string } | null;
   };
   server: SectionDto<DbServerInfo>;
   runtimes: DbRuntimeConnectionDto[];
   kpis: {
-    connections: { used: number | null; limit: number; percent: number | null };
+    connections: { used: number | null; limit: number };
     sessions: number | null;
     /** Thời gian trung bình mỗi câu lệnh (delta digest của database) — database không lộ phân vị. */
     avgMs: number | null;
@@ -114,7 +108,6 @@ export interface DbOverviewDto {
     slowQueryMs: number;
     longTransactionSec: number;
     actionsEnabled: boolean;
-    migrationsEnabled: boolean;
   };
 }
 
@@ -129,8 +122,6 @@ export type DbMetric = 'queries' | 'latency' | 'connections' | 'errors';
 
 export interface DbMetricsDto {
   metric: DbMetric;
-  range: DbRange;
-  resolutionSec: number | null;
   unit: string;
   series: DbSeriesDto[];
 }
@@ -147,9 +138,6 @@ export interface DbQueryStatDto extends DbDigestStat {
 
 export interface DbQueryStatsDto {
   stats: SectionDto<DbQueryStatDto[]>;
-  minMs: number;
-  range: DbRange;
-  note: 'cumulative';
 }
 
 export interface DbQueryDetailDto {
@@ -227,7 +215,6 @@ export interface DbStorageDto {
   growthTodayBytes: number | null;
   growth30dBytes: number | null;
   history: { t: number; value: number }[];
-  topTables: { name: string; totalBytes: number | null }[];
 }
 
 export interface DbMigrationsDto {
@@ -263,9 +250,7 @@ export interface DbErrorRecordDto {
 
 export interface DbErrorsDto {
   counts: Record<DbErrorKind, number>;
-  total: number;
   items: DbErrorRecordDto[];
-  range: DbRange;
 }
 
 export interface DbConfigDto {

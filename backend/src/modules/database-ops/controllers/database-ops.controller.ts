@@ -58,8 +58,8 @@ export class DatabaseOpsController {
 
   @Public()
   @Get(R.QUERY_DETAIL)
-  public queryDetail(@Param('digest') id: string, @Query() q: Record<string, string>) {
-    return this.db.getQueryDetail(parse(digest, id), parse(rangeSchema, q).range);
+  public queryDetail(@Param('digest') id: string) {
+    return this.db.getQueryDetail(parse(digest, id));
   }
 
   @Public()

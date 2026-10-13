@@ -102,17 +102,14 @@ export class DatabaseMetricsService {
     };
   }
 
-  /** Chuỗi thời gian `minutes` phút gần nhất; `resolutionSec` null khi không có điểm nào. */
+  /** Chuỗi thời gian `minutes` phút gần nhất (không có dữ liệu → `points` rỗng). */
   public async series(
     minutes: number,
     defs: DbSeriesDef[],
-  ): Promise<{
-    resolutionSec: number | null;
-    series: (DbSeriesDef & { points: { t: number; value: number }[] })[];
-  }> {
+  ): Promise<(DbSeriesDef & { points: { t: number; value: number }[] })[]> {
     const stepSec = Math.max(30, Math.ceil((minutes * 60) / MAX_POINTS));
     const rateWindow = `${Math.max(120, stepSec * 2)}s`;
-    const series = await Promise.all(
+    return Promise.all(
       defs.map(async (d) => {
         const res = await this.prom.safeRange(
           d.expr.replaceAll('$w', rateWindow),
@@ -125,6 +122,5 @@ export class DatabaseMetricsService {
         };
       }),
     );
-    return { resolutionSec: series.some((s) => s.points.length > 0) ? stepSec : null, series };
   }
 }

@@ -64,9 +64,6 @@ export interface DbAlert {
   severity: 'warning' | 'critical';
   title: string;
   message: string;
-  value: number;
-  threshold: number;
-  unit: string;
   since: string | null;
   tab: DbTab;
 }
@@ -105,7 +102,6 @@ export interface DbConnectionError {
 }
 
 export interface DbOverview {
-  generatedAt: string;
   range: DbRange;
   driver: string;
   environment: string;
@@ -114,10 +110,8 @@ export interface DbOverview {
   health: {
     status: DbHealthStatus;
     reasons: { code: string; message: string }[];
-    since: string;
     lastSuccessAt: string | null;
     pingMs: number | null;
-    lastError: DbConnectionError | null;
   };
   server: Section<DbServerInfo>;
   runtimes: {
@@ -129,7 +123,7 @@ export interface DbOverview {
     lastError: DbConnectionError | null;
   }[];
   kpis: {
-    connections: { used: number | null; limit: number; percent: number | null };
+    connections: { used: number | null; limit: number };
     sessions: number | null;
     /** Trung bình mỗi câu lệnh (delta digest của database). */
     avgMs: number | null;
@@ -148,7 +142,7 @@ export interface DbOverview {
   largestTables: Section<DbTable[]>;
   report: { today: DbReport; yesterday: DbReport };
   events: DbEvent[];
-  settings: { slowQueryMs: number; longTransactionSec: number; actionsEnabled: boolean; migrationsEnabled: boolean };
+  settings: { slowQueryMs: number; longTransactionSec: number; actionsEnabled: boolean };
 }
 
 export interface DbSeries {
@@ -160,8 +154,6 @@ export interface DbSeries {
 
 export interface DbMetrics {
   metric: DbMetric;
-  range: DbRange;
-  resolutionSec: number | null;
   unit: string;
   series: DbSeries[];
 }
@@ -290,7 +282,6 @@ export interface DbStorage {
   growthTodayBytes: number | null;
   growth30dBytes: number | null;
   history: { t: number; value: number }[];
-  topTables: { name: string; totalBytes: number | null }[];
 }
 
 export interface DbMigrations {
@@ -306,9 +297,7 @@ export interface DbMigrations {
 
 export interface DbErrors {
   counts: Record<DbErrorRecord['kind'], number>;
-  total: number;
   items: DbErrorRecord[];
-  range: DbRange;
 }
 
 export interface DbConfig {

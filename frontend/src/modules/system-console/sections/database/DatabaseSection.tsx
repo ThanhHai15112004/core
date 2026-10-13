@@ -130,7 +130,7 @@ export const DatabaseSection: React.FC = () => {
       <PageTabs tabs={tabs} value={page.tab} onChange={page.goTab} />
       {renderTab()}
 
-      <QueryDetailSheet id={page.digestId} range={page.range} onClose={() => page.openQuery(null)} navigate={page.navigate} />
+      <QueryDetailSheet id={page.digestId} onClose={() => page.openQuery(null)} navigate={page.navigate} />
       <SessionDetailSheet
         id={page.sessionId}
         canCancel={caps.has('cancel')}
