@@ -26,6 +26,7 @@ import { TRAFFIC_RANGES, TRAFFIC_TABS } from '../constants/traffic';
 import { routeIdOf } from '../utils/traffic-format';
 import { SCHEDULER_RANGES, SCHEDULER_TABS } from '../constants/scheduler';
 import { RUNTIME_RANGES } from '../constants/runtime-metrics';
+import { PERF_RANGES, PERF_TABS } from '../constants/performance';
 
 type Translate = (path: string, params?: Record<string, string | number>) => string;
 
@@ -86,7 +87,9 @@ export const SECTIONS: SectionDef[] = [
     group: 'runtime-traffic',
     icon: Gauge,
     component: load(() => import('../sections/performance/PerformanceSection'), 'PerformanceSection'),
-    crumb: (p, t) => (p[1] ? t(`perf.component.${p[1]}`) : null),
+    controls: { ranges: PERF_RANGES },
+    crumb: (p, t) => ((PERF_TABS as readonly string[]).includes(p[0] ?? '') ? t(`perf.tab.${p[0]}`) : null),
+    keywords: ['latency', 'bottleneck', 'cpu'],
   },
   { id: 'database', group: 'infrastructure', icon: Database, component: load(() => import('../sections/database/DatabaseSection'), 'DatabaseSection'), crumb: tabCrumb('db'), keywords: ['mysql', 'sql'] },
   { id: 'cache', group: 'infrastructure', icon: Zap, component: load(() => import('../sections/cache/CacheSection'), 'CacheSection'), crumb: tabCrumb('cache'), keywords: ['redis'] },

@@ -1,102 +1,77 @@
-import React from 'react';
+import { useLocale } from '@core/i18n/index';
+import { NO_VALUE } from '@core/lib/format';
+import type { Tone } from '@core/theme';
+import { StatGrid, StatTile } from '@core/ui/blocks';
 import type { Kpi, PerformanceOverview } from '../../types/performance.types';
-import { formatUnit, trendOf } from '../../utils/performance-format';
-import type { StatusTone } from '../../utils/status-tone';
-import { useLocale } from '../../../../core/i18n/index';
+import { KPI_RULES } from '../../constants/performance';
+import { kpiDelta, usePerfFormat } from './perf-format';
 
-interface Item {
-  key: string;
-  value: string;
-  sub: string;
-  tone: StatusTone;
-  trend: ReturnType<typeof trendOf>;
-}
+const TILES = 6;
 
-/** 6 KPI cấp hệ thống, trung bình trong khoảng đang chọn và so với kỳ trước. */
-export const PerfKpis: React.FC<{ data: PerformanceOverview | null }> = ({ data }) => {
+/** 6 KPI cấp hệ thống: trung bình trong khoảng đang chọn + thay đổi so với kỳ trước. */
+export function PerfKpis({ data, loading }: { data: PerformanceOverview | undefined; loading: boolean }) {
   const { t } = useLocale();
-
+  const fmt = usePerfFormat();
   if (!data) {
     return (
-      <div className="ov-kpi-grid">
-        {Array.from({ length: 6 }, (_, i) => (
-          <div key={i} className="ov-card ov-kpi">
-            <span className="ov-skeleton" style={{ width: '60%', height: 12 }} />
-            <span className="ov-skeleton" style={{ width: '45%', height: 28, marginTop: 14 }} />
-          </div>
+      <StatGrid columns={6}>
+        {Array.from({ length: TILES }, (_, i) => (
+          <StatTile key={i} label={NO_VALUE} value={NO_VALUE} loading={loading} />
         ))}
-      </div>
+      </StatGrid>
     );
   }
-
   const { kpis, bottlenecks } = data;
-  const range = t(`tr.range.${data.range}`);
-  const toneFor = (rules: string[], kpi: Kpi): StatusTone => {
+  const range = t(`ui.time.ranges.${data.range}`);
+  const toneFor = (rules: readonly string[], kpi: Kpi): Tone | undefined => {
     const hits = bottlenecks.filter((b) => rules.includes(b.rule));
     if (hits.some((b) => b.severity === 'critical')) return 'crit';
     if (hits.length) return 'warn';
-    return kpi.value === null ? 'unknown' : 'ok';
+    return kpi.value === null ? undefined : 'ok';
   };
-  const avgSub = t('perf.kpi.avgOf', { range });
   const mem = kpis.memoryMb;
-
-  const items: Item[] = [
-    {
-      key: 'apiP95',
-      value: formatUnit(kpis.apiP95Ms.value, 'ms'),
-      sub: kpis.apiP95Ms.value === null ? t('perf.kpi.noRequests') : avgSub,
-      tone: toneFor(['API_LATENCY_P95', 'API_LATENCY_P99'], kpis.apiP95Ms),
-      trend: trendOf(kpis.apiP95Ms.changePercent, true),
-    },
-    {
-      key: 'throughput',
-      value: kpis.throughputPerSec.value === null ? formatUnit(null, '') : `${formatUnit(kpis.throughputPerSec.value, '/s').replace('/s', '')} req/s`,
-      sub: avgSub,
-      tone: 'unknown',
-      trend: trendOf(kpis.throughputPerSec.changePercent, null),
-    },
-    {
-      key: 'cpu',
-      value: formatUnit(kpis.cpuPercent.value, '%'),
-      sub: t('perf.kpi.cpuSub', { range }),
-      tone: toneFor(['CPU_HIGH'], kpis.cpuPercent),
-      trend: trendOf(kpis.cpuPercent.changePercent, true),
-    },
-    {
-      key: 'memory',
-      value: mem.limitMb ? `${formatUnit(mem.value, 'MB')} / ${formatUnit(mem.limitMb, 'MB')}` : formatUnit(mem.value, 'MB'),
-      sub: mem.percent === null ? t('perf.kpi.memorySub') : t('perf.kpi.memoryPercent', { percent: formatUnit(mem.percent, '%') }),
-      tone: toneFor(['MEMORY_HIGH', 'MEMORY_GROWTH'], mem),
-      trend: trendOf(mem.changePercent, true),
-    },
-    {
-      key: 'errorRate',
-      value: formatUnit(kpis.errorRatePercent.value, '%'),
-      sub: kpis.errorRatePercent.value === null ? t('perf.kpi.noRequests') : t('perf.kpi.errorSub'),
-      tone: toneFor(['API_ERROR_RATE'], kpis.errorRatePercent),
-      trend: trendOf(kpis.errorRatePercent.changePercent, true),
-    },
-    {
-      key: 'bottlenecks',
-      value: String(kpis.bottlenecks.count),
-      sub: kpis.bottlenecks.count ? kpis.bottlenecks.components.join(', ') : t('perf.kpi.noBottlenecks'),
-      tone: bottlenecks.some((b) => b.severity === 'critical') ? 'crit' : bottlenecks.length ? 'warn' : 'ok',
-      trend: null,
-    },
-  ];
+  const avgHint = t('perf.kpi.avgOf', { range });
 
   return (
-    <div className="ov-kpi-grid">
-      {items.map((item) => (
-        <div key={item.key} className={`ov-card ov-kpi ov-tone-${item.tone}`}>
-          <span className="ov-kpi-label">{t(`perf.kpi.${item.key}`)}</span>
-          <span className="ov-kpi-value">{item.value}</span>
-          {item.trend && (
-            <span className={`ov-kpi-trend is-${item.trend.tone}`}>{t('perf.kpi.vsPrevious', { delta: item.trend.text })}</span>
-          )}
-          <span className="ov-kpi-sub">{item.sub}</span>
-        </div>
-      ))}
-    </div>
+    <StatGrid columns={6}>
+      <StatTile
+        label={t('perf.kpi.apiP95')}
+        value={fmt(kpis.apiP95Ms.value, 'ms')}
+        sub={kpis.apiP95Ms.value === null ? t('perf.kpi.noRequests') : undefined}
+        delta={kpiDelta(kpis.apiP95Ms.changePercent, true)}
+        tone={toneFor(KPI_RULES.apiP95, kpis.apiP95Ms)}
+        hint={avgHint}
+      />
+      <StatTile label={t('perf.kpi.throughput')} value={fmt(kpis.throughputPerSec.value, '/s')} delta={kpiDelta(kpis.throughputPerSec.changePercent, null)} hint={avgHint} />
+      <StatTile
+        label={t('perf.kpi.cpu')}
+        value={fmt(kpis.cpuPercent.value, '%')}
+        delta={kpiDelta(kpis.cpuPercent.changePercent, true)}
+        tone={toneFor(KPI_RULES.cpu, kpis.cpuPercent)}
+        hint={t('perf.kpi.cpuHint', { range })}
+      />
+      <StatTile
+        label={t('perf.kpi.memory')}
+        value={fmt(mem.value, 'MB')}
+        sub={mem.limitMb ? t('perf.kpi.memoryOf', { limit: fmt(mem.limitMb, 'MB'), percent: fmt(mem.percent, '%') }) : undefined}
+        delta={kpiDelta(mem.changePercent, true)}
+        tone={toneFor(KPI_RULES.memory, mem)}
+        hint={t('perf.kpi.memoryHint')}
+      />
+      <StatTile
+        label={t('perf.kpi.errorRate')}
+        value={fmt(kpis.errorRatePercent.value, '%')}
+        sub={kpis.errorRatePercent.value === null ? t('perf.kpi.noRequests') : undefined}
+        delta={kpiDelta(kpis.errorRatePercent.changePercent, true)}
+        tone={toneFor(KPI_RULES.errorRate, kpis.errorRatePercent)}
+        hint={t('perf.kpi.errorHint')}
+      />
+      <StatTile
+        label={t('perf.kpi.bottlenecks')}
+        value={String(kpis.bottlenecks.count)}
+        sub={kpis.bottlenecks.components.join(', ') || undefined}
+        tone={bottlenecks.some((b) => b.severity === 'critical') ? 'crit' : bottlenecks.length ? 'warn' : 'ok'}
+      />
+    </StatGrid>
   );
-};
+}
