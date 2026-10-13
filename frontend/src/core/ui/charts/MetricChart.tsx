@@ -60,7 +60,7 @@ export function MetricChart<K extends string>({
         <>
           {actions}
           {metrics && metrics.length > 1 && onChange && (
-            <ToggleGroup type="single" value={value} onValueChange={(v) => v && onChange(v as K)} aria-label={t('ui.chart.metric')}>
+            <ToggleGroup type="single" value={value} onValueChange={(v) => v && onChange(v as K)} aria-label={t('ui.chart.metric')} className="max-w-full overflow-x-auto">
               {metrics.map((m) => (
                 <ToggleGroupItem key={m.id} value={m.id}>
                   {m.label}

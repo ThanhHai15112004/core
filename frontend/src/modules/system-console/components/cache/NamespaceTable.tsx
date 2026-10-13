@@ -1,75 +1,94 @@
-import React, { useState } from 'react';
+import { useMemo } from 'react';
+import { createColumnHelper } from '@tanstack/react-table';
 import { KeyRound, ShieldAlert } from 'lucide-react';
-import type { NamespaceRow } from '../../types/cache.types';
-import { formatBytes, formatCompact } from '../../utils/database-format';
-import { formatTtl } from '../../utils/cache-format';
-import { NO_VALUE } from '../../utils/runtime-format';
-import { useLocale } from '../../../../core/i18n/index';
+import { useLocale } from '@core/i18n/index';
+import { useFormat } from '@core/hooks/useFormat';
+import { NO_VALUE } from '@core/lib/format';
+import { Badge } from '@core/ui/primitives';
+import { DataTable } from '@core/ui/blocks';
+import type { KeyFilter, NamespaceRow } from '../../types/cache.types';
 
-const SORTS = ['keys', 'memory', 'ttl'] as const;
-export type NamespaceSort = (typeof SORTS)[number];
-const sortValue = (n: NamespaceRow, s: NamespaceSort) =>
-  s === 'keys' ? n.keys : s === 'memory' ? n.bytes : (n.avgTtlMs ?? Number.MAX_SAFE_INTEGER);
+const col = createColumnHelper<NamespaceRow>();
 
-/** Bảng namespace (key, dung lượng, TTL trung bình — hit/miss chỉ có ở mức toàn Redis server) — sort được, bấm để xem chi tiết. */
-export const NamespaceTable: React.FC<{
+interface NamespaceTableProps {
   rows: NamespaceRow[];
-  onOpen: (name: string) => void;
-  sortable?: boolean;
-  emptyText: string;
-}> = ({ rows, onOpen, sortable = true, emptyText }) => {
-  const { t, locale } = useLocale();
-  const [sort, setSort] = useState<NamespaceSort>('keys');
-  if (rows.length === 0) return <p className="ov-empty-line">{emptyText}</p>;
-  // TTL ngắn đứng trước; các cột còn lại lớn đứng trước.
-  const list = sortable
-    ? [...rows].sort((a, b) => (sort === 'ttl' ? sortValue(a, sort) - sortValue(b, sort) : sortValue(b, sort) - sortValue(a, sort)))
-    : rows;
-  return (
-    <>
-      {sortable && (
-        <div className="ov-segmented cache-sort" role="tablist" aria-label={t('cache.ns.sort')}>
-          {SORTS.map((s) => (
-            <button key={s} type="button" role="tab" aria-selected={sort === s} className={sort === s ? 'is-active' : ''} onClick={() => setSort(s)}>
-              {t(`cache.ns.sortBy.${s}`)}
+  onOpen: (row: NamespaceRow) => void;
+  /** Bấm số "không TTL" / "sắp hết hạn" → mở Keys đã lọc. */
+  onBrowse?: (name: string, ttl: KeyFilter['ttl']) => void;
+  activeName?: string | null;
+  emptyMessage: string;
+  /** Chỉ cột chính (Tổng quan). */
+  compact?: boolean;
+  maxHeight?: number;
+}
+
+/** Bảng namespace do backend gom theo prefix key: số key, dung lượng, TTL — sort theo header, bấm để xem chi tiết. */
+export function NamespaceTable({ rows, onOpen, onBrowse, activeName, emptyMessage, compact, maxHeight }: NamespaceTableProps) {
+  const { t } = useLocale();
+  const f = useFormat();
+  const columns = useMemo(() => {
+    const count = (id: 'persistent' | 'expiringSoon', ttl: KeyFilter['ttl'], warn: boolean) =>
+      col.accessor(id, {
+        header: t(id === 'persistent' ? 'cache.ns.persistent' : 'cache.ns.expiringSoon'),
+        cell: (c) => {
+          const v = c.getValue();
+          if (!v) return <span className="text-faint">0</span>;
+          const text = <span className={warn ? 'text-warn-fg' : undefined}>{f.compact(v)}</span>;
+          return onBrowse ? (
+            <button type="button" className="hover:underline" onClick={(e) => (e.stopPropagation(), onBrowse(c.row.original.name, ttl))}>
+              {text}
             </button>
-          ))}
-        </div>
-      )}
-      <div className="scp-table-wrap">
-        <table className="scp-table cache-ns-table">
-          <thead>
-            <tr>
-              <th>{t('cache.ns.name')}</th>
-              <th>{t('cache.ns.keys')}</th>
-              <th>{t('cache.ns.memory')}</th>
-              <th>{t('cache.ns.avgTtl')}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {list.map((n) => (
-              <tr key={n.name} className="is-clickable" onClick={() => onOpen(n.name)}>
-                <td>
-                  <code>{n.name}</code>
-                  {n.session && (
-                    <span className="pf-chip ov-tone-warn cache-chip">
-                      <KeyRound size={11} /> {t('cache.ns.session')}
-                    </span>
-                  )}
-                  {!n.session && n.sensitive && (
-                    <span className="pf-chip ov-tone-unknown cache-chip">
-                      <ShieldAlert size={11} /> {t('cache.ns.sensitive')}
-                    </span>
-                  )}
-                </td>
-                <td>{formatCompact(n.keys, locale)}</td>
-                <td>{formatBytes(n.bytes)}</td>
-                <td>{n.keys === 0 ? NO_VALUE : n.avgTtlMs === null ? t('cache.ttl.none') : formatTtl(n.avgTtlMs)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </>
+          ) : (
+            text
+          );
+        },
+        meta: { align: 'right', mono: true, width: '110px' },
+      });
+    return [
+      col.accessor('name', {
+        header: t('cache.ns.name'),
+        cell: (c) => (
+          <span className="flex min-w-0 items-center gap-1.5">
+            <span className="truncate font-mono text-xs text-fg">{c.getValue()}</span>
+            {c.row.original.session && (
+              <Badge tone="warn" size="xs">
+                <KeyRound />
+                {t('cache.ns.session')}
+              </Badge>
+            )}
+            {!c.row.original.session && c.row.original.sensitive && (
+              <Badge size="xs">
+                <ShieldAlert />
+                {t('cache.ns.sensitive')}
+              </Badge>
+            )}
+          </span>
+        ),
+        meta: { truncate: true },
+      }),
+      col.accessor('keys', { header: t('cache.ns.keys'), cell: (c) => f.compact(c.getValue()), meta: { align: 'right', mono: true, width: '90px' } }),
+      col.accessor('bytes', { header: t('cache.ns.memory'), cell: (c) => f.bytes(c.getValue()), meta: { align: 'right', mono: true, width: '100px' } }),
+      col.accessor((r) => (r.keys === 0 ? null : (r.avgTtlMs ?? Number.MAX_SAFE_INTEGER)), {
+        id: 'avgTtl',
+        header: t('cache.ns.avgTtl'),
+        cell: (c) => (c.row.original.keys === 0 ? NO_VALUE : c.row.original.avgTtlMs === null ? t('cache.ttl.none') : f.duration(c.row.original.avgTtlMs)),
+        sortUndefined: 'last',
+        meta: { align: 'right', mono: true, width: '120px', className: 'whitespace-nowrap' },
+      }),
+      ...(compact ? [] : [count('persistent', 'persistent', false), count('expiringSoon', 'lt1m', true)]),
+    ];
+  }, [t, f, compact, onBrowse]);
+
+  return (
+    <DataTable
+      data={rows}
+      columns={columns}
+      getRowId={(r) => r.name}
+      onRowClick={onOpen}
+      activeRowId={activeName ?? undefined}
+      initialSorting={compact ? [] : [{ id: 'keys', desc: true }]}
+      emptyMessage={emptyMessage}
+      maxHeight={maxHeight}
+    />
   );
-};
+}

@@ -120,6 +120,11 @@ export const uiEn: UiTranslation = {
   mask: {
     hidden: 'Secret value — always masked',
   },
+  source: {
+    unsupported: 'Not provided by the current source',
+    disconnected: 'Not connected — no data yet',
+    error: 'Could not read this part',
+  },
   status: {
     ok: 'Healthy',
     warn: 'Warning',

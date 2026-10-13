@@ -31,6 +31,7 @@ import { PERF_RANGES, PERF_TABS } from '../constants/performance';
 import { DB_RANGES, DB_TABS } from '../constants/database';
 import { WORKER_PAGE_TABS, WORKER_RANGES } from '../constants/worker';
 import { JOBS_RANGES, JOBS_TABS, SHORT_ID_HEAD } from '../constants/jobs';
+import { CACHE_RANGES } from '../constants/cache';
 
 type Translate = (path: string, params?: Record<string, string | number>) => string;
 
@@ -104,7 +105,15 @@ export const SECTIONS: SectionDef[] = [
     crumb: (p, t) => (p[0] && (DB_TABS as readonly string[]).includes(p[0]) ? t(`db.tab.${p[0]}`) : null),
     keywords: ['mysql', 'sql', 'migration', 'session'],
   },
-  { id: 'cache', group: 'infrastructure', icon: Zap, component: load(() => import('../sections/cache/CacheSection'), 'CacheSection'), crumb: tabCrumb('cache'), keywords: ['redis'] },
+  {
+    id: 'cache',
+    group: 'infrastructure',
+    icon: Zap,
+    component: load(() => import('../sections/cache/CacheSection'), 'CacheSection'),
+    controls: { ranges: CACHE_RANGES },
+    crumb: tabCrumb('cache'),
+    keywords: ['redis', 'namespace', 'key'],
+  },
   { id: 'storage', group: 'infrastructure', icon: HardDrive, component: load(() => import('../sections/storage/StorageSection'), 'StorageSection'), crumb: tabCrumb('storage'), keywords: ['file', 's3'] },
   {
     id: 'messaging',

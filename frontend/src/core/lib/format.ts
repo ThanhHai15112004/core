@@ -140,6 +140,36 @@ export function changePercent(current: Nullable<number>, previous: Nullable<numb
   return ((current - previous) / previous) * 100;
 }
 
+/**
+ * Giá trị theo ký hiệu đơn vị backend gửi kèm series: `B` / `B/s` (byte), `%`, `/s`, `/min`, `ms`, `s`;
+ * đơn vị khác → số kèm đơn vị, rỗng → số gọn.
+ */
+export function formatMetric(v: Nullable<number>, unit: string, locale: string): string {
+  if (isNil(v) || Number.isNaN(v)) return NO_VALUE;
+  switch (unit) {
+    case 'B':
+    case 'bytes':
+      return formatBytes(v);
+    case 'B/s':
+      return `${formatBytes(v)}${UNIT.perSec}`;
+    case '%':
+    case 'percent':
+      return formatPercent(v);
+    case '/s':
+      return formatRate(v, locale, 'sec');
+    case '/min':
+      return formatRate(v, locale, 'min');
+    case 'ms':
+      return formatDuration(v);
+    case 's':
+      return formatDuration(v * 1000);
+    case '':
+      return formatCompact(v, locale);
+    default:
+      return `${formatCompact(v, locale)} ${unit}`;
+  }
+}
+
 /** Chu kỳ ngắn: 5000 → "5s", 60000 → "1m", 5400000 → "1.5h". */
 export function formatInterval(ms: number): string {
   const s = ms / 1000;

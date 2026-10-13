@@ -1,202 +1,145 @@
-import React, { useCallback, useMemo, useState } from 'react';
-import { Ban, Pause, Play, Radio, RefreshCw, WifiOff } from 'lucide-react';
-import type { KeyFilter } from '../../types/cache.types';
+import React, { useState } from 'react';
+import { PlugZap, RefreshCw, X, Zap } from 'lucide-react';
+import { useLocale } from '@core/i18n/index';
+import { useAppMutation, useLiveQuery } from '@core/data';
+import { useFormat } from '@core/hooks/useFormat';
+import { Badge, Button } from '@core/ui/primitives';
+import { PageHeader, PageTabs, PanelState, RelativeTime, StatusBanner, type PageTab } from '@core/ui/blocks';
+import type { CacheCapability, CachePing } from '../../types/cache.types';
 import { cacheApi } from '../../services/cache.api';
-import { usePolling } from '../../hooks/usePolling';
-import { useCacheRoute } from '../../hooks/useCacheRoute';
-import { useCacheActions } from '../../hooks/useCacheActions';
-import { CACHE_RANGES, CACHE_TABS, TAB_CAPABILITY } from '../../constants/cache';
-import { CacheHealthBanner } from '../../components/cache/CacheHealthBanner';
-import { NamespaceDrawer } from '../../components/cache/NamespaceDrawer';
-import { KeyDrawer } from '../../components/cache/KeyDrawer';
-import { CacheOverviewView } from './CacheOverviewView';
-import { CacheNamespacesView } from './CacheNamespacesView';
-import { CacheKeysView } from './CacheKeysView';
-import { CacheConnectionsView, CacheMemoryView, CacheTtlView } from './CacheInsightViews';
-import { CacheConfigView, CacheEventsView, CacheOperationsView } from './CacheOtherViews';
-import { useLocale } from '../../../../core/i18n/index';
-import { useNow } from '../../../../core/hooks/useNow';
-import '../../styles/console-runtimes.css';
-import '../../styles/console-traffic.css';
-import '../../styles/console-performance.css';
-import '../../styles/console-database.css';
-import '../../styles/console-cache.css';
+import { CACHE_HEALTH_TONE, CACHE_TABS, KNOWN_ENVIRONMENTS, type CachePageTab } from '../../constants/cache';
+import { NamespaceSheet } from '../../components/cache/NamespaceSheet';
+import { KeySheet } from '../../components/cache/KeySheet';
+import { useCachePage } from './useCachePage';
+import { useCacheActions } from './useCacheActions';
+import { cacheKeys } from './cache-keys';
+import { CacheOverviewTab } from './CacheOverviewTab';
+import { CacheNamespacesTab } from './CacheNamespacesTab';
+import { CacheKeysTab } from './CacheKeysTab';
+import { CacheActivityTab } from './CacheActivityTab';
+import { CacheConfigSheet } from './CacheConfigSheet';
 
-const TTL_FILTERS: KeyFilter['ttl'][] = ['any', 'persistent', 'expiring', 'lt1m'];
+/** Tab cần capability nào (driver không hỗ trợ → nói rõ thay vì bảng trống). */
+const TAB_CAPABILITY: Partial<Record<CachePageTab, CacheCapability>> = { keys: 'keyExplorer' };
 
 /**
- * Cache: `cache/<tab>/<id>` — hiệu quả (hit/miss), bộ nhớ, keyspace/namespace/TTL, kết nối, lỗi & sự kiện,
- * thao tác đúng phạm vi (key → namespace → flush ở Danger Zone). Phần driver không hỗ trợ hiện rõ lý do.
+ * Cache — Tổng quan (hiệu quả, bộ nhớ, TTL, kết nối) · Namespaces · Keys · Hoạt động (lỗi, sự kiện, thao tác).
+ * Chi tiết namespace / key mở drawer (`?ns=`, `?key=`) ở mọi tab; cấu hình mở dạng sheet (⚙).
  */
 export const CacheSection: React.FC = () => {
-  const { t, formatRelative } = useLocale();
-  const now = useNow();
-  const { tab, id, range, query, go, setRange, setQuery, navigate } = useCacheRoute();
-  const [paused, setPaused] = useState(false);
-  const [reloadKey, setReloadKey] = useState(0);
-  const overview = usePolling(() => cacheApi.overview(range), `cache:${range}:${reloadKey}`, undefined, paused);
-  const bump = useCallback(() => setReloadKey((k) => k + 1), []);
-  // Đối tượng vừa xoá không còn → đóng drawer của nó thay vì tải lại (404).
-  const actions = useCacheActions(() => {
-    if (id) go(tab, null, tab === 'keys' ? query : {});
-    bump();
-  });
+  const { t, formatTime } = useLocale();
+  const f = useFormat();
+  const page = useCachePage();
+  const overview = useLiveQuery(cacheKeys.overview(page.range), () => cacheApi.overview(page.range));
   const data = overview.data;
-  const caps = new Set(data?.capabilities ?? []);
-  const driver = data?.driver ?? '';
-  const closeDrawer = () => go(tab, null, tab === 'keys' ? query : {});
+  const [ping, setPing] = useState<CachePing | null>(null);
+  const actions = useCacheActions((action) => {
+    if (action === 'deleteKey') page.openKey(null);
+    if (action === 'clearNamespace') page.openNamespace(null);
+  });
+  const test = useAppMutation({ mutationFn: () => cacheApi.ping(), success: false, onSuccess: setPing });
 
-  const filter = useMemo<KeyFilter>(
-    () => ({
-      match: query['match'] ?? '',
-      type: query['type'] ?? '',
-      ttl: TTL_FILTERS.includes(query['ttl'] as KeyFilter['ttl']) ? (query['ttl'] as KeyFilter['ttl']) : 'any',
-      namespace: query['namespace'] ?? '',
-    }),
-    [query],
-  );
-  const setFilter = (patch: Partial<KeyFilter>) => {
-    const next = { ...filter, ...patch };
-    setQuery({
-      match: next.match || undefined,
-      type: next.type || undefined,
-      ttl: next.ttl === 'any' ? undefined : next.ttl,
-      namespace: next.namespace || undefined,
-    });
-  };
+  const problems = data?.alerts.filter((a) => a.severity !== 'info').length ?? 0;
+  const tabs: PageTab<CachePageTab>[] = CACHE_TABS.map((id) => ({
+    id,
+    label: t(`cache.tab.${id}`),
+    ...(id === 'overview' ? { count: problems, countTone: data?.alerts.some((a) => a.severity === 'critical') ? ('crit' as const) : ('warn' as const) } : {}),
+  }));
+  const health = data?.health;
+  const tone = health ? CACHE_HEALTH_TONE[health.status] : undefined;
+  const cap = TAB_CAPABILITY[page.tab];
+  const unsupported = data && cap && !data.capabilities.includes(cap);
+  const actionsEnabled = data?.settings.actionsEnabled ?? false;
 
   const renderTab = () => {
-    const cap = TAB_CAPABILITY[tab];
-    if (data && cap && !caps.has(cap)) {
-      return (
-        <section className="tr-empty-state" role="status">
-          <Ban size={28} />
-          <h2>{t('cache.unsupported.title')}</h2>
-          <p>{t('cache.unsupported.message', { driver: t(`cache.driver.${driver}`) })}</p>
-        </section>
-      );
-    }
-    switch (tab) {
+    if (unsupported) return <PanelState status="no-source" message={t('cache.unsupported.message', { driver: t(`cache.driver.${data.driver}`) })} />;
+    switch (page.tab) {
       case 'namespaces':
-        return <CacheNamespacesView range={range} paused={paused} reloadKey={reloadKey} go={go} />;
+        return <CacheNamespacesTab page={page} />;
       case 'keys':
-        return (
-          <CacheKeysView
-            driver={driver}
-            filter={filter}
-            setFilter={setFilter}
-            actionsEnabled={data?.settings.actionsEnabled ?? false}
-            reloadKey={reloadKey}
-            go={(nextTab, nextId, q) => go(nextTab, nextId, { ...query, ...q })}
-            onDelete={actions.requestDeleteKey}
-          />
-        );
-      case 'memory':
-        return <CacheMemoryView range={range} paused={paused} driver={driver} reloadKey={reloadKey} go={go} />;
-      case 'ttl':
-        return <CacheTtlView paused={paused} reloadKey={reloadKey} go={go} />;
-      case 'connections':
-        return <CacheConnectionsView paused={paused} driver={driver} navigate={navigate} />;
-      case 'events':
-        return <CacheEventsView range={range} paused={paused} reloadKey={reloadKey} go={go} navigate={navigate} />;
-      case 'operations':
-        return (
-          <CacheOperationsView
-            paused={paused}
-            reloadKey={reloadKey}
-            flushEnabled={data?.settings.flushEnabled ?? false}
-            actionsEnabled={data?.settings.actionsEnabled ?? false}
-            onFlush={() => void actions.requestFlush()}
-          />
-        );
-      case 'configuration':
-        return <CacheConfigView />;
+        return <CacheKeysTab page={page} driver={data?.driver} actionsEnabled={actionsEnabled} onDelete={actions.requestDeleteKey} />;
+      case 'activity':
+        return <CacheActivityTab page={page} data={data} onFlush={actions.requestFlush} />;
       default:
-        return <CacheOverviewView data={data} now={now} paused={paused} go={go} navigate={navigate} />;
+        return <CacheOverviewTab page={page} query={overview} />;
     }
   };
 
   return (
-    <div className="ov-page">
-      <header className="ov-page-head">
-        <div>
-          <h1 className="ov-page-title">{t('nav.cache')}</h1>
-          <p className="ov-page-subtitle">{t('cache.subtitle')}</p>
-        </div>
-        <div className="tr-live">
-          <span className={`tr-live-badge ${paused ? 'is-paused' : ''}`}>
-            {paused ? <Pause size={12} /> : <Radio size={12} />}
-            {paused ? t('tr.live.paused') : t('tr.live.live')}
-          </span>
-          <span className="ov-page-updated">
-            <time>{overview.lastUpdated ? formatRelative(overview.lastUpdated, now) : '--'}</time>
-          </span>
-          <button type="button" className="scp-btn scp-btn-sm scp-btn-secondary" onClick={bump} aria-label={t('cache.refresh')}>
-            <RefreshCw size={13} /> {t('cache.refresh')}
-          </button>
-          <button type="button" className="scp-btn scp-btn-sm scp-btn-secondary" onClick={() => setPaused((p) => !p)} aria-pressed={paused}>
-            {paused ? <Play size={13} /> : <Pause size={13} />} {paused ? t('tr.live.resume') : t('tr.live.pause')}
-          </button>
-        </div>
-      </header>
+    <div>
+      <PageHeader
+        title={t('nav.cache')}
+        icon={Zap}
+        status={health && tone ? { tone, label: t(`cache.health.${health.status}`) } : undefined}
+        actions={
+          <>
+            {data && (
+              <Badge variant="outline" className="hidden font-mono sm:inline-flex">
+                {t(`cache.driver.${data.driver}`)} · {KNOWN_ENVIRONMENTS.includes(data.environment) ? t(`ov.env.${data.environment}`) : data.environment}
+              </Badge>
+            )}
+            <Button size="sm" onClick={() => test.mutate()} disabled={test.isPending}>
+              <PlugZap />
+              {test.isPending ? t('cache.test.running') : t('cache.test.button')}
+            </Button>
+          </>
+        }
+        onSettings={() => page.setSettings(true)}
+      />
 
-      {overview.error && !data ? (
-        <section className="ov-offline" role="alert">
-          <WifiOff size={22} className="ov-offline-icon" />
-          <div className="ov-offline-body">
-            <h2>{t('ov.offline.title')}</h2>
-            <p>{overview.error.message}</p>
-          </div>
-        </section>
-      ) : (
-        data && <CacheHealthBanner data={data} now={now} />
+      {overview.isError && !data && page.tab !== 'overview' && (
+        <StatusBanner
+          tone="crit"
+          title={t('ov.offline.title')}
+          description={overview.error instanceof Error ? overview.error.message : undefined}
+          actions={
+            <Button size="xs" onClick={() => void overview.refetch()}>
+              <RefreshCw />
+              {t('ui.state.retry')}
+            </Button>
+          }
+        />
+      )}
+      {health && tone && tone !== 'ok' && (
+        <StatusBanner
+          tone={tone}
+          title={t(`cache.health.${health.status}`)}
+          reasons={health.reasons.map((r) => ({ id: r.code, text: r.message }))}
+          meta={
+            health.lastSuccessAt ? (
+              <span>
+                {t('cache.health.lastSuccess')} <RelativeTime value={health.lastSuccessAt} />
+              </span>
+            ) : undefined
+          }
+        />
+      )}
+      {ping && (
+        <StatusBanner
+          tone={ping.ok ? 'ok' : 'crit'}
+          title={ping.ok ? t('cache.test.ok', { latency: f.duration(ping.latencyMs), time: formatTime(ping.at, true) }) : t('cache.test.fail', { error: ping.error ?? '' })}
+          actions={
+            <Button size="icon-xs" variant="ghost" onClick={() => setPing(null)} aria-label={t('ui.action.close')}>
+              <X />
+            </Button>
+          }
+        />
       )}
 
-      <div className="tr-controls">
-        <nav className="rt-tabs" role="tablist" aria-label={t('nav.cache')}>
-          {CACHE_TABS.map((x) => (
-            <button key={x} type="button" role="tab" aria-selected={tab === x} className={tab === x ? 'is-active' : ''} onClick={() => go(x)}>
-              {t(`cache.tab.${x}`)}
-              {x === 'overview' && data && data.alerts.filter((a) => a.severity !== 'info').length > 0 && (
-                <span className="ov-count">{data.alerts.filter((a) => a.severity !== 'info').length}</span>
-              )}
-            </button>
-          ))}
-        </nav>
-        <div className="ov-segmented" role="tablist" aria-label={t('ov.chart.range')}>
-          {CACHE_RANGES.map((r) => (
-            <button key={r} type="button" role="tab" aria-selected={range === r} className={range === r ? 'is-active' : ''} onClick={() => setRange(r)}>
-              {r}
-            </button>
-          ))}
-        </div>
-      </div>
-
+      <PageTabs tabs={tabs} value={page.tab} onChange={(tab) => page.go(tab)} />
       {renderTab()}
 
-      {id && tab === 'namespaces' && (
-        <NamespaceDrawer
-          key={id}
-          name={id}
-          range={range}
-          reloadKey={reloadKey}
-          onClose={closeDrawer}
-          onBrowse={(ns) => go('keys', null, { namespace: ns })}
-          onOpenKey={(key) => go('keys', key, { namespace: id })}
-          onClear={actions.requestClearNamespace}
-        />
-      )}
-      {id && tab === 'keys' && (
-        <KeyDrawer
-          key={id}
-          cacheKey={id}
-          reloadKey={reloadKey}
-          onClose={closeDrawer}
-          onDelete={(d) => actions.requestDeleteKey({ key: d.key, namespace: d.namespace, type: d.type, bytes: d.bytes, ttlMs: d.ttlMs })}
-          onOpenNamespace={(ns) => go('namespaces', ns)}
-        />
-      )}
-      {actions.modal}
+      <NamespaceSheet
+        name={page.nsId}
+        range={page.range}
+        onClose={() => page.openNamespace(null)}
+        onBrowse={(ns) => page.browseKeys({ namespace: ns })}
+        onOpenKey={page.openKey}
+        onClear={actions.requestClearNamespace}
+      />
+      <KeySheet keyId={page.keyId} onClose={() => page.openKey(null)} onDelete={actions.requestDeleteKey} onOpenNamespace={page.openNamespace} />
+      <CacheConfigSheet open={page.settingsOpen} onOpenChange={page.setSettings} />
+      {actions.dialogs}
     </div>
   );
 };

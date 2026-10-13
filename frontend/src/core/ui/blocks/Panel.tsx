@@ -28,7 +28,7 @@ export function Panel({ title, hint, actions, expandable, flush, className, body
   return (
     <section className={cn('flex min-w-0 flex-col rounded-lg border border-border bg-panel', className)}>
       {hasHead && (
-        <header className="flex min-h-10 items-center gap-2 border-b border-border px-3 py-2">
+        <header className="flex min-h-10 flex-wrap items-center gap-2 border-b border-border px-3 py-2">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1.5">
               {title && <h2 className="truncate text-sm font-semibold text-fg">{title}</h2>}
@@ -41,7 +41,7 @@ export function Panel({ title, hint, actions, expandable, flush, className, body
               )}
             </div>
           </div>
-          {actions && <div className="flex shrink-0 items-center gap-1.5">{actions}</div>}
+          {actions && <div className="flex max-w-full shrink-0 items-center gap-1.5">{actions}</div>}
           {expandable && (
             <Hint content={t('ui.action.fullscreen')}>
               <Button variant="ghost" size="icon-xs" onClick={() => setExpanded(true)} aria-label={t('ui.action.fullscreen')}>

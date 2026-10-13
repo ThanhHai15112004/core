@@ -119,6 +119,11 @@ export const uiVi = {
   mask: {
     hidden: 'Giá trị bí mật — luôn được che',
   },
+  source: {
+    unsupported: 'Nguồn hiện tại không cung cấp dữ liệu này',
+    disconnected: 'Chưa kết nối — chưa có dữ liệu',
+    error: 'Không đọc được phần này',
+  },
   status: {
     ok: 'Ổn định',
     warn: 'Cảnh báo',
