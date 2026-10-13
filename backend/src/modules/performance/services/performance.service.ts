@@ -396,8 +396,6 @@ export class PerformanceService {
     return {
       range,
       telemetry: {
-        performance: true,
-        traffic: true,
         database: this.database.getStatus().state === 'connected' ? 'active' : 'unavailable',
       },
       status: {
@@ -429,8 +427,6 @@ export class PerformanceService {
       breakdown: {
         requests: cur.api.requests ?? 0,
         avgTotalMs: cur.api.avgMs,
-        phases: [],
-        dbQueriesPerRequest: null,
       },
       budgets: [
         budget('apiP95Ms', cur.api.p95Ms, 'ms'),
@@ -452,7 +448,6 @@ export class PerformanceService {
         queueWaiting: cur.messaging.waiting,
       },
       settings: {
-        resolutionSec: null,
         evaluateSec: Math.round(this.config.performance.evaluateMs / 1000),
         windowMin: minutes,
         thresholds: {

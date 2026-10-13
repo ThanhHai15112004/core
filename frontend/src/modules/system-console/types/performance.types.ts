@@ -71,13 +71,10 @@ export interface ComponentRow {
   errorPercent: number | null;
 }
 
-export type BreakdownPhase = 'route' | 'guard' | 'app' | 'db' | 'cache' | 'send';
 
 export interface Breakdown {
   requests: number;
   avgTotalMs: number | null;
-  phases: { phase: BreakdownPhase; avgMs: number; percent: number }[];
-  dbQueriesPerRequest: number | null;
 }
 
 export interface Budget {
@@ -108,7 +105,7 @@ export interface Throughput {
 
 export interface PerformanceOverview {
   range: PerfRange;
-  telemetry: { performance: boolean; traffic: boolean; database: 'active' | 'unavailable' };
+  telemetry: { database: 'active' | 'unavailable' };
   status: { level: PerfLevel; reasons: string[] };
   kpis: {
     apiP95Ms: Kpi;
@@ -126,7 +123,6 @@ export interface PerformanceOverview {
   capacity: Capacity[];
   throughput: Throughput;
   settings: {
-    resolutionSec: number | null;
     evaluateSec: number;
     windowMin: number;
     thresholds: { cpuPercent: number; memoryPercent: number };

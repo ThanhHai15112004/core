@@ -121,7 +121,7 @@ describe('Performance (/ops/performance)', () => {
           memoryMb: { value: number; limitMb: number | null; percent: number | null };
           errorRatePercent: { value: number };
         };
-        breakdown: { requests: number; avgTotalMs: number | null; phases: unknown[] };
+        breakdown: { requests: number; avgTotalMs: number | null };
         components: { id: string; status: string; note: string | null; load: number | null }[];
         budgets: { key: string; target: number; met: boolean | null }[];
       }>(`${base}/overview?range=15m`, { 'accept-language': 'en' });
@@ -135,7 +135,7 @@ describe('Performance (/ops/performance)', () => {
       expect(d.kpis.cpuPercent.value).toBe(35);
       expect(d.kpis.memoryMb).toMatchObject({ value: 256, limitMb: null, percent: null });
       // Prometheus không có thời gian theo giai đoạn → không chia ước lượng.
-      expect(d.breakdown).toMatchObject({ requests: 1800, avgTotalMs: 50, phases: [] });
+      expect(d.breakdown).toEqual({ requests: 1800, avgTotalMs: 50 });
       expect(d.telemetry.database).toBe('unavailable');
 
       expect(d.components.find((c) => c.id === 'api')).toMatchObject({

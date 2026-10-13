@@ -88,18 +88,10 @@ export interface ComponentRowDto {
   errorPercent: number | null;
 }
 
-export interface BreakdownPhaseDto {
-  phase: 'route' | 'guard' | 'app' | 'db' | 'cache' | 'send';
-  avgMs: number;
-  percent: number;
-}
-
 export interface BreakdownDto {
   /** Số request đi tới handler được dùng để tính. */
   requests: number;
   avgTotalMs: number | null;
-  phases: BreakdownPhaseDto[];
-  dbQueriesPerRequest: number | null;
 }
 
 export interface BudgetDto {
@@ -133,7 +125,7 @@ export interface ThroughputDto {
 export interface PerformanceOverviewDto {
   range: PerfRange;
   /** `database`: đã kết nối database thật hay chưa (chưa kết nối → không có số liệu query). */
-  telemetry: { performance: boolean; traffic: boolean; database: 'active' | 'unavailable' };
+  telemetry: { database: 'active' | 'unavailable' };
   status: { level: PerfLevel; reasons: string[] };
   kpis: {
     apiP95Ms: KpiDto;
@@ -151,7 +143,6 @@ export interface PerformanceOverviewDto {
   capacity: CapacityDto[];
   throughput: ThroughputDto;
   settings: {
-    resolutionSec: number | null;
     evaluateSec: number;
     windowMin: number;
     /** Ngưỡng cảnh báo CPU/bộ nhớ theo runtime (tô màu thanh sử dụng). */

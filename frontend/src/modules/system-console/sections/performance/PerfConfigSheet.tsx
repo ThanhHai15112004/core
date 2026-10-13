@@ -19,7 +19,6 @@ export function PerfConfigSheet({ data, open, onOpenChange }: { data: Performanc
               items: [
                 { label: t('perf.config.window'), value: t('perf.config.minutes', { count: s.windowMin }), hint: t('perf.config.windowHint') },
                 { label: t('perf.config.evaluate'), value: t('perf.config.seconds', { count: s.evaluateSec }) },
-                { label: t('perf.config.resolution'), value: s.resolutionSec ? t('perf.config.seconds', { count: s.resolutionSec }) : null },
                 { label: t('perf.config.cpuThreshold'), value: fmt(s.thresholds.cpuPercent, '%'), mono: true },
                 { label: t('perf.config.memoryThreshold'), value: fmt(s.thresholds.memoryPercent, '%'), mono: true },
               ],
@@ -33,8 +32,6 @@ export function PerfConfigSheet({ data, open, onOpenChange }: { data: Performanc
               id: 'telemetry',
               title: t('perf.config.telemetry'),
               items: [
-                { label: t('perf.config.perfSource'), value: t(data.telemetry.performance ? 'perf.config.active' : 'perf.config.inactive') },
-                { label: t('perf.config.trafficSource'), value: t(data.telemetry.traffic ? 'perf.config.active' : 'perf.config.inactive') },
                 { label: t('perf.config.dbSource'), value: t(data.telemetry.database === 'active' ? 'perf.config.active' : 'perf.config.inactive') },
               ],
             },

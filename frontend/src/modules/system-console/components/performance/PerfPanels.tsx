@@ -1,38 +1,24 @@
 import { ArrowRight, Check, Minus, X } from 'lucide-react';
 import { cn } from '@core/lib/cn';
 import { useLocale } from '@core/i18n/index';
-import { NO_VALUE } from '@core/lib/format';
 import { TONE_CLASS } from '@core/theme';
 import { PanelState, UsageBar } from '@core/ui/blocks';
-import { BarList } from '@core/ui/charts';
 import type { Breakdown, Budget, Capacity, Throughput } from '../../types/performance.types';
 import { CAPACITY_FULL_PERCENT, CAPACITY_WARN_PERCENT } from '../../constants/performance';
 import { usePerfFormat } from './perf-format';
 
-/** Thời gian trung bình một request chia theo giai đoạn thật của Fastify/Nest (DB/cache đo trong cùng request). */
+/** Thời gian trung bình một request đã vào tới handler (Prometheus không có số đo từng giai đoạn). */
 export function LatencyBreakdown({ breakdown, dbActive }: { breakdown: Breakdown; dbActive: boolean }) {
   const { t } = useLocale();
   const fmt = usePerfFormat();
   if (breakdown.avgTotalMs === null) return <PanelState status="empty" message={t('perf.breakdown.empty')} compact />;
-  const top = breakdown.phases.reduce((a, b) => (b.avgMs > a.avgMs ? b : a), breakdown.phases[0]!);
   return (
     <>
       <div className="mb-3 flex flex-wrap items-baseline gap-x-4 gap-y-1">
         <span className="font-mono text-xl font-semibold tabular-nums text-fg">{fmt(breakdown.avgTotalMs, 'ms')}</span>
         <span className="text-xs text-muted">{t('perf.breakdown.requests', { count: breakdown.requests })}</span>
-        <span className="text-xs text-muted">
-          {dbActive ? t('perf.breakdown.dbQueries', { count: breakdown.dbQueriesPerRequest ?? NO_VALUE }) : t('perf.breakdown.dbInactive')}
-        </span>
+        {!dbActive && <span className="text-xs text-muted">{t('perf.breakdown.dbInactive')}</span>}
       </div>
-      <BarList
-        items={breakdown.phases.map((p) => ({
-          id: p.phase,
-          label: t(`perf.breakdown.phase.${p.phase}`),
-          value: p.avgMs,
-          display: `${fmt(p.avgMs, 'ms')} · ${p.percent}%`,
-          tone: p.phase === top.phase && p.avgMs > 0 ? 'warn' : undefined,
-        }))}
-      />
     </>
   );
 }
