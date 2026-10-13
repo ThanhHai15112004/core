@@ -21,5 +21,3 @@ export function useTrafficFormat() {
     [t, f],
   );
 }
-
-export type TrafficFormat = ReturnType<typeof useTrafficFormat>;

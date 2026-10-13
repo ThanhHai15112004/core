@@ -8,6 +8,4 @@ export const TRAFFIC_ROUTES = {
   ENDPOINT_DETAIL: 'endpoints/:routeId',
   ERRORS: 'errors',
   INSIGHTS: 'insights',
-  buildSummaryPath: () => `/${PREFIX}/summary`,
-  buildEndpointPath: (routeId: string) => `/${PREFIX}/endpoints/${routeId}`,
 } as const;

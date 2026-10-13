@@ -1,10 +1,4 @@
 {
-  "traffic.status.healthy": "Ổn định",
-  "traffic.status.slow": "Chậm",
-  "traffic.status.high_error": "Lỗi cao",
-  "traffic.status.failing": "Đang lỗi",
-  "traffic.status.idle": "Không có traffic",
-  "traffic.status.low_traffic": "Ít dữ liệu",
   "traffic.reason.slow": "P95 {p95} ms vượt ngưỡng {threshold} ms",
   "traffic.reason.highError": "Lỗi 5xx {rate}% (ngưỡng {threshold}%)",
   "traffic.reason.failing": "Lỗi 5xx {rate}% vượt ngưỡng nghiêm trọng {threshold}%",

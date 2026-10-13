@@ -16,15 +16,11 @@ export const TRAFFIC_TAB_ALIASES: Partial<Record<string, TabAlias<TrafficTab>>> 
 /** Khoảng thời gian API traffic hỗ trợ. */
 export const TRAFFIC_RANGES = ['5m', '15m', '1h', '6h', '24h', '7d'] as const satisfies readonly TrafficRange[];
 
-/** Tab con cũ của trang endpoint (`endpoints/<id>/<tab>`) — nay gộp vào một trang. */
-export const LEGACY_ENDPOINT_TABS = ['overview', 'requests', 'errors', 'latency', 'status'] as const;
-
 export const HTTP_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] as const;
 
 /** Phạm vi traffic: `all` gồm cả traffic nội bộ (System Console, health); `app` bỏ phần đó. */
 export const TRAFFIC_SCOPES = ['all', 'app'] as const;
 export type TrafficScope = (typeof TRAFFIC_SCOPES)[number];
-export const DEFAULT_SCOPE: TrafficScope = 'all';
 
 /** Lọc bảng endpoint: theo trạng thái backend suy ra, hoặc có lỗi 4xx / 5xx. */
 export const ENDPOINT_STATUS_FILTERS = ['failing', 'high_error', 'slow', 'healthy', 'low_traffic', 'idle', '5xx', '4xx'] as const;

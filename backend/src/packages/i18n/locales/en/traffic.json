@@ -1,10 +1,4 @@
 {
-  "traffic.status.healthy": "Healthy",
-  "traffic.status.slow": "Slow",
-  "traffic.status.high_error": "High error",
-  "traffic.status.failing": "Failing",
-  "traffic.status.idle": "No traffic",
-  "traffic.status.low_traffic": "Low data",
   "traffic.reason.slow": "P95 {p95} ms exceeds threshold {threshold} ms",
   "traffic.reason.highError": "5xx {rate}% (threshold {threshold}%)",
   "traffic.reason.failing": "5xx {rate}% exceeds critical threshold {threshold}%",

@@ -252,11 +252,9 @@ describe('HTTP Traffic (/ops/traffic)', () => {
       expect(sent.some((e) => e.includes('offset 900s'))).toBe(true);
       expect(body.data.comparison.requestsPercent).toBe(0);
       expect(body.data.settings).toEqual({
-        slowMs: 500,
         endpointP95WarnMs: 500,
         errorRateWarnPercent: 2,
         errorRateCritPercent: 10,
-        minRequestsForStatus: 20,
       });
     });
   });

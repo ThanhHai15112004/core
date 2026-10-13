@@ -51,16 +51,12 @@ export interface StatusClassDto {
 
 /** Ngưỡng đánh giá lấy từ cấu hình `TRAFFIC_*`. */
 export interface TrafficSettingsDto {
-  slowMs: number;
   endpointP95WarnMs: number;
   errorRateWarnPercent: number;
   errorRateCritPercent: number;
-  minRequestsForStatus: number;
 }
 
 export interface TrafficSummaryDto {
-  range: string;
-  generatedAt: string;
   stats: TrafficStatsDto;
   comparison: TrafficComparisonDto;
   /** Từ 0 giờ hôm nay (giờ server); null khi Prometheus không trả lời. */
@@ -80,7 +76,6 @@ export interface SeriesPointDto {
 }
 
 export interface TimeseriesDto {
-  range: string;
   metric: TimeseriesMetric;
   stepSec: number;
   unit: 'rps' | 'ms' | 'percent';
@@ -106,7 +101,6 @@ export interface EndpointDetailDto extends EndpointRowDto {
 }
 
 export interface ErrorAnalysisDto {
-  range: string;
   stats: TrafficStatsDto;
   topRoutes: {
     routeId: string;
@@ -139,7 +133,7 @@ export interface TrafficProblemDto {
 export interface SecurityTrafficDto {
   status: 401 | 403 | 429;
   count: number;
-  topRoute: { routeId: string; method: string; route: string; count: number } | null;
+  topRoute: { method: string; route: string } | null;
 }
 
 export interface TrafficSummary24hDto {
@@ -152,7 +146,6 @@ export interface TrafficSummary24hDto {
 }
 
 export interface TrafficInsightsDto {
-  generatedAt: string;
   problems: TrafficProblemDto[];
   security: SecurityTrafficDto[];
   rateLimit: { configured: false; message: string };

@@ -141,11 +141,9 @@ export class TrafficService {
   private settings(): TrafficSettingsDto {
     const th = this.cfg.thresholds;
     return {
-      slowMs: this.cfg.slowMs,
       endpointP95WarnMs: th.endpointP95Ms,
       errorRateWarnPercent: th.errorRateWarnPercent,
       errorRateCritPercent: th.errorRateCritPercent,
-      minRequestsForStatus: th.minRequestsForStatus,
     };
   }
 
@@ -237,8 +235,6 @@ export class TrafficService {
       this.requestsToday(selector),
     ]);
     return {
-      range: q.range,
-      generatedAt: new Date().toISOString(),
       stats: current.stats,
       comparison: this.compare(current.stats, previous.stats),
       requestsToday: today,
@@ -299,7 +295,6 @@ export class TrafficService {
     const values = main.map((p) => p.value);
     const peak = values.length ? Math.max(...values) : null;
     return {
-      range: q.range,
       metric,
       stepSec,
       unit,
@@ -453,7 +448,6 @@ export class TrafficService {
       this.getEndpoints(q, 'errors'),
     ]);
     return {
-      range: q.range,
       stats: summary.stats,
       topRoutes: endpoints
         .filter((e) => e.stats.serverErrors > 0 || e.stats.clientErrors > 0)
@@ -481,7 +475,6 @@ export class TrafficService {
       this.last24h(selector),
     ]);
     return {
-      generatedAt: new Date().toISOString(),
       problems,
       security,
       rateLimit: { configured: false, message: this.i18n.t('traffic.rateLimit.notConfigured') },
@@ -600,12 +593,7 @@ export class TrafficService {
         status,
         count: list.reduce((n, x) => n + x.count, 0),
         topRoute: top
-          ? {
-              routeId: routeKey(top.labels),
-              method: top.labels['method'] || 'GET',
-              route: top.labels['route'] || '/',
-              count: top.count,
-            }
+          ? { method: top.labels['method'] || 'GET', route: top.labels['route'] || '/' }
           : null,
       };
     });
