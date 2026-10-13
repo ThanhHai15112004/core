@@ -146,17 +146,13 @@ export class LogsOpsService {
 
   private backend(): LogsBackendDto {
     return {
-      provider: 'redis-stream',
-      historicalSearch: 'limited',
-      fullText: 'scan',
       bufferSize: LOGS_STREAM_MAXLEN,
       consoleFormat: this.config.logs.format,
     };
   }
 
-  private redaction(): LogsOverviewDto['redaction'] {
+  private redaction(): LogsConfigDto['redaction'] {
     return {
-      enabled: true,
       keys: [...SENSITIVE_KEY_NAMES],
       patterns: [...TEXT_REDACTION_PATTERNS],
     };
@@ -168,7 +164,6 @@ export class LogsOpsService {
       entries: list.length,
       capacity: this.store.capacity,
       oldestAt: list.length ? list[list.length - 1]!.t : null,
-      newestAt: list.length ? list[0]!.t : null,
     }));
   }
 
@@ -224,7 +219,6 @@ export class LogsOpsService {
           template: messageTemplate(sample.message),
           module: sample.context ?? null,
           frame: null,
-          level: sample.level,
           count: list.length,
           total: list.length,
           firstSeen: iso(first),
@@ -241,15 +235,6 @@ export class LogsOpsService {
           jobTypes: countBy(list.map((e) => e.jobType)).map((c) => c.name),
           routes: countBy(list.map((e) => e.route)).map((c) => c.name),
           spark,
-          sample: {
-            id: sample.id ?? null,
-            message: sample.message,
-            at: sample.t,
-            runtime: sample.runtime ?? null,
-            jobId: sample.jobId ?? null,
-            requestId: sample.requestId ?? null,
-            correlationId: sample.correlationId ?? null,
-          },
         } satisfies ErrorGroupRowDto;
       })
       .sort((a, b) => b.count - a.count);
@@ -258,28 +243,17 @@ export class LogsOpsService {
   // ─── Overview / biểu đồ ───────────────────────────────────────────────────
 
   public async getOverview(range: LogsRange, now = Date.now()): Promise<LogsOverviewDto> {
-    const base = {
-      range,
-      environment: this.config.app.env,
-      backend: this.backend(),
-      redaction: this.redaction(),
-    };
     if (!this.store.isAvailable())
       return {
-        ...base,
         status: 'unavailable',
-        lastEventAt: null,
         lastIngestAt: null,
         kpis: {
           logsPerMin: null,
-          total: null,
           errors: null,
           warnings: null,
           fatal: null,
-          sources: 0,
           errorRatePercent: null,
           uniqueErrors: 0,
-          traceablePercent: null,
           dropped: null,
         },
         levels: [],
@@ -305,10 +279,8 @@ export class LogsOpsService {
       { total: number; errors: number; warnings: number; instances: Set<string> }
     >();
     const modules = new Map<string, { total: number; errors: number }>();
-    let traceable = 0;
     for (const e of entries) {
       counts[e.level]++;
-      if (e.correlationId || e.jobId || e.executionId) traceable++;
       const s = sources.get(e.runtime ?? 'unknown') ?? {
         total: 0,
         errors: 0,
@@ -377,40 +349,34 @@ export class LogsOpsService {
       });
 
     return {
-      ...base,
       status:
         failing.length || dropped > 0
           ? 'degraded'
           : lastEventAt && lastEventAt >= now - STREAMING_SEC * 1000
             ? 'streaming'
             : 'idle',
-      lastEventAt: iso(lastEventAt),
       lastIngestAt: iso(lastIngestAt),
       kpis: {
         logsPerMin: perMin(total),
-        total,
         errors,
         warnings: counts.warn,
         fatal: counts.fatal,
-        sources: sources.size,
         errorRatePercent: rate,
         uniqueErrors: groupRows.length,
-        traceablePercent: pct(traceable, total),
         dropped: live.length ? dropped : null,
       },
       levels: LOG_ENTRY_LEVELS.filter(
         (l) => counts[l] > 0 || l === 'info' || l === 'warn' || l === 'error',
       ).map((l) => ({ level: l, count: counts[l], percent: pct(counts[l], total) })),
       sources: [...sources]
+        .sort(([, a], [, b]) => b.total - a.total)
         .map(([runtime, s]) => ({
           runtime,
-          total: s.total,
           perMin: perMin(s.total),
           errors: s.errors,
           warnings: s.warnings,
           instances: s.instances.size,
-        }))
-        .sort((a, b) => b.total - a.total),
+        })),
       modules: [...modules]
         .map(([module, m]) => ({ module, total: m.total, errors: m.errors }))
         .sort((a, b) => b.errors - a.errors || b.total - a.total)
@@ -420,12 +386,7 @@ export class LogsOpsService {
       recentAudit: audit.items.slice(0, 6),
       levelsActive: [...overrides.values()]
         .filter((o) => o.until === null || o.until > now)
-        .map((o) => ({
-          runtime: o.runtime,
-          level: o.level,
-          until: iso(o.until),
-          modules: o.modules,
-        })),
+        .map((o) => ({ runtime: o.runtime, level: o.level, modules: o.modules })),
     };
   }
 
@@ -452,7 +413,7 @@ export class LogsOpsService {
         else p[e.level]++;
       }
     }
-    return { range, bucketSec, points, spike: null };
+    return { bucketSec, points, spike: null };
   }
 
   // ─── Explorer / live tail / export ────────────────────────────────────────
@@ -474,7 +435,7 @@ export class LogsOpsService {
       scanned: snap.entries.length,
       matched: matched.length,
       coverage: this.coverage(snap),
-      resolved: filter.anyId ? this.resolve(filter.anyId, snap.entries) : null,
+      resolved: filter.anyId ? this.resolvedId(filter.anyId, snap.entries) : null,
     };
   }
 
@@ -595,7 +556,6 @@ export class LogsOpsService {
               fingerprint: entry.fingerprint,
               count: group.length,
               firstSeen: group[group.length - 1]!.t,
-              lastSeen: group[0]!.t,
             }
           : null,
     };
@@ -626,7 +586,16 @@ export class LogsOpsService {
   }
 
   /** Một ID dán vào ô tìm là gì (request / job / execution / correlation / log). */
-  private resolve(id: string, entries: LogEntry[]): ResolvedIdDto {
+  private resolvedId(id: string, entries: LogEntry[]): ResolvedIdDto {
+    const { kinds, queue } = this.resolve(id, entries);
+    return { id, kinds, queue };
+  }
+
+  /** Loại ID, queue (job) và correlation ID của chuỗi xử lý chứa ID đó (trace mở rộng theo correlation). */
+  private resolve(
+    id: string,
+    entries: LogEntry[],
+  ): { kinds: ResolvedIdKind[]; queue: string | null; correlationId: string | null } {
     const kinds = new Set<ResolvedIdKind>();
     let queue: string | null = null;
     let correlationId: string | null = null;
@@ -642,7 +611,7 @@ export class LogsOpsService {
       if (!correlationId && LOG_ID_FIELDS.some((k) => e[k] === id))
         correlationId = e.correlationId ?? null;
     }
-    return { id, kinds: [...kinds], queue, correlationId };
+    return { kinds: [...kinds], queue, correlationId };
   }
 
   // ─── Nhóm lỗi ─────────────────────────────────────────────────────────────
@@ -652,7 +621,7 @@ export class LogsOpsService {
     q: string | null,
     now = Date.now(),
   ): Promise<ErrorGroupsDto> {
-    if (!this.store.isAvailable()) return { range, items: [], otherCount: 0 };
+    if (!this.store.isAvailable()) return { items: [], otherCount: 0 };
     const from = now - LOGS_RANGES[range] * 60_000;
     const snap = await this.store.logs();
     const text = q?.toLowerCase().trim() ?? '';
@@ -663,7 +632,7 @@ export class LogsOpsService {
           .toLowerCase()
           .includes(text),
     );
-    return { range, items, otherCount: 0 };
+    return { items, otherCount: 0 };
   }
 
   public async getErrorGroup(
@@ -689,7 +658,6 @@ export class LogsOpsService {
     return {
       ...row,
       series: buckets,
-      bucketSec: series.bucketSec,
       baselinePerMin: Math.round((list.length / minutes) * 100) / 100,
       currentPerMin: null,
       affected: {
@@ -720,31 +688,26 @@ export class LogsOpsService {
       .reverse();
     if (!related.length) throw new LogNotFoundException('TRACE_NOT_FOUND', { id });
 
-    const events: TraceEventDto[] = related.slice(0, TRACE_MAX_EVENTS).map((e) => {
-      const kind: TraceEventDto['kind'] = e.route ? 'request' : e.jobId ? 'job' : 'log';
-      return {
-        at: e.t,
-        component: e.runtime ?? 'unknown',
-        kind,
-        level: isError(e) ? 'error' : e.level === 'warn' ? 'warn' : 'info',
-        label: e.message,
-        detail: e.route ?? e.jobType ?? null,
-        module: e.context ?? null,
-        errorType: e.errorType ?? null,
-        logId: e.id ?? null,
-        link: e.requestId
-          ? { kind: 'request', id: e.requestId }
-          : e.jobId
-            ? {
-                kind: 'job',
-                id: e.jobId,
-                queue: typeof e.metadata?.queue === 'string' ? e.metadata.queue : null,
-              }
-            : e.executionId
-              ? { kind: 'execution', id: e.executionId }
-              : null,
-      };
-    });
+    const events: TraceEventDto[] = related.slice(0, TRACE_MAX_EVENTS).map((e) => ({
+      at: e.t,
+      component: e.runtime ?? 'unknown',
+      level: isError(e) ? 'error' : e.level === 'warn' ? 'warn' : 'info',
+      label: e.message,
+      detail: e.route ?? e.jobType ?? null,
+      module: e.context ?? null,
+      logId: e.id ?? null,
+      link: e.requestId
+        ? { kind: 'request', id: e.requestId }
+        : e.jobId
+          ? {
+              kind: 'job',
+              id: e.jobId,
+              queue: typeof e.metadata?.queue === 'string' ? e.metadata.queue : null,
+            }
+          : e.executionId
+            ? { kind: 'execution', id: e.executionId }
+            : null,
+    }));
     const flow = new Map<string, TraceNodeDto>();
     for (const ev of events) {
       const n = flow.get(ev.component);
@@ -763,30 +726,28 @@ export class LogsOpsService {
     }
     const first = related[0]!;
     const last = related[related.length - 1]!;
-    const failure = events.find((ev) => ev.level === 'error') ?? null;
+    // `events` cùng thứ tự với `related` → chỉ số của sự kiện lỗi đầu tiên cũng là chỉ số log gốc.
+    const failureAt = events.findIndex((ev) => ev.level === 'error');
+    const failure = events[failureAt] ?? null;
     return {
       id,
       resolvedFrom: resolved.kinds,
       correlationId: corr,
-      startedAt: first.t,
-      endedAt: last.t,
       durationMs: entryTime(last) - entryTime(first),
       status: failure ? 'failed' : 'ok',
       services: [...flow.keys()],
       counts: {
         logs: related.length,
         errors: related.filter(isError).length,
-        warnings: related.filter((e) => e.level === 'warn').length,
         jobs: new Set(related.map((e) => e.jobId).filter(Boolean)).size,
         requests: new Set(related.map((e) => e.requestId).filter(Boolean)).size,
       },
-      root: events[0] ? { kind: events[0].kind, label: events[0].label, at: events[0].at } : null,
+      root: events[0] ? { label: events[0].label, at: events[0].at } : null,
       failurePoint: failure
         ? {
             component: failure.component,
             label: failure.label,
-            at: failure.at,
-            errorType: failure.errorType ?? null,
+            errorType: related[failureAt]!.errorType ?? null,
             logId: failure.logId,
           }
         : null,
@@ -833,8 +794,6 @@ export class LogsOpsService {
     return {
       current: totals(from, now),
       previous: totals(from - 86_400_000, from - 86_400_000 + span),
-      from: new Date(from).toISOString(),
-      to: new Date(now).toISOString(),
       available,
     };
   }
@@ -858,25 +817,14 @@ export class LogsOpsService {
           instance: s.instance,
           level: s.level,
           baseLevel: s.baseLevel,
-          overrideUntil: iso(s.overrideUntil),
-          overrideModules: s.overrideModules,
           dropped: s.dropped,
           written: s.written,
           lastSuccessAt: iso(s.lastSuccessAt),
-          lastErrorAt: iso(s.lastErrorAt),
           lastError: s.lastError,
-          updatedAt: new Date(s.updatedAt).toISOString(),
         })),
         override:
           o && (o.until === null || o.until > now)
-            ? {
-                level: o.level,
-                previous: o.previous,
-                until: iso(o.until),
-                modules: o.modules,
-                setAt: new Date(o.setAt).toISOString(),
-                actor: o.actor,
-              }
+            ? { level: o.level, previous: o.previous, until: iso(o.until), modules: o.modules }
             : null,
       };
     });

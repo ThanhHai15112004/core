@@ -57,7 +57,6 @@ export interface LogCoverage {
   entries: number;
   capacity: number;
   oldestAt: string | null;
-  newestAt: string | null;
 }
 
 export type ResolvedIdKind = 'request' | 'job' | 'execution' | 'correlation' | 'log';
@@ -66,7 +65,6 @@ export interface ResolvedId {
   id: string;
   kinds: ResolvedIdKind[];
   queue: string | null;
-  correlationId: string | null;
 }
 
 export interface LogSearchResult {
@@ -102,7 +100,7 @@ export interface LogDetail extends LogRow {
   links: LogLinks;
   before: LogRow[];
   after: LogRow[];
-  group: { fingerprint: string; count: number; firstSeen: string | null; lastSeen: string | null } | null;
+  group: { fingerprint: string; count: number; firstSeen: string | null } | null;
 }
 
 export interface LogIssue {
@@ -113,9 +111,6 @@ export interface LogIssue {
 }
 
 export interface LogsBackend {
-  provider: 'redis-stream';
-  historicalSearch: 'limited';
-  fullText: 'scan';
   /** Số log gần nhất được giữ trong stream, chung cho mọi runtime. */
   bufferSize: number;
   consoleFormat: 'json' | 'text';
@@ -127,7 +122,6 @@ export interface ErrorGroupRow {
   template: string;
   module: string | null;
   frame: string | null;
-  level: LogLevel;
   count: number;
   total: number;
   firstSeen: string | null;
@@ -140,19 +134,9 @@ export interface ErrorGroupRow {
   jobTypes: string[];
   routes: string[];
   spark: number[];
-  sample: {
-    id: string | null;
-    message: string;
-    at: string | null;
-    runtime: string | null;
-    jobId: string | null;
-    requestId: string | null;
-    correlationId: string | null;
-  };
 }
 
 export interface ErrorGroups {
-  range: LogsRange;
   items: ErrorGroupRow[];
   otherCount: number;
 }
@@ -164,12 +148,11 @@ export interface CountShare {
 
 export interface ErrorGroupDetail extends ErrorGroupRow {
   series: { t: string; count: number }[];
-  bucketSec: number;
   baselinePerMin: number | null;
   currentPerMin: number | null;
   affected: { runtimes: CountShare[]; jobTypes: CountShare[]; routes: CountShare[] };
   samples: LogRow[];
-  nearestStart: { runtime: string; at: string; minutesBefore: number } | null;
+  nearestStart: { runtime: string; minutesBefore: number } | null;
   dependency: LogDependency | null;
 }
 
@@ -183,7 +166,6 @@ export interface LogsSeriesPoint {
 }
 
 export interface LogsSeries {
-  range: LogsRange;
   bucketSec: number;
   points: LogsSeriesPoint[];
   spike: { at: string; beforePerMin: number; afterPerMin: number } | null;
@@ -219,57 +201,43 @@ export interface LevelState {
     instance: string;
     level: string;
     baseLevel: string;
-    overrideUntil: string | null;
-    overrideModules: string[];
     dropped: number;
     written: number;
     lastSuccessAt: string | null;
-    lastErrorAt: string | null;
     lastError: string | null;
-    updatedAt: string;
   }[];
-  override: { level: string; previous: string; until: string | null; modules: string[]; setAt: string; actor: string | null } | null;
+  override: { level: string; previous: string; until: string | null; modules: string[] } | null;
 }
 
 export interface Redaction {
-  enabled: true;
   keys: string[];
   patterns: string[];
 }
 
 export interface LogsOverview {
   status: 'streaming' | 'idle' | 'degraded' | 'unavailable';
-  range: LogsRange;
-  environment: string;
-  lastEventAt: string | null;
   lastIngestAt: string | null;
-  backend: LogsBackend;
   kpis: {
     logsPerMin: number | null;
-    total: number | null;
     errors: number | null;
     warnings: number | null;
     fatal: number | null;
-    sources: number;
     errorRatePercent: number | null;
     uniqueErrors: number;
-    traceablePercent: number | null;
     dropped: number | null;
   };
   levels: { level: LogLevel; count: number; percent: number | null }[];
-  sources: { runtime: string; total: number; perMin: number | null; errors: number; warnings: number; instances: number }[];
+  sources: { runtime: string; perMin: number | null; errors: number; warnings: number; instances: number }[];
   modules: { module: string; total: number; errors: number }[];
   issues: LogIssue[];
   topErrors: ErrorGroupRow[];
   recentAudit: AuditEvent[];
-  redaction: Redaction;
-  levelsActive: { runtime: string; level: string; until: string | null; modules: string[] }[];
+  levelsActive: { runtime: string; level: string; modules: string[] }[];
 }
 
 export interface TraceEvent {
   at: string;
   component: string;
-  kind: 'request' | 'log' | 'job' | 'execution';
   level: 'info' | 'warn' | 'error';
   label: string;
   detail: string | null;
@@ -291,14 +259,12 @@ export interface Trace {
   id: string;
   resolvedFrom: ResolvedIdKind[];
   correlationId: string | null;
-  startedAt: string | null;
-  endedAt: string | null;
   durationMs: number | null;
   status: 'failed' | 'ok' | 'running' | 'unknown';
   services: string[];
-  counts: { logs: number; errors: number; warnings: number; jobs: number; requests: number };
-  root: { kind: TraceEvent['kind']; label: string; at: string } | null;
-  failurePoint: { component: string; label: string; at: string; errorType: string | null; logId: string | null } | null;
+  counts: { logs: number; errors: number; jobs: number; requests: number };
+  root: { label: string; at: string } | null;
+  failurePoint: { component: string; label: string; errorType: string | null; logId: string | null } | null;
   flow: TraceNode[];
   events: TraceEvent[];
   truncated: boolean;
@@ -318,8 +284,6 @@ export interface LogsReportTotals {
 export interface LogsReport {
   current: LogsReportTotals;
   previous: LogsReportTotals;
-  from: string;
-  to: string;
   available: boolean;
 }
 

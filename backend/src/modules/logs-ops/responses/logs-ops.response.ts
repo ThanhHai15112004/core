@@ -36,7 +36,6 @@ export interface LogCoverageDto {
   entries: number;
   capacity: number;
   oldestAt: string | null;
-  newestAt: string | null;
 }
 
 export interface LogSearchDto {
@@ -64,7 +63,6 @@ export interface ResolvedIdDto {
   kinds: ResolvedIdKind[];
   /** Job: queue để mở trang Job. */
   queue: string | null;
-  correlationId: string | null;
 }
 
 export interface LogLinksDto {
@@ -96,7 +94,6 @@ export interface LogDetailDto extends LogRowDto {
     fingerprint: string;
     count: number;
     firstSeen: string | null;
-    lastSeen: string | null;
   } | null;
 }
 
@@ -112,12 +109,8 @@ export interface LogIssueDto {
     | null;
 }
 
+/** Kho log: Redis Stream `logs:<env>` (chưa có kho log tập trung như Loki / OpenSearch). */
 export interface LogsBackendDto {
-  /** `redis-stream`: Redis Stream `logs:<env>` (chưa có kho log tập trung như Loki / OpenSearch). */
-  provider: 'redis-stream';
-  /** Tìm được log cũ tới đâu: `limited` = chỉ khoảng `bufferSize` log gần nhất (mọi runtime chung một stream). */
-  historicalSearch: 'limited';
-  fullText: 'scan';
   /** `MAXLEN ~` của stream — số log gần nhất được giữ, chung cho mọi runtime. */
   bufferSize: number;
   consoleFormat: 'json' | 'text';
@@ -125,20 +118,16 @@ export interface LogsBackendDto {
 
 export interface LogsKpisDto {
   logsPerMin: number | null;
-  total: number | null;
   errors: number | null;
   warnings: number | null;
   fatal: number | null;
-  sources: number;
   errorRatePercent: number | null;
   uniqueErrors: number;
-  traceablePercent: number | null;
   dropped: number | null;
 }
 
 export interface LogSourceDto {
   runtime: string;
-  total: number;
   perMin: number | null;
   errors: number;
   warnings: number;
@@ -163,7 +152,6 @@ export interface ErrorGroupRowDto {
   template: string;
   module: string | null;
   frame: string | null;
-  level: LogEntryLevel;
   /** Số lần trong khoảng thời gian đang xem (telemetry) và tổng từ khi theo dõi. */
   count: number;
   total: number;
@@ -178,19 +166,9 @@ export interface ErrorGroupRowDto {
   jobTypes: string[];
   routes: string[];
   spark: number[];
-  sample: {
-    id: string | null;
-    message: string;
-    at: string | null;
-    runtime: string | null;
-    jobId: string | null;
-    requestId: string | null;
-    correlationId: string | null;
-  };
 }
 
 export interface ErrorGroupsDto {
-  range: LogsRange;
   items: ErrorGroupRowDto[];
   /** Nhóm lỗi vượt giới hạn metric riêng (gộp `other`). */
   otherCount: number;
@@ -203,13 +181,12 @@ export interface CountShareDto {
 
 export interface ErrorGroupDetailDto extends ErrorGroupRowDto {
   series: { t: string; count: number }[];
-  bucketSec: number;
   baselinePerMin: number | null;
   currentPerMin: number | null;
   affected: { runtimes: CountShareDto[]; jobTypes: CountShareDto[]; routes: CountShareDto[] };
   samples: LogRowDto[];
   /** Runtime khởi động gần nhất trước lần đầu xuất hiện (chỉ là tương quan thời gian, không kết luận nguyên nhân). */
-  nearestStart: { runtime: string; at: string; minutesBefore: number } | null;
+  nearestStart: { runtime: string; minutesBefore: number } | null;
   dependency: LogLinksDto['dependency'];
 }
 
@@ -223,7 +200,6 @@ export interface LogsSeriesPointDto {
 }
 
 export interface LogsSeriesDto {
-  range: LogsRange;
   bucketSec: number;
   points: LogsSeriesPointDto[];
   /** Spike lỗi phát hiện trong khoảng (lỗi/phút trước → sau). */
@@ -270,32 +246,22 @@ export interface LevelStateDto {
     instance: string;
     level: string;
     baseLevel: string;
-    overrideUntil: string | null;
-    overrideModules: string[];
     dropped: number;
     written: number;
     lastSuccessAt: string | null;
-    lastErrorAt: string | null;
     lastError: string | null;
-    updatedAt: string;
   }[];
   override: {
     level: string;
     previous: string;
     until: string | null;
     modules: string[];
-    setAt: string;
-    actor: string | null;
   } | null;
 }
 
 export interface LogsOverviewDto {
   status: 'streaming' | 'idle' | 'degraded' | 'unavailable';
-  range: LogsRange;
-  environment: string;
-  lastEventAt: string | null;
   lastIngestAt: string | null;
-  backend: LogsBackendDto;
   kpis: LogsKpisDto;
   levels: LogLevelShareDto[];
   sources: LogSourceDto[];
@@ -303,19 +269,16 @@ export interface LogsOverviewDto {
   issues: LogIssueDto[];
   topErrors: ErrorGroupRowDto[];
   recentAudit: AuditEventDto[];
-  redaction: { enabled: true; keys: string[]; patterns: string[] };
-  levelsActive: { runtime: string; level: string; until: string | null; modules: string[] }[];
+  levelsActive: { runtime: string; level: string; modules: string[] }[];
 }
 
 export interface TraceEventDto {
   at: string;
   component: string;
-  kind: 'request' | 'log' | 'job' | 'execution';
   level: 'info' | 'warn' | 'error';
   label: string;
   detail: string | null;
   module: string | null;
-  errorType?: string | null;
   logId: string | null;
   link: { kind: 'request' | 'job' | 'execution'; id: string; queue?: string | null } | null;
 }
@@ -333,18 +296,15 @@ export interface TraceDto {
   id: string;
   resolvedFrom: ResolvedIdKind[];
   correlationId: string | null;
-  startedAt: string | null;
-  endedAt: string | null;
   durationMs: number | null;
   status: 'failed' | 'ok' | 'running' | 'unknown';
   services: string[];
-  counts: { logs: number; errors: number; warnings: number; jobs: number; requests: number };
-  root: { kind: TraceEventDto['kind']; label: string; at: string } | null;
+  counts: { logs: number; errors: number; jobs: number; requests: number };
+  root: { label: string; at: string } | null;
   /** Điểm lỗi đầu tiên theo thời gian — không khẳng định là nguyên nhân gốc. */
   failurePoint: {
     component: string;
     label: string;
-    at: string;
     errorType: string | null;
     logId: string | null;
   } | null;
@@ -367,10 +327,8 @@ export interface LogsReportTotalsDto {
 
 export interface LogsReportDto {
   current: LogsReportTotalsDto;
+  /** Từ 0h hôm nay (giờ server) tới giờ; `previous` = hôm qua cùng khung giờ. */
   previous: LogsReportTotalsDto;
-  /** Từ 0h hôm nay (giờ server) tới giờ; hôm qua cùng khung giờ. */
-  from: string;
-  to: string;
   available: boolean;
 }
 
@@ -381,7 +339,7 @@ export interface LogsConfigDto {
   buffers: LogCoverageDto[];
   /** `stream` = số log đang có, `streamMax` = sức chứa stream, `scan` = số log đọc mỗi lần phân tích. */
   retention: { key: string; value: string | number }[];
-  redaction: { enabled: true; keys: string[]; patterns: string[] };
+  redaction: { keys: string[]; patterns: string[] };
   permissions: {
     levelChange: boolean;
     levelPermanent: boolean;

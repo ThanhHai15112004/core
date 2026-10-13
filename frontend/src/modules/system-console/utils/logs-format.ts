@@ -16,9 +16,6 @@ export function logDateTime(iso: string): string {
 
 export const browserTimeZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone;
 
-/** ID ngắn để hiện trong cột Context. */
-export const shortId = (id: string, n = 10) => (id.length > n ? `${id.slice(0, n)}…` : id);
-
 /** Ngữ cảnh quan trọng nhất của log (job > request > execution > correlation). */
 export function contextOf(r: LogRow): { kind: 'job' | 'request' | 'execution' | 'correlation'; id: string } | null {
   if (r.jobId) return { kind: 'job', id: r.jobId };
