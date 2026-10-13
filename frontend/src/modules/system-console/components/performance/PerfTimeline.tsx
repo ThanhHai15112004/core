@@ -10,7 +10,7 @@ import { Panel, PanelState } from '@core/ui/blocks';
 import { TimeSeriesChart, type ChartMarker, type TimeSeries } from '@core/ui/charts';
 import type { PerfFilters, PerfMetric } from '../../types/performance.types';
 import { performanceApi } from '../../services/performance.api';
-import { BASELINE_COLOR, BASELINE_MODES, COMPARE_COLOR, EXTRA_METRICS, PERF_METRICS, PERF_SERIES_COLORS, PRIMARY_METRICS, SEVERITY_TONE } from '../../constants/performance';
+import { BASELINE_COLOR, BASELINE_MODES, COMPARE_COLOR, EXTRA_METRICS, PERF_METRICS, PRIMARY_METRICS, SEVERITY_TONE } from '../../constants/performance';
 import { perfKeys } from '../../sections/performance/performance-keys';
 import { usePerfFormat } from './perf-format';
 
@@ -40,7 +40,7 @@ export function PerfTimeline({ filters, setFilters }: PerfTimelineProps) {
         label: s.label,
         axis: s.axis,
         dashed: s.kind !== 'main',
-        color: s.kind === 'compare' ? COMPARE_COLOR : s.kind === 'baseline' ? BASELINE_COLOR : PERF_SERIES_COLORS[s.id],
+        color: s.kind === 'compare' ? COMPARE_COLOR : s.kind === 'baseline' ? BASELINE_COLOR : undefined,
         points: s.points.map((p) => ({ t: p.t, v: p.value })),
       })),
     [d],

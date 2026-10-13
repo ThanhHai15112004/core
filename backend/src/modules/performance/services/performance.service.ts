@@ -17,6 +17,7 @@ import {
 import type {
   BaselineMode,
   BottleneckDto,
+  BottleneckResponseDto,
   BudgetDto,
   CapacityDto,
   ComponentDetailDto,
@@ -78,9 +79,10 @@ function targetOf(v: Violation): string {
 
 const kpi = (value: number | null, previous: number | null): KpiDto => ({
   value,
-  previous,
   changePercent: changePercent(value, previous),
 });
+/** `runtime` chỉ dùng nội bộ — không trả cho console. */
+const toResponse = ({ runtime: _runtime, ...rest }: BottleneckDto): BottleneckResponseDto => rest;
 const max = (values: (number | null)[]) => {
   const list = values.filter((v): v is number => v !== null);
   return list.length ? Math.max(...list) : null;
@@ -224,7 +226,6 @@ export class PerformanceService {
         latencyMs,
         latencyKind,
         errorPercent,
-        target: COMPONENT_TARGET[id],
       };
     };
     const dbDown = this.database.getStatus().state !== 'connected';
@@ -240,7 +241,6 @@ export class PerformanceService {
             latencyMs: null,
             latencyKind: 'avg',
             errorPercent: null,
-            target: COMPONENT_TARGET.database,
           }
         : row('database', m.db.qps, 'qps', m.db.avgMs, 'avg', m.db.errorRatePercent),
       row(
@@ -296,10 +296,8 @@ export class PerformanceService {
         cpuPercent: r?.cpuPercent ?? null,
         cpuAvgPercent: w?.cpuAvg ?? null,
         cpuPeakPercent: w?.cpuPeak ?? null,
-        cpuPeakAt: null,
         rssMb: r?.rssMb ?? null,
         heapUsedMb: r?.heapUsedMb ?? null,
-        heapTotalMb: r?.heapTotalMb ?? null,
         externalMb: r?.externalMb ?? null,
         memoryLimitMb: r?.memoryLimitMb ?? null,
         memoryLimitSource: r?.memoryLimitSource ?? null,
@@ -397,7 +395,6 @@ export class PerformanceService {
     const v = violations ?? [];
     return {
       range,
-      generatedAt: new Date().toISOString(),
       telemetry: {
         performance: true,
         traffic: true,
@@ -426,7 +423,7 @@ export class PerformanceService {
         },
       },
       resources,
-      bottlenecks,
+      bottlenecks: bottlenecks.map(toResponse),
       components: this.components(cur, v),
       // Prometheus chỉ có tổng thời gian request, không có từng giai đoạn → không chia ước lượng.
       breakdown: {
@@ -569,10 +566,6 @@ export class PerformanceService {
     const peak = values.length ? Math.max(...values) : null;
     const peakAt = peak !== null ? (points.find((p) => p.value === peak)?.t ?? null) : null;
     return {
-      metric,
-      compare,
-      baseline,
-      range,
       resolutionSec: stepSec,
       unit: main.unit,
       series,
@@ -590,23 +583,11 @@ export class PerformanceService {
   /** Mốc trên biểu đồ: sự kiện nghẽn và vòng đời runtime (khởi động lại, crash, dừng). */
   private async markers(from: number): Promise<PerfMarkerDto[]> {
     const events = await this.getEventsSince(from);
-    return events
-      .map((e): PerfMarkerDto | null => {
-        const kind: PerfMarkerDto['kind'] | null =
-          e.source === 'performance'
-            ? e.type === 'recovered'
-              ? 'recovered'
-              : 'bottleneck'
-            : e.type === 'crashed'
-              ? 'crash'
-              : e.type === 'stopped'
-                ? 'stop'
-                : e.type === 'started'
-                  ? 'restart'
-                  : null;
-        return kind ? { t: Date.parse(e.at), kind, label: e.title, severity: e.severity } : null;
-      })
-      .filter((m): m is PerfMarkerDto => m !== null);
+    return events.map((e): PerfMarkerDto => ({
+      t: Date.parse(e.at),
+      label: e.title,
+      severity: e.severity,
+    }));
   }
 
   // ─── Events ───────────────────────────────────────────────────────────────
@@ -632,7 +613,6 @@ export class PerformanceService {
           id: e.id,
           at: new Date(e.at).toISOString(),
           source: 'performance',
-          type: e.type,
           severity:
             e.type === 'recovered' ? 'success' : e.severity === 'critical' ? 'critical' : 'warning',
           title: this.i18n.t(`performance.rule.${e.rule}.title`, params),
@@ -651,7 +631,6 @@ export class PerformanceService {
         id: e.id,
         at: e.at,
         source: 'runtime',
-        type: e.type,
         severity:
           e.level === 'error'
             ? 'critical'
@@ -695,7 +674,6 @@ export class PerformanceService {
       value,
       unit,
       baseline,
-      changePercent: changePercent(value, baseline),
     });
     const metrics: ComponentMetricDto[] =
       id === 'api'
@@ -764,13 +742,10 @@ export class PerformanceService {
             .catch(() => [])
         : [];
     return {
-      id,
-      name: this.i18n.t(`performance.component.${id}`),
       status: row.status,
       note: row.note,
-      range,
       metrics,
-      bottlenecks: await this.bottlenecks(own),
+      bottlenecks: (await this.bottlenecks(own)).map(toResponse),
       endpoints,
       target: COMPONENT_TARGET[id],
     };

@@ -29,28 +29,12 @@ export const KPI_RULES = {
   errorRate: ['API_ERROR_RATE'],
 } as const;
 
-/** Màu series theo id; series không có trong bảng dùng màu theo thứ tự. */
-export const PERF_SERIES_COLORS: Record<string, ChartColor> = {
-  p50: 'series-1',
-  p95: 'series-2',
-  p99: 'series-3',
-  total: 'series-2',
-  http: 'series-1',
-  db: 'series-3',
-  cache: 'series-4',
-  jobs: 'series-5',
-  api: 'series-1',
-  worker: 'series-3',
-  scheduler: 'series-4',
-  avg: 'series-1',
-  waiting: 'warn',
-  active: 'series-1',
-};
+/** Series chính dùng màu mặc định; series so sánh / baseline có màu riêng. */
 export const COMPARE_COLOR: ChartColor = 'series-5';
 export const BASELINE_COLOR: ChartColor = 'muted';
 
 /** Chỉ số trong drawer thành phần mà tăng là xấu. */
-export const HIGHER_IS_WORSE = new Set(['p50', 'p95', 'p99', 'avg', 'errorRate', 'errors', 'poolWaiting', 'maxOp', 'avgJob', 'p95Job', 'failed', 'queueWaiting']);
+export const HIGHER_IS_WORSE = new Set(['p50', 'p95', 'p99', 'avg', 'errorRate', 'errors', 'poolWaiting', 'avgJob', 'p95Job', 'failed', 'queueWaiting']);
 
 /** Mức dùng tài nguyên có giới hạn: từ ngưỡng này tô vàng, đầy tô đỏ. */
 export const CAPACITY_WARN_PERCENT = 80;

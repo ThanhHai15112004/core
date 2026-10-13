@@ -11,7 +11,6 @@ import {
 import { PerformanceValidationException } from '../exceptions/performance.exceptions.js';
 import type {
   BaselineMode,
-  BottleneckDto,
   ComponentDetailDto,
   PerfEventDto,
   PerfRange,
@@ -55,12 +54,6 @@ export class PerformanceController {
   public async timeseries(@Query() raw: Record<string, string>): Promise<PerfTimeseriesDto> {
     const q = parse(timeseriesSchema, raw);
     return this.performance.getTimeseries(q.range, q.metric, q.compare ?? null, q.baseline ?? null);
-  }
-
-  @Public()
-  @Get(PERFORMANCE_ROUTES.BOTTLENECKS)
-  public async bottlenecks(): Promise<BottleneckDto[]> {
-    return this.performance.getBottlenecks();
   }
 
   @Public()

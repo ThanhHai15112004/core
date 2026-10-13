@@ -19,7 +19,6 @@ export type PerfMetric =
 
 export interface Kpi {
   value: number | null;
-  previous: number | null;
   changePercent: number | null;
 }
 
@@ -27,7 +26,6 @@ export interface Bottleneck {
   id: string;
   rule: string;
   component: ComponentId | 'runtime';
-  runtime: string | null;
   severity: PerfSeverity;
   title: string;
   message: string;
@@ -48,10 +46,8 @@ export interface RuntimeResource {
   cpuPercent: number | null;
   cpuAvgPercent: number | null;
   cpuPeakPercent: number | null;
-  cpuPeakAt: string | null;
   rssMb: number | null;
   heapUsedMb: number | null;
-  heapTotalMb: number | null;
   externalMb: number | null;
   memoryLimitMb: number | null;
   memoryLimitSource: 'cgroup' | 'v8-heap' | null;
@@ -73,7 +69,6 @@ export interface ComponentRow {
   latencyMs: number | null;
   latencyKind: 'p95' | 'avg';
   errorPercent: number | null;
-  target: string;
 }
 
 export type BreakdownPhase = 'route' | 'guard' | 'app' | 'db' | 'cache' | 'send';
@@ -113,7 +108,6 @@ export interface Throughput {
 
 export interface PerformanceOverview {
   range: PerfRange;
-  generatedAt: string;
   telemetry: { performance: boolean; traffic: boolean; database: 'active' | 'unavailable' };
   status: { level: PerfLevel; reasons: string[] };
   kpis: {
@@ -150,16 +144,11 @@ export interface PerfSeries {
 
 export interface PerfMarker {
   t: number;
-  kind: 'restart' | 'crash' | 'stop' | 'bottleneck' | 'recovered';
   label: string;
   severity: 'info' | 'warning' | 'critical' | 'success';
 }
 
 export interface PerfTimeseries {
-  metric: PerfMetric;
-  compare: PerfMetric | null;
-  baseline: BaselineMode | null;
-  range: PerfRange;
   resolutionSec: number | null;
   unit: string;
   series: PerfSeries[];
@@ -172,7 +161,6 @@ export interface PerfEvent {
   id: string;
   at: string;
   source: 'performance' | 'runtime';
-  type: string;
   severity: 'info' | 'warning' | 'critical' | 'success';
   title: string;
   message: string;
@@ -180,12 +168,9 @@ export interface PerfEvent {
 }
 
 export interface ComponentDetail {
-  id: ComponentId;
-  name: string;
   status: ComponentStatus;
   note: string | null;
-  range: PerfRange;
-  metrics: { key: string; label: string; value: number | null; unit: string; baseline: number | null; changePercent: number | null }[];
+  metrics: { key: string; label: string; value: number | null; unit: string; baseline: number | null }[];
   bottlenecks: Bottleneck[];
   endpoints: { routeId: string; method: string; route: string; p95Ms: number | null; requests: number }[];
   target: string;

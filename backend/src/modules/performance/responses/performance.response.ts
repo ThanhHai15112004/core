@@ -24,7 +24,6 @@ export type RuleKey =
 /** Giá trị hiện tại so với khoảng liền trước cùng độ dài. */
 export interface KpiDto {
   value: number | null;
-  previous: number | null;
   /** % thay đổi; `null` khi thiếu một trong hai. */
   changePercent: number | null;
 }
@@ -51,6 +50,9 @@ export interface BottleneckDto {
   target: string;
 }
 
+/** Điểm nghẽn trả cho console — `runtime` chỉ dùng nội bộ (gom KPI, Tổng quan hệ thống). */
+export type BottleneckResponseDto = Omit<BottleneckDto, 'runtime'>;
+
 export interface RuntimeResourceDto {
   id: string;
   name: string;
@@ -59,10 +61,8 @@ export interface RuntimeResourceDto {
   cpuPercent: number | null;
   cpuAvgPercent: number | null;
   cpuPeakPercent: number | null;
-  cpuPeakAt: string | null;
   rssMb: number | null;
   heapUsedMb: number | null;
-  heapTotalMb: number | null;
   externalMb: number | null;
   memoryLimitMb: number | null;
   memoryLimitSource: 'cgroup' | 'v8-heap' | null;
@@ -86,8 +86,6 @@ export interface ComponentRowDto {
   latencyMs: number | null;
   latencyKind: 'p95' | 'avg';
   errorPercent: number | null;
-  /** Section để mở màn chuyên sâu. */
-  target: string;
 }
 
 export interface BreakdownPhaseDto {
@@ -134,7 +132,6 @@ export interface ThroughputDto {
 
 export interface PerformanceOverviewDto {
   range: PerfRange;
-  generatedAt: string;
   /** `database`: đã kết nối database thật hay chưa (chưa kết nối → không có số liệu query). */
   telemetry: { performance: boolean; traffic: boolean; database: 'active' | 'unavailable' };
   status: { level: PerfLevel; reasons: string[] };
@@ -147,7 +144,7 @@ export interface PerformanceOverviewDto {
     bottlenecks: { count: number; components: string[] };
   };
   resources: RuntimeResourceDto[];
-  bottlenecks: BottleneckDto[];
+  bottlenecks: BottleneckResponseDto[];
   components: ComponentRowDto[];
   breakdown: BreakdownDto;
   budgets: BudgetDto[];
@@ -191,16 +188,11 @@ export interface PerfSeriesDto {
 export interface PerfMarkerDto {
   /** epoch ms */
   t: number;
-  kind: 'restart' | 'crash' | 'stop' | 'bottleneck' | 'recovered';
   label: string;
   severity: 'info' | 'warning' | 'critical' | 'success';
 }
 
 export interface PerfTimeseriesDto {
-  metric: TimeseriesMetric;
-  compare: TimeseriesMetric | null;
-  baseline: BaselineMode | null;
-  range: PerfRange;
   resolutionSec: number | null;
   unit: string;
   series: PerfSeriesDto[];
@@ -215,7 +207,6 @@ export interface PerfEventDto {
   id: string;
   at: string;
   source: 'performance' | 'runtime';
-  type: string;
   severity: 'info' | 'warning' | 'critical' | 'success';
   title: string;
   message: string;
@@ -228,17 +219,13 @@ export interface ComponentMetricDto {
   value: number | null;
   unit: string;
   baseline: number | null;
-  changePercent: number | null;
 }
 
 export interface ComponentDetailDto {
-  id: ComponentId;
-  name: string;
   status: ComponentStatus;
   note: string | null;
-  range: PerfRange;
   metrics: ComponentMetricDto[];
-  bottlenecks: BottleneckDto[];
+  bottlenecks: BottleneckResponseDto[];
   /** API: endpoint chậm nhất theo P95. */
   endpoints: {
     routeId: string;

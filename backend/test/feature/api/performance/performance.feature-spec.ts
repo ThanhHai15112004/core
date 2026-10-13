@@ -5,6 +5,7 @@ import {
   PERFORMANCE_ROUTES,
   PerformanceEventsService,
   PerformanceMonitorService,
+  PerformanceService,
 } from '@modules/performance/index.js';
 
 interface Envelope<T> {
@@ -62,11 +63,11 @@ describe('Performance (/ops/performance)', () => {
     });
 
     it('component detail: không có số đo → unavailable (không báo normal giả); 404 và validation', async () => {
-      const api = await get<{ id: string; status: string; metrics: { value: unknown }[] }>(
+      const api = await get<{ status: string; metrics: { value: unknown }[] }>(
         `${base}/components/api?range=15m`,
       );
       expect(api.status).toBe(200);
-      expect(api.body.data).toMatchObject({ id: 'api', status: 'unavailable' });
+      expect(api.body.data).toMatchObject({ status: 'unavailable' });
       expect(api.body.data.metrics.every((m) => m.value === null)).toBe(true);
 
       const missing = await get(`${base}/components/nope`, { 'accept-language': 'en' });
@@ -77,7 +78,7 @@ describe('Performance (/ops/performance)', () => {
     });
 
     it('bottlenecks rỗng (không kết luận khi không có số liệu); events trả về danh sách', async () => {
-      expect((await get<unknown[]>(`${base}/bottlenecks`)).body.data).toEqual([]);
+      expect(await context.app.get(PerformanceService).getBottlenecks()).toEqual([]);
       const events = await get<unknown[]>(`${base}/events?range=1h`);
       expect(events.status).toBe(200);
       expect(Array.isArray(events.body.data)).toBe(true);
@@ -114,7 +115,7 @@ describe('Performance (/ops/performance)', () => {
         status: { level: string };
         telemetry: { database: string };
         kpis: {
-          apiP95Ms: { value: number; previous: number; changePercent: number | null };
+          apiP95Ms: { value: number; changePercent: number | null };
           throughputPerSec: { value: number };
           cpuPercent: { value: number };
           memoryMb: { value: number; limitMb: number | null; percent: number | null };
@@ -128,7 +129,7 @@ describe('Performance (/ops/performance)', () => {
       const d = body.data;
       // 5% lỗi 5xx ≥ ngưỡng cảnh báo PERF_ERROR_RATE_PERCENT_WARN (2%) → degraded.
       expect(d.status.level).toBe('degraded');
-      expect(d.kpis.apiP95Ms).toMatchObject({ value: 120, previous: 120, changePercent: 0 });
+      expect(d.kpis.apiP95Ms).toMatchObject({ value: 120, changePercent: 0 });
       expect(d.kpis.throughputPerSec.value).toBe(2);
       expect(d.kpis.errorRatePercent.value).toBe(5);
       expect(d.kpis.cpuPercent.value).toBe(35);
@@ -157,10 +158,17 @@ describe('Performance (/ops/performance)', () => {
 
     it('bottlenecks: P95 vượt ngưỡng → điểm nghẽn có tiêu đề và link drill-down', async () => {
       p95Sec = 1.5;
-      const { body } = await get<
-        { id: string; severity: string; title: string; value: number; target: string }[]
-      >(`${base}/bottlenecks`, { 'accept-language': 'en' });
-      expect(body.data[0]).toMatchObject({
+      const { body } = await get<{
+        bottlenecks: {
+          id: string;
+          severity: string;
+          title: string;
+          value: number;
+          target: string;
+        }[];
+      }>(`${base}/overview?range=15m`, { 'accept-language': 'en' });
+      expect(body.data.bottlenecks[0]).not.toHaveProperty('runtime');
+      expect(body.data.bottlenecks[0]).toMatchObject({
         id: 'API_LATENCY_P95',
         severity: 'critical',
         value: 1500,
@@ -178,17 +186,17 @@ describe('Performance (/ops/performance)', () => {
       await store.client.del(store.keys.evaluateLock());
       p95Sec = 0.12;
       await monitor.tick(Date.now() + 60_000);
-      const { body } = await get<
-        { source: string; type: string; severity: string; title: string }[]
-      >(`${base}/events?range=1h`, { 'accept-language': 'en' });
+      const { body } = await get<{ source: string; severity: string; title: string }[]>(
+        `${base}/events?range=1h`,
+        { 'accept-language': 'en' },
+      );
       const p95 = body.data.filter((e) => e.source === 'performance' && e.title === 'High API P95');
-      expect(p95.map((e) => [e.type, e.severity])).toEqual([
-        ['recovered', 'success'],
-        ['started', 'critical'],
-      ]);
-      // Lỗi 5xx vẫn vượt ngưỡng → chỉ có sự kiện bắt đầu.
+      // Mới nhất trước: hồi phục (success) rồi bắt đầu (critical).
+      expect(p95.map((e) => e.severity)).toEqual(['success', 'critical']);
+      // Lỗi 5xx vẫn vượt ngưỡng → chỉ có sự kiện bắt đầu, chưa hồi phục.
       const err = body.data.filter((e) => e.title === 'High API error rate');
-      expect(err.map((e) => e.type)).toEqual(['started']);
+      expect(err).toHaveLength(1);
+      expect(err[0]!.severity).not.toBe('success');
     });
 
     it('timeseries: series chính + so sánh (trục phải) + baseline hôm qua dịch về khoảng hiện tại', async () => {

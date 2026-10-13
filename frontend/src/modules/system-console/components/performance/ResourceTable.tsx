@@ -20,7 +20,7 @@ interface ResourceTableProps {
 
 /** Tài nguyên theo runtime: CPU (hiện tại · TB · đỉnh), bộ nhớ so với giới hạn, event loop, GC. Bấm hàng → Runtimes. */
 export function ResourceTable({ resources, thresholds, onOpen }: ResourceTableProps) {
-  const { t, formatTime } = useLocale();
+  const { t } = useLocale();
   const f = useFormat();
   const fmt = usePerfFormat();
   const columns = useMemo(
@@ -57,7 +57,6 @@ export function ResourceTable({ resources, thresholds, onOpen }: ResourceTablePr
               <UsageBar percent={r.cpuPercent} thresholds={{ warn: thresholds.cpuPercent, crit: CAPACITY_FULL_PERCENT }} />
               <div className="mt-0.5 truncate font-mono text-2xs text-faint">
                 {t('perf.resources.cpuStats', { avg: f.percent(r.cpuAvgPercent), peak: f.percent(r.cpuPeakPercent) })}
-                {r.cpuPeakAt && ` · ${formatTime(r.cpuPeakAt)}`}
               </div>
             </div>
           );
@@ -106,7 +105,7 @@ export function ResourceTable({ resources, thresholds, onOpen }: ResourceTablePr
         meta: { align: 'right', mono: true },
       }),
     ],
-    [t, f, fmt, formatTime, thresholds],
+    [t, f, fmt, thresholds],
   );
   return <DataTable data={resources} columns={columns} getRowId={(r) => r.id} onRowClick={(r) => onOpen(r.id)} rowTone={(r) => (r.memoryTrend?.growing ? 'warn' : undefined)} emptyMessage={t('perf.resources.empty')} />;
 }

@@ -4,15 +4,6 @@ import { NO_VALUE, UNIT, formatDelta, formatDuration } from '@core/lib/format';
 import { LATENCY_CEILING_MS } from '../constants/traffic';
 import type { TrafficSummary } from '../types/traffic.types';
 
-/** Latency: `842 ms`, `1.82 s`, giá trị chạm trần histogram → `≥ 10 s`. (Performance dùng chung.) */
-export function formatMs(ms: number | null | undefined): string {
-  if (ms === null || ms === undefined) return NO_VALUE;
-  if (ms >= LATENCY_CEILING_MS) return `≥ ${LATENCY_CEILING_MS / 1000} ${UNIT.s}`;
-  if (ms < 1) return `${ms.toFixed(1)} ${UNIT.ms}`;
-  if (ms < 1000) return `${Math.round(ms)} ${UNIT.ms}`;
-  return `${(ms / 1000).toFixed(2)} ${UNIT.s}`;
-}
-
 /** Latency cho trang Traffic: như `formatDuration` nhưng giá trị chạm trần histogram hiện `≥`. */
 export function formatLatency(ms: number | null | undefined): string {
   if (ms !== null && ms !== undefined && ms >= LATENCY_CEILING_MS) return `≥ ${formatDuration(LATENCY_CEILING_MS)}`;
