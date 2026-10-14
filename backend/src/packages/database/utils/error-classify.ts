@@ -13,6 +13,29 @@ const TIMEOUT = new Set([
   'ETIMEOUT',
 ]);
 const CANCELLED = new Set(['ER_QUERY_INTERRUPTED', '1317', '57014']);
+const UNIQUE_VIOLATION = new Set([
+  'ER_DUP_ENTRY',
+  '1062',
+  '23505',
+  '2601',
+  '2627',
+  'SQLITE_CONSTRAINT_UNIQUE',
+  '2067',
+]);
+const FOREIGN_KEY_VIOLATION = new Set([
+  'ER_NO_REFERENCED_ROW',
+  'ER_NO_REFERENCED_ROW_2',
+  'ER_ROW_IS_REFERENCED',
+  'ER_ROW_IS_REFERENCED_2',
+  '1216',
+  '1217',
+  '1451',
+  '1452',
+  '23503',
+  '547',
+  'SQLITE_CONSTRAINT_FOREIGNKEY',
+  '787',
+]);
 const CONNECTION = new Set([
   'ECONNREFUSED',
   'ECONNRESET',
@@ -36,6 +59,36 @@ export function errorCodeOf(err: unknown): string | null {
   return null;
 }
 
+/** Kiểm tra lỗi có phải do vi phạm ràng buộc duy nhất (Unique Constraint) hay không */
+export function isUniqueConstraintError(err: unknown): boolean {
+  const code = errorCodeOf(err);
+  const errno = String(
+    (err as { errno?: unknown; driverError?: { errno?: unknown } })?.driverError?.errno ??
+      (err as { errno?: unknown })?.errno ??
+      '',
+  );
+  if ((code !== null && UNIQUE_VIOLATION.has(code)) || UNIQUE_VIOLATION.has(errno)) {
+    return true;
+  }
+  const message = err instanceof Error ? err.message : '';
+  return (
+    message.includes('Duplicate entry') ||
+    message.includes('duplicate key value violates unique constraint') ||
+    message.includes('UNIQUE constraint failed')
+  );
+}
+
+/** Kiểm tra lỗi có phải do vi phạm khóa ngoại (Foreign Key Constraint) hay không */
+export function isForeignKeyConstraintError(err: unknown): boolean {
+  const code = errorCodeOf(err);
+  const errno = String(
+    (err as { errno?: unknown; driverError?: { errno?: unknown } })?.driverError?.errno ??
+      (err as { errno?: unknown })?.errno ??
+      '',
+  );
+  return (code !== null && FOREIGN_KEY_VIOLATION.has(code)) || FOREIGN_KEY_VIOLATION.has(errno);
+}
+
 /** Phân loại mã lỗi cơ sở dữ liệu thành các nhóm lỗi nghiệp vụ chuẩn */
 export function classifyDbError(err: unknown): DbErrorKind {
   const code = errorCodeOf(err);
@@ -50,6 +103,8 @@ export function classifyDbError(err: unknown): DbErrorKind {
   if (has(LOCK_TIMEOUT)) return 'lock_timeout';
   if (has(CANCELLED)) return 'cancelled';
   if (has(TIMEOUT)) return 'timeout';
+  if (isUniqueConstraintError(err)) return 'unique_violation';
+  if (isForeignKeyConstraintError(err)) return 'foreign_key_violation';
   if (has(CONNECTION) || (code !== null && code.startsWith('08'))) return 'connection';
   return 'query';
 }

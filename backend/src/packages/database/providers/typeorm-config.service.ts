@@ -82,17 +82,38 @@ export class TypeOrmConfigService implements TypeOrmOptionsFactory {
       migrationsTableName: db.migrationsTableName,
     };
 
+    const masterEndpoint = {
+      host: db.host,
+      port: db.port,
+      username: db.username,
+      password: db.password,
+      database: db.database,
+    };
+
+    const replicationConfig = db.readHost
+      ? {
+          replication: {
+            master: masterEndpoint,
+            slaves: [
+              {
+                host: db.readHost,
+                port: db.readPort,
+                username: db.username,
+                password: db.password,
+                database: db.database,
+              },
+            ],
+          },
+        }
+      : masterEndpoint;
+
     switch (driver) {
       case DatabaseDriver.POSTGRES:
       case DatabaseDriver.POSTGRESQL:
         return {
           ...baseOptions,
           type: 'postgres',
-          host: db.host,
-          port: db.port,
-          username: db.username,
-          password: db.password,
-          database: db.database,
+          ...replicationConfig,
           applicationName: this.clientName,
           connectTimeoutMS: db.connectTimeoutMs,
           ...(db.ssl ? { ssl: true } : {}),
@@ -109,11 +130,7 @@ export class TypeOrmConfigService implements TypeOrmOptionsFactory {
         return {
           ...baseOptions,
           type: 'mssql',
-          host: db.host,
-          port: db.port,
-          username: db.username,
-          password: db.password,
-          database: db.database,
+          ...replicationConfig,
           connectionTimeout: db.connectTimeoutMs,
           ...(db.queryTimeoutMs > 0 ? { requestTimeout: db.queryTimeoutMs } : {}),
           options: {
@@ -141,11 +158,7 @@ export class TypeOrmConfigService implements TypeOrmOptionsFactory {
         return {
           ...baseOptions,
           type: 'mysql',
-          host: db.host,
-          port: db.port,
-          username: db.username,
-          password: db.password,
-          database: db.database,
+          ...replicationConfig,
           charset: 'utf8mb4_unicode_ci',
           connectTimeout: db.connectTimeoutMs,
           ...(db.ssl ? { ssl: {} } : {}),

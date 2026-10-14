@@ -216,44 +216,70 @@ export class ${pascal}Controller {
 `;
     await writeFile(`controllers/${kebab}.controller.ts`, controllerContent);
 
-    // 9. If withDb: entities and repositories
+    // 9. If withDb: entities, repositories, and mappers
     if (withDb) {
       const entityContent = `
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn } from 'typeorm';
+import { Entity, Column, Index } from 'typeorm';
+import { TypeOrmBaseEntity } from '@packages/database/index.js';
 
+/**
+ * Thực thể dữ liệu của module ${title}.
+ * Gợi ý: Đổi sang kế thừa \`VersionedTypeOrmEntity\` nếu bảng chứa dữ liệu nhạy cảm cần Optimistic Locking.
+ */
 @Entity('${kebab.replace(/-/g, '_')}')
-export class ${pascal}Entity {
-  @PrimaryGeneratedColumn('uuid')
-  public id!: string;
-
+export class ${pascal}Entity extends TypeOrmBaseEntity {
+  @Index({ unique: true })
   @Column({ type: 'varchar', length: 255 })
   public title!: string;
 
   @Column({ type: 'text', nullable: true })
   public description?: string;
-
-  @CreateDateColumn()
-  public createdAt!: Date;
-
-  @UpdateDateColumn()
-  public updatedAt!: Date;
 }
 `;
       await writeFile(`entities/${kebab}.entity.ts`, entityContent);
 
       const repoContent = `
-import { Injectable } from '@nestjs/common';
-import { DataSource, Repository } from 'typeorm';
+import { Injectable, Optional } from '@nestjs/common';
+import { DataSource } from 'typeorm';
+import { BaseTypeOrmRepository, TransactionManager } from '@packages/database/index.js';
 import { ${pascal}Entity } from '../entities/${kebab}.entity.js';
 
 @Injectable()
-export class ${pascal}Repository extends Repository<${pascal}Entity> {
-  constructor(dataSource: DataSource) {
-    super(${pascal}Entity, dataSource.createEntityManager());
+export class ${pascal}Repository extends BaseTypeOrmRepository<${pascal}Entity> {
+  constructor(
+    dataSource: DataSource,
+    @Optional() transactionManager: TransactionManager | null = null,
+  ) {
+    super(${pascal}Entity, dataSource, transactionManager);
   }
 }
 `;
       await writeFile(`repositories/${kebab}.repository.ts`, repoContent);
+
+      const mapperContent = `
+import { Injectable } from '@nestjs/common';
+import type { EntityMapperContract } from '@packages/database/index.js';
+import type { ${pascal}Entity } from '../entities/${kebab}.entity.js';
+import type { ${pascal}Response } from '../responses/${kebab}.response.js';
+
+@Injectable()
+export class ${pascal}Mapper implements EntityMapperContract<${pascal}Entity, ${pascal}Response> {
+  public toResponse(entity: ${pascal}Entity): ${pascal}Response {
+    return {
+      id: entity.id,
+      title: entity.title,
+      ...(entity.description !== undefined ? { description: entity.description } : {}),
+      createdAt: entity.createdAt.toISOString(),
+      updatedAt: entity.updatedAt.toISOString(),
+    };
+  }
+
+  public toResponseList(entities: ${pascal}Entity[]): ${pascal}Response[] {
+    return entities.map((item) => this.toResponse(item));
+  }
+}
+`;
+      await writeFile(`mappers/${kebab}.mapper.ts`, mapperContent);
     }
 
     // 10. <name>.module.ts
@@ -262,7 +288,7 @@ import { Module } from '@nestjs/common';
 import { ${pascal}Controller } from './controllers/${kebab}.controller.js';
 import { ${pascal}Service } from './services/${kebab}.service.js';
 import { ${constant}_PUBLIC_SERVICE } from './contracts/index.js';
-${withDb ? `import { ${pascal}Repository } from './repositories/${kebab}.repository.js';\n` : ''}
+${withDb ? `import { ${pascal}Repository } from './repositories/${kebab}.repository.js';\nimport { ${pascal}Mapper } from './mappers/${kebab}.mapper.js';\n` : ''}
 @Module({
   controllers: [${pascal}Controller],
   providers: [
@@ -271,7 +297,7 @@ ${withDb ? `import { ${pascal}Repository } from './repositories/${kebab}.reposit
       provide: ${constant}_PUBLIC_SERVICE,
       useExisting: ${pascal}Service,
     },
-    ${withDb ? `${pascal}Repository,` : ''}
+    ${withDb ? `${pascal}Repository,\n    ${pascal}Mapper,` : ''}
   ],
   exports: [${pascal}Service, ${constant}_PUBLIC_SERVICE],
 })

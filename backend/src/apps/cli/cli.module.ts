@@ -22,6 +22,7 @@ import { ModuleCommand } from './commands/module/module.command.js';
 import { DoctorCommand } from './commands/health/doctor.command.js';
 import { MigrationCommand } from './commands/database/migration.command.js';
 import { SeedCommand } from './commands/database/seed.command.js';
+import { DataRepairCommand } from './commands/database/data-repair.command.js';
 import { ArchitectureCommand } from './commands/architecture/architecture.command.js';
 import { OpenApiCommand } from './commands/architecture/openapi.command.js';
 
@@ -48,6 +49,7 @@ import { OpenApiCommand } from './commands/architecture/openapi.command.js';
     DoctorCommand,
     MigrationCommand,
     SeedCommand,
+    DataRepairCommand,
     ArchitectureCommand,
     OpenApiCommand,
   ],
@@ -61,6 +63,7 @@ import { OpenApiCommand } from './commands/architecture/openapi.command.js';
     DoctorCommand,
     MigrationCommand,
     SeedCommand,
+    DataRepairCommand,
     ArchitectureCommand,
     OpenApiCommand,
   ],
@@ -73,6 +76,7 @@ export class CliModule implements OnApplicationBootstrap {
     private readonly doctorCommand: DoctorCommand,
     private readonly migrationCommand: MigrationCommand,
     private readonly seedCommand: SeedCommand,
+    private readonly dataRepairCommand: DataRepairCommand,
     private readonly architectureCommand: ArchitectureCommand,
     private readonly openApiCommand: OpenApiCommand,
   ) {}
@@ -85,6 +89,7 @@ export class CliModule implements OnApplicationBootstrap {
     this.dispatcher.registerProvider(this.doctorCommand);
     this.dispatcher.registerProvider(this.migrationCommand);
     this.dispatcher.registerProvider(this.seedCommand);
+    this.dispatcher.registerProvider(this.dataRepairCommand);
     this.dispatcher.registerProvider(this.architectureCommand);
     this.dispatcher.registerProvider(this.openApiCommand);
   }

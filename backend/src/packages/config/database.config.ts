@@ -22,6 +22,10 @@ export const databaseConfig = () => {
     connection,
     host: env('DB_HOST', false) || '127.0.0.1',
     port,
+    /** Host Read Replica khi thật sự cần tách đọc/ghi (để trống = dùng chung node chính). */
+    readHost: env('DB_READ_HOST', false) || '',
+    /** Port Read Replica (mặc định bằng port chính). */
+    readPort: env.number('DB_READ_PORT', false) || port,
     database: env('DB_DATABASE', false) || 'core_db',
     username: env('DB_USERNAME', false) || 'root',
     password: env('DB_PASSWORD', false) || '',

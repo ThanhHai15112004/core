@@ -1,5 +1,12 @@
 export type DbErrorKind =
-  'timeout' | 'connection' | 'deadlock' | 'lock_timeout' | 'cancelled' | 'query';
+  | 'timeout'
+  | 'connection'
+  | 'deadlock'
+  | 'lock_timeout'
+  | 'cancelled'
+  | 'unique_violation'
+  | 'foreign_key_violation'
+  | 'query';
 
 /** Lỗi query đã lưu — SQL đã chuẩn hoá, message đã bỏ literal, không có params. */
 export interface DbErrorRecord {

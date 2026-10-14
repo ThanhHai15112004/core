@@ -47,6 +47,11 @@ export class TransactionManager implements UnitOfWorkContract {
     return this.storage.getStore()?.manager ?? this.manualRunner?.manager ?? null;
   }
 
+  /** Kiểm tra ngữ cảnh thực thi hiện tại có đang nằm trong một giao dịch đang mở hay không. */
+  public isInTransaction(): boolean {
+    return this.getCurrentManager() !== null;
+  }
+
   /** Khởi tạo giao dịch thủ công (dành cho luồng gọi tuần tự `startTransaction` -> `commit` / `rollback`). */
   public async startTransaction(isolationLevel?: TransactionIsolationLevel): Promise<void> {
     if (this.manualRunner) {

@@ -104,6 +104,11 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       return fastifyNormalized;
     }
 
+    const dbConstraintNormalized = this.normalizeDatabaseConstraintError(exception);
+    if (dbConstraintNormalized) {
+      return dbConstraintNormalized;
+    }
+
     if (exception instanceof HttpException) {
       const statusCode = exception.getStatus();
       const res = exception.getResponse();
@@ -265,6 +270,58 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         statusCode: HTTP_STATUS_CODE.BAD_REQUEST,
         code: HTTP_ERROR_CODE.INVALID_JSON_PAYLOAD,
         message: this.i18n.t(HTTP_ERROR_CODE.INVALID_JSON_PAYLOAD),
+        details: [],
+        category: 'CLIENT',
+        isOperational: true,
+      };
+    }
+
+    return null;
+  }
+
+  /** Nhận diện lỗi vi phạm Unique Constraint từ cơ sở dữ liệu (MySQL/Postgres/MSSQL/SQLite) để trả về HTTP 409 Conflict */
+  private normalizeDatabaseConstraintError(exception: unknown): NormalizedError | null {
+    if (typeof exception !== 'object' || exception === null) {
+      return null;
+    }
+
+    const errRecord = exception as {
+      code?: unknown;
+      errno?: unknown;
+      message?: unknown;
+      driverError?: { code?: unknown; errno?: unknown; message?: unknown };
+    };
+    const rawCode = String(errRecord.driverError?.code ?? errRecord.code ?? '');
+    const rawErrno = String(errRecord.driverError?.errno ?? errRecord.errno ?? '');
+    const rawMessage =
+      typeof errRecord.message === 'string'
+        ? errRecord.message
+        : typeof errRecord.driverError?.message === 'string'
+          ? errRecord.driverError.message
+          : '';
+
+    const uniqueCodes = new Set([
+      'ER_DUP_ENTRY',
+      '1062',
+      '23505',
+      '2601',
+      '2627',
+      'SQLITE_CONSTRAINT_UNIQUE',
+      '2067',
+    ]);
+
+    const isDuplicate =
+      uniqueCodes.has(rawCode) ||
+      uniqueCodes.has(rawErrno) ||
+      rawMessage.includes('Duplicate entry') ||
+      rawMessage.includes('duplicate key value violates unique constraint') ||
+      rawMessage.includes('UNIQUE constraint failed');
+
+    if (isDuplicate) {
+      return {
+        statusCode: HTTP_STATUS_CODE.CONFLICT,
+        code: HTTP_ERROR_CODE.DUPLICATE_RESOURCE,
+        message: this.i18n.t(HTTP_ERROR_CODE.DUPLICATE_RESOURCE),
         details: [],
         category: 'CLIENT',
         isOperational: true,

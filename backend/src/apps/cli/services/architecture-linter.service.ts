@@ -8,7 +8,9 @@ export interface ArchitectureViolation {
     | 'RULE_1_CROSS_MODULE'
     | 'RULE_2_PACKAGES_PURITY'
     | 'RULE_3_NO_TEST_IN_SRC'
-    | 'RULE_4_CIRCULAR_DEPENDENCY';
+    | 'RULE_4_CIRCULAR_DEPENDENCY'
+    | 'RULE_5_ENTITY_EXPOSURE'
+    | 'RULE_6_FOREIGN_KEY_AND_CASCADE';
   file: string;
   line?: number;
   message: string;
@@ -26,7 +28,7 @@ export class ArchitectureLinterService {
 
   constructor(private readonly manifestService: ManifestService) {}
 
-  /** Rà soát toàn bộ mã nguồn theo 4 quy tắc kiến trúc và trả về báo cáo vi phạm */
+  /** Rà soát toàn bộ mã nguồn theo 6 quy tắc kiến trúc và trả về báo cáo vi phạm */
   public async check(): Promise<ArchitectureReport> {
     const backendRoot = this.manifestService.getBackendRoot();
     const srcDir = path.join(backendRoot, 'src');
@@ -53,7 +55,7 @@ export class ArchitectureLinterService {
     // Đồ thị module để kiểm tra circular dependencies (Rule 4)
     const moduleDependencies = new Map<string, Set<string>>();
 
-    // Kiểm tra Rule 1 & Rule 2
+    // Kiểm tra Rule 1, Rule 2, Rule 5 & Rule 6
     for (const file of files) {
       const relativePath = path.relative(srcDir, file).replace(/\\/g, '/');
 
@@ -68,6 +70,13 @@ export class ArchitectureLinterService {
       const lines = content.split('\n');
       const isPackageFile = relativePath.startsWith('packages/');
       const currentModule = this.extractModuleName(relativePath);
+      const isModuleIndexFile =
+        Boolean(currentModule) &&
+        (relativePath === `modules/${currentModule}/index.ts` ||
+          relativePath === `project-modules/${currentModule}/index.ts`);
+      const isControllerFile = Boolean(currentModule) && relativePath.includes('/controllers/');
+      const isEntityFile = Boolean(currentModule) && relativePath.includes('/entities/');
+      const isMigrationFile = relativePath.includes('/migrations/');
 
       if (currentModule && !moduleDependencies.has(currentModule)) {
         moduleDependencies.set(currentModule, new Set<string>());
@@ -75,6 +84,24 @@ export class ArchitectureLinterService {
 
       for (let i = 0; i < lines.length; i++) {
         const line = lines[i]!;
+        const prevLine = i > 0 ? lines[i - 1]! : '';
+
+        // Rule 6b: Cấm onDelete: 'CASCADE' trong Entity hoặc Migration nếu không có @allow-cascade-delete
+        if (isEntityFile || isMigrationFile) {
+          if (
+            /onDelete\s*:\s*['"]CASCADE['"]/i.test(line) &&
+            !line.includes('@allow-cascade-delete') &&
+            !prevLine.includes('@allow-cascade-delete')
+          ) {
+            violations.push({
+              rule: 'RULE_6_FOREIGN_KEY_AND_CASCADE',
+              file: path.relative(backendRoot, file),
+              line: i + 1,
+              message: `Dangerous "onDelete: 'CASCADE'" detected. Prefer RESTRICT/SET NULL with Soft Delete (@DeleteDateColumn), or add "// @allow-cascade-delete" if strictly required.`,
+            });
+          }
+        }
+
         const importMatch = line.match(/(?:import|export)\s+.*?from\s+['"]([^'"]+)['"]/);
         if (!importMatch) continue;
 
@@ -97,11 +124,43 @@ export class ArchitectureLinterService {
           }
         }
 
-        // Rule 1: Module không được import file nội bộ của module khác
+        // Rule 5: Không để lộ ORM Entity hoặc Repository ra ngoài index.ts của module hoặc trực tiếp vào Controller
+        if (isModuleIndexFile && /^\s*export\s+/.test(line)) {
+          if (importPath.includes('/entities/') || importPath.includes('/repositories/')) {
+            violations.push({
+              rule: 'RULE_5_ENTITY_EXPOSURE',
+              file: path.relative(backendRoot, file),
+              line: i + 1,
+              message: `Module "${currentModule}" must not export internal ORM entities or repositories in index.ts. Export Response DTOs and Public Service/Facade contracts instead. Violated export: "${importPath}"`,
+            });
+          }
+        }
+
+        if (isControllerFile) {
+          if (importPath.includes('/entities/') || importPath.includes('/repositories/')) {
+            violations.push({
+              rule: 'RULE_5_ENTITY_EXPOSURE',
+              file: path.relative(backendRoot, file),
+              line: i + 1,
+              message: `Controller in module "${currentModule}" must not directly import ORM entities or repositories. Use Service and Response DTO/Mapper instead. Violated import: "${importPath}"`,
+            });
+          }
+        }
+
+        // Rule 1 & Rule 6a: Module không được import file nội bộ của module khác; Entity tuyệt đối không import từ module khác
         if (currentModule) {
           const targetModule = this.extractTargetModuleFromImport(importPath, relativePath);
           if (targetModule && targetModule !== currentModule) {
             moduleDependencies.get(currentModule)?.add(targetModule);
+
+            if (isEntityFile) {
+              violations.push({
+                rule: 'RULE_6_FOREIGN_KEY_AND_CASCADE',
+                file: path.relative(backendRoot, file),
+                line: i + 1,
+                message: `Entity in module "${currentModule}" cannot import from module "${targetModule}". Cross-module physical Foreign Keys are strictly forbidden; store only scalar IDs (e.g. "${targetModule}Id: string").`,
+              });
+            }
 
             // Kiểm tra xem có import sâu vào internal không
             // Hợp lệ: @modules/<target>, @modules/<target>/index.js, @modules/<target>/contracts, @modules/<target>/contracts/index.js

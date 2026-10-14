@@ -27,6 +27,7 @@
     "arch:check": "node dist/apps/cli/main.js arch:check",
     "migration:check": "node dist/apps/cli/main.js migration:check",
     "seed:run": "node dist/apps/cli/main.js seed:run",
+    "data:repair": "node dist/apps/cli/main.js data:repair",
     "openapi:export": "node dist/apps/cli/main.js openapi:export",
     "openapi:check": "node dist/apps/cli/main.js openapi:check",
     "module:list": "node dist/apps/cli/main.js module:list",

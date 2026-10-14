@@ -9,6 +9,7 @@ import { DatabaseOperationsService } from './operations/database-operations.serv
 import { TransactionManager } from './transaction/transaction-manager.service.js';
 import { UNIT_OF_WORK } from './transaction/unit-of-work.contract.js';
 import { DatabaseSeederService } from './seeding/database-seeder.service.js';
+import { DataRepairRunnerService } from './repair/data-repair-runner.service.js';
 
 /**
  * Kết nối database thật qua TypeORM (khởi tạo nền, có retry — app vẫn chạy khi DB chưa sẵn sàng).
@@ -28,6 +29,7 @@ import { DatabaseSeederService } from './seeding/database-seeder.service.js';
       useExisting: TransactionManager,
     },
     DatabaseSeederService,
+    DataRepairRunnerService,
     BaseDatabaseProvider,
     DatabaseManageableAdapter,
   ],
@@ -39,6 +41,7 @@ import { DatabaseSeederService } from './seeding/database-seeder.service.js';
     TransactionManager,
     UNIT_OF_WORK,
     DatabaseSeederService,
+    DataRepairRunnerService,
     BaseDatabaseProvider,
     DatabaseManageableAdapter,
   ],
