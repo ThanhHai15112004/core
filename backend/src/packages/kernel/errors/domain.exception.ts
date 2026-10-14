@@ -1,4 +1,4 @@
-import { AppException } from './app.exception.js';
+import { AppException, ERROR_CATEGORY, type MessageParams } from './app.exception.js';
 import { HTTP_ERROR_CODE, HTTP_STATUS_CODE } from './http-exceptions.js';
 
 /** Ngoại lệ vi phạm quy tắc nghiệp vụ (400 Domain Error). */
@@ -10,8 +10,16 @@ export class DomainException extends AppException {
     message: string,
     code: string = HTTP_ERROR_CODE.DOMAIN_ERROR,
     details: unknown[] = [],
+    messageParams?: MessageParams,
   ) {
-    super(message, HTTP_STATUS_CODE.BAD_REQUEST, details);
+    super(
+      message,
+      HTTP_STATUS_CODE.BAD_REQUEST,
+      details,
+      messageParams,
+      ERROR_CATEGORY.DOMAIN,
+      true,
+    );
     this.code = code;
   }
 }

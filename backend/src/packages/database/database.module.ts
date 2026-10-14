@@ -6,6 +6,9 @@ import { DatabaseManageableAdapter } from './providers/database-manageable.adapt
 import { DatabaseConnectionService } from './providers/database-connection.service.js';
 import { DatabaseMonitoringService } from './monitoring/database-monitoring.service.js';
 import { DatabaseOperationsService } from './operations/database-operations.service.js';
+import { TransactionManager } from './transaction/transaction-manager.service.js';
+import { UNIT_OF_WORK } from './transaction/unit-of-work.contract.js';
+import { DatabaseSeederService } from './seeding/database-seeder.service.js';
 
 /**
  * Kết nối database thật qua TypeORM (khởi tạo nền, có retry — app vẫn chạy khi DB chưa sẵn sàng).
@@ -19,6 +22,12 @@ import { DatabaseOperationsService } from './operations/database-operations.serv
     DatabaseConnectionService,
     DatabaseMonitoringService,
     DatabaseOperationsService,
+    TransactionManager,
+    {
+      provide: UNIT_OF_WORK,
+      useExisting: TransactionManager,
+    },
+    DatabaseSeederService,
     BaseDatabaseProvider,
     DatabaseManageableAdapter,
   ],
@@ -27,6 +36,9 @@ import { DatabaseOperationsService } from './operations/database-operations.serv
     DatabaseConnectionService,
     DatabaseMonitoringService,
     DatabaseOperationsService,
+    TransactionManager,
+    UNIT_OF_WORK,
+    DatabaseSeederService,
     BaseDatabaseProvider,
     DatabaseManageableAdapter,
   ],

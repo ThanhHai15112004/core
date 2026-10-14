@@ -7,6 +7,7 @@ import { PinoNestLogger } from '@packages/logging/index.js';
 import { RuntimeAgentService } from '@packages/runtime/index.js';
 import { ApiRuntimeContributor } from '../runtime/api-runtime.contributor.js';
 import { ApiModule } from '../api.module.js';
+import { setupApiDocs } from './api-docs.bootstrap.js';
 
 /** Khởi tạo và khởi chạy HTTP API server với NestJS và Fastify */
 export async function bootstrapApi(): Promise<NestFastifyApplication> {
@@ -34,10 +35,12 @@ export async function bootstrapApi(): Promise<NestFastifyApplication> {
   });
 
   app.setGlobalPrefix(prefix);
+  setupApiDocs(app);
   app.enableShutdownHooks();
 
   await app.listen(port, host);
   logger.log(`HTTP API server started on http://${host}:${port}/${prefix}`);
+  logger.log(`Scalar API Reference available at http://${host}:${port}/docs`);
 
   return app;
 }

@@ -126,8 +126,24 @@ export class DatabaseConnectionService implements OnApplicationBootstrap, OnAppl
       };
     }
     const startedAt = performance.now();
+    const timeoutMs = Math.max(500, Math.min(this.config.database.connectTimeoutMs || 5000, 5000));
+    let timeoutId: NodeJS.Timeout | null = null;
     try {
-      await ds.query('SELECT 1');
+      await Promise.race([
+        ds.query('SELECT 1'),
+        new Promise<never>((_, reject) => {
+          timeoutId = setTimeout(
+            () =>
+              reject(
+                Object.assign(new Error(`Database ping timed out after ${timeoutMs}ms`), {
+                  code: 'ETIMEOUT',
+                }),
+              ),
+            timeoutMs,
+          );
+          timeoutId.unref();
+        }),
+      ]);
       const latencyMs = Math.round((performance.now() - startedAt) * 10) / 10;
       return { ok: true, latencyMs, error: null };
     } catch (err) {
@@ -136,6 +152,8 @@ export class DatabaseConnectionService implements OnApplicationBootstrap, OnAppl
         latencyMs: null,
         error: { code: errorCodeOf(err), message: sanitizeDbMessage(err) },
       };
+    } finally {
+      if (timeoutId) clearTimeout(timeoutId);
     }
   }
 
@@ -180,6 +198,7 @@ export class DatabaseConnectionService implements OnApplicationBootstrap, OnAppl
       this.status.attempts++;
       try {
         await ds.initialize();
+        this.applyMysqlQueryTimeout(ds);
         this.failures = 0;
         this.status.lastSuccessAt = new Date().toISOString();
         this.transition('connected', null);
@@ -209,6 +228,54 @@ export class DatabaseConnectionService implements OnApplicationBootstrap, OnAppl
       }
     })();
     return this.initializing;
+  }
+
+  /**
+   * Thiết lập query timeout cho MySQL (`mysql2`) độc lập với `maxQueryExecutionTime` (vốn dùng cho log Slow Query).
+   * Đặt cả `SET SESSION max_execution_time` trên server lẫn `timeout` mặc định của lệnh `mysql2`.
+   */
+  private applyMysqlQueryTimeout(ds: DataSource): void {
+    const timeoutMs = Math.floor(this.config.database.queryTimeoutMs ?? 0);
+    if (timeoutMs <= 0 || (this.driver !== 'mysql' && this.driver !== 'mariadb')) return;
+
+    type MysqlConn = {
+      __coreTimeoutConfigured?: boolean;
+      query?: (sql: unknown, ...rest: unknown[]) => unknown;
+    };
+    const pool = (
+      ds.driver as unknown as {
+        pool?: {
+          on?: (event: string, listener: (conn: MysqlConn) => void) => void;
+          _allConnections?:
+            MysqlConn[] | { length?: number; get?: (index: number) => MysqlConn | undefined };
+        };
+      }
+    ).pool;
+    if (!pool) return;
+
+    const configure = (conn: MysqlConn | undefined): void => {
+      if (!conn || conn.__coreTimeoutConfigured || typeof conn.query !== 'function') return;
+      conn.__coreTimeoutConfigured = true;
+      const origQuery = conn.query.bind(conn);
+      origQuery(`SET SESSION max_execution_time = ${timeoutMs}`, () => undefined);
+      conn.query = (sql: unknown, ...rest: unknown[]) => {
+        const nextSql = typeof sql === 'string' ? { sql, timeout: timeoutMs } : sql;
+        return origQuery(nextSql, ...rest);
+      };
+    };
+
+    const existing = pool._allConnections;
+    if (Array.isArray(existing)) {
+      for (const conn of existing) configure(conn);
+    } else if (
+      existing &&
+      typeof existing === 'object' &&
+      typeof existing.length === 'number' &&
+      typeof existing.get === 'function'
+    ) {
+      for (let i = 0; i < existing.length; i++) configure(existing.get(i));
+    }
+    pool.on?.('connection', configure);
   }
 
   /** Pool tạo ra trong lần initialize lỗi không tự đóng → đóng để không rò kết nối khi retry. */

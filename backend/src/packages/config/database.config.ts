@@ -26,10 +26,18 @@ export const databaseConfig = () => {
     username: env('DB_USERNAME', false) || 'root',
     password: env('DB_PASSWORD', false) || '',
     maxConnections: env.number('DB_MAX_CONNECTIONS', false) || 10,
+    /** Số connection nhàn rỗi tối đa giữ trong pool (0 = bằng maxConnections). */
+    poolMaxIdle: numberOr('DB_POOL_MAX_IDLE', 0),
+    /** Thời gian tối đa (ms) giữ một connection nhàn rỗi trong pool trước khi đóng. */
+    poolIdleTimeoutMs: numberOr('DB_POOL_IDLE_TIMEOUT_MS', 60_000),
+    /** Giới hạn số yêu cầu xếp hàng chờ lấy connection từ pool (0 = không giới hạn). */
+    poolQueueLimit: numberOr('DB_POOL_QUEUE_LIMIT', 0),
     synchronize: env.boolean('DB_SYNCHRONIZE', false),
     logging: env.boolean('DB_LOGGING', false),
     ssl: booleanOr('DB_SSL', false),
     connectTimeoutMs: numberOr('DB_CONNECT_TIMEOUT_MS', 10_000),
+    /** Thời gian tối đa (ms) cho phép một câu truy vấn chạy trước khi bị ngắt (0 = không giới hạn). */
+    queryTimeoutMs: numberOr('DB_QUERY_TIMEOUT_MS', 30_000),
     /** Chu kỳ kiểm tra kết nối (`SELECT 1`) và tự kết nối lại. */
     healthIntervalMs: numberOr('DB_HEALTH_INTERVAL_MS', 5000),
     /** Ngưỡng query chậm của trang Database. */
@@ -37,6 +45,10 @@ export const databaseConfig = () => {
     /** Số query chậm trong 15 phút để bật cảnh báo "query chậm tăng". */
     /** Transaction mở lâu hơn ngưỡng này được đánh dấu "dài". */
     longTransactionSec: numberOr('DB_LONG_TX_SEC', 10),
+    /** Thời gian tối đa (ms) cho phép một transaction chạy trong TransactionManager trước khi tự động rollback (0 = không giới hạn). */
+    transactionTimeoutMs: numberOr('DB_TRANSACTION_TIMEOUT_MS', 30_000),
+    /** Chặn chạy migration nếu phát hiện migration đã áp dụng bị sửa đổi hoặc xóa file. */
+    migrationStrict: booleanOr('DB_MIGRATION_STRICT', true),
     /** Dung lượng tối đa cấp cho database (GB) để tính % sử dụng; 0 = không biết. */
     storageLimitGb: numberOr('DB_STORAGE_LIMIT_GB', 0),
     storageWarnPercent: numberOr('DB_STORAGE_WARN_PERCENT', 80),

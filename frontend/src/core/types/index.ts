@@ -57,10 +57,13 @@ export type PaginatedResponse<T> = ApiResponse<T[], PaginationMeta>;
 
 export type CursorPaginatedResponse<T> = ApiResponse<T[], CursorPaginationMeta>;
 
+export type ValidationSource = 'body' | 'query' | 'params';
+
 export interface ApiErrorDetail {
   field?: string;
   message: string;
   code?: string;
+  source?: ValidationSource;
 }
 
 /** Envelope lỗi do `GlobalExceptionFilter` của backend trả về. */

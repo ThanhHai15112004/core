@@ -1,4 +1,8 @@
-import type { CursorPaginationMeta, PaginationMeta } from '@packages/kernel/index.js';
+import type {
+  CursorPaginationMeta,
+  PaginationMeta,
+  ValidationSource,
+} from '@packages/kernel/index.js';
 
 export interface ApiSuccessResponse<T, TMeta = Record<string, unknown>> {
   readonly success: true;
@@ -16,6 +20,7 @@ export interface ApiErrorDetail {
   readonly field?: string;
   readonly message: string;
   readonly code?: string;
+  readonly source?: ValidationSource;
 }
 
 export interface ApiErrorEnvelope {

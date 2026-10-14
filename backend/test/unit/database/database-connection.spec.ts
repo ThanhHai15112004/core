@@ -7,6 +7,7 @@ import { CoreConfigService } from '@packages/config/index.js';
 import { RedisService } from '@packages/redis/index.js';
 import {
   DatabaseConnectionService,
+  TypeOrmConfigService,
   databaseKeys,
   type DbEventRecord,
 } from '@packages/database/index.js';
@@ -37,7 +38,7 @@ function fakeDataSource(failures: number) {
   return { ds: ds as unknown as DataSource, state };
 }
 
-describe('DatabaseConnectionService', () => {
+describe('DatabaseConnectionService & TypeOrmConfigService', () => {
   let redis: RedisService;
   let config: CoreConfigService;
 
@@ -114,5 +115,146 @@ describe('DatabaseConnectionService', () => {
     expect(svc.getStatus().state).toBe('disabled');
     expect(state.attempts).toBe(0);
     applyTestEnv({ DB_ENABLED: 'true' });
+  });
+
+  it('ping() bị treo → tự động timeout với mã lỗi ETIMEOUT thay vì treo vô hạn', async () => {
+    applyTestEnv({ DB_CONNECT_TIMEOUT_MS: '1200' });
+    config = new CoreConfigService();
+    const { ds } = fakeDataSource(0);
+    const svc = create(ds);
+    svc.onApplicationBootstrap();
+    await advance(0);
+    expect(svc.isConnected()).toBe(true);
+
+    (ds as unknown as { query: () => Promise<unknown> }).query = () => new Promise(() => undefined);
+    const pingPromise = svc.ping();
+    await advance(1200);
+    const result = await pingPromise;
+    expect(result).toMatchObject({
+      ok: false,
+      latencyMs: null,
+      error: { code: 'ETIMEOUT' },
+    });
+    await svc.onApplicationShutdown();
+    applyTestEnv({ DB_CONNECT_TIMEOUT_MS: '10000' });
+  });
+
+  it('áp dụng queryTimeoutMs cho MySQL pool độc lập với slowQueryMs', async () => {
+    applyTestEnv({ DB_QUERY_TIMEOUT_MS: '15000', DB_SLOW_QUERY_MS: '500' });
+    config = new CoreConfigService();
+
+    const executed: unknown[] = [];
+    const existingConn = {
+      query: (sql: unknown) => {
+        executed.push(sql);
+      },
+    };
+    let onConnectionListener: ((conn: typeof existingConn) => void) | undefined;
+
+    let initialized = false;
+    const ds = {
+      options: { type: 'mysql' },
+      get isInitialized() {
+        return initialized;
+      },
+      driver: {
+        pool: {
+          _allConnections: [existingConn],
+          on: (event: string, cb: (conn: typeof existingConn) => void) => {
+            if (event === 'connection') onConnectionListener = cb;
+          },
+        },
+      },
+      initialize: async () => {
+        initialized = true;
+      },
+      query: async () => [{ 1: 1 }],
+    } as unknown as DataSource;
+
+    const svc = create(ds);
+    svc.onApplicationBootstrap();
+    await advance(0);
+
+    expect(executed[0]).toBe('SET SESSION max_execution_time = 15000');
+    existingConn.query('SELECT * FROM users');
+    expect(executed[1]).toEqual({ sql: 'SELECT * FROM users', timeout: 15000 });
+
+    const newConnExecuted: unknown[] = [];
+    const newConn = {
+      query: (sql: unknown) => {
+        newConnExecuted.push(sql);
+      },
+    };
+    onConnectionListener?.(newConn);
+    newConn.query('UPDATE users SET active = 1');
+    expect(newConnExecuted).toEqual([
+      'SET SESSION max_execution_time = 15000',
+      { sql: 'UPDATE users SET active = 1', timeout: 15000 },
+    ]);
+
+    await svc.onApplicationShutdown();
+    applyTestEnv({ DB_QUERY_TIMEOUT_MS: '30000' });
+  });
+
+  it('TypeOrmConfigService tạo cấu hình pool và queryTimeout chuẩn cho MySQL, Postgres, MSSQL', () => {
+    const sharedEnv = {
+      DB_MAX_CONNECTIONS: '20',
+      DB_POOL_MAX_IDLE: '8',
+      DB_POOL_IDLE_TIMEOUT_MS: '45000',
+      DB_POOL_QUEUE_LIMIT: '100',
+      DB_CONNECT_TIMEOUT_MS: '8000',
+      DB_QUERY_TIMEOUT_MS: '25000',
+      DB_SLOW_QUERY_MS: '600',
+    };
+    applyTestEnv({ ...sharedEnv, DB_CONNECTION: 'mysql' });
+    const mysqlOpts = new TypeOrmConfigService(
+      new CoreConfigService(),
+    ).createTypeOrmOptions() as Record<string, unknown>;
+    expect(mysqlOpts).toMatchObject({
+      type: 'mysql',
+      maxQueryExecutionTime: 600,
+      connectTimeout: 8000,
+      extra: {
+        connectionLimit: 20,
+        maxIdle: 8,
+        idleTimeout: 45000,
+        queueLimit: 100,
+      },
+    });
+
+    applyTestEnv({ ...sharedEnv, DB_CONNECTION: 'pgsql' });
+    const pgOpts = new TypeOrmConfigService(
+      new CoreConfigService(),
+    ).createTypeOrmOptions() as Record<string, unknown>;
+    expect(pgOpts).toMatchObject({
+      type: 'postgres',
+      maxQueryExecutionTime: 600,
+      connectTimeoutMS: 8000,
+      extra: {
+        max: 20,
+        idleTimeoutMillis: 45000,
+        statement_timeout: 25000,
+        query_timeout: 25000,
+      },
+    });
+
+    applyTestEnv({ ...sharedEnv, DB_CONNECTION: 'mssql' });
+    const mssqlOpts = new TypeOrmConfigService(
+      new CoreConfigService(),
+    ).createTypeOrmOptions() as Record<string, unknown>;
+    expect(mssqlOpts).toMatchObject({
+      type: 'mssql',
+      maxQueryExecutionTime: 600,
+      connectionTimeout: 8000,
+      requestTimeout: 25000,
+      extra: {
+        pool: {
+          max: 20,
+          idleTimeoutMillis: 45000,
+        },
+      },
+    });
+
+    applyTestEnv();
   });
 });

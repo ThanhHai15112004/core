@@ -15,12 +15,14 @@ import { normalizeSql } from '../utils/sql-normalize.js';
 import { TypeOrmPinoLogger } from './typeorm-pino.logger.js';
 
 const currentFile = fileURLToPath(import.meta.url);
-/** `src/database/migrations/*.ts` khi chạy từ source (test/dev), `dist/database/migrations/*.js` khi đã build. */
-const MIGRATIONS_GLOB = path.join(
-  path.dirname(currentFile),
-  '../../../database/migrations',
-  currentFile.endsWith('.ts') ? '*.ts' : '*.js',
-);
+const migrationExt = currentFile.endsWith('.ts') ? '*.ts' : '*.js';
+const srcRoot = path.resolve(path.dirname(currentFile), '../../..');
+/** Nạp migration từ thư mục tập trung `database/migrations` và thư mục `migrations` của từng module. */
+const MIGRATIONS_GLOBS = [
+  path.join(srcRoot, 'database/migrations', migrationExt),
+  path.join(srcRoot, 'modules/*/migrations', migrationExt),
+  path.join(srcRoot, 'project-modules/*/migrations', migrationExt),
+];
 
 /** Tối đa số lỗi query ghi vào Redis mỗi giây (database sập → mọi query lỗi, không ghi tràn). */
 const ERROR_RECORDS_PER_SEC = 5;
@@ -76,7 +78,7 @@ export class TypeOrmConfigService implements TypeOrmOptionsFactory {
       autoLoadEntities: true,
       // Kết nối do DatabaseConnectionService mở nền (có retry) → API vẫn chạy khi database chưa sẵn sàng.
       manualInitialization: true,
-      migrations: [MIGRATIONS_GLOB],
+      migrations: MIGRATIONS_GLOBS,
       migrationsTableName: db.migrationsTableName,
     };
 
@@ -96,6 +98,10 @@ export class TypeOrmConfigService implements TypeOrmOptionsFactory {
           ...(db.ssl ? { ssl: true } : {}),
           extra: {
             max: db.maxConnections,
+            idleTimeoutMillis: db.poolIdleTimeoutMs,
+            ...(db.queryTimeoutMs > 0
+              ? { statement_timeout: db.queryTimeoutMs, query_timeout: db.queryTimeoutMs }
+              : {}),
           },
         };
 
@@ -109,6 +115,7 @@ export class TypeOrmConfigService implements TypeOrmOptionsFactory {
           password: db.password,
           database: db.database,
           connectionTimeout: db.connectTimeoutMs,
+          ...(db.queryTimeoutMs > 0 ? { requestTimeout: db.queryTimeoutMs } : {}),
           options: {
             encrypt: db.ssl,
             trustServerCertificate: true,
@@ -117,6 +124,7 @@ export class TypeOrmConfigService implements TypeOrmOptionsFactory {
           extra: {
             pool: {
               max: db.maxConnections,
+              idleTimeoutMillis: db.poolIdleTimeoutMs,
             },
           },
         };
@@ -143,6 +151,10 @@ export class TypeOrmConfigService implements TypeOrmOptionsFactory {
           ...(db.ssl ? { ssl: {} } : {}),
           extra: {
             connectionLimit: db.maxConnections,
+            maxIdle:
+              db.poolMaxIdle > 0 ? Math.min(db.poolMaxIdle, db.maxConnections) : db.maxConnections,
+            idleTimeout: db.poolIdleTimeoutMs,
+            queueLimit: db.poolQueueLimit,
             connectAttributes: { program_name: this.clientName },
           },
         };

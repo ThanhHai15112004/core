@@ -81,4 +81,23 @@ describe('Feature: Common API Conventions & Versioning (Task 2.1)', () => {
     expect(Array.isArray(body.error.details)).toBe(true);
     expect((body.error.details ?? []).length).toBeGreaterThan(0);
   });
+
+  it('POST with malformed JSON payload should return 400 INVALID_JSON_PAYLOAD error envelope', async () => {
+    const response = await context.app.inject({
+      method: 'POST',
+      url: buildVersionedPath(`${JOBS_OPS_ROUTES.PREFIX}/${JOBS_OPS_ROUTES.BULK_RETRY}`),
+      headers: {
+        'content-type': 'application/json',
+        'accept-language': 'vi',
+      },
+      payload: '{"jobs": [invalid_json}',
+    });
+
+    expect(response.statusCode).toBe(HTTP_STATUS_CODE.BAD_REQUEST);
+    const body = JSON.parse(response.payload) as ApiErrorResponse;
+    expect(body.success).toBe(false);
+    expect(body.statusCode).toBe(HTTP_STATUS_CODE.BAD_REQUEST);
+    expect(body.error.code).toBe(HTTP_ERROR_CODE.INVALID_JSON_PAYLOAD);
+    expect(typeof body.error.message).toBe('string');
+  });
 });

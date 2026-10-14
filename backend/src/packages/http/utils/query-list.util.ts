@@ -19,7 +19,9 @@ import {
   type SortCriterion,
   type SortOrder,
   type SortParams,
+  VALIDATION_ISSUE_CODE,
   ValidationAppException,
+  type ValidationSource,
 } from '@packages/kernel/index.js';
 import type { ApiErrorDetail } from '../contracts/api-response.contract.js';
 
@@ -55,25 +57,56 @@ export function isPrintableString(value: string): boolean {
 
 /**
  * Chuyển đổi danh sách lỗi `ZodIssue` sang mảng `ApiErrorDetail` chuẩn của hệ thống.
+ * Hỗ trợ gắn `source` (`body` | `query` | `params`) và tách chi tiết từng trường không được phép (`unrecognized_keys`).
  */
-export function formatZodIssues(issues: readonly z.ZodIssue[]): ApiErrorDetail[] {
-  return issues.map((issue) => {
-    const fieldPath = issue.path.map((segment) => String(segment)).join('.');
-    return {
-      ...(fieldPath.length > 0 ? { field: fieldPath } : {}),
+export function formatZodIssues(
+  issues: readonly z.ZodIssue[],
+  source?: ValidationSource,
+): ApiErrorDetail[] {
+  const details: ApiErrorDetail[] = [];
+
+  for (const issue of issues) {
+    const basePath = issue.path.map((segment) => String(segment)).join('.');
+    const issueRecord = issue as unknown as Record<string, unknown>;
+    const unrecognizedKeys = Array.isArray(issueRecord['keys'])
+      ? (issueRecord['keys'] as unknown[]).map((k) => String(k))
+      : [];
+
+    if (issue.code === VALIDATION_ISSUE_CODE.UNRECOGNIZED_KEYS && unrecognizedKeys.length > 0) {
+      for (const key of unrecognizedKeys) {
+        const fullField = basePath.length > 0 ? `${basePath}.${key}` : key;
+        details.push({
+          field: fullField,
+          message: `Unrecognized field "${fullField}" is not allowed`,
+          code: VALIDATION_ISSUE_CODE.UNRECOGNIZED_KEYS,
+          ...(source ? { source } : {}),
+        });
+      }
+      continue;
+    }
+
+    details.push({
+      ...(basePath.length > 0 ? { field: basePath } : {}),
       message: issue.message,
       code: issue.code,
-    };
-  });
+      ...(source ? { source } : {}),
+    });
+  }
+
+  return details;
 }
 
 /**
  * Xác thực dữ liệu đầu vào theo Zod schema; ném `ValidationAppException` (400) chuẩn hóa nếu thất bại.
  */
-export function parseOrThrow<T>(schema: z.ZodType<T>, input: unknown): T {
+export function parseOrThrow<T>(
+  schema: z.ZodType<T>,
+  input: unknown,
+  source?: ValidationSource,
+): T {
   const result = schema.safeParse(input);
   if (!result.success) {
-    throw new ValidationAppException(formatZodIssues(result.error.issues));
+    throw new ValidationAppException(formatZodIssues(result.error.issues, source));
   }
   return result.data;
 }

@@ -6,7 +6,12 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import type { FastifyRequest } from 'fastify';
-import { IS_PUBLIC_KEY } from '@packages/http/index.js';
+import { ForbiddenAppException, HTTP_ERROR_CODE } from '@packages/kernel/index.js';
+import {
+  IS_PUBLIC_KEY,
+  REQUIRED_PERMISSIONS_KEY,
+  REQUIRED_ROLES_KEY,
+} from '@packages/http/index.js';
 import { TokenService } from '../providers/token.service.js';
 import type { UserIdentity } from '../contracts/auth.contract.js';
 
@@ -17,7 +22,7 @@ export class AuthGuard implements CanActivate {
     private readonly tokenService: TokenService,
   ) {}
 
-  /** Kiểm tra quyền truy cập của yêu cầu HTTP trước khi vào controller */
+  /** Kiểm tra xác thực JWT và quyền truy cập (Roles & Permissions) của yêu cầu HTTP trước khi vào controller */
   public async canActivate(context: ExecutionContext): Promise<boolean> {
     const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
       context.getHandler(),
@@ -54,6 +59,39 @@ export class AuthGuard implements CanActivate {
     }
 
     request.user = user;
+
+    const requiredRoles =
+      this.reflector.getAllAndOverride<readonly string[]>(REQUIRED_ROLES_KEY, [
+        context.getHandler(),
+        context.getClass(),
+      ]) ?? [];
+
+    if (requiredRoles.length > 0) {
+      const userRoles = new Set(user.roles ?? []);
+      const hasRole = requiredRoles.some((role) => userRoles.has(role));
+      if (!hasRole) {
+        throw new ForbiddenAppException(HTTP_ERROR_CODE.FORBIDDEN, [
+          { requiredRoles, actualRoles: user.roles ?? [] },
+        ]);
+      }
+    }
+
+    const requiredPermissions =
+      this.reflector.getAllAndOverride<readonly string[]>(REQUIRED_PERMISSIONS_KEY, [
+        context.getHandler(),
+        context.getClass(),
+      ]) ?? [];
+
+    if (requiredPermissions.length > 0) {
+      const userPermissions = new Set(user.permissions ?? []);
+      const missingPermissions = requiredPermissions.filter((perm) => !userPermissions.has(perm));
+      if (missingPermissions.length > 0) {
+        throw new ForbiddenAppException(HTTP_ERROR_CODE.FORBIDDEN, [
+          { requiredPermissions, missingPermissions },
+        ]);
+      }
+    }
+
     return true;
   }
 }

@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { Injectable, Logger, Optional } from '@nestjs/common';
 import { CoreConfigService } from '@packages/config/index.js';
 import { RedisService } from '@packages/redis/index.js';
@@ -12,11 +13,16 @@ import { recordDbEvent } from '../monitoring/db-events.js';
 
 export type SessionAction = 'cancel' | 'terminate';
 
+export type MigrationIntegrityStatus = 'ok' | 'modified' | 'missing_source';
+
 export class DatabaseOperationError extends Error {
   constructor(
     public readonly code:
       | 'ACTIONS_DISABLED'
       | 'MIGRATIONS_DISABLED'
+      | 'MIGRATION_TAMPERED'
+      | 'ROLLBACK_FORBIDDEN'
+      | 'SEED_ENV_FORBIDDEN'
       | 'UNSUPPORTED'
       | 'SESSION_NOT_FOUND'
       | 'SELF_SESSION'
@@ -35,6 +41,8 @@ export interface MigrationInfo {
   timestamp: number | null;
   status: 'applied' | 'pending';
   appliedAt: string | null;
+  checksum?: string | null;
+  integrity?: MigrationIntegrityStatus;
 }
 
 export interface MigrationRun {
@@ -47,6 +55,20 @@ export interface MigrationRun {
 }
 
 const MIGRATE_LOCK_SEC = 600;
+
+/** Tính mã băm SHA-256 đại diện cho nội dung logic (`up`/`down`) của một class Migration. */
+export function computeMigrationChecksum(migration: {
+  name?: string;
+  up?: unknown;
+  down?: unknown;
+  constructor?: { name?: string };
+}): string {
+  const name = migration.name ?? migration.constructor?.name ?? '';
+  const upSource = typeof migration.up === 'function' ? migration.up.toString() : '';
+  const downSource = typeof migration.down === 'function' ? migration.down.toString() : '';
+  const normalized = `${name}|${upSource}|${downSource}`.replace(/\s+/g, ' ').trim();
+  return createHash('sha256').update(normalized).digest('hex').slice(0, 16);
+}
 
 /** Thao tác vận hành database: test connection, cancel query, terminate session, migration. */
 @Injectable()
@@ -112,7 +134,7 @@ export class DatabaseOperationsService {
     }
   }
 
-  /** Migration khai báo (DataSource.migrations) so với bảng lịch sử → applied / pending. */
+  /** Migration khai báo (DataSource.migrations) so với bảng lịch sử → applied / pending kèm kiểm tra tính toàn vẹn. */
   public async migrations(): Promise<{ items: MigrationInfo[]; lastRun: MigrationRun | null }> {
     const ds = this.connection.connected();
     if (!ds) throw new DatabaseOperationError('UNAVAILABLE', this.connection.getStatus().state);
@@ -123,32 +145,73 @@ export class DatabaseOperationsService {
       )
       .catch(() => [] as { name: string; timestamp: number }[]);
     const appliedNames = new Map(applied.map((a) => [String(a.name), Number(a.timestamp)]));
-    const declared = ds.migrations.map((m) => {
+
+    const storedChecksums = this.redis?.isReady()
+      ? await this.redis.client
+          .hgetall(databaseKeys(this.redis).migrationChecksums())
+          .catch(() => ({}) as Record<string, string>)
+      : ({} as Record<string, string>);
+
+    const declaredMap = new Map<
+      string,
+      { name: string; timestamp: number | null; checksum: string }
+    >();
+    for (const m of ds.migrations) {
       const name = m.name ?? m.constructor.name;
-      const timestamp = Number(/(\d{13})$/.exec(name)?.[1] ?? NaN);
-      return { name, timestamp: Number.isFinite(timestamp) ? timestamp : null };
-    });
-    const names = new Set([...declared.map((d) => d.name), ...appliedNames.keys()]);
+      const timestamp = Number(/(\d{13})$/.exec(name)?.[1] ?? /^(\d{13})/.exec(name)?.[1] ?? NaN);
+      declaredMap.set(name, {
+        name,
+        timestamp: Number.isFinite(timestamp) ? timestamp : null,
+        checksum: computeMigrationChecksum(m),
+      });
+    }
+
+    const names = new Set([...declaredMap.keys(), ...appliedNames.keys()]);
     const items: MigrationInfo[] = [...names].map((name) => {
-      const ts = appliedNames.get(name) ?? declared.find((d) => d.name === name)?.timestamp ?? null;
+      const declared = declaredMap.get(name);
+      const isApplied = appliedNames.has(name);
+      const ts = appliedNames.get(name) ?? declared?.timestamp ?? null;
+      const recordedHash = storedChecksums[name];
+
+      let integrity: MigrationIntegrityStatus = 'ok';
+      if (isApplied && !declared) {
+        integrity = 'missing_source';
+      } else if (isApplied && declared && recordedHash && recordedHash !== declared.checksum) {
+        integrity = 'modified';
+      }
+
       return {
         name,
         timestamp: ts,
-        status: appliedNames.has(name) ? 'applied' : 'pending',
-        // TypeORM không lưu thời điểm chạy; timestamp trong tên là lúc tạo migration.
+        status: isApplied ? 'applied' : 'pending',
         appliedAt: null,
+        checksum: declared?.checksum ?? recordedHash ?? null,
+        integrity,
       };
     });
     items.sort((a, b) => (a.timestamp ?? 0) - (b.timestamp ?? 0));
     return { items, lastRun: await this.lastRun() };
   }
 
-  /** Thực thi các tệp migration cơ sở dữ liệu chưa được áp dụng */
+  /** Thực thi các tệp migration cơ sở dữ liệu chưa được áp dụng (có kiểm tra bất biến & Redis Lock). */
   public async runMigrations(): Promise<MigrationRun> {
     if (!this.config.database.migrationsEnabled)
       throw new DatabaseOperationError('MIGRATIONS_DISABLED', 'Running migrations is disabled');
     const ds = this.connection.connected();
     if (!ds) throw new DatabaseOperationError('UNAVAILABLE', this.connection.getStatus().state);
+
+    if (this.config.database.migrationStrict) {
+      const { items } = await this.migrations();
+      const tampered = items.filter((m) => m.status === 'applied' && m.integrity !== 'ok');
+      if (tampered.length > 0) {
+        const detail = tampered.map((m) => `${m.name} (${m.integrity})`).join(', ');
+        throw new DatabaseOperationError(
+          'MIGRATION_TAMPERED',
+          `Immutable migration policy violated: applied migration(s) modified or missing in source: ${detail}`,
+        );
+      }
+    }
+
     const keys = this.redis ? databaseKeys(this.redis) : null;
     if (keys && this.redis?.isReady()) {
       const locked = await this.redis.client.set(
@@ -172,6 +235,7 @@ export class DatabaseOperationsService {
         error: null,
         durationMs: Date.now() - startedAt,
       };
+      await this.saveMigrationChecksums(ds);
       this.logger.log(`Migrations completed: ${run.executed.join(', ') || 'none pending'}`);
     } catch (err) {
       run = {
@@ -197,6 +261,68 @@ export class DatabaseOperationsService {
       runtime: null,
     });
     return run;
+  }
+
+  /** Hoàn tác (rollback) bản migration gần nhất (yêu cầu Redis Lock và chặn trên Production nếu không có `force`). */
+  public async revertLastMigration(options?: { force?: boolean }): Promise<MigrationRun> {
+    if (!this.config.database.migrationsEnabled)
+      throw new DatabaseOperationError('MIGRATIONS_DISABLED', 'Running migrations is disabled');
+    if (this.config.isProduction && !options?.force) {
+      throw new DatabaseOperationError(
+        'ROLLBACK_FORBIDDEN',
+        'Rolling back migrations in production requires explicit --force confirmation',
+      );
+    }
+    const ds = this.connection.connected();
+    if (!ds) throw new DatabaseOperationError('UNAVAILABLE', this.connection.getStatus().state);
+
+    const keys = this.redis ? databaseKeys(this.redis) : null;
+    if (keys && this.redis?.isReady()) {
+      const locked = await this.redis.client.set(
+        keys.migrateLock(),
+        '1',
+        'EX',
+        MIGRATE_LOCK_SEC,
+        'NX',
+      );
+      if (locked !== 'OK')
+        throw new DatabaseOperationError('BUSY', 'Another migration operation is in progress');
+    }
+
+    const startedAt = Date.now();
+    try {
+      await ds.undoLastMigration({ transaction: 'each' });
+      const run: MigrationRun = {
+        at: new Date().toISOString(),
+        status: 'completed',
+        executed: ['reverted_last'],
+        error: null,
+        durationMs: Date.now() - startedAt,
+      };
+      this.logger.warn(`Last database migration reverted in ${run.durationMs}ms`);
+      return run;
+    } catch (err) {
+      const message = sanitizeDbMessage(err);
+      this.logger.error(`Migration rollback failed: ${message}`);
+      throw new DatabaseOperationError('FAILED', message);
+    } finally {
+      if (keys && this.redis?.isReady())
+        await this.redis.client.del(keys.migrateLock()).catch(() => undefined);
+    }
+  }
+
+  /** Lưu checksum SHA-256 của các migration khai báo vào Redis sau khi chạy thành công. */
+  private async saveMigrationChecksums(ds: {
+    migrations: { name?: string; up?: unknown; down?: unknown; constructor: { name: string } }[];
+  }): Promise<void> {
+    if (!this.redis?.isReady() || ds.migrations.length === 0) return;
+    const key = databaseKeys(this.redis).migrationChecksums();
+    const pipe = this.redis.client.pipeline();
+    for (const m of ds.migrations) {
+      const name = m.name ?? m.constructor.name;
+      pipe.hset(key, name, computeMigrationChecksum(m));
+    }
+    await pipe.exec().catch(() => undefined);
   }
 
   /** Lấy mốc thời gian của lần thực thi gần nhất */

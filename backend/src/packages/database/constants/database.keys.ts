@@ -12,10 +12,13 @@ export const databaseKeys = (redis: RedisService) => ({
   storage: () => redis.key('db', 'storage'),
   /** Kết quả lần chạy migration gần nhất (JSON). */
   lastMigrationRun: () => redis.key('db', 'migrations', 'last'),
+  /** Hash lưu checksum SHA-256 của các migration đã áp dụng (migrationName -> checksum). */
+  migrationChecksums: () => redis.key('db', 'migrations', 'checksums'),
   /** Trạng thái kết nối của từng runtime (JSON, TTL). */
   connection: (instance: string) => redis.key('db', 'conn', instance),
   collectLock: () => redis.key('db', 'lock', 'collect'),
   migrateLock: () => redis.key('db', 'lock', 'migrate'),
+  seedLock: () => redis.key('db', 'lock', 'seed'),
 });
 
 export const EVENT_LOG_SIZE = 1000;

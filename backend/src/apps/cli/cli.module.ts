@@ -21,7 +21,9 @@ import { SystemCommand } from './commands/system/system.command.js';
 import { ModuleCommand } from './commands/module/module.command.js';
 import { DoctorCommand } from './commands/health/doctor.command.js';
 import { MigrationCommand } from './commands/database/migration.command.js';
+import { SeedCommand } from './commands/database/seed.command.js';
 import { ArchitectureCommand } from './commands/architecture/architecture.command.js';
+import { OpenApiCommand } from './commands/architecture/openapi.command.js';
 
 @Module({
   imports: [
@@ -45,7 +47,9 @@ import { ArchitectureCommand } from './commands/architecture/architecture.comman
     ModuleCommand,
     DoctorCommand,
     MigrationCommand,
+    SeedCommand,
     ArchitectureCommand,
+    OpenApiCommand,
   ],
   exports: [
     CliDispatcherService,
@@ -56,7 +60,9 @@ import { ArchitectureCommand } from './commands/architecture/architecture.comman
     ModuleCommand,
     DoctorCommand,
     MigrationCommand,
+    SeedCommand,
     ArchitectureCommand,
+    OpenApiCommand,
   ],
 })
 export class CliModule implements OnApplicationBootstrap {
@@ -66,7 +72,9 @@ export class CliModule implements OnApplicationBootstrap {
     private readonly moduleCommand: ModuleCommand,
     private readonly doctorCommand: DoctorCommand,
     private readonly migrationCommand: MigrationCommand,
+    private readonly seedCommand: SeedCommand,
     private readonly architectureCommand: ArchitectureCommand,
+    private readonly openApiCommand: OpenApiCommand,
   ) {}
 
   /** Đăng ký toàn bộ các command providers vào dispatcher khi ứng dụng khởi chạy */
@@ -76,6 +84,8 @@ export class CliModule implements OnApplicationBootstrap {
     this.dispatcher.registerProvider(this.moduleCommand);
     this.dispatcher.registerProvider(this.doctorCommand);
     this.dispatcher.registerProvider(this.migrationCommand);
+    this.dispatcher.registerProvider(this.seedCommand);
     this.dispatcher.registerProvider(this.architectureCommand);
+    this.dispatcher.registerProvider(this.openApiCommand);
   }
 }

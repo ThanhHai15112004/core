@@ -3,6 +3,7 @@ import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fa
 import RedisMock from 'ioredis-mock';
 import type { Redis } from 'ioredis';
 import { ApiModule } from '@apps/api/api.module.js';
+import { setupApiDocs } from '@apps/api/bootstrap/api-docs.bootstrap.js';
 import { CoreConfigService } from '@packages/config/index.js';
 import { normalizeApiPrefix } from '@packages/http/index.js';
 import { REDIS_CLIENT_FACTORY, type RedisClientFactory } from '@packages/redis/index.js';
@@ -18,6 +19,8 @@ export const mockRedisFactory: RedisClientFactory = () => {
 export interface CreateTestAppOptions {
   /** Bật `app.setGlobalPrefix(apiPrefix)` giống môi trường runtime thực tế (mặc định `false`). */
   readonly useGlobalPrefix?: boolean;
+  /** Đăng ký các route tài liệu API (`/docs`, `/docs/openapi.json`, `/docs/postman.json`). */
+  readonly enableApiDocs?: boolean;
 }
 
 export interface TestAppContext {
@@ -46,6 +49,10 @@ export async function createTestApp(options?: CreateTestAppOptions): Promise<Tes
   if (options?.useGlobalPrefix) {
     const configService = app.get(CoreConfigService);
     app.setGlobalPrefix(normalizeApiPrefix(configService.app.apiPrefix));
+  }
+
+  if (options?.enableApiDocs) {
+    setupApiDocs(app);
   }
 
   await app.init();
