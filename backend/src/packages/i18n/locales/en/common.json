@@ -2,7 +2,13 @@
   "INTERNAL_SERVER_ERROR": "An unexpected error occurred",
   "BAD_REQUEST": "Invalid request data",
   "VALIDATION_FAILED": "Validation failed",
+  "DOMAIN_ERROR": "Domain rule violation",
   "NOT_FOUND": "Requested resource not found",
   "UNAUTHORIZED": "Unauthorized access",
-  "FORBIDDEN": "Forbidden access"
+  "FORBIDDEN": "Forbidden access",
+  "CONFLICT": "Resource conflict or already exists",
+  "UNPROCESSABLE_ENTITY": "Unprocessable entity",
+  "TOO_MANY_REQUESTS": "Too many requests, please try again later",
+  "SERVICE_UNAVAILABLE": "Service temporarily unavailable",
+  "HTTP_ERROR": "HTTP request failed"
 }

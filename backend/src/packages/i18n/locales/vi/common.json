@@ -2,7 +2,13 @@
   "INTERNAL_SERVER_ERROR": "Đã xảy ra lỗi không mong muốn",
   "BAD_REQUEST": "Dữ liệu yêu cầu không hợp lệ",
   "VALIDATION_FAILED": "Dữ liệu không vượt qua kiểm tra hợp lệ",
+  "DOMAIN_ERROR": "Vi phạm quy tắc nghiệp vụ",
   "NOT_FOUND": "Không tìm thấy dữ liệu yêu cầu",
   "UNAUTHORIZED": "Truy cập không được phép",
-  "FORBIDDEN": "Bị từ chối quyền truy cập"
+  "FORBIDDEN": "Bị từ chối quyền truy cập",
+  "CONFLICT": "Dữ liệu bị xung đột hoặc đã tồn tại",
+  "UNPROCESSABLE_ENTITY": "Không thể xử lý thực thể yêu cầu",
+  "TOO_MANY_REQUESTS": "Quá nhiều yêu cầu, vui lòng thử lại sau",
+  "SERVICE_UNAVAILABLE": "Dịch vụ tạm thời không khả dụng",
+  "HTTP_ERROR": "Yêu cầu HTTP không thành công"
 }

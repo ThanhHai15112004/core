@@ -1,10 +1,16 @@
-export interface ApiSuccessResponse<T> {
+import type { CursorPaginationMeta, PaginationMeta } from '@packages/kernel/index.js';
+
+export interface ApiSuccessResponse<T, TMeta = Record<string, unknown>> {
   readonly success: true;
   readonly statusCode: number;
   readonly data: T;
-  readonly meta?: Record<string, unknown>;
+  readonly meta?: TMeta;
   readonly timestamp: string;
 }
+
+export type ApiPaginatedResponse<T> = ApiSuccessResponse<readonly T[], PaginationMeta>;
+
+export type ApiCursorPaginatedResponse<T> = ApiSuccessResponse<readonly T[], CursorPaginationMeta>;
 
 export interface ApiErrorDetail {
   readonly field?: string;
@@ -25,4 +31,5 @@ export interface ApiErrorResponse {
   readonly timestamp: string;
 }
 
-export type ApiResponse<T> = ApiSuccessResponse<T> | ApiErrorResponse;
+export type ApiResponse<T, TMeta = Record<string, unknown>> =
+  ApiSuccessResponse<T, TMeta> | ApiErrorResponse;

@@ -2,6 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
 import { Logger } from '@nestjs/common';
 import { CoreConfigService } from '@packages/config/index.js';
+import { normalizeApiPrefix } from '@packages/http/index.js';
 import { PinoNestLogger } from '@packages/logging/index.js';
 import { RuntimeAgentService } from '@packages/runtime/index.js';
 import { ApiRuntimeContributor } from '../runtime/api-runtime.contributor.js';
@@ -24,7 +25,7 @@ export async function bootstrapApi(): Promise<NestFastifyApplication> {
   const configService = app.get(CoreConfigService);
   const port = configService.app.port;
   const host = configService.app.host;
-  const prefix = configService.app.apiPrefix;
+  const prefix = normalizeApiPrefix(configService.app.apiPrefix);
 
   app.enableCors({
     origin: true,

@@ -4,3 +4,6 @@ export * from './filters/global-exception.filter.js';
 export * from './interceptors/transform-response.interceptor.js';
 export * from './http.module.js';
 export * from './utils/capture.js';
+export * from './utils/api-version.util.js';
+export * from './utils/response.util.js';
+export * from './utils/query-list.util.js';

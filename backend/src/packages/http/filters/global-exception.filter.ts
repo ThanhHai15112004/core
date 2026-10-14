@@ -7,9 +7,11 @@ import {
   Logger,
 } from '@nestjs/common';
 import type { FastifyReply } from 'fastify';
-import { AppException } from '@packages/kernel/index.js';
+import { ZodError } from 'zod';
+import { AppException, HTTP_ERROR_CODE, HTTP_STATUS_CODE } from '@packages/kernel/index.js';
 import { CoreI18nService } from '@packages/i18n/index.js';
 import type { ApiErrorResponse } from '../contracts/api-response.contract.js';
+import { formatZodIssues } from '../utils/query-list.util.js';
 
 interface NormalizedError {
   statusCode: number;
@@ -22,6 +24,7 @@ interface NormalizedError {
 export class GlobalExceptionFilter implements ExceptionFilter {
   private readonly logger = new Logger(GlobalExceptionFilter.name);
 
+  /** Khởi tạo bộ lọc ngoại lệ toàn cục với dịch vụ đa ngôn ngữ */
   constructor(private readonly i18n: CoreI18nService) {}
 
   /** Bắt và xử lý ngoại lệ phát sinh trong quá trình thực thi */
@@ -30,7 +33,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     const response = http.getResponse<FastifyReply>();
     const { statusCode, code, message, details } = this.normalize(exception);
 
-    if (statusCode >= 500) {
+    if (statusCode >= HTTP_STATUS_CODE.INTERNAL_SERVER_ERROR) {
       this.logger.error(
         `[${code}] ${exception instanceof Error ? exception.message : message}`,
         exception instanceof Error ? exception.stack : undefined,
@@ -62,17 +65,26 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       };
     }
 
+    if (exception instanceof ZodError) {
+      return {
+        statusCode: HTTP_STATUS_CODE.BAD_REQUEST,
+        code: HTTP_ERROR_CODE.VALIDATION_FAILED,
+        message: this.i18n.t(HTTP_ERROR_CODE.VALIDATION_FAILED),
+        details: formatZodIssues(exception.issues),
+      };
+    }
+
     if (exception instanceof HttpException) {
       const statusCode = exception.getStatus();
-      const code = HttpStatus[statusCode] ?? 'HTTP_ERROR';
+      const code = HttpStatus[statusCode] ?? HTTP_ERROR_CODE.HTTP_ERROR;
       const res = exception.getResponse();
       const body = typeof res === 'object' && res !== null ? (res as Record<string, unknown>) : {};
 
       if (Array.isArray(body['message'])) {
         return {
           statusCode,
-          code: 'VALIDATION_FAILED',
-          message: this.i18n.t('VALIDATION_FAILED'),
+          code: HTTP_ERROR_CODE.VALIDATION_FAILED,
+          message: this.i18n.t(HTTP_ERROR_CODE.VALIDATION_FAILED),
           details: body['message'],
         };
       }
@@ -88,9 +100,9 @@ export class GlobalExceptionFilter implements ExceptionFilter {
 
     // Lỗi không lường trước: không trả message gốc cho client để tránh lộ thông tin nội bộ.
     return {
-      statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
-      code: 'INTERNAL_SERVER_ERROR',
-      message: this.i18n.t('INTERNAL_SERVER_ERROR'),
+      statusCode: HTTP_STATUS_CODE.INTERNAL_SERVER_ERROR,
+      code: HTTP_ERROR_CODE.INTERNAL_SERVER_ERROR,
+      message: this.i18n.t(HTTP_ERROR_CODE.INTERNAL_SERVER_ERROR),
       details: [],
     };
   }

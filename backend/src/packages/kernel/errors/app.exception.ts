@@ -10,6 +10,7 @@ export abstract class AppException extends Error {
   public readonly details: unknown[];
   public readonly messageParams: MessageParams | undefined;
 
+  /** Khởi tạo ngoại lệ ứng dụng cơ sở với thông điệp, mã trạng thái HTTP, chi tiết lỗi và tham số dịch */
   constructor(
     message: string,
     statusCode = 500,
