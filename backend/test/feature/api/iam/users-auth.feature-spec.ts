@@ -1001,6 +1001,7 @@ describe('Feature E2E: IAM — Auth, Security Settings, Users (firstName/lastNam
     const verifyOtpRes = await context.injectJson<{
       mfaRequired: boolean;
       accessToken?: string;
+      sessionId?: number;
     }>({
       method: 'POST',
       url: '/api/v1/auth/mfa/verify',
@@ -1013,5 +1014,48 @@ describe('Feature E2E: IAM — Auth, Security Settings, Users (firstName/lastNam
     expect(verifyOtpRes.status).toBe(HTTP_STATUS_CODE.OK);
     expect(verifyOtpRes.body.data.mfaRequired).toBe(false);
     expect(verifyOtpRes.body.data.accessToken).toBeDefined();
+
+    // Verify authenticated user can send Email OTP without mfaChallengeToken (on @Public route)
+    const authSendOtpRes = await context.injectJson<{
+      sent: boolean;
+      maskedEmail: string;
+      devOtpCode?: string;
+    }>({
+      method: 'POST',
+      url: '/api/v1/auth/mfa/email-otp/send',
+      headers: authHeaders,
+      payload: {},
+    });
+    expect(authSendOtpRes.status).toBe(HTTP_STATUS_CODE.OK);
+    expect(authSendOtpRes.body.data.sent).toBe(true);
+
+    // Verify Email OTP toggle off via { enabled: false }
+    const disableEmailOtpRes = await context.injectJson<{
+      mfaEnabled: boolean;
+      totpEnabled: boolean;
+      emailOtpEnabled: boolean;
+    }>({
+      method: 'POST',
+      url: '/api/v1/auth/mfa/email-otp/enable',
+      headers: authHeaders,
+      payload: { enabled: false },
+    });
+    expect(disableEmailOtpRes.status).toBe(HTTP_STATUS_CODE.OK);
+    expect(disableEmailOtpRes.body.data.emailOtpEnabled).toBe(false);
+    expect(disableEmailOtpRes.body.data.totpEnabled).toBe(true);
+
+    // Verify Fastify accepts Content-Type: application/json with empty body on DELETE /auth/sessions/:id
+    if (verifyOtpRes.body.data.sessionId) {
+      const rawRevokeRes = await context.app.inject({
+        method: 'DELETE',
+        url: `/api/v1/auth/sessions/${verifyOtpRes.body.data.sessionId}`,
+        headers: {
+          ...authHeaders,
+          'content-type': 'application/json',
+        },
+        payload: '',
+      });
+      expect(rawRevokeRes.statusCode).toBe(HTTP_STATUS_CODE.OK);
+    }
   });
 });

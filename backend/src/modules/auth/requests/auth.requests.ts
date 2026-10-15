@@ -62,6 +62,7 @@ export const enableTotpMfaSchema = z.object({
 export type EnableTotpMfaRequest = z.infer<typeof enableTotpMfaSchema>;
 
 export const enableEmailOtpMfaSchema = z.object({
+  enabled: z.boolean().optional(),
   code: z
     .string()
     .trim()

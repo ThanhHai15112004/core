@@ -1,0 +1,125 @@
+import { Injectable } from '@nestjs/common';
+import { buildXlsxBuffer } from '@packages/kernel/index.js';
+import { UserRepository } from '../repositories/user.repository.js';
+import { UsersService } from '../services/users.service.js';
+import type { ListUsersQuery } from '../requests/users.requests.js';
+import type { ExportUsersCsvResponse } from '../responses/users.response.js';
+import {
+  DEFAULT_USER_EXPORT_REPORT_TITLE,
+  USER_EXPORT_CENTER_COLUMNS,
+  USER_EXPORT_COLUMN_WIDTHS,
+  USER_EXPORT_HEADERS,
+  USER_EXPORT_TEXT_COLUMNS,
+  USER_IMPORT_TEMPLATE_CENTER_COLUMNS,
+  USER_IMPORT_TEMPLATE_COLUMN_WIDTHS,
+  USER_IMPORT_TEMPLATE_HEADERS,
+  USER_IMPORT_TEMPLATE_SAMPLE_ROWS,
+  USER_IMPORT_TEMPLATE_TEXT_COLUMNS,
+  escapeCsvCell,
+  formatVietnameseDateTime,
+  mapUserToExportRow,
+} from './user-export.formatter.js';
+
+const MAX_EXPORT_ROWS = 5_000;
+
+@Injectable()
+export class UserExportService {
+  constructor(
+    private readonly usersService: UsersService,
+    private readonly userRepository: UserRepository,
+  ) {}
+
+  /**
+   * Xuất danh sách người dùng ra định dạng Excel (.xlsx) hoặc CSV (.csv) theo bộ lọc hiện hành (Mục 3.1.8).
+   * - Định dạng báo cáo chuẩn như `danh_sach_nhan_vien.xlsx`:
+   *   + Dòng 1: Tiêu đề báo cáo lớn (gộp ô ngang, chữ xanh đậm #1E4488 cỡ 16) + Logo PNG tùy chọn (nếu có truyền `logoBase64`, nếu không thì để trống).
+   *   + Dòng 2: `Ngày xuất dữ liệu: dd/MM/yyyy HH:mm:ss` (chữ nghiêng xám).
+   *   + Dòng 3: Header bảng màu xanh đậm #1E4488, chữ trắng in đậm, cố định khi cuộn.
+   *   + Dòng 4+: Dữ liệu nhân sự; các trường không có thông tin sẽ để trống `""`.
+   */
+  public async exportUsersCsv(query: ListUsersQuery): Promise<ExportUsersCsvResponse> {
+    const format: 'csv' | 'xlsx' = query.format === 'xlsx' ? 'xlsx' : 'csv';
+    const { items } = await this.userRepository.searchPaginated({
+      ...query,
+      page: 1,
+      limit: Math.min(query.limit ?? MAX_EXPORT_ROWS, MAX_EXPORT_ROWS),
+    });
+
+    const hydrated = await this.usersService.hydrateUsersList(items);
+
+    const reportTitle = query.title?.trim() || DEFAULT_USER_EXPORT_REPORT_TITLE;
+    const exportedAtSubtitle = `Ngày xuất dữ liệu: ${formatVietnameseDateTime(new Date())}`;
+
+    const lines: string[] = [USER_EXPORT_HEADERS.join(',')];
+    const matrixRows: Array<Array<string | number>> = [];
+
+    for (let i = 0; i < hydrated.length; i++) {
+      const user = hydrated[i]!;
+      const rowValues = mapUserToExportRow(user, i);
+      matrixRows.push(rowValues);
+      lines.push(rowValues.map((v) => escapeCsvCell(v)).join(','));
+    }
+
+    const csvContent = `\uFEFF${lines.join('\r\n')}\r\n`;
+    const xlsxBuffer = buildXlsxBuffer(USER_EXPORT_HEADERS, matrixRows, {
+      sheetName: 'Sheet1',
+      title: reportTitle,
+      subtitle: exportedAtSubtitle,
+      logoPng: query.logoBase64 ?? null,
+      columnWidths: USER_EXPORT_COLUMN_WIDTHS,
+      centerColumnIndices: USER_EXPORT_CENTER_COLUMNS,
+      textColumnIndices: USER_EXPORT_TEXT_COLUMNS,
+      freezeHeader: true,
+    });
+    const xlsxBase64 = xlsxBuffer.toString('base64');
+    const datePart = new Date().toISOString().slice(0, 10);
+
+    return {
+      fileName: `danh_sach_nhan_vien_${datePart}.${format}`,
+      contentType:
+        format === 'xlsx'
+          ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+          : 'text/csv; charset=utf-8',
+      format,
+      totalExported: hydrated.length,
+      csvContent,
+      xlsxBase64,
+    };
+  }
+
+  /**
+   * Xuất file mẫu (Template) Excel (.xlsx) & CSV phục vụ nhập người dùng hàng loạt (Mục 3.1.7).
+   * - Định dạng bảng Header nền xanh đậm #1E4488 chữ trắng in đậm, cố định dòng tiêu đề,
+   *   định dạng Text '@' cho SĐT / Mã nhân viên, kèm dữ liệu mẫu.
+   */
+  public exportImportTemplate(format: 'csv' | 'xlsx' = 'xlsx'): ExportUsersCsvResponse {
+    const lines: string[] = [
+      USER_IMPORT_TEMPLATE_HEADERS.join(','),
+      ...USER_IMPORT_TEMPLATE_SAMPLE_ROWS.map((row) => row.map((v) => escapeCsvCell(v)).join(',')),
+    ];
+    const csvContent = `\uFEFF${lines.join('\r\n')}\r\n`;
+    const xlsxBase64 = buildXlsxBuffer(
+      USER_IMPORT_TEMPLATE_HEADERS,
+      USER_IMPORT_TEMPLATE_SAMPLE_ROWS,
+      {
+        sheetName: 'Sheet1',
+        columnWidths: USER_IMPORT_TEMPLATE_COLUMN_WIDTHS,
+        centerColumnIndices: USER_IMPORT_TEMPLATE_CENTER_COLUMNS,
+        textColumnIndices: USER_IMPORT_TEMPLATE_TEXT_COLUMNS,
+        freezeHeader: true,
+      },
+    ).toString('base64');
+
+    return {
+      fileName: `mau_import_nhan_vien.${format}`,
+      contentType:
+        format === 'xlsx'
+          ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+          : 'text/csv; charset=utf-8',
+      format,
+      totalExported: USER_IMPORT_TEMPLATE_SAMPLE_ROWS.length,
+      csvContent,
+      xlsxBase64,
+    };
+  }
+}

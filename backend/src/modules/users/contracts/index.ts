@@ -9,16 +9,40 @@ export type UserStatusCode = (typeof USER_STATUS)[keyof typeof USER_STATUS];
 export type UserStatusName = keyof typeof USER_STATUS;
 
 export function parseUserStatus(val: unknown): UserStatusCode {
-  if (typeof val === 'number' && (val === 1 || val === 2 || val === 3 || val === 4)) {
-    return val;
+  if (typeof val === 'number') {
+    if (val === 0) return USER_STATUS.INACTIVE;
+    if (val === 1 || val === 2 || val === 3 || val === 4) return val;
   }
   if (typeof val === 'string') {
-    const num = Number(val);
+    const trimmed = val.trim();
+    if (trimmed === '0') return USER_STATUS.INACTIVE;
+    const num = Number(trimmed);
     if (num === 1 || num === 2 || num === 3 || num === 4) return num;
-    const upper = val.trim().toUpperCase();
-    if (upper === 'INACTIVE') return USER_STATUS.INACTIVE;
-    if (upper === 'LOCKED') return USER_STATUS.LOCKED;
-    if (upper === 'ARCHIVED') return USER_STATUS.ARCHIVED;
+
+    const upper = trimmed.toUpperCase();
+    if (
+      upper === 'INACTIVE' ||
+      upper.includes('NGHỈ VIỆC') ||
+      upper.includes('NGHI VIEC') ||
+      upper.includes('NGỪNG') ||
+      upper.includes('VÔ HIỆU') ||
+      upper === 'TẮT' ||
+      upper === 'TAT' ||
+      upper === 'OFF'
+    ) {
+      return USER_STATUS.INACTIVE;
+    }
+    if (
+      upper === 'LOCKED' ||
+      upper.includes('KHÓA') ||
+      upper.includes('KHOA') ||
+      upper.includes('TẠM HOÃN')
+    ) {
+      return USER_STATUS.LOCKED;
+    }
+    if (upper === 'ARCHIVED' || upper.includes('LƯU TRỮ') || upper.includes('LUU TRU')) {
+      return USER_STATUS.ARCHIVED;
+    }
   }
   return USER_STATUS.ACTIVE;
 }

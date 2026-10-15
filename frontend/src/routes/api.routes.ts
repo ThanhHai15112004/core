@@ -95,6 +95,7 @@ export const API_ROUTES = {
     LIST: (qs = '') => `/users${qs ? `?${qs}` : ''}`,
     CREATE: '/users',
     DETAIL: (id: string | number) => `/users/${id}`,
+    UPDATE: (id: string | number) => `/users/${id}`,
     STATUS_HISTORY: (id: string | number) => `/users/${id}/status-history`,
     LOCK: (id: string | number) => `/users/${id}/lock`,
     UNLOCK: (id: string | number) => `/users/${id}/unlock`,

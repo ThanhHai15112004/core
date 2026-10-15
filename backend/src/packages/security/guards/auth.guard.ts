@@ -29,12 +29,25 @@ export class AuthGuard implements CanActivate {
       context.getClass(),
     ]);
 
+    const request = context.switchToHttp().getRequest<FastifyRequest & { user?: UserIdentity }>();
+    const authHeader = request.headers['authorization'];
+
     if (isPublic) {
+      if (authHeader && typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) {
+        const token = authHeader.slice(7).trim();
+        if (token.length > 0) {
+          const payload = await this.tokenService.verify(token).catch(() => null);
+          if (payload) {
+            const optionalUser = await this.tokenService.validateUser(payload).catch(() => null);
+            if (optionalUser) {
+              request.user = optionalUser;
+            }
+          }
+        }
+      }
       return true;
     }
 
-    const request = context.switchToHttp().getRequest<FastifyRequest & { user?: UserIdentity }>();
-    const authHeader = request.headers['authorization'];
     if (!authHeader || typeof authHeader !== 'string') {
       throw new UnauthorizedException('Missing Authorization header');
     }

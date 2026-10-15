@@ -128,15 +128,19 @@ export class UsersService implements IUsersPublicService {
 
   /** Tạo mới người dùng kèm gán vai trò và đơn vị/chi nhánh (Mục 3.1.1) */
   public async create(dto: CreateUserRequest, actorId?: number): Promise<UserResponse> {
-    const normalizedUsername = dto.username.trim().toLowerCase();
     const normalizedEmail = dto.email.trim().toLowerCase();
+    const rawUsername =
+      dto.username && dto.username.trim().length >= 3
+        ? dto.username.trim().toLowerCase()
+        : (normalizedEmail.split('@')[0] ?? 'user').replace(/[^a-z0-9._-]/g, '') || 'user';
+    const normalizedUsername = rawUsername.length >= 3 ? rawUsername : `${rawUsername}_usr`;
 
     const [existingByUsername, existingByEmail] = await Promise.all([
       this.userRepository.findByUsername(normalizedUsername, true),
       this.userRepository.findByEmail(normalizedEmail, true),
     ]);
 
-    if (existingByUsername) {
+    if (existingByUsername && dto.username) {
       throw new ConflictAppException(
         'users.duplicateUsername',
         [{ username: normalizedUsername }],
@@ -144,6 +148,10 @@ export class UsersService implements IUsersPublicService {
         HTTP_ERROR_CODE.DUPLICATE_RESOURCE,
       );
     }
+
+    const finalUsername = existingByUsername
+      ? `${normalizedUsername}_${Date.now().toString(36).slice(-4)}`
+      : normalizedUsername;
 
     if (existingByEmail) {
       throw new ConflictAppException(
@@ -178,7 +186,7 @@ export class UsersService implements IUsersPublicService {
 
     const work = async (): Promise<UserEntity> => {
       const savedUser = await this.userRepository.saveEntity({
-        username: normalizedUsername,
+        username: finalUsername,
         email: normalizedEmail,
         firstName: nameParts.firstName,
         lastName: nameParts.lastName,
@@ -221,7 +229,7 @@ export class UsersService implements IUsersPublicService {
 
   /** Cập nhật thông tin hồ sơ người dùng (Mục 3.1.2) */
   public async update(id: number, dto: UpdateUserRequest): Promise<UserResponse> {
-    const user = await this.userRepository.findByIdWithArchived(id, false);
+    const user = await this.userRepository.findByIdWithArchived(id, true);
     if (!user) {
       throw new NotFoundAppException('users.notFound', { id });
     }
@@ -274,12 +282,12 @@ export class UsersService implements IUsersPublicService {
     }
 
     await this.invalidateIdentityCache(id);
-    return this.getById(id);
+    return this.getById(id, true);
   }
 
   /** Khóa tài khoản người dùng kèm lý do và thời hạn khóa tùy chọn (Mục 3.1.3 & 3.1.10) */
   public async lockUser(id: number, dto: LockUserRequest, actorId?: number): Promise<UserResponse> {
-    const user = await this.userRepository.findByIdWithArchived(id, false);
+    const user = await this.userRepository.findByIdWithArchived(id, true);
     if (!user) {
       throw new NotFoundAppException('users.notFound', { id });
     }
@@ -296,16 +304,18 @@ export class UsersService implements IUsersPublicService {
     user.status = USER_STATUS.LOCKED;
     user.lockReason = dto.reason.trim();
     user.lockedUntil = lockedUntilDate;
+    user.archivedAt = null;
+    user.deletedAt = null;
 
     await this.userRepository.saveEntity(user);
     await this.recordStatusHistory(id, prevStatus, USER_STATUS.LOCKED, user.lockReason, actorId);
     await this.invalidateIdentityCache(id);
-    return this.getById(id);
+    return this.getById(id, true);
   }
 
   /** Mở khóa tài khoản người dùng và đặt lại bộ đếm đăng nhập sai (Mục 3.1.3 & 3.1.10) */
   public async unlockUser(id: number, actorId?: number): Promise<UserResponse> {
-    const user = await this.userRepository.findByIdWithArchived(id, false);
+    const user = await this.userRepository.findByIdWithArchived(id, true);
     if (!user) {
       throw new NotFoundAppException('users.notFound', { id });
     }
@@ -315,11 +325,13 @@ export class UsersService implements IUsersPublicService {
     user.lockedUntil = null;
     user.lockReason = null;
     user.failedLoginAttempts = 0;
+    user.archivedAt = null;
+    user.deletedAt = null;
 
     await this.userRepository.saveEntity(user);
     await this.recordStatusHistory(id, prevStatus, USER_STATUS.ACTIVE, 'Account unlocked', actorId);
     await this.invalidateIdentityCache(id);
-    return this.getById(id);
+    return this.getById(id, true);
   }
 
   /** Vô hiệu hóa tài khoản người dùng — chuyển trạng thái sang INACTIVE (2) (Mục 3.1.4 & 3.1.10) */
@@ -328,13 +340,15 @@ export class UsersService implements IUsersPublicService {
     reason?: string | null,
     actorId?: number,
   ): Promise<UserResponse> {
-    const user = await this.userRepository.findByIdWithArchived(id, false);
+    const user = await this.userRepository.findByIdWithArchived(id, true);
     if (!user) {
       throw new NotFoundAppException('users.notFound', { id });
     }
 
     const prevStatus = parseUserStatus(user.status);
     user.status = USER_STATUS.INACTIVE;
+    user.archivedAt = null;
+    user.deletedAt = null;
     if (reason !== undefined) {
       user.lockReason = reason ? reason.trim() : null;
     }
@@ -348,12 +362,12 @@ export class UsersService implements IUsersPublicService {
       actorId,
     );
     await this.invalidateIdentityCache(id);
-    return this.getById(id);
+    return this.getById(id, true);
   }
 
   /** Kích hoạt lại tài khoản người dùng — chuyển trạng thái sang ACTIVE (1) (Mục 3.1.10) */
   public async activateUser(id: number, actorId?: number): Promise<UserResponse> {
-    const user = await this.userRepository.findByIdWithArchived(id, false);
+    const user = await this.userRepository.findByIdWithArchived(id, true);
     if (!user) {
       throw new NotFoundAppException('users.notFound', { id });
     }
@@ -363,6 +377,8 @@ export class UsersService implements IUsersPublicService {
     user.lockedUntil = null;
     user.lockReason = null;
     user.failedLoginAttempts = 0;
+    user.archivedAt = null;
+    user.deletedAt = null;
 
     await this.userRepository.saveEntity(user);
     await this.recordStatusHistory(
@@ -373,7 +389,7 @@ export class UsersService implements IUsersPublicService {
       actorId,
     );
     await this.invalidateIdentityCache(id);
-    return this.getById(id);
+    return this.getById(id, true);
   }
 
   /** Chuyển đổi trực tiếp trạng thái Active (1) / Inactive (2) / Locked (3) / Archived (4) (Mục 3.1.10) */

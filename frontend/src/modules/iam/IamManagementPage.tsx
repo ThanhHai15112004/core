@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { fetchApi } from '../../core/services/api';
+import { fetchApi, fetchApiWithMeta } from '../../core/services/api';
 import { API_ROUTES } from '../../routes/index';
 import {
   Shield,
@@ -100,11 +100,46 @@ const PRIVILEGED_PRESET_ACCOUNTS = [
   { label: 'Engineering Manager (#10)', email: 'manager.eng@gmail.com' },
 ];
 
+const IAM_ACCESS_TOKEN_KEY = 'core_iam_access_token';
+const IAM_REFRESH_TOKEN_KEY = 'core_iam_refresh_token';
+
 export const IamManagementPage: React.FC = () => {
   const [subTab, setSubTab] = useState<'users' | 'auth' | 'orgs-roles'>('users');
-  const [accessToken, setAccessToken] = useState<string>('');
-  const [_refreshToken, setRefreshToken] = useState<string>('');
+  const [accessToken, setAccessTokenState] = useState<string>(() => {
+    try {
+      return window.localStorage.getItem(IAM_ACCESS_TOKEN_KEY) ?? '';
+    } catch {
+      return '';
+    }
+  });
+  const [_refreshToken, setRefreshTokenState] = useState<string>(() => {
+    try {
+      return window.localStorage.getItem(IAM_REFRESH_TOKEN_KEY) ?? '';
+    } catch {
+      return '';
+    }
+  });
   const [statusBanner, setStatusBanner] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
+
+  const setAccessToken = useCallback((token: string) => {
+    setAccessTokenState(token);
+    try {
+      if (token) window.localStorage.setItem(IAM_ACCESS_TOKEN_KEY, token);
+      else window.localStorage.removeItem(IAM_ACCESS_TOKEN_KEY);
+    } catch {
+      // ignore storage errors
+    }
+  }, []);
+
+  const setRefreshToken = useCallback((token: string) => {
+    setRefreshTokenState(token);
+    try {
+      if (token) window.localStorage.setItem(IAM_REFRESH_TOKEN_KEY, token);
+      else window.localStorage.removeItem(IAM_REFRESH_TOKEN_KEY);
+    } catch {
+      // ignore storage errors
+    }
+  }, []);
 
   // Auth & MFA state
   const [identifier, setIdentifier] = useState('superadmin@gmail.com');
@@ -120,14 +155,19 @@ export const IamManagementPage: React.FC = () => {
     mfaEnabled: boolean;
     totpEnabled: boolean;
     emailOtpEnabled: boolean;
-    remainingRecoveryCodes: number;
+    remainingRecoveryCodesCount?: number;
+    remainingRecoveryCodes?: number;
   } | null>(null);
   const [sessions, setSessions] = useState<SessionItem[]>([]);
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
 
-  // Users, Roles, Organizations state
+  // Users, Roles, Organizations & Pagination state
   const [users, setUsers] = useState<UserItem[]>([]);
+  const [page, setPage] = useState<number>(1);
+  const [limit, setLimit] = useState<number>(50);
+  const [totalUsers, setTotalUsers] = useState<number>(0);
+  const [totalPages, setTotalPages] = useState<number>(1);
   const [roles, setRoles] = useState<RoleOption[]>([]);
   const [orgs, setOrgs] = useState<OrgUnitOption[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -204,24 +244,36 @@ export const IamManagementPage: React.FC = () => {
       if (statusFilter) qs.set('status', statusFilter);
       if (roleFilter) qs.set('roleId', roleFilter);
       if (orgFilter) qs.set('organizationUnitId', orgFilter);
+      qs.set('page', String(page));
+      qs.set('limit', String(limit));
 
-      const [usersData, rolesData, orgsData] = await Promise.all([
-        fetchApi<UserItem[] | { items: UserItem[] }>(API_ROUTES.USERS.LIST(qs.toString()), { headers: authHeaders() }),
+      const [usersResult, rolesData, orgsData] = await Promise.all([
+        fetchApiWithMeta<UserItem[] | { items: UserItem[] }>(API_ROUTES.USERS.LIST(qs.toString()), {
+          headers: authHeaders(),
+        }),
         fetchApi<RoleOption[]>(API_ROUTES.ROLES.LIST, { headers: authHeaders() }),
         fetchApi<OrgUnitOption[]>(API_ROUTES.ORGANIZATIONS.LIST, { headers: authHeaders() }),
       ]);
+      const usersData = usersResult.data;
       const normalizedUsers = Array.isArray(usersData)
         ? usersData
         : Array.isArray(usersData?.items)
           ? usersData.items
           : [];
       setUsers(normalizedUsers);
+      setTotalUsers(usersResult.meta?.total ?? normalizedUsers.length);
+      setTotalPages(Math.max(1, usersResult.meta?.totalPages ?? 1));
       setRoles(Array.isArray(rolesData) ? rolesData : []);
       setOrgs(Array.isArray(orgsData) ? orgsData : []);
     } catch (err) {
+      if (err && typeof err === 'object' && 'status' in err && (err as { status: number }).status === 401) {
+        setAccessToken('');
+        setRefreshToken('');
+        return;
+      }
       notify('err', err instanceof Error ? err.message : 'Failed to load IAM directory data');
     }
-  }, [accessToken, authHeaders, orgFilter, roleFilter, searchQuery, statusFilter]);
+  }, [accessToken, authHeaders, limit, orgFilter, page, roleFilter, searchQuery, setAccessToken, setRefreshToken, statusFilter]);
 
   const loadAuthProfileData = useCallback(async () => {
     if (!accessToken) return;
@@ -231,16 +283,22 @@ export const IamManagementPage: React.FC = () => {
           mfaEnabled: boolean;
           totpEnabled: boolean;
           emailOtpEnabled: boolean;
-          remainingRecoveryCodes: number;
+          remainingRecoveryCodesCount?: number;
+          remainingRecoveryCodes?: number;
         }>(API_ROUTES.AUTH.MFA_STATUS, { headers: authHeaders() }),
         fetchApi<SessionItem[]>(API_ROUTES.AUTH.SESSIONS, { headers: authHeaders() }),
       ]);
       setMfaStatus(mfa);
       setSessions(Array.isArray(sess) ? sess : []);
     } catch (err) {
+      if (err && typeof err === 'object' && 'status' in err && (err as { status: number }).status === 401) {
+        setAccessToken('');
+        setRefreshToken('');
+        return;
+      }
       notify('err', err instanceof Error ? err.message : 'Failed to load session/MFA status');
     }
-  }, [accessToken, authHeaders]);
+  }, [accessToken, authHeaders, setAccessToken, setRefreshToken]);
 
   useEffect(() => {
     if (accessToken) {
@@ -250,51 +308,88 @@ export const IamManagementPage: React.FC = () => {
   }, [accessToken, loadDirectoryData, loadAuthProfileData]);
 
   // --- Auth Handlers ---
+  const performLoginRequest = useCallback(
+    async (loginId: string, loginPass: string, silent = false) => {
+      try {
+        const res = await fetchApi<{
+          mfaRequired: boolean;
+          mfaChallengeToken?: string;
+          availableMfaMethods?: string[];
+          devOtpCode?: string;
+          accessToken?: string;
+          refreshToken?: string;
+          tokens?: { accessToken: string; refreshToken: string };
+        }>(API_ROUTES.AUTH.LOGIN, {
+          method: 'POST',
+          body: JSON.stringify({ identifier: loginId, password: loginPass, deviceName: 'Core Web UI' }),
+        });
+
+        const resolvedAccess = res.accessToken ?? res.tokens?.accessToken;
+        const resolvedRefresh = res.refreshToken ?? res.tokens?.refreshToken ?? '';
+
+        if (res.mfaRequired && res.mfaChallengeToken) {
+          setMfaChallengeToken(res.mfaChallengeToken);
+          const methods = res.availableMfaMethods ?? ['TOTP', 'EMAIL_OTP', 'RECOVERY_CODE'];
+          setAvailableMfaMethods(methods);
+          if (methods.includes('TOTP')) setSelectedMfaMethod('TOTP');
+          else if (methods.includes('EMAIL_OTP')) setSelectedMfaMethod('EMAIL_OTP');
+          if (res.devOtpCode) {
+            setMfaCode(res.devOtpCode);
+          }
+          notify(
+            'ok',
+            `Yêu cầu xác thực 2 lớp (MFA).${res.devOtpCode ? ` Đã tự điền mã OTP Dev: ${res.devOtpCode} — hãy bấm "Xác nhận MFA".` : ' Vui lòng nhập mã TOTP hoặc nhấn "Gửi OTP tới Email".'}`,
+          );
+        } else if (resolvedAccess) {
+          setAccessToken(resolvedAccess);
+          setRefreshToken(resolvedRefresh);
+          setMfaChallengeToken(null);
+          if (!silent) {
+            notify('ok', `Đăng nhập thành công (${loginId})!`);
+          }
+        }
+      } catch (err) {
+        if (!silent) {
+          notify('err', err instanceof Error ? err.message : 'Login failed');
+        }
+      }
+    },
+    [setAccessToken, setRefreshToken],
+  );
+
+  // Tự động đăng nhập tài khoản quản trị mặc định khi mở trang lần đầu nếu chưa có token
+  useEffect(() => {
+    if (!accessToken && !mfaChallengeToken) {
+      void performLoginRequest('superadmin@gmail.com', '!P@ssw0rd#', true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    try {
-      const res = await fetchApi<{
-        mfaRequired: boolean;
-        mfaChallengeToken?: string;
-        availableMfaMethods?: string[];
-        accessToken?: string;
-        refreshToken?: string;
-        tokens?: { accessToken: string; refreshToken: string };
-      }>(API_ROUTES.AUTH.LOGIN, {
-        method: 'POST',
-        body: JSON.stringify({ identifier, password, deviceName: 'Core Web UI' }),
-      });
-
-      const resolvedAccess = res.accessToken ?? res.tokens?.accessToken;
-      const resolvedRefresh = res.refreshToken ?? res.tokens?.refreshToken ?? '';
-
-      if (res.mfaRequired && res.mfaChallengeToken) {
-        setMfaChallengeToken(res.mfaChallengeToken);
-        setAvailableMfaMethods(res.availableMfaMethods ?? ['TOTP', 'EMAIL_OTP', 'RECOVERY_CODE']);
-        notify('ok', 'Yêu cầu xác thực đa lớp (MFA). Vui lòng nhập mã TOTP hoặc gửi OTP qua Email.');
-      } else if (resolvedAccess) {
-        setAccessToken(resolvedAccess);
-        setRefreshToken(resolvedRefresh);
-        setMfaChallengeToken(null);
-        notify('ok', 'Đăng nhập thành công!');
-      }
-    } catch (err) {
-      notify('err', err instanceof Error ? err.message : 'Login failed');
-    }
+    await performLoginRequest(identifier, password, false);
   };
 
   const handleSendEmailOtp = async () => {
-    if (!mfaChallengeToken) return;
     try {
-      const res = await fetchApi<{ sent: boolean; maskedEmail: string }>(
+      const res = await fetchApi<{ sent: boolean; maskedEmail: string; devOtpCode?: string }>(
         API_ROUTES.AUTH.MFA_EMAIL_OTP_SEND,
         {
           method: 'POST',
-          body: JSON.stringify({ mfaChallengeToken }),
+          headers: authHeaders(),
+          body: JSON.stringify(mfaChallengeToken ? { mfaChallengeToken } : {}),
         },
       );
-      setSelectedMfaMethod('EMAIL_OTP');
-      notify('ok', `Đã gửi mã OTP 6 chữ số tới ${res.maskedEmail}`);
+      if (mfaChallengeToken) {
+        setSelectedMfaMethod('EMAIL_OTP');
+        if (res.devOtpCode) {
+          setMfaCode(res.devOtpCode);
+        }
+      }
+      notify(
+        'ok',
+        `Đã gửi mã OTP 6 chữ số tới ${res.maskedEmail}${res.devOtpCode ? ` (Mã OTP Dev: ${res.devOtpCode})` : ''}`,
+      );
     } catch (err) {
       notify('err', err instanceof Error ? err.message : 'Failed to send Email OTP');
     }
@@ -333,7 +428,7 @@ export const IamManagementPage: React.FC = () => {
 
   const handleSetupTotp = async () => {
     try {
-      const res = await fetchApi<{ secret: string; otpauthUrl: string }>(
+      const res = await fetchApi<{ secret: string; otpauthUri?: string; otpauthUrl?: string }>(
         API_ROUTES.AUTH.MFA_TOTP_SETUP,
         { method: 'POST', headers: authHeaders() },
       );
@@ -354,27 +449,75 @@ export const IamManagementPage: React.FC = () => {
           body: JSON.stringify({ code: totpSetupCode }),
         },
       );
-      setRecoveryCodes(res.recoveryCodes);
+      if (res.recoveryCodes?.length) {
+        setRecoveryCodes(res.recoveryCodes);
+      }
       setTotpSecret(null);
       setTotpSetupCode('');
       await loadAuthProfileData();
-      notify('ok', 'Đã bật TOTP thành công! Hãy lưu lại 8 mã khôi phục.');
+      notify('ok', 'Đã bật TOTP thành công! Hãy lưu lại bộ mã khôi phục.');
     } catch (err) {
       notify('err', err instanceof Error ? err.message : 'Failed to verify TOTP setup');
     }
   };
 
-  const handleToggleEmailOtp = async (enabled: boolean) => {
+  const handleDisableTotp = async () => {
     try {
-      await fetchApi(API_ROUTES.AUTH.MFA_EMAIL_OTP_TOGGLE, {
+      await fetchApi(API_ROUTES.AUTH.MFA_DISABLE, {
         method: 'POST',
         headers: authHeaders(),
-        body: JSON.stringify({ enabled }),
+        body: JSON.stringify({ method: 'TOTP' }),
       });
+      setTotpSecret(null);
+      await loadAuthProfileData();
+      notify('ok', 'Đã tắt xác thực TOTP.');
+    } catch (err) {
+      notify('err', err instanceof Error ? err.message : 'Failed to disable TOTP');
+    }
+  };
+
+  const handleToggleEmailOtp = async (enabled: boolean) => {
+    try {
+      if (enabled) {
+        const res = await fetchApi<{ recoveryCodes?: string[] }>(
+          API_ROUTES.AUTH.MFA_EMAIL_OTP_ENABLE,
+          {
+            method: 'POST',
+            headers: authHeaders(),
+            body: JSON.stringify({ enabled: true }),
+          },
+        );
+        if (res.recoveryCodes && res.recoveryCodes.length > 0) {
+          setRecoveryCodes(res.recoveryCodes);
+        }
+      } else {
+        await fetchApi(API_ROUTES.AUTH.MFA_DISABLE, {
+          method: 'POST',
+          headers: authHeaders(),
+          body: JSON.stringify({ method: 'EMAIL_OTP' }),
+        });
+      }
       await loadAuthProfileData();
       notify('ok', enabled ? 'Đã bật xác thực Email OTP!' : 'Đã tắt xác thực Email OTP.');
     } catch (err) {
       notify('err', err instanceof Error ? err.message : 'Failed to toggle Email OTP');
+    }
+  };
+
+  const handleRegenerateRecoveryCodes = async () => {
+    try {
+      const res = await fetchApi<{ recoveryCodes: string[] }>(
+        API_ROUTES.AUTH.MFA_RECOVERY_CODES,
+        {
+          method: 'POST',
+          headers: authHeaders(),
+        },
+      );
+      setRecoveryCodes(res.recoveryCodes ?? []);
+      await loadAuthProfileData();
+      notify('ok', 'Đã cấp mới 8 mã khôi phục dự phòng (Recovery Codes)!');
+    } catch (err) {
+      notify('err', err instanceof Error ? err.message : 'Failed to regenerate recovery codes');
     }
   };
 
@@ -405,7 +548,7 @@ export const IamManagementPage: React.FC = () => {
         headers: authHeaders(),
       });
       await loadAuthProfileData();
-      notify('ok', 'Đã thu hồi phiên đăng nhập.');
+      notify('ok', `Đã thu hồi phiên đăng nhập #${sessionId}.`);
     } catch (err) {
       notify('err', err instanceof Error ? err.message : 'Revoke session failed');
     }
@@ -530,6 +673,79 @@ export const IamManagementPage: React.FC = () => {
       notify('ok', `Đã chuyển trạng thái người dùng #${statusHistoryUser.id} sang mã ${statusChangeTarget} và ghi lịch sử.`);
     } catch (err) {
       notify('err', err instanceof Error ? err.message : 'Failed to change user status');
+    }
+  };
+
+  // --- Edit Profile, Roles & Organization Units for Existing User (3.1.2, 3.1.5, 3.1.6) ---
+  const [editingUser, setEditingUser] = useState<UserItem | null>(null);
+  const [editFirstName, setEditFirstName] = useState('');
+  const [editLastName, setEditLastName] = useState('');
+  const [editFullName, setEditFullName] = useState('');
+  const [editEmail, setEditEmail] = useState('');
+  const [editPhone, setEditPhone] = useState('');
+  const [editRoleIds, setEditRoleIds] = useState<number[]>([]);
+  const [editOrgIds, setEditOrgIds] = useState<number[]>([]);
+  const [editPrimaryOrgId, setEditPrimaryOrgId] = useState<number | null>(null);
+
+  const handleOpenEditUser = (u: UserItem) => {
+    setEditingUser(u);
+    setEditFirstName(u.firstName ?? '');
+    setEditLastName(u.lastName ?? '');
+    setEditFullName(u.fullName ?? '');
+    setEditEmail(u.email ?? '');
+    setEditPhone(u.phone ?? u.phoneNumber ?? '');
+    const currentRoleIds = u.roles
+      .map((r) => Number((r as { roleId?: number; id?: number }).roleId ?? r.id))
+      .filter((n) => Number.isFinite(n) && n > 0);
+    setEditRoleIds(currentRoleIds);
+    const orgList = u.organizationUnits ?? u.organizations ?? [];
+    const currentOrgIds = orgList.map((o) => Number(o.organizationUnitId));
+    setEditOrgIds(currentOrgIds);
+    const primary = orgList.find((o) => o.isPrimary)?.organizationUnitId ?? u.primaryOrganizationUnitId ?? currentOrgIds[0] ?? null;
+    setEditPrimaryOrgId(primary ? Number(primary) : null);
+  };
+
+  const handleSaveEditUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingUser) return;
+    try {
+      await fetchApi(API_ROUTES.USERS.UPDATE(editingUser.id), {
+        method: 'PATCH',
+        headers: authHeaders(),
+        body: JSON.stringify({
+          email: editEmail.trim(),
+          firstName: editFirstName.trim() || undefined,
+          lastName: editLastName.trim() || undefined,
+          fullName:
+            editFullName.trim() ||
+            `${editLastName.trim()} ${editFirstName.trim()}`.trim() ||
+            editingUser.fullName,
+          phone: editPhone.trim() || null,
+        }),
+      });
+
+      await fetchApi(API_ROUTES.USERS.ASSIGN_ROLES(editingUser.id), {
+        method: 'PUT',
+        headers: authHeaders(),
+        body: JSON.stringify({ roleIds: editRoleIds }),
+      });
+
+      await fetchApi(API_ROUTES.USERS.ASSIGN_ORGANIZATIONS(editingUser.id), {
+        method: 'PUT',
+        headers: authHeaders(),
+        body: JSON.stringify({
+          organizationUnits: editOrgIds.map((orgId) => ({
+            organizationUnitId: orgId,
+            isPrimary: orgId === (editPrimaryOrgId ?? editOrgIds[0]),
+          })),
+        }),
+      });
+
+      setEditingUser(null);
+      await loadDirectoryData();
+      notify('ok', `Đã cập nhật hồ sơ, vai trò và đơn vị cho người dùng #${editingUser.id}!`);
+    } catch (err) {
+      notify('err', err instanceof Error ? err.message : 'Failed to update user profile/roles/organizations');
     }
   };
 
@@ -1112,11 +1328,180 @@ export const IamManagementPage: React.FC = () => {
             </div>
           )}
 
+          {/* Edit User Profile, Roles & Organization Units Panel (3.1.2, 3.1.5, 3.1.6) */}
+          {editingUser && (
+            <form
+              onSubmit={(e) => void handleSaveEditUser(e)}
+              style={{ ...cardStyle, border: '1px solid rgba(16, 185, 129, 0.4)' }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                <h3 style={{ fontSize: '15px', fontWeight: 700, margin: 0 }}>
+                  ✏️ Cập nhật Hồ sơ, Vai trò & Đơn vị — #{editingUser.id} {editingUser.fullName}
+                </h3>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  style={{ padding: '4px 10px', fontSize: '12px' }}
+                  onClick={() => setEditingUser(null)}
+                >
+                  Đóng
+                </button>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px', marginBottom: '12px' }}>
+                <input
+                  style={inputStyle}
+                  placeholder="Họ và tên đệm (Last Name)"
+                  value={editLastName}
+                  onChange={(e) => setEditLastName(e.target.value)}
+                />
+                <input
+                  style={inputStyle}
+                  placeholder="Tên (First Name)"
+                  value={editFirstName}
+                  onChange={(e) => setEditFirstName(e.target.value)}
+                />
+                <input
+                  style={inputStyle}
+                  placeholder="Họ và tên đầy đủ"
+                  value={editFullName}
+                  onChange={(e) => setEditFullName(e.target.value)}
+                />
+                <input
+                  style={inputStyle}
+                  placeholder="Email"
+                  value={editEmail}
+                  onChange={(e) => setEditEmail(e.target.value)}
+                />
+                <input
+                  style={inputStyle}
+                  placeholder="Số điện thoại"
+                  value={editPhone}
+                  onChange={(e) => setEditPhone(e.target.value)}
+                />
+              </div>
+
+              <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '6px' }}>
+                Gán vai trò (Roles — Mục 3.1.5):
+              </div>
+              <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '12px' }}>
+                {roles.map((r) => {
+                  const checked = editRoleIds.includes(r.id);
+                  return (
+                    <label key={r.id} style={{ fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={(e) => {
+                          if (e.target.checked) setEditRoleIds([...editRoleIds, r.id]);
+                          else setEditRoleIds(editRoleIds.filter((id) => id !== r.id));
+                        }}
+                      />
+                      #{r.id} {r.name} ({r.code})
+                    </label>
+                  );
+                })}
+              </div>
+
+              <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '6px' }}>
+                Gán đơn vị / chi nhánh (Multi-Organization Units — Mục 3.1.6):
+              </div>
+              <div style={{ display: 'grid', gap: '6px', marginBottom: '14px' }}>
+                {orgs.map((o) => {
+                  const checked = editOrgIds.includes(o.id);
+                  return (
+                    <div key={o.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '12px' }}>
+                      <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              const next = [...editOrgIds, o.id];
+                              setEditOrgIds(next);
+                              if (!editPrimaryOrgId) setEditPrimaryOrgId(o.id);
+                            } else {
+                              setEditOrgIds(editOrgIds.filter((id) => id !== o.id));
+                            }
+                          }}
+                        />
+                        #{o.id} {o.name} ({o.code})
+                      </label>
+                      {checked && (
+                        <label style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: '#38bdf8' }}>
+                          <input
+                            type="radio"
+                            name="editPrimaryOrg"
+                            checked={(editPrimaryOrgId ?? editOrgIds[0]) === o.id}
+                            onChange={() => setEditPrimaryOrgId(o.id)}
+                          />
+                          Đơn vị chính
+                        </label>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              <button type="submit" className="btn-primary" style={{ padding: '8px 18px', fontSize: '13px' }}>
+                Lưu cập nhật Hồ sơ, Vai trò & Đơn vị
+              </button>
+            </form>
+          )}
+
           {/* Users Table */}
           <div style={{ ...cardStyle, overflowX: 'auto' }}>
-            <h3 style={{ fontSize: '16px', fontWeight: 700, marginBottom: '14px' }}>
-              Danh sách người dùng ({users.length})
-            </h3>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: '12px',
+                marginBottom: '14px',
+              }}
+            >
+              <h3 style={{ fontSize: '16px', fontWeight: 700, margin: 0 }}>
+                Danh sách người dùng (Hiển thị {users.length} / Tổng {totalUsers} người dùng)
+              </h3>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', fontSize: '13px' }}>
+                <span style={{ color: 'var(--text-muted)' }}>Số dòng/trang:</span>
+                <select
+                  style={{ ...inputStyle, width: '90px', padding: '5px 8px' }}
+                  value={limit}
+                  onChange={(e) => {
+                    setLimit(Number(e.target.value));
+                    setPage(1);
+                  }}
+                >
+                  <option value={20}>20</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                  <option value={200}>200</option>
+                </select>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  disabled={page <= 1}
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  style={{ padding: '5px 10px', fontSize: '12px', opacity: page <= 1 ? 0.5 : 1 }}
+                >
+                  ← Trang trước
+                </button>
+                <span>
+                  Trang <strong>{page}</strong> / {totalPages}
+                </span>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  disabled={page >= totalPages}
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  style={{ padding: '5px 10px', fontSize: '12px', opacity: page >= totalPages ? 0.5 : 1 }}
+                >
+                  Trang sau →
+                </button>
+              </div>
+            </div>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--border-color)', textAlign: 'left' }}>
@@ -1195,6 +1580,14 @@ export const IamManagementPage: React.FC = () => {
                         <td style={{ padding: '10px 8px' }}>{u.mfaEnabled ? '✅ Bật' : 'Tắt'}</td>
                       <td style={{ padding: '10px 8px' }}>
                         <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                          <button
+                            type="button"
+                            className="btn-secondary"
+                            style={{ padding: '4px 8px', fontSize: '12px', color: '#34d399' }}
+                            onClick={() => handleOpenEditUser(u)}
+                          >
+                            ✏️ Sửa hồ sơ
+                          </button>
                           {statusLabel === 'LOCKED' ? (
                             <button
                               type="button"
@@ -1493,7 +1886,10 @@ export const IamManagementPage: React.FC = () => {
               <div>• Trạng thái MFA tổng: <strong>{mfaStatus?.mfaEnabled ? 'ĐANG BẬT' : 'ĐANG TẮT'}</strong></div>
               <div>• TOTP (Google Authenticator): <strong>{mfaStatus?.totpEnabled ? 'Đã kích hoạt' : 'Chưa kích hoạt'}</strong></div>
               <div>• Email OTP (Mã 6 số qua Email): <strong>{mfaStatus?.emailOtpEnabled ? 'Đã kích hoạt' : 'Chưa kích hoạt'}</strong></div>
-              <div>• Số mã khôi phục còn lại: <strong>{mfaStatus?.remainingRecoveryCodes ?? 0}</strong></div>
+              <div>
+                • Số mã khôi phục còn lại:{' '}
+                <strong>{mfaStatus?.remainingRecoveryCodesCount ?? mfaStatus?.remainingRecoveryCodes ?? 0}</strong>
+              </div>
             </div>
 
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '14px' }}>
@@ -1505,6 +1901,16 @@ export const IamManagementPage: React.FC = () => {
               >
                 Thiết lập TOTP
               </button>
+              {mfaStatus?.totpEnabled && (
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => void handleDisableTotp()}
+                  style={{ padding: '7px 12px', fontSize: '13px' }}
+                >
+                  Tắt TOTP
+                </button>
+              )}
               <button
                 type="button"
                 className="btn-secondary"
@@ -1513,6 +1919,24 @@ export const IamManagementPage: React.FC = () => {
               >
                 {mfaStatus?.emailOtpEnabled ? 'Tắt Email OTP' : 'Bật Email OTP'}
               </button>
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => void handleSendEmailOtp()}
+                style={{ padding: '7px 12px', fontSize: '13px' }}
+              >
+                Gửi mã OTP Email
+              </button>
+              {mfaStatus?.mfaEnabled && (
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => void handleRegenerateRecoveryCodes()}
+                  style={{ padding: '7px 12px', fontSize: '13px' }}
+                >
+                  Cấp lại mã khôi phục
+                </button>
+              )}
             </div>
 
             {totpSecret && (

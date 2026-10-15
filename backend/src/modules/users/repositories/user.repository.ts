@@ -74,11 +74,11 @@ export class UserRepository extends BaseTypeOrmRepository<UserEntity> {
     filter: SearchUsersFilter = {},
   ): Promise<{ items: UserEntity[]; total: number }> {
     const page = Math.max(1, Math.trunc(filter.page ?? 1));
-    const limit = Math.max(1, Math.min(200, Math.trunc(filter.limit ?? 20)));
+    const limit = Math.max(1, Math.min(500, Math.trunc(filter.limit ?? 20)));
     const skip = (page - 1) * limit;
 
     const qb = this.repository.createQueryBuilder('u');
-    if (filter.includeArchived) {
+    if (filter.includeArchived || filter.status === 4) {
       qb.withDeleted();
     }
 

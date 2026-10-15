@@ -7,7 +7,7 @@ import {
   Public,
   ValidatedBody,
   ValidatedParams,
-  intIdParamSchema,
+  positiveIntParamSchema,
 } from '@packages/http/index.js';
 import { CurrentUser, type UserIdentity } from '@packages/security/index.js';
 import { AUTH_ROUTES } from '../routes/auth.routes.js';
@@ -189,7 +189,7 @@ export class AuthController {
   })
   public async revokeSession(
     @CurrentUser() user: UserIdentity,
-    @ValidatedParams(intIdParamSchema, 'sessionId') sessionId: number,
+    @ValidatedParams(positiveIntParamSchema, 'sessionId') sessionId: number,
   ): Promise<{ revoked: true; sessionId: number }> {
     return this.sessionService.revokeSessionById(user.id, sessionId, 'Revoked by user');
   }

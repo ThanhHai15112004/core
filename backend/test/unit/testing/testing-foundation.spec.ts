@@ -89,7 +89,7 @@ describe('Testing Foundation Unit Tests (Task 2.7)', () => {
     it('userIdentityFactory, tokenPayloadFactory và createPaginationQueryFixture sinh dữ liệu chuẩn', () => {
       const user = userIdentityFactory.build({ permissions: ['users.read'] });
       expect(user).toEqual({
-        id: 'user-test-1',
+        id: 1,
         email: 'user1@test.local',
         roles: ['user'],
         permissions: ['users.read'],
@@ -97,7 +97,7 @@ describe('Testing Foundation Unit Tests (Task 2.7)', () => {
 
       const payload = tokenPayloadFactory.build();
       expect(payload).toEqual({
-        sub: 'user-test-1',
+        sub: 1,
         roles: ['user'],
       });
 

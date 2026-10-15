@@ -24,6 +24,7 @@ export interface LoginResponse {
   readonly availableMfaMethods?: readonly MfaMethodType[];
   readonly emailOtpSent?: boolean;
   readonly maskedEmail?: string;
+  readonly devOtpCode?: string;
   readonly accessToken?: string;
   readonly refreshToken?: string;
   readonly sessionId?: number;
@@ -49,18 +50,20 @@ export interface MfaStatusResponse {
   readonly emailOtpEnabled: boolean;
   readonly preferredMethod: 'TOTP' | 'EMAIL_OTP' | 'RECOVERY_CODE';
   readonly remainingRecoveryCodesCount: number;
+  readonly remainingRecoveryCodes: number;
   readonly verifiedAt: string | null;
 }
 
 export interface MfaTotpSetupResponse {
   readonly secret: string;
   readonly otpauthUri: string;
+  readonly otpauthUrl: string;
   readonly accountName: string;
   readonly issuer: string;
 }
 
 export interface MfaEnableResultResponse {
-  readonly mfaEnabled: true;
+  readonly mfaEnabled: boolean;
   readonly totpEnabled: boolean;
   readonly emailOtpEnabled: boolean;
   readonly recoveryCodes: readonly string[];
@@ -102,6 +105,7 @@ export const loginResponseSchema = z.object({
   availableMfaMethods: z.array(z.enum(['TOTP', 'EMAIL_OTP', 'RECOVERY_CODE'])).optional(),
   emailOtpSent: z.boolean().optional(),
   maskedEmail: z.string().optional(),
+  devOtpCode: z.string().optional(),
   accessToken: z.string().optional(),
   refreshToken: z.string().optional(),
   sessionId: z.number().int().min(1).optional(),
@@ -125,20 +129,22 @@ export const mfaStatusResponseSchema = z.object({
   mfaEnabled: z.boolean(),
   totpEnabled: z.boolean(),
   emailOtpEnabled: z.boolean(),
-  preferredMethod: z.enum(['TOTP', 'EMAIL_OTP']),
+  preferredMethod: z.enum(['TOTP', 'EMAIL_OTP', 'RECOVERY_CODE']),
   remainingRecoveryCodesCount: z.number(),
+  remainingRecoveryCodes: z.number(),
   verifiedAt: z.string().nullable(),
 });
 
 export const mfaTotpSetupResponseSchema = z.object({
   secret: z.string(),
   otpauthUri: z.string(),
+  otpauthUrl: z.string(),
   accountName: z.string(),
   issuer: z.string(),
 });
 
 export const mfaEnableResultResponseSchema = z.object({
-  mfaEnabled: z.literal(true),
+  mfaEnabled: z.boolean(),
   totpEnabled: z.boolean(),
   emailOtpEnabled: z.boolean(),
   recoveryCodes: z.array(z.string()),

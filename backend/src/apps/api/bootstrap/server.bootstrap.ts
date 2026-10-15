@@ -12,11 +12,13 @@ import { setupApiDocs } from './api-docs.bootstrap.js';
 /** Khởi tạo và khởi chạy HTTP API server với NestJS và Fastify */
 export async function bootstrapApi(): Promise<NestFastifyApplication> {
   const logger = new Logger('ApiBootstrap');
-  const app = await NestFactory.create<NestFastifyApplication>(
-    ApiModule,
-    new FastifyAdapter({ logger: false }),
-    { bufferLogs: true },
-  );
+  // Parser JSON chấp nhận body rỗng được thay trong HttpModule.onModuleInit (sau khi Nest
+  // đăng ký parser mặc định). KHÔNG gọi trước NestFactory.create → FST_ERR_CTP_ALREADY_PRESENT.
+  const adapter = new FastifyAdapter({ logger: false });
+
+  const app = await NestFactory.create<NestFastifyApplication>(ApiModule, adapter, {
+    bufferLogs: true,
+  });
   app.useLogger(app.get(PinoNestLogger));
 
   const agent = app.get(RuntimeAgentService);

@@ -41,7 +41,8 @@ import type {
 import type { UserStatusHistoryRepository } from '@modules/users/repositories/user-status-history.repository.js';
 import { UsersMapper } from '@modules/users/mappers/users.mapper.js';
 import { UsersService } from '@modules/users/services/users.service.js';
-import { UserImportExportService } from '@modules/users/services/user-import-export.service.js';
+import { UserImportService } from '@modules/users/import/index.js';
+import { UserExportService } from '@modules/users/export/index.js';
 import {
   DB_ENCRYPTION_ALGO_CODE,
   MFA_METHOD,
@@ -611,12 +612,13 @@ function createIamInMemoryHarness() {
     organizationsService,
     userStatusHistoryRepo,
   );
-  const importExportService = new UserImportExportService(
+  const importService = new UserImportService(
     usersService,
     userRepo,
     rolesService,
     organizationsService,
   );
+  const exportService = new UserExportService(usersService, userRepo);
   const sessionService = new SessionService(sessionRepo, tokenService, passwordHasher, config);
   const passwordService = new PasswordService(
     resetRepo,
@@ -652,7 +654,8 @@ function createIamInMemoryHarness() {
     organizationsService,
     rolesService,
     usersService,
-    importExportService,
+    importService,
+    exportService,
     sessionService,
     passwordService,
     mfaService,
@@ -821,7 +824,7 @@ describe('Unit: Quản lý Người dùng (3.1) & Xác thực / Phiên / MFA (3)
       'tranvanb,tranvanb@gmail.com,Bình,"Trần Văn","Trùng lặp",0911111111,Abcd@454647#,1,staff,BRANCH_HCM',
     ].join('\n');
 
-    const importResult = await h.importExportService.bulkImport({
+    const importResult = await h.importService.bulkImport({
       csvContent: csvInput,
       skipDuplicates: true,
     });
@@ -857,16 +860,40 @@ describe('Unit: Quản lý Người dùng (3.1) & Xác thực / Phiên / MFA (3)
     expect(inactiveRes.data).toHaveLength(1);
     expect(inactiveRes.data[0]?.username).toBe('lethic');
 
-    // Xuất danh sách người dùng ra CSV (3.1.8)
-    const exported = await h.importExportService.exportUsersCsv({
+    // Xuất danh sách người dùng ra Excel (.xlsx) & CSV (3.1.8)
+    const exported = await h.exportService.exportUsersCsv({
       page: 1,
       limit: 100,
       sortBy: 'createdAt',
       sortOrder: 'DESC',
+      format: 'xlsx',
     });
     expect(exported.totalExported).toBe(2);
+    expect(exported.fileName).toMatch(/^danh_sach_nhan_vien_.*\.xlsx$/);
     expect(exported.csvContent).toContain('tranvanb@gmail.com');
     expect(exported.csvContent).toContain('lethic@gmail.com');
+    expect(exported.xlsxBase64.length).toBeGreaterThan(100);
+
+    // Xuất file mẫu Import (.xlsx) và kiểm tra import ngược từ file Excel có dòng tiêu đề + ngày xuất ở trên
+    const templateRes = h.exportService.exportImportTemplate('xlsx');
+    expect(templateRes.fileName).toBe('mau_import_nhan_vien.xlsx');
+    expect(templateRes.totalExported).toBe(3);
+
+    const importFromTemplate = await h.importService.bulkImport({
+      xlsxBase64: templateRes.xlsxBase64,
+      skipDuplicates: true,
+    });
+    expect(importFromTemplate.importedCount).toBe(3);
+    expect(importFromTemplate.failedCount).toBe(0);
+
+    // Import lại chính file báo cáo danh_sach_nhan_vien.xlsx (có dòng 1 Tiêu đề, dòng 2 Ngày xuất, dòng 3 Header)
+    const reimportReport = await h.importService.bulkImport({
+      xlsxBase64: exported.xlsxBase64,
+      skipDuplicates: true,
+    });
+    expect(reimportReport.totalRows).toBe(2);
+    expect(reimportReport.skippedCount).toBe(2);
+    expect(reimportReport.failedCount).toBe(0);
   });
 
   it('Mục 3: Đăng nhập, chống Brute-Force (khóa tự động), Phiên đăng nhập (ID số nguyên), Đổi/Quên mật khẩu & MFA (TOTP + Email OTP + Recovery Codes)', async () => {

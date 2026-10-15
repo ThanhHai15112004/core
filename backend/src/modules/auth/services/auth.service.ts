@@ -109,9 +109,11 @@ export class AuthService implements IAuthPublicService {
       });
 
       let emailOtpSent = false;
+      let devOtpCode: string | undefined;
       if (availableMethods.includes('EMAIL_OTP') && !availableMethods.includes('TOTP')) {
-        await this.mfaService.sendEmailOtp(credentials.id);
+        const otpRes = await this.mfaService.sendEmailOtp(credentials.id);
         emailOtpSent = true;
+        devOtpCode = otpRes.devOtpCode;
       }
 
       return {
@@ -120,6 +122,7 @@ export class AuthService implements IAuthPublicService {
         availableMfaMethods: availableMethods,
         emailOtpSent,
         maskedEmail: this.mfaService.maskEmail(credentials.email),
+        ...(devOtpCode ? { devOtpCode } : {}),
       };
     }
 

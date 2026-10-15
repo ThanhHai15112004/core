@@ -13,7 +13,8 @@ import {
 import { CurrentUser, type UserIdentity } from '@packages/security/index.js';
 import { USERS_ROUTES } from '../routes/users.routes.js';
 import { UsersService } from '../services/users.service.js';
-import { UserImportExportService } from '../services/user-import-export.service.js';
+import { UserImportService } from '../import/index.js';
+import { UserExportService } from '../export/index.js';
 import {
   type AssignUserOrganizationsRequest,
   type AssignUserRolesRequest,
@@ -48,7 +49,8 @@ import {
 export class UsersController {
   constructor(
     private readonly usersService: UsersService,
-    private readonly importExportService: UserImportExportService,
+    private readonly importService: UserImportService,
+    private readonly exportService: UserExportService,
   ) {}
 
   /** Tìm kiếm và lọc người dùng có phân trang (Mục 3.1.9) */
@@ -75,7 +77,7 @@ export class UsersController {
   public async exportCsv(
     @ValidatedQuery(listUsersQuerySchema) query: ListUsersQuery,
   ): Promise<ExportUsersCsvResponse> {
-    return this.importExportService.exportUsersCsv(query);
+    return this.exportService.exportUsersCsv(query);
   }
 
   /** Tải file mẫu (Template) Excel (.xlsx) hoặc CSV (.csv) để nhập người dùng hàng loạt (Mục 3.1.7) */
@@ -89,7 +91,7 @@ export class UsersController {
   public exportImportTemplate(
     @ValidatedQuery(listUsersQuerySchema) query: ListUsersQuery,
   ): ExportUsersCsvResponse {
-    return this.importExportService.exportImportTemplate(query.format === 'csv' ? 'csv' : 'xlsx');
+    return this.exportService.exportImportTemplate(query.format === 'csv' ? 'csv' : 'xlsx');
   }
 
   /** Nhập người dùng hàng loạt từ file Excel (.xlsx), CSV hoặc JSON (Mục 3.1.7) */
@@ -104,7 +106,7 @@ export class UsersController {
     @ValidatedBody(bulkImportUsersSchema) body: BulkImportUsersRequest,
     @CurrentUser() actor?: UserIdentity,
   ): Promise<BulkImportUsersResultResponse> {
-    return this.importExportService.bulkImport(body, actor?.id);
+    return this.importService.bulkImport(body, actor?.id);
   }
 
   /** Xem chi tiết thông tin một người dùng */

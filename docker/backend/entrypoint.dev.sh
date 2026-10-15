@@ -16,15 +16,15 @@ if [ ! -d "/app/backend/node_modules/@nestjs" ] || [ "$CURRENT_HASH" != "$SAVED_
 fi
 
 if [ "$RUNTIME" = "api" ]; then
-  echo "🚀 [Core Backend] API runtime (:3005) — build + watch"
-  # Chạy làm PID 1 để nhận trực tiếp SIGTERM/SIGINT
-  exec npm run dev:api
+  echo "🚀 [Core Backend] API runtime (:3005) — tsc watch (incremental) + dev-runner"
+  # Runner chạy làm PID 1 để nhận trực tiếp SIGTERM/SIGINT; build không xoá dist,
+  # sau mỗi build ghi dist/.build-stamp và tự khởi động lại API khi crash.
+  exec node scripts/dev-runner.mjs --name api --build --entry dist/apps/api/main.js
 fi
 
 # Worker/Scheduler dùng chung thư mục dist do container API build (bind mount),
-# chỉ tự khởi động lại khi dist thay đổi — tránh nhiều container cùng xoá/ghi dist.
+# chỉ khởi động lại khi API ghi dist/.build-stamp (1 lần/build) — không phản ứng với
+# từng file đang ghi dở; tự khởi động lại khi crash.
 ENTRY="dist/apps/$RUNTIME/main.js"
-echo "⏳ [Core Backend] $RUNTIME runtime: chờ $ENTRY ..."
-until [ -f "$ENTRY" ]; do sleep 2; done
-echo "🚀 [Core Backend] $RUNTIME runtime started"
-exec node --watch-path=dist "$ENTRY"
+echo "🚀 [Core Backend] $RUNTIME runtime — dev-runner (theo dõi dist/.build-stamp)"
+exec node scripts/dev-runner.mjs --name "$RUNTIME" --entry "$ENTRY"

@@ -49,6 +49,7 @@ export class MfaService {
         emailOtpEnabled: false,
         preferredMethod: 'TOTP',
         remainingRecoveryCodesCount: 0,
+        remainingRecoveryCodes: 0,
         verifiedAt: null,
       };
     }
@@ -63,6 +64,7 @@ export class MfaService {
       emailOtpEnabled: Boolean(config.emailOtpEnabled),
       preferredMethod: methodName,
       remainingRecoveryCodesCount: recoveryHashes.length,
+      remainingRecoveryCodes: recoveryHashes.length,
       verifiedAt: config.verifiedAt ? config.verifiedAt.toISOString() : null,
     };
   }
@@ -126,6 +128,7 @@ export class MfaService {
     return {
       secret,
       otpauthUri,
+      otpauthUrl: otpauthUri,
       accountName: user.email,
       issuer,
     };
@@ -164,11 +167,24 @@ export class MfaService {
     };
   }
 
-  /** Kích hoạt phương thức xác thực nhiều lớp qua Email OTP (6 chữ số) */
+  /** Kích hoạt (hoặc tắt nếu `enabled: false`) phương thức xác thực nhiều lớp qua Email OTP (6 chữ số) */
   public async enableEmailOtp(
     userId: number,
     dto: EnableEmailOtpMfaRequest = {},
   ): Promise<MfaEnableResultResponse> {
+    if (dto.enabled === false) {
+      const status = await this.disableMfa(userId, {
+        method: 'EMAIL_OTP',
+        ...(dto.code ? { code: dto.code } : {}),
+      });
+      return {
+        mfaEnabled: status.mfaEnabled,
+        totpEnabled: status.totpEnabled,
+        emailOtpEnabled: status.emailOtpEnabled,
+        recoveryCodes: [],
+      };
+    }
+
     let config = await this.mfaRepository.findByUserId(userId);
     if (!config) {
       config = await this.mfaRepository.saveEntity({
@@ -226,7 +242,7 @@ export class MfaService {
         userId,
         totpSecret: null,
         totpEnabled: false,
-        emailOtpEnabled: true,
+        emailOtpEnabled: false,
         preferredMethod: MFA_METHOD.EMAIL_OTP,
         recoveryCodesHashJson: '[]',
         emailOtpCodeHash: otpHash,

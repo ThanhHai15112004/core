@@ -15,7 +15,8 @@ import { UserOrganizationUnitRepository } from './repositories/user-organization
 import { UserStatusHistoryRepository } from './repositories/user-status-history.repository.js';
 import { UsersMapper } from './mappers/users.mapper.js';
 import { UsersService } from './services/users.service.js';
-import { UserImportExportService } from './services/user-import-export.service.js';
+import { UserImportService } from './import/index.js';
+import { UserExportService } from './export/index.js';
 import { UsersController } from './controllers/users.controller.js';
 
 @Module({
@@ -39,12 +40,13 @@ import { UsersController } from './controllers/users.controller.js';
     UserStatusHistoryRepository,
     UsersMapper,
     UsersService,
-    UserImportExportService,
+    UserImportService,
+    UserExportService,
     {
       provide: USERS_PUBLIC_SERVICE,
       useExisting: UsersService,
     },
   ],
-  exports: [UsersService, UserImportExportService, USERS_PUBLIC_SERVICE],
+  exports: [UsersService, UserImportService, UserExportService, USERS_PUBLIC_SERVICE],
 })
 export class UsersModule {}

@@ -32,7 +32,8 @@ export const createUserSchema = z
       .regex(
         /^[a-zA-Z0-9._-]+$/,
         'Username may only contain letters, digits, dot, underscore or hyphen',
-      ),
+      )
+      .optional(),
     email: z.string().trim().email().max(255),
     firstName: z.string().trim().min(1).max(100).optional(),
     lastName: z.string().trim().min(1).max(150).optional(),
@@ -106,12 +107,14 @@ export const listUsersQuerySchema = z.object({
   includeArchived: optionalQueryParam(booleanQueryParam()),
   mfaEnabled: optionalQueryParam(booleanQueryParam()),
   page: optionalQueryParam(intQueryParam({ min: 1 })).default(1),
-  limit: optionalQueryParam(intQueryParam({ min: 1, max: 200 })).default(20),
+  limit: optionalQueryParam(intQueryParam({ min: 1, max: 500 })).default(20),
   sortBy: optionalQueryParam(
     z.enum(['id', 'createdAt', 'firstName', 'lastName', 'fullName', 'email', 'username', 'status']),
   ).default('id'),
   sortOrder: optionalQueryParam(z.enum(['ASC', 'DESC'])).default('ASC'),
   format: optionalQueryParam(z.enum(['csv', 'xlsx'])),
+  title: optionalQueryParam(z.string().trim().max(160)),
+  logoBase64: optionalQueryParam(z.string().max(500_000)),
 });
 
 export type ListUsersQuery = z.infer<typeof listUsersQuerySchema>;
@@ -125,6 +128,7 @@ export const bulkImportUserRowSchema = z.object({
   phone: z.string().trim().max(32).nullable().optional(),
   password: z.string().min(8).max(128).optional(),
   status: userStatusSchema.optional().default(USER_STATUS.ACTIVE),
+  positionTitle: z.string().trim().max(128).nullable().optional(),
   roleCodes: z.array(z.string().trim().min(1)).optional().default([]),
   organizationCodes: z.array(z.string().trim().min(1)).optional().default([]),
 });
