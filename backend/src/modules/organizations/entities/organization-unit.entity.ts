@@ -1,6 +1,11 @@
 import { Column, Entity, Index } from 'typeorm';
 import { TypeOrmBaseEntity } from '@packages/database/index.js';
-import type { OrganizationUnitStatus, OrganizationUnitType } from '../contracts/index.js';
+import {
+  ORG_UNIT_STATUS,
+  ORG_UNIT_TYPE,
+  type OrganizationUnitStatusCode,
+  type OrganizationUnitTypeCode,
+} from '../contracts/index.js';
 
 @Entity('organization_units')
 export class OrganizationUnitEntity extends TypeOrmBaseEntity {
@@ -11,17 +16,19 @@ export class OrganizationUnitEntity extends TypeOrmBaseEntity {
   @Column({ type: 'varchar', length: 255 })
   public name!: string;
 
+  /** Loại đơn vị: 1 = HEADQUARTERS, 2 = BRANCH, 3 = DEPARTMENT, 4 = TEAM */
   @Index()
-  @Column({ type: 'varchar', length: 32, default: 'BRANCH' })
-  public type!: OrganizationUnitType;
+  @Column({ type: 'int', default: ORG_UNIT_TYPE.BRANCH })
+  public type!: OrganizationUnitTypeCode;
 
   @Index()
-  @Column({ name: 'parent_id', type: 'uuid', nullable: true })
-  public parentId?: string | null;
+  @Column({ name: 'parent_id', type: 'int', nullable: true })
+  public parentId?: number | null;
 
+  /** Trạng thái: 1 = ACTIVE, 2 = INACTIVE, 3 = ARCHIVED */
   @Index()
-  @Column({ type: 'varchar', length: 32, default: 'ACTIVE' })
-  public status!: OrganizationUnitStatus;
+  @Column({ type: 'int', default: ORG_UNIT_STATUS.ACTIVE })
+  public status!: OrganizationUnitStatusCode;
 
   @Column({ type: 'text', nullable: true })
   public description?: string | null;

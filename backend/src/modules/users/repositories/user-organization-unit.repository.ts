@@ -3,11 +3,13 @@ import { DataSource, In } from 'typeorm';
 import { BaseTypeOrmRepository, TransactionManager } from '@packages/database/index.js';
 import { UserOrganizationUnitEntity } from '../entities/user-organization-unit.entity.js';
 
-export interface UserOrganizationInputItem {
-  readonly organizationUnitId: string;
+export interface UserOrganizationInput {
+  readonly organizationUnitId: number;
   readonly isPrimary?: boolean | undefined;
   readonly positionTitle?: string | null | undefined;
 }
+
+export type UserOrganizationInputItem = UserOrganizationInput;
 
 @Injectable()
 export class UserOrganizationUnitRepository extends BaseTypeOrmRepository<UserOrganizationUnitEntity> {
@@ -18,53 +20,56 @@ export class UserOrganizationUnitRepository extends BaseTypeOrmRepository<UserOr
     super(UserOrganizationUnitEntity, dataSource, transactionManager);
   }
 
-  /** Lấy danh sách liên kết đơn vị/chi nhánh theo mảng userIds */
-  public async findByUserIds(userIds: readonly string[]): Promise<UserOrganizationUnitEntity[]> {
+  /** Tìm danh sách đơn vị đã gán cho mảng userIds */
+  public async findByUserIds(userIds: readonly number[]): Promise<UserOrganizationUnitEntity[]> {
     if (userIds.length === 0) return [];
-    const uniqueIds = [...new Set(userIds)];
-    return this.repository.find({
-      where: { userId: In(uniqueIds) },
-    });
+    return this.executeReadOnly(async (repo) =>
+      repo.find({
+        where: { userId: In([...userIds]) },
+        order: { isPrimary: 'DESC', id: 'ASC' },
+      }),
+    );
   }
 
-  /** Thay thế danh sách đơn vị/chi nhánh của một người dùng */
+  /** Tìm danh sách userIds thuộc một hoặc nhiều organizationUnitIds */
+  public async findUserIdsByOrganizationUnitIds(unitIds: readonly number[]): Promise<number[]> {
+    if (unitIds.length === 0) return [];
+    const rows = await this.executeReadOnly(async (repo) =>
+      repo.find({
+        where: { organizationUnitId: In([...unitIds]) },
+        select: { userId: true },
+      }),
+    );
+    return [...new Set(rows.map((r) => Number(r.userId)))];
+  }
+
+  /** Thay thế toàn bộ danh sách đơn vị/chi nhánh của một người dùng */
   public async replaceUserOrganizations(
-    userId: string,
-    items: readonly UserOrganizationInputItem[],
+    userId: number,
+    inputs: readonly UserOrganizationInput[],
   ): Promise<UserOrganizationUnitEntity[]> {
     await this.repository.delete({ userId });
-    if (items.length === 0) {
+
+    if (inputs.length === 0) {
       return [];
     }
 
-    const dedupMap = new Map<string, UserOrganizationInputItem>();
-    for (const item of items) {
-      dedupMap.set(item.organizationUnitId, item);
+    const deduped = new Map<number, UserOrganizationInput>();
+    for (const item of inputs) {
+      deduped.set(Number(item.organizationUnitId), item);
     }
 
-    const deduped = [...dedupMap.values()];
-    const hasExplicitPrimary = deduped.some((i) => Boolean(i.isPrimary));
+    const items = [...deduped.values()];
+    const hasPrimary = items.some((i) => i.isPrimary === true);
 
-    let primaryAssigned = false;
-    const entities = deduped.map((item, idx) => {
-      let isPrimary = false;
-      if (hasExplicitPrimary) {
-        if (item.isPrimary && !primaryAssigned) {
-          isPrimary = true;
-          primaryAssigned = true;
-        }
-      } else if (idx === 0) {
-        isPrimary = true;
-        primaryAssigned = true;
-      }
-
-      return this.repository.create({
+    const entities = items.map((item, idx) =>
+      this.repository.create({
         userId,
-        organizationUnitId: item.organizationUnitId,
-        isPrimary,
+        organizationUnitId: Number(item.organizationUnitId),
+        isPrimary: hasPrimary ? Boolean(item.isPrimary) : idx === 0,
         positionTitle: item.positionTitle ?? null,
-      });
-    });
+      }),
+    );
 
     return this.repository.save(entities);
   }

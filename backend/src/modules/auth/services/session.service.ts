@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { Injectable, Optional } from '@nestjs/common';
 import { CoreConfigService } from '@packages/config/index.js';
 import {
@@ -12,7 +11,7 @@ import {
   parseDurationSeconds,
 } from '@packages/security/index.js';
 import { RedisService } from '@packages/redis/index.js';
-import type { UserAuthIdentityView } from '@modules/users/contracts/index.js';
+import { USER_STATUS, type UserAuthIdentityView } from '@modules/users/contracts/index.js';
 import { AuthSessionRepository } from '../repositories/auth-session.repository.js';
 import type { SessionItemResponse } from '../responses/auth.response.js';
 
@@ -21,7 +20,7 @@ const DEFAULT_ACCESS_TTL_SEC = 900; // 15m
 const DEFAULT_REFRESH_TTL_SEC = 604_800; // 7d
 
 export interface IssuedSessionTokens {
-  readonly sessionId: string;
+  readonly sessionId: number;
   readonly accessToken: string;
   readonly refreshToken: string;
   readonly expiresInSeconds: number;
@@ -42,7 +41,6 @@ export class SessionService {
     user: UserAuthIdentityView,
     context: { ipAddress?: string | null; userAgent?: string | null; deviceName?: string | null },
   ): Promise<IssuedSessionTokens> {
-    const sessionId = randomUUID();
     const accessTtlSec = parseDurationSeconds(
       this.configService?.auth.jwt.accessExpiration,
       DEFAULT_ACCESS_TTL_SEC,
@@ -51,6 +49,23 @@ export class SessionService {
       this.configService?.auth.jwt.refreshExpiration,
       DEFAULT_REFRESH_TTL_SEC,
     );
+
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + refreshTtlSec * 1000);
+
+    const createdSession = await this.sessionRepository.saveEntity({
+      userId: user.id,
+      refreshTokenHash: 'pending',
+      ipAddress: context.ipAddress ?? null,
+      userAgent: context.userAgent ?? null,
+      deviceName: context.deviceName ?? this.extractDeviceName(context.userAgent),
+      lastActiveAt: now,
+      expiresAt,
+      revokedAt: null,
+      revokeReason: null,
+    });
+
+    const sessionId = Number(createdSession.id);
 
     const [accessToken, refreshToken] = await Promise.all([
       this.tokenService.signAccessToken(
@@ -68,22 +83,8 @@ export class SessionService {
       this.tokenService.signRefreshToken({ sub: user.id, sid: sessionId }, refreshTtlSec),
     ]);
 
-    const refreshTokenHash = this.passwordHasher.sha256(refreshToken);
-    const now = new Date();
-    const expiresAt = new Date(now.getTime() + refreshTtlSec * 1000);
-
-    await this.sessionRepository.saveEntity({
-      id: sessionId,
-      userId: user.id,
-      refreshTokenHash,
-      ipAddress: context.ipAddress ?? null,
-      userAgent: context.userAgent ?? null,
-      deviceName: context.deviceName ?? this.extractDeviceName(context.userAgent),
-      lastActiveAt: now,
-      expiresAt,
-      revokedAt: null,
-      revokeReason: null,
-    });
+    createdSession.refreshTokenHash = this.passwordHasher.sha256(refreshToken);
+    await this.sessionRepository.saveEntity(createdSession);
 
     await this.cacheActiveSession(sessionId, user.id, refreshTtlSec);
 
@@ -98,17 +99,20 @@ export class SessionService {
   /** Xoay vòng Refresh Token (Refresh Token Rotation) và cấp cặp token mới */
   public async rotateRefreshSession(
     refreshToken: string,
-    resolveUser: (userId: string) => Promise<UserAuthIdentityView | null>,
+    resolveUser: (userId: number) => Promise<UserAuthIdentityView | null>,
   ): Promise<IssuedSessionTokens & { user: UserAuthIdentityView }> {
     const payload = await this.tokenService.verifyRefreshToken(refreshToken);
     if (!payload || !payload.sid) {
       throw new UnauthorizedAppException('auth.invalidRefreshToken');
     }
 
-    const tokenHash = this.passwordHasher.sha256(refreshToken);
-    const session = await this.sessionRepository.findById(payload.sid);
+    const sessionId = Number(payload.sid);
+    const payloadUserId = Number(payload.sub);
 
-    if (!session || session.userId !== payload.sub) {
+    const tokenHash = this.passwordHasher.sha256(refreshToken);
+    const session = await this.sessionRepository.findById(sessionId);
+
+    if (!session || Number(session.userId) !== payloadUserId) {
       throw new UnauthorizedAppException('auth.sessionNotFound');
     }
 
@@ -125,9 +129,9 @@ export class SessionService {
       throw new UnauthorizedAppException('auth.refreshTokenReused');
     }
 
-    const user = await resolveUser(session.userId);
-    if (!user || user.status !== 'ACTIVE') {
-      await this.revokeSessionById(session.userId, session.id, 'User account not active');
+    const user = await resolveUser(Number(session.userId));
+    if (!user || user.status !== USER_STATUS.ACTIVE) {
+      await this.revokeSessionById(Number(session.userId), session.id, 'User account not active');
       throw new ForbiddenAppException('auth.accountNotActive');
     }
 
@@ -164,7 +168,7 @@ export class SessionService {
     await this.cacheActiveSession(session.id, user.id, refreshTtlSec);
 
     return {
-      sessionId: session.id,
+      sessionId: Number(session.id),
       accessToken: newAccessToken,
       refreshToken: newRefreshToken,
       expiresInSeconds: accessTtlSec,
@@ -173,7 +177,7 @@ export class SessionService {
   }
 
   /** Kiểm tra một phiên đăng nhập còn hiệu lực hay không */
-  public async isSessionActive(sessionId: string, userId: string): Promise<boolean> {
+  public async isSessionActive(sessionId: number, userId: number): Promise<boolean> {
     if (this.redis?.isReady()) {
       const cached = await this.redis.client
         .get(`${AUTH_SESSION_REDIS_PREFIX}${sessionId}`)
@@ -181,13 +185,13 @@ export class SessionService {
       if (cached === 'REVOKED') {
         return false;
       }
-      if (cached === userId) {
+      if (cached === String(userId)) {
         return true;
       }
     }
 
     const session = await this.sessionRepository.findById(sessionId);
-    if (!session || session.userId !== userId) {
+    if (!session || Number(session.userId) !== Number(userId)) {
       return false;
     }
     if (session.revokedAt || session.expiresAt.getTime() <= Date.now()) {
@@ -198,17 +202,17 @@ export class SessionService {
 
   /** Liệt kê danh sách các phiên đang hoạt động của người dùng */
   public async listUserSessions(
-    userId: string,
-    currentSessionId?: string,
+    userId: number,
+    currentSessionId?: number,
   ): Promise<SessionItemResponse[]> {
     const sessions = await this.sessionRepository.findActiveByUserId(userId);
     return sessions.map((s) => ({
-      id: s.id,
-      userId: s.userId,
+      id: Number(s.id),
+      userId: Number(s.userId),
       ipAddress: s.ipAddress ?? null,
       userAgent: s.userAgent ?? null,
       deviceName: s.deviceName ?? null,
-      isCurrent: Boolean(currentSessionId && s.id === currentSessionId),
+      isCurrent: Boolean(currentSessionId && Number(s.id) === Number(currentSessionId)),
       lastActiveAt: s.lastActiveAt.toISOString(),
       expiresAt: s.expiresAt.toISOString(),
       createdAt: s.createdAt.toISOString(),
@@ -217,12 +221,12 @@ export class SessionService {
 
   /** Thu hồi một phiên đăng nhập cụ thể của người dùng */
   public async revokeSessionById(
-    userId: string,
-    sessionId: string,
+    userId: number,
+    sessionId: number,
     reason = 'User logged out',
-  ): Promise<{ revoked: true; sessionId: string }> {
+  ): Promise<{ revoked: true; sessionId: number }> {
     const session = await this.sessionRepository.findById(sessionId);
-    if (!session || session.userId !== userId) {
+    if (!session || Number(session.userId) !== Number(userId)) {
       throw new NotFoundAppException('auth.sessionNotFound', { sessionId });
     }
 
@@ -233,38 +237,38 @@ export class SessionService {
     }
 
     await this.removeSessionCache(sessionId);
-    return { revoked: true, sessionId };
+    return { revoked: true, sessionId: Number(sessionId) };
   }
 
   /** Thu hồi toàn bộ các phiên đăng nhập của người dùng (hỗ trợ giữ lại phiên hiện hành) */
   public async revokeAllUserSessions(
-    userId: string,
+    userId: number,
     reason = 'Revoked all sessions',
-    exceptSessionId?: string,
+    exceptSessionId?: number,
   ): Promise<number> {
     const revokedList = await this.sessionRepository.revokeAllForUser(
       userId,
       reason,
       exceptSessionId,
     );
-    await Promise.all(revokedList.map((s) => this.removeSessionCache(s.id)));
+    await Promise.all(revokedList.map((s) => this.removeSessionCache(Number(s.id))));
     return revokedList.length;
   }
 
   /** Ghi trạng thái phiên hợp lệ lên Redis */
   private async cacheActiveSession(
-    sessionId: string,
-    userId: string,
+    sessionId: number,
+    userId: number,
     ttlSeconds: number,
   ): Promise<void> {
     if (!this.redis?.isReady()) return;
     await this.redis.client
-      .set(`${AUTH_SESSION_REDIS_PREFIX}${sessionId}`, userId, 'EX', ttlSeconds)
+      .set(`${AUTH_SESSION_REDIS_PREFIX}${sessionId}`, String(userId), 'EX', ttlSeconds)
       .catch(() => undefined);
   }
 
   /** Đánh dấu phiên đã thu hồi trên Redis */
-  private async removeSessionCache(sessionId: string): Promise<void> {
+  private async removeSessionCache(sessionId: number): Promise<void> {
     if (!this.redis?.isReady()) return;
     await this.redis.client
       .set(`${AUTH_SESSION_REDIS_PREFIX}${sessionId}`, 'REVOKED', 'EX', 3600)

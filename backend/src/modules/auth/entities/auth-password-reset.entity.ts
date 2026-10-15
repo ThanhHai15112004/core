@@ -4,14 +4,13 @@ import { TypeOrmBaseEntity } from '@packages/database/index.js';
 @Entity('auth_password_resets')
 export class AuthPasswordResetEntity extends TypeOrmBaseEntity {
   @Index()
-  @Column({ name: 'user_id', type: 'uuid' })
-  public userId!: string;
+  @Column({ name: 'user_id', type: 'int' })
+  public userId!: number;
 
   @Index({ unique: true })
   @Column({ name: 'token_hash', type: 'varchar', length: 128 })
   public tokenHash!: string;
 
-  @Index()
   @Column({ name: 'expires_at', type: 'timestamp' })
   public expiresAt!: Date;
 

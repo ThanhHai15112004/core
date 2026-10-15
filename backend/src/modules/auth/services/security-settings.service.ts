@@ -5,7 +5,15 @@ import {
   PASSWORD_HASH_ALGORITHMS,
   PasswordHasherService,
 } from '@packages/security/index.js';
-import type { MfaMethodType } from '../contracts/index.js';
+import {
+  type MfaMethodType,
+  getDbEncryptionAlgoName,
+  getMfaPolicyName,
+  getPasswordHashAlgoName,
+  parseDbEncryptionAlgoCode,
+  parseMfaPolicyCode,
+  parsePasswordHashAlgoCode,
+} from '../contracts/index.js';
 import { AuthSecuritySettingRepository } from '../repositories/auth-security-setting.repository.js';
 import type { UpdateSecuritySettingsRequest } from '../requests/auth.requests.js';
 import type { SecuritySettingsResponse } from '../responses/auth.response.js';
@@ -42,10 +50,14 @@ export class SecuritySettingsService {
         const persisted = await this.settingRepo.findByScopeKey('GLOBAL');
         if (persisted) {
           this.cached = {
-            passwordHashAlgorithm: persisted.passwordHashAlgorithm,
-            dbEncryptionAlgorithm: persisted.dbEncryptionAlgorithm,
+            passwordHashAlgorithm: getPasswordHashAlgoName(
+              parsePasswordHashAlgoCode(persisted.passwordHashAlgorithm),
+            ),
+            dbEncryptionAlgorithm: getDbEncryptionAlgoName(
+              parseDbEncryptionAlgoCode(persisted.dbEncryptionAlgorithm),
+            ),
             encryptFieldsAtRest: Boolean(persisted.encryptFieldsAtRest),
-            mfaPolicy: persisted.mfaPolicy,
+            mfaPolicy: getMfaPolicyName(parseMfaPolicyCode(persisted.mfaPolicy)),
             allowedMfaMethods: this.parseAllowedMethods(persisted.allowedMfaMethodsJson),
             maxFailedLoginAttempts: persisted.maxFailedLoginAttempts,
             lockoutDurationMinutes: persisted.lockoutDurationMinutes,
@@ -111,10 +123,10 @@ export class SecuritySettingsService {
         await this.settingRepo.saveEntity({
           ...(existing ? { id: existing.id } : {}),
           scopeKey: 'GLOBAL',
-          passwordHashAlgorithm: next.passwordHashAlgorithm,
-          dbEncryptionAlgorithm: next.dbEncryptionAlgorithm,
+          passwordHashAlgorithm: parsePasswordHashAlgoCode(next.passwordHashAlgorithm),
+          dbEncryptionAlgorithm: parseDbEncryptionAlgoCode(next.dbEncryptionAlgorithm),
           encryptFieldsAtRest: next.encryptFieldsAtRest,
-          mfaPolicy: next.mfaPolicy,
+          mfaPolicy: parseMfaPolicyCode(next.mfaPolicy),
           allowedMfaMethodsJson: JSON.stringify(next.allowedMfaMethods),
           maxFailedLoginAttempts: next.maxFailedLoginAttempts,
           lockoutDurationMinutes: next.lockoutDurationMinutes,
@@ -124,7 +136,7 @@ export class SecuritySettingsService {
           requireSpecialChars: next.requireSpecialChars,
         });
       } catch {
-        // Bỏ qua lỗi ghi DB nếu môi trường kiểm thử không chạy Postgres
+        // Bỏ qua lỗi ghi DB nếu môi trường kiểm thử không chạy DB
       }
     }
 

@@ -20,49 +20,58 @@ import {
 } from 'lucide-react';
 
 interface RoleOption {
-  id: string;
+  id: number;
   code: string;
   name: string;
+  status?: number;
+  statusName?: string;
   permissions: string[];
 }
 
 interface OrgUnitOption {
-  id: string;
+  id: number;
   code: string;
   name: string;
-  type: string;
-  parentId: string | null;
-  path: string;
+  type: number;
+  typeName?: string;
+  parentId: number | null;
+  status?: number;
+  statusName?: string;
+  path?: string;
 }
 
 interface UserOrgAssignment {
-  organizationUnitId: string;
+  organizationUnitId: number;
   code: string;
   name: string;
-  type: string;
+  type: number;
+  typeName?: string;
   isPrimary: boolean;
   positionTitle?: string | null;
 }
 
 interface UserItem {
-  id: string;
+  id: number;
   email: string;
   username: string | null;
+  firstName?: string;
+  lastName?: string;
   fullName: string;
   phone?: string | null;
   phoneNumber?: string | null;
-  status: 'ACTIVE' | 'INACTIVE' | 'LOCKED' | 'ARCHIVED';
+  status: number | 'ACTIVE' | 'INACTIVE' | 'LOCKED' | 'ARCHIVED';
+  statusName?: 'ACTIVE' | 'INACTIVE' | 'LOCKED' | 'ARCHIVED';
   statusReason?: string | null;
   lockReason?: string | null;
   mfaEnabled: boolean;
-  primaryOrganizationUnitId?: string | null;
-  roles: { id: string; code: string; name: string }[];
+  primaryOrganizationUnitId?: number | null;
+  roles: { id: number; code: string; name: string }[];
   organizationUnits?: UserOrgAssignment[];
   organizations?: UserOrgAssignment[];
 }
 
 interface SessionItem {
-  id: string;
+  id: number;
   deviceName: string | null;
   ipAddress: string | null;
   lastActiveAt: string;
@@ -70,17 +79,25 @@ interface SessionItem {
   isCurrent: boolean;
 }
 
+const getUserStatusLabel = (u: Pick<UserItem, 'status' | 'statusName'>): 'ACTIVE' | 'INACTIVE' | 'LOCKED' | 'ARCHIVED' => {
+  if (u.statusName) return u.statusName;
+  if (u.status === 1 || u.status === 'ACTIVE') return 'ACTIVE';
+  if (u.status === 2 || u.status === 'INACTIVE') return 'INACTIVE';
+  if (u.status === 3 || u.status === 'LOCKED') return 'LOCKED';
+  return 'ARCHIVED';
+};
+
 const PRIVILEGED_PRESET_ACCOUNTS = [
-  { label: 'Super Admin', email: 'superadmin@gmail.com' },
-  { label: 'System Admin', email: 'admin@gmail.com' },
-  { label: 'Security Admin', email: 'admin.security@gmail.com' },
-  { label: 'HR Admin', email: 'admin.hr@gmail.com' },
-  { label: 'Mobile Admin', email: 'admin.mobile@gmail.com' },
-  { label: 'System Console Admin', email: 'admin.ops@gmail.com' },
-  { label: 'Finance Admin', email: 'admin.finance@gmail.com' },
-  { label: 'Support Admin', email: 'admin.support@gmail.com' },
-  { label: 'Branch Director HCM', email: 'director.hcm@gmail.com' },
-  { label: 'Engineering Manager', email: 'manager.eng@gmail.com' },
+  { label: 'Super Admin (#1)', email: 'superadmin@gmail.com' },
+  { label: 'System Admin (#2)', email: 'admin@gmail.com' },
+  { label: 'Security Admin (#3)', email: 'admin.security@gmail.com' },
+  { label: 'HR Admin (#4)', email: 'admin.hr@gmail.com' },
+  { label: 'Mobile Admin (#5)', email: 'admin.mobile@gmail.com' },
+  { label: 'System Console Admin (#6)', email: 'admin.ops@gmail.com' },
+  { label: 'Finance Admin (#7)', email: 'admin.finance@gmail.com' },
+  { label: 'Support Admin (#8)', email: 'admin.support@gmail.com' },
+  { label: 'Branch Director HCM (#9)', email: 'director.hcm@gmail.com' },
+  { label: 'Engineering Manager (#10)', email: 'manager.eng@gmail.com' },
 ];
 
 export const IamManagementPage: React.FC = () => {
@@ -121,25 +138,54 @@ export const IamManagementPage: React.FC = () => {
   // Create User form state
   const [newUserEmail, setNewUserEmail] = useState('');
   const [newUserUsername, setNewUserUsername] = useState('');
+  const [newUserFirstName, setNewUserFirstName] = useState('');
+  const [newUserLastName, setNewUserLastName] = useState('');
   const [newUserFullName, setNewUserFullName] = useState('');
   const [newUserPhone, setNewUserPhone] = useState('');
   const [newUserPassword, setNewUserPassword] = useState('Abcd@454647#');
-  const [newUserRoleIds, setNewUserRoleIds] = useState<string[]>([]);
-  const [newUserOrgIds, setNewUserOrgIds] = useState<string[]>([]);
-  const [newUserPrimaryOrgId, setNewUserPrimaryOrgId] = useState<string>('');
+  const [newUserRoleIds, setNewUserRoleIds] = useState<number[]>([]);
+  const [newUserOrgIds, setNewUserOrgIds] = useState<number[]>([]);
+  const [newUserPrimaryOrgId, setNewUserPrimaryOrgId] = useState<number | null>(null);
 
-  // Bulk Import CSV text state
+  // Bulk Import Excel (.xlsx) / CSV state
   const [bulkCsvText, setBulkCsvText] = useState(
-    'minh.nguyenhoang01@gmail.com,minh.nguyenhoang01,Nguyễn Hoàng Minh,0901234567\nanh.tranthiminh02@gmail.com,anh.tranthiminh02,Trần Thị Minh Anh,0909876543',
+    'username,email,lastName,firstName,fullName,phone,status,roles,organizations\nminh.nguyenhoang01,minh.nguyenhoang01@gmail.com,Nguyễn Hoàng,Minh,Nguyễn Hoàng Minh,0901234567,1,staff,BRANCH_HCM|DEPT_ENGINEERING\nanh.tranthiminh02,anh.tranthiminh02@gmail.com,Trần Thị Minh,Anh,Trần Thị Minh Anh,0909876543,1,staff,BRANCH_HCM|DEPT_HR',
   );
+  const [bulkXlsxBase64, setBulkXlsxBase64] = useState<string | null>(null);
+  const [bulkFileName, setBulkFileName] = useState<string | null>(null);
+  const [bulkImportReport, setBulkImportReport] = useState<{
+    totalRows: number;
+    importedCount: number;
+    skippedCount: number;
+    failedCount: number;
+    errors: Array<{ row: number; identifier: string; message: string }>;
+  } | null>(null);
+
+  // User Status History & Status Change modal state (Mục 3.1.10)
+  const [statusHistoryUser, setStatusHistoryUser] = useState<UserItem | null>(null);
+  const [statusHistoryList, setStatusHistoryList] = useState<
+    Array<{
+      id: number;
+      userId: number;
+      fromStatus: number | null;
+      fromStatusName: string | null;
+      toStatus: number;
+      toStatusName: string;
+      reason: string | null;
+      changedBy: number | null;
+      createdAt: string;
+    }>
+  >([]);
+  const [statusChangeTarget, setStatusChangeTarget] = useState<number>(1);
+  const [statusChangeReason, setStatusChangeReason] = useState<string>('');
 
   // Create Role & Organization form state
   const [newRoleCode, setNewRoleCode] = useState('');
   const [newRoleName, setNewRoleName] = useState('');
-  const [newRolePerms, setNewRolePerms] = useState('users.read,users.write');
+  const [newRolePerms, setNewRolePerms] = useState('users.read,users.update');
   const [newOrgCode, setNewOrgCode] = useState('');
   const [newOrgName, setNewOrgName] = useState('');
-  const [newOrgType, setNewOrgType] = useState<'HEADQUARTERS' | 'BRANCH' | 'DEPARTMENT' | 'TEAM'>('DEPARTMENT');
+  const [newOrgType, setNewOrgType] = useState<number>(3);
   const [newOrgParentId, setNewOrgParentId] = useState<string>('');
 
   const authHeaders = useCallback((): Record<string, string> => {
@@ -352,7 +398,7 @@ export const IamManagementPage: React.FC = () => {
     }
   };
 
-  const handleRevokeSession = async (sessionId: string) => {
+  const handleRevokeSession = async (sessionId: number) => {
     try {
       await fetchApi(API_ROUTES.AUTH.REVOKE_SESSION(sessionId), {
         method: 'DELETE',
@@ -371,7 +417,7 @@ export const IamManagementPage: React.FC = () => {
     try {
       const organizationsPayload = newUserOrgIds.map((orgId) => ({
         organizationUnitId: orgId,
-        isPrimary: orgId === (newUserPrimaryOrgId || newUserOrgIds[0]),
+        isPrimary: orgId === (newUserPrimaryOrgId ?? newUserOrgIds[0]),
       }));
       await fetchApi(API_ROUTES.USERS.CREATE, {
         method: 'POST',
@@ -379,7 +425,12 @@ export const IamManagementPage: React.FC = () => {
         body: JSON.stringify({
           email: newUserEmail,
           username: newUserUsername || undefined,
-          fullName: newUserFullName,
+          firstName: newUserFirstName || undefined,
+          lastName: newUserLastName || undefined,
+          fullName:
+            newUserFullName ||
+            `${newUserLastName} ${newUserFirstName}`.trim() ||
+            newUserEmail,
           phone: newUserPhone || undefined,
           password: newUserPassword,
           roleIds: newUserRoleIds,
@@ -388,6 +439,8 @@ export const IamManagementPage: React.FC = () => {
       });
       setNewUserEmail('');
       setNewUserUsername('');
+      setNewUserFirstName('');
+      setNewUserLastName('');
       setNewUserFullName('');
       setNewUserPhone('');
       await loadDirectoryData();
@@ -398,7 +451,7 @@ export const IamManagementPage: React.FC = () => {
   };
 
   const handleUserStatusAction = async (
-    userId: string,
+    userId: number,
     action: 'lock' | 'unlock' | 'deactivate' | 'archive' | 'activate',
   ) => {
     try {
@@ -436,69 +489,183 @@ export const IamManagementPage: React.FC = () => {
     }
   };
 
+  const handleOpenStatusHistory = async (user: UserItem) => {
+    setStatusHistoryUser(user);
+    setStatusChangeTarget(typeof user.status === 'number' ? user.status : 1);
+    setStatusChangeReason(user.lockReason ?? '');
+    try {
+      const history = await fetchApi<
+        Array<{
+          id: number;
+          userId: number;
+          fromStatus: number | null;
+          fromStatusName: string | null;
+          toStatus: number;
+          toStatusName: string;
+          reason: string | null;
+          changedBy: number | null;
+          createdAt: string;
+        }>
+      >(API_ROUTES.USERS.STATUS_HISTORY(user.id), { headers: authHeaders() });
+      setStatusHistoryList(Array.isArray(history) ? history : []);
+    } catch (err) {
+      notify('err', err instanceof Error ? err.message : 'Failed to load user status history');
+    }
+  };
+
+  const handleSubmitStatusChange = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!statusHistoryUser) return;
+    try {
+      const updated = await fetchApi<UserItem>(API_ROUTES.USERS.STATUS(statusHistoryUser.id), {
+        method: 'PUT',
+        headers: authHeaders(),
+        body: JSON.stringify({
+          status: statusChangeTarget,
+          reason: statusChangeReason.trim() || 'Cập nhật trạng thái từ bảng điều khiển IAM',
+        }),
+      });
+      await loadDirectoryData();
+      await handleOpenStatusHistory(updated);
+      notify('ok', `Đã chuyển trạng thái người dùng #${statusHistoryUser.id} sang mã ${statusChangeTarget} và ghi lịch sử.`);
+    } catch (err) {
+      notify('err', err instanceof Error ? err.message : 'Failed to change user status');
+    }
+  };
+
+  const handleImportFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setBulkFileName(file.name);
+    setBulkImportReport(null);
+
+    if (file.name.toLowerCase().endsWith('.xlsx')) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = typeof reader.result === 'string' ? reader.result : '';
+        const base64 = result.replace(/^data:[^;]+;base64,/i, '');
+        setBulkXlsxBase64(base64);
+        notify('ok', `Đã nạp file Excel "${file.name}" (${Math.round(file.size / 1024)} KB). Nhấn "Thực thi Import" để kiểm tra & nhập dữ liệu.`);
+      };
+      reader.readAsDataURL(file);
+    } else {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const text = typeof reader.result === 'string' ? reader.result : '';
+        setBulkXlsxBase64(null);
+        setBulkCsvText(text);
+        notify('ok', `Đã nạp nội dung file CSV "${file.name}".`);
+      };
+      reader.readAsText(file, 'utf-8');
+    }
+  };
+
   const handleBulkImport = async () => {
     try {
-      const lines = bulkCsvText
-        .split('\n')
-        .map((l) => l.trim())
-        .filter(Boolean);
-      const items = lines.map((line) => {
-        const [email = '', username = '', fullName = '', phone = ''] = line
-          .split(',')
-          .map((s) => s.trim());
-        return {
-          email,
-          username: username || undefined,
-          fullName: fullName || email,
-          phone: phone || undefined,
-          password: 'Abcd@454647#',
-        };
-      });
+      const payload = bulkXlsxBase64
+        ? { xlsxBase64: bulkXlsxBase64, skipDuplicates: true }
+        : { csvContent: bulkCsvText, skipDuplicates: true };
 
-      const res = await fetchApi<{ createdCount: number; failedCount: number }>(
-        API_ROUTES.USERS.IMPORT,
-        {
-          method: 'POST',
-          headers: authHeaders(),
-          body: JSON.stringify({ items }),
-        },
-      );
+      const res = await fetchApi<{
+        totalRows: number;
+        importedCount: number;
+        skippedCount: number;
+        failedCount: number;
+        errors: Array<{ row: number; identifier: string; message: string }>;
+      }>(API_ROUTES.USERS.IMPORT, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify(payload),
+      });
+      setBulkImportReport(res);
       await loadDirectoryData();
       notify(
-        'ok',
-        `Nhập hàng loạt hoàn tất: tạo mới ${res.createdCount}, lỗi ${res.failedCount}.`,
+        res.failedCount > 0 ? 'err' : 'ok',
+        `Nhập hàng loạt hoàn tất: tổng ${res.totalRows} dòng | tạo mới ${res.importedCount} | bỏ qua trùng ${res.skippedCount} | lỗi ${res.failedCount}.`,
       );
     } catch (err) {
       notify('err', err instanceof Error ? err.message : 'Bulk import failed');
     }
   };
 
-  const handleExportCsv = async () => {
-    try {
-      const qs = new URLSearchParams();
-      if (searchQuery.trim()) qs.set('q', searchQuery.trim());
-      if (statusFilter) qs.set('status', statusFilter);
-      const csv = await fetchApi<string | { csv?: string }>(API_ROUTES.USERS.EXPORT(qs.toString()), {
-        headers: authHeaders(),
-      });
-      const csvString =
-        typeof csv === 'string'
-          ? csv
-          : typeof csv?.csv === 'string'
-            ? csv.csv
-            : JSON.stringify(csv);
-      const blob = new Blob([csvString], {
-        type: 'text/csv;charset=utf-8;',
+  const downloadBase64OrCsv = (
+    data: {
+      fileName?: string;
+      format?: 'csv' | 'xlsx';
+      csvContent?: string;
+      xlsxBase64?: string;
+    },
+    requestedFormat: 'csv' | 'xlsx',
+    fallbackName: string,
+  ) => {
+    if (requestedFormat === 'xlsx' && data.xlsxBase64) {
+      const binary = window.atob(data.xlsxBase64);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i);
+      }
+      const blob = new Blob([bytes], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = 'users-export.csv';
+      a.download = data.fileName || `${fallbackName}.xlsx`;
       a.click();
       URL.revokeObjectURL(url);
-      notify('ok', 'Đã xuất danh sách người dùng (CSV).');
+      return;
+    }
+
+    const csvText = data.csvContent ?? '';
+    const blob = new Blob([csvText], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = data.fileName || `${fallbackName}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleExportUsers = async (format: 'csv' | 'xlsx' = 'csv') => {
+    try {
+      const qs = new URLSearchParams();
+      if (searchQuery.trim()) qs.set('q', searchQuery.trim());
+      if (statusFilter) qs.set('status', statusFilter);
+      if (roleFilter) qs.set('roleId', roleFilter);
+      if (orgFilter) qs.set('organizationUnitId', orgFilter);
+      qs.set('format', format);
+
+      const res = await fetchApi<{
+        fileName: string;
+        format: 'csv' | 'xlsx';
+        totalExported: number;
+        csvContent: string;
+        xlsxBase64: string;
+      }>(API_ROUTES.USERS.EXPORT(qs.toString()), {
+        headers: authHeaders(),
+      });
+
+      downloadBase64OrCsv(res, format, 'users-export');
+      notify('ok', `Đã xuất ${res.totalExported} người dùng ra file ${format.toUpperCase()}.`);
     } catch (err) {
-      notify('err', err instanceof Error ? err.message : 'Export CSV failed');
+      notify('err', err instanceof Error ? err.message : `Export ${format.toUpperCase()} failed`);
+    }
+  };
+
+  const handleDownloadImportTemplate = async (format: 'csv' | 'xlsx' = 'xlsx') => {
+    try {
+      const res = await fetchApi<{
+        fileName: string;
+        format: 'csv' | 'xlsx';
+        csvContent: string;
+        xlsxBase64: string;
+      }>(API_ROUTES.USERS.IMPORT_TEMPLATE(format), {
+        headers: authHeaders(),
+      });
+      downloadBase64OrCsv(res, format, 'users-import-template');
+      notify('ok', `Đã tải file mẫu Import (${format.toUpperCase()}).`);
+    } catch (err) {
+      notify('err', err instanceof Error ? err.message : 'Download template failed');
     }
   };
 
@@ -536,7 +703,7 @@ export const IamManagementPage: React.FC = () => {
           code: newOrgCode,
           name: newOrgName,
           type: newOrgType,
-          parentId: newOrgParentId || null,
+          parentId: newOrgParentId ? Number(newOrgParentId) : null,
         }),
       });
       setNewOrgCode('');
@@ -810,16 +977,16 @@ export const IamManagementPage: React.FC = () => {
                 onChange={(e) => setStatusFilter(e.target.value)}
               >
                 <option value="">-- Tất cả trạng thái --</option>
-                <option value="ACTIVE">ACTIVE (Hoạt động)</option>
-                <option value="INACTIVE">INACTIVE (Vô hiệu hóa)</option>
-                <option value="LOCKED">LOCKED (Đã khóa)</option>
-                <option value="ARCHIVED">ARCHIVED (Lưu trữ)</option>
+                <option value="1">1 - ACTIVE (Hoạt động)</option>
+                <option value="2">2 - INACTIVE (Vô hiệu hóa)</option>
+                <option value="3">3 - LOCKED (Đã khóa)</option>
+                <option value="4">4 - ARCHIVED (Lưu trữ)</option>
               </select>
               <select style={inputStyle} value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)}>
                 <option value="">-- Lọc theo vai trò --</option>
                 {roles.map((r) => (
                   <option key={r.id} value={r.id}>
-                    {r.name} ({r.code})
+                    #{r.id} - {r.name} ({r.code})
                   </option>
                 ))}
               </select>
@@ -827,7 +994,7 @@ export const IamManagementPage: React.FC = () => {
                 <option value="">-- Lọc theo đơn vị/chi nhánh --</option>
                 {orgs.map((o) => (
                   <option key={o.id} value={o.id}>
-                    {o.name} ({o.code})
+                    #{o.id} - {o.name} ({o.code})
                   </option>
                 ))}
               </select>
@@ -841,16 +1008,109 @@ export const IamManagementPage: React.FC = () => {
               >
                 Tìm kiếm & Lọc
               </button>
-              <button
-                type="button"
-                className="btn-secondary"
-                onClick={() => void handleExportCsv()}
-                style={{ padding: '7px 14px', fontSize: '13px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-              >
-                <Download size={14} /> Xuất danh sách CSV
-              </button>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => void handleExportUsers('xlsx')}
+                  style={{ padding: '7px 14px', fontSize: '13px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                >
+                  <Download size={14} /> Xuất Excel (.xlsx)
+                </button>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => void handleExportUsers('csv')}
+                  style={{ padding: '7px 14px', fontSize: '13px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                >
+                  <Download size={14} /> Xuất CSV (.csv)
+                </button>
+              </div>
             </div>
           </div>
+
+          {/* Status History & Direct Status Transition Panel (3.1.10) */}
+          {statusHistoryUser && (
+            <div style={{ ...cardStyle, border: '1px solid rgba(56, 189, 248, 0.35)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                <h3 style={{ fontSize: '15px', fontWeight: 700, margin: 0 }}>
+                  📜 Quản lý & Lịch sử thay đổi trạng thái — #{statusHistoryUser.id} {statusHistoryUser.fullName} ({statusHistoryUser.email})
+                </h3>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  style={{ padding: '4px 10px', fontSize: '12px' }}
+                  onClick={() => setStatusHistoryUser(null)}
+                >
+                  Đóng
+                </button>
+              </div>
+
+              <form
+                onSubmit={(e) => void handleSubmitStatusChange(e)}
+                style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center', marginBottom: '14px' }}
+              >
+                <select
+                  style={{ ...inputStyle, width: '220px' }}
+                  value={statusChangeTarget}
+                  onChange={(e) => setStatusChangeTarget(Number(e.target.value))}
+                >
+                  <option value={1}>1 - ACTIVE (Hoạt động)</option>
+                  <option value={2}>2 - INACTIVE (Vô hiệu hóa)</option>
+                  <option value={3}>3 - LOCKED (Tạm khóa)</option>
+                  <option value={4}>4 - ARCHIVED (Lưu trữ)</option>
+                </select>
+                <input
+                  style={{ ...inputStyle, flex: 1, minWidth: '240px' }}
+                  placeholder="Lý do chuyển trạng thái (bắt buộc để lưu vết kiểm toán)..."
+                  value={statusChangeReason}
+                  onChange={(e) => setStatusChangeReason(e.target.value)}
+                />
+                <button type="submit" className="btn-primary" style={{ padding: '8px 16px', fontSize: '13px' }}>
+                  Cập nhật trạng thái & Ghi lịch sử
+                </button>
+              </form>
+
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid var(--border-color)', textAlign: 'left' }}>
+                      <th style={{ padding: '8px' }}>ID</th>
+                      <th style={{ padding: '8px' }}>Từ trạng thái</th>
+                      <th style={{ padding: '8px' }}>Sang trạng thái</th>
+                      <th style={{ padding: '8px' }}>Lý do thay đổi</th>
+                      <th style={{ padding: '8px' }}>Người thực hiện (ID)</th>
+                      <th style={{ padding: '8px' }}>Thời gian</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {statusHistoryList.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} style={{ padding: '12px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                          Chưa có bản ghi lịch sử thay đổi trạng thái.
+                        </td>
+                      </tr>
+                    ) : (
+                      statusHistoryList.map((h) => (
+                        <tr key={h.id} style={{ borderBottom: '1px solid rgba(148, 163, 184, 0.1)' }}>
+                          <td style={{ padding: '8px' }}>#{h.id}</td>
+                          <td style={{ padding: '8px' }}>
+                            {h.fromStatus !== null ? `${h.fromStatus} (${h.fromStatusName})` : 'Khởi tạo'}
+                          </td>
+                          <td style={{ padding: '8px', fontWeight: 700, color: '#38bdf8' }}>
+                            {h.toStatus} ({h.toStatusName})
+                          </td>
+                          <td style={{ padding: '8px' }}>{h.reason || '—'}</td>
+                          <td style={{ padding: '8px' }}>{h.changedBy ? `User #${h.changedBy}` : 'System'}</td>
+                          <td style={{ padding: '8px' }}>{new Date(h.createdAt).toLocaleString('vi-VN')}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
 
           {/* Users Table */}
           <div style={{ ...cardStyle, overflowX: 'auto' }}>
@@ -860,8 +1120,8 @@ export const IamManagementPage: React.FC = () => {
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--border-color)', textAlign: 'left' }}>
-                  <th style={{ padding: '10px 8px' }}>Họ tên / Email</th>
-                  <th style={{ padding: '10px 8px' }}>Trạng thái</th>
+                  <th style={{ padding: '10px 8px' }}>ID / Họ tên / Email</th>
+                  <th style={{ padding: '10px 8px' }}>Trạng thái (STT)</th>
                   <th style={{ padding: '10px 8px' }}>Vai trò (Roles)</th>
                   <th style={{ padding: '10px 8px' }}>Đơn vị / Chi nhánh (Multi-Org)</th>
                   <th style={{ padding: '10px 8px' }}>MFA</th>
@@ -878,10 +1138,19 @@ export const IamManagementPage: React.FC = () => {
                 ) : (
                   users.map((u) => {
                     const orgList = u.organizationUnits ?? u.organizations ?? [];
+                    const statusLabel = getUserStatusLabel(u);
                     return (
                       <tr key={u.id} style={{ borderBottom: '1px solid rgba(148, 163, 184, 0.1)' }}>
                         <td style={{ padding: '10px 8px' }}>
-                          <div style={{ fontWeight: 600 }}>{u.fullName}</div>
+                          <div style={{ fontWeight: 600 }}>
+                            <span style={{ color: '#38bdf8', marginRight: '6px' }}>#{u.id}</span>
+                            {u.fullName}
+                            {u.firstName && u.lastName ? (
+                              <span style={{ color: 'var(--text-muted)', fontWeight: 400, fontSize: '11px', marginLeft: '6px' }}>
+                                (Họ: {u.lastName} | Tên: {u.firstName})
+                              </span>
+                            ) : null}
+                          </div>
                           <div style={{ color: 'var(--text-muted)', fontSize: '12px' }}>
                             {u.email} {u.username ? `(@${u.username})` : ''}
                           </div>
@@ -894,20 +1163,20 @@ export const IamManagementPage: React.FC = () => {
                               fontSize: '11px',
                               fontWeight: 700,
                               background:
-                                u.status === 'ACTIVE'
+                                statusLabel === 'ACTIVE'
                                   ? 'rgba(16, 185, 129, 0.18)'
-                                  : u.status === 'LOCKED'
+                                  : statusLabel === 'LOCKED'
                                     ? 'rgba(239, 68, 68, 0.2)'
                                     : 'rgba(148, 163, 184, 0.2)',
                               color:
-                                u.status === 'ACTIVE'
+                                statusLabel === 'ACTIVE'
                                   ? '#34d399'
-                                  : u.status === 'LOCKED'
+                                  : statusLabel === 'LOCKED'
                                     ? '#f87171'
                                     : '#cbd5e1',
                             }}
                           >
-                            {u.status}
+                            {u.status} ({statusLabel})
                           </span>
                         </td>
                         <td style={{ padding: '10px 8px' }}>
@@ -926,7 +1195,7 @@ export const IamManagementPage: React.FC = () => {
                         <td style={{ padding: '10px 8px' }}>{u.mfaEnabled ? '✅ Bật' : 'Tắt'}</td>
                       <td style={{ padding: '10px 8px' }}>
                         <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                          {u.status === 'LOCKED' ? (
+                          {statusLabel === 'LOCKED' ? (
                             <button
                               type="button"
                               className="btn-secondary"
@@ -945,7 +1214,7 @@ export const IamManagementPage: React.FC = () => {
                               <Lock size={12} /> Khóa
                             </button>
                           )}
-                          {u.status === 'ACTIVE' ? (
+                          {statusLabel === 'ACTIVE' ? (
                             <button
                               type="button"
                               className="btn-secondary"
@@ -971,6 +1240,14 @@ export const IamManagementPage: React.FC = () => {
                             onClick={() => void handleUserStatusAction(u.id, 'archive')}
                           >
                             Lưu trữ
+                          </button>
+                          <button
+                            type="button"
+                            className="btn-secondary"
+                            style={{ padding: '4px 8px', fontSize: '12px', color: '#38bdf8' }}
+                            onClick={() => void handleOpenStatusHistory(u)}
+                          >
+                            📜 Lịch sử TT
                           </button>
                         </div>
                       </td>
@@ -1011,10 +1288,23 @@ export const IamManagementPage: React.FC = () => {
                     onChange={(e) => setNewUserPhone(e.target.value)}
                   />
                 </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                  <input
+                    style={inputStyle}
+                    placeholder="Họ và tên đệm (Last Name)"
+                    value={newUserLastName}
+                    onChange={(e) => setNewUserLastName(e.target.value)}
+                  />
+                  <input
+                    style={inputStyle}
+                    placeholder="Tên (First Name)"
+                    value={newUserFirstName}
+                    onChange={(e) => setNewUserFirstName(e.target.value)}
+                  />
+                </div>
                 <input
                   style={inputStyle}
-                  placeholder="Họ và tên (*)"
-                  required
+                  placeholder="Họ và tên đầy đủ (Full Name)"
                   value={newUserFullName}
                   onChange={(e) => setNewUserFullName(e.target.value)}
                 />
@@ -1042,7 +1332,7 @@ export const IamManagementPage: React.FC = () => {
                             else setNewUserRoleIds(newUserRoleIds.filter((id) => id !== r.id));
                           }}
                         />
-                        {r.name} ({r.code})
+                        #{r.id} {r.name} ({r.code})
                       </label>
                     );
                   })}
@@ -1071,14 +1361,14 @@ export const IamManagementPage: React.FC = () => {
                               }
                             }}
                           />
-                          {o.name} ({o.code} - {o.type})
+                          #{o.id} {o.name} ({o.code} - {o.typeName ?? o.type})
                         </label>
                         {checked && (
                           <label style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: '#38bdf8' }}>
                             <input
                               type="radio"
                               name="primaryOrg"
-                              checked={(newUserPrimaryOrgId || newUserOrgIds[0]) === o.id}
+                              checked={(newUserPrimaryOrgId ?? newUserOrgIds[0]) === o.id}
                               onChange={() => setNewUserPrimaryOrgId(o.id)}
                             />
                             Đơn vị chính
@@ -1095,19 +1385,60 @@ export const IamManagementPage: React.FC = () => {
               </div>
             </form>
 
-            {/* Bulk Import Users */}
+            {/* Bulk Import Users (Excel .xlsx & CSV) */}
             <div style={cardStyle}>
               <h3 style={{ fontSize: '16px', fontWeight: 700, marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Upload size={16} /> Nhập người dùng hàng loạt (Bulk Import)
+                <Upload size={16} /> Nhập người dùng hàng loạt (Excel .xlsx / CSV)
               </h3>
               <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '10px' }}>
-                Định dạng mỗi dòng: <code>email,username,fullName,phoneNumber</code>
+                Hỗ trợ tải lên trực tiếp file <strong>Excel (.xlsx)</strong> hoặc <strong>CSV (.csv)</strong> có kiểm tra dữ liệu từng dòng (email, username, họ tên, mã role, mã đơn vị, trùng lặp).
+              </p>
+
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '10px' }}>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  style={{ padding: '5px 10px', fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '5px' }}
+                  onClick={() => void handleDownloadImportTemplate('xlsx')}
+                >
+                  <Download size={12} /> Tải file mẫu Excel (.xlsx)
+                </button>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  style={{ padding: '5px 10px', fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '5px' }}
+                  onClick={() => void handleDownloadImportTemplate('csv')}
+                >
+                  <Download size={12} /> Tải file mẫu CSV (.csv)
+                </button>
+              </div>
+
+              <div style={{ marginBottom: '10px' }}>
+                <input
+                  type="file"
+                  accept=".xlsx,.csv"
+                  onChange={handleImportFileChange}
+                  style={{ ...inputStyle, padding: '6px' }}
+                />
+                {bulkFileName && (
+                  <div style={{ fontSize: '12px', color: '#38bdf8', marginTop: '4px' }}>
+                    📎 Đang chọn file: <strong>{bulkFileName}</strong>{' '}
+                    {bulkXlsxBase64 ? '(Chế độ đọc trực tiếp binary Excel .xlsx)' : '(Chế độ CSV)'}
+                  </div>
+                )}
+              </div>
+
+              <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '6px' }}>
+                Hoặc nhập/chỉnh sửa trực tiếp nội dung CSV (<code>email,username,lastName,firstName,fullName,phoneNumber,roleCodes,organizationUnitCodes</code>):
               </p>
               <textarea
-                rows={6}
+                rows={5}
                 style={{ ...inputStyle, fontFamily: 'monospace', marginBottom: '12px' }}
                 value={bulkCsvText}
-                onChange={(e) => setBulkCsvText(e.target.value)}
+                onChange={(e) => {
+                  setBulkCsvText(e.target.value);
+                  setBulkXlsxBase64('');
+                }}
               />
               <button
                 type="button"
@@ -1115,8 +1446,36 @@ export const IamManagementPage: React.FC = () => {
                 onClick={() => void handleBulkImport()}
                 style={{ padding: '9px 16px', width: '100%' }}
               >
-                Thực thi Import hàng loạt
+                {bulkXlsxBase64 ? `Thực thi Import từ file Excel (${bulkFileName})` : 'Thực thi Import hàng loạt'}
               </button>
+
+              {bulkImportReport && (
+                <div
+                  style={{
+                    marginTop: '12px',
+                    padding: '10px',
+                    borderRadius: '8px',
+                    background: 'rgba(15, 23, 42, 0.65)',
+                    border: '1px solid var(--border-color)',
+                    fontSize: '12px',
+                  }}
+                >
+                  <div style={{ fontWeight: 700, marginBottom: '6px' }}>
+                    📊 Kết quả kiểm tra & Import: Tổng {bulkImportReport.totalRows} dòng — Thành công:{' '}
+                    <span style={{ color: '#34d399' }}>{bulkImportReport.importedCount}</span> — Lỗi:{' '}
+                    <span style={{ color: '#f87171' }}>{bulkImportReport.failedCount}</span>
+                  </div>
+                  {bulkImportReport.errors.length > 0 && (
+                    <div style={{ maxHeight: '140px', overflowY: 'auto' }}>
+                      {bulkImportReport.errors.map((err, idx) => (
+                        <div key={idx} style={{ color: '#fca5a5', padding: '2px 0' }}>
+                          • Dòng #{err.row} ({err.identifier}): {err.message}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -1236,7 +1595,7 @@ export const IamManagementPage: React.FC = () => {
                   }}
                 >
                   <div>
-                    <strong>{s.deviceName || 'Unknown Device'}</strong> — IP: {s.ipAddress || 'N/A'}
+                    <strong>#{s.id} - {s.deviceName || 'Unknown Device'}</strong> — IP: {s.ipAddress || 'N/A'}
                     <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
                       Hoạt động cuối: {new Date(s.lastActiveAt).toLocaleString()} | Hết hạn:{' '}
                       {new Date(s.expiresAt).toLocaleString()}
@@ -1268,7 +1627,7 @@ export const IamManagementPage: React.FC = () => {
             <div style={{ display: 'grid', gap: '10px', marginBottom: '16px' }}>
               <input
                 style={inputStyle}
-                placeholder="Mã đơn vị (VD: BRANCH_HN)"
+                placeholder="Mã đơn vị (VD: DEPT_AI)"
                 required
                 value={newOrgCode}
                 onChange={(e) => setNewOrgCode(e.target.value)}
@@ -1283,14 +1642,12 @@ export const IamManagementPage: React.FC = () => {
               <select
                 style={inputStyle}
                 value={newOrgType}
-                onChange={(e) =>
-                  setNewOrgType(e.target.value as 'HEADQUARTERS' | 'BRANCH' | 'DEPARTMENT' | 'TEAM')
-                }
+                onChange={(e) => setNewOrgType(Number(e.target.value))}
               >
-                <option value="HEADQUARTERS">HEADQUARTERS (Trụ sở chính)</option>
-                <option value="BRANCH">BRANCH (Chi nhánh)</option>
-                <option value="DEPARTMENT">DEPARTMENT (Phòng ban)</option>
-                <option value="TEAM">TEAM (Nhóm)</option>
+                <option value={1}>1 - HEADQUARTERS (Trụ sở chính)</option>
+                <option value={2}>2 - BRANCH (Chi nhánh)</option>
+                <option value={3}>3 - DEPARTMENT (Phòng ban)</option>
+                <option value={4}>4 - TEAM (Nhóm)</option>
               </select>
               <select
                 style={inputStyle}
@@ -1300,7 +1657,7 @@ export const IamManagementPage: React.FC = () => {
                 <option value="">-- Không có đơn vị cha (Root) --</option>
                 {orgs.map((o) => (
                   <option key={o.id} value={o.id}>
-                    {o.name} ({o.code})
+                    #{o.id} - {o.name} ({o.code})
                   </option>
                 ))}
               </select>
@@ -1314,7 +1671,7 @@ export const IamManagementPage: React.FC = () => {
               <ul style={{ marginTop: '8px', paddingLeft: '18px', lineHeight: 1.7 }}>
                 {orgs.map((o) => (
                   <li key={o.id}>
-                    <strong>{o.name}</strong> ({o.code}) — <code>{o.type}</code>
+                    <strong>#{o.id} - {o.name}</strong> ({o.code}) — <code>{o.type} ({o.typeName ?? ''})</code>
                   </li>
                 ))}
               </ul>
@@ -1357,7 +1714,7 @@ export const IamManagementPage: React.FC = () => {
               <ul style={{ marginTop: '8px', paddingLeft: '18px', lineHeight: 1.7 }}>
                 {roles.map((r) => (
                   <li key={r.id}>
-                    <strong>{r.name}</strong> (<code>{r.code}</code>) — {r.permissions.length} quyền
+                    <strong>#{r.id} - {r.name}</strong> (<code>{r.code}</code>) — {r.permissions.length} quyền
                   </li>
                 ))}
               </ul>

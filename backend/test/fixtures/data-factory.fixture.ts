@@ -93,7 +93,7 @@ export function defineFactory<T extends object>(builder: (seq: number) => T): Da
  * Factory chuẩn tạo UserIdentity phục vụ kiểm thử xác thực & phân quyền.
  */
 export const userIdentityFactory = defineFactory<UserIdentity>((seq) => ({
-  id: `user-test-${seq}`,
+  id: seq,
   email: `user${seq}@test.local`,
   roles: ['user'],
   permissions: [],
@@ -103,7 +103,7 @@ export const userIdentityFactory = defineFactory<UserIdentity>((seq) => ({
  * Factory chuẩn tạo TokenPayload JWT phục vụ kiểm thử bảo mật.
  */
 export const tokenPayloadFactory = defineFactory<TokenPayload>((seq) => ({
-  sub: `user-test-${seq}`,
+  sub: seq,
   roles: ['user'],
 }));
 

@@ -1,6 +1,6 @@
 import { Column, Entity, Index } from 'typeorm';
 import { VersionedTypeOrmEntity } from '@packages/database/index.js';
-import type { UserStatus } from '../contracts/index.js';
+import { USER_STATUS, type UserStatusCode } from '../contracts/index.js';
 
 @Entity('users')
 export class UserEntity extends VersionedTypeOrmEntity {
@@ -13,10 +13,15 @@ export class UserEntity extends VersionedTypeOrmEntity {
   public email!: string;
 
   @Index()
-  @Column({ type: 'varchar', length: 32, nullable: true })
+  @Column({ type: 'varchar', length: 255, nullable: true })
   public phone?: string | null;
 
-  @Index()
+  @Column({ name: 'first_name', type: 'varchar', length: 100 })
+  public firstName!: string;
+
+  @Column({ name: 'last_name', type: 'varchar', length: 150 })
+  public lastName!: string;
+
   @Column({ name: 'full_name', type: 'varchar', length: 255 })
   public fullName!: string;
 
@@ -26,9 +31,10 @@ export class UserEntity extends VersionedTypeOrmEntity {
   @Column({ name: 'password_hash', type: 'varchar', length: 255 })
   public passwordHash!: string;
 
+  /** Trạng thái: 1 = ACTIVE, 2 = INACTIVE, 3 = LOCKED, 4 = ARCHIVED */
   @Index()
-  @Column({ type: 'varchar', length: 32, default: 'ACTIVE' })
-  public status!: UserStatus;
+  @Column({ type: 'int', default: USER_STATUS.ACTIVE })
+  public status!: UserStatusCode;
 
   @Column({ name: 'locked_until', type: 'timestamp', nullable: true })
   public lockedUntil?: Date | null;
@@ -43,8 +49,8 @@ export class UserEntity extends VersionedTypeOrmEntity {
   public mfaEnabled!: boolean;
 
   @Index()
-  @Column({ name: 'primary_organization_unit_id', type: 'uuid', nullable: true })
-  public primaryOrganizationUnitId?: string | null;
+  @Column({ name: 'primary_organization_unit_id', type: 'int', nullable: true })
+  public primaryOrganizationUnitId?: number | null;
 
   @Column({ name: 'password_changed_at', type: 'timestamp', nullable: true })
   public passwordChangedAt?: Date | null;

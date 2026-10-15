@@ -1,4 +1,4 @@
-import { Injectable, Optional } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import {
   BadRequestAppException,
   ConflictAppException,
@@ -7,7 +7,14 @@ import {
   NotFoundAppException,
 } from '@packages/kernel/index.js';
 import { TransactionManager } from '@packages/database/index.js';
-import type { IRolesPublicService, RoleSummary } from '../contracts/index.js';
+import {
+  type IRolesPublicService,
+  PERMISSION_STATUS,
+  ROLE_STATUS,
+  type RoleSummary,
+} from '../contracts/index.js';
+import type { PermissionEntity } from '../entities/permission.entity.js';
+import { PermissionRepository } from '../repositories/permission.repository.js';
 import { RoleRepository } from '../repositories/role.repository.js';
 import { RolePermissionRepository } from '../repositories/role-permission.repository.js';
 import { RolesMapper } from '../mappers/roles.mapper.js';
@@ -25,7 +32,12 @@ export class RolesService implements IRolesPublicService {
     private readonly roleRepository: RoleRepository,
     private readonly rolePermissionRepository: RolePermissionRepository,
     private readonly mapper: RolesMapper,
-    @Optional() private readonly transactionManager: TransactionManager | null = null,
+    @Optional()
+    @Inject(PermissionRepository)
+    private readonly permissionRepository: PermissionRepository | null = null,
+    @Optional()
+    @Inject(TransactionManager)
+    private readonly transactionManager: TransactionManager | null = null,
   ) {}
 
   /** Lấy danh sách vai trò kèm danh sách quyền của từng vai trò */
@@ -33,37 +45,39 @@ export class RolesService implements IRolesPublicService {
     const roles = await this.roleRepository.findFiltered(query);
     if (roles.length === 0) return [];
 
-    const permsMap = await this.loadPermissionsMap(roles.map((r) => r.id));
-    return roles.map((role) => this.mapper.toResponse(role, permsMap.get(role.id) ?? []));
+    const permsMap = await this.loadPermissionsMap(roles.map((r) => Number(r.id)));
+    return roles.map((role) => this.mapper.toResponse(role, permsMap.get(Number(role.id)) ?? []));
   }
 
   /** Lấy thông tin chi tiết một vai trò theo ID */
-  public async getById(id: string): Promise<RoleResponse> {
+  public async getById(id: number): Promise<RoleResponse> {
     const role = await this.roleRepository.findById(id);
     if (!role) {
       throw new NotFoundAppException('roles.notFound', { id });
     }
-    const permsMap = await this.loadPermissionsMap([role.id]);
-    return this.mapper.toResponse(role, permsMap.get(role.id) ?? []);
+    const permsMap = await this.loadPermissionsMap([Number(role.id)]);
+    return this.mapper.toResponse(role, permsMap.get(Number(role.id)) ?? []);
   }
 
-  /** Lấy danh mục quyền hạn hệ thống từ bảng core_permissions */
+  /** Lấy danh mục quyền hạn hệ thống từ bảng permissions */
   public async listPermissionsCatalog(): Promise<PermissionCatalogItemResponse[]> {
-    try {
-      const rows = (await this.roleRepository.manager.query(
-        'SELECT code, module, description FROM core_permissions ORDER BY module ASC, code ASC',
-      )) as Array<{ code: string; module: string; description: string }>;
-      return rows.map((r) => ({
-        code: String(r.code),
-        module: String(r.module),
-        description: String(r.description),
-      }));
-    } catch {
-      return [];
-    }
+    if (!this.permissionRepository) return [];
+    const perms = await this.permissionRepository.findAll();
+    return perms.map((p) => ({
+      id: Number(p.id),
+      code: p.code,
+      name: p.name,
+      module: p.module,
+      description: p.description ?? null,
+      status:
+        p.status === PERMISSION_STATUS.INACTIVE
+          ? PERMISSION_STATUS.INACTIVE
+          : PERMISSION_STATUS.ACTIVE,
+      statusName: p.status === PERMISSION_STATUS.INACTIVE ? 'INACTIVE' : 'ACTIVE',
+    }));
   }
 
-  /** Tạo mới vai trò và gán quyền */
+  /** Tạo mới vai trò và gán quyền (hỗ trợ cả permissionIds hoặc permissions codes) */
   public async create(dto: CreateRoleRequest): Promise<RoleResponse> {
     const normalizedCode = dto.code.trim().toLowerCase();
     const existing = await this.roleRepository.findByCode(normalizedCode);
@@ -82,17 +96,15 @@ export class RolesService implements IRolesPublicService {
         name: dto.name.trim(),
         description: dto.description ?? null,
         isSystem: false,
-        status: dto.status ?? 'ACTIVE',
+        status: dto.status ?? ROLE_STATUS.ACTIVE,
       });
 
-      const permEntities = await this.rolePermissionRepository.replacePermissionsForRole(
-        saved.id,
-        dto.permissions ?? [],
+      const resolvedPerms = await this.resolveInputPermissions(dto.permissionIds, dto.permissions);
+      await this.rolePermissionRepository.replacePermissionsForRole(
+        Number(saved.id),
+        resolvedPerms.map((p) => Number(p.id)),
       );
-      return this.mapper.toResponse(
-        saved,
-        permEntities.map((p) => p.permissionCode),
-      );
+      return this.mapper.toResponse(saved, resolvedPerms);
     };
 
     if (this.transactionManager) {
@@ -102,13 +114,13 @@ export class RolesService implements IRolesPublicService {
   }
 
   /** Cập nhật thông tin vai trò và danh sách quyền */
-  public async update(id: string, dto: UpdateRoleRequest): Promise<RoleResponse> {
+  public async update(id: number, dto: UpdateRoleRequest): Promise<RoleResponse> {
     const role = await this.roleRepository.findById(id);
     if (!role) {
       throw new NotFoundAppException('roles.notFound', { id });
     }
 
-    if (role.isSystem && dto.status === 'INACTIVE') {
+    if (role.isSystem && dto.status === ROLE_STATUS.INACTIVE) {
       throw new ForbiddenAppException('roles.cannotDeactivateSystemRole', [{ code: role.code }]);
     }
 
@@ -118,19 +130,20 @@ export class RolesService implements IRolesPublicService {
       if (dto.status !== undefined) role.status = dto.status;
 
       const saved = await this.roleRepository.saveEntity(role);
-      if (dto.permissions !== undefined) {
-        const permEntities = await this.rolePermissionRepository.replacePermissionsForRole(
-          saved.id,
+      if (dto.permissionIds !== undefined || dto.permissions !== undefined) {
+        const resolvedPerms = await this.resolveInputPermissions(
+          dto.permissionIds,
           dto.permissions,
         );
-        return this.mapper.toResponse(
-          saved,
-          permEntities.map((p) => p.permissionCode),
+        await this.rolePermissionRepository.replacePermissionsForRole(
+          Number(saved.id),
+          resolvedPerms.map((p) => Number(p.id)),
         );
+        return this.mapper.toResponse(saved, resolvedPerms);
       }
 
-      const permsMap = await this.loadPermissionsMap([saved.id]);
-      return this.mapper.toResponse(saved, permsMap.get(saved.id) ?? []);
+      const permsMap = await this.loadPermissionsMap([Number(saved.id)]);
+      return this.mapper.toResponse(saved, permsMap.get(Number(saved.id)) ?? []);
     };
 
     if (this.transactionManager) {
@@ -140,24 +153,22 @@ export class RolesService implements IRolesPublicService {
   }
 
   /** Cập nhật riêng danh sách quyền hạn cho một vai trò */
-  public async setPermissions(id: string, dto: SetRolePermissionsRequest): Promise<RoleResponse> {
+  public async setPermissions(id: number, dto: SetRolePermissionsRequest): Promise<RoleResponse> {
     const role = await this.roleRepository.findById(id);
     if (!role) {
       throw new NotFoundAppException('roles.notFound', { id });
     }
 
-    const permEntities = await this.rolePermissionRepository.replacePermissionsForRole(
-      role.id,
-      dto.permissions,
+    const resolvedPerms = await this.resolveInputPermissions(dto.permissionIds, dto.permissions);
+    await this.rolePermissionRepository.replacePermissionsForRole(
+      Number(role.id),
+      resolvedPerms.map((p) => Number(p.id)),
     );
-    return this.mapper.toResponse(
-      role,
-      permEntities.map((p) => p.permissionCode),
-    );
+    return this.mapper.toResponse(role, resolvedPerms);
   }
 
   /** Xóa mềm vai trò (chặn xóa đối với vai trò hệ thống isSystem = true) */
-  public async remove(id: string): Promise<{ deleted: true; id: string }> {
+  public async remove(id: number): Promise<{ deleted: true; id: number }> {
     const role = await this.roleRepository.findById(id);
     if (!role) {
       throw new NotFoundAppException('roles.notFound', { id });
@@ -170,66 +181,111 @@ export class RolesService implements IRolesPublicService {
   }
 
   /** Hợp đồng công khai: Tìm danh sách vai trò theo mảng roleIds */
-  public async findByIds(roleIds: readonly string[]): Promise<RoleSummary[]> {
+  public async findByIds(roleIds: readonly number[]): Promise<RoleSummary[]> {
     const roles = await this.roleRepository.findByIds(roleIds);
     if (roles.length === 0) return [];
-    const permsMap = await this.loadPermissionsMap(roles.map((r) => r.id));
-    return roles.map((role) => this.mapper.toSummary(role, permsMap.get(role.id) ?? []));
+    const permsMap = await this.loadPermissionsMap(roles.map((r) => Number(r.id)));
+    return roles.map((role) => this.mapper.toSummary(role, permsMap.get(Number(role.id)) ?? []));
   }
 
   /** Hợp đồng công khai: Tìm danh sách vai trò theo mảng mã code */
   public async findByCodes(codes: readonly string[]): Promise<RoleSummary[]> {
     const roles = await this.roleRepository.findByCodes(codes);
     if (roles.length === 0) return [];
-    const permsMap = await this.loadPermissionsMap(roles.map((r) => r.id));
-    return roles.map((role) => this.mapper.toSummary(role, permsMap.get(role.id) ?? []));
+    const permsMap = await this.loadPermissionsMap(roles.map((r) => Number(r.id)));
+    return roles.map((role) => this.mapper.toSummary(role, permsMap.get(Number(role.id)) ?? []));
   }
 
   /** Hợp đồng công khai: Tổng hợp danh sách mã quyền duy nhất từ mảng roleIds */
-  public async resolvePermissionsByRoleIds(roleIds: readonly string[]): Promise<string[]> {
+  public async resolvePermissionsByRoleIds(roleIds: readonly number[]): Promise<string[]> {
     const activeRoles = (await this.roleRepository.findByIds(roleIds)).filter(
-      (r) => r.status === 'ACTIVE',
+      (r) => Number(r.status) === ROLE_STATUS.ACTIVE,
     );
     if (activeRoles.length === 0) return [];
 
-    const permEntities = await this.rolePermissionRepository.findByRoleIds(
-      activeRoles.map((r) => r.id),
-    );
-    return [...new Set(permEntities.map((p) => p.permissionCode))];
+    const permsMap = await this.loadPermissionsMap(activeRoles.map((r) => Number(r.id)));
+    const codes = new Set<string>();
+    for (const r of activeRoles) {
+      for (const perm of permsMap.get(Number(r.id)) ?? []) {
+        codes.add(perm.code);
+      }
+    }
+    return [...codes];
   }
 
-  /** Hợp đồng công khai: Đảm bảo tất cả roleIds tồn tại và đang ACTIVE */
-  public async ensureActiveRolesExist(roleIds: readonly string[]): Promise<RoleSummary[]> {
-    const uniqueIds = [...new Set(roleIds)];
+  /** Hợp đồng công khai: Đảm bảo toàn bộ roleIds đều tồn tại và đang ACTIVE (status = 1) */
+  public async ensureActiveRolesExist(roleIds: readonly number[]): Promise<RoleSummary[]> {
+    const uniqueIds = [...new Set(roleIds.map(Number))];
     if (uniqueIds.length === 0) return [];
 
     const roles = await this.roleRepository.findByIds(uniqueIds);
-    const foundMap = new Map(roles.map((r) => [r.id, r]));
+    const foundMap = new Map(roles.map((r) => [Number(r.id), r]));
 
     const missingIds = uniqueIds.filter((id) => !foundMap.has(id));
     if (missingIds.length > 0) {
       throw new BadRequestAppException('roles.invalidOrMissingRoles', [{ missingIds }]);
     }
 
-    const inactiveIds = roles.filter((r) => r.status !== 'ACTIVE').map((r) => r.id);
+    const inactiveIds = roles
+      .filter((r) => Number(r.status) !== ROLE_STATUS.ACTIVE)
+      .map((r) => Number(r.id));
     if (inactiveIds.length > 0) {
       throw new BadRequestAppException('roles.inactiveRolesNotAllowed', [{ inactiveIds }]);
     }
 
     const permsMap = await this.loadPermissionsMap(uniqueIds);
-    return roles.map((role) => this.mapper.toSummary(role, permsMap.get(role.id) ?? []));
+    return roles.map((role) => this.mapper.toSummary(role, permsMap.get(Number(role.id)) ?? []));
   }
 
-  /** Nạp bảng ánh xạ roleId -> danh sách permissionCodes */
-  private async loadPermissionsMap(roleIds: readonly string[]): Promise<Map<string, string[]>> {
-    const map = new Map<string, string[]>();
-    if (roleIds.length === 0) return map;
+  /** Chuẩn hóa danh sách quyền từ permissionIds hoặc permissions codes thông qua bảng permissions */
+  private async resolveInputPermissions(
+    permissionIds?: readonly number[],
+    permissionCodes?: readonly string[],
+  ): Promise<PermissionEntity[]> {
+    if (!this.permissionRepository) {
+      return [];
+    }
 
-    const rows = await this.rolePermissionRepository.findByRoleIds(roleIds);
-    for (const row of rows) {
-      const list = map.get(row.roleId) ?? [];
-      list.push(row.permissionCode);
-      map.set(row.roleId, list);
+    const byId = new Map<number, PermissionEntity>();
+    if (permissionIds && permissionIds.length > 0) {
+      const foundByIds = await this.permissionRepository.findByIds(permissionIds);
+      for (const p of foundByIds) {
+        byId.set(Number(p.id), p);
+      }
+    }
+
+    if (permissionCodes && permissionCodes.length > 0) {
+      const ensuredByCodes =
+        await this.permissionRepository.ensurePermissionsByCodes(permissionCodes);
+      for (const p of ensuredByCodes) {
+        byId.set(Number(p.id), p);
+      }
+    }
+
+    return [...byId.values()];
+  }
+
+  /** Tải bản đồ roleId -> danh sách PermissionEntity từ bảng role_permissions join permissions */
+  private async loadPermissionsMap(
+    roleIds: readonly number[],
+  ): Promise<Map<number, PermissionEntity[]>> {
+    const map = new Map<number, PermissionEntity[]>();
+    if (roleIds.length === 0 || !this.permissionRepository) return map;
+
+    const links = await this.rolePermissionRepository.findByRoleIds(roleIds);
+    if (links.length === 0) return map;
+
+    const permIds = [...new Set(links.map((l) => Number(l.permissionId)))];
+    const perms = await this.permissionRepository.findByIds(permIds);
+    const permById = new Map(perms.map((p) => [Number(p.id), p]));
+
+    for (const link of links) {
+      const perm = permById.get(Number(link.permissionId));
+      if (!perm || Number(perm.status) !== PERMISSION_STATUS.ACTIVE) continue;
+      const roleId = Number(link.roleId);
+      const bucket = map.get(roleId) ?? [];
+      bucket.push(perm);
+      map.set(roleId, bucket);
     }
     return map;
   }

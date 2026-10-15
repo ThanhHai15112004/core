@@ -72,31 +72,41 @@ describe('Unit: Security Package — PasswordHasher, FieldEncryption, TotpServic
     expect(fieldEncryption.decrypt('PLAIN_LEGACY_SECRET')).toBe('PLAIN_LEGACY_SECRET');
   });
 
-  it('IAM Seeders: Đơn vị TP.HCM (1 chi nhánh), 10 TK đặc quyền (!P@ssw0rd#) & 1.000 TK thường (Abcd@454647#) đều @gmail.com và tên thật', () => {
+  it('IAM Seeders: Đơn vị TP.HCM (1 chi nhánh, ID 1..10), 10 TK đặc quyền (!P@ssw0rd#, ID 1..10) & 1.000 TK thường (Abcd@454647#, ID 11..1010) đều @gmail.com, có firstName/lastName và tên thật', () => {
     expect(PRIVILEGED_DEFAULT_PASSWORD).toBe('!P@ssw0rd#');
     expect(REGULAR_USER_DEFAULT_PASSWORD).toBe('Abcd@454647#');
 
-    // Chỉ có 1 chi nhánh ở TP.HCM (BRANCH_HCM)
-    const branches = HCMC_ORGANIZATION_UNITS.filter((u) => u.type === 'BRANCH');
+    // Chỉ có 1 chi nhánh ở TP.HCM (BRANCH_HCM, type = 2)
+    const branches = HCMC_ORGANIZATION_UNITS.filter((u) => u.type === 2);
     expect(branches).toHaveLength(1);
+    expect(branches[0]?.id).toBe(2);
     expect(branches[0]?.code).toBe('BRANCH_HCM');
 
-    // Tất cả tài khoản đặc quyền đều dùng @gmail.com
+    // Tất cả tài khoản đặc quyền đều dùng @gmail.com, có firstName/lastName và ID tuần tự 1..10
     expect(PRIVILEGED_ACCOUNTS.length).toBeGreaterThanOrEqual(10);
-    for (const pUser of PRIVILEGED_ACCOUNTS) {
+    for (let i = 0; i < PRIVILEGED_ACCOUNTS.length; i++) {
+      const pUser = PRIVILEGED_ACCOUNTS[i]!;
+      expect(pUser.id).toBe(i + 1);
       expect(pUser.email.endsWith('@gmail.com')).toBe(true);
+      expect(pUser.firstName.length).toBeGreaterThan(0);
+      expect(pUser.lastName.length).toBeGreaterThan(0);
     }
 
-    // Sinh 1.000 người dùng ngẫu nhiên tên tiếng Việt thật, không có user1/user2, 100% @gmail.com
+    // Sinh 1.000 người dùng ngẫu nhiên tên tiếng Việt thật, không có user1/user2, 100% @gmail.com, ID 11..1010
     const dataset = generateRealisticUsersDataset(1000);
     expect(dataset).toHaveLength(1000);
     const emails = new Set<string>();
     const usernames = new Set<string>();
 
-    for (const u of dataset) {
+    for (let i = 0; i < dataset.length; i++) {
+      const u = dataset[i]!;
+      expect(u.id).toBe(11 + i);
       expect(u.email.endsWith('@gmail.com')).toBe(true);
       expect(u.username).not.toMatch(/^user\d+$/i);
+      expect(u.firstName.length).toBeGreaterThan(0);
+      expect(u.lastName.length).toBeGreaterThan(0);
       expect(u.fullName.split(' ').length).toBeGreaterThanOrEqual(3);
+      expect([1, 2, 3]).toContain(u.status);
       emails.add(u.email);
       usernames.add(u.username);
     }
@@ -154,9 +164,9 @@ describe('Unit: Security Package — PasswordHasher, FieldEncryption, TotpServic
     const config = new CoreConfigService();
     const resolver: IUserIdentityResolver = {
       resolveIdentity: async (payload) => ({
-        id: payload.sub,
+        id: Number(payload.sub),
         email: 'resolved@core.local',
-        ...(payload.sid ? { sessionId: payload.sid } : {}),
+        ...(payload.sid ? { sessionId: Number(payload.sid) } : {}),
         roles: ['admin'],
         permissions: ['users.read', 'users.manage'],
       }),
@@ -165,15 +175,15 @@ describe('Unit: Security Package — PasswordHasher, FieldEncryption, TotpServic
     const tokenService = new TokenService(config, undefined, resolver);
 
     const accessToken = await tokenService.signAccessToken({
-      sub: 'user-123',
-      sid: 'sess-456',
+      sub: 123,
+      sid: 456,
       roles: ['admin'],
     });
 
     const verifiedAccess = await tokenService.verify(accessToken);
     expect(verifiedAccess).not.toBeNull();
-    expect(verifiedAccess?.sub).toBe('user-123');
-    expect(verifiedAccess?.sid).toBe('sess-456');
+    expect(verifiedAccess?.sub).toBe(123);
+    expect(verifiedAccess?.sid).toBe(456);
     expect(verifiedAccess?.type).toBe('access');
 
     // Token bị sửa chữ ký -> từ chối
@@ -181,25 +191,26 @@ describe('Unit: Security Package — PasswordHasher, FieldEncryption, TotpServic
 
     // Refresh token không được chấp nhận như Access token
     const refreshToken = await tokenService.signRefreshToken({
-      sub: 'user-123',
-      sid: 'sess-456',
+      sub: 123,
+      sid: 456,
     });
     expect(await tokenService.verify(refreshToken)).toBeNull();
     const verifiedRefresh = await tokenService.verifyRefreshToken(refreshToken);
-    expect(verifiedRefresh?.sub).toBe('user-123');
-    expect(verifiedRefresh?.sid).toBe('sess-456');
+    expect(verifiedRefresh?.sub).toBe(123);
+    expect(verifiedRefresh?.sid).toBe(456);
 
     // MFA Challenge token
     const mfaToken = await tokenService.signMfaChallengeToken({
-      sub: 'user-123',
+      sub: 123,
       methods: ['TOTP', 'EMAIL_OTP'],
     });
     expect(await tokenService.verify(mfaToken)).toBeNull();
     const verifiedMfa = await tokenService.verifyMfaChallengeToken(mfaToken);
-    expect(verifiedMfa?.sub).toBe('user-123');
+    expect(verifiedMfa?.sub).toBe(123);
 
     // Validate user qua IUserIdentityResolver
     const identity = await tokenService.validateUser(verifiedAccess!);
+    expect(identity?.id).toBe(123);
     expect(identity?.email).toBe('resolved@core.local');
     expect(identity?.permissions).toContain('users.manage');
   });

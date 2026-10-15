@@ -12,33 +12,36 @@ export class RolePermissionRepository extends BaseTypeOrmRepository<RolePermissi
     super(RolePermissionEntity, dataSource, transactionManager);
   }
 
-  /** Lấy toàn bộ bản ghi quyền gắn với danh sách roleIds */
-  public async findByRoleIds(roleIds: readonly string[]): Promise<RolePermissionEntity[]> {
+  /** Lấy danh sách liên kết quyền hạn theo mảng roleIds */
+  public async findByRoleIds(roleIds: readonly number[]): Promise<RolePermissionEntity[]> {
     if (roleIds.length === 0) return [];
-    const uniqueIds = [...new Set(roleIds)];
-    return this.repository.find({
-      where: { roleId: In(uniqueIds) },
-    });
+    return this.executeReadOnly(async (repo) =>
+      repo.find({
+        where: { roleId: In([...roleIds]) },
+        order: { id: 'ASC' },
+      }),
+    );
   }
 
-  /** Thay thế danh sách quyền của một vai trò */
+  /** Thay thế toàn bộ danh sách permissionIds cho một vai trò */
   public async replacePermissionsForRole(
-    roleId: string,
-    permissionCodes: readonly string[],
+    roleId: number,
+    permissionIds: readonly number[],
   ): Promise<RolePermissionEntity[]> {
+    const uniquePermIds = [...new Set(permissionIds.map(Number).filter((n) => n >= 1))];
+
     await this.repository.delete({ roleId });
-    const uniqueCodes = [...new Set(permissionCodes.map((p) => p.trim()).filter(Boolean))];
-    if (uniqueCodes.length === 0) {
+
+    if (uniquePermIds.length === 0) {
       return [];
     }
 
-    const entities = uniqueCodes.map((code) =>
+    const entities = uniquePermIds.map((permissionId) =>
       this.repository.create({
         roleId,
-        permissionCode: code,
+        permissionId,
       }),
     );
-
     return this.repository.save(entities);
   }
 }

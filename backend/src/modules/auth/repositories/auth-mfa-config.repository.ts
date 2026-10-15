@@ -12,10 +12,10 @@ export class AuthMfaConfigRepository extends BaseTypeOrmRepository<AuthMfaConfig
     super(AuthMfaConfigEntity, dataSource, transactionManager);
   }
 
-  /** Tìm cấu hình MFA của người dùng theo userId */
-  public async findByUserId(userId: string): Promise<AuthMfaConfigEntity | null> {
+  /** Tìm cấu hình MFA của người dùng theo userId số nguyên */
+  public async findByUserId(userId: number): Promise<AuthMfaConfigEntity | null> {
     return this.repository.findOne({
-      where: { userId },
+      where: { userId: Number(userId) },
     });
   }
 }

@@ -1,10 +1,15 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
+import {
+  BadRequestAppException,
+  buildXlsxBuffer,
+  parseXlsxToMatrix,
+} from '@packages/kernel/index.js';
 import {
   type IOrganizationsPublicService,
   ORGANIZATIONS_PUBLIC_SERVICE,
 } from '@modules/organizations/contracts/index.js';
 import { type IRolesPublicService, ROLES_PUBLIC_SERVICE } from '@modules/roles/contracts/index.js';
-import type { UserStatus } from '../contracts/index.js';
+import { USER_STATUS, parseUserStatus, resolveVietnameseNameParts } from '../contracts/index.js';
 import { UserRepository } from '../repositories/user.repository.js';
 import { UsersService } from './users.service.js';
 import {
@@ -18,7 +23,7 @@ import type {
   ExportUsersCsvResponse,
 } from '../responses/users.response.js';
 
-const DEFAULT_BULK_PASSWORD = 'ChangeMe@123';
+const DEFAULT_BULK_PASSWORD = 'Abcd@454647#';
 const MAX_EXPORT_ROWS = 5_000;
 
 @Injectable()
@@ -28,21 +33,34 @@ export class UserImportExportService {
     private readonly userRepository: UserRepository,
     @Inject(ROLES_PUBLIC_SERVICE)
     private readonly rolesPublicService: IRolesPublicService,
+    @Optional()
     @Inject(ORGANIZATIONS_PUBLIC_SERVICE)
-    private readonly organizationsPublicService: IOrganizationsPublicService,
+    private readonly organizationsPublicService: IOrganizationsPublicService | null = null,
   ) {}
 
-  /** Nhập người dùng hàng loạt từ chuỗi CSV hoặc mảng đối tượng JSON (Mục 3.1.7) */
+  /** Nhập người dùng hàng loạt từ file Excel (.xlsx base64), chuỗi CSV hoặc mảng JSON (Mục 3.1.7) */
   public async bulkImport(
     dto: BulkImportUsersRequest,
-    actorId?: string,
+    actorId?: number,
   ): Promise<BulkImportUsersResultResponse> {
-    const rawRows: BulkImportUserRowInput[] = dto.csvContent
-      ? this.parseCsvToRows(dto.csvContent)
-      : (dto.items ?? []);
+    let rawRows: BulkImportUserRowInput[];
+    if (dto.xlsxBase64) {
+      try {
+        const matrix = parseXlsxToMatrix(dto.xlsxBase64);
+        rawRows = this.mapMatrixToImportRows(matrix);
+      } catch (err: unknown) {
+        throw new BadRequestAppException('users.invalidXlsxFile', [
+          err instanceof Error ? err.message : 'Unable to parse .xlsx file',
+        ]);
+      }
+    } else if (dto.csvContent) {
+      rawRows = this.parseCsvToRows(dto.csvContent);
+    } else {
+      rawRows = dto.items ?? [];
+    }
 
     const errors: Array<{ row: number; identifier: string; message: string }> = [];
-    const importedUserIds: string[] = [];
+    const importedUserIds: number[] = [];
     let skippedCount = 0;
 
     // Thu thập toàn bộ roleCodes và organizationCodes để tra cứu 1 lần (tránh N+1 query)
@@ -57,11 +75,13 @@ export class UserImportExportService {
 
     const [rolesFound, orgsFound] = await Promise.all([
       allRoleCodes.length > 0 ? this.rolesPublicService.findByCodes(allRoleCodes) : [],
-      allOrgCodes.length > 0 ? this.organizationsPublicService.findByCodes(allOrgCodes) : [],
+      allOrgCodes.length > 0 && this.organizationsPublicService
+        ? this.organizationsPublicService.findByCodes(allOrgCodes)
+        : [],
     ]);
 
-    const roleIdByCode = new Map(rolesFound.map((r) => [r.code.toLowerCase(), r.id]));
-    const orgIdByCode = new Map(orgsFound.map((o) => [o.code.toUpperCase(), o.id]));
+    const roleIdByCode = new Map(rolesFound.map((r) => [r.code.toLowerCase(), Number(r.id)]));
+    const orgIdByCode = new Map(orgsFound.map((o) => [o.code.toUpperCase(), Number(o.id)]));
 
     for (let i = 0; i < rawRows.length; i++) {
       const rowNumber = i + 1;
@@ -101,32 +121,40 @@ export class UserImportExportService {
 
       const roleIds = (validRow.roleCodes ?? [])
         .map((code) => roleIdByCode.get(code.trim().toLowerCase()))
-        .filter((id): id is string => Boolean(id));
+        .filter((id): id is number => typeof id === 'number');
 
       const organizationUnits = (validRow.organizationCodes ?? [])
         .map((code) => orgIdByCode.get(code.trim().toUpperCase()))
-        .filter((id): id is string => Boolean(id))
+        .filter((id): id is number => typeof id === 'number')
         .map((organizationUnitId, idx) => ({
           organizationUnitId,
           isPrimary: idx === 0,
           positionTitle: null,
         }));
 
+      const nameParts = resolveVietnameseNameParts({
+        firstName: validRow.firstName,
+        lastName: validRow.lastName,
+        fullName: validRow.fullName,
+      });
+
       try {
         const created = await this.usersService.create(
           {
             username: normalizedUsername,
             email: normalizedEmail,
-            fullName: validRow.fullName.trim(),
+            firstName: nameParts.firstName,
+            lastName: nameParts.lastName,
+            fullName: nameParts.fullName,
             phone: validRow.phone ?? null,
             password: validRow.password || dto.defaultPassword || DEFAULT_BULK_PASSWORD,
-            status: validRow.status ?? 'ACTIVE',
+            status: validRow.status ?? USER_STATUS.ACTIVE,
             roleIds,
             organizationUnits,
           },
           actorId,
         );
-        importedUserIds.push(created.id);
+        importedUserIds.push(Number(created.id));
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'Failed to import user row';
         errors.push({ row: rowNumber, identifier, message });
@@ -143,8 +171,9 @@ export class UserImportExportService {
     };
   }
 
-  /** Xuất danh sách người dùng ra định dạng CSV theo bộ lọc hiện hành (Mục 3.1.8) */
+  /** Xuất danh sách người dùng ra định dạng CSV hoặc Excel (.xlsx) theo bộ lọc hiện hành (Mục 3.1.8) */
   public async exportUsersCsv(query: ListUsersQuery): Promise<ExportUsersCsvResponse> {
+    const format: 'csv' | 'xlsx' = query.format === 'xlsx' ? 'xlsx' : 'csv';
     const { items } = await this.userRepository.searchPaginated({
       ...query,
       page: 1,
@@ -157,9 +186,12 @@ export class UserImportExportService {
       'id',
       'username',
       'email',
+      'lastName',
+      'firstName',
       'fullName',
       'phone',
       'status',
+      'statusName',
       'mfaEnabled',
       'roles',
       'organizationUnits',
@@ -168,36 +200,109 @@ export class UserImportExportService {
     ];
 
     const lines: string[] = [headers.join(',')];
+    const matrixRows: Array<Array<string | number>> = [];
+
     for (const user of hydrated) {
       const rolesStr = user.roles.map((r) => r.code).join('|');
       const orgsStr = user.organizationUnits
         .map((o) => `${o.code ?? o.organizationUnitId}${o.isPrimary ? '*' : ''}`)
         .join('|');
 
-      const rowValues = [
+      const rowValues: Array<string | number> = [
         user.id,
         user.username,
         user.email,
+        user.lastName,
+        user.firstName,
         user.fullName,
         user.phone ?? '',
         user.status,
+        user.statusName,
         user.mfaEnabled ? 'true' : 'false',
         rolesStr,
         orgsStr,
         user.lastLoginAt ?? '',
         user.createdAt,
       ];
+      matrixRows.push(rowValues);
       lines.push(rowValues.map((v) => this.escapeCsvCell(v)).join(','));
     }
 
     const csvContent = `\uFEFF${lines.join('\r\n')}\r\n`;
+    const xlsxBuffer = buildXlsxBuffer(headers, matrixRows, 'Users');
+    const xlsxBase64 = xlsxBuffer.toString('base64');
     const datePart = new Date().toISOString().slice(0, 10);
 
     return {
-      fileName: `users-export-${datePart}.csv`,
-      contentType: 'text/csv; charset=utf-8',
+      fileName: `users-export-${datePart}.${format}`,
+      contentType:
+        format === 'xlsx'
+          ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+          : 'text/csv; charset=utf-8',
+      format,
       totalExported: hydrated.length,
       csvContent,
+      xlsxBase64,
+    };
+  }
+
+  /** Xuất file mẫu (Template) Excel (.xlsx) & CSV phục vụ nhập người dùng hàng loạt (Mục 3.1.7) */
+  public exportImportTemplate(format: 'csv' | 'xlsx' = 'xlsx'): ExportUsersCsvResponse {
+    const headers = [
+      'username',
+      'email',
+      'lastName',
+      'firstName',
+      'fullName',
+      'phone',
+      'status',
+      'roles',
+      'organizations',
+    ];
+    const sampleRows: Array<Array<string | number>> = [
+      [
+        'an.nguyen',
+        'an.nguyen@gmail.com',
+        'Nguyễn Văn',
+        'An',
+        'Nguyễn Văn An',
+        '0901234567',
+        1,
+        'staff',
+        'BRANCH_HCM|DEPT_ENGINEERING',
+      ],
+      [
+        'binh.tran',
+        'binh.tran@gmail.com',
+        'Trần Thị',
+        'Bình',
+        'Trần Thị Bình',
+        '0902345678',
+        1,
+        'department_manager',
+        'BRANCH_HCM|DEPT_HR',
+      ],
+    ];
+
+    const lines: string[] = [
+      headers.join(','),
+      ...sampleRows.map((row) => row.map((v) => this.escapeCsvCell(v)).join(',')),
+    ];
+    const csvContent = `\uFEFF${lines.join('\r\n')}\r\n`;
+    const xlsxBase64 = buildXlsxBuffer(headers, sampleRows, 'UsersImportTemplate').toString(
+      'base64',
+    );
+
+    return {
+      fileName: `users-import-template.${format}`,
+      contentType:
+        format === 'xlsx'
+          ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+          : 'text/csv; charset=utf-8',
+      format,
+      totalExported: sampleRows.length,
+      csvContent,
+      xlsxBase64,
     };
   }
 
@@ -209,7 +314,17 @@ export class UserImportExportService {
     const lines = normalized.split(/\r?\n/).filter((l) => l.trim().length > 0);
     if (lines.length < 2) return [];
 
-    const headerCells = this.parseCsvLine(lines[0]!).map((h) => h.trim().toLowerCase());
+    const matrix = lines.map((line) => this.parseCsvLine(line));
+    return this.mapMatrixToImportRows(matrix);
+  }
+
+  /** Chuyển đổi mảng 2 chiều (từ CSV hoặc Excel .xlsx) thành danh sách `BulkImportUserRowInput` */
+  private mapMatrixToImportRows(
+    matrix: ReadonlyArray<ReadonlyArray<string>>,
+  ): BulkImportUserRowInput[] {
+    if (matrix.length < 2) return [];
+
+    const headerCells = matrix[0]!.map((h) => h.trim().toLowerCase());
     const idxOf = (names: string[]): number => {
       for (const name of names) {
         const idx = headerCells.indexOf(name.toLowerCase());
@@ -218,42 +333,57 @@ export class UserImportExportService {
       return -1;
     };
 
-    const usernameIdx = idxOf(['username', 'user_name', 'account']);
+    const usernameIdx = idxOf(['username', 'user_name', 'account', 'tai_khoan']);
     const emailIdx = idxOf(['email', 'mail']);
-    const fullNameIdx = idxOf(['fullname', 'full_name', 'name', 'hoten']);
-    const phoneIdx = idxOf(['phone', 'phone_number', 'sdt']);
-    const passwordIdx = idxOf(['password', 'pass']);
-    const statusIdx = idxOf(['status', 'trangthai']);
-    const rolesIdx = idxOf(['roles', 'rolecodes', 'role_codes']);
-    const orgsIdx = idxOf(['organizations', 'organizationcodes', 'organization_codes', 'branches']);
+    const firstNameIdx = idxOf(['firstname', 'first_name', 'ten']);
+    const lastNameIdx = idxOf(['lastname', 'last_name', 'ho', 'ho_dem']);
+    const fullNameIdx = idxOf(['fullname', 'full_name', 'name', 'hoten', 'ho_ten']);
+    const phoneIdx = idxOf(['phone', 'phone_number', 'sdt', 'so_dien_thoai']);
+    const passwordIdx = idxOf(['password', 'pass', 'mat_khau']);
+    const statusIdx = idxOf(['status', 'trangthai', 'trang_thai']);
+    const rolesIdx = idxOf(['roles', 'rolecodes', 'role_codes', 'vai_tro']);
+    const orgsIdx = idxOf([
+      'organizations',
+      'organizationcodes',
+      'organization_codes',
+      'organizationunits',
+      'branches',
+      'don_vi',
+    ]);
 
     const rows: BulkImportUserRowInput[] = [];
-    for (let i = 1; i < lines.length; i++) {
-      const cells = this.parseCsvLine(lines[i]!);
+    for (let i = 1; i < matrix.length; i++) {
+      const cells = matrix[i]!;
       const getCell = (idx: number): string => (idx >= 0 ? (cells[idx] ?? '').trim() : '');
 
       const email = getCell(emailIdx);
       const username = getCell(usernameIdx) || (email.includes('@') ? email.split('@')[0]! : '');
-      const fullName = getCell(fullNameIdx) || username;
+      if (!email && !username) continue;
+
+      const firstName = getCell(firstNameIdx) || undefined;
+      const lastName = getCell(lastNameIdx) || undefined;
+      const fullName =
+        getCell(fullNameIdx) || `${lastName ?? ''} ${firstName ?? ''}`.trim() || username;
       const phone = getCell(phoneIdx) || null;
       const password = getCell(passwordIdx) || undefined;
-      const rawStatus = getCell(statusIdx).toUpperCase();
-      const status: UserStatus =
-        rawStatus === 'INACTIVE' || rawStatus === 'LOCKED' ? rawStatus : 'ACTIVE';
+      const rawStatus = getCell(statusIdx);
+      const status = rawStatus ? parseUserStatus(rawStatus) : USER_STATUS.ACTIVE;
 
       const roleCodes = getCell(rolesIdx)
-        .split(/[|;]/)
+        .split(/[|;,]/)
         .map((s) => s.trim())
         .filter(Boolean);
 
       const organizationCodes = getCell(orgsIdx)
-        .split(/[|;]/)
-        .map((s) => s.trim())
+        .split(/[|;,]/)
+        .map((s) => s.replace(/\*$/, '').trim())
         .filter(Boolean);
 
       rows.push({
         username,
         email,
+        ...(firstName ? { firstName } : {}),
+        ...(lastName ? { lastName } : {}),
         fullName,
         phone,
         ...(password ? { password } : {}),
@@ -266,7 +396,7 @@ export class UserImportExportService {
     return rows;
   }
 
-  /** Tách một dòng CSV có hỗ trợ giá trị nằm trong dấu ngoặc kép */
+  /** Phân tích một dòng CSV có hỗ trợ dấu ngoặc kép */
   private parseCsvLine(line: string): string[] {
     const result: string[] = [];
     let current = '';
@@ -274,14 +404,18 @@ export class UserImportExportService {
 
     for (let i = 0; i < line.length; i++) {
       const ch = line[i]!;
-      if (ch === '"') {
-        if (inQuotes && line[i + 1] === '"') {
+      if (inQuotes) {
+        if (ch === '"' && line[i + 1] === '"') {
           current += '"';
           i++;
+        } else if (ch === '"') {
+          inQuotes = false;
         } else {
-          inQuotes = !inQuotes;
+          current += ch;
         }
-      } else if (ch === ',' && !inQuotes) {
+      } else if (ch === '"') {
+        inQuotes = true;
+      } else if (ch === ',') {
         result.push(current);
         current = '';
       } else {
@@ -292,12 +426,12 @@ export class UserImportExportService {
     return result;
   }
 
-  /** Chuẩn hóa giá trị ô CSV chống lỗi dấu phẩy, xuống dòng và CSV Formula Injection */
-  private escapeCsvCell(value: string): string {
-    const safeVal = /^[=+\-@]/.test(value) ? `'${value}` : value;
-    if (/[",\r\n]/.test(safeVal)) {
-      return `"${safeVal.replace(/"/g, '""')}"`;
+  /** Thoát chuỗi an toàn khi ghi ra ô CSV */
+  private escapeCsvCell(value: unknown): string {
+    const str = String(value ?? '');
+    if (/[",\r\n]/.test(str)) {
+      return `"${str.replace(/"/g, '""')}"`;
     }
-    return safeVal;
+    return str;
   }
 }

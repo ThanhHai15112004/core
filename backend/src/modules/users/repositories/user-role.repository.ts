@@ -12,23 +12,39 @@ export class UserRoleRepository extends BaseTypeOrmRepository<UserRoleEntity> {
     super(UserRoleEntity, dataSource, transactionManager);
   }
 
-  /** Lấy danh sách liên kết vai trò theo mảng userIds */
-  public async findByUserIds(userIds: readonly string[]): Promise<UserRoleEntity[]> {
+  /** Tìm danh sách vai trò đã gán cho mảng userIds */
+  public async findByUserIds(userIds: readonly number[]): Promise<UserRoleEntity[]> {
     if (userIds.length === 0) return [];
-    const uniqueIds = [...new Set(userIds)];
-    return this.repository.find({
-      where: { userId: In(uniqueIds) },
-    });
+    return this.executeReadOnly(async (repo) =>
+      repo.find({
+        where: { userId: In([...userIds]) },
+        order: { id: 'ASC' },
+      }),
+    );
   }
 
-  /** Thay thế danh sách vai trò của một người dùng */
+  /** Tìm danh sách userIds thuộc một hoặc nhiều roleIds */
+  public async findUserIdsByRoleIds(roleIds: readonly number[]): Promise<number[]> {
+    if (roleIds.length === 0) return [];
+    const rows = await this.executeReadOnly(async (repo) =>
+      repo.find({
+        where: { roleId: In([...roleIds]) },
+        select: { userId: true },
+      }),
+    );
+    return [...new Set(rows.map((r) => Number(r.userId)))];
+  }
+
+  /** Thay thế toàn bộ danh sách vai trò của một người dùng */
   public async replaceUserRoles(
-    userId: string,
-    roleIds: readonly string[],
-    assignedBy?: string | null,
+    userId: number,
+    roleIds: readonly number[],
+    assignedBy?: number | null,
   ): Promise<UserRoleEntity[]> {
+    const uniqueRoleIds = [...new Set(roleIds.map(Number).filter((n) => n >= 1))];
+
     await this.repository.delete({ userId });
-    const uniqueRoleIds = [...new Set(roleIds)];
+
     if (uniqueRoleIds.length === 0) {
       return [];
     }
@@ -40,7 +56,6 @@ export class UserRoleRepository extends BaseTypeOrmRepository<UserRoleEntity> {
         assignedBy: assignedBy ?? null,
       }),
     );
-
     return this.repository.save(entities);
   }
 }

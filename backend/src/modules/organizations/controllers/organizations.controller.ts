@@ -8,7 +8,7 @@ import {
   ValidatedBody,
   ValidatedParams,
   ValidatedQuery,
-  uuidParamSchema,
+  positiveIntParamSchema,
 } from '@packages/http/index.js';
 import { ORGANIZATIONS_ROUTES } from '../routes/organizations.routes.js';
 import { OrganizationsService } from '../services/organizations.service.js';
@@ -25,7 +25,7 @@ import {
   organizationUnitResponseSchema,
 } from '../responses/organizations.response.js';
 
-@ApiGroup('Organizations & Branches', 'Quản lý Đơn vị, Chi nhánh và Phòng ban')
+@ApiGroup('Organizations', 'Quản lý danh mục đơn vị, chi nhánh và phòng ban')
 @Controller(ORGANIZATIONS_ROUTES.PREFIX)
 export class OrganizationsController {
   constructor(private readonly organizationsService: OrganizationsService) {}
@@ -34,7 +34,7 @@ export class OrganizationsController {
   @Get()
   @RequirePermissions('organizations.read')
   @ApiDoc({
-    summary: 'Lấy danh sách đơn vị / chi nhánh',
+    summary: 'Danh sách đơn vị, chi nhánh và phòng ban',
     response: z.array(organizationUnitResponseSchema),
   })
   public async list(
@@ -47,16 +47,16 @@ export class OrganizationsController {
   @Get(ORGANIZATIONS_ROUTES.BY_ID)
   @RequirePermissions('organizations.read')
   @ApiDoc({
-    summary: 'Lấy chi tiết đơn vị / chi nhánh theo ID',
+    summary: 'Xem chi tiết đơn vị hoặc chi nhánh theo ID',
     response: organizationUnitResponseSchema,
   })
   public async getById(
-    @ValidatedParams(uuidParamSchema, 'id') id: string,
+    @ValidatedParams(positiveIntParamSchema, 'id') id: number,
   ): Promise<OrganizationUnitResponse> {
     return this.organizationsService.getById(id);
   }
 
-  /** Tạo mới một đơn vị hoặc chi nhánh */
+  /** Tạo mới đơn vị hoặc chi nhánh */
   @Post()
   @RequirePermissions('organizations.manage')
   @ApiDoc({
@@ -70,7 +70,7 @@ export class OrganizationsController {
     return this.organizationsService.create(body);
   }
 
-  /** Cập nhật thông tin đơn vị hoặc chi nhánh */
+  /** Cập nhật đơn vị hoặc chi nhánh */
   @Patch(ORGANIZATIONS_ROUTES.BY_ID)
   @RequirePermissions('organizations.manage')
   @ApiDoc({
@@ -78,7 +78,7 @@ export class OrganizationsController {
     response: organizationUnitResponseSchema,
   })
   public async update(
-    @ValidatedParams(uuidParamSchema, 'id') id: string,
+    @ValidatedParams(positiveIntParamSchema, 'id') id: number,
     @ValidatedBody(updateOrganizationUnitSchema) body: UpdateOrganizationUnitRequest,
   ): Promise<OrganizationUnitResponse> {
     return this.organizationsService.update(id, body);
@@ -90,11 +90,11 @@ export class OrganizationsController {
   @RequirePermissions('organizations.manage')
   @ApiDoc({
     summary: 'Xóa mềm đơn vị hoặc chi nhánh',
-    response: z.object({ deleted: z.literal(true), id: z.string().uuid() }),
+    response: z.object({ deleted: z.literal(true), id: z.number().int().min(1) }),
   })
   public async remove(
-    @ValidatedParams(uuidParamSchema, 'id') id: string,
-  ): Promise<{ deleted: true; id: string }> {
+    @ValidatedParams(positiveIntParamSchema, 'id') id: number,
+  ): Promise<{ deleted: true; id: number }> {
     return this.organizationsService.remove(id);
   }
 }

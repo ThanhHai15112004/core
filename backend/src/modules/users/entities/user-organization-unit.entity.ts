@@ -5,12 +5,12 @@ import { TypeOrmBaseEntity } from '@packages/database/index.js';
 @Index(['userId', 'organizationUnitId'], { unique: true })
 export class UserOrganizationUnitEntity extends TypeOrmBaseEntity {
   @Index()
-  @Column({ name: 'user_id', type: 'uuid' })
-  public userId!: string;
+  @Column({ name: 'user_id', type: 'int' })
+  public userId!: number;
 
   @Index()
-  @Column({ name: 'organization_unit_id', type: 'uuid' })
-  public organizationUnitId!: string;
+  @Column({ name: 'organization_unit_id', type: 'int' })
+  public organizationUnitId!: number;
 
   @Column({ name: 'is_primary', type: 'boolean', default: false })
   public isPrimary!: boolean;

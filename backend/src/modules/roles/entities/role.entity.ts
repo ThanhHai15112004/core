@@ -1,6 +1,6 @@
 import { Column, Entity, Index } from 'typeorm';
 import { TypeOrmBaseEntity } from '@packages/database/index.js';
-import type { RoleStatus } from '../contracts/index.js';
+import { ROLE_STATUS, type RoleStatusCode } from '../contracts/index.js';
 
 @Entity('roles')
 export class RoleEntity extends TypeOrmBaseEntity {
@@ -17,7 +17,8 @@ export class RoleEntity extends TypeOrmBaseEntity {
   @Column({ name: 'is_system', type: 'boolean', default: false })
   public isSystem!: boolean;
 
+  /** Trạng thái: 1 = ACTIVE, 2 = INACTIVE */
   @Index()
-  @Column({ type: 'varchar', length: 32, default: 'ACTIVE' })
-  public status!: RoleStatus;
+  @Column({ type: 'int', default: ROLE_STATUS.ACTIVE })
+  public status!: RoleStatusCode;
 }

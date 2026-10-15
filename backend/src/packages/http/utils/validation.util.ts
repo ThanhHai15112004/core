@@ -327,6 +327,10 @@ export const positiveIntParamSchema = z
   ])
   .pipe(z.number().int().min(1));
 
+export const intIdParamSchema = z.object({
+  id: positiveIntParamSchema,
+});
+
 /**
  * Schema kiểm tra Path Parameter dạng chuỗi định danh Slug (`^[a-z0-9]+(?:-[a-z0-9]+)*$`).
  */

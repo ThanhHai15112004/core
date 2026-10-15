@@ -33,7 +33,7 @@ class RbacTestController {
   @RequireRoles('operator', 'admin')
   @RequirePermissions('ops.jobs.retry', 'ops.jobs.read')
   @Post('ops-action')
-  public runProtectedAction(@CurrentUser('id') userId: string): { executedBy: string } {
+  public runProtectedAction(@CurrentUser('id') userId: number): { executedBy: number } {
     return { executedBy: userId };
   }
 }
@@ -65,7 +65,7 @@ describe('Feature E2E: AuthGuard & Permission Test Helper (Task 2.7.3 & 2.7.6)',
 
   it('actingAs() gắn đúng thông tin UserIdentity cho @CurrentUser() trên route cần đăng nhập', async () => {
     const session = actingAs(context.app, {
-      id: 'usr-999',
+      id: 999,
       email: 'qa@core.local',
       roles: ['editor'],
       permissions: ['articles.write'],
@@ -79,7 +79,7 @@ describe('Feature E2E: AuthGuard & Permission Test Helper (Task 2.7.3 & 2.7.6)',
 
     expect(res.status).toBe(HTTP_STATUS_CODE.OK);
     expect(res.body.data).toEqual({
-      id: 'usr-999',
+      id: 999,
       email: 'qa@core.local',
       roles: ['editor'],
       permissions: ['articles.write'],

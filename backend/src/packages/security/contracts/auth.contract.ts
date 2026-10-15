@@ -1,24 +1,24 @@
 export interface UserIdentity {
-  readonly id: string;
+  readonly id: number;
   readonly email?: string;
   readonly username?: string;
-  readonly sessionId?: string;
+  readonly sessionId?: number;
   readonly roles: readonly string[];
   readonly permissions: readonly string[];
-  readonly organizationUnitIds?: readonly string[];
+  readonly organizationUnitIds?: readonly number[];
 }
 
 export type JwtTokenType = 'access' | 'refresh' | 'mfa_challenge';
 
 export interface TokenPayload {
-  readonly sub: string;
-  readonly sid?: string;
+  readonly sub: string | number;
+  readonly sid?: string | number;
   readonly type?: JwtTokenType;
   readonly email?: string;
   readonly username?: string;
   readonly roles?: string[];
   readonly permissions?: string[];
-  readonly organizationUnitIds?: string[];
+  readonly organizationUnitIds?: Array<number | string>;
   readonly iat?: number;
   readonly exp?: number;
   readonly [key: string]: unknown;

@@ -27,29 +27,36 @@ export class DevelopmentDataSeeder implements SeederContract {
       throw new Error('DevelopmentDataSeeder is strictly forbidden in production environment');
     }
 
+    const isPostgres = ctx.driver === 'postgres';
+    const pkDef = isPostgres ? 'SERIAL PRIMARY KEY' : 'INT AUTO_INCREMENT PRIMARY KEY';
+
     await ctx.manager.query(`
       CREATE TABLE IF NOT EXISTS core_master_settings (
-        setting_key VARCHAR(128) PRIMARY KEY,
+        id ${pkDef},
+        setting_key VARCHAR(128) NOT NULL UNIQUE,
         setting_value TEXT NOT NULL,
-        description VARCHAR(255) NOT NULL
+        description VARCHAR(255) NOT NULL,
+        status INT NOT NULL DEFAULT 1,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        deleted_at TIMESTAMP NULL
       )
     `);
 
-    const isPostgres = ctx.driver === 'postgres';
     let affected = 0;
 
     for (const item of DEV_SAMPLE_SETTINGS) {
       if (isPostgres) {
         await ctx.manager.query(
-          `INSERT INTO core_master_settings (setting_key, setting_value, description)
-           VALUES ($1, $2, $3)
+          `INSERT INTO core_master_settings (setting_key, setting_value, description, status)
+           VALUES ($1, $2, $3, 1)
            ON CONFLICT (setting_key) DO UPDATE SET setting_value = EXCLUDED.setting_value`,
           [item.key, item.value, item.description],
         );
       } else {
         await ctx.manager.query(
-          `INSERT INTO core_master_settings (setting_key, setting_value, description)
-           VALUES (?, ?, ?)
+          `INSERT INTO core_master_settings (setting_key, setting_value, description, status)
+           VALUES (?, ?, ?, 1)
            ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)`,
           [item.key, item.value, item.description],
         );

@@ -2,7 +2,7 @@ import { Injectable, Optional } from '@nestjs/common';
 import { DataSource, In } from 'typeorm';
 import { BaseTypeOrmRepository, TransactionManager } from '@packages/database/index.js';
 import { RoleEntity } from '../entities/role.entity.js';
-import type { RoleStatus } from '../contracts/index.js';
+import type { ListRolesQuery } from '../requests/roles.requests.js';
 
 @Injectable()
 export class RoleRepository extends BaseTypeOrmRepository<RoleEntity> {
@@ -15,45 +15,51 @@ export class RoleRepository extends BaseTypeOrmRepository<RoleEntity> {
 
   /** Tìm vai trò theo mã code */
   public async findByCode(code: string): Promise<RoleEntity | null> {
-    return this.repository.findOne({
-      where: { code: code.trim().toLowerCase() },
-    });
+    const normalized = code.trim().toLowerCase();
+    return this.executeReadOnly(async (repo) =>
+      repo.findOne({
+        where: { code: normalized },
+      }),
+    );
   }
 
-  /** Tìm danh sách vai trò theo mảng ID */
-  public async findByIds(roleIds: readonly string[]): Promise<RoleEntity[]> {
-    if (roleIds.length === 0) return [];
-    const uniqueIds = [...new Set(roleIds)];
-    return this.repository.find({
-      where: { id: In(uniqueIds) },
-    });
+  /** Tìm danh sách vai trò theo mảng ID số nguyên */
+  public async findByIds(ids: readonly number[]): Promise<RoleEntity[]> {
+    if (ids.length === 0) return [];
+    return this.executeReadOnly(async (repo) =>
+      repo.find({
+        where: { id: In([...ids]) },
+        order: { id: 'ASC' },
+      }),
+    );
   }
 
   /** Tìm danh sách vai trò theo mảng mã code */
   public async findByCodes(codes: readonly string[]): Promise<RoleEntity[]> {
     if (codes.length === 0) return [];
-    const normalized = [...new Set(codes.map((c) => c.trim().toLowerCase()))];
-    return this.repository.find({
-      where: { code: In(normalized) },
-    });
+    const normalized = codes.map((c) => c.trim().toLowerCase());
+    return this.executeReadOnly(async (repo) =>
+      repo.find({
+        where: { code: In(normalized) },
+        order: { id: 'ASC' },
+      }),
+    );
   }
 
-  /** Lấy danh sách vai trò có lọc theo từ khóa hoặc trạng thái */
-  public async findFiltered(
-    filter: { q?: string | undefined; status?: RoleStatus | undefined } = {},
-  ): Promise<RoleEntity[]> {
-    const qb = this.repository.createQueryBuilder('r');
+  /** Tìm danh sách vai trò theo điều kiện lọc */
+  public async findFiltered(query: ListRolesQuery): Promise<RoleEntity[]> {
+    return this.executeReadOnly(async (repo) => {
+      const qb = repo.createQueryBuilder('r').orderBy('r.id', 'ASC');
 
-    if (filter.q && filter.q.trim().length > 0) {
-      const kw = `%${filter.q.trim().toLowerCase()}%`;
-      qb.andWhere('(LOWER(r.code) LIKE :kw OR LOWER(r.name) LIKE :kw)', { kw });
-    }
+      if (query.status !== undefined) {
+        qb.andWhere('r.status = :status', { status: query.status });
+      }
+      if (query.search) {
+        const keyword = `%${query.search.trim().toLowerCase()}%`;
+        qb.andWhere('(LOWER(r.code) LIKE :keyword OR LOWER(r.name) LIKE :keyword)', { keyword });
+      }
 
-    if (filter.status) {
-      qb.andWhere('r.status = :status', { status: filter.status });
-    }
-
-    qb.orderBy('r.code', 'ASC');
-    return qb.getMany();
+      return qb.getMany();
+    });
   }
 }

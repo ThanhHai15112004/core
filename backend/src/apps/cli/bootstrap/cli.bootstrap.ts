@@ -1,5 +1,6 @@
 import { NestFactory } from '@nestjs/core';
 import { Logger } from '@nestjs/common';
+import { DatabaseConnectionService } from '@packages/database/index.js';
 import { PinoNestLogger } from '@packages/logging/index.js';
 import { RedisService } from '@packages/redis/index.js';
 import { CliHistoryService } from '@packages/runtime/index.js';
@@ -7,6 +8,7 @@ import { CliModule } from '../cli.module.js';
 import { CliDispatcherService } from '../dispatcher/cli-dispatcher.service.js';
 
 const REDIS_READY_TIMEOUT_MS = 2000;
+const DB_READY_TIMEOUT_MS = 5000;
 
 /** Khởi tạo ngữ cảnh NestJS CLI, cấu hình logger, nạp dispatcher và thực thi lệnh */
 export async function bootstrapCli(args: string[] = process.argv.slice(2)): Promise<void> {
@@ -19,7 +21,7 @@ export async function bootstrapCli(args: string[] = process.argv.slice(2)): Prom
   const history = app.get(CliHistoryService);
   const commandName = args[0] ?? 'help';
 
-  // Với các lệnh offline như help, arch:check, module:create, không cần đợi Redis
+  // Với các lệnh offline như help, arch:check, module:create, không cần đợi Redis/Database
   const isOfflineFriendly = [
     'help',
     '--help',
@@ -30,7 +32,10 @@ export async function bootstrapCli(args: string[] = process.argv.slice(2)): Prom
     'module:list',
   ].includes(commandName);
   if (!isOfflineFriendly) {
-    await waitForRedis(app.get(RedisService));
+    await Promise.all([
+      waitForRedis(app.get(RedisService)),
+      waitForDatabase(app.get(DatabaseConnectionService)),
+    ]);
   }
 
   try {
@@ -48,5 +53,13 @@ async function waitForRedis(redis: RedisService): Promise<void> {
   const deadline = Date.now() + REDIS_READY_TIMEOUT_MS;
   while (!redis.isReady() && Date.now() < deadline) {
     await new Promise((r) => setTimeout(r, 100));
+  }
+}
+
+/** Đợi DatabaseConnectionService hoàn tất lần initialize() đầu tiên (nạp xong entities & migrations). */
+async function waitForDatabase(db: DatabaseConnectionService): Promise<void> {
+  const deadline = Date.now() + DB_READY_TIMEOUT_MS;
+  while (db.getStatus().state === 'connecting' && Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, 50));
   }
 }

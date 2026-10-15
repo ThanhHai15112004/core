@@ -40,7 +40,7 @@ class SampleWalletRepository extends BaseTypeOrmRepository<SampleWalletEntity> {
 }
 
 interface SampleWalletResponseDto {
-  id: string;
+  id: number;
   ownerCode: string;
   balance: number;
 }
@@ -254,7 +254,7 @@ describe('2.6 Repository & Data Safety (Repository, Read/Write, Entity Guard, Un
       } as unknown as ExecutionContext;
 
       const entity = new SampleWalletEntity();
-      entity.id = 'w-100';
+      entity.id = 100;
       entity.ownerCode = 'USER_01';
       entity.balance = 5000;
 

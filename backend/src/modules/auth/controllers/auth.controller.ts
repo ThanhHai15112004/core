@@ -7,7 +7,7 @@ import {
   Public,
   ValidatedBody,
   ValidatedParams,
-  uuidParamSchema,
+  intIdParamSchema,
 } from '@packages/http/index.js';
 import { CurrentUser, type UserIdentity } from '@packages/security/index.js';
 import { AUTH_ROUTES } from '../routes/auth.routes.js';
@@ -185,12 +185,12 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiDoc({
     summary: 'Thu hồi một phiên đăng nhập theo sessionId',
-    response: z.object({ revoked: z.literal(true), sessionId: z.string().uuid() }),
+    response: z.object({ revoked: z.literal(true), sessionId: z.number().int().positive() }),
   })
   public async revokeSession(
     @CurrentUser() user: UserIdentity,
-    @ValidatedParams(uuidParamSchema, 'sessionId') sessionId: string,
-  ): Promise<{ revoked: true; sessionId: string }> {
+    @ValidatedParams(intIdParamSchema, 'sessionId') sessionId: number,
+  ): Promise<{ revoked: true; sessionId: number }> {
     return this.sessionService.revokeSessionById(user.id, sessionId, 'Revoked by user');
   }
 

@@ -20,10 +20,10 @@ export class AuthSessionRepository extends BaseTypeOrmRepository<AuthSessionEnti
   }
 
   /** Lấy danh sách các phiên đang hoạt động của một người dùng */
-  public async findActiveByUserId(userId: string): Promise<AuthSessionEntity[]> {
+  public async findActiveByUserId(userId: number): Promise<AuthSessionEntity[]> {
     return this.repository.find({
       where: {
-        userId,
+        userId: Number(userId),
         revokedAt: IsNull(),
         expiresAt: MoreThan(new Date()),
       },
@@ -33,14 +33,15 @@ export class AuthSessionRepository extends BaseTypeOrmRepository<AuthSessionEnti
 
   /** Thu hồi toàn bộ các phiên đang hoạt động của người dùng (trừ phiên hiện tại nếu truyền exceptSessionId) */
   public async revokeAllForUser(
-    userId: string,
+    userId: number,
     reason: string,
-    exceptSessionId?: string,
+    exceptSessionId?: number,
   ): Promise<AuthSessionEntity[]> {
     const activeSessions = await this.findActiveByUserId(userId);
-    const toRevoke = exceptSessionId
-      ? activeSessions.filter((s) => s.id !== exceptSessionId)
-      : activeSessions;
+    const toRevoke =
+      exceptSessionId !== undefined
+        ? activeSessions.filter((s) => Number(s.id) !== Number(exceptSessionId))
+        : activeSessions;
 
     if (toRevoke.length === 0) {
       return [];

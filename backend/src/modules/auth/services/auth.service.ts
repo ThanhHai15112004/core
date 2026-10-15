@@ -4,6 +4,7 @@ import { PasswordHasherService, TokenService } from '@packages/security/index.js
 import {
   type IUsersPublicService,
   USERS_PUBLIC_SERVICE,
+  USER_STATUS,
   type UserAuthIdentityView,
 } from '@modules/users/contracts/index.js';
 import type { IAuthPublicService } from '../contracts/index.js';
@@ -43,17 +44,17 @@ export class AuthService implements IAuthPublicService {
     meta: { ipAddress?: string | null; userAgent?: string | null } = {},
   ): Promise<LoginResponse> {
     const credentials = await this.usersPublicService.findAuthUserByIdentifier(dto.identifier);
-    if (!credentials || credentials.archivedAt) {
+    if (!credentials || credentials.archivedAt || credentials.status === USER_STATUS.ARCHIVED) {
       throw new UnauthorizedAppException('auth.invalidCredentials');
     }
 
-    // Kiểm tra trạng thái INACTIVE
-    if (credentials.status === 'INACTIVE') {
+    // Kiểm tra trạng thái INACTIVE (2)
+    if (credentials.status === USER_STATUS.INACTIVE) {
       throw new ForbiddenAppException('auth.accountInactive');
     }
 
-    // Kiểm tra trạng thái LOCKED (nếu thời hạn khóa đã qua thì tự động mở khóa)
-    if (credentials.status === 'LOCKED') {
+    // Kiểm tra trạng thái LOCKED (3) (nếu thời hạn khóa đã qua thì tự động mở khóa)
+    if (credentials.status === USER_STATUS.LOCKED) {
       if (credentials.lockedUntil && credentials.lockedUntil.getTime() <= Date.now()) {
         await this.usersPublicService.autoUnlockExpiredLock(credentials.id);
       } else {
@@ -155,7 +156,7 @@ export class AuthService implements IAuthPublicService {
       throw new UnauthorizedAppException('auth.invalidOrExpiredMfaChallenge');
     }
 
-    const userId = challengePayload.sub;
+    const userId = Number(challengePayload.sub);
     const isCodeValid = await this.mfaService.verifyMfaCode(userId, dto.code, dto.method);
     if (!isCodeValid) {
       throw new UnauthorizedAppException('auth.invalidMfaCode');
@@ -163,7 +164,7 @@ export class AuthService implements IAuthPublicService {
 
     await this.usersPublicService.recordLoginSuccess(userId);
     const identity = await this.usersPublicService.findAuthUserById(userId);
-    if (!identity || identity.status !== 'ACTIVE') {
+    if (!identity || identity.status !== USER_STATUS.ACTIVE) {
       throw new ForbiddenAppException('auth.accountNotActive');
     }
 
@@ -186,7 +187,7 @@ export class AuthService implements IAuthPublicService {
   /** Gửi mã OTP 6 số qua Email (dùng trong bước MFA Challenge hoặc cho người dùng đã đăng nhập) */
   public async sendMfaEmailOtp(
     dto: SendEmailOtpRequest,
-    authenticatedUserId?: string,
+    authenticatedUserId?: number,
   ): Promise<SendEmailOtpResponse> {
     let targetUserId = authenticatedUserId;
     if (!targetUserId && dto.mfaChallengeToken) {
@@ -194,7 +195,7 @@ export class AuthService implements IAuthPublicService {
       if (!payload || !payload.sub) {
         throw new UnauthorizedAppException('auth.invalidOrExpiredMfaChallenge');
       }
-      targetUserId = payload.sub;
+      targetUserId = Number(payload.sub);
     }
 
     if (!targetUserId) {
@@ -221,7 +222,7 @@ export class AuthService implements IAuthPublicService {
   }
 
   /** Lấy thông tin hồ sơ của tài khoản đang đăng nhập */
-  public async getMe(userId: string): Promise<AuthenticatedUserProfileResponse> {
+  public async getMe(userId: number): Promise<AuthenticatedUserProfileResponse> {
     const identity = await this.usersPublicService.findAuthUserById(userId);
     if (!identity) {
       throw new UnauthorizedAppException('auth.userNotFound');
@@ -230,7 +231,7 @@ export class AuthService implements IAuthPublicService {
   }
 
   /** Hợp đồng công khai: Thu hồi toàn bộ phiên đăng nhập của người dùng */
-  public async revokeAllUserSessions(userId: string, reason?: string): Promise<number> {
+  public async revokeAllUserSessions(userId: number, reason?: string): Promise<number> {
     return this.sessionService.revokeAllUserSessions(userId, reason);
   }
 
@@ -240,9 +241,12 @@ export class AuthService implements IAuthPublicService {
       id: identity.id,
       username: identity.username,
       email: identity.email,
+      firstName: identity.firstName,
+      lastName: identity.lastName,
       fullName: identity.fullName,
       phone: identity.phone,
       status: identity.status,
+      statusName: identity.statusName,
       mfaEnabled: identity.mfaEnabled,
       primaryOrganizationUnitId: identity.primaryOrganizationUnitId,
       organizationUnitIds: [...identity.organizationUnitIds],

@@ -7,7 +7,7 @@ import {
   TotpService,
 } from '@packages/security/index.js';
 import { type IUsersPublicService, USERS_PUBLIC_SERVICE } from '@modules/users/contracts/index.js';
-import type { MfaMethodType } from '../contracts/index.js';
+import { MFA_METHOD, MFA_METHOD_NAME, type MfaMethodType } from '../contracts/index.js';
 import type { AuthMfaConfigEntity } from '../entities/auth-mfa-config.entity.js';
 import { AuthMfaConfigRepository } from '../repositories/auth-mfa-config.repository.js';
 import type {
@@ -40,7 +40,7 @@ export class MfaService {
   ) {}
 
   /** Lấy trạng thái cấu hình MFA hiện tại của người dùng */
-  public async getStatus(userId: string): Promise<MfaStatusResponse> {
+  public async getStatus(userId: number): Promise<MfaStatusResponse> {
     const config = await this.mfaRepository.findByUserId(userId);
     if (!config) {
       return {
@@ -55,19 +55,20 @@ export class MfaService {
 
     const recoveryHashes = this.parseRecoveryHashes(config.recoveryCodesHashJson);
     const mfaEnabled = Boolean(config.totpEnabled || config.emailOtpEnabled);
+    const methodName = MFA_METHOD_NAME[config.preferredMethod] ?? 'TOTP';
 
     return {
       mfaEnabled,
       totpEnabled: Boolean(config.totpEnabled),
       emailOtpEnabled: Boolean(config.emailOtpEnabled),
-      preferredMethod: config.preferredMethod ?? 'TOTP',
+      preferredMethod: methodName,
       remainingRecoveryCodesCount: recoveryHashes.length,
       verifiedAt: config.verifiedAt ? config.verifiedAt.toISOString() : null,
     };
   }
 
   /** Lấy danh sách các phương thức MFA đang khả dụng cho người dùng khi đăng nhập bước 2 */
-  public async getAvailableMethodsForUser(userId: string): Promise<MfaMethodType[]> {
+  public async getAvailableMethodsForUser(userId: number): Promise<MfaMethodType[]> {
     const config = await this.mfaRepository.findByUserId(userId);
     if (!config) {
       return ['EMAIL_OTP'];
@@ -92,7 +93,7 @@ export class MfaService {
   }
 
   /** Bước 1 thiết lập TOTP: sinh khóa bí mật Base32, mã hóa AEAD xuống DB và tạo đường dẫn otpauth:// */
-  public async setupTotp(userId: string): Promise<MfaTotpSetupResponse> {
+  public async setupTotp(userId: number): Promise<MfaTotpSetupResponse> {
     const user = await this.usersPublicService.findAuthUserById(userId);
     if (!user) {
       throw new UnauthorizedAppException('auth.userNotFound');
@@ -114,7 +115,7 @@ export class MfaService {
         totpSecret: encryptedSecret,
         totpEnabled: false,
         emailOtpEnabled: false,
-        preferredMethod: 'TOTP',
+        preferredMethod: MFA_METHOD.TOTP,
         recoveryCodesHashJson: '[]',
       });
     } else {
@@ -132,7 +133,7 @@ export class MfaService {
 
   /** Bước 2 kích hoạt TOTP: giải mã khóa từ DB, xác minh mã 6 số từ ứng dụng Authenticator và cấp mã dự phòng */
   public async enableTotp(
-    userId: string,
+    userId: number,
     dto: EnableTotpMfaRequest,
   ): Promise<MfaEnableResultResponse> {
     const config = await this.mfaRepository.findByUserId(userId);
@@ -148,7 +149,7 @@ export class MfaService {
 
     const { plainCodes, hashesJson } = this.ensureRecoveryCodes(config);
     config.totpEnabled = true;
-    config.preferredMethod = 'TOTP';
+    config.preferredMethod = MFA_METHOD.TOTP;
     config.recoveryCodesHashJson = hashesJson;
     config.verifiedAt = new Date();
 
@@ -165,7 +166,7 @@ export class MfaService {
 
   /** Kích hoạt phương thức xác thực nhiều lớp qua Email OTP (6 chữ số) */
   public async enableEmailOtp(
-    userId: string,
+    userId: number,
     dto: EnableEmailOtpMfaRequest = {},
   ): Promise<MfaEnableResultResponse> {
     let config = await this.mfaRepository.findByUserId(userId);
@@ -175,7 +176,7 @@ export class MfaService {
         totpSecret: null,
         totpEnabled: false,
         emailOtpEnabled: false,
-        preferredMethod: 'EMAIL_OTP',
+        preferredMethod: MFA_METHOD.EMAIL_OTP,
         recoveryCodesHashJson: '[]',
       });
     }
@@ -192,7 +193,7 @@ export class MfaService {
     const { plainCodes, hashesJson } = this.ensureRecoveryCodes(config);
     config.emailOtpEnabled = true;
     if (!config.totpEnabled) {
-      config.preferredMethod = 'EMAIL_OTP';
+      config.preferredMethod = MFA_METHOD.EMAIL_OTP;
     }
     config.recoveryCodesHashJson = hashesJson;
     config.verifiedAt = new Date();
@@ -209,7 +210,7 @@ export class MfaService {
   }
 
   /** Phát sinh và gửi mã OTP 6 chữ số qua Email phục vụ xác thực bước 2 hoặc kích hoạt Email OTP */
-  public async sendEmailOtp(userId: string): Promise<SendEmailOtpResponse> {
+  public async sendEmailOtp(userId: number): Promise<SendEmailOtpResponse> {
     const user = await this.usersPublicService.findAuthUserById(userId);
     if (!user) {
       throw new UnauthorizedAppException('auth.userNotFound');
@@ -226,7 +227,7 @@ export class MfaService {
         totpSecret: null,
         totpEnabled: false,
         emailOtpEnabled: true,
-        preferredMethod: 'EMAIL_OTP',
+        preferredMethod: MFA_METHOD.EMAIL_OTP,
         recoveryCodesHashJson: '[]',
         emailOtpCodeHash: otpHash,
         emailOtpExpiresAt: expiresAt,
@@ -251,7 +252,7 @@ export class MfaService {
 
   /** Xác minh mã MFA bước 2 (hỗ trợ cả TOTP, Email OTP và Recovery Code) */
   public async verifyMfaCode(
-    userId: string,
+    userId: number,
     code: string,
     preferredMethod?: MfaMethodType,
   ): Promise<boolean> {
@@ -306,7 +307,7 @@ export class MfaService {
   }
 
   /** Tắt xác thực nhiều lớp (TOTP, Email OTP hoặc toàn bộ) */
-  public async disableMfa(userId: string, dto: DisableMfaRequest): Promise<MfaStatusResponse> {
+  public async disableMfa(userId: number, dto: DisableMfaRequest): Promise<MfaStatusResponse> {
     const config = await this.mfaRepository.findByUserId(userId);
     if (!config) {
       await this.usersPublicService.setMfaEnabled(userId, false);
@@ -344,7 +345,7 @@ export class MfaService {
   }
 
   /** Cấp lại bộ 8 mã khôi phục dự phòng (Recovery Codes) mới */
-  public async regenerateRecoveryCodes(userId: string): Promise<{ recoveryCodes: string[] }> {
+  public async regenerateRecoveryCodes(userId: number): Promise<{ recoveryCodes: string[] }> {
     const config = await this.mfaRepository.findByUserId(userId);
     if (!config || (!config.totpEnabled && !config.emailOtpEnabled)) {
       throw new BadRequestAppException('auth.mfaNotEnabled');
@@ -431,7 +432,7 @@ export class MfaService {
       .replace(/[^A-Z0-9]/g, '');
   }
 
-  /** Che bớt địa chỉ email khi trả về thông báo gửi OTP (vd: ad***@core.local) */
+  /** Che bớt địa chỉ email khi trả về thông báo gửi OTP (vd: ad***@gmail.com) */
   public maskEmail(email: string): string {
     const [localPart, domain] = email.split('@');
     if (!localPart || !domain) return '***';

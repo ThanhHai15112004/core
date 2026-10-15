@@ -1,8 +1,13 @@
 import { Column, Entity, Index } from 'typeorm';
 import { TypeOrmBaseEntity } from '@packages/database/index.js';
-import type { DbEncryptionAlgorithm, PasswordHashAlgorithm } from '@packages/security/index.js';
-
-export type MfaEnforcementPolicy = 'OPTIONAL' | 'REQUIRED_FOR_ADMINS' | 'REQUIRED_FOR_ALL';
+import {
+  DB_ENCRYPTION_ALGO_CODE,
+  type DbEncryptionAlgoCode,
+  MFA_POLICY_CODE,
+  type MfaPolicyCode,
+  PASSWORD_HASH_ALGO_CODE,
+  type PasswordHashAlgoCode,
+} from '../contracts/index.js';
 
 @Entity('auth_security_settings')
 export class AuthSecuritySettingEntity extends TypeOrmBaseEntity {
@@ -10,22 +15,32 @@ export class AuthSecuritySettingEntity extends TypeOrmBaseEntity {
   @Column({ name: 'scope_key', type: 'varchar', length: 64, default: 'GLOBAL' })
   public scopeKey!: string;
 
-  @Column({ name: 'password_hash_algorithm', type: 'varchar', length: 32, default: 'SCRYPT' })
-  public passwordHashAlgorithm!: PasswordHashAlgorithm;
+  /** Thuật toán băm mật khẩu: 1 = SCRYPT, 2 = PBKDF2_SHA512, 3 = PBKDF2_SHA256 */
+  @Column({
+    name: 'password_hash_algorithm',
+    type: 'int',
+    default: PASSWORD_HASH_ALGO_CODE.SCRYPT,
+  })
+  public passwordHashAlgorithm!: PasswordHashAlgoCode;
 
-  @Column({ name: 'db_encryption_algorithm', type: 'varchar', length: 32, default: 'AES_256_GCM' })
-  public dbEncryptionAlgorithm!: DbEncryptionAlgorithm;
+  /** Thuật toán mã hóa trường nhạy cảm xuống DB: 1 = AES_256_GCM, 2 = CHACHA20_POLY1305, 3 = AES_256_CBC_HMAC */
+  @Column({
+    name: 'db_encryption_algorithm',
+    type: 'int',
+    default: DB_ENCRYPTION_ALGO_CODE.AES_256_GCM,
+  })
+  public dbEncryptionAlgorithm!: DbEncryptionAlgoCode;
 
   @Column({ name: 'encrypt_fields_at_rest', type: 'boolean', default: true })
   public encryptFieldsAtRest!: boolean;
 
-  @Column({ name: 'mfa_policy', type: 'varchar', length: 32, default: 'OPTIONAL' })
-  public mfaPolicy!: MfaEnforcementPolicy;
+  /** Chính sách MFA: 1 = OPTIONAL, 2 = REQUIRED_FOR_ADMINS, 3 = REQUIRED_FOR_ALL */
+  @Column({ name: 'mfa_policy', type: 'int', default: MFA_POLICY_CODE.OPTIONAL })
+  public mfaPolicy!: MfaPolicyCode;
 
   @Column({
     name: 'allowed_mfa_methods_json',
     type: 'text',
-    default: '["TOTP","EMAIL_OTP","RECOVERY_CODE"]',
   })
   public allowedMfaMethodsJson!: string;
 

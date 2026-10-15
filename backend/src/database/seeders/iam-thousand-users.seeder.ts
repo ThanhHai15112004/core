@@ -1,5 +1,7 @@
 import { PasswordHasherService } from '@packages/security/index.js';
 import type { SeederContext, SeederContract } from '@packages/database/index.js';
+import { ORGANIZATION_UNIT_TYPE } from '@modules/organizations/contracts/index.js';
+import { USER_STATUS, type UserStatusCode } from '@modules/users/contracts/index.js';
 import { HCMC_ORGANIZATION_UNITS, STANDARD_IAM_ROLES } from './iam-master.seeder.js';
 
 export const REGULAR_USER_DEFAULT_PASSWORD = 'Abcd@454647#';
@@ -86,7 +88,7 @@ const FIRST_NAMES: readonly NameEntry[] = [
   { vi: 'Bách', slug: 'bach' },
   { vi: 'Yến', slug: 'yen' },
   { vi: 'Thành', slug: 'thanh' },
-  { vi: 'hương', slug: 'huong' },
+  { vi: 'Hương', slug: 'huong' },
   { vi: 'Sơn', slug: 'son' },
   { vi: 'Lan', slug: 'lan' },
   { vi: 'Vinh', slug: 'vinh' },
@@ -127,29 +129,36 @@ const POSITION_TITLES: readonly string[] = [
 ] as const;
 
 export interface GeneratedRealisticUserSeed {
-  readonly id: string;
+  readonly id: number;
   readonly username: string;
   readonly email: string;
   readonly phone: string;
+  readonly firstName: string;
+  readonly lastName: string;
   readonly fullName: string;
-  readonly status: 'ACTIVE' | 'INACTIVE' | 'LOCKED';
-  readonly primaryOrgId: string;
-  readonly branchOrgId: string;
-  readonly roleId: string;
+  readonly status: UserStatusCode;
+  readonly primaryOrgId: number;
+  readonly branchOrgId: number;
+  readonly roleId: number;
   readonly positionTitle: string;
 }
 
 /**
  * Sinh danh sách `count` (mặc định 1.000) người dùng tên thật ngẫu nhiên có tính tất định (deterministic PRNG),
  * đảm bảo:
+ * - ID đánh theo số thứ tự nguyên liên tiếp từ 11 đến 1010 (sau 10 tài khoản đặc quyền ID 1..10)
  * - Không bao giờ đặt tên kiểu `user1`, `user2`...
+ * - Có đầy đủ `firstName`, `lastName` và `fullName`
  * - 100% email có đuôi `@gmail.com`
  * - Gán vào Chi nhánh TP.HCM (`BRANCH_HCM`) và các phòng ban tại TP.HCM
+ * - Trạng thái nguyên: `1 = ACTIVE`, `2 = INACTIVE`, `3 = LOCKED`
  */
 export function generateRealisticUsersDataset(
   count = TOTAL_REGULAR_USERS_COUNT,
 ): GeneratedRealisticUserSeed[] {
-  const departmentOrgs = HCMC_ORGANIZATION_UNITS.filter((o) => o.type === 'DEPARTMENT');
+  const departmentOrgs = HCMC_ORGANIZATION_UNITS.filter(
+    (o) => o.type === ORGANIZATION_UNIT_TYPE.DEPARTMENT,
+  );
   const branchHcm = HCMC_ORGANIZATION_UNITS.find((o) => o.code === 'BRANCH_HCM')!;
   const staffRole = STANDARD_IAM_ROLES.find((r) => r.code === 'staff')!;
   const managerRole = STANDARD_IAM_ROLES.find((r) => r.code === 'department_manager')!;
@@ -169,8 +178,9 @@ export function generateRealisticUsersDataset(
     const mn = MIDDLE_NAMES[nextRand() % MIDDLE_NAMES.length]!;
     const fn = FIRST_NAMES[nextRand() % FIRST_NAMES.length]!;
 
-    const capitalizedFirst = fn.vi.charAt(0).toUpperCase() + fn.vi.slice(1);
-    const fullName = `${ln.vi} ${mn.vi} ${capitalizedFirst}`;
+    const firstName = fn.vi.charAt(0).toUpperCase() + fn.vi.slice(1);
+    const lastName = `${ln.vi} ${mn.vi}`;
+    const fullName = `${lastName} ${firstName}`;
 
     // Tạo hậu tố số ngẫu nhiên tự nhiên (ví dụ: 79, 86, 92, 204...) thay vì số thứ tự 1, 2, 3
     let tagNumber = 101 + (nextRand() % 8990);
@@ -191,14 +201,20 @@ export function generateRealisticUsersDataset(
     const role = i % 25 === 0 ? managerRole : staffRole;
 
     const statusRoll = nextRand() % 100;
-    const status: 'ACTIVE' | 'INACTIVE' | 'LOCKED' =
-      statusRoll < 88 ? 'ACTIVE' : statusRoll < 95 ? 'INACTIVE' : 'LOCKED';
+    const status: UserStatusCode =
+      statusRoll < 88
+        ? USER_STATUS.ACTIVE
+        : statusRoll < 95
+          ? USER_STATUS.INACTIVE
+          : USER_STATUS.LOCKED;
 
     results.push({
-      id: `40000000-0000-4000-8000-${String(i + 1).padStart(12, '0')}`,
+      id: 11 + i,
       username,
       email,
       phone,
+      firstName,
+      lastName,
       fullName,
       status,
       primaryOrgId: dept.id,
@@ -236,23 +252,19 @@ export class IamThousandUsersSeeder implements SeederContract {
     for (let offset = 0; offset < users.length; offset += batchSize) {
       const chunk = users.slice(offset, offset + batchSize);
 
-      for (let j = 0; j < chunk.length; j++) {
-        const u = chunk[j]!;
-        const globalIdx = offset + j + 1;
-        const urId = `41000000-0000-4000-8000-${String(globalIdx).padStart(12, '0')}`;
-        const uoDeptId = `42000000-0000-4000-8000-${String(globalIdx * 2 - 1).padStart(12, '0')}`;
-        const uoBranchId = `42000000-0000-4000-8000-${String(globalIdx * 2).padStart(12, '0')}`;
-
+      for (const u of chunk) {
         if (isPostgres) {
           await ctx.manager.query(
-            `INSERT INTO users (id, username, email, phone, full_name, password_hash, status, primary_organization_unit_id, version)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 1)
+            `INSERT INTO users (id, username, email, phone, first_name, last_name, full_name, password_hash, status, primary_organization_unit_id, version)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 1)
              ON CONFLICT (username) DO NOTHING`,
             [
               u.id,
               u.username,
               u.email,
               u.phone,
+              u.firstName,
+              u.lastName,
               u.fullName,
               defaultPasswordHash,
               u.status,
@@ -260,27 +272,29 @@ export class IamThousandUsersSeeder implements SeederContract {
             ],
           );
           await ctx.manager.query(
-            `INSERT INTO user_roles (id, user_id, role_id)
-             VALUES ($1, $2, $3)
+            `INSERT INTO user_roles (user_id, role_id)
+             VALUES ($1, $2)
              ON CONFLICT (user_id, role_id) DO NOTHING`,
-            [urId, u.id, u.roleId],
+            [u.id, u.roleId],
           );
           await ctx.manager.query(
-            `INSERT INTO user_organization_units (id, user_id, organization_unit_id, is_primary, position_title)
-             VALUES ($1, $2, $3, TRUE, $4), ($5, $2, $6, FALSE, $4)
+            `INSERT INTO user_organization_units (user_id, organization_unit_id, is_primary, position_title)
+             VALUES ($1, $2, TRUE, $3), ($1, $4, FALSE, $3)
              ON CONFLICT (user_id, organization_unit_id) DO NOTHING`,
-            [uoDeptId, u.id, u.primaryOrgId, u.positionTitle, uoBranchId, u.branchOrgId],
+            [u.id, u.primaryOrgId, u.positionTitle, u.branchOrgId],
           );
         } else {
           await ctx.manager.query(
-            `INSERT INTO users (id, username, email, phone, full_name, password_hash, status, primary_organization_unit_id, version)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)
+            `INSERT INTO users (id, username, email, phone, first_name, last_name, full_name, password_hash, status, primary_organization_unit_id, version)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
              ON DUPLICATE KEY UPDATE status = VALUES(status)`,
             [
               u.id,
               u.username,
               u.email,
               u.phone,
+              u.firstName,
+              u.lastName,
               u.fullName,
               defaultPasswordHash,
               u.status,
@@ -288,34 +302,53 @@ export class IamThousandUsersSeeder implements SeederContract {
             ],
           );
           await ctx.manager.query(
-            `INSERT INTO user_roles (id, user_id, role_id)
-             VALUES (?, ?, ?)
+            `INSERT INTO user_roles (user_id, role_id)
+             VALUES (?, ?)
              ON DUPLICATE KEY UPDATE role_id = VALUES(role_id)`,
-            [urId, u.id, u.roleId],
+            [u.id, u.roleId],
           );
           await ctx.manager.query(
-            `INSERT INTO user_organization_units (id, user_id, organization_unit_id, is_primary, position_title)
-             VALUES (?, ?, ?, TRUE, ?), (?, ?, ?, FALSE, ?)
+            `INSERT INTO user_organization_units (user_id, organization_unit_id, is_primary, position_title)
+             VALUES (?, ?, TRUE, ?), (?, ?, FALSE, ?)
              ON DUPLICATE KEY UPDATE position_title = VALUES(position_title)`,
-            [
-              uoDeptId,
-              u.id,
-              u.primaryOrgId,
-              u.positionTitle,
-              uoBranchId,
-              u.id,
-              u.branchOrgId,
-              u.positionTitle,
-            ],
+            [u.id, u.primaryOrgId, u.positionTitle, u.id, u.branchOrgId, u.positionTitle],
           );
         }
         affected++;
       }
     }
 
+    // Seed lịch sử thay đổi trạng thái cho các user đang ở trạng thái INACTIVE (2) hoặc LOCKED (3)
+    const countRows = (await ctx.manager.query(
+      'SELECT COUNT(*) AS cnt FROM user_status_histories',
+    )) as Array<{ cnt?: number | string }>;
+    const existingHistoryCount = Number(countRows[0]?.cnt ?? 0);
+    if (existingHistoryCount === 0) {
+      const nonActiveUsers = users.filter((u) => u.status !== USER_STATUS.ACTIVE);
+      for (const u of nonActiveUsers) {
+        const reason =
+          u.status === USER_STATUS.LOCKED
+            ? 'Tạm khóa do nhập sai mật khẩu quá số lần quy định'
+            : 'Tạm ngưng kích hoạt theo đề xuất của phòng Nhân sự';
+        if (isPostgres) {
+          await ctx.manager.query(
+            `INSERT INTO user_status_histories (user_id, from_status, to_status, reason, changed_by)
+             VALUES ($1, $2, $3, $4, 1)`,
+            [u.id, USER_STATUS.ACTIVE, u.status, reason],
+          );
+        } else {
+          await ctx.manager.query(
+            `INSERT INTO user_status_histories (user_id, from_status, to_status, reason, changed_by)
+             VALUES (?, ?, ?, ?, 1)`,
+            [u.id, USER_STATUS.ACTIVE, u.status, reason],
+          );
+        }
+      }
+    }
+
     return {
       affected,
-      details: `${affected} realistic Vietnamese users (@gmail.com, pass: ${REGULAR_USER_DEFAULT_PASSWORD}) assigned to HCMC branch & departments`,
+      details: `${affected} realistic Vietnamese users (IDs 11..1010, @gmail.com, pass: ${REGULAR_USER_DEFAULT_PASSWORD}) assigned to HCMC branch & departments`,
     };
   }
 }

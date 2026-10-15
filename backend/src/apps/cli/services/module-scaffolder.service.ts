@@ -124,7 +124,7 @@ export class Create${pascal}Request {
     // 4. responses/<name>.response.ts
     const responseContent = `
 export interface ${pascal}Response {
-  id: string;
+  id: number;
   title: string;
   description?: string;
   createdAt: string;
@@ -136,7 +136,7 @@ export interface ${pascal}Response {
     // 5. contracts/index.ts
     const contractContent = `
 export interface I${pascal}PublicService {
-  exists(id: string): Promise<boolean>;
+  exists(id: number): Promise<boolean>;
 }
 
 export const ${constant}_PUBLIC_SERVICE = Symbol('${constant}_PUBLIC_SERVICE');
@@ -167,7 +167,7 @@ export class ${pascal}Service implements I${pascal}PublicService {
   public async create(dto: Create${pascal}Request): Promise<${pascal}Response> {
     this.logger.log(\`Creating new ${kebab}: \${dto.title}\`);
     return {
-      id: 'mock-id-' + Date.now(),
+      id: 1,
       title: dto.title,
       description: dto.description,
       createdAt: new Date().toISOString(),
@@ -175,7 +175,7 @@ export class ${pascal}Service implements I${pascal}PublicService {
     };
   }
 
-  public async findById(id: string): Promise<${pascal}Response | null> {
+  public async findById(id: number): Promise<${pascal}Response | null> {
     return {
       id,
       title: \`Sample \${id}\`,
@@ -184,7 +184,7 @@ export class ${pascal}Service implements I${pascal}PublicService {
     };
   }
 
-  public async exists(id: string): Promise<boolean> {
+  public async exists(id: number): Promise<boolean> {
     const item = await this.findById(id);
     return item !== null;
   }
@@ -210,7 +210,7 @@ export class ${pascal}Controller {
 
   @Get(${constant}_ROUTES.BY_ID)
   public async getById(@Param('id') id: string) {
-    return this.${camel}Service.findById(id);
+    return this.${camel}Service.findById(Number(id));
   }
 }
 `;

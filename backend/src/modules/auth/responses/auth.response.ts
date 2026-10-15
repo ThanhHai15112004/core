@@ -2,15 +2,18 @@ import { z } from 'zod';
 import type { MfaMethodType } from '../contracts/index.js';
 
 export interface AuthenticatedUserProfileResponse {
-  readonly id: string;
+  readonly id: number;
   readonly username: string;
   readonly email: string;
+  readonly firstName: string;
+  readonly lastName: string;
   readonly fullName: string;
   readonly phone: string | null;
-  readonly status: string;
+  readonly status: number;
+  readonly statusName: string;
   readonly mfaEnabled: boolean;
-  readonly primaryOrganizationUnitId: string | null;
-  readonly organizationUnitIds: readonly string[];
+  readonly primaryOrganizationUnitId: number | null;
+  readonly organizationUnitIds: readonly number[];
   readonly roles: readonly string[];
   readonly permissions: readonly string[];
 }
@@ -23,14 +26,14 @@ export interface LoginResponse {
   readonly maskedEmail?: string;
   readonly accessToken?: string;
   readonly refreshToken?: string;
-  readonly sessionId?: string;
+  readonly sessionId?: number;
   readonly expiresInSeconds?: number;
   readonly user?: AuthenticatedUserProfileResponse;
 }
 
 export interface SessionItemResponse {
-  readonly id: string;
-  readonly userId: string;
+  readonly id: number;
+  readonly userId: number;
   readonly ipAddress: string | null;
   readonly userAgent: string | null;
   readonly deviceName: string | null;
@@ -44,7 +47,7 @@ export interface MfaStatusResponse {
   readonly mfaEnabled: boolean;
   readonly totpEnabled: boolean;
   readonly emailOtpEnabled: boolean;
-  readonly preferredMethod: 'TOTP' | 'EMAIL_OTP';
+  readonly preferredMethod: 'TOTP' | 'EMAIL_OTP' | 'RECOVERY_CODE';
   readonly remainingRecoveryCodesCount: number;
   readonly verifiedAt: string | null;
 }
@@ -77,15 +80,18 @@ export interface ForgotPasswordResponse {
 }
 
 export const authenticatedUserProfileSchema = z.object({
-  id: z.string().uuid(),
+  id: z.number().int().min(1),
   username: z.string(),
   email: z.string().email(),
+  firstName: z.string(),
+  lastName: z.string(),
   fullName: z.string(),
   phone: z.string().nullable(),
-  status: z.string(),
+  status: z.number().int().min(1).max(4),
+  statusName: z.string(),
   mfaEnabled: z.boolean(),
-  primaryOrganizationUnitId: z.string().uuid().nullable(),
-  organizationUnitIds: z.array(z.string().uuid()),
+  primaryOrganizationUnitId: z.number().int().min(1).nullable(),
+  organizationUnitIds: z.array(z.number().int().min(1)),
   roles: z.array(z.string()),
   permissions: z.array(z.string()),
 });
@@ -98,14 +104,14 @@ export const loginResponseSchema = z.object({
   maskedEmail: z.string().optional(),
   accessToken: z.string().optional(),
   refreshToken: z.string().optional(),
-  sessionId: z.string().uuid().optional(),
+  sessionId: z.number().int().min(1).optional(),
   expiresInSeconds: z.number().optional(),
   user: authenticatedUserProfileSchema.optional(),
 });
 
 export const sessionItemResponseSchema = z.object({
-  id: z.string().uuid(),
-  userId: z.string().uuid(),
+  id: z.number().int().min(1),
+  userId: z.number().int().min(1),
   ipAddress: z.string().nullable(),
   userAgent: z.string().nullable(),
   deviceName: z.string().nullable(),

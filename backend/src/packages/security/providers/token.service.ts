@@ -108,7 +108,7 @@ export class TokenService implements TokenVerificationStrategy {
 
   /** Ký phát hành Refresh Token chuẩn JWT HS256 */
   public async signRefreshToken(
-    payload: { sub: string; sid: string },
+    payload: { sub: string | number; sid: string | number },
     expiresIn?: string | number,
   ): Promise<string> {
     const secret = await this.getRefreshSecret();
@@ -121,7 +121,7 @@ export class TokenService implements TokenVerificationStrategy {
 
   /** Ký phát hành MFA Challenge Token ngắn hạn (mặc định 5 phút) phục vụ xác thực bước 2 */
   public async signMfaChallengeToken(
-    payload: { sub: string; methods?: string[]; email?: string },
+    payload: { sub: string | number; methods?: string[]; email?: string },
     expiresIn?: string | number,
   ): Promise<string> {
     const secret = await this.getAccessSecret();
@@ -164,21 +164,33 @@ export class TokenService implements TokenVerificationStrategy {
 
   /** Xác thực thông tin danh tính tài khoản người dùng từ payload JWT */
   public async validateUser(payload: TokenPayload): Promise<UserIdentity | null> {
-    if (!payload.sub) return null;
+    if (payload.sub === undefined || payload.sub === null || payload.sub === '') return null;
 
     if (this.identityResolver) {
       return this.identityResolver.resolveIdentity(payload);
     }
 
+    const numericId = typeof payload.sub === 'number' ? payload.sub : Number(payload.sub) || 1;
+    const numericSid =
+      payload.sid !== undefined
+        ? typeof payload.sid === 'number'
+          ? payload.sid
+          : Number(payload.sid) || 1
+        : undefined;
+
     return {
-      id: payload.sub,
+      id: numericId,
       ...(payload.email !== undefined ? { email: payload.email } : {}),
       ...(payload.username !== undefined ? { username: payload.username } : {}),
-      ...(payload.sid !== undefined ? { sessionId: payload.sid } : {}),
+      ...(numericSid !== undefined ? { sessionId: numericSid } : {}),
       roles: payload.roles ?? ['user'],
       permissions: payload.permissions ?? [],
       ...(payload.organizationUnitIds !== undefined
-        ? { organizationUnitIds: payload.organizationUnitIds }
+        ? {
+            organizationUnitIds: payload.organizationUnitIds.map((v) =>
+              typeof v === 'number' ? v : Number(v) || 1,
+            ),
+          }
         : {}),
     };
   }
@@ -196,7 +208,7 @@ export class TokenService implements TokenVerificationStrategy {
     const nowSeconds = Math.floor(Date.now() / 1000);
     const fullPayload: TokenPayload = {
       ...payload,
-      sub: String(payload.sub ?? ''),
+      sub: typeof payload.sub === 'number' ? payload.sub : String(payload.sub ?? ''),
       iat: nowSeconds,
       exp: nowSeconds + ttlSeconds,
     };
@@ -249,7 +261,11 @@ export class TokenService implements TokenVerificationStrategy {
         Buffer.from(payloadSeg, 'base64url').toString('utf8'),
       ) as TokenPayload;
 
-      if (!payload || typeof payload !== 'object' || typeof payload.sub !== 'string') {
+      if (
+        !payload ||
+        typeof payload !== 'object' ||
+        (typeof payload.sub !== 'string' && typeof payload.sub !== 'number')
+      ) {
         return null;
       }
 

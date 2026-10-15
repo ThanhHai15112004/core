@@ -17,8 +17,8 @@ export const ORM_ENTITY_WATERMARK = Symbol.for('core:orm_entity');
 export abstract class TypeOrmBaseEntity {
   public readonly [ORM_ENTITY_WATERMARK] = true as const;
 
-  @PrimaryGeneratedColumn('uuid')
-  public id!: string;
+  @PrimaryGeneratedColumn('increment')
+  public id!: number;
 
   @CreateDateColumn({ name: 'created_at' })
   public createdAt!: Date;

@@ -5,7 +5,12 @@ import {
   HTTP_ERROR_CODE,
   NotFoundAppException,
 } from '@packages/kernel/index.js';
-import type { IOrganizationsPublicService, OrganizationUnitSummary } from '../contracts/index.js';
+import {
+  type IOrganizationsPublicService,
+  ORG_UNIT_STATUS,
+  ORG_UNIT_TYPE,
+  type OrganizationUnitSummary,
+} from '../contracts/index.js';
 import { OrganizationUnitRepository } from '../repositories/organization-unit.repository.js';
 import { OrganizationsMapper } from '../mappers/organizations.mapper.js';
 import type {
@@ -29,7 +34,7 @@ export class OrganizationsService implements IOrganizationsPublicService {
   }
 
   /** Lấy thông tin chi tiết đơn vị/chi nhánh theo ID */
-  public async getById(id: string): Promise<OrganizationUnitResponse> {
+  public async getById(id: number): Promise<OrganizationUnitResponse> {
     const entity = await this.repository.findById(id);
     if (!entity) {
       throw new NotFoundAppException('organizations.notFound', { id });
@@ -62,9 +67,9 @@ export class OrganizationsService implements IOrganizationsPublicService {
     const saved = await this.repository.saveEntity({
       code: normalizedCode,
       name: dto.name.trim(),
-      type: dto.type ?? 'BRANCH',
+      type: dto.type ?? ORG_UNIT_TYPE.BRANCH,
       parentId: dto.parentId ?? null,
-      status: dto.status ?? 'ACTIVE',
+      status: dto.status ?? ORG_UNIT_STATUS.ACTIVE,
       description: dto.description ?? null,
     });
 
@@ -73,7 +78,7 @@ export class OrganizationsService implements IOrganizationsPublicService {
 
   /** Cập nhật thông tin đơn vị hoặc chi nhánh */
   public async update(
-    id: string,
+    id: number,
     dto: UpdateOrganizationUnitRequest,
   ): Promise<OrganizationUnitResponse> {
     const entity = await this.repository.findById(id);
@@ -104,7 +109,7 @@ export class OrganizationsService implements IOrganizationsPublicService {
   }
 
   /** Xóa mềm đơn vị hoặc chi nhánh */
-  public async remove(id: string): Promise<{ deleted: true; id: string }> {
+  public async remove(id: number): Promise<{ deleted: true; id: number }> {
     const entity = await this.repository.findById(id);
     if (!entity) {
       throw new NotFoundAppException('organizations.notFound', { id });
@@ -113,8 +118,8 @@ export class OrganizationsService implements IOrganizationsPublicService {
     return { deleted: true, id };
   }
 
-  /** Hợp đồng công khai: Tìm danh sách tóm tắt đơn vị theo mảng ID */
-  public async findByIds(ids: readonly string[]): Promise<OrganizationUnitSummary[]> {
+  /** Hợp đồng công khai: Tìm danh sách tóm tắt đơn vị theo mảng ID số nguyên */
+  public async findByIds(ids: readonly number[]): Promise<OrganizationUnitSummary[]> {
     const entities = await this.repository.findByIds(ids);
     return entities.map((item) => this.mapper.toSummary(item));
   }
@@ -125,20 +130,22 @@ export class OrganizationsService implements IOrganizationsPublicService {
     return entities.map((item) => this.mapper.toSummary(item));
   }
 
-  /** Hợp đồng công khai: Đảm bảo tất cả đơn vị/chi nhánh đều tồn tại và đang ACTIVE */
-  public async ensureActiveUnitsExist(ids: readonly string[]): Promise<OrganizationUnitSummary[]> {
-    const uniqueIds = [...new Set(ids)];
+  /** Hợp đồng công khai: Đảm bảo tất cả đơn vị/chi nhánh đều tồn tại và đang ACTIVE (status = 1) */
+  public async ensureActiveUnitsExist(ids: readonly number[]): Promise<OrganizationUnitSummary[]> {
+    const uniqueIds = [...new Set(ids.map(Number))];
     if (uniqueIds.length === 0) return [];
 
     const entities = await this.repository.findByIds(uniqueIds);
-    const foundMap = new Map(entities.map((e) => [e.id, e]));
+    const foundMap = new Map(entities.map((e) => [Number(e.id), e]));
 
     const missingIds = uniqueIds.filter((id) => !foundMap.has(id));
     if (missingIds.length > 0) {
       throw new BadRequestAppException('organizations.invalidOrMissingUnits', [{ missingIds }]);
     }
 
-    const inactiveIds = entities.filter((e) => e.status !== 'ACTIVE').map((e) => e.id);
+    const inactiveIds = entities
+      .filter((e) => Number(e.status) !== ORG_UNIT_STATUS.ACTIVE)
+      .map((e) => Number(e.id));
     if (inactiveIds.length > 0) {
       throw new BadRequestAppException('organizations.inactiveUnitsNotAllowed', [{ inactiveIds }]);
     }

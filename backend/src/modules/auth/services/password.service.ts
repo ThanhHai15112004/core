@@ -2,7 +2,11 @@ import { Inject, Injectable, Optional } from '@nestjs/common';
 import { CoreConfigService } from '@packages/config/index.js';
 import { BadRequestAppException, UnauthorizedAppException } from '@packages/kernel/index.js';
 import { PasswordHasherService } from '@packages/security/index.js';
-import { type IUsersPublicService, USERS_PUBLIC_SERVICE } from '@modules/users/contracts/index.js';
+import {
+  type IUsersPublicService,
+  USERS_PUBLIC_SERVICE,
+  USER_STATUS,
+} from '@modules/users/contracts/index.js';
 import { AuthPasswordResetRepository } from '../repositories/auth-password-reset.repository.js';
 import { SessionService } from './session.service.js';
 import type {
@@ -27,9 +31,9 @@ export class PasswordService {
 
   /** Đổi mật khẩu cho người dùng đang đăng nhập và thu hồi các phiên khác */
   public async changePassword(
-    userId: string,
+    userId: number,
     dto: ChangePasswordRequest,
-    currentSessionId?: string,
+    currentSessionId?: number,
   ): Promise<{ changed: true; revokedSessionsCount: number }> {
     if (dto.currentPassword === dto.newPassword) {
       throw new BadRequestAppException('auth.newPasswordMustDiffer');
@@ -77,7 +81,12 @@ export class PasswordService {
     const user = await this.usersPublicService.findAuthUserByIdentifier(normalizedEmail);
 
     // Luôn trả về thành công để chống dò quét email (User Enumeration Protection)
-    if (!user || user.archivedAt || user.status === 'INACTIVE') {
+    if (
+      !user ||
+      user.archivedAt ||
+      user.status === USER_STATUS.INACTIVE ||
+      user.status === USER_STATUS.ARCHIVED
+    ) {
       return {
         accepted: true,
         expiresInSeconds: PASSWORD_RESET_TTL_SECONDS,
@@ -116,14 +125,14 @@ export class PasswordService {
     }
 
     const newHash = await this.passwordHasher.hash(dto.newPassword);
-    await this.usersPublicService.updatePasswordHash(resetRecord.userId, newHash);
-    await this.usersPublicService.autoUnlockExpiredLock(resetRecord.userId);
+    await this.usersPublicService.updatePasswordHash(Number(resetRecord.userId), newHash);
+    await this.usersPublicService.autoUnlockExpiredLock(Number(resetRecord.userId));
 
     resetRecord.usedAt = new Date();
     await this.passwordResetRepository.saveEntity(resetRecord);
 
     const revokedSessionsCount = await this.sessionService.revokeAllUserSessions(
-      resetRecord.userId,
+      Number(resetRecord.userId),
       'Password reset completed',
     );
 

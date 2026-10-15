@@ -1,8 +1,43 @@
 import { z } from 'zod';
-import { optionalQueryParam } from '@packages/http/index.js';
+import {
+  ORG_UNIT_STATUS,
+  ORG_UNIT_TYPE,
+  type OrganizationUnitStatusCode,
+  type OrganizationUnitTypeCode,
+  parseOrgUnitStatus,
+  parseOrgUnitType,
+} from '../contracts/index.js';
 
-export const organizationUnitTypeSchema = z.enum(['UNIT', 'BRANCH', 'DEPARTMENT']);
-export const organizationUnitStatusSchema = z.enum(['ACTIVE', 'INACTIVE']);
+const orgTypeSchema = z
+  .preprocess(
+    (val) => (val === undefined ? undefined : parseOrgUnitType(val)),
+    z.union([
+      z.literal(ORG_UNIT_TYPE.HEADQUARTERS),
+      z.literal(ORG_UNIT_TYPE.BRANCH),
+      z.literal(ORG_UNIT_TYPE.DEPARTMENT),
+      z.literal(ORG_UNIT_TYPE.TEAM),
+    ]),
+  )
+  .optional();
+
+const orgStatusSchema = z
+  .preprocess(
+    (val) => (val === undefined ? undefined : parseOrgUnitStatus(val)),
+    z.union([
+      z.literal(ORG_UNIT_STATUS.ACTIVE),
+      z.literal(ORG_UNIT_STATUS.INACTIVE),
+      z.literal(ORG_UNIT_STATUS.ARCHIVED),
+    ]),
+  )
+  .optional();
+
+const coerceOptionalIntId = z
+  .preprocess((val) => {
+    if (val === undefined || val === null || val === '') return null;
+    const n = Number(val);
+    return Number.isFinite(n) ? n : val;
+  }, z.number().int().min(1).nullable())
+  .optional();
 
 export const createOrganizationUnitSchema = z.object({
   code: z
@@ -10,31 +45,54 @@ export const createOrganizationUnitSchema = z.object({
     .trim()
     .min(2)
     .max(64)
-    .regex(/^[A-Za-z0-9_-]+$/, 'Code must contain only letters, digits, underscore or hyphen'),
+    .regex(/^[A-Za-z0-9_-]+$/, 'Organization code may only contain letters, digits, _ and -'),
   name: z.string().trim().min(2).max(255),
-  type: organizationUnitTypeSchema.default('BRANCH'),
-  parentId: z.string().uuid().nullable().optional(),
-  status: organizationUnitStatusSchema.default('ACTIVE'),
+  type: orgTypeSchema,
+  parentId: coerceOptionalIntId,
+  status: orgStatusSchema,
   description: z.string().trim().max(1000).nullable().optional(),
 });
 
-export type CreateOrganizationUnitRequest = z.infer<typeof createOrganizationUnitSchema>;
+export interface CreateOrganizationUnitRequest {
+  readonly code: string;
+  readonly name: string;
+  readonly type?: OrganizationUnitTypeCode | undefined;
+  readonly parentId?: number | null | undefined;
+  readonly status?: OrganizationUnitStatusCode | undefined;
+  readonly description?: string | null | undefined;
+}
 
 export const updateOrganizationUnitSchema = z.object({
   name: z.string().trim().min(2).max(255).optional(),
-  type: organizationUnitTypeSchema.optional(),
-  parentId: z.string().uuid().nullable().optional(),
-  status: organizationUnitStatusSchema.optional(),
+  type: orgTypeSchema,
+  parentId: coerceOptionalIntId,
+  status: orgStatusSchema,
   description: z.string().trim().max(1000).nullable().optional(),
 });
 
-export type UpdateOrganizationUnitRequest = z.infer<typeof updateOrganizationUnitSchema>;
+export interface UpdateOrganizationUnitRequest {
+  readonly name?: string | undefined;
+  readonly type?: OrganizationUnitTypeCode | undefined;
+  readonly parentId?: number | null | undefined;
+  readonly status?: OrganizationUnitStatusCode | undefined;
+  readonly description?: string | null | undefined;
+}
 
 export const listOrganizationUnitsQuerySchema = z.object({
-  q: optionalQueryParam(z.string().trim().max(120)),
-  type: optionalQueryParam(organizationUnitTypeSchema),
-  status: optionalQueryParam(organizationUnitStatusSchema),
-  parentId: optionalQueryParam(z.string().uuid()),
+  search: z.string().trim().max(120).optional(),
+  type: orgTypeSchema,
+  status: orgStatusSchema,
+  parentId: z
+    .preprocess(
+      (v) => (v === undefined || v === '' ? undefined : Number(v)),
+      z.number().int().min(1),
+    )
+    .optional(),
 });
 
-export type ListOrganizationUnitsQuery = z.infer<typeof listOrganizationUnitsQuerySchema>;
+export interface ListOrganizationUnitsQuery {
+  readonly search?: string | undefined;
+  readonly type?: OrganizationUnitTypeCode | undefined;
+  readonly status?: OrganizationUnitStatusCode | undefined;
+  readonly parentId?: number | undefined;
+}

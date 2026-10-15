@@ -4,7 +4,11 @@ import type {
   TokenPayload,
   UserIdentity,
 } from '@packages/security/index.js';
-import { type IUsersPublicService, USERS_PUBLIC_SERVICE } from '@modules/users/contracts/index.js';
+import {
+  type IUsersPublicService,
+  USERS_PUBLIC_SERVICE,
+  USER_STATUS,
+} from '@modules/users/contracts/index.js';
 import { SessionService } from './session.service.js';
 
 @Injectable()
@@ -21,27 +25,33 @@ export class UserIdentityResolverService implements IUserIdentityResolver {
       return null;
     }
 
+    const userId = Number(payload.sub);
+    if (Number.isNaN(userId) || userId <= 0) {
+      return null;
+    }
+
     // Nếu token không gắn mã phiên (sid), trả về thông tin trực tiếp từ payload (tương thích unit test)
     if (!payload.sid) {
       return {
-        id: payload.sub,
+        id: userId,
         ...(payload.email !== undefined ? { email: payload.email } : {}),
         ...(payload.username !== undefined ? { username: payload.username } : {}),
         roles: payload.roles ?? ['user'],
         permissions: payload.permissions ?? [],
         ...(payload.organizationUnitIds !== undefined
-          ? { organizationUnitIds: payload.organizationUnitIds }
+          ? { organizationUnitIds: payload.organizationUnitIds.map(Number) }
           : {}),
       };
     }
 
-    const sessionActive = await this.sessionService.isSessionActive(payload.sid, payload.sub);
+    const sessionId = Number(payload.sid);
+    const sessionActive = await this.sessionService.isSessionActive(sessionId, userId);
     if (!sessionActive) {
       return null;
     }
 
-    const user = await this.usersPublicService.findAuthUserById(payload.sub);
-    if (!user || user.status !== 'ACTIVE') {
+    const user = await this.usersPublicService.findAuthUserById(userId);
+    if (!user || user.status !== USER_STATUS.ACTIVE) {
       return null;
     }
 
@@ -49,7 +59,7 @@ export class UserIdentityResolverService implements IUserIdentityResolver {
       id: user.id,
       email: user.email,
       username: user.username,
-      sessionId: payload.sid,
+      sessionId,
       roles: user.roles,
       permissions: user.permissions,
       organizationUnitIds: user.organizationUnitIds,
