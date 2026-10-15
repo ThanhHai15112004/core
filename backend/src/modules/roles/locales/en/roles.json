@@ -1,0 +1,8 @@
+{
+  "notFound": "Requested role not found",
+  "duplicateCode": "Role code already exists",
+  "cannotDeleteSystemRole": "Cannot delete system default role",
+  "cannotDeactivateSystemRole": "Cannot deactivate system default role",
+  "invalidOrMissingRoles": "One or more selected roles do not exist",
+  "inactiveRolesNotAllowed": "Cannot assign inactive roles to user"
+}

@@ -27,6 +27,14 @@ services:
     mem_limit: 1536m
     mem_reservation: 512m
     restart: unless-stopped
+    networks:
+      - core_dev_net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:3005/api/v1/health >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   # Worker runtime: consumer BullMQ (dùng dist do service backend build)
   worker:
@@ -51,7 +59,16 @@ services:
     mem_reservation: 256m
     restart: unless-stopped
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
+    networks:
+      - core_dev_net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:9101/metrics >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   # Scheduler runtime: cron task (dùng dist do service backend build)
   scheduler:
@@ -76,7 +93,16 @@ services:
     mem_reservation: 128m
     restart: unless-stopped
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
+    networks:
+      - core_dev_net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:9102/metrics >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   frontend:
     container_name: core-frontend-dev
@@ -99,7 +125,16 @@ services:
     mem_reservation: 384m
     restart: unless-stopped
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
+    networks:
+      - core_dev_net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:5175 >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
 
   # Prometheus: scrape /metrics của api/worker/scheduler, nguồn lịch sử cho biểu đồ System Console
   prometheus:
@@ -116,8 +151,27 @@ services:
       - prometheus_data:/prometheus
     mem_limit: 256m
     restart: unless-stopped
+    networks:
+      - core_dev_net
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:9090/-/healthy >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
+# ==============================================================================
+# Volumes & Networks
+# ==============================================================================
 volumes:
   backend_node_modules:
+    name: core_dev_backend_node_modules
   frontend_node_modules:
+    name: core_dev_frontend_node_modules
   prometheus_data:
+    name: core_dev_prometheus_data
+
+networks:
+  core_dev_net:
+    name: core_dev_network
+    driver: bridge

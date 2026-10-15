@@ -14,6 +14,8 @@ import {
   type PermissionSeedItem,
 } from '../../../../database/seeders/master-permission.seeder.js';
 import { DevelopmentDataSeeder } from '../../../../database/seeders/development.seeder.js';
+import { IamMasterSeeder } from '../../../../database/seeders/iam-master.seeder.js';
+import { IamThousandUsersSeeder } from '../../../../database/seeders/iam-thousand-users.seeder.js';
 
 @Injectable()
 export class SeedCommand implements ICliCommandProvider {
@@ -29,7 +31,7 @@ export class SeedCommand implements ICliCommandProvider {
         name: 'seed:run',
         domain: 'Database',
         description:
-          'Đồng bộ dữ liệu nền tảng (Permissions, Master Data) và Seed dữ liệu mẫu Development',
+          'Đồng bộ dữ liệu nền tảng (Permissions, Master Data, IAM Admins) và Seed 1.000 Users mẫu Development',
         usage: 'npm run cli -- seed:run [--scope=all|master|development]',
         execute: (args) => this.runSeed(args),
       },
@@ -52,7 +54,9 @@ export class SeedCommand implements ICliCommandProvider {
     const permissions = await this.collectManifestPermissions();
     const seeders: SeederContract[] = [
       new MasterPermissionSeeder(permissions),
+      new IamMasterSeeder(),
       new DevelopmentDataSeeder(),
+      new IamThousandUsersSeeder(),
     ];
 
     console.log(`\n--- RUNNING DATABASE SEEDERS (scope: ${scope}) ---`);

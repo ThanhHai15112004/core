@@ -27,7 +27,7 @@ WORKDIR /app
 ENV NODE_ENV=production
 
 COPY package.json pnpm-workspace.yaml* ./
-COPY backend/package*.json ./backend/
+COPY backend/package*.json backend/project.manifest.json ./backend/
 COPY --from=builder /app/backend/dist ./backend/dist
 COPY --from=builder /app/frontend/dist ./frontend/dist
 COPY docker/entrypoint.prod.sh /app/docker/entrypoint.prod.sh
@@ -37,5 +37,8 @@ RUN npm --prefix backend install --omit=dev && chmod +x /app/docker/entrypoint.p
 EXPOSE 3005
 
 USER node
+
+HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=3 \
+  CMD wget -qO- http://127.0.0.1:3005/api/v1/health >/dev/null || exit 1
 
 ENTRYPOINT ["/app/docker/entrypoint.prod.sh"]

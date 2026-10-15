@@ -18,6 +18,10 @@ import { HttpClientModule } from '@packages/http-client/index.js';
 import { I18nModule } from '@packages/i18n/index.js';
 import { HealthModule } from '@modules/health/index.js';
 import { SystemOpsModule } from '@modules/system-ops/index.js';
+import { OrganizationsModule } from '@modules/organizations/index.js';
+import { RolesModule } from '@modules/roles/index.js';
+import { UsersModule } from '@modules/users/index.js';
+import { AuthModule } from '@modules/auth/index.js';
 import { RedisModule } from '@packages/redis/index.js';
 import { RuntimeAgentModule } from '@packages/runtime/index.js';
 import { ApiRuntimeContributor } from './runtime/api-runtime.contributor.js';
@@ -42,6 +46,10 @@ import { MetricsModule } from '@packages/metrics/index.js';
     I18nModule,
     HealthModule,
     SystemOpsModule,
+    OrganizationsModule,
+    RolesModule,
+    UsersModule,
+    AuthModule,
   ],
   providers: [
     ApiRuntimeContributor,

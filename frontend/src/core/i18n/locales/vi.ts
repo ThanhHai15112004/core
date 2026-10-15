@@ -54,6 +54,7 @@ export const vi = {
   header: {
     systemConsole: 'System Console',
     home: 'Trang chủ',
+    iam: 'Người dùng & Xác thực',
     languageToggle: 'Ngôn ngữ',
   },
   footer: {

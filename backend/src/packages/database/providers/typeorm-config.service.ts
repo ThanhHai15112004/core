@@ -16,7 +16,13 @@ import { TypeOrmPinoLogger } from './typeorm-pino.logger.js';
 
 const currentFile = fileURLToPath(import.meta.url);
 const migrationExt = currentFile.endsWith('.ts') ? '*.ts' : '*.js';
+const entityExt = currentFile.endsWith('.ts') ? '*.entity.ts' : '*.entity.js';
 const srcRoot = path.resolve(path.dirname(currentFile), '../../..');
+/** Nạp thực thể ORM tự động từ thư mục `entities` của từng module. */
+const ENTITIES_GLOBS = [
+  path.join(srcRoot, 'modules/*/entities', entityExt),
+  path.join(srcRoot, 'project-modules/*/entities', entityExt),
+];
 /** Nạp migration từ thư mục tập trung `database/migrations` và thư mục `migrations` của từng module. */
 const MIGRATIONS_GLOBS = [
   path.join(srcRoot, 'database/migrations', migrationExt),
@@ -76,6 +82,7 @@ export class TypeOrmConfigService implements TypeOrmOptionsFactory {
       logger: new TypeOrmPinoLogger(db.logging, (err, query) => this.recordQueryError(err, query)),
       maxQueryExecutionTime: db.slowQueryMs ?? 500,
       autoLoadEntities: true,
+      entities: ENTITIES_GLOBS,
       // Kết nối do DatabaseConnectionService mở nền (có retry) → API vẫn chạy khi database chưa sẵn sàng.
       manualInitialization: true,
       migrations: MIGRATIONS_GLOBS,

@@ -1,0 +1,8 @@
+{
+  "notFound": "Organization unit or branch not found",
+  "duplicateCode": "Organization unit code already exists",
+  "parentNotFound": "Parent organization unit not found",
+  "cannotBeOwnParent": "Organization unit cannot be its own parent",
+  "invalidOrMissingUnits": "One or more organization units do not exist",
+  "inactiveUnitsNotAllowed": "Cannot assign user to inactive organization units"
+}

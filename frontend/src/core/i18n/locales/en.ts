@@ -55,6 +55,7 @@ export const en: TranslationKey = {
   header: {
     systemConsole: 'System Console',
     home: 'Home',
+    iam: 'Users & Auth',
     languageToggle: 'Language',
   },
   footer: {

@@ -1,0 +1,21 @@
+{
+  "$schema": "../../packages/kernel/schemas/module.manifest.schema.json",
+  "name": "organizations",
+  "displayName": "Organization Units & Branches",
+  "version": "1.0.0",
+  "description": "Module quản lý Đơn vị, Chi nhánh và Phòng ban phục vụ phân bổ nhân sự và phân quyền theo đơn vị",
+  "type": "core",
+  "category": "core",
+  "author": "Core Platform Team",
+  "entryModule": "OrganizationsModule",
+  "dependencies": ["database"],
+  "permissions": ["organizations.read", "organizations.manage"],
+  "events": {
+    "published": ["organization.created", "organization.updated", "organization.deleted"],
+    "subscribed": []
+  },
+  "database": {
+    "hasMigrations": true,
+    "tables": ["organization_units"]
+  }
+}

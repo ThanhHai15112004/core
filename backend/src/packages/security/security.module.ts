@@ -7,10 +7,11 @@ import { SecretService } from './providers/secret.service.js';
 import { TokenService } from './providers/token.service.js';
 import { AuthGuard } from './guards/auth.guard.js';
 import { SecurityManageableAdapter } from './providers/security-manageable.adapter.js';
-
 import { SecretDriver } from './types/secret.types.js';
-
 import { SecretRegistryService } from './providers/secret-registry.service.js';
+import { PasswordHasherService } from './providers/password-hasher.service.js';
+import { FieldEncryptionService } from './providers/field-encryption.service.js';
+import { TotpService } from './providers/totp.service.js';
 
 @Global()
 @Module({
@@ -33,6 +34,9 @@ import { SecretRegistryService } from './providers/secret-registry.service.js';
     },
     SecretService,
     SecretRegistryService,
+    PasswordHasherService,
+    FieldEncryptionService,
+    TotpService,
     TokenService,
     AuthGuard,
     SecurityManageableAdapter,
@@ -43,6 +47,9 @@ import { SecretRegistryService } from './providers/secret-registry.service.js';
     FileSecretProvider,
     SecretService,
     SecretRegistryService,
+    PasswordHasherService,
+    FieldEncryptionService,
+    TotpService,
     TokenService,
     AuthGuard,
     SecurityManageableAdapter,

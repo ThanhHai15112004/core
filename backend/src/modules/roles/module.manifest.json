@@ -1,0 +1,21 @@
+{
+  "$schema": "../../packages/kernel/schemas/module.manifest.schema.json",
+  "name": "roles",
+  "displayName": "Roles & Permissions Management",
+  "version": "1.0.0",
+  "description": "Module quản lý Vai trò (Roles) và ánh xạ Quyền hạn (Permissions) phục vụ RBAC",
+  "type": "core",
+  "category": "core",
+  "author": "Core Platform Team",
+  "entryModule": "RolesModule",
+  "dependencies": ["database"],
+  "permissions": ["roles.read", "roles.manage"],
+  "events": {
+    "published": ["role.created", "role.updated", "role.deleted", "role.permissions_updated"],
+    "subscribed": []
+  },
+  "database": {
+    "hasMigrations": true,
+    "tables": ["roles", "role_permissions"]
+  }
+}

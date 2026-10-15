@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import {
   type ManageablePackage,
   type PackageStatusReport,
@@ -8,6 +8,8 @@ import {
 } from '@packages/kernel/index.js';
 import { CoreConfigService } from '@packages/config/index.js';
 import { CoreI18nService } from '@packages/i18n/index.js';
+import { PasswordHasherService } from './password-hasher.service.js';
+import { FieldEncryptionService } from './field-encryption.service.js';
 
 @Injectable()
 export class SecurityManageableAdapter implements ManageablePackage {
@@ -18,26 +20,31 @@ export class SecurityManageableAdapter implements ManageablePackage {
   constructor(
     private readonly configService: CoreConfigService,
     private readonly i18n: CoreI18nService,
+    @Optional() private readonly passwordHasher?: PasswordHasherService,
+    @Optional() private readonly fieldEncryption?: FieldEncryptionService,
   ) {}
 
   public get displayName(): string {
     return this.i18n.t('ops.security.displayName');
   }
 
-  /** Lấy báo cáo tình trạng hoạt động và các chỉ số của package */
+  /** Lấy báo cáo tình trạng hoạt động và các chỉ số bảo mật/mã hóa của package */
   public async getStatus(): Promise<PackageStatusReport> {
     const { jwt } = this.configService.auth;
+    const passwordHashAlgorithm = this.passwordHasher?.getDefaultAlgorithm() ?? 'SCRYPT';
+    const dbEncryptionAlgorithm = this.fieldEncryption?.getDefaultAlgorithm() ?? 'AES_256_GCM';
 
-    // TokenService.verify() hiện là bản skeleton, chưa kiểm tra chữ ký JWT.
     return {
-      status: PackageStatus.WARNING,
-      summary: this.i18n.t('ops.security.skeletonWarning'),
+      status: PackageStatus.HEALTHY,
+      summary: this.i18n.t('ops.status.healthy'),
       metrics: {
         accessExpiration: jwt.accessExpiration,
         refreshExpiration: jwt.refreshExpiration,
         secretDriver: this.configService.auth.secretDriver,
         globalAuthGuard: true,
-        tokenVerification: 'skeleton',
+        tokenVerification: 'HS256',
+        passwordHashAlgorithm,
+        dbEncryptionAlgorithm,
       },
     };
   }

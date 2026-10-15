@@ -1,0 +1,39 @@
+{
+  "$schema": "../../packages/kernel/schemas/module.manifest.schema.json",
+  "name": "users",
+  "displayName": "User Management",
+  "version": "1.0.0",
+  "description": "Module quản lý vòng đời tài khoản người dùng, phân bổ vai trò, đơn vị/chi nhánh, nhập/xuất hàng loạt và trạng thái Active/Inactive/Locked",
+  "type": "core",
+  "category": "core",
+  "author": "Core Platform Team",
+  "entryModule": "UsersModule",
+  "dependencies": ["database", "redis", "organizations", "roles"],
+  "permissions": [
+    "users.read",
+    "users.create",
+    "users.update",
+    "users.status",
+    "users.import",
+    "users.export"
+  ],
+  "events": {
+    "published": [
+      "user.created",
+      "user.updated",
+      "user.locked",
+      "user.unlocked",
+      "user.deactivated",
+      "user.activated",
+      "user.archived",
+      "user.restored",
+      "user.roles_assigned",
+      "user.organizations_assigned"
+    ],
+    "subscribed": []
+  },
+  "database": {
+    "hasMigrations": true,
+    "tables": ["users", "user_roles", "user_organization_units"]
+  }
+}

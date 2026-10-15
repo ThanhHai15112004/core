@@ -3,4 +3,5 @@ export const securityKeys = {
   all: ['governance'] as const,
   secrets: () => ['governance', 'secrets'] as const,
   configuration: () => ['governance', 'configuration'] as const,
+  policy: () => ['governance', 'security-policy'] as const,
 };

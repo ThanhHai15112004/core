@@ -1,0 +1,32 @@
+{
+  "$schema": "../../packages/kernel/schemas/module.manifest.schema.json",
+  "name": "auth",
+  "displayName": "Authentication, Sessions & Multi-Factor Auth",
+  "version": "1.0.0",
+  "description": "Module xác thực tài khoản, quản lý mật khẩu, quản lý phiên đăng nhập đa thiết bị và xác thực nhiều lớp (TOTP, Email OTP, Recovery Codes)",
+  "type": "core",
+  "category": "core",
+  "author": "Core Platform Team",
+  "entryModule": "AuthModule",
+  "dependencies": ["database", "redis", "security", "users"],
+  "permissions": ["auth.sessions.manage"],
+  "events": {
+    "published": [
+      "auth.login_succeeded",
+      "auth.login_failed",
+      "auth.mfa_challenged",
+      "auth.mfa_verified",
+      "auth.mfa_email_otp_sent",
+      "auth.session_created",
+      "auth.session_revoked",
+      "auth.password_changed",
+      "auth.password_reset_requested",
+      "auth.password_reset_completed"
+    ],
+    "subscribed": []
+  },
+  "database": {
+    "hasMigrations": true,
+    "tables": ["auth_sessions", "auth_mfa_configs", "auth_password_resets"]
+  }
+}

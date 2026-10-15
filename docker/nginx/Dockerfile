@@ -13,4 +13,7 @@ COPY docker/nginx/conf.d/ssl.conf.template /etc/nginx/conf.d/ssl.conf.template
 
 EXPOSE 80 443
 
+HEALTHCHECK --interval=15s --timeout=5s --start-period=15s --retries=3 \
+  CMD curl -fsS http://127.0.0.1/api/v1/health >/dev/null || exit 1
+
 CMD ["nginx", "-g", "daemon off;"]

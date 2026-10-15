@@ -1,0 +1,6 @@
+{
+  "notFound": "Requested user not found",
+  "duplicateUsername": "Username already exists in the system",
+  "duplicateEmail": "Email address is already in use by another account",
+  "invalidLockedUntilDate": "Auto-unlock timestamp must be a future date"
+}

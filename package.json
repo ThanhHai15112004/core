@@ -14,8 +14,22 @@
     "build:fe": "npm --prefix frontend run build",
     "start": "npm --prefix backend run start",
     "test": "npm --prefix backend run test",
+    "test:unit": "npm --prefix backend run test:unit",
+    "test:integration": "npm --prefix backend run test:integration",
+    "test:feature": "npm --prefix backend run test:feature",
     "test:e2e": "npm --prefix backend run test:e2e",
-    "check": "npm --prefix backend run check"
+    "test:cov": "npm --prefix backend run test:cov",
+    "test:cov:module": "npm --prefix backend run test:cov:module",
+    "check": "npm --prefix backend run check",
+    "docker:up": "./docker-dev.sh up",
+    "docker:down": "./docker-dev.sh down",
+    "docker:restart": "./docker-dev.sh restart",
+    "docker:logs": "./docker-dev.sh logs",
+    "docker:ps": "./docker-dev.sh ps",
+    "docker:smoke": "./docker-dev.sh smoke",
+    "docker:prod:up": "./docker-prod.sh up",
+    "docker:prod:down": "./docker-prod.sh down",
+    "docker:prod:smoke": "./docker-prod.sh smoke"
   },
   "devDependencies": {
     "@commitlint/cli": "^21.2.1",

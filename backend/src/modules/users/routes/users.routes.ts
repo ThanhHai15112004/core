@@ -1,0 +1,16 @@
+export const USERS_ROUTES = {
+  PREFIX: 'users',
+  ROOT: '',
+  EXPORT: 'export',
+  BULK_IMPORT: 'bulk-import',
+  BY_ID: ':id',
+  LOCK: ':id/lock',
+  UNLOCK: ':id/unlock',
+  DEACTIVATE: ':id/deactivate',
+  ACTIVATE: ':id/activate',
+  RESTORE: ':id/restore',
+  STATUS: ':id/status',
+  ROLES: ':id/roles',
+  ORGANIZATIONS: ':id/organizations',
+  buildByIdPath: (id: string) => `/users/${id}`,
+} as const;

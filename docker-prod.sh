@@ -117,11 +117,16 @@ case "$1" in
     docker compose $COMPOSE_FILE config
     ;;
 
+  smoke)
+    bash ./docker/smoke-test.sh prod
+    ;;
+
   *)
-    echo "Cách dùng: ./docker-prod.sh {up|down|restart|logs|status|ssl-init|config} [service]"
+    echo "Cách dùng: ./docker-prod.sh {up|down|restart|logs|status|smoke|ssl-init|config} [service]"
     echo ""
     echo "Ví dụ trên VPS:"
     echo "  ./docker-prod.sh up                # Build & Chạy toàn bộ hệ thống"
+    echo "  ./docker-prod.sh smoke             # Chạy smoke test kiểm tra sức khỏe Production"
     echo "  ./docker-prod.sh ssl-init          # Cấp chứng chỉ SSL HTTPS miễn phí"
     echo "  ./docker-prod.sh status            # Xem trạng thái và RAM/CPU"
     echo "  ./docker-prod.sh logs nginx        # Xem log riêng của Nginx"

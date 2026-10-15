@@ -12,11 +12,12 @@ import { PACKAGE_STATUS_TONE, SECURITY_CONFIG_ENV, SECURITY_PACKAGE_ID, SECURITY
 import { usePackagesQuery } from '../packages/usePackages';
 import { securityKeys } from './security-keys';
 import { JwtDecoderPanel } from './JwtDecoderPanel';
+import { SecurityPolicyPanel } from './SecurityPolicyPanel';
 
 const HIDDEN_METRICS = new Set<string>([...Object.keys(SECURITY_CONFIG_ENV), ...SECURITY_STATE_METRICS]);
 
 /**
- * Bảo mật: trạng thái xác thực (verify chữ ký, AuthGuard, secret đã cấu hình) → cấu hình JWT → công cụ giải mã JWT
+ * Bảo mật: trạng thái xác thực (verify chữ ký, AuthGuard, secret đã cấu hình) → cấu hình JWT → chính sách mã hóa & MFA → công cụ giải mã JWT
  * (chạy hoàn toàn ở trình duyệt, vẫn dùng được khi API lỗi).
  */
 export const SecuritySection: React.FC = () => {
@@ -43,6 +44,7 @@ export const SecuritySection: React.FC = () => {
         }}
       </QueryView>
 
+      <SecurityPolicyPanel />
       <JwtDecoderPanel />
     </div>
   );

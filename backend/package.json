@@ -35,9 +35,12 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "NODE_OPTIONS=\"--experimental-vm-modules --max-old-space-size=2048\" jest --passWithNoTests --runInBand",
     "test:unit": "NODE_OPTIONS=\"--experimental-vm-modules --max-old-space-size=2048\" jest --testPathPattern=\"test/unit\" --runInBand",
+    "test:integration": "NODE_OPTIONS=\"--experimental-vm-modules --max-old-space-size=2048\" jest --testPathPattern=\"test/integration\" --runInBand",
     "test:feature": "NODE_OPTIONS=\"--experimental-vm-modules --max-old-space-size=2048\" jest --testPathPattern=\"test/feature\" --runInBand",
+    "test:e2e": "NODE_OPTIONS=\"--experimental-vm-modules --max-old-space-size=2048\" jest --testPathPattern=\"test/feature\" --runInBand",
     "test:watch": "NODE_OPTIONS=\"--experimental-vm-modules --max-old-space-size=2048\" jest --watch",
-    "test:cov": "NODE_OPTIONS=\"--experimental-vm-modules --max-old-space-size=2048\" jest --coverage",
+    "test:cov": "NODE_OPTIONS=\"--experimental-vm-modules --max-old-space-size=2048\" jest --coverage --runInBand",
+    "test:cov:module": "NODE_OPTIONS=\"--experimental-vm-modules --max-old-space-size=2048\" jest --coverage --runInBand && node scripts/report-module-coverage.mjs",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "check": "npm run lint && npm run typecheck && npm run test && npm run build"
   },
@@ -104,6 +107,7 @@
     "rootDir": ".",
     "testMatch": [
       "<rootDir>/test/**/*.spec.ts",
+      "<rootDir>/test/**/*.integration-spec.ts",
       "<rootDir>/test/**/*.feature-spec.ts"
     ],
     "transform": {
@@ -140,6 +144,11 @@
       "!src/**/*.module.ts"
     ],
     "coverageDirectory": "./coverage",
+    "coverageReporters": [
+      "text",
+      "lcov",
+      "json-summary"
+    ],
     "testEnvironment": "node",
     "extensionsToTreatAsEsm": [
       ".ts"

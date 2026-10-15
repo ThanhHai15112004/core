@@ -34,3 +34,5 @@ export interface SeederContract {
   readonly order?: number;
   run(ctx: SeederContext): Promise<{ affected: number; details?: string }>;
 }
+
+export type ISeeder = SeederContract;

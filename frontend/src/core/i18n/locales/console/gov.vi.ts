@@ -7,10 +7,10 @@ export const govVi = {
   },
   security: {
     skeletonTitle: 'Xác thực JWT chưa được triển khai',
-    noPackage: 'Package security chưa đăng ký với System Ops',
+    noPackage: 'Package security chưa đăng ký với System Console',
     kpi: {
       verification: 'Xác minh chữ ký JWT',
-      verificationHint: 'TokenService.verify() — "skeleton" nghĩa là chưa kiểm tra chữ ký',
+      verificationHint: 'TokenService.verify() — chuẩn chữ ký JWT đang kích hoạt',
       authGuard: 'AuthGuard toàn cục',
       authGuardHint: 'Guard xác thực áp dụng cho mọi route (trừ route @Public)',
       secrets: 'Secret đã cấu hình',
@@ -23,6 +23,21 @@ export const govVi = {
       accessExpiration: 'Hạn access token',
       refreshExpiration: 'Hạn refresh token',
       secretDriver: 'Secret driver',
+    },
+    policy: {
+      title: 'Cấu hình Bảo mật, Thuật toán Băm & Mã hóa Database',
+      hint: 'Chọn thuật toán băm mật khẩu, thuật toán mã hóa trường nhạy cảm xuống DB (AEAD) và chính sách MFA/khóa tài khoản',
+      passwordHashAlgorithm: 'Thuật toán băm mật khẩu (Password Hash)',
+      dbEncryptionAlgorithm: 'Thuật toán mã hóa xuống DB (Encrypt-at-Rest)',
+      encryptFieldsAtRest: 'Mã hóa trường nhạy cảm trong DB (TOTP Secret / PII)',
+      mfaPolicy: 'Chính sách bắt buộc xác thực đa lớp (MFA)',
+      allowedMfaMethods: 'Phương thức MFA cho phép',
+      maxFailedLoginAttempts: 'Số lần đăng nhập sai tối đa',
+      lockoutDurationMinutes: 'Thời gian khóa tạm thời (phút)',
+      passwordMinLength: 'Độ dài mật khẩu tối thiểu',
+      save: 'Lưu cấu hình bảo mật',
+      saving: 'Đang lưu…',
+      saved: 'Đã cập nhật cấu hình bảo mật & mã hóa thành công',
     },
     decoder: {
       title: 'Giải mã JWT',
@@ -79,7 +94,7 @@ export const govVi = {
   },
   packages: {
     search: 'Lọc theo tên, ID hoặc tóm tắt…',
-    empty: 'Chưa có package nào đăng ký với System Ops',
+    empty: 'Chưa có package nào đăng ký với System Console',
     needAttention: '{{count}} cần chú ý',
     metricPair: '{{key}}: {{value}}',
     category: {

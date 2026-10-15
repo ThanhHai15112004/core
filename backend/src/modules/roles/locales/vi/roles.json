@@ -1,0 +1,8 @@
+{
+  "notFound": "Không tìm thấy vai trò yêu cầu",
+  "duplicateCode": "Mã vai trò đã tồn tại",
+  "cannotDeleteSystemRole": "Không thể xóa vai trò mặc định của hệ thống",
+  "cannotDeactivateSystemRole": "Không thể vô hiệu hóa vai trò mặc định của hệ thống",
+  "invalidOrMissingRoles": "Một hoặc nhiều vai trò được chọn không tồn tại",
+  "inactiveRolesNotAllowed": "Không thể gán vai trò đang ngừng hoạt động cho người dùng"
+}

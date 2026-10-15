@@ -1,0 +1,6 @@
+{
+  "notFound": "Không tìm thấy người dùng yêu cầu",
+  "duplicateUsername": "Tên đăng nhập đã tồn tại trong hệ thống",
+  "duplicateEmail": "Địa chỉ email đã được sử dụng bởi tài khoản khác",
+  "invalidLockedUntilDate": "Thời điểm mở khóa tự động phải là thời gian trong tương lai"
+}

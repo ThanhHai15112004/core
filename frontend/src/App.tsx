@@ -2,6 +2,7 @@ import { lazy, Suspense, useState } from 'react';
 import { Header } from './core/layouts/Header';
 import { Footer } from './core/layouts/Footer';
 import { Home } from './modules/home/pages/Home';
+import { IamManagementPage } from './modules/iam/IamManagementPage';
 import { AppProviders } from './providers/index';
 import type { NavigationTabId } from './core/constants/index';
 import { ROUTES } from './routes/index';
@@ -29,7 +30,7 @@ function App() {
       ) : (
         <AppProviders>
           <Header activeTab={activeTab} onTabChange={setActiveTab} />
-          <Home />
+          {activeTab === 'iam' ? <IamManagementPage /> : <Home />}
           <Footer />
         </AppProviders>
       )}

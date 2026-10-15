@@ -18,7 +18,11 @@
     "logs-ops",
     "runtimes",
     "traffic",
-    "performance"
+    "performance",
+    "organizations",
+    "roles",
+    "users",
+    "auth"
   ],
   "settings": {
     "defaultLocale": "vi",

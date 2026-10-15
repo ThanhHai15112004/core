@@ -9,10 +9,10 @@ export const govEn: GovTranslation = {
   },
   security: {
     skeletonTitle: 'JWT verification is not implemented yet',
-    noPackage: 'The security package is not registered with System Ops',
+    noPackage: 'The security package is not registered with System Console',
     kpi: {
       verification: 'JWT signature check',
-      verificationHint: 'TokenService.verify() — "skeleton" means signatures are not checked',
+      verificationHint: 'TokenService.verify() — active JWT signature algorithm',
       authGuard: 'Global AuthGuard',
       authGuardHint: 'Auth guard applied to every route (except @Public routes)',
       secrets: 'Secrets configured',
@@ -25,6 +25,21 @@ export const govEn: GovTranslation = {
       accessExpiration: 'Access token TTL',
       refreshExpiration: 'Refresh token TTL',
       secretDriver: 'Secret driver',
+    },
+    policy: {
+      title: 'Security, Password Hashing & Database Encryption Policy',
+      hint: 'Select password hashing algorithm, database field encryption algorithm (AEAD), MFA enforcement, and account lockout thresholds',
+      passwordHashAlgorithm: 'Password Hashing Algorithm',
+      dbEncryptionAlgorithm: 'Database Encryption Algorithm (Encrypt-at-Rest)',
+      encryptFieldsAtRest: 'Encrypt Sensitive DB Fields (TOTP Secret / PII)',
+      mfaPolicy: 'Multi-Factor Authentication (MFA) Policy',
+      allowedMfaMethods: 'Allowed MFA Methods',
+      maxFailedLoginAttempts: 'Max Failed Login Attempts',
+      lockoutDurationMinutes: 'Lockout Duration (Minutes)',
+      passwordMinLength: 'Minimum Password Length',
+      save: 'Save Security Settings',
+      saving: 'Saving…',
+      saved: 'Security & encryption settings updated successfully',
     },
     decoder: {
       title: 'JWT decoder',
@@ -81,7 +96,7 @@ export const govEn: GovTranslation = {
   },
   packages: {
     search: 'Filter by name, ID or summary…',
-    empty: 'No packages registered with System Ops',
+    empty: 'No packages registered with System Console',
     needAttention: '{{count}} need attention',
     metricPair: '{{key}}: {{value}}',
     category: {

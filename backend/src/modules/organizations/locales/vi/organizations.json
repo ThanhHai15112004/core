@@ -1,0 +1,8 @@
+{
+  "notFound": "Không tìm thấy đơn vị hoặc chi nhánh yêu cầu",
+  "duplicateCode": "Mã đơn vị/chi nhánh đã tồn tại",
+  "parentNotFound": "Không tìm thấy đơn vị cấp trên",
+  "cannotBeOwnParent": "Đơn vị không thể chọn chính nó làm đơn vị cấp trên",
+  "invalidOrMissingUnits": "Một hoặc nhiều đơn vị/chi nhánh không tồn tại",
+  "inactiveUnitsNotAllowed": "Không thể gán người dùng vào đơn vị/chi nhánh đang ngừng hoạt động"
+}
