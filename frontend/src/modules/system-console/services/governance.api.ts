@@ -33,6 +33,12 @@ export interface SecurityPolicySettings {
   requireUppercase: boolean;
   requireNumbers: boolean;
   requireSpecialChars: boolean;
+  requireCurrentPasswordOnChange: boolean;
+  disallowedPasswords: string[];
+  disallowUserInfoInPassword: boolean;
+  preventPasswordReuse: boolean;
+  passwordHistoryLimit: number;
+  revokeSessionsOnPasswordChange: boolean;
   availablePasswordHashAlgorithms: PasswordHashAlgo[];
   availableDbEncryptionAlgorithms: DbEncryptionAlgo[];
   updatedAt: string;

@@ -198,12 +198,13 @@ export class MfaService {
     }
 
     if (dto.code) {
-      const validOtp = this.verifyStoredEmailOtp(config, dto.code);
+      const validOtp = await this.verifyAndTrackEmailOtp(config, dto.code);
       if (!validOtp) {
         throw new BadRequestAppException('auth.invalidMfaCode');
       }
       config.emailOtpCodeHash = null;
       config.emailOtpExpiresAt = null;
+      config.emailOtpFailedAttempts = 0;
     }
 
     const { plainCodes, hashesJson } = this.ensureRecoveryCodes(config);
@@ -247,10 +248,12 @@ export class MfaService {
         recoveryCodesHashJson: '[]',
         emailOtpCodeHash: otpHash,
         emailOtpExpiresAt: expiresAt,
+        emailOtpFailedAttempts: 0,
       });
     } else {
       config.emailOtpCodeHash = otpHash;
       config.emailOtpExpiresAt = expiresAt;
+      config.emailOtpFailedAttempts = 0;
       await this.mfaRepository.saveEntity(config);
     }
 
@@ -304,11 +307,12 @@ export class MfaService {
       }
     }
 
-    // 3. Kiểm tra mã Email OTP 6 chữ số
+    // 3. Kiểm tra mã Email OTP 6 chữ số (kèm giới hạn số lần nhập sai)
     if (preferredMethod === 'EMAIL_OTP' || !preferredMethod) {
-      if (this.verifyStoredEmailOtp(config, trimmedCode)) {
+      if (await this.verifyAndTrackEmailOtp(config, trimmedCode)) {
         config.emailOtpCodeHash = null;
         config.emailOtpExpiresAt = null;
+        config.emailOtpFailedAttempts = 0;
         await this.mfaRepository.saveEntity(config);
         return true;
       }
@@ -344,12 +348,14 @@ export class MfaService {
       config.emailOtpEnabled = false;
       config.emailOtpCodeHash = null;
       config.emailOtpExpiresAt = null;
+      config.emailOtpFailedAttempts = 0;
     } else {
       config.totpEnabled = false;
       config.totpSecret = null;
       config.emailOtpEnabled = false;
       config.emailOtpCodeHash = null;
       config.emailOtpExpiresAt = null;
+      config.emailOtpFailedAttempts = 0;
       config.recoveryCodesHashJson = '[]';
     }
 
@@ -375,16 +381,29 @@ export class MfaService {
     return { recoveryCodes: plainCodes };
   }
 
-  /** Kiểm tra mã Email OTP đã lưu và thời hạn hiệu lực */
-  private verifyStoredEmailOtp(config: AuthMfaConfigEntity, code: string): boolean {
+  /** Kiểm tra mã Email OTP đã lưu, thời hạn hiệu lực và giới hạn số lần nhập sai (tối đa 5 lần) */
+  private async verifyAndTrackEmailOtp(config: AuthMfaConfigEntity, code: string): Promise<boolean> {
     if (!config.emailOtpCodeHash || !config.emailOtpExpiresAt) {
       return false;
     }
     if (config.emailOtpExpiresAt.getTime() <= Date.now()) {
       return false;
     }
+    const currentFailed = config.emailOtpFailedAttempts ?? 0;
+    if (currentFailed >= 5) {
+      return false;
+    }
     const candidateHash = this.passwordHasher.sha256(code.trim());
-    return candidateHash === config.emailOtpCodeHash;
+    if (candidateHash === config.emailOtpCodeHash) {
+      return true;
+    }
+    config.emailOtpFailedAttempts = currentFailed + 1;
+    if (config.emailOtpFailedAttempts >= 5) {
+      config.emailOtpCodeHash = null;
+      config.emailOtpExpiresAt = null;
+    }
+    await this.mfaRepository.saveEntity(config);
+    return false;
   }
 
   /** Kiểm tra và gạch bỏ mã khôi phục dự phòng đã sử dụng */

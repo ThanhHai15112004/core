@@ -1,5 +1,9 @@
 import { Inject, Injectable, Optional } from '@nestjs/common';
-import { ForbiddenAppException, UnauthorizedAppException } from '@packages/kernel/index.js';
+import {
+  BadRequestAppException,
+  ForbiddenAppException,
+  UnauthorizedAppException,
+} from '@packages/kernel/index.js';
 import { PasswordHasherService, TokenService } from '@packages/security/index.js';
 import {
   type IUsersPublicService,
@@ -11,15 +15,18 @@ import type { IAuthPublicService } from '../contracts/index.js';
 import { SessionService } from './session.service.js';
 import { MfaService } from './mfa.service.js';
 import { SecuritySettingsService } from './security-settings.service.js';
+import { VerificationService } from './verification.service.js';
 import type {
   LoginRequest,
   RefreshTokenRequest,
+  RegisterRequest,
   SendEmailOtpRequest,
   VerifyMfaChallengeRequest,
 } from '../requests/auth.requests.js';
 import type {
   AuthenticatedUserProfileResponse,
   LoginResponse,
+  RegisterResponse,
   SendEmailOtpResponse,
 } from '../responses/auth.response.js';
 
@@ -36,9 +43,131 @@ export class AuthService implements IAuthPublicService {
     @Inject(USERS_PUBLIC_SERVICE)
     private readonly usersPublicService: IUsersPublicService,
     @Optional() private readonly securitySettingsService?: SecuritySettingsService,
+    @Optional() private readonly verificationService?: VerificationService,
   ) {}
 
-  /** Đăng nhập bước 1 bằng Username/Email + Mật khẩu */
+  /**
+   * Đăng ký tài khoản bằng Email + mật khẩu hoặc SĐT + mật khẩu (Mục 3.2.1 & 3.2.2)
+   * Có thể bật hoặc tắt theo dự án qua SecuritySettingsService (`allowEmailRegistration` / `allowPhoneRegistration`).
+   */
+  public async register(
+    dto: RegisterRequest,
+    meta: { ipAddress?: string | null; userAgent?: string | null } = {},
+  ): Promise<RegisterResponse> {
+    const hasEmail = Boolean(dto.email && dto.email.trim());
+    const hasPhone = Boolean(dto.phone && dto.phone.trim());
+    if (!hasEmail && !hasPhone) {
+      throw new BadRequestAppException('auth.emailOrPhoneRequired');
+    }
+
+    const settings = await this.securitySettingsService?.getSettings();
+    if (hasEmail && settings?.allowEmailRegistration === false) {
+      throw new ForbiddenAppException('auth.emailRegistrationDisabled');
+    }
+    if (hasPhone && settings?.allowPhoneRegistration === false) {
+      throw new ForbiddenAppException('auth.phoneRegistrationDisabled');
+    }
+
+    if (this.securitySettingsService) {
+      await this.securitySettingsService.validatePasswordPolicy(dto.password, {
+        username: dto.username,
+        email: dto.email,
+        phone: dto.phone,
+      });
+    } else {
+      this.validatePasswordPolicy(dto.password, settings);
+    }
+
+    const emailVerifyRequired = hasEmail && Boolean(settings?.requireEmailVerification);
+    const phoneVerifyRequired =
+      !emailVerifyRequired && hasPhone && Boolean(settings?.requirePhoneVerification);
+    const verificationRequired = emailVerifyRequired || phoneVerifyRequired;
+
+    const created = await this.usersPublicService.registerSelfUser({
+      username: dto.username,
+      email: dto.email ?? null,
+      phone: dto.phone ?? null,
+      password: dto.password,
+      firstName: dto.firstName,
+      lastName: dto.lastName,
+      fullName: dto.fullName,
+      avatarUrl: dto.avatarUrl ?? null,
+      dateOfBirth: dto.dateOfBirth ?? null,
+      gender: dto.gender ?? null,
+      address: dto.address ?? null,
+      city: dto.city ?? null,
+      country: dto.country ?? null,
+      bio: dto.bio ?? null,
+      status: verificationRequired ? USER_STATUS.INACTIVE : USER_STATUS.ACTIVE,
+    });
+
+    if (verificationRequired) {
+      if (emailVerifyRequired && this.verificationService) {
+        const sent = await this.verificationService.sendEmailVerification(
+          { email: created.email },
+          { userId: created.id, ipAddress: meta.ipAddress },
+        );
+        return {
+          registered: true,
+          verificationRequired: true,
+          verificationChannel: 'EMAIL',
+          maskedTarget: sent.maskedTarget,
+          expiresInSeconds: sent.expiresInSeconds,
+          ...(sent.devVerificationCode ? { devVerificationCode: sent.devVerificationCode } : {}),
+          ...(sent.devVerificationToken
+            ? { devVerificationToken: sent.devVerificationToken }
+            : {}),
+          user: this.toProfileResponse(created),
+        };
+      }
+
+      if (phoneVerifyRequired && this.verificationService) {
+        const sent = await this.verificationService.sendPhoneOtp(
+          { phone: created.phone ?? undefined },
+          { userId: created.id, ipAddress: meta.ipAddress },
+        );
+        return {
+          registered: true,
+          verificationRequired: true,
+          verificationChannel: 'PHONE_OTP',
+          maskedTarget: sent.maskedTarget,
+          expiresInSeconds: sent.expiresInSeconds,
+          ...(sent.devVerificationCode ? { devVerificationCode: sent.devVerificationCode } : {}),
+          user: this.toProfileResponse(created),
+        };
+      }
+
+      return {
+        registered: true,
+        verificationRequired: true,
+        verificationChannel: emailVerifyRequired ? 'EMAIL' : 'PHONE_OTP',
+        user: this.toProfileResponse(created),
+      };
+    }
+
+    await this.usersPublicService.recordLoginSuccess(created.id);
+    const issued = await this.sessionService.createSession(created, {
+      ipAddress: meta.ipAddress ?? null,
+      userAgent: meta.userAgent ?? null,
+      deviceName: dto.deviceName ?? null,
+    });
+
+    return {
+      registered: true,
+      verificationRequired: false,
+      verificationChannel: null,
+      accessToken: issued.accessToken,
+      refreshToken: issued.refreshToken,
+      sessionId: issued.sessionId,
+      expiresInSeconds: issued.expiresInSeconds,
+      user: this.toProfileResponse(created),
+    };
+  }
+
+  /**
+   * Đăng nhập bước 1 bằng Username / Email / SĐT + Mật khẩu (Mục 3.2.3)
+   * Không tiết lộ tài khoản có tồn tại hay không (`auth.invalidCredentials`).
+   */
   public async login(
     dto: LoginRequest,
     meta: { ipAddress?: string | null; userAgent?: string | null } = {},
@@ -93,10 +222,14 @@ export class AuthService implements IAuthPublicService {
       throw new UnauthorizedAppException('auth.invalidCredentials');
     }
 
-    // Tự động nâng cấp chuỗi băm mật khẩu nếu Admin đã chuyển sang thuật toán băm mới trong Security Settings
-    if (this.passwordHasher.needsRehash(credentials.passwordHash)) {
-      const upgradedHash = await this.passwordHasher.hash(dto.password);
-      await this.usersPublicService.updatePasswordHash(credentials.id, upgradedHash);
+    // Tự động nâng cấp chuỗi băm mật khẩu nếu Admin đã chuyển sang thuật toán băm mới trong Security Settings (Mục 3.3.6)
+    const activeSettings = await this.securitySettingsService?.getSettings();
+    const targetHashAlgo = activeSettings?.passwordHashAlgorithm;
+    if (this.passwordHasher.needsRehash(credentials.passwordHash, targetHashAlgo)) {
+      const upgradedHash = await this.passwordHasher.hash(dto.password, targetHashAlgo);
+      await this.usersPublicService.updatePasswordHash(credentials.id, upgradedHash, {
+        recordHistory: false,
+      });
     }
 
     // Nếu tài khoản bật xác thực nhiều lớp (MFA) -> yêu cầu bước 2
@@ -233,9 +366,41 @@ export class AuthService implements IAuthPublicService {
     return this.toProfileResponse(identity);
   }
 
-  /** Hợp đồng công khai: Thu hồi toàn bộ phiên đăng nhập của người dùng */
-  public async revokeAllUserSessions(userId: number, reason?: string): Promise<number> {
-    return this.sessionService.revokeAllUserSessions(userId, reason);
+  /** Hợp đồng công khai: Thu hồi toàn bộ phiên đăng nhập của người dùng (Mục 3.2.5) */
+  public async revokeAllUserSessions(
+    userId: number,
+    reason?: string,
+    exceptSessionId?: number,
+  ): Promise<number> {
+    return this.sessionService.revokeAllUserSessions(userId, reason, exceptSessionId);
+  }
+
+  private validatePasswordPolicy(
+    password: string,
+    settings?: {
+      passwordMinLength: number;
+      requireUppercase: boolean;
+      requireNumbers: boolean;
+      requireSpecialChars: boolean;
+    },
+  ): void {
+    const minLength = settings?.passwordMinLength ?? 8;
+    if (password.length < minLength) {
+      throw new BadRequestAppException('auth.passwordPolicyViolation', [{ minLength }]);
+    }
+    if (settings?.requireUppercase && !/[A-Z]/.test(password)) {
+      throw new BadRequestAppException('auth.passwordPolicyViolation', [
+        { requireUppercase: true },
+      ]);
+    }
+    if (settings?.requireNumbers && !/\d/.test(password)) {
+      throw new BadRequestAppException('auth.passwordPolicyViolation', [{ requireNumbers: true }]);
+    }
+    if (settings?.requireSpecialChars && !/[^A-Za-z0-9]/.test(password)) {
+      throw new BadRequestAppException('auth.passwordPolicyViolation', [
+        { requireSpecialChars: true },
+      ]);
+    }
   }
 
   /** Chuyển đổi UserAuthIdentityView sang DTO phản hồi hồ sơ */
@@ -247,14 +412,18 @@ export class AuthService implements IAuthPublicService {
       firstName: identity.firstName,
       lastName: identity.lastName,
       fullName: identity.fullName,
+      avatarUrl: identity.avatarUrl ?? null,
       phone: identity.phone,
       status: identity.status,
       statusName: identity.statusName,
+      emailVerifiedAt: identity.emailVerifiedAt ? identity.emailVerifiedAt.toISOString() : null,
+      phoneVerifiedAt: identity.phoneVerifiedAt ? identity.phoneVerifiedAt.toISOString() : null,
       mfaEnabled: identity.mfaEnabled,
       primaryOrganizationUnitId: identity.primaryOrganizationUnitId,
       organizationUnitIds: [...identity.organizationUnitIds],
       roles: [...identity.roles],
       permissions: [...identity.permissions],
+      ...(identity.profile ? { profile: identity.profile } : {}),
     };
   }
 }

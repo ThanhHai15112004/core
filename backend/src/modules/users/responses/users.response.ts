@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type {
   UserOrganizationAssignmentSummary,
+  UserProfileView,
   UserRoleAssignmentSummary,
   UserStatusCode,
   UserStatusName,
@@ -15,8 +16,11 @@ export interface UserResponse {
   readonly lastName: string;
   readonly fullName: string;
   readonly avatarUrl: string | null;
+  readonly profile: UserProfileView;
   readonly status: UserStatusCode;
   readonly statusName: UserStatusName;
+  readonly emailVerifiedAt: string | null;
+  readonly phoneVerifiedAt: string | null;
   readonly lockedUntil: string | null;
   readonly lockReason: string | null;
   readonly failedLoginAttempts: number;
@@ -83,17 +87,34 @@ export const userOrganizationSummarySchema = z.object({
   positionTitle: z.string().nullable(),
 });
 
+export const userProfileResponseSchema = z.object({
+  firstName: z.string(),
+  lastName: z.string(),
+  fullName: z.string(),
+  avatarUrl: z.string().nullable(),
+  dateOfBirth: z.string().nullable(),
+  gender: z.number().int().nullable(),
+  identityNumber: z.string().nullable(),
+  address: z.string().nullable(),
+  city: z.string().nullable(),
+  country: z.string().nullable(),
+  bio: z.string().nullable(),
+});
+
 export const userResponseSchema = z.object({
   id: z.number().int().min(1),
   username: z.string(),
-  email: z.string().email(),
+  email: z.string(),
   phone: z.string().nullable(),
   firstName: z.string(),
   lastName: z.string(),
   fullName: z.string(),
   avatarUrl: z.string().nullable(),
+  profile: userProfileResponseSchema,
   status: z.number().int().min(1).max(4),
   statusName: z.enum(['ACTIVE', 'INACTIVE', 'LOCKED', 'ARCHIVED']),
+  emailVerifiedAt: z.string().nullable(),
+  phoneVerifiedAt: z.string().nullable(),
   lockedUntil: z.string().nullable(),
   lockReason: z.string().nullable(),
   failedLoginAttempts: z.number(),

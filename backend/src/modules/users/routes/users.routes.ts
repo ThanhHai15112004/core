@@ -12,6 +12,8 @@ export const USERS_ROUTES = {
   STATUS: ':id/status',
   STATUS_HISTORY: ':id/status-history',
   RESTORE: ':id/restore',
+  RESET_PASSWORD: ':id/reset-password',
   ROLES: ':id/roles',
   ORGANIZATIONS: ':id/organizations',
 } as const;
+

@@ -6,10 +6,12 @@ import { OrganizationsModule } from '@modules/organizations/index.js';
 import { RolesModule } from '@modules/roles/index.js';
 import { USERS_PUBLIC_SERVICE } from './contracts/index.js';
 import { UserEntity } from './entities/user.entity.js';
+import { UserProfileEntity } from './entities/user-profile.entity.js';
 import { UserRoleEntity } from './entities/user-role.entity.js';
 import { UserOrganizationUnitEntity } from './entities/user-organization-unit.entity.js';
 import { UserStatusHistoryEntity } from './entities/user-status-history.entity.js';
 import { UserRepository } from './repositories/user.repository.js';
+import { UserProfileRepository } from './repositories/user-profile.repository.js';
 import { UserRoleRepository } from './repositories/user-role.repository.js';
 import { UserOrganizationUnitRepository } from './repositories/user-organization-unit.repository.js';
 import { UserStatusHistoryRepository } from './repositories/user-status-history.repository.js';
@@ -27,6 +29,7 @@ import { UsersController } from './controllers/users.controller.js';
     OrganizationsModule,
     TypeOrmModule.forFeature([
       UserEntity,
+      UserProfileEntity,
       UserRoleEntity,
       UserOrganizationUnitEntity,
       UserStatusHistoryEntity,
@@ -35,6 +38,7 @@ import { UsersController } from './controllers/users.controller.js';
   controllers: [UsersController],
   providers: [
     UserRepository,
+    UserProfileRepository,
     UserRoleRepository,
     UserOrganizationUnitRepository,
     UserStatusHistoryRepository,
@@ -47,6 +51,12 @@ import { UsersController } from './controllers/users.controller.js';
       useExisting: UsersService,
     },
   ],
-  exports: [UsersService, UserImportService, UserExportService, USERS_PUBLIC_SERVICE],
+  exports: [
+    UsersService,
+    UserImportService,
+    UserExportService,
+    UserProfileRepository,
+    USERS_PUBLIC_SERVICE,
+  ],
 })
 export class UsersModule {}

@@ -253,23 +253,28 @@ export class IamThousandUsersSeeder implements SeederContract {
       const chunk = users.slice(offset, offset + batchSize);
 
       for (const u of chunk) {
+        const phoneHash = this.passwordHasher.sha256(u.phone.trim());
         if (isPostgres) {
           await ctx.manager.query(
-            `INSERT INTO users (id, username, email, phone, first_name, last_name, full_name, password_hash, status, primary_organization_unit_id, version)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 1)
+            `INSERT INTO users (id, username, email, phone, phone_hash, password_hash, status, email_verified_at, phone_verified_at, primary_organization_unit_id, version)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, $8, 1)
              ON CONFLICT (username) DO NOTHING`,
             [
               u.id,
               u.username,
               u.email,
               u.phone,
-              u.firstName,
-              u.lastName,
-              u.fullName,
+              phoneHash,
               defaultPasswordHash,
               u.status,
               u.primaryOrgId,
             ],
+          );
+          await ctx.manager.query(
+            `INSERT INTO user_profiles (user_id, first_name, last_name, full_name, city, country)
+             VALUES ($1, $2, $3, $4, 'TP. Hồ Chí Minh', 'Việt Nam')
+             ON CONFLICT (user_id) DO NOTHING`,
+            [u.id, u.firstName, u.lastName, u.fullName],
           );
           await ctx.manager.query(
             `INSERT INTO user_roles (user_id, role_id)
@@ -285,21 +290,25 @@ export class IamThousandUsersSeeder implements SeederContract {
           );
         } else {
           await ctx.manager.query(
-            `INSERT INTO users (id, username, email, phone, first_name, last_name, full_name, password_hash, status, primary_organization_unit_id, version)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+            `INSERT INTO users (id, username, email, phone, phone_hash, password_hash, status, email_verified_at, phone_verified_at, primary_organization_unit_id, version)
+             VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?, 1)
              ON DUPLICATE KEY UPDATE status = VALUES(status)`,
             [
               u.id,
               u.username,
               u.email,
               u.phone,
-              u.firstName,
-              u.lastName,
-              u.fullName,
+              phoneHash,
               defaultPasswordHash,
               u.status,
               u.primaryOrgId,
             ],
+          );
+          await ctx.manager.query(
+            `INSERT INTO user_profiles (user_id, first_name, last_name, full_name, city, country)
+             VALUES (?, ?, ?, ?, 'TP. Hồ Chí Minh', 'Việt Nam')
+             ON DUPLICATE KEY UPDATE first_name = VALUES(first_name), last_name = VALUES(last_name), full_name = VALUES(full_name)`,
+            [u.id, u.firstName, u.lastName, u.fullName],
           );
           await ctx.manager.query(
             `INSERT INTO user_roles (user_id, role_id)

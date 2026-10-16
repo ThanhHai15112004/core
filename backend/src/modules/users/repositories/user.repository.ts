@@ -51,14 +51,30 @@ export class UserRepository extends BaseTypeOrmRepository<UserEntity> {
     });
   }
 
-  /** Tìm người dùng theo identifier (email hoặc username) phục vụ đăng nhập */
-  public async findByIdentifier(identifier: string): Promise<UserEntity | null> {
+  /** Tìm người dùng theo mã băm SHA-256 của số điện thoại (blind index) */
+  public async findByPhoneHash(phoneHash: string, withDeleted = false): Promise<UserEntity | null> {
+    return this.repository.findOne({
+      where: { phoneHash: phoneHash.trim().toLowerCase() },
+      withDeleted,
+    });
+  }
+
+  /** Tìm người dùng theo identifier (email, username hoặc mã băm SĐT) phục vụ đăng nhập */
+  public async findByIdentifier(
+    identifier: string,
+    phoneHash?: string | null,
+  ): Promise<UserEntity | null> {
     const normalized = identifier.trim().toLowerCase();
-    return this.repository
-      .createQueryBuilder('u')
-      .withDeleted()
-      .where('LOWER(u.email) = :id OR LOWER(u.username) = :id', { id: normalized })
-      .getOne();
+    const qb = this.repository.createQueryBuilder('u').withDeleted();
+    if (phoneHash) {
+      qb.where(
+        'LOWER(u.email) = :id OR LOWER(u.username) = :id OR (u.phone_hash IS NOT NULL AND u.phone_hash = :phoneHash)',
+        { id: normalized, phoneHash },
+      );
+    } else {
+      qb.where('LOWER(u.email) = :id OR LOWER(u.username) = :id', { id: normalized });
+    }
+    return qb.getOne();
   }
 
   /** Tìm người dùng theo ID số nguyên (hỗ trợ lấy cả bản ghi đã lưu trữ/soft-delete) */
@@ -69,7 +85,7 @@ export class UserRepository extends BaseTypeOrmRepository<UserEntity> {
     });
   }
 
-  /** Tìm kiếm và lọc người dùng có phân trang (hỗ trợ lọc theo vai trò, đơn vị/chi nhánh, trạng thái) */
+  /** Tìm kiếm và lọc người dùng có phân trang (hỗ trợ lọc theo hồ sơ user_profiles, vai trò, đơn vị/chi nhánh, trạng thái) */
   public async searchPaginated(
     filter: SearchUsersFilter = {},
   ): Promise<{ items: UserEntity[]; total: number }> {
@@ -77,7 +93,9 @@ export class UserRepository extends BaseTypeOrmRepository<UserEntity> {
     const limit = Math.max(1, Math.min(500, Math.trunc(filter.limit ?? 20)));
     const skip = (page - 1) * limit;
 
-    const qb = this.repository.createQueryBuilder('u');
+    const qb = this.repository
+      .createQueryBuilder('u')
+      .leftJoin('user_profiles', 'up', 'up.user_id = u.id AND up.deleted_at IS NULL');
     if (filter.includeArchived || filter.status === 4) {
       qb.withDeleted();
     }
@@ -85,7 +103,7 @@ export class UserRepository extends BaseTypeOrmRepository<UserEntity> {
     if (filter.q && filter.q.trim().length > 0) {
       const kw = `%${filter.q.trim().toLowerCase()}%`;
       qb.andWhere(
-        "(LOWER(u.username) LIKE :kw OR LOWER(u.email) LIKE :kw OR LOWER(u.first_name) LIKE :kw OR LOWER(u.last_name) LIKE :kw OR LOWER(u.full_name) LIKE :kw OR LOWER(COALESCE(u.phone, '')) LIKE :kw)",
+        "(LOWER(u.username) LIKE :kw OR LOWER(COALESCE(u.email, '')) LIKE :kw OR LOWER(COALESCE(up.first_name, '')) LIKE :kw OR LOWER(COALESCE(up.last_name, '')) LIKE :kw OR LOWER(COALESCE(up.full_name, '')) LIKE :kw OR LOWER(COALESCE(u.phone, '')) LIKE :kw)",
         { kw },
       );
     }
@@ -115,9 +133,9 @@ export class UserRepository extends BaseTypeOrmRepository<UserEntity> {
     const sortColumnMap: Record<NonNullable<SearchUsersFilter['sortBy']>, string> = {
       id: 'u.id',
       createdAt: 'u.createdAt',
-      firstName: 'u.firstName',
-      lastName: 'u.lastName',
-      fullName: 'u.fullName',
+      firstName: 'up.first_name',
+      lastName: 'up.last_name',
+      fullName: 'up.full_name',
       email: 'u.email',
       username: 'u.username',
       status: 'u.status',

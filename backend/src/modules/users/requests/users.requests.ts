@@ -40,6 +40,13 @@ export const createUserSchema = z
     fullName: z.string().trim().min(2).max(255).optional(),
     phone: z.string().trim().max(32).nullable().optional(),
     avatarUrl: z.string().trim().url().max(500).nullable().optional(),
+    dateOfBirth: z.string().trim().max(32).nullable().optional(),
+    gender: z.number().int().min(1).max(3).nullable().optional(),
+    identityNumber: z.string().trim().max(64).nullable().optional(),
+    address: z.string().trim().max(255).nullable().optional(),
+    city: z.string().trim().max(100).nullable().optional(),
+    country: z.string().trim().max(100).nullable().optional(),
+    bio: z.string().trim().max(2000).nullable().optional(),
     password: z.string().min(8).max(128),
     status: userStatusSchema.default(USER_STATUS.ACTIVE),
     roleIds: z.array(coercePositiveInt).default([]),
@@ -63,6 +70,13 @@ export const updateUserSchema = z.object({
   email: z.string().trim().email().max(255).optional(),
   phone: z.string().trim().max(32).nullable().optional(),
   avatarUrl: z.string().trim().url().max(500).nullable().optional(),
+  dateOfBirth: z.string().trim().max(32).nullable().optional(),
+  gender: z.number().int().min(1).max(3).nullable().optional(),
+  identityNumber: z.string().trim().max(64).nullable().optional(),
+  address: z.string().trim().max(255).nullable().optional(),
+  city: z.string().trim().max(100).nullable().optional(),
+  country: z.string().trim().max(100).nullable().optional(),
+  bio: z.string().trim().max(2000).nullable().optional(),
   expectedVersion: z.number().int().min(1).optional(),
 });
 
@@ -154,3 +168,14 @@ export const bulkImportUsersSchema = z
   );
 
 export type BulkImportUsersRequest = z.infer<typeof bulkImportUsersSchema>;
+
+export const adminResetUserPasswordSchema = z
+  .object({
+    newPassword: z.string().min(6).max(128).optional(),
+    useSuggestedPassword: z.boolean().optional().default(false),
+    revokeSessions: z.boolean().optional().default(true),
+  })
+  .default({ useSuggestedPassword: false, revokeSessions: true });
+
+export type AdminResetUserPasswordRequest = z.infer<typeof adminResetUserPasswordSchema>;
+

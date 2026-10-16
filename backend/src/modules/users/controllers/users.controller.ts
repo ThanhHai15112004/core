@@ -16,6 +16,7 @@ import { UsersService } from '../services/users.service.js';
 import { UserImportService } from '../import/index.js';
 import { UserExportService } from '../export/index.js';
 import {
+  type AdminResetUserPasswordRequest,
   type AssignUserOrganizationsRequest,
   type AssignUserRolesRequest,
   type BulkImportUsersRequest,
@@ -24,6 +25,7 @@ import {
   type ListUsersQuery,
   type LockUserRequest,
   type UpdateUserRequest,
+  adminResetUserPasswordSchema,
   assignUserOrganizationsSchema,
   assignUserRolesSchema,
   bulkImportUsersSchema,
@@ -299,4 +301,26 @@ export class UsersController {
   ): Promise<UserResponse> {
     return this.usersService.assignOrganizations(id, body);
   }
+
+  /** Reset mật khẩu người dùng từ trang quản trị (Mục 3.3.3 — chỉ người có quyền được thực hiện) */
+  @Post(USERS_ROUTES.RESET_PASSWORD)
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions('users.update')
+  @ApiDoc({
+    summary: 'Đặt lại mật khẩu người dùng từ trang quản trị và thu hồi phiên đăng nhập',
+    response: z.object({
+      reset: z.literal(true),
+      userId: z.number().int().positive(),
+      revokedSessionsCount: z.number().int().min(0),
+      generatedPassword: z.string().optional(),
+    }),
+  })
+  public async resetUserPassword(
+    @ValidatedParams(positiveIntParamSchema, 'id') id: number,
+    @ValidatedBody(adminResetUserPasswordSchema) body: AdminResetUserPasswordRequest,
+    @CurrentUser() actor?: UserIdentity,
+  ) {
+    return this.usersService.adminResetPassword(id, body ?? {}, actor?.id);
+  }
 }
+

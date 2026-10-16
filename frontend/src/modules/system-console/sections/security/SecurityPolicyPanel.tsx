@@ -73,6 +73,29 @@ function SecurityPolicyForm({
     initial.lockoutDurationMinutes,
   );
   const [passwordMinLength, setPasswordMinLength] = useState<number>(initial.passwordMinLength);
+  const [requireUppercase, setRequireUppercase] = useState<boolean>(initial.requireUppercase ?? true);
+  const [requireNumbers, setRequireNumbers] = useState<boolean>(initial.requireNumbers ?? true);
+  const [requireSpecialChars, setRequireSpecialChars] = useState<boolean>(
+    initial.requireSpecialChars ?? false,
+  );
+  const [requireCurrentPasswordOnChange, setRequireCurrentPasswordOnChange] = useState<boolean>(
+    initial.requireCurrentPasswordOnChange ?? true,
+  );
+  const [disallowUserInfoInPassword, setDisallowUserInfoInPassword] = useState<boolean>(
+    initial.disallowUserInfoInPassword ?? true,
+  );
+  const [preventPasswordReuse, setPreventPasswordReuse] = useState<boolean>(
+    initial.preventPasswordReuse ?? true,
+  );
+  const [passwordHistoryLimit, setPasswordHistoryLimit] = useState<number>(
+    initial.passwordHistoryLimit ?? 5,
+  );
+  const [revokeSessionsOnPasswordChange, setRevokeSessionsOnPasswordChange] = useState<boolean>(
+    initial.revokeSessionsOnPasswordChange ?? true,
+  );
+  const [disallowedPasswordsText, setDisallowedPasswordsText] = useState<string>(
+    (initial.disallowedPasswords ?? []).join(', '),
+  );
 
   useEffect(() => {
     setPasswordHashAlgorithm(initial.passwordHashAlgorithm);
@@ -83,6 +106,15 @@ function SecurityPolicyForm({
     setMaxFailedLoginAttempts(initial.maxFailedLoginAttempts);
     setLockoutDurationMinutes(initial.lockoutDurationMinutes);
     setPasswordMinLength(initial.passwordMinLength);
+    setRequireUppercase(initial.requireUppercase ?? true);
+    setRequireNumbers(initial.requireNumbers ?? true);
+    setRequireSpecialChars(initial.requireSpecialChars ?? false);
+    setRequireCurrentPasswordOnChange(initial.requireCurrentPasswordOnChange ?? true);
+    setDisallowUserInfoInPassword(initial.disallowUserInfoInPassword ?? true);
+    setPreventPasswordReuse(initial.preventPasswordReuse ?? true);
+    setPasswordHistoryLimit(initial.passwordHistoryLimit ?? 5);
+    setRevokeSessionsOnPasswordChange(initial.revokeSessionsOnPasswordChange ?? true);
+    setDisallowedPasswordsText((initial.disallowedPasswords ?? []).join(', '));
   }, [initial]);
 
   const saveMutation = useAppMutation<void, SecurityPolicySettings>({
@@ -96,6 +128,18 @@ function SecurityPolicyForm({
         maxFailedLoginAttempts,
         lockoutDurationMinutes,
         passwordMinLength,
+        requireUppercase,
+        requireNumbers,
+        requireSpecialChars,
+        requireCurrentPasswordOnChange,
+        disallowUserInfoInPassword,
+        preventPasswordReuse,
+        passwordHistoryLimit,
+        revokeSessionsOnPasswordChange,
+        disallowedPasswords: disallowedPasswordsText
+          .split(',')
+          .map((s) => s.trim().toLowerCase())
+          .filter(Boolean),
       }),
     success: false,
     onSuccess: () => {
@@ -179,7 +223,7 @@ function SecurityPolicyForm({
       </div>
 
       {/* Numeric thresholds & switches */}
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
         <div className="flex flex-col gap-1.5">
           <label className="text-xs font-medium text-muted">
             {t('gov.security.policy.maxFailedLoginAttempts')}
@@ -216,6 +260,87 @@ function SecurityPolicyForm({
             max={64}
             value={passwordMinLength}
             onChange={(e) => setPasswordMinLength(Number(e.target.value) || 8)}
+          />
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <label className="text-xs font-medium text-muted">
+            Giới hạn lịch sử mật khẩu cũ (Password History Limit)
+          </label>
+          <Input
+            type="number"
+            min={1}
+            max={24}
+            value={passwordHistoryLimit}
+            onChange={(e) => setPasswordHistoryLimit(Number(e.target.value) || 5)}
+          />
+        </div>
+      </div>
+
+      {/* Section 3.3 Password Policy & Recovery Settings */}
+      <div className="flex flex-col gap-3 rounded-lg border border-border bg-surface-muted/40 p-3">
+        <div className="text-xs font-semibold text-fg">
+          Chính sách mật khẩu & Khôi phục tài khoản (Mục 3.3 — Biến Setting)
+        </div>
+        <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 md:grid-cols-3">
+          <label className="flex items-center gap-2 text-xs text-fg">
+            <Switch
+              checked={requireUppercase}
+              onCheckedChange={(c) => setRequireUppercase(Boolean(c))}
+            />
+            <span>Bắt buộc chữ hoa (A-Z)</span>
+          </label>
+          <label className="flex items-center gap-2 text-xs text-fg">
+            <Switch
+              checked={requireNumbers}
+              onCheckedChange={(c) => setRequireNumbers(Boolean(c))}
+            />
+            <span>Bắt buộc chữ số (0-9)</span>
+          </label>
+          <label className="flex items-center gap-2 text-xs text-fg">
+            <Switch
+              checked={requireSpecialChars}
+              onCheckedChange={(c) => setRequireSpecialChars(Boolean(c))}
+            />
+            <span>Bắt buộc ký tự đặc biệt (!@#...)</span>
+          </label>
+          <label className="flex items-center gap-2 text-xs text-fg">
+            <Switch
+              checked={requireCurrentPasswordOnChange}
+              onCheckedChange={(c) => setRequireCurrentPasswordOnChange(Boolean(c))}
+            />
+            <span>Yêu cầu mật khẩu hiện tại khi đổi MK</span>
+          </label>
+          <label className="flex items-center gap-2 text-xs text-fg">
+            <Switch
+              checked={preventPasswordReuse}
+              onCheckedChange={(c) => setPreventPasswordReuse(Boolean(c))}
+            />
+            <span>Không cho dùng lại mật khẩu cũ</span>
+          </label>
+          <label className="flex items-center gap-2 text-xs text-fg">
+            <Switch
+              checked={disallowUserInfoInPassword}
+              onCheckedChange={(c) => setDisallowUserInfoInPassword(Boolean(c))}
+            />
+            <span>Cấm chứa Username / Email / SĐT</span>
+          </label>
+          <label className="flex items-center gap-2 text-xs text-fg">
+            <Switch
+              checked={revokeSessionsOnPasswordChange}
+              onCheckedChange={(c) => setRevokeSessionsOnPasswordChange(Boolean(c))}
+            />
+            <span>Thu hồi phiên cũ sau khi đổi / reset MK</span>
+          </label>
+        </div>
+        <div className="flex flex-col gap-1">
+          <label className="text-xs font-medium text-muted">
+            Danh sách mật khẩu bị cấm sử dụng (phân cách bằng dấu phẩy)
+          </label>
+          <Input
+            value={disallowedPasswordsText}
+            onChange={(e) => setDisallowedPasswordsText(e.target.value)}
+            placeholder="password, 12345678, qwerty123, admin123..."
           />
         </div>
       </div>

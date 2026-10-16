@@ -16,8 +16,9 @@ import type { RolePermissionEntity } from '@modules/roles/entities/role-permissi
 import { PermissionRepository } from '@modules/roles/repositories/permission.repository.js';
 import { RoleRepository } from '@modules/roles/repositories/role.repository.js';
 import { RolePermissionRepository } from '@modules/roles/repositories/role-permission.repository.js';
-import { USER_STATUS } from '@modules/users/contracts/index.js';
+import { USER_STATUS, normalizePhoneNumber } from '@modules/users/contracts/index.js';
 import type { UserEntity } from '@modules/users/entities/user.entity.js';
+import type { UserProfileEntity } from '@modules/users/entities/user-profile.entity.js';
 import type { UserRoleEntity } from '@modules/users/entities/user-role.entity.js';
 import type { UserOrganizationUnitEntity } from '@modules/users/entities/user-organization-unit.entity.js';
 import type { UserStatusHistoryEntity } from '@modules/users/entities/user-status-history.entity.js';
@@ -25,6 +26,7 @@ import {
   UserRepository,
   type SearchUsersFilter,
 } from '@modules/users/repositories/user.repository.js';
+import { UserProfileRepository } from '@modules/users/repositories/user-profile.repository.js';
 import { UserRoleRepository } from '@modules/users/repositories/user-role.repository.js';
 import {
   type UserOrganizationInputItem,
@@ -46,7 +48,7 @@ import { AuthMfaConfigRepository } from '@modules/auth/repositories/auth-mfa-con
 import { AuthPasswordResetRepository } from '@modules/auth/repositories/auth-password-reset.repository.js';
 import { AuthSecuritySettingRepository } from '@modules/auth/repositories/auth-security-setting.repository.js';
 
-describe('Feature E2E: IAM — Auth, Security Settings, Users (firstName/lastName/statusHistory), Roles, Permissions & Organizations (Integer IDs & Status STT)', () => {
+describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfiles (firstName/lastName/statusHistory), Roles, Permissions & Organizations (Integer IDs & Status STT)', () => {
   let context: TestAppContext;
   let adminAccessToken = '';
   let adminRoleId = 0;
@@ -56,6 +58,7 @@ describe('Feature E2E: IAM — Auth, Security Settings, Users (firstName/lastNam
   let roleSeq = 0;
   let rolePermSeq = 0;
   let userSeq = 0;
+  let userProfileSeq = 0;
   let userRoleSeq = 0;
   let userOrgSeq = 0;
   let historySeq = 0;
@@ -68,6 +71,7 @@ describe('Feature E2E: IAM — Auth, Security Settings, Users (firstName/lastNam
   const roleStore = new Map<number, RoleEntity>();
   const rolePermStore: RolePermissionEntity[] = [];
   const userStore = new Map<number, UserEntity>();
+  const userProfileStore = new Map<number, UserProfileEntity>();
   const userRoleStore: UserRoleEntity[] = [];
   const userOrgStore: UserOrganizationUnitEntity[] = [];
   const statusHistoryStore: UserStatusHistoryEntity[] = [];
@@ -233,6 +237,46 @@ describe('Feature E2E: IAM — Auth, Security Settings, Users (firstName/lastNam
       },
     });
 
+    const userProfileRepo = context.moduleFixture.get(UserProfileRepository, { strict: false });
+    Object.assign(userProfileRepo, {
+      findByUserId: async (userId: number) => userProfileStore.get(Number(userId)) ?? null,
+      findByUserIds: async (userIds: readonly number[]) => {
+        const set = new Set(userIds.map(Number));
+        return [...userProfileStore.values()].filter((p) => set.has(p.userId));
+      },
+      upsertByUserId: async (userId: number, partial: Partial<UserProfileEntity>) => {
+        const now = new Date();
+        const existing = userProfileStore.get(Number(userId));
+        const entity = {
+          id: existing?.id ?? ++userProfileSeq,
+          userId: Number(userId),
+          firstName: partial.firstName ?? existing?.firstName ?? '',
+          lastName: partial.lastName ?? existing?.lastName ?? '',
+          fullName: partial.fullName ?? existing?.fullName ?? '',
+          avatarUrl:
+            partial.avatarUrl !== undefined ? partial.avatarUrl : (existing?.avatarUrl ?? null),
+          dateOfBirth:
+            partial.dateOfBirth !== undefined
+              ? partial.dateOfBirth
+              : (existing?.dateOfBirth ?? null),
+          gender: partial.gender !== undefined ? partial.gender : (existing?.gender ?? null),
+          identityNumber:
+            partial.identityNumber !== undefined
+              ? partial.identityNumber
+              : (existing?.identityNumber ?? null),
+          address: partial.address !== undefined ? partial.address : (existing?.address ?? null),
+          city: partial.city !== undefined ? partial.city : (existing?.city ?? null),
+          country: partial.country !== undefined ? partial.country : (existing?.country ?? null),
+          bio: partial.bio !== undefined ? partial.bio : (existing?.bio ?? null),
+          createdAt: existing?.createdAt ?? now,
+          updatedAt: now,
+          deletedAt: null,
+        } as unknown as UserProfileEntity;
+        userProfileStore.set(Number(userId), entity);
+        return entity;
+      },
+    });
+
     const userRepo = context.moduleFixture.get(UserRepository, { strict: false });
     Object.assign(userRepo, {
       findByIdWithArchived: async (id: number, withDeleted = false) => {
@@ -257,27 +301,47 @@ describe('Feature E2E: IAM — Auth, Security Settings, Users (firstName/lastNam
           ) ?? null
         );
       },
-      findByIdentifier: async (identifier: string) => {
+      findByPhoneHash: async (phoneHash: string, withDeleted = false) => {
+        return (
+          [...userStore.values()].find(
+            (u) => u.phoneHash === phoneHash && (withDeleted || (!u.deletedAt && !u.archivedAt)),
+          ) ?? null
+        );
+      },
+      findByIdentifier: async (identifier: string, phoneHash?: string | null) => {
         const norm = identifier.trim().toLowerCase();
         return (
-          [...userStore.values()].find((u) => u.email === norm || u.username === norm) ?? null
+          [...userStore.values()].find(
+            (u) =>
+              u.email === norm ||
+              u.username === norm ||
+              (phoneHash && u.phoneHash === phoneHash) ||
+              u.phone === identifier.trim(),
+          ) ?? null
         );
       },
       saveEntity: async (partial: Partial<UserEntity>) => {
         const now = new Date();
         const existing = partial.id ? userStore.get(Number(partial.id)) : undefined;
-        const entity: UserEntity = {
+        const entity = {
           id: partial.id ?? existing?.id ?? ++userSeq,
           username: partial.username ?? existing!.username,
           email: partial.email ?? existing!.email,
           phone: partial.phone !== undefined ? partial.phone : (existing?.phone ?? null),
-          firstName: partial.firstName ?? existing?.firstName ?? '',
-          lastName: partial.lastName ?? existing?.lastName ?? '',
-          fullName: partial.fullName ?? existing!.fullName,
-          avatarUrl:
-            partial.avatarUrl !== undefined ? partial.avatarUrl : (existing?.avatarUrl ?? null),
+          phoneHash:
+            partial.phoneHash !== undefined ? partial.phoneHash : (existing?.phoneHash ?? null),
           passwordHash: partial.passwordHash ?? existing!.passwordHash,
+          passwordHistoryHashesJson:
+            partial.passwordHistoryHashesJson ?? existing?.passwordHistoryHashesJson ?? '[]',
           status: partial.status ?? existing?.status ?? USER_STATUS.ACTIVE,
+          emailVerifiedAt:
+            partial.emailVerifiedAt !== undefined
+              ? partial.emailVerifiedAt
+              : (existing?.emailVerifiedAt ?? null),
+          phoneVerifiedAt:
+            partial.phoneVerifiedAt !== undefined
+              ? partial.phoneVerifiedAt
+              : (existing?.phoneVerifiedAt ?? null),
           lockedUntil:
             partial.lockedUntil !== undefined
               ? partial.lockedUntil
@@ -306,7 +370,7 @@ describe('Feature E2E: IAM — Auth, Security Settings, Users (firstName/lastNam
           version: existing ? existing.version + 1 : 1,
           createdAt: existing?.createdAt ?? now,
           updatedAt: now,
-        } as UserEntity;
+        } as unknown as UserEntity;
         userStore.set(entity.id, entity);
         return entity;
       },
@@ -330,15 +394,20 @@ describe('Feature E2E: IAM — Auth, Security Settings, Users (firstName/lastNam
         }
         if (filter.q) {
           const kw = filter.q.trim().toLowerCase();
-          list = list.filter(
-            (u) =>
+          const normPhone = normalizePhoneNumber(kw);
+          const kwPhoneHash = normPhone ? hasher.sha256(normPhone) : null;
+          list = list.filter((u) => {
+            const prof = userProfileStore.get(u.id);
+            return (
               u.username.toLowerCase().includes(kw) ||
               u.email.toLowerCase().includes(kw) ||
-              u.firstName.toLowerCase().includes(kw) ||
-              u.lastName.toLowerCase().includes(kw) ||
-              u.fullName.toLowerCase().includes(kw) ||
-              (u.phone ?? '').toLowerCase().includes(kw),
-          );
+              (prof?.firstName ?? '').toLowerCase().includes(kw) ||
+              (prof?.lastName ?? '').toLowerCase().includes(kw) ||
+              (prof?.fullName ?? '').toLowerCase().includes(kw) ||
+              (u.phone ?? '').toLowerCase().includes(kw) ||
+              (kwPhoneHash && u.phoneHash === kwPhoneHash)
+            );
+          });
         }
         if (filter.status) {
           list = list.filter((u) => u.status === filter.status);
@@ -542,6 +611,8 @@ describe('Feature E2E: IAM — Auth, Security Settings, Users (firstName/lastNam
             partial.emailOtpExpiresAt !== undefined
               ? partial.emailOtpExpiresAt
               : (existing?.emailOtpExpiresAt ?? null),
+          emailOtpFailedAttempts:
+            partial.emailOtpFailedAttempts ?? existing?.emailOtpFailedAttempts ?? 0,
           verifiedAt:
             partial.verifiedAt !== undefined ? partial.verifiedAt : (existing?.verifiedAt ?? null),
           createdAt: existing?.createdAt ?? now,
@@ -555,16 +626,34 @@ describe('Feature E2E: IAM — Auth, Security Settings, Users (firstName/lastNam
     const resetRepo = context.moduleFixture.get(AuthPasswordResetRepository, { strict: false });
     Object.assign(resetRepo, {
       findByTokenHash: async (hash: string) => resetStore.get(hash) ?? null,
+      findByOtpCodeHash: async (otpHash: string) =>
+        [...resetStore.values()]
+          .sort((a, b) => b.id - a.id)
+          .find((r) => r.otpCodeHash === otpHash) ?? null,
+      findLatestByUserId: async (userId: number) =>
+        [...resetStore.values()]
+          .filter((r) => r.userId === Number(userId))
+          .sort((a, b) => b.id - a.id)[0] ?? null,
       saveEntity: async (partial: Partial<AuthPasswordResetEntity>) => {
         const now = new Date();
+        const existing = partial.tokenHash ? resetStore.get(partial.tokenHash) : undefined;
         const entity: AuthPasswordResetEntity = {
-          id: partial.id ?? ++resetSeq,
-          userId: partial.userId!,
-          tokenHash: partial.tokenHash!,
-          expiresAt: partial.expiresAt!,
-          usedAt: partial.usedAt ?? null,
-          requestedIp: partial.requestedIp ?? null,
-          createdAt: now,
+          id: partial.id ?? existing?.id ?? ++resetSeq,
+          userId: partial.userId ?? existing!.userId,
+          tokenHash: partial.tokenHash ?? existing!.tokenHash,
+          otpCodeHash:
+            partial.otpCodeHash !== undefined
+              ? partial.otpCodeHash
+              : (existing?.otpCodeHash ?? null),
+          attemptCount: partial.attemptCount ?? existing?.attemptCount ?? 0,
+          maxAttempts: partial.maxAttempts ?? existing?.maxAttempts ?? 5,
+          expiresAt: partial.expiresAt ?? existing!.expiresAt,
+          usedAt: partial.usedAt !== undefined ? partial.usedAt : (existing?.usedAt ?? null),
+          requestedIp:
+            partial.requestedIp !== undefined
+              ? partial.requestedIp
+              : (existing?.requestedIp ?? null),
+          createdAt: existing?.createdAt ?? now,
           updatedAt: now,
         } as AuthPasswordResetEntity;
         resetStore.set(entity.tokenHash, entity);
@@ -610,6 +699,58 @@ describe('Feature E2E: IAM — Auth, Security Settings, Users (firstName/lastNam
             15,
           passwordMinLength:
             partial.passwordMinLength ?? globalSecuritySetting?.passwordMinLength ?? 8,
+          requireUppercase:
+            partial.requireUppercase ?? globalSecuritySetting?.requireUppercase ?? true,
+          requireNumbers:
+            partial.requireNumbers ?? globalSecuritySetting?.requireNumbers ?? true,
+          requireSpecialChars:
+            partial.requireSpecialChars ?? globalSecuritySetting?.requireSpecialChars ?? false,
+          requireCurrentPasswordOnChange:
+            partial.requireCurrentPasswordOnChange ??
+            globalSecuritySetting?.requireCurrentPasswordOnChange ??
+            true,
+          disallowedPasswordsJson:
+            partial.disallowedPasswordsJson ??
+            globalSecuritySetting?.disallowedPasswordsJson ??
+            '["password","12345678","123456789","1234567890","qwerty123","admin123","welcome123","letmein123","iloveyou","abcd1234"]',
+          disallowUserInfoInPassword:
+            partial.disallowUserInfoInPassword ??
+            globalSecuritySetting?.disallowUserInfoInPassword ??
+            true,
+          preventPasswordReuse:
+            partial.preventPasswordReuse ??
+            globalSecuritySetting?.preventPasswordReuse ??
+            true,
+          passwordHistoryLimit:
+            partial.passwordHistoryLimit ??
+            globalSecuritySetting?.passwordHistoryLimit ??
+            5,
+          revokeSessionsOnPasswordChange:
+            partial.revokeSessionsOnPasswordChange ??
+            globalSecuritySetting?.revokeSessionsOnPasswordChange ??
+            true,
+          allowEmailRegistration:
+            partial.allowEmailRegistration ??
+            globalSecuritySetting?.allowEmailRegistration ??
+            true,
+          allowPhoneRegistration:
+            partial.allowPhoneRegistration ??
+            globalSecuritySetting?.allowPhoneRegistration ??
+            true,
+          requireEmailVerification:
+            partial.requireEmailVerification ??
+            globalSecuritySetting?.requireEmailVerification ??
+            false,
+          requirePhoneVerification:
+            partial.requirePhoneVerification ??
+            globalSecuritySetting?.requirePhoneVerification ??
+            false,
+          otpMaxSendCount:
+            partial.otpMaxSendCount ?? globalSecuritySetting?.otpMaxSendCount ?? 5,
+          otpMaxAttempts:
+            partial.otpMaxAttempts ?? globalSecuritySetting?.otpMaxAttempts ?? 5,
+          otpCooldownSeconds:
+            partial.otpCooldownSeconds ?? globalSecuritySetting?.otpCooldownSeconds ?? 60,
           createdAt: globalSecuritySetting?.createdAt ?? now,
           updatedAt: now,
         } as AuthSecuritySettingEntity;
@@ -646,11 +787,13 @@ describe('Feature E2E: IAM — Auth, Security Settings, Users (firstName/lastNam
     const adminUser = await userRepo.saveEntity({
       email: 'superadmin@gmail.com',
       username: 'superadmin',
+      passwordHash: adminPasswordHash,
+      status: USER_STATUS.ACTIVE,
+    });
+    await userProfileRepo.upsertByUserId(adminUser.id, {
       firstName: 'Sơn',
       lastName: 'Nguyễn Thái',
       fullName: 'Nguyễn Thái Sơn',
-      passwordHash: adminPasswordHash,
-      status: USER_STATUS.ACTIVE,
     });
     await userRoleRepo.replaceUserRoles(adminUser.id, [adminRoleId]);
   });
@@ -1057,5 +1200,423 @@ describe('Feature E2E: IAM — Auth, Security Settings, Users (firstName/lastNam
       });
       expect(rawRevokeRes.statusCode).toBe(HTTP_STATUS_CODE.OK);
     }
+  });
+
+  it('Section 3.2 E2E: Self-registration (Email & Phone with project toggles), Login by Phone, Email verification, Phone OTP verification (with send/attempt limits), Logout-all & user_profiles separation', async () => {
+    // 1. Register with Email + password & detailed user_profiles fields (3.2.1)
+    const regEmailRes = await context.injectJson<{
+      registered: boolean;
+      verificationRequired: boolean;
+      accessToken?: string;
+      user: {
+        id: number;
+        email: string;
+        firstName: string;
+        lastName: string;
+        fullName: string;
+        profile?: { city: string | null; bio: string | null };
+      };
+    }>({
+      method: 'POST',
+      url: '/api/v1/auth/register',
+      payload: {
+        email: 'self.email@gmail.com',
+        password: 'Password123',
+        firstName: 'Thảo',
+        lastName: 'Phạm Phương',
+        city: 'Đà Nẵng',
+        country: 'Vietnam',
+        bio: 'QA Engineer',
+        deviceName: 'Chrome Desktop',
+      },
+    });
+    expect(regEmailRes.status).toBe(HTTP_STATUS_CODE.CREATED);
+    expect(regEmailRes.body.data.registered).toBe(true);
+    expect(regEmailRes.body.data.accessToken).toBeDefined();
+    expect(regEmailRes.body.data.user.firstName).toBe('Thảo');
+    expect(regEmailRes.body.data.user.fullName).toBe('Phạm Phương Thảo');
+    expect(regEmailRes.body.data.user.profile?.city).toBe('Đà Nẵng');
+
+    // Verify userStore (core) and userProfileStore (1:1 profile) separation
+    const savedCore = userStore.get(regEmailRes.body.data.user.id);
+    const savedProfile = userProfileStore.get(regEmailRes.body.data.user.id);
+    expect(savedCore).toBeDefined();
+    expect('firstName' in (savedCore as unknown as Record<string, unknown>)).toBe(false);
+    expect(savedProfile?.firstName).toBe('Thảo');
+    expect(savedProfile?.city).toBe('Đà Nẵng');
+
+    // 2. Toggle off allowEmailRegistration via PUT /api/v1/auth/security-settings (3.2.1)
+    await context.injectJson({
+      method: 'PUT',
+      url: '/api/v1/auth/security-settings',
+      payload: {
+        allowEmailRegistration: false,
+        allowPhoneRegistration: true,
+        otpCooldownSeconds: 0,
+        otpMaxSendCount: 2,
+        otpMaxAttempts: 2,
+      },
+    });
+
+    const blockedEmailReg = await context.injectJson({
+      method: 'POST',
+      url: '/api/v1/auth/register',
+      payload: {
+        email: 'blocked.user@gmail.com',
+        password: 'Password123',
+      },
+    });
+    expect(blockedEmailReg.status).toBe(HTTP_STATUS_CODE.FORBIDDEN);
+
+    // 3. Register with Phone + password (3.2.2)
+    const regPhoneRes = await context.injectJson<{
+      registered: boolean;
+      accessToken?: string;
+      user: { id: number; phone: string | null; fullName: string };
+    }>({
+      method: 'POST',
+      url: '/api/v1/auth/register',
+      payload: {
+        phone: '+84 909 888 777',
+        password: 'Password123',
+        firstName: 'Hùng',
+        lastName: 'Lý Quốc',
+        deviceName: 'Android App',
+      },
+    });
+    expect(regPhoneRes.status).toBe(HTTP_STATUS_CODE.CREATED);
+    expect(regPhoneRes.body.data.user.phone).toBe('0909888777');
+    expect(regPhoneRes.body.data.user.fullName).toBe('Lý Quốc Hùng');
+
+    // 4. Login with Phone (3.2.3)
+    const loginByPhoneRes = await context.injectJson<{
+      mfaRequired: boolean;
+      accessToken?: string;
+      user?: { id: number; phone: string | null };
+    }>({
+      method: 'POST',
+      url: '/api/v1/auth/login',
+      payload: {
+        identifier: '0909888777',
+        password: 'Password123',
+        deviceName: 'Web Browser',
+      },
+    });
+    expect(loginByPhoneRes.status).toBe(HTTP_STATUS_CODE.OK);
+    expect(loginByPhoneRes.body.data.accessToken).toBeDefined();
+    expect(loginByPhoneRes.body.data.user?.id).toBe(regPhoneRes.body.data.user.id);
+
+    // 5. Logout from all devices via POST /api/v1/auth/logout-all (3.2.5)
+    const phoneUserHeaders = { authorization: `Bearer ${loginByPhoneRes.body.data.accessToken}` };
+    const logoutAllRes = await context.injectJson<{ loggedOutAll: boolean; revokedCount: number }>({
+      method: 'POST',
+      url: '/api/v1/auth/logout-all',
+      headers: phoneUserHeaders,
+      payload: {},
+    });
+    expect(logoutAllRes.status).toBe(HTTP_STATUS_CODE.OK);
+    expect(logoutAllRes.body.data.loggedOutAll).toBe(true);
+    expect(logoutAllRes.body.data.revokedCount).toBe(2);
+
+    // 6. Email verification send & confirm (3.2.6)
+    const sendEmailVerRes = await context.injectJson<{
+      sent: boolean;
+      devVerificationCode?: string;
+      devVerificationToken?: string;
+    }>({
+      method: 'POST',
+      url: '/api/v1/auth/verify/email/send',
+      payload: { email: 'self.email@gmail.com' },
+    });
+    expect(sendEmailVerRes.status).toBe(HTTP_STATUS_CODE.OK);
+    expect(sendEmailVerRes.body.data.sent).toBe(true);
+
+    const confirmEmailVerRes = await context.injectJson<{
+      verified: boolean;
+      channel: string;
+      userId: number;
+    }>({
+      method: 'POST',
+      url: '/api/v1/auth/verify/email/confirm',
+      payload: {
+        email: 'self.email@gmail.com',
+        tokenOrCode: sendEmailVerRes.body.data.devVerificationCode,
+      },
+    });
+    expect(confirmEmailVerRes.status).toBe(HTTP_STATUS_CODE.OK);
+    expect(confirmEmailVerRes.body.data.verified).toBe(true);
+
+    // 7. Phone OTP verification with send count limit (maxSends = 2) and failed attempts limit (maxAttempts = 2) (3.2.7)
+    const sendPhoneOtp1 = await context.injectJson<{
+      sent: boolean;
+      sendCount: number;
+      devVerificationCode?: string;
+    }>({
+      method: 'POST',
+      url: '/api/v1/auth/verify/phone/send',
+      payload: { phone: '0909888777' },
+    });
+    expect(sendPhoneOtp1.status).toBe(HTTP_STATUS_CODE.OK);
+    expect(sendPhoneOtp1.body.data.sendCount).toBe(1);
+
+    const sendPhoneOtp2 = await context.injectJson<{
+      sent: boolean;
+      sendCount: number;
+      devVerificationCode?: string;
+    }>({
+      method: 'POST',
+      url: '/api/v1/auth/verify/phone/send',
+      payload: { phone: '0909888777' },
+    });
+    expect(sendPhoneOtp2.status).toBe(HTTP_STATUS_CODE.OK);
+    expect(sendPhoneOtp2.body.data.sendCount).toBe(2);
+
+    // 3rd send exceeds otpMaxSendCount = 2 -> 403 Forbidden
+    const sendPhoneOtp3 = await context.injectJson({
+      method: 'POST',
+      url: '/api/v1/auth/verify/phone/send',
+      payload: { phone: '0909888777' },
+    });
+    expect(sendPhoneOtp3.status).toBe(HTTP_STATUS_CODE.FORBIDDEN);
+
+    // Wrong OTP attempt 1 -> 400 Bad Request
+    const wrongOtp1 = await context.injectJson({
+      method: 'POST',
+      url: '/api/v1/auth/verify/phone/confirm',
+      payload: { phone: '0909888777', code: '000000' },
+    });
+    expect(wrongOtp1.status).toBe(HTTP_STATUS_CODE.BAD_REQUEST);
+
+    // Wrong OTP attempt 2 reaches maxAttempts = 2 -> 403 Forbidden
+    const wrongOtp2 = await context.injectJson({
+      method: 'POST',
+      url: '/api/v1/auth/verify/phone/confirm',
+      payload: { phone: '0909888777', code: '999999' },
+    });
+    expect(wrongOtp2.status).toBe(HTTP_STATUS_CODE.FORBIDDEN);
+
+    // Increase otpMaxSendCount to issue a fresh OTP and confirm successfully
+    await context.injectJson({
+      method: 'PUT',
+      url: '/api/v1/auth/security-settings',
+      payload: { allowEmailRegistration: true, otpMaxSendCount: 5, otpMaxAttempts: 5 },
+    });
+
+    const freshPhoneOtp = await context.injectJson<{ devVerificationCode?: string }>({
+      method: 'POST',
+      url: '/api/v1/auth/verify/phone/send',
+      payload: { phone: '0909888777' },
+    });
+    expect(freshPhoneOtp.status).toBe(HTTP_STATUS_CODE.OK);
+
+    const confirmPhoneRes = await context.injectJson<{ verified: boolean; channel: string }>({
+      method: 'POST',
+      url: '/api/v1/auth/verify/phone/confirm',
+      payload: {
+        phone: '0909888777',
+        code: freshPhoneOtp.body.data.devVerificationCode,
+      },
+    });
+    expect(confirmPhoneRes.status).toBe(HTTP_STATUS_CODE.OK);
+    expect(confirmPhoneRes.body.data.verified).toBe(true);
+    expect(confirmPhoneRes.body.data.channel).toBe('PHONE_OTP');
+  });
+
+  it('Section 3.3 E2E: Suggested password, Password policy & disallowed list, Change password (with requireCurrentPasswordOnChange setting), Password reuse prevention, Forgot/Reset via 6-digit OTP, Admin Reset Password & Session Revocation', async () => {
+    const adminHeaders = { authorization: `Bearer ${adminAccessToken}` };
+
+    // 1. GET /api/v1/auth/password/suggest returns strong passwords respecting policy
+    const suggestRes = await context.injectJson<{
+      password: string;
+      suggestions: string[];
+      policy: { minLength: number };
+    }>({
+      method: 'GET',
+      url: '/api/v1/auth/password/suggest?count=4&length=16',
+    });
+    expect(suggestRes.status).toBe(HTTP_STATUS_CODE.OK);
+    expect(suggestRes.body.data.suggestions).toHaveLength(4);
+    expect(suggestRes.body.data.password).toBe(suggestRes.body.data.suggestions[0]);
+    expect(suggestRes.body.data.password.length).toBeGreaterThanOrEqual(16);
+
+    // 2. Configure Section 3.3 password settings via PUT /api/v1/auth/security-settings
+    const updateSecRes = await context.injectJson<{
+      requireCurrentPasswordOnChange: boolean;
+      disallowedPasswords: string[];
+      disallowUserInfoInPassword: boolean;
+      preventPasswordReuse: boolean;
+      passwordHistoryLimit: number;
+      revokeSessionsOnPasswordChange: boolean;
+    }>({
+      method: 'PUT',
+      url: '/api/v1/auth/security-settings',
+      payload: {
+        passwordMinLength: 10,
+        requireUppercase: true,
+        requireNumbers: true,
+        requireSpecialChars: true,
+        requireCurrentPasswordOnChange: true,
+        disallowedPasswords: ['qwerty123!', 'company2026!'],
+        disallowUserInfoInPassword: true,
+        preventPasswordReuse: true,
+        passwordHistoryLimit: 3,
+        revokeSessionsOnPasswordChange: true,
+      },
+    });
+    expect(updateSecRes.status).toBe(HTTP_STATUS_CODE.OK);
+    expect(updateSecRes.body.data.requireCurrentPasswordOnChange).toBe(true);
+    expect(updateSecRes.body.data.preventPasswordReuse).toBe(true);
+    expect(updateSecRes.body.data.disallowedPasswords).toContain('company2026!');
+
+    // 3. Register a user and create 2 active sessions
+    const regRes = await context.injectJson<{
+      accessToken: string;
+      user: { id: number; email: string };
+    }>({
+      method: 'POST',
+      url: '/api/v1/auth/register',
+      payload: {
+        email: 'sec33.user@gmail.com',
+        password: 'First#Password101',
+        firstName: 'Kiệt',
+        lastName: 'Trương Tuấn',
+        deviceName: 'Session 1',
+      },
+    });
+    expect(regRes.status).toBe(HTTP_STATUS_CODE.CREATED);
+    const userId = regRes.body.data.user.id;
+    const userToken1 = regRes.body.data.accessToken;
+
+    const login2Res = await context.injectJson<{ accessToken: string }>({
+      method: 'POST',
+      url: '/api/v1/auth/login',
+      payload: {
+        identifier: 'sec33.user@gmail.com',
+        password: 'First#Password101',
+        deviceName: 'Session 2',
+      },
+    });
+    expect(login2Res.status).toBe(HTTP_STATUS_CODE.OK);
+
+    // 4. Reject disallowed password or password containing email prefix
+    const disallowedRes = await context.injectJson({
+      method: 'POST',
+      url: '/api/v1/auth/password/change',
+      headers: { authorization: `Bearer ${userToken1}` },
+      payload: {
+        currentPassword: 'First#Password101',
+        newPassword: 'Company2026!',
+      },
+    });
+    expect(disallowedRes.status).toBe(HTTP_STATUS_CODE.BAD_REQUEST);
+
+    const userInfoInPwdRes = await context.injectJson({
+      method: 'POST',
+      url: '/api/v1/auth/password/change',
+      headers: { authorization: `Bearer ${userToken1}` },
+      payload: {
+        currentPassword: 'First#Password101',
+        newPassword: 'Sec33.user#2026',
+      },
+    });
+    expect(userInfoInPwdRes.status).toBe(HTTP_STATUS_CODE.BAD_REQUEST);
+
+    // 5. Change password (requires currentPassword) & revokes other sessions
+    const changePwdRes = await context.injectJson<{
+      changed: boolean;
+      revokedSessionsCount: number;
+    }>({
+      method: 'POST',
+      url: '/api/v1/auth/password/change',
+      headers: { authorization: `Bearer ${userToken1}` },
+      payload: {
+        currentPassword: 'First#Password101',
+        newPassword: 'Second#Password202',
+      },
+    });
+    expect(changePwdRes.status).toBe(HTTP_STATUS_CODE.OK);
+    expect(changePwdRes.body.data.changed).toBe(true);
+    expect(changePwdRes.body.data.revokedSessionsCount).toBe(1);
+
+    // 6. Prevent reusing old password ('First#Password101')
+    const reuseRes = await context.injectJson({
+      method: 'POST',
+      url: '/api/v1/auth/password/change',
+      headers: { authorization: `Bearer ${userToken1}` },
+      payload: {
+        currentPassword: 'Second#Password202',
+        newPassword: 'First#Password101',
+      },
+    });
+    expect(reuseRes.status).toBe(HTTP_STATUS_CODE.BAD_REQUEST);
+
+    // 7. Forgot password & Reset via 6-digit OTP (revoking all sessions)
+    const forgotRes = await context.injectJson<{
+      accepted: boolean;
+      devResetToken?: string;
+      devResetOtp?: string;
+    }>({
+      method: 'POST',
+      url: '/api/v1/auth/password/forgot',
+      payload: { email: 'sec33.user@gmail.com' },
+    });
+    expect(forgotRes.status).toBe(HTTP_STATUS_CODE.OK);
+    expect(forgotRes.body.data.devResetOtp).toMatch(/^\d{6}$/);
+
+    const resetViaOtpRes = await context.injectJson<{
+      reset: boolean;
+      revokedSessionsCount: number;
+    }>({
+      method: 'POST',
+      url: '/api/v1/auth/password/reset',
+      payload: {
+        email: 'sec33.user@gmail.com',
+        otpCode: forgotRes.body.data.devResetOtp,
+        newPassword: 'Third#Password303',
+      },
+    });
+    expect(resetViaOtpRes.status).toBe(HTTP_STATUS_CODE.OK);
+    expect(resetViaOtpRes.body.data.reset).toBe(true);
+    expect(resetViaOtpRes.body.data.revokedSessionsCount).toBe(1);
+
+    // 8. Admin Reset User Password via POST /api/v1/users/:id/reset-password (requires users.update)
+    const adminResetRes = await context.injectJson<{
+      reset: boolean;
+      userId: number;
+      generatedPassword?: string;
+      revokedSessionsCount: number;
+    }>({
+      method: 'POST',
+      url: `/api/v1/users/${userId}/reset-password`,
+      headers: adminHeaders,
+      payload: {
+        useSuggestedPassword: true,
+        revokeSessions: true,
+      },
+    });
+    expect(adminResetRes.status).toBe(HTTP_STATUS_CODE.OK);
+    expect(adminResetRes.body.data.reset).toBe(true);
+    expect(adminResetRes.body.data.userId).toBe(userId);
+    expect(adminResetRes.body.data.generatedPassword).toBeDefined();
+
+    // 9. Automatic password hash algorithm upgrade on login (3.3.6: PBKDF2_SHA512 -> PBKDF2_SHA256)
+    expect(userStore.get(userId)?.passwordHash.startsWith('pbkdf2_sha512$')).toBe(true);
+    await context.injectJson({
+      method: 'PUT',
+      url: '/api/v1/auth/security-settings',
+      payload: { passwordHashAlgorithm: 'PBKDF2_SHA256' },
+    });
+
+    const loginAfterAdminReset = await context.injectJson<{ accessToken: string }>({
+      method: 'POST',
+      url: '/api/v1/auth/login',
+      payload: {
+        identifier: 'sec33.user@gmail.com',
+        password: adminResetRes.body.data.generatedPassword,
+      },
+    });
+    expect(loginAfterAdminReset.status).toBe(HTTP_STATUS_CODE.OK);
+    expect(loginAfterAdminReset.body.data.accessToken).toBeDefined();
+    expect(userStore.get(userId)?.passwordHash.startsWith('pbkdf2_sha256$')).toBe(true);
   });
 });

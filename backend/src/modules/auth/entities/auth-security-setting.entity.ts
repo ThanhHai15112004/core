@@ -61,4 +61,44 @@ export class AuthSecuritySettingEntity extends TypeOrmBaseEntity {
 
   @Column({ name: 'require_special_chars', type: 'boolean', default: true })
   public requireSpecialChars!: boolean;
+
+  @Column({ name: 'require_current_password_on_change', type: 'boolean', default: true })
+  public requireCurrentPasswordOnChange?: boolean;
+
+  @Column({ name: 'disallowed_passwords_json', type: 'text', nullable: true })
+  public disallowedPasswordsJson?: string | null;
+
+  @Column({ name: 'disallow_user_info_in_password', type: 'boolean', default: true })
+  public disallowUserInfoInPassword?: boolean;
+
+  @Column({ name: 'prevent_password_reuse', type: 'boolean', default: false })
+  public preventPasswordReuse?: boolean;
+
+  @Column({ name: 'password_history_limit', type: 'int', default: 5 })
+  public passwordHistoryLimit?: number;
+
+  @Column({ name: 'revoke_sessions_on_password_change', type: 'boolean', default: true })
+  public revokeSessionsOnPasswordChange?: boolean;
+
+  @Column({ name: 'allow_email_registration', type: 'boolean', default: true })
+  public allowEmailRegistration?: boolean;
+
+  @Column({ name: 'allow_phone_registration', type: 'boolean', default: true })
+  public allowPhoneRegistration?: boolean;
+
+  @Column({ name: 'require_email_verification', type: 'boolean', default: false })
+  public requireEmailVerification?: boolean;
+
+  @Column({ name: 'require_phone_verification', type: 'boolean', default: false })
+  public requirePhoneVerification?: boolean;
+
+  @Column({ name: 'otp_max_send_count', type: 'int', default: 5 })
+  public otpMaxSendCount?: number;
+
+  @Column({ name: 'otp_max_attempts', type: 'int', default: 5 })
+  public otpMaxAttempts?: number;
+
+  @Column({ name: 'otp_cooldown_seconds', type: 'int', default: 60 })
+  public otpCooldownSeconds?: number;
 }
+

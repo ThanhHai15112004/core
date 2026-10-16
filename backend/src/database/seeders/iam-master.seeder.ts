@@ -633,42 +633,51 @@ export class IamMasterSeeder implements SeederContract {
     for (const acc of PRIVILEGED_ACCOUNTS) {
       const role = roleByCode.get(acc.roleCode)!;
       const primaryOrg = orgByCode.get(acc.orgCode)!;
+      const phoneHash = this.passwordHasher.sha256(acc.phone.trim());
 
       if (isPostgres) {
         await ctx.manager.query(
-          `INSERT INTO users (id, username, email, phone, first_name, last_name, full_name, password_hash, status, primary_organization_unit_id, version)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 1)
-           ON CONFLICT (username) DO UPDATE SET email = EXCLUDED.email, first_name = EXCLUDED.first_name, last_name = EXCLUDED.last_name, full_name = EXCLUDED.full_name, password_hash = EXCLUDED.password_hash`,
+          `INSERT INTO users (id, username, email, phone, phone_hash, password_hash, status, email_verified_at, phone_verified_at, primary_organization_unit_id, version)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, $8, 1)
+           ON CONFLICT (username) DO UPDATE SET email = EXCLUDED.email, phone = EXCLUDED.phone, phone_hash = EXCLUDED.phone_hash, password_hash = EXCLUDED.password_hash`,
           [
             acc.id,
             acc.username,
             acc.email,
             acc.phone,
-            acc.firstName,
-            acc.lastName,
-            acc.fullName,
+            phoneHash,
             privilegedPasswordHash,
             USER_STATUS.ACTIVE,
             primaryOrg.id,
           ],
         );
+        await ctx.manager.query(
+          `INSERT INTO user_profiles (user_id, first_name, last_name, full_name, city, country)
+           VALUES ($1, $2, $3, $4, 'TP. Hồ Chí Minh', 'Việt Nam')
+           ON CONFLICT (user_id) DO UPDATE SET first_name = EXCLUDED.first_name, last_name = EXCLUDED.last_name, full_name = EXCLUDED.full_name`,
+          [acc.id, acc.firstName, acc.lastName, acc.fullName],
+        );
       } else {
         await ctx.manager.query(
-          `INSERT INTO users (id, username, email, phone, first_name, last_name, full_name, password_hash, status, primary_organization_unit_id, version)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
-           ON DUPLICATE KEY UPDATE email = VALUES(email), first_name = VALUES(first_name), last_name = VALUES(last_name), full_name = VALUES(full_name), password_hash = VALUES(password_hash)`,
+          `INSERT INTO users (id, username, email, phone, phone_hash, password_hash, status, email_verified_at, phone_verified_at, primary_organization_unit_id, version)
+           VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?, 1)
+           ON DUPLICATE KEY UPDATE email = VALUES(email), phone = VALUES(phone), phone_hash = VALUES(phone_hash), password_hash = VALUES(password_hash)`,
           [
             acc.id,
             acc.username,
             acc.email,
             acc.phone,
-            acc.firstName,
-            acc.lastName,
-            acc.fullName,
+            phoneHash,
             privilegedPasswordHash,
             USER_STATUS.ACTIVE,
             primaryOrg.id,
           ],
+        );
+        await ctx.manager.query(
+          `INSERT INTO user_profiles (user_id, first_name, last_name, full_name, city, country)
+           VALUES (?, ?, ?, ?, 'TP. Hồ Chí Minh', 'Việt Nam')
+           ON DUPLICATE KEY UPDATE first_name = VALUES(first_name), last_name = VALUES(last_name), full_name = VALUES(full_name)`,
+          [acc.id, acc.firstName, acc.lastName, acc.fullName],
         );
       }
 
@@ -724,8 +733,10 @@ export class IamMasterSeeder implements SeederContract {
         `INSERT INTO auth_security_settings (
           id, scope_key, password_hash_algorithm, db_encryption_algorithm, encrypt_fields_at_rest,
           mfa_policy, allowed_mfa_methods_json, max_failed_login_attempts, lockout_duration_minutes,
-          password_min_length, require_uppercase, require_numbers, require_special_chars
-        ) VALUES (1, 'GLOBAL', 1, 1, TRUE, 1, '["TOTP","EMAIL_OTP","RECOVERY_CODE"]', 5, 15, 8, TRUE, TRUE, TRUE)
+          password_min_length, require_uppercase, require_numbers, require_special_chars,
+          allow_email_registration, allow_phone_registration, require_email_verification, require_phone_verification,
+          otp_max_send_count, otp_max_attempts, otp_cooldown_seconds
+        ) VALUES (1, 'GLOBAL', 1, 1, TRUE, 1, '["TOTP","EMAIL_OTP","RECOVERY_CODE"]', 5, 15, 8, TRUE, TRUE, TRUE, TRUE, TRUE, FALSE, FALSE, 5, 5, 60)
         ON CONFLICT (scope_key) DO NOTHING`,
       );
     } else {
@@ -733,8 +744,10 @@ export class IamMasterSeeder implements SeederContract {
         `INSERT INTO auth_security_settings (
           id, scope_key, password_hash_algorithm, db_encryption_algorithm, encrypt_fields_at_rest,
           mfa_policy, allowed_mfa_methods_json, max_failed_login_attempts, lockout_duration_minutes,
-          password_min_length, require_uppercase, require_numbers, require_special_chars
-        ) VALUES (1, 'GLOBAL', 1, 1, TRUE, 1, '["TOTP","EMAIL_OTP","RECOVERY_CODE"]', 5, 15, 8, TRUE, TRUE, TRUE)
+          password_min_length, require_uppercase, require_numbers, require_special_chars,
+          allow_email_registration, allow_phone_registration, require_email_verification, require_phone_verification,
+          otp_max_send_count, otp_max_attempts, otp_cooldown_seconds
+        ) VALUES (1, 'GLOBAL', 1, 1, TRUE, 1, '["TOTP","EMAIL_OTP","RECOVERY_CODE"]', 5, 15, 8, TRUE, TRUE, TRUE, TRUE, TRUE, FALSE, FALSE, 5, 5, 60)
         ON DUPLICATE KEY UPDATE scope_key = VALUES(scope_key)`,
       );
     }

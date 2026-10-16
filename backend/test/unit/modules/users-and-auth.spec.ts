@@ -24,8 +24,9 @@ import type { RoleRepository } from '@modules/roles/repositories/role.repository
 import type { RolePermissionRepository } from '@modules/roles/repositories/role-permission.repository.js';
 import { RolesMapper } from '@modules/roles/mappers/roles.mapper.js';
 import { RolesService } from '@modules/roles/services/roles.service.js';
-import { USER_STATUS } from '@modules/users/contracts/index.js';
+import { USER_STATUS, normalizePhoneNumber } from '@modules/users/contracts/index.js';
 import type { UserEntity } from '@modules/users/entities/user.entity.js';
+import type { UserProfileEntity } from '@modules/users/entities/user-profile.entity.js';
 import type { UserRoleEntity } from '@modules/users/entities/user-role.entity.js';
 import type { UserOrganizationUnitEntity } from '@modules/users/entities/user-organization-unit.entity.js';
 import type { UserStatusHistoryEntity } from '@modules/users/entities/user-status-history.entity.js';
@@ -33,6 +34,7 @@ import type {
   UserRepository,
   SearchUsersFilter,
 } from '@modules/users/repositories/user.repository.js';
+import type { UserProfileRepository } from '@modules/users/repositories/user-profile.repository.js';
 import type { UserRoleRepository } from '@modules/users/repositories/user-role.repository.js';
 import type {
   UserOrganizationInputItem,
@@ -61,9 +63,10 @@ import { SessionService } from '@modules/auth/services/session.service.js';
 import { PasswordService } from '@modules/auth/services/password.service.js';
 import { MfaService } from '@modules/auth/services/mfa.service.js';
 import { SecuritySettingsService } from '@modules/auth/services/security-settings.service.js';
+import { VerificationService } from '@modules/auth/services/verification.service.js';
 import { AuthService } from '@modules/auth/services/auth.service.js';
 
-/** Tạo bộ lưu trữ in-memory với ID số nguyên tăng dần (1, 2, 3...) và bảng permissions độc lập */
+/** Tạo bộ lưu trữ in-memory với ID số nguyên tăng dần (1, 2, 3...) và bảng permissions + user_profiles độc lập */
 function createIamInMemoryHarness() {
   applyTestEnv();
   const config = new CoreConfigService();
@@ -77,6 +80,7 @@ function createIamInMemoryHarness() {
   let roleSeq = 0;
   let rolePermSeq = 0;
   let userSeq = 0;
+  let userProfileSeq = 0;
   let userRoleSeq = 0;
   let userOrgSeq = 0;
   let historySeq = 0;
@@ -89,6 +93,7 @@ function createIamInMemoryHarness() {
   const roleStore = new Map<number, RoleEntity>();
   const rolePermStore: RolePermissionEntity[] = [];
   const userStore = new Map<number, UserEntity>();
+  const userProfileStore = new Map<number, UserProfileEntity>();
   const userRoleStore: UserRoleEntity[] = [];
   const userOrgStore: UserOrganizationUnitEntity[] = [];
   const statusHistoryStore: UserStatusHistoryEntity[] = [];
@@ -233,6 +238,45 @@ function createIamInMemoryHarness() {
     },
   } as unknown as RolePermissionRepository;
 
+  const userProfileRepo = {
+    findByUserId: async (userId: number) => userProfileStore.get(Number(userId)) ?? null,
+    findByUserIds: async (userIds: readonly number[]) => {
+      const set = new Set(userIds.map(Number));
+      return [...userProfileStore.values()].filter((p) => set.has(p.userId));
+    },
+    upsertByUserId: async (userId: number, partial: Partial<UserProfileEntity>) => {
+      const now = new Date();
+      const existing = userProfileStore.get(Number(userId));
+      const entity = {
+        id: existing?.id ?? ++userProfileSeq,
+        userId: Number(userId),
+        firstName: partial.firstName ?? existing?.firstName ?? '',
+        lastName: partial.lastName ?? existing?.lastName ?? '',
+        fullName: partial.fullName ?? existing?.fullName ?? '',
+        avatarUrl:
+          partial.avatarUrl !== undefined ? partial.avatarUrl : (existing?.avatarUrl ?? null),
+        dateOfBirth:
+          partial.dateOfBirth !== undefined
+            ? partial.dateOfBirth
+            : (existing?.dateOfBirth ?? null),
+        gender: partial.gender !== undefined ? partial.gender : (existing?.gender ?? null),
+        identityNumber:
+          partial.identityNumber !== undefined
+            ? partial.identityNumber
+            : (existing?.identityNumber ?? null),
+        address: partial.address !== undefined ? partial.address : (existing?.address ?? null),
+        city: partial.city !== undefined ? partial.city : (existing?.city ?? null),
+        country: partial.country !== undefined ? partial.country : (existing?.country ?? null),
+        bio: partial.bio !== undefined ? partial.bio : (existing?.bio ?? null),
+        createdAt: existing?.createdAt ?? now,
+        updatedAt: now,
+        deletedAt: null,
+      } as unknown as UserProfileEntity;
+      userProfileStore.set(Number(userId), entity);
+      return entity;
+    },
+  } as unknown as UserProfileRepository;
+
   const userRepo = {
     findByIdWithArchived: async (id: number, withDeleted = false) => {
       const u = userStore.get(Number(id));
@@ -256,27 +300,47 @@ function createIamInMemoryHarness() {
         ) ?? null
       );
     },
-    findByIdentifier: async (identifier: string) => {
+    findByPhoneHash: async (phoneHash: string, withDeleted = false) => {
+      return (
+        [...userStore.values()].find(
+          (u) => u.phoneHash === phoneHash && (withDeleted || (!u.deletedAt && !u.archivedAt)),
+        ) ?? null
+      );
+    },
+    findByIdentifier: async (identifier: string, phoneHash?: string | null) => {
       const norm = identifier.trim().toLowerCase();
       return (
-        [...userStore.values()].find((u) => u.email === norm || u.username === norm) ?? null
+        [...userStore.values()].find(
+          (u) =>
+            u.email === norm ||
+            u.username === norm ||
+            (phoneHash && u.phoneHash === phoneHash) ||
+            u.phone === identifier.trim(),
+        ) ?? null
       );
     },
     saveEntity: async (partial: Partial<UserEntity>) => {
       const now = new Date();
       const existing = partial.id ? userStore.get(Number(partial.id)) : undefined;
-      const entity: UserEntity = {
+      const entity = {
         id: partial.id ?? existing?.id ?? ++userSeq,
         username: partial.username ?? existing!.username,
         email: partial.email ?? existing!.email,
         phone: partial.phone !== undefined ? partial.phone : (existing?.phone ?? null),
-        firstName: partial.firstName ?? existing?.firstName ?? '',
-        lastName: partial.lastName ?? existing?.lastName ?? '',
-        fullName: partial.fullName ?? existing!.fullName,
-        avatarUrl:
-          partial.avatarUrl !== undefined ? partial.avatarUrl : (existing?.avatarUrl ?? null),
+        phoneHash:
+          partial.phoneHash !== undefined ? partial.phoneHash : (existing?.phoneHash ?? null),
         passwordHash: partial.passwordHash ?? existing!.passwordHash,
+        passwordHistoryHashesJson:
+          partial.passwordHistoryHashesJson ?? existing?.passwordHistoryHashesJson ?? '[]',
         status: partial.status ?? existing?.status ?? USER_STATUS.ACTIVE,
+        emailVerifiedAt:
+          partial.emailVerifiedAt !== undefined
+            ? partial.emailVerifiedAt
+            : (existing?.emailVerifiedAt ?? null),
+        phoneVerifiedAt:
+          partial.phoneVerifiedAt !== undefined
+            ? partial.phoneVerifiedAt
+            : (existing?.phoneVerifiedAt ?? null),
         lockedUntil:
           partial.lockedUntil !== undefined ? partial.lockedUntil : (existing?.lockedUntil ?? null),
         lockReason:
@@ -301,7 +365,7 @@ function createIamInMemoryHarness() {
         version: existing ? existing.version + 1 : 1,
         createdAt: existing?.createdAt ?? now,
         updatedAt: now,
-      } as UserEntity;
+      } as unknown as UserEntity;
       userStore.set(entity.id, entity);
       return entity;
     },
@@ -325,15 +389,20 @@ function createIamInMemoryHarness() {
       }
       if (filter.q) {
         const kw = filter.q.trim().toLowerCase();
-        list = list.filter(
-          (u) =>
+        const normPhone = normalizePhoneNumber(kw);
+        const kwPhoneHash = normPhone ? passwordHasher.sha256(normPhone) : null;
+        list = list.filter((u) => {
+          const prof = userProfileStore.get(u.id);
+          return (
             u.username.toLowerCase().includes(kw) ||
             u.email.toLowerCase().includes(kw) ||
-            u.firstName.toLowerCase().includes(kw) ||
-            u.lastName.toLowerCase().includes(kw) ||
-            u.fullName.toLowerCase().includes(kw) ||
-            (u.phone ?? '').toLowerCase().includes(kw),
-        );
+            (prof?.firstName ?? '').toLowerCase().includes(kw) ||
+            (prof?.lastName ?? '').toLowerCase().includes(kw) ||
+            (prof?.fullName ?? '').toLowerCase().includes(kw) ||
+            (u.phone ?? '').toLowerCase().includes(kw) ||
+            (kwPhoneHash && u.phoneHash === kwPhoneHash)
+          );
+        });
       }
       if (filter.status) {
         list = list.filter((u) => u.status === filter.status);
@@ -528,6 +597,8 @@ function createIamInMemoryHarness() {
           partial.emailOtpExpiresAt !== undefined
             ? partial.emailOtpExpiresAt
             : (existing?.emailOtpExpiresAt ?? null),
+        emailOtpFailedAttempts:
+          partial.emailOtpFailedAttempts ?? existing?.emailOtpFailedAttempts ?? 0,
         verifiedAt:
           partial.verifiedAt !== undefined ? partial.verifiedAt : (existing?.verifiedAt ?? null),
         createdAt: existing?.createdAt ?? now,
@@ -540,16 +611,34 @@ function createIamInMemoryHarness() {
 
   const resetRepo = {
     findByTokenHash: async (hash: string) => resetStore.get(hash) ?? null,
+    findByOtpCodeHash: async (otpHash: string) =>
+      [...resetStore.values()]
+        .sort((a, b) => b.id - a.id)
+        .find((r) => r.otpCodeHash === otpHash) ?? null,
+    findLatestByUserId: async (userId: number) =>
+      [...resetStore.values()]
+        .filter((r) => r.userId === Number(userId))
+        .sort((a, b) => b.id - a.id)[0] ?? null,
     saveEntity: async (partial: Partial<AuthPasswordResetEntity>) => {
       const now = new Date();
+      const existing = partial.tokenHash ? resetStore.get(partial.tokenHash) : undefined;
       const entity: AuthPasswordResetEntity = {
-        id: partial.id ?? ++resetSeq,
-        userId: partial.userId!,
-        tokenHash: partial.tokenHash!,
-        expiresAt: partial.expiresAt!,
-        usedAt: partial.usedAt ?? null,
-        requestedIp: partial.requestedIp ?? null,
-        createdAt: now,
+        id: partial.id ?? existing?.id ?? ++resetSeq,
+        userId: partial.userId ?? existing!.userId,
+        tokenHash: partial.tokenHash ?? existing!.tokenHash,
+        otpCodeHash:
+          partial.otpCodeHash !== undefined
+            ? partial.otpCodeHash
+            : (existing?.otpCodeHash ?? null),
+        attemptCount: partial.attemptCount ?? existing?.attemptCount ?? 0,
+        maxAttempts: partial.maxAttempts ?? existing?.maxAttempts ?? 5,
+        expiresAt: partial.expiresAt ?? existing!.expiresAt,
+        usedAt: partial.usedAt !== undefined ? partial.usedAt : (existing?.usedAt ?? null),
+        requestedIp:
+          partial.requestedIp !== undefined
+            ? partial.requestedIp
+            : (existing?.requestedIp ?? null),
+        createdAt: existing?.createdAt ?? now,
         updatedAt: now,
       } as AuthPasswordResetEntity;
       resetStore.set(entity.tokenHash, entity);
@@ -593,6 +682,54 @@ function createIamInMemoryHarness() {
           15,
         passwordMinLength:
           partial.passwordMinLength ?? globalSecuritySetting?.passwordMinLength ?? 8,
+        requireUppercase:
+          partial.requireUppercase ?? globalSecuritySetting?.requireUppercase ?? true,
+        requireNumbers:
+          partial.requireNumbers ?? globalSecuritySetting?.requireNumbers ?? true,
+        requireSpecialChars:
+          partial.requireSpecialChars ?? globalSecuritySetting?.requireSpecialChars ?? false,
+        requireCurrentPasswordOnChange:
+          partial.requireCurrentPasswordOnChange ??
+          globalSecuritySetting?.requireCurrentPasswordOnChange ??
+          true,
+        disallowedPasswordsJson:
+          partial.disallowedPasswordsJson ??
+          globalSecuritySetting?.disallowedPasswordsJson ??
+          '["password","12345678","123456789","1234567890","qwerty123","admin123","welcome123","letmein123","iloveyou","abcd1234"]',
+        disallowUserInfoInPassword:
+          partial.disallowUserInfoInPassword ??
+          globalSecuritySetting?.disallowUserInfoInPassword ??
+          true,
+        preventPasswordReuse:
+          partial.preventPasswordReuse ??
+          globalSecuritySetting?.preventPasswordReuse ??
+          true,
+        passwordHistoryLimit:
+          partial.passwordHistoryLimit ??
+          globalSecuritySetting?.passwordHistoryLimit ??
+          5,
+        revokeSessionsOnPasswordChange:
+          partial.revokeSessionsOnPasswordChange ??
+          globalSecuritySetting?.revokeSessionsOnPasswordChange ??
+          true,
+        allowEmailRegistration:
+          partial.allowEmailRegistration ?? globalSecuritySetting?.allowEmailRegistration ?? true,
+        allowPhoneRegistration:
+          partial.allowPhoneRegistration ?? globalSecuritySetting?.allowPhoneRegistration ?? true,
+        requireEmailVerification:
+          partial.requireEmailVerification ??
+          globalSecuritySetting?.requireEmailVerification ??
+          false,
+        requirePhoneVerification:
+          partial.requirePhoneVerification ??
+          globalSecuritySetting?.requirePhoneVerification ??
+          false,
+        otpMaxSendCount:
+          partial.otpMaxSendCount ?? globalSecuritySetting?.otpMaxSendCount ?? 5,
+        otpMaxAttempts:
+          partial.otpMaxAttempts ?? globalSecuritySetting?.otpMaxAttempts ?? 5,
+        otpCooldownSeconds:
+          partial.otpCooldownSeconds ?? globalSecuritySetting?.otpCooldownSeconds ?? 60,
         createdAt: globalSecuritySetting?.createdAt ?? now,
         updatedAt: now,
       } as AuthSecuritySettingEntity;
@@ -611,6 +748,10 @@ function createIamInMemoryHarness() {
     rolesService,
     organizationsService,
     userStatusHistoryRepo,
+    fieldEncryption,
+    null,
+    null,
+    userProfileRepo,
   );
   const importService = new UserImportService(
     usersService,
@@ -620,14 +761,15 @@ function createIamInMemoryHarness() {
   );
   const exportService = new UserExportService(usersService, userRepo);
   const sessionService = new SessionService(sessionRepo, tokenService, passwordHasher, config);
+  const securitySettingsService = new SecuritySettingsService(securitySettingRepo);
   const passwordService = new PasswordService(
     resetRepo,
     passwordHasher,
     sessionService,
     usersService,
     config,
+    securitySettingsService,
   );
-  const securitySettingsService = new SecuritySettingsService(securitySettingRepo);
   const mfaService = new MfaService(
     mfaRepo,
     totpService,
@@ -636,6 +778,13 @@ function createIamInMemoryHarness() {
     config,
     fieldEncryption,
   );
+  const verificationService = new VerificationService(
+    passwordHasher,
+    usersService,
+    undefined,
+    securitySettingsService,
+    config,
+  );
   const authService = new AuthService(
     passwordHasher,
     tokenService,
@@ -643,9 +792,12 @@ function createIamInMemoryHarness() {
     mfaService,
     usersService,
     securitySettingsService,
+    verificationService,
   );
 
   return {
+    userStore,
+    userProfileStore,
     mfaStore,
     permStore,
     fieldEncryption,
@@ -659,6 +811,7 @@ function createIamInMemoryHarness() {
     sessionService,
     passwordService,
     mfaService,
+    verificationService,
     authService,
   };
 }
@@ -1015,5 +1168,323 @@ describe('Unit: Quản lý Người dùng (3.1) & Xác thực / Phiên / MFA (3)
     const afterBruteForce = await h.usersService.getById(user.id);
     expect(afterBruteForce.status).toBe(USER_STATUS.LOCKED);
     expect(afterBruteForce.failedLoginAttempts).toBe(5);
+  });
+
+  it('Mục 3.2 & Tách bảng users (Core) / user_profiles (Chi tiết): Đăng ký Email/SĐT (bật/tắt theo dự án), Đăng nhập bằng SĐT, Đăng xuất tất cả thiết bị, Xác minh Email & Xác minh SĐT bằng OTP (giới hạn gửi & nhập sai)', async () => {
+    // 1. Đăng ký bằng Email + mật khẩu (3.2.1) và kiểm tra dữ liệu lưu tách bạch giữa users (Core) và user_profiles
+    const regEmail = await h.authService.register(
+      {
+        email: 'member.email@gmail.com',
+        password: 'Password@123',
+        firstName: 'Hương',
+        lastName: 'Trần Thị',
+        city: 'Hồ Chí Minh',
+        country: 'Vietnam',
+        bio: 'Product Designer',
+        deviceName: 'MacBook Pro',
+      },
+      { ipAddress: '10.0.0.10', userAgent: 'Safari/17.0' },
+    );
+    expect(regEmail.registered).toBe(true);
+    expect(regEmail.verificationRequired).toBe(false);
+    expect(regEmail.accessToken).toBeDefined();
+    expect(regEmail.user.email).toBe('member.email@gmail.com');
+    expect(regEmail.user.firstName).toBe('Hương');
+    expect(regEmail.user.lastName).toBe('Trần Thị');
+    expect(regEmail.user.fullName).toBe('Trần Thị Hương');
+    expect(regEmail.user.profile?.city).toBe('Hồ Chí Minh');
+    expect(regEmail.user.profile?.bio).toBe('Product Designer');
+
+    // Xác minh bảng users chỉ chứa trường Core và bảng user_profiles chứa trường cá nhân
+    const coreEntity = h.userStore.get(regEmail.user.id);
+    const profileEntity = h.userProfileStore.get(regEmail.user.id);
+    expect(coreEntity).toBeDefined();
+    expect('firstName' in (coreEntity as unknown as Record<string, unknown>)).toBe(false);
+    expect(profileEntity?.firstName).toBe('Hương');
+    expect(profileEntity?.city).toBe('Hồ Chí Minh');
+
+    // 2. Bật/tắt đăng ký bằng Email hoặc SĐT theo dự án (3.2.1 & 3.2.2)
+    await h.securitySettingsService.updateSettings({
+      allowEmailRegistration: false,
+      allowPhoneRegistration: true,
+      otpCooldownSeconds: 0,
+      otpMaxSendCount: 2,
+      otpMaxAttempts: 3,
+    });
+
+    await expect(
+      h.authService.register({
+        email: 'blocked@gmail.com',
+        password: 'Password@123',
+      }),
+    ).rejects.toThrow();
+
+    // 3. Đăng ký bằng SĐT + mật khẩu (3.2.2) khi allowPhoneRegistration = true
+    const regPhone = await h.authService.register(
+      {
+        phone: '+84 912 345 678',
+        password: 'Password@123',
+        firstName: 'Khang',
+        lastName: 'Lê Minh',
+        deviceName: 'iPhone 15',
+      },
+      { ipAddress: '10.0.0.20', userAgent: 'MobileSafari' },
+    );
+    expect(regPhone.registered).toBe(true);
+    expect(regPhone.user.phone).toBe('0912345678');
+    expect(regPhone.user.fullName).toBe('Lê Minh Khang');
+
+    // Khi tắt allowPhoneRegistration -> từ chối đăng ký bằng SĐT
+    await h.securitySettingsService.updateSettings({
+      allowPhoneRegistration: false,
+    });
+    await expect(
+      h.authService.register({
+        phone: '0987654321',
+        password: 'Password@123',
+      }),
+    ).rejects.toThrow();
+
+    // 4. Đăng nhập bằng SĐT (3.2.3) với nhiều định dạng (+84 / 0...) và không tiết lộ tài khoản tồn tại
+    const loginByPhone = await h.authService.login(
+      {
+        identifier: '0912345678',
+        password: 'Password@123',
+        deviceName: 'iPad Pro',
+      },
+      { ipAddress: '10.0.0.21', userAgent: 'iPadOS' },
+    );
+    expect(loginByPhone.mfaRequired).toBe(false);
+    expect(loginByPhone.accessToken).toBeDefined();
+    expect(loginByPhone.user?.id).toBe(regPhone.user.id);
+
+    // 5. Đăng xuất khỏi tất cả thiết bị (3.2.5)
+    const activeBefore = await h.sessionService.listUserSessions(regPhone.user.id);
+    expect(activeBefore).toHaveLength(2);
+    const revokedAll = await h.authService.revokeAllUserSessions(
+      regPhone.user.id,
+      'Logout all devices',
+    );
+    expect(revokedAll).toBe(2);
+    const activeAfter = await h.sessionService.listUserSessions(regPhone.user.id);
+    expect(activeAfter).toHaveLength(0);
+
+    // 6. Xác minh Email có thời hạn bằng mã hoặc link token (3.2.6)
+    const emailVerSend = await h.verificationService.sendEmailVerification(
+      { email: 'member.email@gmail.com' },
+      { userId: regEmail.user.id },
+    );
+    expect(emailVerSend.sent).toBe(true);
+    expect(emailVerSend.devVerificationToken).toBeDefined();
+
+    const emailVerConfirm = await h.verificationService.confirmEmailVerification({
+      email: 'member.email@gmail.com',
+      tokenOrCode: emailVerSend.devVerificationToken!,
+    });
+    expect(emailVerConfirm.verified).toBe(true);
+    expect(emailVerConfirm.channel).toBe('EMAIL');
+    const verifiedEmailUser = await h.usersService.getById(regEmail.user.id);
+    expect(verifiedEmailUser.emailVerifiedAt).not.toBeNull();
+
+    // 7. Xác minh SĐT bằng OTP có giới hạn số lần gửi (maxSends = 2) và số lần nhập sai (maxAttempts = 3) (3.2.7)
+    const phoneOtp1 = await h.verificationService.sendPhoneOtp({ phone: '0912345678' });
+    expect(phoneOtp1.sendCount).toBe(1);
+    const phoneOtp2 = await h.verificationService.sendPhoneOtp({ phone: '0912345678' });
+    expect(phoneOtp2.sendCount).toBe(2);
+
+    // Lần gửi thứ 3 vượt quá otpMaxSendCount (2) -> bị chặn
+    await expect(
+      h.verificationService.sendPhoneOtp({ phone: '0912345678' }),
+    ).rejects.toThrow();
+
+    // Nhập sai OTP 3 lần liên tiếp -> vượt quá otpMaxAttempts (3) -> hủy hiệu lực mã
+    await expect(
+      h.verificationService.confirmPhoneOtp({ phone: '0912345678', code: '000000' }),
+    ).rejects.toThrow();
+    await expect(
+      h.verificationService.confirmPhoneOtp({ phone: '0912345678', code: '111111' }),
+    ).rejects.toThrow();
+    await expect(
+      h.verificationService.confirmPhoneOtp({ phone: '0912345678', code: '222222' }),
+    ).rejects.toThrow();
+
+    // Tăng giới hạn gửi để gửi lại mã mới và xác nhận đúng
+    await h.securitySettingsService.updateSettings({ otpMaxSendCount: 5 });
+    const phoneOtpValid = await h.verificationService.sendPhoneOtp({ phone: '0912345678' });
+    const phoneConfirmed = await h.verificationService.confirmPhoneOtp({
+      phone: '0912345678',
+      code: phoneOtpValid.devVerificationCode!,
+    });
+    expect(phoneConfirmed.verified).toBe(true);
+    expect(phoneConfirmed.channel).toBe('PHONE_OTP');
+
+    const verifiedPhoneUser = await h.usersService.getById(regPhone.user.id);
+    expect(verifiedPhoneUser.phoneVerifiedAt).not.toBeNull();
+  });
+
+  it('Mục 3.3: Mật khẩu gợi ý, Chính sách mật khẩu (disallowed + userInfo), Đổi mật khẩu (biến setting requireCurrentPasswordOnChange), Chống dùng lại mật khẩu cũ, Quên mật khẩu bằng OTP 6 số, Admin Reset mật khẩu & Thu hồi phiên', async () => {
+    // 1. Gợi ý mật khẩu mạnh (Suggested Strong Password)
+    const suggested = await h.passwordService.suggestPasswords({ count: 3, length: 16 });
+    expect(suggested.suggestions).toHaveLength(3);
+    expect(suggested.password).toBe(suggested.suggestions[0]);
+    for (const pwd of suggested.suggestions) {
+      expect(pwd.length).toBeGreaterThanOrEqual(16);
+      expect(/[A-Z]/.test(pwd)).toBe(true);
+      expect(/[a-z]/.test(pwd)).toBe(true);
+      expect(/[0-9]/.test(pwd)).toBe(true);
+      expect(/[^A-Za-z0-9]/.test(pwd)).toBe(true);
+    }
+
+    // 2. Tạo tài khoản kiểm thử và thiết lập chính sách mật khẩu qua biến setting
+    await h.securitySettingsService.updateSettings({
+      passwordMinLength: 10,
+      requireUppercase: true,
+      requireNumbers: true,
+      requireSpecialChars: true,
+      requireCurrentPasswordOnChange: true,
+      disallowedPasswords: ['qwerty123', 'summer2026!'],
+      disallowUserInfoInPassword: true,
+      preventPasswordReuse: true,
+      passwordHistoryLimit: 3,
+      revokeSessionsOnPasswordChange: true,
+    });
+
+    const user = await h.usersService.create({
+      username: 'hoanglong99',
+      email: 'hoanglong99@gmail.com',
+      firstName: 'Long',
+      lastName: 'Hoàng',
+      phone: '0933445566',
+      password: 'Init#Password101',
+      status: USER_STATUS.ACTIVE,
+      roleIds: [],
+      organizationUnits: [],
+    });
+
+    // Đăng nhập 2 phiên thiết bị khác nhau
+    const session1 = await h.authService.login({
+      identifier: 'hoanglong99',
+      password: 'Init#Password101',
+      deviceName: 'Device 1',
+    });
+    const session2 = await h.authService.login({
+      identifier: 'hoanglong99',
+      password: 'Init#Password101',
+      deviceName: 'Device 2',
+    });
+    expect(session1.sessionId).toBeDefined();
+    expect(session2.sessionId).toBeDefined();
+
+    // 3. Kiểm tra chính sách mật khẩu: cấm mật khẩu trong danh sách đen hoặc chứa username/email
+    await expect(
+      h.passwordService.changePassword(
+        user.id,
+        {
+          currentPassword: 'Init#Password101',
+          newPassword: 'Summer2026!',
+        },
+        session1.sessionId,
+      ),
+    ).rejects.toThrow();
+
+    await expect(
+      h.passwordService.changePassword(
+        user.id,
+        {
+          currentPassword: 'Init#Password101',
+          newPassword: 'Hoanglong99#Secure1',
+        },
+        session1.sessionId,
+      ),
+    ).rejects.toThrow();
+
+    // 4. Đổi mật khẩu thành công (yêu cầu mật khẩu hiện tại) & tự động thu hồi phiên khác
+    await expect(
+      h.passwordService.changePassword(user.id, {
+        newPassword: 'Valid#Password202',
+      }),
+    ).rejects.toThrow();
+
+    const change1 = await h.passwordService.changePassword(
+      user.id,
+      {
+        currentPassword: 'Init#Password101',
+        newPassword: 'Valid#Password202',
+      },
+      session1.sessionId,
+    );
+    expect(change1.changed).toBe(true);
+    expect(change1.revokedSessionsCount).toBe(1); // Thu hồi session2, giữ lại session1 hiện tại
+
+    // 5. Không cho dùng lại mật khẩu cũ (preventPasswordReuse = true)
+    await expect(
+      h.passwordService.changePassword(
+        user.id,
+        {
+          currentPassword: 'Valid#Password202',
+          newPassword: 'Init#Password101',
+        },
+        session1.sessionId,
+      ),
+    ).rejects.toThrow();
+
+    // 6. Tắt biến setting requireCurrentPasswordOnChange -> đổi mật khẩu không cần truyền currentPassword
+    await h.securitySettingsService.updateSettings({
+      requireCurrentPasswordOnChange: false,
+    });
+    const changeNoCurrent = await h.passwordService.changePassword(
+      user.id,
+      {
+        newPassword: 'Third#Password303',
+      },
+      session1.sessionId,
+    );
+    expect(changeNoCurrent.changed).toBe(true);
+
+    // 7. Quên mật khẩu & Khôi phục bằng mã OTP 6 chữ số (3.3.2)
+    const forgotOtpRes = await h.passwordService.requestPasswordReset({
+      email: 'hoanglong99@gmail.com',
+    });
+    expect(forgotOtpRes.accepted).toBe(true);
+    expect(forgotOtpRes.devResetToken).toBeDefined();
+    expect(forgotOtpRes.devResetOtp).toMatch(/^\d{6}$/);
+
+    // Khôi phục bằng OTP 6 chữ số và kiểm tra thu hồi toàn bộ phiên
+    const resetByOtp = await h.passwordService.resetPassword({
+      email: 'hoanglong99@gmail.com',
+      otpCode: forgotOtpRes.devResetOtp!,
+      newPassword: 'Fourth#Password404',
+    });
+    expect(resetByOtp.reset).toBe(true);
+    expect(resetByOtp.revokedSessionsCount).toBe(1); // session1 cũng bị thu hồi sau khi reset
+
+    // 8. Admin Reset mật khẩu người dùng từ trang quản trị (dùng mật khẩu gợi ý tự động & thu hồi phiên)
+    await h.authService.login({
+      identifier: 'hoanglong99',
+      password: 'Fourth#Password404',
+      deviceName: 'Device After Reset',
+    });
+    const adminResetRes = await h.usersService.adminResetPassword(
+      user.id,
+      { useSuggestedPassword: true, revokeSessions: true },
+      1,
+    );
+    expect(adminResetRes.reset).toBe(true);
+    expect(adminResetRes.userId).toBe(user.id);
+    expect(adminResetRes.generatedPassword).toBeDefined();
+    expect(adminResetRes.revokedSessionsCount).toBe(1);
+
+    // 9. Tự nâng cấp thuật toán băm mật khẩu khi người dùng đăng nhập (3.3.6: SCRYPT -> PBKDF2_SHA512)
+    expect(h.userStore.get(user.id)?.passwordHash.startsWith('scrypt$')).toBe(true);
+    await h.securitySettingsService.updateSettings({
+      passwordHashAlgorithm: 'PBKDF2_SHA512',
+    });
+
+    const loginAfterAdminReset = await h.authService.login({
+      identifier: 'hoanglong99',
+      password: adminResetRes.generatedPassword!,
+    });
+    expect(loginAfterAdminReset.accessToken).toBeDefined();
+    expect(h.userStore.get(user.id)?.passwordHash.startsWith('pbkdf2_sha512$')).toBe(true);
   });
 });

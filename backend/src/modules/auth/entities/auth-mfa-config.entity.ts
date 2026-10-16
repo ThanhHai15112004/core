@@ -30,6 +30,9 @@ export class AuthMfaConfigEntity extends TypeOrmBaseEntity {
   @Column({ name: 'email_otp_expires_at', type: 'timestamp', nullable: true })
   public emailOtpExpiresAt?: Date | null;
 
+  @Column({ name: 'email_otp_failed_attempts', type: 'int', default: 0 })
+  public emailOtpFailedAttempts?: number;
+
   @Column({ name: 'verified_at', type: 'timestamp', nullable: true })
   public verifiedAt?: Date | null;
 }

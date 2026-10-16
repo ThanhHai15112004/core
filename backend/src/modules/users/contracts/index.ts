@@ -109,6 +109,37 @@ export function resolveVietnameseNameParts(input: {
   };
 }
 
+/**
+ * Chuẩn hóa số điện thoại về định dạng thống nhất (ví dụ +84909123456 -> 0909123456)
+ * phục vụ tạo mã băm SHA-256 (blind index `phone_hash`) và tra cứu đăng nhập/đăng ký.
+ */
+export function normalizePhoneNumber(phone?: string | null): string | null {
+  if (!phone) return null;
+  const cleaned = phone.trim().replace(/[\s.\-()]/g, '');
+  if (!cleaned) return null;
+  if (cleaned.startsWith('+84')) {
+    return `0${cleaned.slice(3)}`;
+  }
+  if (cleaned.startsWith('84') && cleaned.length >= 10 && cleaned.length <= 12) {
+    return `0${cleaned.slice(2)}`;
+  }
+  return cleaned;
+}
+
+export interface UserProfileView {
+  readonly firstName: string;
+  readonly lastName: string;
+  readonly fullName: string;
+  readonly avatarUrl: string | null;
+  readonly dateOfBirth: string | null;
+  readonly gender: number | null;
+  readonly identityNumber: string | null;
+  readonly address: string | null;
+  readonly city: string | null;
+  readonly country: string | null;
+  readonly bio: string | null;
+}
+
 export interface UserOrganizationAssignmentSummary {
   readonly organizationUnitId: number;
   readonly code?: string;
@@ -129,12 +160,16 @@ export interface UserAuthCredentialsView {
   readonly id: number;
   readonly username: string;
   readonly email: string;
+  readonly phone: string | null;
   readonly firstName: string;
   readonly lastName: string;
   readonly fullName: string;
   readonly passwordHash: string;
+  readonly passwordHistoryHashes?: readonly string[];
   readonly status: UserStatusCode;
   readonly statusName: UserStatusName;
+  readonly emailVerifiedAt: Date | null;
+  readonly phoneVerifiedAt: Date | null;
   readonly lockedUntil: Date | null;
   readonly lockReason: string | null;
   readonly failedLoginAttempts: number;
@@ -149,20 +184,59 @@ export interface UserAuthIdentityView {
   readonly firstName: string;
   readonly lastName: string;
   readonly fullName: string;
+  readonly avatarUrl?: string | null;
   readonly phone: string | null;
   readonly status: UserStatusCode;
   readonly statusName: UserStatusName;
+  readonly emailVerifiedAt?: Date | null;
+  readonly phoneVerifiedAt?: Date | null;
   readonly lockedUntil: Date | null;
   readonly mfaEnabled: boolean;
   readonly primaryOrganizationUnitId: number | null;
   readonly organizationUnitIds: readonly number[];
   readonly roles: readonly string[];
   readonly permissions: readonly string[];
+  readonly profile?: UserProfileView;
+}
+
+export interface SelfRegisterUserInput {
+  readonly username?: string | undefined;
+  readonly email?: string | null | undefined;
+  readonly phone?: string | null | undefined;
+  readonly password: string;
+  readonly firstName?: string | undefined;
+  readonly lastName?: string | undefined;
+  readonly fullName?: string | undefined;
+  readonly avatarUrl?: string | null | undefined;
+  readonly dateOfBirth?: string | null | undefined;
+  readonly gender?: number | null | undefined;
+  readonly address?: string | null | undefined;
+  readonly city?: string | null | undefined;
+  readonly country?: string | null | undefined;
+  readonly bio?: string | null | undefined;
+  readonly status?: UserStatusCode | undefined;
+}
+
+export interface AdminResetUserPasswordInput {
+  readonly newPassword?: string | undefined;
+  readonly useSuggestedPassword?: boolean | undefined;
+  readonly revokeSessions?: boolean | undefined;
+}
+
+export interface AdminResetUserPasswordResult {
+  readonly reset: true;
+  readonly userId: number;
+  readonly revokedSessionsCount: number;
+  readonly generatedPassword?: string;
 }
 
 export interface IUsersPublicService {
   findAuthUserByIdentifier(identifier: string): Promise<UserAuthCredentialsView | null>;
+  findAuthCredentialsByUserId?(userId: number): Promise<UserAuthCredentialsView | null>;
   findAuthUserById(userId: number): Promise<UserAuthIdentityView | null>;
+  registerSelfUser(input: SelfRegisterUserInput): Promise<UserAuthIdentityView>;
+  markEmailVerified(userId: number): Promise<void>;
+  markPhoneVerified(userId: number): Promise<void>;
   recordLoginSuccess(userId: number): Promise<void>;
   recordLoginFailure(
     userId: number,
@@ -170,8 +244,20 @@ export interface IUsersPublicService {
     lockDurationMinutes: number,
   ): Promise<{ failedAttempts: number; locked: boolean; lockedUntil: Date | null }>;
   autoUnlockExpiredLock(userId: number): Promise<void>;
-  updatePasswordHash(userId: number, newPasswordHash: string): Promise<void>;
+  updatePasswordHash(
+    userId: number,
+    newPasswordHash: string,
+    options?: { recordHistory?: boolean; maxHistory?: number },
+  ): Promise<void>;
   setMfaEnabled(userId: number, enabled: boolean): Promise<void>;
+  registerAdminPasswordResetDelegate?(
+    delegate: (
+      userId: number,
+      input: AdminResetUserPasswordInput,
+      actorId?: number,
+    ) => Promise<AdminResetUserPasswordResult>,
+  ): void;
 }
 
 export const USERS_PUBLIC_SERVICE = Symbol('USERS_PUBLIC_SERVICE');
+

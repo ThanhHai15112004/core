@@ -18,4 +18,21 @@ export class AuthPasswordResetRepository extends BaseTypeOrmRepository<AuthPassw
       where: { tokenHash },
     });
   }
+
+  /** Tìm yêu cầu đặt lại mật khẩu theo mã băm OTP 6 số */
+  public async findByOtpCodeHash(otpCodeHash: string): Promise<AuthPasswordResetEntity | null> {
+    return this.repository.findOne({
+      where: { otpCodeHash },
+      order: { id: 'DESC' },
+    });
+  }
+
+  /** Tìm yêu cầu đặt lại mật khẩu mới nhất của một người dùng */
+  public async findLatestByUserId(userId: number): Promise<AuthPasswordResetEntity | null> {
+    return this.repository.findOne({
+      where: { userId },
+      order: { id: 'DESC' },
+    });
+  }
 }
+

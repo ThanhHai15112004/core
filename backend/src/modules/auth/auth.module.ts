@@ -7,12 +7,14 @@ import { AuthMfaConfigRepository } from './repositories/auth-mfa-config.reposito
 import { AuthPasswordResetRepository } from './repositories/auth-password-reset.repository.js';
 import { AuthSecuritySettingRepository } from './repositories/auth-security-setting.repository.js';
 import { AuthSessionRepository } from './repositories/auth-session.repository.js';
+import { AuthVerificationCodeRepository } from './repositories/auth-verification-code.repository.js';
 import { AuthService } from './services/auth.service.js';
 import { MfaService } from './services/mfa.service.js';
 import { PasswordService } from './services/password.service.js';
 import { SecuritySettingsService } from './services/security-settings.service.js';
 import { SessionService } from './services/session.service.js';
 import { UserIdentityResolverService } from './services/user-identity-resolver.service.js';
+import { VerificationService } from './services/verification.service.js';
 
 @Module({
   imports: [UsersModule],
@@ -22,10 +24,12 @@ import { UserIdentityResolverService } from './services/user-identity-resolver.s
     AuthMfaConfigRepository,
     AuthPasswordResetRepository,
     AuthSecuritySettingRepository,
+    AuthVerificationCodeRepository,
     SecuritySettingsService,
     SessionService,
     PasswordService,
     MfaService,
+    VerificationService,
     AuthService,
     UserIdentityResolverService,
     {
@@ -42,6 +46,7 @@ import { UserIdentityResolverService } from './services/user-identity-resolver.s
     SessionService,
     PasswordService,
     MfaService,
+    VerificationService,
     SecuritySettingsService,
     AUTH_PUBLIC_SERVICE,
     USER_IDENTITY_RESOLVER,

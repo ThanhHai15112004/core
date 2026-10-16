@@ -22,19 +22,26 @@ import {
   type RoleSummary,
 } from '@modules/roles/contracts/index.js';
 import {
+  type AdminResetUserPasswordInput,
+  type AdminResetUserPasswordResult,
   type IUsersPublicService,
+  type SelfRegisterUserInput,
   USER_STATUS,
   type UserAuthCredentialsView,
   type UserAuthIdentityView,
   type UserOrganizationAssignmentSummary,
+  type UserProfileView,
   type UserRoleAssignmentSummary,
   type UserStatusCode,
   getUserStatusName,
+  normalizePhoneNumber,
   parseUserStatus,
   resolveVietnameseNameParts,
 } from '../contracts/index.js';
 import type { UserEntity } from '../entities/user.entity.js';
+import type { UserProfileEntity } from '../entities/user-profile.entity.js';
 import { UserRepository } from '../repositories/user.repository.js';
+import { UserProfileRepository } from '../repositories/user-profile.repository.js';
 import { UserRoleRepository } from '../repositories/user-role.repository.js';
 import { UserOrganizationUnitRepository } from '../repositories/user-organization-unit.repository.js';
 import { UserStatusHistoryRepository } from '../repositories/user-status-history.repository.js';
@@ -54,6 +61,15 @@ export const USER_IDENTITY_CACHE_PREFIX = 'iam:user:identity:';
 
 @Injectable()
 export class UsersService implements IUsersPublicService {
+  private readonly fallbackProfiles = new Map<number, UserProfileEntity>();
+  private readonly fallbackPasswordHistory = new Map<number, string[]>();
+  private adminPasswordResetDelegate?: (
+    userId: number,
+    input: AdminResetUserPasswordInput,
+    actorId?: number,
+  ) => Promise<AdminResetUserPasswordResult>;
+
+
   constructor(
     private readonly userRepository: UserRepository,
     private readonly userRoleRepository: UserRoleRepository,
@@ -77,6 +93,9 @@ export class UsersService implements IUsersPublicService {
     @Optional()
     @Inject(RedisService)
     private readonly redis: RedisService | null = null,
+    @Optional()
+    @Inject(UserProfileRepository)
+    private readonly userProfileRepository: UserProfileRepository | null = null,
   ) {}
 
   /** Tìm kiếm và lọc danh sách người dùng có phân trang (Mục 3.1.9) */
@@ -126,7 +145,7 @@ export class UsersService implements IUsersPublicService {
     });
   }
 
-  /** Tạo mới người dùng kèm gán vai trò và đơn vị/chi nhánh (Mục 3.1.1) */
+  /** Tạo mới người dùng kèm lưu bảng Core (`users`) và bảng Chi tiết (`user_profiles`) (Mục 3.1.1) */
   public async create(dto: CreateUserRequest, actorId?: number): Promise<UserResponse> {
     const normalizedEmail = dto.email.trim().toLowerCase();
     const rawUsername =
@@ -135,9 +154,15 @@ export class UsersService implements IUsersPublicService {
         : (normalizedEmail.split('@')[0] ?? 'user').replace(/[^a-z0-9._-]/g, '') || 'user';
     const normalizedUsername = rawUsername.length >= 3 ? rawUsername : `${rawUsername}_usr`;
 
-    const [existingByUsername, existingByEmail] = await Promise.all([
+    const normalizedPhone = normalizePhoneNumber(dto.phone);
+    const phoneHash = normalizedPhone ? this.passwordHasher.sha256(normalizedPhone) : null;
+
+    const [existingByUsername, existingByEmail, existingByPhone] = await Promise.all([
       this.userRepository.findByUsername(normalizedUsername, true),
       this.userRepository.findByEmail(normalizedEmail, true),
+      phoneHash && typeof this.userRepository.findByPhoneHash === 'function'
+        ? this.userRepository.findByPhoneHash(phoneHash, true)
+        : Promise.resolve(null),
     ]);
 
     if (existingByUsername && dto.username) {
@@ -162,6 +187,15 @@ export class UsersService implements IUsersPublicService {
       );
     }
 
+    if (existingByPhone && normalizedPhone) {
+      throw new ConflictAppException(
+        'users.duplicatePhone',
+        [{ phone: normalizedPhone }],
+        { phone: normalizedPhone },
+        HTTP_ERROR_CODE.DUPLICATE_RESOURCE,
+      );
+    }
+
     const roleIds = dto.roleIds ?? [];
     if (roleIds.length > 0) {
       await this.rolesPublicService.ensureActiveRolesExist(roleIds);
@@ -182,17 +216,14 @@ export class UsersService implements IUsersPublicService {
     const passwordHash = await this.passwordHasher.hash(dto.password);
     const primaryOrgInput = orgInputs.find((o) => o.isPrimary) ?? orgInputs[0];
     const initialStatus = dto.status ?? USER_STATUS.ACTIVE;
-    const encryptedPhone = this.encryptPhone(dto.phone);
+    const encryptedPhone = this.encryptPhone(normalizedPhone ?? dto.phone);
 
     const work = async (): Promise<UserEntity> => {
       const savedUser = await this.userRepository.saveEntity({
         username: finalUsername,
         email: normalizedEmail,
-        firstName: nameParts.firstName,
-        lastName: nameParts.lastName,
-        fullName: nameParts.fullName,
         phone: encryptedPhone,
-        avatarUrl: dto.avatarUrl ?? null,
+        phoneHash,
         passwordHash,
         status: initialStatus,
         failedLoginAttempts: 0,
@@ -201,16 +232,31 @@ export class UsersService implements IUsersPublicService {
         passwordChangedAt: new Date(),
       });
 
+      const userId = Number(savedUser.id);
+      await this.upsertUserProfile(userId, {
+        firstName: nameParts.firstName,
+        lastName: nameParts.lastName,
+        fullName: nameParts.fullName,
+        avatarUrl: dto.avatarUrl ?? null,
+        dateOfBirth: dto.dateOfBirth ?? null,
+        gender: dto.gender ?? null,
+        identityNumber: dto.identityNumber ?? null,
+        address: dto.address ?? null,
+        city: dto.city ?? null,
+        country: dto.country ?? null,
+        bio: dto.bio ?? null,
+      });
+
       if (roleIds.length > 0) {
-        await this.userRoleRepository.replaceUserRoles(Number(savedUser.id), roleIds, actorId);
+        await this.userRoleRepository.replaceUserRoles(userId, roleIds, actorId);
       }
 
       if (orgInputs.length > 0) {
-        await this.userOrgRepository.replaceUserOrganizations(Number(savedUser.id), orgInputs);
+        await this.userOrgRepository.replaceUserOrganizations(userId, orgInputs);
       }
 
       await this.recordStatusHistory(
-        Number(savedUser.id),
+        userId,
         null,
         initialStatus,
         'Initial account creation',
@@ -227,7 +273,7 @@ export class UsersService implements IUsersPublicService {
     return this.getById(Number(created.id));
   }
 
-  /** Cập nhật thông tin hồ sơ người dùng (Mục 3.1.2) */
+  /** Cập nhật thông tin tài khoản Core (`users`) và chi tiết cá nhân (`user_profiles`) (Mục 3.1.2) */
   public async update(id: number, dto: UpdateUserRequest): Promise<UserResponse> {
     const user = await this.userRepository.findByIdWithArchived(id, true);
     if (!user) {
@@ -250,32 +296,72 @@ export class UsersService implements IUsersPublicService {
       }
     }
 
+    if (dto.phone !== undefined) {
+      const normalizedPhone = normalizePhoneNumber(dto.phone);
+      const nextPhoneHash = normalizedPhone ? this.passwordHasher.sha256(normalizedPhone) : null;
+      if (
+        normalizedPhone &&
+        nextPhoneHash &&
+        nextPhoneHash !== user.phoneHash &&
+        typeof this.userRepository.findByPhoneHash === 'function'
+      ) {
+        const duplicatePhone = await this.userRepository.findByPhoneHash(nextPhoneHash, true);
+        if (duplicatePhone && Number(duplicatePhone.id) !== Number(id)) {
+          throw new ConflictAppException(
+            'users.duplicatePhone',
+            [{ phone: normalizedPhone }],
+            { phone: normalizedPhone },
+            HTTP_ERROR_CODE.DUPLICATE_RESOURCE,
+          );
+        }
+      }
+      user.phone = this.encryptPhone(normalizedPhone ?? dto.phone);
+      user.phoneHash = nextPhoneHash;
+    }
+
+    const currentProfile = await this.getUserProfile(id, user);
+    let nextFirstName = currentProfile.firstName;
+    let nextLastName = currentProfile.lastName;
+    let nextFullName = currentProfile.fullName;
+
     if (dto.firstName !== undefined || dto.lastName !== undefined || dto.fullName !== undefined) {
       const resolved = resolveVietnameseNameParts({
-        firstName: dto.firstName ?? user.firstName,
-        lastName: dto.lastName ?? user.lastName,
+        firstName: dto.firstName ?? currentProfile.firstName,
+        lastName: dto.lastName ?? currentProfile.lastName,
         fullName:
           dto.fullName ??
           (dto.firstName !== undefined || dto.lastName !== undefined
-            ? `${dto.lastName ?? user.lastName} ${dto.firstName ?? user.firstName}`.trim()
-            : user.fullName),
+            ? `${dto.lastName ?? currentProfile.lastName} ${dto.firstName ?? currentProfile.firstName}`.trim()
+            : currentProfile.fullName),
       });
-      user.firstName = resolved.firstName;
-      user.lastName = resolved.lastName;
-      user.fullName = resolved.fullName;
+      nextFirstName = resolved.firstName;
+      nextLastName = resolved.lastName;
+      nextFullName = resolved.fullName;
     }
 
-    if (dto.phone !== undefined) user.phone = this.encryptPhone(dto.phone);
-    if (dto.avatarUrl !== undefined) user.avatarUrl = dto.avatarUrl;
+    await this.upsertUserProfile(id, {
+      firstName: nextFirstName,
+      lastName: nextLastName,
+      fullName: nextFullName,
+      avatarUrl: dto.avatarUrl !== undefined ? dto.avatarUrl : (currentProfile.avatarUrl ?? null),
+      dateOfBirth:
+        dto.dateOfBirth !== undefined ? dto.dateOfBirth : (currentProfile.dateOfBirth ?? null),
+      gender: dto.gender !== undefined ? dto.gender : (currentProfile.gender ?? null),
+      identityNumber:
+        dto.identityNumber !== undefined
+          ? dto.identityNumber
+          : (currentProfile.identityNumber ?? null),
+      address: dto.address !== undefined ? dto.address : (currentProfile.address ?? null),
+      city: dto.city !== undefined ? dto.city : (currentProfile.city ?? null),
+      country: dto.country !== undefined ? dto.country : (currentProfile.country ?? null),
+      bio: dto.bio !== undefined ? dto.bio : (currentProfile.bio ?? null),
+    });
 
     if (dto.expectedVersion !== undefined) {
       await this.userRepository.updateWithOptimisticLock(id, dto.expectedVersion, {
         email: user.email,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        fullName: user.fullName,
         phone: user.phone ?? null,
-        avatarUrl: user.avatarUrl ?? null,
+        phoneHash: user.phoneHash ?? null,
       });
     } else {
       await this.userRepository.saveEntity(user);
@@ -521,25 +607,53 @@ export class UsersService implements IUsersPublicService {
     return this.getById(id);
   }
 
-  /** Hợp đồng công khai cho module Auth: Tìm thông tin đăng nhập theo username hoặc email */
+  /** Hợp đồng công khai cho module Auth: Tìm thông tin đăng nhập theo username, email hoặc số điện thoại */
   public async findAuthUserByIdentifier(
     identifier: string,
   ): Promise<UserAuthCredentialsView | null> {
-    const user = await this.userRepository.findByIdentifier(identifier);
-    if (!user) return null;
+    const trimmed = identifier.trim();
+    const normalizedPhone = normalizePhoneNumber(trimmed);
+    const phoneHash =
+      normalizedPhone && /^[0-9+]+$/.test(trimmed.replace(/[\s.\-()]/g, ''))
+        ? this.passwordHasher.sha256(normalizedPhone)
+        : null;
 
+    let user = await this.userRepository.findByIdentifier(trimmed, phoneHash);
+    if (!user && phoneHash && typeof this.userRepository.findByPhoneHash === 'function') {
+      user = await this.userRepository.findByPhoneHash(phoneHash, true);
+    }
+
+    if (!user) return null;
+    return this.toAuthCredentialsView(user);
+  }
+
+  /** Hợp đồng công khai cho module Auth: Tìm thông tin xác thực và lịch sử mật khẩu theo userId */
+  public async findAuthCredentialsByUserId(
+    userId: number,
+  ): Promise<UserAuthCredentialsView | null> {
+    const user = await this.userRepository.findByIdWithArchived(userId, true);
+    if (!user) return null;
+    return this.toAuthCredentialsView(user);
+  }
+
+  private async toAuthCredentialsView(user: UserEntity): Promise<UserAuthCredentialsView> {
+    const profile = await this.getUserProfile(Number(user.id), user);
     const statusCode =
       user.deletedAt || user.archivedAt ? USER_STATUS.ARCHIVED : parseUserStatus(user.status);
     return {
       id: Number(user.id),
       username: user.username,
-      email: user.email,
-      firstName: user.firstName ?? '',
-      lastName: user.lastName ?? '',
-      fullName: user.fullName,
+      email: user.email ?? '',
+      phone: this.decryptPhone(user.phone),
+      firstName: profile.firstName,
+      lastName: profile.lastName,
+      fullName: profile.fullName,
       passwordHash: user.passwordHash,
+      passwordHistoryHashes: this.parsePasswordHistory(Number(user.id), user),
       status: statusCode,
       statusName: getUserStatusName(statusCode),
+      emailVerifiedAt: user.emailVerifiedAt ?? null,
+      phoneVerifiedAt: user.phoneVerifiedAt ?? null,
       lockedUntil: user.lockedUntil ?? null,
       lockReason: user.lockReason ?? null,
       failedLoginAttempts: user.failedLoginAttempts ?? 0,
@@ -548,7 +662,8 @@ export class UsersService implements IUsersPublicService {
     };
   }
 
-  /** Hợp đồng công khai cho module Auth: Lấy danh tính đầy đủ kèm roles, permissions và đơn vị */
+
+  /** Hợp đồng công khai cho module Auth: Lấy danh tính đầy đủ kèm hồ sơ user_profiles, roles, permissions và đơn vị */
   public async findAuthUserById(userId: number): Promise<UserAuthIdentityView | null> {
     const user = await this.userRepository.findByIdWithArchived(userId, true);
     if (
@@ -560,9 +675,10 @@ export class UsersService implements IUsersPublicService {
       return null;
     }
 
-    const [roleLinks, orgLinks] = await Promise.all([
+    const [roleLinks, orgLinks, profile] = await Promise.all([
       this.userRoleRepository.findByUserIds([userId]),
       this.userOrgRepository.findByUserIds([userId]),
+      this.getUserProfile(userId, user),
     ]);
 
     const roleIds = roleLinks.map((r) => Number(r.roleId));
@@ -578,13 +694,16 @@ export class UsersService implements IUsersPublicService {
     return {
       id: Number(user.id),
       username: user.username,
-      email: user.email,
-      firstName: user.firstName ?? '',
-      lastName: user.lastName ?? '',
-      fullName: user.fullName,
+      email: user.email ?? '',
+      firstName: profile.firstName,
+      lastName: profile.lastName,
+      fullName: profile.fullName,
+      avatarUrl: profile.avatarUrl,
       phone: this.decryptPhone(user.phone),
       status: statusCode,
       statusName: getUserStatusName(statusCode),
+      emailVerifiedAt: user.emailVerifiedAt ?? null,
+      phoneVerifiedAt: user.phoneVerifiedAt ?? null,
       lockedUntil: user.lockedUntil ?? null,
       mfaEnabled: Boolean(user.mfaEnabled),
       primaryOrganizationUnitId:
@@ -594,7 +713,164 @@ export class UsersService implements IUsersPublicService {
       organizationUnitIds,
       roles: roleCodes.length > 0 ? roleCodes : ['user'],
       permissions,
+      profile,
     };
+  }
+
+  /** Hợp đồng công khai cho module Auth: Tự đăng ký tài khoản bằng Email hoặc SĐT (Mục 3.2.1 & 3.2.2) */
+  public async registerSelfUser(input: SelfRegisterUserInput): Promise<UserAuthIdentityView> {
+    const normalizedEmail = input.email?.trim().toLowerCase() || null;
+    const normalizedPhone = normalizePhoneNumber(input.phone);
+
+    if (!normalizedEmail && !normalizedPhone) {
+      throw new BadRequestAppException('auth.emailOrPhoneRequired');
+    }
+
+    const phoneHash = normalizedPhone ? this.passwordHasher.sha256(normalizedPhone) : null;
+    const fallbackEmail =
+      normalizedEmail ?? `${normalizedPhone ?? Date.now().toString(36)}@phone.local`;
+
+    let baseUsername = input.username?.trim().toLowerCase() ?? '';
+    if (!baseUsername || baseUsername.length < 3) {
+      if (normalizedEmail) {
+        baseUsername =
+          (normalizedEmail.split('@')[0] ?? 'user').replace(/[^a-z0-9._-]/g, '') || 'user';
+      } else if (normalizedPhone) {
+        baseUsername = `u_${normalizedPhone.replace(/[^0-9]/g, '')}`;
+      } else {
+        baseUsername = 'user';
+      }
+    }
+    if (baseUsername.length < 3) {
+      baseUsername = `${baseUsername}_usr`;
+    }
+
+    const [existingByUsername, existingByEmail, existingByPhone] = await Promise.all([
+      this.userRepository.findByUsername(baseUsername, true),
+      this.userRepository.findByEmail(fallbackEmail, true),
+      phoneHash && typeof this.userRepository.findByPhoneHash === 'function'
+        ? this.userRepository.findByPhoneHash(phoneHash, true)
+        : Promise.resolve(null),
+    ]);
+
+    if (existingByUsername && input.username) {
+      throw new ConflictAppException(
+        'users.duplicateUsername',
+        [{ username: baseUsername }],
+        { username: baseUsername },
+        HTTP_ERROR_CODE.DUPLICATE_RESOURCE,
+      );
+    }
+
+    if (existingByEmail && normalizedEmail) {
+      throw new ConflictAppException(
+        'users.duplicateEmail',
+        [{ email: normalizedEmail }],
+        { email: normalizedEmail },
+        HTTP_ERROR_CODE.DUPLICATE_RESOURCE,
+      );
+    }
+
+    if (existingByPhone && normalizedPhone) {
+      throw new ConflictAppException(
+        'users.duplicatePhone',
+        [{ phone: normalizedPhone }],
+        { phone: normalizedPhone },
+        HTTP_ERROR_CODE.DUPLICATE_RESOURCE,
+      );
+    }
+
+    const finalUsername = existingByUsername
+      ? `${baseUsername}_${Date.now().toString(36).slice(-4)}`
+      : baseUsername;
+
+    const nameParts = resolveVietnameseNameParts({
+      firstName: input.firstName,
+      lastName: input.lastName,
+      fullName: input.fullName,
+    });
+
+    const passwordHash = await this.passwordHasher.hash(input.password);
+    const encryptedPhone = this.encryptPhone(normalizedPhone ?? input.phone);
+    const initialStatus = input.status ?? USER_STATUS.ACTIVE;
+
+    const savedUser = await this.userRepository.saveEntity({
+      username: finalUsername,
+      email: fallbackEmail,
+      phone: encryptedPhone,
+      phoneHash,
+      passwordHash,
+      status: initialStatus,
+      emailVerifiedAt: null,
+      phoneVerifiedAt: null,
+      failedLoginAttempts: 0,
+      mfaEnabled: false,
+      primaryOrganizationUnitId: null,
+      passwordChangedAt: new Date(),
+    });
+
+    const userId = Number(savedUser.id);
+    await this.upsertUserProfile(userId, {
+      firstName: nameParts.firstName,
+      lastName: nameParts.lastName,
+      fullName: nameParts.fullName,
+      avatarUrl: input.avatarUrl ?? null,
+      dateOfBirth: input.dateOfBirth ?? null,
+      gender: input.gender ?? null,
+      address: input.address ?? null,
+      city: input.city ?? null,
+      country: input.country ?? null,
+      bio: input.bio ?? null,
+    });
+
+    await this.recordStatusHistory(userId, null, initialStatus, 'Self-registered account', userId);
+
+    const identity = await this.findAuthUserById(userId);
+    return identity!;
+  }
+
+  /** Hợp đồng công khai: Đánh dấu địa chỉ Email đã được xác minh (Mục 3.2.6) */
+  public async markEmailVerified(userId: number): Promise<void> {
+    const user = await this.userRepository.findByIdWithArchived(userId, false);
+    if (!user) {
+      throw new NotFoundAppException('users.notFound', { id: userId });
+    }
+    user.emailVerifiedAt = new Date();
+    if (Number(user.status) === USER_STATUS.INACTIVE) {
+      const prev = parseUserStatus(user.status);
+      user.status = USER_STATUS.ACTIVE;
+      await this.recordStatusHistory(
+        userId,
+        prev,
+        USER_STATUS.ACTIVE,
+        'Activated after email verification',
+        userId,
+      );
+    }
+    await this.userRepository.saveEntity(user);
+    await this.invalidateIdentityCache(userId);
+  }
+
+  /** Hợp đồng công khai: Đánh dấu số điện thoại đã được xác minh bằng OTP (Mục 3.2.7) */
+  public async markPhoneVerified(userId: number): Promise<void> {
+    const user = await this.userRepository.findByIdWithArchived(userId, false);
+    if (!user) {
+      throw new NotFoundAppException('users.notFound', { id: userId });
+    }
+    user.phoneVerifiedAt = new Date();
+    if (Number(user.status) === USER_STATUS.INACTIVE) {
+      const prev = parseUserStatus(user.status);
+      user.status = USER_STATUS.ACTIVE;
+      await this.recordStatusHistory(
+        userId,
+        prev,
+        USER_STATUS.ACTIVE,
+        'Activated after phone OTP verification',
+        userId,
+      );
+    }
+    await this.userRepository.saveEntity(user);
+    await this.invalidateIdentityCache(userId);
   }
 
   /** Hợp đồng công khai: Ghi nhận đăng nhập thành công */
@@ -679,16 +955,95 @@ export class UsersService implements IUsersPublicService {
     await this.invalidateIdentityCache(userId);
   }
 
-  /** Hợp đồng công khai: Cập nhật mật khẩu mới cho người dùng */
-  public async updatePasswordHash(userId: number, newPasswordHash: string): Promise<void> {
+  /** Hợp đồng công khai: Cập nhật mật khẩu mới cho người dùng và lưu lịch sử hash mật khẩu cũ (Mục 3.3.5) */
+  public async updatePasswordHash(
+    userId: number,
+    newPasswordHash: string,
+    options?: { recordHistory?: boolean; maxHistory?: number },
+  ): Promise<void> {
     const user = await this.userRepository.findByIdWithArchived(userId, false);
     if (!user) {
       throw new NotFoundAppException('users.notFound', { id: userId });
     }
+
+    if (options?.recordHistory !== false && user.passwordHash && user.passwordHash !== newPasswordHash) {
+      const maxHistory = Math.max(1, Math.min(20, options?.maxHistory ?? 10));
+      const currentHistory = this.parsePasswordHistory(userId, user);
+      const nextHistory = [
+        user.passwordHash,
+        ...currentHistory.filter((h) => h !== user.passwordHash),
+      ].slice(0, maxHistory);
+      user.passwordHistoryHashesJson = JSON.stringify(nextHistory);
+      this.fallbackPasswordHistory.set(Number(userId), nextHistory);
+    }
+
     user.passwordHash = newPasswordHash;
     user.passwordChangedAt = new Date();
     await this.userRepository.saveEntity(user);
     await this.invalidateIdentityCache(userId);
+  }
+
+  /** Đăng ký delegate xử lý reset mật khẩu từ PasswordService (module Auth) để tránh phụ thuộc vòng */
+  public registerAdminPasswordResetDelegate(
+    delegate: (
+      userId: number,
+      input: AdminResetUserPasswordInput,
+      actorId?: number,
+    ) => Promise<AdminResetUserPasswordResult>,
+  ): void {
+    this.adminPasswordResetDelegate = delegate;
+  }
+
+  /** Đặt lại mật khẩu người dùng từ trang quản trị (Mục 3.3.3 — chỉ người có quyền mới thực hiện) */
+  public async adminResetPassword(
+    id: number,
+    dto: AdminResetUserPasswordInput,
+    actorId?: number,
+  ): Promise<AdminResetUserPasswordResult> {
+    const user = await this.userRepository.findByIdWithArchived(id, false);
+    if (!user) {
+      throw new NotFoundAppException('users.notFound', { id });
+    }
+
+    if (this.adminPasswordResetDelegate) {
+      return this.adminPasswordResetDelegate(id, dto, actorId);
+    }
+
+    const useSuggested = Boolean(dto.useSuggestedPassword || !dto.newPassword?.trim());
+    const plainPassword = useSuggested
+      ? this.passwordHasher.generateSuggestedPassword()
+      : dto.newPassword!.trim();
+    const newHash = await this.passwordHasher.hash(plainPassword);
+    await this.updatePasswordHash(id, newHash);
+    if (Number(user.status) === USER_STATUS.LOCKED) {
+      await this.unlockUser(id, actorId);
+    } else if (user.failedLoginAttempts > 0) {
+      user.failedLoginAttempts = 0;
+      await this.userRepository.saveEntity(user);
+    }
+
+    return {
+      reset: true,
+      userId: Number(id),
+      revokedSessionsCount: 0,
+      ...(useSuggested ? { generatedPassword: plainPassword } : {}),
+    };
+  }
+
+  private parsePasswordHistory(userId: number, user?: UserEntity): string[] {
+    if (user?.passwordHistoryHashesJson) {
+      try {
+        const parsed = JSON.parse(user.passwordHistoryHashesJson) as unknown;
+        if (Array.isArray(parsed)) {
+          const valid = parsed.filter((item): item is string => typeof item === 'string' && item.length > 0);
+          this.fallbackPasswordHistory.set(Number(userId), valid);
+          return valid;
+        }
+      } catch {
+        // Fallback sang bộ nhớ đệm nếu chuỗi JSON không hợp lệ
+      }
+    }
+    return this.fallbackPasswordHistory.get(Number(userId)) ?? [];
   }
 
   /** Hợp đồng công khai: Bật hoặc tắt cờ xác thực nhiều lớp (MFA) trên hồ sơ người dùng */
@@ -702,15 +1057,22 @@ export class UsersService implements IUsersPublicService {
     await this.invalidateIdentityCache(userId);
   }
 
-  /** Ghép nối thông tin vai trò và đơn vị/chi nhánh cho danh sách UserEntity */
+
+  /** Ghép nối thông tin hồ sơ chi tiết (`user_profiles`), vai trò và đơn vị/chi nhánh cho danh sách UserEntity */
   public async hydrateUsersList(users: readonly UserEntity[]): Promise<UserResponse[]> {
     if (users.length === 0) return [];
     const userIds = users.map((u) => Number(u.id));
 
-    const [allRoleLinks, allOrgLinks] = await Promise.all([
+    const [allRoleLinks, allOrgLinks, allProfiles] = await Promise.all([
       this.userRoleRepository.findByUserIds(userIds),
       this.userOrgRepository.findByUserIds(userIds),
+      this.findProfilesByUserIds(userIds),
     ]);
+
+    const profileByUser = new Map<number, UserProfileEntity>();
+    for (const p of allProfiles) {
+      profileByUser.set(Number(p.userId), p);
+    }
 
     const distinctRoleIds = [...new Set(allRoleLinks.map((l) => Number(l.roleId)))];
     const distinctOrgIds = [...new Set(allOrgLinks.map((l) => Number(l.organizationUnitId)))];
@@ -764,11 +1126,110 @@ export class UsersService implements IUsersPublicService {
 
     return users.map((user) =>
       this.mapper.toResponse(user, {
+        profile: profileByUser.get(Number(user.id)) ?? null,
         roles: rolesByUser.get(Number(user.id)) ?? [],
         organizationUnits: orgsByUser.get(Number(user.id)) ?? [],
         decryptedPhone: this.decryptPhone(user.phone),
       }),
     );
+  }
+
+  private async upsertUserProfile(
+    userId: number,
+    data: Partial<UserProfileEntity>,
+  ): Promise<UserProfileEntity> {
+    if (
+      this.userProfileRepository &&
+      typeof this.userProfileRepository.upsertByUserId === 'function'
+    ) {
+      const saved = await this.userProfileRepository.upsertByUserId(userId, data);
+      this.fallbackProfiles.set(Number(userId), saved);
+      return saved;
+    }
+
+    const now = new Date();
+    const existing = this.fallbackProfiles.get(Number(userId));
+    const merged: UserProfileEntity = {
+      id: existing?.id ?? Number(userId),
+      userId: Number(userId),
+      firstName: data.firstName ?? existing?.firstName ?? 'User',
+      lastName: data.lastName ?? existing?.lastName ?? 'Core',
+      fullName: data.fullName ?? existing?.fullName ?? 'Core User',
+      avatarUrl: data.avatarUrl !== undefined ? data.avatarUrl : (existing?.avatarUrl ?? null),
+      dateOfBirth:
+        data.dateOfBirth !== undefined ? data.dateOfBirth : (existing?.dateOfBirth ?? null),
+      gender: data.gender !== undefined ? data.gender : (existing?.gender ?? null),
+      identityNumber:
+        data.identityNumber !== undefined
+          ? data.identityNumber
+          : (existing?.identityNumber ?? null),
+      address: data.address !== undefined ? data.address : (existing?.address ?? null),
+      city: data.city !== undefined ? data.city : (existing?.city ?? null),
+      country: data.country !== undefined ? data.country : (existing?.country ?? null),
+      bio: data.bio !== undefined ? data.bio : (existing?.bio ?? null),
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+      deletedAt: null,
+    } as UserProfileEntity;
+    this.fallbackProfiles.set(Number(userId), merged);
+    return merged;
+  }
+
+  private async findProfilesByUserIds(userIds: readonly number[]): Promise<UserProfileEntity[]> {
+    if (
+      this.userProfileRepository &&
+      typeof this.userProfileRepository.findByUserIds === 'function'
+    ) {
+      const rows = await this.userProfileRepository.findByUserIds(userIds);
+      if (rows.length > 0) {
+        return rows;
+      }
+    }
+    return userIds
+      .map((id) => this.fallbackProfiles.get(Number(id)))
+      .filter((p): p is UserProfileEntity => Boolean(p));
+  }
+
+  private async getUserProfile(userId: number, user?: UserEntity): Promise<UserProfileView> {
+    let profile: UserProfileEntity | null = null;
+    if (
+      this.userProfileRepository &&
+      typeof this.userProfileRepository.findByUserId === 'function'
+    ) {
+      profile = await this.userProfileRepository.findByUserId(userId).catch(() => null);
+    }
+    if (!profile) {
+      profile = this.fallbackProfiles.get(Number(userId)) ?? null;
+    }
+
+    const legacy = user as unknown as
+      | {
+          firstName?: string;
+          lastName?: string;
+          fullName?: string;
+          avatarUrl?: string | null;
+        }
+      | undefined;
+
+    const firstName = profile?.firstName ?? legacy?.firstName ?? '';
+    const lastName = profile?.lastName ?? legacy?.lastName ?? '';
+    const fullName =
+      profile?.fullName ??
+      (legacy?.fullName || `${lastName} ${firstName}`.trim() || user?.username || '');
+
+    return {
+      firstName,
+      lastName,
+      fullName,
+      avatarUrl: profile?.avatarUrl ?? legacy?.avatarUrl ?? null,
+      dateOfBirth: profile?.dateOfBirth ?? null,
+      gender: profile?.gender ?? null,
+      identityNumber: profile?.identityNumber ?? null,
+      address: profile?.address ?? null,
+      city: profile?.city ?? null,
+      country: profile?.country ?? null,
+      bio: profile?.bio ?? null,
+    };
   }
 
   private encryptPhone(phone?: string | null): string | null {

@@ -77,23 +77,44 @@ export class CreateIamAndUsersTables1760515200000 implements MigrationInterface 
       CREATE TABLE IF NOT EXISTS users (
         id ${pkDef},
         username VARCHAR(64) NOT NULL UNIQUE,
-        email VARCHAR(255) NOT NULL UNIQUE,
-        phone VARCHAR(32) NULL,
-        first_name VARCHAR(100) NOT NULL,
-        last_name VARCHAR(150) NOT NULL,
-        full_name VARCHAR(255) NOT NULL,
-        avatar_url VARCHAR(500) NULL,
+        email VARCHAR(255) NULL UNIQUE,
+        phone VARCHAR(255) NULL,
+        phone_hash VARCHAR(64) NULL UNIQUE,
         password_hash VARCHAR(255) NOT NULL,
         status INT NOT NULL DEFAULT 1,
+        email_verified_at TIMESTAMP NULL,
+        phone_verified_at TIMESTAMP NULL,
         locked_until TIMESTAMP NULL,
         lock_reason VARCHAR(255) NULL,
         failed_login_attempts INT NOT NULL DEFAULT 0,
         mfa_enabled BOOLEAN NOT NULL DEFAULT FALSE,
         primary_organization_unit_id INT NULL,
         password_changed_at TIMESTAMP NULL,
+        password_history_hashes_json TEXT NULL,
         last_login_at TIMESTAMP NULL,
         archived_at TIMESTAMP NULL,
         version INT NOT NULL DEFAULT 1,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        deleted_at TIMESTAMP NULL
+      )
+    `);
+
+    await queryRunner.query(`
+      CREATE TABLE IF NOT EXISTS user_profiles (
+        id ${pkDef},
+        user_id INT NOT NULL UNIQUE,
+        first_name VARCHAR(100) NOT NULL,
+        last_name VARCHAR(150) NOT NULL,
+        full_name VARCHAR(255) NOT NULL,
+        avatar_url VARCHAR(500) NULL,
+        date_of_birth DATE NULL,
+        gender INT NULL,
+        identity_number VARCHAR(128) NULL,
+        address VARCHAR(255) NULL,
+        city VARCHAR(100) NULL,
+        country VARCHAR(100) NULL,
+        bio TEXT NULL,
         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
         deleted_at TIMESTAMP NULL
@@ -170,6 +191,7 @@ export class CreateIamAndUsersTables1760515200000 implements MigrationInterface 
         recovery_codes_hash_json TEXT NOT NULL,
         email_otp_code_hash VARCHAR(128) NULL,
         email_otp_expires_at TIMESTAMP NULL,
+        email_otp_failed_attempts INT NOT NULL DEFAULT 0,
         verified_at TIMESTAMP NULL,
         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -182,8 +204,33 @@ export class CreateIamAndUsersTables1760515200000 implements MigrationInterface 
         id ${pkDef},
         user_id INT NOT NULL,
         token_hash VARCHAR(128) NOT NULL UNIQUE,
+        otp_code_hash VARCHAR(128) NULL,
+        attempt_count INT NOT NULL DEFAULT 0,
+        max_attempts INT NOT NULL DEFAULT 5,
         expires_at TIMESTAMP NOT NULL,
         used_at TIMESTAMP NULL,
+        requested_ip VARCHAR(64) NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        deleted_at TIMESTAMP NULL
+      )
+    `);
+
+    await queryRunner.query(`
+      CREATE TABLE IF NOT EXISTS auth_verification_codes (
+        id ${pkDef},
+        user_id INT NOT NULL,
+        channel INT NOT NULL DEFAULT 1,
+        purpose INT NOT NULL DEFAULT 1,
+        target VARCHAR(255) NOT NULL,
+        code_hash VARCHAR(128) NOT NULL,
+        attempt_count INT NOT NULL DEFAULT 0,
+        max_attempts INT NOT NULL DEFAULT 5,
+        send_count INT NOT NULL DEFAULT 1,
+        max_sends INT NOT NULL DEFAULT 5,
+        last_sent_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        expires_at TIMESTAMP NOT NULL,
+        verified_at TIMESTAMP NULL,
         requested_ip VARCHAR(64) NULL,
         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -206,6 +253,19 @@ export class CreateIamAndUsersTables1760515200000 implements MigrationInterface 
         require_uppercase BOOLEAN NOT NULL DEFAULT TRUE,
         require_numbers BOOLEAN NOT NULL DEFAULT TRUE,
         require_special_chars BOOLEAN NOT NULL DEFAULT TRUE,
+        require_current_password_on_change BOOLEAN NOT NULL DEFAULT TRUE,
+        disallowed_passwords_json TEXT NULL,
+        disallow_user_info_in_password BOOLEAN NOT NULL DEFAULT TRUE,
+        prevent_password_reuse BOOLEAN NOT NULL DEFAULT FALSE,
+        password_history_limit INT NOT NULL DEFAULT 5,
+        revoke_sessions_on_password_change BOOLEAN NOT NULL DEFAULT TRUE,
+        allow_email_registration BOOLEAN NOT NULL DEFAULT TRUE,
+        allow_phone_registration BOOLEAN NOT NULL DEFAULT TRUE,
+        require_email_verification BOOLEAN NOT NULL DEFAULT FALSE,
+        require_phone_verification BOOLEAN NOT NULL DEFAULT FALSE,
+        otp_max_send_count INT NOT NULL DEFAULT 5,
+        otp_max_attempts INT NOT NULL DEFAULT 5,
+        otp_cooldown_seconds INT NOT NULL DEFAULT 60,
         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
         deleted_at TIMESTAMP NULL
@@ -229,12 +289,14 @@ export class CreateIamAndUsersTables1760515200000 implements MigrationInterface 
   public async down(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query('DROP TABLE IF EXISTS core_master_settings');
     await queryRunner.query('DROP TABLE IF EXISTS auth_security_settings');
+    await queryRunner.query('DROP TABLE IF EXISTS auth_verification_codes');
     await queryRunner.query('DROP TABLE IF EXISTS auth_password_resets');
     await queryRunner.query('DROP TABLE IF EXISTS auth_mfa_configs');
     await queryRunner.query('DROP TABLE IF EXISTS auth_sessions');
     await queryRunner.query('DROP TABLE IF EXISTS user_status_histories');
     await queryRunner.query('DROP TABLE IF EXISTS user_organization_units');
     await queryRunner.query('DROP TABLE IF EXISTS user_roles');
+    await queryRunner.query('DROP TABLE IF EXISTS user_profiles');
     await queryRunner.query('DROP TABLE IF EXISTS users');
     await queryRunner.query('DROP TABLE IF EXISTS role_permissions');
     await queryRunner.query('DROP TABLE IF EXISTS roles');

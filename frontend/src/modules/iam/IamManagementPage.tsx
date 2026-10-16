@@ -521,6 +521,108 @@ export const IamManagementPage: React.FC = () => {
     }
   };
 
+  const [forgotIdentifier, setForgotIdentifier] = useState('superadmin@gmail.com');
+  const [resetTokenOrOtp, setResetTokenOrOtp] = useState('');
+  const [resetNewPassword, setResetNewPassword] = useState('');
+
+  const handleSuggestPassword = async (target: 'change' | 'createUser' | 'reset') => {
+    try {
+      const res = await fetchApi<{ password: string; suggestions: string[] }>(
+        API_ROUTES.AUTH.PASSWORD_SUGGEST(3, 16),
+      );
+      if (target === 'change') {
+        setNewPassword(res.password);
+      } else if (target === 'reset') {
+        setResetNewPassword(res.password);
+      } else {
+        setNewUserPassword(res.password);
+      }
+      notify(
+        'ok',
+        `Đã điền mật khẩu gợi ý mạnh: ${res.password} (Các gợi ý khác: ${res.suggestions.join(' | ')})`,
+      );
+    } catch (err) {
+      notify('err', err instanceof Error ? err.message : 'Failed to suggest password');
+    }
+  };
+
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const res = await fetchApi<{
+        accepted: boolean;
+        expiresInSeconds: number;
+        maskedTarget?: string;
+        devResetToken?: string;
+        devResetOtp?: string;
+      }>(API_ROUTES.AUTH.PASSWORD_FORGOT, {
+        method: 'POST',
+        body: JSON.stringify({ identifier: forgotIdentifier }),
+      });
+      if (res.devResetOtp) {
+        setResetTokenOrOtp(res.devResetOtp);
+      } else if (res.devResetToken) {
+        setResetTokenOrOtp(res.devResetToken);
+      }
+      notify(
+        'ok',
+        `Đã gửi yêu cầu khôi phục mật khẩu${res.maskedTarget ? ` tới ${res.maskedTarget}` : ''}.${res.devResetOtp ? ` Mã OTP Dev: ${res.devResetOtp} | Link Token: ${res.devResetToken ?? ''}` : ''}`,
+      );
+    } catch (err) {
+      notify('err', err instanceof Error ? err.message : 'Forgot password request failed');
+    }
+  };
+
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const isOtp6 = /^\d{6}$/.test(resetTokenOrOtp.trim());
+      const res = await fetchApi<{ reset: boolean; revokedSessionsCount: number }>(
+        API_ROUTES.AUTH.PASSWORD_RESET,
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            identifier: forgotIdentifier.trim() || undefined,
+            ...(isOtp6 ? { otpCode: resetTokenOrOtp.trim() } : { token: resetTokenOrOtp.trim() }),
+            newPassword: resetNewPassword,
+          }),
+        },
+      );
+      setResetTokenOrOtp('');
+      setResetNewPassword('');
+      notify(
+        'ok',
+        `Đặt lại mật khẩu thành công! Đã thu hồi ${res.revokedSessionsCount} phiên đăng nhập cũ.`,
+      );
+    } catch (err) {
+      notify('err', err instanceof Error ? err.message : 'Reset password failed');
+    }
+  };
+
+  const handleAdminResetUserPassword = async (u: UserItem) => {
+    try {
+      const res = await fetchApi<{
+        reset: boolean;
+        userId: number;
+        generatedPassword?: string;
+        revokedSessionsCount: number;
+      }>(API_ROUTES.USERS.RESET_PASSWORD(u.id), {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({
+          useSuggestedPassword: true,
+          revokeSessions: true,
+        }),
+      });
+      notify(
+        'ok',
+        `Đã Reset mật khẩu cho #${u.id} (${u.email}). Mật khẩu mới tự sinh: ${res.generatedPassword ?? '(đã đặt)'} | Đã thu hồi ${res.revokedSessionsCount} phiên.`,
+      );
+    } catch (err) {
+      notify('err', err instanceof Error ? err.message : 'Admin reset password failed');
+    }
+  };
+
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -528,7 +630,7 @@ export const IamManagementPage: React.FC = () => {
         method: 'POST',
         headers: authHeaders(),
         body: JSON.stringify({
-          currentPassword,
+          currentPassword: currentPassword || undefined,
           newPassword,
           revokeOtherSessions: true,
         }),
@@ -1637,6 +1739,14 @@ export const IamManagementPage: React.FC = () => {
                           <button
                             type="button"
                             className="btn-secondary"
+                            style={{ padding: '4px 8px', fontSize: '12px', color: '#fbbf24' }}
+                            onClick={() => void handleAdminResetUserPassword(u)}
+                          >
+                            🔑 Reset MK
+                          </button>
+                          <button
+                            type="button"
+                            className="btn-secondary"
                             style={{ padding: '4px 8px', fontSize: '12px', color: '#38bdf8' }}
                             onClick={() => void handleOpenStatusHistory(u)}
                           >
@@ -1701,14 +1811,24 @@ export const IamManagementPage: React.FC = () => {
                   value={newUserFullName}
                   onChange={(e) => setNewUserFullName(e.target.value)}
                 />
-                <input
-                  type="password"
-                  style={inputStyle}
-                  placeholder="Mật khẩu khởi tạo (*)"
-                  required
-                  value={newUserPassword}
-                  onChange={(e) => setNewUserPassword(e.target.value)}
-                />
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  <input
+                    type="text"
+                    style={inputStyle}
+                    placeholder="Mật khẩu khởi tạo (*)"
+                    required
+                    value={newUserPassword}
+                    onChange={(e) => setNewUserPassword(e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    style={{ whiteSpace: 'nowrap', padding: '8px 10px', fontSize: '12px' }}
+                    onClick={() => void handleSuggestPassword('createUser')}
+                  >
+                    ✨ Gợi ý MK
+                  </button>
+                </div>
 
                 {/* Multi-role selection */}
                 <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Gán vai trò (Roles):</div>
@@ -1971,33 +2091,104 @@ export const IamManagementPage: React.FC = () => {
             )}
           </div>
 
-          {/* Password Management */}
-          <form onSubmit={(e) => void handleChangePassword(e)} style={cardStyle}>
-            <h3 style={{ fontSize: '16px', fontWeight: 700, marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <KeyRound size={16} /> Quản lý mật khẩu
-            </h3>
-            <div style={{ display: 'grid', gap: '10px' }}>
-              <input
-                type="password"
-                style={inputStyle}
-                placeholder="Mật khẩu hiện tại"
-                required
-                value={currentPassword}
-                onChange={(e) => setCurrentPassword(e.target.value)}
-              />
-              <input
-                type="password"
-                style={inputStyle}
-                placeholder="Mật khẩu mới (tối thiểu 8 ký tự)"
-                required
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-              />
-              <button type="submit" className="btn-primary" style={{ padding: '8px 16px' }}>
-                Đổi mật khẩu & Thu hồi phiên khác
-              </button>
+          {/* Password Management (Change & Forgot/Reset) */}
+          <div style={cardStyle}>
+            <form onSubmit={(e) => void handleChangePassword(e)}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                <h3 style={{ fontSize: '16px', fontWeight: 700, margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <KeyRound size={16} /> Đổi mật khẩu & Khôi phục tài khoản (Mục 3.3)
+                </h3>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  style={{ padding: '4px 10px', fontSize: '12px' }}
+                  onClick={() => void handleSuggestPassword('change')}
+                >
+                  ✨ Gợi ý mật khẩu mạnh
+                </button>
+              </div>
+              <div style={{ display: 'grid', gap: '10px' }}>
+                <input
+                  type="password"
+                  style={inputStyle}
+                  placeholder="Mật khẩu hiện tại (tùy cấu hình biến setting)"
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                />
+                <input
+                  type="text"
+                  style={inputStyle}
+                  placeholder="Mật khẩu mới (hoặc bấm Gợi ý mật khẩu mạnh)"
+                  required
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                />
+                <button type="submit" className="btn-primary" style={{ padding: '8px 16px' }}>
+                  Đổi mật khẩu & Thu hồi phiên khác
+                </button>
+              </div>
+            </form>
+
+            <div
+              style={{
+                marginTop: '16px',
+                paddingTop: '14px',
+                borderTop: '1px solid var(--border-color)',
+                display: 'grid',
+                gap: '10px',
+              }}
+            >
+              <div style={{ fontSize: '13px', fontWeight: 600 }}>
+                🔑 Quên mật khẩu — Gửi Link Token hoặc Mã OTP 6 số (Mục 3.3.2)
+              </div>
+              <form onSubmit={(e) => void handleForgotPassword(e)} style={{ display: 'flex', gap: '8px' }}>
+                <input
+                  style={inputStyle}
+                  placeholder="Email, Username hoặc SĐT cần khôi phục"
+                  value={forgotIdentifier}
+                  onChange={(e) => setForgotIdentifier(e.target.value)}
+                />
+                <button
+                  type="submit"
+                  className="btn-secondary"
+                  style={{ whiteSpace: 'nowrap', padding: '8px 12px', fontSize: '12px' }}
+                >
+                  Gửi Link / OTP
+                </button>
+              </form>
+
+              <form onSubmit={(e) => void handleResetPassword(e)} style={{ display: 'grid', gap: '8px' }}>
+                <input
+                  style={inputStyle}
+                  placeholder="Nhập mã OTP 6 số hoặc Link Token khôi phục"
+                  required
+                  value={resetTokenOrOtp}
+                  onChange={(e) => setResetTokenOrOtp(e.target.value)}
+                />
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <input
+                    type="text"
+                    style={inputStyle}
+                    placeholder="Mật khẩu mới đặt lại"
+                    required
+                    value={resetNewPassword}
+                    onChange={(e) => setResetNewPassword(e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    style={{ whiteSpace: 'nowrap', padding: '8px 10px', fontSize: '12px' }}
+                    onClick={() => void handleSuggestPassword('reset')}
+                  >
+                    ✨ Gợi ý
+                  </button>
+                </div>
+                <button type="submit" className="btn-secondary" style={{ padding: '8px 14px', fontSize: '13px' }}>
+                  Xác nhận Đặt lại mật khẩu & Thu hồi phiên cũ
+                </button>
+              </form>
             </div>
-          </form>
+          </div>
 
           {/* Active Sessions */}
           <div style={{ ...cardStyle, gridColumn: '1 / -1' }}>

@@ -156,4 +156,74 @@ export class PasswordHasherService {
     const num = randomInt(0, max);
     return String(num).padStart(safeDigits, '0');
   }
+
+  /**
+   * Sinh mật khẩu gợi ý mạnh an toàn mật mã học theo các biến setting chính sách mật khẩu
+   * (độ dài tối thiểu, chữ hoa, chữ số, ký tự đặc biệt và loại trừ danh sách mật khẩu bị cấm)
+   */
+  public generateSuggestedPassword(options?: {
+    length?: number | undefined;
+    minLength?: number | undefined;
+    requireUppercase?: boolean | undefined;
+    requireNumbers?: boolean | undefined;
+    requireSpecialChars?: boolean | undefined;
+    disallowedPasswords?: readonly string[] | undefined;
+  }): string {
+    const minLen = Math.max(6, options?.minLength ?? 8);
+    const targetLen = Math.max(minLen, Math.min(64, options?.length ?? Math.max(12, minLen)));
+    const requireUppercase = options?.requireUppercase ?? true;
+    const requireNumbers = options?.requireNumbers ?? true;
+    const requireSpecialChars = options?.requireSpecialChars ?? true;
+    const disallowed = new Set(
+      (options?.disallowedPasswords ?? []).map((p) => p.trim().toLowerCase()).filter(Boolean),
+    );
+
+    const lowerChars = 'abcdefghijkmnopqrstuvwxyz';
+    const upperChars = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+    const numberChars = '23456789';
+    const specialChars = '!@#$%^&*_-+=?';
+
+    let pool = lowerChars;
+    if (requireUppercase) pool += upperChars;
+    if (requireNumbers) pool += numberChars;
+    if (requireSpecialChars) pool += specialChars;
+
+    for (let attempt = 0; attempt < 10; attempt++) {
+      const chars: string[] = [];
+      chars.push(lowerChars[randomInt(0, lowerChars.length)]!);
+      if (requireUppercase) {
+        chars.push(upperChars[randomInt(0, upperChars.length)]!);
+      }
+      if (requireNumbers) {
+        chars.push(numberChars[randomInt(0, numberChars.length)]!);
+      }
+      if (requireSpecialChars) {
+        chars.push(specialChars[randomInt(0, specialChars.length)]!);
+      }
+
+      while (chars.length < targetLen) {
+        chars.push(pool[randomInt(0, pool.length)]!);
+      }
+
+      // Fisher-Yates shuffle bằng randomInt an toàn mật mã học
+      for (let i = chars.length - 1; i > 0; i--) {
+        const j = randomInt(0, i + 1);
+        const tmp = chars[i]!;
+        chars[i] = chars[j]!;
+        chars[j] = tmp;
+      }
+
+      const candidate = chars.join('');
+      const lowerCandidate = candidate.toLowerCase();
+      const isDisallowed = [...disallowed].some(
+        (banned) => lowerCandidate === banned || lowerCandidate.includes(banned),
+      );
+      if (!isDisallowed) {
+        return candidate;
+      }
+    }
+
+    return ` Sec#${randomBytes(6).toString('hex')}!9A`.trim();
+  }
 }
+
