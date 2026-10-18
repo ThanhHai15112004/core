@@ -12,6 +12,7 @@ export type VerificationChannelCode =
 export const VERIFICATION_PURPOSE = {
   VERIFY_EMAIL: 1,
   VERIFY_PHONE: 2,
+  MFA_SMS: 3,
 } as const;
 
 export type VerificationPurposeCode =

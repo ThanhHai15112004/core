@@ -35,6 +35,7 @@ export interface InjectJsonOptions {
   readonly url: string;
   readonly payload?: unknown;
   readonly headers?: Record<string, string>;
+  readonly remoteAddress?: string;
 }
 
 export interface InjectJsonBody<T = unknown> {
@@ -72,6 +73,7 @@ export async function injectJson<T = unknown>(
     url: options.url,
     ...(options.headers ? { headers: options.headers } : {}),
     ...(options.payload !== undefined ? { payload: options.payload as object | string } : {}),
+    ...(options.remoteAddress ? { remoteAddress: options.remoteAddress } : {}),
   });
 
   let parsedBody: unknown = null;

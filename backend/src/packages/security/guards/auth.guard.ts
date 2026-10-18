@@ -31,6 +31,11 @@ export class AuthGuard implements CanActivate {
 
     const request = context.switchToHttp().getRequest<FastifyRequest & { user?: UserIdentity }>();
     const authHeader = request.headers['authorization'];
+    const resolutionContext = {
+      ipAddress: request.ip ?? null,
+      endpoint: request.url ?? null,
+      method: request.method ?? null,
+    };
 
     if (isPublic) {
       if (authHeader && typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) {
@@ -38,7 +43,9 @@ export class AuthGuard implements CanActivate {
         if (token.length > 0) {
           const payload = await this.tokenService.verify(token).catch(() => null);
           if (payload) {
-            const optionalUser = await this.tokenService.validateUser(payload).catch(() => null);
+            const optionalUser = await this.tokenService
+              .validateUser(payload, resolutionContext)
+              .catch(() => null);
             if (optionalUser) {
               request.user = optionalUser;
             }
@@ -66,7 +73,7 @@ export class AuthGuard implements CanActivate {
       throw new UnauthorizedException('Invalid or expired token');
     }
 
-    const user = await this.tokenService.validateUser(payload);
+    const user = await this.tokenService.validateUser(payload, resolutionContext);
     if (!user) {
       throw new UnauthorizedException('User not found or disabled');
     }

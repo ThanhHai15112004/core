@@ -735,8 +735,9 @@ export class IamMasterSeeder implements SeederContract {
           mfa_policy, allowed_mfa_methods_json, max_failed_login_attempts, lockout_duration_minutes,
           password_min_length, require_uppercase, require_numbers, require_special_chars,
           allow_email_registration, allow_phone_registration, require_email_verification, require_phone_verification,
-          otp_max_send_count, otp_max_attempts, otp_cooldown_seconds
-        ) VALUES (1, 'GLOBAL', 1, 1, TRUE, 1, '["TOTP","EMAIL_OTP","RECOVERY_CODE"]', 5, 15, 8, TRUE, TRUE, TRUE, TRUE, TRUE, FALSE, FALSE, 5, 5, 60)
+          otp_max_send_count, otp_max_attempts, otp_cooldown_seconds,
+          session_idle_timeout_minutes, session_max_lifetime_minutes, enable_login_audit_log
+        ) VALUES (1, 'GLOBAL', 1, 1, TRUE, 1, '["TOTP","EMAIL_OTP","RECOVERY_CODE"]', 5, 15, 8, TRUE, TRUE, TRUE, TRUE, TRUE, FALSE, FALSE, 5, 5, 60, 30, 10080, TRUE)
         ON CONFLICT (scope_key) DO NOTHING`,
       );
     } else {
@@ -746,8 +747,9 @@ export class IamMasterSeeder implements SeederContract {
           mfa_policy, allowed_mfa_methods_json, max_failed_login_attempts, lockout_duration_minutes,
           password_min_length, require_uppercase, require_numbers, require_special_chars,
           allow_email_registration, allow_phone_registration, require_email_verification, require_phone_verification,
-          otp_max_send_count, otp_max_attempts, otp_cooldown_seconds
-        ) VALUES (1, 'GLOBAL', 1, 1, TRUE, 1, '["TOTP","EMAIL_OTP","RECOVERY_CODE"]', 5, 15, 8, TRUE, TRUE, TRUE, TRUE, TRUE, FALSE, FALSE, 5, 5, 60)
+          otp_max_send_count, otp_max_attempts, otp_cooldown_seconds,
+          session_idle_timeout_minutes, session_max_lifetime_minutes, enable_login_audit_log
+        ) VALUES (1, 'GLOBAL', 1, 1, TRUE, 1, '["TOTP","EMAIL_OTP","RECOVERY_CODE"]', 5, 15, 8, TRUE, TRUE, TRUE, TRUE, TRUE, FALSE, FALSE, 5, 5, 60, 30, 10080, TRUE)
         ON DUPLICATE KEY UPDATE scope_key = VALUES(scope_key)`,
       );
     }

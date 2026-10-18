@@ -60,6 +60,9 @@ export class SecuritySettingsService {
     otpMaxSendCount: 5,
     otpMaxAttempts: 5,
     otpCooldownSeconds: 60,
+    sessionIdleTimeoutMinutes: 30,
+    sessionMaxLifetimeMinutes: 10080,
+    enableLoginAuditLog: true,
     availablePasswordHashAlgorithms: [...PASSWORD_HASH_ALGORITHMS],
     availableDbEncryptionAlgorithms: [...DB_ENCRYPTION_ALGORITHMS],
     updatedAt: new Date().toISOString(),
@@ -144,6 +147,18 @@ export class SecuritySettingsService {
             otpMaxSendCount: persisted.otpMaxSendCount ?? this.cached.otpMaxSendCount,
             otpMaxAttempts: persisted.otpMaxAttempts ?? this.cached.otpMaxAttempts,
             otpCooldownSeconds: persisted.otpCooldownSeconds ?? this.cached.otpCooldownSeconds,
+            sessionIdleTimeoutMinutes:
+              persisted.sessionIdleTimeoutMinutes !== undefined
+                ? Number(persisted.sessionIdleTimeoutMinutes)
+                : (this.cached.sessionIdleTimeoutMinutes ?? 30),
+            sessionMaxLifetimeMinutes:
+              persisted.sessionMaxLifetimeMinutes !== undefined
+                ? Number(persisted.sessionMaxLifetimeMinutes)
+                : (this.cached.sessionMaxLifetimeMinutes ?? 10080),
+            enableLoginAuditLog:
+              persisted.enableLoginAuditLog !== undefined
+                ? Boolean(persisted.enableLoginAuditLog)
+                : (this.cached.enableLoginAuditLog ?? true),
             availablePasswordHashAlgorithms: [...PASSWORD_HASH_ALGORITHMS],
             availableDbEncryptionAlgorithms: [...DB_ENCRYPTION_ALGORITHMS],
             updatedAt: persisted.updatedAt
@@ -231,6 +246,15 @@ export class SecuritySettingsService {
       ...(dto.otpCooldownSeconds !== undefined
         ? { otpCooldownSeconds: dto.otpCooldownSeconds }
         : {}),
+      ...(dto.sessionIdleTimeoutMinutes !== undefined
+        ? { sessionIdleTimeoutMinutes: dto.sessionIdleTimeoutMinutes }
+        : {}),
+      ...(dto.sessionMaxLifetimeMinutes !== undefined
+        ? { sessionMaxLifetimeMinutes: dto.sessionMaxLifetimeMinutes }
+        : {}),
+      ...(dto.enableLoginAuditLog !== undefined
+        ? { enableLoginAuditLog: dto.enableLoginAuditLog }
+        : {}),
       updatedAt: new Date().toISOString(),
     };
 
@@ -264,6 +288,9 @@ export class SecuritySettingsService {
         otpMaxSendCount: next.otpMaxSendCount,
         otpMaxAttempts: next.otpMaxAttempts,
         otpCooldownSeconds: next.otpCooldownSeconds,
+        sessionIdleTimeoutMinutes: next.sessionIdleTimeoutMinutes ?? 30,
+        sessionMaxLifetimeMinutes: next.sessionMaxLifetimeMinutes ?? 10080,
+        enableLoginAuditLog: next.enableLoginAuditLog ?? true,
       };
 
       const repoAny = this.settingRepo as unknown as {
@@ -375,7 +402,8 @@ export class SecuritySettingsService {
       const parsed = JSON.parse(jsonStr) as unknown;
       if (!Array.isArray(parsed)) return ['TOTP', 'EMAIL_OTP', 'RECOVERY_CODE'];
       const valid = parsed.filter(
-        (m): m is MfaMethodType => m === 'TOTP' || m === 'EMAIL_OTP' || m === 'RECOVERY_CODE',
+        (m): m is MfaMethodType =>
+          m === 'TOTP' || m === 'EMAIL_OTP' || m === 'SMS_OTP' || m === 'RECOVERY_CODE',
       );
       return valid.length > 0 ? valid : ['TOTP', 'EMAIL_OTP', 'RECOVERY_CODE'];
     } catch {

@@ -79,6 +79,32 @@ interface SessionItem {
   isCurrent: boolean;
 }
 
+interface LoginHistoryItem {
+  id: number;
+  userId: number | null;
+  identifier: string | null;
+  sessionId: number | null;
+  eventType: number;
+  eventTypeName: string;
+  status: number;
+  statusName: string;
+  deviceName: string | null;
+  userAgent: string | null;
+  ipAddress: string | null;
+  reason: string | null;
+  createdAt: string;
+}
+
+interface SecuritySettingsState {
+  requireCurrentPasswordOnChange: boolean;
+  passwordMinLength: number;
+  maxLoginAttempts: number;
+  lockoutDurationMinutes: number;
+  sessionIdleTimeoutMinutes: number;
+  sessionMaxLifetimeMinutes: number;
+  enableLoginAuditLog: boolean;
+}
+
 const getUserStatusLabel = (u: Pick<UserItem, 'status' | 'statusName'>): 'ACTIVE' | 'INACTIVE' | 'LOCKED' | 'ARCHIVED' => {
   if (u.statusName) return u.statusName;
   if (u.status === 1 || u.status === 'ACTIVE') return 'ACTIVE';
@@ -159,6 +185,16 @@ export const IamManagementPage: React.FC = () => {
     remainingRecoveryCodes?: number;
   } | null>(null);
   const [sessions, setSessions] = useState<SessionItem[]>([]);
+  const [loginHistory, setLoginHistory] = useState<LoginHistoryItem[]>([]);
+  const [securitySettings, setSecuritySettings] = useState<SecuritySettingsState>({
+    requireCurrentPasswordOnChange: false,
+    passwordMinLength: 10,
+    maxLoginAttempts: 5,
+    lockoutDurationMinutes: 15,
+    sessionIdleTimeoutMinutes: 30,
+    sessionMaxLifetimeMinutes: 10080,
+    enableLoginAuditLog: true,
+  });
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
 
@@ -201,7 +237,7 @@ export const IamManagementPage: React.FC = () => {
     errors: Array<{ row: number; identifier: string; message: string }>;
   } | null>(null);
 
-  // User Status History & Status Change modal state (Mục 3.1.10)
+  // User Status History & Status Change modal state (Mục 3.1.10 & 3.4.7)
   const [statusHistoryUser, setStatusHistoryUser] = useState<UserItem | null>(null);
   const [statusHistoryList, setStatusHistoryList] = useState<
     Array<{
@@ -216,6 +252,7 @@ export const IamManagementPage: React.FC = () => {
       createdAt: string;
     }>
   >([]);
+  const [userLoginHistoryList, setUserLoginHistoryList] = useState<LoginHistoryItem[]>([]);
   const [statusChangeTarget, setStatusChangeTarget] = useState<number>(1);
   const [statusChangeReason, setStatusChangeReason] = useState<string>('');
 
@@ -278,7 +315,7 @@ export const IamManagementPage: React.FC = () => {
   const loadAuthProfileData = useCallback(async () => {
     if (!accessToken) return;
     try {
-      const [mfa, sess] = await Promise.all([
+      const [mfa, sess, hist, secSettings] = await Promise.all([
         fetchApi<{
           mfaEnabled: boolean;
           totpEnabled: boolean;
@@ -287,9 +324,15 @@ export const IamManagementPage: React.FC = () => {
           remainingRecoveryCodes?: number;
         }>(API_ROUTES.AUTH.MFA_STATUS, { headers: authHeaders() }),
         fetchApi<SessionItem[]>(API_ROUTES.AUTH.SESSIONS, { headers: authHeaders() }),
+        fetchApi<LoginHistoryItem[]>(API_ROUTES.AUTH.LOGIN_HISTORY(50), { headers: authHeaders() }).catch(() => []),
+        fetchApi<SecuritySettingsState>(API_ROUTES.AUTH.SECURITY_SETTINGS, { headers: authHeaders() }).catch(() => null),
       ]);
       setMfaStatus(mfa);
       setSessions(Array.isArray(sess) ? sess : []);
+      setLoginHistory(Array.isArray(hist) ? hist : []);
+      if (secSettings) {
+        setSecuritySettings(secSettings);
+      }
     } catch (err) {
       if (err && typeof err === 'object' && 'status' in err && (err as { status: number }).status === 401) {
         setAccessToken('');
@@ -656,6 +699,77 @@ export const IamManagementPage: React.FC = () => {
     }
   };
 
+  const handleRevokeAllSessions = async (includeCurrent: boolean) => {
+    try {
+      const res = await fetchApi<{ revokedCount: number }>(API_ROUTES.AUTH.REVOKE_ALL_SESSIONS, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({
+          includeCurrent,
+          reason: includeCurrent
+            ? 'Emergency revoke all sessions from UI'
+            : 'Revoke all other sessions from UI',
+        }),
+      });
+      await loadAuthProfileData();
+      notify(
+        'ok',
+        includeCurrent
+          ? `🚨 Đã thu hồi toàn bộ ${res.revokedCount} phiên đăng nhập khẩn cấp (kể cả thiết bị hiện tại)!`
+          : `Đã thu hồi ${res.revokedCount} phiên đăng nhập trên các thiết bị khác.`,
+      );
+    } catch (err) {
+      notify('err', err instanceof Error ? err.message : 'Revoke all sessions failed');
+    }
+  };
+
+  const handleAdminRevokeUserSessions = async (u: UserItem) => {
+    try {
+      const res = await fetchApi<{
+        userId: number;
+        revokedCount?: number;
+        revokedSessionsCount?: number;
+        reason?: string;
+      }>(API_ROUTES.USERS.REVOKE_SESSIONS(u.id), {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({
+          reason: 'Emergency session revocation by Administrator',
+        }),
+      });
+      const revokedTotal = res.revokedSessionsCount ?? res.revokedCount ?? 0;
+      await loadAuthProfileData();
+      notify(
+        'ok',
+        `🚫 Đã thu hồi khẩn cấp ${revokedTotal} phiên đăng nhập của người dùng #${u.id} (${u.email}).`,
+      );
+    } catch (err) {
+      notify('err', err instanceof Error ? err.message : 'Admin revoke user sessions failed');
+    }
+  };
+
+  const handleSaveSessionSecuritySettings = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const updated = await fetchApi<SecuritySettingsState>(API_ROUTES.AUTH.SECURITY_SETTINGS, {
+        method: 'PUT',
+        headers: authHeaders(),
+        body: JSON.stringify({
+          sessionIdleTimeoutMinutes: Number(securitySettings.sessionIdleTimeoutMinutes),
+          sessionMaxLifetimeMinutes: Number(securitySettings.sessionMaxLifetimeMinutes),
+          enableLoginAuditLog: Boolean(securitySettings.enableLoginAuditLog),
+        }),
+      });
+      setSecuritySettings(updated);
+      notify(
+        'ok',
+        `Đã lưu cấu hình phiên & kiểm toán: Idle Timeout = ${updated.sessionIdleTimeoutMinutes} phút | Max Lifetime = ${updated.sessionMaxLifetimeMinutes} phút | Audit Login Log = ${updated.enableLoginAuditLog ? 'BẬT' : 'TẮT'}.`,
+      );
+    } catch (err) {
+      notify('err', err instanceof Error ? err.message : 'Failed to update security settings');
+    }
+  };
+
   // --- User Management Handlers ---
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -739,20 +853,24 @@ export const IamManagementPage: React.FC = () => {
     setStatusChangeTarget(typeof user.status === 'number' ? user.status : 1);
     setStatusChangeReason(user.lockReason ?? '');
     try {
-      const history = await fetchApi<
-        Array<{
-          id: number;
-          userId: number;
-          fromStatus: number | null;
-          fromStatusName: string | null;
-          toStatus: number;
-          toStatusName: string;
-          reason: string | null;
-          changedBy: number | null;
-          createdAt: string;
-        }>
-      >(API_ROUTES.USERS.STATUS_HISTORY(user.id), { headers: authHeaders() });
+      const [history, loginHist] = await Promise.all([
+        fetchApi<
+          Array<{
+            id: number;
+            userId: number;
+            fromStatus: number | null;
+            fromStatusName: string | null;
+            toStatus: number;
+            toStatusName: string;
+            reason: string | null;
+            changedBy: number | null;
+            createdAt: string;
+          }>
+        >(API_ROUTES.USERS.STATUS_HISTORY(user.id), { headers: authHeaders() }),
+        fetchApi<LoginHistoryItem[]>(API_ROUTES.USERS.LOGIN_HISTORY(user.id), { headers: authHeaders() }).catch(() => []),
+      ]);
       setStatusHistoryList(Array.isArray(history) ? history : []);
+      setUserLoginHistoryList(Array.isArray(loginHist) ? loginHist : []);
     } catch (err) {
       notify('err', err instanceof Error ? err.message : 'Failed to load user status history');
     }
@@ -1427,6 +1545,71 @@ export const IamManagementPage: React.FC = () => {
                   </tbody>
                 </table>
               </div>
+
+              <div style={{ marginTop: '16px', paddingTop: '12px', borderTop: '1px solid var(--border-color)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                  <h4 style={{ fontSize: '13px', fontWeight: 700, margin: 0 }}>
+                    🕒 Lịch sử Đăng nhập, Đăng xuất & Thu hồi phiên của người dùng #{statusHistoryUser.id} ({userLoginHistoryList.length})
+                  </h4>
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    style={{ padding: '4px 10px', fontSize: '12px', color: '#f87171', borderColor: 'rgba(239, 68, 68, 0.4)' }}
+                    onClick={() => void handleAdminRevokeUserSessions(statusHistoryUser)}
+                  >
+                    🚫 Thu hồi toàn bộ phiên của người dùng này
+                  </button>
+                </div>
+                <div style={{ overflowX: 'auto', maxHeight: '220px', overflowY: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                    <thead>
+                      <tr style={{ borderBottom: '1px solid var(--border-color)', textAlign: 'left' }}>
+                        <th style={{ padding: '6px 8px' }}>Thời gian</th>
+                        <th style={{ padding: '6px 8px' }}>Sự kiện</th>
+                        <th style={{ padding: '6px 8px' }}>Kết quả</th>
+                        <th style={{ padding: '6px 8px' }}>Thiết bị</th>
+                        <th style={{ padding: '6px 8px' }}>Địa chỉ IP</th>
+                        <th style={{ padding: '6px 8px' }}>Chi tiết / Lý do</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {userLoginHistoryList.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} style={{ padding: '10px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                            Chưa có bản ghi lịch sử đăng nhập/đăng xuất.
+                          </td>
+                        </tr>
+                      ) : (
+                        userLoginHistoryList.map((item) => (
+                          <tr key={item.id} style={{ borderBottom: '1px solid rgba(148, 163, 184, 0.1)' }}>
+                            <td style={{ padding: '6px 8px', whiteSpace: 'nowrap' }}>
+                              {new Date(item.createdAt).toLocaleString('vi-VN')}
+                            </td>
+                            <td style={{ padding: '6px 8px', fontWeight: 600 }}>
+                              <code>{item.eventTypeName}</code>
+                            </td>
+                            <td style={{ padding: '6px 8px' }}>
+                              <span
+                                style={{
+                                  color: item.statusName === 'SUCCESS' ? '#34d399' : '#f87171',
+                                  fontWeight: 700,
+                                }}
+                              >
+                                {item.statusName}
+                              </span>
+                            </td>
+                            <td style={{ padding: '6px 8px' }}>{item.deviceName || '—'}</td>
+                            <td style={{ padding: '6px 8px' }}>{item.ipAddress || '—'}</td>
+                            <td style={{ padding: '6px 8px', color: 'var(--text-muted)' }}>
+                              {item.reason || (item.sessionId ? `Session #${item.sessionId}` : '—')}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             </div>
           )}
 
@@ -1747,10 +1930,18 @@ export const IamManagementPage: React.FC = () => {
                           <button
                             type="button"
                             className="btn-secondary"
+                            style={{ padding: '4px 8px', fontSize: '12px', color: '#f87171' }}
+                            onClick={() => void handleAdminRevokeUserSessions(u)}
+                          >
+                            🚫 Thu hồi phiên
+                          </button>
+                          <button
+                            type="button"
+                            className="btn-secondary"
                             style={{ padding: '4px 8px', fontSize: '12px', color: '#38bdf8' }}
                             onClick={() => void handleOpenStatusHistory(u)}
                           >
-                            📜 Lịch sử TT
+                            📜 Lịch sử TT & ĐN
                           </button>
                         </div>
                       </td>
@@ -2190,43 +2381,246 @@ export const IamManagementPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Active Sessions */}
+          {/* Active Sessions & Timeout Settings (Mục 3.4) */}
           <div style={{ ...cardStyle, gridColumn: '1 / -1' }}>
-            <h3 style={{ fontSize: '16px', fontWeight: 700, marginBottom: '12px' }}>
-               Quản lý phiên đăng nhập (Active Sessions: {sessions.length})
-            </h3>
-            <div style={{ display: 'grid', gap: '8px' }}>
-              {sessions.map((s) => (
-                <div
-                  key={s.id}
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    padding: '10px 14px',
-                    borderRadius: '8px',
-                    border: '1px solid var(--border-color)',
-                    fontSize: '13px',
-                  }}
-                >
-                  <div>
-                    <strong>#{s.id} - {s.deviceName || 'Unknown Device'}</strong> — IP: {s.ipAddress || 'N/A'}
-                    <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                      Hoạt động cuối: {new Date(s.lastActiveAt).toLocaleString()} | Hết hạn:{' '}
-                      {new Date(s.expiresAt).toLocaleString()}
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    className="btn-secondary"
-                    style={{ padding: '5px 10px', fontSize: '12px' }}
-                    onClick={() => void handleRevokeSession(s.id)}
-                  >
-                    Thu hồi phiên
-                  </button>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: '12px',
+                marginBottom: '14px',
+              }}
+            >
+              <div>
+                <h3 style={{ fontSize: '16px', fontWeight: 700, margin: 0 }}>
+                  🖥️ Quản lý phiên đăng nhập & Thiết bị (Active Sessions: {sessions.length} — Mục 3.4)
+                </h3>
+                <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                  Cấu hình hiện tại: Idle Timeout = <strong>{securitySettings.sessionIdleTimeoutMinutes} phút</strong> | Thời hạn tối đa (Max Lifetime) ={' '}
+                  <strong>{securitySettings.sessionMaxLifetimeMinutes} phút</strong> | Ghi lịch sử đăng nhập/đăng xuất ={' '}
+                  <strong style={{ color: securitySettings.enableLoginAuditLog ? '#34d399' : '#fbbf24' }}>
+                    {securitySettings.enableLoginAuditLog ? 'ĐANG BẬT' : 'ĐANG TẮT'}
+                  </strong>
                 </div>
-              ))}
+              </div>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  style={{ padding: '7px 12px', fontSize: '12px' }}
+                  onClick={() => void handleRevokeAllSessions(false)}
+                >
+                  Thu hồi các thiết bị khác
+                </button>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  style={{
+                    padding: '7px 12px',
+                    fontSize: '12px',
+                    color: '#f87171',
+                    borderColor: 'rgba(239, 68, 68, 0.45)',
+                    background: 'rgba(239, 68, 68, 0.12)',
+                  }}
+                  onClick={() => void handleRevokeAllSessions(true)}
+                >
+                  🚨 Thu hồi toàn bộ phiên (Khẩn cấp)
+                </button>
+              </div>
             </div>
+
+            {/* Session Timeout & Audit Log Settings Form */}
+            <form
+              onSubmit={(e) => void handleSaveSessionSecuritySettings(e)}
+              style={{
+                display: 'flex',
+                gap: '12px',
+                flexWrap: 'wrap',
+                alignItems: 'flex-end',
+                padding: '12px',
+                borderRadius: '8px',
+                background: 'rgba(15, 23, 42, 0.55)',
+                border: '1px solid var(--border-color)',
+                marginBottom: '14px',
+              }}
+            >
+              <div style={{ minWidth: '170px' }}>
+                <label style={{ display: 'block', fontSize: '11px', color: 'var(--text-muted)', marginBottom: '4px' }}>
+                  Idle Timeout (phút không hoạt động):
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  max={43200}
+                  style={inputStyle}
+                  value={securitySettings.sessionIdleTimeoutMinutes}
+                  onChange={(e) =>
+                    setSecuritySettings((prev) => ({
+                      ...prev,
+                      sessionIdleTimeoutMinutes: Number(e.target.value),
+                    }))
+                  }
+                />
+              </div>
+              <div style={{ minWidth: '190px' }}>
+                <label style={{ display: 'block', fontSize: '11px', color: 'var(--text-muted)', marginBottom: '4px' }}>
+                  Thời hạn phiên tối đa (Max Lifetime phút):
+                </label>
+                <input
+                  type="number"
+                  min={5}
+                  max={525600}
+                  style={inputStyle}
+                  value={securitySettings.sessionMaxLifetimeMinutes}
+                  onChange={(e) =>
+                    setSecuritySettings((prev) => ({
+                      ...prev,
+                      sessionMaxLifetimeMinutes: Number(e.target.value),
+                    }))
+                  }
+                />
+              </div>
+              <label
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  fontSize: '13px',
+                  paddingBottom: '8px',
+                  cursor: 'pointer',
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={securitySettings.enableLoginAuditLog}
+                  onChange={(e) =>
+                    setSecuritySettings((prev) => ({
+                      ...prev,
+                      enableLoginAuditLog: e.target.checked,
+                    }))
+                  }
+                />
+                Ghi lịch sử đăng nhập & đăng xuất (Audit Login Log)
+              </label>
+              <button type="submit" className="btn-primary" style={{ padding: '8px 14px', fontSize: '12px' }}>
+                Lưu cấu hình Phiên & Audit
+              </button>
+            </form>
+
+            <div style={{ display: 'grid', gap: '8px' }}>
+              {sessions.length === 0 ? (
+                <div style={{ padding: '12px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '13px' }}>
+                  Không có phiên đăng nhập nào đang hoạt động.
+                </div>
+              ) : (
+                sessions.map((s) => (
+                  <div
+                    key={s.id}
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      padding: '10px 14px',
+                      borderRadius: '8px',
+                      border: '1px solid var(--border-color)',
+                      fontSize: '13px',
+                    }}
+                  >
+                    <div>
+                      <strong>#{s.id} - {s.deviceName || 'Unknown Device'}</strong> — IP: {s.ipAddress || 'N/A'}
+                      <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                        Hoạt động cuối: {new Date(s.lastActiveAt).toLocaleString('vi-VN')} | Hết hạn tối đa:{' '}
+                        {new Date(s.expiresAt).toLocaleString('vi-VN')}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      style={{ padding: '5px 10px', fontSize: '12px' }}
+                      onClick={() => void handleRevokeSession(s.id)}
+                    >
+                      Thu hồi phiên
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* Login & Logout Audit History (Mục 3.4.7) */}
+          <div style={{ ...cardStyle, gridColumn: '1 / -1', overflowX: 'auto' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+              <h3 style={{ fontSize: '16px', fontWeight: 700, margin: 0 }}>
+                📜 Lịch sử Đăng nhập & Đăng xuất theo Thời gian, IP và Thiết bị ({loginHistory.length} bản ghi — Mục 3.4.7)
+              </h3>
+              <button
+                type="button"
+                className="btn-secondary"
+                style={{ padding: '5px 10px', fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                onClick={() => void loadAuthProfileData()}
+              >
+                <RefreshCw size={13} /> Làm mới lịch sử
+              </button>
+            </div>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid var(--border-color)', textAlign: 'left' }}>
+                  <th style={{ padding: '8px' }}>ID</th>
+                  <th style={{ padding: '8px' }}>Thời gian</th>
+                  <th style={{ padding: '8px' }}>Sự kiện (Event)</th>
+                  <th style={{ padding: '8px' }}>Trạng thái</th>
+                  <th style={{ padding: '8px' }}>Thiết bị (Device / User-Agent)</th>
+                  <th style={{ padding: '8px' }}>Địa chỉ IP</th>
+                  <th style={{ padding: '8px' }}>Phiên / Lý do chi tiết</th>
+                </tr>
+              </thead>
+              <tbody>
+                {loginHistory.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} style={{ padding: '16px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                      Chưa có bản ghi lịch sử đăng nhập / đăng xuất.
+                    </td>
+                  </tr>
+                ) : (
+                  loginHistory.map((item) => (
+                    <tr key={item.id} style={{ borderBottom: '1px solid rgba(148, 163, 184, 0.1)' }}>
+                      <td style={{ padding: '8px' }}>#{item.id}</td>
+                      <td style={{ padding: '8px', whiteSpace: 'nowrap' }}>
+                        {new Date(item.createdAt).toLocaleString('vi-VN')}
+                      </td>
+                      <td style={{ padding: '8px', fontWeight: 600 }}>
+                        <code>{item.eventTypeName}</code>
+                      </td>
+                      <td style={{ padding: '8px' }}>
+                        <span
+                          style={{
+                            padding: '2px 8px',
+                            borderRadius: '10px',
+                            fontSize: '11px',
+                            fontWeight: 700,
+                            background:
+                              item.statusName === 'SUCCESS'
+                                ? 'rgba(16, 185, 129, 0.18)'
+                                : 'rgba(239, 68, 68, 0.2)',
+                            color: item.statusName === 'SUCCESS' ? '#34d399' : '#f87171',
+                          }}
+                        >
+                          {item.statusName}
+                        </span>
+                      </td>
+                      <td style={{ padding: '8px' }}>{item.deviceName || item.userAgent || '—'}</td>
+                      <td style={{ padding: '8px' }}>{item.ipAddress || '—'}</td>
+                      <td style={{ padding: '8px', color: 'var(--text-muted)' }}>
+                        {item.sessionId ? `[Session #${item.sessionId}] ` : ''}
+                        {item.reason || '—'}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
           </div>
         </div>
       )}

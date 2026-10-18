@@ -1,6 +1,7 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import type {
   IUserIdentityResolver,
+  IdentityResolutionContext,
   TokenPayload,
   UserIdentity,
 } from '@packages/security/index.js';
@@ -10,6 +11,7 @@ import {
   USER_STATUS,
 } from '@modules/users/contracts/index.js';
 import { SessionService } from './session.service.js';
+import { ServiceAccountService } from './service-account.service.js';
 
 @Injectable()
 export class UserIdentityResolverService implements IUserIdentityResolver {
@@ -17,12 +19,27 @@ export class UserIdentityResolverService implements IUserIdentityResolver {
     private readonly sessionService: SessionService,
     @Inject(USERS_PUBLIC_SERVICE)
     private readonly usersPublicService: IUsersPublicService,
+    @Optional() private readonly serviceAccountService?: ServiceAccountService,
   ) {}
 
-  /** Giải mã và kiểm tra trạng thái hoạt động của phiên đăng nhập cùng tài khoản người dùng */
-  public async resolveIdentity(payload: TokenPayload): Promise<UserIdentity | null> {
+  /** Giải mã và kiểm tra trạng thái hoạt động của phiên đăng nhập người dùng hoặc API Client / Service Account */
+  public async resolveIdentity(
+    payload: TokenPayload,
+    context?: IdentityResolutionContext,
+  ): Promise<UserIdentity | null> {
     if (!payload.sub) {
       return null;
+    }
+
+    // Nhánh xác thực cho Tài khoản hệ thống (Service Account) & API Client (Mục 3.6)
+    if (
+      payload.clientType === 'api_client' ||
+      (typeof payload.sub === 'string' && payload.sub.startsWith('sa:'))
+    ) {
+      if (!this.serviceAccountService) {
+        return null;
+      }
+      return this.serviceAccountService.resolveApiClientTokenIdentity(payload, context);
     }
 
     const userId = Number(payload.sub);
@@ -60,9 +77,11 @@ export class UserIdentityResolverService implements IUserIdentityResolver {
       email: user.email,
       username: user.username,
       sessionId,
+      subjectType: 'USER',
       roles: user.roles,
       permissions: user.permissions,
       organizationUnitIds: user.organizationUnitIds,
     };
   }
 }
+

@@ -2,6 +2,7 @@ import { Inject, Injectable, Optional } from '@nestjs/common';
 import {
   BadRequestAppException,
   ConflictAppException,
+  ForbiddenAppException,
   HTTP_ERROR_CODE,
   NotFoundAppException,
   type PaginatedResult,
@@ -22,6 +23,8 @@ import {
   type RoleSummary,
 } from '@modules/roles/contracts/index.js';
 import {
+  type AdminResetUserMfaInput,
+  type AdminResetUserMfaResult,
   type AdminResetUserPasswordInput,
   type AdminResetUserPasswordResult,
   type IUsersPublicService,
@@ -29,6 +32,7 @@ import {
   USER_STATUS,
   type UserAuthCredentialsView,
   type UserAuthIdentityView,
+  type UserLoginHistoryItemView,
   type UserOrganizationAssignmentSummary,
   type UserProfileView,
   type UserRoleAssignmentSummary,
@@ -68,6 +72,21 @@ export class UsersService implements IUsersPublicService {
     input: AdminResetUserPasswordInput,
     actorId?: number,
   ) => Promise<AdminResetUserPasswordResult>;
+  private adminRevokeSessionsDelegate?: (userId: number, reason?: string) => Promise<number>;
+  private userLoginHistoryDelegate?: (
+    userId: number,
+    limit?: number,
+  ) => Promise<UserLoginHistoryItemView[]>;
+  private adminResetMfaDelegate?: (
+    userId: number,
+    input: AdminResetUserMfaInput,
+    actorId?: number,
+  ) => Promise<AdminResetUserMfaResult>;
+  private stepUpVerificationDelegate?: (
+    userId: number,
+    stepUpToken: string,
+    action?: string,
+  ) => Promise<boolean>;
 
 
   constructor(
@@ -552,12 +571,19 @@ export class UsersService implements IUsersPublicService {
     return this.getById(id, true);
   }
 
-  /** Gán danh sách vai trò cho người dùng (Mục 3.1.5) */
+  /** Gán danh sách vai trò cho người dùng (Mục 3.1.5 & 3.5.7 — hỗ trợ xác thực lại khi thao tác nhạy cảm) */
   public async assignRoles(
     id: number,
     dto: AssignUserRolesRequest,
     actorId?: number,
   ): Promise<UserResponse> {
+    await this.verifySensitiveActionStepUp(
+      actorId,
+      dto.stepUpToken,
+      dto.requireStepUp,
+      'users.assignRoles',
+    );
+
     const user = await this.userRepository.findByIdWithArchived(id, false);
     if (!user) {
       throw new NotFoundAppException('users.notFound', { id });
@@ -993,6 +1019,166 @@ export class UsersService implements IUsersPublicService {
   ): void {
     this.adminPasswordResetDelegate = delegate;
   }
+
+  /** Đăng ký delegate thu hồi phiên đăng nhập từ SessionService (module Auth) */
+  public registerAdminRevokeSessionsDelegate(
+    delegate: (userId: number, reason?: string) => Promise<number>,
+  ): void {
+    this.adminRevokeSessionsDelegate = delegate;
+  }
+
+  /** Đăng ký delegate tra cứu lịch sử đăng nhập & đăng xuất từ SessionService (module Auth) */
+  public registerUserLoginHistoryDelegate(
+    delegate: (userId: number, limit?: number) => Promise<UserLoginHistoryItemView[]>,
+  ): void {
+    this.userLoginHistoryDelegate = delegate;
+  }
+
+  /** Đăng ký delegate xử lý Reset MFA có kiểm soát từ module Auth (Mục 3.5.8) */
+  public registerAdminResetMfaDelegate(
+    delegate: (
+      userId: number,
+      input: AdminResetUserMfaInput,
+      actorId?: number,
+    ) => Promise<AdminResetUserMfaResult>,
+  ): void {
+    this.adminResetMfaDelegate = delegate;
+  }
+
+  /** Đăng ký delegate kiểm tra Step-Up Token cho thao tác nhạy cảm từ module Auth (Mục 3.5.7) */
+  public registerStepUpVerificationDelegate(
+    delegate: (userId: number, stepUpToken: string, action?: string) => Promise<boolean>,
+  ): void {
+    this.stepUpVerificationDelegate = delegate;
+  }
+
+  /** Kiểm tra xác thực lại (Step-Up Authentication) khi thực hiện thao tác nhạy cảm (Mục 3.5.7) */
+  public async verifySensitiveActionStepUp(
+    actorId?: number,
+    stepUpToken?: string,
+    requireStepUp?: boolean,
+    action?: string,
+  ): Promise<void> {
+    if (!requireStepUp && !stepUpToken) {
+      return;
+    }
+    if (!stepUpToken || !stepUpToken.trim()) {
+      throw new ForbiddenAppException('auth.stepUpAuthenticationRequired', [{ action }]);
+    }
+    if (!this.stepUpVerificationDelegate) {
+      return;
+    }
+    const targetActorId = actorId ?? 0;
+    const isValid = await this.stepUpVerificationDelegate(
+      targetActorId,
+      stepUpToken.trim(),
+      action,
+    );
+    if (!isValid) {
+      throw new ForbiddenAppException('auth.invalidOrExpiredStepUpToken', [{ action }]);
+    }
+  }
+
+  /** Reset MFA có kiểm soát từ trang quản trị (Mục 3.5.8 — Có xác minh hoặc phê duyệt) */
+  public async adminResetMfa(
+    id: number,
+    dto: AdminResetUserMfaInput,
+    actorId?: number,
+  ): Promise<AdminResetUserMfaResult> {
+    const reason = dto.reason?.trim();
+    if (!reason || reason.length < 3) {
+      throw new BadRequestAppException('auth.mfaResetReasonRequired');
+    }
+
+    if (dto.stepUpToken) {
+      await this.verifySensitiveActionStepUp(actorId, dto.stepUpToken, true, 'users.resetMfa');
+    }
+
+    const user = await this.userRepository.findByIdWithArchived(id, true);
+    if (!user) {
+      throw new NotFoundAppException('users.notFound', { id });
+    }
+
+    if (this.adminResetMfaDelegate) {
+      const result = await this.adminResetMfaDelegate(id, dto, actorId);
+      await this.invalidateIdentityCache(id);
+      return result;
+    }
+
+    user.mfaEnabled = false;
+    await this.userRepository.saveEntity(user);
+    const revokedSessionsCount =
+      dto.revokeSessions !== false && this.adminRevokeSessionsDelegate
+        ? await this.adminRevokeSessionsDelegate(id, `MFA reset by administrator: ${reason}`)
+        : 0;
+    await this.invalidateIdentityCache(id);
+
+    return {
+      reset: true,
+      userId: Number(id),
+      revokedSessionsCount,
+      revokedTrustedDevicesCount: 0,
+      reason,
+      verificationReference: dto.verificationReference ?? null,
+      resetByActorId: actorId ?? null,
+      resetAt: new Date().toISOString(),
+    };
+  }
+
+  /** Thu hồi toàn bộ phiên đăng nhập của người dùng khi có sự cố (Mục 3.4.6) */
+  public async revokeUserSessions(
+    id: number,
+    reason?: string,
+    actorId?: number,
+  ): Promise<{
+    revoked: true;
+    userId: number;
+    revokedCount: number;
+    revokedSessionsCount: number;
+    reason: string;
+  }> {
+    const user = await this.userRepository.findByIdWithArchived(id, true);
+    if (!user) {
+      throw new NotFoundAppException('users.notFound', { id });
+    }
+
+    const effectiveReason =
+      reason?.trim() ||
+      (actorId
+        ? `Revoked all sessions by administrator #${actorId} due to security incident`
+        : 'Revoked all sessions by administrator due to security incident');
+
+    const revokedCount = this.adminRevokeSessionsDelegate
+      ? await this.adminRevokeSessionsDelegate(id, effectiveReason)
+      : 0;
+
+    await this.invalidateIdentityCache(id);
+    return {
+      revoked: true,
+      userId: Number(id),
+      revokedCount,
+      revokedSessionsCount: revokedCount,
+      reason: effectiveReason,
+    };
+  }
+
+  /** Xem lịch sử đăng nhập và đăng xuất của một người dùng theo thời gian, IP và thiết bị (Mục 3.4.7) */
+  public async getLoginHistory(id: number, limit = 50): Promise<UserLoginHistoryItemView[]> {
+    const user = await this.userRepository.findByIdWithArchived(id, true);
+    if (!user) {
+      throw new NotFoundAppException('users.notFound', { id });
+    }
+    if (!this.userLoginHistoryDelegate) {
+      return [];
+    }
+    return this.userLoginHistoryDelegate(id, limit);
+  }
+
+  /** Alias tương thích cho `getLoginHistory()` (Mục 3.4.7) */
+  public async getUserLoginHistory(id: number, limit = 50): Promise<UserLoginHistoryItemView[]> {
+    return this.getLoginHistory(id, limit);
+  }
+
 
   /** Đặt lại mật khẩu người dùng từ trang quản trị (Mục 3.3.3 — chỉ người có quyền mới thực hiện) */
   public async adminResetPassword(

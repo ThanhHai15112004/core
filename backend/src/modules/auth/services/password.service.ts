@@ -15,10 +15,15 @@ import {
   USER_STATUS,
   type UserAuthCredentialsView,
 } from '@modules/users/contracts/index.js';
+import {
+  AUTH_EMAIL_NOTIFICATION_ADAPTER,
+  type IEmailNotificationAdapter,
+} from '../contracts/index.js';
 import type { AuthPasswordResetEntity } from '../entities/auth-password-reset.entity.js';
 import { AuthPasswordResetRepository } from '../repositories/auth-password-reset.repository.js';
 import { SessionService } from './session.service.js';
 import { SecuritySettingsService } from './security-settings.service.js';
+import { DefaultEmailNotificationAdapter } from './notification-adapters.provider.js';
 import type {
   AdminResetPasswordRequest,
   ChangePasswordRequest,
@@ -38,6 +43,7 @@ const DEFAULT_RESET_OTP_MAX_ATTEMPTS = 5;
 @Injectable()
 export class PasswordService {
   private readonly resetFallbackStore = new Map<string, AuthPasswordResetEntity>();
+  private readonly emailAdapter: IEmailNotificationAdapter;
 
   constructor(
     private readonly passwordResetRepository: AuthPasswordResetRepository,
@@ -47,7 +53,11 @@ export class PasswordService {
     private readonly usersPublicService: IUsersPublicService,
     @Optional() private readonly configService?: CoreConfigService,
     @Optional() private readonly securitySettingsService?: SecuritySettingsService,
+    @Optional()
+    @Inject(AUTH_EMAIL_NOTIFICATION_ADAPTER)
+    emailAdapter?: IEmailNotificationAdapter,
   ) {
+    this.emailAdapter = emailAdapter ?? new DefaultEmailNotificationAdapter();
     this.usersPublicService.registerAdminPasswordResetDelegate?.((userId, input, actorId) =>
       this.adminResetUserPassword(userId, input, actorId),
     );
@@ -210,6 +220,17 @@ export class PasswordService {
       maxAttempts: saved.maxAttempts ?? maxAttempts,
     });
     this.resetFallbackStore.set(tokenHash, enrichedRecord);
+
+    if (user.email) {
+      await this.emailAdapter.sendOtpEmail({
+        userId: user.id,
+        email: user.email,
+        otpCode,
+        expiresInSeconds: PASSWORD_RESET_TTL_SECONDS,
+        purpose: 'PASSWORD_RESET',
+        verificationToken: plainToken,
+      });
+    }
 
     const maskedTarget = user.email ? this.maskEmail(user.email) : undefined;
     const isProd = this.configService?.app.env === 'production';

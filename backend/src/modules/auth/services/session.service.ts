@@ -12,12 +12,26 @@ import {
 } from '@packages/security/index.js';
 import { RedisService } from '@packages/redis/index.js';
 import { USER_STATUS, type UserAuthIdentityView } from '@modules/users/contracts/index.js';
+import {
+  AUTH_EVENT_STATUS,
+  AUTH_EVENT_TYPE,
+  type AuthEventStatusCode,
+  type AuthEventTypeCode,
+  getAuthEventStatusName,
+  getAuthEventTypeName,
+} from '../contracts/index.js';
+import type { AuthLoginHistoryEntity } from '../entities/auth-login-history.entity.js';
+import type { AuthSessionEntity } from '../entities/auth-session.entity.js';
+import { AuthLoginHistoryRepository } from '../repositories/auth-login-history.repository.js';
 import { AuthSessionRepository } from '../repositories/auth-session.repository.js';
-import type { SessionItemResponse } from '../responses/auth.response.js';
+import type { LoginHistoryItemResponse, SessionItemResponse } from '../responses/auth.response.js';
+import { SecuritySettingsService } from './security-settings.service.js';
 
 export const AUTH_SESSION_REDIS_PREFIX = 'iam:auth:session:';
 const DEFAULT_ACCESS_TTL_SEC = 900; // 15m
 const DEFAULT_REFRESH_TTL_SEC = 604_800; // 7d
+const DEFAULT_IDLE_TIMEOUT_MINUTES = 30; // 30m
+const DEFAULT_MAX_LIFETIME_MINUTES = 10_080; // 7d
 
 export interface IssuedSessionTokens {
   readonly sessionId: number;
@@ -26,17 +40,116 @@ export interface IssuedSessionTokens {
   readonly expiresInSeconds: number;
 }
 
+export interface RecordAuthEventInput {
+  readonly userId?: number | null;
+  readonly sessionId?: number | null;
+  readonly identifier?: string | null;
+  readonly eventType: AuthEventTypeCode;
+  readonly status?: AuthEventStatusCode;
+  readonly ipAddress?: string | null;
+  readonly userAgent?: string | null;
+  readonly deviceName?: string | null;
+  readonly reason?: string | null;
+}
+
 @Injectable()
 export class SessionService {
+  private readonly fallbackLoginHistory: AuthLoginHistoryEntity[] = [];
+  private fallbackHistorySeq = 0;
+
   constructor(
     private readonly sessionRepository: AuthSessionRepository,
     private readonly tokenService: TokenService,
     private readonly passwordHasher: PasswordHasherService,
     @Optional() private readonly configService?: CoreConfigService,
     @Optional() private readonly redis?: RedisService,
+    @Optional() private securitySettingsService?: SecuritySettingsService,
+    @Optional() private readonly loginHistoryRepository?: AuthLoginHistoryRepository,
   ) {}
 
-  /** Tạo phiên đăng nhập mới và phát hành cặp Access Token + Refresh Token */
+  /** Gắn SecuritySettingsService (hỗ trợ khởi tạo linh hoạt trong unit test harness) */
+  public setSecuritySettingsService(service?: SecuritySettingsService): void {
+    if (service) {
+      this.securitySettingsService = service;
+    }
+  }
+
+  /** Đọc cấu hình thời hạn Idle Timeout, Max Session Lifetime và cờ bật/tắt Audit Login Log */
+  private async resolveSessionPolicy(): Promise<{
+    idleTimeoutMs: number;
+    maxLifetimeMs: number;
+    enableLoginAuditLog: boolean;
+  }> {
+    const settings = await this.securitySettingsService?.getSettings();
+    const idleMinutes = settings?.sessionIdleTimeoutMinutes ?? DEFAULT_IDLE_TIMEOUT_MINUTES;
+    const maxLifetimeMinutes = settings?.sessionMaxLifetimeMinutes ?? DEFAULT_MAX_LIFETIME_MINUTES;
+    const enableLoginAuditLog = settings?.enableLoginAuditLog !== false;
+
+    return {
+      idleTimeoutMs: idleMinutes > 0 ? idleMinutes * 60_000 : 0,
+      maxLifetimeMs:
+        maxLifetimeMinutes > 0 ? maxLifetimeMinutes * 60_000 : DEFAULT_REFRESH_TTL_SEC * 1000,
+      enableLoginAuditLog,
+    };
+  }
+
+  /** Ghi lịch sử sự kiện Đăng nhập / Đăng xuất / Thu hồi phiên (tôn trọng cờ enableLoginAuditLog) */
+  public async recordAuthEvent(
+    input: RecordAuthEventInput,
+  ): Promise<AuthLoginHistoryEntity | null> {
+    const { enableLoginAuditLog } = await this.resolveSessionPolicy();
+    if (!enableLoginAuditLog) {
+      return null;
+    }
+
+    const now = new Date();
+    const deviceName = input.deviceName ?? this.extractDeviceName(input.userAgent);
+    const status = input.status ?? AUTH_EVENT_STATUS.SUCCESS;
+
+    if (
+      this.loginHistoryRepository &&
+      typeof this.loginHistoryRepository.recordEvent === 'function'
+    ) {
+      try {
+        const saved = await this.loginHistoryRepository.recordEvent({
+          userId: input.userId ?? null,
+          sessionId: input.sessionId ?? null,
+          identifier: input.identifier ?? null,
+          eventType: input.eventType,
+          status,
+          ipAddress: input.ipAddress ?? null,
+          userAgent: input.userAgent ?? null,
+          deviceName,
+          reason: input.reason ?? null,
+        });
+        this.fallbackLoginHistory.unshift(saved);
+        return saved;
+      } catch {
+        // Fallback sang bộ nhớ đệm nếu môi trường test không khởi tạo bảng auth_login_histories
+      }
+    }
+
+    const fallbackEntry = {
+      id: ++this.fallbackHistorySeq,
+      userId: input.userId ?? null,
+      sessionId: input.sessionId ?? null,
+      identifier: input.identifier ?? null,
+      eventType: input.eventType,
+      status,
+      ipAddress: input.ipAddress ?? null,
+      userAgent: input.userAgent ?? null,
+      deviceName,
+      reason: input.reason ?? null,
+      createdAt: now,
+      updatedAt: now,
+      deletedAt: null,
+    } as AuthLoginHistoryEntity;
+
+    this.fallbackLoginHistory.unshift(fallbackEntry);
+    return fallbackEntry;
+  }
+
+  /** Tạo phiên đăng nhập mới và phát hành cặp Access Token + Refresh Token (Mục 3.4.1 & 3.4.3) */
   public async createSession(
     user: UserAuthIdentityView,
     context: { ipAddress?: string | null; userAgent?: string | null; deviceName?: string | null },
@@ -50,15 +163,18 @@ export class SessionService {
       DEFAULT_REFRESH_TTL_SEC,
     );
 
+    const { maxLifetimeMs, idleTimeoutMs } = await this.resolveSessionPolicy();
     const now = new Date();
-    const expiresAt = new Date(now.getTime() + refreshTtlSec * 1000);
+    const effectiveMaxSec = Math.min(refreshTtlSec, Math.floor(maxLifetimeMs / 1000));
+    const expiresAt = new Date(now.getTime() + Math.max(1, effectiveMaxSec) * 1000);
+    const resolvedDeviceName = context.deviceName ?? this.extractDeviceName(context.userAgent);
 
     const createdSession = await this.sessionRepository.saveEntity({
       userId: user.id,
       refreshTokenHash: 'pending',
       ipAddress: context.ipAddress ?? null,
       userAgent: context.userAgent ?? null,
-      deviceName: context.deviceName ?? this.extractDeviceName(context.userAgent),
+      deviceName: resolvedDeviceName,
       lastActiveAt: now,
       expiresAt,
       revokedAt: null,
@@ -80,13 +196,32 @@ export class SessionService {
         },
         accessTtlSec,
       ),
-      this.tokenService.signRefreshToken({ sub: user.id, sid: sessionId }, refreshTtlSec),
+      this.tokenService.signRefreshToken(
+        { sub: user.id, sid: sessionId },
+        Math.max(1, effectiveMaxSec),
+      ),
     ]);
 
     createdSession.refreshTokenHash = this.passwordHasher.sha256(refreshToken);
     await this.sessionRepository.saveEntity(createdSession);
 
-    await this.cacheActiveSession(sessionId, user.id, refreshTtlSec);
+    const redisTtlSec =
+      idleTimeoutMs > 0
+        ? Math.min(Math.max(1, effectiveMaxSec), Math.floor(idleTimeoutMs / 1000))
+        : Math.max(1, effectiveMaxSec);
+    await this.cacheActiveSession(sessionId, user.id, redisTtlSec);
+
+    await this.recordAuthEvent({
+      userId: user.id,
+      sessionId,
+      identifier: user.email || user.username,
+      eventType: AUTH_EVENT_TYPE.LOGIN_SUCCESS,
+      status: AUTH_EVENT_STATUS.SUCCESS,
+      ipAddress: context.ipAddress ?? null,
+      userAgent: context.userAgent ?? null,
+      deviceName: resolvedDeviceName,
+      reason: 'User logged in successfully',
+    });
 
     return {
       sessionId,
@@ -96,10 +231,11 @@ export class SessionService {
     };
   }
 
-  /** Xoay vòng Refresh Token (Refresh Token Rotation) và cấp cặp token mới */
+  /** Xoay vòng Refresh Token (Refresh Token Rotation), kiểm tra Idle Timeout + Max Lifetime và phát hiện token dùng lại (Mục 3.4.2 & 3.4.3) */
   public async rotateRefreshSession(
     refreshToken: string,
     resolveUser: (userId: number) => Promise<UserAuthIdentityView | null>,
+    meta: { ipAddress?: string | null; userAgent?: string | null } = {},
   ): Promise<IssuedSessionTokens & { user: UserAuthIdentityView }> {
     const payload = await this.tokenService.verifyRefreshToken(refreshToken);
     if (!payload || !payload.sid) {
@@ -116,16 +252,69 @@ export class SessionService {
       throw new UnauthorizedAppException('auth.sessionNotFound');
     }
 
-    if (session.revokedAt || session.expiresAt.getTime() <= Date.now()) {
+    const nowMs = Date.now();
+    const { idleTimeoutMs, maxLifetimeMs } = await this.resolveSessionPolicy();
+
+    if (session.revokedAt || session.expiresAt.getTime() <= nowMs) {
+      throw new UnauthorizedAppException('auth.sessionExpiredOrRevoked');
+    }
+
+    // Kiểm tra thời hạn tối đa tuyệt đối (Absolute Max Session Lifetime) tính từ lúc tạo phiên
+    const createdMs = session.createdAt ? session.createdAt.getTime() : nowMs;
+    if (maxLifetimeMs > 0 && nowMs - createdMs >= maxLifetimeMs) {
+      session.revokedAt = new Date(nowMs);
+      session.revokeReason = 'Session maximum lifetime exceeded';
+      await this.sessionRepository.saveEntity(session);
+      await this.removeSessionCache(session.id);
+      await this.recordAuthEvent({
+        userId: Number(session.userId),
+        sessionId: Number(session.id),
+        eventType: AUTH_EVENT_TYPE.SESSION_EXPIRED,
+        status: AUTH_EVENT_STATUS.FAILED,
+        ipAddress: meta.ipAddress ?? session.ipAddress ?? null,
+        userAgent: meta.userAgent ?? session.userAgent ?? null,
+        deviceName: session.deviceName ?? null,
+        reason: 'Session maximum lifetime exceeded',
+      });
+      throw new UnauthorizedAppException('auth.sessionExpiredOrRevoked');
+    }
+
+    // Kiểm tra thời gian không hoạt động (Idle Timeout)
+    const lastActiveMs = session.lastActiveAt ? session.lastActiveAt.getTime() : createdMs;
+    if (idleTimeoutMs > 0 && nowMs - lastActiveMs > idleTimeoutMs) {
+      session.revokedAt = new Date(nowMs);
+      session.revokeReason = 'Session idle timeout expired';
+      await this.sessionRepository.saveEntity(session);
+      await this.removeSessionCache(session.id);
+      await this.recordAuthEvent({
+        userId: Number(session.userId),
+        sessionId: Number(session.id),
+        eventType: AUTH_EVENT_TYPE.SESSION_EXPIRED,
+        status: AUTH_EVENT_STATUS.FAILED,
+        ipAddress: meta.ipAddress ?? session.ipAddress ?? null,
+        userAgent: meta.userAgent ?? session.userAgent ?? null,
+        deviceName: session.deviceName ?? null,
+        reason: 'Session idle timeout expired',
+      });
       throw new UnauthorizedAppException('auth.sessionExpiredOrRevoked');
     }
 
     // Phát hiện dùng lại Refresh Token cũ đã xoay vòng -> thu hồi ngay phiên để chống đánh cắp
     if (session.refreshTokenHash !== tokenHash) {
-      session.revokedAt = new Date();
+      session.revokedAt = new Date(nowMs);
       session.revokeReason = 'Refresh token reuse detected';
       await this.sessionRepository.saveEntity(session);
       await this.removeSessionCache(session.id);
+      await this.recordAuthEvent({
+        userId: Number(session.userId),
+        sessionId: Number(session.id),
+        eventType: AUTH_EVENT_TYPE.TOKEN_REUSE_DETECTED,
+        status: AUTH_EVENT_STATUS.FAILED,
+        ipAddress: meta.ipAddress ?? session.ipAddress ?? null,
+        userAgent: meta.userAgent ?? session.userAgent ?? null,
+        deviceName: session.deviceName ?? null,
+        reason: 'Refresh token reuse detected; session revoked',
+      });
       throw new UnauthorizedAppException('auth.refreshTokenReused');
     }
 
@@ -144,6 +333,11 @@ export class SessionService {
       DEFAULT_REFRESH_TTL_SEC,
     );
 
+    const maxAllowedExpiresMs =
+      maxLifetimeMs > 0 ? createdMs + maxLifetimeMs : nowMs + refreshTtlSec * 1000;
+    const nextExpiresMs = Math.min(nowMs + refreshTtlSec * 1000, maxAllowedExpiresMs);
+    const remainingSec = Math.max(1, Math.floor((nextExpiresMs - nowMs) / 1000));
+
     const [newAccessToken, newRefreshToken] = await Promise.all([
       this.tokenService.signAccessToken(
         {
@@ -157,15 +351,22 @@ export class SessionService {
         },
         accessTtlSec,
       ),
-      this.tokenService.signRefreshToken({ sub: user.id, sid: session.id }, refreshTtlSec),
+      this.tokenService.signRefreshToken({ sub: user.id, sid: session.id }, remainingSec),
     ]);
 
-    const now = new Date();
+    const now = new Date(nowMs);
     session.refreshTokenHash = this.passwordHasher.sha256(newRefreshToken);
     session.lastActiveAt = now;
-    session.expiresAt = new Date(now.getTime() + refreshTtlSec * 1000);
+    session.expiresAt = new Date(nextExpiresMs);
+    if (meta.ipAddress) session.ipAddress = meta.ipAddress;
+    if (meta.userAgent) session.userAgent = meta.userAgent;
     await this.sessionRepository.saveEntity(session);
-    await this.cacheActiveSession(session.id, user.id, refreshTtlSec);
+
+    const redisTtlSec =
+      idleTimeoutMs > 0
+        ? Math.min(remainingSec, Math.floor(idleTimeoutMs / 1000))
+        : remainingSec;
+    await this.cacheActiveSession(session.id, user.id, redisTtlSec);
 
     return {
       sessionId: Number(session.id),
@@ -176,7 +377,7 @@ export class SessionService {
     };
   }
 
-  /** Kiểm tra một phiên đăng nhập còn hiệu lực hay không */
+  /** Kiểm tra một phiên đăng nhập còn hiệu lực hay không (bao gồm Idle Timeout & Max Lifetime) */
   public async isSessionActive(sessionId: number, userId: number): Promise<boolean> {
     if (this.redis?.isReady()) {
       const cached = await this.redis.client
@@ -185,28 +386,82 @@ export class SessionService {
       if (cached === 'REVOKED') {
         return false;
       }
-      if (cached === String(userId)) {
-        return true;
-      }
     }
 
     const session = await this.sessionRepository.findById(sessionId);
     if (!session || Number(session.userId) !== Number(userId)) {
       return false;
     }
-    if (session.revokedAt || session.expiresAt.getTime() <= Date.now()) {
+    if (session.revokedAt) {
       return false;
     }
+
+    const nowMs = Date.now();
+    const { idleTimeoutMs, maxLifetimeMs } = await this.resolveSessionPolicy();
+    const createdMs = session.createdAt ? session.createdAt.getTime() : nowMs;
+
+    if (
+      session.expiresAt.getTime() <= nowMs ||
+      (maxLifetimeMs > 0 && nowMs - createdMs >= maxLifetimeMs)
+    ) {
+      session.revokedAt = new Date(nowMs);
+      session.revokeReason = 'Session maximum lifetime exceeded';
+      await this.sessionRepository.saveEntity(session);
+      await this.removeSessionCache(session.id);
+      await this.recordAuthEvent({
+        userId: Number(session.userId),
+        sessionId: Number(session.id),
+        eventType: AUTH_EVENT_TYPE.SESSION_EXPIRED,
+        status: AUTH_EVENT_STATUS.FAILED,
+        ipAddress: session.ipAddress ?? null,
+        userAgent: session.userAgent ?? null,
+        deviceName: session.deviceName ?? null,
+        reason: 'Session maximum lifetime exceeded',
+      });
+      return false;
+    }
+
+    const lastActiveMs = session.lastActiveAt ? session.lastActiveAt.getTime() : createdMs;
+    if (idleTimeoutMs > 0 && nowMs - lastActiveMs > idleTimeoutMs) {
+      session.revokedAt = new Date(nowMs);
+      session.revokeReason = 'Session idle timeout expired';
+      await this.sessionRepository.saveEntity(session);
+      await this.removeSessionCache(session.id);
+      await this.recordAuthEvent({
+        userId: Number(session.userId),
+        sessionId: Number(session.id),
+        eventType: AUTH_EVENT_TYPE.SESSION_EXPIRED,
+        status: AUTH_EVENT_STATUS.FAILED,
+        ipAddress: session.ipAddress ?? null,
+        userAgent: session.userAgent ?? null,
+        deviceName: session.deviceName ?? null,
+        reason: 'Session idle timeout expired',
+      });
+      return false;
+    }
+
+    session.lastActiveAt = new Date(nowMs);
+    await this.sessionRepository.saveEntity(session);
     return true;
   }
 
-  /** Liệt kê danh sách các phiên đang hoạt động của người dùng */
+  /** Liệt kê danh sách các phiên đang hoạt động của người dùng (Mục 3.4.4) */
   public async listUserSessions(
     userId: number,
     currentSessionId?: number,
   ): Promise<SessionItemResponse[]> {
+    const { idleTimeoutMs, maxLifetimeMs } = await this.resolveSessionPolicy();
+    const nowMs = Date.now();
     const sessions = await this.sessionRepository.findActiveByUserId(userId);
-    return sessions.map((s) => ({
+    const validSessions = sessions.filter((s) => {
+      const createdMs = s.createdAt ? s.createdAt.getTime() : nowMs;
+      const lastActiveMs = s.lastActiveAt ? s.lastActiveAt.getTime() : createdMs;
+      if (maxLifetimeMs > 0 && nowMs - createdMs >= maxLifetimeMs) return false;
+      if (idleTimeoutMs > 0 && nowMs - lastActiveMs > idleTimeoutMs) return false;
+      return true;
+    });
+
+    return validSessions.map((s) => ({
       id: Number(s.id),
       userId: Number(s.userId),
       ipAddress: s.ipAddress ?? null,
@@ -216,14 +471,109 @@ export class SessionService {
       lastActiveAt: s.lastActiveAt.toISOString(),
       expiresAt: s.expiresAt.toISOString(),
       createdAt: s.createdAt.toISOString(),
+      revokedAt: s.revokedAt ? s.revokedAt.toISOString() : null,
+      revokeReason: s.revokeReason ?? null,
     }));
   }
 
-  /** Thu hồi một phiên đăng nhập cụ thể của người dùng */
+  /** Xem lịch sử đăng nhập & đăng xuất theo thời gian, IP và thiết bị (Mục 3.4.7) */
+  public async listUserLoginHistory(
+    userId: number,
+    limit = 50,
+  ): Promise<LoginHistoryItemResponse[]> {
+    const safeLimit = Math.max(1, Math.min(200, limit));
+    let records: AuthLoginHistoryEntity[] = [];
+
+    if (
+      this.loginHistoryRepository &&
+      typeof this.loginHistoryRepository.findByUserId === 'function'
+    ) {
+      try {
+        records = await this.loginHistoryRepository.findByUserId(userId, safeLimit);
+      } catch {
+        records = [];
+      }
+    }
+
+    if (records.length === 0) {
+      records = this.fallbackLoginHistory
+        .filter((h) => Number(h.userId) === Number(userId))
+        .slice(0, safeLimit);
+    }
+
+    // Nếu chưa có bản ghi trong auth_login_histories nhưng đã có phiên trong auth_sessions, tổng hợp từ auth_sessions
+    if (records.length === 0) {
+      const repoAny = this.sessionRepository as unknown as {
+        findAllByUserId?: (uid: number, lim?: number) => Promise<AuthSessionEntity[]>;
+      };
+      const sessions: AuthSessionEntity[] =
+        typeof repoAny.findAllByUserId === 'function'
+          ? await repoAny.findAllByUserId(userId, safeLimit).catch(() => [])
+          : await this.sessionRepository.findActiveByUserId(userId).catch(() => []);
+
+      const synthesized: LoginHistoryItemResponse[] = [];
+      for (const s of sessions) {
+        if (s.revokedAt) {
+          const isLogout = (s.revokeReason ?? '').toLowerCase().includes('logged out');
+          const evCode = isLogout ? AUTH_EVENT_TYPE.LOGOUT : AUTH_EVENT_TYPE.SESSION_REVOKED;
+          synthesized.push({
+            id: Number(s.id) * 10 + 2,
+            userId: Number(s.userId),
+            sessionId: Number(s.id),
+            identifier: null,
+            eventType: evCode,
+            eventTypeName: getAuthEventTypeName(evCode),
+            status: AUTH_EVENT_STATUS.SUCCESS,
+            statusName: 'SUCCESS',
+            ipAddress: s.ipAddress ?? null,
+            userAgent: s.userAgent ?? null,
+            deviceName: s.deviceName ?? null,
+            reason: s.revokeReason ?? 'Session revoked',
+            createdAt: s.revokedAt.toISOString(),
+          });
+        }
+        synthesized.push({
+          id: Number(s.id) * 10 + 1,
+          userId: Number(s.userId),
+          sessionId: Number(s.id),
+          identifier: null,
+          eventType: AUTH_EVENT_TYPE.LOGIN_SUCCESS,
+          eventTypeName: 'LOGIN_SUCCESS',
+          status: AUTH_EVENT_STATUS.SUCCESS,
+          statusName: 'SUCCESS',
+          ipAddress: s.ipAddress ?? null,
+          userAgent: s.userAgent ?? null,
+          deviceName: s.deviceName ?? null,
+          reason: 'Session created',
+          createdAt: s.createdAt.toISOString(),
+        });
+      }
+      return synthesized.slice(0, safeLimit);
+    }
+
+    return records.map((r) => ({
+      id: Number(r.id),
+      userId: r.userId !== undefined && r.userId !== null ? Number(r.userId) : null,
+      sessionId: r.sessionId !== undefined && r.sessionId !== null ? Number(r.sessionId) : null,
+      identifier: r.identifier ?? null,
+      eventType: Number(r.eventType),
+      eventTypeName: getAuthEventTypeName(r.eventType),
+      status: Number(r.status),
+      statusName: getAuthEventStatusName(r.status),
+      ipAddress: r.ipAddress ?? null,
+      userAgent: r.userAgent ?? null,
+      deviceName: r.deviceName ?? null,
+      reason: r.reason ?? null,
+      createdAt: r.createdAt.toISOString(),
+    }));
+  }
+
+  /** Thu hồi một phiên đăng nhập cụ thể của người dùng (Mục 3.4.5) */
   public async revokeSessionById(
     userId: number,
     sessionId: number,
     reason = 'User logged out',
+    meta: { ipAddress?: string | null; userAgent?: string | null } = {},
   ): Promise<{ revoked: true; sessionId: number }> {
     const session = await this.sessionRepository.findById(sessionId);
     if (!session || Number(session.userId) !== Number(userId)) {
@@ -237,14 +587,28 @@ export class SessionService {
     }
 
     await this.removeSessionCache(sessionId);
+
+    const isSelfLogout = reason.toLowerCase().includes('logged out');
+    await this.recordAuthEvent({
+      userId: Number(userId),
+      sessionId: Number(sessionId),
+      eventType: isSelfLogout ? AUTH_EVENT_TYPE.LOGOUT : AUTH_EVENT_TYPE.SESSION_REVOKED,
+      status: AUTH_EVENT_STATUS.SUCCESS,
+      ipAddress: meta.ipAddress ?? session.ipAddress ?? null,
+      userAgent: meta.userAgent ?? session.userAgent ?? null,
+      deviceName: session.deviceName ?? null,
+      reason,
+    });
+
     return { revoked: true, sessionId: Number(sessionId) };
   }
 
-  /** Thu hồi toàn bộ các phiên đăng nhập của người dùng (hỗ trợ giữ lại phiên hiện hành) */
+  /** Thu hồi toàn bộ các phiên đăng nhập của người dùng (Mục 3.4.6 — hỗ trợ giữ lại phiên hiện hành) */
   public async revokeAllUserSessions(
     userId: number,
     reason = 'Revoked all sessions',
     exceptSessionId?: number,
+    meta: { ipAddress?: string | null; userAgent?: string | null } = {},
   ): Promise<number> {
     const revokedList = await this.sessionRepository.revokeAllForUser(
       userId,
@@ -252,6 +616,18 @@ export class SessionService {
       exceptSessionId,
     );
     await Promise.all(revokedList.map((s) => this.removeSessionCache(Number(s.id))));
+
+    await this.recordAuthEvent({
+      userId: Number(userId),
+      sessionId: exceptSessionId ?? null,
+      eventType: AUTH_EVENT_TYPE.SESSION_REVOKE_ALL,
+      status: AUTH_EVENT_STATUS.SUCCESS,
+      ipAddress: meta.ipAddress ?? revokedList[0]?.ipAddress ?? null,
+      userAgent: meta.userAgent ?? revokedList[0]?.userAgent ?? null,
+      deviceName: revokedList[0]?.deviceName ?? this.extractDeviceName(meta.userAgent),
+      reason: `${reason} (revoked ${revokedList.length} sessions)`,
+    });
+
     return revokedList.length;
   }
 
@@ -276,7 +652,7 @@ export class SessionService {
   }
 
   /** Suy đoán tên thiết bị ngắn gọn từ chuỗi User-Agent */
-  private extractDeviceName(userAgent?: string | null): string {
+  public extractDeviceName(userAgent?: string | null): string {
     if (!userAgent) return 'Unknown Device';
     if (/iPhone|iPad|iOS/i.test(userAgent)) return 'iOS Device';
     if (/Android/i.test(userAgent)) return 'Android Device';

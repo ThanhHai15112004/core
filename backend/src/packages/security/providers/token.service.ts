@@ -3,6 +3,7 @@ import { Inject, Injectable, Optional } from '@nestjs/common';
 import { CoreConfigService } from '@packages/config/index.js';
 import {
   type IUserIdentityResolver,
+  type IdentityResolutionContext,
   type TokenPayload,
   USER_IDENTITY_RESOLVER,
   type UserIdentity,
@@ -129,6 +130,16 @@ export class TokenService implements TokenVerificationStrategy {
     return this.signHs256({ ...payload, type: 'mfa_challenge' }, secret, ttlSeconds);
   }
 
+  /** Ký phát hành Step-Up Token ngắn hạn (mặc định 5 phút) phục vụ xác thực lại khi thao tác nhạy cảm (Mục 3.5.7) */
+  public async signStepUpToken(
+    payload: { sub: string | number; sid?: string | number; action?: string; method?: string },
+    expiresIn?: string | number,
+  ): Promise<string> {
+    const secret = await this.getAccessSecret();
+    const ttlSeconds = parseDurationSeconds(expiresIn, DEFAULT_MFA_CHALLENGE_TTL_SECONDS);
+    return this.signHs256({ ...payload, type: 'step_up' }, secret, ttlSeconds);
+  }
+
   /** Xác thực tính hợp lệ và chữ ký số của Access Token */
   public async verify(token: string): Promise<TokenPayload | null> {
     const secret = await this.getAccessSecret();
@@ -162,12 +173,25 @@ export class TokenService implements TokenVerificationStrategy {
     return payload;
   }
 
-  /** Xác thực thông tin danh tính tài khoản người dùng từ payload JWT */
-  public async validateUser(payload: TokenPayload): Promise<UserIdentity | null> {
+  /** Xác thực tính hợp lệ của Step-Up Token (Mục 3.5.7) */
+  public async verifyStepUpToken(token: string): Promise<TokenPayload | null> {
+    const secret = await this.getAccessSecret();
+    const payload = this.verifyHs256(token, secret);
+    if (!payload || payload.type !== 'step_up') {
+      return null;
+    }
+    return payload;
+  }
+
+  /** Xác thực thông tin danh tính tài khoản người dùng hoặc Service Account từ payload JWT */
+  public async validateUser(
+    payload: TokenPayload,
+    context?: IdentityResolutionContext,
+  ): Promise<UserIdentity | null> {
     if (payload.sub === undefined || payload.sub === null || payload.sub === '') return null;
 
     if (this.identityResolver) {
-      return this.identityResolver.resolveIdentity(payload);
+      return this.identityResolver.resolveIdentity(payload, context);
     }
 
     const numericId = typeof payload.sub === 'number' ? payload.sub : Number(payload.sub) || 1;

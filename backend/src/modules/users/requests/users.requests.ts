@@ -103,6 +103,8 @@ export interface ChangeUserStatusRequest {
 
 export const assignUserRolesSchema = z.object({
   roleIds: z.array(coercePositiveInt),
+  stepUpToken: z.string().trim().min(10).optional(),
+  requireStepUp: z.boolean().optional(),
 });
 
 export type AssignUserRolesRequest = z.infer<typeof assignUserRolesSchema>;
@@ -129,6 +131,8 @@ export const listUsersQuerySchema = z.object({
   format: optionalQueryParam(z.enum(['csv', 'xlsx'])),
   title: optionalQueryParam(z.string().trim().max(160)),
   logoBase64: optionalQueryParam(z.string().max(500_000)),
+  stepUpToken: optionalQueryParam(z.string().trim().min(10)),
+  requireStepUp: optionalQueryParam(booleanQueryParam()),
 });
 
 export type ListUsersQuery = z.infer<typeof listUsersQuerySchema>;
@@ -178,4 +182,14 @@ export const adminResetUserPasswordSchema = z
   .default({ useSuggestedPassword: false, revokeSessions: true });
 
 export type AdminResetUserPasswordRequest = z.infer<typeof adminResetUserPasswordSchema>;
+
+export const adminResetUserMfaSchema = z.object({
+  reason: z.string().trim().min(3).max(500),
+  verificationReference: z.string().trim().max(255).optional(),
+  revokeSessions: z.boolean().optional().default(true),
+  stepUpToken: z.string().trim().min(10).optional(),
+});
+
+export type AdminResetUserMfaRequest = z.infer<typeof adminResetUserMfaSchema>;
+
 

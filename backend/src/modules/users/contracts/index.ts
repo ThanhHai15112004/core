@@ -230,6 +230,40 @@ export interface AdminResetUserPasswordResult {
   readonly generatedPassword?: string;
 }
 
+export interface UserLoginHistoryItemView {
+  readonly id: number;
+  readonly userId: number | null;
+  readonly sessionId: number | null;
+  readonly identifier: string | null;
+  readonly eventType: number;
+  readonly eventTypeName: string;
+  readonly status: number;
+  readonly statusName: 'SUCCESS' | 'FAILED';
+  readonly ipAddress: string | null;
+  readonly userAgent: string | null;
+  readonly deviceName: string | null;
+  readonly reason: string | null;
+  readonly createdAt: string;
+}
+
+export interface AdminResetUserMfaInput {
+  readonly reason: string;
+  readonly verificationReference?: string | undefined;
+  readonly revokeSessions?: boolean | undefined;
+  readonly stepUpToken?: string | undefined;
+}
+
+export interface AdminResetUserMfaResult {
+  readonly reset: true;
+  readonly userId: number;
+  readonly revokedSessionsCount: number;
+  readonly revokedTrustedDevicesCount: number;
+  readonly reason: string;
+  readonly verificationReference?: string | null;
+  readonly resetByActorId?: number | null;
+  readonly resetAt: string;
+}
+
 export interface IUsersPublicService {
   findAuthUserByIdentifier(identifier: string): Promise<UserAuthCredentialsView | null>;
   findAuthCredentialsByUserId?(userId: number): Promise<UserAuthCredentialsView | null>;
@@ -257,7 +291,25 @@ export interface IUsersPublicService {
       actorId?: number,
     ) => Promise<AdminResetUserPasswordResult>,
   ): void;
+  registerAdminRevokeSessionsDelegate?(
+    delegate: (userId: number, reason?: string) => Promise<number>,
+  ): void;
+  registerUserLoginHistoryDelegate?(
+    delegate: (userId: number, limit?: number) => Promise<UserLoginHistoryItemView[]>,
+  ): void;
+  registerAdminResetMfaDelegate?(
+    delegate: (
+      userId: number,
+      input: AdminResetUserMfaInput,
+      actorId?: number,
+    ) => Promise<AdminResetUserMfaResult>,
+  ): void;
+  registerStepUpVerificationDelegate?(
+    delegate: (userId: number, stepUpToken: string, action?: string) => Promise<boolean>,
+  ): void;
 }
 
 export const USERS_PUBLIC_SERVICE = Symbol('USERS_PUBLIC_SERVICE');
+
+
 

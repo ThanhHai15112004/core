@@ -16,6 +16,7 @@ import { UsersService } from '../services/users.service.js';
 import { UserImportService } from '../import/index.js';
 import { UserExportService } from '../export/index.js';
 import {
+  type AdminResetUserMfaRequest,
   type AdminResetUserPasswordRequest,
   type AssignUserOrganizationsRequest,
   type AssignUserRolesRequest,
@@ -25,6 +26,7 @@ import {
   type ListUsersQuery,
   type LockUserRequest,
   type UpdateUserRequest,
+  adminResetUserMfaSchema,
   adminResetUserPasswordSchema,
   assignUserOrganizationsSchema,
   assignUserRolesSchema,
@@ -69,7 +71,7 @@ export class UsersController {
     return this.usersService.listPaginated(query);
   }
 
-  /** Xuất danh sách người dùng ra Excel (.xlsx) hoặc CSV (.csv) theo bộ lọc (Mục 3.1.8) */
+  /** Xuất danh sách người dùng ra Excel (.xlsx) hoặc CSV (.csv) theo bộ lọc (Mục 3.1.8 & 3.5.7 — hỗ trợ xác thực lại khi xuất dữ liệu lớn) */
   @Get(USERS_ROUTES.EXPORT)
   @RequirePermissions('users.export')
   @ApiDoc({
@@ -78,7 +80,14 @@ export class UsersController {
   })
   public async exportCsv(
     @ValidatedQuery(listUsersQuerySchema) query: ListUsersQuery,
+    @CurrentUser() actor?: UserIdentity,
   ): Promise<ExportUsersCsvResponse> {
+    await this.usersService.verifySensitiveActionStepUp(
+      actor?.id,
+      query.stepUpToken,
+      query.requireStepUp,
+      'users.export',
+    );
     return this.exportService.exportUsersCsv(query);
   }
 
@@ -322,5 +331,70 @@ export class UsersController {
   ) {
     return this.usersService.adminResetPassword(id, body ?? {}, actor?.id);
   }
+
+  /** Reset MFA có kiểm soát từ trang quản trị (Mục 3.5.8 — có xác minh hoặc phê duyệt) */
+  @Post(USERS_ROUTES.RESET_MFA)
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions('users.update')
+  @ApiDoc({
+    summary: 'Reset MFA có kiểm soát cho người dùng bị mất thiết bị xác thực (kèm lý do/xác minh và thu hồi phiên)',
+    response: z.object({
+      reset: z.literal(true),
+      userId: z.number().int().positive(),
+      revokedSessionsCount: z.number().int().min(0),
+      revokedTrustedDevicesCount: z.number().int().min(0),
+      reason: z.string(),
+      verificationReference: z.string().nullable().optional(),
+      resetByActorId: z.number().int().nullable().optional(),
+      resetAt: z.string(),
+    }),
+  })
+  public async resetUserMfa(
+    @ValidatedParams(positiveIntParamSchema, 'id') id: number,
+    @ValidatedBody(adminResetUserMfaSchema) body: AdminResetUserMfaRequest,
+    @CurrentUser() actor?: UserIdentity,
+  ) {
+    return this.usersService.adminResetMfa(id, body, actor?.id);
+  }
+
+  /** Thu hồi toàn bộ phiên đăng nhập của người dùng khi có sự cố (Mục 3.4.6) */
+  @Post(USERS_ROUTES.REVOKE_SESSIONS)
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions('users.status')
+  @ApiDoc({
+    summary: 'Thu hồi toàn bộ phiên đăng nhập của người dùng khi phát hiện sự cố bảo mật',
+    response: z.object({
+      revoked: z.literal(true),
+      userId: z.number().int().positive(),
+      revokedCount: z.number().int().min(0),
+      revokedSessionsCount: z.number().int().min(0).optional(),
+      reason: z.string().optional(),
+    }),
+  })
+  public async revokeUserSessions(
+    @ValidatedParams(positiveIntParamSchema, 'id') id: number,
+    @ValidatedBody(
+      z
+        .object({ reason: z.string().trim().max(255).optional() })
+        .default({}),
+    )
+    body?: { reason?: string },
+    @CurrentUser() actor?: UserIdentity,
+  ) {
+    return this.usersService.revokeUserSessions(id, body?.reason, actor?.id);
+  }
+
+  /** Xem lịch sử đăng nhập & đăng xuất của một người dùng theo thời gian, IP và thiết bị (Mục 3.4.7) */
+  @Get(USERS_ROUTES.LOGIN_HISTORY)
+  @RequirePermissions('users.read')
+  @ApiDoc({
+    summary: 'Xem lịch sử đăng nhập và đăng xuất của người dùng theo thời gian, IP và thiết bị',
+  })
+  public async getLoginHistory(
+    @ValidatedParams(positiveIntParamSchema, 'id') id: number,
+  ) {
+    return this.usersService.getLoginHistory(id, 50);
+  }
 }
+
 

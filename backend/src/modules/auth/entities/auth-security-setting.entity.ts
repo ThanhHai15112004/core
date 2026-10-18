@@ -100,5 +100,15 @@ export class AuthSecuritySettingEntity extends TypeOrmBaseEntity {
 
   @Column({ name: 'otp_cooldown_seconds', type: 'int', default: 60 })
   public otpCooldownSeconds?: number;
+
+  @Column({ name: 'session_idle_timeout_minutes', type: 'int', default: 30 })
+  public sessionIdleTimeoutMinutes?: number;
+
+  @Column({ name: 'session_max_lifetime_minutes', type: 'int', default: 10080 })
+  public sessionMaxLifetimeMinutes?: number;
+
+  @Column({ name: 'enable_login_audit_log', type: 'boolean', default: true })
+  public enableLoginAuditLog?: boolean;
 }
+
 

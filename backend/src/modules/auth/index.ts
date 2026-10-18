@@ -7,5 +7,9 @@ export * from './services/session.service.js';
 export * from './services/password.service.js';
 export * from './services/mfa.service.js';
 export * from './services/verification.service.js';
+export * from './services/service-account.service.js';
+export * from './services/notification-adapters.provider.js';
 export * from './services/user-identity-resolver.service.js';
 export * from './auth.module.js';
+
+

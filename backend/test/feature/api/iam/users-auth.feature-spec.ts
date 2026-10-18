@@ -1619,4 +1619,291 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
     expect(loginAfterAdminReset.body.data.accessToken).toBeDefined();
     expect(userStore.get(userId)?.passwordHash.startsWith('pbkdf2_sha256$')).toBe(true);
   });
+
+  it('Section 3.6 E2E: Service Accounts & API Clients (3.6.1 -> 3.6.7) — create service account, create API client with one-time secret, issue token, enforce scopes on /api/v1/users, rotate secret, enforce IP whitelist, track usage logs, and revoke client tokens immediately', async () => {
+    const adminHeaders = { authorization: `Bearer ${adminAccessToken}` };
+
+    // 1. Create Service Account (3.6.1 — system/job account independent of personal users)
+    const createSaRes = await context.injectJson<{
+      id: number;
+      code: string;
+      name: string;
+      isServiceAccount: boolean;
+      userId: null;
+      status: number;
+      statusName: string;
+      scopes: string[];
+    }>({
+      method: 'POST',
+      url: '/api/v1/auth/service-accounts',
+      headers: adminHeaders,
+      payload: {
+        code: 'crm_webhook_sync',
+        name: 'CRM Webhook Sync Job',
+        description: 'Service account đồng bộ dữ liệu CRM định kỳ',
+        scopes: ['users.read', 'users.export', 'organizations.read'],
+      },
+    });
+    expect(createSaRes.status).toBe(HTTP_STATUS_CODE.CREATED);
+    expect(createSaRes.body.data.id).toBe(1);
+    expect(createSaRes.body.data.code).toBe('CRM_WEBHOOK_SYNC');
+    expect(createSaRes.body.data.isServiceAccount).toBe(true);
+    expect(createSaRes.body.data.userId).toBeNull();
+    expect(createSaRes.body.data.statusName).toBe('ACTIVE');
+    expect(createSaRes.body.data.scopes).toEqual([
+      'users.read',
+      'users.export',
+      'organizations.read',
+    ]);
+
+    const saId = createSaRes.body.data.id;
+
+    // 2. Create API Client with Client ID, one-time Client Secret, Scopes & IP Whitelist (3.6.2, 3.6.3, 3.6.4, 3.6.6)
+    const createClientRes = await context.injectJson<{
+      id: number;
+      serviceAccountId: number;
+      serviceAccountCode: string;
+      clientId: string;
+      clientSecret: string;
+      secretPrefix: string;
+      oneTimeSecretWarning: boolean;
+      scopes: string[];
+      allowedIps: string[];
+      status: number;
+      statusName: string;
+      tokenVersion: number;
+    }>({
+      method: 'POST',
+      url: '/api/v1/auth/api-clients',
+      headers: adminHeaders,
+      payload: {
+        serviceAccountId: saId,
+        name: 'CRM Production Server Client',
+        description: 'API Client cho máy chủ CRM Production',
+        scopes: ['users.read'],
+        allowedIps: ['127.0.0.1', '10.50.0.0/16'],
+      },
+    });
+    expect(createClientRes.status).toBe(HTTP_STATUS_CODE.CREATED);
+    expect(createClientRes.body.data.id).toBe(1);
+    expect(createClientRes.body.data.serviceAccountId).toBe(saId);
+    expect(createClientRes.body.data.clientId).toMatch(/^cli_[A-Za-z0-9_-]+$/);
+    expect(createClientRes.body.data.clientSecret).toMatch(/^cs_[A-Za-z0-9_-]+$/);
+    expect(createClientRes.body.data.oneTimeSecretWarning).toBe(true);
+    expect(createClientRes.body.data.scopes).toEqual(['users.read']);
+    expect(createClientRes.body.data.allowedIps).toEqual(['127.0.0.1', '10.50.0.0/16']);
+
+    const apiClientNumericId = createClientRes.body.data.id;
+    const clientId = createClientRes.body.data.clientId;
+    const initialSecret = createClientRes.body.data.clientSecret;
+
+    // 3.6.4: Subsequent GET /api/v1/auth/api-clients/:id and GET /api/v1/auth/api-clients NEVER return plain clientSecret
+    const getClientRes = await context.injectJson<Record<string, unknown>>({
+      method: 'GET',
+      url: `/api/v1/auth/api-clients/${apiClientNumericId}`,
+      headers: adminHeaders,
+    });
+    expect(getClientRes.status).toBe(HTTP_STATUS_CODE.OK);
+    expect(getClientRes.body.data.clientSecret).toBeUndefined();
+    expect(getClientRes.body.data.secretPrefix).toBe(`${initialSecret.slice(0, 10)}...`);
+
+    const listClientsRes = await context.injectJson<Array<Record<string, unknown>>>({
+      method: 'GET',
+      url: `/api/v1/auth/api-clients?serviceAccountId=${saId}`,
+      headers: adminHeaders,
+    });
+    expect(listClientsRes.status).toBe(HTTP_STATUS_CODE.OK);
+    expect(listClientsRes.body.data).toHaveLength(1);
+    expect(listClientsRes.body.data[0]?.clientSecret).toBeUndefined();
+
+    // 4. IP Whitelist check on token issuance (3.6.6): request from disallowed IP 198.51.100.77 is rejected (403)
+    const tokenDeniedIpRes = await context.injectJson({
+      method: 'POST',
+      url: '/api/v1/auth/api-clients/token',
+      remoteAddress: '198.51.100.77',
+      payload: {
+        clientId,
+        clientSecret: initialSecret,
+      },
+    });
+    expect(tokenDeniedIpRes.status).toBe(HTTP_STATUS_CODE.FORBIDDEN);
+
+    // 5. Issue token from allowed IP in CIDR 10.50.0.0/16 (10.50.12.34)
+    const tokenSuccessRes = await context.injectJson<{
+      accessToken: string;
+      tokenType: string;
+      expiresIn: number;
+      clientId: string;
+      serviceAccountId: number;
+      serviceAccountCode: string;
+      scopes: string[];
+    }>({
+      method: 'POST',
+      url: '/api/v1/auth/api-clients/token',
+      remoteAddress: '10.50.12.34',
+      payload: {
+        clientId,
+        clientSecret: initialSecret,
+      },
+    });
+    expect(tokenSuccessRes.status).toBe(HTTP_STATUS_CODE.OK);
+    expect(tokenSuccessRes.body.data.accessToken).toBeDefined();
+    expect(tokenSuccessRes.body.data.tokenType).toBe('Bearer');
+    expect(tokenSuccessRes.body.data.scopes).toEqual(['users.read']);
+
+    const clientAccessToken1 = tokenSuccessRes.body.data.accessToken;
+
+    // 6. Scope Enforcement (3.6.3):
+    // Client has 'users.read' -> GET /api/v1/users succeeds (200 OK)
+    const clientReadUsersRes = await context.injectJson({
+      method: 'GET',
+      url: '/api/v1/users',
+      remoteAddress: '10.50.12.34',
+      headers: { authorization: `Bearer ${clientAccessToken1}` },
+    });
+    expect(clientReadUsersRes.status).toBe(HTTP_STATUS_CODE.OK);
+
+    // Client does NOT have 'users.export' -> GET /api/v1/users/export is forbidden (403)
+    const clientExportForbiddenRes = await context.injectJson({
+      method: 'GET',
+      url: '/api/v1/users/export',
+      remoteAddress: '10.50.12.34',
+      headers: { authorization: `Bearer ${clientAccessToken1}` },
+    });
+    expect(clientExportForbiddenRes.status).toBe(HTTP_STATUS_CODE.FORBIDDEN);
+
+    // Calling GET /api/v1/users with valid token but from disallowed IP 203.0.113.99 -> rejected by AuthGuard (403)
+    const clientApiCallDeniedIpRes = await context.injectJson({
+      method: 'GET',
+      url: '/api/v1/users',
+      remoteAddress: '203.0.113.99',
+      headers: { authorization: `Bearer ${clientAccessToken1}` },
+    });
+    expect(clientApiCallDeniedIpRes.status).toBe(HTTP_STATUS_CODE.FORBIDDEN);
+
+    // 7. Grant additional scope 'users.export' to API Client (3.6.3) & Rotate Client Secret (3.6.4)
+    const updateScopesRes = await context.injectJson<{ scopes: string[] }>({
+      method: 'PUT',
+      url: `/api/v1/auth/api-clients/${apiClientNumericId}/scopes`,
+      headers: adminHeaders,
+      payload: {
+        scopes: ['users.read', 'users.export'],
+      },
+    });
+    expect(updateScopesRes.status).toBe(HTTP_STATUS_CODE.OK);
+    expect(updateScopesRes.body.data.scopes).toEqual(['users.read', 'users.export']);
+
+    const rotateSecretRes = await context.injectJson<{
+      id: number;
+      clientId: string;
+      clientSecret: string;
+      secretPrefix: string;
+      secretRotatedAt: string;
+      tokenVersion: number;
+      oneTimeSecretWarning: boolean;
+    }>({
+      method: 'POST',
+      url: `/api/v1/auth/api-clients/${apiClientNumericId}/rotate-secret`,
+      headers: adminHeaders,
+      payload: {
+        reason: 'Xoay vòng định kỳ theo chính sách bảo mật',
+      },
+    });
+    expect(rotateSecretRes.status).toBe(HTTP_STATUS_CODE.OK);
+    expect(rotateSecretRes.body.data.clientSecret).toMatch(/^cs_[A-Za-z0-9_-]+$/);
+    expect(rotateSecretRes.body.data.clientSecret).not.toBe(initialSecret);
+    expect(rotateSecretRes.body.data.oneTimeSecretWarning).toBe(true);
+    expect(rotateSecretRes.body.data.tokenVersion).toBe(2);
+
+    const rotatedSecret = rotateSecretRes.body.data.clientSecret;
+
+    // Old token is immediately invalidated after secret rotation (401 Unauthorized)
+    const oldTokenCallRes = await context.injectJson({
+      method: 'GET',
+      url: '/api/v1/users',
+      remoteAddress: '10.50.12.34',
+      headers: { authorization: `Bearer ${clientAccessToken1}` },
+    });
+    expect(oldTokenCallRes.status).toBe(HTTP_STATUS_CODE.UNAUTHORIZED);
+
+    // Issue new token with rotated secret -> now has 'users.export' scope
+    const tokenAfterRotateRes = await context.injectJson<{
+      accessToken: string;
+      scopes: string[];
+    }>({
+      method: 'POST',
+      url: '/api/v1/auth/api-clients/token',
+      remoteAddress: '10.50.12.34',
+      payload: {
+        clientId,
+        clientSecret: rotatedSecret,
+      },
+    });
+    expect(tokenAfterRotateRes.status).toBe(HTTP_STATUS_CODE.OK);
+    expect(tokenAfterRotateRes.body.data.scopes).toEqual(['users.read', 'users.export']);
+
+    const clientAccessToken2 = tokenAfterRotateRes.body.data.accessToken;
+
+    const clientExportAllowedRes = await context.injectJson({
+      method: 'GET',
+      url: '/api/v1/users/export',
+      remoteAddress: '10.50.12.34',
+      headers: { authorization: `Bearer ${clientAccessToken2}` },
+    });
+    expect(clientExportAllowedRes.status).toBe(HTTP_STATUS_CODE.OK);
+
+    // 8. Revoke API Client (3.6.5) -> stops all issued tokens immediately
+    const revokeClientRes = await context.injectJson<{
+      revoked: boolean;
+      statusName: string;
+      tokenVersion: number;
+    }>({
+      method: 'POST',
+      url: `/api/v1/auth/api-clients/${apiClientNumericId}/revoke`,
+      headers: adminHeaders,
+      payload: {
+        reason: 'Ngừng kết nối máy chủ CRM cũ',
+      },
+    });
+    expect(revokeClientRes.status).toBe(HTTP_STATUS_CODE.OK);
+    expect(revokeClientRes.body.data.revoked).toBe(true);
+    expect(revokeClientRes.body.data.statusName).toBe('REVOKED');
+    expect(revokeClientRes.body.data.tokenVersion).toBe(3);
+
+    // Active token is immediately rejected after revocation (401 Unauthorized)
+    const callAfterRevokeRes = await context.injectJson({
+      method: 'GET',
+      url: '/api/v1/users',
+      remoteAddress: '10.50.12.34',
+      headers: { authorization: `Bearer ${clientAccessToken2}` },
+    });
+    expect(callAfterRevokeRes.status).toBe(HTTP_STATUS_CODE.UNAUTHORIZED);
+
+    // 9. Inspect recent usage tracking (3.6.7 — records IP, timestamp, result, endpoint & history)
+    const usageRes = await context.injectJson<{
+      id: number;
+      clientId: string;
+      lastUsedAt: string;
+      lastUsedIp: string;
+      lastUsedResult: string;
+      lastUsedEndpoint: string;
+      usageLogs: Array<{
+        timestamp: string;
+        ipAddress: string | null;
+        result: string;
+        endpoint?: string | null;
+      }>;
+    }>({
+      method: 'GET',
+      url: `/api/v1/auth/api-clients/${apiClientNumericId}/usage`,
+      headers: adminHeaders,
+    });
+    expect(usageRes.status).toBe(HTTP_STATUS_CODE.OK);
+    expect(usageRes.body.data.clientId).toBe(clientId);
+    expect(usageRes.body.data.lastUsedAt).toBeDefined();
+    expect(usageRes.body.data.lastUsedIp).toBe('10.50.12.34');
+    expect(usageRes.body.data.lastUsedResult).toBe('CLIENT_REVOKED');
+    expect(usageRes.body.data.usageLogs.length).toBeGreaterThanOrEqual(5);
+  });
 });
+

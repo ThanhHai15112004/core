@@ -239,6 +239,24 @@ export class CreateIamAndUsersTables1760515200000 implements MigrationInterface 
     `);
 
     await queryRunner.query(`
+      CREATE TABLE IF NOT EXISTS auth_login_histories (
+        id ${pkDef},
+        user_id INT NULL,
+        session_id INT NULL,
+        identifier VARCHAR(255) NULL,
+        event_type INT NOT NULL DEFAULT 1,
+        status INT NOT NULL DEFAULT 1,
+        ip_address VARCHAR(64) NULL,
+        user_agent VARCHAR(500) NULL,
+        device_name VARCHAR(128) NULL,
+        reason VARCHAR(255) NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        deleted_at TIMESTAMP NULL
+      )
+    `);
+
+    await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS auth_security_settings (
         id ${pkDef},
         scope_key VARCHAR(64) NOT NULL UNIQUE DEFAULT 'GLOBAL',
@@ -266,6 +284,9 @@ export class CreateIamAndUsersTables1760515200000 implements MigrationInterface 
         otp_max_send_count INT NOT NULL DEFAULT 5,
         otp_max_attempts INT NOT NULL DEFAULT 5,
         otp_cooldown_seconds INT NOT NULL DEFAULT 60,
+        session_idle_timeout_minutes INT NOT NULL DEFAULT 30,
+        session_max_lifetime_minutes INT NOT NULL DEFAULT 10080,
+        enable_login_audit_log BOOLEAN NOT NULL DEFAULT TRUE,
         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
         deleted_at TIMESTAMP NULL
@@ -289,6 +310,7 @@ export class CreateIamAndUsersTables1760515200000 implements MigrationInterface 
   public async down(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query('DROP TABLE IF EXISTS core_master_settings');
     await queryRunner.query('DROP TABLE IF EXISTS auth_security_settings');
+    await queryRunner.query('DROP TABLE IF EXISTS auth_login_histories');
     await queryRunner.query('DROP TABLE IF EXISTS auth_verification_codes');
     await queryRunner.query('DROP TABLE IF EXISTS auth_password_resets');
     await queryRunner.query('DROP TABLE IF EXISTS auth_mfa_configs');
@@ -304,3 +326,4 @@ export class CreateIamAndUsersTables1760515200000 implements MigrationInterface 
     await queryRunner.query('DROP TABLE IF EXISTS organization_units');
   }
 }
+

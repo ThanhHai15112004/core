@@ -3,12 +3,16 @@ export interface UserIdentity {
   readonly email?: string;
   readonly username?: string;
   readonly sessionId?: number;
+  readonly subjectType?: 'USER' | 'SERVICE_ACCOUNT';
+  readonly serviceAccountId?: number;
+  readonly apiClientId?: number;
+  readonly clientId?: string;
   readonly roles: readonly string[];
   readonly permissions: readonly string[];
   readonly organizationUnitIds?: readonly number[];
 }
 
-export type JwtTokenType = 'access' | 'refresh' | 'mfa_challenge';
+export type JwtTokenType = 'access' | 'refresh' | 'mfa_challenge' | 'step_up';
 
 export interface TokenPayload {
   readonly sub: string | number;
@@ -24,8 +28,18 @@ export interface TokenPayload {
   readonly [key: string]: unknown;
 }
 
+export interface IdentityResolutionContext {
+  readonly ipAddress?: string | null;
+  readonly endpoint?: string | null;
+  readonly method?: string | null;
+}
+
 export interface IUserIdentityResolver {
-  resolveIdentity(payload: TokenPayload): Promise<UserIdentity | null>;
+  resolveIdentity(
+    payload: TokenPayload,
+    context?: IdentityResolutionContext,
+  ): Promise<UserIdentity | null>;
 }
 
 export const USER_IDENTITY_RESOLVER = Symbol('USER_IDENTITY_RESOLVER');
+

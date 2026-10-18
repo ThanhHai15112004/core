@@ -12,6 +12,12 @@ import {
   normalizePhoneNumber,
 } from '@modules/users/contracts/index.js';
 import {
+  AUTH_EMAIL_NOTIFICATION_ADAPTER,
+  AUTH_SMS_OTP_PROVIDER,
+  type IEmailNotificationAdapter,
+  type ISmsOtpProvider,
+} from '../contracts/index.js';
+import {
   type AuthVerificationCodeEntity,
   VERIFICATION_CHANNEL,
   VERIFICATION_PURPOSE,
@@ -20,6 +26,10 @@ import {
 } from '../entities/auth-verification-code.entity.js';
 import { AuthVerificationCodeRepository } from '../repositories/auth-verification-code.repository.js';
 import { SecuritySettingsService } from './security-settings.service.js';
+import {
+  DefaultEmailNotificationAdapter,
+  DefaultSmsOtpProvider,
+} from './notification-adapters.provider.js';
 import type {
   ConfirmEmailVerificationRequest,
   ConfirmPhoneOtpVerificationRequest,
@@ -42,6 +52,8 @@ export class VerificationService {
   private readonly logger = new Logger(VerificationService.name);
   private fallbackSeq = 0;
   private readonly fallbackStore = new Map<number, AuthVerificationCodeEntity>();
+  private readonly emailAdapter: IEmailNotificationAdapter;
+  private readonly smsProvider: ISmsOtpProvider;
 
   constructor(
     private readonly passwordHasher: PasswordHasherService,
@@ -50,9 +62,18 @@ export class VerificationService {
     @Optional() private readonly verificationRepo?: AuthVerificationCodeRepository,
     @Optional() private readonly securitySettingsService?: SecuritySettingsService,
     @Optional() private readonly configService?: CoreConfigService,
-  ) {}
+    @Optional()
+    @Inject(AUTH_EMAIL_NOTIFICATION_ADAPTER)
+    emailAdapter?: IEmailNotificationAdapter,
+    @Optional()
+    @Inject(AUTH_SMS_OTP_PROVIDER)
+    smsProvider?: ISmsOtpProvider,
+  ) {
+    this.emailAdapter = emailAdapter ?? new DefaultEmailNotificationAdapter();
+    this.smsProvider = smsProvider ?? new DefaultSmsOtpProvider();
+  }
 
-  /** Gửi link hoặc mã xác minh Email có thời hạn (Mục 3.2.6) */
+  /** Gửi link hoặc mã xác minh Email có thời hạn (Mục 3.2.6 & 3.5.1) */
   public async sendEmailVerification(
     dto: SendEmailVerificationRequest,
     options: { userId?: number | undefined; ipAddress?: string | null | undefined } = {},
@@ -106,6 +127,15 @@ export class VerificationService {
       expiresAt,
       verifiedAt: null,
       requestedIp: options.ipAddress ?? null,
+    });
+
+    await this.emailAdapter.sendOtpEmail({
+      userId: user.id,
+      email: user.email,
+      otpCode,
+      expiresInSeconds: EMAIL_VERIFICATION_TTL_SECONDS,
+      purpose: 'EMAIL_VERIFICATION',
+      verificationToken: linkToken,
     });
 
     const maskedTarget = this.maskEmail(user.email);
@@ -245,6 +275,14 @@ export class VerificationService {
       expiresAt,
       verifiedAt: null,
       requestedIp: options.ipAddress ?? null,
+    });
+
+    await this.smsProvider.sendOtpSms({
+      userId: user.id,
+      phone: targetPhone,
+      otpCode,
+      expiresInSeconds: PHONE_OTP_TTL_SECONDS,
+      purpose: 'PHONE_VERIFICATION',
     });
 
     const maskedTarget = this.maskPhone(targetPhone);

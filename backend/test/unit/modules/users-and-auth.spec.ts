@@ -46,10 +46,12 @@ import { UsersService } from '@modules/users/services/users.service.js';
 import { UserImportService } from '@modules/users/import/index.js';
 import { UserExportService } from '@modules/users/export/index.js';
 import {
+  API_CLIENT_STATUS,
   DB_ENCRYPTION_ALGO_CODE,
   MFA_METHOD,
   MFA_POLICY_CODE,
   PASSWORD_HASH_ALGO_CODE,
+  SERVICE_ACCOUNT_STATUS,
 } from '@modules/auth/contracts/index.js';
 import type { AuthSessionEntity } from '@modules/auth/entities/auth-session.entity.js';
 import type { AuthMfaConfigEntity } from '@modules/auth/entities/auth-mfa-config.entity.js';
@@ -62,8 +64,14 @@ import type { AuthSecuritySettingRepository } from '@modules/auth/repositories/a
 import { SessionService } from '@modules/auth/services/session.service.js';
 import { PasswordService } from '@modules/auth/services/password.service.js';
 import { MfaService } from '@modules/auth/services/mfa.service.js';
+import {
+  DefaultEmailNotificationAdapter,
+  DefaultSmsOtpProvider,
+} from '@modules/auth/services/notification-adapters.provider.js';
 import { SecuritySettingsService } from '@modules/auth/services/security-settings.service.js';
 import { VerificationService } from '@modules/auth/services/verification.service.js';
+import { ServiceAccountService } from '@modules/auth/services/service-account.service.js';
+import { UserIdentityResolverService } from '@modules/auth/services/user-identity-resolver.service.js';
 import { AuthService } from '@modules/auth/services/auth.service.js';
 
 /** Tạo bộ lưu trữ in-memory với ID số nguyên tăng dần (1, 2, 3...) và bảng permissions + user_profiles độc lập */
@@ -730,6 +738,16 @@ function createIamInMemoryHarness() {
           partial.otpMaxAttempts ?? globalSecuritySetting?.otpMaxAttempts ?? 5,
         otpCooldownSeconds:
           partial.otpCooldownSeconds ?? globalSecuritySetting?.otpCooldownSeconds ?? 60,
+        sessionIdleTimeoutMinutes:
+          partial.sessionIdleTimeoutMinutes ??
+          globalSecuritySetting?.sessionIdleTimeoutMinutes ??
+          30,
+        sessionMaxLifetimeMinutes:
+          partial.sessionMaxLifetimeMinutes ??
+          globalSecuritySetting?.sessionMaxLifetimeMinutes ??
+          10080,
+        enableLoginAuditLog:
+          partial.enableLoginAuditLog ?? globalSecuritySetting?.enableLoginAuditLog ?? true,
         createdAt: globalSecuritySetting?.createdAt ?? now,
         updatedAt: now,
       } as AuthSecuritySettingEntity;
@@ -760,6 +778,8 @@ function createIamInMemoryHarness() {
     organizationsService,
   );
   const exportService = new UserExportService(usersService, userRepo);
+  const emailAdapter = new DefaultEmailNotificationAdapter();
+  const smsProvider = new DefaultSmsOtpProvider();
   const sessionService = new SessionService(sessionRepo, tokenService, passwordHasher, config);
   const securitySettingsService = new SecuritySettingsService(securitySettingRepo);
   const passwordService = new PasswordService(
@@ -769,6 +789,7 @@ function createIamInMemoryHarness() {
     usersService,
     config,
     securitySettingsService,
+    emailAdapter,
   );
   const mfaService = new MfaService(
     mfaRepo,
@@ -777,6 +798,8 @@ function createIamInMemoryHarness() {
     usersService,
     config,
     fieldEncryption,
+    emailAdapter,
+    smsProvider,
   );
   const verificationService = new VerificationService(
     passwordHasher,
@@ -784,6 +807,15 @@ function createIamInMemoryHarness() {
     undefined,
     securitySettingsService,
     config,
+    emailAdapter,
+    smsProvider,
+  );
+  const serviceAccountService = new ServiceAccountService(passwordHasher, tokenService);
+  const identityResolver = new UserIdentityResolverService(
+    usersService,
+    sessionService,
+    securitySettingsService,
+    serviceAccountService,
   );
   const authService = new AuthService(
     passwordHasher,
@@ -795,14 +827,25 @@ function createIamInMemoryHarness() {
     verificationService,
   );
 
+  usersService.registerAdminRevokeSessionsDelegate((userId, reason) =>
+    sessionService.revokeAllUserSessions(userId, reason),
+  );
+  usersService.registerUserLoginHistoryDelegate((userId, limit) =>
+    sessionService.listUserLoginHistory(userId, limit),
+  );
+
   return {
     userStore,
     userProfileStore,
+    sessionStore,
     mfaStore,
     permStore,
     fieldEncryption,
+    emailAdapter,
+    smsProvider,
     securitySettingsService,
     totpService,
+    tokenService,
     organizationsService,
     rolesService,
     usersService,
@@ -812,6 +855,8 @@ function createIamInMemoryHarness() {
     passwordService,
     mfaService,
     verificationService,
+    serviceAccountService,
+    identityResolver,
     authService,
   };
 }
@@ -1487,4 +1532,575 @@ describe('Unit: Quản lý Người dùng (3.1) & Xác thực / Phiên / MFA (3)
     expect(loginAfterAdminReset.accessToken).toBeDefined();
     expect(h.userStore.get(user.id)?.passwordHash.startsWith('pbkdf2_sha512$')).toBe(true);
   });
+
+  it('Mục 3.4: Quản lý phiên đăng nhập — Idle Timeout, Max Session Lifetime, Thu hồi phiên từ xa / Khẩn cấp (Admin & User) và Ghi lịch sử đăng nhập & đăng xuất (bật/tắt enableLoginAuditLog)', async () => {
+    await h.securitySettingsService.updateSettings({
+      sessionIdleTimeoutMinutes: 15,
+      sessionMaxLifetimeMinutes: 120,
+      enableLoginAuditLog: true,
+    });
+
+    const user = await h.usersService.create({
+      username: 'sessiontester',
+      email: 'sessiontester@gmail.com',
+      firstName: 'Phúc',
+      lastName: 'Đặng Hồng',
+      password: 'Session#Pass123',
+      status: USER_STATUS.ACTIVE,
+      roleIds: [],
+      organizationUnits: [],
+    });
+
+    // 1. Đăng nhập thất bại (sai mật khẩu) -> được ghi nhận vào lịch sử đăng nhập (LOGIN_FAILED)
+    await expect(
+      h.authService.login(
+        {
+          identifier: 'sessiontester@gmail.com',
+          password: 'Wrong#Pass999',
+          deviceName: 'Suspicious Browser',
+        },
+        { ipAddress: '203.0.113.99', userAgent: 'KaliLinux/1.0' },
+      ),
+    ).rejects.toThrow();
+
+    // 2. Đăng nhập thành công trên 2 thiết bị -> được ghi nhận vào lịch sử (LOGIN_SUCCESS)
+    const dev1 = await h.authService.login(
+      {
+        identifier: 'sessiontester@gmail.com',
+        password: 'Session#Pass123',
+        deviceName: 'MacBook Air M3',
+      },
+      { ipAddress: '192.168.1.10', userAgent: 'Mozilla/5.0 (Macintosh)' },
+    );
+    const dev2 = await h.authService.login(
+      {
+        identifier: 'sessiontester@gmail.com',
+        password: 'Session#Pass123',
+        deviceName: 'iPhone 16 Pro',
+      },
+      { ipAddress: '192.168.1.11', userAgent: 'Mozilla/5.0 (iPhone)' },
+    );
+
+    expect(dev1.sessionId).toBeDefined();
+    expect(dev2.sessionId).toBeDefined();
+
+    // 3. Kiểm tra danh sách thiết bị đang đăng nhập
+    const activeList = await h.sessionService.listUserSessions(user.id, dev1.sessionId);
+    expect(activeList).toHaveLength(2);
+    expect(activeList.find((s) => s.id === dev1.sessionId)?.isCurrent).toBe(true);
+
+    // 4. Kiểm tra tự động hết hạn phiên do Idle Timeout (quá 15 phút không hoạt động)
+    const s1Entity = h.sessionStore.get(dev1.sessionId!)!;
+    s1Entity.lastActiveAt = new Date(Date.now() - 16 * 60 * 1000); // 16 phút trước (> 15 phút Idle Timeout)
+    await expect(
+      h.authService.refresh({ refreshToken: dev1.refreshToken! }),
+    ).rejects.toThrow();
+    expect(h.sessionStore.get(dev1.sessionId!)?.revokeReason).toContain('Session idle timeout');
+
+    // 5. Kiểm tra tự động hết hạn phiên do Max Session Lifetime (vượt quá 120 phút kể từ lúc tạo phiên)
+    const dev3 = await h.authService.login(
+      {
+        identifier: 'sessiontester@gmail.com',
+        password: 'Session#Pass123',
+        deviceName: 'Windows Workstation',
+      },
+      { ipAddress: '192.168.1.12', userAgent: 'Mozilla/5.0 (Windows NT 10.0)' },
+    );
+    const s3Entity = h.sessionStore.get(dev3.sessionId!)!;
+    s3Entity.createdAt = new Date(Date.now() - 125 * 60 * 1000); // Tạo 125 phút trước (> 120 phút Max Lifetime)
+    s3Entity.lastActiveAt = new Date(Date.now() - 2 * 60 * 1000); // Mới hoạt động 2 phút trước
+    await expect(
+      h.authService.refresh({ refreshToken: dev3.refreshToken! }),
+    ).rejects.toThrow();
+    expect(h.sessionStore.get(dev3.sessionId!)?.revokeReason).toContain(
+      'Session maximum lifetime exceeded',
+    );
+
+    // 6. Đăng xuất (Logout) thiết bị dev2 -> ghi nhận sự kiện LOGOUT
+    await h.authService.logout(dev2.refreshToken);
+
+    // 7. Đăng nhập lại 2 phiên mới và thực hiện Admin thu hồi toàn bộ phiên khi có sự cố (POST /users/:id/revoke-sessions)
+    await h.authService.login(
+      {
+        identifier: 'sessiontester@gmail.com',
+        password: 'Session#Pass123',
+        deviceName: 'Tablet Android',
+      },
+      { ipAddress: '192.168.1.20', userAgent: 'Android 15' },
+    );
+    const adminRevoke = await h.usersService.revokeUserSessions(
+      user.id,
+      'Tài khoản có dấu hiệu bất thường cần thu hồi khẩn cấp',
+      1,
+    );
+    expect(adminRevoke.revokedSessionsCount).toBe(1);
+
+    // 8. Kiểm tra Lịch sử đăng nhập & đăng xuất theo thời gian, IP và thiết bị
+    const history = await h.usersService.getUserLoginHistory(user.id, 50);
+    expect(history.length).toBeGreaterThanOrEqual(6);
+    const eventNames = history.map((item) => item.eventTypeName);
+    expect(eventNames).toEqual(
+      expect.arrayContaining([
+        'LOGIN_FAILED',
+        'LOGIN_SUCCESS',
+        'SESSION_EXPIRED',
+        'LOGOUT',
+        'SESSION_REVOKE_ALL',
+      ]),
+    );
+    const failedEvent = history.find((item) => item.eventTypeName === 'LOGIN_FAILED');
+    expect(failedEvent?.ipAddress).toBe('203.0.113.99');
+    expect(failedEvent?.deviceName).toBe('Suspicious Browser');
+
+    // 9. Tắt biến setting enableLoginAuditLog = false -> không ghi thêm bản ghi lịch sử mới
+    const countBeforeDisable = (await h.sessionService.listUserLoginHistory(user.id, 100)).length;
+    await h.securitySettingsService.updateSettings({ enableLoginAuditLog: false });
+    await h.authService.login({
+      identifier: 'sessiontester@gmail.com',
+      password: 'Session#Pass123',
+      deviceName: 'Unlogged Device',
+    });
+    const countAfterDisable = (await h.sessionService.listUserLoginHistory(user.id, 100)).length;
+    expect(countAfterDisable).toBe(countBeforeDisable);
+  });
+
+  it('Mục 3.5: Xác thực OTP và MFA — Email Adapter, SMS Provider & MFA SMS_OTP, TOTP, Recovery Codes, Trusted Devices, Bắt buộc MFA theo vai trò, Step-up Authentication & Reset MFA có kiểm soát', async () => {
+    const adminRole = await h.rolesService.create({
+      code: 'SUPER_ADMIN',
+      name: 'Super Administrator',
+      status: ROLE_STATUS.ACTIVE,
+      permissions: ['users.read', 'users.update', 'users.export', 'system.manage'],
+    });
+    const memberRole = await h.rolesService.create({
+      code: 'MEMBER',
+      name: 'Standard Member',
+      status: ROLE_STATUS.ACTIVE,
+      permissions: ['users.read'],
+    });
+
+    const adminUser = await h.usersService.create({
+      username: 'chiefadmin',
+      email: 'chiefadmin@core.local',
+      firstName: 'Quân',
+      lastName: 'Lê Minh',
+      phone: '0909888777',
+      password: 'Admin#Secure123',
+      status: USER_STATUS.ACTIVE,
+      roleIds: [adminRole.id],
+      organizationUnits: [],
+    });
+
+    const normalUser = await h.usersService.create({
+      username: 'normalmember',
+      email: 'normalmember@core.local',
+      firstName: 'Hà',
+      lastName: 'Phạm Thu',
+      phone: '0911222333',
+      password: 'Member#Secure123',
+      status: USER_STATUS.ACTIVE,
+      roleIds: [memberRole.id],
+      organizationUnits: [],
+    });
+
+    // 1. Bắt buộc MFA theo vai trò (3.5.6: REQUIRED_FOR_ADMINS)
+    await h.securitySettingsService.updateSettings({
+      mfaPolicy: 'REQUIRED_FOR_ADMINS',
+      allowedMfaMethods: ['TOTP', 'EMAIL_OTP', 'SMS_OTP', 'RECOVERY_CODE'],
+    });
+
+    // Người dùng thường (MEMBER) chưa bật MFA -> vẫn đăng nhập thẳng bình thường
+    const memberLogin = await h.authService.login({
+      identifier: 'normalmember',
+      password: 'Member#Secure123',
+    });
+    expect(memberLogin.mfaRequired).toBe(false);
+    expect(memberLogin.accessToken).toBeDefined();
+
+    // Quản trị viên (SUPER_ADMIN) dù chưa tự bật MFA cá nhân vẫn bị bắt buộc qua bước 2 MFA (mfaPolicyEnforced = true)
+    // và hệ thống tự động gửi Email OTP qua Notification Adapter (3.5.1)
+    const adminLogin1 = await h.authService.login({
+      identifier: 'chiefadmin',
+      password: 'Admin#Secure123',
+    });
+    expect(adminLogin1.mfaRequired).toBe(true);
+    expect(adminLogin1.mfaPolicyEnforced).toBe(true);
+    expect(adminLogin1.mfaEnrollmentRequired).toBe(true);
+    expect(adminLogin1.emailOtpSent).toBe(true);
+    expect(adminLogin1.devOtpCode).toMatch(/^\d{6}$/);
+    expect(h.emailAdapter.getDispatchedHistory().length).toBeGreaterThanOrEqual(1);
+    expect(h.emailAdapter.getDispatchedHistory()[0]?.purpose).toBe('MFA_EMAIL_OTP');
+
+    // 2. Gửi OTP qua SMS dùng SMS Provider riêng & kích hoạt MFA SMS_OTP (3.5.2)
+    const smsSent = await h.authService.sendMfaSmsOtp({
+      mfaChallengeToken: adminLogin1.mfaChallengeToken!,
+    });
+    expect(smsSent.sent).toBe(true);
+    expect(smsSent.providerMessageId).toBeDefined();
+    expect(smsSent.devOtpCode).toMatch(/^\d{6}$/);
+    expect(h.smsProvider.getDispatchedHistory()[0]?.purpose).toBe('MFA_SMS_OTP');
+
+    const smsEnableRes = await h.mfaService.enableSmsOtp(adminUser.id, {
+      code: smsSent.devOtpCode!,
+    });
+    expect(smsEnableRes.mfaEnabled).toBe(true);
+    expect(smsEnableRes.smsOtpEnabled).toBe(true);
+    expect(smsEnableRes.recoveryCodes).toHaveLength(8);
+
+    // 3. Cho phép tin cậy thiết bị (Trusted Devices có thời hạn và có thể thu hồi — 3.5.5)
+    const smsChallengeOtp = await h.authService.sendMfaSmsOtp({
+      mfaChallengeToken: adminLogin1.mfaChallengeToken!,
+    });
+    const verifiedWithTrust = await h.authService.verifyMfaChallenge(
+      {
+        mfaChallengeToken: adminLogin1.mfaChallengeToken!,
+        code: smsChallengeOtp.devOtpCode!,
+        method: 'SMS_OTP',
+        deviceName: 'Admin MacBook Pro 16',
+        trustDevice: true,
+        trustDurationDays: 14,
+      },
+      { ipAddress: '10.10.1.50', userAgent: 'Mozilla/5.0 (Macintosh)' },
+    );
+    expect(verifiedWithTrust.mfaRequired).toBe(false);
+    expect(verifiedWithTrust.accessToken).toBeDefined();
+    expect(verifiedWithTrust.trustedDeviceToken).toBeDefined();
+    expect(verifiedWithTrust.trustedDeviceExpiresAt).toBeDefined();
+
+    // Khi đăng nhập lại kèm trustedDeviceToken hợp lệ -> tự động miễn bước MFA
+    const loginFromTrustedDevice = await h.authService.login({
+      identifier: 'chiefadmin',
+      password: 'Admin#Secure123',
+      trustedDeviceToken: verifiedWithTrust.trustedDeviceToken!,
+    });
+    expect(loginFromTrustedDevice.mfaRequired).toBe(false);
+    expect(loginFromTrustedDevice.trustedDeviceBypassed).toBe(true);
+    expect(loginFromTrustedDevice.accessToken).toBeDefined();
+
+    // Xem danh sách thiết bị tin cậy và thu hồi thiết bị tin cậy
+    const trustedDevices = await h.mfaService.listTrustedDevices(adminUser.id);
+    expect(trustedDevices).toHaveLength(1);
+    expect(trustedDevices[0]?.deviceName).toBe('Admin MacBook Pro 16');
+
+    const revokedTrusted = await h.mfaService.revokeTrustedDevice(
+      adminUser.id,
+      trustedDevices[0]!.deviceId,
+    );
+    expect(revokedTrusted.revoked).toBe(true);
+
+    // Sau khi thu hồi thiết bị tin cậy -> đăng nhập lại với token cũ sẽ bắt buộc nhập MFA lại
+    const loginAfterRevokeTrust = await h.authService.login({
+      identifier: 'chiefadmin',
+      password: 'Admin#Secure123',
+      trustedDeviceToken: verifiedWithTrust.trustedDeviceToken!,
+    });
+    expect(loginAfterRevokeTrust.mfaRequired).toBe(true);
+
+    // 4. Yêu cầu xác thực lại khi thao tác nhạy cảm (Step-Up Authentication — 3.5.7)
+    // Khi yêu cầu requireStepUp = true mà không có stepUpToken -> bị từ chối
+    await expect(
+      h.usersService.assignRoles(
+        normalUser.id,
+        { roleIds: [adminRole.id], requireStepUp: true },
+        adminUser.id,
+      ),
+    ).rejects.toThrow();
+
+    // Thực hiện xác thực lại bằng mật khẩu hiện tại để nhận stepUpToken
+    const stepUpRes = await h.authService.verifyStepUp(
+      adminUser.id,
+      {
+        password: 'Admin#Secure123',
+        action: 'users.assignRoles',
+      },
+      verifiedWithTrust.sessionId,
+    );
+    expect(stepUpRes.verified).toBe(true);
+    expect(stepUpRes.stepUpToken).toBeDefined();
+
+    // Dùng stepUpToken cho sai mục đích action ('users.export' thay vì 'users.assignRoles') -> bị từ chối
+    await expect(
+      h.usersService.verifySensitiveActionStepUp(
+        adminUser.id,
+        stepUpRes.stepUpToken,
+        true,
+        'users.export',
+      ),
+    ).rejects.toThrow();
+
+    // Dùng stepUpToken đúng action 'users.assignRoles' -> đổi quyền thành công
+    const promotedUser = await h.usersService.assignRoles(
+      normalUser.id,
+      {
+        roleIds: [adminRole.id],
+        stepUpToken: stepUpRes.stepUpToken,
+        requireStepUp: true,
+      },
+      adminUser.id,
+    );
+    expect(promotedUser.roles[0]?.code).toBe('super_admin');
+
+    // 5. Reset MFA có kiểm soát từ trang quản trị (3.5.8 — Có lý do xác minh / phê duyệt & thu hồi phiên)
+    const resetMfaResult = await h.usersService.adminResetMfa(
+      adminUser.id,
+      {
+        reason: 'Người dùng mất điện thoại, đã xác minh danh tính qua video call với IT Helpdesk',
+        verificationReference: 'TICKET-IAM-2026-089',
+        revokeSessions: true,
+      },
+      adminUser.id,
+    );
+    expect(resetMfaResult.reset).toBe(true);
+    expect(resetMfaResult.userId).toBe(adminUser.id);
+    expect(resetMfaResult.verificationReference).toBe('TICKET-IAM-2026-089');
+    expect(resetMfaResult.revokedSessionsCount).toBeGreaterThanOrEqual(1);
+
+    const statusAfterAdminReset = await h.mfaService.getStatus(adminUser.id);
+    expect(statusAfterAdminReset.mfaEnabled).toBe(false);
+    expect(statusAfterAdminReset.totpEnabled).toBe(false);
+    expect(statusAfterAdminReset.emailOtpEnabled).toBe(false);
+    expect(statusAfterAdminReset.smsOtpEnabled).toBe(false);
+  });
+
+  it('Mục 3.6: Tài khoản hệ thống (Service Account) và API Client — tạo Service Account (3.6.1), tạo API Client (3.6.2), gán phạm vi truy cập scopes (3.6.3), tạo & xoay vòng Client Secret hiển thị một lần (3.6.4), thu hồi API Client ngừng toàn bộ token (3.6.5), giới hạn IP/CIDR (3.6.6) và theo dõi lịch sử sử dụng gần nhất (3.6.7)', async () => {
+    // 1. Tạo Service Account dùng cho hệ thống hoặc job, không gắn người dùng cá nhân (3.6.1)
+    const sa = await h.serviceAccountService.createServiceAccount(
+      {
+        code: 'erp_sync_job',
+        name: 'ERP Sync Background Worker',
+        description: 'Tài khoản hệ thống đồng bộ dữ liệu nhân sự từ ERP',
+        scopes: ['users.read', 'users.export', 'organizations.read'],
+      },
+      1,
+    );
+    expect(sa.id).toBe(1);
+    expect(sa.code).toBe('ERP_SYNC_JOB');
+    expect(sa.isServiceAccount).toBe(true);
+    expect(sa.userId).toBeNull();
+    expect(sa.status).toBe(SERVICE_ACCOUNT_STATUS.ACTIVE);
+    expect(sa.statusName).toBe('ACTIVE');
+    expect(sa.scopes).toEqual(['users.read', 'users.export', 'organizations.read']);
+
+    // Chặn trùng mã Service Account
+    await expect(
+      h.serviceAccountService.createServiceAccount({
+        code: 'ERP_SYNC_JOB',
+        name: 'Duplicate SA',
+      }),
+    ).rejects.toThrow();
+
+    // 2. Tạo API Client gắn với Service Account (3.6.2, 3.6.3, 3.6.4, 3.6.6)
+    // Nếu gán scope vượt quá phạm vi của Service Account ('users.delete' không nằm trong SA scopes) -> bị từ chối
+    await expect(
+      h.serviceAccountService.createApiClient({
+        serviceAccountId: sa.id,
+        name: 'Invalid Scope Client',
+        scopes: ['users.read', 'users.delete'],
+      }),
+    ).rejects.toThrow();
+
+    const createdClient = await h.serviceAccountService.createApiClient(
+      {
+        serviceAccountId: sa.id,
+        name: 'ERP Production Connector',
+        description: 'Kết nối từ máy chủ ERP nội bộ',
+        scopes: ['users.read', 'organizations.read'],
+        allowedIps: ['10.20.30.0/24', '203.0.113.50'],
+      },
+      1,
+    );
+    expect(createdClient.id).toBe(1);
+    expect(createdClient.serviceAccountId).toBe(sa.id);
+    expect(createdClient.serviceAccountCode).toBe('ERP_SYNC_JOB');
+    expect(createdClient.clientId).toMatch(/^cli_[A-Za-z0-9_-]+$/);
+    expect(createdClient.clientSecret).toMatch(/^cs_[A-Za-z0-9_-]+$/);
+    expect(createdClient.oneTimeSecretWarning).toBe(true);
+    expect(createdClient.scopes).toEqual(['users.read', 'organizations.read']);
+    expect(createdClient.allowedIps).toEqual(['10.20.30.0/24', '203.0.113.50']);
+    expect(createdClient.status).toBe(API_CLIENT_STATUS.ACTIVE);
+    expect(createdClient.tokenVersion).toBe(1);
+
+    // 3.6.4: Khi gọi getApiClientById hoặc listApiClients sau đó, KHÔNG BAO GIỜ trả về plain clientSecret nữa
+    const fetchedClient = await h.serviceAccountService.getApiClientById(createdClient.id);
+    expect((fetchedClient as Record<string, unknown>).clientSecret).toBeUndefined();
+    expect(fetchedClient.secretPrefix).toBe(`${createdClient.clientSecret.slice(0, 10)}...`);
+
+    const allClients = await h.serviceAccountService.listApiClients(sa.id);
+    expect(allClients).toHaveLength(1);
+    expect((allClients[0] as Record<string, unknown>).clientSecret).toBeUndefined();
+
+    // 3.6.6 & 3.6.7: Cấp token từ IP không nằm trong danh sách cho phép -> bị từ chối & ghi nhận DENIED_IP
+    await expect(
+      h.serviceAccountService.issueClientToken(
+        {
+          clientId: createdClient.clientId,
+          clientSecret: createdClient.clientSecret,
+        },
+        { ipAddress: '198.51.100.99' },
+      ),
+    ).rejects.toThrow();
+
+    let usageTrack = await h.serviceAccountService.getApiClientUsage(createdClient.id);
+    expect(usageTrack.lastUsedIp).toBe('198.51.100.99');
+    expect(usageTrack.lastUsedResult).toBe('DENIED_IP');
+
+    // Sai Client Secret từ IP hợp lệ -> bị từ chối & ghi nhận INVALID_SECRET
+    await expect(
+      h.serviceAccountService.issueClientToken(
+        {
+          clientId: createdClient.clientId,
+          clientSecret: 'cs_wrong_secret_value_123456',
+        },
+        { ipAddress: '10.20.30.15' },
+      ),
+    ).rejects.toThrow();
+
+    usageTrack = await h.serviceAccountService.getApiClientUsage(createdClient.id);
+    expect(usageTrack.lastUsedIp).toBe('10.20.30.15');
+    expect(usageTrack.lastUsedResult).toBe('INVALID_SECRET');
+
+    // Yêu cầu scope vượt quá phạm vi của API Client khi xin token -> bị từ chối & ghi nhận FORBIDDEN_SCOPE
+    await expect(
+      h.serviceAccountService.issueClientToken(
+        {
+          clientId: createdClient.clientId,
+          clientSecret: createdClient.clientSecret,
+          scopes: ['users.export'],
+        },
+        { ipAddress: '10.20.30.15' },
+      ),
+    ).rejects.toThrow();
+
+    usageTrack = await h.serviceAccountService.getApiClientUsage(createdClient.id);
+    expect(usageTrack.lastUsedResult).toBe('FORBIDDEN_SCOPE');
+
+    // Cấp token thành công từ IP nằm trong dải CIDR 10.20.30.0/24 (có chuẩn hóa ::ffff:10.20.30.88)
+    const tokenRes1 = await h.serviceAccountService.issueClientToken(
+      {
+        clientId: createdClient.clientId,
+        clientSecret: createdClient.clientSecret,
+      },
+      { ipAddress: '::ffff:10.20.30.88' },
+    );
+    expect(tokenRes1.accessToken).toBeDefined();
+    expect(tokenRes1.tokenType).toBe('Bearer');
+    expect(tokenRes1.clientId).toBe(createdClient.clientId);
+    expect(tokenRes1.serviceAccountCode).toBe('ERP_SYNC_JOB');
+    expect(tokenRes1.scopes).toEqual(['users.read', 'organizations.read']);
+
+    // Xác thực token qua UserIdentityResolverService (mô phỏng AuthGuard gọi khi API Client gọi endpoint)
+    const verifiedPayload1 = await h.tokenService.verifyToken(tokenRes1.accessToken);
+    const resolvedIdentity1 = await h.identityResolver.resolveIdentity(verifiedPayload1, {
+      ipAddress: '203.0.113.50',
+      endpoint: '/api/v1/users',
+      method: 'GET',
+    });
+    expect(resolvedIdentity1).not.toBeNull();
+    expect(resolvedIdentity1!.subjectType).toBe('SERVICE_ACCOUNT');
+    expect(resolvedIdentity1!.serviceAccountId).toBe(sa.id);
+    expect(resolvedIdentity1!.apiClientId).toBe(createdClient.id);
+    expect(resolvedIdentity1!.clientId).toBe(createdClient.clientId);
+    expect(resolvedIdentity1!.permissions).toEqual(['users.read', 'organizations.read']);
+
+    // Nếu mang token hợp lệ nhưng gọi API từ IP trái phép -> bị chặn ngay tại bước resolveIdentity (403 Forbidden)
+    await expect(
+      h.identityResolver.resolveIdentity(verifiedPayload1, {
+        ipAddress: '172.16.0.99',
+        endpoint: '/api/v1/users',
+        method: 'GET',
+      }),
+    ).rejects.toThrow();
+
+    // 3.6.3: Cập nhật phạm vi truy cập (scopes) cho API Client
+    const updatedScopesClient = await h.serviceAccountService.updateApiClientScopes(
+      createdClient.id,
+      {
+        scopes: ['users.read', 'users.export'],
+      },
+    );
+    expect(updatedScopesClient.scopes).toEqual(['users.read', 'users.export']);
+
+    // 3.6.4: Xoay vòng Client Secret (Rotate Secret) -> trả về secret mới 1 lần, tăng tokenVersion và vô hiệu hóa secret + token cũ
+    const rotated = await h.serviceAccountService.rotateClientSecret(createdClient.id, {
+      reason: 'Xoay vòng định kỳ hàng quý',
+    });
+    expect(rotated.clientSecret).toMatch(/^cs_[A-Za-z0-9_-]+$/);
+    expect(rotated.clientSecret).not.toBe(createdClient.clientSecret);
+    expect(rotated.oneTimeSecretWarning).toBe(true);
+    expect(rotated.tokenVersion).toBe(2);
+    expect(rotated.secretRotatedAt).toBeDefined();
+
+    // Secret cũ không còn xin được token
+    await expect(
+      h.serviceAccountService.issueClientToken(
+        {
+          clientId: createdClient.clientId,
+          clientSecret: createdClient.clientSecret,
+        },
+        { ipAddress: '203.0.113.50' },
+      ),
+    ).rejects.toThrow();
+
+    // Token cũ (tokenVersion = 1) bị vô hiệu hóa ngay lập tức
+    const identityFromOldToken = await h.identityResolver.resolveIdentity(verifiedPayload1, {
+      ipAddress: '203.0.113.50',
+      endpoint: '/api/v1/users',
+      method: 'GET',
+    });
+    expect(identityFromOldToken).toBeNull();
+
+    // Xin token mới bằng Client Secret mới -> thành công
+    const tokenRes2 = await h.serviceAccountService.issueClientToken(
+      {
+        clientId: createdClient.clientId,
+        clientSecret: rotated.clientSecret,
+      },
+      { ipAddress: '203.0.113.50' },
+    );
+    const verifiedPayload2 = await h.tokenService.verifyToken(tokenRes2.accessToken);
+    const resolvedIdentity2 = await h.identityResolver.resolveIdentity(verifiedPayload2, {
+      ipAddress: '203.0.113.50',
+      endpoint: '/api/v1/users/export',
+      method: 'GET',
+    });
+    expect(resolvedIdentity2).not.toBeNull();
+    expect(resolvedIdentity2!.permissions).toEqual(['users.read', 'users.export']);
+
+    // 3.6.5: Thu hồi API Client (Revoke) -> ngừng toàn bộ token đã cấp ngay lập tức
+    const revokedRes = await h.serviceAccountService.revokeApiClient(createdClient.id, {
+      reason: 'Ngừng tích hợp hệ thống ERP cũ',
+    });
+    expect(revokedRes.revoked).toBe(true);
+    expect(revokedRes.status).toBe(API_CLIENT_STATUS.REVOKED);
+    expect(revokedRes.statusName).toBe('REVOKED');
+    expect(revokedRes.tokenVersion).toBe(3);
+
+    // Token đã cấp trước khi thu hồi lập tức mất hiệu lực
+    const identityAfterRevoke = await h.identityResolver.resolveIdentity(verifiedPayload2, {
+      ipAddress: '203.0.113.50',
+      endpoint: '/api/v1/users',
+      method: 'GET',
+    });
+    expect(identityAfterRevoke).toBeNull();
+
+    // Không thể xin cấp token mới từ API Client đã bị thu hồi
+    await expect(
+      h.serviceAccountService.issueClientToken(
+        {
+          clientId: createdClient.clientId,
+          clientSecret: rotated.clientSecret,
+        },
+        { ipAddress: '203.0.113.50' },
+      ),
+    ).rejects.toThrow();
+
+    // 3.6.7: Kiểm tra lịch sử sử dụng gần nhất (IP, thời gian, kết quả, endpoint)
+    const finalUsage = await h.serviceAccountService.getApiClientUsage(createdClient.id);
+    expect(finalUsage.clientId).toBe(createdClient.clientId);
+    expect(finalUsage.lastUsedAt).toBeDefined();
+    expect(finalUsage.lastUsedIp).toBe('203.0.113.50');
+    expect(finalUsage.lastUsedResult).toBe('CLIENT_REVOKED');
+    expect(finalUsage.usageLogs.length).toBeGreaterThanOrEqual(6);
+  });
 });
+
+

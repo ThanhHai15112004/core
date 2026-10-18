@@ -1,32 +1,84 @@
+import { randomUUID } from 'node:crypto';
 import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { CoreConfigService } from '@packages/config/index.js';
-import { BadRequestAppException, UnauthorizedAppException } from '@packages/kernel/index.js';
+import {
+  BadRequestAppException,
+  NotFoundAppException,
+  UnauthorizedAppException,
+} from '@packages/kernel/index.js';
 import {
   FieldEncryptionService,
   PasswordHasherService,
   TotpService,
 } from '@packages/security/index.js';
-import { type IUsersPublicService, USERS_PUBLIC_SERVICE } from '@modules/users/contracts/index.js';
-import { MFA_METHOD, MFA_METHOD_NAME, type MfaMethodType } from '../contracts/index.js';
+import {
+  type IUsersPublicService,
+  USERS_PUBLIC_SERVICE,
+  normalizePhoneNumber,
+} from '@modules/users/contracts/index.js';
+import {
+  AUTH_EMAIL_NOTIFICATION_ADAPTER,
+  AUTH_SMS_OTP_PROVIDER,
+  type AdminResetMfaInput,
+  type AdminResetMfaResult,
+  type IEmailNotificationAdapter,
+  type ISmsOtpProvider,
+  MFA_METHOD,
+  MFA_METHOD_NAME,
+  type MfaMethodType,
+} from '../contracts/index.js';
 import type { AuthMfaConfigEntity } from '../entities/auth-mfa-config.entity.js';
 import { AuthMfaConfigRepository } from '../repositories/auth-mfa-config.repository.js';
+import {
+  DefaultEmailNotificationAdapter,
+  DefaultSmsOtpProvider,
+} from './notification-adapters.provider.js';
 import type {
   DisableMfaRequest,
   EnableEmailOtpMfaRequest,
+  EnableSmsOtpMfaRequest,
   EnableTotpMfaRequest,
 } from '../requests/auth.requests.js';
 import type {
+  AdminResetMfaResponse,
   MfaEnableResultResponse,
   MfaStatusResponse,
   MfaTotpSetupResponse,
   SendEmailOtpResponse,
+  SendSmsOtpResponse,
+  TrustedDeviceItemResponse,
 } from '../responses/auth.response.js';
 
 const EMAIL_OTP_TTL_SECONDS = 300; // 5 phút
+const SMS_OTP_TTL_SECONDS = 300; // 5 phút
+const DEFAULT_TRUSTED_DEVICE_DAYS = 30;
+
+export interface StoredTrustedDeviceRecord {
+  readonly deviceId: string;
+  readonly tokenHash: string;
+  readonly deviceName: string | null;
+  readonly ipAddress: string | null;
+  readonly userAgent: string | null;
+  readonly createdAt: string;
+  lastUsedAt: string;
+  readonly trustedUntil: string;
+}
+
+interface MfaExtendedEnvelope {
+  codes: string[];
+  smsOtpEnabled?: boolean;
+  smsOtpCodeHash?: string | null;
+  smsOtpExpiresAt?: string | null;
+  smsOtpFailedAttempts?: number;
+  trustedDevices?: StoredTrustedDeviceRecord[];
+}
 
 @Injectable()
 export class MfaService {
   private readonly logger = new Logger(MfaService.name);
+  private readonly emailAdapter: IEmailNotificationAdapter;
+  private readonly smsProvider: ISmsOtpProvider;
+  private readonly fallbackMfaConfigs = new Map<number, AuthMfaConfigEntity>();
 
   constructor(
     private readonly mfaRepository: AuthMfaConfigRepository,
@@ -37,45 +89,61 @@ export class MfaService {
     @Optional() private readonly configService?: CoreConfigService,
     @Optional()
     private readonly fieldEncryption: FieldEncryptionService = new FieldEncryptionService(),
-  ) {}
+    @Optional()
+    @Inject(AUTH_EMAIL_NOTIFICATION_ADAPTER)
+    emailAdapter?: IEmailNotificationAdapter,
+    @Optional()
+    @Inject(AUTH_SMS_OTP_PROVIDER)
+    smsProvider?: ISmsOtpProvider,
+  ) {
+    this.emailAdapter = emailAdapter ?? new DefaultEmailNotificationAdapter();
+    this.smsProvider = smsProvider ?? new DefaultSmsOtpProvider();
+  }
 
   /** Lấy trạng thái cấu hình MFA hiện tại của người dùng */
   public async getStatus(userId: number): Promise<MfaStatusResponse> {
-    const config = await this.mfaRepository.findByUserId(userId);
+    const config = await this.findConfigByUserId(userId);
     if (!config) {
       return {
         mfaEnabled: false,
         totpEnabled: false,
         emailOtpEnabled: false,
+        smsOtpEnabled: false,
         preferredMethod: 'TOTP',
         remainingRecoveryCodesCount: 0,
         remainingRecoveryCodes: 0,
+        trustedDevicesCount: 0,
         verifiedAt: null,
       };
     }
 
-    const recoveryHashes = this.parseRecoveryHashes(config.recoveryCodesHashJson);
-    const mfaEnabled = Boolean(config.totpEnabled || config.emailOtpEnabled);
+    const envelope = this.parseExtendedEnvelope(config.recoveryCodesHashJson);
+    const activeTrustedDevices = this.filterActiveTrustedDevices(envelope.trustedDevices ?? []);
+    const smsOtpEnabled = Boolean(envelope.smsOtpEnabled);
+    const mfaEnabled = Boolean(config.totpEnabled || config.emailOtpEnabled || smsOtpEnabled);
     const methodName = MFA_METHOD_NAME[config.preferredMethod] ?? 'TOTP';
 
     return {
       mfaEnabled,
       totpEnabled: Boolean(config.totpEnabled),
       emailOtpEnabled: Boolean(config.emailOtpEnabled),
+      smsOtpEnabled,
       preferredMethod: methodName,
-      remainingRecoveryCodesCount: recoveryHashes.length,
-      remainingRecoveryCodes: recoveryHashes.length,
+      remainingRecoveryCodesCount: envelope.codes.length,
+      remainingRecoveryCodes: envelope.codes.length,
+      trustedDevicesCount: activeTrustedDevices.length,
       verifiedAt: config.verifiedAt ? config.verifiedAt.toISOString() : null,
     };
   }
 
   /** Lấy danh sách các phương thức MFA đang khả dụng cho người dùng khi đăng nhập bước 2 */
   public async getAvailableMethodsForUser(userId: number): Promise<MfaMethodType[]> {
-    const config = await this.mfaRepository.findByUserId(userId);
+    const config = await this.findConfigByUserId(userId);
     if (!config) {
       return ['EMAIL_OTP'];
     }
 
+    const envelope = this.parseExtendedEnvelope(config.recoveryCodesHashJson);
     const methods: MfaMethodType[] = [];
     if (config.totpEnabled && config.totpSecret) {
       methods.push('TOTP');
@@ -83,8 +151,10 @@ export class MfaService {
     if (config.emailOtpEnabled) {
       methods.push('EMAIL_OTP');
     }
-    const recoveryHashes = this.parseRecoveryHashes(config.recoveryCodesHashJson);
-    if (recoveryHashes.length > 0) {
+    if (envelope.smsOtpEnabled) {
+      methods.push('SMS_OTP');
+    }
+    if (envelope.codes.length > 0) {
       methods.push('RECOVERY_CODE');
     }
 
@@ -110,9 +180,9 @@ export class MfaService {
       issuer,
     });
 
-    let config = await this.mfaRepository.findByUserId(userId);
+    let config = await this.findConfigByUserId(userId);
     if (!config) {
-      config = await this.mfaRepository.saveEntity({
+      config = await this.saveConfig({
         userId,
         totpSecret: encryptedSecret,
         totpEnabled: false,
@@ -122,7 +192,7 @@ export class MfaService {
       });
     } else {
       config.totpSecret = encryptedSecret;
-      await this.mfaRepository.saveEntity(config);
+      await this.saveConfig(config);
     }
 
     return {
@@ -139,7 +209,7 @@ export class MfaService {
     userId: number,
     dto: EnableTotpMfaRequest,
   ): Promise<MfaEnableResultResponse> {
-    const config = await this.mfaRepository.findByUserId(userId);
+    const config = await this.findConfigByUserId(userId);
     if (!config || !config.totpSecret) {
       throw new BadRequestAppException('auth.mfaTotpNotSetup');
     }
@@ -150,19 +220,21 @@ export class MfaService {
       throw new BadRequestAppException('auth.invalidMfaCode');
     }
 
+    const envelope = this.parseExtendedEnvelope(config.recoveryCodesHashJson);
     const { plainCodes, hashesJson } = this.ensureRecoveryCodes(config);
     config.totpEnabled = true;
     config.preferredMethod = MFA_METHOD.TOTP;
     config.recoveryCodesHashJson = hashesJson;
     config.verifiedAt = new Date();
 
-    await this.mfaRepository.saveEntity(config);
+    await this.saveConfig(config);
     await this.usersPublicService.setMfaEnabled(userId, true);
 
     return {
       mfaEnabled: true,
       totpEnabled: true,
       emailOtpEnabled: Boolean(config.emailOtpEnabled),
+      smsOtpEnabled: Boolean(envelope.smsOtpEnabled),
       recoveryCodes: plainCodes,
     };
   }
@@ -181,13 +253,14 @@ export class MfaService {
         mfaEnabled: status.mfaEnabled,
         totpEnabled: status.totpEnabled,
         emailOtpEnabled: status.emailOtpEnabled,
+        smsOtpEnabled: Boolean(status.smsOtpEnabled),
         recoveryCodes: [],
       };
     }
 
-    let config = await this.mfaRepository.findByUserId(userId);
+    let config = await this.findConfigByUserId(userId);
     if (!config) {
-      config = await this.mfaRepository.saveEntity({
+      config = await this.saveConfig({
         userId,
         totpSecret: null,
         totpEnabled: false,
@@ -207,6 +280,7 @@ export class MfaService {
       config.emailOtpFailedAttempts = 0;
     }
 
+    const envelope = this.parseExtendedEnvelope(config.recoveryCodesHashJson);
     const { plainCodes, hashesJson } = this.ensureRecoveryCodes(config);
     config.emailOtpEnabled = true;
     if (!config.totpEnabled) {
@@ -215,18 +289,94 @@ export class MfaService {
     config.recoveryCodesHashJson = hashesJson;
     config.verifiedAt = new Date();
 
-    await this.mfaRepository.saveEntity(config);
+    await this.saveConfig(config);
     await this.usersPublicService.setMfaEnabled(userId, true);
 
     return {
       mfaEnabled: true,
       totpEnabled: Boolean(config.totpEnabled),
       emailOtpEnabled: true,
+      smsOtpEnabled: Boolean(envelope.smsOtpEnabled),
       recoveryCodes: plainCodes,
     };
   }
 
-  /** Phát sinh và gửi mã OTP 6 chữ số qua Email phục vụ xác thực bước 2 hoặc kích hoạt Email OTP */
+  /** Kích hoạt (hoặc tắt nếu `enabled: false`) phương thức xác thực nhiều lớp qua SMS OTP (Mục 3.5.2) */
+  public async enableSmsOtp(
+    userId: number,
+    dto: EnableSmsOtpMfaRequest = {},
+  ): Promise<MfaEnableResultResponse> {
+    if (dto.enabled === false) {
+      const status = await this.disableMfa(userId, {
+        method: 'SMS_OTP',
+        ...(dto.code ? { code: dto.code } : {}),
+      });
+      return {
+        mfaEnabled: status.mfaEnabled,
+        totpEnabled: status.totpEnabled,
+        emailOtpEnabled: status.emailOtpEnabled,
+        smsOtpEnabled: Boolean(status.smsOtpEnabled),
+        recoveryCodes: [],
+      };
+    }
+
+    const user = await this.usersPublicService.findAuthUserById(userId);
+    if (!user || !user.phone) {
+      throw new BadRequestAppException('auth.phoneRequiredForSmsMfa');
+    }
+
+    let config = await this.findConfigByUserId(userId);
+    if (!config) {
+      config = await this.saveConfig({
+        userId,
+        totpSecret: null,
+        totpEnabled: false,
+        emailOtpEnabled: false,
+        preferredMethod: MFA_METHOD.SMS_OTP,
+        recoveryCodesHashJson: '[]',
+      });
+    }
+
+    const envelope = this.parseExtendedEnvelope(config.recoveryCodesHashJson);
+
+    if (dto.code) {
+      const validSms = await this.verifyAndTrackSmsOtp(config, envelope, dto.code);
+      if (!validSms) {
+        throw new BadRequestAppException('auth.invalidMfaCode');
+      }
+      envelope.smsOtpCodeHash = null;
+      envelope.smsOtpExpiresAt = null;
+      envelope.smsOtpFailedAttempts = 0;
+    }
+
+    let plainCodes: string[] = [];
+    if (envelope.codes.length === 0) {
+      plainCodes = this.totpService.generateRecoveryCodes(8);
+      envelope.codes = plainCodes.map((c) =>
+        this.passwordHasher.sha256(this.normalizeRecoveryCode(c)),
+      );
+    }
+
+    envelope.smsOtpEnabled = true;
+    if (!config.totpEnabled && !config.emailOtpEnabled) {
+      config.preferredMethod = MFA_METHOD.SMS_OTP;
+    }
+    config.recoveryCodesHashJson = this.serializeExtendedEnvelope(envelope);
+    config.verifiedAt = new Date();
+
+    await this.saveConfig(config);
+    await this.usersPublicService.setMfaEnabled(userId, true);
+
+    return {
+      mfaEnabled: true,
+      totpEnabled: Boolean(config.totpEnabled),
+      emailOtpEnabled: Boolean(config.emailOtpEnabled),
+      smsOtpEnabled: true,
+      recoveryCodes: plainCodes,
+    };
+  }
+
+  /** Phát sinh và gửi mã OTP 6 chữ số qua Email thông qua Notification Adapter (Mục 3.5.1) */
   public async sendEmailOtp(userId: number): Promise<SendEmailOtpResponse> {
     const user = await this.usersPublicService.findAuthUserById(userId);
     if (!user) {
@@ -237,9 +387,9 @@ export class MfaService {
     const otpHash = this.passwordHasher.sha256(otpCode);
     const expiresAt = new Date(Date.now() + EMAIL_OTP_TTL_SECONDS * 1000);
 
-    let config = await this.mfaRepository.findByUserId(userId);
+    let config = await this.findConfigByUserId(userId);
     if (!config) {
-      config = await this.mfaRepository.saveEntity({
+      config = await this.saveConfig({
         userId,
         totpSecret: null,
         totpEnabled: false,
@@ -254,8 +404,16 @@ export class MfaService {
       config.emailOtpCodeHash = otpHash;
       config.emailOtpExpiresAt = expiresAt;
       config.emailOtpFailedAttempts = 0;
-      await this.mfaRepository.saveEntity(config);
+      await this.saveConfig(config);
     }
+
+    const dispatchResult = await this.emailAdapter.sendOtpEmail({
+      userId: user.id,
+      email: user.email,
+      otpCode,
+      expiresInSeconds: EMAIL_OTP_TTL_SECONDS,
+      purpose: 'MFA_EMAIL_OTP',
+    });
 
     const maskedEmail = this.maskEmail(user.email);
     this.logger.log(`Issued Email OTP for user ${user.id} (${maskedEmail})`);
@@ -265,22 +423,82 @@ export class MfaService {
       sent: true,
       maskedEmail,
       expiresInSeconds: EMAIL_OTP_TTL_SECONDS,
+      ...(dispatchResult.messageId ? { messageId: dispatchResult.messageId } : {}),
       ...(!isProd ? { devOtpCode: otpCode } : {}),
     };
   }
 
-  /** Xác minh mã MFA bước 2 (hỗ trợ cả TOTP, Email OTP và Recovery Code) */
+  /** Phát sinh và gửi mã OTP 6 chữ số qua SMS thông qua SMS Provider riêng của dự án (Mục 3.5.2) */
+  public async sendSmsOtp(userId: number, phoneOverride?: string): Promise<SendSmsOtpResponse> {
+    const user = await this.usersPublicService.findAuthUserById(userId);
+    if (!user) {
+      throw new UnauthorizedAppException('auth.userNotFound');
+    }
+
+    const targetPhone = normalizePhoneNumber(phoneOverride ?? user.phone);
+    if (!targetPhone) {
+      throw new BadRequestAppException('auth.phoneRequiredForSmsMfa');
+    }
+
+    const otpCode = this.passwordHasher.generateNumericOtp(6);
+    const otpHash = this.passwordHasher.sha256(otpCode);
+    const expiresAt = new Date(Date.now() + SMS_OTP_TTL_SECONDS * 1000);
+
+    let config = await this.findConfigByUserId(userId);
+    if (!config) {
+      config = await this.saveConfig({
+        userId,
+        totpSecret: null,
+        totpEnabled: false,
+        emailOtpEnabled: false,
+        preferredMethod: MFA_METHOD.SMS_OTP,
+        recoveryCodesHashJson: '[]',
+      });
+    }
+
+    const envelope = this.parseExtendedEnvelope(config.recoveryCodesHashJson);
+    envelope.smsOtpCodeHash = otpHash;
+    envelope.smsOtpExpiresAt = expiresAt.toISOString();
+    envelope.smsOtpFailedAttempts = 0;
+    config.recoveryCodesHashJson = this.serializeExtendedEnvelope(envelope);
+    await this.saveConfig(config);
+
+    const dispatchResult = await this.smsProvider.sendOtpSms({
+      userId: user.id,
+      phone: targetPhone,
+      otpCode,
+      expiresInSeconds: SMS_OTP_TTL_SECONDS,
+      purpose: 'MFA_SMS_OTP',
+    });
+
+    const maskedPhone = this.maskPhone(targetPhone);
+    this.logger.log(`Issued SMS OTP for user ${user.id} (${maskedPhone})`);
+
+    const isProd = this.configService?.app.env === 'production';
+    return {
+      sent: true,
+      maskedPhone,
+      expiresInSeconds: SMS_OTP_TTL_SECONDS,
+      ...(dispatchResult.providerMessageId
+        ? { providerMessageId: dispatchResult.providerMessageId }
+        : {}),
+      ...(!isProd ? { devOtpCode: otpCode } : {}),
+    };
+  }
+
+  /** Xác minh mã MFA bước 2 (hỗ trợ cả TOTP, Email OTP, SMS OTP và Recovery Code) */
   public async verifyMfaCode(
     userId: number,
     code: string,
     preferredMethod?: MfaMethodType,
   ): Promise<boolean> {
-    const config = await this.mfaRepository.findByUserId(userId);
+    const config = await this.findConfigByUserId(userId);
     if (!config) {
       return false;
     }
 
     const trimmedCode = code.trim();
+    const envelope = this.parseExtendedEnvelope(config.recoveryCodesHashJson);
 
     // 1. Kiểm tra nếu người dùng truyền mã khôi phục dự phòng (Recovery Code)
     if (preferredMethod === 'RECOVERY_CODE' || trimmedCode.includes('-')) {
@@ -313,12 +531,30 @@ export class MfaService {
         config.emailOtpCodeHash = null;
         config.emailOtpExpiresAt = null;
         config.emailOtpFailedAttempts = 0;
-        await this.mfaRepository.saveEntity(config);
+        await this.saveConfig(config);
         return true;
+      }
+      if (preferredMethod === 'EMAIL_OTP') {
+        return false;
       }
     }
 
-    // 4. Fallback kiểm tra Recovery Code không có dấu gạch ngang
+    // 4. Kiểm tra mã SMS OTP 6 chữ số (Mục 3.5.2)
+    if (preferredMethod === 'SMS_OTP' || !preferredMethod) {
+      if (await this.verifyAndTrackSmsOtp(config, envelope, trimmedCode)) {
+        envelope.smsOtpCodeHash = null;
+        envelope.smsOtpExpiresAt = null;
+        envelope.smsOtpFailedAttempts = 0;
+        config.recoveryCodesHashJson = this.serializeExtendedEnvelope(envelope);
+        await this.saveConfig(config);
+        return true;
+      }
+      if (preferredMethod === 'SMS_OTP') {
+        return false;
+      }
+    }
+
+    // 5. Fallback kiểm tra Recovery Code không có dấu gạch ngang
     if (!preferredMethod && (await this.consumeRecoveryCode(config, trimmedCode))) {
       return true;
     }
@@ -326,9 +562,232 @@ export class MfaService {
     return false;
   }
 
-  /** Tắt xác thực nhiều lớp (TOTP, Email OTP hoặc toàn bộ) */
+  /**
+   * Đăng ký thiết bị hiện tại vào danh sách Thiết bị tin cậy (Trusted Devices — Mục 3.5.5)
+   * Có thời hạn (`trustDurationDays`, mặc định 30 ngày) và có thể thu hồi bất kỳ lúc nào.
+   */
+  public async registerTrustedDevice(
+    userId: number,
+    options: {
+      deviceName?: string | null | undefined;
+      ipAddress?: string | null | undefined;
+      userAgent?: string | null | undefined;
+      trustDurationDays?: number | undefined;
+    } = {},
+  ): Promise<{
+    deviceId: string;
+    trustedDeviceToken: string;
+    trustedUntil: string;
+    device: TrustedDeviceItemResponse;
+  }> {
+    let config = await this.findConfigByUserId(userId);
+    if (!config) {
+      config = await this.saveConfig({
+        userId,
+        totpSecret: null,
+        totpEnabled: false,
+        emailOtpEnabled: false,
+        preferredMethod: MFA_METHOD.TOTP,
+        recoveryCodesHashJson: '[]',
+      });
+    }
+
+    const envelope = this.parseExtendedEnvelope(config.recoveryCodesHashJson);
+    const activeDevices = this.filterActiveTrustedDevices(envelope.trustedDevices ?? []);
+
+    const deviceId = `td-${randomUUID()}`;
+    const rawSecret = this.passwordHasher.generateRandomToken(24);
+    const trustedDeviceToken = `${userId}.${deviceId}.${rawSecret}`;
+    const tokenHash = this.passwordHasher.sha256(trustedDeviceToken);
+
+    const days = Math.max(1, Math.min(365, options.trustDurationDays ?? DEFAULT_TRUSTED_DEVICE_DAYS));
+    const now = new Date();
+    const trustedUntilDate = new Date(now.getTime() + days * 86_400_000);
+
+    const record: StoredTrustedDeviceRecord = {
+      deviceId,
+      tokenHash,
+      deviceName: options.deviceName ?? this.inferDeviceName(options.userAgent),
+      ipAddress: options.ipAddress ?? null,
+      userAgent: options.userAgent ?? null,
+      createdAt: now.toISOString(),
+      lastUsedAt: now.toISOString(),
+      trustedUntil: trustedUntilDate.toISOString(),
+    };
+
+    envelope.trustedDevices = [record, ...activeDevices].slice(0, 20);
+    config.recoveryCodesHashJson = this.serializeExtendedEnvelope(envelope);
+    await this.saveConfig(config);
+
+    return {
+      deviceId,
+      trustedDeviceToken,
+      trustedUntil: record.trustedUntil,
+      device: this.toTrustedDeviceResponse(record),
+    };
+  }
+
+  /**
+   * Kiểm tra token thiết bị tin cậy khi đăng nhập (Mục 3.5.5).
+   * Tự động loại bỏ các thiết bị đã hết hạn.
+   */
+  public async verifyTrustedDevice(
+    userId: number,
+    rawTrustedDeviceToken?: string | null,
+  ): Promise<boolean> {
+    if (!rawTrustedDeviceToken || !rawTrustedDeviceToken.trim()) {
+      return false;
+    }
+
+    const config = await this.findConfigByUserId(userId);
+    if (!config) {
+      return false;
+    }
+
+    const envelope = this.parseExtendedEnvelope(config.recoveryCodesHashJson);
+    const activeDevices = this.filterActiveTrustedDevices(envelope.trustedDevices ?? []);
+    if (activeDevices.length === 0) {
+      return false;
+    }
+
+    const candidateHash = this.passwordHasher.sha256(rawTrustedDeviceToken.trim());
+    const matched = activeDevices.find((d) => d.tokenHash === candidateHash);
+    if (!matched) {
+      return false;
+    }
+
+    matched.lastUsedAt = new Date().toISOString();
+    envelope.trustedDevices = activeDevices;
+    config.recoveryCodesHashJson = this.serializeExtendedEnvelope(envelope);
+    await this.saveConfig(config);
+    return true;
+  }
+
+  /** Danh sách các thiết bị tin cậy đang còn hiệu lực của người dùng (Mục 3.5.5) */
+  public async listTrustedDevices(userId: number): Promise<TrustedDeviceItemResponse[]> {
+    const config = await this.findConfigByUserId(userId);
+    if (!config) {
+      return [];
+    }
+
+    const envelope = this.parseExtendedEnvelope(config.recoveryCodesHashJson);
+    const activeDevices = this.filterActiveTrustedDevices(envelope.trustedDevices ?? []);
+    return activeDevices.map((d) => this.toTrustedDeviceResponse(d));
+  }
+
+  /** Thu hồi một thiết bị tin cậy cụ thể theo deviceId (Mục 3.5.5) */
+  public async revokeTrustedDevice(
+    userId: number,
+    deviceId: string,
+  ): Promise<{ revoked: true; deviceId: string }> {
+    const config = await this.findConfigByUserId(userId);
+    if (!config) {
+      throw new NotFoundAppException('auth.trustedDeviceNotFound', { deviceId });
+    }
+
+    const envelope = this.parseExtendedEnvelope(config.recoveryCodesHashJson);
+    const activeDevices = this.filterActiveTrustedDevices(envelope.trustedDevices ?? []);
+    const remaining = activeDevices.filter((d) => d.deviceId !== deviceId);
+
+    if (remaining.length === activeDevices.length) {
+      throw new NotFoundAppException('auth.trustedDeviceNotFound', { deviceId });
+    }
+
+    envelope.trustedDevices = remaining;
+    config.recoveryCodesHashJson = this.serializeExtendedEnvelope(envelope);
+    await this.saveConfig(config);
+
+    return { revoked: true, deviceId };
+  }
+
+  /** Thu hồi toàn bộ thiết bị tin cậy của người dùng (Mục 3.5.5) */
+  public async revokeAllTrustedDevices(
+    userId: number,
+  ): Promise<{ revoked: true; revokedCount: number }> {
+    const config = await this.findConfigByUserId(userId);
+    if (!config) {
+      return { revoked: true, revokedCount: 0 };
+    }
+
+    const envelope = this.parseExtendedEnvelope(config.recoveryCodesHashJson);
+    const activeDevices = this.filterActiveTrustedDevices(envelope.trustedDevices ?? []);
+    const revokedCount = activeDevices.length;
+
+    envelope.trustedDevices = [];
+    config.recoveryCodesHashJson = this.serializeExtendedEnvelope(envelope);
+    await this.saveConfig(config);
+
+    return { revoked: true, revokedCount };
+  }
+
+  /**
+   * Reset MFA có kiểm soát từ trang quản trị (Mục 3.5.8 — Có xác minh hoặc phê duyệt)
+   * Xóa toàn bộ cấu hình MFA (TOTP, Email OTP, SMS OTP, Recovery Codes, Trusted Devices) của người dùng.
+   */
+  public async adminResetUserMfa(
+    userId: number,
+    input: AdminResetMfaInput,
+    actorId?: number,
+    revokeSessionsCallback?: (userId: number, reason: string) => Promise<number>,
+  ): Promise<AdminResetMfaResult & AdminResetMfaResponse> {
+    const reason = input.reason?.trim();
+    if (!reason || reason.length < 3) {
+      throw new BadRequestAppException('auth.mfaResetReasonRequired');
+    }
+
+    const user = await this.usersPublicService.findAuthUserById(userId);
+    if (!user) {
+      throw new NotFoundAppException('users.notFound', { id: userId });
+    }
+
+    const config = await this.findConfigByUserId(userId);
+    let revokedTrustedDevicesCount = 0;
+
+    if (config) {
+      const envelope = this.parseExtendedEnvelope(config.recoveryCodesHashJson);
+      revokedTrustedDevicesCount = this.filterActiveTrustedDevices(
+        envelope.trustedDevices ?? [],
+      ).length;
+
+      config.totpEnabled = false;
+      config.totpSecret = null;
+      config.emailOtpEnabled = false;
+      config.emailOtpCodeHash = null;
+      config.emailOtpExpiresAt = null;
+      config.emailOtpFailedAttempts = 0;
+      config.recoveryCodesHashJson = '[]';
+      config.verifiedAt = null;
+      await this.saveConfig(config);
+    }
+
+    await this.usersPublicService.setMfaEnabled(userId, false);
+
+    let revokedSessionsCount = 0;
+    if (input.revokeSessions !== false && revokeSessionsCallback) {
+      const sessionReason = `MFA reset by administrator${actorId ? ` #${actorId}` : ''}: ${reason}`;
+      revokedSessionsCount = await revokeSessionsCallback(userId, sessionReason);
+    }
+
+    const resetAt = new Date().toISOString();
+    this.logger.log(
+      `Controlled MFA reset executed for user #${userId} by actor #${actorId ?? 'system'} (reason="${reason}", ref="${input.verificationReference ?? 'N/A'}")`,
+    );
+
+    return {
+      reset: true,
+      userId: Number(userId),
+      revokedSessionsCount,
+      revokedTrustedDevicesCount,
+      reason,
+      verificationReference: input.verificationReference ?? null,
+      resetByActorId: actorId ?? null,
+      resetAt,
+    };
+  }
+
+  /** Tắt xác thực nhiều lớp (TOTP, Email OTP, SMS OTP hoặc toàn bộ) */
   public async disableMfa(userId: number, dto: DisableMfaRequest): Promise<MfaStatusResponse> {
-    const config = await this.mfaRepository.findByUserId(userId);
+    const config = await this.findConfigByUserId(userId);
     if (!config) {
       await this.usersPublicService.setMfaEnabled(userId, false);
       return this.getStatus(userId);
@@ -341,6 +800,8 @@ export class MfaService {
       }
     }
 
+    const envelope = this.parseExtendedEnvelope(config.recoveryCodesHashJson);
+
     if (dto.method === 'TOTP') {
       config.totpEnabled = false;
       config.totpSecret = null;
@@ -349,6 +810,12 @@ export class MfaService {
       config.emailOtpCodeHash = null;
       config.emailOtpExpiresAt = null;
       config.emailOtpFailedAttempts = 0;
+    } else if (dto.method === 'SMS_OTP') {
+      envelope.smsOtpEnabled = false;
+      envelope.smsOtpCodeHash = null;
+      envelope.smsOtpExpiresAt = null;
+      envelope.smsOtpFailedAttempts = 0;
+      config.recoveryCodesHashJson = this.serializeExtendedEnvelope(envelope);
     } else {
       config.totpEnabled = false;
       config.totpSecret = null;
@@ -359,8 +826,11 @@ export class MfaService {
       config.recoveryCodesHashJson = '[]';
     }
 
-    const stillEnabled = Boolean(config.totpEnabled || config.emailOtpEnabled);
-    await this.mfaRepository.saveEntity(config);
+    const updatedEnvelope = this.parseExtendedEnvelope(config.recoveryCodesHashJson);
+    const stillEnabled = Boolean(
+      config.totpEnabled || config.emailOtpEnabled || updatedEnvelope.smsOtpEnabled,
+    );
+    await this.saveConfig(config);
     await this.usersPublicService.setMfaEnabled(userId, stillEnabled);
 
     return this.getStatus(userId);
@@ -368,15 +838,24 @@ export class MfaService {
 
   /** Cấp lại bộ 8 mã khôi phục dự phòng (Recovery Codes) mới */
   public async regenerateRecoveryCodes(userId: number): Promise<{ recoveryCodes: string[] }> {
-    const config = await this.mfaRepository.findByUserId(userId);
-    if (!config || (!config.totpEnabled && !config.emailOtpEnabled)) {
+    const config = await this.findConfigByUserId(userId);
+    const envelope = config ? this.parseExtendedEnvelope(config.recoveryCodesHashJson) : null;
+    if (
+      !config ||
+      (!config.totpEnabled && !config.emailOtpEnabled && !envelope?.smsOtpEnabled)
+    ) {
       throw new BadRequestAppException('auth.mfaNotEnabled');
     }
 
     const plainCodes = this.totpService.generateRecoveryCodes(8);
     const hashes = plainCodes.map((c) => this.passwordHasher.sha256(this.normalizeRecoveryCode(c)));
-    config.recoveryCodesHashJson = JSON.stringify(hashes);
-    await this.mfaRepository.saveEntity(config);
+    if (envelope) {
+      envelope.codes = hashes;
+      config.recoveryCodesHashJson = this.serializeExtendedEnvelope(envelope);
+    } else {
+      config.recoveryCodesHashJson = JSON.stringify(hashes);
+    }
+    await this.saveConfig(config);
 
     return { recoveryCodes: plainCodes };
   }
@@ -402,7 +881,38 @@ export class MfaService {
       config.emailOtpCodeHash = null;
       config.emailOtpExpiresAt = null;
     }
-    await this.mfaRepository.saveEntity(config);
+    await this.saveConfig(config);
+    return false;
+  }
+
+  /** Kiểm tra mã SMS OTP đã lưu, thời hạn hiệu lực và giới hạn số lần nhập sai (tối đa 5 lần) */
+  private async verifyAndTrackSmsOtp(
+    config: AuthMfaConfigEntity,
+    envelope: MfaExtendedEnvelope,
+    code: string,
+  ): Promise<boolean> {
+    if (!envelope.smsOtpCodeHash || !envelope.smsOtpExpiresAt) {
+      return false;
+    }
+    const expiresAtMs = new Date(envelope.smsOtpExpiresAt).getTime();
+    if (!Number.isFinite(expiresAtMs) || expiresAtMs <= Date.now()) {
+      return false;
+    }
+    const currentFailed = envelope.smsOtpFailedAttempts ?? 0;
+    if (currentFailed >= 5) {
+      return false;
+    }
+    const candidateHash = this.passwordHasher.sha256(code.trim());
+    if (candidateHash === envelope.smsOtpCodeHash) {
+      return true;
+    }
+    envelope.smsOtpFailedAttempts = currentFailed + 1;
+    if (envelope.smsOtpFailedAttempts >= 5) {
+      envelope.smsOtpCodeHash = null;
+      envelope.smsOtpExpiresAt = null;
+    }
+    config.recoveryCodesHashJson = this.serializeExtendedEnvelope(envelope);
+    await this.saveConfig(config);
     return false;
   }
 
@@ -411,18 +921,18 @@ export class MfaService {
     config: AuthMfaConfigEntity,
     rawCode: string,
   ): Promise<boolean> {
-    const hashes = this.parseRecoveryHashes(config.recoveryCodesHashJson);
-    if (hashes.length === 0) return false;
+    const envelope = this.parseExtendedEnvelope(config.recoveryCodesHashJson);
+    if (envelope.codes.length === 0) return false;
 
     const candidateHash = this.passwordHasher.sha256(this.normalizeRecoveryCode(rawCode));
-    const idx = hashes.indexOf(candidateHash);
+    const idx = envelope.codes.indexOf(candidateHash);
     if (idx === -1) {
       return false;
     }
 
-    hashes.splice(idx, 1);
-    config.recoveryCodesHashJson = JSON.stringify(hashes);
-    await this.mfaRepository.saveEntity(config);
+    envelope.codes.splice(idx, 1);
+    config.recoveryCodesHashJson = this.serializeExtendedEnvelope(envelope);
+    await this.saveConfig(config);
     return true;
   }
 
@@ -431,32 +941,183 @@ export class MfaService {
     plainCodes: string[];
     hashesJson: string;
   } {
-    const existingHashes = this.parseRecoveryHashes(config.recoveryCodesHashJson);
-    if (existingHashes.length > 0 && config.recoveryCodesHashJson) {
+    const envelope = this.parseExtendedEnvelope(config.recoveryCodesHashJson);
+    if (envelope.codes.length > 0 && config.recoveryCodesHashJson) {
       return {
         plainCodes: [],
-        hashesJson: config.recoveryCodesHashJson,
+        hashesJson: this.serializeExtendedEnvelope(envelope),
       };
     }
     const plainCodes = this.totpService.generateRecoveryCodes(8);
-    const hashes = plainCodes.map((c) => this.passwordHasher.sha256(this.normalizeRecoveryCode(c)));
+    envelope.codes = plainCodes.map((c) =>
+      this.passwordHasher.sha256(this.normalizeRecoveryCode(c)),
+    );
     return {
       plainCodes,
-      hashesJson: JSON.stringify(hashes),
+      hashesJson: this.serializeExtendedEnvelope(envelope),
     };
   }
 
-  /** Giải mã mảng JSON các mã băm Recovery Codes */
-  private parseRecoveryHashes(jsonStr?: string | null): string[] {
-    if (!jsonStr) return [];
+  /** Giải mã cấu trúc JSON mở rộng (tương thích ngược với mảng string[] cũ) */
+  private parseExtendedEnvelope(jsonStr?: string | null): MfaExtendedEnvelope {
+    if (!jsonStr) {
+      return { codes: [] };
+    }
     try {
       const parsed = JSON.parse(jsonStr) as unknown;
-      return Array.isArray(parsed)
-        ? parsed.filter((item): item is string => typeof item === 'string')
-        : [];
+      if (Array.isArray(parsed)) {
+        return {
+          codes: parsed.filter((item): item is string => typeof item === 'string'),
+        };
+      }
+      if (parsed && typeof parsed === 'object') {
+        const obj = parsed as Partial<MfaExtendedEnvelope>;
+        return {
+          codes: Array.isArray(obj.codes)
+            ? obj.codes.filter((item): item is string => typeof item === 'string')
+            : [],
+          ...(obj.smsOtpEnabled !== undefined ? { smsOtpEnabled: Boolean(obj.smsOtpEnabled) } : {}),
+          ...(obj.smsOtpCodeHash !== undefined ? { smsOtpCodeHash: obj.smsOtpCodeHash } : {}),
+          ...(obj.smsOtpExpiresAt !== undefined ? { smsOtpExpiresAt: obj.smsOtpExpiresAt } : {}),
+          ...(obj.smsOtpFailedAttempts !== undefined
+            ? { smsOtpFailedAttempts: Number(obj.smsOtpFailedAttempts) }
+            : {}),
+          ...(Array.isArray(obj.trustedDevices) ? { trustedDevices: obj.trustedDevices } : {}),
+        };
+      }
+      return { codes: [] };
     } catch {
-      return [];
+      return { codes: [] };
     }
+  }
+
+  /** Tuần tự hóa lại JSON mở rộng (nếu không có metadata mở rộng thì xuất mảng thuần để giữ tương thích tối đa) */
+  private serializeExtendedEnvelope(envelope: MfaExtendedEnvelope): string {
+    const hasExtendedMetadata =
+      Boolean(envelope.smsOtpEnabled) ||
+      Boolean(envelope.smsOtpCodeHash) ||
+      Boolean(envelope.trustedDevices && envelope.trustedDevices.length > 0);
+
+    if (!hasExtendedMetadata) {
+      return JSON.stringify(envelope.codes);
+    }
+
+    return JSON.stringify({
+      codes: envelope.codes,
+      ...(envelope.smsOtpEnabled ? { smsOtpEnabled: true } : {}),
+      ...(envelope.smsOtpCodeHash
+        ? {
+            smsOtpCodeHash: envelope.smsOtpCodeHash,
+            smsOtpExpiresAt: envelope.smsOtpExpiresAt ?? null,
+            smsOtpFailedAttempts: envelope.smsOtpFailedAttempts ?? 0,
+          }
+        : {}),
+      ...(envelope.trustedDevices && envelope.trustedDevices.length > 0
+        ? { trustedDevices: envelope.trustedDevices }
+        : {}),
+    });
+  }
+
+  private filterActiveTrustedDevices(
+    devices: StoredTrustedDeviceRecord[],
+  ): StoredTrustedDeviceRecord[] {
+    const nowMs = Date.now();
+    return devices.filter((d) => {
+      const untilMs = new Date(d.trustedUntil).getTime();
+      return Number.isFinite(untilMs) && untilMs > nowMs;
+    });
+  }
+
+  private toTrustedDeviceResponse(record: StoredTrustedDeviceRecord): TrustedDeviceItemResponse {
+    return {
+      deviceId: record.deviceId,
+      deviceName: record.deviceName,
+      ipAddress: record.ipAddress,
+      userAgent: record.userAgent,
+      createdAt: record.createdAt,
+      lastUsedAt: record.lastUsedAt,
+      trustedUntil: record.trustedUntil,
+    };
+  }
+
+  private inferDeviceName(userAgent?: string | null): string | null {
+    if (!userAgent) return 'Trusted Device';
+    if (/iPhone|iPad|iOS/i.test(userAgent)) return 'iOS Trusted Device';
+    if (/Android/i.test(userAgent)) return 'Android Trusted Device';
+    if (/Macintosh|Mac OS/i.test(userAgent)) return 'Mac Trusted Browser';
+    if (/Windows/i.test(userAgent)) return 'Windows Trusted Browser';
+    if (/Linux/i.test(userAgent)) return 'Linux Trusted Browser';
+    return 'Trusted Browser';
+  }
+
+  private async findConfigByUserId(userId: number): Promise<AuthMfaConfigEntity | null> {
+    if (this.mfaRepository && typeof this.mfaRepository.findByUserId === 'function') {
+      try {
+        const found = await this.mfaRepository.findByUserId(userId);
+        if (found) {
+          this.fallbackMfaConfigs.set(Number(userId), found);
+          return found;
+        }
+      } catch {
+        // Fallback sang bộ nhớ đệm nếu không có kết nối DB
+      }
+    }
+    return this.fallbackMfaConfigs.get(Number(userId)) ?? null;
+  }
+
+  private async saveConfig(
+    data: Partial<AuthMfaConfigEntity> & { userId: number },
+  ): Promise<AuthMfaConfigEntity> {
+    const existing = this.fallbackMfaConfigs.get(Number(data.userId));
+    const merged: AuthMfaConfigEntity = {
+      id: data.id ?? existing?.id ?? Number(data.userId),
+      userId: Number(data.userId),
+      totpSecret: data.totpSecret !== undefined ? data.totpSecret : (existing?.totpSecret ?? null),
+      totpEnabled:
+        data.totpEnabled !== undefined ? data.totpEnabled : (existing?.totpEnabled ?? false),
+      emailOtpEnabled:
+        data.emailOtpEnabled !== undefined
+          ? data.emailOtpEnabled
+          : (existing?.emailOtpEnabled ?? false),
+      preferredMethod:
+        data.preferredMethod !== undefined
+          ? data.preferredMethod
+          : (existing?.preferredMethod ?? MFA_METHOD.TOTP),
+      recoveryCodesHashJson:
+        data.recoveryCodesHashJson !== undefined
+          ? data.recoveryCodesHashJson
+          : (existing?.recoveryCodesHashJson ?? '[]'),
+      emailOtpCodeHash:
+        data.emailOtpCodeHash !== undefined
+          ? data.emailOtpCodeHash
+          : (existing?.emailOtpCodeHash ?? null),
+      emailOtpExpiresAt:
+        data.emailOtpExpiresAt !== undefined
+          ? data.emailOtpExpiresAt
+          : (existing?.emailOtpExpiresAt ?? null),
+      emailOtpFailedAttempts:
+        data.emailOtpFailedAttempts !== undefined
+          ? data.emailOtpFailedAttempts
+          : (existing?.emailOtpFailedAttempts ?? 0),
+      verifiedAt: data.verifiedAt !== undefined ? data.verifiedAt : (existing?.verifiedAt ?? null),
+      createdAt: existing?.createdAt ?? new Date(),
+      updatedAt: new Date(),
+      deletedAt: null,
+    } as AuthMfaConfigEntity;
+
+    this.fallbackMfaConfigs.set(Number(data.userId), merged);
+
+    if (this.mfaRepository && typeof this.mfaRepository.saveEntity === 'function') {
+      try {
+        const saved = await this.mfaRepository.saveEntity(merged);
+        this.fallbackMfaConfigs.set(Number(data.userId), saved);
+        return saved;
+      } catch {
+        // Fallback sang in-memory
+      }
+    }
+
+    return merged;
   }
 
   /** Chuẩn hóa mã khôi phục về chữ in hoa không dấu gạch ngang */
@@ -473,5 +1134,12 @@ export class MfaService {
     if (!localPart || !domain) return '***';
     const visible = localPart.slice(0, Math.min(2, localPart.length));
     return `${visible}***@${domain}`;
+  }
+
+  /** Che bớt số điện thoại khi trả về thông báo gửi SMS OTP (vd: 090****456) */
+  public maskPhone(phone: string): string {
+    const cleaned = phone.trim();
+    if (cleaned.length <= 4) return '***';
+    return `${cleaned.slice(0, 3)}****${cleaned.slice(-3)}`;
   }
 }

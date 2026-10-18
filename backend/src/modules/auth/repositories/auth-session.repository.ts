@@ -55,4 +55,14 @@ export class AuthSessionRepository extends BaseTypeOrmRepository<AuthSessionEnti
 
     return this.repository.save(toRevoke);
   }
+
+  /** Lấy toàn bộ lịch sử phiên (cả đang hoạt động và đã đăng xuất/thu hồi/hết hạn) của người dùng */
+  public async findAllByUserId(userId: number, limit = 50): Promise<AuthSessionEntity[]> {
+    return this.repository.find({
+      where: { userId: Number(userId) },
+      order: { createdAt: 'DESC' },
+      take: Math.max(1, Math.min(200, limit)),
+    });
+  }
 }
+

@@ -11,9 +11,14 @@ export const USERS_ROUTES = {
   ACTIVATE: ':id/activate',
   STATUS: ':id/status',
   STATUS_HISTORY: ':id/status-history',
+  LOGIN_HISTORY: ':id/login-history',
+  REVOKE_SESSIONS: ':id/revoke-sessions',
   RESTORE: ':id/restore',
   RESET_PASSWORD: ':id/reset-password',
+  RESET_MFA: ':id/reset-mfa',
   ROLES: ':id/roles',
   ORGANIZATIONS: ':id/organizations',
 } as const;
+
+
 
