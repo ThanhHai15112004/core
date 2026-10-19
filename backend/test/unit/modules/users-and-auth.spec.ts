@@ -98,14 +98,16 @@ import { UserIdentityResolverService } from '@modules/auth/services/user-identit
 import { AuthService } from '@modules/auth/services/auth.service.js';
 import {
   CODE_ITEM_STATUS,
-  CodeRegistryService,
   defaultCodeRegistry,
+  SETTING_VALUE_TYPE,
+  SettingRegistryService,
 } from '@packages/kernel/index.js';
 import type { CodeTypeEntity } from '@modules/codes/entities/code-type.entity.js';
 import type { CodeValueEntity } from '@modules/codes/entities/code-value.entity.js';
 import type { CodeTypeRepository } from '@modules/codes/repositories/code-type.repository.js';
 import type { CodeValueRepository } from '@modules/codes/repositories/code-value.repository.js';
 import { CodesService } from '@modules/codes/services/codes.service.js';
+import { SettingsService } from '@modules/settings/services/settings.service.js';
 import { MasterPermissionSeeder } from '../../../src/database/seeders/master-permission.seeder.js';
 
 /** Tạo bộ lưu trữ in-memory với ID số nguyên tăng dần (1, 2, 3...) và bảng permissions + user_profiles độc lập */
@@ -227,9 +229,7 @@ function createIamInMemoryHarness() {
         name: partial.name ?? existing?.name ?? partial.code ?? '',
         module: partial.module ?? existing?.module ?? 'core',
         description:
-          partial.description !== undefined
-            ? partial.description
-            : (existing?.description ?? null),
+          partial.description !== undefined ? partial.description : (existing?.description ?? null),
         status: partial.status ?? existing?.status ?? PERMISSION_STATUS.ACTIVE,
         createdAt: existing?.createdAt ?? now,
         updatedAt: now,
@@ -265,9 +265,7 @@ function createIamInMemoryHarness() {
         code,
         name: partial.name ?? existing?.name ?? code,
         description:
-          partial.description !== undefined
-            ? partial.description
-            : (existing?.description ?? null),
+          partial.description !== undefined ? partial.description : (existing?.description ?? null),
         isSystem: partial.isSystem ?? existing?.isSystem ?? false,
         dataScope:
           partial.dataScope ?? existing?.dataScope ?? inferDefaultDataScopeForRoleCode(code),
@@ -328,9 +326,7 @@ function createIamInMemoryHarness() {
         avatarUrl:
           partial.avatarUrl !== undefined ? partial.avatarUrl : (existing?.avatarUrl ?? null),
         dateOfBirth:
-          partial.dateOfBirth !== undefined
-            ? partial.dateOfBirth
-            : (existing?.dateOfBirth ?? null),
+          partial.dateOfBirth !== undefined ? partial.dateOfBirth : (existing?.dateOfBirth ?? null),
         gender: partial.gender !== undefined ? partial.gender : (existing?.gender ?? null),
         identityNumber:
           partial.identityNumber !== undefined
@@ -446,8 +442,7 @@ function createIamInMemoryHarness() {
           partial.lockedUntil !== undefined ? partial.lockedUntil : (existing?.lockedUntil ?? null),
         lockReason:
           partial.lockReason !== undefined ? partial.lockReason : (existing?.lockReason ?? null),
-        failedLoginAttempts:
-          partial.failedLoginAttempts ?? existing?.failedLoginAttempts ?? 0,
+        failedLoginAttempts: partial.failedLoginAttempts ?? existing?.failedLoginAttempts ?? 0,
         mfaEnabled: partial.mfaEnabled ?? existing?.mfaEnabled ?? false,
         primaryOrganizationUnitId:
           partial.primaryOrganizationUnitId !== undefined
@@ -534,7 +529,10 @@ function createIamInMemoryHarness() {
         if (sf.effectiveScopeName === 'ORG_UNIT') {
           list = list.filter((u) => {
             if (allowedUsers.has(u.id)) return true;
-            if (u.primaryOrganizationUnitId && allowedOrgs.has(Number(u.primaryOrganizationUnitId))) {
+            if (
+              u.primaryOrganizationUnitId &&
+              allowedOrgs.has(Number(u.primaryOrganizationUnitId))
+            ) {
               return true;
             }
             return userOrgStore.some(
@@ -649,9 +647,7 @@ function createIamInMemoryHarness() {
       return entry;
     },
     findByUserId: async (userId: number) =>
-      statusHistoryStore
-        .filter((h) => h.userId === Number(userId))
-        .sort((a, b) => b.id - a.id),
+      statusHistoryStore.filter((h) => h.userId === Number(userId)).sort((a, b) => b.id - a.id),
   } as unknown as UserStatusHistoryRepository;
 
   const sessionRepo = {
@@ -741,9 +737,8 @@ function createIamInMemoryHarness() {
   const resetRepo = {
     findByTokenHash: async (hash: string) => resetStore.get(hash) ?? null,
     findByOtpCodeHash: async (otpHash: string) =>
-      [...resetStore.values()]
-        .sort((a, b) => b.id - a.id)
-        .find((r) => r.otpCodeHash === otpHash) ?? null,
+      [...resetStore.values()].sort((a, b) => b.id - a.id).find((r) => r.otpCodeHash === otpHash) ??
+      null,
     findLatestByUserId: async (userId: number) =>
       [...resetStore.values()]
         .filter((r) => r.userId === Number(userId))
@@ -756,17 +751,13 @@ function createIamInMemoryHarness() {
         userId: partial.userId ?? existing!.userId,
         tokenHash: partial.tokenHash ?? existing!.tokenHash,
         otpCodeHash:
-          partial.otpCodeHash !== undefined
-            ? partial.otpCodeHash
-            : (existing?.otpCodeHash ?? null),
+          partial.otpCodeHash !== undefined ? partial.otpCodeHash : (existing?.otpCodeHash ?? null),
         attemptCount: partial.attemptCount ?? existing?.attemptCount ?? 0,
         maxAttempts: partial.maxAttempts ?? existing?.maxAttempts ?? 5,
         expiresAt: partial.expiresAt ?? existing!.expiresAt,
         usedAt: partial.usedAt !== undefined ? partial.usedAt : (existing?.usedAt ?? null),
         requestedIp:
-          partial.requestedIp !== undefined
-            ? partial.requestedIp
-            : (existing?.requestedIp ?? null),
+          partial.requestedIp !== undefined ? partial.requestedIp : (existing?.requestedIp ?? null),
         createdAt: existing?.createdAt ?? now,
         updatedAt: now,
       } as AuthPasswordResetEntity;
@@ -794,27 +785,20 @@ function createIamInMemoryHarness() {
         encryptFieldsAtRest:
           partial.encryptFieldsAtRest ?? globalSecuritySetting?.encryptFieldsAtRest ?? true,
         mfaPolicy:
-          partial.mfaPolicy ??
-          globalSecuritySetting?.mfaPolicy ??
-          MFA_POLICY_CODE.OPTIONAL,
+          partial.mfaPolicy ?? globalSecuritySetting?.mfaPolicy ?? MFA_POLICY_CODE.OPTIONAL,
         allowedMfaMethodsJson:
           partial.allowedMfaMethodsJson ??
           globalSecuritySetting?.allowedMfaMethodsJson ??
           '["TOTP","EMAIL_OTP","RECOVERY_CODE"]',
         maxFailedLoginAttempts:
-          partial.maxFailedLoginAttempts ??
-          globalSecuritySetting?.maxFailedLoginAttempts ??
-          5,
+          partial.maxFailedLoginAttempts ?? globalSecuritySetting?.maxFailedLoginAttempts ?? 5,
         lockoutDurationMinutes:
-          partial.lockoutDurationMinutes ??
-          globalSecuritySetting?.lockoutDurationMinutes ??
-          15,
+          partial.lockoutDurationMinutes ?? globalSecuritySetting?.lockoutDurationMinutes ?? 15,
         passwordMinLength:
           partial.passwordMinLength ?? globalSecuritySetting?.passwordMinLength ?? 8,
         requireUppercase:
           partial.requireUppercase ?? globalSecuritySetting?.requireUppercase ?? true,
-        requireNumbers:
-          partial.requireNumbers ?? globalSecuritySetting?.requireNumbers ?? true,
+        requireNumbers: partial.requireNumbers ?? globalSecuritySetting?.requireNumbers ?? true,
         requireSpecialChars:
           partial.requireSpecialChars ?? globalSecuritySetting?.requireSpecialChars ?? false,
         requireCurrentPasswordOnChange:
@@ -830,13 +814,9 @@ function createIamInMemoryHarness() {
           globalSecuritySetting?.disallowUserInfoInPassword ??
           true,
         preventPasswordReuse:
-          partial.preventPasswordReuse ??
-          globalSecuritySetting?.preventPasswordReuse ??
-          true,
+          partial.preventPasswordReuse ?? globalSecuritySetting?.preventPasswordReuse ?? true,
         passwordHistoryLimit:
-          partial.passwordHistoryLimit ??
-          globalSecuritySetting?.passwordHistoryLimit ??
-          5,
+          partial.passwordHistoryLimit ?? globalSecuritySetting?.passwordHistoryLimit ?? 5,
         revokeSessionsOnPasswordChange:
           partial.revokeSessionsOnPasswordChange ??
           globalSecuritySetting?.revokeSessionsOnPasswordChange ??
@@ -853,10 +833,8 @@ function createIamInMemoryHarness() {
           partial.requirePhoneVerification ??
           globalSecuritySetting?.requirePhoneVerification ??
           false,
-        otpMaxSendCount:
-          partial.otpMaxSendCount ?? globalSecuritySetting?.otpMaxSendCount ?? 5,
-        otpMaxAttempts:
-          partial.otpMaxAttempts ?? globalSecuritySetting?.otpMaxAttempts ?? 5,
+        otpMaxSendCount: partial.otpMaxSendCount ?? globalSecuritySetting?.otpMaxSendCount ?? 5,
+        otpMaxAttempts: partial.otpMaxAttempts ?? globalSecuritySetting?.otpMaxAttempts ?? 5,
         otpCooldownSeconds:
           partial.otpCooldownSeconds ?? globalSecuritySetting?.otpCooldownSeconds ?? 60,
         sessionIdleTimeoutMinutes:
@@ -892,8 +870,7 @@ function createIamInMemoryHarness() {
     findByCodeHash: async (codeHash: string, channel: number) =>
       [...verificationStore.values()]
         .filter(
-          (r) =>
-            r.channel === channel && !r.verifiedAt && r.codeHash.split(':').includes(codeHash),
+          (r) => r.channel === channel && !r.verifiedAt && r.codeHash.split(':').includes(codeHash),
         )
         .sort((a, b) => Number(b.id) - Number(a.id))[0] ?? null,
     saveEntity: async (partial: Partial<AuthVerificationCodeEntity>) => {
@@ -915,9 +892,7 @@ function createIamInMemoryHarness() {
         verifiedAt:
           partial.verifiedAt !== undefined ? partial.verifiedAt : (existing?.verifiedAt ?? null),
         requestedIp:
-          partial.requestedIp !== undefined
-            ? partial.requestedIp
-            : (existing?.requestedIp ?? null),
+          partial.requestedIp !== undefined ? partial.requestedIp : (existing?.requestedIp ?? null),
         createdAt: existing?.createdAt ?? now,
         updatedAt: now,
         deletedAt: null,
@@ -942,9 +917,7 @@ function createIamInMemoryHarness() {
         code: partial.code ?? existing?.code ?? '',
         name: partial.name ?? existing?.name ?? '',
         description:
-          partial.description !== undefined
-            ? partial.description
-            : (existing?.description ?? null),
+          partial.description !== undefined ? partial.description : (existing?.description ?? null),
         status: partial.status ?? existing?.status ?? SERVICE_ACCOUNT_STATUS.ACTIVE,
         scopesJson: partial.scopesJson ?? existing?.scopesJson ?? '[]',
         createdBy:
@@ -986,9 +959,7 @@ function createIamInMemoryHarness() {
         serviceAccountId: Number(partial.serviceAccountId ?? existing?.serviceAccountId ?? 0),
         name: partial.name ?? existing?.name ?? '',
         description:
-          partial.description !== undefined
-            ? partial.description
-            : (existing?.description ?? null),
+          partial.description !== undefined ? partial.description : (existing?.description ?? null),
         clientId: partial.clientId ?? existing?.clientId ?? '',
         clientSecretHash: partial.clientSecretHash ?? existing?.clientSecretHash ?? '',
         secretPrefix: partial.secretPrefix ?? existing?.secretPrefix ?? '',
@@ -1471,9 +1442,7 @@ describe('Unit: Quản lý Người dùng (3.1) & Xác thực / Phiên / MFA (3)
     expect(refreshed.refreshToken).toBeDefined();
 
     // Dùng lại Refresh Token cũ đã xoay vòng -> bị từ chối và thu hồi phiên
-    await expect(
-      h.authService.refresh({ refreshToken: login1.refreshToken! }),
-    ).rejects.toThrow();
+    await expect(h.authService.refresh({ refreshToken: login1.refreshToken! })).rejects.toThrow();
 
     // 3. Bật xác thực 2 lớp bằng TOTP (Google Authenticator) & xác minh totpSecret được mã hóa AEAD xuống DB
     const totpSetup = await h.mfaService.setupTotp(user.id);
@@ -1687,9 +1656,7 @@ describe('Unit: Quản lý Người dùng (3.1) & Xác thực / Phiên / MFA (3)
     expect(phoneOtp2.sendCount).toBe(2);
 
     // Lần gửi thứ 3 vượt quá otpMaxSendCount (2) -> bị chặn
-    await expect(
-      h.verificationService.sendPhoneOtp({ phone: '0912345678' }),
-    ).rejects.toThrow();
+    await expect(h.verificationService.sendPhoneOtp({ phone: '0912345678' })).rejects.toThrow();
 
     // Nhập sai OTP 3 lần liên tiếp -> vượt quá otpMaxAttempts (3) -> hủy hiệu lực mã
     await expect(
@@ -1941,9 +1908,7 @@ describe('Unit: Quản lý Người dùng (3.1) & Xác thực / Phiên / MFA (3)
     // 4. Kiểm tra tự động hết hạn phiên do Idle Timeout (quá 15 phút không hoạt động)
     const s1Entity = h.sessionStore.get(dev1.sessionId!)!;
     s1Entity.lastActiveAt = new Date(Date.now() - 16 * 60 * 1000); // 16 phút trước (> 15 phút Idle Timeout)
-    await expect(
-      h.authService.refresh({ refreshToken: dev1.refreshToken! }),
-    ).rejects.toThrow();
+    await expect(h.authService.refresh({ refreshToken: dev1.refreshToken! })).rejects.toThrow();
     expect(h.sessionStore.get(dev1.sessionId!)?.revokeReason).toContain('Session idle timeout');
 
     // 5. Kiểm tra tự động hết hạn phiên do Max Session Lifetime (vượt quá 120 phút kể từ lúc tạo phiên)
@@ -1958,9 +1923,7 @@ describe('Unit: Quản lý Người dùng (3.1) & Xác thực / Phiên / MFA (3)
     const s3Entity = h.sessionStore.get(dev3.sessionId!)!;
     s3Entity.createdAt = new Date(Date.now() - 125 * 60 * 1000); // Tạo 125 phút trước (> 120 phút Max Lifetime)
     s3Entity.lastActiveAt = new Date(Date.now() - 2 * 60 * 1000); // Mới hoạt động 2 phút trước
-    await expect(
-      h.authService.refresh({ refreshToken: dev3.refreshToken! }),
-    ).rejects.toThrow();
+    await expect(h.authService.refresh({ refreshToken: dev3.refreshToken! })).rejects.toThrow();
     expect(h.sessionStore.get(dev3.sessionId!)?.revokeReason).toContain(
       'Session maximum lifetime exceeded',
     );
@@ -2664,9 +2627,7 @@ describe('Unit: Quản lý Người dùng (3.1) & Xác thực / Phiên / MFA (3)
     expect(i18n.t('roles.dataScopeAllNotAllowedForRole', undefined, 'vi')).toContain(
       'toàn hệ thống (ALL)',
     );
-    expect(i18n.t('roles.dataScopeAllNotAllowedForRole', undefined, 'en')).toContain(
-      'System-wide',
-    );
+    expect(i18n.t('roles.dataScopeAllNotAllowedForRole', undefined, 'en')).toContain('System-wide');
     expect(i18n.t('users.circularManagerHierarchy', undefined, 'vi')).toContain('vòng lặp');
     expect(i18n.t('users.circularManagerHierarchy', undefined, 'en')).toContain('Circular');
 
@@ -2901,7 +2862,8 @@ describe('Unit: Quản lý Người dùng (3.1) & Xác thực / Phiên / MFA (3)
     const registeredRules = h.dataScopeService.listRegisteredRules('courses');
     expect(
       registeredRules.some(
-        (r) => r.module === 'courses' && r.resource === 'courses' && r.code === 'courses.co_instructor',
+        (r) =>
+          r.module === 'courses' && r.resource === 'courses' && r.code === 'courses.co_instructor',
       ),
     ).toBe(true);
 
@@ -3162,9 +3124,7 @@ describe('Unit: Quản lý Người dùng (3.1) & Xác thực / Phiên / MFA (3)
       'https://admin.enterprise.vn',
       '*.trusted.enterprise.vn',
     ]);
-    expect(
-      h.platformSecurityService.evaluateCorsOrigin('https://admin.enterprise.vn'),
-    ).toEqual({
+    expect(h.platformSecurityService.evaluateCorsOrigin('https://admin.enterprise.vn')).toEqual({
       allowed: true,
       allowedOrigin: 'https://admin.enterprise.vn',
     });
@@ -3362,12 +3322,7 @@ describe('Unit: Quản lý Người dùng (3.1) & Xác thực / Phiên / MFA (3)
     // Kiểm tra danh sách Security Events và Security Alerts qua RolesService
     const secEvents = h.rolesService.listSecurityEvents({ limit: 50 });
     expect(secEvents.map((e) => e.eventType)).toEqual(
-      expect.arrayContaining([
-        'LOGIN_FAILED',
-        'MFA_DISABLED',
-        'PERMISSION_CHANGED',
-        'DATA_EXPORT',
-      ]),
+      expect.arrayContaining(['LOGIN_FAILED', 'MFA_DISABLED', 'PERMISSION_CHANGED', 'DATA_EXPORT']),
     );
 
     const secAlerts = h.rolesService.listSecurityAlerts({ limit: 50 });
@@ -3413,7 +3368,9 @@ describe('Unit: Quản lý Người dùng (3.1) & Xác thực / Phiên / MFA (3)
           module: partial.module ?? existing?.module ?? 'core',
           name: partial.name ?? existing?.name ?? norm,
           description:
-            partial.description !== undefined ? partial.description : (existing?.description ?? null),
+            partial.description !== undefined
+              ? partial.description
+              : (existing?.description ?? null),
           isSystem: partial.isSystem ?? existing?.isSystem ?? true,
           allowCustomValues: partial.allowCustomValues ?? existing?.allowCustomValues ?? true,
           status: partial.status ?? existing?.status ?? CODE_ITEM_STATUS.ACTIVE,
@@ -3446,7 +3403,8 @@ describe('Unit: Quản lý Người dùng (3.1) & Xác thực / Phiên / MFA (3)
         const norm = typeCode.trim().toLowerCase();
         return (
           [...valStore.values()].find(
-            (v) => v.typeCode === norm && Number(v.numericCode) === Number(numericCode) && !v.deletedAt,
+            (v) =>
+              v.typeCode === norm && Number(v.numericCode) === Number(numericCode) && !v.deletedAt,
           ) ?? null
         );
       },
@@ -3464,11 +3422,15 @@ describe('Unit: Quản lý Người dùng (3.1) & Xác thực / Phiên / MFA (3)
               : (existing?.behaviorCode ?? null),
           name: partial.name ?? existing!.name,
           description:
-            partial.description !== undefined ? partial.description : (existing?.description ?? null),
+            partial.description !== undefined
+              ? partial.description
+              : (existing?.description ?? null),
           labelsJson:
             partial.labelsJson !== undefined ? partial.labelsJson : (existing?.labelsJson ?? null),
           aliasesJson:
-            partial.aliasesJson !== undefined ? partial.aliasesJson : (existing?.aliasesJson ?? null),
+            partial.aliasesJson !== undefined
+              ? partial.aliasesJson
+              : (existing?.aliasesJson ?? null),
           color: partial.color !== undefined ? partial.color : (existing?.color ?? null),
           icon: partial.icon !== undefined ? partial.icon : (existing?.icon ?? null),
           sortOrder: partial.sortOrder ?? existing?.sortOrder ?? 0,
@@ -3590,5 +3552,329 @@ describe('Unit: Quản lý Người dùng (3.1) & Xác thực / Phiên / MFA (3)
     expect(seederRes.affected).toBeGreaterThan(20);
     expect(executedQueries.some((q) => q.includes('INSERT INTO code_types'))).toBe(true);
     expect(executedQueries.some((q) => q.includes('INSERT INTO code_values'))).toBe(true);
+    expect(executedQueries.some((q) => q.includes('INSERT INTO setting_groups'))).toBe(true);
+    expect(executedQueries.some((q) => q.includes('INSERT INTO system_settings'))).toBe(true);
+    expect(executedQueries.some((q) => q.includes('INSERT INTO system_setting_scopes'))).toBe(true);
+  });
+
+  it('5.1.1 -> 5.1.8: Cấu hình hệ thống động (Nhóm cấu hình, Namespace theo module, Kiểu TEXT/NUMBER/BOOLEAN/JSON, Môi trường, Đơn vị, Mã hóa & Che giấu Secret, Lịch sử thay đổi, Cache & Cầu nối Chính sách mật khẩu)', async () => {
+    const settingRegistry = new SettingRegistryService();
+    const fieldEncryption = new FieldEncryptionService(new CoreConfigService());
+    const auditLogService = new AuditLogService();
+    const settingsService = new SettingsService(
+      null,
+      null,
+      null,
+      null,
+      settingRegistry,
+      fieldEncryption,
+      auditLogService,
+      null,
+    );
+
+    const adminActor = {
+      id: 1,
+      email: 'superadmin@gmail.com',
+      roles: ['super_admin'],
+      permissions: ['settings.read', 'settings.manage'],
+    };
+
+    // Liên kết cầu nối hai chiều với SecuritySettingsService của h
+    const securityServiceWithBridge = new SecuritySettingsService(
+      (h.securitySettingsService as unknown as { settingRepo: AuthSecuritySettingRepository })
+        .settingRepo,
+      undefined,
+      undefined,
+      settingRegistry,
+    );
+
+    // 1. Đồng bộ Manifest (5.1.1 & 5.1.2): Nhóm cấu hình hệ thống (email, file, security, ui, system) & Namespace theo module
+    const syncRes = await settingsService.syncManifests();
+    expect(syncRes.totalGroups).toBeGreaterThanOrEqual(5);
+    expect(syncRes.totalSettings).toBeGreaterThanOrEqual(14);
+
+    const groups = await settingsService.listGroups();
+    const groupCodes = groups.map((g) => g.code);
+    expect(groupCodes).toEqual(
+      expect.arrayContaining(['email', 'file', 'security', 'ui', 'system']),
+    );
+
+    // Tạo thêm nhóm cấu hình tùy chỉnh (5.1.1)
+    const customGroup = await settingsService.createGroup(
+      {
+        code: 'integrations',
+        module: 'settings',
+        name: 'Cấu hình tích hợp bên thứ ba',
+      },
+      adminActor,
+    );
+    expect(customGroup.code).toBe('integrations');
+    expect(customGroup.isSystem).toBe(false);
+
+    // Lọc danh sách cấu hình theo module / namespace (5.1.2)
+    const authPasswordSettings = await settingsService.listSettings({
+      module: 'auth',
+      namespace: 'auth.password',
+    });
+    expect(authPasswordSettings.length).toBeGreaterThanOrEqual(4);
+    expect(authPasswordSettings.some((s) => s.key === 'security.password.min_length')).toBe(true);
+
+    // 2. Validate kiểu dữ liệu TEXT, NUMBER, BOOLEAN, JSON trước khi lưu (5.1.3)
+    // - NUMBER: kiểm tra min/max/integerOnly (security.password.min_length có min=6, max=64, integerOnly=true)
+    await expect(
+      settingsService.updateSettingValue(
+        'security.password.min_length',
+        { value: 3 }, // < min (6)
+        adminActor,
+      ),
+    ).rejects.toThrow();
+
+    await expect(
+      settingsService.updateSettingValue(
+        'security.password.min_length',
+        { value: 'not-a-number' },
+        adminActor,
+      ),
+    ).rejects.toThrow();
+
+    // - BOOLEAN: kiểm tra kiểu boolean chuẩn
+    await expect(
+      settingsService.updateSettingValue(
+        'security.password.require_uppercase',
+        { value: 'yes-invalid-boolean' },
+        adminActor,
+      ),
+    ).rejects.toThrow();
+
+    // - JSON: kiểm tra mảng/object hợp lệ
+    const updatedAllowedExts = await settingsService.updateSettingValue(
+      'file.upload.allowed_extensions',
+      {
+        value: ['jpg', 'png', 'pdf', 'docx'],
+        reason: 'Cập nhật định dạng tệp cho phép',
+      },
+      adminActor,
+    );
+    expect(updatedAllowedExts.valueTypeName).toBe('JSON');
+    expect(updatedAllowedExts.value).toEqual(['jpg', 'png', 'pdf', 'docx']);
+
+    // - TEXT: kiểm tra enumOptions (ui.theme.default_mode chỉ nhận light | dark | system)
+    await expect(
+      settingsService.updateSettingValue(
+        'ui.theme.default_mode',
+        { value: 'neon-invalid' },
+        adminActor,
+      ),
+    ).rejects.toThrow();
+
+    const updatedTheme = await settingsService.updateSettingValue(
+      'ui.theme.default_mode',
+      { value: 'dark' },
+      adminActor,
+    );
+    expect(updatedTheme.value).toBe('dark');
+
+    // 3. Hỗ trợ cấu hình theo môi trường (5.1.4) & theo đơn vị (5.1.5) với thứ tự ưu tiên:
+    //    UNIT_ENV -> UNIT_ALL -> GLOBAL_ENV -> GLOBAL -> DEFAULT
+    await settingsService.updateSettingValue(
+      'email.smtp.host',
+      { value: 'smtp.global.internal', environment: 'ALL' },
+      adminActor,
+    );
+    await settingsService.updateSettingValue(
+      'email.smtp.host',
+      { value: 'smtp.prod.amazonaws.com', environment: 'production' },
+      adminActor,
+    );
+    await settingsService.updateSettingValue(
+      'email.smtp.host',
+      { value: 'smtp.unit10.local', environment: 'ALL', organizationUnitId: 10 },
+      adminActor,
+    );
+    await settingsService.updateSettingValue(
+      'email.smtp.host',
+      { value: 'smtp.unit10.prod.local', environment: 'production', organizationUnitId: 10 },
+      adminActor,
+    );
+
+    const resolvedGlobalStaging = await settingsService.resolve<string>('email.smtp.host', {
+      environment: 'staging',
+    });
+    expect(resolvedGlobalStaging.value).toBe('smtp.global.internal');
+    expect(resolvedGlobalStaging.resolvedSource).toBe('GLOBAL');
+
+    const resolvedGlobalProd = await settingsService.resolve<string>('email.smtp.host', {
+      environment: 'production',
+    });
+    expect(resolvedGlobalProd.value).toBe('smtp.prod.amazonaws.com');
+    expect(resolvedGlobalProd.resolvedSource).toBe('GLOBAL_ENV');
+
+    const resolvedUnitAll = await settingsService.resolve<string>('email.smtp.host', {
+      environment: 'staging',
+      organizationUnitId: 10,
+    });
+    expect(resolvedUnitAll.value).toBe('smtp.unit10.local');
+    expect(resolvedUnitAll.resolvedSource).toBe('UNIT_ALL');
+
+    const resolvedUnitEnv = await settingsService.resolve<string>('email.smtp.host', {
+      environment: 'production',
+      organizationUnitId: 10,
+    });
+    expect(resolvedUnitEnv.value).toBe('smtp.unit10.prod.local');
+    expect(resolvedUnitEnv.resolvedSource).toBe('UNIT_ENV');
+
+    // Chặn ghi đè theo đơn vị khi allowUnitOverride = false (ví dụ system.maintenance.enabled)
+    await expect(
+      settingsService.updateSettingValue(
+        'system.maintenance.enabled',
+        { value: true, organizationUnitId: 10 },
+        adminActor,
+      ),
+    ).rejects.toThrow();
+
+    // 4. Ẩn hoặc mã hóa cấu hình nhạy cảm (5.1.6): Không hiển thị secret thô qua API/log, giải mã nội bộ
+    const updatedSecret = await settingsService.updateSettingValue(
+      'email.smtp.password',
+      {
+        value: 'SuperSecretSmtpKey#2026!',
+        reason: 'Cập nhật mật khẩu SMTP',
+      },
+      adminActor,
+    );
+    expect(updatedSecret.isSensitive).toBe(true);
+    expect(updatedSecret.isEncrypted).toBe(true);
+    expect(updatedSecret.value).toBe('••••••••');
+
+    const resolvedSecretPublic = await settingsService.resolve('email.smtp.password');
+    expect(resolvedSecretPublic.value).toBe('••••••••');
+
+    // Dịch vụ nội bộ gọi getDecryptedValue sẽ nhận lại đúng chuỗi gốc đã giải mã AES-256-GCM
+    const decryptedSecret = await settingsService.getDecryptedValue<string>('email.smtp.password');
+    expect(decryptedSecret).toBe('SuperSecretSmtpKey#2026!');
+
+    // 5. Cache cấu hình & tự động xóa cache khi thay đổi (5.1.8) + Cầu nối sang SecuritySettingsService
+    const firstResolveMinLen = await settingsService.resolve<number>(
+      'security.password.min_length',
+    );
+    expect(firstResolveMinLen.value).toBe(8);
+    expect(firstResolveMinLen.fromCache).toBe(false);
+
+    const cachedResolveMinLen = await settingsService.resolve<number>(
+      'security.password.min_length',
+    );
+    expect(cachedResolveMinLen.value).toBe(8);
+    expect(cachedResolveMinLen.fromCache).toBe(true);
+
+    // Khi cập nhật security.password.min_length = 12 -> Cache bị invalidate ngay lập tức và SecuritySettingsService tự đồng bộ
+    await settingsService.updateSettingValue(
+      'security.password.min_length',
+      {
+        value: 12,
+        reason: 'Tăng độ dài mật khẩu tối thiểu lên 12 ký tự theo tiêu chuẩn an ninh mới',
+      },
+      adminActor,
+    );
+
+    const afterUpdateResolve = await settingsService.resolve<number>(
+      'security.password.min_length',
+    );
+    expect(afterUpdateResolve.value).toBe(12);
+    expect(afterUpdateResolve.fromCache).toBe(false);
+
+    // Kiểm tra SecuritySettingsService đã nhận giá trị 12 ký tự và chặn mật khẩu 9 ký tự
+    const secView = await securityServiceWithBridge.getSettings();
+    expect(secView.passwordMinLength).toBe(12);
+    await expect(
+      securityServiceWithBridge.validatePasswordPolicy('Abcd@1234', {
+        email: 'user@example.com',
+      }),
+    ).rejects.toThrow();
+
+    // 6. Ghi lịch sử thay đổi cấu hình (5.1.7): Biết ai đã thay đổi, thời gian, giá trị cũ/mới (đã che secret nếu nhạy cảm)
+    const minLenHistory = await settingsService.listHistory({
+      settingKey: 'security.password.min_length',
+    });
+    expect(minLenHistory.length).toBeGreaterThanOrEqual(1);
+    expect(typeof minLenHistory[0]?.settingId).toBe('number');
+    expect(minLenHistory[0]?.environmentCode).toBe(1);
+    expect(minLenHistory[0]?.actorUserId).toBe(1);
+    expect(minLenHistory[0]?.actorIdentifier).toBe('superadmin@gmail.com');
+    expect(minLenHistory[0]?.oldValue).toBe(8);
+    expect(minLenHistory[0]?.newValue).toBe(12);
+
+    const secretHistory = await settingsService.listHistory({
+      settingKey: 'email.smtp.password',
+    });
+    expect(secretHistory.length).toBeGreaterThanOrEqual(1);
+    expect(secretHistory[0]?.newValue).toBe('••••••••');
+
+    // 7. Kiểm tra thay đổi ngược từ API / SecuritySettingsService -> SettingsService tự động cập nhật & xóa cache
+    await securityServiceWithBridge.updateSettings({
+      passwordMinLength: 10,
+    });
+    const resolvedAfterAuthUpdate = await settingsService.resolve<number>(
+      'security.password.min_length',
+    );
+    expect(resolvedAfterAuthUpdate.value).toBe(10);
+    expect(resolvedAfterAuthUpdate.fromCache).toBe(false);
+
+    // 8. Kiểm tra khi thay đổi trực tiếp dữ liệu trong Database (system_settings) -> hydrateRegistryFromDbSafe tự động phát hiện, xóa cache và đồng bộ sang SecuritySettingsService
+    let dbGlobalMinLen = '14';
+    const mockDbSettingRepo = {
+      findFiltered: async () => [
+        {
+          id: 1,
+          settingKey: 'security.password.min_length',
+          groupId: 3,
+          module: 'auth',
+          namespace: 'auth.password',
+          name: 'Độ dài mật khẩu tối thiểu',
+          description: 'Số ký tự tối thiểu khi tạo hoặc đổi mật khẩu',
+          valueType: SETTING_VALUE_TYPE.NUMBER,
+          defaultValue: '8',
+          globalValue: dbGlobalMinLen,
+          validationRulesJson: JSON.stringify({ min: 6, max: 64, integerOnly: true }),
+          isSensitive: false,
+          isEncrypted: false,
+          allowUnitOverride: true,
+          isSystem: true,
+          sortOrder: 1,
+          status: 1,
+          updatedBy: 1,
+        },
+      ],
+    };
+    const dbBackedSettingsService = new SettingsService(
+      null,
+      mockDbSettingRepo as never,
+      null,
+      null,
+      settingRegistry,
+      fieldEncryption,
+      auditLogService,
+      null,
+    );
+
+    const resolvedFromDirectDb1 = await dbBackedSettingsService.resolve<number>(
+      'security.password.min_length',
+    );
+    expect(resolvedFromDirectDb1.value).toBe(14);
+    expect((await securityServiceWithBridge.getSettings()).passwordMinLength).toBe(14);
+
+    // Lần đọc thứ 2 trúng cache (fromCache = true)
+    const cachedFromDirectDb = await dbBackedSettingsService.resolve<number>(
+      'security.password.min_length',
+    );
+    expect(cachedFromDirectDb.value).toBe(14);
+    expect(cachedFromDirectDb.fromCache).toBe(true);
+
+    // Giả lập DBA sửa trực tiếp cột global_value trong bảng system_settings từ '14' -> '16'
+    dbGlobalMinLen = '16';
+    const resolvedAfterDirectSqlEdit = await dbBackedSettingsService.resolve<number>(
+      'security.password.min_length',
+    );
+    expect(resolvedAfterDirectSqlEdit.value).toBe(16);
+    expect(resolvedAfterDirectSqlEdit.fromCache).toBe(false);
+    expect((await securityServiceWithBridge.getSettings()).passwordMinLength).toBe(16);
   });
 });

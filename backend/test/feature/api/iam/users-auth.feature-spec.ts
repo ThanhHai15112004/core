@@ -389,8 +389,7 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
               : (existing?.lockedUntil ?? null),
           lockReason:
             partial.lockReason !== undefined ? partial.lockReason : (existing?.lockReason ?? null),
-          failedLoginAttempts:
-            partial.failedLoginAttempts ?? existing?.failedLoginAttempts ?? 0,
+          failedLoginAttempts: partial.failedLoginAttempts ?? existing?.failedLoginAttempts ?? 0,
           mfaEnabled: partial.mfaEnabled ?? existing?.mfaEnabled ?? false,
           primaryOrganizationUnitId:
             partial.primaryOrganizationUnitId !== undefined
@@ -492,7 +491,9 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
       },
       findUserIdsByRoleIds: async (roleIds: readonly number[]) => {
         const set = new Set(roleIds.map(Number));
-        return [...new Set(userRoleStore.filter((ur) => set.has(ur.roleId)).map((ur) => ur.userId))];
+        return [
+          ...new Set(userRoleStore.filter((ur) => set.has(ur.roleId)).map((ur) => ur.userId)),
+        ];
       },
       replaceUserRoles: async (userId: number, roleIds: readonly number[], assignedBy?: number) => {
         for (let i = userRoleStore.length - 1; i >= 0; i--) {
@@ -581,9 +582,7 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
         return entry;
       },
       findByUserId: async (userId: number) =>
-        statusHistoryStore
-          .filter((h) => h.userId === Number(userId))
-          .sort((a, b) => b.id - a.id),
+        statusHistoryStore.filter((h) => h.userId === Number(userId)).sort((a, b) => b.id - a.id),
     });
 
     const sessionRepo = context.moduleFixture.get(AuthSessionRepository, { strict: false });
@@ -731,27 +730,20 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
           encryptFieldsAtRest:
             partial.encryptFieldsAtRest ?? globalSecuritySetting?.encryptFieldsAtRest ?? true,
           mfaPolicy:
-            partial.mfaPolicy ??
-            globalSecuritySetting?.mfaPolicy ??
-            MFA_POLICY_CODE.OPTIONAL,
+            partial.mfaPolicy ?? globalSecuritySetting?.mfaPolicy ?? MFA_POLICY_CODE.OPTIONAL,
           allowedMfaMethodsJson:
             partial.allowedMfaMethodsJson ??
             globalSecuritySetting?.allowedMfaMethodsJson ??
             '["TOTP","EMAIL_OTP","RECOVERY_CODE"]',
           maxFailedLoginAttempts:
-            partial.maxFailedLoginAttempts ??
-            globalSecuritySetting?.maxFailedLoginAttempts ??
-            5,
+            partial.maxFailedLoginAttempts ?? globalSecuritySetting?.maxFailedLoginAttempts ?? 5,
           lockoutDurationMinutes:
-            partial.lockoutDurationMinutes ??
-            globalSecuritySetting?.lockoutDurationMinutes ??
-            15,
+            partial.lockoutDurationMinutes ?? globalSecuritySetting?.lockoutDurationMinutes ?? 15,
           passwordMinLength:
             partial.passwordMinLength ?? globalSecuritySetting?.passwordMinLength ?? 8,
           requireUppercase:
             partial.requireUppercase ?? globalSecuritySetting?.requireUppercase ?? true,
-          requireNumbers:
-            partial.requireNumbers ?? globalSecuritySetting?.requireNumbers ?? true,
+          requireNumbers: partial.requireNumbers ?? globalSecuritySetting?.requireNumbers ?? true,
           requireSpecialChars:
             partial.requireSpecialChars ?? globalSecuritySetting?.requireSpecialChars ?? false,
           requireCurrentPasswordOnChange:
@@ -767,25 +759,17 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
             globalSecuritySetting?.disallowUserInfoInPassword ??
             true,
           preventPasswordReuse:
-            partial.preventPasswordReuse ??
-            globalSecuritySetting?.preventPasswordReuse ??
-            true,
+            partial.preventPasswordReuse ?? globalSecuritySetting?.preventPasswordReuse ?? true,
           passwordHistoryLimit:
-            partial.passwordHistoryLimit ??
-            globalSecuritySetting?.passwordHistoryLimit ??
-            5,
+            partial.passwordHistoryLimit ?? globalSecuritySetting?.passwordHistoryLimit ?? 5,
           revokeSessionsOnPasswordChange:
             partial.revokeSessionsOnPasswordChange ??
             globalSecuritySetting?.revokeSessionsOnPasswordChange ??
             true,
           allowEmailRegistration:
-            partial.allowEmailRegistration ??
-            globalSecuritySetting?.allowEmailRegistration ??
-            true,
+            partial.allowEmailRegistration ?? globalSecuritySetting?.allowEmailRegistration ?? true,
           allowPhoneRegistration:
-            partial.allowPhoneRegistration ??
-            globalSecuritySetting?.allowPhoneRegistration ??
-            true,
+            partial.allowPhoneRegistration ?? globalSecuritySetting?.allowPhoneRegistration ?? true,
           requireEmailVerification:
             partial.requireEmailVerification ??
             globalSecuritySetting?.requireEmailVerification ??
@@ -794,10 +778,8 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
             partial.requirePhoneVerification ??
             globalSecuritySetting?.requirePhoneVerification ??
             false,
-          otpMaxSendCount:
-            partial.otpMaxSendCount ?? globalSecuritySetting?.otpMaxSendCount ?? 5,
-          otpMaxAttempts:
-            partial.otpMaxAttempts ?? globalSecuritySetting?.otpMaxAttempts ?? 5,
+          otpMaxSendCount: partial.otpMaxSendCount ?? globalSecuritySetting?.otpMaxSendCount ?? 5,
+          otpMaxAttempts: partial.otpMaxAttempts ?? globalSecuritySetting?.otpMaxAttempts ?? 5,
           otpCooldownSeconds:
             partial.otpCooldownSeconds ?? globalSecuritySetting?.otpCooldownSeconds ?? 60,
           sessionIdleTimeoutMinutes:
@@ -1076,9 +1058,7 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
         return (
           [...codeValueStore.values()].find(
             (v) =>
-              v.typeCode === norm &&
-              Number(v.numericCode) === Number(numericCode) &&
-              !v.deletedAt,
+              v.typeCode === norm && Number(v.numericCode) === Number(numericCode) && !v.deletedAt,
           ) ?? null
         );
       },
@@ -1146,6 +1126,8 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
       'organizations.manage',
       'codes.read',
       'codes.manage',
+      'settings.read',
+      'settings.manage',
     ]);
     const seededRole = await roleRepo.saveEntity({
       code: 'super_admin',
@@ -1980,7 +1962,7 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
     await context.injectJson({
       method: 'PUT',
       url: '/api/v1/auth/security-settings',
-      payload: { passwordHashAlgorithm: 'PBKDF2_SHA256' },
+      payload: { passwordHashAlgorithm: 'PBKDF2_SHA256', passwordMinLength: 8 },
     });
 
     const loginAfterAdminReset = await context.injectJson<{ accessToken: string }>({
@@ -2546,9 +2528,7 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
       headers: adminHeaders,
     });
     expect(orphansRes.status).toBe(HTTP_STATUS_CODE.OK);
-    const deprecatedOrphan = orphansRes.body.data.find(
-      (o) => o.code === 'deprecated_module.write',
-    );
+    const deprecatedOrphan = orphansRes.body.data.find((o) => o.code === 'deprecated_module.write');
     expect(deprecatedOrphan).toBeDefined();
     expect(deprecatedOrphan?.assignedRoles.map((r) => r.code)).toContain('permission_viewer');
 
@@ -2797,13 +2777,13 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
       expect.arrayContaining(['LOGIN_FAILED', 'DATA_EXPORT', 'PERMISSION_CHANGED']),
     );
 
-    const secAlertsRes = await context.injectJson<
-      Array<{ anomalyType: string; severity: string }>
-    >({
-      method: 'GET',
-      url: '/api/v1/roles/security-alerts?limit=50',
-      headers: adminHeaders,
-    });
+    const secAlertsRes = await context.injectJson<Array<{ anomalyType: string; severity: string }>>(
+      {
+        method: 'GET',
+        url: '/api/v1/roles/security-alerts?limit=50',
+        headers: adminHeaders,
+      },
+    );
     expect(secAlertsRes.status).toBe(HTTP_STATUS_CODE.OK);
     expect(secAlertsRes.body.data.map((a) => a.anomalyType)).toEqual(
       expect.arrayContaining(['BRUTE_FORCE_LOGIN', 'LARGE_DATA_EXPORT']),
@@ -2860,7 +2840,10 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
     const bootstrapRes = await context.injectJson<{
       locale: string;
       totalTypes: number;
-      dictionary: Record<string, Array<{ numericCode: number; code: string; displayLabel: string }>>;
+      dictionary: Record<
+        string,
+        Array<{ numericCode: number; code: string; displayLabel: string }>
+      >;
     }>({
       method: 'GET',
       url: '/api/v1/codes/bootstrap?locale=en',
@@ -2961,5 +2944,289 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
     });
     expect(deleteCustomRes.status).toBe(HTTP_STATUS_CODE.OK);
     expect(deleteCustomRes.body.data.deleted).toBe(true);
+  });
+
+  it('supports Section 5.1 System Settings API (/api/v1/settings: sync, groups, CRUD, type validation, environment & unit resolution, sensitive masking, history, cache invalidation & password policy bridge)', async () => {
+    const adminHeaders = { authorization: `Bearer ${adminAccessToken}` };
+
+    // 1. POST /api/v1/settings/sync — Idempotent sync from module.manifest.json (5.1.1 & 5.1.2)
+    const syncRes = await context.injectJson<{
+      syncedModules: string[];
+      totalGroups: number;
+      totalSettings: number;
+      totalEnvironmentOverrides: number;
+    }>({
+      method: 'POST',
+      url: '/api/v1/settings/sync',
+      headers: adminHeaders,
+    });
+    expect(syncRes.status).toBe(HTTP_STATUS_CODE.OK);
+    expect(syncRes.body.data.totalGroups).toBeGreaterThanOrEqual(5);
+    expect(syncRes.body.data.totalSettings).toBeGreaterThanOrEqual(14);
+
+    // 2. GET /api/v1/settings/groups — List system setting groups (email, file, security, ui, system)
+    const groupsRes = await context.injectJson<
+      Array<{ code: string; module: string; name: string; isSystem: boolean }>
+    >({
+      method: 'GET',
+      url: '/api/v1/settings/groups',
+      headers: adminHeaders,
+    });
+    expect(groupsRes.status).toBe(HTTP_STATUS_CODE.OK);
+    const groupCodes = groupsRes.body.data.map((g) => g.code);
+    expect(groupCodes).toEqual(
+      expect.arrayContaining(['email', 'file', 'security', 'ui', 'system']),
+    );
+
+    // 3. GET /api/v1/settings?module=auth&namespace=auth.password — Filter by module and namespace (5.1.2)
+    const authSettingsRes = await context.injectJson<
+      Array<{ key: string; module: string; namespace: string; valueTypeName: string }>
+    >({
+      method: 'GET',
+      url: '/api/v1/settings?module=auth&namespace=auth.password',
+      headers: adminHeaders,
+    });
+    expect(authSettingsRes.status).toBe(HTTP_STATUS_CODE.OK);
+    expect(authSettingsRes.body.data.some((s) => s.key === 'security.password.min_length')).toBe(
+      true,
+    );
+
+    // 4. PUT /api/v1/settings/:key — Validate NUMBER constraints (min=6, max=64) before saving (5.1.3)
+    const invalidMinLenRes = await context.injectJson({
+      method: 'PUT',
+      url: '/api/v1/settings/security.password.min_length',
+      headers: adminHeaders,
+      payload: {
+        value: 3, // < min (6) -> 400 Bad Request
+        reason: 'Thử giá trị không hợp lệ',
+      },
+    });
+    expect(invalidMinLenRes.status).toBe(HTTP_STATUS_CODE.BAD_REQUEST);
+
+    // 5. PUT /api/v1/settings/:key — Environment & Organization Unit overrides (5.1.4 & 5.1.5)
+    const setGlobalHost = await context.injectJson<{
+      key: string;
+      value: string;
+      resolvedSource: string;
+    }>({
+      method: 'PUT',
+      url: '/api/v1/settings/email.smtp.host',
+      headers: adminHeaders,
+      payload: {
+        value: 'smtp.global.corp',
+        environment: 'ALL',
+      },
+    });
+    expect(setGlobalHost.status).toBe(HTTP_STATUS_CODE.OK);
+    expect(setGlobalHost.body.data.value).toBe('smtp.global.corp');
+
+    const setProdHost = await context.injectJson<{
+      key: string;
+      value: string;
+      resolvedSource: string;
+    }>({
+      method: 'PUT',
+      url: '/api/v1/settings/email.smtp.host',
+      headers: adminHeaders,
+      payload: {
+        value: 'smtp.prod.corp',
+        environment: 'production',
+      },
+    });
+    expect(setProdHost.status).toBe(HTTP_STATUS_CODE.OK);
+
+    const setUnitProdHost = await context.injectJson<{
+      key: string;
+      value: string;
+      resolvedSource: string;
+    }>({
+      method: 'PUT',
+      url: '/api/v1/settings/email.smtp.host',
+      headers: adminHeaders,
+      payload: {
+        value: 'smtp.unit99.prod.corp',
+        environment: 'production',
+        organizationUnitId: 99,
+      },
+    });
+    expect(setUnitProdHost.status).toBe(HTTP_STATUS_CODE.OK);
+
+    // Resolve hierarchy via GET /api/v1/settings/resolve
+    const resolveStagingGlobal = await context.injectJson<
+      Array<{
+        key: string;
+        value: string;
+        resolvedSource: string;
+        fromCache: boolean;
+      }>
+    >({
+      method: 'GET',
+      url: '/api/v1/settings/resolve?key=email.smtp.host&environment=staging',
+      headers: adminHeaders,
+    });
+    expect(resolveStagingGlobal.status).toBe(HTTP_STATUS_CODE.OK);
+    expect(resolveStagingGlobal.body.data[0]?.value).toBe('smtp.global.corp');
+    expect(resolveStagingGlobal.body.data[0]?.resolvedSource).toBe('GLOBAL');
+
+    const resolveProdGlobal = await context.injectJson<
+      Array<{
+        key: string;
+        value: string;
+        resolvedSource: string;
+      }>
+    >({
+      method: 'GET',
+      url: '/api/v1/settings/resolve?key=email.smtp.host&environment=production',
+      headers: adminHeaders,
+    });
+    expect(resolveProdGlobal.status).toBe(HTTP_STATUS_CODE.OK);
+    expect(resolveProdGlobal.body.data[0]?.value).toBe('smtp.prod.corp');
+    expect(resolveProdGlobal.body.data[0]?.resolvedSource).toBe('GLOBAL_ENV');
+
+    const resolveProdUnit = await context.injectJson<
+      Array<{
+        key: string;
+        value: string;
+        resolvedSource: string;
+      }>
+    >({
+      method: 'GET',
+      url: '/api/v1/settings/resolve?key=email.smtp.host&environment=production&organizationUnitId=99',
+      headers: adminHeaders,
+    });
+    expect(resolveProdUnit.status).toBe(HTTP_STATUS_CODE.OK);
+    expect(resolveProdUnit.body.data[0]?.value).toBe('smtp.unit99.prod.corp');
+    expect(resolveProdUnit.body.data[0]?.resolvedSource).toBe('UNIT_ENV');
+
+    // 6. Sensitive Setting Encryption & Masking (5.1.6): Never expose raw secret in API response or history
+    const setSmtpPass = await context.injectJson<{
+      key: string;
+      isSensitive: boolean;
+      isEncrypted: boolean;
+      value: string;
+    }>({
+      method: 'PUT',
+      url: '/api/v1/settings/email.smtp.password',
+      headers: adminHeaders,
+      payload: {
+        value: 'RawSmtpSecretPassword#999!',
+        reason: 'Xoay vòng mật khẩu SMTP định kỳ',
+      },
+    });
+    expect(setSmtpPass.status).toBe(HTTP_STATUS_CODE.OK);
+    expect(setSmtpPass.body.data.isSensitive).toBe(true);
+    expect(setSmtpPass.body.data.isEncrypted).toBe(true);
+    expect(setSmtpPass.body.data.value).toBe('••••••••');
+
+    // 7. Cache hit & immediate invalidation on update + Live Bridge to Password Policy (5.1.8)
+    const resolveMinLen1 = await context.injectJson<
+      Array<{
+        value: number;
+        fromCache: boolean;
+      }>
+    >({
+      method: 'GET',
+      url: '/api/v1/settings/resolve?key=security.password.min_length',
+      headers: adminHeaders,
+    });
+    expect(resolveMinLen1.status).toBe(HTTP_STATUS_CODE.OK);
+    expect(resolveMinLen1.body.data[0]?.value).toBe(8);
+
+    const resolveMinLen2 = await context.injectJson<
+      Array<{
+        value: number;
+        fromCache: boolean;
+      }>
+    >({
+      method: 'GET',
+      url: '/api/v1/settings/resolve?key=security.password.min_length',
+      headers: adminHeaders,
+    });
+    expect(resolveMinLen2.status).toBe(HTTP_STATUS_CODE.OK);
+    expect(resolveMinLen2.body.data[0]?.fromCache).toBe(true);
+
+    // Update security.password.min_length to 11 via Settings API
+    const updateMinLenRes = await context.injectJson<{
+      key: string;
+      value: number;
+    }>({
+      method: 'PUT',
+      url: '/api/v1/settings/security.password.min_length',
+      headers: adminHeaders,
+      payload: {
+        value: 11,
+        reason: 'Nâng chuẩn độ dài mật khẩu tối thiểu lên 11 ký tự',
+      },
+    });
+    expect(updateMinLenRes.status).toBe(HTTP_STATUS_CODE.OK);
+    expect(updateMinLenRes.body.data.value).toBe(11);
+
+    // Verify SecuritySettingsService (/api/v1/auth/security-settings) immediately reflects passwordMinLength = 11
+    const authSecRes = await context.injectJson<{
+      passwordMinLength: number;
+    }>({
+      method: 'GET',
+      url: '/api/v1/auth/security-settings',
+      headers: adminHeaders,
+    });
+    expect(authSecRes.status).toBe(HTTP_STATUS_CODE.OK);
+    expect(authSecRes.body.data.passwordMinLength).toBe(11);
+
+    // Reverse bridge: Update passwordMinLength = 10 via PUT /api/v1/auth/security-settings -> /api/v1/settings/resolve reflects 10 immediately
+    const updateViaAuthApiRes = await context.injectJson<{
+      passwordMinLength: number;
+    }>({
+      method: 'PUT',
+      url: '/api/v1/auth/security-settings',
+      headers: adminHeaders,
+      payload: {
+        passwordMinLength: 10,
+      },
+    });
+    expect(updateViaAuthApiRes.status).toBe(HTTP_STATUS_CODE.OK);
+    expect(updateViaAuthApiRes.body.data.passwordMinLength).toBe(10);
+
+    const resolveAfterAuthApi = await context.injectJson<
+      Array<{
+        value: number;
+        fromCache: boolean;
+      }>
+    >({
+      method: 'GET',
+      url: '/api/v1/settings/resolve?key=security.password.min_length',
+      headers: adminHeaders,
+    });
+    expect(resolveAfterAuthApi.status).toBe(HTTP_STATUS_CODE.OK);
+    expect(resolveAfterAuthApi.body.data[0]?.value).toBe(10);
+    expect(resolveAfterAuthApi.body.data[0]?.fromCache).toBe(false);
+
+    // Reset security.password.min_length back to 8 so subsequent tests are unaffected
+    await context.injectJson({
+      method: 'PUT',
+      url: '/api/v1/settings/security.password.min_length',
+      headers: adminHeaders,
+      payload: {
+        value: 8,
+        reason: 'Khôi phục cấu hình mặc định 8 ký tự',
+      },
+    });
+
+    // 8. GET /api/v1/settings/:key/history — Setting Change History (5.1.7)
+    const historyRes = await context.injectJson<
+      Array<{
+        settingKey: string;
+        oldValue: unknown;
+        newValue: unknown;
+        actorUserId: number | null;
+        reason: string | null;
+      }>
+    >({
+      method: 'GET',
+      url: '/api/v1/settings/security.password.min_length/history',
+      headers: adminHeaders,
+    });
+    expect(historyRes.status).toBe(HTTP_STATUS_CODE.OK);
+    expect(historyRes.body.data.length).toBeGreaterThanOrEqual(2);
+    expect(historyRes.body.data.some((h) => h.newValue === 11)).toBe(true);
   });
 });

@@ -115,5 +115,109 @@
         }
       ]
     }
+  ],
+  "settings": [
+    {
+      "key": "security.password.min_length",
+      "groupCode": "security",
+      "module": "auth",
+      "namespace": "auth.password",
+      "name": "Độ dài mật khẩu tối thiểu",
+      "description": "Số ký tự tối thiểu bắt buộc khi tạo hoặc đổi mật khẩu người dùng",
+      "valueType": "NUMBER",
+      "defaultValue": 8,
+      "validationRules": { "min": 6, "max": 128, "integerOnly": true },
+      "isSensitive": false,
+      "allowUnitOverride": true,
+      "isSystem": true,
+      "sortOrder": 1
+    },
+    {
+      "key": "security.password.require_uppercase",
+      "groupCode": "security",
+      "module": "auth",
+      "namespace": "auth.password",
+      "name": "Bắt buộc chữ cái viết hoa",
+      "description": "Yêu cầu mật khẩu phải chứa ít nhất một chữ cái in hoa (A-Z)",
+      "valueType": "BOOLEAN",
+      "defaultValue": true,
+      "isSensitive": false,
+      "allowUnitOverride": true,
+      "isSystem": true,
+      "sortOrder": 2
+    },
+    {
+      "key": "security.password.require_numbers",
+      "groupCode": "security",
+      "module": "auth",
+      "namespace": "auth.password",
+      "name": "Bắt buộc chữ số",
+      "description": "Yêu cầu mật khẩu phải chứa ít nhất một chữ số (0-9)",
+      "valueType": "BOOLEAN",
+      "defaultValue": true,
+      "isSensitive": false,
+      "allowUnitOverride": true,
+      "isSystem": true,
+      "sortOrder": 3
+    },
+    {
+      "key": "security.password.require_special_chars",
+      "groupCode": "security",
+      "module": "auth",
+      "namespace": "auth.password",
+      "name": "Bắt buộc ký tự đặc biệt",
+      "description": "Yêu cầu mật khẩu phải chứa ít nhất một ký tự đặc biệt (!@#$%^&*...)",
+      "valueType": "BOOLEAN",
+      "defaultValue": false,
+      "isSensitive": false,
+      "allowUnitOverride": true,
+      "isSystem": true,
+      "sortOrder": 4
+    },
+    {
+      "key": "security.login.max_failed_attempts",
+      "groupCode": "security",
+      "module": "auth",
+      "namespace": "auth.login",
+      "name": "Số lần đăng nhập sai tối đa",
+      "description": "Số lần nhập sai mật khẩu liên tiếp trước khi tạm khóa tài khoản",
+      "valueType": "NUMBER",
+      "defaultValue": 5,
+      "validationRules": { "min": 1, "max": 50, "integerOnly": true },
+      "isSensitive": false,
+      "allowUnitOverride": true,
+      "isSystem": true,
+      "sortOrder": 5
+    },
+    {
+      "key": "security.login.lockout_duration_minutes",
+      "groupCode": "security",
+      "module": "auth",
+      "namespace": "auth.login",
+      "name": "Thời gian tạm khóa tài khoản (phút)",
+      "description": "Số phút khóa tài khoản tự động khi vượt quá số lần đăng nhập sai",
+      "valueType": "NUMBER",
+      "defaultValue": 15,
+      "validationRules": { "min": 1, "max": 1440, "integerOnly": true },
+      "isSensitive": false,
+      "allowUnitOverride": true,
+      "isSystem": true,
+      "sortOrder": 6
+    },
+    {
+      "key": "security.session.idle_timeout_minutes",
+      "groupCode": "security",
+      "module": "auth",
+      "namespace": "auth.session",
+      "name": "Thời gian chờ phiên không hoạt động (phút)",
+      "description": "Tự động thu hồi phiên nếu người dùng không thao tác quá thời gian quy định",
+      "valueType": "NUMBER",
+      "defaultValue": 30,
+      "validationRules": { "min": 1, "max": 10080, "integerOnly": true },
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 7
+    }
   ]
 }

@@ -40,6 +40,16 @@
       "items": { "type": "object" },
       "default": []
     },
+    "settingGroups": {
+      "type": "array",
+      "items": { "type": "object" },
+      "default": []
+    },
+    "settings": {
+      "type": "array",
+      "items": { "type": "object" },
+      "default": []
+    },
     "events": {
       "type": "object",
       "properties": {

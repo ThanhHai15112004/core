@@ -41,6 +41,35 @@ export const ModuleCodeTypeManifestSchema = z.object({
   values: z.array(ModuleCodeValueManifestSchema).optional().default([]),
 });
 
+export const ModuleSettingGroupManifestSchema = z.object({
+  code: z.string().min(1),
+  module: z.string().optional(),
+  name: z.string().min(1),
+  description: z.string().nullable().optional(),
+  icon: z.string().nullable().optional(),
+  sortOrder: z.number().int().optional(),
+  isSystem: z.boolean().optional(),
+  status: z.number().int().optional(),
+});
+
+export const ModuleSettingManifestSchema = z.object({
+  key: z.string().min(1),
+  groupCode: z.string().min(1),
+  module: z.string().optional(),
+  namespace: z.string().optional(),
+  name: z.string().min(1),
+  description: z.string().nullable().optional(),
+  valueType: z.union([z.number().int(), z.string().min(1)]),
+  defaultValue: z.unknown(),
+  validationRules: z.record(z.string(), z.unknown()).nullable().optional(),
+  isSensitive: z.boolean().optional(),
+  allowUnitOverride: z.boolean().optional(),
+  isSystem: z.boolean().optional(),
+  sortOrder: z.number().int().optional(),
+  status: z.number().int().optional(),
+  environmentOverrides: z.record(z.string(), z.unknown()).nullable().optional(),
+});
+
 export const ModuleManifestSchema = z.object({
   $schema: z.string().optional(),
   name: z
@@ -57,6 +86,8 @@ export const ModuleManifestSchema = z.object({
   dependencies: z.array(z.string()).optional().default([]),
   permissions: z.array(z.string()).optional().default([]),
   codeTypes: z.array(ModuleCodeTypeManifestSchema).optional().default([]),
+  settingGroups: z.array(ModuleSettingGroupManifestSchema).optional().default([]),
+  settings: z.array(ModuleSettingManifestSchema).optional().default([]),
   events: ModuleEventsManifestSchema,
   database: ModuleDatabaseManifestSchema,
 });

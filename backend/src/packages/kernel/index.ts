@@ -13,6 +13,7 @@ export * from './types/manageable-package.enum.js';
 export * from './types/database-driver.enum.js';
 export * from './contracts/manifest.contract.js';
 export * from './contracts/code-lookup.contract.js';
+export * from './contracts/setting-lookup.contract.js';
 export * from './schemas/manifest.schema.js';
 export * from './utils/spreadsheet.util.js';
 export * from './kernel.module.js';

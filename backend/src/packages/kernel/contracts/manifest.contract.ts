@@ -1,4 +1,5 @@
 import type { CodeTypeManifestItem } from './code-lookup.contract.js';
+import type { SettingGroupManifestItem, SettingManifestItem } from './setting-lookup.contract.js';
 
 export type ModuleType = 'core' | 'project';
 
@@ -25,6 +26,8 @@ export interface ModuleManifest {
   dependencies?: string[];
   permissions?: string[];
   codeTypes?: CodeTypeManifestItem[];
+  settingGroups?: SettingGroupManifestItem[];
+  settings?: SettingManifestItem[];
   events?: ModuleEventsManifest;
   database?: ModuleDatabaseManifest;
 }

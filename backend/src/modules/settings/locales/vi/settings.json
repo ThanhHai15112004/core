@@ -1,0 +1,9 @@
+{
+  "settingNotFound": "Không tìm thấy cấu hình hệ thống '{{key}}'",
+  "settingAlreadyExists": "Khóa cấu hình '{{key}}' đã tồn tại",
+  "groupNotFound": "Không tìm thấy nhóm cấu hình '{{code}}'",
+  "groupAlreadyExists": "Nhóm cấu hình '{{code}}' đã tồn tại",
+  "unitOverrideNotAllowed": "Cấu hình '{{key}}' là cấu hình toàn cục và không cho phép ghi đè theo đơn vị",
+  "scopeOverrideNotFound": "Không tìm thấy bản ghi cấu hình ghi đè cho '{{key}}'"
+}
+

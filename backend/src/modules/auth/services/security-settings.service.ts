@@ -1,5 +1,9 @@
 import { Injectable, Optional } from '@nestjs/common';
-import { BadRequestAppException } from '@packages/kernel/index.js';
+import {
+  BadRequestAppException,
+  SettingRegistryService,
+  defaultSettingRegistry,
+} from '@packages/kernel/index.js';
 import {
   DB_ENCRYPTION_ALGORITHMS,
   FieldEncryptionService,
@@ -35,11 +39,68 @@ export const DEFAULT_DISALLOWED_PASSWORDS: readonly string[] = [
 
 @Injectable()
 export class SecuritySettingsService {
+  private readonly registry: SettingRegistryService;
+  private isSyncingFromRegistry = false;
+
   constructor(
     private readonly settingRepo: AuthSecuritySettingRepository,
     @Optional() private readonly passwordHasher?: PasswordHasherService,
     @Optional() private readonly fieldEncryption?: FieldEncryptionService,
-  ) {}
+    @Optional() settingRegistry?: SettingRegistryService,
+  ) {
+    this.registry = settingRegistry ?? defaultSettingRegistry;
+    this.registry.onSettingChanged(async (evt) => {
+      if (this.isSyncingFromRegistry || evt.organizationUnitId !== null) {
+        return;
+      }
+      if (evt.environment !== 'ALL' && evt.environment !== this.registry.getActiveEnvironment()) {
+        return;
+      }
+      const patch: Partial<UpdateSecuritySettingsRequest> = {};
+      if (evt.key === 'security.password.min_length' && typeof evt.value === 'number') {
+        patch.passwordMinLength = evt.value;
+      } else if (
+        evt.key === 'security.password.require_uppercase' &&
+        typeof evt.value === 'boolean'
+      ) {
+        patch.requireUppercase = evt.value;
+      } else if (
+        evt.key === 'security.password.require_numbers' &&
+        typeof evt.value === 'boolean'
+      ) {
+        patch.requireNumbers = evt.value;
+      } else if (
+        evt.key === 'security.password.require_special_chars' &&
+        typeof evt.value === 'boolean'
+      ) {
+        patch.requireSpecialChars = evt.value;
+      } else if (
+        evt.key === 'security.login.max_failed_attempts' &&
+        typeof evt.value === 'number'
+      ) {
+        patch.maxFailedLoginAttempts = evt.value;
+      } else if (
+        evt.key === 'security.login.lockout_duration_minutes' &&
+        typeof evt.value === 'number'
+      ) {
+        patch.lockoutDurationMinutes = evt.value;
+      } else if (
+        evt.key === 'security.session.idle_timeout_minutes' &&
+        typeof evt.value === 'number'
+      ) {
+        patch.sessionIdleTimeoutMinutes = evt.value;
+      }
+
+      if (Object.keys(patch).length > 0 && this.settingRepo) {
+        try {
+          this.isSyncingFromRegistry = true;
+          await this.updateSettings(patch as UpdateSecuritySettingsRequest);
+        } finally {
+          this.isSyncingFromRegistry = false;
+        }
+      }
+    });
+  }
 
   /** Lấy cấu hình bảo mật & mã hóa hiện hành trực tiếp từ DB */
   public async getSettings(): Promise<SecuritySettingsResponse> {
@@ -175,7 +236,91 @@ export class SecuritySettingsService {
     const saved = await this.settingRepo.saveGlobal(entityPayload);
     const settings = this.toResponse(saved);
     this.syncCryptoProviders(settings);
+    if (!this.isSyncingFromRegistry) {
+      await this.syncToSettingRegistry(dto, settings);
+    }
     return settings;
+  }
+
+  private async syncToSettingRegistry(
+    dto: UpdateSecuritySettingsRequest,
+    settings: SecuritySettingsResponse,
+  ): Promise<void> {
+    const mappings: Array<{
+      dtoField: keyof UpdateSecuritySettingsRequest;
+      key: string;
+      namespace: string;
+      value: unknown;
+    }> = [
+      {
+        dtoField: 'passwordMinLength',
+        key: 'security.password.min_length',
+        namespace: 'auth.password',
+        value: settings.passwordMinLength,
+      },
+      {
+        dtoField: 'requireUppercase',
+        key: 'security.password.require_uppercase',
+        namespace: 'auth.password',
+        value: settings.requireUppercase,
+      },
+      {
+        dtoField: 'requireNumbers',
+        key: 'security.password.require_numbers',
+        namespace: 'auth.password',
+        value: settings.requireNumbers,
+      },
+      {
+        dtoField: 'requireSpecialChars',
+        key: 'security.password.require_special_chars',
+        namespace: 'auth.password',
+        value: settings.requireSpecialChars,
+      },
+      {
+        dtoField: 'maxFailedLoginAttempts',
+        key: 'security.login.max_failed_attempts',
+        namespace: 'auth.login',
+        value: settings.maxFailedLoginAttempts,
+      },
+      {
+        dtoField: 'lockoutDurationMinutes',
+        key: 'security.login.lockout_duration_minutes',
+        namespace: 'auth.login',
+        value: settings.lockoutDurationMinutes,
+      },
+      {
+        dtoField: 'sessionIdleTimeoutMinutes',
+        key: 'security.session.idle_timeout_minutes',
+        namespace: 'auth.session',
+        value: settings.sessionIdleTimeoutMinutes,
+      },
+    ];
+
+    for (const item of mappings) {
+      if (dto[item.dtoField] === undefined) {
+        continue;
+      }
+      const existing = this.registry.getDefinition(item.key);
+      if (existing) {
+        this.registry.upsertDefinition({
+          ...existing,
+          globalSerializedValue: String(item.value),
+        });
+      }
+      try {
+        this.isSyncingFromRegistry = true;
+        await this.registry.notifySettingChanged({
+          key: item.key,
+          module: 'auth',
+          namespace: item.namespace,
+          environment: 'ALL',
+          organizationUnitId: null,
+          value: item.value,
+        });
+      } finally {
+        this.isSyncingFromRegistry = false;
+      }
+    }
   }
 
   private toResponse(persisted: AuthSecuritySettingEntity): SecuritySettingsResponse {

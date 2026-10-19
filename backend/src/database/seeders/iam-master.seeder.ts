@@ -275,6 +275,22 @@ export const STANDARD_IAM_PERMISSIONS: readonly SeedPermissionDef[] = [
     description:
       'Quyền thêm mới, chỉnh sửa, ẩn/hiện giá trị danh mục động và đồng bộ từ module.manifest.json',
   },
+  {
+    id: 20,
+    code: 'settings.read',
+    name: 'Xem cấu hình hệ thống & tham số vận hành',
+    module: 'settings',
+    description:
+      'Quyền xem danh sách nhóm cấu hình, tham số hệ thống, ghi đè theo môi trường/đơn vị và lịch sử thay đổi',
+  },
+  {
+    id: 21,
+    code: 'settings.manage',
+    name: 'Quản trị cấu hình hệ thống & đồng bộ Manifest',
+    module: 'settings',
+    description:
+      'Quyền thêm mới, cập nhật giá trị cấu hình, ghi đè theo môi trường/đơn vị và đồng bộ từ module.manifest.json',
+  },
 ] as const;
 
 const ALL_IAM_PERMISSION_CODES = STANDARD_IAM_PERMISSIONS.map((p) => p.code);

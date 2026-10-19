@@ -1,0 +1,9 @@
+{
+  "settingNotFound": "System setting '{{key}}' was not found",
+  "settingAlreadyExists": "Setting key '{{key}}' already exists",
+  "groupNotFound": "Setting group '{{code}}' was not found",
+  "groupAlreadyExists": "Setting group '{{code}}' already exists",
+  "unitOverrideNotAllowed": "Setting '{{key}}' is global-only and does not allow organization unit override",
+  "scopeOverrideNotFound": "Scope override for setting '{{key}}' was not found"
+}
+

@@ -1,0 +1,257 @@
+{
+  "$schema": "../../packages/kernel/schemas/module.manifest.schema.json",
+  "name": "settings",
+  "displayName": "Dynamic System Settings & Scoped Configuration",
+  "version": "1.0.0",
+  "description": "Module quản trị cấu hình hệ thống động theo nhóm (email, file, security, ui, system), theo module/namespace, hỗ trợ kiểu TEXT/NUMBER/BOOLEAN/JSON, phân giải đa tầng (Global -> Environment -> Organization Unit), mã hóa secret, ghi lịch sử thay đổi và cache tốc độ cao",
+  "type": "core",
+  "category": "core",
+  "author": "Core Platform Team",
+  "entryModule": "SettingsModule",
+  "dependencies": ["database", "cache", "security", "i18n"],
+  "permissions": ["settings.read", "settings.manage"],
+  "events": {
+    "published": [
+      "settings.synced",
+      "settings.group_created",
+      "settings.setting_created",
+      "settings.setting_updated",
+      "settings.scope_overridden",
+      "settings.scope_removed"
+    ],
+    "subscribed": []
+  },
+  "database": {
+    "hasMigrations": true,
+    "tables": [
+      "setting_groups",
+      "system_settings",
+      "system_setting_scopes",
+      "system_setting_histories"
+    ]
+  },
+  "codeTypes": [
+    {
+      "code": "settings.value_type",
+      "name": "Kiểu dữ liệu cấu hình hệ thống",
+      "description": "Các kiểu dữ liệu được hỗ trợ và kiểm tra hợp lệ khi lưu cấu hình",
+      "isSystem": true,
+      "allowCustomValues": false,
+      "values": [
+        {
+          "numericCode": 1,
+          "code": "TEXT",
+          "behaviorCode": "TEXT",
+          "name": "Chuỗi văn bản (Text)",
+          "labels": { "vi": "Chuỗi văn bản (Text)", "en": "Text String" },
+          "badgeTone": "neutral",
+          "sortOrder": 1,
+          "isDefault": true,
+          "isSystem": true
+        },
+        {
+          "numericCode": 2,
+          "code": "NUMBER",
+          "behaviorCode": "NUMBER",
+          "name": "Số (Number)",
+          "labels": { "vi": "Số (Number)", "en": "Number" },
+          "badgeTone": "info",
+          "sortOrder": 2,
+          "isSystem": true
+        },
+        {
+          "numericCode": 3,
+          "code": "BOOLEAN",
+          "behaviorCode": "BOOLEAN",
+          "name": "Luận lý (Boolean)",
+          "labels": { "vi": "Luận lý (Boolean)", "en": "Boolean" },
+          "badgeTone": "success",
+          "sortOrder": 3,
+          "isSystem": true
+        },
+        {
+          "numericCode": 4,
+          "code": "JSON",
+          "behaviorCode": "JSON",
+          "name": "Đối tượng / Mảng JSON",
+          "labels": { "vi": "Đối tượng / Mảng JSON", "en": "JSON Object / Array" },
+          "badgeTone": "warning",
+          "sortOrder": 4,
+          "isSystem": true
+        }
+      ]
+    }
+  ],
+  "settingGroups": [
+    {
+      "code": "email",
+      "module": "settings",
+      "name": "Cấu hình Email & Thông báo",
+      "description": "Thiết lập máy chủ gửi thư SMTP, địa chỉ người gửi mặc định và giới hạn gửi email",
+      "icon": "mail",
+      "sortOrder": 1,
+      "isSystem": true
+    },
+    {
+      "code": "file",
+      "module": "settings",
+      "name": "Cấu hình Tệp tin & Lưu trữ",
+      "description": "Thiết lập dung lượng tải lên tối đa, định dạng file cho phép và chính sách lưu trữ",
+      "icon": "folder",
+      "sortOrder": 2,
+      "isSystem": true
+    },
+    {
+      "code": "security",
+      "module": "auth",
+      "name": "Cấu hình Bảo mật & Xác thực",
+      "description": "Thiết lập độ dài mật khẩu, độ phức tạp, khóa tài khoản, MFA và thời hạn phiên đăng nhập",
+      "icon": "shield-lock",
+      "sortOrder": 3,
+      "isSystem": true
+    },
+    {
+      "code": "ui",
+      "module": "settings",
+      "name": "Cấu hình Giao diện & Hiển thị",
+      "description": "Thiết lập thương hiệu, giao diện sáng/tối, ngôn ngữ, múi giờ và số dòng phân trang mặc định",
+      "icon": "palette",
+      "sortOrder": 4,
+      "isSystem": true
+    },
+    {
+      "code": "system",
+      "module": "settings",
+      "name": "Cấu hình Vận hành Hệ thống",
+      "description": "Thiết lập chế độ bảo trì, thời gian lưu trữ nhật ký và các tham số vận hành chung",
+      "icon": "settings",
+      "sortOrder": 5,
+      "isSystem": true
+    }
+  ],
+  "settings": [
+    {
+      "key": "email.smtp.host",
+      "groupCode": "email",
+      "module": "settings",
+      "namespace": "system.email",
+      "name": "Máy chủ SMTP Host",
+      "description": "Địa chỉ máy chủ gửi thư đi (ví dụ: smtp.enterprise.vn)",
+      "valueType": "TEXT",
+      "defaultValue": "smtp.enterprise.vn",
+      "isSensitive": false,
+      "allowUnitOverride": true,
+      "isSystem": true,
+      "sortOrder": 1,
+      "environmentOverrides": {
+        "development": "localhost",
+        "production": "smtp.enterprise.vn"
+      }
+    },
+    {
+      "key": "email.smtp.port",
+      "groupCode": "email",
+      "module": "settings",
+      "namespace": "system.email",
+      "name": "Cổng SMTP Port",
+      "description": "Cổng kết nối máy chủ gửi thư (ví dụ: 587 hoặc 465)",
+      "valueType": "NUMBER",
+      "defaultValue": 587,
+      "validationRules": { "min": 1, "max": 65535, "integerOnly": true },
+      "isSensitive": false,
+      "allowUnitOverride": true,
+      "isSystem": true,
+      "sortOrder": 2
+    },
+    {
+      "key": "email.smtp.password",
+      "groupCode": "email",
+      "module": "settings",
+      "namespace": "system.email",
+      "name": "Mật khẩu / API Key SMTP",
+      "description": "Khóa bí mật xác thực máy chủ gửi email (tự động mã hóa và ẩn trên giao diện)",
+      "valueType": "TEXT",
+      "defaultValue": "",
+      "isSensitive": true,
+      "allowUnitOverride": true,
+      "isSystem": true,
+      "sortOrder": 3
+    },
+    {
+      "key": "file.upload.max_size_mb",
+      "groupCode": "file",
+      "module": "settings",
+      "namespace": "system.file",
+      "name": "Dung lượng tải lên tối đa (MB)",
+      "description": "Giới hạn kích thước tối đa cho một tệp tải lên hệ thống",
+      "valueType": "NUMBER",
+      "defaultValue": 25,
+      "validationRules": { "min": 1, "max": 2048, "integerOnly": true },
+      "isSensitive": false,
+      "allowUnitOverride": true,
+      "isSystem": true,
+      "sortOrder": 1
+    },
+    {
+      "key": "file.upload.allowed_extensions",
+      "groupCode": "file",
+      "module": "settings",
+      "namespace": "system.file",
+      "name": "Danh sách đuôi tệp cho phép",
+      "description": "Mảng JSON các phần mở rộng tệp được phép tải lên",
+      "valueType": "JSON",
+      "defaultValue": ["pdf", "docx", "xlsx", "png", "jpg", "csv"],
+      "isSensitive": false,
+      "allowUnitOverride": true,
+      "isSystem": true,
+      "sortOrder": 2
+    },
+    {
+      "key": "ui.appearance.theme_config",
+      "groupCode": "ui",
+      "module": "settings",
+      "namespace": "system.ui",
+      "name": "Cấu hình chủ đề & thương hiệu",
+      "description": "Cấu hình JSON cho chế độ sáng/tối, màu chủ đạo và số dòng phân trang mặc định",
+      "valueType": "JSON",
+      "defaultValue": {
+        "mode": "light",
+        "primaryColor": "#2563eb",
+        "defaultPageSize": 20
+      },
+      "isSensitive": false,
+      "allowUnitOverride": true,
+      "isSystem": true,
+      "sortOrder": 1
+    },
+    {
+      "key": "ui.theme.default_mode",
+      "groupCode": "ui",
+      "module": "settings",
+      "namespace": "system.ui",
+      "name": "Chế độ giao diện mặc định",
+      "description": "Chế độ hiển thị mặc định cho người dùng mới (light, dark, system)",
+      "valueType": "TEXT",
+      "defaultValue": "light",
+      "validationRules": { "enumOptions": ["light", "dark", "system"] },
+      "isSensitive": false,
+      "allowUnitOverride": true,
+      "isSystem": true,
+      "sortOrder": 2
+    },
+    {
+      "key": "system.maintenance.enabled",
+      "groupCode": "system",
+      "module": "settings",
+      "namespace": "system.general",
+      "name": "Chế độ bảo trì hệ thống",
+      "description": "Bật/tắt chế độ bảo trì toàn hệ thống (không cho phép ghi đè theo đơn vị)",
+      "valueType": "BOOLEAN",
+      "defaultValue": false,
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 1
+    }
+  ]
+}

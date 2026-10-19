@@ -23,7 +23,8 @@
     "roles",
     "users",
     "auth",
-    "codes"
+    "codes",
+    "settings"
   ],
   "settings": {
     "defaultLocale": "vi",
