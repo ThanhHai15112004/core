@@ -1887,7 +1887,7 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
       lastUsedIp: string;
       lastUsedResult: string;
       lastUsedEndpoint: string;
-      usageLogs: Array<{
+      logs: Array<{
         timestamp: string;
         ipAddress: string | null;
         result: string;
@@ -1903,7 +1903,7 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
     expect(usageRes.body.data.lastUsedAt).toBeDefined();
     expect(usageRes.body.data.lastUsedIp).toBe('10.50.12.34');
     expect(usageRes.body.data.lastUsedResult).toBe('CLIENT_REVOKED');
-    expect(usageRes.body.data.usageLogs.length).toBeGreaterThanOrEqual(5);
+    expect(usageRes.body.data.logs.length).toBeGreaterThanOrEqual(5);
   });
 });
 

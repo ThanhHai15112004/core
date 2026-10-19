@@ -180,7 +180,10 @@ export class ServiceAccountService {
 
     if (Number(serviceAccount.status) !== SERVICE_ACCOUNT_STATUS.ACTIVE) {
       throw new ForbiddenAppException('auth.serviceAccountInactive', [
-        { serviceAccountId: serviceAccount.id, status: getServiceAccountStatusName(serviceAccount.status) },
+        {
+          serviceAccountId: serviceAccount.id,
+          status: getServiceAccountStatusName(serviceAccount.status),
+        },
       ]);
     }
 
@@ -262,8 +265,6 @@ export class ServiceAccountService {
     }
 
     client.scopesJson = JSON.stringify(nextScopes);
-    // Tăng tokenVersion để các token cũ có scope cũ không còn hiệu lực
-    client.tokenVersion = (client.tokenVersion ?? 1) + 1;
     const saved = await this.saveApiClient(client);
     return this.toApiClientResponse(saved, sa ?? undefined);
   }
@@ -586,7 +587,9 @@ export class ServiceAccountService {
 
     // 4. Giao thoa giữa scopes trong token và scopes hiện hành của API Client
     const currentClientScopes = this.parseStringArray(client.scopesJson);
-    const tokenScopes = Array.isArray(payload.permissions) ? payload.permissions : currentClientScopes;
+    const tokenScopes = Array.isArray(payload.permissions)
+      ? payload.permissions
+      : currentClientScopes;
     const effectiveScopes = tokenScopes.filter(
       (s) => currentClientScopes.includes('*') || currentClientScopes.includes(s),
     );
@@ -653,11 +656,11 @@ export class ServiceAccountService {
 
       // Hỗ trợ wildcard dạng '10.10.1.*'
       if (rule.includes('*')) {
-        const regexPattern =
+        const regexPattern: string =
           '^' +
           rule
             .split('*')
-            .map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+            .map((part: string) => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
             .join('.*') +
           '$';
         if (new RegExp(regexPattern).test(normalizedCaller)) {
@@ -687,7 +690,7 @@ export class ServiceAccountService {
     if (ipInt === null || rangeInt === null) return false;
 
     if (prefix === 0) return true;
-    const mask = prefix === 32 ? 0xffffffff : (~((1 << (32 - prefix)) - 1)) >>> 0;
+    const mask = prefix === 32 ? 0xffffffff : ~((1 << (32 - prefix)) - 1) >>> 0;
     return (ipInt & mask) >>> 0 === (rangeInt & mask) >>> 0;
   }
 
@@ -799,9 +802,8 @@ export class ServiceAccountService {
     try {
       const parsed = JSON.parse(jsonStr) as unknown;
       if (!Array.isArray(parsed)) return [];
-      return parsed.filter(
-        (item): item is ApiClientUsageLogItem =>
-          Boolean(item && typeof item === 'object' && 'timestamp' in item && 'result' in item),
+      return parsed.filter((item): item is ApiClientUsageLogItem =>
+        Boolean(item && typeof item === 'object' && 'timestamp' in item && 'result' in item),
       );
     } catch {
       return [];

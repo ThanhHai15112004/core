@@ -13,3 +13,4 @@ process.env['STORAGE_LOCAL_PATH'] ??= path.join(os.tmpdir(), `core-test-storage-
  * luôn ở trạng thái "không khả dụng" — kết quả test không phụ thuộc máy chạy.
  */
 process.env['REDIS_PORT'] ??= '1';
+process.env['OPS_DATABASE_MIGRATIONS_ENABLED'] ??= 'false';

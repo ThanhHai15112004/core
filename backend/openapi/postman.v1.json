@@ -19,7 +19,360 @@
       "name": "Authentication, Sessions & MFA",
       "item": [
         {
-          "name": "Đăng nhập tài khoản (hỗ trợ bước 2 MFA nếu tài khoản đã bật)",
+          "name": "Danh sách các API Clients (không hiển thị lại Client Secret)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/api-clients?serviceAccountId=1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "api-clients"
+              ],
+              "query": [
+                {
+                  "key": "serviceAccountId",
+                  "value": "1"
+                }
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `users.read`"
+          }
+        },
+        {
+          "name": "Tạo mới API Client (trả về Client Secret duy nhất một lần)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/api-clients",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "api-clients"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"serviceAccountId\": 1,\n  \"name\": \"name_sample\",\n  \"description\": \"description_sample\",\n  \"scopes\": [\n    \"scopes_sample\"\n  ],\n  \"allowedIps\": [\n    \"allowedIps_sample\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `users.update`"
+          }
+        },
+        {
+          "name": "Đổi Client ID và Client Secret lấy Access Token (có kiểm tra IP Whitelist & Scopes)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/api-clients/token",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "api-clients",
+                "token"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"clientId\": \"550e8400-e29b-41d4-a716-446655440000\",\n  \"clientSecret\": \"clientSecret_sample\",\n  \"scopes\": [\n    \"scopes_sample\"\n  ],\n  \"expiresInSeconds\": 60\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Chế độ truy cập**: `Public` (Không yêu cầu đăng nhập)"
+          }
+        },
+        {
+          "name": "Xem chi tiết API Client theo ID (không trả về lại Client Secret)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/api-clients/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "api-clients",
+                ":id"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `users.read`"
+          }
+        },
+        {
+          "name": "Cấu hình danh sách địa chỉ IP được phép gọi (IP Whitelist) cho API Client",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/api-clients/:id/allowed-ips",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "api-clients",
+                ":id",
+                "allowed-ips"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"allowedIps\": [\n    \"allowedIps_sample\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `users.update`"
+          }
+        },
+        {
+          "name": "Thu hồi API Client và ngừng toàn bộ token đã cấp ngay lập tức",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/api-clients/:id/revoke",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "api-clients",
+                ":id",
+                "revoke"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"reason_sample\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `users.update`"
+          }
+        },
+        {
+          "name": "Xoay vòng Client Secret của API Client (Secret mới chỉ hiển thị 1 lần và vô hiệu hóa token cũ)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/api-clients/:id/rotate-secret",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "api-clients",
+                ":id",
+                "rotate-secret"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"revokeExistingTokens\": true,\n  \"reason\": \"reason_sample\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `users.update`"
+          }
+        },
+        {
+          "name": "Gán hoặc cập nhật phạm vi truy cập (scopes) cho API Client",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/api-clients/:id/scopes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "api-clients",
+                ":id",
+                "scopes"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"scopes\": [\n    \"scopes_sample\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `users.update`"
+          }
+        },
+        {
+          "name": "Xem lần sử dụng gần nhất và lịch sử sử dụng của API Client (IP, thời gian, kết quả)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/api-clients/:id/usage",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "api-clients",
+                ":id",
+                "usage"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `users.read`"
+          }
+        },
+        {
+          "name": "Đăng nhập tài khoản bằng Email, Username hoặc SĐT (không tiết lộ tài khoản tồn tại)",
           "request": {
             "method": "POST",
             "header": [
@@ -46,7 +399,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"identifier\": \"identifier_sample\",\n  \"password\": \"password_sample\",\n  \"deviceName\": \"deviceName_sample\"\n}",
+              "raw": "{\n  \"identifier\": \"identifier_sample\",\n  \"password\": \"password_sample\",\n  \"deviceName\": \"deviceName_sample\",\n  \"trustedDeviceToken\": \"trustedDeviceToken_sample\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -57,7 +410,42 @@
           }
         },
         {
-          "name": "Đăng xuất và thu hồi phiên hiện tại",
+          "name": "Xem lịch sử đăng nhập, đăng xuất và thu hồi phiên theo thời gian, IP và thiết bị",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login-history?limit=50",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login-history"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "50"
+                }
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)"
+          }
+        },
+        {
+          "name": "Đăng xuất và thu hồi refresh token của phiên hiện tại",
           "request": {
             "method": "POST",
             "header": [
@@ -80,6 +468,35 @@
                 "v1",
                 "auth",
                 "logout"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)"
+          }
+        },
+        {
+          "name": "Đăng xuất khỏi tất cả thiết bị (thu hồi toàn bộ phiên của người dùng)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/logout-all",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "logout-all"
               ]
             },
             "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)"
@@ -115,6 +532,49 @@
           }
         },
         {
+          "name": "Reset MFA có kiểm soát cho người dùng bị mất thiết bị xác thực (kèm lý do/xác minh và thu hồi phiên)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/mfa/admin-reset",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "mfa",
+                "admin-reset"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": 1,\n  \"reason\": \"reason_sample\",\n  \"verificationReference\": \"verificationReference_sample\",\n  \"revokeSessions\": true,\n  \"stepUpToken\": \"stepUpToken_sample\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `users.update`"
+          }
+        },
+        {
           "name": "Tắt xác thực nhiều lớp (MFA)",
           "request": {
             "method": "POST",
@@ -147,7 +607,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"method\": \"ALL\",\n  \"code\": \"code_sample\"\n}",
+              "raw": "{\n  \"method\": \"ALL\",\n  \"code\": \"code_sample\",\n  \"currentPassword\": \"currentPassword_sample\",\n  \"stepUpToken\": \"stepUpToken_sample\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -191,7 +651,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"code\": \"code_sample\"\n}",
+              "raw": "{\n  \"enabled\": true,\n  \"code\": \"code_sample\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -202,7 +662,7 @@
           }
         },
         {
-          "name": "Gửi mã OTP 6 chữ số qua Email phục vụ xác thực nhiều lớp",
+          "name": "Gửi mã OTP 6 chữ số qua Email phục vụ xác thực nhiều lớp (Notification Adapter)",
           "request": {
             "method": "POST",
             "header": [
@@ -269,6 +729,90 @@
               ]
             },
             "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)"
+          }
+        },
+        {
+          "name": "Kích hoạt xác thực 2 lớp qua SMS OTP và nhận danh sách mã khôi phục dự phòng",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/mfa/sms-otp/enable",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "mfa",
+                "sms-otp",
+                "enable"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"enabled\": true,\n  \"code\": \"code_sample\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)"
+          }
+        },
+        {
+          "name": "Gửi mã OTP 6 chữ số qua SMS phục vụ xác thực nhiều lớp (SMS Provider)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/mfa/sms-otp/send",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "mfa",
+                "sms-otp",
+                "send"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"mfaChallengeToken\": \"mfaChallengeToken_sample\",\n  \"phone\": \"phone_sample\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Chế độ truy cập**: `Public` (Không yêu cầu đăng nhập)"
           }
         },
         {
@@ -377,6 +921,97 @@
           }
         },
         {
+          "name": "Xem danh sách các thiết bị tin cậy đã được ghi nhận khi xác thực MFA",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/mfa/trusted-devices",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "mfa",
+                "trusted-devices"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)"
+          }
+        },
+        {
+          "name": "Thu hồi toàn bộ thiết bị tin cậy của tài khoản",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/mfa/trusted-devices",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "mfa",
+                "trusted-devices"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)"
+          }
+        },
+        {
+          "name": "Thu hồi một thiết bị tin cậy cụ thể theo deviceId",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/mfa/trusted-devices/:deviceId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "mfa",
+                "trusted-devices",
+                ":deviceId"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)"
+          }
+        },
+        {
           "name": "Xác thực mã MFA/2FA bước 2 (TOTP, Email OTP hoặc Recovery Code)",
           "request": {
             "method": "POST",
@@ -405,7 +1040,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"mfaChallengeToken\": \"mfaChallengeToken_sample\",\n  \"code\": \"code_sample\",\n  \"method\": \"TOTP\",\n  \"deviceName\": \"deviceName_sample\"\n}",
+              "raw": "{\n  \"mfaChallengeToken\": \"mfaChallengeToken_sample\",\n  \"code\": \"code_sample\",\n  \"method\": \"TOTP\",\n  \"deviceName\": \"deviceName_sample\",\n  \"trustDevice\": true,\n  \"trustDurationDays\": 1\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -416,7 +1051,50 @@
           }
         },
         {
-          "name": "Đổi mật khẩu tài khoản hiện tại",
+          "name": "Reset mật khẩu người dùng từ trang quản trị (hỗ trợ tự sinh mật khẩu gợi ý và thu hồi phiên)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/password/admin-reset",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "password",
+                "admin-reset"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": 1,\n  \"newPassword\": \"newPassword_sample\",\n  \"useSuggestedPassword\": false,\n  \"revokeSessions\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `users.update`"
+          }
+        },
+        {
+          "name": "Đổi mật khẩu tài khoản hiện tại (có kiểm tra chính sách mật khẩu, lịch sử mật khẩu và thu hồi phiên)",
           "request": {
             "method": "POST",
             "header": [
@@ -459,7 +1137,7 @@
           }
         },
         {
-          "name": "Yêu cầu đặt lại mật khẩu (Forgot Password)",
+          "name": "Yêu cầu đặt lại mật khẩu (gửi link khôi phục hoặc mã OTP 6 chữ số)",
           "request": {
             "method": "POST",
             "header": [
@@ -487,7 +1165,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"user@example.com\"\n}",
+              "raw": "{\n  \"email\": \"user@example.com\",\n  \"identifier\": \"identifier_sample\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -498,7 +1176,7 @@
           }
         },
         {
-          "name": "Đặt lại mật khẩu mới bằng token khôi phục (Reset Password)",
+          "name": "Đặt lại mật khẩu mới bằng token khôi phục hoặc mã OTP 6 chữ số (Reset Password)",
           "request": {
             "method": "POST",
             "header": [
@@ -526,12 +1204,48 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"token\": \"token_sample\",\n  \"newPassword\": \"newPassword_sample\"\n}",
+              "raw": "{\n  \"token\": \"token_sample\",\n  \"otpCode\": \"otpCode_sample\",\n  \"email\": \"user@example.com\",\n  \"identifier\": \"identifier_sample\",\n  \"newPassword\": \"newPassword_sample\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Chế độ truy cập**: `Public` (Không yêu cầu đăng nhập)"
+          }
+        },
+        {
+          "name": "Gợi ý danh sách mật khẩu mạnh đạt chuẩn chính sách mật khẩu của hệ thống",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/password/suggest?count=3&length=6",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "password",
+                "suggest"
+              ],
+              "query": [
+                {
+                  "key": "count",
+                  "value": "3"
+                },
+                {
+                  "key": "length",
+                  "value": "6"
+                }
+              ]
             },
             "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Chế độ truy cập**: `Public` (Không yêu cầu đăng nhập)"
           }
@@ -565,6 +1279,44 @@
             "body": {
               "mode": "raw",
               "raw": "{\n  \"refreshToken\": \"refreshToken_sample\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Chế độ truy cập**: `Public` (Không yêu cầu đăng nhập)"
+          }
+        },
+        {
+          "name": "Đăng ký tài khoản mới bằng Email + mật khẩu hoặc SĐT + mật khẩu (tùy cấu hình dự án)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "register"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"username_sample\",\n  \"email\": \"user@example.com\",\n  \"phone\": \"phone_sample\",\n  \"password\": \"password_sample\",\n  \"firstName\": \"firstName_sample\",\n  \"lastName\": \"lastName_sample\",\n  \"fullName\": \"fullName_sample\",\n  \"avatarUrl\": \"https://example.com/resource\",\n  \"dateOfBirth\": \"dateOfBirth_sample\",\n  \"gender\": 1,\n  \"address\": \"address_sample\",\n  \"city\": \"city_sample\",\n  \"country\": \"country_sample\",\n  \"bio\": \"bio_sample\",\n  \"deviceName\": \"deviceName_sample\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -627,7 +1379,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"passwordHashAlgorithm\": \"SCRYPT\",\n  \"dbEncryptionAlgorithm\": \"AES_256_GCM\",\n  \"encryptFieldsAtRest\": true,\n  \"mfaPolicy\": \"OPTIONAL\",\n  \"allowedMfaMethods\": [\n    \"TOTP\"\n  ],\n  \"maxFailedLoginAttempts\": 3,\n  \"lockoutDurationMinutes\": 1,\n  \"passwordMinLength\": 6,\n  \"requireUppercase\": true,\n  \"requireNumbers\": true,\n  \"requireSpecialChars\": true\n}",
+              "raw": "{\n  \"passwordHashAlgorithm\": \"SCRYPT\",\n  \"dbEncryptionAlgorithm\": \"AES_256_GCM\",\n  \"encryptFieldsAtRest\": true,\n  \"mfaPolicy\": \"OPTIONAL\",\n  \"allowedMfaMethods\": [\n    \"TOTP\"\n  ],\n  \"maxFailedLoginAttempts\": 3,\n  \"lockoutDurationMinutes\": 1,\n  \"passwordMinLength\": 6,\n  \"requireUppercase\": true,\n  \"requireNumbers\": true,\n  \"requireSpecialChars\": true,\n  \"requireCurrentPasswordOnChange\": true,\n  \"disallowedPasswords\": [\n    \"disallowedPasswords_sample\"\n  ],\n  \"disallowUserInfoInPassword\": true,\n  \"preventPasswordReuse\": true,\n  \"passwordHistoryLimit\": 1,\n  \"revokeSessionsOnPasswordChange\": true,\n  \"allowEmailRegistration\": true,\n  \"allowPhoneRegistration\": true,\n  \"requireEmailVerification\": true,\n  \"requirePhoneVerification\": true,\n  \"otpMaxSendCount\": 1,\n  \"otpMaxAttempts\": 1,\n  \"otpCooldownSeconds\": 0,\n  \"sessionIdleTimeoutMinutes\": 0,\n  \"sessionMaxLifetimeMinutes\": 5,\n  \"enableLoginAuditLog\": true\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -635,6 +1387,150 @@
               }
             },
             "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Chế độ truy cập**: `Public` (Không yêu cầu đăng nhập)"
+          }
+        },
+        {
+          "name": "Danh sách tài khoản hệ thống (Service Accounts — độc lập với người dùng cá nhân)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/service-accounts",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "service-accounts"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `users.read`"
+          }
+        },
+        {
+          "name": "Tạo tài khoản hệ thống (Service Account) dùng cho hệ thống tích hợp hoặc background job",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/service-accounts",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "service-accounts"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"code_sample\",\n  \"name\": \"name_sample\",\n  \"description\": \"description_sample\",\n  \"scopes\": [\n    \"scopes_sample\"\n  ],\n  \"status\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `users.update`"
+          }
+        },
+        {
+          "name": "Xem chi tiết tài khoản hệ thống (Service Account) theo ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/service-accounts/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "service-accounts",
+                ":id"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `users.read`"
+          }
+        },
+        {
+          "name": "Cập nhật tên, mô tả, trạng thái hoặc phạm vi quyền của Service Account",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/service-accounts/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "service-accounts",
+                ":id"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"name_sample\",\n  \"description\": \"description_sample\",\n  \"scopes\": [\n    \"scopes_sample\"\n  ],\n  \"status\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `users.update`"
           }
         },
         {
@@ -667,7 +1563,7 @@
           }
         },
         {
-          "name": "Thu hồi toàn bộ các phiên đăng nhập khác của tài khoản",
+          "name": "Thu hồi toàn bộ các phiên đăng nhập của tài khoản (hỗ trợ includeCurrent)",
           "request": {
             "method": "POST",
             "header": [
@@ -678,6 +1574,10 @@
               {
                 "key": "Authorization",
                 "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
               }
             ],
             "url": {
@@ -692,6 +1592,15 @@
                 "sessions",
                 "revoke-all"
               ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"includeCurrent\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)"
           }
@@ -724,6 +1633,209 @@
               ]
             },
             "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)"
+          }
+        },
+        {
+          "name": "Xác thực lại bằng mật khẩu hiện tại hoặc mã MFA để nhận stepUpToken ngắn hạn cho thao tác nhạy cảm",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/step-up/verify",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "step-up",
+                "verify"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"password\": \"password_sample\",\n  \"code\": \"code_sample\",\n  \"method\": \"TOTP\",\n  \"action\": \"action_sample\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)"
+          }
+        },
+        {
+          "name": "Xác nhận địa chỉ Email bằng link token hoặc mã 6 số",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/verify/email/confirm",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "verify",
+                "email",
+                "confirm"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"user@example.com\",\n  \"tokenOrCode\": \"tokenOrCode_sample\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Chế độ truy cập**: `Public` (Không yêu cầu đăng nhập)"
+          }
+        },
+        {
+          "name": "Gửi link hoặc mã xác minh Email có thời hạn",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/verify/email/send",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "verify",
+                "email",
+                "send"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"user@example.com\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Chế độ truy cập**: `Public` (Không yêu cầu đăng nhập)"
+          }
+        },
+        {
+          "name": "Xác minh SĐT bằng mã OTP 6 số (có giới hạn số lần nhập sai)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/verify/phone/confirm",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "verify",
+                "phone",
+                "confirm"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"phone_sample\",\n  \"code\": \"code_sample\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Chế độ truy cập**: `Public` (Không yêu cầu đăng nhập)"
+          }
+        },
+        {
+          "name": "Gửi mã OTP 6 số xác minh SĐT (có giới hạn số lần gửi và cooldown)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/verify/phone/send",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "verify",
+                "phone",
+                "send"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"phone_sample\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Chế độ truy cập**: `Public` (Không yêu cầu đăng nhập)"
           }
         }
       ]
@@ -5507,7 +6619,7 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/v1/users?q=q_sample&status=1&roleId=1&organizationUnitId=1&includeArchived=true&mfaEnabled=true&page=1&limit=20&sortBy=id&sortOrder=ASC&format=csv",
+              "raw": "{{baseUrl}}/api/v1/users?q=q_sample&status=1&roleId=1&organizationUnitId=1&includeArchived=true&mfaEnabled=true&page=1&limit=20&sortBy=id&sortOrder=ASC&format=csv&title=title_sample&logoBase64=logoBase64_sample&stepUpToken=stepUpToken_sample&requireStepUp=true",
               "host": [
                 "{{baseUrl}}"
               ],
@@ -5560,6 +6672,22 @@
                 {
                   "key": "format",
                   "value": "csv"
+                },
+                {
+                  "key": "title",
+                  "value": "title_sample"
+                },
+                {
+                  "key": "logoBase64",
+                  "value": "logoBase64_sample"
+                },
+                {
+                  "key": "stepUpToken",
+                  "value": "stepUpToken_sample"
+                },
+                {
+                  "key": "requireStepUp",
+                  "value": "true"
                 }
               ]
             },
@@ -5597,7 +6725,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"username\": \"username_sample\",\n  \"email\": \"user@example.com\",\n  \"firstName\": \"firstName_sample\",\n  \"lastName\": \"lastName_sample\",\n  \"fullName\": \"fullName_sample\",\n  \"phone\": \"phone_sample\",\n  \"avatarUrl\": \"https://example.com/resource\",\n  \"password\": \"password_sample\",\n  \"status\": 1,\n  \"roleIds\": [\n    1\n  ],\n  \"organizationUnits\": [\n    {\n      \"organizationUnitId\": 1,\n      \"isPrimary\": false,\n      \"positionTitle\": \"positionTitle_sample\"\n    }\n  ]\n}",
+              "raw": "{\n  \"username\": \"username_sample\",\n  \"email\": \"user@example.com\",\n  \"firstName\": \"firstName_sample\",\n  \"lastName\": \"lastName_sample\",\n  \"fullName\": \"fullName_sample\",\n  \"phone\": \"phone_sample\",\n  \"avatarUrl\": \"https://example.com/resource\",\n  \"dateOfBirth\": \"dateOfBirth_sample\",\n  \"gender\": 1,\n  \"identityNumber\": \"identityNumber_sample\",\n  \"address\": \"address_sample\",\n  \"city\": \"city_sample\",\n  \"country\": \"country_sample\",\n  \"bio\": \"bio_sample\",\n  \"password\": \"password_sample\",\n  \"status\": 1,\n  \"roleIds\": [\n    1\n  ],\n  \"organizationUnits\": [\n    {\n      \"organizationUnitId\": 1,\n      \"isPrimary\": false,\n      \"positionTitle\": \"positionTitle_sample\"\n    }\n  ]\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -5639,7 +6767,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"xlsxBase64\": \"xlsxBase64_sample\",\n  \"csvContent\": \"csvContent_sample\",\n  \"items\": [\n    {\n      \"username\": \"username_sample\",\n      \"email\": \"user@example.com\",\n      \"firstName\": \"firstName_sample\",\n      \"lastName\": \"lastName_sample\",\n      \"fullName\": \"fullName_sample\",\n      \"phone\": \"phone_sample\",\n      \"password\": \"password_sample\",\n      \"status\": 1,\n      \"roleCodes\": [\n        \"roleCodes_sample\"\n      ],\n      \"organizationCodes\": [\n        \"organizationCodes_sample\"\n      ]\n    }\n  ],\n  \"defaultPassword\": \"defaultPassword_sample\",\n  \"skipDuplicates\": true\n}",
+              "raw": "{\n  \"xlsxBase64\": \"xlsxBase64_sample\",\n  \"csvContent\": \"csvContent_sample\",\n  \"items\": [\n    {\n      \"username\": \"username_sample\",\n      \"email\": \"user@example.com\",\n      \"firstName\": \"firstName_sample\",\n      \"lastName\": \"lastName_sample\",\n      \"fullName\": \"fullName_sample\",\n      \"phone\": \"phone_sample\",\n      \"password\": \"password_sample\",\n      \"status\": 1,\n      \"positionTitle\": \"positionTitle_sample\",\n      \"roleCodes\": [\n        \"roleCodes_sample\"\n      ],\n      \"organizationCodes\": [\n        \"organizationCodes_sample\"\n      ]\n    }\n  ],\n  \"defaultPassword\": \"defaultPassword_sample\",\n  \"skipDuplicates\": true\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -5664,7 +6792,7 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/v1/users/export?q=q_sample&status=1&roleId=1&organizationUnitId=1&includeArchived=true&mfaEnabled=true&page=1&limit=20&sortBy=id&sortOrder=ASC&format=csv",
+              "raw": "{{baseUrl}}/api/v1/users/export?q=q_sample&status=1&roleId=1&organizationUnitId=1&includeArchived=true&mfaEnabled=true&page=1&limit=20&sortBy=id&sortOrder=ASC&format=csv&title=title_sample&logoBase64=logoBase64_sample&stepUpToken=stepUpToken_sample&requireStepUp=true",
               "host": [
                 "{{baseUrl}}"
               ],
@@ -5718,6 +6846,22 @@
                 {
                   "key": "format",
                   "value": "csv"
+                },
+                {
+                  "key": "title",
+                  "value": "title_sample"
+                },
+                {
+                  "key": "logoBase64",
+                  "value": "logoBase64_sample"
+                },
+                {
+                  "key": "stepUpToken",
+                  "value": "stepUpToken_sample"
+                },
+                {
+                  "key": "requireStepUp",
+                  "value": "true"
                 }
               ]
             },
@@ -5739,7 +6883,7 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/v1/users/import-template?q=q_sample&status=1&roleId=1&organizationUnitId=1&includeArchived=true&mfaEnabled=true&page=1&limit=20&sortBy=id&sortOrder=ASC&format=csv",
+              "raw": "{{baseUrl}}/api/v1/users/import-template?q=q_sample&status=1&roleId=1&organizationUnitId=1&includeArchived=true&mfaEnabled=true&page=1&limit=20&sortBy=id&sortOrder=ASC&format=csv&title=title_sample&logoBase64=logoBase64_sample&stepUpToken=stepUpToken_sample&requireStepUp=true",
               "host": [
                 "{{baseUrl}}"
               ],
@@ -5793,6 +6937,22 @@
                 {
                   "key": "format",
                   "value": "csv"
+                },
+                {
+                  "key": "title",
+                  "value": "title_sample"
+                },
+                {
+                  "key": "logoBase64",
+                  "value": "logoBase64_sample"
+                },
+                {
+                  "key": "stepUpToken",
+                  "value": "stepUpToken_sample"
+                },
+                {
+                  "key": "requireStepUp",
+                  "value": "true"
                 }
               ]
             },
@@ -5860,7 +7020,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"firstName\": \"firstName_sample\",\n  \"lastName\": \"lastName_sample\",\n  \"fullName\": \"fullName_sample\",\n  \"email\": \"user@example.com\",\n  \"phone\": \"phone_sample\",\n  \"avatarUrl\": \"https://example.com/resource\",\n  \"expectedVersion\": 1\n}",
+              "raw": "{\n  \"firstName\": \"firstName_sample\",\n  \"lastName\": \"lastName_sample\",\n  \"fullName\": \"fullName_sample\",\n  \"email\": \"user@example.com\",\n  \"phone\": \"phone_sample\",\n  \"avatarUrl\": \"https://example.com/resource\",\n  \"dateOfBirth\": \"dateOfBirth_sample\",\n  \"gender\": 1,\n  \"identityNumber\": \"identityNumber_sample\",\n  \"address\": \"address_sample\",\n  \"city\": \"city_sample\",\n  \"country\": \"country_sample\",\n  \"bio\": \"bio_sample\",\n  \"expectedVersion\": 1\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -6003,6 +7163,36 @@
           }
         },
         {
+          "name": "Xem lịch sử đăng nhập và đăng xuất của người dùng theo thời gian, IP và thiết bị",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/users/:id/login-history",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "users",
+                ":id",
+                "login-history"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `users.read`"
+          }
+        },
+        {
           "name": "Gán người dùng vào các đơn vị hoặc chi nhánh",
           "request": {
             "method": "PUT",
@@ -6046,6 +7236,92 @@
           }
         },
         {
+          "name": "Reset MFA có kiểm soát cho người dùng bị mất thiết bị xác thực (kèm lý do/xác minh và thu hồi phiên)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/users/:id/reset-mfa",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "users",
+                ":id",
+                "reset-mfa"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"reason_sample\",\n  \"verificationReference\": \"verificationReference_sample\",\n  \"revokeSessions\": true,\n  \"stepUpToken\": \"stepUpToken_sample\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `users.update`"
+          }
+        },
+        {
+          "name": "Đặt lại mật khẩu người dùng từ trang quản trị và thu hồi phiên đăng nhập",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/users/:id/reset-password",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "users",
+                ":id",
+                "reset-password"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"newPassword\": \"newPassword_sample\",\n  \"useSuggestedPassword\": false,\n  \"revokeSessions\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `users.update`"
+          }
+        },
+        {
           "name": "Khôi phục tài khoản người dùng đã lưu trữ",
           "request": {
             "method": "POST",
@@ -6071,6 +7347,49 @@
                 ":id",
                 "restore"
               ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `users.status`"
+          }
+        },
+        {
+          "name": "Thu hồi toàn bộ phiên đăng nhập của người dùng khi phát hiện sự cố bảo mật",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/users/:id/revoke-sessions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "users",
+                ":id",
+                "revoke-sessions"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"reason_sample\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `users.status`"
           }
@@ -6108,7 +7427,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"roleIds\": [\n    1\n  ]\n}",
+              "raw": "{\n  \"roleIds\": [\n    1\n  ],\n  \"stepUpToken\": \"stepUpToken_sample\",\n  \"requireStepUp\": true\n}",
               "options": {
                 "raw": {
                   "language": "json"

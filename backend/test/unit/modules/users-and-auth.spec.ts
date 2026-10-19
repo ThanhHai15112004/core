@@ -812,10 +812,10 @@ function createIamInMemoryHarness() {
   );
   const serviceAccountService = new ServiceAccountService(passwordHasher, tokenService);
   const identityResolver = new UserIdentityResolverService(
-    usersService,
     sessionService,
-    securitySettingsService,
+    usersService,
     serviceAccountService,
+    tokenService,
   );
   const authService = new AuthService(
     passwordHasher,
@@ -1988,7 +1988,8 @@ describe('Unit: Quản lý Người dùng (3.1) & Xác thực / Phiên / MFA (3)
     expect(tokenRes1.scopes).toEqual(['users.read', 'organizations.read']);
 
     // Xác thực token qua UserIdentityResolverService (mô phỏng AuthGuard gọi khi API Client gọi endpoint)
-    const verifiedPayload1 = await h.tokenService.verifyToken(tokenRes1.accessToken);
+    const verifiedPayload1 = (await h.tokenService.verify(tokenRes1.accessToken))!;
+    expect(verifiedPayload1).not.toBeNull();
     const resolvedIdentity1 = await h.identityResolver.resolveIdentity(verifiedPayload1, {
       ipAddress: '203.0.113.50',
       endpoint: '/api/v1/users',
@@ -2056,7 +2057,8 @@ describe('Unit: Quản lý Người dùng (3.1) & Xác thực / Phiên / MFA (3)
       },
       { ipAddress: '203.0.113.50' },
     );
-    const verifiedPayload2 = await h.tokenService.verifyToken(tokenRes2.accessToken);
+    const verifiedPayload2 = (await h.tokenService.verify(tokenRes2.accessToken))!;
+    expect(verifiedPayload2).not.toBeNull();
     const resolvedIdentity2 = await h.identityResolver.resolveIdentity(verifiedPayload2, {
       ipAddress: '203.0.113.50',
       endpoint: '/api/v1/users/export',
@@ -2099,7 +2101,7 @@ describe('Unit: Quản lý Người dùng (3.1) & Xác thực / Phiên / MFA (3)
     expect(finalUsage.lastUsedAt).toBeDefined();
     expect(finalUsage.lastUsedIp).toBe('203.0.113.50');
     expect(finalUsage.lastUsedResult).toBe('CLIENT_REVOKED');
-    expect(finalUsage.usageLogs.length).toBeGreaterThanOrEqual(6);
+    expect(finalUsage.logs.length).toBeGreaterThanOrEqual(6);
   });
 });
 

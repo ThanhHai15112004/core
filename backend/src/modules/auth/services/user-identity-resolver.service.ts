@@ -1,9 +1,10 @@
 import { Inject, Injectable, Optional } from '@nestjs/common';
-import type {
-  IUserIdentityResolver,
-  IdentityResolutionContext,
-  TokenPayload,
-  UserIdentity,
+import {
+  type IUserIdentityResolver,
+  type IdentityResolutionContext,
+  type TokenPayload,
+  TokenService,
+  type UserIdentity,
 } from '@packages/security/index.js';
 import {
   type IUsersPublicService,
@@ -20,7 +21,10 @@ export class UserIdentityResolverService implements IUserIdentityResolver {
     @Inject(USERS_PUBLIC_SERVICE)
     private readonly usersPublicService: IUsersPublicService,
     @Optional() private readonly serviceAccountService?: ServiceAccountService,
-  ) {}
+    @Optional() private readonly tokenService?: TokenService,
+  ) {
+    this.tokenService?.setIdentityResolver(this);
+  }
 
   /** Giải mã và kiểm tra trạng thái hoạt động của phiên đăng nhập người dùng hoặc API Client / Service Account */
   public async resolveIdentity(
@@ -84,4 +88,3 @@ export class UserIdentityResolverService implements IUserIdentityResolver {
     };
   }
 }
-

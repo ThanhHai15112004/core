@@ -166,9 +166,9 @@ describe('Feature: System Ops overview (/ops/overview)', () => {
     };
 
     // 10 package + worker + scheduler; trong test không có telemetry runtime (worker/scheduler unknown), không có
-    // database thật, broker không kết nối được (messaging + queue lỗi) và security cảnh báo → 6 ổn định.
+    // database thật, broker không kết nối được (messaging + queue lỗi) và security ổn định (HS256) → 7 ổn định.
     expect(body.data.overallHealth.totalServices).toBe(12);
-    expect(body.data.overallHealth.healthyServices).toBe(6);
+    expect(body.data.overallHealth.healthyServices).toBe(7);
     expect(body.data.keyMetrics.find((m) => m.id === 'req_sec')?.label).toBe('Requests / Sec');
     expect(body.data.healthMap.find((m) => m.id === 'runtime-worker')?.status).toBe('unknown');
     // API theo health check thật: database của test không chạy → không báo "healthy" giả.

@@ -68,12 +68,17 @@ export class TokenService implements TokenVerificationStrategy {
     @Optional() private readonly secretService?: SecretService,
     @Optional()
     @Inject(USER_IDENTITY_RESOLVER)
-    private readonly identityResolver?: IUserIdentityResolver,
+    private identityResolver?: IUserIdentityResolver,
   ) {
     this.accessSecret = this.configService?.auth.jwt.accessSecret ?? '';
     this.refreshSecret = this.configService?.auth.jwt.refreshSecret ?? '';
     this.accessExpiration = this.configService?.auth.jwt.accessExpiration ?? '15m';
     this.refreshExpiration = this.configService?.auth.jwt.refreshExpiration ?? '7d';
+  }
+
+  /** Đăng ký trình phân giải danh tính động từ AuthModule vào TokenService toàn cục */
+  public setIdentityResolver(resolver: IUserIdentityResolver): void {
+    this.identityResolver = resolver;
   }
 
   /** Lấy secret khóa bảo mật dùng để ký và xác thực Access Token */

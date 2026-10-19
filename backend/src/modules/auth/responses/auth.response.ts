@@ -1,6 +1,5 @@
 import { z } from 'zod';
-import type { UserProfileView } from '@modules/users/contracts/index.js';
-import { userProfileResponseSchema } from '@modules/users/responses/users.response.js';
+import { type UserProfileView, userProfileResponseSchema } from '@modules/users/index.js';
 import type { MfaMethodType } from '../contracts/index.js';
 
 export interface AuthenticatedUserProfileResponse {
@@ -276,7 +275,9 @@ export const loginResponseSchema = z.object({
   mfaPolicyEnforced: z.boolean().optional(),
   mfaEnrollmentRequired: z.boolean().optional(),
   mfaChallengeToken: z.string().optional(),
-  availableMfaMethods: z.array(z.enum(['TOTP', 'EMAIL_OTP', 'SMS_OTP', 'RECOVERY_CODE'])).optional(),
+  availableMfaMethods: z
+    .array(z.enum(['TOTP', 'EMAIL_OTP', 'SMS_OTP', 'RECOVERY_CODE']))
+    .optional(),
   emailOtpSent: z.boolean().optional(),
   smsOtpSent: z.boolean().optional(),
   maskedEmail: z.string().optional(),
@@ -709,4 +710,3 @@ export const apiClientUsageLogResponseSchema = z.object({
     }),
   ),
 });
-
