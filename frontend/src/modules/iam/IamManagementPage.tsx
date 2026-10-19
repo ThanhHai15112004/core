@@ -23,6 +23,9 @@ interface RoleOption {
   id: number;
   code: string;
   name: string;
+  description?: string | null;
+  isSystem?: boolean;
+  userCount?: number;
   status?: number;
   statusName?: string;
   permissions: string[];
@@ -1105,6 +1108,12 @@ export const IamManagementPage: React.FC = () => {
     }
   };
 
+  const [newRoleDesc, setNewRoleDesc] = useState('');
+  const [selectedRoleUsers, setSelectedRoleUsers] = useState<{
+    role: RoleOption;
+    users: Array<{ id: number; username: string; email: string; fullName: string; statusName: string }>;
+  } | null>(null);
+
   const handleCreateRole = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -1114,6 +1123,7 @@ export const IamManagementPage: React.FC = () => {
         body: JSON.stringify({
           code: newRoleCode,
           name: newRoleName,
+          description: newRoleDesc || null,
           permissions: newRolePerms
             .split(',')
             .map((p) => p.trim())
@@ -1122,10 +1132,82 @@ export const IamManagementPage: React.FC = () => {
       });
       setNewRoleCode('');
       setNewRoleName('');
+      setNewRoleDesc('');
       await loadDirectoryData();
       notify('ok', 'Đã tạo vai trò mới!');
     } catch (err) {
       notify('err', err instanceof Error ? err.message : 'Create role failed');
+    }
+  };
+
+  const handleCloneRole = async (role: RoleOption) => {
+    const newCode = window.prompt(`Nhập mã (code) cho vai trò sao chép từ "${role.code}":`, `${role.code}_copy`);
+    if (!newCode) return;
+    const newName = window.prompt('Nhập tên hiển thị cho vai trò mới:', `${role.name} (Copy)`);
+    if (!newName) return;
+    try {
+      await fetchApi(API_ROUTES.ROLES.CLONE(role.id), {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({ code: newCode.trim(), name: newName.trim() }),
+      });
+      await loadDirectoryData();
+      notify('ok', `Đã sao chép vai trò "${role.code}" -> "${newCode.trim()}"!`);
+    } catch (err) {
+      notify('err', err instanceof Error ? err.message : 'Clone role failed');
+    }
+  };
+
+  const handleQuickEditRole = async (role: RoleOption) => {
+    const updatedName = window.prompt(`Cập nhật tên vai trò (Mã cố định: ${role.code}):`, role.name);
+    if (!updatedName) return;
+    const updatedDesc = window.prompt('Cập nhật mô tả vai trò:', role.description ?? '');
+    const updatedPerms = window.prompt(
+      'Cập nhật danh sách mã quyền (cách nhau dấu phẩy):',
+      role.permissions.join(','),
+    );
+    if (updatedPerms === null) return;
+    try {
+      await fetchApi(API_ROUTES.ROLES.UPDATE(role.id), {
+        method: 'PATCH',
+        headers: authHeaders(),
+        body: JSON.stringify({
+          name: updatedName.trim(),
+          description: updatedDesc,
+          permissions: updatedPerms
+            .split(',')
+            .map((p) => p.trim())
+            .filter(Boolean),
+        }),
+      });
+      await loadDirectoryData();
+      notify('ok', `Đã cập nhật vai trò #${role.id} (${role.code})!`);
+    } catch (err) {
+      notify('err', err instanceof Error ? err.message : 'Update role failed');
+    }
+  };
+
+  const handleViewRoleUsers = async (role: RoleOption) => {
+    try {
+      const list = await fetchApi<
+        Array<{ id: number; username: string; email: string; fullName: string; statusName: string }>
+      >(API_ROUTES.ROLES.USERS(role.id), { headers: authHeaders() });
+      setSelectedRoleUsers({ role, users: Array.isArray(list) ? list : [] });
+    } catch (err) {
+      notify('err', err instanceof Error ? err.message : 'Load role users failed');
+    }
+  };
+
+  const handleDeleteRole = async (role: RoleOption) => {
+    try {
+      await fetchApi(API_ROUTES.ROLES.DELETE(role.id), {
+        method: 'DELETE',
+        headers: authHeaders(),
+      });
+      await loadDirectoryData();
+      notify('ok', `Đã xóa vai trò #${role.id} (${role.code})!`);
+    } catch (err) {
+      notify('err', err instanceof Error ? err.message : 'Delete role failed');
     }
   };
 
@@ -2690,7 +2772,7 @@ export const IamManagementPage: React.FC = () => {
           {/* Roles Manager */}
           <form onSubmit={(e) => void handleCreateRole(e)} style={cardStyle}>
             <h3 style={{ fontSize: '16px', fontWeight: 700, marginBottom: '12px' }}>
-              🔑 Tạo Vai trò & Quyền hạn (RBAC Role)
+              🔑 Quản lý Vai trò & Quyền hạn (RBAC Role — Mục 4.1)
             </h3>
             <div style={{ display: 'grid', gap: '10px', marginBottom: '16px' }}>
               <input
@@ -2709,6 +2791,12 @@ export const IamManagementPage: React.FC = () => {
               />
               <input
                 style={inputStyle}
+                placeholder="Mô tả vai trò (tùy chọn)"
+                value={newRoleDesc}
+                onChange={(e) => setNewRoleDesc(e.target.value)}
+              />
+              <input
+                style={inputStyle}
                 placeholder="Danh sách quyền (cách nhau dấu phẩy)"
                 value={newRolePerms}
                 onChange={(e) => setNewRolePerms(e.target.value)}
@@ -2718,12 +2806,97 @@ export const IamManagementPage: React.FC = () => {
               </button>
             </div>
 
+            {selectedRoleUsers && (
+              <div
+                style={{
+                  marginBottom: '14px',
+                  padding: '10px',
+                  borderRadius: '8px',
+                  border: '1px solid var(--border-color)',
+                  background: 'rgba(15, 23, 42, 0.6)',
+                  fontSize: '12px',
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                  <strong>
+                    👥 Người dùng thuộc vai trò {selectedRoleUsers.role.name} (
+                    {selectedRoleUsers.users.length}):
+                  </strong>
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    style={{ padding: '2px 8px', fontSize: '11px' }}
+                    onClick={() => setSelectedRoleUsers(null)}
+                  >
+                    Đóng
+                  </button>
+                </div>
+                {selectedRoleUsers.users.length === 0 ? (
+                  <div style={{ color: 'var(--text-muted)' }}>Chưa có người dùng nào gán vai trò này.</div>
+                ) : (
+                  <ul style={{ margin: 0, paddingLeft: '18px' }}>
+                    {selectedRoleUsers.users.map((u) => (
+                      <li key={u.id}>
+                        #{u.id} {u.fullName} ({u.email}) — <code>{u.statusName}</code>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+
             <div style={{ fontSize: '13px' }}>
               <strong>Danh sách vai trò hiện có ({roles.length}):</strong>
-              <ul style={{ marginTop: '8px', paddingLeft: '18px', lineHeight: 1.7 }}>
+              <ul style={{ marginTop: '8px', paddingLeft: '18px', lineHeight: 1.8 }}>
                 {roles.map((r) => (
-                  <li key={r.id}>
-                    <strong>#{r.id} - {r.name}</strong> (<code>{r.code}</code>) — {r.permissions.length} quyền
+                  <li key={r.id} style={{ marginBottom: '6px' }}>
+                    <div>
+                      <strong>#{r.id} - {r.name}</strong> (<code>{r.code}</code>){' '}
+                      {r.isSystem ? '[SYSTEM]' : '[CUSTOM]'} — {r.permissions.length} quyền —{' '}
+                      <strong>{r.userCount ?? 0} user</strong>
+                    </div>
+                    <div style={{ display: 'flex', gap: '6px', marginTop: '2px', flexWrap: 'wrap' }}>
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        style={{ padding: '2px 8px', fontSize: '11px' }}
+                        onClick={() => void handleViewRoleUsers(r)}
+                      >
+                        Xem user ({r.userCount ?? 0})
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        style={{ padding: '2px 8px', fontSize: '11px' }}
+                        onClick={() => void handleQuickEditRole(r)}
+                      >
+                        Sửa / Gán quyền
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        style={{ padding: '2px 8px', fontSize: '11px' }}
+                        onClick={() => void handleCloneRole(r)}
+                      >
+                        Sao chép
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        style={{ padding: '2px 8px', fontSize: '11px' }}
+                        disabled={Boolean(r.isSystem) || (r.userCount ?? 0) > 0}
+                        title={
+                          r.isSystem
+                            ? 'Vai trò hệ thống bị khóa không cho xóa'
+                            : (r.userCount ?? 0) > 0
+                              ? 'Đang có người dùng sử dụng vai trò này'
+                              : 'Xóa vai trò'
+                        }
+                        onClick={() => void handleDeleteRole(r)}
+                      >
+                        Xóa
+                      </button>
+                    </div>
                   </li>
                 ))}
               </ul>

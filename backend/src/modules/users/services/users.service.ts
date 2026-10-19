@@ -20,6 +20,7 @@ import {
   type IRolesPublicService,
   ROLE_STATUS,
   ROLES_PUBLIC_SERVICE,
+  type RoleAssignedUserSummary,
   type RoleSummary,
 } from '@modules/roles/contracts/index.js';
 import {
@@ -88,7 +89,6 @@ export class UsersService implements IUsersPublicService {
     action?: string,
   ) => Promise<boolean>;
 
-
   constructor(
     private readonly userRepository: UserRepository,
     private readonly userRoleRepository: UserRoleRepository,
@@ -115,7 +115,14 @@ export class UsersService implements IUsersPublicService {
     @Optional()
     @Inject(UserProfileRepository)
     private readonly userProfileRepository: UserProfileRepository | null = null,
-  ) {}
+  ) {
+    this.rolesPublicService.registerRoleUserCountDelegate?.((roleIds) =>
+      this.countUsersByRoleIds(roleIds),
+    );
+    this.rolesPublicService.registerRoleUsersListDelegate?.((roleId) =>
+      this.listUsersByRoleId(roleId),
+    );
+  }
 
   /** Tìm kiếm và lọc danh sách người dùng có phân trang (Mục 3.1.9) */
   public async listPaginated(query: ListUsersQuery): Promise<PaginatedResult<UserResponse>> {
@@ -688,7 +695,6 @@ export class UsersService implements IUsersPublicService {
     };
   }
 
-
   /** Hợp đồng công khai cho module Auth: Lấy danh tính đầy đủ kèm hồ sơ user_profiles, roles, permissions và đơn vị */
   public async findAuthUserById(userId: number): Promise<UserAuthIdentityView | null> {
     const user = await this.userRepository.findByIdWithArchived(userId, true);
@@ -992,7 +998,11 @@ export class UsersService implements IUsersPublicService {
       throw new NotFoundAppException('users.notFound', { id: userId });
     }
 
-    if (options?.recordHistory !== false && user.passwordHash && user.passwordHash !== newPasswordHash) {
+    if (
+      options?.recordHistory !== false &&
+      user.passwordHash &&
+      user.passwordHash !== newPasswordHash
+    ) {
       const maxHistory = Math.max(1, Math.min(20, options?.maxHistory ?? 10));
       const currentHistory = this.parsePasswordHistory(userId, user);
       const nextHistory = [
@@ -1179,7 +1189,6 @@ export class UsersService implements IUsersPublicService {
     return this.getLoginHistory(id, limit);
   }
 
-
   /** Đặt lại mật khẩu người dùng từ trang quản trị (Mục 3.3.3 — chỉ người có quyền mới thực hiện) */
   public async adminResetPassword(
     id: number,
@@ -1221,7 +1230,9 @@ export class UsersService implements IUsersPublicService {
       try {
         const parsed = JSON.parse(user.passwordHistoryHashesJson) as unknown;
         if (Array.isArray(parsed)) {
-          const valid = parsed.filter((item): item is string => typeof item === 'string' && item.length > 0);
+          const valid = parsed.filter(
+            (item): item is string => typeof item === 'string' && item.length > 0,
+          );
           this.fallbackPasswordHistory.set(Number(userId), valid);
           return valid;
         }
@@ -1242,7 +1253,6 @@ export class UsersService implements IUsersPublicService {
     await this.userRepository.saveEntity(user);
     await this.invalidateIdentityCache(userId);
   }
-
 
   /** Ghép nối thông tin hồ sơ chi tiết (`user_profiles`), vai trò và đơn vị/chi nhánh cho danh sách UserEntity */
   public async hydrateUsersList(users: readonly UserEntity[]): Promise<UserResponse[]> {
@@ -1448,6 +1458,102 @@ export class UsersService implements IUsersPublicService {
         changedBy: changedBy ?? null,
       })
       .catch(() => undefined);
+  }
+
+  /** Đếm số lượng người dùng (chưa bị xóa/lưu trữ) đang sử dụng từng vai trò (Mục 4.1) */
+  private async countUsersByRoleIds(roleIds: readonly number[]): Promise<Map<number, number>> {
+    const counts = new Map<number, number>();
+    if (roleIds.length === 0) return counts;
+
+    const links = await this.loadRoleLinks(roleIds);
+    if (links.length === 0) return counts;
+
+    const distinctUserIds = [...new Set(links.map((l) => Number(l.userId)))];
+    const activeUserIds = new Set<number>();
+    await Promise.all(
+      distinctUserIds.map(async (uid) => {
+        const u = await this.userRepository.findByIdWithArchived(uid, false);
+        if (u && !u.deletedAt && !u.archivedAt && Number(u.status) !== USER_STATUS.ARCHIVED) {
+          activeUserIds.add(uid);
+        }
+      }),
+    );
+
+    const seenPairs = new Set<string>();
+    for (const link of links) {
+      const uid = Number(link.userId);
+      const rid = Number(link.roleId);
+      if (!activeUserIds.has(uid)) continue;
+      const key = `${rid}:${uid}`;
+      if (seenPairs.has(key)) continue;
+      seenPairs.add(key);
+      counts.set(rid, (counts.get(rid) ?? 0) + 1);
+    }
+    return counts;
+  }
+
+  /** Lấy danh sách người dùng đang được gán một vai trò cụ thể (Mục 4.1) */
+  private async listUsersByRoleId(roleId: number): Promise<RoleAssignedUserSummary[]> {
+    const links = await this.loadRoleLinks([roleId]);
+    if (links.length === 0) return [];
+
+    const assignedAtByUserId = new Map<number, Date>();
+    for (const link of links) {
+      const uid = Number(link.userId);
+      if (!assignedAtByUserId.has(uid)) {
+        assignedAtByUserId.set(uid, link.createdAt ?? new Date());
+      }
+    }
+
+    const userIds = [...assignedAtByUserId.keys()];
+    const users: UserEntity[] = [];
+    for (const uid of userIds) {
+      const u = await this.userRepository.findByIdWithArchived(uid, false);
+      if (u && !u.deletedAt && !u.archivedAt && Number(u.status) !== USER_STATUS.ARCHIVED) {
+        users.push(u);
+      }
+    }
+    if (users.length === 0) return [];
+
+    const profiles = await this.findProfilesByUserIds(users.map((u) => Number(u.id)));
+    const profileMap = new Map<number, UserProfileEntity>();
+    for (const p of profiles) {
+      profileMap.set(Number(p.userId), p);
+    }
+
+    return users.map((u) => {
+      const uid = Number(u.id);
+      const prof = profileMap.get(uid);
+      const statusCode = parseUserStatus(u.status);
+      const assignedAt = assignedAtByUserId.get(uid) ?? u.createdAt ?? new Date();
+      return {
+        id: uid,
+        username: u.username,
+        email: u.email ?? '',
+        fullName:
+          prof?.fullName || `${prof?.lastName ?? ''} ${prof?.firstName ?? ''}`.trim() || u.username,
+        status: statusCode,
+        statusName: getUserStatusName(statusCode),
+        primaryOrganizationUnitId:
+          u.primaryOrganizationUnitId !== undefined && u.primaryOrganizationUnitId !== null
+            ? Number(u.primaryOrganizationUnitId)
+            : null,
+        assignedAt: assignedAt.toISOString(),
+      };
+    });
+  }
+
+  private async loadRoleLinks(roleIds: readonly number[]) {
+    if (typeof this.userRoleRepository.findByRoleIds === 'function') {
+      return this.userRoleRepository.findByRoleIds(roleIds);
+    }
+    if (typeof this.userRoleRepository.findUserIdsByRoleIds === 'function') {
+      const uids = await this.userRoleRepository.findUserIdsByRoleIds(roleIds);
+      const allLinks = await this.userRoleRepository.findByUserIds(uids);
+      const roleSet = new Set(roleIds.map(Number));
+      return allLinks.filter((l) => roleSet.has(Number(l.roleId)));
+    }
+    return [];
   }
 
   /** Xóa cache danh tính người dùng trên Redis khi thông tin quyền/trạng thái thay đổi */

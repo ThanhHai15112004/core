@@ -447,6 +447,14 @@ function createIamInMemoryHarness() {
       const set = new Set(userIds.map(Number));
       return userRoleStore.filter((ur) => set.has(ur.userId));
     },
+    findByRoleIds: async (roleIds: readonly number[]) => {
+      const set = new Set(roleIds.map(Number));
+      return userRoleStore.filter((ur) => set.has(ur.roleId));
+    },
+    findUserIdsByRoleIds: async (roleIds: readonly number[]) => {
+      const set = new Set(roleIds.map(Number));
+      return [...new Set(userRoleStore.filter((ur) => set.has(ur.roleId)).map((ur) => ur.userId))];
+    },
     replaceUserRoles: async (userId: number, roleIds: readonly number[], assignedBy?: number) => {
       for (let i = userRoleStore.length - 1; i >= 0; i--) {
         if (userRoleStore[i]?.userId === userId) userRoleStore.splice(i, 1);
@@ -840,6 +848,7 @@ function createIamInMemoryHarness() {
     sessionStore,
     mfaStore,
     permStore,
+    roleRepo,
     fieldEncryption,
     emailAdapter,
     smsProvider,
@@ -1885,6 +1894,7 @@ describe('Unit: Quản lý Người dùng (3.1) & Xác thực / Phiên / MFA (3)
       h.serviceAccountService.createServiceAccount({
         code: 'ERP_SYNC_JOB',
         name: 'Duplicate SA',
+        scopes: [],
       }),
     ).rejects.toThrow();
 
@@ -1895,6 +1905,7 @@ describe('Unit: Quản lý Người dùng (3.1) & Xác thực / Phiên / MFA (3)
         serviceAccountId: sa.id,
         name: 'Invalid Scope Client',
         scopes: ['users.read', 'users.delete'],
+        allowedIps: [],
       }),
     ).rejects.toThrow();
 
@@ -1921,12 +1932,12 @@ describe('Unit: Quản lý Người dùng (3.1) & Xác thực / Phiên / MFA (3)
 
     // 3.6.4: Khi gọi getApiClientById hoặc listApiClients sau đó, KHÔNG BAO GIỜ trả về plain clientSecret nữa
     const fetchedClient = await h.serviceAccountService.getApiClientById(createdClient.id);
-    expect((fetchedClient as Record<string, unknown>).clientSecret).toBeUndefined();
+    expect((fetchedClient as unknown as Record<string, unknown>).clientSecret).toBeUndefined();
     expect(fetchedClient.secretPrefix).toBe(`${createdClient.clientSecret.slice(0, 10)}...`);
 
     const allClients = await h.serviceAccountService.listApiClients(sa.id);
     expect(allClients).toHaveLength(1);
-    expect((allClients[0] as Record<string, unknown>).clientSecret).toBeUndefined();
+    expect((allClients[0] as unknown as Record<string, unknown>).clientSecret).toBeUndefined();
 
     // 3.6.6 & 3.6.7: Cấp token từ IP không nằm trong danh sách cho phép -> bị từ chối & ghi nhận DENIED_IP
     await expect(
@@ -2023,6 +2034,7 @@ describe('Unit: Quản lý Người dùng (3.1) & Xác thực / Phiên / MFA (3)
     // 3.6.4: Xoay vòng Client Secret (Rotate Secret) -> trả về secret mới 1 lần, tăng tokenVersion và vô hiệu hóa secret + token cũ
     const rotated = await h.serviceAccountService.rotateClientSecret(createdClient.id, {
       reason: 'Xoay vòng định kỳ hàng quý',
+      revokeExistingTokens: true,
     });
     expect(rotated.clientSecret).toMatch(/^cs_[A-Za-z0-9_-]+$/);
     expect(rotated.clientSecret).not.toBe(createdClient.clientSecret);
@@ -2103,6 +2115,118 @@ describe('Unit: Quản lý Người dùng (3.1) & Xác thực / Phiên / MFA (3)
     expect(finalUsage.lastUsedResult).toBe('CLIENT_REVOKED');
     expect(finalUsage.logs.length).toBeGreaterThanOrEqual(6);
   });
+
+  it('validates Section 4.1 Role Management: create, update name/desc without changing code, set permissions, assign multiple roles, clone role, lock system role, view assigned users & block deleting in-use role', async () => {
+    // 1. Tạo mới vai trò tùy chỉnh (ví dụ: manager, staff, student)
+    const managerRole = await h.rolesService.create({
+      code: 'manager',
+      name: 'Manager',
+      description: 'Quản lý bộ phận',
+      permissions: ['users.read', 'users.update', 'organizations.read'],
+    });
+    const studentRole = await h.rolesService.create({
+      code: 'student',
+      name: 'Student',
+      description: 'Học viên hệ thống',
+      permissions: ['courses.read'],
+    });
+
+    expect(managerRole.code).toBe('manager');
+    expect(managerRole.isSystem).toBe(false);
+    expect(managerRole.userCount).toBe(0);
+    expect(managerRole.permissions).toEqual(['users.read', 'users.update', 'organizations.read']);
+
+    // 2. Cập nhật tên và mô tả vai trò (mã code hệ thống giữ nguyên bất biến)
+    const updatedManager = await h.rolesService.update(managerRole.id, {
+      name: 'Department Manager Updated',
+      description: 'Mô tả vai trò quản lý đã cập nhật',
+    });
+    expect(updatedManager.code).toBe('manager');
+    expect(updatedManager.name).toBe('Department Manager Updated');
+    expect(updatedManager.description).toBe('Mô tả vai trò quản lý đã cập nhật');
+
+    // 3. Gán quyền cho vai trò (setPermissions)
+    const afterSetPerms = await h.rolesService.setPermissions(managerRole.id, {
+      permissions: ['users.read', 'users.update', 'users.export', 'roles.read'],
+    });
+    expect(afterSetPerms.permissions).toEqual([
+      'users.read',
+      'users.update',
+      'users.export',
+      'roles.read',
+    ]);
+
+    // 4. Sao chép vai trò (Clone Role): tạo role mới từ role hiện có
+    const clonedRole = await h.rolesService.clone(managerRole.id, {
+      code: 'assistant_manager',
+      name: 'Assistant Manager',
+    });
+    expect(clonedRole.id).not.toBe(managerRole.id);
+    expect(clonedRole.code).toBe('assistant_manager');
+    expect(clonedRole.name).toBe('Assistant Manager');
+    expect(clonedRole.isSystem).toBe(false);
+    expect(clonedRole.permissions).toEqual(afterSetPerms.permissions);
+    expect(clonedRole.description).toContain('Cloned from manager');
+
+    // 5. Gán nhiều vai trò cho người dùng
+    const user1 = await h.usersService.create({
+      email: 'multi.role.user@gmail.com',
+      username: 'multirole01',
+      firstName: 'Hùng',
+      lastName: 'Trần Văn',
+      password: 'Password@123',
+      status: USER_STATUS.ACTIVE,
+      roleIds: [managerRole.id],
+      organizationUnits: [],
+    });
+    const assignedMulti = await h.usersService.assignRoles(user1.id, {
+      roleIds: [managerRole.id, studentRole.id, clonedRole.id],
+    });
+    expect(assignedMulti.roles.map((r) => r.code).sort()).toEqual([
+      'assistant_manager',
+      'manager',
+      'student',
+    ]);
+
+    // 6. Xem danh sách người đang sử dụng vai trò & kiểm tra userCount trước khi thay đổi hoặc xóa
+    const fetchedCloned = await h.rolesService.getById(clonedRole.id);
+    expect(fetchedCloned.userCount).toBe(1);
+
+    const assignedUsers = await h.rolesService.listAssignedUsers(clonedRole.id);
+    expect(assignedUsers).toHaveLength(1);
+    expect(assignedUsers[0]?.id).toBe(user1.id);
+    expect(assignedUsers[0]?.email).toBe('multi.role.user@gmail.com');
+    expect(assignedUsers[0]?.fullName).toBe('Trần Văn Hùng');
+
+    // 7. Chặn xóa vai trò đang có người sử dụng (userCount > 0)
+    await expect(h.rolesService.remove(clonedRole.id)).rejects.toThrow();
+
+    // Sau khi gỡ người dùng khỏi vai trò clonedRole -> xóa mềm thành công
+    await h.usersService.assignRoles(user1.id, {
+      roleIds: [managerRole.id, studentRole.id],
+    });
+    const assignedAfterUnlink = await h.rolesService.listAssignedUsers(clonedRole.id);
+    expect(assignedAfterUnlink).toHaveLength(0);
+
+    const removedRes = await h.rolesService.remove(clonedRole.id);
+    expect(removedRes).toEqual({ deleted: true, id: clonedRole.id });
+
+    // 8. Khóa vai trò hệ thống (isSystem = true): không cho xóa và không cho vô hiệu hóa
+    const savedSysRole = await h.roleRepo.saveEntity({
+      code: 'super_admin',
+      name: 'Super Admin',
+      isSystem: true,
+      status: ROLE_STATUS.ACTIVE,
+    });
+    const sysRole = await h.rolesService.getById(savedSysRole.id);
+    expect(sysRole.isSystem).toBe(true);
+    await expect(h.rolesService.remove(sysRole.id)).rejects.toThrow();
+    await expect(
+      h.rolesService.update(sysRole.id, { status: ROLE_STATUS.INACTIVE }),
+    ).rejects.toThrow();
+  });
 });
+
+
 
 

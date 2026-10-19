@@ -59,6 +59,25 @@ export interface SetRolePermissionsRequest {
   readonly permissions?: readonly string[] | undefined;
 }
 
+export const cloneRoleSchema = z.object({
+  code: z
+    .string()
+    .trim()
+    .min(2)
+    .max(64)
+    .regex(/^[a-z0-9_-]+$/i, 'Role code may only contain letters, digits, _ and -'),
+  name: z.string().trim().min(2).max(150),
+  description: z.string().trim().max(1000).nullable().optional(),
+  status: roleStatusSchema,
+});
+
+export interface CloneRoleRequest {
+  readonly code: string;
+  readonly name: string;
+  readonly description?: string | null | undefined;
+  readonly status?: RoleStatusCode | undefined;
+}
+
 export const listRolesQuerySchema = z.object({
   search: z.string().trim().max(120).optional(),
   status: roleStatusSchema,

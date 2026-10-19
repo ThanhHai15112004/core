@@ -39,11 +39,28 @@ export interface RoleSummary {
   readonly permissions: readonly string[];
 }
 
+export interface RoleAssignedUserSummary {
+  readonly id: number;
+  readonly username: string;
+  readonly email: string;
+  readonly fullName: string;
+  readonly status: number;
+  readonly statusName: string;
+  readonly primaryOrganizationUnitId: number | null;
+  readonly assignedAt: string;
+}
+
 export interface IRolesPublicService {
   findByIds(roleIds: readonly number[]): Promise<RoleSummary[]>;
   findByCodes(codes: readonly string[]): Promise<RoleSummary[]>;
   resolvePermissionsByRoleIds(roleIds: readonly number[]): Promise<string[]>;
   ensureActiveRolesExist(roleIds: readonly number[]): Promise<RoleSummary[]>;
+  registerRoleUserCountDelegate?(
+    delegate: (roleIds: readonly number[]) => Promise<Map<number, number>>,
+  ): void;
+  registerRoleUsersListDelegate?(
+    delegate: (roleId: number) => Promise<RoleAssignedUserSummary[]>,
+  ): void;
 }
 
 export const ROLES_PUBLIC_SERVICE = Symbol('ROLES_PUBLIC_SERVICE');

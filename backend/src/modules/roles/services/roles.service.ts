@@ -11,6 +11,7 @@ import {
   type IRolesPublicService,
   PERMISSION_STATUS,
   ROLE_STATUS,
+  type RoleAssignedUserSummary,
   type RoleSummary,
 } from '../contracts/index.js';
 import type { PermissionEntity } from '../entities/permission.entity.js';
@@ -19,15 +20,23 @@ import { RoleRepository } from '../repositories/role.repository.js';
 import { RolePermissionRepository } from '../repositories/role-permission.repository.js';
 import { RolesMapper } from '../mappers/roles.mapper.js';
 import type {
+  CloneRoleRequest,
   CreateRoleRequest,
   ListRolesQuery,
   SetRolePermissionsRequest,
   UpdateRoleRequest,
 } from '../requests/roles.requests.js';
-import type { PermissionCatalogItemResponse, RoleResponse } from '../responses/roles.response.js';
+import type {
+  PermissionCatalogItemResponse,
+  RoleAssignedUserResponse,
+  RoleResponse,
+} from '../responses/roles.response.js';
 
 @Injectable()
 export class RolesService implements IRolesPublicService {
+  private roleUserCountDelegate?: (roleIds: readonly number[]) => Promise<Map<number, number>>;
+  private roleUsersListDelegate?: (roleId: number) => Promise<RoleAssignedUserSummary[]>;
+
   constructor(
     private readonly roleRepository: RoleRepository,
     private readonly rolePermissionRepository: RolePermissionRepository,
@@ -40,13 +49,37 @@ export class RolesService implements IRolesPublicService {
     private readonly transactionManager: TransactionManager | null = null,
   ) {}
 
-  /** Lấy danh sách vai trò kèm danh sách quyền của từng vai trò */
+  /** Đăng ký hàm ủy quyền từ module Users để đếm số người dùng đang giữ từng vai trò */
+  public registerRoleUserCountDelegate(
+    delegate: (roleIds: readonly number[]) => Promise<Map<number, number>>,
+  ): void {
+    this.roleUserCountDelegate = delegate;
+  }
+
+  /** Đăng ký hàm ủy quyền từ module Users để lấy danh sách người dùng đang giữ một vai trò */
+  public registerRoleUsersListDelegate(
+    delegate: (roleId: number) => Promise<RoleAssignedUserSummary[]>,
+  ): void {
+    this.roleUsersListDelegate = delegate;
+  }
+
+  /** Lấy danh sách vai trò kèm danh sách quyền và số lượng người đang sử dụng của từng vai trò */
   public async list(query: ListRolesQuery = {}): Promise<RoleResponse[]> {
     const roles = await this.roleRepository.findFiltered(query);
     if (roles.length === 0) return [];
 
-    const permsMap = await this.loadPermissionsMap(roles.map((r) => Number(r.id)));
-    return roles.map((role) => this.mapper.toResponse(role, permsMap.get(Number(role.id)) ?? []));
+    const roleIds = roles.map((r) => Number(r.id));
+    const [permsMap, countsMap] = await Promise.all([
+      this.loadPermissionsMap(roleIds),
+      this.loadUserCountsMap(roleIds),
+    ]);
+    return roles.map((role) =>
+      this.mapper.toResponse(
+        role,
+        permsMap.get(Number(role.id)) ?? [],
+        countsMap.get(Number(role.id)) ?? 0,
+      ),
+    );
   }
 
   /** Lấy thông tin chi tiết một vai trò theo ID */
@@ -55,8 +88,24 @@ export class RolesService implements IRolesPublicService {
     if (!role) {
       throw new NotFoundAppException('roles.notFound', { id });
     }
-    const permsMap = await this.loadPermissionsMap([Number(role.id)]);
-    return this.mapper.toResponse(role, permsMap.get(Number(role.id)) ?? []);
+    const roleId = Number(role.id);
+    const [permsMap, countsMap] = await Promise.all([
+      this.loadPermissionsMap([roleId]),
+      this.loadUserCountsMap([roleId]),
+    ]);
+    return this.mapper.toResponse(role, permsMap.get(roleId) ?? [], countsMap.get(roleId) ?? 0);
+  }
+
+  /** Xem danh sách người dùng đang sử dụng vai trò (Mục 4.1 — kiểm tra trước khi thay đổi hoặc xóa) */
+  public async listAssignedUsers(roleId: number): Promise<RoleAssignedUserResponse[]> {
+    const role = await this.roleRepository.findById(roleId);
+    if (!role) {
+      throw new NotFoundAppException('roles.notFound', { id: roleId });
+    }
+    if (!this.roleUsersListDelegate) {
+      return [];
+    }
+    return this.roleUsersListDelegate(Number(role.id));
   }
 
   /** Lấy danh mục quyền hạn hệ thống từ bảng permissions */
@@ -104,7 +153,7 @@ export class RolesService implements IRolesPublicService {
         Number(saved.id),
         resolvedPerms.map((p) => Number(p.id)),
       );
-      return this.mapper.toResponse(saved, resolvedPerms);
+      return this.mapper.toResponse(saved, resolvedPerms, 0);
     };
 
     if (this.transactionManager) {
@@ -113,7 +162,57 @@ export class RolesService implements IRolesPublicService {
     return work();
   }
 
-  /** Cập nhật thông tin vai trò và danh sách quyền */
+  /** Sao chép vai trò: Tạo vai trò mới kế thừa toàn bộ quyền từ một vai trò hiện có (Mục 4.1) */
+  public async clone(sourceRoleId: number, dto: CloneRoleRequest): Promise<RoleResponse> {
+    const sourceRole = await this.roleRepository.findById(sourceRoleId);
+    if (!sourceRole) {
+      throw new NotFoundAppException('roles.notFound', { id: sourceRoleId });
+    }
+
+    const normalizedCode = dto.code.trim().toLowerCase();
+    const existing = await this.roleRepository.findByCode(normalizedCode);
+    if (existing) {
+      throw new ConflictAppException(
+        'roles.duplicateCode',
+        [{ code: normalizedCode }],
+        { code: normalizedCode },
+        HTTP_ERROR_CODE.DUPLICATE_RESOURCE,
+      );
+    }
+
+    const sourcePermsMap = await this.loadPermissionsMap([Number(sourceRole.id)]);
+    const sourcePerms = sourcePermsMap.get(Number(sourceRole.id)) ?? [];
+
+    const resolvedDescription =
+      dto.description !== undefined
+        ? dto.description
+        : sourceRole.description
+          ? `${sourceRole.description} (Cloned from ${sourceRole.code})`
+          : `Cloned from role ${sourceRole.code}`;
+
+    const work = async (): Promise<RoleResponse> => {
+      const saved = await this.roleRepository.saveEntity({
+        code: normalizedCode,
+        name: dto.name.trim(),
+        description: resolvedDescription,
+        isSystem: false,
+        status: dto.status ?? ROLE_STATUS.ACTIVE,
+      });
+
+      await this.rolePermissionRepository.replacePermissionsForRole(
+        Number(saved.id),
+        sourcePerms.map((p) => Number(p.id)),
+      );
+      return this.mapper.toResponse(saved, sourcePerms, 0);
+    };
+
+    if (this.transactionManager) {
+      return this.transactionManager.runInTransaction(work);
+    }
+    return work();
+  }
+
+  /** Cập nhật thông tin vai trò (tên, mô tả, trạng thái — giữ nguyên mã code) và danh sách quyền */
   public async update(id: number, dto: UpdateRoleRequest): Promise<RoleResponse> {
     const role = await this.roleRepository.findById(id);
     if (!role) {
@@ -123,6 +222,9 @@ export class RolesService implements IRolesPublicService {
     if (role.isSystem && dto.status === ROLE_STATUS.INACTIVE) {
       throw new ForbiddenAppException('roles.cannotDeactivateSystemRole', [{ code: role.code }]);
     }
+
+    const countsMap = await this.loadUserCountsMap([Number(role.id)]);
+    const userCount = countsMap.get(Number(role.id)) ?? 0;
 
     const work = async (): Promise<RoleResponse> => {
       if (dto.name !== undefined) role.name = dto.name.trim();
@@ -139,11 +241,11 @@ export class RolesService implements IRolesPublicService {
           Number(saved.id),
           resolvedPerms.map((p) => Number(p.id)),
         );
-        return this.mapper.toResponse(saved, resolvedPerms);
+        return this.mapper.toResponse(saved, resolvedPerms, userCount);
       }
 
       const permsMap = await this.loadPermissionsMap([Number(saved.id)]);
-      return this.mapper.toResponse(saved, permsMap.get(Number(saved.id)) ?? []);
+      return this.mapper.toResponse(saved, permsMap.get(Number(saved.id)) ?? [], userCount);
     };
 
     if (this.transactionManager) {
@@ -159,15 +261,18 @@ export class RolesService implements IRolesPublicService {
       throw new NotFoundAppException('roles.notFound', { id });
     }
 
-    const resolvedPerms = await this.resolveInputPermissions(dto.permissionIds, dto.permissions);
+    const [resolvedPerms, countsMap] = await Promise.all([
+      this.resolveInputPermissions(dto.permissionIds, dto.permissions),
+      this.loadUserCountsMap([Number(role.id)]),
+    ]);
     await this.rolePermissionRepository.replacePermissionsForRole(
       Number(role.id),
       resolvedPerms.map((p) => Number(p.id)),
     );
-    return this.mapper.toResponse(role, resolvedPerms);
+    return this.mapper.toResponse(role, resolvedPerms, countsMap.get(Number(role.id)) ?? 0);
   }
 
-  /** Xóa mềm vai trò (chặn xóa đối với vai trò hệ thống isSystem = true) */
+  /** Xóa mềm vai trò (chặn xóa đối với vai trò hệ thống isSystem = true hoặc vai trò đang có người dùng sử dụng) */
   public async remove(id: number): Promise<{ deleted: true; id: number }> {
     const role = await this.roleRepository.findById(id);
     if (!role) {
@@ -176,6 +281,18 @@ export class RolesService implements IRolesPublicService {
     if (role.isSystem) {
       throw new ForbiddenAppException('roles.cannotDeleteSystemRole', [{ code: role.code }]);
     }
+
+    const countsMap = await this.loadUserCountsMap([Number(role.id)]);
+    const assignedUserCount = countsMap.get(Number(role.id)) ?? 0;
+    if (assignedUserCount > 0) {
+      throw new ConflictAppException(
+        'roles.cannotDeleteAssignedRole',
+        [{ id: Number(role.id), code: role.code, userCount: assignedUserCount }],
+        { id: Number(role.id), code: role.code, userCount: assignedUserCount },
+        HTTP_ERROR_CODE.CONFLICT,
+      );
+    }
+
     await this.roleRepository.repository.softDelete(id);
     return { deleted: true, id };
   }
@@ -263,6 +380,14 @@ export class RolesService implements IRolesPublicService {
     }
 
     return [...byId.values()];
+  }
+
+  /** Tải bản đồ roleId -> số lượng người dùng đang giữ vai trò thông qua delegate */
+  private async loadUserCountsMap(roleIds: readonly number[]): Promise<Map<number, number>> {
+    if (roleIds.length === 0 || !this.roleUserCountDelegate) {
+      return new Map<number, number>();
+    }
+    return this.roleUserCountDelegate(roleIds);
   }
 
   /** Tải bản đồ roleId -> danh sách PermissionEntity từ bảng role_permissions join permissions */

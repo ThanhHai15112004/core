@@ -36,6 +36,7 @@ export interface RoleResponse {
   readonly statusName: RoleStatusName;
   readonly permissionIds: readonly number[];
   readonly permissions: readonly string[];
+  readonly userCount: number;
   readonly createdAt: string;
   readonly updatedAt: string;
 }
@@ -50,6 +51,29 @@ export const roleResponseSchema = z.object({
   statusName: z.enum(['ACTIVE', 'INACTIVE']),
   permissionIds: z.array(z.number().int().min(1)),
   permissions: z.array(z.string()),
+  userCount: z.number().int().min(0),
   createdAt: z.string(),
   updatedAt: z.string(),
+});
+
+export interface RoleAssignedUserResponse {
+  readonly id: number;
+  readonly username: string;
+  readonly email: string;
+  readonly fullName: string;
+  readonly status: number;
+  readonly statusName: string;
+  readonly primaryOrganizationUnitId: number | null;
+  readonly assignedAt: string;
+}
+
+export const roleAssignedUserResponseSchema = z.object({
+  id: z.number().int().min(1),
+  username: z.string(),
+  email: z.string(),
+  fullName: z.string(),
+  status: z.number().int(),
+  statusName: z.string(),
+  primaryOrganizationUnitId: z.number().int().nullable(),
+  assignedAt: z.string(),
 });

@@ -23,6 +23,17 @@ export class UserRoleRepository extends BaseTypeOrmRepository<UserRoleEntity> {
     );
   }
 
+  /** Tìm danh sách bản ghi gán vai trò thuộc một hoặc nhiều roleIds */
+  public async findByRoleIds(roleIds: readonly number[]): Promise<UserRoleEntity[]> {
+    if (roleIds.length === 0) return [];
+    return this.executeReadOnly(async (repo) =>
+      repo.find({
+        where: { roleId: In([...roleIds]) },
+        order: { id: 'ASC' },
+      }),
+    );
+  }
+
   /** Tìm danh sách userIds thuộc một hoặc nhiều roleIds */
   public async findUserIdsByRoleIds(roleIds: readonly number[]): Promise<number[]> {
     if (roleIds.length === 0) return [];

@@ -445,6 +445,14 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
         const set = new Set(userIds.map(Number));
         return userRoleStore.filter((ur) => set.has(ur.userId));
       },
+      findByRoleIds: async (roleIds: readonly number[]) => {
+        const set = new Set(roleIds.map(Number));
+        return userRoleStore.filter((ur) => set.has(ur.roleId));
+      },
+      findUserIdsByRoleIds: async (roleIds: readonly number[]) => {
+        const set = new Set(roleIds.map(Number));
+        return [...new Set(userRoleStore.filter((ur) => set.has(ur.roleId)).map((ur) => ur.userId))];
+      },
       replaceUserRoles: async (userId: number, roleIds: readonly number[], assignedBy?: number) => {
         for (let i = userRoleStore.length - 1; i >= 0; i--) {
           if (userRoleStore[i]?.userId === userId) userRoleStore.splice(i, 1);
@@ -1905,5 +1913,164 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
     expect(usageRes.body.data.lastUsedResult).toBe('CLIENT_REVOKED');
     expect(usageRes.body.data.logs.length).toBeGreaterThanOrEqual(5);
   });
+
+  it('supports Section 4.1 Role Management E2E: create, update name/desc, set permissions, clone role, list assigned users, lock system role & prevent deleting assigned role', async () => {
+    const adminHeaders = { authorization: `Bearer ${adminAccessToken}` };
+
+    // 1. Tạo mới vai trò tùy chỉnh (Student)
+    const createStudentRoleRes = await context.injectJson<{
+      id: number;
+      code: string;
+      name: string;
+      description: string | null;
+      isSystem: boolean;
+      permissions: string[];
+      userCount: number;
+    }>({
+      method: 'POST',
+      url: '/api/v1/roles',
+      headers: adminHeaders,
+      payload: {
+        code: 'student_role',
+        name: 'Student Role',
+        description: 'Vai trò học viên',
+        permissions: ['users.read'],
+      },
+    });
+    expect(createStudentRoleRes.status).toBe(HTTP_STATUS_CODE.CREATED);
+    const studentRoleId = createStudentRoleRes.body.data.id;
+    expect(createStudentRoleRes.body.data.code).toBe('student_role');
+    expect(createStudentRoleRes.body.data.isSystem).toBe(false);
+    expect(createStudentRoleRes.body.data.userCount).toBe(0);
+
+    // 2. Cập nhật tên và mô tả vai trò (PATCH /api/v1/roles/:id)
+    const updateRoleRes = await context.injectJson<{
+      id: number;
+      code: string;
+      name: string;
+      description: string | null;
+    }>({
+      method: 'PATCH',
+      url: `/api/v1/roles/${studentRoleId}`,
+      headers: adminHeaders,
+      payload: {
+        name: 'Student Role Updated',
+        description: 'Mô tả học viên đã cập nhật',
+      },
+    });
+    expect(updateRoleRes.status).toBe(HTTP_STATUS_CODE.OK);
+    expect(updateRoleRes.body.data.code).toBe('student_role');
+    expect(updateRoleRes.body.data.name).toBe('Student Role Updated');
+    expect(updateRoleRes.body.data.description).toBe('Mô tả học viên đã cập nhật');
+
+    // 3. Gán quyền cho vai trò (PUT /api/v1/roles/:id/permissions)
+    const setPermsRes = await context.injectJson<{
+      id: number;
+      permissions: string[];
+    }>({
+      method: 'PUT',
+      url: `/api/v1/roles/${studentRoleId}/permissions`,
+      headers: adminHeaders,
+      payload: {
+        permissions: ['users.read', 'organizations.read'],
+      },
+    });
+    expect(setPermsRes.status).toBe(HTTP_STATUS_CODE.OK);
+    expect(setPermsRes.body.data.permissions).toEqual(['users.read', 'organizations.read']);
+
+    // 4. Sao chép vai trò (POST /api/v1/roles/:id/clone)
+    const cloneRoleRes = await context.injectJson<{
+      id: number;
+      code: string;
+      name: string;
+      description: string | null;
+      isSystem: boolean;
+      permissions: string[];
+      userCount: number;
+    }>({
+      method: 'POST',
+      url: `/api/v1/roles/${studentRoleId}/clone`,
+      headers: adminHeaders,
+      payload: {
+        code: 'student_vip_role',
+        name: 'Student VIP Role',
+      },
+    });
+    expect(cloneRoleRes.status).toBe(HTTP_STATUS_CODE.CREATED);
+    const clonedRoleId = cloneRoleRes.body.data.id;
+    expect(clonedRoleId).not.toBe(studentRoleId);
+    expect(cloneRoleRes.body.data.code).toBe('student_vip_role');
+    expect(cloneRoleRes.body.data.isSystem).toBe(false);
+    expect(cloneRoleRes.body.data.permissions).toEqual(['users.read', 'organizations.read']);
+
+    // 5. Gán nhiều vai trò cho người dùng và kiểm tra danh sách người đang sử dụng vai trò (GET /api/v1/roles/:id/users)
+    const createUserRes = await context.injectJson<{ id: number; roles: Array<{ code: string }> }>({
+      method: 'POST',
+      url: '/api/v1/users',
+      headers: adminHeaders,
+      payload: {
+        email: 'student.clone.test@gmail.com',
+        username: 'student_clone_01',
+        firstName: 'Lan',
+        lastName: 'Nguyễn Thị',
+        password: 'Password@123',
+        roleIds: [studentRoleId, clonedRoleId],
+      },
+    });
+    expect(createUserRes.status).toBe(HTTP_STATUS_CODE.CREATED);
+    const createdUserId = createUserRes.body.data.id;
+    expect(createUserRes.body.data.roles.map((r) => r.code).sort()).toEqual([
+      'student_role',
+      'student_vip_role',
+    ]);
+
+    const roleUsersRes = await context.injectJson<
+      Array<{ id: number; username: string; email: string; fullName: string }>
+    >({
+      method: 'GET',
+      url: `/api/v1/roles/${clonedRoleId}/users`,
+      headers: adminHeaders,
+    });
+    expect(roleUsersRes.status).toBe(HTTP_STATUS_CODE.OK);
+    expect(roleUsersRes.body.data).toHaveLength(1);
+    expect(roleUsersRes.body.data[0]?.id).toBe(createdUserId);
+    expect(roleUsersRes.body.data[0]?.email).toBe('student.clone.test@gmail.com');
+
+    // 6. Chặn xóa vai trò khi đang có người dùng sử dụng (409 Conflict)
+    const deleteInUseRes = await context.injectJson({
+      method: 'DELETE',
+      url: `/api/v1/roles/${clonedRoleId}`,
+      headers: adminHeaders,
+    });
+    expect(deleteInUseRes.status).toBe(HTTP_STATUS_CODE.CONFLICT);
+
+    // Gỡ vai trò clonedRole khỏi người dùng -> xóa thành công
+    const reassignRes = await context.injectJson({
+      method: 'PUT',
+      url: `/api/v1/users/${createdUserId}/roles`,
+      headers: adminHeaders,
+      payload: {
+        roleIds: [studentRoleId],
+      },
+    });
+    expect(reassignRes.status).toBe(HTTP_STATUS_CODE.OK);
+
+    const deleteFreeRoleRes = await context.injectJson<{ deleted: boolean; id: number }>({
+      method: 'DELETE',
+      url: `/api/v1/roles/${clonedRoleId}`,
+      headers: adminHeaders,
+    });
+    expect(deleteFreeRoleRes.status).toBe(HTTP_STATUS_CODE.OK);
+    expect(deleteFreeRoleRes.body.data.deleted).toBe(true);
+
+    // 7. Khóa vai trò hệ thống (adminRoleId có isSystem = true): chặn xóa (403 Forbidden)
+    const deleteSystemRoleRes = await context.injectJson({
+      method: 'DELETE',
+      url: `/api/v1/roles/${adminRoleId}`,
+      headers: adminHeaders,
+    });
+    expect(deleteSystemRoleRes.status).toBe(HTTP_STATUS_CODE.FORBIDDEN);
+  });
 });
+
 

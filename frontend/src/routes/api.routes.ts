@@ -122,6 +122,11 @@ export const API_ROUTES = {
     LIST: '/roles',
     PERMISSIONS: '/roles/permissions',
     DETAIL: (id: string | number) => `/roles/${id}`,
+    UPDATE: (id: string | number) => `/roles/${id}`,
+    DELETE: (id: string | number) => `/roles/${id}`,
+    SET_PERMISSIONS: (id: string | number) => `/roles/${id}/permissions`,
+    CLONE: (id: string | number) => `/roles/${id}/clone`,
+    USERS: (id: string | number) => `/roles/${id}/users`,
   },
   ORGANIZATIONS: {
     LIST: '/organizations',

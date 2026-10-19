@@ -13,10 +13,12 @@ import {
 import { ROLES_ROUTES } from '../routes/roles.routes.js';
 import { RolesService } from '../services/roles.service.js';
 import {
+  type CloneRoleRequest,
   type CreateRoleRequest,
   type ListRolesQuery,
   type SetRolePermissionsRequest,
   type UpdateRoleRequest,
+  cloneRoleSchema,
   createRoleSchema,
   listRolesQuerySchema,
   setRolePermissionsSchema,
@@ -24,17 +26,19 @@ import {
 } from '../requests/roles.requests.js';
 import {
   type PermissionCatalogItemResponse,
+  type RoleAssignedUserResponse,
   type RoleResponse,
   permissionCatalogItemResponseSchema,
+  roleAssignedUserResponseSchema,
   roleResponseSchema,
 } from '../responses/roles.response.js';
 
-@ApiGroup('Roles & Permissions', 'Quản lý vai trò và phân quyền RBAC')
+@ApiGroup('Roles & Permissions', 'Quản lý vai trò và phân quyền RBAC (Mục 4.1)')
 @Controller(ROLES_ROUTES.PREFIX)
 export class RolesController {
   constructor(private readonly rolesService: RolesService) {}
 
-  /** Danh sách vai trò kèm danh sách quyền */
+  /** Danh sách vai trò kèm danh sách quyền và số lượng người đang sử dụng */
   @Get()
   @RequirePermissions('roles.read')
   @ApiDoc({
@@ -56,6 +60,19 @@ export class RolesController {
   })
   public async permissionsCatalog(): Promise<PermissionCatalogItemResponse[]> {
     return this.rolesService.listPermissionsCatalog();
+  }
+
+  /** Xem danh sách người dùng đang sử dụng vai trò (Mục 4.1 — kiểm tra trước khi thay đổi hoặc xóa) */
+  @Get(ROLES_ROUTES.ROLE_USERS)
+  @RequirePermissions('roles.read')
+  @ApiDoc({
+    summary: 'Xem danh sách người dùng đang được gán vai trò theo ID',
+    response: z.array(roleAssignedUserResponseSchema),
+  })
+  public async listAssignedUsers(
+    @ValidatedParams(positiveIntParamSchema, 'id') id: number,
+  ): Promise<RoleAssignedUserResponse[]> {
+    return this.rolesService.listAssignedUsers(id);
   }
 
   /** Xem chi tiết một vai trò theo ID */
@@ -85,11 +102,26 @@ export class RolesController {
     return this.rolesService.create(body);
   }
 
-  /** Cập nhật thông tin vai trò */
+  /** Sao chép vai trò từ vai trò hiện có (Mục 4.1) */
+  @Post(ROLES_ROUTES.CLONE)
+  @RequirePermissions('roles.manage')
+  @ApiDoc({
+    summary: 'Sao chép vai trò hiện có sang vai trò mới kèm toàn bộ quyền hạn',
+    status: HTTP_STATUS_CODE.CREATED,
+    response: roleResponseSchema,
+  })
+  public async clone(
+    @ValidatedParams(positiveIntParamSchema, 'id') id: number,
+    @ValidatedBody(cloneRoleSchema) body: CloneRoleRequest,
+  ): Promise<RoleResponse> {
+    return this.rolesService.clone(id, body);
+  }
+
+  /** Cập nhật thông tin vai trò (tên, mô tả, trạng thái — không cho phép đổi mã code) */
   @Patch(ROLES_ROUTES.BY_ID)
   @RequirePermissions('roles.manage')
   @ApiDoc({
-    summary: 'Cập nhật vai trò và danh sách quyền',
+    summary: 'Cập nhật tên, mô tả, trạng thái và danh sách quyền của vai trò',
     response: roleResponseSchema,
   })
   public async update(
@@ -113,12 +145,12 @@ export class RolesController {
     return this.rolesService.setPermissions(id, body);
   }
 
-  /** Xóa mềm vai trò */
+  /** Xóa mềm vai trò (chặn xóa vai trò hệ thống hoặc vai trò đang có người dùng sử dụng) */
   @Delete(ROLES_ROUTES.BY_ID)
   @HttpCode(HttpStatus.OK)
   @RequirePermissions('roles.manage')
   @ApiDoc({
-    summary: 'Xóa mềm vai trò tùy chỉnh',
+    summary: 'Xóa mềm vai trò tùy chỉnh (chặn nếu là vai trò hệ thống hoặc đang có người sử dụng)',
     response: z.object({ deleted: z.literal(true), id: z.number().int().min(1) }),
   })
   public async remove(

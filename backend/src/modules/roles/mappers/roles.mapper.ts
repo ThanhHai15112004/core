@@ -11,6 +11,7 @@ export class RolesMapper implements EntityMapperContract<RoleEntity, RoleRespons
   public toResponse(
     entity: RoleEntity,
     permissions: readonly PermissionEntity[] = [],
+    userCount = 0,
   ): RoleResponse {
     const statusCode = parseRoleStatus(entity.status);
     return {
@@ -23,6 +24,7 @@ export class RolesMapper implements EntityMapperContract<RoleEntity, RoleRespons
       statusName: getRoleStatusName(statusCode),
       permissionIds: permissions.map((p) => Number(p.id)),
       permissions: permissions.map((p) => p.code),
+      userCount: Math.max(0, Math.trunc(userCount)),
       createdAt: entity.createdAt.toISOString(),
       updatedAt: entity.updatedAt.toISOString(),
     };
