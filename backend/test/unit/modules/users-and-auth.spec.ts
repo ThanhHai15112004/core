@@ -1,11 +1,23 @@
 import { describe, it, expect, beforeEach } from '@jest/globals';
 import { CoreConfigService } from '@packages/config/index.js';
+import { CoreI18nService } from '@packages/i18n/index.js';
+import { RequestContextService } from '@packages/logging/index.js';
 import {
+  AUDIT_ACTOR_TYPE,
+  AuditLogService,
+  DATA_SCOPE,
+  DataScopeService,
   FieldEncryptionService,
+  inferDefaultDataScopeForRoleCode,
   PasswordHasherService,
+  sanitizeAuditSnapshot,
   TokenService,
   TotpService,
 } from '@packages/security/index.js';
+import rolesVi from '@modules/roles/locales/vi/roles.json' with { type: 'json' };
+import rolesEn from '@modules/roles/locales/en/roles.json' with { type: 'json' };
+import usersVi from '@modules/users/locales/vi/users.json' with { type: 'json' };
+import usersEn from '@modules/users/locales/en/users.json' with { type: 'json' };
 import { applyTestEnv } from '../../fixtures/env.fixture.js';
 import {
   ORGANIZATION_UNIT_STATUS,
@@ -232,14 +244,21 @@ function createIamInMemoryHarness() {
     findFiltered: async () => [...roleStore.values()],
     saveEntity: async (partial: Partial<RoleEntity>) => {
       const now = new Date();
+      const existing = partial.id ? roleStore.get(Number(partial.id)) : undefined;
+      const code = partial.code ?? existing?.code ?? '';
       const entity: RoleEntity = {
-        id: partial.id ?? ++roleSeq,
-        code: partial.code!,
-        name: partial.name!,
-        description: partial.description ?? null,
-        isSystem: partial.isSystem ?? false,
-        status: partial.status ?? ROLE_STATUS.ACTIVE,
-        createdAt: partial.createdAt ?? now,
+        id: partial.id ?? existing?.id ?? ++roleSeq,
+        code,
+        name: partial.name ?? existing?.name ?? code,
+        description:
+          partial.description !== undefined
+            ? partial.description
+            : (existing?.description ?? null),
+        isSystem: partial.isSystem ?? existing?.isSystem ?? false,
+        dataScope:
+          partial.dataScope ?? existing?.dataScope ?? inferDefaultDataScopeForRoleCode(code),
+        status: partial.status ?? existing?.status ?? ROLE_STATUS.ACTIVE,
+        createdAt: partial.createdAt ?? existing?.createdAt ?? now,
         updatedAt: now,
         deletedAt: null,
       } as RoleEntity;
@@ -358,6 +377,35 @@ function createIamInMemoryHarness() {
         ) ?? null
       );
     },
+    findSubordinateUserIds: async (managerUserId: number, maxDepth = 10) => {
+      const rootId = Number(managerUserId);
+      if (!Number.isFinite(rootId) || rootId <= 0) return [];
+      const visited = new Set<number>([rootId]);
+      const subordinates: number[] = [];
+      let frontier: number[] = [rootId];
+      for (let depth = 0; depth < maxDepth && frontier.length > 0; depth++) {
+        const frontierSet = new Set(frontier);
+        const directReports = [...userStore.values()]
+          .filter(
+            (u) =>
+              !u.deletedAt &&
+              !u.archivedAt &&
+              u.managerId !== null &&
+              frontierSet.has(Number(u.managerId)),
+          )
+          .map((u) => Number(u.id));
+        const nextFrontier: number[] = [];
+        for (const uid of directReports) {
+          if (!visited.has(uid)) {
+            visited.add(uid);
+            subordinates.push(uid);
+            nextFrontier.push(uid);
+          }
+        }
+        frontier = nextFrontier;
+      }
+      return subordinates;
+    },
     saveEntity: async (partial: Partial<UserEntity>) => {
       const now = new Date();
       const existing = partial.id ? userStore.get(Number(partial.id)) : undefined;
@@ -391,6 +439,8 @@ function createIamInMemoryHarness() {
           partial.primaryOrganizationUnitId !== undefined
             ? partial.primaryOrganizationUnitId
             : (existing?.primaryOrganizationUnitId ?? null),
+        managerId:
+          partial.managerId !== undefined ? partial.managerId : (existing?.managerId ?? null),
         passwordChangedAt:
           partial.passwordChangedAt !== undefined
             ? partial.passwordChangedAt
@@ -462,6 +512,24 @@ function createIamInMemoryHarness() {
           (u) =>
             u.primaryOrganizationUnitId === filter.organizationUnitId || userIdsWithOrg.has(u.id),
         );
+      }
+      if (filter.scopeFilter && !filter.scopeFilter.isUnrestricted) {
+        const sf = filter.scopeFilter;
+        const allowedUsers = new Set(sf.allowedUserIds.map(Number));
+        const allowedOrgs = new Set(sf.allowedOrganizationUnitIds.map(Number));
+        if (sf.effectiveScopeName === 'ORG_UNIT') {
+          list = list.filter((u) => {
+            if (allowedUsers.has(u.id)) return true;
+            if (u.primaryOrganizationUnitId && allowedOrgs.has(Number(u.primaryOrganizationUnitId))) {
+              return true;
+            }
+            return userOrgStore.some(
+              (uo) => uo.userId === u.id && allowedOrgs.has(Number(uo.organizationUnitId)),
+            );
+          });
+        } else {
+          list = list.filter((u) => allowedUsers.has(u.id));
+        }
       }
       const page = filter.page ?? 1;
       const limit = filter.limit ?? 20;
@@ -975,8 +1043,24 @@ function createIamInMemoryHarness() {
       loginHistoryStore.filter((h) => Number(h.userId) === Number(userId)).slice(0, limit),
   } as unknown as AuthLoginHistoryRepository;
 
-  const organizationsService = new OrganizationsService(orgRepo, new OrganizationsMapper());
-  const rolesService = new RolesService(roleRepo, rolePermRepo, new RolesMapper(), permRepo);
+  const requestContextService = new RequestContextService();
+  const auditLogService = new AuditLogService();
+  const dataScopeService = new DataScopeService();
+  const organizationsService = new OrganizationsService(
+    orgRepo,
+    new OrganizationsMapper(),
+    dataScopeService,
+    auditLogService,
+  );
+  const rolesService = new RolesService(
+    roleRepo,
+    rolePermRepo,
+    new RolesMapper(),
+    permRepo,
+    null,
+    dataScopeService,
+    auditLogService,
+  );
   const usersService = new UsersService(
     userRepo,
     userRoleRepo,
@@ -990,6 +1074,8 @@ function createIamInMemoryHarness() {
     null,
     null,
     userProfileRepo,
+    dataScopeService,
+    auditLogService,
   );
   const importService = new UserImportService(
     usersService,
@@ -1043,6 +1129,7 @@ function createIamInMemoryHarness() {
     tokenService,
     serviceAccountRepo,
     apiClientRepo,
+    auditLogService,
   );
   const identityResolver = new UserIdentityResolverService(
     sessionService,
@@ -1080,6 +1167,9 @@ function createIamInMemoryHarness() {
     securitySettingsService,
     totpService,
     tokenService,
+    requestContextService,
+    auditLogService,
+    dataScopeService,
     organizationsService,
     rolesService,
     usersService,
@@ -2536,5 +2626,498 @@ describe('Unit: Quản lý Người dùng (3.1) & Xác thực / Phiên / MFA (3)
       instructor: false,
       legacy_auditor: true,
     });
+  });
+
+  it('validates Section 4.3 Data Scope (Phạm vi dữ liệu) & Backend i18n (vi/en): SELF, ORG_UNIT, SUBORDINATES, ALL, list & export scoping, anti-IDOR detail check (403), and custom module scope rules', async () => {
+    // 0. Kiểm tra Backend i18n (vi & en) cho Core + các module IAM
+    const i18n = new CoreI18nService();
+    i18n.registerNamespace('roles', { vi: rolesVi, en: rolesEn });
+    i18n.registerNamespace('users', { vi: usersVi, en: usersEn });
+
+    expect(i18n.t('security.dataScopeForbidden', undefined, 'vi')).toContain('phạm vi dữ liệu');
+    expect(i18n.t('security.dataScopeForbidden', undefined, 'en')).toContain('Data Scope');
+    expect(i18n.t('roles.dataScopeAllNotAllowedForRole', undefined, 'vi')).toContain(
+      'toàn hệ thống (ALL)',
+    );
+    expect(i18n.t('roles.dataScopeAllNotAllowedForRole', undefined, 'en')).toContain(
+      'System-wide',
+    );
+    expect(i18n.t('users.circularManagerHierarchy', undefined, 'vi')).toContain('vòng lặp');
+    expect(i18n.t('users.circularManagerHierarchy', undefined, 'en')).toContain('Circular');
+
+    // 1. Tạo cây đơn vị: HQ -> Branch HN -> Dept Sales HN; và Branch HCM độc lập
+    const hq = await h.organizationsService.create({
+      code: 'HQ',
+      name: 'Trụ sở chính',
+      type: ORGANIZATION_UNIT_TYPE.HEADQUARTERS,
+    });
+    const branchHn = await h.organizationsService.create({
+      code: 'BR_HN',
+      name: 'Chi nhánh Hà Nội',
+      type: ORGANIZATION_UNIT_TYPE.BRANCH,
+      parentId: hq.id,
+    });
+    const deptSalesHn = await h.organizationsService.create({
+      code: 'DEPT_SALES_HN',
+      name: 'Phòng Kinh doanh HN',
+      type: ORGANIZATION_UNIT_TYPE.DEPARTMENT,
+      parentId: branchHn.id,
+    });
+    const branchHcm = await h.organizationsService.create({
+      code: 'BR_HCM',
+      name: 'Chi nhánh TP.HCM',
+      type: ORGANIZATION_UNIT_TYPE.BRANCH,
+      parentId: hq.id,
+    });
+
+    // Kiểm tra resolveDescendantUnitIds trên cây đơn vị
+    const hnTreeIds = await h.organizationsService.resolveDescendantUnitIds([branchHn.id]);
+    expect(hnTreeIds).toEqual(expect.arrayContaining([branchHn.id, deptSalesHn.id]));
+    expect(hnTreeIds).not.toContain(branchHcm.id);
+
+    // 2. Tạo 4 vai trò đại diện 4 phạm vi dữ liệu: ALL (1), ORG_UNIT (2), SUBORDINATES (3), SELF (4)
+    expect(inferDefaultDataScopeForRoleCode('super_admin')).toBe(DATA_SCOPE.ALL);
+    expect(inferDefaultDataScopeForRoleCode('branch_director')).toBe(DATA_SCOPE.ORG_UNIT);
+    expect(inferDefaultDataScopeForRoleCode('team_leader')).toBe(DATA_SCOPE.SUBORDINATES);
+    expect(inferDefaultDataScopeForRoleCode('regular_member')).toBe(DATA_SCOPE.SELF);
+
+    // Chặn vai trò thường không có quyền toàn hệ thống tự xin DATA_SCOPE.ALL
+    await expect(
+      h.rolesService.create({
+        code: 'normal_staff_trying_all',
+        name: 'Normal Staff Trying ALL',
+        dataScope: DATA_SCOPE.ALL,
+        permissions: ['users.read'],
+      }),
+    ).rejects.toThrow();
+
+    const roleAdminAll = await h.rolesService.create({
+      code: 'super_admin',
+      name: 'Super Admin',
+      dataScope: DATA_SCOPE.ALL,
+      permissions: ['system.full_access', 'users.read'],
+    });
+    const roleBranchMgr = await h.rolesService.create({
+      code: 'branch_director',
+      name: 'Giám đốc Chi nhánh',
+      dataScope: DATA_SCOPE.ORG_UNIT,
+      permissions: ['users.read'],
+    });
+    const roleTeamLead = await h.rolesService.create({
+      code: 'team_leader',
+      name: 'Trưởng nhóm',
+      dataScope: DATA_SCOPE.SUBORDINATES,
+      permissions: ['users.read'],
+    });
+    const roleSelfMember = await h.rolesService.create({
+      code: 'member',
+      name: 'Nhân viên',
+      dataScope: DATA_SCOPE.SELF,
+      permissions: ['users.read'],
+    });
+
+    // 3. Tạo người dùng theo cây đơn vị và cây quản lý (managerId):
+    // adminAll (HQ) -> branchMgrHn (BR_HN) -> teamLeadHn (DEPT_SALES_HN) -> staffHn1 (DEPT_SALES_HN)
+    // outsiderHcm (BR_HCM)
+    const adminAll = await h.usersService.create({
+      email: 'admin.all@example.com',
+      firstName: 'Admin',
+      lastName: 'All',
+      password: 'Password@123',
+      status: USER_STATUS.ACTIVE,
+      roleIds: [roleAdminAll.id],
+      organizationUnits: [{ organizationUnitId: hq.id, isPrimary: true }],
+    });
+    const branchMgrHn = await h.usersService.create({
+      email: 'mgr.hn@example.com',
+      firstName: 'Manager',
+      lastName: 'Hanoi',
+      password: 'Password@123',
+      status: USER_STATUS.ACTIVE,
+      managerId: adminAll.id,
+      roleIds: [roleBranchMgr.id],
+      organizationUnits: [{ organizationUnitId: branchHn.id, isPrimary: true }],
+    });
+    const teamLeadHn = await h.usersService.create({
+      email: 'lead.hn@example.com',
+      firstName: 'Lead',
+      lastName: 'Hanoi',
+      password: 'Password@123',
+      status: USER_STATUS.ACTIVE,
+      managerId: branchMgrHn.id,
+      roleIds: [roleTeamLead.id],
+      organizationUnits: [{ organizationUnitId: deptSalesHn.id, isPrimary: true }],
+    });
+    const staffHn1 = await h.usersService.create({
+      email: 'staff1.hn@example.com',
+      firstName: 'Staff 1',
+      lastName: 'Hanoi',
+      password: 'Password@123',
+      status: USER_STATUS.ACTIVE,
+      managerId: teamLeadHn.id,
+      roleIds: [roleSelfMember.id],
+      organizationUnits: [{ organizationUnitId: deptSalesHn.id, isPrimary: true }],
+    });
+    const outsiderHcm = await h.usersService.create({
+      email: 'outsider.hcm@example.com',
+      firstName: 'Outsider',
+      lastName: 'HCM',
+      password: 'Password@123',
+      status: USER_STATUS.ACTIVE,
+      managerId: adminAll.id,
+      roleIds: [roleSelfMember.id],
+      organizationUnits: [{ organizationUnitId: branchHcm.id, isPrimary: true }],
+    });
+
+    // Chặn tự gán chính mình làm quản lý hoặc tạo vòng lặp cây quản lý (Circular manager hierarchy)
+    await expect(
+      h.usersService.update(teamLeadHn.id, { managerId: teamLeadHn.id }),
+    ).rejects.toThrow();
+    await expect(
+      h.usersService.update(branchMgrHn.id, { managerId: staffHn1.id }),
+    ).rejects.toThrow();
+
+    // 4. Tạo Principal (UserIdentity) cho từng người dùng để kiểm tra Data Scope thực thi ở Backend
+    const makePrincipal = (
+      u: Awaited<ReturnType<typeof h.usersService.getById>>,
+      effectiveDataScope: 1 | 2 | 3 | 4,
+    ) => ({
+      id: u.id,
+      sessionId: 1,
+      email: u.email,
+      roles: u.roles.map((r) => r.code),
+      permissions: ['users.read'],
+      organizationUnitIds: u.organizationUnits.map((o) => o.organizationUnitId),
+      primaryOrganizationUnitId: u.primaryOrganizationUnitId,
+      dataScope: effectiveDataScope,
+      dataScopes: [effectiveDataScope],
+    });
+
+    const principalSelf = makePrincipal(staffHn1, DATA_SCOPE.SELF);
+    const principalSubordinates = makePrincipal(teamLeadHn, DATA_SCOPE.SUBORDINATES);
+    const principalOrgUnit = makePrincipal(branchMgrHn, DATA_SCOPE.ORG_UNIT);
+    const principalAll = makePrincipal(adminAll, DATA_SCOPE.ALL);
+
+    const baseQuery = {
+      page: 1,
+      limit: 20,
+      sortBy: 'id' as const,
+      sortOrder: 'ASC' as const,
+    };
+
+    // 5. Áp dụng phạm vi vào danh sách (listPaginated) và báo cáo (exportUsersCsv)
+    // 5a. SELF (4): staffHn1 chỉ thấy chính mình
+    const listSelf = await h.usersService.listPaginated(baseQuery, principalSelf);
+    expect(listSelf.data.map((u) => u.id)).toEqual([staffHn1.id]);
+    const csvSelf = await h.exportService.exportUsersCsv(baseQuery, principalSelf);
+    expect(csvSelf.totalExported).toBe(1);
+    expect(csvSelf.csvContent).toContain('staff1.hn@example.com');
+    expect(csvSelf.csvContent).not.toContain('lead.hn@example.com');
+    expect(csvSelf.csvContent).not.toContain('outsider.hcm@example.com');
+
+    // 5b. SUBORDINATES (3): teamLeadHn thấy chính mình + cấp dưới trực tiếp/gián tiếp (staffHn1)
+    const listSub = await h.usersService.listPaginated(baseQuery, principalSubordinates);
+    expect(listSub.data.map((u) => u.id).sort()).toEqual([teamLeadHn.id, staffHn1.id].sort());
+    expect(listSub.data.map((u) => u.id)).not.toContain(branchMgrHn.id);
+    expect(listSub.data.map((u) => u.id)).not.toContain(outsiderHcm.id);
+
+    // 5c. ORG_UNIT (2): branchMgrHn thuộc BR_HN -> thấy nhân sự thuộc BR_HN và đơn vị con DEPT_SALES_HN, không thấy BR_HCM
+    const listOrg = await h.usersService.listPaginated(baseQuery, principalOrgUnit);
+    expect(listOrg.data.map((u) => u.id).sort()).toEqual(
+      [branchMgrHn.id, teamLeadHn.id, staffHn1.id].sort(),
+    );
+    expect(listOrg.data.map((u) => u.id)).not.toContain(outsiderHcm.id);
+    const csvOrg = await h.exportService.exportUsersCsv(baseQuery, principalOrgUnit);
+    expect(csvOrg.totalExported).toBe(3);
+    expect(csvOrg.csvContent).toContain('mgr.hn@example.com');
+    expect(csvOrg.csvContent).toContain('staff1.hn@example.com');
+    expect(csvOrg.csvContent).not.toContain('outsider.hcm@example.com');
+
+    // 5d. ALL (1): adminAll thấy toàn bộ 5 người dùng trên hệ thống
+    const listAll = await h.usersService.listPaginated(baseQuery, principalAll);
+    expect(listAll.data).toHaveLength(5);
+
+    // 6. Kiểm tra phạm vi trước khi xem chi tiết (Anti-IDOR — ngăn truy cập bằng cách đổi ID)
+    // staffHn1 (SELF) xem chính mình -> OK, nhưng đổi sang ID của teamLeadHn hoặc outsiderHcm -> bị chặn 403
+    const selfDetail = await h.usersService.getById(staffHn1.id, false, principalSelf);
+    expect(selfDetail.id).toBe(staffHn1.id);
+    await expect(h.usersService.getById(teamLeadHn.id, false, principalSelf)).rejects.toThrow();
+    await expect(h.usersService.getStatusHistory(outsiderHcm.id, principalSelf)).rejects.toThrow();
+
+    // branchMgrHn (ORG_UNIT) xem nhân sự trong phòng con DEPT_SALES_HN -> OK, nhưng xem outsiderHcm -> 403
+    const subUnitDetail = await h.usersService.getById(staffHn1.id, false, principalOrgUnit);
+    expect(subUnitDetail.id).toBe(staffHn1.id);
+    await expect(h.usersService.getById(outsiderHcm.id, false, principalOrgUnit)).rejects.toThrow();
+
+    // 7. Cho phép module nghiệp vụ bổ sung rule phạm vi riêng (registerResourceRule) mà không sửa trực tiếp Core
+    h.dataScopeService.registerResourceRule({
+      code: 'courses.co_instructor',
+      name: 'Co-Instructor Course Access',
+      module: 'courses',
+      resource: 'courses',
+      description:
+        'Cho phép giảng viên đồng phụ trách (coInstructorIds) xem khóa học ngoài phạm vi mặc định',
+      evaluate: ({ actor, target }) => {
+        if (!target) {
+          return {
+            filterOverride: {
+              customAttributes: { includeCoInstructorCourses: true },
+            },
+          };
+        }
+        const coInstructors = (target.attributes?.['coInstructorIds'] as number[]) ?? [];
+        if (coInstructors.includes(actor.id)) {
+          return { allow: true };
+        }
+        return undefined;
+      },
+    });
+
+    const registeredRules = h.dataScopeService.listRegisteredRules('courses');
+    expect(
+      registeredRules.some(
+        (r) => r.module === 'courses' && r.resource === 'courses' && r.code === 'courses.co_instructor',
+      ),
+    ).toBe(true);
+
+    const courseFilter = await h.dataScopeService.resolveScopeFilter(principalSelf, 'courses');
+    expect(courseFilter.customAttributes?.includeCoInstructorCourses).toBe(true);
+    expect(courseFilter.appliedRuleCodes).toContain('courses.co_instructor');
+
+    // Bản ghi khóa học thuộc người khác (ownerId = 999), nhưng staffHn1 nằm trong coInstructorIds -> được phép truy cập!
+    await expect(
+      h.dataScopeService.assertCanAccessRecord(principalSelf, 'courses', {
+        id: 501,
+        ownerId: 999,
+        primaryOrganizationUnitId: branchHcm.id,
+        attributes: { coInstructorIds: [staffHn1.id] },
+      }),
+    ).resolves.toBeDefined();
+
+    // Nếu không nằm trong coInstructorIds -> bị chặn 403 Forbidden
+    await expect(
+      h.dataScopeService.assertCanAccessRecord(principalSelf, 'courses', {
+        id: 502,
+        ownerId: 999,
+        primaryOrganizationUnitId: branchHcm.id,
+        attributes: { coInstructorIds: [teamLeadHn.id] },
+      }),
+    ).rejects.toThrow();
+  });
+
+  it('validates Section 4.4 Audit Log: actor (User ID & Service Account), timestamp & IP, module & feature, before/after snapshot with sensitive redaction, reason, Request ID & Correlation ID, filtered query API, and append-only immutability (403 Forbidden)', async () => {
+    // 0. Kiểm tra cơ chế tự động che (redact) dữ liệu nhạy cảm trong beforeData / afterData (Mục 4.4.4)
+    const sanitized = sanitizeAuditSnapshot({
+      id: 99,
+      username: 'auditor01',
+      password: 'PlainPassword@123',
+      passwordHash: 'scrypt$secret',
+      clientSecret: 'cs_super_secret',
+      nested: {
+        totpSecret: 'BASE32SECRET',
+        normalField: 'visible-value',
+      },
+    });
+    expect(sanitized).toEqual({
+      id: 99,
+      username: 'auditor01',
+      password: '[REDACTED]',
+      passwordHash: '[REDACTED]',
+      clientSecret: '[REDACTED]',
+      nested: {
+        totpSecret: '[REDACTED]',
+        normalField: 'visible-value',
+      },
+    });
+
+    // 1. Giả lập RequestContext (AsyncLocalStorage) có đầy đủ Request ID, Correlation ID, IP, User-Agent và Actor User (Mục 4.4.1, 4.4.2, 4.4.6)
+    await h.requestContextService.run(
+      {
+        correlationId: 'corr-audit-44-001',
+        requestId: 'req-audit-44-001',
+        userId: '1',
+        ipAddress: '10.20.30.40',
+        userAgent: 'Jest-Audit-Agent/1.0',
+        actor: {
+          id: 1,
+          username: 'superadmin',
+          email: 'superadmin@gmail.com',
+          roles: ['super_admin'],
+          permissions: ['*'],
+        },
+      },
+      async () => {
+        // 1a. Thao tác tạo mới & cập nhật Role (module: 'roles', feature: 'role-management')
+        const role = await h.rolesService.create({
+          code: 'auditor_lead',
+          name: 'Auditor Lead',
+          description: 'Trưởng nhóm kiểm toán',
+          dataScope: DATA_SCOPE.ORG_UNIT,
+          permissions: ['users.read', 'roles.read'],
+        });
+        await h.rolesService.update(role.id, {
+          name: 'Senior Auditor Lead',
+          dataScope: DATA_SCOPE.SUBORDINATES,
+        });
+
+        // 1b. Thao tác tạo User, khóa User kèm lý do và mở khóa User (module: 'users', feature: 'user-status' — Mục 4.4.4 & 4.4.5)
+        const targetUser = await h.usersService.create(
+          {
+            email: 'target.audit@example.com',
+            username: 'target_audit',
+            firstName: 'An',
+            lastName: 'Nguyễn Văn',
+            password: 'Password@123',
+            status: USER_STATUS.ACTIVE,
+            roleIds: [role.id],
+            organizationUnits: [],
+          },
+          1,
+        );
+
+        await h.usersService.lockUser(
+          targetUser.id,
+          {
+            reason: 'Phát hiện đăng nhập bất thường từ IP lạ',
+          },
+          1,
+        );
+
+        await h.usersService.unlockUser(targetUser.id, 1);
+      },
+    );
+
+    // 2. Thao tác bởi Service Account / API Client (Mục 4.4.1: actorType = SERVICE_ACCOUNT = 2)
+    const sa = await h.serviceAccountService.createServiceAccount(
+      {
+        code: 'SA_AUDIT_SYNC',
+        name: 'Audit Sync Worker',
+        scopes: ['users.read'],
+      },
+      1,
+    );
+    const apiClient = await h.serviceAccountService.createApiClient(
+      {
+        serviceAccountId: sa.id,
+        name: 'Audit Sync Client',
+        scopes: ['users.read'],
+        allowedIps: ['172.16.99.10'],
+      },
+      1,
+    );
+
+    await h.requestContextService.run(
+      {
+        correlationId: 'corr-sa-44-002',
+        requestId: 'req-sa-44-002',
+        ipAddress: '172.16.99.10',
+        userAgent: 'SyncWorker/2.0',
+      },
+      async () => {
+        await h.serviceAccountService.issueClientToken(
+          {
+            clientId: apiClient.clientId,
+            clientSecret: apiClient.clientSecret,
+          },
+          { ipAddress: '172.16.99.10' },
+        );
+      },
+    );
+
+    // 3. Tra cứu Audit Log qua API RolesService.listAuditLogs với các bộ lọc (Mục 4.4.7)
+    // 3a. Lọc theo module = 'roles' và action = 'ROLE_UPDATED'
+    const roleUpdateLogs = await h.rolesService.listAuditLogs({
+      module: 'roles',
+      action: 'ROLE_UPDATED',
+      page: 1,
+      limit: 20,
+    });
+    expect(roleUpdateLogs.data).toHaveLength(1);
+    const roleLog = roleUpdateLogs.data[0]!;
+    expect(roleLog.actorType).toBe(AUDIT_ACTOR_TYPE.USER);
+    expect(roleLog.actorTypeName).toBe('USER');
+    expect(roleLog.actorUserId).toBe(1);
+    expect(roleLog.actorIdentifier).toBe('superadmin@gmail.com');
+    expect(roleLog.ipAddress).toBe('10.20.30.40');
+    expect(roleLog.requestId).toBe('req-audit-44-001');
+    expect(roleLog.correlationId).toBe('corr-audit-44-001');
+    expect(roleLog.beforeData).toMatchObject({
+      code: 'auditor_lead',
+      name: 'Auditor Lead',
+      dataScope: DATA_SCOPE.ORG_UNIT,
+    });
+    expect(roleLog.afterData).toMatchObject({
+      code: 'auditor_lead',
+      name: 'Senior Auditor Lead',
+      dataScope: DATA_SCOPE.SUBORDINATES,
+    });
+
+    // 3b. Lọc theo module = 'users' và action = 'user.lock' để kiểm tra lý do thay đổi (reason) và before/after status (Mục 4.4.4 & 4.4.5)
+    const lockLogs = await h.rolesService.listAuditLogs({
+      module: 'users',
+      action: 'user.lock',
+      actorUserId: 1,
+      correlationId: 'corr-audit-44-001',
+      page: 1,
+      limit: 20,
+    });
+    expect(lockLogs.data).toHaveLength(1);
+    expect(lockLogs.data[0]!.reason).toBe('Phát hiện đăng nhập bất thường từ IP lạ');
+    expect(lockLogs.data[0]!.beforeData).toEqual({ status: USER_STATUS.ACTIVE });
+    expect(lockLogs.data[0]!.afterData).toMatchObject({
+      status: USER_STATUS.LOCKED,
+      lockReason: 'Phát hiện đăng nhập bất thường từ IP lạ',
+    });
+
+    // 3c. Lọc theo actorType = SERVICE_ACCOUNT (2) và actorServiceAccountId (Mục 4.4.1 & 4.4.7)
+    const saLogs = await h.rolesService.listAuditLogs({
+      actorType: AUDIT_ACTOR_TYPE.SERVICE_ACCOUNT,
+      actorServiceAccountId: sa.id,
+      page: 1,
+      limit: 20,
+    });
+    expect(saLogs.data).toHaveLength(1);
+    expect(saLogs.data[0]!.actorTypeName).toBe('SERVICE_ACCOUNT');
+    expect(saLogs.data[0]!.actorServiceAccountId).toBe(sa.id);
+    expect(saLogs.data[0]!.actorApiClientId).toBe(apiClient.id);
+    expect(saLogs.data[0]!.actorIdentifier).toBe(`SA_AUDIT_SYNC:${apiClient.clientId}`);
+    expect(saLogs.data[0]!.ipAddress).toBe('172.16.99.10');
+    expect(saLogs.data[0]!.requestId).toBe('req-sa-44-002');
+    expect(saLogs.data[0]!.correlationId).toBe('corr-sa-44-002');
+
+    // 3d. Xem chi tiết 1 bản ghi Audit Log theo ID
+    const detail = await h.rolesService.getAuditLogById(roleLog.id);
+    expect(detail.id).toBe(roleLog.id);
+    expect(detail.action).toBe('ROLE_UPDATED');
+
+    // 4. Kiểm chứng tính bất biến (Immutability — Mục 4.4.8): Không cho phép sửa hoặc xóa Audit Log bằng API thường (403 Forbidden)
+    await expect(h.rolesService.updateAuditLog(roleLog.id)).rejects.toThrow(
+      'security.auditLogImmutable',
+    );
+    await expect(h.rolesService.deleteAuditLog(roleLog.id)).rejects.toThrow(
+      'security.auditLogImmutable',
+    );
+    await expect(h.auditLogService.update(roleLog.id, { reason: 'tamper' })).rejects.toThrow(
+      'security.auditLogImmutable',
+    );
+    await expect(h.auditLogService.remove(roleLog.id)).rejects.toThrow(
+      'security.auditLogImmutable',
+    );
+
+    // 5. Kiểm tra đa ngôn ngữ (vi/en) cho thông báo lỗi bất biến Audit Log
+    const i18n = new CoreI18nService();
+    i18n.registerNamespace('roles', { vi: rolesVi, en: rolesEn });
+    expect(i18n.t('security.auditLogImmutable', undefined, 'vi')).toContain(
+      'Nhật ký thao tác (Audit Log)',
+    );
+    expect(i18n.t('security.auditLogImmutable', undefined, 'en')).toContain(
+      'Audit Logs are immutable',
+    );
+    expect(i18n.t('roles.auditLogNotFound', undefined, 'vi')).toContain(
+      'Không tìm thấy bản ghi Nhật ký thao tác',
+    );
+    expect(i18n.t('roles.auditLogNotFound', undefined, 'en')).toContain(
+      'Requested Audit Log record not found',
+    );
   });
 });

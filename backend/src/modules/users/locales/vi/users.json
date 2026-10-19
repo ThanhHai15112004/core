@@ -3,5 +3,9 @@
   "duplicateUsername": "Tên đăng nhập đã tồn tại trong hệ thống",
   "duplicateEmail": "Địa chỉ email đã được sử dụng bởi tài khoản khác",
   "duplicatePhone": "Số điện thoại đã được sử dụng bởi tài khoản khác",
-  "invalidLockedUntilDate": "Thời điểm mở khóa tự động phải là thời gian trong tương lai"
+  "invalidLockedUntilDate": "Thời điểm mở khóa tự động phải là thời gian trong tương lai",
+  "managerNotFound": "Không tìm thấy người quản lý trực tiếp được chỉ định",
+  "cannotBeOwnManager": "Người dùng không thể chọn chính mình làm người quản lý trực tiếp",
+  "circularManagerHierarchy": "Phát hiện vòng lặp trong cây quản lý nhân sự (cấp dưới không thể làm quản lý của cấp trên)",
+  "invalidXlsxFile": "Tệp Excel (.xlsx) tải lên không hợp lệ hoặc bị hỏng"
 }

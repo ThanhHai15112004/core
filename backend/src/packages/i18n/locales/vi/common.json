@@ -20,5 +20,7 @@
   "UNPROCESSABLE_ENTITY": "Không thể xử lý thực thể yêu cầu",
   "TOO_MANY_REQUESTS": "Quá nhiều yêu cầu, vui lòng thử lại sau",
   "SERVICE_UNAVAILABLE": "Dịch vụ tạm thời không khả dụng",
-  "HTTP_ERROR": "Yêu cầu HTTP không thành công"
+  "HTTP_ERROR": "Yêu cầu HTTP không thành công",
+  "security.dataScopeForbidden": "Bạn không có quyền truy cập bản ghi ngoài phạm vi dữ liệu (Data Scope) được cấp phép",
+  "security.auditLogImmutable": "Nhật ký thao tác (Audit Log) là bất biến (Append-only) — nghiêm cấm sửa đổi hoặc xóa bằng API thường để bảo vệ tính toàn vẹn"
 }

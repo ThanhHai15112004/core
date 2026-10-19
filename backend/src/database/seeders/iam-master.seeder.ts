@@ -1,4 +1,4 @@
-import { PasswordHasherService } from '@packages/security/index.js';
+import { DATA_SCOPE, type DataScopeCode, PasswordHasherService } from '@packages/security/index.js';
 import type { SeederContext, SeederContract } from '@packages/database/index.js';
 import {
   ORGANIZATION_UNIT_STATUS,
@@ -32,6 +32,7 @@ export interface SeedRoleDef {
   readonly code: string;
   readonly name: string;
   readonly isSystem: boolean;
+  readonly dataScope: DataScopeCode;
   readonly description: string;
   readonly permissions: readonly string[];
 }
@@ -47,6 +48,7 @@ export interface SeedPrivilegedUserDef {
   readonly roleCode: string;
   readonly orgCode: string;
   readonly positionTitle: string;
+  readonly managerId: number | null;
 }
 
 /**
@@ -267,6 +269,7 @@ export const STANDARD_IAM_ROLES: readonly SeedRoleDef[] = [
     code: 'super_admin',
     name: 'Super Administrator (Toàn quyền Hệ thống)',
     isSystem: true,
+    dataScope: DATA_SCOPE.ALL,
     description: 'Đặc quyền tối cao toàn hệ thống, quản trị mọi phân hệ và cấu hình bảo mật',
     permissions: ALL_IAM_PERMISSION_CODES,
   },
@@ -275,6 +278,7 @@ export const STANDARD_IAM_ROLES: readonly SeedRoleDef[] = [
     code: 'admin',
     name: 'System Administrator (Quản trị Hệ thống)',
     isSystem: true,
+    dataScope: DATA_SCOPE.ALL,
     description: 'Quản trị tổng hợp người dùng, vai trò, đơn vị và vận hành chung',
     permissions: ALL_IAM_PERMISSION_CODES,
   },
@@ -283,6 +287,7 @@ export const STANDARD_IAM_ROLES: readonly SeedRoleDef[] = [
     code: 'admin_security',
     name: 'Security Administrator (Quản trị Bảo mật & Mã hóa)',
     isSystem: true,
+    dataScope: DATA_SCOPE.ALL,
     description: 'Quản trị thuật toán mã hóa, chính sách MFA, khóa tài khoản và thu hồi phiên',
     permissions: [
       'users.read',
@@ -301,6 +306,7 @@ export const STANDARD_IAM_ROLES: readonly SeedRoleDef[] = [
     code: 'admin_hr',
     name: 'HR Administrator (Quản trị Nhân sự & Tổ chức)',
     isSystem: true,
+    dataScope: DATA_SCOPE.ALL,
     description: 'Quản lý hồ sơ nhân sự, sơ đồ phòng ban, nhập/xuất danh sách người dùng hàng loạt',
     permissions: [
       'users.read',
@@ -320,6 +326,7 @@ export const STANDARD_IAM_ROLES: readonly SeedRoleDef[] = [
     code: 'admin_mobile',
     name: 'Mobile Platform Admin (Quản trị Kênh Mobile)',
     isSystem: true,
+    dataScope: DATA_SCOPE.ALL,
     description: 'Quản trị người dùng kênh ứng dụng di động, phiên thiết bị Mobile & OTP',
     permissions: [
       'users.read',
@@ -336,6 +343,7 @@ export const STANDARD_IAM_ROLES: readonly SeedRoleDef[] = [
     code: 'admin_ops',
     name: 'Operations Admin (Quản trị Vận hành Hạ tầng)',
     isSystem: true,
+    dataScope: DATA_SCOPE.ALL,
     description: 'Quản trị System Console, Runtimes, Database, Cache, Queue và giám sát hệ thống',
     permissions: ['users.read', 'roles.read', 'organizations.read', 'auth.settings.read'],
   },
@@ -344,6 +352,7 @@ export const STANDARD_IAM_ROLES: readonly SeedRoleDef[] = [
     code: 'admin_finance',
     name: 'Finance Administrator (Quản trị Tài chính & Kiểm toán)',
     isSystem: false,
+    dataScope: DATA_SCOPE.ALL,
     description: 'Tra cứu và kết xuất báo cáo người dùng, đơn vị phục vụ đối soát và kiểm toán',
     permissions: ['users.read', 'users.export', 'organizations.read', 'roles.read'],
   },
@@ -352,6 +361,7 @@ export const STANDARD_IAM_ROLES: readonly SeedRoleDef[] = [
     code: 'admin_support',
     name: 'Customer Support Admin (Quản trị Hỗ trợ Người dùng)',
     isSystem: false,
+    dataScope: DATA_SCOPE.ALL,
     description: 'Hỗ trợ mở khóa tài khoản, kiểm tra trạng thái đăng nhập và hướng dẫn người dùng',
     permissions: ['users.read', 'users.lock', 'organizations.read'],
   },
@@ -360,6 +370,7 @@ export const STANDARD_IAM_ROLES: readonly SeedRoleDef[] = [
     code: 'branch_director',
     name: 'Branch Director (Giám đốc Chi nhánh TP.HCM)',
     isSystem: false,
+    dataScope: DATA_SCOPE.ORG_UNIT,
     description: 'Điều hành toàn bộ hoạt động và nhân sự tại Chi nhánh TP. Hồ Chí Minh',
     permissions: ['users.read', 'users.update', 'users.export', 'organizations.read', 'roles.read'],
   },
@@ -368,6 +379,7 @@ export const STANDARD_IAM_ROLES: readonly SeedRoleDef[] = [
     code: 'department_manager',
     name: 'Department Manager (Trưởng phòng ban)',
     isSystem: false,
+    dataScope: DATA_SCOPE.SUBORDINATES,
     description: 'Quản lý nhân sự và công việc trong phạm vi phòng ban trực thuộc',
     permissions: ['users.read', 'organizations.read'],
   },
@@ -376,6 +388,7 @@ export const STANDARD_IAM_ROLES: readonly SeedRoleDef[] = [
     code: 'staff',
     name: 'Standard Staff (Nhân viên Tiêu chuẩn)',
     isSystem: false,
+    dataScope: DATA_SCOPE.SELF,
     description: 'Nhân viên chính thức thuộc các phòng ban tại Chi nhánh TP.HCM',
     permissions: ['users.read'],
   },
@@ -396,6 +409,7 @@ export const PRIVILEGED_ACCOUNTS: readonly SeedPrivilegedUserDef[] = [
     roleCode: 'super_admin',
     orgCode: 'HQ_HCM',
     positionTitle: 'Tổng Giám đốc Công nghệ (CTO)',
+    managerId: null,
   },
   {
     id: 2,
@@ -408,6 +422,7 @@ export const PRIVILEGED_ACCOUNTS: readonly SeedPrivilegedUserDef[] = [
     roleCode: 'admin',
     orgCode: 'HQ_HCM',
     positionTitle: 'Quản trị viên Hệ thống Cấp cao',
+    managerId: 1,
   },
   {
     id: 3,
@@ -420,6 +435,7 @@ export const PRIVILEGED_ACCOUNTS: readonly SeedPrivilegedUserDef[] = [
     roleCode: 'admin_security',
     orgCode: 'DEPT_SECURITY',
     positionTitle: 'Giám đốc An toàn Thông tin (CISO)',
+    managerId: 1,
   },
   {
     id: 4,
@@ -432,6 +448,7 @@ export const PRIVILEGED_ACCOUNTS: readonly SeedPrivilegedUserDef[] = [
     roleCode: 'admin_hr',
     orgCode: 'DEPT_HR',
     positionTitle: 'Giám đốc Nhân sự (CHRO)',
+    managerId: 1,
   },
   {
     id: 5,
@@ -444,6 +461,7 @@ export const PRIVILEGED_ACCOUNTS: readonly SeedPrivilegedUserDef[] = [
     roleCode: 'admin_mobile',
     orgCode: 'DEPT_MOBILE',
     positionTitle: 'Trưởng phòng Nền tảng Mobile',
+    managerId: 9,
   },
   {
     id: 6,
@@ -456,6 +474,7 @@ export const PRIVILEGED_ACCOUNTS: readonly SeedPrivilegedUserDef[] = [
     roleCode: 'admin_ops',
     orgCode: 'DEPT_OPS',
     positionTitle: 'Trưởng phòng Vận hành Hạ tầng (Lead SRE)',
+    managerId: 9,
   },
   {
     id: 7,
@@ -468,6 +487,7 @@ export const PRIVILEGED_ACCOUNTS: readonly SeedPrivilegedUserDef[] = [
     roleCode: 'admin_finance',
     orgCode: 'DEPT_FINANCE',
     positionTitle: 'Kế toán Trưởng (CFO)',
+    managerId: 9,
   },
   {
     id: 8,
@@ -480,6 +500,7 @@ export const PRIVILEGED_ACCOUNTS: readonly SeedPrivilegedUserDef[] = [
     roleCode: 'admin_support',
     orgCode: 'DEPT_SUPPORT',
     positionTitle: 'Trưởng bộ phận Hỗ trợ 24/7',
+    managerId: 9,
   },
   {
     id: 9,
@@ -492,6 +513,7 @@ export const PRIVILEGED_ACCOUNTS: readonly SeedPrivilegedUserDef[] = [
     roleCode: 'branch_director',
     orgCode: 'BRANCH_HCM',
     positionTitle: 'Giám đốc Chi nhánh TP. Hồ Chí Minh',
+    managerId: 1,
   },
   {
     id: 10,
@@ -504,6 +526,7 @@ export const PRIVILEGED_ACCOUNTS: readonly SeedPrivilegedUserDef[] = [
     roleCode: 'department_manager',
     orgCode: 'DEPT_ENGINEERING',
     positionTitle: 'Giám đốc Kỹ thuật Phần mềm',
+    managerId: 9,
   },
 ] as const;
 
@@ -589,17 +612,33 @@ export class IamMasterSeeder implements SeederContract {
     for (const role of STANDARD_IAM_ROLES) {
       if (isPostgres) {
         await ctx.manager.query(
-          `INSERT INTO roles (id, code, name, description, is_system, status)
-           VALUES ($1, $2, $3, $4, $5, $6)
-           ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name, description = EXCLUDED.description`,
-          [role.id, role.code, role.name, role.description, role.isSystem, ROLE_STATUS.ACTIVE],
+          `INSERT INTO roles (id, code, name, description, is_system, data_scope, status)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)
+           ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name, description = EXCLUDED.description, data_scope = EXCLUDED.data_scope`,
+          [
+            role.id,
+            role.code,
+            role.name,
+            role.description,
+            role.isSystem,
+            role.dataScope,
+            ROLE_STATUS.ACTIVE,
+          ],
         );
       } else {
         await ctx.manager.query(
-          `INSERT INTO roles (id, code, name, description, is_system, status)
-           VALUES (?, ?, ?, ?, ?, ?)
-           ON DUPLICATE KEY UPDATE name = VALUES(name), description = VALUES(description)`,
-          [role.id, role.code, role.name, role.description, role.isSystem, ROLE_STATUS.ACTIVE],
+          `INSERT INTO roles (id, code, name, description, is_system, data_scope, status)
+           VALUES (?, ?, ?, ?, ?, ?, ?)
+           ON DUPLICATE KEY UPDATE name = VALUES(name), description = VALUES(description), data_scope = VALUES(data_scope)`,
+          [
+            role.id,
+            role.code,
+            role.name,
+            role.description,
+            role.isSystem,
+            role.dataScope,
+            ROLE_STATUS.ACTIVE,
+          ],
         );
       }
       affected++;
@@ -637,9 +676,9 @@ export class IamMasterSeeder implements SeederContract {
 
       if (isPostgres) {
         await ctx.manager.query(
-          `INSERT INTO users (id, username, email, phone, phone_hash, password_hash, status, email_verified_at, phone_verified_at, primary_organization_unit_id, version)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, $8, 1)
-           ON CONFLICT (username) DO UPDATE SET email = EXCLUDED.email, phone = EXCLUDED.phone, phone_hash = EXCLUDED.phone_hash, password_hash = EXCLUDED.password_hash`,
+          `INSERT INTO users (id, username, email, phone, phone_hash, password_hash, status, email_verified_at, phone_verified_at, primary_organization_unit_id, manager_id, version)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, $8, $9, 1)
+           ON CONFLICT (username) DO UPDATE SET email = EXCLUDED.email, phone = EXCLUDED.phone, phone_hash = EXCLUDED.phone_hash, password_hash = EXCLUDED.password_hash, manager_id = EXCLUDED.manager_id`,
           [
             acc.id,
             acc.username,
@@ -649,6 +688,7 @@ export class IamMasterSeeder implements SeederContract {
             privilegedPasswordHash,
             USER_STATUS.ACTIVE,
             primaryOrg.id,
+            acc.managerId,
           ],
         );
         await ctx.manager.query(
@@ -659,9 +699,9 @@ export class IamMasterSeeder implements SeederContract {
         );
       } else {
         await ctx.manager.query(
-          `INSERT INTO users (id, username, email, phone, phone_hash, password_hash, status, email_verified_at, phone_verified_at, primary_organization_unit_id, version)
-           VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?, 1)
-           ON DUPLICATE KEY UPDATE email = VALUES(email), phone = VALUES(phone), phone_hash = VALUES(phone_hash), password_hash = VALUES(password_hash)`,
+          `INSERT INTO users (id, username, email, phone, phone_hash, password_hash, status, email_verified_at, phone_verified_at, primary_organization_unit_id, manager_id, version)
+           VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?, ?, 1)
+           ON DUPLICATE KEY UPDATE email = VALUES(email), phone = VALUES(phone), phone_hash = VALUES(phone_hash), password_hash = VALUES(password_hash), manager_id = VALUES(manager_id)`,
           [
             acc.id,
             acc.username,
@@ -671,6 +711,7 @@ export class IamMasterSeeder implements SeederContract {
             privilegedPasswordHash,
             USER_STATUS.ACTIVE,
             primaryOrg.id,
+            acc.managerId,
           ],
         );
         await ctx.manager.query(
@@ -733,11 +774,8 @@ export class IamMasterSeeder implements SeederContract {
         `INSERT INTO auth_security_settings (
           id, scope_key, password_hash_algorithm, db_encryption_algorithm, encrypt_fields_at_rest,
           mfa_policy, allowed_mfa_methods_json, max_failed_login_attempts, lockout_duration_minutes,
-          password_min_length, require_uppercase, require_numbers, require_special_chars,
-          allow_email_registration, allow_phone_registration, require_email_verification, require_phone_verification,
-          otp_max_send_count, otp_max_attempts, otp_cooldown_seconds,
-          session_idle_timeout_minutes, session_max_lifetime_minutes, enable_login_audit_log
-        ) VALUES (1, 'GLOBAL', 1, 1, TRUE, 1, '["TOTP","EMAIL_OTP","RECOVERY_CODE"]', 5, 15, 8, TRUE, TRUE, TRUE, TRUE, TRUE, FALSE, FALSE, 5, 5, 60, 30, 10080, TRUE)
+          password_min_length, require_uppercase, require_numbers, require_special_chars
+        ) VALUES (1, 'GLOBAL', 1, 1, TRUE, 1, '["TOTP","EMAIL_OTP","RECOVERY_CODE"]', 5, 15, 8, TRUE, TRUE, TRUE)
         ON CONFLICT (scope_key) DO NOTHING`,
       );
     } else {
@@ -745,13 +783,139 @@ export class IamMasterSeeder implements SeederContract {
         `INSERT INTO auth_security_settings (
           id, scope_key, password_hash_algorithm, db_encryption_algorithm, encrypt_fields_at_rest,
           mfa_policy, allowed_mfa_methods_json, max_failed_login_attempts, lockout_duration_minutes,
-          password_min_length, require_uppercase, require_numbers, require_special_chars,
-          allow_email_registration, allow_phone_registration, require_email_verification, require_phone_verification,
-          otp_max_send_count, otp_max_attempts, otp_cooldown_seconds,
-          session_idle_timeout_minutes, session_max_lifetime_minutes, enable_login_audit_log
-        ) VALUES (1, 'GLOBAL', 1, 1, TRUE, 1, '["TOTP","EMAIL_OTP","RECOVERY_CODE"]', 5, 15, 8, TRUE, TRUE, TRUE, TRUE, TRUE, FALSE, FALSE, 5, 5, 60, 30, 10080, TRUE)
+          password_min_length, require_uppercase, require_numbers, require_special_chars
+        ) VALUES (1, 'GLOBAL', 1, 1, TRUE, 1, '["TOTP","EMAIL_OTP","RECOVERY_CODE"]', 5, 15, 8, TRUE, TRUE, TRUE)
         ON DUPLICATE KEY UPDATE scope_key = VALUES(scope_key)`,
       );
+    }
+
+    // 6. Seed Sample Initial Audit Logs (Mục 4.4 — Nhật ký thao tác: User, Service Account, System)
+    const sampleAuditLogs = [
+      {
+        id: 1,
+        actorType: 1,
+        actorUserId: 1,
+        actorServiceAccountId: null,
+        actorApiClientId: null,
+        actorIdentifier: 'superadmin',
+        module: 'roles',
+        feature: 'role-management',
+        action: 'role.update',
+        resourceType: 'role',
+        resourceId: '9',
+        beforeData: JSON.stringify({ code: 'branch_director', dataScope: 1 }),
+        afterData: JSON.stringify({ code: 'branch_director', dataScope: 2 }),
+        reason: 'Cập nhật phạm vi dữ liệu (Data Scope) Giám đốc Chi nhánh sang UNIT',
+        ipAddress: '10.10.1.15',
+        userAgent: 'Mozilla/5.0 (IAM Console)',
+        requestId: 'req-seed-audit-001',
+        correlationId: 'corr-seed-audit-001',
+      },
+      {
+        id: 2,
+        actorType: 1,
+        actorUserId: 2,
+        actorServiceAccountId: null,
+        actorApiClientId: null,
+        actorIdentifier: 'admin_iam',
+        module: 'users',
+        feature: 'user-status',
+        action: 'user.unlock',
+        resourceType: 'user',
+        resourceId: '8',
+        beforeData: JSON.stringify({ status: 3, lockReason: 'Exceeded failed login attempts' }),
+        afterData: JSON.stringify({ status: 1, lockReason: null, failedLoginAttempts: 0 }),
+        reason: 'Xác minh danh tính hợp lệ và mở khóa tài khoản theo ticket #IAM-402',
+        ipAddress: '10.10.1.22',
+        userAgent: 'Mozilla/5.0 (IAM Console)',
+        requestId: 'req-seed-audit-002',
+        correlationId: 'corr-seed-audit-002',
+      },
+      {
+        id: 3,
+        actorType: 2,
+        actorUserId: null,
+        actorServiceAccountId: 1,
+        actorApiClientId: 1,
+        actorIdentifier: 'SA_ERP_SYNC:cli_erp_sync_prod',
+        module: 'auth',
+        feature: 'api-client-token',
+        action: 'api_client.issue_token',
+        resourceType: 'api_client',
+        resourceId: '1',
+        beforeData: null,
+        afterData: JSON.stringify({
+          serviceAccountCode: 'SA_ERP_SYNC',
+          scopes: ['users.read', 'organizations.read'],
+        }),
+        reason: 'Issued M2M access token for SA_ERP_SYNC',
+        ipAddress: '172.16.10.50',
+        userAgent: 'Core-ERP-Sync-Worker/2.1',
+        requestId: 'req-seed-audit-003',
+        correlationId: 'corr-seed-audit-003',
+      },
+    ];
+
+    for (const log of sampleAuditLogs) {
+      if (isPostgres) {
+        await ctx.manager.query(
+          `INSERT INTO audit_logs (
+            id, actor_type, actor_user_id, actor_service_account_id, actor_api_client_id,
+            actor_identifier, module, feature, action, resource_type, resource_id,
+            before_data, after_data, reason, ip_address, user_agent, request_id, correlation_id
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+          ON CONFLICT (id) DO NOTHING`,
+          [
+            log.id,
+            log.actorType,
+            log.actorUserId,
+            log.actorServiceAccountId,
+            log.actorApiClientId,
+            log.actorIdentifier,
+            log.module,
+            log.feature,
+            log.action,
+            log.resourceType,
+            log.resourceId,
+            log.beforeData,
+            log.afterData,
+            log.reason,
+            log.ipAddress,
+            log.userAgent,
+            log.requestId,
+            log.correlationId,
+          ],
+        );
+      } else {
+        await ctx.manager.query(
+          `INSERT INTO audit_logs (
+            id, actor_type, actor_user_id, actor_service_account_id, actor_api_client_id,
+            actor_identifier, module, feature, action, resource_type, resource_id,
+            before_data, after_data, reason, ip_address, user_agent, request_id, correlation_id
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ON DUPLICATE KEY UPDATE action = VALUES(action)`,
+          [
+            log.id,
+            log.actorType,
+            log.actorUserId,
+            log.actorServiceAccountId,
+            log.actorApiClientId,
+            log.actorIdentifier,
+            log.module,
+            log.feature,
+            log.action,
+            log.resourceType,
+            log.resourceId,
+            log.beforeData,
+            log.afterData,
+            log.reason,
+            log.ipAddress,
+            log.userAgent,
+            log.requestId,
+            log.correlationId,
+          ],
+        );
+      }
     }
 
     return {

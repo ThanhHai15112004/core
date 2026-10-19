@@ -39,7 +39,8 @@ export class UsersMapper implements EntityMapperContract<UserEntity, UserRespons
     const firstName = p?.firstName ?? legacyEntity.firstName ?? '';
     const lastName = p?.lastName ?? legacyEntity.lastName ?? '';
     const fullName =
-      p?.fullName ?? (legacyEntity.fullName || `${lastName} ${firstName}`.trim() || entity.username);
+      p?.fullName ??
+      (legacyEntity.fullName || `${lastName} ${firstName}`.trim() || entity.username);
     const avatarUrl = p?.avatarUrl ?? legacyEntity.avatarUrl ?? null;
 
     const profileView: UserProfileView = {
@@ -77,6 +78,10 @@ export class UsersMapper implements EntityMapperContract<UserEntity, UserRespons
       primaryOrganizationUnitId:
         entity.primaryOrganizationUnitId !== undefined && entity.primaryOrganizationUnitId !== null
           ? Number(entity.primaryOrganizationUnitId)
+          : null,
+      managerId:
+        entity.managerId !== undefined && entity.managerId !== null
+          ? Number(entity.managerId)
           : null,
       roles: context.roles ?? [],
       organizationUnits: context.organizationUnits ?? [],

@@ -3,6 +3,10 @@
   "duplicateCode": "Mã vai trò đã tồn tại",
   "cannotDeleteSystemRole": "Không thể xóa vai trò mặc định của hệ thống",
   "cannotDeactivateSystemRole": "Không thể vô hiệu hóa vai trò mặc định của hệ thống",
+  "cannotDeleteAssignedRole": "Không thể xóa vai trò đang được gán cho người dùng",
   "invalidOrMissingRoles": "Một hoặc nhiều vai trò được chọn không tồn tại",
-  "inactiveRolesNotAllowed": "Không thể gán vai trò đang ngừng hoạt động cho người dùng"
+  "inactiveRolesNotAllowed": "Không thể gán vai trò đang ngừng hoạt động cho người dùng",
+  "dataScopeAllNotAllowedForRole": "Phạm vi dữ liệu toàn hệ thống (ALL) chỉ được gán cho các vai trò quản trị được phép",
+  "dataScopeServiceUnavailable": "Dịch vụ quản lý phạm vi dữ liệu (DataScopeService) hiện không khả dụng",
+  "auditLogNotFound": "Không tìm thấy bản ghi Nhật ký thao tác (Audit Log) yêu cầu"
 }

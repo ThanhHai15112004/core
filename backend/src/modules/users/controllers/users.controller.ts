@@ -57,25 +57,26 @@ export class UsersController {
     private readonly exportService: UserExportService,
   ) {}
 
-  /** Tìm kiếm và lọc người dùng có phân trang (Mục 3.1.9) */
+  /** Tìm kiếm và lọc người dùng có phân trang kèm áp dụng Phạm vi dữ liệu (Mục 3.1.9 & 4.3.5) */
   @Get()
   @RequirePermissions('users.read')
   @ApiDoc({
-    summary: 'Tìm kiếm và lọc danh sách người dùng có phân trang',
+    summary: 'Tìm kiếm và lọc danh sách người dùng có phân trang (áp dụng Data Scope Mục 4.3)',
     response: userResponseSchema,
     pagination: 'offset',
   })
   public async list(
     @ValidatedQuery(listUsersQuerySchema) query: ListUsersQuery,
+    @CurrentUser() actor?: UserIdentity,
   ): Promise<PaginatedResult<UserResponse>> {
-    return this.usersService.listPaginated(query);
+    return this.usersService.listPaginated(query, actor);
   }
 
-  /** Xuất danh sách người dùng ra Excel (.xlsx) hoặc CSV (.csv) theo bộ lọc (Mục 3.1.8 & 3.5.7 — hỗ trợ xác thực lại khi xuất dữ liệu lớn) */
+  /** Xuất danh sách người dùng ra Excel (.xlsx) hoặc CSV (.csv) theo bộ lọc & Phạm vi dữ liệu (Mục 3.1.8, 3.5.7 & 4.3.5) */
   @Get(USERS_ROUTES.EXPORT)
   @RequirePermissions('users.export')
   @ApiDoc({
-    summary: 'Xuất danh sách người dùng ra định dạng Excel (.xlsx) hoặc CSV (.csv)',
+    summary: 'Xuất danh sách người dùng ra định dạng Excel (.xlsx) hoặc CSV (.csv) theo Data Scope',
     response: exportUsersCsvResponseSchema,
   })
   public async exportCsv(
@@ -88,7 +89,7 @@ export class UsersController {
       query.requireStepUp,
       'users.export',
     );
-    return this.exportService.exportUsersCsv(query);
+    return this.exportService.exportUsersCsv(query, actor);
   }
 
   /** Tải file mẫu (Template) Excel (.xlsx) hoặc CSV (.csv) để nhập người dùng hàng loạt (Mục 3.1.7) */
@@ -120,20 +121,21 @@ export class UsersController {
     return this.importService.bulkImport(body, actor?.id);
   }
 
-  /** Xem chi tiết thông tin một người dùng */
+  /** Xem chi tiết thông tin một người dùng kèm kiểm tra phạm vi dữ liệu chống đổi ID (Mục 4.3.6) */
   @Get(USERS_ROUTES.BY_ID)
   @RequirePermissions('users.read')
   @ApiDoc({
-    summary: 'Xem chi tiết hồ sơ người dùng theo ID',
+    summary: 'Xem chi tiết hồ sơ người dùng theo ID (kiểm tra Data Scope chống đổi ID — Mục 4.3.6)',
     response: userResponseSchema,
   })
   public async getById(
     @ValidatedParams(positiveIntParamSchema, 'id') id: number,
+    @CurrentUser() actor?: UserIdentity,
   ): Promise<UserResponse> {
-    return this.usersService.getById(id);
+    return this.usersService.getById(id, true, actor);
   }
 
-  /** Xem lịch sử thay đổi trạng thái của người dùng (Mục 3.1.10) */
+  /** Xem lịch sử thay đổi trạng thái của người dùng (Mục 3.1.10 & 4.3.6) */
   @Get(USERS_ROUTES.STATUS_HISTORY)
   @RequirePermissions('users.read')
   @ApiDoc({
@@ -143,8 +145,9 @@ export class UsersController {
   })
   public async getStatusHistory(
     @ValidatedParams(positiveIntParamSchema, 'id') id: number,
+    @CurrentUser() actor?: UserIdentity,
   ): Promise<UserStatusHistoryItemResponse[]> {
-    return this.usersService.getStatusHistory(id);
+    return this.usersService.getStatusHistory(id, actor);
   }
 
   /** Tạo mới người dùng (Mục 3.1.1) */
@@ -337,7 +340,8 @@ export class UsersController {
   @HttpCode(HttpStatus.OK)
   @RequirePermissions('users.update')
   @ApiDoc({
-    summary: 'Reset MFA có kiểm soát cho người dùng bị mất thiết bị xác thực (kèm lý do/xác minh và thu hồi phiên)',
+    summary:
+      'Reset MFA có kiểm soát cho người dùng bị mất thiết bị xác thực (kèm lý do/xác minh và thu hồi phiên)',
     response: z.object({
       reset: z.literal(true),
       userId: z.number().int().positive(),
@@ -373,18 +377,14 @@ export class UsersController {
   })
   public async revokeUserSessions(
     @ValidatedParams(positiveIntParamSchema, 'id') id: number,
-    @ValidatedBody(
-      z
-        .object({ reason: z.string().trim().max(255).optional() })
-        .default({}),
-    )
+    @ValidatedBody(z.object({ reason: z.string().trim().max(255).optional() }).default({}))
     body?: { reason?: string },
     @CurrentUser() actor?: UserIdentity,
   ) {
     return this.usersService.revokeUserSessions(id, body?.reason, actor?.id);
   }
 
-  /** Xem lịch sử đăng nhập & đăng xuất của một người dùng theo thời gian, IP và thiết bị (Mục 3.4.7) */
+  /** Xem lịch sử đăng nhập & đăng xuất của một người dùng theo thời gian, IP và thiết bị (Mục 3.4.7 & 4.3.6) */
   @Get(USERS_ROUTES.LOGIN_HISTORY)
   @RequirePermissions('users.read')
   @ApiDoc({
@@ -392,9 +392,8 @@ export class UsersController {
   })
   public async getLoginHistory(
     @ValidatedParams(positiveIntParamSchema, 'id') id: number,
+    @CurrentUser() actor?: UserIdentity,
   ) {
-    return this.usersService.getLoginHistory(id, 50);
+    return this.usersService.getLoginHistory(id, 50, actor);
   }
 }
-
-

@@ -49,6 +49,7 @@ export const createUserSchema = z
     bio: z.string().trim().max(2000).nullable().optional(),
     password: z.string().min(8).max(128),
     status: userStatusSchema.default(USER_STATUS.ACTIVE),
+    managerId: coercePositiveInt.nullable().optional(),
     roleIds: z.array(coercePositiveInt).default([]),
     organizationUnits: z.array(userOrganizationAssignmentInputSchema).default([]),
   })
@@ -77,6 +78,7 @@ export const updateUserSchema = z.object({
   city: z.string().trim().max(100).nullable().optional(),
   country: z.string().trim().max(100).nullable().optional(),
   bio: z.string().trim().max(2000).nullable().optional(),
+  managerId: coercePositiveInt.nullable().optional(),
   expectedVersion: z.number().int().min(1).optional(),
 });
 
@@ -120,6 +122,7 @@ export const listUsersQuerySchema = z.object({
   status: optionalQueryParam(userStatusSchema),
   roleId: optionalQueryParam(intQueryParam({ min: 1 })),
   organizationUnitId: optionalQueryParam(intQueryParam({ min: 1 })),
+  managerId: optionalQueryParam(intQueryParam({ min: 1 })),
   includeArchived: optionalQueryParam(booleanQueryParam()),
   mfaEnabled: optionalQueryParam(booleanQueryParam()),
   page: optionalQueryParam(intQueryParam({ min: 1 })).default(1),
@@ -191,5 +194,3 @@ export const adminResetUserMfaSchema = z.object({
 });
 
 export type AdminResetUserMfaRequest = z.infer<typeof adminResetUserMfaSchema>;
-
-

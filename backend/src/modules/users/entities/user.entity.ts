@@ -50,6 +50,10 @@ export class UserEntity extends VersionedTypeOrmEntity {
   @Column({ name: 'primary_organization_unit_id', type: 'int', nullable: true })
   public primaryOrganizationUnitId?: number | null;
 
+  @Index()
+  @Column({ name: 'manager_id', type: 'int', nullable: true })
+  public managerId?: number | null;
+
   @Column({ name: 'password_changed_at', type: 'timestamp', nullable: true })
   public passwordChangedAt?: Date | null;
 
@@ -62,4 +66,3 @@ export class UserEntity extends VersionedTypeOrmEntity {
   @Column({ name: 'archived_at', type: 'timestamp', nullable: true })
   public archivedAt?: Date | null;
 }
-

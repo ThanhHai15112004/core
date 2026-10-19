@@ -1,6 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import type { EntityMapperContract } from '@packages/database/index.js';
-import { type RoleSummary, getRoleStatusName, parseRoleStatus } from '../contracts/index.js';
+import {
+  type RoleSummary,
+  getDataScopeName,
+  getRoleStatusName,
+  inferDefaultDataScopeForRoleCode,
+  parseDataScope,
+  parseRoleStatus,
+} from '../contracts/index.js';
 import type { PermissionEntity } from '../entities/permission.entity.js';
 import type { RoleEntity } from '../entities/role.entity.js';
 import type { RoleResponse } from '../responses/roles.response.js';
@@ -14,12 +21,18 @@ export class RolesMapper implements EntityMapperContract<RoleEntity, RoleRespons
     userCount = 0,
   ): RoleResponse {
     const statusCode = parseRoleStatus(entity.status);
+    const dataScopeCode = parseDataScope(
+      entity.dataScope,
+      inferDefaultDataScopeForRoleCode(entity.code),
+    );
     return {
       id: Number(entity.id),
       code: entity.code,
       name: entity.name,
       description: entity.description ?? null,
       isSystem: Boolean(entity.isSystem),
+      dataScope: dataScopeCode,
+      dataScopeName: getDataScopeName(dataScopeCode),
       status: statusCode,
       statusName: getRoleStatusName(statusCode),
       permissionIds: permissions.map((p) => Number(p.id)),
@@ -38,11 +51,17 @@ export class RolesMapper implements EntityMapperContract<RoleEntity, RoleRespons
   /** Chuyển đổi sang bản tóm tắt phục vụ giao tiếp liên module */
   public toSummary(entity: RoleEntity, permissions: readonly PermissionEntity[] = []): RoleSummary {
     const statusCode = parseRoleStatus(entity.status);
+    const dataScopeCode = parseDataScope(
+      entity.dataScope,
+      inferDefaultDataScopeForRoleCode(entity.code),
+    );
     return {
       id: Number(entity.id),
       code: entity.code,
       name: entity.name,
       isSystem: Boolean(entity.isSystem),
+      dataScope: dataScopeCode,
+      dataScopeName: getDataScopeName(dataScopeCode),
       status: statusCode,
       statusName: getRoleStatusName(statusCode),
       permissionIds: permissions.map((p) => Number(p.id)),

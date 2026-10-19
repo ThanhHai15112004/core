@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { buildXlsxBuffer } from '@packages/kernel/index.js';
+import type { UserIdentity } from '@packages/security/index.js';
 import { UserRepository } from '../repositories/user.repository.js';
 import { UsersService } from '../services/users.service.js';
 import type { ListUsersQuery } from '../requests/users.requests.js';
@@ -30,17 +31,18 @@ export class UserExportService {
   ) {}
 
   /**
-   * Xuất danh sách người dùng ra định dạng Excel (.xlsx) hoặc CSV (.csv) theo bộ lọc hiện hành (Mục 3.1.8).
-   * - Định dạng báo cáo chuẩn như `danh_sach_nhan_vien.xlsx`:
-   *   + Dòng 1: Tiêu đề báo cáo lớn (gộp ô ngang, chữ xanh đậm #1E4488 cỡ 16) + Logo PNG tùy chọn (nếu có truyền `logoBase64`, nếu không thì để trống).
-   *   + Dòng 2: `Ngày xuất dữ liệu: dd/MM/yyyy HH:mm:ss` (chữ nghiêng xám).
-   *   + Dòng 3: Header bảng màu xanh đậm #1E4488, chữ trắng in đậm, cố định khi cuộn.
-   *   + Dòng 4+: Dữ liệu nhân sự; các trường không có thông tin sẽ để trống `""`.
+   * Xuất danh sách người dùng ra định dạng Excel (.xlsx) hoặc CSV (.csv) theo bộ lọc hiện hành
+   * và áp dụng Phạm vi dữ liệu (Data Scope) của người xuất báo cáo (Mục 3.1.8 & 4.3.5).
    */
-  public async exportUsersCsv(query: ListUsersQuery): Promise<ExportUsersCsvResponse> {
+  public async exportUsersCsv(
+    query: ListUsersQuery,
+    actor?: UserIdentity,
+  ): Promise<ExportUsersCsvResponse> {
     const format: 'csv' | 'xlsx' = query.format === 'xlsx' ? 'xlsx' : 'csv';
+    const scopeFilter = await this.usersService.resolveUserScopeFilter(actor, 'export');
     const { items } = await this.userRepository.searchPaginated({
       ...query,
+      ...(scopeFilter ? { scopeFilter } : {}),
       page: 1,
       limit: Math.min(query.limit ?? MAX_EXPORT_ROWS, MAX_EXPORT_ROWS),
     });

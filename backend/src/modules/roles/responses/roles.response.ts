@@ -1,5 +1,7 @@
 import { z } from 'zod';
 import type {
+  DataScopeCode,
+  DataScopeName,
   PermissionStatusCode,
   PermissionStatusName,
   RoleStatusCode,
@@ -116,6 +118,8 @@ export interface RolePermissionMatrixResponse {
     readonly code: string;
     readonly name: string;
     readonly isSystem: boolean;
+    readonly dataScope: DataScopeCode;
+    readonly dataScopeName: DataScopeName;
     readonly status: RoleStatusCode;
     readonly statusName: RoleStatusName;
     readonly totalGrantedPermissions: number;
@@ -136,6 +140,8 @@ export const rolePermissionMatrixResponseSchema = z.object({
       code: z.string(),
       name: z.string(),
       isSystem: z.boolean(),
+      dataScope: z.number().int().min(1).max(4),
+      dataScopeName: z.enum(['ALL', 'ORG_UNIT', 'SUBORDINATES', 'SELF']),
       status: z.number().int().min(1).max(2),
       statusName: z.enum(['ACTIVE', 'INACTIVE']),
       totalGrantedPermissions: z.number().int().min(0),
@@ -168,6 +174,8 @@ export interface RoleResponse {
   readonly name: string;
   readonly description: string | null;
   readonly isSystem: boolean;
+  readonly dataScope: DataScopeCode;
+  readonly dataScopeName: DataScopeName;
   readonly status: RoleStatusCode;
   readonly statusName: RoleStatusName;
   readonly permissionIds: readonly number[];
@@ -183,6 +191,8 @@ export const roleResponseSchema = z.object({
   name: z.string(),
   description: z.string().nullable(),
   isSystem: z.boolean(),
+  dataScope: z.number().int().min(1).max(4),
+  dataScopeName: z.enum(['ALL', 'ORG_UNIT', 'SUBORDINATES', 'SELF']),
   status: z.number().int().min(1).max(2),
   statusName: z.enum(['ACTIVE', 'INACTIVE']),
   permissionIds: z.array(z.number().int().min(1)),

@@ -3,6 +3,10 @@
   "duplicateCode": "Role code already exists",
   "cannotDeleteSystemRole": "Cannot delete system default role",
   "cannotDeactivateSystemRole": "Cannot deactivate system default role",
+  "cannotDeleteAssignedRole": "Cannot delete role while users are still assigned to it",
   "invalidOrMissingRoles": "One or more selected roles do not exist",
-  "inactiveRolesNotAllowed": "Cannot assign inactive roles to user"
+  "inactiveRolesNotAllowed": "Cannot assign inactive roles to user",
+  "dataScopeAllNotAllowedForRole": "System-wide data scope (ALL) is restricted to permitted administrative roles",
+  "dataScopeServiceUnavailable": "DataScopeService is currently unavailable",
+  "auditLogNotFound": "Requested Audit Log record not found"
 }

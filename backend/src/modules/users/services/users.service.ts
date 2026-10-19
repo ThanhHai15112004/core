@@ -9,7 +9,16 @@ import {
 } from '@packages/kernel/index.js';
 import { createPaginatedResult } from '@packages/http/index.js';
 import { TransactionManager } from '@packages/database/index.js';
-import { FieldEncryptionService, PasswordHasherService } from '@packages/security/index.js';
+import {
+  AuditLogService,
+  DataScopeService,
+  FieldEncryptionService,
+  PasswordHasherService,
+  type ResolvedDataScopeFilter,
+  type UserIdentity,
+  DATA_SCOPE,
+  parseDataScope,
+} from '@packages/security/index.js';
 import { RedisService } from '@packages/redis/index.js';
 import {
   type IOrganizationsPublicService,
@@ -66,6 +75,7 @@ export const USER_IDENTITY_CACHE_PREFIX = 'iam:user:identity:';
 
 @Injectable()
 export class UsersService implements IUsersPublicService {
+  private readonly effectiveDataScopeService: DataScopeService;
   private adminPasswordResetDelegate?: (
     userId: number,
     input: AdminResetUserPasswordInput,
@@ -113,44 +123,129 @@ export class UsersService implements IUsersPublicService {
     @Optional()
     @Inject(UserProfileRepository)
     private readonly userProfileRepository: UserProfileRepository | null = null,
+    @Optional()
+    @Inject(DataScopeService)
+    private readonly dataScopeService: DataScopeService | null = null,
+    @Optional()
+    @Inject(AuditLogService)
+    private readonly auditLogService: AuditLogService | null = null,
   ) {
+    this.effectiveDataScopeService = this.dataScopeService ?? new DataScopeService();
+
     this.rolesPublicService.registerRoleUserCountDelegate?.((roleIds) =>
       this.countUsersByRoleIds(roleIds),
     );
     this.rolesPublicService.registerRoleUsersListDelegate?.((roleId) =>
       this.listUsersByRoleId(roleId),
     );
+
+    // Đăng ký bộ giải quyết cây cấp dưới (SUBORDINATES) và cây đơn vị (ORG_UNIT) cho DataScopeService (Mục 4.3)
+    this.effectiveDataScopeService.registerSubordinateResolver((managerId) =>
+      this.resolveSubordinateUserIds(managerId),
+    );
+    if (this.organizationsPublicService?.resolveDescendantUnitIds) {
+      this.effectiveDataScopeService.registerOrgHierarchyResolver((unitIds) =>
+        this.organizationsPublicService!.resolveDescendantUnitIds!(unitIds),
+      );
+    }
+    this.effectiveDataScopeService.registerRoleScopeResolver(async (roleCodes) => {
+      const roles = await this.rolesPublicService.findByCodes(roleCodes);
+      return roles
+        .filter((r) => r.status === ROLE_STATUS.ACTIVE)
+        .map((r) => parseDataScope(r.dataScope));
+    });
   }
 
-  /** Tìm kiếm và lọc danh sách người dùng có phân trang (Mục 3.1.9) */
-  public async listPaginated(query: ListUsersQuery): Promise<PaginatedResult<UserResponse>> {
+  /** Truy cập instance DataScopeService đang gắn với UsersService */
+  public getDataScopeService(): DataScopeService {
+    return this.effectiveDataScopeService;
+  }
+
+  /** Giải quyết danh sách ID nhân sự cấp dưới trực tiếp và gián tiếp theo cây quản lý (Mục 4.3.3) */
+  public async resolveSubordinateUserIds(managerId: number): Promise<number[]> {
+    if (typeof this.userRepository.findSubordinateUserIds === 'function') {
+      return this.userRepository.findSubordinateUserIds(managerId);
+    }
+    return [];
+  }
+
+  /** Giải quyết bộ lọc phạm vi dữ liệu cho người dùng hiện hành (Mục 4.3.5) */
+  public async resolveUserScopeFilter(
+    actor?: UserIdentity,
+    action = 'read',
+  ): Promise<ResolvedDataScopeFilter | undefined> {
+    if (!actor) return undefined;
+    return this.effectiveDataScopeService.resolveScopeFilter(actor, 'users', action);
+  }
+
+  /** Kiểm tra phạm vi dữ liệu trước khi xem chi tiết hoặc thao tác trên bản ghi người dùng (Mục 4.3.6 — Chống đổi ID / IDOR) */
+  public async assertCanAccessUserRecord(
+    targetUser: UserResponse,
+    actor?: UserIdentity,
+    action = 'read',
+  ): Promise<void> {
+    if (!actor) return;
+    const orgIds = [
+      ...(targetUser.primaryOrganizationUnitId ? [targetUser.primaryOrganizationUnitId] : []),
+      ...targetUser.organizationUnits.map((o) => Number(o.organizationUnitId)),
+    ];
+    await this.effectiveDataScopeService.assertCanAccessRecord(
+      actor,
+      'users',
+      {
+        id: targetUser.id,
+        ownerId: targetUser.id,
+        primaryOrganizationUnitId: targetUser.primaryOrganizationUnitId,
+        organizationUnitIds: [...new Set(orgIds)],
+        managerId: targetUser.managerId ?? null,
+      },
+      action,
+    );
+  }
+
+  /** Tìm kiếm và lọc danh sách người dùng có phân trang kèm áp dụng Phạm vi dữ liệu (Mục 3.1.9 & 4.3.5) */
+  public async listPaginated(
+    query: ListUsersQuery,
+    actor?: UserIdentity,
+  ): Promise<PaginatedResult<UserResponse>> {
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
-    const { items, total } = await this.userRepository.searchPaginated(query);
+    const scopeFilter = await this.resolveUserScopeFilter(actor, 'read');
+    const { items, total } = await this.userRepository.searchPaginated({
+      ...query,
+      ...(scopeFilter ? { scopeFilter } : {}),
+    });
     const enriched = await this.hydrateUsersList(items);
     return createPaginatedResult(enriched, total, page, limit);
   }
 
-  /** Xem chi tiết một người dùng theo ID số nguyên */
-  public async getById(id: number, includeArchived = true): Promise<UserResponse> {
+  /** Xem chi tiết một người dùng theo ID số nguyên kèm kiểm tra phạm vi dữ liệu chống đổi ID (Mục 4.3.6) */
+  public async getById(
+    id: number,
+    includeArchived = true,
+    actor?: UserIdentity,
+  ): Promise<UserResponse> {
     const user = await this.userRepository.findByIdWithArchived(id, includeArchived);
     if (!user) {
       throw new NotFoundAppException('users.notFound', { id });
     }
     const [hydrated] = await this.hydrateUsersList([user]);
+    if (actor) {
+      await this.assertCanAccessUserRecord(hydrated!, actor, 'read');
+    }
     return hydrated!;
   }
 
-  /** Xem lịch sử thay đổi trạng thái của một người dùng (Mục 3.1.10) */
-  public async getStatusHistory(userId: number): Promise<UserStatusHistoryItemResponse[]> {
-    const user = await this.userRepository.findByIdWithArchived(userId, true);
-    if (!user) {
-      throw new NotFoundAppException('users.notFound', { id: userId });
-    }
+  /** Xem lịch sử thay đổi trạng thái của một người dùng kèm kiểm tra phạm vi dữ liệu (Mục 3.1.10 & 4.3.6) */
+  public async getStatusHistory(
+    userId: number,
+    actor?: UserIdentity,
+  ): Promise<UserStatusHistoryItemResponse[]> {
+    const userResp = await this.getById(userId, true, actor);
     if (!this.statusHistoryRepository) {
       return [];
     }
-    const rows = await this.statusHistoryRepository.findByUserId(userId);
+    const rows = await this.statusHistoryRepository.findByUserId(userResp.id);
     return rows.map((r) => {
       const fromCode =
         r.fromStatus !== undefined && r.fromStatus !== null ? parseUserStatus(r.fromStatus) : null;
@@ -232,6 +327,13 @@ export class UsersService implements IUsersPublicService {
       );
     }
 
+    if (dto.managerId !== undefined && dto.managerId !== null) {
+      const manager = await this.userRepository.findByIdWithArchived(dto.managerId, false);
+      if (!manager) {
+        throw new BadRequestAppException('users.managerNotFound', [{ managerId: dto.managerId }]);
+      }
+    }
+
     const nameParts = resolveVietnameseNameParts({
       firstName: dto.firstName,
       lastName: dto.lastName,
@@ -253,6 +355,7 @@ export class UsersService implements IUsersPublicService {
         failedLoginAttempts: 0,
         mfaEnabled: false,
         primaryOrganizationUnitId: primaryOrgInput?.organizationUnitId ?? null,
+        managerId: dto.managerId ?? null,
         passwordChangedAt: new Date(),
       });
 
@@ -294,7 +397,26 @@ export class UsersService implements IUsersPublicService {
       ? await this.transactionManager.runInTransaction(work)
       : await work();
 
-    return this.getById(Number(created.id));
+    const result = await this.getById(Number(created.id));
+    await this.auditLogService?.record({
+      actorUserId: actorId ?? null,
+      module: 'users',
+      feature: 'user-management',
+      action: 'user.create',
+      resourceType: 'user',
+      resourceId: result.id,
+      beforeData: null,
+      afterData: {
+        id: result.id,
+        username: result.username,
+        email: result.email,
+        status: result.status,
+        roleCodes: result.roles.map((r) => r.code),
+        organizationUnitIds: result.organizationUnits.map((o) => o.organizationUnitId),
+      },
+      reason: 'Initial account creation',
+    });
+    return result;
   }
 
   /** Cập nhật thông tin tài khoản Core (`users`) và chi tiết cá nhân (`user_profiles`) (Mục 3.1.2) */
@@ -302,6 +424,35 @@ export class UsersService implements IUsersPublicService {
     const user = await this.userRepository.findByIdWithArchived(id, true);
     if (!user) {
       throw new NotFoundAppException('users.notFound', { id });
+    }
+    const beforeSnapshot = {
+      id: user.id,
+      username: user.username,
+      email: user.email,
+      managerId: user.managerId ?? null,
+      status: user.status,
+    };
+
+    if (dto.managerId !== undefined) {
+      if (dto.managerId === null) {
+        user.managerId = null;
+      } else {
+        const nextManagerId = Number(dto.managerId);
+        if (nextManagerId === Number(id)) {
+          throw new BadRequestAppException('users.cannotBeOwnManager', [{ id }]);
+        }
+        const manager = await this.userRepository.findByIdWithArchived(nextManagerId, false);
+        if (!manager) {
+          throw new BadRequestAppException('users.managerNotFound', [{ managerId: nextManagerId }]);
+        }
+        const subordinates = await this.resolveSubordinateUserIds(Number(id));
+        if (subordinates.includes(nextManagerId)) {
+          throw new BadRequestAppException('users.circularManagerHierarchy', [
+            { id, managerId: nextManagerId },
+          ]);
+        }
+        user.managerId = nextManagerId;
+      }
     }
 
     if (dto.email !== undefined) {
@@ -386,13 +537,34 @@ export class UsersService implements IUsersPublicService {
         email: user.email,
         phone: user.phone ?? null,
         phoneHash: user.phoneHash ?? null,
+        managerId: user.managerId ?? null,
       });
     } else {
       await this.userRepository.saveEntity(user);
     }
 
     await this.invalidateIdentityCache(id);
-    return this.getById(id, true);
+    const updated = await this.getById(id, true);
+    await this.auditLogService?.record({
+      module: 'users',
+      feature: 'user-management',
+      action: 'user.update',
+      resourceType: 'user',
+      resourceId: id,
+      beforeData: {
+        ...beforeSnapshot,
+        fullName: currentProfile.fullName,
+      },
+      afterData: {
+        id: updated.id,
+        username: updated.username,
+        email: updated.email,
+        managerId: updated.managerId,
+        status: updated.status,
+        fullName: updated.fullName,
+      },
+    });
+    return updated;
   }
 
   /** Khóa tài khoản người dùng kèm lý do và thời hạn khóa tùy chọn (Mục 3.1.3 & 3.1.10) */
@@ -420,7 +592,23 @@ export class UsersService implements IUsersPublicService {
     await this.userRepository.saveEntity(user);
     await this.recordStatusHistory(id, prevStatus, USER_STATUS.LOCKED, user.lockReason, actorId);
     await this.invalidateIdentityCache(id);
-    return this.getById(id, true);
+    const updated = await this.getById(id, true);
+    await this.auditLogService?.record({
+      actorUserId: actorId ?? null,
+      module: 'users',
+      feature: 'user-status',
+      action: 'user.lock',
+      resourceType: 'user',
+      resourceId: id,
+      beforeData: { status: prevStatus },
+      afterData: {
+        status: USER_STATUS.LOCKED,
+        lockReason: user.lockReason,
+        lockedUntil: lockedUntilDate ? lockedUntilDate.toISOString() : null,
+      },
+      reason: user.lockReason,
+    });
+    return updated;
   }
 
   /** Mở khóa tài khoản người dùng và đặt lại bộ đếm đăng nhập sai (Mục 3.1.3 & 3.1.10) */
@@ -431,6 +619,7 @@ export class UsersService implements IUsersPublicService {
     }
 
     const prevStatus = parseUserStatus(user.status);
+    const prevLockReason = user.lockReason ?? null;
     user.status = USER_STATUS.ACTIVE;
     user.lockedUntil = null;
     user.lockReason = null;
@@ -441,7 +630,19 @@ export class UsersService implements IUsersPublicService {
     await this.userRepository.saveEntity(user);
     await this.recordStatusHistory(id, prevStatus, USER_STATUS.ACTIVE, 'Account unlocked', actorId);
     await this.invalidateIdentityCache(id);
-    return this.getById(id, true);
+    const updated = await this.getById(id, true);
+    await this.auditLogService?.record({
+      actorUserId: actorId ?? null,
+      module: 'users',
+      feature: 'user-status',
+      action: 'user.unlock',
+      resourceType: 'user',
+      resourceId: id,
+      beforeData: { status: prevStatus, lockReason: prevLockReason },
+      afterData: { status: USER_STATUS.ACTIVE, lockReason: null, failedLoginAttempts: 0 },
+      reason: 'Account unlocked',
+    });
+    return updated;
   }
 
   /** Vô hiệu hóa tài khoản người dùng — chuyển trạng thái sang INACTIVE (2) (Mục 3.1.4 & 3.1.10) */
@@ -472,7 +673,19 @@ export class UsersService implements IUsersPublicService {
       actorId,
     );
     await this.invalidateIdentityCache(id);
-    return this.getById(id, true);
+    const updated = await this.getById(id, true);
+    await this.auditLogService?.record({
+      actorUserId: actorId ?? null,
+      module: 'users',
+      feature: 'user-status',
+      action: 'user.deactivate',
+      resourceType: 'user',
+      resourceId: id,
+      beforeData: { status: prevStatus },
+      afterData: { status: USER_STATUS.INACTIVE },
+      reason: reason ?? 'Account deactivated',
+    });
+    return updated;
   }
 
   /** Kích hoạt lại tài khoản người dùng — chuyển trạng thái sang ACTIVE (1) (Mục 3.1.10) */
@@ -499,7 +712,19 @@ export class UsersService implements IUsersPublicService {
       actorId,
     );
     await this.invalidateIdentityCache(id);
-    return this.getById(id, true);
+    const updated = await this.getById(id, true);
+    await this.auditLogService?.record({
+      actorUserId: actorId ?? null,
+      module: 'users',
+      feature: 'user-status',
+      action: 'user.activate',
+      resourceType: 'user',
+      resourceId: id,
+      beforeData: { status: prevStatus },
+      afterData: { status: USER_STATUS.ACTIVE },
+      reason: 'Account activated',
+    });
+    return updated;
   }
 
   /** Chuyển đổi trực tiếp trạng thái Active (1) / Inactive (2) / Locked (3) / Archived (4) (Mục 3.1.10) */
@@ -549,7 +774,19 @@ export class UsersService implements IUsersPublicService {
       actorId,
     );
     await this.invalidateIdentityCache(id);
-    return this.getById(id, true);
+    const updated = await this.getById(id, true);
+    await this.auditLogService?.record({
+      actorUserId: actorId ?? null,
+      module: 'users',
+      feature: 'user-status',
+      action: 'user.archive',
+      resourceType: 'user',
+      resourceId: id,
+      beforeData: { status: prevStatus },
+      afterData: { status: USER_STATUS.ARCHIVED, archivedAt: now.toISOString() },
+      reason: 'Account archived',
+    });
+    return updated;
   }
 
   /** Khôi phục người dùng đã lưu trữ (Restore Archived User) (Mục 3.1.4) */
@@ -573,7 +810,19 @@ export class UsersService implements IUsersPublicService {
       actorId,
     );
     await this.invalidateIdentityCache(id);
-    return this.getById(id, true);
+    const updated = await this.getById(id, true);
+    await this.auditLogService?.record({
+      actorUserId: actorId ?? null,
+      module: 'users',
+      feature: 'user-status',
+      action: 'user.restore',
+      resourceType: 'user',
+      resourceId: id,
+      beforeData: { status: prevStatus },
+      afterData: { status: USER_STATUS.INACTIVE, archivedAt: null },
+      reason: 'Account restored from archive',
+    });
+    return updated;
   }
 
   /** Gán danh sách vai trò cho người dùng (Mục 3.1.5 & 3.5.7 — hỗ trợ xác thực lại khi thao tác nhạy cảm) */
@@ -594,13 +843,31 @@ export class UsersService implements IUsersPublicService {
       throw new NotFoundAppException('users.notFound', { id });
     }
 
+    const prevLinks = await this.userRoleRepository.findByUserIds([id]);
+    const prevRoleIds = prevLinks.map((l) => Number(l.roleId));
+
     if (dto.roleIds.length > 0) {
       await this.rolesPublicService.ensureActiveRolesExist(dto.roleIds);
     }
 
     await this.userRoleRepository.replaceUserRoles(id, dto.roleIds, actorId);
     await this.invalidateIdentityCache(id);
-    return this.getById(id);
+    const updated = await this.getById(id);
+    await this.auditLogService?.record({
+      actorUserId: actorId ?? null,
+      module: 'users',
+      feature: 'user-roles',
+      action: 'user.assign_roles',
+      resourceType: 'user',
+      resourceId: id,
+      beforeData: { roleIds: prevRoleIds },
+      afterData: {
+        roleIds: updated.roles.map((r) => r.roleId),
+        roleCodes: updated.roles.map((r) => r.code),
+      },
+      reason: 'Updated user roles assignment',
+    });
+    return updated;
   }
 
   /** Gán người dùng vào một hoặc nhiều đơn vị/chi nhánh (Mục 3.1.6) */
@@ -612,6 +879,9 @@ export class UsersService implements IUsersPublicService {
     if (!user) {
       throw new NotFoundAppException('users.notFound', { id });
     }
+
+    const prevLinks = await this.userOrgRepository.findByUserIds([id]);
+    const prevOrgUnitIds = prevLinks.map((l) => Number(l.organizationUnitId));
 
     const unitIds = dto.organizationUnits.map((o) => o.organizationUnitId);
     if (unitIds.length > 0 && this.organizationsPublicService) {
@@ -635,7 +905,21 @@ export class UsersService implements IUsersPublicService {
     }
 
     await this.invalidateIdentityCache(id);
-    return this.getById(id);
+    const updated = await this.getById(id);
+    await this.auditLogService?.record({
+      module: 'users',
+      feature: 'user-organizations',
+      action: 'user.assign_organizations',
+      resourceType: 'user',
+      resourceId: id,
+      beforeData: { organizationUnitIds: prevOrgUnitIds },
+      afterData: {
+        organizationUnitIds: updated.organizationUnits.map((o) => o.organizationUnitId),
+        primaryOrganizationUnitId: updated.primaryOrganizationUnitId,
+      },
+      reason: 'Updated user organization units assignment',
+    });
+    return updated;
   }
 
   /** Hợp đồng công khai cho module Auth: Tìm thông tin đăng nhập theo username, email hoặc số điện thoại */
@@ -718,7 +1002,21 @@ export class UsersService implements IUsersPublicService {
 
     const roleCodes = activeRoles.map((r) => r.code);
     const permissions = [...new Set(activeRoles.flatMap((r) => r.permissions))];
-    const organizationUnitIds = orgLinks.map((o) => Number(o.organizationUnitId));
+    const primaryOrgId =
+      user.primaryOrganizationUnitId !== undefined && user.primaryOrganizationUnitId !== null
+        ? Number(user.primaryOrganizationUnitId)
+        : null;
+    const organizationUnitIds = [
+      ...new Set([
+        ...(primaryOrgId ? [primaryOrgId] : []),
+        ...orgLinks.map((o) => Number(o.organizationUnitId)),
+      ]),
+    ];
+    const dataScopes =
+      activeRoles.length > 0
+        ? [...new Set(activeRoles.map((r) => parseDataScope(r.dataScope)))].sort((a, b) => a - b)
+        : [DATA_SCOPE.SELF];
+    const effectiveDataScope = dataScopes[0] ?? DATA_SCOPE.SELF;
     const statusCode = parseUserStatus(user.status);
 
     return {
@@ -736,13 +1034,14 @@ export class UsersService implements IUsersPublicService {
       phoneVerifiedAt: user.phoneVerifiedAt ?? null,
       lockedUntil: user.lockedUntil ?? null,
       mfaEnabled: Boolean(user.mfaEnabled),
-      primaryOrganizationUnitId:
-        user.primaryOrganizationUnitId !== undefined && user.primaryOrganizationUnitId !== null
-          ? Number(user.primaryOrganizationUnitId)
-          : null,
+      primaryOrganizationUnitId: primaryOrgId,
+      managerId:
+        user.managerId !== undefined && user.managerId !== null ? Number(user.managerId) : null,
       organizationUnitIds,
       roles: roleCodes.length > 0 ? roleCodes : ['user'],
       permissions,
+      dataScope: effectiveDataScope,
+      dataScopes,
       profile,
     };
   }
@@ -1169,21 +1468,26 @@ export class UsersService implements IUsersPublicService {
     };
   }
 
-  /** Xem lịch sử đăng nhập và đăng xuất của một người dùng theo thời gian, IP và thiết bị (Mục 3.4.7) */
-  public async getLoginHistory(id: number, limit = 50): Promise<UserLoginHistoryItemView[]> {
-    const user = await this.userRepository.findByIdWithArchived(id, true);
-    if (!user) {
-      throw new NotFoundAppException('users.notFound', { id });
-    }
+  /** Xem lịch sử đăng nhập và đăng xuất của một người dùng theo thời gian, IP và thiết bị kèm kiểm tra phạm vi dữ liệu (Mục 3.4.7 & 4.3.6) */
+  public async getLoginHistory(
+    id: number,
+    limit = 50,
+    actor?: UserIdentity,
+  ): Promise<UserLoginHistoryItemView[]> {
+    const userResp = await this.getById(id, true, actor);
     if (!this.userLoginHistoryDelegate) {
       return [];
     }
-    return this.userLoginHistoryDelegate(id, limit);
+    return this.userLoginHistoryDelegate(userResp.id, limit);
   }
 
   /** Alias tương thích cho `getLoginHistory()` (Mục 3.4.7) */
-  public async getUserLoginHistory(id: number, limit = 50): Promise<UserLoginHistoryItemView[]> {
-    return this.getLoginHistory(id, limit);
+  public async getUserLoginHistory(
+    id: number,
+    limit = 50,
+    actor?: UserIdentity,
+  ): Promise<UserLoginHistoryItemView[]> {
+    return this.getLoginHistory(id, limit, actor);
   }
 
   /** Đặt lại mật khẩu người dùng từ trang quản trị (Mục 3.3.3 — chỉ người có quyền mới thực hiện) */
@@ -1285,6 +1589,8 @@ export class UsersService implements IUsersPublicService {
         roleId: Number(roleInfo.id),
         code: roleInfo.code,
         name: roleInfo.name,
+        ...(roleInfo.dataScope !== undefined ? { dataScope: roleInfo.dataScope } : {}),
+        ...(roleInfo.dataScopeName !== undefined ? { dataScopeName: roleInfo.dataScopeName } : {}),
       });
       rolesByUser.set(uid, list);
     }

@@ -25,10 +25,34 @@ interface RoleOption {
   name: string;
   description?: string | null;
   isSystem?: boolean;
+  dataScope?: number;
+  dataScopeName?: 'ALL' | 'ORG_UNIT' | 'SUBORDINATES' | 'SELF';
   userCount?: number;
   status?: number;
   statusName?: string;
   permissions: string[];
+}
+
+interface DataScopeSelfState {
+  userId: number;
+  effectiveDataScope: number;
+  effectiveDataScopeName: 'ALL' | 'ORG_UNIT' | 'SUBORDINATES' | 'SELF';
+  allowedOrganizationUnitIds: number[];
+  allowedSubordinateUserIds: number[];
+  roles: Array<{
+    id: number;
+    code: string;
+    name: string;
+    dataScope: number;
+    dataScopeName: 'ALL' | 'ORG_UNIT' | 'SUBORDINATES' | 'SELF';
+  }>;
+}
+
+interface DataScopeRuleItem {
+  resource: string;
+  module: string;
+  description: string;
+  registeredAt: string;
 }
 
 interface OrgUnitOption {
@@ -68,6 +92,7 @@ interface UserItem {
   lockReason?: string | null;
   mfaEnabled: boolean;
   primaryOrganizationUnitId?: number | null;
+  managerId?: number | null;
   roles: { id: number; code: string; name: string }[];
   organizationUnits?: UserOrgAssignment[];
   organizations?: UserOrgAssignment[];
@@ -108,6 +133,30 @@ interface SecuritySettingsState {
   enableLoginAuditLog: boolean;
 }
 
+interface AuditLogItem {
+  id: number;
+  actorType: 1 | 2 | 3;
+  actorTypeName: 'USER' | 'SERVICE_ACCOUNT' | 'SYSTEM';
+  actorUserId: number | null;
+  actorServiceAccountId: number | null;
+  actorApiClientId: number | null;
+  actorIdentifier: string | null;
+  module: string;
+  feature: string;
+  action: string;
+  resourceType: string | null;
+  resourceId: string | null;
+  beforeData: Record<string, unknown> | null;
+  afterData: Record<string, unknown> | null;
+  reason: string | null;
+  ipAddress: string | null;
+  userAgent: string | null;
+  requestId: string | null;
+  correlationId: string | null;
+  metadata: Record<string, unknown> | null;
+  createdAt: string;
+}
+
 const getUserStatusLabel = (u: Pick<UserItem, 'status' | 'statusName'>): 'ACTIVE' | 'INACTIVE' | 'LOCKED' | 'ARCHIVED' => {
   if (u.statusName) return u.statusName;
   if (u.status === 1 || u.status === 'ACTIVE') return 'ACTIVE';
@@ -133,7 +182,7 @@ const IAM_ACCESS_TOKEN_KEY = 'core_iam_access_token';
 const IAM_REFRESH_TOKEN_KEY = 'core_iam_refresh_token';
 
 export const IamManagementPage: React.FC = () => {
-  const [subTab, setSubTab] = useState<'users' | 'auth' | 'orgs-roles'>('users');
+  const [subTab, setSubTab] = useState<'users' | 'auth' | 'orgs-roles' | 'audit-logs'>('users');
   const [accessToken, setAccessTokenState] = useState<string>(() => {
     try {
       return window.localStorage.getItem(IAM_ACCESS_TOKEN_KEY) ?? '';
@@ -222,6 +271,7 @@ export const IamManagementPage: React.FC = () => {
   const [newUserFullName, setNewUserFullName] = useState('');
   const [newUserPhone, setNewUserPhone] = useState('');
   const [newUserPassword, setNewUserPassword] = useState('Abcd@454647#');
+  const [newUserManagerId, setNewUserManagerId] = useState<string>('');
   const [newUserRoleIds, setNewUserRoleIds] = useState<number[]>([]);
   const [newUserOrgIds, setNewUserOrgIds] = useState<number[]>([]);
   const [newUserPrimaryOrgId, setNewUserPrimaryOrgId] = useState<number | null>(null);
@@ -259,14 +309,35 @@ export const IamManagementPage: React.FC = () => {
   const [statusChangeTarget, setStatusChangeTarget] = useState<number>(1);
   const [statusChangeReason, setStatusChangeReason] = useState<string>('');
 
-  // Create Role & Organization form state
+  // Create Role, Data Scope (4.3) & Organization form state
   const [newRoleCode, setNewRoleCode] = useState('');
   const [newRoleName, setNewRoleName] = useState('');
+  const [newRoleDataScope, setNewRoleDataScope] = useState<number>(4);
   const [newRolePerms, setNewRolePerms] = useState('users.read,users.update');
+  const [dataScopeSelf, setDataScopeSelf] = useState<DataScopeSelfState | null>(null);
+  const [dataScopeRules, setDataScopeRules] = useState<DataScopeRuleItem[]>([]);
+  const [newScopeRuleResource, setNewScopeRuleResource] = useState('');
+  const [newScopeRuleModule, setNewScopeRuleModule] = useState('');
+  const [newScopeRuleDesc, setNewScopeRuleDesc] = useState('');
   const [newOrgCode, setNewOrgCode] = useState('');
   const [newOrgName, setNewOrgName] = useState('');
   const [newOrgType, setNewOrgType] = useState<number>(3);
   const [newOrgParentId, setNewOrgParentId] = useState<string>('');
+
+  // Section 4.4 — Audit Log state
+  const [auditLogs, setAuditLogs] = useState<AuditLogItem[]>([]);
+  const [auditTotal, setAuditTotal] = useState<number>(0);
+  const [auditPage, setAuditPage] = useState<number>(1);
+  const [auditTotalPages, setAuditTotalPages] = useState<number>(1);
+  const [auditModuleFilter, setAuditModuleFilter] = useState<string>('');
+  const [auditActionFilter, setAuditActionFilter] = useState<string>('');
+  const [auditActorTypeFilter, setAuditActorTypeFilter] = useState<string>('');
+  const [auditActorUserIdFilter, setAuditActorUserIdFilter] = useState<string>('');
+  const [auditFromDate, setAuditFromDate] = useState<string>('');
+  const [auditToDate, setAuditToDate] = useState<string>('');
+  const [auditCorrelationFilter, setAuditCorrelationFilter] = useState<string>('');
+  const [auditSearchQuery, setAuditSearchQuery] = useState<string>('');
+  const [selectedAuditLog, setSelectedAuditLog] = useState<AuditLogItem | null>(null);
 
   const authHeaders = useCallback((): Record<string, string> => {
     return accessToken ? { Authorization: `Bearer ${accessToken}` } : {};
@@ -274,6 +345,68 @@ export const IamManagementPage: React.FC = () => {
 
   const notify = (type: 'ok' | 'err', text: string) => {
     setStatusBanner({ type, text });
+  };
+
+  const loadAuditLogs = useCallback(async () => {
+    if (!accessToken) return;
+    try {
+      const qs = new URLSearchParams();
+      if (auditModuleFilter.trim()) qs.set('module', auditModuleFilter.trim());
+      if (auditActionFilter.trim()) qs.set('action', auditActionFilter.trim());
+      if (auditActorTypeFilter) qs.set('actorType', auditActorTypeFilter);
+      if (auditActorUserIdFilter.trim()) qs.set('actorUserId', auditActorUserIdFilter.trim());
+      if (auditFromDate) qs.set('fromDate', auditFromDate);
+      if (auditToDate) qs.set('toDate', auditToDate);
+      if (auditCorrelationFilter.trim()) qs.set('correlationId', auditCorrelationFilter.trim());
+      if (auditSearchQuery.trim()) qs.set('q', auditSearchQuery.trim());
+      qs.set('page', String(auditPage));
+      qs.set('limit', '20');
+
+      const res = await fetchApiWithMeta<AuditLogItem[] | { items: AuditLogItem[] }>(
+        API_ROUTES.ROLES.AUDIT_LOGS(qs.toString()),
+        { headers: authHeaders() },
+      );
+      const rawData = res.data;
+      const items = Array.isArray(rawData)
+        ? rawData
+        : Array.isArray(rawData?.items)
+          ? rawData.items
+          : [];
+      setAuditLogs(items);
+      setAuditTotal(res.meta?.total ?? items.length);
+      setAuditTotalPages(Math.max(1, res.meta?.totalPages ?? 1));
+    } catch {
+      // Ignore if current user lacks roles.read
+    }
+  }, [
+    accessToken,
+    auditActionFilter,
+    auditActorTypeFilter,
+    auditActorUserIdFilter,
+    auditCorrelationFilter,
+    auditFromDate,
+    auditModuleFilter,
+    auditPage,
+    auditSearchQuery,
+    auditToDate,
+    authHeaders,
+  ]);
+
+  const handleTestAuditLogImmutability = async (id: number, method: 'PUT' | 'DELETE') => {
+    try {
+      await fetchApi(API_ROUTES.ROLES.AUDIT_LOG_DETAIL(id), {
+        method,
+        headers: authHeaders(),
+        body: method === 'PUT' ? JSON.stringify({ reason: 'Tampered audit log' }) : undefined,
+      });
+      notify('err', 'Cảnh báo: API không chặn thao tác sửa/xóa Audit Log!');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : '403 Forbidden';
+      notify(
+        'ok',
+        `✅ Kiểm chứng Toàn vẹn (Mục 4.4.8): Backend đã chặn thao tác ${method} Audit Log #${id} — "${msg}"`,
+      );
+    }
   };
 
   const loadDirectoryData = useCallback(async () => {
@@ -287,12 +420,18 @@ export const IamManagementPage: React.FC = () => {
       qs.set('page', String(page));
       qs.set('limit', String(limit));
 
-      const [usersResult, rolesData, orgsData] = await Promise.all([
+      const [usersResult, rolesData, orgsData, myScopeData, scopeRulesData] = await Promise.all([
         fetchApiWithMeta<UserItem[] | { items: UserItem[] }>(API_ROUTES.USERS.LIST(qs.toString()), {
           headers: authHeaders(),
         }),
         fetchApi<RoleOption[]>(API_ROUTES.ROLES.LIST, { headers: authHeaders() }),
         fetchApi<OrgUnitOption[]>(API_ROUTES.ORGANIZATIONS.LIST, { headers: authHeaders() }),
+        fetchApi<DataScopeSelfState>(API_ROUTES.ROLES.DATA_SCOPES_ME, {
+          headers: authHeaders(),
+        }).catch(() => null),
+        fetchApi<DataScopeRuleItem[]>(API_ROUTES.ROLES.DATA_SCOPES_RULES, {
+          headers: authHeaders(),
+        }).catch(() => []),
       ]);
       const usersData = usersResult.data;
       const normalizedUsers = Array.isArray(usersData)
@@ -305,6 +444,8 @@ export const IamManagementPage: React.FC = () => {
       setTotalPages(Math.max(1, usersResult.meta?.totalPages ?? 1));
       setRoles(Array.isArray(rolesData) ? rolesData : []);
       setOrgs(Array.isArray(orgsData) ? orgsData : []);
+      if (myScopeData) setDataScopeSelf(myScopeData);
+      setDataScopeRules(Array.isArray(scopeRulesData) ? scopeRulesData : []);
     } catch (err) {
       if (err && typeof err === 'object' && 'status' in err && (err as { status: number }).status === 401) {
         setAccessToken('');
@@ -371,8 +512,9 @@ export const IamManagementPage: React.FC = () => {
     if (accessToken) {
       void loadDirectoryData();
       void loadAuthProfileData();
+      void loadAuditLogs();
     }
-  }, [accessToken, loadDirectoryData, loadAuthProfileData]);
+  }, [accessToken, loadDirectoryData, loadAuthProfileData, loadAuditLogs]);
 
   // --- Auth Handlers ---
   const performLoginRequest = useCallback(
@@ -816,6 +958,7 @@ export const IamManagementPage: React.FC = () => {
             newUserEmail,
           phone: newUserPhone || undefined,
           password: newUserPassword,
+          managerId: newUserManagerId.trim() ? Number(newUserManagerId) : null,
           roleIds: newUserRoleIds,
           organizationUnits: organizationsPayload,
         }),
@@ -826,6 +969,7 @@ export const IamManagementPage: React.FC = () => {
       setNewUserLastName('');
       setNewUserFullName('');
       setNewUserPhone('');
+      setNewUserManagerId('');
       await loadDirectoryData();
       notify('ok', 'Tạo mới người dùng thành công!');
     } catch (err) {
@@ -927,6 +1071,7 @@ export const IamManagementPage: React.FC = () => {
   const [editFullName, setEditFullName] = useState('');
   const [editEmail, setEditEmail] = useState('');
   const [editPhone, setEditPhone] = useState('');
+  const [editManagerId, setEditManagerId] = useState<string>('');
   const [editRoleIds, setEditRoleIds] = useState<number[]>([]);
   const [editOrgIds, setEditOrgIds] = useState<number[]>([]);
   const [editPrimaryOrgId, setEditPrimaryOrgId] = useState<number | null>(null);
@@ -938,6 +1083,7 @@ export const IamManagementPage: React.FC = () => {
     setEditFullName(u.fullName ?? '');
     setEditEmail(u.email ?? '');
     setEditPhone(u.phone ?? u.phoneNumber ?? '');
+    setEditManagerId(u.managerId ? String(u.managerId) : '');
     const currentRoleIds = u.roles
       .map((r) => Number((r as { roleId?: number; id?: number }).roleId ?? r.id))
       .filter((n) => Number.isFinite(n) && n > 0);
@@ -965,6 +1111,7 @@ export const IamManagementPage: React.FC = () => {
             `${editLastName.trim()} ${editFirstName.trim()}`.trim() ||
             editingUser.fullName,
           phone: editPhone.trim() || null,
+          managerId: editManagerId.trim() ? Number(editManagerId) : null,
         }),
       });
 
@@ -987,7 +1134,7 @@ export const IamManagementPage: React.FC = () => {
 
       setEditingUser(null);
       await loadDirectoryData();
-      notify('ok', `Đã cập nhật hồ sơ, vai trò và đơn vị cho người dùng #${editingUser.id}!`);
+      notify('ok', `Đã cập nhật hồ sơ, người quản lý, vai trò và đơn vị cho người dùng #${editingUser.id}!`);
     } catch (err) {
       notify('err', err instanceof Error ? err.message : 'Failed to update user profile/roles/organizations');
     }
@@ -1145,6 +1292,7 @@ export const IamManagementPage: React.FC = () => {
           code: newRoleCode,
           name: newRoleName,
           description: newRoleDesc || null,
+          dataScope: newRoleDataScope,
           permissions: newRolePerms
             .split(',')
             .map((p) => p.trim())
@@ -1154,10 +1302,33 @@ export const IamManagementPage: React.FC = () => {
       setNewRoleCode('');
       setNewRoleName('');
       setNewRoleDesc('');
+      setNewRoleDataScope(4);
       await loadDirectoryData();
-      notify('ok', 'Đã tạo vai trò mới!');
+      notify('ok', 'Đã tạo vai trò mới kèm cấu hình Phạm vi dữ liệu (Data Scope)!');
     } catch (err) {
       notify('err', err instanceof Error ? err.message : 'Create role failed');
+    }
+  };
+
+  const handleRegisterScopeRule = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await fetchApi(API_ROUTES.ROLES.DATA_SCOPES_RULES, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({
+          resource: newScopeRuleResource.trim(),
+          module: newScopeRuleModule.trim(),
+          description: newScopeRuleDesc.trim(),
+        }),
+      });
+      setNewScopeRuleResource('');
+      setNewScopeRuleModule('');
+      setNewScopeRuleDesc('');
+      await loadDirectoryData();
+      notify('ok', `Đã đăng ký rule phạm vi dữ liệu tùy chỉnh cho tài nguyên "${newScopeRuleResource.trim()}"!`);
+    } catch (err) {
+      notify('err', err instanceof Error ? err.message : 'Register custom data scope rule failed');
     }
   };
 
@@ -1183,6 +1354,11 @@ export const IamManagementPage: React.FC = () => {
     const updatedName = window.prompt(`Cập nhật tên vai trò (Mã cố định: ${role.code}):`, role.name);
     if (!updatedName) return;
     const updatedDesc = window.prompt('Cập nhật mô tả vai trò:', role.description ?? '');
+    const updatedScopeStr = window.prompt(
+      'Cập nhật Phạm vi dữ liệu (Data Scope: 1=ALL Toàn hệ thống, 2=ORG_UNIT Đơn vị & cấp dưới, 3=SUBORDINATES Cây quản lý, 4=SELF Cá nhân):',
+      String(role.dataScope ?? 4),
+    );
+    if (updatedScopeStr === null) return;
     const updatedPerms = window.prompt(
       'Cập nhật danh sách mã quyền (cách nhau dấu phẩy):',
       role.permissions.join(','),
@@ -1195,6 +1371,7 @@ export const IamManagementPage: React.FC = () => {
         body: JSON.stringify({
           name: updatedName.trim(),
           description: updatedDesc,
+          dataScope: Number(updatedScopeStr) || 4,
           permissions: updatedPerms
             .split(',')
             .map((p) => p.trim())
@@ -1371,6 +1548,17 @@ export const IamManagementPage: React.FC = () => {
             style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '8px 14px' }}
           >
             <Building2 size={15} /> Vai trò & Đơn vị/Chi nhánh
+          </button>
+          <button
+            type="button"
+            className={subTab === 'audit-logs' ? 'btn-primary' : 'btn-secondary'}
+            onClick={() => {
+              setSubTab('audit-logs');
+              void loadAuditLogs();
+            }}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '8px 14px' }}
+          >
+            <Shield size={15} /> Nhật ký thao tác (Audit Log 4.4)
           </button>
         </div>
       </div>
@@ -1820,6 +2008,14 @@ export const IamManagementPage: React.FC = () => {
                   value={editPhone}
                   onChange={(e) => setEditPhone(e.target.value)}
                 />
+                <input
+                  type="number"
+                  min={1}
+                  style={inputStyle}
+                  placeholder="ID Quản lý trực tiếp (Manager ID - 4.3)"
+                  value={editManagerId}
+                  onChange={(e) => setEditManagerId(e.target.value)}
+                />
               </div>
 
               <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '6px' }}>
@@ -1902,9 +2098,23 @@ export const IamManagementPage: React.FC = () => {
                 marginBottom: '14px',
               }}
             >
-              <h3 style={{ fontSize: '16px', fontWeight: 700, margin: 0 }}>
-                Danh sách người dùng (Hiển thị {users.length} / Tổng {totalUsers} người dùng)
-              </h3>
+              <div>
+                <h3 style={{ fontSize: '16px', fontWeight: 700, margin: 0 }}>
+                  Danh sách người dùng (Hiển thị {users.length} / Tổng {totalUsers} người dùng trong phạm vi)
+                </h3>
+                {dataScopeSelf && (
+                  <div style={{ fontSize: '12px', color: '#38bdf8', marginTop: '4px' }}>
+                    🛡️ Phạm vi dữ liệu (Data Scope — Mục 4.3) đang áp dụng:{' '}
+                    <strong>
+                      {dataScopeSelf.effectiveDataScope} - {dataScopeSelf.effectiveDataScopeName}
+                    </strong>
+                    {dataScopeSelf.effectiveDataScopeName === 'ORG_UNIT' &&
+                      ` (Đơn vị & cấp dưới: ${dataScopeSelf.allowedOrganizationUnitIds.join(', ') || '—'})`}
+                    {dataScopeSelf.effectiveDataScopeName === 'SUBORDINATES' &&
+                      ` (Cấp dưới trực thuộc: ${dataScopeSelf.allowedSubordinateUserIds.length} user)`}
+                  </div>
+                )}
+              </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', fontSize: '13px' }}>
                 <span style={{ color: 'var(--text-muted)' }}>Số dòng/trang:</span>
                 <select
@@ -1979,6 +2189,11 @@ export const IamManagementPage: React.FC = () => {
                           </div>
                           <div style={{ color: 'var(--text-muted)', fontSize: '12px' }}>
                             {u.email} {u.username ? `(@${u.username})` : ''}
+                            {u.managerId ? (
+                              <span style={{ marginLeft: '6px', color: '#a78bfa' }}>
+                                • Quản lý: #{u.managerId}
+                              </span>
+                            ) : null}
                           </div>
                         </td>
                         <td style={{ padding: '10px 8px' }}>
@@ -2152,12 +2367,22 @@ export const IamManagementPage: React.FC = () => {
                     onChange={(e) => setNewUserFirstName(e.target.value)}
                   />
                 </div>
-                <input
-                  style={inputStyle}
-                  placeholder="Họ và tên đầy đủ (Full Name)"
-                  value={newUserFullName}
-                  onChange={(e) => setNewUserFullName(e.target.value)}
-                />
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                  <input
+                    style={inputStyle}
+                    placeholder="Họ và tên đầy đủ (Full Name)"
+                    value={newUserFullName}
+                    onChange={(e) => setNewUserFullName(e.target.value)}
+                  />
+                  <input
+                    type="number"
+                    min={1}
+                    style={inputStyle}
+                    placeholder="ID Quản lý trực tiếp (VD: 10)"
+                    value={newUserManagerId}
+                    onChange={(e) => setNewUserManagerId(e.target.value)}
+                  />
+                </div>
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                   <input
                     type="text"
@@ -2846,7 +3071,7 @@ export const IamManagementPage: React.FC = () => {
           {/* Roles Manager */}
           <form onSubmit={(e) => void handleCreateRole(e)} style={cardStyle}>
             <h3 style={{ fontSize: '16px', fontWeight: 700, marginBottom: '12px' }}>
-              🔑 Quản lý Vai trò & Quyền hạn (RBAC Role — Mục 4.1)
+              🔑 Quản lý Vai trò, Quyền hạn & Phạm vi dữ liệu (RBAC & Data Scope — Mục 4.1 & 4.3)
             </h3>
             <div style={{ display: 'grid', gap: '10px', marginBottom: '16px' }}>
               <input
@@ -2869,6 +3094,21 @@ export const IamManagementPage: React.FC = () => {
                 value={newRoleDesc}
                 onChange={(e) => setNewRoleDesc(e.target.value)}
               />
+              <div>
+                <label style={{ display: 'block', fontSize: '11px', color: 'var(--text-muted)', marginBottom: '4px' }}>
+                  Phạm vi dữ liệu của vai trò (Data Scope — Mục 4.3):
+                </label>
+                <select
+                  style={inputStyle}
+                  value={newRoleDataScope}
+                  onChange={(e) => setNewRoleDataScope(Number(e.target.value))}
+                >
+                  <option value={1}>1 - ALL (Xem dữ liệu toàn hệ thống — chỉ vai trò được phép)</option>
+                  <option value={2}>2 - ORG_UNIT (Xem dữ liệu đơn vị & các đơn vị con)</option>
+                  <option value={3}>3 - SUBORDINATES (Xem dữ liệu cấp dưới theo cây quản lý)</option>
+                  <option value={4}>4 - SELF (Chỉ xem dữ liệu của chính mình — mặc định)</option>
+                </select>
+              </div>
               <input
                 style={inputStyle}
                 placeholder="Danh sách quyền (cách nhau dấu phẩy)"
@@ -2960,8 +3200,20 @@ export const IamManagementPage: React.FC = () => {
                   <li key={r.id} style={{ marginBottom: '6px' }}>
                     <div>
                       <strong>#{r.id} - {r.name}</strong> (<code>{r.code}</code>){' '}
-                      {r.isSystem ? '[SYSTEM]' : '[CUSTOM]'} — {r.permissions.length} quyền —{' '}
-                      <strong>{r.userCount ?? 0} user</strong>
+                      {r.isSystem ? '[SYSTEM]' : '[CUSTOM]'}{' '}
+                      <span
+                        style={{
+                          padding: '1px 7px',
+                          borderRadius: '10px',
+                          fontSize: '11px',
+                          fontWeight: 700,
+                          background: 'rgba(56, 189, 248, 0.16)',
+                          color: '#38bdf8',
+                        }}
+                      >
+                        Scope: {r.dataScope ?? 4} ({r.dataScopeName ?? 'SELF'})
+                      </span>{' '}
+                      — {r.permissions.length} quyền — <strong>{r.userCount ?? 0} user</strong>
                     </div>
                     <div style={{ display: 'flex', gap: '6px', marginTop: '2px', flexWrap: 'wrap' }}>
                       <button
@@ -2980,7 +3232,7 @@ export const IamManagementPage: React.FC = () => {
                         disabled={!hasPermission('roles.manage')}
                         onClick={() => void handleQuickEditRole(r)}
                       >
-                        Sửa / Gán quyền
+                        Sửa / Gán quyền & Scope
                       </button>
                       <button
                         type="button"
@@ -3017,6 +3269,493 @@ export const IamManagementPage: React.FC = () => {
               </ul>
             </div>
           </form>
+
+          {/* Section 4.3 — Data Scope & Custom Module Scope Rules Panel */}
+          <div style={{ ...cardStyle, gridColumn: '1 / -1' }}>
+            <h3 style={{ fontSize: '16px', fontWeight: 700, marginBottom: '8px' }}>
+              🛡️ Mục 4.3 — Phạm vi dữ liệu (Data Scope) & Rule mở rộng theo Module nghiệp vụ
+            </h3>
+            <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '14px' }}>
+              Áp dụng phạm vi dữ liệu trực tiếp ở tầng Backend/SQL cho danh sách, báo cáo xuất file (CSV/XLSX) và kiểm tra chống truy cập trái phép bằng cách đổi ID (Anti-IDOR 403). Cho phép các module nghiệp vụ đăng ký rule phạm vi riêng qua <code>DataScopeService.registerResourceRule()</code> mà không sửa trực tiếp Core.
+            </p>
+
+            {dataScopeSelf && (
+              <div
+                style={{
+                  padding: '12px 14px',
+                  borderRadius: '8px',
+                  background: 'rgba(15, 23, 42, 0.65)',
+                  border: '1px solid rgba(56, 189, 248, 0.3)',
+                  marginBottom: '16px',
+                  fontSize: '13px',
+                }}
+              >
+                <div>
+                  <strong>Phạm vi dữ liệu hiệu lực của phiên hiện tại (User #{dataScopeSelf.userId}):</strong>{' '}
+                  <span style={{ color: '#38bdf8', fontWeight: 700 }}>
+                    {dataScopeSelf.effectiveDataScope} — {dataScopeSelf.effectiveDataScopeName}
+                  </span>
+                </div>
+                <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                  • Đơn vị được phép truy cập (kể cả đơn vị con):{' '}
+                  <code>
+                    {dataScopeSelf.allowedOrganizationUnitIds.length > 0
+                      ? dataScopeSelf.allowedOrganizationUnitIds.join(', ')
+                      : 'Tất cả / Theo Scope'}
+                  </code>{' '}
+                  | • Cấp dưới trực thuộc theo cây quản lý (Subordinates):{' '}
+                  <code>{dataScopeSelf.allowedSubordinateUserIds.length} user</code>
+                </div>
+              </div>
+            )}
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '16px' }}>
+              <form onSubmit={(e) => void handleRegisterScopeRule(e)} style={{ display: 'grid', gap: '8px' }}>
+                <strong style={{ fontSize: '13px' }}>
+                  ➕ Đăng ký Rule phạm vi riêng cho Module nghiệp vụ (Không sửa Core):
+                </strong>
+                <input
+                  style={inputStyle}
+                  placeholder="Mã tài nguyên (VD: courses, orders, tickets)"
+                  required
+                  value={newScopeRuleResource}
+                  onChange={(e) => setNewScopeRuleResource(e.target.value)}
+                />
+                <input
+                  style={inputStyle}
+                  placeholder="Tên module nghiệp vụ (VD: lms-courses)"
+                  required
+                  value={newScopeRuleModule}
+                  onChange={(e) => setNewScopeRuleModule(e.target.value)}
+                />
+                <input
+                  style={inputStyle}
+                  placeholder="Mô tả quy tắc phạm vi dữ liệu của module"
+                  required
+                  value={newScopeRuleDesc}
+                  onChange={(e) => setNewScopeRuleDesc(e.target.value)}
+                />
+                <button
+                  type="submit"
+                  className="btn-primary"
+                  style={{ padding: '8px 14px', fontSize: '13px' }}
+                  disabled={!hasPermission('roles.manage')}
+                >
+                  Đăng ký Rule Phạm vi Module
+                </button>
+              </form>
+
+              <div style={{ fontSize: '13px' }}>
+                <strong>Danh sách Rule phạm vi dữ liệu đã đăng ký ({dataScopeRules.length}):</strong>
+                {dataScopeRules.length === 0 ? (
+                  <div style={{ color: 'var(--text-muted)', marginTop: '8px', fontSize: '12px' }}>
+                    Chưa có module nghiệp vụ nào đăng ký rule tùy chỉnh ngoài 4 mức mặc định (ALL, ORG_UNIT, SUBORDINATES, SELF).
+                  </div>
+                ) : (
+                  <ul style={{ marginTop: '8px', paddingLeft: '18px', lineHeight: 1.7 }}>
+                    {dataScopeRules.map((rule) => (
+                      <li key={rule.resource}>
+                        <code>{rule.resource}</code> (Module: <strong>{rule.module}</strong>) —{' '}
+                        {rule.description}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SUBTAB 4: AUDIT LOGS (Mục 4.4 — Nhật ký thao tác bất biến) */}
+      {subTab === 'audit-logs' && (
+        <div>
+          <div style={cardStyle}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', marginBottom: '12px' }}>
+              <div>
+                <h2 style={{ fontSize: '18px', fontWeight: 700 }}>
+                  📜 Mục 4.4 — Nhật ký thao tác hệ thống (Immutable Audit Log)
+                </h2>
+                <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                  Lưu vết bất biến (Append-only) toàn bộ thao tác nhạy cảm: Người thực hiện (User ID / Service Account), Thời gian & IP, Module & Chức năng, Dữ liệu Trước/Sau (Before/After JSON đã tự động che mật khẩu/secret), Lý do thay đổi, Request ID & Correlation ID. Nghiêm cấm sửa/xóa qua API thường (403 Forbidden).
+                </p>
+              </div>
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => void loadAuditLogs()}
+                style={{ padding: '7px 14px', fontSize: '13px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+              >
+                <RefreshCw size={14} /> Tra cứu / Làm mới ({auditTotal})
+              </button>
+            </div>
+
+            {/* Filter Bar (4.4.7) */}
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+                gap: '10px',
+                marginBottom: '16px',
+                padding: '12px',
+                borderRadius: '10px',
+                background: 'rgba(15, 23, 42, 0.55)',
+                border: '1px solid var(--border-color)',
+              }}
+            >
+              <div>
+                <label style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>
+                  Loại tác nhân (Actor Type)
+                </label>
+                <select
+                  style={inputStyle}
+                  value={auditActorTypeFilter}
+                  onChange={(e) => {
+                    setAuditActorTypeFilter(e.target.value);
+                    setAuditPage(1);
+                  }}
+                >
+                  <option value="">Tất cả (User + Service Account + System)</option>
+                  <option value="1">1 — USER (Người dùng)</option>
+                  <option value="2">2 — SERVICE_ACCOUNT (Tài khoản hệ thống)</option>
+                  <option value="3">3 — SYSTEM (Tiến trình nội bộ)</option>
+                </select>
+              </div>
+              <div>
+                <label style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>
+                  Module nghiệp vụ
+                </label>
+                <select
+                  style={inputStyle}
+                  value={auditModuleFilter}
+                  onChange={(e) => {
+                    setAuditModuleFilter(e.target.value);
+                    setAuditPage(1);
+                  }}
+                >
+                  <option value="">Tất cả Module</option>
+                  <option value="users">users (Người dùng)</option>
+                  <option value="roles">roles (Vai trò & Quyền)</option>
+                  <option value="organizations">organizations (Đơn vị/Chi nhánh)</option>
+                  <option value="auth">auth (Xác thực & Service Account)</option>
+                </select>
+              </div>
+              <div>
+                <label style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>
+                  Hành động (Action)
+                </label>
+                <input
+                  style={inputStyle}
+                  placeholder="VD: role.update, user.unlock..."
+                  value={auditActionFilter}
+                  onChange={(e) => {
+                    setAuditActionFilter(e.target.value);
+                    setAuditPage(1);
+                  }}
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>
+                  User ID thực hiện
+                </label>
+                <input
+                  style={inputStyle}
+                  placeholder="VD: 1, 2..."
+                  value={auditActorUserIdFilter}
+                  onChange={(e) => {
+                    setAuditActorUserIdFilter(e.target.value);
+                    setAuditPage(1);
+                  }}
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>
+                  Correlation ID / Request ID
+                </label>
+                <input
+                  style={inputStyle}
+                  placeholder="VD: corr-seed-audit-001"
+                  value={auditCorrelationFilter}
+                  onChange={(e) => {
+                    setAuditCorrelationFilter(e.target.value);
+                    setAuditPage(1);
+                  }}
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>
+                  Từ khóa (Lý do / Định danh / IP)
+                </label>
+                <input
+                  style={inputStyle}
+                  placeholder="Tìm kiếm tự do..."
+                  value={auditSearchQuery}
+                  onChange={(e) => {
+                    setAuditSearchQuery(e.target.value);
+                    setAuditPage(1);
+                  }}
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>
+                  Từ ngày (From Date)
+                </label>
+                <input
+                  type="date"
+                  style={inputStyle}
+                  value={auditFromDate}
+                  onChange={(e) => {
+                    setAuditFromDate(e.target.value);
+                    setAuditPage(1);
+                  }}
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>
+                  Đến ngày (To Date)
+                </label>
+                <input
+                  type="date"
+                  style={inputStyle}
+                  value={auditToDate}
+                  onChange={(e) => {
+                    setAuditToDate(e.target.value);
+                    setAuditPage(1);
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Audit Log Table */}
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid var(--border-color)', textAlign: 'left', color: 'var(--text-muted)' }}>
+                    <th style={{ padding: '10px 8px' }}>ID / Thời gian</th>
+                    <th style={{ padding: '10px 8px' }}>Người thực hiện (4.4.1)</th>
+                    <th style={{ padding: '10px 8px' }}>Module / Chức năng / Hành động (4.4.3)</th>
+                    <th style={{ padding: '10px 8px' }}>Lý do thay đổi (4.4.5)</th>
+                    <th style={{ padding: '10px 8px' }}>IP & Request / Correlation ID (4.4.2 & 4.4.6)</th>
+                    <th style={{ padding: '10px 8px', textAlign: 'right' }}>Chi tiết & Kiểm chứng Bất biến (4.4.4 & 4.4.8)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {auditLogs.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} style={{ padding: '24px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                        Không tìm thấy bản ghi Nhật ký thao tác (Audit Log) nào khớp bộ lọc.
+                      </td>
+                    </tr>
+                  ) : (
+                    auditLogs.map((log) => (
+                      <tr key={log.id} style={{ borderBottom: '1px solid rgba(148, 163, 184, 0.12)' }}>
+                        <td style={{ padding: '10px 8px', whiteSpace: 'nowrap' }}>
+                          <div style={{ fontWeight: 700 }}>#{log.id}</div>
+                          <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                            {new Date(log.createdAt).toLocaleString('vi-VN')}
+                          </div>
+                        </td>
+                        <td style={{ padding: '10px 8px' }}>
+                          <span
+                            style={{
+                              display: 'inline-block',
+                              padding: '2px 7px',
+                              borderRadius: '6px',
+                              fontSize: '11px',
+                              fontWeight: 700,
+                              background:
+                                log.actorType === 2
+                                  ? 'rgba(168, 85, 247, 0.2)'
+                                  : log.actorType === 1
+                                    ? 'rgba(56, 189, 248, 0.2)'
+                                    : 'rgba(148, 163, 184, 0.2)',
+                              color:
+                                log.actorType === 2
+                                  ? '#c084fc'
+                                  : log.actorType === 1
+                                    ? '#38bdf8'
+                                    : '#cbd5e1',
+                              marginBottom: '3px',
+                            }}
+                          >
+                            {log.actorTypeName}
+                          </span>
+                          <div style={{ fontSize: '12px' }}>
+                            {log.actorIdentifier || (log.actorUserId ? `User #${log.actorUserId}` : log.actorServiceAccountId ? `SA #${log.actorServiceAccountId}` : 'system')}
+                          </div>
+                          {log.actorUserId && (
+                            <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                              User ID: <code>{log.actorUserId}</code>
+                            </div>
+                          )}
+                          {log.actorServiceAccountId && (
+                            <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                              SA ID: <code>{log.actorServiceAccountId}</code>
+                              {log.actorApiClientId ? ` | Client #${log.actorApiClientId}` : ''}
+                            </div>
+                          )}
+                        </td>
+                        <td style={{ padding: '10px 8px' }}>
+                          <div>
+                            <strong style={{ color: '#38bdf8' }}>{log.module}</strong> /{' '}
+                            <span>{log.feature}</span>
+                          </div>
+                          <div style={{ marginTop: '2px' }}>
+                            <code>{log.action}</code>
+                            {log.resourceType && (
+                              <span style={{ fontSize: '11px', color: 'var(--text-muted)', marginLeft: '6px' }}>
+                                ({log.resourceType} #{log.resourceId ?? 'N/A'})
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td style={{ padding: '10px 8px', maxWidth: '240px' }}>
+                          {log.reason ? (
+                            <span>{log.reason}</span>
+                          ) : (
+                            <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>—</span>
+                          )}
+                        </td>
+                        <td style={{ padding: '10px 8px', fontSize: '11px' }}>
+                          <div>
+                            IP: <code>{log.ipAddress ?? 'local'}</code>
+                          </div>
+                          <div style={{ color: 'var(--text-muted)', marginTop: '2px' }}>
+                            Req: <code>{log.requestId ?? '—'}</code>
+                          </div>
+                          <div style={{ color: 'var(--text-muted)' }}>
+                            Corr: <code>{log.correlationId ?? '—'}</code>
+                          </div>
+                        </td>
+                        <td style={{ padding: '10px 8px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                          <div style={{ display: 'inline-flex', gap: '6px' }}>
+                            <button
+                              type="button"
+                              className="btn-secondary"
+                              onClick={() => setSelectedAuditLog(log)}
+                              style={{ padding: '4px 10px', fontSize: '12px' }}
+                            >
+                              Xem Before/After
+                            </button>
+                            <button
+                              type="button"
+                              className="btn-secondary"
+                              onClick={() => void handleTestAuditLogImmutability(log.id, 'DELETE')}
+                              style={{ padding: '4px 10px', fontSize: '12px', color: '#f87171' }}
+                              title="Kiểm chứng Mục 4.4.8: Thử gọi DELETE /roles/audit-logs/:id (Backend sẽ chặn 403)"
+                            >
+                              Thử Xóa (403)
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Pagination */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '14px', fontSize: '13px' }}>
+              <span style={{ color: 'var(--text-muted)' }}>
+                Tổng số bản ghi Audit Log: <strong>{auditTotal}</strong> (Trang {auditPage}/{auditTotalPages})
+              </span>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  disabled={auditPage <= 1}
+                  onClick={() => setAuditPage((p) => Math.max(1, p - 1))}
+                  style={{ padding: '4px 12px', fontSize: '12px' }}
+                >
+                  ← Trang trước
+                </button>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  disabled={auditPage >= auditTotalPages}
+                  onClick={() => setAuditPage((p) => Math.min(auditTotalPages, p + 1))}
+                  style={{ padding: '4px 12px', fontSize: '12px' }}
+                >
+                  Trang sau →
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Modal xem chi tiết Before / After JSON (Mục 4.4.4) */}
+          {selectedAuditLog && (
+            <div style={cardStyle}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                <h3 style={{ fontSize: '16px', fontWeight: 700 }}>
+                  🔍 Chi tiết Nhật ký thao tác #{selectedAuditLog.id} — <code>{selectedAuditLog.action}</code>
+                </h3>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={() => void handleTestAuditLogImmutability(selectedAuditLog.id, 'PUT')}
+                    style={{ padding: '4px 10px', fontSize: '12px', color: '#fbbf24' }}
+                  >
+                    Thử Sửa PUT (Kiểm chứng 403)
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={() => setSelectedAuditLog(null)}
+                    style={{ padding: '4px 10px', fontSize: '12px' }}
+                  >
+                    Đóng ✕
+                  </button>
+                </div>
+              </div>
+              <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '12px' }}>
+                Actor: <strong>{selectedAuditLog.actorTypeName}</strong> ({selectedAuditLog.actorIdentifier ?? 'N/A'}) | IP: <code>{selectedAuditLog.ipAddress ?? 'local'}</code> | Request ID: <code>{selectedAuditLog.requestId ?? '—'}</code> | Correlation ID: <code>{selectedAuditLog.correlationId ?? '—'}</code>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '14px' }}>
+                <div>
+                  <strong style={{ fontSize: '13px', color: '#f87171' }}>
+                    Dữ liệu TRƯỚC khi thay đổi (beforeData):
+                  </strong>
+                  <pre
+                    style={{
+                      marginTop: '6px',
+                      padding: '12px',
+                      borderRadius: '8px',
+                      background: 'rgba(15, 23, 42, 0.8)',
+                      border: '1px solid rgba(248, 113, 113, 0.3)',
+                      fontSize: '12px',
+                      overflowX: 'auto',
+                    }}
+                  >
+                    {selectedAuditLog.beforeData
+                      ? JSON.stringify(selectedAuditLog.beforeData, null, 2)
+                      : 'null (Tạo mới / Không có trạng thái trước)'}
+                  </pre>
+                </div>
+                <div>
+                  <strong style={{ fontSize: '13px', color: '#34d399' }}>
+                    Dữ liệu SAU khi thay đổi (afterData):
+                  </strong>
+                  <pre
+                    style={{
+                      marginTop: '6px',
+                      padding: '12px',
+                      borderRadius: '8px',
+                      background: 'rgba(15, 23, 42, 0.8)',
+                      border: '1px solid rgba(52, 211, 153, 0.3)',
+                      fontSize: '12px',
+                      overflowX: 'auto',
+                    }}
+                  >
+                    {selectedAuditLog.afterData
+                      ? JSON.stringify(selectedAuditLog.afterData, null, 2)
+                      : 'null'}
+                  </pre>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </main>

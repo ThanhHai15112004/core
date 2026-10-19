@@ -12,6 +12,7 @@ import {
   REQUIRED_PERMISSIONS_KEY,
   REQUIRED_ROLES_KEY,
 } from '@packages/http/index.js';
+import { RequestContextService } from '@packages/logging/index.js';
 import { TokenService } from '../providers/token.service.js';
 import type { UserIdentity } from '../contracts/auth.contract.js';
 
@@ -21,6 +22,20 @@ export class AuthGuard implements CanActivate {
     private readonly reflector: Reflector,
     private readonly tokenService: TokenService,
   ) {}
+
+  private attachActorToContext(request: FastifyRequest, user: UserIdentity): void {
+    const store = RequestContextService.current();
+    if (!store) return;
+    store.actor = user;
+    store.userId = String(user.id);
+    if (!store.ipAddress && request.ip) {
+      store.ipAddress = request.ip;
+    }
+    const ua = request.headers['user-agent'];
+    if (!store.userAgent && ua) {
+      store.userAgent = Array.isArray(ua) ? ua[0] : ua;
+    }
+  }
 
   /** Kiểm tra xác thực JWT và quyền truy cập (Roles & Permissions) của yêu cầu HTTP trước khi vào controller */
   public async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -48,6 +63,7 @@ export class AuthGuard implements CanActivate {
               .catch(() => null);
             if (optionalUser) {
               request.user = optionalUser;
+              this.attachActorToContext(request, optionalUser);
             }
           }
         }
@@ -79,6 +95,7 @@ export class AuthGuard implements CanActivate {
     }
 
     request.user = user;
+    this.attachActorToContext(request, user);
 
     const requiredRoles =
       this.reflector.getAllAndOverride<readonly string[]>(REQUIRED_ROLES_KEY, [

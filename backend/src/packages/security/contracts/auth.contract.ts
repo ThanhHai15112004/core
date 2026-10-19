@@ -10,6 +10,8 @@ export interface UserIdentity {
   readonly roles: readonly string[];
   readonly permissions: readonly string[];
   readonly organizationUnitIds?: readonly number[];
+  readonly dataScope?: number;
+  readonly dataScopes?: readonly number[];
 }
 
 export type JwtTokenType = 'access' | 'refresh' | 'mfa_challenge' | 'step_up';
@@ -23,6 +25,8 @@ export interface TokenPayload {
   readonly roles?: string[];
   readonly permissions?: string[];
   readonly organizationUnitIds?: Array<number | string>;
+  readonly dataScope?: number;
+  readonly dataScopes?: number[];
   readonly iat?: number;
   readonly exp?: number;
   readonly [key: string]: unknown;
@@ -42,4 +46,3 @@ export interface IUserIdentityResolver {
 }
 
 export const USER_IDENTITY_RESOLVER = Symbol('USER_IDENTITY_RESOLVER');
-

@@ -26,6 +26,7 @@ export interface UserResponse {
   readonly failedLoginAttempts: number;
   readonly mfaEnabled: boolean;
   readonly primaryOrganizationUnitId: number | null;
+  readonly managerId?: number | null;
   readonly roles: readonly UserRoleAssignmentSummary[];
   readonly organizationUnits: readonly UserOrganizationAssignmentSummary[];
   readonly lastLoginAt: string | null;
@@ -75,6 +76,8 @@ export const userRoleSummarySchema = z.object({
   roleId: z.number().int().min(1),
   code: z.string(),
   name: z.string(),
+  dataScope: z.number().int().min(1).max(4).optional(),
+  dataScopeName: z.string().optional(),
 });
 
 export const userOrganizationSummarySchema = z.object({
@@ -120,6 +123,7 @@ export const userResponseSchema = z.object({
   failedLoginAttempts: z.number(),
   mfaEnabled: z.boolean(),
   primaryOrganizationUnitId: z.number().int().min(1).nullable(),
+  managerId: z.number().int().min(1).nullable().optional(),
   roles: z.array(userRoleSummarySchema),
   organizationUnits: z.array(userOrganizationSummarySchema),
   lastLoginAt: z.string().nullable(),

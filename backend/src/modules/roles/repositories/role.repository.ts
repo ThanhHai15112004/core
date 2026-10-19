@@ -54,6 +54,9 @@ export class RoleRepository extends BaseTypeOrmRepository<RoleEntity> {
       if (query.status !== undefined) {
         qb.andWhere('r.status = :status', { status: query.status });
       }
+      if (query.dataScope !== undefined) {
+        qb.andWhere('r.dataScope = :dataScope', { dataScope: query.dataScope });
+      }
       if (query.search) {
         const keyword = `%${query.search.trim().toLowerCase()}%`;
         qb.andWhere('(LOWER(r.code) LIKE :keyword OR LOWER(r.name) LIKE :keyword)', { keyword });

@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import {
   ConflictAppException,
   ForbiddenAppException,
@@ -7,6 +7,8 @@ import {
   UnauthorizedAppException,
 } from '@packages/kernel/index.js';
 import {
+  AUDIT_ACTOR_TYPE,
+  AuditLogService,
   type IdentityResolutionContext,
   PasswordHasherService,
   type TokenPayload,
@@ -68,6 +70,9 @@ export class ServiceAccountService {
     private readonly tokenService: TokenService,
     private readonly serviceAccountRepo: AuthServiceAccountRepository,
     private readonly apiClientRepo: AuthApiClientRepository,
+    @Optional()
+    @Inject(AuditLogService)
+    private readonly auditLogService: AuditLogService | null = null,
   ) {}
 
   // ============================================================================
@@ -108,7 +113,25 @@ export class ServiceAccountService {
       lastUsedResult: null,
     });
 
-    return this.toServiceAccountResponse(saved);
+    const response = this.toServiceAccountResponse(saved);
+    await this.auditLogService?.record({
+      actorUserId: actorId ?? null,
+      module: 'auth',
+      feature: 'service-account',
+      action: 'service_account.create',
+      resourceType: 'service_account',
+      resourceId: response.id,
+      beforeData: null,
+      afterData: {
+        id: response.id,
+        code: response.code,
+        name: response.name,
+        status: response.status,
+        scopes: response.scopes,
+      },
+      reason: 'Created system service account',
+    });
+    return response;
   }
 
   /** Danh sách toàn bộ Service Accounts */
@@ -135,6 +158,13 @@ export class ServiceAccountService {
     if (!existing) {
       throw new NotFoundAppException('auth.serviceAccountNotFound', { id });
     }
+    const beforeSnapshot = {
+      id: existing.id,
+      code: existing.code,
+      name: existing.name,
+      status: existing.status,
+      scopes: this.parseStringArray(existing.scopesJson),
+    };
 
     if (dto.name !== undefined) {
       existing.name = dto.name.trim();
@@ -150,7 +180,24 @@ export class ServiceAccountService {
     }
 
     const saved = await this.saveServiceAccount(existing);
-    return this.toServiceAccountResponse(saved);
+    const response = this.toServiceAccountResponse(saved);
+    await this.auditLogService?.record({
+      module: 'auth',
+      feature: 'service-account',
+      action: 'service_account.update',
+      resourceType: 'service_account',
+      resourceId: id,
+      beforeData: beforeSnapshot,
+      afterData: {
+        id: response.id,
+        code: response.code,
+        name: response.name,
+        status: response.status,
+        scopes: response.scopes,
+      },
+      reason: 'Updated service account configuration',
+    });
+    return response;
   }
 
   // ============================================================================
@@ -215,6 +262,23 @@ export class ServiceAccountService {
     });
 
     const baseResponse = this.toApiClientResponse(saved, serviceAccount);
+    await this.auditLogService?.record({
+      actorUserId: actorId ?? null,
+      module: 'auth',
+      feature: 'api-client',
+      action: 'api_client.create',
+      resourceType: 'api_client',
+      resourceId: baseResponse.id,
+      beforeData: null,
+      afterData: {
+        id: baseResponse.id,
+        clientId: baseResponse.clientId,
+        serviceAccountId: baseResponse.serviceAccountId,
+        scopes: baseResponse.scopes,
+        allowedIps: baseResponse.allowedIps,
+      },
+      reason: `Created API Client for service account ${serviceAccount.code}`,
+    });
     return {
       ...baseResponse,
       clientSecret: plainClientSecret,
@@ -251,6 +315,7 @@ export class ServiceAccountService {
     if (!client) {
       throw new NotFoundAppException('auth.apiClientNotFound', { id });
     }
+    const prevScopes = this.parseStringArray(client.scopesJson);
 
     const sa = await this.findServiceAccountByIdInternal(client.serviceAccountId);
     const nextScopes = this.normalizeScopes(dto.scopes);
@@ -261,7 +326,18 @@ export class ServiceAccountService {
 
     client.scopesJson = JSON.stringify(nextScopes);
     const saved = await this.saveApiClient(client);
-    return this.toApiClientResponse(saved, sa ?? undefined);
+    const response = this.toApiClientResponse(saved, sa ?? undefined);
+    await this.auditLogService?.record({
+      module: 'auth',
+      feature: 'api-client',
+      action: 'api_client.update_scopes',
+      resourceType: 'api_client',
+      resourceId: id,
+      beforeData: { scopes: prevScopes },
+      afterData: { scopes: response.scopes },
+      reason: 'Updated API Client scopes',
+    });
+    return response;
   }
 
   /** Cập nhật danh sách giới hạn IP được phép gọi cho API Client (Mục 3.6.6) */
@@ -273,12 +349,24 @@ export class ServiceAccountService {
     if (!client) {
       throw new NotFoundAppException('auth.apiClientNotFound', { id });
     }
+    const prevIps = this.parseStringArray(client.allowedIpsJson);
 
     const allowedIps = this.normalizeIpList(dto.allowedIps);
     client.allowedIpsJson = JSON.stringify(allowedIps);
     const saved = await this.saveApiClient(client);
     const sa = await this.findServiceAccountByIdInternal(client.serviceAccountId);
-    return this.toApiClientResponse(saved, sa ?? undefined);
+    const response = this.toApiClientResponse(saved, sa ?? undefined);
+    await this.auditLogService?.record({
+      module: 'auth',
+      feature: 'api-client',
+      action: 'api_client.update_allowed_ips',
+      resourceType: 'api_client',
+      resourceId: id,
+      beforeData: { allowedIps: prevIps },
+      afterData: { allowedIps: response.allowedIps },
+      reason: 'Updated API Client IP whitelist',
+    });
+    return response;
   }
 
   /**
@@ -298,6 +386,7 @@ export class ServiceAccountService {
       throw new ForbiddenAppException('auth.apiClientRevoked', [{ clientId: client.clientId }]);
     }
 
+    const prevTokenVersion = client.tokenVersion ?? 1;
     const plainClientSecret = `cs_${this.passwordHasher.generateRandomToken(24)}`;
     const clientSecretHash = this.passwordHasher.sha256(plainClientSecret);
     const secretPrefix = `${plainClientSecret.slice(0, 10)}...`;
@@ -311,6 +400,19 @@ export class ServiceAccountService {
     }
 
     const saved = await this.saveApiClient(client);
+    await this.auditLogService?.record({
+      module: 'auth',
+      feature: 'api-client',
+      action: 'api_client.rotate_secret',
+      resourceType: 'api_client',
+      resourceId: id,
+      beforeData: { tokenVersion: prevTokenVersion },
+      afterData: {
+        tokenVersion: saved.tokenVersion,
+        secretRotatedAt: now.toISOString(),
+      },
+      reason: 'Rotated API Client secret',
+    });
     return {
       rotated: true,
       id: Number(saved.id),
@@ -334,6 +436,7 @@ export class ServiceAccountService {
     if (!client) {
       throw new NotFoundAppException('auth.apiClientNotFound', { id });
     }
+    const prevStatus = client.status;
 
     const now = new Date();
     client.status = API_CLIENT_STATUS.REVOKED;
@@ -342,6 +445,20 @@ export class ServiceAccountService {
     client.tokenVersion = (client.tokenVersion ?? 1) + 1;
 
     const saved = await this.saveApiClient(client);
+    await this.auditLogService?.record({
+      module: 'auth',
+      feature: 'api-client',
+      action: 'api_client.revoke',
+      resourceType: 'api_client',
+      resourceId: id,
+      beforeData: { status: prevStatus },
+      afterData: {
+        status: saved.status,
+        tokenVersion: saved.tokenVersion,
+        revokedAt: now.toISOString(),
+      },
+      reason: saved.revokedReason ?? 'Revoked by administrator',
+    });
     return {
       revoked: true,
       id: Number(saved.id),
@@ -487,6 +604,27 @@ export class ServiceAccountService {
       status: 'SUCCESS',
       result: 'SUCCESS',
       reason: `Issued token with scopes [${grantedScopes.join(', ')}]`,
+    });
+
+    await this.auditLogService?.record({
+      actorType: AUDIT_ACTOR_TYPE.SERVICE_ACCOUNT,
+      actorServiceAccountId: Number(serviceAccount.id),
+      actorApiClientId: Number(client.id),
+      actorIdentifier: `${serviceAccount.code}:${client.clientId}`,
+      module: 'auth',
+      feature: 'api-client-token',
+      action: 'api_client.issue_token',
+      resourceType: 'api_client',
+      resourceId: client.id,
+      beforeData: null,
+      afterData: {
+        clientId: client.clientId,
+        serviceAccountId: Number(serviceAccount.id),
+        serviceAccountCode: serviceAccount.code,
+        scopes: grantedScopes,
+      },
+      reason: `Issued M2M access token for ${serviceAccount.code}`,
+      ipAddress,
     });
 
     return {

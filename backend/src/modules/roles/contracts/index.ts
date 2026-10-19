@@ -1,3 +1,21 @@
+import {
+  DATA_SCOPE,
+  type DataScopeCode,
+  type DataScopeName,
+  getDataScopeName,
+  inferDefaultDataScopeForRoleCode,
+  parseDataScope,
+} from '@packages/security/index.js';
+
+export {
+  DATA_SCOPE,
+  type DataScopeCode,
+  type DataScopeName,
+  getDataScopeName,
+  inferDefaultDataScopeForRoleCode,
+  parseDataScope,
+};
+
 export const ROLE_STATUS = {
   ACTIVE: 1,
   INACTIVE: 2,
@@ -33,6 +51,8 @@ export interface RoleSummary {
   readonly code: string;
   readonly name: string;
   readonly isSystem: boolean;
+  readonly dataScope: DataScopeCode;
+  readonly dataScopeName: DataScopeName;
   readonly status: RoleStatusCode;
   readonly statusName: RoleStatusName;
   readonly permissionIds: readonly number[];
@@ -79,6 +99,7 @@ export interface IRolesPublicService {
   findByIds(roleIds: readonly number[]): Promise<RoleSummary[]>;
   findByCodes(codes: readonly string[]): Promise<RoleSummary[]>;
   resolvePermissionsByRoleIds(roleIds: readonly number[]): Promise<string[]>;
+  resolveDataScopesByRoleIds?(roleIds: readonly number[]): Promise<DataScopeCode[]>;
   ensureActiveRolesExist(roleIds: readonly number[]): Promise<RoleSummary[]>;
   registerRoleUserCountDelegate?(
     delegate: (roleIds: readonly number[]) => Promise<Map<number, number>>,

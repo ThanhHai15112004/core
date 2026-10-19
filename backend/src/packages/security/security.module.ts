@@ -12,6 +12,8 @@ import { SecretRegistryService } from './providers/secret-registry.service.js';
 import { PasswordHasherService } from './providers/password-hasher.service.js';
 import { FieldEncryptionService } from './providers/field-encryption.service.js';
 import { TotpService } from './providers/totp.service.js';
+import { DataScopeService } from './providers/data-scope.service.js';
+import { AuditLogService } from './providers/audit-log.service.js';
 
 @Global()
 @Module({
@@ -38,6 +40,8 @@ import { TotpService } from './providers/totp.service.js';
     FieldEncryptionService,
     TotpService,
     TokenService,
+    DataScopeService,
+    AuditLogService,
     AuthGuard,
     SecurityManageableAdapter,
   ],
@@ -51,6 +55,8 @@ import { TotpService } from './providers/totp.service.js';
     FieldEncryptionService,
     TotpService,
     TokenService,
+    DataScopeService,
+    AuditLogService,
     AuthGuard,
     SecurityManageableAdapter,
   ],

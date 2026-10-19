@@ -1,6 +1,7 @@
-import { Module } from '@nestjs/common';
+import { Module, Optional } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { DatabaseModule } from '@packages/database/index.js';
+import { CoreI18nService } from '@packages/i18n/index.js';
 import { SecurityModule } from '@packages/security/index.js';
 import { OrganizationsModule } from '@modules/organizations/index.js';
 import { RolesModule } from '@modules/roles/index.js';
@@ -20,6 +21,8 @@ import { UsersService } from './services/users.service.js';
 import { UserImportService } from './import/index.js';
 import { UserExportService } from './export/index.js';
 import { UsersController } from './controllers/users.controller.js';
+import enUsers from './locales/en/users.json' with { type: 'json' };
+import viUsers from './locales/vi/users.json' with { type: 'json' };
 
 @Module({
   imports: [
@@ -59,4 +62,8 @@ import { UsersController } from './controllers/users.controller.js';
     USERS_PUBLIC_SERVICE,
   ],
 })
-export class UsersModule {}
+export class UsersModule {
+  constructor(@Optional() i18n?: CoreI18nService) {
+    i18n?.registerNamespace('users', { vi: viUsers, en: enUsers });
+  }
+}

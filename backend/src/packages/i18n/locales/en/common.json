@@ -20,5 +20,7 @@
   "UNPROCESSABLE_ENTITY": "Unprocessable entity",
   "TOO_MANY_REQUESTS": "Too many requests, please try again later",
   "SERVICE_UNAVAILABLE": "Service temporarily unavailable",
-  "HTTP_ERROR": "HTTP request failed"
+  "HTTP_ERROR": "HTTP request failed",
+  "security.dataScopeForbidden": "You do not have permission to access records outside your authorized Data Scope",
+  "security.auditLogImmutable": "Audit Logs are immutable (append-only) — modifying or deleting audit records via standard APIs is strictly prohibited to preserve integrity"
 }

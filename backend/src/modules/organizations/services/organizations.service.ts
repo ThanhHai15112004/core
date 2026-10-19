@@ -1,10 +1,11 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import {
   BadRequestAppException,
   ConflictAppException,
   HTTP_ERROR_CODE,
   NotFoundAppException,
 } from '@packages/kernel/index.js';
+import { AuditLogService, DataScopeService } from '@packages/security/index.js';
 import {
   type IOrganizationsPublicService,
   ORG_UNIT_STATUS,
@@ -25,7 +26,17 @@ export class OrganizationsService implements IOrganizationsPublicService {
   constructor(
     private readonly repository: OrganizationUnitRepository,
     private readonly mapper: OrganizationsMapper,
-  ) {}
+    @Optional()
+    @Inject(DataScopeService)
+    private readonly dataScopeService: DataScopeService | null = null,
+    @Optional()
+    @Inject(AuditLogService)
+    private readonly auditLogService: AuditLogService | null = null,
+  ) {
+    this.dataScopeService?.registerOrgHierarchyResolver((unitIds) =>
+      this.resolveDescendantUnitIds(unitIds),
+    );
+  }
 
   /** Lấy danh sách đơn vị/chi nhánh có lọc */
   public async list(query: ListOrganizationUnitsQuery = {}): Promise<OrganizationUnitResponse[]> {
@@ -73,7 +84,25 @@ export class OrganizationsService implements IOrganizationsPublicService {
       description: dto.description ?? null,
     });
 
-    return this.mapper.toResponse(saved);
+    const response = this.mapper.toResponse(saved);
+    await this.auditLogService?.record({
+      module: 'organizations',
+      feature: 'organization-unit-management',
+      action: 'organization_unit.create',
+      resourceType: 'organization_unit',
+      resourceId: response.id,
+      beforeData: null,
+      afterData: {
+        id: response.id,
+        code: response.code,
+        name: response.name,
+        type: response.type,
+        parentId: response.parentId,
+        status: response.status,
+      },
+      reason: 'Created organization unit',
+    });
+    return response;
   }
 
   /** Cập nhật thông tin đơn vị hoặc chi nhánh */
@@ -85,6 +114,15 @@ export class OrganizationsService implements IOrganizationsPublicService {
     if (!entity) {
       throw new NotFoundAppException('organizations.notFound', { id });
     }
+    const beforeSnapshot = {
+      id: entity.id,
+      code: entity.code,
+      name: entity.name,
+      type: entity.type,
+      parentId: entity.parentId,
+      status: entity.status,
+      description: entity.description,
+    };
 
     if (dto.parentId !== undefined && dto.parentId !== null) {
       if (dto.parentId === id) {
@@ -105,7 +143,26 @@ export class OrganizationsService implements IOrganizationsPublicService {
     if (dto.description !== undefined) entity.description = dto.description;
 
     const saved = await this.repository.saveEntity(entity);
-    return this.mapper.toResponse(saved);
+    const response = this.mapper.toResponse(saved);
+    await this.auditLogService?.record({
+      module: 'organizations',
+      feature: 'organization-unit-management',
+      action: 'organization_unit.update',
+      resourceType: 'organization_unit',
+      resourceId: id,
+      beforeData: beforeSnapshot,
+      afterData: {
+        id: response.id,
+        code: response.code,
+        name: response.name,
+        type: response.type,
+        parentId: response.parentId,
+        status: response.status,
+        description: response.description,
+      },
+      reason: 'Updated organization unit',
+    });
+    return response;
   }
 
   /** Xóa mềm đơn vị hoặc chi nhánh */
@@ -114,7 +171,25 @@ export class OrganizationsService implements IOrganizationsPublicService {
     if (!entity) {
       throw new NotFoundAppException('organizations.notFound', { id });
     }
+    const beforeSnapshot = {
+      id: entity.id,
+      code: entity.code,
+      name: entity.name,
+      type: entity.type,
+      parentId: entity.parentId,
+      status: entity.status,
+    };
     await this.repository.repository.softDelete(id);
+    await this.auditLogService?.record({
+      module: 'organizations',
+      feature: 'organization-unit-management',
+      action: 'organization_unit.delete',
+      resourceType: 'organization_unit',
+      resourceId: id,
+      beforeData: beforeSnapshot,
+      afterData: { deleted: true },
+      reason: 'Soft-deleted organization unit',
+    });
     return { deleted: true, id };
   }
 
@@ -151,5 +226,43 @@ export class OrganizationsService implements IOrganizationsPublicService {
     }
 
     return entities.map((item) => this.mapper.toSummary(item));
+  }
+
+  /**
+   * Hợp đồng công khai: Giải quyết danh sách toàn bộ ID đơn vị (bao gồm các đơn vị gốc `rootUnitIds`
+   * và toàn bộ đơn vị/phòng ban/nhóm con trực thuộc theo cây `parentId` — Mục 4.3.2).
+   */
+  public async resolveDescendantUnitIds(rootUnitIds: readonly number[]): Promise<number[]> {
+    const seeds = [
+      ...new Set(rootUnitIds.map(Number).filter((id) => Number.isInteger(id) && id > 0)),
+    ];
+    if (seeds.length === 0) return [];
+
+    const allUnits = await this.repository.findFiltered({});
+    const childrenByParent = new Map<number, number[]>();
+    for (const unit of allUnits) {
+      if (Number(unit.status) === ORG_UNIT_STATUS.ARCHIVED) continue;
+      if (unit.parentId !== undefined && unit.parentId !== null) {
+        const pId = Number(unit.parentId);
+        const list = childrenByParent.get(pId) ?? [];
+        list.push(Number(unit.id));
+        childrenByParent.set(pId, list);
+      }
+    }
+
+    const visited = new Set<number>(seeds);
+    const queue = [...seeds];
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+      const children = childrenByParent.get(current) ?? [];
+      for (const childId of children) {
+        if (!visited.has(childId)) {
+          visited.add(childId);
+          queue.push(childId);
+        }
+      }
+    }
+
+    return [...visited].sort((a, b) => a - b);
   }
 }

@@ -92,6 +92,7 @@ export interface IOrganizationsPublicService {
   findByIds(ids: readonly number[]): Promise<OrganizationUnitSummary[]>;
   findByCodes(codes: readonly string[]): Promise<OrganizationUnitSummary[]>;
   ensureActiveUnitsExist(ids: readonly number[]): Promise<OrganizationUnitSummary[]>;
+  resolveDescendantUnitIds?(rootUnitIds: readonly number[]): Promise<number[]>;
 }
 
 export const ORGANIZATIONS_PUBLIC_SERVICE = Symbol('ORGANIZATIONS_PUBLIC_SERVICE');

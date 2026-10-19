@@ -17,7 +17,11 @@ export interface RequestSource {
 
 export interface RequestContextStore {
   correlationId: string;
+  requestId?: string;
   userId?: string;
+  ipAddress?: string | null;
+  userAgent?: string | null;
+  actor?: unknown;
   /** Job đang xử lý (worker) — log trong lúc xử lý mang `jobId` để lọc theo job. */
   jobId?: string;
   source?: RequestSource;

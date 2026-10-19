@@ -62,6 +62,10 @@ export class UserIdentityResolverService implements IUserIdentityResolver {
         ...(payload.organizationUnitIds !== undefined
           ? { organizationUnitIds: payload.organizationUnitIds.map(Number) }
           : {}),
+        ...(payload.dataScope !== undefined ? { dataScope: Number(payload.dataScope) } : {}),
+        ...(Array.isArray(payload.dataScopes)
+          ? { dataScopes: payload.dataScopes.map(Number) }
+          : {}),
       };
     }
 
@@ -85,6 +89,8 @@ export class UserIdentityResolverService implements IUserIdentityResolver {
       roles: user.roles,
       permissions: user.permissions,
       organizationUnitIds: user.organizationUnitIds,
+      ...(user.dataScope !== undefined ? { dataScope: user.dataScope } : {}),
+      ...(user.dataScopes !== undefined ? { dataScopes: user.dataScopes } : {}),
     };
   }
 }

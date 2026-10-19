@@ -154,6 +154,8 @@ export interface UserRoleAssignmentSummary {
   readonly roleId: number;
   readonly code: string;
   readonly name: string;
+  readonly dataScope?: number;
+  readonly dataScopeName?: string;
 }
 
 export interface UserAuthCredentialsView {
@@ -193,9 +195,12 @@ export interface UserAuthIdentityView {
   readonly lockedUntil: Date | null;
   readonly mfaEnabled: boolean;
   readonly primaryOrganizationUnitId: number | null;
+  readonly managerId?: number | null;
   readonly organizationUnitIds: readonly number[];
   readonly roles: readonly string[];
   readonly permissions: readonly string[];
+  readonly dataScope?: number;
+  readonly dataScopes?: readonly number[];
   readonly profile?: UserProfileView;
 }
 
@@ -310,6 +315,3 @@ export interface IUsersPublicService {
 }
 
 export const USERS_PUBLIC_SERVICE = Symbol('USERS_PUBLIC_SERVICE');
-
-
-

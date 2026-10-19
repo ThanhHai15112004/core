@@ -1,4 +1,5 @@
-import { Module } from '@nestjs/common';
+import { Module, Optional } from '@nestjs/common';
+import { CoreI18nService } from '@packages/i18n/index.js';
 import { USER_IDENTITY_RESOLVER } from '@packages/security/index.js';
 import { UsersModule } from '@modules/users/index.js';
 import {
@@ -27,6 +28,8 @@ import { ServiceAccountService } from './services/service-account.service.js';
 import { SessionService } from './services/session.service.js';
 import { UserIdentityResolverService } from './services/user-identity-resolver.service.js';
 import { VerificationService } from './services/verification.service.js';
+import enAuth from './locales/en/auth.json' with { type: 'json' };
+import viAuth from './locales/vi/auth.json' with { type: 'json' };
 
 @Module({
   imports: [UsersModule],
@@ -83,6 +86,8 @@ import { VerificationService } from './services/verification.service.js';
     USER_IDENTITY_RESOLVER,
   ],
 })
-export class AuthModule {}
-
-
+export class AuthModule {
+  constructor(@Optional() i18n?: CoreI18nService) {
+    i18n?.registerNamespace('auth', { vi: viAuth, en: enAuth });
+  }
+}

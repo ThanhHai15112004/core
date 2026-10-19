@@ -141,6 +141,7 @@ export interface GeneratedRealisticUserSeed {
   readonly branchOrgId: number;
   readonly roleId: number;
   readonly positionTitle: string;
+  readonly managerId: number | null;
 }
 
 /**
@@ -165,6 +166,15 @@ export function generateRealisticUsersDataset(
 
   const results: GeneratedRealisticUserSeed[] = [];
   const usedUsernames = new Set<string>();
+  const deptManagerByOrgId = new Map<number, number>([
+    [3, 10], // DEPT_ENGINEERING -> #10 manager_eng
+    [4, 5], // DEPT_MOBILE -> #5 admin_mobile
+    [5, 3], // DEPT_SECURITY -> #3 admin_security
+    [6, 6], // DEPT_OPS -> #6 admin_ops
+    [7, 4], // DEPT_HR -> #4 admin_hr
+    [8, 7], // DEPT_FINANCE -> #7 admin_finance
+    [10, 8], // DEPT_SUPPORT -> #8 admin_support
+  ]);
 
   // Bộ sinh số giả ngẫu nhiên LCG (Linear Congruential Generator) giúp tên phân tán tự nhiên
   let state = 20261015;
@@ -198,7 +208,13 @@ export function generateRealisticUsersDataset(
 
     const dept = departmentOrgs[nextRand() % departmentOrgs.length]!;
     const positionTitle = POSITION_TITLES[nextRand() % POSITION_TITLES.length]!;
-    const role = i % 25 === 0 ? managerRole : staffRole;
+    const isManager = i % 25 === 0;
+    const role = isManager ? managerRole : staffRole;
+    const userId = 11 + i;
+    const managerId = isManager ? 9 : (deptManagerByOrgId.get(dept.id) ?? 10);
+    if (isManager && !deptManagerByOrgId.has(dept.id)) {
+      deptManagerByOrgId.set(dept.id, userId);
+    }
 
     const statusRoll = nextRand() % 100;
     const status: UserStatusCode =
@@ -209,7 +225,7 @@ export function generateRealisticUsersDataset(
           : USER_STATUS.LOCKED;
 
     results.push({
-      id: 11 + i,
+      id: userId,
       username,
       email,
       phone,
@@ -221,6 +237,7 @@ export function generateRealisticUsersDataset(
       branchOrgId: branchHcm.id,
       roleId: role.id,
       positionTitle,
+      managerId,
     });
   }
 
@@ -256,8 +273,8 @@ export class IamThousandUsersSeeder implements SeederContract {
         const phoneHash = this.passwordHasher.sha256(u.phone.trim());
         if (isPostgres) {
           await ctx.manager.query(
-            `INSERT INTO users (id, username, email, phone, phone_hash, password_hash, status, email_verified_at, phone_verified_at, primary_organization_unit_id, version)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, $8, 1)
+            `INSERT INTO users (id, username, email, phone, phone_hash, password_hash, status, email_verified_at, phone_verified_at, primary_organization_unit_id, manager_id, version)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, $8, $9, 1)
              ON CONFLICT (username) DO NOTHING`,
             [
               u.id,
@@ -268,6 +285,7 @@ export class IamThousandUsersSeeder implements SeederContract {
               defaultPasswordHash,
               u.status,
               u.primaryOrgId,
+              u.managerId,
             ],
           );
           await ctx.manager.query(
@@ -290,9 +308,9 @@ export class IamThousandUsersSeeder implements SeederContract {
           );
         } else {
           await ctx.manager.query(
-            `INSERT INTO users (id, username, email, phone, phone_hash, password_hash, status, email_verified_at, phone_verified_at, primary_organization_unit_id, version)
-             VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?, 1)
-             ON DUPLICATE KEY UPDATE status = VALUES(status)`,
+            `INSERT INTO users (id, username, email, phone, phone_hash, password_hash, status, email_verified_at, phone_verified_at, primary_organization_unit_id, manager_id, version)
+             VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?, ?, 1)
+             ON DUPLICATE KEY UPDATE status = VALUES(status), manager_id = VALUES(manager_id)`,
             [
               u.id,
               u.username,
@@ -302,6 +320,7 @@ export class IamThousandUsersSeeder implements SeederContract {
               defaultPasswordHash,
               u.status,
               u.primaryOrgId,
+              u.managerId,
             ],
           );
           await ctx.manager.query(

@@ -80,6 +80,26 @@ export class CoreI18nService implements I18nContract {
     return LocaleContext.get() ?? this.defaultLocale;
   }
 
+  /** Đăng ký từ điển ngôn ngữ của module nghiệp vụ theo namespace (vd: 'roles' -> 'roles.notFound') */
+  public registerNamespace(
+    namespace: string,
+    dictionaries: Partial<Record<SupportedLocale, Record<string, string>>>,
+  ): void {
+    const cleanNs = namespace.trim();
+    const locales: SupportedLocale[] = ['vi', 'en'];
+    for (const locale of locales) {
+      const entries = dictionaries[locale];
+      if (!entries) continue;
+      for (const [k, v] of Object.entries(entries)) {
+        const prefixedKey = cleanNs && !k.startsWith(`${cleanNs}.`) ? `${cleanNs}.${k}` : k;
+        this.dictionaries[locale][prefixedKey] = v;
+        if (!(k in this.dictionaries[locale])) {
+          this.dictionaries[locale][k] = v;
+        }
+      }
+    }
+  }
+
   /** Dịch `key`; không tìm thấy thì thử locale mặc định rồi trả về chính `key`. */
   public t(
     key: string,
