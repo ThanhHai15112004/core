@@ -173,6 +173,60 @@ export class RolesController {
     return this.rolesService.deleteAuditLog(id);
   }
 
+  /** Tra cứu danh sách Sự kiện bảo mật (Security Events — Mục 4.5.7: Login sai, đổi quyền, tắt MFA, export dữ liệu lớn) */
+  @Get(ROLES_ROUTES.SECURITY_EVENTS)
+  @RequirePermissions('roles.read')
+  @ApiDoc({
+    summary:
+      'Tra cứu các sự kiện bảo mật nền tảng: Login sai, đổi quyền, tắt MFA, export dữ liệu lớn (Mục 4.5.7)',
+  })
+  public listSecurityEvents(
+    @ValidatedQuery(
+      z.object({
+        eventType: z.string().trim().optional(),
+        actorId: z.coerce.number().int().min(1).optional(),
+        targetUserId: z.coerce.number().int().min(1).optional(),
+        limit: z.coerce.number().int().min(1).max(200).optional(),
+      }),
+    )
+    query: {
+      eventType?: string;
+      actorId?: number;
+      targetUserId?: number;
+      limit?: number;
+    },
+  ) {
+    return this.rolesService.listSecurityEvents(
+      query as Parameters<RolesService['listSecurityEvents']>[0],
+    );
+  }
+
+  /** Tra cứu danh sách Cảnh báo thao tác bất thường (SIEM Anomaly Alerts — Mục 4.5.8) */
+  @Get(ROLES_ROUTES.SECURITY_ALERTS)
+  @RequirePermissions('roles.read')
+  @ApiDoc({
+    summary:
+      'Tra cứu danh sách cảnh báo thao tác bất thường gửi sang Monitoring / SIEM (Mục 4.5.8)',
+  })
+  public listSecurityAlerts(
+    @ValidatedQuery(
+      z.object({
+        anomalyType: z.string().trim().optional(),
+        severity: z.enum(['INFO', 'WARNING', 'HIGH', 'CRITICAL']).optional(),
+        actorId: z.coerce.number().int().min(1).optional(),
+        limit: z.coerce.number().int().min(1).max(200).optional(),
+      }),
+    )
+    query: {
+      anomalyType?: string;
+      severity?: 'INFO' | 'WARNING' | 'HIGH' | 'CRITICAL';
+      actorId?: number;
+      limit?: number;
+    },
+  ) {
+    return this.rolesService.listSecurityAlerts(query);
+  }
+
   /** Danh mục toàn bộ mã quyền hạn trong bảng permissions */
   @Get(ROLES_ROUTES.PERMISSIONS_CATALOG)
   @RequirePermissions('roles.read')

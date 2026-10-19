@@ -16,6 +16,31 @@ export const ModuleDatabaseManifestSchema = z
   })
   .optional();
 
+export const ModuleCodeValueManifestSchema = z.object({
+  numericCode: z.number().int(),
+  code: z.string().min(1),
+  name: z.string().min(1),
+  labels: z.record(z.string(), z.string()).optional(),
+  aliases: z.array(z.string()).optional(),
+  behaviorCode: z.string().nullable().optional(),
+  badgeTone: z.enum(['success', 'warning', 'danger', 'info', 'neutral']).optional(),
+  sortOrder: z.number().int().optional(),
+  metadata: z.record(z.string(), z.unknown()).nullable().optional(),
+  isSystem: z.boolean().optional(),
+  status: z.number().int().optional(),
+});
+
+export const ModuleCodeTypeManifestSchema = z.object({
+  code: z.string().min(1),
+  module: z.string().optional(),
+  name: z.string().min(1),
+  description: z.string().nullable().optional(),
+  isSystem: z.boolean().optional(),
+  allowCustomValues: z.boolean().optional(),
+  status: z.number().int().optional(),
+  values: z.array(ModuleCodeValueManifestSchema).optional().default([]),
+});
+
 export const ModuleManifestSchema = z.object({
   $schema: z.string().optional(),
   name: z
@@ -31,6 +56,7 @@ export const ModuleManifestSchema = z.object({
   entryModule: z.string().min(1),
   dependencies: z.array(z.string()).optional().default([]),
   permissions: z.array(z.string()).optional().default([]),
+  codeTypes: z.array(ModuleCodeTypeManifestSchema).optional().default([]),
   events: ModuleEventsManifestSchema,
   database: ModuleDatabaseManifestSchema,
 });

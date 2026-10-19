@@ -35,6 +35,11 @@
       "items": { "type": "string" },
       "default": []
     },
+    "codeTypes": {
+      "type": "array",
+      "items": { "type": "object" },
+      "default": []
+    },
     "events": {
       "type": "object",
       "properties": {

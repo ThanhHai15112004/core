@@ -1,3 +1,5 @@
+import { defaultCodeRegistry } from '@packages/kernel/index.js';
+
 export const ORG_UNIT_TYPE = {
   HEADQUARTERS: 1,
   BRANCH: 2,
@@ -7,8 +9,8 @@ export const ORG_UNIT_TYPE = {
 
 export const ORGANIZATION_UNIT_TYPE = ORG_UNIT_TYPE;
 
-export type OrganizationUnitTypeCode = (typeof ORG_UNIT_TYPE)[keyof typeof ORG_UNIT_TYPE];
-export type OrganizationUnitTypeName = keyof typeof ORG_UNIT_TYPE;
+export type OrganizationUnitTypeCode = (typeof ORG_UNIT_TYPE)[keyof typeof ORG_UNIT_TYPE] | number;
+export type OrganizationUnitTypeName = keyof typeof ORG_UNIT_TYPE | (string & {});
 
 export const ORG_UNIT_STATUS = {
   ACTIVE: 1,
@@ -21,60 +23,49 @@ export const ORGANIZATION_UNIT_STATUS = ORG_UNIT_STATUS;
 export type OrganizationUnitStatusCode = (typeof ORG_UNIT_STATUS)[keyof typeof ORG_UNIT_STATUS];
 export type OrganizationUnitStatusName = keyof typeof ORG_UNIT_STATUS;
 
+/**
+ * Phân giải loại đơn vị/chi nhánh thông qua CodeRegistryService (`organizations.unit_type`).
+ * Hỗ trợ cả 4 mã gốc (1..4) lẫn các mã động do Admin tạo thêm (vd: 5 = CAMPUS, 6 = LAB).
+ */
 export function parseOrgUnitType(val: unknown): OrganizationUnitTypeCode {
-  if (typeof val === 'number' && (val === 1 || val === 2 || val === 3 || val === 4)) {
-    return val;
-  }
-  if (typeof val === 'string') {
-    const num = Number(val);
-    if (num === 1 || num === 2 || num === 3 || num === 4) return num;
-    const upper = val.trim().toUpperCase();
-    if (upper === 'HEADQUARTERS' || upper === 'UNIT') return ORG_UNIT_TYPE.HEADQUARTERS;
-    if (upper === 'BRANCH') return ORG_UNIT_TYPE.BRANCH;
-    if (upper === 'DEPARTMENT') return ORG_UNIT_TYPE.DEPARTMENT;
-    if (upper === 'TEAM') return ORG_UNIT_TYPE.TEAM;
-  }
-  return ORG_UNIT_TYPE.BRANCH;
+  return defaultCodeRegistry.parseToNumericCode(
+    'organizations.unit_type',
+    val,
+    ORG_UNIT_TYPE.BRANCH,
+  );
 }
 
+/**
+ * Tra cứu tên mã loại đơn vị/chi nhánh từ `organizations.unit_type` (O(1) L1 Lookup).
+ */
 export function getOrgUnitTypeName(code: number): OrganizationUnitTypeName {
-  switch (code) {
-    case ORG_UNIT_TYPE.HEADQUARTERS:
-      return 'HEADQUARTERS';
-    case ORG_UNIT_TYPE.DEPARTMENT:
-      return 'DEPARTMENT';
-    case ORG_UNIT_TYPE.TEAM:
-      return 'TEAM';
-    case ORG_UNIT_TYPE.BRANCH:
-    default:
-      return 'BRANCH';
-  }
+  return defaultCodeRegistry.getCodeName('organizations.unit_type', code, 'BRANCH');
 }
 
+/**
+ * Phân giải trạng thái đơn vị/chi nhánh thông qua CodeRegistryService (`organizations.status`).
+ */
 export function parseOrgUnitStatus(val: unknown): OrganizationUnitStatusCode {
-  if (typeof val === 'number' && (val === 1 || val === 2 || val === 3)) {
-    return val;
-  }
-  if (typeof val === 'string') {
-    const num = Number(val);
-    if (num === 1 || num === 2 || num === 3) return num;
-    const upper = val.trim().toUpperCase();
-    if (upper === 'INACTIVE') return ORG_UNIT_STATUS.INACTIVE;
-    if (upper === 'ARCHIVED') return ORG_UNIT_STATUS.ARCHIVED;
+  const resolved = defaultCodeRegistry.parseToNumericCode(
+    'organizations.status',
+    val,
+    ORG_UNIT_STATUS.ACTIVE,
+  );
+  if (resolved === ORG_UNIT_STATUS.INACTIVE || resolved === ORG_UNIT_STATUS.ARCHIVED) {
+    return resolved;
   }
   return ORG_UNIT_STATUS.ACTIVE;
 }
 
+/**
+ * Tra cứu tên trạng thái đơn vị/chi nhánh từ `organizations.status`.
+ */
 export function getOrgUnitStatusName(code: number): OrganizationUnitStatusName {
-  switch (code) {
-    case ORG_UNIT_STATUS.INACTIVE:
-      return 'INACTIVE';
-    case ORG_UNIT_STATUS.ARCHIVED:
-      return 'ARCHIVED';
-    case ORG_UNIT_STATUS.ACTIVE:
-    default:
-      return 'ACTIVE';
+  const name = defaultCodeRegistry.getCodeName('organizations.status', code, 'ACTIVE');
+  if (name === 'INACTIVE' || name === 'ARCHIVED') {
+    return name;
   }
+  return 'ACTIVE';
 }
 
 export interface OrganizationUnitSummary {

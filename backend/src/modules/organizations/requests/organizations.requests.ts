@@ -1,7 +1,6 @@
 import { z } from 'zod';
 import {
   ORG_UNIT_STATUS,
-  ORG_UNIT_TYPE,
   type OrganizationUnitStatusCode,
   type OrganizationUnitTypeCode,
   parseOrgUnitStatus,
@@ -11,12 +10,7 @@ import {
 const orgTypeSchema = z
   .preprocess(
     (val) => (val === undefined ? undefined : parseOrgUnitType(val)),
-    z.union([
-      z.literal(ORG_UNIT_TYPE.HEADQUARTERS),
-      z.literal(ORG_UNIT_TYPE.BRANCH),
-      z.literal(ORG_UNIT_TYPE.DEPARTMENT),
-      z.literal(ORG_UNIT_TYPE.TEAM),
-    ]),
+    z.number().int().min(1),
   )
   .optional();
 

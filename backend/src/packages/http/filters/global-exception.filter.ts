@@ -174,16 +174,23 @@ export class GlobalExceptionFilter implements ExceptionFilter {
 
       const code = HttpStatus[statusCode] ?? HTTP_ERROR_CODE.HTTP_ERROR;
 
-      // Nếu là lỗi 5xx từ HttpException không phải AppException -> ẩn thông báo gốc nhạy cảm
-      if (statusCode >= HTTP_STATUS_CODE.INTERNAL_SERVER_ERROR) {
+      // Nếu là lỗi 5xx hoặc chứa câu lệnh SQL / lỗi driver DB nhạy cảm -> ẩn thông báo gốc
+      if (
+        statusCode >= HTTP_STATUS_CODE.INTERNAL_SERVER_ERROR ||
+        this.containsSensitiveSqlOrStackTrace(rawMessage)
+      ) {
+        const maskedStatus =
+          statusCode >= HTTP_STATUS_CODE.INTERNAL_SERVER_ERROR
+            ? statusCode
+            : HTTP_STATUS_CODE.INTERNAL_SERVER_ERROR;
         return {
-          statusCode,
+          statusCode: maskedStatus,
           code:
-            statusCode === HTTP_STATUS_CODE.SERVICE_UNAVAILABLE
+            maskedStatus === HTTP_STATUS_CODE.SERVICE_UNAVAILABLE
               ? HTTP_ERROR_CODE.SERVICE_UNAVAILABLE
               : HTTP_ERROR_CODE.INTERNAL_SERVER_ERROR,
           message: this.i18n.t(
-            statusCode === HTTP_STATUS_CODE.SERVICE_UNAVAILABLE
+            maskedStatus === HTTP_STATUS_CODE.SERVICE_UNAVAILABLE
               ? HTTP_ERROR_CODE.SERVICE_UNAVAILABLE
               : HTTP_ERROR_CODE.INTERNAL_SERVER_ERROR,
           ),
@@ -213,6 +220,16 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       category: classification.category,
       isOperational: false,
     };
+  }
+
+  /** Phát hiện chuỗi thông báo lỗi có chứa câu lệnh SQL hoặc Stack Trace nội bộ cần che giấu (Mục 4.5) */
+  private containsSensitiveSqlOrStackTrace(message: string | undefined): boolean {
+    if (!message || typeof message !== 'string') {
+      return false;
+    }
+    const sqlOrStackPattern =
+      /\b(SELECT\s+.+\s+FROM|INSERT\s+INTO|UPDATE\s+\S+\s+SET|DELETE\s+FROM|DROP\s+TABLE|ALTER\s+TABLE|QueryFailedError|SQLITE_ERROR|ER_PARSE_ERROR|syntax error at or near)\b|(?:^\s*at\s+\S+\s+\([^)]+:\d+:\d+\))/im;
+    return sqlOrStackPattern.test(message);
   }
 
   /** Nhận diện và chuẩn hóa các lỗi phát sinh từ tầng Fastify Parser (JSON hỏng, body quá lớn, sai Content-Type) */

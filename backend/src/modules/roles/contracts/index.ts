@@ -1,3 +1,4 @@
+import { defaultCodeRegistry } from '@packages/kernel/index.js';
 import {
   DATA_SCOPE,
   type DataScopeCode,
@@ -33,17 +34,13 @@ export type PermissionStatusCode = (typeof PERMISSION_STATUS)[keyof typeof PERMI
 export type PermissionStatusName = keyof typeof PERMISSION_STATUS;
 
 export function parseRoleStatus(val: unknown): RoleStatusCode {
-  if (typeof val === 'number' && (val === 1 || val === 2)) return val;
-  if (typeof val === 'string') {
-    const num = Number(val);
-    if (num === 1 || num === 2) return num;
-    if (val.trim().toUpperCase() === 'INACTIVE') return ROLE_STATUS.INACTIVE;
-  }
-  return ROLE_STATUS.ACTIVE;
+  const resolved = defaultCodeRegistry.parseToNumericCode('roles.status', val, ROLE_STATUS.ACTIVE);
+  return resolved === ROLE_STATUS.INACTIVE ? ROLE_STATUS.INACTIVE : ROLE_STATUS.ACTIVE;
 }
 
 export function getRoleStatusName(code: number): RoleStatusName {
-  return code === ROLE_STATUS.INACTIVE ? 'INACTIVE' : 'ACTIVE';
+  const name = defaultCodeRegistry.getCodeName('roles.status', code, 'ACTIVE');
+  return name === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE';
 }
 
 export interface RoleSummary {

@@ -10,6 +10,8 @@ export const ROLES_ROUTES = {
   DATA_SCOPES_RULES: 'data-scopes/rules',
   AUDIT_LOGS: 'audit-logs',
   AUDIT_LOG_BY_ID: 'audit-logs/:id',
+  SECURITY_EVENTS: 'security-events',
+  SECURITY_ALERTS: 'security-alerts',
   BY_ID: ':id',
   ROLE_PERMISSIONS: ':id/permissions',
   CLONE: ':id/clone',

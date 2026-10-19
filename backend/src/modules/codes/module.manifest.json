@@ -1,0 +1,27 @@
+{
+  "$schema": "../../packages/kernel/schemas/module.manifest.schema.json",
+  "name": "codes",
+  "displayName": "Dynamic Lookup & Hybrid Code System",
+  "version": "1.0.0",
+  "description": "Module quản trị danh mục động (Lookup Table) và ánh xạ mã chuẩn Hybrid (code_types, code_values) cho toàn hệ thống",
+  "type": "core",
+  "category": "core",
+  "author": "Core Platform Team",
+  "entryModule": "CodesModule",
+  "dependencies": ["database", "i18n"],
+  "permissions": ["codes.read", "codes.manage"],
+  "events": {
+    "published": [
+      "codes.synced",
+      "codes.value_created",
+      "codes.value_updated",
+      "codes.value_deleted"
+    ],
+    "subscribed": []
+  },
+  "database": {
+    "hasMigrations": true,
+    "tables": ["code_types", "code_values"]
+  }
+}
+

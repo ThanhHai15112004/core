@@ -82,6 +82,16 @@ export class AuthService implements IAuthPublicService {
     this.usersPublicService.registerStepUpVerificationDelegate?.((userId, stepUpToken, action) =>
       this.verifyStepUpToken(userId, stepUpToken, action),
     );
+    this.mfaService.registerSecurityEventDelegate?.((evt) =>
+      this.sessionService.recordAuthEvent({
+        userId: evt.userId,
+        actorId: evt.actorId ?? evt.userId,
+        eventType: evt.eventType,
+        status: AUTH_EVENT_STATUS.SUCCESS,
+        reason: evt.reason,
+        metadata: evt.metadata ?? null,
+      }),
+    );
   }
 
   /**
@@ -152,9 +162,7 @@ export class AuthService implements IAuthPublicService {
           maskedTarget: sent.maskedTarget,
           expiresInSeconds: sent.expiresInSeconds,
           ...(sent.devVerificationCode ? { devVerificationCode: sent.devVerificationCode } : {}),
-          ...(sent.devVerificationToken
-            ? { devVerificationToken: sent.devVerificationToken }
-            : {}),
+          ...(sent.devVerificationToken ? { devVerificationToken: sent.devVerificationToken } : {}),
           user: this.toProfileResponse(created),
         };
       }
@@ -478,7 +486,8 @@ export class AuthService implements IAuthPublicService {
       throw new ForbiddenAppException('auth.accountNotActive');
     }
 
-    let trustedDeviceInfo: { trustedDeviceToken: string; trustedDeviceExpiresAt: string } | undefined;
+    let trustedDeviceInfo:
+      { trustedDeviceToken: string; trustedDeviceExpiresAt: string } | undefined;
     if (dto.trustDevice) {
       const trusted = await this.mfaService.registerTrustedDevice(userId, {
         deviceName: dto.deviceName ?? null,
@@ -623,10 +632,7 @@ export class AuthService implements IAuthPublicService {
       if (!credentials) {
         throw new UnauthorizedAppException('auth.userNotFound');
       }
-      const pwdOk = await this.passwordHasher.verify(
-        dto.currentPassword,
-        credentials.passwordHash,
-      );
+      const pwdOk = await this.passwordHasher.verify(dto.currentPassword, credentials.passwordHash);
       if (!pwdOk) {
         throw new UnauthorizedAppException('auth.invalidCurrentPassword');
       }

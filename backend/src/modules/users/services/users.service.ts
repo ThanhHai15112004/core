@@ -14,6 +14,7 @@ import {
   DataScopeService,
   FieldEncryptionService,
   PasswordHasherService,
+  PlatformSecurityService,
   type ResolvedDataScopeFilter,
   type UserIdentity,
   DATA_SCOPE,
@@ -129,6 +130,9 @@ export class UsersService implements IUsersPublicService {
     @Optional()
     @Inject(AuditLogService)
     private readonly auditLogService: AuditLogService | null = null,
+    @Optional()
+    @Inject(PlatformSecurityService)
+    private readonly platformSecurityService: PlatformSecurityService | null = null,
   ) {
     this.effectiveDataScopeService = this.dataScopeService ?? new DataScopeService();
 
@@ -866,6 +870,23 @@ export class UsersService implements IUsersPublicService {
         roleCodes: updated.roles.map((r) => r.code),
       },
       reason: 'Updated user roles assignment',
+    });
+    await this.platformSecurityService?.recordSecurityEvent({
+      eventType: 'PERMISSION_CHANGED',
+      module: 'users',
+      feature: 'user-roles',
+      action: 'user.assign_roles',
+      actorId: actorId ?? null,
+      targetUserId: id,
+      resourceType: 'user',
+      resourceId: id,
+      reason: 'Updated user roles assignment',
+      beforeData: { roleIds: prevRoleIds },
+      afterData: {
+        roleIds: updated.roles.map((r) => r.roleId),
+        roleCodes: updated.roles.map((r) => r.code),
+      },
+      persistToAuditLog: false,
     });
     return updated;
   }

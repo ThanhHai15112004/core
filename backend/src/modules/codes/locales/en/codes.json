@@ -1,0 +1,10 @@
+{
+  "typeNotFound": "Code type '{{typeCode}}' was not found.",
+  "valueNotFound": "Code value not found (typeCode: {{typeCode}}, numericCode: {{numericCode}}).",
+  "customValuesNotAllowed": "System code type '{{typeCode}}' does not allow adding custom dynamic values.",
+  "duplicateNumericCode": "Numeric code '{{numericCode}}' already exists in '{{typeCode}}'.",
+  "duplicateValueCode": "Value code '{{code}}' already exists in '{{typeCode}}'.",
+  "cannotDeleteSystemValue": "Cannot delete system anchor code value (isSystem = true: {{code}}). You may customize its labels or color instead.",
+  "cannotDeactivateSystemAnchor": "Cannot deactivate required system anchor code value ({{code}})."
+}
+

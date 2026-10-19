@@ -78,6 +78,13 @@ export class MfaService {
   private readonly logger = new Logger(MfaService.name);
   private readonly emailAdapter: IEmailNotificationAdapter;
   private readonly smsProvider: ISmsOtpProvider;
+  private securityEventDelegate?: (event: {
+    userId: number;
+    actorId?: number | null;
+    eventType: 10 | 11;
+    reason: string;
+    metadata?: Record<string, unknown>;
+  }) => Promise<unknown>;
 
   constructor(
     private readonly mfaRepository: AuthMfaConfigRepository,
@@ -97,6 +104,19 @@ export class MfaService {
   ) {
     this.emailAdapter = emailAdapter ?? new DefaultEmailNotificationAdapter();
     this.smsProvider = smsProvider ?? new DefaultSmsOtpProvider();
+  }
+
+  /** Đăng ký callback ghi nhận sự kiện bảo mật MFA (Tắt MFA / Reset MFA) vào lịch sử đăng nhập & Audit Log */
+  public registerSecurityEventDelegate(
+    delegate: (event: {
+      userId: number;
+      actorId?: number | null;
+      eventType: 10 | 11;
+      reason: string;
+      metadata?: Record<string, unknown>;
+    }) => Promise<unknown>,
+  ): void {
+    this.securityEventDelegate = delegate;
   }
 
   /** Lấy trạng thái cấu hình MFA hiện tại của người dùng */
@@ -775,6 +795,18 @@ export class MfaService {
       `Controlled MFA reset executed for user #${userId} by actor #${actorId ?? 'system'} (reason="${reason}", ref="${input.verificationReference ?? 'N/A'}")`,
     );
 
+    await this.securityEventDelegate?.({
+      userId: Number(userId),
+      actorId: actorId ?? null,
+      eventType: 11, // AUTH_EVENT_TYPE.MFA_RESET
+      reason: `MFA reset by administrator${actorId ? ` #${actorId}` : ''}: ${reason}`,
+      metadata: {
+        verificationReference: input.verificationReference ?? null,
+        revokedSessionsCount,
+        revokedTrustedDevicesCount,
+      },
+    });
+
     return {
       reset: true,
       userId: Number(userId),
@@ -792,6 +824,13 @@ export class MfaService {
     const config = await this.findConfigByUserId(userId);
     if (!config) {
       await this.usersPublicService.setMfaEnabled(userId, false);
+      await this.securityEventDelegate?.({
+        userId: Number(userId),
+        actorId: Number(userId),
+        eventType: 10, // AUTH_EVENT_TYPE.MFA_DISABLED
+        reason: `User disabled MFA (${dto.method ?? 'ALL'})`,
+        metadata: { method: dto.method ?? 'ALL', mfaEnabledAfter: false },
+      });
       return this.getStatus(userId);
     }
 
@@ -834,6 +873,14 @@ export class MfaService {
     );
     await this.saveConfig(config);
     await this.usersPublicService.setMfaEnabled(userId, stillEnabled);
+
+    await this.securityEventDelegate?.({
+      userId: Number(userId),
+      actorId: Number(userId),
+      eventType: 10, // AUTH_EVENT_TYPE.MFA_DISABLED
+      reason: `User disabled MFA (${dto.method ?? 'ALL'})`,
+      metadata: { method: dto.method ?? 'ALL', mfaEnabledAfter: stillEnabled },
+    });
 
     return this.getStatus(userId);
   }

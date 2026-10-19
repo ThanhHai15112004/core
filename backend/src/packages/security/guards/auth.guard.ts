@@ -2,10 +2,11 @@ import {
   type CanActivate,
   type ExecutionContext,
   Injectable,
+  Optional,
   UnauthorizedException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import type { FastifyRequest } from 'fastify';
+import type { FastifyReply, FastifyRequest } from 'fastify';
 import { ForbiddenAppException, HTTP_ERROR_CODE } from '@packages/kernel/index.js';
 import {
   IS_PUBLIC_KEY,
@@ -14,6 +15,7 @@ import {
 } from '@packages/http/index.js';
 import { RequestContextService } from '@packages/logging/index.js';
 import { TokenService } from '../providers/token.service.js';
+import { PlatformSecurityService } from '../providers/platform-security.service.js';
 import type { UserIdentity } from '../contracts/auth.contract.js';
 
 @Injectable()
@@ -21,6 +23,7 @@ export class AuthGuard implements CanActivate {
   constructor(
     private readonly reflector: Reflector,
     private readonly tokenService: TokenService,
+    @Optional() private readonly platformSecurityService?: PlatformSecurityService,
   ) {}
 
   private attachActorToContext(request: FastifyRequest, user: UserIdentity): void {
@@ -37,14 +40,51 @@ export class AuthGuard implements CanActivate {
     }
   }
 
-  /** Kiểm tra xác thực JWT và quyền truy cập (Roles & Permissions) của yêu cầu HTTP trước khi vào controller */
+  private async enforceRateLimit(
+    request: FastifyRequest & { user?: UserIdentity },
+    reply?: FastifyReply,
+  ): Promise<void> {
+    if (!this.platformSecurityService) return;
+    const forwarded = request.headers['x-forwarded-for'];
+    const rawForwarded = Array.isArray(forwarded) ? forwarded[0] : forwarded;
+    const clientIp =
+      (typeof rawForwarded === 'string' ? rawForwarded.split(',')[0]?.trim() : undefined) ||
+      request.ip ||
+      '127.0.0.1';
+
+    try {
+      const rl = await this.platformSecurityService.assertRateLimit({
+        ipAddress: clientIp,
+        userId: request.user?.id ?? null,
+        method: request.method,
+        url: request.url,
+      });
+      reply?.header('x-ratelimit-limit', String(rl.limit));
+      reply?.header('x-ratelimit-remaining', String(rl.remaining));
+      reply?.header('x-ratelimit-reset', String(Math.ceil(rl.resetAtMs / 1000)));
+    } catch (err) {
+      const details = (err as { details?: Array<{ retryAfterSeconds?: number; limit?: number }> })
+        ?.details;
+      const retryAfter = details?.[0]?.retryAfterSeconds ?? 60;
+      const limit = details?.[0]?.limit ?? 0;
+      reply?.header('x-ratelimit-limit', String(limit));
+      reply?.header('x-ratelimit-remaining', '0');
+      reply?.header('retry-after', String(retryAfter));
+      throw err;
+    }
+  }
+
+  /** Kiểm tra xác thực JWT, Rate Limit (IP/User/API) và quyền truy cập (Roles & Permissions) của yêu cầu HTTP */
   public async canActivate(context: ExecutionContext): Promise<boolean> {
     const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
       context.getHandler(),
       context.getClass(),
     ]);
 
-    const request = context.switchToHttp().getRequest<FastifyRequest & { user?: UserIdentity }>();
+    const http = context.switchToHttp();
+    const request = http.getRequest<FastifyRequest & { user?: UserIdentity }>();
+    const reply =
+      typeof http.getResponse === 'function' ? http.getResponse<FastifyReply>() : undefined;
     const authHeader = request.headers['authorization'];
     const resolutionContext = {
       ipAddress: request.ip ?? null,
@@ -68,34 +108,41 @@ export class AuthGuard implements CanActivate {
           }
         }
       }
+      await this.enforceRateLimit(request, reply);
       return true;
     }
 
     if (!authHeader || typeof authHeader !== 'string') {
+      await this.enforceRateLimit(request, reply);
       throw new UnauthorizedException('Missing Authorization header');
     }
 
     const parts = authHeader.split(' ');
     if (parts.length !== 2 || parts[0] !== 'Bearer') {
+      await this.enforceRateLimit(request, reply);
       throw new UnauthorizedException('Invalid Authorization token format');
     }
 
     const token = parts[1];
     if (!token) {
+      await this.enforceRateLimit(request, reply);
       throw new UnauthorizedException('Token is required');
     }
     const payload = await this.tokenService.verify(token);
     if (!payload) {
+      await this.enforceRateLimit(request, reply);
       throw new UnauthorizedException('Invalid or expired token');
     }
 
     const user = await this.tokenService.validateUser(payload, resolutionContext);
     if (!user) {
+      await this.enforceRateLimit(request, reply);
       throw new UnauthorizedException('User not found or disabled');
     }
 
     request.user = user;
     this.attachActorToContext(request, user);
+    await this.enforceRateLimit(request, reply);
 
     const requiredRoles =
       this.reflector.getAllAndOverride<readonly string[]>(REQUIRED_ROLES_KEY, [

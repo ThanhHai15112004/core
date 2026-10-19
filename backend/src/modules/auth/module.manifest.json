@@ -33,5 +33,87 @@
   "database": {
     "hasMigrations": true,
     "tables": ["auth_sessions", "auth_mfa_configs", "auth_password_resets"]
-  }
+  },
+  "codeTypes": [
+    {
+      "code": "auth.mfa_method",
+      "name": "Phương thức xác thực đa nhân tố (MFA)",
+      "description": "Các phương thức xác thực bước 2 được hỗ trợ trên nền tảng",
+      "isSystem": true,
+      "allowCustomValues": false,
+      "values": [
+        {
+          "numericCode": 1,
+          "code": "TOTP",
+          "behaviorCode": "TOTP",
+          "name": "Ứng dụng Authenticator (TOTP)",
+          "labels": { "vi": "Ứng dụng Authenticator (TOTP)", "en": "Authenticator App (TOTP)" },
+          "badgeTone": "success",
+          "sortOrder": 1,
+          "isDefault": true,
+          "isSystem": true
+        },
+        {
+          "numericCode": 2,
+          "code": "EMAIL_OTP",
+          "behaviorCode": "EMAIL_OTP",
+          "name": "Mã OTP qua Email",
+          "labels": { "vi": "Mã OTP qua Email", "en": "Email OTP" },
+          "badgeTone": "info",
+          "sortOrder": 2,
+          "isSystem": true
+        },
+        {
+          "numericCode": 3,
+          "code": "RECOVERY_CODE",
+          "behaviorCode": "RECOVERY_CODE",
+          "name": "Mã khôi phục dự phòng",
+          "labels": { "vi": "Mã khôi phục dự phòng", "en": "Recovery Code" },
+          "badgeTone": "warning",
+          "sortOrder": 3,
+          "isSystem": true
+        }
+      ]
+    },
+    {
+      "code": "auth.mfa_policy",
+      "name": "Chính sách bắt buộc MFA",
+      "description": "Chính sách yêu cầu xác thực đa nhân tố trên toàn hệ thống",
+      "isSystem": true,
+      "allowCustomValues": false,
+      "values": [
+        {
+          "numericCode": 1,
+          "code": "OPTIONAL",
+          "behaviorCode": "OPTIONAL",
+          "name": "Tùy chọn (Người dùng tự bật)",
+          "labels": { "vi": "Tùy chọn (Người dùng tự bật)", "en": "Optional" },
+          "badgeTone": "neutral",
+          "sortOrder": 1,
+          "isDefault": true,
+          "isSystem": true
+        },
+        {
+          "numericCode": 2,
+          "code": "REQUIRED_FOR_ADMINS",
+          "behaviorCode": "REQUIRED_FOR_ADMINS",
+          "name": "Bắt buộc với Quản trị viên",
+          "labels": { "vi": "Bắt buộc với Quản trị viên", "en": "Required for Admins" },
+          "badgeTone": "warning",
+          "sortOrder": 2,
+          "isSystem": true
+        },
+        {
+          "numericCode": 3,
+          "code": "REQUIRED_FOR_ALL",
+          "behaviorCode": "REQUIRED_FOR_ALL",
+          "name": "Bắt buộc toàn bộ người dùng",
+          "labels": { "vi": "Bắt buộc toàn bộ người dùng", "en": "Required for All Users" },
+          "badgeTone": "danger",
+          "sortOrder": 3,
+          "isSystem": true
+        }
+      ]
+    }
+  ]
 }

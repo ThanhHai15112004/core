@@ -22,7 +22,8 @@
     "organizations",
     "roles",
     "users",
-    "auth"
+    "auth",
+    "codes"
   ],
   "settings": {
     "defaultLocale": "vi",

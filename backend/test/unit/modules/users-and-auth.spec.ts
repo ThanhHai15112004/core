@@ -10,7 +10,10 @@ import {
   FieldEncryptionService,
   inferDefaultDataScopeForRoleCode,
   PasswordHasherService,
+  PlatformSecurityService,
+  redactSensitiveResponseData,
   sanitizeAuditSnapshot,
+  sanitizeInputPayload,
   TokenService,
   TotpService,
 } from '@packages/security/index.js';
@@ -93,6 +96,17 @@ import { VerificationService } from '@modules/auth/services/verification.service
 import { ServiceAccountService } from '@modules/auth/services/service-account.service.js';
 import { UserIdentityResolverService } from '@modules/auth/services/user-identity-resolver.service.js';
 import { AuthService } from '@modules/auth/services/auth.service.js';
+import {
+  CODE_ITEM_STATUS,
+  CodeRegistryService,
+  defaultCodeRegistry,
+} from '@packages/kernel/index.js';
+import type { CodeTypeEntity } from '@modules/codes/entities/code-type.entity.js';
+import type { CodeValueEntity } from '@modules/codes/entities/code-value.entity.js';
+import type { CodeTypeRepository } from '@modules/codes/repositories/code-type.repository.js';
+import type { CodeValueRepository } from '@modules/codes/repositories/code-value.repository.js';
+import { CodesService } from '@modules/codes/services/codes.service.js';
+import { MasterPermissionSeeder } from '../../../src/database/seeders/master-permission.seeder.js';
 
 /** Tạo bộ lưu trữ in-memory với ID số nguyên tăng dần (1, 2, 3...) và bảng permissions + user_profiles độc lập */
 function createIamInMemoryHarness() {
@@ -1045,6 +1059,7 @@ function createIamInMemoryHarness() {
 
   const requestContextService = new RequestContextService();
   const auditLogService = new AuditLogService();
+  const platformSecurityService = new PlatformSecurityService(config, auditLogService);
   const dataScopeService = new DataScopeService();
   const organizationsService = new OrganizationsService(
     orgRepo,
@@ -1060,6 +1075,7 @@ function createIamInMemoryHarness() {
     null,
     dataScopeService,
     auditLogService,
+    platformSecurityService,
   );
   const usersService = new UsersService(
     userRepo,
@@ -1076,6 +1092,7 @@ function createIamInMemoryHarness() {
     userProfileRepo,
     dataScopeService,
     auditLogService,
+    platformSecurityService,
   );
   const importService = new UserImportService(
     usersService,
@@ -1083,7 +1100,12 @@ function createIamInMemoryHarness() {
     rolesService,
     organizationsService,
   );
-  const exportService = new UserExportService(usersService, userRepo);
+  const exportService = new UserExportService(
+    usersService,
+    userRepo,
+    auditLogService,
+    platformSecurityService,
+  );
   const emailAdapter = new DefaultEmailNotificationAdapter();
   const smsProvider = new DefaultSmsOtpProvider();
   const securitySettingsService = new SecuritySettingsService(securitySettingRepo);
@@ -1095,6 +1117,8 @@ function createIamInMemoryHarness() {
     undefined,
     securitySettingsService,
     loginHistoryRepo,
+    auditLogService,
+    platformSecurityService,
   );
   const passwordService = new PasswordService(
     resetRepo,
@@ -1169,6 +1193,7 @@ function createIamInMemoryHarness() {
     tokenService,
     requestContextService,
     auditLogService,
+    platformSecurityService,
     dataScopeService,
     organizationsService,
     rolesService,
@@ -3119,5 +3144,451 @@ describe('Unit: Quản lý Người dùng (3.1) & Xác thực / Phiên / MFA (3)
     expect(i18n.t('roles.auditLogNotFound', undefined, 'en')).toContain(
       'Requested Audit Log record not found',
     );
+  });
+
+  it('supports Section 4.5 Platform Security & Login/Logout Audit (4.5.1 -> 4.5.8): Security Headers, CORS Allowlist, 3D Rate Limiting (IP/User/API), Input Sanitization, Sensitive Redaction, Login/Logout Audit (auth_login_history + audit_logs), Security Events (failed login, permission change, MFA disable, large export), and SIEM Anomaly Alerts', async () => {
+    const h = createIamInMemoryHarness();
+
+    // 1. Security Headers (4.5.1): HSTS, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy
+    const secHeaders = h.platformSecurityService.getSecurityHeaders();
+    expect(secHeaders['strict-transport-security']).toContain('max-age=31536000');
+    expect(secHeaders['x-frame-options']).toBe('DENY');
+    expect(secHeaders['x-content-type-options']).toBe('nosniff');
+    expect(secHeaders['referrer-policy']).toBe('strict-origin-when-cross-origin');
+    expect(secHeaders['permissions-policy']).toContain('camera=()');
+
+    // 2. CORS Allowlist (4.5.2): Allow whitelisted origins, reject unknown domains and never allow wildcard
+    h.platformSecurityService.setAllowedOrigins([
+      'https://admin.enterprise.vn',
+      '*.trusted.enterprise.vn',
+    ]);
+    expect(
+      h.platformSecurityService.evaluateCorsOrigin('https://admin.enterprise.vn'),
+    ).toEqual({
+      allowed: true,
+      allowedOrigin: 'https://admin.enterprise.vn',
+    });
+    expect(
+      h.platformSecurityService.evaluateCorsOrigin('https://portal.trusted.enterprise.vn'),
+    ).toEqual({
+      allowed: true,
+      allowedOrigin: 'https://portal.trusted.enterprise.vn',
+    });
+    expect(h.platformSecurityService.evaluateCorsOrigin('https://evil-attacker.com')).toEqual({
+      allowed: false,
+      allowedOrigin: null,
+    });
+
+    // 3. Rate Limit 3 chiều: IP, User và API Route (4.5.3)
+    h.platformSecurityService.setRateLimitRule('POST /api/v1/auth/login', {
+      ipLimit: 3,
+      userLimit: 5,
+      apiLimit: 10,
+      windowSeconds: 60,
+    });
+    const rl1 = h.platformSecurityService.consumeRateLimit({
+      ip: '203.0.113.55',
+      userId: null,
+      routeKey: 'POST /api/v1/auth/login',
+    });
+    expect(rl1.allowed).toBe(true);
+    expect(rl1.remaining).toBe(2);
+    h.platformSecurityService.consumeRateLimit({
+      ip: '203.0.113.55',
+      userId: null,
+      routeKey: 'POST /api/v1/auth/login',
+    });
+    h.platformSecurityService.consumeRateLimit({
+      ip: '203.0.113.55',
+      userId: null,
+      routeKey: 'POST /api/v1/auth/login',
+    });
+    const rlBlocked = h.platformSecurityService.consumeRateLimit({
+      ip: '203.0.113.55',
+      userId: null,
+      routeKey: 'POST /api/v1/auth/login',
+    });
+    expect(rlBlocked.allowed).toBe(false);
+    expect(rlBlocked.exceededDimension).toBe('IP');
+    expect(rlBlocked.retryAfterSeconds).toBeGreaterThan(0);
+
+    // 4. Input Sanitization & Response Sensitive Redaction (4.5.4 & 4.5.6)
+    const dirtyPayload = {
+      fullName: 'Nguyễn <script>alert("xss")</script>Văn A\0',
+      bio: ' normal <a href="javascript:evil()" onclick="steal()">link</a> ',
+      password: 'Raw<script>Password!123',
+    };
+    const cleaned = sanitizeInputPayload(dirtyPayload);
+    expect(cleaned.fullName).toBe('Nguyễn Văn A');
+    expect(cleaned.bio).not.toContain('javascript:');
+    expect(cleaned.bio).not.toContain('onclick=');
+    // Password field preserves characters except null-byte
+    expect(cleaned.password).toBe('Raw<script>Password!123');
+
+    const redactedResponse = redactSensitiveResponseData({
+      id: 1,
+      username: 'alice',
+      passwordHash: 'scrypt$secret',
+      totpSecret: 'BASE32SECRET',
+      nested: {
+        refreshTokenHash: 'sha256$hash',
+        safeField: 'visible',
+      },
+    });
+    expect(redactedResponse.passwordHash).toBe('[REDACTED]');
+    expect(redactedResponse.totpSecret).toBe('[REDACTED]');
+    expect(redactedResponse.nested.refreshTokenHash).toBe('[REDACTED]');
+    expect(redactedResponse.nested.safeField).toBe('visible');
+
+    // 5. Đăng ký SIEM Alert Sink để kiểm tra cảnh báo thao tác bất thường (4.5.8)
+    const dispatchedAlerts: Array<{ anomalyType: string; severity: string; title: string }> = [];
+    h.platformSecurityService.registerSiemAlertSink({
+      name: 'TestMemorySiemSink',
+      sendAlert: (alert) => {
+        dispatchedAlerts.push({
+          anomalyType: alert.anomalyType,
+          severity: alert.severity,
+          title: alert.title,
+        });
+      },
+    });
+
+    // 6. Kiểm tra Audit Login / Logout / Failed Login / MFA Disable / Permission Change / Large Export (4.5.7 & 4.5.8)
+    const role = await h.rolesService.create({
+      code: 'sec45_member',
+      name: 'Security 4.5 Member',
+      permissions: ['users.read', 'users.export'],
+    });
+
+    const user = await h.usersService.create(
+      {
+        email: 'sec45.user@gmail.com',
+        username: 'sec45_user',
+        firstName: 'Bảo',
+        lastName: 'Trần',
+        password: 'Valid#Password123',
+        status: USER_STATUS.ACTIVE,
+        roleIds: [role.id],
+        organizationUnits: [],
+      },
+      1,
+    );
+
+    // 6a. Login sai 3 lần liên tiếp -> ghi vào cả auth_login_history, audit_logs và phát cảnh báo SIEM BRUTE_FORCE_LOGIN
+    for (let i = 0; i < 3; i++) {
+      await expect(
+        h.authService.login(
+          { identifier: 'sec45.user@gmail.com', password: 'WrongPassword!' },
+          { ipAddress: '198.51.100.88', userAgent: 'AttackerBot/1.0' },
+        ),
+      ).rejects.toThrow();
+    }
+
+    expect(dispatchedAlerts.some((a) => a.anomalyType === 'BRUTE_FORCE_LOGIN')).toBe(true);
+
+    // 6b. Login thành công -> ghi LOGIN_SUCCESS vào cả auth_login_history và audit_logs
+    const loginRes = await h.authService.login(
+      {
+        identifier: 'sec45.user@gmail.com',
+        password: 'Valid#Password123',
+        deviceName: 'MacBook Pro Sec45',
+      },
+      { ipAddress: '10.10.20.30', userAgent: 'Mozilla/5.0 Macintosh' },
+    );
+    expect(loginRes.mfaRequired).toBe(false);
+    expect(loginRes.sessionId).toBeDefined();
+
+    // 6c. Bật rồi tắt MFA -> ghi sự kiện MFA_DISABLED vào auth_login_history, audit_logs và phát cảnh báo SIEM MFA_PROTECTION_DISABLED
+    await h.mfaService.enableEmailOtp(user.id, { enabled: true });
+    await h.authService.disableMfa(user.id, {
+      method: 'EMAIL_OTP',
+      currentPassword: 'Valid#Password123',
+    });
+    expect(dispatchedAlerts.some((a) => a.anomalyType === 'MFA_PROTECTION_DISABLED')).toBe(true);
+
+    // 6d. Đổi quyền của vai trò -> ghi sự kiện PERMISSION_CHANGED và phát cảnh báo SIEM PRIVILEGE_ESCALATION_OR_CHANGE
+    await h.rolesService.setPermissions(role.id, {
+      permissions: ['users.read', 'users.export', 'roles.read'],
+    });
+    expect(dispatchedAlerts.some((a) => a.anomalyType === 'PRIVILEGE_ESCALATION_OR_CHANGE')).toBe(
+      true,
+    );
+
+    // 6e. Export dữ liệu vượt ngưỡng cảnh báo -> ghi sự kiện DATA_EXPORT và phát cảnh báo SIEM LARGE_DATA_EXPORT
+    h.platformSecurityService.setLargeExportThreshold(1);
+    const exported = await h.exportService.exportUsersCsv(
+      { page: 1, limit: 100, sortBy: 'id', sortOrder: 'ASC', format: 'csv' },
+      {
+        id: user.id,
+        email: user.email,
+        username: user.username,
+        roles: ['sec45_member'],
+        permissions: ['users.read', 'users.export'],
+        organizationUnitIds: [],
+      },
+    );
+    expect(exported.totalExported).toBeGreaterThanOrEqual(1);
+    expect(dispatchedAlerts.some((a) => a.anomalyType === 'LARGE_DATA_EXPORT')).toBe(true);
+
+    // 6f. Logout -> ghi sự kiện LOGOUT vào cả auth_login_history và audit_logs
+    await h.authService.logout(
+      {
+        userId: user.id,
+        sessionId: loginRes.sessionId,
+        ipAddress: '10.10.20.30',
+        userAgent: 'Mozilla/5.0 Macintosh',
+      },
+      { ipAddress: '10.10.20.30', userAgent: 'Mozilla/5.0 Macintosh' },
+    );
+
+    // Kiểm tra bảng auth_login_history của user có đầy đủ: LOGIN_FAILED, LOGIN_SUCCESS, MFA_DISABLED, LOGOUT
+    const userHistory = await h.sessionService.listUserLoginHistory(user.id, 50);
+    const historyEventNames = userHistory.map((item) => item.eventTypeName);
+    expect(historyEventNames).toEqual(
+      expect.arrayContaining(['LOGIN_FAILED', 'LOGIN_SUCCESS', 'MFA_DISABLED', 'LOGOUT']),
+    );
+
+    // Kiểm tra bảng audit_logs (module = 'auth') cũng có đầy đủ LOGIN_FAILED, LOGIN_SUCCESS, MFA_DISABLED, LOGOUT
+    const authAuditLogs = await h.rolesService.listAuditLogs({
+      module: 'auth',
+      page: 1,
+      limit: 50,
+    });
+    const authAuditActions = authAuditLogs.data.map((item) => item.action);
+    expect(authAuditActions).toEqual(
+      expect.arrayContaining(['LOGIN_FAILED', 'LOGIN_SUCCESS', 'MFA_DISABLED', 'LOGOUT']),
+    );
+
+    // Kiểm tra danh sách Security Events và Security Alerts qua RolesService
+    const secEvents = h.rolesService.listSecurityEvents({ limit: 50 });
+    expect(secEvents.map((e) => e.eventType)).toEqual(
+      expect.arrayContaining([
+        'LOGIN_FAILED',
+        'MFA_DISABLED',
+        'PERMISSION_CHANGED',
+        'DATA_EXPORT',
+      ]),
+    );
+
+    const secAlerts = h.rolesService.listSecurityAlerts({ limit: 50 });
+    expect(secAlerts.map((a) => a.anomalyType)).toEqual(
+      expect.arrayContaining([
+        'BRUTE_FORCE_LOGIN',
+        'MFA_PROTECTION_DISABLED',
+        'PRIVILEGE_ESCALATION_OR_CHANGE',
+        'LARGE_DATA_EXPORT',
+      ]),
+    );
+  });
+
+  it('supports Dynamic Lookup Table & Hybrid Code System (code_types, code_values, 2-tier i18n, dynamic unit types, hybrid behaviorCode, and MasterPermissionSeeder)', async () => {
+    const h = createIamInMemoryHarness();
+    let typeSeq = 0;
+    let valSeq = 0;
+    const typeStore = new Map<string, CodeTypeEntity>();
+    const valStore = new Map<number, CodeValueEntity>();
+
+    const codeTypeRepo = {
+      findByCode: async (code: string) => typeStore.get(code.trim().toLowerCase()) ?? null,
+      findFiltered: async (params?: { module?: string; search?: string }) => {
+        let list = [...typeStore.values()];
+        if (params?.module) {
+          list = list.filter((t) => t.module === params.module!.trim().toLowerCase());
+        }
+        if (params?.search) {
+          const kw = params.search.trim().toLowerCase();
+          list = list.filter(
+            (t) => t.code.toLowerCase().includes(kw) || t.name.toLowerCase().includes(kw),
+          );
+        }
+        return list;
+      },
+      saveEntity: async (partial: Partial<CodeTypeEntity>) => {
+        const now = new Date();
+        const norm = partial.code!.trim().toLowerCase();
+        const existing = typeStore.get(norm);
+        const entity: CodeTypeEntity = {
+          id: existing?.id ?? ++typeSeq,
+          code: norm,
+          module: partial.module ?? existing?.module ?? 'core',
+          name: partial.name ?? existing?.name ?? norm,
+          description:
+            partial.description !== undefined ? partial.description : (existing?.description ?? null),
+          isSystem: partial.isSystem ?? existing?.isSystem ?? true,
+          allowCustomValues: partial.allowCustomValues ?? existing?.allowCustomValues ?? true,
+          status: partial.status ?? existing?.status ?? CODE_ITEM_STATUS.ACTIVE,
+          createdAt: existing?.createdAt ?? now,
+          updatedAt: now,
+          deletedAt: null,
+        } as CodeTypeEntity;
+        typeStore.set(norm, entity);
+        return entity;
+      },
+    } as unknown as CodeTypeRepository;
+
+    const codeValueRepo = {
+      findByTypeCode: async (typeCode: string, includeInactive = false) => {
+        const norm = typeCode.trim().toLowerCase();
+        return [...valStore.values()]
+          .filter(
+            (v) =>
+              v.typeCode === norm &&
+              !v.deletedAt &&
+              (includeInactive || v.status === CODE_ITEM_STATUS.ACTIVE),
+          )
+          .sort((a, b) => a.sortOrder - b.sortOrder || a.numericCode - b.numericCode);
+      },
+      findAllOrdered: async (includeInactive = true) =>
+        [...valStore.values()].filter(
+          (v) => !v.deletedAt && (includeInactive || v.status === CODE_ITEM_STATUS.ACTIVE),
+        ),
+      findByTypeAndNumericCode: async (typeCode: string, numericCode: number) => {
+        const norm = typeCode.trim().toLowerCase();
+        return (
+          [...valStore.values()].find(
+            (v) => v.typeCode === norm && Number(v.numericCode) === Number(numericCode) && !v.deletedAt,
+          ) ?? null
+        );
+      },
+      saveEntity: async (partial: Partial<CodeValueEntity>) => {
+        const now = new Date();
+        const existing = partial.id ? valStore.get(Number(partial.id)) : undefined;
+        const entity: CodeValueEntity = {
+          id: existing?.id ?? ++valSeq,
+          typeCode: partial.typeCode ?? existing!.typeCode,
+          numericCode: Number(partial.numericCode ?? existing!.numericCode),
+          code: partial.code ?? existing!.code,
+          behaviorCode:
+            partial.behaviorCode !== undefined
+              ? partial.behaviorCode
+              : (existing?.behaviorCode ?? null),
+          name: partial.name ?? existing!.name,
+          description:
+            partial.description !== undefined ? partial.description : (existing?.description ?? null),
+          labelsJson:
+            partial.labelsJson !== undefined ? partial.labelsJson : (existing?.labelsJson ?? null),
+          aliasesJson:
+            partial.aliasesJson !== undefined ? partial.aliasesJson : (existing?.aliasesJson ?? null),
+          color: partial.color !== undefined ? partial.color : (existing?.color ?? null),
+          icon: partial.icon !== undefined ? partial.icon : (existing?.icon ?? null),
+          sortOrder: partial.sortOrder ?? existing?.sortOrder ?? 0,
+          isDefault: partial.isDefault ?? existing?.isDefault ?? false,
+          isSystem: partial.isSystem ?? existing?.isSystem ?? false,
+          metadataJson:
+            partial.metadataJson !== undefined
+              ? partial.metadataJson
+              : (existing?.metadataJson ?? null),
+          status: partial.status ?? existing?.status ?? CODE_ITEM_STATUS.ACTIVE,
+          createdAt: existing?.createdAt ?? now,
+          updatedAt: now,
+          deletedAt: null,
+        } as CodeValueEntity;
+        valStore.set(entity.id, entity);
+        return entity;
+      },
+      repository: {
+        softDelete: async (id: number) => {
+          valStore.delete(Number(id));
+        },
+      },
+    } as unknown as CodeValueRepository;
+
+    const i18n = new CoreI18nService();
+    const codesService = new CodesService(
+      codeTypeRepo,
+      codeValueRepo,
+      defaultCodeRegistry,
+      i18n,
+      h.auditLogService,
+    );
+
+    // 1. Sync manifests into code_types & code_values
+    const syncRes = await codesService.syncManifests();
+    expect(syncRes.totalCodeTypes).toBeGreaterThanOrEqual(8);
+    expect(syncRes.createdTypesCount).toBeGreaterThanOrEqual(8);
+    expect(syncRes.syncedModules).toEqual(
+      expect.arrayContaining(['organizations', 'users', 'roles', 'auth']),
+    );
+
+    // 2. Verify Bootstrap dictionary & 2-tier i18n (vi + en)
+    const bootstrapEn = await codesService.getBootstrapDictionary({ locale: 'en' });
+    expect(bootstrapEn.locale).toBe('en');
+    expect(bootstrapEn.dictionary['organizations.unit_type']).toBeDefined();
+    const hqEn = bootstrapEn.dictionary['organizations.unit_type']!.find(
+      (v) => v.numericCode === 1,
+    );
+    expect(hqEn?.displayLabel).toBe('Headquarters');
+
+    // 3. Add dynamic unit type 5 = CAMPUS to organizations.unit_type and create an Organization Unit with type = 'CAMPUS'
+    const campusVal = await codesService.createCodeValue('organizations.unit_type', {
+      numericCode: 5,
+      code: 'CAMPUS',
+      behaviorCode: 'BRANCH',
+      name: 'Cơ sở đào tạo',
+      labels: { vi: 'Cơ sở đào tạo', en: 'Training Campus' },
+      aliases: ['CO SO', 'CƠ SỞ'],
+      color: 'cyan',
+      status: CODE_ITEM_STATUS.ACTIVE,
+    });
+    expect(campusVal.numericCode).toBe(5);
+    expect(campusVal.code).toBe('CAMPUS');
+    expect(campusVal.isSystem).toBe(false);
+
+    const campusOrg = await h.organizationsService.create({
+      code: 'CAMPUS_THUDUC',
+      name: 'Cơ sở Đào tạo TP. Thủ Đức',
+      type: 5,
+    });
+    expect(campusOrg.type).toBe(5);
+    expect(campusOrg.typeName).toBe('CAMPUS');
+
+    // 4. Hybrid User Status: Add custom status 5 = PROBATION_SUSPENDED with behaviorCode = 'LOCKED'
+    const customStatusVal = await codesService.createCodeValue('users.status', {
+      numericCode: 5,
+      code: 'PROBATION_SUSPENDED',
+      behaviorCode: 'LOCKED',
+      name: 'Tạm đình chỉ thử việc',
+      labels: { vi: 'Tạm đình chỉ thử việc', en: 'Probation Suspended' },
+      aliases: ['ĐÌNH CHỈ THỬ VIỆC'],
+      status: CODE_ITEM_STATUS.ACTIVE,
+    });
+    expect(customStatusVal.behaviorCode).toBe('LOCKED');
+    expect(defaultCodeRegistry.resolveBehaviorCode('users.status', 5)).toBe('LOCKED');
+
+    // 5. Block deleting system anchor code value (isSystem = true)
+    await expect(codesService.removeCodeValue('organizations.unit_type', 1)).rejects.toThrow();
+
+    // 6. Block adding custom values to locked code_type (allowCustomValues = false, e.g. roles.data_scope)
+    await expect(
+      codesService.createCodeValue('roles.data_scope', {
+        code: 'CUSTOM_REGION',
+        name: 'Vùng tùy chỉnh',
+        status: CODE_ITEM_STATUS.ACTIVE,
+      }),
+    ).rejects.toThrow();
+
+    // 7. Delete custom code value (5 = CAMPUS) and clean up
+    const delCampus = await codesService.removeCodeValue('organizations.unit_type', 5);
+    expect(delCampus.deleted).toBe(true);
+    await codesService.removeCodeValue('users.status', 5);
+
+    // 8. Verify MasterPermissionSeeder executes SQL for code_types & code_values
+    const executedQueries: string[] = [];
+    const seeder = new MasterPermissionSeeder([
+      { code: 'codes.read', module: 'codes', description: 'Read codes' },
+    ]);
+    const seederRes = await seeder.run({
+      driver: 'postgres',
+      environment: 'test',
+      manager: {
+        query: async (sql: string) => {
+          executedQueries.push(sql);
+          return [];
+        },
+      } as never,
+    });
+    expect(seederRes.affected).toBeGreaterThan(20);
+    expect(executedQueries.some((q) => q.includes('INSERT INTO code_types'))).toBe(true);
+    expect(executedQueries.some((q) => q.includes('INSERT INTO code_values'))).toBe(true);
   });
 });

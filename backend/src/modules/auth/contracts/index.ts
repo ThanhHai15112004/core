@@ -122,6 +122,12 @@ export const AUTH_EVENT_TYPE = {
   SESSION_REVOKE_ALL: 7,
   SESSION_EXPIRED: 8,
   TOKEN_REUSE_DETECTED: 9,
+  MFA_DISABLED: 10,
+  MFA_RESET: 11,
+  PASSWORD_CHANGED: 12,
+  PASSWORD_RESET: 13,
+  PERMISSION_CHANGED: 14,
+  DATA_EXPORT: 15,
 } as const;
 
 export type AuthEventTypeCode = (typeof AUTH_EVENT_TYPE)[keyof typeof AUTH_EVENT_TYPE];
@@ -153,6 +159,18 @@ export function getAuthEventTypeName(code: number): AuthEventTypeName {
       return 'SESSION_EXPIRED';
     case AUTH_EVENT_TYPE.TOKEN_REUSE_DETECTED:
       return 'TOKEN_REUSE_DETECTED';
+    case AUTH_EVENT_TYPE.MFA_DISABLED:
+      return 'MFA_DISABLED';
+    case AUTH_EVENT_TYPE.MFA_RESET:
+      return 'MFA_RESET';
+    case AUTH_EVENT_TYPE.PASSWORD_CHANGED:
+      return 'PASSWORD_CHANGED';
+    case AUTH_EVENT_TYPE.PASSWORD_RESET:
+      return 'PASSWORD_RESET';
+    case AUTH_EVENT_TYPE.PERMISSION_CHANGED:
+      return 'PERMISSION_CHANGED';
+    case AUTH_EVENT_TYPE.DATA_EXPORT:
+      return 'DATA_EXPORT';
     case AUTH_EVENT_TYPE.LOGIN_SUCCESS:
     default:
       return 'LOGIN_SUCCESS';
@@ -215,11 +233,7 @@ export interface AdminResetMfaResult {
 }
 
 export interface IAuthPublicService {
-  revokeAllUserSessions(
-    userId: number,
-    reason?: string,
-    exceptSessionId?: number,
-  ): Promise<number>;
+  revokeAllUserSessions(userId: number, reason?: string, exceptSessionId?: number): Promise<number>;
 }
 
 export const AUTH_PUBLIC_SERVICE = Symbol('AUTH_PUBLIC_SERVICE');
@@ -240,6 +254,3 @@ export {
   type ApiClientUsageResultType,
   getApiClientStatusName,
 } from '../entities/auth-api-client.entity.js';
-
-
-

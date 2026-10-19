@@ -106,7 +106,13 @@ export interface LoginHistoryItemResponse {
     | 'SESSION_REVOKED'
     | 'SESSION_REVOKE_ALL'
     | 'SESSION_EXPIRED'
-    | 'TOKEN_REUSE_DETECTED';
+    | 'TOKEN_REUSE_DETECTED'
+    | 'MFA_DISABLED'
+    | 'MFA_RESET'
+    | 'PASSWORD_CHANGED'
+    | 'PASSWORD_RESET'
+    | 'PERMISSION_CHANGED'
+    | 'DATA_EXPORT';
   readonly status: number;
   readonly statusName: 'SUCCESS' | 'FAILED';
   readonly ipAddress: string | null;

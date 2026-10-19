@@ -174,8 +174,85 @@ function resolveValidationErrorCode(
   return HTTP_ERROR_CODE.VALIDATION_FAILED;
 }
 
+const DANGEROUS_OBJECT_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+const RAW_PRESERVED_FIELD_KEYS = new Set([
+  'password',
+  'newPassword',
+  'currentPassword',
+  'oldPassword',
+  'confirmPassword',
+  'secret',
+  'clientSecret',
+  'token',
+  'refreshToken',
+  'accessToken',
+  'signature',
+  'AvatarBase64',
+  'avatarBase64',
+]);
+
 /**
- * Thực thi xác thực dữ liệu đầu vào chung cho `body`, `query`, hoặc `params`.
+ * Làm sạch chuỗi đầu vào để giảm rủi ro XSS và Null-byte / Control-character Injection (Mục 4.5).
+ */
+export function sanitizeStringInput(value: string, stripControlChars = true): string {
+  let cleaned = value
+    .replace(/<\s*script\b[^>]*>[\s\S]*?<\s*\/\s*script\s*>/gi, '')
+    .replace(/<\s*\/?\s*script\b[^>]*>/gi, '')
+    .replace(/javascript\s*:/gi, '')
+    .replace(/\bon[a-z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '');
+
+  if (stripControlChars) {
+    // eslint-disable-next-line no-control-regex
+    cleaned = cleaned.replace(/\0/g, '').replace(/[\x01-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
+  }
+  return cleaned;
+}
+
+/**
+ * Làm sạch đệ quy payload đầu vào (body, query, params), loại bỏ prototype pollution keys và XSS.
+ */
+export function sanitizeInputPayload<T>(
+  input: T,
+  currentKey?: string,
+  stripControlChars = true,
+): T {
+  if (input === null || input === undefined) {
+    return input;
+  }
+
+  if (typeof input === 'string') {
+    if (currentKey && RAW_PRESERVED_FIELD_KEYS.has(currentKey)) {
+      return input.replace(/\0/g, '') as unknown as T;
+    }
+    return sanitizeStringInput(input, stripControlChars) as unknown as T;
+  }
+
+  if (Array.isArray(input)) {
+    return input.map((item) =>
+      sanitizeInputPayload(item, currentKey, stripControlChars),
+    ) as unknown as T;
+  }
+
+  if (typeof input === 'object' && !(input instanceof Date)) {
+    const proto = Object.getPrototypeOf(input) as unknown;
+    if (proto !== Object.prototype && proto !== null) {
+      return input;
+    }
+    const sanitizedObj: Record<string, unknown> = {};
+    for (const [key, val] of Object.entries(input as Record<string, unknown>)) {
+      if (DANGEROUS_OBJECT_KEYS.has(key)) {
+        continue;
+      }
+      sanitizedObj[key] = sanitizeInputPayload(val, key, stripControlChars);
+    }
+    return sanitizedObj as unknown as T;
+  }
+
+  return input;
+}
+
+/**
+ * Thực thi xác thực và làm sạch dữ liệu đầu vào chung cho `body`, `query`, hoặc `params`.
  */
 export function validateInput<T>(
   schema: z.ZodType<T>,
@@ -186,17 +263,21 @@ export function validateInput<T>(
   const source = options.source;
   const effectiveSchema = applyUnknownFieldPolicy(schema, policy);
 
-  const normalizedInput =
+  const rawNormalizedInput =
     effectiveSchema instanceof z.ZodObject && (input === undefined || input === null) ? {} : input;
 
-  const result = effectiveSchema.safeParse(normalizedInput);
+  // Bước 1: Loại bỏ null-byte, prototype pollution keys và XSS script tags trước khi parse
+  const preSanitizedInput = sanitizeInputPayload(rawNormalizedInput, undefined, false);
+
+  const result = effectiveSchema.safeParse(preSanitizedInput);
   if (!result.success) {
     const details = formatZodIssues(result.error.issues, source);
     const code = resolveValidationErrorCode(details, options);
     throw new ValidationAppException(details, code, undefined, code);
   }
 
-  return result.data;
+  // Bước 2: Loại bỏ các ký tự điều khiển ẩn còn sót lại sau khi đã qua bước kiểm tra schema
+  return sanitizeInputPayload(result.data, undefined, true);
 }
 
 /**

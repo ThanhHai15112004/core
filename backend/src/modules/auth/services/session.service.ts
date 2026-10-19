@@ -6,7 +6,9 @@ import {
   UnauthorizedAppException,
 } from '@packages/kernel/index.js';
 import {
+  AuditLogService,
   PasswordHasherService,
+  PlatformSecurityService,
   TokenService,
   parseDurationSeconds,
 } from '@packages/security/index.js';
@@ -41,6 +43,7 @@ export interface IssuedSessionTokens {
 
 export interface RecordAuthEventInput {
   readonly userId?: number | null;
+  readonly actorId?: number | null;
   readonly sessionId?: number | null;
   readonly identifier?: string | null;
   readonly eventType: AuthEventTypeCode;
@@ -49,6 +52,7 @@ export interface RecordAuthEventInput {
   readonly userAgent?: string | null;
   readonly deviceName?: string | null;
   readonly reason?: string | null;
+  readonly metadata?: Record<string, unknown> | null;
 }
 
 @Injectable()
@@ -61,12 +65,27 @@ export class SessionService {
     @Optional() private readonly redis?: RedisService,
     @Optional() private securitySettingsService?: SecuritySettingsService,
     @Optional() private readonly loginHistoryRepository?: AuthLoginHistoryRepository,
+    @Optional() private auditLogService?: AuditLogService,
+    @Optional() private platformSecurityService?: PlatformSecurityService,
   ) {}
 
   /** Gắn SecuritySettingsService (hỗ trợ khởi tạo linh hoạt trong unit test harness) */
   public setSecuritySettingsService(service?: SecuritySettingsService): void {
     if (service) {
       this.securitySettingsService = service;
+    }
+  }
+
+  /** Gắn AuditLogService & PlatformSecurityService (hỗ trợ khởi tạo linh hoạt trong unit test harness) */
+  public setSecurityAuditDependencies(
+    auditLogService?: AuditLogService,
+    platformSecurityService?: PlatformSecurityService,
+  ): void {
+    if (auditLogService) {
+      this.auditLogService = auditLogService;
+    }
+    if (platformSecurityService) {
+      this.platformSecurityService = platformSecurityService;
     }
   }
 
@@ -89,7 +108,10 @@ export class SessionService {
     };
   }
 
-  /** Ghi lịch sử sự kiện Đăng nhập / Đăng xuất / Thu hồi phiên vào DB (tôn trọng cờ enableLoginAuditLog) */
+  /**
+   * Ghi lịch sử sự kiện Đăng nhập / Đăng xuất / Thu hồi phiên / MFA / Mật khẩu vào bảng `auth_login_history`
+   * đồng thời đồng bộ sang `AuditLogService` (Mục 4.4) và `PlatformSecurityService` (Mục 4.5).
+   */
   public async recordAuthEvent(
     input: RecordAuthEventInput,
   ): Promise<AuthLoginHistoryEntity | null> {
@@ -103,8 +125,10 @@ export class SessionService {
 
     const deviceName = input.deviceName ?? this.extractDeviceName(input.userAgent);
     const status = input.status ?? AUTH_EVENT_STATUS.SUCCESS;
+    const eventTypeName = getAuthEventTypeName(input.eventType);
+    const statusName = getAuthEventStatusName(status);
 
-    return await this.loginHistoryRepository.recordEvent({
+    const savedHistory = await this.loginHistoryRepository.recordEvent({
       userId: input.userId ?? null,
       sessionId: input.sessionId ?? null,
       identifier: input.identifier ?? null,
@@ -115,6 +139,78 @@ export class SessionService {
       deviceName,
       reason: input.reason ?? null,
     });
+
+    const effectiveActorId = input.actorId ?? input.userId ?? null;
+
+    if (this.auditLogService) {
+      await this.auditLogService.record({
+        module: 'auth',
+        feature:
+          input.eventType === AUTH_EVENT_TYPE.MFA_DISABLED ||
+          input.eventType === AUTH_EVENT_TYPE.MFA_RESET ||
+          input.eventType === AUTH_EVENT_TYPE.MFA_CHALLENGE ||
+          input.eventType === AUTH_EVENT_TYPE.MFA_FAILED
+            ? 'mfa_security'
+            : input.eventType === AUTH_EVENT_TYPE.PASSWORD_CHANGED ||
+                input.eventType === AUTH_EVENT_TYPE.PASSWORD_RESET
+              ? 'password_security'
+              : 'session_auth',
+        action: eventTypeName,
+        actorId: effectiveActorId,
+        ipAddress: input.ipAddress ?? null,
+        userAgent: input.userAgent ?? null,
+        resourceType: input.sessionId ? 'auth_session' : 'user',
+        resourceId: input.sessionId ?? input.userId ?? input.identifier ?? null,
+        reason: input.reason ?? null,
+        afterData: {
+          loginHistoryId: Number(savedHistory.id),
+          userId: input.userId ?? null,
+          sessionId: input.sessionId ?? null,
+          identifier: input.identifier ?? null,
+          eventType: input.eventType,
+          eventTypeName,
+          status,
+          statusName,
+          deviceName,
+          ...(input.metadata ? { metadata: input.metadata } : {}),
+        },
+      });
+    }
+
+    if (this.platformSecurityService) {
+      if (
+        input.eventType === AUTH_EVENT_TYPE.LOGIN_FAILED ||
+        input.eventType === AUTH_EVENT_TYPE.MFA_FAILED ||
+        input.eventType === AUTH_EVENT_TYPE.TOKEN_REUSE_DETECTED ||
+        input.eventType === AUTH_EVENT_TYPE.MFA_DISABLED ||
+        input.eventType === AUTH_EVENT_TYPE.MFA_RESET ||
+        input.eventType === AUTH_EVENT_TYPE.PASSWORD_CHANGED ||
+        input.eventType === AUTH_EVENT_TYPE.PASSWORD_RESET
+      ) {
+        await this.platformSecurityService.recordSecurityEvent({
+          eventType: eventTypeName,
+          module: 'auth',
+          feature: 'authentication',
+          action: eventTypeName,
+          actorId: effectiveActorId,
+          targetUserId: input.userId ?? null,
+          identifier: input.identifier ?? null,
+          ipAddress: input.ipAddress ?? null,
+          userAgent: input.userAgent ?? null,
+          resourceType: input.sessionId ? 'auth_session' : 'user',
+          resourceId: input.sessionId ?? input.userId ?? input.identifier ?? null,
+          reason: input.reason ?? null,
+          metadata: {
+            loginHistoryId: Number(savedHistory.id),
+            deviceName,
+            ...(input.metadata ?? {}),
+          },
+          persistToAuditLog: false,
+        });
+      }
+    }
+
+    return savedHistory;
   }
 
   /** Tạo phiên đăng nhập mới và phát hành cặp Access Token + Refresh Token (Mục 3.4.1 & 3.4.3) */

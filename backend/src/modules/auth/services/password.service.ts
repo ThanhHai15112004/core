@@ -17,6 +17,8 @@ import {
 } from '@modules/users/contracts/index.js';
 import {
   AUTH_EMAIL_NOTIFICATION_ADAPTER,
+  AUTH_EVENT_STATUS,
+  AUTH_EVENT_TYPE,
   type IEmailNotificationAdapter,
 } from '../contracts/index.js';
 import type { AuthPasswordResetEntity } from '../entities/auth-password-reset.entity.js';
@@ -164,6 +166,16 @@ export class PasswordService {
         currentSessionId,
       );
     }
+
+    await this.sessionService.recordAuthEvent({
+      userId,
+      actorId: userId,
+      sessionId: currentSessionId ?? null,
+      eventType: AUTH_EVENT_TYPE.PASSWORD_CHANGED,
+      status: AUTH_EVENT_STATUS.SUCCESS,
+      reason: 'Password changed by user',
+      metadata: { revokedSessionsCount },
+    });
 
     return { changed: true, revokedSessionsCount };
   }
@@ -320,6 +332,16 @@ export class PasswordService {
       'Password reset completed',
     );
 
+    await this.sessionService.recordAuthEvent({
+      userId,
+      actorId: userId,
+      ipAddress: resetRecord.requestedIp ?? null,
+      eventType: AUTH_EVENT_TYPE.PASSWORD_RESET,
+      status: AUTH_EVENT_STATUS.SUCCESS,
+      reason: 'Password reset via recovery token/OTP',
+      metadata: { revokedSessionsCount },
+    });
+
     return { reset: true, revokedSessionsCount };
   }
 
@@ -368,6 +390,15 @@ export class PasswordService {
         'Password reset by administrator',
       );
     }
+
+    await this.sessionService.recordAuthEvent({
+      userId: Number(userId),
+      actorId: _actorId ?? null,
+      eventType: AUTH_EVENT_TYPE.PASSWORD_RESET,
+      status: AUTH_EVENT_STATUS.SUCCESS,
+      reason: `Password reset by administrator${_actorId ? ` #${_actorId}` : ''}`,
+      metadata: { revokedSessionsCount, useSuggested },
+    });
 
     return {
       reset: true,

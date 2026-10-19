@@ -1,3 +1,4 @@
+import { discoverManifestCodeTypes } from '@packages/kernel/index.js';
 import { DATA_SCOPE, type DataScopeCode, PasswordHasherService } from '@packages/security/index.js';
 import type { SeederContext, SeederContract } from '@packages/database/index.js';
 import {
@@ -259,6 +260,21 @@ export const STANDARD_IAM_PERMISSIONS: readonly SeedPermissionDef[] = [
     module: 'auth',
     description: 'Quyền thay đổi thuật toán băm mật khẩu, mã hóa DB và chính sách bảo mật',
   },
+  {
+    id: 18,
+    code: 'codes.read',
+    name: 'Xem danh mục động & mã chuẩn hệ thống',
+    module: 'codes',
+    description: 'Quyền xem danh sách nhóm danh mục (code_types) và giá trị danh mục (code_values)',
+  },
+  {
+    id: 19,
+    code: 'codes.manage',
+    name: 'Quản trị danh mục động & đồng bộ Manifest',
+    module: 'codes',
+    description:
+      'Quyền thêm mới, chỉnh sửa, ẩn/hiện giá trị danh mục động và đồng bộ từ module.manifest.json',
+  },
 ] as const;
 
 const ALL_IAM_PERMISSION_CODES = STANDARD_IAM_PERMISSIONS.map((p) => p.code);
@@ -319,6 +335,8 @@ export const STANDARD_IAM_ROLES: readonly SeedRoleDef[] = [
       'organizations.read',
       'organizations.manage',
       'roles.read',
+      'codes.read',
+      'codes.manage',
     ],
   },
   {
@@ -336,6 +354,7 @@ export const STANDARD_IAM_ROLES: readonly SeedRoleDef[] = [
       'auth.mfa.manage',
       'organizations.read',
       'roles.read',
+      'codes.read',
     ],
   },
   {
@@ -345,7 +364,14 @@ export const STANDARD_IAM_ROLES: readonly SeedRoleDef[] = [
     isSystem: true,
     dataScope: DATA_SCOPE.ALL,
     description: 'Quản trị System Console, Runtimes, Database, Cache, Queue và giám sát hệ thống',
-    permissions: ['users.read', 'roles.read', 'organizations.read', 'auth.settings.read'],
+    permissions: [
+      'users.read',
+      'roles.read',
+      'organizations.read',
+      'auth.settings.read',
+      'codes.read',
+      'codes.manage',
+    ],
   },
   {
     id: 7,
@@ -354,7 +380,7 @@ export const STANDARD_IAM_ROLES: readonly SeedRoleDef[] = [
     isSystem: false,
     dataScope: DATA_SCOPE.ALL,
     description: 'Tra cứu và kết xuất báo cáo người dùng, đơn vị phục vụ đối soát và kiểm toán',
-    permissions: ['users.read', 'users.export', 'organizations.read', 'roles.read'],
+    permissions: ['users.read', 'users.export', 'organizations.read', 'roles.read', 'codes.read'],
   },
   {
     id: 8,
@@ -363,7 +389,7 @@ export const STANDARD_IAM_ROLES: readonly SeedRoleDef[] = [
     isSystem: false,
     dataScope: DATA_SCOPE.ALL,
     description: 'Hỗ trợ mở khóa tài khoản, kiểm tra trạng thái đăng nhập và hướng dẫn người dùng',
-    permissions: ['users.read', 'users.lock', 'organizations.read'],
+    permissions: ['users.read', 'users.lock', 'organizations.read', 'codes.read'],
   },
   {
     id: 9,
@@ -372,7 +398,14 @@ export const STANDARD_IAM_ROLES: readonly SeedRoleDef[] = [
     isSystem: false,
     dataScope: DATA_SCOPE.ORG_UNIT,
     description: 'Điều hành toàn bộ hoạt động và nhân sự tại Chi nhánh TP. Hồ Chí Minh',
-    permissions: ['users.read', 'users.update', 'users.export', 'organizations.read', 'roles.read'],
+    permissions: [
+      'users.read',
+      'users.update',
+      'users.export',
+      'organizations.read',
+      'roles.read',
+      'codes.read',
+    ],
   },
   {
     id: 10,
@@ -381,7 +414,7 @@ export const STANDARD_IAM_ROLES: readonly SeedRoleDef[] = [
     isSystem: false,
     dataScope: DATA_SCOPE.SUBORDINATES,
     description: 'Quản lý nhân sự và công việc trong phạm vi phòng ban trực thuộc',
-    permissions: ['users.read', 'organizations.read'],
+    permissions: ['users.read', 'organizations.read', 'codes.read'],
   },
   {
     id: 11,
@@ -390,7 +423,7 @@ export const STANDARD_IAM_ROLES: readonly SeedRoleDef[] = [
     isSystem: false,
     dataScope: DATA_SCOPE.SELF,
     description: 'Nhân viên chính thức thuộc các phòng ban tại Chi nhánh TP.HCM',
-    permissions: ['users.read'],
+    permissions: ['users.read', 'codes.read'],
   },
 ] as const;
 
@@ -918,9 +951,122 @@ export class IamMasterSeeder implements SeederContract {
       }
     }
 
+    // 7. Seed Dynamic Lookup & Hybrid Code System (code_types & code_values) từ module.manifest.json
+    const manifestCodeTypes = discoverManifestCodeTypes();
+    for (const ct of manifestCodeTypes) {
+      const typeCode = ct.code.trim().toLowerCase();
+      const moduleName = (ct.module ?? typeCode.split('.')[0] ?? 'core').trim().toLowerCase();
+      const isSystem = ct.isSystem ?? true;
+      const allowCustomValues = ct.allowCustomValues ?? true;
+
+      if (isPostgres) {
+        await ctx.manager.query(
+          `INSERT INTO code_types (code, module, name, description, is_system, allow_custom_values, status)
+           VALUES ($1, $2, $3, $4, $5, $6, 1)
+           ON CONFLICT (code) DO UPDATE SET
+             module = EXCLUDED.module,
+             name = EXCLUDED.name,
+             description = EXCLUDED.description,
+             is_system = EXCLUDED.is_system,
+             allow_custom_values = EXCLUDED.allow_custom_values`,
+          [typeCode, moduleName, ct.name, ct.description ?? null, isSystem, allowCustomValues],
+        );
+      } else {
+        await ctx.manager.query(
+          `INSERT INTO code_types (code, module, name, description, is_system, allow_custom_values, status)
+           VALUES (?, ?, ?, ?, ?, ?, 1)
+           ON DUPLICATE KEY UPDATE
+             module = VALUES(module),
+             name = VALUES(name),
+             description = VALUES(description),
+             is_system = VALUES(is_system),
+             allow_custom_values = VALUES(allow_custom_values)`,
+          [typeCode, moduleName, ct.name, ct.description ?? null, isSystem, allowCustomValues],
+        );
+      }
+      affected++;
+
+      for (const val of ct.values ?? []) {
+        const valCode = val.code.trim().toUpperCase();
+        const behaviorCode = val.behaviorCode ? val.behaviorCode.trim().toUpperCase() : null;
+        const labelsJson = val.labels ? JSON.stringify(val.labels) : null;
+        const aliasesJson = val.aliases ? JSON.stringify(val.aliases) : null;
+        const metadataJson = val.metadata ? JSON.stringify(val.metadata) : null;
+
+        if (isPostgres) {
+          await ctx.manager.query(
+            `INSERT INTO code_values (
+               type_code, numeric_code, code, behavior_code, name, description,
+               labels_json, aliases_json, color, icon, sort_order, is_default, is_system, metadata_json, status
+             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 1)
+             ON CONFLICT (type_code, numeric_code) DO UPDATE SET
+               code = EXCLUDED.code,
+               behavior_code = EXCLUDED.behavior_code,
+               name = COALESCE(NULLIF(code_values.name, ''), EXCLUDED.name),
+               labels_json = COALESCE(code_values.labels_json, EXCLUDED.labels_json),
+               aliases_json = COALESCE(code_values.aliases_json, EXCLUDED.aliases_json),
+               color = COALESCE(code_values.color, EXCLUDED.color),
+               sort_order = EXCLUDED.sort_order,
+               is_default = EXCLUDED.is_default,
+               is_system = EXCLUDED.is_system`,
+            [
+              typeCode,
+              val.numericCode,
+              valCode,
+              behaviorCode,
+              val.name,
+              val.description ?? null,
+              labelsJson,
+              aliasesJson,
+              val.color ?? null,
+              val.icon ?? null,
+              val.sortOrder ?? val.numericCode,
+              val.isDefault ?? false,
+              val.isSystem ?? true,
+              metadataJson,
+            ],
+          );
+        } else {
+          await ctx.manager.query(
+            `INSERT INTO code_values (
+               type_code, numeric_code, code, behavior_code, name, description,
+               labels_json, aliases_json, color, icon, sort_order, is_default, is_system, metadata_json, status
+             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+             ON DUPLICATE KEY UPDATE
+               code = VALUES(code),
+               behavior_code = VALUES(behavior_code),
+               name = COALESCE(NULLIF(code_values.name, ''), VALUES(name)),
+               labels_json = COALESCE(code_values.labels_json, VALUES(labels_json)),
+               aliases_json = COALESCE(code_values.aliases_json, VALUES(aliases_json)),
+               color = COALESCE(code_values.color, VALUES(color)),
+               sort_order = VALUES(sort_order),
+               is_default = VALUES(is_default),
+               is_system = VALUES(is_system)`,
+            [
+              typeCode,
+              val.numericCode,
+              valCode,
+              behaviorCode,
+              val.name,
+              val.description ?? null,
+              labelsJson,
+              aliasesJson,
+              val.color ?? null,
+              val.icon ?? null,
+              val.sortOrder ?? val.numericCode,
+              val.isDefault ?? false,
+              val.isSystem ?? true,
+              metadataJson,
+            ],
+          );
+        }
+        affected++;
+      }
+    }
+
     return {
       affected,
-      details: `${HCMC_ORGANIZATION_UNITS.length} HCMC org units (1 branch), ${STANDARD_IAM_PERMISSIONS.length} permissions, ${STANDARD_IAM_ROLES.length} roles, ${PRIVILEGED_ACCOUNTS.length} privileged accounts (@gmail.com) seeded`,
+      details: `${HCMC_ORGANIZATION_UNITS.length} HCMC org units (1 branch), ${STANDARD_IAM_PERMISSIONS.length} permissions, ${STANDARD_IAM_ROLES.length} roles, ${PRIVILEGED_ACCOUNTS.length} privileged accounts (@gmail.com), ${manifestCodeTypes.length} code_types seeded`,
     };
   }
 }

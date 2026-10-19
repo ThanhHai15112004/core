@@ -1,3 +1,5 @@
+import type { CodeTypeManifestItem } from './code-lookup.contract.js';
+
 export type ModuleType = 'core' | 'project';
 
 export interface ModuleEventsManifest {
@@ -22,6 +24,7 @@ export interface ModuleManifest {
   entryModule: string;
   dependencies?: string[];
   permissions?: string[];
+  codeTypes?: CodeTypeManifestItem[];
   events?: ModuleEventsManifest;
   database?: ModuleDatabaseManifest;
 }

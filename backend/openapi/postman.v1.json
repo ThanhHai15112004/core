@@ -1841,6 +1841,283 @@
       ]
     },
     {
+      "name": "Codes & Lookup Dictionary",
+      "item": [
+        {
+          "name": "Danh sách các nhóm danh mục (code_types) trên toàn hệ thống",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/codes?module=module_sample&search=search_sample&locale=locale_sample&includeValues=true",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "codes"
+              ],
+              "query": [
+                {
+                  "key": "module",
+                  "value": "module_sample"
+                },
+                {
+                  "key": "search",
+                  "value": "search_sample"
+                },
+                {
+                  "key": "locale",
+                  "value": "locale_sample"
+                },
+                {
+                  "key": "includeValues",
+                  "value": "true"
+                }
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `codes.read`"
+          }
+        },
+        {
+          "name": "Tải từ điển danh mục động (Bootstrap Dictionary) kèm nhãn đa ngôn ngữ",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/codes/bootstrap?locale=locale_sample&module=module_sample&includeInactive=true",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "codes",
+                "bootstrap"
+              ],
+              "query": [
+                {
+                  "key": "locale",
+                  "value": "locale_sample"
+                },
+                {
+                  "key": "module",
+                  "value": "module_sample"
+                },
+                {
+                  "key": "includeInactive",
+                  "value": "true"
+                }
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Chế độ truy cập**: `Public` (Không yêu cầu đăng nhập)"
+          }
+        },
+        {
+          "name": "Đồng bộ danh mục chuẩn từ module.manifest.json vào code_types & code_values",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/codes/sync",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "codes",
+                "sync"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `codes.manage`"
+          }
+        },
+        {
+          "name": "Danh sách giá trị danh mục (code_values) theo typeCode",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/codes/:typeCode/values?locale=locale_sample&includeInactive=true",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "codes",
+                ":typeCode",
+                "values"
+              ],
+              "query": [
+                {
+                  "key": "locale",
+                  "value": "locale_sample"
+                },
+                {
+                  "key": "includeInactive",
+                  "value": "true"
+                }
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `codes.read`"
+          }
+        },
+        {
+          "name": "Thêm mới giá trị danh mục động (code_values) cho nhóm typeCode",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/codes/:typeCode/values",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "codes",
+                ":typeCode",
+                "values"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"numericCode\": 1,\n  \"code\": \"code_sample\",\n  \"behaviorCode\": \"behaviorCode_sample\",\n  \"name\": \"name_sample\",\n  \"description\": \"description_sample\",\n  \"labels\": {},\n  \"aliases\": [\n    \"aliases_sample\"\n  ],\n  \"color\": \"color_sample\",\n  \"icon\": \"icon_sample\",\n  \"sortOrder\": 0,\n  \"isDefault\": true,\n  \"metadata\": {},\n  \"status\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `codes.manage`"
+          }
+        },
+        {
+          "name": "Cập nhật nhãn hiển thị đa ngôn ngữ, màu sắc hoặc trạng thái giá trị danh mục",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/codes/:typeCode/values/:numericCode",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "codes",
+                ":typeCode",
+                "values",
+                ":numericCode"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"name_sample\",\n  \"description\": \"description_sample\",\n  \"behaviorCode\": \"behaviorCode_sample\",\n  \"labels\": {},\n  \"aliases\": [\n    \"aliases_sample\"\n  ],\n  \"color\": \"color_sample\",\n  \"icon\": \"icon_sample\",\n  \"sortOrder\": 0,\n  \"isDefault\": true,\n  \"metadata\": {},\n  \"status\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `codes.manage`"
+          }
+        },
+        {
+          "name": "Xóa mềm giá trị danh mục động (chặn xóa đối với giá trị gốc isSystem = true)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/codes/:typeCode/values/:numericCode",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "codes",
+                ":typeCode",
+                "values",
+                ":numericCode"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `codes.manage`"
+          }
+        }
+      ]
+    },
+    {
       "name": "System Health",
       "item": [
         {
@@ -6349,7 +6626,7 @@
       "name": "Roles & Permissions",
       "item": [
         {
-          "name": "Danh sách các vai trò hệ thống và vai trò tùy chỉnh",
+          "name": "Danh sách các vai trò hệ thống và vai trò tùy chỉnh kèm phạm vi dữ liệu (Mục 4.1 & 4.3)",
           "request": {
             "method": "GET",
             "header": [
@@ -6363,7 +6640,7 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/v1/roles?search=search_sample&status=1",
+              "raw": "{{baseUrl}}/api/v1/roles?search=search_sample&status=1&dataScope=1",
               "host": [
                 "{{baseUrl}}"
               ],
@@ -6379,6 +6656,10 @@
                 },
                 {
                   "key": "status",
+                  "value": "1"
+                },
+                {
+                  "key": "dataScope",
                   "value": "1"
                 }
               ]
@@ -6417,7 +6698,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"code\": \"code_sample\",\n  \"name\": \"name_sample\",\n  \"description\": \"description_sample\",\n  \"status\": 1,\n  \"permissionIds\": [\n    1\n  ],\n  \"permissions\": [\n    \"permissions_sample\"\n  ]\n}",
+              "raw": "{\n  \"code\": \"code_sample\",\n  \"name\": \"name_sample\",\n  \"description\": \"description_sample\",\n  \"dataScope\": 1,\n  \"status\": 1,\n  \"permissionIds\": [\n    1\n  ],\n  \"permissions\": [\n    \"permissions_sample\"\n  ]\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -6428,7 +6709,329 @@
           }
         },
         {
-          "name": "Danh mục các quyền hạn từ bảng permissions",
+          "name": "Tra cứu Nhật ký thao tác (Audit Log) lọc theo người dùng, Service Account, module, thời gian và hành động (Mục 4.4)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/roles/audit-logs?page=1&limit=20&q=q_sample&actorType=1&actorUserId=1&actorServiceAccountId=1&module=module_sample&feature=feature_sample&action=action_sample&resourceType=resourceType_sample&resourceId=550e8400-e29b-41d4-a716-446655440000&requestId=550e8400-e29b-41d4-a716-446655440000&correlationId=550e8400-e29b-41d4-a716-446655440000&ipAddress=ipAddress_sample&fromDate=fromDate_sample&toDate=toDate_sample&sortOrder=ASC",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "roles",
+                "audit-logs"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "q",
+                  "value": "q_sample"
+                },
+                {
+                  "key": "actorType",
+                  "value": "1"
+                },
+                {
+                  "key": "actorUserId",
+                  "value": "1"
+                },
+                {
+                  "key": "actorServiceAccountId",
+                  "value": "1"
+                },
+                {
+                  "key": "module",
+                  "value": "module_sample"
+                },
+                {
+                  "key": "feature",
+                  "value": "feature_sample"
+                },
+                {
+                  "key": "action",
+                  "value": "action_sample"
+                },
+                {
+                  "key": "resourceType",
+                  "value": "resourceType_sample"
+                },
+                {
+                  "key": "resourceId",
+                  "value": "550e8400-e29b-41d4-a716-446655440000"
+                },
+                {
+                  "key": "requestId",
+                  "value": "550e8400-e29b-41d4-a716-446655440000"
+                },
+                {
+                  "key": "correlationId",
+                  "value": "550e8400-e29b-41d4-a716-446655440000"
+                },
+                {
+                  "key": "ipAddress",
+                  "value": "ipAddress_sample"
+                },
+                {
+                  "key": "fromDate",
+                  "value": "fromDate_sample"
+                },
+                {
+                  "key": "toDate",
+                  "value": "toDate_sample"
+                },
+                {
+                  "key": "sortOrder",
+                  "value": "ASC"
+                }
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `roles.read`"
+          }
+        },
+        {
+          "name": "Xem chi tiết bản ghi Nhật ký thao tác (Audit Log) kèm dữ liệu trước và sau khi thay đổi (Mục 4.4)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/roles/audit-logs/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "roles",
+                "audit-logs",
+                ":id"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `roles.read`"
+          }
+        },
+        {
+          "name": "Không cho phép sửa Audit Log qua API thường (Mục 4.4.8 — Bảo vệ tính toàn vẹn)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/roles/audit-logs/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "roles",
+                "audit-logs",
+                ":id"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `roles.manage`"
+          }
+        },
+        {
+          "name": "Không cho phép sửa Audit Log qua API thường (Mục 4.4.8 — Bảo vệ tính toàn vẹn)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/roles/audit-logs/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "roles",
+                "audit-logs",
+                ":id"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `roles.manage`"
+          }
+        },
+        {
+          "name": "Không cho phép xóa Audit Log qua API thường (Mục 4.4.8 — Bảo vệ tính toàn vẹn)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/roles/audit-logs/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "roles",
+                "audit-logs",
+                ":id"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `roles.manage`"
+          }
+        },
+        {
+          "name": "Xem phạm vi dữ liệu hiệu lực (Data Scope) của tài khoản đang đăng nhập (Mục 4.3)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/roles/data-scopes/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "roles",
+                "data-scopes",
+                "me"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)"
+          }
+        },
+        {
+          "name": "Danh sách các rule phạm vi dữ liệu riêng do các module nghiệp vụ đăng ký (Mục 4.3.7)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/roles/data-scopes/rules",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "roles",
+                "data-scopes",
+                "rules"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `roles.read`"
+          }
+        },
+        {
+          "name": "Đăng ký bổ sung rule phạm vi dữ liệu riêng cho module nghiệp vụ (Mục 4.3.7)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/roles/data-scopes/rules",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "roles",
+                "data-scopes",
+                "rules"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"code_sample\",\n  \"resource\": \"resource_sample\",\n  \"module\": \"module_sample\",\n  \"name\": \"name_sample\",\n  \"description\": \"description_sample\",\n  \"allowedOrganizationUnitIds\": [\n    1\n  ],\n  \"allowedUserIds\": [\n    1\n  ],\n  \"allowAllIfHasPermission\": \"allowAllIfHasPermission_sample\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `roles.manage`"
+          }
+        },
+        {
+          "name": "Danh mục các quyền hạn từ bảng permissions kèm nhóm chức năng và cảnh báo mồ côi",
           "request": {
             "method": "GET",
             "header": [
@@ -6451,6 +7054,233 @@
                 "v1",
                 "roles",
                 "permissions"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `roles.read`"
+          }
+        },
+        {
+          "name": "Danh sách quyền được nhóm theo module và chức năng (Mục 4.2)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/roles/permissions/grouped",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "roles",
+                "permissions",
+                "grouped"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `roles.read`"
+          }
+        },
+        {
+          "name": "Bảng ma trận tổng hợp vai trò và quyền toàn hệ thống (Mục 4.2)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/roles/permissions/matrix",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "roles",
+                "permissions",
+                "matrix"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `roles.read`"
+          }
+        },
+        {
+          "name": "Cảnh báo danh sách quyền không còn module sử dụng (Mục 4.2)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/roles/permissions/orphans",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "roles",
+                "permissions",
+                "orphans"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `roles.read`"
+          }
+        },
+        {
+          "name": "Đồng bộ quyền từ các module manifest (không tạo trùng quyền, phát hiện quyền mồ côi)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/roles/permissions/sync",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "roles",
+                "permissions",
+                "sync"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"modules\": [\n    {\n      \"module\": \"module_sample\",\n      \"displayName\": \"displayName_sample\",\n      \"permissions\": [\n        \"permissions_sample\"\n      ]\n    }\n  ],\n  \"replaceActiveModules\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `roles.manage`"
+          }
+        },
+        {
+          "name": "Tra cứu danh sách cảnh báo thao tác bất thường gửi sang Monitoring / SIEM (Mục 4.5.8)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/roles/security-alerts?anomalyType=anomalyType_sample&severity=INFO&actorId=1&limit=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "roles",
+                "security-alerts"
+              ],
+              "query": [
+                {
+                  "key": "anomalyType",
+                  "value": "anomalyType_sample"
+                },
+                {
+                  "key": "severity",
+                  "value": "INFO"
+                },
+                {
+                  "key": "actorId",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `roles.read`"
+          }
+        },
+        {
+          "name": "Tra cứu các sự kiện bảo mật nền tảng: Login sai, đổi quyền, tắt MFA, export dữ liệu lớn (Mục 4.5.7)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/roles/security-events?eventType=eventType_sample&actorId=1&targetUserId=1&limit=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "roles",
+                "security-events"
+              ],
+              "query": [
+                {
+                  "key": "eventType",
+                  "value": "eventType_sample"
+                },
+                {
+                  "key": "actorId",
+                  "value": "1"
+                },
+                {
+                  "key": "targetUserId",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
               ]
             },
             "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `roles.read`"
@@ -6486,7 +7316,7 @@
           }
         },
         {
-          "name": "Cập nhật vai trò và danh sách quyền",
+          "name": "Cập nhật tên, mô tả, trạng thái và danh sách quyền của vai trò",
           "request": {
             "method": "PATCH",
             "header": [
@@ -6517,7 +7347,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"name_sample\",\n  \"description\": \"description_sample\",\n  \"status\": 1,\n  \"permissionIds\": [\n    1\n  ],\n  \"permissions\": [\n    \"permissions_sample\"\n  ]\n}",
+              "raw": "{\n  \"name\": \"name_sample\",\n  \"description\": \"description_sample\",\n  \"dataScope\": 1,\n  \"status\": 1,\n  \"permissionIds\": [\n    1\n  ],\n  \"permissions\": [\n    \"permissions_sample\"\n  ]\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -6528,7 +7358,7 @@
           }
         },
         {
-          "name": "Xóa mềm vai trò tùy chỉnh",
+          "name": "Xóa mềm vai trò tùy chỉnh (chặn nếu là vai trò hệ thống hoặc đang có người sử dụng)",
           "request": {
             "method": "DELETE",
             "header": [
@@ -6552,6 +7382,49 @@
                 "roles",
                 ":id"
               ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `roles.manage`"
+          }
+        },
+        {
+          "name": "Sao chép vai trò hiện có sang vai trò mới kèm toàn bộ quyền hạn",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/roles/:id/clone",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "roles",
+                ":id",
+                "clone"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"code_sample\",\n  \"name\": \"name_sample\",\n  \"description\": \"description_sample\",\n  \"dataScope\": 1,\n  \"status\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `roles.manage`"
           }
@@ -6598,14 +7471,9 @@
             },
             "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `roles.manage`"
           }
-        }
-      ]
-    },
-    {
-      "name": "User Management",
-      "item": [
+        },
         {
-          "name": "Tìm kiếm và lọc danh sách người dùng có phân trang",
+          "name": "Xem danh sách người dùng đang được gán vai trò theo ID",
           "request": {
             "method": "GET",
             "header": [
@@ -6619,7 +7487,42 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/v1/users?q=q_sample&status=1&roleId=1&organizationUnitId=1&includeArchived=true&mfaEnabled=true&page=1&limit=20&sortBy=id&sortOrder=ASC&format=csv&title=title_sample&logoBase64=logoBase64_sample&stepUpToken=stepUpToken_sample&requireStepUp=true",
+              "raw": "{{baseUrl}}/api/v1/roles/:id/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "roles",
+                ":id",
+                "users"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `roles.read`"
+          }
+        }
+      ]
+    },
+    {
+      "name": "User Management",
+      "item": [
+        {
+          "name": "Tìm kiếm và lọc danh sách người dùng có phân trang (áp dụng Data Scope Mục 4.3)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/users?q=q_sample&status=1&roleId=1&organizationUnitId=1&managerId=1&includeArchived=true&mfaEnabled=true&page=1&limit=20&sortBy=id&sortOrder=ASC&format=csv&title=title_sample&logoBase64=logoBase64_sample&stepUpToken=stepUpToken_sample&requireStepUp=true",
               "host": [
                 "{{baseUrl}}"
               ],
@@ -6643,6 +7546,10 @@
                 },
                 {
                   "key": "organizationUnitId",
+                  "value": "1"
+                },
+                {
+                  "key": "managerId",
                   "value": "1"
                 },
                 {
@@ -6725,7 +7632,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"username\": \"username_sample\",\n  \"email\": \"user@example.com\",\n  \"firstName\": \"firstName_sample\",\n  \"lastName\": \"lastName_sample\",\n  \"fullName\": \"fullName_sample\",\n  \"phone\": \"phone_sample\",\n  \"avatarUrl\": \"https://example.com/resource\",\n  \"dateOfBirth\": \"dateOfBirth_sample\",\n  \"gender\": 1,\n  \"identityNumber\": \"identityNumber_sample\",\n  \"address\": \"address_sample\",\n  \"city\": \"city_sample\",\n  \"country\": \"country_sample\",\n  \"bio\": \"bio_sample\",\n  \"password\": \"password_sample\",\n  \"status\": 1,\n  \"roleIds\": [\n    1\n  ],\n  \"organizationUnits\": [\n    {\n      \"organizationUnitId\": 1,\n      \"isPrimary\": false,\n      \"positionTitle\": \"positionTitle_sample\"\n    }\n  ]\n}",
+              "raw": "{\n  \"username\": \"username_sample\",\n  \"email\": \"user@example.com\",\n  \"firstName\": \"firstName_sample\",\n  \"lastName\": \"lastName_sample\",\n  \"fullName\": \"fullName_sample\",\n  \"phone\": \"phone_sample\",\n  \"avatarUrl\": \"https://example.com/resource\",\n  \"dateOfBirth\": \"dateOfBirth_sample\",\n  \"gender\": 1,\n  \"identityNumber\": \"identityNumber_sample\",\n  \"address\": \"address_sample\",\n  \"city\": \"city_sample\",\n  \"country\": \"country_sample\",\n  \"bio\": \"bio_sample\",\n  \"password\": \"password_sample\",\n  \"status\": 1,\n  \"managerId\": 1,\n  \"roleIds\": [\n    1\n  ],\n  \"organizationUnits\": [\n    {\n      \"organizationUnitId\": 1,\n      \"isPrimary\": false,\n      \"positionTitle\": \"positionTitle_sample\"\n    }\n  ]\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -6778,7 +7685,7 @@
           }
         },
         {
-          "name": "Xuất danh sách người dùng ra định dạng Excel (.xlsx) hoặc CSV (.csv)",
+          "name": "Xuất danh sách người dùng ra định dạng Excel (.xlsx) hoặc CSV (.csv) theo Data Scope",
           "request": {
             "method": "GET",
             "header": [
@@ -6792,7 +7699,7 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/v1/users/export?q=q_sample&status=1&roleId=1&organizationUnitId=1&includeArchived=true&mfaEnabled=true&page=1&limit=20&sortBy=id&sortOrder=ASC&format=csv&title=title_sample&logoBase64=logoBase64_sample&stepUpToken=stepUpToken_sample&requireStepUp=true",
+              "raw": "{{baseUrl}}/api/v1/users/export?q=q_sample&status=1&roleId=1&organizationUnitId=1&managerId=1&includeArchived=true&mfaEnabled=true&page=1&limit=20&sortBy=id&sortOrder=ASC&format=csv&title=title_sample&logoBase64=logoBase64_sample&stepUpToken=stepUpToken_sample&requireStepUp=true",
               "host": [
                 "{{baseUrl}}"
               ],
@@ -6817,6 +7724,10 @@
                 },
                 {
                   "key": "organizationUnitId",
+                  "value": "1"
+                },
+                {
+                  "key": "managerId",
                   "value": "1"
                 },
                 {
@@ -6883,7 +7794,7 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/v1/users/import-template?q=q_sample&status=1&roleId=1&organizationUnitId=1&includeArchived=true&mfaEnabled=true&page=1&limit=20&sortBy=id&sortOrder=ASC&format=csv&title=title_sample&logoBase64=logoBase64_sample&stepUpToken=stepUpToken_sample&requireStepUp=true",
+              "raw": "{{baseUrl}}/api/v1/users/import-template?q=q_sample&status=1&roleId=1&organizationUnitId=1&managerId=1&includeArchived=true&mfaEnabled=true&page=1&limit=20&sortBy=id&sortOrder=ASC&format=csv&title=title_sample&logoBase64=logoBase64_sample&stepUpToken=stepUpToken_sample&requireStepUp=true",
               "host": [
                 "{{baseUrl}}"
               ],
@@ -6908,6 +7819,10 @@
                 },
                 {
                   "key": "organizationUnitId",
+                  "value": "1"
+                },
+                {
+                  "key": "managerId",
                   "value": "1"
                 },
                 {
@@ -6960,7 +7875,7 @@
           }
         },
         {
-          "name": "Xem chi tiết hồ sơ người dùng theo ID",
+          "name": "Xem chi tiết hồ sơ người dùng theo ID (kiểm tra Data Scope chống đổi ID — Mục 4.3.6)",
           "request": {
             "method": "GET",
             "header": [
@@ -7020,7 +7935,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"firstName\": \"firstName_sample\",\n  \"lastName\": \"lastName_sample\",\n  \"fullName\": \"fullName_sample\",\n  \"email\": \"user@example.com\",\n  \"phone\": \"phone_sample\",\n  \"avatarUrl\": \"https://example.com/resource\",\n  \"dateOfBirth\": \"dateOfBirth_sample\",\n  \"gender\": 1,\n  \"identityNumber\": \"identityNumber_sample\",\n  \"address\": \"address_sample\",\n  \"city\": \"city_sample\",\n  \"country\": \"country_sample\",\n  \"bio\": \"bio_sample\",\n  \"expectedVersion\": 1\n}",
+              "raw": "{\n  \"firstName\": \"firstName_sample\",\n  \"lastName\": \"lastName_sample\",\n  \"fullName\": \"fullName_sample\",\n  \"email\": \"user@example.com\",\n  \"phone\": \"phone_sample\",\n  \"avatarUrl\": \"https://example.com/resource\",\n  \"dateOfBirth\": \"dateOfBirth_sample\",\n  \"gender\": 1,\n  \"identityNumber\": \"identityNumber_sample\",\n  \"address\": \"address_sample\",\n  \"city\": \"city_sample\",\n  \"country\": \"country_sample\",\n  \"bio\": \"bio_sample\",\n  \"managerId\": 1,\n  \"expectedVersion\": 1\n}",
               "options": {
                 "raw": {
                   "language": "json"

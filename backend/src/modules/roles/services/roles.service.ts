@@ -16,7 +16,12 @@ import {
   type AuditLogRecord,
   DataScopeService,
   type DataScopeCustomRuleMetadata,
+  PlatformSecurityService,
   type ResolvedDataScopeFilter,
+  type SecurityAnomalyAlert,
+  type SecurityEventRecord,
+  type SecurityEventSeverity,
+  type SecurityEventTypeCode,
   type UserIdentity,
 } from '@packages/security/index.js';
 import {
@@ -87,6 +92,9 @@ export class RolesService implements IRolesPublicService {
     @Optional()
     @Inject(AuditLogService)
     private readonly auditLogService: AuditLogService | null = null,
+    @Optional()
+    @Inject(PlatformSecurityService)
+    private readonly platformSecurityService: PlatformSecurityService | null = null,
   ) {
     this.initializeModuleManifests();
     this.dataScopeService?.registerRoleScopeResolver(async (roleCodes) => {
@@ -639,6 +647,18 @@ export class RolesService implements IRolesPublicService {
           beforeData: beforeSnapshot,
           afterData: updatedResponse,
         });
+        await this.platformSecurityService?.recordSecurityEvent({
+          eventType: 'PERMISSION_CHANGED',
+          module: 'roles',
+          feature: 'role_management',
+          action: 'ROLE_UPDATED',
+          resourceType: 'role',
+          resourceId: updatedResponse.id,
+          reason: `Updated role ${updatedResponse.code} permissions/scope`,
+          beforeData: beforeSnapshot,
+          afterData: updatedResponse,
+          persistToAuditLog: false,
+        });
         return updatedResponse;
       }
 
@@ -661,6 +681,20 @@ export class RolesService implements IRolesPublicService {
         beforeData: beforeSnapshot,
         afterData: updatedResponse,
       });
+      if (dto.dataScope !== undefined) {
+        await this.platformSecurityService?.recordSecurityEvent({
+          eventType: 'PERMISSION_CHANGED',
+          module: 'roles',
+          feature: 'role_management',
+          action: 'ROLE_UPDATED',
+          resourceType: 'role',
+          resourceId: updatedResponse.id,
+          reason: `Updated role ${updatedResponse.code} data scope`,
+          beforeData: beforeSnapshot,
+          afterData: updatedResponse,
+          persistToAuditLog: false,
+        });
+      }
       return updatedResponse;
     };
 
@@ -700,6 +734,18 @@ export class RolesService implements IRolesPublicService {
       resourceId: role.id,
       beforeData: { permissions: beforePerms.map((p) => p.code) },
       afterData: { permissions: resolvedPerms.map((p) => p.code) },
+    });
+    await this.platformSecurityService?.recordSecurityEvent({
+      eventType: 'PERMISSION_CHANGED',
+      module: 'roles',
+      feature: 'role_permissions',
+      action: 'ROLE_PERMISSIONS_UPDATED',
+      resourceType: 'role',
+      resourceId: role.id,
+      reason: `Updated permissions for role ${role.code}`,
+      beforeData: { permissions: beforePerms.map((p) => p.code) },
+      afterData: { permissions: resolvedPerms.map((p) => p.code) },
+      persistToAuditLog: false,
     });
     return response;
   }
@@ -929,6 +975,26 @@ export class RolesService implements IRolesPublicService {
       return this.auditLogService.remove(id);
     }
     throw new ForbiddenAppException('security.auditLogImmutable', [{ id, operation: 'DELETE' }]);
+  }
+
+  /** Tra cứu danh sách Sự kiện bảo mật (Security Events — Mục 4.5.7) */
+  public listSecurityEvents(filter?: {
+    eventType?: SecurityEventTypeCode | string;
+    actorId?: number;
+    targetUserId?: number;
+    limit?: number;
+  }): SecurityEventRecord[] {
+    return this.platformSecurityService?.listSecurityEvents(filter) ?? [];
+  }
+
+  /** Tra cứu danh sách Cảnh báo thao tác bất thường (SIEM Anomaly Alerts — Mục 4.5.8) */
+  public listSecurityAlerts(filter?: {
+    anomalyType?: string;
+    severity?: SecurityEventSeverity;
+    actorId?: number;
+    limit?: number;
+  }): SecurityAnomalyAlert[] {
+    return this.platformSecurityService?.listAnomalyAlerts(filter) ?? [];
   }
 
   /** Hợp đồng công khai: Đảm bảo toàn bộ roleIds đều tồn tại và đang ACTIVE (status = 1) */

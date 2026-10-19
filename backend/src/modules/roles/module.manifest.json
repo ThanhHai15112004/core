@@ -17,5 +17,109 @@
   "database": {
     "hasMigrations": true,
     "tables": ["roles", "role_permissions"]
-  }
+  },
+  "codeTypes": [
+    {
+      "code": "roles.status",
+      "name": "Trạng thái vai trò",
+      "description": "Trạng thái kích hoạt của vai trò RBAC",
+      "isSystem": true,
+      "allowCustomValues": false,
+      "values": [
+        {
+          "numericCode": 1,
+          "code": "ACTIVE",
+          "behaviorCode": "ACTIVE",
+          "name": "Đang hoạt động",
+          "labels": { "vi": "Đang hoạt động", "en": "Active" },
+          "badgeTone": "success",
+          "color": "emerald",
+          "sortOrder": 1,
+          "isDefault": true,
+          "isSystem": true
+        },
+        {
+          "numericCode": 2,
+          "code": "INACTIVE",
+          "behaviorCode": "INACTIVE",
+          "name": "Ngừng hoạt động",
+          "labels": { "vi": "Ngừng hoạt động", "en": "Inactive" },
+          "badgeTone": "warning",
+          "color": "slate",
+          "sortOrder": 2,
+          "isSystem": true
+        }
+      ]
+    },
+    {
+      "code": "roles.data_scope",
+      "name": "Phạm vi dữ liệu (Data Scope)",
+      "description": "Cấp độ phạm vi truy cập dữ liệu gắn với vai trò (Hybrid Anchor)",
+      "isSystem": true,
+      "allowCustomValues": false,
+      "values": [
+        {
+          "numericCode": 1,
+          "code": "ALL",
+          "behaviorCode": "ALL",
+          "name": "Toàn hệ thống",
+          "labels": { "vi": "Toàn hệ thống", "en": "All System Data" },
+          "aliases": ["GLOBAL", "SYSTEM", "TOÀN HỆ THỐNG"],
+          "badgeTone": "danger",
+          "color": "purple",
+          "sortOrder": 1,
+          "isSystem": true
+        },
+        {
+          "numericCode": 2,
+          "code": "ORG_UNIT",
+          "behaviorCode": "ORG_UNIT",
+          "name": "Theo đơn vị / chi nhánh",
+          "labels": { "vi": "Theo đơn vị / chi nhánh", "en": "Organization Unit" },
+          "aliases": ["ORGANIZATION_UNIT", "UNIT", "BRANCH"],
+          "badgeTone": "info",
+          "color": "indigo",
+          "sortOrder": 2,
+          "isSystem": true
+        },
+        {
+          "numericCode": 3,
+          "code": "DEPARTMENT",
+          "behaviorCode": "DEPARTMENT",
+          "name": "Theo phòng ban / nhóm",
+          "labels": { "vi": "Theo phòng ban / nhóm", "en": "Department / Team" },
+          "aliases": ["DEPT", "TEAM"],
+          "badgeTone": "info",
+          "color": "blue",
+          "sortOrder": 3,
+          "isSystem": true
+        },
+        {
+          "numericCode": 4,
+          "code": "SUBORDINATES",
+          "behaviorCode": "SUBORDINATES",
+          "name": "Theo cấp dưới quản lý",
+          "labels": { "vi": "Theo cấp dưới quản lý", "en": "Subordinates" },
+          "aliases": ["MANAGER", "SUBORDINATE", "TEAM_SUBORDINATES"],
+          "badgeTone": "warning",
+          "color": "teal",
+          "sortOrder": 4,
+          "isSystem": true
+        },
+        {
+          "numericCode": 5,
+          "code": "SELF",
+          "behaviorCode": "SELF",
+          "name": "Chỉ dữ liệu cá nhân",
+          "labels": { "vi": "Chỉ dữ liệu cá nhân", "en": "Own Data Only (Self)" },
+          "aliases": ["PERSONAL", "OWN", "ME"],
+          "badgeTone": "neutral",
+          "color": "slate",
+          "sortOrder": 5,
+          "isDefault": true,
+          "isSystem": true
+        }
+      ]
+    }
+  ]
 }

@@ -5,6 +5,7 @@ import { CoreConfigService } from '@packages/config/index.js';
 import { normalizeApiPrefix } from '@packages/http/index.js';
 import { PinoNestLogger } from '@packages/logging/index.js';
 import { RuntimeAgentService } from '@packages/runtime/index.js';
+import { PlatformSecurityService } from '@packages/security/index.js';
 import { ApiRuntimeContributor } from '../runtime/api-runtime.contributor.js';
 import { ApiModule } from '../api.module.js';
 import { setupApiDocs } from './api-docs.bootstrap.js';
@@ -26,12 +27,13 @@ export async function bootstrapApi(): Promise<NestFastifyApplication> {
   app.get(ApiRuntimeContributor).attachServer(app.getHttpServer());
 
   const configService = app.get(CoreConfigService);
+  const platformSecurity = app.get(PlatformSecurityService);
   const port = configService.app.port;
   const host = configService.app.host;
   const prefix = normalizeApiPrefix(configService.app.apiPrefix);
 
   app.enableCors({
-    origin: true,
+    origin: platformSecurity.getAllowedOrigins(),
     methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
     credentials: true,
   });

@@ -1,6 +1,7 @@
 export * from './contracts/auth.contract.js';
 export * from './contracts/data-scope.contract.js';
 export * from './contracts/audit-log.contract.js';
+export * from './contracts/platform-security.contract.js';
 export * from './contracts/secret-provider.contract.js';
 export * from './types/auth.types.js';
 export * from './types/secret.types.js';
@@ -12,6 +13,7 @@ export * from './providers/totp.service.js';
 export * from './providers/token.service.js';
 export * from './providers/data-scope.service.js';
 export * from './providers/audit-log.service.js';
+export * from './providers/platform-security.service.js';
 export * from './providers/env-secret.provider.js';
 export * from './providers/file-secret.provider.js';
 export * from './providers/secret.service.js';

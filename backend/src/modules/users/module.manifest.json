@@ -38,5 +38,161 @@
   "database": {
     "hasMigrations": true,
     "tables": ["users", "user_roles", "user_organization_units"]
-  }
+  },
+  "codeTypes": [
+    {
+      "code": "users.status",
+      "name": "Trạng thái tài khoản người dùng",
+      "description": "Trạng thái vòng đời tài khoản (Hybrid: gắn với State Machine đăng nhập & khóa tài khoản)",
+      "isSystem": true,
+      "allowCustomValues": true,
+      "values": [
+        {
+          "numericCode": 1,
+          "code": "ACTIVE",
+          "behaviorCode": "ACTIVE",
+          "name": "Đang làm việc",
+          "labels": { "vi": "Đang làm việc", "en": "Active" },
+          "aliases": ["HOẠT ĐỘNG", "HOAT DONG", "ĐANG LÀM VIỆC", "DANG LAM VIEC", "ON"],
+          "badgeTone": "success",
+          "color": "emerald",
+          "sortOrder": 1,
+          "isDefault": true,
+          "isSystem": true
+        },
+        {
+          "numericCode": 2,
+          "code": "INACTIVE",
+          "behaviorCode": "INACTIVE",
+          "name": "Ngừng hoạt động / Nghỉ việc",
+          "labels": { "vi": "Ngừng hoạt động / Nghỉ việc", "en": "Inactive" },
+          "aliases": [
+            "0",
+            "NGHỈ VIỆC",
+            "NGHI VIEC",
+            "NGỪNG",
+            "NGỪNG HOẠT ĐỘNG",
+            "VÔ HIỆU",
+            "VÔ HIỆU HÓA",
+            "TẮT",
+            "TAT",
+            "OFF"
+          ],
+          "badgeTone": "warning",
+          "color": "slate",
+          "sortOrder": 2,
+          "isSystem": true
+        },
+        {
+          "numericCode": 3,
+          "code": "LOCKED",
+          "behaviorCode": "LOCKED",
+          "name": "Đang bị khóa",
+          "labels": { "vi": "Đang bị khóa", "en": "Locked" },
+          "aliases": ["KHÓA", "KHOA", "BỊ KHÓA", "ĐANG BỊ KHÓA", "TẠM KHÓA", "TAM KHOA", "TẠM HOÃN", "TAM HOAN"],
+          "badgeTone": "danger",
+          "color": "rose",
+          "sortOrder": 3,
+          "isSystem": true
+        },
+        {
+          "numericCode": 4,
+          "code": "ARCHIVED",
+          "behaviorCode": "ARCHIVED",
+          "name": "Đã lưu trữ",
+          "labels": { "vi": "Đã lưu trữ", "en": "Archived" },
+          "aliases": ["LƯU TRỮ", "LUU TRU", "ĐÃ LƯU TRỮ"],
+          "badgeTone": "neutral",
+          "color": "zinc",
+          "sortOrder": 4,
+          "isSystem": true
+        }
+      ]
+    },
+    {
+      "code": "users.gender",
+      "name": "Giới tính",
+      "description": "Danh mục giới tính hồ sơ người dùng (100% Dynamic Lookup)",
+      "isSystem": true,
+      "allowCustomValues": true,
+      "values": [
+        {
+          "numericCode": 1,
+          "code": "MALE",
+          "name": "Nam",
+          "labels": { "vi": "Nam", "en": "Male" },
+          "aliases": ["NAM", "M", "BOY"],
+          "badgeTone": "info",
+          "sortOrder": 1,
+          "isSystem": true
+        },
+        {
+          "numericCode": 2,
+          "code": "FEMALE",
+          "name": "Nữ",
+          "labels": { "vi": "Nữ", "en": "Female" },
+          "aliases": ["NỮ", "NU", "F", "GIRL"],
+          "badgeTone": "info",
+          "sortOrder": 2,
+          "isSystem": true
+        },
+        {
+          "numericCode": 3,
+          "code": "OTHER",
+          "name": "Khác",
+          "labels": { "vi": "Khác", "en": "Other" },
+          "aliases": ["KHÁC", "KHAC", "UNKNOWN", "O"],
+          "badgeTone": "neutral",
+          "sortOrder": 3,
+          "isSystem": true
+        }
+      ]
+    },
+    {
+      "code": "users.position_title",
+      "name": "Chức danh công việc",
+      "description": "Danh mục chức danh công việc của nhân sự trong đơn vị (100% Dynamic Lookup)",
+      "isSystem": true,
+      "allowCustomValues": true,
+      "values": [
+        {
+          "numericCode": 1,
+          "code": "DIRECTOR",
+          "name": "Giám đốc",
+          "labels": { "vi": "Giám đốc", "en": "Director" },
+          "badgeTone": "info",
+          "sortOrder": 1,
+          "isSystem": false
+        },
+        {
+          "numericCode": 2,
+          "code": "DEPARTMENT_HEAD",
+          "name": "Trưởng phòng",
+          "labels": { "vi": "Trưởng phòng", "en": "Department Head" },
+          "badgeTone": "success",
+          "sortOrder": 2,
+          "isSystem": false
+        },
+        {
+          "numericCode": 3,
+          "code": "TEAM_LEAD",
+          "name": "Trưởng nhóm",
+          "labels": { "vi": "Trưởng nhóm", "en": "Team Lead" },
+          "badgeTone": "success",
+          "sortOrder": 3,
+          "isSystem": false
+        },
+        {
+          "numericCode": 4,
+          "code": "SPECIALIST",
+          "name": "Chuyên viên",
+          "labels": { "vi": "Chuyên viên", "en": "Specialist" },
+          "badgeTone": "neutral",
+          "sortOrder": 4,
+          "isDefault": true,
+          "isSystem": false
+        }
+      ]
+    }
+  ]
 }

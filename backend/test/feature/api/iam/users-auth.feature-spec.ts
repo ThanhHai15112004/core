@@ -1,7 +1,11 @@
 import { describe, beforeAll, afterAll, it, expect } from '@jest/globals';
 import { HTTP_STATUS_CODE } from '@packages/kernel/index.js';
 import { TransactionManager } from '@packages/database/index.js';
-import { PasswordHasherService, TotpService } from '@packages/security/index.js';
+import {
+  PasswordHasherService,
+  PlatformSecurityService,
+  TotpService,
+} from '@packages/security/index.js';
 import { createTestApp, type TestAppContext } from '../../../concerns/test-app.concern.js';
 import {
   ORGANIZATION_UNIT_STATUS,
@@ -57,6 +61,11 @@ import { AuthVerificationCodeRepository } from '@modules/auth/repositories/auth-
 import { AuthServiceAccountRepository } from '@modules/auth/repositories/auth-service-account.repository.js';
 import { AuthApiClientRepository } from '@modules/auth/repositories/auth-api-client.repository.js';
 import { AuthLoginHistoryRepository } from '@modules/auth/repositories/auth-login-history.repository.js';
+import { CODE_ITEM_STATUS } from '@packages/kernel/index.js';
+import type { CodeTypeEntity } from '@modules/codes/entities/code-type.entity.js';
+import type { CodeValueEntity } from '@modules/codes/entities/code-value.entity.js';
+import { CodeTypeRepository } from '@modules/codes/repositories/code-type.repository.js';
+import { CodeValueRepository } from '@modules/codes/repositories/code-value.repository.js';
 
 describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfiles (firstName/lastName/statusHistory), Roles, Permissions & Organizations (Integer IDs & Status STT)', () => {
   let context: TestAppContext;
@@ -999,7 +1008,131 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
         loginHistoryStore.filter((h) => Number(h.userId) === Number(userId)).slice(0, limit),
     });
 
-    // Seed super_admin role (ID = 1), permissions (ID = 1..10) & superadmin@gmail.com (ID = 1) with password !P@ssw0rd#
+    let codeTypeSeq = 0;
+    let codeValueSeq = 0;
+    const codeTypeStore = new Map<string, CodeTypeEntity>();
+    const codeValueStore = new Map<number, CodeValueEntity>();
+
+    const codeTypeRepo = context.moduleFixture.get(CodeTypeRepository, { strict: false });
+    Object.assign(codeTypeRepo, {
+      findByCode: async (code: string) => codeTypeStore.get(code.trim().toLowerCase()) ?? null,
+      findFiltered: async (params?: { module?: string; search?: string }) => {
+        let list = [...codeTypeStore.values()];
+        if (params?.module) {
+          list = list.filter((t) => t.module === params.module!.trim().toLowerCase());
+        }
+        if (params?.search) {
+          const kw = params.search.trim().toLowerCase();
+          list = list.filter(
+            (t) => t.code.toLowerCase().includes(kw) || t.name.toLowerCase().includes(kw),
+          );
+        }
+        return list;
+      },
+      saveEntity: async (partial: Partial<CodeTypeEntity>) => {
+        const now = new Date();
+        const norm = partial.code!.trim().toLowerCase();
+        const existing = codeTypeStore.get(norm);
+        const entity: CodeTypeEntity = {
+          id: existing?.id ?? ++codeTypeSeq,
+          code: norm,
+          module: partial.module ?? existing?.module ?? 'core',
+          name: partial.name ?? existing?.name ?? norm,
+          description:
+            partial.description !== undefined
+              ? partial.description
+              : (existing?.description ?? null),
+          isSystem: partial.isSystem ?? existing?.isSystem ?? true,
+          allowCustomValues: partial.allowCustomValues ?? existing?.allowCustomValues ?? true,
+          status: partial.status ?? existing?.status ?? CODE_ITEM_STATUS.ACTIVE,
+          createdAt: existing?.createdAt ?? now,
+          updatedAt: now,
+          deletedAt: null,
+        } as CodeTypeEntity;
+        codeTypeStore.set(norm, entity);
+        return entity;
+      },
+    });
+
+    const codeValueRepo = context.moduleFixture.get(CodeValueRepository, { strict: false });
+    Object.assign(codeValueRepo, {
+      findByTypeCode: async (typeCode: string, includeInactive = false) => {
+        const norm = typeCode.trim().toLowerCase();
+        return [...codeValueStore.values()]
+          .filter(
+            (v) =>
+              v.typeCode === norm &&
+              !v.deletedAt &&
+              (includeInactive || v.status === CODE_ITEM_STATUS.ACTIVE),
+          )
+          .sort((a, b) => a.sortOrder - b.sortOrder || a.numericCode - b.numericCode);
+      },
+      findAllOrdered: async (includeInactive = true) =>
+        [...codeValueStore.values()].filter(
+          (v) => !v.deletedAt && (includeInactive || v.status === CODE_ITEM_STATUS.ACTIVE),
+        ),
+      findByTypeAndNumericCode: async (typeCode: string, numericCode: number) => {
+        const norm = typeCode.trim().toLowerCase();
+        return (
+          [...codeValueStore.values()].find(
+            (v) =>
+              v.typeCode === norm &&
+              Number(v.numericCode) === Number(numericCode) &&
+              !v.deletedAt,
+          ) ?? null
+        );
+      },
+      saveEntity: async (partial: Partial<CodeValueEntity>) => {
+        const now = new Date();
+        const existing = partial.id ? codeValueStore.get(Number(partial.id)) : undefined;
+        const entity: CodeValueEntity = {
+          id: existing?.id ?? ++codeValueSeq,
+          typeCode: partial.typeCode ?? existing!.typeCode,
+          numericCode: Number(partial.numericCode ?? existing!.numericCode),
+          code: partial.code ?? existing!.code,
+          behaviorCode:
+            partial.behaviorCode !== undefined
+              ? partial.behaviorCode
+              : (existing?.behaviorCode ?? null),
+          name: partial.name ?? existing!.name,
+          description:
+            partial.description !== undefined
+              ? partial.description
+              : (existing?.description ?? null),
+          labelsJson:
+            partial.labelsJson !== undefined ? partial.labelsJson : (existing?.labelsJson ?? null),
+          aliasesJson:
+            partial.aliasesJson !== undefined
+              ? partial.aliasesJson
+              : (existing?.aliasesJson ?? null),
+          color: partial.color !== undefined ? partial.color : (existing?.color ?? null),
+          icon: partial.icon !== undefined ? partial.icon : (existing?.icon ?? null),
+          sortOrder: partial.sortOrder ?? existing?.sortOrder ?? 0,
+          isDefault: partial.isDefault ?? existing?.isDefault ?? false,
+          isSystem: partial.isSystem ?? existing?.isSystem ?? false,
+          metadataJson:
+            partial.metadataJson !== undefined
+              ? partial.metadataJson
+              : (existing?.metadataJson ?? null),
+          status: partial.status ?? existing?.status ?? CODE_ITEM_STATUS.ACTIVE,
+          createdAt: existing?.createdAt ?? now,
+          updatedAt: now,
+          deletedAt: null,
+        } as CodeValueEntity;
+        codeValueStore.set(entity.id, entity);
+        return entity;
+      },
+    });
+    Object.defineProperty(codeValueRepo, 'repository', {
+      configurable: true,
+      get: () => ({
+        softDelete: async (id: number) => {
+          codeValueStore.delete(Number(id));
+        },
+      }),
+    });
+
+    // Seed super_admin role (ID = 1), permissions (ID = 1..12) & superadmin@gmail.com (ID = 1) with password !P@ssw0rd#
     const seededPerms = await permRepo.ensureByCodes([
       'users.read',
       'users.create',
@@ -1011,6 +1144,8 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
       'roles.manage',
       'organizations.read',
       'organizations.manage',
+      'codes.read',
+      'codes.manage',
     ]);
     const seededRole = await roleRepo.saveEntity({
       code: 'super_admin',
@@ -2501,5 +2636,330 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
       payload: {},
     });
     expect(forgedSyncAttempt.status).toBe(HTTP_STATUS_CODE.FORBIDDEN);
+  });
+
+  it('supports Section 4.5 Platform Security & Login/Logout Audit E2E (4.5.1 -> 4.5.8): Security Headers, CORS Allowlist, 3D Rate Limit (429), Input Sanitization, Login/Logout Audit (auth_login_history + audit_logs), Security Events & SIEM Anomaly Alerts', async () => {
+    const adminHeaders = { authorization: `Bearer ${adminAccessToken}` };
+    const platformSecurity = context.moduleFixture.get(PlatformSecurityService, {
+      strict: false,
+    });
+
+    // 1. Security Headers (4.5.1) & Rate Limit Headers (4.5.3) on HTTP response
+    const meWithHeaders = await context.injectJson({
+      method: 'GET',
+      url: '/api/v1/auth/me',
+      headers: adminHeaders,
+    });
+    expect(meWithHeaders.status).toBe(HTTP_STATUS_CODE.OK);
+    expect(meWithHeaders.headers['strict-transport-security']).toContain('max-age=31536000');
+    expect(meWithHeaders.headers['x-frame-options']).toBe('DENY');
+    expect(meWithHeaders.headers['x-content-type-options']).toBe('nosniff');
+    expect(meWithHeaders.headers['referrer-policy']).toBe('strict-origin-when-cross-origin');
+    expect(meWithHeaders.headers['permissions-policy']).toContain('camera=()');
+    expect(meWithHeaders.headers['x-ratelimit-limit']).toBeDefined();
+    expect(meWithHeaders.headers['x-ratelimit-remaining']).toBeDefined();
+
+    // 2. CORS Allowlist (4.5.2): Whitelisted domain gets Access-Control-Allow-Origin, unknown domain is blocked on preflight OPTIONS (403)
+    platformSecurity.setAllowedOrigins(['https://console.enterprise.vn']);
+
+    const allowedCorsRes = await context.injectJson({
+      method: 'GET',
+      url: '/api/v1/auth/me',
+      headers: {
+        ...adminHeaders,
+        origin: 'https://console.enterprise.vn',
+      },
+    });
+    expect(allowedCorsRes.status).toBe(HTTP_STATUS_CODE.OK);
+    expect(allowedCorsRes.headers['access-control-allow-origin']).toBe(
+      'https://console.enterprise.vn',
+    );
+
+    const blockedCorsPreflight = await context.app.inject({
+      method: 'OPTIONS',
+      url: '/api/v1/auth/me',
+      headers: {
+        origin: 'https://malicious-domain.org',
+        'access-control-request-method': 'GET',
+      },
+    });
+    expect(blockedCorsPreflight.statusCode).toBe(HTTP_STATUS_CODE.FORBIDDEN);
+    expect(blockedCorsPreflight.headers['access-control-allow-origin']).toBeUndefined();
+
+    // 3. Input Validation & Sanitization (4.5.4): Strip <script>, javascript:, and inline event handlers
+    const sanitizedUserRes = await context.injectJson<{
+      id: number;
+      firstName: string;
+      lastName: string;
+      fullName: string;
+      profile?: { bio: string | null };
+    }>({
+      method: 'POST',
+      url: '/api/v1/users',
+      headers: adminHeaders,
+      payload: {
+        email: 'sec45.e2e@gmail.com',
+        username: 'sec45_e2e',
+        firstName: 'Minh<script>alert("xss")</script>',
+        lastName: 'Hoàng',
+        password: 'Safe#Password123',
+        bio: 'Hồ sơ <a href="javascript:evil()" onmouseover="steal()">an toàn</a>',
+        roleIds: [adminRoleId],
+      },
+    });
+    expect(sanitizedUserRes.status).toBe(HTTP_STATUS_CODE.CREATED);
+    expect(sanitizedUserRes.body.data.firstName).toBe('Minh');
+    expect(sanitizedUserRes.body.data.fullName).not.toContain('<script>');
+    expect(sanitizedUserRes.body.data.profile?.bio).not.toContain('javascript:');
+    expect(sanitizedUserRes.body.data.profile?.bio).not.toContain('onmouseover=');
+
+    // 4. Audit Login / Failed Login / Logout in BOTH auth_login_history & audit_logs (4.5.7)
+    for (let i = 0; i < 3; i++) {
+      const failRes = await context.injectJson({
+        method: 'POST',
+        url: '/api/v1/auth/login',
+        remoteAddress: '198.51.100.180',
+        payload: {
+          identifier: 'sec45.e2e@gmail.com',
+          password: 'WrongPassword!999',
+        },
+      });
+      expect(failRes.status).toBe(HTTP_STATUS_CODE.UNAUTHORIZED);
+    }
+
+    const okLoginRes = await context.injectJson<{
+      accessToken: string;
+      sessionId: number;
+    }>({
+      method: 'POST',
+      url: '/api/v1/auth/login',
+      remoteAddress: '10.20.30.50',
+      payload: {
+        identifier: 'sec45.e2e@gmail.com',
+        password: 'Safe#Password123',
+        deviceName: 'Sec45 E2E Workstation',
+      },
+    });
+    expect(okLoginRes.status).toBe(HTTP_STATUS_CODE.OK);
+    const sec45Token = okLoginRes.body.data.accessToken;
+
+    // Trigger large data export event
+    platformSecurity.setLargeExportThreshold(1);
+    const exportRes = await context.injectJson<{ totalExported: number }>({
+      method: 'GET',
+      url: '/api/v1/users/export?format=csv',
+      headers: { authorization: `Bearer ${sec45Token}` },
+    });
+    expect(exportRes.status).toBe(HTTP_STATUS_CODE.OK);
+    expect(exportRes.body.data.totalExported).toBeGreaterThanOrEqual(1);
+
+    // Logout current session
+    const logoutRes = await context.injectJson<{ loggedOut: boolean }>({
+      method: 'POST',
+      url: '/api/v1/auth/logout',
+      headers: { authorization: `Bearer ${sec45Token}` },
+    });
+    expect(logoutRes.status).toBe(HTTP_STATUS_CODE.OK);
+    expect(logoutRes.body.data.loggedOut).toBe(true);
+
+    // Verify user login history via GET /api/v1/users/:id/login-history
+    const userHistoryRes = await context.injectJson<
+      Array<{ eventTypeName: string; statusName: string }>
+    >({
+      method: 'GET',
+      url: `/api/v1/users/${sanitizedUserRes.body.data.id}/login-history`,
+      headers: adminHeaders,
+    });
+    expect(userHistoryRes.status).toBe(HTTP_STATUS_CODE.OK);
+    expect(userHistoryRes.body.data.map((h) => h.eventTypeName)).toEqual(
+      expect.arrayContaining(['LOGIN_FAILED', 'LOGIN_SUCCESS', 'LOGOUT']),
+    );
+
+    // Verify Audit Logs via GET /api/v1/roles/audit-logs?module=auth
+    const authAuditRes = await context.injectJson<Array<{ action: string; module: string }>>({
+      method: 'GET',
+      url: '/api/v1/roles/audit-logs?module=auth&limit=50',
+      headers: adminHeaders,
+    });
+    expect(authAuditRes.status).toBe(HTTP_STATUS_CODE.OK);
+    expect(authAuditRes.body.data.map((a) => a.action)).toEqual(
+      expect.arrayContaining(['LOGIN_FAILED', 'LOGIN_SUCCESS', 'LOGOUT']),
+    );
+
+    // 5. Query Security Events & SIEM Anomaly Alerts via GET /api/v1/roles/security-events & /security-alerts (4.5.7 & 4.5.8)
+    const secEventsRes = await context.injectJson<Array<{ eventType: string }>>({
+      method: 'GET',
+      url: '/api/v1/roles/security-events?limit=50',
+      headers: adminHeaders,
+    });
+    expect(secEventsRes.status).toBe(HTTP_STATUS_CODE.OK);
+    expect(secEventsRes.body.data.map((e) => e.eventType)).toEqual(
+      expect.arrayContaining(['LOGIN_FAILED', 'DATA_EXPORT', 'PERMISSION_CHANGED']),
+    );
+
+    const secAlertsRes = await context.injectJson<
+      Array<{ anomalyType: string; severity: string }>
+    >({
+      method: 'GET',
+      url: '/api/v1/roles/security-alerts?limit=50',
+      headers: adminHeaders,
+    });
+    expect(secAlertsRes.status).toBe(HTTP_STATUS_CODE.OK);
+    expect(secAlertsRes.body.data.map((a) => a.anomalyType)).toEqual(
+      expect.arrayContaining(['BRUTE_FORCE_LOGIN', 'LARGE_DATA_EXPORT']),
+    );
+
+    // 6. Rate Limit enforcement (4.5.3): Exceed IP rate limit on a specific route -> 429 Too Many Requests
+    platformSecurity.setRateLimitRule('GET /api/v1/auth/password/suggest', {
+      ipLimit: 2,
+      userLimit: 10,
+      apiLimit: 50,
+      windowSeconds: 60,
+    });
+    const rlOk1 = await context.injectJson({
+      method: 'GET',
+      url: '/api/v1/auth/password/suggest',
+      remoteAddress: '198.51.100.250',
+    });
+    expect(rlOk1.status).toBe(HTTP_STATUS_CODE.OK);
+    const rlOk2 = await context.injectJson({
+      method: 'GET',
+      url: '/api/v1/auth/password/suggest',
+      remoteAddress: '198.51.100.250',
+    });
+    expect(rlOk2.status).toBe(HTTP_STATUS_CODE.OK);
+    const rlExceeded = await context.injectJson({
+      method: 'GET',
+      url: '/api/v1/auth/password/suggest',
+      remoteAddress: '198.51.100.250',
+    });
+    expect(rlExceeded.status).toBe(HTTP_STATUS_CODE.TOO_MANY_REQUESTS);
+    expect(rlExceeded.headers['retry-after']).toBeDefined();
+  });
+
+  it('supports Dynamic Lookup Table & Hybrid Code System API (/api/v1/codes: sync, bootstrap, list, dynamic unit_type = CAMPUS, 2-tier i18n, and 403 system anchor protection)', async () => {
+    const adminHeaders = { authorization: `Bearer ${adminAccessToken}` };
+
+    // 1. POST /api/v1/codes/sync — Synchronize all module.manifest.json codeTypes into code_types & code_values
+    const syncRes = await context.injectJson<{
+      syncedModules: string[];
+      totalCodeTypes: number;
+      totalCodeValues: number;
+    }>({
+      method: 'POST',
+      url: '/api/v1/codes/sync',
+      headers: adminHeaders,
+    });
+    expect(syncRes.status).toBe(HTTP_STATUS_CODE.OK);
+    expect(syncRes.body.data.totalCodeTypes).toBeGreaterThanOrEqual(8);
+    expect(syncRes.body.data.syncedModules).toEqual(
+      expect.arrayContaining(['organizations', 'users', 'roles', 'auth']),
+    );
+
+    // 2. GET /api/v1/codes/bootstrap?locale=en — 1-request dictionary with English labels
+    const bootstrapRes = await context.injectJson<{
+      locale: string;
+      totalTypes: number;
+      dictionary: Record<string, Array<{ numericCode: number; code: string; displayLabel: string }>>;
+    }>({
+      method: 'GET',
+      url: '/api/v1/codes/bootstrap?locale=en',
+    });
+    expect(bootstrapRes.status).toBe(HTTP_STATUS_CODE.OK);
+    expect(bootstrapRes.body.data.locale).toBe('en');
+    const orgUnitTypesEn = bootstrapRes.body.data.dictionary['organizations.unit_type'];
+    expect(orgUnitTypesEn).toBeDefined();
+    expect(orgUnitTypesEn!.find((v) => v.numericCode === 1)?.displayLabel).toBe('Headquarters');
+
+    // 3. GET /api/v1/codes?module=users&includeValues=true — List code_types for module users
+    const userTypesRes = await context.injectJson<
+      Array<{ code: string; module: string; totalValues: number }>
+    >({
+      method: 'GET',
+      url: '/api/v1/codes?module=users&includeValues=true',
+      headers: adminHeaders,
+    });
+    expect(userTypesRes.status).toBe(HTTP_STATUS_CODE.OK);
+    expect(userTypesRes.body.data.map((t) => t.code)).toEqual(
+      expect.arrayContaining(['users.status', 'users.gender', 'users.position_title']),
+    );
+
+    // 4. POST /api/v1/codes/organizations.unit_type/values — Add dynamic unit type 5 = CAMPUS
+    const createCampusRes = await context.injectJson<{
+      numericCode: number;
+      code: string;
+      displayLabel: string;
+      isSystem: boolean;
+    }>({
+      method: 'POST',
+      url: '/api/v1/codes/organizations.unit_type/values',
+      headers: adminHeaders,
+      payload: {
+        numericCode: 5,
+        code: 'CAMPUS',
+        behaviorCode: 'BRANCH',
+        name: 'Cơ sở đào tạo',
+        labels: { vi: 'Cơ sở đào tạo', en: 'Campus' },
+        aliases: ['CƠ SỞ', 'CO SO'],
+        color: 'cyan',
+      },
+    });
+    expect(createCampusRes.status).toBe(HTTP_STATUS_CODE.CREATED);
+    expect(createCampusRes.body.data.numericCode).toBe(5);
+    expect(createCampusRes.body.data.code).toBe('CAMPUS');
+    expect(createCampusRes.body.data.isSystem).toBe(false);
+
+    // 5. POST /api/v1/organizations — Create Organization Unit using the new dynamic type = 5 ('CAMPUS')
+    const createOrgCampusRes = await context.injectJson<{
+      id: number;
+      code: string;
+      type: number;
+      typeName: string;
+    }>({
+      method: 'POST',
+      url: '/api/v1/organizations',
+      headers: adminHeaders,
+      payload: {
+        code: 'CAMPUS_Q9',
+        name: 'Cơ sở Đào tạo Quận 9',
+        type: 5,
+      },
+    });
+    expect(createOrgCampusRes.status).toBe(HTTP_STATUS_CODE.CREATED);
+    expect(createOrgCampusRes.body.data.type).toBe(5);
+    expect(createOrgCampusRes.body.data.typeName).toBe('CAMPUS');
+
+    // 6. PATCH /api/v1/codes/organizations.unit_type/values/5 — Customize multilingual label at runtime
+    const updateCampusRes = await context.injectJson<{
+      numericCode: number;
+      displayLabel: string;
+      labels: Record<string, string>;
+    }>({
+      method: 'PATCH',
+      url: '/api/v1/codes/organizations.unit_type/values/5',
+      headers: adminHeaders,
+      payload: {
+        labels: { vi: 'Phân hiệu Đào tạo Quốc tế', en: 'International Campus' },
+      },
+    });
+    expect(updateCampusRes.status).toBe(HTTP_STATUS_CODE.OK);
+    expect(updateCampusRes.body.data.labels.en).toBe('International Campus');
+
+    // 7. DELETE /api/v1/codes/organizations.unit_type/values/1 — Block deleting system anchor (isSystem = true) with 403 Forbidden
+    const deleteSystemRes = await context.injectJson({
+      method: 'DELETE',
+      url: '/api/v1/codes/organizations.unit_type/values/1',
+      headers: adminHeaders,
+    });
+    expect(deleteSystemRes.status).toBe(HTTP_STATUS_CODE.FORBIDDEN);
+
+    // 8. DELETE /api/v1/codes/organizations.unit_type/values/5 — Allow deleting custom code value (isSystem = false)
+    const deleteCustomRes = await context.injectJson<{ deleted: boolean; numericCode: number }>({
+      method: 'DELETE',
+      url: '/api/v1/codes/organizations.unit_type/values/5',
+      headers: adminHeaders,
+    });
+    expect(deleteCustomRes.status).toBe(HTTP_STATUS_CODE.OK);
+    expect(deleteCustomRes.body.data.deleted).toBe(true);
   });
 });

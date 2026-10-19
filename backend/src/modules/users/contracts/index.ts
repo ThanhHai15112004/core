@@ -1,3 +1,5 @@
+import { defaultCodeRegistry } from '@packages/kernel/index.js';
+
 export const USER_STATUS = {
   ACTIVE: 1,
   INACTIVE: 2,
@@ -8,57 +10,59 @@ export const USER_STATUS = {
 export type UserStatusCode = (typeof USER_STATUS)[keyof typeof USER_STATUS];
 export type UserStatusName = keyof typeof USER_STATUS;
 
-export function parseUserStatus(val: unknown): UserStatusCode {
-  if (typeof val === 'number') {
-    if (val === 0) return USER_STATUS.INACTIVE;
-    if (val === 1 || val === 2 || val === 3 || val === 4) return val;
-  }
-  if (typeof val === 'string') {
-    const trimmed = val.trim();
-    if (trimmed === '0') return USER_STATUS.INACTIVE;
-    const num = Number(trimmed);
-    if (num === 1 || num === 2 || num === 3 || num === 4) return num;
+export const USER_GENDER = {
+  MALE: 1,
+  FEMALE: 2,
+  OTHER: 3,
+} as const;
 
-    const upper = trimmed.toUpperCase();
-    if (
-      upper === 'INACTIVE' ||
-      upper.includes('NGHỈ VIỆC') ||
-      upper.includes('NGHI VIEC') ||
-      upper.includes('NGỪNG') ||
-      upper.includes('VÔ HIỆU') ||
-      upper === 'TẮT' ||
-      upper === 'TAT' ||
-      upper === 'OFF'
-    ) {
-      return USER_STATUS.INACTIVE;
-    }
-    if (
-      upper === 'LOCKED' ||
-      upper.includes('KHÓA') ||
-      upper.includes('KHOA') ||
-      upper.includes('TẠM HOÃN')
-    ) {
-      return USER_STATUS.LOCKED;
-    }
-    if (upper === 'ARCHIVED' || upper.includes('LƯU TRỮ') || upper.includes('LUU TRU')) {
-      return USER_STATUS.ARCHIVED;
-    }
+export type UserGenderCode = (typeof USER_GENDER)[keyof typeof USER_GENDER];
+export type UserGenderName = keyof typeof USER_GENDER;
+
+/**
+ * Phân giải trạng thái người dùng thông qua CodeRegistryService (`users.status`).
+ * Không còn hardcode chuỗi từ khóa tiếng Việt trong code — toàn bộ aliases được quản lý động tại `code_values`.
+ */
+export function parseUserStatus(val: unknown): UserStatusCode {
+  if (val === 0 || val === '0') {
+    return USER_STATUS.INACTIVE;
   }
+  const resolved = defaultCodeRegistry.parseToNumericCode('users.status', val, USER_STATUS.ACTIVE);
+  if (resolved === 1 || resolved === 2 || resolved === 3 || resolved === 4) {
+    return resolved;
+  }
+  const behavior = defaultCodeRegistry.resolveBehaviorCode('users.status', resolved);
+  if (behavior === 'INACTIVE') return USER_STATUS.INACTIVE;
+  if (behavior === 'LOCKED') return USER_STATUS.LOCKED;
+  if (behavior === 'ARCHIVED') return USER_STATUS.ARCHIVED;
   return USER_STATUS.ACTIVE;
 }
 
+/**
+ * Tra cứu tên mã trạng thái người dùng từ `users.status` (O(1) L1 Lookup).
+ */
 export function getUserStatusName(code: number): UserStatusName {
-  switch (code) {
-    case USER_STATUS.INACTIVE:
-      return 'INACTIVE';
-    case USER_STATUS.LOCKED:
-      return 'LOCKED';
-    case USER_STATUS.ARCHIVED:
-      return 'ARCHIVED';
-    case USER_STATUS.ACTIVE:
-    default:
-      return 'ACTIVE';
+  const behavior = defaultCodeRegistry.resolveBehaviorCode('users.status', code);
+  if (behavior === 'INACTIVE' || behavior === 'LOCKED' || behavior === 'ARCHIVED') {
+    return behavior;
   }
+  return 'ACTIVE';
+}
+
+/**
+ * Phân giải giới tính người dùng thông qua CodeRegistryService (`users.gender`).
+ */
+export function parseUserGender(val: unknown): number | null {
+  if (val === undefined || val === null || val === '') return null;
+  return defaultCodeRegistry.parseToNumericCode('users.gender', val, USER_GENDER.OTHER);
+}
+
+/**
+ * Tra cứu tên mã giới tính từ `users.gender`.
+ */
+export function getUserGenderName(code?: number | null): string | null {
+  if (code === undefined || code === null) return null;
+  return defaultCodeRegistry.getCodeName('users.gender', code, 'OTHER');
 }
 
 /**

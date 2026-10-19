@@ -1,0 +1,10 @@
+{
+  "typeNotFound": "Không tìm thấy nhóm danh mục động (typeCode: {{typeCode}}).",
+  "valueNotFound": "Không tìm thấy giá trị danh mục (typeCode: {{typeCode}}, numericCode: {{numericCode}}).",
+  "customValuesNotAllowed": "Nhóm danh mục hệ thống '{{typeCode}}' không cho phép tạo thêm giá trị tùy chỉnh động.",
+  "duplicateNumericCode": "Mã số nguyên '{{numericCode}}' đã tồn tại trong nhóm danh mục '{{typeCode}}'.",
+  "duplicateValueCode": "Mã định danh '{{code}}' đã tồn tại trong nhóm danh mục '{{typeCode}}'.",
+  "cannotDeleteSystemValue": "Không thể xóa giá trị danh mục gốc của hệ thống (isSystem = true: {{code}}). Bạn chỉ có thể đổi nhãn hiển thị hoặc màu sắc.",
+  "cannotDeactivateSystemAnchor": "Không thể vô hiệu hóa mã neo hệ thống bắt buộc ({{code}})."
+}
+

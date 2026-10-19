@@ -146,6 +146,7 @@ export interface RecordAuditLogInput {
   readonly actor?: UserIdentity | null | undefined;
   readonly actorType?: AuditActorTypeCode | string | undefined;
   readonly actorUserId?: number | null | undefined;
+  readonly actorId?: number | null | undefined;
   readonly actorServiceAccountId?: number | null | undefined;
   readonly actorApiClientId?: number | null | undefined;
   readonly actorIdentifier?: string | null | undefined;

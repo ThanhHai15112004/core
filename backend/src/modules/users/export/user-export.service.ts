@@ -1,6 +1,10 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import { buildXlsxBuffer } from '@packages/kernel/index.js';
-import type { UserIdentity } from '@packages/security/index.js';
+import {
+  AuditLogService,
+  PlatformSecurityService,
+  type UserIdentity,
+} from '@packages/security/index.js';
 import { UserRepository } from '../repositories/user.repository.js';
 import { UsersService } from '../services/users.service.js';
 import type { ListUsersQuery } from '../requests/users.requests.js';
@@ -28,11 +32,13 @@ export class UserExportService {
   constructor(
     private readonly usersService: UsersService,
     private readonly userRepository: UserRepository,
+    @Optional() private readonly auditLogService?: AuditLogService,
+    @Optional() private readonly platformSecurityService?: PlatformSecurityService,
   ) {}
 
   /**
    * Xuất danh sách người dùng ra định dạng Excel (.xlsx) hoặc CSV (.csv) theo bộ lọc hiện hành
-   * và áp dụng Phạm vi dữ liệu (Data Scope) của người xuất báo cáo (Mục 3.1.8 & 4.3.5).
+   * và áp dụng Phạm vi dữ liệu (Data Scope) của người xuất báo cáo (Mục 3.1.8, 4.3.5 & 4.5.7).
    */
   public async exportUsersCsv(
     query: ListUsersQuery,
@@ -75,9 +81,50 @@ export class UserExportService {
     });
     const xlsxBase64 = xlsxBuffer.toString('base64');
     const datePart = new Date().toISOString().slice(0, 10);
+    const fileName = `danh_sach_nhan_vien_${datePart}.${format}`;
+
+    if (this.platformSecurityService) {
+      await this.platformSecurityService.recordSecurityEvent({
+        eventType: 'DATA_EXPORT',
+        module: 'users',
+        feature: 'user_export',
+        action: 'USER_DATA_EXPORTED',
+        actorId: actor?.id ?? null,
+        resourceType: 'user_export',
+        resourceId: fileName,
+        recordCount: hydrated.length,
+        reason: `Exported ${hydrated.length} user records as ${format.toUpperCase()}`,
+        afterData: {
+          fileName,
+          format,
+          totalExported: hydrated.length,
+          effectiveDataScope: scopeFilter?.effectiveScopeName ?? 'ALL',
+        },
+        metadata: {
+          format,
+          totalExported: hydrated.length,
+        },
+      });
+    } else if (this.auditLogService) {
+      await this.auditLogService.record({
+        module: 'users',
+        feature: 'user_export',
+        action: 'USER_DATA_EXPORTED',
+        actorId: actor?.id ?? null,
+        resourceType: 'user_export',
+        resourceId: fileName,
+        reason: `Exported ${hydrated.length} user records as ${format.toUpperCase()}`,
+        afterData: {
+          fileName,
+          format,
+          totalExported: hydrated.length,
+          effectiveDataScope: scopeFilter?.effectiveScopeName ?? 'ALL',
+        },
+      });
+    }
 
     return {
-      fileName: `danh_sach_nhan_vien_${datePart}.${format}`,
+      fileName,
       contentType:
         format === 'xlsx'
           ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'

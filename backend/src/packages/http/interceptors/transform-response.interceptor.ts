@@ -60,6 +60,52 @@ function isAlreadyWrappedEnvelope<T>(value: unknown): value is ApiSuccessRespons
   );
 }
 
+const SENSITIVE_RESPONSE_FIELDS = new Set([
+  'passwordhash',
+  'totpsecret',
+  'clientsecrethash',
+  'recoverycodeshashjson',
+  'emailotpcodehash',
+  'smsotpcodehash',
+  'codehash',
+  'refreshtokenhash',
+  'encryptedsecret',
+]);
+
+/**
+ * Che giấu đệ quy các trường bí mật/băm nội bộ nếu vô tình xuất hiện trong payload phản hồi HTTP (Mục 4.5).
+ */
+export function redactSensitiveResponseData<T>(data: T, depth = 0): T {
+  if (depth > 8 || data === null || data === undefined) {
+    return data;
+  }
+  if (Array.isArray(data)) {
+    let mutated = false;
+    const nextArr = data.map((item) => {
+      const redactedItem = redactSensitiveResponseData(item, depth + 1);
+      if (redactedItem !== item) mutated = true;
+      return redactedItem;
+    });
+    return (mutated ? nextArr : data) as unknown as T;
+  }
+  if (typeof data === 'object' && !(data instanceof Date) && !Buffer.isBuffer(data)) {
+    let mutated = false;
+    const result: Record<string, unknown> = {};
+    for (const [key, val] of Object.entries(data as Record<string, unknown>)) {
+      if (SENSITIVE_RESPONSE_FIELDS.has(key.toLowerCase())) {
+        result[key] = '[REDACTED]';
+        mutated = true;
+      } else {
+        const redactedVal = redactSensitiveResponseData(val, depth + 1);
+        if (redactedVal !== val) mutated = true;
+        result[key] = redactedVal;
+      }
+    }
+    return (mutated ? result : data) as unknown as T;
+  }
+  return data;
+}
+
 @Injectable()
 export class TransformResponseInterceptor<T> implements NestInterceptor<
   T,
@@ -90,7 +136,13 @@ export class TransformResponseInterceptor<T> implements NestInterceptor<
               HTTP_ERROR_CODE.ORM_ENTITY_LEAK_DETECTED,
             );
           }
-          return data;
+          const redactedInner = redactSensitiveResponseData(data.data);
+          return redactedInner === data.data
+            ? data
+            : {
+                ...data,
+                data: redactedInner,
+              };
         }
 
         // If the data already contains meta or is a paginated envelope, handle appropriately
@@ -107,7 +159,7 @@ export class TransformResponseInterceptor<T> implements NestInterceptor<
           return {
             success: true as const,
             statusCode,
-            data: complexData.data as T,
+            data: redactSensitiveResponseData(complexData.data) as T,
             ...(complexData.meta ? { meta: complexData.meta } : {}),
             timestamp: new Date().toISOString(),
           };
@@ -125,7 +177,7 @@ export class TransformResponseInterceptor<T> implements NestInterceptor<
         return {
           success: true as const,
           statusCode,
-          data,
+          data: redactSensitiveResponseData(data),
           timestamp: new Date().toISOString(),
         };
       }),

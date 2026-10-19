@@ -17,5 +17,111 @@
   "database": {
     "hasMigrations": true,
     "tables": ["organization_units"]
-  }
+  },
+  "codeTypes": [
+    {
+      "code": "organizations.unit_type",
+      "name": "Loại đơn vị tổ chức",
+      "description": "Phân loại cấp bậc đơn vị trong cây sơ đồ tổ chức (cho phép mở rộng động)",
+      "isSystem": true,
+      "allowCustomValues": true,
+      "values": [
+        {
+          "numericCode": 1,
+          "code": "HEADQUARTERS",
+          "behaviorCode": "HEADQUARTERS",
+          "name": "Trụ sở chính",
+          "labels": { "vi": "Trụ sở chính", "en": "Headquarters" },
+          "aliases": ["UNIT", "HQ", "TRỤ SỞ", "TRU SO", "TRỤ SỞ CHÍNH"],
+          "badgeTone": "info",
+          "color": "indigo",
+          "sortOrder": 1,
+          "isSystem": true
+        },
+        {
+          "numericCode": 2,
+          "code": "BRANCH",
+          "behaviorCode": "BRANCH",
+          "name": "Chi nhánh",
+          "labels": { "vi": "Chi nhánh", "en": "Branch" },
+          "aliases": ["CHI NHÁNH", "CHI NHANH"],
+          "badgeTone": "success",
+          "color": "blue",
+          "sortOrder": 2,
+          "isDefault": true,
+          "isSystem": true
+        },
+        {
+          "numericCode": 3,
+          "code": "DEPARTMENT",
+          "behaviorCode": "DEPARTMENT",
+          "name": "Phòng ban",
+          "labels": { "vi": "Phòng ban", "en": "Department" },
+          "aliases": ["DEPT", "PHÒNG BAN", "PHONG BAN", "KHỐI", "KHOI"],
+          "badgeTone": "neutral",
+          "color": "emerald",
+          "sortOrder": 3,
+          "isSystem": true
+        },
+        {
+          "numericCode": 4,
+          "code": "TEAM",
+          "behaviorCode": "TEAM",
+          "name": "Đội nhóm / Tổ chuyên môn",
+          "labels": { "vi": "Đội nhóm / Tổ chuyên môn", "en": "Team" },
+          "aliases": ["ĐỘI NHÓM", "DOI NHOM", "NHÓM", "NHOM", "TỔ", "TO"],
+          "badgeTone": "neutral",
+          "color": "amber",
+          "sortOrder": 4,
+          "isSystem": true
+        }
+      ]
+    },
+    {
+      "code": "organizations.status",
+      "name": "Trạng thái đơn vị tổ chức",
+      "description": "Trạng thái vòng đời hoạt động của đơn vị, chi nhánh, phòng ban",
+      "isSystem": true,
+      "allowCustomValues": false,
+      "values": [
+        {
+          "numericCode": 1,
+          "code": "ACTIVE",
+          "behaviorCode": "ACTIVE",
+          "name": "Đang hoạt động",
+          "labels": { "vi": "Đang hoạt động", "en": "Active" },
+          "aliases": ["HOẠT ĐỘNG", "HOAT DONG", "ON"],
+          "badgeTone": "success",
+          "color": "emerald",
+          "sortOrder": 1,
+          "isDefault": true,
+          "isSystem": true
+        },
+        {
+          "numericCode": 2,
+          "code": "INACTIVE",
+          "behaviorCode": "INACTIVE",
+          "name": "Ngừng hoạt động",
+          "labels": { "vi": "Ngừng hoạt động", "en": "Inactive" },
+          "aliases": ["TẠM NGƯNG", "TAM NGUNG", "NGỪNG", "TẮT", "OFF"],
+          "badgeTone": "warning",
+          "color": "slate",
+          "sortOrder": 2,
+          "isSystem": true
+        },
+        {
+          "numericCode": 3,
+          "code": "ARCHIVED",
+          "behaviorCode": "ARCHIVED",
+          "name": "Đã lưu trữ / Giải thể",
+          "labels": { "vi": "Đã lưu trữ / Giải thể", "en": "Archived" },
+          "aliases": ["LƯU TRỮ", "LUU TRU", "GIẢI THỂ"],
+          "badgeTone": "neutral",
+          "color": "zinc",
+          "sortOrder": 3,
+          "isSystem": true
+        }
+      ]
+    }
+  ]
 }
