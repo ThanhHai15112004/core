@@ -967,11 +967,17 @@ export class SettingsService implements ISettingsPublicService, OnModuleInit {
 
   private async invalidateSettingCacheForKey(settingKey: string): Promise<void> {
     const normKey = settingKey.trim().toLowerCase();
-    const keysToDelete: string[] = [];
+    const keysToDelete = new Set<string>([
+      this.buildCacheKey(normKey, 'ALL', null),
+      this.buildCacheKey(normKey, this.registry.getActiveEnvironment(), null),
+    ]);
     for (const cacheKey of this.resolvedCache.keys()) {
       if (cacheKey.endsWith(`:${normKey}`)) {
-        keysToDelete.push(cacheKey);
+        keysToDelete.add(cacheKey);
       }
+    }
+    for (const ov of this.registry.listScopeOverridesForKey(normKey)) {
+      keysToDelete.add(this.buildCacheKey(normKey, ov.environment, ov.organizationUnitId));
     }
     for (const k of keysToDelete) {
       this.resolvedCache.delete(k);

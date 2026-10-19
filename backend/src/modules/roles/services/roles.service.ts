@@ -1,5 +1,3 @@
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
-import { join, resolve } from 'node:path';
 import { Inject, Injectable, Optional } from '@nestjs/common';
 import {
   BadRequestAppException,
@@ -7,6 +5,7 @@ import {
   ForbiddenAppException,
   HTTP_ERROR_CODE,
   NotFoundAppException,
+  scanModuleManifests,
 } from '@packages/kernel/index.js';
 import { TransactionManager } from '@packages/database/index.js';
 import {
@@ -1080,37 +1079,21 @@ export class RolesService implements IRolesPublicService {
 
   /** Khởi tạo danh sách quyền công bố động từ các tệp module.manifest.json thực tế trên đĩa */
   private initializeModuleManifests(): void {
-    const candidateDirs = [
-      resolve(process.cwd(), 'src/modules'),
-      resolve(process.cwd(), 'src/project-modules'),
-      resolve(process.cwd(), 'backend/src/modules'),
-      resolve(process.cwd(), 'backend/src/project-modules'),
-    ];
-
-    for (const baseDir of candidateDirs) {
-      if (!existsSync(baseDir)) continue;
-      const entries = readdirSync(baseDir, { withFileTypes: true });
-      for (const entry of entries) {
-        if (!entry.isDirectory()) continue;
-        const manifestPath = join(baseDir, entry.name, 'module.manifest.json');
-        if (!existsSync(manifestPath)) continue;
-        const raw = JSON.parse(readFileSync(manifestPath, 'utf8')) as {
-          name?: string;
-          displayName?: string;
-          permissions?: (string | ModulePermissionDeclaration)[];
-        };
-        const modName = (raw.name || entry.name).trim().toLowerCase();
-        if (modName && Array.isArray(raw.permissions)) {
-          const existing = this.registeredModules.get(modName);
-          const mergedPerms = existing
-            ? [...existing.permissions, ...raw.permissions]
-            : raw.permissions;
-          this.registerModulePermissions({
-            module: modName,
-            displayName: raw.displayName || existing?.displayName || modName,
-            permissions: mergedPerms,
-          });
-        }
+    for (const { moduleName, raw } of scanModuleManifests<{
+      name?: string;
+      displayName?: string;
+      permissions?: (string | ModulePermissionDeclaration)[];
+    }>()) {
+      if (moduleName && Array.isArray(raw.permissions)) {
+        const existing = this.registeredModules.get(moduleName);
+        const mergedPerms = existing
+          ? [...existing.permissions, ...raw.permissions]
+          : raw.permissions;
+        this.registerModulePermissions({
+          module: moduleName,
+          displayName: raw.displayName || existing?.displayName || moduleName,
+          permissions: mergedPerms,
+        });
       }
     }
   }

@@ -1,6 +1,5 @@
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
-import { join, resolve } from 'node:path';
 import { Injectable } from '@nestjs/common';
+import { scanModuleManifests } from './manifest.contract.js';
 
 export type CodeBadgeTone = 'success' | 'warning' | 'danger' | 'info' | 'neutral';
 
@@ -108,44 +107,21 @@ export type CodeI18nResolver = (
  */
 export function discoverManifestCodeTypes(): CodeTypeManifestItem[] {
   const discovered = new Map<string, CodeTypeManifestItem>();
-  const candidateDirs = [
-    resolve(process.cwd(), 'src/modules'),
-    resolve(process.cwd(), 'src/project-modules'),
-    resolve(process.cwd(), 'backend/src/modules'),
-    resolve(process.cwd(), 'backend/src/project-modules'),
-  ];
 
-  for (const baseDir of candidateDirs) {
-    if (!existsSync(baseDir)) continue;
-    try {
-      const entries = readdirSync(baseDir, { withFileTypes: true });
-      for (const entry of entries) {
-        if (!entry.isDirectory()) continue;
-        const manifestPath = join(baseDir, entry.name, 'module.manifest.json');
-        if (!existsSync(manifestPath)) continue;
-        try {
-          const raw = JSON.parse(readFileSync(manifestPath, 'utf8')) as {
-            name?: string;
-            codeTypes?: CodeTypeManifestItem[];
-          };
-          const modName = (raw.name || entry.name).trim().toLowerCase();
-          if (Array.isArray(raw.codeTypes)) {
-            for (const ct of raw.codeTypes) {
-              if (!ct?.code) continue;
-              const normalizedCode = ct.code.trim().toLowerCase();
-              discovered.set(normalizedCode, {
-                ...ct,
-                code: normalizedCode,
-                module: (ct.module || modName).trim().toLowerCase(),
-              });
-            }
-          }
-        } catch {
-          // Bỏ qua manifest lỗi cú pháp
-        }
+  for (const { moduleName, raw } of scanModuleManifests<{
+    name?: string;
+    codeTypes?: CodeTypeManifestItem[];
+  }>()) {
+    if (Array.isArray(raw.codeTypes)) {
+      for (const ct of raw.codeTypes) {
+        if (!ct?.code) continue;
+        const normalizedCode = ct.code.trim().toLowerCase();
+        discovered.set(normalizedCode, {
+          ...ct,
+          code: normalizedCode,
+          module: (ct.module || moduleName).trim().toLowerCase(),
+        });
       }
-    } catch {
-      // Bỏ qua nếu thư mục không đọc được
     }
   }
 

@@ -1,11 +1,10 @@
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
-import { join, resolve } from 'node:path';
 import { Injectable } from '@nestjs/common';
 import {
   HTTP_ERROR_CODE,
   VALIDATION_ISSUE_CODE,
   ValidationAppException,
 } from '../errors/http-exceptions.js';
+import { scanModuleManifests } from './manifest.contract.js';
 
 /**
  * Mã số nguyên kiểu giá trị cấu hình (Mục 5.1.3 — Hỗ trợ kiểu Text, Number, Boolean và JSON):
@@ -655,67 +654,42 @@ export function discoverManifestSettings(): {
 } {
   const groupMap = new Map<string, SettingGroupManifestItem>();
   const settingMap = new Map<string, SettingManifestItem>();
-  const candidateDirs = [
-    resolve(process.cwd(), 'src/modules'),
-    resolve(process.cwd(), 'src/project-modules'),
-    resolve(process.cwd(), 'backend/src/modules'),
-    resolve(process.cwd(), 'backend/src/project-modules'),
-  ];
 
-  for (const baseDir of candidateDirs) {
-    if (!existsSync(baseDir)) continue;
-    try {
-      const entries = readdirSync(baseDir, { withFileTypes: true });
-      for (const entry of entries) {
-        if (!entry.isDirectory()) continue;
-        const manifestPath = join(baseDir, entry.name, 'module.manifest.json');
-        if (!existsSync(manifestPath)) continue;
-        try {
-          const raw = JSON.parse(readFileSync(manifestPath, 'utf-8')) as {
-            name?: string;
-            settingGroups?: SettingGroupManifestItem[];
-            settings?: SettingManifestItem[];
-          };
-          const moduleName = (raw.name ?? entry.name).trim().toLowerCase();
-
-          if (Array.isArray(raw.settingGroups)) {
-            for (const grp of raw.settingGroups) {
-              if (!grp || typeof grp.code !== 'string') continue;
-              const code = grp.code.trim().toLowerCase();
-              if (!groupMap.has(code)) {
-                groupMap.set(code, {
-                  ...grp,
-                  code,
-                  module: (grp.module ?? moduleName).trim().toLowerCase(),
-                });
-              }
-            }
-          }
-
-          if (Array.isArray(raw.settings)) {
-            for (const item of raw.settings) {
-              if (!item || typeof item.key !== 'string') continue;
-              const key = item.key.trim().toLowerCase();
-              if (!settingMap.has(key)) {
-                const parts = key.split('.');
-                const defaultNamespace =
-                  parts.length >= 2 ? `${moduleName}.${parts[0]}` : moduleName;
-                settingMap.set(key, {
-                  ...item,
-                  key,
-                  groupCode: (item.groupCode || parts[0] || 'system').trim().toLowerCase(),
-                  module: (item.module ?? moduleName).trim().toLowerCase(),
-                  namespace: (item.namespace ?? defaultNamespace).trim().toLowerCase(),
-                });
-              }
-            }
-          }
-        } catch {
-          // Ignore malformed manifest file
+  for (const { moduleName, raw } of scanModuleManifests<{
+    name?: string;
+    settingGroups?: SettingGroupManifestItem[];
+    settings?: SettingManifestItem[];
+  }>()) {
+    if (Array.isArray(raw.settingGroups)) {
+      for (const grp of raw.settingGroups) {
+        if (!grp || typeof grp.code !== 'string') continue;
+        const code = grp.code.trim().toLowerCase();
+        if (!groupMap.has(code)) {
+          groupMap.set(code, {
+            ...grp,
+            code,
+            module: (grp.module ?? moduleName).trim().toLowerCase(),
+          });
         }
       }
-    } catch {
-      // Ignore inaccessible directory
+    }
+
+    if (Array.isArray(raw.settings)) {
+      for (const item of raw.settings) {
+        if (!item || typeof item.key !== 'string') continue;
+        const key = item.key.trim().toLowerCase();
+        if (!settingMap.has(key)) {
+          const parts = key.split('.');
+          const defaultNamespace = parts.length >= 2 ? `${moduleName}.${parts[0]}` : moduleName;
+          settingMap.set(key, {
+            ...item,
+            key,
+            groupCode: (item.groupCode || parts[0] || 'system').trim().toLowerCase(),
+            module: (item.module ?? moduleName).trim().toLowerCase(),
+            namespace: (item.namespace ?? defaultNamespace).trim().toLowerCase(),
+          });
+        }
+      }
     }
   }
 
