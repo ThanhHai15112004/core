@@ -13,24 +13,32 @@ const DB_READY_TIMEOUT_MS = 5000;
 /** Khởi tạo ngữ cảnh NestJS CLI, cấu hình logger, nạp dispatcher và thực thi lệnh */
 export async function bootstrapCli(args: string[] = process.argv.slice(2)): Promise<void> {
   const logger = new Logger('CliBootstrap');
-  const app = await NestFactory.createApplicationContext(CliModule, { bufferLogs: true });
-  app.useLogger(app.get(PinoNestLogger));
-  await app.init();
-
-  const dispatcher = app.get(CliDispatcherService);
-  const history = app.get(CliHistoryService);
   const commandName = args[0] ?? 'help';
 
-  // Với các lệnh offline như help, arch:check, module:create, không cần đợi Redis/Database
+  // Với các lệnh offline như help, arch:check, openapi:check, module:create, không cần đợi Redis/Database
   const isOfflineFriendly = [
     'help',
     '--help',
     '-h',
     'arch:check',
     'architecture:check',
+    'openapi:check',
+    'openapi:export',
     'module:create',
     'module:list',
   ].includes(commandName);
+
+  if (isOfflineFriendly) {
+    process.env['DB_ENABLED'] = 'false';
+  }
+
+  const app = await NestFactory.createApplicationContext(CliModule, { bufferLogs: true });
+  app.useLogger(app.get(PinoNestLogger));
+  await app.init();
+
+  const dispatcher = app.get(CliDispatcherService);
+  const history = app.get(CliHistoryService);
+
   if (!isOfflineFriendly) {
     await Promise.all([
       waitForRedis(app.get(RedisService)),
@@ -44,7 +52,7 @@ export async function bootstrapCli(args: string[] = process.argv.slice(2)): Prom
     logger.error(`CLI execution failed: ${error instanceof Error ? error.message : String(error)}`);
     process.exitCode = 1;
   } finally {
-    await app.close();
+    await Promise.race([app.close(), new Promise((resolve) => setTimeout(resolve, 1000))]);
   }
 }
 

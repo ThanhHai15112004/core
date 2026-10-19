@@ -1,0 +1,308 @@
+name: Core CI Quality & Smoke Gate
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - master
+      - develop
+      - 'release/v*'
+      - 'hotfix/v*'
+    tags:
+      - 'v*.*.*'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ============================================================================
+  # Stage 1: Validate (Shell syntax, Docker Compose config, Anti-AI-Deception & Diff Filter)
+  # ============================================================================
+  validate:
+    name: Validate & Diff Guard
+    runs-on: ubuntu-latest
+    outputs:
+      backend_changed: ${{ steps.changes.outputs.backend_changed }}
+      frontend_changed: ${{ steps.changes.outputs.frontend_changed }}
+      db_changed: ${{ steps.changes.outputs.db_changed }}
+      is_integration_ref: ${{ steps.changes.outputs.is_integration_ref }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Validate Shell Scripts & Docker Compose Configs
+        run: bash scripts/ci/validate-configs.sh
+
+      - name: Run Anti-AI-Deception & Diff Quality Guard
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          BASE_SHA="${PR_BASE_SHA:-${BEFORE_SHA:-}}"
+          node scripts/ci/guard-diff.mjs --enforce-feature-test --base "$BASE_SHA" --head "$GITHUB_SHA"
+
+      - name: Detect Changed Scopes & Integration Ref
+        id: changes
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          BEFORE_SHA: ${{ github.event.before }}
+          REF_NAME: ${{ github.ref_name }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+
+          # Nhánh tích hợp (main, develop, release/*, hotfix/*, tag v*): Luôn chạy full test không lọc theo diff
+          is_integration="false"
+          if [ "$EVENT_NAME" != "pull_request" ]; then
+            case "$REF_NAME" in
+              main|master|develop|release/v*|hotfix/v*|v*.*.*)
+                is_integration="true"
+                ;;
+            esac
+          fi
+
+          base_sha="${PR_BASE_SHA:-${BEFORE_SHA:-}}"
+          zero_sha="0000000000000000000000000000000000000000"
+          if [ -z "$base_sha" ] || [ "$base_sha" = "$zero_sha" ]; then
+            if git rev-parse "${GITHUB_SHA}^" >/dev/null 2>&1; then
+              base_sha="$(git rev-parse "${GITHUB_SHA}^")"
+            else
+              base_sha="$(git hash-object -t tree /dev/null)"
+            fi
+          fi
+
+          git diff --name-only --diff-filter=ACMRD "$base_sha" "$GITHUB_SHA" > /tmp/changed-files
+
+          backend_changed="false"
+          frontend_changed="false"
+          db_changed="false"
+
+          while IFS= read -r file; do
+            case "$file" in
+              backend/*|.github/workflows/ci.yml|.gitlab-ci.yml|package.json)
+                backend_changed="true"
+                ;;
+            esac
+            case "$file" in
+              frontend/*|.github/workflows/ci.yml|.gitlab-ci.yml|package.json)
+                frontend_changed="true"
+                ;;
+            esac
+            case "$file" in
+              backend/src/database/*|backend/src/packages/database/*|backend/src/*/migrations/*|backend/src/*/seeders/*|backend/src/*/module.manifest.json|backend/project.manifest.json|.github/workflows/ci.yml|.gitlab-ci.yml)
+                db_changed="true"
+                ;;
+            esac
+          done < /tmp/changed-files
+
+          echo "is_integration_ref=$is_integration" >> "$GITHUB_OUTPUT"
+          echo "backend_changed=$backend_changed" >> "$GITHUB_OUTPUT"
+          echo "frontend_changed=$frontend_changed" >> "$GITHUB_OUTPUT"
+          echo "db_changed=$db_changed" >> "$GITHUB_OUTPUT"
+
+          echo "Scope Summary: is_integration=$is_integration | backend=$backend_changed | frontend=$frontend_changed | db=$db_changed"
+
+  # ============================================================================
+  # Stage 2a: Backend Test (Zero-Container — Node.js thuần siêu nhanh)
+  # ============================================================================
+  backend-test:
+    name: Backend Quality & Tests (Zero-Container)
+    needs: validate
+    if: needs.validate.outputs.backend_changed == 'true' || needs.validate.outputs.is_integration_ref == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install Backend Dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Check Formatting & ESLint
+        working-directory: backend
+        run: |
+          npm run format:check
+          npx eslint "{src,test}/**/*.ts"
+
+      - name: TypeScript Typecheck & Build (ESM + tsc-alias)
+        working-directory: backend
+        run: |
+          npm run typecheck
+          npm run build
+
+      - name: Architecture Boundary & OpenAPI Contract Gate (Offline)
+        working-directory: backend
+        run: |
+          npm run arch:check
+          npm run openapi:check
+
+      - name: Run Unit, Integration & Feature Tests with Module Coverage
+        working-directory: backend
+        run: npm run test:cov:module
+
+  # ============================================================================
+  # Stage 2b: Frontend Test (Zero-Container — Oxlint + Hardcode Gate + Vitest + Build)
+  # ============================================================================
+  frontend-test:
+    name: Frontend Quality, Vitest & Build
+    needs: validate
+    if: needs.validate.outputs.frontend_changed == 'true' || needs.validate.outputs.is_integration_ref == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Frontend Dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Run Oxlint & Hardcode Gate (Theme / i18n)
+        working-directory: frontend
+        run: npm run lint
+
+      - name: Run Vitest Suite
+        working-directory: frontend
+        run: npm run test
+
+      - name: Build Production Bundle (tsc -b + vite build)
+        working-directory: frontend
+        run: npm run build
+
+  # ============================================================================
+  # Stage 2c: Database Migration & Idempotent Seeder Test (Chỉ bật khi sửa DB/Manifest hoặc nhánh tích hợp)
+  # ============================================================================
+  db-migration-seed-test:
+    name: Database Migration & Seeder Gate (Ephemeral Postgres + Redis)
+    needs: validate
+    if: needs.validate.outputs.db_changed == 'true' || needs.validate.outputs.is_integration_ref == 'true'
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: core_test
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: test_password
+        ports:
+          - 5432:5432
+        options: >-
+          --tmpfs /var/lib/postgresql/data:rw
+          --health-cmd="pg_isready -U test_user -d core_test"
+          --health-interval=3s
+          --health-timeout=3s
+          --health-retries=20
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=3s
+          --health-timeout=3s
+          --health-retries=20
+    env:
+      NODE_ENV: development
+      APP_NAME: core-ci
+      HOST: 127.0.0.1
+      PORT: 3005
+      API_PREFIX: api/v1
+      DB_ENABLED: 'true'
+      DB_CONNECTION: pgsql
+      DB_HOST: 127.0.0.1
+      DB_PORT: '5432'
+      DB_DATABASE: core_test
+      DB_USERNAME: test_user
+      DB_PASSWORD: test_password
+      OPS_DATABASE_MIGRATIONS_ENABLED: 'true'
+      REDIS_HOST: 127.0.0.1
+      REDIS_PORT: '6379'
+      JWT_ACCESS_SECRET: ci_test_access_secret_key_at_least_32_characters_long
+      JWT_REFRESH_SECRET: ci_test_refresh_secret_key_at_least_32_characters_long
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install & Build Backend
+        working-directory: backend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Execute Database Migrations (migration:check --run)
+        working-directory: backend
+        run: npm run cli -- migration:check --run
+
+      - name: Execute Seeders Run #1 (Fresh DB)
+        working-directory: backend
+        run: npm run cli -- seed:run
+
+      - name: Execute Seeders Run #2 (Verify Idempotency)
+        working-directory: backend
+        run: npm run cli -- seed:run
+
+  # ============================================================================
+  # Stage 3: Docker Multi-Runtime Smoke Test (Chỉ chạy trên nhánh tích hợp develop/main/release)
+  # ============================================================================
+  docker-smoke-test:
+    name: Docker Production Build & Smoke Test
+    needs:
+      - validate
+      - backend-test
+      - frontend-test
+      - db-migration-seed-test
+    if: |
+      always() &&
+      needs.validate.outputs.is_integration_ref == 'true' &&
+      (needs.backend-test.result == 'success' || needs.backend-test.result == 'skipped') &&
+      (needs.frontend-test.result == 'success' || needs.frontend-test.result == 'skipped') &&
+      (needs.db-migration-seed-test.result == 'success' || needs.db-migration-seed-test.result == 'skipped')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Prepare Production Env & Boot Stack
+        run: |
+          cp .env.docker.prod.example .env.docker.prod
+          sed -i 's/^DB_ENABLED=.*/DB_ENABLED=false/' .env.docker.prod
+          docker compose -f docker-compose.prod.yml up -d --build
+
+      - name: Run Multi-Runtime Smoke Test (API, Worker, Scheduler, Nginx, Prometheus)
+        run: bash ./docker/smoke-test.sh prod
+
+      - name: Tear Down Docker Stack
+        if: always()
+        run: |
+          docker compose -f docker-compose.prod.yml logs --tail=50 || true
+          docker compose -f docker-compose.prod.yml down -v --remove-orphans || true
+

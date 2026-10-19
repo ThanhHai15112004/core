@@ -1,0 +1,197 @@
+stages:
+  - validate
+  - test
+  - smoke
+
+workflow:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+    - if: '$CI_COMMIT_BRANCH =~ /^(release|hotfix)\/v[0-9]+\.[0-9]+\.[0-9]+$/'
+    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+$/'
+    - when: never
+
+default:
+  interruptible: true
+  retry:
+    max: 2
+    when:
+      - runner_system_failure
+      - stuck_or_timeout_failure
+
+variables:
+  DOCKER_HOST: tcp://docker:2375
+  DOCKER_TLS_CERTDIR: ""
+  DOCKER_DRIVER: overlay2
+
+# Branch tích hợp: chạy full test, không lọc theo diff.
+# Merge dồn khiến pipeline cũ bị auto-cancel, nên diff của commit cuối
+# không phản ánh hết những gì đã vào nhánh.
+.integration-refs:
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+    - if: '$CI_COMMIT_BRANCH =~ /^(release|hotfix)\/v[0-9]+\.[0-9]+\.[0-9]+$/'
+    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+$/'
+
+# ==============================================================================
+# Stage 1: Validate (Shell syntax, Docker Compose config & Anti-AI-Deception Guard)
+# ==============================================================================
+validate-and-guard:
+  image: node:22-alpine
+  stage: validate
+  variables:
+    GIT_DEPTH: "0"
+  before_script:
+    - apk add --no-cache bash git docker-cli docker-cli-compose
+  script:
+    - bash scripts/ci/validate-configs.sh
+    - node scripts/ci/guard-diff.mjs --enforce-feature-test
+
+# ==============================================================================
+# Stage 2a: Backend Test (Zero-Container — Node.js thuần siêu nhanh)
+# ==============================================================================
+backend-test:
+  image: node:22-alpine
+  stage: test
+  rules:
+    - !reference [.integration-refs, rules]
+    - changes:
+        - backend/**/*
+        - package.json
+        - .gitlab-ci.yml
+  variables:
+    npm_config_cache: "$CI_PROJECT_DIR/.npm-backend"
+  cache:
+    key:
+      files:
+        - backend/package-lock.json
+    paths:
+      - .npm-backend/
+  script:
+    - cd backend
+    - npm ci
+    - npm run format:check
+    - npx eslint "{src,test}/**/*.ts"
+    - npm run typecheck
+    - npm run build
+    - npm run arch:check
+    - npm run openapi:check
+    - npm run test:cov:module
+
+# ==============================================================================
+# Stage 2b: Frontend Test (Zero-Container — Oxlint + Hardcode Gate + Vitest + Build)
+# ==============================================================================
+frontend-test:
+  image: node:22-alpine
+  stage: test
+  rules:
+    - !reference [.integration-refs, rules]
+    - changes:
+        - frontend/**/*
+        - package.json
+        - .gitlab-ci.yml
+  variables:
+    npm_config_cache: "$CI_PROJECT_DIR/.npm-frontend"
+  cache:
+    key:
+      files:
+        - frontend/package-lock.json
+    paths:
+      - .npm-frontend/
+  script:
+    - cd frontend
+    - npm ci
+    - npm run lint
+    - npm run test
+    - npm run build
+
+# ==============================================================================
+# Stage 2c: Database Migration & Seeder Idempotency Gate
+# Chỉ bật container Postgres + Redis khi chạm tới DB/Migrations/Seeders/Manifest hoặc trên nhánh tích hợp
+# ==============================================================================
+db-migration-seed-test:
+  image: node:22-alpine
+  stage: test
+  services:
+    - name: postgres:16-alpine
+      alias: postgres
+    - name: redis:7-alpine
+      alias: redis
+  rules:
+    - !reference [.integration-refs, rules]
+    - changes:
+        - backend/src/database/**/*
+        - backend/src/packages/database/**/*
+        - backend/src/**/migrations/**/*
+        - backend/src/**/seeders/**/*
+        - backend/src/**/module.manifest.json
+        - backend/project.manifest.json
+        - .gitlab-ci.yml
+  variables:
+    npm_config_cache: "$CI_PROJECT_DIR/.npm-backend"
+    POSTGRES_DB: core_test
+    POSTGRES_USER: test_user
+    POSTGRES_PASSWORD: test_password
+    NODE_ENV: development
+    APP_NAME: core-ci
+    HOST: 127.0.0.1
+    PORT: "3005"
+    API_PREFIX: api/v1
+    DB_ENABLED: "true"
+    DB_CONNECTION: pgsql
+    DB_HOST: postgres
+    DB_PORT: "5432"
+    DB_DATABASE: core_test
+    DB_USERNAME: test_user
+    DB_PASSWORD: test_password
+    OPS_DATABASE_MIGRATIONS_ENABLED: "true"
+    REDIS_HOST: redis
+    REDIS_PORT: "6379"
+    JWT_ACCESS_SECRET: ci_test_access_secret_key_at_least_32_characters_long
+    JWT_REFRESH_SECRET: ci_test_refresh_secret_key_at_least_32_characters_long
+  cache:
+    key:
+      files:
+        - backend/package-lock.json
+    paths:
+      - .npm-backend/
+  script:
+    - cd backend
+    - npm ci
+    - npm run build
+    - npm run cli -- migration:check --run
+    - npm run cli -- seed:run
+    - npm run cli -- seed:run
+
+# ==============================================================================
+# Stage 3: Docker Production Smoke Test (Chỉ chạy trên nhánh tích hợp develop/main/release)
+# ==============================================================================
+docker-smoke-test:
+  image: docker:27-cli
+  stage: smoke
+  services:
+    - name: docker:27-dind
+  rules:
+    - !reference [.integration-refs, rules]
+  needs:
+    - job: validate-and-guard
+    - job: backend-test
+      optional: true
+    - job: frontend-test
+      optional: true
+    - job: db-migration-seed-test
+      optional: true
+  before_script:
+    - apk add --no-cache bash curl
+    - docker info
+  script:
+    - cp .env.docker.prod.example .env.docker.prod
+    - sed -i 's/^DB_ENABLED=.*/DB_ENABLED=false/' .env.docker.prod
+    - docker compose -f docker-compose.prod.yml up -d --build
+    - bash ./docker/smoke-test.sh prod
+  after_script:
+    - docker compose -f docker-compose.prod.yml down -v --remove-orphans >/dev/null 2>&1 || true
+    - rm -f .env.docker.prod
+

@@ -1,6 +1,10 @@
 {
-  "backend/src/**/*.ts": [
+  "backend/{src,test}/**/*.ts": [
     "npx prettier --write --config backend/.prettierrc",
     "npx eslint --fix --config backend/eslint.config.mjs"
+  ],
+  "frontend/src/**/*.{ts,tsx,css}": [
+    "npx --prefix frontend oxlint",
+    "node frontend/scripts/check-hardcode.mjs"
   ]
 }

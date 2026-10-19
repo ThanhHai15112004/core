@@ -1,1 +1,4 @@
+node scripts/ci/guard-diff.mjs --staged
+node scripts/ci/guard-diff.mjs --staged
 npx lint-staged
+
