@@ -66,8 +66,6 @@ export const USER_IDENTITY_CACHE_PREFIX = 'iam:user:identity:';
 
 @Injectable()
 export class UsersService implements IUsersPublicService {
-  private readonly fallbackProfiles = new Map<number, UserProfileEntity>();
-  private readonly fallbackPasswordHistory = new Map<number, string[]>();
   private adminPasswordResetDelegate?: (
     userId: number,
     input: AdminResetUserPasswordInput,
@@ -1010,7 +1008,6 @@ export class UsersService implements IUsersPublicService {
         ...currentHistory.filter((h) => h !== user.passwordHash),
       ].slice(0, maxHistory);
       user.passwordHistoryHashesJson = JSON.stringify(nextHistory);
-      this.fallbackPasswordHistory.set(Number(userId), nextHistory);
     }
 
     user.passwordHash = newPasswordHash;
@@ -1225,22 +1222,15 @@ export class UsersService implements IUsersPublicService {
     };
   }
 
-  private parsePasswordHistory(userId: number, user?: UserEntity): string[] {
-    if (user?.passwordHistoryHashesJson) {
-      try {
-        const parsed = JSON.parse(user.passwordHistoryHashesJson) as unknown;
-        if (Array.isArray(parsed)) {
-          const valid = parsed.filter(
-            (item): item is string => typeof item === 'string' && item.length > 0,
-          );
-          this.fallbackPasswordHistory.set(Number(userId), valid);
-          return valid;
-        }
-      } catch {
-        // Fallback sang bộ nhớ đệm nếu chuỗi JSON không hợp lệ
-      }
+  private parsePasswordHistory(_userId: number, user?: UserEntity): string[] {
+    if (!user?.passwordHistoryHashesJson) {
+      return [];
     }
-    return this.fallbackPasswordHistory.get(Number(userId)) ?? [];
+    const parsed = JSON.parse(user.passwordHistoryHashesJson) as unknown;
+    if (Array.isArray(parsed)) {
+      return parsed.filter((item): item is string => typeof item === 'string' && item.length > 0);
+    }
+    return [];
   }
 
   /** Hợp đồng công khai: Bật hoặc tắt cờ xác thực nhiều lớp (MFA) trên hồ sơ người dùng */
@@ -1334,90 +1324,32 @@ export class UsersService implements IUsersPublicService {
     userId: number,
     data: Partial<UserProfileEntity>,
   ): Promise<UserProfileEntity> {
-    if (
-      this.userProfileRepository &&
-      typeof this.userProfileRepository.upsertByUserId === 'function'
-    ) {
-      const saved = await this.userProfileRepository.upsertByUserId(userId, data);
-      this.fallbackProfiles.set(Number(userId), saved);
-      return saved;
+    if (!this.userProfileRepository) {
+      throw new Error('UserProfileRepository is not initialized');
     }
-
-    const now = new Date();
-    const existing = this.fallbackProfiles.get(Number(userId));
-    const merged: UserProfileEntity = {
-      id: existing?.id ?? Number(userId),
-      userId: Number(userId),
-      firstName: data.firstName ?? existing?.firstName ?? 'User',
-      lastName: data.lastName ?? existing?.lastName ?? 'Core',
-      fullName: data.fullName ?? existing?.fullName ?? 'Core User',
-      avatarUrl: data.avatarUrl !== undefined ? data.avatarUrl : (existing?.avatarUrl ?? null),
-      dateOfBirth:
-        data.dateOfBirth !== undefined ? data.dateOfBirth : (existing?.dateOfBirth ?? null),
-      gender: data.gender !== undefined ? data.gender : (existing?.gender ?? null),
-      identityNumber:
-        data.identityNumber !== undefined
-          ? data.identityNumber
-          : (existing?.identityNumber ?? null),
-      address: data.address !== undefined ? data.address : (existing?.address ?? null),
-      city: data.city !== undefined ? data.city : (existing?.city ?? null),
-      country: data.country !== undefined ? data.country : (existing?.country ?? null),
-      bio: data.bio !== undefined ? data.bio : (existing?.bio ?? null),
-      createdAt: existing?.createdAt ?? now,
-      updatedAt: now,
-      deletedAt: null,
-    } as UserProfileEntity;
-    this.fallbackProfiles.set(Number(userId), merged);
-    return merged;
+    return await this.userProfileRepository.upsertByUserId(userId, data);
   }
 
   private async findProfilesByUserIds(userIds: readonly number[]): Promise<UserProfileEntity[]> {
-    if (
-      this.userProfileRepository &&
-      typeof this.userProfileRepository.findByUserIds === 'function'
-    ) {
-      const rows = await this.userProfileRepository.findByUserIds(userIds);
-      if (rows.length > 0) {
-        return rows;
-      }
+    if (!this.userProfileRepository) {
+      throw new Error('UserProfileRepository is not initialized');
     }
-    return userIds
-      .map((id) => this.fallbackProfiles.get(Number(id)))
-      .filter((p): p is UserProfileEntity => Boolean(p));
+    return await this.userProfileRepository.findByUserIds(userIds);
   }
 
   private async getUserProfile(userId: number, user?: UserEntity): Promise<UserProfileView> {
-    let profile: UserProfileEntity | null = null;
-    if (
-      this.userProfileRepository &&
-      typeof this.userProfileRepository.findByUserId === 'function'
-    ) {
-      profile = await this.userProfileRepository.findByUserId(userId).catch(() => null);
+    if (!this.userProfileRepository) {
+      throw new Error('UserProfileRepository is not initialized');
     }
-    if (!profile) {
-      profile = this.fallbackProfiles.get(Number(userId)) ?? null;
-    }
-
-    const legacy = user as unknown as
-      | {
-          firstName?: string;
-          lastName?: string;
-          fullName?: string;
-          avatarUrl?: string | null;
-        }
-      | undefined;
-
-    const firstName = profile?.firstName ?? legacy?.firstName ?? '';
-    const lastName = profile?.lastName ?? legacy?.lastName ?? '';
-    const fullName =
-      profile?.fullName ??
-      (legacy?.fullName || `${lastName} ${firstName}`.trim() || user?.username || '');
+    const profile = await this.userProfileRepository.findByUserId(userId);
 
     return {
-      firstName,
-      lastName,
-      fullName,
-      avatarUrl: profile?.avatarUrl ?? legacy?.avatarUrl ?? null,
+      firstName: profile?.firstName ?? '',
+      lastName: profile?.lastName ?? '',
+      fullName:
+        profile?.fullName ??
+        (`${profile?.lastName ?? ''} ${profile?.firstName ?? ''}`.trim() || user?.username || ''),
+      avatarUrl: profile?.avatarUrl ?? null,
       dateOfBirth: profile?.dateOfBirth ?? null,
       gender: profile?.gender ?? null,
       identityNumber: profile?.identityNumber ?? null,
@@ -1448,16 +1380,16 @@ export class UsersService implements IUsersPublicService {
     reason?: string | null,
     changedBy?: number | null,
   ): Promise<void> {
-    if (!this.statusHistoryRepository) return;
-    await this.statusHistoryRepository
-      .recordTransition({
-        userId,
-        fromStatus,
-        toStatus,
-        reason: reason ?? null,
-        changedBy: changedBy ?? null,
-      })
-      .catch(() => undefined);
+    if (!this.statusHistoryRepository) {
+      throw new Error('UserStatusHistoryRepository is not initialized');
+    }
+    await this.statusHistoryRepository.recordTransition({
+      userId,
+      fromStatus,
+      toStatus,
+      reason: reason ?? null,
+      changedBy: changedBy ?? null,
+    });
   }
 
   /** Đếm số lượng người dùng (chưa bị xóa/lưu trữ) đang sử dụng từng vai trò (Mục 4.1) */

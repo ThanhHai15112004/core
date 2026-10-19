@@ -18,4 +18,21 @@ export class AuthSecuritySettingRepository extends BaseTypeOrmRepository<AuthSec
       where: { scopeKey },
     });
   }
+
+  /** Tìm bản ghi cấu hình bảo mật toàn cục (GLOBAL) */
+  public async findGlobal(): Promise<AuthSecuritySettingEntity | null> {
+    return this.findByScopeKey('GLOBAL');
+  }
+
+  /** Lưu hoặc cập nhật bản ghi cấu hình bảo mật toàn cục (GLOBAL) */
+  public async saveGlobal(
+    data: Partial<AuthSecuritySettingEntity>,
+  ): Promise<AuthSecuritySettingEntity> {
+    const existing = await this.findByScopeKey('GLOBAL');
+    return this.saveEntity({
+      ...(existing ? { id: existing.id } : {}),
+      ...data,
+      scopeKey: 'GLOBAL',
+    });
+  }
 }

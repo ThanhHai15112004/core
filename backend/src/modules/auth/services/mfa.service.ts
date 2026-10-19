@@ -78,7 +78,6 @@ export class MfaService {
   private readonly logger = new Logger(MfaService.name);
   private readonly emailAdapter: IEmailNotificationAdapter;
   private readonly smsProvider: ISmsOtpProvider;
-  private readonly fallbackMfaConfigs = new Map<number, AuthMfaConfigEntity>();
 
   constructor(
     private readonly mfaRepository: AuthMfaConfigRepository,
@@ -600,7 +599,10 @@ export class MfaService {
     const trustedDeviceToken = `${userId}.${deviceId}.${rawSecret}`;
     const tokenHash = this.passwordHasher.sha256(trustedDeviceToken);
 
-    const days = Math.max(1, Math.min(365, options.trustDurationDays ?? DEFAULT_TRUSTED_DEVICE_DAYS));
+    const days = Math.max(
+      1,
+      Math.min(365, options.trustDurationDays ?? DEFAULT_TRUSTED_DEVICE_DAYS),
+    );
     const now = new Date();
     const trustedUntilDate = new Date(now.getTime() + days * 86_400_000);
 
@@ -840,10 +842,7 @@ export class MfaService {
   public async regenerateRecoveryCodes(userId: number): Promise<{ recoveryCodes: string[] }> {
     const config = await this.findConfigByUserId(userId);
     const envelope = config ? this.parseExtendedEnvelope(config.recoveryCodesHashJson) : null;
-    if (
-      !config ||
-      (!config.totpEnabled && !config.emailOtpEnabled && !envelope?.smsOtpEnabled)
-    ) {
+    if (!config || (!config.totpEnabled && !config.emailOtpEnabled && !envelope?.smsOtpEnabled)) {
       throw new BadRequestAppException('auth.mfaNotEnabled');
     }
 
@@ -861,7 +860,10 @@ export class MfaService {
   }
 
   /** Kiểm tra mã Email OTP đã lưu, thời hạn hiệu lực và giới hạn số lần nhập sai (tối đa 5 lần) */
-  private async verifyAndTrackEmailOtp(config: AuthMfaConfigEntity, code: string): Promise<boolean> {
+  private async verifyAndTrackEmailOtp(
+    config: AuthMfaConfigEntity,
+    code: string,
+  ): Promise<boolean> {
     if (!config.emailOtpCodeHash || !config.emailOtpExpiresAt) {
       return false;
     }
@@ -1051,73 +1053,19 @@ export class MfaService {
   }
 
   private async findConfigByUserId(userId: number): Promise<AuthMfaConfigEntity | null> {
-    if (this.mfaRepository && typeof this.mfaRepository.findByUserId === 'function') {
-      try {
-        const found = await this.mfaRepository.findByUserId(userId);
-        if (found) {
-          this.fallbackMfaConfigs.set(Number(userId), found);
-          return found;
-        }
-      } catch {
-        // Fallback sang bộ nhớ đệm nếu không có kết nối DB
-      }
+    if (!this.mfaRepository) {
+      throw new Error('AuthMfaConfigRepository is not initialized');
     }
-    return this.fallbackMfaConfigs.get(Number(userId)) ?? null;
+    return await this.mfaRepository.findByUserId(userId);
   }
 
   private async saveConfig(
     data: Partial<AuthMfaConfigEntity> & { userId: number },
   ): Promise<AuthMfaConfigEntity> {
-    const existing = this.fallbackMfaConfigs.get(Number(data.userId));
-    const merged: AuthMfaConfigEntity = {
-      id: data.id ?? existing?.id ?? Number(data.userId),
-      userId: Number(data.userId),
-      totpSecret: data.totpSecret !== undefined ? data.totpSecret : (existing?.totpSecret ?? null),
-      totpEnabled:
-        data.totpEnabled !== undefined ? data.totpEnabled : (existing?.totpEnabled ?? false),
-      emailOtpEnabled:
-        data.emailOtpEnabled !== undefined
-          ? data.emailOtpEnabled
-          : (existing?.emailOtpEnabled ?? false),
-      preferredMethod:
-        data.preferredMethod !== undefined
-          ? data.preferredMethod
-          : (existing?.preferredMethod ?? MFA_METHOD.TOTP),
-      recoveryCodesHashJson:
-        data.recoveryCodesHashJson !== undefined
-          ? data.recoveryCodesHashJson
-          : (existing?.recoveryCodesHashJson ?? '[]'),
-      emailOtpCodeHash:
-        data.emailOtpCodeHash !== undefined
-          ? data.emailOtpCodeHash
-          : (existing?.emailOtpCodeHash ?? null),
-      emailOtpExpiresAt:
-        data.emailOtpExpiresAt !== undefined
-          ? data.emailOtpExpiresAt
-          : (existing?.emailOtpExpiresAt ?? null),
-      emailOtpFailedAttempts:
-        data.emailOtpFailedAttempts !== undefined
-          ? data.emailOtpFailedAttempts
-          : (existing?.emailOtpFailedAttempts ?? 0),
-      verifiedAt: data.verifiedAt !== undefined ? data.verifiedAt : (existing?.verifiedAt ?? null),
-      createdAt: existing?.createdAt ?? new Date(),
-      updatedAt: new Date(),
-      deletedAt: null,
-    } as AuthMfaConfigEntity;
-
-    this.fallbackMfaConfigs.set(Number(data.userId), merged);
-
-    if (this.mfaRepository && typeof this.mfaRepository.saveEntity === 'function') {
-      try {
-        const saved = await this.mfaRepository.saveEntity(merged);
-        this.fallbackMfaConfigs.set(Number(data.userId), saved);
-        return saved;
-      } catch {
-        // Fallback sang in-memory
-      }
+    if (!this.mfaRepository) {
+      throw new Error('AuthMfaConfigRepository is not initialized');
     }
-
-    return merged;
+    return await this.mfaRepository.saveEntity(data);
   }
 
   /** Chuẩn hóa mã khôi phục về chữ in hoa không dấu gạch ngang */

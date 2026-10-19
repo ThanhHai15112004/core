@@ -121,6 +121,10 @@ export const API_ROUTES = {
   ROLES: {
     LIST: '/roles',
     PERMISSIONS: '/roles/permissions',
+    PERMISSIONS_GROUPED: '/roles/permissions/grouped',
+    PERMISSIONS_SYNC: '/roles/permissions/sync',
+    PERMISSIONS_ORPHANS: '/roles/permissions/orphans',
+    PERMISSIONS_MATRIX: '/roles/permissions/matrix',
     DETAIL: (id: string | number) => `/roles/${id}`,
     UPDATE: (id: string | number) => `/roles/${id}`,
     DELETE: (id: string | number) => `/roles/${id}`,

@@ -50,6 +50,31 @@ export interface RoleAssignedUserSummary {
   readonly assignedAt: string;
 }
 
+export interface ModulePermissionDeclaration {
+  readonly code: string;
+  readonly name?: string | undefined;
+  readonly description?: string | null | undefined;
+  readonly featureGroup?: string | undefined;
+}
+
+export interface ModulePermissionsManifestInput {
+  readonly module: string;
+  readonly displayName?: string | undefined;
+  readonly permissions: readonly (string | ModulePermissionDeclaration)[];
+}
+
+export interface SyncPermissionsSummary {
+  readonly totalDeclared: number;
+  readonly createdCount: number;
+  readonly updatedCount: number;
+  readonly unchangedCount: number;
+  readonly orphanedCount: number;
+  readonly createdCodes: readonly string[];
+  readonly updatedCodes: readonly string[];
+  readonly orphanedCodes: readonly string[];
+  readonly syncedModules: readonly string[];
+}
+
 export interface IRolesPublicService {
   findByIds(roleIds: readonly number[]): Promise<RoleSummary[]>;
   findByCodes(codes: readonly string[]): Promise<RoleSummary[]>;
@@ -61,6 +86,10 @@ export interface IRolesPublicService {
   registerRoleUsersListDelegate?(
     delegate: (roleId: number) => Promise<RoleAssignedUserSummary[]>,
   ): void;
+  registerModulePermissions?(input: ModulePermissionsManifestInput): void;
+  syncModulePermissions?(
+    modules?: readonly ModulePermissionsManifestInput[],
+  ): Promise<SyncPermissionsSummary>;
 }
 
 export const ROLES_PUBLIC_SERVICE = Symbol('ROLES_PUBLIC_SERVICE');

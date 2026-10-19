@@ -13,7 +13,10 @@
     "users.read",
     "users.create",
     "users.update",
+    "users.lock",
     "users.status",
+    "users.assign_roles",
+    "users.assign_organizations",
     "users.import",
     "users.export"
   ],

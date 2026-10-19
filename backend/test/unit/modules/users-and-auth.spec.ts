@@ -19,7 +19,7 @@ import { PERMISSION_STATUS, ROLE_STATUS } from '@modules/roles/contracts/index.j
 import type { PermissionEntity } from '@modules/roles/entities/permission.entity.js';
 import type { RoleEntity } from '@modules/roles/entities/role.entity.js';
 import type { RolePermissionEntity } from '@modules/roles/entities/role-permission.entity.js';
-import type { PermissionRepository } from '@modules/roles/repositories/permission.repository.js';
+import { PermissionRepository } from '@modules/roles/repositories/permission.repository.js';
 import type { RoleRepository } from '@modules/roles/repositories/role.repository.js';
 import type { RolePermissionRepository } from '@modules/roles/repositories/role-permission.repository.js';
 import { RolesMapper } from '@modules/roles/mappers/roles.mapper.js';
@@ -57,10 +57,18 @@ import type { AuthSessionEntity } from '@modules/auth/entities/auth-session.enti
 import type { AuthMfaConfigEntity } from '@modules/auth/entities/auth-mfa-config.entity.js';
 import type { AuthPasswordResetEntity } from '@modules/auth/entities/auth-password-reset.entity.js';
 import type { AuthSecuritySettingEntity } from '@modules/auth/entities/auth-security-setting.entity.js';
+import type { AuthVerificationCodeEntity } from '@modules/auth/entities/auth-verification-code.entity.js';
+import type { AuthServiceAccountEntity } from '@modules/auth/entities/auth-service-account.entity.js';
+import type { AuthApiClientEntity } from '@modules/auth/entities/auth-api-client.entity.js';
+import type { AuthLoginHistoryEntity } from '@modules/auth/entities/auth-login-history.entity.js';
 import type { AuthSessionRepository } from '@modules/auth/repositories/auth-session.repository.js';
 import type { AuthMfaConfigRepository } from '@modules/auth/repositories/auth-mfa-config.repository.js';
 import type { AuthPasswordResetRepository } from '@modules/auth/repositories/auth-password-reset.repository.js';
 import type { AuthSecuritySettingRepository } from '@modules/auth/repositories/auth-security-setting.repository.js';
+import type { AuthVerificationCodeRepository } from '@modules/auth/repositories/auth-verification-code.repository.js';
+import type { AuthServiceAccountRepository } from '@modules/auth/repositories/auth-service-account.repository.js';
+import type { AuthApiClientRepository } from '@modules/auth/repositories/auth-api-client.repository.js';
+import type { AuthLoginHistoryRepository } from '@modules/auth/repositories/auth-login-history.repository.js';
 import { SessionService } from '@modules/auth/services/session.service.js';
 import { PasswordService } from '@modules/auth/services/password.service.js';
 import { MfaService } from '@modules/auth/services/mfa.service.js';
@@ -182,6 +190,29 @@ function createIamInMemoryHarness() {
       const lower = codes.map((c) => c.trim().toLowerCase());
       return [...permStore.values()].filter((p) => lower.includes(p.code));
     },
+    saveEntity: async (partial: Partial<PermissionEntity>) => {
+      const now = new Date();
+      const existing = partial.id
+        ? permStore.get(Number(partial.id))
+        : [...permStore.values()].find((p) => p.code === partial.code);
+      const entity: PermissionEntity = {
+        id: partial.id ?? existing?.id ?? ++permSeq,
+        code: (partial.code ?? existing!.code).trim().toLowerCase(),
+        name: partial.name ?? existing?.name ?? partial.code ?? '',
+        module: partial.module ?? existing?.module ?? 'core',
+        description:
+          partial.description !== undefined
+            ? partial.description
+            : (existing?.description ?? null),
+        status: partial.status ?? existing?.status ?? PERMISSION_STATUS.ACTIVE,
+        createdAt: existing?.createdAt ?? now,
+        updatedAt: now,
+        deletedAt: null,
+      } as PermissionEntity;
+      permStore.set(entity.id, entity);
+      return entity;
+    },
+    upsertCatalogItems: PermissionRepository.prototype.upsertCatalogItems,
     ensureByCodes: ensureByCodesFn,
     ensurePermissionsByCodes: ensureByCodesFn,
   } as unknown as PermissionRepository;
@@ -763,6 +794,187 @@ function createIamInMemoryHarness() {
     },
   } as unknown as AuthSecuritySettingRepository;
 
+  let verificationSeq = 0;
+  const verificationStore = new Map<number, AuthVerificationCodeEntity>();
+  const verificationRepo = {
+    findLatestUnverified: async (userId: number, channel: number, purpose: number) =>
+      [...verificationStore.values()]
+        .filter(
+          (r) =>
+            Number(r.userId) === Number(userId) &&
+            r.channel === channel &&
+            r.purpose === purpose &&
+            !r.verifiedAt,
+        )
+        .sort((a, b) => Number(b.id) - Number(a.id))[0] ?? null,
+    findByCodeHash: async (codeHash: string, channel: number) =>
+      [...verificationStore.values()]
+        .filter(
+          (r) =>
+            r.channel === channel && !r.verifiedAt && r.codeHash.split(':').includes(codeHash),
+        )
+        .sort((a, b) => Number(b.id) - Number(a.id))[0] ?? null,
+    saveEntity: async (partial: Partial<AuthVerificationCodeEntity>) => {
+      const now = new Date();
+      const existing = partial.id ? verificationStore.get(Number(partial.id)) : undefined;
+      const entity = {
+        id: partial.id ?? existing?.id ?? ++verificationSeq,
+        userId: Number(partial.userId ?? existing?.userId ?? 0),
+        channel: partial.channel ?? existing?.channel ?? 1,
+        purpose: partial.purpose ?? existing?.purpose ?? 1,
+        target: partial.target ?? existing?.target ?? '',
+        codeHash: partial.codeHash ?? existing?.codeHash ?? '',
+        attemptCount: partial.attemptCount ?? existing?.attemptCount ?? 0,
+        maxAttempts: partial.maxAttempts ?? existing?.maxAttempts ?? 5,
+        sendCount: partial.sendCount ?? existing?.sendCount ?? 1,
+        maxSends: partial.maxSends ?? existing?.maxSends ?? 5,
+        lastSentAt: partial.lastSentAt ?? existing?.lastSentAt ?? now,
+        expiresAt: partial.expiresAt ?? existing?.expiresAt ?? now,
+        verifiedAt:
+          partial.verifiedAt !== undefined ? partial.verifiedAt : (existing?.verifiedAt ?? null),
+        requestedIp:
+          partial.requestedIp !== undefined
+            ? partial.requestedIp
+            : (existing?.requestedIp ?? null),
+        createdAt: existing?.createdAt ?? now,
+        updatedAt: now,
+        deletedAt: null,
+      } as AuthVerificationCodeEntity;
+      verificationStore.set(Number(entity.id), entity);
+      return entity;
+    },
+  } as unknown as AuthVerificationCodeRepository;
+
+  let saSeq = 0;
+  const saStore = new Map<number, AuthServiceAccountEntity>();
+  const serviceAccountRepo = {
+    findById: async (id: number) => saStore.get(Number(id)) ?? null,
+    findByCode: async (code: string) =>
+      [...saStore.values()].find((sa) => sa.code === code.trim().toUpperCase()) ?? null,
+    findAllOrdered: async () => [...saStore.values()].sort((a, b) => Number(a.id) - Number(b.id)),
+    saveEntity: async (partial: Partial<AuthServiceAccountEntity>) => {
+      const now = new Date();
+      const existing = partial.id ? saStore.get(Number(partial.id)) : undefined;
+      const entity = {
+        id: partial.id ?? existing?.id ?? ++saSeq,
+        code: partial.code ?? existing?.code ?? '',
+        name: partial.name ?? existing?.name ?? '',
+        description:
+          partial.description !== undefined
+            ? partial.description
+            : (existing?.description ?? null),
+        status: partial.status ?? existing?.status ?? SERVICE_ACCOUNT_STATUS.ACTIVE,
+        scopesJson: partial.scopesJson ?? existing?.scopesJson ?? '[]',
+        createdBy:
+          partial.createdBy !== undefined ? partial.createdBy : (existing?.createdBy ?? null),
+        lastUsedAt:
+          partial.lastUsedAt !== undefined ? partial.lastUsedAt : (existing?.lastUsedAt ?? null),
+        lastUsedIp:
+          partial.lastUsedIp !== undefined ? partial.lastUsedIp : (existing?.lastUsedIp ?? null),
+        lastUsedResult:
+          partial.lastUsedResult !== undefined
+            ? partial.lastUsedResult
+            : (existing?.lastUsedResult ?? null),
+        createdAt: existing?.createdAt ?? now,
+        updatedAt: now,
+        deletedAt: null,
+      } as AuthServiceAccountEntity;
+      saStore.set(Number(entity.id), entity);
+      return entity;
+    },
+  } as unknown as AuthServiceAccountRepository;
+
+  let apiClientSeq = 0;
+  const apiClientStore = new Map<number, AuthApiClientEntity>();
+  const apiClientRepo = {
+    findById: async (id: number) => apiClientStore.get(Number(id)) ?? null,
+    findByClientId: async (clientId: string) =>
+      [...apiClientStore.values()].find((c) => c.clientId === clientId.trim()) ?? null,
+    findByServiceAccountId: async (serviceAccountId: number) =>
+      [...apiClientStore.values()]
+        .filter((c) => Number(c.serviceAccountId) === Number(serviceAccountId))
+        .sort((a, b) => Number(a.id) - Number(b.id)),
+    findAllOrdered: async () =>
+      [...apiClientStore.values()].sort((a, b) => Number(a.id) - Number(b.id)),
+    saveEntity: async (partial: Partial<AuthApiClientEntity>) => {
+      const now = new Date();
+      const existing = partial.id ? apiClientStore.get(Number(partial.id)) : undefined;
+      const entity = {
+        id: partial.id ?? existing?.id ?? ++apiClientSeq,
+        serviceAccountId: Number(partial.serviceAccountId ?? existing?.serviceAccountId ?? 0),
+        name: partial.name ?? existing?.name ?? '',
+        description:
+          partial.description !== undefined
+            ? partial.description
+            : (existing?.description ?? null),
+        clientId: partial.clientId ?? existing?.clientId ?? '',
+        clientSecretHash: partial.clientSecretHash ?? existing?.clientSecretHash ?? '',
+        secretPrefix: partial.secretPrefix ?? existing?.secretPrefix ?? '',
+        scopesJson: partial.scopesJson ?? existing?.scopesJson ?? '[]',
+        allowedIpsJson: partial.allowedIpsJson ?? existing?.allowedIpsJson ?? '[]',
+        status: partial.status ?? existing?.status ?? API_CLIENT_STATUS.ACTIVE,
+        tokenVersion: partial.tokenVersion ?? existing?.tokenVersion ?? 1,
+        secretRotatedAt:
+          partial.secretRotatedAt !== undefined
+            ? partial.secretRotatedAt
+            : (existing?.secretRotatedAt ?? null),
+        revokedAt:
+          partial.revokedAt !== undefined ? partial.revokedAt : (existing?.revokedAt ?? null),
+        revokedReason:
+          partial.revokedReason !== undefined
+            ? partial.revokedReason
+            : (existing?.revokedReason ?? null),
+        lastUsedAt:
+          partial.lastUsedAt !== undefined ? partial.lastUsedAt : (existing?.lastUsedAt ?? null),
+        lastUsedIp:
+          partial.lastUsedIp !== undefined ? partial.lastUsedIp : (existing?.lastUsedIp ?? null),
+        lastUsedResult:
+          partial.lastUsedResult !== undefined
+            ? partial.lastUsedResult
+            : (existing?.lastUsedResult ?? null),
+        lastUsedEndpoint:
+          partial.lastUsedEndpoint !== undefined
+            ? partial.lastUsedEndpoint
+            : (existing?.lastUsedEndpoint ?? null),
+        usageLogsJson: partial.usageLogsJson ?? existing?.usageLogsJson ?? '[]',
+        createdBy:
+          partial.createdBy !== undefined ? partial.createdBy : (existing?.createdBy ?? null),
+        createdAt: existing?.createdAt ?? now,
+        updatedAt: now,
+        deletedAt: null,
+      } as AuthApiClientEntity;
+      apiClientStore.set(Number(entity.id), entity);
+      return entity;
+    },
+  } as unknown as AuthApiClientRepository;
+
+  let loginHistorySeq = 0;
+  const loginHistoryStore: AuthLoginHistoryEntity[] = [];
+  const loginHistoryRepo = {
+    recordEvent: async (input: Partial<AuthLoginHistoryEntity>) => {
+      const now = new Date();
+      const entry = {
+        id: ++loginHistorySeq,
+        userId: input.userId ?? null,
+        sessionId: input.sessionId ?? null,
+        identifier: input.identifier ?? null,
+        eventType: input.eventType!,
+        status: input.status!,
+        ipAddress: input.ipAddress ?? null,
+        userAgent: input.userAgent ?? null,
+        deviceName: input.deviceName ?? null,
+        reason: input.reason ?? null,
+        createdAt: now,
+        updatedAt: now,
+        deletedAt: null,
+      } as AuthLoginHistoryEntity;
+      loginHistoryStore.unshift(entry);
+      return entry;
+    },
+    findByUserId: async (userId: number, limit = 50) =>
+      loginHistoryStore.filter((h) => Number(h.userId) === Number(userId)).slice(0, limit),
+  } as unknown as AuthLoginHistoryRepository;
+
   const organizationsService = new OrganizationsService(orgRepo, new OrganizationsMapper());
   const rolesService = new RolesService(roleRepo, rolePermRepo, new RolesMapper(), permRepo);
   const usersService = new UsersService(
@@ -788,8 +1000,16 @@ function createIamInMemoryHarness() {
   const exportService = new UserExportService(usersService, userRepo);
   const emailAdapter = new DefaultEmailNotificationAdapter();
   const smsProvider = new DefaultSmsOtpProvider();
-  const sessionService = new SessionService(sessionRepo, tokenService, passwordHasher, config);
   const securitySettingsService = new SecuritySettingsService(securitySettingRepo);
+  const sessionService = new SessionService(
+    sessionRepo,
+    tokenService,
+    passwordHasher,
+    config,
+    undefined,
+    securitySettingsService,
+    loginHistoryRepo,
+  );
   const passwordService = new PasswordService(
     resetRepo,
     passwordHasher,
@@ -812,13 +1032,18 @@ function createIamInMemoryHarness() {
   const verificationService = new VerificationService(
     passwordHasher,
     usersService,
-    undefined,
+    verificationRepo,
     securitySettingsService,
     config,
     emailAdapter,
     smsProvider,
   );
-  const serviceAccountService = new ServiceAccountService(passwordHasher, tokenService);
+  const serviceAccountService = new ServiceAccountService(
+    passwordHasher,
+    tokenService,
+    serviceAccountRepo,
+    apiClientRepo,
+  );
   const identityResolver = new UserIdentityResolverService(
     sessionService,
     usersService,
@@ -2225,8 +2450,91 @@ describe('Unit: Quản lý Người dùng (3.1) & Xác thực / Phiên / MFA (3)
       h.rolesService.update(sysRole.id, { status: ROLE_STATUS.INACTIVE }),
     ).rejects.toThrow();
   });
+
+  it('validates Section 4.2 Permission Management: module permission registration, idempotent sync, functional grouping, orphan warnings & role-permission summary matrix', async () => {
+    // 1. Đăng ký danh sách quyền theo module mới (ví dụ module 'courses')
+    h.rolesService.registerModulePermissions({
+      module: 'courses',
+      displayName: 'Courses & Curriculum',
+      permissions: [
+        {
+          code: 'courses.read',
+          name: 'Xem khóa học',
+          featureGroup: 'courses.catalog',
+          description: 'Quyền xem danh sách khóa học',
+        },
+        {
+          code: 'courses.publish',
+          name: 'Xuất bản khóa học',
+          featureGroup: 'courses.publishing',
+          description: 'Quyền xuất bản khóa học',
+        },
+      ],
+    });
+
+    // 2. Đồng bộ quyền lần 1 (Idempotent Sync) -> tạo mới các quyền của toàn bộ module đã đăng ký
+    const sync1 = await h.rolesService.syncModulePermissions();
+    expect(sync1.totalDeclared).toBeGreaterThanOrEqual(19);
+    expect(sync1.createdCount).toBe(sync1.totalDeclared);
+    expect(sync1.unchangedCount).toBe(0);
+    expect(sync1.orphanedCount).toBe(0);
+    expect(sync1.syncedModules).toEqual(
+      expect.arrayContaining(['users', 'roles', 'organizations', 'auth', 'system-ops', 'courses']),
+    );
+
+    // 3. Đồng bộ lại lần 2 -> không tạo trùng quyền (createdCount = 0, unchangedCount = totalDeclared)
+    const sync2 = await h.rolesService.syncModulePermissions();
+    expect(sync2.createdCount).toBe(0);
+    expect(sync2.unchangedCount).toBe(sync1.totalDeclared);
+
+    // 4. Tạo 2 vai trò gắn quyền chuẩn và 1 quyền cũ không còn thuộc module nào ('legacy_billing.export')
+    const instructorRole = await h.rolesService.create({
+      code: 'instructor',
+      name: 'Instructor',
+      permissions: ['courses.read', 'courses.publish', 'users.read'],
+    });
+    const legacyAuditorRole = await h.rolesService.create({
+      code: 'legacy_auditor',
+      name: 'Legacy Auditor',
+      permissions: ['users.read', 'legacy_billing.export'],
+    });
+
+    // 5. Nhóm quyền theo chức năng (listPermissionsGrouped)
+    const grouped = await h.rolesService.listPermissionsGrouped();
+    expect(grouped.length).toBeGreaterThanOrEqual(6);
+    const coursePublishGroup = grouped.find((g) => g.featureGroup === 'courses.publishing');
+    expect(coursePublishGroup).toBeDefined();
+    expect(coursePublishGroup?.module).toBe('courses');
+    expect(coursePublishGroup?.moduleDisplayName).toBe('Courses & Curriculum');
+    expect(coursePublishGroup?.permissions.map((p) => p.code)).toEqual(['courses.publish']);
+
+    // 6. Cảnh báo quyền không còn module sử dụng (listOrphanedPermissions)
+    const orphans = await h.rolesService.listOrphanedPermissions();
+    expect(orphans).toHaveLength(1);
+    expect(orphans[0]?.code).toBe('legacy_billing.export');
+    expect(orphans[0]?.assignedRoles.map((r) => r.code)).toEqual([legacyAuditorRole.code]);
+    expect(orphans[0]?.warningMessage).toContain('legacy_billing.export');
+
+    // 7. Bảng ma trận tổng hợp Vai trò × Quyền toàn hệ thống (getPermissionMatrix)
+    const matrix = await h.rolesService.getPermissionMatrix();
+    expect(matrix.summary.totalRoles).toBe(2);
+    expect(matrix.summary.totalOrphanedPermissions).toBe(1);
+    expect(matrix.roles.map((r) => r.code)).toEqual([instructorRole.code, legacyAuditorRole.code]);
+
+    const publishRow = matrix.rows.find((row) => row.code === 'courses.publish');
+    expect(publishRow).toBeDefined();
+    expect(publishRow?.isOrphaned).toBe(false);
+    expect(publishRow?.roleGrants).toEqual({
+      instructor: true,
+      legacy_auditor: false,
+    });
+
+    const orphanRow = matrix.rows.find((row) => row.code === 'legacy_billing.export');
+    expect(orphanRow).toBeDefined();
+    expect(orphanRow?.isOrphaned).toBe(true);
+    expect(orphanRow?.roleGrants).toEqual({
+      instructor: false,
+      legacy_auditor: true,
+    });
+  });
 });
-
-
-
-

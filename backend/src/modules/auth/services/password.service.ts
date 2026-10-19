@@ -42,7 +42,6 @@ const DEFAULT_RESET_OTP_MAX_ATTEMPTS = 5;
 
 @Injectable()
 export class PasswordService {
-  private readonly resetFallbackStore = new Map<string, AuthPasswordResetEntity>();
   private readonly emailAdapter: IEmailNotificationAdapter;
 
   constructor(
@@ -203,7 +202,7 @@ export class PasswordService {
     const settings = await this.securitySettingsService?.getSettings();
     const maxAttempts = settings?.otpMaxAttempts ?? DEFAULT_RESET_OTP_MAX_ATTEMPTS;
 
-    const saved = await this.passwordResetRepository.saveEntity({
+    await this.passwordResetRepository.saveEntity({
       userId: user.id,
       tokenHash,
       otpCodeHash,
@@ -213,13 +212,6 @@ export class PasswordService {
       usedAt: null,
       requestedIp: requestedIp ?? null,
     });
-
-    const enrichedRecord: AuthPasswordResetEntity = Object.assign(saved, {
-      otpCodeHash: saved.otpCodeHash ?? otpCodeHash,
-      attemptCount: saved.attemptCount ?? 0,
-      maxAttempts: saved.maxAttempts ?? maxAttempts,
-    });
-    this.resetFallbackStore.set(tokenHash, enrichedRecord);
 
     if (user.email) {
       await this.emailAdapter.sendOtpEmail({
@@ -260,10 +252,7 @@ export class PasswordService {
     let resetRecord: AuthPasswordResetEntity | null = null;
 
     // 1. Tìm theo Link Token Hash
-    resetRecord =
-      (await this.passwordResetRepository.findByTokenHash(candidateHash)) ??
-      this.resetFallbackStore.get(candidateHash) ??
-      null;
+    resetRecord = await this.passwordResetRepository.findByTokenHash(candidateHash);
 
     // 2. Nếu có truyền identifier/email hoặc dùng mã OTP 6 số -> tìm bản ghi mới nhất của user hoặc theo otpCodeHash
     if (!resetRecord && targetIdentifier) {
@@ -290,7 +279,9 @@ export class PasswordService {
     }
 
     const isTokenMatch = resetRecord.tokenHash === candidateHash;
-    const isOtpMatch = Boolean(resetRecord.otpCodeHash && resetRecord.otpCodeHash === candidateHash);
+    const isOtpMatch = Boolean(
+      resetRecord.otpCodeHash && resetRecord.otpCodeHash === candidateHash,
+    );
 
     if (!isTokenMatch && !isOtpMatch) {
       resetRecord.attemptCount = currentAttempts + 1;
@@ -450,47 +441,16 @@ export class PasswordService {
   private async findLatestResetRecordForUser(
     userId: number,
   ): Promise<AuthPasswordResetEntity | null> {
-    const repoAny = this.passwordResetRepository as unknown as {
-      findLatestByUserId?: (uid: number) => Promise<AuthPasswordResetEntity | null>;
-    };
-    if (typeof repoAny.findLatestByUserId === 'function') {
-      try {
-        const found = await repoAny.findLatestByUserId(userId);
-        if (found) return found;
-      } catch {
-        // Fallback sang bộ nhớ đệm nếu repo là test mock
-      }
-    }
-
-    const matches = [...this.resetFallbackStore.values()]
-      .filter((r) => Number(r.userId) === Number(userId) && !r.usedAt)
-      .sort((a, b) => Number(b.id) - Number(a.id));
-    return matches[0] ?? null;
+    return await this.passwordResetRepository.findLatestByUserId(userId);
   }
 
   private async findResetRecordByOtpHash(
     otpCodeHash: string,
   ): Promise<AuthPasswordResetEntity | null> {
-    const repoAny = this.passwordResetRepository as unknown as {
-      findByOtpCodeHash?: (hash: string) => Promise<AuthPasswordResetEntity | null>;
-    };
-    if (typeof repoAny.findByOtpCodeHash === 'function') {
-      try {
-        const found = await repoAny.findByOtpCodeHash(otpCodeHash);
-        if (found) return found;
-      } catch {
-        // Fallback sang bộ nhớ đệm nếu repo là test mock
-      }
-    }
-
-    const matches = [...this.resetFallbackStore.values()]
-      .filter((r) => r.otpCodeHash === otpCodeHash && !r.usedAt)
-      .sort((a, b) => Number(b.id) - Number(a.id));
-    return matches[0] ?? null;
+    return await this.passwordResetRepository.findByOtpCodeHash(otpCodeHash);
   }
 
   private async persistResetRecordUpdate(record: AuthPasswordResetEntity): Promise<void> {
-    this.resetFallbackStore.set(record.tokenHash, record);
     await this.passwordResetRepository.saveEntity(record);
   }
 
@@ -501,4 +461,3 @@ export class PasswordService {
     return `${visible}***@${domain}`;
   }
 }
-

@@ -1,4 +1,4 @@
-import { Injectable, Optional } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import {
   ConflictAppException,
   ForbiddenAppException,
@@ -63,16 +63,11 @@ const MAX_USAGE_LOG_ENTRIES = 50;
  */
 @Injectable()
 export class ServiceAccountService {
-  private saFallbackSeq = 0;
-  private clientFallbackSeq = 0;
-  private readonly fallbackServiceAccounts = new Map<number, AuthServiceAccountEntity>();
-  private readonly fallbackApiClients = new Map<number, AuthApiClientEntity>();
-
   constructor(
     private readonly passwordHasher: PasswordHasherService,
     private readonly tokenService: TokenService,
-    @Optional() private readonly serviceAccountRepo?: AuthServiceAccountRepository,
-    @Optional() private readonly apiClientRepo?: AuthApiClientRepository,
+    private readonly serviceAccountRepo: AuthServiceAccountRepository,
+    private readonly apiClientRepo: AuthApiClientRepository,
   ) {}
 
   // ============================================================================
@@ -873,211 +868,64 @@ export class ServiceAccountService {
   private async findServiceAccountByIdInternal(
     id: number,
   ): Promise<AuthServiceAccountEntity | null> {
-    if (this.serviceAccountRepo && typeof this.serviceAccountRepo.findById === 'function') {
-      try {
-        const found = await this.serviceAccountRepo.findById(Number(id));
-        if (found) {
-          this.fallbackServiceAccounts.set(Number(found.id), found);
-          return found;
-        }
-      } catch {
-        // Fallback in-memory
-      }
+    if (!this.serviceAccountRepo) {
+      throw new Error('AuthServiceAccountRepository is not initialized');
     }
-    return this.fallbackServiceAccounts.get(Number(id)) ?? null;
+    return await this.serviceAccountRepo.findById(Number(id));
   }
 
   private async findServiceAccountByCode(code: string): Promise<AuthServiceAccountEntity | null> {
-    const normalized = code.trim().toUpperCase();
-    if (this.serviceAccountRepo && typeof this.serviceAccountRepo.findByCode === 'function') {
-      try {
-        const found = await this.serviceAccountRepo.findByCode(normalized);
-        if (found) {
-          this.fallbackServiceAccounts.set(Number(found.id), found);
-          return found;
-        }
-      } catch {
-        // Fallback in-memory
-      }
+    if (!this.serviceAccountRepo) {
+      throw new Error('AuthServiceAccountRepository is not initialized');
     }
-    for (const sa of this.fallbackServiceAccounts.values()) {
-      if (sa.code === normalized) return sa;
-    }
-    return null;
+    return await this.serviceAccountRepo.findByCode(code.trim().toUpperCase());
   }
 
   private async findAllServiceAccounts(): Promise<AuthServiceAccountEntity[]> {
-    if (this.serviceAccountRepo && typeof this.serviceAccountRepo.findAllOrdered === 'function') {
-      try {
-        const list = await this.serviceAccountRepo.findAllOrdered();
-        if (list.length > 0 || this.fallbackServiceAccounts.size === 0) {
-          for (const item of list) {
-            this.fallbackServiceAccounts.set(Number(item.id), item);
-          }
-          return list;
-        }
-      } catch {
-        // Fallback in-memory
-      }
+    if (!this.serviceAccountRepo) {
+      throw new Error('AuthServiceAccountRepository is not initialized');
     }
-    return [...this.fallbackServiceAccounts.values()].sort((a, b) => Number(a.id) - Number(b.id));
+    return await this.serviceAccountRepo.findAllOrdered();
   }
 
   private async saveServiceAccount(
     data: Partial<AuthServiceAccountEntity>,
   ): Promise<AuthServiceAccountEntity> {
-    const now = new Date();
-    const existing = data.id ? this.fallbackServiceAccounts.get(Number(data.id)) : undefined;
-    const entity: AuthServiceAccountEntity = {
-      id: data.id ?? existing?.id ?? ++this.saFallbackSeq,
-      code: data.code ?? existing?.code ?? '',
-      name: data.name ?? existing?.name ?? '',
-      description:
-        data.description !== undefined ? data.description : (existing?.description ?? null),
-      status: data.status ?? existing?.status ?? SERVICE_ACCOUNT_STATUS.ACTIVE,
-      scopesJson: data.scopesJson ?? existing?.scopesJson ?? '[]',
-      createdBy: data.createdBy !== undefined ? data.createdBy : (existing?.createdBy ?? null),
-      lastUsedAt: data.lastUsedAt !== undefined ? data.lastUsedAt : (existing?.lastUsedAt ?? null),
-      lastUsedIp: data.lastUsedIp !== undefined ? data.lastUsedIp : (existing?.lastUsedIp ?? null),
-      lastUsedResult:
-        data.lastUsedResult !== undefined
-          ? data.lastUsedResult
-          : (existing?.lastUsedResult ?? null),
-      createdAt: existing?.createdAt ?? now,
-      updatedAt: now,
-      deletedAt: null,
-    } as AuthServiceAccountEntity;
-
-    this.fallbackServiceAccounts.set(Number(entity.id), entity);
-
-    if (this.serviceAccountRepo && typeof this.serviceAccountRepo.saveEntity === 'function') {
-      try {
-        const persisted = await this.serviceAccountRepo.saveEntity(entity);
-        this.fallbackServiceAccounts.set(Number(persisted.id), persisted);
-        return persisted;
-      } catch {
-        // Fallback in-memory
-      }
+    if (!this.serviceAccountRepo) {
+      throw new Error('AuthServiceAccountRepository is not initialized');
     }
-
-    return entity;
+    return await this.serviceAccountRepo.saveEntity(data);
   }
 
   private async findApiClientByIdInternal(id: number): Promise<AuthApiClientEntity | null> {
-    if (this.apiClientRepo && typeof this.apiClientRepo.findById === 'function') {
-      try {
-        const found = await this.apiClientRepo.findById(Number(id));
-        if (found) {
-          this.fallbackApiClients.set(Number(found.id), found);
-          return found;
-        }
-      } catch {
-        // Fallback in-memory
-      }
+    if (!this.apiClientRepo) {
+      throw new Error('AuthApiClientRepository is not initialized');
     }
-    return this.fallbackApiClients.get(Number(id)) ?? null;
+    return await this.apiClientRepo.findById(Number(id));
   }
 
   private async findApiClientByClientIdInternal(
     clientId: string,
   ): Promise<AuthApiClientEntity | null> {
-    const trimmed = clientId.trim();
-    if (this.apiClientRepo && typeof this.apiClientRepo.findByClientId === 'function') {
-      try {
-        const found = await this.apiClientRepo.findByClientId(trimmed);
-        if (found) {
-          this.fallbackApiClients.set(Number(found.id), found);
-          return found;
-        }
-      } catch {
-        // Fallback in-memory
-      }
+    if (!this.apiClientRepo) {
+      throw new Error('AuthApiClientRepository is not initialized');
     }
-    for (const c of this.fallbackApiClients.values()) {
-      if (c.clientId === trimmed) return c;
-    }
-    return null;
+    return await this.apiClientRepo.findByClientId(clientId.trim());
   }
 
   private async findAllApiClients(serviceAccountId?: number): Promise<AuthApiClientEntity[]> {
-    if (this.apiClientRepo) {
-      try {
-        const list =
-          serviceAccountId !== undefined &&
-          typeof this.apiClientRepo.findByServiceAccountId === 'function'
-            ? await this.apiClientRepo.findByServiceAccountId(serviceAccountId)
-            : typeof this.apiClientRepo.findAllOrdered === 'function'
-              ? await this.apiClientRepo.findAllOrdered()
-              : [];
-        if (list.length > 0 || this.fallbackApiClients.size === 0) {
-          for (const item of list) {
-            this.fallbackApiClients.set(Number(item.id), item);
-          }
-          return list;
-        }
-      } catch {
-        // Fallback in-memory
-      }
+    if (!this.apiClientRepo) {
+      throw new Error('AuthApiClientRepository is not initialized');
     }
-    const all = [...this.fallbackApiClients.values()].sort((a, b) => Number(a.id) - Number(b.id));
-    if (serviceAccountId !== undefined) {
-      return all.filter((c) => Number(c.serviceAccountId) === Number(serviceAccountId));
-    }
-    return all;
+    return serviceAccountId !== undefined
+      ? await this.apiClientRepo.findByServiceAccountId(serviceAccountId)
+      : await this.apiClientRepo.findAllOrdered();
   }
 
   private async saveApiClient(data: Partial<AuthApiClientEntity>): Promise<AuthApiClientEntity> {
-    const now = new Date();
-    const existing = data.id ? this.fallbackApiClients.get(Number(data.id)) : undefined;
-    const entity: AuthApiClientEntity = {
-      id: data.id ?? existing?.id ?? ++this.clientFallbackSeq,
-      serviceAccountId: Number(data.serviceAccountId ?? existing?.serviceAccountId ?? 0),
-      name: data.name ?? existing?.name ?? '',
-      description:
-        data.description !== undefined ? data.description : (existing?.description ?? null),
-      clientId: data.clientId ?? existing?.clientId ?? '',
-      clientSecretHash: data.clientSecretHash ?? existing?.clientSecretHash ?? '',
-      secretPrefix: data.secretPrefix ?? existing?.secretPrefix ?? '',
-      scopesJson: data.scopesJson ?? existing?.scopesJson ?? '[]',
-      allowedIpsJson: data.allowedIpsJson ?? existing?.allowedIpsJson ?? '[]',
-      status: data.status ?? existing?.status ?? API_CLIENT_STATUS.ACTIVE,
-      tokenVersion: data.tokenVersion ?? existing?.tokenVersion ?? 1,
-      secretRotatedAt:
-        data.secretRotatedAt !== undefined
-          ? data.secretRotatedAt
-          : (existing?.secretRotatedAt ?? null),
-      revokedAt: data.revokedAt !== undefined ? data.revokedAt : (existing?.revokedAt ?? null),
-      revokedReason:
-        data.revokedReason !== undefined ? data.revokedReason : (existing?.revokedReason ?? null),
-      lastUsedAt: data.lastUsedAt !== undefined ? data.lastUsedAt : (existing?.lastUsedAt ?? null),
-      lastUsedIp: data.lastUsedIp !== undefined ? data.lastUsedIp : (existing?.lastUsedIp ?? null),
-      lastUsedResult:
-        data.lastUsedResult !== undefined
-          ? data.lastUsedResult
-          : (existing?.lastUsedResult ?? null),
-      lastUsedEndpoint:
-        data.lastUsedEndpoint !== undefined
-          ? data.lastUsedEndpoint
-          : (existing?.lastUsedEndpoint ?? null),
-      usageLogsJson: data.usageLogsJson ?? existing?.usageLogsJson ?? '[]',
-      createdBy: data.createdBy !== undefined ? data.createdBy : (existing?.createdBy ?? null),
-      createdAt: existing?.createdAt ?? now,
-      updatedAt: now,
-      deletedAt: null,
-    } as AuthApiClientEntity;
-
-    this.fallbackApiClients.set(Number(entity.id), entity);
-
-    if (this.apiClientRepo && typeof this.apiClientRepo.saveEntity === 'function') {
-      try {
-        const persisted = await this.apiClientRepo.saveEntity(entity);
-        this.fallbackApiClients.set(Number(persisted.id), persisted);
-        return persisted;
-      } catch {
-        // Fallback in-memory
-      }
+    if (!this.apiClientRepo) {
+      throw new Error('AuthApiClientRepository is not initialized');
     }
-
-    return entity;
+    return await this.apiClientRepo.saveEntity(data);
   }
 }

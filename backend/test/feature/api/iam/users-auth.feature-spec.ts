@@ -34,19 +34,29 @@ import {
 } from '@modules/users/repositories/user-organization-unit.repository.js';
 import { UserStatusHistoryRepository } from '@modules/users/repositories/user-status-history.repository.js';
 import {
+  API_CLIENT_STATUS,
   DB_ENCRYPTION_ALGO_CODE,
   MFA_METHOD,
   MFA_POLICY_CODE,
   PASSWORD_HASH_ALGO_CODE,
+  SERVICE_ACCOUNT_STATUS,
 } from '@modules/auth/contracts/index.js';
 import type { AuthSessionEntity } from '@modules/auth/entities/auth-session.entity.js';
 import type { AuthMfaConfigEntity } from '@modules/auth/entities/auth-mfa-config.entity.js';
 import type { AuthPasswordResetEntity } from '@modules/auth/entities/auth-password-reset.entity.js';
 import type { AuthSecuritySettingEntity } from '@modules/auth/entities/auth-security-setting.entity.js';
+import type { AuthVerificationCodeEntity } from '@modules/auth/entities/auth-verification-code.entity.js';
+import type { AuthServiceAccountEntity } from '@modules/auth/entities/auth-service-account.entity.js';
+import type { AuthApiClientEntity } from '@modules/auth/entities/auth-api-client.entity.js';
+import type { AuthLoginHistoryEntity } from '@modules/auth/entities/auth-login-history.entity.js';
 import { AuthSessionRepository } from '@modules/auth/repositories/auth-session.repository.js';
 import { AuthMfaConfigRepository } from '@modules/auth/repositories/auth-mfa-config.repository.js';
 import { AuthPasswordResetRepository } from '@modules/auth/repositories/auth-password-reset.repository.js';
 import { AuthSecuritySettingRepository } from '@modules/auth/repositories/auth-security-setting.repository.js';
+import { AuthVerificationCodeRepository } from '@modules/auth/repositories/auth-verification-code.repository.js';
+import { AuthServiceAccountRepository } from '@modules/auth/repositories/auth-service-account.repository.js';
+import { AuthApiClientRepository } from '@modules/auth/repositories/auth-api-client.repository.js';
+import { AuthLoginHistoryRepository } from '@modules/auth/repositories/auth-login-history.repository.js';
 
 describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfiles (firstName/lastName/statusHistory), Roles, Permissions & Organizations (Integer IDs & Status STT)', () => {
   let context: TestAppContext;
@@ -167,6 +177,28 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
       findByCodes: async (codes: readonly string[]) => {
         const lower = codes.map((c) => c.trim().toLowerCase());
         return [...permStore.values()].filter((p) => lower.includes(p.code));
+      },
+      saveEntity: async (partial: Partial<PermissionEntity>) => {
+        const now = new Date();
+        const existing = partial.id
+          ? permStore.get(Number(partial.id))
+          : [...permStore.values()].find((p) => p.code === partial.code);
+        const entity: PermissionEntity = {
+          id: partial.id ?? existing?.id ?? ++permSeq,
+          code: (partial.code ?? existing!.code).trim().toLowerCase(),
+          name: partial.name ?? existing?.name ?? partial.code ?? '',
+          module: partial.module ?? existing?.module ?? 'core',
+          description:
+            partial.description !== undefined
+              ? partial.description
+              : (existing?.description ?? null),
+          status: partial.status ?? existing?.status ?? PERMISSION_STATUS.ACTIVE,
+          createdAt: existing?.createdAt ?? now,
+          updatedAt: now,
+          deletedAt: null,
+        } as PermissionEntity;
+        permStore.set(entity.id, entity);
+        return entity;
       },
       ensureByCodes: ensureByCodesFn,
       ensurePermissionsByCodes: ensureByCodesFn,
@@ -759,11 +791,212 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
             partial.otpMaxAttempts ?? globalSecuritySetting?.otpMaxAttempts ?? 5,
           otpCooldownSeconds:
             partial.otpCooldownSeconds ?? globalSecuritySetting?.otpCooldownSeconds ?? 60,
+          sessionIdleTimeoutMinutes:
+            partial.sessionIdleTimeoutMinutes ??
+            globalSecuritySetting?.sessionIdleTimeoutMinutes ??
+            30,
+          sessionMaxLifetimeMinutes:
+            partial.sessionMaxLifetimeMinutes ??
+            globalSecuritySetting?.sessionMaxLifetimeMinutes ??
+            10080,
+          enableLoginAuditLog:
+            partial.enableLoginAuditLog ?? globalSecuritySetting?.enableLoginAuditLog ?? true,
           createdAt: globalSecuritySetting?.createdAt ?? now,
           updatedAt: now,
         } as AuthSecuritySettingEntity;
         return globalSecuritySetting;
       },
+    });
+
+    let verificationSeq = 0;
+    const verificationStore = new Map<number, AuthVerificationCodeEntity>();
+    const verificationRepo = context.moduleFixture.get(AuthVerificationCodeRepository, {
+      strict: false,
+    });
+    Object.assign(verificationRepo, {
+      findLatestUnverified: async (userId: number, channel: number, purpose: number) =>
+        [...verificationStore.values()]
+          .filter(
+            (r) =>
+              Number(r.userId) === Number(userId) &&
+              r.channel === channel &&
+              r.purpose === purpose &&
+              !r.verifiedAt,
+          )
+          .sort((a, b) => Number(b.id) - Number(a.id))[0] ?? null,
+      findByCodeHash: async (codeHash: string, channel: number) =>
+        [...verificationStore.values()]
+          .filter(
+            (r) =>
+              r.channel === channel && !r.verifiedAt && r.codeHash.split(':').includes(codeHash),
+          )
+          .sort((a, b) => Number(b.id) - Number(a.id))[0] ?? null,
+      saveEntity: async (partial: Partial<AuthVerificationCodeEntity>) => {
+        const now = new Date();
+        const existing = partial.id ? verificationStore.get(Number(partial.id)) : undefined;
+        const entity = {
+          id: partial.id ?? existing?.id ?? ++verificationSeq,
+          userId: Number(partial.userId ?? existing?.userId ?? 0),
+          channel: partial.channel ?? existing?.channel ?? 1,
+          purpose: partial.purpose ?? existing?.purpose ?? 1,
+          target: partial.target ?? existing?.target ?? '',
+          codeHash: partial.codeHash ?? existing?.codeHash ?? '',
+          attemptCount: partial.attemptCount ?? existing?.attemptCount ?? 0,
+          maxAttempts: partial.maxAttempts ?? existing?.maxAttempts ?? 5,
+          sendCount: partial.sendCount ?? existing?.sendCount ?? 1,
+          maxSends: partial.maxSends ?? existing?.maxSends ?? 5,
+          lastSentAt: partial.lastSentAt ?? existing?.lastSentAt ?? now,
+          expiresAt: partial.expiresAt ?? existing?.expiresAt ?? now,
+          verifiedAt:
+            partial.verifiedAt !== undefined ? partial.verifiedAt : (existing?.verifiedAt ?? null),
+          requestedIp:
+            partial.requestedIp !== undefined
+              ? partial.requestedIp
+              : (existing?.requestedIp ?? null),
+          createdAt: existing?.createdAt ?? now,
+          updatedAt: now,
+          deletedAt: null,
+        } as AuthVerificationCodeEntity;
+        verificationStore.set(Number(entity.id), entity);
+        return entity;
+      },
+    });
+
+    let saSeq = 0;
+    const saStore = new Map<number, AuthServiceAccountEntity>();
+    const serviceAccountRepo = context.moduleFixture.get(AuthServiceAccountRepository, {
+      strict: false,
+    });
+    Object.assign(serviceAccountRepo, {
+      findById: async (id: number) => saStore.get(Number(id)) ?? null,
+      findByCode: async (code: string) =>
+        [...saStore.values()].find((sa) => sa.code === code.trim().toUpperCase()) ?? null,
+      findAllOrdered: async () => [...saStore.values()].sort((a, b) => Number(a.id) - Number(b.id)),
+      saveEntity: async (partial: Partial<AuthServiceAccountEntity>) => {
+        const now = new Date();
+        const existing = partial.id ? saStore.get(Number(partial.id)) : undefined;
+        const entity = {
+          id: partial.id ?? existing?.id ?? ++saSeq,
+          code: partial.code ?? existing?.code ?? '',
+          name: partial.name ?? existing?.name ?? '',
+          description:
+            partial.description !== undefined
+              ? partial.description
+              : (existing?.description ?? null),
+          status: partial.status ?? existing?.status ?? SERVICE_ACCOUNT_STATUS.ACTIVE,
+          scopesJson: partial.scopesJson ?? existing?.scopesJson ?? '[]',
+          createdBy:
+            partial.createdBy !== undefined ? partial.createdBy : (existing?.createdBy ?? null),
+          lastUsedAt:
+            partial.lastUsedAt !== undefined ? partial.lastUsedAt : (existing?.lastUsedAt ?? null),
+          lastUsedIp:
+            partial.lastUsedIp !== undefined ? partial.lastUsedIp : (existing?.lastUsedIp ?? null),
+          lastUsedResult:
+            partial.lastUsedResult !== undefined
+              ? partial.lastUsedResult
+              : (existing?.lastUsedResult ?? null),
+          createdAt: existing?.createdAt ?? now,
+          updatedAt: now,
+          deletedAt: null,
+        } as AuthServiceAccountEntity;
+        saStore.set(Number(entity.id), entity);
+        return entity;
+      },
+    });
+
+    let apiClientSeq = 0;
+    const apiClientStore = new Map<number, AuthApiClientEntity>();
+    const apiClientRepo = context.moduleFixture.get(AuthApiClientRepository, { strict: false });
+    Object.assign(apiClientRepo, {
+      findById: async (id: number) => apiClientStore.get(Number(id)) ?? null,
+      findByClientId: async (clientId: string) =>
+        [...apiClientStore.values()].find((c) => c.clientId === clientId.trim()) ?? null,
+      findByServiceAccountId: async (serviceAccountId: number) =>
+        [...apiClientStore.values()]
+          .filter((c) => Number(c.serviceAccountId) === Number(serviceAccountId))
+          .sort((a, b) => Number(a.id) - Number(b.id)),
+      findAllOrdered: async () =>
+        [...apiClientStore.values()].sort((a, b) => Number(a.id) - Number(b.id)),
+      saveEntity: async (partial: Partial<AuthApiClientEntity>) => {
+        const now = new Date();
+        const existing = partial.id ? apiClientStore.get(Number(partial.id)) : undefined;
+        const entity = {
+          id: partial.id ?? existing?.id ?? ++apiClientSeq,
+          serviceAccountId: Number(partial.serviceAccountId ?? existing?.serviceAccountId ?? 0),
+          name: partial.name ?? existing?.name ?? '',
+          description:
+            partial.description !== undefined
+              ? partial.description
+              : (existing?.description ?? null),
+          clientId: partial.clientId ?? existing?.clientId ?? '',
+          clientSecretHash: partial.clientSecretHash ?? existing?.clientSecretHash ?? '',
+          secretPrefix: partial.secretPrefix ?? existing?.secretPrefix ?? '',
+          scopesJson: partial.scopesJson ?? existing?.scopesJson ?? '[]',
+          allowedIpsJson: partial.allowedIpsJson ?? existing?.allowedIpsJson ?? '[]',
+          status: partial.status ?? existing?.status ?? API_CLIENT_STATUS.ACTIVE,
+          tokenVersion: partial.tokenVersion ?? existing?.tokenVersion ?? 1,
+          secretRotatedAt:
+            partial.secretRotatedAt !== undefined
+              ? partial.secretRotatedAt
+              : (existing?.secretRotatedAt ?? null),
+          revokedAt:
+            partial.revokedAt !== undefined ? partial.revokedAt : (existing?.revokedAt ?? null),
+          revokedReason:
+            partial.revokedReason !== undefined
+              ? partial.revokedReason
+              : (existing?.revokedReason ?? null),
+          lastUsedAt:
+            partial.lastUsedAt !== undefined ? partial.lastUsedAt : (existing?.lastUsedAt ?? null),
+          lastUsedIp:
+            partial.lastUsedIp !== undefined ? partial.lastUsedIp : (existing?.lastUsedIp ?? null),
+          lastUsedResult:
+            partial.lastUsedResult !== undefined
+              ? partial.lastUsedResult
+              : (existing?.lastUsedResult ?? null),
+          lastUsedEndpoint:
+            partial.lastUsedEndpoint !== undefined
+              ? partial.lastUsedEndpoint
+              : (existing?.lastUsedEndpoint ?? null),
+          usageLogsJson: partial.usageLogsJson ?? existing?.usageLogsJson ?? '[]',
+          createdBy:
+            partial.createdBy !== undefined ? partial.createdBy : (existing?.createdBy ?? null),
+          createdAt: existing?.createdAt ?? now,
+          updatedAt: now,
+          deletedAt: null,
+        } as AuthApiClientEntity;
+        apiClientStore.set(Number(entity.id), entity);
+        return entity;
+      },
+    });
+
+    let loginHistorySeq = 0;
+    const loginHistoryStore: AuthLoginHistoryEntity[] = [];
+    const loginHistoryRepo = context.moduleFixture.get(AuthLoginHistoryRepository, {
+      strict: false,
+    });
+    Object.assign(loginHistoryRepo, {
+      recordEvent: async (input: Partial<AuthLoginHistoryEntity>) => {
+        const now = new Date();
+        const entry = {
+          id: ++loginHistorySeq,
+          userId: input.userId ?? null,
+          sessionId: input.sessionId ?? null,
+          identifier: input.identifier ?? null,
+          eventType: input.eventType!,
+          status: input.status!,
+          ipAddress: input.ipAddress ?? null,
+          userAgent: input.userAgent ?? null,
+          deviceName: input.deviceName ?? null,
+          reason: input.reason ?? null,
+          createdAt: now,
+          updatedAt: now,
+          deletedAt: null,
+        } as AuthLoginHistoryEntity;
+        loginHistoryStore.unshift(entry);
+        return entry;
+      },
+      findByUserId: async (userId: number, limit = 50) =>
+        loginHistoryStore.filter((h) => Number(h.userId) === Number(userId)).slice(0, limit),
     });
 
     // Seed super_admin role (ID = 1), permissions (ID = 1..10) & superadmin@gmail.com (ID = 1) with password !P@ssw0rd#
@@ -2071,6 +2304,202 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
     });
     expect(deleteSystemRoleRes.status).toBe(HTTP_STATUS_CODE.FORBIDDEN);
   });
+
+  it('supports Section 4.2 Permission Management E2E: module permission sync (idempotent), grouped permissions, orphan warnings, role-permission matrix & server-side API permission enforcement', async () => {
+    const adminHeaders = { authorization: `Bearer ${adminAccessToken}` };
+
+    // 1. Đồng bộ quyền khi thêm module mới 'lms_courses' (POST /api/v1/roles/permissions/sync)
+    const syncRes1 = await context.injectJson<{
+      totalDeclared: number;
+      createdCount: number;
+      updatedCount: number;
+      unchangedCount: number;
+      orphanedCount: number;
+      syncedModules: string[];
+    }>({
+      method: 'POST',
+      url: '/api/v1/roles/permissions/sync',
+      headers: adminHeaders,
+      payload: {
+        modules: [
+          {
+            module: 'lms_courses',
+            displayName: 'LMS Courses',
+            permissions: [
+              {
+                code: 'lms_courses.read',
+                name: 'Xem khóa học LMS',
+                featureGroup: 'lms_courses.catalog',
+              },
+              {
+                code: 'lms_courses.grading.manage',
+                name: 'Chấm điểm học viên',
+                featureGroup: 'lms_courses.grading',
+              },
+            ],
+          },
+        ],
+      },
+    });
+    expect(syncRes1.status).toBe(HTTP_STATUS_CODE.OK);
+    expect(syncRes1.body.data.syncedModules).toContain('lms_courses');
+    expect(syncRes1.body.data.totalDeclared).toBeGreaterThanOrEqual(19);
+
+    // Gọi sync lần 2 với cùng module -> Idempotent (không tạo trùng quyền: createdCount = 0)
+    const syncRes2 = await context.injectJson<{
+      totalDeclared: number;
+      createdCount: number;
+      unchangedCount: number;
+    }>({
+      method: 'POST',
+      url: '/api/v1/roles/permissions/sync',
+      headers: adminHeaders,
+      payload: {},
+    });
+    expect(syncRes2.status).toBe(HTTP_STATUS_CODE.OK);
+    expect(syncRes2.body.data.createdCount).toBe(0);
+    expect(syncRes2.body.data.unchangedCount).toBe(syncRes1.body.data.totalDeclared);
+
+    // 2. Nhóm quyền theo chức năng (GET /api/v1/roles/permissions/grouped)
+    const groupedRes = await context.injectJson<
+      Array<{
+        module: string;
+        moduleDisplayName: string;
+        featureGroup: string;
+        totalPermissions: number;
+        permissions: Array<{ code: string; featureGroup: string; isOrphaned: boolean }>;
+      }>
+    >({
+      method: 'GET',
+      url: '/api/v1/roles/permissions/grouped',
+      headers: adminHeaders,
+    });
+    expect(groupedRes.status).toBe(HTTP_STATUS_CODE.OK);
+    const lmsGradingGroup = groupedRes.body.data.find(
+      (g) => g.featureGroup === 'lms_courses.grading',
+    );
+    expect(lmsGradingGroup).toBeDefined();
+    expect(lmsGradingGroup?.module).toBe('lms_courses');
+    expect(lmsGradingGroup?.moduleDisplayName).toBe('LMS Courses');
+    expect(lmsGradingGroup?.permissions.map((p) => p.code)).toEqual(['lms_courses.grading.manage']);
+
+    // 3. Tạo vai trò chỉ có quyền đọc ('roles.read', 'users.read') kèm 1 quyền rác ('deprecated_module.write')
+    const viewerRoleRes = await context.injectJson<{ id: number; code: string }>({
+      method: 'POST',
+      url: '/api/v1/roles',
+      headers: adminHeaders,
+      payload: {
+        code: 'permission_viewer',
+        name: 'Permission Viewer',
+        permissions: ['roles.read', 'users.read', 'deprecated_module.write'],
+      },
+    });
+    expect(viewerRoleRes.status).toBe(HTTP_STATUS_CODE.CREATED);
+    const viewerRoleId = viewerRoleRes.body.data.id;
+
+    // 4. Cảnh báo quyền không còn module sử dụng (GET /api/v1/roles/permissions/orphans)
+    const orphansRes = await context.injectJson<
+      Array<{
+        code: string;
+        module: string;
+        assignedRoles: Array<{ id: number; code: string }>;
+        warningMessage: string;
+      }>
+    >({
+      method: 'GET',
+      url: '/api/v1/roles/permissions/orphans',
+      headers: adminHeaders,
+    });
+    expect(orphansRes.status).toBe(HTTP_STATUS_CODE.OK);
+    const deprecatedOrphan = orphansRes.body.data.find(
+      (o) => o.code === 'deprecated_module.write',
+    );
+    expect(deprecatedOrphan).toBeDefined();
+    expect(deprecatedOrphan?.assignedRoles.map((r) => r.code)).toContain('permission_viewer');
+
+    // 5. Bảng tổng hợp ma trận Vai trò × Quyền (GET /api/v1/roles/permissions/matrix)
+    const matrixRes = await context.injectJson<{
+      roles: Array<{ id: number; code: string; totalGrantedPermissions: number }>;
+      modules: string[];
+      rows: Array<{
+        code: string;
+        isOrphaned: boolean;
+        grantedRoleCodes: string[];
+        roleGrants: Record<string, boolean>;
+      }>;
+      summary: {
+        totalRoles: number;
+        totalPermissions: number;
+        totalOrphanedPermissions: number;
+      };
+    }>({
+      method: 'GET',
+      url: '/api/v1/roles/permissions/matrix',
+      headers: adminHeaders,
+    });
+    expect(matrixRes.status).toBe(HTTP_STATUS_CODE.OK);
+    expect(matrixRes.body.data.summary.totalRoles).toBeGreaterThanOrEqual(2);
+    expect(matrixRes.body.data.summary.totalOrphanedPermissions).toBeGreaterThanOrEqual(1);
+    const orphanMatrixRow = matrixRes.body.data.rows.find(
+      (r) => r.code === 'deprecated_module.write',
+    );
+    expect(orphanMatrixRow?.isOrphaned).toBe(true);
+    expect(orphanMatrixRow?.roleGrants['permission_viewer']).toBe(true);
+
+    // 6. Kiểm tra quyền tại API (không tin quyền do frontend gửi lên) & dữ liệu permission cho Frontend (/auth/me)
+    const createViewerUserRes = await context.injectJson<{ id: number }>({
+      method: 'POST',
+      url: '/api/v1/users',
+      headers: adminHeaders,
+      payload: {
+        email: 'viewer42@gmail.com',
+        username: 'viewer42',
+        firstName: 'Vinh',
+        lastName: 'Lê',
+        password: 'Password@123',
+        roleIds: [viewerRoleId],
+      },
+    });
+    expect(createViewerUserRes.status).toBe(HTTP_STATUS_CODE.CREATED);
+
+    const viewerLoginRes = await context.injectJson<{ accessToken: string }>({
+      method: 'POST',
+      url: '/api/v1/auth/login',
+      payload: {
+        identifier: 'viewer42@gmail.com',
+        password: 'Password@123',
+      },
+    });
+    expect(viewerLoginRes.status).toBe(HTTP_STATUS_CODE.OK);
+    const viewerToken = viewerLoginRes.body.data.accessToken;
+
+    // Frontend lấy danh sách quyền thực tế của user từ GET /api/v1/auth/me để ẩn/khóa nút
+    const meRes = await context.injectJson<{
+      id: number;
+      permissions: string[];
+      roles: Array<{ code: string }>;
+    }>({
+      method: 'GET',
+      url: '/api/v1/auth/me',
+      headers: { authorization: `Bearer ${viewerToken}` },
+    });
+    expect(meRes.status).toBe(HTTP_STATUS_CODE.OK);
+    expect(meRes.body.data.permissions).toEqual(
+      expect.arrayContaining(['roles.read', 'users.read']),
+    );
+    expect(meRes.body.data.permissions).not.toContain('roles.manage');
+
+    // Dù Frontend giả mạo header quyền 'roles.manage', API vẫn chặn 403 Forbidden vì kiểm tra từ DB/Session tại Backend
+    const forgedSyncAttempt = await context.injectJson({
+      method: 'POST',
+      url: '/api/v1/roles/permissions/sync',
+      headers: {
+        authorization: `Bearer ${viewerToken}`,
+        'x-permissions': 'roles.manage,super_admin',
+        'x-user-permissions': '["roles.manage"]',
+      },
+      payload: {},
+    });
+    expect(forgedSyncAttempt.status).toBe(HTTP_STATUS_CODE.FORBIDDEN);
+  });
 });
-
-

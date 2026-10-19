@@ -50,8 +50,6 @@ const DEFAULT_OTP_COOLDOWN_SECONDS = 60;
 @Injectable()
 export class VerificationService {
   private readonly logger = new Logger(VerificationService.name);
-  private fallbackSeq = 0;
-  private readonly fallbackStore = new Map<number, AuthVerificationCodeEntity>();
   private readonly emailAdapter: IEmailNotificationAdapter;
   private readonly smsProvider: ISmsOtpProvider;
 
@@ -59,7 +57,7 @@ export class VerificationService {
     private readonly passwordHasher: PasswordHasherService,
     @Inject(USERS_PUBLIC_SERVICE)
     private readonly usersPublicService: IUsersPublicService,
-    @Optional() private readonly verificationRepo?: AuthVerificationCodeRepository,
+    private readonly verificationRepo: AuthVerificationCodeRepository,
     @Optional() private readonly securitySettingsService?: SecuritySettingsService,
     @Optional() private readonly configService?: CoreConfigService,
     @Optional()
@@ -392,56 +390,32 @@ export class VerificationService {
     channel: VerificationChannelCode,
     purpose: VerificationPurposeCode,
   ): Promise<AuthVerificationCodeEntity | null> {
-    if (this.verificationRepo && typeof this.verificationRepo.findLatestUnverified === 'function') {
-      try {
-        const found = await this.verificationRepo.findLatestUnverified(userId, channel, purpose);
-        if (found) return found;
-      } catch {
-        // Fallback sang bộ nhớ đệm nếu không chạy DB
-      }
+    if (!this.verificationRepo) {
+      throw new Error('AuthVerificationCodeRepository is not initialized');
     }
-
-    const matches = [...this.fallbackStore.values()]
-      .filter(
-        (r) =>
-          Number(r.userId) === Number(userId) &&
-          r.channel === channel &&
-          r.purpose === purpose &&
-          !r.verifiedAt,
-      )
-      .sort((a, b) => Number(b.id) - Number(a.id));
-    return matches[0] ?? null;
+    return await this.verificationRepo.findLatestUnverified(userId, channel, purpose);
   }
 
   private async findByCandidateHash(
     candidateHash: string,
     channel: VerificationChannelCode,
   ): Promise<AuthVerificationCodeEntity | null> {
-    if (this.verificationRepo && typeof this.verificationRepo.findByCodeHash === 'function') {
-      try {
-        const found = await this.verificationRepo.findByCodeHash(candidateHash, channel);
-        if (found) return found;
-      } catch {
-        // Fallback sang in-memory
-      }
+    if (!this.verificationRepo) {
+      throw new Error('AuthVerificationCodeRepository is not initialized');
     }
-
-    const matches = [...this.fallbackStore.values()]
-      .filter(
-        (r) =>
-          r.channel === channel && !r.verifiedAt && r.codeHash.split(':').includes(candidateHash),
-      )
-      .sort((a, b) => Number(b.id) - Number(a.id));
-    return matches[0] ?? null;
+    return await this.verificationRepo.findByCodeHash(candidateHash, channel);
   }
 
   private async saveVerificationRecord(
     existing: AuthVerificationCodeEntity | null,
     data: Partial<AuthVerificationCodeEntity>,
   ): Promise<AuthVerificationCodeEntity> {
+    if (!this.verificationRepo) {
+      throw new Error('AuthVerificationCodeRepository is not initialized');
+    }
     const now = new Date();
-    const record: AuthVerificationCodeEntity = {
-      id: existing?.id ?? ++this.fallbackSeq,
+    const payload: Partial<AuthVerificationCodeEntity> = {
+      ...(existing?.id ? { id: existing.id } : {}),
       userId: Number(data.userId ?? existing?.userId ?? 0),
       channel: data.channel ?? existing?.channel ?? VERIFICATION_CHANNEL.EMAIL,
       purpose: data.purpose ?? existing?.purpose ?? VERIFICATION_PURPOSE.VERIFY_EMAIL,
@@ -456,24 +430,8 @@ export class VerificationService {
       verifiedAt: data.verifiedAt !== undefined ? data.verifiedAt : (existing?.verifiedAt ?? null),
       requestedIp:
         data.requestedIp !== undefined ? data.requestedIp : (existing?.requestedIp ?? null),
-      createdAt: existing?.createdAt ?? now,
-      updatedAt: now,
-      deletedAt: null,
-    } as AuthVerificationCodeEntity;
-
-    this.fallbackStore.set(Number(record.id), record);
-
-    if (this.verificationRepo && typeof this.verificationRepo.saveEntity === 'function') {
-      try {
-        const persisted = await this.verificationRepo.saveEntity(record);
-        this.fallbackStore.set(Number(persisted.id), persisted);
-        return persisted;
-      } catch {
-        // Fallback in-memory
-      }
-    }
-
-    return record;
+    };
+    return await this.verificationRepo.saveEntity(payload);
   }
 
   public maskEmail(email: string): string {
@@ -489,4 +447,3 @@ export class VerificationService {
     return `${cleaned.slice(0, 3)}****${cleaned.slice(-3)}`;
   }
 }
-

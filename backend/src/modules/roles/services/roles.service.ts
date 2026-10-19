@@ -1,3 +1,5 @@
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { Inject, Injectable, Optional } from '@nestjs/common';
 import {
   BadRequestAppException,
@@ -9,6 +11,8 @@ import {
 import { TransactionManager } from '@packages/database/index.js';
 import {
   type IRolesPublicService,
+  type ModulePermissionDeclaration,
+  type ModulePermissionsManifestInput,
   PERMISSION_STATUS,
   ROLE_STATUS,
   type RoleAssignedUserSummary,
@@ -24,30 +28,47 @@ import type {
   CreateRoleRequest,
   ListRolesQuery,
   SetRolePermissionsRequest,
+  SyncPermissionsRequest,
   UpdateRoleRequest,
 } from '../requests/roles.requests.js';
 import type {
+  OrphanedPermissionWarningResponse,
   PermissionCatalogItemResponse,
+  PermissionFunctionalGroupResponse,
   RoleAssignedUserResponse,
+  RolePermissionMatrixResponse,
+  RolePermissionMatrixRowResponse,
   RoleResponse,
+  SyncPermissionsResultResponse,
 } from '../responses/roles.response.js';
+
+interface NormalizedPermissionDeclaration {
+  readonly code: string;
+  readonly name: string;
+  readonly module: string;
+  readonly moduleDisplayName: string;
+  readonly featureGroup: string;
+  readonly description: string | null;
+}
 
 @Injectable()
 export class RolesService implements IRolesPublicService {
   private roleUserCountDelegate?: (roleIds: readonly number[]) => Promise<Map<number, number>>;
   private roleUsersListDelegate?: (roleId: number) => Promise<RoleAssignedUserSummary[]>;
+  private readonly registeredModules = new Map<string, ModulePermissionsManifestInput>();
+  private customActiveModulesOverride: Map<string, ModulePermissionsManifestInput> | null = null;
 
   constructor(
     private readonly roleRepository: RoleRepository,
     private readonly rolePermissionRepository: RolePermissionRepository,
     private readonly mapper: RolesMapper,
-    @Optional()
-    @Inject(PermissionRepository)
-    private readonly permissionRepository: PermissionRepository | null = null,
+    private readonly permissionRepository: PermissionRepository,
     @Optional()
     @Inject(TransactionManager)
     private readonly transactionManager: TransactionManager | null = null,
-  ) {}
+  ) {
+    this.initializeModuleManifests();
+  }
 
   /** Đăng ký hàm ủy quyền từ module Users để đếm số người dùng đang giữ từng vai trò */
   public registerRoleUserCountDelegate(
@@ -61,6 +82,17 @@ export class RolesService implements IRolesPublicService {
     delegate: (roleId: number) => Promise<RoleAssignedUserSummary[]>,
   ): void {
     this.roleUsersListDelegate = delegate;
+  }
+
+  /** Đăng ký danh sách quyền công bố của một module (Mục 4.2 — Mỗi module tự công bố quyền của mình) */
+  public registerModulePermissions(input: ModulePermissionsManifestInput): void {
+    const moduleKey = input.module.trim().toLowerCase();
+    if (!moduleKey) return;
+    this.registeredModules.set(moduleKey, {
+      module: moduleKey,
+      displayName: input.displayName?.trim() || input.module,
+      permissions: input.permissions,
+    });
   }
 
   /** Lấy danh sách vai trò kèm danh sách quyền và số lượng người đang sử dụng của từng vai trò */
@@ -108,22 +140,258 @@ export class RolesService implements IRolesPublicService {
     return this.roleUsersListDelegate(Number(role.id));
   }
 
-  /** Lấy danh mục quyền hạn hệ thống từ bảng permissions */
+  /** Lấy danh mục quyền hạn hệ thống từ bảng permissions kèm nhóm chức năng và cờ cảnh báo quyền mồ côi (Mục 4.2) */
   public async listPermissionsCatalog(): Promise<PermissionCatalogItemResponse[]> {
-    if (!this.permissionRepository) return [];
     const perms = await this.permissionRepository.findAll();
-    return perms.map((p) => ({
-      id: Number(p.id),
-      code: p.code,
-      name: p.name,
-      module: p.module,
-      description: p.description ?? null,
-      status:
-        p.status === PERMISSION_STATUS.INACTIVE
-          ? PERMISSION_STATUS.INACTIVE
-          : PERMISSION_STATUS.ACTIVE,
-      statusName: p.status === PERMISSION_STATUS.INACTIVE ? 'INACTIVE' : 'ACTIVE',
-    }));
+    const declaredMap = this.getActiveDeclaredPermissionsMap();
+
+    return perms.map((p) => {
+      const normalizedCode = p.code.trim().toLowerCase();
+      const declared = declaredMap.get(normalizedCode);
+      const moduleName = p.module || declared?.module || this.extractModuleFromCode(normalizedCode);
+      const featureGroup =
+        declared?.featureGroup ?? this.deriveFeatureGroup(normalizedCode, moduleName);
+
+      return {
+        id: Number(p.id),
+        code: p.code,
+        name: p.name,
+        module: moduleName,
+        featureGroup,
+        description: p.description ?? null,
+        status:
+          p.status === PERMISSION_STATUS.INACTIVE
+            ? PERMISSION_STATUS.INACTIVE
+            : PERMISSION_STATUS.ACTIVE,
+        statusName: p.status === PERMISSION_STATUS.INACTIVE ? 'INACTIVE' : 'ACTIVE',
+        isOrphaned: !declaredMap.has(normalizedCode),
+      };
+    });
+  }
+
+  /** Nhóm danh mục quyền theo module và nhóm chức năng (Mục 4.2 — Nhóm quyền theo chức năng dễ chọn và quản lý) */
+  public async listPermissionsGrouped(): Promise<PermissionFunctionalGroupResponse[]> {
+    const catalog = await this.listPermissionsCatalog();
+    const activeModules = this.getActiveModulesMap();
+    const groupsMap = new Map<
+      string,
+      {
+        module: string;
+        moduleDisplayName: string;
+        featureGroup: string;
+        permissions: PermissionCatalogItemResponse[];
+      }
+    >();
+
+    for (const item of catalog) {
+      const key = `${item.module}::${item.featureGroup}`;
+      const existing = groupsMap.get(key);
+      if (existing) {
+        existing.permissions.push(item);
+      } else {
+        const modManifest = activeModules.get(item.module.toLowerCase());
+        groupsMap.set(key, {
+          module: item.module,
+          moduleDisplayName: modManifest?.displayName || item.module,
+          featureGroup: item.featureGroup,
+          permissions: [item],
+        });
+      }
+    }
+
+    return [...groupsMap.values()]
+      .sort((a, b) =>
+        a.module === b.module
+          ? a.featureGroup.localeCompare(b.featureGroup)
+          : a.module.localeCompare(b.module),
+      )
+      .map((g) => ({
+        module: g.module,
+        moduleDisplayName: g.moduleDisplayName,
+        featureGroup: g.featureGroup,
+        totalPermissions: g.permissions.length,
+        permissions: g.permissions,
+      }));
+  }
+
+  /** Đồng bộ quyền idempotent từ các module manifests vào bảng permissions (Mục 4.2 — Không tạo trùng quyền) */
+  public async syncModulePermissions(
+    input?: SyncPermissionsRequest | readonly ModulePermissionsManifestInput[],
+  ): Promise<SyncPermissionsResultResponse> {
+    let modulesInput: readonly ModulePermissionsManifestInput[] | undefined;
+    let replaceActiveModules = false;
+
+    if (Array.isArray(input)) {
+      modulesInput = input;
+    } else if (input && typeof input === 'object') {
+      const req = input as SyncPermissionsRequest;
+      modulesInput = req.modules;
+      replaceActiveModules = Boolean(req.replaceActiveModules);
+    }
+
+    if (modulesInput && modulesInput.length > 0) {
+      if (replaceActiveModules) {
+        const overrideMap = new Map<string, ModulePermissionsManifestInput>();
+        for (const mod of modulesInput) {
+          const key = mod.module.trim().toLowerCase();
+          if (!key) continue;
+          overrideMap.set(key, {
+            module: key,
+            displayName: mod.displayName?.trim() || mod.module,
+            permissions: mod.permissions,
+          });
+        }
+        this.customActiveModulesOverride = overrideMap;
+      } else {
+        this.customActiveModulesOverride = null;
+        for (const mod of modulesInput) {
+          this.registerModulePermissions(mod);
+        }
+      }
+    } else if (replaceActiveModules) {
+      this.customActiveModulesOverride = null;
+    }
+
+    const declaredMap = this.getActiveDeclaredPermissionsMap();
+    const activeModules = this.getActiveModulesMap();
+    const declaredItems = [...declaredMap.values()];
+
+    const { createdCodes, updatedCodes, unchangedCount } =
+      await this.permissionRepository.upsertCatalogItems(
+        declaredItems.map((item) => ({
+          code: item.code,
+          name: item.name,
+          module: item.module,
+          description: item.description,
+        })),
+      );
+
+    const allAfter = await this.permissionRepository.findAll();
+    const orphanedCodes = allAfter
+      .map((p) => p.code.trim().toLowerCase())
+      .filter((code) => !declaredMap.has(code));
+
+    return {
+      totalDeclared: declaredItems.length,
+      createdCount: createdCodes.length,
+      updatedCount: updatedCodes.length,
+      unchangedCount,
+      orphanedCount: orphanedCodes.length,
+      createdCodes,
+      updatedCodes,
+      orphanedCodes,
+      syncedModules: [...activeModules.keys()],
+    };
+  }
+
+  /** Cảnh báo danh sách quyền mồ côi không còn thuộc bất kỳ module hoạt động nào (Mục 4.2 — Tránh permission rác) */
+  public async listOrphanedPermissions(): Promise<OrphanedPermissionWarningResponse[]> {
+    const allPerms = await this.permissionRepository.findAll();
+    const declaredMap = this.getActiveDeclaredPermissionsMap();
+    const orphanedPerms = allPerms.filter((p) => !declaredMap.has(p.code.trim().toLowerCase()));
+    if (orphanedPerms.length === 0) return [];
+
+    const roles = await this.roleRepository.findFiltered({});
+    const roleIds = roles.map((r) => Number(r.id));
+    const permsMap = await this.loadPermissionsMap(roleIds);
+
+    return orphanedPerms.map((perm) => {
+      const assignedRoles = roles
+        .filter((role) => {
+          const rolePerms = permsMap.get(Number(role.id)) ?? [];
+          return rolePerms.some((rp) => Number(rp.id) === Number(perm.id) || rp.code === perm.code);
+        })
+        .map((role) => ({
+          id: Number(role.id),
+          code: role.code,
+          name: role.name,
+        }));
+
+      return {
+        id: Number(perm.id),
+        code: perm.code,
+        name: perm.name,
+        module: perm.module,
+        assignedRoles,
+        warningMessage:
+          assignedRoles.length > 0
+            ? `Permission '${perm.code}' is not declared by any active module manifest and is still assigned to ${assignedRoles.length} role(s).`
+            : `Permission '${perm.code}' is not declared by any active module manifest (unused orphan permission).`,
+      };
+    });
+  }
+
+  /** Tạo bảng ma trận tổng hợp Vai trò × Quyền toàn hệ thống (Mục 4.2 — Dễ rà soát quyền toàn hệ thống) */
+  public async getPermissionMatrix(): Promise<RolePermissionMatrixResponse> {
+    const [roles, catalog] = await Promise.all([
+      this.roleRepository.findFiltered({}),
+      this.listPermissionsCatalog(),
+    ]);
+
+    const roleIds = roles.map((r) => Number(r.id));
+    const permsMap = await this.loadPermissionsMap(roleIds);
+
+    const rolePermCodeSets = new Map<number, Set<string>>();
+    for (const role of roles) {
+      const rId = Number(role.id);
+      const rPerms = permsMap.get(rId) ?? [];
+      rolePermCodeSets.set(rId, new Set(rPerms.map((p) => p.code.trim().toLowerCase())));
+    }
+
+    const rows: RolePermissionMatrixRowResponse[] = catalog.map((perm) => {
+      const normalizedCode = perm.code.trim().toLowerCase();
+      const grantedRoleIds: number[] = [];
+      const grantedRoleCodes: string[] = [];
+      const roleGrants: Record<string, boolean> = {};
+
+      for (const role of roles) {
+        const rId = Number(role.id);
+        const hasPerm = rolePermCodeSets.get(rId)?.has(normalizedCode) ?? false;
+        roleGrants[role.code] = hasPerm;
+        if (hasPerm) {
+          grantedRoleIds.push(rId);
+          grantedRoleCodes.push(role.code);
+        }
+      }
+
+      return {
+        permissionId: perm.id,
+        code: perm.code,
+        name: perm.name,
+        module: perm.module,
+        featureGroup: perm.featureGroup,
+        isOrphaned: perm.isOrphaned,
+        grantedRoleIds,
+        grantedRoleCodes,
+        roleGrants,
+      };
+    });
+
+    const modulesSet = new Set<string>(catalog.map((c) => c.module));
+    const totalOrphanedPermissions = catalog.filter((c) => c.isOrphaned).length;
+
+    return {
+      roles: roles.map((role) => {
+        const rId = Number(role.id);
+        const mapped = this.mapper.toSummary(role, permsMap.get(rId) ?? []);
+        return {
+          id: mapped.id,
+          code: mapped.code,
+          name: mapped.name,
+          isSystem: mapped.isSystem,
+          status: mapped.status,
+          statusName: mapped.statusName,
+          totalGrantedPermissions: mapped.permissions.length,
+        };
+      }),
+      modules: [...modulesSet].sort(),
+      rows,
+      summary: {
+        totalRoles: roles.length,
+        totalPermissions: catalog.length,
+        totalOrphanedPermissions,
+      },
+    };
   }
 
   /** Tạo mới vai trò và gán quyền (hỗ trợ cả permissionIds hoặc permissions codes) */
@@ -359,10 +627,6 @@ export class RolesService implements IRolesPublicService {
     permissionIds?: readonly number[],
     permissionCodes?: readonly string[],
   ): Promise<PermissionEntity[]> {
-    if (!this.permissionRepository) {
-      return [];
-    }
-
     const byId = new Map<number, PermissionEntity>();
     if (permissionIds && permissionIds.length > 0) {
       const foundByIds = await this.permissionRepository.findByIds(permissionIds);
@@ -395,7 +659,7 @@ export class RolesService implements IRolesPublicService {
     roleIds: readonly number[],
   ): Promise<Map<number, PermissionEntity[]>> {
     const map = new Map<number, PermissionEntity[]>();
-    if (roleIds.length === 0 || !this.permissionRepository) return map;
+    if (roleIds.length === 0) return map;
 
     const links = await this.rolePermissionRepository.findByRoleIds(roleIds);
     if (links.length === 0) return map;
@@ -413,5 +677,118 @@ export class RolesService implements IRolesPublicService {
       map.set(roleId, bucket);
     }
     return map;
+  }
+
+  /** Khởi tạo danh sách quyền công bố động từ các tệp module.manifest.json thực tế trên đĩa */
+  private initializeModuleManifests(): void {
+    const candidateDirs = [
+      resolve(process.cwd(), 'src/modules'),
+      resolve(process.cwd(), 'src/project-modules'),
+      resolve(process.cwd(), 'backend/src/modules'),
+      resolve(process.cwd(), 'backend/src/project-modules'),
+    ];
+
+    for (const baseDir of candidateDirs) {
+      if (!existsSync(baseDir)) continue;
+      const entries = readdirSync(baseDir, { withFileTypes: true });
+      for (const entry of entries) {
+        if (!entry.isDirectory()) continue;
+        const manifestPath = join(baseDir, entry.name, 'module.manifest.json');
+        if (!existsSync(manifestPath)) continue;
+        const raw = JSON.parse(readFileSync(manifestPath, 'utf8')) as {
+          name?: string;
+          displayName?: string;
+          permissions?: (string | ModulePermissionDeclaration)[];
+        };
+        const modName = (raw.name || entry.name).trim().toLowerCase();
+        if (modName && Array.isArray(raw.permissions)) {
+          const existing = this.registeredModules.get(modName);
+          const mergedPerms = existing
+            ? [...existing.permissions, ...raw.permissions]
+            : raw.permissions;
+          this.registerModulePermissions({
+            module: modName,
+            displayName: raw.displayName || existing?.displayName || modName,
+            permissions: mergedPerms,
+          });
+        }
+      }
+    }
+  }
+
+  /** Lấy bản đồ các module đang hoạt động (hỗ trợ override khi test hoặc đồng bộ replaceActiveModules) */
+  private getActiveModulesMap(): Map<string, ModulePermissionsManifestInput> {
+    if (this.customActiveModulesOverride) {
+      return this.customActiveModulesOverride;
+    }
+    return this.registeredModules;
+  }
+
+  /** Tổng hợp bản đồ mã quyền -> thông tin quyền đã chuẩn hóa từ toàn bộ các module đang hoạt động */
+  private getActiveDeclaredPermissionsMap(): Map<string, NormalizedPermissionDeclaration> {
+    const activeModules = this.getActiveModulesMap();
+    const map = new Map<string, NormalizedPermissionDeclaration>();
+
+    for (const [modKey, manifest] of activeModules.entries()) {
+      const moduleName = modKey.trim().toLowerCase();
+      const moduleDisplayName = manifest.displayName?.trim() || moduleName;
+
+      for (const permEntry of manifest.permissions) {
+        if (typeof permEntry === 'string') {
+          const code = permEntry.trim().toLowerCase();
+          if (!code) continue;
+          map.set(code, {
+            code,
+            name: this.formatPermissionDisplayName(code),
+            module: moduleName,
+            moduleDisplayName,
+            featureGroup: this.deriveFeatureGroup(code, moduleName),
+            description: `Permission ${code} declared by module ${moduleName}`,
+          });
+        } else if (permEntry && typeof permEntry === 'object') {
+          const code = permEntry.code.trim().toLowerCase();
+          if (!code) continue;
+          map.set(code, {
+            code,
+            name: permEntry.name?.trim() || this.formatPermissionDisplayName(code),
+            module: moduleName,
+            moduleDisplayName,
+            featureGroup:
+              permEntry.featureGroup?.trim() || this.deriveFeatureGroup(code, moduleName),
+            description:
+              permEntry.description !== undefined
+                ? permEntry.description
+                : `Permission ${code} declared by module ${moduleName}`,
+          });
+        }
+      }
+    }
+
+    return map;
+  }
+
+  /** Trích xuất tên module từ mã quyền (ví dụ `users.read` -> `users`) */
+  private extractModuleFromCode(code: string): string {
+    const normalized = code.trim().toLowerCase();
+    return normalized.includes('.') ? normalized.split('.')[0]! : 'core';
+  }
+
+  /** Suy diễn nhóm chức năng từ mã quyền (ví dụ `auth.sessions.manage` -> `auth.sessions`, `users.read` -> `users`) */
+  private deriveFeatureGroup(code: string, moduleName: string): string {
+    const parts = code.trim().toLowerCase().split('.').filter(Boolean);
+    if (parts.length >= 3) {
+      return `${parts[0]}.${parts[1]}`;
+    }
+    return moduleName || parts[0] || 'core';
+  }
+
+  /** Tạo tên hiển thị thân thiện từ mã quyền */
+  private formatPermissionDisplayName(code: string): string {
+    return code
+      .trim()
+      .split(/[._-]+/)
+      .filter(Boolean)
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(' ');
   }
 }

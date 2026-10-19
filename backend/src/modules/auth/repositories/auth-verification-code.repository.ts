@@ -1,5 +1,5 @@
 import { Injectable, Optional } from '@nestjs/common';
-import { DataSource, IsNull } from 'typeorm';
+import { DataSource, IsNull, Like } from 'typeorm';
 import { BaseTypeOrmRepository, TransactionManager } from '@packages/database/index.js';
 import {
   AuthVerificationCodeEntity,
@@ -33,14 +33,14 @@ export class AuthVerificationCodeRepository extends BaseTypeOrmRepository<AuthVe
     });
   }
 
-  /** Tìm bản ghi xác minh theo mã băm SHA-256 (dành cho link token xác minh Email) */
+  /** Tìm bản ghi xác minh theo mã băm SHA-256 (dành cho link token hoặc mã OTP xác minh Email) */
   public async findByCodeHash(
     codeHash: string,
     channel: VerificationChannelCode,
   ): Promise<AuthVerificationCodeEntity | null> {
     return this.repository.findOne({
       where: {
-        codeHash,
+        codeHash: Like(`%${codeHash}%`),
         channel,
         verifiedAt: IsNull(),
       },
@@ -48,4 +48,3 @@ export class AuthVerificationCodeRepository extends BaseTypeOrmRepository<AuthVe
     });
   }
 }
-

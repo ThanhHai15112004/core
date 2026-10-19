@@ -9,7 +9,12 @@
   "author": "Core Platform Team",
   "entryModule": "AuthModule",
   "dependencies": ["database", "redis", "security", "users"],
-  "permissions": ["auth.sessions.manage"],
+  "permissions": [
+    "auth.sessions.manage",
+    "auth.mfa.manage",
+    "auth.settings.read",
+    "auth.settings.write"
+  ],
   "events": {
     "published": [
       "auth.login_succeeded",

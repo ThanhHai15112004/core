@@ -21,7 +21,6 @@ import {
   getAuthEventTypeName,
 } from '../contracts/index.js';
 import type { AuthLoginHistoryEntity } from '../entities/auth-login-history.entity.js';
-import type { AuthSessionEntity } from '../entities/auth-session.entity.js';
 import { AuthLoginHistoryRepository } from '../repositories/auth-login-history.repository.js';
 import { AuthSessionRepository } from '../repositories/auth-session.repository.js';
 import type { LoginHistoryItemResponse, SessionItemResponse } from '../responses/auth.response.js';
@@ -54,9 +53,6 @@ export interface RecordAuthEventInput {
 
 @Injectable()
 export class SessionService {
-  private readonly fallbackLoginHistory: AuthLoginHistoryEntity[] = [];
-  private fallbackHistorySeq = 0;
-
   constructor(
     private readonly sessionRepository: AuthSessionRepository,
     private readonly tokenService: TokenService,
@@ -93,7 +89,7 @@ export class SessionService {
     };
   }
 
-  /** Ghi lịch sử sự kiện Đăng nhập / Đăng xuất / Thu hồi phiên (tôn trọng cờ enableLoginAuditLog) */
+  /** Ghi lịch sử sự kiện Đăng nhập / Đăng xuất / Thu hồi phiên vào DB (tôn trọng cờ enableLoginAuditLog) */
   public async recordAuthEvent(
     input: RecordAuthEventInput,
   ): Promise<AuthLoginHistoryEntity | null> {
@@ -101,36 +97,14 @@ export class SessionService {
     if (!enableLoginAuditLog) {
       return null;
     }
+    if (!this.loginHistoryRepository) {
+      throw new Error('AuthLoginHistoryRepository is not initialized');
+    }
 
-    const now = new Date();
     const deviceName = input.deviceName ?? this.extractDeviceName(input.userAgent);
     const status = input.status ?? AUTH_EVENT_STATUS.SUCCESS;
 
-    if (
-      this.loginHistoryRepository &&
-      typeof this.loginHistoryRepository.recordEvent === 'function'
-    ) {
-      try {
-        const saved = await this.loginHistoryRepository.recordEvent({
-          userId: input.userId ?? null,
-          sessionId: input.sessionId ?? null,
-          identifier: input.identifier ?? null,
-          eventType: input.eventType,
-          status,
-          ipAddress: input.ipAddress ?? null,
-          userAgent: input.userAgent ?? null,
-          deviceName,
-          reason: input.reason ?? null,
-        });
-        this.fallbackLoginHistory.unshift(saved);
-        return saved;
-      } catch {
-        // Fallback sang bộ nhớ đệm nếu môi trường test không khởi tạo bảng auth_login_histories
-      }
-    }
-
-    const fallbackEntry = {
-      id: ++this.fallbackHistorySeq,
+    return await this.loginHistoryRepository.recordEvent({
       userId: input.userId ?? null,
       sessionId: input.sessionId ?? null,
       identifier: input.identifier ?? null,
@@ -140,13 +114,7 @@ export class SessionService {
       userAgent: input.userAgent ?? null,
       deviceName,
       reason: input.reason ?? null,
-      createdAt: now,
-      updatedAt: now,
-      deletedAt: null,
-    } as AuthLoginHistoryEntity;
-
-    this.fallbackLoginHistory.unshift(fallbackEntry);
-    return fallbackEntry;
+    });
   }
 
   /** Tạo phiên đăng nhập mới và phát hành cặp Access Token + Refresh Token (Mục 3.4.1 & 3.4.3) */
@@ -363,9 +331,7 @@ export class SessionService {
     await this.sessionRepository.saveEntity(session);
 
     const redisTtlSec =
-      idleTimeoutMs > 0
-        ? Math.min(remainingSec, Math.floor(idleTimeoutMs / 1000))
-        : remainingSec;
+      idleTimeoutMs > 0 ? Math.min(remainingSec, Math.floor(idleTimeoutMs / 1000)) : remainingSec;
     await this.cacheActiveSession(session.id, user.id, redisTtlSec);
 
     return {
@@ -476,80 +442,16 @@ export class SessionService {
     }));
   }
 
-  /** Xem lịch sử đăng nhập & đăng xuất theo thời gian, IP và thiết bị (Mục 3.4.7) */
+  /** Xem lịch sử đăng nhập & đăng xuất theo thời gian, IP và thiết bị trực tiếp từ DB (Mục 3.4.7) */
   public async listUserLoginHistory(
     userId: number,
     limit = 50,
   ): Promise<LoginHistoryItemResponse[]> {
+    if (!this.loginHistoryRepository) {
+      throw new Error('AuthLoginHistoryRepository is not initialized');
+    }
     const safeLimit = Math.max(1, Math.min(200, limit));
-    let records: AuthLoginHistoryEntity[] = [];
-
-    if (
-      this.loginHistoryRepository &&
-      typeof this.loginHistoryRepository.findByUserId === 'function'
-    ) {
-      try {
-        records = await this.loginHistoryRepository.findByUserId(userId, safeLimit);
-      } catch {
-        records = [];
-      }
-    }
-
-    if (records.length === 0) {
-      records = this.fallbackLoginHistory
-        .filter((h) => Number(h.userId) === Number(userId))
-        .slice(0, safeLimit);
-    }
-
-    // Nếu chưa có bản ghi trong auth_login_histories nhưng đã có phiên trong auth_sessions, tổng hợp từ auth_sessions
-    if (records.length === 0) {
-      const repoAny = this.sessionRepository as unknown as {
-        findAllByUserId?: (uid: number, lim?: number) => Promise<AuthSessionEntity[]>;
-      };
-      const sessions: AuthSessionEntity[] =
-        typeof repoAny.findAllByUserId === 'function'
-          ? await repoAny.findAllByUserId(userId, safeLimit).catch(() => [])
-          : await this.sessionRepository.findActiveByUserId(userId).catch(() => []);
-
-      const synthesized: LoginHistoryItemResponse[] = [];
-      for (const s of sessions) {
-        if (s.revokedAt) {
-          const isLogout = (s.revokeReason ?? '').toLowerCase().includes('logged out');
-          const evCode = isLogout ? AUTH_EVENT_TYPE.LOGOUT : AUTH_EVENT_TYPE.SESSION_REVOKED;
-          synthesized.push({
-            id: Number(s.id) * 10 + 2,
-            userId: Number(s.userId),
-            sessionId: Number(s.id),
-            identifier: null,
-            eventType: evCode,
-            eventTypeName: getAuthEventTypeName(evCode),
-            status: AUTH_EVENT_STATUS.SUCCESS,
-            statusName: 'SUCCESS',
-            ipAddress: s.ipAddress ?? null,
-            userAgent: s.userAgent ?? null,
-            deviceName: s.deviceName ?? null,
-            reason: s.revokeReason ?? 'Session revoked',
-            createdAt: s.revokedAt.toISOString(),
-          });
-        }
-        synthesized.push({
-          id: Number(s.id) * 10 + 1,
-          userId: Number(s.userId),
-          sessionId: Number(s.id),
-          identifier: null,
-          eventType: AUTH_EVENT_TYPE.LOGIN_SUCCESS,
-          eventTypeName: 'LOGIN_SUCCESS',
-          status: AUTH_EVENT_STATUS.SUCCESS,
-          statusName: 'SUCCESS',
-          ipAddress: s.ipAddress ?? null,
-          userAgent: s.userAgent ?? null,
-          deviceName: s.deviceName ?? null,
-          reason: 'Session created',
-          createdAt: s.createdAt.toISOString(),
-        });
-      }
-      return synthesized.slice(0, safeLimit);
-    }
+    const records = await this.loginHistoryRepository.findByUserId(userId, safeLimit);
 
     return records.map((r) => ({
       id: Number(r.id),

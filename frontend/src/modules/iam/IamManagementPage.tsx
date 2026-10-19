@@ -315,10 +315,22 @@ export const IamManagementPage: React.FC = () => {
     }
   }, [accessToken, authHeaders, limit, orgFilter, page, roleFilter, searchQuery, setAccessToken, setRefreshToken, statusFilter]);
 
+  const [currentUserPermissions, setCurrentUserPermissions] = useState<string[] | null>(null);
+  const [currentUserRoles, setCurrentUserRoles] = useState<string[]>([]);
+
+  const hasPermission = useCallback(
+    (perm: string): boolean => {
+      if (!currentUserPermissions) return true;
+      if (currentUserRoles.includes('super_admin')) return true;
+      return currentUserPermissions.includes(perm);
+    },
+    [currentUserPermissions, currentUserRoles],
+  );
+
   const loadAuthProfileData = useCallback(async () => {
     if (!accessToken) return;
     try {
-      const [mfa, sess, hist, secSettings] = await Promise.all([
+      const [mfa, sess, hist, secSettings, meProfile] = await Promise.all([
         fetchApi<{
           mfaEnabled: boolean;
           totpEnabled: boolean;
@@ -329,12 +341,21 @@ export const IamManagementPage: React.FC = () => {
         fetchApi<SessionItem[]>(API_ROUTES.AUTH.SESSIONS, { headers: authHeaders() }),
         fetchApi<LoginHistoryItem[]>(API_ROUTES.AUTH.LOGIN_HISTORY(50), { headers: authHeaders() }).catch(() => []),
         fetchApi<SecuritySettingsState>(API_ROUTES.AUTH.SECURITY_SETTINGS, { headers: authHeaders() }).catch(() => null),
+        fetchApi<{ permissions?: string[]; roles?: Array<{ code: string }> }>(API_ROUTES.AUTH.ME, {
+          headers: authHeaders(),
+        }).catch(() => null),
       ]);
       setMfaStatus(mfa);
       setSessions(Array.isArray(sess) ? sess : []);
       setLoginHistory(Array.isArray(hist) ? hist : []);
       if (secSettings) {
         setSecuritySettings(secSettings);
+      }
+      if (meProfile) {
+        setCurrentUserPermissions(Array.isArray(meProfile.permissions) ? meProfile.permissions : []);
+        setCurrentUserRoles(
+          Array.isArray(meProfile.roles) ? meProfile.roles.map((r) => r.code) : [],
+        );
       }
     } catch (err) {
       if (err && typeof err === 'object' && 'status' in err && (err as { status: number }).status === 401) {
@@ -1208,6 +1229,59 @@ export const IamManagementPage: React.FC = () => {
       notify('ok', `Đã xóa vai trò #${role.id} (${role.code})!`);
     } catch (err) {
       notify('err', err instanceof Error ? err.message : 'Delete role failed');
+    }
+  };
+
+  const handleSyncPermissions = async () => {
+    try {
+      const res = await fetchApi<{
+        totalDeclared: number;
+        createdCount: number;
+        updatedCount: number;
+        unchangedCount: number;
+        orphanedCount: number;
+      }>(API_ROUTES.ROLES.PERMISSIONS_SYNC, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({}),
+      });
+      await loadDirectoryData();
+      notify(
+        'ok',
+        `Đồng bộ quyền thành công: ${res.totalDeclared} quyền công bố | tạo mới ${res.createdCount} | cập nhật ${res.updatedCount} | giữ nguyên ${res.unchangedCount} | mồ côi ${res.orphanedCount}.`,
+      );
+    } catch (err) {
+      notify('err', err instanceof Error ? err.message : 'Sync permissions failed');
+    }
+  };
+
+  const handleCheckOrphanPermissions = async () => {
+    try {
+      const list = await fetchApi<Array<{ code: string; warningMessage: string }>>(
+        API_ROUTES.ROLES.PERMISSIONS_ORPHANS,
+        { headers: authHeaders() },
+      );
+      if (!list || list.length === 0) {
+        notify('ok', 'Không có quyền mồ côi nào trong hệ thống.');
+      } else {
+        notify('err', `Cảnh báo ${list.length} quyền mồ côi: ${list.map((i) => i.code).join(', ')}`);
+      }
+    } catch (err) {
+      notify('err', err instanceof Error ? err.message : 'Check orphan permissions failed');
+    }
+  };
+
+  const handleViewPermissionMatrix = async () => {
+    try {
+      const matrix = await fetchApi<{
+        summary: { totalRoles: number; totalPermissions: number; totalOrphanedPermissions: number };
+      }>(API_ROUTES.ROLES.PERMISSIONS_MATRIX, { headers: authHeaders() });
+      notify(
+        'ok',
+        `Ma trận Vai trò × Quyền: ${matrix.summary.totalRoles} vai trò × ${matrix.summary.totalPermissions} quyền (mồ côi: ${matrix.summary.totalOrphanedPermissions}).`,
+      );
+    } catch (err) {
+      notify('err', err instanceof Error ? err.message : 'Load permission matrix failed');
     }
   };
 
@@ -2801,9 +2875,43 @@ export const IamManagementPage: React.FC = () => {
                 value={newRolePerms}
                 onChange={(e) => setNewRolePerms(e.target.value)}
               />
-              <button type="submit" className="btn-primary" style={{ padding: '8px 16px' }}>
+              <button
+                type="submit"
+                className="btn-primary"
+                style={{ padding: '8px 16px' }}
+                disabled={!hasPermission('roles.manage')}
+              >
                 Thêm vai trò
               </button>
+              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  style={{ padding: '4px 10px', fontSize: '11px' }}
+                  disabled={!hasPermission('roles.manage')}
+                  onClick={() => void handleSyncPermissions()}
+                >
+                  Đồng bộ quyền Module (4.2)
+                </button>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  style={{ padding: '4px 10px', fontSize: '11px' }}
+                  disabled={!hasPermission('roles.read')}
+                  onClick={() => void handleCheckOrphanPermissions()}
+                >
+                  Cảnh báo quyền mồ côi
+                </button>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  style={{ padding: '4px 10px', fontSize: '11px' }}
+                  disabled={!hasPermission('roles.read')}
+                  onClick={() => void handleViewPermissionMatrix()}
+                >
+                  Ma trận Vai trò × Quyền
+                </button>
+              </div>
             </div>
 
             {selectedRoleUsers && (
@@ -2860,6 +2968,7 @@ export const IamManagementPage: React.FC = () => {
                         type="button"
                         className="btn-secondary"
                         style={{ padding: '2px 8px', fontSize: '11px' }}
+                        disabled={!hasPermission('roles.read')}
                         onClick={() => void handleViewRoleUsers(r)}
                       >
                         Xem user ({r.userCount ?? 0})
@@ -2868,6 +2977,7 @@ export const IamManagementPage: React.FC = () => {
                         type="button"
                         className="btn-secondary"
                         style={{ padding: '2px 8px', fontSize: '11px' }}
+                        disabled={!hasPermission('roles.manage')}
                         onClick={() => void handleQuickEditRole(r)}
                       >
                         Sửa / Gán quyền
@@ -2876,6 +2986,7 @@ export const IamManagementPage: React.FC = () => {
                         type="button"
                         className="btn-secondary"
                         style={{ padding: '2px 8px', fontSize: '11px' }}
+                        disabled={!hasPermission('roles.manage')}
                         onClick={() => void handleCloneRole(r)}
                       >
                         Sao chép
@@ -2884,7 +2995,11 @@ export const IamManagementPage: React.FC = () => {
                         type="button"
                         className="btn-secondary"
                         style={{ padding: '2px 8px', fontSize: '11px' }}
-                        disabled={Boolean(r.isSystem) || (r.userCount ?? 0) > 0}
+                        disabled={
+                          !hasPermission('roles.manage') ||
+                          Boolean(r.isSystem) ||
+                          (r.userCount ?? 0) > 0
+                        }
                         title={
                           r.isSystem
                             ? 'Vai trò hệ thống bị khóa không cho xóa'

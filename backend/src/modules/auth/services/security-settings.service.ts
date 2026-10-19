@@ -35,150 +35,33 @@ export const DEFAULT_DISALLOWED_PASSWORDS: readonly string[] = [
 
 @Injectable()
 export class SecuritySettingsService {
-  private cached: SecuritySettingsResponse = {
-    passwordHashAlgorithm: 'SCRYPT',
-    dbEncryptionAlgorithm: 'AES_256_GCM',
-    encryptFieldsAtRest: true,
-    mfaPolicy: 'OPTIONAL',
-    allowedMfaMethods: ['TOTP', 'EMAIL_OTP', 'RECOVERY_CODE'],
-    maxFailedLoginAttempts: 5,
-    lockoutDurationMinutes: 15,
-    passwordMinLength: 8,
-    requireUppercase: true,
-    requireNumbers: true,
-    requireSpecialChars: false,
-    requireCurrentPasswordOnChange: true,
-    disallowedPasswords: [...DEFAULT_DISALLOWED_PASSWORDS],
-    disallowUserInfoInPassword: true,
-    preventPasswordReuse: true,
-    passwordHistoryLimit: 5,
-    revokeSessionsOnPasswordChange: true,
-    allowEmailRegistration: true,
-    allowPhoneRegistration: true,
-    requireEmailVerification: false,
-    requirePhoneVerification: false,
-    otpMaxSendCount: 5,
-    otpMaxAttempts: 5,
-    otpCooldownSeconds: 60,
-    sessionIdleTimeoutMinutes: 30,
-    sessionMaxLifetimeMinutes: 10080,
-    enableLoginAuditLog: true,
-    availablePasswordHashAlgorithms: [...PASSWORD_HASH_ALGORITHMS],
-    availableDbEncryptionAlgorithms: [...DB_ENCRYPTION_ALGORITHMS],
-    updatedAt: new Date().toISOString(),
-  };
-
   constructor(
-    @Optional() private readonly settingRepo?: AuthSecuritySettingRepository,
+    private readonly settingRepo: AuthSecuritySettingRepository,
     @Optional() private readonly passwordHasher?: PasswordHasherService,
     @Optional() private readonly fieldEncryption?: FieldEncryptionService,
   ) {}
 
-  /** Lấy cấu hình bảo mật & mã hóa hiện hành (ưu tiên đọc từ DB nếu sẵn sàng, fallback in-memory) */
+  /** Lấy cấu hình bảo mật & mã hóa hiện hành trực tiếp từ DB */
   public async getSettings(): Promise<SecuritySettingsResponse> {
-    if (this.settingRepo) {
-      try {
-        const repoAny = this.settingRepo as unknown as {
-          findByScopeKey?: (scope: string) => Promise<AuthSecuritySettingEntity | null>;
-          findGlobal?: () => Promise<AuthSecuritySettingEntity | null>;
-        };
-        const persisted =
-          typeof repoAny.findByScopeKey === 'function'
-            ? await repoAny.findByScopeKey('GLOBAL')
-            : typeof repoAny.findGlobal === 'function'
-              ? await repoAny.findGlobal()
-              : null;
-
-        if (persisted) {
-          this.cached = {
-            passwordHashAlgorithm: getPasswordHashAlgoName(
-              parsePasswordHashAlgoCode(persisted.passwordHashAlgorithm),
-            ),
-            dbEncryptionAlgorithm: getDbEncryptionAlgoName(
-              parseDbEncryptionAlgoCode(persisted.dbEncryptionAlgorithm),
-            ),
-            encryptFieldsAtRest: Boolean(persisted.encryptFieldsAtRest),
-            mfaPolicy: getMfaPolicyName(parseMfaPolicyCode(persisted.mfaPolicy)),
-            allowedMfaMethods: this.parseAllowedMethods(persisted.allowedMfaMethodsJson),
-            maxFailedLoginAttempts: persisted.maxFailedLoginAttempts,
-            lockoutDurationMinutes: persisted.lockoutDurationMinutes,
-            passwordMinLength: persisted.passwordMinLength,
-            requireUppercase: Boolean(persisted.requireUppercase),
-            requireNumbers: Boolean(persisted.requireNumbers),
-            requireSpecialChars: Boolean(persisted.requireSpecialChars),
-            requireCurrentPasswordOnChange:
-              persisted.requireCurrentPasswordOnChange !== undefined
-                ? Boolean(persisted.requireCurrentPasswordOnChange)
-                : this.cached.requireCurrentPasswordOnChange,
-            disallowedPasswords: this.parseDisallowedPasswords(
-              persisted.disallowedPasswordsJson,
-              this.cached.disallowedPasswords,
-            ),
-            disallowUserInfoInPassword:
-              persisted.disallowUserInfoInPassword !== undefined
-                ? Boolean(persisted.disallowUserInfoInPassword)
-                : this.cached.disallowUserInfoInPassword,
-            preventPasswordReuse:
-              persisted.preventPasswordReuse !== undefined
-                ? Boolean(persisted.preventPasswordReuse)
-                : this.cached.preventPasswordReuse,
-            passwordHistoryLimit:
-              persisted.passwordHistoryLimit ?? this.cached.passwordHistoryLimit,
-            revokeSessionsOnPasswordChange:
-              persisted.revokeSessionsOnPasswordChange !== undefined
-                ? Boolean(persisted.revokeSessionsOnPasswordChange)
-                : this.cached.revokeSessionsOnPasswordChange,
-            allowEmailRegistration:
-              persisted.allowEmailRegistration !== undefined
-                ? Boolean(persisted.allowEmailRegistration)
-                : this.cached.allowEmailRegistration,
-            allowPhoneRegistration:
-              persisted.allowPhoneRegistration !== undefined
-                ? Boolean(persisted.allowPhoneRegistration)
-                : this.cached.allowPhoneRegistration,
-            requireEmailVerification:
-              persisted.requireEmailVerification !== undefined
-                ? Boolean(persisted.requireEmailVerification)
-                : this.cached.requireEmailVerification,
-            requirePhoneVerification:
-              persisted.requirePhoneVerification !== undefined
-                ? Boolean(persisted.requirePhoneVerification)
-                : this.cached.requirePhoneVerification,
-            otpMaxSendCount: persisted.otpMaxSendCount ?? this.cached.otpMaxSendCount,
-            otpMaxAttempts: persisted.otpMaxAttempts ?? this.cached.otpMaxAttempts,
-            otpCooldownSeconds: persisted.otpCooldownSeconds ?? this.cached.otpCooldownSeconds,
-            sessionIdleTimeoutMinutes:
-              persisted.sessionIdleTimeoutMinutes !== undefined
-                ? Number(persisted.sessionIdleTimeoutMinutes)
-                : (this.cached.sessionIdleTimeoutMinutes ?? 30),
-            sessionMaxLifetimeMinutes:
-              persisted.sessionMaxLifetimeMinutes !== undefined
-                ? Number(persisted.sessionMaxLifetimeMinutes)
-                : (this.cached.sessionMaxLifetimeMinutes ?? 10080),
-            enableLoginAuditLog:
-              persisted.enableLoginAuditLog !== undefined
-                ? Boolean(persisted.enableLoginAuditLog)
-                : (this.cached.enableLoginAuditLog ?? true),
-            availablePasswordHashAlgorithms: [...PASSWORD_HASH_ALGORITHMS],
-            availableDbEncryptionAlgorithms: [...DB_ENCRYPTION_ALGORITHMS],
-            updatedAt: persisted.updatedAt
-              ? persisted.updatedAt.toISOString()
-              : this.cached.updatedAt,
-          };
-        }
-      } catch {
-        // Fallback an toàn về bộ nhớ đệm khi DB chưa khởi tạo bảng hoặc đang chạy chế độ không DB
-      }
+    if (!this.settingRepo) {
+      throw new Error('AuthSecuritySettingRepository is not initialized');
     }
-
-    this.syncCryptoProviders(this.cached);
-    return this.cached;
+    let persisted = await this.settingRepo.findGlobal();
+    if (!persisted) {
+      persisted = await this.settingRepo.saveGlobal({ scopeKey: 'GLOBAL' });
+    }
+    const settings = this.toResponse(persisted);
+    this.syncCryptoProviders(settings);
+    return settings;
   }
 
-  /** Cập nhật cấu hình bảo mật & mã hóa hệ thống và áp dụng tức thì cho các dịch vụ mật mã học */
+  /** Cập nhật cấu hình bảo mật & mã hóa hệ thống vào DB và áp dụng tức thì cho các dịch vụ mật mã học */
   public async updateSettings(
     dto: UpdateSecuritySettingsRequest,
   ): Promise<SecuritySettingsResponse> {
+    if (!this.settingRepo) {
+      throw new Error('AuthSecuritySettingRepository is not initialized');
+    }
     const current = await this.getSettings();
     const next: SecuritySettingsResponse = {
       ...current,
@@ -258,72 +141,114 @@ export class SecuritySettingsService {
       updatedAt: new Date().toISOString(),
     };
 
-    this.cached = next;
-    this.syncCryptoProviders(next);
+    const entityPayload: Partial<AuthSecuritySettingEntity> = {
+      scopeKey: 'GLOBAL',
+      passwordHashAlgorithm: parsePasswordHashAlgoCode(next.passwordHashAlgorithm),
+      dbEncryptionAlgorithm: parseDbEncryptionAlgoCode(next.dbEncryptionAlgorithm),
+      encryptFieldsAtRest: next.encryptFieldsAtRest,
+      mfaPolicy: parseMfaPolicyCode(next.mfaPolicy),
+      allowedMfaMethodsJson: JSON.stringify(next.allowedMfaMethods),
+      maxFailedLoginAttempts: next.maxFailedLoginAttempts,
+      lockoutDurationMinutes: next.lockoutDurationMinutes,
+      passwordMinLength: next.passwordMinLength,
+      requireUppercase: next.requireUppercase,
+      requireNumbers: next.requireNumbers,
+      requireSpecialChars: next.requireSpecialChars,
+      requireCurrentPasswordOnChange: next.requireCurrentPasswordOnChange,
+      disallowedPasswordsJson: JSON.stringify(next.disallowedPasswords),
+      disallowUserInfoInPassword: next.disallowUserInfoInPassword,
+      preventPasswordReuse: next.preventPasswordReuse,
+      passwordHistoryLimit: next.passwordHistoryLimit,
+      revokeSessionsOnPasswordChange: next.revokeSessionsOnPasswordChange,
+      allowEmailRegistration: next.allowEmailRegistration,
+      allowPhoneRegistration: next.allowPhoneRegistration,
+      requireEmailVerification: next.requireEmailVerification,
+      requirePhoneVerification: next.requirePhoneVerification,
+      otpMaxSendCount: next.otpMaxSendCount,
+      otpMaxAttempts: next.otpMaxAttempts,
+      otpCooldownSeconds: next.otpCooldownSeconds,
+      sessionIdleTimeoutMinutes: next.sessionIdleTimeoutMinutes ?? 30,
+      sessionMaxLifetimeMinutes: next.sessionMaxLifetimeMinutes ?? 10080,
+      enableLoginAuditLog: next.enableLoginAuditLog ?? true,
+    };
 
-    if (this.settingRepo) {
-      const entityPayload: Partial<AuthSecuritySettingEntity> = {
-        scopeKey: 'GLOBAL',
-        passwordHashAlgorithm: parsePasswordHashAlgoCode(next.passwordHashAlgorithm),
-        dbEncryptionAlgorithm: parseDbEncryptionAlgoCode(next.dbEncryptionAlgorithm),
-        encryptFieldsAtRest: next.encryptFieldsAtRest,
-        mfaPolicy: parseMfaPolicyCode(next.mfaPolicy),
-        allowedMfaMethodsJson: JSON.stringify(next.allowedMfaMethods),
-        maxFailedLoginAttempts: next.maxFailedLoginAttempts,
-        lockoutDurationMinutes: next.lockoutDurationMinutes,
-        passwordMinLength: next.passwordMinLength,
-        requireUppercase: next.requireUppercase,
-        requireNumbers: next.requireNumbers,
-        requireSpecialChars: next.requireSpecialChars,
-        requireCurrentPasswordOnChange: next.requireCurrentPasswordOnChange,
-        disallowedPasswordsJson: JSON.stringify(next.disallowedPasswords),
-        disallowUserInfoInPassword: next.disallowUserInfoInPassword,
-        preventPasswordReuse: next.preventPasswordReuse,
-        passwordHistoryLimit: next.passwordHistoryLimit,
-        revokeSessionsOnPasswordChange: next.revokeSessionsOnPasswordChange,
-        allowEmailRegistration: next.allowEmailRegistration,
-        allowPhoneRegistration: next.allowPhoneRegistration,
-        requireEmailVerification: next.requireEmailVerification,
-        requirePhoneVerification: next.requirePhoneVerification,
-        otpMaxSendCount: next.otpMaxSendCount,
-        otpMaxAttempts: next.otpMaxAttempts,
-        otpCooldownSeconds: next.otpCooldownSeconds,
-        sessionIdleTimeoutMinutes: next.sessionIdleTimeoutMinutes ?? 30,
-        sessionMaxLifetimeMinutes: next.sessionMaxLifetimeMinutes ?? 10080,
-        enableLoginAuditLog: next.enableLoginAuditLog ?? true,
-      };
+    const saved = await this.settingRepo.saveGlobal(entityPayload);
+    const settings = this.toResponse(saved);
+    this.syncCryptoProviders(settings);
+    return settings;
+  }
 
-      const repoAny = this.settingRepo as unknown as {
-        findByScopeKey?: (scope: string) => Promise<AuthSecuritySettingEntity | null>;
-        saveEntity?: (data: Partial<AuthSecuritySettingEntity>) => Promise<unknown>;
-        saveGlobal?: (data: Partial<AuthSecuritySettingEntity>) => Promise<unknown>;
-      };
-
-      try {
-        if (typeof repoAny.saveGlobal === 'function') {
-          await repoAny.saveGlobal(entityPayload);
-        }
-      } catch {
-        // Bỏ qua lỗi ghi mock
-      }
-
-      try {
-        if (
-          typeof repoAny.findByScopeKey === 'function' &&
-          typeof repoAny.saveEntity === 'function'
-        ) {
-          const existing = await repoAny.findByScopeKey('GLOBAL');
-          await repoAny.saveEntity({
-            ...(existing ? { id: existing.id } : {}),
-            ...entityPayload,
-          });
-        }
-      } catch {
-        // Bỏ qua lỗi ghi DB nếu môi trường kiểm thử không chạy DB
-      }
-    }
-
-    return this.cached;
+  private toResponse(persisted: AuthSecuritySettingEntity): SecuritySettingsResponse {
+    return {
+      passwordHashAlgorithm: getPasswordHashAlgoName(
+        parsePasswordHashAlgoCode(persisted.passwordHashAlgorithm),
+      ),
+      dbEncryptionAlgorithm: getDbEncryptionAlgoName(
+        parseDbEncryptionAlgoCode(persisted.dbEncryptionAlgorithm),
+      ),
+      encryptFieldsAtRest: Boolean(persisted.encryptFieldsAtRest),
+      mfaPolicy: getMfaPolicyName(parseMfaPolicyCode(persisted.mfaPolicy)),
+      allowedMfaMethods: this.parseAllowedMethods(persisted.allowedMfaMethodsJson),
+      maxFailedLoginAttempts: persisted.maxFailedLoginAttempts,
+      lockoutDurationMinutes: persisted.lockoutDurationMinutes,
+      passwordMinLength: persisted.passwordMinLength,
+      requireUppercase: Boolean(persisted.requireUppercase),
+      requireNumbers: Boolean(persisted.requireNumbers),
+      requireSpecialChars: Boolean(persisted.requireSpecialChars),
+      requireCurrentPasswordOnChange:
+        persisted.requireCurrentPasswordOnChange !== undefined
+          ? Boolean(persisted.requireCurrentPasswordOnChange)
+          : true,
+      disallowedPasswords: this.parseDisallowedPasswords(
+        persisted.disallowedPasswordsJson,
+        DEFAULT_DISALLOWED_PASSWORDS,
+      ),
+      disallowUserInfoInPassword:
+        persisted.disallowUserInfoInPassword !== undefined
+          ? Boolean(persisted.disallowUserInfoInPassword)
+          : true,
+      preventPasswordReuse:
+        persisted.preventPasswordReuse !== undefined
+          ? Boolean(persisted.preventPasswordReuse)
+          : true,
+      passwordHistoryLimit: persisted.passwordHistoryLimit ?? 5,
+      revokeSessionsOnPasswordChange:
+        persisted.revokeSessionsOnPasswordChange !== undefined
+          ? Boolean(persisted.revokeSessionsOnPasswordChange)
+          : true,
+      allowEmailRegistration:
+        persisted.allowEmailRegistration !== undefined
+          ? Boolean(persisted.allowEmailRegistration)
+          : true,
+      allowPhoneRegistration:
+        persisted.allowPhoneRegistration !== undefined
+          ? Boolean(persisted.allowPhoneRegistration)
+          : true,
+      requireEmailVerification:
+        persisted.requireEmailVerification !== undefined
+          ? Boolean(persisted.requireEmailVerification)
+          : false,
+      requirePhoneVerification:
+        persisted.requirePhoneVerification !== undefined
+          ? Boolean(persisted.requirePhoneVerification)
+          : false,
+      otpMaxSendCount: persisted.otpMaxSendCount ?? 5,
+      otpMaxAttempts: persisted.otpMaxAttempts ?? 5,
+      otpCooldownSeconds: persisted.otpCooldownSeconds ?? 60,
+      sessionIdleTimeoutMinutes:
+        persisted.sessionIdleTimeoutMinutes !== undefined
+          ? Number(persisted.sessionIdleTimeoutMinutes)
+          : 30,
+      sessionMaxLifetimeMinutes:
+        persisted.sessionMaxLifetimeMinutes !== undefined
+          ? Number(persisted.sessionMaxLifetimeMinutes)
+          : 10080,
+      enableLoginAuditLog:
+        persisted.enableLoginAuditLog !== undefined ? Boolean(persisted.enableLoginAuditLog) : true,
+      availablePasswordHashAlgorithms: [...PASSWORD_HASH_ALGORITHMS],
+      availableDbEncryptionAlgorithms: [...DB_ENCRYPTION_ALGORITHMS],
+      updatedAt: (persisted.updatedAt ?? new Date()).toISOString(),
+    };
   }
 
   /**
@@ -428,4 +353,3 @@ export class SecuritySettingsService {
     }
   }
 }
-

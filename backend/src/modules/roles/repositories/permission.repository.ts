@@ -82,4 +82,71 @@ export class PermissionRepository extends BaseTypeOrmRepository<PermissionEntity
   public async ensureByCodes(codes: readonly string[]): Promise<PermissionEntity[]> {
     return this.ensurePermissionsByCodes(codes);
   }
+
+  /**
+   * Đồng bộ idempotent danh sách quyền hạn từ các module vào bảng `permissions` (Mục 4.2 — không tạo trùng quyền).
+   */
+  public async upsertCatalogItems(
+    items: readonly {
+      code: string;
+      name: string;
+      module: string;
+      description: string | null;
+    }[],
+  ): Promise<{
+    createdCodes: string[];
+    updatedCodes: string[];
+    unchangedCount: number;
+  }> {
+    if (items.length === 0) {
+      return { createdCodes: [], updatedCodes: [], unchangedCount: 0 };
+    }
+
+    const allExisting = await this.findAll();
+    const byCode = new Map(allExisting.map((p) => [p.code.trim().toLowerCase(), p]));
+
+    const createdCodes: string[] = [];
+    const updatedCodes: string[] = [];
+    let unchangedCount = 0;
+
+    for (const item of items) {
+      const code = item.code.trim().toLowerCase();
+      if (!code) continue;
+
+      const existing = byCode.get(code);
+      if (!existing) {
+        const created = await this.saveEntity({
+          code,
+          name: item.name.trim() || code,
+          module: item.module.trim() || 'core',
+          description: item.description ?? `Permission ${code}`,
+          status: PERMISSION_STATUS.ACTIVE,
+        });
+        byCode.set(code, created);
+        createdCodes.push(code);
+      } else {
+        const nextName = item.name.trim() || existing.name;
+        const nextModule = item.module.trim() || existing.module;
+        const nextDesc =
+          item.description !== undefined ? item.description : (existing.description ?? null);
+
+        const changed =
+          existing.name !== nextName ||
+          existing.module !== nextModule ||
+          (existing.description ?? null) !== nextDesc;
+
+        if (changed) {
+          existing.name = nextName;
+          existing.module = nextModule;
+          existing.description = nextDesc;
+          await this.saveEntity(existing);
+          updatedCodes.push(code);
+        } else {
+          unchangedCount++;
+        }
+      }
+    }
+
+    return { createdCodes, updatedCodes, unchangedCount };
+  }
 }
