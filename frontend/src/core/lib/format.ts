@@ -177,3 +177,60 @@ export function formatInterval(ms: number): string {
   if (s < 3600) return `${round(s / 60, 1)}${UNIT.m}`;
   return `${round(s / 3600, 1)}${UNIT.h}`;
 }
+
+/** 5.3.6: Định dạng tiền tệ chuẩn theo locale & mã tiền tệ ISO 4217 (mặc định VND cho vi, USD cho en). */
+export function formatCurrency(
+  amount: Nullable<number>,
+  locale: string,
+  currencyCode?: string,
+): string {
+  if (isNil(amount) || Number.isNaN(amount)) return NO_VALUE;
+  const isVi = locale.toLowerCase().startsWith('vi');
+  const bcp47 = isVi ? 'vi-VN' : 'en-US';
+  const currency = currencyCode?.trim().toUpperCase() || (isVi ? 'VND' : 'USD');
+  return new Intl.NumberFormat(bcp47, {
+    style: 'currency',
+    currency,
+  }).format(amount);
+}
+
+/** 5.3.4 & 5.3.6: Định dạng ngày (dd/MM/yyyy cho vi, MM/dd/yyyy cho en) theo múi giờ người dùng. */
+export function formatDate(
+  value: Nullable<Date | string | number>,
+  locale: string,
+  timeZone = 'Asia/Ho_Chi_Minh',
+): string {
+  if (isNil(value) || value === '') return NO_VALUE;
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return NO_VALUE;
+  const bcp47 = locale.toLowerCase().startsWith('vi') ? 'vi-VN' : 'en-US';
+  return new Intl.DateTimeFormat(bcp47, {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    timeZone,
+  }).format(date);
+}
+
+/** 5.3.4, 5.3.5 & 5.3.6: Định dạng ngày giờ đầy đủ theo locale và múi giờ người dùng. */
+export function formatDateTime(
+  value: Nullable<Date | string | number>,
+  locale: string,
+  timeZone = 'Asia/Ho_Chi_Minh',
+  withSeconds = false,
+): string {
+  if (isNil(value) || value === '') return NO_VALUE;
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return NO_VALUE;
+  const bcp47 = locale.toLowerCase().startsWith('vi') ? 'vi-VN' : 'en-US';
+  return new Intl.DateTimeFormat(bcp47, {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    ...(withSeconds ? { second: '2-digit' } : {}),
+    hour12: false,
+    timeZone,
+  }).format(date);
+}

@@ -1,4 +1,9 @@
 import { discoverManifestCodeTypes } from '@packages/kernel/index.js';
+import {
+  STANDARD_BOOTSTRAP_LOCALES,
+  STANDARD_BOOTSTRAP_TIMEZONES,
+  getInitialStaticDictionaries,
+} from '@packages/i18n/index.js';
 import { DATA_SCOPE, type DataScopeCode, PasswordHasherService } from '@packages/security/index.js';
 import type { SeederContext, SeederContract } from '@packages/database/index.js';
 import {
@@ -1080,9 +1085,158 @@ export class IamMasterSeeder implements SeederContract {
       }
     }
 
+    // 8. Seed Dynamic I18n Locales, Timezones & Translations (Mục 5.3 — i18n_locales, i18n_timezones, i18n_translations)
+    for (const loc of STANDARD_BOOTSTRAP_LOCALES) {
+      if (isPostgres) {
+        await ctx.manager.query(
+          `INSERT INTO i18n_locales (
+             code, bcp47_tag, name, native_name, direction, date_format, datetime_format,
+             currency_code, number_decimal_separator, number_group_separator,
+             is_default, is_system, sort_order, status
+           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+           ON CONFLICT (code) DO UPDATE SET
+             bcp47_tag = EXCLUDED.bcp47_tag,
+             name = EXCLUDED.name,
+             native_name = EXCLUDED.native_name,
+             date_format = COALESCE(NULLIF(i18n_locales.date_format, ''), EXCLUDED.date_format),
+             datetime_format = COALESCE(NULLIF(i18n_locales.datetime_format, ''), EXCLUDED.datetime_format),
+             currency_code = COALESCE(NULLIF(i18n_locales.currency_code, ''), EXCLUDED.currency_code)`,
+          [
+            loc.code,
+            loc.bcp47Tag,
+            loc.name,
+            loc.nativeName,
+            loc.direction,
+            loc.dateFormat,
+            loc.datetimeFormat,
+            loc.currencyCode,
+            loc.numberDecimalSeparator,
+            loc.numberGroupSeparator,
+            loc.isDefault,
+            loc.isSystem,
+            loc.sortOrder,
+            loc.status,
+          ],
+        );
+      } else {
+        await ctx.manager.query(
+          `INSERT INTO i18n_locales (
+             code, bcp47_tag, name, native_name, direction, date_format, datetime_format,
+             currency_code, number_decimal_separator, number_group_separator,
+             is_default, is_system, sort_order, status
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON DUPLICATE KEY UPDATE
+             bcp47_tag = VALUES(bcp47_tag),
+             name = VALUES(name),
+             native_name = VALUES(native_name),
+             date_format = COALESCE(NULLIF(i18n_locales.date_format, ''), VALUES(date_format)),
+             datetime_format = COALESCE(NULLIF(i18n_locales.datetime_format, ''), VALUES(datetime_format)),
+             currency_code = COALESCE(NULLIF(i18n_locales.currency_code, ''), VALUES(currency_code))`,
+          [
+            loc.code,
+            loc.bcp47Tag,
+            loc.name,
+            loc.nativeName,
+            loc.direction,
+            loc.dateFormat,
+            loc.datetimeFormat,
+            loc.currencyCode,
+            loc.numberDecimalSeparator,
+            loc.numberGroupSeparator,
+            loc.isDefault,
+            loc.isSystem,
+            loc.sortOrder,
+            loc.status,
+          ],
+        );
+      }
+      affected++;
+    }
+
+    for (const tz of STANDARD_BOOTSTRAP_TIMEZONES) {
+      const labelsJson = JSON.stringify(tz.labels);
+      if (isPostgres) {
+        await ctx.manager.query(
+          `INSERT INTO i18n_timezones (
+             code, name, labels_json, utc_offset, utc_offset_minutes, region,
+             is_default, is_system, sort_order, status
+           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+           ON CONFLICT (code) DO UPDATE SET
+             name = EXCLUDED.name,
+             labels_json = COALESCE(i18n_timezones.labels_json, EXCLUDED.labels_json),
+             utc_offset = EXCLUDED.utc_offset,
+             utc_offset_minutes = EXCLUDED.utc_offset_minutes,
+             region = EXCLUDED.region`,
+          [
+            tz.code,
+            tz.name,
+            labelsJson,
+            tz.utcOffset,
+            tz.utcOffsetMinutes,
+            tz.region,
+            tz.isDefault,
+            tz.isSystem,
+            tz.sortOrder,
+            tz.status,
+          ],
+        );
+      } else {
+        await ctx.manager.query(
+          `INSERT INTO i18n_timezones (
+             code, name, labels_json, utc_offset, utc_offset_minutes, region,
+             is_default, is_system, sort_order, status
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON DUPLICATE KEY UPDATE
+             name = VALUES(name),
+             labels_json = COALESCE(i18n_timezones.labels_json, VALUES(labels_json)),
+             utc_offset = VALUES(utc_offset),
+             utc_offset_minutes = VALUES(utc_offset_minutes),
+             region = VALUES(region)`,
+          [
+            tz.code,
+            tz.name,
+            labelsJson,
+            tz.utcOffset,
+            tz.utcOffsetMinutes,
+            tz.region,
+            tz.isDefault,
+            tz.isSystem,
+            tz.sortOrder,
+            tz.status,
+          ],
+        );
+      }
+      affected++;
+    }
+
+    const staticDicts = getInitialStaticDictionaries();
+    for (const [locale, dict] of Object.entries(staticDicts)) {
+      for (const [key, value] of Object.entries(dict)) {
+        const namespace = key.includes('.') ? key.split('.')[0]! : 'common';
+        if (isPostgres) {
+          await ctx.manager.query(
+            `INSERT INTO i18n_translations (
+               locale, namespace, translation_key, translation_value, is_system, status
+             ) VALUES ($1, $2, $3, $4, TRUE, 1)
+             ON CONFLICT (locale, translation_key) DO NOTHING`,
+            [locale, namespace, key, value],
+          );
+        } else {
+          await ctx.manager.query(
+            `INSERT INTO i18n_translations (
+               locale, namespace, translation_key, translation_value, is_system, status
+             ) VALUES (?, ?, ?, ?, TRUE, 1)
+             ON DUPLICATE KEY UPDATE translation_value = COALESCE(NULLIF(i18n_translations.translation_value, ''), VALUES(translation_value))`,
+            [locale, namespace, key, value],
+          );
+        }
+        affected++;
+      }
+    }
+
     return {
       affected,
-      details: `${HCMC_ORGANIZATION_UNITS.length} HCMC org units (1 branch), ${STANDARD_IAM_PERMISSIONS.length} permissions, ${STANDARD_IAM_ROLES.length} roles, ${PRIVILEGED_ACCOUNTS.length} privileged accounts (@gmail.com), ${manifestCodeTypes.length} code_types seeded`,
+      details: `${HCMC_ORGANIZATION_UNITS.length} HCMC org units (1 branch), ${STANDARD_IAM_PERMISSIONS.length} permissions, ${STANDARD_IAM_ROLES.length} roles, ${PRIVILEGED_ACCOUNTS.length} privileged accounts (@gmail.com), ${manifestCodeTypes.length} code_types, ${STANDARD_BOOTSTRAP_LOCALES.length} i18n_locales, ${STANDARD_BOOTSTRAP_TIMEZONES.length} i18n_timezones seeded`,
     };
   }
 }

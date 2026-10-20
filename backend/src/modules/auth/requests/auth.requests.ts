@@ -1,6 +1,30 @@
 import { z } from 'zod';
+import { isSupportedLocale, isValidIanaTimezone } from '@packages/i18n/index.js';
 
 export const mfaMethodSchema = z.enum(['TOTP', 'EMAIL_OTP', 'SMS_OTP', 'RECOVERY_CODE']);
+
+export const updateMyPreferencesSchema = z.object({
+  preferredLocale: z
+    .string()
+    .trim()
+    .min(2)
+    .max(16)
+    .refine((loc) => isSupportedLocale(loc), {
+      message: 'Unsupported or inactive locale code in i18n_locales',
+    })
+    .optional(),
+  preferredTimezone: z
+    .string()
+    .trim()
+    .min(1)
+    .max(64)
+    .refine((tz) => isValidIanaTimezone(tz), {
+      message: 'Invalid IANA timezone identifier (e.g., Asia/Ho_Chi_Minh, UTC, America/New_York)',
+    })
+    .optional(),
+});
+
+export type UpdateMyPreferencesRequest = z.infer<typeof updateMyPreferencesSchema>;
 
 export const loginRequestSchema = z.object({
   identifier: z.string().trim().min(2).max(255),
@@ -78,7 +102,6 @@ export const resetPasswordSchema = z
 
 export type ResetPasswordRequest = z.infer<typeof resetPasswordSchema>;
 
-
 export const enableTotpMfaSchema = z.object({
   code: z
     .string()
@@ -155,6 +178,16 @@ export const registerRequestSchema = z
     city: z.string().trim().max(100).nullable().optional(),
     country: z.string().trim().max(100).nullable().optional(),
     bio: z.string().trim().max(2000).nullable().optional(),
+    preferredLocale: z.enum(['vi', 'en']).optional(),
+    preferredTimezone: z
+      .string()
+      .trim()
+      .min(1)
+      .max(64)
+      .refine((tz) => isValidIanaTimezone(tz), {
+        message: 'Invalid IANA timezone identifier',
+      })
+      .optional(),
     deviceName: z.string().trim().max(128).optional(),
   })
   .refine((data) => Boolean(data.email?.trim() || data.phone?.trim()), {
@@ -270,7 +303,8 @@ export const stepUpVerifySchema = z
     action: z.string().trim().max(128).optional(),
   })
   .refine((data) => Boolean(data.password?.trim() || data.code?.trim()), {
-    message: 'Either current password or MFA verification code is required for step-up authentication',
+    message:
+      'Either current password or MFA verification code is required for step-up authentication',
   });
 
 export type StepUpVerifyRequest = z.infer<typeof stepUpVerifySchema>;
@@ -299,7 +333,9 @@ export const createServiceAccountSchema = z.object({
   name: z.string().trim().min(2).max(150),
   description: z.string().trim().max(1000).nullable().optional(),
   scopes: z.array(z.string().trim().min(1).max(128)).max(200).optional().default([]),
-  status: z.union([z.number().int().min(1).max(3), z.enum(['ACTIVE', 'INACTIVE', 'REVOKED'])]).optional(),
+  status: z
+    .union([z.number().int().min(1).max(3), z.enum(['ACTIVE', 'INACTIVE', 'REVOKED'])])
+    .optional(),
 });
 
 export type CreateServiceAccountRequest = z.infer<typeof createServiceAccountSchema>;
@@ -308,7 +344,9 @@ export const updateServiceAccountSchema = z.object({
   name: z.string().trim().min(2).max(150).optional(),
   description: z.string().trim().max(1000).nullable().optional(),
   scopes: z.array(z.string().trim().min(1).max(128)).max(200).optional(),
-  status: z.union([z.number().int().min(1).max(3), z.enum(['ACTIVE', 'INACTIVE', 'REVOKED'])]).optional(),
+  status: z
+    .union([z.number().int().min(1).max(3), z.enum(['ACTIVE', 'INACTIVE', 'REVOKED'])])
+    .optional(),
 });
 
 export type UpdateServiceAccountRequest = z.infer<typeof updateServiceAccountSchema>;

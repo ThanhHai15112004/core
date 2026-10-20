@@ -1,6 +1,25 @@
 import { z } from 'zod';
 import { booleanQueryParam, intQueryParam, optionalQueryParam } from '@packages/http/index.js';
+import { isSupportedLocale, isValidIanaTimezone } from '@packages/i18n/index.js';
 import { USER_STATUS, type UserStatusCode, parseUserStatus } from '../contracts/index.js';
+
+export const preferredLocaleSchema = z
+  .string()
+  .trim()
+  .min(2)
+  .max(16)
+  .refine((loc) => isSupportedLocale(loc), {
+    message: 'Unsupported or inactive locale code in i18n_locales',
+  });
+
+export const preferredTimezoneSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(64)
+  .refine((tz) => isValidIanaTimezone(tz), {
+    message: 'Invalid IANA timezone identifier (e.g., Asia/Ho_Chi_Minh, UTC, America/New_York)',
+  });
 
 export const userStatusSchema = z.preprocess(
   (val) => (val === undefined ? undefined : parseUserStatus(val)),
@@ -47,6 +66,8 @@ export const createUserSchema = z
     city: z.string().trim().max(100).nullable().optional(),
     country: z.string().trim().max(100).nullable().optional(),
     bio: z.string().trim().max(2000).nullable().optional(),
+    preferredLocale: preferredLocaleSchema.optional(),
+    preferredTimezone: preferredTimezoneSchema.optional(),
     password: z.string().min(8).max(128),
     status: userStatusSchema.default(USER_STATUS.ACTIVE),
     managerId: coercePositiveInt.nullable().optional(),
@@ -78,11 +99,20 @@ export const updateUserSchema = z.object({
   city: z.string().trim().max(100).nullable().optional(),
   country: z.string().trim().max(100).nullable().optional(),
   bio: z.string().trim().max(2000).nullable().optional(),
+  preferredLocale: preferredLocaleSchema.optional(),
+  preferredTimezone: preferredTimezoneSchema.optional(),
   managerId: coercePositiveInt.nullable().optional(),
   expectedVersion: z.number().int().min(1).optional(),
 });
 
 export type UpdateUserRequest = z.infer<typeof updateUserSchema>;
+
+export const updateUserPreferencesSchema = z.object({
+  preferredLocale: preferredLocaleSchema.optional(),
+  preferredTimezone: preferredTimezoneSchema.optional(),
+});
+
+export type UpdateUserPreferencesRequest = z.infer<typeof updateUserPreferencesSchema>;
 
 export const lockUserSchema = z.object({
   reason: z.string().trim().min(2).max(255),

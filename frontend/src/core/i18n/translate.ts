@@ -6,12 +6,24 @@ export type TranslateParams = Record<string, string | number>;
 
 export const SUPPORTED_LOCALES: readonly SupportedLocale[] = ['vi', 'en'];
 export const DEFAULT_LOCALE: SupportedLocale = 'vi';
+export const DEFAULT_TIMEZONE = 'Asia/Ho_Chi_Minh';
 export const LOCALE_STORAGE_KEY = 'scp_locale';
+export const TIMEZONE_STORAGE_KEY = 'scp_timezone';
 
 const dictionaries: Record<SupportedLocale, unknown> = { vi, en };
 
 export function isSupportedLocale(value: unknown): value is SupportedLocale {
   return SUPPORTED_LOCALES.includes(value as SupportedLocale);
+}
+
+export function isValidTimezone(value: unknown): value is string {
+  if (typeof value !== 'string' || !value.trim()) return false;
+  try {
+    Intl.DateTimeFormat(undefined, { timeZone: value.trim() });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function readStoredLocale(): SupportedLocale {
@@ -24,8 +36,19 @@ export function readStoredLocale(): SupportedLocale {
   return DEFAULT_LOCALE;
 }
 
-/* Locale đang dùng, để code ngoài React (vd. fetchApi) đọc được. */
+export function readStoredTimezone(): string {
+  try {
+    const saved = localStorage.getItem(TIMEZONE_STORAGE_KEY);
+    if (isValidTimezone(saved)) return saved.trim();
+  } catch {
+    // localStorage bị chặn (private mode...) → dùng mặc định
+  }
+  return DEFAULT_TIMEZONE;
+}
+
+/* Locale & Timezone đang dùng, để code ngoài React (vd. fetchApi) đọc được. */
 let activeLocale: SupportedLocale = readStoredLocale();
+let activeTimezone: string = readStoredTimezone();
 
 export function getActiveLocale(): SupportedLocale {
   return activeLocale;
@@ -33,7 +56,19 @@ export function getActiveLocale(): SupportedLocale {
 
 export function setActiveLocale(locale: SupportedLocale): void {
   activeLocale = locale;
-  document.documentElement.lang = locale;
+  if (typeof document !== 'undefined') {
+    document.documentElement.lang = locale;
+  }
+}
+
+export function getActiveTimezone(): string {
+  return activeTimezone;
+}
+
+export function setActiveTimezone(timezone: string): void {
+  if (isValidTimezone(timezone)) {
+    activeTimezone = timezone.trim();
+  }
 }
 
 function resolvePath(target: unknown, path: string): unknown {
@@ -56,7 +91,7 @@ export function translate(locale: SupportedLocale, path: string, params?: Transl
 
   if (!params) return result;
   return Object.entries(params).reduce(
-    (acc, [key, val]) => acc.replaceAll(`{{${key}}}`, String(val)),
+    (acc, [key, val]) => acc.replaceAll(`{{${key}}}`, String(val)).replaceAll(`{${key}}`, String(val)),
     result,
   );
 }
@@ -80,9 +115,16 @@ export function formatRelative(value: Date | string | number, locale: SupportedL
   return rtf.format(0, 'second');
 }
 
-/** Format thời gian theo locale đang chọn. */
-export function formatTime(value: Date | string | number, locale: SupportedLocale, withSeconds = true): string {
+/** Format thời gian theo locale và múi giờ đang chọn. */
+export function formatTime(
+  value: Date | string | number,
+  locale: SupportedLocale,
+  withSeconds = true,
+  timeZone: string = activeTimezone,
+): string {
+  const validTz = isValidTimezone(timeZone) ? timeZone.trim() : DEFAULT_TIMEZONE;
   return new Date(value).toLocaleTimeString(locale === 'vi' ? 'vi-VN' : 'en-US', {
+    timeZone: validTz,
     hour12: false,
     hour: '2-digit',
     minute: '2-digit',

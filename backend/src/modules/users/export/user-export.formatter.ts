@@ -1,3 +1,4 @@
+import { LocaleFormatter } from '@packages/i18n/index.js';
 import { USER_STATUS } from '../contracts/index.js';
 import type { UserResponse } from '../responses/users.response.js';
 
@@ -110,21 +111,17 @@ export const USER_IMPORT_TEMPLATE_SAMPLE_ROWS: ReadonlyArray<ReadonlyArray<strin
   ],
 ];
 
-/** Định dạng ngày giờ Việt Nam `dd/MM/yyyy HH:mm:ss` phục vụ dòng "Ngày xuất dữ liệu" */
-export function formatVietnameseDateTime(date: Date = new Date()): string {
-  const pad = (n: number): string => String(n).padStart(2, '0');
-  return `${pad(date.getDate())}/${pad(date.getMonth() + 1)}/${date.getFullYear()} ${pad(
-    date.getHours(),
-  )}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+/** Định dạng ngày giờ báo cáo `dd/MM/yyyy HH:mm:ss` theo múi giờ người dùng (5.3.4, 5.3.5, 5.3.6) */
+export function formatVietnameseDateTime(date: Date = new Date(), timeZone?: string): string {
+  return LocaleFormatter.formatReportDateTime(date, timeZone);
 }
 
-/** Định dạng ngày ngắn `dd/MM/yyyy` từ chuỗi ISO hoặc Date */
-export function formatVietnameseDateOnly(isoOrDate?: string | Date | null): string {
-  if (!isoOrDate) return '';
-  const d = typeof isoOrDate === 'string' ? new Date(isoOrDate) : isoOrDate;
-  if (Number.isNaN(d.getTime())) return '';
-  const pad = (n: number): string => String(n).padStart(2, '0');
-  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
+/** Định dạng ngày ngắn `dd/MM/yyyy` theo múi giờ người dùng (5.3.4, 5.3.5, 5.3.6) */
+export function formatVietnameseDateOnly(
+  isoOrDate?: string | Date | null,
+  timeZone?: string,
+): string {
+  return LocaleFormatter.formatReportDateOnly(isoOrDate, timeZone);
 }
 
 /** Hiển thị nhãn trạng thái tiếng Việt tường minh trên file Excel xuất ra */
@@ -155,7 +152,11 @@ export function escapeCsvCell(value: unknown): string {
  * Chuyển một `UserResponse` thành dòng dữ liệu xuất Excel / CSV.
  * Nếu trường nào chưa có thông tin (SĐT, Đơn vị, Chức danh, Vai trò...) thì để trống `""`.
  */
-export function mapUserToExportRow(user: UserResponse, index: number): Array<string | number> {
+export function mapUserToExportRow(
+  user: UserResponse,
+  index: number,
+  options?: { timeZone?: string },
+): Array<string | number> {
   const stt = index + 1;
   const employeeCode = `NV${String(user.id).padStart(4, '0')}`;
   const rolesStr = user.roles.map((r) => r.code).join('|');
@@ -180,6 +181,6 @@ export function mapUserToExportRow(user: UserResponse, index: number): Array<str
     rolesStr,
     user.mfaEnabled ? 'Bật' : 'Tắt',
     formatVietnameseUserStatusLabel(user.status),
-    formatVietnameseDateOnly(user.createdAt),
+    formatVietnameseDateOnly(user.createdAt, options?.timeZone),
   ];
 }

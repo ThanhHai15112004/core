@@ -66,6 +66,12 @@ export class UserIdentityResolverService implements IUserIdentityResolver {
         ...(Array.isArray(payload.dataScopes)
           ? { dataScopes: payload.dataScopes.map(Number) }
           : {}),
+        ...(typeof payload.preferredLocale === 'string'
+          ? { preferredLocale: payload.preferredLocale }
+          : {}),
+        ...(typeof payload.preferredTimezone === 'string'
+          ? { preferredTimezone: payload.preferredTimezone }
+          : {}),
       };
     }
 
@@ -91,6 +97,9 @@ export class UserIdentityResolverService implements IUserIdentityResolver {
       organizationUnitIds: user.organizationUnitIds,
       ...(user.dataScope !== undefined ? { dataScope: user.dataScope } : {}),
       ...(user.dataScopes !== undefined ? { dataScopes: user.dataScopes } : {}),
+      preferredLocale: user.preferredLocale ?? user.profile?.preferredLocale ?? 'vi',
+      preferredTimezone:
+        user.preferredTimezone ?? user.profile?.preferredTimezone ?? 'Asia/Ho_Chi_Minh',
     };
   }
 }

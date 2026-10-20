@@ -40,5 +40,15 @@ export class UserProfileEntity extends TypeOrmBaseEntity {
 
   @Column({ type: 'text', nullable: true })
   public bio?: string | null;
-}
 
+  @Column({ name: 'preferred_locale', type: 'varchar', length: 16, default: 'vi' })
+  public preferredLocale!: string;
+
+  @Column({
+    name: 'preferred_timezone',
+    type: 'varchar',
+    length: 64,
+    default: 'Asia/Ho_Chi_Minh',
+  })
+  public preferredTimezone!: string;
+}

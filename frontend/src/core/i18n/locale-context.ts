@@ -3,7 +3,9 @@ import type { SupportedLocale, TranslateParams } from './translate';
 
 export interface LocaleContextValue {
   locale: SupportedLocale;
+  timezone: string;
   setLocale: (locale: SupportedLocale) => void;
+  setTimezone: (timezone: string) => void;
   toggleLocale: () => void;
   t: (path: string, params?: TranslateParams) => string;
   formatTime: (value: Date | string | number, withSeconds?: boolean) => string;

@@ -6,8 +6,19 @@ import {
   HTTP_ERROR_CODE,
   NotFoundAppException,
   type PaginatedResult,
+  defaultSettingRegistry,
 } from '@packages/kernel/index.js';
 import { createPaginatedResult } from '@packages/http/index.js';
+import {
+  DEFAULT_LOCALE,
+  DEFAULT_TIMEZONE,
+  LocaleContext,
+  type SupportedLocale,
+  getRegistryDefaultLocaleCode,
+  getRegistryDefaultTimezoneCode,
+  isSupportedLocale,
+  isValidIanaTimezone,
+} from '@packages/i18n/index.js';
 import { TransactionManager } from '@packages/database/index.js';
 import {
   AuditLogService,
@@ -41,10 +52,12 @@ import {
   type IUsersPublicService,
   type SelfRegisterUserInput,
   USER_STATUS,
+  type UpdateUserPreferencesInput,
   type UserAuthCredentialsView,
   type UserAuthIdentityView,
   type UserLoginHistoryItemView,
   type UserOrganizationAssignmentSummary,
+  type UserPreferencesView,
   type UserProfileView,
   type UserRoleAssignmentSummary,
   type UserStatusCode,
@@ -364,6 +377,8 @@ export class UsersService implements IUsersPublicService {
       });
 
       const userId = Number(savedUser.id);
+      const preferredLocale = this.normalizePreferredLocale(dto.preferredLocale);
+      const preferredTimezone = this.normalizePreferredTimezone(dto.preferredTimezone);
       await this.upsertUserProfile(userId, {
         firstName: nameParts.firstName,
         lastName: nameParts.lastName,
@@ -376,6 +391,8 @@ export class UsersService implements IUsersPublicService {
         city: dto.city ?? null,
         country: dto.country ?? null,
         bio: dto.bio ?? null,
+        preferredLocale,
+        preferredTimezone,
       });
 
       if (roleIds.length > 0) {
@@ -518,6 +535,15 @@ export class UsersService implements IUsersPublicService {
       nextFullName = resolved.fullName;
     }
 
+    const nextPreferredLocale =
+      dto.preferredLocale !== undefined
+        ? this.normalizePreferredLocale(dto.preferredLocale)
+        : (currentProfile.preferredLocale ?? this.getSystemDefaultLocale());
+    const nextPreferredTimezone =
+      dto.preferredTimezone !== undefined
+        ? this.normalizePreferredTimezone(dto.preferredTimezone)
+        : (currentProfile.preferredTimezone ?? this.getSystemDefaultTimezone());
+
     await this.upsertUserProfile(id, {
       firstName: nextFirstName,
       lastName: nextLastName,
@@ -534,6 +560,8 @@ export class UsersService implements IUsersPublicService {
       city: dto.city !== undefined ? dto.city : (currentProfile.city ?? null),
       country: dto.country !== undefined ? dto.country : (currentProfile.country ?? null),
       bio: dto.bio !== undefined ? dto.bio : (currentProfile.bio ?? null),
+      preferredLocale: nextPreferredLocale,
+      preferredTimezone: nextPreferredTimezone,
     });
 
     if (dto.expectedVersion !== undefined) {
@@ -1063,7 +1091,110 @@ export class UsersService implements IUsersPublicService {
       permissions,
       dataScope: effectiveDataScope,
       dataScopes,
+      preferredLocale: profile.preferredLocale ?? this.getSystemDefaultLocale(),
+      preferredTimezone: profile.preferredTimezone ?? this.getSystemDefaultTimezone(),
       profile,
+    };
+  }
+
+  /**
+   * 5.3.2 & 5.3.5: Lấy tùy chọn ngôn ngữ (`preferredLocale`) và múi giờ (`preferredTimezone`) của người dùng.
+   */
+  public async getUserPreferences(userId: number): Promise<UserPreferencesView> {
+    const user = await this.userRepository.findByIdWithArchived(userId, false);
+    if (!user) {
+      throw new NotFoundAppException('users.notFound', { id: userId });
+    }
+    const profileEntity = this.userProfileRepository
+      ? await this.userProfileRepository.findByUserId(userId)
+      : null;
+    const preferredLocale = isSupportedLocale(profileEntity?.preferredLocale)
+      ? profileEntity!.preferredLocale
+      : this.getSystemDefaultLocale();
+    const preferredTimezone = isValidIanaTimezone(profileEntity?.preferredTimezone)
+      ? profileEntity!.preferredTimezone.trim()
+      : this.getSystemDefaultTimezone();
+
+    return {
+      userId: Number(user.id),
+      preferredLocale,
+      preferredTimezone,
+      updatedAt: (profileEntity?.updatedAt ?? user.updatedAt ?? new Date()).toISOString(),
+    };
+  }
+
+  /**
+   * 5.3.2 & 5.3.5: Cập nhật tùy chọn ngôn ngữ (`preferredLocale`) và múi giờ (`preferredTimezone`) của người dùng.
+   */
+  public async updateUserPreferences(
+    userId: number,
+    input: UpdateUserPreferencesInput,
+  ): Promise<UserPreferencesView> {
+    const user = await this.userRepository.findByIdWithArchived(userId, false);
+    if (!user) {
+      throw new NotFoundAppException('users.notFound', { id: userId });
+    }
+
+    const currentProfile = await this.getUserProfile(userId, user);
+    const nextLocale: SupportedLocale =
+      input.preferredLocale !== undefined
+        ? this.normalizePreferredLocale(input.preferredLocale)
+        : isSupportedLocale(currentProfile.preferredLocale)
+          ? currentProfile.preferredLocale
+          : this.getSystemDefaultLocale();
+
+    const nextTimezone: string =
+      input.preferredTimezone !== undefined
+        ? this.normalizePreferredTimezone(input.preferredTimezone)
+        : isValidIanaTimezone(currentProfile.preferredTimezone)
+          ? currentProfile.preferredTimezone!.trim()
+          : this.getSystemDefaultTimezone();
+
+    const savedProfile = await this.upsertUserProfile(userId, {
+      firstName: currentProfile.firstName || user.username,
+      lastName: currentProfile.lastName || '',
+      fullName: currentProfile.fullName || user.username,
+      avatarUrl: currentProfile.avatarUrl ?? null,
+      dateOfBirth: currentProfile.dateOfBirth ?? null,
+      gender: currentProfile.gender ?? null,
+      identityNumber: currentProfile.identityNumber ?? null,
+      address: currentProfile.address ?? null,
+      city: currentProfile.city ?? null,
+      country: currentProfile.country ?? null,
+      bio: currentProfile.bio ?? null,
+      preferredLocale: nextLocale,
+      preferredTimezone: nextTimezone,
+    });
+
+    LocaleContext.applyUserPreferences({
+      preferredLocale: nextLocale,
+      preferredTimezone: nextTimezone,
+    });
+
+    await this.invalidateIdentityCache(userId);
+    await this.auditLogService?.record({
+      actorUserId: userId,
+      module: 'users',
+      feature: 'user-preferences',
+      action: 'user.update_preferences',
+      resourceType: 'user_profile',
+      resourceId: userId,
+      beforeData: {
+        preferredLocale: currentProfile.preferredLocale ?? this.getSystemDefaultLocale(),
+        preferredTimezone: currentProfile.preferredTimezone ?? this.getSystemDefaultTimezone(),
+      },
+      afterData: {
+        preferredLocale: nextLocale,
+        preferredTimezone: nextTimezone,
+      },
+      reason: 'Updated user locale and timezone preferences',
+    });
+
+    return {
+      userId: Number(user.id),
+      preferredLocale: nextLocale,
+      preferredTimezone: nextTimezone,
+      updatedAt: (savedProfile.updatedAt ?? new Date()).toISOString(),
     };
   }
 
@@ -1160,6 +1291,8 @@ export class UsersService implements IUsersPublicService {
     });
 
     const userId = Number(savedUser.id);
+    const preferredLocale = this.normalizePreferredLocale(input.preferredLocale);
+    const preferredTimezone = this.normalizePreferredTimezone(input.preferredTimezone);
     await this.upsertUserProfile(userId, {
       firstName: nameParts.firstName,
       lastName: nameParts.lastName,
@@ -1171,6 +1304,8 @@ export class UsersService implements IUsersPublicService {
       city: input.city ?? null,
       country: input.country ?? null,
       bio: input.bio ?? null,
+      preferredLocale,
+      preferredTimezone,
     });
 
     await this.recordStatusHistory(userId, null, initialStatus, 'Self-registered account', userId);
@@ -1684,7 +1819,61 @@ export class UsersService implements IUsersPublicService {
       city: profile?.city ?? null,
       country: profile?.country ?? null,
       bio: profile?.bio ?? null,
+      preferredLocale: profile?.preferredLocale?.trim() || this.getSystemDefaultLocale(),
+      preferredTimezone: profile?.preferredTimezone?.trim() || this.getSystemDefaultTimezone(),
     };
+  }
+
+  private getSystemDefaultLocale(): SupportedLocale {
+    const dbDefault = getRegistryDefaultLocaleCode();
+    const configured = defaultSettingRegistry.getValue<string>('ui.locale.default');
+    if (
+      configured &&
+      isSupportedLocale(configured) &&
+      (!dbDefault || configured.trim().toLowerCase() !== DEFAULT_LOCALE)
+    ) {
+      return configured.trim().toLowerCase();
+    }
+    if (dbDefault && isSupportedLocale(dbDefault)) return dbDefault;
+    return isSupportedLocale(configured) ? configured.trim().toLowerCase() : DEFAULT_LOCALE;
+  }
+
+  private getSystemDefaultTimezone(): string {
+    const dbDefault = getRegistryDefaultTimezoneCode();
+    const configured = defaultSettingRegistry.getValue<string>('ui.timezone.default');
+    if (
+      configured &&
+      isValidIanaTimezone(configured) &&
+      (!dbDefault || configured.trim() !== DEFAULT_TIMEZONE)
+    ) {
+      return configured.trim();
+    }
+    if (dbDefault && isValidIanaTimezone(dbDefault)) return dbDefault;
+    return isValidIanaTimezone(configured) ? configured!.trim() : DEFAULT_TIMEZONE;
+  }
+
+  private normalizePreferredLocale(locale?: string | null): SupportedLocale {
+    if (locale === undefined || locale === null || locale.trim() === '') {
+      return this.getSystemDefaultLocale();
+    }
+    const normalized = locale.trim().toLowerCase();
+    if (!isSupportedLocale(normalized)) {
+      throw new BadRequestAppException('users.invalidPreferredLocale', [{ locale }], { locale });
+    }
+    return normalized;
+  }
+
+  private normalizePreferredTimezone(timezone?: string | null): string {
+    if (timezone === undefined || timezone === null || timezone.trim() === '') {
+      return this.getSystemDefaultTimezone();
+    }
+    const trimmed = timezone.trim();
+    if (!isValidIanaTimezone(trimmed)) {
+      throw new BadRequestAppException('users.invalidPreferredTimezone', [{ timezone: trimmed }], {
+        timezone: trimmed,
+      });
+    }
+    return trimmed;
   }
 
   private encryptPhone(phone?: string | null): string | null {

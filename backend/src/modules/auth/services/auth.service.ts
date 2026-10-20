@@ -33,6 +33,7 @@ import type {
   SendEmailOtpRequest,
   SendSmsOtpRequest,
   StepUpVerifyRequest,
+  UpdateMyPreferencesRequest,
   VerifyMfaChallengeRequest,
 } from '../requests/auth.requests.js';
 import type {
@@ -44,6 +45,7 @@ import type {
   SendEmailOtpResponse,
   SendSmsOtpResponse,
   StepUpVerifyResponse,
+  UserPreferencesResponse,
 } from '../responses/auth.response.js';
 
 const DEFAULT_MAX_FAILED_LOGIN_ATTEMPTS = 5;
@@ -146,6 +148,8 @@ export class AuthService implements IAuthPublicService {
       city: dto.city ?? null,
       country: dto.country ?? null,
       bio: dto.bio ?? null,
+      preferredLocale: dto.preferredLocale ?? null,
+      preferredTimezone: dto.preferredTimezone ?? null,
       status: verificationRequired ? USER_STATUS.INACTIVE : USER_STATUS.ACTIVE,
     });
 
@@ -701,6 +705,38 @@ export class AuthService implements IAuthPublicService {
     return this.toProfileResponse(identity);
   }
 
+  /** 5.3.2 & 5.3.5: Lấy tùy chọn ngôn ngữ (`preferredLocale`) và múi giờ (`preferredTimezone`) của người dùng đang đăng nhập */
+  public async getMyPreferences(userId: number): Promise<UserPreferencesResponse> {
+    if (typeof this.usersPublicService.getUserPreferences === 'function') {
+      return this.usersPublicService.getUserPreferences(userId);
+    }
+    const identity = await this.usersPublicService.findAuthUserById(userId);
+    if (!identity) {
+      throw new UnauthorizedAppException('auth.userNotFound');
+    }
+    const preferredLocale =
+      identity.preferredLocale === 'en' || identity.profile?.preferredLocale === 'en' ? 'en' : 'vi';
+    const preferredTimezone =
+      identity.preferredTimezone ?? identity.profile?.preferredTimezone ?? 'Asia/Ho_Chi_Minh';
+    return {
+      userId: identity.id,
+      preferredLocale,
+      preferredTimezone,
+      updatedAt: new Date().toISOString(),
+    };
+  }
+
+  /** 5.3.2 & 5.3.5: Cập nhật tùy chọn ngôn ngữ (`preferredLocale`) và múi giờ (`preferredTimezone`) của người dùng đang đăng nhập */
+  public async updateMyPreferences(
+    userId: number,
+    dto: UpdateMyPreferencesRequest,
+  ): Promise<UserPreferencesResponse> {
+    if (typeof this.usersPublicService.updateUserPreferences === 'function') {
+      return this.usersPublicService.updateUserPreferences(userId, dto);
+    }
+    throw new BadRequestAppException('users.invalidPreferredLocale');
+  }
+
   /** Đăng xuất phiên hiện tại bằng Refresh Token hoặc theo (userId, sessionId) (Mục 3.2.4 & 3.4.5) */
   public async logout(
     refreshTokenOrContext?:
@@ -844,6 +880,9 @@ export class AuthService implements IAuthPublicService {
 
   /** Chuyển đổi UserAuthIdentityView sang DTO phản hồi hồ sơ */
   private toProfileResponse(identity: UserAuthIdentityView): AuthenticatedUserProfileResponse {
+    const preferredLocale = identity.preferredLocale ?? identity.profile?.preferredLocale ?? 'vi';
+    const preferredTimezone =
+      identity.preferredTimezone ?? identity.profile?.preferredTimezone ?? 'Asia/Ho_Chi_Minh';
     return {
       id: identity.id,
       username: identity.username,
@@ -862,6 +901,8 @@ export class AuthService implements IAuthPublicService {
       organizationUnitIds: [...identity.organizationUnitIds],
       roles: [...identity.roles],
       permissions: [...identity.permissions],
+      preferredLocale,
+      preferredTimezone,
       ...(identity.profile ? { profile: identity.profile } : {}),
     };
   }

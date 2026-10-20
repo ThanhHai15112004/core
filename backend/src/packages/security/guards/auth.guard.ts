@@ -13,6 +13,7 @@ import {
   REQUIRED_PERMISSIONS_KEY,
   REQUIRED_ROLES_KEY,
 } from '@packages/http/index.js';
+import { LocaleContext } from '@packages/i18n/index.js';
 import { RequestContextService } from '@packages/logging/index.js';
 import { TokenService } from '../providers/token.service.js';
 import { PlatformSecurityService } from '../providers/platform-security.service.js';
@@ -27,6 +28,10 @@ export class AuthGuard implements CanActivate {
   ) {}
 
   private attachActorToContext(request: FastifyRequest, user: UserIdentity): void {
+    LocaleContext.applyUserPreferences({
+      preferredLocale: user.preferredLocale ?? null,
+      preferredTimezone: user.preferredTimezone ?? null,
+    });
     const store = RequestContextService.current();
     if (!store) return;
     store.actor = user;

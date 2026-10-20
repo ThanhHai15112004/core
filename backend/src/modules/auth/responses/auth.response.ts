@@ -20,7 +20,16 @@ export interface AuthenticatedUserProfileResponse {
   readonly organizationUnitIds: readonly number[];
   readonly roles: readonly string[];
   readonly permissions: readonly string[];
+  readonly preferredLocale?: string;
+  readonly preferredTimezone?: string;
   readonly profile?: UserProfileView;
+}
+
+export interface UserPreferencesResponse {
+  readonly userId: number;
+  readonly preferredLocale: string;
+  readonly preferredTimezone: string;
+  readonly updatedAt: string;
 }
 
 export interface RegisterResponse {
@@ -240,7 +249,16 @@ export const authenticatedUserProfileSchema = z.object({
   organizationUnitIds: z.array(z.number().int().min(1)),
   roles: z.array(z.string()),
   permissions: z.array(z.string()),
+  preferredLocale: z.string().optional(),
+  preferredTimezone: z.string().optional(),
   profile: userProfileResponseSchema.optional(),
+});
+
+export const userPreferencesResponseSchema = z.object({
+  userId: z.number().int().min(1),
+  preferredLocale: z.string(),
+  preferredTimezone: z.string(),
+  updatedAt: z.string(),
 });
 
 export const registerResponseSchema = z.object({

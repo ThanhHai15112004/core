@@ -1229,6 +1229,36 @@ export class SettingRegistryService {
     };
   }
 
+  /** Đọc nhanh giá trị cấu hình bất kỳ kiểu dữ liệu nào theo ngữ cảnh (hoặc trả về `fallback`) */
+  public getValue<T = unknown>(
+    key: string,
+    context?: SettingResolveContext,
+    fallback?: T,
+  ): T | undefined {
+    const resolved = this.resolve<T>(key, context, { maskSensitive: false });
+    if (!resolved || resolved.value === undefined || resolved.value === null) {
+      return fallback;
+    }
+    return resolved.value;
+  }
+
+  /** Cập nhật nhanh giá trị toàn cục (`globalSerializedValue`) của một cấu hình đã đăng ký */
+  public setGlobalValue(key: string, value: unknown): void {
+    const normKey = key.trim().toLowerCase();
+    const def = this.definitions.get(normKey);
+    if (!def) return;
+    const { serialized } = validateAndSerializeSettingValue(
+      value,
+      def.valueType,
+      def.validationRules,
+      normKey,
+    );
+    this.upsertDefinition({
+      ...def,
+      globalSerializedValue: serialized,
+    });
+  }
+
   /** Đọc nhanh cấu hình kiểu `number` (ví dụ: `getNumber('security.password.min_length', undefined, 8)`) */
   public getNumber(key: string, context?: SettingResolveContext, fallback = 0): number {
     const resolved = this.resolve<number>(key, context, { maskSensitive: false });

@@ -16,6 +16,8 @@ export interface UserResponse {
   readonly lastName: string;
   readonly fullName: string;
   readonly avatarUrl: string | null;
+  readonly preferredLocale?: string;
+  readonly preferredTimezone?: string;
   readonly profile: UserProfileView;
   readonly status: UserStatusCode;
   readonly statusName: UserStatusName;
@@ -102,6 +104,8 @@ export const userProfileResponseSchema = z.object({
   city: z.string().nullable(),
   country: z.string().nullable(),
   bio: z.string().nullable(),
+  preferredLocale: z.string().optional(),
+  preferredTimezone: z.string().optional(),
 });
 
 export const userResponseSchema = z.object({
@@ -113,6 +117,8 @@ export const userResponseSchema = z.object({
   lastName: z.string(),
   fullName: z.string(),
   avatarUrl: z.string().nullable(),
+  preferredLocale: z.string().optional(),
+  preferredTimezone: z.string().optional(),
   profile: userProfileResponseSchema,
   status: z.number().int().min(1).max(4),
   statusName: z.enum(['ACTIVE', 'INACTIVE', 'LOCKED', 'ARCHIVED']),

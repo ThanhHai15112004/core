@@ -4,6 +4,9 @@ import {
   changePercent,
   formatBytes,
   formatCompact,
+  formatCurrency,
+  formatDate,
+  formatDateTime,
   formatDelta,
   formatDuration,
   formatMb,
@@ -57,5 +60,16 @@ describe('format', () => {
   it('shortens ids', () => {
     expect(shortId('abc')).toBe('abc');
     expect(shortId('0123456789abcdefXYZ')).toBe('01234567…fXYZ');
+  });
+
+  it('formats currency, date and datetime by locale and user timezone (5.3.4, 5.3.5, 5.3.6)', () => {
+    expect(formatCurrency(null, 'vi')).toBe(NO_VALUE);
+    expect(formatCurrency(1_250_000, 'vi', 'VND')).toContain('1.250.000');
+    expect(formatCurrency(1250.5, 'en', 'USD')).toContain('$1,250.50');
+
+    const utcIso = '2026-10-20T18:30:00.000Z';
+    expect(formatDate(utcIso, 'vi', 'UTC')).toBe('20/10/2026');
+    expect(formatDate(utcIso, 'vi', 'Asia/Ho_Chi_Minh')).toBe('21/10/2026');
+    expect(formatDateTime(utcIso, 'vi', 'Asia/Ho_Chi_Minh', true)).toContain('01:30:00');
   });
 });

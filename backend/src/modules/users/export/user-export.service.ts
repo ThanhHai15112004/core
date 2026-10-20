@@ -1,4 +1,5 @@
 import { Injectable, Optional } from '@nestjs/common';
+import { LocaleContext, LocaleFormatter } from '@packages/i18n/index.js';
 import { buildXlsxBuffer } from '@packages/kernel/index.js';
 import {
   AuditLogService,
@@ -55,15 +56,18 @@ export class UserExportService {
 
     const hydrated = await this.usersService.hydrateUsersList(items);
 
+    const effectiveTimezone = LocaleFormatter.resolveActiveTimezone(
+      actor?.preferredTimezone ?? LocaleContext.getTimezone(),
+    );
     const reportTitle = query.title?.trim() || DEFAULT_USER_EXPORT_REPORT_TITLE;
-    const exportedAtSubtitle = `Ngày xuất dữ liệu: ${formatVietnameseDateTime(new Date())}`;
+    const exportedAtSubtitle = `Ngày xuất dữ liệu: ${formatVietnameseDateTime(new Date(), effectiveTimezone)}`;
 
     const lines: string[] = [USER_EXPORT_HEADERS.join(',')];
     const matrixRows: Array<Array<string | number>> = [];
 
     for (let i = 0; i < hydrated.length; i++) {
       const user = hydrated[i]!;
-      const rowValues = mapUserToExportRow(user, i);
+      const rowValues = mapUserToExportRow(user, i, { timeZone: effectiveTimezone });
       matrixRows.push(rowValues);
       lines.push(rowValues.map((v) => escapeCsvCell(v)).join(','));
     }

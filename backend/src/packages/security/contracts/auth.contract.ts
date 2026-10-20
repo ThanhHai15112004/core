@@ -12,6 +12,8 @@ export interface UserIdentity {
   readonly organizationUnitIds?: readonly number[];
   readonly dataScope?: number;
   readonly dataScopes?: readonly number[];
+  readonly preferredLocale?: string | null;
+  readonly preferredTimezone?: string | null;
 }
 
 export type JwtTokenType = 'access' | 'refresh' | 'mfa_challenge' | 'step_up';
@@ -27,6 +29,8 @@ export interface TokenPayload {
   readonly organizationUnitIds?: Array<number | string>;
   readonly dataScope?: number;
   readonly dataScopes?: number[];
+  readonly preferredLocale?: string;
+  readonly preferredTimezone?: string;
   readonly iat?: number;
   readonly exp?: number;
   readonly [key: string]: unknown;

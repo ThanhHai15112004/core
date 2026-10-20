@@ -339,6 +339,9 @@ function createIamInMemoryHarness() {
         city: partial.city !== undefined ? partial.city : (existing?.city ?? null),
         country: partial.country !== undefined ? partial.country : (existing?.country ?? null),
         bio: partial.bio !== undefined ? partial.bio : (existing?.bio ?? null),
+        preferredLocale: partial.preferredLocale ?? existing?.preferredLocale ?? 'vi',
+        preferredTimezone:
+          partial.preferredTimezone ?? existing?.preferredTimezone ?? 'Asia/Ho_Chi_Minh',
         createdAt: existing?.createdAt ?? now,
         updatedAt: now,
         deletedAt: null,
@@ -4041,7 +4044,14 @@ describe('Unit: Quản lý Người dùng (3.1) & Xác thực / Phiên / MFA (3)
     expect(evalByOrgUnit.enabled).toBe(true);
     expect(evalByOrgUnit.reason).toBe('TARGET_ORG_UNIT_MATCH');
 
-    // Người dùng ngoài danh sách User, Role, Đơn vị -> bị từ chối (TARGET_MISMATCH)
+    // Người dùng ngoài danh sách User, Role, Đơn vị -> bị từ chối (TARGET_MISMATCH) kể cả khi rolloutPercentage = 100
+    await featureFlagsService.updateFeatureFlag(
+      'users.smart_onboarding',
+      {
+        rolloutPercentage: 100,
+      },
+      adminActor,
+    );
     const evalOutsider = await featureFlagsService.evaluate('users.smart_onboarding', {
       userId: 999,
       roles: ['GUEST'],
@@ -4158,5 +4168,77 @@ describe('Unit: Quản lý Người dùng (3.1) & Xác thực / Phiên / MFA (3)
       feature: 'feature_flags',
     });
     expect(auditEntries.meta.totalItems).toBeGreaterThanOrEqual(5);
+  });
+
+  it('5.3.1 -> 5.3.6: Đa ngôn ngữ và múi giờ — ngôn ngữ mặc định, lưu preference ngôn ngữ/múi giờ người dùng, thông báo lỗi đa ngôn ngữ, UTC -> múi giờ báo cáo & định dạng chuẩn', async () => {
+    const createdUser = await h.usersService.create({
+      email: 'global.manager@gmail.com',
+      username: 'global.manager',
+      firstName: 'Hải',
+      lastName: 'Nguyễn Thanh',
+      password: '!P@ssw0rd#',
+      status: USER_STATUS.ACTIVE,
+      roleIds: [],
+      organizationUnits: [],
+    });
+
+    // 5.3.1: Mặc định hệ thống là tiếng Việt ('vi') và múi giờ 'Asia/Ho_Chi_Minh'
+    expect(createdUser.preferredLocale).toBe('vi');
+    expect(createdUser.preferredTimezone).toBe('Asia/Ho_Chi_Minh');
+    expect(createdUser.profile.preferredLocale).toBe('vi');
+    expect(createdUser.profile.preferredTimezone).toBe('Asia/Ho_Chi_Minh');
+
+    // 5.3.2 & 5.3.5: Cho người dùng chọn ngôn ngữ ('en') và múi giờ ('Asia/Tokyo') lưu trong preference
+    const updatedPrefs = await h.authService.updateMyPreferences(createdUser.id, {
+      preferredLocale: 'en',
+      preferredTimezone: 'Asia/Tokyo',
+    });
+    expect(updatedPrefs.userId).toBe(createdUser.id);
+    expect(updatedPrefs.preferredLocale).toBe('en');
+    expect(updatedPrefs.preferredTimezone).toBe('Asia/Tokyo');
+
+    const fetchedPrefs = await h.authService.getMyPreferences(createdUser.id);
+    expect(fetchedPrefs.preferredLocale).toBe('en');
+    expect(fetchedPrefs.preferredTimezone).toBe('Asia/Tokyo');
+
+    const meProfile = await h.authService.getMe(createdUser.id);
+    expect(meProfile.preferredLocale).toBe('en');
+    expect(meProfile.preferredTimezone).toBe('Asia/Tokyo');
+
+    // Chặn múi giờ không hợp lệ
+    await expect(
+      h.authService.updateMyPreferences(createdUser.id, {
+        preferredTimezone: 'Invalid/Timezone_XYZ',
+      }),
+    ).rejects.toThrow();
+
+    // 5.3.4 & 5.3.5: Lưu thời gian theo UTC & hiển thị trong báo cáo theo múi giờ người dùng chọn
+    const rawUserEntity = h.userStore.get(createdUser.id);
+    // Đặt createdAt = 2026-10-20T18:30:00.000Z (UTC: 20/10/2026, nhưng ở Asia/Ho_Chi_Minh / Asia/Tokyo là 21/10/2026)
+    rawUserEntity!.createdAt = new Date('2026-10-20T18:30:00.000Z');
+
+    const exportUtc = await h.exportService.exportUsersCsv(
+      { page: 1, limit: 20, sortBy: 'id', sortOrder: 'ASC' },
+      {
+        id: createdUser.id,
+        roles: ['super_admin'],
+        permissions: ['users.read'],
+        preferredLocale: 'en',
+        preferredTimezone: 'UTC',
+      },
+    );
+    expect(exportUtc.csvContent).toContain('20/10/2026');
+
+    const exportHcm = await h.exportService.exportUsersCsv(
+      { page: 1, limit: 20, sortBy: 'id', sortOrder: 'ASC' },
+      {
+        id: createdUser.id,
+        roles: ['super_admin'],
+        permissions: ['users.read'],
+        preferredLocale: 'vi',
+        preferredTimezone: 'Asia/Ho_Chi_Minh',
+      },
+    );
+    expect(exportHcm.csvContent).toContain('21/10/2026');
   });
 });

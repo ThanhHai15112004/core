@@ -1,5 +1,5 @@
 import { frontendConfig } from '../../config/index';
-import { getActiveLocale } from '../i18n/index';
+import { getActiveLocale, getActiveTimezone } from '../i18n/index';
 import type { ApiErrorResponse, ApiResponse } from '../types/index';
 
 export class ApiError extends Error {
@@ -57,6 +57,7 @@ export async function fetchApiWithMeta<T>(
       headers: {
         ...(hasBody ? { 'Content-Type': 'application/json' } : {}),
         'Accept-Language': getActiveLocale(),
+        'X-Timezone': getActiveTimezone(),
         ...options.headers,
       },
     });

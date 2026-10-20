@@ -6,6 +6,7 @@ export const AUTH_ROUTES = {
   LOGOUT: 'logout',
   LOGOUT_ALL: 'logout-all',
   ME: 'me',
+  PREFERENCES: 'preferences',
   SESSIONS: 'sessions',
   SESSION_BY_ID: 'sessions/:sessionId',
   REVOKE_ALL_SESSIONS: 'sessions/revoke-all',
@@ -45,5 +46,3 @@ export const AUTH_ROUTES = {
   API_CLIENT_REVOKE: 'api-clients/:id/revoke',
   API_CLIENT_USAGE: 'api-clients/:id/usage',
 } as const;
-
-

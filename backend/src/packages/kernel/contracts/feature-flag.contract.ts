@@ -702,8 +702,23 @@ export class FeatureFlagRegistryService {
 
     const hasAnyTargetFilter = hasUserTargets || hasRoleTargets || hasUnitTargets;
 
+    if (hasAnyTargetFilter) {
+      return {
+        key: def.key,
+        module: def.module,
+        enabled: false,
+        reason: 'TARGET_MISMATCH',
+        rolloutPercentage: def.rolloutPercentage,
+        userBucket: null,
+        startsAt: def.startsAt,
+        endsAt: def.endsAt,
+        evaluatedAt,
+        fromCache,
+      };
+    }
+
     // 5.2.6: Bật theo tỷ lệ người dùng (rolloutPercentage 0..100%)
-    if (def.rolloutPercentage >= 100 && !hasAnyTargetFilter) {
+    if (def.rolloutPercentage >= 100) {
       return {
         key: def.key,
         module: def.module,
@@ -723,7 +738,7 @@ export class FeatureFlagRegistryService {
         key: def.key,
         module: def.module,
         enabled: false,
-        reason: hasAnyTargetFilter ? 'TARGET_MISMATCH' : 'ROLLOUT_EXCLUDED',
+        reason: 'ROLLOUT_EXCLUDED',
         rolloutPercentage: 0,
         userBucket: null,
         startsAt: def.startsAt,

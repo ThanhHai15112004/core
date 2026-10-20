@@ -309,6 +309,9 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
           city: partial.city !== undefined ? partial.city : (existing?.city ?? null),
           country: partial.country !== undefined ? partial.country : (existing?.country ?? null),
           bio: partial.bio !== undefined ? partial.bio : (existing?.bio ?? null),
+          preferredLocale: partial.preferredLocale ?? existing?.preferredLocale ?? 'vi',
+          preferredTimezone:
+            partial.preferredTimezone ?? existing?.preferredTimezone ?? 'Asia/Ho_Chi_Minh',
           createdAt: existing?.createdAt ?? now,
           updatedAt: now,
           deletedAt: null,
@@ -3228,5 +3231,226 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
     expect(historyRes.status).toBe(HTTP_STATUS_CODE.OK);
     expect(historyRes.body.data.length).toBeGreaterThanOrEqual(2);
     expect(historyRes.body.data.some((h) => h.newValue === 11)).toBe(true);
+  });
+
+  it('5.2 & 5.3 Feature E2E: Feature Flags HTTP APIs (/api/v1/settings/feature-flags/*) & Multilingual / Timezone User Preferences (/api/v1/auth/preferences)', async () => {
+    const adminHeaders = { authorization: `Bearer ${adminAccessToken}` };
+
+    // =========================================================================
+    // PHẦN 1: FEATURE FLAGS HTTP E2E (Mục 5.2.1 -> 5.2.8)
+    // =========================================================================
+    const listFlagsRes = await context.injectJson<
+      Array<{
+        key: string;
+        module: string;
+        isEnabled: boolean;
+        isModuleInstalled: boolean;
+      }>
+    >({
+      method: 'GET',
+      url: '/api/v1/settings/feature-flags',
+      headers: adminHeaders,
+    });
+    expect(listFlagsRes.status).toBe(HTTP_STATUS_CODE.OK);
+    expect(listFlagsRes.body.data.length).toBeGreaterThanOrEqual(3);
+
+    // 5.2.1: Tạo mới Feature Flag với key và mô tả rõ
+    const createFlagRes = await context.injectJson<{
+      id: number;
+      key: string;
+      module: string;
+      isEnabled: boolean;
+      rolloutPercentage: number;
+    }>({
+      method: 'POST',
+      url: '/api/v1/settings/feature-flags',
+      headers: adminHeaders,
+      payload: {
+        key: 'users.e2e_pilot_export',
+        module: 'users',
+        name: 'Xuất báo cáo nhân sự nâng cao theo múi giờ',
+        description:
+          'Cho phép xuất báo cáo nhân sự theo múi giờ cá nhân trong giai đoạn thử nghiệm',
+        isEnabled: true,
+        rolloutPercentage: 100,
+        targetUserIds: ['1'],
+        targetRoles: ['SUPER_ADMIN'],
+        targetOrganizationUnitIds: ['10'],
+        startsAt: '2026-10-01T00:00:00.000Z',
+        endsAt: '2026-12-31T23:59:59.000Z',
+        reason: 'Tạo flag thử nghiệm E2E',
+      },
+    });
+    expect(createFlagRes.status).toBe(HTTP_STATUS_CODE.CREATED);
+    expect(createFlagRes.body.data.key).toBe('users.e2e_pilot_export');
+
+    // 5.2.2: Chặn tạo flag cho module chưa cài đặt ('uninstalled_mod.feature_x')
+    const invalidModuleFlagRes = await context.injectJson({
+      method: 'POST',
+      url: '/api/v1/settings/feature-flags',
+      headers: adminHeaders,
+      payload: {
+        key: 'uninstalled_mod.feature_x',
+        module: 'uninstalled_mod',
+        name: 'Tính năng module chưa cài',
+        description: 'Kiểm tra chặn tạo flag khi module chưa có trong enabledModules',
+        isEnabled: true,
+      },
+    });
+    expect(invalidModuleFlagRes.status).toBe(HTTP_STATUS_CODE.UNPROCESSABLE_ENTITY);
+
+    // 5.2.3 -> 5.2.7: Đánh giá Feature Flag qua GET /api/v1/settings/feature-flags/evaluate
+    const evalMatchUserRes = await context.injectJson<
+      Array<{
+        key: string;
+        enabled: boolean;
+        reason: string;
+      }>
+    >({
+      method: 'GET',
+      url: '/api/v1/settings/feature-flags/evaluate?key=users.e2e_pilot_export&userId=1&at=2026-10-20T10:00:00.000Z',
+      headers: adminHeaders,
+    });
+    expect(evalMatchUserRes.status).toBe(HTTP_STATUS_CODE.OK);
+    expect(evalMatchUserRes.body.data[0]?.enabled).toBe(true);
+    expect(evalMatchUserRes.body.data[0]?.reason).toBe('TARGET_USER_MATCH');
+
+    // Người dùng không khớp target (userId=999, role=GUEST, org=99) -> TARGET_MISMATCH (enabled: false)
+    const evalMismatchRes = await context.injectJson<
+      Array<{
+        key: string;
+        enabled: boolean;
+        reason: string;
+      }>
+    >({
+      method: 'GET',
+      url: '/api/v1/settings/feature-flags/evaluate?key=users.e2e_pilot_export&userId=999&roles=GUEST&organizationUnitId=99&at=2026-10-20T10:00:00.000Z',
+      headers: adminHeaders,
+    });
+    expect(evalMismatchRes.status).toBe(HTTP_STATUS_CODE.OK);
+    expect(evalMismatchRes.body.data[0]?.enabled).toBe(false);
+    expect(evalMismatchRes.body.data[0]?.reason).toBe('TARGET_MISMATCH');
+
+    // Khi ngoài khung thời gian thử nghiệm (sau endsAt) -> tự động đóng tính năng (EXPIRED)
+    const evalExpiredRes = await context.injectJson<
+      Array<{
+        key: string;
+        enabled: boolean;
+        reason: string;
+      }>
+    >({
+      method: 'GET',
+      url: '/api/v1/settings/feature-flags/evaluate?key=users.e2e_pilot_export&userId=1&at=2027-01-02T00:00:00.000Z',
+      headers: adminHeaders,
+    });
+    expect(evalExpiredRes.status).toBe(HTTP_STATUS_CODE.OK);
+    expect(evalExpiredRes.body.data[0]?.enabled).toBe(false);
+    expect(evalExpiredRes.body.data[0]?.reason).toBe('EXPIRED');
+
+    // Toggle tắt flag qua PATCH /api/v1/settings/feature-flags/:key/toggle
+    const toggleFlagRes = await context.injectJson<{
+      key: string;
+      isEnabled: boolean;
+    }>({
+      method: 'PATCH',
+      url: '/api/v1/settings/feature-flags/users.e2e_pilot_export/toggle',
+      headers: adminHeaders,
+      payload: {
+        isEnabled: false,
+        reason: 'Đóng thử nghiệm tính năng xuất báo cáo E2E',
+      },
+    });
+    expect(toggleFlagRes.status).toBe(HTTP_STATUS_CODE.OK);
+    expect(toggleFlagRes.body.data.isEnabled).toBe(false);
+
+    // 5.2.8: Kiểm tra lịch sử thay đổi Feature Flag qua GET /api/v1/settings/feature-flags/:key/history
+    const flagHistoryRes = await context.injectJson<
+      Array<{
+        flagKey: string;
+        action: string;
+        actorUserId: number | null;
+      }>
+    >({
+      method: 'GET',
+      url: '/api/v1/settings/feature-flags/users.e2e_pilot_export/history',
+      headers: adminHeaders,
+    });
+    expect(flagHistoryRes.status).toBe(HTTP_STATUS_CODE.OK);
+    expect(flagHistoryRes.body.data.length).toBeGreaterThanOrEqual(2);
+    expect(flagHistoryRes.body.data.map((h) => h.action)).toEqual(
+      expect.arrayContaining(['CREATE', 'TOGGLE']),
+    );
+
+    // =========================================================================
+    // PHẦN 2: ĐA NGÔN NGỮ VÀ MÚI GIỜ HTTP E2E (Mục 5.3.1 -> 5.3.6)
+    // =========================================================================
+    // 5.3.1 & 5.3.2: Lấy tùy chọn ngôn ngữ & múi giờ mặc định của người dùng (vi, Asia/Ho_Chi_Minh)
+    const getPrefsRes = await context.injectJson<{
+      userId: number;
+      preferredLocale: 'vi' | 'en';
+      preferredTimezone: string;
+    }>({
+      method: 'GET',
+      url: '/api/v1/auth/preferences',
+      headers: adminHeaders,
+    });
+    expect(getPrefsRes.status).toBe(HTTP_STATUS_CODE.OK);
+    expect(getPrefsRes.body.data.preferredLocale).toBe('vi');
+    expect(getPrefsRes.body.data.preferredTimezone).toBe('Asia/Ho_Chi_Minh');
+
+    // 5.3.2 & 5.3.5: Người dùng đổi ngôn ngữ sang 'en' và múi giờ sang 'America/New_York'
+    const updatePrefsRes = await context.injectJson<{
+      userId: number;
+      preferredLocale: 'vi' | 'en';
+      preferredTimezone: string;
+    }>({
+      method: 'PATCH',
+      url: '/api/v1/auth/preferences',
+      headers: adminHeaders,
+      payload: {
+        preferredLocale: 'en',
+        preferredTimezone: 'America/New_York',
+      },
+    });
+    expect(updatePrefsRes.status).toBe(HTTP_STATUS_CODE.OK);
+    expect(updatePrefsRes.body.data.preferredLocale).toBe('en');
+    expect(updatePrefsRes.body.data.preferredTimezone).toBe('America/New_York');
+
+    // 5.3.3: Chuẩn hóa thông báo lỗi đa ngôn ngữ — Khi user có preferredLocale = 'en' gọi API lỗi mà không gửi Accept-Language,
+    // AuthGuard tự động áp dụng preferredLocale = 'en' từ hồ sơ và trả về thông báo lỗi tiếng Anh!
+    const notFoundInUserPrefEn = await context.injectJson({
+      method: 'GET',
+      url: '/api/v1/users/999999',
+      headers: adminHeaders,
+    });
+    expect(notFoundInUserPrefEn.status).toBe(HTTP_STATUS_CODE.NOT_FOUND);
+    expect(
+      (notFoundInUserPrefEn.body as unknown as { error: { message: string } }).error.message,
+    ).toBe('Requested user not found');
+
+    // Nếu client gửi kèm header Accept-Language: vi tường minh, ưu tiên trả về tiếng Việt
+    const notFoundExplicitVi = await context.injectJson({
+      method: 'GET',
+      url: '/api/v1/users/999999',
+      headers: {
+        ...adminHeaders,
+        'accept-language': 'vi',
+      },
+    });
+    expect(notFoundExplicitVi.status).toBe(HTTP_STATUS_CODE.NOT_FOUND);
+    expect(
+      (notFoundExplicitVi.body as unknown as { error: { message: string } }).error.message,
+    ).toBe('Không tìm thấy người dùng yêu cầu');
+
+    // Khôi phục lại preference mặc định 'vi' & 'Asia/Ho_Chi_Minh'
+    await context.injectJson({
+      method: 'PATCH',
+      url: '/api/v1/auth/preferences',
+      headers: adminHeaders,
+      payload: {
+        preferredLocale: 'vi',
+        preferredTimezone: 'Asia/Ho_Chi_Minh',
+      },
+    });
   });
 });

@@ -167,6 +167,7 @@ export class TypeOrmConfigService implements TypeOrmOptionsFactory {
           type: 'mysql',
           ...replicationConfig,
           charset: 'utf8mb4_unicode_ci',
+          timezone: 'Z',
           connectTimeout: db.connectTimeoutMs,
           ...(db.ssl ? { ssl: {} } : {}),
           extra: {

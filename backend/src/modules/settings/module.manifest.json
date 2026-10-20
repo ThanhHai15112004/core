@@ -33,7 +33,10 @@
       "system_setting_scopes",
       "system_setting_histories",
       "feature_flags",
-      "feature_flag_histories"
+      "feature_flag_histories",
+      "i18n_locales",
+      "i18n_timezones",
+      "i18n_translations"
     ]
   },
   "codeTypes": [
@@ -244,6 +247,50 @@
       "allowUnitOverride": true,
       "isSystem": true,
       "sortOrder": 2
+    },
+    {
+      "key": "ui.locale.default",
+      "groupCode": "ui",
+      "module": "settings",
+      "namespace": "system.ui",
+      "name": "Ngôn ngữ mặc định của hệ thống",
+      "description": "Mã ngôn ngữ mặc định áp dụng khi người dùng chưa thiết lập tùy chọn cá nhân hoặc không gửi header ngôn ngữ (vi, en)",
+      "valueType": "TEXT",
+      "defaultValue": "vi",
+      "validationRules": { "enumOptions": ["vi", "en"] },
+      "isSensitive": false,
+      "allowUnitOverride": true,
+      "isSystem": true,
+      "sortOrder": 3
+    },
+    {
+      "key": "ui.timezone.default",
+      "groupCode": "ui",
+      "module": "settings",
+      "namespace": "system.ui",
+      "name": "Múi giờ mặc định của hệ thống",
+      "description": "Múi giờ IANA mặc định dùng cho lịch, báo cáo và hiển thị thời gian khi người dùng chưa chọn múi giờ (ví dụ: Asia/Ho_Chi_Minh, UTC)",
+      "valueType": "TEXT",
+      "defaultValue": "Asia/Ho_Chi_Minh",
+      "isSensitive": false,
+      "allowUnitOverride": true,
+      "isSystem": true,
+      "sortOrder": 4
+    },
+    {
+      "key": "ui.currency.default",
+      "groupCode": "ui",
+      "module": "settings",
+      "namespace": "system.ui",
+      "name": "Đơn vị tiền tệ mặc định",
+      "description": "Mã tiền tệ ISO 4217 mặc định phục vụ định dạng tiền tệ trong báo cáo và giao dịch (ví dụ: VND, USD)",
+      "valueType": "TEXT",
+      "defaultValue": "VND",
+      "validationRules": { "enumOptions": ["VND", "USD", "EUR", "JPY", "SGD"] },
+      "isSensitive": false,
+      "allowUnitOverride": true,
+      "isSystem": true,
+      "sortOrder": 5
     },
     {
       "key": "system.maintenance.enabled",

@@ -142,6 +142,20 @@ export interface UserProfileView {
   readonly city: string | null;
   readonly country: string | null;
   readonly bio: string | null;
+  readonly preferredLocale?: string;
+  readonly preferredTimezone?: string;
+}
+
+export interface UserPreferencesView {
+  readonly userId: number;
+  readonly preferredLocale: string;
+  readonly preferredTimezone: string;
+  readonly updatedAt: string;
+}
+
+export interface UpdateUserPreferencesInput {
+  readonly preferredLocale?: string | undefined;
+  readonly preferredTimezone?: string | undefined;
 }
 
 export interface UserOrganizationAssignmentSummary {
@@ -205,6 +219,8 @@ export interface UserAuthIdentityView {
   readonly permissions: readonly string[];
   readonly dataScope?: number;
   readonly dataScopes?: readonly number[];
+  readonly preferredLocale?: string;
+  readonly preferredTimezone?: string;
   readonly profile?: UserProfileView;
 }
 
@@ -223,6 +239,8 @@ export interface SelfRegisterUserInput {
   readonly city?: string | null | undefined;
   readonly country?: string | null | undefined;
   readonly bio?: string | null | undefined;
+  readonly preferredLocale?: string | null | undefined;
+  readonly preferredTimezone?: string | null | undefined;
   readonly status?: UserStatusCode | undefined;
 }
 
@@ -293,6 +311,11 @@ export interface IUsersPublicService {
     options?: { recordHistory?: boolean; maxHistory?: number },
   ): Promise<void>;
   setMfaEnabled(userId: number, enabled: boolean): Promise<void>;
+  getUserPreferences?(userId: number): Promise<UserPreferencesView>;
+  updateUserPreferences?(
+    userId: number,
+    input: UpdateUserPreferencesInput,
+  ): Promise<UserPreferencesView>;
   registerAdminPasswordResetDelegate?(
     delegate: (
       userId: number,

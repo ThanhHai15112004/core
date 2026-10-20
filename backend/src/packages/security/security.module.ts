@@ -87,7 +87,7 @@ export function configureFastifyPlatformSecurityHooks(
             );
             reply.header(
               'access-control-allow-headers',
-              'Content-Type, Authorization, X-Request-Id, X-Correlation-Id, X-Scope-Unit-Id, X-Scope-Subordinate-Ids, X-Step-Up-Token, Accept-Language',
+              'Content-Type, Authorization, X-Request-Id, X-Correlation-Id, X-Scope-Unit-Id, X-Scope-Subordinate-Ids, X-Step-Up-Token, Accept-Language, X-Locale, X-Timezone',
             );
 
             if (req.method?.toUpperCase() === 'OPTIONS') {

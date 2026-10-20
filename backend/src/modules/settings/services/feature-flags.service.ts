@@ -50,6 +50,7 @@ export class FeatureFlagsService implements IFeatureFlagsPublicService, OnModule
   private historySeq = 0;
   private flagSeq = 100;
   private isPublishingChange = false;
+  private dbHydrated = false;
 
   constructor(
     @Optional() private readonly flagRepository?: FeatureFlagRepository | null,
@@ -177,6 +178,7 @@ export class FeatureFlagsService implements IFeatureFlagsPublicService, OnModule
         for (const entity of allDbFlags) {
           this.syncEntityIntoRegistry(entity);
         }
+        this.dbHydrated = true;
 
         return {
           syncedModules: Array.from(syncedModules),
@@ -757,6 +759,17 @@ export class FeatureFlagsService implements IFeatureFlagsPublicService, OnModule
   }
 
   private async ensureLoadedFromDb(): Promise<void> {
+    if (this.flagRepository && !this.dbHydrated) {
+      this.dbHydrated = true;
+      try {
+        const allDbFlags = await this.flagRepository.findFiltered();
+        for (const entity of allDbFlags) {
+          this.syncEntityIntoRegistry(entity);
+        }
+      } catch {
+        // Ignore DB error when table is not yet migrated
+      }
+    }
     if (this.registry.listDefinitions().length > 0) {
       return;
     }

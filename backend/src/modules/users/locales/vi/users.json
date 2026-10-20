@@ -7,5 +7,7 @@
   "managerNotFound": "Không tìm thấy người quản lý trực tiếp được chỉ định",
   "cannotBeOwnManager": "Người dùng không thể chọn chính mình làm người quản lý trực tiếp",
   "circularManagerHierarchy": "Phát hiện vòng lặp trong cây quản lý nhân sự (cấp dưới không thể làm quản lý của cấp trên)",
-  "invalidXlsxFile": "Tệp Excel (.xlsx) tải lên không hợp lệ hoặc bị hỏng"
+  "invalidXlsxFile": "Tệp Excel (.xlsx) tải lên không hợp lệ hoặc bị hỏng",
+  "invalidPreferredLocale": "Ngôn ngữ tùy chọn '{locale}' không được hệ thống hỗ trợ (chỉ hỗ trợ: vi, en)",
+  "invalidPreferredTimezone": "Múi giờ '{timezone}' không phải định danh múi giờ IANA hợp lệ"
 }

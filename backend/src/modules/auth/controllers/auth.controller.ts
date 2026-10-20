@@ -61,6 +61,7 @@ import {
   type SuggestPasswordQuery,
   type UpdateApiClientAllowedIpsRequest,
   type UpdateApiClientScopesRequest,
+  type UpdateMyPreferencesRequest,
   type UpdateSecuritySettingsRequest,
   type UpdateServiceAccountRequest,
   type VerifyMfaChallengeRequest,
@@ -94,6 +95,7 @@ import {
   suggestPasswordQuerySchema,
   updateApiClientAllowedIpsSchema,
   updateApiClientScopesSchema,
+  updateMyPreferencesSchema,
   updateSecuritySettingsSchema,
   updateServiceAccountSchema,
   verifyMfaChallengeSchema,
@@ -123,6 +125,7 @@ import {
   type StepUpVerifyResponse,
   type SuggestedPasswordResponse,
   type TrustedDeviceItemResponse,
+  type UserPreferencesResponse,
   type VerificationConfirmResponse,
   type VerificationSendResponse,
   adminResetMfaResponseSchema,
@@ -149,6 +152,7 @@ import {
   stepUpVerifyResponseSchema,
   suggestedPasswordResponseSchema,
   trustedDeviceItemResponseSchema,
+  userPreferencesResponseSchema,
   verificationConfirmResponseSchema,
   verificationSendResponseSchema,
 } from '../responses/auth.response.js';
@@ -287,6 +291,32 @@ export class AuthController {
   })
   public async getMe(@CurrentUser() user: UserIdentity): Promise<AuthenticatedUserProfileResponse> {
     return this.authService.getMe(user.id);
+  }
+
+  /** 5.3.2 & 5.3.5: Lấy tùy chọn ngôn ngữ (`preferredLocale`) và múi giờ (`preferredTimezone`) của người dùng đang đăng nhập */
+  @Get(AUTH_ROUTES.PREFERENCES)
+  @ApiDoc({
+    summary: 'Lấy tùy chọn ngôn ngữ và múi giờ của người dùng đang đăng nhập (Mục 5.3)',
+    response: userPreferencesResponseSchema,
+  })
+  public async getMyPreferences(
+    @CurrentUser() user: UserIdentity,
+  ): Promise<UserPreferencesResponse> {
+    return this.authService.getMyPreferences(user.id);
+  }
+
+  /** 5.3.2 & 5.3.5: Cập nhật tùy chọn ngôn ngữ (`preferredLocale`) và múi giờ (`preferredTimezone`) của người dùng đang đăng nhập */
+  @Patch(AUTH_ROUTES.PREFERENCES)
+  @ApiDoc({
+    summary:
+      'Cập nhật tùy chọn ngôn ngữ (vi/en) và múi giờ IANA của người dùng đang đăng nhập (Mục 5.3)',
+    response: userPreferencesResponseSchema,
+  })
+  public async updateMyPreferences(
+    @CurrentUser() user: UserIdentity,
+    @ValidatedBody(updateMyPreferencesSchema) body: UpdateMyPreferencesRequest,
+  ): Promise<UserPreferencesResponse> {
+    return this.authService.updateMyPreferences(user.id, body);
   }
 
   /** Đăng xuất khỏi phiên hiện tại (Mục 3.2.4) */
@@ -496,7 +526,8 @@ export class AuthController {
   @Post(AUTH_ROUTES.PASSWORD_CHANGE)
   @HttpCode(HttpStatus.OK)
   @ApiDoc({
-    summary: 'Đổi mật khẩu tài khoản hiện tại (có kiểm tra chính sách mật khẩu, lịch sử mật khẩu và thu hồi phiên)',
+    summary:
+      'Đổi mật khẩu tài khoản hiện tại (có kiểm tra chính sách mật khẩu, lịch sử mật khẩu và thu hồi phiên)',
     response: z.object({ changed: z.literal(true), revokedSessionsCount: z.number() }),
   })
   public async changePassword(
@@ -540,7 +571,8 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @RequirePermissions('users.update')
   @ApiDoc({
-    summary: 'Reset mật khẩu người dùng từ trang quản trị (hỗ trợ tự sinh mật khẩu gợi ý và thu hồi phiên)',
+    summary:
+      'Reset mật khẩu người dùng từ trang quản trị (hỗ trợ tự sinh mật khẩu gợi ý và thu hồi phiên)',
     response: adminResetPasswordResponseSchema,
   })
   public async adminResetPassword(
@@ -692,7 +724,8 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @RequirePermissions('users.update')
   @ApiDoc({
-    summary: 'Reset MFA có kiểm soát cho người dùng bị mất thiết bị xác thực (kèm lý do/xác minh và thu hồi phiên)',
+    summary:
+      'Reset MFA có kiểm soát cho người dùng bị mất thiết bị xác thực (kèm lý do/xác minh và thu hồi phiên)',
     response: adminResetMfaResponseSchema,
   })
   public async adminResetMfa(
@@ -706,7 +739,8 @@ export class AuthController {
   @Post(AUTH_ROUTES.STEP_UP_VERIFY)
   @HttpCode(HttpStatus.OK)
   @ApiDoc({
-    summary: 'Xác thực lại bằng mật khẩu hiện tại hoặc mã MFA để nhận stepUpToken ngắn hạn cho thao tác nhạy cảm',
+    summary:
+      'Xác thực lại bằng mật khẩu hiện tại hoặc mã MFA để nhận stepUpToken ngắn hạn cho thao tác nhạy cảm',
     response: stepUpVerifyResponseSchema,
   })
   public async verifyStepUp(
@@ -763,7 +797,8 @@ export class AuthController {
   @HttpCode(HttpStatus.CREATED)
   @RequirePermissions('users.update')
   @ApiDoc({
-    summary: 'Tạo tài khoản hệ thống (Service Account) dùng cho hệ thống tích hợp hoặc background job',
+    summary:
+      'Tạo tài khoản hệ thống (Service Account) dùng cho hệ thống tích hợp hoặc background job',
     response: serviceAccountResponseSchema,
   })
   public async createServiceAccount(
@@ -892,7 +927,8 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @RequirePermissions('users.update')
   @ApiDoc({
-    summary: 'Xoay vòng Client Secret của API Client (Secret mới chỉ hiển thị 1 lần và vô hiệu hóa token cũ)',
+    summary:
+      'Xoay vòng Client Secret của API Client (Secret mới chỉ hiển thị 1 lần và vô hiệu hóa token cũ)',
     response: apiClientRotateSecretResponseSchema,
   })
   public async rotateApiClientSecret(
@@ -930,4 +966,3 @@ export class AuthController {
     return this.serviceAccountService!.getApiClientUsage(id);
   }
 }
-

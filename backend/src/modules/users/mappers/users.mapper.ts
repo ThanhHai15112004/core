@@ -42,6 +42,8 @@ export class UsersMapper implements EntityMapperContract<UserEntity, UserRespons
       p?.fullName ??
       (legacyEntity.fullName || `${lastName} ${firstName}`.trim() || entity.username);
     const avatarUrl = p?.avatarUrl ?? legacyEntity.avatarUrl ?? null;
+    const preferredLocale = p?.preferredLocale?.trim() || 'vi';
+    const preferredTimezone = p?.preferredTimezone?.trim() || 'Asia/Ho_Chi_Minh';
 
     const profileView: UserProfileView = {
       firstName,
@@ -55,6 +57,8 @@ export class UsersMapper implements EntityMapperContract<UserEntity, UserRespons
       city: p?.city ?? null,
       country: p?.country ?? null,
       bio: p?.bio ?? null,
+      preferredLocale,
+      preferredTimezone,
     };
 
     return {
@@ -66,6 +70,8 @@ export class UsersMapper implements EntityMapperContract<UserEntity, UserRespons
       lastName,
       fullName,
       avatarUrl,
+      preferredLocale,
+      preferredTimezone,
       profile: profileView,
       status: statusCode,
       statusName: getUserStatusName(statusCode),
