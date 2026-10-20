@@ -110,3 +110,11 @@ export class DefaultSmsOtpProvider implements ISmsOtpProvider {
     return this.history;
   }
 }
+
+export function createDefaultEmailNotificationAdapter(): IEmailNotificationAdapter {
+  return new DefaultEmailNotificationAdapter();
+}
+
+export function createDefaultSmsOtpProvider(): ISmsOtpProvider {
+  return new DefaultSmsOtpProvider();
+}

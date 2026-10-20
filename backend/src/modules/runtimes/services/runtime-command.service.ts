@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { CoreI18nService } from '@packages/i18n/index.js';
-import { NotFoundAppException } from '@packages/kernel/index.js';
+import { NotFoundAppException, safeJsonParse } from '@packages/kernel/index.js';
 import { RedisService } from '@packages/redis/index.js';
 import {
   COMMAND_TTL_SEC,
@@ -101,10 +101,15 @@ export class RuntimeCommandService {
     if (!rawCommand)
       throw new NotFoundAppException('runtime.error.commandNotFound', { id: commandId });
 
-    const command = JSON.parse(rawCommand) as RuntimeCommand;
-    const result: RuntimeCommandResult = rawResult
-      ? (JSON.parse(rawResult) as RuntimeCommandResult)
-      : { id: commandId, status: 'pending', at: command.requestedAt };
+    const command = safeJsonParse<RuntimeCommand>(rawCommand);
+    if (!command)
+      throw new NotFoundAppException('runtime.error.commandNotFound', { id: commandId });
+    const parsedResult = safeJsonParse<RuntimeCommandResult>(rawResult);
+    const result: RuntimeCommandResult = parsedResult ?? {
+      id: commandId,
+      status: 'pending',
+      at: command.requestedAt,
+    };
 
     return {
       id: command.id,

@@ -1,3 +1,4 @@
+import { safeJsonParse } from '@packages/kernel/index.js';
 import type { RedisService } from '@packages/redis/index.js';
 import { runtimeKeys, type RuntimeHeartbeat } from '@packages/runtime/index.js';
 import type { QueueInfo } from '@packages/queue/index.js';
@@ -46,10 +47,5 @@ export function reasonOf(message: string | null | undefined): string {
 export async function readWorkerHeartbeat(redis: RedisService): Promise<RuntimeHeartbeat | null> {
   if (!redis.isReady()) return null;
   const raw = await redis.client.get(runtimeKeys(redis).heartbeat('worker')).catch(() => null);
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw) as RuntimeHeartbeat;
-  } catch {
-    return null;
-  }
+  return safeJsonParse<RuntimeHeartbeat>(raw);
 }

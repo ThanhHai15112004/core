@@ -1,15 +1,18 @@
 import { Global, Module } from '@nestjs/common';
-import { CodeRegistryService, defaultCodeRegistry } from './contracts/code-lookup.contract.js';
+import { CodeRegistryService, defaultCodeRegistry } from './registries/code-registry.service.js';
 import {
   FeatureFlagRegistryService,
   defaultFeatureFlagRegistry,
-} from './contracts/feature-flag.contract.js';
-import { MenuRegistryService, defaultMenuRegistry } from './contracts/menu.contract.js';
-import { SequenceRegistryService, defaultSequenceRegistry } from './contracts/sequence.contract.js';
+} from './registries/feature-flag-registry.service.js';
+import { MenuRegistryService, defaultMenuRegistry } from './registries/menu-registry.service.js';
+import {
+  SequenceRegistryService,
+  defaultSequenceRegistry,
+} from './registries/sequence-registry.service.js';
 import {
   SettingRegistryService,
   defaultSettingRegistry,
-} from './contracts/setting-lookup.contract.js';
+} from './registries/setting-registry.service.js';
 
 @Global()
 @Module({

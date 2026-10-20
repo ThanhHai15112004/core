@@ -23,10 +23,6 @@ export class AuditLogRepository implements IAuditLogPersistencePort {
     auditLogService?.registerPersistencePort(this);
   }
 
-  private parseJsonObject(raw?: string | null): Record<string, unknown> | null {
-    return safeJsonParseObject(raw, null);
-  }
-
   private toRecord(entity: AuditLogEntity): AuditLogRecord {
     const actorType = parseAuditActorType(entity.actorType);
     return {
@@ -51,8 +47,8 @@ export class AuditLogRepository implements IAuditLogPersistencePort {
       action: entity.action,
       resourceType: entity.resourceType ?? null,
       resourceId: entity.resourceId ?? null,
-      beforeData: this.parseJsonObject(entity.beforeDataJson),
-      afterData: this.parseJsonObject(entity.afterDataJson),
+      beforeData: safeJsonParseObject(entity.beforeDataJson, null),
+      afterData: safeJsonParseObject(entity.afterDataJson, null),
       reason: entity.reason ?? null,
       ipAddress: entity.ipAddress ?? null,
       userAgent: entity.userAgent ?? null,

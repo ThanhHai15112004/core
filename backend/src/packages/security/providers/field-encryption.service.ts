@@ -150,3 +150,5 @@ export class FieldEncryptionService {
     return { encKey, macKey };
   }
 }
+
+export const defaultFieldEncryptionService = new FieldEncryptionService();

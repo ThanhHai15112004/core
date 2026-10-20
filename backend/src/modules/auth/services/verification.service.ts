@@ -29,8 +29,8 @@ import {
 import { AuthVerificationCodeRepository } from '../repositories/auth-verification-code.repository.js';
 import { SecuritySettingsService } from './security-settings.service.js';
 import {
-  DefaultEmailNotificationAdapter,
-  DefaultSmsOtpProvider,
+  createDefaultEmailNotificationAdapter,
+  createDefaultSmsOtpProvider,
 } from './notification-adapters.provider.js';
 import type {
   ConfirmEmailVerificationRequest,
@@ -69,8 +69,8 @@ export class VerificationService {
     @Inject(AUTH_SMS_OTP_PROVIDER)
     smsProvider?: ISmsOtpProvider,
   ) {
-    this.emailAdapter = emailAdapter ?? new DefaultEmailNotificationAdapter();
-    this.smsProvider = smsProvider ?? new DefaultSmsOtpProvider();
+    this.emailAdapter = emailAdapter ?? createDefaultEmailNotificationAdapter();
+    this.smsProvider = smsProvider ?? createDefaultSmsOtpProvider();
   }
 
   /** Gửi link hoặc mã xác minh Email có thời hạn (Mục 3.2.6 & 3.5.1) */

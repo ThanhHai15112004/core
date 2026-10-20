@@ -414,3 +414,7 @@ export class DataScopeService {
     return matched.sort((a, b) => (a.priority ?? 100) - (b.priority ?? 100));
   }
 }
+
+export function createDefaultDataScopeService(): DataScopeService {
+  return new DataScopeService();
+}

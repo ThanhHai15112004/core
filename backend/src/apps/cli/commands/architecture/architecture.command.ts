@@ -49,6 +49,8 @@ export class ArchitectureCommand implements ICliCommandProvider {
       console.log('  [Rule 4] No Circular Dependencies: OK');
       console.log('  [Rule 5] No Direct ORM Entity/Repository Exposure: OK');
       console.log('  [Rule 6] Foreign Key & Cascade Delete Safety: OK');
+      console.log('  [Rule 7] I18n Locale Parity & Exception Keys: OK');
+      console.log('  [Rule 8] Shared Kernel Utils & ESM Hygiene: OK');
       console.log('------------------------------------------------------\n');
       return;
     }

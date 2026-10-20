@@ -1,13 +1,11 @@
-import {
-  type CanActivate,
-  type ExecutionContext,
-  Injectable,
-  Optional,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { type CanActivate, type ExecutionContext, Injectable, Optional } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import type { FastifyReply, FastifyRequest } from 'fastify';
-import { ForbiddenAppException, HTTP_ERROR_CODE } from '@packages/kernel/index.js';
+import {
+  ForbiddenAppException,
+  HTTP_ERROR_CODE,
+  UnauthorizedAppException,
+} from '@packages/kernel/index.js';
 import {
   IS_PUBLIC_KEY,
   REQUIRED_PERMISSIONS_KEY,
@@ -119,30 +117,30 @@ export class AuthGuard implements CanActivate {
 
     if (!authHeader || typeof authHeader !== 'string') {
       await this.enforceRateLimit(request, reply);
-      throw new UnauthorizedException('Missing Authorization header');
+      throw new UnauthorizedAppException('security.missingAuthHeader');
     }
 
     const parts = authHeader.split(' ');
     if (parts.length !== 2 || parts[0] !== 'Bearer') {
       await this.enforceRateLimit(request, reply);
-      throw new UnauthorizedException('Invalid Authorization token format');
+      throw new UnauthorizedAppException('security.invalidAuthTokenFormat');
     }
 
     const token = parts[1];
     if (!token) {
       await this.enforceRateLimit(request, reply);
-      throw new UnauthorizedException('Token is required');
+      throw new UnauthorizedAppException('security.tokenRequired');
     }
     const payload = await this.tokenService.verify(token);
     if (!payload) {
       await this.enforceRateLimit(request, reply);
-      throw new UnauthorizedException('Invalid or expired token');
+      throw new UnauthorizedAppException('security.invalidOrExpiredToken');
     }
 
     const user = await this.tokenService.validateUser(payload, resolutionContext);
     if (!user) {
       await this.enforceRateLimit(request, reply);
-      throw new UnauthorizedException('User not found or disabled');
+      throw new UnauthorizedAppException('security.userNotFoundOrDisabled');
     }
 
     request.user = user;

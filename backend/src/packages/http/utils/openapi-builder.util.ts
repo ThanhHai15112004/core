@@ -584,6 +584,181 @@ function extractOpenApiParameters(
   return [];
 }
 
+function collectOperationParameters(params: {
+  docOptions: ApiDocOptions;
+  recordedValidations: readonly RecordedValidationSchema[];
+  pathParamNames: readonly string[];
+}): OpenApiParameterObject[] {
+  const { docOptions, recordedValidations, pathParamNames } = params;
+  const parameters: OpenApiParameterObject[] = [];
+  const seenPathParams = new Set<string>();
+
+  if (docOptions.params) {
+    for (const p of extractOpenApiParameters(docOptions.params, 'path')) {
+      seenPathParams.add(p.name);
+      parameters.push(p);
+    }
+  }
+
+  for (const rec of recordedValidations) {
+    if (rec.source === VALIDATION_SOURCE.PARAMS) {
+      for (const p of extractOpenApiParameters(rec.schema, 'path', rec.paramKey)) {
+        if (!seenPathParams.has(p.name)) {
+          seenPathParams.add(p.name);
+          parameters.push(p);
+        }
+      }
+    }
+  }
+
+  for (const paramName of pathParamNames) {
+    if (!seenPathParams.has(paramName)) {
+      seenPathParams.add(paramName);
+      const fallbackSchema: OpenApiSchemaObject = { type: 'string', minLength: 1 };
+      parameters.push({
+        name: paramName,
+        in: 'path',
+        required: true,
+        schema: fallbackSchema,
+        example: generateSchemaExample(fallbackSchema, paramName),
+      });
+    }
+  }
+
+  const seenQueryParams = new Set<string>();
+  const querySchema =
+    docOptions.query ??
+    recordedValidations.find((r) => r.source === VALIDATION_SOURCE.QUERY)?.schema;
+
+  if (querySchema) {
+    for (const q of extractOpenApiParameters(querySchema, 'query')) {
+      if (!seenQueryParams.has(q.name)) {
+        seenQueryParams.add(q.name);
+        parameters.push(q);
+      }
+    }
+  }
+
+  return parameters;
+}
+
+function buildOperationResponses(params: {
+  docOptions: ApiDocOptions;
+  handler: object;
+  httpVerb: string;
+  hasInputValidation: boolean;
+  isPublic: boolean;
+  methodRoles: readonly string[];
+  methodPermissions: readonly string[];
+  pathParamNames: readonly string[];
+}): Record<string, OpenApiResponseObject> {
+  const {
+    docOptions,
+    handler,
+    httpVerb,
+    hasInputValidation,
+    isPublic,
+    methodRoles,
+    methodPermissions,
+    pathParamNames,
+  } = params;
+
+  const explicitHttpCode = Reflect.getMetadata(NEST_HTTP_CODE_METADATA, handler) as
+    number | undefined;
+  const successStatus =
+    docOptions.status ??
+    explicitHttpCode ??
+    (httpVerb === 'post' ? HTTP_STATUS_CODE.CREATED : HTTP_STATUS_CODE.OK);
+
+  const responses: Record<string, OpenApiResponseObject> = {};
+
+  if (successStatus === HTTP_STATUS_CODE.NO_CONTENT) {
+    responses[String(HTTP_STATUS_CODE.NO_CONTENT)] = {
+      description: 'No Content',
+    };
+  } else {
+    const dataSchema = docOptions.response
+      ? zodSchemaToOpenApiSchema(docOptions.response)
+      : ({ type: 'object', additionalProperties: true } satisfies OpenApiSchemaObject);
+
+    const envelope = buildSuccessEnvelopeSchema(
+      dataSchema,
+      successStatus,
+      docOptions.pagination,
+      docOptions.responseExample,
+    );
+
+    responses[String(successStatus)] = {
+      description: 'Success Response Envelope',
+      content: {
+        'application/json': {
+          schema: envelope.schema,
+          example: envelope.example,
+        },
+      },
+    };
+  }
+
+  if (
+    hasInputValidation ||
+    (docOptions.errorCodes ?? []).includes(HTTP_ERROR_CODE.VALIDATION_FAILED)
+  ) {
+    responses[String(HTTP_STATUS_CODE.BAD_REQUEST)] = buildErrorEnvelopeSchema(
+      HTTP_STATUS_CODE.BAD_REQUEST,
+      HTTP_ERROR_CODE.VALIDATION_FAILED,
+      'Dữ liệu đầu vào không hợp lệ',
+      true,
+    );
+  }
+
+  if (!isPublic) {
+    responses[String(HTTP_STATUS_CODE.UNAUTHORIZED)] = buildErrorEnvelopeSchema(
+      HTTP_STATUS_CODE.UNAUTHORIZED,
+      HTTP_ERROR_CODE.UNAUTHORIZED,
+      'Chưa xác thực hoặc JWT token không hợp lệ',
+    );
+  }
+
+  if (
+    methodRoles.length > 0 ||
+    methodPermissions.length > 0 ||
+    (docOptions.errorCodes ?? []).includes(HTTP_ERROR_CODE.FORBIDDEN)
+  ) {
+    responses[String(HTTP_STATUS_CODE.FORBIDDEN)] = buildErrorEnvelopeSchema(
+      HTTP_STATUS_CODE.FORBIDDEN,
+      HTTP_ERROR_CODE.FORBIDDEN,
+      'Không đủ quyền hạn (Roles/Permissions) để thực hiện thao tác',
+    );
+  }
+
+  if (
+    pathParamNames.length > 0 ||
+    (docOptions.errorCodes ?? []).includes(HTTP_ERROR_CODE.NOT_FOUND)
+  ) {
+    responses[String(HTTP_STATUS_CODE.NOT_FOUND)] = buildErrorEnvelopeSchema(
+      HTTP_STATUS_CODE.NOT_FOUND,
+      HTTP_ERROR_CODE.NOT_FOUND,
+      'Không tìm thấy tài nguyên yêu cầu',
+    );
+  }
+
+  if ((docOptions.errorCodes ?? []).includes(HTTP_ERROR_CODE.CONFLICT)) {
+    responses[String(HTTP_STATUS_CODE.CONFLICT)] = buildErrorEnvelopeSchema(
+      HTTP_STATUS_CODE.CONFLICT,
+      HTTP_ERROR_CODE.CONFLICT,
+      'Xung đột trạng thái dữ liệu',
+    );
+  }
+
+  responses[String(HTTP_STATUS_CODE.INTERNAL_SERVER_ERROR)] = buildErrorEnvelopeSchema(
+    HTTP_STATUS_CODE.INTERNAL_SERVER_ERROR,
+    HTTP_ERROR_CODE.INTERNAL_SERVER_ERROR,
+    'Lỗi hệ thống nội bộ',
+  );
+
+  return responses;
+}
+
 /**
  * Quét danh sách các Controller Classes và sinh tài liệu chuẩn OpenAPI 3.1.0.
  * Tự động kết hợp metadata từ `@Controller`, `@Get/@Post/...`, `@Public`, `@RequirePermissions`, `@RequireRoles`,
@@ -678,58 +853,12 @@ export function buildOpenApiDocumentFromControllers(
         tagMap.set(tag, { name: tag });
       }
 
-      // 1. Tổng hợp Path Parameters & Query Parameters
-      const parameters: OpenApiParameterObject[] = [];
-      const seenPathParams = new Set<string>();
+      const parameters = collectOperationParameters({
+        docOptions,
+        recordedValidations,
+        pathParamNames,
+      });
 
-      if (docOptions.params) {
-        for (const p of extractOpenApiParameters(docOptions.params, 'path')) {
-          seenPathParams.add(p.name);
-          parameters.push(p);
-        }
-      }
-
-      for (const rec of recordedValidations) {
-        if (rec.source === VALIDATION_SOURCE.PARAMS) {
-          for (const p of extractOpenApiParameters(rec.schema, 'path', rec.paramKey)) {
-            if (!seenPathParams.has(p.name)) {
-              seenPathParams.add(p.name);
-              parameters.push(p);
-            }
-          }
-        }
-      }
-
-      // Tự động điền các tham số :param trên route path nếu chưa có schema tường minh
-      for (const paramName of pathParamNames) {
-        if (!seenPathParams.has(paramName)) {
-          seenPathParams.add(paramName);
-          const fallbackSchema: OpenApiSchemaObject = { type: 'string', minLength: 1 };
-          parameters.push({
-            name: paramName,
-            in: 'path',
-            required: true,
-            schema: fallbackSchema,
-            example: generateSchemaExample(fallbackSchema, paramName),
-          });
-        }
-      }
-
-      const seenQueryParams = new Set<string>();
-      const querySchema =
-        docOptions.query ??
-        recordedValidations.find((r) => r.source === VALIDATION_SOURCE.QUERY)?.schema;
-
-      if (querySchema) {
-        for (const q of extractOpenApiParameters(querySchema, 'query')) {
-          if (!seenQueryParams.has(q.name)) {
-            seenQueryParams.add(q.name);
-            parameters.push(q);
-          }
-        }
-      }
-
-      // 2. Tổng hợp Request Body
       const bodySchemaZod =
         docOptions.body ??
         recordedValidations.find((r) => r.source === VALIDATION_SOURCE.BODY)?.schema;
@@ -739,102 +868,17 @@ export function buildOpenApiDocumentFromControllers(
         ? (docOptions.requestExample ?? generateSchemaExample(bodyOpenApiSchema, 'body'))
         : undefined;
 
-      // 3. Tổng hợp Responses (Success Envelope + Error Envelopes)
-      const explicitHttpCode = Reflect.getMetadata(NEST_HTTP_CODE_METADATA, handler) as
-        number | undefined;
-      const successStatus =
-        docOptions.status ??
-        explicitHttpCode ??
-        (httpVerb === 'post' ? HTTP_STATUS_CODE.CREATED : HTTP_STATUS_CODE.OK);
+      const responses = buildOperationResponses({
+        docOptions,
+        handler,
+        httpVerb,
+        hasInputValidation: Boolean(bodyOpenApiSchema || parameters.length > 0),
+        isPublic,
+        methodRoles,
+        methodPermissions,
+        pathParamNames,
+      });
 
-      const responses: Record<string, OpenApiResponseObject> = {};
-
-      if (successStatus === HTTP_STATUS_CODE.NO_CONTENT) {
-        responses[String(HTTP_STATUS_CODE.NO_CONTENT)] = {
-          description: 'No Content',
-        };
-      } else {
-        const dataSchema = docOptions.response
-          ? zodSchemaToOpenApiSchema(docOptions.response)
-          : ({ type: 'object', additionalProperties: true } satisfies OpenApiSchemaObject);
-
-        const envelope = buildSuccessEnvelopeSchema(
-          dataSchema,
-          successStatus,
-          docOptions.pagination,
-          docOptions.responseExample,
-        );
-
-        responses[String(successStatus)] = {
-          description: 'Success Response Envelope',
-          content: {
-            'application/json': {
-              schema: envelope.schema,
-              example: envelope.example,
-            },
-          },
-        };
-      }
-
-      const hasInputValidation = Boolean(bodyOpenApiSchema || parameters.length > 0);
-      if (
-        hasInputValidation ||
-        (docOptions.errorCodes ?? []).includes(HTTP_ERROR_CODE.VALIDATION_FAILED)
-      ) {
-        responses[String(HTTP_STATUS_CODE.BAD_REQUEST)] = buildErrorEnvelopeSchema(
-          HTTP_STATUS_CODE.BAD_REQUEST,
-          HTTP_ERROR_CODE.VALIDATION_FAILED,
-          'Dữ liệu đầu vào không hợp lệ',
-          true,
-        );
-      }
-
-      if (!isPublic) {
-        responses[String(HTTP_STATUS_CODE.UNAUTHORIZED)] = buildErrorEnvelopeSchema(
-          HTTP_STATUS_CODE.UNAUTHORIZED,
-          HTTP_ERROR_CODE.UNAUTHORIZED,
-          'Chưa xác thực hoặc JWT token không hợp lệ',
-        );
-      }
-
-      if (
-        methodRoles.length > 0 ||
-        methodPermissions.length > 0 ||
-        (docOptions.errorCodes ?? []).includes(HTTP_ERROR_CODE.FORBIDDEN)
-      ) {
-        responses[String(HTTP_STATUS_CODE.FORBIDDEN)] = buildErrorEnvelopeSchema(
-          HTTP_STATUS_CODE.FORBIDDEN,
-          HTTP_ERROR_CODE.FORBIDDEN,
-          'Không đủ quyền hạn (Roles/Permissions) để thực hiện thao tác',
-        );
-      }
-
-      if (
-        pathParamNames.length > 0 ||
-        (docOptions.errorCodes ?? []).includes(HTTP_ERROR_CODE.NOT_FOUND)
-      ) {
-        responses[String(HTTP_STATUS_CODE.NOT_FOUND)] = buildErrorEnvelopeSchema(
-          HTTP_STATUS_CODE.NOT_FOUND,
-          HTTP_ERROR_CODE.NOT_FOUND,
-          'Không tìm thấy tài nguyên yêu cầu',
-        );
-      }
-
-      if ((docOptions.errorCodes ?? []).includes(HTTP_ERROR_CODE.CONFLICT)) {
-        responses[String(HTTP_STATUS_CODE.CONFLICT)] = buildErrorEnvelopeSchema(
-          HTTP_STATUS_CODE.CONFLICT,
-          HTTP_ERROR_CODE.CONFLICT,
-          'Xung đột trạng thái dữ liệu',
-        );
-      }
-
-      responses[String(HTTP_STATUS_CODE.INTERNAL_SERVER_ERROR)] = buildErrorEnvelopeSchema(
-        HTTP_STATUS_CODE.INTERNAL_SERVER_ERROR,
-        HTTP_ERROR_CODE.INTERNAL_SERVER_ERROR,
-        'Lỗi hệ thống nội bộ',
-      );
-
-      // 4. Mô tả chi tiết + Bảng phân quyền
       const securityBlock = buildSecurityDescriptionBlock(isPublic, methodRoles, methodPermissions);
       const fullDescription = docOptions.description
         ? `${docOptions.description}\n\n${securityBlock}`

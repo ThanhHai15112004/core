@@ -1,4 +1,5 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
+import { safeJsonParseList } from '@packages/kernel/index.js';
 import { RedisService } from '@packages/redis/index.js';
 import {
   MessagingConnectionService,
@@ -7,7 +8,7 @@ import {
   type JobEventRecord,
   type JobOperationRecord,
 } from '@packages/messaging/index.js';
-import { BullMqJobProvider } from '../providers/bullmq-job.provider.js';
+import { createBullMqJobProvider } from '../providers/bullmq-job.provider.js';
 import { queueKeys } from '../constants/queue.keys.js';
 import type {
   JobCapability,
@@ -29,8 +30,9 @@ export class JobMonitoringService {
     registry: QueueRegistry,
     private readonly connection: MessagingConnectionService,
     private readonly redis: RedisService,
+    @Optional() injectedProvider?: JobProvider,
   ) {
-    this.provider = new BullMqJobProvider(registry, redis);
+    this.provider = injectedProvider ?? createBullMqJobProvider(registry, redis);
   }
 
   /** Kiểm tra xem tính năng chỉ định có được hỗ trợ hay không */
@@ -92,12 +94,6 @@ export class JobMonitoringService {
   /** Audit thao tác job (mới nhất trước) — `JobOperationsService` ghi. */
   public async operations(): Promise<JobOperationRecord[]> {
     const raws = await this.redis.client.lrange(queueKeys(this.redis).jobOperations(), 0, -1);
-    return raws.flatMap((r) => {
-      try {
-        return [JSON.parse(r) as JobOperationRecord];
-      } catch {
-        return [];
-      }
-    });
+    return safeJsonParseList<JobOperationRecord>(raws);
   }
 }

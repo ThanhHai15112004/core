@@ -3,6 +3,7 @@ import {
   BadRequestAppException,
   SettingRegistryService,
   defaultSettingRegistry,
+  safeJsonParse,
 } from '@packages/kernel/index.js';
 import {
   DB_ENCRYPTION_ALGORITHMS,
@@ -467,34 +468,24 @@ export class SecuritySettingsService {
   }
 
   private parseAllowedMethods(jsonStr?: string | null): MfaMethodType[] {
-    if (!jsonStr) return ['TOTP', 'EMAIL_OTP', 'RECOVERY_CODE'];
-    try {
-      const parsed = JSON.parse(jsonStr) as unknown;
-      if (!Array.isArray(parsed)) return ['TOTP', 'EMAIL_OTP', 'RECOVERY_CODE'];
-      const valid = parsed.filter(
-        (m): m is MfaMethodType =>
-          m === 'TOTP' || m === 'EMAIL_OTP' || m === 'SMS_OTP' || m === 'RECOVERY_CODE',
-      );
-      return valid.length > 0 ? valid : ['TOTP', 'EMAIL_OTP', 'RECOVERY_CODE'];
-    } catch {
-      return ['TOTP', 'EMAIL_OTP', 'RECOVERY_CODE'];
-    }
+    const parsed = safeJsonParse<unknown>(jsonStr, null);
+    if (!Array.isArray(parsed)) return ['TOTP', 'EMAIL_OTP', 'RECOVERY_CODE'];
+    const valid = parsed.filter(
+      (m): m is MfaMethodType =>
+        m === 'TOTP' || m === 'EMAIL_OTP' || m === 'SMS_OTP' || m === 'RECOVERY_CODE',
+    );
+    return valid.length > 0 ? valid : ['TOTP', 'EMAIL_OTP', 'RECOVERY_CODE'];
   }
 
   private parseDisallowedPasswords(
     jsonStr?: string | null,
     fallback: readonly string[] = DEFAULT_DISALLOWED_PASSWORDS,
   ): string[] {
-    if (!jsonStr) return [...fallback];
-    try {
-      const parsed = JSON.parse(jsonStr) as unknown;
-      if (!Array.isArray(parsed)) return [...fallback];
-      return parsed
-        .filter((item): item is string => typeof item === 'string')
-        .map((s) => s.trim().toLowerCase())
-        .filter(Boolean);
-    } catch {
-      return [...fallback];
-    }
+    const parsed = safeJsonParse<unknown>(jsonStr, null);
+    if (!Array.isArray(parsed)) return [...fallback];
+    return parsed
+      .filter((item): item is string => typeof item === 'string')
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean);
   }
 }

@@ -1,6 +1,7 @@
 import { performance } from 'node:perf_hooks';
 import { Injectable, Logger } from '@nestjs/common';
 import { CoreConfigService } from '@packages/config/index.js';
+import { safeJsonParse, safeJsonParseList } from '@packages/kernel/index.js';
 import { RedisService } from '@packages/redis/index.js';
 import { QueueRegistry, schedulerKeys } from '@packages/queue/index.js';
 import {
@@ -104,7 +105,7 @@ export class SchedulerOperationsService {
     if (!this.redis.isReady()) return [];
     try {
       const raw = await this.redis.client.lrange(this.keys.operations(), 0, MAX_OPERATIONS - 1);
-      return raw.map((item) => JSON.parse(item) as SchedulerOperationRecord);
+      return safeJsonParseList<SchedulerOperationRecord>(raw);
     } catch {
       return [];
     }
@@ -115,11 +116,7 @@ export class SchedulerOperationsService {
     if (!this.redis.isReady()) return null;
     const raw = await this.redis.client.hget(this.keys.definitions(), taskId);
     if (raw) {
-      try {
-        return JSON.parse(raw) as TaskDefinitionJson;
-      } catch {
-        // continue search
-      }
+      return safeJsonParse<TaskDefinitionJson | null>(raw, null);
     }
 
     return null;

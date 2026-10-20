@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { Injectable, Logger, Optional } from '@nestjs/common';
 import { CoreConfigService } from '@packages/config/index.js';
+import { safeJsonParse } from '@packages/kernel/index.js';
 import { RedisService } from '@packages/redis/index.js';
 import { databaseKeys } from '../constants/database.keys.js';
 import { DatabaseConnectionService } from '../providers/database-connection.service.js';
@@ -331,10 +332,6 @@ export class DatabaseOperationsService {
     const raw = await this.redis.client
       .get(databaseKeys(this.redis).lastMigrationRun())
       .catch(() => null);
-    try {
-      return raw ? (JSON.parse(raw) as MigrationRun) : null;
-    } catch {
-      return null;
-    }
+    return safeJsonParse<MigrationRun | null>(raw, null);
   }
 }

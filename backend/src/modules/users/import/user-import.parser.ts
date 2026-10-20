@@ -37,6 +37,98 @@ export function detectHeaderRowIndex(matrix: ReadonlyArray<ReadonlyArray<string>
   return detectSpreadsheetHeaderRowIndex(matrix, USER_KNOWN_HEADERS);
 }
 
+interface UserImportColumnMap {
+  usernameIdx: number;
+  employeeCodeIdx: number;
+  emailIdx: number;
+  firstNameIdx: number;
+  lastNameIdx: number;
+  middleNameIdx: number;
+  fullNameIdx: number;
+  phoneIdx: number;
+  passwordIdx: number;
+  statusIdx: number;
+  positionIdx: number;
+  rolesIdx: number;
+  orgsIdx: number;
+}
+
+function resolveUserImportColumnMap(headerRow: ReadonlyArray<string>): UserImportColumnMap {
+  const idxOf = createSpreadsheetColumnFinder(headerRow);
+  return {
+    usernameIdx: idxOf([
+      'username',
+      'user_name',
+      'account',
+      'tai_khoan',
+      'tài khoản',
+      'tên đăng nhập',
+      'ten dang nhap',
+    ]),
+    employeeCodeIdx: idxOf(['mã nhân viên', 'ma nhan vien', 'employee_code', 'emp_code', 'mã nv']),
+    emailIdx: idxOf(['email', 'mail', 'thư điện tử']),
+    firstNameIdx: idxOf(['firstname', 'first_name', 'ten', 'tên', 'tên nhân viên']),
+    lastNameIdx: idxOf([
+      'lastname',
+      'last_name',
+      'ho',
+      'ho_dem',
+      'họ',
+      'họ và tên đệm',
+      'ho va ten dem',
+      'họ nhân viên',
+    ]),
+    middleNameIdx: idxOf(['tên đệm', 'ten dem', 'middlename', 'middle_name']),
+    fullNameIdx: idxOf(['fullname', 'full_name', 'name', 'hoten', 'ho_ten', 'họ và tên', 'họ tên']),
+    phoneIdx: idxOf([
+      'phone',
+      'phone_number',
+      'phonenumber',
+      'sdt',
+      'sđt',
+      'so_dien_thoai',
+      'số điện thoại',
+    ]),
+    passwordIdx: idxOf(['password', 'pass', 'mat_khau', 'mật khẩu']),
+    statusIdx: idxOf(['status', 'trangthai', 'trang_thai', 'trạng thái']),
+    positionIdx: idxOf([
+      'chức danh',
+      'chuc danh',
+      'mã chức danh',
+      'ma chuc danh',
+      'vị trí công việc',
+      'vi tri cong viec',
+      'chức danh / vị trí',
+      'position',
+      'position_title',
+    ]),
+    rolesIdx: idxOf([
+      'roles',
+      'rolecodes',
+      'role_codes',
+      'vai_tro',
+      'vai trò',
+      'mã vai trò',
+      'mã chức vụ',
+    ]),
+    orgsIdx: idxOf([
+      'organizations',
+      'organizationcodes',
+      'organization_codes',
+      'organizationunits',
+      'organizationunitcodes',
+      'branches',
+      'don_vi',
+      'đơn vị',
+      'mã đơn vị',
+      'ma don vi',
+      'đơn vị / phòng ban',
+      'don vi / phong ban',
+      'phòng ban',
+    ]),
+  };
+}
+
 /** Chuyển đổi mảng 2 chiều (từ CSV hoặc Excel .xlsx) thành danh sách `BulkImportUserRowInput` */
 export function mapMatrixToImportRows(
   matrix: ReadonlyArray<ReadonlyArray<string>>,
@@ -46,101 +138,16 @@ export function mapMatrixToImportRows(
   const headerRowIdx = detectHeaderRowIndex(matrix);
   if (headerRowIdx >= matrix.length - 1) return [];
 
-  const idxOf = createSpreadsheetColumnFinder(matrix[headerRowIdx]!);
-
-  const usernameIdx = idxOf([
-    'username',
-    'user_name',
-    'account',
-    'tai_khoan',
-    'tài khoản',
-    'tên đăng nhập',
-    'ten dang nhap',
-  ]);
-  const employeeCodeIdx = idxOf([
-    'mã nhân viên',
-    'ma nhan vien',
-    'employee_code',
-    'emp_code',
-    'mã nv',
-  ]);
-  const emailIdx = idxOf(['email', 'mail', 'thư điện tử']);
-  const firstNameIdx = idxOf(['firstname', 'first_name', 'ten', 'tên', 'tên nhân viên']);
-  const lastNameIdx = idxOf([
-    'lastname',
-    'last_name',
-    'ho',
-    'ho_dem',
-    'họ',
-    'họ và tên đệm',
-    'ho va ten dem',
-    'họ nhân viên',
-  ]);
-  const middleNameIdx = idxOf(['tên đệm', 'ten dem', 'middlename', 'middle_name']);
-  const fullNameIdx = idxOf([
-    'fullname',
-    'full_name',
-    'name',
-    'hoten',
-    'ho_ten',
-    'họ và tên',
-    'họ tên',
-  ]);
-  const phoneIdx = idxOf([
-    'phone',
-    'phone_number',
-    'phonenumber',
-    'sdt',
-    'sđt',
-    'so_dien_thoai',
-    'số điện thoại',
-  ]);
-  const passwordIdx = idxOf(['password', 'pass', 'mat_khau', 'mật khẩu']);
-  const statusIdx = idxOf(['status', 'trangthai', 'trang_thai', 'trạng thái']);
-  const positionIdx = idxOf([
-    'chức danh',
-    'chuc danh',
-    'mã chức danh',
-    'ma chuc danh',
-    'vị trí công việc',
-    'vi tri cong viec',
-    'chức danh / vị trí',
-    'position',
-    'position_title',
-  ]);
-  const rolesIdx = idxOf([
-    'roles',
-    'rolecodes',
-    'role_codes',
-    'vai_tro',
-    'vai trò',
-    'mã vai trò',
-    'mã chức vụ',
-  ]);
-  const orgsIdx = idxOf([
-    'organizations',
-    'organizationcodes',
-    'organization_codes',
-    'organizationunits',
-    'organizationunitcodes',
-    'branches',
-    'don_vi',
-    'đơn vị',
-    'mã đơn vị',
-    'ma don vi',
-    'đơn vị / phòng ban',
-    'don vi / phong ban',
-    'phòng ban',
-  ]);
-
+  const cols = resolveUserImportColumnMap(matrix[headerRowIdx]!);
   const rows: BulkImportUserRowInput[] = [];
+
   for (let i = headerRowIdx + 1; i < matrix.length; i++) {
     const cells = matrix[i]!;
     const getCell = (idx: number): string => (idx >= 0 ? cleanCellValue(cells[idx] ?? '') : '');
 
-    const rawEmail = getCell(emailIdx);
-    const rawUsername = getCell(usernameIdx);
-    const rawEmpCode = getCell(employeeCodeIdx);
+    const rawEmail = getCell(cols.emailIdx);
+    const rawUsername = getCell(cols.usernameIdx);
+    const rawEmpCode = getCell(cols.employeeCodeIdx);
 
     const email =
       rawEmail ||
@@ -156,26 +163,26 @@ export function mapMatrixToImportRows(
 
     if (!email && !username) continue;
 
-    const rawFirst = getCell(firstNameIdx);
-    const rawLast = getCell(lastNameIdx);
-    const rawMiddle = getCell(middleNameIdx);
+    const rawFirst = getCell(cols.firstNameIdx);
+    const rawLast = getCell(cols.lastNameIdx);
+    const rawMiddle = getCell(cols.middleNameIdx);
     const combinedLast = [rawLast, rawMiddle].filter(Boolean).join(' ').trim();
 
     const firstName = rawFirst || undefined;
     const lastName = combinedLast || undefined;
-    const fullName = getCell(fullNameIdx) || `${combinedLast} ${rawFirst}`.trim() || username;
-    const phone = getCell(phoneIdx) || null;
-    const password = getCell(passwordIdx) || undefined;
-    const rawStatus = getCell(statusIdx);
+    const fullName = getCell(cols.fullNameIdx) || `${combinedLast} ${rawFirst}`.trim() || username;
+    const phone = getCell(cols.phoneIdx) || null;
+    const password = getCell(cols.passwordIdx) || undefined;
+    const rawStatus = getCell(cols.statusIdx);
     const status = rawStatus ? parseUserStatus(rawStatus) : USER_STATUS.ACTIVE;
-    const positionTitle = getCell(positionIdx) || null;
+    const positionTitle = getCell(cols.positionIdx) || null;
 
-    const roleCodes = getCell(rolesIdx)
+    const roleCodes = getCell(cols.rolesIdx)
       .split(/[|;,]/)
       .map((s) => cleanCellValue(s))
       .filter(Boolean);
 
-    const organizationCodes = getCell(orgsIdx)
+    const organizationCodes = getCell(cols.orgsIdx)
       .split(/[|;,]/)
       .map((s) => cleanCellValue(s.replace(/\*$/, '')))
       .filter(Boolean);

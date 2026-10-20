@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import * as os from 'node:os';
 import { CoreConfigService } from '@packages/config/index.js';
+import { safeJsonParse } from '@packages/kernel/index.js';
 import { RedisService } from '@packages/redis/index.js';
 import { COMMAND_TTL_SEC, runtimeKeys } from '../constants/runtime.keys.js';
 import { RUNTIME_IDENTITY } from '../constants/runtime.tokens.js';
@@ -142,11 +143,12 @@ export class RuntimeAgentService implements OnApplicationBootstrap, BeforeApplic
     const subscriber = this.redis.createSubscriber();
     subscriber.on('message', (ch: string, raw: string) => {
       if (ch !== channel) return;
-      try {
-        void this.handleCommand(JSON.parse(raw) as RuntimeCommand);
-      } catch {
+      const command = safeJsonParse<RuntimeCommand | null>(raw, null);
+      if (!command) {
         this.logger.warn(`Ignored malformed runtime command: ${raw}`);
+        return;
       }
+      void this.handleCommand(command);
     });
     await this.safe(() => subscriber.subscribe(channel));
   }

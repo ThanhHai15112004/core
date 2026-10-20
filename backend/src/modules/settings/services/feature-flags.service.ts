@@ -15,6 +15,7 @@ import {
   defaultMenuRegistry,
   discoverInstalledModules,
   discoverManifestFeatureFlags,
+  parseNumericUserId,
   safeJsonParseObject,
   safeJsonParseStringArray,
   validateFeatureFlagRules,
@@ -213,7 +214,7 @@ export class FeatureFlagsService implements IFeatureFlagsPublicService, OnModule
 
     if (!moduleName) {
       throw new UnprocessableEntityAppException(
-        'Feature flag must belong to a valid module (<module>.<feature>).',
+        'settings.featureFlagModuleRequired',
         [],
         undefined,
         'FEATURE_FLAG_MODULE_REQUIRED',
@@ -261,7 +262,7 @@ export class FeatureFlagsService implements IFeatureFlagsPublicService, OnModule
 
     const nowIso = new Date().toISOString();
     const isEnabled = Boolean(input.isEnabled ?? false);
-    const actorUserId = this.parseNumericUserId(actor?.id);
+    const actorUserId = parseNumericUserId(actor?.id);
     let flagId = ++this.flagSeq;
 
     if (this.flagRepository) {
@@ -395,7 +396,7 @@ export class FeatureFlagsService implements IFeatureFlagsPublicService, OnModule
           : current.status === FEATURE_FLAG_STATUS.ARCHIVED
             ? FEATURE_FLAG_STATUS.ARCHIVED
             : FEATURE_FLAG_STATUS.ACTIVE;
-    const actorUserId = this.parseNumericUserId(actor?.id);
+    const actorUserId = parseNumericUserId(actor?.id);
     const nowIso = new Date().toISOString();
 
     if (this.flagRepository) {
@@ -497,7 +498,7 @@ export class FeatureFlagsService implements IFeatureFlagsPublicService, OnModule
       );
     }
 
-    const actorUserId = this.parseNumericUserId(actor?.id);
+    const actorUserId = parseNumericUserId(actor?.id);
     const nowIso = new Date().toISOString();
 
     if (this.flagRepository) {
@@ -790,12 +791,12 @@ export class FeatureFlagsService implements IFeatureFlagsPublicService, OnModule
       description: entity.description,
       isEnabled: Boolean(entity.isEnabled),
       rolloutPercentage: Number(entity.rolloutPercentage ?? 100),
-      targetUserIds: this.parseJsonArray(entity.targetUserIdsJson),
-      targetRoles: this.parseJsonArray(entity.targetRolesJson).map((r) => r.toUpperCase()),
-      targetOrganizationUnitIds: this.parseJsonArray(entity.targetOrgUnitIdsJson),
+      targetUserIds: safeJsonParseStringArray(entity.targetUserIdsJson),
+      targetRoles: safeJsonParseStringArray(entity.targetRolesJson).map((r) => r.toUpperCase()),
+      targetOrganizationUnitIds: safeJsonParseStringArray(entity.targetOrgUnitIdsJson),
       startsAt: entity.startsAt ? new Date(entity.startsAt).toISOString() : null,
       endsAt: entity.endsAt ? new Date(entity.endsAt).toISOString() : null,
-      metadata: this.parseJsonObject(entity.metadataJson),
+      metadata: safeJsonParseObject(entity.metadataJson, null),
       isSystem: Boolean(entity.isSystem),
       status:
         entity.status === FEATURE_FLAG_STATUS.ARCHIVED
@@ -877,7 +878,7 @@ export class FeatureFlagsService implements IFeatureFlagsPublicService, OnModule
   }): Promise<void> {
     const reqCtx = RequestContextService.current();
     const resolvedActor = params.actor ?? (reqCtx?.actor as UserIdentity | undefined) ?? null;
-    const actorUserId = this.parseNumericUserId(resolvedActor?.id ?? reqCtx?.userId);
+    const actorUserId = parseNumericUserId(resolvedActor?.id ?? reqCtx?.userId);
     const actorIdentifier =
       resolvedActor?.email ??
       resolvedActor?.username ??
@@ -971,8 +972,8 @@ export class FeatureFlagsService implements IFeatureFlagsPublicService, OnModule
       flagId: entity.flagId,
       flagKey: entity.flagKey,
       action,
-      oldState: this.parseJsonObject(entity.oldStateJson),
-      newState: this.parseJsonObject(entity.newStateJson) ?? {},
+      oldState: safeJsonParseObject(entity.oldStateJson, null),
+      newState: safeJsonParseObject(entity.newStateJson, null) ?? {},
       actorUserId: entity.actorUserId ?? null,
       actorIdentifier: entity.actorIdentifier ?? null,
       reason: entity.reason ?? null,
@@ -1054,24 +1055,5 @@ export class FeatureFlagsService implements IFeatureFlagsPublicService, OnModule
       }
     }
     defaultMenuRegistry.invalidateCache();
-  }
-
-  private parseNumericUserId(rawId: unknown): number | null {
-    if (typeof rawId === 'number' && Number.isInteger(rawId) && rawId > 0) {
-      return rawId;
-    }
-    if (typeof rawId === 'string' && /^\d+$/.test(rawId.trim())) {
-      const parsed = Number.parseInt(rawId.trim(), 10);
-      return parsed > 0 ? parsed : null;
-    }
-    return null;
-  }
-
-  private parseJsonArray(jsonStr?: string | null): string[] {
-    return safeJsonParseStringArray(jsonStr);
-  }
-
-  private parseJsonObject(jsonStr?: string | null): Record<string, unknown> | null {
-    return safeJsonParseObject(jsonStr, null);
   }
 }

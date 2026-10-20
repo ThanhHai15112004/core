@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { safeJsonParse } from '@packages/kernel/index.js';
 import type { LogEntry, LogEntryLevel, LogMetadata } from '../contracts/log-entry.types.js';
 
 const LEVEL_OF: Record<number, LogEntryLevel> = {
@@ -67,12 +68,7 @@ const str = (v: unknown): string | undefined =>
 
 /** Một dòng JSON pino trong Redis Stream → LogEntry chuẩn hoá cho trang Logs. `null` nếu không đọc được. */
 export function toLogEntry(id: string, raw: string): LogEntry | null {
-  let o: Record<string, unknown>;
-  try {
-    o = JSON.parse(raw) as Record<string, unknown>;
-  } catch {
-    return null;
-  }
+  const o = safeJsonParse<Record<string, unknown> | null>(raw, null);
   if (!o || typeof o !== 'object') return null;
   const time = typeof o.time === 'number' ? o.time : Number(id.split('-')[0]);
   const err = (o.err && typeof o.err === 'object' ? o.err : null) as Record<string, unknown> | null;

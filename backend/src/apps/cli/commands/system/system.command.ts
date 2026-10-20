@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { safeJsonParse } from '@packages/kernel/index.js';
 import { BaseMessagePublisherProvider, QUEUES, type QueueName } from '@packages/messaging/index.js';
 import { RedisService } from '@packages/redis/index.js';
 import {
@@ -72,7 +73,7 @@ export class SystemCommand implements ICliCommandProvider {
     const queues = Object.values(QUEUES) as string[];
     if (queue && !queues.includes(queue))
       throw new Error(`Unknown queue "${queue}". Available: ${queues.join(', ')}`);
-    const payload: unknown = rawPayload ? JSON.parse(rawPayload) : {};
+    const payload: unknown = rawPayload ? safeJsonParse(rawPayload, {}) : {};
     const envelope = await this.publisher.publish(topic, payload, queue as QueueName | undefined);
     this.logger.log(`Published ${topic} → ${queue ?? QUEUES.SYSTEM_EVENTS} (job ${envelope.id})`);
   }
@@ -82,11 +83,11 @@ export class SystemCommand implements ICliCommandProvider {
     const keys = runtimeKeys(this.redis);
     for (const id of LONG_RUNNING_RUNTIMES) {
       const raw = await this.redis.client.get(keys.heartbeat(id));
-      if (!raw) {
+      const hb = safeJsonParse<RuntimeHeartbeat | null>(raw, null);
+      if (!hb) {
         this.logger.log(`${id.padEnd(10)} no heartbeat`);
         continue;
       }
-      const hb = JSON.parse(raw) as RuntimeHeartbeat;
       this.logger.log(
         `${id.padEnd(10)} ${hb.state.padEnd(8)} pid=${hb.process.pid} cpu=${hb.resources.cpuPercent}% rss=${hb.resources.rssMb}MB up=${hb.uptimeSec}s`,
       );

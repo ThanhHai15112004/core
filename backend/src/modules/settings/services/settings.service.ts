@@ -5,48 +5,36 @@ import {
   ForbiddenAppException,
   NotFoundAppException,
   type RegisteredSettingDefinition,
-  type RegisteredSettingGroup,
-  type RegisteredSettingScopeOverride,
   type ResolvedSettingView,
-  SENSITIVE_SETTING_MASK,
   SETTING_ENVIRONMENT,
   SETTING_ITEM_STATUS,
   type SettingEnvironmentCode,
-  type SettingGroupManifestItem,
-  type SettingManifestItem,
   SettingRegistryService,
   type SettingResolveContext,
-  type SettingValidationRules,
   type SettingValueTypeCode,
   buildSettingScopeKey,
   defaultSettingRegistry,
-  deserializeSettingValue,
   discoverManifestSettings,
   getSettingEnvironmentName,
-  getSettingValueTypeName,
   normalizeSettingEnvironment,
   parseSettingEnvironmentCode,
   parseSettingValueTypeCode,
   validateAndSerializeSettingValue,
 } from '@packages/kernel/index.js';
-import { RequestContextService } from '@packages/logging/index.js';
 import {
   AuditLogService,
   FieldEncryptionService,
   type UserIdentity,
+  defaultFieldEncryptionService,
 } from '@packages/security/index.js';
 import type {
   ISettingsPublicService,
   SettingGroupSummary,
   SettingHistoryRecord,
-  SettingScopeOverrideSummary,
   SyncSettingsResult,
   SystemSettingSummary,
 } from '../contracts/index.js';
 import type { SettingGroupEntity } from '../entities/setting-group.entity.js';
-import type { SystemSettingHistoryEntity } from '../entities/system-setting-history.entity.js';
-import type { SystemSettingScopeEntity } from '../entities/system-setting-scope.entity.js';
-import type { SystemSettingEntity } from '../entities/system-setting.entity.js';
 import { SettingGroupRepository } from '../repositories/setting-group.repository.js';
 import { SystemSettingHistoryRepository } from '../repositories/system-setting-history.repository.js';
 import { SystemSettingScopeRepository } from '../repositories/system-setting-scope.repository.js';
@@ -61,6 +49,19 @@ import type {
   ResolveSettingsQuery,
   UpdateSettingValueRequest,
 } from '../requests/settings.requests.js';
+import {
+  buildAndPersistNewSettingDefinition,
+  buildSystemSettingSummary,
+  mapSettingHistoryEntityToRecord,
+  persistAndAuditSettingHistory,
+  persistGlobalSettingUpdateRecord,
+  persistScopedSettingUpdateRecord,
+} from './settings-audit-mapper.helper.js';
+import {
+  hydrateSettingRegistryFromDatabase,
+  upsertSettingDefinitionFromManifest,
+  upsertSettingGroupFromManifest,
+} from './settings-hydration.helper.js';
 
 const SETTING_CACHE_TTL_SEC = 300;
 
@@ -92,7 +93,7 @@ export class SettingsService implements ISettingsPublicService, OnModuleInit {
     @Optional() private readonly cacheProvider?: BaseCacheProvider | null,
   ) {
     this.registry = settingRegistry ?? defaultSettingRegistry;
-    this.encryptionService = fieldEncryptionService ?? new FieldEncryptionService();
+    this.encryptionService = fieldEncryptionService ?? defaultFieldEncryptionService;
     this.registry.onSettingChanged(async (evt) => {
       const skipDbPersist = this.isPublishingChange;
       await this.invalidateSettingCacheForKey(evt.key);
@@ -158,13 +159,23 @@ export class SettingsService implements ISettingsPublicService, OnModuleInit {
 
     for (const grp of discovered.groups) {
       syncedModules.add((grp.module ?? 'settings').trim().toLowerCase());
-      await this.upsertGroupFromManifest(grp);
+      await upsertSettingGroupFromManifest({
+        grp,
+        groupRepository: this.groupRepository,
+        registry: this.registry,
+      });
       totalGroups++;
     }
 
     for (const item of discovered.settings) {
       syncedModules.add((item.module ?? 'settings').trim().toLowerCase());
-      const envCount = await this.upsertSettingFromManifest(item);
+      const envCount = await upsertSettingDefinitionFromManifest({
+        item,
+        settingRepository: this.settingRepository,
+        scopeRepository: this.scopeRepository,
+        registry: this.registry,
+        encryptionService: this.encryptionService,
+      });
       totalSettings++;
       totalEnvironmentOverrides += envCount;
     }
@@ -179,10 +190,6 @@ export class SettingsService implements ISettingsPublicService, OnModuleInit {
       totalEnvironmentOverrides,
     };
   }
-
-  // =========================================================================
-  // 1. NHÓM CẤU HÌNH HỆ THỐNG (Mục 5.1.1 — Email, File, Bảo mật, Giao diện...)
-  // =========================================================================
 
   /** Liệt kê danh sách nhóm cấu hình hệ thống kèm số lượng cấu hình trong mỗi nhóm */
   public async listGroups(query?: {
@@ -299,10 +306,6 @@ export class SettingsService implements ISettingsPublicService, OnModuleInit {
     };
   }
 
-  // =========================================================================
-  // 2. QUẢN LÝ & TRA CỨU CẤU HÌNH THEO MODULE / NAMESPACE (Mục 5.1.2 -> 5.1.6)
-  // =========================================================================
-
   /** Liệt kê danh sách cấu hình có lọc theo nhóm, module, namespace, kiểu dữ liệu, môi trường và đơn vị */
   public async listSettings(query: ListSettingsQuery = {}): Promise<SystemSettingSummary[]> {
     await this.hydrateRegistryFromDbSafe();
@@ -361,9 +364,7 @@ export class SettingsService implements ISettingsPublicService, OnModuleInit {
   }
 
   /**
-   * Tạo mới một định nghĩa cấu hình theo module / namespace (Mục 5.1.2 & 5.1.3):
-   * - Tự động kiểm tra kiểu dữ liệu `TEXT`, `NUMBER`, `BOOLEAN`, `JSON` trước khi lưu
-   * - Tự động mã hóa `AES-256-GCM` nếu `isSensitive = true` (Mục 5.1.6)
+   * Tạo mới một định nghĩa cấu hình theo module / namespace (Mục 5.1.2 & 5.1.3)
    */
   public async createSetting(
     dto: CreateSettingRequest,
@@ -375,101 +376,17 @@ export class SettingsService implements ISettingsPublicService, OnModuleInit {
       throw new ConflictAppException('settings.settingAlreadyExists', [], { key });
     }
 
-    const groupCode = dto.groupCode.trim().toLowerCase();
-    let group = this.registry.getGroupByCode(groupCode);
-    if (!group) {
-      group = this.registry.registerGroup({
-        code: groupCode,
-        module: (dto.module ?? 'settings').trim().toLowerCase(),
-        name: groupCode.toUpperCase(),
+    const { def, valueType, isSensitive, moduleName, namespace, serializedGlobal, parsedGlobal } =
+      await buildAndPersistNewSettingDefinition({
+        dto,
+        key,
+        actorUserId: actor?.id ?? null,
+        nextSettingId: () => ++this.settingSeq,
+        registry: this.registry,
+        encryptionService: this.encryptionService,
+        settingRepository: this.settingRepository,
       });
-    }
-    const groupId = group.id;
 
-    const valueType = parseSettingValueTypeCode(dto.valueType);
-    const rules: SettingValidationRules | null = dto.validationRules ?? null;
-
-    const validatedDefault = validateAndSerializeSettingValue(
-      dto.defaultValue,
-      valueType,
-      rules,
-      key,
-    );
-    const initialRawValue = dto.value !== undefined ? dto.value : dto.defaultValue;
-    const validatedGlobal = validateAndSerializeSettingValue(
-      initialRawValue,
-      valueType,
-      rules,
-      key,
-    );
-
-    const isSensitive = dto.isSensitive === true;
-    const storedGlobalValue =
-      isSensitive && validatedGlobal.serialized.length > 0
-        ? this.encryptionService.encrypt(validatedGlobal.serialized)
-        : validatedGlobal.serialized;
-    const isEncrypted = isSensitive && storedGlobalValue.startsWith('enc:v1:');
-
-    const parts = key.split('.');
-    const moduleName = (dto.module ?? parts[0] ?? 'settings').trim().toLowerCase();
-    const namespace = (
-      dto.namespace ?? (parts.length >= 2 ? `${moduleName}.${parts[0]}` : moduleName)
-    )
-      .trim()
-      .toLowerCase();
-    const actorUserId = actor?.id ?? null;
-
-    let savedEntity: SystemSettingEntity | null = null;
-    if (this.settingRepository) {
-      try {
-        savedEntity = await this.settingRepository.saveEntity({
-          settingKey: key,
-          groupId,
-          module: moduleName,
-          namespace,
-          name: dto.name.trim(),
-          description: dto.description ?? null,
-          valueType,
-          defaultValue: validatedDefault.serialized,
-          globalValue: storedGlobalValue,
-          validationRulesJson: rules ? JSON.stringify(rules) : null,
-          isSensitive,
-          isEncrypted,
-          allowUnitOverride: dto.allowUnitOverride ?? true,
-          isSystem: dto.isSystem ?? false,
-          sortOrder: dto.sortOrder ?? 10,
-          status: SETTING_ITEM_STATUS.ACTIVE,
-          updatedBy: actorUserId,
-        });
-      } catch {
-        // Fallback to L1 memory
-      }
-    }
-
-    const def: RegisteredSettingDefinition = {
-      id: savedEntity?.id ? Number(savedEntity.id) : ++this.settingSeq,
-      groupId,
-      key,
-      groupCode,
-      module: moduleName,
-      namespace,
-      name: dto.name.trim(),
-      description: dto.description ?? null,
-      valueType,
-      valueTypeName: getSettingValueTypeName(valueType),
-      defaultSerializedValue: validatedDefault.serialized,
-      globalSerializedValue: storedGlobalValue,
-      validationRules: rules,
-      isSensitive,
-      isEncrypted,
-      allowUnitOverride: dto.allowUnitOverride ?? true,
-      isSystem: dto.isSystem ?? false,
-      sortOrder: dto.sortOrder ?? 10,
-      status: SETTING_ITEM_STATUS.ACTIVE,
-      updatedBy: actorUserId,
-    };
-
-    this.registry.upsertDefinition(def);
     await this.invalidateSettingCacheForKey(key);
 
     await this.recordSettingHistory({
@@ -480,7 +397,7 @@ export class SettingsService implements ISettingsPublicService, OnModuleInit {
       organizationUnitId: null,
       valueType,
       oldSerializedValue: null,
-      newSerializedValue: validatedGlobal.serialized,
+      newSerializedValue: serializedGlobal,
       isSensitive,
       actor,
       reason: dto.reason ?? 'Created new setting definition',
@@ -493,19 +410,14 @@ export class SettingsService implements ISettingsPublicService, OnModuleInit {
       namespace,
       environment: 'ALL',
       organizationUnitId: null,
-      value: validatedGlobal.parsedValue,
+      value: parsedGlobal,
     });
 
     return this.toSettingSummary(def);
   }
 
   /**
-   * Cập nhật giá trị cấu hình (Toàn cục, theo Môi trường, hoặc theo Đơn vị — Mục 5.1.3 -> 5.1.8):
-   * - Kiểm tra đúng kiểu `TEXT`, `NUMBER`, `BOOLEAN`, `JSON` và `validationRules` trước khi lưu
-   * - Chặn ghi đè theo đơn vị nếu `allowUnitOverride = false`
-   * - Tự động mã hóa `AES-256-GCM` nếu `isSensitive = true`
-   * - Tự động ghi lịch sử thay đổi (`system_setting_histories` + `AuditLogService`)
-   * - Tự động xóa Cache (`BaseCacheProvider` + L1) để cập nhật tức thì
+   * Cập nhật giá trị cấu hình (Toàn cục, theo Môi trường, hoặc theo Đơn vị — Mục 5.1.3 -> 5.1.8)
    */
   public async updateSettingValue(
     key: string,
@@ -549,89 +461,34 @@ export class SettingsService implements ISettingsPublicService, OnModuleInit {
     const actorUserId = actor?.id ?? null;
 
     const isGlobalDefaultScope = envCode === SETTING_ENVIRONMENT.ALL && unitId === null;
-    let oldPlainSerialized: string | null = null;
-
-    if (isGlobalDefaultScope) {
-      oldPlainSerialized = this.decryptIfNeeded(def.globalSerializedValue, def.isEncrypted);
-
-      const updatedDef: RegisteredSettingDefinition = {
-        ...def,
-        name: dto.name?.trim() || def.name,
-        description: dto.description !== undefined ? dto.description : def.description,
-        allowUnitOverride:
-          dto.allowUnitOverride !== undefined ? dto.allowUnitOverride : def.allowUnitOverride,
-        validationRules: effectiveRules ?? null,
-        globalSerializedValue: encryptedValue,
-        isEncrypted,
-        updatedBy: actorUserId,
-      };
-
-      if (this.settingRepository) {
-        try {
-          const existingDb = await this.settingRepository.findByKey(normKey);
-          if (existingDb) {
-            await this.settingRepository.saveEntity({
-              ...existingDb,
-              name: updatedDef.name,
-              description: updatedDef.description,
-              allowUnitOverride: updatedDef.allowUnitOverride,
-              validationRulesJson: updatedDef.validationRules
-                ? JSON.stringify(updatedDef.validationRules)
-                : null,
-              globalValue: encryptedValue,
-              isEncrypted,
-              updatedBy: actorUserId,
-            });
-          }
-        } catch {
-          // Fallback to L1 memory
-        }
-      }
-
-      this.registry.upsertDefinition(updatedDef);
-    } else {
-      const scopeKey = buildSettingScopeKey(normKey, normEnv, unitId);
-      const existingOverride = this.registry
-        .listScopeOverridesForKey(normKey)
-        .find((o) => o.scopeKey === scopeKey);
-      oldPlainSerialized = existingOverride
-        ? this.decryptIfNeeded(existingOverride.serializedValue, existingOverride.isEncrypted)
-        : null;
-
-      let savedScope: SystemSettingScopeEntity | null = null;
-      if (this.scopeRepository) {
-        try {
-          const existingDbScope = await this.scopeRepository.findByScope(def.id, envCode, unitId);
-          savedScope = await this.scopeRepository.saveEntity({
-            ...(existingDbScope ? { id: existingDbScope.id } : {}),
-            settingId: def.id,
-            environment: envCode,
-            organizationUnitId: unitId,
-            settingValue: encryptedValue,
-            isEncrypted,
-            updatedBy: actorUserId,
-            reason: dto.reason ?? null,
-          });
-        } catch {
-          // Fallback to L1 memory
-        }
-      }
-
-      this.registry.upsertScopeOverride({
-        id: savedScope?.id ? Number(savedScope.id) : (existingOverride?.id ?? ++this.scopeSeq),
-        settingId: def.id,
-        settingKey: normKey,
-        environmentCode: envCode,
-        environment: normEnv,
-        organizationUnitId: unitId,
-        scopeKey,
-        serializedValue: encryptedValue,
-        isEncrypted,
-        updatedBy: actorUserId,
-        reason: dto.reason ?? null,
-        updatedAt: new Date().toISOString(),
-      });
-    }
+    const oldPlainSerialized = isGlobalDefaultScope
+      ? await persistGlobalSettingUpdateRecord({
+          def,
+          normKey,
+          dto,
+          effectiveRules: effectiveRules ?? null,
+          encryptedValue,
+          isEncrypted,
+          actorUserId,
+          registry: this.registry,
+          settingRepository: this.settingRepository,
+          decryptIfNeeded: (raw, isEnc) => this.decryptIfNeeded(raw, isEnc),
+        })
+      : await persistScopedSettingUpdateRecord({
+          def,
+          normKey,
+          envCode,
+          normEnv,
+          unitId,
+          encryptedValue,
+          isEncrypted,
+          actorUserId,
+          reason: dto.reason ?? null,
+          nextScopeId: () => ++this.scopeSeq,
+          registry: this.registry,
+          scopeRepository: this.scopeRepository,
+          decryptIfNeeded: (raw, isEnc) => this.decryptIfNeeded(raw, isEnc),
+        });
 
     await this.invalidateSettingCacheForKey(normKey);
 
@@ -749,10 +606,6 @@ export class SettingsService implements ISettingsPublicService, OnModuleInit {
       organizationUnitId: unitId,
     });
   }
-
-  // =========================================================================
-  // 3. PHÂN GIẢI CẤU HÌNH CÓ CACHE & ĐỌC SECRET NỘI BỘ (Mục 5.1.4 -> 5.1.8)
-  // =========================================================================
 
   /**
    * Phân giải giá trị cấu hình hiệu lực theo ngữ cảnh `{ environment, organizationUnitId }`
@@ -890,7 +743,6 @@ export class SettingsService implements ISettingsPublicService, OnModuleInit {
   /**
    * Phương thức nội bộ dành riêng cho các Backend Services (Mailer, Storage, Auth...)
    * để lấy giá trị thật đã giải mã (`AES-256-GCM`) của cấu hình nhạy cảm (Mục 5.1.6).
-   * Tuyệt đối KHÔNG phơi bày hàm này trực tiếp ra HTTP Response công khai.
    */
   public async getDecryptedValue<T = unknown>(
     key: string,
@@ -908,10 +760,6 @@ export class SettingsService implements ISettingsPublicService, OnModuleInit {
     }
     return resolved.value;
   }
-
-  // =========================================================================
-  // 4. LỊCH SỬ THAY ĐỔI CẤU HÌNH (Mục 5.1.7)
-  // =========================================================================
 
   /** Tra cứu danh sách lịch sử thay đổi cấu hình (biết ai đã thay đổi, lúc nào, lý do, giá trị cũ/mới) */
   public async listHistory(query: ListSettingHistoryQuery = {}): Promise<SettingHistoryRecord[]> {
@@ -940,7 +788,7 @@ export class SettingsService implements ISettingsPublicService, OnModuleInit {
           limit,
         });
         if (dbItems.length > 0) {
-          return dbItems.map((item) => this.mapHistoryEntityToRecord(item));
+          return dbItems.map((item) => mapSettingHistoryEntityToRecord(item, this.registry));
         }
       } catch {
         // Fallback to in-memory history list
@@ -965,10 +813,6 @@ export class SettingsService implements ISettingsPublicService, OnModuleInit {
 
     return items.slice(0, limit);
   }
-
-  // =========================================================================
-  // PRIVATE HELPERS
-  // =========================================================================
 
   private buildCacheKey(settingKey: string, environment: string, unitId: number | null): string {
     return `settings:resolved:${environment}:${unitId ?? 0}:${settingKey}`;
@@ -1018,100 +862,19 @@ export class SettingsService implements ISettingsPublicService, OnModuleInit {
     return raw;
   }
 
-  private formatMaskedOrDeserializedValue(
-    serialized: string | null | undefined,
-    valueType: SettingValueTypeCode,
-    isSensitive: boolean,
-    isEncrypted: boolean,
-  ): unknown {
-    if (serialized === null || serialized === undefined) {
-      return null;
-    }
-    if (isSensitive) {
-      return serialized.length > 0 ? SENSITIVE_SETTING_MASK : '';
-    }
-    const plain = this.decryptIfNeeded(serialized, isEncrypted);
-    return deserializeSettingValue(plain, valueType);
-  }
-
   private toSettingSummary(
     def: RegisteredSettingDefinition,
     context?: SettingResolveContext,
     fallbackId = 1,
   ): SystemSettingSummary {
-    const resolved = this.registry.resolve(def.key, context, {
-      maskSensitive: true,
-      decryptor: (cipher) => this.encryptionService.decrypt(cipher),
-      fromCache: true,
+    return buildSystemSettingSummary({
+      def,
+      context,
+      fallbackId,
+      registry: this.registry,
+      encryptionService: this.encryptionService,
+      decryptIfNeeded: (raw, isEnc) => this.decryptIfNeeded(raw, isEnc),
     });
-
-    const overrides = this.registry
-      .listScopeOverridesForKey(def.key)
-      .map((ov, idx): SettingScopeOverrideSummary => ({
-        id: ov.id ?? idx + 1,
-        settingId: ov.settingId ?? def.id,
-        settingKey: ov.settingKey,
-        environmentCode: ov.environmentCode,
-        environment: ov.environment,
-        organizationUnitId: ov.organizationUnitId,
-        scopeKey: ov.scopeKey,
-        value: this.formatMaskedOrDeserializedValue(
-          ov.serializedValue,
-          def.valueType,
-          def.isSensitive,
-          ov.isEncrypted,
-        ),
-        isSensitive: def.isSensitive,
-        isEncrypted: ov.isEncrypted,
-        hasValue: ov.serializedValue.length > 0,
-        updatedBy: ov.updatedBy,
-        reason: ov.reason,
-        updatedAt: ov.updatedAt ?? new Date().toISOString(),
-      }));
-
-    const globalFormatted = this.formatMaskedOrDeserializedValue(
-      def.globalSerializedValue,
-      def.valueType,
-      def.isSensitive,
-      def.isEncrypted,
-    );
-    const defaultFormatted = this.formatMaskedOrDeserializedValue(
-      def.defaultSerializedValue,
-      def.valueType,
-      def.isSensitive,
-      false,
-    );
-
-    return {
-      id: def.id ?? fallbackId,
-      groupId: def.groupId,
-      key: def.key,
-      groupCode: def.groupCode,
-      module: def.module,
-      namespace: def.namespace,
-      name: def.name,
-      description: def.description,
-      valueType: def.valueType,
-      valueTypeName: def.valueTypeName,
-      value: resolved ? resolved.value : globalFormatted,
-      globalValue: globalFormatted,
-      defaultValue: defaultFormatted,
-      validationRules: def.validationRules,
-      isSensitive: def.isSensitive,
-      isEncrypted: def.isEncrypted,
-      hasValue: resolved ? resolved.hasValue : def.globalSerializedValue.length > 0,
-      allowUnitOverride: def.allowUnitOverride,
-      isSystem: def.isSystem,
-      sortOrder: def.sortOrder,
-      status: def.status,
-      statusName: def.status === SETTING_ITEM_STATUS.INACTIVE ? 'INACTIVE' : 'ACTIVE',
-      resolvedSource: resolved?.resolvedSource ?? 'GLOBAL',
-      resolvedEnvironment: resolved?.resolvedEnvironment ?? 'ALL',
-      resolvedOrganizationUnitId: resolved?.resolvedOrganizationUnitId ?? null,
-      scopeOverrides: overrides,
-      updatedBy: def.updatedBy,
-      updatedAt: new Date().toISOString(),
-    };
   }
 
   private async recordSettingHistory(input: {
@@ -1128,499 +891,24 @@ export class SettingsService implements ISettingsPublicService, OnModuleInit {
     reason?: string | null | undefined;
     action: string;
   }): Promise<void> {
-    const ctx = RequestContextService.current();
-    const resolvedActor = input.actor ?? (ctx?.actor as UserIdentity | undefined) ?? null;
-    const actorUserId =
-      resolvedActor?.id ??
-      (ctx?.userId && !Number.isNaN(Number(ctx.userId)) ? Number(ctx.userId) : null);
-    const actorIdentifier =
-      resolvedActor?.email ??
-      resolvedActor?.username ??
-      (actorUserId ? `user:${actorUserId}` : 'system');
-    const ipAddress = ctx?.ipAddress ?? '127.0.0.1';
-    const userAgent = ctx?.userAgent ?? null;
-    const requestId = ctx?.requestId ?? ctx?.correlationId ?? null;
-    const correlationId = ctx?.correlationId ?? null;
-
-    const safeOldSerialized = input.isSensitive
-      ? input.oldSerializedValue
-        ? SENSITIVE_SETTING_MASK
-        : null
-      : input.oldSerializedValue;
-    const safeNewSerialized = input.isSensitive
-      ? input.newSerializedValue
-        ? SENSITIVE_SETTING_MASK
-        : ''
-      : input.newSerializedValue;
-
-    let savedId = ++this.historySeq;
-    if (this.historyRepository) {
-      try {
-        const saved = await this.historyRepository.saveEntity({
-          settingId: input.settingId,
-          environment: input.environmentCode,
-          organizationUnitId: input.organizationUnitId,
-          valueType: input.valueType,
-          oldValue: safeOldSerialized,
-          newValue: safeNewSerialized,
-          actorUserId,
-          actorIdentifier,
-          reason: input.reason ?? null,
-          ipAddress,
-          userAgent,
-          requestId,
-          correlationId,
-        });
-        savedId = Number(saved.id);
-      } catch {
-        // Fallback to in-memory history
-      }
-    }
-
-    const oldParsed =
-      safeOldSerialized === null
-        ? null
-        : input.isSensitive
-          ? SENSITIVE_SETTING_MASK
-          : deserializeSettingValue(safeOldSerialized, input.valueType);
-    const newParsed = input.isSensitive
-      ? SENSITIVE_SETTING_MASK
-      : deserializeSettingValue(safeNewSerialized, input.valueType);
-
-    const historyRecord: SettingHistoryRecord = {
-      id: savedId,
-      settingId: input.settingId,
-      settingKey: input.settingKey,
-      environmentCode: input.environmentCode,
-      environment: input.environment,
-      organizationUnitId: input.organizationUnitId,
-      valueType: input.valueType,
-      valueTypeName: getSettingValueTypeName(input.valueType),
-      oldValue: oldParsed,
-      newValue: newParsed,
-      actorUserId,
-      actorIdentifier,
-      reason: input.reason ?? null,
-      ipAddress,
-      userAgent,
-      requestId,
-      correlationId,
-      createdAt: new Date().toISOString(),
-    };
-
-    this.inMemoryHistory.unshift(historyRecord);
-    if (this.inMemoryHistory.length > 500) {
-      this.inMemoryHistory.pop();
-    }
-
-    if (this.auditLogService) {
-      await this.auditLogService.record({
-        actor: resolvedActor,
-        actorUserId,
-        actorIdentifier,
-        module: 'settings',
-        feature: 'system_settings',
-        action: input.action,
-        resourceType: 'system_setting',
-        resourceId: input.settingKey,
-        beforeData: {
-          settingId: input.settingId,
-          settingKey: input.settingKey,
-          environmentCode: input.environmentCode,
-          environment: input.environment,
-          organizationUnitId: input.organizationUnitId,
-          value: oldParsed,
-        },
-        afterData: {
-          settingId: input.settingId,
-          settingKey: input.settingKey,
-          environmentCode: input.environmentCode,
-          environment: input.environment,
-          organizationUnitId: input.organizationUnitId,
-          value: newParsed,
-        },
-        reason: input.reason ?? null,
-        ipAddress,
-        userAgent,
-        requestId,
-        correlationId,
-      });
-    }
-  }
-
-  private mapHistoryEntityToRecord(entity: SystemSettingHistoryEntity): SettingHistoryRecord {
-    const valueType = parseSettingValueTypeCode(entity.valueType);
-    const envCode = parseSettingEnvironmentCode(entity.environment);
-    const envName = getSettingEnvironmentName(envCode);
-    const def = this.registry.getDefinitionById(Number(entity.settingId));
-    const settingKey = def?.key ?? `setting:${entity.settingId}`;
-    const isMaskedOld = entity.oldValue === SENSITIVE_SETTING_MASK;
-    const isMaskedNew = entity.newValue === SENSITIVE_SETTING_MASK;
-
-    return {
-      id: Number(entity.id),
-      settingId: Number(entity.settingId),
-      settingKey,
-      environmentCode: envCode,
-      environment: envName,
-      organizationUnitId: entity.organizationUnitId ?? null,
-      valueType,
-      valueTypeName: getSettingValueTypeName(valueType),
-      oldValue:
-        entity.oldValue === null || entity.oldValue === undefined
-          ? null
-          : isMaskedOld
-            ? SENSITIVE_SETTING_MASK
-            : deserializeSettingValue(entity.oldValue, valueType),
-      newValue: isMaskedNew
-        ? SENSITIVE_SETTING_MASK
-        : deserializeSettingValue(entity.newValue, valueType),
-      actorUserId: entity.actorUserId ?? null,
-      actorIdentifier: entity.actorIdentifier ?? null,
-      reason: entity.reason ?? null,
-      ipAddress: entity.ipAddress ?? null,
-      userAgent: entity.userAgent ?? null,
-      requestId: entity.requestId ?? null,
-      correlationId: entity.correlationId ?? null,
-      createdAt:
-        entity.createdAt instanceof Date
-          ? entity.createdAt.toISOString()
-          : String(entity.createdAt ?? new Date().toISOString()),
-    };
-  }
-
-  private async upsertGroupFromManifest(grp: SettingGroupManifestItem): Promise<void> {
-    const code = grp.code.trim().toLowerCase();
-    const moduleName = (grp.module ?? 'settings').trim().toLowerCase();
-    let dbId: number | undefined;
-
-    if (this.groupRepository) {
-      try {
-        const existing = await this.groupRepository.findByCode(code);
-        const saved = await this.groupRepository.saveEntity({
-          ...(existing ? { id: existing.id } : {}),
-          code,
-          module: moduleName,
-          name: existing?.name || grp.name.trim(),
-          description: existing?.description ?? grp.description ?? null,
-          icon: existing?.icon ?? grp.icon ?? null,
-          sortOrder: grp.sortOrder ?? existing?.sortOrder ?? 0,
-          isSystem: grp.isSystem ?? true,
-          status: SETTING_ITEM_STATUS.ACTIVE,
-        });
-        dbId = Number(saved.id);
-      } catch {
-        // Ignore when DB table is not available
-      }
-    }
-
-    this.registry.registerGroup({
-      ...grp,
-      ...(dbId ? { id: dbId } : {}),
-      code,
-      module: moduleName,
+    await persistAndAuditSettingHistory({
+      ...input,
+      nextHistoryId: () => ++this.historySeq,
+      historyRepository: this.historyRepository,
+      auditLogService: this.auditLogService,
+      inMemoryHistory: this.inMemoryHistory,
     });
-  }
-
-  private async upsertSettingFromManifest(item: SettingManifestItem): Promise<number> {
-    const key = item.key.trim().toLowerCase();
-    const valueType = parseSettingValueTypeCode(item.valueType);
-    const validatedDefault = validateAndSerializeSettingValue(
-      item.defaultValue,
-      valueType,
-      item.validationRules,
-      key,
-    );
-    const parts = key.split('.');
-    const groupCode = (item.groupCode || parts[0] || 'system').trim().toLowerCase();
-    const moduleName = (item.module ?? 'settings').trim().toLowerCase();
-    const namespace = (
-      item.namespace ?? (parts.length >= 2 ? `${moduleName}.${parts[0]}` : moduleName)
-    )
-      .trim()
-      .toLowerCase();
-
-    let group = this.registry.getGroupByCode(groupCode);
-    if (!group) {
-      group = this.registry.registerGroup({
-        code: groupCode,
-        module: moduleName,
-        name: groupCode.toUpperCase(),
-      });
-    }
-    const groupId = group.id;
-
-    const isSensitive = item.isSensitive === true;
-    const encryptedDefault =
-      isSensitive && validatedDefault.serialized.length > 0
-        ? this.encryptionService.encrypt(validatedDefault.serialized)
-        : validatedDefault.serialized;
-    const isEncrypted = isSensitive && encryptedDefault.startsWith('enc:v1:');
-
-    let savedSettingId: number | undefined;
-    if (this.settingRepository) {
-      try {
-        const existing = await this.settingRepository.findByKey(key);
-        if (!existing) {
-          const saved = await this.settingRepository.saveEntity({
-            settingKey: key,
-            groupId,
-            module: moduleName,
-            namespace,
-            name: item.name.trim(),
-            description: item.description ?? null,
-            valueType,
-            defaultValue: validatedDefault.serialized,
-            globalValue: encryptedDefault,
-            validationRulesJson: item.validationRules ? JSON.stringify(item.validationRules) : null,
-            isSensitive,
-            isEncrypted,
-            allowUnitOverride: item.allowUnitOverride ?? true,
-            isSystem: item.isSystem ?? true,
-            sortOrder: item.sortOrder ?? 0,
-            status: SETTING_ITEM_STATUS.ACTIVE,
-          });
-          savedSettingId = Number(saved.id);
-        } else {
-          savedSettingId = Number(existing.id);
-        }
-      } catch {
-        // Ignore when DB table is not available
-      }
-    }
-
-    const registeredDef = this.registry.registerManifestSetting({
-      ...item,
-      ...(savedSettingId ? { id: savedSettingId } : {}),
-      groupId,
-    });
-    const effectiveSettingId = savedSettingId ?? registeredDef.id;
-
-    let envCount = 0;
-    if (item.environmentOverrides && typeof item.environmentOverrides === 'object') {
-      for (const [envKey, envVal] of Object.entries(item.environmentOverrides)) {
-        const envCode = parseSettingEnvironmentCode(envKey);
-        const validatedEnv = validateAndSerializeSettingValue(
-          envVal,
-          valueType,
-          item.validationRules,
-          key,
-        );
-        if (this.scopeRepository) {
-          try {
-            const existingScope = await this.scopeRepository.findByScope(
-              effectiveSettingId,
-              envCode,
-              null,
-            );
-            if (!existingScope) {
-              await this.scopeRepository.saveEntity({
-                settingId: effectiveSettingId,
-                environment: envCode,
-                organizationUnitId: null,
-                settingValue: validatedEnv.serialized,
-                isEncrypted: false,
-                reason: 'Manifest environment default',
-              });
-            }
-          } catch {
-            // Ignore when DB table is not available
-          }
-        }
-        envCount++;
-      }
-    }
-
-    return envCount;
   }
 
   private async hydrateRegistryFromDbSafe(): Promise<void> {
-    if (this.groupRepository) {
-      try {
-        const dbGroups = await this.groupRepository.findFiltered();
-        if (dbGroups.length > 0) {
-          const seenCodes = new Set<string>();
-          for (const g of dbGroups) {
-            const normCode = g.code.trim().toLowerCase();
-            seenCodes.add(normCode);
-            const group: RegisteredSettingGroup = {
-              id: Number(g.id),
-              code: normCode,
-              module: g.module.trim().toLowerCase(),
-              name: g.name,
-              description: g.description ?? null,
-              icon: g.icon ?? null,
-              sortOrder: g.sortOrder ?? 0,
-              isSystem: g.isSystem ?? true,
-              status:
-                g.status === SETTING_ITEM_STATUS.INACTIVE
-                  ? SETTING_ITEM_STATUS.INACTIVE
-                  : SETTING_ITEM_STATUS.ACTIVE,
-            };
-            this.registry.registerGroup(group);
-          }
-          for (const existingGrp of this.registry.listGroups()) {
-            if (existingGrp.id !== undefined && !seenCodes.has(existingGrp.code)) {
-              this.registry.removeGroup(existingGrp.code);
-            }
-          }
-        }
-      } catch {
-        // Ignore when DB is not ready
-      }
-    }
-
-    if (this.settingRepository) {
-      try {
-        const dbSettings = await this.settingRepository.findFiltered();
-        if (dbSettings.length > 0) {
-          const seenKeys = new Set<string>();
-          for (const s of dbSettings) {
-            const normKey = s.settingKey.trim().toLowerCase();
-            seenKeys.add(normKey);
-            const existingDef = this.registry.getDefinition(normKey);
-            const groupId = Number(s.groupId ?? existingDef?.groupId ?? 1);
-            const groupCode = (
-              this.registry.getGroupById(groupId)?.code ??
-              existingDef?.groupCode ??
-              normKey.split('.')[0] ??
-              'system'
-            )
-              .trim()
-              .toLowerCase();
-            const valueType = parseSettingValueTypeCode(s.valueType);
-            let rules: SettingValidationRules | null = null;
-            if (s.validationRulesJson) {
-              try {
-                rules = JSON.parse(s.validationRulesJson) as SettingValidationRules;
-              } catch {
-                rules = null;
-              }
-            }
-            const nextStatus =
-              s.status === SETTING_ITEM_STATUS.INACTIVE
-                ? SETTING_ITEM_STATUS.INACTIVE
-                : SETTING_ITEM_STATUS.ACTIVE;
-
-            const valueChangedInDb =
-              !existingDef ||
-              existingDef.globalSerializedValue !== s.globalValue ||
-              existingDef.defaultSerializedValue !== s.defaultValue ||
-              existingDef.isEncrypted !== Boolean(s.isEncrypted) ||
-              existingDef.isSensitive !== Boolean(s.isSensitive) ||
-              existingDef.allowUnitOverride !== Boolean(s.allowUnitOverride) ||
-              existingDef.status !== nextStatus ||
-              existingDef.name !== s.name;
-
-            this.registry.upsertDefinition({
-              id: Number(s.id),
-              groupId,
-              key: normKey,
-              groupCode,
-              module: s.module.trim().toLowerCase(),
-              namespace: s.namespace.trim().toLowerCase(),
-              name: s.name,
-              description: s.description ?? null,
-              valueType,
-              valueTypeName: getSettingValueTypeName(valueType),
-              defaultSerializedValue: s.defaultValue,
-              globalSerializedValue: s.globalValue,
-              validationRules: rules,
-              isSensitive: Boolean(s.isSensitive),
-              isEncrypted: Boolean(s.isEncrypted),
-              allowUnitOverride: Boolean(s.allowUnitOverride),
-              isSystem: Boolean(s.isSystem),
-              sortOrder: s.sortOrder ?? 0,
-              status: nextStatus,
-              updatedBy: s.updatedBy ?? null,
-            });
-
-            if (valueChangedInDb) {
-              await this.invalidateSettingCacheForKey(normKey);
-              if (existingDef && existingDef.globalSerializedValue !== s.globalValue) {
-                const plainSerialized = this.decryptIfNeeded(s.globalValue, Boolean(s.isEncrypted));
-                const parsedValue = deserializeSettingValue(plainSerialized, valueType);
-                await this.publishSettingChanged({
-                  key: normKey,
-                  module: s.module.trim().toLowerCase(),
-                  namespace: s.namespace.trim().toLowerCase(),
-                  environment: 'ALL',
-                  organizationUnitId: null,
-                  value: parsedValue,
-                });
-              }
-            }
-          }
-
-          for (const existingDef of this.registry.listDefinitions()) {
-            if (existingDef.id !== undefined && !seenKeys.has(existingDef.key)) {
-              this.registry.removeDefinition(existingDef.key);
-              await this.invalidateSettingCacheForKey(existingDef.key);
-            }
-          }
-        }
-      } catch {
-        // Ignore when DB is not ready
-      }
-    }
-
-    if (this.scopeRepository) {
-      try {
-        const dbScopes = await this.scopeRepository.findAllScopes();
-        const seenScopeKeys = new Set<string>();
-        const existingScopesByKey = new Map(
-          this.registry.listAllScopeOverrides().map((o) => [o.scopeKey, o]),
-        );
-
-        for (const sc of dbScopes) {
-          const settingId = Number(sc.settingId);
-          const def = this.registry.getDefinitionById(settingId);
-          if (!def) continue;
-          const envCode = parseSettingEnvironmentCode(sc.environment);
-          const envName = getSettingEnvironmentName(envCode);
-          const unitId = sc.organizationUnitId ?? null;
-          const scopeKey = buildSettingScopeKey(def.key, envName, unitId);
-
-          seenScopeKeys.add(scopeKey);
-          const prev = existingScopesByKey.get(scopeKey);
-          const changed =
-            !prev ||
-            prev.serializedValue !== sc.settingValue ||
-            prev.isEncrypted !== Boolean(sc.isEncrypted);
-
-          const override: RegisteredSettingScopeOverride = {
-            id: Number(sc.id),
-            settingId,
-            settingKey: def.key,
-            environmentCode: envCode,
-            environment: envName,
-            organizationUnitId: unitId,
-            scopeKey,
-            serializedValue: sc.settingValue,
-            isEncrypted: Boolean(sc.isEncrypted),
-            updatedBy: sc.updatedBy ?? null,
-            reason: sc.reason ?? null,
-            updatedAt:
-              sc.updatedAt instanceof Date
-                ? sc.updatedAt.toISOString()
-                : String(sc.updatedAt ?? new Date().toISOString()),
-          };
-          this.registry.upsertScopeOverride(override);
-
-          if (changed) {
-            await this.invalidateSettingCacheForKey(override.settingKey);
-          }
-        }
-
-        for (const existingOverride of existingScopesByKey.values()) {
-          if (existingOverride.id !== undefined && !seenScopeKeys.has(existingOverride.scopeKey)) {
-            this.registry.removeScopeOverrideByScopeKey(existingOverride.scopeKey);
-            await this.invalidateSettingCacheForKey(existingOverride.settingKey);
-          }
-        }
-      } catch {
-        // Ignore when DB is not ready
-      }
-    }
+    await hydrateSettingRegistryFromDatabase({
+      groupRepository: this.groupRepository,
+      settingRepository: this.settingRepository,
+      scopeRepository: this.scopeRepository,
+      registry: this.registry,
+      decryptIfNeeded: (raw, isEnc) => this.decryptIfNeeded(raw, isEnc),
+      invalidateSettingCacheForKey: (k) => this.invalidateSettingCacheForKey(k),
+      publishSettingChanged: (evt) => this.publishSettingChanged(evt),
+    });
   }
 }

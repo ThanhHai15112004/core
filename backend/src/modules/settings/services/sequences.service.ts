@@ -20,6 +20,7 @@ import {
   defaultSequenceRegistry,
   discoverManifestSequences,
   formatSequenceCode,
+  parseNumericUserId,
   resolveSequenceDateParts,
   safeJsonParseObject,
   validateSequenceRule,
@@ -301,7 +302,7 @@ export class SequencesService implements ISequencesPublicService, OnModuleInit {
       timezone: dto.timezone,
     });
 
-    const actorUserId = this.parseNumericUserId(actor?.id);
+    const actorUserId = parseNumericUserId(actor?.id);
     const nowIso = new Date().toISOString();
     let ruleId = ++this.ruleSeq;
 
@@ -411,10 +412,10 @@ export class SequencesService implements ISequencesPublicService, OnModuleInit {
       dto.status !== SEQUENCE_STATUS.ACTIVE &&
       dto.status !== SEQUENCE_STATUS.ARCHIVED
     ) {
-      throw new UnprocessableEntityAppException('Invalid sequence status');
+      throw new UnprocessableEntityAppException('settings.invalidSequenceStatus');
     }
 
-    const actorUserId = this.parseNumericUserId(actor?.id);
+    const actorUserId = parseNumericUserId(actor?.id);
     const nowIso = new Date().toISOString();
     const nextStatus = (dto.status as SequenceStatusCode | undefined) ?? existing.status;
 
@@ -734,7 +735,7 @@ export class SequencesService implements ISequencesPublicService, OnModuleInit {
   }): Promise<void> {
     const reqCtx = RequestContextService.current();
     const resolvedActor = params.actor ?? (reqCtx?.actor as UserIdentity | undefined) ?? null;
-    const actorUserId = this.parseNumericUserId(resolvedActor?.id ?? reqCtx?.userId);
+    const actorUserId = parseNumericUserId(resolvedActor?.id ?? reqCtx?.userId);
     const actorIdentifier =
       resolvedActor?.email ??
       resolvedActor?.username ??
@@ -839,16 +840,5 @@ export class SequencesService implements ISequencesPublicService, OnModuleInit {
       correlationId: entity.correlationId ?? null,
       createdAt: entity.createdAt ? entity.createdAt.toISOString() : new Date().toISOString(),
     };
-  }
-
-  private parseNumericUserId(rawId: unknown): number | null {
-    if (typeof rawId === 'number' && Number.isInteger(rawId) && rawId > 0) {
-      return rawId;
-    }
-    if (typeof rawId === 'string' && /^\d+$/.test(rawId.trim())) {
-      const parsed = Number.parseInt(rawId.trim(), 10);
-      return parsed > 0 ? parsed : null;
-    }
-    return null;
   }
 }

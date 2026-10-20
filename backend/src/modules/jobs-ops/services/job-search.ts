@@ -1,3 +1,4 @@
+import { safeJsonParseObject } from '@packages/kernel/index.js';
 import type { JobSourceKind } from '@packages/messaging/index.js';
 import {
   JOB_LIST_STATES,
@@ -119,12 +120,10 @@ export function encodeCursor(c: Cursor): string {
 export function decodeCursor(raw: string | null | undefined): Cursor {
   if (!raw) return {};
   try {
-    const v = JSON.parse(Buffer.from(raw, 'base64url').toString('utf8')) as unknown;
-    if (!v || typeof v !== 'object' || Array.isArray(v)) return {};
+    const v = safeJsonParseObject(Buffer.from(raw, 'base64url').toString('utf8'), null);
+    if (!v) return {};
     return Object.fromEntries(
-      Object.entries(v as Record<string, unknown>).filter(
-        ([, n]) => typeof n === 'number' && Number.isInteger(n) && n >= -1,
-      ),
+      Object.entries(v).filter(([, n]) => typeof n === 'number' && Number.isInteger(n) && n >= -1),
     ) as Cursor;
   } catch {
     return {};

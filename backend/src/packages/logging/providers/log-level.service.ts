@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { hostname } from 'node:os';
 import { CoreConfigService } from '@packages/config/index.js';
+import { safeJsonParse } from '@packages/kernel/index.js';
 import { RedisService } from '@packages/redis/index.js';
 import { logsKeys } from '../constants/logs.keys.js';
 import type { LogIngestState, LogLevelOverrideRecord } from '../contracts/log-store.types.js';
@@ -90,7 +91,7 @@ export class LogLevelService implements OnApplicationBootstrap, OnApplicationShu
     const k = logsKeys(this.redis);
     try {
       const raw = await this.redis.client.hget(k.level(), this.options.runtime);
-      this.override = raw ? (JSON.parse(raw) as LogLevelOverrideRecord) : null;
+      this.override = safeJsonParse<LogLevelOverrideRecord | null>(raw, null);
       this.apply(now);
       const state: LogIngestState = {
         runtime: this.options.runtime,

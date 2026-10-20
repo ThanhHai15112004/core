@@ -31,3 +31,17 @@ export function maskPhone(phone: string): string {
   if (cleaned.length <= 4) return '***';
   return `${cleaned.slice(0, 3)}****${cleaned.slice(-3)}`;
 }
+
+/**
+ * Chuẩn hóa ID người dùng / thực thể dạng số nguyên dương (`number | string | unknown` -> `number | null`).
+ */
+export function parseNumericUserId(rawId: unknown): number | null {
+  if (typeof rawId === 'number' && Number.isInteger(rawId) && rawId > 0) {
+    return rawId;
+  }
+  if (typeof rawId === 'string' && /^\d+$/.test(rawId.trim())) {
+    const parsed = Number.parseInt(rawId.trim(), 10);
+    return parsed > 0 ? parsed : null;
+  }
+  return null;
+}

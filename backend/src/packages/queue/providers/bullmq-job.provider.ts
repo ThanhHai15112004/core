@@ -1,4 +1,5 @@
 import type { Job, Queue } from 'bullmq';
+import { safeJsonParse } from '@packages/kernel/index.js';
 import type { RedisService } from '@packages/redis/index.js';
 import {
   JOB_CANCELLED,
@@ -406,12 +407,8 @@ export class BullMqJobProvider implements JobProvider {
     ]);
     const lifecycle = parseLifecycle(logs.logs);
     const other = logs.logs.filter((row) => {
-      try {
-        const e = JSON.parse(row) as Partial<LifecycleEntry>;
-        return !(e && typeof e.at === 'number' && typeof e.type === 'string');
-      } catch {
-        return true;
-      }
+      const e = safeJsonParse<Partial<LifecycleEntry> | null>(row, null);
+      return !(e && typeof e.at === 'number' && typeof e.type === 'string');
     });
     const env = parseEnvelope(job.data);
     return {
@@ -468,4 +465,8 @@ export class BullMqJobProvider implements JobProvider {
     const job = await this.t(this.queue(queue).getJob(id)).catch(() => undefined);
     if (job) logLifecycle(job, entry.type, entry);
   }
+}
+
+export function createBullMqJobProvider(registry: QueueRegistry, redis: RedisService): JobProvider {
+  return new BullMqJobProvider(registry, redis);
 }

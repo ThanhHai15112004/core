@@ -26,7 +26,7 @@ import type { AuthPasswordResetEntity } from '../entities/auth-password-reset.en
 import { AuthPasswordResetRepository } from '../repositories/auth-password-reset.repository.js';
 import { SessionService } from './session.service.js';
 import { SecuritySettingsService } from './security-settings.service.js';
-import { DefaultEmailNotificationAdapter } from './notification-adapters.provider.js';
+import { createDefaultEmailNotificationAdapter } from './notification-adapters.provider.js';
 import type {
   AdminResetPasswordRequest,
   ChangePasswordRequest,
@@ -42,6 +42,24 @@ import type {
 
 const PASSWORD_RESET_TTL_SECONDS = 900; // 15 phút
 const DEFAULT_RESET_OTP_MAX_ATTEMPTS = 5;
+
+/** Tra cứu thông tin xác thực (credentials) của người dùng qua Public Contract của module Users */
+export async function resolveUserCredentialsById(
+  usersPublicService: IUsersPublicService,
+  userId: number,
+): Promise<UserAuthCredentialsView | null> {
+  if (typeof usersPublicService.findAuthCredentialsByUserId === 'function') {
+    const direct = await usersPublicService.findAuthCredentialsByUserId(userId);
+    if (direct) return direct;
+  }
+
+  const identity = await usersPublicService.findAuthUserById(userId);
+  if (!identity) return null;
+
+  return (
+    (await usersPublicService.findAuthUserByIdentifier(identity.email || identity.username)) ?? null
+  );
+}
 
 @Injectable()
 export class PasswordService {
@@ -59,7 +77,7 @@ export class PasswordService {
     @Inject(AUTH_EMAIL_NOTIFICATION_ADAPTER)
     emailAdapter?: IEmailNotificationAdapter,
   ) {
-    this.emailAdapter = emailAdapter ?? new DefaultEmailNotificationAdapter();
+    this.emailAdapter = emailAdapter ?? createDefaultEmailNotificationAdapter();
     this.usersPublicService.registerAdminPasswordResetDelegate?.((userId, input, actorId) =>
       this.adminResetUserPassword(userId, input, actorId),
     );
@@ -456,22 +474,8 @@ export class PasswordService {
     }
   }
 
-  private async resolveUserCredentialsById(
-    userId: number,
-  ): Promise<UserAuthCredentialsView | null> {
-    if (typeof this.usersPublicService.findAuthCredentialsByUserId === 'function') {
-      const direct = await this.usersPublicService.findAuthCredentialsByUserId(userId);
-      if (direct) return direct;
-    }
-
-    const identity = await this.usersPublicService.findAuthUserById(userId);
-    if (!identity) return null;
-
-    return (
-      (await this.usersPublicService.findAuthUserByIdentifier(
-        identity.email || identity.username,
-      )) ?? null
-    );
+  public async resolveUserCredentialsById(userId: number): Promise<UserAuthCredentialsView | null> {
+    return resolveUserCredentialsById(this.usersPublicService, userId);
   }
 
   private async findLatestResetRecordForUser(

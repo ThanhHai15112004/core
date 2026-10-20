@@ -4,6 +4,7 @@ import {
   ConflictAppException,
   NotFoundAppException,
   defaultSettingRegistry,
+  safeJsonParseObject,
 } from '@packages/kernel/index.js';
 import {
   CoreI18nService,
@@ -393,7 +394,7 @@ export class I18nManagementService implements II18nManagementPublicService, OnMo
     const nextIsDefault = dto.isDefault !== undefined ? dto.isDefault : existing.isDefault;
 
     if (nextIsDefault && nextStatus !== I18N_ITEM_STATUS.ACTIVE) {
-      throw new BadRequestAppException('Cannot set an INACTIVE locale as the system default');
+      throw new BadRequestAppException('i18n.cannotSetInactiveLocaleDefault');
     }
 
     const actorUserId = actor?.id ?? null;
@@ -618,7 +619,7 @@ export class I18nManagementService implements II18nManagementPublicService, OnMo
     const nextIsDefault = dto.isDefault !== undefined ? dto.isDefault : existing.isDefault;
 
     if (nextIsDefault && nextStatus !== I18N_ITEM_STATUS.ACTIVE) {
-      throw new BadRequestAppException('Cannot set an INACTIVE timezone as the system default');
+      throw new BadRequestAppException('i18n.cannotSetInactiveTimezoneDefault');
     }
 
     const actorUserId = actor?.id ?? null;
@@ -829,14 +830,7 @@ export class I18nManagementService implements II18nManagementPublicService, OnMo
   }
 
   private mapTimezoneEntityToMetadata(entity: I18nTimezoneEntity): RegisteredTimezoneMetadata {
-    let parsedLabels: Record<string, string> = {};
-    if (entity.labelsJson) {
-      try {
-        parsedLabels = JSON.parse(entity.labelsJson) as Record<string, string>;
-      } catch {
-        parsedLabels = {};
-      }
-    }
+    const parsedLabels = safeJsonParseObject<Record<string, string>>(entity.labelsJson, {});
     return {
       id: Number(entity.id),
       code: entity.code.trim(),

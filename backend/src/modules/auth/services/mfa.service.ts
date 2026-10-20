@@ -7,11 +7,13 @@ import {
   UnauthorizedAppException,
   maskEmail as sharedMaskEmail,
   maskPhone as sharedMaskPhone,
+  safeJsonParse,
 } from '@packages/kernel/index.js';
 import {
   FieldEncryptionService,
   PasswordHasherService,
   TotpService,
+  defaultFieldEncryptionService,
 } from '@packages/security/index.js';
 import {
   type IUsersPublicService,
@@ -32,8 +34,8 @@ import {
 import type { AuthMfaConfigEntity } from '../entities/auth-mfa-config.entity.js';
 import { AuthMfaConfigRepository } from '../repositories/auth-mfa-config.repository.js';
 import {
-  DefaultEmailNotificationAdapter,
-  DefaultSmsOtpProvider,
+  createDefaultEmailNotificationAdapter,
+  createDefaultSmsOtpProvider,
 } from './notification-adapters.provider.js';
 import type {
   DisableMfaRequest,
@@ -96,7 +98,7 @@ export class MfaService {
     private readonly usersPublicService: IUsersPublicService,
     @Optional() private readonly configService?: CoreConfigService,
     @Optional()
-    private readonly fieldEncryption: FieldEncryptionService = new FieldEncryptionService(),
+    private readonly fieldEncryption: FieldEncryptionService = defaultFieldEncryptionService,
     @Optional()
     @Inject(AUTH_EMAIL_NOTIFICATION_ADAPTER)
     emailAdapter?: IEmailNotificationAdapter,
@@ -104,8 +106,8 @@ export class MfaService {
     @Inject(AUTH_SMS_OTP_PROVIDER)
     smsProvider?: ISmsOtpProvider,
   ) {
-    this.emailAdapter = emailAdapter ?? new DefaultEmailNotificationAdapter();
-    this.smsProvider = smsProvider ?? new DefaultSmsOtpProvider();
+    this.emailAdapter = emailAdapter ?? createDefaultEmailNotificationAdapter();
+    this.smsProvider = smsProvider ?? createDefaultSmsOtpProvider();
   }
 
   /** Đăng ký callback ghi nhận sự kiện bảo mật MFA (Tắt MFA / Reset MFA) vào lịch sử đăng nhập & Audit Log */
@@ -1015,35 +1017,31 @@ export class MfaService {
 
   /** Giải mã cấu trúc JSON mở rộng (tương thích ngược với mảng string[] cũ) */
   private parseExtendedEnvelope(jsonStr?: string | null): MfaExtendedEnvelope {
-    if (!jsonStr) {
+    const parsed = safeJsonParse<unknown>(jsonStr, null);
+    if (!parsed) {
       return { codes: [] };
     }
-    try {
-      const parsed = JSON.parse(jsonStr) as unknown;
-      if (Array.isArray(parsed)) {
-        return {
-          codes: parsed.filter((item): item is string => typeof item === 'string'),
-        };
-      }
-      if (parsed && typeof parsed === 'object') {
-        const obj = parsed as Partial<MfaExtendedEnvelope>;
-        return {
-          codes: Array.isArray(obj.codes)
-            ? obj.codes.filter((item): item is string => typeof item === 'string')
-            : [],
-          ...(obj.smsOtpEnabled !== undefined ? { smsOtpEnabled: Boolean(obj.smsOtpEnabled) } : {}),
-          ...(obj.smsOtpCodeHash !== undefined ? { smsOtpCodeHash: obj.smsOtpCodeHash } : {}),
-          ...(obj.smsOtpExpiresAt !== undefined ? { smsOtpExpiresAt: obj.smsOtpExpiresAt } : {}),
-          ...(obj.smsOtpFailedAttempts !== undefined
-            ? { smsOtpFailedAttempts: Number(obj.smsOtpFailedAttempts) }
-            : {}),
-          ...(Array.isArray(obj.trustedDevices) ? { trustedDevices: obj.trustedDevices } : {}),
-        };
-      }
-      return { codes: [] };
-    } catch {
-      return { codes: [] };
+    if (Array.isArray(parsed)) {
+      return {
+        codes: parsed.filter((item): item is string => typeof item === 'string'),
+      };
     }
+    if (typeof parsed === 'object') {
+      const obj = parsed as Partial<MfaExtendedEnvelope>;
+      return {
+        codes: Array.isArray(obj.codes)
+          ? obj.codes.filter((item): item is string => typeof item === 'string')
+          : [],
+        ...(obj.smsOtpEnabled !== undefined ? { smsOtpEnabled: Boolean(obj.smsOtpEnabled) } : {}),
+        ...(obj.smsOtpCodeHash !== undefined ? { smsOtpCodeHash: obj.smsOtpCodeHash } : {}),
+        ...(obj.smsOtpExpiresAt !== undefined ? { smsOtpExpiresAt: obj.smsOtpExpiresAt } : {}),
+        ...(obj.smsOtpFailedAttempts !== undefined
+          ? { smsOtpFailedAttempts: Number(obj.smsOtpFailedAttempts) }
+          : {}),
+        ...(Array.isArray(obj.trustedDevices) ? { trustedDevices: obj.trustedDevices } : {}),
+      };
+    }
+    return { codes: [] };
   }
 
   /** Tuần tự hóa lại JSON mở rộng (nếu không có metadata mở rộng thì xuất mảng thuần để giữ tương thích tối đa) */

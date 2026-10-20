@@ -9,6 +9,14 @@
   "localeAlreadyExists": "Locale code '{code}' already exists in database",
   "timezoneNotFound": "System timezone not found (code: {code})",
   "timezoneAlreadyExists": "Timezone '{code}' already exists in database",
-  "translationNotFound": "Translation entry not found (locale: {locale}, key: {key})"
+  "translationNotFound": "Translation entry not found (locale: {locale}, key: {key})",
+  "i18n.localeNotFound": "System locale not found (code: {code})",
+  "i18n.localeAlreadyExists": "Locale code '{code}' already exists in database",
+  "i18n.timezoneNotFound": "System timezone not found (code: {code})",
+  "i18n.timezoneAlreadyExists": "Timezone '{code}' already exists in database",
+  "i18n.cannotSetInactiveLocaleDefault": "Cannot set an INACTIVE locale as the system default",
+  "i18n.cannotSetInactiveTimezoneDefault": "Cannot set an INACTIVE timezone as the system default",
+  "featureFlagModuleRequired": "Feature flag must belong to a valid module (<module>.<feature>)",
+  "invalidSequenceStatus": "Invalid sequence status"
 }
 

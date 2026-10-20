@@ -1,5 +1,6 @@
 import { Injectable, Optional } from '@nestjs/common';
 import { CoreConfigService } from '@packages/config/index.js';
+import { safeJsonParse as parse } from '@packages/kernel/index.js';
 import { RedisService } from '@packages/redis/index.js';
 import { STORAGE_SNAPSHOT_LIMIT, storageKeys } from '../constants/storage.keys.js';
 import type { ActiveUpload } from '../contracts/storage-events.types.js';
@@ -20,16 +21,6 @@ import type {
 /** Snapshot usage cũ hơn mức này thì quét lại khi đọc (quét lớn nặng — collector nền làm thường xuyên). */
 const USAGE_MAX_AGE_MS = 5 * 60_000;
 const POINT_EVERY_MS = 60 * 60_000;
-
-/** Xác thực và ép kiểu dữ liệu đầu vào theo schema Zod */
-const parse = <T>(raw: string | null): T | null => {
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw) as T;
-  } catch {
-    return null;
-  }
-};
 
 /** Lấy mốc thời gian bắt đầu của ngày theo chuỗi ngày giờ */
 const startOfDay = (t: number) => {

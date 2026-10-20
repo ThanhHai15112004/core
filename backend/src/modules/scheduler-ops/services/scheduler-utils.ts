@@ -1,4 +1,5 @@
 import type { Queue } from 'bullmq';
+import { safeJsonParse } from '@packages/kernel/index.js';
 import type {
   MessagingConnectionService,
   QueueName,
@@ -44,10 +45,5 @@ export async function readSchedulerHeartbeat(
 ): Promise<RuntimeHeartbeat | null> {
   if (!redis.isReady()) return null;
   const raw = await redis.client.get(runtimeKeys(redis).heartbeat('scheduler')).catch(() => null);
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw) as RuntimeHeartbeat;
-  } catch {
-    return null;
-  }
+  return safeJsonParse<RuntimeHeartbeat>(raw);
 }

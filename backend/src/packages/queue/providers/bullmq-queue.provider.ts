@@ -280,3 +280,11 @@ export class BullMqQueueProvider implements QueueMonitoringProvider {
     await this.t(this.queue(queue).drain(includeDelayed));
   }
 }
+
+export function createBullMqQueueProvider(
+  registry: QueueRegistry,
+  redis: RedisService,
+  endpoint: string,
+): QueueMonitoringProvider {
+  return new BullMqQueueProvider(registry, redis, endpoint);
+}

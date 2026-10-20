@@ -6,6 +6,7 @@ import {
   type OnModuleDestroy,
 } from '@nestjs/common';
 import { CoreConfigService } from '@packages/config/index.js';
+import { safeJsonParse as parse } from '@packages/kernel/index.js';
 import { RedisService } from '@packages/redis/index.js';
 import { cacheKeys } from '../constants/cache.keys.js';
 import { MemoryCacheDriver } from '../drivers/memory-cache.driver.js';
@@ -25,16 +26,6 @@ import type {
 /** Runtime dùng driver memory publish snapshot của mình mỗi chu kỳ (TTL gấp 3 để runtime tắt tự biến mất). */
 const MEMORY_PUBLISH_MS = 30_000;
 const MEMORY_SNAPSHOT_TTL_SEC = 90;
-
-/** Xác thực và ép kiểu dữ liệu đầu vào theo schema Zod */
-const parse = <T>(raw: string | null): T | null => {
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw) as T;
-  } catch {
-    return null;
-  }
-};
 
 /** Đọc số liệu vận hành của cache qua provider theo driver (redis / memory). Mọi lệnh đều chỉ đọc. */
 @Injectable()

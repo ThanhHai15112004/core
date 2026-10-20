@@ -1,5 +1,6 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { safeJsonParse, safeJsonParseObject } from '../utils/json.util.js';
 import type { CodeTypeManifestItem } from './code-lookup.contract.js';
 import type { FeatureFlagManifestItem } from './feature-flag.contract.js';
 import type { MenuManifestItem } from './menu.contract.js';
@@ -91,7 +92,8 @@ export function scanModuleManifests<
         const manifestPath = join(baseDir, entry.name, 'module.manifest.json');
         if (!existsSync(manifestPath)) continue;
         try {
-          const raw = JSON.parse(readFileSync(manifestPath, 'utf8')) as T;
+          const raw = safeJsonParse<T | null>(readFileSync(manifestPath, 'utf8'), null);
+          if (!raw) continue;
           const moduleName = (raw.name ?? entry.name).trim().toLowerCase();
           results.push({
             moduleName,
@@ -126,7 +128,7 @@ export function discoverInstalledModules(): string[] {
   for (const filePath of candidateFiles) {
     if (!existsSync(filePath)) continue;
     try {
-      const raw = JSON.parse(readFileSync(filePath, 'utf8')) as Partial<ProjectManifest>;
+      const raw = safeJsonParseObject<Partial<ProjectManifest>>(readFileSync(filePath, 'utf8'));
       if (Array.isArray(raw.enabledModules)) {
         for (const mod of raw.enabledModules) {
           if (typeof mod === 'string' && mod.trim().length > 0) {

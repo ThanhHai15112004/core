@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import { CoreConfigService } from '@packages/config/index.js';
 import { RedisService } from '@packages/redis/index.js';
 import {
@@ -7,7 +7,7 @@ import {
   sanitizeMessagingMessage,
   type MessagingConnectionStatus,
 } from '@packages/messaging/index.js';
-import { BullMqQueueProvider } from '../providers/bullmq-queue.provider.js';
+import { createBullMqQueueProvider } from '../providers/bullmq-queue.provider.js';
 import { QueueOperationError } from '../utils/queue-errors.js';
 import type {
   QueueCapability,
@@ -34,9 +34,11 @@ export class QueueMonitoringService {
     private readonly connection: MessagingConnectionService,
     config: CoreConfigService,
     redis: RedisService,
+    @Optional() injectedProvider?: QueueMonitoringProvider,
   ) {
     const { host, port, db } = config.cache.redis;
-    this.provider = new BullMqQueueProvider(registry, redis, `${host}:${port}/${db}`);
+    this.provider =
+      injectedProvider ?? createBullMqQueueProvider(registry, redis, `${host}:${port}/${db}`);
   }
 
   /** Kiểm tra xem tính năng chỉ định có được hỗ trợ hay không */

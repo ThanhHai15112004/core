@@ -4,5 +4,8 @@
   "parentNotFound": "Không tìm thấy đơn vị cấp trên",
   "cannotBeOwnParent": "Đơn vị không thể chọn chính nó làm đơn vị cấp trên",
   "invalidOrMissingUnits": "Một hoặc nhiều đơn vị/chi nhánh không tồn tại",
-  "inactiveUnitsNotAllowed": "Không thể gán người dùng vào đơn vị/chi nhánh đang ngừng hoạt động"
+  "inactiveUnitsNotAllowed": "Không thể gán người dùng vào đơn vị/chi nhánh đang ngừng hoạt động",
+  "circularParentHierarchy": "Phát hiện vòng lặp phân cấp: Không thể chọn đơn vị con cháu làm đơn vị cấp trên",
+  "hasChildUnits": "Không thể xóa hoặc lưu trữ đơn vị đang còn {childCount} đơn vị trực thuộc hoạt động",
+  "hasAssignedUsers": "Không thể xóa hoặc lưu trữ đơn vị đang có {userCount} nhân sự trực thuộc"
 }

@@ -1,4 +1,5 @@
 import { Inject, Injectable, Optional } from '@nestjs/common';
+import { BaseCacheProvider } from '@packages/cache/index.js';
 import {
   BadRequestAppException,
   ForbiddenAppException,
@@ -11,17 +12,18 @@ import {
   type IUsersPublicService,
   USERS_PUBLIC_SERVICE,
   USER_STATUS,
-  type UserAuthCredentialsView,
   type UserAuthIdentityView,
 } from '@modules/users/contracts/index.js';
-import {
-  AUTH_EVENT_STATUS,
-  AUTH_EVENT_TYPE,
-  type IAuthPublicService,
-  type MfaMethodType,
-} from '../contracts/index.js';
+import { AUTH_EVENT_STATUS, AUTH_EVENT_TYPE, type IAuthPublicService } from '../contracts/index.js';
 import { SessionService } from './session.service.js';
 import { MfaService } from './mfa.service.js';
+import {
+  MfaChallengeAttemptTracker,
+  issueLoginMfaStep2Challenge,
+  verifyAndEnforceLoginAccountStatus,
+  verifyLoginPasswordAndRehashIfNeeded,
+} from './mfa-challenge-attempt.helper.js';
+import { resolveUserCredentialsById } from './password.service.js';
 import { SecuritySettingsService } from './security-settings.service.js';
 import { VerificationService } from './verification.service.js';
 import type {
@@ -48,8 +50,6 @@ import type {
   UserPreferencesResponse,
 } from '../responses/auth.response.js';
 
-const DEFAULT_MAX_FAILED_LOGIN_ATTEMPTS = 5;
-const DEFAULT_AUTO_LOCK_DURATION_MINUTES = 15;
 const STEP_UP_TOKEN_TTL_SECONDS = 300; // 5 phút
 const ADMIN_ROLE_CODES = new Set([
   'SUPER_ADMIN',
@@ -61,7 +61,7 @@ const ADMIN_ROLE_CODES = new Set([
 
 @Injectable()
 export class AuthService implements IAuthPublicService {
-  private readonly mfaChallengeAttempts = new Map<string, number>();
+  private readonly mfaAttemptTracker: MfaChallengeAttemptTracker;
 
   constructor(
     private readonly passwordHasher: PasswordHasherService,
@@ -72,7 +72,9 @@ export class AuthService implements IAuthPublicService {
     private readonly usersPublicService: IUsersPublicService,
     @Optional() private readonly securitySettingsService?: SecuritySettingsService,
     @Optional() private readonly verificationService?: VerificationService,
+    @Optional() private readonly cacheProvider?: BaseCacheProvider | null,
   ) {
+    this.mfaAttemptTracker = new MfaChallengeAttemptTracker(() => this.cacheProvider);
     this.sessionService.setSecuritySettingsService(this.securitySettingsService);
     this.usersPublicService.registerAdminRevokeSessionsDelegate?.((userId, reason) =>
       this.sessionService.revokeAllUserSessions(userId, reason),
@@ -226,114 +228,30 @@ export class AuthService implements IAuthPublicService {
     dto: LoginRequest,
     meta: { ipAddress?: string | null; userAgent?: string | null } = {},
   ): Promise<LoginResponse> {
-    const credentials = await this.usersPublicService.findAuthUserByIdentifier(dto.identifier);
-    if (!credentials || credentials.archivedAt || credentials.status === USER_STATUS.ARCHIVED) {
-      await this.sessionService.recordAuthEvent({
-        userId: credentials?.id ?? null,
-        identifier: dto.identifier,
-        eventType: AUTH_EVENT_TYPE.LOGIN_FAILED,
-        status: AUTH_EVENT_STATUS.FAILED,
-        ipAddress: meta.ipAddress ?? null,
-        userAgent: meta.userAgent ?? null,
-        deviceName: dto.deviceName ?? null,
-        reason: credentials ? 'Account is archived' : 'Account not found',
-      });
-      throw new UnauthorizedAppException('auth.invalidCredentials');
-    }
+    const rawCredentials = await this.usersPublicService.findAuthUserByIdentifier(dto.identifier);
+    const credentials = await verifyAndEnforceLoginAccountStatus({
+      credentials: rawCredentials,
+      dto,
+      meta,
+      sessionService: this.sessionService,
+      usersPublicService: this.usersPublicService,
+    });
 
-    // Kiểm tra trạng thái INACTIVE (2)
-    if (credentials.status === USER_STATUS.INACTIVE) {
-      await this.sessionService.recordAuthEvent({
-        userId: credentials.id,
-        identifier: dto.identifier,
-        eventType: AUTH_EVENT_TYPE.LOGIN_FAILED,
-        status: AUTH_EVENT_STATUS.FAILED,
-        ipAddress: meta.ipAddress ?? null,
-        userAgent: meta.userAgent ?? null,
-        deviceName: dto.deviceName ?? null,
-        reason: 'Account is inactive',
-      });
-      throw new ForbiddenAppException('auth.accountInactive');
-    }
-
-    // Kiểm tra trạng thái LOCKED (3) (nếu thời hạn khóa đã qua thì tự động mở khóa)
-    if (credentials.status === USER_STATUS.LOCKED) {
-      if (credentials.lockedUntil && credentials.lockedUntil.getTime() <= Date.now()) {
-        await this.usersPublicService.autoUnlockExpiredLock(credentials.id);
-      } else {
-        await this.sessionService.recordAuthEvent({
-          userId: credentials.id,
-          identifier: dto.identifier,
-          eventType: AUTH_EVENT_TYPE.LOGIN_FAILED,
-          status: AUTH_EVENT_STATUS.FAILED,
-          ipAddress: meta.ipAddress ?? null,
-          userAgent: meta.userAgent ?? null,
-          deviceName: dto.deviceName ?? null,
-          reason: `Account locked: ${credentials.lockReason ?? 'Locked'}`,
-        });
-        throw new ForbiddenAppException('auth.accountLocked', [
-          {
-            reason: credentials.lockReason,
-            lockedUntil: credentials.lockedUntil ? credentials.lockedUntil.toISOString() : null,
-          },
-        ]);
-      }
-    }
-
-    // Kiểm tra mật khẩu
-    const isPasswordValid = await this.passwordHasher.verify(
-      dto.password,
-      credentials.passwordHash,
-    );
-    if (!isPasswordValid) {
-      const settings = await this.securitySettingsService?.getSettings();
-      const maxAttempts = settings?.maxFailedLoginAttempts ?? DEFAULT_MAX_FAILED_LOGIN_ATTEMPTS;
-      const lockMinutes = settings?.lockoutDurationMinutes ?? DEFAULT_AUTO_LOCK_DURATION_MINUTES;
-
-      const failure = await this.usersPublicService.recordLoginFailure(
-        credentials.id,
-        maxAttempts,
-        lockMinutes,
-      );
-      await this.sessionService.recordAuthEvent({
-        userId: credentials.id,
-        identifier: dto.identifier,
-        eventType: AUTH_EVENT_TYPE.LOGIN_FAILED,
-        status: AUTH_EVENT_STATUS.FAILED,
-        ipAddress: meta.ipAddress ?? null,
-        userAgent: meta.userAgent ?? null,
-        deviceName: dto.deviceName ?? null,
-        reason: failure.locked
-          ? `Invalid password; account locked after ${failure.failedAttempts} attempts`
-          : `Invalid password (attempt ${failure.failedAttempts}/${maxAttempts})`,
-      });
-      if (failure.locked) {
-        throw new ForbiddenAppException('auth.accountLockedDueToFailedAttempts', [
-          {
-            failedAttempts: failure.failedAttempts,
-            lockedUntil: failure.lockedUntil ? failure.lockedUntil.toISOString() : null,
-          },
-        ]);
-      }
-      throw new UnauthorizedAppException('auth.invalidCredentials');
-    }
-
-    // Tự động nâng cấp chuỗi băm mật khẩu nếu Admin đã chuyển sang thuật toán băm mới trong Security Settings (Mục 3.3.6)
-    const activeSettings = await this.securitySettingsService?.getSettings();
-    const targetHashAlgo = activeSettings?.passwordHashAlgorithm;
-    if (this.passwordHasher.needsRehash(credentials.passwordHash, targetHashAlgo)) {
-      const upgradedHash = await this.passwordHasher.hash(dto.password, targetHashAlgo);
-      await this.usersPublicService.updatePasswordHash(credentials.id, upgradedHash, {
-        recordHistory: false,
-      });
-    }
+    const activeSettings = await verifyLoginPasswordAndRehashIfNeeded({
+      credentials,
+      dto,
+      meta,
+      passwordHasher: this.passwordHasher,
+      securitySettingsService: this.securitySettingsService,
+      usersPublicService: this.usersPublicService,
+      sessionService: this.sessionService,
+    });
 
     const identity = await this.usersPublicService.findAuthUserById(credentials.id);
     if (!identity) {
       throw new UnauthorizedAppException('auth.userNotFound');
     }
 
-    // Kiểm tra chính sách bắt buộc MFA theo vai trò (Mục 3.5.6)
     const mfaPolicy = activeSettings?.mfaPolicy ?? 'OPTIONAL';
     const isAdminUser = this.isAdministrativeUser(identity);
     const isPolicyEnforced =
@@ -341,7 +259,6 @@ export class AuthService implements IAuthPublicService {
     const mfaRequired = Boolean(credentials.mfaEnabled || isPolicyEnforced);
 
     if (mfaRequired) {
-      // Kiểm tra nếu người dùng đăng nhập từ Thiết bị tin cậy (Trusted Device — Mục 3.5.5) còn thời hạn
       if (dto.trustedDeviceToken) {
         const isTrustedDevice = await this.mfaService.verifyTrustedDevice(
           credentials.id,
@@ -366,83 +283,26 @@ export class AuthService implements IAuthPublicService {
         }
       }
 
-      const configuredMethods = await this.mfaService.getAvailableMethodsForUser(credentials.id);
       const allowedByPolicy = activeSettings?.allowedMfaMethods ?? [
         'TOTP',
         'EMAIL_OTP',
         'SMS_OTP',
         'RECOVERY_CODE',
       ];
-
-      let availableMethods = configuredMethods.filter((m) => allowedByPolicy.includes(m));
-      if (!credentials.mfaEnabled && isPolicyEnforced) {
-        const fallbackMethods: MfaMethodType[] = [];
-        if (credentials.email && allowedByPolicy.includes('EMAIL_OTP')) {
-          fallbackMethods.push('EMAIL_OTP');
-        }
-        if (credentials.phone && allowedByPolicy.includes('SMS_OTP')) {
-          fallbackMethods.push('SMS_OTP');
-        }
-        if (fallbackMethods.length === 0) {
-          fallbackMethods.push('EMAIL_OTP');
-        }
-        availableMethods = fallbackMethods;
-      } else if (availableMethods.length === 0) {
-        availableMethods = configuredMethods;
-      }
-
-      const mfaChallengeToken = await this.tokenService.signMfaChallengeToken({
-        sub: credentials.id,
-        email: credentials.email,
-        methods: availableMethods,
+      return issueLoginMfaStep2Challenge({
+        credentials,
+        identity,
+        dto,
+        meta,
+        mfaPolicy,
+        isPolicyEnforced,
+        allowedByPolicy,
+        mfaService: this.mfaService,
+        tokenService: this.tokenService,
+        sessionService: this.sessionService,
       });
-
-      let emailOtpSent = false;
-      let smsOtpSent = false;
-      let maskedPhone: string | undefined;
-      let devOtpCode: string | undefined;
-
-      if (!availableMethods.includes('TOTP')) {
-        if (availableMethods.includes('EMAIL_OTP') && credentials.email) {
-          const otpRes = await this.mfaService.sendEmailOtp(credentials.id);
-          emailOtpSent = true;
-          devOtpCode = otpRes.devOtpCode;
-        } else if (availableMethods.includes('SMS_OTP') && credentials.phone) {
-          const smsRes = await this.mfaService.sendSmsOtp(credentials.id, credentials.phone);
-          smsOtpSent = true;
-          maskedPhone = smsRes.maskedPhone;
-          devOtpCode = smsRes.devOtpCode;
-        }
-      }
-
-      await this.sessionService.recordAuthEvent({
-        userId: credentials.id,
-        identifier: dto.identifier,
-        eventType: AUTH_EVENT_TYPE.MFA_CHALLENGE,
-        status: AUTH_EVENT_STATUS.SUCCESS,
-        ipAddress: meta.ipAddress ?? null,
-        userAgent: meta.userAgent ?? null,
-        deviceName: dto.deviceName ?? null,
-        reason: isPolicyEnforced
-          ? `MFA step-2 challenge issued (policy=${mfaPolicy})`
-          : 'MFA step-2 challenge issued',
-      });
-
-      return {
-        mfaRequired: true,
-        ...(isPolicyEnforced ? { mfaPolicyEnforced: true } : {}),
-        ...(!credentials.mfaEnabled && isPolicyEnforced ? { mfaEnrollmentRequired: true } : {}),
-        mfaChallengeToken,
-        availableMfaMethods: availableMethods,
-        emailOtpSent,
-        ...(smsOtpSent ? { smsOtpSent: true } : {}),
-        maskedEmail: this.mfaService.maskEmail(credentials.email),
-        ...(maskedPhone ? { maskedPhone } : {}),
-        ...(devOtpCode ? { devOtpCode } : {}),
-      };
     }
 
-    // Đăng nhập hoàn tất (không bật MFA)
     await this.usersPublicService.recordLoginSuccess(credentials.id);
     const issued = await this.sessionService.createSession(identity, {
       ipAddress: meta.ipAddress ?? null,
@@ -471,7 +331,7 @@ export class AuthService implements IAuthPublicService {
     }
 
     const challengeHash = this.passwordHasher.sha256(dto.mfaChallengeToken);
-    const currentAttempts = this.mfaChallengeAttempts.get(challengeHash) ?? 0;
+    const currentAttempts = await this.mfaAttemptTracker.getAttempts(challengeHash);
     if (currentAttempts >= 5) {
       throw new UnauthorizedAppException('auth.invalidOrExpiredMfaChallenge');
     }
@@ -490,7 +350,7 @@ export class AuthService implements IAuthPublicService {
     const userId = Number(challengePayload.sub);
     const isCodeValid = await this.mfaService.verifyMfaCode(userId, dto.code, dto.method);
     if (!isCodeValid) {
-      this.mfaChallengeAttempts.set(challengeHash, currentAttempts + 1);
+      await this.mfaAttemptTracker.incrementAttempts(challengeHash, currentAttempts);
       await this.sessionService.recordAuthEvent({
         userId,
         identifier: challengePayload.email ?? null,
@@ -504,7 +364,7 @@ export class AuthService implements IAuthPublicService {
       throw new UnauthorizedAppException('auth.invalidMfaCode');
     }
 
-    this.mfaChallengeAttempts.delete(challengeHash);
+    await this.mfaAttemptTracker.clearAttempts(challengeHash);
 
     await this.usersPublicService.recordLoginSuccess(userId);
     const identity = await this.usersPublicService.findAuthUserById(userId);
@@ -577,7 +437,7 @@ export class AuthService implements IAuthPublicService {
     dto: StepUpVerifyRequest,
     sessionId?: number,
   ): Promise<StepUpVerifyResponse> {
-    const credentials = await this.resolveUserCredentialsById(userId);
+    const credentials = await resolveUserCredentialsById(this.usersPublicService, userId);
     if (!credentials || credentials.archivedAt || credentials.status !== USER_STATUS.ACTIVE) {
       throw new UnauthorizedAppException('auth.userNotFound');
     }
@@ -654,7 +514,7 @@ export class AuthService implements IAuthPublicService {
         throw new ForbiddenAppException('auth.invalidOrExpiredStepUpToken');
       }
     } else if (dto.currentPassword) {
-      const credentials = await this.resolveUserCredentialsById(userId);
+      const credentials = await resolveUserCredentialsById(this.usersPublicService, userId);
       if (!credentials) {
         throw new UnauthorizedAppException('auth.userNotFound');
       }
@@ -852,24 +712,6 @@ export class AuthService implements IAuthPublicService {
     }
 
     return targetUserId;
-  }
-
-  private async resolveUserCredentialsById(
-    userId: number,
-  ): Promise<UserAuthCredentialsView | null> {
-    if (typeof this.usersPublicService.findAuthCredentialsByUserId === 'function') {
-      const direct = await this.usersPublicService.findAuthCredentialsByUserId(userId);
-      if (direct) return direct;
-    }
-
-    const identity = await this.usersPublicService.findAuthUserById(userId);
-    if (!identity) return null;
-
-    return (
-      (await this.usersPublicService.findAuthUserByIdentifier(
-        identity.email || identity.username,
-      )) ?? null
-    );
   }
 
   private validatePasswordPolicy(

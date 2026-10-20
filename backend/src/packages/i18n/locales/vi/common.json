@@ -22,5 +22,12 @@
   "SERVICE_UNAVAILABLE": "Dịch vụ tạm thời không khả dụng",
   "HTTP_ERROR": "Yêu cầu HTTP không thành công",
   "security.dataScopeForbidden": "Bạn không có quyền truy cập bản ghi ngoài phạm vi dữ liệu (Data Scope) được cấp phép",
-  "security.auditLogImmutable": "Nhật ký thao tác (Audit Log) là bất biến (Append-only) — nghiêm cấm sửa đổi hoặc xóa bằng API thường để bảo vệ tính toàn vẹn"
+  "security.auditLogImmutable": "Nhật ký thao tác (Audit Log) là bất biến (Append-only) — nghiêm cấm sửa đổi hoặc xóa bằng API thường để bảo vệ tính toàn vẹn",
+  "security.missingAuthHeader": "Thiếu tiêu đề xác thực Authorization",
+  "security.invalidAuthTokenFormat": "Định dạng mã xác thực Authorization không hợp lệ (yêu cầu Bearer token)",
+  "security.tokenRequired": "Vui lòng cung cấp mã xác thực (Token)",
+  "security.invalidOrExpiredToken": "Mã xác thực không hợp lệ hoặc đã hết hạn",
+  "security.userNotFoundOrDisabled": "Tài khoản người dùng không tồn tại hoặc đã bị vô hiệu hóa",
+  "kernel.menu.invalidNameLength": "Tên hiển thị menu phải từ 1 đến 255 ký tự",
+  "kernel.menu.hierarchyDepthExceeded": "Độ sâu phân cấp cây menu vượt quá giới hạn an toàn"
 }

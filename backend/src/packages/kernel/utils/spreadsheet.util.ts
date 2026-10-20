@@ -242,32 +242,18 @@ function resolveValidPngBuffer(logoPng?: Buffer | string | null): Buffer | null 
   return null;
 }
 
-/**
- * Tạo file Excel `.xlsx` chuẩn OpenXML có định dạng bảng biểu chuyên nghiệp
- * (tương thích thiết kế `danh_sach_nhan_vien.xlsx` và `mau_import_nguoi_dung.xlsx`).
- */
-export function buildXlsxBuffer(
+const DEFAULT_XLSX_STYLES_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<styleSheet xml:space="preserve" xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts count="0"/><fonts count="4"><font><b val="0"/><i val="0"/><strike val="0"/><u val="none"/><sz val="11"/><color rgb="FF000000"/><name val="Calibri"/></font><font><b val="1"/><i val="0"/><strike val="0"/><u val="none"/><sz val="16"/><color rgb="FF1E4488"/><name val="Calibri"/></font><font><b val="0"/><i val="1"/><strike val="0"/><u val="none"/><sz val="10"/><color rgb="FF6B7280"/><name val="Calibri"/></font><font><b val="1"/><i val="0"/><strike val="0"/><u val="none"/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font></fonts><fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF1E4488"/><bgColor rgb="FF000000"/></patternFill></fill></fills><borders count="3"><border><left/><right/><top/><bottom/><diagonal/></border><border><left style="thin"><color rgb="FF9CA3AF"/></left><right style="thin"><color rgb="FF9CA3AF"/></right><top style="thin"><color rgb="FF9CA3AF"/></top><bottom style="thin"><color rgb="FF9CA3AF"/></bottom><diagonal/></border><border><left style="thin"><color rgb="FFE5E7EB"/></left><right style="thin"><color rgb="FFE5E7EB"/></right><top style="thin"><color rgb="FFE5E7EB"/></top><bottom style="thin"><color rgb="FFE5E7EB"/></bottom><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="8"><xf xfId="0" fontId="0" numFmtId="0" fillId="0" borderId="0" applyFont="0" applyNumberFormat="0" applyFill="0" applyBorder="0" applyAlignment="0"/><xf xfId="0" fontId="1" numFmtId="0" fillId="0" borderId="0" applyFont="1" applyNumberFormat="0" applyFill="0" applyBorder="0" applyAlignment="1"><alignment horizontal="center" vertical="center" textRotation="0" wrapText="false" shrinkToFit="false"/></xf><xf xfId="0" fontId="2" numFmtId="0" fillId="0" borderId="0" applyFont="1" applyNumberFormat="0" applyFill="0" applyBorder="0" applyAlignment="1"><alignment horizontal="center" vertical="center" textRotation="0" wrapText="false" shrinkToFit="false"/></xf><xf xfId="0" fontId="3" numFmtId="0" fillId="2" borderId="1" applyFont="1" applyNumberFormat="0" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" textRotation="0" wrapText="true" shrinkToFit="false"/></xf><xf xfId="0" fontId="0" numFmtId="0" fillId="0" borderId="2" applyFont="0" applyNumberFormat="0" applyFill="0" applyBorder="1" applyAlignment="1"><alignment vertical="center" textRotation="0" wrapText="false" shrinkToFit="false"/></xf><xf xfId="0" fontId="0" numFmtId="0" fillId="0" borderId="2" applyFont="0" applyNumberFormat="0" applyFill="0" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" textRotation="0" wrapText="false" shrinkToFit="false"/></xf><xf xfId="0" fontId="0" numFmtId="49" fillId="0" borderId="2" applyFont="0" applyNumberFormat="1" applyFill="0" applyBorder="1" applyAlignment="1"><alignment vertical="center" textRotation="0" wrapText="false" shrinkToFit="false"/></xf><xf xfId="0" fontId="0" numFmtId="49" fillId="0" borderId="2" applyFont="0" applyNumberFormat="1" applyFill="0" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" textRotation="0" wrapText="false" shrinkToFit="false"/></xf></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles><dxfs count="0"/><tableStyles defaultTableStyle="TableStyleMedium9" defaultPivotStyle="PivotTableStyle1"/></styleSheet>`;
+
+function buildXlsxColsXml(
   headers: readonly string[],
   rows: ReadonlyArray<ReadonlyArray<unknown>>,
-  sheetNameOrOptions: string | XlsxBuildOptions = 'Users',
-): Buffer {
-  const opts: XlsxBuildOptions =
-    typeof sheetNameOrOptions === 'string' ? { sheetName: sheetNameOrOptions } : sheetNameOrOptions;
-
-  const safeSheetName = escapeXml((opts.sheetName ?? 'Sheet1').slice(0, 31) || 'Sheet1');
-  const titleText = opts.title?.trim() || null;
-  const subtitleText = opts.subtitle?.trim() || null;
-  const logoBuffer = resolveValidPngBuffer(opts.logoPng);
+  customWidths?: readonly number[],
+): string {
   const colCount = Math.max(1, headers.length);
-  const lastColLetter = columnIndexToLetter(colCount - 1);
-
-  const centerCols = new Set(opts.centerColumnIndices ?? []);
-  const textCols = new Set(opts.textColumnIndices ?? []);
-
-  // Tính độ rộng cột tự động nếu không truyền columnWidths
   const computedWidths: number[] = [];
   for (let c = 0; c < colCount; c++) {
-    const customW = opts.columnWidths?.[c];
+    const customW = customWidths?.[c];
     if (customW && customW > 0) {
       computedWidths.push(customW);
       continue;
@@ -282,121 +268,20 @@ export function buildXlsxBuffer(
     computedWidths.push(Math.min(42, Math.max(10, Math.ceil(maxCellLen * 1.25) + 4)));
   }
 
-  const colsXml = `<cols>${computedWidths
+  return `<cols>${computedWidths
     .map(
       (w, idx) =>
         `<col min="${idx + 1}" max="${idx + 1}" width="${w}" customWidth="true" style="0"/>`,
     )
     .join('')}</cols>`;
+}
 
-  /**
-   * Bảng styles chuẩn theo `danh_sach_nhan_vien.xlsx`:
-   * s="0": Normal (Calibri 11)
-   * s="1": Title (Calibri 16 Bold #1E4488, căn giữa)
-   * s="2": Subtitle / Ngày xuất (Calibri 10 Italic #6B7280, căn giữa)
-   * s="3": Table Header (Calibri 11 Bold #FFFFFF, nền #1E4488, viền #9CA3AF, căn giữa, wrapText)
-   * s="4": Data Cell Left (Calibri 11, viền mảnh #E5E7EB, căn giữa dọc)
-   * s="5": Data Cell Center (Calibri 11, viền mảnh #E5E7EB, căn giữa ngang & dọc)
-   * s="6": Data Cell Text '@' Left (numFmtId=49, viền mảnh #E5E7EB, giữ nguyên số 0 đầu)
-   * s="7": Data Cell Text '@' Center (numFmtId=49, viền mảnh #E5E7EB, căn giữa & giữ số 0 đầu)
-   */
-  const stylesXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<styleSheet xml:space="preserve" xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts count="0"/><fonts count="4"><font><b val="0"/><i val="0"/><strike val="0"/><u val="none"/><sz val="11"/><color rgb="FF000000"/><name val="Calibri"/></font><font><b val="1"/><i val="0"/><strike val="0"/><u val="none"/><sz val="16"/><color rgb="FF1E4488"/><name val="Calibri"/></font><font><b val="0"/><i val="1"/><strike val="0"/><u val="none"/><sz val="10"/><color rgb="FF6B7280"/><name val="Calibri"/></font><font><b val="1"/><i val="0"/><strike val="0"/><u val="none"/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font></fonts><fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF1E4488"/><bgColor rgb="FF000000"/></patternFill></fill></fills><borders count="3"><border><left/><right/><top/><bottom/><diagonal/></border><border><left style="thin"><color rgb="FF9CA3AF"/></left><right style="thin"><color rgb="FF9CA3AF"/></right><top style="thin"><color rgb="FF9CA3AF"/></top><bottom style="thin"><color rgb="FF9CA3AF"/></bottom><diagonal/></border><border><left style="thin"><color rgb="FFE5E7EB"/></left><right style="thin"><color rgb="FFE5E7EB"/></right><top style="thin"><color rgb="FFE5E7EB"/></top><bottom style="thin"><color rgb="FFE5E7EB"/></bottom><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="8"><xf xfId="0" fontId="0" numFmtId="0" fillId="0" borderId="0" applyFont="0" applyNumberFormat="0" applyFill="0" applyBorder="0" applyAlignment="0"/><xf xfId="0" fontId="1" numFmtId="0" fillId="0" borderId="0" applyFont="1" applyNumberFormat="0" applyFill="0" applyBorder="0" applyAlignment="1"><alignment horizontal="center" vertical="center" textRotation="0" wrapText="false" shrinkToFit="false"/></xf><xf xfId="0" fontId="2" numFmtId="0" fillId="0" borderId="0" applyFont="1" applyNumberFormat="0" applyFill="0" applyBorder="0" applyAlignment="1"><alignment horizontal="center" vertical="center" textRotation="0" wrapText="false" shrinkToFit="false"/></xf><xf xfId="0" fontId="3" numFmtId="0" fillId="2" borderId="1" applyFont="1" applyNumberFormat="0" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" textRotation="0" wrapText="true" shrinkToFit="false"/></xf><xf xfId="0" fontId="0" numFmtId="0" fillId="0" borderId="2" applyFont="0" applyNumberFormat="0" applyFill="0" applyBorder="1" applyAlignment="1"><alignment vertical="center" textRotation="0" wrapText="false" shrinkToFit="false"/></xf><xf xfId="0" fontId="0" numFmtId="0" fillId="0" borderId="2" applyFont="0" applyNumberFormat="0" applyFill="0" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" textRotation="0" wrapText="false" shrinkToFit="false"/></xf><xf xfId="0" fontId="0" numFmtId="49" fillId="0" borderId="2" applyFont="0" applyNumberFormat="1" applyFill="0" applyBorder="1" applyAlignment="1"><alignment vertical="center" textRotation="0" wrapText="false" shrinkToFit="false"/></xf><xf xfId="0" fontId="0" numFmtId="49" fillId="0" borderId="2" applyFont="0" applyNumberFormat="1" applyFill="0" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" textRotation="0" wrapText="false" shrinkToFit="false"/></xf></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles><dxfs count="0"/><tableStyles defaultTableStyle="TableStyleMedium9" defaultPivotStyle="PivotTableStyle1"/></styleSheet>`;
-
-  const xmlRows: string[] = [];
-  const mergeCellRefs: string[] = [];
-  let currentRowNumber = 1;
-
-  // Dòng tiêu đề lớn (Row 1) nếu có
-  if (titleText) {
-    xmlRows.push(
-      `<row r="${currentRowNumber}" spans="1:${colCount}" customHeight="1" ht="48"><c r="A${currentRowNumber}" s="1" t="inlineStr"><is><t xml:space="preserve">${escapeXml(titleText)}</t></is></c></row>`,
-    );
-    if (colCount > 1) {
-      mergeCellRefs.push(`A${currentRowNumber}:${lastColLetter}${currentRowNumber}`);
-    }
-    currentRowNumber++;
-  }
-
-  // Dòng phụ đề / Ngày xuất dữ liệu (Row 2) nếu có
-  if (subtitleText) {
-    xmlRows.push(
-      `<row r="${currentRowNumber}" spans="1:${colCount}" customHeight="1" ht="24"><c r="A${currentRowNumber}" s="2" t="inlineStr"><is><t xml:space="preserve">${escapeXml(subtitleText)}</t></is></c></row>`,
-    );
-    if (colCount > 1) {
-      mergeCellRefs.push(`A${currentRowNumber}:${lastColLetter}${currentRowNumber}`);
-    }
-    currentRowNumber++;
-  }
-
-  // Dòng Header của bảng dữ liệu
-  const headerRowNumber = currentRowNumber;
-  const headerXmlCells: string[] = [];
-  for (let cIdx = 0; cIdx < headers.length; cIdx++) {
-    const ref = `${columnIndexToLetter(cIdx)}${headerRowNumber}`;
-    const text = escapeXml(headers[cIdx] ?? '');
-    headerXmlCells.push(
-      `<c r="${ref}" s="3" t="inlineStr"><is><t xml:space="preserve">${text}</t></is></c>`,
-    );
-  }
-  xmlRows.push(
-    `<row r="${headerRowNumber}" spans="1:${colCount}" customHeight="1" ht="32">${headerXmlCells.join('')}</row>`,
-  );
-  currentRowNumber++;
-
-  // Các dòng dữ liệu
-  for (let rIdx = 0; rIdx < rows.length; rIdx++) {
-    const rowNumber = currentRowNumber++;
-    const rowCells = rows[rIdx]!;
-    const xmlCells: string[] = [];
-
-    for (let cIdx = 0; cIdx < colCount; cIdx++) {
-      const ref = `${columnIndexToLetter(cIdx)}${rowNumber}`;
-      const val = rowCells[cIdx];
-      const isCenter = centerCols.has(cIdx);
-      const isText = textCols.has(cIdx);
-
-      const styleIdx = isText ? (isCenter ? 7 : 6) : isCenter ? 5 : 4;
-
-      if (!isText && typeof val === 'number' && Number.isFinite(val)) {
-        xmlCells.push(`<c r="${ref}" s="${styleIdx}"><v>${val}</v></c>`);
-      } else {
-        const text = escapeXml(val ?? '');
-        xmlCells.push(
-          `<c r="${ref}" s="${styleIdx}" t="inlineStr"><is><t xml:space="preserve">${text}</t></is></c>`,
-        );
-      }
-    }
-    xmlRows.push(`<row r="${rowNumber}" spans="1:${colCount}">${xmlCells.join('')}</row>`);
-  }
-
-  const lastRowNumber = Math.max(headerRowNumber, currentRowNumber - 1);
-  const dimensionRef = `A1:${lastColLetter}${lastRowNumber}`;
-  const freezeHeader = opts.freezeHeader ?? true;
-  const sheetViewInner = freezeHeader
-    ? `<pane ySplit="${headerRowNumber}" topLeftCell="A${headerRowNumber + 1}" activePane="bottomLeft" state="frozen"/><selection pane="bottomLeft" activeCell="A${headerRowNumber}" sqref="A${headerRowNumber}:${lastColLetter}${headerRowNumber}"/>`
-    : `<selection activeCell="A1" sqref="A1"/>`;
-
-  const mergeCellsXml =
-    mergeCellRefs.length > 0
-      ? `<mergeCells count="${mergeCellRefs.length}">${mergeCellRefs
-          .map((ref) => `<mergeCell ref="${ref}"/>`)
-          .join('')}</mergeCells>`
-      : '';
-
-  const drawingTagXml = logoBuffer ? '<drawing r:id="rId1"/>' : '';
-
-  const sheetXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<worksheet xml:space="preserve" xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing">
-  <dimension ref="${dimensionRef}"/>
-  <sheetViews><sheetView tabSelected="1" workbookViewId="0" showGridLines="true" showRowColHeaders="1">${sheetViewInner}</sheetView></sheetViews>
-  <sheetFormatPr defaultRowHeight="18" outlineLevelRow="0" outlineLevelCol="0"/>
-  ${colsXml}
-  <sheetData>${xmlRows.join('')}</sheetData>
-  ${mergeCellsXml}
-  ${drawingTagXml}
-</worksheet>`;
-
+function buildXlsxArchiveEntries(params: {
+  safeSheetName: string;
+  sheetXml: string;
+  logoBuffer: Buffer | null;
+}): Array<{ name: string; content: Buffer }> {
+  const { safeSheetName, sheetXml, logoBuffer } = params;
   const contentTypesXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
   <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
@@ -435,17 +320,15 @@ export function buildXlsxBuffer(
     { name: '_rels/.rels', content: Buffer.from(rootRelsXml, 'utf8') },
     { name: 'xl/workbook.xml', content: Buffer.from(workbookXml, 'utf8') },
     { name: 'xl/_rels/workbook.xml.rels', content: Buffer.from(workbookRelsXml, 'utf8') },
-    { name: 'xl/styles.xml', content: Buffer.from(stylesXml, 'utf8') },
+    { name: 'xl/styles.xml', content: Buffer.from(DEFAULT_XLSX_STYLES_XML, 'utf8') },
     { name: 'xl/worksheets/sheet1.xml', content: Buffer.from(sheetXml, 'utf8') },
   ];
 
   if (logoBuffer) {
     const sheetRelsXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing1.xml"/></Relationships>`;
-
     const drawingRelsXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/logo.png"/></Relationships>`;
-
     const drawingXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><xdr:oneCellAnchor><xdr:from><xdr:col>0</xdr:col><xdr:colOff>57150</xdr:colOff><xdr:row>0</xdr:row><xdr:rowOff>38100</xdr:rowOff></xdr:from><xdr:ext cx="1028700" cy="381000"/><xdr:pic><xdr:nvPicPr><xdr:cNvPr id="1" name="Logo" descr=""/><xdr:cNvPicPr><a:picLocks noChangeAspect="1"/></xdr:cNvPicPr></xdr:nvPicPr><xdr:blipFill><a:blip xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:embed="rId1"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill><xdr:spPr><a:xfrm rot="0"/><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr></xdr:pic><xdr:clientData/></xdr:oneCellAnchor></xdr:wsDr>`;
 
@@ -457,7 +340,127 @@ export function buildXlsxBuffer(
     );
   }
 
-  return createZipArchive(archiveEntries);
+  return archiveEntries;
+}
+
+/**
+ * Tạo file Excel `.xlsx` chuẩn OpenXML có định dạng bảng biểu chuyên nghiệp
+ * (tương thích thiết kế `danh_sach_nhan_vien.xlsx` và `mau_import_nguoi_dung.xlsx`).
+ */
+export function buildXlsxBuffer(
+  headers: readonly string[],
+  rows: ReadonlyArray<ReadonlyArray<unknown>>,
+  sheetNameOrOptions: string | XlsxBuildOptions = 'Users',
+): Buffer {
+  const opts: XlsxBuildOptions =
+    typeof sheetNameOrOptions === 'string' ? { sheetName: sheetNameOrOptions } : sheetNameOrOptions;
+
+  const safeSheetName = escapeXml((opts.sheetName ?? 'Sheet1').slice(0, 31) || 'Sheet1');
+  const titleText = opts.title?.trim() || null;
+  const subtitleText = opts.subtitle?.trim() || null;
+  const logoBuffer = resolveValidPngBuffer(opts.logoPng);
+  const colCount = Math.max(1, headers.length);
+  const lastColLetter = columnIndexToLetter(colCount - 1);
+
+  const centerCols = new Set(opts.centerColumnIndices ?? []);
+  const textCols = new Set(opts.textColumnIndices ?? []);
+  const colsXml = buildXlsxColsXml(headers, rows, opts.columnWidths);
+
+  const xmlRows: string[] = [];
+  const mergeCellRefs: string[] = [];
+  let currentRowNumber = 1;
+
+  if (titleText) {
+    xmlRows.push(
+      `<row r="${currentRowNumber}" spans="1:${colCount}" customHeight="1" ht="48"><c r="A${currentRowNumber}" s="1" t="inlineStr"><is><t xml:space="preserve">${escapeXml(titleText)}</t></is></c></row>`,
+    );
+    if (colCount > 1) {
+      mergeCellRefs.push(`A${currentRowNumber}:${lastColLetter}${currentRowNumber}`);
+    }
+    currentRowNumber++;
+  }
+
+  if (subtitleText) {
+    xmlRows.push(
+      `<row r="${currentRowNumber}" spans="1:${colCount}" customHeight="1" ht="24"><c r="A${currentRowNumber}" s="2" t="inlineStr"><is><t xml:space="preserve">${escapeXml(subtitleText)}</t></is></c></row>`,
+    );
+    if (colCount > 1) {
+      mergeCellRefs.push(`A${currentRowNumber}:${lastColLetter}${currentRowNumber}`);
+    }
+    currentRowNumber++;
+  }
+
+  const headerRowNumber = currentRowNumber;
+  const headerXmlCells: string[] = [];
+  for (let cIdx = 0; cIdx < headers.length; cIdx++) {
+    const ref = `${columnIndexToLetter(cIdx)}${headerRowNumber}`;
+    const text = escapeXml(headers[cIdx] ?? '');
+    headerXmlCells.push(
+      `<c r="${ref}" s="3" t="inlineStr"><is><t xml:space="preserve">${text}</t></is></c>`,
+    );
+  }
+  xmlRows.push(
+    `<row r="${headerRowNumber}" spans="1:${colCount}" customHeight="1" ht="32">${headerXmlCells.join('')}</row>`,
+  );
+  currentRowNumber++;
+
+  for (let rIdx = 0; rIdx < rows.length; rIdx++) {
+    const rowNumber = currentRowNumber++;
+    const rowCells = rows[rIdx]!;
+    const xmlCells: string[] = [];
+
+    for (let cIdx = 0; cIdx < colCount; cIdx++) {
+      const ref = `${columnIndexToLetter(cIdx)}${rowNumber}`;
+      const val = rowCells[cIdx];
+      const isCenter = centerCols.has(cIdx);
+      const isText = textCols.has(cIdx);
+      const styleIdx = isText ? (isCenter ? 7 : 6) : isCenter ? 5 : 4;
+
+      if (!isText && typeof val === 'number' && Number.isFinite(val)) {
+        xmlCells.push(`<c r="${ref}" s="${styleIdx}"><v>${val}</v></c>`);
+      } else {
+        const text = escapeXml(val ?? '');
+        xmlCells.push(
+          `<c r="${ref}" s="${styleIdx}" t="inlineStr"><is><t xml:space="preserve">${text}</t></is></c>`,
+        );
+      }
+    }
+    xmlRows.push(`<row r="${rowNumber}" spans="1:${colCount}">${xmlCells.join('')}</row>`);
+  }
+
+  const lastRowNumber = Math.max(headerRowNumber, currentRowNumber - 1);
+  const dimensionRef = `A1:${lastColLetter}${lastRowNumber}`;
+  const freezeHeader = opts.freezeHeader ?? true;
+  const sheetViewInner = freezeHeader
+    ? `<pane ySplit="${headerRowNumber}" topLeftCell="A${headerRowNumber + 1}" activePane="bottomLeft" state="frozen"/><selection pane="bottomLeft" activeCell="A${headerRowNumber}" sqref="A${headerRowNumber}:${lastColLetter}${headerRowNumber}"/>`
+    : `<selection activeCell="A1" sqref="A1"/>`;
+
+  const mergeCellsXml =
+    mergeCellRefs.length > 0
+      ? `<mergeCells count="${mergeCellRefs.length}">${mergeCellRefs
+          .map((ref) => `<mergeCell ref="${ref}"/>`)
+          .join('')}</mergeCells>`
+      : '';
+  const drawingTagXml = logoBuffer ? '<drawing r:id="rId1"/>' : '';
+
+  const sheetXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xml:space="preserve" xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing">
+  <dimension ref="${dimensionRef}"/>
+  <sheetViews><sheetView tabSelected="1" workbookViewId="0" showGridLines="true" showRowColHeaders="1">${sheetViewInner}</sheetView></sheetViews>
+  <sheetFormatPr defaultRowHeight="18" outlineLevelRow="0" outlineLevelCol="0"/>
+  ${colsXml}
+  <sheetData>${xmlRows.join('')}</sheetData>
+  ${mergeCellsXml}
+  ${drawingTagXml}
+</worksheet>`;
+
+  return createZipArchive(
+    buildXlsxArchiveEntries({
+      safeSheetName,
+      sheetXml,
+      logoBuffer,
+    }),
+  );
 }
 
 /**

@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { safeJsonParse } from '@packages/kernel/index.js';
 import { LOG_ENTRY_LEVELS, type LogEntry, type LogEntryLevel } from '@packages/logging/index.js';
 
 /** ID field lọc được trực tiếp (và nhận từ URL: `?jobId=…`). */
@@ -280,8 +281,8 @@ export function encodeLogCursor(e: LogEntry): string {
 export function decodeLogCursor(raw: string | null): LogCursor | null {
   if (!raw) return null;
   try {
-    const v = JSON.parse(Buffer.from(raw, 'base64url').toString('utf8')) as Partial<LogCursor>;
-    return typeof v.t === 'number' && typeof v.id === 'string' ? { t: v.t, id: v.id } : null;
+    const v = safeJsonParse<Partial<LogCursor>>(Buffer.from(raw, 'base64url').toString('utf8'));
+    return v && typeof v.t === 'number' && typeof v.id === 'string' ? { t: v.t, id: v.id } : null;
   } catch {
     return null;
   }

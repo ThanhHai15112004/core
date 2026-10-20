@@ -5,6 +5,8 @@ import {
   HTTP_ERROR_CODE,
   NotFoundAppException,
   UnauthorizedAppException,
+  safeJsonParse,
+  safeJsonParseStringArray,
 } from '@packages/kernel/index.js';
 import {
   AUDIT_ACTOR_TYPE,
@@ -497,8 +499,80 @@ export class ServiceAccountService {
     }
 
     const serviceAccount = await this.findServiceAccountByIdInternal(client.serviceAccountId);
+    const { activeAccount, grantedScopes } = await this.verifyClientTokenEligibility({
+      client,
+      serviceAccount,
+      dto,
+      ipAddress,
+      endpoint,
+    });
 
-    // 1. Kiểm tra nếu API Client đã bị thu hồi (Mục 3.6.5)
+    const ttlSeconds = dto.expiresInSeconds ?? DEFAULT_CLIENT_TOKEN_TTL_SECONDS;
+    const accessToken = await this.tokenService.signAccessToken(
+      {
+        sub: `sa:${activeAccount.id}`,
+        username: activeAccount.code,
+        roles: ['service_account'],
+        permissions: grantedScopes,
+        clientType: 'api_client',
+        saId: Number(activeAccount.id),
+        apiClientId: Number(client.id),
+        cid: client.clientId,
+        tv: Number(client.tokenVersion ?? 1),
+      },
+      ttlSeconds,
+    );
+
+    await this.recordClientUsage(client, activeAccount, {
+      ipAddress,
+      action: 'ISSUE_TOKEN',
+      endpoint,
+      status: 'SUCCESS',
+      result: 'SUCCESS',
+      reason: `Issued token with scopes [${grantedScopes.join(', ')}]`,
+    });
+
+    await this.auditLogService?.record({
+      actorType: AUDIT_ACTOR_TYPE.SERVICE_ACCOUNT,
+      actorServiceAccountId: Number(activeAccount.id),
+      actorApiClientId: Number(client.id),
+      actorIdentifier: `${activeAccount.code}:${client.clientId}`,
+      module: 'auth',
+      feature: 'api-client-token',
+      action: 'api_client.issue_token',
+      resourceType: 'api_client',
+      resourceId: client.id,
+      beforeData: null,
+      afterData: {
+        clientId: client.clientId,
+        serviceAccountId: Number(activeAccount.id),
+        serviceAccountCode: activeAccount.code,
+        scopes: grantedScopes,
+      },
+      reason: `Issued M2M access token for ${activeAccount.code}`,
+      ipAddress,
+    });
+
+    return {
+      tokenType: 'Bearer',
+      accessToken,
+      expiresInSeconds: ttlSeconds,
+      clientId: client.clientId,
+      serviceAccountId: Number(activeAccount.id),
+      serviceAccountCode: activeAccount.code,
+      scopes: grantedScopes,
+    };
+  }
+
+  private async verifyClientTokenEligibility(params: {
+    client: AuthApiClientEntity;
+    serviceAccount: AuthServiceAccountEntity | null;
+    dto: IssueApiClientTokenRequest;
+    ipAddress: string | null;
+    endpoint: string;
+  }): Promise<{ activeAccount: AuthServiceAccountEntity; grantedScopes: string[] }> {
+    const { client, serviceAccount, dto, ipAddress, endpoint } = params;
+
     if (Number(client.status) === API_CLIENT_STATUS.REVOKED || client.revokedAt) {
       await this.recordClientUsage(client, serviceAccount, {
         ipAddress,
@@ -511,7 +585,6 @@ export class ServiceAccountService {
       throw new ForbiddenAppException('auth.apiClientRevoked', [{ clientId: client.clientId }]);
     }
 
-    // 2. Kiểm tra trạng thái Service Account (Mục 3.6.1)
     if (!serviceAccount || Number(serviceAccount.status) !== SERVICE_ACCOUNT_STATUS.ACTIVE) {
       await this.recordClientUsage(client, serviceAccount, {
         ipAddress,
@@ -526,7 +599,6 @@ export class ServiceAccountService {
       ]);
     }
 
-    // 3. Kiểm tra giới hạn IP được phép gọi (IP Whitelist — Mục 3.6.6)
     const allowedIps = this.parseStringArray(client.allowedIpsJson);
     if (allowedIps.length > 0 && !this.isIpAllowed(ipAddress, allowedIps)) {
       await this.recordClientUsage(client, serviceAccount, {
@@ -542,7 +614,6 @@ export class ServiceAccountService {
       ]);
     }
 
-    // 4. Kiểm tra Client Secret (Mục 3.6.2 & 3.6.4)
     const candidateHash = this.passwordHasher.sha256(dto.clientSecret);
     if (!this.passwordHasher.safeEqualHex(candidateHash, client.clientSecretHash)) {
       await this.recordClientUsage(client, serviceAccount, {
@@ -556,7 +627,6 @@ export class ServiceAccountService {
       throw new UnauthorizedAppException('auth.invalidApiClientCredentials');
     }
 
-    // 5. Kiểm tra phạm vi truy cập (Scopes — Mục 3.6.3)
     const allowedClientScopes = this.parseStringArray(client.scopesJson);
     let grantedScopes = allowedClientScopes;
     if (dto.scopes && dto.scopes.length > 0) {
@@ -580,62 +650,7 @@ export class ServiceAccountService {
       grantedScopes = requestedScopes;
     }
 
-    const ttlSeconds = dto.expiresInSeconds ?? DEFAULT_CLIENT_TOKEN_TTL_SECONDS;
-    const accessToken = await this.tokenService.signAccessToken(
-      {
-        sub: `sa:${serviceAccount.id}`,
-        username: serviceAccount.code,
-        roles: ['service_account'],
-        permissions: grantedScopes,
-        clientType: 'api_client',
-        saId: Number(serviceAccount.id),
-        apiClientId: Number(client.id),
-        cid: client.clientId,
-        tv: Number(client.tokenVersion ?? 1),
-      },
-      ttlSeconds,
-    );
-
-    // 6. Ghi nhận lần sử dụng thành công gần nhất (Mục 3.6.7)
-    await this.recordClientUsage(client, serviceAccount, {
-      ipAddress,
-      action: 'ISSUE_TOKEN',
-      endpoint,
-      status: 'SUCCESS',
-      result: 'SUCCESS',
-      reason: `Issued token with scopes [${grantedScopes.join(', ')}]`,
-    });
-
-    await this.auditLogService?.record({
-      actorType: AUDIT_ACTOR_TYPE.SERVICE_ACCOUNT,
-      actorServiceAccountId: Number(serviceAccount.id),
-      actorApiClientId: Number(client.id),
-      actorIdentifier: `${serviceAccount.code}:${client.clientId}`,
-      module: 'auth',
-      feature: 'api-client-token',
-      action: 'api_client.issue_token',
-      resourceType: 'api_client',
-      resourceId: client.id,
-      beforeData: null,
-      afterData: {
-        clientId: client.clientId,
-        serviceAccountId: Number(serviceAccount.id),
-        serviceAccountCode: serviceAccount.code,
-        scopes: grantedScopes,
-      },
-      reason: `Issued M2M access token for ${serviceAccount.code}`,
-      ipAddress,
-    });
-
-    return {
-      tokenType: 'Bearer',
-      accessToken,
-      expiresInSeconds: ttlSeconds,
-      clientId: client.clientId,
-      serviceAccountId: Number(serviceAccount.id),
-      serviceAccountCode: serviceAccount.code,
-      scopes: grantedScopes,
-    };
+    return { activeAccount: serviceAccount, grantedScopes };
   }
 
   /**
@@ -920,27 +935,15 @@ export class ServiceAccountService {
   }
 
   private parseStringArray(jsonStr?: string | null): string[] {
-    if (!jsonStr) return [];
-    try {
-      const parsed = JSON.parse(jsonStr) as unknown;
-      if (!Array.isArray(parsed)) return [];
-      return parsed.filter((item): item is string => typeof item === 'string');
-    } catch {
-      return [];
-    }
+    return safeJsonParseStringArray(jsonStr);
   }
 
   private parseUsageLogs(jsonStr?: string | null): ApiClientUsageLogItem[] {
-    if (!jsonStr) return [];
-    try {
-      const parsed = JSON.parse(jsonStr) as unknown;
-      if (!Array.isArray(parsed)) return [];
-      return parsed.filter((item): item is ApiClientUsageLogItem =>
-        Boolean(item && typeof item === 'object' && 'timestamp' in item && 'result' in item),
-      );
-    } catch {
-      return [];
-    }
+    const parsed = safeJsonParse<unknown>(jsonStr, null);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((item): item is ApiClientUsageLogItem =>
+      Boolean(item && typeof item === 'object' && 'timestamp' in item && 'result' in item),
+    );
   }
 
   private toServiceAccountResponse(entity: AuthServiceAccountEntity): ServiceAccountResponse {

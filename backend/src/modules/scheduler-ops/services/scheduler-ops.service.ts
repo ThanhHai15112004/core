@@ -3,6 +3,7 @@ import type { Job, JobType, Queue } from 'bullmq';
 import { CronExpressionParser } from 'cron-parser';
 import { CoreConfigService } from '@packages/config/index.js';
 import { CoreI18nService } from '@packages/i18n/index.js';
+import { safeJsonParse } from '@packages/kernel/index.js';
 import { RedisService } from '@packages/redis/index.js';
 import { QueueRegistry, schedulerKeys } from '@packages/queue/index.js';
 import { MANUAL_RUN_PREFIX, MessagingConnectionService } from '@packages/messaging/index.js';
@@ -147,11 +148,8 @@ export class SchedulerOpsService {
     ]);
     const defs = new Map<string, TaskDefinition>();
     for (const [id, raw] of Object.entries(rawDefs as Record<string, string>)) {
-      try {
-        defs.set(id, JSON.parse(raw) as TaskDefinition);
-      } catch {
-        // định nghĩa hỏng — bỏ qua
-      }
+      const parsed = safeJsonParse<TaskDefinition>(raw);
+      if (parsed) defs.set(id, parsed);
     }
     const queues = liveQueues(this.queueRegistry, this.connection);
     const schedulers = new Map<string, LiveScheduler>();

@@ -1,4 +1,5 @@
 import type { Job } from 'bullmq';
+import { safeJsonParse } from '@packages/kernel/index.js';
 import type { LifecycleEntry, LifecycleType } from '../contracts/messaging-events.types.js';
 
 /** Ghi một dòng vòng đời vào job log của BullMQ (tra cứu được theo message ID). */
@@ -31,12 +32,8 @@ export function logLifecycle(
 export function parseLifecycle(rows: string[]): LifecycleEntry[] {
   const out: LifecycleEntry[] = [];
   for (const row of rows) {
-    try {
-      const e = JSON.parse(row) as LifecycleEntry;
-      if (e && typeof e.at === 'number' && typeof e.type === 'string') out.push(e);
-    } catch {
-      /* dòng log do handler tự ghi → bỏ qua */
-    }
+    const e = safeJsonParse<LifecycleEntry | null>(row, null);
+    if (e && typeof e.at === 'number' && typeof e.type === 'string') out.push(e);
   }
   return out.sort((a, b) => a.at - b.at);
 }

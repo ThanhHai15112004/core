@@ -218,68 +218,7 @@ export class ${pascal}Controller {
 
     // 9. If withDb: entities, repositories, and mappers
     if (withDb) {
-      const entityContent = `
-import { Entity, Column, Index } from 'typeorm';
-import { TypeOrmBaseEntity } from '@packages/database/index.js';
-
-/**
- * Thực thể dữ liệu của module ${title}.
- * Gợi ý: Đổi sang kế thừa \`VersionedTypeOrmEntity\` nếu bảng chứa dữ liệu nhạy cảm cần Optimistic Locking.
- */
-@Entity('${kebab.replace(/-/g, '_')}')
-export class ${pascal}Entity extends TypeOrmBaseEntity {
-  @Index({ unique: true })
-  @Column({ type: 'varchar', length: 255 })
-  public title!: string;
-
-  @Column({ type: 'text', nullable: true })
-  public description?: string;
-}
-`;
-      await writeFile(`entities/${kebab}.entity.ts`, entityContent);
-
-      const repoContent = `
-import { Injectable, Optional } from '@nestjs/common';
-import { DataSource } from 'typeorm';
-import { BaseTypeOrmRepository, TransactionManager } from '@packages/database/index.js';
-import { ${pascal}Entity } from '../entities/${kebab}.entity.js';
-
-@Injectable()
-export class ${pascal}Repository extends BaseTypeOrmRepository<${pascal}Entity> {
-  constructor(
-    dataSource: DataSource,
-    @Optional() transactionManager: TransactionManager | null = null,
-  ) {
-    super(${pascal}Entity, dataSource, transactionManager);
-  }
-}
-`;
-      await writeFile(`repositories/${kebab}.repository.ts`, repoContent);
-
-      const mapperContent = `
-import { Injectable } from '@nestjs/common';
-import type { EntityMapperContract } from '@packages/database/index.js';
-import type { ${pascal}Entity } from '../entities/${kebab}.entity.js';
-import type { ${pascal}Response } from '../responses/${kebab}.response.js';
-
-@Injectable()
-export class ${pascal}Mapper implements EntityMapperContract<${pascal}Entity, ${pascal}Response> {
-  public toResponse(entity: ${pascal}Entity): ${pascal}Response {
-    return {
-      id: entity.id,
-      title: entity.title,
-      ...(entity.description !== undefined ? { description: entity.description } : {}),
-      createdAt: entity.createdAt.toISOString(),
-      updatedAt: entity.updatedAt.toISOString(),
-    };
-  }
-
-  public toResponseList(entities: ${pascal}Entity[]): ${pascal}Response[] {
-    return entities.map((item) => this.toResponse(item));
-  }
-}
-`;
-      await writeFile(`mappers/${kebab}.mapper.ts`, mapperContent);
+      await this.scaffoldDatabaseLayer({ kebab, pascal, title, writeFile });
     }
 
     // 10. <name>.module.ts
@@ -323,5 +262,76 @@ export * from './${kebab}.module.js';
       targetDirectory: targetDir,
       createdFiles,
     };
+  }
+
+  private async scaffoldDatabaseLayer(params: {
+    kebab: string;
+    pascal: string;
+    title: string;
+    writeFile: (relativePath: string, content: string) => Promise<void>;
+  }): Promise<void> {
+    const { kebab, pascal, title, writeFile } = params;
+    const entityContent = `
+import { Entity, Column, Index } from 'typeorm';
+import { TypeOrmBaseEntity } from '@packages/database/index.js';
+
+/**
+ * Thực thể dữ liệu của module ${title}.
+ * Gợi ý: Đổi sang kế thừa \`VersionedTypeOrmEntity\` nếu bảng chứa dữ liệu nhạy cảm cần Optimistic Locking.
+ */
+@Entity('${kebab.replace(/-/g, '_')}')
+export class ${pascal}Entity extends TypeOrmBaseEntity {
+  @Index({ unique: true })
+  @Column({ type: 'varchar', length: 255 })
+  public title!: string;
+
+  @Column({ type: 'text', nullable: true })
+  public description?: string;
+}
+`;
+    await writeFile(`entities/${kebab}.entity.ts`, entityContent);
+
+    const repoContent = `
+import { Injectable, Optional } from '@nestjs/common';
+import { DataSource } from 'typeorm';
+import { BaseTypeOrmRepository, TransactionManager } from '@packages/database/index.js';
+import { ${pascal}Entity } from '../entities/${kebab}.entity.js';
+
+@Injectable()
+export class ${pascal}Repository extends BaseTypeOrmRepository<${pascal}Entity> {
+  constructor(
+    dataSource: DataSource,
+    @Optional() transactionManager: TransactionManager | null = null,
+  ) {
+    super(${pascal}Entity, dataSource, transactionManager);
+  }
+}
+`;
+    await writeFile(`repositories/${kebab}.repository.ts`, repoContent);
+
+    const mapperContent = `
+import { Injectable } from '@nestjs/common';
+import type { EntityMapperContract } from '@packages/database/index.js';
+import type { ${pascal}Entity } from '../entities/${kebab}.entity.js';
+import type { ${pascal}Response } from '../responses/${kebab}.response.js';
+
+@Injectable()
+export class ${pascal}Mapper implements EntityMapperContract<${pascal}Entity, ${pascal}Response> {
+  public toResponse(entity: ${pascal}Entity): ${pascal}Response {
+    return {
+      id: entity.id,
+      title: entity.title,
+      ...(entity.description !== undefined ? { description: entity.description } : {}),
+      createdAt: entity.createdAt.toISOString(),
+      updatedAt: entity.updatedAt.toISOString(),
+    };
+  }
+
+  public toResponseList(entities: ${pascal}Entity[]): ${pascal}Response[] {
+    return entities.map((item) => this.toResponse(item));
+  }
+}
+`;
+    await writeFile(`mappers/${kebab}.mapper.ts`, mapperContent);
   }
 }
