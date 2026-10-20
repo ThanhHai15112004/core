@@ -9,7 +9,7 @@ import { normalizeApiPrefix } from '@packages/http/index.js';
 import { REDIS_CLIENT_FACTORY, type RedisClientFactory } from '@packages/redis/index.js';
 
 import type { ModuleMetadata } from '@nestjs/common';
-import type { ApiErrorResponse, ApiSuccessResponse } from '@packages/http/index.js';
+import type { ApiErrorResponse } from '@packages/http/index.js';
 
 /** Redis giả lập trong bộ nhớ — test không bao giờ chạm vào Redis thật (dùng chung với project khác). */
 export const mockRedisFactory: RedisClientFactory = () => {

@@ -65,4 +65,3 @@ export class AuthSessionRepository extends BaseTypeOrmRepository<AuthSessionEnti
     });
   }
 }
-

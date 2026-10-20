@@ -97,7 +97,10 @@ describe('Messaging Monitor (/ops/messaging) — broker unavailable', () => {
     expect(pr.status).toBe(404);
     const co = await call<{ consumers: unknown[] }>('GET', `${base}/consumers`);
     expect(co.status).toBe(200);
-    const m = await call<{ series: { id: string }[] }>('GET', `${base}/metrics?metric=lag&range=1h`);
+    const m = await call<{ series: { id: string }[] }>(
+      'GET',
+      `${base}/metrics?metric=lag&range=1h`,
+    );
     expect(m.status).toBe(200);
     expect(m.body.data.series[0]?.id).toBe('lag');
     const bad = await call('GET', `${base}/metrics?metric=nope`);

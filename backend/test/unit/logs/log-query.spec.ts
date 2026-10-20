@@ -31,7 +31,9 @@ describe('log query', () => {
   });
 
   it('dán một ID → tìm theo mọi field ID', () => {
-    expect(parseLogQuery('0a1b2c3d-1111-2222-3333-444455556666').anyId).toBe('0a1b2c3d-1111-2222-3333-444455556666');
+    expect(parseLogQuery('0a1b2c3d-1111-2222-3333-444455556666').anyId).toBe(
+      '0a1b2c3d-1111-2222-3333-444455556666',
+    );
     expect(parseLogQuery('req_821').anyId).toBe('req_821');
     expect(parseLogQuery('timeout').anyId).toBeNull();
     expect(looksLikeId('hello')).toBe(false);
@@ -42,7 +44,12 @@ describe('log query', () => {
     const row = e({ metadata: { status: 503, path: '/api/v1/reports' } });
     expect(matchesLog(row, f)).toBe(true);
     expect(matchesLog(e({ metadata: { status: 404, path: '/api/v1/reports' } }), f)).toBe(false);
-    expect(matchesLog(e({ errorType: 'StorageTimeoutError' }), parseLogQuery('errorType:storagetimeouterror'))).toBe(true);
+    expect(
+      matchesLog(
+        e({ errorType: 'StorageTimeoutError' }),
+        parseLogQuery('errorType:storagetimeouterror'),
+      ),
+    ).toBe(true);
   });
 
   it('anyId khớp correlation / job / request / message', () => {
@@ -62,7 +69,11 @@ describe('log query', () => {
   });
 
   it('log cũ (trước structured log): ID ổn định, tách stack khỏi message', () => {
-    const legacy = { t: '2026-09-30T14:00:00.000Z', level: 'error', message: 'boom\n    at X (/a.ts:1:1)' } as LogEntry;
+    const legacy = {
+      t: '2026-09-30T14:00:00.000Z',
+      level: 'error',
+      message: 'boom\n    at X (/a.ts:1:1)',
+    } as LogEntry;
     const n1 = normalizeStoredEntry(legacy, 'worker');
     const n2 = normalizeStoredEntry(legacy, 'worker');
     expect(n1.id).toBe(n2.id);

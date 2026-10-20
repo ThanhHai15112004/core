@@ -110,5 +110,3 @@ export class AuthSecuritySettingEntity extends TypeOrmBaseEntity {
   @Column({ name: 'enable_login_audit_log', type: 'boolean', default: true })
   public enableLoginAuditLog?: boolean;
 }
-
-

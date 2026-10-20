@@ -16,7 +16,8 @@ export interface FileCoverageSummaryEntry {
 
 export type IstanbulCoverageSummaryJson = Record<string, FileCoverageSummaryEntry>;
 
-export type ModuleCategory = 'packages' | 'modules' | 'project-modules' | 'apps' | 'database' | 'other';
+export type ModuleCategory =
+  'packages' | 'modules' | 'project-modules' | 'apps' | 'database' | 'other';
 
 export interface ModuleCoverageItem {
   readonly key: string;
@@ -59,8 +60,7 @@ function addMetric(target: MutableBucket, source: CoverageMetricBucket | undefin
 }
 
 function finalizeBucket(bucket: MutableBucket): CoverageMetricBucket {
-  const pct =
-    bucket.total > 0 ? Math.round((bucket.covered / bucket.total) * 10000) / 100 : 100;
+  const pct = bucket.total > 0 ? Math.round((bucket.covered / bucket.total) * 10000) / 100 : 100;
   return {
     total: bucket.total,
     covered: bucket.covered,
@@ -76,9 +76,10 @@ export function classifySourceFileToModule(
   filePath: string,
   backendRoot?: string,
 ): { key: string; category: ModuleCategory; name: string } | null {
-  const normalized = (
-    backendRoot ? path.relative(backendRoot, filePath) : filePath
-  ).replace(/\\/g, '/');
+  const normalized = (backendRoot ? path.relative(backendRoot, filePath) : filePath).replace(
+    /\\/g,
+    '/',
+  );
 
   const srcIdx = normalized.indexOf('src/');
   const relFromSrc = srcIdx >= 0 ? normalized.slice(srcIdx + 4) : normalized;

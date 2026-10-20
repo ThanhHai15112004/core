@@ -105,10 +105,7 @@ describe('Storage Monitor (/ops/storage) — local', () => {
       contentType: string;
       versions: unknown;
       settings: { signedUrl: boolean; preview: boolean };
-    }>(
-      'GET',
-      `${base}/objects/detail?key=${encodeURIComponent('uploads/report.pdf')}`,
-    );
+    }>('GET', `${base}/objects/detail?key=${encodeURIComponent('uploads/report.pdf')}`);
     expect(d.body.data).toMatchObject({
       size: 4096,
       kind: 'document',

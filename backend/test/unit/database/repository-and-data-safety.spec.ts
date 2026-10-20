@@ -14,7 +14,6 @@ import {
   DataRepairRunnerService,
   DatabaseConnectionService,
   TransactionManager,
-  TypeOrmBaseEntity,
   TypeOrmConfigService,
   VersionedTypeOrmEntity,
   classifyDbError,
@@ -122,26 +121,28 @@ function createMockDataSource(options?: { withReplication?: boolean; updateAffec
     ),
   } as unknown as DataSource;
 
-    return {
-      dataSource,
-      mockConnection: {
-        driver: 'mysql',
-        connected: () => dataSource,
-        getStatus: () => ({ state: 'connected' }),
-      } as unknown as DatabaseConnectionService,
-      defaultRepo,
-      txRepo,
-      slaveRepo,
-      txQueryRunner,
-      slaveQueryRunner,
-      executedQueries,
-      isReleased: () => released,
-      isSlaveReleased: () => slaveReleased,
-    };
-  }
+  return {
+    dataSource,
+    mockConnection: {
+      driver: 'mysql',
+      connected: () => dataSource,
+      getStatus: () => ({ state: 'connected' }),
+    } as unknown as DatabaseConnectionService,
+    defaultRepo,
+    txRepo,
+    slaveRepo,
+    txQueryRunner,
+    slaveQueryRunner,
+    executedQueries,
+    isReleased: () => released,
+    isSlaveReleased: () => slaveReleased,
+  };
+}
 
 /** Tạo mock CoreConfigService cho kiểm thử Database */
-function createMockConfig(overrides: Partial<CoreConfigService['database']> = {}): CoreConfigService {
+function createMockConfig(
+  overrides: Partial<CoreConfigService['database']> = {},
+): CoreConfigService {
   return {
     app: {
       nodeEnv: 'development',
@@ -361,9 +362,7 @@ describe('2.6 Repository & Data Safety (Repository, Read/Write, Entity Guard, Un
           return {
             scannedCount: 50,
             affectedCount: 4,
-            summary: context.dryRun
-              ? 'Would reset 4 negative wallets'
-              : 'Reset 4 negative wallets',
+            summary: context.dryRun ? 'Would reset 4 negative wallets' : 'Reset 4 negative wallets',
           };
         },
       };

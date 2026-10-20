@@ -12,7 +12,11 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { z } from 'zod';
-import { ForbiddenAppException, HTTP_ERROR_CODE, HTTP_STATUS_CODE } from '@packages/kernel/index.js';
+import {
+  ForbiddenAppException,
+  HTTP_ERROR_CODE,
+  HTTP_STATUS_CODE,
+} from '@packages/kernel/index.js';
 import {
   ApiDoc,
   ApiGroup,
@@ -136,10 +140,7 @@ describe('Unit: Scalar UI, OpenAPI 3.1 & Breaking Change Detector (Task 2.3)', (
           description: 'Quản lý danh mục khóa học mẫu',
         },
       ]);
-      expect(Object.keys(doc.paths)).toEqual([
-        '/api/v1/courses',
-        '/api/v1/courses/{id}',
-      ]);
+      expect(Object.keys(doc.paths)).toEqual(['/api/v1/courses', '/api/v1/courses/{id}']);
 
       const postman = convertOpenApiToPostmanCollection(doc);
       expect(postman.info.name).toBe('Core Test API');
@@ -158,9 +159,9 @@ describe('Unit: Scalar UI, OpenAPI 3.1 & Breaking Change Detector (Task 2.3)', (
 
       expect(listOp).toBeDefined();
       expect(listOp?.parameters?.map((p) => p.name)).toEqual(['page', 'limit', 'status']);
-      expect(listOp?.responses['200']?.content?.['application/json']?.schema.properties).toHaveProperty(
-        'meta',
-      );
+      expect(
+        listOp?.responses['200']?.content?.['application/json']?.schema.properties,
+      ).toHaveProperty('meta');
 
       expect(createOp).toBeDefined();
       const bodySchema = createOp?.requestBody?.content['application/json']?.schema;
@@ -334,5 +335,3 @@ describe('Unit: Scalar UI, OpenAPI 3.1 & Breaking Change Detector (Task 2.3)', (
     });
   });
 });
-
-

@@ -30,4 +30,3 @@ export class AuthPasswordResetEntity extends TypeOrmBaseEntity {
   @Column({ name: 'requested_ip', type: 'varchar', length: 64, nullable: true })
   public requestedIp?: string | null;
 }
-

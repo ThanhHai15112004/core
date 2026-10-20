@@ -3,9 +3,7 @@ import type { TokenPayload, UserIdentity } from '@packages/security/index.js';
 /**
  * Giao diện Persister trừu tượng (tương thích với TypeORM Repository, BaseTypeOrmRepository hoặc hàm callback).
  */
-export type FactoryPersister<T> =
-  | { save: (entity: T) => Promise<T> }
-  | ((entity: T) => Promise<T>);
+export type FactoryPersister<T> = { save: (entity: T) => Promise<T> } | ((entity: T) => Promise<T>);
 
 export type FactoryStateResolver<T> = Partial<T> | ((seq: number, base: T) => Partial<T>);
 

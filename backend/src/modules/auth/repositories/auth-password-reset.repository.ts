@@ -35,4 +35,3 @@ export class AuthPasswordResetRepository extends BaseTypeOrmRepository<AuthPassw
     });
   }
 }
-

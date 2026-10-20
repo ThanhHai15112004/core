@@ -19,6 +19,3 @@ export const USERS_ROUTES = {
   ROLES: ':id/roles',
   ORGANIZATIONS: ':id/organizations',
 } as const;
-
-
-

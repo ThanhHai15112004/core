@@ -1,5 +1,10 @@
 import { describe, it, expect, jest } from '@jest/globals';
-import { HttpException, HttpStatus, type ArgumentMetadata, type ArgumentsHost } from '@nestjs/common';
+import {
+  HttpException,
+  HttpStatus,
+  type ArgumentMetadata,
+  type ArgumentsHost,
+} from '@nestjs/common';
 import { z } from 'zod';
 import {
   BadRequestAppException,
@@ -197,7 +202,9 @@ describe('Unit: Validation & Error Handling (Task 2.2)', () => {
       expect(() => validateParams(positiveIntParamSchema, '0')).toThrow(ValidationAppException);
       expect(() => validateParams(positiveIntParamSchema, '-5')).toThrow(ValidationAppException);
       expect(() => validateParams(positiveIntParamSchema, '12abc')).toThrow(ValidationAppException);
-      expect(() => validateParams(slugParamSchema, 'Invalid_Slug!')).toThrow(ValidationAppException);
+      expect(() => validateParams(slugParamSchema, 'Invalid_Slug!')).toThrow(
+        ValidationAppException,
+      );
       expect(() => validateParams(printableIdParamSchema, 'bad\u0000id')).toThrow(
         ValidationAppException,
       );

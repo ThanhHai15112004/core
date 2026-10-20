@@ -11,5 +11,3 @@ export * from './services/service-account.service.js';
 export * from './services/notification-adapters.provider.js';
 export * from './services/user-identity-resolver.service.js';
 export * from './auth.module.js';
-
-

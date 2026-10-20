@@ -2,11 +2,7 @@ import { Controller, Get, Post, UseGuards } from '@nestjs/common';
 import { describe, beforeAll, afterAll, it, expect } from '@jest/globals';
 import { HTTP_STATUS_CODE } from '@packages/kernel/index.js';
 import { Public, RequirePermissions, RequireRoles } from '@packages/http/index.js';
-import {
-  AuthGuard,
-  CurrentUser,
-  type UserIdentity,
-} from '@packages/security/index.js';
+import { AuthGuard, CurrentUser, type UserIdentity } from '@packages/security/index.js';
 import { createTestApp, type TestAppContext } from '../../../concerns/test-app.concern.js';
 import { actingAs, assertEndpointAuthMatrix } from '../../../concerns/permission.concern.js';
 

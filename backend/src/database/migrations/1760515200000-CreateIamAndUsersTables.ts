@@ -326,4 +326,3 @@ export class CreateIamAndUsersTables1760515200000 implements MigrationInterface 
     await queryRunner.query('DROP TABLE IF EXISTS organization_units');
   }
 }
-

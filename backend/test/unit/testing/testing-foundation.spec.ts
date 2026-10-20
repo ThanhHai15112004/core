@@ -185,7 +185,9 @@ describe('Testing Foundation Unit Tests (Task 2.7)', () => {
       } as unknown as DataSource;
 
       await truncateTestTables(pgDs, ['users', 'audit_logs']);
-      expect(executedSql).toEqual(['TRUNCATE TABLE "users", "audit_logs" RESTART IDENTITY CASCADE']);
+      expect(executedSql).toEqual([
+        'TRUNCATE TABLE "users", "audit_logs" RESTART IDENTITY CASCADE',
+      ]);
 
       await expect(truncateTestTables(pgDs, ['users; DROP TABLE x'])).rejects.toThrow(
         TestDatabaseSafetyError,

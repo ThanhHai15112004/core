@@ -3,11 +3,7 @@ import type { INestApplication } from '@nestjs/common';
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { HTTP_ERROR_CODE, HTTP_STATUS_CODE } from '@packages/kernel/index.js';
 import type { ApiErrorResponse } from '@packages/http/index.js';
-import {
-  TokenService,
-  type TokenPayload,
-  type UserIdentity,
-} from '@packages/security/index.js';
+import { TokenService, type TokenPayload, type UserIdentity } from '@packages/security/index.js';
 import { userIdentityFactory } from '../fixtures/data-factory.fixture.js';
 
 export interface ActingAsContext {
@@ -45,16 +41,14 @@ function ensureTokenServiceInstrumented(app: INestApplication): Map<string, User
       };
     });
 
-    jest
-      .spyOn(tokenService, 'validateUser')
-      .mockImplementation(async (payload: TokenPayload) => {
-        for (const identity of registry!.values()) {
-          if (identity.id === payload.sub) {
-            return identity;
-          }
+    jest.spyOn(tokenService, 'validateUser').mockImplementation(async (payload: TokenPayload) => {
+      for (const identity of registry!.values()) {
+        if (identity.id === payload.sub) {
+          return identity;
         }
-        return null;
-      });
+      }
+      return null;
+    });
 
     instrumentedApps.add(app);
   }

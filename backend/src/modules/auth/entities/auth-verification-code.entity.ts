@@ -74,4 +74,3 @@ export class AuthVerificationCodeEntity extends TypeOrmBaseEntity {
   @Column({ name: 'requested_ip', type: 'varchar', length: 64, nullable: true })
   public requestedIp?: string | null;
 }
-

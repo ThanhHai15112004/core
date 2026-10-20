@@ -1,5 +1,8 @@
 import { describe, it, expect, jest } from '@jest/globals';
-import { CliDispatcherService, type ICliCommandProvider } from '../../../src/apps/cli/dispatcher/cli-dispatcher.service.js';
+import {
+  CliDispatcherService,
+  type ICliCommandProvider,
+} from '../../../src/apps/cli/dispatcher/cli-dispatcher.service.js';
 
 describe('CliDispatcherService', () => {
   /** Kiểm thử việc đăng ký provider và phân phối đối số đến lệnh tương ứng */
@@ -47,6 +50,8 @@ describe('CliDispatcherService', () => {
     const dispatcher = new CliDispatcherService();
     jest.spyOn(console, 'log').mockImplementation(() => {});
 
-    await expect(dispatcher.dispatch(['unknown:command'])).rejects.toThrow('Command "unknown:command" not found.');
+    await expect(dispatcher.dispatch(['unknown:command'])).rejects.toThrow(
+      'Command "unknown:command" not found.',
+    );
   });
 });

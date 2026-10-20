@@ -378,11 +378,7 @@ describe('Unit: Common API Standards (Task 2.1)', () => {
     const allowedSort = ['id', 'createdAt', 'priority', 'title'] as const;
 
     it('should parse multi-column sort expressions and enforce whitelist', () => {
-      const sortParams = parseSortExpression(
-        '-priority,createdAt:asc',
-        allowedSort,
-        'createdAt',
-      );
+      const sortParams = parseSortExpression('-priority,createdAt:asc', allowedSort, 'createdAt');
       expect(sortParams.sortBy).toBe('priority');
       expect(sortParams.sortOrder).toBe('desc');
       expect(sortParams.sortCriteria).toEqual([
@@ -464,9 +460,9 @@ describe('Unit: Common API Standards (Task 2.1)', () => {
       ]);
 
       // Reject disallowed operator on field
-      expect(() =>
-        parseFilterConditions({ status__gt: '10' }, { status: ['eq', 'in'] }),
-      ).toThrow(ValidationAppException);
+      expect(() => parseFilterConditions({ status__gt: '10' }, { status: ['eq', 'in'] })).toThrow(
+        ValidationAppException,
+      );
     });
   });
 
