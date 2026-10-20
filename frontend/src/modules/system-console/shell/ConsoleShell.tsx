@@ -26,17 +26,25 @@ import { ROUTES } from '../../../routes/index';
 import { useConsoleData } from '../context/console-data-context';
 import { useConsoleRoute } from '../context/console-route-context';
 import { ENV_TONE } from '../constants/console.constants';
-import { SECTION_GROUPS, SECTIONS, sectionDef } from './sections';
+import {
+  SECTION_GROUPS,
+  SECTIONS,
+  collectMenuSectionMap,
+  resolveGroupFromMenuCode,
+  resolveMenuIcon,
+  resolveSectionFromMenuNode,
+  sectionDef,
+} from './sections';
 
 const goHome = () => navigateTo(ROUTES.HOME);
 
-/** Khung System Console: sidebar theo registry, breadcrumb, bộ điều khiển chung, Ctrl K. */
+/** Khung System Console: sidebar theo registry / cây menu động từ DB, breadcrumb, bộ điều khiển chung, Ctrl K. */
 export const ConsoleShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { t, toggleLocale } = useLocale();
+  const { t, locale, toggleLocale } = useLocale();
   const { toggleTheme } = useTheme();
   const { refreshNow } = useLive();
   const { route, navigate } = useConsoleRoute();
-  const { overview, packages, currentLatency, isOffline, environment } = useConsoleData();
+  const { overview, packages, menuTree, currentLatency, isOffline, environment } = useConsoleData();
   const def = sectionDef(route.section);
   const effectiveRange = useTimeRange(def.controls?.ranges);
 
@@ -53,37 +61,97 @@ export const ConsoleShell: React.FC<{ children: React.ReactNode }> = ({ children
 
   const problemPackages = packages.filter((p) => p.statusReport.status === 'warning' || p.statusReport.status === 'error').length;
 
+  const menuSectionMap = useMemo(() => collectMenuSectionMap(menuTree), [menuTree]);
+
+  const sectionLabelOf = useMemo(
+    () => (id: (typeof SECTIONS)[number]['id'], customName?: string | null) => {
+      const name = customName ?? menuSectionMap?.get(id)?.name;
+      return locale === 'vi' && name ? name : t(`nav.${id}`);
+    },
+    [locale, menuSectionMap, t],
+  );
+
   const groups: NavGroup[] = useMemo(() => {
-    const item = (s: (typeof SECTIONS)[number]) => ({
+    const toNavItem = (s: (typeof SECTIONS)[number], customLabel?: string, customIcon?: string | null) => ({
       id: s.id,
-      label: t(`nav.${s.id}`),
-      icon: s.icon,
+      label: customLabel ?? sectionLabelOf(s.id),
+      icon: resolveMenuIcon(customIcon ?? menuSectionMap?.get(s.id)?.icon, s.icon),
       tone: sectionTone.get(s.id),
       ...(s.id === 'packages' ? { count: problemPackages, countLabel: t('ov.sidebar.problemPackages') } : {}),
     });
+
+    // Nếu đã tải được cây menu động từ Backend (GET /settings/menus/tree?position=SYSTEM_CONSOLE)
+    if (menuTree !== null && menuTree.length > 0) {
+      const rootItems: NavGroup['items'] = [];
+      const dynamicGroups: NavGroup[] = [];
+
+      for (const node of menuTree) {
+        if (node.type === 1 || node.children.length > 0) {
+          const groupKey = resolveGroupFromMenuCode(node.code);
+          const groupLabel = locale === 'vi' && node.name ? node.name : groupKey ? t(`nav.group.${groupKey}`) : node.name;
+          const items = node.children
+            .map((child) => {
+              const secId = resolveSectionFromMenuNode(child);
+              if (!secId) return null;
+              const sec = sectionDef(secId);
+              return toNavItem(sec, sectionLabelOf(sec.id, child.name), child.icon);
+            })
+            .filter((x): x is NonNullable<typeof x> => x !== null);
+
+          if (items.length > 0) {
+            dynamicGroups.push({
+              id: groupKey ?? node.code.toLowerCase(),
+              label: groupLabel,
+              items,
+            });
+          }
+        } else {
+          const secId = resolveSectionFromMenuNode(node);
+          if (secId) {
+            const sec = sectionDef(secId);
+            rootItems.push(toNavItem(sec, sectionLabelOf(sec.id, node.name), node.icon));
+          }
+        }
+      }
+
+      return [
+        ...(rootItems.length > 0 ? [{ id: 'root', items: rootItems }] : []),
+        ...dynamicGroups,
+      ];
+    }
+
     return [
-      { id: 'root', items: SECTIONS.filter((s) => s.group === null).map(item) },
-      ...SECTION_GROUPS.map((g) => ({ id: g, label: t(`nav.group.${g}`), items: SECTIONS.filter((s) => s.group === g).map(item) })),
+      { id: 'root', items: SECTIONS.filter((s) => s.group === null).map((s) => toNavItem(s)) },
+      ...SECTION_GROUPS.map((g) => ({
+        id: g,
+        label: t(`nav.group.${g}`),
+        items: SECTIONS.filter((s) => s.group === g).map((s) => toNavItem(s)),
+      })),
     ];
-  }, [t, sectionTone, problemPackages]);
+  }, [t, locale, menuTree, menuSectionMap, sectionLabelOf, sectionTone, problemPackages]);
+
+  const activeSections = useMemo(() => {
+    if (!menuSectionMap || menuSectionMap.size === 0) return SECTIONS;
+    return SECTIONS.filter((s) => menuSectionMap.has(s.id));
+  }, [menuSectionMap]);
 
   const crumbs: Crumb[] = useMemo(() => {
     const detail = def.crumb?.(route.params, t) ?? null;
     const list: Crumb[] = [{ label: t('nav.systemConsole'), onClick: () => navigate('overview') }];
-    list.push({ label: t(`nav.${def.id}`), onClick: detail ? () => navigate(def.id) : undefined });
+    list.push({ label: sectionLabelOf(def.id), onClick: detail ? () => navigate(def.id) : undefined });
     if (detail) list.push({ label: detail });
     return list;
-  }, [def, route.params, t, navigate]);
+  }, [def, route.params, t, navigate, sectionLabelOf]);
 
   const commands: CommandSection[] = useMemo(
     () => [
       {
         id: 'pages',
         heading: t('ui.command.pages'),
-        items: SECTIONS.map((s) => ({
+        items: activeSections.map((s) => ({
           id: s.id,
-          label: t(`nav.${s.id}`),
-          icon: s.icon,
+          label: sectionLabelOf(s.id),
+          icon: resolveMenuIcon(menuSectionMap?.get(s.id)?.icon, s.icon),
           keywords: [s.id, ...(s.keywords ?? [])],
           hint: s.group ? t(`nav.group.${s.group}`) : undefined,
           onSelect: () => navigate(s.id),
@@ -100,7 +168,7 @@ export const ConsoleShell: React.FC<{ children: React.ReactNode }> = ({ children
         ],
       },
     ],
-    [t, navigate, refreshNow, toggleTheme, toggleLocale],
+    [t, activeSections, menuSectionMap, sectionLabelOf, navigate, refreshNow, toggleTheme, toggleLocale],
   );
 
   const latencyTone: Tone = isOffline

@@ -19,7 +19,7 @@ import {
   Zap,
 } from 'lucide-react';
 import type { TimeRange } from '@core/constants/ui.constants';
-import type { ConsoleSectionId } from '../types/console.types';
+import type { ConsoleMenuTreeNode, ConsoleSectionId } from '../types/console.types';
 import { LOGS_RANGES } from '../constants/logs';
 import { MESSAGING_RANGES } from '../constants/messaging';
 import { OVERVIEW_RANGES } from '../constants/overview';
@@ -208,9 +208,113 @@ const SECTION_MAP = new Map<string, SectionDef>(SECTIONS.map((s) => [s.id, s]));
 /** Id cũ trong hash/localStorage → id mới. */
 const SECTION_ALIASES: Record<string, ConsoleSectionId> = { runtime: 'runtimes' };
 
+const MENU_CODE_TO_SECTION: Record<string, ConsoleSectionId> = {
+  SC_OVERVIEW: 'overview',
+  SC_RUNTIMES: 'runtimes',
+  SC_HTTP_TRAFFIC: 'http-traffic',
+  SC_PERFORMANCE: 'performance',
+  SC_DATABASE: 'database',
+  SC_CACHE: 'cache',
+  SC_STORAGE: 'storage',
+  SC_MESSAGING: 'messaging',
+  SC_WORKER: 'worker',
+  SC_SCHEDULER: 'scheduler',
+  SC_JOBS: 'jobs',
+  SC_LOGS: 'logs',
+  SC_SECURITY: 'security',
+  SC_SECRETS: 'secrets',
+  SC_CONFIGURATION: 'configuration',
+  SC_PACKAGES: 'packages',
+};
+
+const MENU_CODE_TO_GROUP: Record<string, SectionGroupId> = {
+  SC_GROUP_RUNTIME: 'runtime-traffic',
+  SC_GROUP_INFRA: 'infrastructure',
+  SC_GROUP_BACKGROUND: 'background',
+  SC_GROUP_GOVERNANCE: 'governance',
+};
+
+const ICON_BY_NAME: Record<string, LucideIcon> = {
+  Boxes,
+  Clock,
+  Cpu,
+  Database,
+  FileText,
+  Gauge,
+  Globe,
+  HardDrive,
+  KeyRound,
+  LayoutDashboard,
+  ListChecks,
+  Package,
+  Radio,
+  Settings2,
+  ShieldCheck,
+  Zap,
+};
+
 export function resolveSection(raw: string | null | undefined): ConsoleSectionId | null {
   if (!raw) return null;
   return SECTION_MAP.get(SECTION_ALIASES[raw] ?? raw)?.id ?? null;
+}
+
+/** Ánh xạ một mục menu động từ DB (`link` hoặc `code`) sang `ConsoleSectionId`. */
+export function resolveSectionFromMenuNode(node: { code?: string | null; link?: string | null }): ConsoleSectionId | null {
+  if (node.link) {
+    const clean = node.link.replace(/^\/+/, '').replace(/^system-console\/?/i, '');
+    const seg = clean.split(/[/?]/)[0];
+    const resolved = resolveSection(seg);
+    if (resolved) return resolved;
+  }
+  if (node.code) {
+    const byCode = MENU_CODE_TO_SECTION[node.code.trim().toUpperCase()];
+    if (byCode) return byCode;
+  }
+  return null;
+}
+
+/** Ánh xạ mã nhóm menu (`SC_GROUP_*`) sang `SectionGroupId` để lấy bản dịch đa ngôn ngữ chuẩn. */
+export function resolveGroupFromMenuCode(code?: string | null): SectionGroupId | null {
+  if (!code) return null;
+  return MENU_CODE_TO_GROUP[code.trim().toUpperCase()] ?? null;
+}
+
+/** Ánh xạ tên icon từ DB (`"Zap"`, `"Database"`, ...) sang component `LucideIcon`. */
+export function resolveMenuIcon(iconName?: string | null, fallback: LucideIcon = LayoutDashboard): LucideIcon {
+  if (!iconName) return fallback;
+  return ICON_BY_NAME[iconName.trim()] ?? fallback;
+}
+
+export interface MenuSectionOverride {
+  name?: string | null;
+  icon?: string | null;
+}
+
+/**
+ * Duyệt đệ quy cây menu động từ DB để thu thập tập các `ConsoleSectionId` được phép hiển thị
+ * cùng thông tin ghi đè (`name`, `icon`). Bỏ qua các nút nhóm (`type === 1`) không trỏ trực tiếp tới section.
+ */
+export function collectMenuSectionMap(
+  nodes: readonly ConsoleMenuTreeNode[] | null | undefined,
+): Map<ConsoleSectionId, MenuSectionOverride> | null {
+  if (!nodes) return null;
+  const map = new Map<ConsoleSectionId, MenuSectionOverride>();
+
+  const walk = (list: readonly ConsoleMenuTreeNode[]) => {
+    for (const node of list) {
+      if (node.children && node.children.length > 0) {
+        walk(node.children);
+      } else if (node.type !== 1) {
+        const secId = resolveSectionFromMenuNode(node);
+        if (secId && !map.has(secId)) {
+          map.set(secId, { name: node.name, icon: node.icon });
+        }
+      }
+    }
+  };
+
+  walk(nodes);
+  return map;
 }
 
 export const sectionDef = (id: ConsoleSectionId): SectionDef => SECTION_MAP.get(id) ?? SECTIONS[0];

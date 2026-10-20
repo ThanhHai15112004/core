@@ -107,3 +107,37 @@ export interface OverviewData {
   incidents: ActiveIncidentItem[];
   recentActivities: RecentActivityEvent[];
 }
+
+/* ==========================================================================
+   DYNAMIC MENU TREE MODEL
+   Khớp với response của GET /settings/menus/tree?position=SYSTEM_CONSOLE
+   ========================================================================== */
+
+export interface ConsoleMenuTreeNode {
+  id: number;
+  code: string;
+  module: string;
+  name: string;
+  status: number;
+  statusName: 'ACTIVE' | 'INACTIVE';
+  link: string | null;
+  linkApi: string | null;
+  type: number;
+  typeName: 'GROUP' | 'ITEM' | 'EXTERNAL' | 'ACTION';
+  parent: number | null;
+  parentCode: string | null;
+  level: number;
+  key: string | null;
+  numOrder: number;
+  icon: string | null;
+  position: string;
+  children: ConsoleMenuTreeNode[];
+}
+
+export interface ConsoleMenuTreeResponse {
+  position: string;
+  cacheVersion: number;
+  fromCache: boolean;
+  totalNodes: number;
+  items: ConsoleMenuTreeNode[];
+}

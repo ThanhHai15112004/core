@@ -1,5 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { fetchApi, fetchApiWithMeta } from '../../core/services/api';
+import {
+  fetchApi,
+  fetchApiWithMeta,
+  IAM_ACCESS_TOKEN_KEY,
+  IAM_REFRESH_TOKEN_KEY,
+} from '../../core/services/api';
 import { API_ROUTES } from '../../routes/index';
 import {
   Shield,
@@ -177,9 +182,6 @@ const PRIVILEGED_PRESET_ACCOUNTS = [
   { label: 'Branch Director HCM (#9)', email: 'director.hcm@gmail.com' },
   { label: 'Engineering Manager (#10)', email: 'manager.eng@gmail.com' },
 ];
-
-const IAM_ACCESS_TOKEN_KEY = 'core_iam_access_token';
-const IAM_REFRESH_TOKEN_KEY = 'core_iam_refresh_token';
 
 export const IamManagementPage: React.FC = () => {
   const [subTab, setSubTab] = useState<'users' | 'auth' | 'orgs-roles' | 'audit-logs'>('users');

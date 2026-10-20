@@ -1,10 +1,12 @@
 import { createContext, useContext } from 'react';
-import type { HealthData, OverviewData, PackageSummary, SystemEnvironment, ToastMessage } from '../types/console.types';
+import type { ConsoleMenuTreeNode, HealthData, OverviewData, PackageSummary, SystemEnvironment, ToastMessage } from '../types/console.types';
 import type { PackageActionResult } from '../types/packages.types';
 
 export interface ConsoleDataContextValue {
   health: HealthData;
   packages: PackageSummary[];
+  /** Cây menu động từ backend (`GET /settings/menus/tree?position=SYSTEM_CONSOLE`), `null` khi chưa tải xong. */
+  menuTree: ConsoleMenuTreeNode[] | null;
   executeAction: (packageId: string, actionId: string, params?: unknown) => Promise<PackageActionResult>;
   /** Round-trip lần gọi `/health` gần nhất (ms). */
   currentLatency: number;
@@ -24,6 +26,7 @@ export interface ConsoleDataContextValue {
 export const consoleKeys = {
   health: ['console', 'health'] as const,
   packages: ['console', 'packages'] as const,
+  menus: ['console', 'menus'] as const,
   /** Text trong overview do backend dịch sẵn → key theo ngôn ngữ. */
   overview: (locale: string) => ['console', 'overview', locale] as const,
 };

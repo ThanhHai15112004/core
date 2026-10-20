@@ -1,10 +1,11 @@
 import React, { Suspense, lazy, useCallback, useEffect, useMemo } from 'react';
 import { navigateTo, useLocation } from '@core/router';
-import type { ConsolePath } from './types/console.types';
+import type { ConsolePath, ConsoleSectionId } from './types/console.types';
 import { CONSOLE_STORAGE_KEYS } from './constants/console.constants';
+import { useConsoleData } from './context/console-data-context';
 import { ConsoleRouteContext, type ConsoleRoute } from './context/console-route-context';
 import { ConsoleShell } from './shell/ConsoleShell';
-import { resolveSection, sectionDef } from './shell/sections';
+import { collectMenuSectionMap, resolveSection, sectionDef } from './shell/sections';
 import { ROUTES } from '../../routes/index';
 
 const BASE = ROUTES.SYSTEM_CONSOLE;
@@ -38,15 +39,36 @@ const segmentsOf = (pathname: string) => pathname.slice(BASE.length).split('/').
  */
 export const SystemConsoleRouter: React.FC = () => {
   const { pathname, search } = useLocation();
+  const { menuTree } = useConsoleData();
   const segments = useMemo(() => segmentsOf(pathname), [pathname]);
   const fromUrl = resolveSection(segments[0]);
   const isKit = KitPage !== null && segments[0] === KIT_SEGMENT;
 
-  // Không có / sai section → chuyển sang section gần nhất (replace, không thêm lịch sử).
+  const allowedSections = useMemo<Set<ConsoleSectionId> | null>(() => {
+    const map = collectMenuSectionMap(menuTree);
+    return map ? new Set(map.keys()) : null;
+  }, [menuTree]);
+
+  // Không có / sai section hoặc section đã bị tắt trên menu động → chuyển sang section hợp lệ gần nhất.
   useEffect(() => {
-    if (fromUrl || isKit) return;
-    navigateTo(`${BASE}/${resolveSection(readLastSection()) ?? 'overview'}${window.location.search}`, 'replace');
-  }, [fromUrl, isKit]);
+    if (isKit) return;
+    const isBlockedByMenu =
+      fromUrl !== null &&
+      allowedSections !== null &&
+      allowedSections.size > 0 &&
+      !allowedSections.has(fromUrl);
+
+    if (fromUrl && !isBlockedByMenu) return;
+
+    const lastSec = resolveSection(readLastSection());
+    const fallbackSec =
+      lastSec && (!allowedSections || allowedSections.size === 0 || allowedSections.has(lastSec))
+        ? lastSec
+        : allowedSections && allowedSections.size > 0
+          ? Array.from(allowedSections)[0]
+          : 'overview';
+    navigateTo(`${BASE}/${fallbackSec}${window.location.search}`, 'replace');
+  }, [fromUrl, isKit, allowedSections]);
 
   // Đổi trang (không phải đổi query) → về đầu trang.
   useEffect(() => {

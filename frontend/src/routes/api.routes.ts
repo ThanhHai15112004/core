@@ -141,5 +141,11 @@ export const API_ROUTES = {
     TREE: '/organizations/tree',
     DETAIL: (id: string | number) => `/organizations/${id}`,
   },
+  SETTINGS: {
+    MENUS: {
+      TREE: (position = 'SYSTEM_CONSOLE') => `/settings/menus/tree?position=${encodeURIComponent(position)}`,
+      LIST: (qs = '') => `/settings/menus${qs ? `?${qs}` : ''}`,
+    },
+  },
 } as const;
 

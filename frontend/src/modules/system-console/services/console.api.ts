@@ -1,6 +1,6 @@
 import { fetchApi } from '../../../core/services/api';
 import { API_ROUTES } from '../../../routes/index';
-import type { HealthData, OverviewData } from '../types/console.types';
+import type { ConsoleMenuTreeResponse, HealthData, OverviewData } from '../types/console.types';
 
 export { fetchPackages, executePackageAction } from './packages.api';
 
@@ -21,4 +21,9 @@ export async function fetchHealth(): Promise<{ data: HealthData; latencyMs: numb
 
 export function fetchOverview(): Promise<OverviewData> {
   return fetchApi<OverviewData>(API_ROUTES.OPS.OVERVIEW);
+}
+
+/** Lấy cây menu động cho System Console (`position=SYSTEM_CONSOLE`). */
+export function fetchConsoleMenus(): Promise<ConsoleMenuTreeResponse> {
+  return fetchApi<ConsoleMenuTreeResponse>(API_ROUTES.SETTINGS.MENUS.TREE('SYSTEM_CONSOLE'));
 }

@@ -39,6 +39,28 @@ export async function fetchApi<T>(endpoint: string, options: RequestInit = {}): 
   return result.data;
 }
 
+export const IAM_ACCESS_TOKEN_KEY = 'core_iam_access_token';
+export const IAM_REFRESH_TOKEN_KEY = 'core_iam_refresh_token';
+
+function getStoredAccessToken(): string | null {
+  try {
+    return typeof window !== 'undefined' ? window.localStorage.getItem(IAM_ACCESS_TOKEN_KEY) : null;
+  } catch {
+    return null;
+  }
+}
+
+function normalizeHeaders(headers?: HeadersInit): Record<string, string> {
+  if (!headers) return {};
+  if (headers instanceof Headers) {
+    return Object.fromEntries(headers.entries());
+  }
+  if (Array.isArray(headers)) {
+    return Object.fromEntries(headers);
+  }
+  return headers;
+}
+
 /**
  * Gọi backend API và trả về cả `{ data, meta }` để phục vụ phân trang danh sách.
  */
@@ -49,6 +71,7 @@ export async function fetchApiWithMeta<T>(
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), frontendConfig.apiTimeoutMs);
   const hasBody = options.body !== undefined && options.body !== null;
+  const accessToken = getStoredAccessToken();
 
   try {
     const response = await fetch(`${frontendConfig.apiBaseUrl}${endpoint}`, {
@@ -56,9 +79,10 @@ export async function fetchApiWithMeta<T>(
       signal: options.signal ?? controller.signal,
       headers: {
         ...(hasBody ? { 'Content-Type': 'application/json' } : {}),
+        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
         'Accept-Language': getActiveLocale(),
         'X-Timezone': getActiveTimezone(),
-        ...options.headers,
+        ...normalizeHeaders(options.headers),
       },
     });
 

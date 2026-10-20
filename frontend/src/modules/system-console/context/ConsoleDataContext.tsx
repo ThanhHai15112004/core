@@ -5,13 +5,13 @@ import { useLocale } from '@core/i18n/index';
 import { useLiveQuery } from '@core/data';
 import type { HealthData, ToastMessage } from '../types/console.types';
 import type { PackageActionResult } from '../types/packages.types';
-import { fetchHealth, fetchPackages, fetchOverview, executePackageAction } from '../services/console.api';
+import { fetchHealth, fetchPackages, fetchOverview, fetchConsoleMenus, executePackageAction } from '../services/console.api';
 import { ConsoleDataContext, consoleKeys, type ConsoleDataContextValue } from './console-data-context';
 
 const INITIAL_HEALTH: HealthData = { status: 'ok', uptime: 0, timestamp: new Date().toISOString() };
 
 /**
- * Dữ liệu chung của cả console (health, packages, overview) — dùng cho thanh trên, sidebar và trang Tổng quan.
+ * Dữ liệu chung của cả console (health, packages, overview, menus) — dùng cho thanh trên, sidebar và trang Tổng quan.
  * Làm mới theo bộ điều khiển chung trên thanh trên cùng.
  */
 export const ConsoleDataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -24,6 +24,7 @@ export const ConsoleDataProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const reachable = healthQ.data !== undefined && !isOffline;
 
   const packagesQ = useLiveQuery(consoleKeys.packages, fetchPackages, { tier: 'slow', enabled: reachable });
+  const menusQ = useLiveQuery(consoleKeys.menus, fetchConsoleMenus, { tier: 'slow', enabled: reachable });
   const overviewQ = useLiveQuery(consoleKeys.overview(locale), fetchOverview, { enabled: reachable });
 
   const [lastSuccessfulSync, setLastSuccessfulSync] = useState<Date | null>(null);
@@ -65,11 +66,13 @@ export const ConsoleDataProvider: React.FC<{ children: React.ReactNode }> = ({ c
   );
 
   const overview = overviewQ.data ?? null;
+  const menuTree = menusQ.data?.items ?? null;
   const refetchOverview = overviewQ.refetch;
   const value = useMemo<ConsoleDataContextValue>(
     () => ({
       health,
       packages: packagesQ.data ?? [],
+      menuTree,
       executeAction,
       currentLatency: healthQ.data?.latencyMs ?? 0,
       addToast,
@@ -81,7 +84,7 @@ export const ConsoleDataProvider: React.FC<{ children: React.ReactNode }> = ({ c
       overviewError: overviewQ.error,
       refetchOverview: () => void refetchOverview(),
     }),
-    [health, packagesQ.data, executeAction, healthQ.data, addToast, overview, isOffline, lastSuccessfulSync, overviewQ.isPending, overviewQ.error, refetchOverview],
+    [health, packagesQ.data, menuTree, executeAction, healthQ.data, addToast, overview, isOffline, lastSuccessfulSync, overviewQ.isPending, overviewQ.error, refetchOverview],
   );
 
   return <ConsoleDataContext.Provider value={value}>{children}</ConsoleDataContext.Provider>;
