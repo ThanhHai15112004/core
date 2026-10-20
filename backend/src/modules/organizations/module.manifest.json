@@ -123,5 +123,24 @@
         }
       ]
     }
+  ],
+  "sequences": [
+    {
+      "key": "organizations.contract_code",
+      "module": "organizations",
+      "name": "Mã hợp đồng theo đơn vị / chi nhánh (Unit Contract Sequence)",
+      "description": "Mẫu sinh mã hợp đồng tách riêng bộ đếm theo từng đơn vị/chi nhánh và năm (ví dụ: CTR-HCM-2026-000001)",
+      "prefix": "CTR",
+      "suffix": "",
+      "separator": "-",
+      "dateFormat": "YYYY",
+      "paddingLength": 6,
+      "startValue": 1,
+      "step": 1,
+      "resetPolicy": "YEARLY",
+      "scopeByUnit": true,
+      "timezone": "Asia/Ho_Chi_Minh",
+      "isSystem": true
+    }
   ]
 }

@@ -123,7 +123,13 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
         const upper = codes.map((c) => c.trim().toUpperCase());
         return [...orgStore.values()].filter((o) => upper.includes(o.code));
       },
-      findFiltered: async () => [...orgStore.values()],
+      findFiltered: async (filter?: { parentId?: number | null }) => {
+        const all = [...orgStore.values()];
+        if (filter?.parentId !== undefined) {
+          return all.filter((o) => Number(o.parentId) === Number(filter.parentId));
+        }
+        return all;
+      },
       saveEntity: async (partial: Partial<OrganizationUnitEntity>) => {
         const now = new Date();
         const entity: OrganizationUnitEntity = {
@@ -3584,5 +3590,171 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
         preferredTimezone: 'Asia/Ho_Chi_Minh',
       },
     });
+
+    // =========================================================================
+    // PHẦN 3: SINH MÃ NGHIỆP VỤ ĐỘNG ĐA MODULE HTTP E2E (Mục 5.5.1 -> 5.5.8)
+    // =========================================================================
+    // 5.5.7: Xem trước mẫu mã (POST /api/v1/settings/sequences/preview) trước khi áp dụng
+    const previewSeqRes = await context.injectJson<{
+      sampleCode: string;
+      nextSampleCodes: string[];
+      periodKey: string;
+    }>({
+      method: 'POST',
+      url: '/api/v1/settings/sequences/preview',
+      headers: adminHeaders,
+      payload: {
+        prefix: 'ORD',
+        separator: '-',
+        dateFormat: 'YYYY',
+        paddingLength: 6,
+        startValue: 1,
+        step: 1,
+        resetPolicy: 'YEARLY',
+        at: '2026-10-20T08:00:00.000Z',
+      },
+    });
+    expect(previewSeqRes.status).toBe(HTTP_STATUS_CODE.OK);
+    expect(previewSeqRes.body.data.sampleCode).toBe('ORD-2026-000001');
+    expect(previewSeqRes.body.data.nextSampleCodes).toEqual([
+      'ORD-2026-000001',
+      'ORD-2026-000002',
+      'ORD-2026-000003',
+    ]);
+
+    // 5.5.1 -> 5.5.3: Tạo mới quy tắc sinh mã (POST /api/v1/settings/sequences)
+    const createSeqRes = await context.injectJson<{
+      key: string;
+      module: string;
+      prefix: string;
+      samplePreview: string;
+    }>({
+      method: 'POST',
+      url: '/api/v1/settings/sequences',
+      headers: adminHeaders,
+      payload: {
+        key: 'orders.e2e_sales_order',
+        module: 'orders',
+        name: 'Mã đơn hàng E2E',
+        description: 'Quy tắc sinh mã đơn hàng phục vụ kiểm thử E2E',
+        prefix: 'ORD',
+        suffix: '',
+        separator: '-',
+        dateFormat: 'YYYY',
+        paddingLength: 6,
+        startValue: 1,
+        step: 1,
+        resetPolicy: 'YEARLY',
+        scopeByUnit: false,
+        reason: 'Khởi tạo mẫu sinh mã đơn hàng E2E',
+      },
+    });
+    expect(createSeqRes.status).toBe(HTTP_STATUS_CODE.CREATED);
+    expect(createSeqRes.body.data.key).toBe('orders.e2e_sales_order');
+    expect(createSeqRes.body.data.prefix).toBe('ORD');
+
+    // 5.5.4: Sinh số thứ tự an toàn khi nhiều request cùng lúc qua HTTP (POST /api/v1/settings/sequences/:key/next)
+    const parallelHttpReqs = Array.from({ length: 10 }, () =>
+      context.injectJson<{
+        code: string;
+        sequenceNumber: number;
+      }>({
+        method: 'POST',
+        url: '/api/v1/settings/sequences/orders.e2e_sales_order/next',
+        headers: adminHeaders,
+        payload: {
+          at: '2026-10-20T09:00:00.000Z',
+        },
+      }),
+    );
+    const parallelHttpResponses = await Promise.all(parallelHttpReqs);
+    const httpCodes = parallelHttpResponses.map((r) => r.body.data.code);
+    expect(new Set(httpCodes).size).toBe(10);
+    expect(httpCodes).toContain('ORD-2026-000001');
+    expect(httpCodes).toContain('ORD-2026-000010');
+
+    // 5.5.6: Sinh mã riêng theo đơn vị (organizations.contract_code có scopeByUnit = true)
+    const unitHcmRes = await context.injectJson<{
+      code: string;
+      unitScopeKey: string;
+    }>({
+      method: 'POST',
+      url: '/api/v1/settings/sequences/organizations.contract_code/next',
+      headers: adminHeaders,
+      payload: {
+        organizationUnitId: 10,
+        unitCode: 'HCM',
+        at: '2026-10-20T09:00:00.000Z',
+      },
+    });
+    const unitHnRes = await context.injectJson<{
+      code: string;
+      unitScopeKey: string;
+    }>({
+      method: 'POST',
+      url: '/api/v1/settings/sequences/organizations.contract_code/next',
+      headers: adminHeaders,
+      payload: {
+        organizationUnitId: 20,
+        unitCode: 'HN',
+        at: '2026-10-20T09:00:00.000Z',
+      },
+    });
+    expect(unitHcmRes.status).toBe(HTTP_STATUS_CODE.OK);
+    expect(unitHcmRes.body.data.code).toBe('CTR-HCM-2026-000001');
+    expect(unitHnRes.status).toBe(HTTP_STATUS_CODE.OK);
+    expect(unitHnRes.body.data.code).toBe('CTR-HN-2026-000001');
+
+    // 5.5.8: Cập nhật cấu hình mã & Tra cứu lịch sử thay đổi (không làm ảnh hưởng mã đã cấp)
+    const updateSeqRes = await context.injectJson<{
+      key: string;
+      prefix: string;
+      suffix: string;
+    }>({
+      method: 'PUT',
+      url: '/api/v1/settings/sequences/orders.e2e_sales_order',
+      headers: adminHeaders,
+      payload: {
+        prefix: 'ORDX',
+        suffix: 'VN',
+        dateFormat: 'YYYYMM',
+        reason: 'Cập nhật tiền tố ORDX và hậu tố VN',
+      },
+    });
+    expect(updateSeqRes.status).toBe(HTTP_STATUS_CODE.OK);
+    expect(updateSeqRes.body.data.prefix).toBe('ORDX');
+    expect(updateSeqRes.body.data.suffix).toBe('VN');
+
+    const nextAfterUpdateRes = await context.injectJson<{
+      code: string;
+      sequenceNumber: number;
+    }>({
+      method: 'POST',
+      url: '/api/v1/settings/sequences/orders.e2e_sales_order/next',
+      headers: adminHeaders,
+      payload: {
+        at: '2026-10-20T10:00:00.000Z',
+      },
+    });
+    expect(nextAfterUpdateRes.status).toBe(HTTP_STATUS_CODE.OK);
+    expect(nextAfterUpdateRes.body.data.code).toBe('ORDX-202610-000011-VN');
+    expect(nextAfterUpdateRes.body.data.sequenceNumber).toBe(11);
+
+    const seqHistoryRes = await context.injectJson<
+      Array<{
+        sequenceKey: string;
+        action: string;
+        reason: string | null;
+      }>
+    >({
+      method: 'GET',
+      url: '/api/v1/settings/sequences/orders.e2e_sales_order/history',
+      headers: adminHeaders,
+    });
+    expect(seqHistoryRes.status).toBe(HTTP_STATUS_CODE.OK);
+    expect(seqHistoryRes.body.data.length).toBeGreaterThanOrEqual(2);
+    expect(seqHistoryRes.body.data.map((h) => h.action)).toEqual(
+      expect.arrayContaining(['CREATE', 'UPDATE']),
+    );
   });
 });

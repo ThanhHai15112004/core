@@ -2,6 +2,7 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import type { CodeTypeManifestItem } from './code-lookup.contract.js';
 import type { FeatureFlagManifestItem } from './feature-flag.contract.js';
+import type { SequenceManifestItem } from './sequence.contract.js';
 import type { SettingGroupManifestItem, SettingManifestItem } from './setting-lookup.contract.js';
 
 export type ModuleType = 'core' | 'project';
@@ -32,6 +33,7 @@ export interface ModuleManifest {
   settingGroups?: SettingGroupManifestItem[];
   settings?: SettingManifestItem[];
   featureFlags?: FeatureFlagManifestItem[];
+  sequences?: SequenceManifestItem[];
   locales?: Record<string, unknown>[];
   timezones?: Record<string, unknown>[];
   translations?: Record<string, unknown>[];

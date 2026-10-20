@@ -27,7 +27,11 @@
       "settings.i18n_locale_updated",
       "settings.i18n_timezone_created",
       "settings.i18n_timezone_updated",
-      "settings.i18n_translation_upserted"
+      "settings.i18n_translation_upserted",
+      "settings.sequences_synced",
+      "settings.sequence_created",
+      "settings.sequence_updated",
+      "settings.sequence_generated"
     ],
     "subscribed": []
   },
@@ -42,7 +46,10 @@
       "feature_flag_histories",
       "i18n_locales",
       "i18n_timezones",
-      "i18n_translations"
+      "i18n_translations",
+      "sequence_rules",
+      "sequence_counters",
+      "sequence_rule_histories"
     ]
   },
   "codeTypes": [
@@ -346,6 +353,42 @@
       "targetUserIds": [],
       "targetRoles": [],
       "targetOrganizationUnitIds": [],
+      "isSystem": true
+    }
+  ],
+  "sequences": [
+    {
+      "key": "settings.order_code",
+      "module": "settings",
+      "name": "Mã đơn hàng nghiệp vụ (Order Sequence)",
+      "description": "Mẫu sinh mã đơn hàng chuẩn theo năm (ví dụ: ORD-2026-000001), tự động reset số thứ tự khi sang năm mới",
+      "prefix": "ORD",
+      "suffix": "",
+      "separator": "-",
+      "dateFormat": "YYYY",
+      "paddingLength": 6,
+      "startValue": 1,
+      "step": 1,
+      "resetPolicy": "YEARLY",
+      "scopeByUnit": false,
+      "timezone": "Asia/Ho_Chi_Minh",
+      "isSystem": true
+    },
+    {
+      "key": "settings.invoice_code",
+      "module": "settings",
+      "name": "Mã hóa đơn tài chính (Invoice Sequence)",
+      "description": "Mẫu sinh mã hóa đơn theo năm và tháng (ví dụ: INV-202610-000001), tự động reset số thứ tự hàng tháng",
+      "prefix": "INV",
+      "suffix": "",
+      "separator": "-",
+      "dateFormat": "YYYYMM",
+      "paddingLength": 6,
+      "startValue": 1,
+      "step": 1,
+      "resetPolicy": "MONTHLY",
+      "scopeByUnit": false,
+      "timezone": "Asia/Ho_Chi_Minh",
       "isSystem": true
     }
   ],

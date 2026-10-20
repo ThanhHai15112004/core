@@ -101,6 +101,9 @@ import {
   computeFeatureFlagRolloutBucket,
   defaultCodeRegistry,
   FeatureFlagRegistryService,
+  SEQUENCE_DATE_FORMAT,
+  SEQUENCE_RESET_POLICY,
+  SequenceRegistryService,
   SETTING_VALUE_TYPE,
   SettingRegistryService,
 } from '@packages/kernel/index.js';
@@ -110,6 +113,7 @@ import type { CodeTypeRepository } from '@modules/codes/repositories/code-type.r
 import type { CodeValueRepository } from '@modules/codes/repositories/code-value.repository.js';
 import { CodesService } from '@modules/codes/services/codes.service.js';
 import { FeatureFlagsService } from '@modules/settings/services/feature-flags.service.js';
+import { SequencesService } from '@modules/settings/services/sequences.service.js';
 import { SettingsService } from '@modules/settings/services/settings.service.js';
 import { MasterPermissionSeeder } from '../../../src/database/seeders/master-permission.seeder.js';
 
@@ -4339,5 +4343,191 @@ describe('Unit: Quản lý Người dùng (3.1) & Xác thực / Phiên / MFA (3)
       },
     );
     expect(exportHcm.csvContent).toContain('21/10/2026');
+  });
+
+  it('5.5.1 -> 5.5.8: Sinh mã nghiệp vụ động đa Module (Sequence Generator) — Tạo mẫu mã ORD-2026-000001, tiền tố/hậu tố, ngày/tháng/năm, Concurrency-safe (Promise.all), Reset theo kỳ, Sinh theo đơn vị, Xem trước & Ghi lịch sử thay đổi', async () => {
+    const sequenceRegistry = new SequenceRegistryService();
+    const auditLogService = new AuditLogService();
+    const sequencesService = new SequencesService(
+      null,
+      null,
+      null,
+      sequenceRegistry,
+      auditLogService,
+    );
+
+    const adminActor = {
+      id: 1,
+      username: 'superadmin',
+      email: 'superadmin@gmail.com',
+      roles: ['SUPER_ADMIN'],
+      permissions: ['settings.read', 'settings.manage'],
+    };
+
+    // Đồng bộ quy tắc sinh mã từ module.manifest.json của nhiều module (settings, users, organizations)
+    const syncRes = await sequencesService.syncManifests();
+    expect(syncRes.totalSequences).toBeGreaterThanOrEqual(4);
+    expect(syncRes.syncedModules).toEqual(
+      expect.arrayContaining(['settings', 'users', 'organizations']),
+    );
+
+    // 5.5.7: Xem trước mẫu mã (Preview) trước khi áp dụng — Tránh cấu hình sai, tuyệt đối không làm tăng bộ đếm
+    const previewRes = sequencesService.preview({
+      prefix: 'ORD',
+      suffix: '',
+      separator: '-',
+      dateFormat: 'YYYY',
+      paddingLength: 6,
+      startValue: 1,
+      step: 1,
+      resetPolicy: 'YEARLY',
+      at: '2026-10-20T08:00:00.000Z',
+    });
+    expect(previewRes.sampleCode).toBe('ORD-2026-000001');
+    expect(previewRes.nextSampleCodes).toEqual([
+      'ORD-2026-000001',
+      'ORD-2026-000002',
+      'ORD-2026-000003',
+    ]);
+    expect(previewRes.periodKey).toBe('2026');
+
+    // 5.5.1, 5.5.2, 5.5.3: Tạo mẫu sinh mã động cho một module nghiệp vụ mới (orders.sales_order)
+    const createdRule = await sequencesService.createSequenceRule(
+      {
+        key: 'orders.sales_order',
+        module: 'orders',
+        name: 'Mã đơn đặt hàng bán lẻ',
+        description: 'Sinh mã đơn hàng tự động dạng ORD-2026-000001',
+        prefix: 'ORD',
+        suffix: '',
+        separator: '-',
+        dateFormat: SEQUENCE_DATE_FORMAT.YYYY,
+        paddingLength: 6,
+        startValue: 1,
+        step: 1,
+        resetPolicy: SEQUENCE_RESET_POLICY.YEARLY,
+        scopeByUnit: false,
+        reason: 'Khởi tạo mẫu sinh mã đơn hàng chuẩn năm 2026',
+      },
+      adminActor,
+    );
+    expect(createdRule.key).toBe('orders.sales_order');
+    expect(createdRule.module).toBe('orders');
+    expect(createdRule.prefix).toBe('ORD');
+    expect(createdRule.dateFormatName).toBe('YYYY');
+    expect(createdRule.resetPolicyName).toBe('YEARLY');
+
+    // Sinh mã đầu tiên: ORD-2026-000001
+    const firstGen = await sequencesService.nextCode('orders.sales_order', {
+      at: '2026-10-20T08:00:00.000Z',
+    });
+    expect(firstGen.code).toBe('ORD-2026-000001');
+    expect(firstGen.sequenceNumber).toBe(1);
+
+    // 5.5.4: Sinh số thứ tự an toàn khi nhiều request cùng lúc (50 request đồng thời qua Promise.all -> Không trùng mã)
+    const concurrentCalls = Array.from({ length: 50 }, () =>
+      sequencesService.nextCode('orders.sales_order', {
+        at: '2026-10-20T08:05:00.000Z',
+      }),
+    );
+    const concurrentResults = await Promise.all(concurrentCalls);
+    const generatedCodes = concurrentResults.map((r) => r.code);
+    const uniqueCodes = new Set(generatedCodes);
+    expect(uniqueCodes.size).toBe(50);
+    expect(generatedCodes[0]).toBe('ORD-2026-000002');
+    expect(generatedCodes[49]).toBe('ORD-2026-000051');
+
+    // 5.5.5: Reset số thứ tự theo kỳ (Theo năm: sang năm 2027 tự động reset về 000001)
+    const nextYearGen = await sequencesService.nextCode('orders.sales_order', {
+      at: '2027-01-01T01:00:00.000Z',
+    });
+    expect(nextYearGen.code).toBe('ORD-2027-000001');
+    expect(nextYearGen.periodKey).toBe('2027');
+
+    // Kiểm tra Reset theo ngày (DAILY) + Chèn YYYYMMDD + Hậu tố (suffix)
+    await sequencesService.createSequenceRule(
+      {
+        key: 'courses.enrollment_ticket',
+        module: 'courses',
+        name: 'Mã phiếu ghi danh khóa học theo ngày',
+        prefix: 'ENR',
+        suffix: 'VN',
+        separator: '-',
+        dateFormat: 'YYYYMMDD',
+        paddingLength: 4,
+        startValue: 1,
+        step: 1,
+        resetPolicy: 'DAILY',
+        scopeByUnit: false,
+      },
+      adminActor,
+    );
+    const day1Code1 = await sequencesService.nextCode('courses.enrollment_ticket', {
+      at: '2026-10-20T03:00:00.000Z',
+    });
+    const day1Code2 = await sequencesService.nextCode('courses.enrollment_ticket', {
+      at: '2026-10-20T04:00:00.000Z',
+    });
+    const day2Code1 = await sequencesService.nextCode('courses.enrollment_ticket', {
+      at: '2026-10-21T03:00:00.000Z',
+    });
+    expect(day1Code1.code).toBe('ENR-20261020-0001-VN');
+    expect(day1Code2.code).toBe('ENR-20261020-0002-VN');
+    expect(day2Code1.code).toBe('ENR-20261021-0001-VN');
+
+    // 5.5.6: Sinh mã riêng theo đơn vị (scopeByUnit = true: Chi nhánh HCM và HN có bộ đếm độc lập)
+    const hcmCtr1 = await sequencesService.nextCode('organizations.contract_code', {
+      organizationUnitId: 10,
+      unitCode: 'HCM',
+      at: '2026-10-20T08:00:00.000Z',
+    });
+    const hcmCtr2 = await sequencesService.nextCode('organizations.contract_code', {
+      organizationUnitId: 10,
+      unitCode: 'HCM',
+      at: '2026-10-20T08:01:00.000Z',
+    });
+    const hnCtr1 = await sequencesService.nextCode('organizations.contract_code', {
+      organizationUnitId: 20,
+      unitCode: 'HN',
+      at: '2026-10-20T08:02:00.000Z',
+    });
+    expect(hcmCtr1.code).toBe('CTR-HCM-2026-000001');
+    expect(hcmCtr2.code).toBe('CTR-HCM-2026-000002');
+    expect(hnCtr1.code).toBe('CTR-HN-2026-000001');
+
+    // 5.5.8: Ghi lịch sử thay đổi cấu hình mã — Không làm ảnh hưởng mã đã cấp trước đó
+    const updatedOrderRule = await sequencesService.updateSequenceRule(
+      'orders.sales_order',
+      {
+        prefix: 'SO',
+        suffix: 'VIP',
+        dateFormat: 'YYYYMM',
+        reason: 'Đổi tiền tố sang SO, thêm hậu tố VIP và chèn tháng YYYYMM từ quý 4',
+      },
+      adminActor,
+    );
+    expect(updatedOrderRule.prefix).toBe('SO');
+    expect(updatedOrderRule.suffix).toBe('VIP');
+    expect(updatedOrderRule.dateFormatName).toBe('YYYYMM');
+
+    // Mã đã cấp trước đó (firstGen.code = 'ORD-2026-000001') hoàn toàn không bị thay đổi,
+    // và mã mới sinh tiếp theo trong năm 2026 tiếp nối số thứ tự 52 với định dạng mới:
+    expect(firstGen.code).toBe('ORD-2026-000001');
+    const codeAfterConfigChange = await sequencesService.nextCode('orders.sales_order', {
+      at: '2026-10-20T09:00:00.000Z',
+    });
+    expect(codeAfterConfigChange.code).toBe('SO-202610-000052-VIP');
+    expect(codeAfterConfigChange.sequenceNumber).toBe(52);
+
+    // Kiểm tra lịch sử thay đổi cấu hình quy tắc sinh mã
+    const histories = await sequencesService.listHistory({
+      sequenceKey: 'orders.sales_order',
+    });
+    expect(histories.length).toBeGreaterThanOrEqual(2);
+    expect(histories.map((h) => h.action)).toEqual(expect.arrayContaining(['CREATE', 'UPDATE']));
+    expect(histories[0]?.oldState).toMatchObject({ prefix: 'ORD', suffix: '' });
+    expect(histories[0]?.newState).toMatchObject({ prefix: 'SO', suffix: 'VIP' });
+    expect(histories[0]?.actorUserId).toBe(1);
+    expect(histories[0]?.reason).toContain('Đổi tiền tố sang SO');
   });
 });

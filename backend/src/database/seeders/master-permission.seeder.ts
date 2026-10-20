@@ -9,15 +9,18 @@ import {
 import {
   type CodeTypeManifestItem,
   type FeatureFlagManifestItem,
+  type SequenceManifestItem,
   type SettingGroupManifestItem,
   type SettingManifestItem,
   SETTING_ITEM_STATUS,
   discoverManifestCodeTypes,
   discoverManifestFeatureFlags,
+  discoverManifestSequences,
   discoverManifestSettings,
   parseSettingEnvironmentCode,
   parseSettingValueTypeCode,
   validateAndSerializeSettingValue,
+  validateSequenceRule,
 } from '@packages/kernel/index.js';
 
 export interface PermissionSeedItem {
@@ -1041,9 +1044,165 @@ export class MasterPermissionSeeder implements SeederContract {
       affected++;
     }
 
+    // 7. Đồng bộ Quy tắc Sinh mã Nghiệp vụ (Mục 5.5 — sequence_rules, sequence_counters, sequence_rule_histories)
+    await ctx.manager.query(`
+      CREATE TABLE IF NOT EXISTS sequence_rules (
+        id ${pkDef},
+        sequence_key VARCHAR(150) NOT NULL UNIQUE,
+        module VARCHAR(64) NOT NULL,
+        name VARCHAR(255) NOT NULL,
+        description TEXT NULL,
+        prefix VARCHAR(32) NOT NULL DEFAULT '',
+        suffix VARCHAR(32) NOT NULL DEFAULT '',
+        separator_char VARCHAR(8) NOT NULL DEFAULT '-',
+        date_format INT NOT NULL DEFAULT 1,
+        template_pattern VARCHAR(255) NULL,
+        padding_length INT NOT NULL DEFAULT 6,
+        start_value BIGINT NOT NULL DEFAULT 1,
+        step INT NOT NULL DEFAULT 1,
+        reset_policy INT NOT NULL DEFAULT 2,
+        scope_by_unit BOOLEAN NOT NULL DEFAULT FALSE,
+        timezone VARCHAR(64) NOT NULL DEFAULT 'Asia/Ho_Chi_Minh',
+        is_system BOOLEAN NOT NULL DEFAULT TRUE,
+        status INT NOT NULL DEFAULT 1,
+        updated_by INT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        deleted_at TIMESTAMP NULL
+      )
+    `);
+
+    await ctx.manager.query(`
+      CREATE TABLE IF NOT EXISTS sequence_counters (
+        id ${pkDef},
+        sequence_id INT NOT NULL,
+        sequence_key VARCHAR(150) NOT NULL,
+        period_key VARCHAR(32) NOT NULL DEFAULT 'ALL',
+        organization_unit_id INT NULL,
+        unit_scope_key VARCHAR(64) NOT NULL DEFAULT 'GLOBAL',
+        current_value BIGINT NOT NULL DEFAULT 0,
+        version INT NOT NULL DEFAULT 1,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        deleted_at TIMESTAMP NULL,
+        CONSTRAINT uq_sequence_counters_scope UNIQUE (sequence_id, period_key, unit_scope_key)
+      )
+    `);
+
+    await ctx.manager.query(`
+      CREATE TABLE IF NOT EXISTS sequence_rule_histories (
+        id ${pkDef},
+        sequence_id INT NOT NULL,
+        sequence_key VARCHAR(150) NOT NULL,
+        action VARCHAR(32) NOT NULL,
+        old_state_json TEXT NULL,
+        new_state_json TEXT NOT NULL,
+        actor_user_id INT NULL,
+        actor_identifier VARCHAR(150) NULL,
+        reason VARCHAR(500) NULL,
+        ip_address VARCHAR(64) NULL,
+        user_agent VARCHAR(255) NULL,
+        request_id VARCHAR(128) NULL,
+        correlation_id VARCHAR(128) NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        deleted_at TIMESTAMP NULL
+      )
+    `);
+
+    const discoveredSequences: SequenceManifestItem[] = discoverManifestSequences();
+    let sequencesSeeded = 0;
+    for (const seq of discoveredSequences) {
+      const key = seq.key.trim().toLowerCase();
+      const moduleName = (seq.module ?? key.split('.')[0] ?? 'settings').trim().toLowerCase();
+      const validated = validateSequenceRule({
+        key,
+        name: seq.name,
+        prefix: seq.prefix,
+        suffix: seq.suffix,
+        separator: seq.separator,
+        dateFormat: seq.dateFormat,
+        templatePattern: seq.templatePattern,
+        paddingLength: seq.paddingLength,
+        startValue: seq.startValue,
+        step: seq.step,
+        resetPolicy: seq.resetPolicy,
+        scopeByUnit: seq.scopeByUnit,
+        timezone: seq.timezone,
+      });
+
+      if (isPostgres) {
+        await ctx.manager.query(
+          `INSERT INTO sequence_rules (
+             sequence_key, module, name, description, prefix, suffix, separator_char,
+             date_format, template_pattern, padding_length, start_value, step,
+             reset_policy, scope_by_unit, timezone, is_system, status
+           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+           ON CONFLICT (sequence_key) DO UPDATE SET
+             module = EXCLUDED.module,
+             name = COALESCE(NULLIF(sequence_rules.name, ''), EXCLUDED.name),
+             description = COALESCE(sequence_rules.description, EXCLUDED.description),
+             is_system = EXCLUDED.is_system`,
+          [
+            key,
+            moduleName,
+            validated.name,
+            seq.description ?? null,
+            validated.prefix,
+            validated.suffix,
+            validated.separator,
+            validated.dateFormat,
+            validated.templatePattern,
+            validated.paddingLength,
+            validated.startValue,
+            validated.step,
+            validated.resetPolicy,
+            validated.scopeByUnit,
+            validated.timezone,
+            seq.isSystem ?? true,
+            seq.status ?? 1,
+          ],
+        );
+      } else {
+        await ctx.manager.query(
+          `INSERT INTO sequence_rules (
+             sequence_key, module, name, description, prefix, suffix, separator_char,
+             date_format, template_pattern, padding_length, start_value, step,
+             reset_policy, scope_by_unit, timezone, is_system, status
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON DUPLICATE KEY UPDATE
+             module = VALUES(module),
+             name = COALESCE(NULLIF(sequence_rules.name, ''), VALUES(name)),
+             description = COALESCE(sequence_rules.description, VALUES(description)),
+             is_system = VALUES(is_system)`,
+          [
+            key,
+            moduleName,
+            validated.name,
+            seq.description ?? null,
+            validated.prefix,
+            validated.suffix,
+            validated.separator,
+            validated.dateFormat,
+            validated.templatePattern,
+            validated.paddingLength,
+            validated.startValue,
+            validated.step,
+            validated.resetPolicy,
+            validated.scopeByUnit,
+            validated.timezone,
+            seq.isSystem ?? true,
+            seq.status ?? 1,
+          ],
+        );
+      }
+      sequencesSeeded++;
+      affected++;
+    }
+
     return {
       affected,
-      details: `${this.permissions.length} permissions, ${this.masterSettings.length} master settings, ${mergedCodeTypes.size} code_types (${codeValuesSeeded} code_values), ${mergedSettingGroups.size} setting_groups (${settingsSeeded} system_settings), ${featureFlagsSeeded} feature_flags, ${localesSeeded} i18n_locales, ${timezonesSeeded} i18n_timezones, ${translationsSeeded} i18n_translations synced`,
+      details: `${this.permissions.length} permissions, ${this.masterSettings.length} master settings, ${mergedCodeTypes.size} code_types (${codeValuesSeeded} code_values), ${mergedSettingGroups.size} setting_groups (${settingsSeeded} system_settings), ${featureFlagsSeeded} feature_flags, ${localesSeeded} i18n_locales, ${timezonesSeeded} i18n_timezones, ${translationsSeeded} i18n_translations, ${sequencesSeeded} sequence_rules synced`,
     };
   }
 }

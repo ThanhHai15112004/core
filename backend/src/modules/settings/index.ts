@@ -7,4 +7,5 @@ export * from './responses/i18n.response.js';
 export * from './services/settings.service.js';
 export * from './services/feature-flags.service.js';
 export * from './services/i18n-management.service.js';
+export * from './services/sequences.service.js';
 export * from './settings.module.js';

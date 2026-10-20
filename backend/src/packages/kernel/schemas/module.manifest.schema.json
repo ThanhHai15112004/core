@@ -55,6 +55,11 @@
       "items": { "type": "object" },
       "default": []
     },
+    "sequences": {
+      "type": "array",
+      "items": { "type": "object" },
+      "default": []
+    },
     "locales": {
       "type": "array",
       "items": { "type": "object" },

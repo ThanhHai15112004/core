@@ -194,5 +194,24 @@
         }
       ]
     }
+  ],
+  "sequences": [
+    {
+      "key": "users.employee_code",
+      "module": "users",
+      "name": "Mã hồ sơ nhân sự (Employee Code)",
+      "description": "Mẫu sinh mã nhân sự tự động theo năm tuyển dụng (ví dụ: EMP-2026-000001)",
+      "prefix": "EMP",
+      "suffix": "",
+      "separator": "-",
+      "dateFormat": "YYYY",
+      "paddingLength": 6,
+      "startValue": 1,
+      "step": 1,
+      "resetPolicy": "YEARLY",
+      "scopeByUnit": false,
+      "timezone": "Asia/Ho_Chi_Minh",
+      "isSystem": true
+    }
   ]
 }

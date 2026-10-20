@@ -29,3 +29,13 @@ export const I18N_ROUTES = {
   TIMEZONE_DETAIL: 'timezones/:code',
   TRANSLATIONS: 'translations',
 } as const;
+
+export const SEQUENCES_ROUTES = {
+  ROOT: 'settings/sequences',
+  SYNC: 'sync',
+  PREVIEW: 'preview',
+  HISTORY: 'history',
+  DETAIL: ':key',
+  NEXT: ':key/next',
+  KEY_HISTORY: ':key/history',
+} as const;
