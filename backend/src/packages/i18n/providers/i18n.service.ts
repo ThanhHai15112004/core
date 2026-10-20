@@ -1,18 +1,15 @@
 import { Injectable } from '@nestjs/common';
-import { defaultSettingRegistry } from '@packages/kernel/index.js';
 import {
   DEFAULT_LOCALE,
-  DEFAULT_TIMEZONE,
   type I18nContract,
   type SupportedLocale,
 } from '../contracts/i18n.contract.js';
 import { LocaleContext } from '../context/locale-context.js';
 import {
+  discoverManifestI18n,
   getActiveSupportedLocales,
-  getRegistryDefaultLocaleCode,
-  getRegistryDefaultTimezoneCode,
-  isSupportedLocale,
-  isValidIanaTimezone,
+  resolveSystemDefaultLocale,
+  resolveSystemDefaultTimezone,
 } from '../resolvers/header-locale.resolver.js';
 import enCommon from '../locales/en/common.json' with { type: 'json' };
 import viCommon from '../locales/vi/common.json' with { type: 'json' };
@@ -80,18 +77,24 @@ const INITIAL_STATIC_DICTIONARIES: Record<string, Dictionary> = {
   },
 };
 
-/** Bộ từ điển toàn cục chia sẻ giữa các instance CoreI18nService và đồng bộ từ bảng `i18n_translations` */
-const sharedDictionaries: Record<string, Dictionary> = {
-  en: { ...INITIAL_STATIC_DICTIONARIES['en'] },
-  vi: { ...INITIAL_STATIC_DICTIONARIES['vi'] },
-};
+for (const item of discoverManifestI18n().translations) {
+  const loc = item.locale.trim().toLowerCase();
+  if (!INITIAL_STATIC_DICTIONARIES[loc]) {
+    INITIAL_STATIC_DICTIONARIES[loc] = {};
+  }
+  INITIAL_STATIC_DICTIONARIES[loc][item.key] = item.value;
+}
 
-/** Lấy bản sao từ điển tĩnh khởi tạo theo từng ngôn ngữ (dùng để seed/sync vào bảng `i18n_translations`) */
+/** Bộ từ điển toàn cục chia sẻ giữa các instance CoreI18nService, nạp từ Manifest/Locales và đồng bộ từ bảng `i18n_translations` */
+const sharedDictionaries: Record<string, Dictionary> = Object.fromEntries(
+  Object.entries(INITIAL_STATIC_DICTIONARIES).map(([locale, dict]) => [locale, { ...dict }]),
+);
+
+/** Lấy bản sao từ điển khởi tạo theo từng ngôn ngữ (dùng để seed/sync vào bảng `i18n_translations`) */
 export function getInitialStaticDictionaries(): Record<string, Record<string, string>> {
-  return {
-    vi: { ...INITIAL_STATIC_DICTIONARIES['vi'] },
-    en: { ...INITIAL_STATIC_DICTIONARIES['en'] },
-  };
+  return Object.fromEntries(
+    Object.entries(INITIAL_STATIC_DICTIONARIES).map(([locale, dict]) => [locale, { ...dict }]),
+  );
 }
 
 /** Ghi đè hoặc thêm mới 1 bản dịch động từ Database (`i18n_translations`) vào bộ nhớ runtime */
@@ -117,7 +120,7 @@ export function removeRuntimeTranslation(locale: string, key: string): void {
 
 @Injectable()
 export class CoreI18nService implements I18nContract {
-  private readonly defaultLocale: SupportedLocale = 'vi';
+  private readonly defaultLocale: SupportedLocale = DEFAULT_LOCALE;
   private readonly dictionaries: Record<string, Dictionary> = sharedDictionaries;
 
   /**
@@ -125,22 +128,7 @@ export class CoreI18nService implements I18nContract {
    * Ưu tiên `ui.locale.default` (nếu khác `'vi'`) -> Ngôn ngữ `isDefault = true` trong bảng `i18n_locales` -> `'vi'`.
    */
   public getDefaultLocale(): SupportedLocale {
-    const configured = defaultSettingRegistry.getValue<string>('ui.locale.default');
-    const dbDefault = getRegistryDefaultLocaleCode();
-    if (
-      configured &&
-      isSupportedLocale(configured) &&
-      (!dbDefault || configured.trim().toLowerCase() !== DEFAULT_LOCALE)
-    ) {
-      return configured.trim().toLowerCase();
-    }
-    if (dbDefault && isSupportedLocale(dbDefault)) {
-      return dbDefault;
-    }
-    if (isSupportedLocale(configured)) {
-      return configured.trim().toLowerCase();
-    }
-    return this.defaultLocale ?? DEFAULT_LOCALE;
+    return resolveSystemDefaultLocale(this.defaultLocale);
   }
 
   /** Locale của request hiện tại, fallback về locale mặc định khi chạy ngoài HTTP. */
@@ -153,22 +141,7 @@ export class CoreI18nService implements I18nContract {
    * Ưu tiên `ui.timezone.default` (nếu khác `'Asia/Ho_Chi_Minh'`) -> Múi giờ `isDefault = true` trong bảng `i18n_timezones` -> `'Asia/Ho_Chi_Minh'`.
    */
   public getDefaultTimezone(): string {
-    const configured = defaultSettingRegistry.getValue<string>('ui.timezone.default');
-    const dbDefault = getRegistryDefaultTimezoneCode();
-    if (
-      configured &&
-      isValidIanaTimezone(configured) &&
-      (!dbDefault || configured.trim() !== DEFAULT_TIMEZONE)
-    ) {
-      return configured.trim();
-    }
-    if (dbDefault && isValidIanaTimezone(dbDefault)) {
-      return dbDefault;
-    }
-    if (isValidIanaTimezone(configured)) {
-      return configured!.trim();
-    }
-    return DEFAULT_TIMEZONE;
+    return resolveSystemDefaultTimezone();
   }
 
   /** Múi giờ của request hiện tại, fallback về múi giờ mặc định khi chạy ngoài HTTP. */
@@ -190,11 +163,18 @@ export class CoreI18nService implements I18nContract {
       if (!this.dictionaries[locale]) {
         this.dictionaries[locale] = {};
       }
+      if (!INITIAL_STATIC_DICTIONARIES[locale]) {
+        INITIAL_STATIC_DICTIONARIES[locale] = {};
+      }
       for (const [k, v] of Object.entries(entries)) {
         const prefixedKey = cleanNs && !k.startsWith(`${cleanNs}.`) ? `${cleanNs}.${k}` : k;
         this.dictionaries[locale][prefixedKey] = v;
+        INITIAL_STATIC_DICTIONARIES[locale][prefixedKey] = v;
         if (!(k in this.dictionaries[locale])) {
           this.dictionaries[locale][k] = v;
+        }
+        if (!(k in INITIAL_STATIC_DICTIONARIES[locale])) {
+          INITIAL_STATIC_DICTIONARIES[locale][k] = v;
         }
       }
     }

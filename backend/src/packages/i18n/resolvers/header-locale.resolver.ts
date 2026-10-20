@@ -1,3 +1,4 @@
+import { defaultSettingRegistry, scanModuleManifests } from '@packages/kernel/index.js';
 import {
   DEFAULT_CURRENCY,
   DEFAULT_DATETIME_FORMAT,
@@ -5,180 +6,132 @@ import {
   DEFAULT_LOCALE,
   DEFAULT_TIMEZONE,
   I18N_ITEM_STATUS,
+  type I18nItemStatusCode,
+  type I18nLocaleManifestItem,
+  type I18nTimezoneManifestItem,
+  type I18nTranslationManifestItem,
   type RegisteredLocaleMetadata,
   type RegisteredTimezoneMetadata,
   type SupportedLocale,
 } from '../contracts/i18n.contract.js';
 
-export const STANDARD_BOOTSTRAP_LOCALES: readonly RegisteredLocaleMetadata[] = [
-  {
-    id: 1,
-    code: 'vi',
-    bcp47Tag: 'vi-VN',
-    name: 'Vietnamese',
-    nativeName: 'Tiếng Việt',
-    direction: 'ltr',
-    dateFormat: 'dd/MM/yyyy',
-    datetimeFormat: 'dd/MM/yyyy HH:mm:ss',
-    currencyCode: 'VND',
-    numberDecimalSeparator: ',',
-    numberGroupSeparator: '.',
-    isDefault: true,
-    isSystem: true,
-    sortOrder: 1,
-    status: I18N_ITEM_STATUS.ACTIVE,
-  },
-  {
-    id: 2,
-    code: 'en',
-    bcp47Tag: 'en-US',
-    name: 'English',
-    nativeName: 'English',
-    direction: 'ltr',
-    dateFormat: 'MM/dd/yyyy',
-    datetimeFormat: 'MM/dd/yyyy HH:mm:ss',
-    currencyCode: 'USD',
-    numberDecimalSeparator: '.',
-    numberGroupSeparator: ',',
-    isDefault: false,
-    isSystem: true,
-    sortOrder: 2,
-    status: I18N_ITEM_STATUS.ACTIVE,
-  },
-];
+/**
+ * Quét tự động (Zero-Hardcode) các tệp `module.manifest.json` qua hàm dùng chung `scanModuleManifests()`
+ * để thu thập danh mục `locales`, `timezones` và `translations` phục vụ Seeder và L1 Fallback (Mục 5.3).
+ */
+export function discoverManifestI18n(): {
+  locales: I18nLocaleManifestItem[];
+  timezones: I18nTimezoneManifestItem[];
+  translations: I18nTranslationManifestItem[];
+} {
+  const localeMap = new Map<string, I18nLocaleManifestItem>();
+  const timezoneMap = new Map<string, I18nTimezoneManifestItem>();
+  const translationMap = new Map<string, I18nTranslationManifestItem>();
 
-export const STANDARD_BOOTSTRAP_TIMEZONES: readonly RegisteredTimezoneMetadata[] = [
-  {
-    id: 1,
-    code: 'Asia/Ho_Chi_Minh',
-    name: 'Giờ Việt Nam (TP. Hồ Chí Minh / Hà Nội)',
-    labels: {
-      vi: 'Giờ Việt Nam (UTC+07:00 — TP.HCM / Hà Nội)',
-      en: 'Indochina Time (UTC+07:00 — Ho Chi Minh / Hanoi)',
-    },
-    utcOffset: '+07:00',
-    utcOffsetMinutes: 420,
-    region: 'Asia',
-    isDefault: true,
-    isSystem: true,
-    sortOrder: 1,
-    status: I18N_ITEM_STATUS.ACTIVE,
-  },
-  {
-    id: 2,
-    code: 'UTC',
-    name: 'Giờ Phối hợp Quốc tế (UTC)',
-    labels: {
-      vi: 'Giờ Phối hợp Quốc tế (UTC+00:00)',
-      en: 'Coordinated Universal Time (UTC+00:00)',
-    },
-    utcOffset: '+00:00',
-    utcOffsetMinutes: 0,
-    region: 'UTC',
-    isDefault: false,
-    isSystem: true,
-    sortOrder: 2,
-    status: I18N_ITEM_STATUS.ACTIVE,
-  },
-  {
-    id: 3,
-    code: 'Asia/Bangkok',
-    name: 'Giờ Đông Dương (Bangkok / Jakarta)',
-    labels: {
-      vi: 'Giờ Bangkok / Jakarta (UTC+07:00)',
-      en: 'Bangkok / Jakarta Time (UTC+07:00)',
-    },
-    utcOffset: '+07:00',
-    utcOffsetMinutes: 420,
-    region: 'Asia',
-    isDefault: false,
-    isSystem: true,
-    sortOrder: 3,
-    status: I18N_ITEM_STATUS.ACTIVE,
-  },
-  {
-    id: 4,
-    code: 'Asia/Singapore',
-    name: 'Giờ Singapore / Kuala Lumpur',
-    labels: {
-      vi: 'Giờ Singapore / Kuala Lumpur (UTC+08:00)',
-      en: 'Singapore Standard Time (UTC+08:00)',
-    },
-    utcOffset: '+08:00',
-    utcOffsetMinutes: 480,
-    region: 'Asia',
-    isDefault: false,
-    isSystem: true,
-    sortOrder: 4,
-    status: I18N_ITEM_STATUS.ACTIVE,
-  },
-  {
-    id: 5,
-    code: 'Asia/Tokyo',
-    name: 'Giờ chuẩn Nhật Bản (Tokyo)',
-    labels: {
-      vi: 'Giờ Nhật Bản — Tokyo (UTC+09:00)',
-      en: 'Japan Standard Time — Tokyo (UTC+09:00)',
-    },
-    utcOffset: '+09:00',
-    utcOffsetMinutes: 540,
-    region: 'Asia',
-    isDefault: false,
-    isSystem: true,
-    sortOrder: 5,
-    status: I18N_ITEM_STATUS.ACTIVE,
-  },
-  {
-    id: 6,
-    code: 'Asia/Seoul',
-    name: 'Giờ chuẩn Hàn Quốc (Seoul)',
-    labels: {
-      vi: 'Giờ Hàn Quốc — Seoul (UTC+09:00)',
-      en: 'Korea Standard Time — Seoul (UTC+09:00)',
-    },
-    utcOffset: '+09:00',
-    utcOffsetMinutes: 540,
-    region: 'Asia',
-    isDefault: false,
-    isSystem: true,
-    sortOrder: 6,
-    status: I18N_ITEM_STATUS.ACTIVE,
-  },
-  {
-    id: 7,
-    code: 'Europe/London',
-    name: 'Giờ chuẩn Luân Đôn (GMT/BST)',
-    labels: {
-      vi: 'Giờ Anh Quốc — London (UTC+00:00)',
-      en: 'Greenwich Mean Time — London (UTC+00:00)',
-    },
-    utcOffset: '+00:00',
-    utcOffsetMinutes: 0,
-    region: 'Europe',
-    isDefault: false,
-    isSystem: true,
-    sortOrder: 7,
-    status: I18N_ITEM_STATUS.ACTIVE,
-  },
-  {
-    id: 8,
-    code: 'America/New_York',
-    name: 'Giờ miền Đông Bắc Mỹ (New York)',
-    labels: {
-      vi: 'Giờ miền Đông Mỹ — New York (UTC-05:00)',
-      en: 'Eastern Time — New York (UTC-05:00)',
-    },
-    utcOffset: '-05:00',
-    utcOffsetMinutes: -300,
-    region: 'America',
-    isDefault: false,
-    isSystem: true,
-    sortOrder: 8,
-    status: I18N_ITEM_STATUS.ACTIVE,
-  },
-];
+  for (const { moduleName, raw } of scanModuleManifests<{
+    name?: string;
+    locales?: I18nLocaleManifestItem[];
+    timezones?: I18nTimezoneManifestItem[];
+    translations?: I18nTranslationManifestItem[];
+  }>()) {
+    if (Array.isArray(raw.locales)) {
+      for (const item of raw.locales) {
+        if (!item || typeof item.code !== 'string') continue;
+        const code = item.code.trim().toLowerCase();
+        if (!localeMap.has(code)) {
+          localeMap.set(code, { ...item, code });
+        }
+      }
+    }
 
-/** Bộ nhớ đệm L1 lưu danh mục Ngôn ngữ (Locales) và Múi giờ (Timezones) đồng bộ từ Database */
+    if (Array.isArray(raw.timezones)) {
+      for (const item of raw.timezones) {
+        if (!item || typeof item.code !== 'string') continue;
+        const code = item.code.trim();
+        if (!timezoneMap.has(code)) {
+          timezoneMap.set(code, { ...item, code });
+        }
+      }
+    }
+
+    if (Array.isArray(raw.translations)) {
+      for (const item of raw.translations) {
+        if (!item || typeof item.locale !== 'string' || typeof item.key !== 'string') continue;
+        const locale = item.locale.trim().toLowerCase();
+        const key = item.key.trim();
+        const namespace = (
+          item.namespace ?? (key.includes('.') ? key.split('.')[0]! : moduleName)
+        ).trim();
+        translationMap.set(`${locale}::${key}`, {
+          ...item,
+          locale,
+          namespace,
+          key,
+        });
+      }
+    }
+  }
+
+  return {
+    locales: [...localeMap.values()],
+    timezones: [...timezoneMap.values()],
+    translations: [...translationMap.values()],
+  };
+}
+
+function mapManifestLocale(item: I18nLocaleManifestItem, index: number): RegisteredLocaleMetadata {
+  const code = item.code.trim().toLowerCase();
+  return {
+    id: index + 1,
+    code,
+    bcp47Tag: item.bcp47Tag?.trim() || (code === 'vi' ? 'vi-VN' : `${code}-${code.toUpperCase()}`),
+    name: item.name,
+    nativeName: item.nativeName,
+    direction: item.direction === 'rtl' ? 'rtl' : 'ltr',
+    dateFormat: item.dateFormat || DEFAULT_DATE_FORMAT,
+    datetimeFormat: item.datetimeFormat || DEFAULT_DATETIME_FORMAT,
+    currencyCode: (item.currencyCode || DEFAULT_CURRENCY).toUpperCase(),
+    numberDecimalSeparator: item.numberDecimalSeparator || ',',
+    numberGroupSeparator: item.numberGroupSeparator || '.',
+    isDefault: Boolean(item.isDefault),
+    isSystem: item.isSystem ?? true,
+    sortOrder: item.sortOrder ?? index + 1,
+    status: (item.status === I18N_ITEM_STATUS.INACTIVE
+      ? I18N_ITEM_STATUS.INACTIVE
+      : I18N_ITEM_STATUS.ACTIVE) as I18nItemStatusCode,
+  };
+}
+
+function mapManifestTimezone(
+  item: I18nTimezoneManifestItem,
+  index: number,
+): RegisteredTimezoneMetadata {
+  return {
+    id: index + 1,
+    code: item.code.trim(),
+    name: item.name,
+    labels: { ...(item.labels ?? { vi: item.name, en: item.name }) },
+    utcOffset: item.utcOffset,
+    utcOffsetMinutes: item.utcOffsetMinutes,
+    region: item.region ?? (item.code.includes('/') ? item.code.split('/')[0]! : 'UTC'),
+    isDefault: Boolean(item.isDefault),
+    isSystem: item.isSystem ?? true,
+    sortOrder: item.sortOrder ?? index + 1,
+    status: (item.status === I18N_ITEM_STATUS.INACTIVE
+      ? I18N_ITEM_STATUS.INACTIVE
+      : I18N_ITEM_STATUS.ACTIVE) as I18nItemStatusCode,
+  };
+}
+
+const discoveredManifestI18n = discoverManifestI18n();
+
+export const STANDARD_BOOTSTRAP_LOCALES: readonly RegisteredLocaleMetadata[] =
+  discoveredManifestI18n.locales.map((item, idx) => mapManifestLocale(item, idx));
+
+export const STANDARD_BOOTSTRAP_TIMEZONES: readonly RegisteredTimezoneMetadata[] =
+  discoveredManifestI18n.timezones.map((item, idx) => mapManifestTimezone(item, idx));
+
+/** Bộ nhớ đệm L1 lưu danh mục Ngôn ngữ (Locales) và Múi giờ (Timezones) đồng bộ từ module.manifest.json & Database */
 const runtimeLocalesMap = new Map<string, RegisteredLocaleMetadata>(
   STANDARD_BOOTSTRAP_LOCALES.map((item) => [item.code, { ...item }]),
 );
@@ -187,7 +140,9 @@ const runtimeTimezonesMap = new Map<string, RegisteredTimezoneMetadata>(
   STANDARD_BOOTSTRAP_TIMEZONES.map((item) => [item.code, { ...item }]),
 );
 
-export const SUPPORTED_LOCALES: readonly SupportedLocale[] = ['vi', 'en'];
+export const SUPPORTED_LOCALES: readonly SupportedLocale[] = STANDARD_BOOTSTRAP_LOCALES.map(
+  (l) => l.code,
+);
 
 /** Lấy danh sách mã ngôn ngữ đang hoạt động (ACTIVE) trong Registry/DB */
 export function getActiveSupportedLocales(): SupportedLocale[] {
@@ -352,6 +307,54 @@ export function resolveTimezone(
     return reg ? reg.code : timezone!.trim();
   }
   return isValidIanaTimezone(defaultTimezone) ? defaultTimezone.trim() : DEFAULT_TIMEZONE;
+}
+
+/**
+ * Phân giải ngôn ngữ mặc định toàn hệ thống (dùng chung cho CoreI18nService, LocaleFormatter, UsersService):
+ * Ưu tiên `ui.locale.default` trong SettingRegistry (nếu khác `'vi'`) -> Ngôn ngữ `isDefault = true` trong `i18n_locales` -> `'vi'`.
+ */
+export function resolveSystemDefaultLocale(
+  fallbackLocale: SupportedLocale = DEFAULT_LOCALE,
+): SupportedLocale {
+  const configured = defaultSettingRegistry.getString('ui.locale.default');
+  const dbDefault = getRegistryDefaultLocaleCode();
+  if (
+    configured &&
+    isSupportedLocale(configured) &&
+    (!dbDefault || configured.trim().toLowerCase() !== DEFAULT_LOCALE)
+  ) {
+    return configured.trim().toLowerCase();
+  }
+  if (dbDefault && isSupportedLocale(dbDefault)) {
+    return dbDefault;
+  }
+  if (configured && isSupportedLocale(configured)) {
+    return configured.trim().toLowerCase();
+  }
+  return fallbackLocale;
+}
+
+/**
+ * Phân giải múi giờ mặc định toàn hệ thống (dùng chung cho CoreI18nService, LocaleFormatter, UsersService):
+ * Ưu tiên `ui.timezone.default` trong SettingRegistry (nếu khác `'Asia/Ho_Chi_Minh'`) -> Múi giờ `isDefault = true` trong `i18n_timezones` -> `'Asia/Ho_Chi_Minh'`.
+ */
+export function resolveSystemDefaultTimezone(fallbackTimezone: string = DEFAULT_TIMEZONE): string {
+  const configured = defaultSettingRegistry.getString('ui.timezone.default');
+  const dbDefault = getRegistryDefaultTimezoneCode();
+  if (
+    configured &&
+    isValidIanaTimezone(configured) &&
+    (!dbDefault || configured.trim() !== DEFAULT_TIMEZONE)
+  ) {
+    return resolveTimezone(configured);
+  }
+  if (dbDefault && isValidIanaTimezone(dbDefault)) {
+    return dbDefault;
+  }
+  if (configured && isValidIanaTimezone(configured)) {
+    return resolveTimezone(configured);
+  }
+  return fallbackTimezone;
 }
 
 /** Lấy locale đầu tiên được hỗ trợ trong header `Accept-Language` (vd. `en-US,en;q=0.9`). */

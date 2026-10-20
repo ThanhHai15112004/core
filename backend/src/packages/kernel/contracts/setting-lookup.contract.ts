@@ -1229,19 +1229,6 @@ export class SettingRegistryService {
     };
   }
 
-  /** Đọc nhanh giá trị cấu hình bất kỳ kiểu dữ liệu nào theo ngữ cảnh (hoặc trả về `fallback`) */
-  public getValue<T = unknown>(
-    key: string,
-    context?: SettingResolveContext,
-    fallback?: T,
-  ): T | undefined {
-    const resolved = this.resolve<T>(key, context, { maskSensitive: false });
-    if (!resolved || resolved.value === undefined || resolved.value === null) {
-      return fallback;
-    }
-    return resolved.value;
-  }
-
   /** Cập nhật nhanh giá trị toàn cục (`globalSerializedValue`) của một cấu hình đã đăng ký */
   public setGlobalValue(key: string, value: unknown): void {
     const normKey = key.trim().toLowerCase();

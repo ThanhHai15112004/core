@@ -4,7 +4,11 @@ import {
   type SeederContract,
   type SeederScope,
 } from '@packages/database/index.js';
-import { type CodeTypeManifestItem, discoverManifestCodeTypes } from '@packages/kernel/index.js';
+import {
+  type CodeTypeManifestItem,
+  discoverManifestCodeTypes,
+  scanModuleManifests,
+} from '@packages/kernel/index.js';
 import {
   type CliCommandDescriptor,
   type ICliCommandProvider,
@@ -90,45 +94,43 @@ export class SeedCommand implements ICliCommandProvider {
     );
   }
 
-  /** Quét toàn bộ module.manifest.json để trích xuất danh sách quyền hạn cần đồng bộ. */
+  /** Quét toàn bộ module.manifest.json qua scanModuleManifests() để trích xuất danh sách quyền hạn cần đồng bộ. */
   private async collectManifestPermissions(): Promise<PermissionSeedItem[]> {
-    if (!this.manifestService) return [];
-    const modules = await this.manifestService.discoverAllModules();
     const result = new Map<string, PermissionSeedItem>();
 
-    for (const mod of modules) {
-      for (const code of mod.manifest.permissions ?? []) {
+    for (const { moduleName, raw } of scanModuleManifests<{
+      name?: string;
+      displayName?: string;
+      permissions?: string[];
+    }>()) {
+      for (const code of raw.permissions ?? []) {
         if (!code || result.has(code)) continue;
         result.set(code, {
           code,
-          module: mod.name,
-          description: `Permission "${code}" declared by module ${mod.manifest.displayName} (${mod.name})`,
+          module: moduleName,
+          description: `Permission "${code}" declared by module ${raw.displayName ?? moduleName} (${moduleName})`,
         });
+      }
+    }
+
+    if (this.manifestService && result.size === 0) {
+      const modules = await this.manifestService.discoverAllModules();
+      for (const mod of modules) {
+        for (const code of mod.manifest.permissions ?? []) {
+          if (!code || result.has(code)) continue;
+          result.set(code, {
+            code,
+            module: mod.name,
+            description: `Permission "${code}" declared by module ${mod.manifest.displayName} (${mod.name})`,
+          });
+        }
       }
     }
     return [...result.values()];
   }
 
-  /** Quét toàn bộ module.manifest.json để trích xuất danh sách codeTypes cần đồng bộ. */
+  /** Tái sử dụng trực tiếp discoverManifestCodeTypes() từ @packages/kernel */
   private async collectManifestCodeTypes(): Promise<CodeTypeManifestItem[]> {
-    const result = new Map<string, CodeTypeManifestItem>();
-    for (const item of discoverManifestCodeTypes()) {
-      result.set(item.code.trim().toLowerCase(), item);
-    }
-    if (!this.manifestService) return [...result.values()];
-
-    const modules = await this.manifestService.discoverAllModules();
-    for (const mod of modules) {
-      for (const ct of mod.manifest.codeTypes ?? []) {
-        if (!ct?.code) continue;
-        const normalizedCode = ct.code.trim().toLowerCase();
-        result.set(normalizedCode, {
-          ...ct,
-          code: normalizedCode,
-          module: ct.module ?? mod.name,
-        });
-      }
-    }
-    return [...result.values()];
+    return discoverManifestCodeTypes();
   }
 }

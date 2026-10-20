@@ -21,7 +21,13 @@
       "settings.feature_flags_synced",
       "settings.feature_flag_created",
       "settings.feature_flag_updated",
-      "settings.feature_flag_toggled"
+      "settings.feature_flag_toggled",
+      "settings.i18n_synced",
+      "settings.i18n_locale_created",
+      "settings.i18n_locale_updated",
+      "settings.i18n_timezone_created",
+      "settings.i18n_timezone_updated",
+      "settings.i18n_translation_upserted"
     ],
     "subscribed": []
   },
@@ -254,10 +260,9 @@
       "module": "settings",
       "namespace": "system.ui",
       "name": "Ngôn ngữ mặc định của hệ thống",
-      "description": "Mã ngôn ngữ mặc định áp dụng khi người dùng chưa thiết lập tùy chọn cá nhân hoặc không gửi header ngôn ngữ (vi, en)",
+      "description": "Mã ngôn ngữ mặc định áp dụng khi người dùng chưa thiết lập tùy chọn cá nhân hoặc không gửi header ngôn ngữ (đồng bộ động với bảng i18n_locales)",
       "valueType": "TEXT",
       "defaultValue": "vi",
-      "validationRules": { "enumOptions": ["vi", "en"] },
       "isSensitive": false,
       "allowUnitOverride": true,
       "isSystem": true,
@@ -269,7 +274,7 @@
       "module": "settings",
       "namespace": "system.ui",
       "name": "Múi giờ mặc định của hệ thống",
-      "description": "Múi giờ IANA mặc định dùng cho lịch, báo cáo và hiển thị thời gian khi người dùng chưa chọn múi giờ (ví dụ: Asia/Ho_Chi_Minh, UTC)",
+      "description": "Múi giờ IANA mặc định dùng cho lịch, báo cáo và hiển thị thời gian khi người dùng chưa chọn múi giờ (đồng bộ động với bảng i18n_timezones)",
       "valueType": "TEXT",
       "defaultValue": "Asia/Ho_Chi_Minh",
       "isSensitive": false,
@@ -283,10 +288,9 @@
       "module": "settings",
       "namespace": "system.ui",
       "name": "Đơn vị tiền tệ mặc định",
-      "description": "Mã tiền tệ ISO 4217 mặc định phục vụ định dạng tiền tệ trong báo cáo và giao dịch (ví dụ: VND, USD)",
+      "description": "Mã tiền tệ ISO 4217 mặc định phục vụ định dạng tiền tệ trong báo cáo và giao dịch (đồng bộ động với bảng i18n_locales)",
       "valueType": "TEXT",
       "defaultValue": "VND",
-      "validationRules": { "enumOptions": ["VND", "USD", "EUR", "JPY", "SGD"] },
       "isSensitive": false,
       "allowUnitOverride": true,
       "isSystem": true,
@@ -343,6 +347,162 @@
       "targetRoles": [],
       "targetOrganizationUnitIds": [],
       "isSystem": true
+    }
+  ],
+  "locales": [
+    {
+      "code": "vi",
+      "bcp47Tag": "vi-VN",
+      "name": "Vietnamese",
+      "nativeName": "Tiếng Việt",
+      "direction": "ltr",
+      "dateFormat": "dd/MM/yyyy",
+      "datetimeFormat": "dd/MM/yyyy HH:mm:ss",
+      "currencyCode": "VND",
+      "numberDecimalSeparator": ",",
+      "numberGroupSeparator": ".",
+      "isDefault": true,
+      "isSystem": true,
+      "sortOrder": 1,
+      "status": 1
+    },
+    {
+      "code": "en",
+      "bcp47Tag": "en-US",
+      "name": "English",
+      "nativeName": "English",
+      "direction": "ltr",
+      "dateFormat": "MM/dd/yyyy",
+      "datetimeFormat": "MM/dd/yyyy HH:mm:ss",
+      "currencyCode": "USD",
+      "numberDecimalSeparator": ".",
+      "numberGroupSeparator": ",",
+      "isDefault": false,
+      "isSystem": true,
+      "sortOrder": 2,
+      "status": 1
+    }
+  ],
+  "timezones": [
+    {
+      "code": "Asia/Ho_Chi_Minh",
+      "name": "Giờ Việt Nam (TP. Hồ Chí Minh / Hà Nội)",
+      "labels": {
+        "vi": "Giờ Việt Nam (UTC+07:00 — TP.HCM / Hà Nội)",
+        "en": "Indochina Time (UTC+07:00 — Ho Chi Minh / Hanoi)"
+      },
+      "utcOffset": "+07:00",
+      "utcOffsetMinutes": 420,
+      "region": "Asia",
+      "isDefault": true,
+      "isSystem": true,
+      "sortOrder": 1,
+      "status": 1
+    },
+    {
+      "code": "UTC",
+      "name": "Giờ Phối hợp Quốc tế (UTC)",
+      "labels": {
+        "vi": "Giờ Phối hợp Quốc tế (UTC+00:00)",
+        "en": "Coordinated Universal Time (UTC+00:00)"
+      },
+      "utcOffset": "+00:00",
+      "utcOffsetMinutes": 0,
+      "region": "UTC",
+      "isDefault": false,
+      "isSystem": true,
+      "sortOrder": 2,
+      "status": 1
+    },
+    {
+      "code": "Asia/Bangkok",
+      "name": "Giờ Đông Dương (Bangkok / Jakarta)",
+      "labels": {
+        "vi": "Giờ Bangkok / Jakarta (UTC+07:00)",
+        "en": "Bangkok / Jakarta Time (UTC+07:00)"
+      },
+      "utcOffset": "+07:00",
+      "utcOffsetMinutes": 420,
+      "region": "Asia",
+      "isDefault": false,
+      "isSystem": true,
+      "sortOrder": 3,
+      "status": 1
+    },
+    {
+      "code": "Asia/Singapore",
+      "name": "Giờ Singapore / Kuala Lumpur",
+      "labels": {
+        "vi": "Giờ Singapore / Kuala Lumpur (UTC+08:00)",
+        "en": "Singapore Standard Time (UTC+08:00)"
+      },
+      "utcOffset": "+08:00",
+      "utcOffsetMinutes": 480,
+      "region": "Asia",
+      "isDefault": false,
+      "isSystem": true,
+      "sortOrder": 4,
+      "status": 1
+    },
+    {
+      "code": "Asia/Tokyo",
+      "name": "Giờ chuẩn Nhật Bản (Tokyo)",
+      "labels": {
+        "vi": "Giờ Nhật Bản — Tokyo (UTC+09:00)",
+        "en": "Japan Standard Time — Tokyo (UTC+09:00)"
+      },
+      "utcOffset": "+09:00",
+      "utcOffsetMinutes": 540,
+      "region": "Asia",
+      "isDefault": false,
+      "isSystem": true,
+      "sortOrder": 5,
+      "status": 1
+    },
+    {
+      "code": "Asia/Seoul",
+      "name": "Giờ chuẩn Hàn Quốc (Seoul)",
+      "labels": {
+        "vi": "Giờ Hàn Quốc — Seoul (UTC+09:00)",
+        "en": "Korea Standard Time — Seoul (UTC+09:00)"
+      },
+      "utcOffset": "+09:00",
+      "utcOffsetMinutes": 540,
+      "region": "Asia",
+      "isDefault": false,
+      "isSystem": true,
+      "sortOrder": 6,
+      "status": 1
+    },
+    {
+      "code": "Europe/London",
+      "name": "Giờ chuẩn Luân Đôn (GMT/BST)",
+      "labels": {
+        "vi": "Giờ Anh Quốc — London (UTC+00:00)",
+        "en": "Greenwich Mean Time — London (UTC+00:00)"
+      },
+      "utcOffset": "+00:00",
+      "utcOffsetMinutes": 0,
+      "region": "Europe",
+      "isDefault": false,
+      "isSystem": true,
+      "sortOrder": 7,
+      "status": 1
+    },
+    {
+      "code": "America/New_York",
+      "name": "Giờ miền Đông Bắc Mỹ (New York)",
+      "labels": {
+        "vi": "Giờ miền Đông Mỹ — New York (UTC-05:00)",
+        "en": "Eastern Time — New York (UTC-05:00)"
+      },
+      "utcOffset": "-05:00",
+      "utcOffsetMinutes": -300,
+      "region": "America",
+      "isDefault": false,
+      "isSystem": true,
+      "sortOrder": 8,
+      "status": 1
     }
   ]
 }

@@ -32,6 +32,9 @@ export interface ModuleManifest {
   settingGroups?: SettingGroupManifestItem[];
   settings?: SettingManifestItem[];
   featureFlags?: FeatureFlagManifestItem[];
+  locales?: Record<string, unknown>[];
+  timezones?: Record<string, unknown>[];
+  translations?: Record<string, unknown>[];
   events?: ModuleEventsManifest;
   database?: ModuleDatabaseManifest;
 }
@@ -62,7 +65,7 @@ export interface DiscoveredModuleManifestEntry<T = Record<string, unknown>> {
 /**
  * Quét tập trung toàn bộ các tệp `module.manifest.json` trong `modules/*` và `project-modules/*`.
  * Dùng chung cho `discoverManifestCodeTypes()`, `discoverManifestSettings()`,
- * `discoverManifestFeatureFlags()` và `RolesService` để tránh lặp code đọc filesystem.
+ * `discoverManifestFeatureFlags()`, `discoverManifestI18n()` và `RolesService` để tránh lặp code đọc filesystem.
  */
 export function scanModuleManifests<
   T extends { name?: string } = ModuleManifest,

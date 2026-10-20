@@ -31,6 +31,8 @@ import { VerificationService } from './services/verification.service.js';
 import enAuth from './locales/en/auth.json' with { type: 'json' };
 import viAuth from './locales/vi/auth.json' with { type: 'json' };
 
+new CoreI18nService().registerNamespace('auth', { vi: viAuth, en: enAuth });
+
 @Module({
   imports: [UsersModule],
   controllers: [AuthController],

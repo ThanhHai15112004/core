@@ -8,6 +8,8 @@ import { OrganizationsService } from './services/organizations.service.js';
 import enOrgs from './locales/en/organizations.json' with { type: 'json' };
 import viOrgs from './locales/vi/organizations.json' with { type: 'json' };
 
+new CoreI18nService().registerNamespace('organizations', { vi: viOrgs, en: enOrgs });
+
 @Module({
   controllers: [OrganizationsController],
   providers: [

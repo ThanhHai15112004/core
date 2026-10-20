@@ -87,6 +87,46 @@ export const ModuleFeatureFlagManifestSchema = z.object({
   status: z.number().int().optional(),
 });
 
+export const ModuleLocaleManifestSchema = z.object({
+  code: z.string().min(2).max(16),
+  bcp47Tag: z.string().min(2).max(32).optional(),
+  name: z.string().min(1),
+  nativeName: z.string().min(1),
+  direction: z.enum(['ltr', 'rtl']).optional(),
+  dateFormat: z.string().min(1),
+  datetimeFormat: z.string().min(1),
+  currencyCode: z.string().min(3).max(8),
+  numberDecimalSeparator: z.string().min(1).max(4).optional(),
+  numberGroupSeparator: z.string().min(1).max(4).optional(),
+  isDefault: z.boolean().optional(),
+  isSystem: z.boolean().optional(),
+  sortOrder: z.number().int().optional(),
+  status: z.number().int().optional(),
+});
+
+export const ModuleTimezoneManifestSchema = z.object({
+  code: z.string().min(2).max(64),
+  name: z.string().min(1),
+  labels: z.record(z.string(), z.string()).optional(),
+  utcOffset: z.string().min(3).max(16),
+  utcOffsetMinutes: z.number().int(),
+  region: z.string().optional(),
+  isDefault: z.boolean().optional(),
+  isSystem: z.boolean().optional(),
+  sortOrder: z.number().int().optional(),
+  status: z.number().int().optional(),
+});
+
+export const ModuleTranslationManifestSchema = z.object({
+  locale: z.string().min(2).max(16),
+  namespace: z.string().min(1),
+  key: z.string().min(1),
+  value: z.string(),
+  description: z.string().nullable().optional(),
+  isSystem: z.boolean().optional(),
+  status: z.number().int().optional(),
+});
+
 export const ModuleManifestSchema = z.object({
   $schema: z.string().optional(),
   name: z
@@ -106,6 +146,9 @@ export const ModuleManifestSchema = z.object({
   settingGroups: z.array(ModuleSettingGroupManifestSchema).optional().default([]),
   settings: z.array(ModuleSettingManifestSchema).optional().default([]),
   featureFlags: z.array(ModuleFeatureFlagManifestSchema).optional().default([]),
+  locales: z.array(ModuleLocaleManifestSchema).optional().default([]),
+  timezones: z.array(ModuleTimezoneManifestSchema).optional().default([]),
+  translations: z.array(ModuleTranslationManifestSchema).optional().default([]),
   events: ModuleEventsManifestSchema,
   database: ModuleDatabaseManifestSchema,
 });

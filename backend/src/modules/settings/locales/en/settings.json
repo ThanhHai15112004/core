@@ -4,6 +4,11 @@
   "groupNotFound": "Setting group '{{code}}' was not found",
   "groupAlreadyExists": "Setting group '{{code}}' already exists",
   "unitOverrideNotAllowed": "Setting '{{key}}' is global-only and does not allow organization unit override",
-  "scopeOverrideNotFound": "Scope override for setting '{{key}}' was not found"
+  "scopeOverrideNotFound": "Scope override for setting '{{key}}' was not found",
+  "localeNotFound": "System locale not found (code: {code})",
+  "localeAlreadyExists": "Locale code '{code}' already exists in database",
+  "timezoneNotFound": "System timezone not found (code: {code})",
+  "timezoneAlreadyExists": "Timezone '{code}' already exists in database",
+  "translationNotFound": "Translation entry not found (locale: {locale}, key: {key})"
 }
 

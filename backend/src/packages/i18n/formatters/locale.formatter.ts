@@ -4,16 +4,14 @@ import {
   DEFAULT_CURRENCY,
   DEFAULT_DATETIME_FORMAT,
   DEFAULT_DATE_FORMAT,
-  DEFAULT_LOCALE,
-  DEFAULT_TIMEZONE,
   type SupportedLocale,
 } from '../contracts/i18n.contract.js';
 import {
   getRegisteredLocaleMetadata,
-  getRegistryDefaultLocaleCode,
-  getRegistryDefaultTimezoneCode,
   isSupportedLocale,
   isValidIanaTimezone,
+  resolveSystemDefaultLocale,
+  resolveSystemDefaultTimezone,
   resolveTimezone,
 } from '../resolvers/header-locale.resolver.js';
 
@@ -40,18 +38,7 @@ export class LocaleFormatter {
     if (locale && isSupportedLocale(locale)) return locale.trim().toLowerCase();
     const ctxLocale = LocaleContext.get();
     if (ctxLocale && isSupportedLocale(ctxLocale)) return ctxLocale.trim().toLowerCase();
-    const configured = defaultSettingRegistry.getValue<string>('ui.locale.default');
-    const dbDefault = getRegistryDefaultLocaleCode();
-    if (
-      configured &&
-      isSupportedLocale(configured) &&
-      (!dbDefault || configured.trim().toLowerCase() !== DEFAULT_LOCALE)
-    ) {
-      return configured.trim().toLowerCase();
-    }
-    if (dbDefault && isSupportedLocale(dbDefault)) return dbDefault;
-    if (isSupportedLocale(configured)) return configured.trim().toLowerCase();
-    return DEFAULT_LOCALE;
+    return resolveSystemDefaultLocale();
   }
 
   /** Phân giải múi giờ hiệu lực từ tham số -> LocaleContext -> DB Default Timezone / System Setting -> `'Asia/Ho_Chi_Minh'` */
@@ -59,18 +46,7 @@ export class LocaleFormatter {
     if (timeZone && isValidIanaTimezone(timeZone)) return resolveTimezone(timeZone);
     const ctxTz = LocaleContext.getTimezone();
     if (ctxTz && isValidIanaTimezone(ctxTz)) return resolveTimezone(ctxTz);
-    const configured = defaultSettingRegistry.getValue<string>('ui.timezone.default');
-    const dbDefault = getRegistryDefaultTimezoneCode();
-    if (
-      configured &&
-      isValidIanaTimezone(configured) &&
-      (!dbDefault || configured.trim() !== DEFAULT_TIMEZONE)
-    ) {
-      return resolveTimezone(configured);
-    }
-    if (dbDefault && isValidIanaTimezone(dbDefault)) return dbDefault;
-    if (isValidIanaTimezone(configured)) return resolveTimezone(configured);
-    return DEFAULT_TIMEZONE;
+    return resolveSystemDefaultTimezone();
   }
 
   /** Phân giải đơn vị tiền tệ hiệu lực từ tham số -> System Setting (`ui.currency.default`) -> DB Locale (`i18n_locales.currency_code`) */
@@ -79,7 +55,7 @@ export class LocaleFormatter {
       return currencyCode.trim().toUpperCase();
     }
     const resolvedLocale = LocaleFormatter.resolveActiveLocale(locale);
-    const configured = defaultSettingRegistry.getValue<string>('ui.currency.default');
+    const configured = defaultSettingRegistry.getString('ui.currency.default');
     if (configured && configured.trim().length > 0 && (!locale || resolvedLocale === 'vi')) {
       return configured.trim().toUpperCase();
     }

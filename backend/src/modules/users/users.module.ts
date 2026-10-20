@@ -24,6 +24,8 @@ import { UsersController } from './controllers/users.controller.js';
 import enUsers from './locales/en/users.json' with { type: 'json' };
 import viUsers from './locales/vi/users.json' with { type: 'json' };
 
+new CoreI18nService().registerNamespace('users', { vi: viUsers, en: enUsers });
+
 @Module({
   imports: [
     DatabaseModule,

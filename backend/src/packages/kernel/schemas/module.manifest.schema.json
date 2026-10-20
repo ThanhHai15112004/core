@@ -55,6 +55,21 @@
       "items": { "type": "object" },
       "default": []
     },
+    "locales": {
+      "type": "array",
+      "items": { "type": "object" },
+      "default": []
+    },
+    "timezones": {
+      "type": "array",
+      "items": { "type": "object" },
+      "default": []
+    },
+    "translations": {
+      "type": "array",
+      "items": { "type": "object" },
+      "default": []
+    },
     "events": {
       "type": "object",
       "properties": {

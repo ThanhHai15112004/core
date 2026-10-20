@@ -4,6 +4,11 @@
   "groupNotFound": "Không tìm thấy nhóm cấu hình '{{code}}'",
   "groupAlreadyExists": "Nhóm cấu hình '{{code}}' đã tồn tại",
   "unitOverrideNotAllowed": "Cấu hình '{{key}}' là cấu hình toàn cục và không cho phép ghi đè theo đơn vị",
-  "scopeOverrideNotFound": "Không tìm thấy bản ghi cấu hình ghi đè cho '{{key}}'"
+  "scopeOverrideNotFound": "Không tìm thấy bản ghi cấu hình ghi đè cho '{{key}}'",
+  "localeNotFound": "Không tìm thấy ngôn ngữ hệ thống (mã: {code})",
+  "localeAlreadyExists": "Mã ngôn ngữ '{code}' đã tồn tại trong cơ sở dữ liệu",
+  "timezoneNotFound": "Không tìm thấy khung giờ/múi giờ hệ thống (mã: {code})",
+  "timezoneAlreadyExists": "Khung giờ/múi giờ '{code}' đã tồn tại trong cơ sở dữ liệu",
+  "translationNotFound": "Không tìm thấy bản dịch thông báo (locale: {locale}, key: {key})"
 }
 

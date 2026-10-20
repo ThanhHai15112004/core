@@ -1,5 +1,6 @@
-import { Global, Module } from '@nestjs/common';
+import { Global, Module, Optional } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { CoreI18nService } from '@packages/i18n/index.js';
 import {
   FEATURE_FLAGS_PUBLIC_SERVICE,
   I18N_MANAGEMENT_PUBLIC_SERVICE,
@@ -29,6 +30,10 @@ import { SystemSettingRepository } from './repositories/system-setting.repositor
 import { FeatureFlagsService } from './services/feature-flags.service.js';
 import { I18nManagementService } from './services/i18n-management.service.js';
 import { SettingsService } from './services/settings.service.js';
+import enSettings from './locales/en/settings.json' with { type: 'json' };
+import viSettings from './locales/vi/settings.json' with { type: 'json' };
+
+new CoreI18nService().registerNamespace('settings', { vi: viSettings, en: enSettings });
 
 @Global()
 @Module({
@@ -90,4 +95,8 @@ import { SettingsService } from './services/settings.service.js';
     I18nTranslationRepository,
   ],
 })
-export class SettingsModule {}
+export class SettingsModule {
+  constructor(@Optional() i18n?: CoreI18nService) {
+    i18n?.registerNamespace('settings', { vi: viSettings, en: enSettings });
+  }
+}

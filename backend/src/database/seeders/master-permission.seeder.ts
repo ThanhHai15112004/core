@@ -1,5 +1,12 @@
 import type { SeederContext, SeederContract } from '@packages/database/index.js';
 import {
+  type I18nLocaleManifestItem,
+  type I18nTimezoneManifestItem,
+  type I18nTranslationManifestItem,
+  discoverManifestI18n,
+  getInitialStaticDictionaries,
+} from '@packages/i18n/index.js';
+import {
   type CodeTypeManifestItem,
   type FeatureFlagManifestItem,
   type SettingGroupManifestItem,
@@ -44,66 +51,34 @@ const DEFAULT_MASTER_SETTINGS: MasterSettingSeedItem[] = [
   },
 ];
 
-export const SEED_SYSTEM_SETTING_GROUPS: readonly SettingGroupManifestItem[] = [
-  {
-    code: 'email',
-    module: 'settings',
-    name: 'Cấu hình Email & Thông báo',
-    description: 'Thiết lập máy chủ gửi thư SMTP, địa chỉ người gửi mặc định và giới hạn gửi email',
-    icon: 'mail',
-    sortOrder: 1,
-    isSystem: true,
-    status: SETTING_ITEM_STATUS.ACTIVE,
-  },
-  {
-    code: 'file',
-    module: 'settings',
-    name: 'Cấu hình Tệp tin & Lưu trữ',
-    description:
-      'Thiết lập dung lượng tải lên tối đa, định dạng file cho phép và chính sách lưu trữ',
-    icon: 'folder',
-    sortOrder: 2,
-    isSystem: true,
-    status: SETTING_ITEM_STATUS.ACTIVE,
-  },
-  {
-    code: 'security',
-    module: 'auth',
-    name: 'Cấu hình Bảo mật & Xác thực',
-    description:
-      'Thiết lập độ dài mật khẩu, độ phức tạp, khóa tài khoản, MFA và thời hạn phiên đăng nhập',
-    icon: 'shield-lock',
-    sortOrder: 3,
-    isSystem: true,
-    status: SETTING_ITEM_STATUS.ACTIVE,
-  },
-  {
-    code: 'ui',
-    module: 'settings',
-    name: 'Cấu hình Giao diện & Hiển thị',
-    description:
-      'Thiết lập thương hiệu, giao diện sáng/tối, ngôn ngữ, múi giờ và số dòng phân trang mặc định',
-    icon: 'palette',
-    sortOrder: 4,
-    isSystem: true,
-    status: SETTING_ITEM_STATUS.ACTIVE,
-  },
-  {
-    code: 'system',
-    module: 'settings',
-    name: 'Cấu hình Vận hành Hệ thống',
-    description:
-      'Thiết lập chế độ bảo trì, thời gian lưu trữ nhật ký và các tham số vận hành chung',
-    icon: 'settings',
-    sortOrder: 5,
-    isSystem: true,
-    status: SETTING_ITEM_STATUS.ACTIVE,
-  },
-];
+export const SEED_SYSTEM_SETTING_GROUPS: readonly SettingGroupManifestItem[] =
+  discoverManifestSettings().groups;
+
+function collectInitialI18nTranslations(): I18nTranslationManifestItem[] {
+  const map = new Map<string, I18nTranslationManifestItem>();
+  for (const [locale, dict] of Object.entries(getInitialStaticDictionaries())) {
+    for (const [key, value] of Object.entries(dict)) {
+      const namespace = key.includes('.') ? key.split('.')[0]! : 'common';
+      map.set(`${locale}::${key}`, {
+        locale,
+        namespace,
+        key,
+        value,
+        isSystem: true,
+        status: SETTING_ITEM_STATUS.ACTIVE,
+      });
+    }
+  }
+  for (const item of discoverManifestI18n().translations) {
+    map.set(`${item.locale}::${item.key}`, item);
+  }
+  return [...map.values()];
+}
 
 /**
  * Seeder đồng bộ danh mục Quyền hạn (`permissions`), Danh mục Động & Hybrid (`code_types`, `code_values`),
- * và Cấu hình Hệ thống Động (`setting_groups`, `system_settings`, `system_setting_scopes`)
+ * Cấu hình Hệ thống Động (`setting_groups`, `system_settings`, `system_setting_scopes`),
+ * Feature Flags (`feature_flags`) và Đa ngôn ngữ & Múi giờ (`i18n_locales`, `i18n_timezones`, `i18n_translations`)
  * từ `module.manifest.json` và Master Data nền tảng (`core_master_settings`).
  * Thiết kế Idempotent: chạy nhiều lần trên mọi môi trường (kể cả Production) không sinh dữ liệu trùng.
  */
@@ -120,6 +95,11 @@ export class MasterPermissionSeeder implements SeederContract {
     private readonly systemSettings: readonly SettingManifestItem[] = discoverManifestSettings()
       .settings,
     private readonly featureFlags: readonly FeatureFlagManifestItem[] = discoverManifestFeatureFlags(),
+    private readonly i18nLocales: readonly I18nLocaleManifestItem[] = discoverManifestI18n()
+      .locales,
+    private readonly i18nTimezones: readonly I18nTimezoneManifestItem[] = discoverManifestI18n()
+      .timezones,
+    private readonly i18nTranslations: readonly I18nTranslationManifestItem[] = collectInitialI18nTranslations(),
   ) {}
 
   public async run(ctx: SeederContext): Promise<{ affected: number; details?: string }> {
@@ -783,9 +763,287 @@ export class MasterPermissionSeeder implements SeederContract {
       affected++;
     }
 
+    await ctx.manager.query(`
+      CREATE TABLE IF NOT EXISTS i18n_locales (
+        id ${pkDef},
+        code VARCHAR(16) NOT NULL UNIQUE,
+        bcp47_tag VARCHAR(32) NOT NULL,
+        name VARCHAR(100) NOT NULL,
+        native_name VARCHAR(100) NOT NULL,
+        direction VARCHAR(8) NOT NULL DEFAULT 'ltr',
+        date_format VARCHAR(32) NOT NULL DEFAULT 'dd/MM/yyyy',
+        datetime_format VARCHAR(64) NOT NULL DEFAULT 'dd/MM/yyyy HH:mm:ss',
+        currency_code VARCHAR(8) NOT NULL DEFAULT 'VND',
+        number_decimal_separator VARCHAR(4) NOT NULL DEFAULT ',',
+        number_group_separator VARCHAR(4) NOT NULL DEFAULT '.',
+        is_default BOOLEAN NOT NULL DEFAULT FALSE,
+        is_system BOOLEAN NOT NULL DEFAULT TRUE,
+        sort_order INT NOT NULL DEFAULT 0,
+        status INT NOT NULL DEFAULT 1,
+        updated_by INT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        deleted_at TIMESTAMP NULL
+      )
+    `);
+
+    await ctx.manager.query(`
+      CREATE TABLE IF NOT EXISTS i18n_timezones (
+        id ${pkDef},
+        code VARCHAR(64) NOT NULL UNIQUE,
+        name VARCHAR(150) NOT NULL,
+        labels_json TEXT NULL,
+        utc_offset VARCHAR(16) NOT NULL,
+        utc_offset_minutes INT NOT NULL DEFAULT 0,
+        region VARCHAR(64) NOT NULL DEFAULT 'Asia',
+        is_default BOOLEAN NOT NULL DEFAULT FALSE,
+        is_system BOOLEAN NOT NULL DEFAULT TRUE,
+        sort_order INT NOT NULL DEFAULT 0,
+        status INT NOT NULL DEFAULT 1,
+        updated_by INT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        deleted_at TIMESTAMP NULL
+      )
+    `);
+
+    await ctx.manager.query(`
+      CREATE TABLE IF NOT EXISTS i18n_translations (
+        id ${pkDef},
+        locale VARCHAR(16) NOT NULL,
+        namespace VARCHAR(64) NOT NULL DEFAULT 'common',
+        translation_key VARCHAR(191) NOT NULL,
+        translation_value TEXT NOT NULL,
+        description VARCHAR(255) NULL,
+        is_system BOOLEAN NOT NULL DEFAULT TRUE,
+        status INT NOT NULL DEFAULT 1,
+        updated_by INT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        deleted_at TIMESTAMP NULL,
+        CONSTRAINT uq_i18n_translations_locale_key UNIQUE (locale, translation_key)
+      )
+    `);
+
+    const discoveredI18n = discoverManifestI18n();
+    const mergedLocales = new Map<string, I18nLocaleManifestItem>();
+    for (const loc of discoveredI18n.locales) {
+      mergedLocales.set(loc.code.trim().toLowerCase(), loc);
+    }
+    for (const loc of this.i18nLocales) {
+      mergedLocales.set(loc.code.trim().toLowerCase(), loc);
+    }
+
+    let localesSeeded = 0;
+    for (const loc of mergedLocales.values()) {
+      const code = loc.code.trim().toLowerCase();
+      const bcp47Tag =
+        loc.bcp47Tag?.trim() || (code === 'vi' ? 'vi-VN' : `${code}-${code.toUpperCase()}`);
+      const direction = loc.direction === 'rtl' ? 'rtl' : 'ltr';
+      const decimalSep = loc.numberDecimalSeparator || ',';
+      const groupSep = loc.numberGroupSeparator || '.';
+      const isDefault = Boolean(loc.isDefault);
+      const isSystem = loc.isSystem ?? true;
+      const sortOrder = loc.sortOrder ?? localesSeeded + 1;
+      const status = loc.status ?? 1;
+
+      if (isPostgres) {
+        await ctx.manager.query(
+          `INSERT INTO i18n_locales (
+             code, bcp47_tag, name, native_name, direction, date_format, datetime_format,
+             currency_code, number_decimal_separator, number_group_separator,
+             is_default, is_system, sort_order, status
+           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+           ON CONFLICT (code) DO UPDATE SET
+             bcp47_tag = EXCLUDED.bcp47_tag,
+             name = EXCLUDED.name,
+             native_name = EXCLUDED.native_name,
+             date_format = COALESCE(NULLIF(i18n_locales.date_format, ''), EXCLUDED.date_format),
+             datetime_format = COALESCE(NULLIF(i18n_locales.datetime_format, ''), EXCLUDED.datetime_format),
+             currency_code = COALESCE(NULLIF(i18n_locales.currency_code, ''), EXCLUDED.currency_code)`,
+          [
+            code,
+            bcp47Tag,
+            loc.name,
+            loc.nativeName,
+            direction,
+            loc.dateFormat,
+            loc.datetimeFormat,
+            loc.currencyCode.toUpperCase(),
+            decimalSep,
+            groupSep,
+            isDefault,
+            isSystem,
+            sortOrder,
+            status,
+          ],
+        );
+      } else {
+        await ctx.manager.query(
+          `INSERT INTO i18n_locales (
+             code, bcp47_tag, name, native_name, direction, date_format, datetime_format,
+             currency_code, number_decimal_separator, number_group_separator,
+             is_default, is_system, sort_order, status
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON DUPLICATE KEY UPDATE
+             bcp47_tag = VALUES(bcp47_tag),
+             name = VALUES(name),
+             native_name = VALUES(native_name),
+             date_format = COALESCE(NULLIF(i18n_locales.date_format, ''), VALUES(date_format)),
+             datetime_format = COALESCE(NULLIF(i18n_locales.datetime_format, ''), VALUES(datetime_format)),
+             currency_code = COALESCE(NULLIF(i18n_locales.currency_code, ''), VALUES(currency_code))`,
+          [
+            code,
+            bcp47Tag,
+            loc.name,
+            loc.nativeName,
+            direction,
+            loc.dateFormat,
+            loc.datetimeFormat,
+            loc.currencyCode.toUpperCase(),
+            decimalSep,
+            groupSep,
+            isDefault,
+            isSystem,
+            sortOrder,
+            status,
+          ],
+        );
+      }
+      localesSeeded++;
+      affected++;
+    }
+
+    const mergedTimezones = new Map<string, I18nTimezoneManifestItem>();
+    for (const tz of discoveredI18n.timezones) {
+      mergedTimezones.set(tz.code.trim(), tz);
+    }
+    for (const tz of this.i18nTimezones) {
+      mergedTimezones.set(tz.code.trim(), tz);
+    }
+
+    let timezonesSeeded = 0;
+    for (const tz of mergedTimezones.values()) {
+      const code = tz.code.trim();
+      const labelsJson = JSON.stringify(tz.labels ?? { vi: tz.name, en: tz.name });
+      const region = tz.region ?? (code.includes('/') ? code.split('/')[0]! : 'UTC');
+      const isDefault = Boolean(tz.isDefault);
+      const isSystem = tz.isSystem ?? true;
+      const sortOrder = tz.sortOrder ?? timezonesSeeded + 1;
+      const status = tz.status ?? 1;
+
+      if (isPostgres) {
+        await ctx.manager.query(
+          `INSERT INTO i18n_timezones (
+             code, name, labels_json, utc_offset, utc_offset_minutes, region,
+             is_default, is_system, sort_order, status
+           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+           ON CONFLICT (code) DO UPDATE SET
+             name = EXCLUDED.name,
+             labels_json = COALESCE(i18n_timezones.labels_json, EXCLUDED.labels_json),
+             utc_offset = EXCLUDED.utc_offset,
+             utc_offset_minutes = EXCLUDED.utc_offset_minutes,
+             region = EXCLUDED.region`,
+          [
+            code,
+            tz.name,
+            labelsJson,
+            tz.utcOffset,
+            tz.utcOffsetMinutes,
+            region,
+            isDefault,
+            isSystem,
+            sortOrder,
+            status,
+          ],
+        );
+      } else {
+        await ctx.manager.query(
+          `INSERT INTO i18n_timezones (
+             code, name, labels_json, utc_offset, utc_offset_minutes, region,
+             is_default, is_system, sort_order, status
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON DUPLICATE KEY UPDATE
+             name = VALUES(name),
+             labels_json = COALESCE(i18n_timezones.labels_json, VALUES(labels_json)),
+             utc_offset = VALUES(utc_offset),
+             utc_offset_minutes = VALUES(utc_offset_minutes),
+             region = VALUES(region)`,
+          [
+            code,
+            tz.name,
+            labelsJson,
+            tz.utcOffset,
+            tz.utcOffsetMinutes,
+            region,
+            isDefault,
+            isSystem,
+            sortOrder,
+            status,
+          ],
+        );
+      }
+      timezonesSeeded++;
+      affected++;
+    }
+
+    const mergedTranslations = new Map<string, I18nTranslationManifestItem>();
+    for (const tr of discoveredI18n.translations) {
+      mergedTranslations.set(`${tr.locale.trim().toLowerCase()}::${tr.key.trim()}`, tr);
+    }
+    for (const tr of this.i18nTranslations) {
+      mergedTranslations.set(`${tr.locale.trim().toLowerCase()}::${tr.key.trim()}`, tr);
+    }
+
+    let translationsSeeded = 0;
+    for (const tr of mergedTranslations.values()) {
+      const locale = tr.locale.trim().toLowerCase();
+      const key = tr.key.trim();
+      const namespace = (tr.namespace || (key.includes('.') ? key.split('.')[0]! : 'common'))
+        .trim()
+        .toLowerCase();
+
+      if (isPostgres) {
+        await ctx.manager.query(
+          `INSERT INTO i18n_translations (
+             locale, namespace, translation_key, translation_value, description, is_system, status
+           ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+           ON CONFLICT (locale, translation_key) DO NOTHING`,
+          [
+            locale,
+            namespace,
+            key,
+            tr.value,
+            tr.description ?? null,
+            tr.isSystem ?? true,
+            tr.status ?? 1,
+          ],
+        );
+      } else {
+        await ctx.manager.query(
+          `INSERT INTO i18n_translations (
+             locale, namespace, translation_key, translation_value, description, is_system, status
+           ) VALUES (?, ?, ?, ?, ?, ?, ?)
+           ON DUPLICATE KEY UPDATE
+             translation_value = COALESCE(NULLIF(i18n_translations.translation_value, ''), VALUES(translation_value))`,
+          [
+            locale,
+            namespace,
+            key,
+            tr.value,
+            tr.description ?? null,
+            tr.isSystem ?? true,
+            tr.status ?? 1,
+          ],
+        );
+      }
+      translationsSeeded++;
+      affected++;
+    }
+
     return {
       affected,
-      details: `${this.permissions.length} permissions, ${this.masterSettings.length} master settings, ${mergedCodeTypes.size} code_types (${codeValuesSeeded} code_values), ${mergedSettingGroups.size} setting_groups (${settingsSeeded} system_settings), ${featureFlagsSeeded} feature_flags synced`,
+      details: `${this.permissions.length} permissions, ${this.masterSettings.length} master settings, ${mergedCodeTypes.size} code_types (${codeValuesSeeded} code_values), ${mergedSettingGroups.size} setting_groups (${settingsSeeded} system_settings), ${featureFlagsSeeded} feature_flags, ${localesSeeded} i18n_locales, ${timezonesSeeded} i18n_timezones, ${translationsSeeded} i18n_translations synced`,
     };
   }
 }

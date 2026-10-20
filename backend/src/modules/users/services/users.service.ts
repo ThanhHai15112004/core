@@ -6,18 +6,15 @@ import {
   HTTP_ERROR_CODE,
   NotFoundAppException,
   type PaginatedResult,
-  defaultSettingRegistry,
 } from '@packages/kernel/index.js';
 import { createPaginatedResult } from '@packages/http/index.js';
 import {
-  DEFAULT_LOCALE,
-  DEFAULT_TIMEZONE,
   LocaleContext,
   type SupportedLocale,
-  getRegistryDefaultLocaleCode,
-  getRegistryDefaultTimezoneCode,
   isSupportedLocale,
   isValidIanaTimezone,
+  resolveSystemDefaultLocale,
+  resolveSystemDefaultTimezone,
 } from '@packages/i18n/index.js';
 import { TransactionManager } from '@packages/database/index.js';
 import {
@@ -538,11 +535,11 @@ export class UsersService implements IUsersPublicService {
     const nextPreferredLocale =
       dto.preferredLocale !== undefined
         ? this.normalizePreferredLocale(dto.preferredLocale)
-        : (currentProfile.preferredLocale ?? this.getSystemDefaultLocale());
+        : (currentProfile.preferredLocale ?? resolveSystemDefaultLocale());
     const nextPreferredTimezone =
       dto.preferredTimezone !== undefined
         ? this.normalizePreferredTimezone(dto.preferredTimezone)
-        : (currentProfile.preferredTimezone ?? this.getSystemDefaultTimezone());
+        : (currentProfile.preferredTimezone ?? resolveSystemDefaultTimezone());
 
     await this.upsertUserProfile(id, {
       firstName: nextFirstName,
@@ -1091,8 +1088,8 @@ export class UsersService implements IUsersPublicService {
       permissions,
       dataScope: effectiveDataScope,
       dataScopes,
-      preferredLocale: profile.preferredLocale ?? this.getSystemDefaultLocale(),
-      preferredTimezone: profile.preferredTimezone ?? this.getSystemDefaultTimezone(),
+      preferredLocale: profile.preferredLocale ?? resolveSystemDefaultLocale(),
+      preferredTimezone: profile.preferredTimezone ?? resolveSystemDefaultTimezone(),
       profile,
     };
   }
@@ -1110,10 +1107,10 @@ export class UsersService implements IUsersPublicService {
       : null;
     const preferredLocale = isSupportedLocale(profileEntity?.preferredLocale)
       ? profileEntity!.preferredLocale
-      : this.getSystemDefaultLocale();
+      : resolveSystemDefaultLocale();
     const preferredTimezone = isValidIanaTimezone(profileEntity?.preferredTimezone)
       ? profileEntity!.preferredTimezone.trim()
-      : this.getSystemDefaultTimezone();
+      : resolveSystemDefaultTimezone();
 
     return {
       userId: Number(user.id),
@@ -1141,14 +1138,14 @@ export class UsersService implements IUsersPublicService {
         ? this.normalizePreferredLocale(input.preferredLocale)
         : isSupportedLocale(currentProfile.preferredLocale)
           ? currentProfile.preferredLocale
-          : this.getSystemDefaultLocale();
+          : resolveSystemDefaultLocale();
 
     const nextTimezone: string =
       input.preferredTimezone !== undefined
         ? this.normalizePreferredTimezone(input.preferredTimezone)
         : isValidIanaTimezone(currentProfile.preferredTimezone)
           ? currentProfile.preferredTimezone!.trim()
-          : this.getSystemDefaultTimezone();
+          : resolveSystemDefaultTimezone();
 
     const savedProfile = await this.upsertUserProfile(userId, {
       firstName: currentProfile.firstName || user.username,
@@ -1180,8 +1177,8 @@ export class UsersService implements IUsersPublicService {
       resourceType: 'user_profile',
       resourceId: userId,
       beforeData: {
-        preferredLocale: currentProfile.preferredLocale ?? this.getSystemDefaultLocale(),
-        preferredTimezone: currentProfile.preferredTimezone ?? this.getSystemDefaultTimezone(),
+        preferredLocale: currentProfile.preferredLocale ?? resolveSystemDefaultLocale(),
+        preferredTimezone: currentProfile.preferredTimezone ?? resolveSystemDefaultTimezone(),
       },
       afterData: {
         preferredLocale: nextLocale,
@@ -1819,42 +1816,14 @@ export class UsersService implements IUsersPublicService {
       city: profile?.city ?? null,
       country: profile?.country ?? null,
       bio: profile?.bio ?? null,
-      preferredLocale: profile?.preferredLocale?.trim() || this.getSystemDefaultLocale(),
-      preferredTimezone: profile?.preferredTimezone?.trim() || this.getSystemDefaultTimezone(),
+      preferredLocale: profile?.preferredLocale?.trim() || resolveSystemDefaultLocale(),
+      preferredTimezone: profile?.preferredTimezone?.trim() || resolveSystemDefaultTimezone(),
     };
-  }
-
-  private getSystemDefaultLocale(): SupportedLocale {
-    const dbDefault = getRegistryDefaultLocaleCode();
-    const configured = defaultSettingRegistry.getValue<string>('ui.locale.default');
-    if (
-      configured &&
-      isSupportedLocale(configured) &&
-      (!dbDefault || configured.trim().toLowerCase() !== DEFAULT_LOCALE)
-    ) {
-      return configured.trim().toLowerCase();
-    }
-    if (dbDefault && isSupportedLocale(dbDefault)) return dbDefault;
-    return isSupportedLocale(configured) ? configured.trim().toLowerCase() : DEFAULT_LOCALE;
-  }
-
-  private getSystemDefaultTimezone(): string {
-    const dbDefault = getRegistryDefaultTimezoneCode();
-    const configured = defaultSettingRegistry.getValue<string>('ui.timezone.default');
-    if (
-      configured &&
-      isValidIanaTimezone(configured) &&
-      (!dbDefault || configured.trim() !== DEFAULT_TIMEZONE)
-    ) {
-      return configured.trim();
-    }
-    if (dbDefault && isValidIanaTimezone(dbDefault)) return dbDefault;
-    return isValidIanaTimezone(configured) ? configured!.trim() : DEFAULT_TIMEZONE;
   }
 
   private normalizePreferredLocale(locale?: string | null): SupportedLocale {
     if (locale === undefined || locale === null || locale.trim() === '') {
-      return this.getSystemDefaultLocale();
+      return resolveSystemDefaultLocale();
     }
     const normalized = locale.trim().toLowerCase();
     if (!isSupportedLocale(normalized)) {
@@ -1865,7 +1834,7 @@ export class UsersService implements IUsersPublicService {
 
   private normalizePreferredTimezone(timezone?: string | null): string {
     if (timezone === undefined || timezone === null || timezone.trim() === '') {
-      return this.getSystemDefaultTimezone();
+      return resolveSystemDefaultTimezone();
     }
     const trimmed = timezone.trim();
     if (!isValidIanaTimezone(trimmed)) {

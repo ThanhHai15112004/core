@@ -8,6 +8,6 @@
   "cannotBeOwnManager": "A user cannot be assigned as their own direct manager",
   "circularManagerHierarchy": "Circular management hierarchy detected (a subordinate cannot manage their superior)",
   "invalidXlsxFile": "Uploaded Excel (.xlsx) file is invalid or corrupted",
-  "invalidPreferredLocale": "Preferred language '{locale}' is not supported (supported: vi, en)",
+  "invalidPreferredLocale": "Preferred language '{locale}' is not supported or is currently inactive",
   "invalidPreferredTimezone": "Timezone '{timezone}' is not a valid IANA timezone identifier"
 }

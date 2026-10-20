@@ -17,6 +17,8 @@ import { RolesController } from './controllers/roles.controller.js';
 import enRoles from './locales/en/roles.json' with { type: 'json' };
 import viRoles from './locales/vi/roles.json' with { type: 'json' };
 
+new CoreI18nService().registerNamespace('roles', { vi: viRoles, en: enRoles });
+
 @Module({
   imports: [
     DatabaseModule,

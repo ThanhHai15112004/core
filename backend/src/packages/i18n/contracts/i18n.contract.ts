@@ -13,6 +13,46 @@ export const I18N_ITEM_STATUS = {
 
 export type I18nItemStatusCode = (typeof I18N_ITEM_STATUS)[keyof typeof I18N_ITEM_STATUS];
 
+export interface I18nLocaleManifestItem {
+  readonly code: string;
+  readonly bcp47Tag?: string | undefined;
+  readonly name: string;
+  readonly nativeName: string;
+  readonly direction?: 'ltr' | 'rtl' | undefined;
+  readonly dateFormat: string;
+  readonly datetimeFormat: string;
+  readonly currencyCode: string;
+  readonly numberDecimalSeparator?: string | undefined;
+  readonly numberGroupSeparator?: string | undefined;
+  readonly isDefault?: boolean | undefined;
+  readonly isSystem?: boolean | undefined;
+  readonly sortOrder?: number | undefined;
+  readonly status?: number | undefined;
+}
+
+export interface I18nTimezoneManifestItem {
+  readonly code: string;
+  readonly name: string;
+  readonly labels?: Readonly<Record<string, string>> | undefined;
+  readonly utcOffset: string;
+  readonly utcOffsetMinutes: number;
+  readonly region?: string | undefined;
+  readonly isDefault?: boolean | undefined;
+  readonly isSystem?: boolean | undefined;
+  readonly sortOrder?: number | undefined;
+  readonly status?: number | undefined;
+}
+
+export interface I18nTranslationManifestItem {
+  readonly locale: string;
+  readonly namespace: string;
+  readonly key: string;
+  readonly value: string;
+  readonly description?: string | null | undefined;
+  readonly isSystem?: boolean | undefined;
+  readonly status?: number | undefined;
+}
+
 export interface RegisteredLocaleMetadata {
   id?: number;
   code: string;
