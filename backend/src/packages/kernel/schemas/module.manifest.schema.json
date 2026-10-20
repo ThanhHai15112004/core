@@ -50,6 +50,11 @@
       "items": { "type": "object" },
       "default": []
     },
+    "featureFlags": {
+      "type": "array",
+      "items": { "type": "object" },
+      "default": []
+    },
     "events": {
       "type": "object",
       "properties": {

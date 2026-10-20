@@ -17,7 +17,11 @@
       "settings.setting_created",
       "settings.setting_updated",
       "settings.scope_overridden",
-      "settings.scope_removed"
+      "settings.scope_removed",
+      "settings.feature_flags_synced",
+      "settings.feature_flag_created",
+      "settings.feature_flag_updated",
+      "settings.feature_flag_toggled"
     ],
     "subscribed": []
   },
@@ -27,7 +31,9 @@
       "setting_groups",
       "system_settings",
       "system_setting_scopes",
-      "system_setting_histories"
+      "system_setting_histories",
+      "feature_flags",
+      "feature_flag_histories"
     ]
   },
   "codeTypes": [
@@ -253,5 +259,44 @@
       "isSystem": true,
       "sortOrder": 1
     }
+  ],
+  "featureFlags": [
+    {
+      "key": "users.bulk_import_v2",
+      "module": "users",
+      "name": "Nhập/Xuất danh sách nhân sự hàng loạt thế hệ mới",
+      "description": "Cho phép nhập và xuất hồ sơ người dùng hàng loạt qua định dạng CSV/XLSX có kiểm tra trùng lặp nâng cao",
+      "isEnabled": true,
+      "rolloutPercentage": 100,
+      "targetUserIds": [],
+      "targetRoles": [],
+      "targetOrganizationUnitIds": [],
+      "isSystem": true
+    },
+    {
+      "key": "auth.mfa_enforcement_pilot",
+      "module": "auth",
+      "name": "Thử nghiệm bắt buộc MFA theo nhóm vai trò và chi nhánh",
+      "description": "Tính năng thử nghiệm yêu cầu xác thực đa yếu tố (TOTP/Email OTP) theo nhóm người dùng, vai trò hoặc đơn vị chỉ định",
+      "isEnabled": false,
+      "rolloutPercentage": 100,
+      "targetUserIds": [],
+      "targetRoles": ["SUPER_ADMIN", "SECURITY_ADMIN"],
+      "targetOrganizationUnitIds": [],
+      "isSystem": true
+    },
+    {
+      "key": "settings.realtime_broadcast",
+      "module": "settings",
+      "name": "Đồng bộ tức thời cấu hình qua sự kiện phân tán",
+      "description": "Phát sóng thay đổi cấu hình và Feature Flag theo tỷ lệ rollout để làm mới cache các node ứng dụng",
+      "isEnabled": true,
+      "rolloutPercentage": 50,
+      "targetUserIds": [],
+      "targetRoles": [],
+      "targetOrganizationUnitIds": [],
+      "isSystem": true
+    }
   ]
 }
+

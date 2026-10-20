@@ -1,10 +1,12 @@
 import type { SeederContext, SeederContract } from '@packages/database/index.js';
 import {
   type CodeTypeManifestItem,
+  type FeatureFlagManifestItem,
   type SettingGroupManifestItem,
   type SettingManifestItem,
   SETTING_ITEM_STATUS,
   discoverManifestCodeTypes,
+  discoverManifestFeatureFlags,
   discoverManifestSettings,
   parseSettingEnvironmentCode,
   parseSettingValueTypeCode,
@@ -117,6 +119,7 @@ export class MasterPermissionSeeder implements SeederContract {
     private readonly settingGroups: readonly SettingGroupManifestItem[] = SEED_SYSTEM_SETTING_GROUPS,
     private readonly systemSettings: readonly SettingManifestItem[] = discoverManifestSettings()
       .settings,
+    private readonly featureFlags: readonly FeatureFlagManifestItem[] = discoverManifestFeatureFlags(),
   ) {}
 
   public async run(ctx: SeederContext): Promise<{ affected: number; details?: string }> {
@@ -652,9 +655,137 @@ export class MasterPermissionSeeder implements SeederContract {
       }
     }
 
+    await ctx.manager.query(`
+      CREATE TABLE IF NOT EXISTS feature_flags (
+        id ${pkDef},
+        flag_key VARCHAR(150) NOT NULL UNIQUE,
+        module VARCHAR(64) NOT NULL,
+        name VARCHAR(255) NOT NULL,
+        description TEXT NOT NULL,
+        is_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+        rollout_percentage INT NOT NULL DEFAULT 100,
+        target_user_ids_json TEXT NOT NULL,
+        target_roles_json TEXT NOT NULL,
+        target_org_unit_ids_json TEXT NOT NULL,
+        starts_at TIMESTAMP NULL,
+        ends_at TIMESTAMP NULL,
+        metadata_json TEXT NULL,
+        is_system BOOLEAN NOT NULL DEFAULT TRUE,
+        status INT NOT NULL DEFAULT 1,
+        updated_by INT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        deleted_at TIMESTAMP NULL
+      )
+    `);
+
+    await ctx.manager.query(`
+      CREATE TABLE IF NOT EXISTS feature_flag_histories (
+        id ${pkDef},
+        flag_id INT NOT NULL,
+        flag_key VARCHAR(150) NOT NULL,
+        action VARCHAR(32) NOT NULL,
+        old_state_json TEXT NULL,
+        new_state_json TEXT NOT NULL,
+        actor_user_id INT NULL,
+        actor_identifier VARCHAR(150) NULL,
+        reason VARCHAR(500) NULL,
+        ip_address VARCHAR(64) NULL,
+        user_agent VARCHAR(255) NULL,
+        request_id VARCHAR(128) NULL,
+        correlation_id VARCHAR(128) NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        deleted_at TIMESTAMP NULL
+      )
+    `);
+
+    const mergedFeatureFlags = new Map<string, FeatureFlagManifestItem>();
+    for (const item of discoverManifestFeatureFlags()) {
+      mergedFeatureFlags.set(item.key.trim().toLowerCase(), item);
+    }
+    for (const item of this.featureFlags) {
+      mergedFeatureFlags.set(item.key.trim().toLowerCase(), item);
+    }
+
+    let featureFlagsSeeded = 0;
+    for (const flag of mergedFeatureFlags.values()) {
+      const flagKey = flag.key.trim().toLowerCase();
+      const moduleName = (flag.module ?? flagKey.split('.')[0] ?? 'settings').trim().toLowerCase();
+      const isEnabled = Boolean(flag.isEnabled ?? false);
+      const rolloutPercentage = flag.rolloutPercentage ?? 100;
+      const targetUserIdsJson = JSON.stringify(flag.targetUserIds ?? []);
+      const targetRolesJson = JSON.stringify(flag.targetRoles ?? []);
+      const targetOrgUnitsJson = JSON.stringify(flag.targetOrganizationUnitIds ?? []);
+      const startsAt = flag.startsAt ? new Date(flag.startsAt) : null;
+      const endsAt = flag.endsAt ? new Date(flag.endsAt) : null;
+      const metadataJson = flag.metadata ? JSON.stringify(flag.metadata) : null;
+      const isSystem = flag.isSystem ?? true;
+
+      if (isPostgres) {
+        await ctx.manager.query(
+          `INSERT INTO feature_flags (
+             flag_key, module, name, description, is_enabled, rollout_percentage,
+             target_user_ids_json, target_roles_json, target_org_unit_ids_json,
+             starts_at, ends_at, metadata_json, is_system, status
+           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 1)
+           ON CONFLICT (flag_key) DO UPDATE SET
+             module = EXCLUDED.module,
+             name = COALESCE(NULLIF(feature_flags.name, ''), EXCLUDED.name),
+             description = COALESCE(NULLIF(feature_flags.description, ''), EXCLUDED.description),
+             is_system = EXCLUDED.is_system`,
+          [
+            flagKey,
+            moduleName,
+            flag.name,
+            flag.description,
+            isEnabled,
+            rolloutPercentage,
+            targetUserIdsJson,
+            targetRolesJson,
+            targetOrgUnitsJson,
+            startsAt,
+            endsAt,
+            metadataJson,
+            isSystem,
+          ],
+        );
+      } else {
+        await ctx.manager.query(
+          `INSERT INTO feature_flags (
+             flag_key, module, name, description, is_enabled, rollout_percentage,
+             target_user_ids_json, target_roles_json, target_org_unit_ids_json,
+             starts_at, ends_at, metadata_json, is_system, status
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+           ON DUPLICATE KEY UPDATE
+             module = VALUES(module),
+             name = COALESCE(NULLIF(feature_flags.name, ''), VALUES(name)),
+             description = COALESCE(NULLIF(feature_flags.description, ''), VALUES(description)),
+             is_system = VALUES(is_system)`,
+          [
+            flagKey,
+            moduleName,
+            flag.name,
+            flag.description,
+            isEnabled,
+            rolloutPercentage,
+            targetUserIdsJson,
+            targetRolesJson,
+            targetOrgUnitsJson,
+            startsAt,
+            endsAt,
+            metadataJson,
+            isSystem,
+          ],
+        );
+      }
+      featureFlagsSeeded++;
+      affected++;
+    }
+
     return {
       affected,
-      details: `${this.permissions.length} permissions, ${this.masterSettings.length} master settings, ${mergedCodeTypes.size} code_types (${codeValuesSeeded} code_values), ${mergedSettingGroups.size} setting_groups (${settingsSeeded} system_settings) synced`,
+      details: `${this.permissions.length} permissions, ${this.masterSettings.length} master settings, ${mergedCodeTypes.size} code_types (${codeValuesSeeded} code_values), ${mergedSettingGroups.size} setting_groups (${settingsSeeded} system_settings), ${featureFlagsSeeded} feature_flags synced`,
     };
   }
 }

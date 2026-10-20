@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import type { CodeTypeManifestItem } from './code-lookup.contract.js';
+import type { FeatureFlagManifestItem } from './feature-flag.contract.js';
 import type { SettingGroupManifestItem, SettingManifestItem } from './setting-lookup.contract.js';
 
 export type ModuleType = 'core' | 'project';
@@ -30,6 +31,7 @@ export interface ModuleManifest {
   codeTypes?: CodeTypeManifestItem[];
   settingGroups?: SettingGroupManifestItem[];
   settings?: SettingManifestItem[];
+  featureFlags?: FeatureFlagManifestItem[];
   events?: ModuleEventsManifest;
   database?: ModuleDatabaseManifest;
 }
@@ -59,8 +61,8 @@ export interface DiscoveredModuleManifestEntry<T = Record<string, unknown>> {
 
 /**
  * Quét tập trung toàn bộ các tệp `module.manifest.json` trong `modules/*` và `project-modules/*`.
- * Dùng chung cho `discoverManifestCodeTypes()`, `discoverManifestSettings()` và `RolesService`
- * để tránh lặp code đọc filesystem.
+ * Dùng chung cho `discoverManifestCodeTypes()`, `discoverManifestSettings()`,
+ * `discoverManifestFeatureFlags()` và `RolesService` để tránh lặp code đọc filesystem.
  */
 export function scanModuleManifests<
   T extends { name?: string } = ModuleManifest,
@@ -100,4 +102,39 @@ export function scanModuleManifests<
   }
 
   return results;
+}
+
+/**
+ * Đọc danh sách các module đã được cài đặt và kích hoạt từ `project.manifest.json`.
+ * Nếu không tìm thấy `project.manifest.json`, fallback về danh sách module quét được từ `scanModuleManifests()`.
+ */
+export function discoverInstalledModules(): string[] {
+  const candidateFiles = [
+    resolve(process.cwd(), 'project.manifest.json'),
+    resolve(process.cwd(), 'backend/project.manifest.json'),
+  ];
+
+  const installedSet = new Set<string>(['core']);
+
+  for (const filePath of candidateFiles) {
+    if (!existsSync(filePath)) continue;
+    try {
+      const raw = JSON.parse(readFileSync(filePath, 'utf8')) as Partial<ProjectManifest>;
+      if (Array.isArray(raw.enabledModules)) {
+        for (const mod of raw.enabledModules) {
+          if (typeof mod === 'string' && mod.trim().length > 0) {
+            installedSet.add(mod.trim().toLowerCase());
+          }
+        }
+        return Array.from(installedSet);
+      }
+    } catch {
+      // Ignore malformed project manifest
+    }
+  }
+
+  for (const entry of scanModuleManifests()) {
+    installedSet.add(entry.moduleName);
+  }
+  return Array.from(installedSet);
 }

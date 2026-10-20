@@ -70,6 +70,23 @@ export const ModuleSettingManifestSchema = z.object({
   environmentOverrides: z.record(z.string(), z.unknown()).nullable().optional(),
 });
 
+export const ModuleFeatureFlagManifestSchema = z.object({
+  key: z.string().min(1),
+  module: z.string().optional(),
+  name: z.string().min(1),
+  description: z.string().min(1),
+  isEnabled: z.boolean().optional(),
+  rolloutPercentage: z.number().int().min(0).max(100).optional(),
+  targetUserIds: z.array(z.string()).optional(),
+  targetRoles: z.array(z.string()).optional(),
+  targetOrganizationUnitIds: z.array(z.string()).optional(),
+  startsAt: z.string().nullable().optional(),
+  endsAt: z.string().nullable().optional(),
+  metadata: z.record(z.string(), z.unknown()).nullable().optional(),
+  isSystem: z.boolean().optional(),
+  status: z.number().int().optional(),
+});
+
 export const ModuleManifestSchema = z.object({
   $schema: z.string().optional(),
   name: z
@@ -88,6 +105,7 @@ export const ModuleManifestSchema = z.object({
   codeTypes: z.array(ModuleCodeTypeManifestSchema).optional().default([]),
   settingGroups: z.array(ModuleSettingGroupManifestSchema).optional().default([]),
   settings: z.array(ModuleSettingManifestSchema).optional().default([]),
+  featureFlags: z.array(ModuleFeatureFlagManifestSchema).optional().default([]),
   events: ModuleEventsManifestSchema,
   database: ModuleDatabaseManifestSchema,
 });

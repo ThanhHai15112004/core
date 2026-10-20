@@ -9,3 +9,13 @@ export const SETTINGS_ROUTES = {
   KEY_SCOPES: ':key/scopes',
   KEY_HISTORY: ':key/history',
 } as const;
+
+export const FEATURE_FLAGS_ROUTES = {
+  ROOT: 'settings/feature-flags',
+  SYNC: 'sync',
+  EVALUATE: 'evaluate',
+  HISTORY: 'history',
+  DETAIL: ':key',
+  TOGGLE: ':key/toggle',
+  KEY_HISTORY: ':key/history',
+} as const;

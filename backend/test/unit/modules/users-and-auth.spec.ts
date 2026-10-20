@@ -98,7 +98,9 @@ import { UserIdentityResolverService } from '@modules/auth/services/user-identit
 import { AuthService } from '@modules/auth/services/auth.service.js';
 import {
   CODE_ITEM_STATUS,
+  computeFeatureFlagRolloutBucket,
   defaultCodeRegistry,
+  FeatureFlagRegistryService,
   SETTING_VALUE_TYPE,
   SettingRegistryService,
 } from '@packages/kernel/index.js';
@@ -107,6 +109,7 @@ import type { CodeValueEntity } from '@modules/codes/entities/code-value.entity.
 import type { CodeTypeRepository } from '@modules/codes/repositories/code-type.repository.js';
 import type { CodeValueRepository } from '@modules/codes/repositories/code-value.repository.js';
 import { CodesService } from '@modules/codes/services/codes.service.js';
+import { FeatureFlagsService } from '@modules/settings/services/feature-flags.service.js';
 import { SettingsService } from '@modules/settings/services/settings.service.js';
 import { MasterPermissionSeeder } from '../../../src/database/seeders/master-permission.seeder.js';
 
@@ -3876,5 +3879,284 @@ describe('Unit: Quản lý Người dùng (3.1) & Xác thực / Phiên / MFA (3)
     expect(resolvedAfterDirectSqlEdit.value).toBe(16);
     expect(resolvedAfterDirectSqlEdit.fromCache).toBe(false);
     expect((await securityServiceWithBridge.getSettings()).passwordMinLength).toBe(16);
+  });
+
+  it('5.2.1 -> 5.2.8: Bật tắt tính năng (Feature Flags) — tạo flag rõ key/mô tả, kiểm tra module đã cài, bật theo user/role/đơn vị/tỷ lệ rollout, tự động đóng khi hết hạn và ghi lịch sử', async () => {
+    applyTestEnv();
+    const auditLogService = new AuditLogService();
+    const flagRegistry = new FeatureFlagRegistryService();
+    const featureFlagsService = new FeatureFlagsService(
+      null,
+      null,
+      flagRegistry,
+      auditLogService,
+      null,
+    );
+
+    const adminActor = {
+      id: 1,
+      email: 'superadmin@gmail.com',
+      roles: ['SUPER_ADMIN'],
+      permissions: ['settings.read', 'settings.manage'],
+    };
+
+    // Đồng bộ Feature Flags mặc định từ module.manifest.json
+    const syncRes = await featureFlagsService.syncManifests();
+    expect(syncRes.totalFlags).toBeGreaterThanOrEqual(3);
+
+    // 5.2.1: Tạo mới Feature Flag (Đặt key và mô tả rõ ràng)
+    const createdFlag = await featureFlagsService.createFeatureFlag(
+      {
+        key: 'users.smart_onboarding',
+        module: 'users',
+        name: 'Luồng hội nhập nhân sự thông minh',
+        description:
+          'Cho phép tự động gợi ý phòng ban và vai trò khi tạo mới nhân sự theo chi nhánh',
+        isEnabled: true,
+        rolloutPercentage: 100,
+        reason: 'Khởi tạo tính năng thử nghiệm hội nhập nhân sự Q4',
+      },
+      adminActor,
+    );
+    expect(createdFlag.key).toBe('users.smart_onboarding');
+    expect(createdFlag.module).toBe('users');
+    expect(createdFlag.isModuleInstalled).toBe(true);
+    expect(createdFlag.isEnabled).toBe(true);
+    expect(createdFlag.description).toContain('tự động gợi ý phòng ban');
+
+    // Chặn tạo trùng key hoặc thiếu mô tả rõ ràng
+    await expect(
+      featureFlagsService.createFeatureFlag(
+        {
+          key: 'users.smart_onboarding',
+          name: 'Trùng key',
+          description: 'Mô tả hợp lệ nhưng trùng key',
+        },
+        adminActor,
+      ),
+    ).rejects.toThrow();
+
+    // 5.2.2: Bật hoặc tắt chức năng đã được cài (Không dùng flag thay cho việc cài module)
+    // Giả lập hệ thống chỉ cài đặt ['users', 'auth', 'settings', 'roles', 'organizations', 'codes'] (không có module 'billing')
+    featureFlagsService.setInstalledModules([
+      'users',
+      'auth',
+      'settings',
+      'roles',
+      'organizations',
+      'codes',
+    ]);
+
+    await expect(
+      featureFlagsService.createFeatureFlag(
+        {
+          key: 'billing.auto_invoice',
+          module: 'billing',
+          name: 'Tự động xuất hóa đơn',
+          description:
+            'Tính năng thuộc module billing chưa được cài đặt trong project.manifest.json',
+          isEnabled: true,
+        },
+        adminActor,
+      ),
+    ).rejects.toThrow(/not installed in enabledModules/i);
+
+    // Ngay cả khi một flag đã có trong registry nhưng module bị gỡ khỏi enabledModules -> evaluate trả về MODULE_NOT_INSTALLED (enabled = false)
+    featureFlagsService.setInstalledModules(['auth', 'settings']);
+    const evalWhenModuleUninstalled = await featureFlagsService.evaluate('users.smart_onboarding', {
+      userId: 10,
+    });
+    expect(evalWhenModuleUninstalled.enabled).toBe(false);
+    expect(evalWhenModuleUninstalled.reason).toBe('MODULE_NOT_INSTALLED');
+
+    // Khôi phục module 'users' vào enabledModules và kiểm tra bật/tắt (toggle)
+    featureFlagsService.setInstalledModules(['users', 'auth', 'settings']);
+    const evalWhenModuleInstalled = await featureFlagsService.evaluate('users.smart_onboarding', {
+      userId: 10,
+    });
+    expect(evalWhenModuleInstalled.enabled).toBe(true);
+    expect(evalWhenModuleInstalled.fromCache).toBe(false);
+
+    // Đọc lần 2 trúng Cache L1 (fromCache = true)
+    const evalCached = await featureFlagsService.evaluate('users.smart_onboarding', {
+      userId: 10,
+    });
+    expect(evalCached.enabled).toBe(true);
+    expect(evalCached.fromCache).toBe(true);
+
+    // Tắt tính năng qua toggleFeatureFlag -> xóa cache và trả về FLAG_DISABLED
+    await featureFlagsService.toggleFeatureFlag(
+      'users.smart_onboarding',
+      {
+        isEnabled: false,
+        reason: 'Tạm dừng tính năng để cấu hình danh sách thử nghiệm',
+      },
+      adminActor,
+    );
+    const evalAfterDisable = await featureFlagsService.evaluate('users.smart_onboarding', {
+      userId: 10,
+    });
+    expect(evalAfterDisable.enabled).toBe(false);
+    expect(evalAfterDisable.reason).toBe('FLAG_DISABLED');
+
+    // 5.2.3, 5.2.4, 5.2.5: Bật theo người dùng (targetUserIds), theo vai trò (targetRoles), theo đơn vị (targetOrganizationUnitIds)
+    await featureFlagsService.updateFeatureFlag(
+      'users.smart_onboarding',
+      {
+        isEnabled: true,
+        targetUserIds: ['101', '102'],
+        targetRoles: ['HR_DIRECTOR', 'PILOT_TESTER'],
+        targetOrganizationUnitIds: ['10', '20'],
+        rolloutPercentage: 0, // Tắt rollout đại trà để chỉ cho phép các đối tượng được nhắm mục tiêu
+        reason:
+          'Chỉ bật thử nghiệm cho User 101/102, Role HR_DIRECTOR/PILOT_TESTER và Chi nhánh 10/20',
+      },
+      adminActor,
+    );
+
+    // 5.2.3: Bật theo người dùng (User 101 nằm trong targetUserIds -> TARGET_USER_MATCH)
+    const evalByUser = await featureFlagsService.evaluate('users.smart_onboarding', {
+      userId: 101,
+      roles: ['STAFF'],
+      organizationUnitId: 99,
+    });
+    expect(evalByUser.enabled).toBe(true);
+    expect(evalByUser.reason).toBe('TARGET_USER_MATCH');
+
+    // 5.2.4: Bật theo vai trò (User 205 có role HR_DIRECTOR -> TARGET_ROLE_MATCH)
+    const evalByRole = await featureFlagsService.evaluate('users.smart_onboarding', {
+      userId: 205,
+      roles: ['STAFF', 'hr_director'],
+      organizationUnitId: 99,
+    });
+    expect(evalByRole.enabled).toBe(true);
+    expect(evalByRole.reason).toBe('TARGET_ROLE_MATCH');
+
+    // 5.2.5: Bật theo đơn vị (User 309 thuộc chi nhánh 20 -> TARGET_ORG_UNIT_MATCH)
+    const evalByOrgUnit = await featureFlagsService.evaluate('users.smart_onboarding', {
+      userId: 309,
+      roles: ['STAFF'],
+      organizationUnitIds: [20, 30],
+    });
+    expect(evalByOrgUnit.enabled).toBe(true);
+    expect(evalByOrgUnit.reason).toBe('TARGET_ORG_UNIT_MATCH');
+
+    // Người dùng ngoài danh sách User, Role, Đơn vị -> bị từ chối (TARGET_MISMATCH)
+    const evalOutsider = await featureFlagsService.evaluate('users.smart_onboarding', {
+      userId: 999,
+      roles: ['GUEST'],
+      organizationUnitId: 88,
+    });
+    expect(evalOutsider.enabled).toBe(false);
+    expect(evalOutsider.reason).toBe('TARGET_MISMATCH');
+
+    // 5.2.6: Bật theo tỷ lệ người dùng (rolloutPercentage 0..100% phục vụ rollout dần)
+    await featureFlagsService.updateFeatureFlag(
+      'users.smart_onboarding',
+      {
+        targetUserIds: [],
+        targetRoles: [],
+        targetOrganizationUnitIds: [],
+        rolloutPercentage: 30, // Chỉ bật cho 30% người dùng
+        reason: 'Rollout dần cho 30% người dùng toàn hệ thống',
+      },
+      adminActor,
+    );
+
+    let matchedRolloutUsers = 0;
+    for (let uid = 1; uid <= 100; uid++) {
+      const bucket = computeFeatureFlagRolloutBucket('users.smart_onboarding', String(uid));
+      const res = await featureFlagsService.evaluate('users.smart_onboarding', {
+        userId: uid,
+      });
+      if (bucket < 30) {
+        expect(res.enabled).toBe(true);
+        expect(res.reason).toBe('ROLLOUT_MATCH');
+        matchedRolloutUsers++;
+      } else {
+        expect(res.enabled).toBe(false);
+        expect(res.reason).toBe('ROLLOUT_EXCLUDED');
+      }
+      // Đảm bảo tính nhất quán (deterministic): cùng 1 user gọi lại luôn nhận đúng kết quả đó
+      const repeatRes = await featureFlagsService.evaluate('users.smart_onboarding', {
+        userId: uid,
+      });
+      expect(repeatRes.enabled).toBe(res.enabled);
+    }
+    expect(matchedRolloutUsers).toBeGreaterThan(10);
+    expect(matchedRolloutUsers).toBeLessThan(60);
+
+    // 5.2.7: Đặt thời gian bắt đầu và kết thúc (Tự động đóng tính năng thử nghiệm khi hết hạn)
+    await expect(
+      featureFlagsService.updateFeatureFlag(
+        'users.smart_onboarding',
+        {
+          startsAt: '2026-12-10T00:00:00.000Z',
+          endsAt: '2026-12-01T00:00:00.000Z', // Lỗi: startsAt > endsAt
+        },
+        adminActor,
+      ),
+    ).rejects.toThrow(/startsAt must be earlier than or equal to endsAt/i);
+
+    await featureFlagsService.updateFeatureFlag(
+      'users.smart_onboarding',
+      {
+        rolloutPercentage: 100,
+        startsAt: '2026-11-01T00:00:00.000Z',
+        endsAt: '2026-11-15T23:59:59.000Z',
+        reason: 'Đặt lịch chạy thử nghiệm từ 01/11/2026 đến hết 15/11/2026',
+      },
+      adminActor,
+    );
+
+    // Trước thời gian bắt đầu -> NOT_STARTED (enabled = false)
+    const evalBeforeStart = await featureFlagsService.evaluate('users.smart_onboarding', {
+      userId: 101,
+      at: '2026-10-25T10:00:00.000Z',
+    });
+    expect(evalBeforeStart.enabled).toBe(false);
+    expect(evalBeforeStart.reason).toBe('NOT_STARTED');
+
+    // Trong khung thời gian thử nghiệm -> ENABLED_ALL (enabled = true)
+    const evalDuringWindow = await featureFlagsService.evaluate('users.smart_onboarding', {
+      userId: 101,
+      at: '2026-11-10T10:00:00.000Z',
+    });
+    expect(evalDuringWindow.enabled).toBe(true);
+    expect(evalDuringWindow.reason).toBe('ENABLED_ALL');
+
+    // Sau thời điểm kết thúc -> Tự động đóng tính năng thử nghiệm (EXPIRED, enabled = false)
+    const evalAfterEnd = await featureFlagsService.evaluate('users.smart_onboarding', {
+      userId: 101,
+      at: '2026-11-16T00:00:01.000Z',
+    });
+    expect(evalAfterEnd.enabled).toBe(false);
+    expect(evalAfterEnd.reason).toBe('EXPIRED');
+
+    // 5.2.8: Ghi lịch sử thay đổi Feature Flag (Phục vụ kiểm soát: biết ai sửa, hành động gì, trạng thái cũ/mới)
+    const histories = await featureFlagsService.listHistory({
+      flagKey: 'users.smart_onboarding',
+    });
+    expect(histories.length).toBeGreaterThanOrEqual(5);
+
+    const actions = histories.map((h) => h.action);
+    expect(actions).toContain('CREATE');
+    expect(actions).toContain('TOGGLE');
+    expect(actions).toContain('UPDATE');
+
+    const latestHistory = histories[0]!;
+    expect(latestHistory.flagKey).toBe('users.smart_onboarding');
+    expect(latestHistory.actorUserId).toBe(1);
+    expect(latestHistory.actorIdentifier).toBe('superadmin@gmail.com');
+    expect(latestHistory.newState).toMatchObject({
+      startsAt: '2026-11-01T00:00:00.000Z',
+      endsAt: '2026-11-15T23:59:59.000Z',
+    });
+
+    const auditEntries = await auditLogService.listPaginated({
+      module: 'settings',
+      feature: 'feature_flags',
+    });
+    expect(auditEntries.meta.totalItems).toBeGreaterThanOrEqual(5);
   });
 });
