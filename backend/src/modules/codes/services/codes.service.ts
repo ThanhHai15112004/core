@@ -21,6 +21,8 @@ import {
   discoverManifestCodeTypes,
   parseCsvToMatrix,
   parseXlsxToMatrix,
+  safeJsonParseObject,
+  safeJsonParseStringArray,
 } from '@packages/kernel/index.js';
 import { CoreI18nService, LocaleContext, LocaleFormatter } from '@packages/i18n/index.js';
 import { AuditLogService } from '@packages/security/index.js';
@@ -1232,7 +1234,7 @@ export class CodesService implements ICodesPublicService, OnModuleInit {
     await this.ensureCodeTypeExists(normalized);
 
     let entity = await this.codeValueRepository.findByTypeAndNumericCode(normalized, numericCode);
-    if (!entity) {
+    if (!entity && this.registry.isValidNumericCode(normalized, numericCode, true)) {
       await this.syncManifests();
       entity = await this.codeValueRepository.findByTypeAndNumericCode(normalized, numericCode);
     }
@@ -1429,28 +1431,10 @@ export class CodesService implements ICodesPublicService, OnModuleInit {
   }
 
   private parseJsonObject<T>(raw: string | null | undefined, fallback: T): T {
-    if (!raw) return fallback;
-    try {
-      const parsed = JSON.parse(raw) as unknown;
-      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-        return parsed as T;
-      }
-      return fallback;
-    } catch {
-      return fallback;
-    }
+    return safeJsonParseObject(raw, fallback as Record<string, unknown> | null) as T;
   }
 
   private parseJsonArray(raw: string | null | undefined): string[] {
-    if (!raw) return [];
-    try {
-      const parsed = JSON.parse(raw) as unknown;
-      if (Array.isArray(parsed)) {
-        return parsed.map((v) => String(v).trim()).filter(Boolean);
-      }
-      return [];
-    } catch {
-      return [];
-    }
+    return safeJsonParseStringArray(raw);
   }
 }

@@ -286,12 +286,14 @@ export class DataScopeService {
     }
 
     // 3. Kiểm tra theo danh sách User được phép (SELF hoặc SUBORDINATES)
+    const normalizedResource = resource.trim().toLowerCase();
+    const isUserResource = normalizedResource === 'users' || normalizedResource === 'user';
     const targetOwnerId =
       target.ownerId !== undefined && target.ownerId !== null
         ? Number(target.ownerId)
-        : typeof target.id === 'number'
-          ? target.id
-          : Number(target.id);
+        : isUserResource && target.id !== undefined && target.id !== null
+          ? Number(target.id)
+          : NaN;
 
     if (
       !Number.isNaN(targetOwnerId) &&

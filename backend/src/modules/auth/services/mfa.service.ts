@@ -5,6 +5,8 @@ import {
   BadRequestAppException,
   NotFoundAppException,
   UnauthorizedAppException,
+  maskEmail as sharedMaskEmail,
+  maskPhone as sharedMaskPhone,
 } from '@packages/kernel/index.js';
 import {
   FieldEncryptionService,
@@ -673,7 +675,9 @@ export class MfaService {
     }
 
     const candidateHash = this.passwordHasher.sha256(rawTrustedDeviceToken.trim());
-    const matched = activeDevices.find((d) => d.tokenHash === candidateHash);
+    const matched = activeDevices.find((d) =>
+      this.passwordHasher.safeEqualHex(d.tokenHash, candidateHash),
+    );
     if (!matched) {
       return false;
     }
@@ -922,7 +926,7 @@ export class MfaService {
       return false;
     }
     const candidateHash = this.passwordHasher.sha256(code.trim());
-    if (candidateHash === config.emailOtpCodeHash) {
+    if (this.passwordHasher.safeEqualHex(candidateHash, config.emailOtpCodeHash)) {
       return true;
     }
     config.emailOtpFailedAttempts = currentFailed + 1;
@@ -952,7 +956,7 @@ export class MfaService {
       return false;
     }
     const candidateHash = this.passwordHasher.sha256(code.trim());
-    if (candidateHash === envelope.smsOtpCodeHash) {
+    if (this.passwordHasher.safeEqualHex(candidateHash, envelope.smsOtpCodeHash)) {
       return true;
     }
     envelope.smsOtpFailedAttempts = currentFailed + 1;
@@ -974,7 +978,9 @@ export class MfaService {
     if (envelope.codes.length === 0) return false;
 
     const candidateHash = this.passwordHasher.sha256(this.normalizeRecoveryCode(rawCode));
-    const idx = envelope.codes.indexOf(candidateHash);
+    const idx = envelope.codes.findIndex((stored) =>
+      this.passwordHasher.safeEqualHex(stored, candidateHash),
+    );
     if (idx === -1) {
       return false;
     }
@@ -1125,16 +1131,11 @@ export class MfaService {
 
   /** Che bớt địa chỉ email khi trả về thông báo gửi OTP (vd: ad***@gmail.com) */
   public maskEmail(email: string): string {
-    const [localPart, domain] = email.split('@');
-    if (!localPart || !domain) return '***';
-    const visible = localPart.slice(0, Math.min(2, localPart.length));
-    return `${visible}***@${domain}`;
+    return sharedMaskEmail(email);
   }
 
   /** Che bớt số điện thoại khi trả về thông báo gửi SMS OTP (vd: 090****456) */
   public maskPhone(phone: string): string {
-    const cleaned = phone.trim();
-    if (cleaned.length <= 4) return '***';
-    return `${cleaned.slice(0, 3)}****${cleaned.slice(-3)}`;
+    return sharedMaskPhone(phone);
   }
 }

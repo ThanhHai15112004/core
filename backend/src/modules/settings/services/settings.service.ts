@@ -94,9 +94,10 @@ export class SettingsService implements ISettingsPublicService, OnModuleInit {
     this.registry = settingRegistry ?? defaultSettingRegistry;
     this.encryptionService = fieldEncryptionService ?? new FieldEncryptionService();
     this.registry.onSettingChanged(async (evt) => {
+      const skipDbPersist = this.isPublishingChange;
       await this.invalidateSettingCacheForKey(evt.key);
       if (
-        !this.isPublishingChange &&
+        !skipDbPersist &&
         evt.environment === 'ALL' &&
         evt.organizationUnitId === null &&
         this.settingRepository
@@ -788,16 +789,20 @@ export class SettingsService implements ISettingsPublicService, OnModuleInit {
     }
 
     if (this.cacheProvider) {
-      const l2Cached = await this.cacheProvider.get<ResolvedSettingView<T>>(cacheKey);
-      if (l2Cached) {
-        this.resolvedCache.set(cacheKey, {
-          entry: l2Cached,
-          expiresAtMs: nowMs + SETTING_CACHE_TTL_SEC * 1000,
-        });
-        return {
-          ...l2Cached,
-          fromCache: true,
-        };
+      try {
+        const l2Cached = await this.cacheProvider.get<ResolvedSettingView<T>>(cacheKey);
+        if (l2Cached) {
+          this.resolvedCache.set(cacheKey, {
+            entry: l2Cached,
+            expiresAtMs: nowMs + SETTING_CACHE_TTL_SEC * 1000,
+          });
+          return {
+            ...l2Cached,
+            fromCache: true,
+          };
+        }
+      } catch {
+        // Fallback to DB/L1 if L2 cache provider fails
       }
     }
 
@@ -823,7 +828,11 @@ export class SettingsService implements ISettingsPublicService, OnModuleInit {
       expiresAtMs: nowMs + SETTING_CACHE_TTL_SEC * 1000,
     });
     if (this.cacheProvider) {
-      await this.cacheProvider.set(cacheKey, freshResolved, SETTING_CACHE_TTL_SEC);
+      try {
+        await this.cacheProvider.set(cacheKey, freshResolved, SETTING_CACHE_TTL_SEC);
+      } catch {
+        // Ignore L2 cache set errors
+      }
     }
 
     return freshResolved;

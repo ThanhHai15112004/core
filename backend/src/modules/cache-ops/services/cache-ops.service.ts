@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { CoreConfigService } from '@packages/config/index.js';
 import { CoreI18nService } from '@packages/i18n/index.js';
+import { formatBytes } from '@packages/kernel/index.js';
 import { RedisService } from '@packages/redis/index.js';
 import {
   CacheConnectionService,
@@ -101,18 +102,7 @@ const startOfDay = (t: number) => {
   return d.getTime();
 };
 
-/** Định dạng số byte thành chuỗi dung lượng dễ đọc (KB, MB, GB) */
-export function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  const units = ['KB', 'MB', 'GB', 'TB'];
-  let v = bytes / 1024;
-  let i = 0;
-  while (v >= 1024 && i < units.length - 1) {
-    v /= 1024;
-    i++;
-  }
-  return `${v >= 100 ? v.toFixed(0) : v.toFixed(1)} ${units[i]}`;
-}
+export { formatBytes };
 
 /**
  * Cache Monitor: hiệu quả (hit/miss có baseline), keyspace/namespace/TTL, bộ nhớ, eviction, kết nối,

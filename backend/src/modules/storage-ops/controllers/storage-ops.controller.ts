@@ -13,7 +13,7 @@ import {
 } from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import { Public, maskIp } from '@packages/http/index.js';
+import { Public, extractRequestContext, isPrintableString } from '@packages/http/index.js';
 import {
   OBJECT_KINDS,
   type ObjectFilter,
@@ -26,19 +26,16 @@ import { StorageValidationException } from '../exceptions/storage-ops.exceptions
 import type { StorageRange } from '../responses/storage-ops.response.js';
 
 const DAY = 86_400_000;
-/** Định dạng chuỗi ký tự hiển thị an toàn không chứa ký tự điều khiển */
-const printable = (s: string) =>
-  ![...s].some((c) => c.charCodeAt(0) < 32 || c.charCodeAt(0) === 127);
 const rangeSchema = z.object({
   range: z.enum(Object.keys(STORAGE_RANGES) as [StorageRange, ...StorageRange[]]).default('1h'),
 });
 /** Key tương đối (kiểm tra kỹ ở tầng storage: không `..`, không `/` đầu). */
-const keySchema = z.string().min(1).max(1024).refine(printable);
+const keySchema = z.string().min(1).max(1024).refine(isPrintableString);
 const containerSchema = z
   .string()
   .min(1)
   .max(256)
-  .refine((s) => printable(s) && !s.includes('/'));
+  .refine((s) => isPrintableString(s) && !s.includes('/'));
 /** Tuổi object → khoảng [minAge, maxAge] theo lastModified. */
 const AGES: Record<string, [number | null, number | null]> = {
   lt1d: [null, DAY],
@@ -49,12 +46,12 @@ const AGES: Record<string, [number | null, number | null]> = {
 };
 const objectsSchema = z.object({
   container: containerSchema.optional(),
-  prefix: z.string().max(512).refine(printable).default(''),
+  prefix: z.string().max(512).refine(isPrintableString).default(''),
   kind: z.enum(OBJECT_KINDS as [ObjectKind, ...ObjectKind[]]).optional(),
   minSize: z.coerce.number().int().min(0).optional(),
   maxSize: z.coerce.number().int().min(0).optional(),
   age: z.enum(Object.keys(AGES) as [string, ...string[]]).optional(),
-  cursor: z.string().max(2048).refine(printable).default(''),
+  cursor: z.string().max(2048).refine(isPrintableString).default(''),
   count: z.coerce.number().int().min(10).max(500).default(100),
 });
 const signedUrlSchema = z.object({
@@ -67,7 +64,7 @@ const signedUrlSchema = z.object({
 });
 const abortSchema = z.object({
   key: keySchema,
-  uploadId: z.string().min(1).max(1024).refine(printable),
+  uploadId: z.string().min(1).max(1024).refine(isPrintableString),
   confirm: z.literal('ABORT'),
 });
 
@@ -79,7 +76,7 @@ function parse<T>(schema: z.ZodType<T>, value: unknown): T {
 }
 
 /** Trích xuất thông tin ngữ cảnh yêu cầu (RequestContext) từ Fastify request */
-const context = (req: FastifyRequest): OperationContext => ({ ip: maskIp(req.ip), actor: null });
+const context = (req: FastifyRequest): OperationContext => extractRequestContext(req);
 /** Tên file an toàn cho Content-Disposition. */
 const fileName = (key: string) =>
   (key.split('/').pop() ?? 'download').replace(/[^\w.\-() ]+/g, '_');

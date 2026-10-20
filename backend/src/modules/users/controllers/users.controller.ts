@@ -175,8 +175,9 @@ export class UsersController {
   public async update(
     @ValidatedParams(positiveIntParamSchema, 'id') id: number,
     @ValidatedBody(updateUserSchema) body: UpdateUserRequest,
+    @CurrentUser() actor?: UserIdentity,
   ): Promise<UserResponse> {
-    return this.usersService.update(id, body);
+    return this.usersService.update(id, body, actor?.id, actor);
   }
 
   /** Khóa tài khoản người dùng (Mục 3.1.3) */
@@ -192,7 +193,7 @@ export class UsersController {
     @ValidatedBody(lockUserSchema) body: LockUserRequest,
     @CurrentUser() actor?: UserIdentity,
   ): Promise<UserResponse> {
-    return this.usersService.lockUser(id, body, actor?.id);
+    return this.usersService.lockUser(id, body, actor?.id, actor);
   }
 
   /** Mở khóa tài khoản người dùng (Mục 3.1.3) */
@@ -207,7 +208,7 @@ export class UsersController {
     @ValidatedParams(positiveIntParamSchema, 'id') id: number,
     @CurrentUser() actor?: UserIdentity,
   ): Promise<UserResponse> {
-    return this.usersService.unlockUser(id, actor?.id);
+    return this.usersService.unlockUser(id, actor?.id, actor);
   }
 
   /** Vô hiệu hóa người dùng — chuyển trạng thái sang INACTIVE (2) (Mục 3.1.4) */
@@ -222,7 +223,7 @@ export class UsersController {
     @ValidatedParams(positiveIntParamSchema, 'id') id: number,
     @CurrentUser() actor?: UserIdentity,
   ): Promise<UserResponse> {
-    return this.usersService.deactivateUser(id, undefined, actor?.id);
+    return this.usersService.deactivateUser(id, undefined, actor?.id, actor);
   }
 
   /** Kích hoạt lại người dùng — chuyển trạng thái sang ACTIVE (1) (Mục 3.1.10) */
@@ -237,7 +238,7 @@ export class UsersController {
     @ValidatedParams(positiveIntParamSchema, 'id') id: number,
     @CurrentUser() actor?: UserIdentity,
   ): Promise<UserResponse> {
-    return this.usersService.activateUser(id, actor?.id);
+    return this.usersService.activateUser(id, actor?.id, actor);
   }
 
   /** Thay đổi trạng thái người dùng Active (1) / Inactive (2) / Locked (3) / Archived (4) (Mục 3.1.10) */
@@ -252,7 +253,7 @@ export class UsersController {
     @ValidatedBody(changeUserStatusSchema) body: ChangeUserStatusRequest,
     @CurrentUser() actor?: UserIdentity,
   ): Promise<UserResponse> {
-    return this.usersService.changeStatus(id, body, actor?.id);
+    return this.usersService.changeStatus(id, body, actor?.id, actor);
   }
 
   /** Lưu trữ (Archive / Soft Delete) người dùng (Mục 3.1.4) */
@@ -267,7 +268,7 @@ export class UsersController {
     @ValidatedParams(positiveIntParamSchema, 'id') id: number,
     @CurrentUser() actor?: UserIdentity,
   ): Promise<UserResponse> {
-    return this.usersService.archiveUser(id, actor?.id);
+    return this.usersService.archiveUser(id, actor?.id, actor);
   }
 
   /** Khôi phục người dùng đã lưu trữ (Mục 3.1.4) */
@@ -282,7 +283,7 @@ export class UsersController {
     @ValidatedParams(positiveIntParamSchema, 'id') id: number,
     @CurrentUser() actor?: UserIdentity,
   ): Promise<UserResponse> {
-    return this.usersService.restoreUser(id, actor?.id);
+    return this.usersService.restoreUser(id, actor?.id, actor);
   }
 
   /** Gán vai trò cho người dùng (Mục 3.1.5) */
@@ -297,7 +298,7 @@ export class UsersController {
     @ValidatedBody(assignUserRolesSchema) body: AssignUserRolesRequest,
     @CurrentUser() actor?: UserIdentity,
   ): Promise<UserResponse> {
-    return this.usersService.assignRoles(id, body, actor?.id);
+    return this.usersService.assignRoles(id, body, actor?.id, actor);
   }
 
   /** Gán người dùng vào các đơn vị hoặc chi nhánh (Mục 3.1.6) */
@@ -310,8 +311,9 @@ export class UsersController {
   public async assignOrganizations(
     @ValidatedParams(positiveIntParamSchema, 'id') id: number,
     @ValidatedBody(assignUserOrganizationsSchema) body: AssignUserOrganizationsRequest,
+    @CurrentUser() actor?: UserIdentity,
   ): Promise<UserResponse> {
-    return this.usersService.assignOrganizations(id, body);
+    return this.usersService.assignOrganizations(id, body, actor?.id, actor);
   }
 
   /** Reset mật khẩu người dùng từ trang quản trị (Mục 3.3.3 — chỉ người có quyền được thực hiện) */
@@ -332,7 +334,7 @@ export class UsersController {
     @ValidatedBody(adminResetUserPasswordSchema) body: AdminResetUserPasswordRequest,
     @CurrentUser() actor?: UserIdentity,
   ) {
-    return this.usersService.adminResetPassword(id, body ?? {}, actor?.id);
+    return this.usersService.adminResetPassword(id, body ?? {}, actor?.id, actor);
   }
 
   /** Reset MFA có kiểm soát từ trang quản trị (Mục 3.5.8 — có xác minh hoặc phê duyệt) */
@@ -358,7 +360,7 @@ export class UsersController {
     @ValidatedBody(adminResetUserMfaSchema) body: AdminResetUserMfaRequest,
     @CurrentUser() actor?: UserIdentity,
   ) {
-    return this.usersService.adminResetMfa(id, body, actor?.id);
+    return this.usersService.adminResetMfa(id, body, actor?.id, actor);
   }
 
   /** Thu hồi toàn bộ phiên đăng nhập của người dùng khi có sự cố (Mục 3.4.6) */
@@ -381,7 +383,7 @@ export class UsersController {
     body?: { reason?: string },
     @CurrentUser() actor?: UserIdentity,
   ) {
-    return this.usersService.revokeUserSessions(id, body?.reason, actor?.id);
+    return this.usersService.revokeUserSessions(id, body?.reason, actor?.id, actor);
   }
 
   /** Xem lịch sử đăng nhập & đăng xuất của một người dùng theo thời gian, IP và thiết bị (Mục 3.4.7 & 4.3.6) */

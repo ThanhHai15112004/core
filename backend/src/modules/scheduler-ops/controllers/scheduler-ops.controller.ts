@@ -1,7 +1,7 @@
 import { Controller, Get, HttpCode, HttpStatus, Param, Post, Query, Req } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import { Public, maskIp } from '@packages/http/index.js';
+import { Public, extractRequestContext, isPrintableString } from '@packages/http/index.js';
 import {
   EXECUTION_STATUSES,
   EXECUTION_TRIGGERS,
@@ -14,10 +14,7 @@ import type { SchedulerOperationContext } from '../services/scheduler-operations
 import { SchedulerValidationException } from '../exceptions/scheduler-ops.exceptions.js';
 import type { SchedulerMetric, SchedulerRange } from '../responses/scheduler-ops.response.js';
 
-/** Định dạng chuỗi ký tự hiển thị an toàn không chứa ký tự điều khiển */
-const printable = (s: string) =>
-  ![...s].some((c) => c.charCodeAt(0) < 32 || c.charCodeAt(0) === 127);
-const idSchema = z.string().min(1).max(200).refine(printable);
+const idSchema = z.string().min(1).max(200).refine(isPrintableString);
 /** Xác định dải thời gian truy vấn theo tham số yêu cầu */
 const range = (fallback: SchedulerRange) =>
   z.enum(Object.keys(SCHEDULER_RANGES) as [SchedulerRange, ...SchedulerRange[]]).default(fallback);
@@ -52,8 +49,8 @@ const executionsSchema = z.object({
 const upcomingSchema = z.object({ hours: z.coerce.number().int().min(1).max(168).default(24) });
 const timelineSchema = z.object({ range: range('6h') });
 const cronSchema = z.object({
-  expression: z.string().trim().min(1).max(120).refine(printable),
-  timezone: z.string().trim().min(1).max(64).refine(printable).optional(),
+  expression: z.string().trim().min(1).max(120).refine(isPrintableString),
+  timezone: z.string().trim().min(1).max(64).refine(isPrintableString).optional(),
 });
 
 /** Xác thực và ép kiểu dữ liệu đầu vào theo schema Zod */
@@ -64,10 +61,7 @@ function parse<T>(schema: z.ZodType<T>, value: unknown): T {
 }
 
 /** Trích xuất thông tin ngữ cảnh yêu cầu (RequestContext) từ Fastify request */
-const context = (req: FastifyRequest): SchedulerOperationContext => ({
-  ip: maskIp(req.ip),
-  actor: null,
-});
+const context = (req: FastifyRequest): SchedulerOperationContext => extractRequestContext(req);
 
 /**
  * Scheduler — lịch chạy và vận hành task: tổng quan, task + chi tiết, lịch sử thực thi, lịch sắp tới, timeline,

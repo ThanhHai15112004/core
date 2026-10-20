@@ -4,6 +4,8 @@ import {
   BadRequestAppException,
   ForbiddenAppException,
   UnauthorizedAppException,
+  maskEmail as sharedMaskEmail,
+  maskPhone as sharedMaskPhone,
 } from '@packages/kernel/index.js';
 import { PasswordHasherService } from '@packages/security/index.js';
 import {
@@ -327,7 +329,7 @@ export class VerificationService {
     }
 
     const candidateHash = this.passwordHasher.sha256(dto.code.trim());
-    if (record.codeHash !== candidateHash) {
+    if (!this.passwordHasher.safeEqualHex(record.codeHash, candidateHash)) {
       record.attemptCount += 1;
       if (record.attemptCount >= record.maxAttempts) {
         record.expiresAt = new Date(0);
@@ -435,15 +437,10 @@ export class VerificationService {
   }
 
   public maskEmail(email: string): string {
-    const [localPart, domain] = email.split('@');
-    if (!localPart || !domain) return '***';
-    const visible = localPart.slice(0, Math.min(2, localPart.length));
-    return `${visible}***@${domain}`;
+    return sharedMaskEmail(email);
   }
 
   public maskPhone(phone: string): string {
-    const cleaned = phone.trim();
-    if (cleaned.length <= 4) return '***';
-    return `${cleaned.slice(0, 3)}****${cleaned.slice(-3)}`;
+    return sharedMaskPhone(phone);
   }
 }

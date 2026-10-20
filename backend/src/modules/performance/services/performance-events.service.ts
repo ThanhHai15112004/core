@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import { CoreConfigService } from '@packages/config/index.js';
+import { safeJsonParse as parse } from '@packages/kernel/index.js';
 import { RedisService } from '@packages/redis/index.js';
 import type { PerfSeverity, RuleKey } from '../responses/performance.response.js';
 import type { ActiveBottleneck } from './performance-rules.js';
@@ -28,16 +29,6 @@ export const performanceKeys = (redis: RedisService) => ({
   active: () => redis.key('perf', 'active'),
   evaluateLock: () => redis.key('perf', 'lock', 'evaluate'),
 });
-
-/** Xác thực và ép kiểu dữ liệu đầu vào theo schema Zod */
-function parse<T>(raw: string | null | undefined): T | null {
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw) as T;
-  } catch {
-    return null;
-  }
-}
 
 /** Sự kiện và trạng thái điểm nghẽn trong Redis (key qua `REDIS_PREFIX`). */
 @Injectable()

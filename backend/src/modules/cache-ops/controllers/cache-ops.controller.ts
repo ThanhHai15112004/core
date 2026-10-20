@@ -12,7 +12,7 @@ import {
 } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import { Public, maskIp } from '@packages/http/index.js';
+import { Public, extractRequestContext, isPrintableString } from '@packages/http/index.js';
 import type { OperationContext } from '@packages/cache/index.js';
 import { CACHE_OPS_ROUTES as R } from '../routes/cache-ops.routes.js';
 import { CACHE_METRICS, CACHE_RANGES, CacheOpsService } from '../services/cache-ops.service.js';
@@ -24,19 +24,16 @@ const rangeSchema = z.object({ range: rangeEnum.default('1h') });
 const metricsSchema = rangeSchema.extend({
   metric: z.enum(CACHE_METRICS as [CacheMetric, ...CacheMetric[]]).default('hitRate'),
 });
-/** Không có ký tự điều khiển (xuống dòng, NUL…) trong key/pattern. */
-const printable = (s: string) =>
-  ![...s].some((c) => c.charCodeAt(0) < 32 || c.charCodeAt(0) === 127);
 /** Key tương đối vùng cache (không gồm prefix). */
-const keySchema = z.string().min(1).max(1024).refine(printable);
+const keySchema = z.string().min(1).max(1024).refine(isPrintableString);
 /** Tên namespace: không chứa ký tự glob. */
 const namespaceSchema = z
   .string()
   .min(1)
   .max(256)
-  .refine((s) => printable(s) && !/[*?[\]]/.test(s));
+  .refine((s) => isPrintableString(s) && !/[*?[\]]/.test(s));
 const keysSchema = z.object({
-  match: z.string().max(256).refine(printable).default(''),
+  match: z.string().max(256).refine(isPrintableString).default(''),
   type: z
     .string()
     .regex(/^[a-z]{1,16}$/)
@@ -58,7 +55,7 @@ function parse<T>(schema: z.ZodType<T>, value: unknown): T {
 }
 
 /** Trích xuất thông tin ngữ cảnh yêu cầu (RequestContext) từ Fastify request */
-const context = (req: FastifyRequest): OperationContext => ({ ip: maskIp(req.ip), actor: null });
+const context = (req: FastifyRequest): OperationContext => extractRequestContext(req);
 
 /**
  * Cache Monitor — hiệu quả, keyspace/namespace, bộ nhớ, kết nối, lỗi & sự kiện, thao tác.

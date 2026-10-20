@@ -24,6 +24,8 @@ import type { OrganizationUnitResponse } from '../responses/organizations.respon
 
 @Injectable()
 export class OrganizationsService implements IOrganizationsPublicService {
+  private unitUsageCountDelegate?: (unitId: number) => Promise<number>;
+
   constructor(
     private readonly repository: OrganizationUnitRepository,
     private readonly mapper: OrganizationsMapper,
@@ -151,6 +153,12 @@ export class OrganizationsService implements IOrganizationsPublicService {
           { parentId: dto.parentId },
         ]);
       }
+      const descendants = await this.resolveDescendantUnitIds([Number(id)]);
+      if (descendants.includes(Number(dto.parentId))) {
+        throw new BadRequestAppException('organizations.circularParentHierarchy', [
+          { id, parentId: dto.parentId },
+        ]);
+      }
     }
 
     if (dto.name !== undefined) entity.name = dto.name.trim();
@@ -182,11 +190,36 @@ export class OrganizationsService implements IOrganizationsPublicService {
     return response;
   }
 
-  /** Xóa mềm đơn vị hoặc chi nhánh */
+  /** Đăng ký delegate đếm số người dùng đang gắn với một đơn vị tổ chức */
+  public registerUnitUsageCountDelegate(delegate: (unitId: number) => Promise<number>): void {
+    this.unitUsageCountDelegate = delegate;
+  }
+
+  /** Xóa mềm đơn vị hoặc chi nhánh (chặn xóa khi còn đơn vị con trực thuộc hoặc nhân sự) */
   public async remove(id: number): Promise<{ deleted: true; id: number }> {
     const entity = await this.repository.findById(id);
     if (!entity) {
       throw new NotFoundAppException('organizations.notFound', { id });
+    }
+
+    const children = await this.repository.findFiltered({ parentId: Number(id) });
+    const activeChildren = children.filter((c) => !c.deletedAt && Number(c.id) !== Number(id));
+    if (activeChildren.length > 0) {
+      throw new ConflictAppException(
+        'organizations.hasChildUnits',
+        [{ id, childCount: activeChildren.length }],
+        { id, childCount: activeChildren.length },
+      );
+    }
+
+    if (this.unitUsageCountDelegate) {
+      const userCount = await this.unitUsageCountDelegate(Number(id));
+      if (userCount > 0) {
+        throw new ConflictAppException('organizations.hasAssignedUsers', [{ id, userCount }], {
+          id,
+          userCount,
+        });
+      }
     }
     const beforeSnapshot = {
       id: entity.id,

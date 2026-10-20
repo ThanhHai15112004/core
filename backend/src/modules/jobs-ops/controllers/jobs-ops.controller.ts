@@ -12,7 +12,12 @@ import {
 } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import { Public, maskIp } from '@packages/http/index.js';
+import {
+  Public,
+  extractRequestContext,
+  isPrintableString,
+  optionalQueryParam,
+} from '@packages/http/index.js';
 import { JOB_SOURCE_KINDS, type JobSourceKind } from '@packages/messaging/index.js';
 import {
   JOB_STATUSES,
@@ -25,43 +30,37 @@ import { JOBS_RANGES, JobsOpsService } from '../services/jobs-ops.service.js';
 import { JobsValidationException } from '../exceptions/jobs-ops.exceptions.js';
 import type { JobsRange } from '../responses/jobs-ops.response.js';
 
-/** Định dạng chuỗi ký tự hiển thị an toàn không chứa ký tự điều khiển */
-const printable = (s: string) =>
-  ![...s].some((c) => c.charCodeAt(0) < 32 || c.charCodeAt(0) === 127);
-const idSchema = z.string().min(1).max(256).refine(printable);
-/** Query rỗng (`?status=`) = không lọc. */
-const optional = <T extends z.ZodTypeAny>(s: T) =>
-  z.preprocess((v) => (v === '' ? undefined : v), s.optional());
+const idSchema = z.string().min(1).max(256).refine(isPrintableString);
 const rangeSchema = z.object({
   range: z.enum(Object.keys(JOBS_RANGES) as [JobsRange, ...JobsRange[]]).default('1h'),
 });
-const queueSchema = z.object({ queue: optional(idSchema) });
+const queueSchema = z.object({ queue: optionalQueryParam(idSchema) });
 /** Cửa sổ thời gian cho job đã kết thúc. */
 const WINDOWS = { '15m': 15, '1h': 60, '6h': 360, '24h': 1440, '7d': 10080 } as const;
 const searchSchema = z.object({
-  status: optional(z.enum(JOB_STATUSES as [JobStatus, ...JobStatus[]])),
-  queue: optional(idSchema),
-  type: optional(z.string().max(200)),
-  search: optional(z.string().max(256).refine(printable)),
-  window: optional(
+  status: optionalQueryParam(z.enum(JOB_STATUSES as [JobStatus, ...JobStatus[]])),
+  queue: optionalQueryParam(idSchema),
+  type: optionalQueryParam(z.string().max(200)),
+  search: optionalQueryParam(z.string().max(256).refine(isPrintableString)),
+  window: optionalQueryParam(
     z.enum(Object.keys(WINDOWS) as [keyof typeof WINDOWS, ...(keyof typeof WINDOWS)[]]),
   ),
-  worker: optional(z.string().max(200)),
-  source: optional(z.enum(JOB_SOURCE_KINDS as [JobSourceKind, ...JobSourceKind[]])),
-  minAttempts: optional(z.coerce.number().int().min(0).max(1000)),
-  minDurationMs: optional(z.coerce.number().int().min(0)),
-  errorType: optional(z.string().max(200)),
-  priority: optional(
+  worker: optionalQueryParam(z.string().max(200)),
+  source: optionalQueryParam(z.enum(JOB_SOURCE_KINDS as [JobSourceKind, ...JobSourceKind[]])),
+  minAttempts: optionalQueryParam(z.coerce.number().int().min(0).max(1000)),
+  minDurationMs: optionalQueryParam(z.coerce.number().int().min(0)),
+  errorType: optionalQueryParam(z.string().max(200)),
+  priority: optionalQueryParam(
     z.enum(['critical', 'high', 'normal', 'low'] as [JobPriorityLevel, ...JobPriorityLevel[]]),
   ),
-  cursor: optional(z.string().max(4000)),
+  cursor: optionalQueryParam(z.string().max(4000)),
   limit: z.coerce.number().int().min(10).max(200).default(50),
 });
 const cancelSchema = z.object({
-  queue: optional(idSchema),
+  queue: optionalQueryParam(idSchema),
   reason: z.string().max(200).optional(),
 });
-const retrySchema = z.object({ queue: optional(idSchema) });
+const retrySchema = z.object({ queue: optionalQueryParam(idSchema) });
 const bulkSchema = z.object({
   jobs: z
     .array(z.object({ queue: idSchema, id: idSchema }))
@@ -77,7 +76,7 @@ export function parse<T>(schema: z.ZodType<T>, value: unknown): T {
 }
 
 /** Trích xuất thông tin ngữ cảnh yêu cầu (RequestContext) từ Fastify request */
-const context = (req: FastifyRequest): JobOperationContext => ({ ip: maskIp(req.ip), actor: null });
+const context = (req: FastifyRequest): JobOperationContext => extractRequestContext(req);
 
 /**
  * Jobs — Job Explorer + Job Operations: tổng quan, tìm job (cursor), chi tiết (vòng đời, lần thử, lỗi, log, nguồn),

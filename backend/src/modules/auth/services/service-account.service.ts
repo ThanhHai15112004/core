@@ -544,7 +544,7 @@ export class ServiceAccountService {
 
     // 4. Kiểm tra Client Secret (Mục 3.6.2 & 3.6.4)
     const candidateHash = this.passwordHasher.sha256(dto.clientSecret);
-    if (candidateHash !== client.clientSecretHash) {
+    if (!this.passwordHasher.safeEqualHex(candidateHash, client.clientSecretHash)) {
       await this.recordClientUsage(client, serviceAccount, {
         ipAddress,
         action: 'ISSUE_TOKEN',

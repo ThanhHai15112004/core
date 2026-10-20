@@ -12,7 +12,7 @@ import {
 } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import { Public, maskIp } from '@packages/http/index.js';
+import { Public, extractRequestContext, isPrintableString } from '@packages/http/index.js';
 import {
   MESSAGE_STATUSES,
   type MessageStatus,
@@ -27,10 +27,7 @@ import {
 import { MessagingValidationException } from '../exceptions/messaging-ops.exceptions.js';
 import type { MessagingMetric, MessagingRange } from '../responses/messaging-ops.response.js';
 
-/** Định dạng chuỗi ký tự hiển thị an toàn không chứa ký tự điều khiển */
-const printable = (s: string) =>
-  ![...s].some((c) => c.charCodeAt(0) < 32 || c.charCodeAt(0) === 127);
-const nameSchema = z.string().min(1).max(256).refine(printable);
+const nameSchema = z.string().min(1).max(256).refine(isPrintableString);
 const rangeSchema = z.object({
   range: z
     .enum(Object.keys(MESSAGING_RANGES) as [MessagingRange, ...MessagingRange[]])
@@ -46,8 +43,8 @@ const messagesSchema = z.object({
   queue: nameSchema.optional(),
   channel: nameSchema.optional(),
   status: z.enum(MESSAGE_STATUSES as [MessageStatus, ...MessageStatus[]]).optional(),
-  producer: z.string().max(64).refine(printable).optional(),
-  search: z.string().max(256).refine(printable).default(''),
+  producer: z.string().max(64).refine(isPrintableString).optional(),
+  search: z.string().max(256).refine(isPrintableString).default(''),
   count: z.coerce.number().int().min(10).max(500).default(100),
 });
 const actionSchema = z.object({ queue: nameSchema });
@@ -60,7 +57,7 @@ function parse<T>(schema: z.ZodType<T>, value: unknown): T {
 }
 
 /** Trích xuất thông tin ngữ cảnh yêu cầu (RequestContext) từ Fastify request */
-const context = (req: FastifyRequest): OperationContext => ({ ip: maskIp(req.ip), actor: null });
+const context = (req: FastifyRequest): OperationContext => extractRequestContext(req);
 
 /**
  * Messaging Monitor — health broker, throughput, lag, channel/producer/consumer, message explorer & vòng đời,

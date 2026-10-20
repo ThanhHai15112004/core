@@ -14,6 +14,8 @@ import {
   defaultFeatureFlagRegistry,
   discoverInstalledModules,
   discoverManifestFeatureFlags,
+  safeJsonParseObject,
+  safeJsonParseStringArray,
   validateFeatureFlagRules,
 } from '@packages/kernel/index.js';
 import { RequestContextService } from '@packages/logging/index.js';
@@ -63,8 +65,9 @@ export class FeatureFlagsService implements IFeatureFlagsPublicService, OnModule
   ) {
     this.registry = featureFlagRegistry ?? defaultFeatureFlagRegistry;
     this.registry.onFlagChanged(async (evt) => {
+      const skipDbPersist = this.isPublishingChange;
       await this.invalidateCacheForFlag(evt.key);
-      if (!this.isPublishingChange && this.flagRepository) {
+      if (!skipDbPersist && this.flagRepository) {
         try {
           const existing = await this.flagRepository.findByKey(evt.key);
           const def = this.registry.getDefinition(evt.key);
@@ -1062,28 +1065,10 @@ export class FeatureFlagsService implements IFeatureFlagsPublicService, OnModule
   }
 
   private parseJsonArray(jsonStr?: string | null): string[] {
-    if (!jsonStr) return [];
-    try {
-      const parsed = JSON.parse(jsonStr);
-      if (Array.isArray(parsed)) {
-        return parsed.map((v) => String(v).trim()).filter(Boolean);
-      }
-    } catch {
-      // Ignore malformed JSON
-    }
-    return [];
+    return safeJsonParseStringArray(jsonStr);
   }
 
   private parseJsonObject(jsonStr?: string | null): Record<string, unknown> | null {
-    if (!jsonStr) return null;
-    try {
-      const parsed = JSON.parse(jsonStr);
-      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-        return parsed as Record<string, unknown>;
-      }
-    } catch {
-      // Ignore malformed JSON
-    }
-    return null;
+    return safeJsonParseObject(jsonStr, null);
   }
 }

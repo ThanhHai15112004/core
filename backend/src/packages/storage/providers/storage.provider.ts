@@ -66,16 +66,16 @@ export class BaseStorageProvider
     this.driver =
       cfg.driver === 's3'
         ? new S3StorageDriver(cfg.s3, async () => ({
-            accessKeyId: await this.secret(cfg.s3.accessKeySecret),
-            secretAccessKey: await this.secret(cfg.s3.secretKeySecret),
+            accessKeyId: await this.secret(cfg.s3.accessKeySecret, cfg.s3.accessKey),
+            secretAccessKey: await this.secret(cfg.s3.secretKeySecret, cfg.s3.secretKey),
           }))
         : new LocalStorageDriver(cfg.localPath);
   }
 
   /** Lấy giá trị secret đã giải mã hoặc kiểm tra cấu hình */
-  private async secret(name: string): Promise<string> {
+  private async secret(name: string, fallbackValue: string = ''): Promise<string> {
     const fromSecrets = await this.secrets?.getSecret(name).catch(() => null);
-    return fromSecrets || process.env[name] || '';
+    return fromSecrets || fallbackValue;
   }
 
   /** Thực thi tác vụ khởi động sau khi toàn bộ ứng dụng hoàn tất bootstrap */

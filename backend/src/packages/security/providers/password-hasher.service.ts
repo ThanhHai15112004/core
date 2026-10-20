@@ -144,6 +144,21 @@ export class PasswordHasherService {
     return createHash('sha256').update(value, 'utf8').digest('hex');
   }
 
+  /** So sánh hai chuỗi băm theo thời gian hằng số (Constant-Time Compare) để chống Timing Attack */
+  public safeEqualHex(a: string | null | undefined, b: string | null | undefined): boolean {
+    if (!a || !b || a.length !== b.length) {
+      return false;
+    }
+    try {
+      const bufA = Buffer.from(a, 'utf8');
+      const bufB = Buffer.from(b, 'utf8');
+      if (bufA.length !== bufB.length) return false;
+      return timingSafeEqual(bufA, bufB);
+    } catch {
+      return false;
+    }
+  }
+
   /** Sinh chuỗi token ngẫu nhiên an toàn mật mã học (Base64URL) */
   public generateRandomToken(byteLength = 32): string {
     return randomBytes(byteLength).toString('base64url');
@@ -226,4 +241,3 @@ export class PasswordHasherService {
     return ` Sec#${randomBytes(6).toString('hex')}!9A`.trim();
   }
 }
-

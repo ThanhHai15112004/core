@@ -2,6 +2,7 @@ import { Injectable, Optional } from '@nestjs/common';
 import { SecretService } from '@packages/security/index.js';
 import { CoreConfigService } from '@packages/config/index.js';
 import { CoreI18nService } from '@packages/i18n/index.js';
+import { formatBytes } from '@packages/kernel/index.js';
 import {
   AGE_BUCKETS,
   OBJECT_KINDS,
@@ -94,18 +95,7 @@ const startOfDay = (t: number) => {
 const iso = (t: number | null | undefined) =>
   t === null || t === undefined ? null : new Date(t).toISOString();
 
-/** Định dạng số byte thành chuỗi dung lượng dễ đọc (KB, MB, GB) */
-export function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  const units = ['KB', 'MB', 'GB', 'TB'];
-  let v = bytes / 1024;
-  let i = 0;
-  while (v >= 1024 && i < units.length - 1) {
-    v /= 1024;
-    i++;
-  }
-  return `${v >= 100 ? v.toFixed(0) : v.toFixed(1)} ${units[i]}`;
-}
+export { formatBytes };
 
 /**
  * Storage Monitor: health, capacity & tăng trưởng (list/head của provider), container, object explorer,

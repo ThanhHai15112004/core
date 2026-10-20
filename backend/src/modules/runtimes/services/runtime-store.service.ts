@@ -1,4 +1,5 @@
 import { Injectable, Optional } from '@nestjs/common';
+import { safeJsonParse, safeJsonParseList } from '@packages/kernel/index.js';
 import { RedisService } from '@packages/redis/index.js';
 import { PrometheusQueryClient } from '@packages/metrics/index.js';
 import {
@@ -14,16 +15,6 @@ import {
 import { LogStreamReader, type LogEntry } from '@packages/logging/index.js';
 
 const EVENT_SCAN_LIMIT = 2000;
-
-/** Phân tích cú pháp chuỗi JSON an toàn với giá trị dự phòng */
-function parseJson<T>(raw: string | null | undefined): T | null {
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw) as T;
-  } catch {
-    return null;
-  }
-}
 
 /** Đọc telemetry runtime từ Redis và Prometheus (chỉ đọc, phía API). */
 @Injectable()
@@ -55,7 +46,7 @@ export class RuntimeStoreService {
     const raws = await this.redis.client.mget(...ids.map((id) => this.keys.heartbeat(id)));
     const map = new Map<RuntimeId, RuntimeHeartbeat>();
     raws.forEach((raw, i) => {
-      const hb = parseJson<RuntimeHeartbeat>(raw);
+      const hb = safeJsonParse<RuntimeHeartbeat>(raw);
       if (hb) map.set(ids[i]!, hb);
     });
     return map;
@@ -72,7 +63,7 @@ export class RuntimeStoreService {
         runtime: record['runtime'] as RuntimeId,
         type: record['type'] as RuntimeEventType,
         at: record['at'] ?? new Date(Number(id.split('-')[0])).toISOString(),
-        data: parseJson<RuntimeEvent['data']>(record['data']) ?? {},
+        data: safeJsonParse<RuntimeEvent['data']>(record['data']) ?? {},
       };
     });
   }
@@ -120,7 +111,9 @@ export class RuntimeStoreService {
     }
 
     if (!this.isAvailable()) return [];
-    const hb = parseJson<RuntimeHeartbeat>(await this.redis.client.get(this.keys.heartbeat(id)));
+    const hb = safeJsonParse<RuntimeHeartbeat>(
+      await this.redis.client.get(this.keys.heartbeat(id)),
+    );
     if (!hb) return [];
     return [
       {
@@ -143,6 +136,6 @@ export class RuntimeStoreService {
   /** Lấy lịch sử các lệnh CLI đã được thực thi */
   public async cliHistory(limit = 200): Promise<CliExecution[]> {
     const raws = await this.redis.client.lrange(this.keys.cliHistory(), 0, limit - 1);
-    return raws.map((r) => parseJson<CliExecution>(r)).filter((e): e is CliExecution => e !== null);
+    return safeJsonParseList<CliExecution>(raws);
   }
 }

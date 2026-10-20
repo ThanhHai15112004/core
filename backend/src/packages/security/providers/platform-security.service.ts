@@ -1,4 +1,5 @@
 import { Injectable, Logger, Optional } from '@nestjs/common';
+import { CoreConfigService } from '@packages/config/index.js';
 import { HTTP_ERROR_CODE, TooManyRequestsAppException } from '@packages/kernel/index.js';
 import { RequestContextService } from '@packages/logging/index.js';
 import { AuditLogService } from './audit-log.service.js';
@@ -203,19 +204,24 @@ export class PlatformSecurityService {
   private largeExportRowThreshold = 50;
 
   constructor(
-    @Optional() auditLogOrConfig?: AuditLogService | unknown,
-    @Optional() maybeAuditLog?: AuditLogService,
+    @Optional() auditLogOrConfig?: AuditLogService | CoreConfigService | null,
+    @Optional() maybeAuditLogOrConfig?: AuditLogService | CoreConfigService | null,
   ) {
-    if (maybeAuditLog && typeof (maybeAuditLog as { record?: unknown }).record === 'function') {
-      this.auditLogService = maybeAuditLog;
-    } else if (
-      auditLogOrConfig &&
-      typeof (auditLogOrConfig as { record?: unknown }).record === 'function'
-    ) {
-      this.auditLogService = auditLogOrConfig as AuditLogService;
+    const candidates = [auditLogOrConfig, maybeAuditLogOrConfig];
+    for (const candidate of candidates) {
+      if (candidate && typeof (candidate as AuditLogService).record === 'function') {
+        this.auditLogService = candidate as AuditLogService;
+      }
     }
 
-    const rawEnvOrigins = process.env.CORS_ALLOWED_ORIGINS;
+    const configSvc = candidates.find((c): c is CoreConfigService =>
+      Boolean(
+        c &&
+        typeof (c as CoreConfigService).app === 'object' &&
+        (c as CoreConfigService).app !== null,
+      ),
+    );
+    const rawEnvOrigins = configSvc?.app.corsAllowedOrigins ?? '';
     if (rawEnvOrigins && rawEnvOrigins.trim().length > 0) {
       const parsed = rawEnvOrigins
         .split(',')

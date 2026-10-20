@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { safeJsonParse as parse } from '@packages/kernel/index.js';
 import { RedisService } from '@packages/redis/index.js';
 import { cacheKeys } from '@packages/cache/index.js';
 import { storageKeys } from '@packages/storage/index.js';
@@ -46,15 +47,6 @@ export interface AuditQuery {
   q: string | null;
   cursor: string | null;
   limit: number;
-}
-
-/** Xác thực và ép kiểu dữ liệu đầu vào theo schema Zod */
-function parse<T>(raw: string): T | null {
-  try {
-    return JSON.parse(raw) as T;
-  } catch {
-    return null;
-  }
 }
 
 /**

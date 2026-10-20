@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
+import { safeJsonParse as parse } from '@packages/kernel/index.js';
 import { RedisService } from '@packages/redis/index.js';
 import {
   LOGS_OPERATION_LOG_SIZE,
@@ -22,16 +23,6 @@ export interface LogSnapshot {
   /** Mới nhất trước, mọi runtime. */
   entries: LogEntry[];
   byRuntime: Map<string, LogEntry[]>;
-}
-
-/** Xác thực và ép kiểu dữ liệu đầu vào theo schema Zod */
-function parse<T>(raw: string | null | undefined): T | null {
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw) as T;
-  } catch {
-    return null;
-  }
 }
 
 /** Đọc / ghi dữ liệu Logs trong Redis: stream log, level tạm thời, tình trạng ghi, audit thao tác. */

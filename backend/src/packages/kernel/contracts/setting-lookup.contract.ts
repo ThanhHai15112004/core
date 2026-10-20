@@ -730,9 +730,12 @@ export class SettingRegistryService {
   private readonly listeners = new Set<SettingChangeListener>();
   private nextGroupId = 1;
   private nextDefinitionId = 1;
-  private activeEnvironment = normalizeSettingEnvironment(process.env.NODE_ENV || 'development');
+  private activeEnvironment: SettingEnvironmentName = 'development';
 
-  constructor() {
+  constructor(initialEnvironment?: string) {
+    if (initialEnvironment) {
+      this.activeEnvironment = normalizeSettingEnvironment(initialEnvironment);
+    }
     this.bootstrapFromManifests();
     if (!SettingRegistryService.sharedInstance) {
       SettingRegistryService.sharedInstance = this;
@@ -1187,11 +1190,15 @@ export class SettingRegistryService {
       finalValue = hasValue ? SENSITIVE_SETTING_MASK : '';
     } else {
       let plainSerialized = selectedSerialized;
-      if (selectedEncrypted && options?.decryptor) {
-        try {
-          plainSerialized = options.decryptor(selectedSerialized);
-        } catch {
-          plainSerialized = selectedSerialized;
+      if (selectedEncrypted) {
+        if (options?.decryptor) {
+          try {
+            plainSerialized = options.decryptor(selectedSerialized);
+          } catch {
+            plainSerialized = def.defaultSerializedValue ?? '';
+          }
+        } else {
+          plainSerialized = def.defaultSerializedValue ?? '';
         }
       }
       finalValue = deserializeSettingValue(plainSerialized, def.valueType);
@@ -1247,8 +1254,13 @@ export class SettingRegistryService {
   }
 
   /** Đọc nhanh cấu hình kiểu `number` (ví dụ: `getNumber('security.password.min_length', undefined, 8)`) */
-  public getNumber(key: string, context?: SettingResolveContext, fallback = 0): number {
-    const resolved = this.resolve<number>(key, context, { maskSensitive: false });
+  public getNumber(
+    key: string,
+    context?: SettingResolveContext,
+    fallback = 0,
+    decryptor?: (cipherText: string) => string,
+  ): number {
+    const resolved = this.resolve<number>(key, context, { maskSensitive: false, decryptor });
     if (!resolved || typeof resolved.value !== 'number' || !Number.isFinite(resolved.value)) {
       return fallback;
     }
@@ -1256,8 +1268,13 @@ export class SettingRegistryService {
   }
 
   /** Đọc nhanh cấu hình kiểu `boolean` */
-  public getBoolean(key: string, context?: SettingResolveContext, fallback = false): boolean {
-    const resolved = this.resolve<boolean>(key, context, { maskSensitive: false });
+  public getBoolean(
+    key: string,
+    context?: SettingResolveContext,
+    fallback = false,
+    decryptor?: (cipherText: string) => string,
+  ): boolean {
+    const resolved = this.resolve<boolean>(key, context, { maskSensitive: false, decryptor });
     if (!resolved || typeof resolved.value !== 'boolean') {
       return fallback;
     }
@@ -1286,8 +1303,9 @@ export class SettingRegistryService {
     key: string,
     context?: SettingResolveContext,
     fallback?: T,
+    decryptor?: (cipherText: string) => string,
   ): T {
-    const resolved = this.resolve<T>(key, context, { maskSensitive: false });
+    const resolved = this.resolve<T>(key, context, { maskSensitive: false, decryptor });
     if (!resolved || resolved.value === undefined || resolved.value === null) {
       return (fallback ?? ({} as T)) as T;
     }

@@ -163,6 +163,15 @@ export class UsersService implements IUsersPublicService {
         this.organizationsPublicService!.resolveDescendantUnitIds!(unitIds),
       );
     }
+    this.organizationsPublicService?.registerUnitUsageCountDelegate?.(async (unitId) => {
+      const { total } = await this.userRepository.searchPaginated({
+        organizationUnitId: unitId,
+        includeArchived: false,
+        page: 1,
+        limit: 1,
+      });
+      return total;
+    });
     this.effectiveDataScopeService.registerRoleScopeResolver(async (roleCodes) => {
       const roles = await this.rolesPublicService.findByCodes(roleCodes);
       return roles
@@ -174,12 +183,13 @@ export class UsersService implements IUsersPublicService {
       'users.status',
       'users.status',
       async ({ numericCode }) => {
-        const { items } = await this.userRepository.searchPaginated({
+        const { total } = await this.userRepository.searchPaginated({
+          status: parseUserStatus(numericCode),
           includeArchived: true,
           page: 1,
-          limit: 10000,
+          limit: 1,
         });
-        return items.filter((u) => !u.deletedAt && Number(u.status) === Number(numericCode)).length;
+        return total;
       },
     );
     defaultCodeRegistry.registerUsageChecker(
@@ -492,10 +502,19 @@ export class UsersService implements IUsersPublicService {
   }
 
   /** Cập nhật thông tin tài khoản Core (`users`) và chi tiết cá nhân (`user_profiles`) (Mục 3.1.2) */
-  public async update(id: number, dto: UpdateUserRequest): Promise<UserResponse> {
+  public async update(
+    id: number,
+    dto: UpdateUserRequest,
+    actorId?: number,
+    actor?: UserIdentity,
+  ): Promise<UserResponse> {
     const user = await this.userRepository.findByIdWithArchived(id, true);
     if (!user) {
       throw new NotFoundAppException('users.notFound', { id });
+    }
+    if (actor) {
+      const [hydratedTarget] = await this.hydrateUsersList([user]);
+      await this.assertCanAccessUserRecord(hydratedTarget!, actor, 'update');
     }
     const beforeSnapshot = {
       id: user.id,
@@ -595,40 +614,49 @@ export class UsersService implements IUsersPublicService {
         ? this.normalizePreferredTimezone(dto.preferredTimezone)
         : (currentProfile.preferredTimezone ?? resolveSystemDefaultTimezone());
 
-    await this.upsertUserProfile(id, {
-      firstName: nextFirstName,
-      lastName: nextLastName,
-      fullName: nextFullName,
-      avatarUrl: dto.avatarUrl !== undefined ? dto.avatarUrl : (currentProfile.avatarUrl ?? null),
-      dateOfBirth:
-        dto.dateOfBirth !== undefined ? dto.dateOfBirth : (currentProfile.dateOfBirth ?? null),
-      gender: dto.gender !== undefined ? dto.gender : (currentProfile.gender ?? null),
-      identityNumber:
-        dto.identityNumber !== undefined
-          ? dto.identityNumber
-          : (currentProfile.identityNumber ?? null),
-      address: dto.address !== undefined ? dto.address : (currentProfile.address ?? null),
-      city: dto.city !== undefined ? dto.city : (currentProfile.city ?? null),
-      country: dto.country !== undefined ? dto.country : (currentProfile.country ?? null),
-      bio: dto.bio !== undefined ? dto.bio : (currentProfile.bio ?? null),
-      preferredLocale: nextPreferredLocale,
-      preferredTimezone: nextPreferredTimezone,
-    });
+    const persistChanges = async (): Promise<void> => {
+      if (dto.expectedVersion !== undefined) {
+        await this.userRepository.updateWithOptimisticLock(id, dto.expectedVersion, {
+          email: user.email,
+          phone: user.phone ?? null,
+          phoneHash: user.phoneHash ?? null,
+          managerId: user.managerId ?? null,
+        });
+      } else {
+        await this.userRepository.saveEntity(user);
+      }
 
-    if (dto.expectedVersion !== undefined) {
-      await this.userRepository.updateWithOptimisticLock(id, dto.expectedVersion, {
-        email: user.email,
-        phone: user.phone ?? null,
-        phoneHash: user.phoneHash ?? null,
-        managerId: user.managerId ?? null,
+      await this.upsertUserProfile(id, {
+        firstName: nextFirstName,
+        lastName: nextLastName,
+        fullName: nextFullName,
+        avatarUrl: dto.avatarUrl !== undefined ? dto.avatarUrl : (currentProfile.avatarUrl ?? null),
+        dateOfBirth:
+          dto.dateOfBirth !== undefined ? dto.dateOfBirth : (currentProfile.dateOfBirth ?? null),
+        gender: dto.gender !== undefined ? dto.gender : (currentProfile.gender ?? null),
+        identityNumber:
+          dto.identityNumber !== undefined
+            ? dto.identityNumber
+            : (currentProfile.identityNumber ?? null),
+        address: dto.address !== undefined ? dto.address : (currentProfile.address ?? null),
+        city: dto.city !== undefined ? dto.city : (currentProfile.city ?? null),
+        country: dto.country !== undefined ? dto.country : (currentProfile.country ?? null),
+        bio: dto.bio !== undefined ? dto.bio : (currentProfile.bio ?? null),
+        preferredLocale: nextPreferredLocale,
+        preferredTimezone: nextPreferredTimezone,
       });
+    };
+
+    if (this.transactionManager) {
+      await this.transactionManager.runInTransaction(persistChanges);
     } else {
-      await this.userRepository.saveEntity(user);
+      await persistChanges();
     }
 
     await this.invalidateIdentityCache(id);
     const updated = await this.getById(id, true);
     await this.auditLogService?.record({
+      actorUserId: actorId ?? actor?.id ?? null,
       module: 'users',
       feature: 'user-management',
       action: 'user.update',
@@ -651,10 +679,19 @@ export class UsersService implements IUsersPublicService {
   }
 
   /** Khóa tài khoản người dùng kèm lý do và thời hạn khóa tùy chọn (Mục 3.1.3 & 3.1.10) */
-  public async lockUser(id: number, dto: LockUserRequest, actorId?: number): Promise<UserResponse> {
+  public async lockUser(
+    id: number,
+    dto: LockUserRequest,
+    actorId?: number,
+    actor?: UserIdentity,
+  ): Promise<UserResponse> {
     const user = await this.userRepository.findByIdWithArchived(id, true);
     if (!user) {
       throw new NotFoundAppException('users.notFound', { id });
+    }
+    if (actor) {
+      const [hydratedTarget] = await this.hydrateUsersList([user]);
+      await this.assertCanAccessUserRecord(hydratedTarget!, actor, 'status');
     }
 
     let lockedUntilDate: Date | null = null;
@@ -695,10 +732,18 @@ export class UsersService implements IUsersPublicService {
   }
 
   /** Mở khóa tài khoản người dùng và đặt lại bộ đếm đăng nhập sai (Mục 3.1.3 & 3.1.10) */
-  public async unlockUser(id: number, actorId?: number): Promise<UserResponse> {
+  public async unlockUser(
+    id: number,
+    actorId?: number,
+    actor?: UserIdentity,
+  ): Promise<UserResponse> {
     const user = await this.userRepository.findByIdWithArchived(id, true);
     if (!user) {
       throw new NotFoundAppException('users.notFound', { id });
+    }
+    if (actor) {
+      const [hydratedTarget] = await this.hydrateUsersList([user]);
+      await this.assertCanAccessUserRecord(hydratedTarget!, actor, 'status');
     }
 
     const prevStatus = parseUserStatus(user.status);
@@ -733,10 +778,15 @@ export class UsersService implements IUsersPublicService {
     id: number,
     reason?: string | null,
     actorId?: number,
+    actor?: UserIdentity,
   ): Promise<UserResponse> {
     const user = await this.userRepository.findByIdWithArchived(id, true);
     if (!user) {
       throw new NotFoundAppException('users.notFound', { id });
+    }
+    if (actor) {
+      const [hydratedTarget] = await this.hydrateUsersList([user]);
+      await this.assertCanAccessUserRecord(hydratedTarget!, actor, 'status');
     }
 
     const prevStatus = parseUserStatus(user.status);
@@ -772,10 +822,18 @@ export class UsersService implements IUsersPublicService {
   }
 
   /** Kích hoạt lại tài khoản người dùng — chuyển trạng thái sang ACTIVE (1) (Mục 3.1.10) */
-  public async activateUser(id: number, actorId?: number): Promise<UserResponse> {
+  public async activateUser(
+    id: number,
+    actorId?: number,
+    actor?: UserIdentity,
+  ): Promise<UserResponse> {
     const user = await this.userRepository.findByIdWithArchived(id, true);
     if (!user) {
       throw new NotFoundAppException('users.notFound', { id });
+    }
+    if (actor) {
+      const [hydratedTarget] = await this.hydrateUsersList([user]);
+      await this.assertCanAccessUserRecord(hydratedTarget!, actor, 'status');
     }
 
     const prevStatus = parseUserStatus(user.status);
@@ -815,6 +873,7 @@ export class UsersService implements IUsersPublicService {
     id: number,
     dto: ChangeUserStatusRequest,
     actorId?: number,
+    actor?: UserIdentity,
   ): Promise<UserResponse> {
     if (dto.status === USER_STATUS.LOCKED) {
       return this.lockUser(
@@ -824,22 +883,31 @@ export class UsersService implements IUsersPublicService {
           lockedUntil: dto.lockedUntil ?? null,
         },
         actorId,
+        actor,
       );
     }
     if (dto.status === USER_STATUS.INACTIVE) {
-      return this.deactivateUser(id, dto.reason ?? null, actorId);
+      return this.deactivateUser(id, dto.reason ?? null, actorId, actor);
     }
     if (dto.status === USER_STATUS.ARCHIVED) {
-      return this.archiveUser(id, actorId);
+      return this.archiveUser(id, actorId, actor);
     }
-    return this.activateUser(id, actorId);
+    return this.activateUser(id, actorId, actor);
   }
 
   /** Lưu trữ (Archive / Soft Delete) người dùng (status = 4) (Mục 3.1.4) */
-  public async archiveUser(id: number, actorId?: number): Promise<UserResponse> {
+  public async archiveUser(
+    id: number,
+    actorId?: number,
+    actor?: UserIdentity,
+  ): Promise<UserResponse> {
     const user = await this.userRepository.findByIdWithArchived(id, true);
     if (!user) {
       throw new NotFoundAppException('users.notFound', { id });
+    }
+    if (actor) {
+      const [hydratedTarget] = await this.hydrateUsersList([user]);
+      await this.assertCanAccessUserRecord(hydratedTarget!, actor, 'status');
     }
 
     const prevStatus = parseUserStatus(user.status);
@@ -873,10 +941,18 @@ export class UsersService implements IUsersPublicService {
   }
 
   /** Khôi phục người dùng đã lưu trữ (Restore Archived User) (Mục 3.1.4) */
-  public async restoreUser(id: number, actorId?: number): Promise<UserResponse> {
+  public async restoreUser(
+    id: number,
+    actorId?: number,
+    actor?: UserIdentity,
+  ): Promise<UserResponse> {
     const user = await this.userRepository.findByIdWithArchived(id, true);
     if (!user) {
       throw new NotFoundAppException('users.notFound', { id });
+    }
+    if (actor) {
+      const [hydratedTarget] = await this.hydrateUsersList([user]);
+      await this.assertCanAccessUserRecord(hydratedTarget!, actor, 'status');
     }
 
     const prevStatus = parseUserStatus(user.status);
@@ -913,6 +989,7 @@ export class UsersService implements IUsersPublicService {
     id: number,
     dto: AssignUserRolesRequest,
     actorId?: number,
+    actor?: UserIdentity,
   ): Promise<UserResponse> {
     await this.verifySensitiveActionStepUp(
       actorId,
@@ -924,6 +1001,10 @@ export class UsersService implements IUsersPublicService {
     const user = await this.userRepository.findByIdWithArchived(id, false);
     if (!user) {
       throw new NotFoundAppException('users.notFound', { id });
+    }
+    if (actor) {
+      const [hydratedTarget] = await this.hydrateUsersList([user]);
+      await this.assertCanAccessUserRecord(hydratedTarget!, actor, 'update');
     }
 
     const prevLinks = await this.userRoleRepository.findByUserIds([id]);
@@ -974,10 +1055,16 @@ export class UsersService implements IUsersPublicService {
   public async assignOrganizations(
     id: number,
     dto: AssignUserOrganizationsRequest,
+    actorId?: number,
+    actor?: UserIdentity,
   ): Promise<UserResponse> {
     const user = await this.userRepository.findByIdWithArchived(id, false);
     if (!user) {
       throw new NotFoundAppException('users.notFound', { id });
+    }
+    if (actor) {
+      const [hydratedTarget] = await this.hydrateUsersList([user]);
+      await this.assertCanAccessUserRecord(hydratedTarget!, actor, 'update');
     }
 
     const prevLinks = await this.userOrgRepository.findByUserIds([id]);
@@ -1007,6 +1094,7 @@ export class UsersService implements IUsersPublicService {
     await this.invalidateIdentityCache(id);
     const updated = await this.getById(id);
     await this.auditLogService?.record({
+      actorUserId: actorId ?? actor?.id ?? null,
       module: 'users',
       feature: 'user-organizations',
       action: 'user.assign_organizations',
@@ -1477,6 +1565,13 @@ export class UsersService implements IUsersPublicService {
     const user = await this.userRepository.findByIdWithArchived(userId, false);
     if (!user) return;
     const prevStatus = parseUserStatus(user.status);
+    if (prevStatus !== USER_STATUS.LOCKED) {
+      if (user.failedLoginAttempts > 0) {
+        user.failedLoginAttempts = 0;
+        await this.userRepository.saveEntity(user);
+      }
+      return;
+    }
     user.status = USER_STATUS.ACTIVE;
     user.lockedUntil = null;
     user.lockReason = null;
@@ -1597,6 +1692,7 @@ export class UsersService implements IUsersPublicService {
     id: number,
     dto: AdminResetUserMfaInput,
     actorId?: number,
+    actor?: UserIdentity,
   ): Promise<AdminResetUserMfaResult> {
     const reason = dto.reason?.trim();
     if (!reason || reason.length < 3) {
@@ -1610,6 +1706,10 @@ export class UsersService implements IUsersPublicService {
     const user = await this.userRepository.findByIdWithArchived(id, true);
     if (!user) {
       throw new NotFoundAppException('users.notFound', { id });
+    }
+    if (actor) {
+      const [hydratedTarget] = await this.hydrateUsersList([user]);
+      await this.assertCanAccessUserRecord(hydratedTarget!, actor, 'update');
     }
 
     if (this.adminResetMfaDelegate) {
@@ -1643,6 +1743,7 @@ export class UsersService implements IUsersPublicService {
     id: number,
     reason?: string,
     actorId?: number,
+    actor?: UserIdentity,
   ): Promise<{
     revoked: true;
     userId: number;
@@ -1653,6 +1754,10 @@ export class UsersService implements IUsersPublicService {
     const user = await this.userRepository.findByIdWithArchived(id, true);
     if (!user) {
       throw new NotFoundAppException('users.notFound', { id });
+    }
+    if (actor) {
+      const [hydratedTarget] = await this.hydrateUsersList([user]);
+      await this.assertCanAccessUserRecord(hydratedTarget!, actor, 'status');
     }
 
     const effectiveReason =
@@ -1702,10 +1807,15 @@ export class UsersService implements IUsersPublicService {
     id: number,
     dto: AdminResetUserPasswordInput,
     actorId?: number,
+    actor?: UserIdentity,
   ): Promise<AdminResetUserPasswordResult> {
     const user = await this.userRepository.findByIdWithArchived(id, false);
     if (!user) {
       throw new NotFoundAppException('users.notFound', { id });
+    }
+    if (actor) {
+      const [hydratedTarget] = await this.hydrateUsersList([user]);
+      await this.assertCanAccessUserRecord(hydratedTarget!, actor, 'update');
     }
 
     if (this.adminPasswordResetDelegate) {
@@ -1737,9 +1847,13 @@ export class UsersService implements IUsersPublicService {
     if (!user?.passwordHistoryHashesJson) {
       return [];
     }
-    const parsed = JSON.parse(user.passwordHistoryHashesJson) as unknown;
-    if (Array.isArray(parsed)) {
-      return parsed.filter((item): item is string => typeof item === 'string' && item.length > 0);
+    try {
+      const parsed = JSON.parse(user.passwordHistoryHashesJson) as unknown;
+      if (Array.isArray(parsed)) {
+        return parsed.filter((item): item is string => typeof item === 'string' && item.length > 0);
+      }
+    } catch {
+      // Ignore malformed JSON
     }
     return [];
   }

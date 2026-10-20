@@ -1,7 +1,7 @@
 import { Injectable, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { ForbiddenAppException } from '@packages/kernel/index.js';
+import { ForbiddenAppException, safeJsonParseObject } from '@packages/kernel/index.js';
 import {
   AuditLogService,
   type AuditLogQueryFilter,
@@ -24,13 +24,7 @@ export class AuditLogRepository implements IAuditLogPersistencePort {
   }
 
   private parseJsonObject(raw?: string | null): Record<string, unknown> | null {
-    if (!raw) return null;
-    try {
-      const parsed = JSON.parse(raw) as unknown;
-      return parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : null;
-    } catch {
-      return null;
-    }
+    return safeJsonParseObject(raw, null);
   }
 
   private toRecord(entity: AuditLogEntity): AuditLogRecord {

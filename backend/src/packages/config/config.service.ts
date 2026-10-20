@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { defaultSettingRegistry } from '@packages/kernel/index.js';
 import { appConfig, type AppConfig } from './app.config.js';
 import { databaseConfig, type DatabaseConfig } from './database.config.js';
 import { authConfig, type AuthConfig } from './auth.config.js';
@@ -33,6 +34,7 @@ export class CoreConfigService {
 
   constructor() {
     this.app = appConfig();
+    defaultSettingRegistry.setActiveEnvironment(this.app.env);
     this.database = databaseConfig();
     this.auth = authConfig();
     this.cache = cacheConfig();

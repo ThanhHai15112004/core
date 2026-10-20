@@ -734,10 +734,25 @@ export class RolesService implements IRolesPublicService {
       this.loadUserCountsMap([Number(role.id)]),
     ]);
     const beforePerms = beforePermsMap.get(Number(role.id)) ?? [];
-    await this.rolePermissionRepository.replacePermissionsForRole(
-      Number(role.id),
-      resolvedPerms.map((p) => Number(p.id)),
+
+    this.assertDataScopeAllAllowedForRole(
+      role.code,
+      Number(role.dataScope ?? DATA_SCOPE.SELF),
+      resolvedPerms.map((p) => p.code),
+      Boolean(role.isSystem),
     );
+
+    const work = async (): Promise<void> => {
+      await this.rolePermissionRepository.replacePermissionsForRole(
+        Number(role.id),
+        resolvedPerms.map((p) => Number(p.id)),
+      );
+    };
+    if (this.transactionManager) {
+      await this.transactionManager.runInTransaction(work);
+    } else {
+      await work();
+    }
     const response = this.mapper.toResponse(
       role,
       resolvedPerms,

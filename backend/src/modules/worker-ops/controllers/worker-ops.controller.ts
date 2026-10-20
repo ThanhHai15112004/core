@@ -1,15 +1,12 @@
 import { Controller, Get, Param, Query } from '@nestjs/common';
 import { z } from 'zod';
-import { Public } from '@packages/http/index.js';
+import { Public, isPrintableString } from '@packages/http/index.js';
 import { WORKER_OPS_ROUTES as R } from '../routes/worker-ops.routes.js';
 import { WORKER_METRICS, WORKER_RANGES, WorkerOpsService } from '../services/worker-ops.service.js';
 import { WorkerValidationException } from '../exceptions/worker-ops.exceptions.js';
 import type { WorkerMetric, WorkerRange } from '../responses/worker-ops.response.js';
 
-/** Định dạng chuỗi ký tự hiển thị an toàn không chứa ký tự điều khiển */
-const printable = (s: string) =>
-  ![...s].some((c) => c.charCodeAt(0) < 32 || c.charCodeAt(0) === 127);
-export const nameSchema = z.string().min(1).max(256).refine(printable);
+export const nameSchema = z.string().min(1).max(256).refine(isPrintableString);
 export const rangeSchema = z.object({
   range: z.enum(Object.keys(WORKER_RANGES) as [WorkerRange, ...WorkerRange[]]).default('1h'),
 });

@@ -11,7 +11,7 @@ import {
 } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import { Public, maskIp } from '@packages/http/index.js';
+import { Public, extractRequestContext } from '@packages/http/index.js';
 import { JOB_STATES, type JobState, type QueueOperationContext } from '@packages/queue/index.js';
 import { QUEUE_OPS_ROUTES as R } from '../routes/worker-ops.routes.js';
 import { WorkerOpsService } from '../services/worker-ops.service.js';
@@ -32,10 +32,7 @@ const drainSchema = z.object({
 });
 
 /** Trích xuất thông tin ngữ cảnh yêu cầu (RequestContext) từ Fastify request */
-const context = (req: FastifyRequest): QueueOperationContext => ({
-  ip: maskIp(req.ip),
-  actor: null,
-});
+const context = (req: FastifyRequest): QueueOperationContext => extractRequestContext(req);
 
 /**
  * Worker & Queue — nhìn theo queue: bảng queue, chi tiết, job, lỗi, số đo theo thời gian; và thao tác

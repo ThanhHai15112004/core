@@ -1,7 +1,12 @@
 import { Body, Controller, Delete, Get, Param, Put, Query, Req, Res } from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import { Public, maskIp } from '@packages/http/index.js';
+import {
+  Public,
+  extractRequestContext,
+  isPrintableString,
+  optionalQueryParam,
+} from '@packages/http/index.js';
 import { LONG_RUNNING_RUNTIMES } from '@packages/runtime/index.js';
 import { LOGS_OPS_ROUTES as R } from '../routes/logs-ops.routes.js';
 import {
@@ -28,14 +33,8 @@ import {
 } from '../exceptions/logs-ops.exceptions.js';
 import type { AuditDomain, LogsRange } from '../responses/logs-ops.response.js';
 
-/** Định dạng chuỗi ký tự hiển thị an toàn không chứa ký tự điều khiển */
-const printable = (s: string) =>
-  ![...s].some((c) => c.charCodeAt(0) < 32 || c.charCodeAt(0) === 127);
 /** Trích xuất hoặc chuẩn hóa nội dung văn bản */
-const text = (max: number) => z.string().max(max).refine(printable);
-/** Query rỗng (`?level=`) = không lọc. */
-const optional = <T extends z.ZodTypeAny>(s: T) =>
-  z.preprocess((v) => (v === '' ? undefined : v), s.optional());
+const text = (max: number) => z.string().max(max).refine(isPrintableString);
 const rangeSchema = z.object({
   range: z.enum(Object.keys(LOGS_RANGES) as [LogsRange, ...LogsRange[]]).default('1h'),
 });
@@ -47,39 +46,39 @@ const isoDate = z
   .max(40)
   .refine((v) => !Number.isNaN(Date.parse(v)));
 const filterSchema = z.object({
-  q: optional(text(500)),
-  level: optional(text(100)),
-  runtime: optional(text(100)),
-  module: optional(text(200)),
-  correlationId: optional(text(256)),
-  requestId: optional(text(256)),
-  jobId: optional(text(256)),
-  messageId: optional(text(256)),
-  executionId: optional(text(256)),
-  userId: optional(text(256)),
-  id: optional(text(256)),
-  status: optional(text(8)),
-  endpoint: optional(text(300)),
-  errorType: optional(text(200)),
-  instance: optional(text(200)),
-  fingerprint: optional(z.string().regex(/^[0-9a-f]{6,40}$/)),
-  window: optional(z.enum(Object.keys(WINDOWS) as [LogWindowKey, ...LogWindowKey[]])),
-  from: optional(isoDate),
-  to: optional(isoDate),
+  q: optionalQueryParam(text(500)),
+  level: optionalQueryParam(text(100)),
+  runtime: optionalQueryParam(text(100)),
+  module: optionalQueryParam(text(200)),
+  correlationId: optionalQueryParam(text(256)),
+  requestId: optionalQueryParam(text(256)),
+  jobId: optionalQueryParam(text(256)),
+  messageId: optionalQueryParam(text(256)),
+  executionId: optionalQueryParam(text(256)),
+  userId: optionalQueryParam(text(256)),
+  id: optionalQueryParam(text(256)),
+  status: optionalQueryParam(text(8)),
+  endpoint: optionalQueryParam(text(300)),
+  errorType: optionalQueryParam(text(200)),
+  instance: optionalQueryParam(text(200)),
+  fingerprint: optionalQueryParam(z.string().regex(/^[0-9a-f]{6,40}$/)),
+  window: optionalQueryParam(z.enum(Object.keys(WINDOWS) as [LogWindowKey, ...LogWindowKey[]])),
+  from: optionalQueryParam(isoDate),
+  to: optionalQueryParam(isoDate),
 });
 const searchSchema = filterSchema.extend({
-  cursor: optional(z.string().max(500)),
+  cursor: optionalQueryParam(z.string().max(500)),
   limit: z.coerce.number().int().min(10).max(500).default(100),
 });
 const tailSchema = filterSchema.extend({
-  after: optional(z.string().max(500)),
+  after: optionalQueryParam(z.string().max(500)),
   limit: z.coerce.number().int().min(1).max(500).default(200),
 });
 const exportSchema = filterSchema.extend({
   format: z.enum(['json', 'csv', 'ndjson']).default('json'),
   limit: z.coerce.number().int().min(1).max(100_000).default(10_000),
 });
-const errorsSchema = rangeSchema.extend({ q: optional(text(200)) });
+const errorsSchema = rangeSchema.extend({ q: optionalQueryParam(text(200)) });
 const AUDIT_DOMAINS: AuditDomain[] = [
   'cache',
   'storage',
@@ -92,11 +91,11 @@ const AUDIT_DOMAINS: AuditDomain[] = [
   'logs',
 ];
 const auditSchema = z.object({
-  window: optional(z.enum(Object.keys(WINDOWS) as [LogWindowKey, ...LogWindowKey[]])),
-  domain: optional(z.enum(AUDIT_DOMAINS as [AuditDomain, ...AuditDomain[]])),
-  result: optional(z.enum(['success', 'failed'])),
-  q: optional(text(200)),
-  cursor: optional(z.string().max(300)),
+  window: optionalQueryParam(z.enum(Object.keys(WINDOWS) as [LogWindowKey, ...LogWindowKey[]])),
+  domain: optionalQueryParam(z.enum(AUDIT_DOMAINS as [AuditDomain, ...AuditDomain[]])),
+  result: optionalQueryParam(z.enum(['success', 'failed'])),
+  q: optionalQueryParam(text(200)),
+  cursor: optionalQueryParam(z.string().max(300)),
   limit: z.coerce.number().int().min(10).max(200).default(50),
 });
 const levelSchema = z.object({
@@ -110,9 +109,9 @@ const levelSchema = z.object({
       .int()
       .refine((v) => (LEVEL_DURATIONS_MIN as readonly number[]).includes(v)),
   ]),
-  modules: z.array(z.string().min(1).max(120).refine(printable)).max(10).default([]),
+  modules: z.array(z.string().min(1).max(120).refine(isPrintableString)).max(10).default([]),
 });
-const idParam = z.string().min(1).max(256).refine(printable);
+const idParam = z.string().min(1).max(256).refine(isPrintableString);
 
 /** Xác thực và ép kiểu dữ liệu đầu vào theo schema Zod */
 export function parse<T>(schema: z.ZodType<T>, value: unknown): T {
@@ -122,7 +121,7 @@ export function parse<T>(schema: z.ZodType<T>, value: unknown): T {
 }
 
 /** Trích xuất thông tin ngữ cảnh yêu cầu (RequestContext) từ Fastify request */
-const context = (req: FastifyRequest): OperationContext => ({ ip: maskIp(req.ip), actor: null });
+const context = (req: FastifyRequest): OperationContext => extractRequestContext(req);
 
 /** Query → bộ lọc log (ô tìm kiếm có cú pháp `level:error jobId:…` + các ô lọc riêng). */
 export function toFilter(f: z.infer<typeof filterSchema>, now = Date.now()): LogFilter {

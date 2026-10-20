@@ -61,6 +61,8 @@ const ADMIN_ROLE_CODES = new Set([
 
 @Injectable()
 export class AuthService implements IAuthPublicService {
+  private readonly mfaChallengeAttempts = new Map<string, number>();
+
   constructor(
     private readonly passwordHasher: PasswordHasherService,
     private readonly tokenService: TokenService,
@@ -468,9 +470,27 @@ export class AuthService implements IAuthPublicService {
       throw new UnauthorizedAppException('auth.invalidOrExpiredMfaChallenge');
     }
 
+    const challengeHash = this.passwordHasher.sha256(dto.mfaChallengeToken);
+    const currentAttempts = this.mfaChallengeAttempts.get(challengeHash) ?? 0;
+    if (currentAttempts >= 5) {
+      throw new UnauthorizedAppException('auth.invalidOrExpiredMfaChallenge');
+    }
+
+    if (
+      dto.method &&
+      Array.isArray(challengePayload.methods) &&
+      challengePayload.methods.length > 0 &&
+      !challengePayload.methods.includes(dto.method)
+    ) {
+      throw new ForbiddenAppException('auth.mfaMethodNotAllowedByPolicy', [
+        { method: dto.method, allowedMethods: challengePayload.methods },
+      ]);
+    }
+
     const userId = Number(challengePayload.sub);
     const isCodeValid = await this.mfaService.verifyMfaCode(userId, dto.code, dto.method);
     if (!isCodeValid) {
+      this.mfaChallengeAttempts.set(challengeHash, currentAttempts + 1);
       await this.sessionService.recordAuthEvent({
         userId,
         identifier: challengePayload.email ?? null,
@@ -483,6 +503,8 @@ export class AuthService implements IAuthPublicService {
       });
       throw new UnauthorizedAppException('auth.invalidMfaCode');
     }
+
+    this.mfaChallengeAttempts.delete(challengeHash);
 
     await this.usersPublicService.recordLoginSuccess(userId);
     const identity = await this.usersPublicService.findAuthUserById(userId);

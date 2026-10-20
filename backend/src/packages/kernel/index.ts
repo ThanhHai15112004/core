@@ -17,4 +17,6 @@ export * from './contracts/setting-lookup.contract.js';
 export * from './contracts/feature-flag.contract.js';
 export * from './schemas/manifest.schema.js';
 export * from './utils/spreadsheet.util.js';
+export * from './utils/json.util.js';
+export * from './utils/format.util.js';
 export * from './kernel.module.js';

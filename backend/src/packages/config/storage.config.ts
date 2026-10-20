@@ -34,6 +34,8 @@ export const storageConfig = () => ({
     /** Tên secret (SecretService) chứa access/secret key; không có thì đọc env trực tiếp. */
     accessKeySecret: env('STORAGE_S3_ACCESS_KEY_SECRET', false) || 'STORAGE_S3_ACCESS_KEY',
     secretKeySecret: env('STORAGE_S3_SECRET_KEY_SECRET', false) || 'STORAGE_S3_SECRET_KEY',
+    accessKey: env('STORAGE_S3_ACCESS_KEY', false) || '',
+    secretKey: env('STORAGE_S3_SECRET_KEY', false) || '',
     timeoutMs: numberOr('STORAGE_S3_TIMEOUT_MS', 30_000),
   },
   /** Dung lượng cấp cho storage (GB) khi provider không tự báo (S3/MinIO); 0 = không biết. */

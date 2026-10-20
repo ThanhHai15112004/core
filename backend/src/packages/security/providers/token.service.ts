@@ -199,28 +199,29 @@ export class TokenService implements TokenVerificationStrategy {
       return this.identityResolver.resolveIdentity(payload, context);
     }
 
-    const numericId = typeof payload.sub === 'number' ? payload.sub : Number(payload.sub) || 1;
+    const numericId = typeof payload.sub === 'number' ? payload.sub : Number(payload.sub);
+    if (!Number.isInteger(numericId) || numericId <= 0) {
+      return null;
+    }
+
+    const rawSid = payload.sid !== undefined ? Number(payload.sid) : undefined;
     const numericSid =
-      payload.sid !== undefined
-        ? typeof payload.sid === 'number'
-          ? payload.sid
-          : Number(payload.sid) || 1
-        : undefined;
+      rawSid !== undefined && Number.isInteger(rawSid) && rawSid > 0 ? rawSid : undefined;
+
+    const validOrgUnitIds = Array.isArray(payload.organizationUnitIds)
+      ? payload.organizationUnitIds
+          .map((v) => (typeof v === 'number' ? v : Number(v)))
+          .filter((v): v is number => Number.isInteger(v) && v > 0)
+      : undefined;
 
     return {
       id: numericId,
       ...(payload.email !== undefined ? { email: payload.email } : {}),
       ...(payload.username !== undefined ? { username: payload.username } : {}),
       ...(numericSid !== undefined ? { sessionId: numericSid } : {}),
-      roles: payload.roles ?? ['user'],
+      roles: payload.roles ?? [],
       permissions: payload.permissions ?? [],
-      ...(payload.organizationUnitIds !== undefined
-        ? {
-            organizationUnitIds: payload.organizationUnitIds.map((v) =>
-              typeof v === 'number' ? v : Number(v) || 1,
-            ),
-          }
-        : {}),
+      ...(validOrgUnitIds !== undefined ? { organizationUnitIds: validOrgUnitIds } : {}),
     };
   }
 

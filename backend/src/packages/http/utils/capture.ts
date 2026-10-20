@@ -28,3 +28,27 @@ export function maskIp(ip: string | undefined): string | null {
   const groups = ip.split(':');
   return groups.length > 4 ? `${groups.slice(0, 4).join(':')}:…` : ip;
 }
+
+/**
+ * Trích xuất thông tin ngữ cảnh vận hành (`ip` đã che và `actor` từ `req.user` nếu đã xác thực)
+ * dùng chung cho các controller vận hành (System Console `/ops/*`).
+ */
+export function extractRequestContext(req: {
+  ip?: string;
+  user?: {
+    id?: number | string | null;
+    username?: string | null;
+    email?: string | null;
+  } | null;
+}): { ip: string | null; actor: string | null } {
+  const user = req.user;
+  const actor = user
+    ? user.username?.trim() ||
+      user.email?.trim() ||
+      (user.id !== undefined && user.id !== null ? String(user.id) : null)
+    : null;
+  return {
+    ip: maskIp(req.ip),
+    actor,
+  };
+}

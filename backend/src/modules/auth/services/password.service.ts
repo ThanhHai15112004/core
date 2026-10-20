@@ -5,6 +5,7 @@ import {
   ForbiddenAppException,
   NotFoundAppException,
   UnauthorizedAppException,
+  maskEmail as sharedMaskEmail,
 } from '@packages/kernel/index.js';
 import { PasswordHasherService } from '@packages/security/index.js';
 import {
@@ -263,10 +264,12 @@ export class PasswordService {
 
     let resetRecord: AuthPasswordResetEntity | null = null;
 
-    // 1. Tìm theo Link Token Hash
-    resetRecord = await this.passwordResetRepository.findByTokenHash(candidateHash);
+    // 1. Tìm theo Link Token Hash (chỉ khi độ dài đủ lớn như token ngẫu nhiên, tránh đoán mò OTP 6 số toàn cục)
+    if (rawTokenOrOtp.length > 10) {
+      resetRecord = await this.passwordResetRepository.findByTokenHash(candidateHash);
+    }
 
-    // 2. Nếu có truyền identifier/email hoặc dùng mã OTP 6 số -> tìm bản ghi mới nhất của user hoặc theo otpCodeHash
+    // 2. Nếu có truyền identifier/email -> tìm bản ghi mới nhất của user để kiểm tra & đếm số lần thử sai
     if (!resetRecord && targetIdentifier) {
       const targetUser = await this.usersPublicService.findAuthUserByIdentifier(targetIdentifier);
       if (targetUser) {
@@ -274,7 +277,8 @@ export class PasswordService {
       }
     }
 
-    if (!resetRecord) {
+    // 3. Chỉ cho phép tra cứu trực tiếp theo otpCodeHash nếu client truyền chuỗi token dài (không cho phép brute-force OTP 6 chữ số không kèm identifier)
+    if (!resetRecord && !targetIdentifier && rawTokenOrOtp.length > 10) {
       resetRecord = await this.findResetRecordByOtpHash(candidateHash);
     }
 
@@ -290,9 +294,10 @@ export class PasswordService {
       ]);
     }
 
-    const isTokenMatch = resetRecord.tokenHash === candidateHash;
+    const isTokenMatch = this.passwordHasher.safeEqualHex(resetRecord.tokenHash, candidateHash);
     const isOtpMatch = Boolean(
-      resetRecord.otpCodeHash && resetRecord.otpCodeHash === candidateHash,
+      resetRecord.otpCodeHash &&
+      this.passwordHasher.safeEqualHex(resetRecord.otpCodeHash, candidateHash),
     );
 
     if (!isTokenMatch && !isOtpMatch) {
@@ -320,7 +325,7 @@ export class PasswordService {
     const newHash = await this.passwordHasher.hash(dto.newPassword);
     await this.usersPublicService.updatePasswordHash(userId, newHash, {
       recordHistory: true,
-      maxHistory: Math.max(10, settings?.passwordHistoryLimit ?? 5),
+      maxHistory: Math.max(1, settings?.passwordHistoryLimit ?? 5),
     });
     await this.usersPublicService.autoUnlockExpiredLock(userId);
 
@@ -374,7 +379,7 @@ export class PasswordService {
     const newHash = await this.passwordHasher.hash(plainPassword);
     await this.usersPublicService.updatePasswordHash(userId, newHash, {
       recordHistory: true,
-      maxHistory: Math.max(10, settings?.passwordHistoryLimit ?? 5),
+      maxHistory: Math.max(1, settings?.passwordHistoryLimit ?? 5),
     });
     await this.usersPublicService.autoUnlockExpiredLock(userId);
 
@@ -486,9 +491,6 @@ export class PasswordService {
   }
 
   private maskEmail(email: string): string {
-    const [localPart, domain] = email.split('@');
-    if (!localPart || !domain) return '***';
-    const visible = localPart.slice(0, Math.min(2, localPart.length));
-    return `${visible}***@${domain}`;
+    return sharedMaskEmail(email);
   }
 }

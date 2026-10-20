@@ -84,6 +84,7 @@ export interface IOrganizationsPublicService {
   findByCodes(codes: readonly string[]): Promise<OrganizationUnitSummary[]>;
   ensureActiveUnitsExist(ids: readonly number[]): Promise<OrganizationUnitSummary[]>;
   resolveDescendantUnitIds?(rootUnitIds: readonly number[]): Promise<number[]>;
+  registerUnitUsageCountDelegate?(delegate: (unitId: number) => Promise<number>): void;
 }
 
 export const ORGANIZATIONS_PUBLIC_SERVICE = Symbol('ORGANIZATIONS_PUBLIC_SERVICE');

@@ -364,7 +364,7 @@ export class SessionService {
     }
 
     // Phát hiện dùng lại Refresh Token cũ đã xoay vòng -> thu hồi ngay phiên để chống đánh cắp
-    if (session.refreshTokenHash !== tokenHash) {
+    if (!this.passwordHasher.safeEqualHex(session.refreshTokenHash, tokenHash)) {
       session.revokedAt = new Date(nowMs);
       session.revokeReason = 'Refresh token reuse detected';
       await this.sessionRepository.saveEntity(session);

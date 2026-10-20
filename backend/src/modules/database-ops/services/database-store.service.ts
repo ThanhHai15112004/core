@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { safeJsonParse, safeJsonParseList } from '@packages/kernel/index.js';
 import { RedisService } from '@packages/redis/index.js';
 import {
   databaseKeys,
@@ -23,20 +24,6 @@ export interface TableIoRate {
 
 export type ActiveAlertState = StoredAlert;
 
-/** Phân tích cú pháp chuỗi JSON an toàn với giá trị dự phòng */
-function parseJson<T>(raw: string | null | undefined): T | null {
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw) as T;
-  } catch {
-    return null;
-  }
-}
-
-/** Phân tích cú pháp chuỗi phân tách thành mảng danh sách */
-const parseList = <T>(raws: string[]) =>
-  raws.map((r) => parseJson<T>(r)).filter((x): x is T => x !== null);
-
 /** Dữ liệu Database Monitor trong Redis (sự kiện, lỗi, snapshot dung lượng, cảnh báo, trạng thái kết nối). */
 @Injectable()
 export class DatabaseStoreService {
@@ -57,17 +44,23 @@ export class DatabaseStoreService {
 
   /** Truy vấn danh sách các sự kiện vận hành gần đây */
   public async events(): Promise<DbEventRecord[]> {
-    return parseList<DbEventRecord>(await this.redis.client.lrange(this.keys.events(), 0, -1));
+    return safeJsonParseList<DbEventRecord>(
+      await this.redis.client.lrange(this.keys.events(), 0, -1),
+    );
   }
 
   /** Truy vấn danh sách các lỗi và ngoại lệ ghi nhận được */
   public async errors(): Promise<DbErrorRecord[]> {
-    return parseList<DbErrorRecord>(await this.redis.client.lrange(this.keys.errors(), 0, -1));
+    return safeJsonParseList<DbErrorRecord>(
+      await this.redis.client.lrange(this.keys.errors(), 0, -1),
+    );
   }
 
   /** Lấy các bản chụp lịch sử dung lượng lưu trữ */
   public async storageSnapshots(): Promise<StorageSnapshot[]> {
-    return parseList<StorageSnapshot>(await this.redis.client.lrange(this.keys.storage(), 0, -1));
+    return safeJsonParseList<StorageSnapshot>(
+      await this.redis.client.lrange(this.keys.storage(), 0, -1),
+    );
   }
 
   /** Lấy số liệu thống kê I/O đọc/ghi của các bảng */
@@ -75,7 +68,7 @@ export class DatabaseStoreService {
     const hash = await this.redis.client.hgetall(this.redis.key('db', 'tableio'));
     const map = new Map<string, TableIoRate>();
     for (const [name, raw] of Object.entries(hash)) {
-      const rate = parseJson<TableIoRate>(raw);
+      const rate = safeJsonParse<TableIoRate>(raw);
       if (rate) map.set(name, rate);
     }
     return map;
@@ -91,7 +84,7 @@ export class DatabaseStoreService {
     const hash = await this.redis.client.hgetall(this.keys.activeAlerts());
     const map = new Map<string, ActiveAlertState>();
     for (const [id, raw] of Object.entries(hash)) {
-      const state = parseJson<ActiveAlertState>(raw);
+      const state = safeJsonParse<ActiveAlertState>(raw);
       if (state) map.set(id, state);
     }
     return map;
@@ -103,7 +96,7 @@ export class DatabaseStoreService {
     const raws = await this.redis.client.mget(...instances.map((i) => this.keys.connection(i)));
     const map = new Map<string, ConnectionStatus>();
     raws.forEach((raw, i) => {
-      const status = parseJson<ConnectionStatus>(raw);
+      const status = safeJsonParse<ConnectionStatus>(raw);
       if (status) map.set(instances[i]!, status);
     });
     return map;
