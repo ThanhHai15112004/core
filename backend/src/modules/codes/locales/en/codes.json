@@ -1,10 +1,17 @@
 {
   "typeNotFound": "Code type '{{typeCode}}' was not found.",
   "valueNotFound": "Code value not found (typeCode: {{typeCode}}, numericCode: {{numericCode}}).",
+  "duplicateTypeCode": "Code type '{{code}}' already exists.",
   "customValuesNotAllowed": "System code type '{{typeCode}}' does not allow adding custom dynamic values.",
   "duplicateNumericCode": "Numeric code '{{numericCode}}' already exists in '{{typeCode}}'.",
   "duplicateValueCode": "Value code '{{code}}' already exists in '{{typeCode}}'.",
   "cannotDeleteSystemValue": "Cannot delete system anchor code value (isSystem = true: {{code}}). You may customize its labels or color instead.",
-  "cannotDeactivateSystemAnchor": "Cannot deactivate required system anchor code value ({{code}})."
+  "cannotDeactivateSystemAnchor": "Cannot deactivate required system anchor code value ({{code}}).",
+  "cannotDeactivateSystemType": "Cannot deactivate core system code type ({{code}}).",
+  "cannotChangeSystemCode": "Cannot change the code identifier of a system anchor value (isSystem = true: {{code}}).",
+  "cannotChangeCodeInUse": "Cannot change code '{{code}}' because it is currently referenced by {{usageCount}} related data records.",
+  "valueInUse": "Cannot delete code value '{{code}}' because it is currently referenced by {{usageCount}} related data records. Please deactivate (INACTIVE) it instead.",
+  "invalidXlsxFile": "Invalid or corrupted Excel (.xlsx) file for master data import."
 }
+
 

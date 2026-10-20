@@ -1,6 +1,7 @@
 import type {
   CodeItemStatusCode,
   CodeTypeManifestItem,
+  CodeValueUsageCheckResult,
   ResolvedCodeValueView,
 } from '@packages/kernel/index.js';
 
@@ -9,6 +10,8 @@ export {
   type CodeItemStatusCode,
   type CodeTypeManifestItem,
   type CodeValueManifestItem,
+  type CodeValueUsageCheckResult,
+  type CodeValueUsageSource,
   type ResolvedCodeValueView,
 } from '@packages/kernel/index.js';
 
@@ -58,6 +61,7 @@ export interface ICodesPublicService {
       locale?: string | undefined;
     },
   ): Promise<ResolvedCodeValueView[]>;
+  checkCodeValueUsage(typeCode: string, numericCode: number): Promise<CodeValueUsageCheckResult>;
   syncManifests(customCodeTypes?: readonly CodeTypeManifestItem[]): Promise<SyncCodesResult>;
 }
 

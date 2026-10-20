@@ -1,10 +1,17 @@
 {
   "typeNotFound": "Không tìm thấy nhóm danh mục động (typeCode: {{typeCode}}).",
   "valueNotFound": "Không tìm thấy giá trị danh mục (typeCode: {{typeCode}}, numericCode: {{numericCode}}).",
+  "duplicateTypeCode": "Nhóm danh mục '{{code}}' đã tồn tại trên hệ thống.",
   "customValuesNotAllowed": "Nhóm danh mục hệ thống '{{typeCode}}' không cho phép tạo thêm giá trị tùy chỉnh động.",
   "duplicateNumericCode": "Mã số nguyên '{{numericCode}}' đã tồn tại trong nhóm danh mục '{{typeCode}}'.",
   "duplicateValueCode": "Mã định danh '{{code}}' đã tồn tại trong nhóm danh mục '{{typeCode}}'.",
   "cannotDeleteSystemValue": "Không thể xóa giá trị danh mục gốc của hệ thống (isSystem = true: {{code}}). Bạn chỉ có thể đổi nhãn hiển thị hoặc màu sắc.",
-  "cannotDeactivateSystemAnchor": "Không thể vô hiệu hóa mã neo hệ thống bắt buộc ({{code}})."
+  "cannotDeactivateSystemAnchor": "Không thể vô hiệu hóa mã neo hệ thống bắt buộc ({{code}}).",
+  "cannotDeactivateSystemType": "Không thể vô hiệu hóa nhóm danh mục hệ thống cốt lõi ({{code}}).",
+  "cannotChangeSystemCode": "Không thể thay đổi mã định danh của mục danh mục hệ thống (isSystem = true: {{code}}).",
+  "cannotChangeCodeInUse": "Không thể đổi mã định danh '{{code}}' vì mục danh mục này đang được sử dụng bởi {{usageCount}} bản ghi dữ liệu liên quan.",
+  "valueInUse": "Không thể xóa mục danh mục '{{code}}' vì đang được sử dụng bởi {{usageCount}} bản ghi dữ liệu liên quan. Vui lòng chuyển sang trạng thái Khóa (INACTIVE) thay vì xóa.",
+  "invalidXlsxFile": "Tệp Excel (.xlsx) danh mục không hợp lệ hoặc bị hỏng."
 }
+
 

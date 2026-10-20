@@ -1,55 +1,32 @@
+import {
+  cleanSpreadsheetCell as cleanCellValue,
+  createSpreadsheetColumnFinder,
+  detectSpreadsheetHeaderRowIndex,
+  parseCsvLine,
+  parseCsvToMatrix,
+} from '@packages/kernel/index.js';
 import { USER_STATUS, parseUserStatus } from '../contracts/index.js';
 import type { BulkImportUserRowInput } from '../requests/users.requests.js';
 
-/** Chuẩn hóa nhãn tiêu đề cột Excel/CSV (bỏ dấu *, bỏ chú thích trong ngoặc, bỏ xuống dòng) */
-function normalizeHeaderLabel(raw: string): string {
-  return raw
-    .replace(/\r?\n/g, ' ')
-    .replace(/\([^)]*\)/g, '')
-    .replace(/\*/g, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .toLowerCase();
-}
+export { parseCsvLine };
 
-/** Kiểm tra xem giá trị ô có thực sự có nội dung (bỏ qua ô trống hoặc dấu gạch ngang '—') */
-function cleanCellValue(raw: string): string {
-  const trimmed = raw.trim();
-  if (!trimmed || trimmed === '—' || trimmed === '-' || trimmed.toLowerCase() === 'n/a') {
-    return '';
-  }
-  return trimmed;
-}
-
-/** Phân tích một dòng CSV có hỗ trợ dấu ngoặc kép */
-export function parseCsvLine(line: string): string[] {
-  const result: string[] = [];
-  let current = '';
-  let inQuotes = false;
-
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i]!;
-    if (inQuotes) {
-      if (ch === '"' && line[i + 1] === '"') {
-        current += '"';
-        i++;
-      } else if (ch === '"') {
-        inQuotes = false;
-      } else {
-        current += ch;
-      }
-    } else if (ch === '"') {
-      inQuotes = true;
-    } else if (ch === ',') {
-      result.push(current);
-      current = '';
-    } else {
-      current += ch;
-    }
-  }
-  result.push(current);
-  return result;
-}
+const USER_KNOWN_HEADERS = [
+  'email',
+  'mail',
+  'username',
+  'user_name',
+  'tên đăng nhập',
+  'ten dang nhap',
+  'mã nhân viên',
+  'ma nhan vien',
+  'employee_code',
+  'họ và tên đệm',
+  'họ',
+  'tên',
+  'họ và tên',
+  'số điện thoại',
+  'sđt',
+] as const;
 
 /**
  * Tự động dò tìm dòng Header trong ma trận Excel/CSV
@@ -57,44 +34,7 @@ export function parseCsvLine(line: string): string[] {
  * lẫn file mẫu Import có Header ngay tại dòng 1).
  */
 export function detectHeaderRowIndex(matrix: ReadonlyArray<ReadonlyArray<string>>): number {
-  const knownHeaders = new Set([
-    'email',
-    'mail',
-    'username',
-    'user_name',
-    'tên đăng nhập',
-    'ten dang nhap',
-    'mã nhân viên',
-    'ma nhan vien',
-    'employee_code',
-    'họ và tên đệm',
-    'họ',
-    'tên',
-    'họ và tên',
-    'số điện thoại',
-    'sđt',
-  ]);
-
-  const maxScan = Math.min(matrix.length, 10);
-  let bestRowIdx = 0;
-  let bestMatchCount = 0;
-
-  for (let r = 0; r < maxScan; r++) {
-    const row = matrix[r] ?? [];
-    let matches = 0;
-    for (const cell of row) {
-      const norm = normalizeHeaderLabel(cell);
-      if (knownHeaders.has(norm)) {
-        matches++;
-      }
-    }
-    if (matches > bestMatchCount) {
-      bestMatchCount = matches;
-      bestRowIdx = r;
-    }
-  }
-
-  return bestRowIdx;
+  return detectSpreadsheetHeaderRowIndex(matrix, USER_KNOWN_HEADERS);
 }
 
 /** Chuyển đổi mảng 2 chiều (từ CSV hoặc Excel .xlsx) thành danh sách `BulkImportUserRowInput` */
@@ -106,15 +46,7 @@ export function mapMatrixToImportRows(
   const headerRowIdx = detectHeaderRowIndex(matrix);
   if (headerRowIdx >= matrix.length - 1) return [];
 
-  const headerCells = matrix[headerRowIdx]!.map((h) => normalizeHeaderLabel(h));
-  const idxOf = (names: readonly string[]): number => {
-    for (const name of names) {
-      const target = normalizeHeaderLabel(name);
-      const idx = headerCells.indexOf(target);
-      if (idx >= 0) return idx;
-    }
-    return -1;
-  };
+  const idxOf = createSpreadsheetColumnFinder(matrix[headerRowIdx]!);
 
   const usernameIdx = idxOf([
     'username',
@@ -268,12 +200,7 @@ export function mapMatrixToImportRows(
 
 /** Phân tích nội dung chuỗi CSV thành mảng dữ liệu đầu vào */
 export function parseCsvToImportRows(csvContent: string): BulkImportUserRowInput[] {
-  const normalized = csvContent.replace(/^\uFEFF/, '').trim();
-  if (!normalized) return [];
-
-  const lines = normalized.split(/\r?\n/).filter((l) => l.trim().length > 0);
-  if (lines.length < 2) return [];
-
-  const matrix = lines.map((line) => parseCsvLine(line));
+  const matrix = parseCsvToMatrix(csvContent);
+  if (matrix.length < 2) return [];
   return mapMatrixToImportRows(matrix);
 }

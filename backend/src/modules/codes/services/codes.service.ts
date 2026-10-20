@@ -1,32 +1,67 @@
 import { Inject, Injectable, type OnModuleInit, Optional } from '@nestjs/common';
 import {
+  BadRequestAppException,
   CODE_ITEM_STATUS,
   type CodeItemStatusCode,
   CodeRegistryService,
   type CodeTypeManifestItem,
   type CodeValueManifestItem,
+  type CodeValueUsageCheckResult,
   ConflictAppException,
   ForbiddenAppException,
   HTTP_ERROR_CODE,
   NotFoundAppException,
   type ResolvedCodeValueView,
+  buildCsvContent,
+  buildXlsxBuffer,
+  cleanSpreadsheetCell,
+  createSpreadsheetColumnFinder,
   defaultCodeRegistry,
+  detectSpreadsheetHeaderRowIndex,
   discoverManifestCodeTypes,
+  parseCsvToMatrix,
+  parseXlsxToMatrix,
 } from '@packages/kernel/index.js';
-import { CoreI18nService } from '@packages/i18n/index.js';
+import { CoreI18nService, LocaleContext, LocaleFormatter } from '@packages/i18n/index.js';
 import { AuditLogService } from '@packages/security/index.js';
 import type { CodeTypeSummary, ICodesPublicService, SyncCodesResult } from '../contracts/index.js';
 import type { CodeTypeEntity } from '../entities/code-type.entity.js';
 import type { CodeValueEntity } from '../entities/code-value.entity.js';
 import { CodeTypeRepository } from '../repositories/code-type.repository.js';
 import { CodeValueRepository } from '../repositories/code-value.repository.js';
-import type {
-  BootstrapCodesQuery,
-  CreateCodeValueRequest,
-  ListCodeTypesQuery,
-  ListCodeValuesQuery,
-  UpdateCodeValueRequest,
+import {
+  type BootstrapCodesQuery,
+  type BulkImportCodeValueRowInput,
+  type BulkImportCodesRequest,
+  type CreateCodeTypeRequest,
+  type CreateCodeValueRequest,
+  type ExportCodesQuery,
+  type ListCodeTypesQuery,
+  type ListCodeValuesQuery,
+  type ReorderCodeValuesRequest,
+  type UpdateCodeTypeRequest,
+  type UpdateCodeValueRequest,
+  bulkImportCodeValueRowSchema,
 } from '../requests/codes.requests.js';
+import type {
+  BulkImportCodesResultResponse,
+  ExportCodesResponse,
+} from '../responses/codes.response.js';
+
+const CODES_EXPORT_HEADERS = [
+  'STT',
+  'Mã nhóm danh mục',
+  'Tên nhóm danh mục',
+  'Mã số',
+  'Mã mục',
+  'Mã hành vi',
+  'Tên hiển thị (VI)',
+  'Tên tiếng Anh (EN)',
+  'Từ đồng nghĩa',
+  'Thứ tự',
+  'Trạng thái',
+  'Nguồn',
+] as const;
 
 @Injectable()
 export class CodesService implements ICodesPublicService, OnModuleInit {
@@ -86,27 +121,12 @@ export class CodesService implements ICodesPublicService, OnModuleInit {
     const dbTypes = await this.findDbCodeTypesSafe(query);
 
     if (dbTypes.length > 0) {
-      return dbTypes.map((ct) => {
-        const values = this.registry.listValues(ct.code, {
-          includeInactive: true,
+      return dbTypes.map((ct) =>
+        this.toCodeTypeSummary(ct, {
           locale,
-        });
-        return {
-          id: Number(ct.id),
-          code: ct.code,
-          module: ct.module,
-          name: ct.name,
-          description: ct.description ?? null,
-          isSystem: Boolean(ct.isSystem),
-          allowCustomValues: Boolean(ct.allowCustomValues),
-          status:
-            Number(ct.status) === CODE_ITEM_STATUS.INACTIVE
-              ? CODE_ITEM_STATUS.INACTIVE
-              : CODE_ITEM_STATUS.ACTIVE,
-          totalValues: values.length,
-          ...(query.includeValues ? { values } : {}),
-        };
-      });
+          includeValues: query.includeValues,
+        }),
+      );
     }
 
     const memTypes = this.registry.listTypes({
@@ -152,6 +172,120 @@ export class CodesService implements ICodesPublicService, OnModuleInit {
       includeInactive: query.includeInactive ?? false,
       locale,
     });
+  }
+
+  /** Tạo mới một nhóm danh mục dùng chung (`code_types` — Mục 5.4.1: loại hồ sơ, trạng thái, khu vực...) */
+  public async createCodeType(dto: CreateCodeTypeRequest): Promise<CodeTypeSummary> {
+    const rawCode = dto.code.trim().toLowerCase();
+    const inferredModule = (
+      dto.module?.trim() || (rawCode.includes('.') ? rawCode.split('.')[0]! : 'common')
+    ).toLowerCase();
+    const normalizedCode = rawCode.includes('.') ? rawCode : `${inferredModule}.${rawCode}`;
+
+    const existing = await this.codeTypeRepository.findByCode(normalizedCode);
+    if (existing || this.manifestCodeTypes.has(normalizedCode)) {
+      throw new ConflictAppException(
+        'codes.duplicateTypeCode',
+        [{ code: normalizedCode }],
+        { code: normalizedCode },
+        HTTP_ERROR_CODE.DUPLICATE_RESOURCE,
+      );
+    }
+
+    const status =
+      dto.status === CODE_ITEM_STATUS.INACTIVE
+        ? CODE_ITEM_STATUS.INACTIVE
+        : CODE_ITEM_STATUS.ACTIVE;
+
+    const saved = await this.codeTypeRepository.saveEntity({
+      code: normalizedCode,
+      module: inferredModule,
+      name: dto.name.trim(),
+      description: dto.description ?? null,
+      isSystem: false,
+      allowCustomValues: dto.allowCustomValues ?? true,
+      status,
+    });
+
+    this.registry.registerCodeType({
+      id: Number(saved.id),
+      code: saved.code,
+      module: saved.module,
+      name: saved.name,
+      description: saved.description ?? null,
+      isSystem: false,
+      allowCustomValues: Boolean(saved.allowCustomValues),
+      status: saved.status,
+      values: [],
+    });
+
+    await this.auditLogService?.record({
+      module: 'codes',
+      feature: 'code-type-management',
+      action: 'codes.type.create',
+      resourceType: 'code_type',
+      resourceId: saved.code,
+      beforeData: null,
+      afterData: {
+        id: saved.id,
+        code: saved.code,
+        module: saved.module,
+        name: saved.name,
+        allowCustomValues: saved.allowCustomValues,
+        status: saved.status,
+      },
+      reason: `Created master data code type ${saved.code}`,
+    });
+
+    return this.toCodeTypeSummary(saved, { includeValues: true });
+  }
+
+  /** Cập nhật thông tin nhóm danh mục (`code_types` — Mục 5.4.1) */
+  public async updateCodeType(
+    typeCode: string,
+    dto: UpdateCodeTypeRequest,
+  ): Promise<CodeTypeSummary> {
+    const normalizedType = typeCode.trim().toLowerCase();
+    const entity = await this.ensureCodeTypeExists(normalizedType);
+
+    if (entity.isSystem && dto.status === CODE_ITEM_STATUS.INACTIVE) {
+      throw new ForbiddenAppException('codes.cannotDeactivateSystemType', [
+        { code: normalizedType },
+      ]);
+    }
+
+    const beforeSnapshot = {
+      name: entity.name,
+      description: entity.description,
+      allowCustomValues: entity.allowCustomValues,
+      status: entity.status,
+    };
+
+    if (dto.name !== undefined) entity.name = dto.name.trim();
+    if (dto.description !== undefined) entity.description = dto.description;
+    if (dto.allowCustomValues !== undefined) entity.allowCustomValues = dto.allowCustomValues;
+    if (dto.status !== undefined) entity.status = dto.status as CodeItemStatusCode;
+
+    const saved = await this.codeTypeRepository.saveEntity(entity);
+    await this.refreshTypeFromDatabaseSafe(normalizedType);
+
+    await this.auditLogService?.record({
+      module: 'codes',
+      feature: 'code-type-management',
+      action: 'codes.type.update',
+      resourceType: 'code_type',
+      resourceId: normalizedType,
+      beforeData: beforeSnapshot,
+      afterData: {
+        name: saved.name,
+        description: saved.description,
+        allowCustomValues: saved.allowCustomValues,
+        status: saved.status,
+      },
+      reason: `Updated code type ${normalizedType}`,
+    });
+
+    return this.toCodeTypeSummary(saved, { includeValues: true });
   }
 
   /** Đồng bộ idempotent toàn bộ `codeTypes` từ `module.manifest.json` vào DB và L1 Cache */
@@ -390,22 +524,7 @@ export class CodesService implements ICodesPublicService, OnModuleInit {
     dto: UpdateCodeValueRequest,
   ): Promise<ResolvedCodeValueView> {
     const normalizedType = typeCode.trim().toLowerCase();
-    await this.ensureCodeTypeExists(normalizedType);
-
-    let entity = await this.codeValueRepository.findByTypeAndNumericCode(
-      normalizedType,
-      numericCode,
-    );
-    if (!entity) {
-      await this.syncManifests();
-      entity = await this.codeValueRepository.findByTypeAndNumericCode(normalizedType, numericCode);
-    }
-    if (!entity) {
-      throw new NotFoundAppException('codes.valueNotFound', {
-        typeCode: normalizedType,
-        numericCode,
-      });
-    }
+    const entity = await this.ensureCodeValueExists(normalizedType, numericCode);
 
     if (entity.isSystem && dto.status === CODE_ITEM_STATUS.INACTIVE) {
       throw new ForbiddenAppException('codes.cannotDeactivateSystemAnchor', [
@@ -413,7 +532,57 @@ export class CodesService implements ICodesPublicService, OnModuleInit {
       ]);
     }
 
+    if (dto.code !== undefined) {
+      const nextCode = dto.code.trim().toUpperCase();
+      if (nextCode !== entity.code.trim().toUpperCase()) {
+        if (entity.isSystem) {
+          throw new ForbiddenAppException('codes.cannotChangeSystemCode', [
+            { typeCode: normalizedType, code: entity.code },
+          ]);
+        }
+
+        const usage = await this.registry.checkValueUsage(normalizedType, numericCode, entity.code);
+        if (usage.inUse) {
+          throw new ConflictAppException(
+            'codes.cannotChangeCodeInUse',
+            [
+              {
+                typeCode: normalizedType,
+                numericCode,
+                code: entity.code,
+                usageCount: usage.totalUsageCount,
+                details: usage.details,
+              },
+            ],
+            {
+              typeCode: normalizedType,
+              numericCode,
+              code: entity.code,
+              usageCount: usage.totalUsageCount,
+            },
+            HTTP_ERROR_CODE.CONFLICT,
+          );
+        }
+
+        const existingValues = await this.codeValueRepository.findByTypeCode(normalizedType, true);
+        const duplicate = existingValues.find(
+          (v) =>
+            Number(v.numericCode) !== Number(numericCode) &&
+            v.code.trim().toUpperCase() === nextCode,
+        );
+        if (duplicate) {
+          throw new ConflictAppException(
+            'codes.duplicateValueCode',
+            [{ typeCode: normalizedType, code: nextCode }],
+            { typeCode: normalizedType, code: nextCode },
+            HTTP_ERROR_CODE.DUPLICATE_RESOURCE,
+          );
+        }
+      }
+    }
+
     const beforeSnapshot = {
+      code: entity.code,
       name: entity.name,
       description: entity.description,
       behaviorCode: entity.behaviorCode,
@@ -425,6 +594,10 @@ export class CodesService implements ICodesPublicService, OnModuleInit {
       isDefault: entity.isDefault,
       status: entity.status,
     };
+
+    if (dto.code !== undefined) {
+      entity.code = dto.code.trim().toUpperCase();
+    }
 
     if (dto.name !== undefined) {
       entity.name = dto.name.trim();
@@ -484,33 +657,80 @@ export class CodesService implements ICodesPublicService, OnModuleInit {
     return view;
   }
 
-  /** Xóa mềm giá trị danh mục động (Chặn xóa nếu `isSystem = true`) */
+  /** Sắp xếp lại thứ tự hiển thị (`sortOrder`) cho các mục danh mục trong nhóm `typeCode` (Mục 5.4.3) */
+  public async reorderCodeValues(
+    typeCode: string,
+    dto: ReorderCodeValuesRequest,
+  ): Promise<ResolvedCodeValueView[]> {
+    const normalizedType = typeCode.trim().toLowerCase();
+    await this.ensureCodeTypeExists(normalizedType);
+
+    for (const item of dto.items) {
+      const entity = await this.ensureCodeValueExists(normalizedType, item.numericCode);
+      entity.sortOrder = item.sortOrder;
+      const saved = await this.codeValueRepository.saveEntity(entity);
+      this.syncEntityValueToRegistry(saved);
+    }
+
+    await this.auditLogService?.record({
+      module: 'codes',
+      feature: 'code-value-management',
+      action: 'codes.value.reorder',
+      resourceType: 'code_type',
+      resourceId: normalizedType,
+      beforeData: null,
+      afterData: { items: dto.items },
+      reason: `Reordered ${dto.items.length} code values in ${normalizedType}`,
+    });
+
+    return this.listCodeValues(normalizedType, { includeInactive: true });
+  }
+
+  /** Kiểm tra xem một mục danh mục đang được sử dụng bởi bao nhiêu bản ghi nghiệp vụ liên quan (Mục 5.4.8) */
+  public async checkCodeValueUsage(
+    typeCode: string,
+    numericCode: number,
+  ): Promise<CodeValueUsageCheckResult> {
+    const normalizedType = typeCode.trim().toLowerCase();
+    const entity = await this.ensureCodeValueExists(normalizedType, numericCode);
+    return this.registry.checkValueUsage(normalizedType, numericCode, entity.code);
+  }
+
+  /** Xóa mềm giá trị danh mục động (Chặn xóa nếu `isSystem = true` hoặc đang được sử dụng `inUse = true` — Mục 5.4.8) */
   public async removeCodeValue(
     typeCode: string,
     numericCode: number,
   ): Promise<{ deleted: true; typeCode: string; numericCode: number; code: string }> {
     const normalizedType = typeCode.trim().toLowerCase();
-    await this.ensureCodeTypeExists(normalizedType);
-
-    let entity = await this.codeValueRepository.findByTypeAndNumericCode(
-      normalizedType,
-      numericCode,
-    );
-    if (!entity) {
-      await this.syncManifests();
-      entity = await this.codeValueRepository.findByTypeAndNumericCode(normalizedType, numericCode);
-    }
-    if (!entity) {
-      throw new NotFoundAppException('codes.valueNotFound', {
-        typeCode: normalizedType,
-        numericCode,
-      });
-    }
+    const entity = await this.ensureCodeValueExists(normalizedType, numericCode);
 
     if (entity.isSystem) {
       throw new ForbiddenAppException('codes.cannotDeleteSystemValue', [
         { typeCode: normalizedType, numericCode, code: entity.code },
       ]);
+    }
+
+    const usage = await this.registry.checkValueUsage(normalizedType, numericCode, entity.code);
+    if (usage.inUse) {
+      throw new ConflictAppException(
+        'codes.valueInUse',
+        [
+          {
+            typeCode: normalizedType,
+            numericCode,
+            code: entity.code,
+            usageCount: usage.totalUsageCount,
+            details: usage.details,
+          },
+        ],
+        {
+          typeCode: normalizedType,
+          numericCode,
+          code: entity.code,
+          usageCount: usage.totalUsageCount,
+        },
+        HTTP_ERROR_CODE.CONFLICT,
+      );
     }
 
     const code = entity.code;
@@ -539,6 +759,434 @@ export class CodesService implements ICodesPublicService, OnModuleInit {
       numericCode,
       code,
     };
+  }
+
+  /** Nhập danh mục hàng loạt từ Excel (.xlsx Base64), CSV hoặc JSON có kiểm tra trùng mã (Mục 5.4.6) */
+  public async bulkImportCodeValues(
+    dto: BulkImportCodesRequest,
+    routeTypeCode?: string,
+  ): Promise<BulkImportCodesResultResponse> {
+    const fallbackTypeCode = (routeTypeCode ?? dto.typeCode ?? '').trim().toLowerCase();
+    let rawRows: BulkImportCodeValueRowInput[];
+
+    if (dto.xlsxBase64) {
+      try {
+        const matrix = parseXlsxToMatrix(dto.xlsxBase64);
+        rawRows = this.mapMatrixToImportRows(matrix, fallbackTypeCode);
+      } catch (err: unknown) {
+        throw new BadRequestAppException('codes.invalidXlsxFile', [
+          err instanceof Error ? err.message : 'Unable to parse .xlsx file',
+        ]);
+      }
+    } else if (dto.csvContent) {
+      const matrix = parseCsvToMatrix(dto.csvContent);
+      rawRows = this.mapMatrixToImportRows(matrix, fallbackTypeCode);
+    } else {
+      rawRows = (dto.items ?? []).map((item) => ({
+        ...item,
+        typeCode: item.typeCode ?? (fallbackTypeCode || undefined),
+      }));
+    }
+
+    const errors: Array<{ row: number; identifier: string; message: string }> = [];
+    const importedCodes: string[] = [];
+    let skippedCount = 0;
+
+    // Bộ nhớ kiểm tra trùng mã ngay trong cùng 1 file import
+    const seenCodesInBatch = new Set<string>();
+    const seenNumericsInBatch = new Set<string>();
+
+    for (let i = 0; i < rawRows.length; i++) {
+      const rowNumber = i + 1;
+      const raw = rawRows[i]!;
+      const resolvedTypeCode = (raw.typeCode || fallbackTypeCode).trim().toLowerCase();
+      const rawCode = (raw.code ?? '').trim().toUpperCase();
+      const identifier = resolvedTypeCode
+        ? `${resolvedTypeCode}:${rawCode || rowNumber}`
+        : rawCode || `row-${rowNumber}`;
+
+      if (!resolvedTypeCode) {
+        errors.push({
+          row: rowNumber,
+          identifier,
+          message: 'Missing typeCode for master data row',
+        });
+        continue;
+      }
+
+      const parsed = bulkImportCodeValueRowSchema.safeParse({
+        ...raw,
+        typeCode: resolvedTypeCode,
+      });
+      if (!parsed.success) {
+        const msg = parsed.error.issues.map((iss) => iss.message).join('; ');
+        errors.push({ row: rowNumber, identifier, message: msg });
+        continue;
+      }
+
+      const validRow = parsed.data;
+      const normalizedValueCode = validRow.code.trim().toUpperCase();
+      const batchCodeKey = `${resolvedTypeCode}:${normalizedValueCode}`;
+
+      // 1. Kiểm tra trùng mã `code` ngay trong file import
+      if (seenCodesInBatch.has(batchCodeKey)) {
+        if (dto.skipDuplicates) {
+          skippedCount++;
+          continue;
+        }
+        errors.push({
+          row: rowNumber,
+          identifier,
+          message: `Duplicate value code in import payload: ${normalizedValueCode} (${resolvedTypeCode})`,
+        });
+        continue;
+      }
+
+      // 2. Kiểm tra trùng `numericCode` ngay trong file import (nếu có truyền)
+      if (validRow.numericCode !== undefined) {
+        const batchNumKey = `${resolvedTypeCode}:${validRow.numericCode}`;
+        if (seenNumericsInBatch.has(batchNumKey)) {
+          if (dto.skipDuplicates) {
+            skippedCount++;
+            continue;
+          }
+          errors.push({
+            row: rowNumber,
+            identifier,
+            message: `Duplicate numericCode in import payload: ${validRow.numericCode} (${resolvedTypeCode})`,
+          });
+          continue;
+        }
+      }
+
+      // 3. Đảm bảo nhóm danh mục tồn tại (nếu chưa có thì tự tạo nhóm Master Data mới)
+      let codeType = await this.codeTypeRepository.findByCode(resolvedTypeCode);
+      if (!codeType && this.manifestCodeTypes.has(resolvedTypeCode)) {
+        await this.syncManifests();
+        codeType = await this.codeTypeRepository.findByCode(resolvedTypeCode);
+      }
+      if (!codeType) {
+        const inferredMod = resolvedTypeCode.includes('.')
+          ? resolvedTypeCode.split('.')[0]!
+          : 'common';
+        codeType = await this.codeTypeRepository.saveEntity({
+          code: resolvedTypeCode,
+          module: inferredMod,
+          name: validRow.typeName?.trim() || resolvedTypeCode,
+          description: null,
+          isSystem: false,
+          allowCustomValues: true,
+          status: CODE_ITEM_STATUS.ACTIVE,
+        });
+        this.registry.registerCodeType({
+          id: Number(codeType.id),
+          code: codeType.code,
+          module: codeType.module,
+          name: codeType.name,
+          isSystem: false,
+          allowCustomValues: true,
+          status: CODE_ITEM_STATUS.ACTIVE,
+        });
+      }
+
+      if (!codeType.allowCustomValues) {
+        errors.push({
+          row: rowNumber,
+          identifier,
+          message: `Code type '${resolvedTypeCode}' does not allow custom values`,
+        });
+        continue;
+      }
+
+      // 4. Kiểm tra trùng mã `code` hoặc `numericCode` với dữ liệu đã có trong DB
+      const existingValues = await this.codeValueRepository.findByTypeCode(resolvedTypeCode, true);
+      const dupByCode = existingValues.find(
+        (v) => v.code.trim().toUpperCase() === normalizedValueCode,
+      );
+      const dupByNumeric =
+        validRow.numericCode !== undefined
+          ? existingValues.find((v) => Number(v.numericCode) === Number(validRow.numericCode))
+          : undefined;
+
+      if (dupByCode || dupByNumeric) {
+        if (dto.skipDuplicates) {
+          skippedCount++;
+          continue;
+        }
+        errors.push({
+          row: rowNumber,
+          identifier,
+          message: dupByCode
+            ? `Duplicate value code in database: ${normalizedValueCode} (${resolvedTypeCode})`
+            : `Duplicate numericCode in database: ${validRow.numericCode} (${resolvedTypeCode})`,
+        });
+        continue;
+      }
+
+      seenCodesInBatch.add(batchCodeKey);
+      if (validRow.numericCode !== undefined) {
+        seenNumericsInBatch.add(`${resolvedTypeCode}:${validRow.numericCode}`);
+      }
+
+      try {
+        const created = await this.createCodeValue(resolvedTypeCode, {
+          numericCode: validRow.numericCode,
+          code: normalizedValueCode,
+          behaviorCode: validRow.behaviorCode ?? normalizedValueCode,
+          name: validRow.name,
+          description: validRow.description ?? null,
+          labels: validRow.labels ?? { vi: validRow.name },
+          aliases: validRow.aliases,
+          color: validRow.color ?? null,
+          icon: validRow.icon ?? null,
+          sortOrder: validRow.sortOrder,
+          isDefault: validRow.isDefault,
+          status: validRow.status ?? CODE_ITEM_STATUS.ACTIVE,
+        });
+        importedCodes.push(`${resolvedTypeCode}:${created.code}`);
+      } catch (err: unknown) {
+        errors.push({
+          row: rowNumber,
+          identifier,
+          message: err instanceof Error ? err.message : 'Failed to import code value',
+        });
+      }
+    }
+
+    await this.auditLogService?.record({
+      module: 'codes',
+      feature: 'code-import',
+      action: 'codes.value.bulk_import',
+      resourceType: 'code_value',
+      resourceId: fallbackTypeCode || 'ALL',
+      beforeData: null,
+      afterData: {
+        totalRows: rawRows.length,
+        importedCount: importedCodes.length,
+        skippedCount,
+        failedCount: errors.length,
+      },
+      reason: `Imported ${importedCodes.length}/${rawRows.length} master data code values`,
+    });
+
+    return {
+      totalRows: rawRows.length,
+      importedCount: importedCodes.length,
+      skippedCount,
+      failedCount: errors.length,
+      importedCodes,
+      errors,
+    };
+  }
+
+  /** Xuất danh mục dùng chung ra Excel (.xlsx) hoặc CSV (.csv) phục vụ quản trị (Mục 5.4.7) */
+  public async exportCodes(query: Partial<ExportCodesQuery> = {}): Promise<ExportCodesResponse> {
+    const format: 'csv' | 'xlsx' = query.format === 'xlsx' ? 'xlsx' : 'csv';
+    const includeInactive = query.includeInactive ?? true;
+
+    const allTypes = await this.listCodeTypes({
+      module: query.module,
+      includeValues: true,
+      locale: 'vi',
+    });
+
+    const filteredTypes = query.typeCode
+      ? allTypes.filter((t) => t.code.toLowerCase() === query.typeCode!.trim().toLowerCase())
+      : allTypes;
+
+    const matrixRows: Array<Array<string | number>> = [];
+    let stt = 0;
+
+    for (const ct of filteredTypes) {
+      const values = this.registry.listValues(ct.code, {
+        includeInactive,
+        locale: 'vi',
+      });
+      for (const val of values) {
+        stt++;
+        matrixRows.push(this.formatCodeExportRow(stt, ct.code, ct.name, val));
+      }
+    }
+
+    const effectiveTimezone = LocaleFormatter.resolveActiveTimezone(LocaleContext.getTimezone());
+    const reportTitle = query.title?.trim() || 'DANH MỤC DÙNG CHUNG HỆ THỐNG (MASTER DATA)';
+    const exportedAtSubtitle = `Ngày xuất dữ liệu: ${LocaleFormatter.formatReportDateTime(new Date(), effectiveTimezone)}`;
+
+    const csvContent = buildCsvContent(CODES_EXPORT_HEADERS, matrixRows);
+    const xlsxBuffer = buildXlsxBuffer(CODES_EXPORT_HEADERS, matrixRows, {
+      sheetName: 'MasterData',
+      title: reportTitle,
+      subtitle: exportedAtSubtitle,
+      logoPng: query.logoBase64 ?? null,
+      centerColumnIndices: [0, 3, 9, 10, 11],
+      textColumnIndices: [1, 4, 5],
+      freezeHeader: true,
+    });
+
+    const datePart = new Date().toISOString().slice(0, 10);
+    const fileName = `danh_muc_dung_chung_${datePart}.${format}`;
+
+    await this.auditLogService?.record({
+      module: 'codes',
+      feature: 'code-export',
+      action: 'codes.export',
+      resourceType: 'code_export',
+      resourceId: fileName,
+      beforeData: null,
+      afterData: {
+        fileName,
+        format,
+        totalExported: matrixRows.length,
+        module: query.module ?? null,
+        typeCode: query.typeCode ?? null,
+      },
+      reason: `Exported ${matrixRows.length} master data items as ${format.toUpperCase()}`,
+    });
+
+    return {
+      fileName,
+      contentType:
+        format === 'xlsx'
+          ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+          : 'text/csv; charset=utf-8',
+      format,
+      totalExported: matrixRows.length,
+      csvContent,
+      xlsxBase64: xlsxBuffer.toString('base64'),
+    };
+  }
+
+  /** Xuất file mẫu (Template) Excel (.xlsx) hoặc CSV (.csv) phục vụ Import danh mục (Mục 5.4.6 — lấy mẫu từ dữ liệu đã seed trong Registry) */
+  public exportImportTemplate(format: 'csv' | 'xlsx' = 'xlsx'): ExportCodesResponse {
+    const sampleType =
+      this.registry.getType('codes.region') ?? this.registry.listTypes()[0] ?? null;
+    const sampleValues = sampleType
+      ? this.registry
+          .listValues(sampleType.code, { includeInactive: true, locale: 'vi' })
+          .slice(0, 2)
+      : [];
+
+    const sampleRows: Array<Array<string | number>> = sampleValues.map((val, idx) =>
+      this.formatCodeExportRow(idx + 1, sampleType!.code, sampleType!.name, val),
+    );
+
+    const csvContent = buildCsvContent(CODES_EXPORT_HEADERS, sampleRows);
+    const xlsxBase64 = buildXlsxBuffer(CODES_EXPORT_HEADERS, sampleRows, {
+      sheetName: 'MasterDataTemplate',
+      centerColumnIndices: [0, 3, 9, 10, 11],
+      textColumnIndices: [1, 4, 5],
+      freezeHeader: true,
+    }).toString('base64');
+
+    return {
+      fileName: `mau_import_danh_muc.${format}`,
+      contentType:
+        format === 'xlsx'
+          ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+          : 'text/csv; charset=utf-8',
+      format,
+      totalExported: sampleRows.length,
+      csvContent,
+      xlsxBase64,
+    };
+  }
+
+  /** Chuyển ma trận 2 chiều từ Excel/CSV sang danh sách `BulkImportCodeValueRowInput` */
+  private mapMatrixToImportRows(
+    matrix: ReadonlyArray<ReadonlyArray<string>>,
+    fallbackTypeCode = '',
+  ): BulkImportCodeValueRowInput[] {
+    if (matrix.length < 2) return [];
+
+    const headerRowIdx = detectSpreadsheetHeaderRowIndex(matrix, [
+      'mã mục',
+      'ma muc',
+      'code',
+      'value_code',
+      'mã nhóm danh mục',
+      'ma nhom danh muc',
+      'type_code',
+      'typecode',
+      'tên hiển thị',
+      'ten hien thi',
+      'name',
+    ]);
+
+    if (headerRowIdx >= matrix.length - 1) return [];
+    const idxOf = createSpreadsheetColumnFinder(matrix[headerRowIdx]!);
+
+    const typeCodeIdx = idxOf([
+      'mã nhóm danh mục',
+      'ma nhom danh muc',
+      'typecode',
+      'type_code',
+      'nhóm danh mục',
+    ]);
+    const typeNameIdx = idxOf(['tên nhóm danh mục', 'ten nhom danh muc', 'typename', 'type_name']);
+    const numericIdx = idxOf(['mã số', 'ma so', 'numericcode', 'numeric_code']);
+    const codeIdx = idxOf(['mã mục', 'ma muc', 'code', 'value_code', 'mã danh mục']);
+    const behaviorIdx = idxOf(['mã hành vi', 'ma hanh vi', 'behaviorcode', 'behavior_code']);
+    const nameViIdx = idxOf(['tên hiển thị', 'ten hien thi', 'name', 'tên mục', 'label_vi', 'vi']);
+    const nameEnIdx = idxOf(['tên tiếng anh', 'ten tieng anh', 'label_en', 'en', 'english']);
+    const aliasesIdx = idxOf(['từ đồng nghĩa', 'tu dong nghia', 'aliases', 'alias']);
+    const sortOrderIdx = idxOf(['thứ tự', 'thu tu', 'sortorder', 'sort_order']);
+    const statusIdx = idxOf(['trạng thái', 'trang thai', 'status']);
+
+    const rows: BulkImportCodeValueRowInput[] = [];
+    for (let i = headerRowIdx + 1; i < matrix.length; i++) {
+      const cells = matrix[i]!;
+      const getCell = (idx: number): string =>
+        idx >= 0 ? cleanSpreadsheetCell(cells[idx] ?? '') : '';
+
+      const code = getCell(codeIdx).toUpperCase();
+      const nameVi = getCell(nameViIdx);
+      if (!code && !nameVi) continue;
+
+      const typeCode = (getCell(typeCodeIdx) || fallbackTypeCode).toLowerCase();
+      const typeName = getCell(typeNameIdx) || undefined;
+      const rawNumeric = getCell(numericIdx);
+      const numericCode =
+        rawNumeric && Number.isInteger(Number(rawNumeric)) && Number(rawNumeric) > 0
+          ? Number(rawNumeric)
+          : undefined;
+      const behaviorCode = getCell(behaviorIdx) ? getCell(behaviorIdx).toUpperCase() : undefined;
+      const nameEn = getCell(nameEnIdx);
+      const labels: Record<string, string> = {};
+      if (nameVi) labels.vi = nameVi;
+      if (nameEn) labels.en = nameEn;
+
+      const aliases = getCell(aliasesIdx)
+        .split(/[|;,]/)
+        .map((s) => cleanSpreadsheetCell(s))
+        .filter(Boolean);
+
+      const rawSort = getCell(sortOrderIdx);
+      const sortOrder =
+        rawSort && Number.isInteger(Number(rawSort)) && Number(rawSort) >= 0
+          ? Number(rawSort)
+          : undefined;
+
+      const rawStatus = getCell(statusIdx).toUpperCase();
+      const status =
+        rawStatus === '2' || rawStatus.includes('INACTIVE') || rawStatus.includes('KHÓA')
+          ? CODE_ITEM_STATUS.INACTIVE
+          : CODE_ITEM_STATUS.ACTIVE;
+
+      rows.push({
+        typeCode,
+        ...(typeName ? { typeName } : {}),
+        ...(numericCode !== undefined ? { numericCode } : {}),
+        code,
+        ...(behaviorCode ? { behaviorCode } : {}),
+        name: nameVi || code,
+        ...(Object.keys(labels).length > 0 ? { labels } : {}),
+        ...(aliases.length > 0 ? { aliases } : {}),
+        ...(sortOrder !== undefined ? { sortOrder } : {}),
+        status,
+      });
+    }
+
+    return rows;
   }
 
   /** Thiết lập cầu nối đa ngôn ngữ 2 tầng (Tier 1: JSONB/Locale File -> Tier 2: DB Custom Override) */
@@ -574,6 +1222,75 @@ export class CodesService implements ICodesPublicService, OnModuleInit {
       throw new NotFoundAppException('codes.typeNotFound', { typeCode: normalized });
     }
     return entity;
+  }
+
+  private async ensureCodeValueExists(
+    typeCode: string,
+    numericCode: number,
+  ): Promise<CodeValueEntity> {
+    const normalized = typeCode.trim().toLowerCase();
+    await this.ensureCodeTypeExists(normalized);
+
+    let entity = await this.codeValueRepository.findByTypeAndNumericCode(normalized, numericCode);
+    if (!entity) {
+      await this.syncManifests();
+      entity = await this.codeValueRepository.findByTypeAndNumericCode(normalized, numericCode);
+    }
+    if (!entity) {
+      throw new NotFoundAppException('codes.valueNotFound', {
+        typeCode: normalized,
+        numericCode,
+      });
+    }
+    return entity;
+  }
+
+  private toCodeTypeSummary(
+    ct: CodeTypeEntity,
+    options?: { locale?: string | undefined; includeValues?: boolean | undefined },
+  ): CodeTypeSummary {
+    const locale = this.resolveEffectiveLocale(options?.locale);
+    const values = this.registry.listValues(ct.code, {
+      includeInactive: true,
+      locale,
+    });
+    return {
+      id: Number(ct.id),
+      code: ct.code,
+      module: ct.module,
+      name: ct.name,
+      description: ct.description ?? null,
+      isSystem: Boolean(ct.isSystem),
+      allowCustomValues: Boolean(ct.allowCustomValues),
+      status:
+        Number(ct.status) === CODE_ITEM_STATUS.INACTIVE
+          ? CODE_ITEM_STATUS.INACTIVE
+          : CODE_ITEM_STATUS.ACTIVE,
+      totalValues: values.length,
+      ...(options?.includeValues ? { values } : {}),
+    };
+  }
+
+  private formatCodeExportRow(
+    stt: number,
+    typeCode: string,
+    typeName: string,
+    val: ResolvedCodeValueView,
+  ): Array<string | number> {
+    return [
+      stt,
+      typeCode,
+      typeName,
+      val.numericCode,
+      val.code,
+      val.behaviorCode ?? val.code,
+      val.labels.vi || val.name,
+      val.labels.en || this.registry.getLabel(typeCode, val.numericCode, 'en'),
+      val.aliases.join('|'),
+      val.sortOrder,
+      val.status === CODE_ITEM_STATUS.INACTIVE ? 'Khóa (INACTIVE)' : 'Hoạt động (ACTIVE)',
+      val.isSystem ? 'Hệ thống' : 'Tùy chỉnh',
+    ];
   }
 
   private async findDbCodeTypesSafe(query: ListCodeTypesQuery): Promise<CodeTypeEntity[]> {

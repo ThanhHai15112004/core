@@ -2939,7 +2939,42 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
     });
     expect(deleteSystemRes.status).toBe(HTTP_STATUS_CODE.FORBIDDEN);
 
-    // 8. DELETE /api/v1/codes/organizations.unit_type/values/5 — Allow deleting custom code value (isSystem = false)
+    // 8. GET /api/v1/codes/organizations.unit_type/values/5/usage — Verify CAMPUS is in use by CAMPUS_Q9 (5.4.8)
+    const usageInUseRes = await context.injectJson<{
+      inUse: boolean;
+      totalUsageCount: number;
+    }>({
+      method: 'GET',
+      url: '/api/v1/codes/organizations.unit_type/values/5/usage',
+      headers: adminHeaders,
+    });
+    expect(usageInUseRes.status).toBe(HTTP_STATUS_CODE.OK);
+    expect(usageInUseRes.body.data.inUse).toBe(true);
+    expect(usageInUseRes.body.data.totalUsageCount).toBeGreaterThanOrEqual(1);
+
+    // 9. Block changing code or deleting custom code value while in use (5.4.3 & 5.4.8)
+    const renameInUseRes = await context.injectJson({
+      method: 'PATCH',
+      url: '/api/v1/codes/organizations.unit_type/values/5',
+      headers: adminHeaders,
+      payload: { code: 'CAMPUS_CHANGED' },
+    });
+    expect(renameInUseRes.status).toBe(HTTP_STATUS_CODE.CONFLICT);
+
+    const deleteInUseRes = await context.injectJson({
+      method: 'DELETE',
+      url: '/api/v1/codes/organizations.unit_type/values/5',
+      headers: adminHeaders,
+    });
+    expect(deleteInUseRes.status).toBe(HTTP_STATUS_CODE.CONFLICT);
+
+    // 10. Delete CAMPUS_Q9 organization unit, then allow deleting custom code value 5
+    await context.injectJson({
+      method: 'DELETE',
+      url: `/api/v1/organizations/${createOrgCampusRes.body.data.id}`,
+      headers: adminHeaders,
+    });
+
     const deleteCustomRes = await context.injectJson<{ deleted: boolean; numericCode: number }>({
       method: 'DELETE',
       url: '/api/v1/codes/organizations.unit_type/values/5',
@@ -2947,6 +2982,103 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
     });
     expect(deleteCustomRes.status).toBe(HTTP_STATUS_CODE.OK);
     expect(deleteCustomRes.body.data.deleted).toBe(true);
+
+    // 11. Section 5.4 Master Data API: Create CodeType, Import CSV with duplicate check, Reorder, Lock & Export
+    const createTypeRes = await context.injectJson<{
+      code: string;
+      name: string;
+      isSystem: boolean;
+    }>({
+      method: 'POST',
+      url: '/api/v1/codes',
+      headers: adminHeaders,
+      payload: {
+        code: 'hr.profile_type',
+        module: 'hr',
+        name: 'Loại hồ sơ nhân sự',
+      },
+    });
+    expect(createTypeRes.status).toBe(HTTP_STATUS_CODE.CREATED);
+    expect(createTypeRes.body.data.code).toBe('hr.profile_type');
+    expect(createTypeRes.body.data.isSystem).toBe(false);
+
+    const importCodesRes = await context.injectJson<{
+      totalRows: number;
+      importedCount: number;
+      failedCount: number;
+    }>({
+      method: 'POST',
+      url: '/api/v1/codes/hr.profile_type/values/import',
+      headers: adminHeaders,
+      payload: {
+        items: [
+          {
+            code: 'OFFICIAL',
+            name: 'Hồ sơ chính thức',
+            labels: { vi: 'Hồ sơ chính thức', en: 'Official Profile' },
+            sortOrder: 2,
+          },
+          {
+            code: 'PROBATION',
+            name: 'Hồ sơ thử việc',
+            labels: { vi: 'Hồ sơ thử việc', en: 'Probation Profile' },
+            sortOrder: 1,
+          },
+          {
+            code: 'OFFICIAL',
+            name: 'Hồ sơ trùng mã',
+          },
+        ],
+        skipDuplicates: false,
+      },
+    });
+    expect(importCodesRes.status).toBe(HTTP_STATUS_CODE.OK);
+    expect(importCodesRes.body.data.importedCount).toBe(2);
+    expect(importCodesRes.body.data.failedCount).toBe(1);
+
+    const reorderRes = await context.injectJson<Array<{ code: string; sortOrder: number }>>({
+      method: 'PATCH',
+      url: '/api/v1/codes/hr.profile_type/values/reorder',
+      headers: adminHeaders,
+      payload: {
+        items: [
+          { numericCode: 1, sortOrder: 1 },
+          { numericCode: 2, sortOrder: 2 },
+        ],
+      },
+    });
+    expect(reorderRes.status).toBe(HTTP_STATUS_CODE.OK);
+    expect(reorderRes.body.data.map((i) => i.code)).toEqual(['OFFICIAL', 'PROBATION']);
+
+    // Lock PROBATION (numericCode = 2) -> excluded from active dropdown list
+    await context.injectJson({
+      method: 'PATCH',
+      url: '/api/v1/codes/hr.profile_type/values/2',
+      headers: adminHeaders,
+      payload: { status: 2 },
+    });
+    const activeProfileTypesRes = await context.injectJson<Array<{ code: string }>>({
+      method: 'GET',
+      url: '/api/v1/codes/hr.profile_type/values',
+      headers: adminHeaders,
+    });
+    expect(activeProfileTypesRes.status).toBe(HTTP_STATUS_CODE.OK);
+    expect(activeProfileTypesRes.body.data.map((i) => i.code)).toEqual(['OFFICIAL']);
+
+    // Export Master Data (5.4.7)
+    const exportRes = await context.injectJson<{
+      fileName: string;
+      totalExported: number;
+      csvContent: string;
+      xlsxBase64: string;
+    }>({
+      method: 'GET',
+      url: '/api/v1/codes/export?typeCode=hr.profile_type&includeInactive=true&format=xlsx',
+      headers: adminHeaders,
+    });
+    expect(exportRes.status).toBe(HTTP_STATUS_CODE.OK);
+    expect(exportRes.body.data.totalExported).toBe(2);
+    expect(exportRes.body.data.csvContent).toContain('hr.profile_type');
   });
 
   it('supports Section 5.1 System Settings API (/api/v1/settings: sync, groups, CRUD, type validation, environment & unit resolution, sensitive masking, history, cache invalidation & password policy bridge)', async () => {

@@ -6,6 +6,7 @@ import {
   HTTP_ERROR_CODE,
   NotFoundAppException,
   type PaginatedResult,
+  defaultCodeRegistry,
 } from '@packages/kernel/index.js';
 import { createPaginatedResult } from '@packages/http/index.js';
 import {
@@ -168,6 +169,59 @@ export class UsersService implements IUsersPublicService {
         .filter((r) => r.status === ROLE_STATUS.ACTIVE)
         .map((r) => parseDataScope(r.dataScope));
     });
+
+    defaultCodeRegistry.registerUsageChecker(
+      'users.status',
+      'users.status',
+      async ({ numericCode }) => {
+        const { items } = await this.userRepository.searchPaginated({
+          includeArchived: true,
+          page: 1,
+          limit: 10000,
+        });
+        return items.filter((u) => !u.deletedAt && Number(u.status) === Number(numericCode)).length;
+      },
+    );
+    defaultCodeRegistry.registerUsageChecker(
+      'users.gender',
+      'user_profiles.gender',
+      async ({ numericCode }) => {
+        if (!this.userProfileRepository) return 0;
+        const { items } = await this.userRepository.searchPaginated({
+          includeArchived: true,
+          page: 1,
+          limit: 10000,
+        });
+        const userIds = items.filter((u) => !u.deletedAt).map((u) => Number(u.id));
+        if (userIds.length === 0) return 0;
+        const profiles = await this.userProfileRepository.findByUserIds(userIds);
+        return profiles.filter((p) => Number(p.gender) === Number(numericCode)).length;
+      },
+    );
+    defaultCodeRegistry.registerUsageChecker(
+      'users.position_title',
+      'user_organization_units.position_title',
+      async ({ numericCode, code }) => {
+        const { items } = await this.userRepository.searchPaginated({
+          includeArchived: true,
+          page: 1,
+          limit: 10000,
+        });
+        const userIds = items.filter((u) => !u.deletedAt).map((u) => Number(u.id));
+        if (userIds.length === 0) return 0;
+        const assignments = await this.userOrgRepository.findByUserIds(userIds);
+        const labelVi = defaultCodeRegistry.getLabel('users.position_title', numericCode, 'vi');
+        const labelEn = defaultCodeRegistry.getLabel('users.position_title', numericCode, 'en');
+        const candidates = new Set(
+          [code, String(numericCode), labelVi, labelEn]
+            .map((s) => s.trim().toUpperCase())
+            .filter(Boolean),
+        );
+        return assignments.filter(
+          (a) => a.positionTitle && candidates.has(a.positionTitle.trim().toUpperCase()),
+        ).length;
+      },
+    );
   }
 
   /** Truy cập instance DataScopeService đang gắn với UsersService */

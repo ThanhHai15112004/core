@@ -3535,10 +3535,109 @@ describe('Unit: Quản lý Người dùng (3.1) & Xác thực / Phiên / MFA (3)
       }),
     ).rejects.toThrow();
 
-    // 7. Delete custom code value (5 = CAMPUS) and clean up
+    // 7. Block changing code or deleting custom code value (5 = CAMPUS) while in use by CAMPUS_THUDUC (5.4.3 & 5.4.8)
+    const usageInUse = await codesService.checkCodeValueUsage('organizations.unit_type', 5);
+    expect(usageInUse.inUse).toBe(true);
+    expect(usageInUse.totalUsageCount).toBe(1);
+    await expect(
+      codesService.updateCodeValue('organizations.unit_type', 5, { code: 'CAMPUS_RENAMED' }),
+    ).rejects.toThrow();
+    await expect(codesService.removeCodeValue('organizations.unit_type', 5)).rejects.toThrow();
+
+    // Release reference by deleting CAMPUS_THUDUC, then allow renaming code and deleting custom code value
+    await h.organizationsService.remove(campusOrg.id);
+    const usageAfterRelease = await codesService.checkCodeValueUsage('organizations.unit_type', 5);
+    expect(usageAfterRelease.inUse).toBe(false);
+    const renamedCampus = await codesService.updateCodeValue('organizations.unit_type', 5, {
+      code: 'CAMPUS_INTL',
+    });
+    expect(renamedCampus.code).toBe('CAMPUS_INTL');
+
     const delCampus = await codesService.removeCodeValue('organizations.unit_type', 5);
     expect(delCampus.deleted).toBe(true);
     await codesService.removeCodeValue('users.status', 5);
+
+    // 9. Section 5.4 Master Data: Create CodeType group, Reorder, Lock item (INACTIVE), Import (CSV/XLSX/JSON with duplicate check) & Export
+    const regionType = await codesService.createCodeType({
+      code: 'common.region',
+      module: 'common',
+      name: 'Khu vực địa lý',
+      description: 'Danh mục khu vực Bắc - Trung - Nam',
+      allowCustomValues: true,
+      status: CODE_ITEM_STATUS.ACTIVE,
+    });
+    expect(regionType.code).toBe('common.region');
+    expect(regionType.isSystem).toBe(false);
+
+    // Duplicate group code must be rejected
+    await expect(
+      codesService.createCodeType({
+        code: 'common.region',
+        name: 'Trùng nhóm khu vực',
+        allowCustomValues: true,
+        status: CODE_ITEM_STATUS.ACTIVE,
+      }),
+    ).rejects.toThrow();
+
+    const updatedRegionType = await codesService.updateCodeType('common.region', {
+      name: 'Khu vực quản lý (Master Data)',
+    });
+    expect(updatedRegionType.name).toBe('Khu vực quản lý (Master Data)');
+
+    // Import items via CSV with intra-file duplicate detection
+    const csvImportPayload = [
+      'STT,Mã nhóm danh mục*,Mã mục*,Tên hiển thị (VI)*,Tên tiếng Anh (EN),Thứ tự,Trạng thái',
+      '1,common.region,NORTH,Miền Bắc,Northern Region,2,1',
+      '2,common.region,SOUTH,Miền Nam,Southern Region,1,1',
+      '3,common.region,NORTH,Miền Bắc Trùng,Duplicate North,3,1',
+    ].join('\n');
+
+    const importRes = await codesService.bulkImportCodeValues({
+      csvContent: csvImportPayload,
+      skipDuplicates: false,
+    });
+    expect(importRes.totalRows).toBe(3);
+    expect(importRes.importedCount).toBe(2);
+    expect(importRes.failedCount).toBe(1);
+    expect(importRes.errors[0]?.message).toContain('Duplicate value code');
+
+    // Reorder items (5.4.3)
+    const reordered = await codesService.reorderCodeValues('common.region', {
+      items: [
+        { numericCode: 1, sortOrder: 1 },
+        { numericCode: 2, sortOrder: 2 },
+      ],
+    });
+    expect(reordered.map((r) => r.code)).toEqual(['NORTH', 'SOUTH']);
+
+    // Lock item (5.4.4): set SOUTH (numericCode = 2) to INACTIVE -> hidden from active list, preserved for existing data
+    await codesService.updateCodeValue('common.region', 2, {
+      status: CODE_ITEM_STATUS.INACTIVE,
+    });
+    const activeRegions = await codesService.listCodeValues('common.region', {
+      includeInactive: false,
+    });
+    expect(activeRegions.map((r) => r.code)).toEqual(['NORTH']);
+    expect(defaultCodeRegistry.getLabel('common.region', 2, 'vi')).toBe('Miền Nam');
+    expect(defaultCodeRegistry.getLabel('common.region', 2, 'en')).toBe('Southern Region');
+
+    // Export Master Data to XLSX & CSV (5.4.7) and Template
+    const exportXlsx = await codesService.exportCodes({
+      typeCode: 'common.region',
+      includeInactive: true,
+      format: 'xlsx',
+    });
+    expect(exportXlsx.totalExported).toBe(2);
+    expect(exportXlsx.csvContent).toContain('common.region');
+    expect(exportXlsx.xlsxBase64.length).toBeGreaterThan(100);
+
+    const templateXlsx = codesService.exportImportTemplate('xlsx');
+    expect(templateXlsx.totalExported).toBeGreaterThanOrEqual(2);
+    const importFromTemplate = await codesService.bulkImportCodeValues({
+      xlsxBase64: templateXlsx.xlsxBase64,
+      skipDuplicates: true,
+    });
+    expect(importFromTemplate.skippedCount).toBe(2);
 
     // 8. Verify MasterPermissionSeeder executes SQL for code_types & code_values
     const executedQueries: string[] = [];

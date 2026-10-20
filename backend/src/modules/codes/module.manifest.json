@@ -22,6 +22,88 @@
   "database": {
     "hasMigrations": true,
     "tables": ["code_types", "code_values"]
-  }
+  },
+  "codeTypes": [
+    {
+      "code": "codes.region",
+      "name": "Khu vực địa lý",
+      "description": "Danh mục dùng chung phân vùng khu vực địa lý (Bắc - Trung - Nam)",
+      "isSystem": false,
+      "allowCustomValues": true,
+      "values": [
+        {
+          "numericCode": 1,
+          "code": "NORTH",
+          "behaviorCode": "NORTH",
+          "name": "Miền Bắc",
+          "labels": { "vi": "Miền Bắc", "en": "Northern Region" },
+          "aliases": ["BAC", "MIEN BAC", "MIỀN BẮC", "NORTH"],
+          "badgeTone": "info",
+          "color": "blue",
+          "sortOrder": 1,
+          "isDefault": true,
+          "isSystem": false
+        },
+        {
+          "numericCode": 2,
+          "code": "CENTRAL",
+          "behaviorCode": "CENTRAL",
+          "name": "Miền Trung",
+          "labels": { "vi": "Miền Trung", "en": "Central Region" },
+          "aliases": ["TRUNG", "MIEN TRUNG", "MIỀN TRUNG", "CENTRAL"],
+          "badgeTone": "warning",
+          "color": "amber",
+          "sortOrder": 2,
+          "isSystem": false
+        },
+        {
+          "numericCode": 3,
+          "code": "SOUTH",
+          "behaviorCode": "SOUTH",
+          "name": "Miền Nam",
+          "labels": { "vi": "Miền Nam", "en": "Southern Region" },
+          "aliases": ["NAM", "MIEN NAM", "MIỀN NAM", "SOUTH"],
+          "badgeTone": "success",
+          "color": "emerald",
+          "sortOrder": 3,
+          "isSystem": false
+        }
+      ]
+    },
+    {
+      "code": "codes.profile_type",
+      "name": "Loại hồ sơ",
+      "description": "Danh mục dùng chung phân loại hồ sơ quản trị",
+      "isSystem": false,
+      "allowCustomValues": true,
+      "values": [
+        {
+          "numericCode": 1,
+          "code": "OFFICIAL",
+          "behaviorCode": "OFFICIAL",
+          "name": "Hồ sơ chính thức",
+          "labels": { "vi": "Hồ sơ chính thức", "en": "Official Profile" },
+          "aliases": ["CHINH THUC", "CHÍNH THỨC", "OFFICIAL"],
+          "badgeTone": "success",
+          "color": "emerald",
+          "sortOrder": 1,
+          "isDefault": true,
+          "isSystem": false
+        },
+        {
+          "numericCode": 2,
+          "code": "PROBATION",
+          "behaviorCode": "PROBATION",
+          "name": "Hồ sơ thử việc",
+          "labels": { "vi": "Hồ sơ thử việc", "en": "Probation Profile" },
+          "aliases": ["THU VIEC", "THỬ VIỆC", "PROBATION"],
+          "badgeTone": "info",
+          "color": "cyan",
+          "sortOrder": 2,
+          "isSystem": false
+        }
+      ]
+    }
+  ]
 }
 

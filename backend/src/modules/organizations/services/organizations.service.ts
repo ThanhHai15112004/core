@@ -4,6 +4,7 @@ import {
   ConflictAppException,
   HTTP_ERROR_CODE,
   NotFoundAppException,
+  defaultCodeRegistry,
 } from '@packages/kernel/index.js';
 import { AuditLogService, DataScopeService } from '@packages/security/index.js';
 import {
@@ -35,6 +36,22 @@ export class OrganizationsService implements IOrganizationsPublicService {
   ) {
     this.dataScopeService?.registerOrgHierarchyResolver((unitIds) =>
       this.resolveDescendantUnitIds(unitIds),
+    );
+    defaultCodeRegistry.registerUsageChecker(
+      'organizations.unit_type',
+      'organization_units.type',
+      async ({ numericCode }) => {
+        const units = await this.repository.findFiltered({});
+        return units.filter((u) => !u.deletedAt && Number(u.type) === Number(numericCode)).length;
+      },
+    );
+    defaultCodeRegistry.registerUsageChecker(
+      'organizations.unit_status',
+      'organization_units.status',
+      async ({ numericCode }) => {
+        const units = await this.repository.findFiltered({});
+        return units.filter((u) => !u.deletedAt && Number(u.status) === Number(numericCode)).length;
+      },
     );
   }
 

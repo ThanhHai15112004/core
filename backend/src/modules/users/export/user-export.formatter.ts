@@ -1,6 +1,9 @@
 import { LocaleFormatter } from '@packages/i18n/index.js';
+import { escapeCsvCell } from '@packages/kernel/index.js';
 import { USER_STATUS } from '../contracts/index.js';
 import type { UserResponse } from '../responses/users.response.js';
+
+export { escapeCsvCell };
 
 /** Tiêu đề mặc định của báo cáo xuất danh sách nhân viên (tham chiếu `danh_sach_nhan_vien.xlsx`) */
 export const DEFAULT_USER_EXPORT_REPORT_TITLE = 'DANH SÁCH CÁN BỘ NHÂN VIÊN';
@@ -137,15 +140,6 @@ export function formatVietnameseUserStatusLabel(status: number): string {
     default:
       return 'Đang làm việc';
   }
-}
-
-/** Thoát chuỗi an toàn khi ghi ra ô CSV */
-export function escapeCsvCell(value: unknown): string {
-  const str = String(value ?? '');
-  if (/[",\r\n]/.test(str)) {
-    return `"${str.replace(/"/g, '""')}"`;
-  }
-  return str;
 }
 
 /**

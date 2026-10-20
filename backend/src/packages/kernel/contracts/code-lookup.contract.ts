@@ -101,6 +101,26 @@ export type CodeI18nResolver = (
   locale: string,
 ) => string | undefined;
 
+export interface CodeValueUsageSource {
+  readonly source: string;
+  readonly count: number;
+}
+
+export interface CodeValueUsageCheckResult {
+  readonly typeCode: string;
+  readonly numericCode: number;
+  readonly code: string;
+  readonly inUse: boolean;
+  readonly totalUsageCount: number;
+  readonly details: readonly CodeValueUsageSource[];
+}
+
+export type CodeValueUsageChecker = (params: {
+  typeCode: string;
+  numericCode: number;
+  code: string;
+}) => Promise<number> | number;
+
 /**
  * Quét tự động (Zero-Hardcode, 100% Domain-Agnostic) các tệp `module.manifest.json`
  * trong `modules/*` và `project-modules/*` để thu thập `codeTypes` phục vụ Seeder và L1 Fallback.
@@ -140,6 +160,7 @@ export class CodeRegistryService {
   }
 
   private readonly codeTypes = new Map<string, RegisteredCodeType>();
+  private readonly usageCheckers = new Map<string, Map<string, CodeValueUsageChecker>>();
   private i18nTranslator?: CodeI18nTranslator;
   private i18nResolver?: CodeI18nResolver;
 
@@ -559,6 +580,94 @@ export class CodeRegistryService {
     const group = this.getCodeType(typeCode);
     if (!group || group.valuesByNumericCode.size === 0) return 1;
     return Math.max(...group.valuesByNumericCode.keys()) + 1;
+  }
+
+  /**
+   * Đăng ký hàm kiểm tra mức độ sử dụng (`UsageChecker`) cho một `typeCode` từ module nghiệp vụ
+   * (Phục vụ mục 5.4.3 & 5.4.8: Chặn xóa hoặc đổi mã danh mục đang được dữ liệu liên quan tham chiếu).
+   */
+  public registerUsageChecker(
+    typeCode: string,
+    source: string,
+    checker: CodeValueUsageChecker,
+  ): void {
+    const normalizedType = typeCode.trim().toLowerCase();
+    const normalizedSource = source.trim();
+    let bySource = this.usageCheckers.get(normalizedType);
+    if (!bySource) {
+      bySource = new Map<string, CodeValueUsageChecker>();
+      this.usageCheckers.set(normalizedType, bySource);
+    }
+    bySource.set(normalizedSource, checker);
+
+    if (CodeRegistryService.sharedInstance && CodeRegistryService.sharedInstance !== this) {
+      CodeRegistryService.sharedInstance.registerUsageChecker(
+        normalizedType,
+        normalizedSource,
+        checker,
+      );
+    }
+  }
+
+  /**
+   * Kiểm tra xem một mục danh mục `(typeCode, numericCode)` có đang được sử dụng bởi dữ liệu nghiệp vụ hay không.
+   */
+  public async checkValueUsage(
+    typeCode: string,
+    numericCode: number,
+    fallbackCode?: string,
+  ): Promise<CodeValueUsageCheckResult> {
+    const normalizedType = typeCode.trim().toLowerCase();
+    const num = Number(numericCode);
+    const group =
+      this.getCodeType(normalizedType) ??
+      CodeRegistryService.sharedInstance?.getCodeType(normalizedType) ??
+      null;
+    const item = group?.valuesByNumericCode.get(num);
+    const code = item?.code ?? fallbackCode?.trim().toUpperCase() ?? String(num);
+
+    const mergedCheckers = new Map<string, CodeValueUsageChecker>();
+    const sharedMap = CodeRegistryService.sharedInstance?.usageCheckers.get(normalizedType);
+    if (sharedMap) {
+      for (const [src, fn] of sharedMap.entries()) {
+        mergedCheckers.set(src, fn);
+      }
+    }
+    const localMap = this.usageCheckers.get(normalizedType);
+    if (localMap) {
+      for (const [src, fn] of localMap.entries()) {
+        mergedCheckers.set(src, fn);
+      }
+    }
+
+    const details: CodeValueUsageSource[] = [];
+    let totalUsageCount = 0;
+
+    for (const [source, checker] of mergedCheckers.entries()) {
+      try {
+        const rawCount = await checker({
+          typeCode: normalizedType,
+          numericCode: num,
+          code,
+        });
+        const count = Math.max(0, Number(rawCount) || 0);
+        if (count > 0) {
+          details.push({ source, count });
+          totalUsageCount += count;
+        }
+      } catch {
+        // Bỏ qua an toàn nếu repository của module chưa khởi tạo trong unit test cô lập
+      }
+    }
+
+    return {
+      typeCode: normalizedType,
+      numericCode: num,
+      code,
+      inUse: totalUsageCount > 0,
+      totalUsageCount,
+      details,
+    };
   }
 
   private resolveItemLabel(

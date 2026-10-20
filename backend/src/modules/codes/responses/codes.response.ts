@@ -56,3 +56,47 @@ export const syncCodesResultResponseSchema = z.object({
 });
 
 export type SyncCodesResultResponse = z.infer<typeof syncCodesResultResponseSchema>;
+
+export const codeValueUsageResponseSchema = z.object({
+  typeCode: z.string(),
+  numericCode: z.number().int(),
+  code: z.string(),
+  inUse: z.boolean(),
+  totalUsageCount: z.number().int(),
+  details: z.array(
+    z.object({
+      source: z.string(),
+      count: z.number().int(),
+    }),
+  ),
+});
+
+export type CodeValueUsageResponse = z.infer<typeof codeValueUsageResponseSchema>;
+
+export const bulkImportCodesResultResponseSchema = z.object({
+  totalRows: z.number().int(),
+  importedCount: z.number().int(),
+  skippedCount: z.number().int(),
+  failedCount: z.number().int(),
+  importedCodes: z.array(z.string()),
+  errors: z.array(
+    z.object({
+      row: z.number().int(),
+      identifier: z.string(),
+      message: z.string(),
+    }),
+  ),
+});
+
+export type BulkImportCodesResultResponse = z.infer<typeof bulkImportCodesResultResponseSchema>;
+
+export const exportCodesResponseSchema = z.object({
+  fileName: z.string(),
+  contentType: z.string(),
+  format: z.enum(['csv', 'xlsx']),
+  totalExported: z.number().int(),
+  csvContent: z.string(),
+  xlsxBase64: z.string(),
+});
+
+export type ExportCodesResponse = z.infer<typeof exportCodesResponseSchema>;

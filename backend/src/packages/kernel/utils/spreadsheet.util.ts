@@ -565,3 +565,127 @@ export function parseXlsxToMatrix(input: Buffer | string): string[][] {
 
   return matrix;
 }
+
+/** Thoát chuỗi an toàn khi ghi ra ô CSV */
+export function escapeCsvCell(value: unknown): string {
+  const str = String(value ?? '');
+  if (/[",\r\n]/.test(str)) {
+    return `"${str.replace(/"/g, '""')}"`;
+  }
+  return str;
+}
+
+/** Tạo nội dung CSV có UTF-8 BOM từ danh sách tiêu đề cột và các dòng dữ liệu */
+export function buildCsvContent(
+  headers: readonly string[],
+  rows: ReadonlyArray<ReadonlyArray<unknown>>,
+): string {
+  const lines: string[] = [
+    headers.map((h) => escapeCsvCell(h)).join(','),
+    ...rows.map((row) => row.map((cell) => escapeCsvCell(cell)).join(',')),
+  ];
+  return `\uFEFF${lines.join('\r\n')}\r\n`;
+}
+
+/** Phân tích một dòng CSV có hỗ trợ dấu ngoặc kép */
+export function parseCsvLine(line: string): string[] {
+  const result: string[] = [];
+  let current = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i]!;
+    if (inQuotes) {
+      if (ch === '"' && line[i + 1] === '"') {
+        current += '"';
+        i++;
+      } else if (ch === '"') {
+        inQuotes = false;
+      } else {
+        current += ch;
+      }
+    } else if (ch === '"') {
+      inQuotes = true;
+    } else if (ch === ',') {
+      result.push(current);
+      current = '';
+    } else {
+      current += ch;
+    }
+  }
+  result.push(current);
+  return result;
+}
+
+/** Phân tích nội dung chuỗi CSV thành ma trận 2 chiều `string[][]` */
+export function parseCsvToMatrix(csvContent: string): string[][] {
+  const normalized = csvContent.replace(/^\uFEFF/, '').trim();
+  if (!normalized) return [];
+  const lines = normalized.split(/\r?\n/).filter((l) => l.trim().length > 0);
+  return lines.map((line) => parseCsvLine(line));
+}
+
+/** Chuẩn hóa nhãn tiêu đề cột Excel/CSV (bỏ dấu *, bỏ chú thích trong ngoặc, bỏ xuống dòng) */
+export function normalizeSpreadsheetHeader(raw: string): string {
+  return raw
+    .replace(/\r?\n/g, ' ')
+    .replace(/\([^)]*\)/g, '')
+    .replace(/\*/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+/** Làm sạch giá trị ô trong bảng tính (bỏ khoảng trắng thừa và dấu gạch ngang rỗng) */
+export function cleanSpreadsheetCell(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed || trimmed === '—' || trimmed === '-' || trimmed.toLowerCase() === 'n/a') {
+    return '';
+  }
+  return trimmed;
+}
+
+/**
+ * Tự động dò tìm chỉ số dòng Header trong ma trận Excel/CSV
+ * (Hỗ trợ cả file có dòng Tiêu đề lớn + Ngày xuất dữ liệu ở dòng 1-2 lẫn file có Header ngay tại dòng 1).
+ */
+export function detectSpreadsheetHeaderRowIndex(
+  matrix: ReadonlyArray<ReadonlyArray<string>>,
+  knownHeaders: Iterable<string>,
+  maxScanRows = 10,
+): number {
+  const knownSet = new Set(Array.from(knownHeaders, (h) => normalizeSpreadsheetHeader(h)));
+  const limit = Math.min(matrix.length, maxScanRows);
+  let bestRowIdx = 0;
+  let bestMatches = 0;
+
+  for (let r = 0; r < limit; r++) {
+    const row = matrix[r] ?? [];
+    let matches = 0;
+    for (const cell of row) {
+      if (knownSet.has(normalizeSpreadsheetHeader(cell))) {
+        matches++;
+      }
+    }
+    if (matches > bestMatches) {
+      bestMatches = matches;
+      bestRowIdx = r;
+    }
+  }
+
+  return bestRowIdx;
+}
+
+/** Tạo bộ tra cứu chỉ số cột theo danh sách tên cột đồng nghĩa đã chuẩn hóa */
+export function createSpreadsheetColumnFinder(
+  headerRow: readonly string[],
+): (candidateNames: readonly string[]) => number {
+  const normalizedHeaders = headerRow.map((h) => normalizeSpreadsheetHeader(h));
+  return (candidateNames: readonly string[]): number => {
+    for (const name of candidateNames) {
+      const idx = normalizedHeaders.indexOf(normalizeSpreadsheetHeader(name));
+      if (idx >= 0) return idx;
+    }
+    return -1;
+  };
+}

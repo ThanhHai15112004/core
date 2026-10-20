@@ -5,6 +5,7 @@ import {
   ForbiddenAppException,
   HTTP_ERROR_CODE,
   NotFoundAppException,
+  defaultCodeRegistry,
   scanModuleManifests,
 } from '@packages/kernel/index.js';
 import { TransactionManager } from '@packages/database/index.js';
@@ -100,6 +101,23 @@ export class RolesService implements IRolesPublicService {
       const roles = await this.findByCodes(roleCodes);
       return roles.filter((r) => r.status === ROLE_STATUS.ACTIVE).map((r) => r.dataScope);
     });
+    defaultCodeRegistry.registerUsageChecker(
+      'roles.status',
+      'roles.status',
+      async ({ numericCode }) => {
+        const roles = await this.roleRepository.findFiltered({});
+        return roles.filter((r) => !r.deletedAt && Number(r.status) === Number(numericCode)).length;
+      },
+    );
+    defaultCodeRegistry.registerUsageChecker(
+      'roles.data_scope',
+      'roles.data_scope',
+      async ({ numericCode }) => {
+        const roles = await this.roleRepository.findFiltered({});
+        return roles.filter((r) => !r.deletedAt && Number(r.dataScope) === Number(numericCode))
+          .length;
+      },
+    );
   }
 
   /** Đăng ký hàm ủy quyền từ module Users để đếm số người dùng đang giữ từng vai trò */

@@ -1251,6 +1251,77 @@
           }
         },
         {
+          "name": "Lấy tùy chọn ngôn ngữ và múi giờ của người dùng đang đăng nhập (Mục 5.3)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/preferences",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "preferences"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)"
+          }
+        },
+        {
+          "name": "Cập nhật tùy chọn ngôn ngữ (vi/en) và múi giờ IANA của người dùng đang đăng nhập (Mục 5.3)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/preferences",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "preferences"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"preferredLocale\": \"preferredLocale_sample\",\n  \"preferredTimezone\": \"preferredTimezone_sample\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)"
+          }
+        },
+        {
           "name": "Làm mới Access Token và xoay vòng Refresh Token",
           "request": {
             "method": "POST",
@@ -1316,7 +1387,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"username\": \"username_sample\",\n  \"email\": \"user@example.com\",\n  \"phone\": \"phone_sample\",\n  \"password\": \"password_sample\",\n  \"firstName\": \"firstName_sample\",\n  \"lastName\": \"lastName_sample\",\n  \"fullName\": \"fullName_sample\",\n  \"avatarUrl\": \"https://example.com/resource\",\n  \"dateOfBirth\": \"dateOfBirth_sample\",\n  \"gender\": 1,\n  \"address\": \"address_sample\",\n  \"city\": \"city_sample\",\n  \"country\": \"country_sample\",\n  \"bio\": \"bio_sample\",\n  \"deviceName\": \"deviceName_sample\"\n}",
+              "raw": "{\n  \"username\": \"username_sample\",\n  \"email\": \"user@example.com\",\n  \"phone\": \"phone_sample\",\n  \"password\": \"password_sample\",\n  \"firstName\": \"firstName_sample\",\n  \"lastName\": \"lastName_sample\",\n  \"fullName\": \"fullName_sample\",\n  \"avatarUrl\": \"https://example.com/resource\",\n  \"dateOfBirth\": \"dateOfBirth_sample\",\n  \"gender\": 1,\n  \"address\": \"address_sample\",\n  \"city\": \"city_sample\",\n  \"country\": \"country_sample\",\n  \"bio\": \"bio_sample\",\n  \"preferredLocale\": \"vi\",\n  \"preferredTimezone\": \"preferredTimezone_sample\",\n  \"deviceName\": \"deviceName_sample\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -1890,6 +1961,47 @@
           }
         },
         {
+          "name": "Tạo mới nhóm danh mục dùng chung (code_types: loại hồ sơ, trạng thái, khu vực...)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/codes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "codes"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"code_sample\",\n  \"module\": \"module_sample\",\n  \"name\": \"name_sample\",\n  \"description\": \"description_sample\",\n  \"allowCustomValues\": true,\n  \"status\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `codes.manage`"
+          }
+        },
+        {
           "name": "Tải từ điển danh mục động (Bootstrap Dictionary) kèm nhãn đa ngôn ngữ",
           "request": {
             "method": "GET",
@@ -1929,6 +2041,139 @@
           }
         },
         {
+          "name": "Xuất danh mục dùng chung (Master Data) ra định dạng Excel (.xlsx) hoặc CSV (.csv)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/codes/export?module=module_sample&typeCode=typeCode_sample&includeInactive=true&format=csv&title=title_sample&logoBase64=logoBase64_sample",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "codes",
+                "export"
+              ],
+              "query": [
+                {
+                  "key": "module",
+                  "value": "module_sample"
+                },
+                {
+                  "key": "typeCode",
+                  "value": "typeCode_sample"
+                },
+                {
+                  "key": "includeInactive",
+                  "value": "true"
+                },
+                {
+                  "key": "format",
+                  "value": "csv"
+                },
+                {
+                  "key": "title",
+                  "value": "title_sample"
+                },
+                {
+                  "key": "logoBase64",
+                  "value": "logoBase64_sample"
+                }
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `codes.read`"
+          }
+        },
+        {
+          "name": "Nhập danh mục dùng chung hàng loạt từ Excel (.xlsx), CSV hoặc JSON có kiểm tra trùng mã",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/codes/import",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "codes",
+                "import"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"typeCode\": \"typeCode_sample\",\n  \"xlsxBase64\": \"xlsxBase64_sample\",\n  \"csvContent\": \"csvContent_sample\",\n  \"items\": [\n    {\n      \"typeCode\": \"typeCode_sample\",\n      \"typeName\": \"typeName_sample\",\n      \"numericCode\": 1,\n      \"code\": \"code_sample\",\n      \"behaviorCode\": \"behaviorCode_sample\",\n      \"name\": \"name_sample\",\n      \"description\": \"description_sample\",\n      \"labels\": {},\n      \"aliases\": [\n        \"aliases_sample\"\n      ],\n      \"color\": \"color_sample\",\n      \"icon\": \"icon_sample\",\n      \"sortOrder\": 0,\n      \"isDefault\": true,\n      \"status\": 1\n    }\n  ],\n  \"skipDuplicates\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `codes.manage`"
+          }
+        },
+        {
+          "name": "Tải file mẫu (Template) Excel (.xlsx) hoặc CSV (.csv) để nhập danh mục hàng loạt",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/codes/import/template?format=xlsx",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "codes",
+                "import",
+                "template"
+              ],
+              "query": [
+                {
+                  "key": "format",
+                  "value": "xlsx"
+                }
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `codes.read`"
+          }
+        },
+        {
           "name": "Đồng bộ danh mục chuẩn từ module.manifest.json vào code_types & code_values",
           "request": {
             "method": "POST",
@@ -1953,6 +2198,48 @@
                 "codes",
                 "sync"
               ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `codes.manage`"
+          }
+        },
+        {
+          "name": "Cập nhật tên hiển thị, mô tả hoặc trạng thái của một nhóm danh mục (code_types)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/codes/:typeCode",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "codes",
+                ":typeCode"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"name_sample\",\n  \"description\": \"description_sample\",\n  \"allowCustomValues\": true,\n  \"status\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `codes.manage`"
           }
@@ -2041,7 +2328,95 @@
           }
         },
         {
-          "name": "Cập nhật nhãn hiển thị đa ngôn ngữ, màu sắc hoặc trạng thái giá trị danh mục",
+          "name": "Nhập danh mục hàng loạt vào nhóm typeCode kèm kiểm tra trùng mã",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/codes/:typeCode/values/import",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "codes",
+                ":typeCode",
+                "values",
+                "import"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"typeCode\": \"typeCode_sample\",\n  \"xlsxBase64\": \"xlsxBase64_sample\",\n  \"csvContent\": \"csvContent_sample\",\n  \"items\": [\n    {\n      \"typeCode\": \"typeCode_sample\",\n      \"typeName\": \"typeName_sample\",\n      \"numericCode\": 1,\n      \"code\": \"code_sample\",\n      \"behaviorCode\": \"behaviorCode_sample\",\n      \"name\": \"name_sample\",\n      \"description\": \"description_sample\",\n      \"labels\": {},\n      \"aliases\": [\n        \"aliases_sample\"\n      ],\n      \"color\": \"color_sample\",\n      \"icon\": \"icon_sample\",\n      \"sortOrder\": 0,\n      \"isDefault\": true,\n      \"status\": 1\n    }\n  ],\n  \"skipDuplicates\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `codes.manage`"
+          }
+        },
+        {
+          "name": "Sắp xếp lại thứ tự hiển thị (sortOrder) của các mục danh mục trong nhóm typeCode",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/codes/:typeCode/values/reorder",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "codes",
+                ":typeCode",
+                "values",
+                "reorder"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [\n    {\n      \"numericCode\": 1,\n      \"sortOrder\": 0\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `codes.manage`"
+          }
+        },
+        {
+          "name": "Cập nhật nhãn hiển thị đa ngôn ngữ, màu sắc, trạng thái hoặc đổi mã (nếu chưa sử dụng)",
           "request": {
             "method": "PATCH",
             "header": [
@@ -2074,7 +2449,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"name_sample\",\n  \"description\": \"description_sample\",\n  \"behaviorCode\": \"behaviorCode_sample\",\n  \"labels\": {},\n  \"aliases\": [\n    \"aliases_sample\"\n  ],\n  \"color\": \"color_sample\",\n  \"icon\": \"icon_sample\",\n  \"sortOrder\": 0,\n  \"isDefault\": true,\n  \"metadata\": {},\n  \"status\": 1\n}",
+              "raw": "{\n  \"code\": \"code_sample\",\n  \"name\": \"name_sample\",\n  \"description\": \"description_sample\",\n  \"behaviorCode\": \"behaviorCode_sample\",\n  \"labels\": {},\n  \"aliases\": [\n    \"aliases_sample\"\n  ],\n  \"color\": \"color_sample\",\n  \"icon\": \"icon_sample\",\n  \"sortOrder\": 0,\n  \"isDefault\": true,\n  \"metadata\": {},\n  \"status\": 1\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -2085,7 +2460,7 @@
           }
         },
         {
-          "name": "Xóa mềm giá trị danh mục động (chặn xóa đối với giá trị gốc isSystem = true)",
+          "name": "Xóa mềm giá trị danh mục động (chặn xóa nếu là mã hệ thống hoặc đang được sử dụng)",
           "request": {
             "method": "DELETE",
             "header": [
@@ -2113,6 +2488,38 @@
               ]
             },
             "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `codes.manage`"
+          }
+        },
+        {
+          "name": "Kiểm tra mức độ sử dụng (inUse, totalUsageCount) của một mục danh mục trước khi sửa mã hoặc xóa",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/codes/:typeCode/values/:numericCode/usage",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "codes",
+                ":typeCode",
+                "values",
+                ":numericCode",
+                "usage"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `codes.read`"
           }
         }
       ]
@@ -7505,6 +7912,1323 @@
       ]
     },
     {
+      "name": "Settings",
+      "item": [
+        {
+          "name": "Danh sách cấu hình hệ thống theo nhóm, module, namespace, môi trường và đơn vị",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/settings?groupCode=groupCode_sample&module=module_sample&namespace=namespace_sample&valueType=-9007199254740991&isSensitive=true&environment=environment_sample&organizationUnitId=1&q=q_sample",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "settings"
+              ],
+              "query": [
+                {
+                  "key": "groupCode",
+                  "value": "groupCode_sample"
+                },
+                {
+                  "key": "module",
+                  "value": "module_sample"
+                },
+                {
+                  "key": "namespace",
+                  "value": "namespace_sample"
+                },
+                {
+                  "key": "valueType",
+                  "value": "-9007199254740991"
+                },
+                {
+                  "key": "isSensitive",
+                  "value": "true"
+                },
+                {
+                  "key": "environment",
+                  "value": "environment_sample"
+                },
+                {
+                  "key": "organizationUnitId",
+                  "value": "1"
+                },
+                {
+                  "key": "q",
+                  "value": "q_sample"
+                }
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `settings.read`"
+          }
+        },
+        {
+          "name": "Tạo mới cấu hình theo module/namespace với kiểm tra kiểu TEXT/NUMBER/BOOLEAN/JSON",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/settings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "settings"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"key\": \"key_sample\",\n  \"groupCode\": \"groupCode_sample\",\n  \"module\": \"module_sample\",\n  \"namespace\": \"namespace_sample\",\n  \"name\": \"name_sample\",\n  \"description\": \"description_sample\",\n  \"valueType\": -9007199254740991,\n  \"defaultValue\": \"defaultValue_sample\",\n  \"value\": \"value_sample\",\n  \"validationRules\": {\n    \"min\": 1,\n    \"max\": 1,\n    \"integerOnly\": true,\n    \"minLength\": 0,\n    \"maxLength\": 1,\n    \"pattern\": \"pattern_sample\",\n    \"enumOptions\": [\n      \"enumOptions_sample\"\n    ],\n    \"allowEmpty\": true\n  },\n  \"isSensitive\": true,\n  \"allowUnitOverride\": true,\n  \"isSystem\": true,\n  \"sortOrder\": -9007199254740991,\n  \"reason\": \"reason_sample\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `settings.manage`"
+          }
+        },
+        {
+          "name": "Cập nhật hàng loạt giá trị cấu hình hệ thống",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/settings/bulk",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "settings",
+                "bulk"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"environment\": \"environment_sample\",\n  \"organizationUnitId\": 1,\n  \"reason\": \"reason_sample\",\n  \"items\": [\n    {\n      \"key\": \"key_sample\",\n      \"value\": \"value_sample\",\n      \"environment\": \"environment_sample\",\n      \"organizationUnitId\": 1,\n      \"reason\": \"reason_sample\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `settings.manage`"
+          }
+        },
+        {
+          "name": "Danh sách nhóm cấu hình hệ thống kèm số lượng cấu hình (Mục 5.1.1)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/settings/groups?module=module_sample&q=q_sample",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "settings",
+                "groups"
+              ],
+              "query": [
+                {
+                  "key": "module",
+                  "value": "module_sample"
+                },
+                {
+                  "key": "q",
+                  "value": "q_sample"
+                }
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `settings.read`"
+          }
+        },
+        {
+          "name": "Tạo mới nhóm cấu hình hệ thống (Mục 5.1.1)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/settings/groups",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "settings",
+                "groups"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"code_sample\",\n  \"module\": \"module_sample\",\n  \"name\": \"name_sample\",\n  \"description\": \"description_sample\",\n  \"icon\": \"icon_sample\",\n  \"sortOrder\": -9007199254740991\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `settings.manage`"
+          }
+        },
+        {
+          "name": "Tra cứu lịch sử thay đổi cấu hình hệ thống (biết ai đã thay đổi — Mục 5.1.7)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/settings/history?settingKey=settingKey_sample&environment=environment_sample&organizationUnitId=1&actorUserId=1&limit=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "settings",
+                "history"
+              ],
+              "query": [
+                {
+                  "key": "settingKey",
+                  "value": "settingKey_sample"
+                },
+                {
+                  "key": "environment",
+                  "value": "environment_sample"
+                },
+                {
+                  "key": "organizationUnitId",
+                  "value": "1"
+                },
+                {
+                  "key": "actorUserId",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `settings.read`"
+          }
+        },
+        {
+          "name": "Phân giải giá trị cấu hình hiệu lực theo thứ tự Đơn vị -> Môi trường -> Toàn cục -> Mặc định (có Cache)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/settings/resolve?keys=keys_sample&key=key_sample&groupCode=groupCode_sample&module=module_sample&namespace=namespace_sample&environment=environment_sample&organizationUnitId=1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "settings",
+                "resolve"
+              ],
+              "query": [
+                {
+                  "key": "keys",
+                  "value": "keys_sample"
+                },
+                {
+                  "key": "key",
+                  "value": "key_sample"
+                },
+                {
+                  "key": "groupCode",
+                  "value": "groupCode_sample"
+                },
+                {
+                  "key": "module",
+                  "value": "module_sample"
+                },
+                {
+                  "key": "namespace",
+                  "value": "namespace_sample"
+                },
+                {
+                  "key": "environment",
+                  "value": "environment_sample"
+                },
+                {
+                  "key": "organizationUnitId",
+                  "value": "1"
+                }
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `settings.read`"
+          }
+        },
+        {
+          "name": "Đồng bộ Idempotent cấu hình hệ thống từ module.manifest.json vào Database và Cache",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/settings/sync",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "settings",
+                "sync"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `settings.manage`"
+          }
+        },
+        {
+          "name": "Xem chi tiết cấu hình theo key kèm danh sách phạm vi ghi đè",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/settings/:key?environment=environment_sample&organizationUnitId=1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "settings",
+                ":key"
+              ],
+              "query": [
+                {
+                  "key": "environment",
+                  "value": "environment_sample"
+                },
+                {
+                  "key": "organizationUnitId",
+                  "value": "1"
+                }
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `settings.read`"
+          }
+        },
+        {
+          "name": "Cập nhật giá trị cấu hình (toàn cục, theo môi trường hoặc theo đơn vị) và tự động xóa Cache",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/settings/:key",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "settings",
+                ":key"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"value\": \"value_sample\",\n  \"environment\": \"environment_sample\",\n  \"organizationUnitId\": 1,\n  \"name\": \"name_sample\",\n  \"description\": \"description_sample\",\n  \"allowUnitOverride\": true,\n  \"validationRules\": {\n    \"min\": 1,\n    \"max\": 1,\n    \"integerOnly\": true,\n    \"minLength\": 0,\n    \"maxLength\": 1,\n    \"pattern\": \"pattern_sample\",\n    \"enumOptions\": [\n      \"enumOptions_sample\"\n    ],\n    \"allowEmpty\": true\n  },\n  \"reason\": \"reason_sample\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `settings.manage`"
+          }
+        },
+        {
+          "name": "Xem lịch sử thay đổi của riêng một khóa cấu hình (Mục 5.1.7)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/settings/:key/history?settingKey=settingKey_sample&environment=environment_sample&organizationUnitId=1&actorUserId=1&limit=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "settings",
+                ":key",
+                "history"
+              ],
+              "query": [
+                {
+                  "key": "settingKey",
+                  "value": "settingKey_sample"
+                },
+                {
+                  "key": "environment",
+                  "value": "environment_sample"
+                },
+                {
+                  "key": "organizationUnitId",
+                  "value": "1"
+                },
+                {
+                  "key": "actorUserId",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `settings.read`"
+          }
+        },
+        {
+          "name": "Xóa bản ghi cấu hình ghi đè theo môi trường hoặc đơn vị",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/settings/:key/scopes?environment=environment_sample&organizationUnitId=1&reason=reason_sample",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "settings",
+                ":key",
+                "scopes"
+              ],
+              "query": [
+                {
+                  "key": "environment",
+                  "value": "environment_sample"
+                },
+                {
+                  "key": "organizationUnitId",
+                  "value": "1"
+                },
+                {
+                  "key": "reason",
+                  "value": "reason_sample"
+                }
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `settings.manage`"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Feature Flags",
+      "item": [
+        {
+          "name": "Danh sách Feature Flags theo module, trạng thái bật/tắt và từ khóa",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/settings/feature-flags?module=module_sample&isEnabled=true&status=1&q=q_sample",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "settings",
+                "feature-flags"
+              ],
+              "query": [
+                {
+                  "key": "module",
+                  "value": "module_sample"
+                },
+                {
+                  "key": "isEnabled",
+                  "value": "true"
+                },
+                {
+                  "key": "status",
+                  "value": "1"
+                },
+                {
+                  "key": "q",
+                  "value": "q_sample"
+                }
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `settings.read`"
+          }
+        },
+        {
+          "name": "Tạo mới Feature Flag kèm quy tắc nhắm mục tiêu và khung thời gian thử nghiệm (Mục 5.2.1)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/settings/feature-flags",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "settings",
+                "feature-flags"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"key\": \"key_sample\",\n  \"module\": \"module_sample\",\n  \"name\": \"name_sample\",\n  \"description\": \"description_sample\",\n  \"isEnabled\": true,\n  \"rolloutPercentage\": 0,\n  \"targetUserIds\": [\n    \"targetUserIds_sample\"\n  ],\n  \"targetRoles\": [\n    \"targetRoles_sample\"\n  ],\n  \"targetOrganizationUnitIds\": [\n    \"targetOrganizationUnitIds_sample\"\n  ],\n  \"startsAt\": \"2026-10-14T10:00:00.000Z\",\n  \"endsAt\": \"2026-10-14T10:00:00.000Z\",\n  \"metadata\": {},\n  \"isSystem\": true,\n  \"reason\": \"reason_sample\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `settings.manage`"
+          }
+        },
+        {
+          "name": "Đánh giá trạng thái hiệu lực của Feature Flags theo người dùng, vai trò, đơn vị, tỷ lệ rollout và khung thời gian",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/settings/feature-flags/evaluate?keys=keys_sample&key=key_sample&module=module_sample&userId=550e8400-e29b-41d4-a716-446655440000&roles=roles_sample&organizationUnitId=550e8400-e29b-41d4-a716-446655440000&organizationUnitIds=organizationUnitIds_sample&at=2026-10-14T10%3A00%3A00.000Z",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "settings",
+                "feature-flags",
+                "evaluate"
+              ],
+              "query": [
+                {
+                  "key": "keys",
+                  "value": "keys_sample"
+                },
+                {
+                  "key": "key",
+                  "value": "key_sample"
+                },
+                {
+                  "key": "module",
+                  "value": "module_sample"
+                },
+                {
+                  "key": "userId",
+                  "value": "550e8400-e29b-41d4-a716-446655440000"
+                },
+                {
+                  "key": "roles",
+                  "value": "roles_sample"
+                },
+                {
+                  "key": "organizationUnitId",
+                  "value": "550e8400-e29b-41d4-a716-446655440000"
+                },
+                {
+                  "key": "organizationUnitIds",
+                  "value": "organizationUnitIds_sample"
+                },
+                {
+                  "key": "at",
+                  "value": "2026-10-14T10:00:00.000Z"
+                }
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `settings.read`"
+          }
+        },
+        {
+          "name": "Tra cứu lịch sử thay đổi Feature Flags toàn hệ thống (Mục 5.2.8)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/settings/feature-flags/history?flagKey=flagKey_sample&action=action_sample&actorUserId=1&limit=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "settings",
+                "feature-flags",
+                "history"
+              ],
+              "query": [
+                {
+                  "key": "flagKey",
+                  "value": "flagKey_sample"
+                },
+                {
+                  "key": "action",
+                  "value": "action_sample"
+                },
+                {
+                  "key": "actorUserId",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `settings.read`"
+          }
+        },
+        {
+          "name": "Đồng bộ Idempotent Feature Flags từ module.manifest.json vào Database và Cache",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/settings/feature-flags/sync",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "settings",
+                "feature-flags",
+                "sync"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `settings.manage`"
+          }
+        },
+        {
+          "name": "Xem chi tiết cấu hình một Feature Flag theo key",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/settings/feature-flags/:key",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "settings",
+                "feature-flags",
+                ":key"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `settings.read`"
+          }
+        },
+        {
+          "name": "Cập nhật quy tắc nhắm mục tiêu (người dùng, vai trò, đơn vị, tỷ lệ rollout, thời gian bắt đầu/kết thúc) của Feature Flag",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/settings/feature-flags/:key",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "settings",
+                "feature-flags",
+                ":key"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"name_sample\",\n  \"description\": \"description_sample\",\n  \"isEnabled\": true,\n  \"rolloutPercentage\": 0,\n  \"targetUserIds\": [\n    \"targetUserIds_sample\"\n  ],\n  \"targetRoles\": [\n    \"targetRoles_sample\"\n  ],\n  \"targetOrganizationUnitIds\": [\n    \"targetOrganizationUnitIds_sample\"\n  ],\n  \"startsAt\": \"2026-10-14T10:00:00.000Z\",\n  \"endsAt\": \"2026-10-14T10:00:00.000Z\",\n  \"metadata\": {},\n  \"status\": 1,\n  \"reason\": \"reason_sample\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `settings.manage`"
+          }
+        },
+        {
+          "name": "Tra cứu lịch sử thay đổi của một Feature Flag cụ thể (Mục 5.2.8)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/settings/feature-flags/:key/history?action=action_sample&actorUserId=1&limit=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "settings",
+                "feature-flags",
+                ":key",
+                "history"
+              ],
+              "query": [
+                {
+                  "key": "action",
+                  "value": "action_sample"
+                },
+                {
+                  "key": "actorUserId",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `settings.read`"
+          }
+        },
+        {
+          "name": "Bật hoặc tắt nhanh Feature Flag (kiểm tra module đã cài đặt — Mục 5.2.2)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/settings/feature-flags/:key/toggle",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "settings",
+                "feature-flags",
+                ":key",
+                "toggle"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"isEnabled\": true,\n  \"reason\": \"reason_sample\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `settings.manage`"
+          }
+        }
+      ]
+    },
+    {
+      "name": "I18n",
+      "item": [
+        {
+          "name": "Danh sách ngôn ngữ hỗ trợ trong Database kèm định dạng ngày, số và tiền tệ",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/settings/i18n/locales?status=1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "settings",
+                "i18n",
+                "locales"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "1"
+                }
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Chế độ truy cập**: `Public` (Không yêu cầu đăng nhập)"
+          }
+        },
+        {
+          "name": "Thêm ngôn ngữ mới vào Database kèm cấu hình định dạng ngày, số, tiền tệ (Mục 5.3)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/settings/i18n/locales",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "settings",
+                "i18n",
+                "locales"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"code_sample\",\n  \"bcp47Tag\": \"bcp47Tag_sample\",\n  \"name\": \"name_sample\",\n  \"nativeName\": \"nativeName_sample\",\n  \"direction\": \"ltr\",\n  \"dateFormat\": \"dd/MM/yyyy\",\n  \"datetimeFormat\": \"dd/MM/yyyy HH:mm:ss\",\n  \"currencyCode\": \"VND\",\n  \"numberDecimalSeparator\": \",\",\n  \"numberGroupSeparator\": \".\",\n  \"isDefault\": false,\n  \"sortOrder\": 10,\n  \"status\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `settings.manage`"
+          }
+        },
+        {
+          "name": "Cập nhật thông tin ngôn ngữ, định dạng ngày/số/tiền tệ, bật/tắt hoặc đặt làm ngôn ngữ mặc định",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/settings/i18n/locales/:code",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "settings",
+                "i18n",
+                "locales",
+                ":code"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"bcp47Tag\": \"bcp47Tag_sample\",\n  \"name\": \"name_sample\",\n  \"nativeName\": \"nativeName_sample\",\n  \"direction\": \"ltr\",\n  \"dateFormat\": \"2026-10-14T10:00:00.000Z\",\n  \"datetimeFormat\": \"2026-10-14T10:00:00.000Z\",\n  \"currencyCode\": \"currencyCode_sample\",\n  \"numberDecimalSeparator\": \"numberDecimalSeparator_sample\",\n  \"numberGroupSeparator\": \"numberGroupSeparator_sample\",\n  \"isDefault\": true,\n  \"sortOrder\": 0,\n  \"status\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `settings.manage`"
+          }
+        },
+        {
+          "name": "Đồng bộ Idempotent danh mục Ngôn ngữ (i18n_locales), Múi giờ (i18n_timezones) và Từ điển (i18n_translations)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/settings/i18n/sync",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "settings",
+                "i18n",
+                "sync"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `settings.manage`"
+          }
+        },
+        {
+          "name": "Danh sách khung giờ / múi giờ lưu trong Database phục vụ chọn múi giờ, lịch và báo cáo",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/settings/i18n/timezones?status=1&region=region_sample&q=q_sample",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "settings",
+                "i18n",
+                "timezones"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "1"
+                },
+                {
+                  "key": "region",
+                  "value": "region_sample"
+                },
+                {
+                  "key": "q",
+                  "value": "q_sample"
+                }
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Chế độ truy cập**: `Public` (Không yêu cầu đăng nhập)"
+          }
+        },
+        {
+          "name": "Thêm mới khung giờ / múi giờ IANA vào Database (Mục 5.3.4 & 5.3.5)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/settings/i18n/timezones",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "settings",
+                "i18n",
+                "timezones"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"code_sample\",\n  \"name\": \"name_sample\",\n  \"labels\": {},\n  \"utcOffset\": \"utcOffset_sample\",\n  \"utcOffsetMinutes\": -840,\n  \"region\": \"Asia\",\n  \"isDefault\": false,\n  \"sortOrder\": 10,\n  \"status\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `settings.manage`"
+          }
+        },
+        {
+          "name": "Cập nhật khung giờ / múi giờ trong Database hoặc đặt làm múi giờ mặc định",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/settings/i18n/timezones/:code",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "settings",
+                "i18n",
+                "timezones",
+                ":code"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"name_sample\",\n  \"labels\": {},\n  \"utcOffset\": \"utcOffset_sample\",\n  \"utcOffsetMinutes\": -840,\n  \"region\": \"region_sample\",\n  \"isDefault\": true,\n  \"sortOrder\": 0,\n  \"status\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `settings.manage`"
+          }
+        },
+        {
+          "name": "Tra cứu từ điển bản dịch & thông báo lỗi đa ngôn ngữ trong Database (Mục 5.3.3)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/settings/i18n/translations?locale=locale_sample&namespace=namespace_sample&status=1&q=q_sample",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "settings",
+                "i18n",
+                "translations"
+              ],
+              "query": [
+                {
+                  "key": "locale",
+                  "value": "locale_sample"
+                },
+                {
+                  "key": "namespace",
+                  "value": "namespace_sample"
+                },
+                {
+                  "key": "status",
+                  "value": "1"
+                },
+                {
+                  "key": "q",
+                  "value": "q_sample"
+                }
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `settings.read`"
+          }
+        },
+        {
+          "name": "Thêm mới hoặc cập nhật câu thông báo đa ngôn ngữ trong Database và làm mới tức thì bộ dịch API",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/settings/i18n/translations",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "settings",
+                "i18n",
+                "translations"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"locale\": \"locale_sample\",\n  \"namespace\": \"common\",\n  \"key\": \"key_sample\",\n  \"value\": \"value_sample\",\n  \"description\": \"description_sample\",\n  \"status\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `settings.manage`"
+          }
+        }
+      ]
+    },
+    {
       "name": "User Management",
       "item": [
         {
@@ -7632,7 +9356,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"username\": \"username_sample\",\n  \"email\": \"user@example.com\",\n  \"firstName\": \"firstName_sample\",\n  \"lastName\": \"lastName_sample\",\n  \"fullName\": \"fullName_sample\",\n  \"phone\": \"phone_sample\",\n  \"avatarUrl\": \"https://example.com/resource\",\n  \"dateOfBirth\": \"dateOfBirth_sample\",\n  \"gender\": 1,\n  \"identityNumber\": \"identityNumber_sample\",\n  \"address\": \"address_sample\",\n  \"city\": \"city_sample\",\n  \"country\": \"country_sample\",\n  \"bio\": \"bio_sample\",\n  \"password\": \"password_sample\",\n  \"status\": 1,\n  \"managerId\": 1,\n  \"roleIds\": [\n    1\n  ],\n  \"organizationUnits\": [\n    {\n      \"organizationUnitId\": 1,\n      \"isPrimary\": false,\n      \"positionTitle\": \"positionTitle_sample\"\n    }\n  ]\n}",
+              "raw": "{\n  \"username\": \"username_sample\",\n  \"email\": \"user@example.com\",\n  \"firstName\": \"firstName_sample\",\n  \"lastName\": \"lastName_sample\",\n  \"fullName\": \"fullName_sample\",\n  \"phone\": \"phone_sample\",\n  \"avatarUrl\": \"https://example.com/resource\",\n  \"dateOfBirth\": \"dateOfBirth_sample\",\n  \"gender\": 1,\n  \"identityNumber\": \"identityNumber_sample\",\n  \"address\": \"address_sample\",\n  \"city\": \"city_sample\",\n  \"country\": \"country_sample\",\n  \"bio\": \"bio_sample\",\n  \"preferredLocale\": \"preferredLocale_sample\",\n  \"preferredTimezone\": \"preferredTimezone_sample\",\n  \"password\": \"password_sample\",\n  \"status\": 1,\n  \"managerId\": 1,\n  \"roleIds\": [\n    1\n  ],\n  \"organizationUnits\": [\n    {\n      \"organizationUnitId\": 1,\n      \"isPrimary\": false,\n      \"positionTitle\": \"positionTitle_sample\"\n    }\n  ]\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -7935,7 +9659,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"firstName\": \"firstName_sample\",\n  \"lastName\": \"lastName_sample\",\n  \"fullName\": \"fullName_sample\",\n  \"email\": \"user@example.com\",\n  \"phone\": \"phone_sample\",\n  \"avatarUrl\": \"https://example.com/resource\",\n  \"dateOfBirth\": \"dateOfBirth_sample\",\n  \"gender\": 1,\n  \"identityNumber\": \"identityNumber_sample\",\n  \"address\": \"address_sample\",\n  \"city\": \"city_sample\",\n  \"country\": \"country_sample\",\n  \"bio\": \"bio_sample\",\n  \"managerId\": 1,\n  \"expectedVersion\": 1\n}",
+              "raw": "{\n  \"firstName\": \"firstName_sample\",\n  \"lastName\": \"lastName_sample\",\n  \"fullName\": \"fullName_sample\",\n  \"email\": \"user@example.com\",\n  \"phone\": \"phone_sample\",\n  \"avatarUrl\": \"https://example.com/resource\",\n  \"dateOfBirth\": \"dateOfBirth_sample\",\n  \"gender\": 1,\n  \"identityNumber\": \"identityNumber_sample\",\n  \"address\": \"address_sample\",\n  \"city\": \"city_sample\",\n  \"country\": \"country_sample\",\n  \"bio\": \"bio_sample\",\n  \"preferredLocale\": \"preferredLocale_sample\",\n  \"preferredTimezone\": \"preferredTimezone_sample\",\n  \"managerId\": 1,\n  \"expectedVersion\": 1\n}",
               "options": {
                 "raw": {
                   "language": "json"
