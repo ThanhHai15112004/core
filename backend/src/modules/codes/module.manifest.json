@@ -104,6 +104,22 @@
         }
       ]
     }
+  ],
+  "menus": [
+    {
+      "code": "CODES_DICTIONARY",
+      "name": "Từ điển Danh mục Động",
+      "status": 1,
+      "link": "/codes",
+      "linkApi": "/api/v1/codes/types",
+      "type": 2,
+      "parent": null,
+      "level": 1,
+      "key": "codes.read",
+      "numOrder": 20,
+      "icon": "BookOpen",
+      "position": "SIDEBAR"
+    }
   ]
 }
 

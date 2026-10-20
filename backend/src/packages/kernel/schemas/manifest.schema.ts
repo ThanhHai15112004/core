@@ -147,6 +147,23 @@ export const ModuleSequenceManifestSchema = z.object({
   status: z.number().int().optional(),
 });
 
+export const ModuleMenuManifestSchema = z.object({
+  code: z.string().min(2).max(100),
+  name: z.string().min(1).max(255),
+  module: z.string().optional(),
+  status: z.union([z.number().int(), z.string(), z.boolean()]).optional(),
+  link: z.string().nullable().optional(),
+  linkApi: z.string().nullable().optional(),
+  type: z.union([z.number().int(), z.string()]).optional(),
+  parent: z.number().int().nullable().optional(),
+  parentCode: z.string().nullable().optional(),
+  level: z.number().int().min(1).optional(),
+  key: z.string().nullable().optional(),
+  numOrder: z.number().int().optional(),
+  icon: z.string().nullable().optional(),
+  position: z.string().optional(),
+});
+
 export const ModuleManifestSchema = z.object({
   $schema: z.string().optional(),
   name: z
@@ -167,6 +184,7 @@ export const ModuleManifestSchema = z.object({
   settings: z.array(ModuleSettingManifestSchema).optional().default([]),
   featureFlags: z.array(ModuleFeatureFlagManifestSchema).optional().default([]),
   sequences: z.array(ModuleSequenceManifestSchema).optional().default([]),
+  menus: z.array(ModuleMenuManifestSchema).optional().default([]),
   locales: z.array(ModuleLocaleManifestSchema).optional().default([]),
   timezones: z.array(ModuleTimezoneManifestSchema).optional().default([]),
   translations: z.array(ModuleTranslationManifestSchema).optional().default([]),

@@ -18,7 +18,6 @@ import {
   UnprocessableEntityAppException,
   computeSequencePeriodKey,
   defaultSequenceRegistry,
-  discoverInstalledModules,
   discoverManifestSequences,
   formatSequenceCode,
   resolveSequenceDateParts,
@@ -52,7 +51,6 @@ export class SequencesService implements ISequencesPublicService, OnModuleInit {
   private readonly inMemoryHistory: SequenceRuleHistoryRecord[] = [];
   private historySeq = 0;
   private ruleSeq = 100;
-  private installedModules = new Set<string>(['core']);
   private dbHydrated = false;
 
   constructor(
@@ -65,9 +63,6 @@ export class SequencesService implements ISequencesPublicService, OnModuleInit {
     @Optional() private readonly auditLogService?: AuditLogService | null,
   ) {
     this.registry = sequenceRegistry ?? defaultSequenceRegistry;
-    for (const mod of discoverInstalledModules()) {
-      this.installedModules.add(mod.trim().toLowerCase());
-    }
   }
 
   public async onModuleInit(): Promise<void> {
@@ -75,17 +70,6 @@ export class SequencesService implements ISequencesPublicService, OnModuleInit {
       await this.syncManifests();
     } catch {
       // Allow graceful startup before migration/seeding
-    }
-  }
-
-  /** Cập nhật danh sách module đã được cài đặt phục vụ kiểm tra động đa module */
-  public setInstalledModules(modules: readonly string[]): void {
-    this.installedModules.clear();
-    this.installedModules.add('core');
-    for (const mod of modules) {
-      if (mod?.trim()) {
-        this.installedModules.add(mod.trim().toLowerCase());
-      }
     }
   }
 
@@ -557,8 +541,17 @@ export class SequencesService implements ISequencesPublicService, OnModuleInit {
               step: activeRule.step,
               count: batchCount,
             });
-          } catch {
-            // Fallback to in-memory allocation if DB table is not available in unit tests
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            const isOfflineOrMockEnv =
+              !this.dbHydrated ||
+              /not a function|not initialized|not established|does not exist|doesn't exist|ECONNREFUSED|connect|offline|mock/i.test(
+                msg,
+              );
+            if (!isOfflineOrMockEnv) {
+              throw err;
+            }
+            // Fallback to in-memory allocation when DB/QueryRunner is offline or mocked in tests
             const existingCounters = this.registry.getCounters(activeRule.key);
             const matched = existingCounters.find(
               (c) => c.periodKey === periodKey && c.unitScopeKey === unitScopeKey,

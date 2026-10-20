@@ -12,6 +12,7 @@ import {
   type RegisteredFeatureFlagDefinition,
   UnprocessableEntityAppException,
   defaultFeatureFlagRegistry,
+  defaultMenuRegistry,
   discoverInstalledModules,
   discoverManifestFeatureFlags,
   safeJsonParseObject,
@@ -105,6 +106,7 @@ export class FeatureFlagsService implements IFeatureFlagsPublicService, OnModule
   public setInstalledModules(modules: readonly string[]): void {
     this.registry.setInstalledModules(modules);
     this.evaluationCache.clear();
+    defaultMenuRegistry.invalidateCache();
   }
 
   public getInstalledModules(): string[] {
@@ -1051,6 +1053,7 @@ export class FeatureFlagsService implements IFeatureFlagsPublicService, OnModule
         }
       }
     }
+    defaultMenuRegistry.invalidateCache();
   }
 
   private parseNumericUserId(rawId: unknown): number | null {

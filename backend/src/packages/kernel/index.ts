@@ -16,6 +16,7 @@ export * from './contracts/code-lookup.contract.js';
 export * from './contracts/setting-lookup.contract.js';
 export * from './contracts/feature-flag.contract.js';
 export * from './contracts/sequence.contract.js';
+export * from './contracts/menu.contract.js';
 export * from './schemas/manifest.schema.js';
 export * from './utils/spreadsheet.util.js';
 export * from './utils/json.util.js';

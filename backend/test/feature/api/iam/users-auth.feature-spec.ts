@@ -3757,4 +3757,225 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
       expect.arrayContaining(['CREATE', 'UPDATE']),
     );
   });
+
+  it('supports Section 5.6 Dynamic Menu & Navigation Management E2E: manifest sync, authorized menu tree by user permissions, create/update/reorder/delete menu, enable/disable toggle (status 1/0), and automatic cache invalidation', async () => {
+    const adminHeaders = { authorization: `Bearer ${adminAccessToken}` };
+
+    // 5.6.3: Đồng bộ Idempotent cấu trúc menu mặc định từ module.manifest.json (POST /api/v1/settings/menus/sync)
+    const syncMenusRes = await context.injectJson<{
+      syncedModules: string[];
+      totalMenus: number;
+    }>({
+      method: 'POST',
+      url: '/api/v1/settings/menus/sync',
+      headers: adminHeaders,
+      payload: {},
+    });
+    expect(syncMenusRes.status).toBe(HTTP_STATUS_CODE.OK);
+    expect(syncMenusRes.body.data.syncedModules).toEqual(
+      expect.arrayContaining(['codes', 'organizations', 'roles', 'settings', 'users']),
+    );
+    expect(syncMenusRes.body.data.totalMenus).toBeGreaterThanOrEqual(12);
+
+    // 5.6.1: Liệt kê danh sách menu quản trị (GET /api/v1/settings/menus)
+    const listMenusRes = await context.injectJson<
+      Array<{
+        id: number;
+        code: string;
+        name: string;
+        status: number;
+        statusName: string;
+        level: number;
+        position: string;
+      }>
+    >({
+      method: 'GET',
+      url: '/api/v1/settings/menus?position=SIDEBAR',
+      headers: adminHeaders,
+    });
+    expect(listMenusRes.status).toBe(HTTP_STATUS_CODE.OK);
+    expect(listMenusRes.body.data.map((m) => m.code)).toEqual(
+      expect.arrayContaining(['HOME', 'IAM', 'IAM_USERS', 'SETTINGS', 'SETTINGS_MENUS']),
+    );
+
+    // 5.6.1: Tạo mới mục menu động dưới nhóm SETTINGS (POST /api/v1/settings/menus)
+    const createMenuRes = await context.injectJson<{
+      id: number;
+      code: string;
+      name: string;
+      status: number;
+      statusName: string;
+      parentCode: string | null;
+      level: number;
+      link: string | null;
+      key: string | null;
+    }>({
+      method: 'POST',
+      url: '/api/v1/settings/menus',
+      headers: adminHeaders,
+      payload: {
+        code: 'SETTINGS_CUSTOM_PORTAL',
+        module: 'settings',
+        name: 'Cấu hình Cổng thông tin E2E',
+        status: 1,
+        type: 2,
+        parentCode: 'SETTINGS',
+        link: '/settings/portal',
+        linkApi: '/api/v1/settings/portal',
+        key: 'settings.read',
+        numOrder: 60,
+        icon: 'Globe',
+        position: 'SIDEBAR',
+        reason: 'Thêm mục menu Cổng thông tin phục vụ kiểm thử E2E',
+      },
+    });
+    expect(createMenuRes.status).toBe(HTTP_STATUS_CODE.CREATED);
+    expect(createMenuRes.body.data.code).toBe('SETTINGS_CUSTOM_PORTAL');
+    expect(createMenuRes.body.data.parentCode).toBe('SETTINGS');
+    expect(createMenuRes.body.data.level).toBe(2);
+    expect(createMenuRes.body.data.status).toBe(1);
+
+    // 5.6.2 & 5.6.4: Lấy cây menu điều hướng đã lọc theo quyền hạn người dùng hiện tại (GET /api/v1/settings/menus/tree)
+    const treeRes1 = await context.injectJson<{
+      position: string;
+      totalNodes: number;
+      cacheVersion: number;
+      fromCache: boolean;
+      items: Array<{
+        code: string;
+        name: string;
+        children: Array<{ code: string; name: string; link: string | null }>;
+      }>;
+    }>({
+      method: 'GET',
+      url: '/api/v1/settings/menus/tree?position=SIDEBAR',
+      headers: adminHeaders,
+    });
+    expect(treeRes1.status).toBe(HTTP_STATUS_CODE.OK);
+    const settingsBranch1 = treeRes1.body.data.items.find((i) => i.code === 'SETTINGS');
+    expect(settingsBranch1).toBeDefined();
+    expect(settingsBranch1?.children.map((c) => c.code)).toContain('SETTINGS_CUSTOM_PORTAL');
+
+    // Gọi lần 2 -> trả về từ Cache điều hướng (fromCache = true)
+    const treeRes2 = await context.injectJson<{
+      fromCache: boolean;
+      cacheVersion: number;
+    }>({
+      method: 'GET',
+      url: '/api/v1/settings/menus/tree?position=SIDEBAR',
+      headers: adminHeaders,
+    });
+    expect(treeRes2.status).toBe(HTTP_STATUS_CODE.OK);
+    expect(treeRes2.body.data.fromCache).toBe(true);
+    expect(treeRes2.body.data.cacheVersion).toBe(treeRes1.body.data.cacheVersion);
+
+    // 5.6.1 & 5.6.4: Tắt hiển thị mục menu (PATCH /api/v1/settings/menus/:code/toggle với status = 0)
+    // -> Tự động xóa cache và ẩn mục menu khỏi cây điều hướng
+    const toggleOffRes = await context.injectJson<{
+      code: string;
+      status: number;
+      statusName: string;
+    }>({
+      method: 'PATCH',
+      url: '/api/v1/settings/menus/SETTINGS_CUSTOM_PORTAL/toggle',
+      headers: adminHeaders,
+      payload: {
+        status: 0,
+        reason: 'Tạm tắt hiển thị menu Cổng thông tin trên giao diện',
+      },
+    });
+    expect(toggleOffRes.status).toBe(HTTP_STATUS_CODE.OK);
+    expect(toggleOffRes.body.data.status).toBe(0);
+    expect(toggleOffRes.body.data.statusName).toBe('INACTIVE');
+
+    const treeAfterToggleOff = await context.injectJson<{
+      fromCache: boolean;
+      items: Array<{
+        code: string;
+        children: Array<{ code: string }>;
+      }>;
+    }>({
+      method: 'GET',
+      url: '/api/v1/settings/menus/tree?position=SIDEBAR',
+      headers: adminHeaders,
+    });
+    expect(treeAfterToggleOff.status).toBe(HTTP_STATUS_CODE.OK);
+    expect(treeAfterToggleOff.body.data.fromCache).toBe(false);
+    const settingsBranchAfterOff = treeAfterToggleOff.body.data.items.find(
+      (i) => i.code === 'SETTINGS',
+    );
+    expect(settingsBranchAfterOff?.children.map((c) => c.code)).not.toContain(
+      'SETTINGS_CUSTOM_PORTAL',
+    );
+
+    // Bật lại mục menu (status = 1) và cập nhật tên + thứ tự hiển thị
+    const toggleOnRes = await context.injectJson<{
+      code: string;
+      status: number;
+      statusName: string;
+    }>({
+      method: 'PATCH',
+      url: '/api/v1/settings/menus/SETTINGS_CUSTOM_PORTAL/toggle',
+      headers: adminHeaders,
+      payload: {
+        status: 1,
+      },
+    });
+    expect(toggleOnRes.status).toBe(HTTP_STATUS_CODE.OK);
+    expect(toggleOnRes.body.data.status).toBe(1);
+
+    const updateMenuRes = await context.injectJson<{
+      code: string;
+      name: string;
+      numOrder: number;
+    }>({
+      method: 'PUT',
+      url: '/api/v1/settings/menus/SETTINGS_CUSTOM_PORTAL',
+      headers: adminHeaders,
+      payload: {
+        name: 'Cổng thông tin Doanh nghiệp',
+        numOrder: 5,
+      },
+    });
+    expect(updateMenuRes.status).toBe(HTTP_STATUS_CODE.OK);
+    expect(updateMenuRes.body.data.name).toBe('Cổng thông tin Doanh nghiệp');
+    expect(updateMenuRes.body.data.numOrder).toBe(5);
+
+    // Sắp xếp lại thứ tự hiển thị (POST /api/v1/settings/menus/reorder)
+    const reorderRes = await context.injectJson<Array<{ code: string; numOrder: number }>>({
+      method: 'POST',
+      url: '/api/v1/settings/menus/reorder',
+      headers: adminHeaders,
+      payload: {
+        items: [{ code: 'SETTINGS_CUSTOM_PORTAL', numOrder: 1 }],
+      },
+    });
+    expect(reorderRes.status).toBe(HTTP_STATUS_CODE.OK);
+    expect(reorderRes.body.data[0]?.numOrder).toBe(1);
+
+    // Xóa cache điều hướng chủ động (POST /api/v1/settings/menus/cache/invalidate)
+    const invalidateRes = await context.injectJson<{
+      invalidated: boolean;
+      cacheVersion: number;
+    }>({
+      method: 'POST',
+      url: '/api/v1/settings/menus/cache/invalidate',
+      headers: adminHeaders,
+      payload: {},
+    });
+    expect(invalidateRes.status).toBe(HTTP_STATUS_CODE.OK);
+    expect(invalidateRes.body.data.invalidated).toBe(true);
+
+    // Xóa mục menu vừa tạo (DELETE /api/v1/settings/menus/:code)
+    const deleteMenuRes = await context.injectJson<{
+      deleted: boolean;
+      code: string;
+    }>({
+      method: 'DELETE',
+      url: '/api/v1/settings/menus/SETTINGS_CUSTOM_PORTAL',
+      headers: adminHeaders,
+    });
+    expect(deleteMenuRes.status).toBe(HTTP_STATUS_CODE.OK);
+    expect(deleteMenuRes.body.data.deleted).toBe(true);
+  });
 });

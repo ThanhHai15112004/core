@@ -9,17 +9,23 @@ import {
 import {
   type CodeTypeManifestItem,
   type FeatureFlagManifestItem,
+  MENU_POSITION,
+  MENU_STATUS,
+  MENU_TYPE,
+  type MenuManifestItem,
   type SequenceManifestItem,
   type SettingGroupManifestItem,
   type SettingManifestItem,
   SETTING_ITEM_STATUS,
   discoverManifestCodeTypes,
   discoverManifestFeatureFlags,
+  discoverManifestMenus,
   discoverManifestSequences,
   discoverManifestSettings,
   parseSettingEnvironmentCode,
   parseSettingValueTypeCode,
   validateAndSerializeSettingValue,
+  validateMenuInput,
   validateSequenceRule,
 } from '@packages/kernel/index.js';
 
@@ -1200,9 +1206,172 @@ export class MasterPermissionSeeder implements SeederContract {
       affected++;
     }
 
+    // 8. Đồng bộ Cấu trúc Menu & Điều hướng Động (Mục 5.6 — bảng menus duy nhất)
+    const menuKeyCol = isPostgres ? '"key"' : '`key`';
+    await ctx.manager.query(`
+      CREATE TABLE IF NOT EXISTS menus (
+        id ${pkDef},
+        code VARCHAR(100) NOT NULL UNIQUE,
+        name VARCHAR(255) NOT NULL,
+        status INT NOT NULL DEFAULT 1,
+        link VARCHAR(255) NULL,
+        link_api VARCHAR(255) NULL,
+        type INT NOT NULL DEFAULT 1,
+        parent INT NULL,
+        level INT NOT NULL DEFAULT 1,
+        ${menuKeyCol} VARCHAR(150) NULL,
+        num_order INT NOT NULL DEFAULT 0,
+        icon VARCHAR(64) NULL,
+        position VARCHAR(32) NOT NULL DEFAULT 'SIDEBAR',
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        deleted_at TIMESTAMP NULL
+      )
+    `);
+
+    const discoveredMenus: MenuManifestItem[] = discoverManifestMenus();
+    let menusSeeded = 0;
+
+    // Bước 8a: Upsert toàn bộ các bản ghi menu để đảm bảo mọi mã code đều đã có id
+    for (const item of discoveredMenus) {
+      const validated = validateMenuInput({
+        code: item.code,
+        name: item.name,
+        status: item.status ?? MENU_STATUS.ACTIVE,
+        link: item.link,
+        linkApi: item.linkApi,
+        type: item.type ?? (item.link ? MENU_TYPE.ITEM : MENU_TYPE.GROUP),
+        key: item.key,
+        numOrder: item.numOrder ?? 0,
+        icon: item.icon,
+        position: item.position ?? MENU_POSITION.SIDEBAR,
+      });
+
+      const initialLevel = item.parentCode || item.parent ? 2 : 1;
+
+      if (isPostgres) {
+        await ctx.manager.query(
+          `INSERT INTO menus (
+             code, name, status, link, link_api, type, parent, level, ${menuKeyCol}, num_order, icon, position
+           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+           ON CONFLICT (code) DO UPDATE SET
+             name = EXCLUDED.name,
+             link = EXCLUDED.link,
+             link_api = EXCLUDED.link_api,
+             type = EXCLUDED.type,
+             ${menuKeyCol} = EXCLUDED.${menuKeyCol},
+             num_order = EXCLUDED.num_order,
+             icon = EXCLUDED.icon,
+             position = EXCLUDED.position`,
+          [
+            validated.code,
+            validated.name,
+            validated.status,
+            validated.link,
+            validated.linkApi,
+            validated.type,
+            item.parent ?? null,
+            initialLevel,
+            validated.key,
+            validated.numOrder,
+            validated.icon,
+            validated.position,
+          ],
+        );
+      } else {
+        await ctx.manager.query(
+          `INSERT INTO menus (
+             code, name, status, link, link_api, type, parent, level, ${menuKeyCol}, num_order, icon, position
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON DUPLICATE KEY UPDATE
+             name = VALUES(name),
+             link = VALUES(link),
+             link_api = VALUES(link_api),
+             type = VALUES(type),
+             ${menuKeyCol} = VALUES(${menuKeyCol}),
+             num_order = VALUES(num_order),
+             icon = VALUES(icon),
+             position = VALUES(position)`,
+          [
+            validated.code,
+            validated.name,
+            validated.status,
+            validated.link,
+            validated.linkApi,
+            validated.type,
+            item.parent ?? null,
+            initialLevel,
+            validated.key,
+            validated.numOrder,
+            validated.icon,
+            validated.position,
+          ],
+        );
+      }
+      menusSeeded++;
+      affected++;
+    }
+
+    // Bước 8b: Tra cứu id từ bảng menus để liên kết parent và tính level chính xác
+    const menuRows = (await ctx.manager.query(`SELECT id, code, parent FROM menus`)) as Array<{
+      id: number;
+      code: string;
+      parent: number | null;
+    }>;
+    const menuIdByCode = new Map<string, number>();
+    let fallbackMenuId = 1;
+    for (const item of discoveredMenus) {
+      menuIdByCode.set(item.code.trim().toUpperCase(), fallbackMenuId++);
+    }
+    for (const row of menuRows) {
+      if (row?.code) {
+        menuIdByCode.set(String(row.code).trim().toUpperCase(), Number(row.id));
+      }
+    }
+
+    const parentCodeByCode = new Map<string, string>();
+    for (const item of discoveredMenus) {
+      if (item.parentCode?.trim()) {
+        parentCodeByCode.set(item.code.trim().toUpperCase(), item.parentCode.trim().toUpperCase());
+      }
+    }
+
+    const computeManifestLevel = (code: string): number => {
+      let lvl = 1;
+      let curr = parentCodeByCode.get(code);
+      const seen = new Set<string>([code]);
+      while (curr && !seen.has(curr)) {
+        seen.add(curr);
+        lvl++;
+        curr = parentCodeByCode.get(curr);
+      }
+      return lvl;
+    };
+
+    for (const item of discoveredMenus) {
+      if (!item.parentCode?.trim()) continue;
+      const code = item.code.trim().toUpperCase();
+      const parentCode = item.parentCode.trim().toUpperCase();
+      const parentId = menuIdByCode.get(parentCode) ?? null;
+      if (parentId === null) continue;
+      const level = computeManifestLevel(code);
+
+      if (isPostgres) {
+        await ctx.manager.query(
+          `UPDATE menus SET parent = $1, level = $2 WHERE code = $3 AND (parent IS NULL OR parent = $1)`,
+          [parentId, level, code],
+        );
+      } else {
+        await ctx.manager.query(
+          `UPDATE menus SET parent = ?, level = ? WHERE code = ? AND (parent IS NULL OR parent = ?)`,
+          [parentId, level, code, parentId],
+        );
+      }
+    }
+
     return {
       affected,
-      details: `${this.permissions.length} permissions, ${this.masterSettings.length} master settings, ${mergedCodeTypes.size} code_types (${codeValuesSeeded} code_values), ${mergedSettingGroups.size} setting_groups (${settingsSeeded} system_settings), ${featureFlagsSeeded} feature_flags, ${localesSeeded} i18n_locales, ${timezonesSeeded} i18n_timezones, ${translationsSeeded} i18n_translations, ${sequencesSeeded} sequence_rules synced`,
+      details: `${this.permissions.length} permissions, ${this.masterSettings.length} master settings, ${mergedCodeTypes.size} code_types (${codeValuesSeeded} code_values), ${mergedSettingGroups.size} setting_groups (${settingsSeeded} system_settings), ${featureFlagsSeeded} feature_flags, ${localesSeeded} i18n_locales, ${timezonesSeeded} i18n_timezones, ${translationsSeeded} i18n_translations, ${sequencesSeeded} sequence_rules, ${menusSeeded} menus synced`,
     };
   }
 }

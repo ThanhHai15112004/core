@@ -6,6 +6,7 @@ import {
   HTTP_ERROR_CODE,
   NotFoundAppException,
   defaultCodeRegistry,
+  defaultMenuRegistry,
   scanModuleManifests,
 } from '@packages/kernel/index.js';
 import { TransactionManager } from '@packages/database/index.js';
@@ -100,6 +101,18 @@ export class RolesService implements IRolesPublicService {
     this.dataScopeService?.registerRoleScopeResolver(async (roleCodes) => {
       const roles = await this.findByCodes(roleCodes);
       return roles.filter((r) => r.status === ROLE_STATUS.ACTIVE).map((r) => r.dataScope);
+    });
+    defaultMenuRegistry.registerRolePermissionsResolver(async (roleCodes) => {
+      const roles = await this.findByCodes(roleCodes);
+      const perms = new Set<string>();
+      for (const role of roles) {
+        if (role.status === ROLE_STATUS.ACTIVE) {
+          for (const permCode of role.permissions) {
+            perms.add(permCode);
+          }
+        }
+      }
+      return [...perms];
     });
     defaultCodeRegistry.registerUsageChecker(
       'roles.status',
@@ -716,9 +729,13 @@ export class RolesService implements IRolesPublicService {
     };
 
     if (this.transactionManager) {
-      return this.transactionManager.runInTransaction(work);
+      const result = await this.transactionManager.runInTransaction(work);
+      defaultMenuRegistry.invalidateCache();
+      return result;
     }
-    return work();
+    const result = await work();
+    defaultMenuRegistry.invalidateCache();
+    return result;
   }
 
   /** Cập nhật riêng danh sách quyền hạn cho một vai trò */
@@ -779,6 +796,7 @@ export class RolesService implements IRolesPublicService {
       afterData: { permissions: resolvedPerms.map((p) => p.code) },
       persistToAuditLog: false,
     });
+    defaultMenuRegistry.invalidateCache();
     return response;
   }
 
@@ -813,6 +831,7 @@ export class RolesService implements IRolesPublicService {
       beforeData: { id: role.id, code: role.code, name: role.name, dataScope: role.dataScope },
       afterData: { deleted: true },
     });
+    defaultMenuRegistry.invalidateCache();
     return { deleted: true, id };
   }
 

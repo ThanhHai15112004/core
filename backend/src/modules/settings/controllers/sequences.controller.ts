@@ -6,7 +6,6 @@ import {
   ValidatedBody,
   ValidatedParams,
   ValidatedQuery,
-  intQueryParam,
 } from '@packages/http/index.js';
 import {
   HTTP_STATUS_CODE,
@@ -193,18 +192,8 @@ export class SequencesController {
   })
   public async listKeyHistory(
     @ValidatedParams(sequenceKeyParamSchema) params: { key: string },
-    @ValidatedQuery(
-      z.object({
-        action: z.string().trim().optional(),
-        actorUserId: intQueryParam({ min: 1 }).optional(),
-        limit: intQueryParam({ min: 1, max: 200 }).optional(),
-      }),
-    )
-    query: {
-      action?: string;
-      actorUserId?: number;
-      limit?: number;
-    },
+    @ValidatedQuery(listSequenceHistoryQuerySchema.omit({ sequenceKey: true }))
+    query: Omit<ListSequenceHistoryQuery, 'sequenceKey'>,
   ): Promise<SequenceRuleHistoryRecord[]> {
     return this.sequencesService.listHistory({
       sequenceKey: params.key,

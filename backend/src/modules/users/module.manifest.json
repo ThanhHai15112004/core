@@ -213,5 +213,35 @@
       "timezone": "Asia/Ho_Chi_Minh",
       "isSystem": true
     }
+  ],
+  "menus": [
+    {
+      "code": "IAM",
+      "name": "Quản trị Định danh & Truy cập",
+      "status": 1,
+      "link": null,
+      "linkApi": "/api/v1/users",
+      "type": 1,
+      "parent": null,
+      "level": 1,
+      "key": null,
+      "numOrder": 10,
+      "icon": "ShieldCheck",
+      "position": "SIDEBAR"
+    },
+    {
+      "code": "IAM_USERS",
+      "name": "Người dùng",
+      "status": 1,
+      "link": "/iam/users",
+      "linkApi": "/api/v1/users",
+      "type": 2,
+      "parentCode": "IAM",
+      "level": 2,
+      "key": "users.read",
+      "numOrder": 1,
+      "icon": "Users",
+      "position": "SIDEBAR"
+    }
   ]
 }

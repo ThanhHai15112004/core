@@ -1,6 +1,13 @@
 import type {
+  BuildAuthorizedMenuTreeOptions,
   FeatureFlagEvaluationContext,
   FeatureFlagEvaluationResult,
+  MenuPositionCode,
+  MenuStatusCode,
+  MenuStatusName,
+  MenuTreeEvaluationResult,
+  MenuTypeCode,
+  MenuTypeName,
   ResolvedSettingView,
   SequenceCounterSnapshot,
   SequenceDateFormatCode,
@@ -21,6 +28,7 @@ export const SETTINGS_PUBLIC_SERVICE = Symbol('SETTINGS_PUBLIC_SERVICE');
 export const FEATURE_FLAGS_PUBLIC_SERVICE = Symbol('FEATURE_FLAGS_PUBLIC_SERVICE');
 export const I18N_MANAGEMENT_PUBLIC_SERVICE = Symbol('I18N_MANAGEMENT_PUBLIC_SERVICE');
 export const SEQUENCES_PUBLIC_SERVICE = Symbol('SEQUENCES_PUBLIC_SERVICE');
+export const MENUS_PUBLIC_SERVICE = Symbol('MENUS_PUBLIC_SERVICE');
 
 export interface SettingGroupSummary {
   readonly id: number;
@@ -312,4 +320,49 @@ export interface ISequencesPublicService {
     count: number,
     context?: SequenceGenerateContext,
   ): Promise<SequenceGeneratedResult[]>;
+}
+
+export interface MenuSummary {
+  readonly id: number;
+  readonly code: string;
+  readonly module: string;
+  readonly name: string;
+  readonly status: MenuStatusCode;
+  readonly statusName: MenuStatusName;
+  readonly link: string | null;
+  readonly linkApi: string | null;
+  readonly type: MenuTypeCode;
+  readonly typeName: MenuTypeName;
+  readonly parent: number | null;
+  readonly parentCode: string | null;
+  readonly level: number;
+  readonly key: string | null;
+  readonly numOrder: number;
+  readonly icon: string | null;
+  readonly position: MenuPositionCode;
+  readonly updatedAt: string;
+}
+
+export interface SyncMenusResult {
+  readonly syncedModules: string[];
+  readonly totalMenus: number;
+}
+
+export interface DeleteMenuResult {
+  readonly deleted: true;
+  readonly code: string;
+  readonly id: number;
+}
+
+export interface InvalidateMenuCacheResult {
+  readonly invalidated: true;
+  readonly cacheVersion: number;
+}
+
+export interface IMenusPublicService {
+  syncManifests(): Promise<SyncMenusResult>;
+  getAuthorizedMenuTree(
+    options?: BuildAuthorizedMenuTreeOptions,
+  ): Promise<MenuTreeEvaluationResult>;
+  invalidateCache(): Promise<InvalidateMenuCacheResult>;
 }

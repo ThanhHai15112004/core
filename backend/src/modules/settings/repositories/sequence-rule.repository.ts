@@ -1,6 +1,7 @@
 import { Injectable, Optional } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { BaseTypeOrmRepository, TransactionManager } from '@packages/database/index.js';
+import { toLikePattern } from '@packages/http/index.js';
 import { SequenceRuleEntity } from '../entities/sequence-rule.entity.js';
 
 @Injectable()
@@ -49,7 +50,7 @@ export class SequenceRuleRepository extends BaseTypeOrmRepository<SequenceRuleEn
         qb.andWhere('sr.status = :status', { status: params.status });
       }
       if (params?.q?.trim()) {
-        const keyword = `%${params.q.trim().toLowerCase()}%`;
+        const keyword = toLikePattern(params.q.trim().toLowerCase(), 'contains');
         qb.andWhere(
           '(LOWER(sr.sequenceKey) LIKE :keyword OR LOWER(sr.name) LIKE :keyword OR LOWER(sr.prefix) LIKE :keyword)',
           { keyword },

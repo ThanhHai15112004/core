@@ -88,61 +88,84 @@ export class SequenceCounterRepository extends BaseTypeOrmRepository<SequenceCou
         return numbers;
       }
 
-      // MySQL / MariaDB: Khóa dòng trong Transaction để cấp dải số nguyên tử
-      const existingRows = (await manager.query(
+      // MySQL / MariaDB: Atomic Upsert (INSERT ... ON DUPLICATE KEY UPDATE) chống Race Condition
+      // khi nhiều instance cùng cấp mã đầu tiên của kỳ mới trên uq_sequence_counters_scope,
+      // kết hợp đọc giá trị đã khóa trong cùng Transaction để lấy chính xác endVal.
+      const upsertResult = (await manager.query(
+        `INSERT INTO sequence_counters (
+           sequence_id, sequence_key, period_key, organization_unit_id, unit_scope_key, current_value, version, updated_at
+         ) VALUES (?, ?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP)
+         ON DUPLICATE KEY UPDATE
+           current_value = LAST_INSERT_ID(GREATEST(current_value + ?, ?)),
+           version = version + 1,
+           updated_at = CURRENT_TIMESTAMP`,
+        [
+          params.sequenceId,
+          params.sequenceKey,
+          params.periodKey,
+          params.organizationUnitId,
+          params.unitScopeKey,
+          firstBatchLastVal,
+          totalIncrement,
+          firstBatchLastVal,
+        ],
+      )) as
+        | { affectedRows?: number; insertId?: number | string }
+        | Array<{ current_value?: string | number }>;
+
+      const lockedRows = (await manager.query(
         `SELECT id, current_value FROM sequence_counters
          WHERE sequence_id = ? AND period_key = ? AND unit_scope_key = ?
          FOR UPDATE`,
         [params.sequenceId, params.periodKey, params.unitScopeKey],
-      )) as Array<{ id: number; current_value: string | number }>;
+      )) as Array<{ id?: number; current_value?: string | number }> | undefined;
 
-      if (existingRows.length === 0) {
-        await manager.query(
-          `INSERT INTO sequence_counters (
-             sequence_id, sequence_key, period_key, organization_unit_id, unit_scope_key, current_value, version
-           ) VALUES (?, ?, ?, ?, ?, ?, 1)`,
-          [
-            params.sequenceId,
-            params.sequenceKey,
-            params.periodKey,
-            params.organizationUnitId,
-            params.unitScopeKey,
-            firstBatchLastVal,
-          ],
-        );
-        const numbers: number[] = [];
-        for (let i = 0; i < safeCount; i++) {
-          numbers.push(safeStart + i * safeStep);
-        }
-        return numbers;
+      let endVal = firstBatchLastVal;
+      if (Array.isArray(lockedRows) && lockedRows[0]?.current_value !== undefined) {
+        endVal = Number(lockedRows[0].current_value);
+      } else if (
+        upsertResult &&
+        !Array.isArray(upsertResult) &&
+        typeof upsertResult === 'object' &&
+        upsertResult.affectedRows === 2 &&
+        upsertResult.insertId !== undefined &&
+        Number(upsertResult.insertId) > 0
+      ) {
+        endVal = Number(upsertResult.insertId);
       }
 
-      const prevVal = Number(existingRows[0]!.current_value);
-      const nextFirstVal = Math.max(prevVal + safeStep, safeStart);
-      const nextLastVal = nextFirstVal + (safeCount - 1) * safeStep;
-
-      await manager.query(
-        `UPDATE sequence_counters
-         SET current_value = ?, version = version + 1, updated_at = CURRENT_TIMESTAMP
-         WHERE id = ?`,
-        [nextLastVal, existingRows[0]!.id],
-      );
-
+      const startOfBatch = endVal - (safeCount - 1) * safeStep;
       const numbers: number[] = [];
       for (let i = 0; i < safeCount; i++) {
-        numbers.push(nextFirstVal + i * safeStep);
+        numbers.push(startOfBatch + i * safeStep);
       }
       return numbers;
     };
 
-    if (this.transactionManager) {
+    const runOnce = async (): Promise<number[]> => {
+      if (this.transactionManager) {
+        return this.transactionManager.runInTransaction((manager) => executeAtomic(manager));
+      }
+      return executeAtomic(this.manager);
+    };
+
+    const maxAttempts = 3;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
-        return await this.transactionManager.runInTransaction((manager) => executeAtomic(manager));
-      } catch {
-        return executeAtomic(this.manager);
+        return await runOnce();
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        const isTransientConcurrencyError =
+          /deadlock|lock wait timeout|could not serialize|duplicate key|ER_LOCK_DEADLOCK|ER_DUP_ENTRY|40P01|23505/i.test(
+            msg,
+          );
+        if (isTransientConcurrencyError && attempt < maxAttempts) {
+          continue;
+        }
+        throw err;
       }
     }
 
-    return executeAtomic(this.manager);
+    return runOnce();
   }
 }

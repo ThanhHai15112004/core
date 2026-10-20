@@ -39,3 +39,13 @@ export const SEQUENCES_ROUTES = {
   NEXT: ':key/next',
   KEY_HISTORY: ':key/history',
 } as const;
+
+export const MENUS_ROUTES = {
+  ROOT: 'settings/menus',
+  SYNC: 'sync',
+  TREE: 'tree',
+  REORDER: 'reorder',
+  INVALIDATE_CACHE: 'cache/invalidate',
+  DETAIL: ':code',
+  TOGGLE: ':code/toggle',
+} as const;

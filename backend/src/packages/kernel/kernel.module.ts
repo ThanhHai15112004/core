@@ -4,6 +4,7 @@ import {
   FeatureFlagRegistryService,
   defaultFeatureFlagRegistry,
 } from './contracts/feature-flag.contract.js';
+import { MenuRegistryService, defaultMenuRegistry } from './contracts/menu.contract.js';
 import { SequenceRegistryService, defaultSequenceRegistry } from './contracts/sequence.contract.js';
 import {
   SettingRegistryService,
@@ -29,12 +30,17 @@ import {
       provide: SequenceRegistryService,
       useValue: defaultSequenceRegistry,
     },
+    {
+      provide: MenuRegistryService,
+      useValue: defaultMenuRegistry,
+    },
   ],
   exports: [
     CodeRegistryService,
     SettingRegistryService,
     FeatureFlagRegistryService,
     SequenceRegistryService,
+    MenuRegistryService,
   ],
 })
 export class KernelModule {}

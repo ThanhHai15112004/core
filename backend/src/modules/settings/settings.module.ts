@@ -4,11 +4,13 @@ import { CoreI18nService } from '@packages/i18n/index.js';
 import {
   FEATURE_FLAGS_PUBLIC_SERVICE,
   I18N_MANAGEMENT_PUBLIC_SERVICE,
+  MENUS_PUBLIC_SERVICE,
   SEQUENCES_PUBLIC_SERVICE,
   SETTINGS_PUBLIC_SERVICE,
 } from './contracts/index.js';
 import { FeatureFlagsController } from './controllers/feature-flags.controller.js';
 import { I18nController } from './controllers/i18n.controller.js';
+import { MenusController } from './controllers/menus.controller.js';
 import { SequencesController } from './controllers/sequences.controller.js';
 import { SettingsController } from './controllers/settings.controller.js';
 import { FeatureFlagHistoryEntity } from './entities/feature-flag-history.entity.js';
@@ -16,6 +18,7 @@ import { FeatureFlagEntity } from './entities/feature-flag.entity.js';
 import { I18nLocaleEntity } from './entities/i18n-locale.entity.js';
 import { I18nTimezoneEntity } from './entities/i18n-timezone.entity.js';
 import { I18nTranslationEntity } from './entities/i18n-translation.entity.js';
+import { MenuEntity } from './entities/menu.entity.js';
 import { SequenceCounterEntity } from './entities/sequence-counter.entity.js';
 import { SequenceRuleHistoryEntity } from './entities/sequence-rule-history.entity.js';
 import { SequenceRuleEntity } from './entities/sequence-rule.entity.js';
@@ -28,6 +31,7 @@ import { FeatureFlagRepository } from './repositories/feature-flag.repository.js
 import { I18nLocaleRepository } from './repositories/i18n-locale.repository.js';
 import { I18nTimezoneRepository } from './repositories/i18n-timezone.repository.js';
 import { I18nTranslationRepository } from './repositories/i18n-translation.repository.js';
+import { MenuRepository } from './repositories/menu.repository.js';
 import { SequenceCounterRepository } from './repositories/sequence-counter.repository.js';
 import { SequenceRuleHistoryRepository } from './repositories/sequence-rule-history.repository.js';
 import { SequenceRuleRepository } from './repositories/sequence-rule.repository.js';
@@ -37,6 +41,7 @@ import { SystemSettingScopeRepository } from './repositories/system-setting-scop
 import { SystemSettingRepository } from './repositories/system-setting.repository.js';
 import { FeatureFlagsService } from './services/feature-flags.service.js';
 import { I18nManagementService } from './services/i18n-management.service.js';
+import { MenusService } from './services/menus.service.js';
 import { SequencesService } from './services/sequences.service.js';
 import { SettingsService } from './services/settings.service.js';
 import enSettings from './locales/en/settings.json' with { type: 'json' };
@@ -60,9 +65,16 @@ new CoreI18nService().registerNamespace('settings', { vi: viSettings, en: enSett
       SequenceRuleEntity,
       SequenceCounterEntity,
       SequenceRuleHistoryEntity,
+      MenuEntity,
     ]),
   ],
-  controllers: [SettingsController, FeatureFlagsController, I18nController, SequencesController],
+  controllers: [
+    SettingsController,
+    FeatureFlagsController,
+    I18nController,
+    SequencesController,
+    MenusController,
+  ],
   providers: [
     SettingGroupRepository,
     SystemSettingRepository,
@@ -76,10 +88,12 @@ new CoreI18nService().registerNamespace('settings', { vi: viSettings, en: enSett
     SequenceRuleRepository,
     SequenceCounterRepository,
     SequenceRuleHistoryRepository,
+    MenuRepository,
     SettingsService,
     FeatureFlagsService,
     I18nManagementService,
     SequencesService,
+    MenusService,
     {
       provide: SETTINGS_PUBLIC_SERVICE,
       useExisting: SettingsService,
@@ -96,16 +110,22 @@ new CoreI18nService().registerNamespace('settings', { vi: viSettings, en: enSett
       provide: SEQUENCES_PUBLIC_SERVICE,
       useExisting: SequencesService,
     },
+    {
+      provide: MENUS_PUBLIC_SERVICE,
+      useExisting: MenusService,
+    },
   ],
   exports: [
     SettingsService,
     FeatureFlagsService,
     I18nManagementService,
     SequencesService,
+    MenusService,
     SETTINGS_PUBLIC_SERVICE,
     FEATURE_FLAGS_PUBLIC_SERVICE,
     I18N_MANAGEMENT_PUBLIC_SERVICE,
     SEQUENCES_PUBLIC_SERVICE,
+    MENUS_PUBLIC_SERVICE,
     SettingGroupRepository,
     SystemSettingRepository,
     SystemSettingScopeRepository,
@@ -118,6 +138,7 @@ new CoreI18nService().registerNamespace('settings', { vi: viSettings, en: enSett
     SequenceRuleRepository,
     SequenceCounterRepository,
     SequenceRuleHistoryRepository,
+    MenuRepository,
   ],
 })
 export class SettingsModule {

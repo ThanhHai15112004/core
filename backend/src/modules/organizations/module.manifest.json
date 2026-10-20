@@ -142,5 +142,21 @@
       "timezone": "Asia/Ho_Chi_Minh",
       "isSystem": true
     }
+  ],
+  "menus": [
+    {
+      "code": "IAM_ORGANIZATIONS",
+      "name": "Sơ đồ Tổ chức & Chi nhánh",
+      "status": 1,
+      "link": "/iam/organizations",
+      "linkApi": "/api/v1/organizations",
+      "type": 2,
+      "parentCode": "IAM",
+      "level": 2,
+      "key": "organizations.read",
+      "numOrder": 3,
+      "icon": "Building2",
+      "position": "SIDEBAR"
+    }
   ]
 }

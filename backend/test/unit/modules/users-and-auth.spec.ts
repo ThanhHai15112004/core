@@ -101,6 +101,10 @@ import {
   computeFeatureFlagRolloutBucket,
   defaultCodeRegistry,
   FeatureFlagRegistryService,
+  MENU_POSITION,
+  MENU_STATUS,
+  MENU_TYPE,
+  MenuRegistryService,
   SEQUENCE_DATE_FORMAT,
   SEQUENCE_RESET_POLICY,
   SequenceRegistryService,
@@ -113,6 +117,8 @@ import type { CodeTypeRepository } from '@modules/codes/repositories/code-type.r
 import type { CodeValueRepository } from '@modules/codes/repositories/code-value.repository.js';
 import { CodesService } from '@modules/codes/services/codes.service.js';
 import { FeatureFlagsService } from '@modules/settings/services/feature-flags.service.js';
+import { MenusService } from '@modules/settings/services/menus.service.js';
+import { SequenceCounterRepository } from '@modules/settings/repositories/sequence-counter.repository.js';
 import { SequencesService } from '@modules/settings/services/sequences.service.js';
 import { SettingsService } from '@modules/settings/services/settings.service.js';
 import { MasterPermissionSeeder } from '../../../src/database/seeders/master-permission.seeder.js';
@@ -4529,5 +4535,369 @@ describe('Unit: Quản lý Người dùng (3.1) & Xác thực / Phiên / MFA (3)
     expect(histories[0]?.newState).toMatchObject({ prefix: 'SO', suffix: 'VIP' });
     expect(histories[0]?.actorUserId).toBe(1);
     expect(histories[0]?.reason).toContain('Đổi tiền tố sang SO');
+
+    // Kiểm tra templatePattern tùy chỉnh (Custom Template Pattern)
+    await sequencesService.createSequenceRule(
+      {
+        key: 'finance.tax_voucher',
+        module: 'finance',
+        name: 'Chứng từ thuế theo mẫu tùy chỉnh',
+        prefix: 'TAX',
+        suffix: 'VN',
+        separator: '/',
+        dateFormat: 'YYYYMM',
+        templatePattern: '{PREFIX}/{UNIT}/{YYYY}{MM}/{SEQ}-{SUFFIX}',
+        paddingLength: 5,
+        startValue: 100,
+        step: 5,
+        resetPolicy: 'MONTHLY',
+        scopeByUnit: true,
+      },
+      adminActor,
+    );
+    const customPatternGen1 = await sequencesService.nextCode('finance.tax_voucher', {
+      organizationUnitId: 10,
+      unitCode: 'HCM',
+      at: '2026-10-20T09:00:00.000Z',
+    });
+    const customPatternGen2 = await sequencesService.nextCode('finance.tax_voucher', {
+      organizationUnitId: 10,
+      unitCode: 'HCM',
+      at: '2026-10-20T09:05:00.000Z',
+    });
+    expect(customPatternGen1.code).toBe('TAX/HCM/202610/00100-VN');
+    expect(customPatternGen2.code).toBe('TAX/HCM/202610/00105-VN');
+
+    // Kiểm thử trực tiếp SequenceCounterRepository.allocateRange cho cả PostgreSQL và MySQL
+    const pgStore = new Map<string, number>();
+    const pgQueries: string[] = [];
+    const pgRepo = new SequenceCounterRepository(
+      {
+        options: { type: 'postgres' },
+        manager: {
+          query: async (sql: string, params: unknown[]) => {
+            pgQueries.push(sql);
+            const scopeKey = `${String(params[0])}:${String(params[2])}:${String(params[4])}`;
+            const firstBatchLastVal = Number(params[5]);
+            const totalIncrement = Number(params[6]);
+            const prev = pgStore.get(scopeKey);
+            const nextVal =
+              prev === undefined
+                ? firstBatchLastVal
+                : Math.max(prev + totalIncrement, firstBatchLastVal);
+            pgStore.set(scopeKey, nextVal);
+            return [{ current_value: String(nextVal) }];
+          },
+        },
+      } as never,
+      null,
+    );
+
+    const pgFirst = await pgRepo.allocateRange({
+      sequenceId: 1,
+      sequenceKey: 'orders.sales_order',
+      periodKey: '2026',
+      organizationUnitId: null,
+      unitScopeKey: 'GLOBAL',
+      startValue: 1,
+      step: 2,
+      count: 1,
+    });
+    expect(pgFirst).toEqual([1]);
+    expect(pgQueries[0]).toContain('ON CONFLICT (sequence_id, period_key, unit_scope_key)');
+
+    const pgNextBatch = await pgRepo.allocateRange({
+      sequenceId: 1,
+      sequenceKey: 'orders.sales_order',
+      periodKey: '2026',
+      organizationUnitId: null,
+      unitScopeKey: 'GLOBAL',
+      startValue: 1,
+      step: 2,
+      count: 3,
+    });
+    expect(pgNextBatch).toEqual([3, 5, 7]);
+
+    // Nhánh MySQL: kiểm tra cả cấp lần đầu, cấp lô nhiều số với step > 1 và tự động retry khi gặp Deadlock
+    const mysqlStore = new Map<string, number>();
+    const mysqlQueries: string[] = [];
+    let simulateDeadlockOnce = true;
+    const mysqlRepo = new SequenceCounterRepository(
+      {
+        options: { type: 'mysql' },
+        manager: {
+          query: async (sql: string, params: unknown[]) => {
+            mysqlQueries.push(sql);
+            if (simulateDeadlockOnce) {
+              simulateDeadlockOnce = false;
+              throw new Error('ER_LOCK_DEADLOCK: Deadlock found when trying to get lock');
+            }
+            if (sql.includes('INSERT INTO sequence_counters')) {
+              const scopeKey = `${String(params[0])}:${String(params[2])}:${String(params[4])}`;
+              const firstBatchLastVal = Number(params[5]);
+              const totalIncrement = Number(params[6]);
+              const prev = mysqlStore.get(scopeKey);
+              if (prev === undefined) {
+                mysqlStore.set(scopeKey, firstBatchLastVal);
+                return { affectedRows: 1, insertId: 1 };
+              }
+              const nextVal = Math.max(prev + totalIncrement, firstBatchLastVal);
+              mysqlStore.set(scopeKey, nextVal);
+              return { affectedRows: 2, insertId: nextVal };
+            }
+            if (sql.includes('SELECT id, current_value FROM sequence_counters')) {
+              const scopeKey = `${String(params[0])}:${String(params[1])}:${String(params[2])}`;
+              const val = mysqlStore.get(scopeKey) ?? 1;
+              return [{ id: 1, current_value: val }];
+            }
+            return [];
+          },
+        },
+      } as never,
+      null,
+    );
+
+    const mysqlFirst = await mysqlRepo.allocateRange({
+      sequenceId: 2,
+      sequenceKey: 'finance.tax_voucher',
+      periodKey: '2026-10',
+      organizationUnitId: 10,
+      unitScopeKey: 'UNIT:10',
+      startValue: 10,
+      step: 5,
+      count: 1,
+    });
+    expect(mysqlFirst).toEqual([10]);
+    expect(mysqlQueries.some((q) => q.includes('ON DUPLICATE KEY UPDATE'))).toBe(true);
+
+    const mysqlNextBatch = await mysqlRepo.allocateRange({
+      sequenceId: 2,
+      sequenceKey: 'finance.tax_voucher',
+      periodKey: '2026-10',
+      organizationUnitId: 10,
+      unitScopeKey: 'UNIT:10',
+      startValue: 10,
+      step: 5,
+      count: 3,
+    });
+    expect(mysqlNextBatch).toEqual([15, 20, 25]);
+  });
+
+  it('validates Section 5.6 Dynamic Menu & Navigation Management (5.6.1 -> 5.6.4): manifest sync, hierarchy & cycle detection, enable/disable toggle (status 1/0 & cascade), RBAC + installed module filtering, reorder, and L1/L2 cache invalidation', async () => {
+    const menuRegistry = new MenuRegistryService();
+    const l2CacheMap = new Map<string, unknown>();
+    const mockCacheProvider = {
+      get: async <T>(k: string): Promise<T | null> => (l2CacheMap.get(k) as T | undefined) ?? null,
+      set: async <T>(k: string, v: T): Promise<void> => {
+        l2CacheMap.set(k, v);
+      },
+      delete: async (k: string): Promise<void> => {
+        l2CacheMap.delete(k);
+      },
+    };
+    const menusService = new MenusService(
+      null,
+      menuRegistry,
+      h.auditLogService,
+      mockCacheProvider as never,
+    );
+
+    const adminActor = {
+      id: 1,
+      email: 'admin@core.local',
+      username: 'admin',
+      roles: ['super_admin'],
+      permissions: ['system.full_access', 'settings.manage'],
+      sessionId: 1,
+    };
+
+    // 5.6.3: Tự động đồng bộ cấu trúc menu mặc định từ module.manifest.json của từng module (Idempotent)
+    const syncResult1 = await menusService.syncManifests();
+    expect(syncResult1.syncedModules).toEqual(
+      expect.arrayContaining(['codes', 'organizations', 'roles', 'settings', 'users']),
+    );
+    expect(syncResult1.totalMenus).toBeGreaterThanOrEqual(12);
+
+    const allMenus = await menusService.listMenus();
+    expect(allMenus.map((m) => m.code)).toEqual(
+      expect.arrayContaining([
+        'HOME',
+        'IAM',
+        'IAM_USERS',
+        'IAM_ROLES',
+        'IAM_ORGANIZATIONS',
+        'CODES_DICTIONARY',
+        'SETTINGS',
+        'SETTINGS_GENERAL',
+        'SETTINGS_FEATURE_FLAGS',
+        'SETTINGS_I18N',
+        'SETTINGS_SEQUENCES',
+        'SETTINGS_MENUS',
+        'SYSTEM_CONSOLE',
+      ]),
+    );
+
+    // Kiểm tra tự động phân cấp cha-con từ parentCode: SETTINGS (level 1) -> SETTINGS_MENUS (level 2)
+    const settingsRoot = await menusService.getMenuByCode('SETTINGS');
+    const settingsMenusChild = await menusService.getMenuByCode('SETTINGS_MENUS');
+    expect(settingsRoot.level).toBe(1);
+    expect(settingsMenusChild.parent).toBe(settingsRoot.id);
+    expect(settingsMenusChild.parentCode).toBe('SETTINGS');
+    expect(settingsMenusChild.level).toBe(2);
+
+    // 5.6.1: Tạo nhóm menu và mục menu con mới (hỗ trợ đa cấp, icon, link, linkApi, thứ tự numOrder, vị trí)
+    const reportsGroup = await menusService.createMenu(
+      {
+        code: 'REPORTS',
+        module: 'settings',
+        name: 'Báo cáo & Phân tích',
+        type: MENU_TYPE.GROUP,
+        icon: 'BarChart3',
+        numOrder: 35,
+        position: MENU_POSITION.SIDEBAR,
+      },
+      adminActor,
+    );
+    expect(reportsGroup.level).toBe(1);
+    expect(reportsGroup.status).toBe(MENU_STATUS.ACTIVE);
+
+    const revenueReportItem = await menusService.createMenu(
+      {
+        code: 'REPORTS_REVENUE',
+        module: 'settings',
+        name: 'Báo cáo Doanh thu',
+        type: MENU_TYPE.ITEM,
+        parentCode: 'REPORTS',
+        link: '/reports/revenue',
+        linkApi: '/api/v1/reports/revenue',
+        key: 'reports.revenue.read',
+        icon: 'TrendingUp',
+        numOrder: 10,
+        position: MENU_POSITION.SIDEBAR,
+      },
+      adminActor,
+    );
+    expect(revenueReportItem.parent).toBe(reportsGroup.id);
+    expect(revenueReportItem.level).toBe(2);
+
+    // Chặn vòng lặp cha-con (Cycle Detection): không cho phép REPORTS trỏ ngược vào con REPORTS_REVENUE hoặc chính nó
+    await expect(
+      menusService.updateMenu('REPORTS', { parentCode: 'REPORTS' }, adminActor),
+    ).rejects.toThrow(/circular/i);
+    await expect(
+      menusService.updateMenu('REPORTS', { parentCode: 'REPORTS_REVENUE' }, adminActor),
+    ).rejects.toThrow(/circular/i);
+
+    // Chặn xóa nhóm menu khi vẫn còn mục menu con trực thuộc
+    await expect(menusService.deleteMenu('REPORTS', adminActor)).rejects.toThrow(/child menu/i);
+
+    // 5.6.2 & 5.6.4: Hiển thị menu tự động theo quyền hạn của người dùng và trạng thái cài đặt của module + Cache L1/L2
+    // Người dùng chỉ có quyền `users.read` -> chỉ thấy HOME (public) và nhánh IAM -> IAM_USERS;
+    // không thấy REPORTS (vì không có quyền `reports.revenue.read` nên nhóm REPORTS rỗng tự động bị cắt tỉa)
+    const userTree1 = await menusService.getAuthorizedMenuTree({
+      position: MENU_POSITION.SIDEBAR,
+      permissions: ['users.read'],
+    });
+    expect(userTree1.fromCache).toBe(false);
+    expect(userTree1.items.map((n) => n.code)).toEqual(['HOME', 'IAM']);
+    const iamNode = userTree1.items.find((n) => n.code === 'IAM');
+    expect(iamNode?.children.map((c) => c.code)).toEqual(['IAM_USERS']);
+    expect(l2CacheMap.size).toBeGreaterThanOrEqual(1);
+
+    // Gọi lần 2 với cùng bộ quyền -> đọc từ L1 Cache (fromCache = true)
+    const userTreeCached = await menusService.getAuthorizedMenuTree({
+      position: MENU_POSITION.SIDEBAR,
+      permissions: ['users.read'],
+    });
+    expect(userTreeCached.fromCache).toBe(true);
+    expect(userTreeCached.cacheVersion).toBe(userTree1.cacheVersion);
+
+    // Người dùng có thêm quyền `reports.revenue.read` -> thấy cả nhóm REPORTS -> REPORTS_REVENUE
+    const analystTree = await menusService.getAuthorizedMenuTree({
+      position: MENU_POSITION.SIDEBAR,
+      permissions: ['users.read', 'reports.revenue.read'],
+    });
+    expect(analystTree.items.map((n) => n.code)).toEqual(['HOME', 'IAM', 'REPORTS']);
+
+    // 5.6.1 & 5.6.4: Bật / Tắt hiển thị menu (status = 0 -> Tắt) -> tự động xóa cache & ẩn khỏi cây điều hướng ngay lập tức
+    const toggledOff = await menusService.toggleMenu(
+      'REPORTS_REVENUE',
+      { status: MENU_STATUS.INACTIVE, reason: 'Tạm ẩn báo cáo doanh thu để bảo trì' },
+      adminActor,
+    );
+    expect(toggledOff.status).toBe(MENU_STATUS.INACTIVE);
+    expect(toggledOff.statusName).toBe('INACTIVE');
+    expect(l2CacheMap.size).toBe(0);
+
+    const analystTreeAfterToggleOff = await menusService.getAuthorizedMenuTree({
+      position: MENU_POSITION.SIDEBAR,
+      permissions: ['users.read', 'reports.revenue.read'],
+    });
+    expect(analystTreeAfterToggleOff.fromCache).toBe(false);
+    expect(analystTreeAfterToggleOff.items.map((n) => n.code)).toEqual(['HOME', 'IAM']);
+
+    // Bật lại menu (status = 1 -> Bật)
+    const toggledOn = await menusService.toggleMenu(
+      'REPORTS_REVENUE',
+      { status: MENU_STATUS.ACTIVE },
+      adminActor,
+    );
+    expect(toggledOn.status).toBe(MENU_STATUS.ACTIVE);
+
+    // Kiểm tra cascadeChildren khi tắt nhóm cha IAM -> toàn bộ mục con dưới IAM cũng chuyển sang INACTIVE
+    await menusService.toggleMenu(
+      'IAM',
+      { status: MENU_STATUS.INACTIVE, cascadeChildren: true },
+      adminActor,
+    );
+    const iamUsersAfterCascadeOff = await menusService.getMenuByCode('IAM_USERS');
+    expect(iamUsersAfterCascadeOff.status).toBe(MENU_STATUS.INACTIVE);
+
+    // Bật lại nhóm cha IAM kèm cascadeChildren
+    await menusService.toggleMenu(
+      'IAM',
+      { status: MENU_STATUS.ACTIVE, cascadeChildren: true },
+      adminActor,
+    );
+    const iamUsersAfterCascadeOn = await menusService.getMenuByCode('IAM_USERS');
+    expect(iamUsersAfterCascadeOn.status).toBe(MENU_STATUS.ACTIVE);
+
+    // 5.6.2: Lọc theo trạng thái cài đặt của module (`enabledModules`): nếu gỡ module `users` khỏi danh sách cài đặt, IAM_USERS tự động ẩn
+    menusService.setInstalledModules(['settings', 'roles', 'organizations', 'codes']);
+    const treeWithoutUsersMod = await menusService.getAuthorizedMenuTree({
+      position: MENU_POSITION.SIDEBAR,
+      permissions: ['users.read', 'roles.read'],
+    });
+    const iamNodeWithoutUsers = treeWithoutUsersMod.items.find((n) => n.code === 'IAM');
+    expect(iamNodeWithoutUsers?.children.map((c) => c.code)).toEqual([
+      'IAM_ROLES',
+      'IAM_AUDIT_LOGS',
+    ]);
+
+    // Khôi phục danh sách module cài đặt
+    menusService.setInstalledModules(['settings', 'users', 'roles', 'organizations', 'codes']);
+
+    // 5.6.1: Sắp xếp lại thứ tự hiển thị (`numOrder`) hàng loạt
+    await menusService.reorderMenus(
+      {
+        items: [
+          { code: 'REPORTS', numOrder: 5 },
+          { code: 'HOME', numOrder: 15 },
+        ],
+        reason: 'Đưa nhóm Báo cáo lên đầu thanh điều hướng',
+      },
+      adminActor,
+    );
+    const treeAfterReorder = await menusService.getAuthorizedMenuTree({
+      position: MENU_POSITION.SIDEBAR,
+      permissions: ['reports.revenue.read'],
+    });
+    expect(treeAfterReorder.items.map((n) => n.code)).toEqual(['REPORTS', 'HOME']);
+
+    // Xóa mục con REPORTS_REVENUE rồi xóa nhóm REPORTS thành công
+    const delChild = await menusService.deleteMenu('REPORTS_REVENUE', adminActor);
+    expect(delChild.deleted).toBe(true);
+    const delGroup = await menusService.deleteMenu('REPORTS', adminActor);
+    expect(delGroup.deleted).toBe(true);
   });
 });

@@ -121,5 +121,35 @@
         }
       ]
     }
+  ],
+  "menus": [
+    {
+      "code": "IAM_ROLES",
+      "name": "Vai trò & Phân quyền",
+      "status": 1,
+      "link": "/iam/roles",
+      "linkApi": "/api/v1/roles",
+      "type": 2,
+      "parentCode": "IAM",
+      "level": 2,
+      "key": "roles.read",
+      "numOrder": 2,
+      "icon": "KeyRound",
+      "position": "SIDEBAR"
+    },
+    {
+      "code": "IAM_AUDIT_LOGS",
+      "name": "Nhật ký Kiểm toán (Audit Log)",
+      "status": 1,
+      "link": "/iam/audit-logs",
+      "linkApi": "/api/v1/roles/audit-logs",
+      "type": 2,
+      "parentCode": "IAM",
+      "level": 2,
+      "key": "roles.read",
+      "numOrder": 4,
+      "icon": "FileCheck",
+      "position": "SIDEBAR"
+    }
   ]
 }
