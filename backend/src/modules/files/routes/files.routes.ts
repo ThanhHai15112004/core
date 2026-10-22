@@ -1,0 +1,17 @@
+export const FILES_ROUTES = {
+  PREFIX: 'files',
+  ROOT: '',
+  STATS: 'stats',
+  FOLDERS: 'folders',
+  FOLDER_BY_ID: 'folders/:id',
+  UPLOAD: 'upload',
+  UPLOAD_BATCH: 'upload-batch',
+  TRASH_PURGE_EXPIRED: 'trash/purge-expired',
+  BY_ID: ':id',
+  DOWNLOAD: ':id/download',
+  STREAM: ':id/stream',
+  TRASH: ':id/trash',
+  RESTORE: ':id/restore',
+  USAGES: ':id/usages',
+  USAGE_BY_ID: ':id/usages/:usageId',
+} as const;

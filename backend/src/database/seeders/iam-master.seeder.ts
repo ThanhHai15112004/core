@@ -290,6 +290,43 @@ export const STANDARD_IAM_PERMISSIONS: readonly SeedPermissionDef[] = [
     description:
       'Quyền thêm mới, cập nhật giá trị cấu hình, ghi đè theo môi trường/đơn vị và đồng bộ từ module.manifest.json',
   },
+  {
+    id: 22,
+    code: 'files.read',
+    name: 'Xem danh sách & thông tin tệp tin',
+    module: 'files',
+    description:
+      'Quyền tra cứu danh sách tệp tin, xem thông tin chi tiết và theo dõi liên kết sử dụng tệp tin',
+  },
+  {
+    id: 23,
+    code: 'files.upload',
+    name: 'Tải tệp tin lên hệ thống',
+    module: 'files',
+    description: 'Quyền tải lên một hoặc nhiều tệp tin vào kho lưu trữ dùng chung',
+  },
+  {
+    id: 24,
+    code: 'files.download',
+    name: 'Tải tệp tin xuống & xem luồng Media',
+    module: 'files',
+    description: 'Quyền tải xuống tệp tin và phát luồng video/media có kiểm soát',
+  },
+  {
+    id: 25,
+    code: 'files.manage',
+    name: 'Đổi tên, quản lý thư mục & liên kết tệp tin',
+    module: 'files',
+    description:
+      'Quyền tạo thư mục, đổi tên hiển thị tệp tin, đưa vào thùng rác, khôi phục và quản lý liên kết sử dụng',
+  },
+  {
+    id: 26,
+    code: 'files.delete',
+    name: 'Xóa vĩnh viễn tệp tin khỏi thùng rác',
+    module: 'files',
+    description: 'Quyền xóa vĩnh viễn tệp tin và dọn dẹp thùng rác khi không còn liên kết dữ liệu',
+  },
 ] as const;
 
 const ALL_IAM_PERMISSION_CODES = STANDARD_IAM_PERMISSIONS.map((p) => p.code);

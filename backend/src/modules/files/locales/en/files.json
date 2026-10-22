@@ -1,0 +1,21 @@
+{
+  "error.fileNotFound": "Requested file was not found",
+  "error.folderNotFound": "Storage folder was not found",
+  "error.parentFolderNotFound": "Parent folder was not found",
+  "error.folderCycleDetected": "Cannot move a folder into itself or one of its descendants",
+  "error.folderNotEmpty": "Cannot delete folder while it still contains subfolders or files",
+  "error.emptyUpload": "Uploaded file content is empty or invalid",
+  "error.batchEmpty": "Batch upload file list must not be empty",
+  "error.fileTooLarge": "File size exceeds the maximum allowed limit ({{maxMb}} MB)",
+  "error.extensionNotAllowed": "File extension '.{{ext}}' is not in the allowed list",
+  "error.signatureMismatch": "Actual file content signature (Magic Bytes) does not match '.{{ext}}' or contains executable code",
+  "error.alreadyInTrash": "This file is already in the trash",
+  "error.notInTrash": "Only files currently in trash that have not been permanently purged can be restored",
+  "error.alreadyPurged": "File has been permanently purged from storage and cannot be restored or downloaded",
+  "error.inTrashCannotDownload": "File is currently in trash; please restore it before downloading",
+  "error.cannotDeleteReferencedFile": "Cannot delete or move to trash because the file is currently referenced by {{count}} data record(s)",
+  "error.storageObjectMissing": "Underlying physical object was not found in storage",
+  "error.accessDeniedScope": "You do not have permission to access files outside your assigned data scope",
+  "error.usageNotFound": "File usage reference record was not found",
+  "error.invalidByteRange": "Requested HTTP byte range header is invalid"
+}

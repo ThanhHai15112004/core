@@ -3,6 +3,7 @@ import { Header } from './core/layouts/Header';
 import { Footer } from './core/layouts/Footer';
 import { Home } from './modules/home/pages/Home';
 import { IamManagementPage } from './modules/iam/IamManagementPage';
+import { FileManagerPage } from './modules/files/FileManagerPage';
 import { AppProviders } from './providers/index';
 import type { NavigationTabId } from './core/constants/index';
 import { ROUTES } from './routes/index';
@@ -30,7 +31,13 @@ function App() {
       ) : (
         <AppProviders>
           <Header activeTab={activeTab} onTabChange={setActiveTab} />
-          {activeTab === 'iam' ? <IamManagementPage /> : <Home />}
+          {activeTab === 'iam' ? (
+            <IamManagementPage />
+          ) : activeTab === 'files' ? (
+            <FileManagerPage />
+          ) : (
+            <Home />
+          )}
           <Footer />
         </AppProviders>
       )}

@@ -1,0 +1,251 @@
+{
+  "$schema": "../../packages/kernel/schemas/module.manifest.schema.json",
+  "name": "files",
+  "displayName": "File Management & Shared Media Library",
+  "version": "1.0.0",
+  "description": "Module quản lý file dùng chung, tách riêng nơi lưu trữ vật lý, kiểm tra file trước khi sử dụng, đổi tên không đổi file gốc, thùng rác có thời gian chờ, khôi phục và theo dõi liên kết sử dụng file (Phase 6 - Mục 6.1)",
+  "type": "core",
+  "category": "core",
+  "author": "Core Platform Team",
+  "entryModule": "FilesModule",
+  "dependencies": ["database", "storage", "security", "i18n"],
+  "permissions": [
+    "files.read",
+    "files.upload",
+    "files.download",
+    "files.manage",
+    "files.delete"
+  ],
+  "events": {
+    "published": [
+      "files.uploaded",
+      "files.renamed",
+      "files.trashed",
+      "files.restored",
+      "files.purged",
+      "files.usage_attached",
+      "files.usage_detached"
+    ],
+    "subscribed": []
+  },
+  "database": {
+    "hasMigrations": true,
+    "tables": ["file_folders", "files", "file_usages"]
+  },
+  "codeTypes": [
+    {
+      "code": "files.status",
+      "name": "Trạng thái tệp tin",
+      "description": "Trạng thái vòng đời của tệp tin trong kho lưu trữ dùng chung",
+      "isSystem": true,
+      "allowCustomValues": false,
+      "values": [
+        {
+          "numericCode": 1,
+          "code": "ACTIVE",
+          "behaviorCode": "ACTIVE",
+          "name": "Đang hoạt động",
+          "labels": { "vi": "Đang hoạt động", "en": "Active" },
+          "aliases": ["ACTIVE", "HOẠT ĐỘNG", "HOAT DONG"],
+          "badgeTone": "success",
+          "color": "emerald",
+          "sortOrder": 1,
+          "isDefault": true,
+          "isSystem": true
+        },
+        {
+          "numericCode": 2,
+          "code": "TRASHED",
+          "behaviorCode": "TRASHED",
+          "name": "Trong thùng rác",
+          "labels": { "vi": "Trong thùng rác", "en": "In Trash" },
+          "aliases": ["TRASH", "TRASHED", "THÙNG RÁC", "THUNG RAC"],
+          "badgeTone": "warning",
+          "color": "amber",
+          "sortOrder": 2,
+          "isSystem": true
+        },
+        {
+          "numericCode": 3,
+          "code": "PURGED",
+          "behaviorCode": "PURGED",
+          "name": "Đã xóa vĩnh viễn",
+          "labels": { "vi": "Đã xóa vĩnh viễn", "en": "Purged" },
+          "aliases": ["PURGED", "DELETED", "ĐÃ XÓA"],
+          "badgeTone": "danger",
+          "color": "red",
+          "sortOrder": 3,
+          "isSystem": true
+        },
+        {
+          "numericCode": 4,
+          "code": "MISSING",
+          "behaviorCode": "MISSING",
+          "name": "Mất file vật lý",
+          "labels": { "vi": "Mất file vật lý", "en": "Missing File" },
+          "aliases": ["MISSING", "LOST", "MẤT FILE", "MAT FILE"],
+          "badgeTone": "danger",
+          "color": "rose",
+          "sortOrder": 4,
+          "isSystem": true
+        }
+      ]
+    },
+    {
+      "code": "files.category",
+      "name": "Phân loại nhóm tệp tin",
+      "description": "Phân nhóm định dạng tệp tin phục vụ lọc và hiển thị trong File Manager",
+      "isSystem": true,
+      "allowCustomValues": false,
+      "values": [
+        {
+          "numericCode": 1,
+          "code": "IMAGE",
+          "behaviorCode": "IMAGE",
+          "name": "Hình ảnh",
+          "labels": { "vi": "Hình ảnh", "en": "Image" },
+          "aliases": ["IMAGE", "HÌNH ẢNH", "HINH ANH"],
+          "badgeTone": "info",
+          "color": "blue",
+          "sortOrder": 1,
+          "isSystem": true
+        },
+        {
+          "numericCode": 2,
+          "code": "VIDEO",
+          "behaviorCode": "VIDEO",
+          "name": "Video",
+          "labels": { "vi": "Video", "en": "Video" },
+          "aliases": ["VIDEO", "PHIM"],
+          "badgeTone": "info",
+          "color": "indigo",
+          "sortOrder": 2,
+          "isSystem": true
+        },
+        {
+          "numericCode": 3,
+          "code": "AUDIO",
+          "behaviorCode": "AUDIO",
+          "name": "Âm thanh",
+          "labels": { "vi": "Âm thanh", "en": "Audio" },
+          "aliases": ["AUDIO", "ÂM THANH", "AM THANH"],
+          "badgeTone": "info",
+          "color": "violet",
+          "sortOrder": 3,
+          "isSystem": true
+        },
+        {
+          "numericCode": 4,
+          "code": "DOCUMENT",
+          "behaviorCode": "DOCUMENT",
+          "name": "Tài liệu văn bản",
+          "labels": { "vi": "Tài liệu văn bản", "en": "Document" },
+          "aliases": ["DOC", "DOCUMENT", "TÀI LIỆU"],
+          "badgeTone": "neutral",
+          "color": "emerald",
+          "sortOrder": 4,
+          "isSystem": true
+        },
+        {
+          "numericCode": 5,
+          "code": "SPREADSHEET",
+          "behaviorCode": "SPREADSHEET",
+          "name": "Bảng tính & Dữ liệu",
+          "labels": { "vi": "Bảng tính & Dữ liệu", "en": "Spreadsheet & Data" },
+          "aliases": ["EXCEL", "CSV", "SPREADSHEET"],
+          "badgeTone": "success",
+          "color": "green",
+          "sortOrder": 5,
+          "isSystem": true
+        },
+        {
+          "numericCode": 6,
+          "code": "ARCHIVE",
+          "behaviorCode": "ARCHIVE",
+          "name": "Tệp nén",
+          "labels": { "vi": "Tệp nén", "en": "Archive" },
+          "aliases": ["ZIP", "RAR", "ARCHIVE"],
+          "badgeTone": "warning",
+          "color": "amber",
+          "sortOrder": 6,
+          "isSystem": true
+        },
+        {
+          "numericCode": 7,
+          "code": "OTHER",
+          "behaviorCode": "OTHER",
+          "name": "Khác",
+          "labels": { "vi": "Khác", "en": "Other" },
+          "aliases": ["OTHER", "KHÁC"],
+          "badgeTone": "neutral",
+          "color": "slate",
+          "sortOrder": 7,
+          "isDefault": true,
+          "isSystem": true
+        }
+      ]
+    },
+    {
+      "code": "files.visibility",
+      "name": "Mức độ hiển thị & truy cập tệp tin",
+      "description": "Quy định phạm vi kiểm tra quyền khi tải xuống hoặc xem tệp tin",
+      "isSystem": true,
+      "allowCustomValues": false,
+      "values": [
+        {
+          "numericCode": 1,
+          "code": "PRIVATE",
+          "behaviorCode": "PRIVATE",
+          "name": "Riêng tư (Kiểm tra quyền & đơn vị)",
+          "labels": { "vi": "Riêng tư (Kiểm tra quyền & đơn vị)", "en": "Private (RBAC & Scope)" },
+          "aliases": ["PRIVATE", "RIÊNG TƯ"],
+          "badgeTone": "warning",
+          "color": "amber",
+          "sortOrder": 1,
+          "isDefault": true,
+          "isSystem": true
+        },
+        {
+          "numericCode": 2,
+          "code": "INTERNAL",
+          "behaviorCode": "INTERNAL",
+          "name": "Nội bộ (Người dùng đã đăng nhập)",
+          "labels": { "vi": "Nội bộ (Người dùng đã đăng nhập)", "en": "Internal (Authenticated)" },
+          "aliases": ["INTERNAL", "NỘI BỘ"],
+          "badgeTone": "info",
+          "color": "blue",
+          "sortOrder": 2,
+          "isSystem": true
+        },
+        {
+          "numericCode": 3,
+          "code": "PUBLIC",
+          "behaviorCode": "PUBLIC",
+          "name": "Công khai",
+          "labels": { "vi": "Công khai", "en": "Public" },
+          "aliases": ["PUBLIC", "CÔNG KHAI"],
+          "badgeTone": "success",
+          "color": "emerald",
+          "sortOrder": 3,
+          "isSystem": true
+        }
+      ]
+    }
+  ],
+  "menus": [
+    {
+      "code": "FILES_MANAGER",
+      "name": "Quản lý Tệp tin & Media",
+      "status": 1,
+      "link": "/files",
+      "linkApi": "/api/v1/files",
+      "type": 2,
+      "parent": null,
+      "level": 1,
+      "key": "files.read",
+      "numOrder": 20,
+      "icon": "FolderOpen",
+      "position": "SIDEBAR"
+    }
+  ]
+}

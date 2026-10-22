@@ -19,6 +19,7 @@ coverage/
 /logs/
 /backend/logs/
 /frontend/logs/
+/backend/uploads/
 
 # Operating systems
 .DS_Store

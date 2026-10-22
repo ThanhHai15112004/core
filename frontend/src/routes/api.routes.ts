@@ -147,5 +147,25 @@ export const API_ROUTES = {
       LIST: (qs = '') => `/settings/menus${qs ? `?${qs}` : ''}`,
     },
   },
+  FILES: {
+    STATS: '/files/stats',
+    FOLDERS: (qs = '') => `/files/folders${qs ? `?${qs}` : ''}`,
+    FOLDER_BY_ID: (id: string | number) => `/files/folders/${id}`,
+    LIST: (qs = '') => `/files${qs ? `?${qs}` : ''}`,
+    UPLOAD: '/files/upload',
+    UPLOAD_BATCH: '/files/upload-batch',
+    TRASH_PURGE_EXPIRED: '/files/trash/purge-expired',
+    DETAIL: (id: string | number) => `/files/${id}`,
+    UPDATE: (id: string | number) => `/files/${id}`,
+    DOWNLOAD: (id: string | number) => `/files/${id}/download`,
+    STREAM: (id: string | number) => `/files/${id}/stream`,
+    TRASH: (id: string | number) => `/files/${id}/trash`,
+    RESTORE: (id: string | number) => `/files/${id}/restore`,
+    PURGE: (id: string | number) => `/files/${id}`,
+    USAGES: (id: string | number) => `/files/${id}/usages`,
+    USAGES_DETACH: (id: string | number) => `/files/${id}/usages/detach`,
+    USAGE_BY_ID: (id: string | number, usageId: string | number) =>
+      `/files/${id}/usages/${usageId}`,
+  },
 } as const;
 
