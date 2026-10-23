@@ -1,5 +1,10 @@
 import type { BaseCacheProvider } from '@packages/cache/index.js';
-import { ForbiddenAppException, UnauthorizedAppException } from '@packages/kernel/index.js';
+import {
+  ForbiddenAppException,
+  type SettingRegistryService,
+  UnauthorizedAppException,
+  defaultSettingRegistry,
+} from '@packages/kernel/index.js';
 import type { PasswordHasherService, TokenService } from '@packages/security/index.js';
 import {
   type IUsersPublicService,
@@ -26,7 +31,21 @@ const DEFAULT_AUTO_LOCK_DURATION_MINUTES = 15;
 export class MfaChallengeAttemptTracker {
   private readonly l1Store = new Map<string, { count: number; expiresAtMs: number }>();
 
-  constructor(private readonly getCacheProvider?: () => BaseCacheProvider | null | undefined) {}
+  constructor(
+    private readonly getCacheProvider?: () => BaseCacheProvider | null | undefined,
+    private readonly settingRegistry: SettingRegistryService = defaultSettingRegistry,
+  ) {}
+
+  private getAttemptTtlSeconds(): number {
+    return Math.max(
+      60,
+      this.settingRegistry.getNumber(
+        'security.mfa.challenge_ttl_seconds',
+        undefined,
+        MFA_CHALLENGE_ATTEMPT_TTL_SEC,
+      ),
+    );
+  }
 
   private buildCacheKey(challengeHash: string): string {
     return `auth:mfa:challenge:attempts:${challengeHash}`;
@@ -74,20 +93,17 @@ export class MfaChallengeAttemptTracker {
   public async incrementAttempts(challengeHash: string, currentAttempts: number): Promise<number> {
     const nextAttempts = currentAttempts + 1;
     const nowMs = Date.now();
+    const ttlSec = this.getAttemptTtlSeconds();
     this.pruneExpiredL1(nowMs);
     this.l1Store.set(challengeHash, {
       count: nextAttempts,
-      expiresAtMs: nowMs + MFA_CHALLENGE_ATTEMPT_TTL_SEC * 1000,
+      expiresAtMs: nowMs + ttlSec * 1000,
     });
 
     const cache = this.getCacheProvider?.();
     if (cache) {
       try {
-        await cache.set(
-          this.buildCacheKey(challengeHash),
-          nextAttempts,
-          MFA_CHALLENGE_ATTEMPT_TTL_SEC,
-        );
+        await cache.set(this.buildCacheKey(challengeHash), nextAttempts, ttlSec);
       } catch {
         // Ignore L2 cache errors
       }

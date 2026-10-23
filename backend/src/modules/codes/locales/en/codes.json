@@ -11,7 +11,8 @@
   "cannotChangeSystemCode": "Cannot change the code identifier of a system anchor value (isSystem = true: {{code}}).",
   "cannotChangeCodeInUse": "Cannot change code '{{code}}' because it is currently referenced by {{usageCount}} related data records.",
   "valueInUse": "Cannot delete code value '{{code}}' because it is currently referenced by {{usageCount}} related data records. Please deactivate (INACTIVE) it instead.",
-  "invalidXlsxFile": "Invalid or corrupted Excel (.xlsx) file for master data import."
+  "invalidXlsxFile": "Invalid or corrupted Excel (.xlsx) file for master data import.",
+  "importMaxRowsExceeded": "Number of rows to import ({{totalRows}}) exceeds the maximum allowed limit ({{maxRows}})."
 }
 
 

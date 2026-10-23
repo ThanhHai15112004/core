@@ -1,6 +1,7 @@
 import { Injectable, Optional } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { BaseTypeOrmRepository, TransactionManager } from '@packages/database/index.js';
+import { resolvePagination } from '@packages/kernel/index.js';
 import { SequenceRuleHistoryEntity } from '../entities/sequence-rule-history.entity.js';
 
 @Injectable()
@@ -18,12 +19,13 @@ export class SequenceRuleHistoryRepository extends BaseTypeOrmRepository<Sequenc
     actorUserId?: number | undefined;
     limit?: number | undefined;
   }): Promise<SequenceRuleHistoryEntity[]> {
+    const { limit } = resolvePagination(params, { defaultLimit: 50, maxLimit: 200 });
     return this.executeReadOnly(async (repo) => {
       const qb = repo
         .createQueryBuilder('srh')
         .orderBy('srh.createdAt', 'DESC')
         .addOrderBy('srh.id', 'DESC')
-        .take(Math.min(Math.max(params?.limit ?? 50, 1), 200));
+        .take(limit);
 
       if (params?.sequenceKey?.trim()) {
         qb.andWhere('LOWER(srh.sequenceKey) = :sequenceKey', {

@@ -16,6 +16,7 @@ import {
   discoverInstalledModules,
   discoverManifestFeatureFlags,
   parseNumericUserId,
+  resolvePagination,
   safeJsonParseObject,
   safeJsonParseStringArray,
   validateFeatureFlagRules,
@@ -707,7 +708,10 @@ export class FeatureFlagsService implements IFeatureFlagsPublicService, OnModule
   public async listHistory(
     query?: ListFeatureFlagHistoryQuery,
   ): Promise<FeatureFlagHistoryRecord[]> {
-    const limit = Math.max(1, Math.min(200, query?.limit ?? 50));
+    const { limit } = resolvePagination(query, {
+      defaultLimit: 50,
+      maxLimit: 200,
+    });
     const filterKey = query?.flagKey?.trim().toLowerCase();
     const filterAction = query?.action?.trim().toUpperCase();
 

@@ -7,11 +7,76 @@ import type {
   FindOptionsWhere,
   ObjectLiteral,
   Repository,
+  SelectQueryBuilder,
 } from 'typeorm';
 import type { QueryDeepPartialEntity } from 'typeorm/query-builder/QueryPartialEntity.js';
-import { ConflictAppException, HTTP_ERROR_CODE } from '@packages/kernel/index.js';
+import {
+  ConflictAppException,
+  HTTP_ERROR_CODE,
+  type RawPaginationInput,
+  type ResolvePaginationOptions,
+  type ResolvedPaginationParams,
+  resolvePagination,
+} from '@packages/kernel/index.js';
 import { TransactionManager } from '../transaction/transaction-manager.service.js';
 import { isUniqueConstraintError } from '../utils/error-classify.js';
+
+export interface PaginatedQueryBuilderResult<TEntity> extends ResolvedPaginationParams {
+  readonly items: TEntity[];
+  readonly total: number;
+}
+
+/**
+ * Hàm dùng chung thực thi phân trang tối ưu trên TypeORM `SelectQueryBuilder`:
+ * 1. Tự động chuẩn hóa `page`, `limit`, `skip` từ `SettingRegistryService` qua `resolvePagination`.
+ * 2. Tối ưu `countMode === 'none'`: lấy `limit + 1` bản ghi (Lookahead), bỏ qua truy vấn `COUNT(*)` nặng trên bảng lớn.
+ * 3. Tối ưu Short-Circuit khi `skip > 0` (từ trang 2 trở đi): kiểm tra `getCount()` trước; nếu `total === 0` hoặc `skip >= total`
+ *    thì trả về mảng rỗng ngay lập tức, tránh chạy câu lệnh `SELECT ... JOIN ... ORDER BY ... OFFSET` vô ích.
+ */
+export async function paginateSelectQueryBuilder<TEntity extends ObjectLiteral>(
+  qb: SelectQueryBuilder<TEntity>,
+  input?: RawPaginationInput | null,
+  options?: ResolvePaginationOptions,
+): Promise<PaginatedQueryBuilderResult<TEntity>> {
+  const pagination = resolvePagination(input, options);
+  const { skip, limit, countMode } = pagination;
+
+  if (countMode === 'none') {
+    const items = await qb
+      .skip(skip)
+      .take(limit + 1)
+      .getMany();
+    return {
+      ...pagination,
+      items,
+      total: skip + items.length,
+    };
+  }
+
+  if (skip > 0) {
+    const total = await qb.getCount();
+    if (total === 0 || skip >= total) {
+      return {
+        ...pagination,
+        items: [],
+        total,
+      };
+    }
+    const items = await qb.skip(skip).take(limit).getMany();
+    return {
+      ...pagination,
+      items,
+      total,
+    };
+  }
+
+  const [items, total] = await qb.skip(0).take(limit).getManyAndCount();
+  return {
+    ...pagination,
+    items,
+    total,
+  };
+}
 
 /**
  * Lớp Repository cơ sở cho từng module nghiệp vụ:
@@ -76,6 +141,19 @@ export abstract class BaseTypeOrmRepository<TEntity extends ObjectLiteral> {
     return this.repository.findOne({
       where: { id } as unknown as FindOptionsWhere<TEntity>,
     });
+  }
+
+  /**
+   * Thực thi phân trang tối ưu trên `SelectQueryBuilder` của Repository:
+   * Chỉ cần gọi 1 dòng `return this.paginateQueryBuilder(qb, filter, { settingPrefix: '...' })`
+   * để tự động áp dụng cấu hình động, giới hạn bảo vệ và tối ưu truy vấn `COUNT` / `OFFSET`.
+   */
+  protected async paginateQueryBuilder(
+    qb: SelectQueryBuilder<TEntity>,
+    input?: RawPaginationInput | null,
+    options?: ResolvePaginationOptions,
+  ): Promise<PaginatedQueryBuilderResult<TEntity>> {
+    return paginateSelectQueryBuilder(qb, input, options);
   }
 
   /**

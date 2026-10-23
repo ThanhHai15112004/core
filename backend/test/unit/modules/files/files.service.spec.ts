@@ -10,16 +10,19 @@ import { DATA_SCOPE, DataScopeService } from '@packages/security/index.js';
 import type { BaseStorageProvider } from '@packages/storage/index.js';
 import {
   FILE_CATEGORY,
+  FILE_PERMISSION_SUBJECT,
   FILE_STATUS,
   FILE_VISIBILITY,
   FilesService,
   FileValidationService,
 } from '@modules/files/index.js';
 import type { FileFolderEntity } from '@modules/files/entities/file-folder.entity.js';
+import type { FilePermissionEntity } from '@modules/files/entities/file-permission.entity.js';
 import type { FileRecordEntity } from '@modules/files/entities/file-record.entity.js';
 import type { FileUsageEntity } from '@modules/files/entities/file-usage.entity.js';
 import { FilesMapper } from '@modules/files/mappers/files.mapper.js';
 import type { FileFoldersRepository } from '@modules/files/repositories/file-folders.repository.js';
+import type { FilePermissionsRepository } from '@modules/files/repositories/file-permissions.repository.js';
 import type { FileUsagesRepository } from '@modules/files/repositories/file-usages.repository.js';
 import type { FilesRepository } from '@modules/files/repositories/files.repository.js';
 
@@ -27,11 +30,13 @@ function createInMemoryFilesHarness() {
   const folders = new Map<number, FileFolderEntity>();
   const files = new Map<number, FileRecordEntity>();
   const usages = new Map<number, FileUsageEntity>();
+  const permissions = new Map<number, FilePermissionEntity>();
   const storageObjects = new Map<string, { buffer: Buffer; mimeType: string }>();
 
   let folderSeq = 1;
   let fileSeq = 1;
   let usageSeq = 1;
+  let permissionSeq = 1;
 
   const foldersRepo = {
     findById: async (id: number) => folders.get(id) ?? null,
@@ -43,6 +48,15 @@ function createInMemoryFilesHarness() {
         .sort((a, b) => a.name.localeCompare(b.name)),
     countChildFolders: async (parentId: number) =>
       [...folders.values()].filter((f) => !f.deletedAt && f.parentId === parentId).length,
+    findByParentAndSlug: async (parentId: number | null, slug: string) =>
+      [...folders.values()].find(
+        (f) =>
+          !f.deletedAt &&
+          (f.parentId ?? null) === parentId &&
+          f.slug.toLowerCase() === slug.toLowerCase(),
+      ) ?? null,
+    findDescendantsByPathPrefix: async (pathPrefix: string) =>
+      [...folders.values()].filter((f) => !f.deletedAt && f.folderPath.startsWith(pathPrefix)),
     saveEntity: async (partial: Partial<FileFolderEntity>) => {
       const now = new Date();
       const id = partial.id ?? folderSeq++;
@@ -167,6 +181,7 @@ function createInMemoryFilesHarness() {
           (f) =>
             f.visibility >= 2 ||
             f.uploadedByUserId === scope.selfUserId ||
+            scope.explicitAllowedFileIds?.includes(f.id) ||
             (f.organizationUnitId !== null &&
               f.organizationUnitId !== undefined &&
               scope.allowedOrgUnitIds?.includes(f.organizationUnitId)),
@@ -175,6 +190,18 @@ function createInMemoryFilesHarness() {
       return { items: list, total: list.length };
     },
     findAllForStats: async () => [...files.values()].filter((f) => f.status !== FILE_STATUS.PURGED),
+    sumActiveBytesByOrgUnit: async (organizationUnitId?: number | null) =>
+      [...files.values()]
+        .filter(
+          (f) =>
+            f.status === FILE_STATUS.ACTIVE &&
+            (!organizationUnitId || f.organizationUnitId === organizationUnitId),
+        )
+        .reduce((sum, f) => sum + (Number(f.sizeBytes) || 0), 0),
+    sumActiveBytesByUser: async (userId: number) =>
+      [...files.values()]
+        .filter((f) => f.status === FILE_STATUS.ACTIVE && f.uploadedByUserId === userId)
+        .reduce((sum, f) => sum + (Number(f.sizeBytes) || 0), 0),
     findExpiredTrashedFiles: async (now: Date) =>
       [...files.values()].filter(
         (f) =>
@@ -248,6 +275,82 @@ function createInMemoryFilesHarness() {
     },
   } as unknown as FileUsagesRepository;
 
+  const permissionsRepo = {
+    findById: async (id: number) => permissions.get(id) ?? null,
+    findByFileId: async (fileId: number) =>
+      [...permissions.values()].filter((p) => !p.deletedAt && p.fileId === fileId),
+    findByTarget: async (params: { fileId: number; subjectType: number; subjectId: string }) =>
+      [...permissions.values()].find(
+        (p) =>
+          !p.deletedAt &&
+          p.fileId === params.fileId &&
+          p.subjectType === params.subjectType &&
+          p.subjectId === params.subjectId,
+      ) ?? null,
+    findActiveForActor: async (params: {
+      fileId?: number;
+      userId?: number | null;
+      roles?: readonly string[];
+      orgUnitIds?: readonly number[];
+      now?: Date;
+    }) => {
+      const now = params.now ?? new Date();
+      const userIdStr = params.userId ? String(params.userId) : null;
+      const roleSet = new Set((params.roles ?? []).map((r) => r.trim().toLowerCase()));
+      const orgSet = new Set((params.orgUnitIds ?? []).map(String));
+
+      return [...permissions.values()].filter((p) => {
+        if (p.deletedAt) return false;
+        if (params.fileId !== undefined && p.fileId !== params.fileId) return false;
+        if (p.expiresAt && p.expiresAt.getTime() <= now.getTime()) return false;
+        if (p.subjectType === FILE_PERMISSION_SUBJECT.USER && userIdStr === p.subjectId) {
+          return true;
+        }
+        if (
+          p.subjectType === FILE_PERMISSION_SUBJECT.ROLE &&
+          roleSet.has(p.subjectId.toLowerCase())
+        ) {
+          return true;
+        }
+        if (p.subjectType === FILE_PERMISSION_SUBJECT.ORG_UNIT && orgSet.has(p.subjectId)) {
+          return true;
+        }
+        return false;
+      });
+    },
+    saveEntity: async (partial: Partial<FilePermissionEntity>) => {
+      const now = new Date();
+      const id = partial.id ?? permissionSeq++;
+      const existing = permissions.get(id);
+      const saved: FilePermissionEntity = {
+        id,
+        fileId: partial.fileId ?? existing?.fileId ?? 0,
+        subjectType: partial.subjectType ?? existing?.subjectType ?? FILE_PERMISSION_SUBJECT.USER,
+        subjectId: partial.subjectId ?? existing?.subjectId ?? '1',
+        canView: partial.canView !== undefined ? partial.canView : (existing?.canView ?? true),
+        canDownload:
+          partial.canDownload !== undefined
+            ? partial.canDownload
+            : (existing?.canDownload ?? false),
+        expiresAt:
+          partial.expiresAt !== undefined ? partial.expiresAt : (existing?.expiresAt ?? null),
+        note: partial.note !== undefined ? partial.note : (existing?.note ?? null),
+        grantedByUserId:
+          partial.grantedByUserId !== undefined
+            ? partial.grantedByUserId
+            : (existing?.grantedByUserId ?? null),
+        createdAt: existing?.createdAt ?? now,
+        updatedAt: now,
+        deletedAt: null,
+      };
+      permissions.set(id, saved);
+      return saved;
+    },
+    softDeleteById: async (id: number) => {
+      permissions.delete(id);
+    },
+  } as unknown as FilePermissionsRepository;
+
   const storageProvider = {
     driver: {
       name: 'local' as const,
@@ -312,6 +415,9 @@ function createInMemoryFilesHarness() {
     null,
     usersPublicService as never,
     null,
+    null,
+    permissionsRepo,
+    null,
   );
 
   return {
@@ -319,6 +425,8 @@ function createInMemoryFilesHarness() {
     settingRegistry,
     storageObjects,
     files,
+    folders,
+    permissions,
   };
 }
 
@@ -326,7 +434,7 @@ function createInMemoryFilesHarness() {
 const VALID_PNG_BASE64 =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
 
-describe('FilesService — Phase 6.1 File Management & Shared Media Library', () => {
+describe('FilesService — Phase 6.1 & 6.2 File Management, Folders & Access Control', () => {
   it('1. Tải lên 1 hoặc nhiều file, kiểm tra Magic Bytes và lưu thông tin người tải', async () => {
     const { service, storageObjects } = createInMemoryFilesHarness();
 
@@ -383,13 +491,23 @@ describe('FilesService — Phase 6.1 File Management & Shared Media Library', ()
     ).rejects.toThrow(BadRequestAppException);
   });
 
-  it('3. Đổi tên file và di chuyển thư mục KHÔNG làm thay đổi file gốc (storageKey) trong Storage', async () => {
+  it('3. Đổi tên file và di chuyển thư mục KHÔNG làm thay đổi file gốc (storageKey) và giữ nguyên liên kết sử dụng', async () => {
     const { service, storageObjects } = createInMemoryFilesHarness();
 
-    const folder = await service.createFolder({ name: 'Tài liệu Hợp đồng 2026' });
+    const folderA = await service.createFolder({ name: 'Tài liệu Hợp đồng 2026' });
+    const folderB = await service.createFolder({ name: 'Hồ sơ Lưu trữ Pháp lý' });
     const uploaded = await service.uploadSingle({
       fileName: 'hop-dong-goc.txt',
       textContent: 'Hợp đồng nguyên tắc',
+      folderId: folderA.id,
+    });
+
+    await service.attachUsage({
+      fileId: uploaded.id,
+      moduleName: 'contracts',
+      entityType: 'legal_contract',
+      entityId: 88,
+      note: 'Đính kèm hợp đồng #88',
     });
 
     const originalStorageKey = uploaded.storageKey;
@@ -397,15 +515,17 @@ describe('FilesService — Phase 6.1 File Management & Shared Media Library', ()
 
     const renamed = await service.updateMetadata(uploaded.id, {
       displayName: 'Hợp đồng Đã Ký Duyệt_v2.txt',
-      folderId: folder.id,
+      folderId: folderB.id,
     });
 
     expect(renamed.displayName).toBe('Hợp đồng Đã Ký Duyệt_v2.txt');
     expect(renamed.originalName).toBe('hop-dong-goc.txt');
-    expect(renamed.folderId).toBe(folder.id);
-    expect(renamed.folderName).toBe('Tài liệu Hợp đồng 2026');
-    // Storage key vật lý giữ nguyên tuyệt đối
+    expect(renamed.folderId).toBe(folderB.id);
+    expect(renamed.folderName).toBe('Hồ sơ Lưu trữ Pháp lý');
+    // Storage key vật lý và liên kết sử dụng giữ nguyên tuyệt đối
     expect(renamed.storageKey).toBe(originalStorageKey);
+    expect(renamed.usageCount).toBe(1);
+    expect(renamed.usages).toHaveLength(1);
     expect(storageObjects.has(originalStorageKey)).toBe(true);
 
     // Khi tải xuống, tên file nhận được là tên mới đã đổi
@@ -631,5 +751,254 @@ describe('FilesService — Phase 6.1 File Management & Shared Media Library', ()
     expect(stats.settings.maxBatchFiles).toBe(1);
     expect(stats.settings.defaultVisibility).toBe(FILE_VISIBILITY.PUBLIC);
     expect(stats.settings.storageKeyPrefix).toBe('custom-media');
+  });
+
+  it('9. [Mục 6.2] Đổi tên & di chuyển thư mục tự động cập nhật đường dẫn con cháu, kiểm tra quyền và chống trùng tên', async () => {
+    const { service, folders } = createInMemoryFilesHarness();
+
+    const rootA = await service.createFolder(
+      { name: 'Khối Đào Tạo', organizationUnitId: 1 },
+      { id: 1, username: 'u1', roles: [], permissions: [], organizationUnitIds: [1] },
+    );
+    const childB = await service.createFolder(
+      { name: 'Học kỳ 1', parentId: rootA.id, organizationUnitId: 1 },
+      { id: 1, username: 'u1', roles: [], permissions: [], organizationUnitIds: [1] },
+    );
+    const grandChildC = await service.createFolder(
+      { name: 'Đề thi', parentId: childB.id, organizationUnitId: 1 },
+      { id: 1, username: 'u1', roles: [], permissions: [], organizationUnitIds: [1] },
+    );
+    const rootTarget = await service.createFolder(
+      { name: 'Kho Lưu Trữ 2026', organizationUnitId: 1 },
+      { id: 1, username: 'u1', roles: [], permissions: [], organizationUnitIds: [1] },
+    );
+
+    expect(grandChildC.folderPath).toBe(`/${rootA.id}/${childB.id}/${grandChildC.id}/`);
+
+    // Chặn tạo thư mục trùng tên cùng cấp
+    await expect(service.createFolder({ name: 'Học kỳ 1', parentId: rootA.id })).rejects.toThrow(
+      ConflictAppException,
+    );
+
+    // Chặn vòng lặp: di chuyển rootA vào trong grandChildC
+    await expect(service.updateFolder(rootA.id, { parentId: grandChildC.id })).rejects.toThrow(
+      BadRequestAppException,
+    );
+
+    // Người dùng ở đơn vị khác (Unit 99, scope SELF) không có quyền sửa thư mục của Unit 1
+    await expect(
+      service.updateFolder(
+        childB.id,
+        { name: 'Hack Folder' },
+        {
+          id: 99,
+          username: 'outsider',
+          roles: [],
+          permissions: ['files.manage'],
+          organizationUnitIds: [99],
+          dataScope: DATA_SCOPE.SELF,
+        },
+      ),
+    ).rejects.toThrow(ForbiddenAppException);
+
+    // Di chuyển childB sang rootTarget -> grandChildC phải tự động được cập nhật folderPath mới
+    const movedB = await service.updateFolder(childB.id, {
+      name: 'Học kỳ 1 (Đã chuyển)',
+      parentId: rootTarget.id,
+    });
+    expect(movedB.folderPath).toBe(`/${rootTarget.id}/${childB.id}/`);
+    expect(folders.get(grandChildC.id)?.folderPath).toBe(
+      `/${rootTarget.id}/${childB.id}/${grandChildC.id}/`,
+    );
+  });
+
+  it('10. [Mục 6.2] Phân quyền Xem (canView) và Tải (canDownload) độc lập theo User, Role, Đơn vị trong bảng file_permissions', async () => {
+    const { service } = createInMemoryFilesHarness();
+
+    const ownerActor = {
+      id: 1,
+      username: 'owner',
+      roles: ['manager'],
+      permissions: ['files.manage'],
+      organizationUnitIds: [1],
+      dataScope: DATA_SCOPE.SELF,
+    };
+
+    const secretDoc = await service.uploadSingle(
+      {
+        fileName: 'bao-cao-tai-chinh.pdf',
+        contentBase64: Buffer.from('%PDF-1.7 secret financial report').toString('base64'),
+        visibility: FILE_VISIBILITY.PRIVATE,
+        organizationUnitId: 1,
+      },
+      ownerActor,
+    );
+
+    const auditorActor = {
+      id: 50,
+      username: 'auditor',
+      roles: ['auditor'],
+      permissions: ['files.read', 'files.download'],
+      organizationUnitIds: [20],
+      dataScope: DATA_SCOPE.SELF,
+    };
+
+    // Khi chưa cấp quyền: auditor ở đơn vị 20 không thể xem cũng không thể tải file PRIVATE của đơn vị 1
+    await expect(service.getById(secretDoc.id, auditorActor)).rejects.toThrow(
+      ForbiddenAppException,
+    );
+    await expect(service.prepareDownload(secretDoc.id, auditorActor)).rejects.toThrow(
+      ForbiddenAppException,
+    );
+
+    // Cấp quyền CHỈ XEM (canView: true, canDownload: false) cho vai trò 'auditor'
+    const grantedPerm = await service.grantPermission(
+      secretDoc.id,
+      {
+        subjectType: FILE_PERMISSION_SUBJECT.ROLE,
+        subjectId: 'auditor',
+        canView: true,
+        canDownload: false,
+        note: 'Kiểm toán chỉ xem thông tin, không được tải file gốc',
+      },
+      ownerActor,
+    );
+    expect(grantedPerm.subjectTypeName).toBe('ROLE');
+    expect(grantedPerm.canView).toBe(true);
+    expect(grantedPerm.canDownload).toBe(false);
+
+    // Auditor bây giờ XEM được chi tiết và tìm thấy trong danh sách, nhưng canDownload = false
+    const viewedByAuditor = await service.getById(secretDoc.id, auditorActor);
+    expect(viewedByAuditor.id).toBe(secretDoc.id);
+    expect(viewedByAuditor.canDownload).toBe(false);
+
+    const listedByAuditor = await service.listPaginated({}, auditorActor);
+    expect(listedByAuditor.data.some((f) => f.id === secretDoc.id)).toBe(true);
+
+    // Auditor cố tình TẢI XUỐNG hoặc tạo link tải tạm thời sẽ bị CHẶN (vì canDownload = false)
+    await expect(service.prepareDownload(secretDoc.id, auditorActor)).rejects.toThrow(
+      ForbiddenAppException,
+    );
+    await expect(
+      service.createTemporaryDownloadLink(secretDoc.id, { expiresInSeconds: 300 }, auditorActor),
+    ).rejects.toThrow(ForbiddenAppException);
+
+    // Nâng cấp quyền cho phép tải (canDownload: true)
+    await service.grantPermission(
+      secretDoc.id,
+      {
+        subjectType: FILE_PERMISSION_SUBJECT.ROLE,
+        subjectId: 'auditor',
+        canView: true,
+        canDownload: true,
+      },
+      ownerActor,
+    );
+
+    const dlResult = await service.prepareDownload(secretDoc.id, auditorActor);
+    expect(dlResult.downloadFileName).toBe('bao-cao-tai-chinh.pdf');
+
+    // Thu hồi quyền -> Auditor không còn truy cập được nữa
+    await service.revokePermission(secretDoc.id, grantedPerm.id, ownerActor);
+    await expect(service.getById(secretDoc.id, auditorActor)).rejects.toThrow(
+      ForbiddenAppException,
+    );
+  });
+
+  it('11. [Mục 6.2] Tạo đường dẫn tải tạm thời (Signed Temporary Link) và tự động hết hạn', async () => {
+    const { service } = createInMemoryFilesHarness();
+
+    const uploaded = await service.uploadSingle({
+      fileName: 'tai-lieu-chia-se.txt',
+      textContent: 'Nội dung tải qua link tạm thời',
+    });
+
+    const link = await service.createTemporaryDownloadLink(uploaded.id, {
+      expiresInSeconds: 600,
+      disposition: 'attachment',
+    });
+
+    expect(link.fileId).toBe(uploaded.id);
+    expect(link.expiresInSeconds).toBe(600);
+    expect(link.downloadUrl).toContain(`/api/v1/files/temporary-download/${link.token}`);
+
+    // Tải file qua token hợp lệ thành công mà không cần truyền actor
+    const tempDl = await service.prepareTemporaryDownload(link.token);
+    expect(tempDl.file.id).toBe(uploaded.id);
+    expect(tempDl.downloadFileName).toBe('tai-lieu-chia-se.txt');
+    expect(tempDl.disposition).toBe('attachment');
+
+    // Giả mạo chữ ký token -> bị từ chối ngay
+    await expect(service.prepareTemporaryDownload(`${link.token}tampered`)).rejects.toThrow(
+      ForbiddenAppException,
+    );
+
+    // Vượt quá thời hạn tối đa cho phép (mặc định 604800 giây = 7 ngày) -> bị chặn
+    await expect(
+      service.createTemporaryDownloadLink(uploaded.id, {
+        expiresInSeconds: 9_999_999,
+      }),
+    ).rejects.toThrow(BadRequestAppException);
+  });
+
+  it('12. [Mục 6.2] Giới hạn dung lượng lưu trữ theo Người dùng (user_quota_mb) và theo Đơn vị (quota_mb)', async () => {
+    const { service, settingRegistry } = createInMemoryFilesHarness();
+
+    // Thiết lập hạn mức dung lượng cho mỗi người dùng = 1 MB
+    settingRegistry.upsertScopeOverride({
+      settingKey: 'file.storage.user_quota_mb',
+      environment: 'ALL',
+      organizationUnitId: null,
+      scopeKey: 'file.storage.user_quota_mb::ALL::GLOBAL',
+      serializedValue: '1',
+      isEncrypted: false,
+      updatedBy: null,
+      reason: 'test user quota',
+    });
+
+    const userActor = {
+      id: 77,
+      username: 'staff77',
+      roles: [],
+      permissions: ['files.upload'],
+      organizationUnitIds: [1],
+    };
+
+    // Tải file ~600 KB lần 1: Thành công (dưới 1 MB)
+    const payload600Kb = Buffer.alloc(600 * 1024, 'a').toString('base64');
+    await service.uploadSingle(
+      {
+        fileName: 'part1.txt',
+        contentBase64: payload600Kb,
+      },
+      userActor,
+    );
+
+    // Tải tiếp file ~600 KB lần 2 bởi cùng user 77: Tổng ~1.2 MB > 1 MB -> Bị chặn!
+    await expect(
+      service.uploadSingle(
+        {
+          fileName: 'part2.txt',
+          contentBase64: payload600Kb,
+        },
+        userActor,
+      ),
+    ).rejects.toThrow(BadRequestAppException);
+
+    // Người dùng khác (user 88) vẫn tải được bình thường vì hạn mức tính riêng theo từng người dùng
+    const otherUserUploaded = await service.uploadSingle(
+      {
+        fileName: 'other-user.txt',
+        contentBase64: payload600Kb,
+      },
+      {
+        id: 88,
+        username: 'staff88',
+        roles: [],
+        permissions: ['files.upload'],
+        organizationUnitIds: [1],
+      },
+    );
+    expect(otherUserUploaded.uploadedByUserId).toBe(88);
   });
 });

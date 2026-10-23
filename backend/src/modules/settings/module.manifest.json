@@ -116,15 +116,6 @@
       "isSystem": true
     },
     {
-      "code": "security",
-      "module": "auth",
-      "name": "Cấu hình Bảo mật & Xác thực",
-      "description": "Thiết lập độ dài mật khẩu, độ phức tạp, khóa tài khoản, MFA và thời hạn phiên đăng nhập",
-      "icon": "shield-lock",
-      "sortOrder": 3,
-      "isSystem": true
-    },
-    {
       "code": "ui",
       "module": "settings",
       "name": "Cấu hình Giao diện & Hiển thị",
@@ -279,33 +270,39 @@
       "allowUnitOverride": false,
       "isSystem": true,
       "sortOrder": 1
+    },
+    {
+      "key": "system.pagination.default_page_size",
+      "groupCode": "system",
+      "module": "settings",
+      "namespace": "system.pagination",
+      "name": "Số dòng mặc định mỗi trang toàn hệ thống",
+      "description": "Số bản ghi trả về mặc định cho mọi API phân trang khi module không khai báo cấu hình riêng hoặc client không truyền tham số limit",
+      "valueType": "NUMBER",
+      "defaultValue": 20,
+      "validationRules": { "min": 1, "max": 500, "integerOnly": true },
+      "isSensitive": false,
+      "allowUnitOverride": true,
+      "isSystem": true,
+      "sortOrder": 2
+    },
+    {
+      "key": "system.pagination.max_page_size",
+      "groupCode": "system",
+      "module": "settings",
+      "namespace": "system.pagination",
+      "name": "Số dòng tối đa mỗi trang toàn hệ thống",
+      "description": "Giới hạn số bản ghi tối đa trên một trang cho mọi API phân trang dùng chung khi module không khai báo ngưỡng riêng",
+      "valueType": "NUMBER",
+      "defaultValue": 100,
+      "validationRules": { "min": 10, "max": 5000, "integerOnly": true },
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 3
     }
   ],
   "featureFlags": [
-    {
-      "key": "users.bulk_import_v2",
-      "module": "users",
-      "name": "Nhập/Xuất danh sách nhân sự hàng loạt thế hệ mới",
-      "description": "Cho phép nhập và xuất hồ sơ người dùng hàng loạt qua định dạng CSV/XLSX có kiểm tra trùng lặp nâng cao",
-      "isEnabled": true,
-      "rolloutPercentage": 100,
-      "targetUserIds": [],
-      "targetRoles": [],
-      "targetOrganizationUnitIds": [],
-      "isSystem": true
-    },
-    {
-      "key": "auth.mfa_enforcement_pilot",
-      "module": "auth",
-      "name": "Thử nghiệm bắt buộc MFA theo nhóm vai trò và chi nhánh",
-      "description": "Tính năng thử nghiệm yêu cầu xác thực đa yếu tố (TOTP/Email OTP) theo nhóm người dùng, vai trò hoặc đơn vị chỉ định",
-      "isEnabled": false,
-      "rolloutPercentage": 100,
-      "targetUserIds": [],
-      "targetRoles": ["SUPER_ADMIN", "SECURITY_ADMIN"],
-      "targetOrganizationUnitIds": [],
-      "isSystem": true
-    },
     {
       "key": "settings.realtime_broadcast",
       "module": "settings",

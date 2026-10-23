@@ -265,6 +265,21 @@ export const updateSecuritySettingsSchema = z.object({
   sessionIdleTimeoutMinutes: z.number().int().min(0).max(10080).optional(),
   sessionMaxLifetimeMinutes: z.number().int().min(5).max(43200).optional(),
   enableLoginAuditLog: z.boolean().optional(),
+  passwordResetTtlSeconds: z.number().int().min(60).max(86400).optional(),
+  mfaEmailOtpTtlSeconds: z.number().int().min(30).max(3600).optional(),
+  mfaSmsOtpTtlSeconds: z.number().int().min(30).max(3600).optional(),
+  mfaTrustedDeviceDays: z.number().int().min(1).max(365).optional(),
+  mfaMaxTrustedDevices: z.number().int().min(1).max(100).optional(),
+  mfaRecoveryCodeCount: z.number().int().min(4).max(20).optional(),
+  mfaChallengeTtlSeconds: z.number().int().min(60).max(1800).optional(),
+  mfaAdminRoleCodes: z.array(z.string().trim().min(1).max(64)).min(1).max(50).optional(),
+  stepUpTokenTtlSeconds: z.number().int().min(60).max(3600).optional(),
+  emailVerificationTtlSeconds: z.number().int().min(60).max(86400).optional(),
+  phoneOtpTtlSeconds: z.number().int().min(30).max(3600).optional(),
+  sessionAccessTokenTtlSeconds: z.number().int().min(60).max(86400).optional(),
+  sessionRefreshTokenTtlSeconds: z.number().int().min(300).max(7776000).optional(),
+  apiClientDefaultTokenTtlSeconds: z.number().int().min(60).max(86400).optional(),
+  apiClientMaxUsageLogs: z.number().int().min(5).max(500).optional(),
 });
 
 export type UpdateSecuritySettingsRequest = z.infer<typeof updateSecuritySettingsSchema>;

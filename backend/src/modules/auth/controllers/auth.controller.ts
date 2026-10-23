@@ -391,7 +391,7 @@ export class AuthController {
     @CurrentUser() user: UserIdentity,
     @ValidatedQuery(loginHistoryQuerySchema) query?: LoginHistoryQuery,
   ): Promise<LoginHistoryItemResponse[]> {
-    return this.sessionService.listUserLoginHistory(user.id, query?.limit ?? 50);
+    return this.sessionService.listUserLoginHistory(user.id, query?.limit);
   }
 
   /** Thu hồi một phiên đăng nhập cụ thể */

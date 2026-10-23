@@ -11,7 +11,8 @@
   "cannotChangeSystemCode": "Không thể thay đổi mã định danh của mục danh mục hệ thống (isSystem = true: {{code}}).",
   "cannotChangeCodeInUse": "Không thể đổi mã định danh '{{code}}' vì mục danh mục này đang được sử dụng bởi {{usageCount}} bản ghi dữ liệu liên quan.",
   "valueInUse": "Không thể xóa mục danh mục '{{code}}' vì đang được sử dụng bởi {{usageCount}} bản ghi dữ liệu liên quan. Vui lòng chuyển sang trạng thái Khóa (INACTIVE) thay vì xóa.",
-  "invalidXlsxFile": "Tệp Excel (.xlsx) danh mục không hợp lệ hoặc bị hỏng."
+  "invalidXlsxFile": "Tệp Excel (.xlsx) danh mục không hợp lệ hoặc bị hỏng.",
+  "importMaxRowsExceeded": "Số lượng dòng danh mục cần nhập ({{totalRows}}) vượt quá giới hạn tối đa cho phép ({{maxRows}})."
 }
 
 

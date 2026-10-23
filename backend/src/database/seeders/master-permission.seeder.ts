@@ -311,40 +311,77 @@ export class MasterPermissionSeeder implements SeederContract {
             ],
           );
         } else {
-          await ctx.manager.query(
-            `INSERT INTO code_values (
-               type_code, numeric_code, code, behavior_code, name, description,
-               labels_json, aliases_json, color, icon, sort_order, is_default, is_system, metadata_json, status
-             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
-             ON DUPLICATE KEY UPDATE
-               code = VALUES(code),
-               behavior_code = VALUES(behavior_code),
-               name = COALESCE(NULLIF(code_values.name, ''), VALUES(name)),
-               description = COALESCE(code_values.description, VALUES(description)),
-               labels_json = COALESCE(code_values.labels_json, VALUES(labels_json)),
-               aliases_json = COALESCE(code_values.aliases_json, VALUES(aliases_json)),
-               color = COALESCE(code_values.color, VALUES(color)),
-               icon = COALESCE(code_values.icon, VALUES(icon)),
-               sort_order = VALUES(sort_order),
-               is_default = VALUES(is_default),
-               is_system = VALUES(is_system)`,
-            [
-              typeCode,
-              val.numericCode,
-              valCode,
-              behaviorCode,
-              val.name,
-              val.description ?? null,
-              labelsJson,
-              aliasesJson,
-              val.color ?? null,
-              val.icon ?? null,
-              val.sortOrder ?? val.numericCode,
-              val.isDefault ?? false,
-              val.isSystem ?? true,
-              metadataJson,
-            ],
-          );
+          const existingRows = (await ctx.manager.query(
+            `SELECT id FROM code_values WHERE type_code = ? AND numeric_code = ? LIMIT 1`,
+            [typeCode, val.numericCode],
+          )) as Array<{ id: number }>;
+          if (Array.isArray(existingRows) && existingRows.length > 0) {
+            await ctx.manager.query(
+              `UPDATE code_values SET
+                 code = ?,
+                 behavior_code = ?,
+                 name = COALESCE(NULLIF(name, ''), ?),
+                 description = COALESCE(description, ?),
+                 labels_json = COALESCE(labels_json, ?),
+                 aliases_json = COALESCE(aliases_json, ?),
+                 color = COALESCE(color, ?),
+                 icon = COALESCE(icon, ?),
+                 sort_order = ?,
+                 is_default = ?,
+                 is_system = ?,
+                 status = 1
+               WHERE id = ?`,
+              [
+                valCode,
+                behaviorCode,
+                val.name,
+                val.description ?? null,
+                labelsJson,
+                aliasesJson,
+                val.color ?? null,
+                val.icon ?? null,
+                val.sortOrder ?? val.numericCode,
+                val.isDefault ?? false,
+                val.isSystem ?? true,
+                existingRows[0]!.id,
+              ],
+            );
+          } else {
+            await ctx.manager.query(
+              `INSERT INTO code_values (
+                 type_code, numeric_code, code, behavior_code, name, description,
+                 labels_json, aliases_json, color, icon, sort_order, is_default, is_system, metadata_json, status
+               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+               ON DUPLICATE KEY UPDATE
+                 code = VALUES(code),
+                 behavior_code = VALUES(behavior_code),
+                 name = COALESCE(NULLIF(code_values.name, ''), VALUES(name)),
+                 description = COALESCE(code_values.description, VALUES(description)),
+                 labels_json = COALESCE(code_values.labels_json, VALUES(labels_json)),
+                 aliases_json = COALESCE(code_values.aliases_json, VALUES(aliases_json)),
+                 color = COALESCE(code_values.color, VALUES(color)),
+                 icon = COALESCE(code_values.icon, VALUES(icon)),
+                 sort_order = VALUES(sort_order),
+                 is_default = VALUES(is_default),
+                 is_system = VALUES(is_system)`,
+              [
+                typeCode,
+                val.numericCode,
+                valCode,
+                behaviorCode,
+                val.name,
+                val.description ?? null,
+                labelsJson,
+                aliasesJson,
+                val.color ?? null,
+                val.icon ?? null,
+                val.sortOrder ?? val.numericCode,
+                val.isDefault ?? false,
+                val.isSystem ?? true,
+                metadataJson,
+              ],
+            );
+          }
         }
         codeValuesSeeded++;
         affected++;

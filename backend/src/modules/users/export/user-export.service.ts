@@ -1,6 +1,10 @@
 import { Injectable, Optional } from '@nestjs/common';
 import { LocaleContext, LocaleFormatter } from '@packages/i18n/index.js';
-import { buildXlsxBuffer } from '@packages/kernel/index.js';
+import {
+  SettingRegistryService,
+  buildXlsxBuffer,
+  defaultSettingRegistry,
+} from '@packages/kernel/index.js';
 import {
   AuditLogService,
   PlatformSecurityService,
@@ -30,12 +34,17 @@ const MAX_EXPORT_ROWS = 5_000;
 
 @Injectable()
 export class UserExportService {
+  private readonly settingRegistry: SettingRegistryService;
+
   constructor(
     private readonly usersService: UsersService,
     private readonly userRepository: UserRepository,
     @Optional() private readonly auditLogService?: AuditLogService,
     @Optional() private readonly platformSecurityService?: PlatformSecurityService,
-  ) {}
+    @Optional() settingRegistry?: SettingRegistryService,
+  ) {
+    this.settingRegistry = settingRegistry ?? defaultSettingRegistry;
+  }
 
   /**
    * Xuất danh sách người dùng ra định dạng Excel (.xlsx) hoặc CSV (.csv) theo bộ lọc hiện hành
@@ -46,12 +55,23 @@ export class UserExportService {
     actor?: UserIdentity,
   ): Promise<ExportUsersCsvResponse> {
     const format: 'csv' | 'xlsx' = query.format === 'xlsx' ? 'xlsx' : 'csv';
+    const maxExportRows = this.settingRegistry.getNumber(
+      'users.export.max_rows',
+      undefined,
+      MAX_EXPORT_ROWS,
+    );
+    const actorOrgUnitId = query.organizationUnitId ?? actor?.organizationUnitIds?.[0];
+    const defaultReportTitle = this.settingRegistry.getString(
+      'users.export.default_report_title',
+      actorOrgUnitId ? { organizationUnitId: actorOrgUnitId } : undefined,
+      DEFAULT_USER_EXPORT_REPORT_TITLE,
+    );
     const scopeFilter = await this.usersService.resolveUserScopeFilter(actor, 'export');
     const { items } = await this.userRepository.searchPaginated({
       ...query,
       ...(scopeFilter ? { scopeFilter } : {}),
       page: 1,
-      limit: Math.min(query.limit ?? MAX_EXPORT_ROWS, MAX_EXPORT_ROWS),
+      limit: Math.min(query.limit ?? maxExportRows, maxExportRows),
     });
 
     const hydrated = await this.usersService.hydrateUsersList(items);
@@ -59,7 +79,7 @@ export class UserExportService {
     const effectiveTimezone = LocaleFormatter.resolveActiveTimezone(
       actor?.preferredTimezone ?? LocaleContext.getTimezone(),
     );
-    const reportTitle = query.title?.trim() || DEFAULT_USER_EXPORT_REPORT_TITLE;
+    const reportTitle = query.title?.trim() || defaultReportTitle;
     const exportedAtSubtitle = `Ngày xuất dữ liệu: ${formatVietnameseDateTime(new Date(), effectiveTimezone)}`;
 
     const lines: string[] = [USER_EXPORT_HEADERS.join(',')];

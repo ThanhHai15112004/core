@@ -458,6 +458,21 @@ export interface SecuritySettingsResponse {
   readonly sessionIdleTimeoutMinutes?: number;
   readonly sessionMaxLifetimeMinutes?: number;
   readonly enableLoginAuditLog?: boolean;
+  readonly passwordResetTtlSeconds?: number;
+  readonly mfaEmailOtpTtlSeconds?: number;
+  readonly mfaSmsOtpTtlSeconds?: number;
+  readonly mfaTrustedDeviceDays?: number;
+  readonly mfaMaxTrustedDevices?: number;
+  readonly mfaRecoveryCodeCount?: number;
+  readonly mfaChallengeTtlSeconds?: number;
+  readonly mfaAdminRoleCodes?: readonly string[];
+  readonly stepUpTokenTtlSeconds?: number;
+  readonly emailVerificationTtlSeconds?: number;
+  readonly phoneOtpTtlSeconds?: number;
+  readonly sessionAccessTokenTtlSeconds?: number;
+  readonly sessionRefreshTokenTtlSeconds?: number;
+  readonly apiClientDefaultTokenTtlSeconds?: number;
+  readonly apiClientMaxUsageLogs?: number;
   readonly availablePasswordHashAlgorithms: readonly (
     'SCRYPT' | 'PBKDF2_SHA512' | 'PBKDF2_SHA256'
   )[];
@@ -495,6 +510,21 @@ export const securitySettingsResponseSchema = z.object({
   sessionIdleTimeoutMinutes: z.number().optional(),
   sessionMaxLifetimeMinutes: z.number().optional(),
   enableLoginAuditLog: z.boolean().optional(),
+  passwordResetTtlSeconds: z.number().optional(),
+  mfaEmailOtpTtlSeconds: z.number().optional(),
+  mfaSmsOtpTtlSeconds: z.number().optional(),
+  mfaTrustedDeviceDays: z.number().optional(),
+  mfaMaxTrustedDevices: z.number().optional(),
+  mfaRecoveryCodeCount: z.number().optional(),
+  mfaChallengeTtlSeconds: z.number().optional(),
+  mfaAdminRoleCodes: z.array(z.string()).optional(),
+  stepUpTokenTtlSeconds: z.number().optional(),
+  emailVerificationTtlSeconds: z.number().optional(),
+  phoneOtpTtlSeconds: z.number().optional(),
+  sessionAccessTokenTtlSeconds: z.number().optional(),
+  sessionRefreshTokenTtlSeconds: z.number().optional(),
+  apiClientDefaultTokenTtlSeconds: z.number().optional(),
+  apiClientMaxUsageLogs: z.number().optional(),
   availablePasswordHashAlgorithms: z.array(z.enum(['SCRYPT', 'PBKDF2_SHA512', 'PBKDF2_SHA256'])),
   availableDbEncryptionAlgorithms: z.array(
     z.enum(['AES_256_GCM', 'CHACHA20_POLY1305', 'AES_256_CBC_HMAC']),

@@ -32,6 +32,16 @@ export const FILE_VISIBILITY = {
 export type FileVisibilityCode = (typeof FILE_VISIBILITY)[keyof typeof FILE_VISIBILITY];
 export type FileVisibilityName = keyof typeof FILE_VISIBILITY;
 
+export const FILE_PERMISSION_SUBJECT = {
+  USER: 1,
+  ROLE: 2,
+  ORG_UNIT: 3,
+} as const;
+
+export type FilePermissionSubjectCode =
+  (typeof FILE_PERMISSION_SUBJECT)[keyof typeof FILE_PERMISSION_SUBJECT];
+export type FilePermissionSubjectName = keyof typeof FILE_PERMISSION_SUBJECT;
+
 /** Phân giải trạng thái tệp tin thông qua CodeRegistryService (`files.status`) */
 export function parseFileStatus(val: unknown): FileStatusCode {
   const resolved = defaultCodeRegistry.parseToNumericCode('files.status', val, FILE_STATUS.ACTIVE);
@@ -104,6 +114,38 @@ export function getFileVisibilityName(code: number): FileVisibilityName {
     return name;
   }
   return 'PRIVATE';
+}
+
+/** Phân giải loại đối tượng phân quyền tệp tin qua CodeRegistryService (`files.permission_subject_type`) */
+export function parseFilePermissionSubjectType(val: unknown): FilePermissionSubjectCode {
+  if (typeof val === 'string') {
+    const upper = val.trim().toUpperCase();
+    if (upper === 'ROLE' || upper === '2') return FILE_PERMISSION_SUBJECT.ROLE;
+    if (upper === 'ORG_UNIT' || upper === 'ORG' || upper === '3') {
+      return FILE_PERMISSION_SUBJECT.ORG_UNIT;
+    }
+    if (upper === 'USER' || upper === '1') return FILE_PERMISSION_SUBJECT.USER;
+  }
+  const resolved = defaultCodeRegistry.parseToNumericCode(
+    'files.permission_subject_type',
+    val,
+    FILE_PERMISSION_SUBJECT.USER,
+  );
+  if (resolved === FILE_PERMISSION_SUBJECT.ROLE || resolved === FILE_PERMISSION_SUBJECT.ORG_UNIT) {
+    return resolved;
+  }
+  return FILE_PERMISSION_SUBJECT.USER;
+}
+
+/** Tra cứu tên loại đối tượng phân quyền tệp tin từ `files.permission_subject_type` */
+export function getFilePermissionSubjectTypeName(code: number): FilePermissionSubjectName {
+  if (code === FILE_PERMISSION_SUBJECT.ROLE) return 'ROLE';
+  if (code === FILE_PERMISSION_SUBJECT.ORG_UNIT) return 'ORG_UNIT';
+  const name = defaultCodeRegistry.getCodeName('files.permission_subject_type', code, 'USER');
+  if (name === 'ROLE' || name === 'ORG_UNIT') {
+    return name;
+  }
+  return 'USER';
 }
 
 export interface FileSummary {

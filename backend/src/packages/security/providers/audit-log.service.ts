@@ -1,6 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
-import { ForbiddenAppException, NotFoundAppException } from '@packages/kernel/index.js';
+import {
+  ForbiddenAppException,
+  NotFoundAppException,
+  resolvePagination,
+} from '@packages/kernel/index.js';
 import { RequestContextService } from '@packages/logging/index.js';
 import type { UserIdentity } from '../contracts/auth.contract.js';
 import {
@@ -149,8 +153,11 @@ export class AuditLogService {
    * module, chức năng, hành động, thời gian, Request ID / Correlation ID (Mục 4.4.7).
    */
   public async listPaginated(filter: AuditLogQueryFilter = {}): Promise<AuditLogPaginatedResult> {
-    const page = Math.max(1, Number(filter.page ?? 1));
-    const limit = Math.min(200, Math.max(1, Number(filter.limit ?? 20)));
+    const { page, limit, offset } = resolvePagination(filter, {
+      settingPrefix: 'roles.audit_log',
+      defaultLimit: 20,
+      maxLimit: 200,
+    });
 
     if (this.persistencePort) {
       try {
@@ -251,7 +258,6 @@ export class AuditLogService {
     }
 
     const totalItems = list.length;
-    const offset = (page - 1) * limit;
     const data = list.slice(offset, offset + limit);
 
     return {

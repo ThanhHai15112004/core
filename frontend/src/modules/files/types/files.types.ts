@@ -25,6 +25,30 @@ export interface FileUsageItem {
   createdAt: string;
 }
 
+export interface FilePermissionItem {
+  id: number;
+  fileId: number;
+  subjectType: number;
+  subjectTypeName: 'USER' | 'ROLE' | 'ORG_UNIT';
+  subjectId: string;
+  canView: boolean;
+  canDownload: boolean;
+  expiresAt: string | null;
+  note: string | null;
+  grantedByUserId: number | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TemporaryDownloadLinkItem {
+  fileId: number;
+  token: string;
+  expiresInSeconds: number;
+  expiresAt: string;
+  disposition: 'attachment' | 'inline';
+  downloadUrl: string;
+}
+
 export interface FileUploaderSummary {
   id: number;
   username: string;
@@ -66,6 +90,8 @@ export interface FileRecordItem {
   createdAt: string;
   updatedAt: string;
   usages?: FileUsageItem[];
+  permissions?: FilePermissionItem[];
+  canDownload?: boolean;
 }
 
 export interface UploadSingleFilePayload {

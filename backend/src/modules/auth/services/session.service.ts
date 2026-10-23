@@ -3,7 +3,10 @@ import { CoreConfigService } from '@packages/config/index.js';
 import {
   ForbiddenAppException,
   NotFoundAppException,
+  SettingRegistryService,
   UnauthorizedAppException,
+  defaultSettingRegistry,
+  resolvePagination,
 } from '@packages/kernel/index.js';
 import {
   AuditLogService,
@@ -57,6 +60,8 @@ export interface RecordAuthEventInput {
 
 @Injectable()
 export class SessionService {
+  private readonly settingRegistry: SettingRegistryService;
+
   constructor(
     private readonly sessionRepository: AuthSessionRepository,
     private readonly tokenService: TokenService,
@@ -67,7 +72,36 @@ export class SessionService {
     @Optional() private readonly loginHistoryRepository?: AuthLoginHistoryRepository,
     @Optional() private auditLogService?: AuditLogService,
     @Optional() private platformSecurityService?: PlatformSecurityService,
-  ) {}
+    @Optional() settingRegistry?: SettingRegistryService,
+  ) {
+    this.settingRegistry = settingRegistry ?? defaultSettingRegistry;
+  }
+
+  private resolveTokenTtlSeconds(): { accessTtlSec: number; refreshTtlSec: number } {
+    const envAccessTtlSec = parseDurationSeconds(
+      this.configService?.auth.jwt.accessExpiration,
+      DEFAULT_ACCESS_TTL_SEC,
+    );
+    const envRefreshTtlSec = parseDurationSeconds(
+      this.configService?.auth.jwt.refreshExpiration,
+      DEFAULT_REFRESH_TTL_SEC,
+    );
+    const regAccessTtlSec = this.settingRegistry.getNumber(
+      'security.session.access_token_ttl_seconds',
+      undefined,
+      DEFAULT_ACCESS_TTL_SEC,
+    );
+    const regRefreshTtlSec = this.settingRegistry.getNumber(
+      'security.session.refresh_token_ttl_seconds',
+      undefined,
+      DEFAULT_REFRESH_TTL_SEC,
+    );
+    return {
+      accessTtlSec: regAccessTtlSec !== DEFAULT_ACCESS_TTL_SEC ? regAccessTtlSec : envAccessTtlSec,
+      refreshTtlSec:
+        regRefreshTtlSec !== DEFAULT_REFRESH_TTL_SEC ? regRefreshTtlSec : envRefreshTtlSec,
+    };
+  }
 
   /** Gắn SecuritySettingsService (hỗ trợ khởi tạo linh hoạt trong unit test harness) */
   public setSecuritySettingsService(service?: SecuritySettingsService): void {
@@ -218,14 +252,7 @@ export class SessionService {
     user: UserAuthIdentityView,
     context: { ipAddress?: string | null; userAgent?: string | null; deviceName?: string | null },
   ): Promise<IssuedSessionTokens> {
-    const accessTtlSec = parseDurationSeconds(
-      this.configService?.auth.jwt.accessExpiration,
-      DEFAULT_ACCESS_TTL_SEC,
-    );
-    const refreshTtlSec = parseDurationSeconds(
-      this.configService?.auth.jwt.refreshExpiration,
-      DEFAULT_REFRESH_TTL_SEC,
-    );
+    const { accessTtlSec, refreshTtlSec } = this.resolveTokenTtlSeconds();
 
     const { maxLifetimeMs, idleTimeoutMs } = await this.resolveSessionPolicy();
     const now = new Date();
@@ -388,14 +415,7 @@ export class SessionService {
       throw new ForbiddenAppException('auth.accountNotActive');
     }
 
-    const accessTtlSec = parseDurationSeconds(
-      this.configService?.auth.jwt.accessExpiration,
-      DEFAULT_ACCESS_TTL_SEC,
-    );
-    const refreshTtlSec = parseDurationSeconds(
-      this.configService?.auth.jwt.refreshExpiration,
-      DEFAULT_REFRESH_TTL_SEC,
-    );
+    const { accessTtlSec, refreshTtlSec } = this.resolveTokenTtlSeconds();
 
     const maxAllowedExpiresMs =
       maxLifetimeMs > 0 ? createdMs + maxLifetimeMs : nowMs + refreshTtlSec * 1000;
@@ -541,12 +561,20 @@ export class SessionService {
   /** Xem lịch sử đăng nhập & đăng xuất theo thời gian, IP và thiết bị trực tiếp từ DB (Mục 3.4.7) */
   public async listUserLoginHistory(
     userId: number,
-    limit = 50,
+    limit?: number,
   ): Promise<LoginHistoryItemResponse[]> {
     if (!this.loginHistoryRepository) {
       throw new Error('AuthLoginHistoryRepository is not initialized');
     }
-    const safeLimit = Math.max(1, Math.min(200, limit));
+    const { limit: safeLimit } = resolvePagination(
+      { limit },
+      {
+        defaultLimitKey: 'users.login_history.default_limit',
+        defaultLimit: 50,
+        maxLimit: 200,
+        registry: this.settingRegistry,
+      },
+    );
     const records = await this.loginHistoryRepository.findByUserId(userId, safeLimit);
 
     return records.map((r) => ({

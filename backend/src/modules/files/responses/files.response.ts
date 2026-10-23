@@ -2,6 +2,8 @@ import { z } from 'zod';
 import type {
   FileCategoryCode,
   FileCategoryName,
+  FilePermissionSubjectCode,
+  FilePermissionSubjectName,
   FileStatusCode,
   FileStatusName,
   FileVisibilityCode,
@@ -60,6 +62,54 @@ export const fileUsageItemResponseSchema = z.object({
   createdAt: z.string(),
 });
 
+export interface FilePermissionItemResponse {
+  readonly id: number;
+  readonly fileId: number;
+  readonly subjectType: FilePermissionSubjectCode;
+  readonly subjectTypeName: FilePermissionSubjectName;
+  readonly subjectId: string;
+  readonly canView: boolean;
+  readonly canDownload: boolean;
+  readonly expiresAt: string | null;
+  readonly note: string | null;
+  readonly grantedByUserId: number | null;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+}
+
+export const filePermissionItemResponseSchema = z.object({
+  id: z.number().int().min(1),
+  fileId: z.number().int().min(1),
+  subjectType: z.number().int().min(1).max(3),
+  subjectTypeName: z.enum(['USER', 'ROLE', 'ORG_UNIT']),
+  subjectId: z.string(),
+  canView: z.boolean(),
+  canDownload: z.boolean(),
+  expiresAt: z.string().nullable(),
+  note: z.string().nullable(),
+  grantedByUserId: z.number().int().min(1).nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+export interface TemporaryDownloadLinkResponse {
+  readonly fileId: number;
+  readonly token: string;
+  readonly expiresInSeconds: number;
+  readonly expiresAt: string;
+  readonly disposition: 'attachment' | 'inline';
+  readonly downloadUrl: string;
+}
+
+export const temporaryDownloadLinkResponseSchema = z.object({
+  fileId: z.number().int().min(1),
+  token: z.string(),
+  expiresInSeconds: z.number().int().min(1),
+  expiresAt: z.string(),
+  disposition: z.enum(['attachment', 'inline']),
+  downloadUrl: z.string(),
+});
+
 export interface FileUploaderSummary {
   readonly id: number;
   readonly username: string;
@@ -99,6 +149,8 @@ export interface FileRecordResponse {
   readonly organizationUnitId: number | null;
   readonly usageCount: number;
   readonly usages?: readonly FileUsageItemResponse[];
+  readonly permissions?: readonly FilePermissionItemResponse[];
+  readonly canDownload?: boolean;
   readonly canDelete: boolean;
   readonly trashedAt: string | null;
   readonly trashedByUserId: number | null;
@@ -135,6 +187,8 @@ export const fileRecordResponseSchema = z.object({
   organizationUnitId: z.number().int().min(1).nullable(),
   usageCount: z.number().int().min(0),
   usages: z.array(fileUsageItemResponseSchema).optional(),
+  permissions: z.array(filePermissionItemResponseSchema).optional(),
+  canDownload: z.boolean().optional(),
   canDelete: z.boolean(),
   trashedAt: z.string().nullable(),
   trashedByUserId: z.number().int().min(1).nullable(),
@@ -155,6 +209,8 @@ export interface FileStatsResponse {
   readonly totalTrashedFormatted: string;
   readonly totalReferencedFiles: number;
   readonly totalFolders: number;
+  readonly currentUserActiveBytes?: number;
+  readonly currentUserActiveFormatted?: string;
   readonly byCategory: readonly {
     readonly category: FileCategoryCode;
     readonly categoryName: FileCategoryName;
@@ -170,6 +226,9 @@ export interface FileStatsResponse {
     readonly verifyMagicBytes?: boolean;
     readonly defaultVisibility?: FileVisibilityCode;
     readonly storageQuotaMb?: number;
+    readonly userStorageQuotaMb?: number;
+    readonly tempLinkDefaultTtlSec?: number;
+    readonly tempLinkMaxTtlSec?: number;
     readonly reconcileOnList?: boolean;
     readonly storageKeyPrefix?: string;
   };
@@ -184,6 +243,8 @@ export const fileStatsResponseSchema = z.object({
   totalTrashedFormatted: z.string(),
   totalReferencedFiles: z.number().int().min(0),
   totalFolders: z.number().int().min(0),
+  currentUserActiveBytes: z.number().int().min(0).optional(),
+  currentUserActiveFormatted: z.string().optional(),
   byCategory: z.array(
     z.object({
       category: z.number().int().min(1).max(7),
@@ -201,6 +262,9 @@ export const fileStatsResponseSchema = z.object({
     verifyMagicBytes: z.boolean().optional(),
     defaultVisibility: z.number().int().min(1).max(3).optional(),
     storageQuotaMb: z.number().int().min(0).optional(),
+    userStorageQuotaMb: z.number().int().min(0).optional(),
+    tempLinkDefaultTtlSec: z.number().int().min(1).optional(),
+    tempLinkMaxTtlSec: z.number().int().min(1).optional(),
     reconcileOnList: z.boolean().optional(),
     storageKeyPrefix: z.string().optional(),
   }),

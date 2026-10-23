@@ -15,6 +15,7 @@ import { HTTP_STATUS_CODE, type PaginatedResult } from '@packages/kernel/index.j
 import {
   ApiDoc,
   ApiGroup,
+  Public,
   RequirePermissions,
   ValidatedBody,
   ValidatedParams,
@@ -28,6 +29,8 @@ import { FilesService } from '../services/files.service.js';
 import {
   type AttachFileUsageRequest,
   type CreateFileFolderRequest,
+  type CreateTemporaryDownloadLinkRequest,
+  type GrantFilePermissionRequest,
   type ListFilesQuery,
   type UpdateFileFolderRequest,
   type UpdateFileMetadataRequest,
@@ -35,6 +38,8 @@ import {
   type UploadSingleFileRequest,
   attachFileUsageSchema,
   createFileFolderSchema,
+  createTemporaryDownloadLinkSchema,
+  grantFilePermissionSchema,
   listFilesQuerySchema,
   updateFileFolderSchema,
   updateFileMetadataSchema,
@@ -43,22 +48,28 @@ import {
 } from '../requests/files.requests.js';
 import {
   type FileFolderResponse,
+  type FilePermissionItemResponse,
   type FileRecordResponse,
   type FileStatsResponse,
   type FileUsageItemResponse,
+  type TemporaryDownloadLinkResponse,
   fileFolderResponseSchema,
+  filePermissionItemResponseSchema,
   fileRecordResponseSchema,
   fileStatsResponseSchema,
   fileUsageItemResponseSchema,
+  temporaryDownloadLinkResponseSchema,
 } from '../responses/files.response.js';
 
 const listFoldersQuerySchema = z.object({
   organizationUnitId: optionalQueryParam(z.coerce.number().int().min(1)),
 });
 
+const tempDownloadTokenParamSchema = z.string().trim().min(10).max(2048);
+
 @ApiGroup(
   'File Management',
-  'Quản lý file dùng chung, thư mục, thùng rác & liên kết sử dụng (Mục 6.1)',
+  'Quản lý file dùng chung, thư mục, phân quyền truy cập, link tải tạm thời, thùng rác & liên kết sử dụng (Mục 6.1 & 6.2)',
 )
 @Controller(FILES_ROUTES.PREFIX)
 export class FilesController {
@@ -79,13 +90,14 @@ export class FilesController {
   @Get(FILES_ROUTES.FOLDERS)
   @RequirePermissions('files.read')
   @ApiDoc({
-    summary: 'Lấy danh sách cây thư mục ảo trong File Manager',
+    summary: 'Lấy danh sách cây thư mục ảo trong File Manager (lọc theo quyền & đơn vị)',
     response: z.array(fileFolderResponseSchema),
   })
   public async listFolders(
     @ValidatedQuery(listFoldersQuerySchema) query: { organizationUnitId?: number | undefined },
+    @CurrentUser() actor?: UserIdentity,
   ): Promise<FileFolderResponse[]> {
-    return this.filesService.listFolders(query.organizationUnitId);
+    return this.filesService.listFolders(query.organizationUnitId, actor);
   }
 
   /** Tạo thư mục mới trong File Manager */
@@ -107,7 +119,8 @@ export class FilesController {
   @Patch(FILES_ROUTES.FOLDER_BY_ID)
   @RequirePermissions('files.manage')
   @ApiDoc({
-    summary: 'Đổi tên hoặc di chuyển thư mục trong File Manager',
+    summary:
+      'Đổi tên hoặc di chuyển thư mục (kiểm tra quyền, chống vòng lặp & cập nhật đường dẫn con)',
     response: fileFolderResponseSchema,
   })
   public async updateFolder(
@@ -152,7 +165,8 @@ export class FilesController {
   @Post(FILES_ROUTES.UPLOAD)
   @RequirePermissions('files.upload')
   @ApiDoc({
-    summary: 'Tải một file lên hệ thống (kiểm tra định dạng, chữ ký Magic Bytes và dung lượng)',
+    summary:
+      'Tải một file lên hệ thống (kiểm tra định dạng, chữ ký Magic Bytes và hạn mức dung lượng)',
     status: HTTP_STATUS_CODE.CREATED,
     response: fileRecordResponseSchema,
   })
@@ -196,11 +210,38 @@ export class FilesController {
     return this.filesService.purgeExpiredTrash(actor);
   }
 
-  /** Xem thông tin chi tiết của file (Tên, loại, dung lượng, người tải, thời gian, liên kết sử dụng) */
+  /** Tải file qua đường dẫn tạm thời tự hết hạn (Signed Temporary Download Link — Mục 6.2) */
+  @Get(FILES_ROUTES.TEMPORARY_DOWNLOAD)
+  @Public()
+  @ApiDoc({
+    summary: 'Tải file thông qua đường dẫn tạm thời có chữ ký và thời hạn tự hết hạn (Mục 6.2)',
+  })
+  public async downloadByTemporaryLink(
+    @ValidatedParams(tempDownloadTokenParamSchema, 'token') token: string,
+    @Res() reply: FastifyReply,
+  ) {
+    const { stream, file, downloadFileName, disposition } =
+      await this.filesService.prepareTemporaryDownload(token);
+    const encodedName = encodeURIComponent(downloadFileName);
+    void reply
+      .header('content-type', file.mimeType || 'application/octet-stream')
+      .header(
+        'content-disposition',
+        `${disposition}; filename="${downloadFileName.replace(/"/g, '_')}"; filename*=UTF-8''${encodedName}`,
+      )
+      .header('cache-control', 'private, no-store')
+      .header('x-content-type-options', 'nosniff');
+    if (stream.size !== null) {
+      void reply.header('content-length', String(stream.size));
+    }
+    return reply.send(stream.body);
+  }
+
+  /** Xem thông tin chi tiết của file (Tên, loại, dung lượng, người tải, thời gian, liên kết sử dụng, phân quyền) */
   @Get(FILES_ROUTES.BY_ID)
   @RequirePermissions('files.read')
   @ApiDoc({
-    summary: 'Xem thông tin chi tiết file kèm người tải và các chức năng đang sử dụng',
+    summary: 'Xem thông tin chi tiết file kèm người tải, các chức năng đang sử dụng và phân quyền',
     response: fileRecordResponseSchema,
   })
   public async getById(
@@ -215,7 +256,7 @@ export class FilesController {
   @RequirePermissions('files.manage')
   @ApiDoc({
     summary:
-      'Đổi tên hiển thị file hoặc chuyển thư mục (không làm thay đổi file gốc trong storage)',
+      'Đổi tên hiển thị file hoặc chuyển thư mục (giữ nguyên liên kết sử dụng và không làm thay đổi file gốc)',
     response: fileRecordResponseSchema,
   })
   public async updateMetadata(
@@ -226,11 +267,79 @@ export class FilesController {
     return this.filesService.updateMetadata(id, body, actor);
   }
 
-  /** Tải file xuống (Kiểm tra quyền trước khi cho tải, trả về tên hiển thị mới) */
+  /** Tạo đường dẫn tải file tạm thời tự hết hạn (Mục 6.2) */
+  @Post(FILES_ROUTES.TEMPORARY_LINK)
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions('files.download')
+  @ApiDoc({
+    summary:
+      'Tạo đường dẫn tải file tạm thời tự hết hạn (Signed Temporary Download Link — Mục 6.2)',
+    response: temporaryDownloadLinkResponseSchema,
+  })
+  public async createTemporaryDownloadLink(
+    @ValidatedParams(positiveIntParamSchema, 'id') id: number,
+    @ValidatedBody(createTemporaryDownloadLinkSchema) body: CreateTemporaryDownloadLinkRequest,
+    @CurrentUser() actor?: UserIdentity,
+  ): Promise<TemporaryDownloadLinkResponse> {
+    return this.filesService.createTemporaryDownloadLink(id, body, actor);
+  }
+
+  /** Xem danh sách phân quyền truy cập chi tiết (User / Role / Đơn vị) của file (Mục 6.2) */
+  @Get(FILES_ROUTES.PERMISSIONS)
+  @RequirePermissions('files.read')
+  @ApiDoc({
+    summary:
+      'Xem danh sách phân quyền xem/tải của file theo người dùng, vai trò hoặc đơn vị (Mục 6.2)',
+    response: z.array(filePermissionItemResponseSchema),
+  })
+  public async listPermissions(
+    @ValidatedParams(positiveIntParamSchema, 'id') id: number,
+    @CurrentUser() actor?: UserIdentity,
+  ): Promise<FilePermissionItemResponse[]> {
+    return this.filesService.listPermissions(id, actor);
+  }
+
+  /** Cấp hoặc cập nhật quyền xem / tải file cho người dùng, vai trò hoặc đơn vị (Mục 6.2) */
+  @Post(FILES_ROUTES.PERMISSIONS)
+  @RequirePermissions('files.manage')
+  @ApiDoc({
+    summary:
+      'Cấp hoặc cập nhật quyền xem (canView) và tải (canDownload) file theo người dùng, vai trò hoặc đơn vị',
+    status: HTTP_STATUS_CODE.CREATED,
+    response: filePermissionItemResponseSchema,
+  })
+  public async grantPermission(
+    @ValidatedParams(positiveIntParamSchema, 'id') id: number,
+    @ValidatedBody(grantFilePermissionSchema) body: GrantFilePermissionRequest,
+    @CurrentUser() actor?: UserIdentity,
+  ): Promise<FilePermissionItemResponse> {
+    return this.filesService.grantPermission(id, body, actor);
+  }
+
+  /** Thu hồi một bản ghi phân quyền truy cập file (Mục 6.2) */
+  @Delete(FILES_ROUTES.PERMISSION_BY_ID)
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions('files.manage')
+  @ApiDoc({
+    summary: 'Thu hồi quyền truy cập file đã cấp cho người dùng, vai trò hoặc đơn vị',
+    response: z.object({
+      revoked: z.literal(true),
+      permissionId: z.number().int().positive(),
+    }),
+  })
+  public async revokePermission(
+    @ValidatedParams(positiveIntParamSchema, 'id') id: number,
+    @ValidatedParams(positiveIntParamSchema, 'permissionId') permissionId: number,
+    @CurrentUser() actor?: UserIdentity,
+  ) {
+    return this.filesService.revokePermission(id, permissionId, actor);
+  }
+
+  /** Tải file xuống (Kiểm tra quyền tải trước khi cho tải, trả về tên hiển thị mới) */
   @Get(FILES_ROUTES.DOWNLOAD)
   @RequirePermissions('files.download')
   @ApiDoc({
-    summary: 'Tải file xuống sau khi kiểm tra quyền truy cập',
+    summary: 'Tải file xuống sau khi kiểm tra quyền tải (có thể khác quyền xem thông tin)',
   })
   public async downloadFile(
     @ValidatedParams(positiveIntParamSchema, 'id') id: number,

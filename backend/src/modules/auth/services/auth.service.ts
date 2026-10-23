@@ -3,7 +3,9 @@ import { BaseCacheProvider } from '@packages/cache/index.js';
 import {
   BadRequestAppException,
   ForbiddenAppException,
+  SettingRegistryService,
   UnauthorizedAppException,
+  defaultSettingRegistry,
 } from '@packages/kernel/index.js';
 import { PasswordHasherService, TokenService } from '@packages/security/index.js';
 import {
@@ -51,17 +53,18 @@ import type {
 } from '../responses/auth.response.js';
 
 const STEP_UP_TOKEN_TTL_SECONDS = 300; // 5 phút
-const ADMIN_ROLE_CODES = new Set([
+const DEFAULT_ADMIN_ROLE_CODES = [
   'SUPER_ADMIN',
   'ADMIN',
   'SYSTEM_ADMIN',
   'IAM_ADMIN',
   'SECURITY_ADMIN',
-]);
+];
 
 @Injectable()
 export class AuthService implements IAuthPublicService {
   private readonly mfaAttemptTracker: MfaChallengeAttemptTracker;
+  private readonly settingRegistry: SettingRegistryService;
 
   constructor(
     private readonly passwordHasher: PasswordHasherService,
@@ -73,8 +76,13 @@ export class AuthService implements IAuthPublicService {
     @Optional() private readonly securitySettingsService?: SecuritySettingsService,
     @Optional() private readonly verificationService?: VerificationService,
     @Optional() private readonly cacheProvider?: BaseCacheProvider | null,
+    @Optional() settingRegistry?: SettingRegistryService,
   ) {
-    this.mfaAttemptTracker = new MfaChallengeAttemptTracker(() => this.cacheProvider);
+    this.settingRegistry = settingRegistry ?? defaultSettingRegistry;
+    this.mfaAttemptTracker = new MfaChallengeAttemptTracker(
+      () => this.cacheProvider,
+      this.settingRegistry,
+    );
     this.sessionService.setSecuritySettingsService(this.securitySettingsService);
     this.usersPublicService.registerAdminRevokeSessionsDelegate?.((userId, reason) =>
       this.sessionService.revokeAllUserSessions(userId, reason),
@@ -332,7 +340,11 @@ export class AuthService implements IAuthPublicService {
 
     const challengeHash = this.passwordHasher.sha256(dto.mfaChallengeToken);
     const currentAttempts = await this.mfaAttemptTracker.getAttempts(challengeHash);
-    if (currentAttempts >= 5) {
+    const settings = await this.securitySettingsService?.getSettings();
+    const maxMfaAttempts =
+      settings?.otpMaxAttempts ??
+      Math.max(1, this.settingRegistry.getNumber('security.otp.max_attempts', undefined, 5));
+    if (currentAttempts >= maxMfaAttempts) {
       throw new UnauthorizedAppException('auth.invalidOrExpiredMfaChallenge');
     }
 
@@ -375,11 +387,15 @@ export class AuthService implements IAuthPublicService {
     let trustedDeviceInfo:
       { trustedDeviceToken: string; trustedDeviceExpiresAt: string } | undefined;
     if (dto.trustDevice) {
+      const defaultTrustDays = Math.max(
+        1,
+        this.settingRegistry.getNumber('security.mfa.trusted_device_days', undefined, 30),
+      );
       const trusted = await this.mfaService.registerTrustedDevice(userId, {
         deviceName: dto.deviceName ?? null,
         ipAddress: meta.ipAddress ?? null,
         userAgent: meta.userAgent ?? null,
-        trustDurationDays: dto.trustDurationDays ?? 30,
+        trustDurationDays: dto.trustDurationDays ?? defaultTrustDays,
       });
       trustedDeviceInfo = {
         trustedDeviceToken: trusted.trustedDeviceToken,
@@ -460,6 +476,14 @@ export class AuthService implements IAuthPublicService {
       throw new BadRequestAppException('auth.stepUpCredentialsRequired');
     }
 
+    const stepUpTtlSeconds = Math.max(
+      60,
+      this.settingRegistry.getNumber(
+        'security.step_up.ttl_seconds',
+        undefined,
+        STEP_UP_TOKEN_TTL_SECONDS,
+      ),
+    );
     const stepUpToken = await this.tokenService.signStepUpToken(
       {
         sub: userId,
@@ -467,13 +491,13 @@ export class AuthService implements IAuthPublicService {
         ...(dto.action ? { action: dto.action } : {}),
         method: verifiedMethod,
       },
-      STEP_UP_TOKEN_TTL_SECONDS,
+      stepUpTtlSeconds,
     );
 
     return {
       verified: true,
       stepUpToken,
-      expiresInSeconds: STEP_UP_TOKEN_TTL_SECONDS,
+      expiresInSeconds: stepUpTtlSeconds,
       method: verifiedMethod,
       action: dto.action ?? null,
     };
@@ -681,7 +705,17 @@ export class AuthService implements IAuthPublicService {
   }
 
   private isAdministrativeUser(identity: UserAuthIdentityView): boolean {
-    if (identity.roles.some((r) => ADMIN_ROLE_CODES.has(r.trim().toUpperCase()))) {
+    const adminRoles = this.settingRegistry.getJson<string[]>(
+      'security.mfa.admin_role_codes',
+      undefined,
+      DEFAULT_ADMIN_ROLE_CODES,
+    );
+    const adminRoleSet = new Set(
+      (Array.isArray(adminRoles) ? adminRoles : DEFAULT_ADMIN_ROLE_CODES).map((r) =>
+        String(r).trim().toUpperCase(),
+      ),
+    );
+    if (identity.roles.some((r) => adminRoleSet.has(r.trim().toUpperCase()))) {
       return true;
     }
     if (

@@ -4,14 +4,17 @@ import {
   FILE_STATUS,
   type FileSummary,
   getFileCategoryName,
+  getFilePermissionSubjectTypeName,
   getFileStatusName,
   getFileVisibilityName,
 } from '../contracts/index.js';
 import type { FileFolderEntity } from '../entities/file-folder.entity.js';
+import type { FilePermissionEntity } from '../entities/file-permission.entity.js';
 import type { FileRecordEntity } from '../entities/file-record.entity.js';
 import type { FileUsageEntity } from '../entities/file-usage.entity.js';
 import type {
   FileFolderResponse,
+  FilePermissionItemResponse,
   FileRecordResponse,
   FileUploaderSummary,
   FileUsageItemResponse,
@@ -51,6 +54,24 @@ export class FilesMapper {
     };
   }
 
+  /** Chuyển đổi thực thể Phân quyền truy cập file sang DTO phản hồi */
+  public toPermissionResponse(entity: FilePermissionEntity): FilePermissionItemResponse {
+    return {
+      id: entity.id,
+      fileId: entity.fileId,
+      subjectType: entity.subjectType,
+      subjectTypeName: getFilePermissionSubjectTypeName(entity.subjectType),
+      subjectId: entity.subjectId,
+      canView: Boolean(entity.canView),
+      canDownload: Boolean(entity.canDownload),
+      expiresAt: entity.expiresAt ? entity.expiresAt.toISOString() : null,
+      note: entity.note ?? null,
+      grantedByUserId: entity.grantedByUserId ?? null,
+      createdAt: entity.createdAt.toISOString(),
+      updatedAt: entity.updatedAt.toISOString(),
+    };
+  }
+
   /** Chuyển đổi thực thể File sang DTO phản hồi chi tiết */
   public toFileResponse(
     entity: FileRecordEntity,
@@ -58,6 +79,8 @@ export class FilesMapper {
       folderName?: string | null;
       uploadedByUser?: FileUploaderSummary | null;
       usages?: readonly FileUsageItemResponse[];
+      permissions?: readonly FilePermissionItemResponse[];
+      canDownload?: boolean;
     },
   ): FileRecordResponse {
     const sizeBytes = Number(entity.sizeBytes) || 0;
@@ -92,6 +115,8 @@ export class FilesMapper {
       organizationUnitId: entity.organizationUnitId ?? null,
       usageCount,
       ...(options?.usages !== undefined ? { usages: options.usages } : {}),
+      ...(options?.permissions !== undefined ? { permissions: options.permissions } : {}),
+      ...(options?.canDownload !== undefined ? { canDownload: options.canDownload } : {}),
       canDelete: usageCount === 0 && entity.status !== FILE_STATUS.PURGED,
       trashedAt: entity.trashedAt ? entity.trashedAt.toISOString() : null,
       trashedByUserId: entity.trashedByUserId ?? null,

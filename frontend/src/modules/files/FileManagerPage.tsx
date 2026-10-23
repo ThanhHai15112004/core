@@ -90,6 +90,14 @@ export const FileManagerPage: React.FC = () => {
   const [usageEntityId, setUsageEntityId] = useState<string>('101');
   const [usageNote, setUsageNote] = useState<string>('Banner trang chủ khóa học');
 
+  // Phân quyền xem/tải & Link tải tạm thời (Mục 6.2)
+  const [showAddPermissionForm, setShowAddPermissionForm] = useState<boolean>(false);
+  const [permSubjectType, setPermSubjectType] = useState<'USER' | 'ROLE' | 'ORG_UNIT'>('ROLE');
+  const [permSubjectId, setPermSubjectId] = useState<string>('teacher');
+  const [permCanDownload, setPermCanDownload] = useState<boolean>(false);
+  const [tempLinkUrl, setTempLinkUrl] = useState<string | null>(null);
+  const [tempLinkExpiresAt, setTempLinkExpiresAt] = useState<string | null>(null);
+
   // Mở Popup <FilePickerModal /> đè lên trình duyệt
   const [pickerOpen, setPickerOpen] = useState<boolean>(false);
   const [pickedFromModal, setPickedFromModal] = useState<FileRecordItem[]>([]);
@@ -323,6 +331,48 @@ export const FileManagerPage: React.FC = () => {
       await handleSelectFileDetail(fileId);
     } catch (err) {
       showNotice('error', err instanceof Error ? err.message : 'Gỡ liên kết thất bại');
+    }
+  };
+
+  const handleGrantPermission = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedFile || !permSubjectId.trim()) return;
+    try {
+      await filesApi.grantPermission(selectedFile.id, {
+        subjectType: permSubjectType,
+        subjectId: permSubjectId.trim(),
+        canView: true,
+        canDownload: permCanDownload,
+      });
+      setShowAddPermissionForm(false);
+      showNotice(
+        'success',
+        `Đã cấp quyền ${permCanDownload ? 'Xem & Tải' : 'Chỉ xem'} cho [${permSubjectType}:${permSubjectId}]`,
+      );
+      await handleSelectFileDetail(selectedFile.id);
+    } catch (err) {
+      showNotice('error', err instanceof Error ? err.message : 'Cấp quyền thất bại');
+    }
+  };
+
+  const handleRevokePermission = async (fileId: number, permissionId: number) => {
+    try {
+      await filesApi.revokePermission(fileId, permissionId);
+      showNotice('success', 'Đã thu hồi quyền truy cập tệp tin');
+      await handleSelectFileDetail(fileId);
+    } catch (err) {
+      showNotice('error', err instanceof Error ? err.message : 'Thu hồi quyền thất bại');
+    }
+  };
+
+  const handleCreateTempDownloadLink = async (fileId: number) => {
+    try {
+      const link = await filesApi.createTemporaryLink(fileId, { expiresInSeconds: 3600 });
+      setTempLinkUrl(link.downloadUrl);
+      setTempLinkExpiresAt(link.expiresAt);
+      showNotice('success', 'Đã tạo đường dẫn tải tạm thời (tự hết hạn sau 1 giờ)');
+    } catch (err) {
+      showNotice('error', err instanceof Error ? err.message : 'Không thể tạo đường dẫn tải tạm thời');
     }
   };
 
@@ -2362,7 +2412,7 @@ export const FileManagerPage: React.FC = () => {
                 )}
               </div>
 
-              {/* Quyền truy cập ở đáy Cột 3 */}
+              {/* Quyền truy cập & Link tải tạm thời ở đáy Cột 3 (Mục 6.2) */}
               <div
                 style={{
                   paddingTop: '0.85rem',
@@ -2378,22 +2428,182 @@ export const FileManagerPage: React.FC = () => {
                   }}
                 >
                   <span style={{ fontSize: '0.84rem', fontWeight: 700, color: '#0f172a' }}>
-                    Quyền truy cập
+                    Quyền truy cập & Link tạm thời
                   </span>
-                  <span
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                    <button
+                      type="button"
+                      onClick={() => void handleCreateTempDownloadLink(selectedFile.id)}
+                      style={{
+                        padding: '0.22rem 0.55rem',
+                        borderRadius: '999px',
+                        border: '1px solid #bfdbfe',
+                        background: '#eff6ff',
+                        color: '#1d4ed8',
+                        fontSize: '0.7rem',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      + Link tạm thời
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowAddPermissionForm((prev) => !prev)}
+                      style={{
+                        padding: '0.22rem 0.55rem',
+                        borderRadius: '999px',
+                        border: '1px solid #e2e8f0',
+                        background: '#f8fafc',
+                        color: '#334155',
+                        fontSize: '0.7rem',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      + Phân quyền
+                    </button>
+                  </div>
+                </div>
+
+                {tempLinkUrl && (
+                  <div
                     style={{
-                      fontSize: '0.75rem',
-                      color: '#2563eb',
-                      fontWeight: 600,
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '0.25rem',
+                      marginBottom: '0.5rem',
+                      padding: '0.45rem 0.6rem',
+                      borderRadius: '8px',
+                      background: '#f0fdf4',
+                      border: '1px solid #bbf7d0',
+                      fontSize: '0.72rem',
                     }}
                   >
-                    {selectedFile.visibility === 2 ? <Globe size={13} /> : <Lock size={13} />}
-                    {selectedFile.visibilityName}
-                  </span>
-                </div>
+                    <div style={{ fontWeight: 600, color: '#166534' }}>
+                      Link tải tạm thời (Hết hạn:{' '}
+                      {tempLinkExpiresAt ? new Date(tempLinkExpiresAt).toLocaleTimeString('vi-VN') : ''})
+                    </div>
+                    <code style={{ wordBreak: 'break-all', color: '#15803d', fontSize: '0.68rem' }}>
+                      {tempLinkUrl}
+                    </code>
+                  </div>
+                )}
+
+                {selectedFile.permissions && selectedFile.permissions.length > 0 && (
+                  <div
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '0.3rem',
+                      marginBottom: '0.5rem',
+                    }}
+                  >
+                    {selectedFile.permissions.map((perm) => (
+                      <div
+                        key={perm.id}
+                        style={{
+                          padding: '0.38rem 0.55rem',
+                          borderRadius: '7px',
+                          background: '#f8fafc',
+                          border: '1px solid #e2e8f0',
+                          fontSize: '0.72rem',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                        }}
+                      >
+                        <span>
+                          <strong>
+                            {perm.subjectTypeName}: {perm.subjectId}
+                          </strong>{' '}
+                          ({perm.canDownload ? 'Xem & Tải' : 'Chỉ xem'})
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => void handleRevokePermission(selectedFile.id, perm.id)}
+                          style={{
+                            border: 'none',
+                            background: 'transparent',
+                            color: '#dc2626',
+                            cursor: 'pointer',
+                          }}
+                          title="Thu hồi quyền"
+                        >
+                          <X size={13} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {showAddPermissionForm && (
+                  <form
+                    onSubmit={(e) => void handleGrantPermission(e)}
+                    style={{
+                      marginBottom: '0.5rem',
+                      padding: '0.55rem',
+                      borderRadius: '9px',
+                      background: '#f8fafc',
+                      border: '1px solid #cbd5e1',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '0.4rem',
+                      fontSize: '0.74rem',
+                    }}
+                  >
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.35rem' }}>
+                      <select
+                        value={permSubjectType}
+                        onChange={(e) =>
+                          setPermSubjectType(e.target.value as 'USER' | 'ROLE' | 'ORG_UNIT')
+                        }
+                        style={{
+                          padding: '0.32rem',
+                          borderRadius: '6px',
+                          border: '1px solid #cbd5e1',
+                          fontSize: '0.74rem',
+                        }}
+                      >
+                        <option value="USER">Người dùng (USER)</option>
+                        <option value="ROLE">Vai trò (ROLE)</option>
+                        <option value="ORG_UNIT">Đơn vị (ORG_UNIT)</option>
+                      </select>
+                      <input
+                        type="text"
+                        value={permSubjectId}
+                        onChange={(e) => setPermSubjectId(e.target.value)}
+                        placeholder="ID hoặc mã Role"
+                        style={{
+                          padding: '0.32rem 0.45rem',
+                          borderRadius: '6px',
+                          border: '1px solid #cbd5e1',
+                          fontSize: '0.74rem',
+                        }}
+                      />
+                    </div>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                      <input
+                        type="checkbox"
+                        checked={permCanDownload}
+                        onChange={(e) => setPermCanDownload(e.target.checked)}
+                      />
+                      <span>Cho phép tải file xuống (bỏ chọn = chỉ xem thông tin)</span>
+                    </label>
+                    <button
+                      type="submit"
+                      style={{
+                        padding: '0.35rem',
+                        borderRadius: '6px',
+                        border: 'none',
+                        background: '#2563eb',
+                        color: '#ffffff',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Lưu phân quyền
+                    </button>
+                  </form>
+                )}
+
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                   <div style={{ display: 'flex' }}>
                     {['NM', 'TT', 'LH'].map((init, idx) => (
@@ -2418,8 +2628,17 @@ export const FileManagerPage: React.FC = () => {
                       </div>
                     ))}
                   </div>
-                  <span style={{ fontSize: '0.74rem', color: '#64748b' }}>
-                    Được chia sẻ trong tổ chức
+                  <span
+                    style={{
+                      fontSize: '0.74rem',
+                      color: '#64748b',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.25rem',
+                    }}
+                  >
+                    {selectedFile.visibility === 2 ? <Globe size={13} /> : <Lock size={13} />}
+                    Mức hiển thị: {selectedFile.visibilityName}
                   </span>
                 </div>
               </div>

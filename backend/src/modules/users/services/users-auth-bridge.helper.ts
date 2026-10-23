@@ -3,6 +3,7 @@ import {
   ConflictAppException,
   HTTP_ERROR_CODE,
   NotFoundAppException,
+  defaultSettingRegistry,
   safeJsonParseStringArray,
 } from '@packages/kernel/index.js';
 import {
@@ -130,6 +131,13 @@ export async function buildUserAuthIdentityView(params: {
   const effectiveDataScope = dataScopes[0] ?? DATA_SCOPE.SELF;
   const statusCode = parseUserStatus(user.status);
 
+  const defaultRoleCode =
+    defaultSettingRegistry.getString(
+      'users.default_role_code',
+      primaryOrgId ? { organizationUnitId: primaryOrgId } : undefined,
+      'user',
+    ) || 'user';
+
   return {
     id: Number(user.id),
     username: user.username,
@@ -149,7 +157,7 @@ export async function buildUserAuthIdentityView(params: {
     managerId:
       user.managerId !== undefined && user.managerId !== null ? Number(user.managerId) : null,
     organizationUnitIds,
-    roles: roleCodes.length > 0 ? roleCodes : ['user'],
+    roles: roleCodes.length > 0 ? roleCodes : [defaultRoleCode],
     permissions,
     dataScope: effectiveDataScope,
     dataScopes,

@@ -3,9 +3,11 @@ import { booleanQueryParam, optionalQueryParam } from '@packages/http/index.js';
 import {
   FILE_STATUS,
   type FileCategoryCode,
+  type FilePermissionSubjectCode,
   type FileStatusCode,
   type FileVisibilityCode,
   parseFileCategory,
+  parseFilePermissionSubjectType,
   parseFileStatus,
   parseFileVisibility,
 } from '../contracts/index.js';
@@ -138,9 +140,42 @@ export interface AttachFileUsageRequest {
   readonly note?: string | null | undefined;
 }
 
+const filePermissionSubjectTypeSchema = z.preprocess(
+  (val) => parseFilePermissionSubjectType(val),
+  z.number().int().min(1).max(3),
+);
+
+export const grantFilePermissionSchema = z.object({
+  subjectType: filePermissionSubjectTypeSchema,
+  subjectId: z.union([z.string().trim().min(1).max(100), z.number().int().min(1)]),
+  canView: z.boolean().optional().default(true),
+  canDownload: z.boolean().optional().default(false),
+  expiresAt: z.string().trim().max(64).nullable().optional(),
+  note: z.string().trim().max(255).nullable().optional(),
+});
+
+export interface GrantFilePermissionRequest {
+  readonly subjectType: FilePermissionSubjectCode;
+  readonly subjectId: string | number;
+  readonly canView?: boolean | undefined;
+  readonly canDownload?: boolean | undefined;
+  readonly expiresAt?: string | null | undefined;
+  readonly note?: string | null | undefined;
+}
+
+export const createTemporaryDownloadLinkSchema = z.object({
+  expiresInSeconds: z.coerce.number().int().min(10).optional(),
+  disposition: z.enum(['attachment', 'inline']).optional().default('attachment'),
+});
+
+export interface CreateTemporaryDownloadLinkRequest {
+  readonly expiresInSeconds?: number | undefined;
+  readonly disposition?: 'attachment' | 'inline' | undefined;
+}
+
 export const listFilesQuerySchema = z.object({
-  page: optionalQueryParam(z.coerce.number().int().min(1)).default(1),
-  limit: optionalQueryParam(z.coerce.number().int().min(1).max(100)).default(20),
+  page: optionalQueryParam(z.coerce.number().int().min(1)),
+  limit: optionalQueryParam(z.coerce.number().int().min(1).max(1000)),
   search: optionalQueryParam(z.string().trim().max(200)),
   folderId: optionalQueryParam(z.coerce.number().int().min(0)),
   category: fileCategorySchema,

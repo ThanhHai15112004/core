@@ -4,6 +4,8 @@ import {
   ForbiddenAppException,
   NotFoundAppException,
   type PaginatedResult,
+  defaultSettingRegistry,
+  resolvePagination,
 } from '@packages/kernel/index.js';
 import { createPaginatedResult } from '@packages/http/index.js';
 import {
@@ -253,11 +255,18 @@ export class UsersService implements IUsersPublicService {
     query: ListUsersQuery,
     actor?: UserIdentity,
   ): Promise<PaginatedResult<UserResponse>> {
-    const page = query.page ?? 1;
-    const limit = query.limit ?? 20;
+    const actorOrgUnitId = query.organizationUnitId ?? actor?.organizationUnitIds?.[0];
+    const { page, limit } = resolvePagination(query, {
+      settingPrefix: 'users.pagination',
+      defaultLimit: 20,
+      maxLimit: 500,
+      context: actorOrgUnitId ? { organizationUnitId: actorOrgUnitId } : undefined,
+    });
     const scopeFilter = await this.resolveUserScopeFilter(actor, 'read');
     const { items, total } = await this.userRepository.searchPaginated({
       ...query,
+      page,
+      limit,
       ...(scopeFilter ? { scopeFilter } : {}),
     });
     const enriched = await this.hydrateUsersList(items);
@@ -1008,17 +1017,19 @@ export class UsersService implements IUsersPublicService {
   /** Xem lịch sử đăng nhập và đăng xuất của một người dùng (Mục 3.4.7 & 4.3.6) */
   public async getLoginHistory(
     id: number,
-    limit = 50,
+    limit?: number,
     actor?: UserIdentity,
   ): Promise<UserLoginHistoryItemView[]> {
     const userResp = await this.getById(id, true, actor);
     if (!this.userLoginHistoryDelegate) return [];
-    return this.userLoginHistoryDelegate(userResp.id, limit);
+    const effectiveLimit =
+      limit ?? defaultSettingRegistry.getNumber('users.login_history.default_limit', undefined, 50);
+    return this.userLoginHistoryDelegate(userResp.id, effectiveLimit);
   }
 
   public async getUserLoginHistory(
     id: number,
-    limit = 50,
+    limit?: number,
     actor?: UserIdentity,
   ): Promise<UserLoginHistoryItemView[]> {
     return this.getLoginHistory(id, limit, actor);

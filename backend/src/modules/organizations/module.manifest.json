@@ -124,6 +124,37 @@
       ]
     }
   ],
+  "settings": [
+    {
+      "key": "organizations.hierarchy.max_depth",
+      "groupCode": "system",
+      "module": "organizations",
+      "namespace": "organizations.hierarchy",
+      "name": "Độ sâu tối đa của cây sơ đồ tổ chức",
+      "description": "Giới hạn số tầng cấp bậc tối đa cho phép trong cây đơn vị tổ chức (Trụ sở -> Chi nhánh -> Phòng ban -> Đội nhóm...)",
+      "valueType": "NUMBER",
+      "defaultValue": 10,
+      "validationRules": { "min": 1, "max": 50, "integerOnly": true },
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 10
+    },
+    {
+      "key": "organizations.hierarchy.include_inactive_in_scope",
+      "groupCode": "system",
+      "module": "organizations",
+      "namespace": "organizations.hierarchy",
+      "name": "Bao gồm đơn vị tạm ngưng (INACTIVE) trong phạm vi dữ liệu cấp dưới",
+      "description": "Khi bật, việc phân giải cây đơn vị con cho Data Scope SUBORDINATES vẫn bao gồm các đơn vị đang tạm ngưng (chỉ loại trừ đơn vị ARCHIVED)",
+      "valueType": "BOOLEAN",
+      "defaultValue": true,
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 11
+    }
+  ],
   "sequences": [
     {
       "key": "organizations.contract_code",

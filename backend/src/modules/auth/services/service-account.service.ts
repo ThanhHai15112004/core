@@ -4,7 +4,9 @@ import {
   ForbiddenAppException,
   HTTP_ERROR_CODE,
   NotFoundAppException,
+  SettingRegistryService,
   UnauthorizedAppException,
+  defaultSettingRegistry,
   safeJsonParse,
   safeJsonParseStringArray,
 } from '@packages/kernel/index.js';
@@ -67,6 +69,8 @@ const MAX_USAGE_LOG_ENTRIES = 50;
  */
 @Injectable()
 export class ServiceAccountService {
+  private readonly settingRegistry: SettingRegistryService;
+
   constructor(
     private readonly passwordHasher: PasswordHasherService,
     private readonly tokenService: TokenService,
@@ -75,7 +79,32 @@ export class ServiceAccountService {
     @Optional()
     @Inject(AuditLogService)
     private readonly auditLogService: AuditLogService | null = null,
-  ) {}
+    @Optional() settingRegistry?: SettingRegistryService,
+  ) {
+    this.settingRegistry = settingRegistry ?? defaultSettingRegistry;
+  }
+
+  private getDefaultClientTokenTtlSeconds(): number {
+    return Math.max(
+      60,
+      this.settingRegistry.getNumber(
+        'security.api_client.default_token_ttl_seconds',
+        undefined,
+        DEFAULT_CLIENT_TOKEN_TTL_SECONDS,
+      ),
+    );
+  }
+
+  private getMaxUsageLogEntries(): number {
+    return Math.max(
+      5,
+      this.settingRegistry.getNumber(
+        'security.api_client.max_usage_logs',
+        undefined,
+        MAX_USAGE_LOG_ENTRIES,
+      ),
+    );
+  }
 
   // ============================================================================
   // 3.6.1: QUẢN LÝ TÀI KHOẢN HỆ THỐNG (SERVICE ACCOUNT)
@@ -507,7 +536,7 @@ export class ServiceAccountService {
       endpoint,
     });
 
-    const ttlSeconds = dto.expiresInSeconds ?? DEFAULT_CLIENT_TOKEN_TTL_SECONDS;
+    const ttlSeconds = dto.expiresInSeconds ?? this.getDefaultClientTokenTtlSeconds();
     const accessToken = await this.tokenService.signAccessToken(
       {
         sub: `sa:${activeAccount.id}`,
@@ -888,7 +917,7 @@ export class ServiceAccountService {
     };
 
     const existingLogs = this.parseUsageLogs(client.usageLogsJson);
-    const nextLogs = [logItem, ...existingLogs].slice(0, MAX_USAGE_LOG_ENTRIES);
+    const nextLogs = [logItem, ...existingLogs].slice(0, this.getMaxUsageLogEntries());
 
     client.lastUsedAt = now;
     client.lastUsedIp = entry.ipAddress;

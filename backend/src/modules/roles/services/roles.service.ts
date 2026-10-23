@@ -5,8 +5,11 @@ import {
   ForbiddenAppException,
   HTTP_ERROR_CODE,
   NotFoundAppException,
+  SettingRegistryService,
   defaultCodeRegistry,
   defaultMenuRegistry,
+  defaultSettingRegistry,
+  resolvePagination,
   scanModuleManifests,
 } from '@packages/kernel/index.js';
 import { TransactionManager } from '@packages/database/index.js';
@@ -37,6 +40,7 @@ import {
   type RoleSummary,
   inferDefaultDataScopeForRoleCode,
   parseDataScope,
+  parseRoleStatus,
 } from '../contracts/index.js';
 import type { PermissionEntity } from '../entities/permission.entity.js';
 import { PermissionRepository } from '../repositories/permission.repository.js';
@@ -72,12 +76,46 @@ interface NormalizedPermissionDeclaration {
   readonly description: string | null;
 }
 
+const DEFAULT_ALL_SCOPE_ROLE_PATTERNS: readonly string[] = [
+  'super_admin',
+  'admin',
+  'root',
+  'auditor',
+  'admin_*',
+  'super_*',
+  'system_*',
+  'auditor_*',
+];
+
+const DEFAULT_ALL_SCOPE_PERMISSIONS: readonly string[] = [
+  'system.full_access',
+  'data_scope.all',
+  'roles.manage',
+  'system.*',
+];
+
+function matchesWildcardPattern(value: string, patterns: readonly string[]): boolean {
+  const normalized = value.trim().toLowerCase();
+  for (const rawPattern of patterns) {
+    const pattern = String(rawPattern).trim().toLowerCase();
+    if (!pattern) continue;
+    if (pattern.endsWith('*')) {
+      const prefix = pattern.slice(0, -1);
+      if (normalized.startsWith(prefix)) return true;
+    } else if (normalized === pattern) {
+      return true;
+    }
+  }
+  return false;
+}
+
 @Injectable()
 export class RolesService implements IRolesPublicService {
   private roleUserCountDelegate?: (roleIds: readonly number[]) => Promise<Map<number, number>>;
   private roleUsersListDelegate?: (roleId: number) => Promise<RoleAssignedUserSummary[]>;
   private readonly registeredModules = new Map<string, ModulePermissionsManifestInput>();
   private customActiveModulesOverride: Map<string, ModulePermissionsManifestInput> | null = null;
+  private readonly settingRegistry: SettingRegistryService;
 
   constructor(
     private readonly roleRepository: RoleRepository,
@@ -96,7 +134,10 @@ export class RolesService implements IRolesPublicService {
     @Optional()
     @Inject(PlatformSecurityService)
     private readonly platformSecurityService: PlatformSecurityService | null = null,
+    @Optional()
+    settingRegistry?: SettingRegistryService,
   ) {
+    this.settingRegistry = settingRegistry ?? defaultSettingRegistry;
     this.initializeModuleManifests();
     this.dataScopeService?.registerRoleScopeResolver(async (roleCodes) => {
       const roles = await this.findByCodes(roleCodes);
@@ -491,7 +532,7 @@ export class RolesService implements IRolesPublicService {
         description: dto.description ?? null,
         isSystem: false,
         dataScope: resolvedDataScope,
-        status: dto.status ?? ROLE_STATUS.ACTIVE,
+        status: parseRoleStatus(dto.status),
       });
 
       await this.rolePermissionRepository.replacePermissionsForRole(
@@ -529,26 +570,28 @@ export class RolesService implements IRolesPublicService {
     isSystem = false,
   ): void {
     if (dataScope !== DATA_SCOPE.ALL || isSystem) return;
-    const code = roleCode.trim().toLowerCase();
-    const isPermittedRoleCode =
-      code === 'super_admin' ||
-      code === 'admin' ||
-      code === 'root' ||
-      code === 'auditor' ||
-      code.startsWith('admin_') ||
-      code.startsWith('super_') ||
-      code.startsWith('system_') ||
-      code.startsWith('auditor_');
+    const allowedRolePatterns = this.settingRegistry.getJson<readonly string[]>(
+      'roles.data_scope.all_allowed_role_patterns',
+      undefined,
+      DEFAULT_ALL_SCOPE_ROLE_PATTERNS,
+    );
+    const allowedPermPatterns = this.settingRegistry.getJson<readonly string[]>(
+      'roles.data_scope.all_allowed_permissions',
+      undefined,
+      DEFAULT_ALL_SCOPE_PERMISSIONS,
+    );
 
-    const hasSystemWidePermission = permissionCodes.some((perm) => {
-      const p = perm.trim().toLowerCase();
-      return (
-        p === 'system.full_access' ||
-        p === 'data_scope.all' ||
-        p === 'roles.manage' ||
-        p.startsWith('system.')
-      );
-    });
+    const isPermittedRoleCode = matchesWildcardPattern(
+      roleCode,
+      Array.isArray(allowedRolePatterns) ? allowedRolePatterns : DEFAULT_ALL_SCOPE_ROLE_PATTERNS,
+    );
+
+    const effectivePermPatterns = Array.isArray(allowedPermPatterns)
+      ? allowedPermPatterns
+      : DEFAULT_ALL_SCOPE_PERMISSIONS;
+    const hasSystemWidePermission = permissionCodes.some((perm) =>
+      matchesWildcardPattern(perm, effectivePermPatterns),
+    );
 
     if (!isPermittedRoleCode && !hasSystemWidePermission) {
       throw new ForbiddenAppException('roles.dataScopeAllNotAllowedForRole', [{ code: roleCode }]);
@@ -595,7 +638,7 @@ export class RolesService implements IRolesPublicService {
         description: resolvedDescription,
         isSystem: false,
         dataScope: resolvedDataScope,
-        status: dto.status ?? ROLE_STATUS.ACTIVE,
+        status: parseRoleStatus(dto.status),
       });
 
       await this.rolePermissionRepository.replacePermissionsForRole(
@@ -996,9 +1039,15 @@ export class RolesService implements IRolesPublicService {
    */
   public async listAuditLogs(query: ListAuditLogsQuery = {}): Promise<AuditLogPaginatedResult> {
     if (!this.auditLogService) {
+      const { page, limit } = resolvePagination(query, {
+        settingPrefix: 'roles.audit_log',
+        defaultLimit: 20,
+        maxLimit: 200,
+        registry: this.settingRegistry,
+      });
       return {
         data: [],
-        meta: { page: 1, limit: 20, totalItems: 0, totalPages: 1 },
+        meta: { page, limit, totalItems: 0, totalPages: 1 },
       };
     }
     return this.auditLogService.listPaginated(query as AuditLogQueryFilter);

@@ -9,6 +9,7 @@ export interface FileScopeConstraint {
   readonly unrestricted: boolean;
   readonly allowedOrgUnitIds?: readonly number[] | undefined;
   readonly selfUserId?: number | null | undefined;
+  readonly explicitAllowedFileIds?: readonly number[] | undefined;
 }
 
 @Injectable()
@@ -42,15 +43,21 @@ export class FilesRepository extends BaseTypeOrmRepository<FileRecordEntity> {
     );
   }
 
+  /** Đếm số bản ghi file đang sử dụng một mã danh mục (`status`, `category`, `visibility`) */
+  public async countByCodeField(
+    field: 'status' | 'category' | 'visibility',
+    numericCode: number,
+  ): Promise<number> {
+    return this.executeReadOnly(async (repo) =>
+      repo.createQueryBuilder('f').where(`f.${field} = :numericCode`, { numericCode }).getCount(),
+    );
+  }
+
   /** Tìm kiếm và lọc file có phân trang kèm kiểm soát phạm vi dữ liệu (Mục 6.1) */
   public async findPaginatedFiltered(
     query: ListFilesQuery,
     scope: FileScopeConstraint,
   ): Promise<{ items: FileRecordEntity[]; total: number }> {
-    const page = Math.max(1, query.page ?? 1);
-    const limit = Math.min(100, Math.max(1, query.limit ?? 20));
-    const skip = (page - 1) * limit;
-
     return this.executeReadOnly(async (repo) => {
       const qb = repo.createQueryBuilder('f');
 
@@ -139,25 +146,33 @@ export class FilesRepository extends BaseTypeOrmRepository<FileRecordEntity> {
       if (!scope.unrestricted) {
         const orgIds = scope.allowedOrgUnitIds ?? [];
         const selfId = scope.selfUserId ?? null;
-        if (orgIds.length > 0 && selfId) {
-          qb.andWhere(
-            '(f.organizationUnitId IN (:...orgIds) OR f.uploadedByUserId = :selfId OR f.visibility >= 2)',
-            { orgIds: [...orgIds], selfId },
-          );
-        } else if (orgIds.length > 0) {
-          qb.andWhere('(f.organizationUnitId IN (:...orgIds) OR f.visibility >= 2)', {
-            orgIds: [...orgIds],
-          });
-        } else if (selfId) {
-          qb.andWhere('(f.uploadedByUserId = :selfId OR f.visibility >= 2)', { selfId });
-        } else {
-          qb.andWhere('f.visibility >= 2');
+        const explicitFileIds = scope.explicitAllowedFileIds ?? [];
+        const subClauses = ['f.visibility >= 2'];
+        const scopeParams: Record<string, unknown> = {};
+
+        if (orgIds.length > 0) {
+          subClauses.push('f.organizationUnitId IN (:...orgIds)');
+          scopeParams.orgIds = [...orgIds];
         }
+        if (selfId) {
+          subClauses.push('f.uploadedByUserId = :selfId');
+          scopeParams.selfId = selfId;
+        }
+        if (explicitFileIds.length > 0) {
+          subClauses.push('f.id IN (:...explicitFileIds)');
+          scopeParams.explicitFileIds = [...explicitFileIds];
+        }
+
+        qb.andWhere(`(${subClauses.join(' OR ')})`, scopeParams);
       }
 
-      qb.orderBy('f.createdAt', 'DESC').addOrderBy('f.id', 'DESC').skip(skip).take(limit);
+      qb.orderBy('f.createdAt', 'DESC').addOrderBy('f.id', 'DESC');
 
-      const [items, total] = await qb.getManyAndCount();
+      const { items, total } = await this.paginateQueryBuilder(qb, query, {
+        settingPrefix: 'files.pagination',
+        defaultLimit: 20,
+        maxLimit: 100,
+      });
       return { items, total };
     });
   }
@@ -172,6 +187,34 @@ export class FilesRepository extends BaseTypeOrmRepository<FileRecordEntity> {
         })
         .getMany(),
     );
+  }
+
+  /** Tính tổng dung lượng (bytes) của các file đang hoạt động theo đơn vị (hoặc toàn hệ thống) */
+  public async sumActiveBytesByOrgUnit(organizationUnitId?: number | null): Promise<number> {
+    return this.executeReadOnly(async (repo) => {
+      const qb = repo
+        .createQueryBuilder('f')
+        .select('COALESCE(SUM(f.sizeBytes), 0)', 'totalBytes')
+        .where('f.status = :status', { status: FILE_STATUS.ACTIVE });
+      if (typeof organizationUnitId === 'number' && organizationUnitId > 0) {
+        qb.andWhere('f.organizationUnitId = :organizationUnitId', { organizationUnitId });
+      }
+      const raw = await qb.getRawOne<{ totalBytes?: string | number | null }>();
+      return Number(raw?.totalBytes ?? 0) || 0;
+    });
+  }
+
+  /** Tính tổng dung lượng (bytes) của các file đang hoạt động do một người dùng tải lên */
+  public async sumActiveBytesByUser(userId: number): Promise<number> {
+    return this.executeReadOnly(async (repo) => {
+      const raw = await repo
+        .createQueryBuilder('f')
+        .select('COALESCE(SUM(f.sizeBytes), 0)', 'totalBytes')
+        .where('f.status = :status', { status: FILE_STATUS.ACTIVE })
+        .andWhere('f.uploadedByUserId = :userId', { userId })
+        .getRawOne<{ totalBytes?: string | number | null }>();
+      return Number(raw?.totalBytes ?? 0) || 0;
+    });
   }
 
   /** Tìm các file trong thùng rác đã quá thời gian chờ (`purge_after_at <= now`) */

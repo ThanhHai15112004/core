@@ -19,6 +19,7 @@ import {
   normalizeSettingEnvironment,
   parseSettingEnvironmentCode,
   parseSettingValueTypeCode,
+  resolvePagination,
   validateAndSerializeSettingValue,
 } from '@packages/kernel/index.js';
 import {
@@ -763,7 +764,11 @@ export class SettingsService implements ISettingsPublicService, OnModuleInit {
 
   /** Tra cứu danh sách lịch sử thay đổi cấu hình (biết ai đã thay đổi, lúc nào, lý do, giá trị cũ/mới) */
   public async listHistory(query: ListSettingHistoryQuery = {}): Promise<SettingHistoryRecord[]> {
-    const limit = Math.max(1, Math.min(200, query.limit ?? 50));
+    const { limit } = resolvePagination(query, {
+      defaultLimit: 50,
+      maxLimit: 200,
+      registry: this.registry,
+    });
 
     if (this.historyRepository) {
       try {

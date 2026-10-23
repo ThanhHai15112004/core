@@ -4,14 +4,17 @@ import {
   ConflictAppException,
   HTTP_ERROR_CODE,
   NotFoundAppException,
+  SettingRegistryService,
   defaultCodeRegistry,
+  defaultSettingRegistry,
 } from '@packages/kernel/index.js';
 import { AuditLogService, DataScopeService } from '@packages/security/index.js';
 import {
   type IOrganizationsPublicService,
   ORG_UNIT_STATUS,
-  ORG_UNIT_TYPE,
   type OrganizationUnitSummary,
+  parseOrgUnitStatus,
+  parseOrgUnitType,
 } from '../contracts/index.js';
 import { OrganizationUnitRepository } from '../repositories/organization-unit.repository.js';
 import { OrganizationsMapper } from '../mappers/organizations.mapper.js';
@@ -22,9 +25,12 @@ import type {
 } from '../requests/organizations.requests.js';
 import type { OrganizationUnitResponse } from '../responses/organizations.response.js';
 
+const DEFAULT_MAX_HIERARCHY_DEPTH = 10;
+
 @Injectable()
 export class OrganizationsService implements IOrganizationsPublicService {
   private unitUsageCountDelegate?: (unitId: number) => Promise<number>;
+  private readonly settingRegistry: SettingRegistryService;
 
   constructor(
     private readonly repository: OrganizationUnitRepository,
@@ -35,7 +41,10 @@ export class OrganizationsService implements IOrganizationsPublicService {
     @Optional()
     @Inject(AuditLogService)
     private readonly auditLogService: AuditLogService | null = null,
+    @Optional()
+    settingRegistry?: SettingRegistryService,
   ) {
+    this.settingRegistry = settingRegistry ?? defaultSettingRegistry;
     this.dataScopeService?.registerOrgHierarchyResolver((unitIds) =>
       this.resolveDescendantUnitIds(unitIds),
     );
@@ -48,13 +57,96 @@ export class OrganizationsService implements IOrganizationsPublicService {
       },
     );
     defaultCodeRegistry.registerUsageChecker(
-      'organizations.unit_status',
+      'organizations.status',
       'organization_units.status',
       async ({ numericCode }) => {
         const units = await this.repository.findFiltered({});
         return units.filter((u) => !u.deletedAt && Number(u.status) === Number(numericCode)).length;
       },
     );
+  }
+
+  private get maxHierarchyDepth(): number {
+    return this.settingRegistry.getNumber(
+      'organizations.hierarchy.max_depth',
+      undefined,
+      DEFAULT_MAX_HIERARCHY_DEPTH,
+    );
+  }
+
+  private get includeInactiveInScope(): boolean {
+    return this.settingRegistry.getBoolean(
+      'organizations.hierarchy.include_inactive_in_scope',
+      undefined,
+      true,
+    );
+  }
+
+  /** Kiểm tra độ sâu cây đơn vị khi gán vào `parentId` (bao gồm cả độ sâu nhánh con bên dưới nếu đang cập nhật) */
+  private async ensureHierarchyDepthAllowed(
+    parentId: number,
+    subtreeDepthBelowNode = 0,
+  ): Promise<void> {
+    const maxDepth = this.maxHierarchyDepth;
+    const allUnits = await this.repository.findFiltered({});
+    const parentByUnitId = new Map<number, number | null>();
+    for (const unit of allUnits) {
+      parentByUnitId.set(
+        Number(unit.id),
+        unit.parentId !== undefined && unit.parentId !== null ? Number(unit.parentId) : null,
+      );
+    }
+
+    let ancestorCount = 1;
+    let cursor: number | null = Number(parentId);
+    const visited = new Set<number>();
+    while (cursor !== null) {
+      if (visited.has(cursor)) break;
+      visited.add(cursor);
+      const nextParent: number | null = parentByUnitId.get(cursor) ?? null;
+      if (nextParent !== null) {
+        ancestorCount += 1;
+      }
+      cursor = nextParent;
+    }
+
+    const totalDepth = ancestorCount + 1 + subtreeDepthBelowNode;
+    if (totalDepth > maxDepth) {
+      throw new BadRequestAppException('organizations.maxHierarchyDepthExceeded', [
+        { parentId, maxDepth, attemptedDepth: totalDepth },
+      ]);
+    }
+  }
+
+  /** Tính số tầng con sâu nhất bên dưới một đơn vị (0 nếu không có đơn vị con) */
+  private async computeSubtreeDepthBelow(unitId: number): Promise<number> {
+    const allUnits = await this.repository.findFiltered({});
+    const childrenByParent = new Map<number, number[]>();
+    for (const unit of allUnits) {
+      if (unit.parentId !== undefined && unit.parentId !== null) {
+        const pId = Number(unit.parentId);
+        const list = childrenByParent.get(pId) ?? [];
+        list.push(Number(unit.id));
+        childrenByParent.set(pId, list);
+      }
+    }
+
+    let maxChildDepth = 0;
+    const queue: Array<{ id: number; depth: number }> = [{ id: Number(unitId), depth: 0 }];
+    const visited = new Set<number>([Number(unitId)]);
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+      if (current.depth > maxChildDepth) {
+        maxChildDepth = current.depth;
+      }
+      for (const childId of childrenByParent.get(current.id) ?? []) {
+        if (!visited.has(childId)) {
+          visited.add(childId);
+          queue.push({ id: childId, depth: current.depth + 1 });
+        }
+      }
+    }
+    return maxChildDepth;
   }
 
   /** Lấy danh sách đơn vị/chi nhánh có lọc */
@@ -92,14 +184,15 @@ export class OrganizationsService implements IOrganizationsPublicService {
           { parentId: dto.parentId },
         ]);
       }
+      await this.ensureHierarchyDepthAllowed(Number(dto.parentId), 0);
     }
 
     const saved = await this.repository.saveEntity({
       code: normalizedCode,
       name: dto.name.trim(),
-      type: dto.type ?? ORG_UNIT_TYPE.BRANCH,
+      type: parseOrgUnitType(dto.type),
       parentId: dto.parentId ?? null,
-      status: dto.status ?? ORG_UNIT_STATUS.ACTIVE,
+      status: parseOrgUnitStatus(dto.status),
       description: dto.description ?? null,
     });
 
@@ -159,6 +252,8 @@ export class OrganizationsService implements IOrganizationsPublicService {
           { id, parentId: dto.parentId },
         ]);
       }
+      const subtreeDepthBelow = await this.computeSubtreeDepthBelow(Number(id));
+      await this.ensureHierarchyDepthAllowed(Number(dto.parentId), subtreeDepthBelow);
     }
 
     if (dto.name !== undefined) entity.name = dto.name.trim();
@@ -289,9 +384,12 @@ export class OrganizationsService implements IOrganizationsPublicService {
     if (seeds.length === 0) return [];
 
     const allUnits = await this.repository.findFiltered({});
+    const includeInactive = this.includeInactiveInScope;
     const childrenByParent = new Map<number, number[]>();
     for (const unit of allUnits) {
-      if (Number(unit.status) === ORG_UNIT_STATUS.ARCHIVED) continue;
+      const status = Number(unit.status);
+      if (status === ORG_UNIT_STATUS.ARCHIVED) continue;
+      if (!includeInactive && status === ORG_UNIT_STATUS.INACTIVE) continue;
       if (unit.parentId !== undefined && unit.parentId !== null) {
         const pId = Number(unit.parentId);
         const list = childrenByParent.get(pId) ?? [];

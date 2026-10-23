@@ -18,6 +18,9 @@ const DEFAULT_MAX_UPLOAD_MB = 25;
 const DEFAULT_MAX_BATCH_FILES = 20;
 const DEFAULT_TRASH_RETENTION_DAYS = 30;
 const DEFAULT_STORAGE_QUOTA_MB = 51_200;
+const DEFAULT_USER_STORAGE_QUOTA_MB = 0;
+const DEFAULT_TEMP_LINK_TTL_SEC = 3_600;
+const DEFAULT_TEMP_LINK_MAX_TTL_SEC = 604_800;
 const DEFAULT_STORAGE_KEY_PREFIX = 'files';
 const DEFAULT_ALLOWED_EXTENSIONS = [
   'pdf',
@@ -137,6 +140,36 @@ export class FileValidationService {
       DEFAULT_STORAGE_QUOTA_MB,
     );
     return val >= 0 ? val : DEFAULT_STORAGE_QUOTA_MB;
+  }
+
+  /** Đọc hạn mức dung lượng lưu trữ tối đa (MB) theo từng người dùng (0 = không giới hạn) */
+  public getUserStorageQuotaMb(organizationUnitId?: number | null): number {
+    const val = this.settingRegistry.getNumber(
+      'file.storage.user_quota_mb',
+      organizationUnitId ? { organizationUnitId } : undefined,
+      DEFAULT_USER_STORAGE_QUOTA_MB,
+    );
+    return val >= 0 ? val : DEFAULT_USER_STORAGE_QUOTA_MB;
+  }
+
+  /** Đọc thời gian hiệu lực mặc định (giây) của đường dẫn tải file tạm thời */
+  public getTempLinkDefaultTtlSec(organizationUnitId?: number | null): number {
+    const val = this.settingRegistry.getNumber(
+      'file.download.temp_link_default_ttl_sec',
+      organizationUnitId ? { organizationUnitId } : undefined,
+      DEFAULT_TEMP_LINK_TTL_SEC,
+    );
+    return val > 0 ? val : DEFAULT_TEMP_LINK_TTL_SEC;
+  }
+
+  /** Đọc thời gian hiệu lực tối đa (giây) cho phép khi tạo đường dẫn tải file tạm thời */
+  public getTempLinkMaxTtlSec(organizationUnitId?: number | null): number {
+    const val = this.settingRegistry.getNumber(
+      'file.download.temp_link_max_ttl_sec',
+      organizationUnitId ? { organizationUnitId } : undefined,
+      DEFAULT_TEMP_LINK_MAX_TTL_SEC,
+    );
+    return val > 0 ? val : DEFAULT_TEMP_LINK_MAX_TTL_SEC;
   }
 
   /** Đọc cấu hình tự động đối soát sự tồn tại của file vật lý khi truy vấn danh sách */

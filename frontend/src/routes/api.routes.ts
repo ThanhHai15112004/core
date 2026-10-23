@@ -166,6 +166,11 @@ export const API_ROUTES = {
     USAGES_DETACH: (id: string | number) => `/files/${id}/usages/detach`,
     USAGE_BY_ID: (id: string | number, usageId: string | number) =>
       `/files/${id}/usages/${usageId}`,
+    PERMISSIONS: (id: string | number) => `/files/${id}/permissions`,
+    PERMISSION_BY_ID: (id: string | number, permissionId: string | number) =>
+      `/files/${id}/permissions/${permissionId}`,
+    TEMPORARY_LINK: (id: string | number) => `/files/${id}/temporary-link`,
+    TEMPORARY_DOWNLOAD: (token: string) => `/files/temporary-download/${token}`,
   },
 } as const;
 

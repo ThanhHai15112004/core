@@ -1,7 +1,13 @@
 import { Injectable, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { ForbiddenAppException, safeJsonParseObject } from '@packages/kernel/index.js';
+import { paginateSelectQueryBuilder } from '@packages/database/index.js';
+import {
+  ForbiddenAppException,
+  SettingRegistryService,
+  defaultSettingRegistry,
+  safeJsonParseObject,
+} from '@packages/kernel/index.js';
 import {
   AuditLogService,
   type AuditLogQueryFilter,
@@ -14,12 +20,17 @@ import { AuditLogEntity } from '../entities/audit-log.entity.js';
 
 @Injectable()
 export class AuditLogRepository implements IAuditLogPersistencePort {
+  private readonly settingRegistry: SettingRegistryService;
+
   constructor(
     @InjectRepository(AuditLogEntity)
     private readonly repository: Repository<AuditLogEntity>,
     @Optional()
     auditLogService?: AuditLogService,
+    @Optional()
+    settingRegistry?: SettingRegistryService,
   ) {
+    this.settingRegistry = settingRegistry ?? defaultSettingRegistry;
     auditLogService?.registerPersistencePort(this);
   }
 
@@ -101,8 +112,6 @@ export class AuditLogRepository implements IAuditLogPersistencePort {
     items: AuditLogRecord[];
     total: number;
   }> {
-    const page = Math.max(1, Number(filter.page ?? 1));
-    const limit = Math.min(200, Math.max(1, Number(filter.limit ?? 20)));
     const qb = this.repository.createQueryBuilder('al');
 
     if (filter.actorType !== undefined) {
@@ -177,11 +186,14 @@ export class AuditLogRepository implements IAuditLogPersistencePort {
     }
 
     const sortOrder = filter.sortOrder === 'ASC' ? 'ASC' : 'DESC';
-    qb.orderBy('al.id', sortOrder)
-      .skip((page - 1) * limit)
-      .take(limit);
+    qb.orderBy('al.id', sortOrder);
 
-    const [entities, total] = await qb.getManyAndCount();
+    const { items: entities, total } = await paginateSelectQueryBuilder(qb, filter, {
+      settingPrefix: 'roles.audit_log',
+      defaultLimit: 20,
+      maxLimit: 200,
+      registry: this.settingRegistry,
+    });
     return {
       items: entities.map((e) => this.toRecord(e)),
       total,

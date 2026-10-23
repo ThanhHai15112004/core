@@ -1,6 +1,7 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash, createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
 import path from 'node:path';
 import { Inject, Injectable, Optional } from '@nestjs/common';
+import { createPaginatedResult } from '@packages/http/index.js';
 import {
   BadRequestAppException,
   ConflictAppException,
@@ -8,13 +9,16 @@ import {
   NotFoundAppException,
   type PaginatedResult,
   SequenceRegistryService,
+  defaultCodeRegistry,
   defaultSequenceRegistry,
   formatBytes,
+  resolvePagination,
 } from '@packages/kernel/index.js';
 import {
   AuditLogService,
   DATA_SCOPE,
   DataScopeService,
+  TokenService,
   type UserIdentity,
 } from '@packages/security/index.js';
 import { BaseStorageProvider, type ObjectStream } from '@packages/storage/index.js';
@@ -26,22 +30,29 @@ import { type IUsersPublicService, USERS_PUBLIC_SERVICE } from '@modules/users/c
 import {
   type AttachFileUsageInput,
   FILE_CATEGORY,
+  FILE_PERMISSION_SUBJECT,
   FILE_STATUS,
   FILE_VISIBILITY,
   type FileCategoryCode,
+  type FilePermissionSubjectCode,
   type FileSummary,
   type IFilesPublicService,
   getFileCategoryName,
+  parseFilePermissionSubjectType,
 } from '../contracts/index.js';
 import type { FileFolderEntity } from '../entities/file-folder.entity.js';
+import type { FilePermissionEntity } from '../entities/file-permission.entity.js';
 import type { FileRecordEntity } from '../entities/file-record.entity.js';
 import { FilesMapper } from '../mappers/files.mapper.js';
 import { FileFoldersRepository } from '../repositories/file-folders.repository.js';
+import { FilePermissionsRepository } from '../repositories/file-permissions.repository.js';
 import { FileUsagesRepository } from '../repositories/file-usages.repository.js';
 import { type FileScopeConstraint, FilesRepository } from '../repositories/files.repository.js';
 import type {
   AttachFileUsageRequest,
   CreateFileFolderRequest,
+  CreateTemporaryDownloadLinkRequest,
+  GrantFilePermissionRequest,
   ListFilesQuery,
   UpdateFileFolderRequest,
   UpdateFileMetadataRequest,
@@ -50,14 +61,17 @@ import type {
 } from '../requests/files.requests.js';
 import type {
   FileFolderResponse,
+  FilePermissionItemResponse,
   FileRecordResponse,
   FileStatsResponse,
   FileUploaderSummary,
   FileUsageItemResponse,
+  TemporaryDownloadLinkResponse,
 } from '../responses/files.response.js';
 import { FileValidationService } from './file-validation.service.js';
 
 const DAY_MS = 86_400_000;
+const FALLBACK_TEMP_LINK_SECRET = 'core-files-temporary-download-hmac-secret-key';
 const ALL_CATEGORIES: readonly FileCategoryCode[] = [
   FILE_CATEGORY.IMAGE,
   FILE_CATEGORY.VIDEO,
@@ -67,6 +81,14 @@ const ALL_CATEGORIES: readonly FileCategoryCode[] = [
   FILE_CATEGORY.ARCHIVE,
   FILE_CATEGORY.OTHER,
 ];
+
+interface TemporaryDownloadTokenPayload {
+  readonly typ: 'file_temp_dl';
+  readonly fid: number;
+  readonly exp: number;
+  readonly disp: 'attachment' | 'inline';
+  readonly uid: number | null;
+}
 
 export interface ResolvedByteRange {
   readonly start: number;
@@ -97,8 +119,47 @@ export class FilesService implements IFilesPublicService {
     @Optional()
     @Inject(SequenceRegistryService)
     sequenceRegistry?: SequenceRegistryService | null,
+    @Optional()
+    private readonly permissionsRepo?: FilePermissionsRepository | null,
+    @Optional()
+    private readonly tokenService?: TokenService | null,
   ) {
     this.sequenceRegistry = sequenceRegistry ?? defaultSequenceRegistry;
+    this.registerCodeUsageCheckers();
+  }
+
+  private registerCodeUsageCheckers(): void {
+    const countField = async (
+      field: 'status' | 'category' | 'visibility',
+      numericCode: number,
+    ): Promise<number> => {
+      if (typeof this.filesRepo.countByCodeField === 'function') {
+        return this.filesRepo.countByCodeField(field, numericCode);
+      }
+      const all = await this.filesRepo.findAllForStats();
+      return all.filter((f) => Number(f[field]) === numericCode).length;
+    };
+
+    defaultCodeRegistry.registerUsageChecker(
+      'files.status',
+      'files.status',
+      async ({ numericCode }) => countField('status', Number(numericCode)),
+    );
+    defaultCodeRegistry.registerUsageChecker(
+      'files.category',
+      'files.category',
+      async ({ numericCode }) => countField('category', Number(numericCode)),
+    );
+    defaultCodeRegistry.registerUsageChecker(
+      'files.visibility',
+      'files.visibility',
+      async ({ numericCode }) => countField('visibility', Number(numericCode)),
+    );
+    defaultCodeRegistry.registerUsageChecker(
+      'files.permission_subject_type',
+      'files.permission_subject_type',
+      async () => 0,
+    );
   }
 
   private resolvePrimaryOrgId(actor?: UserIdentity): number | null {
@@ -121,15 +182,24 @@ export class FilesService implements IFilesPublicService {
     return generated.code;
   }
 
-  // ─── 1. Quản lý Thư mục ảo (Logical Folders) ──────────────────────────────
+  // ─── 1. Quản lý Thư mục ảo (Logical Folders — Mục 6.2) ────────────────────
 
-  /** Lấy danh sách thư mục lưu trữ */
-  public async listFolders(organizationUnitId?: number): Promise<FileFolderResponse[]> {
+  /** Lấy danh sách thư mục lưu trữ (có lọc theo phạm vi dữ liệu của người dùng) */
+  public async listFolders(
+    organizationUnitId?: number,
+    actor?: UserIdentity,
+  ): Promise<FileFolderResponse[]> {
     const folders = await this.foldersRepo.findAllOrdered(organizationUnitId);
-    return folders.map((f) => this.mapper.toFolderResponse(f));
+    const scope = await this.resolveFileScopeConstraint(actor);
+    if (scope.unrestricted) {
+      return folders.map((f) => this.mapper.toFolderResponse(f));
+    }
+
+    const visibleFolders = folders.filter((f) => this.isFolderAccessibleInScope(f, scope));
+    return visibleFolders.map((f) => this.mapper.toFolderResponse(f));
   }
 
-  /** Tạo thư mục mới trong File Manager (không tác động tới đường dẫn vật lý của file) */
+  /** Tạo thư mục mới trong File Manager (kiểm tra quyền, chống trùng tên cùng cấp) */
   public async createFolder(
     input: CreateFileFolderRequest,
     actor?: UserIdentity,
@@ -140,17 +210,25 @@ export class FilesService implements IFilesPublicService {
       if (!parentFolder) {
         throw new NotFoundAppException('files.error.parentFolderNotFound');
       }
+      await this.assertCanAccessFolder(parentFolder, actor);
     }
 
-    const slug = this.slugifyName(input.name);
-    const orgId = input.organizationUnitId ?? this.resolvePrimaryOrgId(actor);
+    const trimmedName = input.name.trim();
+    const slug = this.slugifyName(trimmedName);
+    const parentId = parentFolder ? parentFolder.id : null;
+    await this.assertUniqueFolderSlugInParent(parentId, slug);
+
+    const orgId =
+      input.organizationUnitId ??
+      parentFolder?.organizationUnitId ??
+      this.resolvePrimaryOrgId(actor);
     const code = await this.generateEntityCode('files.folder_code', orgId);
 
     const created = await this.foldersRepo.saveEntity({
       code,
-      name: input.name.trim(),
+      name: trimmedName,
       slug,
-      parentId: parentFolder ? parentFolder.id : null,
+      parentId,
       folderPath: '/',
       organizationUnitId: orgId,
       createdByUserId: actor?.id ?? null,
@@ -168,12 +246,18 @@ export class FilesService implements IFilesPublicService {
     await this.recordAudit(actor, 'folder.create', 'file_folder', String(updated.id), null, {
       name: updated.name,
       parentId: updated.parentId ?? null,
+      folderPath: updated.folderPath,
     });
 
     return this.mapper.toFolderResponse(updated);
   }
 
-  /** Đổi tên hoặc di chuyển thư mục (kiểm tra chống vòng lặp cây thư mục) */
+  /**
+   * Đổi tên hoặc di chuyển thư mục (Mục 6.2):
+   * - Kiểm tra quyền quản lý trên thư mục hiện tại và thư mục cha đích.
+   * - Kiểm tra chống vòng lặp cây thư mục và chống trùng tên cùng cấp.
+   * - Tự động cập nhật dây chuyền `folderPath` cho toàn bộ thư mục con cháu (descendants).
+   */
   public async updateFolder(
     id: number,
     input: UpdateFileFolderRequest,
@@ -184,6 +268,9 @@ export class FilesService implements IFilesPublicService {
       throw new NotFoundAppException('files.error.folderNotFound');
     }
 
+    await this.assertCanAccessFolder(folder, actor);
+
+    const oldFolderPath = folder.folderPath;
     let nextParentId = folder.parentId ?? null;
     let nextFolderPath = folder.folderPath;
 
@@ -199,6 +286,7 @@ export class FilesService implements IFilesPublicService {
         if (!parent) {
           throw new NotFoundAppException('files.error.parentFolderNotFound');
         }
+        await this.assertCanAccessFolder(parent, actor);
         if (parent.folderPath.includes(`/${folder.id}/`)) {
           throw new BadRequestAppException('files.error.folderCycleDetected');
         }
@@ -208,23 +296,42 @@ export class FilesService implements IFilesPublicService {
     }
 
     const nextName = input.name !== undefined ? input.name.trim() : folder.name;
+    const nextSlug = this.slugifyName(nextName);
+
+    if (nextSlug !== folder.slug || nextParentId !== (folder.parentId ?? null)) {
+      await this.assertUniqueFolderSlugInParent(nextParentId, nextSlug, folder.id);
+    }
+
     const saved = await this.foldersRepo.saveEntity({
       ...folder,
       name: nextName,
-      slug: this.slugifyName(nextName),
+      slug: nextSlug,
       parentId: nextParentId,
       folderPath: nextFolderPath,
       description:
         input.description !== undefined ? input.description : (folder.description ?? null),
     });
 
+    // Cập nhật dây chuyền `folderPath` cho toàn bộ thư mục con cháu khi di chuyển thư mục cha
+    if (nextFolderPath !== oldFolderPath) {
+      await this.cascadeUpdateDescendantFolderPaths(folder.id, oldFolderPath, nextFolderPath);
+    }
+
     await this.recordAudit(
       actor,
       'folder.update',
       'file_folder',
       String(saved.id),
-      { name: folder.name, parentId: folder.parentId ?? null },
-      { name: saved.name, parentId: saved.parentId ?? null },
+      {
+        name: folder.name,
+        parentId: folder.parentId ?? null,
+        folderPath: oldFolderPath,
+      },
+      {
+        name: saved.name,
+        parentId: saved.parentId ?? null,
+        folderPath: saved.folderPath,
+      },
     );
 
     return this.mapper.toFolderResponse(saved);
@@ -239,6 +346,8 @@ export class FilesService implements IFilesPublicService {
     if (!folder) {
       throw new NotFoundAppException('files.error.folderNotFound');
     }
+
+    await this.assertCanAccessFolder(folder, actor);
 
     const [childFolders, filesCount] = await Promise.all([
       this.foldersRepo.countChildFolders(id),
@@ -264,7 +373,7 @@ export class FilesService implements IFilesPublicService {
 
   // ─── 2. Tải file lên hệ thống (Một hoặc nhiều file) ────────────────────────
 
-  /** Tải một file lên hệ thống, kiểm tra chữ ký & dung lượng trước khi lưu vào Storage */
+  /** Tải một file lên hệ thống, kiểm tra chữ ký & dung lượng (theo đơn vị + người dùng) trước khi lưu */
   public async uploadSingle(
     input: UploadSingleFileRequest,
     actor?: UserIdentity,
@@ -277,10 +386,11 @@ export class FilesService implements IFilesPublicService {
       if (!folder) {
         throw new NotFoundAppException('files.error.folderNotFound');
       }
+      await this.assertCanAccessFolder(folder, actor);
     }
 
     const validated = this.validationService.validateUploadInput(input, orgId);
-    await this.assertStorageQuotaWithinLimit(validated.sizeBytes, orgId);
+    await this.assertStorageQuotaWithinLimit(validated.sizeBytes, orgId, actor?.id ?? null);
     const checksumSha256 = this.computeSha256Hex(validated.buffer);
     const storageKey = this.buildImmutableStorageKey(validated.extension);
 
@@ -330,6 +440,8 @@ export class FilesService implements IFilesPublicService {
         ? (uploaderMap.get(saved.uploadedByUserId) ?? null)
         : null,
       usages: [],
+      permissions: [],
+      canDownload: true,
     });
   }
 
@@ -400,8 +512,11 @@ export class FilesService implements IFilesPublicService {
     query: ListFilesQuery,
     actor?: UserIdentity,
   ): Promise<PaginatedResult<FileRecordResponse>> {
-    const page = Math.max(1, query.page ?? 1);
-    const limit = Math.min(100, Math.max(1, query.limit ?? 20));
+    const { page, limit } = resolvePagination(query, {
+      settingPrefix: 'files.pagination',
+      defaultLimit: 20,
+      maxLimit: 100,
+    });
     const scope = await this.resolveFileScopeConstraint(actor);
 
     const { items: rawItems, total } = await this.filesRepo.findPaginatedFiltered(query, scope);
@@ -439,34 +554,25 @@ export class FilesService implements IFilesPublicService {
       }),
     );
 
-    const totalPages = Math.max(1, Math.ceil(total / limit));
-    return {
-      data: mapped,
-      meta: {
-        total,
-        page,
-        limit,
-        totalPages,
-        hasNextPage: page < totalPages,
-        hasPrevPage: page > 1,
-      },
-    };
+    return createPaginatedResult(mapped, total, page, limit);
   }
 
-  /** Xem thông tin chi tiết của một file kèm người tải và danh sách chức năng đang sử dụng */
+  /** Xem thông tin chi tiết của một file kèm người tải, liên kết sử dụng và phân quyền truy cập */
   public async getById(id: number, actor?: UserIdentity): Promise<FileRecordResponse> {
     const found = await this.filesRepo.findById(id);
     if (!found || found.status === FILE_STATUS.PURGED) {
       throw new NotFoundAppException('files.error.fileNotFound');
     }
 
-    await this.assertCanAccessFile(found, actor);
+    await this.assertCanViewFile(found, actor);
     const entity = await this.reconcileStorageExistence(found);
 
-    const [folder, uploaderMap, usages] = await Promise.all([
+    const [folder, uploaderMap, usages, permissions, canDownload] = await Promise.all([
       entity.folderId ? this.foldersRepo.findById(entity.folderId) : Promise.resolve(null),
       this.loadUploaderSummaries(entity.uploadedByUserId ? [entity.uploadedByUserId] : []),
       this.usagesRepo.findByFileId(entity.id),
+      this.permissionsRepo ? this.permissionsRepo.findByFileId(entity.id) : Promise.resolve([]),
+      this.canDownloadFile(entity, actor),
     ]);
 
     return this.mapper.toFileResponse(entity, {
@@ -475,6 +581,8 @@ export class FilesService implements IFilesPublicService {
         ? (uploaderMap.get(entity.uploadedByUserId) ?? null)
         : null,
       usages: usages.map((u) => this.mapper.toUsageResponse(u)),
+      permissions: permissions.map((p) => this.mapper.toPermissionResponse(p)),
+      canDownload,
     });
   }
 
@@ -491,6 +599,7 @@ export class FilesService implements IFilesPublicService {
     let totalTrashedFiles = 0;
     let totalTrashedBytes = 0;
     let totalReferencedFiles = 0;
+    let currentUserActiveBytes = 0;
 
     const categoryTotals = new Map<FileCategoryCode, { count: number; bytes: number }>();
     for (const cat of ALL_CATEGORIES) {
@@ -502,6 +611,9 @@ export class FilesService implements IFilesPublicService {
       if (file.status === FILE_STATUS.ACTIVE) {
         totalActiveFiles++;
         totalActiveBytes += size;
+        if (actor?.id && file.uploadedByUserId === actor.id) {
+          currentUserActiveBytes += size;
+        }
         if ((Number(file.usageCount) || 0) > 0) {
           totalReferencedFiles++;
         }
@@ -524,6 +636,8 @@ export class FilesService implements IFilesPublicService {
       totalTrashedFormatted: formatBytes(totalTrashedBytes),
       totalReferencedFiles,
       totalFolders: folders.length,
+      currentUserActiveBytes,
+      currentUserActiveFormatted: formatBytes(currentUserActiveBytes),
       byCategory: ALL_CATEGORIES.map((category) => {
         const stat = categoryTotals.get(category) ?? { count: 0, bytes: 0 };
         return {
@@ -542,15 +656,18 @@ export class FilesService implements IFilesPublicService {
         verifyMagicBytes: this.validationService.shouldVerifyMagicBytes(orgId),
         defaultVisibility: this.validationService.getDefaultVisibility(orgId),
         storageQuotaMb: this.validationService.getStorageQuotaMb(orgId),
+        userStorageQuotaMb: this.validationService.getUserStorageQuotaMb(orgId),
+        tempLinkDefaultTtlSec: this.validationService.getTempLinkDefaultTtlSec(orgId),
+        tempLinkMaxTtlSec: this.validationService.getTempLinkMaxTtlSec(orgId),
         reconcileOnList: this.validationService.shouldReconcileOnList(),
         storageKeyPrefix: this.validationService.getStorageKeyPrefix(),
       },
     };
   }
 
-  // ─── 4. Tải file xuống & Stream Video có kiểm tra quyền ────────────────────
+  // ─── 4. Tải file xuống, Stream Video & Link tải tạm thời (Mục 6.2) ─────────
 
-  /** Chuẩn bị luồng tải file xuống (kiểm tra quyền, dùng displayName đã đổi tên) */
+  /** Chuẩn bị luồng tải file xuống (kiểm tra quyền tải file tách biệt quyền xem) */
   public async prepareDownload(
     id: number,
     actor?: UserIdentity,
@@ -570,7 +687,7 @@ export class FilesService implements IFilesPublicService {
       throw new BadRequestAppException('files.error.inTrashCannotDownload');
     }
 
-    await this.assertCanAccessFile(entity, actor);
+    await this.assertCanDownloadFile(entity, actor);
 
     const exists = await this.storage.exists(entity.storageKey);
     if (!exists) {
@@ -600,7 +717,7 @@ export class FilesService implements IFilesPublicService {
 
   /**
    * Chuẩn bị luồng phát trực tiếp (Inline / Video & Audio Byte-Range Streaming `206 Partial Content`).
-   * Cho phép trình phát Video tua nhanh đến bất kỳ thời điểm nào mà không phải tải toàn bộ file.
+   * Kiểm tra quyền tải/phát (`assertCanDownloadFile`) trước khi mở stream.
    */
   public async prepareStream(
     id: number,
@@ -619,7 +736,7 @@ export class FilesService implements IFilesPublicService {
       throw new BadRequestAppException('files.error.inTrashCannotDownload');
     }
 
-    await this.assertCanAccessFile(entity, actor);
+    await this.assertCanDownloadFile(entity, actor);
 
     const exists = await this.storage.exists(entity.storageKey);
     if (!exists) {
@@ -653,9 +770,131 @@ export class FilesService implements IFilesPublicService {
     };
   }
 
+  /**
+   * Tạo đường dẫn tải file tạm thời tự hết hạn (Signed Temporary Download Link — Mục 6.2).
+   * Kiểm tra người tạo phải có quyền tải file (`assertCanDownloadFile`), sau đó ký HMAC-SHA256.
+   */
+  public async createTemporaryDownloadLink(
+    fileId: number,
+    input?: CreateTemporaryDownloadLinkRequest,
+    actor?: UserIdentity,
+  ): Promise<TemporaryDownloadLinkResponse> {
+    const entity = await this.filesRepo.findById(fileId);
+    if (!entity || entity.status === FILE_STATUS.PURGED) {
+      throw new NotFoundAppException('files.error.fileNotFound');
+    }
+    if (entity.status === FILE_STATUS.TRASHED) {
+      throw new BadRequestAppException('files.error.inTrashCannotDownload');
+    }
+
+    await this.assertCanDownloadFile(entity, actor);
+
+    const orgId = entity.organizationUnitId ?? this.resolvePrimaryOrgId(actor);
+    const defaultTtlSec = this.validationService.getTempLinkDefaultTtlSec(orgId);
+    const maxTtlSec = this.validationService.getTempLinkMaxTtlSec(orgId);
+
+    const requestedTtl = input?.expiresInSeconds ?? defaultTtlSec;
+    if (requestedTtl > maxTtlSec) {
+      throw new BadRequestAppException('files.error.temporaryLinkTtlExceeded', [], {
+        maxSeconds: maxTtlSec,
+      });
+    }
+
+    const expiresInSeconds = Math.max(1, Math.trunc(requestedTtl));
+    const disposition = input?.disposition === 'inline' ? 'inline' : 'attachment';
+    const nowSeconds = Math.floor(Date.now() / 1000);
+    const expSeconds = nowSeconds + expiresInSeconds;
+
+    const payload: TemporaryDownloadTokenPayload = {
+      typ: 'file_temp_dl',
+      fid: entity.id,
+      exp: expSeconds,
+      disp: disposition,
+      uid: actor?.id ?? null,
+    };
+
+    const secret = await this.resolveSigningSecret();
+    const token = this.signTemporaryDownloadToken(payload, secret);
+    const expiresAt = new Date(expSeconds * 1000).toISOString();
+    const downloadUrl = `/api/v1/files/temporary-download/${token}`;
+
+    await this.recordAudit(actor, 'file.temporary_link_create', 'file', String(entity.id), null, {
+      expiresInSeconds,
+      expiresAt,
+      disposition,
+    });
+
+    return {
+      fileId: entity.id,
+      token,
+      expiresInSeconds,
+      expiresAt,
+      disposition,
+      downloadUrl,
+    };
+  }
+
+  /**
+   * Giải mã và xác thực đường dẫn tải tạm thời (`GET /api/v1/files/temporary-download/:token`).
+   * Tự động từ chối nếu chữ ký không khớp hoặc đã quá thời hạn `exp`.
+   */
+  public async prepareTemporaryDownload(token: string): Promise<{
+    stream: ObjectStream;
+    file: FileRecordResponse;
+    downloadFileName: string;
+    disposition: 'attachment' | 'inline';
+  }> {
+    const secret = await this.resolveSigningSecret();
+    const payload = this.verifyTemporaryDownloadToken(token, secret);
+    if (!payload) {
+      throw new ForbiddenAppException('files.error.temporaryLinkExpiredOrInvalid');
+    }
+
+    const entity = await this.filesRepo.findById(payload.fid);
+    if (!entity || entity.status === FILE_STATUS.PURGED) {
+      throw new NotFoundAppException('files.error.fileNotFound');
+    }
+    if (entity.status === FILE_STATUS.TRASHED) {
+      throw new BadRequestAppException('files.error.inTrashCannotDownload');
+    }
+
+    const exists = await this.storage.exists(entity.storageKey);
+    if (!exists) {
+      if (entity.status !== FILE_STATUS.MISSING) {
+        await this.filesRepo.saveEntity({
+          ...entity,
+          status: FILE_STATUS.MISSING,
+        });
+      }
+      throw new NotFoundAppException('files.error.storageObjectMissing');
+    }
+
+    const stream = await this.storage.driver.stream(entity.storageKey);
+    const downloadFileName = this.buildSafeDownloadFileName(entity.displayName, entity.extension);
+
+    await this.recordAudit(
+      undefined,
+      'file.temporary_link_download',
+      'file',
+      String(entity.id),
+      null,
+      {
+        displayName: entity.displayName,
+        issuedByUserId: payload.uid,
+      },
+    );
+
+    return {
+      stream,
+      file: this.mapper.toFileResponse(entity),
+      downloadFileName,
+      disposition: payload.disp,
+    };
+  }
+
   // ─── 5. Đổi tên file & Di chuyển thư mục (Không đổi file gốc trong Storage) ─
 
-  /** Đổi tên hiển thị, thư mục hoặc mức hiển thị mà không chạm vào `storage_key` vật lý */
+  /** Đổi tên hiển thị, di chuyển thư mục (kiểm tra quyền thư mục đích, giữ nguyên liên kết sử dụng & storage_key) */
   public async updateMetadata(
     id: number,
     input: UpdateFileMetadataRequest,
@@ -666,7 +905,7 @@ export class FilesService implements IFilesPublicService {
       throw new NotFoundAppException('files.error.fileNotFound');
     }
 
-    await this.assertCanAccessFile(entity, actor);
+    await this.assertCanManageFile(entity, actor);
 
     let folder: FileFolderEntity | null = null;
     let nextFolderId = entity.folderId ?? null;
@@ -678,6 +917,7 @@ export class FilesService implements IFilesPublicService {
         if (!folder) {
           throw new NotFoundAppException('files.error.folderNotFound');
         }
+        await this.assertCanAccessFolder(folder, actor);
         nextFolderId = folder.id;
       }
     } else if (entity.folderId) {
@@ -695,7 +935,7 @@ export class FilesService implements IFilesPublicService {
           : null
         : (entity.metadataJson ?? null);
 
-    // Chú ý: `storageKey` được giữ nguyên 100% không bao giờ thay đổi
+    // Chú ý: `storageKey` và `file_usages` được giữ nguyên 100% không bao giờ thay đổi
     const saved = await this.filesRepo.saveEntity({
       ...entity,
       displayName: nextDisplayName,
@@ -723,9 +963,11 @@ export class FilesService implements IFilesPublicService {
       },
     );
 
-    const [uploaderMap, usages] = await Promise.all([
+    const [uploaderMap, usages, permissions, canDownload] = await Promise.all([
       this.loadUploaderSummaries(saved.uploadedByUserId ? [saved.uploadedByUserId] : []),
       this.usagesRepo.findByFileId(saved.id),
+      this.permissionsRepo ? this.permissionsRepo.findByFileId(saved.id) : Promise.resolve([]),
+      this.canDownloadFile(saved, actor),
     ]);
 
     return this.mapper.toFileResponse(saved, {
@@ -734,10 +976,151 @@ export class FilesService implements IFilesPublicService {
         ? (uploaderMap.get(saved.uploadedByUserId) ?? null)
         : null,
       usages: usages.map((u) => this.mapper.toUsageResponse(u)),
+      permissions: permissions.map((p) => this.mapper.toPermissionResponse(p)),
+      canDownload,
     });
   }
 
-  // ─── 6. Đưa vào thùng rác, Khôi phục & Xóa vĩnh viễn ───────────────────────
+  // ─── 6. Phân quyền Xem & Tải file chi tiết (`file_permissions` — Mục 6.2) ──
+
+  /** Xem danh sách phân quyền chi tiết (User / Role / Đơn vị) của một file */
+  public async listPermissions(
+    fileId: number,
+    actor?: UserIdentity,
+  ): Promise<FilePermissionItemResponse[]> {
+    const entity = await this.filesRepo.findById(fileId);
+    if (!entity || entity.status === FILE_STATUS.PURGED) {
+      throw new NotFoundAppException('files.error.fileNotFound');
+    }
+    await this.assertCanViewFile(entity, actor);
+
+    if (!this.permissionsRepo) return [];
+    const list = await this.permissionsRepo.findByFileId(fileId);
+    return list.map((p) => this.mapper.toPermissionResponse(p));
+  }
+
+  /**
+   * Cấp hoặc cập nhật quyền Xem (`canView`) / Tải (`canDownload`) cho Người dùng, Vai trò hoặc Đơn vị.
+   * Quyền tải file có thể độc lập với quyền xem (ví dụ: cho phép xem thông tin nhưng không cho tải xuống).
+   * Nếu `canDownload = true` thì tự động bật `canView = true`.
+   */
+  public async grantPermission(
+    fileId: number,
+    input: GrantFilePermissionRequest,
+    actor?: UserIdentity,
+  ): Promise<FilePermissionItemResponse> {
+    const entity = await this.filesRepo.findById(fileId);
+    if (!entity || entity.status === FILE_STATUS.PURGED) {
+      throw new NotFoundAppException('files.error.fileNotFound');
+    }
+    await this.assertCanManageFile(entity, actor);
+
+    if (!this.permissionsRepo) {
+      throw new NotFoundAppException('files.error.permissionNotFound');
+    }
+
+    const subjectType: FilePermissionSubjectCode = parseFilePermissionSubjectType(
+      input.subjectType,
+    );
+    const rawSubjectId = String(input.subjectId).trim();
+    const subjectId =
+      subjectType === FILE_PERMISSION_SUBJECT.ROLE ? rawSubjectId.toLowerCase() : rawSubjectId;
+
+    const canDownload = Boolean(input.canDownload);
+    const canView = canDownload ? true : (input.canView ?? true);
+    let expiresAt: Date | null = null;
+    if (input.expiresAt) {
+      const parsedDate = new Date(input.expiresAt);
+      if (!Number.isNaN(parsedDate.getTime())) {
+        expiresAt = parsedDate;
+      }
+    }
+
+    const existing = await this.permissionsRepo.findByTarget({
+      fileId,
+      subjectType,
+      subjectId,
+    });
+
+    const saved = await this.permissionsRepo.saveEntity({
+      ...(existing ?? {}),
+      fileId,
+      subjectType,
+      subjectId,
+      canView,
+      canDownload,
+      expiresAt,
+      note: input.note !== undefined ? input.note : (existing?.note ?? null),
+      grantedByUserId: actor?.id ?? existing?.grantedByUserId ?? null,
+    });
+
+    await this.recordAudit(
+      actor,
+      'file.permission_grant',
+      'file',
+      String(fileId),
+      existing
+        ? {
+            subjectType: existing.subjectType,
+            subjectId: existing.subjectId,
+            canView: existing.canView,
+            canDownload: existing.canDownload,
+          }
+        : null,
+      {
+        subjectType: saved.subjectType,
+        subjectId: saved.subjectId,
+        canView: saved.canView,
+        canDownload: saved.canDownload,
+        expiresAt: saved.expiresAt ? saved.expiresAt.toISOString() : null,
+      },
+    );
+
+    return this.mapper.toPermissionResponse(saved);
+  }
+
+  /** Thu hồi một bản ghi phân quyền truy cập file */
+  public async revokePermission(
+    fileId: number,
+    permissionId: number,
+    actor?: UserIdentity,
+  ): Promise<{ revoked: true; permissionId: number }> {
+    const entity = await this.filesRepo.findById(fileId);
+    if (!entity || entity.status === FILE_STATUS.PURGED) {
+      throw new NotFoundAppException('files.error.fileNotFound');
+    }
+    await this.assertCanManageFile(entity, actor);
+
+    if (!this.permissionsRepo) {
+      throw new NotFoundAppException('files.error.permissionNotFound');
+    }
+
+    const found = await this.permissionsRepo.findById(permissionId);
+    if (!found || found.fileId !== fileId) {
+      throw new NotFoundAppException('files.error.permissionNotFound');
+    }
+
+    await this.permissionsRepo.softDeleteById(found.id);
+
+    await this.recordAudit(
+      actor,
+      'file.permission_revoke',
+      'file',
+      String(fileId),
+      {
+        permissionId: found.id,
+        subjectType: found.subjectType,
+        subjectId: found.subjectId,
+        canView: found.canView,
+        canDownload: found.canDownload,
+      },
+      null,
+    );
+
+    return { revoked: true, permissionId };
+  }
+
+  // ─── 7. Đưa vào thùng rác, Khôi phục & Xóa vĩnh viễn ───────────────────────
 
   /**
    * Đưa file vào thùng rác (Soft Trash có thời gian chờ trước khi xóa vĩnh viễn).
@@ -752,7 +1135,7 @@ export class FilesService implements IFilesPublicService {
       throw new ConflictAppException('files.error.alreadyInTrash');
     }
 
-    await this.assertCanAccessFile(entity, actor);
+    await this.assertCanManageFile(entity, actor);
     await this.assertNoActiveUsages(entity.id);
 
     const retentionDays = this.validationService.getTrashRetentionDays(
@@ -798,7 +1181,7 @@ export class FilesService implements IFilesPublicService {
       throw new BadRequestAppException('files.error.notInTrash');
     }
 
-    await this.assertCanAccessFile(entity, actor);
+    await this.assertCanManageFile(entity, actor);
 
     const existsInStorage = await this.storage.exists(entity.storageKey);
     if (!existsInStorage) {
@@ -839,7 +1222,7 @@ export class FilesService implements IFilesPublicService {
       throw new NotFoundAppException('files.error.fileNotFound');
     }
 
-    await this.assertCanAccessFile(entity, actor);
+    await this.assertCanManageFile(entity, actor);
     await this.assertNoActiveUsages(entity.id);
 
     const existsInStorage = await this.storage.exists(entity.storageKey);
@@ -910,7 +1293,7 @@ export class FilesService implements IFilesPublicService {
     };
   }
 
-  // ─── 7. Theo dõi liên kết sử dụng file (`file_usages` & Public Contract) ───
+  // ─── 8. Theo dõi liên kết sử dụng file (`file_usages` & Public Contract) ───
 
   /** Lấy danh sách các chức năng/bản ghi đang sử dụng một file */
   public async listUsages(fileId: number, actor?: UserIdentity): Promise<FileUsageItemResponse[]> {
@@ -918,7 +1301,7 @@ export class FilesService implements IFilesPublicService {
     if (!entity || entity.status === FILE_STATUS.PURGED) {
       throw new NotFoundAppException('files.error.fileNotFound');
     }
-    await this.assertCanAccessFile(entity, actor);
+    await this.assertCanViewFile(entity, actor);
 
     const usages = await this.usagesRepo.findByFileId(fileId);
     return usages.map((u) => this.mapper.toUsageResponse(u));
@@ -1119,26 +1502,120 @@ export class FilesService implements IFilesPublicService {
     }
   }
 
-  /** Kiểm tra hạn mức tổng dung lượng lưu trữ (`file.storage.quota_mb`) trước khi tải lên */
+  /**
+   * Kiểm tra hạn mức dung lượng lưu trữ (Mục 6.2):
+   * 1. Theo đơn vị / hệ thống (`file.storage.quota_mb`).
+   * 2. Theo người dùng (`file.storage.user_quota_mb`).
+   */
   private async assertStorageQuotaWithinLimit(
     incomingSizeBytes: number,
     organizationUnitId?: number | null,
+    userId?: number | null,
   ): Promise<void> {
-    const quotaMb = this.validationService.getStorageQuotaMb(organizationUnitId);
-    if (quotaMb <= 0) return;
+    const orgQuotaMb = this.validationService.getStorageQuotaMb(organizationUnitId);
+    if (orgQuotaMb > 0) {
+      const maxOrgQuotaBytes = orgQuotaMb * 1024 * 1024;
+      const usedOrgBytes =
+        typeof this.filesRepo.sumActiveBytesByOrgUnit === 'function'
+          ? await this.filesRepo.sumActiveBytesByOrgUnit(organizationUnitId)
+          : (await this.filesRepo.findAllForStats())
+              .filter(
+                (f) =>
+                  f.status === FILE_STATUS.ACTIVE &&
+                  (!organizationUnitId || f.organizationUnitId === organizationUnitId),
+              )
+              .reduce((sum, f) => sum + (Number(f.sizeBytes) || 0), 0);
 
-    const maxQuotaBytes = quotaMb * 1024 * 1024;
-    const allFiles = await this.filesRepo.findAllForStats();
-    const usedBytes = allFiles
-      .filter(
-        (f) =>
-          f.status === FILE_STATUS.ACTIVE &&
-          (!organizationUnitId || f.organizationUnitId === organizationUnitId),
-      )
-      .reduce((sum, f) => sum + (Number(f.sizeBytes) || 0), 0);
+      if (usedOrgBytes + incomingSizeBytes > maxOrgQuotaBytes) {
+        throw new BadRequestAppException('files.error.storageQuotaExceeded', [], {
+          quotaMb: orgQuotaMb,
+        });
+      }
+    }
 
-    if (usedBytes + incomingSizeBytes > maxQuotaBytes) {
-      throw new BadRequestAppException('files.error.storageQuotaExceeded', [], { quotaMb });
+    const userQuotaMb = this.validationService.getUserStorageQuotaMb(organizationUnitId);
+    if (userQuotaMb > 0 && typeof userId === 'number' && userId > 0) {
+      const maxUserQuotaBytes = userQuotaMb * 1024 * 1024;
+      const usedUserBytes =
+        typeof this.filesRepo.sumActiveBytesByUser === 'function'
+          ? await this.filesRepo.sumActiveBytesByUser(userId)
+          : (await this.filesRepo.findAllForStats())
+              .filter((f) => f.status === FILE_STATUS.ACTIVE && f.uploadedByUserId === userId)
+              .reduce((sum, f) => sum + (Number(f.sizeBytes) || 0), 0);
+
+      if (usedUserBytes + incomingSizeBytes > maxUserQuotaBytes) {
+        throw new BadRequestAppException('files.error.userStorageQuotaExceeded', [], {
+          quotaMb: userQuotaMb,
+        });
+      }
+    }
+  }
+
+  /** Kiểm tra trùng tên/slug thư mục trong cùng một thư mục cha (`parentId`) */
+  private async assertUniqueFolderSlugInParent(
+    parentId: number | null,
+    slug: string,
+    excludeFolderId?: number,
+  ): Promise<void> {
+    let duplicate: FileFolderEntity | null = null;
+    if (typeof this.foldersRepo.findByParentAndSlug === 'function') {
+      duplicate = await this.foldersRepo.findByParentAndSlug(parentId, slug);
+    } else {
+      const all = await this.foldersRepo.findAllOrdered();
+      duplicate =
+        all.find(
+          (f) => (f.parentId ?? null) === parentId && f.slug.toLowerCase() === slug.toLowerCase(),
+        ) ?? null;
+    }
+
+    if (duplicate && duplicate.id !== excludeFolderId) {
+      throw new ConflictAppException('files.error.folderNameDuplicate');
+    }
+  }
+
+  /** Cập nhật dây chuyền `folderPath` của toàn bộ thư mục con cháu khi di chuyển thư mục cha */
+  private async cascadeUpdateDescendantFolderPaths(
+    parentFolderId: number,
+    oldFolderPath: string,
+    newFolderPath: string,
+  ): Promise<void> {
+    const descendants =
+      typeof this.foldersRepo.findDescendantsByPathPrefix === 'function'
+        ? await this.foldersRepo.findDescendantsByPathPrefix(oldFolderPath)
+        : (await this.foldersRepo.findAllOrdered()).filter((f) =>
+            f.folderPath.startsWith(oldFolderPath),
+          );
+
+    for (const child of descendants) {
+      if (child.id === parentFolderId) continue;
+      if (child.folderPath.startsWith(oldFolderPath)) {
+        const updatedChildPath = `${newFolderPath}${child.folderPath.slice(oldFolderPath.length)}`;
+        await this.foldersRepo.saveEntity({
+          ...child,
+          folderPath: updatedChildPath,
+        });
+      }
+    }
+  }
+
+  private isFolderAccessibleInScope(folder: FileFolderEntity, scope: FileScopeConstraint): boolean {
+    if (scope.unrestricted) return true;
+    if (!folder.organizationUnitId && !folder.createdByUserId) return true;
+    if (folder.createdByUserId && folder.createdByUserId === scope.selfUserId) return true;
+    if (folder.organizationUnitId && scope.allowedOrgUnitIds?.includes(folder.organizationUnitId)) {
+      return true;
+    }
+    return false;
+  }
+
+  private async assertCanAccessFolder(
+    folder: FileFolderEntity,
+    actor?: UserIdentity,
+  ): Promise<void> {
+    if (!actor || !this.dataScopeService) return;
+    const scope = await this.resolveFileScopeConstraint(actor);
+    if (!this.isFolderAccessibleInScope(folder, scope)) {
+      throw new ForbiddenAppException('files.error.folderAccessDenied');
     }
   }
 
@@ -1236,34 +1713,228 @@ export class FilesService implements IFilesPublicService {
     ) {
       allowedOrgUnitIds = await this.orgsPublicService.resolveDescendantUnitIds(rootOrgIds);
     }
+
+    let explicitAllowedFileIds: number[] = [];
+    if (this.permissionsRepo) {
+      const matchedPerms = await this.permissionsRepo.findActiveForActor({
+        userId: actor.id,
+        roles: actor.roles ?? [],
+        orgUnitIds: allowedOrgUnitIds.length > 0 ? allowedOrgUnitIds : rootOrgIds,
+      });
+      explicitAllowedFileIds = [
+        ...new Set(matchedPerms.filter((p) => p.canView || p.canDownload).map((p) => p.fileId)),
+      ];
+    }
+
     return {
       unrestricted: false,
       allowedOrgUnitIds,
       selfUserId: actor.id,
+      explicitAllowedFileIds,
     };
   }
 
-  private async assertCanAccessFile(entity: FileRecordEntity, actor?: UserIdentity): Promise<void> {
+  /** Tìm các bản ghi phân quyền đang hiệu lực khớp với `actor` trên một `fileId` */
+  private async findMatchingActivePermissions(
+    fileId: number,
+    actor: UserIdentity,
+    allowedOrgUnitIds: readonly number[],
+  ): Promise<FilePermissionEntity[]> {
+    if (!this.permissionsRepo) return [];
+    const orgIds =
+      allowedOrgUnitIds.length > 0 ? allowedOrgUnitIds : (actor.organizationUnitIds ?? []);
+    return this.permissionsRepo.findActiveForActor({
+      fileId,
+      userId: actor.id,
+      roles: actor.roles ?? [],
+      orgUnitIds: orgIds,
+    });
+  }
+
+  /**
+   * Kiểm tra quyền XEM thông tin file (Mục 6.2):
+   * Hỗ trợ phân quyền theo Người dùng, Vai trò hoặc Đơn vị trong bảng `file_permissions` + `visibility` + `DataScope`.
+   */
+  private async assertCanViewFile(entity: FileRecordEntity, actor?: UserIdentity): Promise<void> {
     if (entity.visibility === FILE_VISIBILITY.PUBLIC) {
       return;
     }
-    if (!actor || !this.dataScopeService) {
+    if (!actor) {
       return;
     }
-    if (entity.visibility === FILE_VISIBILITY.INTERNAL) {
+    if (entity.uploadedByUserId && entity.uploadedByUserId === actor.id) {
       return;
     }
+
     const scope = await this.resolveFileScopeConstraint(actor);
     if (scope.unrestricted) {
       return;
     }
-    if (entity.uploadedByUserId && entity.uploadedByUserId === actor.id) {
+
+    const matchedPerms = await this.findMatchingActivePermissions(
+      entity.id,
+      actor,
+      scope.allowedOrgUnitIds ?? [],
+    );
+    if (matchedPerms.length > 0) {
+      if (matchedPerms.some((p) => p.canView || p.canDownload)) {
+        return;
+      }
+      throw new ForbiddenAppException('files.error.accessDeniedScope');
+    }
+
+    if (entity.visibility === FILE_VISIBILITY.INTERNAL) {
       return;
     }
     if (entity.organizationUnitId && scope.allowedOrgUnitIds?.includes(entity.organizationUnitId)) {
       return;
     }
     throw new ForbiddenAppException('files.error.accessDeniedScope');
+  }
+
+  /**
+   * Kiểm tra quyền TẢI XUỐNG / STREAM file (Mục 6.2 — Có thể khác quyền xem thông tin):
+   * - Nếu người dùng có bản ghi phân quyền trong `file_permissions`:
+   *   + Có ít nhất 1 quyền `canDownload = true` -> Cho phép tải.
+   *   + Chỉ có quyền `canView = true` nhưng tất cả quyền khớp đều `canDownload = false` -> CHẶN TẢI (`downloadPermissionDenied`),
+   *     dù người dùng vẫn xem được thông tin chi tiết của file.
+   */
+  private async assertCanDownloadFile(
+    entity: FileRecordEntity,
+    actor?: UserIdentity,
+  ): Promise<void> {
+    if (!actor) {
+      return;
+    }
+    if (entity.uploadedByUserId && entity.uploadedByUserId === actor.id) {
+      return;
+    }
+
+    const scope = await this.resolveFileScopeConstraint(actor);
+    if (scope.unrestricted) {
+      return;
+    }
+
+    const matchedPerms = await this.findMatchingActivePermissions(
+      entity.id,
+      actor,
+      scope.allowedOrgUnitIds ?? [],
+    );
+    if (matchedPerms.length > 0) {
+      if (matchedPerms.some((p) => p.canDownload)) {
+        return;
+      }
+      if (matchedPerms.some((p) => p.canView)) {
+        throw new ForbiddenAppException('files.error.downloadPermissionDenied');
+      }
+      throw new ForbiddenAppException('files.error.accessDeniedScope');
+    }
+
+    if (
+      entity.visibility === FILE_VISIBILITY.PUBLIC ||
+      entity.visibility === FILE_VISIBILITY.INTERNAL
+    ) {
+      return;
+    }
+    if (entity.organizationUnitId && scope.allowedOrgUnitIds?.includes(entity.organizationUnitId)) {
+      return;
+    }
+    throw new ForbiddenAppException('files.error.accessDeniedScope');
+  }
+
+  private async canDownloadFile(entity: FileRecordEntity, actor?: UserIdentity): Promise<boolean> {
+    try {
+      await this.assertCanDownloadFile(entity, actor);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /** Kiểm tra quyền quản lý file (sửa metadata, chuyển thư mục, cấp quyền, xóa) */
+  private async assertCanManageFile(entity: FileRecordEntity, actor?: UserIdentity): Promise<void> {
+    if (!actor || !this.dataScopeService) {
+      return;
+    }
+    if (entity.uploadedByUserId && entity.uploadedByUserId === actor.id) {
+      return;
+    }
+    const scope = await this.resolveFileScopeConstraint(actor);
+    if (scope.unrestricted) {
+      return;
+    }
+    if (entity.organizationUnitId && scope.allowedOrgUnitIds?.includes(entity.organizationUnitId)) {
+      return;
+    }
+    throw new ForbiddenAppException('files.error.accessDeniedScope');
+  }
+
+  private async resolveSigningSecret(): Promise<string> {
+    if (this.tokenService) {
+      const accessSecret = await this.tokenService.getAccessSecret().catch(() => '');
+      if (accessSecret) return accessSecret;
+    }
+    return FALLBACK_TEMP_LINK_SECRET;
+  }
+
+  private signTemporaryDownloadToken(
+    payload: TemporaryDownloadTokenPayload,
+    secret: string,
+  ): string {
+    const payloadSegment = Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url');
+    const signatureSegment = createHmac('sha256', secret)
+      .update(payloadSegment)
+      .digest('base64url');
+    return `${payloadSegment}.${signatureSegment}`;
+  }
+
+  private verifyTemporaryDownloadToken(
+    token: string,
+    secret: string,
+  ): TemporaryDownloadTokenPayload | null {
+    if (!token || !secret) return null;
+    const parts = token.trim().split('.');
+    if (parts.length !== 2) return null;
+    const [payloadSegment, signatureSegment] = parts;
+    if (!payloadSegment || !signatureSegment) return null;
+
+    try {
+      const expectedSig = createHmac('sha256', secret).update(payloadSegment).digest('base64url');
+      const sigBuf = Buffer.from(signatureSegment, 'utf8');
+      const expectedBuf = Buffer.from(expectedSig, 'utf8');
+      if (sigBuf.length !== expectedBuf.length || !timingSafeEqual(sigBuf, expectedBuf)) {
+        return null;
+      }
+
+      const decoded = JSON.parse(
+        Buffer.from(payloadSegment, 'base64url').toString('utf8'),
+      ) as Partial<TemporaryDownloadTokenPayload>;
+
+      if (
+        !decoded ||
+        decoded.typ !== 'file_temp_dl' ||
+        typeof decoded.fid !== 'number' ||
+        decoded.fid <= 0 ||
+        typeof decoded.exp !== 'number'
+      ) {
+        return null;
+      }
+
+      const nowSeconds = Math.floor(Date.now() / 1000);
+      if (decoded.exp <= nowSeconds) {
+        return null;
+      }
+
+      return {
+        typ: 'file_temp_dl',
+        fid: decoded.fid,
+        exp: decoded.exp,
+        disp: decoded.disp === 'inline' ? 'inline' : 'attachment',
+        uid: typeof decoded.uid === 'number' ? decoded.uid : null,
+      };
+    } catch {
+      return null;
+    }
   }
 
   private async loadUploaderSummaries(

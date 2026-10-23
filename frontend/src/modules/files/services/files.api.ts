@@ -3,9 +3,11 @@ import { fetchApi, fetchApiWithMeta, IAM_ACCESS_TOKEN_KEY, type PaginationMeta }
 import { API_ROUTES } from '../../../routes/index';
 import type {
   FileFolderItem,
+  FilePermissionItem,
   FileRecordItem,
   FileUsageItem,
   ListFilesFilterParams,
+  TemporaryDownloadLinkItem,
   UploadSingleFilePayload,
 } from '../types/files.types';
 
@@ -199,6 +201,44 @@ export const filesApi = {
   getStreamUrl: (fileId: number): string => {
     return `${frontendConfig.apiBaseUrl}${API_ROUTES.FILES.STREAM(fileId)}`;
   },
+
+  /** Lấy danh sách phân quyền xem/tải của file (Mục 6.2) */
+  listPermissions: (fileId: number) =>
+    fetchApi<FilePermissionItem[]>(API_ROUTES.FILES.PERMISSIONS(fileId)),
+
+  /** Cấp hoặc cập nhật quyền xem/tải file theo User, Role hoặc Đơn vị (Mục 6.2) */
+  grantPermission: (
+    fileId: number,
+    payload: {
+      subjectType: number | 'USER' | 'ROLE' | 'ORG_UNIT';
+      subjectId: string | number;
+      canView?: boolean;
+      canDownload?: boolean;
+      expiresAt?: string | null;
+      note?: string | null;
+    },
+  ) =>
+    fetchApi<FilePermissionItem>(API_ROUTES.FILES.PERMISSIONS(fileId), {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+
+  /** Thu hồi một bản ghi phân quyền truy cập file (Mục 6.2) */
+  revokePermission: (fileId: number, permissionId: number) =>
+    fetchApi<{ revoked: boolean; permissionId: number }>(
+      API_ROUTES.FILES.PERMISSION_BY_ID(fileId, permissionId),
+      { method: 'DELETE' },
+    ),
+
+  /** Tạo đường dẫn tải tạm thời tự hết hạn (Signed Temporary Download Link — Mục 6.2) */
+  createTemporaryLink: (
+    fileId: number,
+    payload: { expiresInSeconds?: number; disposition?: 'attachment' | 'inline' } = {},
+  ) =>
+    fetchApi<TemporaryDownloadLinkItem>(API_ROUTES.FILES.TEMPORARY_LINK(fileId), {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
 };
 
 /** Helper đọc đối tượng File của trình duyệt sang Base64 */

@@ -1,7 +1,12 @@
 import { z } from 'zod';
 import { booleanQueryParam, intQueryParam, optionalQueryParam } from '@packages/http/index.js';
 import { isSupportedLocale, isValidIanaTimezone } from '@packages/i18n/index.js';
-import { USER_STATUS, type UserStatusCode, parseUserStatus } from '../contracts/index.js';
+import {
+  USER_STATUS,
+  type UserStatusCode,
+  parseUserGender,
+  parseUserStatus,
+} from '../contracts/index.js';
 
 export const preferredLocaleSchema = z
   .string()
@@ -29,6 +34,11 @@ export const userStatusSchema = z.preprocess(
     z.literal(USER_STATUS.LOCKED),
     z.literal(USER_STATUS.ARCHIVED),
   ]),
+);
+
+export const userGenderSchema = z.preprocess(
+  (val) => (val === undefined || val === null ? val : parseUserGender(val)),
+  z.number().int().min(1).nullable().optional(),
 );
 
 const coercePositiveInt = z.preprocess((v) => Number(v), z.number().int().min(1));
@@ -60,7 +70,7 @@ export const createUserSchema = z
     phone: z.string().trim().max(32).nullable().optional(),
     avatarUrl: z.string().trim().url().max(500).nullable().optional(),
     dateOfBirth: z.string().trim().max(32).nullable().optional(),
-    gender: z.number().int().min(1).max(3).nullable().optional(),
+    gender: userGenderSchema,
     identityNumber: z.string().trim().max(64).nullable().optional(),
     address: z.string().trim().max(255).nullable().optional(),
     city: z.string().trim().max(100).nullable().optional(),
@@ -93,7 +103,7 @@ export const updateUserSchema = z.object({
   phone: z.string().trim().max(32).nullable().optional(),
   avatarUrl: z.string().trim().url().max(500).nullable().optional(),
   dateOfBirth: z.string().trim().max(32).nullable().optional(),
-  gender: z.number().int().min(1).max(3).nullable().optional(),
+  gender: userGenderSchema,
   identityNumber: z.string().trim().max(64).nullable().optional(),
   address: z.string().trim().max(255).nullable().optional(),
   city: z.string().trim().max(100).nullable().optional(),
@@ -155,8 +165,8 @@ export const listUsersQuerySchema = z.object({
   managerId: optionalQueryParam(intQueryParam({ min: 1 })),
   includeArchived: optionalQueryParam(booleanQueryParam()),
   mfaEnabled: optionalQueryParam(booleanQueryParam()),
-  page: optionalQueryParam(intQueryParam({ min: 1 })).default(1),
-  limit: optionalQueryParam(intQueryParam({ min: 1, max: 500 })).default(20),
+  page: optionalQueryParam(intQueryParam({ min: 1 })),
+  limit: optionalQueryParam(intQueryParam({ min: 1, max: 5000 })),
   sortBy: optionalQueryParam(
     z.enum(['id', 'createdAt', 'firstName', 'lastName', 'fullName', 'email', 'username', 'status']),
   ).default('id'),

@@ -1,6 +1,7 @@
 import { Injectable, Optional } from '@nestjs/common';
 import { DataSource, In } from 'typeorm';
 import { BaseTypeOrmRepository, TransactionManager } from '@packages/database/index.js';
+import { CODE_ITEM_STATUS } from '@packages/kernel/index.js';
 import { CodeValueEntity } from '../entities/code-value.entity.js';
 
 @Injectable()
@@ -26,7 +27,7 @@ export class CodeValueRepository extends BaseTypeOrmRepository<CodeValueEntity> 
         .addOrderBy('cv.numericCode', 'ASC');
 
       if (!includeInactive) {
-        qb.andWhere('cv.status = 1');
+        qb.andWhere('cv.status = :activeStatus', { activeStatus: CODE_ITEM_STATUS.ACTIVE });
       }
       return qb.getMany();
     });
@@ -48,7 +49,7 @@ export class CodeValueRepository extends BaseTypeOrmRepository<CodeValueEntity> 
         .addOrderBy('cv.numericCode', 'ASC');
 
       if (!includeInactive) {
-        qb.andWhere('cv.status = 1');
+        qb.andWhere('cv.status = :activeStatus', { activeStatus: CODE_ITEM_STATUS.ACTIVE });
       }
       return qb.getMany();
     });
@@ -64,7 +65,7 @@ export class CodeValueRepository extends BaseTypeOrmRepository<CodeValueEntity> 
         .addOrderBy('cv.numericCode', 'ASC');
 
       if (!includeInactive) {
-        qb.andWhere('cv.status = 1');
+        qb.andWhere('cv.status = :activeStatus', { activeStatus: CODE_ITEM_STATUS.ACTIVE });
       }
       return qb.getMany();
     });

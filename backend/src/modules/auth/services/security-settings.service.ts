@@ -1,18 +1,23 @@
 import { Injectable, Optional } from '@nestjs/common';
 import {
   BadRequestAppException,
+  SETTING_ITEM_STATUS,
+  SETTING_VALUE_TYPE,
   SettingRegistryService,
   defaultSettingRegistry,
   safeJsonParse,
 } from '@packages/kernel/index.js';
 import {
   DB_ENCRYPTION_ALGORITHMS,
+  type DbEncryptionAlgorithm,
   FieldEncryptionService,
   PASSWORD_HASH_ALGORITHMS,
+  type PasswordHashAlgorithm,
   PasswordHasherService,
 } from '@packages/security/index.js';
 import {
   type MfaMethodType,
+  type MfaPolicyType,
   getDbEncryptionAlgoName,
   getMfaPolicyName,
   getPasswordHashAlgoName,
@@ -38,6 +43,361 @@ export const DEFAULT_DISALLOWED_PASSWORDS: readonly string[] = [
   'abcd1234',
 ];
 
+type SettingDescriptorKind =
+  | 'number'
+  | 'boolean'
+  | 'passwordHashAlgo'
+  | 'dbEncryptionAlgo'
+  | 'mfaPolicy'
+  | 'mfaMethods'
+  | 'stringArray';
+
+interface SecuritySettingDescriptor {
+  readonly dtoField: keyof UpdateSecuritySettingsRequest;
+  readonly key: string;
+  readonly namespace: string;
+  readonly kind: SettingDescriptorKind;
+  readonly syncFromRegistryToDb?: boolean;
+}
+
+const VALID_MFA_POLICIES: ReadonlySet<string> = new Set([
+  'OPTIONAL',
+  'REQUIRED_FOR_ADMINS',
+  'REQUIRED_FOR_ALL',
+]);
+
+const VALID_MFA_METHODS: ReadonlySet<string> = new Set([
+  'TOTP',
+  'EMAIL_OTP',
+  'SMS_OTP',
+  'RECOVERY_CODE',
+]);
+
+const SECURITY_SETTING_DESCRIPTORS: readonly SecuritySettingDescriptor[] = [
+  // Password policy
+  {
+    dtoField: 'passwordMinLength',
+    key: 'security.password.min_length',
+    namespace: 'auth.password',
+    kind: 'number',
+    syncFromRegistryToDb: true,
+  },
+  {
+    dtoField: 'requireUppercase',
+    key: 'security.password.require_uppercase',
+    namespace: 'auth.password',
+    kind: 'boolean',
+    syncFromRegistryToDb: true,
+  },
+  {
+    dtoField: 'requireNumbers',
+    key: 'security.password.require_numbers',
+    namespace: 'auth.password',
+    kind: 'boolean',
+    syncFromRegistryToDb: true,
+  },
+  {
+    dtoField: 'requireSpecialChars',
+    key: 'security.password.require_special_chars',
+    namespace: 'auth.password',
+    kind: 'boolean',
+    syncFromRegistryToDb: true,
+  },
+  {
+    dtoField: 'requireCurrentPasswordOnChange',
+    key: 'security.password.require_current_on_change',
+    namespace: 'auth.password',
+    kind: 'boolean',
+    syncFromRegistryToDb: true,
+  },
+  {
+    dtoField: 'disallowUserInfoInPassword',
+    key: 'security.password.disallow_user_info',
+    namespace: 'auth.password',
+    kind: 'boolean',
+    syncFromRegistryToDb: true,
+  },
+  {
+    dtoField: 'disallowedPasswords',
+    key: 'security.password.disallowed_list',
+    namespace: 'auth.password',
+    kind: 'stringArray',
+    syncFromRegistryToDb: true,
+  },
+  {
+    dtoField: 'preventPasswordReuse',
+    key: 'security.password.prevent_reuse',
+    namespace: 'auth.password',
+    kind: 'boolean',
+    syncFromRegistryToDb: true,
+  },
+  {
+    dtoField: 'passwordHistoryLimit',
+    key: 'security.password.history_limit',
+    namespace: 'auth.password',
+    kind: 'number',
+    syncFromRegistryToDb: true,
+  },
+  {
+    dtoField: 'revokeSessionsOnPasswordChange',
+    key: 'security.password.revoke_sessions_on_change',
+    namespace: 'auth.password',
+    kind: 'boolean',
+    syncFromRegistryToDb: true,
+  },
+  {
+    dtoField: 'passwordResetTtlSeconds',
+    key: 'security.password.reset_ttl_seconds',
+    namespace: 'auth.password',
+    kind: 'number',
+  },
+  // Crypto
+  {
+    dtoField: 'passwordHashAlgorithm',
+    key: 'security.crypto.password_hash_algorithm',
+    namespace: 'auth.crypto',
+    kind: 'passwordHashAlgo',
+    syncFromRegistryToDb: true,
+  },
+  {
+    dtoField: 'dbEncryptionAlgorithm',
+    key: 'security.crypto.db_encryption_algorithm',
+    namespace: 'auth.crypto',
+    kind: 'dbEncryptionAlgo',
+    syncFromRegistryToDb: true,
+  },
+  {
+    dtoField: 'encryptFieldsAtRest',
+    key: 'security.crypto.encrypt_fields_at_rest',
+    namespace: 'auth.crypto',
+    kind: 'boolean',
+    syncFromRegistryToDb: true,
+  },
+  // MFA & Step-Up
+  {
+    dtoField: 'mfaPolicy',
+    key: 'security.mfa.policy',
+    namespace: 'auth.mfa',
+    kind: 'mfaPolicy',
+    syncFromRegistryToDb: true,
+  },
+  {
+    dtoField: 'allowedMfaMethods',
+    key: 'security.mfa.allowed_methods',
+    namespace: 'auth.mfa',
+    kind: 'mfaMethods',
+    syncFromRegistryToDb: true,
+  },
+  {
+    dtoField: 'mfaEmailOtpTtlSeconds',
+    key: 'security.mfa.email_otp_ttl_seconds',
+    namespace: 'auth.mfa',
+    kind: 'number',
+  },
+  {
+    dtoField: 'mfaSmsOtpTtlSeconds',
+    key: 'security.mfa.sms_otp_ttl_seconds',
+    namespace: 'auth.mfa',
+    kind: 'number',
+  },
+  {
+    dtoField: 'mfaTrustedDeviceDays',
+    key: 'security.mfa.trusted_device_days',
+    namespace: 'auth.mfa',
+    kind: 'number',
+  },
+  {
+    dtoField: 'mfaMaxTrustedDevices',
+    key: 'security.mfa.max_trusted_devices',
+    namespace: 'auth.mfa',
+    kind: 'number',
+  },
+  {
+    dtoField: 'mfaRecoveryCodeCount',
+    key: 'security.mfa.recovery_code_count',
+    namespace: 'auth.mfa',
+    kind: 'number',
+  },
+  {
+    dtoField: 'mfaChallengeTtlSeconds',
+    key: 'security.mfa.challenge_ttl_seconds',
+    namespace: 'auth.mfa',
+    kind: 'number',
+  },
+  {
+    dtoField: 'mfaAdminRoleCodes',
+    key: 'security.mfa.admin_role_codes',
+    namespace: 'auth.mfa',
+    kind: 'stringArray',
+  },
+  {
+    dtoField: 'stepUpTokenTtlSeconds',
+    key: 'security.step_up.ttl_seconds',
+    namespace: 'auth.step_up',
+    kind: 'number',
+  },
+  // Login & Registration & Verification & OTP
+  {
+    dtoField: 'maxFailedLoginAttempts',
+    key: 'security.login.max_failed_attempts',
+    namespace: 'auth.login',
+    kind: 'number',
+    syncFromRegistryToDb: true,
+  },
+  {
+    dtoField: 'lockoutDurationMinutes',
+    key: 'security.login.lockout_duration_minutes',
+    namespace: 'auth.login',
+    kind: 'number',
+    syncFromRegistryToDb: true,
+  },
+  {
+    dtoField: 'allowEmailRegistration',
+    key: 'security.registration.allow_email',
+    namespace: 'auth.registration',
+    kind: 'boolean',
+    syncFromRegistryToDb: true,
+  },
+  {
+    dtoField: 'allowPhoneRegistration',
+    key: 'security.registration.allow_phone',
+    namespace: 'auth.registration',
+    kind: 'boolean',
+    syncFromRegistryToDb: true,
+  },
+  {
+    dtoField: 'requireEmailVerification',
+    key: 'security.registration.require_email_verification',
+    namespace: 'auth.registration',
+    kind: 'boolean',
+    syncFromRegistryToDb: true,
+  },
+  {
+    dtoField: 'requirePhoneVerification',
+    key: 'security.registration.require_phone_verification',
+    namespace: 'auth.registration',
+    kind: 'boolean',
+    syncFromRegistryToDb: true,
+  },
+  {
+    dtoField: 'emailVerificationTtlSeconds',
+    key: 'security.verification.email_ttl_seconds',
+    namespace: 'auth.verification',
+    kind: 'number',
+  },
+  {
+    dtoField: 'phoneOtpTtlSeconds',
+    key: 'security.verification.phone_otp_ttl_seconds',
+    namespace: 'auth.verification',
+    kind: 'number',
+  },
+  {
+    dtoField: 'otpMaxSendCount',
+    key: 'security.otp.max_send_count',
+    namespace: 'auth.otp',
+    kind: 'number',
+    syncFromRegistryToDb: true,
+  },
+  {
+    dtoField: 'otpMaxAttempts',
+    key: 'security.otp.max_attempts',
+    namespace: 'auth.otp',
+    kind: 'number',
+    syncFromRegistryToDb: true,
+  },
+  {
+    dtoField: 'otpCooldownSeconds',
+    key: 'security.otp.cooldown_seconds',
+    namespace: 'auth.otp',
+    kind: 'number',
+    syncFromRegistryToDb: true,
+  },
+  // Session & Audit & API Client
+  {
+    dtoField: 'sessionIdleTimeoutMinutes',
+    key: 'security.session.idle_timeout_minutes',
+    namespace: 'auth.session',
+    kind: 'number',
+    syncFromRegistryToDb: true,
+  },
+  {
+    dtoField: 'sessionMaxLifetimeMinutes',
+    key: 'security.session.max_lifetime_minutes',
+    namespace: 'auth.session',
+    kind: 'number',
+    syncFromRegistryToDb: true,
+  },
+  {
+    dtoField: 'sessionAccessTokenTtlSeconds',
+    key: 'security.session.access_token_ttl_seconds',
+    namespace: 'auth.session',
+    kind: 'number',
+  },
+  {
+    dtoField: 'sessionRefreshTokenTtlSeconds',
+    key: 'security.session.refresh_token_ttl_seconds',
+    namespace: 'auth.session',
+    kind: 'number',
+  },
+  {
+    dtoField: 'enableLoginAuditLog',
+    key: 'security.audit.enable_login_log',
+    namespace: 'auth.audit',
+    kind: 'boolean',
+    syncFromRegistryToDb: true,
+  },
+  {
+    dtoField: 'apiClientDefaultTokenTtlSeconds',
+    key: 'security.api_client.default_token_ttl_seconds',
+    namespace: 'auth.api_client',
+    kind: 'number',
+  },
+  {
+    dtoField: 'apiClientMaxUsageLogs',
+    key: 'security.api_client.max_usage_logs',
+    namespace: 'auth.api_client',
+    kind: 'number',
+  },
+];
+
+const DESCRIPTOR_BY_KEY = new Map<string, SecuritySettingDescriptor>(
+  SECURITY_SETTING_DESCRIPTORS.map((d) => [d.key, d]),
+);
+
+function coerceRegistryEventValue(kind: SettingDescriptorKind, raw: unknown): unknown {
+  switch (kind) {
+    case 'number':
+      return typeof raw === 'number' ? raw : undefined;
+    case 'boolean':
+      return typeof raw === 'boolean' ? raw : undefined;
+    case 'passwordHashAlgo':
+      return typeof raw === 'string' &&
+        (PASSWORD_HASH_ALGORITHMS as readonly string[]).includes(raw)
+        ? (raw as PasswordHashAlgorithm)
+        : undefined;
+    case 'dbEncryptionAlgo':
+      return typeof raw === 'string' &&
+        (DB_ENCRYPTION_ALGORITHMS as readonly string[]).includes(raw)
+        ? (raw as DbEncryptionAlgorithm)
+        : undefined;
+    case 'mfaPolicy':
+      return typeof raw === 'string' && VALID_MFA_POLICIES.has(raw)
+        ? (raw as MfaPolicyType)
+        : undefined;
+    case 'mfaMethods': {
+      if (!Array.isArray(raw)) return undefined;
+      const valid = raw.filter(
+        (m): m is MfaMethodType => typeof m === 'string' && VALID_MFA_METHODS.has(m),
+      );
+      return valid.length > 0 ? valid : undefined;
+    }
+    case 'stringArray':
+      return Array.isArray(raw)
+        ? raw.filter((item): item is string => typeof item === 'string')
+        : undefined;
+  }
+}
+
 @Injectable()
 export class SecuritySettingsService {
   private readonly registry: SettingRegistryService;
@@ -51,54 +411,27 @@ export class SecuritySettingsService {
   ) {
     this.registry = settingRegistry ?? defaultSettingRegistry;
     this.registry.onSettingChanged(async (evt) => {
-      if (this.isSyncingFromRegistry || evt.organizationUnitId !== null) {
+      if (this.isSyncingFromRegistry || evt.organizationUnitId !== null || !this.settingRepo) {
         return;
       }
       if (evt.environment !== 'ALL' && evt.environment !== this.registry.getActiveEnvironment()) {
         return;
       }
-      const patch: Partial<UpdateSecuritySettingsRequest> = {};
-      if (evt.key === 'security.password.min_length' && typeof evt.value === 'number') {
-        patch.passwordMinLength = evt.value;
-      } else if (
-        evt.key === 'security.password.require_uppercase' &&
-        typeof evt.value === 'boolean'
-      ) {
-        patch.requireUppercase = evt.value;
-      } else if (
-        evt.key === 'security.password.require_numbers' &&
-        typeof evt.value === 'boolean'
-      ) {
-        patch.requireNumbers = evt.value;
-      } else if (
-        evt.key === 'security.password.require_special_chars' &&
-        typeof evt.value === 'boolean'
-      ) {
-        patch.requireSpecialChars = evt.value;
-      } else if (
-        evt.key === 'security.login.max_failed_attempts' &&
-        typeof evt.value === 'number'
-      ) {
-        patch.maxFailedLoginAttempts = evt.value;
-      } else if (
-        evt.key === 'security.login.lockout_duration_minutes' &&
-        typeof evt.value === 'number'
-      ) {
-        patch.lockoutDurationMinutes = evt.value;
-      } else if (
-        evt.key === 'security.session.idle_timeout_minutes' &&
-        typeof evt.value === 'number'
-      ) {
-        patch.sessionIdleTimeoutMinutes = evt.value;
+      const descriptor = DESCRIPTOR_BY_KEY.get(evt.key);
+      if (!descriptor?.syncFromRegistryToDb) {
+        return;
       }
-
-      if (Object.keys(patch).length > 0 && this.settingRepo) {
-        try {
-          this.isSyncingFromRegistry = true;
-          await this.updateSettings(patch as UpdateSecuritySettingsRequest);
-        } finally {
-          this.isSyncingFromRegistry = false;
-        }
+      const parsedValue = coerceRegistryEventValue(descriptor.kind, evt.value);
+      if (parsedValue === undefined) {
+        return;
+      }
+      try {
+        this.isSyncingFromRegistry = true;
+        await this.updateSettings({
+          [descriptor.dtoField]: parsedValue,
+        } as UpdateSecuritySettingsRequest);
+      } finally {
+        this.isSyncingFromRegistry = false;
       }
     });
   }
@@ -125,81 +458,27 @@ export class SecuritySettingsService {
       throw new Error('AuthSecuritySettingRepository is not initialized');
     }
     const current = await this.getSettings();
+    const definedUpdates: Record<string, unknown> = {};
+    for (const { dtoField } of SECURITY_SETTING_DESCRIPTORS) {
+      const val = dto[dtoField];
+      if (val !== undefined) {
+        definedUpdates[dtoField] = val;
+      }
+    }
+    if (dto.disallowedPasswords !== undefined) {
+      definedUpdates.disallowedPasswords = [
+        ...new Set(dto.disallowedPasswords.map((p) => p.trim().toLowerCase()).filter(Boolean)),
+      ];
+    }
+    if (dto.mfaAdminRoleCodes !== undefined) {
+      definedUpdates.mfaAdminRoleCodes = [
+        ...new Set(dto.mfaAdminRoleCodes.map((r) => r.trim().toUpperCase()).filter(Boolean)),
+      ];
+    }
+
     const next: SecuritySettingsResponse = {
       ...current,
-      ...(dto.passwordHashAlgorithm !== undefined
-        ? { passwordHashAlgorithm: dto.passwordHashAlgorithm }
-        : {}),
-      ...(dto.dbEncryptionAlgorithm !== undefined
-        ? { dbEncryptionAlgorithm: dto.dbEncryptionAlgorithm }
-        : {}),
-      ...(dto.encryptFieldsAtRest !== undefined
-        ? { encryptFieldsAtRest: dto.encryptFieldsAtRest }
-        : {}),
-      ...(dto.mfaPolicy !== undefined ? { mfaPolicy: dto.mfaPolicy } : {}),
-      ...(dto.allowedMfaMethods !== undefined ? { allowedMfaMethods: dto.allowedMfaMethods } : {}),
-      ...(dto.maxFailedLoginAttempts !== undefined
-        ? { maxFailedLoginAttempts: dto.maxFailedLoginAttempts }
-        : {}),
-      ...(dto.lockoutDurationMinutes !== undefined
-        ? { lockoutDurationMinutes: dto.lockoutDurationMinutes }
-        : {}),
-      ...(dto.passwordMinLength !== undefined ? { passwordMinLength: dto.passwordMinLength } : {}),
-      ...(dto.requireUppercase !== undefined ? { requireUppercase: dto.requireUppercase } : {}),
-      ...(dto.requireNumbers !== undefined ? { requireNumbers: dto.requireNumbers } : {}),
-      ...(dto.requireSpecialChars !== undefined
-        ? { requireSpecialChars: dto.requireSpecialChars }
-        : {}),
-      ...(dto.requireCurrentPasswordOnChange !== undefined
-        ? { requireCurrentPasswordOnChange: dto.requireCurrentPasswordOnChange }
-        : {}),
-      ...(dto.disallowedPasswords !== undefined
-        ? {
-            disallowedPasswords: [
-              ...new Set(
-                dto.disallowedPasswords.map((p) => p.trim().toLowerCase()).filter(Boolean),
-              ),
-            ],
-          }
-        : {}),
-      ...(dto.disallowUserInfoInPassword !== undefined
-        ? { disallowUserInfoInPassword: dto.disallowUserInfoInPassword }
-        : {}),
-      ...(dto.preventPasswordReuse !== undefined
-        ? { preventPasswordReuse: dto.preventPasswordReuse }
-        : {}),
-      ...(dto.passwordHistoryLimit !== undefined
-        ? { passwordHistoryLimit: dto.passwordHistoryLimit }
-        : {}),
-      ...(dto.revokeSessionsOnPasswordChange !== undefined
-        ? { revokeSessionsOnPasswordChange: dto.revokeSessionsOnPasswordChange }
-        : {}),
-      ...(dto.allowEmailRegistration !== undefined
-        ? { allowEmailRegistration: dto.allowEmailRegistration }
-        : {}),
-      ...(dto.allowPhoneRegistration !== undefined
-        ? { allowPhoneRegistration: dto.allowPhoneRegistration }
-        : {}),
-      ...(dto.requireEmailVerification !== undefined
-        ? { requireEmailVerification: dto.requireEmailVerification }
-        : {}),
-      ...(dto.requirePhoneVerification !== undefined
-        ? { requirePhoneVerification: dto.requirePhoneVerification }
-        : {}),
-      ...(dto.otpMaxSendCount !== undefined ? { otpMaxSendCount: dto.otpMaxSendCount } : {}),
-      ...(dto.otpMaxAttempts !== undefined ? { otpMaxAttempts: dto.otpMaxAttempts } : {}),
-      ...(dto.otpCooldownSeconds !== undefined
-        ? { otpCooldownSeconds: dto.otpCooldownSeconds }
-        : {}),
-      ...(dto.sessionIdleTimeoutMinutes !== undefined
-        ? { sessionIdleTimeoutMinutes: dto.sessionIdleTimeoutMinutes }
-        : {}),
-      ...(dto.sessionMaxLifetimeMinutes !== undefined
-        ? { sessionMaxLifetimeMinutes: dto.sessionMaxLifetimeMinutes }
-        : {}),
-      ...(dto.enableLoginAuditLog !== undefined
-        ? { enableLoginAuditLog: dto.enableLoginAuditLog }
-        : {}),
+      ...(definedUpdates as Partial<SecuritySettingsResponse>),
       updatedAt: new Date().toISOString(),
     };
 
@@ -235,11 +514,11 @@ export class SecuritySettingsService {
     };
 
     const saved = await this.settingRepo.saveGlobal(entityPayload);
+    if (!this.isSyncingFromRegistry) {
+      await this.syncToSettingRegistry(dto, next);
+    }
     const settings = this.toResponse(saved);
     this.syncCryptoProviders(settings);
-    if (!this.isSyncingFromRegistry) {
-      await this.syncToSettingRegistry(dto, settings);
-    }
     return settings;
   }
 
@@ -247,65 +526,49 @@ export class SecuritySettingsService {
     dto: UpdateSecuritySettingsRequest,
     settings: SecuritySettingsResponse,
   ): Promise<void> {
-    const mappings: Array<{
-      dtoField: keyof UpdateSecuritySettingsRequest;
-      key: string;
-      namespace: string;
-      value: unknown;
-    }> = [
-      {
-        dtoField: 'passwordMinLength',
-        key: 'security.password.min_length',
-        namespace: 'auth.password',
-        value: settings.passwordMinLength,
-      },
-      {
-        dtoField: 'requireUppercase',
-        key: 'security.password.require_uppercase',
-        namespace: 'auth.password',
-        value: settings.requireUppercase,
-      },
-      {
-        dtoField: 'requireNumbers',
-        key: 'security.password.require_numbers',
-        namespace: 'auth.password',
-        value: settings.requireNumbers,
-      },
-      {
-        dtoField: 'requireSpecialChars',
-        key: 'security.password.require_special_chars',
-        namespace: 'auth.password',
-        value: settings.requireSpecialChars,
-      },
-      {
-        dtoField: 'maxFailedLoginAttempts',
-        key: 'security.login.max_failed_attempts',
-        namespace: 'auth.login',
-        value: settings.maxFailedLoginAttempts,
-      },
-      {
-        dtoField: 'lockoutDurationMinutes',
-        key: 'security.login.lockout_duration_minutes',
-        namespace: 'auth.login',
-        value: settings.lockoutDurationMinutes,
-      },
-      {
-        dtoField: 'sessionIdleTimeoutMinutes',
-        key: 'security.session.idle_timeout_minutes',
-        namespace: 'auth.session',
-        value: settings.sessionIdleTimeoutMinutes,
-      },
-    ];
-
-    for (const item of mappings) {
+    for (const item of SECURITY_SETTING_DESCRIPTORS) {
       if (dto[item.dtoField] === undefined) {
         continue;
       }
+      const value = settings[item.dtoField as keyof SecuritySettingsResponse];
+      const isJson = item.kind === 'mfaMethods' || item.kind === 'stringArray';
+      const serialized = isJson ? JSON.stringify(value) : String(value);
       const existing = this.registry.getDefinition(item.key);
+      const isBoolean = item.kind === 'boolean';
+      const isNumber = item.kind === 'number';
       if (existing) {
         this.registry.upsertDefinition({
           ...existing,
-          globalSerializedValue: String(item.value),
+          globalSerializedValue: serialized,
+        });
+      } else {
+        this.registry.upsertDefinition({
+          id: 0,
+          key: item.key,
+          groupId: 0,
+          groupCode: 'security',
+          module: 'auth',
+          namespace: item.namespace,
+          name: item.key,
+          description: null,
+          valueType: isJson
+            ? SETTING_VALUE_TYPE.JSON
+            : isBoolean
+              ? SETTING_VALUE_TYPE.BOOLEAN
+              : isNumber
+                ? SETTING_VALUE_TYPE.NUMBER
+                : SETTING_VALUE_TYPE.TEXT,
+          valueTypeName: isJson ? 'JSON' : isBoolean ? 'BOOLEAN' : isNumber ? 'NUMBER' : 'TEXT',
+          defaultSerializedValue: serialized,
+          globalSerializedValue: serialized,
+          isSensitive: false,
+          isEncrypted: false,
+          allowUnitOverride: true,
+          validationRules: {},
+          isSystem: true,
+          sortOrder: 0,
+          status: SETTING_ITEM_STATUS.ACTIVE,
+          updatedBy: null,
         });
       }
       try {
@@ -316,7 +579,7 @@ export class SecuritySettingsService {
           namespace: item.namespace,
           environment: 'ALL',
           organizationUnitId: null,
-          value: item.value,
+          value,
         });
       } finally {
         this.isSyncingFromRegistry = false;
@@ -391,6 +654,81 @@ export class SecuritySettingsService {
           : 10080,
       enableLoginAuditLog:
         persisted.enableLoginAuditLog !== undefined ? Boolean(persisted.enableLoginAuditLog) : true,
+      passwordResetTtlSeconds: this.registry.getNumber(
+        'security.password.reset_ttl_seconds',
+        undefined,
+        900,
+      ),
+      mfaEmailOtpTtlSeconds: this.registry.getNumber(
+        'security.mfa.email_otp_ttl_seconds',
+        undefined,
+        300,
+      ),
+      mfaSmsOtpTtlSeconds: this.registry.getNumber(
+        'security.mfa.sms_otp_ttl_seconds',
+        undefined,
+        300,
+      ),
+      mfaTrustedDeviceDays: this.registry.getNumber(
+        'security.mfa.trusted_device_days',
+        undefined,
+        30,
+      ),
+      mfaMaxTrustedDevices: this.registry.getNumber(
+        'security.mfa.max_trusted_devices',
+        undefined,
+        20,
+      ),
+      mfaRecoveryCodeCount: this.registry.getNumber(
+        'security.mfa.recovery_code_count',
+        undefined,
+        8,
+      ),
+      mfaChallengeTtlSeconds: this.registry.getNumber(
+        'security.mfa.challenge_ttl_seconds',
+        undefined,
+        300,
+      ),
+      mfaAdminRoleCodes: this.registry.getJson<string[]>(
+        'security.mfa.admin_role_codes',
+        undefined,
+        ['SUPER_ADMIN', 'ADMIN', 'SYSTEM_ADMIN', 'IAM_ADMIN', 'SECURITY_ADMIN'],
+      ),
+      stepUpTokenTtlSeconds: this.registry.getNumber(
+        'security.step_up.ttl_seconds',
+        undefined,
+        300,
+      ),
+      emailVerificationTtlSeconds: this.registry.getNumber(
+        'security.verification.email_ttl_seconds',
+        undefined,
+        900,
+      ),
+      phoneOtpTtlSeconds: this.registry.getNumber(
+        'security.verification.phone_otp_ttl_seconds',
+        undefined,
+        300,
+      ),
+      sessionAccessTokenTtlSeconds: this.registry.getNumber(
+        'security.session.access_token_ttl_seconds',
+        undefined,
+        900,
+      ),
+      sessionRefreshTokenTtlSeconds: this.registry.getNumber(
+        'security.session.refresh_token_ttl_seconds',
+        undefined,
+        604800,
+      ),
+      apiClientDefaultTokenTtlSeconds: this.registry.getNumber(
+        'security.api_client.default_token_ttl_seconds',
+        undefined,
+        3600,
+      ),
+      apiClientMaxUsageLogs: this.registry.getNumber(
+        'security.api_client.max_usage_logs',
+        undefined,
+        50,
+      ),
       availablePasswordHashAlgorithms: [...PASSWORD_HASH_ALGORITHMS],
       availableDbEncryptionAlgorithms: [...DB_ENCRYPTION_ALGORITHMS],
       updatedAt: (persisted.updatedAt ?? new Date()).toISOString(),

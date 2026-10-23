@@ -16,7 +16,7 @@
   },
   "database": {
     "hasMigrations": true,
-    "tables": ["roles", "role_permissions"]
+    "tables": ["roles", "permissions", "role_permissions", "audit_logs"]
   },
   "codeTypes": [
     {
@@ -74,9 +74,12 @@
           "numericCode": 2,
           "code": "ORG_UNIT",
           "behaviorCode": "ORG_UNIT",
-          "name": "Theo đơn vị / chi nhánh",
-          "labels": { "vi": "Theo đơn vị / chi nhánh", "en": "Organization Unit" },
-          "aliases": ["ORGANIZATION_UNIT", "UNIT", "BRANCH"],
+          "name": "Theo đơn vị / chi nhánh / phòng ban",
+          "labels": {
+            "vi": "Theo đơn vị / chi nhánh / phòng ban",
+            "en": "Organization Unit / Department"
+          },
+          "aliases": ["ORGANIZATION_UNIT", "UNIT", "BRANCH", "DEPARTMENT", "DEPT", "TEAM"],
           "badgeTone": "info",
           "color": "indigo",
           "sortOrder": 2,
@@ -84,18 +87,6 @@
         },
         {
           "numericCode": 3,
-          "code": "DEPARTMENT",
-          "behaviorCode": "DEPARTMENT",
-          "name": "Theo phòng ban / nhóm",
-          "labels": { "vi": "Theo phòng ban / nhóm", "en": "Department / Team" },
-          "aliases": ["DEPT", "TEAM"],
-          "badgeTone": "info",
-          "color": "blue",
-          "sortOrder": 3,
-          "isSystem": true
-        },
-        {
-          "numericCode": 4,
           "code": "SUBORDINATES",
           "behaviorCode": "SUBORDINATES",
           "name": "Theo cấp dưới quản lý",
@@ -103,11 +94,11 @@
           "aliases": ["MANAGER", "SUBORDINATE", "TEAM_SUBORDINATES"],
           "badgeTone": "warning",
           "color": "teal",
-          "sortOrder": 4,
+          "sortOrder": 3,
           "isSystem": true
         },
         {
-          "numericCode": 5,
+          "numericCode": 4,
           "code": "SELF",
           "behaviorCode": "SELF",
           "name": "Chỉ dữ liệu cá nhân",
@@ -115,11 +106,85 @@
           "aliases": ["PERSONAL", "OWN", "ME"],
           "badgeTone": "neutral",
           "color": "slate",
-          "sortOrder": 5,
+          "sortOrder": 4,
           "isDefault": true,
           "isSystem": true
         }
       ]
+    }
+  ],
+  "settings": [
+    {
+      "key": "roles.data_scope.all_allowed_role_patterns",
+      "groupCode": "security",
+      "module": "roles",
+      "namespace": "roles.data_scope",
+      "name": "Mẫu mã vai trò được phép gán Phạm vi dữ liệu Toàn hệ thống (ALL)",
+      "description": "Danh sách mã vai trò hoặc mẫu tiền tố (kết thúc bằng *) được phép gán DATA_SCOPE.ALL mà không cần quyền cấp hệ thống",
+      "valueType": "JSON",
+      "defaultValue": [
+        "super_admin",
+        "admin",
+        "root",
+        "auditor",
+        "admin_*",
+        "super_*",
+        "system_*",
+        "auditor_*"
+      ],
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 40
+    },
+    {
+      "key": "roles.data_scope.all_allowed_permissions",
+      "groupCode": "security",
+      "module": "roles",
+      "namespace": "roles.data_scope",
+      "name": "Danh sách quyền hạn cho phép gán Phạm vi dữ liệu Toàn hệ thống (ALL)",
+      "description": "Danh sách mã quyền hoặc nhóm quyền (kết thúc bằng *) cho phép vai trò tùy chỉnh được nhận DATA_SCOPE.ALL",
+      "valueType": "JSON",
+      "defaultValue": [
+        "system.full_access",
+        "data_scope.all",
+        "roles.manage",
+        "system.*"
+      ],
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 41
+    },
+    {
+      "key": "roles.audit_log.default_page_size",
+      "groupCode": "security",
+      "module": "roles",
+      "namespace": "roles.audit_log",
+      "name": "Số dòng mặc định mỗi trang khi tra cứu Nhật ký thao tác (Audit Log)",
+      "description": "Số lượng bản ghi Audit Log trả về mặc định khi client không truyền tham số limit",
+      "valueType": "NUMBER",
+      "defaultValue": 20,
+      "validationRules": { "min": 1, "max": 200, "integerOnly": true },
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 42
+    },
+    {
+      "key": "roles.audit_log.max_page_size",
+      "groupCode": "security",
+      "module": "roles",
+      "namespace": "roles.audit_log",
+      "name": "Số dòng tối đa mỗi trang khi tra cứu Nhật ký thao tác (Audit Log)",
+      "description": "Giới hạn số bản ghi Audit Log tối đa được phép lấy trong một lần truy vấn phân trang",
+      "valueType": "NUMBER",
+      "defaultValue": 200,
+      "validationRules": { "min": 10, "max": 1000, "integerOnly": true },
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 43
     }
   ],
   "menus": [

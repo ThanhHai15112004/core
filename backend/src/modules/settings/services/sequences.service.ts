@@ -21,6 +21,7 @@ import {
   discoverManifestSequences,
   formatSequenceCode,
   parseNumericUserId,
+  resolvePagination,
   resolveSequenceDateParts,
   safeJsonParseObject,
   validateSequenceRule,
@@ -608,7 +609,11 @@ export class SequencesService implements ISequencesPublicService, OnModuleInit {
     if (query?.actorUserId !== undefined) {
       items = items.filter((h) => h.actorUserId === query.actorUserId);
     }
-    return items.slice(0, Math.min(Math.max(query?.limit ?? 50, 1), 200));
+    const { limit } = resolvePagination(query, {
+      defaultLimit: 50,
+      maxLimit: 200,
+    });
+    return items.slice(0, limit);
   }
 
   private async ensureHydrated(): Promise<void> {

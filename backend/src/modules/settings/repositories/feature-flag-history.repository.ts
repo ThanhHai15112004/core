@@ -1,6 +1,7 @@
 import { Injectable, Optional } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { BaseTypeOrmRepository, TransactionManager } from '@packages/database/index.js';
+import { resolvePagination } from '@packages/kernel/index.js';
 import { FeatureFlagHistoryEntity } from '../entities/feature-flag-history.entity.js';
 
 @Injectable()
@@ -19,7 +20,7 @@ export class FeatureFlagHistoryRepository extends BaseTypeOrmRepository<FeatureF
     actorUserId?: number | undefined;
     limit?: number | undefined;
   }): Promise<FeatureFlagHistoryEntity[]> {
-    const limit = Math.max(1, Math.min(200, params?.limit ?? 50));
+    const { limit } = resolvePagination(params, { defaultLimit: 50, maxLimit: 200 });
     return this.executeReadOnly(async (repo) => {
       const qb = repo.createQueryBuilder('ffh').orderBy('ffh.id', 'DESC').take(limit);
 

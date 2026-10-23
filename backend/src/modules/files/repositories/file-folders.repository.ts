@@ -42,6 +42,34 @@ export class FileFoldersRepository extends BaseTypeOrmRepository<FileFolderEntit
     );
   }
 
+  /** Tìm thư mục theo thư mục cha và slug để chống trùng tên cùng cấp */
+  public async findByParentAndSlug(
+    parentId: number | null,
+    slug: string,
+  ): Promise<FileFolderEntity | null> {
+    return this.executeReadOnly(async (repo) => {
+      const qb = repo.createQueryBuilder('folder').where('LOWER(folder.slug) = :slug', {
+        slug: slug.toLowerCase(),
+      });
+      if (parentId === null) {
+        qb.andWhere('folder.parentId IS NULL');
+      } else {
+        qb.andWhere('folder.parentId = :parentId', { parentId });
+      }
+      return qb.getOne();
+    });
+  }
+
+  /** Tìm tất cả thư mục con cháu có `folderPath` bắt đầu bằng tiền tố `pathPrefix` */
+  public async findDescendantsByPathPrefix(pathPrefix: string): Promise<FileFolderEntity[]> {
+    return this.executeReadOnly(async (repo) =>
+      repo
+        .createQueryBuilder('folder')
+        .where('folder.folderPath LIKE :prefix', { prefix: `${pathPrefix}%` })
+        .getMany(),
+    );
+  }
+
   /** Xóa mềm thư mục theo ID */
   public async softDeleteById(id: number): Promise<void> {
     await this.repository.softDelete(id);

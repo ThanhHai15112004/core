@@ -10,11 +10,18 @@ import {
   HTTP_ERROR_CODE,
   NotFoundAppException,
   type ResolvedCodeValueView,
+  SettingRegistryService,
   defaultCodeRegistry,
+  defaultSettingRegistry,
   discoverManifestCodeTypes,
   safeJsonParseObject,
 } from '@packages/kernel/index.js';
-import { CoreI18nService } from '@packages/i18n/index.js';
+import {
+  CoreI18nService,
+  type SupportedLocale,
+  isSupportedLocale,
+  resolveSystemDefaultLocale,
+} from '@packages/i18n/index.js';
 import { AuditLogService } from '@packages/security/index.js';
 import type { CodeTypeSummary, ICodesPublicService, SyncCodesResult } from '../contracts/index.js';
 import type { CodeTypeEntity } from '../entities/code-type.entity.js';
@@ -53,6 +60,7 @@ import {
 export class CodesService implements ICodesPublicService, OnModuleInit {
   private readonly manifestCodeTypes = new Map<string, CodeTypeManifestItem>();
   private readonly registry: CodeRegistryService;
+  private readonly settingRegistry: SettingRegistryService;
 
   constructor(
     private readonly codeTypeRepository: CodeTypeRepository,
@@ -66,8 +74,12 @@ export class CodesService implements ICodesPublicService, OnModuleInit {
     @Optional()
     @Inject(AuditLogService)
     private readonly auditLogService: AuditLogService | null = null,
+    @Optional()
+    @Inject(SettingRegistryService)
+    settingRegistryService: SettingRegistryService | null = null,
   ) {
     this.registry = codeRegistryService ?? defaultCodeRegistry;
+    this.settingRegistry = settingRegistryService ?? defaultSettingRegistry;
     this.configureI18nBridge();
     this.discoverManifestCodeTypes();
   }
@@ -580,6 +592,7 @@ export class CodesService implements ICodesPublicService, OnModuleInit {
       codeValueRepository: this.codeValueRepository,
       manifestCodeTypes: this.manifestCodeTypes,
       registry: this.registry,
+      settingRegistry: this.settingRegistry,
       syncManifests: () => this.syncManifests(),
       createCodeValue: (typeCode, payload) => this.createCodeValue(typeCode, payload),
     });
@@ -605,16 +618,19 @@ export class CodesService implements ICodesPublicService, OnModuleInit {
 
   /** Xuất danh mục dùng chung ra Excel (.xlsx) hoặc CSV (.csv) phục vụ quản trị (Mục 5.4.7) */
   public async exportCodes(query: Partial<ExportCodesQuery> = {}): Promise<ExportCodesResponse> {
+    const locale = this.resolveEffectiveLocale();
     const allTypes = await this.listCodeTypes({
       module: query.module,
       includeValues: true,
-      locale: 'vi',
+      locale,
     });
 
     const response = buildCodesExportPayload({
       registry: this.registry,
+      settingRegistry: this.settingRegistry,
       allTypes,
       query,
+      locale,
     });
 
     await this.auditLogService?.record({
@@ -639,7 +655,7 @@ export class CodesService implements ICodesPublicService, OnModuleInit {
 
   /** Xuất file mẫu (Template) Excel (.xlsx) hoặc CSV (.csv) phục vụ Import danh mục (Mục 5.4.6) */
   public exportImportTemplate(format: 'csv' | 'xlsx' = 'xlsx'): ExportCodesResponse {
-    return buildCodesImportTemplatePayload(this.registry, format);
+    return buildCodesImportTemplatePayload(this.registry, format, this.resolveEffectiveLocale());
   }
 
   private async validateCodeValueCodeChange(
@@ -740,7 +756,9 @@ export class CodesService implements ICodesPublicService, OnModuleInit {
       const moduleName = parts[0] ?? 'core';
       const shortType = parts.slice(1).join('.');
       const key = `${moduleName}.codes.${shortType}.${valueCode}`;
-      const supportedLocale = locale === 'en' ? 'en' : 'vi';
+      const supportedLocale: SupportedLocale = isSupportedLocale(locale)
+        ? locale
+        : resolveSystemDefaultLocale();
       const translated = this.i18nService.t(key, {}, supportedLocale);
       return translated && translated !== key ? translated : undefined;
     });
@@ -856,6 +874,6 @@ export class CodesService implements ICodesPublicService, OnModuleInit {
     if (requestedLocale && requestedLocale.trim()) {
       return requestedLocale.trim().toLowerCase();
     }
-    return this.i18nService?.getCurrentLocale() ?? 'vi';
+    return this.i18nService?.getCurrentLocale() ?? resolveSystemDefaultLocale();
   }
 }

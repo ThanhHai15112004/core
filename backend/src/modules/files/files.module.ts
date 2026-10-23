@@ -9,10 +9,12 @@ import { UsersModule } from '@modules/users/index.js';
 import { FILES_PUBLIC_SERVICE } from './contracts/index.js';
 import { FilesController } from './controllers/files.controller.js';
 import { FileFolderEntity } from './entities/file-folder.entity.js';
+import { FilePermissionEntity } from './entities/file-permission.entity.js';
 import { FileRecordEntity } from './entities/file-record.entity.js';
 import { FileUsageEntity } from './entities/file-usage.entity.js';
 import { FilesMapper } from './mappers/files.mapper.js';
 import { FileFoldersRepository } from './repositories/file-folders.repository.js';
+import { FilePermissionsRepository } from './repositories/file-permissions.repository.js';
 import { FileUsagesRepository } from './repositories/file-usages.repository.js';
 import { FilesRepository } from './repositories/files.repository.js';
 import { FileValidationService } from './services/file-validation.service.js';
@@ -29,13 +31,19 @@ new CoreI18nService().registerNamespace('files', { vi: viFiles, en: enFiles });
     StorageModule,
     OrganizationsModule,
     UsersModule,
-    TypeOrmModule.forFeature([FileFolderEntity, FileRecordEntity, FileUsageEntity]),
+    TypeOrmModule.forFeature([
+      FileFolderEntity,
+      FileRecordEntity,
+      FileUsageEntity,
+      FilePermissionEntity,
+    ]),
   ],
   controllers: [FilesController],
   providers: [
     FileFoldersRepository,
     FilesRepository,
     FileUsagesRepository,
+    FilePermissionsRepository,
     FilesMapper,
     FileValidationService,
     FilesService,

@@ -4,7 +4,9 @@ import {
   BadRequestAppException,
   ForbiddenAppException,
   NotFoundAppException,
+  SettingRegistryService,
   UnauthorizedAppException,
+  defaultSettingRegistry,
   maskEmail as sharedMaskEmail,
 } from '@packages/kernel/index.js';
 import { PasswordHasherService } from '@packages/security/index.js';
@@ -64,6 +66,7 @@ export async function resolveUserCredentialsById(
 @Injectable()
 export class PasswordService {
   private readonly emailAdapter: IEmailNotificationAdapter;
+  private readonly settingRegistry: SettingRegistryService;
 
   constructor(
     private readonly passwordResetRepository: AuthPasswordResetRepository,
@@ -76,10 +79,23 @@ export class PasswordService {
     @Optional()
     @Inject(AUTH_EMAIL_NOTIFICATION_ADAPTER)
     emailAdapter?: IEmailNotificationAdapter,
+    @Optional() settingRegistry?: SettingRegistryService,
   ) {
     this.emailAdapter = emailAdapter ?? createDefaultEmailNotificationAdapter();
+    this.settingRegistry = settingRegistry ?? defaultSettingRegistry;
     this.usersPublicService.registerAdminPasswordResetDelegate?.((userId, input, actorId) =>
       this.adminResetUserPassword(userId, input, actorId),
+    );
+  }
+
+  private getPasswordResetTtlSeconds(): number {
+    return Math.max(
+      60,
+      this.settingRegistry.getNumber(
+        'security.password.reset_ttl_seconds',
+        undefined,
+        PASSWORD_RESET_TTL_SECONDS,
+      ),
     );
   }
 
@@ -212,6 +228,8 @@ export class PasswordService {
       : rawIdentifier;
     const user = await this.usersPublicService.findAuthUserByIdentifier(normalizedIdent);
 
+    const resetTtlSeconds = this.getPasswordResetTtlSeconds();
+
     // Luôn trả về thành công để chống dò quét tài khoản (User Enumeration Protection)
     if (
       !user ||
@@ -221,7 +239,7 @@ export class PasswordService {
     ) {
       return {
         accepted: true,
-        expiresInSeconds: PASSWORD_RESET_TTL_SECONDS,
+        expiresInSeconds: resetTtlSeconds,
       };
     }
 
@@ -229,7 +247,7 @@ export class PasswordService {
     const otpCode = this.passwordHasher.generateNumericOtp(6);
     const tokenHash = this.passwordHasher.sha256(plainToken);
     const otpCodeHash = this.passwordHasher.sha256(otpCode);
-    const expiresAt = new Date(Date.now() + PASSWORD_RESET_TTL_SECONDS * 1000);
+    const expiresAt = new Date(Date.now() + resetTtlSeconds * 1000);
     const settings = await this.securitySettingsService?.getSettings();
     const maxAttempts = settings?.otpMaxAttempts ?? DEFAULT_RESET_OTP_MAX_ATTEMPTS;
 
@@ -249,7 +267,7 @@ export class PasswordService {
         userId: user.id,
         email: user.email,
         otpCode,
-        expiresInSeconds: PASSWORD_RESET_TTL_SECONDS,
+        expiresInSeconds: resetTtlSeconds,
         purpose: 'PASSWORD_RESET',
         verificationToken: plainToken,
       });
@@ -259,7 +277,7 @@ export class PasswordService {
     const isProd = this.configService?.app.env === 'production';
     return {
       accepted: true,
-      expiresInSeconds: PASSWORD_RESET_TTL_SECONDS,
+      expiresInSeconds: resetTtlSeconds,
       ...(maskedTarget ? { maskedTarget } : {}),
       ...(!isProd
         ? {

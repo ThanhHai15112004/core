@@ -1125,6 +1125,7 @@ function createIamInMemoryHarness() {
     fieldEncryption,
     emailAdapter,
     smsProvider,
+    securitySettingsService,
   );
   const verificationService = new VerificationService(
     passwordHasher,

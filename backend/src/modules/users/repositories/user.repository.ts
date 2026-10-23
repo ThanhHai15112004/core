@@ -1,6 +1,7 @@
 import { Injectable, Optional } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { BaseTypeOrmRepository, TransactionManager } from '@packages/database/index.js';
+import { defaultSettingRegistry } from '@packages/kernel/index.js';
 import type { ResolvedDataScopeFilter } from '@packages/security/index.js';
 import type { UserStatusCode } from '../contracts/index.js';
 import { UserEntity } from '../entities/user.entity.js';
@@ -132,9 +133,16 @@ export class UserRepository extends BaseTypeOrmRepository<UserEntity> {
   public async searchPaginated(
     filter: SearchUsersFilter = {},
   ): Promise<{ items: UserEntity[]; total: number }> {
-    const page = Math.max(1, Math.trunc(filter.page ?? 1));
-    const limit = Math.max(1, Math.min(500, Math.trunc(filter.limit ?? 20)));
-    const skip = (page - 1) * limit;
+    const maxPageSize = defaultSettingRegistry.getNumber(
+      'users.pagination.max_page_size',
+      undefined,
+      500,
+    );
+    const maxExportRows = defaultSettingRegistry.getNumber(
+      'users.export.max_rows',
+      undefined,
+      5000,
+    );
 
     const qb = this.repository
       .createQueryBuilder('u')
@@ -212,9 +220,13 @@ export class UserRepository extends BaseTypeOrmRepository<UserEntity> {
     const sortCol = sortColumnMap[filter.sortBy ?? 'id'] ?? 'u.id';
     const sortDir = filter.sortOrder === 'DESC' ? 'DESC' : 'ASC';
 
-    qb.orderBy(sortCol, sortDir).skip(skip).take(limit);
+    qb.orderBy(sortCol, sortDir);
 
-    const [items, total] = await qb.getManyAndCount();
+    const { items, total } = await this.paginateQueryBuilder(qb, filter, {
+      defaultLimitKey: 'users.pagination.default_page_size',
+      defaultLimit: 20,
+      maxLimit: Math.max(maxPageSize, maxExportRows),
+    });
     return { items, total };
   }
 }

@@ -1,5 +1,10 @@
 import { Inject, Injectable, Optional } from '@nestjs/common';
-import { BadRequestAppException, parseXlsxToMatrix } from '@packages/kernel/index.js';
+import {
+  BadRequestAppException,
+  SettingRegistryService,
+  defaultSettingRegistry,
+  parseXlsxToMatrix,
+} from '@packages/kernel/index.js';
 import {
   type IOrganizationsPublicService,
   ORGANIZATIONS_PUBLIC_SERVICE,
@@ -20,6 +25,8 @@ const DEFAULT_BULK_PASSWORD = 'Abcd@454647#';
 
 @Injectable()
 export class UserImportService {
+  private readonly settingRegistry: SettingRegistryService;
+
   constructor(
     private readonly usersService: UsersService,
     private readonly userRepository: UserRepository,
@@ -28,7 +35,10 @@ export class UserImportService {
     @Optional()
     @Inject(ORGANIZATIONS_PUBLIC_SERVICE)
     private readonly organizationsPublicService: IOrganizationsPublicService | null = null,
-  ) {}
+    @Optional() settingRegistry?: SettingRegistryService,
+  ) {
+    this.settingRegistry = settingRegistry ?? defaultSettingRegistry;
+  }
 
   /** Nhập người dùng hàng loạt từ file Excel (.xlsx base64), chuỗi CSV hoặc mảng JSON (Mục 3.1.7) */
   public async bulkImport(
@@ -148,6 +158,13 @@ export class UserImportService {
         fullName: validRow.fullName,
       });
 
+      const fallbackPassword =
+        this.settingRegistry.getString(
+          'users.import.default_password',
+          matchedOrgIds[0] ? { organizationUnitId: matchedOrgIds[0] } : undefined,
+          DEFAULT_BULK_PASSWORD,
+        ) || DEFAULT_BULK_PASSWORD;
+
       try {
         const created = await this.usersService.create(
           {
@@ -157,7 +174,7 @@ export class UserImportService {
             lastName: nameParts.lastName,
             fullName: nameParts.fullName,
             phone: validRow.phone ?? null,
-            password: validRow.password || dto.defaultPassword || DEFAULT_BULK_PASSWORD,
+            password: validRow.password || dto.defaultPassword || fallbackPassword,
             status: validRow.status ?? USER_STATUS.ACTIVE,
             roleIds,
             organizationUnits,

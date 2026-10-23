@@ -4,15 +4,21 @@ import {
   type CodeRegistryService,
   type CodeTypeManifestItem,
   type ResolvedCodeValueView,
+  type SettingRegistryService,
   buildCsvContent,
   buildXlsxBuffer,
   cleanSpreadsheetCell,
   createSpreadsheetColumnFinder,
+  defaultSettingRegistry,
   detectSpreadsheetHeaderRowIndex,
   parseCsvToMatrix,
   parseXlsxToMatrix,
 } from '@packages/kernel/index.js';
-import { LocaleContext, LocaleFormatter } from '@packages/i18n/index.js';
+import {
+  LocaleContext,
+  LocaleFormatter,
+  resolveSystemDefaultLocale,
+} from '@packages/i18n/index.js';
 import type { CodeTypeSummary } from '../contracts/index.js';
 import type { CodeTypeRepository } from '../repositories/code-type.repository.js';
 import type { CodeValueRepository } from '../repositories/code-value.repository.js';
@@ -194,6 +200,7 @@ export async function executeBulkImportCodeValues(params: {
   codeValueRepository: CodeValueRepository;
   manifestCodeTypes: ReadonlyMap<string, CodeTypeManifestItem>;
   registry: CodeRegistryService;
+  settingRegistry?: SettingRegistryService | undefined;
   syncManifests: () => Promise<unknown>;
   createCodeValue: (
     typeCode: string,
@@ -207,11 +214,24 @@ export async function executeBulkImportCodeValues(params: {
     codeValueRepository,
     manifestCodeTypes,
     registry,
+    settingRegistry = defaultSettingRegistry,
     syncManifests,
     createCodeValue,
   } = params;
 
   const rawRows = parseImportPayloadToRows(dto, fallbackTypeCode);
+  const maxImportRows = settingRegistry.getNumber('codes.import.max_rows', undefined, 5000);
+  if (rawRows.length > maxImportRows) {
+    throw new BadRequestAppException('codes.importMaxRowsExceeded', [
+      { totalRows: rawRows.length, maxRows: maxImportRows },
+    ]);
+  }
+  const autoCreateMissingType = settingRegistry.getBoolean(
+    'codes.import.auto_create_missing_type',
+    undefined,
+    true,
+  );
+
   const errors: Array<{ row: number; identifier: string; message: string }> = [];
   const importedCodes: string[] = [];
   let skippedCount = 0;
@@ -286,6 +306,14 @@ export async function executeBulkImportCodeValues(params: {
       codeType = await codeTypeRepository.findByCode(resolvedTypeCode);
     }
     if (!codeType) {
+      if (!autoCreateMissingType) {
+        errors.push({
+          row: rowNumber,
+          identifier,
+          message: `Code type '${resolvedTypeCode}' does not exist and auto-creation is disabled`,
+        });
+        continue;
+      }
       const inferredMod = resolvedTypeCode.includes('.')
         ? resolvedTypeCode.split('.')[0]!
         : 'common';
@@ -384,10 +412,18 @@ export async function executeBulkImportCodeValues(params: {
 
 export function buildCodesExportPayload(params: {
   registry: CodeRegistryService;
+  settingRegistry?: SettingRegistryService | undefined;
   allTypes: readonly CodeTypeSummary[];
   query: Partial<ExportCodesQuery>;
+  locale?: string | undefined;
 }): ExportCodesResponse {
-  const { registry, allTypes, query } = params;
+  const {
+    registry,
+    settingRegistry = defaultSettingRegistry,
+    allTypes,
+    query,
+    locale = resolveSystemDefaultLocale(),
+  } = params;
   const format: 'csv' | 'xlsx' = query.format === 'xlsx' ? 'xlsx' : 'csv';
   const includeInactive = query.includeInactive ?? true;
 
@@ -401,7 +437,7 @@ export function buildCodesExportPayload(params: {
   for (const ct of filteredTypes) {
     const values = registry.listValues(ct.code, {
       includeInactive,
-      locale: 'vi',
+      locale,
     });
     for (const val of values) {
       stt++;
@@ -410,7 +446,12 @@ export function buildCodesExportPayload(params: {
   }
 
   const effectiveTimezone = LocaleFormatter.resolveActiveTimezone(LocaleContext.getTimezone());
-  const reportTitle = query.title?.trim() || 'DANH MỤC DÙNG CHUNG HỆ THỐNG (MASTER DATA)';
+  const defaultReportTitle = settingRegistry.getString(
+    'codes.export.default_report_title',
+    undefined,
+    'DANH MỤC DÙNG CHUNG HỆ THỐNG (MASTER DATA)',
+  );
+  const reportTitle = query.title?.trim() || defaultReportTitle;
   const exportedAtSubtitle = `Ngày xuất dữ liệu: ${LocaleFormatter.formatReportDateTime(new Date(), effectiveTimezone)}`;
 
   const csvContent = buildCsvContent(CODES_EXPORT_HEADERS, matrixRows);
@@ -443,10 +484,11 @@ export function buildCodesExportPayload(params: {
 export function buildCodesImportTemplatePayload(
   registry: CodeRegistryService,
   format: 'csv' | 'xlsx' = 'xlsx',
+  locale: string = resolveSystemDefaultLocale(),
 ): ExportCodesResponse {
   const sampleType = registry.getType('codes.region') ?? registry.listTypes()[0] ?? null;
   const sampleValues = sampleType
-    ? registry.listValues(sampleType.code, { includeInactive: true, locale: 'vi' }).slice(0, 2)
+    ? registry.listValues(sampleType.code, { includeInactive: true, locale }).slice(0, 2)
     : [];
 
   const sampleRows: Array<Array<string | number>> = sampleValues.map((val, idx) =>

@@ -3,7 +3,9 @@ import { CoreConfigService } from '@packages/config/index.js';
 import {
   BadRequestAppException,
   ForbiddenAppException,
+  SettingRegistryService,
   UnauthorizedAppException,
+  defaultSettingRegistry,
   maskEmail as sharedMaskEmail,
   maskPhone as sharedMaskPhone,
 } from '@packages/kernel/index.js';
@@ -54,6 +56,7 @@ export class VerificationService {
   private readonly logger = new Logger(VerificationService.name);
   private readonly emailAdapter: IEmailNotificationAdapter;
   private readonly smsProvider: ISmsOtpProvider;
+  private readonly settingRegistry: SettingRegistryService;
 
   constructor(
     private readonly passwordHasher: PasswordHasherService,
@@ -68,9 +71,33 @@ export class VerificationService {
     @Optional()
     @Inject(AUTH_SMS_OTP_PROVIDER)
     smsProvider?: ISmsOtpProvider,
+    @Optional() settingRegistry?: SettingRegistryService,
   ) {
     this.emailAdapter = emailAdapter ?? createDefaultEmailNotificationAdapter();
     this.smsProvider = smsProvider ?? createDefaultSmsOtpProvider();
+    this.settingRegistry = settingRegistry ?? defaultSettingRegistry;
+  }
+
+  private getEmailVerificationTtlSeconds(): number {
+    return Math.max(
+      60,
+      this.settingRegistry.getNumber(
+        'security.verification.email_ttl_seconds',
+        undefined,
+        EMAIL_VERIFICATION_TTL_SECONDS,
+      ),
+    );
+  }
+
+  private getPhoneOtpTtlSeconds(): number {
+    return Math.max(
+      30,
+      this.settingRegistry.getNumber(
+        'security.verification.phone_otp_ttl_seconds',
+        undefined,
+        PHONE_OTP_TTL_SECONDS,
+      ),
+    );
   }
 
   /** Gửi link hoặc mã xác minh Email có thời hạn (Mục 3.2.6 & 3.5.1) */
@@ -108,10 +135,11 @@ export class VerificationService {
       sendCount = existing.sendCount + 1;
     }
 
+    const emailTtlSeconds = this.getEmailVerificationTtlSeconds();
     const otpCode = this.passwordHasher.generateNumericOtp(6);
     const linkToken = this.passwordHasher.generateRandomToken(24);
     const combinedHash = `${this.passwordHasher.sha256(otpCode)}:${this.passwordHasher.sha256(linkToken)}`;
-    const expiresAt = new Date(now.getTime() + EMAIL_VERIFICATION_TTL_SECONDS * 1000);
+    const expiresAt = new Date(now.getTime() + emailTtlSeconds * 1000);
 
     await this.saveVerificationRecord(existing, {
       userId: user.id,
@@ -133,7 +161,7 @@ export class VerificationService {
       userId: user.id,
       email: user.email,
       otpCode,
-      expiresInSeconds: EMAIL_VERIFICATION_TTL_SECONDS,
+      expiresInSeconds: emailTtlSeconds,
       purpose: 'EMAIL_VERIFICATION',
       verificationToken: linkToken,
     });
@@ -146,7 +174,7 @@ export class VerificationService {
       sent: true,
       channel: 'EMAIL',
       maskedTarget,
-      expiresInSeconds: EMAIL_VERIFICATION_TTL_SECONDS,
+      expiresInSeconds: emailTtlSeconds,
       sendCount,
       maxSends: policy.maxSends,
       cooldownSeconds: policy.cooldownSeconds,
@@ -257,9 +285,10 @@ export class VerificationService {
       sendCount = existing.sendCount + 1;
     }
 
+    const phoneOtpTtlSeconds = this.getPhoneOtpTtlSeconds();
     const otpCode = this.passwordHasher.generateNumericOtp(6);
     const codeHash = this.passwordHasher.sha256(otpCode);
-    const expiresAt = new Date(now.getTime() + PHONE_OTP_TTL_SECONDS * 1000);
+    const expiresAt = new Date(now.getTime() + phoneOtpTtlSeconds * 1000);
 
     await this.saveVerificationRecord(existing, {
       userId: user.id,
@@ -281,7 +310,7 @@ export class VerificationService {
       userId: user.id,
       phone: targetPhone,
       otpCode,
-      expiresInSeconds: PHONE_OTP_TTL_SECONDS,
+      expiresInSeconds: phoneOtpTtlSeconds,
       purpose: 'PHONE_VERIFICATION',
     });
 
@@ -293,7 +322,7 @@ export class VerificationService {
       sent: true,
       channel: 'PHONE_OTP',
       maskedTarget,
-      expiresInSeconds: PHONE_OTP_TTL_SECONDS,
+      expiresInSeconds: phoneOtpTtlSeconds,
       sendCount,
       maxSends: policy.maxSends,
       cooldownSeconds: policy.cooldownSeconds,

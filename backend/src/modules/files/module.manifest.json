@@ -3,7 +3,7 @@
   "name": "files",
   "displayName": "File Management & Shared Media Library",
   "version": "1.0.0",
-  "description": "Module quản lý file dùng chung, tách riêng nơi lưu trữ vật lý, kiểm tra file trước khi sử dụng, đổi tên không đổi file gốc, thùng rác có thời gian chờ, khôi phục và theo dõi liên kết sử dụng file (Phase 6 - Mục 6.1)",
+  "description": "Module quản lý file dùng chung, tách riêng nơi lưu trữ vật lý, kiểm tra file trước khi sử dụng, đổi tên không đổi file gốc, thùng rác có thời gian chờ, khôi phục, theo dõi liên kết sử dụng file, phân quyền chi tiết và tạo link tải tạm thời (Phase 6 - Mục 6.1 & 6.2)",
   "type": "core",
   "category": "core",
   "author": "Core Platform Team",
@@ -30,7 +30,7 @@
   },
   "database": {
     "hasMigrations": true,
-    "tables": ["file_folders", "files", "file_usages"]
+    "tables": ["file_folders", "files", "file_usages", "file_permissions"]
   },
   "codeTypes": [
     {
@@ -230,6 +230,52 @@
           "isSystem": true
         }
       ]
+    },
+    {
+      "code": "files.permission_subject_type",
+      "name": "Loại đối tượng phân quyền tệp tin",
+      "description": "Phân loại đối tượng được cấp quyền xem/tải tệp tin trong bảng file_permissions",
+      "isSystem": true,
+      "allowCustomValues": false,
+      "values": [
+        {
+          "numericCode": 1,
+          "code": "USER",
+          "behaviorCode": "USER",
+          "name": "Người dùng",
+          "labels": { "vi": "Người dùng", "en": "User" },
+          "aliases": ["USER", "NGƯỜI DÙNG", "NGUOI DUNG"],
+          "badgeTone": "info",
+          "color": "blue",
+          "sortOrder": 1,
+          "isDefault": true,
+          "isSystem": true
+        },
+        {
+          "numericCode": 2,
+          "code": "ROLE",
+          "behaviorCode": "ROLE",
+          "name": "Vai trò",
+          "labels": { "vi": "Vai trò", "en": "Role" },
+          "aliases": ["ROLE", "VAI TRÒ", "VAI TRO"],
+          "badgeTone": "warning",
+          "color": "amber",
+          "sortOrder": 2,
+          "isSystem": true
+        },
+        {
+          "numericCode": 3,
+          "code": "ORG_UNIT",
+          "behaviorCode": "ORG_UNIT",
+          "name": "Đơn vị tổ chức",
+          "labels": { "vi": "Đơn vị tổ chức", "en": "Organization Unit" },
+          "aliases": ["ORG", "ORG_UNIT", "ĐƠN VỊ", "DON VI"],
+          "badgeTone": "success",
+          "color": "emerald",
+          "sortOrder": 3,
+          "isSystem": true
+        }
+      ]
     }
   ],
   "settingGroups": [
@@ -365,6 +411,51 @@
       "sortOrder": 7
     },
     {
+      "key": "file.storage.user_quota_mb",
+      "groupCode": "file",
+      "module": "files",
+      "namespace": "files.storage",
+      "name": "Hạn mức dung lượng lưu trữ theo người dùng (MB)",
+      "description": "Tổng dung lượng lưu trữ tối đa cho mỗi người dùng (0 = không giới hạn, hỗ trợ cấu hình riêng theo từng đơn vị)",
+      "valueType": "NUMBER",
+      "defaultValue": 0,
+      "validationRules": { "min": 0, "max": 10485760, "integerOnly": true },
+      "isSensitive": false,
+      "allowUnitOverride": true,
+      "isSystem": true,
+      "sortOrder": 8
+    },
+    {
+      "key": "file.download.temp_link_default_ttl_sec",
+      "groupCode": "file",
+      "module": "files",
+      "namespace": "files.download",
+      "name": "Thời hạn mặc định của đường dẫn tải tạm thời (Giây)",
+      "description": "Thời gian hiệu lực mặc định khi tạo đường dẫn tải file tạm thời tự hết hạn",
+      "valueType": "NUMBER",
+      "defaultValue": 3600,
+      "validationRules": { "min": 30, "max": 604800, "integerOnly": true },
+      "isSensitive": false,
+      "allowUnitOverride": true,
+      "isSystem": true,
+      "sortOrder": 9
+    },
+    {
+      "key": "file.download.temp_link_max_ttl_sec",
+      "groupCode": "file",
+      "module": "files",
+      "namespace": "files.download",
+      "name": "Thời hạn tối đa của đường dẫn tải tạm thời (Giây)",
+      "description": "Giới hạn thời gian sống tối đa được phép cấu hình cho một đường dẫn tải tạm thời",
+      "valueType": "NUMBER",
+      "defaultValue": 604800,
+      "validationRules": { "min": 60, "max": 2592000, "integerOnly": true },
+      "isSensitive": false,
+      "allowUnitOverride": true,
+      "isSystem": true,
+      "sortOrder": 10
+    },
+    {
       "key": "file.storage.reconcile_on_list",
       "groupCode": "file",
       "module": "files",
@@ -376,7 +467,7 @@
       "isSensitive": false,
       "allowUnitOverride": false,
       "isSystem": true,
-      "sortOrder": 8
+      "sortOrder": 11
     },
     {
       "key": "file.storage.key_prefix",
@@ -390,7 +481,37 @@
       "isSensitive": false,
       "allowUnitOverride": false,
       "isSystem": true,
-      "sortOrder": 9
+      "sortOrder": 12
+    },
+    {
+      "key": "files.pagination.default_page_size",
+      "groupCode": "file",
+      "module": "files",
+      "namespace": "files.pagination",
+      "name": "Số lượng tệp mặc định mỗi trang",
+      "description": "Số lượng bản ghi tệp tin trả về mặc định khi truy vấn danh sách trong Media Library",
+      "valueType": "NUMBER",
+      "defaultValue": 20,
+      "validationRules": { "min": 1, "max": 200, "integerOnly": true },
+      "isSensitive": false,
+      "allowUnitOverride": true,
+      "isSystem": true,
+      "sortOrder": 13
+    },
+    {
+      "key": "files.pagination.max_page_size",
+      "groupCode": "file",
+      "module": "files",
+      "namespace": "files.pagination",
+      "name": "Số lượng tệp tối đa mỗi trang",
+      "description": "Giới hạn số lượng bản ghi tệp tin tối đa được phép lấy trong 1 trang",
+      "valueType": "NUMBER",
+      "defaultValue": 100,
+      "validationRules": { "min": 10, "max": 500, "integerOnly": true },
+      "isSensitive": false,
+      "allowUnitOverride": true,
+      "isSystem": true,
+      "sortOrder": 14
     }
   ],
   "sequences": [

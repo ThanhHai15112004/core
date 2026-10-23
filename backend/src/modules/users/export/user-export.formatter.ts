@@ -1,5 +1,5 @@
 import { LocaleFormatter } from '@packages/i18n/index.js';
-import { escapeCsvCell } from '@packages/kernel/index.js';
+import { defaultCodeRegistry, escapeCsvCell } from '@packages/kernel/index.js';
 import { USER_STATUS } from '../contracts/index.js';
 import type { UserResponse } from '../responses/users.response.js';
 
@@ -127,19 +127,17 @@ export function formatVietnameseDateOnly(
   return LocaleFormatter.formatReportDateOnly(isoOrDate, timeZone);
 }
 
-/** Hiển thị nhãn trạng thái tiếng Việt tường minh trên file Excel xuất ra */
+/** Hiển thị nhãn trạng thái tiếng Việt tường minh trên file Excel xuất ra (tra cứu động từ CodeRegistryService `users.status`) */
 export function formatVietnameseUserStatusLabel(status: number): string {
-  switch (status) {
-    case USER_STATUS.INACTIVE:
-      return 'Ngừng hoạt động';
-    case USER_STATUS.LOCKED:
-      return 'Tạm khóa';
-    case USER_STATUS.ARCHIVED:
-      return 'Lưu trữ';
-    case USER_STATUS.ACTIVE:
-    default:
-      return 'Đang làm việc';
-  }
+  const fallback =
+    status === USER_STATUS.INACTIVE
+      ? 'Ngừng hoạt động'
+      : status === USER_STATUS.LOCKED
+        ? 'Tạm khóa'
+        : status === USER_STATUS.ARCHIVED
+          ? 'Lưu trữ'
+          : 'Đang làm việc';
+  return defaultCodeRegistry.getLabel('users.status', status, 'vi') || fallback;
 }
 
 /**

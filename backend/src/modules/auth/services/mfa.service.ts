@@ -4,7 +4,9 @@ import { CoreConfigService } from '@packages/config/index.js';
 import {
   BadRequestAppException,
   NotFoundAppException,
+  SettingRegistryService,
   UnauthorizedAppException,
+  defaultSettingRegistry,
   maskEmail as sharedMaskEmail,
   maskPhone as sharedMaskPhone,
   safeJsonParse,
@@ -37,6 +39,7 @@ import {
   createDefaultEmailNotificationAdapter,
   createDefaultSmsOtpProvider,
 } from './notification-adapters.provider.js';
+import { SecuritySettingsService } from './security-settings.service.js';
 import type {
   DisableMfaRequest,
   EnableEmailOtpMfaRequest,
@@ -56,6 +59,9 @@ import type {
 const EMAIL_OTP_TTL_SECONDS = 300; // 5 phút
 const SMS_OTP_TTL_SECONDS = 300; // 5 phút
 const DEFAULT_TRUSTED_DEVICE_DAYS = 30;
+const DEFAULT_MAX_TRUSTED_DEVICES = 20;
+const DEFAULT_RECOVERY_CODE_COUNT = 8;
+const DEFAULT_MFA_OTP_MAX_ATTEMPTS = 5;
 
 export interface StoredTrustedDeviceRecord {
   readonly deviceId: string;
@@ -82,6 +88,7 @@ export class MfaService {
   private readonly logger = new Logger(MfaService.name);
   private readonly emailAdapter: IEmailNotificationAdapter;
   private readonly smsProvider: ISmsOtpProvider;
+  private readonly settingRegistry: SettingRegistryService;
   private securityEventDelegate?: (event: {
     userId: number;
     actorId?: number | null;
@@ -105,9 +112,88 @@ export class MfaService {
     @Optional()
     @Inject(AUTH_SMS_OTP_PROVIDER)
     smsProvider?: ISmsOtpProvider,
+    @Optional() private readonly securitySettingsService?: SecuritySettingsService,
+    @Optional() settingRegistry?: SettingRegistryService,
   ) {
     this.emailAdapter = emailAdapter ?? createDefaultEmailNotificationAdapter();
     this.smsProvider = smsProvider ?? createDefaultSmsOtpProvider();
+    this.settingRegistry = settingRegistry ?? defaultSettingRegistry;
+  }
+
+  private getEmailOtpTtlSeconds(): number {
+    return Math.max(
+      30,
+      this.settingRegistry.getNumber(
+        'security.mfa.email_otp_ttl_seconds',
+        undefined,
+        EMAIL_OTP_TTL_SECONDS,
+      ),
+    );
+  }
+
+  private getSmsOtpTtlSeconds(): number {
+    return Math.max(
+      30,
+      this.settingRegistry.getNumber(
+        'security.mfa.sms_otp_ttl_seconds',
+        undefined,
+        SMS_OTP_TTL_SECONDS,
+      ),
+    );
+  }
+
+  private getDefaultTrustedDeviceDays(): number {
+    return Math.max(
+      1,
+      Math.min(
+        365,
+        this.settingRegistry.getNumber(
+          'security.mfa.trusted_device_days',
+          undefined,
+          DEFAULT_TRUSTED_DEVICE_DAYS,
+        ),
+      ),
+    );
+  }
+
+  private getMaxTrustedDevices(): number {
+    return Math.max(
+      1,
+      this.settingRegistry.getNumber(
+        'security.mfa.max_trusted_devices',
+        undefined,
+        DEFAULT_MAX_TRUSTED_DEVICES,
+      ),
+    );
+  }
+
+  private getRecoveryCodeCount(): number {
+    return Math.max(
+      4,
+      Math.min(
+        20,
+        this.settingRegistry.getNumber(
+          'security.mfa.recovery_code_count',
+          undefined,
+          DEFAULT_RECOVERY_CODE_COUNT,
+        ),
+      ),
+    );
+  }
+
+  private async getMaxOtpAttempts(): Promise<number> {
+    const settings = await this.securitySettingsService?.getSettings();
+    if (settings?.otpMaxAttempts && settings.otpMaxAttempts > 0) {
+      return settings.otpMaxAttempts;
+    }
+    return Math.max(
+      1,
+      this.settingRegistry.getNumber(
+        'security.otp.max_attempts',
+        undefined,
+        DEFAULT_MFA_OTP_MAX_ATTEMPTS,
+      ),
+    );
   }
 
   /** Đăng ký callback ghi nhận sự kiện bảo mật MFA (Tắt MFA / Reset MFA) vào lịch sử đăng nhập & Audit Log */
@@ -374,7 +460,7 @@ export class MfaService {
 
     let plainCodes: string[] = [];
     if (envelope.codes.length === 0) {
-      plainCodes = this.totpService.generateRecoveryCodes(8);
+      plainCodes = this.totpService.generateRecoveryCodes(this.getRecoveryCodeCount());
       envelope.codes = plainCodes.map((c) =>
         this.passwordHasher.sha256(this.normalizeRecoveryCode(c)),
       );
@@ -406,9 +492,10 @@ export class MfaService {
       throw new UnauthorizedAppException('auth.userNotFound');
     }
 
+    const emailOtpTtlSeconds = this.getEmailOtpTtlSeconds();
     const otpCode = this.passwordHasher.generateNumericOtp(6);
     const otpHash = this.passwordHasher.sha256(otpCode);
-    const expiresAt = new Date(Date.now() + EMAIL_OTP_TTL_SECONDS * 1000);
+    const expiresAt = new Date(Date.now() + emailOtpTtlSeconds * 1000);
 
     let config = await this.findConfigByUserId(userId);
     if (!config) {
@@ -434,7 +521,7 @@ export class MfaService {
       userId: user.id,
       email: user.email,
       otpCode,
-      expiresInSeconds: EMAIL_OTP_TTL_SECONDS,
+      expiresInSeconds: emailOtpTtlSeconds,
       purpose: 'MFA_EMAIL_OTP',
     });
 
@@ -445,7 +532,7 @@ export class MfaService {
     return {
       sent: true,
       maskedEmail,
-      expiresInSeconds: EMAIL_OTP_TTL_SECONDS,
+      expiresInSeconds: emailOtpTtlSeconds,
       ...(dispatchResult.messageId ? { messageId: dispatchResult.messageId } : {}),
       ...(!isProd ? { devOtpCode: otpCode } : {}),
     };
@@ -463,9 +550,10 @@ export class MfaService {
       throw new BadRequestAppException('auth.phoneRequiredForSmsMfa');
     }
 
+    const smsOtpTtlSeconds = this.getSmsOtpTtlSeconds();
     const otpCode = this.passwordHasher.generateNumericOtp(6);
     const otpHash = this.passwordHasher.sha256(otpCode);
-    const expiresAt = new Date(Date.now() + SMS_OTP_TTL_SECONDS * 1000);
+    const expiresAt = new Date(Date.now() + smsOtpTtlSeconds * 1000);
 
     let config = await this.findConfigByUserId(userId);
     if (!config) {
@@ -490,7 +578,7 @@ export class MfaService {
       userId: user.id,
       phone: targetPhone,
       otpCode,
-      expiresInSeconds: SMS_OTP_TTL_SECONDS,
+      expiresInSeconds: smsOtpTtlSeconds,
       purpose: 'MFA_SMS_OTP',
     });
 
@@ -501,7 +589,7 @@ export class MfaService {
     return {
       sent: true,
       maskedPhone,
-      expiresInSeconds: SMS_OTP_TTL_SECONDS,
+      expiresInSeconds: smsOtpTtlSeconds,
       ...(dispatchResult.providerMessageId
         ? { providerMessageId: dispatchResult.providerMessageId }
         : {}),
@@ -625,7 +713,7 @@ export class MfaService {
 
     const days = Math.max(
       1,
-      Math.min(365, options.trustDurationDays ?? DEFAULT_TRUSTED_DEVICE_DAYS),
+      Math.min(365, options.trustDurationDays ?? this.getDefaultTrustedDeviceDays()),
     );
     const now = new Date();
     const trustedUntilDate = new Date(now.getTime() + days * 86_400_000);
@@ -641,7 +729,7 @@ export class MfaService {
       trustedUntil: trustedUntilDate.toISOString(),
     };
 
-    envelope.trustedDevices = [record, ...activeDevices].slice(0, 20);
+    envelope.trustedDevices = [record, ...activeDevices].slice(0, this.getMaxTrustedDevices());
     config.recoveryCodesHashJson = this.serializeExtendedEnvelope(envelope);
     await this.saveConfig(config);
 
@@ -899,7 +987,7 @@ export class MfaService {
       throw new BadRequestAppException('auth.mfaNotEnabled');
     }
 
-    const plainCodes = this.totpService.generateRecoveryCodes(8);
+    const plainCodes = this.totpService.generateRecoveryCodes(this.getRecoveryCodeCount());
     const hashes = plainCodes.map((c) => this.passwordHasher.sha256(this.normalizeRecoveryCode(c)));
     if (envelope) {
       envelope.codes = hashes;
@@ -912,7 +1000,7 @@ export class MfaService {
     return { recoveryCodes: plainCodes };
   }
 
-  /** Kiểm tra mã Email OTP đã lưu, thời hạn hiệu lực và giới hạn số lần nhập sai (tối đa 5 lần) */
+  /** Kiểm tra mã Email OTP đã lưu, thời hạn hiệu lực và giới hạn số lần nhập sai (tối đa theo otpMaxAttempts) */
   private async verifyAndTrackEmailOtp(
     config: AuthMfaConfigEntity,
     code: string,
@@ -923,8 +1011,9 @@ export class MfaService {
     if (config.emailOtpExpiresAt.getTime() <= Date.now()) {
       return false;
     }
+    const maxAttempts = await this.getMaxOtpAttempts();
     const currentFailed = config.emailOtpFailedAttempts ?? 0;
-    if (currentFailed >= 5) {
+    if (currentFailed >= maxAttempts) {
       return false;
     }
     const candidateHash = this.passwordHasher.sha256(code.trim());
@@ -932,7 +1021,7 @@ export class MfaService {
       return true;
     }
     config.emailOtpFailedAttempts = currentFailed + 1;
-    if (config.emailOtpFailedAttempts >= 5) {
+    if (config.emailOtpFailedAttempts >= maxAttempts) {
       config.emailOtpCodeHash = null;
       config.emailOtpExpiresAt = null;
     }
@@ -940,7 +1029,7 @@ export class MfaService {
     return false;
   }
 
-  /** Kiểm tra mã SMS OTP đã lưu, thời hạn hiệu lực và giới hạn số lần nhập sai (tối đa 5 lần) */
+  /** Kiểm tra mã SMS OTP đã lưu, thời hạn hiệu lực và giới hạn số lần nhập sai (tối đa theo otpMaxAttempts) */
   private async verifyAndTrackSmsOtp(
     config: AuthMfaConfigEntity,
     envelope: MfaExtendedEnvelope,
@@ -953,8 +1042,9 @@ export class MfaService {
     if (!Number.isFinite(expiresAtMs) || expiresAtMs <= Date.now()) {
       return false;
     }
+    const maxAttempts = await this.getMaxOtpAttempts();
     const currentFailed = envelope.smsOtpFailedAttempts ?? 0;
-    if (currentFailed >= 5) {
+    if (currentFailed >= maxAttempts) {
       return false;
     }
     const candidateHash = this.passwordHasher.sha256(code.trim());
@@ -962,7 +1052,7 @@ export class MfaService {
       return true;
     }
     envelope.smsOtpFailedAttempts = currentFailed + 1;
-    if (envelope.smsOtpFailedAttempts >= 5) {
+    if (envelope.smsOtpFailedAttempts >= maxAttempts) {
       envelope.smsOtpCodeHash = null;
       envelope.smsOtpExpiresAt = null;
     }
@@ -1005,7 +1095,7 @@ export class MfaService {
         hashesJson: this.serializeExtendedEnvelope(envelope),
       };
     }
-    const plainCodes = this.totpService.generateRecoveryCodes(8);
+    const plainCodes = this.totpService.generateRecoveryCodes(this.getRecoveryCodeCount());
     envelope.codes = plainCodes.map((c) =>
       this.passwordHasher.sha256(this.normalizeRecoveryCode(c)),
     );

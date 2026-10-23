@@ -105,6 +105,51 @@
       ]
     }
   ],
+  "settings": [
+    {
+      "key": "codes.export.default_report_title",
+      "groupCode": "system",
+      "module": "codes",
+      "namespace": "codes.export",
+      "name": "Tiêu đề báo cáo xuất danh mục dùng chung mặc định",
+      "description": "Tiêu đề hiển thị trên đầu trang tính Excel khi xuất danh mục dùng chung (Master Data), cho phép ghi đè theo từng đơn vị",
+      "valueType": "TEXT",
+      "defaultValue": "DANH MỤC DÙNG CHUNG HỆ THỐNG (MASTER DATA)",
+      "isSensitive": false,
+      "allowUnitOverride": true,
+      "isSystem": true,
+      "sortOrder": 30
+    },
+    {
+      "key": "codes.import.auto_create_missing_type",
+      "groupCode": "system",
+      "module": "codes",
+      "namespace": "codes.import",
+      "name": "Tự động tạo nhóm danh mục mới khi Import",
+      "description": "Cho phép tự động khởi tạo nhóm danh mục (code_types) mới khi file Excel/CSV import chứa typeCode chưa tồn tại trên hệ thống",
+      "valueType": "BOOLEAN",
+      "defaultValue": true,
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 31
+    },
+    {
+      "key": "codes.import.max_rows",
+      "groupCode": "system",
+      "module": "codes",
+      "namespace": "codes.import",
+      "name": "Số dòng tối đa cho mỗi lần Import danh mục",
+      "description": "Giới hạn số lượng dòng dữ liệu danh mục tối đa được phép nhập hàng loạt trong một lần thực thi",
+      "valueType": "NUMBER",
+      "defaultValue": 5000,
+      "validationRules": { "min": 100, "max": 50000, "integerOnly": true },
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 32
+    }
+  ],
   "menus": [
     {
       "code": "CODES_DICTIONARY",

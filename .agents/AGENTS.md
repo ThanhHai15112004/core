@@ -6,28 +6,31 @@
 
 ### 1.1. Tiện ích tại `backend/src/packages/`
 - **`@packages/kernel`**:
+  - `types/pagination.type.ts`: `resolvePagination` (chuẩn hóa 1 dòng `page`, `limit`, `skip`/`offset`, `take`, `countMode` tự động đọc cấu hình động `SettingRegistryService`), `PAGINATION_DEFAULTS`.
   - `utils/json.util.ts`: `safeJsonParse`, `safeJsonParseList`, `safeJsonParseObject`, `safeJsonParseStringArray`.
-  - `utils/format.util.ts`: `formatBytes`, `maskEmail`, `maskPhone`.
+  - `utils/format.util.ts`: `formatBytes`, `maskEmail`, `maskPhone`, `parseNumericUserId`.
   - `utils/spreadsheet.util.ts`: `parseSpreadsheetBuffer`, `buildCsvBuffer`, `buildXlsxBuffer`, `normalizeHeaderKey`.
-  - `utils/slug.util.ts`, `utils/string.util.ts`, `utils/manifest-scanner.util.ts`: `scanModuleManifests`, `discoverInstalledModules`.
+  - `utils/manifest-scanner.util.ts`: `scanModuleManifests`, `discoverInstalledModules`.
   - `contracts/`: `CodeRegistryService`, `SettingRegistryService`, `FeatureFlagRegistryService`, `SequenceRegistryService`, `MenuRegistryService`, `AppException` (`BadRequestAppException`, `NotFoundAppException`, `ConflictAppException`, `ForbiddenAppException`...).
 - **`@packages/http`**:
-  - `utils/query-list.util.ts`: `isPrintableString`, `optionalQueryParam`, `booleanQueryParam`, `csvQueryParam`, `parseListQuery`, `parseOrThrow`, `formatZodIssues`.
+  - `utils/response.util.ts`: `createPaginatedResult` (đóng gói `{ data, meta }` chuẩn và tự cắt phần tử lookahead `limit + 1`).
+  - `utils/query-list.util.ts`: `isPrintableString`, `optionalQueryParam`, `booleanQueryParam`, `csvQueryParam`, `parseListQuery`, `parseOrThrow`, `formatZodIssues`, `createPaginationQuerySchema`.
   - `utils/capture.ts`: `maskIp`, `maskEmails`, `redactPayload`, `extractRequestContext`.
   - `utils/validation.util.ts`: `stripDisallowedFields`, `findDisallowedFields`, `applyUnknownFieldPolicy`.
 - **`@packages/security`**: `PasswordHasherService` (`hashPassword`, `verifyPassword`, `hashSha256Hex`, `safeEqualHex`), `FieldEncryptionService`, `TokenService`, `DataScopeService`, `PlatformSecurityService`.
-- **`@packages/database` & `@packages/cache`**: `BaseRepository`, `TransactionManager` (`runInTransaction`), `BaseCacheProvider`.
+- **`@packages/database` & `@packages/cache`**: `BaseTypeOrmRepository` (`this.paginateQueryBuilder`, `executeReadOnly`, `saveEntity`, `updateWithOptimisticLock`), `paginateSelectQueryBuilder` (phân trang QueryBuilder tự động tối ưu `countMode` & short-circuit khi `skip >= total`), `TransactionManager` (`runInTransaction`), `BaseCacheProvider`.
 
 ### 1.2. Module Nền Tảng tại `backend/src/modules/` (Cấm tạo bảng/module trùng)
 
 | Module | Bảng DB sở hữu | Service / Registry xuất khẩu | Trách nhiệm cốt lõi |
 | :--- | :--- | :--- | :--- |
 | **`organizations`** | `organization_units` | `OrganizationsService`, `ORGANIZATIONS_PUBLIC_SERVICE` | Cây đơn vị (`parentId`, `path`), chống vòng lặp, chặn xóa khi còn con/nhân sự. |
-| **`roles`** | `roles`, `permissions`, `role_permissions` | `RolesService`, `ROLES_PUBLIC_SERVICE`, `DataScopeService`, `AuditLogService` | RBAC, đồng bộ quyền từ `module.manifest.json`, Data Scope (`ALL`, `ORG_UNIT`, `SUBORDINATES`, `SELF`), Audit Log bất biến. |
-| **`users`** | `users`, `user_roles`, `user_organization_units`, `user_status_histories` | `UsersService`, `USERS_PUBLIC_SERVICE` | Hồ sơ user, đa vai trò, đa đơn vị (1 đơn vị chính), lịch sử trạng thái, Import/Export CSV & XLSX. |
-| **`auth`** | `auth_sessions`, `auth_mfa_configs`, `auth_password_resets`, `auth_login_histories`, `auth_security_settings`, `auth_service_accounts` | `AuthService`, `SecuritySettingsService` | JWT + Refresh Token rotation, MFA (TOTP, Email OTP, Recovery Code), password policy, lockout, Service Account / API Key. |
+| **`roles`** | `roles`, `permissions`, `role_permissions`, `audit_logs` | `RolesService`, `ROLES_PUBLIC_SERVICE`, `DataScopeService`, `AuditLogService` | RBAC, đồng bộ quyền từ `module.manifest.json`, Data Scope (`ALL`, `ORG_UNIT`, `SUBORDINATES`, `SELF`), Audit Log bất biến. |
+| **`users`** | `users`, `user_profiles`, `user_roles`, `user_organization_units`, `user_status_histories` | `UsersService`, `USERS_PUBLIC_SERVICE` | Hồ sơ user, đa vai trò, đa đơn vị (1 đơn vị chính), lịch sử trạng thái, Import/Export CSV & XLSX. |
+| **`auth`** | `auth_sessions`, `auth_mfa_configs`, `auth_password_resets`, `auth_login_histories`, `auth_security_settings`, `auth_service_accounts`, `auth_api_clients`, `auth_verification_codes` | `AuthService`, `SecuritySettingsService` | JWT + Refresh Token rotation, MFA (TOTP, Email OTP, Recovery Code), password policy, lockout, Service Account / API Key. |
 | **`codes`** | `code_types`, `code_values` | `CodeRegistryService`, `CodesService`, `CODES_PUBLIC_SERVICE` | Danh mục động & Hybrid Enum (`numericCode`, `code`, `behaviorCode`, `labels` đa ngôn ngữ, `aliases`). Khai báo `"codeTypes"` trong `module.manifest.json`. |
 | **`settings`** | `setting_groups`, `system_settings`, `system_setting_scopes`, `system_setting_histories`, `feature_flags`, `feature_flag_histories`, `i18n_locales`, `i18n_timezones`, `i18n_translations`, `sequence_rules`, `sequence_counters`, `sequence_rule_histories`, `menus` | `Setting/FeatureFlag/Sequence/MenuRegistryService`, `Settings/FeatureFlags/I18nManagement/Sequences/MenusService`, `*_PUBLIC_SERVICE` | Cấu hình động 5 tầng (`AES-256-GCM`), Feature Flags (User/Role/OrgUnit/Rollout %/Time window), Đa ngôn ngữ & Múi giờ, Sinh mã tự động (`NEVER`/`YEARLY`/`MONTHLY`/`DAILY`, `scopeByUnit`, `preview`), Cây Menu động (`SIDEBAR`/`TOPBAR`/`FOOTER`/`SYSTEM_CONSOLE`, `GROUP`/`ITEM`/`EXTERNAL`/`ACTION`, cache L1/L2). Khai báo qua `module.manifest.json`. |
+| **`files`** | `file_folders`, `files`, `file_usages` | `FilesService`, `FILES_PUBLIC_SERVICE` | Quản lý tệp & thư viện Media dùng chung, kiểm tra Magic Bytes, Byte-Range video, theo dõi liên kết (`file_usages`), thùng rác & tự động dọn dẹp. |
 | **`health` & `*-ops`** | *(Không tạo bảng nghiệp vụ)* | `HealthModule`, `System/Database/Cache/Queue/Worker/Scheduler/LogsOpsModule` | Healthcheck (`/health`) & API vận hành System Console (`/ops/*`). |
 
 > **⚠️ Phân biệt 4 cơ chế cấu hình & Quét Manifest**:

@@ -1,3 +1,9 @@
+import type { SettingResolveContext } from '../contracts/setting-lookup.contract.js';
+import {
+  SettingRegistryService,
+  defaultSettingRegistry,
+} from '../registries/setting-registry.service.js';
+
 /**
  * Các giá trị mặc định và ngưỡng giới hạn cho phân trang dữ liệu.
  */
@@ -9,6 +15,121 @@ export const PAGINATION_DEFAULTS = {
   /** Ngưỡng offset tối đa cho phép nhằm tránh truy vấn quét sâu (Deep Offset Scan) trên bảng lớn. */
   MAX_OFFSET: 10_000,
 } as const;
+
+/** Tham số đầu vào thô của phân trang (từ Query DTO hoặc Filter). */
+export interface RawPaginationInput {
+  readonly page?: number | string | null | undefined;
+  readonly limit?: number | string | null | undefined;
+  readonly countMode?: CountMode | null | undefined;
+}
+
+/** Tùy chọn phân giải phân trang tập trung kết hợp Cấu hình động (SettingRegistryService). */
+export interface ResolvePaginationOptions {
+  /**
+   * Tiền tố khóa cấu hình động (ví dụ: `'users.pagination'`, `'roles.audit_log'`).
+   * Tự động tra cứu `<settingPrefix>.default_page_size` và `<settingPrefix>.max_page_size`.
+   */
+  readonly settingPrefix?: string | undefined;
+  /** Khóa cấu hình động cho `limit` mặc định (ghi đè `settingPrefix`). */
+  readonly defaultLimitKey?: string | undefined;
+  /** Khóa cấu hình động cho `limit` tối đa (ghi đè `settingPrefix`). */
+  readonly maxLimitKey?: string | undefined;
+  /** Giá trị `limit` mặc định fallback khi chưa cấu hình (mặc định `PAGINATION_DEFAULTS.LIMIT = 20`). */
+  readonly defaultLimit?: number | undefined;
+  /** Giá trị `limit` tối đa fallback khi chưa cấu hình (mặc định `PAGINATION_DEFAULTS.MAX_LIMIT = 100`). */
+  readonly maxLimit?: number | undefined;
+  /** Giá trị `limit` tối thiểu (mặc định `PAGINATION_DEFAULTS.MIN_LIMIT = 1`). */
+  readonly minLimit?: number | undefined;
+  /** Chế độ đếm tổng bản ghi mặc định (`'exact'`, `'estimated'`, `'none'`). */
+  readonly defaultCountMode?: CountMode | undefined;
+  /** Ngữ cảnh đơn vị / môi trường khi phân giải cấu hình động. */
+  readonly context?: SettingResolveContext | undefined;
+  /** Tùy chọn truyền instance SettingRegistryService riêng (mặc định dùng `defaultSettingRegistry`). */
+  readonly registry?: SettingRegistryService | undefined;
+}
+
+/** Kết quả phân trang đã chuẩn hóa, dùng trực tiếp cho cả Service (`page, limit`) và TypeORM (`skip, take, offset`). */
+export interface ResolvedPaginationParams extends PaginationParams {
+  readonly skip: number;
+  readonly take: number;
+  readonly countMode: CountMode;
+}
+
+/**
+ * Hàm dùng chung chuẩn hóa tham số phân trang (`page`, `limit`, `offset`/`skip`, `take`) chỉ với 1 dòng gọi.
+ * Tự động đọc cấu hình động từ `SettingRegistryService` theo thứ tự ưu tiên:
+ * 1. Khóa riêng của module (`<settingPrefix>.default_page_size` / `<settingPrefix>.max_page_size` hoặc `defaultLimitKey` / `maxLimitKey`).
+ * 2. Khóa toàn cục của hệ thống (`system.pagination.default_page_size` / `system.pagination.max_page_size`).
+ * 3. Hằng số fallback truyền vào hoặc `PAGINATION_DEFAULTS`.
+ */
+export function resolvePagination(
+  input?: RawPaginationInput | null,
+  options?: ResolvePaginationOptions,
+): ResolvedPaginationParams {
+  const registry = options?.registry ?? defaultSettingRegistry;
+  const ctx = options?.context;
+
+  const globalDefaultLimit = registry.getNumber(
+    'system.pagination.default_page_size',
+    ctx,
+    options?.defaultLimit ?? PAGINATION_DEFAULTS.LIMIT,
+  );
+  const globalMaxLimit = registry.getNumber(
+    'system.pagination.max_page_size',
+    ctx,
+    options?.maxLimit ?? PAGINATION_DEFAULTS.MAX_LIMIT,
+  );
+
+  const defaultLimitKey =
+    options?.defaultLimitKey ??
+    (options?.settingPrefix ? `${options.settingPrefix}.default_page_size` : undefined);
+  const maxLimitKey =
+    options?.maxLimitKey ??
+    (options?.settingPrefix ? `${options.settingPrefix}.max_page_size` : undefined);
+
+  const fallbackDefault = options?.defaultLimit ?? globalDefaultLimit;
+  const fallbackMax = options?.maxLimit ?? globalMaxLimit;
+
+  const rawDefaultLimit = defaultLimitKey
+    ? registry.getNumber(defaultLimitKey, ctx, fallbackDefault)
+    : fallbackDefault;
+  const rawMaxLimit = maxLimitKey ? registry.getNumber(maxLimitKey, ctx, fallbackMax) : fallbackMax;
+
+  const minLimit = Math.max(1, Math.trunc(options?.minLimit ?? PAGINATION_DEFAULTS.MIN_LIMIT));
+  const safeMaxLimit = Math.max(minLimit, Math.trunc(rawMaxLimit));
+  const safeDefaultLimit = Math.min(safeMaxLimit, Math.max(minLimit, Math.trunc(rawDefaultLimit)));
+
+  const parsedPage = Number(input?.page);
+  const page =
+    Number.isFinite(parsedPage) && parsedPage >= PAGINATION_DEFAULTS.PAGE
+      ? Math.trunc(parsedPage)
+      : PAGINATION_DEFAULTS.PAGE;
+
+  const hasExplicitLimit =
+    input?.limit !== undefined && input?.limit !== null && input?.limit !== '';
+  const parsedLimit = hasExplicitLimit ? Number(input?.limit) : safeDefaultLimit;
+  const limit =
+    Number.isFinite(parsedLimit) && parsedLimit >= minLimit
+      ? Math.min(safeMaxLimit, Math.trunc(parsedLimit))
+      : hasExplicitLimit && Number.isFinite(parsedLimit) && parsedLimit < minLimit
+        ? minLimit
+        : safeDefaultLimit;
+
+  const offset = (page - 1) * limit;
+  const countMode: CountMode =
+    input?.countMode && COUNT_MODES.includes(input.countMode)
+      ? input.countMode
+      : (options?.defaultCountMode ?? 'exact');
+
+  return {
+    page,
+    limit,
+    offset,
+    skip: offset,
+    take: limit,
+    countMode,
+  };
+}
 
 export const SORT_ORDERS = ['asc', 'desc'] as const;
 export type SortOrder = (typeof SORT_ORDERS)[number];

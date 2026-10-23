@@ -37,7 +37,13 @@
   },
   "database": {
     "hasMigrations": true,
-    "tables": ["users", "user_roles", "user_organization_units"]
+    "tables": [
+      "users",
+      "user_profiles",
+      "user_roles",
+      "user_organization_units",
+      "user_status_histories"
+    ]
   },
   "codeTypes": [
     {
@@ -193,6 +199,135 @@
           "isSystem": false
         }
       ]
+    }
+  ],
+  "settingGroups": [
+    {
+      "code": "users",
+      "module": "users",
+      "name": "Cấu hình Quản lý Người dùng & Nhân sự",
+      "description": "Thiết lập tham số nhập/xuất hồ sơ nhân sự, phân trang, vai trò mặc định và lịch sử đăng nhập",
+      "icon": "users",
+      "sortOrder": 6,
+      "isSystem": true
+    }
+  ],
+  "settings": [
+    {
+      "key": "users.import.default_password",
+      "groupCode": "users",
+      "module": "users",
+      "namespace": "users.import",
+      "name": "Mật khẩu mặc định khi nhập hàng loạt (Bulk Import)",
+      "description": "Mật khẩu khởi tạo mặc định cho tài khoản nhân sự được import khi dòng dữ liệu và request không chỉ định mật khẩu riêng (tự động mã hóa AES-256-GCM)",
+      "valueType": "TEXT",
+      "defaultValue": "Abcd@454647#",
+      "isSensitive": true,
+      "allowUnitOverride": true,
+      "isSystem": true,
+      "sortOrder": 1
+    },
+    {
+      "key": "users.export.max_rows",
+      "groupCode": "users",
+      "module": "users",
+      "namespace": "users.export",
+      "name": "Số dòng tối đa cho mỗi lần xuất danh sách nhân sự",
+      "description": "Giới hạn số lượng bản ghi người dùng tối đa được xuất ra file Excel (.xlsx) hoặc CSV (.csv) trong một lần truy vấn",
+      "valueType": "NUMBER",
+      "defaultValue": 5000,
+      "validationRules": { "min": 100, "max": 100000, "integerOnly": true },
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 2
+    },
+    {
+      "key": "users.export.default_report_title",
+      "groupCode": "users",
+      "module": "users",
+      "namespace": "users.export",
+      "name": "Tiêu đề báo cáo xuất danh sách nhân sự mặc định",
+      "description": "Tiêu đề hiển thị trên đầu trang tính Excel khi xuất danh sách người dùng (cho phép ghi đè theo từng đơn vị/chi nhánh)",
+      "valueType": "TEXT",
+      "defaultValue": "DANH SÁCH CÁN BỘ NHÂN VIÊN",
+      "isSensitive": false,
+      "allowUnitOverride": true,
+      "isSystem": true,
+      "sortOrder": 3
+    },
+    {
+      "key": "users.pagination.default_page_size",
+      "groupCode": "users",
+      "module": "users",
+      "namespace": "users.pagination",
+      "name": "Số dòng mặc định mỗi trang danh sách người dùng",
+      "description": "Số lượng bản ghi người dùng trả về mặc định khi truy vấn danh sách mà không truyền tham số limit",
+      "valueType": "NUMBER",
+      "defaultValue": 20,
+      "validationRules": { "min": 1, "max": 500, "integerOnly": true },
+      "isSensitive": false,
+      "allowUnitOverride": true,
+      "isSystem": true,
+      "sortOrder": 4
+    },
+    {
+      "key": "users.pagination.max_page_size",
+      "groupCode": "users",
+      "module": "users",
+      "namespace": "users.pagination",
+      "name": "Số dòng tối đa mỗi trang danh sách người dùng",
+      "description": "Giới hạn số lượng bản ghi tối đa trên một trang khi tra cứu danh sách người dùng",
+      "valueType": "NUMBER",
+      "defaultValue": 500,
+      "validationRules": { "min": 10, "max": 5000, "integerOnly": true },
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 5
+    },
+    {
+      "key": "users.default_role_code",
+      "groupCode": "users",
+      "module": "users",
+      "namespace": "users.general",
+      "name": "Mã vai trò mặc định của người dùng",
+      "description": "Mã vai trò dự phòng cấp cho tài khoản người dùng khi chưa được gán vai trò tường minh trong bảng user_roles",
+      "valueType": "TEXT",
+      "defaultValue": "user",
+      "isSensitive": false,
+      "allowUnitOverride": true,
+      "isSystem": true,
+      "sortOrder": 6
+    },
+    {
+      "key": "users.login_history.default_limit",
+      "groupCode": "users",
+      "module": "users",
+      "namespace": "users.login_history",
+      "name": "Số dòng lịch sử đăng nhập hiển thị mặc định",
+      "description": "Số lượng bản ghi lịch sử đăng nhập và đăng xuất gần nhất trả về mặc định khi xem chi tiết hồ sơ người dùng",
+      "valueType": "NUMBER",
+      "defaultValue": 50,
+      "validationRules": { "min": 1, "max": 500, "integerOnly": true },
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 7
+    }
+  ],
+  "featureFlags": [
+    {
+      "key": "users.bulk_import_v2",
+      "module": "users",
+      "name": "Nhập/Xuất danh sách nhân sự hàng loạt thế hệ mới",
+      "description": "Cho phép nhập và xuất hồ sơ người dùng hàng loạt qua định dạng CSV/XLSX có kiểm tra trùng lặp nâng cao",
+      "isEnabled": true,
+      "rolloutPercentage": 100,
+      "targetUserIds": [],
+      "targetRoles": [],
+      "targetOrganizationUnitIds": [],
+      "isSystem": true
     }
   ],
   "sequences": [
