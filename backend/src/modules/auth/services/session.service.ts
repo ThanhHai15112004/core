@@ -20,43 +20,25 @@ import { USER_STATUS, type UserAuthIdentityView } from '@modules/users/contracts
 import {
   AUTH_EVENT_STATUS,
   AUTH_EVENT_TYPE,
-  type AuthEventStatusCode,
-  type AuthEventTypeCode,
   getAuthEventStatusName,
   getAuthEventTypeName,
 } from '../contracts/index.js';
 import type { AuthLoginHistoryEntity } from '../entities/auth-login-history.entity.js';
+import {
+  AUTH_SESSION_REDIS_PREFIX,
+  DEFAULT_ACCESS_TTL_SEC,
+  DEFAULT_IDLE_TIMEOUT_MINUTES,
+  DEFAULT_MAX_LIFETIME_MINUTES,
+  DEFAULT_REFRESH_TTL_SEC,
+} from '../enum/auth.enum.js';
+import { extractDeviceNameFromUserAgent } from '../helpers/auth-device.helper.js';
 import { AuthLoginHistoryRepository } from '../repositories/auth-login-history.repository.js';
 import { AuthSessionRepository } from '../repositories/auth-session.repository.js';
 import type { LoginHistoryItemResponse, SessionItemResponse } from '../responses/auth.response.js';
+import type { IssuedSessionTokens, RecordAuthEventInput } from '../types/auth.types.js';
 import { SecuritySettingsService } from './security-settings.service.js';
-
-export const AUTH_SESSION_REDIS_PREFIX = 'iam:auth:session:';
-const DEFAULT_ACCESS_TTL_SEC = 900; // 15m
-const DEFAULT_REFRESH_TTL_SEC = 604_800; // 7d
-const DEFAULT_IDLE_TIMEOUT_MINUTES = 30; // 30m
-const DEFAULT_MAX_LIFETIME_MINUTES = 10_080; // 7d
-
-export interface IssuedSessionTokens {
-  readonly sessionId: number;
-  readonly accessToken: string;
-  readonly refreshToken: string;
-  readonly expiresInSeconds: number;
-}
-
-export interface RecordAuthEventInput {
-  readonly userId?: number | null;
-  readonly actorId?: number | null;
-  readonly sessionId?: number | null;
-  readonly identifier?: string | null;
-  readonly eventType: AuthEventTypeCode;
-  readonly status?: AuthEventStatusCode;
-  readonly ipAddress?: string | null;
-  readonly userAgent?: string | null;
-  readonly deviceName?: string | null;
-  readonly reason?: string | null;
-  readonly metadata?: Record<string, unknown> | null;
-}
+export { AUTH_SESSION_REDIS_PREFIX } from '../enum/auth.enum.js';
+export type { IssuedSessionTokens, RecordAuthEventInput } from '../types/auth.types.js';
 
 @Injectable()
 export class SessionService {
@@ -679,12 +661,6 @@ export class SessionService {
 
   /** Suy đoán tên thiết bị ngắn gọn từ chuỗi User-Agent */
   public extractDeviceName(userAgent?: string | null): string {
-    if (!userAgent) return 'Unknown Device';
-    if (/iPhone|iPad|iOS/i.test(userAgent)) return 'iOS Device';
-    if (/Android/i.test(userAgent)) return 'Android Device';
-    if (/Macintosh|Mac OS/i.test(userAgent)) return 'Mac';
-    if (/Windows/i.test(userAgent)) return 'Windows PC';
-    if (/Linux/i.test(userAgent)) return 'Linux';
-    return 'Web Browser';
+    return extractDeviceNameFromUserAgent(userAgent);
   }
 }

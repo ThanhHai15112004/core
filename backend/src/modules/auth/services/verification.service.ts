@@ -45,11 +45,13 @@ import type {
   VerificationSendResponse,
 } from '../responses/auth.response.js';
 
-const EMAIL_VERIFICATION_TTL_SECONDS = 900; // 15 phút
-const PHONE_OTP_TTL_SECONDS = 300; // 5 phút
-const DEFAULT_OTP_MAX_SENDS = 5;
-const DEFAULT_OTP_MAX_ATTEMPTS = 5;
-const DEFAULT_OTP_COOLDOWN_SECONDS = 60;
+import {
+  DEFAULT_OTP_COOLDOWN_SECONDS,
+  DEFAULT_OTP_MAX_ATTEMPTS,
+  DEFAULT_OTP_MAX_SENDS,
+  EMAIL_VERIFICATION_TTL_SECONDS,
+  PHONE_OTP_TTL_SECONDS,
+} from '../enum/auth.enum.js';
 
 @Injectable()
 export class VerificationService {

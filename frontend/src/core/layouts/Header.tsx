@@ -2,7 +2,8 @@ import React from 'react';
 import { APP_NAME, NAVIGATION_ITEMS, type NavigationTabId } from '../constants/index';
 import { ROUTES } from '../../routes/index';
 import { useLocale } from '../i18n/index';
-import { Home, Terminal, Boxes, Globe, Shield, FolderOpen } from 'lucide-react';
+import { useTheme } from '../theme/index';
+import { Home, Terminal, Boxes, Globe, ShieldCheck, FolderOpen, Sun, Moon } from 'lucide-react';
 import { navigateTo } from '../router/index';
 
 interface HeaderProps {
@@ -12,11 +13,12 @@ interface HeaderProps {
 
 export const Header: React.FC<HeaderProps> = ({ activeTab = 'home', onTabChange }) => {
   const { locale, toggleLocale, t } = useLocale();
+  const { theme, toggleTheme } = useTheme();
 
   const resolveNavIcon = (id: NavigationTabId) => {
     switch (id) {
-      case 'iam':
-        return <Shield size={15} />;
+      case 'auth':
+        return <ShieldCheck size={15} />;
       case 'files':
         return <FolderOpen size={15} />;
       case 'home':
@@ -28,16 +30,11 @@ export const Header: React.FC<HeaderProps> = ({ activeTab = 'home', onTabChange 
   return (
     <header className="glass header-root">
       <div className="header-content">
-        <div
-          onClick={() => onTabChange?.('home')}
-          className="header-brand"
-        >
+        <div onClick={() => onTabChange?.('home')} className="header-brand">
           <div className="header-logo-badge" aria-hidden="true">
             <Boxes size={18} />
           </div>
-          <span className="gradient-text header-brand-name">
-            {APP_NAME}
-          </span>
+          <span className="gradient-text header-brand-name">{APP_NAME}</span>
         </div>
 
         <nav className="header-nav">
@@ -71,16 +68,26 @@ export const Header: React.FC<HeaderProps> = ({ activeTab = 'home', onTabChange 
             <span>{t('header.systemConsole')}</span>
           </button>
 
+          {/* Theme Switch Button (Light / Dark) */}
+          <button
+            type="button"
+            onClick={toggleTheme}
+            className="theme-toggle-btn"
+            title={theme === 'dark' ? 'Chuyển sang giao diện Sáng' : 'Chuyển sang giao diện Tối'}
+          >
+            {theme === 'dark' ? <Sun size={15} color="#FBBF24" /> : <Moon size={15} color="#2563EB" />}
+            <span>{theme === 'dark' ? t('header.themeDark') : t('header.themeLight')}</span>
+          </button>
+
           {/* Language Switch Button */}
           <button
             type="button"
             onClick={toggleLocale}
-            className="nav-tab-btn"
+            className="theme-toggle-btn"
             title={t('header.languageToggle')}
-            style={{ padding: '0.4rem 0.65rem', minWidth: 'unset' }}
           >
             <Globe size={14} />
-            <span style={{ textTransform: 'uppercase', fontWeight: 600 }}>{locale}</span>
+            <span style={{ textTransform: 'uppercase', fontWeight: 700 }}>{locale}</span>
           </button>
         </nav>
       </div>

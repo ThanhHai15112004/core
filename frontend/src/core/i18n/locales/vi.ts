@@ -54,9 +54,12 @@ export const vi = {
   header: {
     systemConsole: 'System Console',
     home: 'Trang chủ',
+    auth: 'Xác thực & Bảo mật',
     iam: 'Người dùng & Xác thực',
     files: 'Quản lý File & Media',
     languageToggle: 'Ngôn ngữ',
+    themeLight: 'Sáng',
+    themeDark: 'Tối',
   },
   footer: {
     platformStatus: 'Hạ tầng Core đang chạy',

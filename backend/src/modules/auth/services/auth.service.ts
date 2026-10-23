@@ -19,12 +19,13 @@ import {
 import { AUTH_EVENT_STATUS, AUTH_EVENT_TYPE, type IAuthPublicService } from '../contracts/index.js';
 import { SessionService } from './session.service.js';
 import { MfaService } from './mfa.service.js';
+import { DEFAULT_ADMIN_ROLE_CODES, STEP_UP_TOKEN_TTL_SECONDS } from '../enum/auth.enum.js';
 import {
   MfaChallengeAttemptTracker,
   issueLoginMfaStep2Challenge,
   verifyAndEnforceLoginAccountStatus,
   verifyLoginPasswordAndRehashIfNeeded,
-} from './mfa-challenge-attempt.helper.js';
+} from '../helpers/mfa-challenge-attempt.helper.js';
 import { resolveUserCredentialsById } from './password.service.js';
 import { SecuritySettingsService } from './security-settings.service.js';
 import { VerificationService } from './verification.service.js';
@@ -51,15 +52,6 @@ import type {
   StepUpVerifyResponse,
   UserPreferencesResponse,
 } from '../responses/auth.response.js';
-
-const STEP_UP_TOKEN_TTL_SECONDS = 300; // 5 phút
-const DEFAULT_ADMIN_ROLE_CODES = [
-  'SUPER_ADMIN',
-  'ADMIN',
-  'SYSTEM_ADMIN',
-  'IAM_ADMIN',
-  'SECURITY_ADMIN',
-];
 
 @Injectable()
 export class AuthService implements IAuthPublicService {

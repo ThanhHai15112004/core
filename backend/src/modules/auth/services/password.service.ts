@@ -42,8 +42,7 @@ import type {
   SuggestedPasswordResponse,
 } from '../responses/auth.response.js';
 
-const PASSWORD_RESET_TTL_SECONDS = 900; // 15 phút
-const DEFAULT_RESET_OTP_MAX_ATTEMPTS = 5;
+import { DEFAULT_RESET_OTP_MAX_ATTEMPTS, PASSWORD_RESET_TTL_SECONDS } from '../enum/auth.enum.js';
 
 /** Tra cứu thông tin xác thực (credentials) của người dùng qua Public Contract của module Users */
 export async function resolveUserCredentialsById(

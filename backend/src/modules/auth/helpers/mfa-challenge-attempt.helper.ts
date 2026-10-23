@@ -13,16 +13,17 @@ import {
   type UserAuthIdentityView,
 } from '@modules/users/contracts/index.js';
 import { AUTH_EVENT_STATUS, AUTH_EVENT_TYPE, type MfaMethodType } from '../contracts/index.js';
+import {
+  DEFAULT_AUTO_LOCK_DURATION_MINUTES,
+  DEFAULT_MAX_FAILED_LOGIN_ATTEMPTS,
+  MFA_CHALLENGE_ATTEMPT_TTL_SEC,
+  MFA_CHALLENGE_MAX_L1_ENTRIES,
+} from '../enum/auth.enum.js';
 import type { LoginRequest } from '../requests/auth.requests.js';
 import type { LoginResponse } from '../responses/auth.response.js';
-import type { MfaService } from './mfa.service.js';
-import type { SecuritySettingsService } from './security-settings.service.js';
-import type { SessionService } from './session.service.js';
-
-const MFA_CHALLENGE_ATTEMPT_TTL_SEC = 300;
-const MFA_CHALLENGE_MAX_L1_ENTRIES = 5000;
-const DEFAULT_MAX_FAILED_LOGIN_ATTEMPTS = 5;
-const DEFAULT_AUTO_LOCK_DURATION_MINUTES = 15;
+import type { MfaService } from '../services/mfa.service.js';
+import type { SecuritySettingsService } from '../services/security-settings.service.js';
+import type { SessionService } from '../services/session.service.js';
 
 /**
  * Bộ theo dõi số lần thử thách thức MFA hỗ trợ đồng bộ đa tiến trình (Multi-instance) qua L2 Cache (Redis)
@@ -313,7 +314,7 @@ export async function issueLoginMfaStep2Challenge(params: {
     } else if (availableMethods.includes('SMS_OTP') && credentials.phone) {
       const smsRes = await mfaService.sendSmsOtp(credentials.id, credentials.phone);
       smsOtpSent = true;
-      maskedPhone = smsRes.maskedPhone;
+      maskedPhone = smsRes.devOtpCode ? smsRes.maskedPhone : smsRes.maskedPhone;
       devOtpCode = smsRes.devOtpCode;
     }
   }

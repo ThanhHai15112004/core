@@ -9,8 +9,25 @@ import {
   defaultSettingRegistry,
   maskEmail as sharedMaskEmail,
   maskPhone as sharedMaskPhone,
-  safeJsonParse,
 } from '@packages/kernel/index.js';
+import {
+  DEFAULT_MAX_TRUSTED_DEVICES,
+  DEFAULT_MFA_OTP_MAX_ATTEMPTS,
+  DEFAULT_RECOVERY_CODE_COUNT,
+  DEFAULT_TRUSTED_DEVICE_DAYS,
+  EMAIL_OTP_TTL_SECONDS,
+  SMS_OTP_TTL_SECONDS,
+} from '../enum/auth.enum.js';
+import { inferTrustedDeviceName } from '../helpers/auth-device.helper.js';
+import {
+  filterActiveTrustedDevices as filterActiveTrustedDevicesHelper,
+  normalizeRecoveryCode as normalizeRecoveryCodeHelper,
+  parseExtendedMfaEnvelope,
+  serializeExtendedMfaEnvelope,
+  toTrustedDeviceResponse as toTrustedDeviceResponseHelper,
+} from '../helpers/mfa-envelope.helper.js';
+import type { MfaExtendedEnvelope, StoredTrustedDeviceRecord } from '../types/auth.types.js';
+export type { StoredTrustedDeviceRecord } from '../types/auth.types.js';
 import {
   FieldEncryptionService,
   PasswordHasherService,
@@ -55,33 +72,6 @@ import type {
   SendSmsOtpResponse,
   TrustedDeviceItemResponse,
 } from '../responses/auth.response.js';
-
-const EMAIL_OTP_TTL_SECONDS = 300; // 5 phút
-const SMS_OTP_TTL_SECONDS = 300; // 5 phút
-const DEFAULT_TRUSTED_DEVICE_DAYS = 30;
-const DEFAULT_MAX_TRUSTED_DEVICES = 20;
-const DEFAULT_RECOVERY_CODE_COUNT = 8;
-const DEFAULT_MFA_OTP_MAX_ATTEMPTS = 5;
-
-export interface StoredTrustedDeviceRecord {
-  readonly deviceId: string;
-  readonly tokenHash: string;
-  readonly deviceName: string | null;
-  readonly ipAddress: string | null;
-  readonly userAgent: string | null;
-  readonly createdAt: string;
-  lastUsedAt: string;
-  readonly trustedUntil: string;
-}
-
-interface MfaExtendedEnvelope {
-  codes: string[];
-  smsOtpEnabled?: boolean;
-  smsOtpCodeHash?: string | null;
-  smsOtpExpiresAt?: string | null;
-  smsOtpFailedAttempts?: number;
-  trustedDevices?: StoredTrustedDeviceRecord[];
-}
 
 @Injectable()
 export class MfaService {
@@ -1107,90 +1097,26 @@ export class MfaService {
 
   /** Giải mã cấu trúc JSON mở rộng (tương thích ngược với mảng string[] cũ) */
   private parseExtendedEnvelope(jsonStr?: string | null): MfaExtendedEnvelope {
-    const parsed = safeJsonParse<unknown>(jsonStr, null);
-    if (!parsed) {
-      return { codes: [] };
-    }
-    if (Array.isArray(parsed)) {
-      return {
-        codes: parsed.filter((item): item is string => typeof item === 'string'),
-      };
-    }
-    if (typeof parsed === 'object') {
-      const obj = parsed as Partial<MfaExtendedEnvelope>;
-      return {
-        codes: Array.isArray(obj.codes)
-          ? obj.codes.filter((item): item is string => typeof item === 'string')
-          : [],
-        ...(obj.smsOtpEnabled !== undefined ? { smsOtpEnabled: Boolean(obj.smsOtpEnabled) } : {}),
-        ...(obj.smsOtpCodeHash !== undefined ? { smsOtpCodeHash: obj.smsOtpCodeHash } : {}),
-        ...(obj.smsOtpExpiresAt !== undefined ? { smsOtpExpiresAt: obj.smsOtpExpiresAt } : {}),
-        ...(obj.smsOtpFailedAttempts !== undefined
-          ? { smsOtpFailedAttempts: Number(obj.smsOtpFailedAttempts) }
-          : {}),
-        ...(Array.isArray(obj.trustedDevices) ? { trustedDevices: obj.trustedDevices } : {}),
-      };
-    }
-    return { codes: [] };
+    return parseExtendedMfaEnvelope(jsonStr);
   }
 
   /** Tuần tự hóa lại JSON mở rộng (nếu không có metadata mở rộng thì xuất mảng thuần để giữ tương thích tối đa) */
   private serializeExtendedEnvelope(envelope: MfaExtendedEnvelope): string {
-    const hasExtendedMetadata =
-      Boolean(envelope.smsOtpEnabled) ||
-      Boolean(envelope.smsOtpCodeHash) ||
-      Boolean(envelope.trustedDevices && envelope.trustedDevices.length > 0);
-
-    if (!hasExtendedMetadata) {
-      return JSON.stringify(envelope.codes);
-    }
-
-    return JSON.stringify({
-      codes: envelope.codes,
-      ...(envelope.smsOtpEnabled ? { smsOtpEnabled: true } : {}),
-      ...(envelope.smsOtpCodeHash
-        ? {
-            smsOtpCodeHash: envelope.smsOtpCodeHash,
-            smsOtpExpiresAt: envelope.smsOtpExpiresAt ?? null,
-            smsOtpFailedAttempts: envelope.smsOtpFailedAttempts ?? 0,
-          }
-        : {}),
-      ...(envelope.trustedDevices && envelope.trustedDevices.length > 0
-        ? { trustedDevices: envelope.trustedDevices }
-        : {}),
-    });
+    return serializeExtendedMfaEnvelope(envelope);
   }
 
   private filterActiveTrustedDevices(
     devices: StoredTrustedDeviceRecord[],
   ): StoredTrustedDeviceRecord[] {
-    const nowMs = Date.now();
-    return devices.filter((d) => {
-      const untilMs = new Date(d.trustedUntil).getTime();
-      return Number.isFinite(untilMs) && untilMs > nowMs;
-    });
+    return filterActiveTrustedDevicesHelper(devices);
   }
 
   private toTrustedDeviceResponse(record: StoredTrustedDeviceRecord): TrustedDeviceItemResponse {
-    return {
-      deviceId: record.deviceId,
-      deviceName: record.deviceName,
-      ipAddress: record.ipAddress,
-      userAgent: record.userAgent,
-      createdAt: record.createdAt,
-      lastUsedAt: record.lastUsedAt,
-      trustedUntil: record.trustedUntil,
-    };
+    return toTrustedDeviceResponseHelper(record);
   }
 
   private inferDeviceName(userAgent?: string | null): string | null {
-    if (!userAgent) return 'Trusted Device';
-    if (/iPhone|iPad|iOS/i.test(userAgent)) return 'iOS Trusted Device';
-    if (/Android/i.test(userAgent)) return 'Android Trusted Device';
-    if (/Macintosh|Mac OS/i.test(userAgent)) return 'Mac Trusted Browser';
-    if (/Windows/i.test(userAgent)) return 'Windows Trusted Browser';
-    if (/Linux/i.test(userAgent)) return 'Linux Trusted Browser';
-    return 'Trusted Browser';
+    return inferTrustedDeviceName(userAgent);
   }
 
   private async findConfigByUserId(userId: number): Promise<AuthMfaConfigEntity | null> {
@@ -1211,10 +1137,7 @@ export class MfaService {
 
   /** Chuẩn hóa mã khôi phục về chữ in hoa không dấu gạch ngang */
   private normalizeRecoveryCode(code: string): string {
-    return code
-      .trim()
-      .toUpperCase()
-      .replace(/[^A-Z0-9]/g, '');
+    return normalizeRecoveryCodeHelper(code);
   }
 
   /** Che bớt địa chỉ email khi trả về thông báo gửi OTP (vd: ad***@gmail.com) */

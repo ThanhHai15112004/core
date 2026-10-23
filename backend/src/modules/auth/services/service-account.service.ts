@@ -7,9 +7,17 @@ import {
   SettingRegistryService,
   UnauthorizedAppException,
   defaultSettingRegistry,
-  safeJsonParse,
-  safeJsonParseStringArray,
 } from '@packages/kernel/index.js';
+import { DEFAULT_CLIENT_TOKEN_TTL_SECONDS, MAX_USAGE_LOG_ENTRIES } from '../enum/auth.enum.js';
+import {
+  ensureScopesWithinAllowed as ensureScopesWithinAllowedHelper,
+  isCallerIpAllowed,
+  normalizeAllowedIpList,
+  normalizeCallerIp as normalizeCallerIpHelper,
+  normalizeScopesList,
+  parseApiClientUsageLogs,
+  parseJsonStringArray,
+} from '../helpers/api-client-security.helper.js';
 import {
   AUDIT_ACTOR_TYPE,
   AuditLogService,
@@ -53,9 +61,6 @@ import type {
   ApiClientUsageLogResponse,
   ServiceAccountResponse,
 } from '../responses/auth.response.js';
-
-const DEFAULT_CLIENT_TOKEN_TTL_SECONDS = 3600; // 1 giờ
-const MAX_USAGE_LOG_ENTRIES = 50;
 
 /**
  * Dịch vụ quản lý Tài khoản hệ thống (Service Account) và API Client (Mục 3.6):
@@ -819,78 +824,11 @@ export class ServiceAccountService {
 
   /** Kiểm tra IP người gọi có khớp với danh sách `allowedIps` (hỗ trợ exact IP, wildcard `*` và CIDR `/8..32`) */
   public isIpAllowed(callerIp: string | null, allowedIps: readonly string[]): boolean {
-    if (allowedIps.length === 0) return true;
-    if (!callerIp) return false;
-
-    const normalizedCaller = this.normalizeCallerIp(callerIp);
-    if (!normalizedCaller) return false;
-
-    for (const rawRule of allowedIps) {
-      const rule = this.normalizeCallerIp(rawRule) ?? rawRule.trim();
-      if (!rule) continue;
-      if (rule === '*' || rule === '0.0.0.0/0') return true;
-      if (rule === normalizedCaller) return true;
-
-      // Hỗ trợ wildcard dạng '10.10.1.*'
-      if (rule.includes('*')) {
-        const regexPattern: string =
-          '^' +
-          rule
-            .split('*')
-            .map((part: string) => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
-            .join('.*') +
-          '$';
-        if (new RegExp(regexPattern).test(normalizedCaller)) {
-          return true;
-        }
-      }
-
-      // Hỗ trợ IPv4 CIDR dạng '10.10.1.0/24'
-      if (rule.includes('/')) {
-        if (this.matchIpv4Cidr(normalizedCaller, rule)) {
-          return true;
-        }
-      }
-    }
-
-    return false;
-  }
-
-  private matchIpv4Cidr(ip: string, cidr: string): boolean {
-    const [rangeIp, prefixStr] = cidr.split('/');
-    if (!rangeIp || !prefixStr) return false;
-    const prefix = Number.parseInt(prefixStr, 10);
-    if (!Number.isFinite(prefix) || prefix < 0 || prefix > 32) return false;
-
-    const ipInt = this.ipv4ToUint32(ip);
-    const rangeInt = this.ipv4ToUint32(rangeIp.trim());
-    if (ipInt === null || rangeInt === null) return false;
-
-    if (prefix === 0) return true;
-    const mask = prefix === 32 ? 0xffffffff : ~((1 << (32 - prefix)) - 1) >>> 0;
-    return (ipInt & mask) >>> 0 === (rangeInt & mask) >>> 0;
-  }
-
-  private ipv4ToUint32(ip: string): number | null {
-    const parts = ip.split('.');
-    if (parts.length !== 4) return null;
-    let value = 0;
-    for (const part of parts) {
-      if (!/^\d+$/.test(part)) return null;
-      const octet = Number.parseInt(part, 10);
-      if (octet < 0 || octet > 255) return null;
-      value = ((value << 8) | octet) >>> 0;
-    }
-    return value >>> 0;
+    return isCallerIpAllowed(callerIp, allowedIps);
   }
 
   private normalizeCallerIp(ip?: string | null): string | null {
-    if (!ip || !ip.trim()) return null;
-    const trimmed = ip.trim();
-    if (trimmed.startsWith('::ffff:')) {
-      return trimmed.slice(7);
-    }
-    return trimmed;
+    return normalizeCallerIpHelper(ip);
   }
 
   private async recordClientUsage(
@@ -938,41 +876,23 @@ export class ServiceAccountService {
     requestedScopes: readonly string[],
     allowedSaScopes: readonly string[],
   ): void {
-    if (allowedSaScopes.length === 0 || allowedSaScopes.includes('*')) {
-      return;
-    }
-    const exceeded = requestedScopes.filter((s) => !allowedSaScopes.includes(s));
-    if (exceeded.length > 0) {
-      throw new ForbiddenAppException('auth.apiClientScopeExceeded', [
-        { requestedScopes, exceededScopes: exceeded, serviceAccountScopes: allowedSaScopes },
-      ]);
-    }
+    ensureScopesWithinAllowedHelper(requestedScopes, allowedSaScopes);
   }
 
   private normalizeScopes(scopes: readonly string[]): string[] {
-    return [...new Set(scopes.map((s) => s.trim()).filter(Boolean))];
+    return normalizeScopesList(scopes);
   }
 
   private normalizeIpList(ips: readonly string[]): string[] {
-    return [
-      ...new Set(
-        ips
-          .map((ip) => this.normalizeCallerIp(ip) ?? ip.trim())
-          .filter((ip): ip is string => Boolean(ip && ip.length > 0)),
-      ),
-    ];
+    return normalizeAllowedIpList(ips);
   }
 
   private parseStringArray(jsonStr?: string | null): string[] {
-    return safeJsonParseStringArray(jsonStr);
+    return parseJsonStringArray(jsonStr);
   }
 
   private parseUsageLogs(jsonStr?: string | null): ApiClientUsageLogItem[] {
-    const parsed = safeJsonParse<unknown>(jsonStr, null);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter((item): item is ApiClientUsageLogItem =>
-      Boolean(item && typeof item === 'object' && 'timestamp' in item && 'result' in item),
-    );
+    return parseApiClientUsageLogs(jsonStr);
   }
 
   private toServiceAccountResponse(entity: AuthServiceAccountEntity): ServiceAccountResponse {

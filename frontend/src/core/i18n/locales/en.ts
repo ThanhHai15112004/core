@@ -55,9 +55,12 @@ export const en: TranslationKey = {
   header: {
     systemConsole: 'System Console',
     home: 'Home',
+    auth: 'Auth & Security',
     iam: 'Users & Auth',
     files: 'Files & Media',
     languageToggle: 'Language',
+    themeLight: 'Light',
+    themeDark: 'Dark',
   },
   footer: {
     platformStatus: 'Core Platform Active',

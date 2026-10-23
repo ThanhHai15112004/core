@@ -1,8 +1,8 @@
 import { lazy, Suspense, useState } from 'react';
 import { Header } from './core/layouts/Header';
 import { Footer } from './core/layouts/Footer';
-import { Home } from './modules/home/pages/Home';
-import { IamManagementPage } from './modules/iam/IamManagementPage';
+import { HomePage } from './web/home/HomePage';
+import { AuthManagementPage } from './modules/auth/AuthManagementPage';
 import { FileManagerPage } from './modules/files/FileManagerPage';
 import { AppProviders } from './providers/index';
 import type { NavigationTabId } from './core/constants/index';
@@ -20,7 +20,8 @@ const SystemConsoleApp = lazy(() => import('./modules/system-console/SystemConso
 function App() {
   const [activeTab, setActiveTab] = useState<NavigationTabId>('home');
   const { pathname } = useLocation();
-  const isConsoleMode = pathname === ROUTES.SYSTEM_CONSOLE || pathname.startsWith(`${ROUTES.SYSTEM_CONSOLE}/`);
+  const isConsoleMode =
+    pathname === ROUTES.SYSTEM_CONSOLE || pathname.startsWith(`${ROUTES.SYSTEM_CONSOLE}/`);
 
   return (
     <LocaleProvider>
@@ -31,12 +32,12 @@ function App() {
       ) : (
         <AppProviders>
           <Header activeTab={activeTab} onTabChange={setActiveTab} />
-          {activeTab === 'iam' ? (
-            <IamManagementPage />
+          {activeTab === 'auth' ? (
+            <AuthManagementPage />
           ) : activeTab === 'files' ? (
             <FileManagerPage />
           ) : (
-            <Home />
+            <HomePage onNavigateTab={setActiveTab} />
           )}
           <Footer />
         </AppProviders>
@@ -46,4 +47,3 @@ function App() {
 }
 
 export default App;
-
