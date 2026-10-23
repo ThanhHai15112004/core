@@ -8,7 +8,8 @@ export type NavigationTabId =
   | 'users'
   | 'codes'
   | 'settings'
-  | 'files';
+  | 'files'
+  | 'notifications';
 
 export interface NavigationItem {
   id: NavigationTabId;
@@ -66,5 +67,11 @@ export const NAVIGATION_ITEMS: readonly NavigationItem[] = [
     labelKey: 'header.files',
     icon: 'folder',
     route: ROUTES.FILES,
+  },
+  {
+    id: 'notifications',
+    labelKey: 'header.notifications',
+    icon: 'bell',
+    route: ROUTES.NOTIFICATIONS,
   },
 ] as const;

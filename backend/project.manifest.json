@@ -25,7 +25,8 @@
     "auth",
     "codes",
     "settings",
-    "files"
+    "files",
+    "notifications"
   ],
   "settings": {
     "defaultLocale": "vi",

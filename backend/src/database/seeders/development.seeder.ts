@@ -69,9 +69,12 @@ export class DevelopmentDataSeeder implements SeederContract {
     // Seed dữ liệu mẫu cho Module Quản lý File & Media (Phase 6.1)
     affected += await this.seedSampleFilesAndUsages(ctx, isPostgres);
 
+    // Seed dữ liệu mẫu cho Module Thông báo trong hệ thống (Phase 7.1)
+    affected += await this.seedSampleNotifications(ctx, isPostgres);
+
     return {
       affected,
-      details: `${affected} development record(s) (settings, folders, files & usages) seeded`,
+      details: `${affected} development record(s) (settings, folders, files, usages & notifications) seeded`,
     };
   }
 
@@ -402,6 +405,189 @@ export class DevelopmentDataSeeder implements SeederContract {
         );
       }
       count++;
+    }
+
+    return count;
+  }
+
+  private async seedSampleNotifications(ctx: SeederContext, isPostgres: boolean): Promise<number> {
+    let count = 0;
+
+    const sampleNotifications = [
+      {
+        id: 1,
+        code: 'NTF-2026-000001',
+        title: 'Khởi tạo thành công Trung tâm Thông báo Hệ thống (Phase 7.1)',
+        content:
+          'Hệ thống thông báo In-App đã sẵn sàng hoạt động, hỗ trợ gửi theo cá nhân, nhóm, vai trò và đơn vị tổ chức.',
+        category: 1, // SYSTEM
+        priority: 2, // NORMAL
+        targetType: 1, // SINGLE_USER
+        targetIdsJson: JSON.stringify({ userIds: [1] }),
+        channelsJson: JSON.stringify(['IN_APP']),
+        actionUrl: '/notifications',
+        referenceModule: 'system',
+        totalTargeted: 1,
+        totalDelivered: 1,
+        totalSkippedByPref: 0,
+      },
+      {
+        id: 2,
+        code: 'NTF-2026-000002',
+        title: 'Cảnh báo bảo mật: Đăng nhập quản trị viên từ phiên làm việc mới',
+        content:
+          'Phát hiện phiên đăng nhập quản trị viên mới. Vui lòng kiểm tra lịch sử phiên đăng nhập nếu không phải là bạn.',
+        category: 3, // SECURITY
+        priority: 4, // URGENT
+        targetType: 3, // ROLE
+        targetIdsJson: JSON.stringify({ roleIds: [1], roleCodes: ['SUPER_ADMIN'] }),
+        channelsJson: JSON.stringify(['IN_APP', 'EMAIL']),
+        actionUrl: '/auth',
+        referenceModule: 'auth',
+        totalTargeted: 1,
+        totalDelivered: 1,
+        totalSkippedByPref: 0,
+      },
+      {
+        id: 3,
+        code: 'NTF-2026-000003',
+        title: 'Công việc mới: Rà soát phân quyền tệp tin & hạn mức lưu trữ quý IV',
+        content:
+          'Đề nghị các quản lý đơn vị kiểm tra danh sách tệp chia sẻ và hạn mức dung lượng lưu trữ của phòng ban.',
+        category: 2, // WORK
+        priority: 3, // HIGH
+        targetType: 4, // ORG_UNIT
+        targetIdsJson: JSON.stringify({ organizationUnitIds: [1], includeSubUnits: true }),
+        channelsJson: JSON.stringify(['IN_APP']),
+        actionUrl: '/files',
+        referenceModule: 'files',
+        totalTargeted: 2,
+        totalDelivered: 2,
+        totalSkippedByPref: 0,
+      },
+      {
+        id: 4,
+        code: 'NTF-2026-000004',
+        title: 'Bản tin nội bộ: Cập nhật lịch bảo trì định kỳ hệ thống cuối tuần',
+        content:
+          'Hệ thống sẽ thực hiện tối ưu hóa chỉ mục cơ sở dữ liệu vào 02:00 Chủ nhật tuần này (không gián đoạn dịch vụ).',
+        category: 4, // ANNOUNCEMENT
+        priority: 1, // LOW
+        targetType: 2, // USER_GROUP
+        targetIdsJson: JSON.stringify({ userIds: [1, 2] }),
+        channelsJson: JSON.stringify(['IN_APP']),
+        actionUrl: '/settings',
+        referenceModule: 'settings',
+        totalTargeted: 2,
+        totalDelivered: 2,
+        totalSkippedByPref: 0,
+      },
+    ];
+
+    for (const n of sampleNotifications) {
+      if (isPostgres) {
+        await ctx.manager.query(
+          `INSERT INTO notifications (
+             id, code, title, content, category, priority, target_type, target_ids_json,
+             channels_json, action_url, reference_module, sender_user_id, organization_unit_id,
+             total_targeted, total_delivered, total_skipped_by_pref, status
+           )
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 1, 1, $12, $13, $14, 1)
+           ON CONFLICT (code) DO UPDATE SET title = EXCLUDED.title, content = EXCLUDED.content`,
+          [
+            n.id,
+            n.code,
+            n.title,
+            n.content,
+            n.category,
+            n.priority,
+            n.targetType,
+            n.targetIdsJson,
+            n.channelsJson,
+            n.actionUrl,
+            n.referenceModule,
+            n.totalTargeted,
+            n.totalDelivered,
+            n.totalSkippedByPref,
+          ],
+        );
+      } else {
+        await ctx.manager.query(
+          `INSERT INTO notifications (
+             id, code, title, content, category, priority, target_type, target_ids_json,
+             channels_json, action_url, reference_module, sender_user_id, organization_unit_id,
+             total_targeted, total_delivered, total_skipped_by_pref, status
+           )
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 1, ?, ?, ?, 1)
+           ON DUPLICATE KEY UPDATE title = VALUES(title), content = VALUES(content)`,
+          [
+            n.id,
+            n.code,
+            n.title,
+            n.content,
+            n.category,
+            n.priority,
+            n.targetType,
+            n.targetIdsJson,
+            n.channelsJson,
+            n.actionUrl,
+            n.referenceModule,
+            n.totalTargeted,
+            n.totalDelivered,
+            n.totalSkippedByPref,
+          ],
+        );
+      }
+      count++;
+    }
+
+    if (isPostgres) {
+      await ctx.manager
+        .query(
+          `SELECT setval(pg_get_serial_sequence('notifications', 'id'), COALESCE((SELECT MAX(id) FROM notifications), 1), true)`,
+        )
+        .catch(() => undefined);
+    }
+
+    const sampleRecipients = [
+      { id: 1, notificationId: 1, recipientUserId: 1, channel: 1, isRead: false, inboxStatus: 1 },
+      { id: 2, notificationId: 2, recipientUserId: 1, channel: 1, isRead: false, inboxStatus: 1 },
+      { id: 3, notificationId: 3, recipientUserId: 1, channel: 1, isRead: true, inboxStatus: 1 },
+      { id: 4, notificationId: 4, recipientUserId: 1, channel: 1, isRead: true, inboxStatus: 2 },
+      { id: 5, notificationId: 3, recipientUserId: 2, channel: 1, isRead: false, inboxStatus: 1 },
+      { id: 6, notificationId: 4, recipientUserId: 2, channel: 1, isRead: false, inboxStatus: 1 },
+    ];
+
+    for (const r of sampleRecipients) {
+      if (isPostgres) {
+        await ctx.manager.query(
+          `INSERT INTO notification_recipients (
+             id, notification_id, recipient_user_id, organization_unit_id, channel, is_read, inbox_status
+           )
+           VALUES ($1, $2, $3, 1, $4, $5, $6)
+           ON CONFLICT (notification_id, recipient_user_id, channel)
+           DO NOTHING`,
+          [r.id, r.notificationId, r.recipientUserId, r.channel, r.isRead, r.inboxStatus],
+        );
+      } else {
+        await ctx.manager.query(
+          `INSERT INTO notification_recipients (
+             id, notification_id, recipient_user_id, organization_unit_id, channel, is_read, inbox_status
+           )
+           VALUES (?, ?, ?, 1, ?, ?, ?)
+           ON DUPLICATE KEY UPDATE channel = VALUES(channel)`,
+          [r.id, r.notificationId, r.recipientUserId, r.channel, r.isRead, r.inboxStatus],
+        );
+      }
+      count++;
+    }
+
+    if (isPostgres) {
+      await ctx.manager
+        .query(
+          `SELECT setval(pg_get_serial_sequence('notification_recipients', 'id'), COALESCE((SELECT MAX(id) FROM notification_recipients), 1), true)`,
+        )
+        .catch(() => undefined);
     }
 
     return count;

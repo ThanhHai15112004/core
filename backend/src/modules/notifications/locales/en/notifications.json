@@ -1,0 +1,22 @@
+{
+  "systemDisabled": "The notification dispatch system is currently disabled in runtime settings.",
+  "titleRequired": "Notification title is required.",
+  "contentRequired": "Notification content is required.",
+  "titleTooLong": "Notification title exceeds the maximum allowed length ({{max}} characters).",
+  "contentTooLong": "Notification content exceeds the maximum allowed length ({{max}} characters).",
+  "singleUserRequired": "Please specify the target recipient user (userId).",
+  "targetUserNotFoundOrInactive": "Target recipient user (#{{userId}}) does not exist or is inactive.",
+  "userGroupEmpty": "Target user group list cannot be empty.",
+  "roleTargetingDisabled": "Role-based notification broadcasting is currently disabled.",
+  "roleTargetRequired": "Please select at least one role (roleIds or roleCodes) to send notifications.",
+  "roleTargetNotFound": "No active matching roles were found for notification dispatch.",
+  "organizationModuleNotAvailable": "Organization-based notifications are only available when the Organizations module is installed and enabled.",
+  "organizationTargetingDisabled": "Organization unit notification broadcasting is currently disabled by setting or feature flag.",
+  "organizationTargetRequired": "Please select at least one organization unit (organizationUnitIds) to send notifications.",
+  "maxRecipientsExceeded": "Recipient count ({{count}}) exceeds the maximum allowed batch size ({{max}}).",
+  "invalidTargetType": "Invalid notification target type.",
+  "inboxItemNotFound": "Notification item was not found in your personal inbox.",
+  "dispatchNotFound": "Notification dispatch history record was not found.",
+  "preferencesCustomizationDisabled": "User notification preference customization is currently disabled by administrator."
+}
+

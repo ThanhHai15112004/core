@@ -9,6 +9,7 @@ import { UsersManagementPage } from './modules/users/UsersManagementPage';
 import { CodesManagementPage } from './modules/codes/CodesManagementPage';
 import { SettingsManagementPage } from './modules/settings/SettingsManagementPage';
 import { FileManagerPage } from './modules/files/FileManagerPage';
+import { NotificationsManagementPage } from './modules/notifications/NotificationsManagementPage';
 import { AppProviders } from './providers/index';
 import type { NavigationTabId } from './core/constants/index';
 import { ROUTES } from './routes/index';
@@ -51,6 +52,8 @@ function App() {
             <SettingsManagementPage />
           ) : activeTab === 'files' ? (
             <FileManagerPage />
+          ) : activeTab === 'notifications' ? (
+            <NotificationsManagementPage />
           ) : (
             <HomePage onNavigateTab={setActiveTab} />
           )}

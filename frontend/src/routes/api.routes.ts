@@ -279,4 +279,17 @@ export const API_ROUTES = {
     TEMPORARY_LINK: (id: string | number) => `/files/${id}/temporary-link`,
     TEMPORARY_DOWNLOAD: (token: string) => `/files/temporary-download/${token}`,
   },
+  NOTIFICATIONS: {
+    CONFIG: (qs = '') => `/notifications/config${qs ? `?${qs}` : ''}`,
+    UNREAD_COUNT: '/notifications/unread-count',
+    INBOX: (qs = '') => `/notifications/inbox${qs ? `?${qs}` : ''}`,
+    INBOX_BY_ID: (id: string | number) => `/notifications/inbox/${id}`,
+    INBOX_READ: (id: string | number) => `/notifications/inbox/${id}/read`,
+    INBOX_MARK_ALL_READ: '/notifications/inbox/mark-all-read',
+    INBOX_ARCHIVE: (id: string | number) => `/notifications/inbox/${id}/archive`,
+    PREFERENCES: '/notifications/preferences',
+    SEND: '/notifications/send',
+    DISPATCHES: (qs = '') => `/notifications/dispatches${qs ? `?${qs}` : ''}`,
+    DISPATCH_BY_ID: (id: string | number) => `/notifications/dispatches/${id}`,
+  },
 } as const;

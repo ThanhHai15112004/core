@@ -1,0 +1,22 @@
+{
+  "systemDisabled": "Hệ thống gửi thông báo hiện đang tạm tắt trong cấu hình vận hành.",
+  "titleRequired": "Tiêu đề thông báo không được để trống.",
+  "contentRequired": "Nội dung thông báo không được để trống.",
+  "titleTooLong": "Tiêu đề thông báo vượt quá độ dài tối đa cho phép ({{max}} ký tự).",
+  "contentTooLong": "Nội dung thông báo vượt quá độ dài tối đa cho phép ({{max}} ký tự).",
+  "singleUserRequired": "Vui lòng chỉ định người dùng nhận thông báo (userId).",
+  "targetUserNotFoundOrInactive": "Người dùng nhận thông báo (#{{userId}}) không tồn tại hoặc đang bị vô hiệu hóa.",
+  "userGroupEmpty": "Danh sách nhóm người dùng nhận thông báo không được để trống.",
+  "roleTargetingDisabled": "Tính năng gửi thông báo theo Vai trò hiện đang bị tắt trong cấu hình.",
+  "roleTargetRequired": "Vui lòng chọn ít nhất một vai trò (roleIds hoặc roleCodes) để gửi thông báo.",
+  "roleTargetNotFound": "Không tìm thấy vai trò hợp lệ đang hoạt động để gửi thông báo.",
+  "organizationModuleNotAvailable": "Tính năng gửi thông báo theo đơn vị chỉ khả dụng khi hệ thống đã cài đặt và bật module Tổ chức (Organizations).",
+  "organizationTargetingDisabled": "Tính năng gửi thông báo theo Đơn vị tổ chức hiện đang bị tắt trong cấu hình hoặc Feature Flag.",
+  "organizationTargetRequired": "Vui lòng chọn ít nhất một đơn vị tổ chức (organizationUnitIds) để gửi thông báo.",
+  "maxRecipientsExceeded": "Số lượng người nhận ({{count}}) vượt quá giới hạn tối đa mỗi lần gửi ({{max}}).",
+  "invalidTargetType": "Loại đối tượng nhận thông báo không hợp lệ.",
+  "inboxItemNotFound": "Không tìm thấy thông báo trong hộp thư cá nhân.",
+  "dispatchNotFound": "Không tìm thấy bản ghi lịch sử phát thông báo.",
+  "preferencesCustomizationDisabled": "Tính năng tùy chỉnh sở thích nhận thông báo của người dùng hiện đang bị khóa bởi quản trị viên."
+}
+

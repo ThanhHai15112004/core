@@ -7,6 +7,7 @@ export const ROUTES = {
   CODES: '/codes',
   SETTINGS: '/settings',
   FILES: '/files',
+  NOTIFICATIONS: '/notifications',
   SYSTEM_CONSOLE: '/system-console',
 } as const;
 

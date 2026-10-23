@@ -63,6 +63,7 @@ export const en: TranslationKey = {
     settings: 'System Settings',
     iam: 'Users & Auth',
     files: 'Files & Media',
+    notifications: 'Notifications & Inbox',
     languageToggle: 'Language',
     themeLight: 'Light',
     themeDark: 'Dark',

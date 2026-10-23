@@ -327,6 +327,29 @@ export const STANDARD_IAM_PERMISSIONS: readonly SeedPermissionDef[] = [
     module: 'files',
     description: 'Quyền xóa vĩnh viễn tệp tin và dọn dẹp thùng rác khi không còn liên kết dữ liệu',
   },
+  {
+    id: 27,
+    code: 'notifications.read',
+    name: 'Xem thông báo & lịch sử phát thông báo',
+    module: 'notifications',
+    description: 'Quyền xem hộp thư thông báo và tra cứu lịch sử phát thông báo trong hệ thống',
+  },
+  {
+    id: 28,
+    code: 'notifications.send',
+    name: 'Tạo & phát thông báo trong hệ thống',
+    module: 'notifications',
+    description:
+      'Quyền tạo và gửi thông báo cho cá nhân, nhóm người dùng, theo vai trò hoặc theo đơn vị tổ chức',
+  },
+  {
+    id: 29,
+    code: 'notifications.manage',
+    name: 'Quản trị cấu hình & chính sách thông báo',
+    module: 'notifications',
+    description:
+      'Quyền quản trị cấu hình vận hành hệ thống thông báo, kênh phát, hạn mức và chính sách sở thích nhận thông báo',
+  },
 ] as const;
 
 const ALL_IAM_PERMISSION_CODES = STANDARD_IAM_PERMISSIONS.map((p) => p.code);

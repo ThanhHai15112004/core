@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { APP_NAME, NAVIGATION_ITEMS, type NavigationTabId } from '../constants/index';
 import { ROUTES } from '../../routes/index';
 import { useLocale } from '../i18n/index';
@@ -15,10 +15,15 @@ import {
   BookOpen,
   Settings,
   FolderOpen,
+  Bell,
   Sun,
   Moon,
 } from 'lucide-react';
 import { navigateTo } from '../router/index';
+import {
+  NOTIFICATION_UNREAD_CHANGED_EVENT,
+  notificationsApi,
+} from '../../modules/notifications/services/notifications.api';
 
 interface HeaderProps {
   activeTab?: NavigationTabId;
@@ -28,6 +33,29 @@ interface HeaderProps {
 export const Header: React.FC<HeaderProps> = ({ activeTab = 'home', onTabChange }) => {
   const { locale, toggleLocale, t } = useLocale();
   const { theme, toggleTheme } = useTheme();
+  const [unreadCount, setUnreadCount] = useState<number>(0);
+
+  const fetchUnread = useCallback(async () => {
+    try {
+      const res = await notificationsApi.getUnreadSummary();
+      if (typeof res?.unreadCount === 'number') {
+        setUnreadCount(res.unreadCount);
+      }
+    } catch {
+      // Ignore if unauthenticated or offline
+    }
+  }, []);
+
+  useEffect(() => {
+    void fetchUnread();
+    const handler = () => void fetchUnread();
+    window.addEventListener(NOTIFICATION_UNREAD_CHANGED_EVENT, handler);
+    const interval = window.setInterval(handler, 30000);
+    return () => {
+      window.removeEventListener(NOTIFICATION_UNREAD_CHANGED_EVENT, handler);
+      window.clearInterval(interval);
+    };
+  }, [fetchUnread]);
 
   const resolveNavIcon = (id: NavigationTabId) => {
     switch (id) {
@@ -45,6 +73,8 @@ export const Header: React.FC<HeaderProps> = ({ activeTab = 'home', onTabChange 
         return <Settings size={15} />;
       case 'files':
         return <FolderOpen size={15} />;
+      case 'notifications':
+        return <Bell size={15} />;
       case 'home':
       default:
         return <Home size={15} />;
@@ -76,6 +106,26 @@ export const Header: React.FC<HeaderProps> = ({ activeTab = 'home', onTabChange 
                   {resolveNavIcon(item.id)}
                 </span>
                 <span>{label}</span>
+                {item.id === 'notifications' && unreadCount > 0 && (
+                  <span
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      minWidth: 18,
+                      height: 18,
+                      padding: '0 5px',
+                      borderRadius: 99,
+                      background: '#EF4444',
+                      color: '#FFFFFF',
+                      fontSize: 10.5,
+                      fontWeight: 800,
+                      marginLeft: 2,
+                    }}
+                  >
+                    {unreadCount > 99 ? '99+' : unreadCount}
+                  </span>
+                )}
               </button>
             );
           })}

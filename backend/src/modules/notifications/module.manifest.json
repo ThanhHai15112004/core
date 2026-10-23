@@ -1,0 +1,625 @@
+{
+  "$schema": "../../packages/kernel/schemas/module.manifest.schema.json",
+  "name": "notifications",
+  "displayName": "In-App Notification & Preferences Center",
+  "version": "1.0.0",
+  "description": "Module quản lý thông báo trong hệ thống (In-app Notification): phát thông báo cho 1 người dùng, nhiều người dùng (nhóm/vai trò), theo đơn vị tổ chức, đánh dấu đã đọc/chưa đọc, lưu trữ/xóa hộp thư không ảnh hưởng lịch sử gửi, phân nhóm thông báo và thiết lập sở thích kênh nhận (Phase 7 - Mục 7.1)",
+  "type": "core",
+  "category": "core",
+  "author": "Core Platform Team",
+  "entryModule": "NotificationsModule",
+  "dependencies": ["database", "security", "i18n", "users", "roles", "organizations", "codes", "settings"],
+  "permissions": [
+    "notifications.read",
+    "notifications.send",
+    "notifications.manage"
+  ],
+  "events": {
+    "published": [
+      "notifications.dispatched",
+      "notifications.read",
+      "notifications.archived",
+      "notifications.deleted",
+      "notifications.preferences_updated"
+    ],
+    "subscribed": []
+  },
+  "database": {
+    "hasMigrations": true,
+    "tables": ["notifications", "notification_recipients", "notification_preferences"]
+  },
+  "codeTypes": [
+    {
+      "code": "notifications.category",
+      "name": "Phân nhóm thông báo",
+      "description": "Phân loại nhóm nghiệp vụ thông báo (Hệ thống, Công việc, Bảo mật, Thông báo chung)",
+      "isSystem": true,
+      "allowCustomValues": true,
+      "values": [
+        {
+          "numericCode": 1,
+          "code": "SYSTEM",
+          "behaviorCode": "SYSTEM",
+          "name": "Hệ thống",
+          "labels": { "vi": "Hệ thống", "en": "System" },
+          "aliases": ["SYSTEM", "HỆ THỐNG", "HE THONG"],
+          "badgeTone": "info",
+          "sortOrder": 1,
+          "isSystem": true
+        },
+        {
+          "numericCode": 2,
+          "code": "WORK",
+          "behaviorCode": "WORK",
+          "name": "Công việc & Tác vụ",
+          "labels": { "vi": "Công việc & Tác vụ", "en": "Work & Tasks" },
+          "aliases": ["WORK", "TASK", "CÔNG VIỆC", "CONG VIEC"],
+          "badgeTone": "success",
+          "sortOrder": 2,
+          "isSystem": true
+        },
+        {
+          "numericCode": 3,
+          "code": "SECURITY",
+          "behaviorCode": "SECURITY",
+          "name": "Bảo mật & Tài khoản",
+          "labels": { "vi": "Bảo mật & Tài khoản", "en": "Security & Account" },
+          "aliases": ["SECURITY", "BẢO MẬT", "BAO MAT"],
+          "badgeTone": "danger",
+          "sortOrder": 3,
+          "isSystem": true
+        },
+        {
+          "numericCode": 4,
+          "code": "ANNOUNCEMENT",
+          "behaviorCode": "ANNOUNCEMENT",
+          "name": "Thông báo chung & Bản tin",
+          "labels": { "vi": "Thông báo chung & Bản tin", "en": "Announcement & News" },
+          "aliases": ["ANNOUNCEMENT", "NEWS", "THÔNG BÁO CHUNG", "BAN TIN"],
+          "badgeTone": "warning",
+          "sortOrder": 4,
+          "isSystem": true
+        }
+      ]
+    },
+    {
+      "code": "notifications.priority",
+      "name": "Mức độ ưu tiên thông báo",
+      "description": "Cấp độ ưu tiên hiển thị của thông báo trong hộp thư người dùng",
+      "isSystem": true,
+      "allowCustomValues": false,
+      "values": [
+        {
+          "numericCode": 1,
+          "code": "LOW",
+          "behaviorCode": "LOW",
+          "name": "Thấp",
+          "labels": { "vi": "Thấp", "en": "Low" },
+          "aliases": ["LOW", "THẤP", "THAP"],
+          "badgeTone": "neutral",
+          "sortOrder": 1,
+          "isSystem": true
+        },
+        {
+          "numericCode": 2,
+          "code": "NORMAL",
+          "behaviorCode": "NORMAL",
+          "name": "Bình thường",
+          "labels": { "vi": "Bình thường", "en": "Normal" },
+          "aliases": ["NORMAL", "BÌNH THƯỜNG", "BINH THUONG"],
+          "badgeTone": "info",
+          "sortOrder": 2,
+          "isSystem": true
+        },
+        {
+          "numericCode": 3,
+          "code": "HIGH",
+          "behaviorCode": "HIGH",
+          "name": "Cao",
+          "labels": { "vi": "Cao", "en": "High" },
+          "aliases": ["HIGH", "CAO"],
+          "badgeTone": "warning",
+          "sortOrder": 3,
+          "isSystem": true
+        },
+        {
+          "numericCode": 4,
+          "code": "URGENT",
+          "behaviorCode": "URGENT",
+          "name": "Khẩn cấp",
+          "labels": { "vi": "Khẩn cấp", "en": "Urgent" },
+          "aliases": ["URGENT", "CRITICAL", "KHẨN CẤP", "KHAN CAP"],
+          "badgeTone": "danger",
+          "sortOrder": 4,
+          "isSystem": true
+        }
+      ]
+    },
+    {
+      "code": "notifications.target_type",
+      "name": "Phạm vi đối tượng nhận thông báo",
+      "description": "Phương thức chọn đích người nhận khi phát thông báo (Cá nhân, Nhóm, Vai trò, Đơn vị)",
+      "isSystem": true,
+      "allowCustomValues": false,
+      "values": [
+        {
+          "numericCode": 1,
+          "code": "SINGLE_USER",
+          "behaviorCode": "SINGLE_USER",
+          "name": "Một người dùng",
+          "labels": { "vi": "Một người dùng", "en": "Single User" },
+          "aliases": ["SINGLE", "SINGLE_USER", "USER", "MỘT NGƯỜI DÙNG"],
+          "badgeTone": "info",
+          "sortOrder": 1,
+          "isSystem": true
+        },
+        {
+          "numericCode": 2,
+          "code": "USER_GROUP",
+          "behaviorCode": "USER_GROUP",
+          "name": "Nhóm người dùng",
+          "labels": { "vi": "Nhóm người dùng", "en": "User Group" },
+          "aliases": ["GROUP", "USER_GROUP", "USERS", "NHÓM NGƯỜI DÙNG"],
+          "badgeTone": "success",
+          "sortOrder": 2,
+          "isSystem": true
+        },
+        {
+          "numericCode": 3,
+          "code": "ROLE",
+          "behaviorCode": "ROLE",
+          "name": "Theo vai trò",
+          "labels": { "vi": "Theo vai trò", "en": "By Role" },
+          "aliases": ["ROLE", "ROLES", "VAI TRÒ", "THEO VAI TRÒ"],
+          "badgeTone": "warning",
+          "sortOrder": 3,
+          "isSystem": true
+        },
+        {
+          "numericCode": 4,
+          "code": "ORG_UNIT",
+          "behaviorCode": "ORG_UNIT",
+          "name": "Theo đơn vị tổ chức",
+          "labels": { "vi": "Theo đơn vị tổ chức", "en": "By Organization Unit" },
+          "aliases": ["ORG", "ORG_UNIT", "ORGANIZATION", "ĐƠN VỊ", "THEO ĐƠN VỊ"],
+          "badgeTone": "info",
+          "sortOrder": 4,
+          "isSystem": true
+        }
+      ]
+    },
+    {
+      "code": "notifications.channel",
+      "name": "Kênh gửi thông báo",
+      "description": "Các kênh truyền thông báo hỗ trợ thiết lập sở thích nhận của người dùng",
+      "isSystem": true,
+      "allowCustomValues": false,
+      "values": [
+        {
+          "numericCode": 1,
+          "code": "IN_APP",
+          "behaviorCode": "IN_APP",
+          "name": "Trong hệ thống (In-App)",
+          "labels": { "vi": "Trong hệ thống (In-App)", "en": "In-App Notification" },
+          "aliases": ["IN_APP", "INAPP", "SYSTEM", "TRONG HỆ THỐNG"],
+          "badgeTone": "info",
+          "sortOrder": 1,
+          "isSystem": true
+        },
+        {
+          "numericCode": 2,
+          "code": "EMAIL",
+          "behaviorCode": "EMAIL",
+          "name": "Thư điện tử (Email)",
+          "labels": { "vi": "Thư điện tử (Email)", "en": "Email" },
+          "aliases": ["EMAIL", "MAIL"],
+          "badgeTone": "success",
+          "sortOrder": 2,
+          "isSystem": true
+        },
+        {
+          "numericCode": 3,
+          "code": "SMS",
+          "behaviorCode": "SMS",
+          "name": "Tin nhắn SMS",
+          "labels": { "vi": "Tin nhắn SMS", "en": "SMS" },
+          "aliases": ["SMS", "PHONE"],
+          "badgeTone": "warning",
+          "sortOrder": 3,
+          "isSystem": true
+        },
+        {
+          "numericCode": 4,
+          "code": "PUSH",
+          "behaviorCode": "PUSH",
+          "name": "Thông báo đẩy (Web/Mobile Push)",
+          "labels": { "vi": "Thông báo đẩy (Web/Mobile Push)", "en": "Web/Mobile Push" },
+          "aliases": ["PUSH", "WEB_PUSH", "MOBILE_PUSH"],
+          "badgeTone": "neutral",
+          "sortOrder": 4,
+          "isSystem": true
+        }
+      ]
+    },
+    {
+      "code": "notifications.inbox_status",
+      "name": "Trạng thái hộp thư người nhận",
+      "description": "Trạng thái thông báo trong hộp thư cá nhân của người nhận (độc lập với lịch sử gửi)",
+      "isSystem": true,
+      "allowCustomValues": false,
+      "values": [
+        {
+          "numericCode": 1,
+          "code": "ACTIVE",
+          "behaviorCode": "ACTIVE",
+          "name": "Trong hộp thư đến",
+          "labels": { "vi": "Trong hộp thư đến", "en": "Active in Inbox" },
+          "aliases": ["ACTIVE", "INBOX", "HỘP THƯ ĐẾN"],
+          "badgeTone": "success",
+          "sortOrder": 1,
+          "isSystem": true
+        },
+        {
+          "numericCode": 2,
+          "code": "ARCHIVED",
+          "behaviorCode": "ARCHIVED",
+          "name": "Đã lưu trữ",
+          "labels": { "vi": "Đã lưu trữ", "en": "Archived" },
+          "aliases": ["ARCHIVED", "ARCHIVE", "LƯU TRỮ", "ĐÃ LƯU TRỮ"],
+          "badgeTone": "warning",
+          "sortOrder": 2,
+          "isSystem": true
+        },
+        {
+          "numericCode": 3,
+          "code": "DELETED",
+          "behaviorCode": "DELETED",
+          "name": "Đã xóa khỏi hộp thư",
+          "labels": { "vi": "Đã xóa khỏi hộp thư", "en": "Deleted from Inbox" },
+          "aliases": ["DELETED", "TRASH", "ĐÃ XÓA"],
+          "badgeTone": "danger",
+          "sortOrder": 3,
+          "isSystem": true
+        }
+      ]
+    }
+  ],
+  "settingGroups": [
+    {
+      "code": "notification",
+      "module": "notifications",
+      "name": "Cấu hình Thông báo & Hộp thư (Notifications)",
+      "description": "Thiết lập kênh thông báo, giới hạn số người nhận, chính sách gửi theo đơn vị/vai trò, thời gian lưu trữ và sở thích nhận thông báo mặc định",
+      "icon": "bell",
+      "sortOrder": 3,
+      "isSystem": true
+    }
+  ],
+  "settings": [
+    {
+      "key": "notification.enabled",
+      "groupCode": "notification",
+      "module": "notifications",
+      "namespace": "notifications.general",
+      "name": "Bật hệ thống gửi và nhận thông báo",
+      "description": "Công tắc tổng bật/tắt tính năng phát thông báo trong toàn hệ thống (hỗ trợ cấu hình riêng theo đơn vị)",
+      "valueType": "BOOLEAN",
+      "defaultValue": true,
+      "isSensitive": false,
+      "allowUnitOverride": true,
+      "isSystem": true,
+      "sortOrder": 1
+    },
+    {
+      "key": "notification.channels.enabled",
+      "groupCode": "notification",
+      "module": "notifications",
+      "namespace": "notifications.channels",
+      "name": "Danh sách kênh thông báo được phép hoạt động",
+      "description": "Mảng JSON các kênh thông báo được bật trên hệ thống (IN_APP, EMAIL, SMS, PUSH)",
+      "valueType": "JSON",
+      "defaultValue": ["IN_APP", "EMAIL", "SMS", "PUSH"],
+      "isSensitive": false,
+      "allowUnitOverride": true,
+      "isSystem": true,
+      "sortOrder": 2
+    },
+    {
+      "key": "notification.channels.default",
+      "groupCode": "notification",
+      "module": "notifications",
+      "namespace": "notifications.channels",
+      "name": "Kênh gửi mặc định khi tạo thông báo mới",
+      "description": "Mảng JSON các kênh được chọn mặc định nếu người gửi không chỉ định",
+      "valueType": "JSON",
+      "defaultValue": ["IN_APP"],
+      "isSensitive": false,
+      "allowUnitOverride": true,
+      "isSystem": true,
+      "sortOrder": 3
+    },
+    {
+      "key": "notification.org_unit_targeting.enabled",
+      "groupCode": "notification",
+      "module": "notifications",
+      "namespace": "notifications.targeting",
+      "name": "Cho phép tạo thông báo theo Đơn vị tổ chức",
+      "description": "Bật/tắt chế độ gửi thông báo theo Đơn vị (chỉ khả dụng khi hệ thống có cài đặt module Organizations)",
+      "valueType": "BOOLEAN",
+      "defaultValue": true,
+      "isSensitive": false,
+      "allowUnitOverride": true,
+      "isSystem": true,
+      "sortOrder": 4
+    },
+    {
+      "key": "notification.org_unit_targeting.include_sub_units_default",
+      "groupCode": "notification",
+      "module": "notifications",
+      "namespace": "notifications.targeting",
+      "name": "Mặc định gửi kèm các đơn vị cấp dưới khi gửi theo đơn vị",
+      "description": "Khi gửi thông báo cho một đơn vị tổ chức, tự động bao gồm nhân sự thuộc các phòng ban/chi nhánh con nếu không truyền cờ includeSubUnits",
+      "valueType": "BOOLEAN",
+      "defaultValue": true,
+      "isSensitive": false,
+      "allowUnitOverride": true,
+      "isSystem": true,
+      "sortOrder": 5
+    },
+    {
+      "key": "notification.role_targeting.enabled",
+      "groupCode": "notification",
+      "module": "notifications",
+      "namespace": "notifications.targeting",
+      "name": "Cho phép tạo thông báo hàng loạt theo Vai trò (Role)",
+      "description": "Bật/tắt chế độ gửi thông báo cho tất cả người dùng thuộc một hoặc nhiều vai trò",
+      "valueType": "BOOLEAN",
+      "defaultValue": true,
+      "isSensitive": false,
+      "allowUnitOverride": true,
+      "isSystem": true,
+      "sortOrder": 6
+    },
+    {
+      "key": "notification.dispatch.max_recipients_per_batch",
+      "groupCode": "notification",
+      "module": "notifications",
+      "namespace": "notifications.dispatch",
+      "name": "Số lượng người nhận tối đa mỗi lần phát thông báo",
+      "description": "Giới hạn số lượng người nhận tối đa trong một lệnh phát thông báo để bảo vệ hiệu năng hệ thống",
+      "valueType": "NUMBER",
+      "defaultValue": 5000,
+      "validationRules": { "min": 1, "max": 100000, "integerOnly": true },
+      "isSensitive": false,
+      "allowUnitOverride": true,
+      "isSystem": true,
+      "sortOrder": 7
+    },
+    {
+      "key": "notification.content.max_title_length",
+      "groupCode": "notification",
+      "module": "notifications",
+      "namespace": "notifications.content",
+      "name": "Độ dài tối đa tiêu đề thông báo (Ký tự)",
+      "description": "Giới hạn số ký tự tối đa cho tiêu đề thông báo",
+      "valueType": "NUMBER",
+      "defaultValue": 255,
+      "validationRules": { "min": 20, "max": 500, "integerOnly": true },
+      "isSensitive": false,
+      "allowUnitOverride": true,
+      "isSystem": true,
+      "sortOrder": 8
+    },
+    {
+      "key": "notification.content.max_body_length",
+      "groupCode": "notification",
+      "module": "notifications",
+      "namespace": "notifications.content",
+      "name": "Độ dài tối đa nội dung thông báo (Ký tự)",
+      "description": "Giới hạn số ký tự tối đa cho nội dung chi tiết của thông báo",
+      "valueType": "NUMBER",
+      "defaultValue": 5000,
+      "validationRules": { "min": 100, "max": 50000, "integerOnly": true },
+      "isSensitive": false,
+      "allowUnitOverride": true,
+      "isSystem": true,
+      "sortOrder": 9
+    },
+    {
+      "key": "notification.preferences.allow_user_customization",
+      "groupCode": "notification",
+      "module": "notifications",
+      "namespace": "notifications.preferences",
+      "name": "Cho phép người dùng tự thiết lập sở thích nhận thông báo",
+      "description": "Khi bật, người dùng có thể chủ động bật/tắt các kênh nhận thông báo (In-App, Email, SMS, Push) theo từng phân nhóm",
+      "valueType": "BOOLEAN",
+      "defaultValue": true,
+      "isSensitive": false,
+      "allowUnitOverride": true,
+      "isSystem": true,
+      "sortOrder": 10
+    },
+    {
+      "key": "notification.preferences.lock_security_in_app",
+      "groupCode": "notification",
+      "module": "notifications",
+      "namespace": "notifications.preferences",
+      "name": "Bắt buộc nhận thông báo Bảo mật (SECURITY) trên kênh In-App",
+      "description": "Khi bật, kênh In-App của phân nhóm Bảo mật (SECURITY) luôn được giữ bật để đảm bảo an toàn tài khoản",
+      "valueType": "BOOLEAN",
+      "defaultValue": true,
+      "isSensitive": false,
+      "allowUnitOverride": true,
+      "isSystem": true,
+      "sortOrder": 11
+    },
+    {
+      "key": "notification.preferences.default_matrix",
+      "groupCode": "notification",
+      "module": "notifications",
+      "namespace": "notifications.preferences",
+      "name": "Ma trận sở thích kênh nhận mặc định theo phân nhóm",
+      "description": "Cấu hình JSON quy định trạng thái bật/tắt mặc định của các kênh (inApp, email, sms, push) cho từng nhóm SYSTEM, WORK, SECURITY, ANNOUNCEMENT",
+      "valueType": "JSON",
+      "defaultValue": {
+        "SYSTEM": { "inApp": true, "email": true, "sms": false, "push": true },
+        "WORK": { "inApp": true, "email": true, "sms": false, "push": true },
+        "SECURITY": { "inApp": true, "email": true, "sms": true, "push": true },
+        "ANNOUNCEMENT": { "inApp": true, "email": false, "sms": false, "push": true }
+      },
+      "isSensitive": false,
+      "allowUnitOverride": true,
+      "isSystem": true,
+      "sortOrder": 12
+    },
+    {
+      "key": "notification.inbox.auto_read_on_open",
+      "groupCode": "notification",
+      "module": "notifications",
+      "namespace": "notifications.inbox",
+      "name": "Tự động đánh dấu đã đọc khi mở xem chi tiết thông báo",
+      "description": "Khi người dùng bấm xem chi tiết một thông báo chưa đọc, hệ thống tự động chuyển trạng thái sang Đã đọc và giảm số đếm thông báo mới",
+      "valueType": "BOOLEAN",
+      "defaultValue": true,
+      "isSensitive": false,
+      "allowUnitOverride": true,
+      "isSystem": true,
+      "sortOrder": 13
+    },
+    {
+      "key": "notification.inbox.retention_days",
+      "groupCode": "notification",
+      "module": "notifications",
+      "namespace": "notifications.inbox",
+      "name": "Thời gian lưu giữ thông báo trong hộp thư (Ngày)",
+      "description": "Số ngày lưu giữ thông báo trong hộp thư trước khi cho phép dọn dẹp tự động (0 = giữ vĩnh viễn)",
+      "valueType": "NUMBER",
+      "defaultValue": 90,
+      "validationRules": { "min": 0, "max": 3650, "integerOnly": true },
+      "isSensitive": false,
+      "allowUnitOverride": true,
+      "isSystem": true,
+      "sortOrder": 14
+    },
+    {
+      "key": "notification.inbox.polling_interval_sec",
+      "groupCode": "notification",
+      "module": "notifications",
+      "namespace": "notifications.inbox",
+      "name": "Chu kỳ tự động cập nhật số lượng thông báo mới (Giây)",
+      "description": "Thời gian làm mới bộ đếm thông báo chưa đọc (unreadCount) trên thanh Header",
+      "valueType": "NUMBER",
+      "defaultValue": 30,
+      "validationRules": { "min": 5, "max": 600, "integerOnly": true },
+      "isSensitive": false,
+      "allowUnitOverride": true,
+      "isSystem": true,
+      "sortOrder": 15
+    },
+    {
+      "key": "notifications.pagination.default_page_size",
+      "groupCode": "notification",
+      "module": "notifications",
+      "namespace": "notifications.pagination",
+      "name": "Số lượng thông báo mặc định mỗi trang",
+      "description": "Số lượng bản ghi thông báo trả về mặc định khi truy vấn hộp thư hoặc lịch sử gửi",
+      "valueType": "NUMBER",
+      "defaultValue": 20,
+      "validationRules": { "min": 1, "max": 200, "integerOnly": true },
+      "isSensitive": false,
+      "allowUnitOverride": true,
+      "isSystem": true,
+      "sortOrder": 16
+    },
+    {
+      "key": "notifications.pagination.max_page_size",
+      "groupCode": "notification",
+      "module": "notifications",
+      "namespace": "notifications.pagination",
+      "name": "Số lượng thông báo tối đa mỗi trang",
+      "description": "Giới hạn số lượng bản ghi thông báo tối đa được phép lấy trong 1 trang",
+      "valueType": "NUMBER",
+      "defaultValue": 100,
+      "validationRules": { "min": 10, "max": 500, "integerOnly": true },
+      "isSensitive": false,
+      "allowUnitOverride": true,
+      "isSystem": true,
+      "sortOrder": 17
+    }
+  ],
+  "featureFlags": [
+    {
+      "key": "notifications.in_app_enabled",
+      "module": "notifications",
+      "name": "Bật Hộp thư Thông báo trong hệ thống (In-App Notification Center)",
+      "description": "Cho phép hiển thị chuông thông báo, hộp thư đến, đánh dấu đã đọc/lưu trữ/xóa trên giao diện người dùng",
+      "isEnabled": true,
+      "rolloutPercentage": 100,
+      "isSystem": true
+    },
+    {
+      "key": "notifications.org_unit_broadcast",
+      "module": "notifications",
+      "name": "Cho phép phát thông báo theo Đơn vị tổ chức (Organization Unit Broadcast)",
+      "description": "Kích hoạt tính năng gửi thông báo hàng loạt theo Đơn vị tổ chức và các đơn vị trực thuộc",
+      "isEnabled": true,
+      "rolloutPercentage": 100,
+      "isSystem": true
+    },
+    {
+      "key": "notifications.role_broadcast",
+      "module": "notifications",
+      "name": "Cho phép phát thông báo theo Vai trò (Role Broadcast)",
+      "description": "Kích hoạt tính năng gửi thông báo hàng loạt theo một hoặc nhiều vai trò trong hệ thống",
+      "isEnabled": true,
+      "rolloutPercentage": 100,
+      "isSystem": true
+    },
+    {
+      "key": "notifications.user_preferences",
+      "module": "notifications",
+      "name": "Cho phép người dùng tùy chỉnh sở thích nhận thông báo",
+      "description": "Kích hoạt bảng thiết lập kênh nhận thông báo (In-App, Email, SMS, Push) theo từng phân nhóm cho người dùng",
+      "isEnabled": true,
+      "rolloutPercentage": 100,
+      "isSystem": true
+    }
+  ],
+  "sequences": [
+    {
+      "key": "notifications.notification_code",
+      "module": "notifications",
+      "name": "Mã định danh bản tin thông báo (Notification Sequence)",
+      "description": "Quy tắc sinh mã tự động cho bản ghi lịch sử phát thông báo (ví dụ: NTF-2026-000001)",
+      "prefix": "NTF",
+      "suffix": "",
+      "separator": "-",
+      "dateFormat": "YYYY",
+      "paddingLength": 6,
+      "startValue": 1,
+      "step": 1,
+      "resetPolicy": "YEARLY",
+      "scopeByUnit": false,
+      "timezone": "Asia/Ho_Chi_Minh",
+      "isSystem": true
+    }
+  ],
+  "menus": [
+    {
+      "code": "NOTIFICATIONS_CENTER",
+      "name": "Thông báo & Hộp thư",
+      "module": "notifications",
+      "status": "ACTIVE",
+      "link": "/notifications",
+      "linkApi": "/api/v1/notifications/inbox",
+      "type": "ITEM",
+      "parentCode": null,
+      "level": 1,
+      "key": "notifications.read",
+      "numOrder": 80,
+      "icon": "bell",
+      "position": "SIDEBAR"
+    }
+  ]
+}
+

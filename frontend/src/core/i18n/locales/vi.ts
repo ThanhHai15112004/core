@@ -62,6 +62,7 @@ export const vi = {
     settings: 'Cấu hình Hệ thống',
     iam: 'Người dùng & Xác thực',
     files: 'Quản lý File & Media',
+    notifications: 'Thông báo & Hộp thư',
     languageToggle: 'Ngôn ngữ',
     themeLight: 'Sáng',
     themeDark: 'Tối',

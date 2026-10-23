@@ -231,6 +231,9 @@ export interface IUsersPublicService {
   registerStepUpVerificationDelegate?(
     delegate: (userId: number, stepUpToken: string, action?: string) => Promise<boolean>,
   ): void;
+  findActiveUserIdsByIds?(userIds: readonly number[]): Promise<number[]>;
+  findActiveUserIdsByRoleIds?(roleIds: readonly number[]): Promise<number[]>;
+  findActiveUserIdsByOrganizationUnitIds?(unitIds: readonly number[]): Promise<number[]>;
 }
 
 export const USERS_PUBLIC_SERVICE = Symbol('USERS_PUBLIC_SERVICE');

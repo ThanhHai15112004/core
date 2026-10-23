@@ -432,3 +432,54 @@ export async function listActiveUsersByRoleId(params: {
     };
   });
 }
+
+export async function filterActiveUserIds(
+  userRepository: UserRepository,
+  candidateIds: readonly number[],
+): Promise<number[]> {
+  const uniqueIds = [
+    ...new Set(candidateIds.map(Number).filter((n) => Number.isFinite(n) && n >= 1)),
+  ];
+  if (uniqueIds.length === 0) return [];
+  const activeIds: number[] = [];
+  for (const uid of uniqueIds) {
+    const u = await userRepository.findByIdWithArchived(uid, false);
+    if (u && !u.deletedAt && !u.archivedAt && Number(u.status) === USER_STATUS.ACTIVE) {
+      activeIds.push(Number(u.id));
+    }
+  }
+  return activeIds;
+}
+
+export async function resolveActiveUserIdsByRoleIds(params: {
+  roleIds: readonly number[];
+  userRoleRepository: UserRoleRepository;
+  userRepository: UserRepository;
+}): Promise<number[]> {
+  const { roleIds, userRoleRepository, userRepository } = params;
+  if (roleIds.length === 0) return [];
+  const links = await loadRoleLinks(userRoleRepository, roleIds);
+  const candidateIds = links.map((l) => Number(l.userId));
+  return filterActiveUserIds(userRepository, candidateIds);
+}
+
+export async function resolveActiveUserIdsByOrganizationUnitIds(params: {
+  unitIds: readonly number[];
+  userOrgRepository: UserOrganizationUnitRepository | null;
+  userRepository: UserRepository;
+}): Promise<number[]> {
+  const { unitIds, userOrgRepository, userRepository } = params;
+  const uniqueUnitIds = [
+    ...new Set(unitIds.map(Number).filter((n) => Number.isFinite(n) && n >= 1)),
+  ];
+  if (uniqueUnitIds.length === 0) return [];
+
+  const candidateIds = new Set<number>();
+  if (userOrgRepository) {
+    if (typeof userOrgRepository.findUserIdsByOrganizationUnitIds === 'function') {
+      const fromOrgRepo = await userOrgRepository.findUserIdsByOrganizationUnitIds(uniqueUnitIds);
+      for (const uid of fromOrgRepo) candidateIds.add(Number(uid));
+    }
+  }
+  return filterActiveUserIds(userRepository, [...candidateIds]);
+}

@@ -63,8 +63,11 @@ import {
 } from '../helpers/user-normalizer.helper.js';
 import {
   countActiveUsersByRoleIds,
+  filterActiveUserIds,
   hydrateUsersResponseList,
   listActiveUsersByRoleId,
+  resolveActiveUserIdsByOrganizationUnitIds,
+  resolveActiveUserIdsByRoleIds,
   validateAndApplyUserUpdateFields,
   validateAndPrepareCreateUserContext,
 } from '../helpers/user-profile-hydration.helper.js';
@@ -1143,6 +1146,28 @@ export class UsersService implements IUsersPublicService {
       userRoleRepository: this.userRoleRepository,
       userRepository: this.userRepository,
       findProfilesByUserIds: (uids) => this.findProfilesByUserIds(uids),
+    });
+  }
+
+  public async findActiveUserIdsByIds(userIds: readonly number[]): Promise<number[]> {
+    return filterActiveUserIds(this.userRepository, userIds);
+  }
+
+  public async findActiveUserIdsByRoleIds(roleIds: readonly number[]): Promise<number[]> {
+    return resolveActiveUserIdsByRoleIds({
+      roleIds,
+      userRoleRepository: this.userRoleRepository,
+      userRepository: this.userRepository,
+    });
+  }
+
+  public async findActiveUserIdsByOrganizationUnitIds(
+    unitIds: readonly number[],
+  ): Promise<number[]> {
+    return resolveActiveUserIdsByOrganizationUnitIds({
+      unitIds,
+      userOrgRepository: this.userOrgRepository,
+      userRepository: this.userRepository,
     });
   }
 

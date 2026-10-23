@@ -1,0 +1,15 @@
+export const NOTIFICATIONS_ROUTES = {
+  PREFIX: 'notifications',
+  ROOT: '',
+  CONFIG: 'config',
+  UNREAD_COUNT: 'unread-count',
+  INBOX: 'inbox',
+  INBOX_MARK_ALL_READ: 'inbox/mark-all-read',
+  INBOX_BY_ID: 'inbox/:id',
+  INBOX_READ: 'inbox/:id/read',
+  INBOX_ARCHIVE: 'inbox/:id/archive',
+  PREFERENCES: 'preferences',
+  SEND: 'send',
+  DISPATCHES: 'dispatches',
+  DISPATCH_BY_ID: 'dispatches/:id',
+} as const;
