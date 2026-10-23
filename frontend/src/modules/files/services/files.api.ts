@@ -2,9 +2,12 @@ import { frontendConfig } from '../../../config/index';
 import { fetchApi, fetchApiWithMeta, IAM_ACCESS_TOKEN_KEY, type PaginationMeta } from '../../../core/services/api';
 import { API_ROUTES } from '../../../routes/index';
 import type {
+  CleanupUnusedFilesItem,
   FileFolderItem,
+  FileIntegrityVerificationItem,
   FilePermissionItem,
   FileRecordItem,
+  FileStatsItem,
   FileUsageItem,
   ListFilesFilterParams,
   TemporaryDownloadLinkItem,
@@ -34,6 +37,9 @@ function buildQueryString(params: ListFilesFilterParams): string {
 }
 
 export const filesApi = {
+  /** Thống kê dung lượng lưu trữ, số lượng theo phân loại và cấu hình hạn mức */
+  getStats: () => fetchApi<FileStatsItem>(API_ROUTES.FILES.STATS),
+
   /** Lấy danh sách thư mục ảo (phẳng hoặc cây) */
   listFolders: (tree = false, organizationUnitId?: number) => {
     const sp = new URLSearchParams();
@@ -84,18 +90,28 @@ export const filesApi = {
       body: JSON.stringify(payload),
     }),
 
-  /** Tải nhiều file lên hệ thống cùng lúc */
+  /** Tạo nhiều file lên hệ thống cùng lúc */
   uploadBatch: (payload: {
     files: UploadSingleFilePayload[];
     folderId?: number | null;
     visibility?: number;
     organizationUnitId?: number | null;
+    moduleName?: string;
+    stageForScan?: boolean;
+    quarantineOnThreat?: boolean;
+    rejectDuplicate?: boolean;
+    reuseDuplicate?: boolean;
+    optimizeImage?: boolean;
+    generateThumbnail?: boolean;
     encryptAtRest?: boolean;
   }) =>
-    fetchApi<{ uploadedCount: number; items: FileRecordItem[] }>(API_ROUTES.FILES.UPLOAD_BATCH, {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    }),
+    fetchApi<{ count: number; uploadedCount?: number; items: FileRecordItem[] }>(
+      API_ROUTES.FILES.UPLOAD_BATCH,
+      {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      },
+    ),
 
   /** Đổi tên hiển thị hoặc di chuyển thư mục (không đổi storageKey vật lý) */
   updateFile: (
@@ -159,20 +175,35 @@ export const filesApi = {
       body: JSON.stringify(payload),
     }),
 
-  /** Gỡ liên kết sử dụng file */
+  /** Gỡ liên kết sử dụng file theo ID bản ghi liên kết */
+  removeUsage: (fileId: number, usageId: number) =>
+    fetchApi<{ removed: boolean; usageId: number; usageCount: number }>(
+      API_ROUTES.FILES.USAGE_BY_ID(fileId, usageId),
+      {
+        method: 'DELETE',
+      },
+    ),
+
+  /** Gỡ liên kết sử dụng file (tương thích ngược) */
   detachUsage: (
     id: number,
     payload: {
+      usageId?: number;
       moduleName: string;
       entityType: string;
       entityId: string | number;
       fieldName?: string | null;
     },
   ) =>
-    fetchApi<{ detached: boolean; usageCount: number }>(API_ROUTES.FILES.USAGES_DETACH(id), {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    }),
+    payload.usageId
+      ? fetchApi<{ removed: boolean; usageId: number; usageCount: number }>(
+          API_ROUTES.FILES.USAGE_BY_ID(id, payload.usageId),
+          { method: 'DELETE' },
+        )
+      : fetchApi<{ detached: boolean; usageCount: number }>(API_ROUTES.FILES.USAGES_DETACH(id), {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        }),
 
   /** Lấy URL tải file trực tiếp hoặc tải qua fetch có kèm Bearer token */
   downloadFileWithAuth: async (file: FileRecordItem): Promise<void> => {
@@ -236,6 +267,45 @@ export const filesApi = {
     payload: { expiresInSeconds?: number; disposition?: 'attachment' | 'inline' } = {},
   ) =>
     fetchApi<TemporaryDownloadLinkItem>(API_ROUTES.FILES.TEMPORARY_LINK(fileId), {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+
+  /** Lấy URL ảnh thu nhỏ (Thumbnail — Mục 6.3.5) */
+  getThumbnailUrl: (fileId: number): string => {
+    return `${frontendConfig.apiBaseUrl}${API_ROUTES.FILES.THUMBNAIL(fileId)}`;
+  },
+
+  /** Duyệt & công bố file từ khu vực chờ kiểm duyệt sang trạng thái ACTIVE (Mục 6.3.3) */
+  publishFile: (fileId: number) =>
+    fetchApi<FileRecordItem>(API_ROUTES.FILES.PUBLISH(fileId), {
+      method: 'POST',
+      body: JSON.stringify({}),
+    }),
+
+  /** Đưa file vào khu vực cách ly QUARANTINED (Mục 6.3.3) */
+  quarantineFile: (fileId: number, reason?: string) =>
+    fetchApi<FileRecordItem>(API_ROUTES.FILES.QUARANTINE(fileId), {
+      method: 'POST',
+      body: JSON.stringify(reason ? { reason } : {}),
+    }),
+
+  /** Đối chiếu Checksum SHA-256 của file vật lý trên Storage để phát hiện thay đổi hoặc bản trùng (Mục 6.3.4) */
+  verifyIntegrity: (fileId: number) =>
+    fetchApi<FileIntegrityVerificationItem>(API_ROUTES.FILES.VERIFY_INTEGRITY(fileId), {
+      method: 'POST',
+      body: JSON.stringify({}),
+    }),
+
+  /** Dọn các file không có liên kết sử dụng (usageCount = 0) sau thời gian an toàn (Mục 6.3.7) */
+  cleanupUnusedFiles: (
+    payload: {
+      olderThanDays?: number;
+      action?: 'trash' | 'purge';
+      organizationUnitId?: number | null;
+    } = {},
+  ) =>
+    fetchApi<CleanupUnusedFilesItem>(API_ROUTES.FILES.CLEANUP_UNUSED, {
       method: 'POST',
       body: JSON.stringify(payload),
     }),

@@ -5,6 +5,8 @@ export const FILE_STATUS = {
   TRASHED: 2,
   PURGED: 3,
   MISSING: 4,
+  PENDING_SCAN: 5,
+  QUARANTINED: 6,
 } as const;
 
 export type FileStatusCode = (typeof FILE_STATUS)[keyof typeof FILE_STATUS];
@@ -44,11 +46,22 @@ export type FilePermissionSubjectName = keyof typeof FILE_PERMISSION_SUBJECT;
 
 /** Phân giải trạng thái tệp tin thông qua CodeRegistryService (`files.status`) */
 export function parseFileStatus(val: unknown): FileStatusCode {
+  if (typeof val === 'string') {
+    const upper = val.trim().toUpperCase();
+    if (upper === 'PENDING_SCAN' || upper === 'PENDING' || upper === '5') {
+      return FILE_STATUS.PENDING_SCAN;
+    }
+    if (upper === 'QUARANTINED' || upper === 'QUARANTINE' || upper === '6') {
+      return FILE_STATUS.QUARANTINED;
+    }
+  }
   const resolved = defaultCodeRegistry.parseToNumericCode('files.status', val, FILE_STATUS.ACTIVE);
   if (
     resolved === FILE_STATUS.TRASHED ||
     resolved === FILE_STATUS.PURGED ||
-    resolved === FILE_STATUS.MISSING
+    resolved === FILE_STATUS.MISSING ||
+    resolved === FILE_STATUS.PENDING_SCAN ||
+    resolved === FILE_STATUS.QUARANTINED
   ) {
     return resolved;
   }
@@ -58,8 +71,16 @@ export function parseFileStatus(val: unknown): FileStatusCode {
 /** Tra cứu tên trạng thái tệp tin từ `files.status` */
 export function getFileStatusName(code: number): FileStatusName {
   if (code === FILE_STATUS.MISSING) return 'MISSING';
+  if (code === FILE_STATUS.PENDING_SCAN) return 'PENDING_SCAN';
+  if (code === FILE_STATUS.QUARANTINED) return 'QUARANTINED';
   const name = defaultCodeRegistry.getCodeName('files.status', code, 'ACTIVE');
-  if (name === 'TRASHED' || name === 'PURGED' || name === 'MISSING') {
+  if (
+    name === 'TRASHED' ||
+    name === 'PURGED' ||
+    name === 'MISSING' ||
+    name === 'PENDING_SCAN' ||
+    name === 'QUARANTINED'
+  ) {
     return name;
   }
   return 'ACTIVE';

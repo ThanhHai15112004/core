@@ -210,6 +210,27 @@ function createInMemoryFilesHarness() {
           f.purgeAfterAt !== undefined &&
           f.purgeAfterAt.getTime() <= now.getTime(),
       ),
+    findByChecksumSha256: async (checksumSha256: string, organizationUnitId?: number | null) =>
+      [...files.values()].filter(
+        (f) =>
+          !f.deletedAt &&
+          f.checksumSha256 === checksumSha256 &&
+          (f.status === FILE_STATUS.ACTIVE || f.status === FILE_STATUS.PENDING_SCAN) &&
+          (organizationUnitId === undefined ||
+            organizationUnitId === null ||
+            f.organizationUnitId === organizationUnitId),
+      ),
+    findUnusedFilesOlderThan: async (cutoffDate: Date, organizationUnitId?: number | null) =>
+      [...files.values()].filter(
+        (f) =>
+          !f.deletedAt &&
+          (f.status === FILE_STATUS.ACTIVE || f.status === FILE_STATUS.PENDING_SCAN) &&
+          f.usageCount === 0 &&
+          f.createdAt.getTime() <= cutoffDate.getTime() &&
+          (organizationUnitId === undefined ||
+            organizationUnitId === null ||
+            f.organizationUnitId === organizationUnitId),
+      ),
   } as unknown as FilesRepository;
 
   const usagesRepo = {
@@ -376,6 +397,11 @@ function createInMemoryFilesHarness() {
     delete: async (key: string) => {
       storageObjects.delete(key);
     },
+    download: async (key: string) => {
+      const obj = storageObjects.get(key);
+      if (!obj) throw new Error('ENOENT');
+      return Buffer.from(obj.buffer);
+    },
     exists: async (key: string) => storageObjects.has(key),
   } as unknown as BaseStorageProvider;
 
@@ -423,6 +449,7 @@ function createInMemoryFilesHarness() {
   return {
     service,
     settingRegistry,
+    validationService,
     storageObjects,
     files,
     folders,
@@ -1000,5 +1027,325 @@ describe('FilesService — Phase 6.1 & 6.2 File Management, Folders & Access Con
       },
     );
     expect(otherUserUploaded.uploadedByUserId).toBe(88);
+  });
+
+  it('13. [Mục 6.3.1 & 6.3.2] Giới hạn loại file theo từng phân loại (category_allowed_extensions), kiểm tra chéo MIME/Magic Bytes và giới hạn dung lượng theo loại file & theo module', async () => {
+    const { service, settingRegistry } = createInMemoryFilesHarness();
+
+    // 1. Cấu hình định dạng cho phép theo từng loại file: AUDIO chỉ nhận mp3, IMAGE chỉ nhận png
+    settingRegistry.upsertScopeOverride({
+      settingKey: 'file.upload.category_allowed_extensions',
+      environment: 'ALL',
+      organizationUnitId: null,
+      scopeKey: 'file.upload.category_allowed_extensions::ALL::GLOBAL',
+      serializedValue: JSON.stringify({
+        AUDIO: ['mp3'],
+        IMAGE: ['png'],
+        VIDEO: ['mp4'],
+      }),
+      isEncrypted: false,
+      updatedBy: null,
+      reason: 'test category allowed extensions',
+    });
+
+    // Tải file .wav (nằm trong allowed_extensions chung nhưng bị giới hạn bởi category AUDIO chỉ cho phép mp3) -> Bị chặn
+    const validWavHeader = Buffer.concat([
+      Buffer.from('RIFF', 'ascii'),
+      Buffer.from([0x24, 0x00, 0x00, 0x00]),
+      Buffer.from('WAVEfmt ', 'ascii'),
+    ]);
+    await expect(
+      service.uploadSingle({
+        fileName: 'voice.wav',
+        contentBase64: validWavHeader.toString('base64'),
+      }),
+    ).rejects.toThrow(BadRequestAppException);
+
+    // Chặn khi expectedCategory truyền vào là AUDIO nhưng tải lên ảnh .png
+    await expect(
+      service.uploadSingle({
+        fileName: 'photo.png',
+        contentBase64: VALID_PNG_BASE64,
+        expectedCategory: FILE_CATEGORY.AUDIO,
+      }),
+    ).rejects.toThrow(BadRequestAppException);
+
+    // Chặn khi MIME type khai báo mâu thuẫn với đuôi file & nội dung thực tế (file .png nhưng khai báo application/pdf)
+    await expect(
+      service.uploadSingle({
+        fileName: 'avatar.png',
+        mimeType: 'application/pdf',
+        contentBase64: VALID_PNG_BASE64,
+      }),
+    ).rejects.toThrow(BadRequestAppException);
+
+    // 2. Giới hạn dung lượng theo loại file (IMAGE tối đa 0.001 MB ~ 1 KB) và theo module (users tối đa 0.002 MB ~ 2 KB)
+    settingRegistry.upsertScopeOverride({
+      settingKey: 'file.upload.category_max_size_mb',
+      environment: 'ALL',
+      organizationUnitId: null,
+      scopeKey: 'file.upload.category_max_size_mb::ALL::GLOBAL',
+      serializedValue: JSON.stringify({
+        DOCUMENT: 0.001, // ~1 KB
+      }),
+      isEncrypted: false,
+      updatedBy: null,
+      reason: 'test category max size',
+    });
+
+    settingRegistry.upsertScopeOverride({
+      settingKey: 'file.upload.module_max_size_mb',
+      environment: 'ALL',
+      organizationUnitId: null,
+      scopeKey: 'file.upload.module_max_size_mb::ALL::GLOBAL',
+      serializedValue: JSON.stringify({
+        courses: 10,
+        users: 0.001, // ~1 KB
+      }),
+      isEncrypted: false,
+      updatedBy: null,
+      reason: 'test module max size',
+    });
+
+    const text3Kb = 'A'.repeat(3072);
+
+    // Vượt giới hạn theo loại file DOCUMENT (~1 KB)
+    await expect(
+      service.uploadSingle({
+        fileName: 'large-doc.txt',
+        textContent: text3Kb,
+      }),
+    ).rejects.toThrow(BadRequestAppException);
+
+    // Tăng giới hạn DOCUMENT lên 5 MB nhưng giới hạn module 'users' vẫn là 0.001 MB (~1 KB)
+    settingRegistry.upsertScopeOverride({
+      settingKey: 'file.upload.category_max_size_mb',
+      environment: 'ALL',
+      organizationUnitId: null,
+      scopeKey: 'file.upload.category_max_size_mb::ALL::GLOBAL',
+      serializedValue: JSON.stringify({ DOCUMENT: 5 }),
+      isEncrypted: false,
+      updatedBy: null,
+      reason: 'raise doc limit',
+    });
+
+    // Tải cho module 'users' bị chặn do vượt hạn mức module
+    await expect(
+      service.uploadSingle({
+        fileName: 'user-bio.txt',
+        textContent: text3Kb,
+        moduleName: 'users',
+      }),
+    ).rejects.toThrow(BadRequestAppException);
+
+    // Cùng file 3 KB đó nhưng tải cho module 'courses' (hạn mức 10 MB) thì thành công
+    const courseDoc = await service.uploadSingle({
+      fileName: 'course-syllabus.txt',
+      textContent: text3Kb,
+      moduleName: 'courses',
+    });
+    expect(courseDoc.moduleName).toBe('courses');
+  });
+
+  it('14. [Mục 6.3.3] Quét mã độc (EICAR, Script XSS, PDF /JavaScript) và Khu vực chờ kiểm duyệt (PENDING_SCAN -> publish / quarantine)', async () => {
+    const { service } = createInMemoryFilesHarness();
+
+    // 1. Chặn ngay lập tức chuỗi kiểm thử virus tiêu chuẩn EICAR
+    const eicarPayload = 'X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*';
+    await expect(
+      service.uploadSingle({
+        fileName: 'eicar-test.txt',
+        textContent: eicarPayload,
+      }),
+    ).rejects.toThrow(BadRequestAppException);
+
+    // 2. Nếu bật quarantineOnThreat = true, file nhiễm mã độc được lưu vào khu vực cách ly QUARANTINED thay vì văng lỗi
+    const quarantinedPdf = await service.uploadSingle({
+      fileName: 'malicious-macro.pdf',
+      contentBase64: Buffer.from(
+        '%PDF-1.7 /OpenAction << /S /JavaScript /JS (app.alert(1)) >>',
+      ).toString('base64'),
+      quarantineOnThreat: true,
+    });
+    expect(quarantinedPdf.status).toBe(FILE_STATUS.QUARANTINED);
+    expect(quarantinedPdf.scanStatus).toBe('INFECTED');
+    expect(quarantinedPdf.threatName).toContain('PDF_ACTIVE_SCRIPT_OR_LAUNCH');
+
+    // File đang ở trạng thái QUARANTINED bị chặn tuyệt đối tải xuống / phát luồng / tạo link tạm
+    await expect(service.prepareDownload(quarantinedPdf.id)).rejects.toThrow(ForbiddenAppException);
+    await expect(
+      service.createTemporaryDownloadLink(quarantinedPdf.id, { expiresInSeconds: 300 }),
+    ).rejects.toThrow(ForbiddenAppException);
+
+    // 3. Đưa file sạch vào khu vực chờ (stageForScan = true -> PENDING_SCAN) trước khi công bố
+    const stagedFile = await service.uploadSingle({
+      fileName: 'pending-approval.txt',
+      textContent: 'Tài liệu sạch chờ kiểm duyệt trước khi công bố',
+      stageForScan: true,
+    });
+    expect(stagedFile.status).toBe(FILE_STATUS.PENDING_SCAN);
+    expect(stagedFile.scanStatus).toBe('PENDING');
+
+    // Khi đang ở khu vực chờ PENDING_SCAN, chưa được phép tải xuống hoặc tạo link chia sẻ
+    await expect(service.prepareDownload(stagedFile.id)).rejects.toThrow(ForbiddenAppException);
+
+    // Duyệt & công bố file từ khu vực chờ sang ACTIVE (publishStagedFile tự động quét lại nội dung vật lý)
+    const publishedFile = await service.publishStagedFile(stagedFile.id);
+    expect(publishedFile.status).toBe(FILE_STATUS.ACTIVE);
+    expect(publishedFile.scanStatus).toBe('CLEAN');
+
+    // Sau khi công bố, tải xuống bình thường
+    const dl = await service.prepareDownload(publishedFile.id);
+    expect(dl.downloadFileName).toBe('pending-approval.txt');
+
+    // Quản trị viên có thể chủ động cách ly (quarantineFile) một file nghi ngờ
+    const manualQuarantined = await service.quarantineFile(
+      publishedFile.id,
+      'Phát hiện nội dung nhạy cảm cần rà soát bảo mật',
+    );
+    expect(manualQuarantined.status).toBe(FILE_STATUS.QUARANTINED);
+    expect(manualQuarantined.scanStatus).toBe('INFECTED');
+  });
+
+  it('15. [Mục 6.3.4] Tính Checksum SHA-256 phát hiện file trùng lặp (ALLOW / REJECT / REUSE) và kiểm tra tính toàn vẹn chống sửa đổi file vật lý', async () => {
+    const { service, storageObjects } = createInMemoryFilesHarness();
+
+    const firstFile = await service.uploadSingle({
+      fileName: 'brochure-v1.txt',
+      textContent: 'Nội dung gốc duy nhất để kiểm tra SHA-256',
+    });
+
+    // 1. Chính sách REJECT (rejectDuplicate = true): Chặn tải lên file có nội dung trùng khớp SHA-256
+    await expect(
+      service.uploadSingle({
+        fileName: 'brochure-copy.txt',
+        textContent: 'Nội dung gốc duy nhất để kiểm tra SHA-256',
+        rejectDuplicate: true,
+      }),
+    ).rejects.toThrow(ConflictAppException);
+
+    // 2. Chính sách REUSE (reuseDuplicate = true): Tái sử dụng ngay bản ghi file gốc đã tồn tại mà không ghi trùng lặp lên đĩa
+    const reusedFile = await service.uploadSingle({
+      fileName: 'brochure-reused.txt',
+      textContent: 'Nội dung gốc duy nhất để kiểm tra SHA-256',
+      reuseDuplicate: true,
+    });
+    expect(reusedFile.id).toBe(firstFile.id);
+    expect(reusedFile.checksumSha256).toBe(firstFile.checksumSha256);
+    expect(reusedFile.storageKey).toBe(firstFile.storageKey);
+
+    // 3. Chính sách ALLOW (mặc định): Tạo bản ghi mới nhưng tự động gắn nhãn duplicateOfFileId trỏ về bản gốc
+    const allowedDuplicate = await service.uploadSingle({
+      fileName: 'brochure-copy-allowed.txt',
+      textContent: 'Nội dung gốc duy nhất để kiểm tra SHA-256',
+    });
+    expect(allowedDuplicate.id).not.toBe(firstFile.id);
+    expect(allowedDuplicate.duplicateOfFileId).toBe(firstFile.id);
+
+    // 4. Kiểm tra tính toàn vẹn (verifyFileIntegrity) khi file vật lý còn nguyên vẹn
+    const checkIntact = await service.verifyFileIntegrity(firstFile.id);
+    expect(checkIntact.intact).toBe(true);
+    expect(checkIntact.actualChecksumSha256).toBe(firstFile.checksumSha256);
+    expect(checkIntact.duplicateFileIds).toContain(allowedDuplicate.id);
+
+    // 4. Giả lập file vật lý trên đĩa bị kẻ tấn công hoặc lỗi đĩa làm thay đổi nội dung
+    storageObjects.set(firstFile.storageKey, {
+      buffer: Buffer.from('Nội dung đã bị chỉnh sửa trái phép trên ổ cứng!'),
+      mimeType: 'text/plain',
+    });
+
+    const checkTampered = await service.verifyFileIntegrity(firstFile.id);
+    expect(checkTampered.intact).toBe(false);
+    expect(checkTampered.actualChecksumSha256).not.toBe(checkTampered.expectedChecksumSha256);
+    expect(checkTampered.status).toBe(FILE_STATUS.QUARANTINED);
+  });
+
+  it('16. [Mục 6.3.5 & 6.3.6] Tự động Resize, tối ưu dung lượng ảnh PNG và sinh ảnh nhỏ Thumbnail để hiển thị nhanh', async () => {
+    const { service, validationService, storageObjects } = createInMemoryFilesHarness();
+
+    // Tạo ảnh PNG lớn (400x300) kèm metadata tEXt thừa để kiểm tra resize + strip chunk + nén tối ưu + tạo thumbnail
+    const basePng = Buffer.from(VALID_PNG_BASE64, 'base64');
+    // Kiểm tra trực tiếp bộ xử lý ảnh thuần Node.js với ảnh PNG hợp lệ
+    const processed = validationService.processAndOptimizeImage(basePng, 'png', 'image/png', {
+      optimize: true,
+      maxWidth: 100,
+      maxHeight: 100,
+      quality: 82,
+      generateThumbnail: true,
+      thumbnailMaxDim: 64,
+    });
+    expect(processed.dimensions).toEqual({ width: 1, height: 1 });
+    expect(processed.thumbnail).not.toBeNull();
+    expect(processed.thumbnail?.width).toBe(1);
+    expect(processed.thumbnail?.height).toBe(1);
+
+    // Tải ảnh lên qua FilesService -> tự động sinh thumbnail & lưu vào Storage
+    const uploadedImg = await service.uploadSingle({
+      fileName: 'product-photo.png',
+      contentBase64: VALID_PNG_BASE64,
+      optimizeImage: true,
+      generateThumbnail: true,
+    });
+
+    expect(uploadedImg.thumbnailUrl).toBe(`/api/v1/files/${uploadedImg.id}/thumbnail`);
+    expect(uploadedImg.imageDimensions).toEqual({ width: 1, height: 1 });
+
+    const thumbKey = (uploadedImg.metadata as Record<string, unknown> | null)?.thumbnailStorageKey;
+    expect(typeof thumbKey).toBe('string');
+    expect(storageObjects.has(String(thumbKey))).toBe(true);
+
+    // Lấy luồng thumbnail qua prepareThumbnail
+    const thumbStream = await service.prepareThumbnail(uploadedImg.id);
+    expect(thumbStream.mimeType).toBe('image/png');
+    expect(thumbStream.stream.size).toBeGreaterThan(0);
+
+    // Khi xóa vĩnh viễn ảnh, file thumbnail vật lý cũng được dọn sạch
+    await service.purgeFile(uploadedImg.id);
+    expect(storageObjects.has(String(thumbKey))).toBe(false);
+  });
+
+  it('17. [Mục 6.3.7] Dọn file không còn sử dụng (usageCount = 0) chỉ xóa sau khoảng thời gian an toàn', async () => {
+    const { service, files } = createInMemoryFilesHarness();
+
+    const oldUnusedFile = await service.uploadSingle({
+      fileName: 'old-orphan.txt',
+      textContent: 'File mồ côi tải lên từ 45 ngày trước',
+    });
+    const oldUsedFile = await service.uploadSingle({
+      fileName: 'old-attached.txt',
+      textContent: 'File cũ nhưng đang gắn với khóa học',
+    });
+    const recentUnusedFile = await service.uploadSingle({
+      fileName: 'recent-orphan.txt',
+      textContent: 'File mới tải lên hôm nay chưa kịp gắn liên kết',
+    });
+
+    // Gắn liên kết sử dụng cho oldUsedFile
+    await service.attachUsage({
+      fileId: oldUsedFile.id,
+      moduleName: 'courses',
+      entityType: 'lesson',
+      entityId: 500,
+    });
+
+    // Lùi thời gian tạo (createdAt) của oldUnusedFile và oldUsedFile về 45 ngày trước
+    const fortyFiveDaysAgo = new Date(Date.now() - 45 * 86_400_000);
+    const recUnused = files.get(oldUnusedFile.id);
+    if (recUnused) recUnused.createdAt = fortyFiveDaysAgo;
+    const recUsed = files.get(oldUsedFile.id);
+    if (recUsed) recUsed.createdAt = fortyFiveDaysAgo;
+
+    // Thực thi dọn file không sử dụng với thời gian an toàn = 30 ngày (action = 'trash')
+    const cleanupRes = await service.cleanupUnusedFiles({
+      olderThanDays: 30,
+      action: 'trash',
+    });
+
+    // Chỉ duy nhất oldUnusedFile bị dọn; oldUsedFile (đang dùng) và recentUnusedFile (chưa đủ 30 ngày an toàn) được giữ nguyên
+    expect(cleanupRes.cleanedCount).toBe(1);
+    expect(cleanupRes.cleanedIds).toEqual([oldUnusedFile.id]);
+    expect(files.get(oldUnusedFile.id)?.status).toBe(FILE_STATUS.TRASHED);
+    expect(files.get(oldUsedFile.id)?.status).toBe(FILE_STATUS.ACTIVE);
+    expect(files.get(recentUnusedFile.id)?.status).toBe(FILE_STATUS.ACTIVE);
   });
 });

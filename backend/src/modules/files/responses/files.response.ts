@@ -158,6 +158,13 @@ export interface FileRecordResponse {
   readonly metadata: Record<string, unknown> | null;
   readonly downloadUrl: string;
   readonly streamUrl: string;
+  readonly thumbnailUrl?: string | null;
+  readonly scanStatus?: 'CLEAN' | 'PENDING' | 'INFECTED';
+  readonly threatName?: string | null;
+  readonly duplicateOfFileId?: number | null;
+  readonly imageDimensions?: { readonly width: number; readonly height: number } | null;
+  readonly optimizedSavedBytes?: number;
+  readonly moduleName?: string | null;
   readonly createdAt: string;
   readonly updatedAt: string;
 }
@@ -180,8 +187,8 @@ export const fileRecordResponseSchema = z.object({
   checksumSha256: z.string(),
   visibility: z.number().int().min(1).max(3),
   visibilityName: z.enum(['PRIVATE', 'INTERNAL', 'PUBLIC']),
-  status: z.number().int().min(1).max(4),
-  statusName: z.enum(['ACTIVE', 'TRASHED', 'PURGED', 'MISSING']),
+  status: z.number().int().min(1).max(6),
+  statusName: z.enum(['ACTIVE', 'TRASHED', 'PURGED', 'MISSING', 'PENDING_SCAN', 'QUARANTINED']),
   uploadedByUserId: z.number().int().min(1).nullable(),
   uploadedByUser: fileUploaderSummarySchema.nullable(),
   organizationUnitId: z.number().int().min(1).nullable(),
@@ -196,8 +203,57 @@ export const fileRecordResponseSchema = z.object({
   metadata: z.record(z.string(), z.unknown()).nullable(),
   downloadUrl: z.string(),
   streamUrl: z.string(),
+  thumbnailUrl: z.string().nullable().optional(),
+  scanStatus: z.enum(['CLEAN', 'PENDING', 'INFECTED']).optional(),
+  threatName: z.string().nullable().optional(),
+  duplicateOfFileId: z.number().int().min(1).nullable().optional(),
+  imageDimensions: z
+    .object({
+      width: z.number().int().min(1),
+      height: z.number().int().min(1),
+    })
+    .nullable()
+    .optional(),
+  optimizedSavedBytes: z.number().int().min(0).optional(),
+  moduleName: z.string().nullable().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
+});
+
+export interface FileIntegrityVerificationResponse {
+  readonly fileId: number;
+  readonly expectedChecksumSha256: string;
+  readonly actualChecksumSha256: string | null;
+  readonly intact: boolean;
+  readonly status: FileStatusCode;
+  readonly statusName: FileStatusName;
+  readonly duplicateFileIds: readonly number[];
+  readonly verifiedAt: string;
+}
+
+export const fileIntegrityVerificationResponseSchema = z.object({
+  fileId: z.number().int().min(1),
+  expectedChecksumSha256: z.string(),
+  actualChecksumSha256: z.string().nullable(),
+  intact: z.boolean(),
+  status: z.number().int().min(1).max(6),
+  statusName: z.enum(['ACTIVE', 'TRASHED', 'PURGED', 'MISSING', 'PENDING_SCAN', 'QUARANTINED']),
+  duplicateFileIds: z.array(z.number().int().min(1)),
+  verifiedAt: z.string(),
+});
+
+export interface CleanupUnusedFilesResponse {
+  readonly retentionDays: number;
+  readonly action: 'trash' | 'purge';
+  readonly cleanedCount: number;
+  readonly cleanedIds: readonly number[];
+}
+
+export const cleanupUnusedFilesResponseSchema = z.object({
+  retentionDays: z.number().min(0),
+  action: z.enum(['trash', 'purge']),
+  cleanedCount: z.number().int().min(0),
+  cleanedIds: z.array(z.number().int().min(1)),
 });
 
 export interface FileStatsResponse {
@@ -231,6 +287,19 @@ export interface FileStatsResponse {
     readonly tempLinkMaxTtlSec?: number;
     readonly reconcileOnList?: boolean;
     readonly storageKeyPrefix?: string;
+    readonly categoryAllowedExtensions?: Readonly<Record<string, readonly string[]>>;
+    readonly categoryMaxSizeMb?: Readonly<Record<string, number>>;
+    readonly moduleMaxSizeMb?: Readonly<Record<string, number>>;
+    readonly malwareScanEnabled?: boolean;
+    readonly stageBeforePublish?: boolean;
+    readonly duplicatePolicy?: 'ALLOW' | 'REJECT' | 'REUSE';
+    readonly thumbnailEnabled?: boolean;
+    readonly thumbnailMaxDim?: number;
+    readonly optimizeImageEnabled?: boolean;
+    readonly imageMaxWidth?: number;
+    readonly imageMaxHeight?: number;
+    readonly imageQuality?: number;
+    readonly unusedRetentionDays?: number;
   };
 }
 
@@ -267,5 +336,18 @@ export const fileStatsResponseSchema = z.object({
     tempLinkMaxTtlSec: z.number().int().min(1).optional(),
     reconcileOnList: z.boolean().optional(),
     storageKeyPrefix: z.string().optional(),
+    categoryAllowedExtensions: z.record(z.string(), z.array(z.string())).optional(),
+    categoryMaxSizeMb: z.record(z.string(), z.number()).optional(),
+    moduleMaxSizeMb: z.record(z.string(), z.number()).optional(),
+    malwareScanEnabled: z.boolean().optional(),
+    stageBeforePublish: z.boolean().optional(),
+    duplicatePolicy: z.enum(['ALLOW', 'REJECT', 'REUSE']).optional(),
+    thumbnailEnabled: z.boolean().optional(),
+    thumbnailMaxDim: z.number().int().min(1).optional(),
+    optimizeImageEnabled: z.boolean().optional(),
+    imageMaxWidth: z.number().int().min(1).optional(),
+    imageMaxHeight: z.number().int().min(1).optional(),
+    imageQuality: z.number().int().min(1).max(100).optional(),
+    unusedRetentionDays: z.number().int().min(1).optional(),
   }),
 });

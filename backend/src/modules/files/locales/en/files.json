@@ -26,5 +26,14 @@
   "error.temporaryLinkExpiredOrInvalid": "Temporary download link is invalid or has expired",
   "error.temporaryLinkTtlExceeded": "Temporary download link expiration exceeds maximum allowed limit ({{maxSeconds}} seconds)",
   "error.usageNotFound": "File usage reference record was not found",
-  "error.invalidByteRange": "Requested HTTP byte range header is invalid"
+  "error.invalidByteRange": "Requested HTTP byte range header is invalid",
+  "error.categoryExtensionNotAllowed": "File extension '.{{ext}}' is not allowed for category '{{category}}'",
+  "error.mimeTypeMismatch": "Provided MIME type '{{mimeType}}' does not match actual file format '.{{ext}}'",
+  "error.categoryFileTooLarge": "File size exceeds maximum allowed limit for category '{{category}}' ({{maxMb}} MB)",
+  "error.moduleFileTooLarge": "File size exceeds maximum allowed limit for module '{{moduleName}}' ({{maxMb}} MB)",
+  "error.malwareDetected": "Malware or dangerous payload detected in uploaded file ({{threatName}})",
+  "error.filePendingScan": "File is currently in the staging area awaiting security scan/approval before publishing",
+  "error.fileInQuarantine": "File has been quarantined due to suspected malware or security violation",
+  "error.duplicateFileDetected": "Uploaded file is a duplicate (matches SHA-256 checksum of file #{{duplicateFileId}})",
+  "error.checksumTampered": "Security alert: Physical file content has been altered and no longer matches its original SHA-256 checksum"
 }

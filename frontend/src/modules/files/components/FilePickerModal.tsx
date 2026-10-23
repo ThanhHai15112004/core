@@ -25,6 +25,7 @@ import {
   MoreVertical,
   CloudUpload,
 } from 'lucide-react';
+import { FOLDER_COLORS } from '../enum/files.enum';
 import { filesApi, readBrowserFileAsBase64 } from '../services/files.api';
 import type { FileFolderItem, FileRecordItem } from '../types/files.types';
 
@@ -42,8 +43,6 @@ export interface FilePickerModalProps {
   /** Tiêu đề hiển thị trên modal */
   title?: string;
 }
-
-const FOLDER_COLORS = ['#f59e0b', '#f97316', '#3b82f6', '#8b5cf6', '#10b981', '#ec4899'];
 
 export const FilePickerModal: React.FC<FilePickerModalProps> = ({
   isOpen,

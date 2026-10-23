@@ -230,6 +230,45 @@ export class FilesRepository extends BaseTypeOrmRepository<FileRecordEntity> {
     );
   }
 
+  /** Tìm các file đang hoạt động có cùng mã băm SHA-256 (phục vụ phát hiện file trùng lặp — Mục 6.3) */
+  public async findByChecksumSha256(
+    checksumSha256: string,
+    organizationUnitId?: number | null,
+  ): Promise<FileRecordEntity[]> {
+    return this.executeReadOnly(async (repo) => {
+      const qb = repo
+        .createQueryBuilder('f')
+        .where('f.checksumSha256 = :checksumSha256', { checksumSha256 })
+        .andWhere('f.status IN (:...statuses)', {
+          statuses: [FILE_STATUS.ACTIVE, FILE_STATUS.PENDING_SCAN],
+        })
+        .orderBy('f.id', 'ASC');
+      if (typeof organizationUnitId === 'number' && organizationUnitId > 0) {
+        qb.andWhere('f.organizationUnitId = :organizationUnitId', { organizationUnitId });
+      }
+      return qb.getMany();
+    });
+  }
+
+  /** Tìm các file không còn được sử dụng (`usageCount = 0`) đã vượt qua thời gian an toàn (Mục 6.3) */
+  public async findUnusedFilesOlderThan(
+    cutoffDate: Date,
+    organizationUnitId?: number | null,
+  ): Promise<FileRecordEntity[]> {
+    return this.executeReadOnly(async (repo) => {
+      const qb = repo
+        .createQueryBuilder('f')
+        .where('f.status = :status', { status: FILE_STATUS.ACTIVE })
+        .andWhere('f.usageCount = 0')
+        .andWhere('f.createdAt <= :cutoffDate', { cutoffDate })
+        .orderBy('f.id', 'ASC');
+      if (typeof organizationUnitId === 'number' && organizationUnitId > 0) {
+        qb.andWhere('f.organizationUnitId = :organizationUnitId', { organizationUnitId });
+      }
+      return qb.getMany();
+    });
+  }
+
   /** Xóa mềm bản ghi file theo ID */
   public async softDeleteById(id: number): Promise<void> {
     await this.repository.softDelete(id);

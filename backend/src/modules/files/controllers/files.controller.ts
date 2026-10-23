@@ -28,32 +28,40 @@ import { FILES_ROUTES } from '../routes/files.routes.js';
 import { FilesService } from '../services/files.service.js';
 import {
   type AttachFileUsageRequest,
+  type CleanupUnusedFilesRequest,
   type CreateFileFolderRequest,
   type CreateTemporaryDownloadLinkRequest,
   type GrantFilePermissionRequest,
   type ListFilesQuery,
+  type QuarantineFileRequest,
   type UpdateFileFolderRequest,
   type UpdateFileMetadataRequest,
   type UploadBatchFilesRequest,
   type UploadSingleFileRequest,
   attachFileUsageSchema,
+  cleanupUnusedFilesSchema,
   createFileFolderSchema,
   createTemporaryDownloadLinkSchema,
   grantFilePermissionSchema,
   listFilesQuerySchema,
+  quarantineFileSchema,
   updateFileFolderSchema,
   updateFileMetadataSchema,
   uploadBatchFilesSchema,
   uploadSingleFileSchema,
 } from '../requests/files.requests.js';
 import {
+  type CleanupUnusedFilesResponse,
   type FileFolderResponse,
+  type FileIntegrityVerificationResponse,
   type FilePermissionItemResponse,
   type FileRecordResponse,
   type FileStatsResponse,
   type FileUsageItemResponse,
   type TemporaryDownloadLinkResponse,
+  cleanupUnusedFilesResponseSchema,
   fileFolderResponseSchema,
+  fileIntegrityVerificationResponseSchema,
   filePermissionItemResponseSchema,
   fileRecordResponseSchema,
   fileStatsResponseSchema,
@@ -69,7 +77,7 @@ const tempDownloadTokenParamSchema = z.string().trim().min(10).max(2048);
 
 @ApiGroup(
   'File Management',
-  'Quản lý file dùng chung, thư mục, phân quyền truy cập, link tải tạm thời, thùng rác & liên kết sử dụng (Mục 6.1 & 6.2)',
+  'Quản lý file dùng chung, thư mục, phân quyền truy cập, link tải tạm thời, kiểm tra & xử lý file, thùng rác & liên kết sử dụng (Mục 6.1, 6.2 & 6.3)',
 )
 @Controller(FILES_ROUTES.PREFIX)
 export class FilesController {
@@ -208,6 +216,22 @@ export class FilesController {
   })
   public async purgeExpiredTrash(@CurrentUser() actor?: UserIdentity) {
     return this.filesService.purgeExpiredTrash(actor);
+  }
+
+  /** Dọn file không còn sử dụng (`usageCount = 0`) sau thời gian an toàn (Mục 6.3) */
+  @Post(FILES_ROUTES.CLEANUP_UNUSED)
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions('files.delete')
+  @ApiDoc({
+    summary:
+      'Dọn các file không có liên kết sử dụng (usageCount = 0) đã vượt quá thời gian lưu giữ an toàn (Mục 6.3)',
+    response: cleanupUnusedFilesResponseSchema,
+  })
+  public async cleanupUnusedFiles(
+    @ValidatedBody(cleanupUnusedFilesSchema) body: CleanupUnusedFilesRequest,
+    @CurrentUser() actor?: UserIdentity,
+  ): Promise<CleanupUnusedFilesResponse> {
+    return this.filesService.cleanupUnusedFiles(body, actor);
   }
 
   /** Tải file qua đường dẫn tạm thời tự hết hạn (Signed Temporary Download Link — Mục 6.2) */
@@ -398,6 +422,76 @@ export class FilesController {
       void reply.header('content-length', String(stream.size));
     }
     return reply.send(stream.body);
+  }
+
+  /** Xem/tải ảnh thu nhỏ (Thumbnail) hiển thị nhanh (Mục 6.3) */
+  @Get(FILES_ROUTES.THUMBNAIL)
+  @RequirePermissions('files.read')
+  @ApiDoc({
+    summary: 'Lấy ảnh nhỏ (thumbnail) để hiển thị nhanh trên giao diện (Mục 6.3)',
+  })
+  public async streamThumbnail(
+    @ValidatedParams(positiveIntParamSchema, 'id') id: number,
+    @Res() reply: FastifyReply,
+    @CurrentUser() actor?: UserIdentity,
+  ) {
+    const { stream, mimeType } = await this.filesService.prepareThumbnail(id, actor);
+    void reply
+      .header('content-type', mimeType || 'image/png')
+      .header('cache-control', 'private, max-age=3600')
+      .header('x-content-type-options', 'nosniff');
+    if (stream.size !== null) {
+      void reply.header('content-length', String(stream.size));
+    }
+    return reply.send(stream.body);
+  }
+
+  /** Duyệt công bố file từ khu vực chờ kiểm duyệt sang trạng thái ACTIVE (Mục 6.3) */
+  @Post(FILES_ROUTES.PUBLISH)
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions('files.manage')
+  @ApiDoc({
+    summary:
+      'Quét lại mã độc & công bố file từ khu vực chờ (PENDING_SCAN) sang trạng thái hoạt động (ACTIVE) (Mục 6.3)',
+    response: fileRecordResponseSchema,
+  })
+  public async publishStagedFile(
+    @ValidatedParams(positiveIntParamSchema, 'id') id: number,
+    @CurrentUser() actor?: UserIdentity,
+  ): Promise<FileRecordResponse> {
+    return this.filesService.publishStagedFile(id, actor);
+  }
+
+  /** Đưa file nghi ngờ hoặc nhiễm mã độc vào khu vực cách ly (QUARANTINED) (Mục 6.3) */
+  @Post(FILES_ROUTES.QUARANTINE)
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions('files.manage')
+  @ApiDoc({
+    summary: 'Cách ly file nghi ngờ hoặc chứa mã độc vào khu vực QUARANTINED (Mục 6.3)',
+    response: fileRecordResponseSchema,
+  })
+  public async quarantineFile(
+    @ValidatedParams(positiveIntParamSchema, 'id') id: number,
+    @ValidatedBody(quarantineFileSchema) body: QuarantineFileRequest,
+    @CurrentUser() actor?: UserIdentity,
+  ): Promise<FileRecordResponse> {
+    return this.filesService.quarantineFile(id, body.reason, actor);
+  }
+
+  /** Kiểm tra tính toàn vẹn file vật lý theo Checksum SHA-256 & phát hiện bản trùng (Mục 6.3) */
+  @Post(FILES_ROUTES.VERIFY_INTEGRITY)
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions('files.read')
+  @ApiDoc({
+    summary:
+      'Đối chiếu Checksum SHA-256 của file vật lý trên Storage để phát hiện file bị thay đổi hoặc trùng lặp (Mục 6.3)',
+    response: fileIntegrityVerificationResponseSchema,
+  })
+  public async verifyFileIntegrity(
+    @ValidatedParams(positiveIntParamSchema, 'id') id: number,
+    @CurrentUser() actor?: UserIdentity,
+  ): Promise<FileIntegrityVerificationResponse> {
+    return this.filesService.verifyFileIntegrity(id, actor);
   }
 
   /** Đưa file vào thùng rác (Có thời gian chờ trước khi xóa vĩnh viễn; chặn nếu còn liên kết) */

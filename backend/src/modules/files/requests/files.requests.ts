@@ -20,6 +20,8 @@ const fileStatusSchema = z
       z.literal(FILE_STATUS.TRASHED),
       z.literal(FILE_STATUS.PURGED),
       z.literal(FILE_STATUS.MISSING),
+      z.literal(FILE_STATUS.PENDING_SCAN),
+      z.literal(FILE_STATUS.QUARANTINED),
     ]),
   )
   .optional();
@@ -81,6 +83,17 @@ export const uploadSingleFileSchema = z.object({
   folderId: coerceOptionalIntId,
   visibility: fileVisibilitySchema,
   organizationUnitId: coerceOptionalIntId,
+  moduleName: z.string().trim().max(100).optional(),
+  expectedCategory: fileCategorySchema,
+  stageForScan: z.boolean().optional(),
+  quarantineOnThreat: z.boolean().optional(),
+  rejectDuplicate: z.boolean().optional(),
+  reuseDuplicate: z.boolean().optional(),
+  optimizeImage: z.boolean().optional(),
+  generateThumbnail: z.boolean().optional(),
+  maxWidth: z.coerce.number().int().min(16).max(8192).optional(),
+  maxHeight: z.coerce.number().int().min(16).max(8192).optional(),
+  quality: z.coerce.number().int().min(10).max(100).optional(),
   metadata: z.record(z.string(), z.unknown()).nullable().optional(),
 });
 
@@ -93,6 +106,17 @@ export interface UploadSingleFileRequest {
   readonly folderId?: number | null | undefined;
   readonly visibility?: FileVisibilityCode | undefined;
   readonly organizationUnitId?: number | null | undefined;
+  readonly moduleName?: string | undefined;
+  readonly expectedCategory?: FileCategoryCode | undefined;
+  readonly stageForScan?: boolean | undefined;
+  readonly quarantineOnThreat?: boolean | undefined;
+  readonly rejectDuplicate?: boolean | undefined;
+  readonly reuseDuplicate?: boolean | undefined;
+  readonly optimizeImage?: boolean | undefined;
+  readonly generateThumbnail?: boolean | undefined;
+  readonly maxWidth?: number | undefined;
+  readonly maxHeight?: number | undefined;
+  readonly quality?: number | undefined;
   readonly metadata?: Record<string, unknown> | null | undefined;
 }
 
@@ -101,6 +125,13 @@ export const uploadBatchFilesSchema = z.object({
   folderId: coerceOptionalIntId,
   visibility: fileVisibilitySchema,
   organizationUnitId: coerceOptionalIntId,
+  moduleName: z.string().trim().max(100).optional(),
+  stageForScan: z.boolean().optional(),
+  quarantineOnThreat: z.boolean().optional(),
+  rejectDuplicate: z.boolean().optional(),
+  reuseDuplicate: z.boolean().optional(),
+  optimizeImage: z.boolean().optional(),
+  generateThumbnail: z.boolean().optional(),
 });
 
 export interface UploadBatchFilesRequest {
@@ -108,6 +139,13 @@ export interface UploadBatchFilesRequest {
   readonly folderId?: number | null | undefined;
   readonly visibility?: FileVisibilityCode | undefined;
   readonly organizationUnitId?: number | null | undefined;
+  readonly moduleName?: string | undefined;
+  readonly stageForScan?: boolean | undefined;
+  readonly quarantineOnThreat?: boolean | undefined;
+  readonly rejectDuplicate?: boolean | undefined;
+  readonly reuseDuplicate?: boolean | undefined;
+  readonly optimizeImage?: boolean | undefined;
+  readonly generateThumbnail?: boolean | undefined;
 }
 
 export const updateFileMetadataSchema = z.object({
@@ -171,6 +209,26 @@ export const createTemporaryDownloadLinkSchema = z.object({
 export interface CreateTemporaryDownloadLinkRequest {
   readonly expiresInSeconds?: number | undefined;
   readonly disposition?: 'attachment' | 'inline' | undefined;
+}
+
+export const quarantineFileSchema = z.object({
+  reason: z.string().trim().min(1).max(255).optional(),
+});
+
+export interface QuarantineFileRequest {
+  readonly reason?: string | undefined;
+}
+
+export const cleanupUnusedFilesSchema = z.object({
+  olderThanDays: z.coerce.number().min(0).max(3650).optional(),
+  action: z.enum(['trash', 'purge']).optional().default('trash'),
+  organizationUnitId: coerceOptionalIntId,
+});
+
+export interface CleanupUnusedFilesRequest {
+  readonly olderThanDays?: number | undefined;
+  readonly action?: 'trash' | 'purge' | undefined;
+  readonly organizationUnitId?: number | null | undefined;
 }
 
 export const listFilesQuerySchema = z.object({

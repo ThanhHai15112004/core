@@ -2,9 +2,12 @@
 
 ## 1. KIẾN TRÚC MODULAR MONOLITH & MANIFEST
 1. **Zero Domain Leakage**: `backend/src/packages/` (`kernel`, `config`, `logging`, `security`...) chỉ chứa Abstractions, Interfaces (`IStorageProvider`, `IMailerProvider`, `IEventDispatcher`), Base classes, Utilities. CẤM đặt Entity/logic nghiệp vụ vào `packages/`.
-2. **Bounded Context tự chủ (`modules/` & `project-modules/`)**:
+2. **Bounded Context tự chủ (`modules/` & `project-modules/` trên cả BE & FE)**:
    - **Cô lập DB**: CẤM tạo Foreign Key vật lý xuyên module (chỉ lưu ID tham chiếu như `order.userId`).
    - **Giao tiếp**: CẤM inject Repository chéo. Đồng bộ qua `<Module>Facade`/Service tại `index.ts`; bất đồng bộ qua Domain Events (`events/`). Controller chỉ làm transport adapter.
+   - **Tổ chức nội bộ Module & Chống file quá dài (BE & FE)**:
+     - Trong mỗi module (`backend/src/modules/<tên>/`, `backend/src/project-modules/<tên>/`, `frontend/src/modules/<tên>/`, `frontend/src/project-modules/<tên>/`), chủ động tách `constants/` (hoặc `enums/`), `types/` (hoặc `interfaces/`), `helpers/` (hoặc `utils/`) để dễ tìm, dễ sửa và dễ mở rộng.
+     - Tránh nhồi nhét vào 1 file quá lớn: ở Backend tách logic tính toán/xử lý chuyên biệt sang `helpers/` hoặc sub-services; ở Frontend (`core/`, `modules/`, `project-modules/`, `web/`, `mobile/`) tách trang lớn thành các sub-components nhỏ trong `components/` và custom `hooks/`.
 3. **Module Manifest (`module.manifest.json`) & Project Manifest (`backend/project.manifest.json`)**:
    - Mọi module bắt buộc có `module.manifest.json` (`name`, `displayName`, `version`, `type: "core" | "project"`, `dependencies`, `permissions`, `events`, `database`, `codeTypes`, `settingGroups`, `settings`, `featureFlags`, `locales`, `timezones`, `sequences`, `menus`), validate bằng `ModuleManifest` & Zod (`packages/kernel/schemas/manifest.schema.js`).
    - Quét manifest bắt buộc dùng `scanModuleManifests()` & `discoverInstalledModules()` (`@packages/kernel`).

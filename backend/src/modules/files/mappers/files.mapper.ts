@@ -89,6 +89,39 @@ export class FilesMapper {
       ? safeJsonParseObject<Record<string, unknown>>(entity.metadataJson)
       : null;
     const metadata = parsedMeta && Object.keys(parsedMeta).length > 0 ? parsedMeta : null;
+    const hasThumbnail =
+      typeof metadata?.thumbnailStorageKey === 'string' && metadata.thumbnailStorageKey.length > 0;
+    const thumbnailUrl =
+      hasThumbnail || entity.category === 1 ? `/api/v1/files/${entity.id}/thumbnail` : null;
+    const scanStatus =
+      metadata?.scanStatus === 'CLEAN' ||
+      metadata?.scanStatus === 'PENDING' ||
+      metadata?.scanStatus === 'INFECTED'
+        ? metadata.scanStatus
+        : entity.status === FILE_STATUS.PENDING_SCAN
+          ? 'PENDING'
+          : entity.status === FILE_STATUS.QUARANTINED
+            ? 'INFECTED'
+            : 'CLEAN';
+    const threatName = typeof metadata?.threatName === 'string' ? metadata.threatName : null;
+    const duplicateOfFileId =
+      typeof metadata?.duplicateOfFileId === 'number' && metadata.duplicateOfFileId > 0
+        ? metadata.duplicateOfFileId
+        : null;
+    const rawDims = metadata?.imageDimensions as { width?: unknown; height?: unknown } | undefined;
+    const imageDimensions =
+      rawDims &&
+      typeof rawDims.width === 'number' &&
+      rawDims.width > 0 &&
+      typeof rawDims.height === 'number' &&
+      rawDims.height > 0
+        ? { width: rawDims.width, height: rawDims.height }
+        : null;
+    const optimizedSavedBytes =
+      typeof metadata?.optimizedSavedBytes === 'number' && metadata.optimizedSavedBytes >= 0
+        ? metadata.optimizedSavedBytes
+        : undefined;
+    const moduleName = typeof metadata?.moduleName === 'string' ? metadata.moduleName : null;
 
     return {
       id: entity.id,
@@ -124,6 +157,13 @@ export class FilesMapper {
       metadata,
       downloadUrl: `/api/v1/files/${entity.id}/download`,
       streamUrl: `/api/v1/files/${entity.id}/stream`,
+      thumbnailUrl,
+      scanStatus,
+      threatName,
+      duplicateOfFileId,
+      imageDimensions,
+      ...(optimizedSavedBytes !== undefined ? { optimizedSavedBytes } : {}),
+      moduleName,
       createdAt: entity.createdAt.toISOString(),
       updatedAt: entity.updatedAt.toISOString(),
     };

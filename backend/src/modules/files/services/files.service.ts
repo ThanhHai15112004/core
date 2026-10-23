@@ -1,5 +1,3 @@
-import { createHash, createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
-import path from 'node:path';
 import { Inject, Injectable, Optional } from '@nestjs/common';
 import { createPaginatedResult } from '@packages/http/index.js';
 import {
@@ -13,6 +11,7 @@ import {
   defaultSequenceRegistry,
   formatBytes,
   resolvePagination,
+  safeJsonParseObject,
 } from '@packages/kernel/index.js';
 import {
   AuditLogService,
@@ -29,7 +28,6 @@ import {
 import { type IUsersPublicService, USERS_PUBLIC_SERVICE } from '@modules/users/contracts/index.js';
 import {
   type AttachFileUsageInput,
-  FILE_CATEGORY,
   FILE_PERMISSION_SUBJECT,
   FILE_STATUS,
   FILE_VISIBILITY,
@@ -38,11 +36,23 @@ import {
   type FileSummary,
   type IFilesPublicService,
   getFileCategoryName,
+  getFileStatusName,
   parseFilePermissionSubjectType,
 } from '../contracts/index.js';
 import type { FileFolderEntity } from '../entities/file-folder.entity.js';
 import type { FilePermissionEntity } from '../entities/file-permission.entity.js';
 import type { FileRecordEntity } from '../entities/file-record.entity.js';
+import { ALL_FILE_CATEGORIES, DAY_MS, FALLBACK_TEMP_LINK_SECRET } from '../enum/files.enum.js';
+import {
+  buildImmutableStorageKey,
+  buildSafeDownloadFileName,
+  buildThumbnailStorageKey,
+  computeSha256Hex,
+  parseByteRangeHeader,
+  signTemporaryDownloadToken,
+  slugifyFolderName,
+  verifyTemporaryDownloadToken,
+} from '../helpers/file-storage.helper.js';
 import { FilesMapper } from '../mappers/files.mapper.js';
 import { FileFoldersRepository } from '../repositories/file-folders.repository.js';
 import { FilePermissionsRepository } from '../repositories/file-permissions.repository.js';
@@ -50,17 +60,21 @@ import { FileUsagesRepository } from '../repositories/file-usages.repository.js'
 import { type FileScopeConstraint, FilesRepository } from '../repositories/files.repository.js';
 import type {
   AttachFileUsageRequest,
+  CleanupUnusedFilesRequest,
   CreateFileFolderRequest,
   CreateTemporaryDownloadLinkRequest,
   GrantFilePermissionRequest,
   ListFilesQuery,
+  QuarantineFileRequest,
   UpdateFileFolderRequest,
   UpdateFileMetadataRequest,
   UploadBatchFilesRequest,
   UploadSingleFileRequest,
 } from '../requests/files.requests.js';
 import type {
+  CleanupUnusedFilesResponse,
   FileFolderResponse,
+  FileIntegrityVerificationResponse,
   FilePermissionItemResponse,
   FileRecordResponse,
   FileStatsResponse,
@@ -68,34 +82,10 @@ import type {
   FileUsageItemResponse,
   TemporaryDownloadLinkResponse,
 } from '../responses/files.response.js';
+import type { ResolvedByteRange, TemporaryDownloadTokenPayload } from '../types/files.types.js';
 import { FileValidationService } from './file-validation.service.js';
 
-const DAY_MS = 86_400_000;
-const FALLBACK_TEMP_LINK_SECRET = 'core-files-temporary-download-hmac-secret-key';
-const ALL_CATEGORIES: readonly FileCategoryCode[] = [
-  FILE_CATEGORY.IMAGE,
-  FILE_CATEGORY.VIDEO,
-  FILE_CATEGORY.AUDIO,
-  FILE_CATEGORY.DOCUMENT,
-  FILE_CATEGORY.SPREADSHEET,
-  FILE_CATEGORY.ARCHIVE,
-  FILE_CATEGORY.OTHER,
-];
-
-interface TemporaryDownloadTokenPayload {
-  readonly typ: 'file_temp_dl';
-  readonly fid: number;
-  readonly exp: number;
-  readonly disp: 'attachment' | 'inline';
-  readonly uid: number | null;
-}
-
-export interface ResolvedByteRange {
-  readonly start: number;
-  readonly end: number;
-  readonly totalSize: number;
-  readonly contentLength: number;
-}
+export type { ResolvedByteRange };
 
 @Injectable()
 export class FilesService implements IFilesPublicService {
@@ -373,7 +363,13 @@ export class FilesService implements IFilesPublicService {
 
   // ─── 2. Tải file lên hệ thống (Một hoặc nhiều file) ────────────────────────
 
-  /** Tải một file lên hệ thống, kiểm tra chữ ký & dung lượng (theo đơn vị + người dùng) trước khi lưu */
+  /**
+   * Tải một file lên hệ thống (Mục 6.1, 6.2 & 6.3):
+   * - Kiểm tra định dạng (extension, MIME, Magic Bytes) và giới hạn dung lượng theo Loại file & Module.
+   * - Quét mã độc, hỗ trợ đưa vào khu vực chờ (`PENDING_SCAN = 5`) hoặc cách ly (`QUARANTINED = 6`).
+   * - Tính checksum SHA-256 và xử lý file trùng lặp theo chính sách (`ALLOW` | `REJECT` | `REUSE`).
+   * - Tự động Resize, tối ưu dung lượng ảnh và tạo ảnh thu nhỏ (`thumbnail`) hiển thị nhanh.
+   */
   public async uploadSingle(
     input: UploadSingleFileRequest,
     actor?: UserIdentity,
@@ -392,9 +388,83 @@ export class FilesService implements IFilesPublicService {
     const validated = this.validationService.validateUploadInput(input, orgId);
     await this.assertStorageQuotaWithinLimit(validated.sizeBytes, orgId, actor?.id ?? null);
     const checksumSha256 = this.computeSha256Hex(validated.buffer);
-    const storageKey = this.buildImmutableStorageKey(validated.extension);
 
+    // Kiểm tra trùng lặp theo mã băm SHA-256 (Mục 6.3.4)
+    const duplicateMatches =
+      typeof this.filesRepo.findByChecksumSha256 === 'function'
+        ? await this.filesRepo.findByChecksumSha256(checksumSha256, orgId)
+        : (await this.filesRepo.findAllForStats()).filter(
+            (f) => f.checksumSha256 === checksumSha256 && f.status === FILE_STATUS.ACTIVE,
+          );
+    const existingDuplicate = duplicateMatches[0] ?? null;
+    const duplicatePolicy = input.rejectDuplicate
+      ? 'REJECT'
+      : input.reuseDuplicate
+        ? 'REUSE'
+        : this.validationService.getDuplicatePolicy(orgId);
+
+    if (existingDuplicate) {
+      if (duplicatePolicy === 'REJECT') {
+        throw new ConflictAppException('files.error.duplicateFileDetected', [], {
+          duplicateFileId: existingDuplicate.id,
+        });
+      }
+      if (duplicatePolicy === 'REUSE') {
+        return this.getById(existingDuplicate.id, actor);
+      }
+    }
+
+    const storageKey = this.buildImmutableStorageKey(validated.extension);
     await this.storage.upload(storageKey, validated.buffer, validated.mimeType);
+
+    let thumbnailStorageKey: string | null = null;
+    if (validated.thumbnail) {
+      thumbnailStorageKey = this.buildThumbnailStorageKey(validated.thumbnail.extension);
+      await this.storage.upload(
+        thumbnailStorageKey,
+        validated.thumbnail.buffer,
+        validated.thumbnail.mimeType,
+      );
+    }
+
+    // Xác định trạng thái vòng đời ban đầu (ACTIVE, PENDING_SCAN hoặc QUARANTINED — Mục 6.3.3)
+    const shouldStage =
+      Boolean(input.stageForScan) || this.validationService.shouldStageBeforePublish(orgId);
+    const initialStatus = !validated.malwareScan.clean
+      ? FILE_STATUS.QUARANTINED
+      : shouldStage
+        ? FILE_STATUS.PENDING_SCAN
+        : FILE_STATUS.ACTIVE;
+
+    const scanStatus = !validated.malwareScan.clean
+      ? 'INFECTED'
+      : initialStatus === FILE_STATUS.PENDING_SCAN
+        ? 'PENDING'
+        : 'CLEAN';
+
+    const enrichedMeta: Record<string, unknown> = {
+      ...(input.metadata ?? {}),
+      ...(input.moduleName ? { moduleName: input.moduleName.trim().toLowerCase() } : {}),
+      scanStatus,
+      scannedAt: validated.malwareScan.scannedAt,
+      ...(validated.malwareScan.threatName ? { threatName: validated.malwareScan.threatName } : {}),
+      ...(existingDuplicate ? { duplicateOfFileId: existingDuplicate.id } : {}),
+      ...(validated.imageDimensions ? { imageDimensions: validated.imageDimensions } : {}),
+      ...(validated.optimizedSavedBytes > 0
+        ? {
+            originalSizeBytes: validated.originalSizeBytes,
+            optimizedSavedBytes: validated.optimizedSavedBytes,
+          }
+        : {}),
+      ...(thumbnailStorageKey
+        ? {
+            thumbnailStorageKey,
+            thumbnailMimeType: validated.thumbnail?.mimeType ?? 'image/png',
+            thumbnailWidth: validated.thumbnail?.width ?? null,
+            thumbnailHeight: validated.thumbnail?.height ?? null,
+          }
+        : {}),
+    };
 
     const code = await this.generateEntityCode('files.file_code', orgId);
     const defaultVisibility = this.validationService.getDefaultVisibility(orgId);
@@ -411,14 +481,14 @@ export class FilesService implements IFilesPublicService {
       sizeBytes: validated.sizeBytes,
       checksumSha256,
       visibility: input.visibility ?? defaultVisibility,
-      status: FILE_STATUS.ACTIVE,
+      status: initialStatus,
       uploadedByUserId: actor?.id ?? null,
       organizationUnitId: orgId,
       usageCount: 0,
       trashedAt: null,
       trashedByUserId: null,
       purgeAfterAt: null,
-      metadataJson: input.metadata ? JSON.stringify(input.metadata) : null,
+      metadataJson: Object.keys(enrichedMeta).length > 0 ? JSON.stringify(enrichedMeta) : null,
     });
 
     await this.recordAudit(actor, 'file.upload', 'file', String(saved.id), null, {
@@ -428,6 +498,8 @@ export class FilesService implements IFilesPublicService {
       mimeType: saved.mimeType,
       sizeBytes: Number(saved.sizeBytes),
       storageKey: saved.storageKey,
+      status: saved.status,
+      scanStatus,
     });
 
     const uploaderMap = await this.loadUploaderSummaries(
@@ -441,7 +513,7 @@ export class FilesService implements IFilesPublicService {
         : null,
       usages: [],
       permissions: [],
-      canDownload: true,
+      canDownload: saved.status === FILE_STATUS.ACTIVE,
     });
   }
 
@@ -472,6 +544,23 @@ export class FilesService implements IFilesPublicService {
           fileItem.organizationUnitId !== undefined
             ? fileItem.organizationUnitId
             : input.organizationUnitId,
+        moduleName: fileItem.moduleName !== undefined ? fileItem.moduleName : input.moduleName,
+        stageForScan:
+          fileItem.stageForScan !== undefined ? fileItem.stageForScan : input.stageForScan,
+        quarantineOnThreat:
+          fileItem.quarantineOnThreat !== undefined
+            ? fileItem.quarantineOnThreat
+            : input.quarantineOnThreat,
+        rejectDuplicate:
+          fileItem.rejectDuplicate !== undefined ? fileItem.rejectDuplicate : input.rejectDuplicate,
+        reuseDuplicate:
+          fileItem.reuseDuplicate !== undefined ? fileItem.reuseDuplicate : input.reuseDuplicate,
+        optimizeImage:
+          fileItem.optimizeImage !== undefined ? fileItem.optimizeImage : input.optimizeImage,
+        generateThumbnail:
+          fileItem.generateThumbnail !== undefined
+            ? fileItem.generateThumbnail
+            : input.generateThumbnail,
       };
       const uploaded = await this.uploadSingle(mergedItem, actor);
       items.push(uploaded);
@@ -602,7 +691,7 @@ export class FilesService implements IFilesPublicService {
     let currentUserActiveBytes = 0;
 
     const categoryTotals = new Map<FileCategoryCode, { count: number; bytes: number }>();
-    for (const cat of ALL_CATEGORIES) {
+    for (const cat of ALL_FILE_CATEGORIES) {
       categoryTotals.set(cat, { count: 0, bytes: 0 });
     }
 
@@ -638,7 +727,7 @@ export class FilesService implements IFilesPublicService {
       totalFolders: folders.length,
       currentUserActiveBytes,
       currentUserActiveFormatted: formatBytes(currentUserActiveBytes),
-      byCategory: ALL_CATEGORIES.map((category) => {
+      byCategory: ALL_FILE_CATEGORIES.map((category) => {
         const stat = categoryTotals.get(category) ?? { count: 0, bytes: 0 };
         return {
           category,
@@ -661,13 +750,26 @@ export class FilesService implements IFilesPublicService {
         tempLinkMaxTtlSec: this.validationService.getTempLinkMaxTtlSec(orgId),
         reconcileOnList: this.validationService.shouldReconcileOnList(),
         storageKeyPrefix: this.validationService.getStorageKeyPrefix(),
+        categoryAllowedExtensions: this.validationService.getCategoryAllowedExtensions(orgId),
+        categoryMaxSizeMb: this.validationService.getCategoryMaxSizeMap(orgId),
+        moduleMaxSizeMb: this.validationService.getModuleMaxSizeMap(orgId),
+        malwareScanEnabled: this.validationService.isMalwareScanEnabled(orgId),
+        stageBeforePublish: this.validationService.shouldStageBeforePublish(orgId),
+        duplicatePolicy: this.validationService.getDuplicatePolicy(orgId),
+        thumbnailEnabled: this.validationService.isThumbnailEnabled(orgId),
+        thumbnailMaxDim: this.validationService.getThumbnailMaxDim(orgId),
+        optimizeImageEnabled: this.validationService.isOptimizeImageEnabled(orgId),
+        imageMaxWidth: this.validationService.getImageMaxWidth(orgId),
+        imageMaxHeight: this.validationService.getImageMaxHeight(orgId),
+        imageQuality: this.validationService.getImageQuality(orgId),
+        unusedRetentionDays: this.validationService.getUnusedRetentionDays(orgId),
       },
     };
   }
 
-  // ─── 4. Tải file xuống, Stream Video & Link tải tạm thời (Mục 6.2) ─────────
+  // ─── 4. Tải file xuống, Stream Video, Thumbnail & Link tải tạm thời ─────────
 
-  /** Chuẩn bị luồng tải file xuống (kiểm tra quyền tải file tách biệt quyền xem) */
+  /** Chuẩn bị luồng tải file xuống (kiểm tra quyền tải file & chặn nếu đang chờ quét/cách ly) */
   public async prepareDownload(
     id: number,
     actor?: UserIdentity,
@@ -685,6 +787,12 @@ export class FilesService implements IFilesPublicService {
     }
     if (entity.status === FILE_STATUS.TRASHED) {
       throw new BadRequestAppException('files.error.inTrashCannotDownload');
+    }
+    if (entity.status === FILE_STATUS.PENDING_SCAN) {
+      throw new ForbiddenAppException('files.error.filePendingScan');
+    }
+    if (entity.status === FILE_STATUS.QUARANTINED) {
+      throw new ForbiddenAppException('files.error.fileInQuarantine');
     }
 
     await this.assertCanDownloadFile(entity, actor);
@@ -735,6 +843,12 @@ export class FilesService implements IFilesPublicService {
     if (entity.status === FILE_STATUS.TRASHED) {
       throw new BadRequestAppException('files.error.inTrashCannotDownload');
     }
+    if (entity.status === FILE_STATUS.PENDING_SCAN) {
+      throw new ForbiddenAppException('files.error.filePendingScan');
+    }
+    if (entity.status === FILE_STATUS.QUARANTINED) {
+      throw new ForbiddenAppException('files.error.fileInQuarantine');
+    }
 
     await this.assertCanDownloadFile(entity, actor);
 
@@ -771,6 +885,62 @@ export class FilesService implements IFilesPublicService {
   }
 
   /**
+   * Chuẩn bị luồng ảnh thu nhỏ (Thumbnail — Mục 6.3.5) để hiển thị nhanh trên giao diện.
+   * Nếu tệp có `thumbnailStorageKey` trên Storage thì trả về stream của ảnh thumbnail,
+   * nếu không có thì fallback trả về stream của ảnh gốc.
+   */
+  public async prepareThumbnail(
+    id: number,
+    actor?: UserIdentity,
+  ): Promise<{
+    stream: ObjectStream;
+    mimeType: string;
+    file: FileRecordResponse;
+  }> {
+    const entity = await this.filesRepo.findById(id);
+    if (!entity || entity.status === FILE_STATUS.PURGED) {
+      throw new NotFoundAppException('files.error.fileNotFound');
+    }
+    if (entity.status === FILE_STATUS.QUARANTINED) {
+      throw new ForbiddenAppException('files.error.fileInQuarantine');
+    }
+
+    await this.assertCanViewFile(entity, actor);
+
+    const meta = entity.metadataJson
+      ? safeJsonParseObject<Record<string, unknown>>(entity.metadataJson)
+      : null;
+    const thumbKey =
+      typeof meta?.thumbnailStorageKey === 'string' && meta.thumbnailStorageKey.length > 0
+        ? meta.thumbnailStorageKey
+        : null;
+    const thumbMime =
+      typeof meta?.thumbnailMimeType === 'string' && meta.thumbnailMimeType.length > 0
+        ? meta.thumbnailMimeType
+        : entity.mimeType;
+
+    if (thumbKey && (await this.storage.exists(thumbKey))) {
+      const stream = await this.storage.driver.stream(thumbKey);
+      return {
+        stream,
+        mimeType: thumbMime,
+        file: this.mapper.toFileResponse(entity),
+      };
+    }
+
+    const exists = await this.storage.exists(entity.storageKey);
+    if (!exists) {
+      throw new NotFoundAppException('files.error.storageObjectMissing');
+    }
+    const stream = await this.storage.driver.stream(entity.storageKey);
+    return {
+      stream,
+      mimeType: entity.mimeType,
+      file: this.mapper.toFileResponse(entity),
+    };
+  }
+
+  /**
    * Tạo đường dẫn tải file tạm thời tự hết hạn (Signed Temporary Download Link — Mục 6.2).
    * Kiểm tra người tạo phải có quyền tải file (`assertCanDownloadFile`), sau đó ký HMAC-SHA256.
    */
@@ -785,6 +955,12 @@ export class FilesService implements IFilesPublicService {
     }
     if (entity.status === FILE_STATUS.TRASHED) {
       throw new BadRequestAppException('files.error.inTrashCannotDownload');
+    }
+    if (entity.status === FILE_STATUS.PENDING_SCAN) {
+      throw new ForbiddenAppException('files.error.filePendingScan');
+    }
+    if (entity.status === FILE_STATUS.QUARANTINED) {
+      throw new ForbiddenAppException('files.error.fileInQuarantine');
     }
 
     await this.assertCanDownloadFile(entity, actor);
@@ -1229,6 +1405,7 @@ export class FilesService implements IFilesPublicService {
     if (existsInStorage) {
       await this.storage.delete(entity.storageKey);
     }
+    await this.deleteThumbnailIfPresent(entity);
 
     await this.filesRepo.saveEntity({
       ...entity,
@@ -1271,6 +1448,7 @@ export class FilesService implements IFilesPublicService {
       if (existsInStorage) {
         await this.storage.delete(file.storageKey).catch(() => undefined);
       }
+      await this.deleteThumbnailIfPresent(file);
 
       await this.filesRepo.saveEntity({
         ...file,
@@ -1290,6 +1468,304 @@ export class FilesService implements IFilesPublicService {
     return {
       purgedCount: purgedIds.length,
       purgedIds,
+    };
+  }
+
+  // ─── 7B. Khu vực chờ quét mã độc, Kiểm tra toàn vẹn Checksum & Dọn file không dùng (Mục 6.3) ───
+
+  /**
+   * Duyệt và công bố file từ khu vực chờ (`PENDING_SCAN = 5` hoặc `QUARANTINED = 6`) sang hoạt động (`ACTIVE = 1` — Mục 6.3.3).
+   * Thực hiện quét lại mã độc trên nội dung vật lý trước khi cho phép công bố.
+   */
+  public async publishStagedFile(id: number, actor?: UserIdentity): Promise<FileRecordResponse> {
+    const entity = await this.filesRepo.findById(id);
+    if (!entity || entity.status === FILE_STATUS.PURGED) {
+      throw new NotFoundAppException('files.error.fileNotFound');
+    }
+    await this.assertCanManageFile(entity, actor);
+
+    const exists = await this.storage.exists(entity.storageKey);
+    if (!exists) {
+      await this.filesRepo.saveEntity({ ...entity, status: FILE_STATUS.MISSING });
+      throw new NotFoundAppException('files.error.storageObjectMissing');
+    }
+
+    if (typeof this.storage.download === 'function') {
+      const physicalBuf = await this.storage.download(entity.storageKey);
+      const scanRes = this.validationService.scanForMalware(
+        physicalBuf,
+        entity.extension,
+        entity.organizationUnitId ?? null,
+      );
+      if (!scanRes.clean) {
+        const meta = entity.metadataJson
+          ? (safeJsonParseObject<Record<string, unknown>>(entity.metadataJson) ?? {})
+          : {};
+        await this.filesRepo.saveEntity({
+          ...entity,
+          status: FILE_STATUS.QUARANTINED,
+          metadataJson: JSON.stringify({
+            ...meta,
+            scanStatus: 'INFECTED',
+            threatName: scanRes.threatName,
+            scannedAt: scanRes.scannedAt,
+          }),
+        });
+        throw new BadRequestAppException('files.error.malwareDetected', [], {
+          threatName: scanRes.threatName ?? 'SUSPICIOUS_PAYLOAD',
+        });
+      }
+    }
+
+    const prevStatus = entity.status;
+    const prevMeta = entity.metadataJson
+      ? (safeJsonParseObject<Record<string, unknown>>(entity.metadataJson) ?? {})
+      : {};
+    const nextMeta: Record<string, unknown> = {
+      ...prevMeta,
+      scanStatus: 'CLEAN',
+      threatName: null,
+      publishedAt: new Date().toISOString(),
+      publishedByUserId: actor?.id ?? null,
+    };
+
+    const saved = await this.filesRepo.saveEntity({
+      ...entity,
+      status: FILE_STATUS.ACTIVE,
+      metadataJson: JSON.stringify(nextMeta),
+    });
+
+    await this.recordAudit(
+      actor,
+      'file.publish',
+      'file',
+      String(saved.id),
+      { status: prevStatus },
+      { status: FILE_STATUS.ACTIVE, scanStatus: 'CLEAN' },
+    );
+
+    return this.getById(saved.id, actor);
+  }
+
+  /**
+   * Đưa file vào khu vực cách ly (`QUARANTINED = 6` — Mục 6.3.3) khi phát hiện nghi ngờ mã độc hoặc vi phạm.
+   * File bị cách ly sẽ bị khóa tải xuống và phát trực tiếp.
+   */
+  public async quarantineFile(
+    id: number,
+    input?: QuarantineFileRequest | string,
+    actor?: UserIdentity,
+  ): Promise<FileRecordResponse> {
+    const entity = await this.filesRepo.findById(id);
+    if (!entity || entity.status === FILE_STATUS.PURGED) {
+      throw new NotFoundAppException('files.error.fileNotFound');
+    }
+    await this.assertCanManageFile(entity, actor);
+
+    const prevStatus = entity.status;
+    const prevMeta = entity.metadataJson
+      ? (safeJsonParseObject<Record<string, unknown>>(entity.metadataJson) ?? {})
+      : {};
+    const rawReason = typeof input === 'string' ? input : input?.reason;
+    const reason = rawReason?.trim() || 'QUARANTINED_BY_ADMIN';
+    const nextMeta: Record<string, unknown> = {
+      ...prevMeta,
+      scanStatus: 'INFECTED',
+      threatName: reason,
+      quarantinedAt: new Date().toISOString(),
+      quarantinedByUserId: actor?.id ?? null,
+    };
+
+    const saved = await this.filesRepo.saveEntity({
+      ...entity,
+      status: FILE_STATUS.QUARANTINED,
+      metadataJson: JSON.stringify(nextMeta),
+    });
+
+    await this.recordAudit(
+      actor,
+      'file.quarantine',
+      'file',
+      String(saved.id),
+      { status: prevStatus },
+      { status: FILE_STATUS.QUARANTINED, reason },
+    );
+
+    return this.getById(saved.id, actor);
+  }
+
+  /**
+   * Kiểm tra tính toàn vẹn của file bằng mã băm SHA-256 và phát hiện file trùng lặp (Mục 6.3.4):
+   * - Đọc lại nội dung vật lý từ Storage, tính lại SHA-256 và so khớp với `entity.checksumSha256`.
+   * - Nếu nội dung vật lý đã bị thay đổi ngoài đĩa (`intact = false`), tự động gắn cờ cảnh báo.
+   * - Trả về danh sách các file khác có cùng mã băm SHA-256 (`duplicateFileIds`).
+   */
+  public async verifyFileIntegrity(
+    id: number,
+    actor?: UserIdentity,
+  ): Promise<FileIntegrityVerificationResponse> {
+    const entity = await this.filesRepo.findById(id);
+    if (!entity || entity.status === FILE_STATUS.PURGED) {
+      throw new NotFoundAppException('files.error.fileNotFound');
+    }
+    await this.assertCanViewFile(entity, actor);
+
+    const verifiedAt = new Date().toISOString();
+    const exists = await this.storage.exists(entity.storageKey);
+    if (!exists) {
+      const updated = await this.filesRepo.saveEntity({
+        ...entity,
+        status: FILE_STATUS.MISSING,
+      });
+      return {
+        fileId: updated.id,
+        expectedChecksumSha256: updated.checksumSha256,
+        actualChecksumSha256: null,
+        intact: false,
+        status: updated.status,
+        statusName: getFileStatusName(updated.status),
+        duplicateFileIds: [],
+        verifiedAt,
+      };
+    }
+
+    let actualChecksumSha256: string | null = null;
+    if (typeof this.storage.download === 'function') {
+      const buf = await this.storage.download(entity.storageKey);
+      actualChecksumSha256 = this.computeSha256Hex(buf);
+    } else {
+      const objStream = await this.storage.driver.stream(entity.storageKey);
+      const chunks: Buffer[] = [];
+      for await (const chunk of objStream.body) {
+        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as Uint8Array));
+      }
+      actualChecksumSha256 = this.computeSha256Hex(Buffer.concat(chunks));
+    }
+
+    const intact = actualChecksumSha256 === entity.checksumSha256;
+    const sameHashList =
+      typeof this.filesRepo.findByChecksumSha256 === 'function'
+        ? await this.filesRepo.findByChecksumSha256(
+            entity.checksumSha256,
+            entity.organizationUnitId ?? null,
+          )
+        : (await this.filesRepo.findAllForStats()).filter(
+            (f) => f.checksumSha256 === entity.checksumSha256,
+          );
+    const duplicateFileIds = sameHashList.filter((f) => f.id !== entity.id).map((f) => f.id);
+
+    const prevMeta = entity.metadataJson
+      ? (safeJsonParseObject<Record<string, unknown>>(entity.metadataJson) ?? {})
+      : {};
+    const updatedEntity = await this.filesRepo.saveEntity({
+      ...entity,
+      status: intact ? entity.status : FILE_STATUS.QUARANTINED,
+      metadataJson: JSON.stringify({
+        ...prevMeta,
+        integrityVerifiedAt: verifiedAt,
+        integrityIntact: intact,
+        ...(!intact ? { scanStatus: 'INFECTED', threatName: 'CHECKSUM_TAMPERED' } : {}),
+      }),
+    });
+
+    await this.recordAudit(actor, 'file.verify_integrity', 'file', String(entity.id), null, {
+      intact,
+      expectedChecksumSha256: entity.checksumSha256,
+      actualChecksumSha256,
+      duplicateFileIds,
+    });
+
+    return {
+      fileId: updatedEntity.id,
+      expectedChecksumSha256: updatedEntity.checksumSha256,
+      actualChecksumSha256,
+      intact,
+      status: updatedEntity.status,
+      statusName: getFileStatusName(updatedEntity.status),
+      duplicateFileIds,
+      verifiedAt,
+    };
+  }
+
+  /**
+   * Dọn dẹp các file không còn được sử dụng (`usageCount = 0`) sau khi đã qua thời gian an toàn (Mục 6.3.7).
+   * Chỉ tác động lên những file có `usageCount = 0` và `createdAt <= now - retentionDays`.
+   * Hỗ trợ 2 chế độ: `'trash'` (đưa vào thùng rác chờ xóa) hoặc `'purge'` (xóa vĩnh viễn).
+   */
+  public async cleanupUnusedFiles(
+    input?: CleanupUnusedFilesRequest,
+    actor?: UserIdentity,
+  ): Promise<CleanupUnusedFilesResponse> {
+    const orgId = input?.organizationUnitId ?? this.resolvePrimaryOrgId(actor);
+    const configuredDays = this.validationService.getUnusedRetentionDays(orgId);
+    const retentionDays =
+      input?.olderThanDays !== undefined && input.olderThanDays >= 0
+        ? input.olderThanDays
+        : configuredDays;
+    const action = input?.action === 'purge' ? 'purge' : 'trash';
+
+    const now = new Date();
+    const cutoffDate = new Date(now.getTime() - retentionDays * DAY_MS);
+
+    const candidates =
+      typeof this.filesRepo.findUnusedFilesOlderThan === 'function'
+        ? await this.filesRepo.findUnusedFilesOlderThan(cutoffDate, orgId)
+        : (await this.filesRepo.findAllForStats()).filter(
+            (f) =>
+              f.status === FILE_STATUS.ACTIVE &&
+              (Number(f.usageCount) || 0) === 0 &&
+              f.createdAt.getTime() <= cutoffDate.getTime() &&
+              (!orgId || f.organizationUnitId === orgId),
+          );
+
+    const cleanedIds: number[] = [];
+    const trashRetentionDays = this.validationService.getTrashRetentionDays(orgId);
+    const purgeAfterAt = new Date(now.getTime() + trashRetentionDays * DAY_MS);
+
+    for (const file of candidates) {
+      const liveUsageCount = await this.usagesRepo.countByFileId(file.id);
+      if (liveUsageCount > 0) {
+        await this.syncFileUsageCount(file.id);
+        continue;
+      }
+
+      if (action === 'purge') {
+        const existsInStorage = await this.storage.exists(file.storageKey);
+        if (existsInStorage) {
+          await this.storage.delete(file.storageKey).catch(() => undefined);
+        }
+        await this.deleteThumbnailIfPresent(file);
+        await this.filesRepo.saveEntity({
+          ...file,
+          status: FILE_STATUS.PURGED,
+        });
+        await this.filesRepo.softDeleteById(file.id);
+      } else {
+        await this.filesRepo.saveEntity({
+          ...file,
+          status: FILE_STATUS.TRASHED,
+          trashedAt: now,
+          trashedByUserId: actor?.id ?? null,
+          purgeAfterAt,
+        });
+      }
+      cleanedIds.push(file.id);
+    }
+
+    if (cleanedIds.length > 0) {
+      await this.recordAudit(actor, 'file.cleanup_unused', 'file', 'batch', null, {
+        retentionDays,
+        action,
+        cleanedCount: cleanedIds.length,
+        cleanedIds,
+      });
+    }
+
+    return {
+      retentionDays,
+      action,
+      cleanedCount: cleanedIds.length,
+      cleanedIds,
     };
   }
 
@@ -1620,77 +2096,44 @@ export class FilesService implements IFilesPublicService {
   }
 
   private computeSha256Hex(buffer: Buffer): string {
-    return createHash('sha256').update(buffer).digest('hex');
+    return computeSha256Hex(buffer);
   }
 
   /** Sinh đường dẫn lưu trữ bất biến theo prefix cấu hình, năm/tháng/ngày và UUID */
   private buildImmutableStorageKey(ext: string): string {
-    const prefix = this.validationService.getStorageKeyPrefix();
-    const now = new Date();
-    const yyyy = String(now.getUTCFullYear());
-    const mm = String(now.getUTCMonth() + 1).padStart(2, '0');
-    const dd = String(now.getUTCDate()).padStart(2, '0');
-    return `${prefix}/${yyyy}/${mm}/${dd}/${randomUUID()}.${ext}`;
+    return buildImmutableStorageKey(this.validationService.getStorageKeyPrefix(), ext);
+  }
+
+  /** Sinh đường dẫn lưu trữ ảnh thu nhỏ (Thumbnail — Mục 6.3.5) */
+  private buildThumbnailStorageKey(ext: string): string {
+    return buildThumbnailStorageKey(this.validationService.getStorageKeyPrefix(), ext);
+  }
+
+  /** Xóa ảnh thumbnail trên Storage (nếu có) khi xóa vĩnh viễn file gốc */
+  private async deleteThumbnailIfPresent(entity: FileRecordEntity): Promise<void> {
+    if (!entity.metadataJson) return;
+    const meta = safeJsonParseObject<Record<string, unknown>>(entity.metadataJson);
+    const thumbKey =
+      typeof meta?.thumbnailStorageKey === 'string' && meta.thumbnailStorageKey.length > 0
+        ? meta.thumbnailStorageKey
+        : null;
+    if (thumbKey && (await this.storage.exists(thumbKey))) {
+      await this.storage.delete(thumbKey).catch(() => undefined);
+    }
   }
 
   /** Chuẩn hóa tên file khi tải xuống để dùng `displayName` mới kèm đuôi chuẩn */
   private buildSafeDownloadFileName(displayName: string, extension: string): string {
-    const cleaned = displayName.trim().replace(/[^\p{L}\p{N}._\-() ]+/gu, '_');
-    const expectedSuffix = `.${extension.toLowerCase()}`;
-    const hasExt = cleaned.toLowerCase().endsWith(expectedSuffix);
-    const withExt = hasExt ? cleaned : `${cleaned}${expectedSuffix}`;
-    return path.basename(withExt) || `download${expectedSuffix}`;
+    return buildSafeDownloadFileName(displayName, extension);
   }
 
   /** Phân tích header `Range: bytes=start-end` phục vụ tua Video (`206 Partial Content`) */
   private parseByteRangeHeader(rangeHeader: string, totalSize: number): ResolvedByteRange {
-    const match = /^bytes=(\d*)-(\d*)$/.exec(rangeHeader.trim());
-    if (!match) {
-      throw new BadRequestAppException('files.error.invalidByteRange');
-    }
-    const startStr = match[1] ?? '';
-    const endStr = match[2] ?? '';
-
-    let start = startStr ? Number.parseInt(startStr, 10) : 0;
-    let end = endStr ? Number.parseInt(endStr, 10) : totalSize - 1;
-
-    if (!startStr && endStr) {
-      const suffixLength = Number.parseInt(endStr, 10);
-      start = Math.max(0, totalSize - suffixLength);
-      end = totalSize - 1;
-    }
-
-    if (
-      Number.isNaN(start) ||
-      Number.isNaN(end) ||
-      start < 0 ||
-      end < start ||
-      start >= totalSize
-    ) {
-      throw new BadRequestAppException('files.error.invalidByteRange');
-    }
-
-    const clampedEnd = Math.min(end, totalSize - 1);
-    return {
-      start,
-      end: clampedEnd,
-      totalSize,
-      contentLength: clampedEnd - start + 1,
-    };
+    return parseByteRangeHeader(rangeHeader, totalSize);
   }
 
   private slugifyName(name: string): string {
-    return (
-      name
-        .trim()
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .replace(/đ/g, 'd')
-        .replace(/Đ/g, 'D')
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/^-+|-+$/g, '') || 'folder'
-    );
+    return slugifyFolderName(name);
   }
 
   private async resolveFileScopeConstraint(actor?: UserIdentity): Promise<FileScopeConstraint> {
@@ -1881,60 +2324,14 @@ export class FilesService implements IFilesPublicService {
     payload: TemporaryDownloadTokenPayload,
     secret: string,
   ): string {
-    const payloadSegment = Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url');
-    const signatureSegment = createHmac('sha256', secret)
-      .update(payloadSegment)
-      .digest('base64url');
-    return `${payloadSegment}.${signatureSegment}`;
+    return signTemporaryDownloadToken(payload, secret);
   }
 
   private verifyTemporaryDownloadToken(
     token: string,
     secret: string,
   ): TemporaryDownloadTokenPayload | null {
-    if (!token || !secret) return null;
-    const parts = token.trim().split('.');
-    if (parts.length !== 2) return null;
-    const [payloadSegment, signatureSegment] = parts;
-    if (!payloadSegment || !signatureSegment) return null;
-
-    try {
-      const expectedSig = createHmac('sha256', secret).update(payloadSegment).digest('base64url');
-      const sigBuf = Buffer.from(signatureSegment, 'utf8');
-      const expectedBuf = Buffer.from(expectedSig, 'utf8');
-      if (sigBuf.length !== expectedBuf.length || !timingSafeEqual(sigBuf, expectedBuf)) {
-        return null;
-      }
-
-      const decoded = JSON.parse(
-        Buffer.from(payloadSegment, 'base64url').toString('utf8'),
-      ) as Partial<TemporaryDownloadTokenPayload>;
-
-      if (
-        !decoded ||
-        decoded.typ !== 'file_temp_dl' ||
-        typeof decoded.fid !== 'number' ||
-        decoded.fid <= 0 ||
-        typeof decoded.exp !== 'number'
-      ) {
-        return null;
-      }
-
-      const nowSeconds = Math.floor(Date.now() / 1000);
-      if (decoded.exp <= nowSeconds) {
-        return null;
-      }
-
-      return {
-        typ: 'file_temp_dl',
-        fid: decoded.fid,
-        exp: decoded.exp,
-        disp: decoded.disp === 'inline' ? 'inline' : 'attachment',
-        uid: typeof decoded.uid === 'number' ? decoded.uid : null,
-      };
-    } catch {
-      return null;
-    }
+    return verifyTemporaryDownloadToken(token, secret);
   }
 
   private async loadUploaderSummaries(

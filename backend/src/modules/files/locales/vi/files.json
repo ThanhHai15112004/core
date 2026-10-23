@@ -26,5 +26,14 @@
   "error.temporaryLinkExpiredOrInvalid": "Đường dẫn tải tạm thời không hợp lệ hoặc đã hết hạn",
   "error.temporaryLinkTtlExceeded": "Thời hạn đường dẫn tải tạm thời vượt quá giới hạn tối đa cho phép ({{maxSeconds}} giây)",
   "error.usageNotFound": "Không tìm thấy bản ghi liên kết sử dụng tệp tin",
-  "error.invalidByteRange": "Phạm vi byte (Range header) yêu cầu không hợp lệ"
+  "error.invalidByteRange": "Phạm vi byte (Range header) yêu cầu không hợp lệ",
+  "error.categoryExtensionNotAllowed": "Đuôi tệp '.{{ext}}' không nằm trong danh sách định dạng được phép cho nhóm '{{category}}'",
+  "error.mimeTypeMismatch": "Kiểu MIME '{{mimeType}}' không khớp với định dạng thực tế của tệp '.{{ext}}'",
+  "error.categoryFileTooLarge": "Dung lượng tệp vượt quá giới hạn tối đa cho phép đối với nhóm '{{category}}' ({{maxMb}} MB)",
+  "error.moduleFileTooLarge": "Dung lượng tệp vượt quá giới hạn tối đa cho phép đối với module '{{moduleName}}' ({{maxMb}} MB)",
+  "error.malwareDetected": "Phát hiện mã độc hoặc nội dung nguy hiểm trong tệp tải lên ({{threatName}})",
+  "error.filePendingScan": "Tệp tin đang nằm trong khu vực chờ kiểm duyệt / quét an toàn trước khi công bố",
+  "error.fileInQuarantine": "Tệp tin đã bị cách ly do nghi ngờ chứa mã độc hoặc vi phạm an toàn",
+  "error.duplicateFileDetected": "Tệp tin tải lên bị trùng lặp hoàn toàn (trùng mã băm SHA-256 với tệp #{{duplicateFileId}})",
+  "error.checksumTampered": "Cảnh báo an toàn: Nội dung vật lý của tệp đã bị thay đổi so với mã băm SHA-256 ban đầu"
 }

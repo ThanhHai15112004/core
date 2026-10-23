@@ -73,9 +73,9 @@ export interface FileRecordItem {
   sizeFormatted: string;
   checksumSha256: string;
   visibility: number;
-  visibilityName: 'PRIVATE' | 'PUBLIC';
+  visibilityName: 'PRIVATE' | 'INTERNAL' | 'PUBLIC';
   status: number;
-  statusName: 'ACTIVE' | 'TRASHED' | 'PURGED';
+  statusName: 'ACTIVE' | 'TRASHED' | 'PURGED' | 'MISSING' | 'PENDING_SCAN' | 'QUARANTINED';
   uploadedByUserId: number | null;
   uploadedByUser?: FileUploaderSummary | null;
   organizationUnitId: number | null;
@@ -87,11 +87,83 @@ export interface FileRecordItem {
   metadata: Record<string, unknown> | null;
   downloadUrl: string;
   streamUrl: string;
+  thumbnailUrl?: string | null;
+  scanStatus?: 'CLEAN' | 'PENDING' | 'INFECTED';
+  threatName?: string | null;
+  duplicateOfFileId?: number | null;
+  imageDimensions?: { width: number; height: number } | null;
+  optimizedSavedBytes?: number;
+  moduleName?: string | null;
   createdAt: string;
   updatedAt: string;
   usages?: FileUsageItem[];
   permissions?: FilePermissionItem[];
   canDownload?: boolean;
+}
+
+export interface FileIntegrityVerificationItem {
+  fileId: number;
+  expectedChecksumSha256: string;
+  actualChecksumSha256: string | null;
+  intact: boolean;
+  status: number;
+  statusName: 'ACTIVE' | 'TRASHED' | 'PURGED' | 'MISSING' | 'PENDING_SCAN' | 'QUARANTINED';
+  duplicateFileIds: number[];
+  verifiedAt: string;
+}
+
+export interface CleanupUnusedFilesItem {
+  retentionDays: number;
+  action: 'trash' | 'purge';
+  cleanedCount: number;
+  cleanedIds: number[];
+}
+
+export interface FileStatsItem {
+  totalActiveFiles: number;
+  totalActiveBytes: number;
+  totalActiveFormatted: string;
+  totalTrashedFiles: number;
+  totalTrashedBytes: number;
+  totalTrashedFormatted: string;
+  totalReferencedFiles: number;
+  totalFolders: number;
+  currentUserActiveBytes?: number;
+  currentUserActiveFormatted?: string;
+  byCategory: {
+    category: number;
+    categoryName: string;
+    count: number;
+    bytes: number;
+    bytesFormatted: string;
+  }[];
+  settings: {
+    maxUploadSizeMb: number;
+    allowedExtensions: string[];
+    trashRetentionDays: number;
+    maxBatchFiles?: number;
+    verifyMagicBytes?: boolean;
+    defaultVisibility?: number;
+    storageQuotaMb?: number;
+    userStorageQuotaMb?: number;
+    tempLinkDefaultTtlSec?: number;
+    tempLinkMaxTtlSec?: number;
+    reconcileOnList?: boolean;
+    storageKeyPrefix?: string;
+    categoryAllowedExtensions?: Record<string, string[]>;
+    categoryMaxSizeMb?: Record<string, number>;
+    moduleMaxSizeMb?: Record<string, number>;
+    malwareScanEnabled?: boolean;
+    stageBeforePublish?: boolean;
+    duplicatePolicy?: 'ALLOW' | 'REJECT' | 'REUSE';
+    thumbnailEnabled?: boolean;
+    thumbnailMaxDim?: number;
+    optimizeImageEnabled?: boolean;
+    imageMaxWidth?: number;
+    imageMaxHeight?: number;
+    imageQuality?: number;
+    unusedRetentionDays?: number;
+  };
 }
 
 export interface UploadSingleFilePayload {
@@ -102,6 +174,17 @@ export interface UploadSingleFilePayload {
   folderId?: number | null;
   visibility?: number;
   organizationUnitId?: number | null;
+  moduleName?: string;
+  expectedCategory?: number;
+  stageForScan?: boolean;
+  quarantineOnThreat?: boolean;
+  rejectDuplicate?: boolean;
+  reuseDuplicate?: boolean;
+  optimizeImage?: boolean;
+  generateThumbnail?: boolean;
+  maxWidth?: number;
+  maxHeight?: number;
+  quality?: number;
   description?: string | null;
   tags?: string[];
   encryptAtRest?: boolean;
