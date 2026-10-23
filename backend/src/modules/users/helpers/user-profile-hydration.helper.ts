@@ -14,6 +14,7 @@ import type {
   RoleSummary,
 } from '@modules/roles/contracts/index.js';
 import type {
+  UserNotificationContactView,
   UserOrganizationAssignmentSummary,
   UserProfileView,
   UserRoleAssignmentSummary,
@@ -482,4 +483,50 @@ export async function resolveActiveUserIdsByOrganizationUnitIds(params: {
     }
   }
   return filterActiveUserIds(userRepository, [...candidateIds]);
+}
+
+export async function resolveUserNotificationContacts(params: {
+  userIds: readonly number[];
+  userRepository: UserRepository;
+  findProfilesByUserIds: (userIds: readonly number[]) => Promise<UserProfileEntity[]>;
+  decryptPhone: (phone?: string | null) => string | null;
+}): Promise<UserNotificationContactView[]> {
+  const { userIds, userRepository, findProfilesByUserIds, decryptPhone } = params;
+  const uniqueIds = [...new Set(userIds.map(Number).filter((n) => Number.isFinite(n) && n >= 1))];
+  if (uniqueIds.length === 0) return [];
+
+  const users: UserEntity[] = [];
+  for (const uid of uniqueIds) {
+    const u = await userRepository.findByIdWithArchived(uid, false);
+    if (u && !u.deletedAt && !u.archivedAt) {
+      users.push(u);
+    }
+  }
+  if (users.length === 0) return [];
+
+  const profiles = await findProfilesByUserIds(users.map((u) => Number(u.id)));
+  const profileMap = new Map<number, UserProfileEntity>();
+  for (const p of profiles) {
+    profileMap.set(Number(p.userId), p);
+  }
+
+  return users.map((u) => {
+    const uid = Number(u.id);
+    const prof = profileMap.get(uid);
+    const decryptedPhone = decryptPhone(u.phone);
+    return {
+      id: uid,
+      username: u.username,
+      email: u.email?.trim() || null,
+      phone: decryptedPhone?.trim() || null,
+      fullName:
+        prof?.fullName || `${prof?.lastName ?? ''} ${prof?.firstName ?? ''}`.trim() || u.username,
+      preferredLocale: prof?.preferredLocale || 'vi',
+      preferredTimezone: prof?.preferredTimezone || 'Asia/Ho_Chi_Minh',
+      primaryOrganizationUnitId:
+        u.primaryOrganizationUnitId !== undefined && u.primaryOrganizationUnitId !== null
+          ? Number(u.primaryOrganizationUnitId)
+          : null,
+    };
+  });
 }

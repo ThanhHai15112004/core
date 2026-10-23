@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Archive, Bell, History, Send, Settings, ShieldAlert, Sliders } from 'lucide-react';
+import { Activity, Archive, Bell, History, Send, Settings, ShieldAlert, Sliders } from 'lucide-react';
+import { NotificationChannelsOpsView } from './components/NotificationChannelsOpsView';
 import { NotificationComposerView } from './components/NotificationComposerView';
 import { NotificationConfigView } from './components/NotificationConfigView';
 import { NotificationDispatchHistoryView } from './components/NotificationDispatchHistoryView';
@@ -7,7 +8,13 @@ import { NotificationInboxView } from './components/NotificationInboxView';
 import { NotificationPreferencesView } from './components/NotificationPreferencesView';
 import { useNotifications } from './hooks/useNotifications';
 
-type NotificationCenterTab = 'inbox' | 'compose' | 'history' | 'preferences' | 'config';
+type NotificationCenterTab =
+  | 'inbox'
+  | 'compose'
+  | 'history'
+  | 'channels'
+  | 'preferences'
+  | 'config';
 
 export const NotificationsManagementPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<NotificationCenterTab>('inbox');
@@ -222,6 +229,15 @@ export const NotificationsManagementPage: React.FC = () => {
 
         <button
           type="button"
+          onClick={() => setActiveTab('channels')}
+          className={`nav-tab-btn ${activeTab === 'channels' ? 'nav-tab-btn-active' : ''}`}
+        >
+          <Activity size={15} />
+          <span>Email / SMS / Push & Quota (7.2)</span>
+        </button>
+
+        <button
+          type="button"
           onClick={() => setActiveTab('preferences')}
           className={`nav-tab-btn ${activeTab === 'preferences' ? 'nav-tab-btn-active' : ''}`}
         >
@@ -296,6 +312,8 @@ export const NotificationsManagementPage: React.FC = () => {
           onCloseDetail={() => setSelectedDispatchDetail(null)}
         />
       )}
+
+      {activeTab === 'channels' && <NotificationChannelsOpsView />}
 
       {activeTab === 'preferences' && (
         <NotificationPreferencesView

@@ -141,11 +141,38 @@ export interface NotificationRuntimeConfig {
     string,
     { inApp: boolean; email: boolean; sms: boolean; push: boolean }
   >;
+  emailFeatureEnabled?: boolean;
+  smsFeatureEnabled?: boolean;
+  pushFeatureEnabled?: boolean;
+  emailProvider?: string;
+  emailFromAddress?: string;
+  emailFromName?: string;
+  smsProvider?: string;
+  smsSenderId?: string;
+  pushProvider?: string;
+  dispatchBatchSize?: number;
+  dispatchRateLimitPerSec?: number;
+  retryEnabled?: boolean;
+  retryMaxAttempts?: number;
+  retryBaseDelaySec?: number;
+  autoSuppressOnPermanentFailure?: boolean;
+  quotaCurrency?: string;
+  quotaHardStopOnExceed?: boolean;
+  smsDailyQuota?: number;
+  smsMonthlyBudget?: number;
+  smsCostPerSegment?: number;
+  emailDailyQuota?: number;
+  emailCostPerMessage?: number;
+  pushDailyQuota?: number;
+  pushCostPerMessage?: number;
 }
 
 export interface SendNotificationPayload {
-  title: string;
-  content: string;
+  title?: string;
+  content?: string;
+  templateCode?: string | null;
+  templateVariables?: Record<string, unknown> | null;
+  idempotencyKey?: string | null;
   category?: number | string;
   priority?: number | string;
   targetType: number | string;
@@ -160,6 +187,113 @@ export interface SendNotificationPayload {
   referenceModule?: string | null;
   organizationUnitId?: number | null;
   forceDeliver?: boolean;
+}
+
+export interface NotificationTemplateItem {
+  id: number;
+  code: string;
+  name: string;
+  channel: number;
+  channelName: NotificationChannelName;
+  category: number;
+  categoryName: NotificationCategoryName;
+  locale: string;
+  subjectTemplate: string | null;
+  bodyTemplate: string;
+  htmlTemplate: string | null;
+  variables: string[];
+  isActive: boolean;
+  isSystem: boolean;
+}
+
+export interface NotificationDeliveryItem {
+  id: number;
+  notificationId: number;
+  recipientUserId: number;
+  channel: number;
+  channelName: NotificationChannelName;
+  providerCode: string;
+  destination: string;
+  templateCode: string | null;
+  renderedSubject: string | null;
+  renderedBody: string;
+  idempotencyKey: string;
+  batchKey: string | null;
+  status: number;
+  statusName: 'QUEUED' | 'SENT' | 'DELIVERED' | 'FAILED' | 'SUPPRESSED';
+  statusLabel: string;
+  errorTypeName: string;
+  errorCode: string | null;
+  errorMessage: string | null;
+  attemptCount: number;
+  maxAttempts: number;
+  nextRetryAt: string | null;
+  providerMessageId: string | null;
+  segmentsCount: number;
+  estimatedCost: number;
+  currency: string;
+  queuedAt: string;
+  sentAt: string | null;
+  deliveredAt: string | null;
+  failedAt: string | null;
+}
+
+export interface NotificationSuppressionItem {
+  id: number;
+  channel: number;
+  channelName: NotificationChannelName;
+  destination: string;
+  reason: number;
+  reasonName: string;
+  reasonLabel: string;
+  providerCode: string | null;
+  errorMessage: string | null;
+  isActive: boolean;
+  suppressedAt: string;
+}
+
+export interface NotificationPushSubscriptionItem {
+  id: number;
+  userId: number;
+  platform: number;
+  platformName: string;
+  deviceToken: string;
+  endpoint: string | null;
+  deviceName: string | null;
+  isActive: boolean;
+  failureReason: string | null;
+  createdAt: string;
+}
+
+export interface NotificationChannelQuotaItem {
+  channel: number;
+  channelName: NotificationChannelName;
+  providerCode: string;
+  dailySent: number;
+  dailyDelivered: number;
+  dailyFailed: number;
+  dailySuppressed: number;
+  dailySegments: number;
+  dailyCost: number;
+  dailyQuotaLimit: number;
+  dailyUsagePercent: number;
+  monthlySent: number;
+  monthlySegments: number;
+  monthlyCost: number;
+  monthlyBudgetLimit: number;
+  monthlyBudgetPercent: number;
+  isQuotaExceeded: boolean;
+  currency: string;
+}
+
+export interface NotificationQuotaSummary {
+  currency: string;
+  hardStopOnExceed: boolean;
+  totalDailyCost: number;
+  totalMonthlyCost: number;
+  totalDailySmsSegments: number;
+  totalMonthlySmsSegments: number;
+  channels: NotificationChannelQuotaItem[];
 }
 
 export interface ListInboxFilterParams {

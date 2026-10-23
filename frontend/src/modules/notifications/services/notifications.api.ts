@@ -3,11 +3,16 @@ import { API_ROUTES } from '../../../routes/index';
 import type {
   ListDispatchesFilterParams,
   ListInboxFilterParams,
+  NotificationDeliveryItem,
   NotificationDispatchDetail,
   NotificationDispatchHistoryItem,
   NotificationInboxItem,
   NotificationPreferenceItem,
+  NotificationPushSubscriptionItem,
+  NotificationQuotaSummary,
   NotificationRuntimeConfig,
+  NotificationSuppressionItem,
+  NotificationTemplateItem,
   NotificationUnreadSummary,
   SendNotificationPayload,
 } from '../types/notifications.types';
@@ -142,6 +147,68 @@ export const notificationsApi = {
 
   getDispatchDetail: (id: number) =>
     fetchApi<NotificationDispatchDetail>(API_ROUTES.NOTIFICATIONS.DISPATCH_BY_ID(id)),
+
+  listTemplates: () =>
+    fetchApiWithMeta<NotificationTemplateItem[]>(API_ROUTES.NOTIFICATIONS.TEMPLATES('limit=50')),
+
+  upsertTemplate: (payload: {
+    code: string;
+    name: string;
+    channel: string | number;
+    locale?: string;
+    subjectTemplate?: string | null;
+    bodyTemplate: string;
+  }) =>
+    fetchApi<NotificationTemplateItem>(API_ROUTES.NOTIFICATIONS.TEMPLATES(), {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+
+  listDeliveries: () =>
+    fetchApiWithMeta<NotificationDeliveryItem[]>(API_ROUTES.NOTIFICATIONS.DELIVERIES('limit=50')),
+
+  retryDelivery: (id: number) =>
+    fetchApi<NotificationDeliveryItem>(API_ROUTES.NOTIFICATIONS.DELIVERY_RETRY_BY_ID(id), {
+      method: 'POST',
+    }),
+
+  retryDueDeliveries: () =>
+    fetchApi<{ retriedCount: number; succeededCount: number }>(
+      API_ROUTES.NOTIFICATIONS.DELIVERIES_RETRY_DUE,
+      { method: 'POST' },
+    ),
+
+  listSuppressions: () =>
+    fetchApiWithMeta<NotificationSuppressionItem[]>(
+      API_ROUTES.NOTIFICATIONS.SUPPRESSIONS('limit=50'),
+    ),
+
+  addSuppression: (payload: { channel: string | number; destination: string; reason?: string }) =>
+    fetchApi<NotificationSuppressionItem>(API_ROUTES.NOTIFICATIONS.SUPPRESSIONS(), {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+
+  removeSuppression: (id: number) =>
+    fetchApi<{ removed: boolean; id: number }>(API_ROUTES.NOTIFICATIONS.SUPPRESSION_BY_ID(id), {
+      method: 'DELETE',
+    }),
+
+  listPushSubscriptions: () =>
+    fetchApi<NotificationPushSubscriptionItem[]>(API_ROUTES.NOTIFICATIONS.PUSH_SUBSCRIPTIONS),
+
+  registerPushSubscription: (payload: {
+    platform: string;
+    deviceToken: string;
+    deviceName?: string;
+  }) =>
+    fetchApi<NotificationPushSubscriptionItem>(API_ROUTES.NOTIFICATIONS.PUSH_SUBSCRIPTIONS, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+
+  getQuotaSummary: () =>
+    fetchApi<NotificationQuotaSummary>(API_ROUTES.NOTIFICATIONS.QUOTA_SUMMARY),
 };
 
 export const NOTIFICATION_UNREAD_CHANGED_EVENT = 'core:notification-unread-changed';

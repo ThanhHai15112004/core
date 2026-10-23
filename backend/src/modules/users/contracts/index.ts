@@ -183,6 +183,17 @@ export interface AdminResetUserMfaResult {
   readonly resetAt: string;
 }
 
+export interface UserNotificationContactView {
+  readonly id: number;
+  readonly username: string;
+  readonly email: string | null;
+  readonly phone: string | null;
+  readonly fullName: string;
+  readonly preferredLocale: string;
+  readonly preferredTimezone: string;
+  readonly primaryOrganizationUnitId: number | null;
+}
+
 export interface IUsersPublicService {
   findAuthUserByIdentifier(identifier: string): Promise<UserAuthCredentialsView | null>;
   findAuthCredentialsByUserId?(userId: number): Promise<UserAuthCredentialsView | null>;
@@ -234,6 +245,7 @@ export interface IUsersPublicService {
   findActiveUserIdsByIds?(userIds: readonly number[]): Promise<number[]>;
   findActiveUserIdsByRoleIds?(roleIds: readonly number[]): Promise<number[]>;
   findActiveUserIdsByOrganizationUnitIds?(unitIds: readonly number[]): Promise<number[]>;
+  findUserContactsByIds?(userIds: readonly number[]): Promise<UserNotificationContactView[]>;
 }
 
 export const USERS_PUBLIC_SERVICE = Symbol('USERS_PUBLIC_SERVICE');

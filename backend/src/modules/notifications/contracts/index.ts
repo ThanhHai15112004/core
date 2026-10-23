@@ -7,28 +7,48 @@ import {
   NOTIFICATIONS_SETTING_KEYS,
   NOTIFICATION_CATEGORY,
   NOTIFICATION_CHANNEL,
+  NOTIFICATION_DELIVERY_STATUS,
   NOTIFICATION_DISPATCH_STATUS,
+  NOTIFICATION_ERROR_TYPE,
   NOTIFICATION_INBOX_STATUS,
   NOTIFICATION_PRIORITY,
+  NOTIFICATION_PUSH_PLATFORM,
+  NOTIFICATION_SUPPRESSION_REASON,
   NOTIFICATION_TARGET_TYPE,
   type NotificationCategoryCode,
   type NotificationCategoryName,
   type NotificationChannelCode,
   type NotificationChannelName,
+  type NotificationDeliveryStatusCode,
+  type NotificationDeliveryStatusName,
   type NotificationDispatchStatusCode,
   type NotificationDispatchStatusName,
+  type NotificationErrorTypeCode,
+  type NotificationErrorTypeName,
   type NotificationInboxStatusCode,
   type NotificationInboxStatusName,
   type NotificationPriorityCode,
   type NotificationPriorityName,
+  type NotificationPushPlatformCode,
+  type NotificationPushPlatformName,
+  type NotificationSuppressionReasonCode,
+  type NotificationSuppressionReasonName,
   type NotificationTargetTypeCode,
   type NotificationTargetTypeName,
 } from '../enum/notifications.enum.js';
 import type {
+  NotificationBatchDeliverySummaryView,
+  NotificationChannelQuotaItemView,
+  NotificationDeliveryItemView,
   NotificationDispatchDetailView,
   NotificationDispatchHistoryItemView,
   NotificationInboxItemView,
   NotificationPreferenceItemView,
+  NotificationPushSubscriptionItemView,
+  NotificationQuotaAndCostSummaryView,
+  NotificationSuppressionItemView,
+  NotificationTemplateItemView,
+  NotificationTemplatePreviewView,
   NotificationUnreadSummaryView,
   ResolvedNotificationRuntimeConfig,
 } from '../types/notifications.types.js';
@@ -41,26 +61,46 @@ export {
   NOTIFICATIONS_SETTING_KEYS,
   NOTIFICATION_CATEGORY,
   NOTIFICATION_CHANNEL,
+  NOTIFICATION_DELIVERY_STATUS,
   NOTIFICATION_DISPATCH_STATUS,
+  NOTIFICATION_ERROR_TYPE,
   NOTIFICATION_INBOX_STATUS,
   NOTIFICATION_PRIORITY,
+  NOTIFICATION_PUSH_PLATFORM,
+  NOTIFICATION_SUPPRESSION_REASON,
   NOTIFICATION_TARGET_TYPE,
   type NotificationCategoryCode,
   type NotificationCategoryName,
   type NotificationChannelCode,
   type NotificationChannelName,
+  type NotificationDeliveryStatusCode,
+  type NotificationDeliveryStatusName,
   type NotificationDispatchStatusCode,
   type NotificationDispatchStatusName,
+  type NotificationErrorTypeCode,
+  type NotificationErrorTypeName,
   type NotificationInboxStatusCode,
   type NotificationInboxStatusName,
   type NotificationPriorityCode,
   type NotificationPriorityName,
+  type NotificationPushPlatformCode,
+  type NotificationPushPlatformName,
+  type NotificationSuppressionReasonCode,
+  type NotificationSuppressionReasonName,
   type NotificationTargetTypeCode,
   type NotificationTargetTypeName,
+  type NotificationBatchDeliverySummaryView,
+  type NotificationChannelQuotaItemView,
+  type NotificationDeliveryItemView,
   type NotificationDispatchDetailView,
   type NotificationDispatchHistoryItemView,
   type NotificationInboxItemView,
   type NotificationPreferenceItemView,
+  type NotificationPushSubscriptionItemView,
+  type NotificationQuotaAndCostSummaryView,
+  type NotificationSuppressionItemView,
+  type NotificationTemplateItemView,
+  type NotificationTemplatePreviewView,
   type NotificationUnreadSummaryView,
   type ResolvedNotificationRuntimeConfig,
 };
@@ -200,9 +240,158 @@ export function getNotificationInboxStatusName(code: number): NotificationInboxS
   return 'ACTIVE';
 }
 
+export function parseNotificationDeliveryStatus(val: unknown): NotificationDeliveryStatusCode {
+  const resolved = defaultCodeRegistry.parseToNumericCode(
+    NOTIFICATIONS_CODE_TYPES.DELIVERY_STATUS,
+    val,
+    NOTIFICATION_DELIVERY_STATUS.QUEUED,
+  );
+  if (
+    resolved === NOTIFICATION_DELIVERY_STATUS.QUEUED ||
+    resolved === NOTIFICATION_DELIVERY_STATUS.SENT ||
+    resolved === NOTIFICATION_DELIVERY_STATUS.DELIVERED ||
+    resolved === NOTIFICATION_DELIVERY_STATUS.FAILED ||
+    resolved === NOTIFICATION_DELIVERY_STATUS.SUPPRESSED
+  ) {
+    return resolved;
+  }
+  return NOTIFICATION_DELIVERY_STATUS.QUEUED;
+}
+
+export function getNotificationDeliveryStatusName(code: number): NotificationDeliveryStatusName {
+  const name = defaultCodeRegistry.getCodeName(
+    NOTIFICATIONS_CODE_TYPES.DELIVERY_STATUS,
+    code,
+    'QUEUED',
+  );
+  if (
+    name === 'QUEUED' ||
+    name === 'SENT' ||
+    name === 'DELIVERED' ||
+    name === 'FAILED' ||
+    name === 'SUPPRESSED'
+  ) {
+    return name;
+  }
+  switch (code) {
+    case NOTIFICATION_DELIVERY_STATUS.SENT:
+      return 'SENT';
+    case NOTIFICATION_DELIVERY_STATUS.DELIVERED:
+      return 'DELIVERED';
+    case NOTIFICATION_DELIVERY_STATUS.FAILED:
+      return 'FAILED';
+    case NOTIFICATION_DELIVERY_STATUS.SUPPRESSED:
+      return 'SUPPRESSED';
+    default:
+      return 'QUEUED';
+  }
+}
+
+export function getNotificationDeliveryStatusLabel(code: number, locale = 'vi'): string {
+  return defaultCodeRegistry.getLabel(NOTIFICATIONS_CODE_TYPES.DELIVERY_STATUS, code, locale);
+}
+
+export function getNotificationErrorTypeName(code: number): NotificationErrorTypeName {
+  switch (code) {
+    case NOTIFICATION_ERROR_TYPE.TRANSIENT:
+      return 'TRANSIENT';
+    case NOTIFICATION_ERROR_TYPE.PERMANENT:
+      return 'PERMANENT';
+    case NOTIFICATION_ERROR_TYPE.RATE_LIMITED:
+      return 'RATE_LIMITED';
+    case NOTIFICATION_ERROR_TYPE.QUOTA_EXCEEDED:
+      return 'QUOTA_EXCEEDED';
+    case NOTIFICATION_ERROR_TYPE.SUPPRESSED:
+      return 'SUPPRESSED';
+    default:
+      return 'NONE';
+  }
+}
+
+export function parseNotificationSuppressionReason(
+  val: unknown,
+): NotificationSuppressionReasonCode {
+  if (typeof val === 'number') {
+    if (val >= 1 && val <= 6) return val as NotificationSuppressionReasonCode;
+  }
+  if (typeof val === 'string') {
+    const upper = val.trim().toUpperCase();
+    if (upper in NOTIFICATION_SUPPRESSION_REASON) {
+      return NOTIFICATION_SUPPRESSION_REASON[upper as keyof typeof NOTIFICATION_SUPPRESSION_REASON];
+    }
+  }
+  const resolved = defaultCodeRegistry.parseToNumericCode(
+    NOTIFICATIONS_CODE_TYPES.SUPPRESSION_REASON,
+    val,
+    NOTIFICATION_SUPPRESSION_REASON.MANUAL_BLOCK,
+  );
+  if (resolved >= 1 && resolved <= 6) {
+    return resolved as NotificationSuppressionReasonCode;
+  }
+  return NOTIFICATION_SUPPRESSION_REASON.MANUAL_BLOCK;
+}
+
+export function getNotificationSuppressionReasonName(
+  code: number,
+): NotificationSuppressionReasonName {
+  switch (code) {
+    case NOTIFICATION_SUPPRESSION_REASON.HARD_BOUNCE:
+      return 'HARD_BOUNCE';
+    case NOTIFICATION_SUPPRESSION_REASON.INVALID_FORMAT:
+      return 'INVALID_FORMAT';
+    case NOTIFICATION_SUPPRESSION_REASON.UNREGISTERED_TOKEN:
+      return 'UNREGISTERED_TOKEN';
+    case NOTIFICATION_SUPPRESSION_REASON.UNSUBSCRIBED:
+      return 'UNSUBSCRIBED';
+    case NOTIFICATION_SUPPRESSION_REASON.SPAM_COMPLAINT:
+      return 'SPAM_COMPLAINT';
+    default:
+      return 'MANUAL_BLOCK';
+  }
+}
+
+export function getNotificationSuppressionReasonLabel(code: number, locale = 'vi'): string {
+  return defaultCodeRegistry.getLabel(NOTIFICATIONS_CODE_TYPES.SUPPRESSION_REASON, code, locale);
+}
+
+export function parseNotificationPushPlatform(val: unknown): NotificationPushPlatformCode {
+  if (
+    val === 2 ||
+    val === '2' ||
+    String(val).toUpperCase() === 'FCM_ANDROID' ||
+    String(val).toUpperCase() === 'FCM'
+  ) {
+    return NOTIFICATION_PUSH_PLATFORM.FCM_ANDROID;
+  }
+  if (
+    val === 3 ||
+    val === '3' ||
+    String(val).toUpperCase() === 'APNS_IOS' ||
+    String(val).toUpperCase() === 'APNS'
+  ) {
+    return NOTIFICATION_PUSH_PLATFORM.APNS_IOS;
+  }
+  return NOTIFICATION_PUSH_PLATFORM.WEB_PUSH;
+}
+
+export function getNotificationPushPlatformName(code: number): NotificationPushPlatformName {
+  switch (code) {
+    case NOTIFICATION_PUSH_PLATFORM.FCM_ANDROID:
+      return 'FCM_ANDROID';
+    case NOTIFICATION_PUSH_PLATFORM.APNS_IOS:
+      return 'APNS_IOS';
+    default:
+      return 'WEB_PUSH';
+  }
+}
+
 export interface DispatchNotificationPublicInput {
-  readonly title: string;
-  readonly content: string;
+  readonly title?: string | undefined;
+  readonly content?: string | undefined;
+  readonly templateCode?: string | null | undefined;
+  readonly templateVariables?: Record<string, unknown> | null | undefined;
+  readonly locale?: string | undefined;
+  readonly idempotencyKey?: string | null | undefined;
   readonly category?: NotificationCategoryCode | NotificationCategoryName | undefined;
   readonly priority?: NotificationPriorityCode | NotificationPriorityName | undefined;
   readonly targetType: NotificationTargetTypeCode | NotificationTargetTypeName;

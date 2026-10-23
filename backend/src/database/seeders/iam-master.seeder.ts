@@ -7,6 +7,7 @@ import {
 } from '@modules/organizations/contracts/index.js';
 import { PERMISSION_STATUS, ROLE_STATUS } from '@modules/roles/contracts/index.js';
 import { USER_STATUS } from '@modules/users/contracts/index.js';
+import { DEFAULT_SYSTEM_NOTIFICATION_TEMPLATES } from '@modules/notifications/index.js';
 
 export const PRIVILEGED_DEFAULT_PASSWORD = '!P@ssw0rd#';
 
@@ -1024,6 +1025,65 @@ export class IamMasterSeeder implements SeederContract {
           ],
         );
       }
+    }
+
+    // 7. Seed Default System Notification Templates (Phase 7 — Mục 7.2)
+    try {
+      for (const tpl of DEFAULT_SYSTEM_NOTIFICATION_TEMPLATES) {
+        const varsJson = JSON.stringify(tpl.variables);
+        if (isPostgres) {
+          await ctx.manager.query(
+            `INSERT INTO notification_templates (
+              code, name, channel, category, locale, subject_template, body_template, html_template, variables_json, is_active, is_system
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, TRUE, $10)
+            ON CONFLICT (code, channel, locale) DO UPDATE SET
+              name = EXCLUDED.name,
+              subject_template = EXCLUDED.subject_template,
+              body_template = EXCLUDED.body_template,
+              html_template = EXCLUDED.html_template,
+              variables_json = EXCLUDED.variables_json`,
+            [
+              tpl.code,
+              tpl.name,
+              tpl.channel,
+              tpl.category,
+              tpl.locale,
+              tpl.subjectTemplate,
+              tpl.bodyTemplate,
+              tpl.htmlTemplate,
+              varsJson,
+              tpl.isSystem,
+            ],
+          );
+        } else {
+          await ctx.manager.query(
+            `INSERT INTO notification_templates (
+              code, name, channel, category, locale, subject_template, body_template, html_template, variables_json, is_active, is_system
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE, ?)
+            ON DUPLICATE KEY UPDATE
+              name = VALUES(name),
+              subject_template = VALUES(subject_template),
+              body_template = VALUES(body_template),
+              html_template = VALUES(html_template),
+              variables_json = VALUES(variables_json)`,
+            [
+              tpl.code,
+              tpl.name,
+              tpl.channel,
+              tpl.category,
+              tpl.locale,
+              tpl.subjectTemplate,
+              tpl.bodyTemplate,
+              tpl.htmlTemplate,
+              varsJson,
+              tpl.isSystem,
+            ],
+          );
+        }
+        affected++;
+      }
+    } catch {
+      // Ignore if notification_templates table is not yet migrated in isolated environments
     }
 
     return {

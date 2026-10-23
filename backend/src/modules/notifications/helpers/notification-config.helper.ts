@@ -214,6 +214,127 @@ export function resolveNotificationRuntimeConfig(
   );
   const defaultPreferenceMatrix = normalizeDefaultPreferenceMatrix(rawDefaultMatrix);
 
+  const emailFeatureEnabled = defaultFeatureFlagRegistry.isEnabled(
+    NOTIFICATIONS_FEATURE_FLAG_KEYS.EMAIL_ENABLED,
+    flagCtx,
+  );
+  const smsFeatureEnabled = defaultFeatureFlagRegistry.isEnabled(
+    NOTIFICATIONS_FEATURE_FLAG_KEYS.SMS_ENABLED,
+    flagCtx,
+  );
+  const pushFeatureEnabled = defaultFeatureFlagRegistry.isEnabled(
+    NOTIFICATIONS_FEATURE_FLAG_KEYS.PUSH_ENABLED,
+    flagCtx,
+  );
+
+  const emailProvider = defaultSettingRegistry.getString(
+    NOTIFICATIONS_SETTING_KEYS.EMAIL_PROVIDER,
+    settingCtx,
+    'CONSOLE',
+  );
+  const emailFromAddress = defaultSettingRegistry.getString(
+    NOTIFICATIONS_SETTING_KEYS.EMAIL_FROM_ADDRESS,
+    settingCtx,
+    'no-reply@core.local',
+  );
+  const emailFromName = defaultSettingRegistry.getString(
+    NOTIFICATIONS_SETTING_KEYS.EMAIL_FROM_NAME,
+    settingCtx,
+    'Core System',
+  );
+  const smsProvider = defaultSettingRegistry.getString(
+    NOTIFICATIONS_SETTING_KEYS.SMS_PROVIDER,
+    settingCtx,
+    'CONSOLE',
+  );
+  const smsSenderId = defaultSettingRegistry.getString(
+    NOTIFICATIONS_SETTING_KEYS.SMS_SENDER_ID,
+    settingCtx,
+    'CORE_APP',
+  );
+  const pushProvider = defaultSettingRegistry.getString(
+    NOTIFICATIONS_SETTING_KEYS.PUSH_PROVIDER,
+    settingCtx,
+    'CONSOLE',
+  );
+
+  const dispatchBatchSize = defaultSettingRegistry.getNumber(
+    NOTIFICATIONS_SETTING_KEYS.DISPATCH_BATCH_SIZE,
+    settingCtx,
+    100,
+  );
+  const dispatchRateLimitPerSec = defaultSettingRegistry.getNumber(
+    NOTIFICATIONS_SETTING_KEYS.DISPATCH_RATE_LIMIT_PER_SEC,
+    settingCtx,
+    50,
+  );
+  const retryEnabled = defaultSettingRegistry.getBoolean(
+    NOTIFICATIONS_SETTING_KEYS.RETRY_ENABLED,
+    settingCtx,
+    true,
+  );
+  const retryMaxAttempts = defaultSettingRegistry.getNumber(
+    NOTIFICATIONS_SETTING_KEYS.RETRY_MAX_ATTEMPTS,
+    settingCtx,
+    3,
+  );
+  const retryBaseDelaySec = defaultSettingRegistry.getNumber(
+    NOTIFICATIONS_SETTING_KEYS.RETRY_BASE_DELAY_SEC,
+    settingCtx,
+    30,
+  );
+  const autoSuppressOnPermanentFailure = defaultSettingRegistry.getBoolean(
+    NOTIFICATIONS_SETTING_KEYS.AUTO_SUPPRESS_ON_PERMANENT_FAILURE,
+    settingCtx,
+    true,
+  );
+
+  const quotaCurrency = defaultSettingRegistry.getString(
+    NOTIFICATIONS_SETTING_KEYS.QUOTA_CURRENCY,
+    settingCtx,
+    'VND',
+  );
+  const quotaHardStopOnExceed = defaultSettingRegistry.getBoolean(
+    NOTIFICATIONS_SETTING_KEYS.QUOTA_HARD_STOP_ON_EXCEED,
+    settingCtx,
+    true,
+  );
+  const smsDailyQuota = defaultSettingRegistry.getNumber(
+    NOTIFICATIONS_SETTING_KEYS.SMS_DAILY_QUOTA,
+    settingCtx,
+    10000,
+  );
+  const smsMonthlyBudget = defaultSettingRegistry.getNumber(
+    NOTIFICATIONS_SETTING_KEYS.SMS_MONTHLY_BUDGET,
+    settingCtx,
+    5000000,
+  );
+  const smsCostPerSegment = defaultSettingRegistry.getNumber(
+    NOTIFICATIONS_SETTING_KEYS.SMS_COST_PER_SEGMENT,
+    settingCtx,
+    800,
+  );
+  const emailDailyQuota = defaultSettingRegistry.getNumber(
+    NOTIFICATIONS_SETTING_KEYS.EMAIL_DAILY_QUOTA,
+    settingCtx,
+    50000,
+  );
+  const emailCostPerMessage = defaultSettingRegistry.getNumber(
+    NOTIFICATIONS_SETTING_KEYS.EMAIL_COST_PER_MESSAGE,
+    settingCtx,
+    20,
+  );
+  const pushDailyQuota = defaultSettingRegistry.getNumber(
+    NOTIFICATIONS_SETTING_KEYS.PUSH_DAILY_QUOTA,
+    settingCtx,
+    100000,
+  );
+  const pushCostPerMessage = defaultSettingRegistry.getNumber(
+    NOTIFICATIONS_SETTING_KEYS.PUSH_COST_PER_MESSAGE,
+    settingCtx,
+    0,
+  );
+
   return {
     enabled,
     inAppFeatureEnabled,
@@ -237,5 +358,29 @@ export function resolveNotificationRuntimeConfig(
     enabledChannels,
     defaultChannels: defaultChannels.length > 0 ? defaultChannels : ['IN_APP'],
     defaultPreferenceMatrix,
+    emailFeatureEnabled,
+    smsFeatureEnabled,
+    pushFeatureEnabled,
+    emailProvider,
+    emailFromAddress,
+    emailFromName,
+    smsProvider,
+    smsSenderId,
+    pushProvider,
+    dispatchBatchSize,
+    dispatchRateLimitPerSec,
+    retryEnabled,
+    retryMaxAttempts,
+    retryBaseDelaySec,
+    autoSuppressOnPermanentFailure,
+    quotaCurrency,
+    quotaHardStopOnExceed,
+    smsDailyQuota,
+    smsMonthlyBudget,
+    smsCostPerSegment,
+    emailDailyQuota,
+    emailCostPerMessage,
+    pushDailyQuota,
+    pushCostPerMessage,
   };
 }

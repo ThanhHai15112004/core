@@ -17,6 +17,13 @@
   "invalidTargetType": "Loại đối tượng nhận thông báo không hợp lệ.",
   "inboxItemNotFound": "Không tìm thấy thông báo trong hộp thư cá nhân.",
   "dispatchNotFound": "Không tìm thấy bản ghi lịch sử phát thông báo.",
-  "preferencesCustomizationDisabled": "Tính năng tùy chỉnh sở thích nhận thông báo của người dùng hiện đang bị khóa bởi quản trị viên."
+  "preferencesCustomizationDisabled": "Tính năng tùy chỉnh sở thích nhận thông báo của người dùng hiện đang bị khóa bởi quản trị viên.",
+  "templateNotFound": "Không tìm thấy mẫu nội dung thông báo (Template) phù hợp.",
+  "cannotDeleteSystemTemplate": "Không thể xóa mẫu thông báo mặc định của hệ thống.",
+  "templateBodyRequired": "Nội dung mẫu thông báo (bodyTemplate) không được để trống.",
+  "deliveryNotFound": "Không tìm thấy bản ghi vận chuyển thông báo (#{{id}}).",
+  "cannotRetrySuppressedDestination": "Không thể gửi lại vì địa chỉ hoặc token nhận đã nằm trong danh sách dừng gửi (Suppression List).",
+  "suppressionNotFound": "Không tìm thấy bản ghi trong danh sách dừng gửi (#{{id}}).",
+  "pushSubscriptionNotFound": "Không tìm thấy thiết bị đăng ký nhận Push Notification (#{{id}})."
 }
 

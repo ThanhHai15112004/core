@@ -1,8 +1,14 @@
 import type {
+  NotificationDeliveryItemView,
   NotificationDispatchDetailView,
   NotificationDispatchHistoryItemView,
   NotificationInboxItemView,
   NotificationPreferenceItemView,
+  NotificationPushSubscriptionItemView,
+  NotificationQuotaAndCostSummaryView,
+  NotificationSuppressionItemView,
+  NotificationTemplateItemView,
+  NotificationTemplatePreviewView,
   NotificationUnreadSummaryView,
   ResolvedNotificationRuntimeConfig,
 } from '../types/notifications.types.js';
@@ -13,6 +19,21 @@ export type NotificationPreferenceItemResponse = NotificationPreferenceItemView;
 export type NotificationDispatchHistoryItemResponse = NotificationDispatchHistoryItemView;
 export type NotificationDispatchDetailResponse = NotificationDispatchDetailView;
 export type NotificationRuntimeConfigResponse = ResolvedNotificationRuntimeConfig;
+export type NotificationTemplateItemResponse = NotificationTemplateItemView;
+export type NotificationTemplatePreviewResponse = NotificationTemplatePreviewView;
+export type NotificationDeliveryItemResponse = NotificationDeliveryItemView;
+export type NotificationSuppressionItemResponse = NotificationSuppressionItemView;
+export type NotificationPushSubscriptionItemResponse = NotificationPushSubscriptionItemView;
+export type NotificationQuotaAndCostSummaryResponse = NotificationQuotaAndCostSummaryView;
+
+export interface RetryDueDeliveriesResponse {
+  readonly scannedCount: number;
+  readonly retriedCount: number;
+  readonly succeededCount: number;
+  readonly rescheduledCount: number;
+  readonly permanentFailedCount: number;
+  readonly items: readonly NotificationDeliveryItemView[];
+}
 
 export interface NotificationReadStateMutationResponse {
   readonly id: number;

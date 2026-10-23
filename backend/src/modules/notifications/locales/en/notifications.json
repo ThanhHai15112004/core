@@ -17,6 +17,13 @@
   "invalidTargetType": "Invalid notification target type.",
   "inboxItemNotFound": "Notification item was not found in your personal inbox.",
   "dispatchNotFound": "Notification dispatch history record was not found.",
-  "preferencesCustomizationDisabled": "User notification preference customization is currently disabled by administrator."
+  "preferencesCustomizationDisabled": "User notification preference customization is currently disabled by administrator.",
+  "templateNotFound": "Matching notification template was not found.",
+  "cannotDeleteSystemTemplate": "Cannot delete a system default notification template.",
+  "templateBodyRequired": "Notification template body (bodyTemplate) is required.",
+  "deliveryNotFound": "Notification delivery record (#{{id}}) was not found.",
+  "cannotRetrySuppressedDestination": "Cannot retry delivery because the destination address or token is in the active suppression list.",
+  "suppressionNotFound": "Suppression record (#{{id}}) was not found.",
+  "pushSubscriptionNotFound": "Push subscription (#{{id}}) was not found."
 }
 

@@ -47,6 +47,7 @@ import {
   type UserAuthCredentialsView,
   type UserAuthIdentityView,
   type UserLoginHistoryItemView,
+  type UserNotificationContactView,
   type UserPreferencesView,
   type UserProfileView,
   type UserStatusCode,
@@ -68,6 +69,7 @@ import {
   listActiveUsersByRoleId,
   resolveActiveUserIdsByOrganizationUnitIds,
   resolveActiveUserIdsByRoleIds,
+  resolveUserNotificationContacts,
   validateAndApplyUserUpdateFields,
   validateAndPrepareCreateUserContext,
 } from '../helpers/user-profile-hydration.helper.js';
@@ -1168,6 +1170,17 @@ export class UsersService implements IUsersPublicService {
       unitIds,
       userOrgRepository: this.userOrgRepository,
       userRepository: this.userRepository,
+    });
+  }
+
+  public async findUserContactsByIds(
+    userIds: readonly number[],
+  ): Promise<UserNotificationContactView[]> {
+    return resolveUserNotificationContacts({
+      userIds,
+      userRepository: this.userRepository,
+      findProfilesByUserIds: (uids) => this.findProfilesByUserIds(uids),
+      decryptPhone: (p) => this.decryptPhone(p),
     });
   }
 

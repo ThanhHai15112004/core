@@ -50,10 +50,12 @@ import {
   isChannelAllowedForRecipient,
 } from '../helpers/notification-preference.helper.js';
 import { resolveNotificationTargetRecipients } from '../helpers/notification-target-resolver.helper.js';
+import { renderNotificationTemplateContent } from '../helpers/notification-template.helper.js';
 import { NotificationsMapper } from '../mappers/notifications.mapper.js';
 import { NotificationPreferencesRepository } from '../repositories/notification-preferences.repository.js';
 import { NotificationRecipientsRepository } from '../repositories/notification-recipients.repository.js';
 import { NotificationsRepository } from '../repositories/notifications.repository.js';
+import { NotificationChannelsService } from './notification-channels.service.js';
 import type {
   ArchiveNotificationRequest,
   ListNotificationDispatchesQuery,
@@ -100,6 +102,8 @@ export class NotificationsService implements INotificationsPublicService {
     @Optional()
     @Inject(SequenceRegistryService)
     sequenceRegistry?: SequenceRegistryService | null,
+    @Optional()
+    private readonly channelsService?: NotificationChannelsService | null,
   ) {
     this.sequenceRegistry = sequenceRegistry ?? defaultSequenceRegistry;
     this.registerCodeUsageCheckers();
@@ -129,6 +133,16 @@ export class NotificationsService implements INotificationsPublicService {
     defaultCodeRegistry.registerUsageChecker(
       NOTIFICATIONS_CODE_TYPES.INBOX_STATUS,
       NOTIFICATIONS_CODE_TYPES.INBOX_STATUS,
+      async () => 0,
+    );
+    defaultCodeRegistry.registerUsageChecker(
+      NOTIFICATIONS_CODE_TYPES.DELIVERY_STATUS,
+      NOTIFICATIONS_CODE_TYPES.DELIVERY_STATUS,
+      async () => 0,
+    );
+    defaultCodeRegistry.registerUsageChecker(
+      NOTIFICATIONS_CODE_TYPES.SUPPRESSION_REASON,
+      NOTIFICATIONS_CODE_TYPES.SUPPRESSION_REASON,
       async () => 0,
     );
   }
@@ -228,6 +242,132 @@ export class NotificationsService implements INotificationsPublicService {
         input.defaultChannels,
       );
     }
+    if (input.emailProvider !== undefined) {
+      defaultSettingRegistry.setGlobalValue(
+        NOTIFICATIONS_SETTING_KEYS.EMAIL_PROVIDER,
+        input.emailProvider,
+      );
+    }
+    if (input.emailFromAddress !== undefined) {
+      defaultSettingRegistry.setGlobalValue(
+        NOTIFICATIONS_SETTING_KEYS.EMAIL_FROM_ADDRESS,
+        input.emailFromAddress,
+      );
+    }
+    if (input.emailFromName !== undefined) {
+      defaultSettingRegistry.setGlobalValue(
+        NOTIFICATIONS_SETTING_KEYS.EMAIL_FROM_NAME,
+        input.emailFromName,
+      );
+    }
+    if (input.smsProvider !== undefined) {
+      defaultSettingRegistry.setGlobalValue(
+        NOTIFICATIONS_SETTING_KEYS.SMS_PROVIDER,
+        input.smsProvider,
+      );
+    }
+    if (input.smsSenderId !== undefined) {
+      defaultSettingRegistry.setGlobalValue(
+        NOTIFICATIONS_SETTING_KEYS.SMS_SENDER_ID,
+        input.smsSenderId,
+      );
+    }
+    if (input.pushProvider !== undefined) {
+      defaultSettingRegistry.setGlobalValue(
+        NOTIFICATIONS_SETTING_KEYS.PUSH_PROVIDER,
+        input.pushProvider,
+      );
+    }
+    if (input.dispatchBatchSize !== undefined) {
+      defaultSettingRegistry.setGlobalValue(
+        NOTIFICATIONS_SETTING_KEYS.DISPATCH_BATCH_SIZE,
+        input.dispatchBatchSize,
+      );
+    }
+    if (input.dispatchRateLimitPerSec !== undefined) {
+      defaultSettingRegistry.setGlobalValue(
+        NOTIFICATIONS_SETTING_KEYS.DISPATCH_RATE_LIMIT_PER_SEC,
+        input.dispatchRateLimitPerSec,
+      );
+    }
+    if (input.retryEnabled !== undefined) {
+      defaultSettingRegistry.setGlobalValue(
+        NOTIFICATIONS_SETTING_KEYS.RETRY_ENABLED,
+        input.retryEnabled,
+      );
+    }
+    if (input.retryMaxAttempts !== undefined) {
+      defaultSettingRegistry.setGlobalValue(
+        NOTIFICATIONS_SETTING_KEYS.RETRY_MAX_ATTEMPTS,
+        input.retryMaxAttempts,
+      );
+    }
+    if (input.retryBaseDelaySec !== undefined) {
+      defaultSettingRegistry.setGlobalValue(
+        NOTIFICATIONS_SETTING_KEYS.RETRY_BASE_DELAY_SEC,
+        input.retryBaseDelaySec,
+      );
+    }
+    if (input.autoSuppressOnPermanentFailure !== undefined) {
+      defaultSettingRegistry.setGlobalValue(
+        NOTIFICATIONS_SETTING_KEYS.AUTO_SUPPRESS_ON_PERMANENT_FAILURE,
+        input.autoSuppressOnPermanentFailure,
+      );
+    }
+    if (input.quotaCurrency !== undefined) {
+      defaultSettingRegistry.setGlobalValue(
+        NOTIFICATIONS_SETTING_KEYS.QUOTA_CURRENCY,
+        input.quotaCurrency,
+      );
+    }
+    if (input.quotaHardStopOnExceed !== undefined) {
+      defaultSettingRegistry.setGlobalValue(
+        NOTIFICATIONS_SETTING_KEYS.QUOTA_HARD_STOP_ON_EXCEED,
+        input.quotaHardStopOnExceed,
+      );
+    }
+    if (input.smsDailyQuota !== undefined) {
+      defaultSettingRegistry.setGlobalValue(
+        NOTIFICATIONS_SETTING_KEYS.SMS_DAILY_QUOTA,
+        input.smsDailyQuota,
+      );
+    }
+    if (input.smsMonthlyBudget !== undefined) {
+      defaultSettingRegistry.setGlobalValue(
+        NOTIFICATIONS_SETTING_KEYS.SMS_MONTHLY_BUDGET,
+        input.smsMonthlyBudget,
+      );
+    }
+    if (input.smsCostPerSegment !== undefined) {
+      defaultSettingRegistry.setGlobalValue(
+        NOTIFICATIONS_SETTING_KEYS.SMS_COST_PER_SEGMENT,
+        input.smsCostPerSegment,
+      );
+    }
+    if (input.emailDailyQuota !== undefined) {
+      defaultSettingRegistry.setGlobalValue(
+        NOTIFICATIONS_SETTING_KEYS.EMAIL_DAILY_QUOTA,
+        input.emailDailyQuota,
+      );
+    }
+    if (input.emailCostPerMessage !== undefined) {
+      defaultSettingRegistry.setGlobalValue(
+        NOTIFICATIONS_SETTING_KEYS.EMAIL_COST_PER_MESSAGE,
+        input.emailCostPerMessage,
+      );
+    }
+    if (input.pushDailyQuota !== undefined) {
+      defaultSettingRegistry.setGlobalValue(
+        NOTIFICATIONS_SETTING_KEYS.PUSH_DAILY_QUOTA,
+        input.pushDailyQuota,
+      );
+    }
+    if (input.pushCostPerMessage !== undefined) {
+      defaultSettingRegistry.setGlobalValue(
+        NOTIFICATIONS_SETTING_KEYS.PUSH_COST_PER_MESSAGE,
+        input.pushCostPerMessage,
+      );
+    }
 
     const toggleFlag = (flagKey: string, enabled?: boolean) => {
       if (enabled === undefined) return;
@@ -247,6 +387,9 @@ export class NotificationsService implements INotificationsPublicService {
     );
     toggleFlag(NOTIFICATIONS_FEATURE_FLAG_KEYS.ROLE_BROADCAST, input.roleBroadcastFlagEnabled);
     toggleFlag(NOTIFICATIONS_FEATURE_FLAG_KEYS.USER_PREFERENCES, input.userPreferencesFlagEnabled);
+    toggleFlag(NOTIFICATIONS_FEATURE_FLAG_KEYS.EMAIL_ENABLED, input.emailFeatureEnabled);
+    toggleFlag(NOTIFICATIONS_FEATURE_FLAG_KEYS.SMS_ENABLED, input.smsFeatureEnabled);
+    toggleFlag(NOTIFICATIONS_FEATURE_FLAG_KEYS.PUSH_ENABLED, input.pushFeatureEnabled);
 
     const updated = this.getRuntimeConfig(actor?.organizationUnitIds?.[0] ?? null, actor);
     await this.recordAudit(
@@ -271,8 +414,42 @@ export class NotificationsService implements INotificationsPublicService {
       throw new ForbiddenAppException('notifications.systemDisabled');
     }
 
-    const title = input.title.trim();
-    const content = input.content.trim();
+    const requestedChannels: NotificationChannelCode[] =
+      input.channels && input.channels.length > 0
+        ? [...new Set(input.channels.map((ch) => parseNotificationChannel(ch)))]
+        : runtimeConfig.defaultChannels.map((ch) => parseNotificationChannel(ch));
+
+    const templateCode = input.templateCode?.trim() || null;
+    const templateVariables = input.templateVariables ?? null;
+    const locale = input.locale?.trim() || 'vi';
+
+    let title = (input.title ?? '').trim();
+    let content = (input.content ?? '').trim();
+
+    if (templateCode && (!title || !content) && this.channelsService) {
+      const primaryChannel = requestedChannels[0] ?? 2;
+      const tpl = await this.channelsService.resolveTemplateByCode(
+        templateCode,
+        primaryChannel,
+        locale,
+      );
+      if (!tpl) {
+        throw new NotFoundAppException('notifications.templateNotFound', { code: templateCode });
+      }
+      const rendered = renderNotificationTemplateContent({
+        subjectTemplate: tpl.subjectTemplate,
+        bodyTemplate: tpl.bodyTemplate,
+        htmlTemplate: tpl.htmlTemplate,
+        variables: templateVariables,
+      });
+      if (!title) {
+        title = (rendered.renderedSubject || tpl.code).trim();
+      }
+      if (!content) {
+        content = rendered.renderedBody.trim();
+      }
+    }
+
     if (!title) {
       throw new BadRequestAppException('notifications.titleRequired');
     }
@@ -299,11 +476,6 @@ export class NotificationsService implements INotificationsPublicService {
         ? parseNotificationPriority(input.priority)
         : NOTIFICATION_PRIORITY.NORMAL;
     const targetType = parseNotificationTargetType(input.targetType);
-
-    const requestedChannels: NotificationChannelCode[] =
-      input.channels && input.channels.length > 0
-        ? [...new Set(input.channels.map((ch) => parseNotificationChannel(ch)))]
-        : runtimeConfig.defaultChannels.map((ch) => parseNotificationChannel(ch));
 
     const requestedChannelNames: NotificationChannelName[] = requestedChannels.map((c) =>
       getNotificationChannelName(c),
@@ -418,6 +590,20 @@ export class NotificationsService implements INotificationsPublicService {
       savedRecipients.push(saved);
     }
 
+    const externalDispatchResult = this.channelsService
+      ? await this.channelsService.dispatchExternalChannelDeliveries({
+          notification: savedNotification,
+          savedRecipients,
+          recipientUserIds,
+          templateCode,
+          templateVariables,
+          locale,
+          callerIdempotencyKey: input.idempotencyKey ?? null,
+          metadata: input.metadata ?? null,
+          runtimeConfig,
+        })
+      : undefined;
+
     await this.recordAudit(
       actor,
       'DISPATCH_NOTIFICATION',
@@ -429,18 +615,26 @@ export class NotificationsService implements INotificationsPublicService {
         category,
         priority,
         targetType,
+        templateCode,
         totalTargeted: recipientUserIds.length,
         totalDelivered,
         totalSkippedByPref,
       },
     );
 
-    return this.mapper.toDispatchDetailView(savedNotification, savedRecipients, {
-      notificationId: Number(savedNotification.id),
-      readCount: 0,
-      archivedCount: 0,
-      deletedFromInboxCount: 0,
-    });
+    return this.mapper.toDispatchDetailView(
+      savedNotification,
+      savedRecipients,
+      {
+        notificationId: Number(savedNotification.id),
+        readCount: 0,
+        archivedCount: 0,
+        deletedFromInboxCount: 0,
+      },
+      locale,
+      externalDispatchResult?.deliveries,
+      externalDispatchResult?.summary,
+    );
   }
 
   public async listUserInbox(
@@ -734,12 +928,16 @@ export class NotificationsService implements INotificationsPublicService {
 
     const recipients = await this.recipientsRepo.findByNotificationId(notificationId);
     const statsMap = await this.recipientsRepo.aggregateStatsByNotificationIds([notificationId]);
+    const channelDeliveries = this.channelsService
+      ? await this.channelsService.listDeliveriesForNotification(notificationId, locale)
+      : undefined;
 
     return this.mapper.toDispatchDetailView(
       notification,
       recipients,
       statsMap.get(notificationId),
       locale,
+      channelDeliveries,
     );
   }
 
