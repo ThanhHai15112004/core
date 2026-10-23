@@ -316,6 +316,7 @@ function createInMemoryFilesHarness() {
 
   return {
     service,
+    settingRegistry,
     storageObjects,
     files,
   };
@@ -561,5 +562,74 @@ describe('FilesService — Phase 6.1 File Management & Shared Media Library', ()
     const onlyReferenced = await service.listPaginated({ onlyReferenced: true });
     expect(onlyReferenced.data).toHaveLength(1);
     expect(onlyReferenced.data[0]?.id).toBe(f1.id);
+  });
+
+  it('8. Đọc đầy đủ cấu hình động từ SettingRegistryService & sinh mã qua SequenceRegistryService', async () => {
+    const { service, settingRegistry } = createInMemoryFilesHarness();
+
+    // Kiểm tra sinh mã tự động theo SequenceRegistryService (FIL-YYYY-XXXXXX & FLD-YYYY-XXXXX)
+    const folder = await service.createFolder({ name: 'Thư mục Cấu hình Động' });
+    expect(folder.code).toMatch(/^FLD-\d{4}-\d{5}$/);
+
+    const uploaded = await service.uploadSingle({
+      fileName: 'config-test.txt',
+      textContent: 'Hello dynamic settings',
+    });
+    expect(uploaded.code).toMatch(/^FIL-\d{4}-\d{6}$/);
+    expect(uploaded.visibility).toBe(FILE_VISIBILITY.PRIVATE);
+
+    // Đổi cấu hình động: max_batch_files = 1, default_visibility = PUBLIC (3), key_prefix = 'custom-media'
+    settingRegistry.upsertScopeOverride({
+      settingKey: 'file.upload.max_batch_files',
+      environment: 'ALL',
+      organizationUnitId: null,
+      scopeKey: 'file.upload.max_batch_files::ALL::GLOBAL',
+      serializedValue: '1',
+      isEncrypted: false,
+      updatedBy: null,
+      reason: 'test',
+    });
+    settingRegistry.upsertScopeOverride({
+      settingKey: 'file.upload.default_visibility',
+      environment: 'ALL',
+      organizationUnitId: null,
+      scopeKey: 'file.upload.default_visibility::ALL::GLOBAL',
+      serializedValue: String(FILE_VISIBILITY.PUBLIC),
+      isEncrypted: false,
+      updatedBy: null,
+      reason: 'test',
+    });
+    settingRegistry.upsertScopeOverride({
+      settingKey: 'file.storage.key_prefix',
+      environment: 'ALL',
+      organizationUnitId: null,
+      scopeKey: 'file.storage.key_prefix::ALL::GLOBAL',
+      serializedValue: 'custom-media',
+      isEncrypted: false,
+      updatedBy: null,
+      reason: 'test',
+    });
+
+    const uploadedWithCustomConfig = await service.uploadSingle({
+      fileName: 'public-by-default.txt',
+      textContent: 'Public visibility from setting',
+    });
+    expect(uploadedWithCustomConfig.visibility).toBe(FILE_VISIBILITY.PUBLIC);
+    expect(uploadedWithCustomConfig.storageKey.startsWith('custom-media/')).toBe(true);
+
+    // Batch upload vượt quá max_batch_files = 1 phải bị chặn
+    await expect(
+      service.uploadBatch({
+        files: [
+          { fileName: 'a.txt', textContent: '1' },
+          { fileName: 'b.txt', textContent: '2' },
+        ],
+      }),
+    ).rejects.toThrow(BadRequestAppException);
+
+    const stats = await service.getStats();
+    expect(stats.settings.maxBatchFiles).toBe(1);
+    expect(stats.settings.defaultVisibility).toBe(FILE_VISIBILITY.PUBLIC);
+    expect(stats.settings.storageKeyPrefix).toBe('custom-media');
   });
 });

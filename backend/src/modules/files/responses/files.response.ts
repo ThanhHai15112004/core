@@ -166,6 +166,12 @@ export interface FileStatsResponse {
     readonly maxUploadSizeMb: number;
     readonly allowedExtensions: readonly string[];
     readonly trashRetentionDays: number;
+    readonly maxBatchFiles?: number;
+    readonly verifyMagicBytes?: boolean;
+    readonly defaultVisibility?: FileVisibilityCode;
+    readonly storageQuotaMb?: number;
+    readonly reconcileOnList?: boolean;
+    readonly storageKeyPrefix?: string;
   };
 }
 
@@ -191,5 +197,11 @@ export const fileStatsResponseSchema = z.object({
     maxUploadSizeMb: z.number().min(1),
     allowedExtensions: z.array(z.string()),
     trashRetentionDays: z.number().int().min(1),
+    maxBatchFiles: z.number().int().min(1).optional(),
+    verifyMagicBytes: z.boolean().optional(),
+    defaultVisibility: z.number().int().min(1).max(3).optional(),
+    storageQuotaMb: z.number().int().min(0).optional(),
+    reconcileOnList: z.boolean().optional(),
+    storageKeyPrefix: z.string().optional(),
   }),
 });

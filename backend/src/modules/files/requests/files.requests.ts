@@ -95,7 +95,7 @@ export interface UploadSingleFileRequest {
 }
 
 export const uploadBatchFilesSchema = z.object({
-  files: z.array(uploadSingleFileSchema).min(1).max(20),
+  files: z.array(uploadSingleFileSchema).min(1),
   folderId: coerceOptionalIntId,
   visibility: fileVisibilitySchema,
   organizationUnitId: coerceOptionalIntId,

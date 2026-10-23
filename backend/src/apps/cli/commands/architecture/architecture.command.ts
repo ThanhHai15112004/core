@@ -51,6 +51,7 @@ export class ArchitectureCommand implements ICliCommandProvider {
       console.log('  [Rule 6] Foreign Key & Cascade Delete Safety: OK');
       console.log('  [Rule 7] I18n Locale Parity & Exception Keys: OK');
       console.log('  [Rule 8] Shared Kernel Utils & ESM Hygiene: OK');
+      console.log('  [Rule 9] Dynamic Settings & No Hardcode Hygiene: OK');
       console.log('------------------------------------------------------\n');
       return;
     }

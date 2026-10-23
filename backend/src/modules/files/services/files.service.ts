@@ -1,4 +1,4 @@
-import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { Inject, Injectable, Optional } from '@nestjs/common';
 import {
@@ -7,6 +7,8 @@ import {
   ForbiddenAppException,
   NotFoundAppException,
   type PaginatedResult,
+  SequenceRegistryService,
+  defaultSequenceRegistry,
   formatBytes,
 } from '@packages/kernel/index.js';
 import {
@@ -75,6 +77,8 @@ export interface ResolvedByteRange {
 
 @Injectable()
 export class FilesService implements IFilesPublicService {
+  private readonly sequenceRegistry: SequenceRegistryService;
+
   constructor(
     private readonly filesRepo: FilesRepository,
     private readonly foldersRepo: FileFoldersRepository,
@@ -90,11 +94,31 @@ export class FilesService implements IFilesPublicService {
     @Optional()
     @Inject(ORGANIZATIONS_PUBLIC_SERVICE)
     private readonly orgsPublicService?: IOrganizationsPublicService | null,
-  ) {}
+    @Optional()
+    @Inject(SequenceRegistryService)
+    sequenceRegistry?: SequenceRegistryService | null,
+  ) {
+    this.sequenceRegistry = sequenceRegistry ?? defaultSequenceRegistry;
+  }
 
   private resolvePrimaryOrgId(actor?: UserIdentity): number | null {
     const first = actor?.organizationUnitIds?.[0];
     return typeof first === 'number' && first > 0 ? first : null;
+  }
+
+  /** Sinh mã định danh theo quy tắc cấu hình động từ `SequenceRegistryService` */
+  private async generateEntityCode(
+    sequenceKey: 'files.file_code' | 'files.folder_code',
+    orgId?: number | null,
+  ): Promise<string> {
+    if (!this.sequenceRegistry.getRule(sequenceKey)) {
+      this.sequenceRegistry.registerManifestSequences();
+    }
+    const generated = await this.sequenceRegistry.nextCode(
+      sequenceKey,
+      orgId ? { organizationUnitId: orgId } : undefined,
+    );
+    return generated.code;
   }
 
   // ─── 1. Quản lý Thư mục ảo (Logical Folders) ──────────────────────────────
@@ -119,8 +143,8 @@ export class FilesService implements IFilesPublicService {
     }
 
     const slug = this.slugifyName(input.name);
-    const code = `FLD_${Date.now().toString(36).toUpperCase()}_${randomBytes(3).toString('hex').toUpperCase()}`;
     const orgId = input.organizationUnitId ?? this.resolvePrimaryOrgId(actor);
+    const code = await this.generateEntityCode('files.folder_code', orgId);
 
     const created = await this.foldersRepo.saveEntity({
       code,
@@ -256,12 +280,14 @@ export class FilesService implements IFilesPublicService {
     }
 
     const validated = this.validationService.validateUploadInput(input, orgId);
+    await this.assertStorageQuotaWithinLimit(validated.sizeBytes, orgId);
     const checksumSha256 = this.computeSha256Hex(validated.buffer);
     const storageKey = this.buildImmutableStorageKey(validated.extension);
 
     await this.storage.upload(storageKey, validated.buffer, validated.mimeType);
 
-    const code = `FIL_${Date.now().toString(36).toUpperCase()}_${randomBytes(3).toString('hex').toUpperCase()}`;
+    const code = await this.generateEntityCode('files.file_code', orgId);
+    const defaultVisibility = this.validationService.getDefaultVisibility(orgId);
     const saved = await this.filesRepo.saveEntity({
       code,
       folderId: folder ? folder.id : null,
@@ -274,7 +300,7 @@ export class FilesService implements IFilesPublicService {
       category: validated.category,
       sizeBytes: validated.sizeBytes,
       checksumSha256,
-      visibility: input.visibility ?? FILE_VISIBILITY.PRIVATE,
+      visibility: input.visibility ?? defaultVisibility,
       status: FILE_STATUS.ACTIVE,
       uploadedByUserId: actor?.id ?? null,
       organizationUnitId: orgId,
@@ -314,6 +340,14 @@ export class FilesService implements IFilesPublicService {
   ): Promise<{ items: FileRecordResponse[]; count: number }> {
     if (!input.files || input.files.length === 0) {
       throw new BadRequestAppException('files.error.batchEmpty');
+    }
+
+    const orgId = input.organizationUnitId ?? this.resolvePrimaryOrgId(actor);
+    const maxBatchFiles = this.validationService.getMaxBatchFiles(orgId);
+    if (input.files.length > maxBatchFiles) {
+      throw new BadRequestAppException('files.error.batchTooLarge', [], {
+        maxFiles: maxBatchFiles,
+      });
     }
 
     const items: FileRecordResponse[] = [];
@@ -371,9 +405,9 @@ export class FilesService implements IFilesPublicService {
     const scope = await this.resolveFileScopeConstraint(actor);
 
     const { items: rawItems, total } = await this.filesRepo.findPaginatedFiltered(query, scope);
-    const reconciledItems = await Promise.all(
-      rawItems.map((item) => this.reconcileStorageExistence(item)),
-    );
+    const reconciledItems = this.validationService.shouldReconcileOnList()
+      ? await Promise.all(rawItems.map((item) => this.reconcileStorageExistence(item)))
+      : rawItems;
     const items =
       query.status === FILE_STATUS.ACTIVE
         ? reconciledItems.filter((item) => item.status === FILE_STATUS.ACTIVE)
@@ -504,6 +538,12 @@ export class FilesService implements IFilesPublicService {
         maxUploadSizeMb: this.validationService.getMaxUploadSizeMb(orgId),
         allowedExtensions: this.validationService.getAllowedExtensions(orgId),
         trashRetentionDays: this.validationService.getTrashRetentionDays(orgId),
+        maxBatchFiles: this.validationService.getMaxBatchFiles(orgId),
+        verifyMagicBytes: this.validationService.shouldVerifyMagicBytes(orgId),
+        defaultVisibility: this.validationService.getDefaultVisibility(orgId),
+        storageQuotaMb: this.validationService.getStorageQuotaMb(orgId),
+        reconcileOnList: this.validationService.shouldReconcileOnList(),
+        storageKeyPrefix: this.validationService.getStorageKeyPrefix(),
       },
     };
   }
@@ -1079,17 +1119,41 @@ export class FilesService implements IFilesPublicService {
     }
   }
 
+  /** Kiểm tra hạn mức tổng dung lượng lưu trữ (`file.storage.quota_mb`) trước khi tải lên */
+  private async assertStorageQuotaWithinLimit(
+    incomingSizeBytes: number,
+    organizationUnitId?: number | null,
+  ): Promise<void> {
+    const quotaMb = this.validationService.getStorageQuotaMb(organizationUnitId);
+    if (quotaMb <= 0) return;
+
+    const maxQuotaBytes = quotaMb * 1024 * 1024;
+    const allFiles = await this.filesRepo.findAllForStats();
+    const usedBytes = allFiles
+      .filter(
+        (f) =>
+          f.status === FILE_STATUS.ACTIVE &&
+          (!organizationUnitId || f.organizationUnitId === organizationUnitId),
+      )
+      .reduce((sum, f) => sum + (Number(f.sizeBytes) || 0), 0);
+
+    if (usedBytes + incomingSizeBytes > maxQuotaBytes) {
+      throw new BadRequestAppException('files.error.storageQuotaExceeded', [], { quotaMb });
+    }
+  }
+
   private computeSha256Hex(buffer: Buffer): string {
     return createHash('sha256').update(buffer).digest('hex');
   }
 
-  /** Sinh đường dẫn lưu trữ bất biến theo năm/tháng/ngày và UUID */
+  /** Sinh đường dẫn lưu trữ bất biến theo prefix cấu hình, năm/tháng/ngày và UUID */
   private buildImmutableStorageKey(ext: string): string {
+    const prefix = this.validationService.getStorageKeyPrefix();
     const now = new Date();
     const yyyy = String(now.getUTCFullYear());
     const mm = String(now.getUTCMonth() + 1).padStart(2, '0');
     const dd = String(now.getUTCDate()).padStart(2, '0');
-    return `files/${yyyy}/${mm}/${dd}/${randomUUID()}.${ext}`;
+    return `${prefix}/${yyyy}/${mm}/${dd}/${randomUUID()}.${ext}`;
   }
 
   /** Chuẩn hóa tên file khi tải xuống để dùng `displayName` mới kèm đuôi chuẩn */

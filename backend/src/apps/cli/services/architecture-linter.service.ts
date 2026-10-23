@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { Injectable, Logger } from '@nestjs/common';
-import { safeJsonParseObject } from '@packages/kernel/index.js';
+import { safeJsonParseObject, scanModuleManifests } from '@packages/kernel/index.js';
 import { ManifestService } from './manifest.service.js';
 
 export interface ArchitectureViolation {
@@ -13,7 +13,8 @@ export interface ArchitectureViolation {
     | 'RULE_5_ENTITY_EXPOSURE'
     | 'RULE_6_FOREIGN_KEY_AND_CASCADE'
     | 'RULE_7_I18N_AND_EXCEPTIONS'
-    | 'RULE_8_SHARED_UTILS_AND_CLEAN_CODE';
+    | 'RULE_8_SHARED_UTILS_AND_CLEAN_CODE'
+    | 'RULE_9_CONFIG_AND_SETTINGS_HYGIENE';
   file: string;
   line?: number;
   message: string;
@@ -61,13 +62,17 @@ export class ArchitectureLinterService {
     // Rule 7a: Kiểm tra đồng bộ khóa dịch đa ngôn ngữ (vi/en) và nạp từ điển toàn cục
     const globalDict = await this.collectAndValidateLocales(srcDir, backendRoot, violations);
 
-    // Kiểm tra Rule 1, Rule 2, Rule 5, Rule 6, Rule 7b & Rule 8
+    // Rule 9a: Thu thập danh mục khóa cấu hình động & sequences đã khai báo trong module.manifest.json
+    const manifestKeys = this.collectManifestConfigKeys();
+
+    // Kiểm tra Rule 1, Rule 2, Rule 5, Rule 6, Rule 7b, Rule 8 & Rule 9
     for (const file of files) {
       await this.lintSingleSourceFile({
         file,
         srcDir,
         backendRoot,
         globalDict,
+        manifestKeys,
         moduleDependencies,
         violations,
       });
@@ -95,10 +100,12 @@ export class ArchitectureLinterService {
     srcDir: string;
     backendRoot: string;
     globalDict: { vi: Set<string>; en: Set<string> };
+    manifestKeys: { settingKeys: Set<string>; sequenceKeys: Set<string> };
     moduleDependencies: Map<string, Set<string>>;
     violations: ArchitectureViolation[];
   }): Promise<void> {
-    const { file, srcDir, backendRoot, globalDict, moduleDependencies, violations } = params;
+    const { file, srcDir, backendRoot, globalDict, manifestKeys, moduleDependencies, violations } =
+      params;
     const relativePath = path.relative(srcDir, file).replace(/\\/g, '/');
 
     let content = '';
@@ -116,11 +123,28 @@ export class ArchitectureLinterService {
       (relativePath === `modules/${currentModule}/index.ts` ||
         relativePath === `project-modules/${currentModule}/index.ts`);
     const isControllerFile = Boolean(currentModule) && relativePath.includes('/controllers/');
+    const isServiceFile = Boolean(currentModule) && relativePath.includes('/services/');
+    const isRequestFile = Boolean(currentModule) && relativePath.includes('/requests/');
     const isEntityFile = Boolean(currentModule) && relativePath.includes('/entities/');
     const isMigrationFile = relativePath.includes('/migrations/');
 
     if (currentModule && !moduleDependencies.has(currentModule)) {
       moduleDependencies.set(currentModule, new Set<string>());
+    }
+
+    // Rule 9: Kiểm tra cấu hình động, tránh hardcode tham số vận hành trong module nghiệp vụ
+    if (currentModule) {
+      this.lintDynamicConfigAndHardcodes({
+        file,
+        backendRoot,
+        currentModule,
+        isServiceFile,
+        isRequestFile,
+        content,
+        lines,
+        manifestKeys,
+        violations,
+      });
     }
 
     for (let i = 0; i < lines.length; i++) {
@@ -465,5 +489,145 @@ export class ArchitectureLinterService {
     }
 
     return globalDict;
+  }
+
+  /** Thu thập tập hợp các khóa setting và sequence đã khai báo trong `module.manifest.json` */
+  private collectManifestConfigKeys(): {
+    settingKeys: Set<string>;
+    sequenceKeys: Set<string>;
+  } {
+    const settingKeys = new Set<string>();
+    const sequenceKeys = new Set<string>();
+    const scanned = scanModuleManifests();
+
+    for (const item of scanned) {
+      const raw = item.raw;
+      if (Array.isArray(raw.settings)) {
+        for (const s of raw.settings) {
+          if (s && typeof s === 'object' && typeof (s as { key?: unknown }).key === 'string') {
+            settingKeys.add((s as { key: string }).key.trim().toLowerCase());
+          }
+        }
+      }
+      if (Array.isArray(raw.sequences)) {
+        for (const seq of raw.sequences) {
+          if (
+            seq &&
+            typeof seq === 'object' &&
+            typeof (seq as { key?: unknown }).key === 'string'
+          ) {
+            sequenceKeys.add((seq as { key: string }).key.trim().toLowerCase());
+          }
+        }
+      }
+    }
+
+    return { settingKeys, sequenceKeys };
+  }
+
+  /**
+   * Rule 9: Kiểm tra tự động các lỗi hardcode tham số cấu hình phổ biến trong module nghiệp vụ
+   * (Thiết kế chính xác, có hỗ trợ `// @allow-hardcode` để tránh false-positive làm sai luồng):
+   * 1. Cấm đọc trực tiếp `process.env` trong `modules/` và `project-modules/`.
+   * 2. Mọi khóa gọi qua `settingRegistry.get*(key)` hoặc `sequenceRegistry.next*(key)` phải được khai báo trong `module.manifest.json`.
+   * 3. Cấm tự ghép mã thực thể nghiệp vụ (`const code = \`PREFIX_\${Date.now().toString(36)}...\``) thay vì dùng `SequenceRegistryService`.
+   * 4. Cấm hardcode giới hạn số lượng mảng nhỏ (`.max(<= 50)`) trực tiếp trên schema `uploadBatch*Schema` thay vì đọc từ `SettingRegistryService`.
+   */
+  private lintDynamicConfigAndHardcodes(params: {
+    file: string;
+    backendRoot: string;
+    currentModule: string;
+    isServiceFile: boolean;
+    isRequestFile: boolean;
+    content: string;
+    lines: string[];
+    manifestKeys: { settingKeys: Set<string>; sequenceKeys: Set<string> };
+    violations: ArchitectureViolation[];
+  }): void {
+    const {
+      file,
+      backendRoot,
+      currentModule,
+      isServiceFile,
+      isRequestFile,
+      content,
+      lines,
+      manifestKeys,
+      violations,
+    } = params;
+    const relFile = path.relative(backendRoot, file);
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i]!;
+      const prevLine = i > 0 ? lines[i - 1]! : '';
+      const trimmed = line.trim();
+
+      if (
+        trimmed.startsWith('//') ||
+        trimmed.startsWith('*') ||
+        line.includes('@allow-hardcode') ||
+        prevLine.includes('@allow-hardcode')
+      ) {
+        continue;
+      }
+
+      // 9.1. Cấm đọc trực tiếp process.env trong module nghiệp vụ
+      if (/\bprocess\.env\.[A-Za-z0-9_]+/.test(line)) {
+        violations.push({
+          rule: 'RULE_9_CONFIG_AND_SETTINGS_HYGIENE',
+          file: relFile,
+          line: i + 1,
+          message: `Direct "process.env" access detected in module "${currentModule}". Use CoreConfigService (@packages/config) for boot-time env or SettingRegistryService for runtime settings.`,
+        });
+      }
+
+      // 9.2. Cấm tự ghép mã thực thể nghiệp vụ bằng Date.now().toString(36) + randomBytes trong Service
+      if (
+        isServiceFile &&
+        /const\s+code\s*=\s*`[A-Z]{2,6}_\$\{Date\.now\(\)\.toString\(36\)/.test(line)
+      ) {
+        violations.push({
+          rule: 'RULE_9_CONFIG_AND_SETTINGS_HYGIENE',
+          file: relFile,
+          line: i + 1,
+          message: `Hardcoded entity code generation detected in module "${currentModule}". Declare a sequence in module.manifest.json and use SequenceRegistryService (@packages/kernel).`,
+        });
+      }
+
+      // 9.3. Cấm hardcode giới hạn số lượng mảng nhỏ (.max(<= 50)) trong uploadBatch*Schema
+      if (isRequestFile && /uploadBatch\w*Schema\s*=\s*z\.object/.test(line)) {
+        const block = lines.slice(i, Math.min(lines.length, i + 8)).join('\n');
+        const batchMaxMatch = block.match(
+          /files\s*:\s*z\.array\([^)]+\)\.min\(\d+\)\.max\((\d+)\)/,
+        );
+        if (batchMaxMatch && Number(batchMaxMatch[1]) <= 50) {
+          violations.push({
+            rule: 'RULE_9_CONFIG_AND_SETTINGS_HYGIENE',
+            file: relFile,
+            line: i + 1,
+            message: `Hardcoded batch upload limit ".max(${batchMaxMatch[1]})" detected in request schema. Validate batch limit dynamically via SettingRegistryService (e.g. "file.upload.max_batch_files") or add "// @allow-hardcode".`,
+          });
+        }
+      }
+    }
+
+    // 9.4. Kiểm tra các khóa settingRegistry.get*(key) và sequenceRegistry.next*(key) có khai báo trong module.manifest.json
+    if (currentModule !== 'settings') {
+      const settingCallRegex =
+        /settingRegistry\.(?:getNumber|getString|getBoolean|getJson|resolve)\?:?\s*(?:<[^>]+>)?\s*\(\s*['"]([a-z0-9_.-]+)['"]/gi;
+      let match: RegExpExecArray | null = null;
+      while ((match = settingCallRegex.exec(content)) !== null) {
+        const key = (match[1] ?? '').trim().toLowerCase();
+        if (key.includes('.') && !manifestKeys.settingKeys.has(key)) {
+          const lineNum = content.slice(0, match.index).split('\n').length;
+          violations.push({
+            rule: 'RULE_9_CONFIG_AND_SETTINGS_HYGIENE',
+            file: relFile,
+            line: lineNum,
+            message: `Unregistered setting key "${key}" used in module "${currentModule}". Declare it under "settings" in module.manifest.json so Admins can configure it dynamically.`,
+          });
+        }
+      }
+    }
   }
 }

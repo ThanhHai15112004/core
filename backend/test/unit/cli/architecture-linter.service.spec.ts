@@ -22,4 +22,14 @@ describe('ArchitectureLinterService', () => {
     const rule2Violations = report.violations.filter((v) => v.rule === 'RULE_2_PACKAGES_PURITY');
     expect(rule2Violations).toHaveLength(0);
   });
+
+  /** Kiểm thử việc đảm bảo không có lỗi hardcode cấu hình hoặc khóa setting chưa khai báo trong module.manifest.json (Rule 9) */
+  it('ensures dynamic settings hygiene and no hardcoded module config (Rule 9)', async () => {
+    const report = await linter.check();
+    const rule9Violations = report.violations.filter(
+      (v) => v.rule === 'RULE_9_CONFIG_AND_SETTINGS_HYGIENE',
+    );
+    expect(rule9Violations).toHaveLength(0);
+    expect(report.passed).toBe(true);
+  });
 });

@@ -6,10 +6,19 @@ import {
   defaultSettingRegistry,
 } from '@packages/kernel/index.js';
 import { mimeOf } from '@packages/storage/index.js';
-import { FILE_CATEGORY, type FileCategoryCode } from '../contracts/index.js';
+import {
+  FILE_CATEGORY,
+  FILE_VISIBILITY,
+  type FileCategoryCode,
+  type FileVisibilityCode,
+} from '../contracts/index.js';
 import type { UploadSingleFileRequest } from '../requests/files.requests.js';
 
 const DEFAULT_MAX_UPLOAD_MB = 25;
+const DEFAULT_MAX_BATCH_FILES = 20;
+const DEFAULT_TRASH_RETENTION_DAYS = 30;
+const DEFAULT_STORAGE_QUOTA_MB = 51_200;
+const DEFAULT_STORAGE_KEY_PREFIX = 'files';
 const DEFAULT_ALLOWED_EXTENSIONS = [
   'pdf',
   'docx',
@@ -79,9 +88,71 @@ export class FileValidationService {
     const days = this.settingRegistry.getNumber(
       'file.trash.retention_days',
       organizationUnitId ? { organizationUnitId } : undefined,
-      30,
+      DEFAULT_TRASH_RETENTION_DAYS,
     );
-    return days > 0 ? days : 30;
+    return days > 0 ? days : DEFAULT_TRASH_RETENTION_DAYS;
+  }
+
+  /** Đọc số lượng tệp tối đa cho phép trong một lần tải lên hàng loạt (Batch Upload) */
+  public getMaxBatchFiles(organizationUnitId?: number | null): number {
+    const val = this.settingRegistry.getNumber(
+      'file.upload.max_batch_files',
+      organizationUnitId ? { organizationUnitId } : undefined,
+      DEFAULT_MAX_BATCH_FILES,
+    );
+    return val > 0 ? val : DEFAULT_MAX_BATCH_FILES;
+  }
+
+  /** Đọc cấu hình bật/tắt kiểm tra chữ ký nhị phân (Magic Bytes) khi tải lên */
+  public shouldVerifyMagicBytes(organizationUnitId?: number | null): boolean {
+    return this.settingRegistry.getBoolean(
+      'file.upload.verify_magic_bytes',
+      organizationUnitId ? { organizationUnitId } : undefined,
+      true,
+    );
+  }
+
+  /** Đọc mức hiển thị mặc định khi tải tệp lên */
+  public getDefaultVisibility(organizationUnitId?: number | null): FileVisibilityCode {
+    const val = this.settingRegistry.getNumber(
+      'file.upload.default_visibility',
+      organizationUnitId ? { organizationUnitId } : undefined,
+      FILE_VISIBILITY.PRIVATE,
+    );
+    if (
+      val === FILE_VISIBILITY.PRIVATE ||
+      val === FILE_VISIBILITY.INTERNAL ||
+      val === FILE_VISIBILITY.PUBLIC
+    ) {
+      return val;
+    }
+    return FILE_VISIBILITY.PRIVATE;
+  }
+
+  /** Đọc hạn mức tổng dung lượng lưu trữ tối đa (MB) của hệ thống/đơn vị (0 = không giới hạn) */
+  public getStorageQuotaMb(organizationUnitId?: number | null): number {
+    const val = this.settingRegistry.getNumber(
+      'file.storage.quota_mb',
+      organizationUnitId ? { organizationUnitId } : undefined,
+      DEFAULT_STORAGE_QUOTA_MB,
+    );
+    return val >= 0 ? val : DEFAULT_STORAGE_QUOTA_MB;
+  }
+
+  /** Đọc cấu hình tự động đối soát sự tồn tại của file vật lý khi truy vấn danh sách */
+  public shouldReconcileOnList(): boolean {
+    return this.settingRegistry.getBoolean('file.storage.reconcile_on_list', undefined, true);
+  }
+
+  /** Đọc tiền tố thư mục lưu trữ vật lý trên Storage */
+  public getStorageKeyPrefix(): string {
+    const raw = this.settingRegistry.getString(
+      'file.storage.key_prefix',
+      undefined,
+      DEFAULT_STORAGE_KEY_PREFIX,
+    );
+    const cleaned = raw.trim().replace(/^\/+|\/+$/g, '');
+    return cleaned || DEFAULT_STORAGE_KEY_PREFIX;
   }
 
   /**
@@ -89,7 +160,7 @@ export class FileValidationService {
    * 1. Giải mã nội dung và kiểm tra rỗng.
    * 2. Kiểm tra phần mở rộng (`extension`) theo danh sách cho phép.
    * 3. Kiểm tra dung lượng tối đa (`max_size_mb`).
-   * 4. Kiểm tra chữ ký tệp (Magic Bytes) chống giả mạo định dạng / mã độc thực thi.
+   * 4. Kiểm tra chữ ký tệp (Magic Bytes) chống giả mạo định dạng / mã độc thực thi (nếu bật `verify_magic_bytes`).
    */
   public validateUploadInput(
     input: UploadSingleFileRequest,
@@ -117,7 +188,9 @@ export class FileValidationService {
       throw new BadRequestAppException('files.error.fileTooLarge', [], { maxMb });
     }
 
-    this.assertMagicBytesMatch(buffer, extRaw);
+    if (this.shouldVerifyMagicBytes(organizationUnitId)) {
+      this.assertMagicBytesMatch(buffer, extRaw);
+    }
 
     const detectedMime = mimeOf(originalName);
     const mimeType =
