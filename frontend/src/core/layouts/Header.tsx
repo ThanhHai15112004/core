@@ -12,6 +12,8 @@ import {
   Building2,
   KeyRound,
   Users,
+  BookOpen,
+  Settings,
   FolderOpen,
   Sun,
   Moon,
@@ -37,6 +39,10 @@ export const Header: React.FC<HeaderProps> = ({ activeTab = 'home', onTabChange 
         return <KeyRound size={15} />;
       case 'users':
         return <Users size={15} />;
+      case 'codes':
+        return <BookOpen size={15} />;
+      case 'settings':
+        return <Settings size={15} />;
       case 'files':
         return <FolderOpen size={15} />;
       case 'home':

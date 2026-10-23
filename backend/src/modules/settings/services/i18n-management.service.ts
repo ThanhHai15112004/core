@@ -4,7 +4,6 @@ import {
   ConflictAppException,
   NotFoundAppException,
   defaultSettingRegistry,
-  safeJsonParseObject,
 } from '@packages/kernel/index.js';
 import {
   CoreI18nService,
@@ -13,9 +12,6 @@ import {
   type RegisteredLocaleMetadata,
   type RegisteredTimezoneMetadata,
   type RegisteredTranslationItem,
-  STANDARD_BOOTSTRAP_LOCALES,
-  STANDARD_BOOTSTRAP_TIMEZONES,
-  getInitialStaticDictionaries,
   getRegisteredLocaleMetadata,
   getRegisteredTimezoneMetadata,
   listRegisteredLocales,
@@ -36,6 +32,15 @@ import type {
 import type { I18nLocaleEntity } from '../entities/i18n-locale.entity.js';
 import type { I18nTimezoneEntity } from '../entities/i18n-timezone.entity.js';
 import type { I18nTranslationEntity } from '../entities/i18n-translation.entity.js';
+import { SETTINGS_AUDIT_META } from '../enum/settings.enum.js';
+import {
+  hydrateI18nCatalogFromDatabase,
+  mapLocaleMetadataToSummary,
+  mapTimezoneMetadataToSummary,
+  mapTranslationItemToSummary,
+  seedInMemoryTranslationsFromStaticDictionaries,
+  syncI18nDatabaseCatalog,
+} from '../helpers/i18n-catalog.helper.js';
 import { I18nLocaleRepository } from '../repositories/i18n-locale.repository.js';
 import { I18nTimezoneRepository } from '../repositories/i18n-timezone.repository.js';
 import { I18nTranslationRepository } from '../repositories/i18n-translation.repository.js';
@@ -64,7 +69,10 @@ export class I18nManagementService implements II18nManagementPublicService, OnMo
     @Optional() private readonly i18nService?: CoreI18nService | null,
     @Optional() private readonly auditLogService?: AuditLogService | null,
   ) {
-    this.seedInMemoryTranslationsFromStatic();
+    seedInMemoryTranslationsFromStaticDictionaries(
+      this.translationMap,
+      () => ++this.translationSeq,
+    );
   }
 
   public async onModuleInit(): Promise<void> {
@@ -75,197 +83,30 @@ export class I18nManagementService implements II18nManagementPublicService, OnMo
     }
   }
 
-  private seedInMemoryTranslationsFromStatic(): void {
-    const staticDicts = getInitialStaticDictionaries();
-    for (const [locale, dict] of Object.entries(staticDicts)) {
-      for (const [key, value] of Object.entries(dict)) {
-        const namespace = key.includes('.') ? key.split('.')[0]! : 'common';
-        const mapKey = `${locale}::${key}`;
-        if (!this.translationMap.has(mapKey)) {
-          this.translationMap.set(mapKey, {
-            id: ++this.translationSeq,
-            locale,
-            namespace,
-            key,
-            value,
-            description: null,
-            isSystem: true,
-            status: I18N_ITEM_STATUS.ACTIVE,
-            updatedBy: null,
-            updatedAt: new Date().toISOString(),
-          });
-        }
-      }
-    }
-  }
-
   /**
    * Đồng bộ Idempotent danh mục Ngôn ngữ (`i18n_locales`), Múi giờ (`i18n_timezones`)
    * và Từ điển thông báo (`i18n_translations`) giữa Database và bộ nhớ Runtime (Mục 5.3.1 -> 5.3.6).
    */
   public async syncDatabaseCatalog(): Promise<SyncI18nResult> {
-    let totalLocales = 0;
-    let totalTimezones = 0;
-    let totalTranslations = 0;
-
-    for (const loc of STANDARD_BOOTSTRAP_LOCALES) {
-      await this.seedLocaleIfMissing(loc);
-      totalLocales++;
-    }
-
-    for (const tz of STANDARD_BOOTSTRAP_TIMEZONES) {
-      await this.seedTimezoneIfMissing(tz);
-      totalTimezones++;
-    }
-
-    for (const item of this.translationMap.values()) {
-      await this.seedTranslationIfMissing(item);
-      totalTranslations++;
-    }
-
-    await this.hydrateFromDatabaseSafe();
-
-    return {
-      totalLocales: listRegisteredLocales(true).length || totalLocales,
-      totalTimezones: listRegisteredTimezones(true).length || totalTimezones,
-      totalTranslations: this.translationMap.size || totalTranslations,
-    };
-  }
-
-  private async seedLocaleIfMissing(loc: RegisteredLocaleMetadata): Promise<void> {
-    if (!this.localeRepository) {
-      if (!getRegisteredLocaleMetadata(loc.code)) {
-        upsertRegisteredLocale(loc);
-      }
-      return;
-    }
-    try {
-      const existing = await this.localeRepository.findByCode(loc.code);
-      if (!existing) {
-        await this.localeRepository.saveEntity({
-          code: loc.code,
-          bcp47Tag: loc.bcp47Tag,
-          name: loc.name,
-          nativeName: loc.nativeName,
-          direction: loc.direction,
-          dateFormat: loc.dateFormat,
-          datetimeFormat: loc.datetimeFormat,
-          currencyCode: loc.currencyCode,
-          numberDecimalSeparator: loc.numberDecimalSeparator,
-          numberGroupSeparator: loc.numberGroupSeparator,
-          isDefault: loc.isDefault,
-          isSystem: loc.isSystem,
-          sortOrder: loc.sortOrder,
-          status: loc.status,
-        });
-      }
-    } catch {
-      // Ignore if DB table not ready
-    }
-  }
-
-  private async seedTimezoneIfMissing(tz: RegisteredTimezoneMetadata): Promise<void> {
-    if (!this.timezoneRepository) {
-      if (!getRegisteredTimezoneMetadata(tz.code)) {
-        upsertRegisteredTimezone(tz);
-      }
-      return;
-    }
-    try {
-      const existing = await this.timezoneRepository.findByCode(tz.code);
-      if (!existing) {
-        await this.timezoneRepository.saveEntity({
-          code: tz.code,
-          name: tz.name,
-          labelsJson: JSON.stringify(tz.labels),
-          utcOffset: tz.utcOffset,
-          utcOffsetMinutes: tz.utcOffsetMinutes,
-          region: tz.region,
-          isDefault: tz.isDefault,
-          isSystem: tz.isSystem,
-          sortOrder: tz.sortOrder,
-          status: tz.status,
-        });
-      }
-    } catch {
-      // Ignore if DB table not ready
-    }
-  }
-
-  private async seedTranslationIfMissing(item: RegisteredTranslationItem): Promise<void> {
-    if (!this.translationRepository) return;
-    try {
-      const existing = await this.translationRepository.findByLocaleAndKey(item.locale, item.key);
-      if (!existing) {
-        await this.translationRepository.saveEntity({
-          locale: item.locale,
-          namespace: item.namespace,
-          translationKey: item.key,
-          translationValue: item.value,
-          description: item.description ?? null,
-          isSystem: item.isSystem,
-          status: item.status,
-        });
-      }
-    } catch {
-      // Ignore if DB table not ready
-    }
+    return syncI18nDatabaseCatalog({
+      localeRepository: this.localeRepository,
+      timezoneRepository: this.timezoneRepository,
+      translationRepository: this.translationRepository,
+      translationMap: this.translationMap,
+      i18nService: this.i18nService,
+    });
   }
 
   /** Nạp toàn bộ dữ liệu từ 3 bảng DB `i18n_locales`, `i18n_timezones`, `i18n_translations` lên bộ nhớ Runtime */
   public async hydrateFromDatabaseSafe(): Promise<void> {
-    if (this.localeRepository) {
-      try {
-        const dbLocales = await this.localeRepository.findAllOrdered();
-        for (const entity of dbLocales) {
-          const meta = this.mapLocaleEntityToMetadata(entity);
-          upsertRegisteredLocale(meta);
-          if (meta.isDefault && meta.status === I18N_ITEM_STATUS.ACTIVE) {
-            defaultSettingRegistry.setGlobalValue('ui.locale.default', meta.code);
-          }
-        }
-      } catch {
-        // Fallback to in-memory registry
-      }
-    }
-
-    if (this.timezoneRepository) {
-      try {
-        const dbTimezones = await this.timezoneRepository.findAllOrdered();
-        for (const entity of dbTimezones) {
-          const meta = this.mapTimezoneEntityToMetadata(entity);
-          upsertRegisteredTimezone(meta);
-          if (meta.isDefault && meta.status === I18N_ITEM_STATUS.ACTIVE) {
-            defaultSettingRegistry.setGlobalValue('ui.timezone.default', meta.code);
-          }
-        }
-      } catch {
-        // Fallback to in-memory registry
-      }
-    }
-
-    if (this.translationRepository) {
-      try {
-        const dbTranslations = await this.translationRepository.findFiltered();
-        for (const entity of dbTranslations) {
-          const item = this.mapTranslationEntityToItem(entity);
-          this.translationMap.set(`${item.locale}::${item.key}`, item);
-          if (item.status === I18N_ITEM_STATUS.ACTIVE) {
-            setRuntimeTranslation(item.locale, item.key, item.value);
-            this.i18nService?.upsertTranslation(item.locale, item.key, item.value, item.namespace);
-          } else {
-            removeRuntimeTranslation(item.locale, item.key);
-          }
-        }
-      } catch {
-        // Fallback to in-memory registry
-      }
-    }
+    await hydrateI18nCatalogFromDatabase({
+      localeRepository: this.localeRepository,
+      timezoneRepository: this.timezoneRepository,
+      translationRepository: this.translationRepository,
+      translationMap: this.translationMap,
+      i18nService: this.i18nService,
+    });
   }
-
-  // =========================================================================
-  // 1. QUẢN LÝ NGÔN NGỮ ĐỘNG TRONG DATABASE (`i18n_locales` — Mục 5.3.1, 5.3.2, 5.3.6)
-  // =========================================================================
 
   /** Liệt kê danh sách ngôn ngữ lưu trong Database (`i18n_locales`) */
   public async listLocales(query: ListI18nLocalesQuery = {}): Promise<I18nLocaleSummary[]> {
@@ -274,10 +115,10 @@ export class I18nManagementService implements II18nManagementPublicService, OnMo
     if (query.status !== undefined) {
       locales = locales.filter((l) => l.status === query.status);
     }
-    return locales.map((l, idx) => this.toLocaleSummary(l, idx + 1));
+    return locales.map((l, idx) => mapLocaleMetadataToSummary(l, idx + 1));
   }
 
-  /** Thêm ngôn ngữ mới vào Database (`i18n_locales`) — ví dụ thêm `ja` (Tiếng Nhật), `ko` (Tiếng Hàn) */
+  /** Thêm ngôn ngữ mới vào Database (`i18n_locales`) */
   public async createLocale(
     dto: CreateI18nLocaleRequest,
     actor?: UserIdentity | null,
@@ -359,8 +200,8 @@ export class I18nManagementService implements II18nManagementPublicService, OnMo
 
     await this.auditLogService?.record({
       actor,
-      module: 'settings',
-      feature: 'i18n_locales',
+      module: SETTINGS_AUDIT_META.MODULE,
+      feature: SETTINGS_AUDIT_META.FEATURES.I18N_LOCALES,
       action: 'I18N_LOCALE_CREATED',
       resourceType: 'i18n_locale',
       resourceId: registered.code,
@@ -374,7 +215,7 @@ export class I18nManagementService implements II18nManagementPublicService, OnMo
       },
     });
 
-    return this.toLocaleSummary(registered);
+    return mapLocaleMetadataToSummary(registered);
   }
 
   /** Cập nhật ngôn ngữ trong Database (`i18n_locales`): đổi định dạng ngày/số/tiền tệ, bật/tắt hoặc đặt làm mặc định */
@@ -464,8 +305,8 @@ export class I18nManagementService implements II18nManagementPublicService, OnMo
 
     await this.auditLogService?.record({
       actor,
-      module: 'settings',
-      feature: 'i18n_locales',
+      module: SETTINGS_AUDIT_META.MODULE,
+      feature: SETTINGS_AUDIT_META.FEATURES.I18N_LOCALES,
       action: 'I18N_LOCALE_UPDATED',
       resourceType: 'i18n_locale',
       resourceId: saved.code,
@@ -483,12 +324,8 @@ export class I18nManagementService implements II18nManagementPublicService, OnMo
       },
     });
 
-    return this.toLocaleSummary(saved);
+    return mapLocaleMetadataToSummary(saved);
   }
-
-  // =========================================================================
-  // 2. QUẢN LÝ KHUNG GIỜ / MÚI GIỜ ĐỘNG TRONG DATABASE (`i18n_timezones` — Mục 5.3.4 & 5.3.5)
-  // =========================================================================
 
   /** Liệt kê danh sách khung giờ/múi giờ lưu trong Database (`i18n_timezones`) */
   public async listTimezones(query: ListI18nTimezonesQuery = {}): Promise<I18nTimezoneSummary[]> {
@@ -510,7 +347,7 @@ export class I18nManagementService implements II18nManagementPublicService, OnMo
           t.utcOffset.toLowerCase().includes(kw),
       );
     }
-    return timezones.map((t, idx) => this.toTimezoneSummary(t, idx + 1));
+    return timezones.map((t, idx) => mapTimezoneMetadataToSummary(t, idx + 1));
   }
 
   /** Thêm mới một khung giờ/múi giờ IANA vào Database (`i18n_timezones`) */
@@ -587,8 +424,8 @@ export class I18nManagementService implements II18nManagementPublicService, OnMo
 
     await this.auditLogService?.record({
       actor,
-      module: 'settings',
-      feature: 'i18n_timezones',
+      module: SETTINGS_AUDIT_META.MODULE,
+      feature: SETTINGS_AUDIT_META.FEATURES.I18N_TIMEZONES,
       action: 'I18N_TIMEZONE_CREATED',
       resourceType: 'i18n_timezone',
       resourceId: registered.code,
@@ -600,7 +437,7 @@ export class I18nManagementService implements II18nManagementPublicService, OnMo
       },
     });
 
-    return this.toTimezoneSummary(registered);
+    return mapTimezoneMetadataToSummary(registered);
   }
 
   /** Cập nhật khung giờ/múi giờ trong Database (`i18n_timezones`): đổi tên, bật/tắt hoặc đặt làm khung giờ mặc định */
@@ -680,8 +517,8 @@ export class I18nManagementService implements II18nManagementPublicService, OnMo
 
     await this.auditLogService?.record({
       actor,
-      module: 'settings',
-      feature: 'i18n_timezones',
+      module: SETTINGS_AUDIT_META.MODULE,
+      feature: SETTINGS_AUDIT_META.FEATURES.I18N_TIMEZONES,
       action: 'I18N_TIMEZONE_UPDATED',
       resourceType: 'i18n_timezone',
       resourceId: saved.code,
@@ -695,12 +532,8 @@ export class I18nManagementService implements II18nManagementPublicService, OnMo
       },
     });
 
-    return this.toTimezoneSummary(saved);
+    return mapTimezoneMetadataToSummary(saved);
   }
-
-  // =========================================================================
-  // 3. QUẢN LÝ TỪ ĐIỂN DỊCH & THÔNG BÁO LỖI TRONG DB (`i18n_translations` — Mục 5.3.3)
-  // =========================================================================
 
   /** Tra cứu danh sách bản dịch đa ngôn ngữ trong Database (`i18n_translations`) */
   public async listTranslations(
@@ -728,7 +561,7 @@ export class I18nManagementService implements II18nManagementPublicService, OnMo
     }
 
     items.sort((a, b) => a.key.localeCompare(b.key) || a.locale.localeCompare(b.locale));
-    return items.map((t, idx) => this.toTranslationSummary(t, idx + 1));
+    return items.map((t, idx) => mapTranslationItemToSummary(t, idx + 1));
   }
 
   /** Thêm mới hoặc cập nhật (Upsert) một bản dịch / thông báo lỗi đa ngôn ngữ trong DB (`i18n_translations`) */
@@ -795,8 +628,8 @@ export class I18nManagementService implements II18nManagementPublicService, OnMo
 
     await this.auditLogService?.record({
       actor,
-      module: 'settings',
-      feature: 'i18n_translations',
+      module: SETTINGS_AUDIT_META.MODULE,
+      feature: SETTINGS_AUDIT_META.FEATURES.I18N_TRANSLATIONS,
       action: existing ? 'I18N_TRANSLATION_UPDATED' : 'I18N_TRANSLATION_CREATED',
       resourceType: 'i18n_translation',
       resourceId: `${locale}:${key}`,
@@ -804,123 +637,6 @@ export class I18nManagementService implements II18nManagementPublicService, OnMo
       afterData: { locale, namespace, key, value, status },
     });
 
-    return this.toTranslationSummary(item);
-  }
-
-  private mapLocaleEntityToMetadata(entity: I18nLocaleEntity): RegisteredLocaleMetadata {
-    return {
-      id: Number(entity.id),
-      code: entity.code.trim().toLowerCase(),
-      bcp47Tag: entity.bcp47Tag,
-      name: entity.name,
-      nativeName: entity.nativeName,
-      direction: entity.direction === 'rtl' ? 'rtl' : 'ltr',
-      dateFormat: entity.dateFormat,
-      datetimeFormat: entity.datetimeFormat,
-      currencyCode: entity.currencyCode,
-      numberDecimalSeparator: entity.numberDecimalSeparator,
-      numberGroupSeparator: entity.numberGroupSeparator,
-      isDefault: Boolean(entity.isDefault),
-      isSystem: Boolean(entity.isSystem),
-      sortOrder: Number(entity.sortOrder ?? 1),
-      status: (entity.status ?? I18N_ITEM_STATUS.ACTIVE) as I18nItemStatusCode,
-      updatedBy: entity.updatedBy ?? null,
-      updatedAt: (entity.updatedAt ?? new Date()).toISOString(),
-    };
-  }
-
-  private mapTimezoneEntityToMetadata(entity: I18nTimezoneEntity): RegisteredTimezoneMetadata {
-    const parsedLabels = safeJsonParseObject<Record<string, string>>(entity.labelsJson, {});
-    return {
-      id: Number(entity.id),
-      code: entity.code.trim(),
-      name: entity.name,
-      labels: parsedLabels,
-      utcOffset: entity.utcOffset,
-      utcOffsetMinutes: Number(entity.utcOffsetMinutes ?? 0),
-      region: entity.region,
-      isDefault: Boolean(entity.isDefault),
-      isSystem: Boolean(entity.isSystem),
-      sortOrder: Number(entity.sortOrder ?? 1),
-      status: (entity.status ?? I18N_ITEM_STATUS.ACTIVE) as I18nItemStatusCode,
-      updatedBy: entity.updatedBy ?? null,
-      updatedAt: (entity.updatedAt ?? new Date()).toISOString(),
-    };
-  }
-
-  private mapTranslationEntityToItem(entity: I18nTranslationEntity): RegisteredTranslationItem {
-    return {
-      id: Number(entity.id),
-      locale: entity.locale.trim().toLowerCase(),
-      namespace: entity.namespace.trim().toLowerCase(),
-      key: entity.translationKey.trim(),
-      value: entity.translationValue,
-      description: entity.description ?? null,
-      isSystem: Boolean(entity.isSystem),
-      status: (entity.status ?? I18N_ITEM_STATUS.ACTIVE) as I18nItemStatusCode,
-      updatedBy: entity.updatedBy ?? null,
-      updatedAt: (entity.updatedAt ?? new Date()).toISOString(),
-    };
-  }
-
-  private toLocaleSummary(meta: RegisteredLocaleMetadata, fallbackId = 1): I18nLocaleSummary {
-    return {
-      id: meta.id ?? fallbackId,
-      code: meta.code,
-      bcp47Tag: meta.bcp47Tag,
-      name: meta.name,
-      nativeName: meta.nativeName,
-      direction: meta.direction,
-      dateFormat: meta.dateFormat,
-      datetimeFormat: meta.datetimeFormat,
-      currencyCode: meta.currencyCode,
-      numberDecimalSeparator: meta.numberDecimalSeparator,
-      numberGroupSeparator: meta.numberGroupSeparator,
-      isDefault: meta.isDefault,
-      isSystem: meta.isSystem,
-      sortOrder: meta.sortOrder,
-      status: meta.status,
-      statusName: meta.status === I18N_ITEM_STATUS.INACTIVE ? 'INACTIVE' : 'ACTIVE',
-      updatedBy: meta.updatedBy ?? null,
-      updatedAt: meta.updatedAt ?? new Date().toISOString(),
-    };
-  }
-
-  private toTimezoneSummary(meta: RegisteredTimezoneMetadata, fallbackId = 1): I18nTimezoneSummary {
-    return {
-      id: meta.id ?? fallbackId,
-      code: meta.code,
-      name: meta.name,
-      labels: meta.labels,
-      utcOffset: meta.utcOffset,
-      utcOffsetMinutes: meta.utcOffsetMinutes,
-      region: meta.region,
-      isDefault: meta.isDefault,
-      isSystem: meta.isSystem,
-      sortOrder: meta.sortOrder,
-      status: meta.status,
-      statusName: meta.status === I18N_ITEM_STATUS.INACTIVE ? 'INACTIVE' : 'ACTIVE',
-      updatedBy: meta.updatedBy ?? null,
-      updatedAt: meta.updatedAt ?? new Date().toISOString(),
-    };
-  }
-
-  private toTranslationSummary(
-    item: RegisteredTranslationItem,
-    fallbackId = 1,
-  ): I18nTranslationSummary {
-    return {
-      id: item.id ?? fallbackId,
-      locale: item.locale,
-      namespace: item.namespace,
-      key: item.key,
-      value: item.value,
-      description: item.description ?? null,
-      isSystem: item.isSystem,
-      status: item.status,
-      statusName: item.status === I18N_ITEM_STATUS.INACTIVE ? 'INACTIVE' : 'ACTIVE',
-      updatedBy: item.updatedBy ?? null,
-      updatedAt: item.updatedAt ?? new Date().toISOString(),
-    };
+    return mapTranslationItemToSummary(item);
   }
 }

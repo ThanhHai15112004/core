@@ -2,9 +2,7 @@ import {
   type RegisteredSettingDefinition,
   SENSITIVE_SETTING_MASK,
   SETTING_ITEM_STATUS,
-  type SettingEnvironmentCode,
   type SettingRegistryService,
-  type SettingResolveContext,
   type SettingValidationRules,
   type SettingValueTypeCode,
   buildSettingScopeKey,
@@ -16,11 +14,7 @@ import {
   validateAndSerializeSettingValue,
 } from '@packages/kernel/index.js';
 import { RequestContextService } from '@packages/logging/index.js';
-import type {
-  AuditLogService,
-  FieldEncryptionService,
-  UserIdentity,
-} from '@packages/security/index.js';
+import type { UserIdentity } from '@packages/security/index.js';
 import type {
   SettingHistoryRecord,
   SettingScopeOverrideSummary,
@@ -29,13 +23,14 @@ import type {
 import type { SystemSettingHistoryEntity } from '../entities/system-setting-history.entity.js';
 import type { SystemSettingScopeEntity } from '../entities/system-setting-scope.entity.js';
 import type { SystemSettingEntity } from '../entities/system-setting.entity.js';
-import type { SystemSettingHistoryRepository } from '../repositories/system-setting-history.repository.js';
-import type { SystemSettingScopeRepository } from '../repositories/system-setting-scope.repository.js';
-import type { SystemSettingRepository } from '../repositories/system-setting.repository.js';
+import { MAX_IN_MEMORY_SETTING_HISTORY, SETTINGS_AUDIT_META } from '../enum/settings.enum.js';
 import type {
-  CreateSettingRequest,
-  UpdateSettingValueRequest,
-} from '../requests/settings.requests.js';
+  BuildAndPersistNewSettingParams,
+  BuildSystemSettingSummaryParams,
+  PersistAndAuditSettingHistoryParams,
+  PersistGlobalSettingUpdateParams,
+  PersistScopedSettingUpdateParams,
+} from '../types/settings.types.js';
 
 export function formatMaskedOrDeserializedSettingValue(params: {
   serialized: string | null | undefined;
@@ -55,14 +50,9 @@ export function formatMaskedOrDeserializedSettingValue(params: {
   return deserializeSettingValue(plain, valueType);
 }
 
-export function buildSystemSettingSummary(params: {
-  def: RegisteredSettingDefinition;
-  context?: SettingResolveContext | undefined;
-  fallbackId?: number | undefined;
-  registry: SettingRegistryService;
-  encryptionService: FieldEncryptionService;
-  decryptIfNeeded: (raw: string, isEncrypted: boolean) => string;
-}): SystemSettingSummary {
+export function buildSystemSettingSummary(
+  params: BuildSystemSettingSummaryParams,
+): SystemSettingSummary {
   const { def, context, fallbackId = 1, registry, encryptionService, decryptIfNeeded } = params;
 
   const resolved = registry.resolve(def.key, context, {
@@ -187,24 +177,9 @@ export function mapSettingHistoryEntityToRecord(
   };
 }
 
-export async function persistAndAuditSettingHistory(params: {
-  settingId: number;
-  settingKey: string;
-  environmentCode: SettingEnvironmentCode;
-  environment: string;
-  organizationUnitId: number | null;
-  valueType: SettingValueTypeCode;
-  oldSerializedValue: string | null;
-  newSerializedValue: string;
-  isSensitive: boolean;
-  actor?: UserIdentity | null | undefined;
-  reason?: string | null | undefined;
-  action: string;
-  nextHistoryId: () => number;
-  historyRepository?: SystemSettingHistoryRepository | null | undefined;
-  auditLogService?: AuditLogService | null | undefined;
-  inMemoryHistory: SettingHistoryRecord[];
-}): Promise<void> {
+export async function persistAndAuditSettingHistory(
+  params: PersistAndAuditSettingHistoryParams,
+): Promise<void> {
   const ctx = RequestContextService.current();
   const resolvedActor = params.actor ?? (ctx?.actor as UserIdentity | undefined) ?? null;
   const actorUserId =
@@ -286,7 +261,7 @@ export async function persistAndAuditSettingHistory(params: {
   };
 
   params.inMemoryHistory.unshift(historyRecord);
-  if (params.inMemoryHistory.length > 500) {
+  if (params.inMemoryHistory.length > MAX_IN_MEMORY_SETTING_HISTORY) {
     params.inMemoryHistory.pop();
   }
 
@@ -295,8 +270,8 @@ export async function persistAndAuditSettingHistory(params: {
       actor: resolvedActor,
       actorUserId,
       actorIdentifier,
-      module: 'settings',
-      feature: 'system_settings',
+      module: SETTINGS_AUDIT_META.MODULE,
+      feature: SETTINGS_AUDIT_META.FEATURES.SYSTEM_SETTINGS,
       action: params.action,
       resourceType: 'system_setting',
       resourceId: params.settingKey,
@@ -325,15 +300,9 @@ export async function persistAndAuditSettingHistory(params: {
   }
 }
 
-export async function buildAndPersistNewSettingDefinition(params: {
-  dto: CreateSettingRequest;
-  key: string;
-  actorUserId: number | null;
-  nextSettingId: () => number;
-  registry: SettingRegistryService;
-  encryptionService: FieldEncryptionService;
-  settingRepository?: SystemSettingRepository | null | undefined;
-}): Promise<{
+export async function buildAndPersistNewSettingDefinition(
+  params: BuildAndPersistNewSettingParams,
+): Promise<{
   def: RegisteredSettingDefinition;
   valueType: SettingValueTypeCode;
   isSensitive: boolean;
@@ -445,18 +414,9 @@ export async function buildAndPersistNewSettingDefinition(params: {
   };
 }
 
-export async function persistGlobalSettingUpdateRecord(params: {
-  def: RegisteredSettingDefinition;
-  normKey: string;
-  dto: UpdateSettingValueRequest;
-  effectiveRules: SettingValidationRules | null;
-  encryptedValue: string;
-  isEncrypted: boolean;
-  actorUserId: number | null;
-  registry: SettingRegistryService;
-  settingRepository?: SystemSettingRepository | null | undefined;
-  decryptIfNeeded: (raw: string, isEncrypted: boolean) => string;
-}): Promise<string | null> {
+export async function persistGlobalSettingUpdateRecord(
+  params: PersistGlobalSettingUpdateParams,
+): Promise<string | null> {
   const {
     def,
     normKey,
@@ -509,21 +469,9 @@ export async function persistGlobalSettingUpdateRecord(params: {
   return oldPlainSerialized;
 }
 
-export async function persistScopedSettingUpdateRecord(params: {
-  def: RegisteredSettingDefinition;
-  normKey: string;
-  envCode: SettingEnvironmentCode;
-  normEnv: string;
-  unitId: number | null;
-  encryptedValue: string;
-  isEncrypted: boolean;
-  actorUserId: number | null;
-  reason: string | null;
-  nextScopeId: () => number;
-  registry: SettingRegistryService;
-  scopeRepository?: SystemSettingScopeRepository | null | undefined;
-  decryptIfNeeded: (raw: string, isEncrypted: boolean) => string;
-}): Promise<string | null> {
+export async function persistScopedSettingUpdateRecord(
+  params: PersistScopedSettingUpdateParams,
+): Promise<string | null> {
   const {
     def,
     normKey,

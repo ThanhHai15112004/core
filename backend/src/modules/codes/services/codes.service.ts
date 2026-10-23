@@ -14,7 +14,6 @@ import {
   defaultCodeRegistry,
   defaultSettingRegistry,
   discoverManifestCodeTypes,
-  safeJsonParseObject,
 } from '@packages/kernel/index.js';
 import {
   CoreI18nService,
@@ -26,6 +25,23 @@ import { AuditLogService } from '@packages/security/index.js';
 import type { CodeTypeSummary, ICodesPublicService, SyncCodesResult } from '../contracts/index.js';
 import type { CodeTypeEntity } from '../entities/code-type.entity.js';
 import type { CodeValueEntity } from '../entities/code-value.entity.js';
+import { CODES_AUDIT_META } from '../enum/codes.enum.js';
+import {
+  buildCodesExportPayload,
+  buildCodesImportTemplatePayload,
+  executeBulkImportCodeValues,
+} from '../helpers/codes-import-export.helper.js';
+import {
+  mapCodeValueEntityToManifestItem,
+  refreshCodeRegistryFromDatabase,
+  refreshSingleCodeTypeFromDatabase,
+  syncDeclaredCodeTypesAndValuesToDatabase,
+} from '../helpers/codes-manifest-sync.helper.js';
+import {
+  applyCodeValueUpdatesToEntity,
+  mapEntityToCodeTypeSummary,
+  validateCodeValueCodeChange,
+} from '../helpers/codes-value-mutation.helper.js';
 import { CodeTypeRepository } from '../repositories/code-type.repository.js';
 import { CodeValueRepository } from '../repositories/code-value.repository.js';
 import type {
@@ -44,17 +60,7 @@ import type {
   BulkImportCodesResultResponse,
   ExportCodesResponse,
 } from '../responses/codes.response.js';
-import {
-  buildCodesExportPayload,
-  buildCodesImportTemplatePayload,
-  executeBulkImportCodeValues,
-} from './codes-import-export.helper.js';
-import {
-  mapCodeValueEntityToManifestItem,
-  refreshCodeRegistryFromDatabase,
-  refreshSingleCodeTypeFromDatabase,
-  syncDeclaredCodeTypesAndValuesToDatabase,
-} from './codes-manifest-sync.helper.js';
+import type { CodeTypeSummaryBuildOptions } from '../types/codes.types.js';
 
 @Injectable()
 export class CodesService implements ICodesPublicService, OnModuleInit {
@@ -218,9 +224,9 @@ export class CodesService implements ICodesPublicService, OnModuleInit {
     });
 
     await this.auditLogService?.record({
-      module: 'codes',
-      feature: 'code-type-management',
-      action: 'codes.type.create',
+      module: CODES_AUDIT_META.MODULE,
+      feature: CODES_AUDIT_META.FEATURES.TYPE_MANAGEMENT,
+      action: CODES_AUDIT_META.ACTIONS.CREATE_TYPE,
       resourceType: 'code_type',
       resourceId: saved.code,
       beforeData: null,
@@ -268,9 +274,9 @@ export class CodesService implements ICodesPublicService, OnModuleInit {
     await this.refreshTypeFromDatabaseSafe(normalizedType);
 
     await this.auditLogService?.record({
-      module: 'codes',
-      feature: 'code-type-management',
-      action: 'codes.type.update',
+      module: CODES_AUDIT_META.MODULE,
+      feature: CODES_AUDIT_META.FEATURES.TYPE_MANAGEMENT,
+      action: CODES_AUDIT_META.ACTIONS.UPDATE_TYPE,
       resourceType: 'code_type',
       resourceId: normalizedType,
       beforeData: beforeSnapshot,
@@ -310,9 +316,9 @@ export class CodesService implements ICodesPublicService, OnModuleInit {
     });
 
     await this.auditLogService?.record({
-      module: 'codes',
-      feature: 'code-lookup-sync',
-      action: 'codes.sync_manifests',
+      module: CODES_AUDIT_META.MODULE,
+      feature: CODES_AUDIT_META.FEATURES.LOOKUP_SYNC,
+      action: CODES_AUDIT_META.ACTIONS.SYNC_MANIFESTS,
       resourceType: 'code_type',
       resourceId: 'ALL',
       beforeData: null,
@@ -392,9 +398,9 @@ export class CodesService implements ICodesPublicService, OnModuleInit {
     const view = this.syncEntityValueToRegistry(saved);
 
     await this.auditLogService?.record({
-      module: 'codes',
-      feature: 'code-value-management',
-      action: 'codes.value.create',
+      module: CODES_AUDIT_META.MODULE,
+      feature: CODES_AUDIT_META.FEATURES.VALUE_MANAGEMENT,
+      action: CODES_AUDIT_META.ACTIONS.CREATE_VALUE,
       resourceType: 'code_value',
       resourceId: `${normalizedType}:${saved.numericCode}`,
       beforeData: null,
@@ -428,7 +434,14 @@ export class CodesService implements ICodesPublicService, OnModuleInit {
     }
 
     if (dto.code !== undefined) {
-      await this.validateCodeValueCodeChange(normalizedType, numericCode, entity, dto.code);
+      await validateCodeValueCodeChange({
+        normalizedType,
+        numericCode,
+        entity,
+        rawNextCode: dto.code,
+        registry: this.registry,
+        codeValueRepository: this.codeValueRepository,
+      });
     }
 
     const beforeSnapshot = {
@@ -445,15 +458,15 @@ export class CodesService implements ICodesPublicService, OnModuleInit {
       status: entity.status,
     };
 
-    this.applyCodeValueUpdatesToEntity(entity, dto);
+    applyCodeValueUpdatesToEntity(entity, dto);
 
     const saved = await this.codeValueRepository.saveEntity(entity);
     const view = this.syncEntityValueToRegistry(saved);
 
     await this.auditLogService?.record({
-      module: 'codes',
-      feature: 'code-value-management',
-      action: 'codes.value.update',
+      module: CODES_AUDIT_META.MODULE,
+      feature: CODES_AUDIT_META.FEATURES.VALUE_MANAGEMENT,
+      action: CODES_AUDIT_META.ACTIONS.UPDATE_VALUE,
       resourceType: 'code_value',
       resourceId: `${normalizedType}:${saved.numericCode}`,
       beforeData: beforeSnapshot,
@@ -491,9 +504,9 @@ export class CodesService implements ICodesPublicService, OnModuleInit {
     }
 
     await this.auditLogService?.record({
-      module: 'codes',
-      feature: 'code-value-management',
-      action: 'codes.value.reorder',
+      module: CODES_AUDIT_META.MODULE,
+      feature: CODES_AUDIT_META.FEATURES.VALUE_MANAGEMENT,
+      action: CODES_AUDIT_META.ACTIONS.REORDER_VALUES,
       resourceType: 'code_type',
       resourceId: normalizedType,
       beforeData: null,
@@ -556,9 +569,9 @@ export class CodesService implements ICodesPublicService, OnModuleInit {
     this.registry.removeValue(normalizedType, numericCode);
 
     await this.auditLogService?.record({
-      module: 'codes',
-      feature: 'code-value-management',
-      action: 'codes.value.delete',
+      module: CODES_AUDIT_META.MODULE,
+      feature: CODES_AUDIT_META.FEATURES.VALUE_MANAGEMENT,
+      action: CODES_AUDIT_META.ACTIONS.DELETE_VALUE,
       resourceType: 'code_value',
       resourceId: `${normalizedType}:${numericCode}`,
       beforeData: {
@@ -598,9 +611,9 @@ export class CodesService implements ICodesPublicService, OnModuleInit {
     });
 
     await this.auditLogService?.record({
-      module: 'codes',
-      feature: 'code-import',
-      action: 'codes.value.bulk_import',
+      module: CODES_AUDIT_META.MODULE,
+      feature: CODES_AUDIT_META.FEATURES.IMPORT,
+      action: CODES_AUDIT_META.ACTIONS.BULK_IMPORT,
       resourceType: 'code_value',
       resourceId: fallbackTypeCode || 'ALL',
       beforeData: null,
@@ -634,9 +647,9 @@ export class CodesService implements ICodesPublicService, OnModuleInit {
     });
 
     await this.auditLogService?.record({
-      module: 'codes',
-      feature: 'code-export',
-      action: 'codes.export',
+      module: CODES_AUDIT_META.MODULE,
+      feature: CODES_AUDIT_META.FEATURES.EXPORT,
+      action: CODES_AUDIT_META.ACTIONS.EXPORT,
       resourceType: 'code_export',
       resourceId: response.fileName,
       beforeData: null,
@@ -656,97 +669,6 @@ export class CodesService implements ICodesPublicService, OnModuleInit {
   /** Xuất file mẫu (Template) Excel (.xlsx) hoặc CSV (.csv) phục vụ Import danh mục (Mục 5.4.6) */
   public exportImportTemplate(format: 'csv' | 'xlsx' = 'xlsx'): ExportCodesResponse {
     return buildCodesImportTemplatePayload(this.registry, format, this.resolveEffectiveLocale());
-  }
-
-  private async validateCodeValueCodeChange(
-    normalizedType: string,
-    numericCode: number,
-    entity: CodeValueEntity,
-    rawNextCode: string,
-  ): Promise<void> {
-    const nextCode = rawNextCode.trim().toUpperCase();
-    if (nextCode === entity.code.trim().toUpperCase()) return;
-
-    if (entity.isSystem) {
-      throw new ForbiddenAppException('codes.cannotChangeSystemCode', [
-        { typeCode: normalizedType, code: entity.code },
-      ]);
-    }
-
-    const usage = await this.registry.checkValueUsage(normalizedType, numericCode, entity.code);
-    if (usage.inUse) {
-      throw new ConflictAppException(
-        'codes.cannotChangeCodeInUse',
-        [
-          {
-            typeCode: normalizedType,
-            numericCode,
-            code: entity.code,
-            usageCount: usage.totalUsageCount,
-            details: usage.details,
-          },
-        ],
-        {
-          typeCode: normalizedType,
-          numericCode,
-          code: entity.code,
-          usageCount: usage.totalUsageCount,
-        },
-        HTTP_ERROR_CODE.CONFLICT,
-      );
-    }
-
-    const existingValues = await this.codeValueRepository.findByTypeCode(normalizedType, true);
-    const duplicate = existingValues.find(
-      (v) =>
-        Number(v.numericCode) !== Number(numericCode) && v.code.trim().toUpperCase() === nextCode,
-    );
-    if (duplicate) {
-      throw new ConflictAppException(
-        'codes.duplicateValueCode',
-        [{ typeCode: normalizedType, code: nextCode }],
-        { typeCode: normalizedType, code: nextCode },
-        HTTP_ERROR_CODE.DUPLICATE_RESOURCE,
-      );
-    }
-  }
-
-  private applyCodeValueUpdatesToEntity(
-    entity: CodeValueEntity,
-    dto: UpdateCodeValueRequest,
-  ): void {
-    if (dto.code !== undefined) {
-      entity.code = dto.code.trim().toUpperCase();
-    }
-    if (dto.name !== undefined) {
-      entity.name = dto.name.trim();
-      const existingLabels = safeJsonParseObject<Record<string, string>>(entity.labelsJson, {});
-      if (dto.labels?.vi === undefined) {
-        existingLabels.vi = entity.name;
-        entity.labelsJson = JSON.stringify(existingLabels);
-      }
-    }
-    if (dto.description !== undefined) entity.description = dto.description;
-    if (dto.behaviorCode !== undefined && !entity.isSystem) {
-      entity.behaviorCode = dto.behaviorCode ? dto.behaviorCode.trim().toUpperCase() : null;
-    }
-    if (dto.labels !== undefined) {
-      const existingLabels = safeJsonParseObject<Record<string, string>>(entity.labelsJson, {});
-      entity.labelsJson = JSON.stringify({ ...existingLabels, ...dto.labels });
-    }
-    if (dto.aliases !== undefined) {
-      entity.aliasesJson = JSON.stringify(dto.aliases);
-    }
-    if (dto.color !== undefined) entity.color = dto.color;
-    if (dto.icon !== undefined) entity.icon = dto.icon;
-    if (dto.sortOrder !== undefined) entity.sortOrder = dto.sortOrder;
-    if (dto.isDefault !== undefined) entity.isDefault = dto.isDefault;
-    if (dto.metadata !== undefined) {
-      entity.metadataJson = dto.metadata ? JSON.stringify(dto.metadata) : null;
-    }
-    if (dto.status !== undefined) {
-      entity.status = dto.status as CodeItemStatusCode;
-    }
   }
 
   private configureI18nBridge(): void {
@@ -807,28 +729,10 @@ export class CodesService implements ICodesPublicService, OnModuleInit {
 
   private toCodeTypeSummary(
     ct: CodeTypeEntity,
-    options?: { locale?: string | undefined; includeValues?: boolean | undefined },
+    options?: CodeTypeSummaryBuildOptions,
   ): CodeTypeSummary {
     const locale = this.resolveEffectiveLocale(options?.locale);
-    const values = this.registry.listValues(ct.code, {
-      includeInactive: true,
-      locale,
-    });
-    return {
-      id: Number(ct.id),
-      code: ct.code,
-      module: ct.module,
-      name: ct.name,
-      description: ct.description ?? null,
-      isSystem: Boolean(ct.isSystem),
-      allowCustomValues: Boolean(ct.allowCustomValues),
-      status:
-        Number(ct.status) === CODE_ITEM_STATUS.INACTIVE
-          ? CODE_ITEM_STATUS.INACTIVE
-          : CODE_ITEM_STATUS.ACTIVE,
-      totalValues: values.length,
-      ...(options?.includeValues ? { values } : {}),
-    };
+    return mapEntityToCodeTypeSummary(ct, this.registry, locale, options);
   }
 
   private async findDbCodeTypesSafe(query: ListCodeTypesQuery): Promise<CodeTypeEntity[]> {

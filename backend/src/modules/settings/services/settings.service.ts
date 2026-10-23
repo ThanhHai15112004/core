@@ -36,6 +36,20 @@ import type {
   SystemSettingSummary,
 } from '../contracts/index.js';
 import type { SettingGroupEntity } from '../entities/setting-group.entity.js';
+import { SETTING_CACHE_TTL_SEC, SETTINGS_AUDIT_META } from '../enum/settings.enum.js';
+import {
+  buildAndPersistNewSettingDefinition,
+  buildSystemSettingSummary,
+  mapSettingHistoryEntityToRecord,
+  persistAndAuditSettingHistory,
+  persistGlobalSettingUpdateRecord,
+  persistScopedSettingUpdateRecord,
+} from '../helpers/settings-audit-mapper.helper.js';
+import {
+  hydrateSettingRegistryFromDatabase,
+  upsertSettingDefinitionFromManifest,
+  upsertSettingGroupFromManifest,
+} from '../helpers/settings-hydration.helper.js';
 import { SettingGroupRepository } from '../repositories/setting-group.repository.js';
 import { SystemSettingHistoryRepository } from '../repositories/system-setting-history.repository.js';
 import { SystemSettingScopeRepository } from '../repositories/system-setting-scope.repository.js';
@@ -50,21 +64,6 @@ import type {
   ResolveSettingsQuery,
   UpdateSettingValueRequest,
 } from '../requests/settings.requests.js';
-import {
-  buildAndPersistNewSettingDefinition,
-  buildSystemSettingSummary,
-  mapSettingHistoryEntityToRecord,
-  persistAndAuditSettingHistory,
-  persistGlobalSettingUpdateRecord,
-  persistScopedSettingUpdateRecord,
-} from './settings-audit-mapper.helper.js';
-import {
-  hydrateSettingRegistryFromDatabase,
-  upsertSettingDefinitionFromManifest,
-  upsertSettingGroupFromManifest,
-} from './settings-hydration.helper.js';
-
-const SETTING_CACHE_TTL_SEC = 300;
 
 @Injectable()
 export class SettingsService implements ISettingsPublicService, OnModuleInit {
@@ -279,8 +278,8 @@ export class SettingsService implements ISettingsPublicService, OnModuleInit {
     if (this.auditLogService) {
       await this.auditLogService.record({
         actor,
-        module: 'settings',
-        feature: 'setting_groups',
+        module: SETTINGS_AUDIT_META.MODULE,
+        feature: SETTINGS_AUDIT_META.FEATURES.SETTING_GROUPS,
         action: 'SETTING_GROUP_CREATED',
         resourceType: 'setting_group',
         resourceId: registered.code,

@@ -7,9 +7,7 @@ import {
   MENU_STATUS,
   MENU_STATUS_NAME_BY_CODE,
   MENU_TYPE,
-  MENU_TYPE_NAME_BY_CODE,
   type MenuManifestItem,
-  type MenuPositionCode,
   MenuRegistryService,
   type MenuStatusCode,
   type MenuTreeEvaluationResult,
@@ -17,14 +15,9 @@ import {
   type RegisteredMenuDefinition,
   defaultMenuRegistry,
   detectMenuCycle,
-  discoverInstalledModules,
-  discoverManifestMenus,
-  parseMenuPosition,
   parseMenuStatusCode,
-  parseMenuTypeCode,
   validateMenuInput,
 } from '@packages/kernel/index.js';
-import { RequestContextService } from '@packages/logging/index.js';
 import { AuditLogService, type UserIdentity } from '@packages/security/index.js';
 import type {
   DeleteMenuResult,
@@ -33,7 +26,20 @@ import type {
   MenuSummary,
   SyncMenusResult,
 } from '../contracts/index.js';
-import type { MenuEntity } from '../entities/menu.entity.js';
+import {
+  MENU_TREE_CACHE_PREFIX,
+  MENU_TREE_CACHE_TTL_SEC,
+  type MenuAuditActionType,
+} from '../enum/settings.enum.js';
+import {
+  mapMenuDefinitionToSummary,
+  persistMenuAndDescendantsToDatabaseSafe,
+  persistSingleMenuToDatabaseSafe,
+  recordMenuAuditLog,
+  resolveParentMenuFromRegistry,
+  serializeMenuState,
+  syncManifestMenusToDatabaseAndRegistry,
+} from '../helpers/menus.helper.js';
 import { MenuRepository } from '../repositories/menu.repository.js';
 import type {
   CreateMenuRequest,
@@ -42,9 +48,6 @@ import type {
   ToggleMenuRequest,
   UpdateMenuRequest,
 } from '../requests/settings.requests.js';
-
-const MENU_TREE_CACHE_PREFIX = 'settings:menus:tree:';
-const MENU_TREE_CACHE_TTL_SEC = 300;
 
 @Injectable()
 export class MenusService implements IMenusPublicService, OnModuleInit {
@@ -85,108 +88,15 @@ export class MenusService implements IMenusPublicService, OnModuleInit {
    * vào bảng `menus` và Kernel `MenuRegistryService` (Mục 5.6).
    */
   public async syncManifests(customMenus?: readonly MenuManifestItem[]): Promise<SyncMenusResult> {
-    this.registry.setInstalledModules(discoverInstalledModules());
-    const manifestMenus = customMenus ?? discoverManifestMenus();
-    const syncedModules = new Set<string>();
-
-    const merged = new Map<string, MenuManifestItem>();
-    for (const item of manifestMenus) {
-      const code = item.code.trim().toUpperCase();
-      const mod = (item.module ?? 'settings').trim().toLowerCase();
-      merged.set(code, { ...item, code, module: mod });
-      syncedModules.add(mod);
-    }
-
-    if (this.menuRepository) {
-      try {
-        // Bước 1: Upsert các bản ghi menu vào bảng menus
-        for (const item of merged.values()) {
-          const validated = validateMenuInput({
-            code: item.code,
-            name: item.name,
-            status: item.status ?? MENU_STATUS.ACTIVE,
-            link: item.link,
-            linkApi: item.linkApi,
-            type: item.type ?? (item.link ? MENU_TYPE.ITEM : MENU_TYPE.GROUP),
-            key: item.key,
-            numOrder: item.numOrder ?? 0,
-            icon: item.icon,
-            position: item.position ?? MENU_POSITION.SIDEBAR,
-          });
-
-          const existing = await this.menuRepository.findByCode(validated.code);
-          if (!existing) {
-            await this.menuRepository.saveEntity({
-              code: validated.code,
-              name: validated.name,
-              status: validated.status,
-              link: validated.link,
-              linkApi: validated.linkApi,
-              type: validated.type,
-              parent: item.parent ?? null,
-              level: item.level ?? (item.parentCode || item.parent ? 2 : 1),
-              key: validated.key,
-              numOrder: validated.numOrder,
-              icon: validated.icon,
-              position: validated.position,
-            });
-          } else {
-            await this.menuRepository.saveEntity({
-              ...existing,
-              name: existing.name || validated.name,
-              link: existing.link ?? validated.link,
-              linkApi: existing.linkApi ?? validated.linkApi,
-              key: existing.key ?? validated.key,
-              icon: existing.icon ?? validated.icon,
-            });
-          }
-        }
-
-        // Bước 2: Giải quyết parentCode -> parent ID và tính lại level
-        const allDbMenus = await this.menuRepository.findFiltered();
-        const dbByCode = new Map<string, MenuEntity>();
-        for (const m of allDbMenus) {
-          dbByCode.set(m.code.trim().toUpperCase(), m);
-        }
-
-        for (const item of merged.values()) {
-          if (!item.parentCode?.trim()) continue;
-          const childEntity = dbByCode.get(item.code.trim().toUpperCase());
-          const parentEntity = dbByCode.get(item.parentCode.trim().toUpperCase());
-          if (childEntity && parentEntity && childEntity.parent !== parentEntity.id) {
-            childEntity.parent = parentEntity.id;
-            childEntity.level = (parentEntity.level ?? 1) + 1;
-            await this.menuRepository.saveEntity(childEntity);
-          }
-        }
-
-        const refreshedMenus = await this.menuRepository.findFiltered();
-        for (const dbMenu of refreshedMenus) {
-          const mod = merged.get(dbMenu.code.trim().toUpperCase())?.module ?? 'settings';
-          this.syncEntityToRegistry(dbMenu, mod);
-          syncedModules.add(mod);
-        }
-        this.registry.recomputeHierarchyLevels();
-        this.registry.invalidateCache({ action: 'SYNC', silent: true });
-        await this.clearL2CacheSafe();
+    return syncManifestMenusToDatabaseAndRegistry({
+      customMenus,
+      registry: this.registry,
+      menuRepository: this.menuRepository,
+      clearL2CacheSafe: () => this.clearL2CacheSafe(),
+      markHydrated: () => {
         this.dbHydrated = true;
-
-        return {
-          syncedModules: Array.from(syncedModules).sort(),
-          totalMenus: refreshedMenus.length,
-        };
-      } catch {
-        // Fallback to in-memory registry when DB is unavailable in unit tests
-      }
-    }
-
-    this.registry.registerManifestMenus(Array.from(merged.values()));
-    await this.clearL2CacheSafe();
-
-    return {
-      syncedModules: Array.from(syncedModules).sort(),
-      totalMenus: this.registry.listMenus().length,
-    };
+      },
+    });
   }
 
   /**
@@ -203,7 +113,7 @@ export class MenusService implements IMenusPublicService, OnModuleInit {
       position: query?.position,
       search: query?.q,
     });
-    return items.map((m) => this.mapDefinitionToSummary(m));
+    return items.map((m) => mapMenuDefinitionToSummary(m));
   }
 
   /**
@@ -216,7 +126,7 @@ export class MenusService implements IMenusPublicService, OnModuleInit {
     if (!def) {
       throw new NotFoundAppException(`Menu '${normCode}' not found`);
     }
-    return this.mapDefinitionToSummary(def);
+    return mapMenuDefinitionToSummary(def);
   }
 
   /**
@@ -290,7 +200,7 @@ export class MenusService implements IMenusPublicService, OnModuleInit {
       throw new ConflictAppException(`Menu '${validated.code}' already exists`);
     }
 
-    const resolvedParent = this.resolveParentMenu(dto.parent, dto.parentCode);
+    const resolvedParent = resolveParentMenuFromRegistry(this.registry, dto.parent, dto.parentCode);
     const level = resolvedParent ? resolvedParent.level + 1 : 1;
     const moduleName = (dto.module ?? 'settings').trim().toLowerCase();
     const nowIso = new Date().toISOString();
@@ -342,12 +252,12 @@ export class MenusService implements IMenusPublicService, OnModuleInit {
       action: 'CREATE',
       code: registered.code,
       oldState: null,
-      newState: this.serializeMenu(registered),
+      newState: serializeMenuState(registered),
       actor,
       reason: dto.reason ?? `Created menu ${registered.code}`,
     });
 
-    return this.mapDefinitionToSummary(registered);
+    return mapMenuDefinitionToSummary(registered);
   }
 
   /**
@@ -365,12 +275,16 @@ export class MenusService implements IMenusPublicService, OnModuleInit {
       throw new NotFoundAppException(`Menu '${normCode}' not found`);
     }
 
-    const oldState = this.serializeMenu(existing);
+    const oldState = serializeMenuState(existing);
 
     let nextParentId = existing.parent;
     let nextParentCode = existing.parentCode;
     if (dto.parent !== undefined || dto.parentCode !== undefined) {
-      const resolvedParent = this.resolveParentMenu(dto.parent, dto.parentCode);
+      const resolvedParent = resolveParentMenuFromRegistry(
+        this.registry,
+        dto.parent,
+        dto.parentCode,
+      );
       nextParentId = resolvedParent ? resolvedParent.id : null;
       nextParentCode = resolvedParent ? resolvedParent.code : null;
       detectMenuCycle(
@@ -414,18 +328,18 @@ export class MenusService implements IMenusPublicService, OnModuleInit {
       updatedAt: nowIso,
     });
 
-    await this.persistMenuAndDescendantsSafe(updated.id);
+    await persistMenuAndDescendantsToDatabaseSafe(updated.id, this.registry, this.menuRepository);
     await this.clearL2CacheSafe();
     await this.recordAudit({
       action: 'UPDATE',
       code: updated.code,
       oldState,
-      newState: this.serializeMenu(updated),
+      newState: serializeMenuState(updated),
       actor,
       reason: dto.reason ?? `Updated menu ${updated.code}`,
     });
 
-    return this.mapDefinitionToSummary(updated);
+    return mapMenuDefinitionToSummary(updated);
   }
 
   /**
@@ -443,7 +357,7 @@ export class MenusService implements IMenusPublicService, OnModuleInit {
       throw new NotFoundAppException(`Menu '${normCode}' not found`);
     }
 
-    const oldState = this.serializeMenu(existing);
+    const oldState = serializeMenuState(existing);
     const nextStatus: MenuStatusCode =
       dto?.status !== undefined
         ? parseMenuStatusCode(dto.status)
@@ -476,14 +390,14 @@ export class MenusService implements IMenusPublicService, OnModuleInit {
       this.registry.invalidateCache({ action: 'TOGGLE', code: updated.code });
     }
 
-    await this.persistMenuAndDescendantsSafe(updated.id);
+    await persistMenuAndDescendantsToDatabaseSafe(updated.id, this.registry, this.menuRepository);
     await this.clearL2CacheSafe();
     await this.recordAudit({
       action: 'TOGGLE',
       code: updated.code,
       oldState,
       newState: {
-        ...this.serializeMenu(updated),
+        ...serializeMenuState(updated),
         cascadeChildren: Boolean(dto?.cascadeChildren),
       },
       actor,
@@ -492,7 +406,7 @@ export class MenusService implements IMenusPublicService, OnModuleInit {
         `Toggled menu ${updated.code} status to ${MENU_STATUS_NAME_BY_CODE[nextStatus]}`,
     });
 
-    return this.mapDefinitionToSummary(this.registry.getMenuByCode(normCode)!);
+    return mapMenuDefinitionToSummary(this.registry.getMenuByCode(normCode)!);
   }
 
   /**
@@ -516,7 +430,11 @@ export class MenusService implements IMenusPublicService, OnModuleInit {
       let nextParentId = existing.parent;
       let nextParentCode = existing.parentCode;
       if (item.parent !== undefined || item.parentCode !== undefined) {
-        const resolvedParent = this.resolveParentMenu(item.parent, item.parentCode);
+        const resolvedParent = resolveParentMenuFromRegistry(
+          this.registry,
+          item.parent,
+          item.parentCode,
+        );
         nextParentId = resolvedParent ? resolvedParent.id : null;
         nextParentCode = resolvedParent ? resolvedParent.code : null;
         detectMenuCycle(
@@ -545,7 +463,7 @@ export class MenusService implements IMenusPublicService, OnModuleInit {
     for (const code of updatedCodes) {
       const def = this.registry.getMenuByCode(code);
       if (def) {
-        await this.persistSingleMenuSafe(def);
+        await persistSingleMenuToDatabaseSafe(def, this.menuRepository);
       }
     }
 
@@ -562,7 +480,7 @@ export class MenusService implements IMenusPublicService, OnModuleInit {
     return updatedCodes
       .map((c) => this.registry.getMenuByCode(c))
       .filter((m): m is RegisteredMenuDefinition => Boolean(m))
-      .map((m) => this.mapDefinitionToSummary(m));
+      .map((m) => mapMenuDefinitionToSummary(m));
   }
 
   /**
@@ -583,7 +501,7 @@ export class MenusService implements IMenusPublicService, OnModuleInit {
       );
     }
 
-    const oldState = this.serializeMenu(existing);
+    const oldState = serializeMenuState(existing);
 
     if (this.menuRepository) {
       try {
@@ -626,153 +544,10 @@ export class MenusService implements IMenusPublicService, OnModuleInit {
     };
   }
 
-  private resolveParentMenu(
-    parentId?: number | null | undefined,
-    parentCode?: string | null | undefined,
-  ): RegisteredMenuDefinition | null {
-    if (parentCode !== undefined) {
-      if (parentCode === null || parentCode.trim() === '') {
-        return null;
-      }
-      const found = this.registry.getMenuByCode(parentCode.trim().toUpperCase());
-      if (!found) {
-        throw new NotFoundAppException(
-          `Parent menu '${parentCode.trim().toUpperCase()}' not found`,
-        );
-      }
-      return found;
-    }
-
-    if (parentId !== undefined) {
-      if (parentId === null || parentId <= 0) {
-        return null;
-      }
-      const found = this.registry.getMenuById(parentId);
-      if (!found) {
-        throw new NotFoundAppException(`Parent menu #${parentId} not found`);
-      }
-      return found;
-    }
-
-    return null;
-  }
-
   private async ensureHydrated(): Promise<void> {
     if (!this.dbHydrated && this.registry.listMenus().length === 0) {
       await this.syncManifests();
       this.dbHydrated = true;
-    }
-  }
-
-  private syncEntityToRegistry(
-    entity: MenuEntity,
-    moduleName = 'settings',
-  ): RegisteredMenuDefinition {
-    const status = parseMenuStatusCode(entity.status, MENU_STATUS.ACTIVE);
-    const type = parseMenuTypeCode(entity.type, MENU_TYPE.ITEM);
-    const position: MenuPositionCode = parseMenuPosition(entity.position, MENU_POSITION.SIDEBAR);
-    return this.registry.registerMenu(
-      {
-        id: Number(entity.id),
-        code: entity.code.trim().toUpperCase(),
-        module: moduleName,
-        name: entity.name,
-        status,
-        statusName: MENU_STATUS_NAME_BY_CODE[status],
-        link: entity.link ?? null,
-        linkApi: entity.linkApi ?? null,
-        type,
-        typeName: MENU_TYPE_NAME_BY_CODE[type],
-        parent: entity.parent ? Number(entity.parent) : null,
-        level: Number(entity.level ?? 1),
-        key: entity.key ?? null,
-        numOrder: Number(entity.numOrder ?? 0),
-        icon: entity.icon ?? null,
-        position,
-        updatedAt: entity.updatedAt ? entity.updatedAt.toISOString() : new Date().toISOString(),
-      },
-      { silent: true },
-    );
-  }
-
-  private mapDefinitionToSummary(def: RegisteredMenuDefinition): MenuSummary {
-    return {
-      id: def.id,
-      code: def.code,
-      module: def.module,
-      name: def.name,
-      status: def.status,
-      statusName: def.statusName,
-      link: def.link,
-      linkApi: def.linkApi,
-      type: def.type,
-      typeName: def.typeName,
-      parent: def.parent,
-      parentCode: def.parentCode,
-      level: def.level,
-      key: def.key,
-      numOrder: def.numOrder,
-      icon: def.icon,
-      position: def.position,
-      updatedAt: def.updatedAt ?? new Date().toISOString(),
-    };
-  }
-
-  private serializeMenu(def: RegisteredMenuDefinition): Record<string, unknown> {
-    return {
-      id: def.id,
-      code: def.code,
-      module: def.module,
-      name: def.name,
-      status: def.status,
-      statusName: def.statusName,
-      link: def.link,
-      linkApi: def.linkApi,
-      type: def.type,
-      typeName: def.typeName,
-      parent: def.parent,
-      parentCode: def.parentCode,
-      level: def.level,
-      key: def.key,
-      numOrder: def.numOrder,
-      icon: def.icon,
-      position: def.position,
-    };
-  }
-
-  private async persistSingleMenuSafe(def: RegisteredMenuDefinition): Promise<void> {
-    if (!this.menuRepository) return;
-    try {
-      const existing = await this.menuRepository.findByCode(def.code);
-      if (existing) {
-        await this.menuRepository.saveEntity({
-          ...existing,
-          name: def.name,
-          status: def.status,
-          link: def.link,
-          linkApi: def.linkApi,
-          type: def.type,
-          parent: def.parent,
-          level: def.level,
-          key: def.key,
-          numOrder: def.numOrder,
-          icon: def.icon,
-          position: def.position,
-        });
-      }
-    } catch {
-      // Ignore when DB is offline in unit tests
-    }
-  }
-
-  private async persistMenuAndDescendantsSafe(rootId: number): Promise<void> {
-    if (!this.menuRepository) return;
-    const idsToPersist = [rootId, ...this.registry.getDescendantIds(rootId)];
-    for (const id of idsToPersist) {
-      const def = this.registry.getMenuById(id);
-      if (def) {
-        await this.persistSingleMenuSafe(def);
-      }
     }
   }
 
@@ -790,48 +565,16 @@ export class MenusService implements IMenusPublicService, OnModuleInit {
   }
 
   private async recordAudit(params: {
-    action: 'CREATE' | 'UPDATE' | 'TOGGLE' | 'REORDER' | 'DELETE';
+    action: MenuAuditActionType;
     code: string;
     oldState: Record<string, unknown> | null;
     newState: Record<string, unknown>;
     actor?: UserIdentity | undefined;
     reason?: string | null | undefined;
   }): Promise<void> {
-    if (!this.auditLogService) return;
-    const reqCtx = RequestContextService.current();
-    const resolvedActor = params.actor ?? (reqCtx?.actor as UserIdentity | undefined) ?? undefined;
-    const rawUserId = resolvedActor?.id ?? reqCtx?.userId;
-    const actorUserId =
-      typeof rawUserId === 'number' && Number.isInteger(rawUserId) && rawUserId > 0
-        ? rawUserId
-        : typeof rawUserId === 'string' && /^\d+$/.test(rawUserId.trim())
-          ? Number.parseInt(rawUserId.trim(), 10)
-          : null;
-    const actorIdentifier =
-      resolvedActor?.email ??
-      resolvedActor?.username ??
-      (actorUserId ? `user:${actorUserId}` : 'system');
-
-    try {
-      await this.auditLogService.record({
-        actor: resolvedActor,
-        actorUserId,
-        actorIdentifier,
-        module: 'settings',
-        feature: 'menus',
-        action: `menu.${params.action.toLowerCase()}`,
-        resourceType: 'menu',
-        resourceId: params.code,
-        beforeData: params.oldState,
-        afterData: params.newState,
-        reason: params.reason ?? null,
-        ipAddress: reqCtx?.ipAddress ?? '127.0.0.1',
-        userAgent: reqCtx?.userAgent ?? null,
-        requestId: reqCtx?.requestId ?? reqCtx?.correlationId ?? null,
-        correlationId: reqCtx?.correlationId ?? null,
-      });
-    } catch {
-      // Ignore audit log error
-    }
+    await recordMenuAuditLog({
+      ...params,
+      auditLogService: this.auditLogService,
+    });
   }
 }

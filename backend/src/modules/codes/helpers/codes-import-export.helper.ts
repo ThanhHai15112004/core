@@ -2,9 +2,7 @@ import {
   BadRequestAppException,
   CODE_ITEM_STATUS,
   type CodeRegistryService,
-  type CodeTypeManifestItem,
   type ResolvedCodeValueView,
-  type SettingRegistryService,
   buildCsvContent,
   buildXlsxBuffer,
   cleanSpreadsheetCell,
@@ -19,35 +17,22 @@ import {
   LocaleFormatter,
   resolveSystemDefaultLocale,
 } from '@packages/i18n/index.js';
-import type { CodeTypeSummary } from '../contracts/index.js';
-import type { CodeTypeRepository } from '../repositories/code-type.repository.js';
-import type { CodeValueRepository } from '../repositories/code-value.repository.js';
+import { CODES_EXPORT_HEADERS, CODES_SETTING_KEYS } from '../enum/codes.enum.js';
 import {
   type BulkImportCodeValueRowInput,
   type BulkImportCodesRequest,
-  type CreateCodeValueRequest,
-  type ExportCodesQuery,
   bulkImportCodeValueRowSchema,
 } from '../requests/codes.requests.js';
 import type {
   BulkImportCodesResultResponse,
   ExportCodesResponse,
 } from '../responses/codes.response.js';
+import type {
+  BuildCodesExportPayloadParams,
+  ExecuteBulkImportCodesParams,
+} from '../types/codes.types.js';
 
-export const CODES_EXPORT_HEADERS = [
-  'STT',
-  'Mã nhóm danh mục',
-  'Tên nhóm danh mục',
-  'Mã số',
-  'Mã mục',
-  'Mã hành vi',
-  'Tên hiển thị (VI)',
-  'Tên tiếng Anh (EN)',
-  'Từ đồng nghĩa',
-  'Thứ tự',
-  'Trạng thái',
-  'Nguồn',
-] as const;
+export { CODES_EXPORT_HEADERS };
 
 export function formatCodeExportRow(
   registry: CodeRegistryService,
@@ -193,20 +178,9 @@ export function parseImportPayloadToRows(
   }));
 }
 
-export async function executeBulkImportCodeValues(params: {
-  dto: BulkImportCodesRequest;
-  fallbackTypeCode: string;
-  codeTypeRepository: CodeTypeRepository;
-  codeValueRepository: CodeValueRepository;
-  manifestCodeTypes: ReadonlyMap<string, CodeTypeManifestItem>;
-  registry: CodeRegistryService;
-  settingRegistry?: SettingRegistryService | undefined;
-  syncManifests: () => Promise<unknown>;
-  createCodeValue: (
-    typeCode: string,
-    dto: CreateCodeValueRequest,
-  ) => Promise<ResolvedCodeValueView>;
-}): Promise<BulkImportCodesResultResponse> {
+export async function executeBulkImportCodeValues(
+  params: ExecuteBulkImportCodesParams,
+): Promise<BulkImportCodesResultResponse> {
   const {
     dto,
     fallbackTypeCode,
@@ -220,14 +194,18 @@ export async function executeBulkImportCodeValues(params: {
   } = params;
 
   const rawRows = parseImportPayloadToRows(dto, fallbackTypeCode);
-  const maxImportRows = settingRegistry.getNumber('codes.import.max_rows', undefined, 5000);
+  const maxImportRows = settingRegistry.getNumber(
+    CODES_SETTING_KEYS.IMPORT_MAX_ROWS,
+    undefined,
+    5000,
+  );
   if (rawRows.length > maxImportRows) {
     throw new BadRequestAppException('codes.importMaxRowsExceeded', [
       { totalRows: rawRows.length, maxRows: maxImportRows },
     ]);
   }
   const autoCreateMissingType = settingRegistry.getBoolean(
-    'codes.import.auto_create_missing_type',
+    CODES_SETTING_KEYS.IMPORT_AUTO_CREATE_MISSING_TYPE,
     undefined,
     true,
   );
@@ -410,13 +388,9 @@ export async function executeBulkImportCodeValues(params: {
   };
 }
 
-export function buildCodesExportPayload(params: {
-  registry: CodeRegistryService;
-  settingRegistry?: SettingRegistryService | undefined;
-  allTypes: readonly CodeTypeSummary[];
-  query: Partial<ExportCodesQuery>;
-  locale?: string | undefined;
-}): ExportCodesResponse {
+export function buildCodesExportPayload(
+  params: BuildCodesExportPayloadParams,
+): ExportCodesResponse {
   const {
     registry,
     settingRegistry = defaultSettingRegistry,
@@ -447,7 +421,7 @@ export function buildCodesExportPayload(params: {
 
   const effectiveTimezone = LocaleFormatter.resolveActiveTimezone(LocaleContext.getTimezone());
   const defaultReportTitle = settingRegistry.getString(
-    'codes.export.default_report_title',
+    CODES_SETTING_KEYS.EXPORT_DEFAULT_REPORT_TITLE,
     undefined,
     'DANH MỤC DÙNG CHUNG HỆ THỐNG (MASTER DATA)',
   );

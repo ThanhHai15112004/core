@@ -1,4 +1,6 @@
 export * from './contracts/index.js';
+export * from './enum/settings.enum.js';
+export * from './types/settings.types.js';
 export * from './routes/settings.routes.js';
 export * from './requests/settings.requests.js';
 export * from './requests/i18n.requests.js';

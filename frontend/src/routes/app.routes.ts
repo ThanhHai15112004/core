@@ -4,6 +4,8 @@ export const ROUTES = {
   ORGANIZATIONS: '/organizations',
   ROLES: '/roles',
   USERS: '/users',
+  CODES: '/codes',
+  SETTINGS: '/settings',
   FILES: '/files',
   SYSTEM_CONSOLE: '/system-console',
 } as const;

@@ -229,3 +229,23 @@ export const authStyles = {
   } satisfies React.CSSProperties,
 };
 
+export const authCardStyle = authStyles.card;
+export const authInputStyle = authStyles.input;
+export const authLabelStyle = authStyles.label;
+export const authBtnPrimaryStyle = authStyles.btnPrimary;
+export const authBtnSecondaryStyle = authStyles.btnSecondary;
+export const authBtnDangerStyle = authStyles.btnDanger;
+
+export const authBadgeStyle = (color: string, bg: string): React.CSSProperties => ({
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: '4px',
+  padding: '3px 9px',
+  borderRadius: '999px',
+  fontSize: '11.5px',
+  fontWeight: 700,
+  color,
+  background: bg,
+});
+
+

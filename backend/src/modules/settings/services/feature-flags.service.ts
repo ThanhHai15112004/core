@@ -13,15 +13,10 @@ import {
   UnprocessableEntityAppException,
   defaultFeatureFlagRegistry,
   defaultMenuRegistry,
-  discoverInstalledModules,
-  discoverManifestFeatureFlags,
   parseNumericUserId,
   resolvePagination,
-  safeJsonParseObject,
-  safeJsonParseStringArray,
   validateFeatureFlagRules,
 } from '@packages/kernel/index.js';
-import { RequestContextService } from '@packages/logging/index.js';
 import { AuditLogService, type UserIdentity } from '@packages/security/index.js';
 import type {
   FeatureFlagHistoryRecord,
@@ -29,8 +24,20 @@ import type {
   IFeatureFlagsPublicService,
   SyncFeatureFlagsResult,
 } from '../contracts/index.js';
-import type { FeatureFlagHistoryEntity } from '../entities/feature-flag-history.entity.js';
-import type { FeatureFlagEntity } from '../entities/feature-flag.entity.js';
+import {
+  FEATURE_FLAG_CACHE_TTL_SEC,
+  type FeatureFlagHistoryActionType,
+} from '../enum/settings.enum.js';
+import {
+  buildFeatureFlagEvaluationCacheKey,
+  buildFeatureFlagSnapshot,
+  isCachedFeatureFlagWindowStillValid,
+  mapFeatureFlagDefinitionToSummary,
+  mapFeatureFlagEntityToDefinition,
+  mapFeatureFlagHistoryEntityToRecord,
+  recordFeatureFlagHistoryAndAudit,
+  syncManifestFeatureFlagsToDatabaseAndRegistry,
+} from '../helpers/feature-flags.helper.js';
 import { FeatureFlagHistoryRepository } from '../repositories/feature-flag-history.repository.js';
 import { FeatureFlagRepository } from '../repositories/feature-flag.repository.js';
 import type {
@@ -41,8 +48,6 @@ import type {
   ToggleFeatureFlagRequest,
   UpdateFeatureFlagRequest,
 } from '../requests/settings.requests.js';
-
-const FEATURE_FLAG_CACHE_TTL_SEC = 300;
 
 @Injectable()
 export class FeatureFlagsService implements IFeatureFlagsPublicService, OnModuleInit {
@@ -121,86 +126,15 @@ export class FeatureFlagsService implements IFeatureFlagsPublicService, OnModule
   public async syncManifests(
     customFlags?: readonly FeatureFlagManifestItem[],
   ): Promise<SyncFeatureFlagsResult> {
-    this.registry.setInstalledModules(discoverInstalledModules());
-    const manifestFlags = customFlags ?? discoverManifestFeatureFlags();
-    const syncedModules = new Set<string>();
-
-    const mergedFlags = new Map<string, FeatureFlagManifestItem>();
-    for (const item of manifestFlags) {
-      const normalizedKey = item.key.trim().toLowerCase();
-      mergedFlags.set(normalizedKey, item);
-      syncedModules.add((item.module ?? normalizedKey.split('.')[0] ?? 'settings').toLowerCase());
-    }
-
-    if (this.flagRepository) {
-      try {
-        for (const item of mergedFlags.values()) {
-          const key = item.key.trim().toLowerCase();
-          const moduleName = (item.module ?? key.split('.')[0] ?? 'settings').trim().toLowerCase();
-          const validated = validateFeatureFlagRules({
-            key,
-            name: item.name,
-            description: item.description,
-            rolloutPercentage: item.rolloutPercentage ?? 100,
-            targetUserIds: item.targetUserIds ?? [],
-            targetRoles: item.targetRoles ?? [],
-            targetOrganizationUnitIds: item.targetOrganizationUnitIds ?? [],
-            startsAt: item.startsAt ?? null,
-            endsAt: item.endsAt ?? null,
-          });
-
-          const existing = await this.flagRepository.findByKey(key);
-          if (!existing) {
-            await this.flagRepository.saveEntity({
-              flagKey: key,
-              module: moduleName,
-              name: item.name.trim(),
-              description: item.description.trim(),
-              isEnabled: Boolean(item.isEnabled ?? false),
-              rolloutPercentage: validated.rolloutPercentage,
-              targetUserIdsJson: JSON.stringify(validated.targetUserIds),
-              targetRolesJson: JSON.stringify(validated.targetRoles),
-              targetOrgUnitIdsJson: JSON.stringify(validated.targetOrganizationUnitIds),
-              startsAt: validated.startsAt ? new Date(validated.startsAt) : null,
-              endsAt: validated.endsAt ? new Date(validated.endsAt) : null,
-              metadataJson: item.metadata ? JSON.stringify(item.metadata) : null,
-              isSystem: item.isSystem ?? true,
-              status:
-                item.status === FEATURE_FLAG_STATUS.ARCHIVED
-                  ? FEATURE_FLAG_STATUS.ARCHIVED
-                  : FEATURE_FLAG_STATUS.ACTIVE,
-            });
-          } else {
-            await this.flagRepository.saveEntity({
-              ...existing,
-              module: moduleName,
-              name: existing.name || item.name.trim(),
-              description: existing.description || item.description.trim(),
-              isSystem: item.isSystem ?? existing.isSystem,
-            });
-          }
-        }
-
-        const allDbFlags = await this.flagRepository.findFiltered();
-        for (const entity of allDbFlags) {
-          this.syncEntityIntoRegistry(entity);
-        }
+    return syncManifestFeatureFlagsToDatabaseAndRegistry({
+      customFlags,
+      registry: this.registry,
+      flagRepository: this.flagRepository,
+      upsertDefinitionSilent: (def) => this.upsertDefinitionSilent(def),
+      markHydrated: () => {
         this.dbHydrated = true;
-
-        return {
-          syncedModules: Array.from(syncedModules),
-          totalFlags: allDbFlags.length,
-        };
-      } catch {
-        // Fallback to in-memory registry below
-      }
-    }
-
-    this.registry.registerManifestFlags(Array.from(mergedFlags.values()));
-    return {
-      syncedModules: Array.from(syncedModules),
-      totalFlags: this.registry.listDefinitions().length,
-    };
+      },
+    });
   }
 
   /**
@@ -222,7 +156,6 @@ export class FeatureFlagsService implements IFeatureFlagsPublicService, OnModule
       );
     }
 
-    // 5.2.2: Không dùng Feature Flag thay cho việc cài module — chặn tạo/bật flag cho module chưa cài đặt
     if (!this.registry.isModuleInstalled(moduleName)) {
       throw new UnprocessableEntityAppException(
         `Cannot create or enable feature flag "${key}" because module "${moduleName}" is not installed in enabledModules.`,
@@ -311,13 +244,7 @@ export class FeatureFlagsService implements IFeatureFlagsPublicService, OnModule
       updatedAt: nowIso,
     };
 
-    this.isPublishingChange = true;
-    try {
-      this.registry.upsertDefinition(definition);
-    } finally {
-      this.isPublishingChange = false;
-    }
-
+    this.upsertDefinitionSilent(definition);
     await this.invalidateCacheForFlag(key);
     const summary = this.toSummary(definition);
 
@@ -326,7 +253,7 @@ export class FeatureFlagsService implements IFeatureFlagsPublicService, OnModule
       flagKey: key,
       action: 'CREATE',
       oldState: null,
-      newState: this.toSnapshot(summary),
+      newState: buildFeatureFlagSnapshot(summary),
       reason: input.reason ?? 'Created feature flag',
       actor,
     });
@@ -445,17 +372,11 @@ export class FeatureFlagsService implements IFeatureFlagsPublicService, OnModule
       updatedAt: nowIso,
     };
 
-    this.isPublishingChange = true;
-    try {
-      this.registry.upsertDefinition(updatedDef);
-    } finally {
-      this.isPublishingChange = false;
-    }
-
+    this.upsertDefinitionSilent(updatedDef);
     await this.invalidateCacheForFlag(key);
     const updatedSummary = this.toSummary(updatedDef);
 
-    const action =
+    const action: FeatureFlagHistoryActionType =
       nextStatus === FEATURE_FLAG_STATUS.ARCHIVED && current.status !== FEATURE_FLAG_STATUS.ARCHIVED
         ? 'ARCHIVE'
         : 'UPDATE';
@@ -464,8 +385,8 @@ export class FeatureFlagsService implements IFeatureFlagsPublicService, OnModule
       flagId: current.id,
       flagKey: key,
       action,
-      oldState: this.toSnapshot(current),
-      newState: this.toSnapshot(updatedSummary),
+      oldState: buildFeatureFlagSnapshot(current),
+      newState: buildFeatureFlagSnapshot(updatedSummary),
       reason: input.reason ?? `Updated feature flag (${action})`,
       actor,
     });
@@ -540,13 +461,7 @@ export class FeatureFlagsService implements IFeatureFlagsPublicService, OnModule
       updatedAt: nowIso,
     };
 
-    this.isPublishingChange = true;
-    try {
-      this.registry.upsertDefinition(updatedDef);
-    } finally {
-      this.isPublishingChange = false;
-    }
-
+    this.upsertDefinitionSilent(updatedDef);
     await this.invalidateCacheForFlag(key);
     const updatedSummary = this.toSummary(updatedDef);
 
@@ -554,8 +469,8 @@ export class FeatureFlagsService implements IFeatureFlagsPublicService, OnModule
       flagId: current.id,
       flagKey: key,
       action: 'TOGGLE',
-      oldState: this.toSnapshot(current),
-      newState: this.toSnapshot(updatedSummary),
+      oldState: buildFeatureFlagSnapshot(current),
+      newState: buildFeatureFlagSnapshot(updatedSummary),
       reason: input.reason ?? (input.isEnabled ? 'Enabled feature flag' : 'Disabled feature flag'),
       actor,
     });
@@ -598,16 +513,15 @@ export class FeatureFlagsService implements IFeatureFlagsPublicService, OnModule
     await this.ensureLoadedFromDb();
     const normalizedKey = key.trim().toLowerCase();
 
-    // Khi có truyền thời điểm kiểm thử `at`, đánh giá trực tiếp không qua cache tĩnh để chính xác tuyệt đối
     if (context?.at !== undefined && context?.at !== null) {
       return this.registry.evaluate(normalizedKey, context, false);
     }
 
-    const cacheKey = this.buildEvaluationCacheKey(normalizedKey, context);
+    const cacheKey = buildFeatureFlagEvaluationCacheKey(normalizedKey, context);
     const nowMs = Date.now();
 
     const l1 = this.evaluationCache.get(cacheKey);
-    if (l1 && l1.expiresAtMs > nowMs && this.isCachedWindowStillValid(l1.entry, nowMs)) {
+    if (l1 && l1.expiresAtMs > nowMs && isCachedFeatureFlagWindowStillValid(l1.entry, nowMs)) {
       return {
         ...l1.entry,
         fromCache: true,
@@ -617,7 +531,7 @@ export class FeatureFlagsService implements IFeatureFlagsPublicService, OnModule
     if (this.cacheProvider) {
       try {
         const l2Cached = await this.cacheProvider.get<FeatureFlagEvaluationResult>(cacheKey);
-        if (l2Cached && this.isCachedWindowStillValid(l2Cached, nowMs)) {
+        if (l2Cached && isCachedFeatureFlagWindowStillValid(l2Cached, nowMs)) {
           const cachedView: FeatureFlagEvaluationResult = {
             ...l2Cached,
             fromCache: true,
@@ -724,7 +638,7 @@ export class FeatureFlagsService implements IFeatureFlagsPublicService, OnModule
           limit,
         });
         if (dbRows.length > 0) {
-          return dbRows.map((row) => this.mapHistoryEntityToRecord(row));
+          return dbRows.map((row) => mapFeatureFlagHistoryEntityToRecord(row));
         }
       } catch {
         // Fallback to in-memory history
@@ -752,7 +666,8 @@ export class FeatureFlagsService implements IFeatureFlagsPublicService, OnModule
       try {
         const entity = await this.flagRepository.findByKey(normalizedKey);
         if (entity) {
-          def = this.syncEntityIntoRegistry(entity);
+          def = mapFeatureFlagEntityToDefinition(entity);
+          this.upsertDefinitionSilent(def);
         }
       } catch {
         // Ignore DB error
@@ -774,7 +689,7 @@ export class FeatureFlagsService implements IFeatureFlagsPublicService, OnModule
       try {
         const allDbFlags = await this.flagRepository.findFiltered();
         for (const entity of allDbFlags) {
-          this.syncEntityIntoRegistry(entity);
+          this.upsertDefinitionSilent(mapFeatureFlagEntityToDefinition(entity));
         }
       } catch {
         // Ignore DB error when table is not yet migrated
@@ -786,263 +701,41 @@ export class FeatureFlagsService implements IFeatureFlagsPublicService, OnModule
     await this.syncManifests();
   }
 
-  private syncEntityIntoRegistry(entity: FeatureFlagEntity): RegisteredFeatureFlagDefinition {
-    const def: RegisteredFeatureFlagDefinition = {
-      id: entity.id,
-      key: entity.flagKey.trim().toLowerCase(),
-      module: entity.module.trim().toLowerCase(),
-      name: entity.name,
-      description: entity.description,
-      isEnabled: Boolean(entity.isEnabled),
-      rolloutPercentage: Number(entity.rolloutPercentage ?? 100),
-      targetUserIds: safeJsonParseStringArray(entity.targetUserIdsJson),
-      targetRoles: safeJsonParseStringArray(entity.targetRolesJson).map((r) => r.toUpperCase()),
-      targetOrganizationUnitIds: safeJsonParseStringArray(entity.targetOrgUnitIdsJson),
-      startsAt: entity.startsAt ? new Date(entity.startsAt).toISOString() : null,
-      endsAt: entity.endsAt ? new Date(entity.endsAt).toISOString() : null,
-      metadata: safeJsonParseObject(entity.metadataJson, null),
-      isSystem: Boolean(entity.isSystem),
-      status:
-        entity.status === FEATURE_FLAG_STATUS.ARCHIVED
-          ? FEATURE_FLAG_STATUS.ARCHIVED
-          : FEATURE_FLAG_STATUS.ACTIVE,
-      updatedBy: entity.updatedBy ?? null,
-      updatedAt: entity.updatedAt ? entity.updatedAt.toISOString() : new Date().toISOString(),
-    };
-
+  private upsertDefinitionSilent(def: RegisteredFeatureFlagDefinition): void {
     this.isPublishingChange = true;
     try {
       this.registry.upsertDefinition(def);
     } finally {
       this.isPublishingChange = false;
     }
-
-    return def;
   }
 
   private toSummary(def: RegisteredFeatureFlagDefinition): FeatureFlagSummary {
-    const nowMs = Date.now();
-    const startsAtMs = def.startsAt ? Date.parse(def.startsAt) : null;
-    const endsAtMs = def.endsAt ? Date.parse(def.endsAt) : null;
-    const isExpired = endsAtMs !== null && !Number.isNaN(endsAtMs) && nowMs > endsAtMs;
-    const isBeforeStart = startsAtMs !== null && !Number.isNaN(startsAtMs) && nowMs < startsAtMs;
-    const isCurrentlyInWindow = !isBeforeStart && !isExpired;
-
-    return {
-      id: def.id ?? 0,
-      key: def.key,
-      module: def.module,
-      isModuleInstalled: this.registry.isModuleInstalled(def.module),
-      name: def.name,
-      description: def.description,
-      isEnabled: def.isEnabled,
-      rolloutPercentage: def.rolloutPercentage,
-      targetUserIds: [...def.targetUserIds],
-      targetRoles: [...def.targetRoles],
-      targetOrganizationUnitIds: [...def.targetOrganizationUnitIds],
-      startsAt: def.startsAt,
-      endsAt: def.endsAt,
-      isCurrentlyInWindow,
-      isExpired,
-      metadata: def.metadata,
-      isSystem: def.isSystem,
-      status: def.status,
-      statusName: def.status === FEATURE_FLAG_STATUS.ARCHIVED ? 'ARCHIVED' : 'ACTIVE',
-      updatedBy: def.updatedBy ?? null,
-      updatedAt: def.updatedAt ?? new Date().toISOString(),
-    };
-  }
-
-  private toSnapshot(summary: FeatureFlagSummary): Record<string, unknown> {
-    return {
-      key: summary.key,
-      module: summary.module,
-      name: summary.name,
-      description: summary.description,
-      isEnabled: summary.isEnabled,
-      rolloutPercentage: summary.rolloutPercentage,
-      targetUserIds: summary.targetUserIds,
-      targetRoles: summary.targetRoles,
-      targetOrganizationUnitIds: summary.targetOrganizationUnitIds,
-      startsAt: summary.startsAt,
-      endsAt: summary.endsAt,
-      status: summary.status,
-      statusName: summary.statusName,
-    };
+    return mapFeatureFlagDefinitionToSummary(def, this.registry);
   }
 
   private async recordHistory(params: {
     flagId: number;
     flagKey: string;
-    action: 'CREATE' | 'UPDATE' | 'TOGGLE' | 'ARCHIVE';
+    action: FeatureFlagHistoryActionType;
     oldState: Record<string, unknown> | null;
     newState: Record<string, unknown>;
     reason: string | null;
     actor?: UserIdentity | undefined;
   }): Promise<void> {
-    const reqCtx = RequestContextService.current();
-    const resolvedActor = params.actor ?? (reqCtx?.actor as UserIdentity | undefined) ?? null;
-    const actorUserId = parseNumericUserId(resolvedActor?.id ?? reqCtx?.userId);
-    const actorIdentifier =
-      resolvedActor?.email ??
-      resolvedActor?.username ??
-      (actorUserId !== null ? `user:${actorUserId}` : 'system');
-    const ipAddress = reqCtx?.ipAddress ?? '127.0.0.1';
-    const userAgent = reqCtx?.userAgent ?? null;
-    const requestId = reqCtx?.requestId ?? reqCtx?.correlationId ?? null;
-    const correlationId = reqCtx?.correlationId ?? null;
-    const nowIso = new Date().toISOString();
-
-    let historyId = ++this.historySeq;
-
-    if (this.historyRepository) {
-      try {
-        const saved = await this.historyRepository.saveEntity({
-          flagId: params.flagId,
-          flagKey: params.flagKey,
-          action: params.action,
-          oldStateJson: params.oldState ? JSON.stringify(params.oldState) : null,
-          newStateJson: JSON.stringify(params.newState),
-          actorUserId,
-          actorIdentifier,
-          reason: params.reason,
-          ipAddress,
-          userAgent,
-          requestId,
-          correlationId,
-        });
-        historyId = saved.id;
-      } catch {
-        // Fallback in-memory
-      }
-    }
-
-    const record: FeatureFlagHistoryRecord = {
-      id: historyId,
-      flagId: params.flagId,
-      flagKey: params.flagKey,
-      action: params.action,
-      oldState: params.oldState,
-      newState: params.newState,
-      actorUserId,
-      actorIdentifier,
-      reason: params.reason,
-      ipAddress,
-      userAgent,
-      requestId,
-      correlationId,
-      createdAt: nowIso,
-    };
-
-    this.inMemoryHistory.unshift(record);
-    if (this.inMemoryHistory.length > 500) {
-      this.inMemoryHistory.length = 500;
-    }
-
-    if (this.auditLogService) {
-      try {
-        await this.auditLogService.record({
-          actor: resolvedActor,
-          actorUserId,
-          actorIdentifier,
-          module: 'settings',
-          feature: 'feature_flags',
-          action: `feature_flag.${params.action.toLowerCase()}`,
-          resourceType: 'feature_flag',
-          resourceId: params.flagKey,
-          beforeData: params.oldState,
-          afterData: params.newState,
-          reason: params.reason,
-          ipAddress,
-          userAgent,
-          requestId,
-          correlationId,
-        });
-      } catch {
-        // Ignore audit log error
-      }
-    }
-  }
-
-  private mapHistoryEntityToRecord(entity: FeatureFlagHistoryEntity): FeatureFlagHistoryRecord {
-    const actionUpper = entity.action.toUpperCase();
-    const action: 'CREATE' | 'UPDATE' | 'TOGGLE' | 'ARCHIVE' =
-      actionUpper === 'CREATE' || actionUpper === 'TOGGLE' || actionUpper === 'ARCHIVE'
-        ? actionUpper
-        : 'UPDATE';
-
-    return {
-      id: entity.id,
-      flagId: entity.flagId,
-      flagKey: entity.flagKey,
-      action,
-      oldState: safeJsonParseObject(entity.oldStateJson, null),
-      newState: safeJsonParseObject(entity.newStateJson, null) ?? {},
-      actorUserId: entity.actorUserId ?? null,
-      actorIdentifier: entity.actorIdentifier ?? null,
-      reason: entity.reason ?? null,
-      ipAddress: entity.ipAddress ?? null,
-      userAgent: entity.userAgent ?? null,
-      requestId: entity.requestId ?? null,
-      correlationId: entity.correlationId ?? null,
-      createdAt: entity.createdAt ? entity.createdAt.toISOString() : new Date().toISOString(),
-    };
-  }
-
-  private buildEvaluationCacheKey(flagKey: string, context?: FeatureFlagEvaluationContext): string {
-    const userPart =
-      context?.userId !== undefined && context?.userId !== null
-        ? String(context.userId).trim().toLowerCase()
-        : '_anon_';
-    const rolesPart = Array.isArray(context?.roles)
-      ? [...context.roles]
-          .map((r) => String(r).trim().toUpperCase())
-          .sort()
-          .join(',')
-      : '_noroles_';
-    const orgUnits: string[] = [];
-    if (context?.organizationUnitId !== undefined && context?.organizationUnitId !== null) {
-      orgUnits.push(String(context.organizationUnitId).trim().toLowerCase());
-    }
-    if (Array.isArray(context?.organizationUnitIds)) {
-      for (const id of context.organizationUnitIds) {
-        if (id !== undefined && id !== null) {
-          orgUnits.push(String(id).trim().toLowerCase());
-        }
-      }
-    }
-    const orgPart = orgUnits.length > 0 ? orgUnits.sort().join(',') : '_noorg_';
-    return `ff:eval:${flagKey}:u=${userPart}:r=${rolesPart}:o=${orgPart}`;
-  }
-
-  private isCachedWindowStillValid(entry: FeatureFlagEvaluationResult, nowMs: number): boolean {
-    if (entry.startsAt) {
-      const startMs = Date.parse(entry.startsAt);
-      if (!Number.isNaN(startMs)) {
-        const wasBeforeStart = entry.reason === 'NOT_STARTED';
-        const isNowBeforeStart = nowMs < startMs;
-        if (wasBeforeStart !== isNowBeforeStart) {
-          return false;
-        }
-      }
-    }
-    if (entry.endsAt) {
-      const endMs = Date.parse(entry.endsAt);
-      if (!Number.isNaN(endMs)) {
-        const wasExpired = entry.reason === 'EXPIRED';
-        const isNowExpired = nowMs > endMs;
-        if (wasExpired !== isNowExpired) {
-          return false;
-        }
-      }
-    }
-    return true;
+    await recordFeatureFlagHistoryAndAudit({
+      ...params,
+      nextHistoryId: () => ++this.historySeq,
+      historyRepository: this.historyRepository,
+      auditLogService: this.auditLogService,
+      inMemoryHistory: this.inMemoryHistory,
+    });
   }
 
   private async invalidateCacheForFlag(flagKey: string): Promise<void> {
     const normalized = flagKey.trim().toLowerCase();
     const prefix = `ff:eval:${normalized}:`;
-    const keysToDelete: string[] = [this.buildEvaluationCacheKey(normalized)];
+    const keysToDelete: string[] = [buildFeatureFlagEvaluationCacheKey(normalized)];
     for (const key of this.evaluationCache.keys()) {
       if (key.startsWith(prefix)) {
         keysToDelete.push(key);

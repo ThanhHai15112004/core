@@ -2,9 +2,6 @@ import {
   type RegisteredSettingGroup,
   type RegisteredSettingScopeOverride,
   SETTING_ITEM_STATUS,
-  type SettingGroupManifestItem,
-  type SettingManifestItem,
-  type SettingRegistryService,
   type SettingValidationRules,
   buildSettingScopeKey,
   deserializeSettingValue,
@@ -15,16 +12,15 @@ import {
   safeJsonParse,
   validateAndSerializeSettingValue,
 } from '@packages/kernel/index.js';
-import type { FieldEncryptionService } from '@packages/security/index.js';
-import type { SettingGroupRepository } from '../repositories/setting-group.repository.js';
-import type { SystemSettingScopeRepository } from '../repositories/system-setting-scope.repository.js';
-import type { SystemSettingRepository } from '../repositories/system-setting.repository.js';
+import type {
+  HydrateSettingRegistryParams,
+  UpsertSettingDefinitionManifestParams,
+  UpsertSettingGroupManifestParams,
+} from '../types/settings.types.js';
 
-export async function upsertSettingGroupFromManifest(params: {
-  grp: SettingGroupManifestItem;
-  groupRepository?: SettingGroupRepository | null | undefined;
-  registry: SettingRegistryService;
-}): Promise<void> {
+export async function upsertSettingGroupFromManifest(
+  params: UpsertSettingGroupManifestParams,
+): Promise<void> {
   const { grp, groupRepository, registry } = params;
   const code = grp.code.trim().toLowerCase();
   const moduleName = (grp.module ?? 'settings').trim().toLowerCase();
@@ -58,13 +54,9 @@ export async function upsertSettingGroupFromManifest(params: {
   });
 }
 
-export async function upsertSettingDefinitionFromManifest(params: {
-  item: SettingManifestItem;
-  settingRepository?: SystemSettingRepository | null | undefined;
-  scopeRepository?: SystemSettingScopeRepository | null | undefined;
-  registry: SettingRegistryService;
-  encryptionService: FieldEncryptionService;
-}): Promise<number> {
+export async function upsertSettingDefinitionFromManifest(
+  params: UpsertSettingDefinitionManifestParams,
+): Promise<number> {
   const { item, settingRepository, scopeRepository, registry, encryptionService } = params;
   const key = item.key.trim().toLowerCase();
   const valueType = parseSettingValueTypeCode(item.valueType);
@@ -177,22 +169,9 @@ export async function upsertSettingDefinitionFromManifest(params: {
   return envCount;
 }
 
-export async function hydrateSettingRegistryFromDatabase(params: {
-  groupRepository?: SettingGroupRepository | null | undefined;
-  settingRepository?: SystemSettingRepository | null | undefined;
-  scopeRepository?: SystemSettingScopeRepository | null | undefined;
-  registry: SettingRegistryService;
-  decryptIfNeeded: (raw: string, isEncrypted: boolean) => string;
-  invalidateSettingCacheForKey: (settingKey: string) => Promise<void>;
-  publishSettingChanged: (event: {
-    key: string;
-    module: string;
-    namespace: string;
-    environment: string;
-    organizationUnitId: number | null;
-    value: unknown;
-  }) => Promise<void>;
-}): Promise<void> {
+export async function hydrateSettingRegistryFromDatabase(
+  params: HydrateSettingRegistryParams,
+): Promise<void> {
   const {
     groupRepository,
     settingRepository,

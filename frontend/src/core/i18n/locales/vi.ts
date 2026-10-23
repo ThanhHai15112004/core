@@ -58,6 +58,8 @@ export const vi = {
     organizations: 'Đơn vị & Tổ chức',
     roles: 'Vai trò & Phân quyền',
     users: 'Hồ sơ Nhân sự',
+    codes: 'Danh mục Động',
+    settings: 'Cấu hình Hệ thống',
     iam: 'Người dùng & Xác thực',
     files: 'Quản lý File & Media',
     languageToggle: 'Ngôn ngữ',

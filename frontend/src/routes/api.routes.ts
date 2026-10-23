@@ -172,10 +172,81 @@ export const API_ROUTES = {
     UPDATE: (id: string | number) => `/organizations/${id}`,
     DELETE: (id: string | number) => `/organizations/${id}`,
   },
+  CODES: {
+    BOOTSTRAP: (qs = '') => `/codes/bootstrap${qs ? `?${qs}` : ''}`,
+    LIST_TYPES: (qs = '') => `/codes${qs ? `?${qs}` : ''}`,
+    CREATE_TYPE: '/codes',
+    UPDATE_TYPE: (typeCode: string) => `/codes/${encodeURIComponent(typeCode)}`,
+    SYNC: '/codes/sync',
+    EXPORT: (qs = '') => `/codes/export${qs ? `?${qs}` : ''}`,
+    IMPORT_TEMPLATE: (format: 'csv' | 'xlsx' = 'xlsx') =>
+      `/codes/import/template?format=${format}`,
+    IMPORT: '/codes/import',
+    VALUES: (typeCode: string, qs = '') =>
+      `/codes/${encodeURIComponent(typeCode)}/values${qs ? `?${qs}` : ''}`,
+    REORDER_VALUES: (typeCode: string) =>
+      `/codes/${encodeURIComponent(typeCode)}/values/reorder`,
+    IMPORT_BY_TYPE: (typeCode: string) =>
+      `/codes/${encodeURIComponent(typeCode)}/values/import`,
+    VALUE_BY_NUMERIC: (typeCode: string, numericCode: number) =>
+      `/codes/${encodeURIComponent(typeCode)}/values/${numericCode}`,
+    VALUE_USAGE: (typeCode: string, numericCode: number) =>
+      `/codes/${encodeURIComponent(typeCode)}/values/${numericCode}/usage`,
+  },
   SETTINGS: {
+    LIST: (qs = '') => `/settings${qs ? `?${qs}` : ''}`,
+    CREATE: '/settings',
+    SYNC: '/settings/sync',
+    GROUPS: (qs = '') => `/settings/groups${qs ? `?${qs}` : ''}`,
+    RESOLVE: (qs = '') => `/settings/resolve${qs ? `?${qs}` : ''}`,
+    BULK: '/settings/bulk',
+    HISTORY: (qs = '') => `/settings/history${qs ? `?${qs}` : ''}`,
+    DETAIL: (key: string, qs = '') =>
+      `/settings/${encodeURIComponent(key)}${qs ? `?${qs}` : ''}`,
+    KEY_SCOPES: (key: string, qs = '') =>
+      `/settings/${encodeURIComponent(key)}/scopes${qs ? `?${qs}` : ''}`,
+    KEY_HISTORY: (key: string, qs = '') =>
+      `/settings/${encodeURIComponent(key)}/history${qs ? `?${qs}` : ''}`,
+    FEATURE_FLAGS: {
+      LIST: (qs = '') => `/settings/feature-flags${qs ? `?${qs}` : ''}`,
+      CREATE: '/settings/feature-flags',
+      SYNC: '/settings/feature-flags/sync',
+      EVALUATE: (qs = '') => `/settings/feature-flags/evaluate${qs ? `?${qs}` : ''}`,
+      HISTORY: (qs = '') => `/settings/feature-flags/history${qs ? `?${qs}` : ''}`,
+      DETAIL: (key: string) => `/settings/feature-flags/${encodeURIComponent(key)}`,
+      TOGGLE: (key: string) => `/settings/feature-flags/${encodeURIComponent(key)}/toggle`,
+      KEY_HISTORY: (key: string, qs = '') =>
+        `/settings/feature-flags/${encodeURIComponent(key)}/history${qs ? `?${qs}` : ''}`,
+    },
+    I18N: {
+      SYNC: '/settings/i18n/sync',
+      LOCALES: (qs = '') => `/settings/i18n/locales${qs ? `?${qs}` : ''}`,
+      LOCALE_DETAIL: (code: string) => `/settings/i18n/locales/${encodeURIComponent(code)}`,
+      TIMEZONES: (qs = '') => `/settings/i18n/timezones${qs ? `?${qs}` : ''}`,
+      TIMEZONE_DETAIL: (code: string) => `/settings/i18n/timezones/${encodeURIComponent(code)}`,
+      TRANSLATIONS: (qs = '') => `/settings/i18n/translations${qs ? `?${qs}` : ''}`,
+    },
+    SEQUENCES: {
+      LIST: (qs = '') => `/settings/sequences${qs ? `?${qs}` : ''}`,
+      CREATE: '/settings/sequences',
+      SYNC: '/settings/sequences/sync',
+      PREVIEW: '/settings/sequences/preview',
+      HISTORY: (qs = '') => `/settings/sequences/history${qs ? `?${qs}` : ''}`,
+      DETAIL: (key: string) => `/settings/sequences/${encodeURIComponent(key)}`,
+      NEXT: (key: string) => `/settings/sequences/${encodeURIComponent(key)}/next`,
+      KEY_HISTORY: (key: string, qs = '') =>
+        `/settings/sequences/${encodeURIComponent(key)}/history${qs ? `?${qs}` : ''}`,
+    },
     MENUS: {
-      TREE: (position = 'SYSTEM_CONSOLE') => `/settings/menus/tree?position=${encodeURIComponent(position)}`,
+      TREE: (position = 'SYSTEM_CONSOLE') =>
+        `/settings/menus/tree?position=${encodeURIComponent(position)}`,
       LIST: (qs = '') => `/settings/menus${qs ? `?${qs}` : ''}`,
+      CREATE: '/settings/menus',
+      SYNC: '/settings/menus/sync',
+      REORDER: '/settings/menus/reorder',
+      INVALIDATE_CACHE: '/settings/menus/cache/invalidate',
+      DETAIL: (code: string) => `/settings/menus/${encodeURIComponent(code)}`,
+      TOGGLE: (code: string) => `/settings/menus/${encodeURIComponent(code)}/toggle`,
     },
   },
   FILES: {

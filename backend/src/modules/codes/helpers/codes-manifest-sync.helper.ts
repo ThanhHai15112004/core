@@ -1,6 +1,5 @@
 import {
   CODE_ITEM_STATUS,
-  type CodeRegistryService,
   type CodeTypeManifestItem,
   type CodeValueManifestItem,
   safeJsonParseObject,
@@ -8,8 +7,11 @@ import {
 } from '@packages/kernel/index.js';
 import type { SyncCodesResult } from '../contracts/index.js';
 import type { CodeValueEntity } from '../entities/code-value.entity.js';
-import type { CodeTypeRepository } from '../repositories/code-type.repository.js';
-import type { CodeValueRepository } from '../repositories/code-value.repository.js';
+import type {
+  CodeRegistryRefreshParams,
+  SingleCodeTypeRefreshParams,
+  SyncDeclaredCodeTypesParams,
+} from '../types/codes.types.js';
 
 export function mapCodeValueEntityToManifestItem(
   entity: CodeValueEntity,
@@ -51,13 +53,9 @@ export function mapCodeValueEntityToManifestItem(
   };
 }
 
-export async function refreshSingleCodeTypeFromDatabase(params: {
-  typeCode: string;
-  codeTypeRepository: CodeTypeRepository;
-  codeValueRepository: CodeValueRepository;
-  registry: CodeRegistryService;
-  manifestCodeTypes: ReadonlyMap<string, CodeTypeManifestItem>;
-}): Promise<void> {
+export async function refreshSingleCodeTypeFromDatabase(
+  params: SingleCodeTypeRefreshParams,
+): Promise<void> {
   const { typeCode, codeTypeRepository, codeValueRepository, registry, manifestCodeTypes } = params;
   try {
     const normalized = typeCode.trim().toLowerCase();
@@ -87,12 +85,9 @@ export async function refreshSingleCodeTypeFromDatabase(params: {
   }
 }
 
-export async function refreshCodeRegistryFromDatabase(params: {
-  codeTypeRepository: CodeTypeRepository;
-  codeValueRepository: CodeValueRepository;
-  registry: CodeRegistryService;
-  manifestCodeTypes: ReadonlyMap<string, CodeTypeManifestItem>;
-}): Promise<void> {
+export async function refreshCodeRegistryFromDatabase(
+  params: CodeRegistryRefreshParams,
+): Promise<void> {
   const { codeTypeRepository, codeValueRepository, registry, manifestCodeTypes } = params;
   try {
     const [dbTypes, dbValues] = await Promise.all([
@@ -133,13 +128,9 @@ export async function refreshCodeRegistryFromDatabase(params: {
   }
 }
 
-export async function syncDeclaredCodeTypesAndValuesToDatabase(params: {
-  allDeclared: readonly CodeTypeManifestItem[];
-  codeTypeRepository: CodeTypeRepository;
-  codeValueRepository: CodeValueRepository;
-  registry: CodeRegistryService;
-  manifestCodeTypes: ReadonlyMap<string, CodeTypeManifestItem>;
-}): Promise<SyncCodesResult> {
+export async function syncDeclaredCodeTypesAndValuesToDatabase(
+  params: SyncDeclaredCodeTypesParams,
+): Promise<SyncCodesResult> {
   const { allDeclared, codeTypeRepository, codeValueRepository, registry, manifestCodeTypes } =
     params;
 
