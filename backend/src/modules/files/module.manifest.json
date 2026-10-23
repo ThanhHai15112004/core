@@ -743,6 +743,20 @@
       "allowUnitOverride": true,
       "isSystem": true,
       "sortOrder": 27
+    },
+    {
+      "key": "file.storage.cdn_base_url",
+      "groupCode": "file",
+      "module": "files",
+      "namespace": "files.storage",
+      "name": "Domain CDN hoặc URL công khai gốc (CDN Base URL)",
+      "description": "Tên miền CDN hoặc tiền tố URL công khai (ví dụ: https://cdn.example.com) chỉ áp dụng cho các tệp tin có mức hiển thị PUBLIC (3)",
+      "valueType": "TEXT",
+      "defaultValue": "",
+      "isSensitive": false,
+      "allowUnitOverride": true,
+      "isSystem": true,
+      "sortOrder": 28
     }
   ],
   "sequences": [

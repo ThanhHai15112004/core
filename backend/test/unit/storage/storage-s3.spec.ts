@@ -123,5 +123,15 @@ describe('S3 driver + monitoring provider (SDK mock)', () => {
       product: 'S3-compatible',
       location: 'core-dev',
     });
+
+    const cdnS3Driver = new S3StorageDriver(
+      new CoreConfigService().storage.s3,
+      async () => ({ accessKeyId: 'a', secretAccessKey: 'b' }),
+      new S3Client({}),
+      'https://cdn.enterprise.vn/',
+    );
+    expect(cdnS3Driver.url('files/2026/10/video.mp4')).toBe(
+      'https://cdn.enterprise.vn/files/2026/10/video.mp4',
+    );
   });
 });

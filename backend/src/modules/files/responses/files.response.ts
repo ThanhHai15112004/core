@@ -158,6 +158,7 @@ export interface FileRecordResponse {
   readonly metadata: Record<string, unknown> | null;
   readonly downloadUrl: string;
   readonly streamUrl: string;
+  readonly publicUrl?: string | null;
   readonly thumbnailUrl?: string | null;
   readonly scanStatus?: 'CLEAN' | 'PENDING' | 'INFECTED';
   readonly threatName?: string | null;
@@ -203,6 +204,7 @@ export const fileRecordResponseSchema = z.object({
   metadata: z.record(z.string(), z.unknown()).nullable(),
   downloadUrl: z.string(),
   streamUrl: z.string(),
+  publicUrl: z.string().nullable().optional(),
   thumbnailUrl: z.string().nullable().optional(),
   scanStatus: z.enum(['CLEAN', 'PENDING', 'INFECTED']).optional(),
   threatName: z.string().nullable().optional(),
@@ -300,6 +302,7 @@ export interface FileStatsResponse {
     readonly imageMaxHeight?: number;
     readonly imageQuality?: number;
     readonly unusedRetentionDays?: number;
+    readonly cdnBaseUrl?: string | null;
   };
 }
 
@@ -349,5 +352,6 @@ export const fileStatsResponseSchema = z.object({
     imageMaxHeight: z.number().int().min(1).optional(),
     imageQuality: z.number().int().min(1).max(100).optional(),
     unusedRetentionDays: z.number().int().min(1).optional(),
+    cdnBaseUrl: z.string().nullable().optional(),
   }),
 });

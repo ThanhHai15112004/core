@@ -424,6 +424,37 @@ export class FilesController {
     return reply.send(stream.body);
   }
 
+  /** Truy cập file công khai hoặc điều hướng qua CDN (Chỉ áp dụng cho file PUBLIC — Mục 6.4.7) */
+  @Get(FILES_ROUTES.PUBLIC_ACCESS)
+  @Public()
+  @ApiDoc({
+    summary:
+      'Truy cập trực tiếp hoặc điều hướng CDN cho tệp tin công khai (chỉ áp dụng khi visibility = PUBLIC — Mục 6.4.7)',
+  })
+  public async accessPublicFile(
+    @ValidatedParams(positiveIntParamSchema, 'id') id: number,
+    @Res() reply: FastifyReply,
+  ) {
+    const { redirectUrl, stream, file, downloadFileName } =
+      await this.filesService.preparePublicAccess(id);
+    if (redirectUrl) {
+      return reply.status(HttpStatus.FOUND).redirect(redirectUrl);
+    }
+    const encodedName = encodeURIComponent(downloadFileName);
+    void reply
+      .header('content-type', file.mimeType || 'application/octet-stream')
+      .header(
+        'content-disposition',
+        `inline; filename="${downloadFileName.replace(/"/g, '_')}"; filename*=UTF-8''${encodedName}`,
+      )
+      .header('cache-control', 'public, max-age=86400')
+      .header('x-content-type-options', 'nosniff');
+    if (stream?.size !== null && stream?.size !== undefined) {
+      void reply.header('content-length', String(stream.size));
+    }
+    return reply.send(stream?.body);
+  }
+
   /** Xem/tải ảnh thu nhỏ (Thumbnail) hiển thị nhanh (Mục 6.3) */
   @Get(FILES_ROUTES.THUMBNAIL)
   @RequirePermissions('files.read')

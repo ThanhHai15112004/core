@@ -15,9 +15,11 @@ export const LOCAL_TMP_PREFIX = '.tmp-';
 export class LocalStorageDriver implements StorageDriver {
   public readonly name = 'local' as const;
   public readonly root: string;
+  private readonly cdnUrl: string | null;
 
-  constructor(localPath: string) {
+  constructor(localPath: string, cdnUrl: string | null = null) {
     this.root = path.resolve(localPath);
+    this.cdnUrl = cdnUrl ? cdnUrl.trim().replace(/\/+$/, '') : null;
   }
 
   /** Xác định đường dẫn thư mục gốc thực tế trên đĩa cứng */
@@ -123,6 +125,9 @@ export class LocalStorageDriver implements StorageDriver {
 
   /** Lấy đường dẫn URL truy cập công khai của tệp tin lưu trữ */
   public url(key: string): string {
+    if (this.cdnUrl) {
+      return `${this.cdnUrl}/${key.replace(/^\/+/, '')}`;
+    }
     return path.join(this.root, key);
   }
 }

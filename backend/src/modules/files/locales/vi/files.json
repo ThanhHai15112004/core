@@ -35,5 +35,6 @@
   "error.filePendingScan": "Tệp tin đang nằm trong khu vực chờ kiểm duyệt / quét an toàn trước khi công bố",
   "error.fileInQuarantine": "Tệp tin đã bị cách ly do nghi ngờ chứa mã độc hoặc vi phạm an toàn",
   "error.duplicateFileDetected": "Tệp tin tải lên bị trùng lặp hoàn toàn (trùng mã băm SHA-256 với tệp #{{duplicateFileId}})",
-  "error.checksumTampered": "Cảnh báo an toàn: Nội dung vật lý của tệp đã bị thay đổi so với mã băm SHA-256 ban đầu"
+  "error.checksumTampered": "Cảnh báo an toàn: Nội dung vật lý của tệp đã bị thay đổi so với mã băm SHA-256 ban đầu",
+  "error.publicAccessDenied": "Tệp tin này không được phép truy cập công khai (chỉ áp dụng cho tệp có mức hiển thị PUBLIC)"
 }

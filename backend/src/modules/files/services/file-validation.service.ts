@@ -357,6 +357,22 @@ export class FileValidationService {
   }
 
   /**
+   * Đọc domain CDN hoặc URL công khai gốc (`file.storage.cdn_base_url` — Mục 6.4.7).
+   * Chỉ áp dụng cho các tệp được phép công khai (`visibility = PUBLIC`).
+   */
+  public getCdnBaseUrl(organizationUnitId?: number | null): string | null {
+    const raw = this.settingRegistry
+      .getString(
+        'file.storage.cdn_base_url',
+        organizationUnitId ? { organizationUnitId } : undefined,
+        '',
+      )
+      .trim()
+      .replace(/\/+$/, '');
+    return raw.length > 0 ? raw : null;
+  }
+
+  /**
    * Kiểm tra toàn diện tệp tải lên trước khi lưu vào Storage (Mục 6.1 & Mục 6.3):
    * 1. Giải mã nội dung và kiểm tra rỗng.
    * 2. Kiểm tra phần mở rộng (`extension`), đối chiếu theo danh sách chung + danh sách theo Loại file (`category_allowed_extensions`).

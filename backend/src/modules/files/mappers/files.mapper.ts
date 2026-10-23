@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { formatBytes, safeJsonParseObject } from '@packages/kernel/index.js';
 import {
   FILE_STATUS,
+  FILE_VISIBILITY,
   type FileSummary,
   getFileCategoryName,
   getFilePermissionSubjectTypeName,
@@ -81,6 +82,8 @@ export class FilesMapper {
       usages?: readonly FileUsageItemResponse[];
       permissions?: readonly FilePermissionItemResponse[];
       canDownload?: boolean;
+      cdnBaseUrl?: string | null;
+      storagePublicUrl?: string | null;
     },
   ): FileRecordResponse {
     const sizeBytes = Number(entity.sizeBytes) || 0;
@@ -123,6 +126,19 @@ export class FilesMapper {
         : undefined;
     const moduleName = typeof metadata?.moduleName === 'string' ? metadata.moduleName : null;
 
+    // Mục 6.4.7: Hỗ trợ CDN hoặc URL công khai chỉ áp dụng cho file được phép công khai (PUBLIC + ACTIVE)
+    const isPubliclyAccessible =
+      entity.visibility === FILE_VISIBILITY.PUBLIC && entity.status === FILE_STATUS.ACTIVE;
+    const cleanKey = entity.storageKey.replace(/^\/+/, '');
+    const cleanCdnBase = options?.cdnBaseUrl ? options.cdnBaseUrl.trim().replace(/\/+$/, '') : '';
+    const resolvedPublicUrl = isPubliclyAccessible
+      ? cleanCdnBase
+        ? `${cleanCdnBase}/${cleanKey}`
+        : options?.storagePublicUrl && /^https?:\/\//i.test(options.storagePublicUrl)
+          ? options.storagePublicUrl
+          : `/api/v1/files/${entity.id}/public`
+      : null;
+
     return {
       id: entity.id,
       code: entity.code,
@@ -157,6 +173,7 @@ export class FilesMapper {
       metadata,
       downloadUrl: `/api/v1/files/${entity.id}/download`,
       streamUrl: `/api/v1/files/${entity.id}/stream`,
+      publicUrl: resolvedPublicUrl,
       thumbnailUrl,
       scanStatus,
       threatName,

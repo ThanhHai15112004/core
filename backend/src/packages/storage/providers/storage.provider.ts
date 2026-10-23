@@ -65,11 +65,16 @@ export class BaseStorageProvider
     const cfg = this.configService.storage;
     this.driver =
       cfg.driver === 's3'
-        ? new S3StorageDriver(cfg.s3, async () => ({
-            accessKeyId: await this.secret(cfg.s3.accessKeySecret, cfg.s3.accessKey),
-            secretAccessKey: await this.secret(cfg.s3.secretKeySecret, cfg.s3.secretKey),
-          }))
-        : new LocalStorageDriver(cfg.localPath);
+        ? new S3StorageDriver(
+            cfg.s3,
+            async () => ({
+              accessKeyId: await this.secret(cfg.s3.accessKeySecret, cfg.s3.accessKey),
+              secretAccessKey: await this.secret(cfg.s3.secretKeySecret, cfg.s3.secretKey),
+            }),
+            undefined,
+            cfg.cdnUrl,
+          )
+        : new LocalStorageDriver(cfg.localPath, cfg.cdnUrl);
   }
 
   /** Lấy giá trị secret đã giải mã hoặc kiểm tra cấu hình */

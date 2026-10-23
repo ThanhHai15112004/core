@@ -12,6 +12,7 @@ export const FILES_ROUTES = {
   BY_ID: ':id',
   DOWNLOAD: ':id/download',
   STREAM: ':id/stream',
+  PUBLIC_ACCESS: ':id/public',
   THUMBNAIL: ':id/thumbnail',
   PUBLISH: ':id/publish',
   QUARANTINE: ':id/quarantine',

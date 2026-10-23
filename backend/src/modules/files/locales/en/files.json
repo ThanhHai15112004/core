@@ -35,5 +35,6 @@
   "error.filePendingScan": "File is currently in the staging area awaiting security scan/approval before publishing",
   "error.fileInQuarantine": "File has been quarantined due to suspected malware or security violation",
   "error.duplicateFileDetected": "Uploaded file is a duplicate (matches SHA-256 checksum of file #{{duplicateFileId}})",
-  "error.checksumTampered": "Security alert: Physical file content has been altered and no longer matches its original SHA-256 checksum"
+  "error.checksumTampered": "Security alert: Physical file content has been altered and no longer matches its original SHA-256 checksum",
+  "error.publicAccessDenied": "This file is not publicly accessible (only applicable to files with PUBLIC visibility)"
 }

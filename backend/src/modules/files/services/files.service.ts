@@ -152,6 +152,40 @@ export class FilesService implements IFilesPublicService {
     );
   }
 
+  /** Giải quyết URL công khai của Storage Driver (nếu có) */
+  private async resolveStoragePublicUrl(key: string): Promise<string | null> {
+    if (typeof this.storage.getUrl === 'function') {
+      return this.storage.getUrl(key).catch(() => null);
+    }
+    if (typeof this.storage.driver?.url === 'function') {
+      return this.storage.driver.url(key);
+    }
+    return null;
+  }
+
+  /** Ánh xạ thực thể File sang `FileRecordResponse` kèm URL công khai/CDN cho file PUBLIC */
+  private async toFileRecordResponse(
+    entity: FileRecordEntity,
+    options?: {
+      folderName?: string | null;
+      uploadedByUser?: FileUploaderSummary | null;
+      usages?: readonly FileUsageItemResponse[];
+      permissions?: readonly FilePermissionItemResponse[];
+      canDownload?: boolean;
+    },
+  ): Promise<FileRecordResponse> {
+    const cdnBaseUrl = this.validationService.getCdnBaseUrl(entity.organizationUnitId ?? null);
+    const storagePublicUrl =
+      entity.visibility === FILE_VISIBILITY.PUBLIC && entity.status === FILE_STATUS.ACTIVE
+        ? await this.resolveStoragePublicUrl(entity.storageKey)
+        : null;
+    return this.mapper.toFileResponse(entity, {
+      ...options,
+      cdnBaseUrl,
+      storagePublicUrl,
+    });
+  }
+
   private resolvePrimaryOrgId(actor?: UserIdentity): number | null {
     const first = actor?.organizationUnitIds?.[0];
     return typeof first === 'number' && first > 0 ? first : null;
@@ -506,7 +540,7 @@ export class FilesService implements IFilesPublicService {
       saved.uploadedByUserId ? [saved.uploadedByUserId] : [],
     );
 
-    return this.mapper.toFileResponse(saved, {
+    return this.toFileRecordResponse(saved, {
       folderName: folder?.name ?? null,
       uploadedByUser: saved.uploadedByUserId
         ? (uploaderMap.get(saved.uploadedByUserId) ?? null)
@@ -634,13 +668,15 @@ export class FilesService implements IFilesPublicService {
     ]);
     const folderMap = new Map(folders.map((f) => [f.id, f.name]));
 
-    const mapped = items.map((entity) =>
-      this.mapper.toFileResponse(entity, {
-        folderName: entity.folderId ? (folderMap.get(entity.folderId) ?? null) : null,
-        uploadedByUser: entity.uploadedByUserId
-          ? (uploaderMap.get(entity.uploadedByUserId) ?? null)
-          : null,
-      }),
+    const mapped = await Promise.all(
+      items.map((entity) =>
+        this.toFileRecordResponse(entity, {
+          folderName: entity.folderId ? (folderMap.get(entity.folderId) ?? null) : null,
+          uploadedByUser: entity.uploadedByUserId
+            ? (uploaderMap.get(entity.uploadedByUserId) ?? null)
+            : null,
+        }),
+      ),
     );
 
     return createPaginatedResult(mapped, total, page, limit);
@@ -664,7 +700,7 @@ export class FilesService implements IFilesPublicService {
       this.canDownloadFile(entity, actor),
     ]);
 
-    return this.mapper.toFileResponse(entity, {
+    return this.toFileRecordResponse(entity, {
       folderName: folder?.name ?? null,
       uploadedByUser: entity.uploadedByUserId
         ? (uploaderMap.get(entity.uploadedByUserId) ?? null)
@@ -763,6 +799,7 @@ export class FilesService implements IFilesPublicService {
         imageMaxHeight: this.validationService.getImageMaxHeight(orgId),
         imageQuality: this.validationService.getImageQuality(orgId),
         unusedRetentionDays: this.validationService.getUnusedRetentionDays(orgId),
+        cdnBaseUrl: this.validationService.getCdnBaseUrl(orgId),
       },
     };
   }
@@ -818,7 +855,7 @@ export class FilesService implements IFilesPublicService {
 
     return {
       stream,
-      file: this.mapper.toFileResponse(entity),
+      file: await this.toFileRecordResponse(entity),
       downloadFileName,
     };
   }
@@ -879,8 +916,68 @@ export class FilesService implements IFilesPublicService {
 
     return {
       stream,
-      file: this.mapper.toFileResponse(entity),
+      file: await this.toFileRecordResponse(entity),
       byteRange,
+    };
+  }
+
+  /**
+   * Chuẩn bị luồng truy cập công khai hoặc điều hướng CDN (Mục 6.4.7).
+   * CHỈ cho phép các file có `visibility = PUBLIC (3)` và `status = ACTIVE (1)`.
+   * Nếu file là `PRIVATE` hoặc `INTERNAL`, từ chối ngay với `ForbiddenAppException`.
+   */
+  public async preparePublicAccess(id: number): Promise<{
+    redirectUrl: string | null;
+    stream: ObjectStream | null;
+    file: FileRecordResponse;
+    downloadFileName: string;
+  }> {
+    const entity = await this.filesRepo.findById(id);
+    if (!entity || entity.status === FILE_STATUS.PURGED) {
+      throw new NotFoundAppException('files.error.fileNotFound');
+    }
+    if (entity.visibility !== FILE_VISIBILITY.PUBLIC) {
+      throw new ForbiddenAppException('files.error.publicAccessDenied');
+    }
+    if (entity.status === FILE_STATUS.TRASHED) {
+      throw new BadRequestAppException('files.error.inTrashCannotDownload');
+    }
+    if (entity.status === FILE_STATUS.PENDING_SCAN) {
+      throw new ForbiddenAppException('files.error.filePendingScan');
+    }
+    if (entity.status === FILE_STATUS.QUARANTINED) {
+      throw new ForbiddenAppException('files.error.fileInQuarantine');
+    }
+
+    const exists = await this.storage.exists(entity.storageKey);
+    if (!exists) {
+      if (entity.status !== FILE_STATUS.MISSING) {
+        await this.filesRepo.saveEntity({
+          ...entity,
+          status: FILE_STATUS.MISSING,
+        });
+      }
+      throw new NotFoundAppException('files.error.storageObjectMissing');
+    }
+
+    const fileResponse = await this.toFileRecordResponse(entity);
+    const downloadFileName = this.buildSafeDownloadFileName(entity.displayName, entity.extension);
+
+    if (fileResponse.publicUrl && /^https?:\/\//i.test(fileResponse.publicUrl)) {
+      return {
+        redirectUrl: fileResponse.publicUrl,
+        stream: null,
+        file: fileResponse,
+        downloadFileName,
+      };
+    }
+
+    const stream = await this.storage.driver.stream(entity.storageKey);
+    return {
+      redirectUrl: null,
+      stream,
+      file: fileResponse,
+      downloadFileName,
     };
   }
 
@@ -1062,7 +1159,7 @@ export class FilesService implements IFilesPublicService {
 
     return {
       stream,
-      file: this.mapper.toFileResponse(entity),
+      file: await this.toFileRecordResponse(entity),
       downloadFileName,
       disposition: payload.disp,
     };
@@ -1146,7 +1243,7 @@ export class FilesService implements IFilesPublicService {
       this.canDownloadFile(saved, actor),
     ]);
 
-    return this.mapper.toFileResponse(saved, {
+    return this.toFileRecordResponse(saved, {
       folderName: folder?.name ?? null,
       uploadedByUser: saved.uploadedByUserId
         ? (uploaderMap.get(saved.uploadedByUserId) ?? null)
@@ -1341,7 +1438,7 @@ export class FilesService implements IFilesPublicService {
       },
     );
 
-    return this.mapper.toFileResponse(saved);
+    return this.toFileRecordResponse(saved);
   }
 
   /** Khôi phục file từ thùng rác (Chỉ khi file chưa bị xóa vĩnh viễn khỏi Storage) */
@@ -1385,7 +1482,7 @@ export class FilesService implements IFilesPublicService {
       { status: FILE_STATUS.ACTIVE },
     );
 
-    return this.mapper.toFileResponse(saved);
+    return this.toFileRecordResponse(saved);
   }
 
   /** Xóa vĩnh viễn một file khỏi Storage và đánh dấu PURGED (Chặn nếu còn liên kết dữ liệu) */

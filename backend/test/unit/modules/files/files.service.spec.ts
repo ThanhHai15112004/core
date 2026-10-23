@@ -1364,4 +1364,64 @@ describe('FilesService — Phase 6.1 & 6.2 File Management, Folders & Access Con
     expect(files.get(oldUsedFile.id)?.status).toBe(FILE_STATUS.ACTIVE);
     expect(files.get(recentUnusedFile.id)?.status).toBe(FILE_STATUS.ACTIVE);
   });
+
+  it('18. [Mục 6.4.7] Hỗ trợ CDN hoặc URL công khai CHỈ áp dụng cho file được phép công khai (PUBLIC + ACTIVE)', async () => {
+    const { service, settingRegistry } = createInMemoryFilesHarness();
+
+    const privateFile = await service.uploadSingle({
+      fileName: 'private-contract.txt',
+      textContent: 'Hợp đồng nội bộ mật',
+      visibility: FILE_VISIBILITY.PRIVATE,
+    });
+    const internalFile = await service.uploadSingle({
+      fileName: 'internal-guide.txt',
+      textContent: 'Hướng dẫn nội bộ',
+      visibility: FILE_VISIBILITY.INTERNAL,
+    });
+    const publicFile = await service.uploadSingle({
+      fileName: 'public-brochure.txt',
+      textContent: 'Tài liệu giới thiệu công khai',
+      visibility: FILE_VISIBILITY.PUBLIC,
+    });
+
+    // File PRIVATE và INTERNAL tuyệt đối KHÔNG có publicUrl và bị chặn khi gọi preparePublicAccess
+    expect(privateFile.publicUrl).toBeNull();
+    expect(internalFile.publicUrl).toBeNull();
+    await expect(service.preparePublicAccess(privateFile.id)).rejects.toThrow(
+      ForbiddenAppException,
+    );
+    await expect(service.preparePublicAccess(internalFile.id)).rejects.toThrow(
+      ForbiddenAppException,
+    );
+
+    // File PUBLIC khi chưa cấu hình CDN thì có publicUrl chuẩn `/api/v1/files/:id/public` và mở stream trực tiếp
+    expect(publicFile.publicUrl).toBe(`/api/v1/files/${publicFile.id}/public`);
+    const localPublicAccess = await service.preparePublicAccess(publicFile.id);
+    expect(localPublicAccess.redirectUrl).toBeNull();
+    expect(localPublicAccess.stream).not.toBeNull();
+    expect(localPublicAccess.downloadFileName).toBe('public-brochure.txt');
+
+    // Khi bật cấu hình động `file.storage.cdn_base_url`, file PUBLIC tự động sinh URL CDN và hỗ trợ redirect
+    settingRegistry.upsertScopeOverride({
+      settingKey: 'file.storage.cdn_base_url',
+      environment: 'ALL',
+      organizationUnitId: null,
+      scopeKey: 'file.storage.cdn_base_url::ALL::GLOBAL',
+      serializedValue: 'https://cdn.enterprise.vn/',
+      isEncrypted: false,
+      updatedBy: null,
+      reason: 'test cdn url',
+    });
+
+    const publicWithCdn = await service.getById(publicFile.id);
+    expect(publicWithCdn.publicUrl).toBe(`https://cdn.enterprise.vn/${publicFile.storageKey}`);
+
+    const cdnAccess = await service.preparePublicAccess(publicFile.id);
+    expect(cdnAccess.redirectUrl).toBe(`https://cdn.enterprise.vn/${publicFile.storageKey}`);
+    expect(cdnAccess.stream).toBeNull();
+
+    // Khi file PUBLIC bị đưa vào thùng rác hoặc cách ly, publicUrl lập tức bị thu hồi về null
+    const trashedPublic = await service.moveToTrash(publicFile.id);
+    expect(trashedPublic.publicUrl).toBeNull();
+  });
 });

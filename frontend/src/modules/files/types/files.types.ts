@@ -87,6 +87,7 @@ export interface FileRecordItem {
   metadata: Record<string, unknown> | null;
   downloadUrl: string;
   streamUrl: string;
+  publicUrl?: string | null;
   thumbnailUrl?: string | null;
   scanStatus?: 'CLEAN' | 'PENDING' | 'INFECTED';
   threatName?: string | null;
@@ -163,6 +164,7 @@ export interface FileStatsItem {
     imageMaxHeight?: number;
     imageQuality?: number;
     unusedRetentionDays?: number;
+    cdnBaseUrl?: string | null;
   };
 }
 

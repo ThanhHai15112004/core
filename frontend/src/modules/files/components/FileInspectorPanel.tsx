@@ -533,6 +533,29 @@ export const FileInspectorPanel: React.FC<FileInspectorPanelProps> = ({
                 {selectedFile.storageKey}
               </code>
 
+              {selectedFile.publicUrl && (
+                <>
+                  <span style={{ color: '#64748b' }}>URL Công khai / CDN</span>
+                  <a
+                    href={selectedFile.publicUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{
+                      fontSize: '0.7rem',
+                      color: '#059669',
+                      background: '#ecfdf5',
+                      padding: '2px 6px',
+                      borderRadius: '5px',
+                      wordBreak: 'break-all',
+                      textDecoration: 'none',
+                      fontWeight: 600,
+                    }}
+                  >
+                    {selectedFile.publicUrl}
+                  </a>
+                </>
+              )}
+
               <span style={{ color: '#64748b' }}>Chủ sở hữu</span>
               <span style={{ color: '#0f172a', fontWeight: 600 }}>
                 {selectedFile.uploadedByUser?.fullName ?? 'Nguyễn Văn Minh'}

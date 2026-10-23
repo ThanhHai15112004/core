@@ -25,13 +25,16 @@ export class S3StorageDriver implements StorageDriver {
   public readonly name = 's3' as const;
   public readonly client: S3Client;
   public readonly bucket: string;
+  private readonly cdnUrl: string | null;
 
   constructor(
     private readonly cfg: StorageConfig['s3'],
     resolveCredentials: CredentialsResolver,
     client?: S3Client,
+    cdnUrl: string | null = null,
   ) {
     this.bucket = cfg.bucket;
+    this.cdnUrl = cdnUrl ? cdnUrl.trim().replace(/\/+$/, '') : null;
     this.client =
       client ??
       new S3Client({
@@ -141,9 +144,13 @@ export class S3StorageDriver implements StorageDriver {
 
   /** Lấy đường dẫn URL truy cập công khai của tệp tin lưu trữ */
   public url(key: string): string {
+    const cleanKey = key.replace(/^\/+/, '');
+    if (this.cdnUrl) {
+      return `${this.cdnUrl}/${cleanKey}`;
+    }
     const base = this.cfg.endpoint ?? `https://${this.bucket}.s3.${this.cfg.region}.amazonaws.com`;
     return this.cfg.endpoint || this.cfg.forcePathStyle
-      ? `${base.replace(/\/$/, '')}/${this.bucket}/${key}`
-      : `${base}/${key}`;
+      ? `${base.replace(/\/$/, '')}/${this.bucket}/${cleanKey}`
+      : `${base}/${cleanKey}`;
   }
 }

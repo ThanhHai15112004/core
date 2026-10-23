@@ -10,7 +10,10 @@ const healthCheckResponseSchema = z.object({
   details: z.record(z.string(), z.unknown()),
 });
 
-@ApiGroup('System Health', 'Kiểm tra trạng thái sẵn sàng của Database, Redis và bộ nhớ Heap')
+@ApiGroup(
+  'System Health',
+  'Kiểm tra trạng thái sẵn sàng của Database, Redis, Storage và bộ nhớ Heap',
+)
 @Controller(HEALTH_ROUTES.PREFIX)
 export class HealthController {
   constructor(private readonly healthService: HealthService) {}
@@ -21,7 +24,7 @@ export class HealthController {
   @ApiDoc({
     summary: 'Kiểm tra sức khỏe hệ thống (Healthcheck)',
     description:
-      'Trả về trạng thái kết nối thực tế của Database, Redis và mức sử dụng bộ nhớ Heap của tiến trình.',
+      'Trả về trạng thái kết nối thực tế của Database, Redis, Storage và mức sử dụng bộ nhớ Heap của tiến trình.',
     response: healthCheckResponseSchema,
     responseExample: {
       status: 'ok',
@@ -29,6 +32,7 @@ export class HealthController {
       details: {
         database: { status: 'up' },
         redis: { status: 'up' },
+        storage: { status: 'up' },
         heap: { status: 'up' },
       },
     },

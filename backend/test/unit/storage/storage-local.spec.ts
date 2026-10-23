@@ -92,6 +92,11 @@ describe('LocalStorageDriver + LocalMonitoringProvider', () => {
     expect(cap.source).toBe('filesystem');
     expect(cap.totalBytes).toBeGreaterThan(0);
     await expect(provider.signedUrl()).rejects.toMatchObject({ code: 'UNSUPPORTED' });
+
+    const cdnDriver = new LocalStorageDriver(path.join(dir, 'root'), 'https://cdn.core.local/');
+    expect(cdnDriver.url('files/2026/10/banner.png')).toBe(
+      'https://cdn.core.local/files/2026/10/banner.png',
+    );
   });
 });
 
