@@ -136,7 +136,7 @@ describe('Organizations Module Unit Tests', () => {
           createdAt: now,
           updatedAt: now,
           deletedAt: null,
-        });
+        } as OrganizationUnitEntity);
       }
 
       const mockRepo = {
@@ -156,7 +156,7 @@ describe('Organizations Module Unit Tests', () => {
           [...store.values()].filter((x) => codes.includes(x.code)),
         saveEntity: async (data: Partial<OrganizationUnitEntity>) => {
           const id = data.id ? Number(data.id) : store.size + 1;
-          const entity: OrganizationUnitEntity = {
+          const entity = {
             id,
             code: data.code ?? `UNIT_${id}`,
             name: data.name ?? `Unit ${id}`,
@@ -167,7 +167,7 @@ describe('Organizations Module Unit Tests', () => {
             createdAt: now,
             updatedAt: now,
             deletedAt: null,
-          };
+          } as OrganizationUnitEntity;
           store.set(id, entity);
           return entity;
         },

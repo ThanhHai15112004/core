@@ -21,11 +21,8 @@ import {
   DataScopeService,
   type DataScopeCustomRuleMetadata,
   PlatformSecurityService,
-  type ResolvedDataScopeFilter,
   type SecurityAnomalyAlert,
   type SecurityEventRecord,
-  type SecurityEventSeverity,
-  type SecurityEventTypeCode,
   type UserIdentity,
 } from '@packages/security/index.js';
 import {
@@ -42,6 +39,26 @@ import {
   parseDataScope,
   parseRoleStatus,
 } from '../contracts/index.js';
+import { ROLES_AUDIT_META, ROLES_CODE_TYPES, ROLES_SETTING_KEYS } from '../enum/roles.enum.js';
+import type {
+  DeclarativeCustomScopeRuleInput,
+  EffectiveDataScopeOverview,
+  NormalizedPermissionDeclaration,
+  SecurityAlertsQueryFilter,
+  SecurityEventsQueryFilter,
+} from '../types/roles.types.js';
+import {
+  buildDeclaredPermissionsMap,
+  buildOrphanedPermissionWarnings,
+  buildRolePermissionMatrix,
+  groupPermissionCatalogItems,
+  mapPermissionsToCatalogItems,
+} from '../helpers/role-permission-catalog.helper.js';
+import {
+  assertDataScopeAllAllowedForRole,
+  buildFallbackEffectiveDataScope,
+  createDeclarativeScopeEvaluateFn,
+} from '../helpers/role-data-scope.helper.js';
 import type { PermissionEntity } from '../entities/permission.entity.js';
 import { PermissionRepository } from '../repositories/permission.repository.js';
 import { RoleRepository } from '../repositories/role.repository.js';
@@ -62,52 +79,9 @@ import type {
   PermissionFunctionalGroupResponse,
   RoleAssignedUserResponse,
   RolePermissionMatrixResponse,
-  RolePermissionMatrixRowResponse,
   RoleResponse,
   SyncPermissionsResultResponse,
 } from '../responses/roles.response.js';
-
-interface NormalizedPermissionDeclaration {
-  readonly code: string;
-  readonly name: string;
-  readonly module: string;
-  readonly moduleDisplayName: string;
-  readonly featureGroup: string;
-  readonly description: string | null;
-}
-
-const DEFAULT_ALL_SCOPE_ROLE_PATTERNS: readonly string[] = [
-  'super_admin',
-  'admin',
-  'root',
-  'auditor',
-  'admin_*',
-  'super_*',
-  'system_*',
-  'auditor_*',
-];
-
-const DEFAULT_ALL_SCOPE_PERMISSIONS: readonly string[] = [
-  'system.full_access',
-  'data_scope.all',
-  'roles.manage',
-  'system.*',
-];
-
-function matchesWildcardPattern(value: string, patterns: readonly string[]): boolean {
-  const normalized = value.trim().toLowerCase();
-  for (const rawPattern of patterns) {
-    const pattern = String(rawPattern).trim().toLowerCase();
-    if (!pattern) continue;
-    if (pattern.endsWith('*')) {
-      const prefix = pattern.slice(0, -1);
-      if (normalized.startsWith(prefix)) return true;
-    } else if (normalized === pattern) {
-      return true;
-    }
-  }
-  return false;
-}
 
 @Injectable()
 export class RolesService implements IRolesPublicService {
@@ -156,16 +130,16 @@ export class RolesService implements IRolesPublicService {
       return [...perms];
     });
     defaultCodeRegistry.registerUsageChecker(
-      'roles.status',
-      'roles.status',
+      ROLES_CODE_TYPES.STATUS,
+      ROLES_CODE_TYPES.STATUS,
       async ({ numericCode }) => {
         const roles = await this.roleRepository.findFiltered({});
         return roles.filter((r) => !r.deletedAt && Number(r.status) === Number(numericCode)).length;
       },
     );
     defaultCodeRegistry.registerUsageChecker(
-      'roles.data_scope',
-      'roles.data_scope',
+      ROLES_CODE_TYPES.DATA_SCOPE,
+      ROLES_CODE_TYPES.DATA_SCOPE,
       async ({ numericCode }) => {
         const roles = await this.roleRepository.findFiltered({});
         return roles.filter((r) => !r.deletedAt && Number(r.dataScope) === Number(numericCode))
@@ -248,74 +222,13 @@ export class RolesService implements IRolesPublicService {
   public async listPermissionsCatalog(): Promise<PermissionCatalogItemResponse[]> {
     const perms = await this.permissionRepository.findAll();
     const declaredMap = this.getActiveDeclaredPermissionsMap();
-
-    return perms.map((p) => {
-      const normalizedCode = p.code.trim().toLowerCase();
-      const declared = declaredMap.get(normalizedCode);
-      const moduleName = p.module || declared?.module || this.extractModuleFromCode(normalizedCode);
-      const featureGroup =
-        declared?.featureGroup ?? this.deriveFeatureGroup(normalizedCode, moduleName);
-
-      return {
-        id: Number(p.id),
-        code: p.code,
-        name: p.name,
-        module: moduleName,
-        featureGroup,
-        description: p.description ?? null,
-        status:
-          p.status === PERMISSION_STATUS.INACTIVE
-            ? PERMISSION_STATUS.INACTIVE
-            : PERMISSION_STATUS.ACTIVE,
-        statusName: p.status === PERMISSION_STATUS.INACTIVE ? 'INACTIVE' : 'ACTIVE',
-        isOrphaned: !declaredMap.has(normalizedCode),
-      };
-    });
+    return mapPermissionsToCatalogItems(perms, declaredMap);
   }
 
   /** Nhóm danh mục quyền theo module và nhóm chức năng (Mục 4.2 — Nhóm quyền theo chức năng dễ chọn và quản lý) */
   public async listPermissionsGrouped(): Promise<PermissionFunctionalGroupResponse[]> {
     const catalog = await this.listPermissionsCatalog();
-    const activeModules = this.getActiveModulesMap();
-    const groupsMap = new Map<
-      string,
-      {
-        module: string;
-        moduleDisplayName: string;
-        featureGroup: string;
-        permissions: PermissionCatalogItemResponse[];
-      }
-    >();
-
-    for (const item of catalog) {
-      const key = `${item.module}::${item.featureGroup}`;
-      const existing = groupsMap.get(key);
-      if (existing) {
-        existing.permissions.push(item);
-      } else {
-        const modManifest = activeModules.get(item.module.toLowerCase());
-        groupsMap.set(key, {
-          module: item.module,
-          moduleDisplayName: modManifest?.displayName || item.module,
-          featureGroup: item.featureGroup,
-          permissions: [item],
-        });
-      }
-    }
-
-    return [...groupsMap.values()]
-      .sort((a, b) =>
-        a.module === b.module
-          ? a.featureGroup.localeCompare(b.featureGroup)
-          : a.module.localeCompare(b.module),
-      )
-      .map((g) => ({
-        module: g.module,
-        moduleDisplayName: g.moduleDisplayName,
-        featureGroup: g.featureGroup,
-        totalPermissions: g.permissions.length,
-        permissions: g.permissions,
-      }));
+    return groupPermissionCatalogItems(catalog, this.getActiveModulesMap());
   }
 
   /** Đồng bộ quyền idempotent từ các module manifests vào bảng permissions (Mục 4.2 — Không tạo trùng quyền) */
@@ -399,30 +312,7 @@ export class RolesService implements IRolesPublicService {
     const roleIds = roles.map((r) => Number(r.id));
     const permsMap = await this.loadPermissionsMap(roleIds);
 
-    return orphanedPerms.map((perm) => {
-      const assignedRoles = roles
-        .filter((role) => {
-          const rolePerms = permsMap.get(Number(role.id)) ?? [];
-          return rolePerms.some((rp) => Number(rp.id) === Number(perm.id) || rp.code === perm.code);
-        })
-        .map((role) => ({
-          id: Number(role.id),
-          code: role.code,
-          name: role.name,
-        }));
-
-      return {
-        id: Number(perm.id),
-        code: perm.code,
-        name: perm.name,
-        module: perm.module,
-        assignedRoles,
-        warningMessage:
-          assignedRoles.length > 0
-            ? `Permission '${perm.code}' is not declared by any active module manifest and is still assigned to ${assignedRoles.length} role(s).`
-            : `Permission '${perm.code}' is not declared by any active module manifest (unused orphan permission).`,
-      };
-    });
+    return buildOrphanedPermissionWarnings(orphanedPerms, roles, permsMap);
   }
 
   /** Tạo bảng ma trận tổng hợp Vai trò × Quyền toàn hệ thống (Mục 4.2 — Dễ rà soát quyền toàn hệ thống) */
@@ -431,73 +321,12 @@ export class RolesService implements IRolesPublicService {
       this.roleRepository.findFiltered({}),
       this.listPermissionsCatalog(),
     ]);
-
     const roleIds = roles.map((r) => Number(r.id));
     const permsMap = await this.loadPermissionsMap(roleIds);
 
-    const rolePermCodeSets = new Map<number, Set<string>>();
-    for (const role of roles) {
-      const rId = Number(role.id);
-      const rPerms = permsMap.get(rId) ?? [];
-      rolePermCodeSets.set(rId, new Set(rPerms.map((p) => p.code.trim().toLowerCase())));
-    }
-
-    const rows: RolePermissionMatrixRowResponse[] = catalog.map((perm) => {
-      const normalizedCode = perm.code.trim().toLowerCase();
-      const grantedRoleIds: number[] = [];
-      const grantedRoleCodes: string[] = [];
-      const roleGrants: Record<string, boolean> = {};
-
-      for (const role of roles) {
-        const rId = Number(role.id);
-        const hasPerm = rolePermCodeSets.get(rId)?.has(normalizedCode) ?? false;
-        roleGrants[role.code] = hasPerm;
-        if (hasPerm) {
-          grantedRoleIds.push(rId);
-          grantedRoleCodes.push(role.code);
-        }
-      }
-
-      return {
-        permissionId: perm.id,
-        code: perm.code,
-        name: perm.name,
-        module: perm.module,
-        featureGroup: perm.featureGroup,
-        isOrphaned: perm.isOrphaned,
-        grantedRoleIds,
-        grantedRoleCodes,
-        roleGrants,
-      };
-    });
-
-    const modulesSet = new Set<string>(catalog.map((c) => c.module));
-    const totalOrphanedPermissions = catalog.filter((c) => c.isOrphaned).length;
-
-    return {
-      roles: roles.map((role) => {
-        const rId = Number(role.id);
-        const mapped = this.mapper.toSummary(role, permsMap.get(rId) ?? []);
-        return {
-          id: mapped.id,
-          code: mapped.code,
-          name: mapped.name,
-          isSystem: mapped.isSystem,
-          dataScope: mapped.dataScope,
-          dataScopeName: mapped.dataScopeName,
-          status: mapped.status,
-          statusName: mapped.statusName,
-          totalGrantedPermissions: mapped.permissions.length,
-        };
-      }),
-      modules: [...modulesSet].sort(),
-      rows,
-      summary: {
-        totalRoles: roles.length,
-        totalPermissions: catalog.length,
-        totalOrphanedPermissions,
-      },
-    };
+    return buildRolePermissionMatrix(roles, catalog, permsMap, (role, perms) =>
+      this.mapper.toSummary(role, perms),
+    );
   }
 
   /** Tạo mới vai trò và gán quyền (hỗ trợ cả permissionIds, permissions codes và dataScope — Mục 4.1 & 4.3) */
@@ -520,11 +349,12 @@ export class RolesService implements IRolesPublicService {
 
     const work = async (): Promise<RoleResponse> => {
       const resolvedPerms = await this.resolveInputPermissions(dto.permissionIds, dto.permissions);
-      this.assertDataScopeAllAllowedForRole(
-        normalizedCode,
-        resolvedDataScope,
-        resolvedPerms.map((p) => p.code),
-      );
+      assertDataScopeAllAllowedForRole({
+        roleCode: normalizedCode,
+        dataScope: resolvedDataScope,
+        permissionCodes: resolvedPerms.map((p) => p.code),
+        settingRegistry: this.settingRegistry,
+      });
 
       const saved = await this.roleRepository.saveEntity({
         code: normalizedCode,
@@ -541,10 +371,10 @@ export class RolesService implements IRolesPublicService {
       );
       const createdResponse = this.mapper.toResponse(saved, resolvedPerms, 0);
       await this.auditLogService?.record({
-        module: 'roles',
-        feature: 'role_management',
-        action: 'ROLE_CREATED',
-        resourceType: 'role',
+        module: ROLES_AUDIT_META.MODULE,
+        feature: ROLES_AUDIT_META.FEATURE_ROLE_MANAGEMENT,
+        action: ROLES_AUDIT_META.ACTION_CREATED,
+        resourceType: ROLES_AUDIT_META.RESOURCE_ROLE,
         resourceId: createdResponse.id,
         beforeData: null,
         afterData: createdResponse,
@@ -556,46 +386,6 @@ export class RolesService implements IRolesPublicService {
       return this.transactionManager.runInTransaction(work);
     }
     return work();
-  }
-
-  /**
-   * Kiểm tra chỉ vai trò được phép mới được gán Phạm vi dữ liệu Toàn hệ thống (DATA_SCOPE.ALL = 1 — Mục 4.3.4).
-   * Vai trò được phép: vai trò quản trị/kiểm toán (`super_admin`, `admin`, `admin_*`, `system_*`, `auditor*`, `root`)
-   * hoặc vai trò có quyền cấp hệ thống (`system.full_access`, `roles.manage`, `users.delete`, `data_scope.all`).
-   */
-  private assertDataScopeAllAllowedForRole(
-    roleCode: string,
-    dataScope: number,
-    permissionCodes: readonly string[],
-    isSystem = false,
-  ): void {
-    if (dataScope !== DATA_SCOPE.ALL || isSystem) return;
-    const allowedRolePatterns = this.settingRegistry.getJson<readonly string[]>(
-      'roles.data_scope.all_allowed_role_patterns',
-      undefined,
-      DEFAULT_ALL_SCOPE_ROLE_PATTERNS,
-    );
-    const allowedPermPatterns = this.settingRegistry.getJson<readonly string[]>(
-      'roles.data_scope.all_allowed_permissions',
-      undefined,
-      DEFAULT_ALL_SCOPE_PERMISSIONS,
-    );
-
-    const isPermittedRoleCode = matchesWildcardPattern(
-      roleCode,
-      Array.isArray(allowedRolePatterns) ? allowedRolePatterns : DEFAULT_ALL_SCOPE_ROLE_PATTERNS,
-    );
-
-    const effectivePermPatterns = Array.isArray(allowedPermPatterns)
-      ? allowedPermPatterns
-      : DEFAULT_ALL_SCOPE_PERMISSIONS;
-    const hasSystemWidePermission = permissionCodes.some((perm) =>
-      matchesWildcardPattern(perm, effectivePermPatterns),
-    );
-
-    if (!isPermittedRoleCode && !hasSystemWidePermission) {
-      throw new ForbiddenAppException('roles.dataScopeAllNotAllowedForRole', [{ code: roleCode }]);
-    }
   }
 
   /** Sao chép vai trò: Tạo vai trò mới kế thừa toàn bộ quyền và phạm vi dữ liệu từ một vai trò hiện có (Mục 4.1 & 4.3) */
@@ -647,10 +437,10 @@ export class RolesService implements IRolesPublicService {
       );
       const clonedResponse = this.mapper.toResponse(saved, sourcePerms, 0);
       await this.auditLogService?.record({
-        module: 'roles',
-        feature: 'role_management',
-        action: 'ROLE_CLONED',
-        resourceType: 'role',
+        module: ROLES_AUDIT_META.MODULE,
+        feature: ROLES_AUDIT_META.FEATURE_ROLE_MANAGEMENT,
+        action: ROLES_AUDIT_META.ACTION_CLONED,
+        resourceType: ROLES_AUDIT_META.RESOURCE_ROLE,
         resourceId: clonedResponse.id,
         beforeData: { sourceRoleId, sourceRoleCode: sourceRole.code },
         afterData: clonedResponse,
@@ -698,12 +488,13 @@ export class RolesService implements IRolesPublicService {
           dto.permissions,
         );
         if (dto.dataScope !== undefined) {
-          this.assertDataScopeAllAllowedForRole(
-            role.code,
-            role.dataScope,
-            resolvedPerms.map((p) => p.code),
-            role.isSystem,
-          );
+          assertDataScopeAllAllowedForRole({
+            roleCode: role.code,
+            dataScope: role.dataScope,
+            permissionCodes: resolvedPerms.map((p) => p.code),
+            isSystem: role.isSystem,
+            settingRegistry: this.settingRegistry,
+          });
         }
         const saved = await this.roleRepository.saveEntity(role);
         await this.rolePermissionRepository.replacePermissionsForRole(
@@ -712,20 +503,20 @@ export class RolesService implements IRolesPublicService {
         );
         const updatedResponse = this.mapper.toResponse(saved, resolvedPerms, userCount);
         await this.auditLogService?.record({
-          module: 'roles',
-          feature: 'role_management',
-          action: 'ROLE_UPDATED',
-          resourceType: 'role',
+          module: ROLES_AUDIT_META.MODULE,
+          feature: ROLES_AUDIT_META.FEATURE_ROLE_MANAGEMENT,
+          action: ROLES_AUDIT_META.ACTION_UPDATED,
+          resourceType: ROLES_AUDIT_META.RESOURCE_ROLE,
           resourceId: updatedResponse.id,
           beforeData: beforeSnapshot,
           afterData: updatedResponse,
         });
         await this.platformSecurityService?.recordSecurityEvent({
           eventType: 'PERMISSION_CHANGED',
-          module: 'roles',
-          feature: 'role_management',
-          action: 'ROLE_UPDATED',
-          resourceType: 'role',
+          module: ROLES_AUDIT_META.MODULE,
+          feature: ROLES_AUDIT_META.FEATURE_ROLE_MANAGEMENT,
+          action: ROLES_AUDIT_META.ACTION_UPDATED,
+          resourceType: ROLES_AUDIT_META.RESOURCE_ROLE,
           resourceId: updatedResponse.id,
           reason: `Updated role ${updatedResponse.code} permissions/scope`,
           beforeData: beforeSnapshot,
@@ -736,20 +527,21 @@ export class RolesService implements IRolesPublicService {
       }
 
       if (dto.dataScope !== undefined) {
-        this.assertDataScopeAllAllowedForRole(
-          role.code,
-          role.dataScope,
-          beforePerms.map((p) => p.code),
-          role.isSystem,
-        );
+        assertDataScopeAllAllowedForRole({
+          roleCode: role.code,
+          dataScope: role.dataScope,
+          permissionCodes: beforePerms.map((p) => p.code),
+          isSystem: role.isSystem,
+          settingRegistry: this.settingRegistry,
+        });
       }
       const saved = await this.roleRepository.saveEntity(role);
       const updatedResponse = this.mapper.toResponse(saved, beforePerms, userCount);
       await this.auditLogService?.record({
-        module: 'roles',
-        feature: 'role_management',
-        action: 'ROLE_UPDATED',
-        resourceType: 'role',
+        module: ROLES_AUDIT_META.MODULE,
+        feature: ROLES_AUDIT_META.FEATURE_ROLE_MANAGEMENT,
+        action: ROLES_AUDIT_META.ACTION_UPDATED,
+        resourceType: ROLES_AUDIT_META.RESOURCE_ROLE,
         resourceId: updatedResponse.id,
         beforeData: beforeSnapshot,
         afterData: updatedResponse,
@@ -757,10 +549,10 @@ export class RolesService implements IRolesPublicService {
       if (dto.dataScope !== undefined) {
         await this.platformSecurityService?.recordSecurityEvent({
           eventType: 'PERMISSION_CHANGED',
-          module: 'roles',
-          feature: 'role_management',
-          action: 'ROLE_UPDATED',
-          resourceType: 'role',
+          module: ROLES_AUDIT_META.MODULE,
+          feature: ROLES_AUDIT_META.FEATURE_ROLE_MANAGEMENT,
+          action: ROLES_AUDIT_META.ACTION_UPDATED,
+          resourceType: ROLES_AUDIT_META.RESOURCE_ROLE,
           resourceId: updatedResponse.id,
           reason: `Updated role ${updatedResponse.code} data scope`,
           beforeData: beforeSnapshot,
@@ -795,12 +587,13 @@ export class RolesService implements IRolesPublicService {
     ]);
     const beforePerms = beforePermsMap.get(Number(role.id)) ?? [];
 
-    this.assertDataScopeAllAllowedForRole(
-      role.code,
-      Number(role.dataScope ?? DATA_SCOPE.SELF),
-      resolvedPerms.map((p) => p.code),
-      Boolean(role.isSystem),
-    );
+    assertDataScopeAllAllowedForRole({
+      roleCode: role.code,
+      dataScope: Number(role.dataScope ?? DATA_SCOPE.SELF),
+      permissionCodes: resolvedPerms.map((p) => p.code),
+      isSystem: Boolean(role.isSystem),
+      settingRegistry: this.settingRegistry,
+    });
 
     const work = async (): Promise<void> => {
       await this.rolePermissionRepository.replacePermissionsForRole(
@@ -819,20 +612,20 @@ export class RolesService implements IRolesPublicService {
       countsMap.get(Number(role.id)) ?? 0,
     );
     await this.auditLogService?.record({
-      module: 'roles',
-      feature: 'role_permissions',
-      action: 'ROLE_PERMISSIONS_UPDATED',
-      resourceType: 'role',
+      module: ROLES_AUDIT_META.MODULE,
+      feature: ROLES_AUDIT_META.FEATURE_ROLE_PERMISSIONS,
+      action: ROLES_AUDIT_META.ACTION_PERMISSIONS_UPDATED,
+      resourceType: ROLES_AUDIT_META.RESOURCE_ROLE,
       resourceId: role.id,
       beforeData: { permissions: beforePerms.map((p) => p.code) },
       afterData: { permissions: resolvedPerms.map((p) => p.code) },
     });
     await this.platformSecurityService?.recordSecurityEvent({
       eventType: 'PERMISSION_CHANGED',
-      module: 'roles',
-      feature: 'role_permissions',
-      action: 'ROLE_PERMISSIONS_UPDATED',
-      resourceType: 'role',
+      module: ROLES_AUDIT_META.MODULE,
+      feature: ROLES_AUDIT_META.FEATURE_ROLE_PERMISSIONS,
+      action: ROLES_AUDIT_META.ACTION_PERMISSIONS_UPDATED,
+      resourceType: ROLES_AUDIT_META.RESOURCE_ROLE,
       resourceId: role.id,
       reason: `Updated permissions for role ${role.code}`,
       beforeData: { permissions: beforePerms.map((p) => p.code) },
@@ -866,10 +659,10 @@ export class RolesService implements IRolesPublicService {
 
     await this.roleRepository.repository.softDelete(id);
     await this.auditLogService?.record({
-      module: 'roles',
-      feature: 'role_management',
-      action: 'ROLE_DELETED',
-      resourceType: 'role',
+      module: ROLES_AUDIT_META.MODULE,
+      feature: ROLES_AUDIT_META.FEATURE_ROLE_MANAGEMENT,
+      action: ROLES_AUDIT_META.ACTION_DELETED,
+      resourceType: ROLES_AUDIT_META.RESOURCE_ROLE,
       resourceId: id,
       beforeData: { id: role.id, code: role.code, name: role.name, dataScope: role.dataScope },
       afterData: { deleted: true },
@@ -929,26 +722,9 @@ export class RolesService implements IRolesPublicService {
   public async getActorEffectiveDataScope(
     actor?: UserIdentity,
     resource = 'users',
-  ): Promise<{
-    filter: ResolvedDataScopeFilter;
-    registeredCustomRules: DataScopeCustomRuleMetadata[];
-  }> {
+  ): Promise<EffectiveDataScopeOverview> {
     if (!this.dataScopeService) {
-      return {
-        filter: {
-          isUnrestricted: true,
-          effectiveScope: DATA_SCOPE.ALL,
-          effectiveScopeName: 'ALL',
-          grantedScopes: [DATA_SCOPE.ALL],
-          allowedUserIds: actor?.id ? [actor.id] : [],
-          allowedOrganizationUnitIds: actor?.organizationUnitIds
-            ? [...actor.organizationUnitIds]
-            : [],
-          customAttributes: {},
-          appliedRuleCodes: [],
-        },
-        registeredCustomRules: [],
-      };
+      return buildFallbackEffectiveDataScope(actor);
     }
 
     const filter = await this.dataScopeService.resolveScopeFilter(actor, resource, 'read');
@@ -965,16 +741,9 @@ export class RolesService implements IRolesPublicService {
   /**
    * Đăng ký một rule phạm vi dữ liệu nghiệp vụ động (Mục 4.3.7 — Cho module nghiệp vụ bổ sung rule phạm vi riêng mà không sửa Core).
    */
-  public registerDeclarativeCustomScopeRule(input: {
-    readonly code: string;
-    readonly resource: string;
-    readonly module?: string | undefined;
-    readonly name: string;
-    readonly description?: string | null | undefined;
-    readonly allowedOrganizationUnitIds?: readonly number[] | undefined;
-    readonly allowedUserIds?: readonly number[] | undefined;
-    readonly allowAllIfHasPermission?: string | undefined;
-  }): DataScopeCustomRuleMetadata {
+  public registerDeclarativeCustomScopeRule(
+    input: DeclarativeCustomScopeRuleInput,
+  ): DataScopeCustomRuleMetadata {
     if (!this.dataScopeService) {
       throw new BadRequestAppException('roles.dataScopeServiceUnavailable');
     }
@@ -985,39 +754,7 @@ export class RolesService implements IRolesPublicService {
       module: input.module ?? input.resource,
       name: input.name,
       description: input.description ?? null,
-      evaluate: ({ actor, target }) => {
-        if (
-          input.allowAllIfHasPermission &&
-          actor.permissions.includes(input.allowAllIfHasPermission)
-        ) {
-          return {
-            allow: true,
-            filterOverride: { isUnrestricted: true },
-          };
-        }
-
-        const extraOrgs = input.allowedOrganizationUnitIds ?? [];
-        const extraUsers = input.allowedUserIds ?? [];
-
-        if (target) {
-          const targetOwner = Number(target.ownerId ?? target.id);
-          if (!Number.isNaN(targetOwner) && extraUsers.includes(targetOwner)) {
-            return { allow: true };
-          }
-          const targetPrimaryOrg = Number(target.primaryOrganizationUnitId);
-          if (!Number.isNaN(targetPrimaryOrg) && extraOrgs.includes(targetPrimaryOrg)) {
-            return { allow: true };
-          }
-        }
-
-        return {
-          filterOverride: {
-            ...(extraOrgs.length > 0 ? { allowedOrganizationUnitIds: extraOrgs } : {}),
-            ...(extraUsers.length > 0 ? { allowedUserIds: extraUsers } : {}),
-            customAttributes: { [input.code]: true },
-          },
-        };
-      },
+      evaluate: createDeclarativeScopeEvaluateFn(input),
     });
 
     const rules = this.dataScopeService.listRegisteredRules(input.resource);
@@ -1040,7 +777,7 @@ export class RolesService implements IRolesPublicService {
   public async listAuditLogs(query: ListAuditLogsQuery = {}): Promise<AuditLogPaginatedResult> {
     if (!this.auditLogService) {
       const { page, limit } = resolvePagination(query, {
-        settingPrefix: 'roles.audit_log',
+        settingPrefix: ROLES_SETTING_KEYS.AUDIT_LOG_PREFIX,
         defaultLimit: 20,
         maxLimit: 200,
         registry: this.settingRegistry,
@@ -1078,22 +815,12 @@ export class RolesService implements IRolesPublicService {
   }
 
   /** Tra cứu danh sách Sự kiện bảo mật (Security Events — Mục 4.5.7) */
-  public listSecurityEvents(filter?: {
-    eventType?: SecurityEventTypeCode | string;
-    actorId?: number;
-    targetUserId?: number;
-    limit?: number;
-  }): SecurityEventRecord[] {
+  public listSecurityEvents(filter?: SecurityEventsQueryFilter): SecurityEventRecord[] {
     return this.platformSecurityService?.listSecurityEvents(filter) ?? [];
   }
 
   /** Tra cứu danh sách Cảnh báo thao tác bất thường (SIEM Anomaly Alerts — Mục 4.5.8) */
-  public listSecurityAlerts(filter?: {
-    anomalyType?: string;
-    severity?: SecurityEventSeverity;
-    actorId?: number;
-    limit?: number;
-  }): SecurityAnomalyAlert[] {
+  public listSecurityAlerts(filter?: SecurityAlertsQueryFilter): SecurityAnomalyAlert[] {
     return this.platformSecurityService?.listAnomalyAlerts(filter) ?? [];
   }
 
@@ -1209,69 +936,6 @@ export class RolesService implements IRolesPublicService {
 
   /** Tổng hợp bản đồ mã quyền -> thông tin quyền đã chuẩn hóa từ toàn bộ các module đang hoạt động */
   private getActiveDeclaredPermissionsMap(): Map<string, NormalizedPermissionDeclaration> {
-    const activeModules = this.getActiveModulesMap();
-    const map = new Map<string, NormalizedPermissionDeclaration>();
-
-    for (const [modKey, manifest] of activeModules.entries()) {
-      const moduleName = modKey.trim().toLowerCase();
-      const moduleDisplayName = manifest.displayName?.trim() || moduleName;
-
-      for (const permEntry of manifest.permissions) {
-        if (typeof permEntry === 'string') {
-          const code = permEntry.trim().toLowerCase();
-          if (!code) continue;
-          map.set(code, {
-            code,
-            name: this.formatPermissionDisplayName(code),
-            module: moduleName,
-            moduleDisplayName,
-            featureGroup: this.deriveFeatureGroup(code, moduleName),
-            description: `Permission ${code} declared by module ${moduleName}`,
-          });
-        } else if (permEntry && typeof permEntry === 'object') {
-          const code = permEntry.code.trim().toLowerCase();
-          if (!code) continue;
-          map.set(code, {
-            code,
-            name: permEntry.name?.trim() || this.formatPermissionDisplayName(code),
-            module: moduleName,
-            moduleDisplayName,
-            featureGroup:
-              permEntry.featureGroup?.trim() || this.deriveFeatureGroup(code, moduleName),
-            description:
-              permEntry.description !== undefined
-                ? permEntry.description
-                : `Permission ${code} declared by module ${moduleName}`,
-          });
-        }
-      }
-    }
-
-    return map;
-  }
-
-  /** Trích xuất tên module từ mã quyền (ví dụ `users.read` -> `users`) */
-  private extractModuleFromCode(code: string): string {
-    const normalized = code.trim().toLowerCase();
-    return normalized.includes('.') ? normalized.split('.')[0]! : 'core';
-  }
-
-  /** Suy diễn nhóm chức năng từ mã quyền (ví dụ `auth.sessions.manage` -> `auth.sessions`, `users.read` -> `users`) */
-  private deriveFeatureGroup(code: string, moduleName: string): string {
-    const parts = code.trim().toLowerCase().split('.').filter(Boolean);
-    if (parts.length >= 3) {
-      return `${parts[0]}.${parts[1]}`;
-    }
-    return moduleName || parts[0] || 'core';
-  }
-
-  /** Tạo tên hiển thị thân thiện từ mã quyền */
-  private formatPermissionDisplayName(code: string): string {
-    return code
-      .trim()
-      .split(/[._-]+/)
-      .filter(Boolean)
-      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-      .join(' ');
+    return buildDeclaredPermissionsMap(this.getActiveModulesMap());
   }
 }

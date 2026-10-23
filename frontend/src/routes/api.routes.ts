@@ -142,7 +142,8 @@ export const API_ROUTES = {
     EXPORT: (qs = '') => `/users/export${qs ? `?${qs}` : ''}`,
   },
   ROLES: {
-    LIST: '/roles',
+    LIST: (qs = '') => `/roles${qs ? `?${qs}` : ''}`,
+    CREATE: '/roles',
     PERMISSIONS: '/roles/permissions',
     PERMISSIONS_GROUPED: '/roles/permissions/grouped',
     PERMISSIONS_SYNC: '/roles/permissions/sync',
@@ -152,6 +153,8 @@ export const API_ROUTES = {
     DATA_SCOPES_RULES: '/roles/data-scopes/rules',
     AUDIT_LOGS: (qs = '') => `/roles/audit-logs${qs ? `?${qs}` : ''}`,
     AUDIT_LOG_DETAIL: (id: string | number) => `/roles/audit-logs/${id}`,
+    SECURITY_EVENTS: (qs = '') => `/roles/security-events${qs ? `?${qs}` : ''}`,
+    SECURITY_ALERTS: (qs = '') => `/roles/security-alerts${qs ? `?${qs}` : ''}`,
     DETAIL: (id: string | number) => `/roles/${id}`,
     UPDATE: (id: string | number) => `/roles/${id}`,
     DELETE: (id: string | number) => `/roles/${id}`,

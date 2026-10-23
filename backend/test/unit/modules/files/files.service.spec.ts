@@ -61,7 +61,7 @@ function createInMemoryFilesHarness() {
       const now = new Date();
       const id = partial.id ?? folderSeq++;
       const existing = folders.get(id);
-      const saved: FileFolderEntity = {
+      const saved = {
         id,
         code: partial.code ?? existing?.code ?? `FLD_${id}`,
         name: partial.name ?? existing?.name ?? 'Folder',
@@ -81,7 +81,7 @@ function createInMemoryFilesHarness() {
         createdAt: existing?.createdAt ?? now,
         updatedAt: now,
         deletedAt: null,
-      };
+      } as FileFolderEntity;
       folders.set(id, saved);
       return saved;
     },
@@ -101,7 +101,7 @@ function createInMemoryFilesHarness() {
       const now = new Date();
       const id = partial.id ?? fileSeq++;
       const existing = files.get(id);
-      const saved: FileRecordEntity = {
+      const saved = {
         id,
         code: partial.code ?? existing?.code ?? `FIL_${id}`,
         folderId: partial.folderId !== undefined ? partial.folderId : (existing?.folderId ?? null),
@@ -142,7 +142,7 @@ function createInMemoryFilesHarness() {
         createdAt: existing?.createdAt ?? now,
         updatedAt: now,
         deletedAt: existing?.deletedAt ?? null,
-      };
+      } as FileRecordEntity;
       files.set(id, saved);
       return saved;
     },
@@ -150,7 +150,23 @@ function createInMemoryFilesHarness() {
       const existing = files.get(id);
       if (existing) existing.deletedAt = new Date();
     },
-    findPaginatedFiltered: async (query, scope) => {
+    findPaginatedFiltered: async (
+      query: {
+        status?: number;
+        folderId?: number;
+        category?: number;
+        uploadedByUserId?: number;
+        onlyReferenced?: boolean;
+        onlyUnused?: boolean;
+        search?: string;
+      },
+      scope: {
+        unrestricted?: boolean;
+        selfUserId?: number | null;
+        explicitAllowedFileIds?: readonly number[];
+        allowedOrgUnitIds?: readonly number[];
+      },
+    ) => {
       const targetStatus = query.status ?? FILE_STATUS.ACTIVE;
       let list = [...files.values()].filter((f) => f.status === targetStatus);
       if (query.folderId !== undefined) {
@@ -272,7 +288,7 @@ function createInMemoryFilesHarness() {
       const now = new Date();
       const id = partial.id ?? usageSeq++;
       const existing = usages.get(id);
-      const saved: FileUsageEntity = {
+      const saved = {
         id,
         fileId: partial.fileId ?? existing?.fileId ?? 0,
         moduleName: partial.moduleName ?? existing?.moduleName ?? 'users',
@@ -287,7 +303,7 @@ function createInMemoryFilesHarness() {
         createdAt: existing?.createdAt ?? now,
         updatedAt: now,
         deletedAt: null,
-      };
+      } as FileUsageEntity;
       usages.set(id, saved);
       return saved;
     },
@@ -343,7 +359,7 @@ function createInMemoryFilesHarness() {
       const now = new Date();
       const id = partial.id ?? permissionSeq++;
       const existing = permissions.get(id);
-      const saved: FilePermissionEntity = {
+      const saved = {
         id,
         fileId: partial.fileId ?? existing?.fileId ?? 0,
         subjectType: partial.subjectType ?? existing?.subjectType ?? FILE_PERMISSION_SUBJECT.USER,
@@ -363,7 +379,7 @@ function createInMemoryFilesHarness() {
         createdAt: existing?.createdAt ?? now,
         updatedAt: now,
         deletedAt: null,
-      };
+      } as FilePermissionEntity;
       permissions.set(id, saved);
       return saved;
     },

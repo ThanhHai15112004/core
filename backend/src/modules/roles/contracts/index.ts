@@ -7,6 +7,15 @@ import {
   inferDefaultDataScopeForRoleCode,
   parseDataScope,
 } from '@packages/security/index.js';
+import {
+  PERMISSION_STATUS,
+  type PermissionStatusCode,
+  type PermissionStatusName,
+  ROLES_CODE_TYPES,
+  ROLE_STATUS,
+  type RoleStatusCode,
+  type RoleStatusName,
+} from '../enum/roles.enum.js';
 
 export {
   DATA_SCOPE,
@@ -15,31 +24,25 @@ export {
   getDataScopeName,
   inferDefaultDataScopeForRoleCode,
   parseDataScope,
+  PERMISSION_STATUS,
+  type PermissionStatusCode,
+  type PermissionStatusName,
+  ROLE_STATUS,
+  type RoleStatusCode,
+  type RoleStatusName,
 };
 
-export const ROLE_STATUS = {
-  ACTIVE: 1,
-  INACTIVE: 2,
-} as const;
-
-export type RoleStatusCode = (typeof ROLE_STATUS)[keyof typeof ROLE_STATUS];
-export type RoleStatusName = keyof typeof ROLE_STATUS;
-
-export const PERMISSION_STATUS = {
-  ACTIVE: 1,
-  INACTIVE: 2,
-} as const;
-
-export type PermissionStatusCode = (typeof PERMISSION_STATUS)[keyof typeof PERMISSION_STATUS];
-export type PermissionStatusName = keyof typeof PERMISSION_STATUS;
-
 export function parseRoleStatus(val: unknown): RoleStatusCode {
-  const resolved = defaultCodeRegistry.parseToNumericCode('roles.status', val, ROLE_STATUS.ACTIVE);
+  const resolved = defaultCodeRegistry.parseToNumericCode(
+    ROLES_CODE_TYPES.STATUS,
+    val,
+    ROLE_STATUS.ACTIVE,
+  );
   return resolved === ROLE_STATUS.INACTIVE ? ROLE_STATUS.INACTIVE : ROLE_STATUS.ACTIVE;
 }
 
 export function getRoleStatusName(code: number): RoleStatusName {
-  const name = defaultCodeRegistry.getCodeName('roles.status', code, 'ACTIVE');
+  const name = defaultCodeRegistry.getCodeName(ROLES_CODE_TYPES.STATUS, code, 'ACTIVE');
   return name === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE';
 }
 

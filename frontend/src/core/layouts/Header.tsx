@@ -3,7 +3,18 @@ import { APP_NAME, NAVIGATION_ITEMS, type NavigationTabId } from '../constants/i
 import { ROUTES } from '../../routes/index';
 import { useLocale } from '../i18n/index';
 import { useTheme } from '../theme/index';
-import { Home, Terminal, Boxes, Globe, ShieldCheck, Building2, FolderOpen, Sun, Moon } from 'lucide-react';
+import {
+  Home,
+  Terminal,
+  Boxes,
+  Globe,
+  ShieldCheck,
+  Building2,
+  KeyRound,
+  FolderOpen,
+  Sun,
+  Moon,
+} from 'lucide-react';
 import { navigateTo } from '../router/index';
 
 interface HeaderProps {
@@ -21,6 +32,8 @@ export const Header: React.FC<HeaderProps> = ({ activeTab = 'home', onTabChange 
         return <ShieldCheck size={15} />;
       case 'organizations':
         return <Building2 size={15} />;
+      case 'roles':
+        return <KeyRound size={15} />;
       case 'files':
         return <FolderOpen size={15} />;
       case 'home':
