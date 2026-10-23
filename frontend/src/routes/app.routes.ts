@@ -3,6 +3,7 @@ export const ROUTES = {
   AUTH: '/auth',
   ORGANIZATIONS: '/organizations',
   ROLES: '/roles',
+  USERS: '/users',
   FILES: '/files',
   SYSTEM_CONSOLE: '/system-console',
 } as const;

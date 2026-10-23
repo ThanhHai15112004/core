@@ -22,24 +22,30 @@ import {
   parseDataScope,
 } from '@packages/security/index.js';
 import { type IRolesPublicService, ROLE_STATUS } from '@modules/roles/contracts/index.js';
+import type {
+  AdminResetUserMfaInput,
+  AdminResetUserMfaResult,
+  AdminResetUserPasswordInput,
+  AdminResetUserPasswordResult,
+  SelfRegisterUserInput,
+  UpdateUserPreferencesInput,
+  UserAuthCredentialsView,
+  UserAuthIdentityView,
+  UserPreferencesView,
+  UserProfileView,
+} from '../contracts/index.js';
 import {
-  type AdminResetUserMfaInput,
-  type AdminResetUserMfaResult,
-  type AdminResetUserPasswordInput,
-  type AdminResetUserPasswordResult,
-  type SelfRegisterUserInput,
+  USERS_AUDIT_META,
+  USERS_SETTING_KEYS,
   USER_STATUS,
-  type UpdateUserPreferencesInput,
-  type UserAuthCredentialsView,
-  type UserAuthIdentityView,
-  type UserPreferencesView,
-  type UserProfileView,
   type UserStatusCode,
+} from '../enum/users.enum.js';
+import {
   getUserStatusName,
   normalizePhoneNumber,
   parseUserStatus,
   resolveVietnameseNameParts,
-} from '../contracts/index.js';
+} from './user-normalizer.helper.js';
 import type { UserProfileEntity } from '../entities/user-profile.entity.js';
 import type { UserEntity } from '../entities/user.entity.js';
 import type { UserOrganizationUnitRepository } from '../repositories/user-organization-unit.repository.js';
@@ -133,7 +139,7 @@ export async function buildUserAuthIdentityView(params: {
 
   const defaultRoleCode =
     defaultSettingRegistry.getString(
-      'users.default_role_code',
+      USERS_SETTING_KEYS.DEFAULT_ROLE_CODE,
       primaryOrgId ? { organizationUnitId: primaryOrgId } : undefined,
       'user',
     ) || 'user';
@@ -411,10 +417,10 @@ export async function updateUserPreferencesRecord(params: {
   await invalidateIdentityCache(userId);
   await auditLogService?.record({
     actorUserId: userId,
-    module: 'users',
-    feature: 'user-preferences',
+    module: USERS_AUDIT_META.MODULE,
+    feature: USERS_AUDIT_META.FEATURES.PREFERENCES,
     action: 'user.update_preferences',
-    resourceType: 'user_profile',
+    resourceType: USERS_AUDIT_META.RESOURCE_TYPES.USER_PROFILE,
     resourceId: userId,
     beforeData: {
       preferredLocale: currentProfile.preferredLocale ?? resolveSystemDefaultLocale(),

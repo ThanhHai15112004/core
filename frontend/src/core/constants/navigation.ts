@@ -1,6 +1,6 @@
 import { ROUTES } from '../../routes/index';
 
-export type NavigationTabId = 'home' | 'auth' | 'organizations' | 'roles' | 'files';
+export type NavigationTabId = 'home' | 'auth' | 'organizations' | 'roles' | 'users' | 'files';
 
 export interface NavigationItem {
   id: NavigationTabId;
@@ -34,6 +34,12 @@ export const NAVIGATION_ITEMS: readonly NavigationItem[] = [
     labelKey: 'header.roles',
     icon: 'key',
     route: ROUTES.ROLES,
+  },
+  {
+    id: 'users',
+    labelKey: 'header.users',
+    icon: 'users',
+    route: ROUTES.USERS,
   },
   {
     id: 'files',

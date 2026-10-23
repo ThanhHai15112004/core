@@ -8,13 +8,7 @@ import {
   resolvePagination,
 } from '@packages/kernel/index.js';
 import { createPaginatedResult } from '@packages/http/index.js';
-import {
-  type SupportedLocale,
-  isSupportedLocale,
-  isValidIanaTimezone,
-  resolveSystemDefaultLocale,
-  resolveSystemDefaultTimezone,
-} from '@packages/i18n/index.js';
+import { resolveSystemDefaultLocale, resolveSystemDefaultTimezone } from '@packages/i18n/index.js';
 import { TransactionManager } from '@packages/database/index.js';
 import {
   AuditLogService,
@@ -45,7 +39,10 @@ import {
   type AdminResetUserPasswordResult,
   type IUsersPublicService,
   type SelfRegisterUserInput,
+  USER_IDENTITY_CACHE_PREFIX,
   USER_STATUS,
+  USERS_AUDIT_META,
+  USERS_SETTING_KEYS,
   type UpdateUserPreferencesInput,
   type UserAuthCredentialsView,
   type UserAuthIdentityView,
@@ -58,6 +55,37 @@ import {
   parseUserStatus,
   resolveVietnameseNameParts,
 } from '../contracts/index.js';
+import type { UserStatusTransitionAction } from '../types/users.types.js';
+import {
+  normalizePreferredLocaleOrThrow,
+  normalizePreferredTimezoneOrThrow,
+  registerUsersUsageCheckers,
+} from '../helpers/user-normalizer.helper.js';
+import {
+  countActiveUsersByRoleIds,
+  hydrateUsersResponseList,
+  listActiveUsersByRoleId,
+  validateAndApplyUserUpdateFields,
+  validateAndPrepareCreateUserContext,
+} from '../helpers/user-profile-hydration.helper.js';
+import {
+  executeAssignUserOrganizationsFlow,
+  executeAssignUserRolesFlow,
+  executeUserStatusTransition,
+} from '../helpers/user-lifecycle-assignment.helper.js';
+import {
+  buildUserAuthCredentialsView,
+  buildUserAuthIdentityView,
+  executeAdminResetUserMfaFlow,
+  executeAdminResetUserPasswordFlow,
+  executeSelfRegisterUser,
+  executeUpdateUserPasswordHash,
+  markUserChannelVerified,
+  recordUserLoginAttemptState,
+  resolveUserPreferencesView,
+  resolveUserProfileView,
+  updateUserPreferencesRecord,
+} from '../helpers/user-auth-bridge.helper.js';
 import type { UserEntity } from '../entities/user.entity.js';
 import type { UserProfileEntity } from '../entities/user-profile.entity.js';
 import { UserRepository } from '../repositories/user.repository.js';
@@ -76,32 +104,8 @@ import type {
   UpdateUserRequest,
 } from '../requests/users.requests.js';
 import type { UserResponse, UserStatusHistoryItemResponse } from '../responses/users.response.js';
-import {
-  countActiveUsersByRoleIds,
-  executeAssignUserOrganizationsFlow,
-  executeAssignUserRolesFlow,
-  executeUserStatusTransition,
-  hydrateUsersResponseList,
-  listActiveUsersByRoleId,
-  registerUsersUsageCheckers,
-  validateAndApplyUserUpdateFields,
-  validateAndPrepareCreateUserContext,
-} from './users-assignment.helper.js';
-import {
-  buildUserAuthCredentialsView,
-  buildUserAuthIdentityView,
-  executeAdminResetUserMfaFlow,
-  executeAdminResetUserPasswordFlow,
-  executeSelfRegisterUser,
-  executeUpdateUserPasswordHash,
-  markUserChannelVerified,
-  recordUserLoginAttemptState,
-  resolveUserPreferencesView,
-  resolveUserProfileView,
-  updateUserPreferencesRecord,
-} from './users-auth-bridge.helper.js';
 
-export const USER_IDENTITY_CACHE_PREFIX = 'iam:user:identity:';
+export { USER_IDENTITY_CACHE_PREFIX };
 
 @Injectable()
 export class UsersService implements IUsersPublicService {
@@ -203,12 +207,10 @@ export class UsersService implements IUsersPublicService {
     });
   }
 
-  /** Truy cập instance DataScopeService đang gắn với UsersService */
   public getDataScopeService(): DataScopeService {
     return this.effectiveDataScopeService;
   }
 
-  /** Giải quyết danh sách ID nhân sự cấp dưới trực tiếp và gián tiếp theo cây quản lý (Mục 4.3.3) */
   public async resolveSubordinateUserIds(managerId: number): Promise<number[]> {
     if (typeof this.userRepository.findSubordinateUserIds === 'function') {
       return this.userRepository.findSubordinateUserIds(managerId);
@@ -216,7 +218,6 @@ export class UsersService implements IUsersPublicService {
     return [];
   }
 
-  /** Giải quyết bộ lọc phạm vi dữ liệu cho người dùng hiện hành (Mục 4.3.5) */
   public async resolveUserScopeFilter(
     actor?: UserIdentity,
     action = 'read',
@@ -225,7 +226,6 @@ export class UsersService implements IUsersPublicService {
     return this.effectiveDataScopeService.resolveScopeFilter(actor, 'users', action);
   }
 
-  /** Kiểm tra phạm vi dữ liệu trước khi xem chi tiết hoặc thao tác trên bản ghi người dùng (Mục 4.3.6 — Chống đổi ID / IDOR) */
   public async assertCanAccessUserRecord(
     targetUser: UserResponse,
     actor?: UserIdentity,
@@ -250,14 +250,13 @@ export class UsersService implements IUsersPublicService {
     );
   }
 
-  /** Tìm kiếm và lọc danh sách người dùng có phân trang kèm áp dụng Phạm vi dữ liệu (Mục 3.1.9 & 4.3.5) */
   public async listPaginated(
     query: ListUsersQuery,
     actor?: UserIdentity,
   ): Promise<PaginatedResult<UserResponse>> {
     const actorOrgUnitId = query.organizationUnitId ?? actor?.organizationUnitIds?.[0];
     const { page, limit } = resolvePagination(query, {
-      settingPrefix: 'users.pagination',
+      settingPrefix: USERS_SETTING_KEYS.PAGINATION_PREFIX,
       defaultLimit: 20,
       maxLimit: 500,
       context: actorOrgUnitId ? { organizationUnitId: actorOrgUnitId } : undefined,
@@ -273,7 +272,6 @@ export class UsersService implements IUsersPublicService {
     return createPaginatedResult(enriched, total, page, limit);
   }
 
-  /** Xem chi tiết một người dùng theo ID số nguyên kèm kiểm tra phạm vi dữ liệu chống đổi ID (Mục 4.3.6) */
   public async getById(
     id: number,
     includeArchived = true,
@@ -290,7 +288,6 @@ export class UsersService implements IUsersPublicService {
     return hydrated!;
   }
 
-  /** Xem lịch sử thay đổi trạng thái của một người dùng kèm kiểm tra phạm vi dữ liệu (Mục 3.1.10 & 4.3.6) */
   public async getStatusHistory(
     userId: number,
     actor?: UserIdentity,
@@ -318,7 +315,6 @@ export class UsersService implements IUsersPublicService {
     });
   }
 
-  /** Tạo mới người dùng kèm lưu bảng Core (`users`) và bảng Chi tiết (`user_profiles`) (Mục 3.1.1) */
   public async create(dto: CreateUserRequest, actorId?: number): Promise<UserResponse> {
     const { normalizedEmail, finalUsername, normalizedPhone, phoneHash, roleIds, orgInputs } =
       await validateAndPrepareCreateUserContext({
@@ -355,8 +351,8 @@ export class UsersService implements IUsersPublicService {
       });
 
       const userId = Number(savedUser.id);
-      const preferredLocale = this.normalizePreferredLocale(dto.preferredLocale);
-      const preferredTimezone = this.normalizePreferredTimezone(dto.preferredTimezone);
+      const preferredLocale = normalizePreferredLocaleOrThrow(dto.preferredLocale);
+      const preferredTimezone = normalizePreferredTimezoneOrThrow(dto.preferredTimezone);
       await this.upsertUserProfile(userId, {
         firstName: nameParts.firstName,
         lastName: nameParts.lastName,
@@ -399,10 +395,10 @@ export class UsersService implements IUsersPublicService {
     const result = await this.getById(Number(created.id));
     await this.auditLogService?.record({
       actorUserId: actorId ?? null,
-      module: 'users',
-      feature: 'user-management',
+      module: USERS_AUDIT_META.MODULE,
+      feature: USERS_AUDIT_META.FEATURES.MANAGEMENT,
       action: 'user.create',
-      resourceType: 'user',
+      resourceType: USERS_AUDIT_META.RESOURCE_TYPES.USER,
       resourceId: result.id,
       beforeData: null,
       afterData: {
@@ -418,7 +414,6 @@ export class UsersService implements IUsersPublicService {
     return result;
   }
 
-  /** Cập nhật thông tin tài khoản Core (`users`) và chi tiết cá nhân (`user_profiles`) (Mục 3.1.2) */
   public async update(
     id: number,
     dto: UpdateUserRequest,
@@ -430,8 +425,7 @@ export class UsersService implements IUsersPublicService {
       throw new NotFoundAppException('users.notFound', { id });
     }
     if (actor) {
-      const [hydratedTarget] = await this.hydrateUsersList([user]);
-      await this.assertCanAccessUserRecord(hydratedTarget!, actor, 'update');
+      await this.ensureAccessUserEntity(user, actor, 'update');
     }
     const beforeSnapshot = {
       id: user.id,
@@ -455,11 +449,11 @@ export class UsersService implements IUsersPublicService {
 
     const nextPreferredLocale =
       dto.preferredLocale !== undefined
-        ? this.normalizePreferredLocale(dto.preferredLocale)
+        ? normalizePreferredLocaleOrThrow(dto.preferredLocale)
         : (currentProfile.preferredLocale ?? resolveSystemDefaultLocale());
     const nextPreferredTimezone =
       dto.preferredTimezone !== undefined
-        ? this.normalizePreferredTimezone(dto.preferredTimezone)
+        ? normalizePreferredTimezoneOrThrow(dto.preferredTimezone)
         : (currentProfile.preferredTimezone ?? resolveSystemDefaultTimezone());
 
     const persistChanges = async (): Promise<void> => {
@@ -505,10 +499,10 @@ export class UsersService implements IUsersPublicService {
     const updated = await this.getById(id, true);
     await this.auditLogService?.record({
       actorUserId: actorId ?? actor?.id ?? null,
-      module: 'users',
-      feature: 'user-management',
+      module: USERS_AUDIT_META.MODULE,
+      feature: USERS_AUDIT_META.FEATURES.MANAGEMENT,
       action: 'user.update',
-      resourceType: 'user',
+      resourceType: USERS_AUDIT_META.RESOURCE_TYPES.USER,
       resourceId: id,
       beforeData: {
         ...beforeSnapshot,
@@ -526,7 +520,6 @@ export class UsersService implements IUsersPublicService {
     return updated;
   }
 
-  /** Khóa tài khoản người dùng kèm lý do và thời hạn khóa tùy chọn (Mục 3.1.3 & 3.1.10) */
   public async lockUser(
     id: number,
     dto: LockUserRequest,
@@ -555,7 +548,6 @@ export class UsersService implements IUsersPublicService {
     });
   }
 
-  /** Mở khóa tài khoản người dùng và đặt lại bộ đếm đăng nhập sai (Mục 3.1.3 & 3.1.10) */
   public async unlockUser(
     id: number,
     actorId?: number,
@@ -575,7 +567,6 @@ export class UsersService implements IUsersPublicService {
     });
   }
 
-  /** Vô hiệu hóa tài khoản người dùng — chuyển trạng thái sang INACTIVE (2) (Mục 3.1.4 & 3.1.10) */
   public async deactivateUser(
     id: number,
     reason?: string | null,
@@ -596,7 +587,6 @@ export class UsersService implements IUsersPublicService {
     });
   }
 
-  /** Kích hoạt lại tài khoản người dùng — chuyển trạng thái sang ACTIVE (1) (Mục 3.1.10) */
   public async activateUser(
     id: number,
     actorId?: number,
@@ -616,7 +606,6 @@ export class UsersService implements IUsersPublicService {
     });
   }
 
-  /** Chuyển đổi trực tiếp trạng thái Active (1) / Inactive (2) / Locked (3) / Archived (4) (Mục 3.1.10) */
   public async changeStatus(
     id: number,
     dto: ChangeUserStatusRequest,
@@ -643,7 +632,6 @@ export class UsersService implements IUsersPublicService {
     return this.activateUser(id, actorId, actor);
   }
 
-  /** Lưu trữ (Archive / Soft Delete) người dùng (status = 4) (Mục 3.1.4) */
   public async archiveUser(
     id: number,
     actorId?: number,
@@ -661,7 +649,6 @@ export class UsersService implements IUsersPublicService {
     });
   }
 
-  /** Khôi phục người dùng đã lưu trữ (Restore Archived User) (Mục 3.1.4) */
   public async restoreUser(
     id: number,
     actorId?: number,
@@ -679,7 +666,6 @@ export class UsersService implements IUsersPublicService {
     });
   }
 
-  /** Gán danh sách vai trò cho người dùng (Mục 3.1.5 & 3.5.7) */
   public async assignRoles(
     id: number,
     dto: AssignUserRolesRequest,
@@ -704,7 +690,6 @@ export class UsersService implements IUsersPublicService {
     });
   }
 
-  /** Gán người dùng vào một hoặc nhiều đơn vị/chi nhánh (Mục 3.1.6) */
   public async assignOrganizations(
     id: number,
     dto: AssignUserOrganizationsRequest,
@@ -727,7 +712,6 @@ export class UsersService implements IUsersPublicService {
     });
   }
 
-  /** Hợp đồng công khai cho module Auth: Tìm thông tin đăng nhập theo username, email hoặc số điện thoại */
   public async findAuthUserByIdentifier(
     identifier: string,
   ): Promise<UserAuthCredentialsView | null> {
@@ -747,7 +731,6 @@ export class UsersService implements IUsersPublicService {
     return this.toAuthCredentialsView(user);
   }
 
-  /** Hợp đồng công khai cho module Auth: Tìm thông tin xác thực và lịch sử mật khẩu theo userId */
   public async findAuthCredentialsByUserId(
     userId: number,
   ): Promise<UserAuthCredentialsView | null> {
@@ -764,7 +747,6 @@ export class UsersService implements IUsersPublicService {
     });
   }
 
-  /** Hợp đồng công khai cho module Auth: Lấy danh tính đầy đủ kèm hồ sơ user_profiles, roles, permissions và đơn vị */
   public async findAuthUserById(userId: number): Promise<UserAuthIdentityView | null> {
     return buildUserAuthIdentityView({
       userId,
@@ -777,9 +759,6 @@ export class UsersService implements IUsersPublicService {
     });
   }
 
-  /**
-   * 5.3.2 & 5.3.5: Lấy tùy chọn ngôn ngữ (`preferredLocale`) và múi giờ (`preferredTimezone`) của người dùng.
-   */
   public async getUserPreferences(userId: number): Promise<UserPreferencesView> {
     return resolveUserPreferencesView({
       userId,
@@ -788,9 +767,6 @@ export class UsersService implements IUsersPublicService {
     });
   }
 
-  /**
-   * 5.3.2 & 5.3.5: Cập nhật tùy chọn ngôn ngữ (`preferredLocale`) và múi giờ (`preferredTimezone`) của người dùng.
-   */
   public async updateUserPreferences(
     userId: number,
     input: UpdateUserPreferencesInput,
@@ -800,30 +776,28 @@ export class UsersService implements IUsersPublicService {
       input,
       userRepository: this.userRepository,
       getUserProfile: (uid, u) => this.getUserProfile(uid, u),
-      normalizePreferredLocale: (l) => this.normalizePreferredLocale(l),
-      normalizePreferredTimezone: (tz) => this.normalizePreferredTimezone(tz),
+      normalizePreferredLocale: (l) => normalizePreferredLocaleOrThrow(l),
+      normalizePreferredTimezone: (tz) => normalizePreferredTimezoneOrThrow(tz),
       upsertUserProfile: (uid, d) => this.upsertUserProfile(uid, d),
       invalidateIdentityCache: (uid) => this.invalidateIdentityCache(uid),
       auditLogService: this.auditLogService,
     });
   }
 
-  /** Hợp đồng công khai cho module Auth: Tự đăng ký tài khoản bằng Email hoặc SĐT (Mục 3.2.1 & 3.2.2) */
   public async registerSelfUser(input: SelfRegisterUserInput): Promise<UserAuthIdentityView> {
     return executeSelfRegisterUser({
       input,
       userRepository: this.userRepository,
       passwordHasher: this.passwordHasher,
       encryptPhone: (p) => this.encryptPhone(p),
-      normalizePreferredLocale: (l) => this.normalizePreferredLocale(l),
-      normalizePreferredTimezone: (tz) => this.normalizePreferredTimezone(tz),
+      normalizePreferredLocale: (l) => normalizePreferredLocaleOrThrow(l),
+      normalizePreferredTimezone: (tz) => normalizePreferredTimezoneOrThrow(tz),
       upsertUserProfile: (uid, d) => this.upsertUserProfile(uid, d),
       recordStatusHistory: (uid, from, to, r, by) => this.recordStatusHistory(uid, from, to, r, by),
       findAuthUserById: (uid) => this.findAuthUserById(uid),
     });
   }
 
-  /** Hợp đồng công khai: Đánh dấu địa chỉ Email đã được xác minh (Mục 3.2.6) */
   public async markEmailVerified(userId: number): Promise<void> {
     await markUserChannelVerified({
       userId,
@@ -834,7 +808,6 @@ export class UsersService implements IUsersPublicService {
     });
   }
 
-  /** Hợp đồng công khai: Đánh dấu số điện thoại đã được xác minh bằng OTP (Mục 3.2.7) */
   public async markPhoneVerified(userId: number): Promise<void> {
     await markUserChannelVerified({
       userId,
@@ -845,7 +818,6 @@ export class UsersService implements IUsersPublicService {
     });
   }
 
-  /** Hợp đồng công khai: Ghi nhận đăng nhập thành công */
   public async recordLoginSuccess(userId: number): Promise<void> {
     await recordUserLoginAttemptState({
       userId,
@@ -856,7 +828,6 @@ export class UsersService implements IUsersPublicService {
     });
   }
 
-  /** Hợp đồng công khai: Ghi nhận đăng nhập thất bại và tự động khóa tài khoản khi vượt ngưỡng */
   public async recordLoginFailure(
     userId: number,
     maxAttempts = 5,
@@ -873,7 +844,6 @@ export class UsersService implements IUsersPublicService {
     });
   }
 
-  /** Hợp đồng công khai: Tự động mở khóa khi thời hạn tạm khóa đã hết */
   public async autoUnlockExpiredLock(userId: number): Promise<void> {
     await recordUserLoginAttemptState({
       userId,
@@ -884,7 +854,6 @@ export class UsersService implements IUsersPublicService {
     });
   }
 
-  /** Hợp đồng công khai: Cập nhật mật khẩu mới cho người dùng và lưu lịch sử hash mật khẩu cũ (Mục 3.3.5) */
   public async updatePasswordHash(
     userId: number,
     newPasswordHash: string,
@@ -937,7 +906,6 @@ export class UsersService implements IUsersPublicService {
     this.stepUpVerificationDelegate = delegate;
   }
 
-  /** Kiểm tra xác thực lại (Step-Up Authentication) khi thực hiện thao tác nhạy cảm (Mục 3.5.7) */
   public async verifySensitiveActionStepUp(
     actorId?: number,
     stepUpToken?: string,
@@ -955,7 +923,6 @@ export class UsersService implements IUsersPublicService {
     }
   }
 
-  /** Reset MFA có kiểm soát từ trang quản trị (Mục 3.5.8) */
   public async adminResetMfa(
     id: number,
     dto: AdminResetUserMfaInput,
@@ -977,7 +944,6 @@ export class UsersService implements IUsersPublicService {
     });
   }
 
-  /** Thu hồi toàn bộ phiên đăng nhập của người dùng khi có sự cố (Mục 3.4.6) */
   public async revokeUserSessions(
     id: number,
     reason?: string,
@@ -1014,7 +980,6 @@ export class UsersService implements IUsersPublicService {
     };
   }
 
-  /** Xem lịch sử đăng nhập và đăng xuất của một người dùng (Mục 3.4.7 & 4.3.6) */
   public async getLoginHistory(
     id: number,
     limit?: number,
@@ -1023,7 +988,12 @@ export class UsersService implements IUsersPublicService {
     const userResp = await this.getById(id, true, actor);
     if (!this.userLoginHistoryDelegate) return [];
     const effectiveLimit =
-      limit ?? defaultSettingRegistry.getNumber('users.login_history.default_limit', undefined, 50);
+      limit ??
+      defaultSettingRegistry.getNumber(
+        USERS_SETTING_KEYS.LOGIN_HISTORY_DEFAULT_LIMIT,
+        undefined,
+        50,
+      );
     return this.userLoginHistoryDelegate(userResp.id, effectiveLimit);
   }
 
@@ -1035,7 +1005,6 @@ export class UsersService implements IUsersPublicService {
     return this.getLoginHistory(id, limit, actor);
   }
 
-  /** Đặt lại mật khẩu người dùng từ trang quản trị (Mục 3.3.3) */
   public async adminResetPassword(
     id: number,
     dto: AdminResetUserPasswordInput,
@@ -1068,13 +1037,7 @@ export class UsersService implements IUsersPublicService {
   private async runStatusTransition(params: {
     id: number;
     toStatus: UserStatusCode;
-    action:
-      | 'user.lock'
-      | 'user.unlock'
-      | 'user.deactivate'
-      | 'user.activate'
-      | 'user.archive'
-      | 'user.restore';
+    action: UserStatusTransitionAction;
     reason: string;
     actorId?: number | undefined;
     actor?: UserIdentity | undefined;
@@ -1095,7 +1058,6 @@ export class UsersService implements IUsersPublicService {
     });
   }
 
-  /** Hợp đồng công khai: Bật hoặc tắt cờ xác thực nhiều lớp (MFA) trên hồ sơ người dùng */
   public async setMfaEnabled(userId: number, enabled: boolean): Promise<void> {
     const user = await this.userRepository.findByIdWithArchived(userId, false);
     if (!user) throw new NotFoundAppException('users.notFound', { id: userId });
@@ -1104,7 +1066,6 @@ export class UsersService implements IUsersPublicService {
     await this.invalidateIdentityCache(userId);
   }
 
-  /** Ghép nối thông tin hồ sơ chi tiết (`user_profiles`), vai trò và đơn vị/chi nhánh cho danh sách UserEntity */
   public async hydrateUsersList(users: readonly UserEntity[]): Promise<UserResponse[]> {
     return hydrateUsersResponseList({
       users,
@@ -1137,28 +1098,6 @@ export class UsersService implements IUsersPublicService {
       user,
       userProfileRepository: this.userProfileRepository,
     });
-  }
-
-  private normalizePreferredLocale(locale?: string | null): SupportedLocale {
-    if (locale === undefined || locale === null || locale.trim() === '')
-      return resolveSystemDefaultLocale();
-    const normalized = locale.trim().toLowerCase();
-    if (!isSupportedLocale(normalized)) {
-      throw new BadRequestAppException('users.invalidPreferredLocale', [{ locale }], { locale });
-    }
-    return normalized;
-  }
-
-  private normalizePreferredTimezone(timezone?: string | null): string {
-    if (timezone === undefined || timezone === null || timezone.trim() === '')
-      return resolveSystemDefaultTimezone();
-    const trimmed = timezone.trim();
-    if (!isValidIanaTimezone(trimmed)) {
-      throw new BadRequestAppException('users.invalidPreferredTimezone', [{ timezone: trimmed }], {
-        timezone: trimmed,
-      });
-    }
-    return trimmed;
   }
 
   private encryptPhone(phone?: string | null): string | null {

@@ -129,6 +129,7 @@ export const API_ROUTES = {
     LOCK: (id: string | number) => `/users/${id}/lock`,
     UNLOCK: (id: string | number) => `/users/${id}/unlock`,
     RESET_PASSWORD: (id: string | number) => `/users/${id}/reset-password`,
+    RESET_MFA: (id: string | number) => `/users/${id}/reset-mfa`,
     REVOKE_SESSIONS: (id: string | number) => `/users/${id}/revoke-sessions`,
     STATUS: (id: string | number) => `/users/${id}/status`,
     DEACTIVATE: (id: string | number) => `/users/${id}/deactivate`,

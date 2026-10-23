@@ -2,16 +2,8 @@ import {
   BadRequestAppException,
   ConflictAppException,
   HTTP_ERROR_CODE,
-  NotFoundAppException,
-  defaultCodeRegistry,
 } from '@packages/kernel/index.js';
-import type { TransactionManager } from '@packages/database/index.js';
-import type {
-  AuditLogService,
-  PasswordHasherService,
-  PlatformSecurityService,
-  UserIdentity,
-} from '@packages/security/index.js';
+import type { PasswordHasherService } from '@packages/security/index.js';
 import type {
   IOrganizationsPublicService,
   OrganizationUnitSummary,
@@ -21,95 +13,27 @@ import type {
   RoleAssignedUserSummary,
   RoleSummary,
 } from '@modules/roles/contracts/index.js';
+import type {
+  UserOrganizationAssignmentSummary,
+  UserProfileView,
+  UserRoleAssignmentSummary,
+} from '../contracts/index.js';
+import { USER_STATUS } from '../enum/users.enum.js';
+import type { PreparedCreateUserContext, PreparedUpdateUserFields } from '../types/users.types.js';
 import {
-  USER_STATUS,
-  type UserOrganizationAssignmentSummary,
-  type UserProfileView,
-  type UserRoleAssignmentSummary,
-  type UserStatusCode,
   getUserStatusName,
   normalizePhoneNumber,
   parseUserStatus,
   resolveVietnameseNameParts,
-} from '../contracts/index.js';
+} from './user-normalizer.helper.js';
 import type { UserProfileEntity } from '../entities/user-profile.entity.js';
 import type { UserEntity } from '../entities/user.entity.js';
 import type { UsersMapper } from '../mappers/users.mapper.js';
 import type { UserOrganizationUnitRepository } from '../repositories/user-organization-unit.repository.js';
-import type { UserProfileRepository } from '../repositories/user-profile.repository.js';
 import type { UserRoleRepository } from '../repositories/user-role.repository.js';
 import type { UserRepository } from '../repositories/user.repository.js';
-import type {
-  AssignUserOrganizationsRequest,
-  AssignUserRolesRequest,
-  CreateUserRequest,
-  UpdateUserRequest,
-} from '../requests/users.requests.js';
+import type { CreateUserRequest, UpdateUserRequest } from '../requests/users.requests.js';
 import type { UserResponse } from '../responses/users.response.js';
-
-export function registerUsersUsageCheckers(params: {
-  userRepository: UserRepository;
-  userProfileRepository: UserProfileRepository | null;
-  userOrgRepository: UserOrganizationUnitRepository;
-}): void {
-  const { userRepository, userProfileRepository, userOrgRepository } = params;
-
-  defaultCodeRegistry.registerUsageChecker(
-    'users.status',
-    'users.status',
-    async ({ numericCode }) => {
-      const { total } = await userRepository.searchPaginated({
-        status: parseUserStatus(numericCode),
-        includeArchived: true,
-        page: 1,
-        limit: 1,
-      });
-      return total;
-    },
-  );
-
-  defaultCodeRegistry.registerUsageChecker(
-    'users.gender',
-    'user_profiles.gender',
-    async ({ numericCode }) => {
-      if (!userProfileRepository) return 0;
-      const { items } = await userRepository.searchPaginated({
-        includeArchived: true,
-        page: 1,
-        limit: 10000,
-      });
-      const userIds = items.filter((u) => !u.deletedAt).map((u) => Number(u.id));
-      if (userIds.length === 0) return 0;
-      const profiles = await userProfileRepository.findByUserIds(userIds);
-      return profiles.filter((p) => Number(p.gender) === Number(numericCode)).length;
-    },
-  );
-
-  defaultCodeRegistry.registerUsageChecker(
-    'users.position_title',
-    'user_organization_units.position_title',
-    async ({ numericCode, code }) => {
-      const { items } = await userRepository.searchPaginated({
-        includeArchived: true,
-        page: 1,
-        limit: 10000,
-      });
-      const userIds = items.filter((u) => !u.deletedAt).map((u) => Number(u.id));
-      if (userIds.length === 0) return 0;
-      const assignments = await userOrgRepository.findByUserIds(userIds);
-      const labelVi = defaultCodeRegistry.getLabel('users.position_title', numericCode, 'vi');
-      const labelEn = defaultCodeRegistry.getLabel('users.position_title', numericCode, 'en');
-      const candidates = new Set(
-        [code, String(numericCode), labelVi, labelEn]
-          .map((s) => s.trim().toUpperCase())
-          .filter(Boolean),
-      );
-      return assignments.filter(
-        (a) => a.positionTitle && candidates.has(a.positionTitle.trim().toUpperCase()),
-      ).length;
-    },
-  );
-}
 
 export async function validateAndPrepareCreateUserContext(params: {
   dto: CreateUserRequest;
@@ -117,14 +41,7 @@ export async function validateAndPrepareCreateUserContext(params: {
   passwordHasher: PasswordHasherService;
   rolesPublicService: IRolesPublicService;
   organizationsPublicService: IOrganizationsPublicService | null;
-}): Promise<{
-  normalizedEmail: string;
-  finalUsername: string;
-  normalizedPhone: string | null;
-  phoneHash: string | null;
-  roleIds: number[];
-  orgInputs: NonNullable<CreateUserRequest['organizationUnits']>;
-}> {
+}): Promise<PreparedCreateUserContext> {
   const { dto, userRepository, passwordHasher, rolesPublicService, organizationsPublicService } =
     params;
 
@@ -215,11 +132,7 @@ export async function validateAndApplyUserUpdateFields(params: {
   passwordHasher: PasswordHasherService;
   encryptPhone: (phone?: string | null) => string | null;
   resolveSubordinateUserIds: (managerId: number) => Promise<number[]>;
-}): Promise<{
-  nextFirstName: string;
-  nextLastName: string;
-  nextFullName: string;
-}> {
+}): Promise<PreparedUpdateUserFields> {
   const {
     id,
     user,
@@ -518,287 +431,4 @@ export async function listActiveUsersByRoleId(params: {
       assignedAt: assignedAt.toISOString(),
     };
   });
-}
-
-export async function executeUserStatusTransition(params: {
-  id: number;
-  toStatus: UserStatusCode;
-  action:
-    | 'user.lock'
-    | 'user.unlock'
-    | 'user.deactivate'
-    | 'user.activate'
-    | 'user.archive'
-    | 'user.restore';
-  reason: string;
-  actorId?: number | undefined;
-  actor?: UserIdentity | undefined;
-  lockedUntil?: Date | null | undefined;
-  lockReason?: string | null | undefined;
-  preserveLockReason?: boolean | undefined;
-  archiveTimestamp?: Date | null | undefined;
-  resetFailedAttempts?: boolean | undefined;
-  userRepository: UserRepository;
-  ensureAccessUserRecord: (user: UserEntity, actor: UserIdentity, action: string) => Promise<void>;
-  recordStatusHistory: (
-    userId: number,
-    fromStatus: UserStatusCode | null,
-    toStatus: UserStatusCode,
-    reason?: string | null,
-    changedBy?: number | null,
-  ) => Promise<void>;
-  invalidateIdentityCache: (userId: number) => Promise<void>;
-  getById: (id: number, includeArchived: boolean) => Promise<UserResponse>;
-  auditLogService: AuditLogService | null;
-}): Promise<UserResponse> {
-  const {
-    id,
-    toStatus,
-    action,
-    reason,
-    actorId,
-    actor,
-    lockedUntil,
-    lockReason,
-    preserveLockReason,
-    archiveTimestamp,
-    resetFailedAttempts,
-    userRepository,
-    ensureAccessUserRecord,
-    recordStatusHistory,
-    invalidateIdentityCache,
-    getById,
-    auditLogService,
-  } = params;
-
-  const user = await userRepository.findByIdWithArchived(id, true);
-  if (!user) {
-    throw new NotFoundAppException('users.notFound', { id });
-  }
-  if (actor) {
-    await ensureAccessUserRecord(user, actor, 'status');
-  }
-
-  const prevStatus = parseUserStatus(user.status);
-  const prevLockReason = user.lockReason ?? null;
-
-  user.status = toStatus;
-  if (lockedUntil !== undefined) {
-    user.lockedUntil = lockedUntil;
-  }
-  if (!preserveLockReason && lockReason !== undefined) {
-    user.lockReason = lockReason;
-  }
-  if (resetFailedAttempts) {
-    user.failedLoginAttempts = 0;
-  }
-  if (archiveTimestamp !== undefined) {
-    user.archivedAt = archiveTimestamp;
-    user.deletedAt = archiveTimestamp;
-  }
-
-  await userRepository.saveEntity(user);
-  await recordStatusHistory(id, prevStatus, toStatus, reason, actorId);
-  await invalidateIdentityCache(id);
-  const updated = await getById(id, true);
-
-  await auditLogService?.record({
-    actorUserId: actorId ?? null,
-    module: 'users',
-    feature: 'user-status',
-    action,
-    resourceType: 'user',
-    resourceId: id,
-    beforeData: {
-      status: prevStatus,
-      ...(action === 'user.unlock' ? { lockReason: prevLockReason } : {}),
-    },
-    afterData: {
-      status: toStatus,
-      ...(action === 'user.lock'
-        ? {
-            lockReason: user.lockReason,
-            lockedUntil: lockedUntil ? lockedUntil.toISOString() : null,
-          }
-        : {}),
-      ...(action === 'user.unlock' ? { lockReason: null, failedLoginAttempts: 0 } : {}),
-      ...(action === 'user.archive' && archiveTimestamp
-        ? { archivedAt: archiveTimestamp.toISOString() }
-        : {}),
-      ...(action === 'user.restore' ? { archivedAt: null } : {}),
-    },
-    reason,
-  });
-
-  return updated;
-}
-
-export async function executeAssignUserRolesFlow(params: {
-  id: number;
-  dto: AssignUserRolesRequest;
-  actorId?: number | undefined;
-  actor?: UserIdentity | undefined;
-  userRepository: UserRepository;
-  userRoleRepository: UserRoleRepository;
-  rolesPublicService: IRolesPublicService;
-  verifySensitiveActionStepUp: (
-    actorId?: number,
-    stepUpToken?: string,
-    requireStepUp?: boolean,
-    action?: string,
-  ) => Promise<void>;
-  ensureAccessUserEntity: (user: UserEntity, actor: UserIdentity, action: string) => Promise<void>;
-  invalidateIdentityCache: (userId: number) => Promise<void>;
-  getById: (id: number) => Promise<UserResponse>;
-  auditLogService: AuditLogService | null;
-  platformSecurityService: PlatformSecurityService | null;
-}): Promise<UserResponse> {
-  const {
-    id,
-    dto,
-    actorId,
-    actor,
-    userRepository,
-    userRoleRepository,
-    rolesPublicService,
-    verifySensitiveActionStepUp,
-    ensureAccessUserEntity,
-    invalidateIdentityCache,
-    getById,
-    auditLogService,
-    platformSecurityService,
-  } = params;
-
-  await verifySensitiveActionStepUp(
-    actorId,
-    dto.stepUpToken,
-    dto.requireStepUp,
-    'users.assignRoles',
-  );
-  const user = await userRepository.findByIdWithArchived(id, false);
-  if (!user) {
-    throw new NotFoundAppException('users.notFound', { id });
-  }
-  if (actor) {
-    await ensureAccessUserEntity(user, actor, 'update');
-  }
-
-  const prevLinks = await userRoleRepository.findByUserIds([id]);
-  const prevRoleIds = prevLinks.map((l) => Number(l.roleId));
-  if (dto.roleIds.length > 0) {
-    await rolesPublicService.ensureActiveRolesExist(dto.roleIds);
-  }
-
-  await userRoleRepository.replaceUserRoles(id, dto.roleIds, actorId);
-  await invalidateIdentityCache(id);
-  const updated = await getById(id);
-
-  await auditLogService?.record({
-    actorUserId: actorId ?? null,
-    module: 'users',
-    feature: 'user-roles',
-    action: 'user.assign_roles',
-    resourceType: 'user',
-    resourceId: id,
-    beforeData: { roleIds: prevRoleIds },
-    afterData: {
-      roleIds: updated.roles.map((r) => r.roleId),
-      roleCodes: updated.roles.map((r) => r.code),
-    },
-    reason: 'Updated user roles assignment',
-  });
-  await platformSecurityService?.recordSecurityEvent({
-    eventType: 'PERMISSION_CHANGED',
-    module: 'users',
-    feature: 'user-roles',
-    action: 'user.assign_roles',
-    actorId: actorId ?? null,
-    targetUserId: id,
-    resourceType: 'user',
-    resourceId: id,
-    reason: 'Updated user roles assignment',
-    beforeData: { roleIds: prevRoleIds },
-    afterData: {
-      roleIds: updated.roles.map((r) => r.roleId),
-      roleCodes: updated.roles.map((r) => r.code),
-    },
-    persistToAuditLog: false,
-  });
-  return updated;
-}
-
-export async function executeAssignUserOrganizationsFlow(params: {
-  id: number;
-  dto: AssignUserOrganizationsRequest;
-  actorId?: number | undefined;
-  actor?: UserIdentity | undefined;
-  userRepository: UserRepository;
-  userOrgRepository: UserOrganizationUnitRepository;
-  organizationsPublicService: IOrganizationsPublicService | null;
-  transactionManager: TransactionManager | null;
-  ensureAccessUserEntity: (user: UserEntity, actor: UserIdentity, action: string) => Promise<void>;
-  invalidateIdentityCache: (userId: number) => Promise<void>;
-  getById: (id: number) => Promise<UserResponse>;
-  auditLogService: AuditLogService | null;
-}): Promise<UserResponse> {
-  const {
-    id,
-    dto,
-    actorId,
-    actor,
-    userRepository,
-    userOrgRepository,
-    organizationsPublicService,
-    transactionManager,
-    ensureAccessUserEntity,
-    invalidateIdentityCache,
-    getById,
-    auditLogService,
-  } = params;
-
-  const user = await userRepository.findByIdWithArchived(id, false);
-  if (!user) {
-    throw new NotFoundAppException('users.notFound', { id });
-  }
-  if (actor) {
-    await ensureAccessUserEntity(user, actor, 'update');
-  }
-
-  const prevLinks = await userOrgRepository.findByUserIds([id]);
-  const prevOrgUnitIds = prevLinks.map((l) => Number(l.organizationUnitId));
-  const unitIds = dto.organizationUnits.map((o) => o.organizationUnitId);
-  if (unitIds.length > 0 && organizationsPublicService) {
-    await organizationsPublicService.ensureActiveUnitsExist(unitIds);
-  }
-
-  const work = async (): Promise<void> => {
-    const savedLinks = await userOrgRepository.replaceUserOrganizations(id, dto.organizationUnits);
-    const primaryLink = savedLinks.find((l) => l.isPrimary) ?? savedLinks[0];
-    user.primaryOrganizationUnitId = primaryLink ? Number(primaryLink.organizationUnitId) : null;
-    await userRepository.saveEntity(user);
-  };
-
-  if (transactionManager) {
-    await transactionManager.runInTransaction(work);
-  } else {
-    await work();
-  }
-
-  await invalidateIdentityCache(id);
-  const updated = await getById(id);
-  await auditLogService?.record({
-    actorUserId: actorId ?? actor?.id ?? null,
-    module: 'users',
-    feature: 'user-organizations',
-    action: 'user.assign_organizations',
-    resourceType: 'user',
-    resourceId: id,
-    beforeData: { organizationUnitIds: prevOrgUnitIds },
-    afterData: {
-      organizationUnitIds: updated.organizationUnits.map((o) => o.organizationUnitId),
-      primaryOrganizationUnitId: updated.primaryOrganizationUnitId,
-    },
-    reason: 'Updated user organization units assignment',
-  });
-  return updated;
 }

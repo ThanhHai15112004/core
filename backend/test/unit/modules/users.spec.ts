@@ -1,0 +1,462 @@
+import { BadRequestAppException, ConflictAppException } from '@packages/kernel/index.js';
+import {
+  USER_GENDER,
+  USER_STATUS,
+  UsersMapper,
+  UsersService,
+  getUserGenderName,
+  getUserStatusName,
+  normalizePhoneNumber,
+  parseUserGender,
+  parseUserStatus,
+  resolveVietnameseNameParts,
+  validateAndApplyUserUpdateFields,
+  validateAndPrepareCreateUserContext,
+} from '@modules/users/index.js';
+import type { UserEntity } from '@modules/users/entities/user.entity.js';
+import type { UserProfileEntity } from '@modules/users/entities/user-profile.entity.js';
+import type { UserRepository } from '@modules/users/repositories/user.repository.js';
+import type { UserProfileRepository } from '@modules/users/repositories/user-profile.repository.js';
+import type { UserRoleRepository } from '@modules/users/repositories/user-role.repository.js';
+import type { UserOrganizationUnitRepository } from '@modules/users/repositories/user-organization-unit.repository.js';
+import type { UserStatusHistoryRepository } from '@modules/users/repositories/user-status-history.repository.js';
+import type { PasswordHasherService } from '@packages/security/index.js';
+import type { IRolesPublicService } from '@modules/roles/contracts/index.js';
+import type { IOrganizationsPublicService } from '@modules/organizations/contracts/index.js';
+
+function createMockUserEntity(
+  overrides: Partial<UserEntity> & { id: number; username: string; email: string },
+): UserEntity {
+  const now = new Date('2026-01-01T00:00:00.000Z');
+  return {
+    id: overrides.id,
+    username: overrides.username,
+    email: overrides.email,
+    phone: overrides.phone ?? null,
+    phoneHash: overrides.phoneHash ?? null,
+    passwordHash: overrides.passwordHash ?? 'hashed_pwd',
+    passwordHistoryHashesJson: overrides.passwordHistoryHashesJson ?? null,
+    status: overrides.status ?? USER_STATUS.ACTIVE,
+    emailVerifiedAt: overrides.emailVerifiedAt ?? null,
+    phoneVerifiedAt: overrides.phoneVerifiedAt ?? null,
+    lockedUntil: overrides.lockedUntil ?? null,
+    lockReason: overrides.lockReason ?? null,
+    failedLoginAttempts: overrides.failedLoginAttempts ?? 0,
+    mfaEnabled: overrides.mfaEnabled ?? false,
+    primaryOrganizationUnitId: overrides.primaryOrganizationUnitId ?? null,
+    managerId: overrides.managerId ?? null,
+    lastLoginAt: overrides.lastLoginAt ?? null,
+    passwordChangedAt: overrides.passwordChangedAt ?? now,
+    archivedAt: overrides.archivedAt ?? null,
+    version: overrides.version ?? 1,
+    createdAt: overrides.createdAt ?? now,
+    updatedAt: overrides.updatedAt ?? now,
+    deletedAt: overrides.deletedAt ?? null,
+  } as UserEntity;
+}
+
+describe('Users Module — Helpers & UsersService Unit Suite', () => {
+  describe('user-normalizer.helper', () => {
+    it('parses Vietnamese fullName and firstName/lastName parts accurately', () => {
+      const parsedFromFull = resolveVietnameseNameParts({ fullName: 'Nguyễn Văn Hải' });
+      expect(parsedFromFull).toEqual({
+        firstName: 'Hải',
+        lastName: 'Nguyễn Văn',
+        fullName: 'Nguyễn Văn Hải',
+      });
+
+      const parsedSingleWord = resolveVietnameseNameParts({ fullName: 'Admin' });
+      expect(parsedSingleWord).toEqual({
+        firstName: 'Admin',
+        lastName: 'Admin',
+        fullName: 'Admin',
+      });
+
+      const parsedFromParts = resolveVietnameseNameParts({
+        firstName: 'Minh',
+        lastName: 'Trần Hoàng',
+      });
+      expect(parsedFromParts).toEqual({
+        firstName: 'Minh',
+        lastName: 'Trần Hoàng',
+        fullName: 'Trần Hoàng Minh',
+      });
+    });
+
+    it('normalizes Vietnamese and international phone numbers consistently', () => {
+      expect(normalizePhoneNumber('+84 909 123-456')).toBe('0909123456');
+      expect(normalizePhoneNumber('84912345678')).toBe('0912345678');
+      expect(normalizePhoneNumber('0988.111.222')).toBe('0988111222');
+      expect(normalizePhoneNumber('   ')).toBeNull();
+      expect(normalizePhoneNumber(null)).toBeNull();
+    });
+
+    it('resolves user status and gender codes via CodeRegistry', () => {
+      expect(parseUserStatus(0)).toBe(USER_STATUS.INACTIVE);
+      expect(parseUserStatus(USER_STATUS.ACTIVE)).toBe(USER_STATUS.ACTIVE);
+      expect(parseUserStatus(USER_STATUS.LOCKED)).toBe(USER_STATUS.LOCKED);
+      expect(getUserStatusName(USER_STATUS.ACTIVE)).toBe('ACTIVE');
+
+      expect(parseUserGender(null)).toBeNull();
+      expect(parseUserGender(USER_GENDER.MALE)).toBe(USER_GENDER.MALE);
+      expect(getUserGenderName(null)).toBeNull();
+      expect(typeof getUserGenderName(USER_GENDER.FEMALE)).toBe('string');
+    });
+  });
+
+  describe('user-profile-hydration.helper', () => {
+    it('prevents circular manager hierarchy and self-management on user update', async () => {
+      const targetUser = createMockUserEntity({
+        id: 10,
+        username: 'manager_a',
+        email: 'manager_a@example.com',
+      });
+      const subordinateUser = createMockUserEntity({
+        id: 25,
+        username: 'sub_b',
+        email: 'sub_b@example.com',
+        managerId: 10,
+      });
+
+      const mockUserRepo = {
+        findByIdWithArchived: async (id: number) =>
+          id === 25 ? subordinateUser : id === 10 ? targetUser : null,
+      } as unknown as UserRepository;
+
+      const mockPasswordHasher = {
+        sha256: (v: string) => `sha_${v}`,
+      } as unknown as PasswordHasherService;
+
+      const baseProfile = {
+        firstName: 'A',
+        lastName: 'Manager',
+        fullName: 'Manager A',
+        avatarUrl: null,
+        dateOfBirth: null,
+        gender: null,
+        identityNumber: null,
+        address: null,
+        city: null,
+        country: null,
+        bio: null,
+      };
+
+      // Cannot be own manager
+      await expect(
+        validateAndApplyUserUpdateFields({
+          id: 10,
+          user: targetUser,
+          dto: { managerId: 10 },
+          currentProfile: baseProfile,
+          userRepository: mockUserRepo,
+          passwordHasher: mockPasswordHasher,
+          encryptPhone: (p) => p ?? null,
+          resolveSubordinateUserIds: async () => [25],
+        }),
+      ).rejects.toThrow(BadRequestAppException);
+
+      // Cannot assign subordinate #25 as manager of #10
+      await expect(
+        validateAndApplyUserUpdateFields({
+          id: 10,
+          user: targetUser,
+          dto: { managerId: 25 },
+          currentProfile: baseProfile,
+          userRepository: mockUserRepo,
+          passwordHasher: mockPasswordHasher,
+          encryptPhone: (p) => p ?? null,
+          resolveSubordinateUserIds: async () => [25],
+        }),
+      ).rejects.toThrow(BadRequestAppException);
+    });
+
+    it('detects duplicate email and auto-suffixes generated username when omitted', async () => {
+      const existingUser = createMockUserEntity({
+        id: 1,
+        username: 'nguyen.van.a',
+        email: 'taken@example.com',
+      });
+
+      const mockUserRepo = {
+        findByUsername: async (u: string) => (u === 'nguyen.van.a' ? existingUser : null),
+        findByEmail: async (e: string) => (e === 'taken@example.com' ? existingUser : null),
+        findByPhoneHash: async () => null,
+      } as unknown as UserRepository;
+
+      const mockPasswordHasher = {
+        sha256: (v: string) => `sha_${v}`,
+      } as unknown as PasswordHasherService;
+
+      const mockRolesService = {
+        ensureActiveRolesExist: async () => undefined,
+      } as unknown as IRolesPublicService;
+
+      // Duplicate email rejected
+      await expect(
+        validateAndPrepareCreateUserContext({
+          dto: {
+            email: 'taken@example.com',
+            fullName: 'Nguyễn Văn A',
+            password: 'Password@123',
+            status: USER_STATUS.ACTIVE,
+            roleIds: [],
+            organizationUnits: [],
+          },
+          userRepository: mockUserRepo,
+          passwordHasher: mockPasswordHasher,
+          rolesPublicService: mockRolesService,
+          organizationsPublicService: null,
+        }),
+      ).rejects.toThrow(ConflictAppException);
+
+      // Auto-generated username from email prefix suffixes when collision happens and username was not explicitly provided
+      const prepared = await validateAndPrepareCreateUserContext({
+        dto: {
+          email: 'nguyen.van.a@company.vn',
+          fullName: 'Nguyễn Văn A',
+          password: 'Password@123',
+          status: USER_STATUS.ACTIVE,
+          roleIds: [],
+          organizationUnits: [],
+        },
+        userRepository: mockUserRepo,
+        passwordHasher: mockPasswordHasher,
+        rolesPublicService: mockRolesService,
+        organizationsPublicService: null,
+      });
+
+      expect(prepared.normalizedEmail).toBe('nguyen.van.a@company.vn');
+      expect(prepared.finalUsername).toMatch(/^nguyen\.van\.a_[a-z0-9]+$/);
+    });
+  });
+
+  describe('UsersService Lifecycle & Assignments', () => {
+    it('creates user, transitions status (lock / unlock / archive / restore) and assigns roles & organizations', async () => {
+      const usersStore = new Map<number, UserEntity>();
+      const profilesStore = new Map<number, UserProfileEntity>();
+      const rolesLinksStore = new Map<number, number[]>();
+      const orgsLinksStore = new Map<
+        number,
+        Array<{ organizationUnitId: number; isPrimary: boolean; positionTitle: string | null }>
+      >();
+      const statusHistories: Array<{
+        userId: number;
+        fromStatus: number | null;
+        toStatus: number;
+        reason: string | null;
+      }> = [];
+      let nextUserId = 1;
+
+      const mockUserRepo = {
+        searchPaginated: async () => ({ items: [...usersStore.values()], total: usersStore.size }),
+        findByIdWithArchived: async (id: number) => usersStore.get(Number(id)) ?? null,
+        findByUsername: async (u: string) =>
+          [...usersStore.values()].find((item) => item.username === u) ?? null,
+        findByEmail: async (e: string) =>
+          [...usersStore.values()].find((item) => item.email === e) ?? null,
+        findByPhoneHash: async () => null,
+        saveEntity: async (data: Partial<UserEntity>) => {
+          const id = data.id ? Number(data.id) : nextUserId++;
+          const existing = usersStore.get(id);
+          const saved = createMockUserEntity({
+            ...existing,
+            ...data,
+            id,
+            username: data.username ?? existing?.username ?? `user_${id}`,
+            email: data.email ?? existing?.email ?? `user_${id}@example.com`,
+          });
+          usersStore.set(id, saved);
+          return saved;
+        },
+      } as unknown as UserRepository;
+
+      const mockProfileRepo = {
+        upsertByUserId: async (userId: number, data: Partial<UserProfileEntity>) => {
+          const existing = profilesStore.get(Number(userId));
+          const record = {
+            id: Number(userId),
+            userId: Number(userId),
+            firstName: data.firstName ?? existing?.firstName ?? '',
+            lastName: data.lastName ?? existing?.lastName ?? '',
+            fullName: data.fullName ?? existing?.fullName ?? '',
+            avatarUrl: data.avatarUrl ?? null,
+            dateOfBirth: data.dateOfBirth ?? null,
+            gender: data.gender ?? null,
+            identityNumber: data.identityNumber ?? null,
+            address: data.address ?? null,
+            city: data.city ?? null,
+            country: data.country ?? null,
+            bio: data.bio ?? null,
+            preferredLocale: data.preferredLocale ?? 'vi',
+            preferredTimezone: data.preferredTimezone ?? 'Asia/Ho_Chi_Minh',
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          } as UserProfileEntity;
+          profilesStore.set(Number(userId), record);
+          return record;
+        },
+        findByUserId: async (userId: number) => profilesStore.get(Number(userId)) ?? null,
+        findByUserIds: async (userIds: readonly number[]) =>
+          userIds
+            .map((id) => profilesStore.get(Number(id)))
+            .filter((p): p is UserProfileEntity => Boolean(p)),
+      } as unknown as UserProfileRepository;
+
+      const mockUserRoleRepo = {
+        findByUserIds: async (userIds: readonly number[]) =>
+          userIds.flatMap((uid) =>
+            (rolesLinksStore.get(Number(uid)) ?? []).map((roleId) => ({
+              userId: Number(uid),
+              roleId,
+            })),
+          ),
+        replaceUserRoles: async (userId: number, roleIds: readonly number[]) => {
+          rolesLinksStore.set(Number(userId), [...roleIds]);
+        },
+      } as unknown as UserRoleRepository;
+
+      const mockUserOrgRepo = {
+        findByUserIds: async (userIds: readonly number[]) =>
+          userIds.flatMap((uid) =>
+            (orgsLinksStore.get(Number(uid)) ?? []).map((o) => ({
+              userId: Number(uid),
+              ...o,
+            })),
+          ),
+        replaceUserOrganizations: async (
+          userId: number,
+          items: ReadonlyArray<{
+            organizationUnitId: number;
+            isPrimary?: boolean;
+            positionTitle?: string | null;
+          }>,
+        ) => {
+          const normalized = items.map((item, idx) => ({
+            userId: Number(userId),
+            organizationUnitId: Number(item.organizationUnitId),
+            isPrimary: item.isPrimary ?? idx === 0,
+            positionTitle: item.positionTitle ?? null,
+          }));
+          orgsLinksStore.set(Number(userId), normalized);
+          return normalized;
+        },
+      } as unknown as UserOrganizationUnitRepository;
+
+      const mockStatusHistoryRepo = {
+        recordTransition: async (entry: {
+          userId: number;
+          fromStatus: number | null;
+          toStatus: number;
+          reason: string | null;
+        }) => {
+          statusHistories.push(entry);
+        },
+        findByUserId: async (userId: number) =>
+          statusHistories
+            .filter((h) => h.userId === Number(userId))
+            .map((h, i) => ({
+              id: i + 1,
+              ...h,
+              changedBy: 1,
+              createdAt: new Date(),
+            })),
+      } as unknown as UserStatusHistoryRepository;
+
+      const mockPasswordHasher = {
+        hash: async (pwd: string) => `hashed:${pwd}`,
+        sha256: (val: string) => `sha256:${val}`,
+        generateSuggestedPassword: () => 'Suggested#2026',
+      } as unknown as PasswordHasherService;
+
+      const mockRolesService = {
+        ensureActiveRolesExist: async () => undefined,
+        findByIds: async (ids: readonly number[]) =>
+          ids.map((id) => ({
+            id,
+            code: id === 1 ? 'admin' : 'staff',
+            name: id === 1 ? 'Administrator' : 'Staff Member',
+            status: 1,
+            dataScope: 1,
+            dataScopeName: 'ALL',
+            permissions: ['users.read'],
+          })),
+        findByCodes: async () => [],
+        registerRoleUserCountDelegate: () => undefined,
+        registerRoleUsersListDelegate: () => undefined,
+      } as unknown as IRolesPublicService;
+
+      const mockOrgsService = {
+        ensureActiveUnitsExist: async () => undefined,
+        findByIds: async (ids: readonly number[]) =>
+          ids.map((id) => ({
+            id,
+            code: `UNIT_${id}`,
+            name: `Phòng Ban ${id}`,
+            type: 20,
+            typeName: 'DEPARTMENT',
+            status: 1,
+          })),
+        registerUnitUsageCountDelegate: () => undefined,
+      } as unknown as IOrganizationsPublicService;
+
+      const service = new UsersService(
+        mockUserRepo,
+        mockUserRoleRepo,
+        mockUserOrgRepo,
+        new UsersMapper(),
+        mockPasswordHasher,
+        mockRolesService,
+        mockOrgsService,
+        mockStatusHistoryRepo,
+        null,
+        null,
+        null,
+        mockProfileRepo,
+      );
+
+      // 1. Create User
+      const created = await service.create(
+        {
+          username: 'thanh.hai',
+          email: 'hai@core.vn',
+          fullName: 'Lê Thanh Hải',
+          phone: '+84909111222',
+          password: 'Password@123',
+          status: USER_STATUS.ACTIVE,
+          roleIds: [1],
+          organizationUnits: [
+            { organizationUnitId: 10, isPrimary: true, positionTitle: 'Tech Lead' },
+          ],
+        },
+        1,
+      );
+
+      expect(created.username).toBe('thanh.hai');
+      expect(created.firstName).toBe('Hải');
+      expect(created.lastName).toBe('Lê Thanh');
+      expect(created.roles).toHaveLength(1);
+      expect(created.organizationUnits[0]?.positionTitle).toBe('Tech Lead');
+
+      // 2. Lock & Unlock User
+      const locked = await service.lockUser(created.id, { reason: 'Security review' }, 1);
+      expect(locked.status).toBe(USER_STATUS.LOCKED);
+      expect(locked.lockReason).toBe('Security review');
+
+      const unlocked = await service.unlockUser(created.id, 1);
+      expect(unlocked.status).toBe(USER_STATUS.ACTIVE);
+      expect(unlocked.lockReason).toBeNull();
+
+      // 3. Archive & Restore User
+      const archived = await service.archiveUser(created.id, 1);
+      expect(archived.status).toBe(USER_STATUS.ARCHIVED);
+      expect(archived.isArchived).toBe(true);
+
+      const restored = await service.restoreUser(created.id, 1);
+      expect(restored.status).toBe(USER_STATUS.INACTIVE);
+
+      // 4. Status history recorded all 5 transitions
+      const history = await service.getStatusHistory(created.id);
+      expect(history).toHaveLength(5);
+    });
+  });
+});

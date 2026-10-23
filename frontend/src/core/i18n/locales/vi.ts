@@ -57,6 +57,7 @@ export const vi = {
     auth: 'Xác thực & Bảo mật',
     organizations: 'Đơn vị & Tổ chức',
     roles: 'Vai trò & Phân quyền',
+    users: 'Hồ sơ Nhân sự',
     iam: 'Người dùng & Xác thực',
     files: 'Quản lý File & Media',
     languageToggle: 'Ngôn ngữ',

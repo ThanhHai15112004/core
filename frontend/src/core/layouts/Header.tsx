@@ -11,6 +11,7 @@ import {
   ShieldCheck,
   Building2,
   KeyRound,
+  Users,
   FolderOpen,
   Sun,
   Moon,
@@ -34,6 +35,8 @@ export const Header: React.FC<HeaderProps> = ({ activeTab = 'home', onTabChange 
         return <Building2 size={15} />;
       case 'roles':
         return <KeyRound size={15} />;
+      case 'users':
+        return <Users size={15} />;
       case 'files':
         return <FolderOpen size={15} />;
       case 'home':

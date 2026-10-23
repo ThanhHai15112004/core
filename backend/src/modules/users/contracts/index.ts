@@ -1,134 +1,26 @@
-import { defaultCodeRegistry } from '@packages/kernel/index.js';
+export {
+  USER_STATUS,
+  type UserStatusCode,
+  type UserStatusName,
+  USER_GENDER,
+  type UserGenderCode,
+  type UserGenderName,
+  USER_IDENTITY_CACHE_PREFIX,
+  USERS_CODE_TYPES,
+  USERS_SETTING_KEYS,
+  USERS_AUDIT_META,
+} from '../enum/users.enum.js';
 
-export const USER_STATUS = {
-  ACTIVE: 1,
-  INACTIVE: 2,
-  LOCKED: 3,
-  ARCHIVED: 4,
-} as const;
+export {
+  parseUserStatus,
+  getUserStatusName,
+  parseUserGender,
+  getUserGenderName,
+  resolveVietnameseNameParts,
+  normalizePhoneNumber,
+} from '../helpers/user-normalizer.helper.js';
 
-export type UserStatusCode = (typeof USER_STATUS)[keyof typeof USER_STATUS];
-export type UserStatusName = keyof typeof USER_STATUS;
-
-export const USER_GENDER = {
-  MALE: 1,
-  FEMALE: 2,
-  OTHER: 3,
-} as const;
-
-export type UserGenderCode = (typeof USER_GENDER)[keyof typeof USER_GENDER];
-export type UserGenderName = keyof typeof USER_GENDER;
-
-/**
- * Phân giải trạng thái người dùng thông qua CodeRegistryService (`users.status`).
- * Không còn hardcode chuỗi từ khóa tiếng Việt trong code — toàn bộ aliases được quản lý động tại `code_values`.
- */
-export function parseUserStatus(val: unknown): UserStatusCode {
-  if (val === 0 || val === '0') {
-    return USER_STATUS.INACTIVE;
-  }
-  const resolved = defaultCodeRegistry.parseToNumericCode('users.status', val, USER_STATUS.ACTIVE);
-  if (resolved === 1 || resolved === 2 || resolved === 3 || resolved === 4) {
-    return resolved;
-  }
-  const behavior = defaultCodeRegistry.resolveBehaviorCode('users.status', resolved);
-  if (behavior === 'INACTIVE') return USER_STATUS.INACTIVE;
-  if (behavior === 'LOCKED') return USER_STATUS.LOCKED;
-  if (behavior === 'ARCHIVED') return USER_STATUS.ARCHIVED;
-  return USER_STATUS.ACTIVE;
-}
-
-/**
- * Tra cứu tên mã trạng thái người dùng từ `users.status` (O(1) L1 Lookup).
- */
-export function getUserStatusName(code: number): UserStatusName {
-  const behavior = defaultCodeRegistry.resolveBehaviorCode('users.status', code);
-  if (behavior === 'INACTIVE' || behavior === 'LOCKED' || behavior === 'ARCHIVED') {
-    return behavior;
-  }
-  return 'ACTIVE';
-}
-
-/**
- * Phân giải giới tính người dùng thông qua CodeRegistryService (`users.gender`).
- */
-export function parseUserGender(val: unknown): number | null {
-  if (val === undefined || val === null || val === '') return null;
-  return defaultCodeRegistry.parseToNumericCode('users.gender', val, USER_GENDER.OTHER);
-}
-
-/**
- * Tra cứu tên mã giới tính từ `users.gender`.
- */
-export function getUserGenderName(code?: number | null): string | null {
-  if (code === undefined || code === null) return null;
-  return defaultCodeRegistry.getCodeName('users.gender', code, 'OTHER');
-}
-
-/**
- * Tách hoặc chuẩn hóa firstName, lastName và fullName theo chuẩn tiếng Việt
- * (lastName = Họ và tên đệm, firstName = Tên gọi)
- */
-export function resolveVietnameseNameParts(input: {
-  firstName?: string | null | undefined;
-  lastName?: string | null | undefined;
-  fullName?: string | null | undefined;
-}): { firstName: string; lastName: string; fullName: string } {
-  const rawFirst = input.firstName?.trim() ?? '';
-  const rawLast = input.lastName?.trim() ?? '';
-  const rawFull = input.fullName?.trim() ?? '';
-
-  if (rawFirst && rawLast) {
-    return {
-      firstName: rawFirst,
-      lastName: rawLast,
-      fullName: rawFull || `${rawLast} ${rawFirst}`.trim(),
-    };
-  }
-
-  if (rawFull) {
-    const parts = rawFull.split(/\s+/).filter(Boolean);
-    if (parts.length === 1) {
-      return {
-        firstName: rawFirst || parts[0]!,
-        lastName: rawLast || parts[0]!,
-        fullName: rawFull,
-      };
-    }
-    const first = rawFirst || parts[parts.length - 1]!;
-    const last = rawLast || parts.slice(0, -1).join(' ');
-    return {
-      firstName: first,
-      lastName: last,
-      fullName: rawFull,
-    };
-  }
-
-  const fallbackFirst = rawFirst || 'User';
-  const fallbackLast = rawLast || 'Core';
-  return {
-    firstName: fallbackFirst,
-    lastName: fallbackLast,
-    fullName: `${fallbackLast} ${fallbackFirst}`.trim(),
-  };
-}
-
-/**
- * Chuẩn hóa số điện thoại về định dạng thống nhất (ví dụ +84909123456 -> 0909123456)
- * phục vụ tạo mã băm SHA-256 (blind index `phone_hash`) và tra cứu đăng nhập/đăng ký.
- */
-export function normalizePhoneNumber(phone?: string | null): string | null {
-  if (!phone) return null;
-  const cleaned = phone.trim().replace(/[\s.\-()]/g, '');
-  if (!cleaned) return null;
-  if (cleaned.startsWith('+84')) {
-    return `0${cleaned.slice(3)}`;
-  }
-  if (cleaned.startsWith('84') && cleaned.length >= 10 && cleaned.length <= 12) {
-    return `0${cleaned.slice(2)}`;
-  }
-  return cleaned;
-}
+import type { UserStatusCode, UserStatusName } from '../enum/users.enum.js';
 
 export interface UserProfileView {
   readonly firstName: string;

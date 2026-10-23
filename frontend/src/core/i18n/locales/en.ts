@@ -58,6 +58,7 @@ export const en: TranslationKey = {
     auth: 'Auth & Security',
     organizations: 'Organizations',
     roles: 'Roles & Permissions',
+    users: 'Users Directory',
     iam: 'Users & Auth',
     files: 'Files & Media',
     languageToggle: 'Language',

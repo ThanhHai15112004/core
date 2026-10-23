@@ -5,6 +5,7 @@ import { HomePage } from './web/home/HomePage';
 import { AuthManagementPage } from './modules/auth/AuthManagementPage';
 import { OrganizationsManagementPage } from './modules/organizations/OrganizationsManagementPage';
 import { RolesManagementPage } from './modules/roles/RolesManagementPage';
+import { UsersManagementPage } from './modules/users/UsersManagementPage';
 import { FileManagerPage } from './modules/files/FileManagerPage';
 import { AppProviders } from './providers/index';
 import type { NavigationTabId } from './core/constants/index';
@@ -40,6 +41,8 @@ function App() {
             <OrganizationsManagementPage />
           ) : activeTab === 'roles' ? (
             <RolesManagementPage />
+          ) : activeTab === 'users' ? (
+            <UsersManagementPage />
           ) : activeTab === 'files' ? (
             <FileManagerPage />
           ) : (
