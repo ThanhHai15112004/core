@@ -21,7 +21,11 @@ import {
   updateOrganizationUnitSchema,
 } from '../requests/organizations.requests.js';
 import {
+  type OrganizationStatsResponse,
+  type OrganizationTreeNodeResponse,
   type OrganizationUnitResponse,
+  organizationStatsResponseSchema,
+  organizationTreeNodeResponseSchema,
   organizationUnitResponseSchema,
 } from '../responses/organizations.response.js';
 
@@ -41,6 +45,30 @@ export class OrganizationsController {
     @ValidatedQuery(listOrganizationUnitsQuerySchema) query: ListOrganizationUnitsQuery,
   ): Promise<OrganizationUnitResponse[]> {
     return this.organizationsService.list(query);
+  }
+
+  /** Lấy sơ đồ cây đơn vị/chi nhánh phân cấp */
+  @Get(ORGANIZATIONS_ROUTES.TREE)
+  @RequirePermissions('organizations.read')
+  @ApiDoc({
+    summary: 'Sơ đồ cây đơn vị, chi nhánh và phòng ban phân cấp (kèm depth, path, children)',
+    response: z.array(organizationTreeNodeResponseSchema),
+  })
+  public async getTree(
+    @ValidatedQuery(listOrganizationUnitsQuerySchema) query: ListOrganizationUnitsQuery,
+  ): Promise<OrganizationTreeNodeResponse[]> {
+    return this.organizationsService.getTree(query);
+  }
+
+  /** Lấy thống kê KPI tổng quan của sơ đồ tổ chức */
+  @Get(ORGANIZATIONS_ROUTES.STATS)
+  @RequirePermissions('organizations.read')
+  @ApiDoc({
+    summary: 'Thống kê số lượng đơn vị theo cấp bậc, trạng thái và độ sâu cây',
+    response: organizationStatsResponseSchema,
+  })
+  public async getStats(): Promise<OrganizationStatsResponse> {
+    return this.organizationsService.getStats();
   }
 
   /** Xem chi tiết một đơn vị/chi nhánh */

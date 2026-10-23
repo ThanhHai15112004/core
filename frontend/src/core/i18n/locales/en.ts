@@ -56,6 +56,7 @@ export const en: TranslationKey = {
     systemConsole: 'System Console',
     home: 'Home',
     auth: 'Auth & Security',
+    organizations: 'Organizations',
     iam: 'Users & Auth',
     files: 'Files & Media',
     languageToggle: 'Language',

@@ -55,6 +55,7 @@ export const vi = {
     systemConsole: 'System Console',
     home: 'Trang chủ',
     auth: 'Xác thực & Bảo mật',
+    organizations: 'Đơn vị & Tổ chức',
     iam: 'Người dùng & Xác thực',
     files: 'Quản lý File & Media',
     languageToggle: 'Ngôn ngữ',

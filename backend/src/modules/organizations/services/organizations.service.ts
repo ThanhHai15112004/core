@@ -16,20 +16,36 @@ import {
   parseOrgUnitStatus,
   parseOrgUnitType,
 } from '../contracts/index.js';
-import { OrganizationUnitRepository } from '../repositories/organization-unit.repository.js';
+import {
+  DEFAULT_INCLUDE_INACTIVE_IN_SCOPE,
+  DEFAULT_MAX_HIERARCHY_DEPTH,
+  ORGANIZATION_CODE_TYPE_KEYS,
+  ORGANIZATION_SETTING_KEYS,
+} from '../enum/organizations.enum.js';
+import {
+  buildOrganizationTree,
+  calculateSubtreeDepthBelow,
+  collectDescendantUnitIds,
+  computeOrganizationStats,
+  ensureHierarchyDepthAllowed,
+} from '../helpers/organization-hierarchy.helper.js';
 import { OrganizationsMapper } from '../mappers/organizations.mapper.js';
+import { OrganizationUnitRepository } from '../repositories/organization-unit.repository.js';
 import type {
   CreateOrganizationUnitRequest,
   ListOrganizationUnitsQuery,
   UpdateOrganizationUnitRequest,
 } from '../requests/organizations.requests.js';
-import type { OrganizationUnitResponse } from '../responses/organizations.response.js';
-
-const DEFAULT_MAX_HIERARCHY_DEPTH = 10;
+import type {
+  OrganizationStatsResponse,
+  OrganizationTreeNodeResponse,
+  OrganizationUnitResponse,
+} from '../responses/organizations.response.js';
+import type { UnitUsageCountDelegate } from '../types/organizations.types.js';
 
 @Injectable()
 export class OrganizationsService implements IOrganizationsPublicService {
-  private unitUsageCountDelegate?: (unitId: number) => Promise<number>;
+  private unitUsageCountDelegate?: UnitUsageCountDelegate;
   private readonly settingRegistry: SettingRegistryService;
 
   constructor(
@@ -49,7 +65,7 @@ export class OrganizationsService implements IOrganizationsPublicService {
       this.resolveDescendantUnitIds(unitIds),
     );
     defaultCodeRegistry.registerUsageChecker(
-      'organizations.unit_type',
+      ORGANIZATION_CODE_TYPE_KEYS.UNIT_TYPE,
       'organization_units.type',
       async ({ numericCode }) => {
         const units = await this.repository.findFiltered({});
@@ -57,7 +73,7 @@ export class OrganizationsService implements IOrganizationsPublicService {
       },
     );
     defaultCodeRegistry.registerUsageChecker(
-      'organizations.status',
+      ORGANIZATION_CODE_TYPE_KEYS.STATUS,
       'organization_units.status',
       async ({ numericCode }) => {
         const units = await this.repository.findFiltered({});
@@ -68,7 +84,7 @@ export class OrganizationsService implements IOrganizationsPublicService {
 
   private get maxHierarchyDepth(): number {
     return this.settingRegistry.getNumber(
-      'organizations.hierarchy.max_depth',
+      ORGANIZATION_SETTING_KEYS.MAX_DEPTH,
       undefined,
       DEFAULT_MAX_HIERARCHY_DEPTH,
     );
@@ -76,83 +92,30 @@ export class OrganizationsService implements IOrganizationsPublicService {
 
   private get includeInactiveInScope(): boolean {
     return this.settingRegistry.getBoolean(
-      'organizations.hierarchy.include_inactive_in_scope',
+      ORGANIZATION_SETTING_KEYS.INCLUDE_INACTIVE_IN_SCOPE,
       undefined,
-      true,
+      DEFAULT_INCLUDE_INACTIVE_IN_SCOPE,
     );
-  }
-
-  /** Kiểm tra độ sâu cây đơn vị khi gán vào `parentId` (bao gồm cả độ sâu nhánh con bên dưới nếu đang cập nhật) */
-  private async ensureHierarchyDepthAllowed(
-    parentId: number,
-    subtreeDepthBelowNode = 0,
-  ): Promise<void> {
-    const maxDepth = this.maxHierarchyDepth;
-    const allUnits = await this.repository.findFiltered({});
-    const parentByUnitId = new Map<number, number | null>();
-    for (const unit of allUnits) {
-      parentByUnitId.set(
-        Number(unit.id),
-        unit.parentId !== undefined && unit.parentId !== null ? Number(unit.parentId) : null,
-      );
-    }
-
-    let ancestorCount = 1;
-    let cursor: number | null = Number(parentId);
-    const visited = new Set<number>();
-    while (cursor !== null) {
-      if (visited.has(cursor)) break;
-      visited.add(cursor);
-      const nextParent: number | null = parentByUnitId.get(cursor) ?? null;
-      if (nextParent !== null) {
-        ancestorCount += 1;
-      }
-      cursor = nextParent;
-    }
-
-    const totalDepth = ancestorCount + 1 + subtreeDepthBelowNode;
-    if (totalDepth > maxDepth) {
-      throw new BadRequestAppException('organizations.maxHierarchyDepthExceeded', [
-        { parentId, maxDepth, attemptedDepth: totalDepth },
-      ]);
-    }
-  }
-
-  /** Tính số tầng con sâu nhất bên dưới một đơn vị (0 nếu không có đơn vị con) */
-  private async computeSubtreeDepthBelow(unitId: number): Promise<number> {
-    const allUnits = await this.repository.findFiltered({});
-    const childrenByParent = new Map<number, number[]>();
-    for (const unit of allUnits) {
-      if (unit.parentId !== undefined && unit.parentId !== null) {
-        const pId = Number(unit.parentId);
-        const list = childrenByParent.get(pId) ?? [];
-        list.push(Number(unit.id));
-        childrenByParent.set(pId, list);
-      }
-    }
-
-    let maxChildDepth = 0;
-    const queue: Array<{ id: number; depth: number }> = [{ id: Number(unitId), depth: 0 }];
-    const visited = new Set<number>([Number(unitId)]);
-    while (queue.length > 0) {
-      const current = queue.shift()!;
-      if (current.depth > maxChildDepth) {
-        maxChildDepth = current.depth;
-      }
-      for (const childId of childrenByParent.get(current.id) ?? []) {
-        if (!visited.has(childId)) {
-          visited.add(childId);
-          queue.push({ id: childId, depth: current.depth + 1 });
-        }
-      }
-    }
-    return maxChildDepth;
   }
 
   /** Lấy danh sách đơn vị/chi nhánh có lọc */
   public async list(query: ListOrganizationUnitsQuery = {}): Promise<OrganizationUnitResponse[]> {
     const units = await this.repository.findFiltered(query);
     return this.mapper.toResponseList(units);
+  }
+
+  /** Lấy sơ đồ cây đơn vị phân cấp kèm depth, path và số lượng đơn vị con */
+  public async getTree(
+    query: ListOrganizationUnitsQuery = {},
+  ): Promise<OrganizationTreeNodeResponse[]> {
+    const list = await this.list(query);
+    return buildOrganizationTree(list);
+  }
+
+  /** Lấy thống kê KPI tổng quan của sơ đồ tổ chức */
+  public async getStats(): Promise<OrganizationStatsResponse> {
+    const list = await this.list({});
+    return computeOrganizationStats(list, this.maxHierarchyDepth);
   }
 
   /** Lấy thông tin chi tiết đơn vị/chi nhánh theo ID */
@@ -184,7 +147,13 @@ export class OrganizationsService implements IOrganizationsPublicService {
           { parentId: dto.parentId },
         ]);
       }
-      await this.ensureHierarchyDepthAllowed(Number(dto.parentId), 0);
+      const allUnits = await this.repository.findFiltered({});
+      ensureHierarchyDepthAllowed({
+        allUnits,
+        parentId: Number(dto.parentId),
+        subtreeDepthBelowNode: 0,
+        maxDepth: this.maxHierarchyDepth,
+      });
     }
 
     const saved = await this.repository.saveEntity({
@@ -252,8 +221,14 @@ export class OrganizationsService implements IOrganizationsPublicService {
           { id, parentId: dto.parentId },
         ]);
       }
-      const subtreeDepthBelow = await this.computeSubtreeDepthBelow(Number(id));
-      await this.ensureHierarchyDepthAllowed(Number(dto.parentId), subtreeDepthBelow);
+      const allUnits = await this.repository.findFiltered({});
+      const subtreeDepthBelow = calculateSubtreeDepthBelow(allUnits, Number(id));
+      ensureHierarchyDepthAllowed({
+        allUnits,
+        parentId: Number(dto.parentId),
+        subtreeDepthBelowNode: subtreeDepthBelow,
+        maxDepth: this.maxHierarchyDepth,
+      });
     }
 
     if (dto.name !== undefined) entity.name = dto.name.trim();
@@ -286,7 +261,7 @@ export class OrganizationsService implements IOrganizationsPublicService {
   }
 
   /** Đăng ký delegate đếm số người dùng đang gắn với một đơn vị tổ chức */
-  public registerUnitUsageCountDelegate(delegate: (unitId: number) => Promise<number>): void {
+  public registerUnitUsageCountDelegate(delegate: UnitUsageCountDelegate): void {
     this.unitUsageCountDelegate = delegate;
   }
 
@@ -378,39 +353,7 @@ export class OrganizationsService implements IOrganizationsPublicService {
    * và toàn bộ đơn vị/phòng ban/nhóm con trực thuộc theo cây `parentId` — Mục 4.3.2).
    */
   public async resolveDescendantUnitIds(rootUnitIds: readonly number[]): Promise<number[]> {
-    const seeds = [
-      ...new Set(rootUnitIds.map(Number).filter((id) => Number.isInteger(id) && id > 0)),
-    ];
-    if (seeds.length === 0) return [];
-
     const allUnits = await this.repository.findFiltered({});
-    const includeInactive = this.includeInactiveInScope;
-    const childrenByParent = new Map<number, number[]>();
-    for (const unit of allUnits) {
-      const status = Number(unit.status);
-      if (status === ORG_UNIT_STATUS.ARCHIVED) continue;
-      if (!includeInactive && status === ORG_UNIT_STATUS.INACTIVE) continue;
-      if (unit.parentId !== undefined && unit.parentId !== null) {
-        const pId = Number(unit.parentId);
-        const list = childrenByParent.get(pId) ?? [];
-        list.push(Number(unit.id));
-        childrenByParent.set(pId, list);
-      }
-    }
-
-    const visited = new Set<number>(seeds);
-    const queue = [...seeds];
-    while (queue.length > 0) {
-      const current = queue.shift()!;
-      const children = childrenByParent.get(current) ?? [];
-      for (const childId of children) {
-        if (!visited.has(childId)) {
-          visited.add(childId);
-          queue.push(childId);
-        }
-      }
-    }
-
-    return [...visited].sort((a, b) => a - b);
+    return collectDescendantUnitIds(allUnits, rootUnitIds, this.includeInactiveInScope);
   }
 }

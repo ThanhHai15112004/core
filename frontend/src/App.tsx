@@ -3,6 +3,7 @@ import { Header } from './core/layouts/Header';
 import { Footer } from './core/layouts/Footer';
 import { HomePage } from './web/home/HomePage';
 import { AuthManagementPage } from './modules/auth/AuthManagementPage';
+import { OrganizationsManagementPage } from './modules/organizations/OrganizationsManagementPage';
 import { FileManagerPage } from './modules/files/FileManagerPage';
 import { AppProviders } from './providers/index';
 import type { NavigationTabId } from './core/constants/index';
@@ -34,6 +35,8 @@ function App() {
           <Header activeTab={activeTab} onTabChange={setActiveTab} />
           {activeTab === 'auth' ? (
             <AuthManagementPage />
+          ) : activeTab === 'organizations' ? (
+            <OrganizationsManagementPage />
           ) : activeTab === 'files' ? (
             <FileManagerPage />
           ) : (

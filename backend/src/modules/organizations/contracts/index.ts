@@ -1,24 +1,19 @@
 import { defaultCodeRegistry } from '@packages/kernel/index.js';
+import {
+  ORGANIZATION_CODE_TYPE_KEYS,
+  ORG_UNIT_STATUS,
+  ORG_UNIT_TYPE,
+} from '../enum/organizations.enum.js';
 
-export const ORG_UNIT_TYPE = {
-  HEADQUARTERS: 1,
-  BRANCH: 2,
-  DEPARTMENT: 3,
-  TEAM: 4,
-} as const;
-
-export const ORGANIZATION_UNIT_TYPE = ORG_UNIT_TYPE;
+export {
+  ORG_UNIT_TYPE,
+  ORGANIZATION_UNIT_TYPE,
+  ORG_UNIT_STATUS,
+  ORGANIZATION_UNIT_STATUS,
+} from '../enum/organizations.enum.js';
 
 export type OrganizationUnitTypeCode = (typeof ORG_UNIT_TYPE)[keyof typeof ORG_UNIT_TYPE] | number;
 export type OrganizationUnitTypeName = keyof typeof ORG_UNIT_TYPE | (string & {});
-
-export const ORG_UNIT_STATUS = {
-  ACTIVE: 1,
-  INACTIVE: 2,
-  ARCHIVED: 3,
-} as const;
-
-export const ORGANIZATION_UNIT_STATUS = ORG_UNIT_STATUS;
 
 export type OrganizationUnitStatusCode = (typeof ORG_UNIT_STATUS)[keyof typeof ORG_UNIT_STATUS];
 export type OrganizationUnitStatusName = keyof typeof ORG_UNIT_STATUS;
@@ -29,7 +24,7 @@ export type OrganizationUnitStatusName = keyof typeof ORG_UNIT_STATUS;
  */
 export function parseOrgUnitType(val: unknown): OrganizationUnitTypeCode {
   return defaultCodeRegistry.parseToNumericCode(
-    'organizations.unit_type',
+    ORGANIZATION_CODE_TYPE_KEYS.UNIT_TYPE,
     val,
     ORG_UNIT_TYPE.BRANCH,
   );
@@ -39,7 +34,7 @@ export function parseOrgUnitType(val: unknown): OrganizationUnitTypeCode {
  * Tra cứu tên mã loại đơn vị/chi nhánh từ `organizations.unit_type` (O(1) L1 Lookup).
  */
 export function getOrgUnitTypeName(code: number): OrganizationUnitTypeName {
-  return defaultCodeRegistry.getCodeName('organizations.unit_type', code, 'BRANCH');
+  return defaultCodeRegistry.getCodeName(ORGANIZATION_CODE_TYPE_KEYS.UNIT_TYPE, code, 'BRANCH');
 }
 
 /**
@@ -47,7 +42,7 @@ export function getOrgUnitTypeName(code: number): OrganizationUnitTypeName {
  */
 export function parseOrgUnitStatus(val: unknown): OrganizationUnitStatusCode {
   const resolved = defaultCodeRegistry.parseToNumericCode(
-    'organizations.status',
+    ORGANIZATION_CODE_TYPE_KEYS.STATUS,
     val,
     ORG_UNIT_STATUS.ACTIVE,
   );
@@ -61,7 +56,7 @@ export function parseOrgUnitStatus(val: unknown): OrganizationUnitStatusCode {
  * Tra cứu tên trạng thái đơn vị/chi nhánh từ `organizations.status`.
  */
 export function getOrgUnitStatusName(code: number): OrganizationUnitStatusName {
-  const name = defaultCodeRegistry.getCodeName('organizations.status', code, 'ACTIVE');
+  const name = defaultCodeRegistry.getCodeName(ORGANIZATION_CODE_TYPE_KEYS.STATUS, code, 'ACTIVE');
   if (name === 'INACTIVE' || name === 'ARCHIVED') {
     return name;
   }

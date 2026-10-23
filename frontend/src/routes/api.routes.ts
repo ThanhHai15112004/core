@@ -160,9 +160,13 @@ export const API_ROUTES = {
     USERS: (id: string | number) => `/roles/${id}/users`,
   },
   ORGANIZATIONS: {
-    LIST: '/organizations',
-    TREE: '/organizations/tree',
+    LIST: (qs = '') => `/organizations${qs ? `?${qs}` : ''}`,
+    TREE: (qs = '') => `/organizations/tree${qs ? `?${qs}` : ''}`,
+    STATS: '/organizations/stats',
+    CREATE: '/organizations',
     DETAIL: (id: string | number) => `/organizations/${id}`,
+    UPDATE: (id: string | number) => `/organizations/${id}`,
+    DELETE: (id: string | number) => `/organizations/${id}`,
   },
   SETTINGS: {
     MENUS: {
