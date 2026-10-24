@@ -71,9 +71,12 @@ export const AuthGatewayPanel: React.FC<AuthGatewayPanelProps> = ({
   const [prefTimezone, setPrefTimezone] = useState(
     currentUser?.preferredTimezone ?? 'Asia/Ho_Chi_Minh',
   );
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isLoggingIn) return;
+    setIsLoggingIn(true);
     try {
       const res = await authApi.login({
         identifier,
@@ -103,6 +106,8 @@ export const AuthGatewayPanel: React.FC<AuthGatewayPanelProps> = ({
       }
     } catch (err) {
       notify('err', err instanceof Error ? err.message : 'Đăng nhập thất bại');
+    } finally {
+      setIsLoggingIn(false);
     }
   };
 
@@ -114,7 +119,7 @@ export const AuthGatewayPanel: React.FC<AuthGatewayPanelProps> = ({
         mfaChallengeToken,
         code: mfaCode,
         method: selectedMfaMethod,
-        trustThisDevice,
+        trustDevice: trustThisDevice,
         deviceName,
       });
 
@@ -192,7 +197,10 @@ export const AuthGatewayPanel: React.FC<AuthGatewayPanelProps> = ({
   const handleConfirmEmailVerify = async () => {
     const emailToUse = verifyEmailAddr.trim() || currentUser?.email || identifier;
     try {
-      await authApi.confirmEmailVerification({ email: emailToUse, code: verifyEmailCode.trim() });
+      await authApi.confirmEmailVerification({
+        email: emailToUse,
+        tokenOrCode: verifyEmailCode.trim(),
+      });
       notify('ok', 'Xác minh địa chỉ Email thành công!');
       if (accessToken) await onAuthenticated(accessToken, refreshToken);
     } catch (err) {
@@ -320,9 +328,17 @@ export const AuthGatewayPanel: React.FC<AuthGatewayPanelProps> = ({
           </div>
 
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '4px' }}>
-            <button type="submit" style={authStyles.btnPrimary}>
+            <button
+              type="submit"
+              disabled={isLoggingIn}
+              style={{
+                ...authStyles.btnPrimary,
+                opacity: isLoggingIn ? 0.7 : 1,
+                cursor: isLoggingIn ? 'wait' : 'pointer',
+              }}
+            >
               <KeyRound size={15} />
-              <span>Đăng nhập (/auth/login)</span>
+              <span>{isLoggingIn ? 'Đang xử lý đăng nhập...' : 'Đăng nhập (/auth/login)'}</span>
             </button>
             {accessToken && (
               <>

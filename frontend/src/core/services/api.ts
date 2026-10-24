@@ -87,19 +87,29 @@ export function getStoredRefreshToken(): string | null {
 export function setStoredAuthTokens(accessToken: string, refreshToken?: string): void {
   try {
     if (typeof window === 'undefined') return;
-    if (accessToken) {
-      window.localStorage.setItem(IAM_ACCESS_TOKEN_KEY, accessToken);
+    const prevAccess = window.localStorage.getItem(IAM_ACCESS_TOKEN_KEY) ?? '';
+    const prevRefresh = window.localStorage.getItem(IAM_REFRESH_TOKEN_KEY) ?? '';
+    const nextAccess = accessToken.trim();
+
+    if (nextAccess) {
+      window.localStorage.setItem(IAM_ACCESS_TOKEN_KEY, nextAccess);
     } else {
       window.localStorage.removeItem(IAM_ACCESS_TOKEN_KEY);
     }
+
+    let nextRefresh = prevRefresh;
     if (refreshToken !== undefined) {
-      if (refreshToken) {
-        window.localStorage.setItem(IAM_REFRESH_TOKEN_KEY, refreshToken);
+      nextRefresh = refreshToken.trim();
+      if (nextRefresh) {
+        window.localStorage.setItem(IAM_REFRESH_TOKEN_KEY, nextRefresh);
       } else {
         window.localStorage.removeItem(IAM_REFRESH_TOKEN_KEY);
       }
     }
-    window.dispatchEvent(new CustomEvent(IAM_AUTH_CHANGED_EVENT));
+
+    if (prevAccess !== nextAccess || prevRefresh !== nextRefresh) {
+      window.dispatchEvent(new CustomEvent(IAM_AUTH_CHANGED_EVENT));
+    }
   } catch {
     // ignore storage errors
   }
@@ -110,16 +120,29 @@ export function clearStoredAuthTokens(): void {
 }
 
 let inFlightAuthPromise: Promise<string | null> | null = null;
+let lastRefreshedAtMs = 0;
 
 /**
  * Đảm bảo luôn có Access Token hợp lệ trước khi gọi API bảo vệ:
  * 1. Dùng lại token trong localStorage nếu còn.
  * 2. Nếu có Refresh Token, tự động xoay vòng qua `/auth/refresh`.
+ * 3. Chống bão xoay vòng (Refresh Storm) khi nhiều request song song cùng gặp 401.
  */
-export async function ensureAccessToken(forceRefresh = false): Promise<string | null> {
+export async function ensureAccessToken(
+  forceRefresh = false,
+  failedToken?: string | null,
+): Promise<string | null> {
+  const existing = getStoredAccessToken();
   if (!forceRefresh) {
-    const existing = getStoredAccessToken();
     if (existing) return existing;
+  } else if (existing) {
+    // Nếu một request song song khác vừa làm mới token xong, dùng lại ngay thay vì gọi /auth/refresh lần nữa
+    if (failedToken && existing !== failedToken) {
+      return existing;
+    }
+    if (Date.now() - lastRefreshedAtMs < 2000) {
+      return existing;
+    }
   }
 
   if (inFlightAuthPromise) {
@@ -127,14 +150,20 @@ export async function ensureAccessToken(forceRefresh = false): Promise<string | 
   }
 
   inFlightAuthPromise = (async (): Promise<string | null> => {
+    const refreshController = new AbortController();
+    const refreshTimeoutId = setTimeout(() => refreshController.abort(), 10000);
     try {
       const storedRefresh = getStoredRefreshToken();
       if (!storedRefresh) {
+        if (existing) {
+          clearStoredAuthTokens();
+        }
         return null;
       }
 
       const refreshRes = await fetch(`${frontendConfig.apiBaseUrl}/auth/refresh`, {
         method: 'POST',
+        signal: refreshController.signal,
         headers: {
           'Content-Type': 'application/json',
           'Accept-Language': getActiveLocale(),
@@ -149,13 +178,20 @@ export async function ensureAccessToken(forceRefresh = false): Promise<string | 
           ? refreshBody.data
           : (refreshBody as { accessToken?: string; refreshToken?: string } | null);
         if (payload?.accessToken) {
+          lastRefreshedAtMs = Date.now();
           setStoredAuthTokens(payload.accessToken, payload.refreshToken ?? storedRefresh);
           return payload.accessToken;
         }
       }
 
+      // Nếu refresh token đã hết hạn hoặc bị thu hồi (401/403), xóa sạch khỏi localStorage để tránh lặp 401 vô tận
+      if (refreshRes && (refreshRes.status === 401 || refreshRes.status === 403)) {
+        clearStoredAuthTokens();
+      }
+
       return null;
     } finally {
+      clearTimeout(refreshTimeoutId);
       inFlightAuthPromise = null;
     }
   })();
@@ -201,18 +237,24 @@ export async function fetchApiWithMeta<T>(
   const hasBody = options.body !== undefined && options.body !== null;
   const callerHeaders = normalizeHeaders(options.headers);
   const explicitAuth = callerHeaders['Authorization'] ?? callerHeaders['authorization'];
+  const explicitToken = explicitAuth ? explicitAuth.replace(/^Bearer\s+/i, '').trim() : null;
   const isPublic = isPublicEndpoint(endpoint);
 
-  let accessToken = explicitAuth
-    ? null
-    : getStoredAccessToken() ?? (isPublic ? null : await ensureAccessToken(false));
+  let accessToken =
+    explicitToken ||
+    getStoredAccessToken() ||
+    (isPublic ? null : await ensureAccessToken(false));
 
   const executeRequest = (tokenOverride?: string | null) => {
+    const restCallerHeaders = { ...callerHeaders };
+    delete restCallerHeaders['Authorization'];
+    delete restCallerHeaders['authorization'];
+
     const nextHeaders: Record<string, string> = {
       ...(hasBody ? { 'Content-Type': 'application/json' } : {}),
       'Accept-Language': getActiveLocale(),
       'X-Timezone': getActiveTimezone(),
-      ...callerHeaders,
+      ...restCallerHeaders,
     };
     const effectiveToken = tokenOverride ?? accessToken;
     if (effectiveToken) {
@@ -229,7 +271,7 @@ export async function fetchApiWithMeta<T>(
     let response = await executeRequest(accessToken);
 
     if (response.status === 401 && !isPublic) {
-      const refreshedToken = await ensureAccessToken(true);
+      const refreshedToken = await ensureAccessToken(true, accessToken);
       if (refreshedToken) {
         accessToken = refreshedToken;
         response = await executeRequest(refreshedToken);

@@ -1,4 +1,4 @@
-import { fetchApi, fetchApiWithMeta, IAM_ACCESS_TOKEN_KEY } from '../../../core/services/api';
+import { fetchApi, fetchApiWithMeta } from '../../../core/services/api';
 import { API_ROUTES } from '../../../routes/index';
 import type {
   AdminResetMfaResult,
@@ -18,16 +18,7 @@ import type {
 import type { UserStatusCode } from '../enum/users.enum';
 
 function resolveAuthHeaders(tokenOverride?: string): Record<string, string> {
-  const token =
-    tokenOverride ??
-    (() => {
-      try {
-        return window.localStorage.getItem(IAM_ACCESS_TOKEN_KEY) ?? '';
-      } catch {
-        return '';
-      }
-    })();
-  return token ? { Authorization: `Bearer ${token}` } : {};
+  return tokenOverride ? { Authorization: `Bearer ${tokenOverride}` } : {};
 }
 
 function buildQueryString(

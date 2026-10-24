@@ -1,11 +1,13 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
+  clearStoredAuthTokens,
   ensureAccessToken,
   getStoredAccessToken,
   getStoredRefreshToken,
   IAM_ACCESS_TOKEN_KEY,
   IAM_AUTH_CHANGED_EVENT,
   IAM_REFRESH_TOKEN_KEY,
+  setStoredAuthTokens,
 } from '../../../core/services/api';
 import { authApi } from '../services/auth.api';
 import type { AuthSubTabId } from '../enum/auth.enum';
@@ -94,6 +96,18 @@ export function useAuthManagement() {
     }
   }, []);
 
+  const setAuthSession = useCallback((newAccess: string, newRefresh?: string) => {
+    setAccessTokenState(newAccess);
+    if (newRefresh !== undefined) {
+      setRefreshTokenState(newRefresh);
+    }
+    if (newAccess) {
+      setStoredAuthTokens(newAccess, newRefresh);
+    } else {
+      clearStoredAuthTokens();
+    }
+  }, []);
+
   const [currentUser, setCurrentUser] = useState<AuthenticatedUserProfile | null>(null);
   const [mfaStatus, setMfaStatus] = useState<MfaStatusData | null>(null);
   const [trustedDevices, setTrustedDevices] = useState<TrustedDeviceItem[]>([]);
@@ -103,6 +117,8 @@ export function useAuthManagement() {
     useState<SecuritySettingsState>(DEFAULT_SECURITY_SETTINGS);
   const [serviceAccounts, setServiceAccounts] = useState<ServiceAccountItem[]>([]);
   const [apiClients, setApiClients] = useState<ApiClientItem[]>([]);
+
+  const inFlightRefreshRef = useRef<{ token: string; promise: Promise<void> } | null>(null);
 
   const notify = useCallback((type: 'ok' | 'err', text: string) => {
     setStatusBanner({ type, text });
@@ -120,31 +136,52 @@ export function useAuthManagement() {
         return;
       }
 
-      setLoading(true);
-      try {
-        const [meRes, mfaRes, devicesRes, sessionsRes, historyRes, secRes, saRes, clientsRes] =
-          await Promise.all([
-            authApi.getMe(token).catch(() => null),
-            authApi.getMfaStatus(token).catch(() => null),
-            authApi.listTrustedDevices(token).catch(() => []),
-            authApi.listSessions(token).catch(() => []),
-            authApi.listLoginHistory(token, 50).catch(() => []),
-            authApi.getSecuritySettings(token).catch(() => null),
-            authApi.listServiceAccounts(token).catch(() => []),
-            authApi.listApiClients(token).catch(() => []),
-          ]);
-
-        if (meRes) setCurrentUser(meRes);
-        if (mfaRes) setMfaStatus(mfaRes);
-        if (Array.isArray(devicesRes)) setTrustedDevices(devicesRes);
-        if (Array.isArray(sessionsRes)) setSessions(sessionsRes);
-        if (Array.isArray(historyRes)) setLoginHistory(historyRes);
-        if (secRes) setSecuritySettings((prev) => ({ ...prev, ...secRes }));
-        if (Array.isArray(saRes)) setServiceAccounts(saRes);
-        if (Array.isArray(clientsRes)) setApiClients(clientsRes);
-      } finally {
-        setLoading(false);
+      if (inFlightRefreshRef.current && inFlightRefreshRef.current.token === token) {
+        return inFlightRefreshRef.current.promise;
       }
+
+      const task = (async () => {
+        setLoading(true);
+        try {
+          const [meRes, mfaRes, devicesRes, sessionsRes, historyRes, secRes, saRes, clientsRes] =
+            await Promise.all([
+              authApi.getMe(token).catch(() => null),
+              authApi.getMfaStatus(token).catch(() => null),
+              authApi.listTrustedDevices(token).catch(() => []),
+              authApi.listSessions(token).catch(() => []),
+              authApi.listLoginHistory(token, 50).catch(() => []),
+              authApi.getSecuritySettings(token).catch(() => null),
+              authApi.listServiceAccounts(token).catch(() => []),
+              authApi.listApiClients(token).catch(() => []),
+            ]);
+
+          if (!meRes && !getStoredAccessToken()) {
+            setCurrentUser(null);
+            setMfaStatus(null);
+            setTrustedDevices([]);
+            setSessions([]);
+            setLoginHistory([]);
+            return;
+          }
+
+          if (meRes) setCurrentUser(meRes);
+          if (mfaRes) setMfaStatus(mfaRes);
+          if (Array.isArray(devicesRes)) setTrustedDevices(devicesRes);
+          if (Array.isArray(sessionsRes)) setSessions(sessionsRes);
+          if (Array.isArray(historyRes)) setLoginHistory(historyRes);
+          if (secRes) setSecuritySettings((prev) => ({ ...prev, ...secRes }));
+          if (Array.isArray(saRes)) setServiceAccounts(saRes);
+          if (Array.isArray(clientsRes)) setApiClients(clientsRes);
+        } finally {
+          setLoading(false);
+          if (inFlightRefreshRef.current?.token === token) {
+            inFlightRefreshRef.current = null;
+          }
+        }
+      })();
+
+      inFlightRefreshRef.current = { token, promise: task };
+      return task;
     },
     [accessToken],
   );
@@ -179,15 +216,14 @@ export function useAuthManagement() {
     if (accessToken) {
       await authApi.logout(accessToken, refreshToken).catch(() => null);
     }
-    setAccessToken('');
-    setRefreshToken('');
+    setAuthSession('', '');
     setCurrentUser(null);
     setMfaStatus(null);
     setTrustedDevices([]);
     setSessions([]);
     setLoginHistory([]);
     notify('ok', 'Đã đăng xuất và xóa khóa phiên cục bộ.');
-  }, [accessToken, refreshToken, setAccessToken, setRefreshToken, notify]);
+  }, [accessToken, refreshToken, setAuthSession, notify]);
 
   const handleRotateRefreshToken = useCallback(async () => {
     if (!refreshToken) {
@@ -196,8 +232,7 @@ export function useAuthManagement() {
     }
     try {
       const res = await authApi.refreshToken(refreshToken);
-      setAccessToken(res.accessToken);
-      setRefreshToken(res.refreshToken);
+      setAuthSession(res.accessToken, res.refreshToken);
       notify(
         'ok',
         `Đã xoay vòng Refresh Token thành công (TTL: ${res.expiresInSeconds}s).`,
@@ -206,7 +241,7 @@ export function useAuthManagement() {
     } catch (err) {
       notify('err', err instanceof Error ? err.message : 'Lỗi xoay vòng Refresh Token');
     }
-  }, [refreshToken, setAccessToken, setRefreshToken, notify, refreshProfileAndCoreState]);
+  }, [refreshToken, setAuthSession, notify, refreshProfileAndCoreState]);
 
   return {
     subTab,
@@ -219,6 +254,7 @@ export function useAuthManagement() {
     refreshToken,
     setAccessToken,
     setRefreshToken,
+    setAuthSession,
     currentUser,
     setCurrentUser,
     mfaStatus,

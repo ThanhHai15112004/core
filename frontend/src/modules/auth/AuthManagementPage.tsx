@@ -29,8 +29,7 @@ export const AuthManagementPage: React.FC = () => {
     loading,
     accessToken,
     refreshToken,
-    setAccessToken,
-    setRefreshToken,
+    setAuthSession,
     currentUser,
     mfaStatus,
     trustedDevices,
@@ -253,8 +252,7 @@ export const AuthManagementPage: React.FC = () => {
           refreshToken={refreshToken}
           currentUser={currentUser}
           onAuthenticated={async (newAccess, newRefresh) => {
-            setAccessToken(newAccess);
-            if (newRefresh) setRefreshToken(newRefresh);
+            setAuthSession(newAccess, newRefresh || undefined);
             await refreshProfileAndCoreState(newAccess);
           }}
           onLogout={handleLogout}

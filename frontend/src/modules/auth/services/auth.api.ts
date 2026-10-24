@@ -97,7 +97,12 @@ export const authApi = {
       body: JSON.stringify({ email }),
     }),
 
-  confirmEmailVerification: (payload: { email?: string; code?: string; token?: string }) =>
+  confirmEmailVerification: (payload: {
+    email?: string;
+    tokenOrCode: string;
+    code?: string;
+    token?: string;
+  }) =>
     fetchApi<{ verified: boolean; channel: string; verifiedAt: string }>(
       API_ROUTES.AUTH.VERIFY_EMAIL_CONFIRM,
       {
@@ -127,6 +132,7 @@ export const authApi = {
     mfaChallengeToken: string;
     code: string;
     method?: MfaMethodType;
+    trustDevice?: boolean;
     trustThisDevice?: boolean;
     deviceName?: string;
   }) =>

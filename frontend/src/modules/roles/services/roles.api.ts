@@ -1,4 +1,4 @@
-import { fetchApi, IAM_ACCESS_TOKEN_KEY } from '../../../core/services/api';
+import { fetchApi } from '../../../core/services/api';
 import { API_ROUTES } from '../../../routes/index';
 import type {
   AuditLogItem,
@@ -21,16 +21,7 @@ import type {
 } from '../types/roles.types';
 
 function resolveAuthHeaders(tokenOverride?: string): Record<string, string> {
-  const token =
-    tokenOverride ??
-    (() => {
-      try {
-        return window.localStorage.getItem(IAM_ACCESS_TOKEN_KEY) ?? '';
-      } catch {
-        return '';
-      }
-    })();
-  return token ? { Authorization: `Bearer ${token}` } : {};
+  return tokenOverride ? { Authorization: `Bearer ${tokenOverride}` } : {};
 }
 
 function buildQueryString(params: Record<string, string | number | undefined>): string {
