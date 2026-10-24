@@ -150,7 +150,6 @@ describe('SettingsModule — 5 Sub-domains & Helpers Unit Tests', () => {
       numberGroupSeparator: ',',
       isDefault: false,
       sortOrder: 3,
-      status: 1,
     });
     expect(createdLocale.code).toBe('ja');
 
@@ -159,7 +158,6 @@ describe('SettingsModule — 5 Sub-domains & Helpers Unit Tests', () => {
       namespace: 'settings',
       key: 'settings.test.greeting',
       value: 'Xin chào hệ thống cấu hình',
-      status: 1,
     });
     expect(upsertedTrans.value).toBe('Xin chào hệ thống cấu hình');
   });

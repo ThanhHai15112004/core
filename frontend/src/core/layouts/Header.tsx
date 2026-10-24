@@ -21,6 +21,11 @@ import {
 } from 'lucide-react';
 import { navigateTo } from '../router/index';
 import {
+  getStoredAccessToken,
+  getStoredRefreshToken,
+  IAM_AUTH_CHANGED_EVENT,
+} from '../services/api';
+import {
   NOTIFICATION_UNREAD_CHANGED_EVENT,
   notificationsApi,
 } from '../../modules/notifications/services/notifications.api';
@@ -36,6 +41,10 @@ export const Header: React.FC<HeaderProps> = ({ activeTab = 'home', onTabChange 
   const [unreadCount, setUnreadCount] = useState<number>(0);
 
   const fetchUnread = useCallback(async () => {
+    if (!getStoredAccessToken() && !getStoredRefreshToken()) {
+      setUnreadCount(0);
+      return;
+    }
     try {
       const res = await notificationsApi.getUnreadSummary();
       if (typeof res?.unreadCount === 'number') {
@@ -50,9 +59,11 @@ export const Header: React.FC<HeaderProps> = ({ activeTab = 'home', onTabChange 
     void fetchUnread();
     const handler = () => void fetchUnread();
     window.addEventListener(NOTIFICATION_UNREAD_CHANGED_EVENT, handler);
+    window.addEventListener(IAM_AUTH_CHANGED_EVENT, handler);
     const interval = window.setInterval(handler, 30000);
     return () => {
       window.removeEventListener(NOTIFICATION_UNREAD_CHANGED_EVENT, handler);
+      window.removeEventListener(IAM_AUTH_CHANGED_EVENT, handler);
       window.clearInterval(interval);
     };
   }, [fetchUnread]);

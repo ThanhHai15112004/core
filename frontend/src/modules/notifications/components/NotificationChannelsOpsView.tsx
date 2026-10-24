@@ -96,7 +96,14 @@ export const NotificationChannelsOpsView: React.FC = () => {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
       {/* 1. Quota & Cost Summary */}
       <div className="glass" style={{ padding: 18, borderRadius: 14 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: 12,
+          }}
+        >
           <h3 style={{ margin: 0, fontSize: 16 }}>
             1. Chi phí & Giới hạn Nhà cung cấp (SMS / Email / Push Quota)
           </h3>
@@ -112,7 +119,13 @@ export const NotificationChannelsOpsView: React.FC = () => {
         </div>
 
         {quota && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12 }}>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+              gap: 12,
+            }}
+          >
             {quota.channels.map((ch) => (
               <div
                 key={ch.channelName}
@@ -127,17 +140,24 @@ export const NotificationChannelsOpsView: React.FC = () => {
                   {ch.channelName} ({ch.providerCode})
                 </div>
                 <div style={{ fontSize: 12.5, opacity: 0.85, marginTop: 6 }}>
-                  Hôm nay: <b>{ch.dailySent}</b> gửi ({ch.dailyDelivered} nhận, {ch.dailyFailed} lỗi,{' '}
-                  {ch.dailySuppressed} chặn)
+                  Hôm nay: <b>{ch.dailySent}</b> gửi ({ch.dailyDelivered} nhận, {ch.dailyFailed}{' '}
+                  lỗi, {ch.dailySuppressed} chặn)
                 </div>
                 {ch.channelName === 'SMS' && (
                   <div style={{ fontSize: 12.5, color: '#FBBF24', marginTop: 4 }}>
-                    SMS Segments hôm nay: <b>{ch.dailySegments}</b> / {ch.dailyQuotaLimit} ({ch.dailyUsagePercent}%)
+                    SMS Segments hôm nay: <b>{ch.dailySegments}</b> / {ch.dailyQuotaLimit} (
+                    {ch.dailyUsagePercent}%)
                   </div>
                 )}
                 <div style={{ fontSize: 12.5, color: '#34D399', marginTop: 4 }}>
-                  Chi phí ngày: <b>{ch.dailyCost.toLocaleString()} {ch.currency}</b> | Tháng:{' '}
-                  <b>{ch.monthlyCost.toLocaleString()} {ch.currency}</b>
+                  Chi phí ngày:{' '}
+                  <b>
+                    {ch.dailyCost.toLocaleString()} {ch.currency}
+                  </b>{' '}
+                  | Tháng:{' '}
+                  <b>
+                    {ch.monthlyCost.toLocaleString()} {ch.currency}
+                  </b>
                 </div>
               </div>
             ))}
@@ -147,7 +167,14 @@ export const NotificationChannelsOpsView: React.FC = () => {
 
       {/* 2. Deliveries Tracking & Retry */}
       <div className="glass" style={{ padding: 18, borderRadius: 14 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: 12,
+          }}
+        >
           <h3 style={{ margin: 0, fontSize: 16 }}>
             2. Theo dõi trạng thái gửi (Queued / Sent / Delivered / Failed / Suppressed)
           </h3>
@@ -226,10 +253,26 @@ export const NotificationChannelsOpsView: React.FC = () => {
       </div>
 
       {/* 3. Templates & Suppressions & Push Subscriptions */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))', gap: 16 }}>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))',
+          gap: 16,
+        }}
+      >
         <div className="glass" style={{ padding: 18, borderRadius: 14 }}>
-          <h3 style={{ margin: '0 0 10px', fontSize: 15 }}>3. Quản lý Template ({templates.length})</h3>
-          <form onSubmit={(e) => void handleCreateTemplate(e)} style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
+          <h3 style={{ margin: '0 0 10px', fontSize: 15 }}>
+            3. Quản lý Template ({templates.length})
+          </h3>
+          <form
+            onSubmit={(e) => void handleCreateTemplate(e)}
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 8,
+              marginBottom: 12,
+            }}
+          >
             <div style={{ display: 'flex', gap: 8 }}>
               <input
                 className="form-input"
@@ -267,7 +310,13 @@ export const NotificationChannelsOpsView: React.FC = () => {
           </form>
           <div style={{ maxHeight: 160, overflowY: 'auto', fontSize: 12 }}>
             {templates.map((t) => (
-              <div key={t.id} style={{ padding: '6px 0', borderBottom: '1px solid rgba(148,163,184,0.12)' }}>
+              <div
+                key={t.id}
+                style={{
+                  padding: '6px 0',
+                  borderBottom: '1px solid rgba(148,163,184,0.12)',
+                }}
+              >
                 <b>{t.code}</b> ({t.channelName} - {t.locale}): {t.bodyTemplate.slice(0, 70)}...
               </div>
             ))}
@@ -278,7 +327,10 @@ export const NotificationChannelsOpsView: React.FC = () => {
           <h3 style={{ margin: '0 0 10px', fontSize: 15 }}>
             4. Suppression List ({suppressions.length}) & Push Token ({pushSubs.length})
           </h3>
-          <form onSubmit={(e) => void handleAddSuppression(e)} style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+          <form
+            onSubmit={(e) => void handleAddSuppression(e)}
+            style={{ display: 'flex', gap: 8, marginBottom: 10 }}
+          >
             <select
               className="form-input"
               value={suppChannel}
@@ -300,7 +352,10 @@ export const NotificationChannelsOpsView: React.FC = () => {
             </button>
           </form>
 
-          <form onSubmit={(e) => void handleRegisterPush(e)} style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+          <form
+            onSubmit={(e) => void handleRegisterPush(e)}
+            style={{ display: 'flex', gap: 8, marginBottom: 10 }}
+          >
             <input
               className="form-input"
               placeholder="Đăng ký Push Device Token..."
@@ -329,7 +384,12 @@ export const NotificationChannelsOpsView: React.FC = () => {
                 {s.isActive && (
                   <button
                     type="button"
-                    style={{ background: 'none', border: 'none', color: '#F87171', cursor: 'pointer' }}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: '#F87171',
+                      cursor: 'pointer',
+                    }}
                     onClick={async () => {
                       await notificationsApi.removeSuppression(s.id);
                       await loadAll();

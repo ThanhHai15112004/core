@@ -1,9 +1,14 @@
-import { Column, Entity, Index } from 'typeorm';
-import { TypeOrmBaseEntity } from '@packages/database/index.js';
+import { Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn } from 'typeorm';
 import { AUDIT_ACTOR_TYPE, type AuditActorTypeCode } from '@packages/security/index.js';
 
 @Entity('audit_logs')
-export class AuditLogEntity extends TypeOrmBaseEntity {
+export class AuditLogEntity {
+  @PrimaryGeneratedColumn({ type: 'int' })
+  public id!: number;
+
+  @CreateDateColumn({ name: 'created_at', type: 'timestamp' })
+  public createdAt!: Date;
+
   /** Loại chủ thể thực hiện: 1 = USER, 2 = SERVICE_ACCOUNT, 3 = SYSTEM (Mục 4.4.1) */
   @Index()
   @Column({ name: 'actor_type', type: 'int', default: AUDIT_ACTOR_TYPE.USER })
@@ -52,11 +57,11 @@ export class AuditLogEntity extends TypeOrmBaseEntity {
   public resourceId?: string | null;
 
   /** Dữ liệu JSON trước khi thay đổi (đã che trường nhạy cảm — Mục 4.4.4) */
-  @Column({ name: 'before_data_json', type: 'text', nullable: true })
+  @Column({ name: 'before_data', type: 'text', nullable: true })
   public beforeDataJson?: string | null;
 
   /** Dữ liệu JSON sau khi thay đổi (đã che trường nhạy cảm — Mục 4.4.4) */
-  @Column({ name: 'after_data_json', type: 'text', nullable: true })
+  @Column({ name: 'after_data', type: 'text', nullable: true })
   public afterDataJson?: string | null;
 
   /** Lý do thực hiện thay đổi (ví dụ: mở khóa tài khoản, sửa dữ liệu, reset MFA — Mục 4.4.5) */

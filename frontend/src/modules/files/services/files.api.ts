@@ -1,5 +1,5 @@
 import { frontendConfig } from '../../../config/index';
-import { fetchApi, fetchApiWithMeta, IAM_ACCESS_TOKEN_KEY, type PaginationMeta } from '../../../core/services/api';
+import { ensureAccessToken, fetchApi, fetchApiWithMeta, type PaginationMeta } from '../../../core/services/api';
 import { API_ROUTES } from '../../../routes/index';
 import type {
   CleanupUnusedFilesItem,
@@ -207,8 +207,7 @@ export const filesApi = {
 
   /** Lấy URL tải file trực tiếp hoặc tải qua fetch có kèm Bearer token */
   downloadFileWithAuth: async (file: FileRecordItem): Promise<void> => {
-    const token =
-      typeof window !== 'undefined' ? window.localStorage.getItem(IAM_ACCESS_TOKEN_KEY) : null;
+    const token = await ensureAccessToken(false);
     const res = await fetch(`${frontendConfig.apiBaseUrl}${API_ROUTES.FILES.DOWNLOAD(file.id)}`, {
       method: 'GET',
       headers: token ? { Authorization: `Bearer ${token}` } : {},

@@ -1,5 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
-import { IAM_ACCESS_TOKEN_KEY, IAM_REFRESH_TOKEN_KEY } from '../../../core/services/api';
+import {
+  ensureAccessToken,
+  getStoredAccessToken,
+  getStoredRefreshToken,
+  IAM_ACCESS_TOKEN_KEY,
+  IAM_AUTH_CHANGED_EVENT,
+  IAM_REFRESH_TOKEN_KEY,
+} from '../../../core/services/api';
 import { authApi } from '../services/auth.api';
 import type { AuthSubTabId } from '../enum/auth.enum';
 import type {
@@ -70,6 +77,7 @@ export function useAuthManagement() {
     try {
       if (token) window.localStorage.setItem(IAM_ACCESS_TOKEN_KEY, token);
       else window.localStorage.removeItem(IAM_ACCESS_TOKEN_KEY);
+      window.dispatchEvent(new CustomEvent(IAM_AUTH_CHANGED_EVENT));
     } catch {
       // ignore storage errors
     }
@@ -80,6 +88,7 @@ export function useAuthManagement() {
     try {
       if (token) window.localStorage.setItem(IAM_REFRESH_TOKEN_KEY, token);
       else window.localStorage.removeItem(IAM_REFRESH_TOKEN_KEY);
+      window.dispatchEvent(new CustomEvent(IAM_AUTH_CHANGED_EVENT));
     } catch {
       // ignore storage errors
     }
@@ -141,8 +150,28 @@ export function useAuthManagement() {
   );
 
   useEffect(() => {
+    const syncTokensFromStorage = () => {
+      const storedAccess = getStoredAccessToken() ?? '';
+      const storedRefresh = getStoredRefreshToken() ?? '';
+      setAccessTokenState(storedAccess);
+      setRefreshTokenState(storedRefresh);
+    };
+    window.addEventListener(IAM_AUTH_CHANGED_EVENT, syncTokensFromStorage);
+    return () => {
+      window.removeEventListener(IAM_AUTH_CHANGED_EVENT, syncTokensFromStorage);
+    };
+  }, []);
+
+  useEffect(() => {
     if (accessToken) {
       void refreshProfileAndCoreState(accessToken);
+    } else {
+      void ensureAccessToken(false).then((bootstrappedToken) => {
+        if (bootstrappedToken) {
+          setAccessTokenState(bootstrappedToken);
+          setRefreshTokenState(getStoredRefreshToken() ?? '');
+        }
+      });
     }
   }, [accessToken, refreshProfileAndCoreState]);
 
