@@ -256,6 +256,11 @@ export const API_ROUTES = {
     LIST: (qs = '') => `/files${qs ? `?${qs}` : ''}`,
     UPLOAD: '/files/upload',
     UPLOAD_BATCH: '/files/upload-batch',
+    UPLOAD_CHUNKED_INIT: '/files/upload-chunked/init',
+    UPLOAD_CHUNKED_PART: (uploadId: string) =>
+      `/files/upload-chunked/${encodeURIComponent(uploadId)}/chunk`,
+    UPLOAD_CHUNKED_COMPLETE: (uploadId: string) =>
+      `/files/upload-chunked/${encodeURIComponent(uploadId)}/complete`,
     TRASH_PURGE_EXPIRED: '/files/trash/purge-expired',
     CLEANUP_UNUSED: '/files/cleanup-unused',
     DETAIL: (id: string | number) => `/files/${id}`,

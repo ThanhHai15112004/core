@@ -168,4 +168,56 @@ export class SequenceCounterRepository extends BaseTypeOrmRepository<SequenceCou
 
     return runOnce();
   }
+
+  /**
+   * Kiểm tra tự động xem mã `code` vừa sinh từ Sequence đã tồn tại trong bảng nghiệp vụ tương ứng hay chưa
+   * (thông qua TypeORM `entityMetadatas` mà không cần import Repository của module khác).
+   */
+  public async isCodeAlreadyUsed(params: {
+    sequenceKey: string;
+    module: string;
+    code: string;
+  }): Promise<boolean> {
+    if (!this.dataSource?.isInitialized) {
+      return false;
+    }
+
+    const normalizedKey = params.sequenceKey.trim().toLowerCase();
+    const normalizedModule = params.module.trim().toLowerCase();
+    const singularModule = normalizedModule.replace(/s$/, '');
+
+    const candidateTables = this.dataSource.entityMetadatas
+      .filter((meta) => {
+        if (!meta.columns.some((col) => col.databaseName === 'code')) {
+          return false;
+        }
+        const table = meta.tableName.toLowerCase();
+        if (normalizedKey === 'files.file_code') return table === 'files';
+        if (normalizedKey === 'files.folder_code') return table === 'file_folders';
+        if (normalizedKey === 'notifications.notification_code') return table === 'notifications';
+        return (
+          table === normalizedModule ||
+          table.startsWith(`${normalizedModule}_`) ||
+          table.startsWith(`${singularModule}_`)
+        );
+      })
+      .map((meta) => meta.tableName);
+
+    if (candidateTables.length === 0) {
+      return false;
+    }
+
+    const isPostgres = this.dataSource.options.type === 'postgres';
+    for (const tableName of candidateTables) {
+      const sql = isPostgres
+        ? `SELECT 1 AS found FROM "${tableName}" WHERE "code" = $1 LIMIT 1`
+        : `SELECT 1 AS found FROM \`${tableName}\` WHERE \`code\` = ? LIMIT 1`;
+      const rows = (await this.manager.query(sql, [params.code]).catch(() => [])) as unknown[];
+      if (Array.isArray(rows) && rows.length > 0) {
+        return true;
+      }
+    }
+
+    return false;
+  }
 }

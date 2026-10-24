@@ -38,4 +38,10 @@ export interface StorageDriver {
   /** Kiểm tra kết nối/quyền cơ bản (local: stat root; S3: HeadBucket). */
   ping(): Promise<void>;
   url(key: string): string;
+  /** Ghi nối tiếp một mảnh dữ liệu (chunk) vào tệp tạm trong phiên tải lên dung lượng lớn */
+  appendChunk?(tempKey: string, chunk: Buffer): Promise<number>;
+  /** Chốt tệp tạm sang khóa lưu trữ chính thức (rename nguyên tử trên đĩa) */
+  finalizeTempObject?(tempKey: string, targetKey: string, opts?: PutOptions): Promise<void>;
+  /** Hủy bỏ và xóa tệp tạm của phiên tải lên theo chunk */
+  abortTempObject?(tempKey: string): Promise<void>;
 }

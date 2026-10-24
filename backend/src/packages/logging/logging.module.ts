@@ -19,6 +19,9 @@ import { resolveRequestId } from './utils/request-id.js';
 
 /** Request không ghi log tự động (scrape metric, health check). */
 const QUIET_URL = /\/(metrics|health)(\/|\?|$)/;
+/** Endpoint vận hành System Console (`/ops/*`) hoặc mảnh upload (`/upload-chunked/.../chunk`) — bỏ qua log 2xx/3xx để tránh spam log. */
+const OPS_URL = /\/ops(\/|\?|$)/;
+const CHUNK_PART_URL = /\/upload-chunked\/[^/]+\/chunk(\/|\?|$)/;
 
 /**
  * Structured logging bằng pino (nestjs-pino + pino-http): JSON ra stdout và Redis Stream `logs:<env>`, mỗi request
@@ -44,8 +47,20 @@ export class LoggingModule implements NestModule {
               genReqId: (req: IncomingMessage, res: ServerResponse) => resolveRequestId(req, res),
               customAttributeKeys: { reqId: 'reqId' },
               quietReqLogger: true,
-              customLogLevel: (_req: IncomingMessage, res: ServerResponse, err?: Error) =>
-                err || res.statusCode >= 500 ? 'error' : res.statusCode >= 400 ? 'warn' : 'info',
+              customLogLevel: (req: IncomingMessage, res: ServerResponse, err?: Error) => {
+                if (err || res.statusCode >= 500) return 'error';
+                if (res.statusCode >= 400) return 'warn';
+                if (
+                  OPS_URL.test(req.url ?? '') &&
+                  (req.method === 'GET' || req.method === 'HEAD')
+                ) {
+                  return 'silent';
+                }
+                if (CHUNK_PART_URL.test(req.url ?? '')) {
+                  return 'silent';
+                }
+                return 'info';
+              },
               autoLogging: { ignore: (req: IncomingMessage) => QUIET_URL.test(req.url ?? '') },
               serializers: {
                 req: (req: { method?: string; url?: string }) => ({

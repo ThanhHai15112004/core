@@ -1,4 +1,4 @@
-import { Injectable, type OnModuleInit, Optional } from '@nestjs/common';
+import { Inject, Injectable, type OnModuleInit, Optional } from '@nestjs/common';
 import {
   BadRequestAppException,
   ConflictAppException,
@@ -63,11 +63,21 @@ export class I18nManagementService implements II18nManagementPublicService, OnMo
   private translationSeq = 100;
 
   constructor(
-    @Optional() private readonly localeRepository?: I18nLocaleRepository | null,
-    @Optional() private readonly timezoneRepository?: I18nTimezoneRepository | null,
-    @Optional() private readonly translationRepository?: I18nTranslationRepository | null,
-    @Optional() private readonly i18nService?: CoreI18nService | null,
-    @Optional() private readonly auditLogService?: AuditLogService | null,
+    @Optional()
+    @Inject(I18nLocaleRepository)
+    private readonly localeRepository?: I18nLocaleRepository | null,
+    @Optional()
+    @Inject(I18nTimezoneRepository)
+    private readonly timezoneRepository?: I18nTimezoneRepository | null,
+    @Optional()
+    @Inject(I18nTranslationRepository)
+    private readonly translationRepository?: I18nTranslationRepository | null,
+    @Optional()
+    @Inject(CoreI18nService)
+    private readonly i18nService?: CoreI18nService | null,
+    @Optional()
+    @Inject(AuditLogService)
+    private readonly auditLogService?: AuditLogService | null,
   ) {
     seedInMemoryTranslationsFromStaticDictionaries(
       this.translationMap,

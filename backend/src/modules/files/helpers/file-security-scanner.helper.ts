@@ -3,14 +3,20 @@ import { DANGEROUS_MIMES, EICAR_SIGNATURE } from '../enum/files.enum.js';
 import type { UploadSingleFileRequest } from '../requests/files.requests.js';
 import type { MalwareScanResult } from '../types/files.types.js';
 
-/** Giải mã nội dung file từ chuỗi Base64 (hỗ trợ cả Data URL) hoặc chuỗi văn bản */
+/** Giải mã nội dung file từ chuỗi Base64 (hỗ trợ cả Data URL) hoặc chuỗi văn bản mà không sao chép chuỗi lớn trên RAM */
 export function decodeUploadBuffer(input: UploadSingleFileRequest): Buffer {
-  if (typeof input.contentBase64 === 'string' && input.contentBase64.trim().length > 0) {
-    const trimmed = input.contentBase64.trim();
-    const commaIndex = trimmed.indexOf(',');
-    const rawBase64 =
-      trimmed.startsWith('data:') && commaIndex !== -1 ? trimmed.slice(commaIndex + 1) : trimmed;
-    return Buffer.from(rawBase64, 'base64');
+  if (typeof input.contentBase64 === 'string' && input.contentBase64.length > 0) {
+    const head = input.contentBase64.slice(0, 128).trimStart();
+    if (head.length > 0) {
+      let rawBase64 = input.contentBase64;
+      if (head.startsWith('data:')) {
+        const commaIndex = input.contentBase64.indexOf(',');
+        if (commaIndex !== -1) {
+          rawBase64 = input.contentBase64.slice(commaIndex + 1);
+        }
+      }
+      return Buffer.from(rawBase64, 'base64');
+    }
   }
   if (typeof input.textContent === 'string' && input.textContent.length > 0) {
     return Buffer.from(input.textContent, 'utf8');

@@ -57,12 +57,18 @@ export class MenusService implements IMenusPublicService, OnModuleInit {
   private dbHydrated = false;
 
   constructor(
-    @Optional() private readonly menuRepository?: MenuRepository | null,
+    @Optional()
+    @Inject(MenuRepository)
+    private readonly menuRepository?: MenuRepository | null,
     @Optional()
     @Inject(MenuRegistryService)
     menuRegistry?: MenuRegistryService | null,
-    @Optional() private readonly auditLogService?: AuditLogService | null,
-    @Optional() private readonly cacheProvider?: BaseCacheProvider | null,
+    @Optional()
+    @Inject(AuditLogService)
+    private readonly auditLogService?: AuditLogService | null,
+    @Optional()
+    @Inject(BaseCacheProvider)
+    private readonly cacheProvider?: BaseCacheProvider | null,
   ) {
     this.registry = menuRegistry ?? defaultMenuRegistry;
     this.registry.onMenuChanged(() => {

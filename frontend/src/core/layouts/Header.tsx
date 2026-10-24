@@ -1,5 +1,11 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { APP_NAME, NAVIGATION_ITEMS, type NavigationTabId } from '../constants/index';
+import {
+  APP_NAME,
+  NAVIGATION_ITEMS,
+  resolveRouteForTab,
+  resolveTabFromPathname,
+  type NavigationTabId,
+} from '../constants/index';
 import { ROUTES } from '../../routes/index';
 import { useLocale } from '../i18n/index';
 import { useTheme } from '../theme/index';
@@ -19,7 +25,7 @@ import {
   Sun,
   Moon,
 } from 'lucide-react';
-import { navigateTo } from '../router/index';
+import { navigateTo, useLocation } from '../router/index';
 import {
   getStoredAccessToken,
   getStoredRefreshToken,
@@ -35,10 +41,23 @@ interface HeaderProps {
   onTabChange?: (tab: NavigationTabId) => void;
 }
 
-export const Header: React.FC<HeaderProps> = ({ activeTab = 'home', onTabChange }) => {
+export const Header: React.FC<HeaderProps> = ({ activeTab, onTabChange }) => {
+  const { pathname } = useLocation();
+  const effectiveTab = activeTab ?? resolveTabFromPathname(pathname);
   const { locale, toggleLocale, t } = useLocale();
   const { theme, toggleTheme } = useTheme();
   const [unreadCount, setUnreadCount] = useState<number>(0);
+
+  const handleSelectTab = useCallback(
+    (tab: NavigationTabId) => {
+      if (onTabChange) {
+        onTabChange(tab);
+      } else {
+        navigateTo(resolveRouteForTab(tab));
+      }
+    },
+    [onTabChange],
+  );
 
   const fetchUnread = useCallback(async () => {
     if (!getStoredAccessToken() && !getStoredRefreshToken()) {
@@ -95,7 +114,7 @@ export const Header: React.FC<HeaderProps> = ({ activeTab = 'home', onTabChange 
   return (
     <header className="glass header-root">
       <div className="header-content">
-        <div onClick={() => onTabChange?.('home')} className="header-brand">
+        <div onClick={() => handleSelectTab('home')} className="header-brand">
           <div className="header-logo-badge" aria-hidden="true">
             <Boxes size={18} />
           </div>
@@ -104,13 +123,13 @@ export const Header: React.FC<HeaderProps> = ({ activeTab = 'home', onTabChange 
 
         <nav className="header-nav">
           {NAVIGATION_ITEMS.map((item) => {
-            const isActive = activeTab === item.id;
+            const isActive = effectiveTab === item.id;
             const label = t(item.labelKey);
             return (
               <button
                 key={item.id}
                 type="button"
-                onClick={() => onTabChange?.(item.id)}
+                onClick={() => handleSelectTab(item.id)}
                 className={`nav-tab-btn ${isActive ? 'nav-tab-btn-active' : ''}`}
               >
                 <span style={{ display: 'inline-flex', alignItems: 'center' }}>

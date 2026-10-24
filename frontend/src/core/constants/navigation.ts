@@ -75,3 +75,26 @@ export const NAVIGATION_ITEMS: readonly NavigationItem[] = [
     route: ROUTES.NOTIFICATIONS,
   },
 ] as const;
+
+const TAB_TO_ROUTE_MAP = new Map<NavigationTabId, string>(
+  NAVIGATION_ITEMS.map((item) => [item.id, item.route]),
+);
+
+/** Ánh xạ `NavigationTabId` sang đường dẫn URL thật (ví dụ: `'files'` → `'/files'`). */
+export function resolveRouteForTab(tab: NavigationTabId): string {
+  return TAB_TO_ROUTE_MAP.get(tab) ?? ROUTES.HOME;
+}
+
+/** Ánh xạ `pathname` hiện tại trên URL sang `NavigationTabId` tương ứng (hỗ trợ F5 và Back/Forward). */
+export function resolveTabFromPathname(pathname: string): NavigationTabId {
+  const normalized = pathname.trim().replace(/\/+$/, '') || '/';
+  if (normalized === '/' || normalized === ROUTES.HOME) {
+    return 'home';
+  }
+  for (const item of NAVIGATION_ITEMS) {
+    if (item.route !== '/' && (normalized === item.route || normalized.startsWith(`${item.route}/`))) {
+      return item.id;
+    }
+  }
+  return 'home';
+}

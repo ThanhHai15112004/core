@@ -322,8 +322,8 @@
       "name": "Dung lượng tải lên tối đa (MB)",
       "description": "Giới hạn kích thước tối đa cho một tệp tải lên hệ thống",
       "valueType": "NUMBER",
-      "defaultValue": 25,
-      "validationRules": { "min": 1, "max": 2048, "integerOnly": true },
+      "defaultValue": 5120,
+      "validationRules": { "min": 1, "max": 102400, "integerOnly": true },
       "isSensitive": false,
       "allowUnitOverride": true,
       "isSystem": true,
@@ -427,7 +427,7 @@
       "name": "Hạn mức tổng dung lượng lưu trữ (MB)",
       "description": "Tổng dung lượng lưu trữ tối đa cho phép (0 = không giới hạn, hỗ trợ cấu hình riêng theo từng đơn vị)",
       "valueType": "NUMBER",
-      "defaultValue": 51200,
+      "defaultValue": 102400,
       "validationRules": { "min": 0, "max": 10485760, "integerOnly": true },
       "isSensitive": false,
       "allowUnitOverride": true,
@@ -551,8 +551,8 @@
         "AUDIO": ["mp3", "wav", "ogg", "m4a", "flac"],
         "DOCUMENT": ["pdf", "doc", "docx", "ppt", "pptx", "txt", "md", "rtf"],
         "SPREADSHEET": ["xlsx", "xls", "csv", "tsv", "json"],
-        "ARCHIVE": ["zip", "rar", "7z", "tar", "gz"],
-        "OTHER": ["bin", "dat"]
+        "ARCHIVE": ["zip", "rar", "7z", "tar", "gz", "iso", "tgz", "bz2"],
+        "OTHER": ["bin", "dat", "sql", "bak", "dmg", "apk"]
       },
       "isSensitive": false,
       "allowUnitOverride": true,
@@ -568,13 +568,13 @@
       "description": "Cấu hình JSON quy định dung lượng tối đa (MB) cho từng loại file (IMAGE, VIDEO, AUDIO, DOCUMENT, SPREADSHEET, ARCHIVE, OTHER)",
       "valueType": "JSON",
       "defaultValue": {
-        "IMAGE": 10,
-        "VIDEO": 200,
-        "AUDIO": 50,
-        "DOCUMENT": 25,
-        "SPREADSHEET": 25,
-        "ARCHIVE": 100,
-        "OTHER": 25
+        "IMAGE": 50,
+        "VIDEO": 5120,
+        "AUDIO": 500,
+        "DOCUMENT": 500,
+        "SPREADSHEET": 500,
+        "ARCHIVE": 5120,
+        "OTHER": 5120
       },
       "isSensitive": false,
       "allowUnitOverride": true,
@@ -590,9 +590,9 @@
       "description": "Cấu hình JSON quy định dung lượng tối đa (MB) cho phép tải lên theo từng module (ví dụ: users, organizations, courses)",
       "valueType": "JSON",
       "defaultValue": {
-        "users": 5,
-        "organizations": 15,
-        "courses": 200
+        "users": 25,
+        "organizations": 100,
+        "courses": 5120
       },
       "isSensitive": false,
       "allowUnitOverride": true,

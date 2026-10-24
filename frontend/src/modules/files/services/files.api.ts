@@ -113,6 +113,193 @@ export const filesApi = {
       },
     ),
 
+  /** Khởi tạo phiên tải lên theo mảnh (Chunked Upload Init) cho file lớn */
+  initChunkedUpload: (payload: {
+    fileName: string;
+    displayName?: string;
+    sizeBytes: number;
+    mimeType?: string;
+    folderId?: number | null;
+    visibility?: number;
+    organizationUnitId?: number | null;
+    moduleName?: string;
+    stageForScan?: boolean;
+    quarantineOnThreat?: boolean;
+    rejectDuplicate?: boolean;
+    reuseDuplicate?: boolean;
+  }) =>
+    fetchApi<{
+      uploadId: string;
+      chunkSizeBytes: number;
+      totalChunks: number;
+      expiresAt: string;
+    }>(API_ROUTES.FILES.UPLOAD_CHUNKED_INIT, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+
+  /** Gửi một mảnh dữ liệu (Binary Blob hoặc Base64) lên phiên Chunked Upload */
+  uploadChunkPart: (
+    uploadId: string,
+    payload:
+      | { chunkIndex: number; blob: Blob }
+      | { chunkIndex: number; contentBase64: string },
+  ) =>
+    'blob' in payload
+      ? fetchApi<{
+          uploadId: string;
+          chunkIndex: number;
+          receivedBytes: number;
+          totalBytes: number;
+          progressPercent: number;
+        }>(`${API_ROUTES.FILES.UPLOAD_CHUNKED_PART(uploadId)}?chunkIndex=${payload.chunkIndex}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/octet-stream',
+            'x-chunk-index': String(payload.chunkIndex),
+          },
+          body: payload.blob,
+        })
+      : fetchApi<{
+          uploadId: string;
+          chunkIndex: number;
+          receivedBytes: number;
+          totalBytes: number;
+          progressPercent: number;
+        }>(API_ROUTES.FILES.UPLOAD_CHUNKED_PART(uploadId), {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        }),
+
+  /** Hoàn tất phiên tải lên theo mảnh */
+  completeChunkedUpload: (uploadId: string) =>
+    fetchApi<FileRecordItem>(API_ROUTES.FILES.UPLOAD_CHUNKED_COMPLETE(uploadId), {
+      method: 'POST',
+      body: JSON.stringify({}),
+    }),
+
+  /**
+   * Tải một đối tượng `File` từ trình duyệt lên hệ thống:
+   * - Nếu `file.size <= 4 MB`: dùng `uploadSingle` 1 bước.
+   * - Nếu `file.size > 4 MB`: tự động cắt từng mảnh 4 MB bằng `file.slice()` và tải tuần tự qua Chunked Upload,
+   *   giúp trình duyệt không bao giờ bị tràn bộ nhớ (`STATUS_BREAKPOINT`) kể cả với tệp 2 GB–5 GB.
+   */
+  uploadBrowserFile: async (
+    file: File,
+    options: {
+      folderId?: number | null;
+      visibility?: number;
+      organizationUnitId?: number | null;
+      moduleName?: string;
+      stageForScan?: boolean;
+      optimizeImage?: boolean;
+      generateThumbnail?: boolean;
+      encryptAtRest?: boolean;
+    } = {},
+    onProgress?: (progress: {
+      percent: number;
+      uploadedBytes: number;
+      totalBytes: number;
+      fileName: string;
+      chunkIndex?: number;
+      totalChunks?: number;
+    }) => void,
+  ): Promise<FileRecordItem> => {
+    const CHUNK_THRESHOLD_BYTES = 4 * 1024 * 1024; // 4 MB
+    if (file.size <= CHUNK_THRESHOLD_BYTES) {
+      onProgress?.({
+        percent: 15,
+        uploadedBytes: 0,
+        totalBytes: file.size,
+        fileName: file.name,
+      });
+      const contentBase64 = await readBrowserFileAsBase64(file);
+      const created = await filesApi.uploadSingle({
+        fileName: file.name,
+        mimeType: file.type || undefined,
+        contentBase64,
+        folderId: options.folderId,
+        visibility: options.visibility,
+        organizationUnitId: options.organizationUnitId,
+        moduleName: options.moduleName,
+        stageForScan: options.stageForScan,
+        optimizeImage: options.optimizeImage,
+        generateThumbnail: options.generateThumbnail,
+        encryptAtRest: options.encryptAtRest,
+      });
+      onProgress?.({
+        percent: 100,
+        uploadedBytes: file.size,
+        totalBytes: file.size,
+        fileName: file.name,
+      });
+      return created;
+    }
+
+    const session = await filesApi.initChunkedUpload({
+      fileName: file.name,
+      sizeBytes: file.size,
+      mimeType: file.type || undefined,
+      folderId: options.folderId,
+      visibility: options.visibility,
+      organizationUnitId: options.organizationUnitId,
+      moduleName: options.moduleName,
+      stageForScan: options.stageForScan,
+    });
+
+    const chunkSize = session.chunkSizeBytes || CHUNK_THRESHOLD_BYTES;
+    const totalOffsets: number[] = [];
+    for (let offset = 0; offset < file.size; offset += chunkSize) {
+      totalOffsets.push(offset);
+    }
+
+    for (let chunkIndex = 0; chunkIndex < totalOffsets.length; chunkIndex += 1) {
+      const start = totalOffsets[chunkIndex]!;
+      const slice = file.slice(start, Math.min(file.size, start + chunkSize));
+
+      let partRes: {
+        uploadId: string;
+        chunkIndex: number;
+        receivedBytes: number;
+        totalBytes: number;
+        progressPercent: number;
+      } | null = null;
+      let lastError: unknown;
+
+      for (let attempt = 0; attempt < 4; attempt += 1) {
+        try {
+          partRes = await filesApi.uploadChunkPart(session.uploadId, {
+            chunkIndex,
+            blob: slice,
+          });
+          break;
+        } catch (err) {
+          lastError = err;
+          if (attempt < 3) {
+            await new Promise((resolve) => setTimeout(resolve, (attempt + 1) * 1000));
+          }
+        }
+      }
+
+      if (!partRes) {
+        throw lastError instanceof Error
+          ? lastError
+          : new Error(`Tải mảnh dữ liệu #${chunkIndex + 1} thất bại`);
+      }
+
+      onProgress?.({
+        percent: partRes.progressPercent,
+        uploadedBytes: partRes.receivedBytes,
+        totalBytes: partRes.totalBytes,
+        fileName: file.name,
+        chunkIndex: chunkIndex + 1,
+        totalChunks: session.totalChunks,
+      });
+    }
+
+    return filesApi.completeChunkedUpload(session.uploadId);
+  },
+
   /** Đổi tên hiển thị hoặc di chuyển thư mục (không đổi storageKey vật lý) */
   updateFile: (
     id: number,
@@ -310,8 +497,8 @@ export const filesApi = {
     }),
 };
 
-/** Helper đọc đối tượng File của trình duyệt sang Base64 */
-export function readBrowserFileAsBase64(file: File): Promise<string> {
+/** Helper đọc đối tượng File hoặc Blob (chunk slice) của trình duyệt sang Base64 */
+export function readBrowserFileAsBase64(blob: Blob, labelName = 'file'): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => {
@@ -319,7 +506,7 @@ export function readBrowserFileAsBase64(file: File): Promise<string> {
       const commaIdx = result.indexOf(',');
       resolve(commaIdx >= 0 ? result.slice(commaIdx + 1) : result);
     };
-    reader.onerror = () => reject(new Error(`Không thể đọc tệp ${file.name}`));
-    reader.readAsDataURL(file);
+    reader.onerror = () => reject(new Error(`Không thể đọc dữ liệu tệp ${labelName}`));
+    reader.readAsDataURL(blob);
   });
 }

@@ -37,29 +37,6 @@ export class NotificationsRepository extends BaseTypeOrmRepository<NotificationE
     );
   }
 
-  public async findByCode(code: string): Promise<NotificationEntity | null> {
-    const trimmed = code.trim();
-    if (!trimmed) return null;
-    return this.executeReadOnly(async (repo) => repo.findOne({ where: { code: trimmed } }));
-  }
-
-  public async findMaxSequenceForYear(year: number): Promise<number> {
-    const prefix = `NTF-${year}-`;
-    return this.executeReadOnly(async (repo) => {
-      const latest = await repo
-        .createQueryBuilder('n')
-        .select('n.code', 'code')
-        .where('n.code LIKE :prefix', { prefix: `${prefix}%` })
-        .orderBy('n.code', 'DESC')
-        .limit(1)
-        .getRawOne<{ code?: string }>();
-      if (!latest?.code) return 0;
-      const tail = latest.code.slice(prefix.length);
-      const parsed = Number.parseInt(tail, 10);
-      return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
-    });
-  }
-
   public async findPaginatedDispatches(
     options: NotificationDispatchFilterOptions,
   ): Promise<PaginatedQueryBuilderResult<NotificationEntity>> {

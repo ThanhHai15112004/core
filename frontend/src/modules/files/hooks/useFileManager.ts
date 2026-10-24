@@ -1,7 +1,7 @@
 import type React from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { FileManagerNavSection } from '../enum/files.enum';
-import { filesApi, readBrowserFileAsBase64 } from '../services/files.api';
+import { filesApi } from '../services/files.api';
 import type {
   FileFolderItem,
   FileIntegrityVerificationItem,
@@ -44,6 +44,8 @@ export function useFileManager() {
   // Tải file lên (Mục 6.1.1 & 6.3)
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
   const [uploading, setUploading] = useState<boolean>(false);
+  const [uploadProgressPercent, setUploadProgressPercent] = useState<number>(0);
+  const [uploadProgressText, setUploadProgressText] = useState<string | null>(null);
   const [uploadEncrypt, setUploadEncrypt] = useState<boolean>(false);
   const [uploadStageForScan, setUploadStageForScan] = useState<boolean>(false);
   const [uploadOptimizeImage, setUploadOptimizeImage] = useState<boolean>(true);
@@ -225,46 +227,59 @@ export function useFileManager() {
   const handleDirectUploadFiles = async (browserList: File[]) => {
     if (browserList.length === 0) return;
     setUploading(true);
+    setUploadProgressPercent(0);
+    setUploadProgressText(null);
     try {
-      const items = await Promise.all(
-        browserList.map(async (file) => ({
-          fileName: file.name,
-          mimeType: file.type || undefined,
-          contentBase64: await readBrowserFileAsBase64(file),
-          folderId: selectedFolderId,
-          visibility: 2,
-          moduleName: uploadModuleName.trim() || undefined,
-          stageForScan: uploadStageForScan,
-          optimizeImage: uploadOptimizeImage,
-          generateThumbnail: uploadGenerateThumbnail,
-          encryptAtRest: uploadEncrypt,
-        })),
-      );
+      const uploadedItems: FileRecordItem[] = [];
+      for (let i = 0; i < browserList.length; i++) {
+        const file = browserList[i];
+        if (!file) continue;
+        let lastUiUpdateMs = 0;
+        const created = await filesApi.uploadBrowserFile(
+          file,
+          {
+            folderId: selectedFolderId,
+            visibility: 2,
+            moduleName: uploadModuleName.trim() || undefined,
+            stageForScan: uploadStageForScan,
+            optimizeImage: uploadOptimizeImage,
+            generateThumbnail: uploadGenerateThumbnail,
+            encryptAtRest: uploadEncrypt,
+          },
+          (prog) => {
+            const nowMs = Date.now();
+            if (prog.percent < 100 && nowMs - lastUiUpdateMs < 200) {
+              return;
+            }
+            lastUiUpdateMs = nowMs;
+            setUploadProgressPercent(prog.percent);
+            if (prog.totalChunks && prog.totalChunks > 1) {
+              setUploadProgressText(
+                `${prog.percent}% (${prog.chunkIndex ?? 0}/${prog.totalChunks} mảnh)`,
+              );
+            } else {
+              setUploadProgressText(`${prog.percent}%`);
+            }
+          },
+        );
+        uploadedItems.push(created);
+      }
 
-      if (items.length === 1 && items[0]) {
-        const created = await filesApi.uploadSingle(items[0]);
+      if (uploadedItems.length === 1 && uploadedItems[0]) {
+        const created = uploadedItems[0];
         showNotice('success', `Đã tải lên "${created.displayName}" (${created.sizeFormatted})`);
         await loadFoldersAndFiles();
         await handleSelectFileDetail(created.id);
-      } else {
-        const batch = await filesApi.uploadBatch({
-          files: items,
-          folderId: selectedFolderId,
-          visibility: 2,
-          moduleName: uploadModuleName.trim() || undefined,
-          stageForScan: uploadStageForScan,
-          optimizeImage: uploadOptimizeImage,
-          generateThumbnail: uploadGenerateThumbnail,
-          encryptAtRest: uploadEncrypt,
-        });
-        const uploadedTotal = batch.count ?? batch.uploadedCount ?? batch.items.length;
-        showNotice('success', `Đã tải lên hàng loạt ${uploadedTotal} tệp thành công`);
+      } else if (uploadedItems.length > 1) {
+        showNotice('success', `Đã tải lên hàng loạt ${uploadedItems.length} tệp thành công`);
         await loadFoldersAndFiles();
       }
     } catch (err) {
       showNotice('error', err instanceof Error ? err.message : 'Tải file lên thất bại');
     } finally {
       setUploading(false);
+      setUploadProgressPercent(0);
+      setUploadProgressText(null);
     }
   };
 
@@ -524,6 +539,8 @@ export function useFileManager() {
     stats,
     uploadInputRef,
     uploading,
+    uploadProgressPercent,
+    uploadProgressText,
     uploadEncrypt,
     setUploadEncrypt,
     uploadStageForScan,

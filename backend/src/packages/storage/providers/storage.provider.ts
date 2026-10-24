@@ -243,6 +243,53 @@ export class BaseStorageProvider
     return (await this.measure('head', path, null, () => this.driver.head(path))) !== null;
   }
 
+  /** Ghi nối tiếp một mảnh dữ liệu (chunk) vào tệp tạm trên Storage */
+  public async appendChunk(tempKey: string, chunk: Buffer): Promise<number> {
+    this.assertKey(tempKey);
+    if (typeof this.driver.appendChunk === 'function') {
+      return this.measure(
+        'put',
+        tempKey,
+        chunk.length,
+        () => this.driver.appendChunk!(tempKey, chunk),
+        () => chunk.length,
+      );
+    }
+    throw new StorageObjectError('UNSUPPORTED', 'Storage driver does not support appendChunk');
+  }
+
+  /** Hoàn tất phiên tải lên theo chunk bằng cách chuyển tệp tạm sang khóa lưu trữ đích */
+  public async finalizeChunkedUpload(
+    tempKey: string,
+    targetKey: string,
+    mimeType?: string,
+  ): Promise<string> {
+    this.assertKey(tempKey);
+    this.assertKey(targetKey);
+    if (typeof this.driver.finalizeTempObject === 'function') {
+      await this.measure('put', targetKey, null, () =>
+        this.driver.finalizeTempObject!(tempKey, targetKey, {
+          contentType: mimeType ?? mimeOf(targetKey),
+        }),
+      );
+      return targetKey;
+    }
+    const fullBuf = await this.driver.get(tempKey);
+    await this.upload(targetKey, fullBuf, mimeType);
+    await this.driver.delete(tempKey).catch(() => undefined);
+    return targetKey;
+  }
+
+  /** Dọn dẹp tệp tạm của phiên tải lên theo chunk */
+  public async abortChunkedUpload(tempKey: string): Promise<void> {
+    if (!isValidKey(tempKey)) return;
+    if (typeof this.driver.abortTempObject === 'function') {
+      await this.driver.abortTempObject(tempKey).catch(() => undefined);
+      return;
+    }
+    await this.driver.delete(tempKey).catch(() => undefined);
+  }
+
   /** Upload đang chạy trong process này. */
   public activeUploads(): ActiveUpload[] {
     return [...this.active.values()];

@@ -258,6 +258,36 @@ export const cleanupUnusedFilesResponseSchema = z.object({
   cleanedIds: z.array(z.number().int().min(1)),
 });
 
+export interface ChunkedUploadInitResponse {
+  readonly uploadId: string;
+  readonly chunkSizeBytes: number;
+  readonly totalChunks: number;
+  readonly expiresAt: string;
+}
+
+export const chunkedUploadInitResponseSchema = z.object({
+  uploadId: z.string().min(1),
+  chunkSizeBytes: z.number().int().min(1),
+  totalChunks: z.number().int().min(1),
+  expiresAt: z.string(),
+});
+
+export interface ChunkedUploadPartResponse {
+  readonly uploadId: string;
+  readonly chunkIndex: number;
+  readonly receivedBytes: number;
+  readonly totalBytes: number;
+  readonly progressPercent: number;
+}
+
+export const chunkedUploadPartResponseSchema = z.object({
+  uploadId: z.string().min(1),
+  chunkIndex: z.number().int().min(0),
+  receivedBytes: z.number().int().min(0),
+  totalBytes: z.number().int().min(1),
+  progressPercent: z.number().min(0).max(100),
+});
+
 export interface FileStatsResponse {
   readonly totalActiveFiles: number;
   readonly totalActiveBytes: number;

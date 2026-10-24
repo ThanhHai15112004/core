@@ -7,6 +7,13 @@ import { toLogEntry } from '../utils/log-entry.js';
 
 type StreamRow = [id: string, fields: string[]];
 
+export interface LogStreamDelta {
+  /** Các bản ghi mới hơn `afterId` (mới nhất trước). */
+  entries: LogEntry[];
+  /** `true` nếu `afterId` vẫn còn trong stream (có thể ghép nối an toàn vào snapshot cũ). */
+  contiguous: boolean;
+}
+
 /** Chuyển đổi đối tượng sang mảng các cặp [key, value] */
 const toEntries = (rows: StreamRow[]): LogEntry[] =>
   rows
@@ -43,6 +50,23 @@ export class LogStreamReader {
       count,
     )) as StreamRow[];
     return toEntries(rows);
+  }
+
+  /** Các log mới hơn `afterId` (không bao gồm `afterId`), tối đa `count` dòng (mới nhất trước). */
+  public async recentAfter(afterId: string, count: number): Promise<LogStreamDelta> {
+    const rows = (await this.redis.client.xrevrange(
+      this.key,
+      '+',
+      afterId,
+      'COUNT',
+      count + 1,
+    )) as StreamRow[];
+    const contiguous = rows.length > 0 && rows[rows.length - 1]![0] === afterId;
+    const freshRows = contiguous ? rows.slice(0, -1) : rows.slice(0, count);
+    return {
+      entries: toEntries(freshRows),
+      contiguous,
+    };
   }
 
   /** Lấy dữ liệu hoặc đối tượng theo khóa định danh */

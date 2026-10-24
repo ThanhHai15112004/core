@@ -63,13 +63,21 @@ export class FeatureFlagsService implements IFeatureFlagsPublicService, OnModule
   private dbHydrated = false;
 
   constructor(
-    @Optional() private readonly flagRepository?: FeatureFlagRepository | null,
-    @Optional() private readonly historyRepository?: FeatureFlagHistoryRepository | null,
+    @Optional()
+    @Inject(FeatureFlagRepository)
+    private readonly flagRepository?: FeatureFlagRepository | null,
+    @Optional()
+    @Inject(FeatureFlagHistoryRepository)
+    private readonly historyRepository?: FeatureFlagHistoryRepository | null,
     @Optional()
     @Inject(FeatureFlagRegistryService)
     featureFlagRegistry?: FeatureFlagRegistryService | null,
-    @Optional() private readonly auditLogService?: AuditLogService | null,
-    @Optional() private readonly cacheProvider?: BaseCacheProvider | null,
+    @Optional()
+    @Inject(AuditLogService)
+    private readonly auditLogService?: AuditLogService | null,
+    @Optional()
+    @Inject(BaseCacheProvider)
+    private readonly cacheProvider?: BaseCacheProvider | null,
   ) {
     this.registry = featureFlagRegistry ?? defaultFeatureFlagRegistry;
     this.registry.onFlagChanged(async (evt) => {

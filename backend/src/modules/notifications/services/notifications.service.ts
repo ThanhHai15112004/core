@@ -984,56 +984,14 @@ export class NotificationsService implements INotificationsPublicService {
   }
 
   private async generateNotificationCode(organizationUnitId?: number | null): Promise<string> {
-    const maxProbeAttempts = 50;
-    for (let attempt = 0; attempt < maxProbeAttempts; attempt++) {
-      try {
-        const generated = this.sequencesPublicService
-          ? await this.sequencesPublicService.nextCode(
-              NOTIFICATIONS_SEQUENCE_KEYS.NOTIFICATION_CODE,
-              {
-                organizationUnitId: organizationUnitId ?? null,
-              },
-            )
-          : await this.sequenceRegistry.nextCode(NOTIFICATIONS_SEQUENCE_KEYS.NOTIFICATION_CODE, {
-              organizationUnitId: organizationUnitId ?? null,
-            });
-        if (generated?.code) {
-          const existing =
-            typeof this.notificationsRepo.findByCode === 'function'
-              ? await this.notificationsRepo.findByCode(generated.code)
-              : null;
-          if (!existing) {
-            return generated.code;
-          }
-        } else {
-          break;
-        }
-      } catch {
-        break;
-      }
-    }
-
-    const year = new Date().getFullYear();
-    if (typeof this.notificationsRepo.findMaxSequenceForYear === 'function') {
-      try {
-        const maxSeq = await this.notificationsRepo.findMaxSequenceForYear(year);
-        if (maxSeq >= 0) {
-          const candidate = `NTF-${year}-${String(maxSeq + 1).padStart(6, '0')}`;
-          const existing =
-            typeof this.notificationsRepo.findByCode === 'function'
-              ? await this.notificationsRepo.findByCode(candidate)
-              : null;
-          if (!existing) {
-            return candidate;
-          }
-        }
-      } catch {
-        // Fallback to random suffix
-      }
-    }
-
-    const randomSuffix = Math.floor(100000 + Math.random() * 900000);
-    return `NTF-${year}-${randomSuffix}`;
+    const generated = this.sequencesPublicService
+      ? await this.sequencesPublicService.nextCode(NOTIFICATIONS_SEQUENCE_KEYS.NOTIFICATION_CODE, {
+          organizationUnitId: organizationUnitId ?? null,
+        })
+      : await this.sequenceRegistry.nextCode(NOTIFICATIONS_SEQUENCE_KEYS.NOTIFICATION_CODE, {
+          organizationUnitId: organizationUnitId ?? null,
+        });
+    return generated.code;
   }
 
   private async recordAudit(

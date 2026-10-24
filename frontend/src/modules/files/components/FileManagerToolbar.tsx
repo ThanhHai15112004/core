@@ -28,6 +28,8 @@ export interface FileManagerToolbarProps {
   readonly foldersCount: number;
   readonly totalFiles: number;
   readonly uploading: boolean;
+  readonly uploadProgressPercent?: number;
+  readonly uploadProgressText?: string | null;
   readonly cleaningUnused: boolean;
   readonly stats: FileStatsItem | null;
   readonly selectedFile: FileRecordItem | null;
@@ -63,6 +65,8 @@ export const FileManagerToolbar: React.FC<FileManagerToolbarProps> = ({
   foldersCount,
   totalFiles,
   uploading,
+  uploadProgressPercent = 0,
+  uploadProgressText = null,
   cleaningUnused,
   stats,
   selectedFile,
@@ -421,7 +425,13 @@ export const FileManagerToolbar: React.FC<FileManagerToolbarProps> = ({
             }}
           >
             <Upload size={15} />
-            <span>{uploading ? 'Đang tải lên...' : 'Tải lên'}</span>
+            <span>
+              {uploading
+                ? uploadProgressText
+                  ? `Đang tải lên ${uploadProgressText}`
+                  : `Đang tải lên (${uploadProgressPercent}%)...`
+                : 'Tải lên'}
+            </span>
           </button>
 
           <button

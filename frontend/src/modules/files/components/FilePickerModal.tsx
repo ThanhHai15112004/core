@@ -26,7 +26,7 @@ import {
   CloudUpload,
 } from 'lucide-react';
 import { FOLDER_COLORS } from '../enum/files.enum';
-import { filesApi, readBrowserFileAsBase64 } from '../services/files.api';
+import { filesApi } from '../services/files.api';
 import type { FileFolderItem, FileRecordItem } from '../types/files.types';
 
 export interface FilePickerModalProps {
@@ -77,6 +77,7 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [uploadProgressPercent, setUploadProgressPercent] = useState(0);
 
   const loadLibrary = useCallback(async () => {
     if (!isOpen) return;
@@ -165,31 +166,23 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
   const handleInstantUploadFiles = async (browserFileList: File[]) => {
     if (browserFileList.length === 0) return;
     setUploading(true);
+    setUploadProgressPercent(0);
     setErrorMsg(null);
     try {
-      const payloads = await Promise.all(
-        browserFileList.map(async (f) => ({
-          fileName: f.name,
-          mimeType: f.type || undefined,
-          contentBase64: await readBrowserFileAsBase64(f),
-          folderId: selectedFolderId,
-          visibility: 2,
-          encryptAtRest: false,
-        })),
-      );
-
-      let uploadedItems: FileRecordItem[] = [];
-      if (payloads.length === 1 && payloads[0]) {
-        const single = await filesApi.uploadSingle(payloads[0]);
-        uploadedItems = [single];
-      } else {
-        const batch = await filesApi.uploadBatch({
-          files: payloads,
-          folderId: selectedFolderId,
-          visibility: 2,
-          encryptAtRest: false,
-        });
-        uploadedItems = batch.items;
+      const uploadedItems: FileRecordItem[] = [];
+      for (const f of browserFileList) {
+        const created = await filesApi.uploadBrowserFile(
+          f,
+          {
+            folderId: selectedFolderId,
+            visibility: 2,
+            encryptAtRest: false,
+          },
+          (prog) => {
+            setUploadProgressPercent(prog.percent);
+          },
+        );
+        uploadedItems.push(created);
       }
 
       await loadLibrary();
@@ -207,6 +200,7 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
       setErrorMsg(err instanceof Error ? err.message : 'Tải file lên thất bại');
     } finally {
       setUploading(false);
+      setUploadProgressPercent(0);
     }
   };
 
@@ -663,7 +657,9 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
                 }}
               >
                 <CloudUpload size={17} />
-                <span>{uploading ? 'Đang tải lên...' : 'Tải lên file'}</span>
+                <span>
+                  {uploading ? `Đang tải lên (${uploadProgressPercent}%)...` : 'Tải lên file'}
+                </span>
               </button>
 
               {/* Danh mục loại file kèm badge đếm */}

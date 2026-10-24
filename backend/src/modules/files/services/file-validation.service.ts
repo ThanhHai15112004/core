@@ -43,13 +43,26 @@ import {
   extractImageDimensionsFromBuffer,
   processAndOptimizeImageBuffer,
 } from '../helpers/image-processor.helper.js';
-import type { UploadSingleFileRequest } from '../requests/files.requests.js';
+import type {
+  InitChunkedUploadRequest,
+  UploadSingleFileRequest,
+} from '../requests/files.requests.js';
 import type {
   ImageProcessingOptions,
   ImageProcessingResult,
   MalwareScanResult,
   ValidatedUploadPayload,
 } from '../types/files.types.js';
+
+export interface ValidatedChunkedInitPayload {
+  readonly originalName: string;
+  readonly displayName: string;
+  readonly extension: string;
+  readonly mimeType: string;
+  readonly category: FileCategoryCode;
+  readonly categoryName: FileCategoryName;
+  readonly sizeBytes: number;
+}
 
 export type { ImageProcessingResult, MalwareScanResult, ValidatedUploadPayload };
 
@@ -498,6 +511,117 @@ export class FileValidationService {
       thumbnail: imageProcessed ? imageProcessed.thumbnail : null,
       malwareScan,
     };
+  }
+
+  /**
+   * Kiểm tra thông tin khởi tạo phiên tải lên theo mảnh (Chunked Upload Init):
+   * Kiểm tra tên tệp, phần mở rộng, MIME type và hạn mức tổng dung lượng trước khi nhận các mảnh dữ liệu.
+   */
+  public validateChunkedInitInput(
+    input: InitChunkedUploadRequest,
+    organizationUnitId?: number | null,
+  ): ValidatedChunkedInitPayload {
+    const originalName = path.basename(input.fileName.trim());
+    const extRaw = path.extname(originalName).replace(/^\./, '').toLowerCase();
+    if (!extRaw) {
+      throw new BadRequestAppException('files.error.extensionNotAllowed', [], { ext: 'none' });
+    }
+
+    const allowedExtensions = this.getAllowedExtensions(organizationUnitId);
+    const categoryAllowedMap = this.getCategoryAllowedExtensions(organizationUnitId);
+    const allCategoryExts = Object.values(categoryAllowedMap).flat();
+    if (!allowedExtensions.includes(extRaw) && !allCategoryExts.includes(extRaw)) {
+      throw new BadRequestAppException('files.error.extensionNotAllowed', [], { ext: extRaw });
+    }
+
+    if (!Number.isFinite(input.sizeBytes) || input.sizeBytes <= 0) {
+      throw new BadRequestAppException('files.error.emptyUpload');
+    }
+
+    const detectedMime = mimeOf(originalName);
+    const providedMime = input.mimeType?.trim().toLowerCase();
+    if (providedMime && providedMime !== 'application/octet-stream') {
+      assertMimeTypeCompatibleWithExtension(providedMime, extRaw, detectedMime);
+    }
+
+    const mimeType =
+      detectedMime && detectedMime !== 'application/octet-stream'
+        ? detectedMime
+        : providedMime || 'application/octet-stream';
+
+    const category = this.resolveCategory(extRaw, mimeType, organizationUnitId);
+    const categoryName = getFileCategoryName(category);
+
+    if (input.expectedCategory !== undefined && input.expectedCategory !== category) {
+      const expectedCategoryName = getFileCategoryName(input.expectedCategory);
+      throw new BadRequestAppException('files.error.categoryExtensionNotAllowed', [], {
+        ext: extRaw,
+        category: expectedCategoryName,
+      });
+    }
+
+    const allowedForCat = categoryAllowedMap[categoryName];
+    if (
+      Array.isArray(allowedForCat) &&
+      allowedForCat.length > 0 &&
+      !allowedForCat.includes(extRaw) &&
+      !allowedExtensions.includes(extRaw)
+    ) {
+      throw new BadRequestAppException('files.error.categoryExtensionNotAllowed', [], {
+        ext: extRaw,
+        category: categoryName,
+      });
+    }
+
+    this.assertSizeWithinLimits(
+      input.sizeBytes,
+      categoryName,
+      input.moduleName,
+      organizationUnitId,
+    );
+
+    const displayName = input.displayName?.trim() || originalName;
+
+    return {
+      originalName,
+      displayName,
+      extension: extRaw,
+      mimeType,
+      category,
+      categoryName,
+      sizeBytes: input.sizeBytes,
+    };
+  }
+
+  /**
+   * Kiểm tra chữ ký nhị phân (Magic Bytes) và quét mã độc ngay trên mảnh đầu tiên (chunk 0)
+   * của phiên tải lên theo chunk để phát hiện sớm tệp giả mạo mà không cần chờ tải hết hàng GB.
+   */
+  public validateFirstChunkBuffer(
+    firstChunkBuf: Buffer,
+    ext: string,
+    options: {
+      organizationUnitId?: number | null;
+      quarantineOnThreat?: boolean | undefined;
+      stageForScan?: boolean | undefined;
+    } = {},
+  ): MalwareScanResult {
+    if (firstChunkBuf.length === 0) {
+      throw new BadRequestAppException('files.error.emptyUpload');
+    }
+
+    if (this.shouldVerifyMagicBytes(options.organizationUnitId)) {
+      assertMagicBytesMatch(firstChunkBuf, ext);
+    }
+
+    const malwareScan = this.scanForMalware(firstChunkBuf, ext, options.organizationUnitId);
+    if (!malwareScan.clean && !options.quarantineOnThreat && !options.stageForScan) {
+      throw new BadRequestAppException('files.error.malwareDetected', [], {
+        threatName: malwareScan.threatName ?? 'SUSPICIOUS_PAYLOAD',
+      });
+    }
+
+    return malwareScan;
   }
 
   /** Quét mã độc trong nội dung tệp tải lên (Mục 6.3.3) */

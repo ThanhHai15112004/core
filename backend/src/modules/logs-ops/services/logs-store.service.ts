@@ -29,6 +29,7 @@ export interface LogSnapshot {
 @Injectable()
 export class LogsStoreService {
   private snapshot: LogSnapshot | null = null;
+  private lastStreamId: string | null = null;
   private loading: Promise<LogSnapshot> | null = null;
 
   constructor(
@@ -58,13 +59,33 @@ export class LogsStoreService {
   public async logs(fresh = false): Promise<LogSnapshot> {
     const now = Date.now();
     if (!fresh && this.snapshot && now - this.snapshot.at < SNAPSHOT_TTL_MS) return this.snapshot;
-    this.loading ??= this.load().finally(() => (this.loading = null));
+    this.loading ??= this.load(fresh).finally(() => (this.loading = null));
     return this.loading;
   }
 
-  /** Tải dữ liệu log từ bộ lưu trữ */
-  private async load(): Promise<LogSnapshot> {
-    const entries = (await this.stream.recent(LOG_SCAN_LIMIT)).sort(compareNewestFirst);
+  /** Tải dữ liệu log từ bộ lưu trữ (ưu tiên đọc phần chênh lệch từ `lastStreamId` nếu có snapshot). */
+  private async load(forceFull = false): Promise<LogSnapshot> {
+    if (!forceFull && this.snapshot && this.lastStreamId) {
+      const delta = await this.stream.recentAfter(this.lastStreamId, LOG_SCAN_LIMIT);
+      if (delta.contiguous) {
+        if (delta.entries.length === 0) {
+          this.snapshot.at = Date.now();
+          return this.snapshot;
+        }
+        this.lastStreamId = delta.entries[0]?.id ?? this.lastStreamId;
+        const merged = [...delta.entries, ...this.snapshot.entries]
+          .sort(compareNewestFirst)
+          .slice(0, LOG_SCAN_LIMIT);
+        return this.buildSnapshot(merged);
+      }
+    }
+    const recent = await this.stream.recent(LOG_SCAN_LIMIT);
+    this.lastStreamId = recent[0]?.id ?? null;
+    return this.buildSnapshot(recent.sort(compareNewestFirst));
+  }
+
+  /** Đóng gói danh sách log đã sắp xếp thành snapshot kèm chỉ mục theo runtime */
+  private buildSnapshot(entries: LogEntry[]): LogSnapshot {
     const byRuntime = new Map<string, LogEntry[]>();
     for (const e of entries) {
       const r = e.runtime ?? 'unknown';

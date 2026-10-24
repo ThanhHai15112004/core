@@ -1,10 +1,15 @@
 import { FILE_CATEGORY, type FileCategoryCode, type FileCategoryName } from '../contracts/index.js';
 
-export const DEFAULT_MAX_UPLOAD_MB = 25;
+export const DEFAULT_MAX_UPLOAD_MB = 5_120;
+export const DEFAULT_UPLOAD_CHUNK_SIZE_BYTES = 4 * 1024 * 1024;
+export const LARGE_FILE_UPLOAD_CHUNK_SIZE_BYTES = 10 * 1024 * 1024;
+export const LARGE_FILE_CHUNK_THRESHOLD_BYTES = 64 * 1024 * 1024;
+export const DEFAULT_MAX_UPLOAD_CHUNK_SIZE_BYTES = 16 * 1024 * 1024;
+export const DEFAULT_CHUNK_SESSION_TTL_MS = 3_600_000;
 export const DEFAULT_MAX_BATCH_FILES = 20;
 export const DEFAULT_TRASH_RETENTION_DAYS = 30;
 export const DEFAULT_UNUSED_RETENTION_DAYS = 30;
-export const DEFAULT_STORAGE_QUOTA_MB = 51_200;
+export const DEFAULT_STORAGE_QUOTA_MB = 102_400;
 export const DEFAULT_USER_STORAGE_QUOTA_MB = 0;
 export const DEFAULT_TEMP_LINK_TTL_SEC = 3_600;
 export const DEFAULT_TEMP_LINK_MAX_TTL_SEC = 604_800;
@@ -47,24 +52,24 @@ export const DEFAULT_CATEGORY_ALLOWED_EXTENSIONS: Readonly<
   AUDIO: ['mp3', 'wav', 'ogg', 'm4a', 'flac'],
   DOCUMENT: ['pdf', 'doc', 'docx', 'ppt', 'pptx', 'txt', 'md', 'rtf'],
   SPREADSHEET: ['xlsx', 'xls', 'csv', 'tsv', 'json'],
-  ARCHIVE: ['zip', 'rar', '7z', 'tar', 'gz'],
-  OTHER: ['bin', 'dat'],
+  ARCHIVE: ['zip', 'rar', '7z', 'tar', 'gz', 'iso', 'tgz', 'bz2'],
+  OTHER: ['bin', 'dat', 'sql', 'bak', 'dmg', 'apk'],
 };
 
 export const DEFAULT_CATEGORY_MAX_SIZE_MB: Readonly<Record<FileCategoryName, number>> = {
-  IMAGE: 10,
-  VIDEO: 200,
-  AUDIO: 50,
-  DOCUMENT: 25,
-  SPREADSHEET: 25,
-  ARCHIVE: 100,
-  OTHER: 25,
+  IMAGE: 50,
+  VIDEO: 5_120,
+  AUDIO: 500,
+  DOCUMENT: 500,
+  SPREADSHEET: 500,
+  ARCHIVE: 5_120,
+  OTHER: 5_120,
 };
 
 export const DEFAULT_MODULE_MAX_SIZE_MB: Readonly<Record<string, number>> = {
-  users: 5,
-  organizations: 15,
-  courses: 200,
+  users: 25,
+  organizations: 100,
+  courses: 5_120,
 };
 
 export const EICAR_SIGNATURE =

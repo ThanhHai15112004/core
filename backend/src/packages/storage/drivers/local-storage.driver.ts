@@ -130,4 +130,30 @@ export class LocalStorageDriver implements StorageDriver {
     }
     return path.join(this.root, key);
   }
+
+  /** Ghi nối tiếp một mảnh dữ liệu (chunk) vào tệp tạm trên đĩa mà không giữ trong RAM */
+  public async appendChunk(tempKey: string, chunk: Buffer): Promise<number> {
+    const full = await this.resolve(tempKey, true);
+    await fs.appendFile(full, chunk);
+    const stat = await fs.stat(full);
+    return stat.size;
+  }
+
+  /** Đổi tên nguyên tử từ tệp tạm sang khóa lưu trữ đích chính thức */
+  public async finalizeTempObject(tempKey: string, targetKey: string): Promise<void> {
+    const tempFull = await this.resolve(tempKey, false);
+    const targetFull = await this.resolve(targetKey, true);
+    try {
+      await fs.rename(tempFull, targetFull);
+    } catch (err) {
+      await fs.rm(tempFull, { force: true }).catch(() => undefined);
+      throw err;
+    }
+  }
+
+  /** Xóa tệp tạm khi hủy phiên hoặc khi phiên tải lên theo mảnh thất bại */
+  public async abortTempObject(tempKey: string): Promise<void> {
+    const tempFull = await this.resolve(tempKey, false);
+    await fs.rm(tempFull, { force: true }).catch(() => undefined);
+  }
 }

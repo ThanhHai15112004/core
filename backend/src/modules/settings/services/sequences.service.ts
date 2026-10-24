@@ -51,15 +51,87 @@ export class SequencesService implements ISequencesPublicService, OnModuleInit {
   private dbHydrated = false;
 
   constructor(
-    @Optional() private readonly ruleRepository?: SequenceRuleRepository | null,
-    @Optional() private readonly counterRepository?: SequenceCounterRepository | null,
-    @Optional() private readonly historyRepository?: SequenceRuleHistoryRepository | null,
+    @Optional()
+    @Inject(SequenceRuleRepository)
+    private readonly ruleRepository?: SequenceRuleRepository | null,
+    @Optional()
+    @Inject(SequenceCounterRepository)
+    private readonly counterRepository?: SequenceCounterRepository | null,
+    @Optional()
+    @Inject(SequenceRuleHistoryRepository)
+    private readonly historyRepository?: SequenceRuleHistoryRepository | null,
     @Optional()
     @Inject(SequenceRegistryService)
     sequenceRegistry?: SequenceRegistryService | null,
-    @Optional() private readonly auditLogService?: AuditLogService | null,
+    @Optional()
+    @Inject(AuditLogService)
+    private readonly auditLogService?: AuditLogService | null,
   ) {
     this.registry = sequenceRegistry ?? defaultSequenceRegistry;
+    this.bindPersistentBackendToRegistry();
+  }
+
+  /**
+   * Kết nối trực tiếp bộ cấp phát bền vững (`sequence_counters`) và bộ kiểm tra trùng mã của DB
+   * vào `SequenceRegistryService` để mọi module gọi `sequenceRegistry.nextCode()` đều tự động
+   * lưu DB và tự nhảy qua các mã đã tồn tại.
+   */
+  private bindPersistentBackendToRegistry(): void {
+    if (!this.counterRepository) {
+      return;
+    }
+
+    this.registry.setPersistentBackend({
+      allocator: async ({
+        rule: activeRule,
+        periodKey,
+        organizationUnitId,
+        unitScopeKey,
+        count: batchCount,
+      }) => {
+        try {
+          return await this.counterRepository!.allocateRange({
+            sequenceId: activeRule.id ?? 1,
+            sequenceKey: activeRule.key,
+            periodKey,
+            organizationUnitId,
+            unitScopeKey,
+            startValue: activeRule.startValue,
+            step: activeRule.step,
+            count: batchCount,
+          });
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          const isOfflineOrMockEnv =
+            !this.dbHydrated ||
+            /not a function|not initialized|not established|does not exist|doesn't exist|ECONNREFUSED|connect|offline|mock/i.test(
+              msg,
+            );
+          if (!isOfflineOrMockEnv) {
+            throw err;
+          }
+          const existingCounters = this.registry.getCounters(activeRule.key);
+          const matched = existingCounters.find(
+            (c) => c.periodKey === periodKey && c.unitScopeKey === unitScopeKey,
+          );
+          let currentVal = matched?.currentValue ?? 0;
+          const allocated: number[] = [];
+          for (let i = 0; i < batchCount; i++) {
+            if (currentVal === 0) {
+              currentVal = activeRule.startValue;
+            } else {
+              currentVal = Math.max(currentVal + activeRule.step, activeRule.startValue);
+            }
+            allocated.push(currentVal);
+          }
+          return allocated;
+        }
+      },
+      existenceChecker:
+        typeof this.counterRepository.isCodeAlreadyUsed === 'function'
+          ? async (params) => this.counterRepository!.isCodeAlreadyUsed(params)
+          : null,
+    });
   }
 
   public async onModuleInit(): Promise<void> {
@@ -376,59 +448,6 @@ export class SequencesService implements ISequencesPublicService, OnModuleInit {
     if (rule.status !== SEQUENCE_STATUS.ACTIVE) {
       throw new UnprocessableEntityAppException(
         `Sequence rule '${normalizedKey}' is archived and cannot generate new codes`,
-      );
-    }
-
-    if (this.counterRepository) {
-      return this.registry.nextBatch(
-        normalizedKey,
-        count,
-        context,
-        async ({
-          rule: activeRule,
-          periodKey,
-          organizationUnitId,
-          unitScopeKey,
-          count: batchCount,
-        }) => {
-          try {
-            return await this.counterRepository!.allocateRange({
-              sequenceId: activeRule.id ?? 1,
-              sequenceKey: activeRule.key,
-              periodKey,
-              organizationUnitId,
-              unitScopeKey,
-              startValue: activeRule.startValue,
-              step: activeRule.step,
-              count: batchCount,
-            });
-          } catch (err) {
-            const msg = err instanceof Error ? err.message : String(err);
-            const isOfflineOrMockEnv =
-              !this.dbHydrated ||
-              /not a function|not initialized|not established|does not exist|doesn't exist|ECONNREFUSED|connect|offline|mock/i.test(
-                msg,
-              );
-            if (!isOfflineOrMockEnv) {
-              throw err;
-            }
-            const existingCounters = this.registry.getCounters(activeRule.key);
-            const matched = existingCounters.find(
-              (c) => c.periodKey === periodKey && c.unitScopeKey === unitScopeKey,
-            );
-            let currentVal = matched?.currentValue ?? 0;
-            const allocated: number[] = [];
-            for (let i = 0; i < batchCount; i++) {
-              if (currentVal === 0) {
-                currentVal = activeRule.startValue;
-              } else {
-                currentVal = Math.max(currentVal + activeRule.step, activeRule.startValue);
-              }
-              allocated.push(currentVal);
-            }
-            return allocated;
-          }
-        },
       );
     }
 

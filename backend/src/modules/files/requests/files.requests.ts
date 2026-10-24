@@ -148,6 +148,60 @@ export interface UploadBatchFilesRequest {
   readonly generateThumbnail?: boolean | undefined;
 }
 
+export const initChunkedUploadSchema = z.object({
+  fileName: z.string().trim().min(1).max(255),
+  displayName: z.string().trim().min(1).max(255).optional(),
+  sizeBytes: z.coerce.number().int().min(1),
+  mimeType: z.string().trim().max(150).optional(),
+  folderId: coerceOptionalIntId,
+  visibility: fileVisibilitySchema,
+  organizationUnitId: coerceOptionalIntId,
+  moduleName: z.string().trim().max(100).optional(),
+  expectedCategory: fileCategorySchema,
+  stageForScan: z.boolean().optional(),
+  quarantineOnThreat: z.boolean().optional(),
+  rejectDuplicate: z.boolean().optional(),
+  reuseDuplicate: z.boolean().optional(),
+  metadata: z.record(z.string(), z.unknown()).nullable().optional(),
+});
+
+export interface InitChunkedUploadRequest {
+  readonly fileName: string;
+  readonly displayName?: string | undefined;
+  readonly sizeBytes: number;
+  readonly mimeType?: string | undefined;
+  readonly folderId?: number | null | undefined;
+  readonly visibility?: FileVisibilityCode | undefined;
+  readonly organizationUnitId?: number | null | undefined;
+  readonly moduleName?: string | undefined;
+  readonly expectedCategory?: FileCategoryCode | undefined;
+  readonly stageForScan?: boolean | undefined;
+  readonly quarantineOnThreat?: boolean | undefined;
+  readonly rejectDuplicate?: boolean | undefined;
+  readonly reuseDuplicate?: boolean | undefined;
+  readonly metadata?: Record<string, unknown> | null | undefined;
+}
+
+export const uploadChunkPartSchema = z.object({
+  chunkIndex: z.coerce.number().int().min(0),
+  contentBase64: z.string().min(1).optional(),
+  chunkBuffer: z.custom<Buffer>((val) => Buffer.isBuffer(val)).optional(),
+});
+
+export interface UploadChunkPartRequest {
+  readonly chunkIndex: number;
+  readonly contentBase64?: string | undefined;
+  readonly chunkBuffer?: Buffer | undefined;
+}
+
+export const completeChunkedUploadSchema = z.object({
+  metadata: z.record(z.string(), z.unknown()).nullable().optional(),
+});
+
+export interface CompleteChunkedUploadRequest {
+  readonly metadata?: Record<string, unknown> | null | undefined;
+}
+
 export const updateFileMetadataSchema = z.object({
   displayName: z.string().trim().min(1).max(255).optional(),
   folderId: coerceOptionalIntId,

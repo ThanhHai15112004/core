@@ -21,6 +21,20 @@ import {
   type SequenceStatusCode,
 } from '../contracts/sequence.contract.js';
 
+export type SequenceBatchAllocator = (params: {
+  rule: RegisteredSequenceRuleDefinition;
+  periodKey: string;
+  organizationUnitId: number | null;
+  unitScopeKey: string;
+  count: number;
+}) => Promise<number[]>;
+
+export type SequenceCodeExistenceChecker = (params: {
+  sequenceKey: string;
+  module: string;
+  code: string;
+}) => Promise<boolean>;
+
 /**
  * L1 Sequence Registry & Concurrency-Safe Generator tại `@packages/kernel` (Mục 5.5).
  * Cho phép bất kỳ module nào trong hệ thống tra cứu quy tắc, xem trước mẫu mã hoặc sinh mã tuần tự
@@ -30,8 +44,27 @@ import {
 export class SequenceRegistryService {
   private readonly rules = new Map<string, RegisteredSequenceRuleDefinition>();
   private readonly counters = new Map<string, SequenceCounterSnapshot>();
+  private readonly issuedCodes = new Set<string>();
   private readonly scopeLocks = new Map<string, Promise<void>>();
   private readonly listeners = new Set<SequenceRuleChangeListener>();
+  private persistentAllocator: SequenceBatchAllocator | null = null;
+  private persistentExistenceChecker: SequenceCodeExistenceChecker | null = null;
+
+  /**
+   * Đăng ký bộ cấp phát bền vững (L2 DB `sequence_counters`) và bộ kiểm tra trùng mã tự động
+   * để mọi lời gọi `sequenceRegistry.nextCode()` đều tự động lưu vào DB và tự nhảy qua mã đã tồn tại.
+   */
+  public setPersistentBackend(params: {
+    allocator?: SequenceBatchAllocator | null;
+    existenceChecker?: SequenceCodeExistenceChecker | null;
+  }): void {
+    if (params.allocator !== undefined) {
+      this.persistentAllocator = params.allocator;
+    }
+    if (params.existenceChecker !== undefined) {
+      this.persistentExistenceChecker = params.existenceChecker;
+    }
+  }
 
   /** Đăng ký hoặc cập nhật một quy tắc sinh mã vào L1 Registry */
   public registerRule(
@@ -113,7 +146,13 @@ export class SequenceRegistryService {
   }
 
   public getRule(key: string): RegisteredSequenceRuleDefinition | null {
-    return this.rules.get(key.trim().toLowerCase()) ?? null;
+    const normalized = key.trim().toLowerCase();
+    let found = this.rules.get(normalized) ?? null;
+    if (!found && this.rules.size === 0) {
+      this.registerManifestSequences();
+      found = this.rules.get(normalized) ?? null;
+    }
+    return found;
   }
 
   public listRules(filter?: {
@@ -247,58 +286,95 @@ export class SequenceRegistryService {
     });
 
     const counterMapKey = this.buildCounterKey(normalizedKey, periodKey, unitInfo.unitScopeKey);
+    const activeAllocator = customAllocator ?? this.persistentAllocator;
 
     return this.withScopeLock(counterMapKey, async () => {
-      let allocatedNumbers: number[];
+      const allocateNumbersOnce = async (batchSize: number): Promise<number[]> => {
+        if (activeAllocator) {
+          return activeAllocator({
+            rule,
+            periodKey,
+            organizationUnitId: unitInfo.organizationUnitId,
+            unitScopeKey: unitInfo.unitScopeKey,
+            count: batchSize,
+          });
+        }
 
-      if (customAllocator) {
-        allocatedNumbers = await customAllocator({
-          rule,
-          periodKey,
-          organizationUnitId: unitInfo.organizationUnitId,
-          unitScopeKey: unitInfo.unitScopeKey,
-          count: safeCount,
-        });
-      } else {
         const existingCounter = this.counters.get(counterMapKey);
         let currentVal = existingCounter?.currentValue ?? 0;
-        allocatedNumbers = [];
-        for (let i = 0; i < safeCount; i++) {
+        const nums: number[] = [];
+        for (let i = 0; i < batchSize; i++) {
           if (currentVal === 0) {
             currentVal = rule.startValue;
           } else {
             currentVal = Math.max(currentVal + rule.step, rule.startValue);
           }
-          allocatedNumbers.push(currentVal);
+          nums.push(currentVal);
+        }
+        return nums;
+      };
+
+      const acceptedResults: SequenceGeneratedResult[] = [];
+      let lastAllocatedNumber = this.counters.get(counterMapKey)?.currentValue ?? rule.startValue;
+      const nowIso = new Date().toISOString();
+      const maxCollisionProbes = Math.max(200, safeCount * 20);
+      let probes = 0;
+
+      while (acceptedResults.length < safeCount && probes < maxCollisionProbes) {
+        const needed = safeCount - acceptedResults.length;
+        const candidateNumbers = await allocateNumbersOnce(needed);
+        probes += candidateNumbers.length;
+
+        for (const seqNum of candidateNumbers) {
+          lastAllocatedNumber = seqNum;
+          this.counters.set(counterMapKey, {
+            sequenceKey: normalizedKey,
+            periodKey,
+            organizationUnitId: unitInfo.organizationUnitId,
+            unitScopeKey: unitInfo.unitScopeKey,
+            currentValue: lastAllocatedNumber,
+            updatedAt: nowIso,
+          });
+
+          const formatted = formatSequenceCode(rule, seqNum, context);
+          const issuedToken = `${normalizedKey}::${formatted.code}`;
+          if (this.issuedCodes.has(issuedToken)) {
+            continue;
+          }
+
+          if (this.persistentExistenceChecker) {
+            const existsInDb = await this.persistentExistenceChecker({
+              sequenceKey: rule.key,
+              module: rule.module,
+              code: formatted.code,
+            }).catch(() => false);
+            if (existsInDb) {
+              this.issuedCodes.add(issuedToken);
+              continue;
+            }
+          }
+
+          this.issuedCodes.add(issuedToken);
+          acceptedResults.push({
+            key: rule.key,
+            module: rule.module,
+            code: formatted.code,
+            sequenceNumber: seqNum,
+            paddedSequence: formatted.paddedSequence,
+            periodKey,
+            unitScopeKey: unitInfo.unitScopeKey,
+            organizationUnitId: unitInfo.organizationUnitId,
+            dateSegment: formatted.dateSegment,
+            generatedAt: nowIso,
+          });
+
+          if (acceptedResults.length >= safeCount) {
+            break;
+          }
         }
       }
 
-      const lastValue = allocatedNumbers[allocatedNumbers.length - 1] ?? rule.startValue;
-      const nowIso = new Date().toISOString();
-      this.counters.set(counterMapKey, {
-        sequenceKey: normalizedKey,
-        periodKey,
-        organizationUnitId: unitInfo.organizationUnitId,
-        unitScopeKey: unitInfo.unitScopeKey,
-        currentValue: lastValue,
-        updatedAt: nowIso,
-      });
-
-      return allocatedNumbers.map((seqNum) => {
-        const formatted = formatSequenceCode(rule, seqNum, context);
-        return {
-          key: rule.key,
-          module: rule.module,
-          code: formatted.code,
-          sequenceNumber: seqNum,
-          paddedSequence: formatted.paddedSequence,
-          periodKey,
-          unitScopeKey: unitInfo.unitScopeKey,
-          organizationUnitId: unitInfo.organizationUnitId,
-          dateSegment: formatted.dateSegment,
-          generatedAt: nowIso,
-        };
-      });
+      return acceptedResults;
     });
   }
 
@@ -329,6 +405,7 @@ export class SequenceRegistryService {
   public clear(): void {
     this.rules.clear();
     this.counters.clear();
+    this.issuedCodes.clear();
     this.scopeLocks.clear();
   }
 

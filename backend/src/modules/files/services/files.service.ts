@@ -43,6 +43,7 @@ import type { FileFolderEntity } from '../entities/file-folder.entity.js';
 import type { FilePermissionEntity } from '../entities/file-permission.entity.js';
 import type { FileRecordEntity } from '../entities/file-record.entity.js';
 import { ALL_FILE_CATEGORIES, DAY_MS, FALLBACK_TEMP_LINK_SECRET } from '../enum/files.enum.js';
+import { ChunkedUploadSessionManager } from '../helpers/chunked-upload-session.helper.js';
 import {
   buildImmutableStorageKey,
   buildSafeDownloadFileName,
@@ -61,17 +62,22 @@ import { type FileScopeConstraint, FilesRepository } from '../repositories/files
 import type {
   AttachFileUsageRequest,
   CleanupUnusedFilesRequest,
+  CompleteChunkedUploadRequest,
   CreateFileFolderRequest,
   CreateTemporaryDownloadLinkRequest,
   GrantFilePermissionRequest,
+  InitChunkedUploadRequest,
   ListFilesQuery,
   QuarantineFileRequest,
   UpdateFileFolderRequest,
   UpdateFileMetadataRequest,
   UploadBatchFilesRequest,
+  UploadChunkPartRequest,
   UploadSingleFileRequest,
 } from '../requests/files.requests.js';
 import type {
+  ChunkedUploadInitResponse,
+  ChunkedUploadPartResponse,
   CleanupUnusedFilesResponse,
   FileFolderResponse,
   FileIntegrityVerificationResponse,
@@ -90,6 +96,7 @@ export type { ResolvedByteRange };
 @Injectable()
 export class FilesService implements IFilesPublicService {
   private readonly sequenceRegistry: SequenceRegistryService;
+  private readonly chunkSessionManager = new ChunkedUploadSessionManager();
 
   constructor(
     private readonly filesRepo: FilesRepository,
@@ -98,8 +105,12 @@ export class FilesService implements IFilesPublicService {
     private readonly mapper: FilesMapper,
     private readonly validationService: FileValidationService,
     private readonly storage: BaseStorageProvider,
-    @Optional() private readonly dataScopeService?: DataScopeService | null,
-    @Optional() private readonly auditLogService?: AuditLogService | null,
+    @Optional()
+    @Inject(DataScopeService)
+    private readonly dataScopeService?: DataScopeService | null,
+    @Optional()
+    @Inject(AuditLogService)
+    private readonly auditLogService?: AuditLogService | null,
     @Optional()
     @Inject(USERS_PUBLIC_SERVICE)
     private readonly usersPublicService?: IUsersPublicService | null,
@@ -196,9 +207,6 @@ export class FilesService implements IFilesPublicService {
     sequenceKey: 'files.file_code' | 'files.folder_code',
     orgId?: number | null,
   ): Promise<string> {
-    if (!this.sequenceRegistry.getRule(sequenceKey)) {
-      this.sequenceRegistry.registerManifestSequences();
-    }
     const generated = await this.sequenceRegistry.nextCode(
       sequenceKey,
       orgId ? { organizationUnitId: orgId } : undefined,
@@ -601,6 +609,240 @@ export class FilesService implements IFilesPublicService {
     }
 
     return { items, count: items.length };
+  }
+
+  // ─── 2B. Tải file dung lượng lớn theo mảnh (Chunked Upload 2GB+) ──────────
+
+  /**
+   * Khởi tạo phiên tải lên theo mảnh (Chunked Upload Init):
+   * Kiểm tra trước định dạng, hạn mức dung lượng và Quota lưu trữ trước khi nhận dữ liệu.
+   */
+  public async initChunkedUpload(
+    input: InitChunkedUploadRequest,
+    actor?: UserIdentity,
+  ): Promise<ChunkedUploadInitResponse> {
+    await this.chunkSessionManager.cleanupExpired(this.storage);
+    const orgId = input.organizationUnitId ?? this.resolvePrimaryOrgId(actor);
+
+    let folder: FileFolderEntity | null = null;
+    if (input.folderId !== undefined && input.folderId !== null) {
+      folder = await this.foldersRepo.findById(input.folderId);
+      if (!folder) {
+        throw new NotFoundAppException('files.error.folderNotFound');
+      }
+      await this.assertCanAccessFolder(folder, actor);
+    }
+
+    const validated = this.validationService.validateChunkedInitInput(input, orgId);
+    await this.assertStorageQuotaWithinLimit(validated.sizeBytes, orgId, actor?.id ?? null);
+
+    const session = this.chunkSessionManager.createSession({
+      storagePrefix: this.validationService.getStorageKeyPrefix(),
+      input,
+      originalName: validated.originalName,
+      displayName: validated.displayName,
+      extension: validated.extension,
+      mimeType: validated.mimeType,
+      category: validated.category,
+      folderId: folder ? folder.id : null,
+      folderName: folder ? folder.name : null,
+      organizationUnitId: orgId,
+      actorUserId: actor?.id ?? null,
+    });
+
+    return {
+      uploadId: session.uploadId,
+      chunkSizeBytes: session.chunkSizeBytes,
+      totalChunks: session.totalChunks,
+      expiresAt: new Date(session.expiresAtMs).toISOString(),
+    };
+  }
+
+  /**
+   * Ghi nối tiếp một mảnh dữ liệu (chunk) vào tệp tạm trên đĩa và cập nhật mã băm SHA-256 streaming.
+   * Ở mảnh đầu tiên (`chunkIndex === 0`), kiểm tra ngay Magic Bytes và quét mã độc.
+   */
+  public async uploadChunkPart(
+    uploadId: string,
+    input: UploadChunkPartRequest,
+    actor?: UserIdentity,
+  ): Promise<ChunkedUploadPartResponse> {
+    const session = this.chunkSessionManager.getActiveSession(uploadId, actor?.id ?? null);
+    const chunkBuffer = this.chunkSessionManager.decodeChunkPayload(input, session.originalName);
+
+    if (input.chunkIndex === 0) {
+      try {
+        session.malwareScan = this.validationService.validateFirstChunkBuffer(
+          chunkBuffer,
+          session.extension,
+          {
+            organizationUnitId: session.organizationUnitId,
+            quarantineOnThreat: session.quarantineOnThreat,
+            stageForScan: session.stageForScan,
+          },
+        );
+        session.imageDimensions = this.validationService.extractImageDimensions(
+          chunkBuffer,
+          session.extension,
+        );
+      } catch (err) {
+        await this.chunkSessionManager.abortSession(uploadId, this.storage);
+        throw err;
+      }
+    }
+
+    const receivedBytes = await this.chunkSessionManager.appendChunkToStorage(
+      session,
+      input.chunkIndex,
+      chunkBuffer,
+      this.storage,
+    );
+    const progressPercent = Math.min(
+      100,
+      Math.round((receivedBytes / Math.max(1, session.totalBytes)) * 100),
+    );
+
+    return {
+      uploadId: session.uploadId,
+      chunkIndex: input.chunkIndex,
+      receivedBytes,
+      totalBytes: session.totalBytes,
+      progressPercent,
+    };
+  }
+
+  /**
+   * Hoàn tất phiên tải lên theo mảnh (Chunked Upload Complete):
+   * Đối chiếu tổng số byte đã nhận, chốt mã băm SHA-256 toàn file, kiểm tra trùng lặp,
+   * đổi tên nguyên tử tệp tạm sang `storageKey` chính thức và lưu bản ghi DB.
+   */
+  public async completeChunkedUpload(
+    uploadId: string,
+    input?: CompleteChunkedUploadRequest,
+    actor?: UserIdentity,
+  ): Promise<FileRecordResponse> {
+    const session = this.chunkSessionManager.getActiveSession(uploadId, actor?.id ?? null);
+
+    if (
+      session.receivedBytes !== session.totalBytes ||
+      session.expectedChunkIndex < session.totalChunks
+    ) {
+      await this.chunkSessionManager.abortSession(uploadId, this.storage);
+      throw new BadRequestAppException('files.error.incompleteChunkedUpload', [], {
+        expectedBytes: session.totalBytes,
+        receivedBytes: session.receivedBytes,
+      });
+    }
+
+    const checksumSha256 = session.sha256Hash.digest('hex');
+    const orgId = session.organizationUnitId;
+
+    const duplicateMatches =
+      typeof this.filesRepo.findByChecksumSha256 === 'function'
+        ? await this.filesRepo.findByChecksumSha256(checksumSha256, orgId)
+        : (await this.filesRepo.findAllForStats()).filter(
+            (f) => f.checksumSha256 === checksumSha256 && f.status === FILE_STATUS.ACTIVE,
+          );
+    const existingDuplicate = duplicateMatches[0] ?? null;
+    const duplicatePolicy = session.rejectDuplicate
+      ? 'REJECT'
+      : session.reuseDuplicate
+        ? 'REUSE'
+        : this.validationService.getDuplicatePolicy(orgId);
+
+    if (existingDuplicate) {
+      if (duplicatePolicy === 'REJECT') {
+        await this.chunkSessionManager.abortSession(uploadId, this.storage);
+        throw new ConflictAppException('files.error.duplicateFileDetected', [], {
+          duplicateFileId: existingDuplicate.id,
+        });
+      }
+      if (duplicatePolicy === 'REUSE') {
+        await this.chunkSessionManager.abortSession(uploadId, this.storage);
+        return this.getById(existingDuplicate.id, actor);
+      }
+    }
+
+    const storageKey = this.buildImmutableStorageKey(session.extension);
+    await this.chunkSessionManager.finalizeToStorageKey(session, storageKey, this.storage);
+
+    const shouldStage =
+      Boolean(session.stageForScan) || this.validationService.shouldStageBeforePublish(orgId);
+    const initialStatus = !session.malwareScan.clean
+      ? FILE_STATUS.QUARANTINED
+      : shouldStage
+        ? FILE_STATUS.PENDING_SCAN
+        : FILE_STATUS.ACTIVE;
+
+    const scanStatus = !session.malwareScan.clean
+      ? 'INFECTED'
+      : initialStatus === FILE_STATUS.PENDING_SCAN
+        ? 'PENDING'
+        : 'CLEAN';
+
+    const enrichedMeta: Record<string, unknown> = {
+      ...(session.metadata ?? {}),
+      ...(input?.metadata ?? {}),
+      ...(session.moduleName ? { moduleName: session.moduleName.trim().toLowerCase() } : {}),
+      chunkedUpload: true,
+      totalChunks: session.totalChunks,
+      scanStatus,
+      scannedAt: session.malwareScan.scannedAt,
+      ...(session.malwareScan.threatName ? { threatName: session.malwareScan.threatName } : {}),
+      ...(existingDuplicate ? { duplicateOfFileId: existingDuplicate.id } : {}),
+      ...(session.imageDimensions ? { imageDimensions: session.imageDimensions } : {}),
+    };
+
+    const code = await this.generateEntityCode('files.file_code', orgId);
+    const defaultVisibility = this.validationService.getDefaultVisibility(orgId);
+    const saved = await this.filesRepo.saveEntity({
+      code,
+      folderId: session.folderId,
+      displayName: session.displayName,
+      originalName: session.originalName,
+      storageDriver: this.storage.driver.name,
+      storageKey,
+      mimeType: session.mimeType,
+      extension: session.extension,
+      category: session.category,
+      sizeBytes: session.totalBytes,
+      checksumSha256,
+      visibility: session.visibility ?? defaultVisibility,
+      status: initialStatus,
+      uploadedByUserId: actor?.id ?? session.actorUserId ?? null,
+      organizationUnitId: orgId,
+      usageCount: 0,
+      trashedAt: null,
+      trashedByUserId: null,
+      purgeAfterAt: null,
+      metadataJson: Object.keys(enrichedMeta).length > 0 ? JSON.stringify(enrichedMeta) : null,
+    });
+
+    await this.recordAudit(actor, 'file.upload_chunked', 'file', String(saved.id), null, {
+      code: saved.code,
+      displayName: saved.displayName,
+      originalName: saved.originalName,
+      mimeType: saved.mimeType,
+      sizeBytes: Number(saved.sizeBytes),
+      storageKey: saved.storageKey,
+      status: saved.status,
+      scanStatus,
+      totalChunks: session.totalChunks,
+    });
+
+    const uploaderMap = await this.loadUploaderSummaries(
+      saved.uploadedByUserId ? [saved.uploadedByUserId] : [],
+    );
+
+    return this.toFileRecordResponse(saved, {
+      folderName: session.folderName,
+      uploadedByUser: saved.uploadedByUserId
+        ? (uploaderMap.get(saved.uploadedByUserId) ?? null)
+        : null,
+      usages: [],
+      permissions: [],
+      canDownload: saved.status === FILE_STATUS.ACTIVE,
+    });
   }
 
   // ─── 3. Tìm kiếm, Lọc & Xem thông tin chi tiết file ────────────────────────

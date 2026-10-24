@@ -457,13 +457,16 @@ export class LogsOpsService {
     this.assertAvailable();
     const snap = await this.store.logs();
     const c = decodeLogCursor(after);
-    const fresh = snap.entries.filter((e) => (!c || newerThan(e, c)) && matchesLog(e, filter));
+    const fresh: LogEntry[] = [];
+    for (const e of snap.entries) {
+      if (c && !newerThan(e, c)) break;
+      if (matchesLog(e, filter)) fresh.push(e);
+    }
     const items = c ? fresh.slice(-limit) : fresh.slice(0, limit);
-    const latest = snap.entries.find((e) => matchesLog(e, filter)) ?? null;
     return {
       items: items.map(logRow),
       more: fresh.length > items.length,
-      latestCursor: latest ? encodeLogCursor(latest) : after,
+      latestCursor: fresh[0] ? encodeLogCursor(fresh[0]) : after,
     };
   }
 

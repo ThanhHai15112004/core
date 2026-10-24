@@ -52,6 +52,8 @@ export const FileManagerPage: React.FC = () => {
     stats,
     uploadInputRef,
     uploading,
+    uploadProgressPercent,
+    uploadProgressText,
     uploadEncrypt,
     setUploadEncrypt,
     uploadStageForScan,
@@ -239,6 +241,8 @@ export const FileManagerPage: React.FC = () => {
             foldersCount={folders.length}
             totalFiles={totalFiles}
             uploading={uploading}
+            uploadProgressPercent={uploadProgressPercent}
+            uploadProgressText={uploadProgressText}
             cleaningUnused={cleaningUnused}
             stats={stats}
             selectedFile={selectedFile}

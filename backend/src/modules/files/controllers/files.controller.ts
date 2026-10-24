@@ -29,28 +29,36 @@ import { FilesService } from '../services/files.service.js';
 import {
   type AttachFileUsageRequest,
   type CleanupUnusedFilesRequest,
+  type CompleteChunkedUploadRequest,
   type CreateFileFolderRequest,
   type CreateTemporaryDownloadLinkRequest,
   type GrantFilePermissionRequest,
+  type InitChunkedUploadRequest,
   type ListFilesQuery,
   type QuarantineFileRequest,
   type UpdateFileFolderRequest,
   type UpdateFileMetadataRequest,
   type UploadBatchFilesRequest,
+  type UploadChunkPartRequest,
   type UploadSingleFileRequest,
   attachFileUsageSchema,
   cleanupUnusedFilesSchema,
+  completeChunkedUploadSchema,
   createFileFolderSchema,
   createTemporaryDownloadLinkSchema,
   grantFilePermissionSchema,
+  initChunkedUploadSchema,
   listFilesQuerySchema,
   quarantineFileSchema,
   updateFileFolderSchema,
   updateFileMetadataSchema,
   uploadBatchFilesSchema,
+  uploadChunkPartSchema,
   uploadSingleFileSchema,
 } from '../requests/files.requests.js';
 import {
+  type ChunkedUploadInitResponse,
+  type ChunkedUploadPartResponse,
   type CleanupUnusedFilesResponse,
   type FileFolderResponse,
   type FileIntegrityVerificationResponse,
@@ -59,6 +67,8 @@ import {
   type FileStatsResponse,
   type FileUsageItemResponse,
   type TemporaryDownloadLinkResponse,
+  chunkedUploadInitResponseSchema,
+  chunkedUploadPartResponseSchema,
   cleanupUnusedFilesResponseSchema,
   fileFolderResponseSchema,
   fileIntegrityVerificationResponseSchema,
@@ -74,6 +84,7 @@ const listFoldersQuerySchema = z.object({
 });
 
 const tempDownloadTokenParamSchema = z.string().trim().min(10).max(2048);
+const uploadSessionIdParamSchema = z.string().trim().min(8).max(128);
 
 @ApiGroup(
   'File Management',
@@ -201,6 +212,54 @@ export class FilesController {
     @CurrentUser() actor?: UserIdentity,
   ): Promise<{ items: FileRecordResponse[]; count: number }> {
     return this.filesService.uploadBatch(body, actor);
+  }
+
+  /** Khởi tạo phiên tải lên theo mảnh (Chunked Upload Init — Hỗ trợ file dung lượng lớn 2GB+) */
+  @Post(FILES_ROUTES.UPLOAD_CHUNKED_INIT)
+  @RequirePermissions('files.upload')
+  @ApiDoc({
+    summary: 'Khởi tạo phiên tải lên theo mảnh (Chunked Upload Init) cho tệp dung lượng lớn (2GB+)',
+    status: HTTP_STATUS_CODE.CREATED,
+    response: chunkedUploadInitResponseSchema,
+  })
+  public async initChunkedUpload(
+    @ValidatedBody(initChunkedUploadSchema) body: InitChunkedUploadRequest,
+    @CurrentUser() actor?: UserIdentity,
+  ): Promise<ChunkedUploadInitResponse> {
+    return this.filesService.initChunkedUpload(body, actor);
+  }
+
+  /** Tải lên một mảnh dữ liệu (4MB Chunk) của phiên Chunked Upload */
+  @Post(FILES_ROUTES.UPLOAD_CHUNKED_PART)
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions('files.upload')
+  @ApiDoc({
+    summary: 'Gửi tiếp một mảnh dữ liệu (chunk) vào tệp tạm và cập nhật mã băm SHA-256 streaming',
+    response: chunkedUploadPartResponseSchema,
+  })
+  public async uploadChunkPart(
+    @ValidatedParams(uploadSessionIdParamSchema, 'uploadId') uploadId: string,
+    @ValidatedBody(uploadChunkPartSchema) body: UploadChunkPartRequest,
+    @CurrentUser() actor?: UserIdentity,
+  ): Promise<ChunkedUploadPartResponse> {
+    return this.filesService.uploadChunkPart(uploadId, body, actor);
+  }
+
+  /** Hoàn tất phiên tải lên theo mảnh và tạo bản ghi tệp tin hoàn chỉnh */
+  @Post(FILES_ROUTES.UPLOAD_CHUNKED_COMPLETE)
+  @RequirePermissions('files.upload')
+  @ApiDoc({
+    summary:
+      'Hoàn tất phiên tải lên theo mảnh (Chunked Upload Complete), chốt SHA-256 và lưu bản ghi',
+    status: HTTP_STATUS_CODE.CREATED,
+    response: fileRecordResponseSchema,
+  })
+  public async completeChunkedUpload(
+    @ValidatedParams(uploadSessionIdParamSchema, 'uploadId') uploadId: string,
+    @ValidatedBody(completeChunkedUploadSchema) body: CompleteChunkedUploadRequest,
+    @CurrentUser() actor?: UserIdentity,
+  ): Promise<FileRecordResponse> {
+    return this.filesService.completeChunkedUpload(uploadId, body, actor);
   }
 
   /** Dọn dẹp các file trong thùng rác đã hết thời gian chờ */

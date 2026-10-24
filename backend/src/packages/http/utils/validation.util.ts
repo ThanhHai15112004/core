@@ -189,6 +189,19 @@ const RAW_PRESERVED_FIELD_KEYS = new Set([
   'signature',
   'AvatarBase64',
   'avatarBase64',
+  'contentBase64',
+  'xlsxBase64',
+  'logoBase64',
+  'csvContent',
+]);
+
+/** Các trường nhị phân mã hóa Base64 dung lượng lớn (không quét regex toàn chuỗi để tránh nghẽn CPU & tràn Heap) */
+const LARGE_BASE64_FIELD_KEYS = new Set([
+  'contentBase64',
+  'xlsxBase64',
+  'logoBase64',
+  'AvatarBase64',
+  'avatarBase64',
 ]);
 
 /**
@@ -221,8 +234,11 @@ export function sanitizeInputPayload<T>(
   }
 
   if (typeof input === 'string') {
+    if (currentKey && LARGE_BASE64_FIELD_KEYS.has(currentKey)) {
+      return (input.includes('\0') ? input.replace(/\0/g, '') : input) as unknown as T;
+    }
     if (currentKey && RAW_PRESERVED_FIELD_KEYS.has(currentKey)) {
-      return input.replace(/\0/g, '') as unknown as T;
+      return (input.includes('\0') ? input.replace(/\0/g, '') : input) as unknown as T;
     }
     return sanitizeStringInput(input, stripControlChars) as unknown as T;
   }

@@ -40,6 +40,8 @@ const PASSWORD_PRESERVE_KEYS = new Set([
   'csvcontent',
   'xlsxbase64',
   'logobase64',
+  'contentbase64',
+  'avatarbase64',
 ]);
 
 const FORBIDDEN_PROTOTYPE_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
@@ -909,6 +911,16 @@ export class PlatformSecurityService {
       if (pattern !== '*' && (exactKey.startsWith(pattern) || path.startsWith(pattern))) {
         return rule;
       }
+    }
+
+    if (path.includes('/upload-chunked/')) {
+      return {
+        routePattern: 'CHUNKED_UPLOAD',
+        windowSeconds: 60,
+        maxRequestsPerIp: 10_000,
+        maxRequestsPerUser: 10_000,
+        maxRequestsPerApi: 20_000,
+      };
     }
 
     return this.defaultRateLimitRule;

@@ -419,6 +419,26 @@ function createInMemoryFilesHarness() {
       return Buffer.from(obj.buffer);
     },
     exists: async (key: string) => storageObjects.has(key),
+    appendChunk: async (tempKey: string, chunk: Buffer) => {
+      const existing = storageObjects.get(tempKey);
+      const nextBuf = existing ? Buffer.concat([existing.buffer, chunk]) : Buffer.from(chunk);
+      storageObjects.set(tempKey, { buffer: nextBuf, mimeType: 'application/octet-stream' });
+      return nextBuf.length;
+    },
+    finalizeChunkedUpload: async (
+      tempKey: string,
+      targetKey: string,
+      mimeType = 'application/octet-stream',
+    ) => {
+      const tempObj = storageObjects.get(tempKey);
+      if (!tempObj) throw new Error('ENOENT');
+      storageObjects.set(targetKey, { buffer: tempObj.buffer, mimeType });
+      storageObjects.delete(tempKey);
+      return targetKey;
+    },
+    abortChunkedUpload: async (tempKey: string) => {
+      storageObjects.delete(tempKey);
+    },
   } as unknown as BaseStorageProvider;
 
   const settingRegistry = new SettingRegistryService();
@@ -1423,5 +1443,65 @@ describe('FilesService — Phase 6.1 & 6.2 File Management, Folders & Access Con
     // Khi file PUBLIC bị đưa vào thùng rác hoặc cách ly, publicUrl lập tức bị thu hồi về null
     const trashedPublic = await service.moveToTrash(publicFile.id);
     expect(trashedPublic.publicUrl).toBeNull();
+  });
+
+  it('19. Tải file dung lượng lớn theo mảnh (Chunked Upload: init -> chunk -> complete) khớp SHA-256 & chặn giả mạo Magic Bytes ở chunk 0', async () => {
+    const { service, storageObjects } = createInMemoryFilesHarness();
+
+    // Tạo một payload mẫu chia làm 2 mảnh (giả lập file > 4 MB bằng cách cắt 4 MB + 1 MB)
+    const part0 = Buffer.alloc(4 * 1024 * 1024, 0x41); // 4 MB chữ 'A'
+    const part1 = Buffer.alloc(512 * 1024, 0x42); // 512 KB chữ 'B'
+    const totalBytes = part0.length + part1.length;
+
+    const initRes = await service.initChunkedUpload({
+      fileName: 'course-recording.mp4',
+      displayName: 'Bài giảng Full HD.mp4',
+      sizeBytes: totalBytes,
+      mimeType: 'video/mp4',
+      visibility: FILE_VISIBILITY.INTERNAL,
+      moduleName: 'courses',
+    });
+
+    expect(initRes.uploadId).toBeDefined();
+    expect(initRes.totalChunks).toBe(2);
+
+    const chunk0Res = await service.uploadChunkPart(initRes.uploadId, {
+      chunkIndex: 0,
+      contentBase64: part0.toString('base64'),
+    });
+    expect(chunk0Res.receivedBytes).toBe(part0.length);
+    expect(chunk0Res.progressPercent).toBeGreaterThan(80);
+
+    const chunk1Res = await service.uploadChunkPart(initRes.uploadId, {
+      chunkIndex: 1,
+      contentBase64: part1.toString('base64'),
+    });
+    expect(chunk1Res.receivedBytes).toBe(totalBytes);
+    expect(chunk1Res.progressPercent).toBe(100);
+
+    const completed = await service.completeChunkedUpload(initRes.uploadId);
+    expect(completed.displayName).toBe('Bài giảng Full HD.mp4');
+    expect(completed.sizeBytes).toBe(totalBytes);
+    expect(completed.category).toBe(FILE_CATEGORY.VIDEO);
+    expect(completed.status).toBe(FILE_STATUS.ACTIVE);
+    expect(storageObjects.has(completed.storageKey)).toBe(true);
+
+    // Kiểm tra toàn vẹn SHA-256 trên Storage khớp tuyệt đối với mã băm streaming
+    const integrity = await service.verifyFileIntegrity(completed.id);
+    expect(integrity.intact).toBe(true);
+
+    // Kiểm tra chặn Magic Bytes giả mạo ngay ở chunk 0 (file .png nhưng gửi thực thi MZ)
+    const badInit = await service.initChunkedUpload({
+      fileName: 'fake-image.png',
+      sizeBytes: 1024,
+      mimeType: 'image/png',
+    });
+
+    await expect(
+      service.uploadChunkPart(badInit.uploadId, {
+        chunkIndex: 0,
+        contentBase64: Buffer.from('MZ-executable-payload').toString('base64'),
+      }),
+    ).rejects.toThrow(BadRequestAppException);
   });
 });

@@ -81,16 +81,30 @@ export class SettingsService implements ISettingsPublicService, OnModuleInit {
   private isPublishingChange = false;
 
   constructor(
-    @Optional() private readonly groupRepository?: SettingGroupRepository | null,
-    @Optional() private readonly settingRepository?: SystemSettingRepository | null,
-    @Optional() private readonly scopeRepository?: SystemSettingScopeRepository | null,
-    @Optional() private readonly historyRepository?: SystemSettingHistoryRepository | null,
+    @Optional()
+    @Inject(SettingGroupRepository)
+    private readonly groupRepository?: SettingGroupRepository | null,
+    @Optional()
+    @Inject(SystemSettingRepository)
+    private readonly settingRepository?: SystemSettingRepository | null,
+    @Optional()
+    @Inject(SystemSettingScopeRepository)
+    private readonly scopeRepository?: SystemSettingScopeRepository | null,
+    @Optional()
+    @Inject(SystemSettingHistoryRepository)
+    private readonly historyRepository?: SystemSettingHistoryRepository | null,
     @Optional()
     @Inject(SettingRegistryService)
     settingRegistry?: SettingRegistryService | null,
-    @Optional() fieldEncryptionService?: FieldEncryptionService | null,
-    @Optional() private readonly auditLogService?: AuditLogService | null,
-    @Optional() private readonly cacheProvider?: BaseCacheProvider | null,
+    @Optional()
+    @Inject(FieldEncryptionService)
+    fieldEncryptionService?: FieldEncryptionService | null,
+    @Optional()
+    @Inject(AuditLogService)
+    private readonly auditLogService?: AuditLogService | null,
+    @Optional()
+    @Inject(BaseCacheProvider)
+    private readonly cacheProvider?: BaseCacheProvider | null,
   ) {
     this.registry = settingRegistry ?? defaultSettingRegistry;
     this.encryptionService = fieldEncryptionService ?? defaultFieldEncryptionService;

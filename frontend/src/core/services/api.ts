@@ -179,10 +179,25 @@ function normalizeHeaders(headers?: HeadersInit): Record<string, string> {
  */
 export async function fetchApiWithMeta<T>(
   endpoint: string,
-  options: RequestInit = {},
+  options: RequestInit & { timeoutMs?: number } = {},
 ): Promise<{ data: T; meta?: PaginationMeta }> {
+  const isUploadEndpoint =
+    endpoint.includes('/files/upload') || endpoint.includes('/upload-chunked');
+  const effectiveTimeoutMs =
+    options.timeoutMs ??
+    (isUploadEndpoint ? frontendConfig.uploadTimeoutMs : frontendConfig.apiTimeoutMs);
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), frontendConfig.apiTimeoutMs);
+  let didTimeout = false;
+  const timeoutId = setTimeout(() => {
+    didTimeout = true;
+    controller.abort(
+      new ApiError(
+        `Yêu cầu tới máy chủ quá thời gian chờ (${Math.round(effectiveTimeoutMs / 1000)}s). Vui lòng thử lại.`,
+        408,
+        'REQUEST_TIMEOUT',
+      ),
+    );
+  }, effectiveTimeoutMs);
   const hasBody = options.body !== undefined && options.body !== null;
   const callerHeaders = normalizeHeaders(options.headers);
   const explicitAuth = callerHeaders['Authorization'] ?? callerHeaders['authorization'];
@@ -238,6 +253,26 @@ export async function fetchApiWithMeta<T>(
     }
 
     return { data: body as T };
+  } catch (err) {
+    if (err instanceof ApiError) {
+      throw err;
+    }
+    const errMsg = err instanceof Error ? err.message : String(err);
+    const errName = err instanceof Error ? err.name : '';
+    if (
+      didTimeout ||
+      errName === 'AbortError' ||
+      /aborted without reason|The user aborted a request|signal is aborted/i.test(errMsg)
+    ) {
+      throw new ApiError(
+        didTimeout
+          ? `Yêu cầu tới máy chủ quá thời gian chờ (${Math.round(effectiveTimeoutMs / 1000)}s). Vui lòng thử lại.`
+          : 'Yêu cầu kết nối đã bị ngắt hoặc quá thời gian chờ. Vui lòng thử lại.',
+        408,
+        'REQUEST_TIMEOUT',
+      );
+    }
+    throw err;
   } finally {
     clearTimeout(timeoutId);
   }
