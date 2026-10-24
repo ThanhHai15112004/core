@@ -60,6 +60,15 @@ export class NotificationRecipientsRepository extends BaseTypeOrmRepository<Noti
     );
   }
 
+  public async saveEntitiesBatch(
+    items: readonly Partial<NotificationRecipientEntity>[],
+  ): Promise<NotificationRecipientEntity[]> {
+    if (items.length === 0) return [];
+    const repo = this.repository;
+    const entities = items.map((item) => repo.create(item));
+    return repo.save(entities, { chunk: 200 });
+  }
+
   public async findPaginatedUserInbox(
     options: NotificationInboxFilterOptions,
   ): Promise<PaginatedQueryBuilderResult<NotificationRecipientEntity>> {

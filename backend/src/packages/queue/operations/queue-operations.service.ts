@@ -1,7 +1,9 @@
 import { performance } from 'node:perf_hooks';
 import { Inject, Injectable, Optional } from '@nestjs/common';
+import { ForbiddenAppException, HTTP_ERROR_CODE } from '@packages/kernel/index.js';
 import { CoreConfigService } from '@packages/config/index.js';
 import { RedisService } from '@packages/redis/index.js';
+import { AuditLogService } from '@packages/security/index.js';
 import { sanitizeMessagingMessage } from '@packages/messaging/index.js';
 import { RUNTIME_IDENTITY, type RuntimeIdentity } from '@packages/runtime/index.js';
 import type {
@@ -17,6 +19,8 @@ import { recordQueueEvent, recordQueueOperation } from '../utils/queue-events.js
 export interface QueueOperationContext {
   ip: string | null;
   actor: string | null;
+  userId?: number | string | null;
+  permissions?: readonly string[] | null;
 }
 
 export interface QueueRetryResult {
@@ -28,7 +32,7 @@ export interface QueueRetryResult {
 /**
  * Thao tác vận hành queue: pause / resume (toàn cục trên broker — worker làm xong job đang chạy rồi ngừng lấy
  * job mới), retry hàng loạt job lỗi (có giới hạn mỗi lần), drain (xoá job đang chờ — nguy hiểm, mặc định tắt).
- * Mọi thao tác bật/tắt bằng env và ghi audit + sự kiện.
+ * Mọi thao tác bật/tắt bằng env, kiểm tra quyền RBAC và ghi audit + sự kiện.
  */
 @Injectable()
 export class QueueOperationsService {
@@ -37,10 +41,33 @@ export class QueueOperationsService {
     private readonly config: CoreConfigService,
     private readonly redis: RedisService,
     @Optional() @Inject(RUNTIME_IDENTITY) private readonly identity?: RuntimeIdentity,
+    @Optional() private readonly auditLogService?: AuditLogService,
   ) {}
 
   private get cfg() {
     return this.config.queue;
+  }
+
+  /** Kiểm tra quyền RBAC khi có thông tin người dùng xác thực hoặc khi bật bắt buộc RBAC */
+  private assertPermission(ctx: QueueOperationContext, requiredPermission: string): void {
+    const hasExplicitPermissions = Array.isArray(ctx.permissions);
+    if (!hasExplicitPermissions && !this.cfg.requireRbac) {
+      return;
+    }
+    const granted = new Set(ctx.permissions ?? []);
+    if (
+      granted.has(requiredPermission) ||
+      granted.has('queues.manage') ||
+      granted.has('system.ops.manage')
+    ) {
+      return;
+    }
+    throw new ForbiddenAppException(HTTP_ERROR_CODE.FORBIDDEN, [
+      {
+        requiredPermissions: [requiredPermission],
+        missingPermissions: [requiredPermission],
+      },
+    ]);
   }
 
   /** Đảm bảo dịch vụ hoặc điều kiện tiên quyết đã sẵn sàng */
@@ -99,7 +126,7 @@ export class QueueOperationsService {
   }
 
   /** Ghi nhận nhật ký kiểm toán cho hành động nhạy cảm */
-  private audit(
+  private async audit(
     action: QueueOperationAction,
     target: string,
     ctx: QueueOperationContext,
@@ -107,7 +134,7 @@ export class QueueOperationsService {
     detail: string | null,
     error: string | null,
   ): Promise<QueueOperationRecord> {
-    return recordQueueOperation(this.redis, {
+    const rec = await recordQueueOperation(this.redis, {
       at: Date.now(),
       action,
       target,
@@ -118,10 +145,31 @@ export class QueueOperationsService {
       ip: ctx.ip,
       error,
     });
+    if (this.auditLogService) {
+      void this.auditLogService
+        .record({
+          actorUserId: typeof ctx.userId === 'number' ? ctx.userId : null,
+          actorIdentifier: ctx.actor,
+          ipAddress: ctx.ip,
+          module: 'worker-ops',
+          feature: 'queue_operations',
+          action: `QUEUE_${action.toUpperCase()}`,
+          resourceType: 'queue',
+          resourceId: target,
+          afterData: {
+            result: rec.result,
+            detail,
+            error,
+          },
+        })
+        .catch(() => undefined);
+    }
+    return rec;
   }
 
   /** Worker làm xong job đang chạy rồi ngừng lấy job mới; job mới vẫn được nhận vào queue. */
   public async pause(queue: string, ctx: QueueOperationContext): Promise<QueueOperationRecord> {
+    this.assertPermission(ctx, 'queues.pause');
     this.ensure(this.cfg.pause, 'PAUSE_DISABLED', 'pause', queue);
     const q = await this.current(queue);
     if (q.paused) throw new QueueOperationError('INVALID_STATE', queue, { queue, state: 'paused' });
@@ -141,6 +189,7 @@ export class QueueOperationsService {
 
   /** Tiếp tục tiếp nhận và xử lý tác vụ sau khi tạm dừng */
   public async resume(queue: string, ctx: QueueOperationContext): Promise<QueueOperationRecord> {
+    this.assertPermission(ctx, 'queues.pause');
     this.ensure(this.cfg.pause, 'PAUSE_DISABLED', 'pause', queue);
     const q = await this.current(queue);
     if (!q.paused)
@@ -168,6 +217,7 @@ export class QueueOperationsService {
     count: number,
     ctx: QueueOperationContext,
   ): Promise<QueueRetryResult> {
+    this.assertPermission(ctx, 'queues.retry_failed');
     this.ensure(this.cfg.retryFailed, 'RETRY_DISABLED', 'retryFailed', queue);
     if (count > this.cfg.retryFailedMax)
       throw new QueueOperationError('TOO_MANY', queue, { max: this.cfg.retryFailedMax, count });
@@ -195,6 +245,7 @@ export class QueueOperationsService {
     includeDelayed: boolean,
     ctx: QueueOperationContext,
   ): Promise<QueueOperationRecord> {
+    this.assertPermission(ctx, 'queues.drain');
     this.ensure(this.cfg.drain, 'DRAIN_DISABLED', 'drain', queue);
     const q = await this.current(queue);
     const waiting = q.counts.waiting + q.counts.prioritized;

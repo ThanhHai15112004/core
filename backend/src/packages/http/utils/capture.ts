@@ -30,7 +30,7 @@ export function maskIp(ip: string | undefined): string | null {
 }
 
 /**
- * Trích xuất thông tin ngữ cảnh vận hành (`ip` đã che và `actor` từ `req.user` nếu đã xác thực)
+ * Trích xuất thông tin ngữ cảnh vận hành (`ip` đã che, `actor`, `userId` và `permissions` từ `req.user` nếu đã xác thực)
  * dùng chung cho các controller vận hành (System Console `/ops/*`).
  */
 export function extractRequestContext(req: {
@@ -39,8 +39,14 @@ export function extractRequestContext(req: {
     id?: number | string | null;
     username?: string | null;
     email?: string | null;
+    permissions?: readonly string[] | null;
   } | null;
-}): { ip: string | null; actor: string | null } {
+}): {
+  ip: string | null;
+  actor: string | null;
+  userId?: number | string | null;
+  permissions?: readonly string[] | null;
+} {
   const user = req.user;
   const actor = user
     ? user.username?.trim() ||
@@ -50,5 +56,11 @@ export function extractRequestContext(req: {
   return {
     ip: maskIp(req.ip),
     actor,
+    ...(user
+      ? {
+          userId: user.id ?? null,
+          permissions: Array.isArray(user.permissions) ? user.permissions : [],
+        }
+      : {}),
   };
 }

@@ -1,124 +1,38 @@
-import { Logger, type OnApplicationBootstrap } from '@nestjs/common';
-import { Processor, WorkerHost } from '@nestjs/bullmq';
-import { UnrecoverableError, type Job } from 'bullmq';
-import type { Counter, Histogram } from 'prom-client';
+import { Logger, Optional } from '@nestjs/common';
+import { Processor } from '@nestjs/bullmq';
+import type { Job } from 'bullmq';
 import { CoreConfigService } from '@packages/config/index.js';
-import { RequestContextService } from '@packages/logging/index.js';
 import { MetricsRegistryService } from '@packages/metrics/index.js';
-import {
-  JOB_LOCK_DURATION_MS,
-  QUEUES,
-  parseEnvelope,
-  scheduledEnvelope,
-  type MessageEnvelope,
-} from '@packages/messaging/index.js';
+import { JOB_LOCK_DURATION_MS, QUEUES, type MessageEnvelope } from '@packages/messaging/index.js';
+import { JobProgressTrackerService } from '@packages/queue/index.js';
+import { BaseQueueProcessor } from '../base-queue.processor.js';
 
 /**
  * Consumer của queue `system.events` (`@nestjs/bullmq`). Mỗi job chạy trong correlation của envelope để lần theo
  * log; đếm `messages_consumed_total{queue,channel,result}` + histogram thời gian xử lý.
- *
- * Job do BullMQ Job Scheduler tạo ra không đi qua publisher nào trong app, nên được đếm vào
- * `messages_published_total` ở lần nhận đầu tiên — để publish/consume trên trang Messaging cân nhau.
  */
 @Processor(QUEUES.SYSTEM_EVENTS, { lockDuration: JOB_LOCK_DURATION_MS, name: 'worker' })
-export class SystemProcessor extends WorkerHost implements OnApplicationBootstrap {
-  private readonly logger = new Logger(SystemProcessor.name);
-  private readonly consumed: Counter<'queue' | 'channel' | 'result'>;
-  private readonly published: Counter<'queue' | 'channel' | 'result'>;
-  private readonly duration: Histogram<'queue' | 'channel'>;
-  private readonly wait: Histogram<'queue'>;
-  private readonly attemptFailures: Counter<'queue' | 'channel' | 'final'>;
-  private readonly recovered: Counter<'queue'>;
-  /** Số job đã xử lý xong (thành công hoặc lỗi) từ khi process chạy — để tính job/phút. */
-  public processed = 0;
+export class SystemProcessor extends BaseQueueProcessor {
+  protected readonly logger = new Logger(SystemProcessor.name);
+  public readonly queueName = QUEUES.SYSTEM_EVENTS;
 
   constructor(
-    private readonly config: CoreConfigService,
+    config: CoreConfigService,
     metrics: MetricsRegistryService,
+    @Optional() progressTracker?: JobProgressTrackerService,
   ) {
-    super();
-    this.consumed = metrics.counter('messages_consumed_total', 'Messages consumed', [
-      'queue',
-      'channel',
-      'result',
-    ]);
-    this.published = metrics.counter('messages_published_total', 'Messages published', [
-      'queue',
-      'channel',
-      'result',
-    ]);
-    this.duration = metrics.histogram('job_duration_seconds', 'Job processing duration', [
-      'queue',
-      'channel',
-    ]);
-    this.wait = metrics.histogram('job_wait_seconds', 'Time from enqueue to processing', ['queue']);
-    this.attemptFailures = metrics.counter(
-      'job_attempt_failures_total',
-      'Failed job attempts (final = no attempts left)',
-      ['queue', 'channel', 'final'],
-    );
-    this.recovered = metrics.counter('job_recovered_total', 'Jobs that succeeded after a retry', [
-      'queue',
-    ]);
+    super(config, metrics, progressTracker);
   }
 
   public get concurrency(): number {
-    return this.config.runtime.worker.concurrency;
+    return this.config.runtime.worker.eventsConcurrency;
   }
 
-  /** Cấu hình mức độ concurrency cho BullMQ worker khi ứng dụng hoàn tất bootstrap */
-  public onApplicationBootstrap(): void {
-    this.worker.concurrency = this.concurrency;
-  }
-
-  /** Tiếp nhận, xác thực envelope và thực thi xử lý một BullMQ job */
-  public async process(job: Job): Promise<void> {
-    // Job từ Job Scheduler / Run Now không có envelope — dựng từ chính job (xem `scheduledEnvelope`).
-    const envelope = parseEnvelope(job.data) ?? scheduledEnvelope(job);
-    if (!envelope) {
-      this.consumed.inc({ queue: job.queueName, channel: job.name, result: 'failed' });
-      throw new UnrecoverableError(`Malformed envelope for job ${job.id ?? '?'}`);
-    }
-    if (job.repeatJobKey && job.attemptsMade === 0 && job.attemptsStarted <= 1) {
-      this.published.inc({ queue: job.queueName, channel: envelope.topic, result: 'success' });
-    }
-    if (job.timestamp > 0) {
-      this.wait.observe(
-        { queue: job.queueName },
-        Math.max(0, ((job.processedOn ?? Date.now()) - job.timestamp) / 1000),
-      );
-    }
-    const end = this.duration.startTimer({ queue: job.queueName, channel: envelope.topic });
-    try {
-      await RequestContextService.runWith(
-        {
-          correlationId: envelope.correlationId ?? envelope.id,
-          jobId: String(job.id ?? ''),
-          source: { kind: 'job', id: String(job.id ?? ''), name: job.name, detail: job.queueName },
-        },
-        () => this.handle(envelope),
-      );
-      this.consumed.inc({ queue: job.queueName, channel: envelope.topic, result: 'success' });
-      if (job.attemptsMade > 0) this.recovered.inc({ queue: job.queueName });
-    } catch (err) {
-      this.consumed.inc({ queue: job.queueName, channel: envelope.topic, result: 'failed' });
-      const final = job.attemptsMade + 1 >= (job.opts.attempts ?? 1);
-      this.attemptFailures.inc({
-        queue: job.queueName,
-        channel: envelope.topic,
-        final: String(final),
-      });
-      throw err;
-    } finally {
-      this.processed++;
-      end();
-    }
-  }
-
-  /** Logic nghiệp vụ theo topic — hiện chỉ ghi log (xử lý lặp lại an toàn). */
-  private async handle(envelope: MessageEnvelope): Promise<void> {
+  /** Logic nghiệp vụ theo topic của sự kiện hệ thống */
+  protected async handle(envelope: MessageEnvelope, _job: Job): Promise<unknown> {
     this.logger.log(
       `Processing message "${envelope.topic}" (${envelope.id}) from ${envelope.producer ?? 'unknown'}`,
     );
+    return { handled: true, topic: envelope.topic, id: envelope.id };
   }
 }

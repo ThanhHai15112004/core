@@ -3,18 +3,173 @@
   "name": "system-ops",
   "displayName": "System Operations Console",
   "version": "1.0.0",
-  "description": "Module quản trị và vận hành toàn hệ thống (Overview, Packages, Secrets, Configuration)",
+  "description": "Module quản trị và vận hành toàn hệ thống (Overview, Packages, Secrets, Configuration, Queue, Worker, Jobs)",
   "type": "core",
   "category": "operations",
   "author": "Core Platform Team",
   "entryModule": "SystemOpsModule",
   "dependencies": ["redis", "runtime", "security", "config"],
-  "permissions": ["system.ops.read", "system.ops.manage"],
+  "permissions": [
+    "system.ops.read",
+    "system.ops.manage",
+    "queues.view",
+    "queues.manage",
+    "queues.pause",
+    "queues.retry_failed",
+    "queues.drain",
+    "jobs.view",
+    "jobs.manage",
+    "jobs.payload",
+    "jobs.retry",
+    "jobs.cancel",
+    "jobs.remove"
+  ],
   "events": {
     "published": ["system.ops.action_executed"]
   },
   "database": {
     "hasMigrations": false,
     "tables": []
-  }
+  },
+  "settingGroups": [
+    {
+      "code": "queue_worker",
+      "module": "system-ops",
+      "name": "Cấu hình Hàng đợi (Queue) & Worker",
+      "description": "Thiết lập số lượng worker xử lý theo từng loại hàng đợi, số lần retry, thời gian chờ tối đa và quyền thao tác job",
+      "icon": "layers",
+      "sortOrder": 10,
+      "isSystem": true
+    }
+  ],
+  "settings": [
+    {
+      "key": "queue.worker.critical_concurrency",
+      "groupCode": "queue_worker",
+      "module": "system-ops",
+      "name": "Số luồng Worker cho hàng đợi Khẩn cấp (system.critical)",
+      "description": "Số lượng job khẩn cấp (OTP, cảnh báo bảo mật) được xử lý đồng thời",
+      "valueType": "NUMBER",
+      "defaultValue": "10",
+      "isPublic": false,
+      "isSecret": false,
+      "isReadonly": false,
+      "validationRules": { "min": 1, "max": 100 }
+    },
+    {
+      "key": "queue.worker.notifications_concurrency",
+      "groupCode": "queue_worker",
+      "module": "system-ops",
+      "name": "Số luồng Worker cho hàng đợi Thông báo (system.notifications)",
+      "description": "Số lượng job gửi Email, SMS, Push Notification được xử lý đồng thời",
+      "valueType": "NUMBER",
+      "defaultValue": "8",
+      "isPublic": false,
+      "isSecret": false,
+      "isReadonly": false,
+      "validationRules": { "min": 1, "max": 100 }
+    },
+    {
+      "key": "queue.worker.heavy_concurrency",
+      "groupCode": "queue_worker",
+      "module": "system-ops",
+      "name": "Số luồng Worker cho hàng đợi Tác vụ nặng (system.heavy)",
+      "description": "Giới hạn số lượng job nặng (Import/Export CSV-XLSX, xử lý ảnh/media) chạy đồng thời để bảo vệ CPU/RAM",
+      "valueType": "NUMBER",
+      "defaultValue": "2",
+      "isPublic": false,
+      "isSecret": false,
+      "isReadonly": false,
+      "validationRules": { "min": 1, "max": 32 }
+    },
+    {
+      "key": "queue.worker.events_concurrency",
+      "groupCode": "queue_worker",
+      "module": "system-ops",
+      "name": "Số luồng Worker cho hàng đợi Sự kiện chung (system.events)",
+      "description": "Số lượng job sự kiện hệ thống được xử lý đồng thời",
+      "valueType": "NUMBER",
+      "defaultValue": "5",
+      "isPublic": false,
+      "isSecret": false,
+      "isReadonly": false,
+      "validationRules": { "min": 1, "max": 100 }
+    },
+    {
+      "key": "queue.retry.max_attempts",
+      "groupCode": "queue_worker",
+      "module": "system-ops",
+      "name": "Số lần thử tối đa mặc định (Max Attempts)",
+      "description": "Số lần thực thi tối đa (lần đầu + retry) trước khi chuyển vào danh sách job thất bại",
+      "valueType": "NUMBER",
+      "defaultValue": "3",
+      "isPublic": false,
+      "isSecret": false,
+      "isReadonly": false,
+      "validationRules": { "min": 1, "max": 10 }
+    },
+    {
+      "key": "queue.retry.max_attempts_cap",
+      "groupCode": "queue_worker",
+      "module": "system-ops",
+      "name": "Giới hạn trần số lần retry (Chống retry vô hạn)",
+      "description": "Trần cứng tối đa cho mọi job trong hệ thống để ngăn chặn retry vô hạn",
+      "valueType": "NUMBER",
+      "defaultValue": "10",
+      "isPublic": false,
+      "isSecret": false,
+      "isReadonly": false,
+      "validationRules": { "min": 1, "max": 20 }
+    },
+    {
+      "key": "queue.retry.backoff_type",
+      "groupCode": "queue_worker",
+      "module": "system-ops",
+      "name": "Chiến lược giãn cách Retry (exponential | fixed)",
+      "description": "Kiểu thời gian chờ giữa các lần thử lại khi job gặp lỗi tạm thời",
+      "valueType": "TEXT",
+      "defaultValue": "exponential",
+      "isPublic": false,
+      "isSecret": false,
+      "isReadonly": false
+    },
+    {
+      "key": "queue.retry.backoff_delay_ms",
+      "groupCode": "queue_worker",
+      "module": "system-ops",
+      "name": "Độ trễ cơ sở trước lần Retry đầu tiên (ms)",
+      "description": "Khoảng thời gian chờ (ms) trước khi thử lại lần đầu tiên",
+      "valueType": "NUMBER",
+      "defaultValue": "1000",
+      "isPublic": false,
+      "isSecret": false,
+      "isReadonly": false,
+      "validationRules": { "min": 100, "max": 300000 }
+    },
+    {
+      "key": "queue.execution.timeout_ms",
+      "groupCode": "queue_worker",
+      "module": "system-ops",
+      "name": "Thời gian chờ thực thi Job tối đa mặc định (ms)",
+      "description": "Quá thời gian này job sẽ bị ngắt lỗi Timeout để giải phóng worker",
+      "valueType": "NUMBER",
+      "defaultValue": "60000",
+      "isPublic": false,
+      "isSecret": false,
+      "isReadonly": false,
+      "validationRules": { "min": 1000, "max": 3600000 }
+    },
+    {
+      "key": "queue.ops.require_rbac",
+      "groupCode": "queue_worker",
+      "module": "system-ops",
+      "name": "Bắt buộc kiểm tra quyền RBAC cho thao tác Queue & Job",
+      "description": "Yêu cầu kiểm tra chặt chẽ quyền queues.* và jobs.* khi thực hiện retry/cancel/remove/pause/drain",
+      "valueType": "BOOLEAN",
+      "defaultValue": "false",
+      "isPublic": false,
+      "isSecret": false,
+      "isReadonly": false
+    }
+  ]
 }

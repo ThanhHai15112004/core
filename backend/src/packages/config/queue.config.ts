@@ -36,6 +36,8 @@ export const queueConfig = () => ({
   retryFailedMax: Math.max(1, numberOr('OPS_QUEUE_RETRY_FAILED_MAX', 500)),
   /** Drain (xoá job đang chờ) — nguy hiểm, mặc định tắt. */
   drain: booleanOr('OPS_QUEUE_DRAIN_ENABLED', false),
+  /** Bắt buộc kiểm tra RBAC permission ngay cả khi gọi nội bộ không có token. */
+  requireRbac: booleanOr('OPS_QUEUE_REQUIRE_RBAC', false),
 });
 
 export type QueueConfig = ReturnType<typeof queueConfig>;

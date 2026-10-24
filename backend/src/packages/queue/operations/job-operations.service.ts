@@ -1,8 +1,10 @@
 import { randomBytes } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
+import { ForbiddenAppException, HTTP_ERROR_CODE } from '@packages/kernel/index.js';
 import { CoreConfigService } from '@packages/config/index.js';
 import { RedisService } from '@packages/redis/index.js';
+import { AuditLogService } from '@packages/security/index.js';
 import {
   sanitizeMessagingMessage,
   type JobOperationAction,
@@ -11,14 +13,21 @@ import {
 import { redactPayload } from '@packages/http/index.js';
 import { JobMonitoringService } from '../monitoring/job-monitoring.service.js';
 import { JobOperationError } from '../utils/job-errors.js';
-import { JOB_OPERATION_LOG_SIZE, queueKeys } from '../constants/queue.keys.js';
+import {
+  CANCEL_SIGNAL_TTL_SEC,
+  JOB_OPERATION_LOG_SIZE,
+  queueKeys,
+} from '../constants/queue.keys.js';
 import type { JobRecord } from '../contracts/job.types.js';
+import { JobProgressTrackerService } from './job-progress.tracker.js';
 
 const MAX_REASON = 200;
 
 export interface JobOperationContext {
   ip: string | null;
   actor: string | null;
+  userId?: number | string | null;
+  permissions?: readonly string[] | null;
 }
 
 export type CancelMode = 'removed' | 'cooperative';
@@ -39,8 +48,8 @@ export interface BulkRetryItem {
 
 /**
  * Thao tác từng job bằng BullMQ API: retry job lỗi (`job.retry`), retry nhiều job đã chọn, huỷ job chưa chạy
- * (`job.remove`), xoá bản ghi job đã xong. Job đang chạy không huỷ được (không kill process). Mọi thao tác bật/tắt
- * bằng env và ghi audit vào log (field `audit`, trang Logs đọc lại).
+ * (`job.remove`) hoặc huỷ hợp tác job đang chạy (`cooperative`), xoá bản ghi job đã xong.
+ * Mọi thao tác bật/tắt bằng env, kiểm tra quyền RBAC và ghi audit vào log.
  */
 @Injectable()
 export class JobOperationsService {
@@ -50,10 +59,34 @@ export class JobOperationsService {
     private readonly jobs: JobMonitoringService,
     private readonly config: CoreConfigService,
     private readonly redis: RedisService,
+    @Optional() private readonly progressTracker?: JobProgressTrackerService,
+    @Optional() private readonly auditLogService?: AuditLogService,
   ) {}
 
   private get cfg() {
     return this.config.jobs;
+  }
+
+  /** Kiểm tra quyền RBAC khi có thông tin người dùng xác thực hoặc khi bật bắt buộc RBAC */
+  private assertPermission(ctx: JobOperationContext, requiredPermission: string): void {
+    const hasExplicitPermissions = Array.isArray(ctx.permissions);
+    if (!hasExplicitPermissions && !this.cfg.requireRbac) {
+      return;
+    }
+    const granted = new Set(ctx.permissions ?? []);
+    if (
+      granted.has(requiredPermission) ||
+      granted.has('jobs.manage') ||
+      granted.has('system.ops.manage')
+    ) {
+      return;
+    }
+    throw new ForbiddenAppException(HTTP_ERROR_CODE.FORBIDDEN, [
+      {
+        requiredPermissions: [requiredPermission],
+        missingPermissions: [requiredPermission],
+      },
+    ]);
   }
 
   /** Đảm bảo dịch vụ hoặc điều kiện tiên quyết đã sẵn sàng */
@@ -65,7 +98,7 @@ export class JobOperationsService {
     if (!this.jobs.usable()) throw new JobOperationError('UNAVAILABLE');
   }
 
-  /** Tải dữ liệu log từ bộ lưu trữ */
+  /** Tải dữ liệu job từ bộ lưu trữ */
   private async load(queue: string, id: string): Promise<JobRecord> {
     if (!this.jobs.provider.isKnown(queue)) throw new JobOperationError('NOT_FOUND', queue, { id });
     const job = await this.jobs.get(id, queue);
@@ -103,7 +136,10 @@ export class JobOperationsService {
       ip: ctx.ip,
       error,
     };
-    this.logger.log({ msg: `job ${action} ${target}`, audit: { domain: 'jobs', ...record } });
+    this.logger.log({
+      msg: `job ${action} ${target}`,
+      audit: { domain: 'jobs', userId: ctx.userId ?? null, ...record },
+    });
     const key = queueKeys(this.redis).jobOperations();
     void this.redis.client
       .multi()
@@ -111,6 +147,27 @@ export class JobOperationsService {
       .ltrim(key, 0, JOB_OPERATION_LOG_SIZE - 1)
       .exec()
       .catch(() => undefined);
+    if (this.auditLogService) {
+      void this.auditLogService
+        .record({
+          actorUserId: typeof ctx.userId === 'number' ? ctx.userId : null,
+          actorIdentifier: ctx.actor,
+          ipAddress: ctx.ip,
+          module: 'jobs-ops',
+          feature: 'job_operations',
+          action: `JOB_${action.toUpperCase()}`,
+          resourceType: 'job',
+          resourceId: target,
+          afterData: {
+            jobType,
+            result: record.result,
+            detail,
+            error,
+          },
+          reason,
+        })
+        .catch(() => undefined);
+    }
     return record;
   }
 
@@ -139,6 +196,7 @@ export class JobOperationsService {
     id: string,
     ctx: JobOperationContext,
   ): Promise<{ record: JobOperationRecord; job: JobRecord }> {
+    this.assertPermission(ctx, 'jobs.retry');
     this.ensure(this.cfg.retry, 'RETRY_DISABLED');
     const started = performance.now();
     const job = await this.load(queue, id);
@@ -170,6 +228,7 @@ export class JobOperationsService {
     items: { queue: string; id: string }[],
     ctx: JobOperationContext,
   ): Promise<{ record: JobOperationRecord; items: BulkRetryItem[] }> {
+    this.assertPermission(ctx, 'jobs.retry');
     this.ensure(this.cfg.retry, 'RETRY_DISABLED');
     const max = this.cfg.bulkRetryMax;
     if (items.length > max)
@@ -222,19 +281,61 @@ export class JobOperationsService {
     return { record, items: out };
   }
 
-  /** Huỷ job chưa chạy (waiting / delayed / retrying) = xoá khỏi hàng đợi. Job đang chạy → không hỗ trợ huỷ. */
+  /**
+   * Huỷ job chưa chạy (waiting / delayed / retrying) = xoá khỏi hàng đợi (`mode: 'removed'`).
+   * Với job đang chạy (active / stalled) = gửi tín hiệu huỷ hợp tác qua Redis (`mode: 'cooperative'`).
+   */
   public async cancel(
     queue: string,
     id: string,
     rawReason: string | null,
     ctx: JobOperationContext,
   ): Promise<JobCancelResult> {
+    this.assertPermission(ctx, 'jobs.cancel');
     this.ensure(this.cfg.cancel, 'CANCEL_DISABLED');
     const started = performance.now();
     const reason = rawReason?.trim().slice(0, MAX_REASON) || null;
     const job = await this.load(queue, id);
-    if (job.status === 'active' || job.status === 'stalled')
-      throw new JobOperationError('NOT_CANCELLABLE', id, { id, queue });
+
+    if (job.status === 'active' || job.status === 'stalled') {
+      await this.guarded('cancel', job, ctx, started, reason, async () => {
+        if (this.progressTracker) {
+          await this.progressTracker.requestCancel(queue, id, { reason, actor: ctx.actor });
+        } else {
+          const signalKey = queueKeys(this.redis).cancelSignal(queue, id);
+          await this.redis.client.set(
+            signalKey,
+            JSON.stringify({
+              queue,
+              jobId: id,
+              reason,
+              actor: ctx.actor,
+              requestedAt: Date.now(),
+            }),
+            'EX',
+            CANCEL_SIGNAL_TTL_SEC,
+          );
+        }
+        await this.jobs.provider.log(queue, id, {
+          type: 'cancel_requested',
+          actor: ctx.actor,
+          error: reason ?? 'Cooperative cancel requested',
+        });
+      });
+
+      const record = this.audit(
+        'cancel',
+        `${queue}|${id}`,
+        job.type,
+        ctx,
+        started,
+        `state=${job.status}, mode=cooperative`,
+        reason,
+        null,
+      );
+      return { record, mode: 'cooperative', delivered: true, instance: job.worker };
+    }
+
     if (job.status !== 'waiting' && job.status !== 'delayed' && job.status !== 'retrying')
       throw this.invalid(job);
     const removed = await this.guarded('cancel', job, ctx, started, reason, () =>
@@ -247,7 +348,7 @@ export class JobOperationsService {
       job.type,
       ctx,
       started,
-      `state=${job.status}`,
+      `state=${job.status}, mode=removed`,
       reason,
       null,
     );
@@ -260,6 +361,7 @@ export class JobOperationsService {
     id: string,
     ctx: JobOperationContext,
   ): Promise<JobOperationRecord> {
+    this.assertPermission(ctx, 'jobs.remove');
     this.ensure(this.cfg.remove, 'REMOVE_DISABLED');
     const started = performance.now();
     const job = await this.load(queue, id);
@@ -281,6 +383,7 @@ export class JobOperationsService {
 
   /** Payload đã che field nhạy cảm — mỗi lần xem ghi audit. */
   public async payload(queue: string, id: string, ctx: JobOperationContext) {
+    this.assertPermission(ctx, 'jobs.payload');
     this.ensure(this.cfg.payload, 'PAYLOAD_DISABLED');
     const started = performance.now();
     const detail = await this.jobs.detail(id, queue);

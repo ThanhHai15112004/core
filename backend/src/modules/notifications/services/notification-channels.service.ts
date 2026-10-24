@@ -9,6 +9,12 @@ import {
 } from '@packages/kernel/index.js';
 import { AuditLogService, type UserIdentity } from '@packages/security/index.js';
 import {
+  BaseMessagePublisherProvider,
+  JOB_PRIORITIES,
+  QUEUES,
+  type MessageEnvelope,
+} from '@packages/messaging/index.js';
+import {
   type IUsersPublicService,
   USERS_PUBLIC_SERVICE,
   type UserNotificationContactView,
@@ -100,6 +106,8 @@ export class NotificationChannelsService {
     @Optional()
     @Inject(USERS_PUBLIC_SERVICE)
     private readonly usersPublicService?: IUsersPublicService | null,
+    @Optional()
+    private readonly messagePublisher?: BaseMessagePublisherProvider | null,
   ) {}
 
   // ==================== 1. TEMPLATE ENGINE & CRUD ====================
@@ -1540,6 +1548,77 @@ export class NotificationChannelsService {
       return (runtimeConfig.pushProvider || 'CONSOLE').trim().toUpperCase();
     }
     return 'IN_APP';
+  }
+
+  /**
+   * Đẩy công việc gửi Email / SMS / Push Notification vào Queue chuyên biệt:
+   * - Nếu là thông báo Bảo mật / OTP (`isCritical = true` hoặc `category === SECURITY`): đẩy vào `system.critical` với `priority = CRITICAL (1)`.
+   * - Nếu là thông báo đơn lẻ thông thường: đẩy vào `system.notifications` với `priority = HIGH (5)`.
+   * - Nếu là gửi hàng loạt theo lô (`recipients.length > 1`): đẩy vào `system.notifications` với `priority = NORMAL (50)`.
+   */
+  public async enqueueChannelJob(input: {
+    readonly channel: string;
+    readonly templateCode?: string | null;
+    readonly category?: number | string;
+    readonly isCritical?: boolean;
+    readonly recipients: readonly {
+      readonly userId?: number | null;
+      readonly recipientAddress: string;
+    }[];
+    readonly batchSize?: number;
+    readonly idempotencyKey?: string;
+    readonly maxAttempts?: number;
+    readonly timeoutMs?: number;
+  }): Promise<MessageEnvelope<{
+    readonly channel: string;
+    readonly templateCode: string | null;
+    readonly recipients: readonly {
+      readonly userId?: number | null;
+      readonly recipientAddress: string;
+    }[];
+    readonly batchSize: number;
+  }> | null> {
+    if (!this.messagePublisher) return null;
+    const resolvedCategory =
+      input.category !== undefined
+        ? parseNotificationCategory(input.category)
+        : NOTIFICATION_CATEGORY.SYSTEM;
+    const isUrgent =
+      Boolean(input.isCritical) ||
+      resolvedCategory === NOTIFICATION_CATEGORY.SECURITY ||
+      (input.templateCode ?? '').toUpperCase().includes('OTP');
+
+    const targetQueue = isUrgent ? QUEUES.SYSTEM_CRITICAL : QUEUES.SYSTEM_NOTIFICATIONS;
+    const priority = isUrgent
+      ? JOB_PRIORITIES.CRITICAL
+      : input.recipients.length > 1
+        ? JOB_PRIORITIES.NORMAL
+        : JOB_PRIORITIES.HIGH;
+    const topic =
+      input.recipients.length > 1
+        ? 'notifications.dispatch_batch'
+        : 'notifications.dispatch_single';
+
+    return this.messagePublisher.publish(
+      topic,
+      {
+        channel: input.channel.trim().toUpperCase(),
+        templateCode: input.templateCode ?? null,
+        recipients: input.recipients,
+        batchSize: Math.max(1, input.batchSize ?? 50),
+      },
+      targetQueue,
+      {
+        priority,
+        ...(input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : {}),
+        ...(input.maxAttempts ? { attempts: input.maxAttempts } : {}),
+        ...(input.timeoutMs ? { timeoutMs: input.timeoutMs } : {}),
+        index: {
+          channel: input.channel.trim().toUpperCase(),
+          ...(input.templateCode ? { templateCode: input.templateCode } : {}),
+        },
+      },
+    );
   }
 
   private isChannelFeatureFlagEnabled(

@@ -4,7 +4,14 @@ import { getQueueToken } from '@nestjs/bullmq';
 import type { JobsOptions, Queue } from 'bullmq';
 import type { Redis } from 'ioredis';
 import { CoreConfigService } from '@packages/config/index.js';
-import { QUEUES, type QueueName } from '../constants/queues.constant.js';
+import {
+  MAX_JOB_ATTEMPTS_CAP,
+  QUEUE_PROFILES,
+  QUEUES,
+  type QueueName,
+  type QueueProfile,
+} from '../constants/queues.constant.js';
+import type { PublishOptions } from '../contracts/job-meta.types.js';
 
 /** Client Redis của BullMQ (backend Redis) — dùng cho PING và đọc zset `delayed`. */
 export const rawClient = (q: Queue): Promise<Redis> =>
@@ -38,6 +45,11 @@ export class QueueRegistry implements OnModuleInit {
     return Object.values(QUEUES);
   }
 
+  /** Lấy cấu hình hồ sơ vận hành mặc định của một hàng đợi */
+  public profile(name: QueueName): QueueProfile {
+    return QUEUE_PROFILES[name] ?? QUEUE_PROFILES[QUEUES.SYSTEM_EVENTS];
+  }
+
   /** Kiểm tra xem tên hàng đợi hoặc kênh có hợp lệ trong danh mục hay không */
   public isKnown(name: string): name is QueueName {
     return (this.names() as string[]).includes(name);
@@ -61,20 +73,29 @@ export class QueueRegistry implements OnModuleInit {
   }
 
   /**
-   * Option mặc định của message: retry theo cấu hình, giữ message đã xong/Dead Letter có giới hạn,
-   * giữ log vòng đời. `jobId` = id envelope để tra cứu được theo message ID.
+   * Option mặc định của message: retry theo cấu hình (chặn trần chống retry vô hạn), giữ message đã xong/Dead Letter
+   * có giới hạn, giữ log vòng đời. `jobId` = id envelope để tra cứu được theo message ID.
    */
-  public jobOptions(jobId: string): JobsOptions {
-    return { jobId, ...this.retentionOptions() };
+  public jobOptions(jobId: string, queue?: QueueName, options?: PublishOptions): JobsOptions {
+    return { jobId, ...this.retentionOptions(queue, options) };
   }
 
   /** Retry + giới hạn job đã xong/thất bại — dùng cả cho job do Job Scheduler / Run Now tạo (không có `jobId`). */
-  public retentionOptions(): Omit<JobsOptions, 'jobId'> {
+  public retentionOptions(queue?: QueueName, options?: PublishOptions): Omit<JobsOptions, 'jobId'> {
     const m = this.config?.messaging;
+    const prof = queue ? QUEUE_PROFILES[queue] : undefined;
+    const cap = m?.maxAttemptsCap ?? MAX_JOB_ATTEMPTS_CAP;
+    const requestedAttempts =
+      options?.attempts ?? (m ? m.maxAttempts : (prof?.defaultAttempts ?? 1));
+    const attempts = Math.min(cap, Math.max(1, Math.round(requestedAttempts)));
+    const backoffType = options?.backoff ?? m?.backoff ?? prof?.defaultBackoff ?? 'exponential';
+    const backoffDelay =
+      options?.backoffDelayMs ?? (m ? m.backoffDelayMs : (prof?.defaultBackoffDelayMs ?? 0));
+
     return {
-      attempts: m?.maxAttempts ?? 1,
-      ...(m && m.maxAttempts > 1 && m.backoffDelayMs > 0
-        ? { backoff: { type: m.backoff, delay: m.backoffDelayMs } }
+      attempts,
+      ...(attempts > 1 && backoffDelay > 0
+        ? { backoff: { type: backoffType, delay: Math.max(0, Math.round(backoffDelay)) } }
         : {}),
       removeOnComplete: { count: m?.keepCompleted ?? 1000 },
       removeOnFail: { count: m?.keepDeadLetter ?? 1000 },

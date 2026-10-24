@@ -8,7 +8,7 @@ import type {
   MessagePublisherContract,
 } from '../contracts/message-publisher.contract.js';
 import type { JobMeta, JobSource, PublishOptions } from '../contracts/job-meta.types.js';
-import { QUEUES, type QueueName } from '../constants/queues.constant.js';
+import { QUEUE_PROFILES, QUEUES, type QueueName } from '../constants/queues.constant.js';
 import { serializeMessage } from '../serializers/message.serializer.js';
 import { sanitizeMessagingMessage } from '../utils/messaging-errors.js';
 import { MessagingConnectionService } from './messaging-connection.service.js';
@@ -60,17 +60,20 @@ export class BaseMessagePublisherProvider implements MessagePublisherContract {
   ): Promise<MessageEnvelope<T>> {
     const producer = this.identity?.id ?? null;
     const correlationId = RequestContextService.currentCorrelationId() ?? null;
+    const profile = QUEUE_PROFILES[queue];
+    const resolvedPriority =
+      options.priority !== undefined && options.priority > 0
+        ? Math.round(options.priority)
+        : profile?.defaultPriority;
     const envelope = serializeMessage(topic, payload, {
       producer,
       correlationId,
-      job: this.meta(producer, options),
+      job: this.meta(producer, queue, options),
     });
     const opts = {
-      ...this.queues.jobOptions(envelope.id),
+      ...this.queues.jobOptions(envelope.id, queue, options),
       ...(options.delayMs && options.delayMs > 0 ? { delay: Math.round(options.delayMs) } : {}),
-      ...(options.priority && options.priority > 0
-        ? { priority: Math.round(options.priority) }
-        : {}),
+      ...(resolvedPriority && resolvedPriority > 0 ? { priority: resolvedPriority } : {}),
     };
     try {
       await this.queues.withTimeout(this.queues.get(queue).add(topic, envelope, opts));
@@ -94,19 +97,24 @@ export class BaseMessagePublisherProvider implements MessagePublisherContract {
   }
 
   /** Trích xuất thông tin metadata từ đối tượng hoặc tin nhắn */
-  private meta(producer: string | null, options: PublishOptions): JobMeta {
+  private meta(producer: string | null, queue: QueueName, options: PublishOptions): JobMeta {
     const source = jobSourceOf(producer);
     const index: Record<string, string> = {};
     for (const [k, v] of Object.entries(options.index ?? {}).slice(0, MAX_INDEX_FIELDS)) {
       const key = k.trim().slice(0, 50);
       if (key && (typeof v === 'string' || typeof v === 'number')) index[key] = indexValue(v);
     }
+    const timeoutMs =
+      options.timeoutMs && options.timeoutMs > 0
+        ? Math.round(options.timeoutMs)
+        : (QUEUE_PROFILES[queue]?.defaultTimeoutMs ?? null);
     return {
       source,
       requestId: source.kind === 'http' ? source.id : null,
       idempotencyKey: options.idempotencyKey ? indexValue(options.idempotencyKey) : null,
       index,
       schema: options.schema ?? null,
+      timeoutMs,
     };
   }
 }

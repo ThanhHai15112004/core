@@ -33,6 +33,8 @@ export const jobsConfig = () => ({
   cancelledRetentionDays: Math.max(1, numberOr('JOBS_CANCELLED_RETENTION_DAYS', 7)),
   /** Số job tối đa một lần tìm kiếm được đọc từ broker (không quét vô hạn). */
   searchScanMax: Math.max(100, numberOr('JOBS_SEARCH_SCAN_MAX', 2000)),
+  /** Số lượng tối đa bản ghi job thất bại giữ trong Failed Archive bền vững trên Redis. */
+  failedArchiveMax: Math.max(50, numberOr('JOBS_FAILED_ARCHIVE_MAX', 1000)),
   /** Retry một job lỗi. */
   retry: booleanOr('OPS_JOBS_RETRY_ENABLED', true),
   /** Retry nhiều job lỗi đã chọn (có xem trước) — tối đa `bulkRetryMax` mỗi lần. */
@@ -43,6 +45,8 @@ export const jobsConfig = () => ({
   remove: booleanOr('OPS_JOBS_REMOVE_ENABLED', false),
   /** Xem payload (đã che field nhạy cảm) — quyền riêng, mỗi lần xem được ghi audit. */
   payload: booleanOr('OPS_JOBS_PAYLOAD_ENABLED', true),
+  /** Bắt buộc kiểm tra RBAC permission ngay cả khi gọi nội bộ không có token. */
+  requireRbac: booleanOr('OPS_JOBS_REQUIRE_RBAC', false),
 });
 
 export type JobsConfig = ReturnType<typeof jobsConfig>;

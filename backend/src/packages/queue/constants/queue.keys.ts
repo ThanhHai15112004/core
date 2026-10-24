@@ -11,12 +11,21 @@ export const queueKeys = (redis: RedisService) => ({
   collectLock: () => redis.key('wqmon', 'lock', 'collect'),
   /** LIST audit thao tác từng job (retry / cancel / remove / payload). */
   jobOperations: () => redis.key('wqmon', 'jobops'),
+  /** Tín hiệu huỷ hợp tác cho job đang chạy (TTL 24h). */
+  cancelSignal: (queue: string, jobId: string) => redis.key('wqmon', 'cancel', queue, jobId),
+  /** Snapshot tiến độ của job phục vụ theo dõi import/export/xử lý file (TTL 7 ngày). */
+  progressSnapshot: (queue: string, jobId: string) => redis.key('wqmon', 'progress', queue, jobId),
+  /** Danh sách lưu trữ bền vững các job thất bại cuối cùng (Dead-Letter Archive) để tra cứu nguyên nhân. */
+  failedArchive: () => redis.key('wqmon', 'failed-archive'),
 });
 
 export const JOB_OPERATION_LOG_SIZE = 500;
 
 export const QUEUE_EVENT_LOG_SIZE = 1000;
 export const QUEUE_OPERATION_LOG_SIZE = 500;
+export const FAILED_JOB_ARCHIVE_SIZE = 1000;
+export const CANCEL_SIGNAL_TTL_SEC = 86_400;
+export const PROGRESS_SNAPSHOT_TTL_SEC = 7 * 86_400;
 
 /** Key Redis của Scheduler (định nghĩa task, task bị tắt, audit thao tác) — đã có REDIS_PREFIX. */
 export const schedulerKeys = (redis: RedisService) => ({

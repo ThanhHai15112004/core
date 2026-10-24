@@ -5,13 +5,19 @@ import { LoggingModule } from '@packages/logging/index.js';
 import { I18nModule } from '@packages/i18n/index.js';
 import { DatabaseModule } from '@packages/database/index.js';
 import { MessagingModule } from '@packages/messaging/index.js';
+import { QueueModule } from '@packages/queue/index.js';
 import { CacheModule } from '@packages/cache/index.js';
 import { StorageModule } from '@packages/storage/index.js';
 import { RedisModule } from '@packages/redis/index.js';
 import { RuntimeAgentModule } from '@packages/runtime/index.js';
 import { MetricsModule } from '@packages/metrics/index.js';
 import { SystemProcessor } from './processors/system/system.processor.js';
+import { CriticalProcessor } from './processors/critical/critical.processor.js';
+import { NotificationsProcessor } from './processors/notifications/notifications.processor.js';
+import { HeavyJobProcessor } from './processors/heavy/heavy-job.processor.js';
 import { WorkerRuntimeContributor } from './runtime/worker-runtime.contributor.js';
+
+const PROCESSORS = [SystemProcessor, CriticalProcessor, NotificationsProcessor, HeavyJobProcessor];
 
 @Module({
   imports: [
@@ -24,10 +30,11 @@ import { WorkerRuntimeContributor } from './runtime/worker-runtime.contributor.j
     LoggingModule.forRoot({ runtime: 'worker' }),
     DatabaseModule,
     MessagingModule,
+    QueueModule,
     CacheModule,
     StorageModule,
   ],
-  providers: [SystemProcessor, WorkerRuntimeContributor],
-  exports: [SystemProcessor],
+  providers: [...PROCESSORS, WorkerRuntimeContributor],
+  exports: [...PROCESSORS],
 })
 export class WorkerModule {}

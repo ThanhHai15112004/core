@@ -1450,7 +1450,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"passwordHashAlgorithm\": \"SCRYPT\",\n  \"dbEncryptionAlgorithm\": \"AES_256_GCM\",\n  \"encryptFieldsAtRest\": true,\n  \"mfaPolicy\": \"OPTIONAL\",\n  \"allowedMfaMethods\": [\n    \"TOTP\"\n  ],\n  \"maxFailedLoginAttempts\": 3,\n  \"lockoutDurationMinutes\": 1,\n  \"passwordMinLength\": 6,\n  \"requireUppercase\": true,\n  \"requireNumbers\": true,\n  \"requireSpecialChars\": true,\n  \"requireCurrentPasswordOnChange\": true,\n  \"disallowedPasswords\": [\n    \"disallowedPasswords_sample\"\n  ],\n  \"disallowUserInfoInPassword\": true,\n  \"preventPasswordReuse\": true,\n  \"passwordHistoryLimit\": 1,\n  \"revokeSessionsOnPasswordChange\": true,\n  \"allowEmailRegistration\": true,\n  \"allowPhoneRegistration\": true,\n  \"requireEmailVerification\": true,\n  \"requirePhoneVerification\": true,\n  \"otpMaxSendCount\": 1,\n  \"otpMaxAttempts\": 1,\n  \"otpCooldownSeconds\": 0,\n  \"sessionIdleTimeoutMinutes\": 0,\n  \"sessionMaxLifetimeMinutes\": 5,\n  \"enableLoginAuditLog\": true\n}",
+              "raw": "{\n  \"passwordHashAlgorithm\": \"SCRYPT\",\n  \"dbEncryptionAlgorithm\": \"AES_256_GCM\",\n  \"encryptFieldsAtRest\": true,\n  \"mfaPolicy\": \"OPTIONAL\",\n  \"allowedMfaMethods\": [\n    \"TOTP\"\n  ],\n  \"maxFailedLoginAttempts\": 3,\n  \"lockoutDurationMinutes\": 1,\n  \"passwordMinLength\": 6,\n  \"requireUppercase\": true,\n  \"requireNumbers\": true,\n  \"requireSpecialChars\": true,\n  \"requireCurrentPasswordOnChange\": true,\n  \"disallowedPasswords\": [\n    \"disallowedPasswords_sample\"\n  ],\n  \"disallowUserInfoInPassword\": true,\n  \"preventPasswordReuse\": true,\n  \"passwordHistoryLimit\": 1,\n  \"revokeSessionsOnPasswordChange\": true,\n  \"allowEmailRegistration\": true,\n  \"allowPhoneRegistration\": true,\n  \"requireEmailVerification\": true,\n  \"requirePhoneVerification\": true,\n  \"otpMaxSendCount\": 1,\n  \"otpMaxAttempts\": 1,\n  \"otpCooldownSeconds\": 0,\n  \"sessionIdleTimeoutMinutes\": 0,\n  \"sessionMaxLifetimeMinutes\": 5,\n  \"enableLoginAuditLog\": true,\n  \"passwordResetTtlSeconds\": 60,\n  \"mfaEmailOtpTtlSeconds\": 30,\n  \"mfaSmsOtpTtlSeconds\": 30,\n  \"mfaTrustedDeviceDays\": 1,\n  \"mfaMaxTrustedDevices\": 1,\n  \"mfaRecoveryCodeCount\": 4,\n  \"mfaChallengeTtlSeconds\": 60,\n  \"mfaAdminRoleCodes\": [\n    \"mfaAdminRoleCodes_sample\"\n  ],\n  \"stepUpTokenTtlSeconds\": 60,\n  \"emailVerificationTtlSeconds\": 60,\n  \"phoneOtpTtlSeconds\": 30,\n  \"sessionAccessTokenTtlSeconds\": 60,\n  \"sessionRefreshTokenTtlSeconds\": 300,\n  \"apiClientDefaultTokenTtlSeconds\": 60,\n  \"apiClientMaxUsageLogs\": 5\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -2525,6 +2525,1100 @@
       ]
     },
     {
+      "name": "File Management",
+      "item": [
+        {
+          "name": "Tìm kiếm và lọc file theo tên, loại, người tải, thời gian, thư mục và trạng thái",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/files?page=1&limit=20&search=search_sample&folderId=0&category=1&status=1&visibility=1&extension=extension_sample&mimeType=mimeType_sample&uploadedByUserId=1&organizationUnitId=1&createdFrom=createdFrom_sample&createdTo=createdTo_sample&minSizeBytes=0&maxSizeBytes=0&onlyReferenced=true&onlyUnused=true",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "files"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "search",
+                  "value": "search_sample"
+                },
+                {
+                  "key": "folderId",
+                  "value": "0"
+                },
+                {
+                  "key": "category",
+                  "value": "1"
+                },
+                {
+                  "key": "status",
+                  "value": "1"
+                },
+                {
+                  "key": "visibility",
+                  "value": "1"
+                },
+                {
+                  "key": "extension",
+                  "value": "extension_sample"
+                },
+                {
+                  "key": "mimeType",
+                  "value": "mimeType_sample"
+                },
+                {
+                  "key": "uploadedByUserId",
+                  "value": "1"
+                },
+                {
+                  "key": "organizationUnitId",
+                  "value": "1"
+                },
+                {
+                  "key": "createdFrom",
+                  "value": "createdFrom_sample"
+                },
+                {
+                  "key": "createdTo",
+                  "value": "createdTo_sample"
+                },
+                {
+                  "key": "minSizeBytes",
+                  "value": "0"
+                },
+                {
+                  "key": "maxSizeBytes",
+                  "value": "0"
+                },
+                {
+                  "key": "onlyReferenced",
+                  "value": "true"
+                },
+                {
+                  "key": "onlyUnused",
+                  "value": "true"
+                }
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `files.read`"
+          }
+        },
+        {
+          "name": "Dọn các file không có liên kết sử dụng (usageCount = 0) đã vượt quá thời gian lưu giữ an toàn (Mục 6.3)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/files/cleanup-unused",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "files",
+                "cleanup-unused"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"olderThanDays\": 0,\n  \"action\": \"trash\",\n  \"organizationUnitId\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `files.delete`"
+          }
+        },
+        {
+          "name": "Lấy danh sách cây thư mục ảo trong File Manager (lọc theo quyền & đơn vị)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/files/folders?organizationUnitId=1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "files",
+                "folders"
+              ],
+              "query": [
+                {
+                  "key": "organizationUnitId",
+                  "value": "1"
+                }
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `files.read`"
+          }
+        },
+        {
+          "name": "Tạo thư mục mới trong File Manager (không thay đổi đường dẫn vật lý)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/files/folders",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "files",
+                "folders"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"name_sample\",\n  \"parentId\": 1,\n  \"organizationUnitId\": 1,\n  \"description\": \"description_sample\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `files.manage`"
+          }
+        },
+        {
+          "name": "Đổi tên hoặc di chuyển thư mục (kiểm tra quyền, chống vòng lặp & cập nhật đường dẫn con)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/files/folders/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "files",
+                "folders",
+                ":id"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"name_sample\",\n  \"parentId\": 1,\n  \"description\": \"description_sample\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `files.manage`"
+          }
+        },
+        {
+          "name": "Xóa thư mục trống (chặn xóa khi còn thư mục con hoặc tệp tin)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/files/folders/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "files",
+                "folders",
+                ":id"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `files.manage`"
+          }
+        },
+        {
+          "name": "Thống kê dung lượng lưu trữ, số lượng theo phân loại và cấu hình File Manager",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/files/stats",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "files",
+                "stats"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `files.read`"
+          }
+        },
+        {
+          "name": "Tải file thông qua đường dẫn tạm thời có chữ ký và thời hạn tự hết hạn (Mục 6.2)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/files/temporary-download/:token",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "files",
+                "temporary-download",
+                ":token"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Chế độ truy cập**: `Public` (Không yêu cầu đăng nhập)"
+          }
+        },
+        {
+          "name": "Dọn dẹp vĩnh viễn các file trong thùng rác đã hết thời gian chờ",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/files/trash/purge-expired",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "files",
+                "trash",
+                "purge-expired"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `files.delete`"
+          }
+        },
+        {
+          "name": "Tải một file lên hệ thống (kiểm tra định dạng, chữ ký Magic Bytes và hạn mức dung lượng)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/files/upload",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "files",
+                "upload"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fileName\": \"fileName_sample\",\n  \"displayName\": \"displayName_sample\",\n  \"mimeType\": \"mimeType_sample\",\n  \"contentBase64\": \"contentBase64_sample\",\n  \"textContent\": \"textContent_sample\",\n  \"folderId\": 1,\n  \"visibility\": 1,\n  \"organizationUnitId\": 1,\n  \"moduleName\": \"moduleName_sample\",\n  \"expectedCategory\": 1,\n  \"stageForScan\": true,\n  \"quarantineOnThreat\": true,\n  \"rejectDuplicate\": true,\n  \"reuseDuplicate\": true,\n  \"optimizeImage\": true,\n  \"generateThumbnail\": true,\n  \"maxWidth\": 16,\n  \"maxHeight\": 16,\n  \"quality\": 10,\n  \"metadata\": {}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `files.upload`"
+          }
+        },
+        {
+          "name": "Tải nhiều file lên hệ thống cùng lúc (Batch Upload)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/files/upload-batch",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "files",
+                "upload-batch"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"files\": [\n    {\n      \"fileName\": \"fileName_sample\",\n      \"displayName\": \"displayName_sample\",\n      \"mimeType\": \"mimeType_sample\",\n      \"contentBase64\": \"contentBase64_sample\",\n      \"textContent\": \"textContent_sample\",\n      \"folderId\": 1,\n      \"visibility\": 1,\n      \"organizationUnitId\": 1,\n      \"moduleName\": \"moduleName_sample\",\n      \"expectedCategory\": 1,\n      \"stageForScan\": true,\n      \"quarantineOnThreat\": true,\n      \"rejectDuplicate\": true,\n      \"reuseDuplicate\": true,\n      \"optimizeImage\": true,\n      \"generateThumbnail\": true,\n      \"maxWidth\": 16,\n      \"maxHeight\": 16,\n      \"quality\": 10,\n      \"metadata\": {}\n    }\n  ],\n  \"folderId\": 1,\n  \"visibility\": 1,\n  \"organizationUnitId\": 1,\n  \"moduleName\": \"moduleName_sample\",\n  \"stageForScan\": true,\n  \"quarantineOnThreat\": true,\n  \"rejectDuplicate\": true,\n  \"reuseDuplicate\": true,\n  \"optimizeImage\": true,\n  \"generateThumbnail\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `files.upload`"
+          }
+        },
+        {
+          "name": "Xem thông tin chi tiết file kèm người tải, các chức năng đang sử dụng và phân quyền",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/files/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "files",
+                ":id"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `files.read`"
+          }
+        },
+        {
+          "name": "Đổi tên hiển thị file hoặc chuyển thư mục (giữ nguyên liên kết sử dụng và không làm thay đổi file gốc)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/files/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "files",
+                ":id"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"displayName\": \"displayName_sample\",\n  \"folderId\": 1,\n  \"visibility\": 1,\n  \"metadata\": {}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `files.manage`"
+          }
+        },
+        {
+          "name": "Xóa vĩnh viễn file khỏi hệ thống lưu trữ (chặn nếu còn liên kết dữ liệu)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/files/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "files",
+                ":id"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `files.delete`"
+          }
+        },
+        {
+          "name": "Tải file xuống sau khi kiểm tra quyền tải (có thể khác quyền xem thông tin)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/files/:id/download",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "files",
+                ":id",
+                "download"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `files.download`"
+          }
+        },
+        {
+          "name": "Xem danh sách phân quyền xem/tải của file theo người dùng, vai trò hoặc đơn vị (Mục 6.2)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/files/:id/permissions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "files",
+                ":id",
+                "permissions"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `files.read`"
+          }
+        },
+        {
+          "name": "Cấp hoặc cập nhật quyền xem (canView) và tải (canDownload) file theo người dùng, vai trò hoặc đơn vị",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/files/:id/permissions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "files",
+                ":id",
+                "permissions"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"subjectType\": 1,\n  \"subjectId\": \"550e8400-e29b-41d4-a716-446655440000\",\n  \"canView\": true,\n  \"canDownload\": false,\n  \"expiresAt\": \"2026-10-14T10:00:00.000Z\",\n  \"note\": \"note_sample\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `files.manage`"
+          }
+        },
+        {
+          "name": "Thu hồi quyền truy cập file đã cấp cho người dùng, vai trò hoặc đơn vị",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/files/:id/permissions/:permissionId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "files",
+                ":id",
+                "permissions",
+                ":permissionId"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `files.manage`"
+          }
+        },
+        {
+          "name": "Truy cập trực tiếp hoặc điều hướng CDN cho tệp tin công khai (chỉ áp dụng khi visibility = PUBLIC — Mục 6.4.7)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/files/:id/public",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "files",
+                ":id",
+                "public"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Chế độ truy cập**: `Public` (Không yêu cầu đăng nhập)"
+          }
+        },
+        {
+          "name": "Quét lại mã độc & công bố file từ khu vực chờ (PENDING_SCAN) sang trạng thái hoạt động (ACTIVE) (Mục 6.3)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/files/:id/publish",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "files",
+                ":id",
+                "publish"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `files.manage`"
+          }
+        },
+        {
+          "name": "Cách ly file nghi ngờ hoặc chứa mã độc vào khu vực QUARANTINED (Mục 6.3)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/files/:id/quarantine",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "files",
+                ":id",
+                "quarantine"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"reason_sample\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `files.manage`"
+          }
+        },
+        {
+          "name": "Khôi phục file từ thùng rác (chỉ khi file chưa bị xóa vĩnh viễn)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/files/:id/restore",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "files",
+                ":id",
+                "restore"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `files.manage`"
+          }
+        },
+        {
+          "name": "Phát luồng Video/Audio/Preview hỗ trợ HTTP Byte-Range (206 Partial Content)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/files/:id/stream",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "files",
+                ":id",
+                "stream"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `files.download`"
+          }
+        },
+        {
+          "name": "Tạo đường dẫn tải file tạm thời tự hết hạn (Signed Temporary Download Link — Mục 6.2)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/files/:id/temporary-link",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "files",
+                ":id",
+                "temporary-link"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"expiresInSeconds\": 10,\n  \"disposition\": \"attachment\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `files.download`"
+          }
+        },
+        {
+          "name": "Lấy ảnh nhỏ (thumbnail) để hiển thị nhanh trên giao diện (Mục 6.3)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/files/:id/thumbnail",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "files",
+                ":id",
+                "thumbnail"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `files.read`"
+          }
+        },
+        {
+          "name": "Đưa file vào thùng rác (chặn nếu file đang được chức năng khác sử dụng)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/files/:id/trash",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "files",
+                ":id",
+                "trash"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `files.manage`"
+          }
+        },
+        {
+          "name": "Xem danh sách các chức năng và bản ghi đang sử dụng file",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/files/:id/usages",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "files",
+                ":id",
+                "usages"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `files.read`"
+          }
+        },
+        {
+          "name": "Đăng ký liên kết một chức năng/bản ghi đang sử dụng file",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/files/:id/usages",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "files",
+                ":id",
+                "usages"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"moduleName\": \"moduleName_sample\",\n  \"entityType\": \"entityType_sample\",\n  \"entityId\": \"550e8400-e29b-41d4-a716-446655440000\",\n  \"fieldName\": \"default\",\n  \"note\": \"note_sample\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `files.manage`"
+          }
+        },
+        {
+          "name": "Gỡ liên kết sử dụng file khỏi một chức năng/bản ghi",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/files/:id/usages/:usageId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "files",
+                ":id",
+                "usages",
+                ":usageId"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `files.manage`"
+          }
+        },
+        {
+          "name": "Đối chiếu Checksum SHA-256 của file vật lý trên Storage để phát hiện file bị thay đổi hoặc trùng lặp (Mục 6.3)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/files/:id/verify-integrity",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "files",
+                ":id",
+                "verify-integrity"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `files.read`"
+          }
+        }
+      ]
+    },
+    {
       "name": "System Health",
       "item": [
         {
@@ -2548,7 +3642,7 @@
                 "health"
               ]
             },
-            "description": "Trả về trạng thái kết nối thực tế của Database, Redis và mức sử dụng bộ nhớ Heap của tiến trình.\n\n### 🔐 Xác thực & Phân quyền (Access Control)\n- **Chế độ truy cập**: `Public` (Không yêu cầu đăng nhập)"
+            "description": "Trả về trạng thái kết nối thực tế của Database, Redis, Storage và mức sử dụng bộ nhớ Heap của tiến trình.\n\n### 🔐 Xác thực & Phân quyền (Access Control)\n- **Chế độ truy cập**: `Public` (Không yêu cầu đăng nhập)"
           }
         }
       ]
@@ -2578,6 +3672,1178 @@
               ]
             },
             "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Chế độ truy cập**: `Public` (Không yêu cầu đăng nhập)"
+          }
+        }
+      ]
+    },
+    {
+      "name": "In-App Notifications",
+      "item": [
+        {
+          "name": "Lấy cấu hình vận hành hiện hành của hệ thống thông báo (Settings + Feature Flags)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/notifications/config?organizationUnitId=1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "notifications",
+                "config"
+              ],
+              "query": [
+                {
+                  "key": "organizationUnitId",
+                  "value": "1"
+                }
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)"
+          }
+        },
+        {
+          "name": "Cập nhật cấu hình vận hành hệ thống thông báo (yêu cầu quyền notifications.manage)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/notifications/config",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "notifications",
+                "config"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"enabled\": true,\n  \"orgUnitTargetingEnabled\": true,\n  \"orgUnitIncludeSubUnitsDefault\": true,\n  \"roleTargetingEnabled\": true,\n  \"allowUserCustomization\": true,\n  \"lockSecurityInApp\": true,\n  \"autoReadOnOpen\": true,\n  \"retentionDays\": 0,\n  \"pollingIntervalSec\": 5,\n  \"maxRecipientsPerBatch\": 1,\n  \"maxTitleLength\": 20,\n  \"maxBodyLength\": 100,\n  \"enabledChannels\": [\n    \"IN_APP\"\n  ],\n  \"defaultChannels\": [\n    \"IN_APP\"\n  ],\n  \"orgUnitBroadcastFlagEnabled\": true,\n  \"roleBroadcastFlagEnabled\": true,\n  \"inAppFeatureEnabled\": true,\n  \"userPreferencesFlagEnabled\": true,\n  \"emailFeatureEnabled\": true,\n  \"smsFeatureEnabled\": true,\n  \"pushFeatureEnabled\": true,\n  \"emailProvider\": \"user@example.com\",\n  \"emailFromAddress\": \"user@example.com\",\n  \"emailFromName\": \"user@example.com\",\n  \"smsProvider\": \"smsProvider_sample\",\n  \"smsSenderId\": \"550e8400-e29b-41d4-a716-446655440000\",\n  \"pushProvider\": \"pushProvider_sample\",\n  \"dispatchBatchSize\": 1,\n  \"dispatchRateLimitPerSec\": 1,\n  \"retryEnabled\": true,\n  \"retryMaxAttempts\": 1,\n  \"retryBaseDelaySec\": 1,\n  \"autoSuppressOnPermanentFailure\": true,\n  \"quotaCurrency\": \"quotaCurrency_sample\",\n  \"quotaHardStopOnExceed\": true,\n  \"smsDailyQuota\": 0,\n  \"smsMonthlyBudget\": 0,\n  \"smsCostPerSegment\": 0,\n  \"emailDailyQuota\": 0,\n  \"emailCostPerMessage\": 0,\n  \"pushDailyQuota\": 0,\n  \"pushCostPerMessage\": 0\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `notifications.manage`"
+          }
+        },
+        {
+          "name": "Tra cứu lịch sử gửi đa kênh (Queued, Sent, Delivered, Failed, Suppressed), số lần retry và chi phí",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/notifications/deliveries?page=1&limit=20&notificationId=1&recipientUserId=1&channel=1&status=1&providerCode=providerCode_sample&batchKey=batchKey_sample&search=search_sample",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "notifications",
+                "deliveries"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "notificationId",
+                  "value": "1"
+                },
+                {
+                  "key": "recipientUserId",
+                  "value": "1"
+                },
+                {
+                  "key": "channel",
+                  "value": "1"
+                },
+                {
+                  "key": "status",
+                  "value": "1"
+                },
+                {
+                  "key": "providerCode",
+                  "value": "providerCode_sample"
+                },
+                {
+                  "key": "batchKey",
+                  "value": "batchKey_sample"
+                },
+                {
+                  "key": "search",
+                  "value": "search_sample"
+                }
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `notifications.read`"
+          }
+        },
+        {
+          "name": "Quét và tự động gửi lại theo lô các bản tin bị lỗi tạm thời đã tới hạn retry",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/notifications/deliveries/retry-due",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "notifications",
+                "deliveries",
+                "retry-due"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `notifications.send`"
+          }
+        },
+        {
+          "name": "Thử gửi lại 1 bản tin lỗi (đảm bảo không gửi trùng nếu đã Sent/Delivered)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/notifications/deliveries/:id/retry",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "notifications",
+                "deliveries",
+                ":id",
+                "retry"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `notifications.send`"
+          }
+        },
+        {
+          "name": "Cập nhật trạng thái gửi từ Provider Webhook (Delivered / Failed + tự động chặn nếu Hard Bounce)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/notifications/deliveries/:id/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "notifications",
+                "deliveries",
+                ":id",
+                "status"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": 1,\n  \"providerMessageId\": \"550e8400-e29b-41d4-a716-446655440000\",\n  \"errorCode\": \"errorCode_sample\",\n  \"errorMessage\": \"errorMessage_sample\",\n  \"isPermanentFailure\": true,\n  \"suppressionReason\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `notifications.send`"
+          }
+        },
+        {
+          "name": "Tra cứu lịch sử phát thông báo gốc (không bị ảnh hưởng khi người nhận xóa/lưu trữ)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/notifications/dispatches?page=1&limit=20&search=search_sample&category=1&priority=1&targetType=1&organizationUnitId=1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "notifications",
+                "dispatches"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "search",
+                  "value": "search_sample"
+                },
+                {
+                  "key": "category",
+                  "value": "1"
+                },
+                {
+                  "key": "priority",
+                  "value": "1"
+                },
+                {
+                  "key": "targetType",
+                  "value": "1"
+                },
+                {
+                  "key": "organizationUnitId",
+                  "value": "1"
+                }
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `notifications.read`"
+          }
+        },
+        {
+          "name": "Xem chi tiết bản ghi lịch sử gửi thông báo và danh sách trạng thái hộp thư người nhận",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/notifications/dispatches/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "notifications",
+                "dispatches",
+                ":id"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `notifications.read`"
+          }
+        },
+        {
+          "name": "Lấy danh sách hộp thư thông báo cá nhân (lọc theo trạng thái đọc, lưu trữ, phân nhóm)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/notifications/inbox?page=1&limit=20&search=search_sample&inboxStatus=1&isRead=true&category=1&priority=1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "notifications",
+                "inbox"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "search",
+                  "value": "search_sample"
+                },
+                {
+                  "key": "inboxStatus",
+                  "value": "1"
+                },
+                {
+                  "key": "isRead",
+                  "value": "true"
+                },
+                {
+                  "key": "category",
+                  "value": "1"
+                },
+                {
+                  "key": "priority",
+                  "value": "1"
+                }
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)"
+          }
+        },
+        {
+          "name": "Đánh dấu đã đọc tất cả thông báo chưa đọc trong hộp thư cá nhân",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/notifications/inbox/mark-all-read",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "notifications",
+                "inbox",
+                "mark-all-read"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"category\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)"
+          }
+        },
+        {
+          "name": "Xem chi tiết thông báo trong hộp thư cá nhân (hỗ trợ tự động đánh dấu đã đọc)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/notifications/inbox/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "notifications",
+                "inbox",
+                ":id"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)"
+          }
+        },
+        {
+          "name": "Xóa thông báo khỏi hộp thư cá nhân (giữ nguyên 100% lịch sử gửi của hệ thống)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/notifications/inbox/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "notifications",
+                "inbox",
+                ":id"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)"
+          }
+        },
+        {
+          "name": "Lưu trữ hoặc bỏ lưu trữ thông báo trong hộp thư cá nhân (không ảnh hưởng lịch sử gửi)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/notifications/inbox/:id/archive",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "notifications",
+                "inbox",
+                ":id",
+                "archive"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"archived\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)"
+          }
+        },
+        {
+          "name": "Đánh dấu đã đọc hoặc chưa đọc một thông báo và trả về unreadCount mới",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/notifications/inbox/:id/read",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "notifications",
+                "inbox",
+                ":id",
+                "read"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"isRead\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)"
+          }
+        },
+        {
+          "name": "Lấy thiết lập sở thích nhận thông báo theo từng phân nhóm và kênh của người dùng",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/notifications/preferences",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "notifications",
+                "preferences"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)"
+          }
+        },
+        {
+          "name": "Cập nhật thiết lập kênh nhận thông báo được phép theo từng phân nhóm",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/notifications/preferences",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "notifications",
+                "preferences"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"preferences\": [\n    {\n      \"category\": 1,\n      \"inAppEnabled\": true,\n      \"emailEnabled\": true,\n      \"smsEnabled\": true,\n      \"pushEnabled\": true,\n      \"mutedUntil\": \"2026-10-14T10:00:00.000Z\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)"
+          }
+        },
+        {
+          "name": "Lấy danh sách thiết bị đã đăng ký nhận Push Notification của người dùng hiện tại",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/notifications/push-subscriptions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "notifications",
+                "push-subscriptions"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)"
+          }
+        },
+        {
+          "name": "Đăng ký token thiết bị hoặc Web Push endpoint để nhận Push Notification",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/notifications/push-subscriptions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "notifications",
+                "push-subscriptions"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"platform\": 1,\n  \"deviceToken\": \"deviceToken_sample\",\n  \"endpoint\": \"endpoint_sample\",\n  \"p256dhKey\": \"p256dhKey_sample\",\n  \"authKey\": \"authKey_sample\",\n  \"deviceName\": \"deviceName_sample\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)"
+          }
+        },
+        {
+          "name": "Hủy đăng ký thiết bị nhận Push Notification",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/notifications/push-subscriptions/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "notifications",
+                "push-subscriptions",
+                ":id"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)"
+          }
+        },
+        {
+          "name": "Theo dõi chi phí lũy kế, số lượng segment SMS và hạn mức Quota ngày/tháng của nhà cung cấp",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/notifications/quota-summary?organizationUnitId=1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "notifications",
+                "quota-summary"
+              ],
+              "query": [
+                {
+                  "key": "organizationUnitId",
+                  "value": "1"
+                }
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `notifications.read`"
+          }
+        },
+        {
+          "name": "Tạo thông báo cho 1 người dùng (SINGLE_USER), nhóm (USER_GROUP), vai trò (ROLE) hoặc đơn vị (ORG_UNIT)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/notifications/send",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "notifications",
+                "send"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"title_sample\",\n  \"content\": \"content_sample\",\n  \"templateCode\": \"templateCode_sample\",\n  \"templateVariables\": {},\n  \"locale\": \"locale_sample\",\n  \"idempotencyKey\": \"idempotencyKey_sample\",\n  \"category\": 1,\n  \"priority\": 1,\n  \"targetType\": 1,\n  \"userId\": 1,\n  \"userIds\": [\n    1\n  ],\n  \"roleIds\": [\n    1\n  ],\n  \"roleCodes\": [\n    \"roleCodes_sample\"\n  ],\n  \"organizationUnitIds\": [\n    1\n  ],\n  \"includeSubUnits\": true,\n  \"channels\": [\n    1\n  ],\n  \"actionUrl\": \"https://example.com/resource\",\n  \"referenceModule\": \"referenceModule_sample\",\n  \"referenceType\": \"referenceType_sample\",\n  \"referenceId\": \"550e8400-e29b-41d4-a716-446655440000\",\n  \"metadata\": {},\n  \"organizationUnitId\": 1,\n  \"forceDeliver\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `notifications.send`"
+          }
+        },
+        {
+          "name": "Lấy danh sách các địa chỉ Email, SĐT hoặc Push Token bị dừng gửi (Suppression List)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/notifications/suppressions?page=1&limit=20&channel=1&reason=1&isActive=true&search=search_sample",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "notifications",
+                "suppressions"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "channel",
+                  "value": "1"
+                },
+                {
+                  "key": "reason",
+                  "value": "1"
+                },
+                {
+                  "key": "isActive",
+                  "value": "true"
+                },
+                {
+                  "key": "search",
+                  "value": "search_sample"
+                }
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `notifications.read`"
+          }
+        },
+        {
+          "name": "Thêm địa chỉ Email, SĐT hoặc Push Token vào danh sách dừng gửi (Suppression List)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/notifications/suppressions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "notifications",
+                "suppressions"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"channel\": 1,\n  \"destination\": \"destination_sample\",\n  \"reason\": 1,\n  \"errorMessage\": \"errorMessage_sample\",\n  \"expiresAt\": \"2026-10-14T10:00:00.000Z\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `notifications.manage`"
+          }
+        },
+        {
+          "name": "Gỡ chặn địa chỉ hoặc token khỏi danh sách dừng gửi",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/notifications/suppressions/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "notifications",
+                "suppressions",
+                ":id"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `notifications.manage`"
+          }
+        },
+        {
+          "name": "Lấy danh sách template thông báo đa kênh (Email, SMS, Push)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/notifications/templates?page=1&limit=20&search=search_sample&channel=1&category=1&locale=locale_sample&isActive=true",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "notifications",
+                "templates"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "search",
+                  "value": "search_sample"
+                },
+                {
+                  "key": "channel",
+                  "value": "1"
+                },
+                {
+                  "key": "category",
+                  "value": "1"
+                },
+                {
+                  "key": "locale",
+                  "value": "locale_sample"
+                },
+                {
+                  "key": "isActive",
+                  "value": "true"
+                }
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `notifications.read`"
+          }
+        },
+        {
+          "name": "Tạo hoặc cập nhật template thông báo đa kênh (tách nội dung khỏi code nghiệp vụ)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/notifications/templates",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "notifications",
+                "templates"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"code_sample\",\n  \"name\": \"name_sample\",\n  \"channel\": 1,\n  \"category\": 1,\n  \"locale\": \"vi\",\n  \"subjectTemplate\": \"subjectTemplate_sample\",\n  \"bodyTemplate\": \"bodyTemplate_sample\",\n  \"htmlTemplate\": \"htmlTemplate_sample\",\n  \"variables\": [\n    \"variables_sample\"\n  ],\n  \"isActive\": true,\n  \"organizationUnitId\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `notifications.manage`"
+          }
+        },
+        {
+          "name": "Render thử nghiệm template thông báo với các biến mẫu và tính số segment SMS",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/notifications/templates/preview",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "notifications",
+                "templates",
+                "preview"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"templateCode\": \"templateCode_sample\",\n  \"channel\": 1,\n  \"locale\": \"vi\",\n  \"subjectTemplate\": \"subjectTemplate_sample\",\n  \"bodyTemplate\": \"bodyTemplate_sample\",\n  \"htmlTemplate\": \"htmlTemplate_sample\",\n  \"variables\": {}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `notifications.read`"
+          }
+        },
+        {
+          "name": "Xóa template thông báo tùy chỉnh (chặn xóa template hệ thống)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/notifications/templates/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "notifications",
+                "templates",
+                ":id"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `notifications.manage`"
+          }
+        },
+        {
+          "name": "Lấy số lượng thông báo mới chưa đọc (unreadCount) và thống kê theo từng phân nhóm",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/notifications/unread-count",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "notifications",
+                "unread-count"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)"
           }
         }
       ]
@@ -6925,6 +9191,82 @@
               }
             },
             "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `organizations.manage`"
+          }
+        },
+        {
+          "name": "Thống kê số lượng đơn vị theo cấp bậc, trạng thái và độ sâu cây",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/organizations/stats",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "organizations",
+                "stats"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `organizations.read`"
+          }
+        },
+        {
+          "name": "Sơ đồ cây đơn vị, chi nhánh và phòng ban phân cấp (kèm depth, path, children)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/organizations/tree?search=search_sample&type=1&status=1&parentId=1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "organizations",
+                "tree"
+              ],
+              "query": [
+                {
+                  "key": "search",
+                  "value": "search_sample"
+                },
+                {
+                  "key": "type",
+                  "value": "1"
+                },
+                {
+                  "key": "status",
+                  "value": "1"
+                },
+                {
+                  "key": "parentId",
+                  "value": "1"
+                }
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `organizations.read`"
           }
         },
         {

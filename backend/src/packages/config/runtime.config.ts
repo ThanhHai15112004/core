@@ -9,6 +9,7 @@ export const runtimeConfig = () => {
   const supervisor = (
     env('RUNTIME_SUPERVISOR', false) || 'none'
   ).toLowerCase() as RuntimeSupervisor;
+  const defaultConcurrency = env.number('WORKER_CONCURRENCY', false) || 5;
 
   return {
     /** Tiến trình nào sẽ dựng lại runtime sau khi nó tự thoát (restart). */
@@ -30,7 +31,12 @@ export const runtimeConfig = () => {
       : true,
     gracefulTimeoutMs: env.number('RUNTIME_GRACEFUL_TIMEOUT_MS', false) || 30000,
     worker: {
-      concurrency: env.number('WORKER_CONCURRENCY', false) || 5,
+      concurrency: defaultConcurrency,
+      criticalConcurrency: env.number('WORKER_CRITICAL_CONCURRENCY', false) || 10,
+      notificationsConcurrency: env.number('WORKER_NOTIFICATIONS_CONCURRENCY', false) || 8,
+      heavyConcurrency: env.number('WORKER_HEAVY_CONCURRENCY', false) || 2,
+      eventsConcurrency: env.number('WORKER_EVENTS_CONCURRENCY', false) || defaultConcurrency,
+      jobTimeoutMs: env.number('WORKER_JOB_TIMEOUT_MS', false) || 60000,
     },
     scheduler: {
       maintenanceCron: env('SCHEDULER_MAINTENANCE_CRON', false) || '*/5 * * * *',

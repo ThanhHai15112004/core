@@ -23,6 +23,8 @@ export interface JobMeta {
   index: Record<string, string>;
   /** Tên schema / phiên bản payload (vd. `GenerateReportPayload:v2`). */
   schema: string | null;
+  /** Thời gian chờ thực thi tối đa (ms) cho job trước khi bị ngắt Timeout. */
+  timeoutMs?: number | null;
 }
 
 export interface PublishOptions {
@@ -30,6 +32,14 @@ export interface PublishOptions {
   delayMs?: number;
   /** Độ ưu tiên BullMQ (1 = cao nhất). Job không có priority được BullMQ lấy trước job có priority. */
   priority?: number;
+  /** Số lần thử tối đa cho job này (bị giới hạn trần bởi MAX_JOB_ATTEMPTS_CAP để chống retry vô hạn). */
+  attempts?: number;
+  /** Kiểu giãn cách giữa các lần retry ('exponential' | 'fixed'). */
+  backoff?: 'exponential' | 'fixed';
+  /** Thời gian chờ cơ sở trước lần retry đầu tiên (ms). */
+  backoffDelayMs?: number;
+  /** Thời gian thực thi tối đa của job (ms) trước khi ngắt lỗi Timeout. */
+  timeoutMs?: number;
   idempotencyKey?: string;
   index?: Record<string, string | number>;
   schema?: string;
