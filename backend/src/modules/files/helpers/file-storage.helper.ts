@@ -81,17 +81,19 @@ export function slugifyFolderName(name: string): string {
   );
 }
 
-/** Ký token HMAC-SHA256 cho đường dẫn tải file tạm thời */
+/** Ký token HMAC-SHA256 nhỏ gọn (< 70 ký tự) cho đường dẫn tải file tạm thời */
 export function signTemporaryDownloadToken(
   payload: TemporaryDownloadTokenPayload,
   secret: string,
 ): string {
-  const payloadSegment = Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url');
-  const signatureSegment = createHmac('sha256', secret).update(payloadSegment).digest('base64url');
-  return `${payloadSegment}.${signatureSegment}`;
+  const dispFlag = payload.disp === 'inline' ? 'i' : 'a';
+  const uidPart = typeof payload.uid === 'number' && payload.uid > 0 ? String(payload.uid) : '0';
+  const compactSegment = `${payload.fid}-${payload.exp}-${dispFlag}-${uidPart}`;
+  const signatureSegment = createHmac('sha256', secret).update(compactSegment).digest('base64url');
+  return `${compactSegment}.${signatureSegment}`;
 }
 
-/** Xác thực token HMAC-SHA256 của đường dẫn tải file tạm thời */
+/** Xác thực token HMAC-SHA256 của đường dẫn tải file tạm thời (hỗ trợ cả định dạng rút gọn và base64url JSON) */
 export function verifyTemporaryDownloadToken(
   token: string,
   secret: string,
@@ -110,6 +112,28 @@ export function verifyTemporaryDownloadToken(
       return null;
     }
 
+    const nowSeconds = Math.floor(Date.now() / 1000);
+
+    // 1. Định dạng nhỏ gọn: `<fid>-<exp>-<i|a>-<uid>`
+    const compactMatch = /^(\d+)-(\d+)-(i|a)-(\d+)$/.exec(payloadSegment);
+    if (compactMatch) {
+      const fid = Number.parseInt(compactMatch[1]!, 10);
+      const exp = Number.parseInt(compactMatch[2]!, 10);
+      const disp = compactMatch[3] === 'i' ? 'inline' : 'attachment';
+      const rawUid = Number.parseInt(compactMatch[4]!, 10);
+      if (fid <= 0 || exp <= nowSeconds) {
+        return null;
+      }
+      return {
+        typ: 'file_temp_dl',
+        fid,
+        exp,
+        disp,
+        uid: rawUid > 0 ? rawUid : null,
+      };
+    }
+
+    // 2. Tương thích ngược định dạng Base64url JSON
     const decoded = JSON.parse(
       Buffer.from(payloadSegment, 'base64url').toString('utf8'),
     ) as Partial<TemporaryDownloadTokenPayload>;
@@ -124,7 +148,6 @@ export function verifyTemporaryDownloadToken(
       return null;
     }
 
-    const nowSeconds = Math.floor(Date.now() / 1000);
     if (decoded.exp <= nowSeconds) {
       return null;
     }

@@ -244,41 +244,54 @@ export const FileRecordTable: React.FC<FileRecordTableProps> = ({
                       onClick={(e) => e.stopPropagation()}
                     >
                       <div style={{ display: 'inline-flex', gap: '0.35rem' }}>
-                        {item.status === 1 ? (
+                        {item.status !== 2 ? (
                           <>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                void filesApi
-                                  .downloadFileWithAuth(item)
-                                  .catch((err: unknown) =>
-                                    onShowError(
-                                      err instanceof Error ? err.message : 'Lỗi tải file',
-                                    ),
-                                  )
-                              }
-                              style={{
-                                padding: '0.32rem 0.5rem',
-                                borderRadius: '7px',
-                                border: '1px solid #e2e8f0',
-                                background: '#ffffff',
-                                color: '#475569',
-                                cursor: 'pointer',
-                              }}
-                              title="Tải xuống"
-                            >
-                              <Download size={14} />
-                            </button>
+                            {item.status === 1 && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  void filesApi
+                                    .downloadFileWithAuth(item)
+                                    .catch((err: unknown) =>
+                                      onShowError(
+                                        err instanceof Error ? err.message : 'Lỗi tải file',
+                                      ),
+                                    )
+                                }
+                                style={{
+                                  padding: '0.32rem 0.5rem',
+                                  borderRadius: '7px',
+                                  border: '1px solid #e2e8f0',
+                                  background: '#ffffff',
+                                  color: '#475569',
+                                  cursor: 'pointer',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '0.25rem',
+                                  fontSize: '0.74rem',
+                                  fontWeight: 600,
+                                }}
+                                title="Tải xuống"
+                              >
+                                <Download size={13} />
+                                <span>Tải</span>
+                              </button>
+                            )}
                             <button
                               type="button"
                               onClick={() => onMoveToTrash(item)}
                               style={{
-                                padding: '0.32rem 0.5rem',
+                                padding: '0.32rem 0.55rem',
                                 borderRadius: '7px',
-                                border: '1px solid #e2e8f0',
-                                background: '#ffffff',
+                                border: '1px solid #fecaca',
+                                background: '#fef2f2',
                                 color: item.usageCount > 0 ? '#94a3b8' : '#dc2626',
                                 cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '0.25rem',
+                                fontSize: '0.74rem',
+                                fontWeight: 600,
                               }}
                               title={
                                 item.usageCount > 0
@@ -286,7 +299,8 @@ export const FileRecordTable: React.FC<FileRecordTableProps> = ({
                                   : 'Đưa vào thùng rác'
                               }
                             >
-                              <Trash2 size={14} />
+                              <Trash2 size={13} />
+                              <span>Xóa</span>
                             </button>
                           </>
                         ) : (

@@ -212,4 +212,57 @@ export abstract class BaseQueueProcessor extends WorkerHost implements OnApplica
 
   /** Xử lý nghiệp vụ cụ thể của từng hàng đợi */
   protected abstract handle(envelope: MessageEnvelope, job: Job): Promise<unknown>;
+
+  /** Khởi tạo danh sách các pha (phases) và đánh dấu bước đầu tiên của job */
+  protected async initJobPhases(
+    job: Job,
+    phases: readonly string[],
+    total: number,
+    initialStep: string,
+    completedPhases: readonly string[] = [phases[0] ?? 'Validate'],
+    activePhase: string | undefined = phases[1] ?? phases[0],
+  ): Promise<void> {
+    if (!this.progressTracker) return;
+    await this.progressTracker.initPhases(job, phases, total);
+    await this.progressTracker.updateProgress(job, {
+      processed: 0,
+      total,
+      step: initialStep,
+      completedPhases,
+      ...(activePhase ? { activePhase } : {}),
+    });
+  }
+
+  /** Cập nhật tiến độ xử lý từng phần (chunk/batch) của job đang chạy */
+  protected async reportJobProgress(
+    job: Job,
+    input: {
+      readonly percent?: number;
+      readonly processed: number;
+      readonly total: number;
+      readonly step: string;
+      readonly completedPhases?: readonly string[];
+      readonly activePhase?: string;
+    },
+  ): Promise<void> {
+    if (!this.progressTracker) return;
+    await this.progressTracker.updateProgress(job, input);
+  }
+
+  /** Đánh dấu job hoàn tất 100% cùng toàn bộ các phase */
+  protected async completeJobProgress(
+    job: Job,
+    total: number,
+    step: string,
+    phases?: readonly string[],
+  ): Promise<void> {
+    if (!this.progressTracker) return;
+    await this.progressTracker.updateProgress(job, {
+      percent: 100,
+      processed: total,
+      total,
+      step,
+      ...(phases ? { completedPhases: [...phases] } : {}),
+    });
+  }
 }

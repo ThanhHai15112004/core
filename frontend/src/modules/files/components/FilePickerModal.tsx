@@ -124,6 +124,42 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
     }
   }, [isOpen, selectedFolderId, categoryFilter, searchQuery, sortBy, topTab]);
 
+  const [focusedPreviewUrl, setFocusedPreviewUrl] = useState<string | null>(null);
+  const [thumbUrlsById, setThumbUrlsById] = useState<Record<number, string>>({});
+  const focusedId = focusedFile?.id;
+  const focusedStatus = focusedFile?.status;
+  const focusedCategory = focusedFile?.category;
+
+  useEffect(() => {
+    let cancelled = false;
+    setFocusedPreviewUrl(null);
+    if (!focusedId || focusedStatus !== 1 || focusedCategory !== 2) {
+      return;
+    }
+    void filesApi.fetchAuthenticatedMediaUrl(focusedId, 'stream').then((url) => {
+      if (!cancelled) setFocusedPreviewUrl(url);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [focusedId, focusedStatus, focusedCategory]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const imageFiles = files.filter((f) => f.category === 1 && f.status === 1);
+    for (const imgFile of imageFiles) {
+      if (thumbUrlsById[imgFile.id]) continue;
+      void filesApi.fetchAuthenticatedMediaUrl(imgFile.id, 'thumbnail').then((url) => {
+        if (!cancelled && url) {
+          setThumbUrlsById((prev) => (prev[imgFile.id] ? prev : { ...prev, [imgFile.id]: url }));
+        }
+      });
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [files, thumbUrlsById]);
+
   useEffect(() => {
     if (isOpen) {
       setCategoryFilter(defaultCategory);
@@ -246,6 +282,7 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
   const renderCardThumbnail = (item: FileRecordItem) => {
     const badge = getFileBadgeStyle(item.category, item.extension);
     if (item.category === 1) {
+      const thumbSrc = thumbUrlsById[item.id];
       return (
         <div
           style={{
@@ -261,14 +298,16 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
             overflow: 'hidden',
           }}
         >
-          <img
-            src={filesApi.getStreamUrl(item.id)}
-            alt={item.displayName}
-            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-            onError={(e) => {
-              (e.currentTarget as HTMLImageElement).style.display = 'none';
-            }}
-          />
+          {thumbSrc && (
+            <img
+              src={thumbSrc}
+              alt={item.displayName}
+              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+              onError={(e) => {
+                (e.currentTarget as HTMLImageElement).style.display = 'none';
+              }}
+            />
+          )}
           <div
             style={{
               position: 'absolute',
@@ -1211,11 +1250,11 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
                       padding: focusedFile.category === 2 ? '0' : '1rem',
                     }}
                   >
-                    {focusedFile.category === 2 ? (
+                    {focusedFile.category === 2 && focusedPreviewUrl ? (
                       <video
                         controls
                         preload="metadata"
-                        src={filesApi.getStreamUrl(focusedFile.id)}
+                        src={focusedPreviewUrl}
                         style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                       />
                     ) : (
@@ -1476,9 +1515,24 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
                   <button
                     type="button"
                     onClick={() => {
-                      void navigator.clipboard?.writeText(filesApi.getStreamUrl(focusedFile.id));
-                      setCopiedNotice(true);
-                      setTimeout(() => setCopiedNotice(false), 1800);
+                      void (async () => {
+                        try {
+                          const link = await filesApi.createTemporaryLink(focusedFile.id, {
+                            disposition: 'inline',
+                            expiresInSeconds: 3600,
+                          });
+                          const targetUrl = link?.downloadUrl
+                            ? filesApi.resolveBackendUrl(link.downloadUrl)
+                            : filesApi.getStreamUrl(focusedFile.id);
+                          await navigator.clipboard?.writeText(targetUrl);
+                        } catch {
+                          await navigator.clipboard?.writeText(
+                            filesApi.getStreamUrl(focusedFile.id),
+                          );
+                        }
+                        setCopiedNotice(true);
+                        setTimeout(() => setCopiedNotice(false), 1800);
+                      })();
                     }}
                     style={{
                       width: '40px',

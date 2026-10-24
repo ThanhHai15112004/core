@@ -1,5 +1,5 @@
 import React from 'react';
-import { Download, Edit3, Eye, Globe, Lock, Unlink, X } from 'lucide-react';
+import { Download, Edit3, Eye, Globe, Lock, RotateCcw, Trash2, Unlink, X } from 'lucide-react';
 import { renderFileTypeIconBox } from '../helpers/file-ui.helper';
 import { filesApi } from '../services/files.api';
 import type {
@@ -57,6 +57,9 @@ export interface FileInspectorPanelProps {
   readonly onChangePermCanDownload: (checked: boolean) => void;
   readonly onSubmitGrantPermission: (e: React.FormEvent) => void;
   readonly onRevokePermission: (fileId: number, permissionId: number) => void;
+  readonly onMoveToTrash: (file: FileRecordItem) => void;
+  readonly onRestoreFromTrash: (file: FileRecordItem) => void;
+  readonly onPurgeFile: (file: FileRecordItem) => void;
   readonly onShowError: (message: string) => void;
 }
 
@@ -102,8 +105,37 @@ export const FileInspectorPanel: React.FC<FileInspectorPanelProps> = ({
   onChangePermCanDownload,
   onSubmitGrantPermission,
   onRevokePermission,
+  onMoveToTrash,
+  onRestoreFromTrash,
+  onPurgeFile,
   onShowError,
 }) => {
+  const [previewMediaUrl, setPreviewMediaUrl] = React.useState<string | null>(null);
+  const selectedId = selectedFile?.id;
+  const selectedStatus = selectedFile?.status;
+  const selectedCategory = selectedFile?.category;
+  const selectedThumbnailUrl = selectedFile?.thumbnailUrl;
+
+  React.useEffect(() => {
+    let cancelled = false;
+    setPreviewMediaUrl(null);
+    if (!selectedId || selectedStatus !== 1) {
+      return;
+    }
+    if (selectedCategory === 2) {
+      void filesApi.fetchAuthenticatedMediaUrl(selectedId, 'stream').then((url) => {
+        if (!cancelled) setPreviewMediaUrl(url);
+      });
+    } else if (selectedCategory === 1 && selectedThumbnailUrl) {
+      void filesApi.fetchAuthenticatedMediaUrl(selectedId, 'thumbnail').then((url) => {
+        if (!cancelled) setPreviewMediaUrl(url);
+      });
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedId, selectedStatus, selectedCategory, selectedThumbnailUrl]);
+
   return (
     <aside
       style={{
@@ -183,7 +215,7 @@ export const FileInspectorPanel: React.FC<FileInspectorPanelProps> = ({
           </div>
 
           {/* Hộp Preview trực quan */}
-          {selectedFile.status === 1 && selectedFile.category === 2 ? (
+          {selectedFile.status === 1 && selectedFile.category === 2 && previewMediaUrl ? (
             <div
               style={{
                 borderRadius: '14px',
@@ -195,7 +227,7 @@ export const FileInspectorPanel: React.FC<FileInspectorPanelProps> = ({
               <video
                 controls
                 preload="metadata"
-                src={filesApi.getStreamUrl(selectedFile.id)}
+                src={previewMediaUrl}
                 style={{ width: '100%', maxHeight: '185px', display: 'block' }}
               />
               <div
@@ -212,7 +244,7 @@ export const FileInspectorPanel: React.FC<FileInspectorPanelProps> = ({
                 <span>Byte-Range</span>
               </div>
             </div>
-          ) : selectedFile.category === 1 && selectedFile.thumbnailUrl ? (
+          ) : selectedFile.category === 1 && selectedFile.thumbnailUrl && previewMediaUrl ? (
             <div
               style={{
                 borderRadius: '14px',
@@ -232,7 +264,7 @@ export const FileInspectorPanel: React.FC<FileInspectorPanelProps> = ({
                 }}
               >
                 <img
-                  src={filesApi.getThumbnailUrl(selectedFile.id)}
+                  src={previewMediaUrl}
                   alt={selectedFile.displayName}
                   style={{
                     maxHeight: '130px',
@@ -340,76 +372,157 @@ export const FileInspectorPanel: React.FC<FileInspectorPanelProps> = ({
             </div>
           )}
 
-          {/* Hàng Nút Thao Tác Nhanh: Mở | Tải xuống | Đổi tên */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: '0.5rem' }}>
-            <a
-              href={filesApi.getStreamUrl(selectedFile.id)}
-              target="_blank"
-              rel="noreferrer"
-              style={{
-                padding: '0.5rem 0.65rem',
-                borderRadius: '9px',
-                border: '1px solid #e2e8f0',
-                background: '#f8fafc',
-                color: '#2563eb',
-                fontWeight: 600,
-                fontSize: '0.8rem',
-                textDecoration: 'none',
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '0.35rem',
-              }}
-            >
-              <Eye size={14} />
-              <span>Mở</span>
-            </a>
+          {/* Hàng Nút Thao Tác Nhanh: Mở | Tải xuống | Đổi tên | Xóa */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: '0.5rem' }}>
+              <button
+                type="button"
+                onClick={() =>
+                  void filesApi
+                    .openFileWithAuth(selectedFile)
+                    .catch((err: unknown) =>
+                      onShowError(err instanceof Error ? err.message : 'Lỗi mở file'),
+                    )
+                }
+                style={{
+                  padding: '0.5rem 0.65rem',
+                  borderRadius: '9px',
+                  border: '1px solid #e2e8f0',
+                  background: '#f8fafc',
+                  color: '#2563eb',
+                  fontWeight: 600,
+                  fontSize: '0.8rem',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '0.35rem',
+                  cursor: 'pointer',
+                }}
+              >
+                <Eye size={14} />
+                <span>Mở</span>
+              </button>
 
-            <button
-              type="button"
-              onClick={() =>
-                void filesApi
-                  .downloadFileWithAuth(selectedFile)
-                  .catch((err: unknown) =>
-                    onShowError(err instanceof Error ? err.message : 'Lỗi tải file'),
-                  )
-              }
-              style={{
-                padding: '0.5rem 0.65rem',
-                borderRadius: '9px',
-                border: '1px solid #e2e8f0',
-                background: '#f8fafc',
-                color: '#0f172a',
-                fontWeight: 600,
-                fontSize: '0.8rem',
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '0.35rem',
-                cursor: 'pointer',
-              }}
-            >
-              <Download size={14} />
-              <span>Tải xuống</span>
-            </button>
+              <button
+                type="button"
+                onClick={() =>
+                  void filesApi
+                    .downloadFileWithAuth(selectedFile)
+                    .catch((err: unknown) =>
+                      onShowError(err instanceof Error ? err.message : 'Lỗi tải file'),
+                    )
+                }
+                style={{
+                  padding: '0.5rem 0.65rem',
+                  borderRadius: '9px',
+                  border: '1px solid #e2e8f0',
+                  background: '#f8fafc',
+                  color: '#0f172a',
+                  fontWeight: 600,
+                  fontSize: '0.8rem',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '0.35rem',
+                  cursor: 'pointer',
+                }}
+              >
+                <Download size={14} />
+                <span>Tải xuống</span>
+              </button>
 
-            <button
-              type="button"
-              onClick={onToggleRenameBox}
-              style={{
-                padding: '0.5rem 0.65rem',
-                borderRadius: '9px',
-                border: '1px solid #e2e8f0',
-                background: showRenameBox ? '#eff6ff' : '#f8fafc',
-                color: '#334155',
-                cursor: 'pointer',
-                display: 'inline-flex',
-                alignItems: 'center',
-              }}
-              title="Đổi tên hiển thị & Di chuyển thư mục (Không đổi Storage Key gốc)"
-            >
-              <Edit3 size={14} />
-            </button>
+              <button
+                type="button"
+                onClick={onToggleRenameBox}
+                style={{
+                  padding: '0.5rem 0.65rem',
+                  borderRadius: '9px',
+                  border: '1px solid #e2e8f0',
+                  background: showRenameBox ? '#eff6ff' : '#f8fafc',
+                  color: '#334155',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                }}
+                title="Đổi tên hiển thị & Di chuyển thư mục (Không đổi Storage Key gốc)"
+              >
+                <Edit3 size={14} />
+              </button>
+            </div>
+
+            {selectedFile.status === 2 ? (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+                <button
+                  type="button"
+                  onClick={() => onRestoreFromTrash(selectedFile)}
+                  style={{
+                    padding: '0.48rem 0.65rem',
+                    borderRadius: '9px',
+                    border: '1px solid #bfdbfe',
+                    background: '#eff6ff',
+                    color: '#2563eb',
+                    fontWeight: 600,
+                    fontSize: '0.78rem',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '0.35rem',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <RotateCcw size={14} />
+                  <span>Khôi phục file</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onPurgeFile(selectedFile)}
+                  style={{
+                    padding: '0.48rem 0.65rem',
+                    borderRadius: '9px',
+                    border: '1px solid #fecaca',
+                    background: '#fef2f2',
+                    color: '#dc2626',
+                    fontWeight: 600,
+                    fontSize: '0.78rem',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '0.35rem',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <Trash2 size={14} />
+                  <span>Xóa vĩnh viễn</span>
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => onMoveToTrash(selectedFile)}
+                style={{
+                  padding: '0.48rem 0.65rem',
+                  borderRadius: '9px',
+                  border: '1px solid #fecaca',
+                  background: '#fef2f2',
+                  color: '#dc2626',
+                  fontWeight: 600,
+                  fontSize: '0.78rem',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '0.35rem',
+                  cursor: 'pointer',
+                }}
+                title={
+                  selectedFile.usageCount > 0
+                    ? `Đang có ${selectedFile.usageCount} liên kết sử dụng — bấm để kiểm tra khóa bảo vệ`
+                    : 'Đưa tệp tin vào thùng rác'
+                }
+              >
+                <Trash2 size={14} />
+                <span>Đưa vào thùng rác (Xóa)</span>
+              </button>
+            )}
           </div>
 
           {/* Hộp Đổi tên & Chuyển thư mục ảo (Mục 6.1.4) */}
@@ -537,7 +650,7 @@ export const FileInspectorPanel: React.FC<FileInspectorPanelProps> = ({
                 <>
                   <span style={{ color: '#64748b' }}>URL Công khai / CDN</span>
                   <a
-                    href={selectedFile.publicUrl}
+                    href={filesApi.resolveBackendUrl(selectedFile.publicUrl)}
                     target="_blank"
                     rel="noreferrer"
                     style={{
@@ -551,7 +664,7 @@ export const FileInspectorPanel: React.FC<FileInspectorPanelProps> = ({
                       fontWeight: 600,
                     }}
                   >
-                    {selectedFile.publicUrl}
+                    {filesApi.resolveBackendUrl(selectedFile.publicUrl)}
                   </a>
                 </>
               )}
@@ -1033,9 +1146,20 @@ export const FileInspectorPanel: React.FC<FileInspectorPanelProps> = ({
                     : ''}
                   )
                 </div>
-                <code style={{ wordBreak: 'break-all', color: '#15803d', fontSize: '0.68rem' }}>
-                  {tempLinkUrl}
-                </code>
+                <a
+                  href={filesApi.resolveBackendUrl(tempLinkUrl)}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{
+                    wordBreak: 'break-all',
+                    color: '#15803d',
+                    fontSize: '0.68rem',
+                    fontFamily: 'monospace',
+                    textDecoration: 'underline',
+                  }}
+                >
+                  {filesApi.resolveBackendUrl(tempLinkUrl)}
+                </a>
               </div>
             )}
 

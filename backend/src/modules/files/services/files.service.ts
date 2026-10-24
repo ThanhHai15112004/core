@@ -13,6 +13,7 @@ import {
   resolvePagination,
   safeJsonParseObject,
 } from '@packages/kernel/index.js';
+import { BaseMessagePublisherProvider, JOB_PRIORITIES, QUEUES } from '@packages/messaging/index.js';
 import {
   AuditLogService,
   DATA_SCOPE,
@@ -124,6 +125,8 @@ export class FilesService implements IFilesPublicService {
     private readonly permissionsRepo?: FilePermissionsRepository | null,
     @Optional()
     private readonly tokenService?: TokenService | null,
+    @Optional()
+    private readonly messagePublisher?: BaseMessagePublisherProvider | null,
   ) {
     this.sequenceRegistry = sequenceRegistry ?? defaultSequenceRegistry;
     this.registerCodeUsageCheckers();
@@ -544,6 +547,36 @@ export class FilesService implements IFilesPublicService {
       scanStatus,
     });
 
+    const HEAVY_MEDIA_QUEUE_THRESHOLD_BYTES = 5 * 1024 * 1024; // 5MB
+    if (
+      this.messagePublisher &&
+      (saved.status === FILE_STATUS.PENDING_SCAN ||
+        Number(saved.sizeBytes) >= HEAVY_MEDIA_QUEUE_THRESHOLD_BYTES)
+    ) {
+      await this.messagePublisher
+        .publish(
+          'files.media_process',
+          {
+            operation: 'media_process' as const,
+            fileId: saved.id,
+            storageKey: saved.storageKey,
+            mimeType: saved.mimeType,
+            extension: saved.extension,
+            totalItems: 1,
+          },
+          QUEUES.SYSTEM_HEAVY,
+          {
+            priority: JOB_PRIORITIES.LOW,
+            index: {
+              operation: 'media_process',
+              fileId: saved.id,
+              extension: saved.extension,
+            },
+          },
+        )
+        .catch(() => null);
+    }
+
     const uploaderMap = await this.loadUploaderSummaries(
       saved.uploadedByUserId ? [saved.uploadedByUserId] : [],
     );
@@ -829,6 +862,32 @@ export class FilesService implements IFilesPublicService {
       scanStatus,
       totalChunks: session.totalChunks,
     });
+
+    if (this.messagePublisher) {
+      await this.messagePublisher
+        .publish(
+          'files.media_process',
+          {
+            operation: 'media_process' as const,
+            fileId: saved.id,
+            storageKey: saved.storageKey,
+            mimeType: saved.mimeType,
+            extension: saved.extension,
+            totalItems: 1,
+          },
+          QUEUES.SYSTEM_HEAVY,
+          {
+            priority: JOB_PRIORITIES.LOW,
+            index: {
+              operation: 'media_process',
+              fileId: saved.id,
+              extension: saved.extension,
+              chunkedUpload: 'true',
+            },
+          },
+        )
+        .catch(() => null);
+    }
 
     const uploaderMap = await this.loadUploaderSummaries(
       saved.uploadedByUserId ? [saved.uploadedByUserId] : [],
@@ -1775,6 +1834,7 @@ export class FilesService implements IFilesPublicService {
   /** Tự động dọn dẹp các file trong thùng rác đã hết thời gian chờ (`purge_after_at <= now`) */
   public async purgeExpiredTrash(
     actor?: UserIdentity,
+    options?: { readonly skipQueuePublish?: boolean },
   ): Promise<{ purgedCount: number; purgedIds: number[] }> {
     const expired = await this.filesRepo.findExpiredTrashedFiles(new Date());
     const purgedIds: number[] = [];
@@ -1802,6 +1862,27 @@ export class FilesService implements IFilesPublicService {
         purgedCount: purgedIds.length,
         purgedIds,
       });
+      if (!options?.skipQueuePublish && this.messagePublisher) {
+        await this.messagePublisher
+          .publish(
+            'files.trash_cleanup',
+            {
+              operation: 'trash_cleanup' as const,
+              executeInWorker: false as const,
+              totalItems: purgedIds.length,
+              fileIds: purgedIds,
+            },
+            QUEUES.SYSTEM_HEAVY,
+            {
+              priority: JOB_PRIORITIES.LOW,
+              index: {
+                operation: 'trash_cleanup',
+                purgedCount: purgedIds.length,
+              },
+            },
+          )
+          .catch(() => null);
+      }
     }
 
     return {

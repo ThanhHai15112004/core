@@ -36,7 +36,57 @@ function buildQueryString(params: ListFilesFilterParams): string {
   return sp.toString();
 }
 
+const mediaBlobUrlCache = new Map<string, string>();
+
+function getBackendOrigin(): string {
+  try {
+    return new URL(frontendConfig.apiBaseUrl).origin;
+  } catch {
+    return 'http://localhost:3006';
+  }
+}
+
 export const filesApi = {
+  /** Chuẩn hóa đường dẫn tương đối (/api/v1/...) sang URL đầy đủ của Backend */
+  resolveBackendUrl: (urlOrPath: string): string => {
+    if (!urlOrPath) return '';
+    if (/^https?:\/\//i.test(urlOrPath) || urlOrPath.startsWith('blob:') || urlOrPath.startsWith('data:')) {
+      return urlOrPath;
+    }
+    if (urlOrPath.startsWith('/api/')) {
+      return `${getBackendOrigin()}${urlOrPath}`;
+    }
+    if (urlOrPath.startsWith('/')) {
+      return `${frontendConfig.apiBaseUrl}${urlOrPath}`;
+    }
+    return urlOrPath;
+  },
+
+  /** Tải ảnh Thumbnail hoặc luồng Media có đính kèm Bearer Token và trả về Blob URL cho thẻ <img> / <video> */
+  fetchAuthenticatedMediaUrl: async (
+    fileId: number,
+    kind: 'thumbnail' | 'stream' = 'thumbnail',
+  ): Promise<string | null> => {
+    const cacheKey = `${kind}:${fileId}`;
+    const cached = mediaBlobUrlCache.get(cacheKey);
+    if (cached) return cached;
+
+    const token = await ensureAccessToken(false);
+    const endpoint =
+      kind === 'thumbnail' ? API_ROUTES.FILES.THUMBNAIL(fileId) : API_ROUTES.FILES.STREAM(fileId);
+    const res = await fetch(`${frontendConfig.apiBaseUrl}${endpoint}`, {
+      method: 'GET',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    }).catch(() => null);
+
+    if (!res || !res.ok) {
+      return null;
+    }
+    const blob = await res.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    mediaBlobUrlCache.set(cacheKey, blobUrl);
+    return blobUrl;
+  },
   /** Thống kê dung lượng lưu trữ, số lượng theo phân loại và cấu hình hạn mức */
   getStats: () => fetchApi<FileStatsItem>(API_ROUTES.FILES.STATS),
 
@@ -391,6 +441,23 @@ export const filesApi = {
           method: 'POST',
           body: JSON.stringify(payload),
         }),
+
+  /** Mở xem file trực tiếp trên tab mới có xác thực (dùng Blob URL kèm Bearer token, không phụ thuộc độ dài URL param) */
+  openFileWithAuth: async (file: FileRecordItem): Promise<void> => {
+    const token = await ensureAccessToken(false);
+    const res = await fetch(`${frontendConfig.apiBaseUrl}${API_ROUTES.FILES.STREAM(file.id)}`, {
+      method: 'GET',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) {
+      const errBody = await res.json().catch(() => null);
+      throw new Error(errBody?.error?.message ?? `Không thể mở file (HTTP ${res.status})`);
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank', 'noopener,noreferrer');
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  },
 
   /** Lấy URL tải file trực tiếp hoặc tải qua fetch có kèm Bearer token */
   downloadFileWithAuth: async (file: FileRecordItem): Promise<void> => {

@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
+import { BaseMessagePublisherProvider, JOB_PRIORITIES, QUEUES } from '@packages/messaging/index.js';
 import type { IEmailNotificationAdapter, ISmsOtpProvider } from '../contracts/index.js';
 
 export interface DispatchedEmailNotificationLog {
@@ -33,6 +34,10 @@ export class DefaultEmailNotificationAdapter implements IEmailNotificationAdapte
   private readonly logger = new Logger(DefaultEmailNotificationAdapter.name);
   private readonly history: DispatchedEmailNotificationLog[] = [];
 
+  constructor(
+    @Optional() private readonly messagePublisher?: BaseMessagePublisherProvider | null,
+  ) {}
+
   public async sendOtpEmail(payload: {
     userId: number;
     email: string;
@@ -57,6 +62,38 @@ export class DefaultEmailNotificationAdapter implements IEmailNotificationAdapte
       this.history.length = 100;
     }
 
+    if (this.messagePublisher) {
+      const topic =
+        payload.purpose === 'PASSWORD_RESET' ? 'auth.password_reset.send' : 'auth.otp.send';
+      await this.messagePublisher
+        .publish(
+          topic,
+          {
+            userId: payload.userId,
+            recipientAddress: payload.email,
+            channel: 'EMAIL',
+            code: payload.otpCode,
+            templateCode: payload.purpose,
+            metadata: {
+              expiresInSeconds: payload.expiresInSeconds,
+              ...(payload.verificationToken
+                ? { verificationToken: payload.verificationToken }
+                : {}),
+            },
+          },
+          QUEUES.SYSTEM_CRITICAL,
+          {
+            priority: JOB_PRIORITIES.CRITICAL,
+            index: {
+              userId: payload.userId,
+              channel: 'EMAIL',
+              purpose: payload.purpose,
+            },
+          },
+        )
+        .catch(() => null);
+    }
+
     this.logger.log(
       `[EmailNotificationAdapter] Dispatched ${payload.purpose} to user #${payload.userId} (messageId=${messageId})`,
     );
@@ -78,6 +115,10 @@ export class DefaultSmsOtpProvider implements ISmsOtpProvider {
   private readonly logger = new Logger(DefaultSmsOtpProvider.name);
   private readonly history: DispatchedSmsOtpLog[] = [];
 
+  constructor(
+    @Optional() private readonly messagePublisher?: BaseMessagePublisherProvider | null,
+  ) {}
+
   public async sendOtpSms(payload: {
     userId: number;
     phone: string;
@@ -98,6 +139,33 @@ export class DefaultSmsOtpProvider implements ISmsOtpProvider {
     this.history.unshift(entry);
     if (this.history.length > 100) {
       this.history.length = 100;
+    }
+
+    if (this.messagePublisher) {
+      await this.messagePublisher
+        .publish(
+          'auth.otp.send',
+          {
+            userId: payload.userId,
+            recipientAddress: payload.phone,
+            channel: 'SMS',
+            code: payload.otpCode,
+            templateCode: payload.purpose,
+            metadata: {
+              expiresInSeconds: payload.expiresInSeconds,
+            },
+          },
+          QUEUES.SYSTEM_CRITICAL,
+          {
+            priority: JOB_PRIORITIES.CRITICAL,
+            index: {
+              userId: payload.userId,
+              channel: 'SMS',
+              purpose: payload.purpose,
+            },
+          },
+        )
+        .catch(() => null);
     }
 
     this.logger.log(

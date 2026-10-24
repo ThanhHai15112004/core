@@ -363,6 +363,9 @@ export const FileManagerPage: React.FC = () => {
           onChangePermCanDownload={setPermCanDownload}
           onSubmitGrantPermission={(e) => void handleGrantPermission(e)}
           onRevokePermission={(fileId, permId) => void handleRevokePermission(fileId, permId)}
+          onMoveToTrash={(f) => void handleMoveToTrash(f)}
+          onRestoreFromTrash={(f) => void handleRestoreFromTrash(f)}
+          onPurgeFile={(f) => void handlePurgeFile(f)}
           onShowError={(msg) => showNotice('error', msg)}
         />
       </div>

@@ -6,6 +6,12 @@ import {
   parseXlsxToMatrix,
 } from '@packages/kernel/index.js';
 import {
+  BaseMessagePublisherProvider,
+  JOB_PRIORITIES,
+  QUEUES,
+  type MessageEnvelope,
+} from '@packages/messaging/index.js';
+import {
   type IOrganizationsPublicService,
   ORGANIZATIONS_PUBLIC_SERVICE,
 } from '@modules/organizations/contracts/index.js';
@@ -36,30 +42,75 @@ export class UserImportService {
     @Inject(ORGANIZATIONS_PUBLIC_SERVICE)
     private readonly organizationsPublicService: IOrganizationsPublicService | null = null,
     @Optional() settingRegistry?: SettingRegistryService,
+    @Optional()
+    private readonly messagePublisher?: BaseMessagePublisherProvider | null,
   ) {
     this.settingRegistry = settingRegistry ?? defaultSettingRegistry;
+  }
+
+  /** Giải mã dữ liệu đầu vào (.xlsx base64, CSV hoặc mảng JSON) thành danh sách dòng import */
+  public parseImportRows(dto: BulkImportUsersRequest): BulkImportUserRowInput[] {
+    if (dto.xlsxBase64) {
+      try {
+        const matrix = parseXlsxToMatrix(dto.xlsxBase64);
+        return mapMatrixToImportRows(matrix);
+      } catch (err: unknown) {
+        throw new BadRequestAppException('users.invalidXlsxFile', [
+          err instanceof Error ? err.message : 'Unable to parse .xlsx file',
+        ]);
+      }
+    }
+    if (dto.csvContent) {
+      return parseCsvToImportRows(dto.csvContent);
+    }
+    return dto.items ?? [];
+  }
+
+  /** Đẩy công việc Import người dùng hàng loạt vào hàng đợi `system.heavy` để Worker xử lý theo lô */
+  public async enqueueBulkImport(
+    dto: BulkImportUsersRequest,
+    actorId?: number,
+  ): Promise<MessageEnvelope<{
+    readonly operation: 'import';
+    readonly executeInWorker: true;
+    readonly totalItems: number;
+    readonly items: readonly BulkImportUserRowInput[];
+    readonly defaultPassword?: string | undefined;
+    readonly skipDuplicates?: boolean | undefined;
+    readonly actorId?: number | undefined;
+  }> | null> {
+    if (!this.messagePublisher) return null;
+    const rawRows = this.parseImportRows(dto);
+    return this.messagePublisher.publish(
+      'users.import',
+      {
+        operation: 'import' as const,
+        executeInWorker: true as const,
+        totalItems: rawRows.length,
+        items: rawRows,
+        ...(dto.defaultPassword !== undefined ? { defaultPassword: dto.defaultPassword } : {}),
+        ...(dto.skipDuplicates !== undefined ? { skipDuplicates: dto.skipDuplicates } : {}),
+        ...(actorId !== undefined ? { actorId } : {}),
+      },
+      QUEUES.SYSTEM_HEAVY,
+      {
+        priority: JOB_PRIORITIES.LOW,
+        index: {
+          operation: 'import',
+          totalRows: rawRows.length,
+          ...(actorId !== undefined ? { actorId } : {}),
+        },
+      },
+    );
   }
 
   /** Nhập người dùng hàng loạt từ file Excel (.xlsx base64), chuỗi CSV hoặc mảng JSON (Mục 3.1.7) */
   public async bulkImport(
     dto: BulkImportUsersRequest,
     actorId?: number,
+    options?: { readonly skipQueuePublish?: boolean },
   ): Promise<BulkImportUsersResultResponse> {
-    let rawRows: BulkImportUserRowInput[];
-    if (dto.xlsxBase64) {
-      try {
-        const matrix = parseXlsxToMatrix(dto.xlsxBase64);
-        rawRows = mapMatrixToImportRows(matrix);
-      } catch (err: unknown) {
-        throw new BadRequestAppException('users.invalidXlsxFile', [
-          err instanceof Error ? err.message : 'Unable to parse .xlsx file',
-        ]);
-      }
-    } else if (dto.csvContent) {
-      rawRows = parseCsvToImportRows(dto.csvContent);
-    } else {
-      rawRows = dto.items ?? [];
-    }
+    const rawRows = this.parseImportRows(dto);
 
     const errors: Array<{ row: number; identifier: string; message: string }> = [];
     const importedUserIds: number[] = [];
@@ -186,6 +237,33 @@ export class UserImportService {
         const message = err instanceof Error ? err.message : 'Failed to import user row';
         errors.push({ row: rowNumber, identifier, message });
       }
+    }
+
+    if (!options?.skipQueuePublish && this.messagePublisher) {
+      await this.messagePublisher
+        .publish(
+          'users.import',
+          {
+            operation: 'import' as const,
+            executeInWorker: false as const,
+            totalItems: rawRows.length,
+            importedCount: importedUserIds.length,
+            skippedCount,
+            failedCount: errors.length,
+            ...(dto.skipDuplicates !== undefined ? { skipDuplicates: dto.skipDuplicates } : {}),
+            ...(actorId !== undefined ? { actorId } : {}),
+          },
+          QUEUES.SYSTEM_HEAVY,
+          {
+            priority: JOB_PRIORITIES.LOW,
+            index: {
+              operation: 'import',
+              totalRows: rawRows.length,
+              importedCount: importedUserIds.length,
+            },
+          },
+        )
+        .catch(() => null);
     }
 
     return {

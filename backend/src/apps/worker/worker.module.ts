@@ -11,6 +11,9 @@ import { StorageModule } from '@packages/storage/index.js';
 import { RedisModule } from '@packages/redis/index.js';
 import { RuntimeAgentModule } from '@packages/runtime/index.js';
 import { MetricsModule } from '@packages/metrics/index.js';
+import { UsersModule } from '@modules/users/index.js';
+import { FilesModule } from '@modules/files/index.js';
+import { NotificationsModule } from '@modules/notifications/index.js';
 import { SystemProcessor } from './processors/system/system.processor.js';
 import { CriticalProcessor } from './processors/critical/critical.processor.js';
 import { NotificationsProcessor } from './processors/notifications/notifications.processor.js';
@@ -33,6 +36,9 @@ const PROCESSORS = [SystemProcessor, CriticalProcessor, NotificationsProcessor, 
     QueueModule,
     CacheModule,
     StorageModule,
+    UsersModule,
+    FilesModule,
+    NotificationsModule,
   ],
   providers: [...PROCESSORS, WorkerRuntimeContributor],
   exports: [...PROCESSORS],

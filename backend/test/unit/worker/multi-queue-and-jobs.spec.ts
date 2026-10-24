@@ -33,6 +33,10 @@ import { CriticalProcessor } from '@apps/worker/processors/critical/critical.pro
 import { NotificationsProcessor } from '@apps/worker/processors/notifications/notifications.processor.js';
 import { HeavyJobProcessor } from '@apps/worker/processors/heavy/heavy-job.processor.js';
 import { SystemProcessor } from '@apps/worker/processors/system/system.processor.js';
+import { DefaultEmailNotificationAdapter } from '@modules/auth/index.js';
+import { UserImportService, type UsersService } from '@modules/users/index.js';
+import type { FilesService } from '@modules/files/index.js';
+import type { NotificationChannelsService } from '@modules/notifications/index.js';
 
 describe('Phase 7.3 — Hàng đợi công việc (Multi-Queue, Worker Concurrency, Retry/Timeout, Priority, Progress, Cancel & RBAC Audit)', () => {
   let redis: RedisService;
@@ -117,7 +121,7 @@ describe('Phase 7.3 — Hàng đợi công việc (Multi-Queue, Worker Concurren
     process.env['WORKER_EVENTS_CONCURRENCY'] = '6';
 
     const customConfig = new CoreConfigService();
-    const metrics = new MetricsRegistryService(customConfig);
+    const metrics = new MetricsRegistryService({ runtime: 'worker' });
 
     const criticalProcessor = new CriticalProcessor(customConfig, metrics, progressTracker);
     const notificationsProcessor = new NotificationsProcessor(
@@ -159,7 +163,7 @@ describe('Phase 7.3 — Hàng đợi công việc (Multi-Queue, Worker Concurren
   });
 
   it('7.3.6 & 7.3.8: theo dõi tiến độ job (Import/Export/Media/Batch) qua các phase và lưu trữ danh sách job thất bại', async () => {
-    const metrics = new MetricsRegistryService(config);
+    const metrics = new MetricsRegistryService({ runtime: 'worker' });
     const heavyProcessor = new HeavyJobProcessor(config, metrics, progressTracker);
 
     const progressUpdates: unknown[] = [];
@@ -333,7 +337,7 @@ describe('Phase 7.3 — Hàng đợi công việc (Multi-Queue, Worker Concurren
     });
 
     // Khi Worker đang chạy bước tiếp theo, `updateProgress` phát hiện tín hiệu hủy và ném lỗi JobCancelled không retry
-    const metrics = new MetricsRegistryService(config);
+    const metrics = new MetricsRegistryService({ runtime: 'worker' });
     const heavyProcessor = new HeavyJobProcessor(config, metrics, progressTracker);
     await expect(
       heavyProcessor.process({
@@ -387,5 +391,275 @@ describe('Phase 7.3 — Hàng đợi công việc (Multi-Queue, Worker Concurren
     );
     expect(cancelledRecord.status).toBe('cancelled');
     expect(cancelledRecord.cancelReason).toBe('Stop heavy export');
+  });
+
+  it('7.3.1 & 7.3.8 (Thực thi thật): UserImportService đẩy job vào system.heavy và HeavyJobProcessor / NotificationsProcessor / CriticalProcessor thực thi nghiệp vụ thật', async () => {
+    const metrics = new MetricsRegistryService({ runtime: 'worker' });
+    const publishedEnvelopes: Array<{
+      queue: string;
+      topic: string;
+      payload: unknown;
+      opts: Record<string, unknown>;
+    }> = [];
+
+    const fakeRegistry = {
+      names: () => Object.values(QUEUES),
+      isKnown: (n: string) => (Object.values(QUEUES) as string[]).includes(n),
+      get: (qName: QueueName) => ({
+        add: async (topic: string, env: unknown, opts: Record<string, unknown>) => {
+          publishedEnvelopes.push({
+            queue: qName,
+            topic,
+            payload: (env as { payload: unknown }).payload,
+            opts,
+          });
+        },
+      }),
+      jobOptions: (jobId: string, qName?: QueueName) => ({
+        jobId,
+        attempts: qName ? QUEUE_PROFILES[qName].defaultAttempts : 3,
+      }),
+      withTimeout: <T>(p: Promise<T>) => p,
+    } as unknown as QueueRegistry;
+
+    const publisher = new BaseMessagePublisherProvider(fakeRegistry);
+
+    // 1. UserImportService đẩy job thật vào system.heavy và HeavyJobProcessor gọi thật UserImportService theo từng chunk
+    let createdCount = 0;
+    const fakeUsersService = {
+      create: async (input: { username: string; email: string }) => {
+        createdCount++;
+        return { id: createdCount, username: input.username, email: input.email };
+      },
+    } as unknown as UsersService;
+    const fakeUserRepo = {
+      findByEmail: async () => null,
+      findByUsername: async () => null,
+    };
+    const fakeRolesPublic = {
+      findByCodes: async () => [],
+    };
+
+    const userImportService = new UserImportService(
+      fakeUsersService,
+      fakeUserRepo as never,
+      fakeRolesPublic as never,
+      null,
+      undefined,
+      publisher,
+    );
+
+    const enqueued = await userImportService.enqueueBulkImport(
+      {
+        items: [
+          {
+            username: 'worker_u1',
+            email: 'worker_u1@example.com',
+            fullName: 'Worker One',
+            status: 1,
+            roleCodes: [],
+            organizationCodes: [],
+          },
+          {
+            username: 'worker_u2',
+            email: 'worker_u2@example.com',
+            fullName: 'Worker Two',
+            status: 1,
+            roleCodes: [],
+            organizationCodes: [],
+          },
+        ],
+        skipDuplicates: true,
+      },
+      1,
+    );
+    expect(enqueued).not.toBeNull();
+    expect(publishedEnvelopes).toHaveLength(1);
+    expect(publishedEnvelopes[0]).toMatchObject({
+      queue: QUEUES.SYSTEM_HEAVY,
+      topic: 'users.import',
+      opts: { priority: JOB_PRIORITIES.LOW },
+    });
+
+    let verifiedFileId: number | null = null;
+    const fakeFilesService = {
+      verifyFileIntegrity: async (fileId: number) => {
+        verifiedFileId = fileId;
+        return { fileId, intact: true };
+      },
+      purgeExpiredTrash: async () => ({ purgedCount: 3, purgedIds: [10, 11, 12] }),
+    } as unknown as FilesService;
+
+    const heavyProcessor = new HeavyJobProcessor(
+      config,
+      metrics,
+      progressTracker,
+      userImportService,
+      fakeFilesService,
+    );
+
+    const importJob = {
+      id: enqueued!.id,
+      name: 'users.import',
+      queueName: QUEUES.SYSTEM_HEAVY,
+      data: enqueued,
+      opts: { attempts: 2 },
+      timestamp: Date.now() - 500,
+      attemptsMade: 0,
+      attemptsStarted: 1,
+      progress: 0,
+      updateProgress: async (p: unknown) => {
+        importJob.progress = p as number;
+      },
+      log: async () => undefined,
+    } as unknown as Job;
+
+    const importRes = await heavyProcessor.process(importJob);
+    expect(createdCount).toBe(2);
+    expect(importRes).toMatchObject({
+      queue: QUEUES.SYSTEM_HEAVY,
+      topic: 'users.import',
+      processed: 2,
+      total: 2,
+      importedCount: 2,
+      skippedCount: 0,
+      failedCount: 0,
+    });
+
+    // 2. HeavyJobProcessor xử lý thật kiểm tra file/ảnh (files.media_process)
+    const mediaJob = {
+      id: 'job-media-202',
+      name: 'files.media_process',
+      queueName: QUEUES.SYSTEM_HEAVY,
+      data: serializeMessage('files.media_process', {
+        operation: 'media_process',
+        fileId: 88,
+        totalItems: 1,
+      }),
+      opts: { attempts: 2 },
+      timestamp: Date.now() - 200,
+      attemptsMade: 0,
+      attemptsStarted: 1,
+      progress: 0,
+      updateProgress: async () => undefined,
+      log: async () => undefined,
+    } as unknown as Job;
+
+    const mediaRes = await heavyProcessor.process(mediaJob);
+    expect(verifiedFileId).toBe(88);
+    expect(mediaRes).toMatchObject({
+      queue: QUEUES.SYSTEM_HEAVY,
+      topic: 'files.media_process',
+      integrityIntact: true,
+    });
+
+    // 3. NotificationsProcessor gọi thật Adapter gửi Email/SMS và xử lý lỗi Permanent (UnrecoverableError)
+    const notificationsProcessor = new NotificationsProcessor(config, metrics, progressTracker);
+    const notifJob = {
+      id: 'job-notif-303',
+      name: 'notifications.dispatch_batch',
+      queueName: QUEUES.SYSTEM_NOTIFICATIONS,
+      data: serializeMessage('notifications.dispatch_batch', {
+        channel: 'EMAIL',
+        templateCode: 'WELCOME_USER',
+        recipients: [
+          { userId: 1, recipientAddress: 'u1@example.com' },
+          { userId: 2, recipientAddress: 'u2@example.com' },
+        ],
+        batchSize: 1,
+      }),
+      opts: { attempts: 4 },
+      timestamp: Date.now() - 200,
+      attemptsMade: 0,
+      attemptsStarted: 1,
+      progress: 0,
+      updateProgress: async () => undefined,
+      log: async () => undefined,
+    } as unknown as Job;
+
+    const notifRes = (await notificationsProcessor.process(notifJob)) as {
+      deliveredCount: number;
+      failedCount: number;
+      providerMessageIds: string[];
+    };
+    expect(notifRes.deliveredCount).toBe(2);
+    expect(notifRes.failedCount).toBe(0);
+    expect(notifRes.providerMessageIds).toHaveLength(2);
+
+    // 4. CriticalProcessor gửi OTP khẩn cấp thật qua Adapter
+    const criticalProcessor = new CriticalProcessor(config, metrics, progressTracker);
+    const criticalJob = {
+      id: 'job-crit-404',
+      name: 'auth.otp.send',
+      queueName: QUEUES.SYSTEM_CRITICAL,
+      data: serializeMessage('auth.otp.send', {
+        channel: 'SMS',
+        destination: '+84901234567',
+        code: '654321',
+      }),
+      opts: { attempts: 3 },
+      timestamp: Date.now() - 100,
+      attemptsMade: 0,
+      attemptsStarted: 1,
+      progress: 0,
+      updateProgress: async () => undefined,
+      log: async () => undefined,
+    } as unknown as Job;
+
+    const critRes = (await criticalProcessor.process(criticalJob)) as {
+      deliveredCount: number;
+      providerMessageId: string | null;
+    };
+    expect(critRes.deliveredCount).toBe(1);
+    expect(critRes.providerMessageId).toContain('sms-');
+
+    // 5. DefaultEmailNotificationAdapter đẩy job OTP / Password Reset vào system.critical với priority CRITICAL
+    const authEmailAdapter = new DefaultEmailNotificationAdapter(publisher);
+    await authEmailAdapter.sendOtpEmail({
+      userId: 99,
+      email: 'security@example.com',
+      otpCode: '112233',
+      expiresInSeconds: 300,
+      purpose: 'PASSWORD_RESET',
+    });
+    expect(publishedEnvelopes).toHaveLength(2);
+    expect(publishedEnvelopes[1]).toMatchObject({
+      queue: QUEUES.SYSTEM_CRITICAL,
+      topic: 'auth.password_reset.send',
+      opts: { priority: JOB_PRIORITIES.CRITICAL },
+    });
+
+    // 6. SystemProcessor khi nhận system.maintenance.tick gọi thật purgeExpiredTrash & retryDueDeliveries
+    const fakeNotificationChannelsService = {
+      retryDueDeliveries: async () => ({ retriedCount: 4 }),
+    } as unknown as NotificationChannelsService;
+    const systemProcessor = new SystemProcessor(
+      config,
+      metrics,
+      progressTracker,
+      fakeFilesService,
+      fakeNotificationChannelsService,
+    );
+    const maintenanceJob = {
+      id: 'job-maint-505',
+      name: 'system.maintenance.tick',
+      queueName: QUEUES.SYSTEM_EVENTS,
+      data: serializeMessage('system.maintenance.tick', { triggeredBy: 'scheduler' }),
+      opts: { attempts: 3 },
+      timestamp: Date.now() - 100,
+      attemptsMade: 0,
+      attemptsStarted: 1,
+      progress: 0,
+      updateProgress: async () => undefined,
+      log: async () => undefined,
+    } as unknown as Job;
+
+    const maintRes = await systemProcessor.process(maintenanceJob);
+    expect(maintRes).toMatchObject({
+      handled: true,
+      topic: 'system.maintenance.tick',
+      purgedTrashCount: 3,
+      retriedDeliveriesCount: 4,
+    });
   });
 });

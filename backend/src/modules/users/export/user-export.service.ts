@@ -5,6 +5,7 @@ import {
   buildXlsxBuffer,
   defaultSettingRegistry,
 } from '@packages/kernel/index.js';
+import { BaseMessagePublisherProvider, JOB_PRIORITIES, QUEUES } from '@packages/messaging/index.js';
 import {
   AuditLogService,
   PlatformSecurityService,
@@ -42,6 +43,7 @@ export class UserExportService {
     @Optional() private readonly auditLogService?: AuditLogService,
     @Optional() private readonly platformSecurityService?: PlatformSecurityService,
     @Optional() settingRegistry?: SettingRegistryService,
+    @Optional() private readonly messagePublisher?: BaseMessagePublisherProvider | null,
   ) {
     this.settingRegistry = settingRegistry ?? defaultSettingRegistry;
   }
@@ -145,6 +147,30 @@ export class UserExportService {
           effectiveDataScope: scopeFilter?.effectiveScopeName ?? 'ALL',
         },
       });
+    }
+
+    if (this.messagePublisher) {
+      await this.messagePublisher
+        .publish(
+          'users.export',
+          {
+            operation: 'export' as const,
+            format,
+            fileName,
+            totalItems: hydrated.length,
+            ...(actor?.id !== undefined ? { actorId: actor.id } : {}),
+          },
+          QUEUES.SYSTEM_HEAVY,
+          {
+            priority: JOB_PRIORITIES.LOW,
+            index: {
+              operation: 'export',
+              format,
+              totalExported: hydrated.length,
+            },
+          },
+        )
+        .catch(() => null);
     }
 
     return {

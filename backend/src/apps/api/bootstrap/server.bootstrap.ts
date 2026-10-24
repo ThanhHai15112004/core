@@ -19,6 +19,7 @@ export async function bootstrapApi(): Promise<NestFastifyApplication> {
   const adapter = new FastifyAdapter({
     logger: false,
     bodyLimit: 32 * 1024 * 1024,
+    maxParamLength: 1024,
   });
 
   const app = await NestFactory.create<NestFastifyApplication>(ApiModule, adapter, {
