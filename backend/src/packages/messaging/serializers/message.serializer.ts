@@ -68,10 +68,29 @@ export function parseEnvelope(data: unknown): MessageEnvelope | null {
 
 /** Prefix jobId của lần chạy thủ công (Run Now) từ System Console. */
 export const MANUAL_RUN_PREFIX = 'manual:';
+/** Prefix jobId của lần chạy bù (Catch-up) khi phát hiện công việc bị bỏ lỡ. */
+export const CATCHUP_RUN_PREFIX = 'catchup:';
+
+/** Trích xuất mã `taskId` từ một job được tạo bởi BullMQ Job Scheduler, Run Now hoặc Catch-up. */
+export function resolveScheduledTaskId(job: {
+  id?: string | undefined;
+  repeatJobKey?: string | undefined;
+}): string | null {
+  if (job.repeatJobKey) return job.repeatJobKey;
+  const id = job.id ?? '';
+  for (const prefix of [MANUAL_RUN_PREFIX, CATCHUP_RUN_PREFIX]) {
+    if (id.startsWith(prefix)) {
+      const rest = id.slice(prefix.length);
+      const idx = rest.lastIndexOf(':');
+      return idx > 0 ? rest.slice(0, idx) : rest || null;
+    }
+  }
+  return null;
+}
 
 /**
- * Job do BullMQ Job Scheduler (có `repeatJobKey`) hoặc Run Now (`manual:<task>:<ts>`) tạo không mang envelope —
- * dựng envelope từ chính job: id = job id (mỗi lần chạy khác nhau), topic = tên job, payload = data.
+ * Job do BullMQ Job Scheduler (có `repeatJobKey`), Run Now (`manual:<task>:<ts>`) hoặc Catch-up (`catchup:<task>:<ts>`)
+ * tạo không mang envelope — dựng envelope từ chính job: id = job id (mỗi lần chạy khác nhau), topic = tên job, payload = data.
  */
 export function scheduledEnvelope(job: {
   id?: string | undefined;
@@ -81,7 +100,8 @@ export function scheduledEnvelope(job: {
   repeatJobKey?: string | undefined;
 }): MessageEnvelope | null {
   const id = job.id ?? '';
-  if (!id || (!job.repeatJobKey && !id.startsWith(MANUAL_RUN_PREFIX))) return null;
+  const taskId = resolveScheduledTaskId(job);
+  if (!id || !taskId) return null;
   return {
     id,
     topic: job.name,
@@ -89,7 +109,18 @@ export function scheduledEnvelope(job: {
     timestamp: new Date(job.timestamp).toISOString(),
     producer: 'scheduler',
     correlationId: id,
-    meta: null,
+    meta: {
+      source: {
+        kind: id.startsWith(MANUAL_RUN_PREFIX) ? 'manual' : 'scheduler',
+        id: taskId,
+        name: job.name,
+        detail: id.startsWith(CATCHUP_RUN_PREFIX) ? 'catchup' : null,
+      },
+      requestId: null,
+      idempotencyKey: null,
+      index: { taskId },
+      schema: null,
+    },
   };
 }
 

@@ -17,5 +17,6 @@ export * from './operations/cache-operations.service.js';
 export * from './providers/cache.provider.js';
 export * from './providers/cache-connection.service.js';
 export * from './providers/cache-manageable.adapter.js';
+export * from './locks/distributed-lock.service.js';
 export * from './cache.module.js';
 export * from './utils/cache-events.js';

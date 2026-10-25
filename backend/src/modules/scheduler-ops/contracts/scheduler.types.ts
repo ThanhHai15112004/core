@@ -38,3 +38,30 @@ export interface SchedulerOperationRecord {
   error: string | null;
   executionId: string | null;
 }
+
+export type SchedulerMisfirePolicy = 'skip' | 'run_once';
+
+export interface MissedExecutionRecord {
+  id: string;
+  taskId: string;
+  taskName: string;
+  queue: string;
+  pattern: string;
+  timezone: string;
+  scheduledAt: number;
+  detectedAt: number;
+  policy: SchedulerMisfirePolicy;
+  compensatedExecutionId: string | null;
+}
+
+export interface SchedulerFailureAlertRecord {
+  id: string;
+  taskId: string;
+  taskName: string;
+  queue: string;
+  executionId: string;
+  error: string;
+  attemptsMade: number;
+  recipients: string[];
+  failedAt: number;
+}

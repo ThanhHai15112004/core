@@ -65,7 +65,8 @@ export type LifecycleType =
   | 'replayed'
   | 'cancel_requested'
   | 'cancelled'
-  | 'stalled';
+  | 'stalled'
+  | 'skipped';
 
 export interface LifecycleEntry {
   at: number;

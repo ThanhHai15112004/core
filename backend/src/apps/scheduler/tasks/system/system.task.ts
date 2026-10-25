@@ -20,6 +20,8 @@ export class SystemTask implements OnModuleInit {
       pattern: this.config.runtime.scheduler.maintenanceCron,
       tz: this.config.scheduler.timezone,
       data: { triggeredBy: 'scheduler' },
+      notifyOnFailure: true,
+      misfirePolicy: 'run_once',
     });
   }
 }

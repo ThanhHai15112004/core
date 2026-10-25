@@ -1,4 +1,5 @@
 export * from './contracts/index.js';
+export * from './exceptions/scheduler-ops.exceptions.js';
 export * from './routes/scheduler-ops.routes.js';
 export * from './responses/scheduler-ops.response.js';
 export * from './services/scheduler-ops.service.js';

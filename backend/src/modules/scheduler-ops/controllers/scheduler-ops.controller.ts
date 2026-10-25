@@ -136,6 +136,20 @@ export class SchedulerOpsController {
     return this.scheduler.getFailures(parse(rangeSchema, q).range);
   }
 
+  /** Lấy danh sách các công việc định kỳ bị bỏ lỡ (khi server tắt trong thời gian dài) */
+  @Public()
+  @Get(R.MISSED)
+  public missed() {
+    return this.scheduler.getMissedExecutions();
+  }
+
+  /** Lấy danh sách các cảnh báo thất bại đã gửi cho người phụ trách */
+  @Public()
+  @Get(R.FAILURE_ALERTS)
+  public failureAlerts() {
+    return this.scheduler.getFailureAlerts();
+  }
+
   /** Truy vấn lịch sử các thao tác vận hành đã thực hiện */
   @Public()
   @Get(R.OPERATIONS)

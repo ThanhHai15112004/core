@@ -26,6 +26,10 @@ export const cacheKeys = (redis: RedisService) => ({
   serverPrev: () => redis.key('cachemon', 'server', 'prev'),
   collectLock: () => redis.key('cachemon', 'lock', 'collect'),
   flushLock: () => redis.key('cachemon', 'lock', 'flush'),
+  /** Khóa ngắn hạn chống Cache Stampede khi nhiều tiến trình cùng tạo một cache key. */
+  stampedeLock: (key: string) => redis.key('cachemon', 'stampede', key),
+  /** Khóa phân tán dùng chung cho job, scheduler và các thao tác nghiệp vụ dễ trùng (7.5.6). */
+  distributedLock: (resource: string) => redis.key('lock', resource),
 });
 
 export const CACHE_ERROR_LOG_SIZE = 500;

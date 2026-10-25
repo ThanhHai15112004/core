@@ -13,6 +13,8 @@ export const SCHEDULER_OPS_ROUTES = {
   UPCOMING: 'upcoming',
   TIMELINE: 'timeline',
   FAILURES: 'failures',
+  MISSED: 'missed',
+  FAILURE_ALERTS: 'failure-alerts',
   OPERATIONS: 'operations',
   CONFIG: 'config',
   CRON: 'cron',

@@ -1,15 +1,30 @@
 import { performance } from 'node:perf_hooks';
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { CoreConfigService } from '@packages/config/index.js';
-import { safeJsonParse, safeJsonParseList } from '@packages/kernel/index.js';
+import {
+  ForbiddenAppException,
+  HTTP_ERROR_CODE,
+  safeJsonParse,
+  safeJsonParseList,
+} from '@packages/kernel/index.js';
 import { RedisService } from '@packages/redis/index.js';
-import { QueueRegistry, schedulerKeys } from '@packages/queue/index.js';
+import { AuditLogService } from '@packages/security/index.js';
+import {
+  QueueRegistry,
+  SCHEDULER_FAILURE_ALERT_LOG_SIZE,
+  SCHEDULER_MISSED_LOG_SIZE,
+  schedulerKeys,
+} from '@packages/queue/index.js';
 import {
   BaseMessagePublisherProvider,
   MANUAL_RUN_PREFIX,
   MessagingConnectionService,
+  QUEUES,
 } from '@packages/messaging/index.js';
 import type {
+  MissedExecutionRecord,
+  SchedulerFailureAlertRecord,
+  SchedulerMisfirePolicy,
   SchedulerOperationAction,
   SchedulerOperationRecord,
 } from '../contracts/scheduler.types.js';
@@ -23,6 +38,8 @@ import { liveQueues } from './scheduler-utils.js';
 export interface SchedulerOperationContext {
   ip: string | null;
   actor: string | null;
+  userId?: number | string | null;
+  permissions?: readonly string[] | null;
 }
 
 const MAX_OPERATIONS = 100;
@@ -36,6 +53,11 @@ interface TaskDefinitionJson {
   every?: number | undefined;
   tz?: string | undefined;
   data?: Record<string, unknown> | undefined;
+  ownerEmail?: string | undefined;
+  notifyEmails?: string[] | undefined;
+  notifyOnFailure?: boolean | undefined;
+  misfirePolicy?: SchedulerMisfirePolicy | undefined;
+  lockTtlSec?: number | undefined;
 }
 
 @Injectable()
@@ -48,6 +70,7 @@ export class SchedulerOperationsService {
     private readonly queueRegistry: QueueRegistry,
     private readonly connection: MessagingConnectionService,
     private readonly publisher: BaseMessagePublisherProvider,
+    @Optional() private readonly auditLogService?: AuditLogService,
   ) {}
 
   private get keys() {
@@ -59,7 +82,32 @@ export class SchedulerOperationsService {
     return this.connection.getStatus().state === 'connected';
   }
 
-  /** Ghi nhận nhật ký kiểm toán cho hành động nhạy cảm */
+  /**
+   * 7.4.5 & 7.4.6 — Kiểm tra quyền RBAC khi thao tác Run Now / Enable / Disable
+   * (kiểm tra khi có `permissions` từ request xác thực hoặc khi `OPS_SCHEDULER_REQUIRE_RBAC=true`).
+   */
+  public assertPermission(ctx: SchedulerOperationContext, requiredPermission: string): void {
+    const hasExplicitPermissions = Array.isArray(ctx.permissions);
+    if (!hasExplicitPermissions && !this.config.scheduler.requireRbac) {
+      return;
+    }
+    const granted = new Set(ctx.permissions ?? []);
+    if (
+      granted.has(requiredPermission) ||
+      granted.has('scheduler.manage') ||
+      granted.has('system.ops.manage')
+    ) {
+      return;
+    }
+    throw new ForbiddenAppException(HTTP_ERROR_CODE.FORBIDDEN, [
+      {
+        requiredPermissions: [requiredPermission],
+        missingPermissions: [requiredPermission],
+      },
+    ]);
+  }
+
+  /** Ghi nhận nhật ký kiểm toán vào cả Redis `scheduler:operations` và bảng DB `audit_logs` */
   private async audit(
     action: SchedulerOperationAction,
     target: string,
@@ -97,6 +145,27 @@ export class SchedulerOperationsService {
       );
     }
 
+    if (this.auditLogService) {
+      await this.auditLogService
+        .record({
+          actorUserId: typeof ctx.userId === 'number' ? ctx.userId : null,
+          actorIdentifier: ctx.actor,
+          ipAddress: ctx.ip,
+          module: 'scheduler-ops',
+          feature: 'scheduler_operations',
+          action: `SCHEDULER_${action.toUpperCase()}`,
+          resourceType: 'scheduled_task',
+          resourceId: target,
+          afterData: {
+            result: record.result,
+            detail,
+            error,
+            executionId,
+          },
+        })
+        .catch(() => undefined);
+    }
+
     return record;
   }
 
@@ -111,6 +180,46 @@ export class SchedulerOperationsService {
     }
   }
 
+  /**
+   * 7.4.3 — Chiếm giữ Distributed Lock trên Redis cho một công việc định kỳ (`scheduler:lock:<taskId>`)
+   * để ngăn công việc chạy trùng.
+   */
+  public async acquireTaskLock(
+    taskId: string,
+    executionId: string,
+    ttlSec?: number,
+  ): Promise<{ acquired: boolean; holder: string | null }> {
+    const key = this.keys.taskLock(taskId);
+    const effectiveTtl = Math.max(5, ttlSec ?? this.config.scheduler.lockTtlSec ?? 300);
+    const setRes = await this.redis.client
+      .set(key, executionId, 'EX', effectiveTtl, 'NX')
+      .catch(() => null);
+    if (setRes === 'OK') {
+      return { acquired: true, holder: executionId };
+    }
+    const currentHolder = await this.redis.client.get(key).catch(() => null);
+    if (currentHolder === executionId) {
+      await this.redis.client.expire(key, effectiveTtl).catch(() => undefined);
+      return { acquired: true, holder: executionId };
+    }
+    return { acquired: false, holder: currentHolder };
+  }
+
+  /** Giải phóng Distributed Lock của một công việc định kỳ (chỉ chủ sở hữu lock mới giải phóng được) */
+  public async releaseTaskLock(taskId: string, executionId: string): Promise<boolean> {
+    const key = this.keys.taskLock(taskId);
+    const holder = await this.redis.client.get(key).catch(() => null);
+    if (holder !== executionId) return false;
+    await this.redis.client.del(key).catch(() => undefined);
+    return true;
+  }
+
+  /** Đọc mã execution đang giữ Distributed Lock của công việc định kỳ (null nếu rảnh) */
+  public async getTaskLock(taskId: string): Promise<string | null> {
+    if (!this.redis.isReady()) return null;
+    return this.redis.client.get(this.keys.taskLock(taskId)).catch(() => null);
+  }
+
   /** Định nghĩa do scheduler runtime ghi; task đã xoá khỏi code bị gỡ khỏi hash nên không Run Now được nữa. */
   private async findTaskDefinition(taskId: string): Promise<TaskDefinitionJson | null> {
     if (!this.redis.isReady()) return null;
@@ -122,11 +231,12 @@ export class SchedulerOperationsService {
     return null;
   }
 
-  /** Run Now: Kích hoạt ngay một job trong queue đích của scheduler */
+  /** Run Now: Kích hoạt ngay một job trong queue đích của scheduler (có RBAC, Distributed Lock & Audit) */
   public async runNow(
     taskId: string,
     ctx: SchedulerOperationContext,
   ): Promise<{ record: SchedulerOperationRecord; executionId: string }> {
+    this.assertPermission(ctx, 'scheduler.run');
     if (!this.config.scheduler.run) {
       throw new SchedulerActionRejectedException('RUN_DISABLED');
     }
@@ -135,6 +245,25 @@ export class SchedulerOperationsService {
     if (!task) {
       const err = new SchedulerNotFoundException('scheduler.error.taskNotFound', { id: taskId });
       await this.audit('run', taskId, ctx, started, null, err.message);
+      throw err;
+    }
+
+    const activeHolder = await this.getTaskLock(taskId);
+    if (activeHolder) {
+      const err = new SchedulerActionRejectedException(
+        'TASK_RUNNING',
+        { execution: activeHolder },
+        409,
+      );
+      await this.audit(
+        'run',
+        taskId,
+        ctx,
+        started,
+        null,
+        `Task "${taskId}" is currently locked by execution "${activeHolder}"`,
+        activeHolder,
+      );
       throw err;
     }
 
@@ -175,11 +304,12 @@ export class SchedulerOperationsService {
     }
   }
 
-  /** Enable task */
+  /** Enable task (có RBAC & Audit) */
   public async enable(
     taskId: string,
     ctx: SchedulerOperationContext,
   ): Promise<SchedulerOperationRecord> {
+    this.assertPermission(ctx, 'scheduler.toggle');
     if (!this.config.scheduler.toggle) {
       throw new SchedulerActionRejectedException('TOGGLE_DISABLED');
     }
@@ -235,11 +365,12 @@ export class SchedulerOperationsService {
     }
   }
 
-  /** Disable task */
+  /** Disable task (có RBAC & Audit) */
   public async disable(
     taskId: string,
     ctx: SchedulerOperationContext,
   ): Promise<SchedulerOperationRecord> {
+    this.assertPermission(ctx, 'scheduler.toggle');
     if (!this.config.scheduler.toggle) {
       throw new SchedulerActionRejectedException('TOGGLE_DISABLED');
     }
@@ -271,5 +402,108 @@ export class SchedulerOperationsService {
       await this.audit('disable', taskId, ctx, started, null, msg);
       throw new SchedulerUnavailableException('STORE_UNAVAILABLE', { error: msg });
     }
+  }
+
+  /**
+   * 7.4.7 — Gửi cảnh báo tới người phụ trách khi một công việc định kỳ thất bại
+   * và lưu lịch sử cảnh báo vào Redis `scheduler:failure-alerts`.
+   */
+  public async notifyTaskFailure(input: {
+    taskId: string;
+    taskName?: string;
+    queue: string;
+    executionId: string;
+    error: string;
+    attemptsMade?: number;
+    recipients?: readonly string[];
+  }): Promise<SchedulerFailureAlertRecord | null> {
+    const task = await this.findTaskDefinition(input.taskId);
+    if (task?.notifyOnFailure === false) {
+      return null;
+    }
+
+    const recipientSet = new Set<string>();
+    for (const email of input.recipients ?? []) {
+      if (email?.trim()) recipientSet.add(email.trim());
+    }
+    if (task?.ownerEmail?.trim()) {
+      recipientSet.add(task.ownerEmail.trim());
+    }
+    for (const email of task?.notifyEmails ?? []) {
+      if (email?.trim()) recipientSet.add(email.trim());
+    }
+    for (const email of this.config.scheduler.alertRecipients ?? []) {
+      if (email?.trim()) recipientSet.add(email.trim());
+    }
+
+    const recipients = [...recipientSet];
+    const record: SchedulerFailureAlertRecord = {
+      id: `sch_fail_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      taskId: input.taskId,
+      taskName: input.taskName ?? task?.name ?? input.taskId,
+      queue: input.queue,
+      executionId: input.executionId,
+      error: input.error,
+      attemptsMade: input.attemptsMade ?? 1,
+      recipients,
+      failedAt: Date.now(),
+    };
+
+    if (this.redis.isReady()) {
+      await this.redis.client
+        .pipeline()
+        .lpush(this.keys.failureAlerts(), JSON.stringify(record))
+        .ltrim(this.keys.failureAlerts(), 0, SCHEDULER_FAILURE_ALERT_LOG_SIZE - 1)
+        .exec()
+        .catch(() => undefined);
+    }
+
+    if (recipients.length > 0 && input.taskName !== 'scheduler.task.failed') {
+      await this.publisher
+        .publish(
+          QUEUES.SYSTEM_CRITICAL,
+          'scheduler.task.failed',
+          {
+            channel: 'EMAIL',
+            templateCode: 'SCHEDULER_TASK_FAILED',
+            recipients: recipients.map((recipientAddress) => ({ recipientAddress })),
+            metadata: record,
+          },
+          {
+            correlationId: input.executionId,
+            job: {
+              source: {
+                kind: 'scheduler',
+                id: input.taskId,
+                name: record.taskName,
+                detail: input.executionId,
+              },
+            },
+          },
+        )
+        .catch(() => undefined);
+    }
+
+    return record;
+  }
+
+  /** Lấy danh sách các cảnh báo thất bại đã gửi cho người phụ trách */
+  public async listFailureAlerts(limit = 50): Promise<SchedulerFailureAlertRecord[]> {
+    if (!this.redis.isReady()) return [];
+    const safeLimit = Math.min(SCHEDULER_FAILURE_ALERT_LOG_SIZE, Math.max(1, limit));
+    const raw = await this.redis.client
+      .lrange(this.keys.failureAlerts(), 0, safeLimit - 1)
+      .catch(() => [] as string[]);
+    return safeJsonParseList<SchedulerFailureAlertRecord>(raw);
+  }
+
+  /** Lấy danh sách các lần chạy bị bỏ lỡ đã phát hiện (7.4.8) */
+  public async listMissedExecutions(limit = 50): Promise<MissedExecutionRecord[]> {
+    if (!this.redis.isReady()) return [];
+    const safeLimit = Math.min(SCHEDULER_MISSED_LOG_SIZE, Math.max(1, limit));
+    const raw = await this.redis.client
+      .lrange(this.keys.missedRuns(), 0, safeLimit - 1)
+      .catch(() => [] as string[]);
+    return safeJsonParseList<MissedExecutionRecord>(raw);
   }
 }

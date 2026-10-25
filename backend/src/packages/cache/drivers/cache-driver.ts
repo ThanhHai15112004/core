@@ -11,6 +11,8 @@ export interface CacheDriver {
   get(key: string): Promise<CacheReadResult>;
   set(key: string, value: unknown, ttlSeconds: number): Promise<void>;
   delete(key: string): Promise<void>;
+  /** Xoá toàn bộ các key có tiền tố `prefix`. Trả về số key đã xoá. */
+  deleteByPrefix(prefix: string): Promise<number>;
   has(key: string): Promise<boolean>;
   /** Xoá toàn bộ dữ liệu cache của driver (chỉ vùng cache của core). Trả về số key đã xoá. */
   clear(): Promise<number>;

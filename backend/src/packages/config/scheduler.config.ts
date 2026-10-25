@@ -22,6 +22,16 @@ function timezoneOr(key: string): string {
   }
 }
 
+/** Chuyển đổi chuỗi phân tách bằng dấu phẩy sang mảng chuỗi */
+const listOr = (key: string, fallback: string[]): string[] => {
+  const raw = env(key, false).trim();
+  if (!raw) return fallback;
+  return raw
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+};
+
 /**
  * Scheduler (BullMQ Job Scheduler): múi giờ lịch chạy, ngưỡng giám sát và quyền thao tác từ System Console. Lịch sử
  * thực thi là job còn giữ trên broker (retention của messaging) — không lưu riêng.
@@ -29,6 +39,10 @@ function timezoneOr(key: string): string {
 export const schedulerConfig = () => ({
   /** Múi giờ mặc định của lịch cron (task có thể khai báo riêng). */
   timezone: timezoneOr('SCHEDULER_TIMEZONE'),
+  /** TTL mặc định (giây) của distributed lock ngăn một công việc định kỳ chạy trùng. */
+  lockTtlSec: numberOr('SCHEDULER_LOCK_TTL_SEC', 300),
+  /** Danh sách người phụ trách mặc định nhận cảnh báo khi công việc định kỳ thất bại. */
+  alertRecipients: listOr('SCHEDULER_ALERT_RECIPIENTS', []),
   rules: {
     /** Không nhận heartbeat của scheduler instance nào quá chừng này (giây) → runtime down. */
     heartbeatTimeoutSec: numberOr('SCHEDULER_HEARTBEAT_TIMEOUT_SEC', 30),
@@ -44,6 +58,8 @@ export const schedulerConfig = () => ({
   run: booleanOr('OPS_SCHEDULER_RUN_ENABLED', true),
   /** Enable / Disable task từ System Console. */
   toggle: booleanOr('OPS_SCHEDULER_TOGGLE_ENABLED', true),
+  /** Bắt buộc kiểm tra quyền RBAC khi thao tác Run Now / Enable / Disable. */
+  requireRbac: booleanOr('OPS_SCHEDULER_REQUIRE_RBAC', false),
 });
 
 export type SchedulerConfig = ReturnType<typeof schedulerConfig>;

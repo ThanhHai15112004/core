@@ -50,6 +50,13 @@ export class MemoryCacheDriver implements CacheDriver {
     this.store.delete(key);
   }
 
+  /** Xóa toàn bộ các khóa bắt đầu bằng `prefix` trong bộ nhớ RAM */
+  public async deleteByPrefix(prefix: string): Promise<number> {
+    const cleanPrefix = prefix.trim().replace(/^:+/, '');
+    if (!cleanPrefix) return 0;
+    return this.deleteWhere((k) => k.startsWith(cleanPrefix));
+  }
+
   /** Kiểm tra sự tồn tại của một khóa trong bộ lưu trữ */
   public async has(key: string): Promise<boolean> {
     return (await this.get(key)).found;

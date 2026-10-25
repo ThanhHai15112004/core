@@ -10,6 +10,7 @@ import {
   classifyJobError,
   logLifecycle,
   parseEnvelope,
+  resolveScheduledTaskId,
   scheduledEnvelope,
   toUnrecoverable,
   type MessageEnvelope,
@@ -120,10 +121,35 @@ export abstract class BaseQueueProcessor extends WorkerHost implements OnApplica
     const startedMs = Date.now();
     const end = this.duration.startTimer({ queue: job.queueName, channel: envelope.topic });
     const timeoutMs = this.resolveExecutionTimeoutMs(envelope);
+    const scheduledTaskId = resolveScheduledTaskId(job) ?? envelope.meta?.index?.['taskId'] ?? null;
+    let lockAcquired = false;
 
     try {
       if (this.progressTracker) {
         await this.progressTracker.assertNotCancelled(job.queueName, jobId, job);
+      }
+
+      if (scheduledTaskId && this.progressTracker) {
+        const lockRes = await this.progressTracker.acquireScheduledTaskLock(
+          scheduledTaskId,
+          jobId,
+          this.config.scheduler?.lockTtlSec,
+        );
+        if (!lockRes.acquired) {
+          logLifecycle(job, 'skipped', {
+            attempt,
+            runtime: 'worker',
+            consumer: this.constructor.name,
+            error: `Overlap prevented: task "${scheduledTaskId}" is already locked by execution "${lockRes.holder ?? 'unknown'}"`,
+          });
+          return {
+            skipped: true,
+            reason: 'overlap_prevented',
+            taskId: scheduledTaskId,
+            holderExecutionId: lockRes.holder,
+          };
+        }
+        lockAcquired = true;
       }
 
       const result = await RequestContextService.runWith(
@@ -139,6 +165,10 @@ export abstract class BaseQueueProcessor extends WorkerHost implements OnApplica
             `${job.queueName}/${envelope.topic}`,
           ),
       );
+
+      if (scheduledTaskId && this.progressTracker) {
+        await this.progressTracker.recordScheduledTaskCheckpoint(scheduledTaskId, Date.now());
+      }
 
       logLifecycle(job, 'completed', {
         attempt,
@@ -197,6 +227,16 @@ export abstract class BaseQueueProcessor extends WorkerHost implements OnApplica
             producer: envelope.producer ?? null,
             failedAt: Date.now(),
           });
+          if (scheduledTaskId) {
+            await this.progressTracker.notifyScheduledTaskFailure({
+              taskId: scheduledTaskId,
+              taskName: envelope.topic,
+              queue: job.queueName,
+              executionId: jobId,
+              error: info.message,
+              attemptsMade: attempt,
+            });
+          }
         }
       }
 
@@ -205,6 +245,9 @@ export abstract class BaseQueueProcessor extends WorkerHost implements OnApplica
       }
       throw err;
     } finally {
+      if (lockAcquired && scheduledTaskId && this.progressTracker) {
+        await this.progressTracker.releaseScheduledTaskLock(scheduledTaskId, jobId);
+      }
       this.processed++;
       end();
     }

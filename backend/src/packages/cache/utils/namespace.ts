@@ -51,3 +51,66 @@ export function namespacePattern(dataPrefix: string, ns: string): string {
 export function matchesNamespace(ns: string, list: readonly string[]): boolean {
   return list.some((n) => ns === n || ns.startsWith(`${n}:`) || ns.split(':').includes(n));
 }
+
+export interface StandardCacheKeyInput {
+  project: string;
+  environment: string;
+  module: string;
+  key: string;
+}
+
+export interface ParsedStandardCacheKey {
+  project: string;
+  environment: string;
+  module: string;
+  key: string;
+}
+
+/** Chuẩn hóa một thành phần định danh trong Cache Key (chữ thường, gọn, không chứa khoảng trắng). */
+export function normalizeCacheSegment(raw: string, fallback: string): string {
+  const cleaned = raw
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+  return cleaned || fallback;
+}
+
+/**
+ * 7.5.2 — Chuẩn hóa tên Cache Key theo cấu trúc `<project>:<environment>:<module>:<key>`.
+ * Nếu `key` đầu vào đã có tiền tố `<project>:<environment>:<module>:` thì không ghép lặp lại.
+ */
+export function buildStandardCacheKey(input: StandardCacheKeyInput): string {
+  const project = normalizeCacheSegment(input.project, 'core');
+  const environment = normalizeCacheSegment(input.environment, 'development');
+  const moduleName = normalizeCacheSegment(input.module, 'common');
+  const rawKey = input.key.trim().replace(/^:+|:+$/g, '');
+  if (!rawKey) {
+    throw new Error('Cache key suffix must not be empty');
+  }
+  const prefix = `${project}:${environment}:${moduleName}:`;
+  if (rawKey.startsWith(prefix)) {
+    return rawKey;
+  }
+  const modulePrefix = `${moduleName}:`;
+  const normalizedSuffix = rawKey.startsWith(modulePrefix)
+    ? rawKey.slice(modulePrefix.length)
+    : rawKey;
+  return `${prefix}${normalizedSuffix}`;
+}
+
+/** Phân tích một khóa đã chuẩn hóa theo cấu trúc `<project>:<environment>:<module>:<key>`. */
+export function parseStandardCacheKey(scopedKey: string): ParsedStandardCacheKey | null {
+  const parts = scopedKey.trim().split(':');
+  if (parts.length < 4) return null;
+  const [project, environment, moduleName, ...rest] = parts;
+  if (!project || !environment || !moduleName || rest.length === 0) {
+    return null;
+  }
+  return {
+    project,
+    environment,
+    module: moduleName,
+    key: rest.join(':'),
+  };
+}

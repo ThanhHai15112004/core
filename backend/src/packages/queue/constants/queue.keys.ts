@@ -27,7 +27,7 @@ export const FAILED_JOB_ARCHIVE_SIZE = 1000;
 export const CANCEL_SIGNAL_TTL_SEC = 86_400;
 export const PROGRESS_SNAPSHOT_TTL_SEC = 7 * 86_400;
 
-/** Key Redis của Scheduler (định nghĩa task, task bị tắt, audit thao tác) — đã có REDIS_PREFIX. */
+/** Key Redis của Scheduler (định nghĩa task, task bị tắt, audit thao tác, lock phân tán, lịch bị bỏ lỡ) — đã có REDIS_PREFIX. */
 export const schedulerKeys = (redis: RedisService) => ({
   /** Hash taskId → định nghĩa (scheduler runtime ghi khi đồng bộ). */
   definitions: () => redis.key('scheduler', 'definitions'),
@@ -35,4 +35,15 @@ export const schedulerKeys = (redis: RedisService) => ({
   disabled: () => redis.key('scheduler', 'disabled'),
   /** LIST audit thao tác (Run Now / Enable / Disable). */
   operations: () => redis.key('scheduler', 'operations'),
+  /** STRING distributed lock cho từng taskId để ngăn chạy trùng (SET NX EX). */
+  taskLock: (taskId: string) => redis.key('scheduler', 'lock', taskId),
+  /** HASH taskId → timestamp ms lần cuối scheduler hoạt động hoặc task hoàn tất (dùng phát hiện lịch bị bỏ lỡ). */
+  checkpoints: () => redis.key('scheduler', 'checkpoints'),
+  /** LIST lịch sử các lần chạy bị bỏ lỡ khi server tắt lâu (mới nhất trước). */
+  missedRuns: () => redis.key('scheduler', 'missed'),
+  /** LIST lịch sử cảnh báo khi task định kỳ thất bại gửi cho người phụ trách (mới nhất trước). */
+  failureAlerts: () => redis.key('scheduler', 'failure-alerts'),
 });
+
+export const SCHEDULER_MISSED_LOG_SIZE = 200;
+export const SCHEDULER_FAILURE_ALERT_LOG_SIZE = 200;

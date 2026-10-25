@@ -4,9 +4,11 @@ import { safeJsonParse } from '@packages/kernel/index.js';
 import { CoreConfigService } from '@packages/config/index.js';
 import { RedisService } from '@packages/redis/index.js';
 import {
+  BaseMessagePublisherProvider,
   JOB_CANCELLED,
   JobError,
   logLifecycle,
+  QUEUES,
   type JobDependency,
 } from '@packages/messaging/index.js';
 import {
@@ -14,6 +16,8 @@ import {
   FAILED_JOB_ARCHIVE_SIZE,
   PROGRESS_SNAPSHOT_TTL_SEC,
   queueKeys,
+  SCHEDULER_FAILURE_ALERT_LOG_SIZE,
+  schedulerKeys,
 } from '../constants/queue.keys.js';
 import type { JobProgressInfo } from '../contracts/job.types.js';
 import { progressOf } from '../providers/bullmq-job.provider.js';
@@ -62,6 +66,7 @@ export class JobProgressTrackerService {
   constructor(
     private readonly redis: RedisService,
     @Optional() private readonly config?: CoreConfigService,
+    @Optional() private readonly publisher?: BaseMessagePublisherProvider,
   ) {}
 
   /** Khởi tạo cấu trúc các pha (phases) của một job nhiều bước */
@@ -244,6 +249,157 @@ export class JobProgressTrackerService {
       if (result.length >= limit) break;
     }
     return result;
+  }
+
+  /**
+   * 7.4.3 — Chiếm giữ Distributed Lock trên Redis cho một công việc định kỳ (`scheduler:lock:<taskId>`)
+   * bằng lệnh nguyên tử `SET key executionId NX EX ttlSec` để ngăn chạy trùng.
+   */
+  public async acquireScheduledTaskLock(
+    taskId: string,
+    executionId: string,
+    ttlSec?: number,
+  ): Promise<{ acquired: boolean; holder: string | null }> {
+    const key = schedulerKeys(this.redis).taskLock(taskId);
+    const effectiveTtl = Math.max(5, ttlSec ?? this.config?.scheduler?.lockTtlSec ?? 300);
+    const setRes = await this.redis.client
+      .set(key, executionId, 'EX', effectiveTtl, 'NX')
+      .catch(() => null);
+    if (setRes === 'OK') {
+      return { acquired: true, holder: executionId };
+    }
+    const currentHolder = await this.redis.client.get(key).catch(() => null);
+    if (currentHolder === executionId) {
+      await this.redis.client.expire(key, effectiveTtl).catch(() => undefined);
+      return { acquired: true, holder: executionId };
+    }
+    if (!currentHolder) {
+      const retrySet = await this.redis.client
+        .set(key, executionId, 'EX', effectiveTtl, 'NX')
+        .catch(() => null);
+      if (retrySet === 'OK') {
+        return { acquired: true, holder: executionId };
+      }
+    }
+    return { acquired: false, holder: currentHolder };
+  }
+
+  /** Giải phóng Distributed Lock của công việc định kỳ (chỉ giải phóng nếu đúng chủ sở hữu `executionId`) */
+  public async releaseScheduledTaskLock(taskId: string, executionId: string): Promise<boolean> {
+    const key = schedulerKeys(this.redis).taskLock(taskId);
+    const holder = await this.redis.client.get(key).catch(() => null);
+    if (holder !== executionId) {
+      return false;
+    }
+    await this.redis.client.del(key).catch(() => undefined);
+    return true;
+  }
+
+  /** Kiểm tra xem công việc định kỳ đang bị giữ lock bởi execution nào (null nếu đang rảnh) */
+  public async getScheduledTaskLock(taskId: string): Promise<string | null> {
+    const key = schedulerKeys(this.redis).taskLock(taskId);
+    return this.redis.client.get(key).catch(() => null);
+  }
+
+  /** Cập nhật mốc thời gian hoàn tất/checkpoint gần nhất của một công việc định kỳ */
+  public async recordScheduledTaskCheckpoint(
+    taskId: string,
+    timestampMs = Date.now(),
+  ): Promise<void> {
+    await this.redis.client
+      .hset(schedulerKeys(this.redis).checkpoints(), taskId, String(timestampMs))
+      .catch(() => undefined);
+  }
+
+  /**
+   * 7.4.7 — Ghi nhận cảnh báo khi công việc định kỳ thất bại và gửi thông báo tới người phụ trách
+   * (`ownerEmail` / `notifyEmails` / `SCHEDULER_ALERT_RECIPIENTS`) qua hàng đợi khẩn cấp `system.critical`.
+   */
+  public async notifyScheduledTaskFailure(input: {
+    taskId: string;
+    taskName?: string;
+    queue: string;
+    executionId: string;
+    error: string;
+    attemptsMade: number;
+    recipients?: readonly string[];
+  }): Promise<{ alerted: boolean; recipients: string[]; alertId: string | null }> {
+    const keys = schedulerKeys(this.redis);
+    const rawDef = await this.redis.client.hget(keys.definitions(), input.taskId).catch(() => null);
+    const def = safeJsonParse<{
+      name?: string;
+      ownerEmail?: string;
+      notifyEmails?: string[];
+      notifyOnFailure?: boolean;
+      lockTtlSec?: number;
+    } | null>(rawDef, null);
+
+    if (def?.notifyOnFailure === false) {
+      return { alerted: false, recipients: [], alertId: null };
+    }
+
+    const recipientSet = new Set<string>();
+    for (const email of input.recipients ?? []) {
+      if (email?.trim()) recipientSet.add(email.trim());
+    }
+    if (def?.ownerEmail?.trim()) {
+      recipientSet.add(def.ownerEmail.trim());
+    }
+    for (const email of def?.notifyEmails ?? []) {
+      if (email?.trim()) recipientSet.add(email.trim());
+    }
+    for (const email of this.config?.scheduler?.alertRecipients ?? []) {
+      if (email?.trim()) recipientSet.add(email.trim());
+    }
+
+    const recipients = [...recipientSet];
+    const alertId = `sch_fail_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    const record = {
+      id: alertId,
+      taskId: input.taskId,
+      taskName: input.taskName ?? def?.name ?? input.taskId,
+      queue: input.queue,
+      executionId: input.executionId,
+      error: input.error,
+      attemptsMade: input.attemptsMade,
+      recipients,
+      failedAt: Date.now(),
+    };
+
+    await this.redis.client
+      .multi()
+      .lpush(keys.failureAlerts(), JSON.stringify(record))
+      .ltrim(keys.failureAlerts(), 0, SCHEDULER_FAILURE_ALERT_LOG_SIZE - 1)
+      .exec()
+      .catch(() => undefined);
+
+    if (recipients.length > 0 && this.publisher && input.taskName !== 'scheduler.task.failed') {
+      await this.publisher
+        .publish(
+          QUEUES.SYSTEM_CRITICAL,
+          'scheduler.task.failed',
+          {
+            channel: 'EMAIL',
+            templateCode: 'SCHEDULER_TASK_FAILED',
+            recipients: recipients.map((recipientAddress) => ({ recipientAddress })),
+            metadata: record,
+          },
+          {
+            correlationId: input.executionId,
+            job: {
+              source: {
+                kind: 'scheduler',
+                id: input.taskId,
+                name: record.taskName,
+                detail: input.executionId,
+              },
+            },
+          },
+        )
+        .catch(() => undefined);
+    }
+
+    return { alerted: true, recipients, alertId };
   }
 }
 

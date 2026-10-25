@@ -5,6 +5,8 @@ import { Injectable } from '@nestjs/common';
  * Scheduler runtime đồng bộ định nghĩa này sang BullMQ Job Scheduler.
  * Worker runtime sẽ là nơi thực sự xử lý job do scheduler kích hoạt.
  */
+export type ScheduledTaskMisfirePolicy = 'skip' | 'run_once';
+
 export interface ScheduledTaskDefinition {
   id: string;
   queue: string;
@@ -14,6 +16,16 @@ export interface ScheduledTaskDefinition {
   every?: number; // interval in milliseconds
   tz?: string;
   data?: Record<string, unknown>;
+  /** Người phụ trách chính nhận cảnh báo khi công việc định kỳ thất bại. */
+  ownerEmail?: string;
+  /** Danh sách email người nhận cảnh báo bổ sung khi công việc thất bại. */
+  notifyEmails?: string[];
+  /** Có gửi cảnh báo khi công việc thất bại hay không (mặc định true). */
+  notifyOnFailure?: boolean;
+  /** Chính sách xử lý khi phát hiện công việc bị bỏ lỡ (server tắt lâu): 'skip' hoặc 'run_once'. */
+  misfirePolicy?: ScheduledTaskMisfirePolicy;
+  /** Thời gian giữ distributed lock tối đa (giây) để ngăn chạy trùng. */
+  lockTtlSec?: number;
 }
 
 const TASK_ID = /^[a-z0-9][a-z0-9._-]{0,99}$/;

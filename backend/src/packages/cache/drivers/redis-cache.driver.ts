@@ -46,6 +46,15 @@ export class RedisCacheDriver implements CacheDriver {
     await this.redis.client.unlink(this.keys.data(key));
   }
 
+  /** Xóa toàn bộ các khóa có tiền tố `prefix` trong vùng cache của core bằng SCAN + UNLINK */
+  public async deleteByPrefix(prefix: string): Promise<number> {
+    this.ensureReady();
+    const cleanPrefix = prefix.trim().replace(/^:+/, '');
+    if (!cleanPrefix) return 0;
+    const pattern = `${escapeGlob(this.keys.dataPrefix())}${escapeGlob(cleanPrefix)}*`;
+    return unlinkMatching(this.redis, pattern, (k) => k.startsWith(cleanPrefix));
+  }
+
   /** Kiểm tra sự tồn tại của một khóa trong bộ lưu trữ */
   public async has(key: string): Promise<boolean> {
     this.ensureReady();

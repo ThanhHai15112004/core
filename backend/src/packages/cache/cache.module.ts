@@ -4,6 +4,7 @@ import { CacheConnectionService } from './providers/cache-connection.service.js'
 import { CacheManageableAdapter } from './providers/cache-manageable.adapter.js';
 import { CacheMonitoringService } from './monitoring/cache-monitoring.service.js';
 import { CacheOperationsService } from './operations/cache-operations.service.js';
+import { DistributedLockService } from './locks/distributed-lock.service.js';
 
 @Global()
 @Module({
@@ -13,6 +14,7 @@ import { CacheOperationsService } from './operations/cache-operations.service.js
     CacheMonitoringService,
     CacheOperationsService,
     CacheManageableAdapter,
+    DistributedLockService,
   ],
   exports: [
     BaseCacheProvider,
@@ -20,6 +22,7 @@ import { CacheOperationsService } from './operations/cache-operations.service.js
     CacheMonitoringService,
     CacheOperationsService,
     CacheManageableAdapter,
+    DistributedLockService,
   ],
 })
 export class CacheModule {}

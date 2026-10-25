@@ -6,7 +6,11 @@ import { CoreI18nService } from '@packages/i18n/index.js';
 import { safeJsonParse } from '@packages/kernel/index.js';
 import { RedisService } from '@packages/redis/index.js';
 import { QueueRegistry, schedulerKeys } from '@packages/queue/index.js';
-import { MANUAL_RUN_PREFIX, MessagingConnectionService } from '@packages/messaging/index.js';
+import {
+  CATCHUP_RUN_PREFIX,
+  MANUAL_RUN_PREFIX,
+  MessagingConnectionService,
+} from '@packages/messaging/index.js';
 import {
   SchedulerOperationsService,
   type SchedulerOperationContext,
@@ -14,6 +18,8 @@ import {
 import type {
   ExecutionStatus,
   ExecutionTrigger,
+  MissedExecutionRecord,
+  SchedulerFailureAlertRecord,
   SchedulerOperationRecord,
 } from '../contracts/scheduler.types.js';
 import { SchedulerNotFoundException } from '../exceptions/scheduler-ops.exceptions.js';
@@ -97,6 +103,7 @@ interface Snapshot {
   disabled: Set<string>;
   schedulers: Map<string, LiveScheduler>;
   executions: ExecutionDto[];
+  missedRuns: MissedExecutionRecord[];
   /** Broker đọc được (lịch sử có thể rỗng vì chưa chạy, không phải vì mất kết nối). */
   brokerUp: boolean;
 }
@@ -109,13 +116,19 @@ const percentile = (sorted: number[], p: number) =>
     ? sorted[Math.min(sorted.length - 1, Math.floor((p / 100) * sorted.length))]!
     : null;
 
-/** Task của một job: Job Scheduler gắn `repeatJobKey` = id lịch; Run Now dùng jobId `manual:<task>:<ts>`. */
+/** Task của một job: Job Scheduler gắn `repeatJobKey` = id lịch; Run Now dùng `manual:<task>:<ts>`; Catch-up dùng `catchup:<task>:<ts>`. */
 function taskOfJob(job: Job): { taskId: string; trigger: ExecutionTrigger } | null {
   if (job.repeatJobKey) return { taskId: job.repeatJobKey, trigger: 'scheduled' };
   const id = job.id ?? '';
-  if (!id.startsWith(MANUAL_RUN_PREFIX)) return null;
-  const taskId = id.slice(MANUAL_RUN_PREFIX.length).split(':')[0];
-  return taskId ? { taskId, trigger: 'manual' } : null;
+  if (id.startsWith(MANUAL_RUN_PREFIX)) {
+    const taskId = id.slice(MANUAL_RUN_PREFIX.length).split(':')[0];
+    return taskId ? { taskId, trigger: 'manual' } : null;
+  }
+  if (id.startsWith(CATCHUP_RUN_PREFIX)) {
+    const taskId = id.slice(CATCHUP_RUN_PREFIX.length).split(':')[0];
+    return taskId ? { taskId, trigger: 'scheduled' } : null;
+  }
+  return null;
 }
 
 /**
@@ -142,9 +155,10 @@ export class SchedulerOpsService {
   private async snapshot(): Promise<Snapshot> {
     const keys = schedulerKeys(this.redis);
     const ready = this.redis.isReady();
-    const [rawDefs, disabled] = await Promise.all([
+    const [rawDefs, disabled, missedRuns] = await Promise.all([
       ready ? this.redis.client.hgetall(keys.definitions()).catch(() => ({})) : {},
       ready ? this.redis.client.smembers(keys.disabled()).catch(() => []) : [],
+      ready ? this.operations.listMissedExecutions(100) : Promise.resolve([]),
     ]);
     const defs = new Map<string, TaskDefinition>();
     for (const [id, raw] of Object.entries(rawDefs as Record<string, string>)) {
@@ -169,7 +183,7 @@ export class SchedulerOpsService {
       }
     }
     executions.sort((a, b) => Date.parse(b.scheduledAt ?? '') - Date.parse(a.scheduledAt ?? ''));
-    return { defs, disabled: new Set(disabled), schedulers, executions, brokerUp };
+    return { defs, disabled: new Set(disabled), schedulers, executions, missedRuns, brokerUp };
   }
 
   /** Job của task trên một queue — đọc theo từng trạng thái nên không cần gọi `getState()` từng job. */
@@ -403,15 +417,18 @@ export class SchedulerOpsService {
   }
 
   /**
-   * Cảnh báo: heartbeat mất (chỉ khi đã từng có heartbeat — `instance` khác null) và task lỗi liên tiếp.
+   * Cảnh báo: heartbeat mất (chỉ khi đã từng có heartbeat — `instance` khác null), task lỗi liên tiếp
+   * và công việc bị bỏ lỡ (`MISSED_RUN` — mục 7.4.8).
    * `heartbeat` = null → bỏ qua cảnh báo heartbeat (trang task chỉ lấy cảnh báo của task).
    */
   private alerts(
     tasks: TaskRowDto[],
     heartbeat: { health: SchedulerHealthDto; instance: SchedulerInstanceDto | null } | null,
+    missedRuns: MissedExecutionRecord[] = [],
   ): SchedulerAlertDto[] {
     const rules = this.config.scheduler.rules;
-    const now = new Date().toISOString();
+    const nowMs = Date.now();
+    const now = new Date(nowMs).toISOString();
     const out: SchedulerAlertDto[] = [];
     const inst = heartbeat?.instance ?? null;
     if (heartbeat?.health.status === 'down' && inst)
@@ -445,6 +462,31 @@ export class SchedulerOpsService {
         executionId: t.lastExecutionId,
         tab: 'tasks',
       });
+
+    const recentMissedCutoff = nowMs - 60 * MINUTE;
+    for (const t of tasks) {
+      const taskMissed = missedRuns.filter(
+        (m) =>
+          m.taskId === t.id &&
+          (m.detectedAt >= recentMissedCutoff || m.scheduledAt >= recentMissedCutoff),
+      );
+      if (taskMissed.length > 0) {
+        out.push({
+          id: `MISSED_RUN:${t.id}`,
+          rule: 'MISSED_RUN',
+          severity: 'warning',
+          title: this.i18n.t('scheduler.alert.MISSED_RUN.title'),
+          message: this.i18n.t('scheduler.alert.MISSED_RUN.message', {
+            task: t.name,
+            value: taskMissed.length,
+          }),
+          since: new Date(taskMissed[0]!.scheduledAt).toISOString(),
+          taskId: t.id,
+          executionId: taskMissed[0]!.compensatedExecutionId,
+          tab: 'tasks',
+        });
+      }
+    }
     return out;
   }
 
@@ -528,7 +570,7 @@ export class SchedulerOpsService {
         nextExecutionAt: upcoming.items[0]?.at ?? null,
         nextExecutionTask: upcoming.items[0]?.taskName ?? null,
       },
-      alerts: this.alerts(tasks, { health, instance }),
+      alerts: this.alerts(tasks, { health, instance }, s.missedRuns),
       upcoming: upcoming.items.slice(0, 10),
       concentration: upcoming.concentration,
       tasks,
@@ -636,7 +678,7 @@ export class SchedulerOpsService {
         }))
         .reverse(),
       recent: recent.slice(0, 20),
-      alerts: this.alerts([task], null),
+      alerts: this.alerts([task], null, s.missedRuns),
       settings: this.settings,
     };
   }
@@ -879,5 +921,15 @@ export class SchedulerOpsService {
   /** Vô hiệu hóa một tác vụ hoặc module trong hệ thống */
   public async disable(taskId: string, ctx: SchedulerOperationContext) {
     return this.operationDto(await this.operations.disable(taskId, ctx));
+  }
+
+  /** Lấy danh sách các lần chạy bị bỏ lỡ đã phát hiện (7.4.8) */
+  public async getMissedExecutions(limit = 50): Promise<MissedExecutionRecord[]> {
+    return this.operations.listMissedExecutions(limit);
+  }
+
+  /** Lấy danh sách cảnh báo khi công việc định kỳ thất bại gửi cho người phụ trách (7.4.7) */
+  public async getFailureAlerts(limit = 50): Promise<SchedulerFailureAlertRecord[]> {
+    return this.operations.listFailureAlerts(limit);
   }
 }
