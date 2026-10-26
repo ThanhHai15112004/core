@@ -1,10 +1,17 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { fetchApi } from '../../../core/services/api';
+import { API_ROUTES } from '../../../routes/index';
 import { organizationsApi } from '../services/organizations.api';
-import type { OrgViewMode } from '../enum/organizations.enum';
+import { ORG_UNIT_TYPE_OPTIONS, type OrgViewMode } from '../enum/organizations.enum';
 import type {
+  BulkImportOrganizationsPayload,
+  BulkImportOrganizationsResult,
   CreateOrganizationUnitPayload,
+  OrganizationManagerOption,
+  OrganizationMoveImpact,
   OrganizationStats,
   OrganizationTreeNode,
+  OrganizationTypeOption,
   OrganizationUnitItem,
   UpdateOrganizationUnitPayload,
 } from '../types/organizations.types';
@@ -49,11 +56,47 @@ function buildClientSideTree(units: readonly OrganizationUnitItem[]): Organizati
   return (childrenMap.get(null) ?? []).map((r) => buildNode(r, 1, ''));
 }
 
+function triggerDownloadExportFile(file: {
+  fileName: string;
+  format: 'csv' | 'xlsx';
+  csvContent: string;
+  xlsxBase64: string;
+}) {
+  if (file.format === 'xlsx' && file.xlsxBase64) {
+    const binary = atob(file.xlsxBase64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    const blob = new Blob([bytes], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = file.fileName;
+    a.click();
+    URL.revokeObjectURL(url);
+  } else {
+    const blob = new Blob([file.csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = file.fileName;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+}
+
 export function useOrganizationsManagement() {
   const [viewMode, setViewMode] = useState<OrgViewMode>('split');
   const [units, setUnits] = useState<OrganizationUnitItem[]>([]);
   const [treeNodes, setTreeNodes] = useState<OrganizationTreeNode[]>([]);
   const [stats, setStats] = useState<OrganizationStats | null>(null);
+  const [unitTypeOptions, setUnitTypeOptions] = useState<readonly OrganizationTypeOption[]>(
+    ORG_UNIT_TYPE_OPTIONS,
+  );
+  const [managerOptions, setManagerOptions] = useState<readonly OrganizationManagerOption[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [statusBanner, setStatusBanner] = useState<{ type: 'ok' | 'err'; text: string } | null>(
     null,
@@ -69,6 +112,12 @@ export function useOrganizationsManagement() {
   const [selectedUnitId, setSelectedUnitId] = useState<number | null>(null);
   const [formMode, setFormMode] = useState<'create' | 'edit'>('create');
   const [presetParentId, setPresetParentId] = useState<number | null>(null);
+  const [moveImpactPreview, setMoveImpactPreview] = useState<OrganizationMoveImpact | null>(null);
+
+  // Import / Export Modal
+  const [showImportExportModal, setShowImportExportModal] = useState<boolean>(false);
+  const [submittingImportExport, setSubmittingImportExport] = useState<boolean>(false);
+  const [importResult, setImportResult] = useState<BulkImportOrganizationsResult | null>(null);
 
   const notify = useCallback((type: 'ok' | 'err', text: string) => {
     setStatusBanner({ type, text });
@@ -77,11 +126,60 @@ export function useOrganizationsManagement() {
   const loadOrganizationsData = useCallback(async () => {
     setLoading(true);
     try {
-      const [listRes, treeRes, statsRes] = await Promise.all([
+      const [listRes, treeRes, statsRes, dynamicTypesRes, usersRes] = await Promise.all([
         organizationsApi.list().catch(() => []),
         organizationsApi.getTree().catch(() => null),
         organizationsApi.getStats().catch(() => null),
+        fetchApi<
+          Array<{
+            numericCode: number;
+            code: string;
+            label?: string;
+            name?: string;
+            status?: number;
+          }>
+        >(API_ROUTES.CODES.VALUES('organizations.unit_type')).catch(() => null),
+        fetchApi<
+          | Array<{ id: number; username: string; fullName?: string; email?: string | null }>
+          | {
+              data?: Array<{
+                id: number;
+                username: string;
+                fullName?: string;
+                email?: string | null;
+              }>;
+            }
+        >(API_ROUTES.USERS.LIST('limit=100')).catch(() => null),
       ]);
+
+      if (Array.isArray(dynamicTypesRes) && dynamicTypesRes.length > 0) {
+        const mappedTypes: OrganizationTypeOption[] = dynamicTypesRes
+          .filter((v) => v.status === undefined || v.status === 1)
+          .map((v) => ({
+            code: Number(v.numericCode),
+            key: v.code,
+            label: `${v.label ?? v.name ?? v.code} (${v.code})`,
+          }));
+        if (mappedTypes.length > 0) {
+          setUnitTypeOptions(mappedTypes);
+        }
+      }
+
+      const rawUsers = Array.isArray(usersRes)
+        ? usersRes
+        : usersRes && Array.isArray(usersRes.data)
+          ? usersRes.data
+          : [];
+      if (rawUsers.length > 0) {
+        setManagerOptions(
+          rawUsers.map((u) => ({
+            id: Number(u.id),
+            username: u.username,
+            fullName: u.fullName || u.username,
+            email: u.email ?? null,
+          })),
+        );
+      }
 
       const safeList = Array.isArray(listRes) ? listRes : [];
       setUnits(safeList);
@@ -128,7 +226,11 @@ export function useOrganizationsManagement() {
       }
       if (searchQuery.trim()) {
         const q = searchQuery.trim().toLowerCase();
-        if (!u.code.toLowerCase().includes(q) && !u.name.toLowerCase().includes(q)) {
+        if (
+          !u.code.toLowerCase().includes(q) &&
+          !u.name.toLowerCase().includes(q) &&
+          !(u.managerName ?? '').toLowerCase().includes(q)
+        ) {
           return false;
         }
       }
@@ -144,13 +246,30 @@ export function useOrganizationsManagement() {
   const handleSelectUnitForEdit = useCallback((unit: OrganizationUnitItem) => {
     setSelectedUnitId(unit.id);
     setFormMode('edit');
+    setMoveImpactPreview(null);
   }, []);
 
   const handleOpenCreateChild = useCallback((parentUnit: OrganizationUnitItem | null) => {
     setSelectedUnitId(parentUnit?.id ?? null);
     setPresetParentId(parentUnit?.id ?? null);
     setFormMode('create');
+    setMoveImpactPreview(null);
   }, []);
+
+  const handleAssessMoveImpact = useCallback(
+    async (unitId: number, newParentId: number | null) => {
+      try {
+        const impact = await organizationsApi.assessMoveImpact(unitId, newParentId);
+        setMoveImpactPreview(impact);
+        return impact;
+      } catch (err) {
+        setMoveImpactPreview(null);
+        notify('err', err instanceof Error ? err.message : 'Lỗi kiểm tra ảnh hưởng di chuyển đơn vị');
+        return null;
+      }
+    },
+    [notify],
+  );
 
   const handleCreateUnit = useCallback(
     async (payload: CreateOrganizationUnitPayload) => {
@@ -172,9 +291,39 @@ export function useOrganizationsManagement() {
       try {
         const updated = await organizationsApi.update(id, payload);
         notify('ok', `Đã cập nhật đơn vị ${updated.code} — ${updated.name}.`);
+        setMoveImpactPreview(null);
         await loadOrganizationsData();
       } catch (err) {
         notify('err', err instanceof Error ? err.message : 'Lỗi cập nhật đơn vị tổ chức');
+      }
+    },
+    [loadOrganizationsData, notify],
+  );
+
+  const handleLockUnit = useCallback(
+    async (id: number, reason?: string) => {
+      try {
+        const locked = await organizationsApi.lockUnit(id, reason);
+        notify(
+          'ok',
+          `Đã khóa đơn vị ${locked.code} — ${locked.name} (không cho dùng mới nhưng giữ nguyên lịch sử).`,
+        );
+        await loadOrganizationsData();
+      } catch (err) {
+        notify('err', err instanceof Error ? err.message : 'Không thể khóa đơn vị');
+      }
+    },
+    [loadOrganizationsData, notify],
+  );
+
+  const handleUnlockUnit = useCallback(
+    async (id: number, reason?: string) => {
+      try {
+        const unlocked = await organizationsApi.unlockUnit(id, reason);
+        notify('ok', `Đã mở khóa đơn vị ${unlocked.code} — ${unlocked.name}.`);
+        await loadOrganizationsData();
+      } catch (err) {
+        notify('err', err instanceof Error ? err.message : 'Không thể mở khóa đơn vị');
       }
     },
     [loadOrganizationsData, notify],
@@ -202,6 +351,70 @@ export function useOrganizationsManagement() {
     [loadOrganizationsData, notify, selectedUnitId],
   );
 
+  const handleExportUnits = useCallback(
+    async (format: 'csv' | 'xlsx', mode: 'tree' | 'list') => {
+      setSubmittingImportExport(true);
+      try {
+        const res = await organizationsApi.exportUnits({
+          format,
+          mode,
+          search: searchQuery.trim() || undefined,
+          type: typeFilter || undefined,
+          status: statusFilter || undefined,
+          parentId: parentFilter && parentFilter !== 'ROOT' ? parentFilter : undefined,
+        });
+        triggerDownloadExportFile(res);
+        notify(
+          'ok',
+          `Đã xuất ${res.totalExported} đơn vị tổ chức ở chế độ ${res.mode === 'tree' ? 'Sơ đồ cây' : 'Danh sách'} (${res.fileName}).`,
+        );
+      } catch (err) {
+        notify('err', err instanceof Error ? err.message : 'Xuất dữ liệu tổ chức thất bại');
+      } finally {
+        setSubmittingImportExport(false);
+      }
+    },
+    [notify, parentFilter, searchQuery, statusFilter, typeFilter],
+  );
+
+  const handleDownloadTemplate = useCallback(
+    async (format: 'csv' | 'xlsx') => {
+      setSubmittingImportExport(true);
+      try {
+        const res = await organizationsApi.downloadImportTemplate(format);
+        triggerDownloadExportFile(res);
+        notify('ok', `Đã tải file mẫu ${res.fileName}.`);
+      } catch (err) {
+        notify('err', err instanceof Error ? err.message : 'Tải file mẫu thất bại');
+      } finally {
+        setSubmittingImportExport(false);
+      }
+    },
+    [notify],
+  );
+
+  const handleBulkImportUnits = useCallback(
+    async (payload: BulkImportOrganizationsPayload) => {
+      setSubmittingImportExport(true);
+      try {
+        const res = await organizationsApi.bulkImportUnits(payload);
+        setImportResult(res);
+        notify(
+          res.failedCount > 0 ? 'err' : 'ok',
+          `Đã nhập ${res.importedCount} mới, cập nhật ${res.updatedCount} / ${res.totalRows} dòng (Bỏ qua: ${res.skippedCount}, Lỗi: ${res.failedCount}).`,
+        );
+        await loadOrganizationsData();
+        return res;
+      } catch (err) {
+        notify('err', err instanceof Error ? err.message : 'Nhập cây tổ chức thất bại');
+        return null;
+      } finally {
+        setSubmittingImportExport(false);
+      }
+    },
+    [loadOrganizationsData, notify],
+  );
+
   return {
     viewMode,
     setViewMode,
@@ -209,6 +422,8 @@ export function useOrganizationsManagement() {
     filteredUnits,
     treeNodes,
     stats,
+    unitTypeOptions,
+    managerOptions,
     loading,
     statusBanner,
     setStatusBanner,
@@ -227,12 +442,24 @@ export function useOrganizationsManagement() {
     setFormMode,
     presetParentId,
     setPresetParentId,
+    moveImpactPreview,
+    setMoveImpactPreview,
+    showImportExportModal,
+    setShowImportExportModal,
+    submittingImportExport,
+    importResult,
+    setImportResult,
     loadOrganizationsData,
     handleSelectUnitForEdit,
     handleOpenCreateChild,
+    handleAssessMoveImpact,
     handleCreateUnit,
     handleUpdateUnit,
+    handleLockUnit,
+    handleUnlockUnit,
     handleDeleteUnit,
+    handleExportUnits,
+    handleDownloadTemplate,
+    handleBulkImportUnits,
   };
 }
-

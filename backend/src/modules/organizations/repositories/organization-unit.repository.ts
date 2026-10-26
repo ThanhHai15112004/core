@@ -67,6 +67,9 @@ export class OrganizationUnitRepository extends BaseTypeOrmRepository<Organizati
       if (query.parentId !== undefined) {
         qb.andWhere('ou.parentId = :parentId', { parentId: query.parentId });
       }
+      if (query.managerId !== undefined) {
+        qb.andWhere('ou.managerId = :managerId', { managerId: query.managerId });
+      }
       this.applyKeywordSearch(qb, query.search ?? query.q, ['ou.code', 'ou.name'], {
         paramPrefix: 'ouKw',
       });

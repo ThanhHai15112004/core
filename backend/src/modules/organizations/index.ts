@@ -2,6 +2,7 @@ export * from './contracts/index.js';
 export * from './enum/organizations.enum.js';
 export * from './types/organizations.types.js';
 export * from './helpers/organization-hierarchy.helper.js';
+export * from './helpers/organization-import-export.helper.js';
 export * from './mappers/organizations.mapper.js';
 export * from './routes/organizations.routes.js';
 export * from './requests/organizations.requests.js';

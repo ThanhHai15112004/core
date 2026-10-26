@@ -17,6 +17,7 @@ export interface SeedOrgUnitDef {
   readonly name: string;
   readonly type: OrganizationUnitTypeCode;
   readonly parentId: number | null;
+  readonly managerId: number | null;
   readonly description: string;
 }
 
@@ -64,6 +65,7 @@ export const HCMC_ORGANIZATION_UNITS: readonly SeedOrgUnitDef[] = [
     name: 'Trụ sở Chính TP. Hồ Chí Minh',
     type: ORGANIZATION_UNIT_TYPE.HEADQUARTERS,
     parentId: null,
+    managerId: 1,
     description: 'Trụ sở điều hành trung tâm tại TP. Hồ Chí Minh',
   },
   {
@@ -72,6 +74,7 @@ export const HCMC_ORGANIZATION_UNITS: readonly SeedOrgUnitDef[] = [
     name: 'Chi nhánh TP. Hồ Chí Minh',
     type: ORGANIZATION_UNIT_TYPE.BRANCH,
     parentId: 1,
+    managerId: 9,
     description: 'Chi nhánh hoạt động chính tại TP. Hồ Chí Minh',
   },
   {
@@ -80,6 +83,7 @@ export const HCMC_ORGANIZATION_UNITS: readonly SeedOrgUnitDef[] = [
     name: 'Khối Công nghệ & Kỹ thuật Phần mềm',
     type: ORGANIZATION_UNIT_TYPE.DEPARTMENT,
     parentId: 2,
+    managerId: 10,
     description: 'Phát triển nền tảng Core, Backend & Web tại TP.HCM',
   },
   {
@@ -88,6 +92,7 @@ export const HCMC_ORGANIZATION_UNITS: readonly SeedOrgUnitDef[] = [
     name: 'Phòng Phát triển Ứng dụng Mobile',
     type: ORGANIZATION_UNIT_TYPE.DEPARTMENT,
     parentId: 2,
+    managerId: 10,
     description: 'Phát triển và vận hành ứng dụng iOS / Android tại TP.HCM',
   },
   {
@@ -96,6 +101,7 @@ export const HCMC_ORGANIZATION_UNITS: readonly SeedOrgUnitDef[] = [
     name: 'Phòng An toàn Thông tin (SecOps)',
     type: ORGANIZATION_UNIT_TYPE.DEPARTMENT,
     parentId: 2,
+    managerId: 3,
     description: 'Quản trị bảo mật, mã hóa dữ liệu, IAM và kiểm toán an ninh',
   },
   {
@@ -104,6 +110,7 @@ export const HCMC_ORGANIZATION_UNITS: readonly SeedOrgUnitDef[] = [
     name: 'Phòng Vận hành Hệ thống (DevOps / SRE)',
     type: ORGANIZATION_UNIT_TYPE.DEPARTMENT,
     parentId: 2,
+    managerId: 6,
     description: 'Quản trị hạ tầng Cloud, Runtimes, Database, Queue và System Console',
   },
   {
@@ -112,6 +119,7 @@ export const HCMC_ORGANIZATION_UNITS: readonly SeedOrgUnitDef[] = [
     name: 'Phòng Hành chính - Nhân sự',
     type: ORGANIZATION_UNIT_TYPE.DEPARTMENT,
     parentId: 2,
+    managerId: 4,
     description: 'Tuyển dụng, quản lý hồ sơ nhân sự và cơ cấu tổ chức',
   },
   {
@@ -120,6 +128,7 @@ export const HCMC_ORGANIZATION_UNITS: readonly SeedOrgUnitDef[] = [
     name: 'Phòng Tài chính - Kế toán',
     type: ORGANIZATION_UNIT_TYPE.DEPARTMENT,
     parentId: 2,
+    managerId: 7,
     description: 'Quản lý ngân sách, kế toán và đối soát tài chính',
   },
   {
@@ -128,6 +137,7 @@ export const HCMC_ORGANIZATION_UNITS: readonly SeedOrgUnitDef[] = [
     name: 'Phòng Kinh doanh & Phát triển Thị trường',
     type: ORGANIZATION_UNIT_TYPE.DEPARTMENT,
     parentId: 2,
+    managerId: 9,
     description: 'Kinh doanh và chăm sóc đối tác tại TP.HCM',
   },
   {
@@ -136,6 +146,7 @@ export const HCMC_ORGANIZATION_UNITS: readonly SeedOrgUnitDef[] = [
     name: 'Phòng Hỗ trợ & Dịch vụ Khách hàng',
     type: ORGANIZATION_UNIT_TYPE.DEPARTMENT,
     parentId: 2,
+    managerId: 8,
     description: 'Hỗ trợ kỹ thuật và giải đáp yêu cầu người dùng 24/7',
   },
 ] as const;
@@ -657,30 +668,32 @@ export class IamMasterSeeder implements SeederContract {
     for (const org of HCMC_ORGANIZATION_UNITS) {
       if (isPostgres) {
         await ctx.manager.query(
-          `INSERT INTO organization_units (id, code, name, type, parent_id, status, description)
-           VALUES ($1, $2, $3, $4, $5, $6, $7)
-           ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name, type = EXCLUDED.type, parent_id = EXCLUDED.parent_id`,
+          `INSERT INTO organization_units (id, code, name, type, parent_id, manager_id, status, description)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+           ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name, type = EXCLUDED.type, parent_id = EXCLUDED.parent_id, manager_id = EXCLUDED.manager_id`,
           [
             org.id,
             org.code,
             org.name,
             org.type,
             org.parentId,
+            org.managerId,
             ORGANIZATION_UNIT_STATUS.ACTIVE,
             org.description,
           ],
         );
       } else {
         await ctx.manager.query(
-          `INSERT INTO organization_units (id, code, name, type, parent_id, status, description)
-           VALUES (?, ?, ?, ?, ?, ?, ?)
-           ON DUPLICATE KEY UPDATE name = VALUES(name), type = VALUES(type), parent_id = VALUES(parent_id)`,
+          `INSERT INTO organization_units (id, code, name, type, parent_id, manager_id, status, description)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+           ON DUPLICATE KEY UPDATE name = VALUES(name), type = VALUES(type), parent_id = VALUES(parent_id), manager_id = VALUES(manager_id)`,
           [
             org.id,
             org.code,
             org.name,
             org.type,
             org.parentId,
+            org.managerId,
             ORGANIZATION_UNIT_STATUS.ACTIVE,
             org.description,
           ],

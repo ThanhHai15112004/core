@@ -3,9 +3,139 @@ import { ORG_UNIT_STATUS, ORG_UNIT_TYPE } from '../enum/organizations.enum.js';
 import type { OrganizationUnitResponse } from '../responses/organizations.response.js';
 import type {
   HierarchyNodeInput,
+  OrganizationMoveImpact,
   OrganizationStats,
   OrganizationTreeNode,
 } from '../types/organizations.types.js';
+
+/**
+ * Tính đường dẫn phân cấp (`/HQ/BRANCH/...`) và độ sâu (`depth`) của một đơn vị trong cây.
+ */
+export function computeUnitHierarchyPathAndDepth(
+  allUnits: ReadonlyArray<{
+    readonly id: number;
+    readonly code: string;
+    readonly parentId?: number | null | undefined;
+  }>,
+  unitId: number,
+  overrideParentId?: number | null,
+): { readonly path: string; readonly depth: number } {
+  const unitById = new Map<
+    number,
+    { readonly id: number; readonly code: string; readonly parentId: number | null }
+  >();
+  for (const u of allUnits) {
+    unitById.set(Number(u.id), {
+      id: Number(u.id),
+      code: u.code,
+      parentId: u.parentId !== undefined && u.parentId !== null ? Number(u.parentId) : null,
+    });
+  }
+
+  const target = unitById.get(Number(unitId));
+  if (!target) {
+    return { path: '', depth: 1 };
+  }
+
+  const codes: string[] = [target.code];
+  let cursorParentId: number | null =
+    overrideParentId !== undefined ? overrideParentId : target.parentId;
+  const visited = new Set<number>([Number(unitId)]);
+
+  while (cursorParentId !== null) {
+    if (visited.has(cursorParentId)) break;
+    visited.add(cursorParentId);
+    const parentNode = unitById.get(cursorParentId);
+    if (!parentNode) break;
+    codes.unshift(parentNode.code);
+    cursorParentId = parentNode.parentId;
+  }
+
+  return {
+    path: `/${codes.join('/')}`,
+    depth: codes.length,
+  };
+}
+
+/**
+ * Kiểm tra toàn diện tính hợp lệ và tính toán tác động khi di chuyển một đơn vị sang `newParentId` mới.
+ */
+export function validateAndComputeMoveImpact(params: {
+  allUnits: ReadonlyArray<{
+    readonly id: number;
+    readonly code: string;
+    readonly name: string;
+    readonly parentId?: number | null | undefined;
+    readonly status?: number | undefined;
+  }>;
+  unitId: number;
+  newParentId: number | null;
+  maxDepth: number;
+  affectedUserCount: number;
+}): OrganizationMoveImpact {
+  const { allUnits, unitId, newParentId, maxDepth, affectedUserCount } = params;
+  const target = allUnits.find((u) => Number(u.id) === Number(unitId));
+  if (!target) {
+    throw new BadRequestAppException('organizations.notFound', [{ id: unitId }]);
+  }
+
+  const descendantIds = collectDescendantUnitIds(allUnits, [Number(unitId)], true);
+  const subtreeDepthBelow = calculateSubtreeDepthBelow(allUnits, Number(unitId));
+
+  if (newParentId !== null) {
+    if (Number(newParentId) === Number(unitId)) {
+      throw new BadRequestAppException('organizations.cannotBeOwnParent');
+    }
+    const parent = allUnits.find((u) => Number(u.id) === Number(newParentId));
+    if (!parent) {
+      throw new BadRequestAppException('organizations.parentNotFound', [{ parentId: newParentId }]);
+    }
+    const parentStatus = Number(parent.status ?? ORG_UNIT_STATUS.ACTIVE);
+    if (parentStatus !== ORG_UNIT_STATUS.ACTIVE) {
+      throw new BadRequestAppException('organizations.parentUnitLocked', [
+        { parentId: newParentId, status: parentStatus },
+      ]);
+    }
+    if (descendantIds.includes(Number(newParentId))) {
+      throw new BadRequestAppException('organizations.circularParentHierarchy', [
+        { id: unitId, parentId: newParentId },
+      ]);
+    }
+    ensureHierarchyDepthAllowed({
+      allUnits,
+      parentId: Number(newParentId),
+      subtreeDepthBelowNode: subtreeDepthBelow,
+      maxDepth,
+    });
+  }
+
+  const oldPos = computeUnitHierarchyPathAndDepth(allUnits, Number(unitId));
+  const newPos = computeUnitHierarchyPathAndDepth(allUnits, Number(unitId), newParentId);
+  const directChildrenCount = allUnits.filter(
+    (u) => Number(u.parentId) === Number(unitId) && Number(u.id) !== Number(unitId),
+  ).length;
+  const oldParentId =
+    target.parentId !== undefined && target.parentId !== null ? Number(target.parentId) : null;
+
+  return {
+    unitId: Number(target.id),
+    unitCode: target.code,
+    unitName: target.name,
+    oldParentId,
+    newParentId,
+    oldPath: oldPos.path,
+    newPath: newPos.path,
+    oldDepth: oldPos.depth,
+    newDepth: newPos.depth,
+    maxDepthInMovedSubtree: newPos.depth + subtreeDepthBelow,
+    maxDepthAllowed: maxDepth,
+    affectedUnitIds: descendantIds,
+    affectedUnitCount: descendantIds.length,
+    directChildrenCount,
+    affectedUserCount,
+    requiresPermissionScopeRefresh: oldParentId !== newParentId,
+  };
+}
 
 /**
  * Tính số lượng tổ tiên phía trên một đơn vị `parentId` (tối thiểu = 1 nếu `parentId` tồn tại).

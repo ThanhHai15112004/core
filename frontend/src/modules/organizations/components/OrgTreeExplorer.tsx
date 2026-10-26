@@ -160,6 +160,11 @@ export const OrgTreeExplorer: React.FC<OrgTreeExplorerProps> = ({
                 }}
               >
                 Path: {node.path} · Cấp {node.depth}
+                {node.managerName
+                  ? ` · Phụ trách: ${node.managerName}`
+                  : node.managerId
+                    ? ` · Phụ trách: #${node.managerId}`
+                    : ''}
                 {node.descendantCount > 0
                   ? ` · ${node.childrenCount} trực tiếp / ${node.descendantCount} tổng đơn vị con`
                   : ''}

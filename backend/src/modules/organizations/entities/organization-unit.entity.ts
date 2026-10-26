@@ -25,6 +25,11 @@ export class OrganizationUnitEntity extends TypeOrmBaseEntity {
   @Column({ name: 'parent_id', type: 'int', nullable: true })
   public parentId?: number | null;
 
+  /** ID người phụ trách / quản lý đơn vị (tham chiếu logic tới users.id) */
+  @Index()
+  @Column({ name: 'manager_id', type: 'int', nullable: true })
+  public managerId?: number | null;
+
   /** Trạng thái: 1 = ACTIVE, 2 = INACTIVE, 3 = ARCHIVED */
   @Index()
   @Column({ type: 'int', default: ORG_UNIT_STATUS.ACTIVE })

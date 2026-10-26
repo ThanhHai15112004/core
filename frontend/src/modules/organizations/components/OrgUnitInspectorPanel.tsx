@@ -1,9 +1,22 @@
 import React, { useState, useEffect } from 'react';
-import { PlusCircle, Save, Trash2, GitBranch, ShieldAlert } from 'lucide-react';
+import {
+  PlusCircle,
+  Save,
+  Trash2,
+  GitBranch,
+  ShieldAlert,
+  Lock,
+  Unlock,
+  ArrowRightLeft,
+  UserCheck,
+} from 'lucide-react';
 import { authStyles } from '../../auth/components/auth-ui.styles';
 import { ORG_UNIT_STATUS_OPTIONS, ORG_UNIT_TYPE_OPTIONS } from '../enum/organizations.enum';
 import type {
   CreateOrganizationUnitPayload,
+  OrganizationManagerOption,
+  OrganizationMoveImpact,
+  OrganizationTypeOption,
   OrganizationUnitItem,
   UpdateOrganizationUnitPayload,
 } from '../types/organizations.types';
@@ -13,9 +26,18 @@ interface OrgUnitInspectorPanelProps {
   selectedUnit: OrganizationUnitItem | null;
   presetParentId: number | null;
   allUnits: OrganizationUnitItem[];
+  unitTypeOptions?: readonly OrganizationTypeOption[];
+  managerOptions?: readonly OrganizationManagerOption[];
+  moveImpactPreview?: OrganizationMoveImpact | null;
   onSwitchToCreate: (parentId?: number | null) => void;
+  onAssessMoveImpact?: (
+    unitId: number,
+    newParentId: number | null,
+  ) => Promise<OrganizationMoveImpact | null>;
   onCreate: (payload: CreateOrganizationUnitPayload) => Promise<void>;
   onUpdate: (id: number, payload: UpdateOrganizationUnitPayload) => Promise<void>;
+  onLockUnit?: (id: number) => Promise<void>;
+  onUnlockUnit?: (id: number) => Promise<void>;
   onDelete: (id: number) => Promise<void>;
 }
 
@@ -24,15 +46,22 @@ export const OrgUnitInspectorPanel: React.FC<OrgUnitInspectorPanelProps> = ({
   selectedUnit,
   presetParentId,
   allUnits,
+  unitTypeOptions = ORG_UNIT_TYPE_OPTIONS,
+  managerOptions = [],
+  moveImpactPreview = null,
   onSwitchToCreate,
+  onAssessMoveImpact,
   onCreate,
   onUpdate,
+  onLockUnit,
+  onUnlockUnit,
   onDelete,
 }) => {
   const [code, setCode] = useState('');
   const [name, setName] = useState('');
   const [type, setType] = useState<number>(2);
   const [parentId, setParentId] = useState<string>('');
+  const [managerId, setManagerId] = useState<string>('');
   const [status, setStatus] = useState<1 | 2 | 3>(1);
   const [description, setDescription] = useState('');
 
@@ -42,6 +71,7 @@ export const OrgUnitInspectorPanel: React.FC<OrgUnitInspectorPanelProps> = ({
       setName(selectedUnit.name);
       setType(selectedUnit.type);
       setParentId(selectedUnit.parentId ? String(selectedUnit.parentId) : '');
+      setManagerId(selectedUnit.managerId ? String(selectedUnit.managerId) : '');
       setStatus(selectedUnit.status);
       setDescription(selectedUnit.description ?? '');
     } else {
@@ -49,20 +79,34 @@ export const OrgUnitInspectorPanel: React.FC<OrgUnitInspectorPanelProps> = ({
       setName('');
       setType(presetParentId ? 3 : 2);
       setParentId(presetParentId ? String(presetParentId) : '');
+      setManagerId('');
       setStatus(1);
       setDescription('');
     }
   }, [mode, selectedUnit, presetParentId]);
 
+  const handleParentChange = (nextParentValue: string) => {
+    setParentId(nextParentValue);
+    if (mode === 'edit' && selectedUnit && onAssessMoveImpact) {
+      const nextParentNum = nextParentValue ? Number(nextParentValue) : null;
+      if (nextParentNum !== selectedUnit.parentId) {
+        void onAssessMoveImpact(selectedUnit.id, nextParentNum);
+      }
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const resolvedParentId = parentId ? Number(parentId) : null;
+    const resolvedManagerId = managerId ? Number(managerId) : null;
 
     if (mode === 'edit' && selectedUnit) {
       await onUpdate(selectedUnit.id, {
+        code: code.trim().toUpperCase(),
         name: name.trim(),
         type,
         parentId: resolvedParentId,
+        managerId: resolvedManagerId,
         status,
         description: description.trim() || null,
       });
@@ -72,11 +116,17 @@ export const OrgUnitInspectorPanel: React.FC<OrgUnitInspectorPanelProps> = ({
         name: name.trim(),
         type,
         parentId: resolvedParentId,
+        managerId: resolvedManagerId,
         status,
         description: description.trim() || null,
       });
     }
   };
+
+  const parentChangedInEdit =
+    mode === 'edit' &&
+    selectedUnit !== null &&
+    (parentId ? Number(parentId) : null) !== selectedUnit.parentId;
 
   return (
     <div style={authStyles.cardHighlighted}>
@@ -115,8 +165,8 @@ export const OrgUnitInspectorPanel: React.FC<OrgUnitInspectorPanelProps> = ({
 
       <p style={authStyles.sectionDesc}>
         {mode === 'edit' && selectedUnit
-          ? `Đang chỉnh sửa ${selectedUnit.code}. Hệ thống tự động chặn gán đơn vị cha gây vòng lặp hoặc vượt quá độ sâu cho phép.`
-          : 'Khai báo mã định danh duy nhất (Code), phân loại cấp bậc và chọn đơn vị cấp trên (Parent Unit).'}
+          ? `Đang chỉnh sửa ${selectedUnit.code}. Cho phép cập nhật mã, tên, trạng thái, người phụ trách và di chuyển nhánh cha.`
+          : 'Khai báo mã định danh duy nhất (Code), phân loại cấp bậc, người phụ trách và chọn đơn vị cấp trên (Parent Unit).'}
       </p>
 
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -126,13 +176,9 @@ export const OrgUnitInspectorPanel: React.FC<OrgUnitInspectorPanelProps> = ({
             type="text"
             value={code}
             onChange={(e) => setCode(e.target.value)}
-            disabled={mode === 'edit'}
             placeholder="VD: BRANCH_DANANG hoặc DEPT_AI"
             required
-            style={{
-              ...authStyles.monoInput,
-              opacity: mode === 'edit' ? 0.7 : 1,
-            }}
+            style={authStyles.monoInput}
           />
         </div>
 
@@ -156,7 +202,7 @@ export const OrgUnitInspectorPanel: React.FC<OrgUnitInspectorPanelProps> = ({
               onChange={(e) => setType(Number(e.target.value))}
               style={authStyles.input}
             >
-              {ORG_UNIT_TYPE_OPTIONS.map((opt) => (
+              {unitTypeOptions.map((opt) => (
                 <option key={opt.code} value={opt.code}>
                   {opt.label}
                 </option>
@@ -181,22 +227,85 @@ export const OrgUnitInspectorPanel: React.FC<OrgUnitInspectorPanelProps> = ({
         </div>
 
         <div>
+          <label style={{ ...authStyles.label, display: 'flex', alignItems: 'center', gap: '5px' }}>
+            <UserCheck size={13} color="var(--primary)" />
+            <span>Người phụ trách đơn vị (`managerId`)</span>
+          </label>
+          {managerOptions.length > 0 ? (
+            <select
+              value={managerId}
+              onChange={(e) => setManagerId(e.target.value)}
+              style={authStyles.input}
+            >
+              <option value="">-- Chưa bổ nhiệm người phụ trách --</option>
+              {managerOptions.map((m) => (
+                <option key={m.id} value={m.id}>
+                  #{m.id} — {m.fullName} (@{m.username})
+                </option>
+              ))}
+            </select>
+          ) : (
+            <input
+              type="number"
+              min={1}
+              value={managerId}
+              onChange={(e) => setManagerId(e.target.value)}
+              placeholder="Nhập ID người phụ trách (VD: 1, 9, 10) hoặc để trống"
+              style={authStyles.input}
+            />
+          )}
+        </div>
+
+        <div>
           <label style={authStyles.label}>Đơn vị cấp trên trực tiếp (`parentId`)</label>
           <select
             value={parentId}
-            onChange={(e) => setParentId(e.target.value)}
+            onChange={(e) => handleParentChange(e.target.value)}
             style={authStyles.input}
           >
             <option value="">-- Không có (Đơn vị gốc / Root Unit) --</option>
             {allUnits
               .filter((u) => (mode === 'edit' && selectedUnit ? u.id !== selectedUnit.id : true))
               .map((u) => (
-                <option key={u.id} value={u.id}>
+                <option key={u.id} value={u.id} disabled={u.status !== 1}>
                   #{u.id} — {u.code} ({u.name}) [{u.typeName}]
+                  {u.status !== 1 ? ` (${u.statusName} - Khóa)` : ''}
                 </option>
               ))}
           </select>
         </div>
+
+        {/* Hộp kiểm tra ảnh hưởng khi di chuyển đơn vị sang nhánh cha mới */}
+        {parentChangedInEdit && moveImpactPreview && (
+          <div
+            style={{
+              padding: '11px 12px',
+              borderRadius: 'var(--radius-sm)',
+              background: 'var(--primary-light)',
+              border: '1px solid var(--primary)',
+              fontSize: '12px',
+              color: 'var(--text-main)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '4px',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 700, color: 'var(--primary)' }}>
+              <ArrowRightLeft size={14} />
+              <span>Đánh giá ảnh hưởng di chuyển đơn vị (Move Impact):</span>
+            </div>
+            <div>
+              • Đường dẫn: <code>{moveImpactPreview.oldPath}</code> →{' '}
+              <code>{moveImpactPreview.newPath}</code> (Cấp {moveImpactPreview.oldDepth} → Cấp{' '}
+              {moveImpactPreview.newDepth})
+            </div>
+            <div>
+              • Phạm vi ảnh hưởng: <strong>{moveImpactPreview.affectedUnitCount}</strong> đơn vị
+              trong nhánh · <strong>{moveImpactPreview.affectedUserCount}</strong> nhân sự cập nhật
+              Data Scope.
+            </div>
+          </div>
+        )}
 
         <div>
           <label style={authStyles.label}>Mô tả chức năng / Địa chỉ</label>
@@ -216,14 +325,38 @@ export const OrgUnitInspectorPanel: React.FC<OrgUnitInspectorPanelProps> = ({
           </button>
 
           {mode === 'edit' && selectedUnit && (
-            <button
-              type="button"
-              onClick={() => void onDelete(selectedUnit.id)}
-              style={authStyles.btnDanger}
-            >
-              <Trash2 size={14} />
-              <span>Xóa mềm đơn vị</span>
-            </button>
+            <>
+              {selectedUnit.status === 1 ? (
+                <button
+                  type="button"
+                  onClick={() => void onLockUnit?.(selectedUnit.id)}
+                  style={authStyles.btnSecondary}
+                  title="Khóa đơn vị: Không cho gán mới nhưng giữ nguyên lịch sử"
+                >
+                  <Lock size={14} />
+                  <span>Khóa đơn vị</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => void onUnlockUnit?.(selectedUnit.id)}
+                  style={authStyles.btnTeal}
+                  title="Mở khóa đơn vị để hoạt động trở lại"
+                >
+                  <Unlock size={14} />
+                  <span>Mở khóa</span>
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={() => void onDelete(selectedUnit.id)}
+                style={authStyles.btnDanger}
+              >
+                <Trash2 size={14} />
+                <span>Xóa mềm</span>
+              </button>
+            </>
           )}
         </div>
       </form>
@@ -243,15 +376,22 @@ export const OrgUnitInspectorPanel: React.FC<OrgUnitInspectorPanelProps> = ({
           gap: '4px',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 700, color: 'var(--text-main)' }}>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            fontWeight: 700,
+            color: 'var(--text-main)',
+          }}
+        >
           <ShieldAlert size={14} color="var(--accent)" />
           <span>Quy tắc bảo vệ toàn vẹn sơ đồ tổ chức:</span>
         </div>
         <div>• Chống vòng lặp: Không cho phép chọn đơn vị con/cháu làm đơn vị cha.</div>
-        <div>• Giới hạn độ sâu: Kiểm tra động qua `organizations.hierarchy.max_depth`.</div>
+        <div>• Khóa đơn vị: Đơn vị đang khóa (`INACTIVE`) không nhận nhân sự/đơn vị con mới nhưng giữ nguyên lịch sử.</div>
         <div>• Chặn xóa an toàn: Không cho phép xóa khi còn đơn vị con hoặc nhân sự trực thuộc.</div>
       </div>
     </div>
   );
 };
-

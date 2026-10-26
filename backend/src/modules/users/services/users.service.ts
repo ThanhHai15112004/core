@@ -198,6 +198,28 @@ export class UsersService implements IUsersPublicService {
       });
       return total;
     });
+    this.organizationsPublicService?.registerUnitManagerResolverDelegate?.(
+      async ({ userIds, identifiers }) => {
+        const targetIds = new Set<number>(
+          (userIds ?? []).map(Number).filter((id) => Number.isInteger(id) && id > 0),
+        );
+        if (identifiers && identifiers.length > 0) {
+          for (const ident of identifiers) {
+            const found = await this.findAuthUserByIdentifier(ident).catch(() => null);
+            if (found) targetIds.add(Number(found.id));
+          }
+        }
+        if (targetIds.size === 0) return [];
+        const contacts = await this.findUserContactsByIds([...targetIds]);
+        return contacts.map((c) => ({
+          id: Number(c.id),
+          username: c.username,
+          fullName: c.fullName,
+          email: c.email,
+          status: USER_STATUS.ACTIVE,
+        }));
+      },
+    );
     this.effectiveDataScopeService.registerRoleScopeResolver(async (roleCodes) => {
       const roles = await this.rolesPublicService.findByCodes(roleCodes);
       return roles

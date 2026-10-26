@@ -7,6 +7,7 @@ import {
   FolderTree,
   Table2,
   Columns,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { authStyles } from '../auth/components/auth-ui.styles';
 import { ORG_VIEW_MODES } from './enum/organizations.enum';
@@ -15,6 +16,7 @@ import { OrgStatsCards } from './components/OrgStatsCards';
 import { OrgTreeExplorer } from './components/OrgTreeExplorer';
 import { OrgDirectoryTable } from './components/OrgDirectoryTable';
 import { OrgUnitInspectorPanel } from './components/OrgUnitInspectorPanel';
+import { OrgImportExportModal } from './components/OrgImportExportModal';
 
 export const OrganizationsManagementPage: React.FC = () => {
   const {
@@ -24,6 +26,8 @@ export const OrganizationsManagementPage: React.FC = () => {
     filteredUnits,
     treeNodes,
     stats,
+    unitTypeOptions,
+    managerOptions,
     loading,
     statusBanner,
     setStatusBanner,
@@ -39,12 +43,23 @@ export const OrganizationsManagementPage: React.FC = () => {
     selectedUnitId,
     formMode,
     presetParentId,
+    moveImpactPreview,
+    showImportExportModal,
+    setShowImportExportModal,
+    submittingImportExport,
+    importResult,
     loadOrganizationsData,
     handleSelectUnitForEdit,
     handleOpenCreateChild,
+    handleAssessMoveImpact,
     handleCreateUnit,
     handleUpdateUnit,
+    handleLockUnit,
+    handleUnlockUnit,
     handleDeleteUnit,
+    handleExportUnits,
+    handleDownloadTemplate,
+    handleBulkImportUnits,
   } = useOrganizationsManagement();
 
   return (
@@ -106,13 +121,13 @@ export const OrganizationsManagementPage: React.FC = () => {
                 margin: '4px 0 0',
               }}
             >
-              Quản lý cây đơn vị đa cấp (`parentId`, `path`), chống vòng lặp phân cấp, giới hạn độ
-              sâu động và bảo vệ toàn vẹn nhân sự/đơn vị con.
+              Quản lý cây đơn vị đa cấp (`parentId`, `path`, `managerId`), chống vòng lặp phân cấp,
+              kiểm tra ảnh hưởng di chuyển đơn vị, khóa đơn vị và Import/Export sơ đồ tổ chức.
             </p>
           </div>
         </div>
 
-        {/* View Mode Switcher + Refresh */}
+        {/* View Mode Switcher + Import/Export + Refresh */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
           <div
             style={{
@@ -157,6 +172,15 @@ export const OrganizationsManagementPage: React.FC = () => {
               );
             })}
           </div>
+
+          <button
+            type="button"
+            onClick={() => setShowImportExportModal(true)}
+            style={authStyles.btnPrimary}
+          >
+            <FileSpreadsheet size={14} />
+            <span>Import / Export Sơ Đồ</span>
+          </button>
 
           <button
             type="button"
@@ -236,6 +260,7 @@ export const OrganizationsManagementPage: React.FC = () => {
             <OrgDirectoryTable
               units={filteredUnits}
               allUnits={units}
+              unitTypeOptions={unitTypeOptions}
               selectedUnitId={selectedUnitId}
               searchQuery={searchQuery}
               onSearchChange={setSearchQuery}
@@ -247,6 +272,8 @@ export const OrganizationsManagementPage: React.FC = () => {
               onParentFilterChange={setParentFilter}
               onSelectUnit={handleSelectUnitForEdit}
               onAddChildUnit={handleOpenCreateChild}
+              onLockUnit={handleLockUnit}
+              onUnlockUnit={handleUnlockUnit}
               onDeleteUnit={handleDeleteUnit}
             />
           )}
@@ -259,15 +286,35 @@ export const OrganizationsManagementPage: React.FC = () => {
             selectedUnit={selectedUnit}
             presetParentId={presetParentId}
             allUnits={units}
-            onSwitchToCreate={(parentId) => handleOpenCreateChild(
-              parentId ? (units.find((u) => u.id === parentId) ?? null) : null,
-            )}
+            unitTypeOptions={unitTypeOptions}
+            managerOptions={managerOptions}
+            moveImpactPreview={moveImpactPreview}
+            onSwitchToCreate={(parentId) =>
+              handleOpenCreateChild(
+                parentId ? (units.find((u) => u.id === parentId) ?? null) : null,
+              )
+            }
+            onAssessMoveImpact={handleAssessMoveImpact}
             onCreate={handleCreateUnit}
             onUpdate={handleUpdateUnit}
+            onLockUnit={handleLockUnit}
+            onUnlockUnit={handleUnlockUnit}
             onDelete={handleDeleteUnit}
           />
         </div>
       </div>
+
+      {/* Modal Import / Export Sơ đồ tổ chức */}
+      {showImportExportModal && (
+        <OrgImportExportModal
+          submitting={submittingImportExport}
+          importResult={importResult}
+          onClose={() => setShowImportExportModal(false)}
+          onExportUnits={handleExportUnits}
+          onDownloadTemplate={handleDownloadTemplate}
+          onBulkImport={handleBulkImportUnits}
+        />
+      )}
     </main>
   );
 };

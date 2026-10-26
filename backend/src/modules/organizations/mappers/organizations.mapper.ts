@@ -16,7 +16,10 @@ export class OrganizationsMapper implements EntityMapperContract<
   OrganizationUnitResponse
 > {
   /** Chuyển đổi từ OrganizationUnitEntity sang DTO trả về cho HTTP API */
-  public toResponse(entity: OrganizationUnitEntity): OrganizationUnitResponse {
+  public toResponse(
+    entity: OrganizationUnitEntity,
+    managerName?: string | null,
+  ): OrganizationUnitResponse {
     const typeCode = parseOrgUnitType(entity.type);
     const statusCode = parseOrgUnitStatus(entity.status);
     return {
@@ -27,6 +30,11 @@ export class OrganizationsMapper implements EntityMapperContract<
       typeName: getOrgUnitTypeName(typeCode),
       parentId:
         entity.parentId !== undefined && entity.parentId !== null ? Number(entity.parentId) : null,
+      managerId:
+        entity.managerId !== undefined && entity.managerId !== null
+          ? Number(entity.managerId)
+          : null,
+      managerName: managerName ?? null,
       status: statusCode,
       statusName: getOrgUnitStatusName(statusCode),
       description: entity.description ?? null,
@@ -36,8 +44,16 @@ export class OrganizationsMapper implements EntityMapperContract<
   }
 
   /** Chuyển đổi danh sách OrganizationUnitEntity sang danh sách Response DTO */
-  public toResponseList(entities: OrganizationUnitEntity[]): OrganizationUnitResponse[] {
-    return entities.map((item) => this.toResponse(item));
+  public toResponseList(
+    entities: OrganizationUnitEntity[],
+    managerNameById?: ReadonlyMap<number, string>,
+  ): OrganizationUnitResponse[] {
+    return entities.map((item) => {
+      const mId =
+        item.managerId !== undefined && item.managerId !== null ? Number(item.managerId) : null;
+      const managerName = mId !== null ? (managerNameById?.get(mId) ?? null) : null;
+      return this.toResponse(item, managerName);
+    });
   }
 
   /** Chuyển đổi sang bản tóm tắt phục vụ giao tiếp liên module */
@@ -52,6 +68,10 @@ export class OrganizationsMapper implements EntityMapperContract<
       typeName: getOrgUnitTypeName(typeCode),
       parentId:
         entity.parentId !== undefined && entity.parentId !== null ? Number(entity.parentId) : null,
+      managerId:
+        entity.managerId !== undefined && entity.managerId !== null
+          ? Number(entity.managerId)
+          : null,
       status: statusCode,
       statusName: getOrgUnitStatusName(statusCode),
     };

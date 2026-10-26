@@ -8,5 +8,9 @@
   "circularParentHierarchy": "Phát hiện vòng lặp phân cấp: Không thể chọn đơn vị con cháu làm đơn vị cấp trên",
   "maxHierarchyDepthExceeded": "Độ sâu phân cấp của cây đơn vị vượt quá giới hạn tối đa cho phép ({maxDepth} tầng)",
   "hasChildUnits": "Không thể xóa hoặc lưu trữ đơn vị đang còn {childCount} đơn vị trực thuộc hoạt động",
-  "hasAssignedUsers": "Không thể xóa hoặc lưu trữ đơn vị đang có {userCount} nhân sự trực thuộc"
+  "hasAssignedUsers": "Không thể xóa hoặc lưu trữ đơn vị đang có {userCount} nhân sự trực thuộc",
+  "parentUnitLocked": "Đơn vị cấp trên đang bị khóa hoặc đã lưu trữ, không thể thêm hoặc chuyển đơn vị con vào",
+  "invalidManagerId": "Người phụ trách đơn vị không tồn tại hoặc không hợp lệ",
+  "invalidXlsxFile": "Tệp Excel (.xlsx) không hợp lệ hoặc bị hỏng",
+  "importMaxRowsExceeded": "Số dòng nhập ({totalRows}) vượt quá giới hạn tối đa cho phép ({maxRows} dòng)"
 }

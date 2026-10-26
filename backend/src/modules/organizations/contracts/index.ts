@@ -63,6 +63,19 @@ export function getOrgUnitStatusName(code: number): OrganizationUnitStatusName {
   return 'ACTIVE';
 }
 
+export interface UnitManagerSummary {
+  readonly id: number;
+  readonly username: string;
+  readonly fullName: string;
+  readonly email: string | null;
+  readonly status: number;
+}
+
+export type UnitManagerResolverDelegate = (params: {
+  readonly userIds?: readonly number[] | undefined;
+  readonly identifiers?: readonly string[] | undefined;
+}) => Promise<readonly UnitManagerSummary[]>;
+
 export interface OrganizationUnitSummary {
   readonly id: number;
   readonly code: string;
@@ -70,6 +83,7 @@ export interface OrganizationUnitSummary {
   readonly type: OrganizationUnitTypeCode;
   readonly typeName: OrganizationUnitTypeName;
   readonly parentId: number | null;
+  readonly managerId?: number | null;
   readonly status: OrganizationUnitStatusCode;
   readonly statusName: OrganizationUnitStatusName;
 }
@@ -81,6 +95,7 @@ export interface IOrganizationsPublicService {
   resolveDescendantUnitIds?(rootUnitIds: readonly number[]): Promise<number[]>;
   getSubtreeUnitIds?(unitId: number): Promise<number[]>;
   registerUnitUsageCountDelegate?(delegate: (unitId: number) => Promise<number>): void;
+  registerUnitManagerResolverDelegate?(delegate: UnitManagerResolverDelegate): void;
 }
 
 export const ORGANIZATIONS_PUBLIC_SERVICE = Symbol('ORGANIZATIONS_PUBLIC_SERVICE');

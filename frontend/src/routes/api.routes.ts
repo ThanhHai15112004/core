@@ -139,8 +139,33 @@ export const API_ROUTES = {
     ASSIGN_ROLES: (id: string | number) => `/users/${id}/roles`,
     ASSIGN_ORGANIZATIONS: (id: string | number) => `/users/${id}/organizations`,
     IMPORT: '/users/bulk-import',
+    IMPORT_PREVIEW: '/users/bulk-import/preview',
+    IMPORT_HISTORIES: (qs = '') => `/users/bulk-import/histories${qs ? `?${qs}` : ''}`,
+    IMPORT_HISTORY_DETAIL: (id: string | number) => `/users/bulk-import/histories/${id}`,
+    IMPORT_JOB_PROGRESS: (jobId: string) =>
+      `/users/bulk-import/jobs/${encodeURIComponent(jobId)}/progress`,
     IMPORT_TEMPLATE: (format: 'csv' | 'xlsx' = 'xlsx') => `/users/import-template?format=${format}`,
     EXPORT: (qs = '') => `/users/export${qs ? `?${qs}` : ''}`,
+    EXPORT_HISTORIES: (qs = '') => `/users/export/histories${qs ? `?${qs}` : ''}`,
+    EXPORT_HISTORY_DETAIL: (id: string | number) => `/users/export/histories/${id}`,
+    EXPORT_JOB_PROGRESS: (jobId: string) =>
+      `/users/export/jobs/${encodeURIComponent(jobId)}/progress`,
+    EXPORT_DOWNLOAD_BY_TOKEN: (token: string) =>
+      `/users/export/downloads/${encodeURIComponent(token)}`,
+    REPORTS: '/users/reports',
+    REPORTS_RUN: '/users/reports/run',
+    REPORTS_SCHEDULES: (qs = '') => `/users/reports/schedules${qs ? `?${qs}` : ''}`,
+    REPORTS_SCHEDULES_TRIGGER_DUE: '/users/reports/schedules/trigger-due',
+    REPORTS_HISTORIES: (qs = '') => `/users/reports/histories${qs ? `?${qs}` : ''}`,
+    REPORTS_HISTORY_DETAIL: (id: string | number) => `/users/reports/histories/${id}`,
+    REPORTS_DOWNLOAD_BY_TOKEN: (token: string) =>
+      `/users/reports/downloads/${encodeURIComponent(token)}`,
+    SEARCH: (qs = '') => `/users/search${qs ? `?${qs}` : ''}`,
+    SEARCH_ENTITIES: '/users/search/entities',
+    SEARCH_SYNC: '/users/search/sync',
+    SEARCH_REBUILD: '/users/search/rebuild',
+    SEARCH_LAG: (qs = '') => `/users/search/lag${qs ? `?${qs}` : ''}`,
+    SEARCH_ZERO_RESULTS: (qs = '') => `/users/search/zero-results${qs ? `?${qs}` : ''}`,
   },
   ROLES: {
     LIST: (qs = '') => `/roles${qs ? `?${qs}` : ''}`,
@@ -167,10 +192,19 @@ export const API_ROUTES = {
     LIST: (qs = '') => `/organizations${qs ? `?${qs}` : ''}`,
     TREE: (qs = '') => `/organizations/tree${qs ? `?${qs}` : ''}`,
     STATS: '/organizations/stats',
+    EXPORT: (qs = '') => `/organizations/export${qs ? `?${qs}` : ''}`,
+    IMPORT_TEMPLATE: (format: 'csv' | 'xlsx' = 'xlsx') =>
+      `/organizations/import/template?format=${format}`,
+    IMPORT: '/organizations/import',
     CREATE: '/organizations',
     DETAIL: (id: string | number) => `/organizations/${id}`,
     UPDATE: (id: string | number) => `/organizations/${id}`,
     DELETE: (id: string | number) => `/organizations/${id}`,
+    MOVE_IMPACT: (id: string | number, newParentId: number | null) =>
+      `/organizations/${id}/move-impact${newParentId !== null ? `?newParentId=${newParentId}` : ''}`,
+    MOVE: (id: string | number) => `/organizations/${id}/move`,
+    LOCK: (id: string | number) => `/organizations/${id}/lock`,
+    UNLOCK: (id: string | number) => `/organizations/${id}/unlock`,
   },
   CODES: {
     BOOTSTRAP: (qs = '') => `/codes/bootstrap${qs ? `?${qs}` : ''}`,

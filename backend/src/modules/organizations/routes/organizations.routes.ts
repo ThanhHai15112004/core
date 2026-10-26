@@ -3,6 +3,13 @@ export const ORGANIZATIONS_ROUTES = {
   ROOT: '',
   TREE: 'tree',
   STATS: 'stats',
+  EXPORT: 'export',
+  IMPORT_TEMPLATE: 'import/template',
+  IMPORT: 'import',
   BY_ID: ':id',
+  MOVE_IMPACT_BY_ID: ':id/move-impact',
+  MOVE_BY_ID: ':id/move',
+  LOCK_BY_ID: ':id/lock',
+  UNLOCK_BY_ID: ':id/unlock',
   buildByIdPath: (id: string) => `/organizations/${id}`,
 } as const;

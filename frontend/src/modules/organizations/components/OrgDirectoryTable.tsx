@@ -1,12 +1,23 @@
 import React from 'react';
-import { Search, Filter, Edit3, Plus, Trash2, Building2 } from 'lucide-react';
+import {
+  Search,
+  Filter,
+  Edit3,
+  Plus,
+  Trash2,
+  Building2,
+  Lock,
+  Unlock,
+  UserCheck,
+} from 'lucide-react';
 import { authStyles } from '../../auth/components/auth-ui.styles';
 import { ORG_UNIT_STATUS_OPTIONS, ORG_UNIT_TYPE_OPTIONS } from '../enum/organizations.enum';
-import type { OrganizationUnitItem } from '../types/organizations.types';
+import type { OrganizationTypeOption, OrganizationUnitItem } from '../types/organizations.types';
 
 interface OrgDirectoryTableProps {
   units: OrganizationUnitItem[];
   allUnits: OrganizationUnitItem[];
+  unitTypeOptions?: readonly OrganizationTypeOption[];
   selectedUnitId: number | null;
   searchQuery: string;
   onSearchChange: (val: string) => void;
@@ -18,12 +29,15 @@ interface OrgDirectoryTableProps {
   onParentFilterChange: (val: string) => void;
   onSelectUnit: (unit: OrganizationUnitItem) => void;
   onAddChildUnit: (parentUnit: OrganizationUnitItem) => void;
+  onLockUnit?: (id: number) => Promise<void>;
+  onUnlockUnit?: (id: number) => Promise<void>;
   onDeleteUnit: (id: number) => Promise<void>;
 }
 
 export const OrgDirectoryTable: React.FC<OrgDirectoryTableProps> = ({
   units,
   allUnits,
+  unitTypeOptions = ORG_UNIT_TYPE_OPTIONS,
   selectedUnitId,
   searchQuery,
   onSearchChange,
@@ -35,9 +49,13 @@ export const OrgDirectoryTable: React.FC<OrgDirectoryTableProps> = ({
   onParentFilterChange,
   onSelectUnit,
   onAddChildUnit,
+  onLockUnit,
+  onUnlockUnit,
   onDeleteUnit,
 }) => {
-  const unitNameById = new Map<number, string>(allUnits.map((u) => [u.id, `${u.code} — ${u.name}`]));
+  const unitNameById = new Map<number, string>(
+    allUnits.map((u) => [u.id, `${u.code} — ${u.name}`]),
+  );
 
   return (
     <div style={authStyles.card}>
@@ -57,8 +75,8 @@ export const OrgDirectoryTable: React.FC<OrgDirectoryTableProps> = ({
             <span>Danh Bạ Đơn Vị, Chi Nhánh & Phòng Ban ({units.length})</span>
           </h3>
           <p style={{ ...authStyles.sectionDesc, margin: '4px 0 0' }}>
-            Tra cứu phẳng theo Mã đơn vị, Tên hiển thị, Cấp bậc loại đơn vị, Trạng thái hoạt động
-            hoặc Đơn vị cấp trên.
+            Tra cứu phẳng theo Mã đơn vị, Tên hiển thị, Cấp bậc loại đơn vị, Người phụ trách,
+            Trạng thái hoạt động hoặc Đơn vị cấp trên.
           </p>
         </div>
 
@@ -74,7 +92,7 @@ export const OrgDirectoryTable: React.FC<OrgDirectoryTableProps> = ({
               type="text"
               value={searchQuery}
               onChange={(e) => onSearchChange(e.target.value)}
-              placeholder="Tìm mã hoặc tên đơn vị..."
+              placeholder="Tìm mã, tên, phụ trách..."
               style={{ ...authStyles.input, paddingLeft: '30px' }}
             />
           </div>
@@ -85,7 +103,7 @@ export const OrgDirectoryTable: React.FC<OrgDirectoryTableProps> = ({
             style={{ ...authStyles.input, width: '170px' }}
           >
             <option value="">Mọi loại đơn vị</option>
-            {ORG_UNIT_TYPE_OPTIONS.map((t) => (
+            {unitTypeOptions.map((t) => (
               <option key={t.code} value={t.code}>
                 {t.label}
               </option>
@@ -145,6 +163,7 @@ export const OrgDirectoryTable: React.FC<OrgDirectoryTableProps> = ({
               <th style={authStyles.tableHeaderCell}>Tên đơn vị / Phòng ban</th>
               <th style={authStyles.tableHeaderCell}>Loại cấp bậc</th>
               <th style={authStyles.tableHeaderCell}>Đơn vị cấp trên (Parent)</th>
+              <th style={authStyles.tableHeaderCell}>Người phụ trách</th>
               <th style={authStyles.tableHeaderCell}>Trạng thái</th>
               <th style={authStyles.tableHeaderCell}>Thao tác</th>
             </tr>
@@ -153,7 +172,7 @@ export const OrgDirectoryTable: React.FC<OrgDirectoryTableProps> = ({
             {units.length === 0 ? (
               <tr>
                 <td
-                  colSpan={7}
+                  colSpan={8}
                   style={{ ...authStyles.tableCell, textAlign: 'center', color: 'var(--text-muted)' }}
                 >
                   Không tìm thấy đơn vị nào khớp điều kiện lọc.
@@ -208,11 +227,23 @@ export const OrgDirectoryTable: React.FC<OrgDirectoryTableProps> = ({
                         </span>
                       )}
                     </td>
+                    <td style={{ ...authStyles.tableCell, fontSize: '12.5px' }}>
+                      {u.managerName ? (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 600 }}>
+                          <UserCheck size={13} color="var(--primary)" />
+                          {u.managerName} (#{u.managerId})
+                        </span>
+                      ) : u.managerId ? (
+                        <span>User #{u.managerId}</span>
+                      ) : (
+                        <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>—</span>
+                      )}
+                    </td>
                     <td style={authStyles.tableCell}>
                       {u.status === 1 ? (
                         <span style={authStyles.badgeSuccess}>ACTIVE</span>
                       ) : u.status === 2 ? (
-                        <span style={authStyles.badgeWarning}>INACTIVE</span>
+                        <span style={authStyles.badgeWarning}>INACTIVE (Khóa)</span>
                       ) : (
                         <span style={authStyles.badgeDanger}>ARCHIVED</span>
                       )}
@@ -230,17 +261,46 @@ export const OrgDirectoryTable: React.FC<OrgDirectoryTableProps> = ({
                         >
                           <Edit3 size={12} /> Sửa
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => onAddChildUnit(u)}
-                          style={{
-                            ...authStyles.btnSecondary,
-                            padding: '5px 9px',
-                            fontSize: '12px',
-                          }}
-                        >
-                          <Plus size={12} /> Thêm con
-                        </button>
+                        {u.status === 1 && (
+                          <button
+                            type="button"
+                            onClick={() => onAddChildUnit(u)}
+                            style={{
+                              ...authStyles.btnSecondary,
+                              padding: '5px 9px',
+                              fontSize: '12px',
+                            }}
+                          >
+                            <Plus size={12} /> Thêm con
+                          </button>
+                        )}
+                        {u.status === 1 ? (
+                          <button
+                            type="button"
+                            onClick={() => void onLockUnit?.(u.id)}
+                            style={{
+                              ...authStyles.btnSecondary,
+                              padding: '5px 9px',
+                              fontSize: '12px',
+                            }}
+                            title="Khóa đơn vị (không cho dùng mới)"
+                          >
+                            <Lock size={12} /> Khóa
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => void onUnlockUnit?.(u.id)}
+                            style={{
+                              ...authStyles.btnTeal,
+                              padding: '5px 9px',
+                              fontSize: '12px',
+                            }}
+                            title="Mở khóa đơn vị"
+                          >
+                            <Unlock size={12} /> Mở khóa
+                          </button>
+                        )}
                         <button
                           type="button"
                           onClick={() => void onDeleteUnit(u.id)}
@@ -264,4 +324,3 @@ export const OrgDirectoryTable: React.FC<OrgDirectoryTableProps> = ({
     </div>
   );
 };
-
