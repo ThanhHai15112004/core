@@ -21,6 +21,10 @@ import {
   ExportRegistryService,
   defaultExportRegistry,
 } from './registries/export-registry.service.js';
+import {
+  ReportRegistryService,
+  defaultReportRegistry,
+} from './registries/report-registry.service.js';
 
 @Global()
 @Module({
@@ -53,6 +57,10 @@ import {
       provide: ExportRegistryService,
       useValue: defaultExportRegistry,
     },
+    {
+      provide: ReportRegistryService,
+      useValue: defaultReportRegistry,
+    },
   ],
   exports: [
     CodeRegistryService,
@@ -62,6 +70,7 @@ import {
     MenuRegistryService,
     ImportRegistryService,
     ExportRegistryService,
+    ReportRegistryService,
   ],
 })
 export class KernelModule {}

@@ -338,3 +338,92 @@ export const adminResetUserMfaSchema = z.object({
 });
 
 export type AdminResetUserMfaRequest = z.infer<typeof adminResetUserMfaSchema>;
+
+export const reportParametersInputSchema = z.object({
+  fromDate: z.string().trim().max(64).nullable().optional(),
+  toDate: z.string().trim().max(64).nullable().optional(),
+  status: z
+    .union([
+      userStatusSchema,
+      z.string().trim().min(1).max(32),
+      z.array(z.union([userStatusSchema, z.string().trim().min(1).max(32)])),
+    ])
+    .nullable()
+    .optional(),
+  organizationUnitId: coercePositiveInt.nullable().optional(),
+  includeSubUnits: z.boolean().optional(),
+  filters: z.record(z.string(), z.unknown()).nullable().optional(),
+});
+
+export const runUserReportSchema = z.object({
+  reportCode: z.string().trim().min(1).max(120).default('users.summary_dashboard'),
+  fromDate: z.string().trim().max(64).nullable().optional(),
+  toDate: z.string().trim().max(64).nullable().optional(),
+  status: z
+    .union([
+      userStatusSchema,
+      z.string().trim().min(1).max(32),
+      z.array(z.union([userStatusSchema, z.string().trim().min(1).max(32)])),
+    ])
+    .nullable()
+    .optional(),
+  organizationUnitId: coercePositiveInt.nullable().optional(),
+  includeSubUnits: z.boolean().optional(),
+  filters: z.record(z.string(), z.unknown()).nullable().optional(),
+  parameters: reportParametersInputSchema.optional(),
+  format: z.enum(['csv', 'xlsx', 'pdf']).optional(),
+  async: z.boolean().optional(),
+  useCache: z.boolean().optional(),
+  forceRefresh: z.boolean().optional(),
+  preferReplica: z.boolean().optional(),
+  ttlSeconds: z.number().int().min(1).max(604800).optional(),
+  notifyChannels: z.array(z.enum(['EMAIL', 'IN_APP'])).optional(),
+  recipientEmails: z.array(z.string().trim().email()).optional(),
+  recipientUserIds: z.array(coercePositiveInt).optional(),
+});
+
+export type RunUserReportRequest = z.infer<typeof runUserReportSchema>;
+
+export const createUserReportScheduleSchema = z.object({
+  reportCode: z.string().trim().min(1).max(120).default('users.summary_dashboard'),
+  name: z.string().trim().min(2).max(200),
+  frequency: z.enum(['DAILY', 'WEEKLY', 'MONTHLY']),
+  cronExpression: z.string().trim().min(5).max(64).optional(),
+  hour: z.number().int().min(0).max(23).optional(),
+  minute: z.number().int().min(0).max(59).optional(),
+  dayOfWeek: z.number().int().min(0).max(6).optional(),
+  dayOfMonth: z.number().int().min(1).max(28).optional(),
+  timezone: preferredTimezoneSchema.optional(),
+  format: z.enum(['csv', 'xlsx', 'pdf']).default('xlsx'),
+  parameters: reportParametersInputSchema.optional(),
+  channels: z
+    .array(z.enum(['EMAIL', 'IN_APP']))
+    .min(1)
+    .default(['EMAIL', 'IN_APP']),
+  recipientEmails: z.array(z.string().trim().email()).optional().default([]),
+  recipientUserIds: z.array(coercePositiveInt).optional().default([]),
+  ttlSeconds: z.number().int().min(60).max(604800).optional().default(3600),
+  isActive: z.boolean().optional().default(true),
+});
+
+export type CreateUserReportScheduleRequest = z.infer<typeof createUserReportScheduleSchema>;
+
+export const listUserReportSchedulesQuerySchema = z.object({
+  reportCode: optionalQueryParam(z.string().trim().max(120)),
+  frequency: optionalQueryParam(z.enum(['DAILY', 'WEEKLY', 'MONTHLY'])),
+  isActive: optionalQueryParam(booleanQueryParam()),
+});
+
+export type ListUserReportSchedulesQuery = z.infer<typeof listUserReportSchedulesQuerySchema>;
+
+export const listUserReportHistoriesQuerySchema = z.object({
+  reportCode: optionalQueryParam(z.string().trim().max(120)),
+  actorId: optionalQueryParam(intQueryParam({ min: 1 })),
+  status: optionalQueryParam(
+    z.enum(['QUEUED', 'PROCESSING', 'COMPLETED', 'FAILED', 'EXPIRED', 'CANCELLED']),
+  ),
+  executionMode: optionalQueryParam(z.enum(['SYNC', 'QUEUE', 'SCHEDULED'])),
+  limit: optionalQueryParam(intQueryParam({ min: 1, max: 200 })),
+});
+
+export type ListUserReportHistoriesQuery = z.infer<typeof listUserReportHistoriesQuerySchema>;

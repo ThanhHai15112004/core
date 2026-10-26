@@ -133,6 +133,40 @@ export abstract class BaseTypeOrmRepository<TEntity extends ObjectLiteral> {
   }
 
   /**
+   * Kiểm tra xem `DataSource` hiện tại có cấu hình Read Replica (`replication`) sẵn sàng và nằm ngoài Transaction hay không.
+   */
+  public hasReadReplica(): boolean {
+    if (this.transactionManager?.isInTransaction()) {
+      return false;
+    }
+    const hasReplication = Boolean(
+      (this.dataSource.options as { replication?: unknown } | undefined)?.replication,
+    );
+    return hasReplication && typeof this.dataSource.createQueryRunner === 'function';
+  }
+
+  /**
+   * Thực thi tác vụ chỉ đọc (Read-Only) và trả về kèm thông tin nguồn dữ liệu thực tế (`'REPLICA' | 'PRIMARY'`).
+   */
+  public async executeReadOnlyWithMeta<TResult>(
+    work: (repo: Repository<TEntity>, manager: EntityManager) => Promise<TResult>,
+  ): Promise<{ readonly data: TResult; readonly dataSourceUsed: 'REPLICA' | 'PRIMARY' }> {
+    if (!this.hasReadReplica()) {
+      const data = await work(this.repository, this.manager);
+      return { data, dataSourceUsed: 'PRIMARY' };
+    }
+
+    const readRunner = this.dataSource.createQueryRunner('slave');
+    try {
+      const readRepo = readRunner.manager.getRepository(this.entityTarget);
+      const data = await work(readRepo, readRunner.manager);
+      return { data, dataSourceUsed: 'REPLICA' };
+    } finally {
+      await readRunner.release();
+    }
+  }
+
+  /**
    * Thực thi tác vụ chỉ đọc (Read-Only):
    * - Nếu đang ở trong một Transaction: luôn đọc từ Master/Transaction hiện hành để đảm bảo tính nhất quán (Read-your-own-writes).
    * - Nếu ngoài Transaction và hệ thống có cấu hình Read Replica (`replication`): mượn kết nối `'slave'` và giải phóng an toàn sau khi đọc xong.
@@ -140,25 +174,8 @@ export abstract class BaseTypeOrmRepository<TEntity extends ObjectLiteral> {
   public async executeReadOnly<TResult>(
     work: (repo: Repository<TEntity>, manager: EntityManager) => Promise<TResult>,
   ): Promise<TResult> {
-    if (this.transactionManager?.isInTransaction()) {
-      return work(this.repository, this.manager);
-    }
-
-    const hasReplication = Boolean(
-      (this.dataSource.options as { replication?: unknown } | undefined)?.replication,
-    );
-
-    if (!hasReplication || typeof this.dataSource.createQueryRunner !== 'function') {
-      return work(this.repository, this.manager);
-    }
-
-    const readRunner = this.dataSource.createQueryRunner('slave');
-    try {
-      const readRepo = readRunner.manager.getRepository(this.entityTarget);
-      return await work(readRepo, readRunner.manager);
-    } finally {
-      await readRunner.release();
-    }
+    const result = await this.executeReadOnlyWithMeta(work);
+    return result.data;
   }
 
   /** Tìm bản ghi theo khóa chính `id` */

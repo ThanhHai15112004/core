@@ -4,6 +4,7 @@ import { safeJsonParse, safeJsonParseObject } from '../utils/json.util.js';
 import type { CodeTypeManifestItem } from './code-lookup.contract.js';
 import type { FeatureFlagManifestItem } from './feature-flag.contract.js';
 import type { MenuManifestItem } from './menu.contract.js';
+import type { ReportManifestItem } from './report.contract.js';
 import type { SequenceManifestItem } from './sequence.contract.js';
 import type { SettingGroupManifestItem, SettingManifestItem } from './setting-lookup.contract.js';
 
@@ -37,6 +38,7 @@ export interface ModuleManifest {
   featureFlags?: FeatureFlagManifestItem[];
   sequences?: SequenceManifestItem[];
   menus?: MenuManifestItem[];
+  reports?: ReportManifestItem[];
   locales?: Record<string, unknown>[];
   timezones?: Record<string, unknown>[];
   translations?: Record<string, unknown>[];

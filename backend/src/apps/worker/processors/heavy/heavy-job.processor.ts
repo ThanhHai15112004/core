@@ -5,6 +5,7 @@ import { CoreConfigService } from '@packages/config/index.js';
 import {
   defaultExportRegistry,
   defaultImportRegistry,
+  defaultReportRegistry,
   type ImportCellIssue,
   type ImportDuplicateStrategy,
 } from '@packages/kernel/index.js';
@@ -15,14 +16,16 @@ import type { UserIdentity } from '@packages/security/index.js';
 import {
   UserExportService,
   UserImportService,
+  UserReportService,
   type BulkImportUserRowInput,
   type ListUsersQuery,
+  type RunUserReportRequest,
 } from '@modules/users/index.js';
 import { FilesService } from '@modules/files/index.js';
 import { BaseQueueProcessor } from '../base-queue.processor.js';
 
 export interface HeavyQueueJobPayload {
-  readonly operation?: 'import' | 'export' | 'media_process' | 'trash_cleanup' | string;
+  readonly operation?: 'import' | 'export' | 'report' | 'media_process' | 'trash_cleanup' | string;
   readonly executeInWorker?: boolean;
   readonly totalItems?: number;
   readonly chunkSize?: number;
@@ -38,6 +41,8 @@ export interface HeavyQueueJobPayload {
   readonly actorId?: number;
   readonly actor?: UserIdentity;
   readonly query?: Partial<ListUsersQuery>;
+  readonly reportCode?: string;
+  readonly request?: Partial<RunUserReportRequest>;
   readonly filters?: Readonly<Record<string, unknown>>;
   readonly notifyOnComplete?: boolean;
   readonly fileId?: number | string | null;
@@ -73,6 +78,7 @@ export class HeavyJobProcessor extends BaseQueueProcessor {
     @Optional() private readonly userImportService?: UserImportService,
     @Optional() private readonly filesService?: FilesService,
     @Optional() private readonly userExportService?: UserExportService,
+    @Optional() private readonly userReportService?: UserReportService,
   ) {
     super(config, metrics, progressTracker);
   }
@@ -137,6 +143,10 @@ export class HeavyJobProcessor extends BaseQueueProcessor {
 
     if (this.canExecuteUserExport(envelope.topic, operation, payload)) {
       return this.handleUserExport(envelope.topic, envelope.id, job, payload);
+    }
+
+    if (this.canExecuteUserReport(envelope.topic, operation, payload)) {
+      return this.handleUserReport(envelope.topic, envelope.id, job, payload);
     }
 
     if (this.canExecuteMediaProcess(envelope.topic, operation, payload)) {
@@ -322,6 +332,70 @@ export class HeavyJobProcessor extends BaseQueueProcessor {
     };
   }
 
+  /** 2.5. Xử lý topic `users.report` — Chạy báo cáo nặng chạy nền qua Queue (Mục 8.4.4 & 8.4.6) */
+  private async handleUserReport(
+    topic: string,
+    envelopeId: string,
+    job: Job,
+    payload: HeavyQueueJobPayload,
+  ): Promise<HeavyHandlerResult> {
+    const effectiveJobId = String(job.id ?? envelopeId);
+    const reportRequest: Partial<RunUserReportRequest> = {
+      reportCode: payload.reportCode ?? payload.request?.reportCode ?? 'users.security_compliance',
+      ...(payload.request ?? {}),
+      ...(payload.format === 'csv' || payload.format === 'xlsx' || payload.format === 'pdf'
+        ? { format: payload.format }
+        : {}),
+      async: false,
+    };
+
+    const effectiveActor: UserIdentity | undefined =
+      payload.actor ??
+      (payload.actorId !== undefined
+        ? {
+            id: payload.actorId,
+            roles: [],
+            permissions: ['users.report'],
+          }
+        : undefined);
+
+    const reportResult = await this.userReportService!.runReport(reportRequest, effectiveActor, {
+      skipQueuePublish: true,
+      ...(payload.historyId !== undefined ? { existingHistoryId: payload.historyId } : {}),
+      jobId: effectiveJobId,
+      executionMode: 'QUEUE',
+      bypassPermissionCheck: effectiveActor === undefined,
+    });
+
+    const effectiveTotal = Math.max(1, reportResult.totalRecords);
+    await this.reportProcessingStep(
+      job,
+      effectiveTotal,
+      effectiveTotal,
+      `Generated report ${reportResult.reportCode} with ${reportResult.totalRecords} records (${topic})`,
+      {
+        remaining: 0,
+        successCount: reportResult.totalRecords,
+      },
+    );
+
+    return {
+      processed: effectiveTotal,
+      total: effectiveTotal,
+      extra: {
+        reportCode: reportResult.reportCode,
+        historyId: reportResult.historyId,
+        totalRecords: reportResult.totalRecords,
+        dataSourceUsed: reportResult.dataSourceUsed,
+        cacheHit: reportResult.cacheHit,
+        downloadToken: reportResult.downloadToken,
+        downloadUrl: reportResult.downloadUrl,
+        expiresAt: reportResult.expiresAt,
+        notifiedChannels: reportResult.notifiedChannels,
+      },
+    };
+  }
+
   /** 3. Xử lý topic `files.media_process` — Kiểm tra toàn vẹn SHA-256 & xử lý tệp media */
   private async handleMediaProcess(
     job: Job,
@@ -343,17 +417,18 @@ export class HeavyJobProcessor extends BaseQueueProcessor {
     };
   }
 
-  /** 4. Xử lý topic `files.trash_cleanup` — Dọn dẹp vĩnh viễn các tệp quá hạn trong thùng rác & file Export tạm hết hạn */
+  /** 4. Xử lý topic `files.trash_cleanup` — Dọn dẹp vĩnh viễn các tệp quá hạn trong thùng rác & file Export/Report tạm hết hạn */
   private async handleTrashCleanup(job: Job, total: number): Promise<HeavyHandlerResult> {
     const cleanupResult = await this.filesService!.purgeExpiredTrash(undefined, {
       skipQueuePublish: true,
     });
     const expiredExports = defaultExportRegistry.purgeExpiredArtifacts();
+    const expiredReports = defaultReportRegistry.purgeExpiredReportArtifacts();
     await this.reportProcessingStep(
       job,
       total,
       total,
-      `Purged ${cleanupResult.purgedCount} expired trashed files and ${expiredExports.purgedCount} expired export files`,
+      `Purged ${cleanupResult.purgedCount} expired trashed files, ${expiredExports.purgedCount} expired export files, and ${expiredReports.purgedCount} expired report files`,
     );
 
     return {
@@ -362,6 +437,7 @@ export class HeavyJobProcessor extends BaseQueueProcessor {
       extra: {
         purgedCount: cleanupResult.purgedCount,
         purgedExportCount: expiredExports.purgedCount,
+        purgedReportCount: expiredReports.purgedCount,
       },
     };
   }
@@ -414,6 +490,19 @@ export class HeavyJobProcessor extends BaseQueueProcessor {
     return (
       (operation === 'export' || topic === 'users.export') &&
       Boolean(this.userExportService) &&
+      payload.executeInWorker === true
+    );
+  }
+
+  /** Kiểm tra điều kiện chạy Báo cáo nặng người dùng thật trong Worker (Mục 8.4.4) */
+  private canExecuteUserReport(
+    topic: string,
+    operation: string,
+    payload: HeavyQueueJobPayload,
+  ): boolean {
+    return (
+      (operation === 'report' || topic === 'users.report') &&
+      Boolean(this.userReportService) &&
       payload.executeInWorker === true
     );
   }

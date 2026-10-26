@@ -18,7 +18,8 @@
     "users.assign_roles",
     "users.assign_organizations",
     "users.import",
-    "users.export"
+    "users.export",
+    "users.report"
   ],
   "events": {
     "published": [
@@ -377,6 +378,50 @@
       "numOrder": 1,
       "icon": "Users",
       "position": "SIDEBAR"
+    }
+  ],
+  "reports": [
+    {
+      "code": "users.summary_dashboard",
+      "module": "users",
+      "name": "Báo cáo tổng hợp nhân sự & trạng thái tài khoản",
+      "description": "Thống kê tổng số nhân sự theo trạng thái, đơn vị, tỷ lệ kích hoạt MFA và xu hướng tạo tài khoản",
+      "category": "DASHBOARD",
+      "requiredPermission": "users.report",
+      "isHeavy": false,
+      "heavyRecordThreshold": 2000,
+      "cacheTtlSeconds": 300,
+      "supportsReadReplica": true,
+      "supportedFormats": ["xlsx", "csv", "pdf"],
+      "parameters": [
+        { "key": "dateRange", "name": "Khoảng ngày tạo", "type": "date-range", "required": false },
+        { "key": "status", "name": "Trạng thái tài khoản", "type": "status", "required": false },
+        { "key": "organizationUnitId", "name": "Đơn vị / Phòng ban", "type": "organization-unit", "required": false },
+        { "key": "filters", "name": "Bộ lọc mở rộng", "type": "filter", "required": false }
+      ],
+      "isSystem": true,
+      "status": 1
+    },
+    {
+      "code": "users.security_compliance",
+      "module": "users",
+      "name": "Báo cáo tuân thủ bảo mật & phiên đăng nhập nhân sự",
+      "description": "Báo cáo chuyên sâu các tài khoản chưa bật MFA, tài khoản bị khóa hoặc lâu chưa đăng nhập theo từng đơn vị",
+      "category": "REPORT",
+      "requiredPermission": "users.report",
+      "isHeavy": true,
+      "heavyRecordThreshold": 500,
+      "cacheTtlSeconds": 600,
+      "supportsReadReplica": true,
+      "supportedFormats": ["xlsx", "csv", "pdf"],
+      "parameters": [
+        { "key": "dateRange", "name": "Khoảng ngày", "type": "date-range", "required": false },
+        { "key": "status", "name": "Trạng thái tài khoản", "type": "status", "required": false },
+        { "key": "organizationUnitId", "name": "Đơn vị / Phòng ban", "type": "organization-unit", "required": false },
+        { "key": "filters", "name": "Bộ lọc mở rộng", "type": "filter", "required": false }
+      ],
+      "isSystem": true,
+      "status": 1
     }
   ]
 }

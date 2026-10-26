@@ -12,9 +12,11 @@ import {
 } from '@packages/http/index.js';
 import { CurrentUser, type UserIdentity } from '@packages/security/index.js';
 import { USERS_ROUTES } from '../routes/users.routes.js';
+import { Optional } from '@nestjs/common';
 import { UsersService } from '../services/users.service.js';
 import { UserImportService } from '../import/index.js';
 import { UserExportService } from '../export/index.js';
+import { UserReportService } from '../reports/index.js';
 import {
   type AdminResetUserMfaRequest,
   type AdminResetUserPasswordRequest,
@@ -22,12 +24,16 @@ import {
   type AssignUserRolesRequest,
   type BulkImportUsersRequest,
   type ChangeUserStatusRequest,
+  type CreateUserReportScheduleRequest,
   type CreateUserRequest,
   type ListUserExportHistoriesQuery,
   type ListUserImportHistoriesQuery,
+  type ListUserReportHistoriesQuery,
+  type ListUserReportSchedulesQuery,
   type ListUsersQuery,
   type LockUserRequest,
   type PreviewImportUsersRequest,
+  type RunUserReportRequest,
   type UpdateUserRequest,
   adminResetUserMfaSchema,
   adminResetUserPasswordSchema,
@@ -35,17 +41,22 @@ import {
   assignUserRolesSchema,
   bulkImportUsersSchema,
   changeUserStatusSchema,
+  createUserReportScheduleSchema,
   createUserSchema,
   listUserExportHistoriesQuerySchema,
   listUserImportHistoriesQuerySchema,
+  listUserReportHistoriesQuerySchema,
+  listUserReportSchedulesQuerySchema,
   listUsersQuerySchema,
   lockUserSchema,
   previewImportUsersSchema,
+  runUserReportSchema,
   updateUserSchema,
 } from '../requests/users.requests.js';
 import {
   type BulkImportUsersResultResponse,
   type ExportUsersCsvResponse,
+  type UserReportExecutionResponse,
   type UserResponse,
   type UserStatusHistoryItemResponse,
   bulkImportUsersResultSchema,
@@ -56,6 +67,10 @@ import {
   importHistoryItemResponseSchema,
   importJobProgressResponseSchema,
   importUsersPreviewResponseSchema,
+  registeredReportDefinitionResponseSchema,
+  userReportExecutionResponseSchema,
+  userReportHistoryItemResponseSchema,
+  userReportScheduleItemResponseSchema,
   userResponseSchema,
   userStatusHistoryItemSchema,
 } from '../responses/users.response.js';
@@ -67,6 +82,7 @@ export class UsersController {
     private readonly usersService: UsersService,
     private readonly importService: UserImportService,
     private readonly exportService: UserExportService,
+    @Optional() private readonly reportService?: UserReportService,
   ) {}
 
   /** Tìm kiếm và lọc người dùng có phân trang kèm áp dụng Phạm vi dữ liệu (Mục 3.1.9 & 4.3.5) */
@@ -153,6 +169,114 @@ export class UsersController {
     @ValidatedParams(z.string().trim().min(1), 'token') token: string,
   ) {
     return this.exportService.downloadTemporaryExport(token);
+  }
+
+  /** Danh sách các báo cáo & dashboard đã đăng ký của module người dùng (Mục 8.4.1 & 8.4.3 — dùng quyền riêng `users.report`) */
+  @Get(USERS_ROUTES.REPORTS)
+  @RequirePermissions('users.report')
+  @ApiDoc({
+    summary:
+      'Lấy danh sách các báo cáo & dashboard đã đăng ký của module người dùng (phân quyền riêng users.report)',
+    response: z.array(registeredReportDefinitionResponseSchema),
+  })
+  public listAvailableReports() {
+    return this.reportService?.listAvailableReports() ?? [];
+  }
+
+  /** Thực thi báo cáo / dashboard nhân sự (Mục 8.4.2, 8.4.3, 8.4.4, 8.4.6, 8.4.7, 8.4.8, 8.4.9) */
+  @Post(USERS_ROUTES.REPORTS_RUN)
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions('users.report')
+  @ApiDoc({
+    summary:
+      'Chạy báo cáo / dashboard nhân sự (hỗ trợ lọc khoảng ngày/trạng thái/đơn vị, Queue cho báo cáo nặng, Read Replica, Cache & file tạm)',
+    response: userReportExecutionResponseSchema,
+  })
+  public async runReport(
+    @ValidatedBody(runUserReportSchema) body: RunUserReportRequest,
+    @CurrentUser() actor?: UserIdentity,
+  ): Promise<UserReportExecutionResponse> {
+    return this.reportService!.runReport(body, actor);
+  }
+
+  /** Lên lịch gửi báo cáo định kỳ theo ngày, tuần hoặc tháng (Mục 8.4.5 & 8.4.6) */
+  @Post(USERS_ROUTES.REPORTS_SCHEDULES)
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions('users.report')
+  @ApiDoc({
+    summary:
+      'Lên lịch gửi báo cáo nhân sự định kỳ theo ngày (DAILY), tuần (WEEKLY) hoặc tháng (MONTHLY)',
+    response: userReportScheduleItemResponseSchema,
+  })
+  public createReportSchedule(
+    @ValidatedBody(createUserReportScheduleSchema) body: CreateUserReportScheduleRequest,
+    @CurrentUser() actor?: UserIdentity,
+  ) {
+    return this.reportService!.createReportSchedule(body, actor);
+  }
+
+  /** Xem danh sách lịch gửi báo cáo định kỳ của module người dùng (Mục 8.4.5) */
+  @Get(USERS_ROUTES.REPORTS_SCHEDULES)
+  @RequirePermissions('users.report')
+  @ApiDoc({
+    summary: 'Xem danh sách lịch gửi báo cáo định kỳ (DAILY / WEEKLY / MONTHLY)',
+    response: z.array(userReportScheduleItemResponseSchema),
+  })
+  public listReportSchedules(
+    @ValidatedQuery(listUserReportSchedulesQuerySchema) query: ListUserReportSchedulesQuery,
+  ) {
+    return this.reportService?.listReportSchedules(query) ?? [];
+  }
+
+  /** Kích hoạt chạy các lịch gửi báo cáo đã đến hạn (Mục 8.4.5 & 8.4.6) */
+  @Post(USERS_ROUTES.REPORTS_SCHEDULES_TRIGGER_DUE)
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions('users.report')
+  @ApiDoc({
+    summary:
+      'Kích hoạt thực thi các lịch báo cáo đã đến hạn kèm gửi Email / thông báo chứa file tạm',
+  })
+  public async triggerDueReportSchedules() {
+    return this.reportService!.triggerDueReportSchedules();
+  }
+
+  /** Xem danh sách lịch sử chạy báo cáo (Thời gian, người chạy và kết quả — Mục 8.4.7) */
+  @Get(USERS_ROUTES.REPORTS_HISTORIES)
+  @RequirePermissions('users.report')
+  @ApiDoc({
+    summary: 'Xem danh sách lịch sử chạy báo cáo (Thời gian, người chạy, nguồn đọc và kết quả)',
+    response: z.array(userReportHistoryItemResponseSchema),
+  })
+  public listReportHistories(
+    @ValidatedQuery(listUserReportHistoriesQuerySchema) query: ListUserReportHistoriesQuery,
+  ) {
+    return this.reportService?.listReportHistories(query) ?? [];
+  }
+
+  /** Xem chi tiết một bản ghi lịch sử chạy báo cáo theo ID (Mục 8.4.7) */
+  @Get(USERS_ROUTES.REPORTS_HISTORY_BY_ID)
+  @RequirePermissions('users.report')
+  @ApiDoc({
+    summary: 'Xem chi tiết bản ghi lịch sử chạy báo cáo theo ID',
+    response: userReportHistoryItemResponseSchema,
+  })
+  public getReportHistoryById(
+    @ValidatedParams(positiveIntParamSchema, 'historyId') historyId: number,
+  ) {
+    return this.reportService!.getReportHistoryById(historyId);
+  }
+
+  /** Tải xuống file báo cáo tạm thời qua token (tự động chặn khi file đã hết hạn — Mục 8.4.6) */
+  @Get(USERS_ROUTES.REPORTS_DOWNLOAD_BY_TOKEN)
+  @RequirePermissions('users.report')
+  @ApiDoc({
+    summary: 'Tải file báo cáo tạm thời theo token (tự động hết hạn theo TTL cấu hình)',
+    response: exportTemporaryDownloadResponseSchema,
+  })
+  public downloadTemporaryReport(
+    @ValidatedParams(z.string().trim().min(1), 'token') token: string,
+  ) {
+    return this.reportService!.downloadTemporaryReport(token);
   }
 
   /** Tải file mẫu (Template) Excel (.xlsx) hoặc CSV (.csv) để nhập người dùng hàng loạt (Mục 3.1.7) */

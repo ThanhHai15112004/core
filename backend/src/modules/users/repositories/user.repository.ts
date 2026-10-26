@@ -1,5 +1,5 @@
 import { Injectable, Optional } from '@nestjs/common';
-import { DataSource } from 'typeorm';
+import { DataSource, type Repository } from 'typeorm';
 import { BaseTypeOrmRepository, TransactionManager } from '@packages/database/index.js';
 import {
   type CountMode,
@@ -166,9 +166,40 @@ export class UserRepository extends BaseTypeOrmRepository<UserEntity> {
     return [...subordinates].sort((a, b) => a - b);
   }
 
+  /**
+   * Thực thi tìm kiếm người dùng chỉ đọc phục vụ Báo cáo & Dashboard (Mục 8.4.8 — Hỗ trợ đọc từ Read Replica khi hệ thống có cấu hình `replication`).
+   */
+  public async searchPaginatedReadOnly(
+    filter: SearchUsersFilter = {},
+    preferReplica = true,
+  ): Promise<{
+    readonly items: UserEntity[];
+    readonly total: number;
+    readonly dataSourceUsed: 'REPLICA' | 'PRIMARY';
+  }> {
+    if (!preferReplica) {
+      const result = await this.searchPaginated(filter);
+      return {
+        items: result.items,
+        total: result.total,
+        dataSourceUsed: 'PRIMARY',
+      };
+    }
+
+    const { data, dataSourceUsed } = await this.executeReadOnlyWithMeta((readRepo) =>
+      this.searchPaginated(filter, readRepo),
+    );
+    return {
+      items: data.items,
+      total: data.total,
+      dataSourceUsed,
+    };
+  }
+
   /** Tìm kiếm và lọc người dùng có phân trang (hỗ trợ lọc theo hồ sơ user_profiles, vai trò, đơn vị/chi nhánh, cây quản lý và Phạm vi dữ liệu Data Scope Mục 4.3) */
   public async searchPaginated(
     filter: SearchUsersFilter = {},
+    repoOverride?: Repository<UserEntity>,
   ): Promise<{ items: UserEntity[]; total: number }> {
     const maxPageSize = defaultSettingRegistry.getNumber(
       'users.pagination.max_page_size',
@@ -181,7 +212,12 @@ export class UserRepository extends BaseTypeOrmRepository<UserEntity> {
       5000,
     );
 
-    const qb = this.repository
+    const activeRepo =
+      repoOverride && typeof repoOverride.createQueryBuilder === 'function'
+        ? repoOverride
+        : this.repository;
+
+    const qb = activeRepo
       .createQueryBuilder('u')
       .leftJoin('user_profiles', 'up', 'up.user_id = u.id AND up.deleted_at IS NULL');
     if (filter.includeArchived || filter.status === 4) {

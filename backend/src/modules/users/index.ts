@@ -12,4 +12,5 @@ export * from './mappers/users.mapper.js';
 export * from './services/users.service.js';
 export * from './import/index.js';
 export * from './export/index.js';
+export * from './reports/index.js';
 export * from './users.module.js';

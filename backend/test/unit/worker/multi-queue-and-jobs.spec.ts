@@ -726,5 +726,89 @@ describe('Phase 7.3 — Hàng đợi công việc (Multi-Queue, Worker Concurren
       downloadToken: 'exp_tok_707',
       downloadUrl: '/api/v1/users/export/downloads/exp_tok_707',
     });
+
+    // 8. HeavyJobProcessor chạy Báo cáo nặng (users.report) thực sự trong Worker, lưu file tạm và trả về downloadUrl (Mục 8.4.4 & 8.4.6)
+    const fakeUserReportService = {
+      runReport: async () => ({
+        reportCode: 'users.security_compliance',
+        reportName: 'Báo cáo tuân thủ bảo mật & phiên đăng nhập nhân sự',
+        module: 'users',
+        category: 'REPORT' as const,
+        requiredPermission: 'users.report',
+        historyId: 99,
+        jobId: 'job-heavy-report-808',
+        status: 'COMPLETED' as const,
+        executionMode: 'QUEUE' as const,
+        dataSourceUsed: 'REPLICA' as const,
+        cacheHit: false,
+        cacheKey: 'rep_cache_808',
+        parameters: {
+          fromDate: null,
+          toDate: null,
+          statuses: [],
+          organizationUnitId: 10,
+          includeSubUnits: false,
+          filters: {},
+        },
+        totalRecords: 180,
+        summary: { totalUsers: 180, compliantCount: 150 },
+        rows: [],
+        format: 'xlsx' as const,
+        fileName: 'bao_cao_users_security_compliance_2026-10-26.xlsx',
+        downloadToken: 'rep_tok_808',
+        downloadUrl: '/api/v1/users/reports/downloads/rep_tok_808',
+        expiresAt: '2026-10-26T16:00:00.000Z',
+        notifiedChannels: ['EMAIL', 'IN_APP'] as const,
+        startedAt: '2026-10-26T15:00:00.000Z',
+        completedAt: '2026-10-26T15:00:02.000Z',
+        durationMs: 2000,
+      }),
+    };
+
+    const heavyReportProcessor = new HeavyJobProcessor(
+      config,
+      metrics,
+      progressTracker,
+      userImportService,
+      fakeFilesService,
+      fakeUserExportService as never,
+      fakeUserReportService as never,
+    );
+
+    const heavyReportJob = {
+      id: 'job-heavy-report-808',
+      name: 'users.report',
+      queueName: QUEUES.SYSTEM_HEAVY,
+      data: serializeMessage('users.report', {
+        operation: 'report',
+        executeInWorker: true,
+        reportCode: 'users.security_compliance',
+        format: 'xlsx',
+        historyId: 99,
+        actorId: 1,
+      }),
+      opts: { attempts: 2 },
+      timestamp: Date.now() - 100,
+      attemptsMade: 0,
+      attemptsStarted: 1,
+      progress: 0,
+      updateProgress: async () => undefined,
+      log: async () => undefined,
+    } as unknown as Job;
+
+    const reportJobRes = await heavyReportProcessor.process(heavyReportJob);
+    expect(reportJobRes).toMatchObject({
+      queue: QUEUES.SYSTEM_HEAVY,
+      topic: 'users.report',
+      operation: 'report',
+      processed: 180,
+      total: 180,
+      reportCode: 'users.security_compliance',
+      historyId: 99,
+      totalRecords: 180,
+      dataSourceUsed: 'REPLICA',
+      downloadToken: 'rep_tok_808',
+      downloadUrl: '/api/v1/users/reports/downloads/rep_tok_808',
+    });
   });
 });

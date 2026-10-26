@@ -5,6 +5,7 @@ import {
   ForbiddenAppException,
   ImportRegistryService,
   NotFoundAppException,
+  ReportRegistryService,
   SettingRegistryService,
   parseXlsxToMatrix,
   type IPdfExportAdapter,
@@ -15,6 +16,7 @@ import {
   USER_STATUS,
   UserExportService,
   UserImportService,
+  UserReportService,
   UsersMapper,
   UsersService,
   getUserGenderName,
@@ -1324,7 +1326,9 @@ describe('Users Module — Helpers & UsersService Unit Suite', () => {
       expect(completed.status).toBe('COMPLETED');
       expect(completed.totalExported).toBe(2);
       expect(completed.downloadToken).toBeTruthy();
-      expect(completed.downloadUrl).toContain(`/api/v1/users/export/downloads/${completed.downloadToken}`);
+      expect(completed.downloadUrl).toContain(
+        `/api/v1/users/export/downloads/${completed.downloadToken}`,
+      );
       expect(completed.expiresAt).toBeTruthy();
       expect(completed.notifiedAt).toBeTruthy();
 
@@ -1442,15 +1446,561 @@ describe('Users Module — Helpers & UsersService Unit Suite', () => {
 
       // 3. Simulate time passing beyond expiresAt (now + 120 seconds) -> file auto-expires
       const futureDate = new Date(Date.now() + 120_000);
-      expect(() =>
-        exportService.downloadTemporaryExport(res.downloadToken!, futureDate),
-      ).toThrow(NotFoundAppException);
+      expect(() => exportService.downloadTemporaryExport(res.downloadToken!, futureDate)).toThrow(
+        NotFoundAppException,
+      );
 
       // History record reflects expired state (isExpired = true, status = EXPIRED)
       const expiredHistory = exportService.getExportHistoryById(res.historyId!);
       expect(expiredHistory.isExpired).toBe(true);
       expect(expiredHistory.status).toBe('EXPIRED');
       expect(expiredHistory.downloadUrl).toBeNull();
+    });
+  });
+
+  describe('Phase 8 — Section 8.4: Shared Report & Dashboard Engine & UserReportService', () => {
+    const createReportTestHarness = (options?: { hasReplica?: boolean }) => {
+      const sampleUsers: UserEntity[] = [
+        createMockUserEntity({
+          id: 1,
+          username: 'an.nguyen',
+          email: 'an.nguyen@core.vn',
+          phone: '0901234567',
+          status: USER_STATUS.ACTIVE,
+          mfaEnabled: true,
+          emailVerifiedAt: new Date('2026-01-02T00:00:00.000Z'),
+          lastLoginAt: new Date('2026-02-01T08:00:00.000Z'),
+          primaryOrganizationUnitId: 10,
+          createdAt: new Date('2026-01-10T00:00:00.000Z'),
+        }),
+        createMockUserEntity({
+          id: 2,
+          username: 'binh.tran',
+          email: 'binh.tran@core.vn',
+          phone: '0912345678',
+          status: USER_STATUS.INACTIVE,
+          mfaEnabled: false,
+          emailVerifiedAt: null,
+          lastLoginAt: null,
+          primaryOrganizationUnitId: 10,
+          createdAt: new Date('2026-02-15T00:00:00.000Z'),
+        }),
+        createMockUserEntity({
+          id: 3,
+          username: 'cuong.le',
+          email: 'cuong.le@core.vn',
+          phone: '0987654321',
+          status: USER_STATUS.LOCKED,
+          mfaEnabled: false,
+          emailVerifiedAt: new Date('2026-03-01T00:00:00.000Z'),
+          lastLoginAt: null,
+          primaryOrganizationUnitId: 20,
+          createdAt: new Date('2026-03-20T00:00:00.000Z'),
+        }),
+      ];
+
+      let dbQueryCalls = 0;
+      const filterUsers = (filter: Record<string, unknown>) => {
+        let filtered = [...sampleUsers];
+        if (filter['status'] !== undefined) {
+          filtered = filtered.filter((u) => u.status === filter['status']);
+        }
+        if (filter['organizationUnitId'] !== undefined) {
+          filtered = filtered.filter(
+            (u) => u.primaryOrganizationUnitId === filter['organizationUnitId'],
+          );
+        }
+        if (filter['mfaEnabled'] !== undefined) {
+          filtered = filtered.filter((u) => u.mfaEnabled === filter['mfaEnabled']);
+        }
+        if (typeof filter['fromDate'] === 'string') {
+          const fromMs = Date.parse(filter['fromDate']);
+          filtered = filtered.filter((u) => u.createdAt.getTime() >= fromMs);
+        }
+        if (typeof filter['toDate'] === 'string') {
+          const toMs = Date.parse(filter['toDate']);
+          filtered = filtered.filter((u) => u.createdAt.getTime() <= toMs);
+        }
+        if (typeof filter['q'] === 'string' && filter['q'].trim().length > 0) {
+          const kw = filter['q'].trim().toLowerCase();
+          filtered = filtered.filter(
+            (u) => u.username.toLowerCase().includes(kw) || u.email.toLowerCase().includes(kw),
+          );
+        }
+        return filtered;
+      };
+
+      const userRepository = {
+        searchPaginated: async (filter: Record<string, unknown>) => {
+          dbQueryCalls++;
+          const filtered = filterUsers(filter);
+          return { items: filtered, total: filtered.length };
+        },
+        searchPaginatedReadOnly: async (filter: Record<string, unknown>, preferReplica = true) => {
+          dbQueryCalls++;
+          const filtered = filterUsers(filter);
+          const dataSourceUsed: 'REPLICA' | 'PRIMARY' =
+            preferReplica && options?.hasReplica ? 'REPLICA' : 'PRIMARY';
+          return { items: filtered, total: filtered.length, dataSourceUsed };
+        },
+      } as unknown as UserRepository;
+
+      const userProfileRepository = {
+        findByUserIds: async (ids: readonly number[]) =>
+          ids.map(
+            (id) =>
+              ({
+                userId: Number(id),
+                firstName: `User${id}`,
+                lastName: 'Test',
+                fullName: `Test User${id}`,
+              }) as UserProfileEntity,
+          ),
+      } as unknown as UserProfileRepository;
+
+      const userRoleRepository = {
+        findByUserIds: async (ids: readonly number[]) =>
+          ids.map((uid) => ({ userId: Number(uid), roleId: 2 })),
+      } as unknown as UserRoleRepository;
+
+      const userOrgRepository = {
+        findByUserIds: async (ids: readonly number[]) =>
+          ids.map((uid) => ({
+            userId: Number(uid),
+            organizationUnitId: Number(uid) === 3 ? 20 : 10,
+            isPrimary: true,
+            positionTitle: 'Staff',
+          })),
+      } as unknown as UserOrganizationUnitRepository;
+
+      const statusHistoryRepo = {
+        recordTransition: async () => undefined,
+        findByUserId: async () => [],
+      } as unknown as UserStatusHistoryRepository;
+
+      const passwordHasher = {
+        hash: async (pwd: string) => `hashed:${pwd}`,
+        sha256: (val: string) => `sha256:${val}`,
+        generateSuggestedPassword: () => 'Suggested#2026',
+      } as unknown as PasswordHasherService;
+
+      const rolesPublicService = {
+        findByIds: async () => [
+          {
+            id: 2,
+            code: 'analyst',
+            name: 'Analyst',
+            status: 1,
+            dataScope: 1,
+            dataScopeName: 'ALL',
+            permissions: ['users.report'],
+          },
+        ],
+        findByCodes: async (codes: readonly string[]) =>
+          codes.map((c, idx) => ({
+            id: idx + 1,
+            code: c.toLowerCase(),
+            name: c.toUpperCase(),
+            status: 1,
+            dataScope: 1,
+          })),
+        registerRoleUserCountDelegate: () => undefined,
+        registerRoleUsersListDelegate: () => undefined,
+      } as unknown as IRolesPublicService;
+
+      const orgsPublicService = {
+        findByIds: async (ids: readonly number[]) =>
+          ids.map((id) => ({
+            id: Number(id),
+            code: Number(id) === 20 ? 'OPS' : 'HQ',
+            name: Number(id) === 20 ? 'Khối Vận Hành' : 'Khối Công Nghệ',
+            type: 1,
+            typeName: 'DIVISION',
+            status: 1,
+          })),
+        getSubtreeUnitIds: async (unitId: number) => (unitId === 10 ? [10, 20] : [unitId]),
+        registerUnitUsageCountDelegate: () => undefined,
+      } as unknown as IOrganizationsPublicService;
+
+      const usersService = new UsersService(
+        userRepository,
+        userRoleRepository,
+        userOrgRepository,
+        new UsersMapper(),
+        passwordHasher,
+        rolesPublicService,
+        orgsPublicService,
+        statusHistoryRepo,
+        null,
+        null,
+        null,
+        userProfileRepository,
+      );
+
+      const exportRegistry = new ExportRegistryService();
+      const reportRegistry = new ReportRegistryService(exportRegistry);
+      const settingRegistry = new SettingRegistryService();
+      settingRegistry.bootstrapFromManifests();
+
+      const publishedMessages: Array<{
+        topic: string;
+        payload: Record<string, unknown>;
+        queueName?: string | undefined;
+      }> = [];
+      const messagePublisher = {
+        publish: async (topic: string, payload: Record<string, unknown>, queueName?: string) => {
+          publishedMessages.push({ topic, payload, queueName });
+          return {
+            id: `msg_rep_${publishedMessages.length}`,
+            topic,
+            payload,
+          };
+        },
+      } as unknown as BaseMessagePublisherProvider;
+
+      const dispatchedNotifications: Array<Record<string, unknown>> = [];
+      const notificationsPublicService = {
+        dispatch: async (dto: Record<string, unknown>) => {
+          dispatchedNotifications.push(dto);
+          return { notificationId: dispatchedNotifications.length, queuedDeliveries: 1 };
+        },
+      };
+
+      const recordedAuditEvents: Array<Record<string, unknown>> = [];
+      const auditLogService = {
+        record: async (entry: Record<string, unknown>) => {
+          recordedAuditEvents.push(entry);
+        },
+      };
+
+      const reportService = new UserReportService(
+        usersService,
+        userRepository,
+        reportRegistry,
+        exportRegistry,
+        settingRegistry,
+        messagePublisher,
+        auditLogService as never,
+        undefined,
+        notificationsPublicService as never,
+        orgsPublicService,
+      );
+
+      return {
+        reportService,
+        reportRegistry,
+        exportRegistry,
+        userRepository,
+        getDbQueryCalls: () => dbQueryCalls,
+        publishedMessages,
+        dispatchedNotifications,
+        recordedAuditEvents,
+      };
+    };
+
+    it('8.4.1 & 8.4.3 — Discovers module-declared reports from module.manifest.json and enforces distinct report permission (rejecting list permission users.read)', async () => {
+      const { reportService, reportRegistry } = createReportTestHarness();
+
+      // 8.4.1: Reports declared in users/module.manifest.json are registered per module
+      const availableReports = reportService.listAvailableReports();
+      expect(availableReports.length).toBeGreaterThanOrEqual(2);
+      const codes = availableReports.map((r) => r.code);
+      expect(codes).toContain('users.summary_dashboard');
+      expect(codes).toContain('users.security_compliance');
+
+      const dashboardReport = availableReports.find((r) => r.code === 'users.summary_dashboard')!;
+      expect(dashboardReport.module).toBe('users');
+      expect(dashboardReport.requiredPermission).toBe('users.report');
+      expect(dashboardReport.supportsReadReplica).toBe(true);
+
+      // 8.4.3a: Rejects registering a report that shares normal list permission (`users.read` or `users.list`)
+      expect(() =>
+        reportRegistry.registerReport({
+          code: 'users.invalid_list_perm_report',
+          module: 'users',
+          name: 'Invalid Report Using List Permission',
+          requiredPermission: 'users.read',
+        }),
+      ).toThrow(BadRequestAppException);
+
+      // 8.4.3b: User who only has normal list permission (`users.read`) is denied access to run reports
+      await expect(
+        reportService.runReport(
+          { reportCode: 'users.summary_dashboard' },
+          { id: 15, roles: ['staff'], permissions: ['users.read'] },
+        ),
+      ).rejects.toThrow(ForbiddenAppException);
+
+      // 8.4.3c: User with dedicated `users.report` permission can execute the report
+      const allowedRes = await reportService.runReport(
+        { reportCode: 'users.summary_dashboard' },
+        { id: 16, roles: ['analyst'], permissions: ['users.report'] },
+      );
+      expect(allowedRes.status).toBe('COMPLETED');
+      expect(allowedRes.requiredPermission).toBe('users.report');
+    });
+
+    it('8.4.2 — Configures and normalizes report parameters (date range, status, organization unit + sub-units, and custom filters)', async () => {
+      const { reportService } = createReportTestHarness();
+      const analyst = { id: 20, roles: ['analyst'], permissions: ['users.report'] };
+
+      // 1. Filter by dateRange + status + organizationUnitId
+      const filteredRes = await reportService.runReport(
+        {
+          reportCode: 'users.summary_dashboard',
+          fromDate: '2026-01-01T00:00:00.000Z',
+          toDate: '2026-02-28T23:59:59.000Z',
+          status: USER_STATUS.ACTIVE,
+          organizationUnitId: 10,
+          filters: { mfaEnabled: true },
+        },
+        analyst,
+      );
+
+      expect(filteredRes.totalRecords).toBe(1);
+      expect(filteredRes.parameters).toEqual({
+        fromDate: '2026-01-01T00:00:00.000Z',
+        toDate: '2026-02-28T23:59:59.000Z',
+        statuses: [USER_STATUS.ACTIVE],
+        organizationUnitId: 10,
+        includeSubUnits: false,
+        filters: { mfaEnabled: true },
+      });
+      expect(filteredRes.summary['activeCount']).toBe(1);
+      expect(filteredRes.summary['mfaEnabledCount']).toBe(1);
+
+      // 2. Include sub-units (unit 10 subtree includes [10, 20])
+      const subtreeRes = await reportService.runReport(
+        {
+          reportCode: 'users.summary_dashboard',
+          organizationUnitId: 10,
+          includeSubUnits: true,
+        },
+        analyst,
+      );
+      expect(subtreeRes.totalRecords).toBe(3);
+
+      // 3. Invalid date range (fromDate > toDate) throws BadRequestAppException
+      await expect(
+        reportService.runReport(
+          {
+            reportCode: 'users.summary_dashboard',
+            fromDate: '2026-05-01T00:00:00.000Z',
+            toDate: '2026-01-01T00:00:00.000Z',
+          },
+          analyst,
+        ),
+      ).rejects.toThrow(BadRequestAppException);
+    });
+
+    it('8.4.4 — Runs heavy reports via Queue (system.heavy) to avoid loading database during HTTP request', async () => {
+      const { reportService, publishedMessages, getDbQueryCalls } = createReportTestHarness();
+      const analyst = { id: 25, roles: ['analyst'], permissions: ['users.report'] };
+
+      // `users.security_compliance` has `isHeavy: true` in manifest -> automatically queued to `system.heavy`
+      const queuedRes = await reportService.runReport(
+        {
+          reportCode: 'users.security_compliance',
+          organizationUnitId: 10,
+          format: 'xlsx',
+        },
+        analyst,
+      );
+
+      expect(queuedRes.status).toBe('QUEUED');
+      expect(queuedRes.executionMode).toBe('QUEUE');
+      expect(queuedRes.jobId).toBe('msg_rep_1');
+      // Verify DB was NOT queried during the HTTP request
+      expect(getDbQueryCalls()).toBe(0);
+      expect(publishedMessages).toHaveLength(1);
+      expect(publishedMessages[0]?.topic).toBe('users.report');
+      expect(publishedMessages[0]?.queueName).toBe('system.heavy');
+      expect(publishedMessages[0]?.payload).toMatchObject({
+        operation: 'report',
+        executeInWorker: true,
+        reportCode: 'users.security_compliance',
+        historyId: queuedRes.historyId,
+      });
+
+      // When Worker processes the queued job with `skipQueuePublish: true`, it executes the report and updates history
+      const workerRes = await reportService.runReport(
+        {
+          reportCode: 'users.security_compliance',
+          organizationUnitId: 10,
+          format: 'xlsx',
+          async: false,
+        },
+        analyst,
+        {
+          skipQueuePublish: true,
+          existingHistoryId: queuedRes.historyId,
+          jobId: queuedRes.jobId!,
+          executionMode: 'QUEUE',
+        },
+      );
+
+      expect(workerRes.status).toBe('COMPLETED');
+      expect(workerRes.totalRecords).toBe(2);
+      expect(workerRes.downloadUrl).toContain('/api/v1/users/reports/downloads/');
+      expect(workerRes.expiresAt).toBeTruthy();
+    });
+
+    it('8.4.5 & 8.4.6 — Schedules reports (DAILY, WEEKLY, MONTHLY) and delivers via Email or Notification using temporary expiring files', async () => {
+      const { reportService, dispatchedNotifications } = createReportTestHarness();
+      const manager = {
+        id: 30,
+        email: 'manager@core.vn',
+        roles: ['manager'],
+        permissions: ['users.report'],
+      };
+
+      // 8.4.5: Create DAILY, WEEKLY, and MONTHLY report schedules
+      const dailySchedule = reportService.createReportSchedule(
+        {
+          reportCode: 'users.summary_dashboard',
+          name: 'Báo cáo nhân sự hàng ngày',
+          frequency: 'DAILY',
+          hour: 8,
+          minute: 0,
+          format: 'xlsx',
+          channels: ['EMAIL', 'IN_APP'],
+          recipientEmails: ['hr-director@core.vn'],
+          recipientUserIds: [30],
+          ttlSeconds: 1800,
+          isActive: true,
+        },
+        manager,
+      );
+      expect(dailySchedule.frequency).toBe('DAILY');
+      expect(dailySchedule.cronExpression).toBe('0 8 * * *');
+
+      const weeklySchedule = reportService.createReportSchedule(
+        {
+          reportCode: 'users.summary_dashboard',
+          name: 'Báo cáo nhân sự hàng tuần',
+          frequency: 'WEEKLY',
+          hour: 9,
+          minute: 30,
+          dayOfWeek: 1,
+          format: 'pdf',
+          channels: ['EMAIL'],
+          recipientEmails: ['board@core.vn'],
+          recipientUserIds: [30],
+          ttlSeconds: 3600,
+          isActive: true,
+        },
+        manager,
+      );
+      expect(weeklySchedule.frequency).toBe('WEEKLY');
+      expect(weeklySchedule.cronExpression).toBe('30 9 * * 1');
+
+      const monthlySchedule = reportService.createReportSchedule(
+        {
+          reportCode: 'users.security_compliance',
+          name: 'Báo cáo tuân thủ bảo mật hàng tháng',
+          frequency: 'MONTHLY',
+          hour: 7,
+          minute: 15,
+          dayOfMonth: 1,
+          format: 'csv',
+          channels: ['IN_APP'],
+          recipientEmails: [],
+          recipientUserIds: [30],
+          ttlSeconds: 3600,
+          isActive: true,
+        },
+        manager,
+      );
+      expect(monthlySchedule.frequency).toBe('MONTHLY');
+      expect(monthlySchedule.cronExpression).toBe('15 7 1 * *');
+
+      expect(reportService.listReportSchedules()).toHaveLength(3);
+
+      // 8.4.5 & 8.4.6: Trigger due schedules at a future timestamp where all 3 are due
+      const futureTriggerTime = new Date(Date.now() + 35 * 24 * 3_600_000);
+      const triggerRes = await reportService.triggerDueReportSchedules(futureTriggerTime);
+      expect(triggerRes.triggeredCount).toBe(3);
+
+      const firstRun = triggerRes.results[0]!;
+      expect(firstRun.downloadUrl).toContain('/api/v1/users/reports/downloads/');
+      expect(firstRun.expiresAt).toBeTruthy();
+      expect(firstRun.notifiedChannels).toEqual(['EMAIL', 'IN_APP']);
+
+      // Verify notifications were dispatched with temporary downloadUrl & expiresAt
+      expect(dispatchedNotifications.length).toBeGreaterThanOrEqual(3);
+      expect(dispatchedNotifications[0]?.['actionUrl']).toBe(firstRun.downloadUrl);
+      expect(dispatchedNotifications[0]?.['channels']).toEqual(['EMAIL', 'IN_APP']);
+
+      // Verify temporary report file can be downloaded before expiry and auto-expires after TTL
+      const history = reportService.getReportHistoryById(firstRun.historyId);
+      expect(history.downloadToken).toBeTruthy();
+      const downloaded = reportService.downloadTemporaryReport(history.downloadToken!);
+      expect(downloaded.fileName).toContain('.xlsx');
+
+      const afterExpiry = new Date(Date.now() + 7_200_000);
+      expect(() =>
+        reportService.downloadTemporaryReport(history.downloadToken!, afterExpiry),
+      ).toThrow(NotFoundAppException);
+    });
+
+    it('8.4.7, 8.4.8 & 8.4.9 — Supports Read Replica when available, caches reports by normalized parameters, and records full execution history', async () => {
+      // 1. System WITH Read Replica configured -> reads from REPLICA on first run, then CACHE on second run with same parameters
+      const replicaHarness = createReportTestHarness({ hasReplica: true });
+      const analyst = { id: 42, roles: ['analyst'], permissions: ['users.report'] };
+
+      const firstRun = await replicaHarness.reportService.runReport(
+        {
+          reportCode: 'users.summary_dashboard',
+          status: USER_STATUS.ACTIVE,
+          organizationUnitId: 10,
+        },
+        analyst,
+      );
+
+      expect(firstRun.dataSourceUsed).toBe('REPLICA');
+      expect(firstRun.cacheHit).toBe(false);
+      expect(firstRun.totalRecords).toBe(1);
+      expect(replicaHarness.getDbQueryCalls()).toBe(1);
+
+      // 8.4.9: Second run with identical parameters hits report cache -> does NOT query DB again
+      const secondRun = await replicaHarness.reportService.runReport(
+        {
+          reportCode: 'users.summary_dashboard',
+          status: USER_STATUS.ACTIVE,
+          organizationUnitId: 10,
+        },
+        analyst,
+      );
+
+      expect(secondRun.dataSourceUsed).toBe('CACHE');
+      expect(secondRun.cacheHit).toBe(true);
+      expect(secondRun.totalRecords).toBe(1);
+      expect(secondRun.cacheKey).toBe(firstRun.cacheKey);
+      expect(replicaHarness.getDbQueryCalls()).toBe(1); // Still 1 DB query!
+
+      // 2. System WITHOUT Read Replica -> safely falls back to PRIMARY
+      const primaryHarness = createReportTestHarness({ hasReplica: false });
+      const primaryRun = await primaryHarness.reportService.runReport(
+        {
+          reportCode: 'users.summary_dashboard',
+          status: USER_STATUS.ACTIVE,
+        },
+        analyst,
+      );
+      expect(primaryRun.dataSourceUsed).toBe('PRIMARY');
+
+      // 8.4.7: Verify Report Execution History recorded timestamps, actorId, parameters, dataSourceUsed, and summary result
+      const histories = replicaHarness.reportService.listReportHistories({ actorId: 42 });
+      expect(histories).toHaveLength(2);
+      expect(histories[0]?.actorId).toBe(42);
+      expect(histories[0]?.status).toBe('COMPLETED');
+      expect(histories[0]?.startedAt).toBeTruthy();
+      expect(histories[0]?.completedAt).toBeTruthy();
+      expect(typeof histories[0]?.durationMs).toBe('number');
+      expect(histories[0]?.summary).toMatchObject({
+        totalUsers: 1,
+        activeCount: 1,
+      });
     });
   });
 });

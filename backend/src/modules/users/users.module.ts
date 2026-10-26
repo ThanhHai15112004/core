@@ -20,6 +20,7 @@ import { UsersMapper } from './mappers/users.mapper.js';
 import { UsersService } from './services/users.service.js';
 import { UserImportService } from './import/index.js';
 import { UserExportService } from './export/index.js';
+import { UserReportService } from './reports/index.js';
 import { UsersController } from './controllers/users.controller.js';
 import enUsers from './locales/en/users.json' with { type: 'json' };
 import viUsers from './locales/vi/users.json' with { type: 'json' };
@@ -51,6 +52,7 @@ new CoreI18nService().registerNamespace('users', { vi: viUsers, en: enUsers });
     UsersService,
     UserImportService,
     UserExportService,
+    UserReportService,
     {
       provide: USERS_PUBLIC_SERVICE,
       useExisting: UsersService,
@@ -60,6 +62,7 @@ new CoreI18nService().registerNamespace('users', { vi: viUsers, en: enUsers });
     UsersService,
     UserImportService,
     UserExportService,
+    UserReportService,
     UserProfileRepository,
     USERS_PUBLIC_SERVICE,
   ],

@@ -164,6 +164,40 @@ export const ModuleMenuManifestSchema = z.object({
   position: z.string().optional(),
 });
 
+export const ModuleReportParameterSchema = z.object({
+  key: z.string().min(1),
+  name: z.string().min(1),
+  type: z.enum([
+    'date-range',
+    'status',
+    'organization-unit',
+    'filter',
+    'string',
+    'number',
+    'boolean',
+  ]),
+  required: z.boolean().optional(),
+  defaultValue: z.unknown().optional(),
+  allowedValues: z.array(z.union([z.string(), z.number(), z.boolean()])).optional(),
+});
+
+export const ModuleReportManifestSchema = z.object({
+  code: z.string().min(1),
+  module: z.string().optional(),
+  name: z.string().min(1),
+  description: z.string().nullable().optional(),
+  category: z.enum(['REPORT', 'DASHBOARD']).optional(),
+  requiredPermission: z.string().min(3),
+  isHeavy: z.boolean().optional(),
+  heavyRecordThreshold: z.number().int().min(1).optional(),
+  cacheTtlSeconds: z.number().int().min(0).optional(),
+  supportsReadReplica: z.boolean().optional(),
+  supportedFormats: z.array(z.enum(['xlsx', 'csv', 'pdf'])).optional(),
+  parameters: z.array(ModuleReportParameterSchema).optional().default([]),
+  isSystem: z.boolean().optional(),
+  status: z.number().int().optional(),
+});
+
 export const ModuleManifestSchema = z.object({
   $schema: z.string().optional(),
   name: z
@@ -185,6 +219,7 @@ export const ModuleManifestSchema = z.object({
   featureFlags: z.array(ModuleFeatureFlagManifestSchema).optional().default([]),
   sequences: z.array(ModuleSequenceManifestSchema).optional().default([]),
   menus: z.array(ModuleMenuManifestSchema).optional().default([]),
+  reports: z.array(ModuleReportManifestSchema).optional().default([]),
   locales: z.array(ModuleLocaleManifestSchema).optional().default([]),
   timezones: z.array(ModuleTimezoneManifestSchema).optional().default([]),
   translations: z.array(ModuleTranslationManifestSchema).optional().default([]),
