@@ -3,6 +3,7 @@ import { Processor } from '@nestjs/bullmq';
 import type { Job } from 'bullmq';
 import { CoreConfigService } from '@packages/config/index.js';
 import {
+  defaultExportRegistry,
   defaultImportRegistry,
   type ImportCellIssue,
   type ImportDuplicateStrategy,
@@ -10,7 +11,13 @@ import {
 import { MetricsRegistryService } from '@packages/metrics/index.js';
 import { QUEUE_PROFILES, QUEUES, type MessageEnvelope } from '@packages/messaging/index.js';
 import { JobProgressTrackerService } from '@packages/queue/index.js';
-import { UserImportService, type BulkImportUserRowInput } from '@modules/users/index.js';
+import type { UserIdentity } from '@packages/security/index.js';
+import {
+  UserExportService,
+  UserImportService,
+  type BulkImportUserRowInput,
+  type ListUsersQuery,
+} from '@modules/users/index.js';
 import { FilesService } from '@modules/files/index.js';
 import { BaseQueueProcessor } from '../base-queue.processor.js';
 
@@ -29,8 +36,12 @@ export interface HeavyQueueJobPayload {
   readonly fileName?: string;
   readonly historyId?: number;
   readonly actorId?: number;
+  readonly actor?: UserIdentity;
+  readonly query?: Partial<ListUsersQuery>;
+  readonly filters?: Readonly<Record<string, unknown>>;
+  readonly notifyOnComplete?: boolean;
   readonly fileId?: number | string | null;
-  readonly format?: 'csv' | 'xlsx' | string;
+  readonly format?: 'csv' | 'xlsx' | 'pdf' | string;
 }
 
 const HEAVY_JOB_PHASES = ['Validate Input', 'Process Items', 'Finalize Output'] as const;
@@ -61,6 +72,7 @@ export class HeavyJobProcessor extends BaseQueueProcessor {
     @Optional() progressTracker?: JobProgressTrackerService,
     @Optional() private readonly userImportService?: UserImportService,
     @Optional() private readonly filesService?: FilesService,
+    @Optional() private readonly userExportService?: UserExportService,
   ) {
     super(config, metrics, progressTracker);
   }
@@ -121,6 +133,10 @@ export class HeavyJobProcessor extends BaseQueueProcessor {
   ): Promise<HeavyHandlerResult> {
     if (this.canExecuteUserImport(envelope.topic, operation, payload)) {
       return this.handleUserImport(envelope.topic, job, payload, chunkSize);
+    }
+
+    if (this.canExecuteUserExport(envelope.topic, operation, payload)) {
+      return this.handleUserExport(envelope.topic, envelope.id, job, payload);
     }
 
     if (this.canExecuteMediaProcess(envelope.topic, operation, payload)) {
@@ -242,7 +258,71 @@ export class HeavyJobProcessor extends BaseQueueProcessor {
     };
   }
 
-  /** 2. Xử lý topic `files.media_process` — Kiểm tra toàn vẹn SHA-256 & xử lý tệp media */
+  /** 2. Xử lý topic `users.export` — Xuất danh sách người dùng lớn chạy nền qua Queue (Mục 8.3.4 & 8.3.5) */
+  private async handleUserExport(
+    topic: string,
+    envelopeId: string,
+    job: Job,
+    payload: HeavyQueueJobPayload,
+  ): Promise<HeavyHandlerResult> {
+    const effectiveJobId = String(job.id ?? envelopeId);
+    const exportQuery: ListUsersQuery = {
+      sortBy: 'id',
+      sortOrder: 'ASC',
+      ...(payload.query ?? {}),
+      ...(payload.format === 'csv' || payload.format === 'xlsx' || payload.format === 'pdf'
+        ? { format: payload.format }
+        : {}),
+      async: false,
+      notifyOnComplete: payload.notifyOnComplete ?? true,
+    };
+
+    const effectiveActor: UserIdentity | undefined =
+      payload.actor ??
+      (payload.actorId !== undefined
+        ? {
+            id: payload.actorId,
+            roles: [],
+            permissions: ['users.export'],
+          }
+        : undefined);
+
+    const exportResult = await this.userExportService!.exportUsersCsv(exportQuery, effectiveActor, {
+      skipQueuePublish: true,
+      ...(payload.historyId !== undefined ? { existingHistoryId: payload.historyId } : {}),
+      jobId: effectiveJobId,
+      forceNotify: payload.notifyOnComplete !== false,
+    });
+
+    const effectiveTotal = Math.max(1, exportResult.totalExported);
+    await this.reportProcessingStep(
+      job,
+      effectiveTotal,
+      effectiveTotal,
+      `Exported ${exportResult.totalExported} items (${topic})`,
+      {
+        remaining: 0,
+        successCount: exportResult.totalExported,
+      },
+    );
+
+    return {
+      processed: effectiveTotal,
+      total: effectiveTotal,
+      extra: {
+        fileName: exportResult.fileName,
+        format: exportResult.format,
+        totalExported: exportResult.totalExported,
+        historyId: exportResult.historyId,
+        downloadToken: exportResult.downloadToken,
+        downloadUrl: exportResult.downloadUrl,
+        expiresAt: exportResult.expiresAt,
+        notifiedAt: exportResult.notifiedAt,
+      },
+    };
+  }
+
+  /** 3. Xử lý topic `files.media_process` — Kiểm tra toàn vẹn SHA-256 & xử lý tệp media */
   private async handleMediaProcess(
     job: Job,
     payload: HeavyQueueJobPayload,
@@ -263,26 +343,30 @@ export class HeavyJobProcessor extends BaseQueueProcessor {
     };
   }
 
-  /** 3. Xử lý topic `files.trash_cleanup` — Dọn dẹp vĩnh viễn các tệp quá hạn trong thùng rác */
+  /** 4. Xử lý topic `files.trash_cleanup` — Dọn dẹp vĩnh viễn các tệp quá hạn trong thùng rác & file Export tạm hết hạn */
   private async handleTrashCleanup(job: Job, total: number): Promise<HeavyHandlerResult> {
     const cleanupResult = await this.filesService!.purgeExpiredTrash(undefined, {
       skipQueuePublish: true,
     });
+    const expiredExports = defaultExportRegistry.purgeExpiredArtifacts();
     await this.reportProcessingStep(
       job,
       total,
       total,
-      `Purged ${cleanupResult.purgedCount} expired trashed files`,
+      `Purged ${cleanupResult.purgedCount} expired trashed files and ${expiredExports.purgedCount} expired export files`,
     );
 
     return {
       processed: total,
       total,
-      extra: { purgedCount: cleanupResult.purgedCount },
+      extra: {
+        purgedCount: cleanupResult.purgedCount,
+        purgedExportCount: expiredExports.purgedCount,
+      },
     };
   }
 
-  /** 4. Xử lý mặc định theo từng chunk (Export hoặc job chỉ ghi nhận tiến độ) */
+  /** 5. Xử lý mặc định theo từng chunk (Export hoặc job chỉ ghi nhận tiến độ) */
   private async handleChunkedProgress(
     topic: string,
     job: Job,
@@ -318,6 +402,19 @@ export class HeavyJobProcessor extends BaseQueueProcessor {
       Boolean(this.userImportService) &&
       payload.executeInWorker !== false &&
       hasInput
+    );
+  }
+
+  /** Kiểm tra điều kiện chạy Export người dùng thật trong Worker (Mục 8.3.4) */
+  private canExecuteUserExport(
+    topic: string,
+    operation: string,
+    payload: HeavyQueueJobPayload,
+  ): boolean {
+    return (
+      (operation === 'export' || topic === 'users.export') &&
+      Boolean(this.userExportService) &&
+      payload.executeInWorker === true
     );
   }
 

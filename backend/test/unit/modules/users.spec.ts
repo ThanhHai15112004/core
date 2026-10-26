@@ -1,7 +1,13 @@
 import {
   BadRequestAppException,
   ConflictAppException,
+  ExportRegistryService,
+  ForbiddenAppException,
   ImportRegistryService,
+  NotFoundAppException,
+  SettingRegistryService,
+  parseXlsxToMatrix,
+  type IPdfExportAdapter,
 } from '@packages/kernel/index.js';
 import type { BaseMessagePublisherProvider } from '@packages/messaging/index.js';
 import {
@@ -911,6 +917,540 @@ describe('Users Module — Helpers & UsersService Unit Suite', () => {
       const historyDetail = importService.getImportHistoryById(queuedRes.historyId!);
       expect(historyDetail.id).toBe(queuedRes.historyId);
       expect(historyDetail.jobId).toBe(queuedRes.jobId);
+    });
+  });
+
+  describe('Phase 8 — Section 8.3: Shared Export Engine & UserExportService', () => {
+    const createExportTestHarness = () => {
+      const usersStore = new Map<number, UserEntity>();
+      const profilesStore = new Map<number, UserProfileEntity>();
+      const publishedJobs: Array<{ id: string; topic: string; payload: unknown; queue: string }> =
+        [];
+      const dispatchedNotifications: Array<Record<string, unknown>> = [];
+      const recordedAuditEvents: Array<Record<string, unknown>> = [];
+
+      const seedUsers = [
+        {
+          id: 1,
+          username: 'an.nguyen',
+          email: 'an.nguyen@core.vn',
+          phone: '0901234567',
+          firstName: 'An',
+          lastName: 'Nguyễn Văn',
+          fullName: 'Nguyễn Văn An',
+          status: USER_STATUS.ACTIVE,
+          primaryOrganizationUnitId: 10,
+        },
+        {
+          id: 2,
+          username: 'binh.tran',
+          email: 'binh.tran@core.vn',
+          phone: '0912345678',
+          firstName: 'Bình',
+          lastName: 'Trần Thị',
+          fullName: 'Trần Thị Bình',
+          status: USER_STATUS.ACTIVE,
+          primaryOrganizationUnitId: 10,
+        },
+        {
+          id: 3,
+          username: 'cuong.le',
+          email: 'cuong.le@core.vn',
+          phone: '0987654321',
+          firstName: 'Cường',
+          lastName: 'Lê Hoàng',
+          fullName: 'Lê Hoàng Cường',
+          status: USER_STATUS.LOCKED,
+          primaryOrganizationUnitId: 20,
+        },
+      ];
+
+      for (const u of seedUsers) {
+        usersStore.set(
+          u.id,
+          createMockUserEntity({
+            id: u.id,
+            username: u.username,
+            email: u.email,
+            phone: u.phone,
+            status: u.status,
+            primaryOrganizationUnitId: u.primaryOrganizationUnitId,
+          }),
+        );
+        profilesStore.set(u.id, {
+          id: u.id,
+          userId: u.id,
+          firstName: u.firstName,
+          lastName: u.lastName,
+          fullName: u.fullName,
+          avatarUrl: null,
+          dateOfBirth: null,
+          gender: USER_GENDER.MALE,
+          identityNumber: null,
+          address: null,
+          city: null,
+          country: null,
+          bio: null,
+          preferredLocale: 'vi',
+          preferredTimezone: 'Asia/Ho_Chi_Minh',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        } as UserProfileEntity);
+      }
+
+      const mockUserRepo = {
+        searchPaginated: async (query: {
+          q?: string;
+          status?: number;
+          organizationUnitId?: number;
+          limit?: number;
+        }) => {
+          let list = [...usersStore.values()];
+          if (query.status !== undefined) {
+            list = list.filter((u) => u.status === query.status);
+          }
+          if (query.organizationUnitId !== undefined) {
+            list = list.filter((u) => u.primaryOrganizationUnitId === query.organizationUnitId);
+          }
+          if (query.q?.trim()) {
+            const kw = query.q.trim().toLowerCase();
+            list = list.filter(
+              (u) =>
+                u.username.toLowerCase().includes(kw) ||
+                u.email.toLowerCase().includes(kw) ||
+                (profilesStore.get(u.id)?.fullName.toLowerCase().includes(kw) ?? false),
+            );
+          }
+          const limited = query.limit ? list.slice(0, query.limit) : list;
+          return { items: limited, total: list.length };
+        },
+      } as unknown as UserRepository;
+
+      const mockProfileRepo = {
+        findByUserIds: async (userIds: readonly number[]) =>
+          userIds
+            .map((id) => profilesStore.get(Number(id)))
+            .filter((p): p is UserProfileEntity => Boolean(p)),
+      } as unknown as UserProfileRepository;
+
+      const mockUserRoleRepo = {
+        findByUserIds: async (userIds: readonly number[]) =>
+          userIds.map((uid) => ({ userId: Number(uid), roleId: 2 })),
+      } as unknown as UserRoleRepository;
+
+      const mockUserOrgRepo = {
+        findByUserIds: async (userIds: readonly number[]) =>
+          userIds.map((uid) => ({
+            userId: Number(uid),
+            organizationUnitId: usersStore.get(Number(uid))?.primaryOrganizationUnitId ?? 10,
+            isPrimary: true,
+            positionTitle: 'Chuyên viên',
+          })),
+      } as unknown as UserOrganizationUnitRepository;
+
+      const mockRolesService = {
+        findByIds: async () => [
+          {
+            id: 2,
+            code: 'staff',
+            name: 'Staff',
+            status: 1,
+            dataScope: 1,
+            dataScopeName: 'ALL',
+            permissions: ['users.export'],
+          },
+        ],
+        findByCodes: async (codes: readonly string[]) =>
+          codes.map((c, idx) => ({
+            id: c.toLowerCase() === 'admin' ? 1 : idx + 2,
+            code: c.toLowerCase(),
+            name: c.toUpperCase(),
+            status: 1,
+            dataScope: 1,
+          })),
+        registerRoleUserCountDelegate: () => undefined,
+        registerRoleUsersListDelegate: () => undefined,
+      } as unknown as IRolesPublicService;
+
+      const mockOrgsService = {
+        findByIds: async (ids: readonly number[]) =>
+          ids.map((id) => ({
+            id,
+            code: `UNIT_${id}`,
+            name: `Phòng Ban ${id}`,
+            type: 20,
+            typeName: 'DEPARTMENT',
+            status: 1,
+          })),
+        registerUnitUsageCountDelegate: () => undefined,
+      } as unknown as IOrganizationsPublicService;
+
+      const mockPasswordHasher = {
+        hash: async (pwd: string) => `hashed:${pwd}`,
+        sha256: (val: string) => `sha256:${val}`,
+        generateSuggestedPassword: () => 'Suggested#2026',
+      } as unknown as PasswordHasherService;
+
+      const mockStatusHistoryRepo = {
+        recordTransition: async () => undefined,
+        findByUserId: async () => [],
+      } as unknown as UserStatusHistoryRepository;
+
+      const usersService = new UsersService(
+        mockUserRepo,
+        mockUserRoleRepo,
+        mockUserOrgRepo,
+        new UsersMapper(),
+        mockPasswordHasher,
+        mockRolesService,
+        mockOrgsService,
+        mockStatusHistoryRepo,
+        null,
+        null,
+        null,
+        mockProfileRepo,
+      );
+
+      const mockPublisher = {
+        publish: async (topic: string, payload: unknown, queue: string) => {
+          const id = `job_export_${publishedJobs.length + 1}`;
+          publishedJobs.push({ id, topic, payload, queue });
+          return {
+            id,
+            topic,
+            payload,
+            producer: 'api',
+            timestamp: Date.now(),
+          };
+        },
+      } as unknown as BaseMessagePublisherProvider;
+
+      const mockAuditLog = {
+        record: async (entry: Record<string, unknown>) => {
+          recordedAuditEvents.push(entry);
+        },
+      };
+
+      const mockNotificationsService = {
+        dispatch: async (input: Record<string, unknown>) => {
+          dispatchedNotifications.push(input);
+          return { notificationId: dispatchedNotifications.length };
+        },
+      };
+
+      const settingRegistry = new SettingRegistryService();
+      const exportRegistry = new ExportRegistryService();
+
+      const exportService = new UserExportService(
+        usersService,
+        mockUserRepo,
+        mockAuditLog as never,
+        undefined,
+        settingRegistry,
+        mockPublisher,
+        exportRegistry,
+        mockNotificationsService as never,
+      );
+
+      return {
+        exportService,
+        settingRegistry,
+        exportRegistry,
+        publishedJobs,
+        dispatchedNotifications,
+        recordedAuditEvents,
+      };
+    };
+
+    it('8.3.1 & 8.3.2 — Exports filtered user list to Excel (.xlsx) and CSV (.csv) preserving active filters', async () => {
+      const { exportService } = createExportTestHarness();
+
+      // 1. Export Excel (.xlsx) with active status & orgUnit filters
+      const xlsxRes = await exportService.exportUsersCsv(
+        {
+          format: 'xlsx',
+          status: USER_STATUS.ACTIVE,
+          organizationUnitId: 10,
+          q: 'an.nguyen',
+          sortBy: 'id',
+          sortOrder: 'ASC',
+        },
+        { id: 7, roles: ['staff'], permissions: ['users.export'] },
+      );
+
+      expect(xlsxRes.format).toBe('xlsx');
+      expect(xlsxRes.totalExported).toBe(1);
+      expect(xlsxRes.xlsxBase64.length).toBeGreaterThan(100);
+      expect(xlsxRes.filtersApplied).toEqual({
+        status: USER_STATUS.ACTIVE,
+        organizationUnitId: 10,
+        q: 'an.nguyen',
+        sortBy: 'id',
+        sortOrder: 'ASC',
+      });
+
+      const parsedMatrix = parseXlsxToMatrix(xlsxRes.xlsxBase64);
+      const flatText = parsedMatrix.flat().join(' ');
+      expect(flatText).toContain('an.nguyen@core.vn');
+      expect(flatText).not.toContain('cuong.le@core.vn');
+
+      // 2. Export CSV (.csv) with onlyRequestedFormat=true for large datasets (skips XLSX buffer build)
+      const csvRes = await exportService.exportUsersCsv(
+        {
+          format: 'csv',
+          status: USER_STATUS.ACTIVE,
+          onlyRequestedFormat: true,
+          sortBy: 'id',
+          sortOrder: 'ASC',
+        },
+        { id: 7, roles: ['staff'], permissions: ['users.export'] },
+      );
+
+      expect(csvRes.format).toBe('csv');
+      expect(csvRes.totalExported).toBe(2);
+      expect(csvRes.csvContent.startsWith('\uFEFF')).toBe(true);
+      expect(csvRes.csvContent).toContain('an.nguyen@core.vn');
+      expect(csvRes.csvContent).toContain('binh.tran@core.vn');
+      expect(csvRes.xlsxBase64).toBe('');
+    });
+
+    it('8.3.3 — Supports PDF export via pluggable IPdfExportAdapter (built-in, custom adapter, and disabled state)', async () => {
+      const { exportService, exportRegistry } = createExportTestHarness();
+
+      // 1. Built-in minimal PDF adapter produces valid %PDF-1.4 document
+      const builtinPdfRes = await exportService.exportUsersCsv(
+        {
+          format: 'pdf',
+          status: USER_STATUS.ACTIVE,
+          title: 'BÁO CÁO NHÂN SỰ PDF',
+          onlyRequestedFormat: true,
+          sortBy: 'id',
+          sortOrder: 'ASC',
+        },
+        { id: 10, roles: ['admin'], permissions: ['users.export'] },
+      );
+
+      expect(builtinPdfRes.format).toBe('pdf');
+      expect(builtinPdfRes.contentType).toBe('application/pdf');
+      expect(builtinPdfRes.pdfBase64).toBeDefined();
+      const rawPdfText = Buffer.from(builtinPdfRes.pdfBase64!, 'base64').toString('utf8');
+      expect(rawPdfText.startsWith('%PDF-1.4')).toBe(true);
+      expect(rawPdfText).toContain('an.nguyen@core.vn');
+
+      // 2. Register a custom project PDF adapter
+      const customAdapter: IPdfExportAdapter = {
+        name: 'custom-project-pdf-adapter',
+        buildPdfBuffer: (headers, rows, options) =>
+          Buffer.from(
+            `%PDF-1.4 CUSTOM title=${options?.title ?? ''} cols=${headers.length} rows=${rows.length}`,
+            'utf8',
+          ),
+      };
+      exportService.registerPdfAdapter(customAdapter);
+
+      const customPdfRes = await exportService.exportUsersCsv(
+        {
+          format: 'pdf',
+          title: 'Custom Adapter Report',
+          onlyRequestedFormat: true,
+          sortBy: 'id',
+          sortOrder: 'ASC',
+        },
+        { id: 10, roles: ['admin'], permissions: ['users.export'] },
+      );
+      const customDecoded = Buffer.from(customPdfRes.pdfBase64!, 'base64').toString('utf8');
+      expect(customDecoded).toContain('%PDF-1.4 CUSTOM title=Custom Adapter Report');
+      expect(customDecoded).toContain('rows=3');
+
+      // 3. Clearing PDF adapter throws BadRequestAppException when PDF is requested
+      exportRegistry.clearPdfAdapter();
+      await expect(
+        exportService.exportUsersCsv({
+          format: 'pdf',
+          sortBy: 'id',
+          sortOrder: 'ASC',
+        }),
+      ).rejects.toThrow(BadRequestAppException);
+    });
+
+    it('8.3.4 & 8.3.5 — Runs large exports via Queue (async=true) and sends completion notification with temporary download URL', async () => {
+      const { exportService, publishedJobs, dispatchedNotifications } = createExportTestHarness();
+
+      // 1. Enqueue async export so API returns immediately with status=QUEUED
+      const queued = await exportService.exportUsersCsv(
+        {
+          format: 'xlsx',
+          status: USER_STATUS.ACTIVE,
+          async: true,
+          notifyOnComplete: true,
+          sortBy: 'id',
+          sortOrder: 'ASC',
+        },
+        { id: 42, roles: ['staff'], permissions: ['users.export'] },
+      );
+
+      expect(queued.status).toBe('QUEUED');
+      expect(queued.totalExported).toBe(0);
+      expect(queued.historyId).toBeDefined();
+      expect(queued.jobId).toBeDefined();
+      expect(publishedJobs).toHaveLength(1);
+      expect(publishedJobs[0]?.topic).toBe('users.export');
+      expect((publishedJobs[0]?.payload as { executeInWorker?: boolean }).executeInWorker).toBe(
+        true,
+      );
+
+      const progressQueued = exportService.getExportJobProgress(queued.jobId!);
+      expect(progressQueued.status).toBe('QUEUED');
+
+      // 2. Worker executes the queued export job
+      const completed = await exportService.exportUsersCsv(
+        {
+          format: 'xlsx',
+          status: USER_STATUS.ACTIVE,
+          async: false,
+          notifyOnComplete: true,
+          sortBy: 'id',
+          sortOrder: 'ASC',
+        },
+        { id: 42, roles: ['staff'], permissions: ['users.export'] },
+        {
+          skipQueuePublish: true,
+          existingHistoryId: queued.historyId,
+          jobId: queued.jobId!,
+          forceNotify: true,
+        },
+      );
+
+      expect(completed.status).toBe('COMPLETED');
+      expect(completed.totalExported).toBe(2);
+      expect(completed.downloadToken).toBeTruthy();
+      expect(completed.downloadUrl).toContain(`/api/v1/users/export/downloads/${completed.downloadToken}`);
+      expect(completed.expiresAt).toBeTruthy();
+      expect(completed.notifiedAt).toBeTruthy();
+
+      // 3. Notification was dispatched to actor #42 with the temporary downloadUrl
+      expect(dispatchedNotifications).toHaveLength(1);
+      expect(dispatchedNotifications[0]?.userId).toBe(42);
+      expect(dispatchedNotifications[0]?.actionUrl).toBe(completed.downloadUrl);
+
+      // 4. Progress snapshot is 100% COMPLETED with downloadUrl attached
+      const progressDone = exportService.getExportJobProgress(queued.jobId!);
+      expect(progressDone.status).toBe('COMPLETED');
+      expect(progressDone.percent).toBe(100);
+      expect(progressDone.downloadUrl).toBe(completed.downloadUrl);
+    });
+
+    it('8.3.6 — Limits exported record count based on both dynamic settings and actor permissions/roles', async () => {
+      const { exportService, settingRegistry } = createExportTestHarness();
+
+      // Configure default max rows = 1, privileged max rows = 3
+      settingRegistry.removeDefinition('users.export.max_rows');
+      settingRegistry.registerManifestSetting({
+        key: 'users.export.max_rows',
+        groupCode: 'users',
+        module: 'users',
+        name: 'Max rows',
+        valueType: 'NUMBER',
+        defaultValue: 1,
+      });
+      settingRegistry.removeDefinition('users.export.privileged_max_rows');
+      settingRegistry.registerManifestSetting({
+        key: 'users.export.privileged_max_rows',
+        groupCode: 'users',
+        module: 'users',
+        name: 'Privileged max rows',
+        valueType: 'NUMBER',
+        defaultValue: 3,
+      });
+
+      try {
+        // 1. Regular staff user is capped at max_rows = 1
+        const staffRes = await exportService.exportUsersCsv(
+          { format: 'csv', sortBy: 'id', sortOrder: 'ASC' },
+          { id: 50, roles: ['staff'], permissions: ['users.export'] },
+        );
+        expect(staffRes.maxRowsApplied).toBe(1);
+        expect(staffRes.totalExported).toBe(1);
+
+        // 2. When enforceStrictLimit=true, requesting limit > maxRowsAllowed throws ForbiddenAppException
+        await expect(
+          exportService.exportUsersCsv(
+            { format: 'csv', limit: 10, enforceStrictLimit: true, sortBy: 'id', sortOrder: 'ASC' },
+            { id: 50, roles: ['staff'], permissions: ['users.export'] },
+          ),
+        ).rejects.toThrow(ForbiddenAppException);
+
+        // 3. Privileged user (with users.export.unlimited permission or admin role) gets privileged_max_rows = 3
+        const adminRes = await exportService.exportUsersCsv(
+          { format: 'csv', sortBy: 'id', sortOrder: 'ASC' },
+          { id: 1, roles: ['admin'], permissions: ['users.export', 'users.export.unlimited'] },
+        );
+        expect(adminRes.maxRowsApplied).toBe(3);
+        expect(adminRes.totalExported).toBe(3);
+      } finally {
+        settingRegistry.removeDefinition('users.export.max_rows');
+        settingRegistry.bootstrapFromManifests();
+      }
+    });
+
+    it('8.3.7 & 8.3.8 — Records Export History (actor, filters, row count) and automatically expires temporary export files', async () => {
+      const { exportService, recordedAuditEvents } = createExportTestHarness();
+
+      const res = await exportService.exportUsersCsv(
+        {
+          format: 'csv',
+          status: USER_STATUS.LOCKED,
+          organizationUnitId: 20,
+          ttlSeconds: 60,
+          sortBy: 'id',
+          sortOrder: 'ASC',
+        },
+        { id: 88, roles: ['staff'], permissions: ['users.export'] },
+      );
+
+      expect(res.totalExported).toBe(1);
+      expect(res.historyId).toBeDefined();
+      expect(res.downloadToken).toBeTruthy();
+
+      // 1. Verify Export History recorded actorId, filters, and totalExported
+      const histories = exportService.listExportHistories({ actorId: 88 });
+      expect(histories).toHaveLength(1);
+      expect(histories[0]?.actorId).toBe(88);
+      expect(histories[0]?.totalExported).toBe(1);
+      expect(histories[0]?.filters).toEqual({
+        status: USER_STATUS.LOCKED,
+        organizationUnitId: 20,
+        sortBy: 'id',
+        sortOrder: 'ASC',
+      });
+
+      // Verify Audit Log also recorded filters and row count
+      expect(recordedAuditEvents).toHaveLength(1);
+      expect(
+        (recordedAuditEvents[0]?.afterData as { filters?: Record<string, unknown> }).filters,
+      ).toEqual({
+        status: USER_STATUS.LOCKED,
+        organizationUnitId: 20,
+        sortBy: 'id',
+        sortOrder: 'ASC',
+      });
+
+      // 2. Download temporary export file while still valid
+      const downloaded = exportService.downloadTemporaryExport(res.downloadToken!);
+      expect(downloaded.fileName).toBe(res.fileName);
+      expect(downloaded.csvContent).toContain('cuong.le@core.vn');
+
+      // 3. Simulate time passing beyond expiresAt (now + 120 seconds) -> file auto-expires
+      const futureDate = new Date(Date.now() + 120_000);
+      expect(() =>
+        exportService.downloadTemporaryExport(res.downloadToken!, futureDate),
+      ).toThrow(NotFoundAppException);
+
+      // History record reflects expired state (isExpired = true, status = EXPIRED)
+      const expiredHistory = exportService.getExportHistoryById(res.historyId!);
+      expect(expiredHistory.isExpired).toBe(true);
+      expect(expiredHistory.status).toBe('EXPIRED');
+      expect(expiredHistory.downloadUrl).toBeNull();
     });
   });
 });

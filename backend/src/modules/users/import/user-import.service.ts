@@ -391,6 +391,13 @@ export class UserImportService {
     }
 
     for (const [rowNumber, rowIssues] of issuesByRow.entries()) {
+      if (
+        duplicateStrategy === 'SKIP' &&
+        rowIssues.every((iss) => iss.code === 'DUPLICATE_IN_FILE')
+      ) {
+        skippedCount++;
+        continue;
+      }
       const raw = rawRows[rowNumber - 1];
       const identifier = raw?.email || raw?.username || `row-${rowNumber}`;
       const firstIssue = rowIssues[0]!;

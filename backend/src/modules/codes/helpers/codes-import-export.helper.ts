@@ -7,10 +7,13 @@ import {
   buildXlsxBuffer,
   cleanSpreadsheetCell,
   createSpreadsheetColumnFinder,
+  defaultExportRegistry,
   defaultSettingRegistry,
   detectSpreadsheetHeaderRowIndex,
   parseCsvToMatrix,
   parseXlsxToMatrix,
+  resolveExportMaxRows,
+  sanitizeExportFilters,
 } from '@packages/kernel/index.js';
 import {
   LocaleContext,
@@ -405,15 +408,25 @@ export function buildCodesExportPayload(
     ? allTypes.filter((t) => t.code.toLowerCase() === query.typeCode!.trim().toLowerCase())
     : allTypes;
 
+  const { maxRowsAllowed } = resolveExportMaxRows(
+    {
+      settingKey: 'codes.export.max_rows',
+      defaultMaxRows: settingRegistry.getNumber(CODES_SETTING_KEYS.IMPORT_MAX_ROWS, undefined, 5000),
+    },
+    settingRegistry,
+  );
+
   const matrixRows: Array<Array<string | number>> = [];
   let stt = 0;
 
   for (const ct of filteredTypes) {
+    if (matrixRows.length >= maxRowsAllowed) break;
     const values = registry.listValues(ct.code, {
       includeInactive,
       locale,
     });
     for (const val of values) {
+      if (matrixRows.length >= maxRowsAllowed) break;
       stt++;
       matrixRows.push(formatCodeExportRow(registry, stt, ct.code, ct.name, val));
     }
@@ -441,6 +454,18 @@ export function buildCodesExportPayload(
 
   const datePart = new Date().toISOString().slice(0, 10);
   const fileName = `danh_muc_dung_chung_${datePart}.${format}`;
+
+  defaultExportRegistry.startExportHistory({
+    profileCode: 'codes',
+    module: 'codes',
+    fileName,
+    format,
+    filters: sanitizeExportFilters(query),
+    totalExported: matrixRows.length,
+    processedRows: matrixRows.length,
+    maxRowsApplied: maxRowsAllowed,
+    status: 'COMPLETED',
+  });
 
   return {
     fileName,

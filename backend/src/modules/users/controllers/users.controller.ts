@@ -23,6 +23,7 @@ import {
   type BulkImportUsersRequest,
   type ChangeUserStatusRequest,
   type CreateUserRequest,
+  type ListUserExportHistoriesQuery,
   type ListUserImportHistoriesQuery,
   type ListUsersQuery,
   type LockUserRequest,
@@ -35,6 +36,7 @@ import {
   bulkImportUsersSchema,
   changeUserStatusSchema,
   createUserSchema,
+  listUserExportHistoriesQuerySchema,
   listUserImportHistoriesQuerySchema,
   listUsersQuerySchema,
   lockUserSchema,
@@ -47,6 +49,9 @@ import {
   type UserResponse,
   type UserStatusHistoryItemResponse,
   bulkImportUsersResultSchema,
+  exportHistoryItemResponseSchema,
+  exportJobProgressResponseSchema,
+  exportTemporaryDownloadResponseSchema,
   exportUsersCsvResponseSchema,
   importHistoryItemResponseSchema,
   importJobProgressResponseSchema,
@@ -79,11 +84,12 @@ export class UsersController {
     return this.usersService.listPaginated(query, actor);
   }
 
-  /** Xuất danh sách người dùng ra Excel (.xlsx) hoặc CSV (.csv) theo bộ lọc & Phạm vi dữ liệu (Mục 3.1.8, 3.5.7 & 4.3.5) */
+  /** Xuất danh sách người dùng ra Excel (.xlsx), CSV (.csv) hoặc PDF (.pdf) theo bộ lọc & Phạm vi dữ liệu (Mục 3.1.8, 3.5.7, 4.3.5 & 8.3) */
   @Get(USERS_ROUTES.EXPORT)
   @RequirePermissions('users.export')
   @ApiDoc({
-    summary: 'Xuất danh sách người dùng ra định dạng Excel (.xlsx) hoặc CSV (.csv) theo Data Scope',
+    summary:
+      'Xuất danh sách người dùng ra định dạng Excel (.xlsx), CSV (.csv) hoặc PDF (.pdf) theo Data Scope',
     response: exportUsersCsvResponseSchema,
   })
   public async exportCsv(
@@ -97,6 +103,56 @@ export class UsersController {
       'users.export',
     );
     return this.exportService.exportUsersCsv(query, actor);
+  }
+
+  /** Xem danh sách lịch sử Export người dùng (Người thực hiện, bộ lọc và số dòng — Mục 8.3.7) */
+  @Get(USERS_ROUTES.EXPORT_HISTORIES)
+  @RequirePermissions('users.export')
+  @ApiDoc({
+    summary: 'Xem danh sách lịch sử Export người dùng (Người thực hiện, bộ lọc và số dòng)',
+    response: z.array(exportHistoryItemResponseSchema),
+  })
+  public listExportHistories(
+    @ValidatedQuery(listUserExportHistoriesQuerySchema) query: ListUserExportHistoriesQuery,
+  ) {
+    return this.exportService.listExportHistories(query);
+  }
+
+  /** Xem chi tiết một bản ghi lịch sử Export người dùng theo ID (Mục 8.3.7) */
+  @Get(USERS_ROUTES.EXPORT_HISTORY_BY_ID)
+  @RequirePermissions('users.export')
+  @ApiDoc({
+    summary: 'Xem chi tiết bản ghi lịch sử Export người dùng theo ID',
+    response: exportHistoryItemResponseSchema,
+  })
+  public getExportHistoryById(
+    @ValidatedParams(positiveIntParamSchema, 'historyId') historyId: number,
+  ) {
+    return this.exportService.getExportHistoryById(historyId);
+  }
+
+  /** Theo dõi tiến độ công việc Export chạy nền qua Queue (Mục 8.3.4) */
+  @Get(USERS_ROUTES.EXPORT_JOB_PROGRESS)
+  @RequirePermissions('users.export')
+  @ApiDoc({
+    summary: 'Xem tiến độ công việc Export người dùng chạy nền qua Queue',
+    response: exportJobProgressResponseSchema,
+  })
+  public getExportJobProgress(@ValidatedParams(z.string().trim().min(1), 'jobId') jobId: string) {
+    return this.exportService.getExportJobProgress(jobId);
+  }
+
+  /** Tải xuống file Export qua đường dẫn tạm thời (tự động chặn khi file đã hết hạn — Mục 8.3.5 & 8.3.8) */
+  @Get(USERS_ROUTES.EXPORT_DOWNLOAD_BY_TOKEN)
+  @RequirePermissions('users.export')
+  @ApiDoc({
+    summary: 'Tải file Export tạm thời theo token (tự động hết hạn theo TTL cấu hình)',
+    response: exportTemporaryDownloadResponseSchema,
+  })
+  public downloadTemporaryExport(
+    @ValidatedParams(z.string().trim().min(1), 'token') token: string,
+  ) {
+    return this.exportService.downloadTemporaryExport(token);
   }
 
   /** Tải file mẫu (Template) Excel (.xlsx) hoặc CSV (.csv) để nhập người dùng hàng loạt (Mục 3.1.7) */

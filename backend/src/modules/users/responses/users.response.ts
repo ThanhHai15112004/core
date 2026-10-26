@@ -84,10 +84,20 @@ export interface BulkImportUsersResultResponse {
 export interface ExportUsersCsvResponse {
   readonly fileName: string;
   readonly contentType: string;
-  readonly format: 'csv' | 'xlsx';
+  readonly format: 'csv' | 'xlsx' | 'pdf';
   readonly totalExported: number;
   readonly csvContent: string;
   readonly xlsxBase64: string;
+  readonly pdfBase64?: string;
+  readonly historyId?: number;
+  readonly jobId?: string | null;
+  readonly status?: 'QUEUED' | 'PROCESSING' | 'COMPLETED' | 'FAILED' | 'EXPIRED' | 'CANCELLED';
+  readonly downloadToken?: string | null;
+  readonly downloadUrl?: string | null;
+  readonly expiresAt?: string | null;
+  readonly maxRowsApplied?: number;
+  readonly filtersApplied?: Readonly<Record<string, unknown>>;
+  readonly notifiedAt?: string | null;
 }
 
 export const userRoleSummarySchema = z.object({
@@ -300,8 +310,76 @@ export const importHistoryItemResponseSchema = z.object({
 export const exportUsersCsvResponseSchema = z.object({
   fileName: z.string(),
   contentType: z.string(),
-  format: z.enum(['csv', 'xlsx']),
+  format: z.enum(['csv', 'xlsx', 'pdf']),
   totalExported: z.number(),
   csvContent: z.string(),
   xlsxBase64: z.string(),
+  pdfBase64: z.string().optional(),
+  historyId: z.number().optional(),
+  jobId: z.string().nullable().optional(),
+  status: z
+    .enum(['QUEUED', 'PROCESSING', 'COMPLETED', 'FAILED', 'EXPIRED', 'CANCELLED'])
+    .optional(),
+  downloadToken: z.string().nullable().optional(),
+  downloadUrl: z.string().nullable().optional(),
+  expiresAt: z.string().nullable().optional(),
+  maxRowsApplied: z.number().optional(),
+  filtersApplied: z.record(z.string(), z.unknown()).optional(),
+  notifiedAt: z.string().nullable().optional(),
+});
+
+export const exportJobProgressResponseSchema = z.object({
+  jobId: z.string(),
+  historyId: z.number().nullable(),
+  profileCode: z.string(),
+  format: z.enum(['csv', 'xlsx', 'pdf']),
+  status: z.enum(['QUEUED', 'PROCESSING', 'COMPLETED', 'FAILED', 'EXPIRED', 'CANCELLED']),
+  totalRows: z.number(),
+  processedRows: z.number(),
+  remainingRows: z.number(),
+  percent: z.number(),
+  downloadToken: z.string().nullable(),
+  downloadUrl: z.string().nullable(),
+  expiresAt: z.string().nullable(),
+  notifiedAt: z.string().nullable(),
+  startedAt: z.string().nullable(),
+  finishedAt: z.string().nullable(),
+});
+
+export const exportHistoryItemResponseSchema = z.object({
+  id: z.number(),
+  jobId: z.string().nullable(),
+  profileCode: z.string(),
+  module: z.string(),
+  fileName: z.string(),
+  format: z.enum(['csv', 'xlsx', 'pdf']),
+  actorId: z.number().nullable(),
+  status: z.enum(['QUEUED', 'PROCESSING', 'COMPLETED', 'FAILED', 'EXPIRED', 'CANCELLED']),
+  filters: z.record(z.string(), z.unknown()),
+  totalExported: z.number(),
+  processedRows: z.number(),
+  maxRowsApplied: z.number(),
+  downloadToken: z.string().nullable(),
+  downloadUrl: z.string().nullable(),
+  expiresAt: z.string().nullable(),
+  isExpired: z.boolean(),
+  notifiedAt: z.string().nullable(),
+  errorMessage: z.string().nullable(),
+  createdAt: z.string(),
+  completedAt: z.string().nullable(),
+});
+
+export const exportTemporaryDownloadResponseSchema = z.object({
+  token: z.string(),
+  downloadUrl: z.string(),
+  fileName: z.string(),
+  contentType: z.string(),
+  format: z.enum(['csv', 'xlsx', 'pdf']),
+  totalExported: z.number(),
+  sizeBytes: z.number(),
+  createdAt: z.string(),
+  expiresAt: z.string(),
+  csvContent: z.string().optional(),
+  xlsxBase64: z.string().optional(),
+  pdfBase64: z.string().optional(),
 });

@@ -233,14 +233,31 @@ export const listUsersQuerySchema = z.object({
       z.enum(['ASC', 'DESC']),
     ),
   ).default('ASC'),
-  format: optionalQueryParam(z.enum(['csv', 'xlsx'])),
+  format: optionalQueryParam(z.enum(['csv', 'xlsx', 'pdf'])),
   title: optionalQueryParam(z.string().trim().max(160)),
   logoBase64: optionalQueryParam(z.string().max(500_000)),
+  async: optionalQueryParam(booleanQueryParam()),
+  notifyOnComplete: optionalQueryParam(booleanQueryParam()),
+  ttlSeconds: optionalQueryParam(intQueryParam({ min: 1, max: 604800 })),
+  enforceStrictLimit: optionalQueryParam(booleanQueryParam()),
+  onlyRequestedFormat: optionalQueryParam(booleanQueryParam()),
   stepUpToken: optionalQueryParam(z.string().trim().min(10)),
   requireStepUp: optionalQueryParam(booleanQueryParam()),
 });
 
 export type ListUsersQuery = z.infer<typeof listUsersQuerySchema>;
+
+export const listUserExportHistoriesQuerySchema = z.object({
+  actorId: optionalQueryParam(intQueryParam({ min: 1 })),
+  format: optionalQueryParam(z.enum(['csv', 'xlsx', 'pdf'])),
+  status: optionalQueryParam(
+    z.enum(['QUEUED', 'PROCESSING', 'COMPLETED', 'FAILED', 'EXPIRED', 'CANCELLED']),
+  ),
+  includeExpired: optionalQueryParam(booleanQueryParam()),
+  limit: optionalQueryParam(intQueryParam({ min: 1, max: 200 })),
+});
+
+export type ListUserExportHistoriesQuery = z.infer<typeof listUserExportHistoriesQuerySchema>;
 
 export const bulkImportUserRowSchema = z.object({
   username: z.string().trim().min(3).max(64),

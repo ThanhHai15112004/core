@@ -204,6 +204,7 @@ describe('Phase 7.3 — Hàng đợi công việc (Multi-Queue, Worker Concurren
       percent: 100,
       processed: 100,
       total: 100,
+      remaining: 0,
       step: 'Completed users.import (100 items)',
       phases: [
         { name: 'Validate Input', state: 'done' },
@@ -660,6 +661,70 @@ describe('Phase 7.3 — Hàng đợi công việc (Multi-Queue, Worker Concurren
       topic: 'system.maintenance.tick',
       purgedTrashCount: 3,
       retriedDeliveriesCount: 4,
+    });
+
+    // 7. HeavyJobProcessor chạy Export lớn (users.export) thực sự trong Worker, lưu file tạm và trả về downloadUrl (Mục 8.3.4 & 8.3.5)
+    const fakeUserExportService = {
+      exportUsersCsv: async () => ({
+        fileName: 'danh_sach_nhan_vien_2026-10-26.xlsx',
+        contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        format: 'xlsx' as const,
+        totalExported: 250,
+        csvContent: '',
+        xlsxBase64: 'UEsDBBQAAAAIA===',
+        historyId: 77,
+        jobId: 'job-heavy-export-707',
+        status: 'COMPLETED' as const,
+        downloadToken: 'exp_tok_707',
+        downloadUrl: '/api/v1/users/export/downloads/exp_tok_707',
+        expiresAt: '2026-10-26T15:00:00.000Z',
+        notifiedAt: '2026-10-26T14:00:00.000Z',
+      }),
+    };
+
+    const heavyExportProcessor = new HeavyJobProcessor(
+      config,
+      metrics,
+      progressTracker,
+      userImportService,
+      fakeFilesService,
+      fakeUserExportService as never,
+    );
+
+    const heavyExportJob = {
+      id: 'job-heavy-export-707',
+      name: 'users.export',
+      queueName: QUEUES.SYSTEM_HEAVY,
+      data: serializeMessage('users.export', {
+        operation: 'export',
+        executeInWorker: true,
+        format: 'xlsx',
+        historyId: 77,
+        actorId: 1,
+        notifyOnComplete: true,
+      }),
+      opts: { attempts: 2 },
+      timestamp: Date.now() - 100,
+      attemptsMade: 0,
+      attemptsStarted: 1,
+      progress: 0,
+      updateProgress: async () => undefined,
+      log: async () => undefined,
+    } as unknown as Job;
+
+    const exportJobRes = await heavyExportProcessor.process(heavyExportJob);
+    expect(exportJobRes).toMatchObject({
+      queue: QUEUES.SYSTEM_HEAVY,
+      topic: 'users.export',
+      operation: 'export',
+      processed: 250,
+      total: 250,
+      fileName: 'danh_sach_nhan_vien_2026-10-26.xlsx',
+      format: 'xlsx',
+      totalExported: 250,
+      historyId: 77,
+      downloadToken: 'exp_tok_707',
+      downloadUrl: '/api/v1/users/export/downloads/exp_tok_707',
     });
   });
 });
