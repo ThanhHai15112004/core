@@ -9,6 +9,7 @@ import {
   defaultCodeRegistry,
   defaultMenuRegistry,
   defaultSettingRegistry,
+  pickSelectedFields,
   resolvePagination,
   scanModuleManifests,
 } from '@packages/kernel/index.js';
@@ -183,13 +184,17 @@ export class RolesService implements IRolesPublicService {
       this.loadPermissionsMap(roleIds),
       this.loadUserCountsMap(roleIds),
     ]);
-    return roles.map((role) =>
+    const items = roles.map((role) =>
       this.mapper.toResponse(
         role,
         permsMap.get(Number(role.id)) ?? [],
         countsMap.get(Number(role.id)) ?? 0,
       ),
     );
+    if (query.fields && query.fields.length > 0) {
+      return pickSelectedFields(items, query.fields) as unknown as RoleResponse[];
+    }
+    return items;
   }
 
   /** Lấy thông tin chi tiết một vai trò theo ID */

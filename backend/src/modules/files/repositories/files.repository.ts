@@ -1,9 +1,23 @@
 import { Injectable, Optional } from '@nestjs/common';
 import { DataSource, In, LessThanOrEqual } from 'typeorm';
-import { BaseTypeOrmRepository, TransactionManager } from '@packages/database/index.js';
+import {
+  BaseTypeOrmRepository,
+  TransactionManager,
+  buildSafeLikePattern,
+} from '@packages/database/index.js';
 import { FILE_STATUS } from '../contracts/index.js';
 import { FileRecordEntity } from '../entities/file-record.entity.js';
-import type { ListFilesQuery } from '../requests/files.requests.js';
+import type { FileSortField, ListFilesQuery } from '../requests/files.requests.js';
+
+export const FILE_SEARCHABLE_COLUMNS = ['f.displayName', 'f.originalName', 'f.code'] as const;
+
+export const FILE_SORT_COLUMN_MAP: Readonly<Record<FileSortField, string>> = {
+  id: 'f.id',
+  createdAt: 'f.createdAt',
+  sizeBytes: 'f.sizeBytes',
+  displayName: 'f.displayName',
+  usageCount: 'f.usageCount',
+};
 
 export interface FileScopeConstraint {
   readonly unrestricted: boolean;
@@ -92,7 +106,9 @@ export class FilesRepository extends BaseTypeOrmRepository<FileRecordEntity> {
 
       if (query.mimeType) {
         const mime = query.mimeType.trim().toLowerCase();
-        qb.andWhere('LOWER(f.mimeType) LIKE :mime', { mime: `%${mime}%` });
+        qb.andWhere("LOWER(f.mimeType) LIKE :mime ESCAPE '\\\\'", {
+          mime: buildSafeLikePattern(mime, 'contains'),
+        });
       }
 
       if (query.uploadedByUserId !== undefined) {
@@ -107,19 +123,12 @@ export class FilesRepository extends BaseTypeOrmRepository<FileRecordEntity> {
         });
       }
 
-      if (query.createdFrom) {
-        const fromDate = new Date(query.createdFrom);
-        if (!Number.isNaN(fromDate.getTime())) {
-          qb.andWhere('f.createdAt >= :createdFrom', { createdFrom: fromDate });
-        }
-      }
-
-      if (query.createdTo) {
-        const toDate = new Date(query.createdTo);
-        if (!Number.isNaN(toDate.getTime())) {
-          qb.andWhere('f.createdAt <= :createdTo', { createdTo: toDate });
-        }
-      }
+      this.applyDateRange(
+        qb,
+        'f.createdAt',
+        { from: query.createdFrom, to: query.createdTo },
+        { fromFieldName: 'createdFrom', toFieldName: 'createdTo' },
+      );
 
       if (query.minSizeBytes !== undefined) {
         qb.andWhere('f.sizeBytes >= :minSizeBytes', { minSizeBytes: query.minSizeBytes });
@@ -135,38 +144,29 @@ export class FilesRepository extends BaseTypeOrmRepository<FileRecordEntity> {
         qb.andWhere('f.usageCount = 0');
       }
 
-      if (query.search) {
-        const keyword = `%${query.search.trim().toLowerCase()}%`;
-        qb.andWhere(
-          '(LOWER(f.displayName) LIKE :keyword OR LOWER(f.originalName) LIKE :keyword OR LOWER(f.code) LIKE :keyword)',
-          { keyword },
-        );
-      }
+      this.applyKeywordSearch(qb, query.search ?? query.q, FILE_SEARCHABLE_COLUMNS);
 
-      if (!scope.unrestricted) {
-        const orgIds = scope.allowedOrgUnitIds ?? [];
-        const selfId = scope.selfUserId ?? null;
-        const explicitFileIds = scope.explicitAllowedFileIds ?? [];
-        const subClauses = ['f.visibility >= 2'];
-        const scopeParams: Record<string, unknown> = {};
+      this.applyDataScope(
+        qb,
+        {
+          unrestricted: scope.unrestricted,
+          allowedOrgUnitIds: scope.allowedOrgUnitIds,
+          selfUserId: scope.selfUserId,
+          explicitAllowedIds: scope.explicitAllowedFileIds,
+        },
+        {
+          alwaysAllowSqlClause: 'f.visibility >= 2',
+          orgUnitColumn: 'f.organizationUnitId',
+          userColumn: 'f.uploadedByUserId',
+          idColumn: 'f.id',
+        },
+      );
 
-        if (orgIds.length > 0) {
-          subClauses.push('f.organizationUnitId IN (:...orgIds)');
-          scopeParams.orgIds = [...orgIds];
-        }
-        if (selfId) {
-          subClauses.push('f.uploadedByUserId = :selfId');
-          scopeParams.selfId = selfId;
-        }
-        if (explicitFileIds.length > 0) {
-          subClauses.push('f.id IN (:...explicitFileIds)');
-          scopeParams.explicitFileIds = [...explicitFileIds];
-        }
-
-        qb.andWhere(`(${subClauses.join(' OR ')})`, scopeParams);
-      }
-
-      qb.orderBy('f.createdAt', 'DESC').addOrderBy('f.id', 'DESC');
+      this.applySort(qb, query, FILE_SORT_COLUMN_MAP, {
+        defaultSortBy: 'createdAt',
+        defaultSortOrder: 'DESC',
+        tieBreakerField: 'id',
+      });
 
       const { items, total } = await this.paginateQueryBuilder(qb, query, {
         settingPrefix: 'files.pagination',

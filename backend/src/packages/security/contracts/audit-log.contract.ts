@@ -200,11 +200,12 @@ export interface AuditLogRecord {
   readonly createdAt: string;
 }
 
-/** Bộ lọc tra cứu Audit Log (Mục 4.4.7 — Lọc theo người dùng, Service Account, module, thời gian và hành động) */
+/** Bộ lọc tra cứu Audit Log (Mục 4.4.7 & 8.1 — Lọc theo người dùng, Service Account, module, thời gian, hành động, sắp xếp và chọn trường) */
 export interface AuditLogQueryFilter {
   readonly page?: number | undefined;
   readonly limit?: number | undefined;
   readonly q?: string | undefined;
+  readonly search?: string | undefined;
   readonly actorType?: AuditActorTypeCode | undefined;
   readonly actorUserId?: number | undefined;
   readonly actorServiceAccountId?: number | undefined;
@@ -218,7 +219,10 @@ export interface AuditLogQueryFilter {
   readonly ipAddress?: string | undefined;
   readonly fromDate?: string | Date | undefined;
   readonly toDate?: string | Date | undefined;
+  readonly sortBy?: 'id' | 'createdAt' | 'module' | 'action' | undefined;
   readonly sortOrder?: 'ASC' | 'DESC' | undefined;
+  readonly sort?: string | undefined;
+  readonly fields?: readonly string[] | undefined;
 }
 
 /** Kết quả phân trang khi tra cứu Audit Log */

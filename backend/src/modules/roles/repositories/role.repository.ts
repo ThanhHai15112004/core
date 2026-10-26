@@ -4,6 +4,13 @@ import { BaseTypeOrmRepository, TransactionManager } from '@packages/database/in
 import { RoleEntity } from '../entities/role.entity.js';
 import type { ListRolesQuery } from '../requests/roles.requests.js';
 
+const ROLE_SORT_COLUMN_MAP: Readonly<Record<string, string>> = {
+  id: 'r.id',
+  code: 'r.code',
+  name: 'r.name',
+  createdAt: 'r.createdAt',
+};
+
 @Injectable()
 export class RoleRepository extends BaseTypeOrmRepository<RoleEntity> {
   constructor(
@@ -46,10 +53,10 @@ export class RoleRepository extends BaseTypeOrmRepository<RoleEntity> {
     );
   }
 
-  /** Tìm danh sách vai trò theo điều kiện lọc */
+  /** Tìm danh sách vai trò theo điều kiện lọc (Query Core 8.1) */
   public async findFiltered(query: ListRolesQuery): Promise<RoleEntity[]> {
     return this.executeReadOnly(async (repo) => {
-      const qb = repo.createQueryBuilder('r').orderBy('r.id', 'ASC');
+      const qb = repo.createQueryBuilder('r');
 
       if (query.status !== undefined) {
         qb.andWhere('r.status = :status', { status: query.status });
@@ -57,10 +64,14 @@ export class RoleRepository extends BaseTypeOrmRepository<RoleEntity> {
       if (query.dataScope !== undefined) {
         qb.andWhere('r.dataScope = :dataScope', { dataScope: query.dataScope });
       }
-      if (query.search) {
-        const keyword = `%${query.search.trim().toLowerCase()}%`;
-        qb.andWhere('(LOWER(r.code) LIKE :keyword OR LOWER(r.name) LIKE :keyword)', { keyword });
-      }
+      this.applyKeywordSearch(qb, query.search ?? query.q, ['r.code', 'r.name'], {
+        paramPrefix: 'roleKw',
+      });
+      this.applySort(qb, query, ROLE_SORT_COLUMN_MAP, {
+        defaultSortBy: 'id',
+        defaultSortOrder: 'ASC',
+        tieBreakerField: 'id',
+      });
 
       return qb.getMany();
     });

@@ -1,5 +1,10 @@
 import { z } from 'zod';
-import { booleanQueryParam, intQueryParam, optionalQueryParam } from '@packages/http/index.js';
+import {
+  booleanQueryParam,
+  intQueryParam,
+  optionalQueryParam,
+  parseSelectFields,
+} from '@packages/http/index.js';
 import { isSupportedLocale, isValidIanaTimezone } from '@packages/i18n/index.js';
 import {
   USER_STATUS,
@@ -157,20 +162,77 @@ export const assignUserOrganizationsSchema = z.object({
 
 export type AssignUserOrganizationsRequest = z.infer<typeof assignUserOrganizationsSchema>;
 
+export const USER_SELECTABLE_FIELDS = [
+  'id',
+  'username',
+  'email',
+  'firstName',
+  'lastName',
+  'fullName',
+  'phone',
+  'avatarUrl',
+  'dateOfBirth',
+  'gender',
+  'genderName',
+  'identityNumber',
+  'address',
+  'city',
+  'country',
+  'bio',
+  'preferredLocale',
+  'preferredTimezone',
+  'status',
+  'statusName',
+  'mfaEnabled',
+  'emailVerifiedAt',
+  'phoneVerifiedAt',
+  'lastLoginAt',
+  'lockedUntil',
+  'lockReason',
+  'primaryOrganizationUnitId',
+  'managerId',
+  'roles',
+  'organizationUnits',
+  'version',
+  'createdAt',
+  'updatedAt',
+] as const;
+
 export const listUsersQuerySchema = z.object({
-  q: optionalQueryParam(z.string().trim().max(120)),
+  q: optionalQueryParam(z.string().trim().max(200)),
+  search: optionalQueryParam(z.string().trim().max(200)),
   status: optionalQueryParam(userStatusSchema),
   roleId: optionalQueryParam(intQueryParam({ min: 1 })),
   organizationUnitId: optionalQueryParam(intQueryParam({ min: 1 })),
   managerId: optionalQueryParam(intQueryParam({ min: 1 })),
   includeArchived: optionalQueryParam(booleanQueryParam()),
   mfaEnabled: optionalQueryParam(booleanQueryParam()),
+  createdFrom: optionalQueryParam(z.string().trim().max(64)),
+  createdTo: optionalQueryParam(z.string().trim().max(64)),
+  fromDate: optionalQueryParam(z.string().trim().max(64)),
+  toDate: optionalQueryParam(z.string().trim().max(64)),
+  fields: optionalQueryParam(
+    z.preprocess(
+      (v) =>
+        parseSelectFields(v as string | readonly string[] | undefined, {
+          allowedFields: USER_SELECTABLE_FIELDS,
+        }),
+      z.array(z.string()).optional(),
+    ),
+  ),
   page: optionalQueryParam(intQueryParam({ min: 1 })),
   limit: optionalQueryParam(intQueryParam({ min: 1, max: 5000 })),
+  countMode: optionalQueryParam(z.enum(['exact', 'estimated', 'none'])),
+  sort: optionalQueryParam(z.string().trim().max(200)),
   sortBy: optionalQueryParam(
     z.enum(['id', 'createdAt', 'firstName', 'lastName', 'fullName', 'email', 'username', 'status']),
   ).default('id'),
-  sortOrder: optionalQueryParam(z.enum(['ASC', 'DESC'])).default('ASC'),
+  sortOrder: optionalQueryParam(
+    z.preprocess(
+      (v) => (typeof v === 'string' ? v.trim().toUpperCase() : v),
+      z.enum(['ASC', 'DESC']),
+    ),
+  ).default('ASC'),
   format: optionalQueryParam(z.enum(['csv', 'xlsx'])),
   title: optionalQueryParam(z.string().trim().max(160)),
   logoBase64: optionalQueryParam(z.string().max(500_000)),

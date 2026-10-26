@@ -3,6 +3,8 @@ import { Injectable } from '@nestjs/common';
 import {
   ForbiddenAppException,
   NotFoundAppException,
+  pickSelectedFields,
+  resolveDateRange,
   resolvePagination,
 } from '@packages/kernel/index.js';
 import { RequestContextService } from '@packages/logging/index.js';
@@ -158,6 +160,10 @@ export class AuditLogService {
       defaultLimit: 20,
       maxLimit: 200,
     });
+    const dateRange = resolveDateRange(filter.fromDate, filter.toDate, {
+      fromFieldName: 'fromDate',
+      toFieldName: 'toDate',
+    });
 
     if (this.persistencePort) {
       try {
@@ -166,8 +172,12 @@ export class AuditLogService {
           page,
           limit,
         });
+        const projected =
+          filter.fields && filter.fields.length > 0
+            ? (pickSelectedFields(items, filter.fields) as unknown as AuditLogRecord[])
+            : items;
         return {
-          data: items,
+          data: projected,
           meta: {
             page,
             limit,
@@ -224,20 +234,17 @@ export class AuditLogService {
       const ip = filter.ipAddress.trim().toLowerCase();
       list = list.filter((item) => (item.ipAddress ?? '').toLowerCase().includes(ip));
     }
-    if (filter.fromDate) {
-      const fromTs = new Date(filter.fromDate).getTime();
-      if (!Number.isNaN(fromTs)) {
-        list = list.filter((item) => new Date(item.createdAt).getTime() >= fromTs);
-      }
+    if (dateRange.fromDate) {
+      const fromTs = dateRange.fromDate.getTime();
+      list = list.filter((item) => new Date(item.createdAt).getTime() >= fromTs);
     }
-    if (filter.toDate) {
-      const toTs = new Date(filter.toDate).getTime();
-      if (!Number.isNaN(toTs)) {
-        list = list.filter((item) => new Date(item.createdAt).getTime() <= toTs);
-      }
+    if (dateRange.toDate) {
+      const toTs = dateRange.toDate.getTime();
+      list = list.filter((item) => new Date(item.createdAt).getTime() <= toTs);
     }
-    if (filter.q?.trim()) {
-      const kw = filter.q.trim().toLowerCase();
+    const keywordRaw = filter.q ?? filter.search;
+    if (keywordRaw?.trim()) {
+      const kw = keywordRaw.trim().toLowerCase();
       list = list.filter(
         (item) =>
           item.module.toLowerCase().includes(kw) ||
@@ -251,14 +258,30 @@ export class AuditLogService {
       );
     }
 
-    if (filter.sortOrder === 'ASC') {
-      list.sort((a, b) => a.id - b.id);
-    } else {
-      list.sort((a, b) => b.id - a.id);
-    }
+    const dir = filter.sortOrder === 'ASC' ? 1 : -1;
+    const sortBy = filter.sortBy ?? 'id';
+    list.sort((a, b) => {
+      if (sortBy === 'module') {
+        const cmp = a.module.localeCompare(b.module);
+        return cmp !== 0 ? cmp * dir : (a.id - b.id) * dir;
+      }
+      if (sortBy === 'action') {
+        const cmp = a.action.localeCompare(b.action);
+        return cmp !== 0 ? cmp * dir : (a.id - b.id) * dir;
+      }
+      if (sortBy === 'createdAt') {
+        const cmp = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+        return cmp !== 0 ? cmp * dir : (a.id - b.id) * dir;
+      }
+      return (a.id - b.id) * dir;
+    });
 
     const totalItems = list.length;
-    const data = list.slice(offset, offset + limit);
+    const sliced = list.slice(offset, offset + limit);
+    const data =
+      filter.fields && filter.fields.length > 0
+        ? (pickSelectedFields(sliced, filter.fields) as unknown as AuditLogRecord[])
+        : sliced;
 
     return {
       data,

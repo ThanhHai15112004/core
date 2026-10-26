@@ -1,6 +1,7 @@
 export * from './contracts/database.contract.js';
 export * from './entities/typeorm-base.entity.js';
 export * from './repository/base-typeorm.repository.js';
+export * from './utils/query-builder-core.helper.js';
 export * from './transaction/unit-of-work.contract.js';
 export * from './transaction/transaction-manager.service.js';
 export * from './seeding/seeder.contract.js';

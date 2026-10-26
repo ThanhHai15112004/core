@@ -8,6 +8,7 @@ import {
   HTTP_ERROR_CODE,
   HTTP_STATUS_CODE,
   InternalServerAppException,
+  ValidationAppException,
 } from '@packages/kernel/index.js';
 import {
   BaseTypeOrmRepository,
@@ -16,9 +17,18 @@ import {
   TransactionManager,
   TypeOrmConfigService,
   VersionedTypeOrmEntity,
+  applyDataScopeToQueryBuilder,
+  applyDateRangeToQueryBuilder,
+  applyFilterConditionsToQueryBuilder,
+  applyKeywordSearchToQueryBuilder,
+  applyQueryCoreToBuilder,
+  applySelectFieldsToQueryBuilder,
+  applySortToQueryBuilder,
   classifyDbError,
+  escapeSqlLikePattern,
   isOrmEntityInstance,
   isUniqueConstraintError,
+  paginateSelectQueryBuilder,
   type DataRepairContract,
 } from '@packages/database/index.js';
 import { TransformResponseInterceptor } from '@packages/http/interceptors/transform-response.interceptor.js';
@@ -394,6 +404,233 @@ describe('2.6 Repository & Data Safety (Repository, Read/Write, Entity Guard, Un
         'UPDATE sample_wallets SET balance = 0 WHERE balance < 0',
         'COMMIT',
       ]);
+    });
+  });
+
+  describe('7. Query Core SQL Helpers & Paginator (Phase 8 — Section 8.1)', () => {
+    function createMockQueryBuilder(rows: unknown[] = [], count = 0) {
+      const whereCalls: Array<{
+        clause: string;
+        params?: Record<string, unknown> | undefined;
+      }> = [];
+      const orderCalls: Array<{ sort: string; order?: 'ASC' | 'DESC' | undefined }> = [];
+      let selectedCols: string[] = [];
+      let skipVal = 0;
+      let takeVal = 0;
+
+      const qb = {
+        andWhere: jest.fn((clause: string, params?: Record<string, unknown>) => {
+          whereCalls.push({ clause, params });
+          return qb;
+        }),
+        orderBy: jest.fn((sort: string, order?: 'ASC' | 'DESC') => {
+          orderCalls.length = 0;
+          orderCalls.push({ sort, order });
+          return qb;
+        }),
+        addOrderBy: jest.fn((sort: string, order?: 'ASC' | 'DESC') => {
+          orderCalls.push({ sort, order });
+          return qb;
+        }),
+        select: jest.fn((cols: string[]) => {
+          selectedCols = cols;
+          return qb;
+        }),
+        skip: jest.fn((val: number) => {
+          skipVal = val;
+          return qb;
+        }),
+        take: jest.fn((val: number) => {
+          takeVal = val;
+          return qb;
+        }),
+        getMany: jest.fn(async () => rows),
+        getCount: jest.fn(async () => count),
+      };
+
+      return {
+        qb: qb as unknown as Parameters<typeof paginateSelectQueryBuilder>[0],
+        whereCalls,
+        orderCalls,
+        getSelectedCols: () => selectedCols,
+        getSkip: () => skipVal,
+        getTake: () => takeVal,
+      };
+    }
+
+    it('escapes SQL LIKE wildcards (%, _, \\) and applies keyword search across configured columns', () => {
+      expect(escapeSqlLikePattern('50%_off\\deal')).toBe('50\\%\\_off\\\\deal');
+
+      const { qb, whereCalls } = createMockQueryBuilder();
+      applyKeywordSearchToQueryBuilder(qb, '100%_test', ['u.username', 'u.email'], {
+        paramPrefix: 'kw',
+      });
+
+      expect(whereCalls).toHaveLength(1);
+      expect(whereCalls[0]?.clause).toContain("ESCAPE '\\\\'");
+      expect(whereCalls[0]?.params).toEqual({ kw_main: '%100\\%\\_test%' });
+    });
+
+    it('applies date range filter and rejects invalid ranges (from > to)', () => {
+      const { qb, whereCalls } = createMockQueryBuilder();
+      applyDateRangeToQueryBuilder(qb, 'u.createdAt', {
+        from: '2026-01-01T00:00:00.000Z',
+        to: '2026-01-31T23:59:59.000Z',
+        paramPrefix: 'createdRange',
+      });
+
+      expect(whereCalls).toHaveLength(2);
+      expect(whereCalls[0]?.clause).toBe('u.createdAt >= :createdRange_from');
+      expect(whereCalls[1]?.clause).toBe('u.createdAt <= :createdRange_to');
+
+      expect(() =>
+        applyDateRangeToQueryBuilder(qb, 'u.createdAt', {
+          from: '2026-03-01T00:00:00.000Z',
+          to: '2026-01-01T00:00:00.000Z',
+        }),
+      ).toThrow(ValidationAppException);
+    });
+
+    it('applies whitelisted filter conditions, sort with deterministic tie-breaker, and sparse select fields', () => {
+      const { qb, whereCalls, orderCalls, getSelectedCols } = createMockQueryBuilder();
+
+      applyFilterConditionsToQueryBuilder(
+        qb,
+        [
+          { field: 'status', operator: 'in', value: ['1', '2'] },
+          { field: 'balance', operator: 'gte', value: '500' },
+        ],
+        {
+          status: 'w.status',
+          balance: 'w.balance',
+        },
+        { paramPrefix: 'flt' },
+      );
+      expect(whereCalls).toHaveLength(2);
+      expect(whereCalls[0]?.clause).toContain('w.status IN (:...flt_0)');
+
+      expect(() =>
+        applyFilterConditionsToQueryBuilder(
+          qb,
+          [{ field: 'secretColumn', operator: 'eq', value: '1' }],
+          { status: 'w.status' },
+        ),
+      ).toThrow(ValidationAppException);
+
+      applySortToQueryBuilder<Record<string, unknown>, 'id' | 'balance'>(
+        qb,
+        { sortBy: 'balance', sortOrder: 'desc' },
+        { id: 'w.id', balance: 'w.balance' },
+        { defaultSortBy: 'id', tieBreakerField: 'id' },
+      );
+      expect(orderCalls).toEqual([
+        { sort: 'w.balance', order: 'DESC' },
+        { sort: 'w.id', order: 'DESC' },
+      ]);
+
+      applySelectFieldsToQueryBuilder(qb, ['balance'], {
+        id: 'w.id',
+        balance: 'w.balance',
+        ownerCode: 'w.ownerCode',
+      });
+      expect(getSelectedCols()).toEqual(['w.id', 'w.balance']);
+    });
+
+    it('applies DataScope SQL conditions (ALL, ORG_UNIT with membership subquery, SELF, and restricted empty 1 = 0)', () => {
+      // 1. ALL -> no SQL restriction added
+      const allMock = createMockQueryBuilder();
+      applyDataScopeToQueryBuilder(
+        allMock.qb,
+        {
+          unrestricted: true,
+          allowedOrganizationUnitIds: [],
+          allowedUserIds: [],
+        },
+        { userColumn: 'u.id', orgUnitColumn: 'u.primaryOrganizationUnitId' },
+      );
+      expect(allMock.whereCalls).toHaveLength(0);
+
+      // 2. ORG_UNIT with membership subquery + self
+      const orgMock = createMockQueryBuilder();
+      applyDataScopeToQueryBuilder(
+        orgMock.qb,
+        {
+          unrestricted: false,
+          selfUserId: 10,
+          allowedOrganizationUnitIds: [100, 200],
+          allowedUserIds: [10],
+        },
+        {
+          userColumn: 'u.id',
+          orgUnitColumn: 'u.primaryOrganizationUnitId',
+          paramPrefix: 'ds',
+          orgMembershipSubquery: {
+            table: 'user_organization_units',
+            alias: 'uou_scope',
+            entityPrimaryColumn: 'u.id',
+            foreignKeyColumn: 'user_id',
+            orgUnitColumn: 'organization_unit_id',
+          },
+        },
+      );
+      expect(orgMock.whereCalls).toHaveLength(1);
+      expect(orgMock.whereCalls[0]?.clause).toContain(
+        'EXISTS (SELECT 1 FROM user_organization_units',
+      );
+      expect(orgMock.whereCalls[0]?.clause).toContain('u.id IN (:...ds_user_ids)');
+
+      // 3. Restricted empty scope -> 1 = 0
+      const emptyMock = createMockQueryBuilder();
+      applyDataScopeToQueryBuilder(
+        emptyMock.qb,
+        {
+          unrestricted: false,
+          selfUserId: null,
+          allowedOrganizationUnitIds: [],
+          allowedUserIds: [],
+        },
+        { userColumn: 'u.id' },
+      );
+      expect(emptyMock.whereCalls).toEqual([{ clause: '1 = 0', params: undefined }]);
+    });
+
+    it('supports 1-call applyQueryCoreToBuilder and paginateSelectQueryBuilder countMode="none" / short-circuit', async () => {
+      const { qb, whereCalls, orderCalls } = createMockQueryBuilder([{ id: 1 }, { id: 2 }], 2);
+      applyQueryCoreToBuilder(
+        qb,
+        {
+          search: 'wallet',
+          sortBy: 'id',
+          sortOrder: 'ASC',
+        },
+        {
+          searchableColumns: ['w.ownerCode'],
+          sortableColumnMap: { id: 'w.id' },
+          sortOptions: { defaultSortBy: 'id', defaultSortOrder: 'ASC' },
+        },
+      );
+      expect(whereCalls).toHaveLength(1);
+      expect(orderCalls).toEqual([{ sort: 'w.id', order: 'ASC' }]);
+
+      // countMode = 'none' -> does not call getCount(), fetches limit + 1 lookahead
+      const noCountMock = createMockQueryBuilder([{ id: 1 }, { id: 2 }, { id: 3 }], 999);
+      const noCountRes = await paginateSelectQueryBuilder(noCountMock.qb, {
+        page: 1,
+        limit: 2,
+        countMode: 'none',
+      });
+      expect(noCountRes.nullableTotal).toBeNull();
+      expect(noCountRes.items).toHaveLength(3); // lookahead item preserved for createPaginatedResult
+      expect(noCountMock.getTake()).toBe(3);
+
+      // exact mode short-circuit when skip >= total
+      const shortCircuitMock = createMockQueryBuilder([{ id: 1 }], 5);
+      const shortCircuitRes = await paginateSelectQueryBuilder(shortCircuitMock.qb, {
+        page: 3,
+        limit: 5,
+      });
+      expect(shortCircuitRes.total).toBe(5);
+      expect(shortCircuitRes.items).toEqual([]);
     });
   });
 });

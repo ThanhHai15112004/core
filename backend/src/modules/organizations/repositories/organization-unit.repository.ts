@@ -4,6 +4,13 @@ import { BaseTypeOrmRepository, TransactionManager } from '@packages/database/in
 import { OrganizationUnitEntity } from '../entities/organization-unit.entity.js';
 import type { ListOrganizationUnitsQuery } from '../requests/organizations.requests.js';
 
+const ORG_UNIT_SORT_COLUMN_MAP: Readonly<Record<string, string>> = {
+  id: 'ou.id',
+  code: 'ou.code',
+  name: 'ou.name',
+  createdAt: 'ou.createdAt',
+};
+
 @Injectable()
 export class OrganizationUnitRepository extends BaseTypeOrmRepository<OrganizationUnitEntity> {
   constructor(
@@ -46,10 +53,10 @@ export class OrganizationUnitRepository extends BaseTypeOrmRepository<Organizati
     );
   }
 
-  /** Tìm danh sách đơn vị/chi nhánh theo điều kiện lọc */
+  /** Tìm danh sách đơn vị/chi nhánh theo điều kiện lọc (Query Core 8.1) */
   public async findFiltered(query: ListOrganizationUnitsQuery): Promise<OrganizationUnitEntity[]> {
     return this.executeReadOnly(async (repo) => {
-      const qb = repo.createQueryBuilder('ou').orderBy('ou.id', 'ASC');
+      const qb = repo.createQueryBuilder('ou');
 
       if (query.type !== undefined) {
         qb.andWhere('ou.type = :type', { type: query.type });
@@ -60,10 +67,14 @@ export class OrganizationUnitRepository extends BaseTypeOrmRepository<Organizati
       if (query.parentId !== undefined) {
         qb.andWhere('ou.parentId = :parentId', { parentId: query.parentId });
       }
-      if (query.search) {
-        const keyword = `%${query.search.trim().toLowerCase()}%`;
-        qb.andWhere('(LOWER(ou.code) LIKE :keyword OR LOWER(ou.name) LIKE :keyword)', { keyword });
-      }
+      this.applyKeywordSearch(qb, query.search ?? query.q, ['ou.code', 'ou.name'], {
+        paramPrefix: 'ouKw',
+      });
+      this.applySort(qb, query, ORG_UNIT_SORT_COLUMN_MAP, {
+        defaultSortBy: 'id',
+        defaultSortOrder: 'ASC',
+        tieBreakerField: 'id',
+      });
 
       return qb.getMany();
     });

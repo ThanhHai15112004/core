@@ -12,8 +12,11 @@ import {
   type ListQueryResult,
   PAGINATION_DEFAULTS,
   type PaginationParams,
+  QUERY_COMPLEXITY_DEFAULTS,
+  type ResolvedDateRange,
   SEARCH_DEFAULTS,
   type SearchMode,
+  SELECT_DEFAULTS,
   SORT_DEFAULTS,
   SORT_ORDERS,
   type SortCriterion,
@@ -22,6 +25,8 @@ import {
   VALIDATION_ISSUE_CODE,
   ValidationAppException,
   type ValidationSource,
+  assertQueryComplexity,
+  resolveDateRange,
 } from '@packages/kernel/index.js';
 import type { ApiErrorDetail } from '../contracts/api-response.contract.js';
 
@@ -167,34 +172,79 @@ export function csvQueryParam<T extends z.ZodTypeAny = z.ZodString>(
   }, z.array(elementSchema).max(maxItems));
 }
 
+export interface DateRangeSchemaOptions {
+  readonly fromKey?: string;
+  readonly toKey?: string;
+  readonly maxSpanDays?: number;
+}
+
+/**
+ * Tạo Zod schema kiểm tra khoảng thời gian theo tên tham số cấu hình (ví dụ `from`/`to`, `fromDate`/`toDate`, `createdFrom`/`createdTo`)
+ * và đảm bảo `from <= to`.
+ */
+export function createDateRangeQuerySchema(options?: DateRangeSchemaOptions) {
+  const fromKey = options?.fromKey ?? 'from';
+  const toKey = options?.toKey ?? 'to';
+
+  return z
+    .object({
+      [fromKey]: optionalQueryParam(
+        z.string().refine((v) => !Number.isNaN(Date.parse(v)), {
+          message: `Invalid ISO date string for "${fromKey}"`,
+        }),
+      ),
+      [toKey]: optionalQueryParam(
+        z.string().refine((v) => !Number.isNaN(Date.parse(v)), {
+          message: `Invalid ISO date string for "${toKey}"`,
+        }),
+      ),
+    })
+    .superRefine((data, ctx) => {
+      const fromVal = data[fromKey];
+      const toVal = data[toKey];
+      if (fromVal !== undefined && toVal !== undefined) {
+        const fromTs = Date.parse(fromVal);
+        const toTs = Date.parse(toVal);
+        if (fromTs > toTs) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: [fromKey],
+            message: `"${fromKey}" date must be earlier than or equal to "${toKey}" date`,
+          });
+        } else if (options?.maxSpanDays !== undefined && options.maxSpanDays > 0) {
+          const maxSpanMs = options.maxSpanDays * 86_400_000;
+          if (toTs - fromTs > maxSpanMs) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: [toKey],
+              message: `Date range between "${fromKey}" and "${toKey}" cannot exceed ${options.maxSpanDays} days`,
+            });
+          }
+        }
+      }
+    })
+    .transform((data) => {
+      const fromStr = data[fromKey];
+      const toStr = data[toKey];
+      const resolved = resolveDateRange(fromStr, toStr, {
+        fromFieldName: fromKey,
+        toFieldName: toKey,
+        ...(options?.maxSpanDays !== undefined ? { maxSpanDays: options.maxSpanDays } : {}),
+      });
+      return {
+        ...data,
+        ...resolved,
+      };
+    });
+}
+
 /**
  * Schema kiểm tra khoảng thời gian (`from`, `to` định dạng ISO 8601) và đảm bảo `from <= to`.
  */
-export const dateRangeQuerySchema = z
-  .object({
-    from: optionalQueryParam(
-      z.string().refine((v) => !Number.isNaN(Date.parse(v)), {
-        message: 'Invalid ISO date string for "from"',
-      }),
-    ),
-    to: optionalQueryParam(
-      z.string().refine((v) => !Number.isNaN(Date.parse(v)), {
-        message: 'Invalid ISO date string for "to"',
-      }),
-    ),
-  })
-  .refine(
-    (data) => {
-      if (data.from !== undefined && data.to !== undefined) {
-        return Date.parse(data.from) <= Date.parse(data.to);
-      }
-      return true;
-    },
-    {
-      message: '"from" date must be earlier than or equal to "to" date',
-      path: ['from'],
-    },
-  );
+export const dateRangeQuerySchema = createDateRangeQuerySchema({
+  fromKey: 'from',
+  toKey: 'to',
+}) as z.ZodType<{ from?: string | undefined; to?: string | undefined }>;
 
 /**
  * Tính toán giá trị `offset` từ `page` và `limit` (1-indexed).
@@ -718,15 +768,18 @@ export function parseFilterConditions<const TField extends string>(
     }
 
     let normalizedValue: unknown = rawValue;
-    if (
-      (operator === 'in' || operator === 'nin' || operator === 'between') &&
-      typeof rawValue === 'string'
-    ) {
-      normalizedValue = rawValue
-        .split(CSV_SEPARATOR)
-        .map((v) => v.trim())
-        .filter(Boolean);
-      if (operator === 'between' && (normalizedValue as string[]).length !== 2) {
+    if (operator === 'in' || operator === 'nin' || operator === 'between') {
+      const listVal =
+        typeof rawValue === 'string'
+          ? rawValue
+              .split(CSV_SEPARATOR)
+              .map((v) => v.trim())
+              .filter(Boolean)
+          : Array.isArray(rawValue)
+            ? rawValue.map((v) => String(v).trim()).filter(Boolean)
+            : [String(rawValue).trim()].filter(Boolean);
+
+      if (operator === 'between' && listVal.length !== 2) {
         throw new ValidationAppException([
           {
             field,
@@ -735,6 +788,21 @@ export function parseFilterConditions<const TField extends string>(
           },
         ]);
       }
+
+      if (
+        (operator === 'in' || operator === 'nin') &&
+        listVal.length > QUERY_COMPLEXITY_DEFAULTS.MAX_IN_VALUES
+      ) {
+        throw new ValidationAppException([
+          {
+            field,
+            code: 'too_many_in_values',
+            message: `Operator "${operator}" on field "${field}" cannot exceed ${QUERY_COMPLEXITY_DEFAULTS.MAX_IN_VALUES} values`,
+          },
+        ]);
+      }
+
+      normalizedValue = listVal;
     } else if (operator === 'isNull') {
       normalizedValue = rawValue === 'true' || rawValue === '1' || rawValue === true;
     }
@@ -797,10 +865,106 @@ export function parseFilterConditions<const TField extends string>(
   return conditions;
 }
 
+export interface SelectFieldsOptions<TField extends string = string> {
+  readonly allowedFields?: readonly TField[] | undefined;
+  readonly alwaysIncludeFields?: readonly TField[] | undefined;
+  readonly maxFields?: number | undefined;
+}
+
+/**
+ * Phân tích và xác thực danh sách trường cần trả về (`?fields=id,username,email` hoặc mảng chuỗi),
+ * đối chiếu nghiêm ngặt với `allowedFields` (nếu có) và giới hạn `maxFields` (Mục 8.1 — Chọn các trường cần trả về).
+ */
+export function parseSelectFields<const TField extends string = string>(
+  rawFields: string | readonly string[] | undefined | null,
+  optionsOrAllowed?: SelectFieldsOptions<TField> | readonly TField[],
+): readonly TField[] | undefined {
+  if (rawFields === undefined || rawFields === null || rawFields === '') {
+    return undefined;
+  }
+
+  const options: SelectFieldsOptions<TField> | undefined = Array.isArray(optionsOrAllowed)
+    ? { allowedFields: optionsOrAllowed as readonly TField[] }
+    : (optionsOrAllowed as SelectFieldsOptions<TField> | undefined);
+
+  const parts = (Array.isArray(rawFields) ? rawFields : String(rawFields).split(CSV_SEPARATOR))
+    .map((f) => String(f).trim())
+    .filter((f) => f.length > 0);
+
+  if (parts.length === 0) {
+    return undefined;
+  }
+
+  const maxFields = options?.maxFields ?? SELECT_DEFAULTS.MAX_FIELDS;
+  if (parts.length > maxFields) {
+    throw new ValidationAppException([
+      {
+        field: 'fields',
+        code: 'too_many_select_fields',
+        message: `Cannot select more than ${maxFields} fields`,
+      },
+    ]);
+  }
+
+  const allowedSet =
+    options?.allowedFields && options.allowedFields.length > 0
+      ? new Set<string>(options.allowedFields)
+      : null;
+
+  const selectedSet = new Set<TField>();
+  if (options?.alwaysIncludeFields) {
+    for (const reqField of options.alwaysIncludeFields) {
+      selectedSet.add(reqField);
+    }
+  }
+
+  for (const part of parts) {
+    if (!isPrintableString(part) || !/^[a-zA-Z0-9_.-]+$/.test(part)) {
+      throw new ValidationAppException([
+        {
+          field: 'fields',
+          code: 'invalid_select_field',
+          message: `Invalid field name "${part}" in fields selection`,
+        },
+      ]);
+    }
+    if (allowedSet && !allowedSet.has(part)) {
+      throw new ValidationAppException([
+        {
+          field: 'fields',
+          code: 'invalid_select_field',
+          message: `Field "${part}" is not selectable. Allowed: ${options?.allowedFields?.join(', ')}`,
+        },
+      ]);
+    }
+    selectedSet.add(part as TField);
+  }
+
+  return [...selectedSet];
+}
+
+/**
+ * Tạo Zod schema phân tích tham số chọn trường (`?fields=id,name` hoặc `?select=id,name`).
+ */
+export function createSelectFieldsQuerySchema<const TField extends string = string>(
+  options?: SelectFieldsOptions<TField>,
+) {
+  return z
+    .object({
+      fields: optionalQueryParam(z.union([z.string(), z.array(z.string())])),
+      select: optionalQueryParam(z.union([z.string(), z.array(z.string())])),
+    })
+    .transform((val): readonly TField[] | undefined => {
+      const raw = val.fields ?? val.select;
+      return parseSelectFields(raw, options);
+    });
+}
+
 export interface CreateListQuerySchemaOptions<
   TSortFields extends readonly [string, ...string[]],
   TFilterSchema extends z.ZodTypeAny = z.ZodObject<Record<string, never>>,
   TFilterField extends string = string,
+  TSelectField extends string = string,
 > {
   readonly allowedSortFields: TSortFields;
   readonly defaultSortBy: TSortFields[number];
@@ -813,19 +977,23 @@ export interface CreateListQuerySchemaOptions<
   readonly defaultCountMode?: CountMode;
   readonly maxSearchLength?: number;
   readonly allowedFilterFields?: AllowedFilterFieldsConfig<TFilterField>;
+  readonly allowedSelectFields?: readonly TSelectField[];
+  readonly alwaysIncludeSelectFields?: readonly TSelectField[];
+  readonly dateRange?: DateRangeSchemaOptions;
   readonly filterSchema?: TFilterSchema;
 }
 
 /**
  * Tạo bộ parser hợp nhất cho mọi API danh sách (Hỗ trợ đồng thời:
  * Offset Pagination, Cursor Pagination, Multi-column Sort có Tie-breaker,
- * Tìm kiếm cơ bản & nâng cao, và Bộ lọc động có Whitelist).
+ * Tìm kiếm cơ bản & nâng cao, Khoảng ngày, Chọn trường trả về và Bộ lọc động có Whitelist).
  */
 export function createListQuerySchema<
   const TSortFields extends readonly [string, ...string[]],
   TFilterSchema extends z.ZodTypeAny = z.ZodObject<Record<string, never>>,
   const TFilterField extends string = string,
->(options: CreateListQuerySchemaOptions<TSortFields, TFilterSchema, TFilterField>) {
+  const TSelectField extends string = string,
+>(options: CreateListQuerySchemaOptions<TSortFields, TFilterSchema, TFilterField, TSelectField>) {
   const paginationSchema = createPaginationQuerySchema({
     ...(options.defaultLimit !== undefined ? { defaultLimit: options.defaultLimit } : {}),
     ...(options.maxLimit !== undefined ? { maxLimit: options.maxLimit } : {}),
@@ -846,7 +1014,16 @@ export function createListQuerySchema<
     ...(options.defaultSortOrder !== undefined
       ? { defaultSortOrder: options.defaultSortOrder }
       : {}),
-    ...(options.maxSortFields !== undefined ? { maxSortFields: options.maxSortFields } : {}),
+    ...(options.maxSortFields !== undefined ? { maxFields: options.maxSortFields } : {}),
+  });
+
+  const selectSchema = createSelectFieldsQuerySchema<TSelectField>({
+    ...(options.allowedSelectFields !== undefined
+      ? { allowedFields: options.allowedSelectFields }
+      : {}),
+    ...(options.alwaysIncludeSelectFields !== undefined
+      ? { alwaysIncludeFields: options.alwaysIncludeSelectFields }
+      : {}),
   });
 
   const maxSearchLen = options.maxSearchLength ?? SEARCH_DEFAULTS.MAX_LENGTH;
@@ -859,12 +1036,20 @@ export function createListQuerySchema<
     ? (Object.keys(options.allowedFilterFields) as TFilterField[])
     : undefined;
 
+  const fromKey = options.dateRange?.fromKey ?? 'from';
+  const toKey = options.dateRange?.toKey ?? 'to';
+
   return z
     .any()
     .transform(
       (
         rawInput: unknown,
-      ): ListQueryResult<TSortFields[number], z.infer<TFilterSchema>, TFilterField> => {
+      ): ListQueryResult<
+        TSortFields[number],
+        z.infer<TFilterSchema>,
+        TFilterField,
+        TSelectField
+      > => {
         const inputObj =
           typeof rawInput === 'object' && rawInput !== null
             ? (rawInput as Record<string, unknown>)
@@ -874,6 +1059,7 @@ export function createListQuerySchema<
         const cursorPagination = parseOrThrow(cursorSchema, inputObj);
         const sort = parseOrThrow(sortSchema, inputObj);
         const searchInput = parseOrThrow(searchRawSchema, inputObj);
+        const fields = parseOrThrow(selectSchema, inputObj);
 
         const rawSearchText = searchInput.search ?? searchInput.q;
         const search = sanitizeSearchText(rawSearchText, maxSearchLen);
@@ -891,6 +1077,20 @@ export function createListQuerySchema<
           ? parseFilterConditions(inputObj, options.allowedFilterFields)
           : [];
 
+        const rawFrom = inputObj[fromKey] as string | Date | number | null | undefined;
+        const rawTo = inputObj[toKey] as string | Date | number | null | undefined;
+        const resolvedRange: ResolvedDateRange = resolveDateRange(rawFrom, rawTo, {
+          fromFieldName: fromKey,
+          toFieldName: toKey,
+          ...(options.dateRange?.maxSpanDays !== undefined
+            ? { maxSpanDays: options.dateRange.maxSpanDays }
+            : {}),
+        });
+        const dateRange =
+          resolvedRange.from !== undefined || resolvedRange.to !== undefined
+            ? resolvedRange
+            : undefined;
+
         const customFilters = (
           options.filterSchema ? parseOrThrow(options.filterSchema, inputObj) : {}
         ) as z.infer<TFilterSchema>;
@@ -899,6 +1099,26 @@ export function createListQuerySchema<
           options.tieBreakerField !== undefined
             ? ensureDeterministicSort(sort.sortCriteria, options.tieBreakerField, sort.sortOrder)
             : sort.sortCriteria;
+
+        assertQueryComplexity(
+          {
+            limit: pagination.limit,
+            offset: pagination.offset,
+            sortCriteriaCount: sort.sortCriteria.length,
+            filterConditions,
+            search,
+            searchTokensCount: advancedSearch?.tokens.length,
+            selectFieldsCount: fields?.length,
+          },
+          {
+            ...(options.maxLimit !== undefined ? { maxLimit: options.maxLimit } : {}),
+            ...(options.maxOffset !== undefined ? { maxOffset: options.maxOffset } : {}),
+            ...(options.maxSortFields !== undefined
+              ? { maxSortFields: options.maxSortFields }
+              : {}),
+            maxSearchLength: maxSearchLen,
+          },
+        );
 
         return {
           page: pagination.page,
@@ -913,6 +1133,8 @@ export function createListQuerySchema<
           search,
           advancedSearch,
           filterConditions,
+          ...(dateRange ? { dateRange } : {}),
+          ...(fields ? { fields } : {}),
           filters: customFilters,
         };
       },

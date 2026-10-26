@@ -936,7 +936,7 @@ export class FilesService implements IFilesPublicService {
     query: ListFilesQuery,
     actor?: UserIdentity,
   ): Promise<PaginatedResult<FileRecordResponse>> {
-    const { page, limit } = resolvePagination(query, {
+    const { page, limit, countMode } = resolvePagination(query, {
       settingPrefix: 'files.pagination',
       defaultLimit: 20,
       maxLimit: 100,
@@ -980,7 +980,13 @@ export class FilesService implements IFilesPublicService {
       ),
     );
 
-    return createPaginatedResult(mapped, total, page, limit);
+    return createPaginatedResult(
+      mapped,
+      countMode === 'none' ? null : total,
+      page,
+      limit,
+      query.fields ? { fields: query.fields } : undefined,
+    );
   }
 
   /** Xem thông tin chi tiết của một file kèm người tải, liên kết sử dụng và phân quyền truy cập */

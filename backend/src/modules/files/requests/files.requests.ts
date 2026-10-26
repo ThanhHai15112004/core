@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import { booleanQueryParam, optionalQueryParam } from '@packages/http/index.js';
+import { booleanQueryParam, optionalQueryParam, parseSelectFields } from '@packages/http/index.js';
+import type { CountMode } from '@packages/kernel/index.js';
 import {
   FILE_STATUS,
   type FileCategoryCode,
@@ -285,10 +286,76 @@ export interface CleanupUnusedFilesRequest {
   readonly organizationUnitId?: number | null | undefined;
 }
 
+export const FILE_SELECTABLE_FIELDS = [
+  'id',
+  'code',
+  'folderId',
+  'folderName',
+  'originalName',
+  'displayName',
+  'storageKey',
+  'thumbnailStorageKey',
+  'mimeType',
+  'extension',
+  'category',
+  'categoryName',
+  'sizeBytes',
+  'sizeFormatted',
+  'checksumSha256',
+  'visibility',
+  'visibilityName',
+  'status',
+  'statusName',
+  'usageCount',
+  'organizationUnitId',
+  'uploadedByUserId',
+  'uploadedByUser',
+  'moduleName',
+  'metadata',
+  'publicUrl',
+  'cdnUrl',
+  'downloadUrl',
+  'streamUrl',
+  'thumbnailUrl',
+  'canDownload',
+  'trashedAt',
+  'purgeAfterAt',
+  'createdAt',
+  'updatedAt',
+] as const;
+
+export const FILE_SORTABLE_FIELDS = [
+  'id',
+  'createdAt',
+  'sizeBytes',
+  'displayName',
+  'usageCount',
+] as const;
+export type FileSortField = (typeof FILE_SORTABLE_FIELDS)[number];
+
 export const listFilesQuerySchema = z.object({
   page: optionalQueryParam(z.coerce.number().int().min(1)),
   limit: optionalQueryParam(z.coerce.number().int().min(1).max(1000)),
+  countMode: optionalQueryParam(z.enum(['exact', 'estimated', 'none'])),
   search: optionalQueryParam(z.string().trim().max(200)),
+  q: optionalQueryParam(z.string().trim().max(200)),
+  sort: optionalQueryParam(z.string().trim().max(200)),
+  sortBy: optionalQueryParam(z.enum(FILE_SORTABLE_FIELDS)),
+  sortOrder: optionalQueryParam(
+    z.preprocess(
+      (v) => (typeof v === 'string' ? v.trim().toUpperCase() : v),
+      z.enum(['ASC', 'DESC']),
+    ),
+  ),
+  fields: optionalQueryParam(
+    z.preprocess(
+      (v) =>
+        parseSelectFields(v as string | readonly string[] | undefined, {
+          allowedFields: FILE_SELECTABLE_FIELDS,
+        }),
+      z.array(z.string()).optional(),
+    ),
+  ),
   folderId: optionalQueryParam(z.coerce.number().int().min(0)),
   category: fileCategorySchema,
   status: fileStatusSchema,
@@ -308,7 +375,13 @@ export const listFilesQuerySchema = z.object({
 export interface ListFilesQuery {
   readonly page?: number | undefined;
   readonly limit?: number | undefined;
+  readonly countMode?: CountMode | undefined;
   readonly search?: string | undefined;
+  readonly q?: string | undefined;
+  readonly sort?: string | undefined;
+  readonly sortBy?: FileSortField | undefined;
+  readonly sortOrder?: 'ASC' | 'DESC' | 'asc' | 'desc' | undefined;
+  readonly fields?: readonly string[] | undefined;
   readonly folderId?: number | undefined;
   readonly category?: FileCategoryCode | undefined;
   readonly status?: FileStatusCode | undefined;

@@ -12,6 +12,8 @@ import type {
 import type { QueryDeepPartialEntity } from 'typeorm/query-builder/QueryPartialEntity.js';
 import {
   ConflictAppException,
+  type DateRangeInput,
+  type FilterCondition,
   HTTP_ERROR_CODE,
   type RawPaginationInput,
   type ResolvePaginationOptions,
@@ -20,10 +22,29 @@ import {
 } from '@packages/kernel/index.js';
 import { TransactionManager } from '../transaction/transaction-manager.service.js';
 import { isUniqueConstraintError } from '../utils/error-classify.js';
+import {
+  type ApplyDataScopeOptions,
+  type DataScopeQueryFilterInput,
+  type DateRangeBuilderOptions,
+  type KeywordSearchBuilderOptions,
+  type QueryCoreExecutionConfig,
+  type QueryCoreExecutionInput,
+  type SortBuilderInput,
+  type SortBuilderOptions,
+  applyDataScopeToQueryBuilder,
+  applyDateRangeToQueryBuilder,
+  applyFilterConditionsToQueryBuilder,
+  applyKeywordSearchToQueryBuilder,
+  applyQueryCoreToBuilder,
+  applySelectFieldsToQueryBuilder,
+  applySortToQueryBuilder,
+} from '../utils/query-builder-core.helper.js';
 
 export interface PaginatedQueryBuilderResult<TEntity> extends ResolvedPaginationParams {
   readonly items: TEntity[];
   readonly total: number;
+  /** Bằng `null` khi `countMode === 'none'` (dùng trực tiếp cho `createPaginatedResult` ở chế độ Lookahead). */
+  readonly nullableTotal: number | null;
 }
 
 /**
@@ -50,6 +71,7 @@ export async function paginateSelectQueryBuilder<TEntity extends ObjectLiteral>(
       ...pagination,
       items,
       total: skip + items.length,
+      nullableTotal: null,
     };
   }
 
@@ -60,6 +82,7 @@ export async function paginateSelectQueryBuilder<TEntity extends ObjectLiteral>(
         ...pagination,
         items: [],
         total,
+        nullableTotal: total,
       };
     }
     const items = await qb.skip(skip).take(limit).getMany();
@@ -67,6 +90,7 @@ export async function paginateSelectQueryBuilder<TEntity extends ObjectLiteral>(
       ...pagination,
       items,
       total,
+      nullableTotal: total,
     };
   }
 
@@ -75,6 +99,7 @@ export async function paginateSelectQueryBuilder<TEntity extends ObjectLiteral>(
     ...pagination,
     items,
     total,
+    nullableTotal: total,
   };
 }
 
@@ -154,6 +179,74 @@ export abstract class BaseTypeOrmRepository<TEntity extends ObjectLiteral> {
     options?: ResolvePaginationOptions,
   ): Promise<PaginatedQueryBuilderResult<TEntity>> {
     return paginateSelectQueryBuilder(qb, input, options);
+  }
+
+  /** Áp dụng toàn diện Query Core (Search + DateRange + Filter + DataScope + Select + Sort) chỉ với 1 dòng */
+  protected applyQueryCore<TSortField extends string = string>(
+    qb: SelectQueryBuilder<TEntity>,
+    input: QueryCoreExecutionInput<TSortField>,
+    config: QueryCoreExecutionConfig<TSortField>,
+  ): SelectQueryBuilder<TEntity> {
+    return applyQueryCoreToBuilder(qb, input, config);
+  }
+
+  /** Áp dụng tìm kiếm từ khóa an toàn (có escape `%`, `_`, `\`) lên danh sách cột cấu hình */
+  protected applyKeywordSearch(
+    qb: SelectQueryBuilder<TEntity>,
+    keyword: string | undefined | null,
+    searchableColumns: readonly string[],
+    options?: KeywordSearchBuilderOptions,
+  ): SelectQueryBuilder<TEntity> {
+    return applyKeywordSearchToQueryBuilder(qb, keyword, searchableColumns, options);
+  }
+
+  /** Áp dụng lọc khoảng ngày (`from <= to`) lên cột thời gian cấu hình */
+  protected applyDateRange(
+    qb: SelectQueryBuilder<TEntity>,
+    column: string,
+    range?: DateRangeInput | null,
+    options?: DateRangeBuilderOptions,
+  ): SelectQueryBuilder<TEntity> {
+    return applyDateRangeToQueryBuilder(qb, column, range, options);
+  }
+
+  /** Áp dụng danh sách điều kiện lọc theo whitelist cột cho phép */
+  protected applyFilterConditions<TField extends string = string>(
+    qb: SelectQueryBuilder<TEntity>,
+    conditions: readonly FilterCondition<TField>[] | undefined | null,
+    allowedColumnMap: Readonly<Record<string, string>>,
+    options?: { paramPrefix?: string; maxConditions?: number; maxInValues?: number },
+  ): SelectQueryBuilder<TEntity> {
+    return applyFilterConditionsToQueryBuilder(qb, conditions, allowedColumnMap, options);
+  }
+
+  /** Áp dụng sắp xếp tăng/giảm có kiểm tra field trước khi query và tự gắn tie-breaker */
+  protected applySort<TSortField extends string = string>(
+    qb: SelectQueryBuilder<TEntity>,
+    input: SortBuilderInput<TSortField> | undefined | null,
+    allowedSortColumnMap: Readonly<Record<TSortField, string>>,
+    options: SortBuilderOptions<TSortField>,
+  ): SelectQueryBuilder<TEntity> {
+    return applySortToQueryBuilder(qb, input, allowedSortColumnMap, options);
+  }
+
+  /** Áp dụng chọn cột SQL trả về theo whitelist */
+  protected applySelectFields(
+    qb: SelectQueryBuilder<TEntity>,
+    fields: readonly string[] | undefined | null,
+    selectableColumnMap: Readonly<Record<string, string>>,
+    alwaysIncludeFields?: readonly string[],
+  ): SelectQueryBuilder<TEntity> {
+    return applySelectFieldsToQueryBuilder(qb, fields, selectableColumnMap, alwaysIncludeFields);
+  }
+
+  /** Áp dụng quyền và Data Scope (`ALL`, `ORG_UNIT`, `SUBORDINATES`, `SELF`) trực tiếp vào query */
+  protected applyDataScope(
+    qb: SelectQueryBuilder<TEntity>,
+    scopeFilter: DataScopeQueryFilterInput | undefined | null,
+    options: ApplyDataScopeOptions,
+  ): SelectQueryBuilder<TEntity> {
+    return applyDataScopeToQueryBuilder(qb, scopeFilter, options);
   }
 
   /**

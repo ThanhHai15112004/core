@@ -11,11 +11,17 @@ import {
   InternalServerAppException,
   NotFoundAppException,
   PAGINATION_DEFAULTS,
+  QUERY_COMPLEXITY_DEFAULTS,
+  SELECT_DEFAULTS,
   ServiceUnavailableAppException,
   TooManyRequestsAppException,
   UnauthorizedAppException,
   UnprocessableEntityAppException,
   ValidationAppException,
+  assertQueryComplexity,
+  pickSelectedFields,
+  resolveDateRange,
+  resolvePagination,
 } from '@packages/kernel/index.js';
 import {
   API_VERSIONS,
@@ -28,9 +34,11 @@ import {
   calculateOffset,
   createCursorPaginatedResult,
   createCursorPaginationQuerySchema,
+  createDateRangeQuerySchema,
   createListQuerySchema,
   createPaginatedResult,
   createPaginationQuerySchema,
+  createSelectFieldsQuerySchema,
   createSortQuerySchema,
   csvQueryParam,
   dateRangeQuerySchema,
@@ -45,6 +53,7 @@ import {
   parseAdvancedSearchQuery,
   parseFilterConditions,
   parseOrThrow,
+  parseSelectFields,
   parseSortExpression,
   sanitizeSearchText,
   toFullTextBooleanQuery,
@@ -542,6 +551,93 @@ describe('Unit: Common API Standards (Task 2.1)', () => {
       expect(result.advancedSearch?.excludedTerms).toEqual(['banned']);
       expect(result.filterConditions).toEqual([{ field: 'age', operator: 'gte', value: '21' }]);
       expect(result.filters).toEqual({ verified: true });
+    });
+
+    it('8.1 Query Core: should validate date ranges, select fields (?fields=...), and query complexity guards', () => {
+      // 1. resolvePagination maxOffset guard
+      expect(() => resolvePagination({ page: 500, limit: 50 }, { maxOffset: 1000 })).toThrow(
+        ValidationAppException,
+      );
+
+      // 2. resolveDateRange & createDateRangeQuerySchema
+      const validRange = resolveDateRange('2026-01-01T00:00:00.000Z', '2026-01-10T00:00:00.000Z', {
+        maxSpanDays: 30,
+      });
+      expect(validRange.fromIso).toBe('2026-01-01T00:00:00.000Z');
+      expect(validRange.toIso).toBe('2026-01-10T00:00:00.000Z');
+
+      expect(() =>
+        resolveDateRange('2026-02-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z'),
+      ).toThrow(ValidationAppException);
+      expect(() =>
+        resolveDateRange('2026-01-01T00:00:00.000Z', '2026-03-01T00:00:00.000Z', {
+          maxSpanDays: 10,
+        }),
+      ).toThrow(ValidationAppException);
+
+      const customDateRangeSchema = createDateRangeQuerySchema({
+        fromKey: 'createdFrom',
+        toKey: 'createdTo',
+      });
+      const parsedDateRange = parseOrThrow(customDateRangeSchema, {
+        createdFrom: '2026-01-01T00:00:00.000Z',
+        createdTo: '2026-01-05T00:00:00.000Z',
+      });
+      expect(parsedDateRange.fromIso).toBe('2026-01-01T00:00:00.000Z');
+
+      // 3. parseSelectFields & pickSelectedFields & createPaginatedResult sparse fieldsets
+      const allowedSelect = ['id', 'email', 'fullName', 'status'] as const;
+      const selected = parseSelectFields('email, fullName', allowedSelect);
+      expect(selected).toEqual(['email', 'fullName']);
+
+      expect(() => parseSelectFields('email,passwordHash', allowedSelect)).toThrow(
+        ValidationAppException,
+      );
+
+      const selectSchema = createSelectFieldsQuerySchema({
+        allowedFields: allowedSelect,
+        maxFields: SELECT_DEFAULTS.MAX_FIELDS,
+      });
+      expect(parseOrThrow(selectSchema, { fields: 'email,status' })).toEqual(['email', 'status']);
+
+      const projectedPaginated = createPaginatedResult(
+        [
+          { id: 1, email: 'a@test.com', fullName: 'User A', status: 1 },
+          { id: 2, email: 'b@test.com', fullName: 'User B', status: 1 },
+        ],
+        2,
+        1,
+        20,
+        { fields: selected },
+      );
+      expect(projectedPaginated.data).toEqual([
+        { id: 1, email: 'a@test.com', fullName: 'User A' },
+        { id: 2, email: 'b@test.com', fullName: 'User B' },
+      ]);
+      expect(
+        pickSelectedFields({ id: 9, email: 'x@test.com', secret: 'hidden' }, ['email']),
+      ).toEqual({ id: 9, email: 'x@test.com' });
+
+      // 4. Query complexity guards (maxInValues, assertQueryComplexity)
+      const tooManyInValues = Array.from(
+        { length: QUERY_COMPLEXITY_DEFAULTS.MAX_IN_VALUES + 1 },
+        (_, i) => `val${i}`,
+      ).join(',');
+      expect(() =>
+        parseFilterConditions({ status__in: tooManyInValues }, { status: ['in'] }),
+      ).toThrow(ValidationAppException);
+
+      expect(() =>
+        assertQueryComplexity(
+          {
+            filterConditions: [
+              { field: 'a', operator: 'eq', value: '1' },
+              { field: 'b', operator: 'eq', value: '2' },
+            ],
+          },
+          { maxFilterConditions: 1 },
+        ),
+      ).toThrow(ValidationAppException);
     });
   });
 });

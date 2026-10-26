@@ -1,13 +1,52 @@
 import { Injectable, Optional } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { BaseTypeOrmRepository, TransactionManager } from '@packages/database/index.js';
-import { defaultSettingRegistry } from '@packages/kernel/index.js';
+import {
+  type CountMode,
+  type FilterCondition,
+  defaultSettingRegistry,
+} from '@packages/kernel/index.js';
 import type { ResolvedDataScopeFilter } from '@packages/security/index.js';
 import type { UserStatusCode } from '../contracts/index.js';
 import { UserEntity } from '../entities/user.entity.js';
 
+export type UserSortField =
+  'id' | 'createdAt' | 'firstName' | 'lastName' | 'fullName' | 'email' | 'username' | 'status';
+
+export const USER_SEARCHABLE_COLUMNS = [
+  'u.username',
+  'u.email',
+  'up.first_name',
+  'up.last_name',
+  'up.full_name',
+  'u.phone',
+] as const;
+
+export const USER_SORT_COLUMN_MAP: Readonly<Record<UserSortField, string>> = {
+  id: 'u.id',
+  createdAt: 'u.createdAt',
+  firstName: 'up.first_name',
+  lastName: 'up.last_name',
+  fullName: 'up.full_name',
+  email: 'u.email',
+  username: 'u.username',
+  status: 'u.status',
+};
+
+export const USER_ALLOWED_FILTER_COLUMN_MAP: Readonly<Record<string, string>> = {
+  id: 'u.id',
+  username: 'u.username',
+  email: 'u.email',
+  status: 'u.status',
+  mfaEnabled: 'u.mfa_enabled',
+  managerId: 'u.manager_id',
+  primaryOrganizationUnitId: 'u.primary_organization_unit_id',
+  createdAt: 'u.createdAt',
+};
+
 export interface SearchUsersFilter {
   readonly q?: string | undefined;
+  readonly search?: string | undefined;
   readonly status?: UserStatusCode | undefined;
   readonly roleId?: number | undefined;
   readonly organizationUnitId?: number | undefined;
@@ -15,19 +54,17 @@ export interface SearchUsersFilter {
   readonly scopeFilter?: ResolvedDataScopeFilter | undefined;
   readonly includeArchived?: boolean | undefined;
   readonly mfaEnabled?: boolean | undefined;
+  readonly createdFrom?: string | undefined;
+  readonly createdTo?: string | undefined;
+  readonly fromDate?: string | undefined;
+  readonly toDate?: string | undefined;
+  readonly filterConditions?: readonly FilterCondition[] | undefined;
   readonly page?: number | undefined;
   readonly limit?: number | undefined;
-  readonly sortBy?:
-    | 'id'
-    | 'createdAt'
-    | 'firstName'
-    | 'lastName'
-    | 'fullName'
-    | 'email'
-    | 'username'
-    | 'status'
-    | undefined;
-  readonly sortOrder?: 'ASC' | 'DESC' | undefined;
+  readonly countMode?: CountMode | undefined;
+  readonly sort?: string | undefined;
+  readonly sortBy?: UserSortField | undefined;
+  readonly sortOrder?: 'ASC' | 'DESC' | 'asc' | 'desc' | undefined;
 }
 
 @Injectable()
@@ -151,13 +188,7 @@ export class UserRepository extends BaseTypeOrmRepository<UserEntity> {
       qb.withDeleted();
     }
 
-    if (filter.q && filter.q.trim().length > 0) {
-      const kw = `%${filter.q.trim().toLowerCase()}%`;
-      qb.andWhere(
-        "(LOWER(u.username) LIKE :kw OR LOWER(COALESCE(u.email, '')) LIKE :kw OR LOWER(COALESCE(up.first_name, '')) LIKE :kw OR LOWER(COALESCE(up.last_name, '')) LIKE :kw OR LOWER(COALESCE(up.full_name, '')) LIKE :kw OR LOWER(COALESCE(u.phone, '')) LIKE :kw)",
-        { kw },
-      );
-    }
+    this.applyKeywordSearch(qb, filter.search ?? filter.q, USER_SEARCHABLE_COLUMNS);
 
     if (filter.status !== undefined) {
       qb.andWhere('u.status = :status', { status: filter.status });
@@ -185,42 +216,42 @@ export class UserRepository extends BaseTypeOrmRepository<UserEntity> {
       );
     }
 
-    // Mục 4.3.5: Áp dụng phạm vi dữ liệu (Data Scope) trực tiếp vào truy vấn danh sách & báo cáo ở Backend
-    if (filter.scopeFilter && !filter.scopeFilter.isUnrestricted) {
-      const scopedUserIds = filter.scopeFilter.allowedUserIds;
-      const scopedOrgIds = filter.scopeFilter.allowedOrganizationUnitIds;
+    this.applyDateRange(
+      qb,
+      'u.createdAt',
+      {
+        from: filter.createdFrom ?? filter.fromDate,
+        to: filter.createdTo ?? filter.toDate,
+      },
+      {
+        fromFieldName: filter.createdFrom !== undefined ? 'createdFrom' : 'fromDate',
+        toFieldName: filter.createdTo !== undefined ? 'createdTo' : 'toDate',
+      },
+    );
 
-      if (scopedUserIds.length > 0 && scopedOrgIds.length > 0) {
-        qb.andWhere(
-          '(u.id IN (:...scopedUserIds) OR u.primary_organization_unit_id IN (:...scopedOrgIds) OR EXISTS (SELECT 1 FROM user_organization_units uou_s WHERE uou_s.user_id = u.id AND uou_s.organization_unit_id IN (:...scopedOrgIds) AND uou_s.deleted_at IS NULL))',
-          { scopedUserIds, scopedOrgIds },
-        );
-      } else if (scopedUserIds.length > 0) {
-        qb.andWhere('u.id IN (:...scopedUserIds)', { scopedUserIds });
-      } else if (scopedOrgIds.length > 0) {
-        qb.andWhere(
-          '(u.primary_organization_unit_id IN (:...scopedOrgIds) OR EXISTS (SELECT 1 FROM user_organization_units uou_s WHERE uou_s.user_id = u.id AND uou_s.organization_unit_id IN (:...scopedOrgIds) AND uou_s.deleted_at IS NULL))',
-          { scopedOrgIds },
-        );
-      } else {
-        qb.andWhere('1 = 0');
-      }
+    if (filter.filterConditions && filter.filterConditions.length > 0) {
+      this.applyFilterConditions(qb, filter.filterConditions, USER_ALLOWED_FILTER_COLUMN_MAP);
     }
 
-    const sortColumnMap: Record<NonNullable<SearchUsersFilter['sortBy']>, string> = {
-      id: 'u.id',
-      createdAt: 'u.createdAt',
-      firstName: 'up.first_name',
-      lastName: 'up.last_name',
-      fullName: 'up.full_name',
-      email: 'u.email',
-      username: 'u.username',
-      status: 'u.status',
-    };
-    const sortCol = sortColumnMap[filter.sortBy ?? 'id'] ?? 'u.id';
-    const sortDir = filter.sortOrder === 'DESC' ? 'DESC' : 'ASC';
+    // Mục 4.3.5 & 8.1: Áp dụng phạm vi dữ liệu (Data Scope) qua Query Core dùng chung ở Backend
+    this.applyDataScope(qb, filter.scopeFilter, {
+      userColumn: 'u.id',
+      orgUnitColumn: 'u.primary_organization_unit_id',
+      orgMembershipSubquery: {
+        table: 'user_organization_units',
+        alias: 'uou_s',
+        foreignKeyColumn: 'user_id',
+        entityPrimaryColumn: 'u.id',
+        orgUnitColumn: 'organization_unit_id',
+        softDeleteColumn: 'deleted_at',
+      },
+    });
 
-    qb.orderBy(sortCol, sortDir);
+    this.applySort(qb, filter, USER_SORT_COLUMN_MAP, {
+      defaultSortBy: 'id',
+      defaultSortOrder: 'ASC',
+      tieBreakerField: 'id',
+    });
 
     const { items, total } = await this.paginateQueryBuilder(qb, filter, {
       defaultLimitKey: 'users.pagination.default_page_size',

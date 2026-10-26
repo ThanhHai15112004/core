@@ -9,6 +9,7 @@ import {
   SORT_ORDERS,
   type SortOrder,
   ValidationAppException,
+  pickSelectedFields,
 } from '@packages/kernel/index.js';
 
 const CURSOR_ENCODING = 'base64url';
@@ -83,19 +84,32 @@ export function buildPaginationMeta(
   };
 }
 
+export interface CreatePaginatedResultOptions {
+  /** Danh sách các trường cần trả về (Sparse Fieldsets). Tự động giữ lại khóa chính `id`. */
+  readonly fields?: readonly string[] | null | undefined;
+  /** Các trường bắt buộc luôn giữ lại khi lọc trường (mặc định `['id']`). */
+  readonly alwaysIncludeFields?: readonly string[] | undefined;
+}
+
 /**
  * Tạo kết quả phân trang chuẩn từ mảng dữ liệu và tổng số bản ghi (`PaginatedResult<T>`).
- * Tự động cắt bớt phần tử thứ `limit + 1` nếu truy vấn sử dụng kỹ thuật lookahead `limit + 1`.
+ * Tự động cắt bớt phần tử thứ `limit + 1` nếu truy vấn sử dụng kỹ thuật lookahead `limit + 1`,
+ * và tự động lọc bớt các trường không cần thiết nếu có truyền `options.fields`.
  */
 export function createPaginatedResult<T>(
   items: readonly T[],
   total: number | null,
   page: number = PAGINATION_DEFAULTS.PAGE,
   limit: number = PAGINATION_DEFAULTS.LIMIT,
+  options?: CreatePaginatedResultOptions,
 ): PaginatedResult<T> {
   const safeLimit = Math.max(PAGINATION_DEFAULTS.MIN_LIMIT, Math.trunc(limit));
   const hasLookaheadExtra = items.length > safeLimit;
-  const data = hasLookaheadExtra ? items.slice(0, safeLimit) : items;
+  const sliced = hasLookaheadExtra ? items.slice(0, safeLimit) : items;
+  const data =
+    options?.fields && options.fields.length > 0
+      ? pickSelectedFields(sliced, options.fields, options.alwaysIncludeFields)
+      : sliced;
   const hasNextOverride = total === null ? hasLookaheadExtra : undefined;
 
   return {

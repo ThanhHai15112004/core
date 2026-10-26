@@ -260,7 +260,7 @@ export class UsersService implements IUsersPublicService {
     actor?: UserIdentity,
   ): Promise<PaginatedResult<UserResponse>> {
     const actorOrgUnitId = query.organizationUnitId ?? actor?.organizationUnitIds?.[0];
-    const { page, limit } = resolvePagination(query, {
+    const { page, limit, countMode } = resolvePagination(query, {
       settingPrefix: USERS_SETTING_KEYS.PAGINATION_PREFIX,
       defaultLimit: 20,
       maxLimit: 500,
@@ -271,10 +271,17 @@ export class UsersService implements IUsersPublicService {
       ...query,
       page,
       limit,
+      countMode,
       ...(scopeFilter ? { scopeFilter } : {}),
     });
     const enriched = await this.hydrateUsersList(items);
-    return createPaginatedResult(enriched, total, page, limit);
+    return createPaginatedResult(
+      enriched,
+      countMode === 'none' ? null : total,
+      page,
+      limit,
+      query.fields ? { fields: query.fields } : undefined,
+    );
   }
 
   public async getById(

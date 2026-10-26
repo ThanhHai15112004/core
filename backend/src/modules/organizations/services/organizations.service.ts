@@ -7,6 +7,7 @@ import {
   SettingRegistryService,
   defaultCodeRegistry,
   defaultSettingRegistry,
+  pickSelectedFields,
 } from '@packages/kernel/index.js';
 import { AuditLogService, DataScopeService } from '@packages/security/index.js';
 import {
@@ -101,7 +102,11 @@ export class OrganizationsService implements IOrganizationsPublicService {
   /** Lấy danh sách đơn vị/chi nhánh có lọc */
   public async list(query: ListOrganizationUnitsQuery = {}): Promise<OrganizationUnitResponse[]> {
     const units = await this.repository.findFiltered(query);
-    return this.mapper.toResponseList(units);
+    const items = this.mapper.toResponseList(units);
+    if (query.fields && query.fields.length > 0) {
+      return pickSelectedFields(items, query.fields) as unknown as OrganizationUnitResponse[];
+    }
+    return items;
   }
 
   /** Lấy sơ đồ cây đơn vị phân cấp kèm depth, path và số lượng đơn vị con */

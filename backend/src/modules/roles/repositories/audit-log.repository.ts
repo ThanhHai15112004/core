@@ -1,7 +1,13 @@
 import { Injectable, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { paginateSelectQueryBuilder } from '@packages/database/index.js';
+import {
+  applyDateRangeToQueryBuilder,
+  applyKeywordSearchToQueryBuilder,
+  applySortToQueryBuilder,
+  buildSafeLikePattern,
+  paginateSelectQueryBuilder,
+} from '@packages/database/index.js';
 import {
   ForbiddenAppException,
   SettingRegistryService,
@@ -17,6 +23,13 @@ import {
   parseAuditActorType,
 } from '@packages/security/index.js';
 import { AuditLogEntity } from '../entities/audit-log.entity.js';
+
+const AUDIT_LOG_SORT_COLUMN_MAP: Readonly<Record<string, string>> = {
+  id: 'al.id',
+  createdAt: 'al.created_at',
+  module: 'al.module',
+  action: 'al.action',
+};
 
 @Injectable()
 export class AuditLogRepository implements IAuditLogPersistencePort {
@@ -136,8 +149,8 @@ export class AuditLogRepository implements IAuditLogPersistencePort {
       });
     }
     if (filter.action?.trim()) {
-      qb.andWhere('UPPER(al.action) LIKE :action', {
-        action: `%${filter.action.trim().toUpperCase()}%`,
+      qb.andWhere("UPPER(al.action) LIKE :action ESCAPE '\\\\'", {
+        action: buildSafeLikePattern(filter.action.trim(), 'contains', 'upper'),
       });
     }
     if (filter.resourceType?.trim()) {
@@ -151,42 +164,59 @@ export class AuditLogRepository implements IAuditLogPersistencePort {
       });
     }
     if (filter.requestId?.trim()) {
-      qb.andWhere('LOWER(al.request_id) LIKE :requestId', {
-        requestId: `%${filter.requestId.trim().toLowerCase()}%`,
+      qb.andWhere("LOWER(al.request_id) LIKE :requestId ESCAPE '\\\\'", {
+        requestId: buildSafeLikePattern(filter.requestId.trim(), 'contains', 'lower'),
       });
     }
     if (filter.correlationId?.trim()) {
-      qb.andWhere('LOWER(al.correlation_id) LIKE :correlationId', {
-        correlationId: `%${filter.correlationId.trim().toLowerCase()}%`,
+      qb.andWhere("LOWER(al.correlation_id) LIKE :correlationId ESCAPE '\\\\'", {
+        correlationId: buildSafeLikePattern(filter.correlationId.trim(), 'contains', 'lower'),
       });
     }
     if (filter.ipAddress?.trim()) {
-      qb.andWhere('LOWER(al.ip_address) LIKE :ipAddress', {
-        ipAddress: `%${filter.ipAddress.trim().toLowerCase()}%`,
+      qb.andWhere("LOWER(al.ip_address) LIKE :ipAddress ESCAPE '\\\\'", {
+        ipAddress: buildSafeLikePattern(filter.ipAddress.trim(), 'contains', 'lower'),
       });
     }
-    if (filter.fromDate) {
-      const fromDate = new Date(filter.fromDate);
-      if (!Number.isNaN(fromDate.getTime())) {
-        qb.andWhere('al.created_at >= :fromDate', { fromDate });
-      }
-    }
-    if (filter.toDate) {
-      const toDate = new Date(filter.toDate);
-      if (!Number.isNaN(toDate.getTime())) {
-        qb.andWhere('al.created_at <= :toDate', { toDate });
-      }
-    }
-    if (filter.q?.trim()) {
-      const kw = `%${filter.q.trim().toLowerCase()}%`;
-      qb.andWhere(
-        "(LOWER(al.module) LIKE :kw OR LOWER(al.feature) LIKE :kw OR LOWER(al.action) LIKE :kw OR LOWER(COALESCE(al.actor_identifier, '')) LIKE :kw OR LOWER(COALESCE(al.reason, '')) LIKE :kw OR LOWER(COALESCE(al.resource_id, '')) LIKE :kw OR LOWER(COALESCE(al.request_id, '')) LIKE :kw OR LOWER(COALESCE(al.correlation_id, '')) LIKE :kw)",
-        { kw },
-      );
-    }
 
-    const sortOrder = filter.sortOrder === 'ASC' ? 'ASC' : 'DESC';
-    qb.orderBy('al.id', sortOrder);
+    applyDateRangeToQueryBuilder(qb, 'al.created_at', {
+      from: filter.fromDate,
+      to: filter.toDate,
+      paramPrefix: 'auditDate',
+      fromFieldName: 'fromDate',
+      toFieldName: 'toDate',
+    });
+
+    applyKeywordSearchToQueryBuilder(
+      qb,
+      filter.q ?? filter.search,
+      [
+        'al.module',
+        'al.feature',
+        'al.action',
+        "COALESCE(al.actor_identifier, '')",
+        "COALESCE(al.reason, '')",
+        "COALESCE(al.resource_id, '')",
+        "COALESCE(al.request_id, '')",
+        "COALESCE(al.correlation_id, '')",
+      ],
+      { paramPrefix: 'auditKw' },
+    );
+
+    applySortToQueryBuilder(
+      qb,
+      {
+        sortBy: filter.sortBy,
+        sortOrder: filter.sortOrder,
+        sort: filter.sort,
+      },
+      AUDIT_LOG_SORT_COLUMN_MAP,
+      {
+        defaultSortBy: 'id',
+        defaultSortOrder: 'DESC',
+        tieBreakerField: 'id',
+      },
+    );
 
     const { items: entities, total } = await paginateSelectQueryBuilder(qb, filter, {
       settingPrefix: 'roles.audit_log',

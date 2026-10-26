@@ -1,4 +1,5 @@
 import type { SettingResolveContext } from '../contracts/setting-lookup.contract.js';
+import { ValidationAppException } from '../errors/http-exceptions.js';
 import {
   SettingRegistryService,
   defaultSettingRegistry,
@@ -14,6 +15,25 @@ export const PAGINATION_DEFAULTS = {
   MAX_LIMIT: 100,
   /** Ngưỡng offset tối đa cho phép nhằm tránh truy vấn quét sâu (Deep Offset Scan) trên bảng lớn. */
   MAX_OFFSET: 10_000,
+} as const;
+
+export const SELECT_DEFAULTS = {
+  MAX_FIELDS: 30,
+  PRIMARY_KEY: 'id',
+} as const;
+
+/**
+ * Ngưỡng bảo vệ độ phức tạp của truy vấn danh sách (Mục 8.1 — Tránh query quá nặng).
+ */
+export const QUERY_COMPLEXITY_DEFAULTS = {
+  MAX_LIMIT: 100,
+  MAX_OFFSET: 10_000,
+  MAX_SORT_FIELDS: 3,
+  MAX_FILTER_CONDITIONS: 10,
+  MAX_IN_VALUES: 50,
+  MAX_SEARCH_LENGTH: 200,
+  MAX_SEARCH_TOKENS: 10,
+  MAX_SELECT_FIELDS: 30,
 } as const;
 
 /** Tham số đầu vào thô của phân trang (từ Query DTO hoặc Filter). */
@@ -34,12 +54,18 @@ export interface ResolvePaginationOptions {
   readonly defaultLimitKey?: string | undefined;
   /** Khóa cấu hình động cho `limit` tối đa (ghi đè `settingPrefix`). */
   readonly maxLimitKey?: string | undefined;
+  /** Khóa cấu hình động cho `maxOffset` tối đa. */
+  readonly maxOffsetKey?: string | undefined;
   /** Giá trị `limit` mặc định fallback khi chưa cấu hình (mặc định `PAGINATION_DEFAULTS.LIMIT = 20`). */
   readonly defaultLimit?: number | undefined;
   /** Giá trị `limit` tối đa fallback khi chưa cấu hình (mặc định `PAGINATION_DEFAULTS.MAX_LIMIT = 100`). */
   readonly maxLimit?: number | undefined;
   /** Giá trị `limit` tối thiểu (mặc định `PAGINATION_DEFAULTS.MIN_LIMIT = 1`). */
   readonly minLimit?: number | undefined;
+  /** Ngưỡng `offset` tối đa nhằm chặn Deep Offset Scan (mặc định `PAGINATION_DEFAULTS.MAX_OFFSET = 10_000`). */
+  readonly maxOffset?: number | undefined;
+  /** Bật/tắt chặn lỗi khi `offset > maxOffset` (mặc định `true`). */
+  readonly enforceMaxOffset?: boolean | undefined;
   /** Chế độ đếm tổng bản ghi mặc định (`'exact'`, `'estimated'`, `'none'`). */
   readonly defaultCountMode?: CountMode | undefined;
   /** Ngữ cảnh đơn vị / môi trường khi phân giải cấu hình động. */
@@ -79,6 +105,11 @@ export function resolvePagination(
     ctx,
     options?.maxLimit ?? PAGINATION_DEFAULTS.MAX_LIMIT,
   );
+  const globalMaxOffset = registry.getNumber(
+    'system.pagination.max_offset',
+    ctx,
+    options?.maxOffset ?? PAGINATION_DEFAULTS.MAX_OFFSET,
+  );
 
   const defaultLimitKey =
     options?.defaultLimitKey ??
@@ -86,18 +117,26 @@ export function resolvePagination(
   const maxLimitKey =
     options?.maxLimitKey ??
     (options?.settingPrefix ? `${options.settingPrefix}.max_page_size` : undefined);
+  const maxOffsetKey =
+    options?.maxOffsetKey ??
+    (options?.settingPrefix ? `${options.settingPrefix}.max_offset` : undefined);
 
   const fallbackDefault = options?.defaultLimit ?? globalDefaultLimit;
   const fallbackMax = options?.maxLimit ?? globalMaxLimit;
+  const fallbackMaxOffset = options?.maxOffset ?? globalMaxOffset;
 
   const rawDefaultLimit = defaultLimitKey
     ? registry.getNumber(defaultLimitKey, ctx, fallbackDefault)
     : fallbackDefault;
   const rawMaxLimit = maxLimitKey ? registry.getNumber(maxLimitKey, ctx, fallbackMax) : fallbackMax;
+  const rawMaxOffset = maxOffsetKey
+    ? registry.getNumber(maxOffsetKey, ctx, fallbackMaxOffset)
+    : fallbackMaxOffset;
 
   const minLimit = Math.max(1, Math.trunc(options?.minLimit ?? PAGINATION_DEFAULTS.MIN_LIMIT));
   const safeMaxLimit = Math.max(minLimit, Math.trunc(rawMaxLimit));
   const safeDefaultLimit = Math.min(safeMaxLimit, Math.max(minLimit, Math.trunc(rawDefaultLimit)));
+  const safeMaxOffset = Math.max(safeMaxLimit, Math.trunc(rawMaxOffset));
 
   const parsedPage = Number(input?.page);
   const page =
@@ -116,6 +155,16 @@ export function resolvePagination(
         : safeDefaultLimit;
 
   const offset = (page - 1) * limit;
+  if ((options?.enforceMaxOffset ?? true) && offset > safeMaxOffset) {
+    throw new ValidationAppException([
+      {
+        field: 'page',
+        code: 'offset_exceeded',
+        message: `Offset (${offset}) exceeds maximum allowed offset (${safeMaxOffset}). Use cursor pagination for deep datasets.`,
+      },
+    ]);
+  }
+
   const countMode: CountMode =
     input?.countMode && COUNT_MODES.includes(input.countMode)
       ? input.countMode
@@ -267,11 +316,282 @@ export interface AdvancedSearchParsed<TField extends string = string> {
   readonly fieldConditions: readonly FilterCondition<TField, string | readonly string[]>[];
 }
 
+/** Đầu vào khoảng thời gian thô (hỗ trợ chuỗi ISO, Date hoặc timestamp). */
+export interface DateRangeInput {
+  readonly from?: string | Date | number | null | undefined;
+  readonly to?: string | Date | number | null | undefined;
+  readonly paramPrefix?: string | undefined;
+  readonly fromFieldName?: string | undefined;
+  readonly toFieldName?: string | undefined;
+  readonly maxSpanDays?: number | undefined;
+}
+
+/** Kết quả chuẩn hóa khoảng thời gian đã qua kiểm tra hợp lệ (`from <= to`). */
+export interface ResolvedDateRange {
+  readonly from?: Date | undefined;
+  readonly to?: Date | undefined;
+  readonly fromDate?: Date | undefined;
+  readonly toDate?: Date | undefined;
+  readonly fromIso?: string | undefined;
+  readonly toIso?: string | undefined;
+}
+
+export interface ResolveDateRangeOptions {
+  readonly fromFieldName?: string | undefined;
+  readonly toFieldName?: string | undefined;
+  /** Giới hạn số ngày tối đa giữa `from` và `to` nhằm tránh quét dữ liệu lịch sử quá lớn. */
+  readonly maxSpanDays?: number | undefined;
+}
+
+/**
+ * Chuẩn hóa và kiểm tra hợp lệ khoảng thời gian (`from`, `to`):
+ * - Nếu chuỗi ngày sai định dạng ISO -> ném `ValidationAppException` (400).
+ * - Nếu `from > to` -> ném `ValidationAppException` (400).
+ * - Nếu khoảng cách vượt quá `maxSpanDays` -> ném `ValidationAppException` (400).
+ */
+export function resolveDateRange(
+  fromRaw?: string | Date | number | null,
+  toRaw?: string | Date | number | null,
+  options?: ResolveDateRangeOptions,
+): ResolvedDateRange {
+  const fromField = options?.fromFieldName ?? 'from';
+  const toField = options?.toFieldName ?? 'to';
+
+  const parseSingleDate = (
+    raw: string | Date | number | null | undefined,
+    fieldName: string,
+  ): Date | undefined => {
+    if (raw === undefined || raw === null || raw === '') {
+      return undefined;
+    }
+    if (raw instanceof Date) {
+      if (Number.isNaN(raw.getTime())) {
+        throw new ValidationAppException([
+          {
+            field: fieldName,
+            code: 'invalid_date',
+            message: `Invalid date value for "${fieldName}"`,
+          },
+        ]);
+      }
+      return raw;
+    }
+    const strVal = typeof raw === 'string' ? raw.trim() : String(raw);
+    if (strVal.length === 0) {
+      return undefined;
+    }
+    const ts = Date.parse(strVal);
+    if (Number.isNaN(ts)) {
+      throw new ValidationAppException([
+        {
+          field: fieldName,
+          code: 'invalid_date',
+          message: `Invalid ISO date string for "${fieldName}"`,
+        },
+      ]);
+    }
+    return new Date(ts);
+  };
+
+  const from = parseSingleDate(fromRaw, fromField);
+  const to = parseSingleDate(toRaw, toField);
+
+  if (from && to && from.getTime() > to.getTime()) {
+    throw new ValidationAppException([
+      {
+        field: fromField,
+        code: 'invalid_date_range',
+        message: `"${fromField}" date must be earlier than or equal to "${toField}" date`,
+      },
+    ]);
+  }
+
+  if (from && to && options?.maxSpanDays !== undefined && options.maxSpanDays > 0) {
+    const maxSpanMs = options.maxSpanDays * 86_400_000;
+    if (to.getTime() - from.getTime() > maxSpanMs) {
+      throw new ValidationAppException([
+        {
+          field: toField,
+          code: 'date_range_too_wide',
+          message: `Date range between "${fromField}" and "${toField}" cannot exceed ${options.maxSpanDays} days`,
+        },
+      ]);
+    }
+  }
+
+  return {
+    ...(from ? { from, fromDate: from, fromIso: from.toISOString() } : {}),
+    ...(to ? { to, toDate: to, toIso: to.toISOString() } : {}),
+  };
+}
+
+/**
+ * Lọc bớt các trường không cần thiết trên một bản ghi hoặc danh sách bản ghi theo danh sách `fields` được chọn.
+ * Luôn giữ lại các trường định danh bắt buộc trong `alwaysIncludeFields` (mặc định `['id']`).
+ */
+export function pickSelectedFields<T>(
+  data: T,
+  fields?: readonly string[] | null,
+  alwaysIncludeFields: readonly string[] = [SELECT_DEFAULTS.PRIMARY_KEY],
+): T {
+  if (!fields || fields.length === 0 || data === null || data === undefined) {
+    return data;
+  }
+
+  const allowedKeys = new Set<string>([...alwaysIncludeFields, ...fields]);
+  const pickOne = (item: unknown): unknown => {
+    if (typeof item !== 'object' || item === null || Array.isArray(item) || item instanceof Date) {
+      return item;
+    }
+    const record = item as Record<string, unknown>;
+    const picked: Record<string, unknown> = {};
+    for (const key of Object.keys(record)) {
+      if (allowedKeys.has(key)) {
+        picked[key] = record[key];
+      }
+    }
+    return picked;
+  };
+
+  if (Array.isArray(data)) {
+    return data.map((item) => pickOne(item)) as unknown as T;
+  }
+  return pickOne(data) as T;
+}
+
+export interface QueryComplexityCheckInput {
+  readonly limit?: number | undefined;
+  readonly offset?: number | undefined;
+  readonly sortCriteriaCount?: number | undefined;
+  readonly filterConditions?: readonly FilterCondition[] | undefined;
+  readonly search?: string | undefined;
+  readonly searchTokensCount?: number | undefined;
+  readonly selectFieldsCount?: number | undefined;
+}
+
+export interface QueryComplexityLimits {
+  readonly maxLimit?: number | undefined;
+  readonly maxOffset?: number | undefined;
+  readonly maxSortFields?: number | undefined;
+  readonly maxFilterConditions?: number | undefined;
+  readonly maxInValues?: number | undefined;
+  readonly maxSearchLength?: number | undefined;
+  readonly maxSearchTokens?: number | undefined;
+  readonly maxSelectFields?: number | undefined;
+}
+
+/**
+ * Kiểm tra tập trung độ phức tạp của một truy vấn danh sách (Mục 8.1 — Giới hạn độ phức tạp của query, tránh query quá nặng).
+ * Ném `ValidationAppException` (400) nếu bất kỳ thông số nào vượt ngưỡng an toàn.
+ */
+export function assertQueryComplexity(
+  input: QueryComplexityCheckInput,
+  limits?: QueryComplexityLimits,
+): void {
+  const maxLimit = limits?.maxLimit ?? QUERY_COMPLEXITY_DEFAULTS.MAX_LIMIT;
+  const maxOffset = limits?.maxOffset ?? QUERY_COMPLEXITY_DEFAULTS.MAX_OFFSET;
+  const maxSortFields = limits?.maxSortFields ?? QUERY_COMPLEXITY_DEFAULTS.MAX_SORT_FIELDS;
+  const maxFilterConditions =
+    limits?.maxFilterConditions ?? QUERY_COMPLEXITY_DEFAULTS.MAX_FILTER_CONDITIONS;
+  const maxInValues = limits?.maxInValues ?? QUERY_COMPLEXITY_DEFAULTS.MAX_IN_VALUES;
+  const maxSearchLength = limits?.maxSearchLength ?? QUERY_COMPLEXITY_DEFAULTS.MAX_SEARCH_LENGTH;
+  const maxSearchTokens = limits?.maxSearchTokens ?? QUERY_COMPLEXITY_DEFAULTS.MAX_SEARCH_TOKENS;
+  const maxSelectFields = limits?.maxSelectFields ?? QUERY_COMPLEXITY_DEFAULTS.MAX_SELECT_FIELDS;
+
+  if (input.limit !== undefined && input.limit > maxLimit) {
+    throw new ValidationAppException([
+      {
+        field: 'limit',
+        code: 'limit_exceeded',
+        message: `Page size (${input.limit}) exceeds maximum allowed limit (${maxLimit})`,
+      },
+    ]);
+  }
+
+  if (input.offset !== undefined && input.offset > maxOffset) {
+    throw new ValidationAppException([
+      {
+        field: 'page',
+        code: 'offset_exceeded',
+        message: `Offset (${input.offset}) exceeds maximum allowed offset (${maxOffset}). Use cursor pagination for deep datasets.`,
+      },
+    ]);
+  }
+
+  if (input.sortCriteriaCount !== undefined && input.sortCriteriaCount > maxSortFields) {
+    throw new ValidationAppException([
+      {
+        field: 'sort',
+        code: 'too_many_sort_fields',
+        message: `Cannot sort by more than ${maxSortFields} fields`,
+      },
+    ]);
+  }
+
+  if (input.filterConditions !== undefined) {
+    if (input.filterConditions.length > maxFilterConditions) {
+      throw new ValidationAppException([
+        {
+          field: 'filter',
+          code: 'too_many_filters',
+          message: `Cannot apply more than ${maxFilterConditions} filter conditions`,
+        },
+      ]);
+    }
+    for (const cond of input.filterConditions) {
+      if (
+        (cond.operator === 'in' || cond.operator === 'nin') &&
+        Array.isArray(cond.value) &&
+        cond.value.length > maxInValues
+      ) {
+        throw new ValidationAppException([
+          {
+            field: cond.field,
+            code: 'too_many_in_values',
+            message: `Filter operator "${cond.operator}" on field "${cond.field}" cannot exceed ${maxInValues} values`,
+          },
+        ]);
+      }
+    }
+  }
+
+  if (input.search !== undefined && input.search.length > maxSearchLength) {
+    throw new ValidationAppException([
+      {
+        field: 'search',
+        code: 'search_too_long',
+        message: `Search query must not exceed ${maxSearchLength} characters`,
+      },
+    ]);
+  }
+
+  if (input.searchTokensCount !== undefined && input.searchTokensCount > maxSearchTokens) {
+    throw new ValidationAppException([
+      {
+        field: 'search',
+        code: 'too_many_search_tokens',
+        message: `Search query cannot exceed ${maxSearchTokens} tokens`,
+      },
+    ]);
+  }
+
+  if (input.selectFieldsCount !== undefined && input.selectFieldsCount > maxSelectFields) {
+    throw new ValidationAppException([
+      {
+        field: 'fields',
+        code: 'too_many_select_fields',
+        message: `Cannot select more than ${maxSelectFields} fields`,
+      },
+    ]);
+  }
+}
+
 /** Kết quả tổng hợp toàn diện của một truy vấn danh sách chuẩn. */
 export interface ListQueryResult<
   TSortField extends string = string,
   TFilters = Record<string, unknown>,
   TFilterField extends string = string,
+  TSelectField extends string = string,
 > {
   readonly page: number;
   readonly limit: number;
@@ -285,5 +605,7 @@ export interface ListQueryResult<
   readonly search: string | undefined;
   readonly advancedSearch: AdvancedSearchParsed<TFilterField> | undefined;
   readonly filterConditions: readonly FilterCondition<TFilterField>[];
+  readonly dateRange?: ResolvedDateRange | undefined;
+  readonly fields?: readonly TSelectField[] | undefined;
   readonly filters: TFilters;
 }
