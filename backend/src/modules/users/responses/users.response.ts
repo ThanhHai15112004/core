@@ -52,17 +52,33 @@ export interface UserStatusHistoryItemResponse {
   readonly createdAt: string;
 }
 
+export interface BulkImportUsersErrorItem {
+  readonly row: number;
+  readonly sheetRowNumber?: number;
+  readonly identifier: string;
+  readonly field?: string | null;
+  readonly column?: string | null;
+  readonly columnLetter?: string | null;
+  readonly code?: string;
+  readonly value?: unknown;
+  readonly message: string;
+}
+
 export interface BulkImportUsersResultResponse {
   readonly totalRows: number;
   readonly importedCount: number;
+  readonly updatedCount?: number;
+  readonly successCount?: number;
   readonly skippedCount: number;
   readonly failedCount: number;
+  readonly remainingCount?: number;
+  readonly duplicateStrategy?: 'SKIP' | 'UPDATE' | 'REJECT';
+  readonly historyId?: number;
+  readonly jobId?: string | null;
+  readonly status?: 'QUEUED' | 'PROCESSING' | 'COMPLETED' | 'PARTIAL' | 'FAILED' | 'CANCELLED';
   readonly importedUserIds: readonly number[];
-  readonly errors: ReadonlyArray<{
-    readonly row: number;
-    readonly identifier: string;
-    readonly message: string;
-  }>;
+  readonly updatedUserIds?: readonly number[];
+  readonly errors: ReadonlyArray<BulkImportUsersErrorItem>;
 }
 
 export interface ExportUsersCsvResponse {
@@ -153,19 +169,132 @@ export const userStatusHistoryItemSchema = z.object({
   createdAt: z.string(),
 });
 
+export const bulkImportErrorItemSchema = z.object({
+  row: z.number(),
+  sheetRowNumber: z.number().optional(),
+  identifier: z.string(),
+  field: z.string().nullable().optional(),
+  column: z.string().nullable().optional(),
+  columnLetter: z.string().nullable().optional(),
+  code: z.string().optional(),
+  value: z.unknown().optional(),
+  message: z.string(),
+});
+
 export const bulkImportUsersResultSchema = z.object({
   totalRows: z.number(),
   importedCount: z.number(),
+  updatedCount: z.number().optional(),
+  successCount: z.number().optional(),
   skippedCount: z.number(),
   failedCount: z.number(),
+  remainingCount: z.number().optional(),
+  duplicateStrategy: z.enum(['SKIP', 'UPDATE', 'REJECT']).optional(),
+  historyId: z.number().optional(),
+  jobId: z.string().nullable().optional(),
+  status: z
+    .enum(['QUEUED', 'PROCESSING', 'COMPLETED', 'PARTIAL', 'FAILED', 'CANCELLED'])
+    .optional(),
   importedUserIds: z.array(z.number().int().min(1)),
-  errors: z.array(
+  updatedUserIds: z.array(z.number().int().min(1)).optional(),
+  errors: z.array(bulkImportErrorItemSchema),
+});
+
+export const importCellIssueSchema = z.object({
+  row: z.number(),
+  sheetRowNumber: z.number(),
+  column: z.string().nullable(),
+  columnLetter: z.string().nullable(),
+  field: z.string().nullable(),
+  code: z.string(),
+  value: z.unknown().optional(),
+  message: z.string(),
+});
+
+export const importUsersPreviewResponseSchema = z.object({
+  profileCode: z.string(),
+  detectedHeaders: z.array(z.string()),
+  headerRowIndex: z.number(),
+  columnMatches: z.array(
     z.object({
-      row: z.number(),
-      identifier: z.string(),
-      message: z.string(),
+      field: z.string(),
+      header: z.string(),
+      required: z.boolean(),
+      matchedIndex: z.number(),
+      matchedHeader: z.string().nullable(),
+      matchedColumnLetter: z.string().nullable(),
+      mappedBy: z.enum(['custom', 'alias', 'unmapped']),
     }),
   ),
+  unmappedRequiredFields: z.array(z.string()),
+  totalRows: z.number(),
+  validRowsCount: z.number(),
+  invalidRowsCount: z.number(),
+  duplicateRowsCount: z.number(),
+  willCreateCount: z.number(),
+  willUpdateCount: z.number(),
+  willSkipCount: z.number(),
+  willRejectCount: z.number(),
+  duplicateStrategy: z.enum(['SKIP', 'UPDATE', 'REJECT']),
+  sampleRows: z.array(
+    z.object({
+      row: z.number(),
+      sheetRowNumber: z.number(),
+      rawValues: z.record(z.string(), z.string()),
+      parsedRow: z.record(z.string(), z.unknown()).nullable(),
+      status: z.enum([
+        'VALID',
+        'DUPLICATE_SKIP',
+        'DUPLICATE_UPDATE',
+        'DUPLICATE_REJECT',
+        'INVALID',
+      ]),
+      existingRecordId: z.union([z.number(), z.string()]).nullable(),
+      issues: z.array(importCellIssueSchema),
+    }),
+  ),
+  issues: z.array(importCellIssueSchema),
+});
+
+export const importJobProgressResponseSchema = z.object({
+  jobId: z.string(),
+  profileCode: z.string(),
+  status: z.enum(['QUEUED', 'PROCESSING', 'COMPLETED', 'PARTIAL', 'FAILED', 'CANCELLED']),
+  totalRows: z.number(),
+  processedRows: z.number(),
+  remainingRows: z.number(),
+  successCount: z.number(),
+  createdCount: z.number(),
+  updatedCount: z.number(),
+  skippedCount: z.number(),
+  failedCount: z.number(),
+  percent: z.number(),
+  startedAt: z.string().nullable(),
+  finishedAt: z.string().nullable(),
+});
+
+export const importHistoryItemResponseSchema = z.object({
+  id: z.number(),
+  jobId: z.string().nullable(),
+  profileCode: z.string(),
+  module: z.string(),
+  fileName: z.string(),
+  format: z.enum(['csv', 'xlsx', 'json']),
+  duplicateStrategy: z.enum(['SKIP', 'UPDATE', 'REJECT']),
+  actorId: z.number().nullable(),
+  status: z.enum(['QUEUED', 'PROCESSING', 'COMPLETED', 'PARTIAL', 'FAILED', 'CANCELLED']),
+  totalRows: z.number(),
+  processedRows: z.number(),
+  remainingRows: z.number(),
+  successCount: z.number(),
+  createdCount: z.number(),
+  updatedCount: z.number(),
+  skippedCount: z.number(),
+  failedCount: z.number(),
+  errors: z.array(importCellIssueSchema),
+  columnMapping: z.record(z.string(), z.union([z.string(), z.number(), z.null()])).nullable(),
+  createdAt: z.string(),
+  completedAt: z.string().nullable(),
 });
 
 export const exportUsersCsvResponseSchema = z.object({

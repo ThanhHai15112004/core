@@ -29,5 +29,6 @@
   "security.invalidOrExpiredToken": "Invalid or expired token",
   "security.userNotFoundOrDisabled": "User not found or disabled",
   "kernel.menu.invalidNameLength": "Menu name must be between 1 and 255 characters",
-  "kernel.menu.hierarchyDepthExceeded": "Menu hierarchy depth exceeded safe limit"
+  "kernel.menu.hierarchyDepthExceeded": "Menu hierarchy depth exceeded safe limit",
+  "import.invalidXlsxFile": "Uploaded Excel (.xlsx) file is invalid or corrupted"
 }

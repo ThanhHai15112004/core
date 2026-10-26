@@ -258,13 +258,25 @@ export const bulkImportUserRowSchema = z.object({
 
 export type BulkImportUserRowInput = z.infer<typeof bulkImportUserRowSchema>;
 
+export const importColumnMappingSchema = z.record(
+  z.string(),
+  z.union([z.string(), z.number().int().min(0)]).nullable(),
+);
+
+export const importDuplicateStrategySchema = z.enum(['SKIP', 'UPDATE', 'REJECT']);
+
 export const bulkImportUsersSchema = z
   .object({
+    fileName: z.string().trim().max(255).optional(),
     xlsxBase64: z.string().min(1).optional(),
     csvContent: z.string().min(1).optional(),
     items: z.array(bulkImportUserRowSchema).optional(),
+    columnMapping: importColumnMappingSchema.optional(),
     defaultPassword: z.string().min(8).max(128).optional(),
     skipDuplicates: z.boolean().default(true),
+    duplicateStrategy: importDuplicateStrategySchema.optional(),
+    async: z.boolean().optional(),
+    previewLimit: z.number().int().min(1).max(200).optional(),
   })
   .refine(
     (data) =>
@@ -277,6 +289,19 @@ export const bulkImportUsersSchema = z
   );
 
 export type BulkImportUsersRequest = z.infer<typeof bulkImportUsersSchema>;
+
+export const previewImportUsersSchema = bulkImportUsersSchema;
+export type PreviewImportUsersRequest = z.infer<typeof previewImportUsersSchema>;
+
+export const listUserImportHistoriesQuerySchema = z.object({
+  actorId: optionalQueryParam(intQueryParam({ min: 1 })),
+  status: optionalQueryParam(
+    z.enum(['QUEUED', 'PROCESSING', 'COMPLETED', 'PARTIAL', 'FAILED', 'CANCELLED']),
+  ),
+  limit: optionalQueryParam(intQueryParam({ min: 1, max: 200 })),
+});
+
+export type ListUserImportHistoriesQuery = z.infer<typeof listUserImportHistoriesQuerySchema>;
 
 export const adminResetUserPasswordSchema = z
   .object({

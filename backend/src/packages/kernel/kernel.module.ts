@@ -13,6 +13,10 @@ import {
   SettingRegistryService,
   defaultSettingRegistry,
 } from './registries/setting-registry.service.js';
+import {
+  ImportRegistryService,
+  defaultImportRegistry,
+} from './registries/import-registry.service.js';
 
 @Global()
 @Module({
@@ -37,6 +41,10 @@ import {
       provide: MenuRegistryService,
       useValue: defaultMenuRegistry,
     },
+    {
+      provide: ImportRegistryService,
+      useValue: defaultImportRegistry,
+    },
   ],
   exports: [
     CodeRegistryService,
@@ -44,6 +52,7 @@ import {
     FeatureFlagRegistryService,
     SequenceRegistryService,
     MenuRegistryService,
+    ImportRegistryService,
   ],
 })
 export class KernelModule {}

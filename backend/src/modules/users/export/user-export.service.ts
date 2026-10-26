@@ -2,6 +2,7 @@ import { Injectable, Optional } from '@nestjs/common';
 import { LocaleContext, LocaleFormatter } from '@packages/i18n/index.js';
 import {
   SettingRegistryService,
+  buildImportTemplateFile,
   buildXlsxBuffer,
   defaultSettingRegistry,
 } from '@packages/kernel/index.js';
@@ -187,38 +188,20 @@ export class UserExportService {
   }
 
   /**
-   * Xuất file mẫu (Template) Excel (.xlsx) & CSV phục vụ nhập người dùng hàng loạt (Mục 3.1.7).
+   * Xuất file mẫu (Template) Excel (.xlsx) & CSV phục vụ nhập người dùng hàng loạt (Mục 3.1.7 & 8.2.1/8.2.2).
+   * - Dùng chung `buildImportTemplateFile` từ `@packages/kernel`
    * - Định dạng bảng Header nền xanh đậm #1E4488 chữ trắng in đậm, cố định dòng tiêu đề,
    *   định dạng Text '@' cho SĐT / Mã nhân viên, kèm dữ liệu mẫu.
    */
   public exportImportTemplate(format: 'csv' | 'xlsx' = 'xlsx'): ExportUsersCsvResponse {
-    const lines: string[] = [
-      USER_IMPORT_TEMPLATE_HEADERS.join(','),
-      ...USER_IMPORT_TEMPLATE_SAMPLE_ROWS.map((row) => row.map((v) => escapeCsvCell(v)).join(',')),
-    ];
-    const csvContent = `\uFEFF${lines.join('\r\n')}\r\n`;
-    const xlsxBase64 = buildXlsxBuffer(
-      USER_IMPORT_TEMPLATE_HEADERS,
-      USER_IMPORT_TEMPLATE_SAMPLE_ROWS,
-      {
-        sheetName: 'Sheet1',
-        columnWidths: USER_IMPORT_TEMPLATE_COLUMN_WIDTHS,
-        centerColumnIndices: USER_IMPORT_TEMPLATE_CENTER_COLUMNS,
-        textColumnIndices: USER_IMPORT_TEMPLATE_TEXT_COLUMNS,
-        freezeHeader: true,
-      },
-    ).toString('base64');
-
-    return {
-      fileName: `mau_import_nhan_vien.${format}`,
-      contentType:
-        format === 'xlsx'
-          ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-          : 'text/csv; charset=utf-8',
+    return buildImportTemplateFile({
+      fileBaseName: 'mau_import_nhan_vien',
       format,
-      totalExported: USER_IMPORT_TEMPLATE_SAMPLE_ROWS.length,
-      csvContent,
-      xlsxBase64,
-    };
+      headers: USER_IMPORT_TEMPLATE_HEADERS,
+      sampleRows: USER_IMPORT_TEMPLATE_SAMPLE_ROWS,
+      columnWidths: USER_IMPORT_TEMPLATE_COLUMN_WIDTHS,
+      centerColumnIndices: USER_IMPORT_TEMPLATE_CENTER_COLUMNS,
+      textColumnIndices: USER_IMPORT_TEMPLATE_TEXT_COLUMNS,
+    });
   }
 }

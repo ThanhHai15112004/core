@@ -23,8 +23,10 @@ import {
   type BulkImportUsersRequest,
   type ChangeUserStatusRequest,
   type CreateUserRequest,
+  type ListUserImportHistoriesQuery,
   type ListUsersQuery,
   type LockUserRequest,
+  type PreviewImportUsersRequest,
   type UpdateUserRequest,
   adminResetUserMfaSchema,
   adminResetUserPasswordSchema,
@@ -33,8 +35,10 @@ import {
   bulkImportUsersSchema,
   changeUserStatusSchema,
   createUserSchema,
+  listUserImportHistoriesQuerySchema,
   listUsersQuerySchema,
   lockUserSchema,
+  previewImportUsersSchema,
   updateUserSchema,
 } from '../requests/users.requests.js';
 import {
@@ -44,6 +48,9 @@ import {
   type UserStatusHistoryItemResponse,
   bulkImportUsersResultSchema,
   exportUsersCsvResponseSchema,
+  importHistoryItemResponseSchema,
+  importJobProgressResponseSchema,
+  importUsersPreviewResponseSchema,
   userResponseSchema,
   userStatusHistoryItemSchema,
 } from '../responses/users.response.js';
@@ -106,7 +113,7 @@ export class UsersController {
     return this.exportService.exportImportTemplate(query.format === 'csv' ? 'csv' : 'xlsx');
   }
 
-  /** Nhập người dùng hàng loạt từ file Excel (.xlsx), CSV hoặc JSON (Mục 3.1.7) */
+  /** Nhập người dùng hàng loạt từ file Excel (.xlsx), CSV hoặc JSON (Mục 3.1.7 & 8.2) */
   @Post(USERS_ROUTES.BULK_IMPORT)
   @HttpCode(HttpStatus.OK)
   @RequirePermissions('users.import')
@@ -119,6 +126,58 @@ export class UsersController {
     @CurrentUser() actor?: UserIdentity,
   ): Promise<BulkImportUsersResultResponse> {
     return this.importService.bulkImport(body, actor?.id);
+  }
+
+  /** Xem trước dữ liệu trước khi nhập (Preview / Dry-run): ánh xạ cột, dòng mẫu và lỗi từng dòng/cột (Mục 8.2.3, 8.2.4, 8.2.5) */
+  @Post(USERS_ROUTES.BULK_IMPORT_PREVIEW)
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions('users.import')
+  @ApiDoc({
+    summary:
+      'Xem trước dữ liệu trước khi nhập (Preview / Dry-run): ánh xạ cột, dòng mẫu và kiểm tra lỗi theo dòng/cột',
+    response: importUsersPreviewResponseSchema,
+  })
+  public async previewBulkImport(
+    @ValidatedBody(previewImportUsersSchema) body: PreviewImportUsersRequest,
+  ) {
+    return this.importService.previewImport(body);
+  }
+
+  /** Xem danh sách lịch sử Import người dùng (File, người thực hiện, trạng thái và kết quả — Mục 8.2.9) */
+  @Get(USERS_ROUTES.BULK_IMPORT_HISTORIES)
+  @RequirePermissions('users.import')
+  @ApiDoc({
+    summary: 'Xem danh sách lịch sử Import người dùng (File, người thực hiện và kết quả)',
+    response: z.array(importHistoryItemResponseSchema),
+  })
+  public listImportHistories(
+    @ValidatedQuery(listUserImportHistoriesQuerySchema) query: ListUserImportHistoriesQuery,
+  ) {
+    return this.importService.listImportHistories(query);
+  }
+
+  /** Xem chi tiết một bản ghi lịch sử Import người dùng theo ID (Mục 8.2.9) */
+  @Get(USERS_ROUTES.BULK_IMPORT_HISTORY_BY_ID)
+  @RequirePermissions('users.import')
+  @ApiDoc({
+    summary: 'Xem chi tiết bản ghi lịch sử Import người dùng theo ID',
+    response: importHistoryItemResponseSchema,
+  })
+  public getImportHistoryById(
+    @ValidatedParams(positiveIntParamSchema, 'historyId') historyId: number,
+  ) {
+    return this.importService.getImportHistoryById(historyId);
+  }
+
+  /** Theo dõi tiến độ công việc Import (số dòng thành công, lỗi và còn lại — Mục 8.2.8) */
+  @Get(USERS_ROUTES.BULK_IMPORT_JOB_PROGRESS)
+  @RequirePermissions('users.import')
+  @ApiDoc({
+    summary: 'Xem tiến độ công việc Import người dùng (số dòng thành công, lỗi và còn lại)',
+    response: importJobProgressResponseSchema,
+  })
+  public getImportJobProgress(@ValidatedParams(z.string().trim().min(1), 'jobId') jobId: string) {
+    return this.importService.getImportJobProgress(jobId);
   }
 
   /** Xem chi tiết thông tin một người dùng kèm kiểm tra phạm vi dữ liệu chống đổi ID (Mục 4.3.6) */

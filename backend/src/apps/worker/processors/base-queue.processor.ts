@@ -283,6 +283,12 @@ export abstract class BaseQueueProcessor extends WorkerHost implements OnApplica
       readonly percent?: number;
       readonly processed: number;
       readonly total: number;
+      readonly remaining?: number | null;
+      readonly successCount?: number | null;
+      readonly createdCount?: number | null;
+      readonly updatedCount?: number | null;
+      readonly skippedCount?: number | null;
+      readonly failedCount?: number | null;
       readonly step: string;
       readonly completedPhases?: readonly string[];
       readonly activePhase?: string;

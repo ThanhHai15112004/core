@@ -2,6 +2,11 @@ import { Logger, Optional } from '@nestjs/common';
 import { Processor } from '@nestjs/bullmq';
 import type { Job } from 'bullmq';
 import { CoreConfigService } from '@packages/config/index.js';
+import {
+  defaultImportRegistry,
+  type ImportCellIssue,
+  type ImportDuplicateStrategy,
+} from '@packages/kernel/index.js';
 import { MetricsRegistryService } from '@packages/metrics/index.js';
 import { QUEUE_PROFILES, QUEUES, type MessageEnvelope } from '@packages/messaging/index.js';
 import { JobProgressTrackerService } from '@packages/queue/index.js';
@@ -19,6 +24,10 @@ export interface HeavyQueueJobPayload {
   readonly xlsxBase64?: string;
   readonly defaultPassword?: string;
   readonly skipDuplicates?: boolean;
+  readonly duplicateStrategy?: ImportDuplicateStrategy;
+  readonly columnMapping?: Record<string, string | number>;
+  readonly fileName?: string;
+  readonly historyId?: number;
   readonly actorId?: number;
   readonly fileId?: number | string | null;
   readonly format?: 'csv' | 'xlsx' | string;
@@ -138,15 +147,20 @@ export class HeavyJobProcessor extends BaseQueueProcessor {
         ? (rawItems as BulkImportUserRowInput[])
         : this.userImportService!.parseImportRows({
             skipDuplicates: payload.skipDuplicates ?? true,
+            ...(payload.duplicateStrategy ? { duplicateStrategy: payload.duplicateStrategy } : {}),
+            ...(payload.columnMapping ? { columnMapping: payload.columnMapping } : {}),
             ...(payload.csvContent ? { csvContent: payload.csvContent } : {}),
             ...(payload.xlsxBase64 ? { xlsxBase64: payload.xlsxBase64 } : {}),
           });
 
     const effectiveTotal = Math.max(1, resolvedRows.length);
+    const historyRef = payload.historyId ?? String(job.id ?? '');
     let processed = 0;
     let importedCount = 0;
+    let updatedCount = 0;
     let skippedCount = 0;
     let failedCount = 0;
+    const accumulatedErrors: ImportCellIssue[] = [];
 
     for (let offset = 0; offset < effectiveTotal; offset += chunkSize) {
       const chunk = resolvedRows.slice(offset, offset + chunkSize);
@@ -155,31 +169,76 @@ export class HeavyJobProcessor extends BaseQueueProcessor {
           {
             items: chunk,
             skipDuplicates: payload.skipDuplicates ?? true,
+            ...(payload.duplicateStrategy ? { duplicateStrategy: payload.duplicateStrategy } : {}),
             ...(payload.defaultPassword !== undefined
               ? { defaultPassword: payload.defaultPassword }
               : {}),
           },
           payload.actorId,
-          { skipQueuePublish: true },
+          { skipQueuePublish: true, skipHistoryRecord: true },
         );
         importedCount += chunkResult.importedCount;
+        updatedCount += chunkResult.updatedCount ?? 0;
         skippedCount += chunkResult.skippedCount;
         failedCount += chunkResult.failedCount;
+        for (const errItem of chunkResult.errors) {
+          accumulatedErrors.push({
+            row: offset + errItem.row,
+            sheetRowNumber: offset + (errItem.sheetRowNumber ?? errItem.row + 1),
+            column: errItem.column ?? errItem.field ?? null,
+            columnLetter: errItem.columnLetter ?? null,
+            field: errItem.field ?? null,
+            code: errItem.code ?? 'VALIDATION_ERROR',
+            value: errItem.value,
+            message: errItem.message,
+          });
+        }
       }
 
       processed = Math.min(effectiveTotal, offset + chunkSize);
+      const remainingRows = Math.max(0, effectiveTotal - processed);
+      const successCount = importedCount + updatedCount;
       await this.reportProcessingStep(
         job,
         processed,
         effectiveTotal,
         `Processing ${processed}/${effectiveTotal} items (${topic})`,
+        {
+          remaining: remainingRows,
+          successCount,
+          createdCount: importedCount,
+          updatedCount,
+          skippedCount,
+          failedCount,
+        },
       );
+      if (historyRef) {
+        defaultImportRegistry.updateImportHistory(historyRef, {
+          status: processed >= effectiveTotal ? 'COMPLETED' : 'PROCESSING',
+          totalRows: resolvedRows.length,
+          processedRows: Math.min(resolvedRows.length, processed),
+          createdCount: importedCount,
+          updatedCount,
+          skippedCount,
+          failedCount,
+          errors: accumulatedErrors,
+        });
+      }
     }
 
+    const remainingRows = 0;
+    const successCount = importedCount + updatedCount;
     return {
       processed,
       total: effectiveTotal,
-      extra: { importedCount, skippedCount, failedCount },
+      extra: {
+        importedCount,
+        updatedCount,
+        successCount,
+        skippedCount,
+        failedCount,
+        remainingCount: remainingRows,
+      },
     };
   }
 
@@ -295,10 +354,19 @@ export class HeavyJobProcessor extends BaseQueueProcessor {
     processed: number,
     total: number,
     step: string,
+    extraCounts?: {
+      readonly remaining?: number | null;
+      readonly successCount?: number | null;
+      readonly createdCount?: number | null;
+      readonly updatedCount?: number | null;
+      readonly skippedCount?: number | null;
+      readonly failedCount?: number | null;
+    },
   ): Promise<void> {
     await this.reportJobProgress(job, {
       processed,
       total,
+      ...(extraCounts ?? {}),
       step,
       completedPhases: ['Validate Input'],
       activePhase: 'Process Items',

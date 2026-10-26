@@ -66,6 +66,12 @@ export interface JobProgressInfo {
   percent: number | null;
   processed: number | null;
   total: number | null;
+  remaining?: number | null;
+  successCount?: number | null;
+  createdCount?: number | null;
+  updatedCount?: number | null;
+  skippedCount?: number | null;
+  failedCount?: number | null;
   step: string | null;
   phases: { name: string; state: 'done' | 'active' | 'pending' | 'failed' }[];
 }

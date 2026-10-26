@@ -34,6 +34,12 @@ export interface JobProgressUpdateInput {
   readonly percent?: number | null;
   readonly processed?: number | null;
   readonly total?: number | null;
+  readonly remaining?: number | null;
+  readonly successCount?: number | null;
+  readonly createdCount?: number | null;
+  readonly updatedCount?: number | null;
+  readonly skippedCount?: number | null;
+  readonly failedCount?: number | null;
   readonly step?: string | null;
   readonly phases?: JobProgressInfo['phases'];
   readonly activePhase?: string;
@@ -128,10 +134,33 @@ export class JobProgressTrackerService {
       return p;
     });
 
+    const remaining =
+      input.remaining !== undefined
+        ? input.remaining
+        : processed !== null && total !== null
+          ? Math.max(0, total - processed)
+          : (current?.remaining ?? null);
+    const successCount =
+      input.successCount !== undefined ? input.successCount : (current?.successCount ?? null);
+    const createdCount =
+      input.createdCount !== undefined ? input.createdCount : (current?.createdCount ?? null);
+    const updatedCount =
+      input.updatedCount !== undefined ? input.updatedCount : (current?.updatedCount ?? null);
+    const skippedCount =
+      input.skippedCount !== undefined ? input.skippedCount : (current?.skippedCount ?? null);
+    const failedCount =
+      input.failedCount !== undefined ? input.failedCount : (current?.failedCount ?? null);
+
     const nextProgress: JobProgressInfo = {
       percent,
       processed,
       total,
+      ...(remaining !== null ? { remaining } : {}),
+      ...(successCount !== null ? { successCount } : {}),
+      ...(createdCount !== null ? { createdCount } : {}),
+      ...(updatedCount !== null ? { updatedCount } : {}),
+      ...(skippedCount !== null ? { skippedCount } : {}),
+      ...(failedCount !== null ? { failedCount } : {}),
       step:
         input.step !== undefined
           ? input.step

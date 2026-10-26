@@ -82,10 +82,26 @@ export function progressOf(raw: unknown): JobProgressInfo | null {
           state: p.state as JobProgressInfo['phases'][number]['state'],
         }))
     : [];
+  const processedVal = num(o['processed']);
+  const totalVal = num(o['total']);
+  const remainingVal =
+    num(o['remaining']) ??
+    (processedVal !== null && totalVal !== null ? Math.max(0, totalVal - processedVal) : null);
+  const successVal = num(o['successCount']);
+  const createdVal = num(o['createdCount']);
+  const updatedVal = num(o['updatedCount']);
+  const skippedVal = num(o['skippedCount']);
+  const failedVal = num(o['failedCount']);
   const info: JobProgressInfo = {
     percent: num(o['percent']),
-    processed: num(o['processed']),
-    total: num(o['total']),
+    processed: processedVal,
+    total: totalVal,
+    ...(remainingVal !== null ? { remaining: remainingVal } : {}),
+    ...(successVal !== null ? { successCount: successVal } : {}),
+    ...(createdVal !== null ? { createdCount: createdVal } : {}),
+    ...(updatedVal !== null ? { updatedCount: updatedVal } : {}),
+    ...(skippedVal !== null ? { skippedCount: skippedVal } : {}),
+    ...(failedVal !== null ? { failedCount: failedVal } : {}),
     step: typeof o['step'] === 'string' ? o['step'].slice(0, 120) : null,
     phases,
   };

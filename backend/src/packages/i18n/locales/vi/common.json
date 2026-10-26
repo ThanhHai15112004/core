@@ -29,5 +29,6 @@
   "security.invalidOrExpiredToken": "Mã xác thực không hợp lệ hoặc đã hết hạn",
   "security.userNotFoundOrDisabled": "Tài khoản người dùng không tồn tại hoặc đã bị vô hiệu hóa",
   "kernel.menu.invalidNameLength": "Tên hiển thị menu phải từ 1 đến 255 ký tự",
-  "kernel.menu.hierarchyDepthExceeded": "Độ sâu phân cấp cây menu vượt quá giới hạn an toàn"
+  "kernel.menu.hierarchyDepthExceeded": "Độ sâu phân cấp cây menu vượt quá giới hạn an toàn",
+  "import.invalidXlsxFile": "Tệp Excel (.xlsx) tải lên không hợp lệ hoặc bị hỏng"
 }
