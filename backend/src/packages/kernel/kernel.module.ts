@@ -25,6 +25,10 @@ import {
   ReportRegistryService,
   defaultReportRegistry,
 } from './registries/report-registry.service.js';
+import {
+  SearchRegistryService,
+  defaultSearchRegistry,
+} from './registries/search-registry.service.js';
 
 @Global()
 @Module({
@@ -61,6 +65,10 @@ import {
       provide: ReportRegistryService,
       useValue: defaultReportRegistry,
     },
+    {
+      provide: SearchRegistryService,
+      useValue: defaultSearchRegistry,
+    },
   ],
   exports: [
     CodeRegistryService,
@@ -71,6 +79,7 @@ import {
     ImportRegistryService,
     ExportRegistryService,
     ReportRegistryService,
+    SearchRegistryService,
   ],
 })
 export class KernelModule {}

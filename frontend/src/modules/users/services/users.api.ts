@@ -3,17 +3,38 @@ import { API_ROUTES } from '../../../routes/index';
 import type {
   AdminResetMfaResult,
   AdminResetPasswordResult,
+  BulkImportUsersPayload,
   BulkImportUsersResult,
   CreateUserPayload,
+  CreateUserReportSchedulePayload,
+  ExportHistoryItem,
+  ExportJobProgress,
   ExportUsersFileResponse,
+  ImportHistoryItem,
+  ImportJobProgress,
+  ImportUsersPreviewResponse,
   ListUsersFilter,
   OrganizationOptionSummary,
+  RegisteredReportDefinition,
+  RegisteredSearchableEntity,
   RoleOptionSummary,
+  RunUserReportPayload,
+  SearchIndexLagReport,
+  SearchQueryResult,
+  SearchSyncHistoryItem,
+  TemporaryDownloadFileResponse,
+  TriggeredReportScheduleResult,
   UpdateUserPayload,
   UserItem,
   UserLoginHistoryItem,
   UserOrganizationAssignmentInput,
+  UserOrganizationHistoryItem,
+  UserReportExecutionResult,
+  UserReportHistoryItem,
+  UserReportScheduleItem,
   UserStatusHistoryItem,
+  UserSubordinatesOverview,
+  ZeroResultKeywordStat,
 } from '../types/users.types';
 import type { UserStatusCode } from '../enum/users.enum';
 
@@ -79,11 +100,15 @@ export const usersApi = {
   assignOrganizations: (
     id: number,
     organizationUnits: readonly UserOrganizationAssignmentInput[],
+    reason?: string | null,
   ) =>
     fetchApi<UserItem>(API_ROUTES.USERS.ASSIGN_ORGANIZATIONS(id), {
       method: 'PUT',
       headers: resolveAuthHeaders(),
-      body: JSON.stringify({ organizationUnits }),
+      body: JSON.stringify({
+        organizationUnits,
+        ...(reason && reason.trim() ? { reason: reason.trim() } : {}),
+      }),
     }),
 
   lockUser: (id: number, payload: { reason: string; lockedUntil?: string | null }) =>
@@ -175,6 +200,24 @@ export const usersApi = {
       headers: resolveAuthHeaders(),
     }),
 
+  getOrganizationHistory: (id: number) =>
+    fetchApi<UserOrganizationHistoryItem[]>(API_ROUTES.USERS.ORGANIZATION_HISTORY(id), {
+      headers: resolveAuthHeaders(),
+    }),
+
+  getSubordinates: (
+    id: number,
+    query?: { directOnly?: boolean; includeTemporary?: boolean },
+  ) => {
+    const qs = buildQueryString({
+      directOnly: query?.directOnly,
+      includeTemporary: query?.includeTemporary,
+    });
+    return fetchApi<UserSubordinatesOverview>(API_ROUTES.USERS.SUBORDINATES(id, qs), {
+      headers: resolveAuthHeaders(),
+    });
+  },
+
   getLoginHistory: (id: number) =>
     fetchApi<UserLoginHistoryItem[]>(API_ROUTES.USERS.LOGIN_HISTORY(id), {
       headers: resolveAuthHeaders(),
@@ -185,19 +228,44 @@ export const usersApi = {
       headers: resolveAuthHeaders(),
     }),
 
-  bulkImportUsers: (payload: {
-    xlsxBase64?: string;
-    csvContent?: string;
-    defaultPassword?: string;
-    skipDuplicates?: boolean;
-  }) =>
+  previewBulkImportUsers: (payload: BulkImportUsersPayload) =>
+    fetchApi<ImportUsersPreviewResponse>(API_ROUTES.USERS.IMPORT_PREVIEW, {
+      method: 'POST',
+      headers: resolveAuthHeaders(),
+      body: JSON.stringify(payload),
+    }),
+
+  bulkImportUsers: (payload: BulkImportUsersPayload) =>
     fetchApi<BulkImportUsersResult>(API_ROUTES.USERS.IMPORT, {
       method: 'POST',
       headers: resolveAuthHeaders(),
       body: JSON.stringify(payload),
     }),
 
-  exportUsers: (filter?: ListUsersFilter & { format?: 'csv' | 'xlsx'; title?: string }) => {
+  listImportHistories: (filter?: { status?: string; limit?: number }) => {
+    const qs = buildQueryString({
+      status: filter?.status,
+      limit: filter?.limit ?? 30,
+    });
+    return fetchApi<ImportHistoryItem[]>(API_ROUTES.USERS.IMPORT_HISTORIES(qs), {
+      headers: resolveAuthHeaders(),
+    });
+  },
+
+  getImportJobProgress: (jobId: string) =>
+    fetchApi<ImportJobProgress>(API_ROUTES.USERS.IMPORT_JOB_PROGRESS(jobId), {
+      headers: resolveAuthHeaders(),
+    }),
+
+  exportUsers: (
+    filter?: ListUsersFilter & {
+      format?: 'csv' | 'xlsx' | 'pdf';
+      title?: string;
+      async?: boolean;
+      notifyOnComplete?: boolean;
+      ttlSeconds?: number;
+    },
+  ) => {
     const qs = buildQueryString({
       q: filter?.q,
       status: filter?.status,
@@ -207,8 +275,178 @@ export const usersApi = {
       mfaEnabled: filter?.mfaEnabled,
       format: filter?.format ?? 'xlsx',
       title: filter?.title,
+      async: filter?.async,
+      notifyOnComplete: filter?.notifyOnComplete,
+      ttlSeconds: filter?.ttlSeconds,
     });
     return fetchApi<ExportUsersFileResponse>(API_ROUTES.USERS.EXPORT(qs), {
+      headers: resolveAuthHeaders(),
+    });
+  },
+
+  listExportHistories: (filter?: {
+    format?: string;
+    status?: string;
+    includeExpired?: boolean;
+    limit?: number;
+  }) => {
+    const qs = buildQueryString({
+      format: filter?.format,
+      status: filter?.status,
+      includeExpired: filter?.includeExpired ?? true,
+      limit: filter?.limit ?? 30,
+    });
+    return fetchApi<ExportHistoryItem[]>(API_ROUTES.USERS.EXPORT_HISTORIES(qs), {
+      headers: resolveAuthHeaders(),
+    });
+  },
+
+  getExportJobProgress: (jobId: string) =>
+    fetchApi<ExportJobProgress>(API_ROUTES.USERS.EXPORT_JOB_PROGRESS(jobId), {
+      headers: resolveAuthHeaders(),
+    }),
+
+  downloadTemporaryExport: (token: string) =>
+    fetchApi<TemporaryDownloadFileResponse>(API_ROUTES.USERS.EXPORT_DOWNLOAD_BY_TOKEN(token), {
+      headers: resolveAuthHeaders(),
+    }),
+
+  listAvailableReports: () =>
+    fetchApi<RegisteredReportDefinition[]>(API_ROUTES.USERS.REPORTS, {
+      headers: resolveAuthHeaders(),
+    }),
+
+  runReport: (payload: RunUserReportPayload) =>
+    fetchApi<UserReportExecutionResult>(API_ROUTES.USERS.REPORTS_RUN, {
+      method: 'POST',
+      headers: resolveAuthHeaders(),
+      body: JSON.stringify(payload),
+    }),
+
+  listReportSchedules: (filter?: {
+    reportCode?: string;
+    frequency?: string;
+    isActive?: boolean;
+  }) => {
+    const qs = buildQueryString({
+      reportCode: filter?.reportCode,
+      frequency: filter?.frequency,
+      isActive: filter?.isActive,
+    });
+    return fetchApi<UserReportScheduleItem[]>(API_ROUTES.USERS.REPORTS_SCHEDULES(qs), {
+      headers: resolveAuthHeaders(),
+    });
+  },
+
+  createReportSchedule: (payload: CreateUserReportSchedulePayload) =>
+    fetchApi<UserReportScheduleItem>(API_ROUTES.USERS.REPORTS_SCHEDULES(''), {
+      method: 'POST',
+      headers: resolveAuthHeaders(),
+      body: JSON.stringify(payload),
+    }),
+
+  triggerDueReportSchedules: () =>
+    fetchApi<TriggeredReportScheduleResult>(API_ROUTES.USERS.REPORTS_SCHEDULES_TRIGGER_DUE, {
+      method: 'POST',
+      headers: resolveAuthHeaders(),
+      body: JSON.stringify({}),
+    }),
+
+  listReportHistories: (filter?: {
+    reportCode?: string;
+    status?: string;
+    executionMode?: string;
+    limit?: number;
+  }) => {
+    const qs = buildQueryString({
+      reportCode: filter?.reportCode,
+      status: filter?.status,
+      executionMode: filter?.executionMode,
+      limit: filter?.limit ?? 30,
+    });
+    return fetchApi<UserReportHistoryItem[]>(API_ROUTES.USERS.REPORTS_HISTORIES(qs), {
+      headers: resolveAuthHeaders(),
+    });
+  },
+
+  downloadTemporaryReport: (token: string) =>
+    fetchApi<TemporaryDownloadFileResponse>(API_ROUTES.USERS.REPORTS_DOWNLOAD_BY_TOKEN(token), {
+      headers: resolveAuthHeaders(),
+    }),
+
+  searchGlobal: (filter: {
+    keyword: string;
+    module?: string;
+    entityType?: string;
+    entityCode?: string;
+    status?: number | '';
+    organizationUnitId?: number | '';
+    includeStale?: boolean;
+    page?: number;
+    limit?: number;
+  }) => {
+    const qs = buildQueryString({
+      keyword: filter.keyword,
+      module: filter.module,
+      entityType: filter.entityType,
+      entityCode: filter.entityCode,
+      status: filter.status,
+      organizationUnitId: filter.organizationUnitId,
+      includeStale: filter.includeStale,
+      page: filter.page ?? 1,
+      limit: filter.limit ?? 20,
+    });
+    return fetchApi<SearchQueryResult>(API_ROUTES.USERS.SEARCH(qs), {
+      headers: resolveAuthHeaders(),
+    });
+  },
+
+  listSearchEntities: () =>
+    fetchApi<RegisteredSearchableEntity[]>(API_ROUTES.USERS.SEARCH_ENTITIES, {
+      headers: resolveAuthHeaders(),
+    }),
+
+  syncSearchIndex: (payload: { userIds?: readonly number[]; async?: boolean }) =>
+    fetchApi<SearchSyncHistoryItem>(API_ROUTES.USERS.SEARCH_SYNC, {
+      method: 'POST',
+      headers: resolveAuthHeaders(),
+      body: JSON.stringify(payload),
+    }),
+
+  rebuildSearchIndex: (payload: {
+    module?: string;
+    entityType?: string;
+    entityCode?: string;
+    async?: boolean;
+  }) =>
+    fetchApi<SearchSyncHistoryItem>(API_ROUTES.USERS.SEARCH_REBUILD, {
+      method: 'POST',
+      headers: resolveAuthHeaders(),
+      body: JSON.stringify(payload),
+    }),
+
+  getSearchIndexLag: (filter?: {
+    module?: string;
+    entityType?: string;
+    staleOnly?: boolean;
+  }) => {
+    const qs = buildQueryString({
+      module: filter?.module,
+      entityType: filter?.entityType,
+      staleOnly: filter?.staleOnly,
+    });
+    return fetchApi<SearchIndexLagReport>(API_ROUTES.USERS.SEARCH_LAG(qs), {
+      headers: resolveAuthHeaders(),
+    });
+  },
+
+  listZeroResultKeywords: (filter?: { module?: string; entityType?: string; limit?: number }) => {
+    const qs = buildQueryString({
+      module: filter?.module,
+      entityType: filter?.entityType,
+      limit: filter?.limit ?? 30,
+    });
+    return fetchApi<ZeroResultKeywordStat[]>(API_ROUTES.USERS.SEARCH_ZERO_RESULTS(qs), {
       headers: resolveAuthHeaders(),
     });
   },

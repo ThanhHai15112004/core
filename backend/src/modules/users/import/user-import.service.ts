@@ -30,6 +30,7 @@ import {
 } from '@modules/organizations/contracts/index.js';
 import { type IRolesPublicService, ROLES_PUBLIC_SERVICE } from '@modules/roles/contracts/index.js';
 import { USER_STATUS, resolveVietnameseNameParts } from '../contracts/index.js';
+import type { UserEntity } from '../entities/user.entity.js';
 import { UserRepository } from '../repositories/user.repository.js';
 import { UsersService } from '../services/users.service.js';
 import {
@@ -76,30 +77,149 @@ export class UserImportService {
     this.registerUsersImportProfile();
   }
 
-  /** Đăng ký profile Import người dùng vào `ImportRegistryService` dùng chung (Mục 8.2) */
+  /** Đăng ký profile Import người dùng và Worker Executor vào `ImportRegistryService` dùng chung (Mục 8.2) */
   private registerUsersImportProfile(): void {
-    this.importRegistry.registerProfile<BulkImportUserRowInput>({
+    const profileHandler = {
       profileCode: USERS_IMPORT_PROFILE_CODE,
       module: 'users',
       columns: USER_IMPORT_COLUMNS,
       rowSchema: bulkImportUserRowSchema,
       uniqueKeyFields: ['email', 'username'],
-      findExistingDuplicates: (rows) => this.findExistingUserDuplicates(rows),
-    });
+      findExistingDuplicates: (
+        rows: ReadonlyArray<{ readonly row: number; readonly data: BulkImportUserRowInput }>,
+      ) => this.findExistingUserDuplicates(rows),
+    };
+    this.importRegistry.registerProfile<BulkImportUserRowInput>(profileHandler);
+
+    const workerExecutor = {
+      profileCode: USERS_IMPORT_PROFILE_CODE,
+      module: 'users',
+      topic: 'users.import',
+      parseImportRows: (input: {
+        readonly items?: readonly BulkImportUserRowInput[] | undefined;
+        readonly csvContent?: string | undefined;
+        readonly xlsxBase64?: string | undefined;
+        readonly columnMapping?: Record<string, string | number | null> | undefined;
+        readonly duplicateStrategy?: ImportDuplicateStrategy | undefined;
+        readonly skipDuplicates?: boolean | undefined;
+      }) =>
+        this.parseImportRows({
+          skipDuplicates: input.skipDuplicates ?? true,
+          ...(input.duplicateStrategy ? { duplicateStrategy: input.duplicateStrategy } : {}),
+          ...(input.columnMapping
+            ? {
+                columnMapping: Object.fromEntries(
+                  Object.entries(input.columnMapping).filter(
+                    (entry): entry is [string, string | number] => entry[1] !== null,
+                  ),
+                ),
+              }
+            : {}),
+          ...(input.csvContent ? { csvContent: input.csvContent } : {}),
+          ...(input.xlsxBase64 ? { xlsxBase64: input.xlsxBase64 } : {}),
+          ...(input.items ? { items: [...input.items] } : {}),
+        }),
+      executeChunkImport: async (input: {
+        readonly items?: readonly BulkImportUserRowInput[] | undefined;
+        readonly skipDuplicates?: boolean | undefined;
+        readonly duplicateStrategy?: ImportDuplicateStrategy | undefined;
+        readonly defaultPassword?: string | undefined;
+        readonly actorId?: number | undefined;
+        readonly options?:
+          | {
+              readonly skipQueuePublish?: boolean | undefined;
+              readonly skipHistoryRecord?: boolean | undefined;
+            }
+          | undefined;
+      }) =>
+        this.bulkImport(
+          {
+            items: input.items ? [...input.items] : [],
+            skipDuplicates: input.skipDuplicates ?? true,
+            ...(input.duplicateStrategy ? { duplicateStrategy: input.duplicateStrategy } : {}),
+            ...(input.defaultPassword !== undefined
+              ? { defaultPassword: input.defaultPassword }
+              : {}),
+          },
+          input.actorId,
+          input.options ?? { skipQueuePublish: true, skipHistoryRecord: true },
+        ),
+    };
+
+    this.importRegistry.registerWorkerExecutor(workerExecutor);
+    if (this.importRegistry !== defaultImportRegistry) {
+      defaultImportRegistry.registerWorkerExecutor(workerExecutor);
+    }
   }
 
-  /** Kiểm tra trùng lặp email/username trong DB cho tập dòng hợp lệ */
+  /**
+   * Tra cứu hàng loạt (Batch IN query) toàn bộ người dùng đã tồn tại theo danh sách email & username
+   * để loại bỏ triệt để N+1 query khi Preview hoặc Bulk Import.
+   */
+  private async batchResolveExistingUsers(
+    items: ReadonlyArray<{ readonly email: string; readonly username: string }>,
+  ): Promise<{
+    readonly byEmail: Map<string, UserEntity>;
+    readonly byUsername: Map<string, UserEntity>;
+  }> {
+    const uniqueEmails = [
+      ...new Set(items.map((item) => item.email.trim().toLowerCase()).filter(Boolean)),
+    ];
+    const uniqueUsernames = [
+      ...new Set(items.map((item) => item.username.trim().toLowerCase()).filter(Boolean)),
+    ];
+
+    const byEmail = new Map<string, UserEntity>();
+    const byUsername = new Map<string, UserEntity>();
+
+    if (uniqueEmails.length === 0 && uniqueUsernames.length === 0) {
+      return { byEmail, byUsername };
+    }
+
+    const [foundByEmails, foundByUsernames] = await Promise.all([
+      typeof this.userRepository.findByEmails === 'function'
+        ? this.userRepository.findByEmails(uniqueEmails, true)
+        : Promise.all(uniqueEmails.map((email) => this.userRepository.findByEmail(email, true))),
+      typeof this.userRepository.findByUsernames === 'function'
+        ? this.userRepository.findByUsernames(uniqueUsernames, true)
+        : Promise.all(
+            uniqueUsernames.map((username) => this.userRepository.findByUsername(username, true)),
+          ),
+    ]);
+
+    for (const user of foundByEmails) {
+      if (user?.email) {
+        byEmail.set(user.email.trim().toLowerCase(), user);
+      }
+    }
+    for (const user of foundByUsernames) {
+      if (user?.username) {
+        byUsername.set(user.username.trim().toLowerCase(), user);
+      }
+    }
+
+    return { byEmail, byUsername };
+  }
+
+  /** Kiểm tra trùng lặp email/username trong DB cho tập dòng hợp lệ (Batch 1 lần chống N+1 query) */
   private async findExistingUserDuplicates(
     rows: ReadonlyArray<{ readonly row: number; readonly data: BulkImportUserRowInput }>,
   ): Promise<ReadonlyMap<number, ExistingDuplicateMatch>> {
     const matches = new Map<number, ExistingDuplicateMatch>();
+    if (rows.length === 0) {
+      return matches;
+    }
+
+    const { byEmail, byUsername } = await this.batchResolveExistingUsers(
+      rows.map((item) => item.data),
+    );
+
     for (const item of rows) {
       const normalizedEmail = item.data.email.trim().toLowerCase();
       const normalizedUsername = item.data.username.trim().toLowerCase();
-      const [existingEmail, existingUsername] = await Promise.all([
-        this.userRepository.findByEmail(normalizedEmail, true),
-        this.userRepository.findByUsername(normalizedUsername, true),
-      ]);
+      const existingEmail = byEmail.get(normalizedEmail);
+      const existingUsername = byUsername.get(normalizedUsername);
+
       if (existingEmail) {
         matches.set(item.row, {
           existingId: Number(existingEmail.id),
@@ -308,7 +428,10 @@ export class UserImportService {
   public async bulkImport(
     dto: BulkImportUsersRequest,
     actorId?: number,
-    options?: { readonly skipQueuePublish?: boolean; readonly skipHistoryRecord?: boolean },
+    options?: {
+      readonly skipQueuePublish?: boolean | undefined;
+      readonly skipHistoryRecord?: boolean | undefined;
+    },
   ): Promise<BulkImportUsersResultResponse> {
     const duplicateStrategy = resolveImportDuplicateStrategy(
       dto.duplicateStrategy,
@@ -447,6 +570,10 @@ export class UserImportService {
 
     const matchByField = new Map(mapping.matches.map((m) => [m.field, m]));
 
+    // Tra cứu hàng loạt (Batch IN query) toàn bộ email & username của các dòng hợp lệ 1 lần để chống N+1 query
+    const { byEmail: existingUserByEmail, byUsername: existingUserByUsername } =
+      await this.batchResolveExistingUsers(validRows.map((item) => item.data));
+
     for (const validItem of validRows) {
       const rowNumber = validItem.row;
       const sheetRowNumber = validItem.sheetRowNumber;
@@ -455,10 +582,8 @@ export class UserImportService {
       const normalizedEmail = validRow.email.trim().toLowerCase();
       const normalizedUsername = validRow.username.trim().toLowerCase();
 
-      const [existingEmail, existingUsername] = await Promise.all([
-        this.userRepository.findByEmail(normalizedEmail, true),
-        this.userRepository.findByUsername(normalizedUsername, true),
-      ]);
+      const existingEmail = existingUserByEmail.get(normalizedEmail) ?? null;
+      const existingUsername = existingUserByUsername.get(normalizedUsername) ?? null;
 
       const existingUser = existingEmail ?? existingUsername;
 

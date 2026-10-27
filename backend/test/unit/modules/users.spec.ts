@@ -6,9 +6,12 @@ import {
   ImportRegistryService,
   NotFoundAppException,
   ReportRegistryService,
+  SearchRegistryService,
   SettingRegistryService,
   parseXlsxToMatrix,
+  type ExternalSearchEngineClientContract,
   type IPdfExportAdapter,
+  type SearchDocumentRecord,
 } from '@packages/kernel/index.js';
 import type { BaseMessagePublisherProvider } from '@packages/messaging/index.js';
 import {
@@ -17,6 +20,7 @@ import {
   UserExportService,
   UserImportService,
   UserReportService,
+  UserSearchService,
   UsersMapper,
   UsersService,
   getUserGenderName,
@@ -34,8 +38,9 @@ import type { UserRepository } from '@modules/users/repositories/user.repository
 import type { UserProfileRepository } from '@modules/users/repositories/user-profile.repository.js';
 import type { UserRoleRepository } from '@modules/users/repositories/user-role.repository.js';
 import type { UserOrganizationUnitRepository } from '@modules/users/repositories/user-organization-unit.repository.js';
+import type { UserOrganizationHistoryRepository } from '@modules/users/repositories/user-organization-history.repository.js';
 import type { UserStatusHistoryRepository } from '@modules/users/repositories/user-status-history.repository.js';
-import type { PasswordHasherService } from '@packages/security/index.js';
+import { DATA_SCOPE, type PasswordHasherService } from '@packages/security/index.js';
 import type { IRolesPublicService } from '@modules/roles/contracts/index.js';
 import type { IOrganizationsPublicService } from '@modules/organizations/contracts/index.js';
 
@@ -60,6 +65,9 @@ function createMockUserEntity(
     mfaEnabled: overrides.mfaEnabled ?? false,
     primaryOrganizationUnitId: overrides.primaryOrganizationUnitId ?? null,
     managerId: overrides.managerId ?? null,
+    temporaryManagerId: overrides.temporaryManagerId ?? null,
+    temporaryManagerFrom: overrides.temporaryManagerFrom ?? null,
+    temporaryManagerUntil: overrides.temporaryManagerUntil ?? null,
     lastLoginAt: overrides.lastLoginAt ?? null,
     passwordChangedAt: overrides.passwordChangedAt ?? now,
     archivedAt: overrides.archivedAt ?? null,
@@ -919,6 +927,118 @@ describe('Users Module — Helpers & UsersService Unit Suite', () => {
       const historyDetail = importService.getImportHistoryById(queuedRes.historyId!);
       expect(historyDetail.id).toBe(queuedRes.historyId);
       expect(historyDetail.jobId).toBe(queuedRes.jobId);
+    });
+
+    it('8.2.6 (Batch IN Query) — Resolves existing duplicates in a single batch via findByEmails & findByUsernames without N+1 queries', async () => {
+      let batchEmailsCalls = 0;
+      let batchUsernamesCalls = 0;
+      let singleEmailCalls = 0;
+      let singleUsernameCalls = 0;
+
+      const batchRepo = {
+        findByEmails: async (emails: readonly string[]) => {
+          batchEmailsCalls += 1;
+          return emails.includes('dup1@core.vn')
+            ? [
+                createMockUserEntity({
+                  id: 101,
+                  username: 'dup1',
+                  email: 'dup1@core.vn',
+                }),
+              ]
+            : [];
+        },
+        findByUsernames: async (usernames: readonly string[]) => {
+          batchUsernamesCalls += 1;
+          return usernames.includes('dup2')
+            ? [
+                createMockUserEntity({
+                  id: 102,
+                  username: 'dup2',
+                  email: 'dup2@core.vn',
+                }),
+              ]
+            : [];
+        },
+        findByEmail: async () => {
+          singleEmailCalls += 1;
+          return null;
+        },
+        findByUsername: async () => {
+          singleUsernameCalls += 1;
+          return null;
+        },
+      } as unknown as UserRepository;
+
+      const createdIds: number[] = [];
+      const mockUsersSvc = {
+        create: async () => {
+          const nextId = 200 + createdIds.length + 1;
+          createdIds.push(nextId);
+          return { id: nextId };
+        },
+      } as unknown as UsersService;
+
+      const mockRolesSvc = {
+        findByCodes: async () => [],
+      } as unknown as IRolesPublicService;
+
+      const batchImportService = new UserImportService(
+        mockUsersSvc,
+        batchRepo,
+        mockRolesSvc,
+        null,
+        undefined,
+        null,
+        new ImportRegistryService(),
+      );
+
+      const res = await batchImportService.bulkImport({
+        items: [
+          {
+            username: 'dup1',
+            email: 'dup1@core.vn',
+            fullName: 'Duplicate Email User',
+            status: USER_STATUS.ACTIVE,
+            roleCodes: [],
+            organizationCodes: [],
+          },
+          {
+            username: 'dup2',
+            email: 'unique2@core.vn',
+            fullName: 'Duplicate Username User',
+            status: USER_STATUS.ACTIVE,
+            roleCodes: [],
+            organizationCodes: [],
+          },
+          {
+            username: 'fresh1',
+            email: 'fresh1@core.vn',
+            fullName: 'Fresh User 1',
+            status: USER_STATUS.ACTIVE,
+            roleCodes: [],
+            organizationCodes: [],
+          },
+          {
+            username: 'fresh2',
+            email: 'fresh2@core.vn',
+            fullName: 'Fresh User 2',
+            status: USER_STATUS.ACTIVE,
+            roleCodes: [],
+            organizationCodes: [],
+          },
+        ],
+        duplicateStrategy: 'SKIP',
+        skipDuplicates: true,
+      });
+
+      expect(res.totalRows).toBe(4);
+      expect(res.skippedCount).toBe(2);
+      expect(res.importedCount).toBe(2);
+      expect(batchEmailsCalls).toBe(1);
+      expect(batchUsernamesCalls).toBe(1);
+      expect(singleEmailCalls).toBe(0);
+      expect(singleUsernameCalls).toBe(0);
     });
   });
 
@@ -2001,6 +2121,929 @@ describe('Users Module — Helpers & UsersService Unit Suite', () => {
         totalUsers: 1,
         activeCount: 1,
       });
+    });
+  });
+
+  describe('UserSearchService & SearchRegistryService — Section 8.5 Global Search Engine', () => {
+    function createSearchTestHarness() {
+      const searchRegistry = new SearchRegistryService();
+      const publishedMessages: Array<{ queue: string; envelope: Record<string, unknown> }> = [];
+
+      const messagePublisher = {
+        publish: async (queue: string, envelope: Record<string, unknown>) => {
+          publishedMessages.push({ queue, envelope });
+        },
+      } as unknown as BaseMessagePublisherProvider;
+
+      const sampleUsers = [
+        {
+          id: 1,
+          username: 'nguyenvanhai',
+          email: 'hai.nguyen@core.vn',
+          fullName: 'Nguyễn Văn Hải',
+          firstName: 'Hải',
+          lastName: 'Nguyễn Văn',
+          employeeCode: 'EMP-2026-000101',
+          phone: '0901234567',
+          status: USER_STATUS.ACTIVE,
+          statusName: 'Đang hoạt động',
+          gender: USER_GENDER.MALE,
+          genderName: 'Nam',
+          avatarUrl: null,
+          dateOfBirth: null,
+          address: null,
+          nationalId: null,
+          taxCode: null,
+          bio: null,
+          preferredLanguage: 'vi',
+          preferredTimezone: 'Asia/Ho_Chi_Minh',
+          emailVerifiedAt: '2026-01-01T00:00:00.000Z',
+          phoneVerifiedAt: null,
+          mfaEnabled: true,
+          lockedUntil: null,
+          lockReason: null,
+          failedLoginAttempts: 0,
+          primaryOrganizationUnitId: 10,
+          managerId: null,
+          lastLoginAt: '2026-10-20T08:00:00.000Z',
+          passwordChangedAt: '2026-01-01T00:00:00.000Z',
+          roles: [{ id: 1, code: 'admin', name: 'Administrator' }],
+          organizationUnits: [
+            { organizationUnitId: 10, code: 'HO', name: 'Khối Công Nghệ', isPrimary: true },
+          ],
+          createdAt: '2026-01-10T08:00:00.000Z',
+          updatedAt: '2026-10-25T10:00:00.000Z',
+        },
+        {
+          id: 2,
+          username: 'tranminhanh',
+          email: 'anh.tran@core.vn',
+          fullName: 'Trần Minh Ánh',
+          firstName: 'Ánh',
+          lastName: 'Trần Minh',
+          employeeCode: 'EMP-2026-000102',
+          phone: '0909888777',
+          status: USER_STATUS.ACTIVE,
+          statusName: 'Đang hoạt động',
+          gender: USER_GENDER.FEMALE,
+          genderName: 'Nữ',
+          avatarUrl: null,
+          dateOfBirth: null,
+          address: null,
+          nationalId: null,
+          taxCode: null,
+          bio: null,
+          preferredLanguage: 'vi',
+          preferredTimezone: 'Asia/Ho_Chi_Minh',
+          emailVerifiedAt: null,
+          phoneVerifiedAt: null,
+          mfaEnabled: false,
+          lockedUntil: null,
+          lockReason: null,
+          failedLoginAttempts: 0,
+          primaryOrganizationUnitId: 20,
+          managerId: 1,
+          lastLoginAt: null,
+          passwordChangedAt: '2026-02-01T00:00:00.000Z',
+          roles: [{ id: 2, code: 'staff', name: 'Staff' }],
+          organizationUnits: [
+            {
+              organizationUnitId: 20,
+              code: 'BR_SOUTH',
+              name: 'Chi nhánh Phía Nam',
+              isPrimary: true,
+            },
+          ],
+          createdAt: '2026-02-15T08:00:00.000Z',
+          updatedAt: '2026-10-25T12:00:00.000Z',
+        },
+      ];
+
+      const usersService = {
+        findAll: async () => ({
+          data: sampleUsers,
+          meta: {
+            page: 1,
+            limit: 500,
+            total: sampleUsers.length,
+            totalPages: 1,
+            hasNextPage: false,
+            hasPreviousPage: false,
+          },
+        }),
+      } as unknown as UsersService;
+
+      const organizationsPublic = {
+        getDescendantIds: async (orgId: number) => (orgId === 10 ? [10, 20] : [orgId]),
+      } as unknown as IOrganizationsPublicService;
+
+      const searchService = new UserSearchService(
+        usersService,
+        searchRegistry,
+        null,
+        messagePublisher,
+        organizationsPublic,
+      );
+
+      return {
+        searchService,
+        searchRegistry,
+        publishedMessages,
+      };
+    }
+
+    it('8.5.1 & 8.5.2 — Registers searchable entities per module and searches via built-in Database Search Provider without requiring external search engines', async () => {
+      const { searchService, searchRegistry } = createSearchTestHarness();
+
+      // 8.5.1: Verify module registered `users.account` searchable entity
+      const entities = searchService.listSearchableEntities({ includeAllModules: true });
+      const userEntity = entities.find((item) => item.code === 'users.account');
+      expect(userEntity).toBeDefined();
+      expect(userEntity?.module).toBe('users');
+      expect(userEntity?.entityType).toBe('user');
+      expect(userEntity?.requiredPermission).toBe('users.read');
+
+      // 8.5.2: Default driver is DATABASE (no Elasticsearch / OpenSearch required)
+      expect(searchRegistry.getActiveDriver()).toBe('DATABASE');
+
+      // Search with Vietnamese diacritics-insensitive keyword ("Nguyen Van Hai" matches "Nguyễn Văn Hải")
+      const searchRes = await searchService.searchUsers(
+        { keyword: 'Nguyen Van Hai' },
+        { id: 1, roles: ['admin'], permissions: ['users.read'] },
+      );
+
+      expect(searchRes.driverUsed).toBe('DATABASE');
+      expect(searchRes.total).toBe(1);
+      expect(searchRes.hits[0]?.id).toBe(1);
+      expect(searchRes.hits[0]?.title).toBe('Nguyễn Văn Hải');
+      expect(searchRes.hits[0]?.score).toBeGreaterThan(0);
+    });
+
+    it('8.5.3, 8.5.4 & 8.5.5 — Supports optional Elasticsearch / OpenSearch adapter, syncs index via Queue, and rebuilds full index by module or entityType', async () => {
+      const { searchService, searchRegistry, publishedMessages } = createSearchTestHarness();
+
+      // 8.5.3: Plug in an optional OpenSearch client adapter
+      const externalIndexedDocs: SearchDocumentRecord[] = [];
+      let externalClearCount = 0;
+
+      const mockOpenSearchClient: ExternalSearchEngineClientContract = {
+        engine: 'OPENSEARCH',
+        indexPrefix: 'enterprise_core',
+        isConnected: () => true,
+        bulkIndex: async (_indexName, docs) => {
+          externalIndexedDocs.push(...docs);
+          return { indexedCount: docs.length };
+        },
+        deleteByQuery: async (_indexName, _filter) => {
+          const deletedCount = externalIndexedDocs.length;
+          externalIndexedDocs.length = 0;
+          externalClearCount += 1;
+          return { deletedCount };
+        },
+        search: async (_indexName, query) => {
+          return externalIndexedDocs.filter((doc) =>
+            doc.searchableText.toLowerCase().includes(query.keyword.toLowerCase()),
+          );
+        },
+      };
+
+      searchService.registerExternalSearchClient(mockOpenSearchClient);
+      expect(searchRegistry.getActiveDriver()).toBe('OPENSEARCH');
+
+      // 8.5.4: Enqueue index sync via Queue (`users.search_sync` on `system.heavy`)
+      const queuedSync = await searchService.syncUsersToSearchIndex(
+        { userIds: [1, 2], async: true },
+        { id: 1, roles: ['admin'], permissions: ['users.update'] },
+      );
+      expect(queuedSync.status).toBe('QUEUED');
+      expect(queuedSync.executionMode).toBe('QUEUE');
+      expect(publishedMessages).toHaveLength(1);
+      expect(publishedMessages[0]?.envelope['topic']).toBe('users.search_sync');
+
+      // 8.5.5: Rebuild entire index by module / entityType (`rebuildSearchIndex`)
+      const rebuildHistory = await searchService.rebuildSearchIndex(
+        { module: 'users', entityType: 'user', async: false },
+        { id: 1, roles: ['admin'], permissions: ['users.update'] },
+      );
+
+      expect(rebuildHistory.operation).toBe('REBUILD');
+      expect(rebuildHistory.status).toBe('COMPLETED');
+      expect(rebuildHistory.driverUsed).toBe('OPENSEARCH');
+      expect(rebuildHistory.indexedCount).toBe(2);
+      expect(externalClearCount).toBeGreaterThanOrEqual(1);
+      expect(externalIndexedDocs).toHaveLength(2);
+
+      // Search using OpenSearch adapter
+      const osSearchRes = await searchService.searchUsers(
+        { keyword: 'EMP-2026-000102' },
+        { id: 1, roles: ['admin'], permissions: ['users.read'] },
+      );
+      expect(osSearchRes.driverUsed).toBe('OPENSEARCH');
+      expect(osSearchRes.total).toBe(1);
+      expect(osSearchRes.hits[0]?.id).toBe(2);
+
+      // Unplug external search engine -> falls back to DATABASE
+      searchService.registerExternalSearchClient(null);
+      expect(searchRegistry.getActiveDriver()).toBe('DATABASE');
+    });
+
+    it('8.5.6, 8.5.7 & 8.5.8 — Enforces Permissions & Data Scope (SELF, ORG_UNIT, SUBORDINATES, ALL), tracks Index Lag / stale documents, and records Zero-Result keyword statistics', async () => {
+      const { searchService } = createSearchTestHarness();
+
+      // Index documents with controlled timestamps to test Index Lag (8.5.7):
+      // sourceUpdatedAt is 10 minutes after indexedAt (> 5 min staleThresholdMs => isStale = true)
+      await searchService.syncUsersToSearchIndex({
+        sourceUpdatedAtOverride: '2026-10-26T10:10:00.000Z',
+        indexedAtOverride: '2026-10-26T10:00:00.000Z',
+      });
+
+      // 8.5.6: 1) Actor without `users.read` permission receives 0 results (never leaks unauthorized data)
+      const noPermResult = await searchService.searchUsers(
+        { keyword: 'core.vn' },
+        { id: 2, roles: ['guest'], permissions: ['profile.view'] },
+      );
+      expect(noPermResult.total).toBe(0);
+
+      // 8.5.6: 2) Actor with SELF Data Scope only sees their own record (id = 2)
+      const selfScopeActor = {
+        id: 2,
+        roles: ['staff'],
+        permissions: ['users.read'],
+        organizationUnitId: 20,
+        dataScopes: [DATA_SCOPE.SELF],
+      };
+      const selfResult = await searchService.searchUsers({ keyword: 'core.vn' }, selfScopeActor);
+      expect(selfResult.total).toBe(1);
+      expect(selfResult.hits[0]?.id).toBe(2);
+
+      // 8.5.6: 3) Actor with ORG_UNIT Data Scope in orgUnit 10 only sees users in orgUnit 10 (id = 1)
+      const orgScopeActor = {
+        id: 1,
+        roles: ['manager'],
+        permissions: ['users.read'],
+        organizationUnitId: 10,
+        dataScopes: [DATA_SCOPE.ORG_UNIT],
+      };
+      const orgResult = await searchService.searchUsers({ keyword: 'core.vn' }, orgScopeActor);
+      expect(orgResult.total).toBe(1);
+      expect(orgResult.hits[0]?.id).toBe(1);
+
+      // 8.5.6: 4) Actor with SUBORDINATES Data Scope in orgUnit 10 sees both orgUnit 10 and descendant orgUnit 20 (ids 1 & 2)
+      const subScopeActor = {
+        id: 1,
+        roles: ['director'],
+        permissions: ['users.read'],
+        organizationUnitId: 10,
+        dataScopes: [DATA_SCOPE.SUBORDINATES],
+      };
+      const subResult = await searchService.searchUsers({ keyword: 'core.vn' }, subScopeActor);
+      expect(subResult.total).toBe(2);
+
+      // 8.5.7: Verify Index Lag tracking (`indexLagMs = 600_000` > `300_000` => `isStale = true`)
+      expect(subResult.staleHitCount).toBe(2);
+      expect(subResult.maxIndexLagMs).toBe(600_000);
+      expect(subResult.hits[0]?.isStale).toBe(true);
+
+      const lagReport = searchService.getSearchIndexLagReport({ staleOnly: true });
+      expect(lagReport.totalIndexedDocuments).toBe(2);
+      expect(lagReport.staleDocumentCount).toBe(2);
+      expect(lagReport.maxLagMs).toBe(600_000);
+      expect(lagReport.items).toHaveLength(2);
+
+      // 8.5.8: Search for non-existent keywords and verify Zero-Result Keyword Statistics
+      await searchService.searchUsers(
+        { keyword: 'Chuyên gia AI Quantum' },
+        { id: 1, roles: ['admin'], permissions: ['users.read'] },
+      );
+      await searchService.searchUsers(
+        { keyword: 'chuyen gia ai quantum' },
+        { id: 1, roles: ['admin'], permissions: ['users.read'] },
+      );
+      await searchService.searchUsers(
+        { keyword: 'Kỹ sư Blockchain' },
+        { id: 1, roles: ['admin'], permissions: ['users.read'] },
+      );
+
+      const zeroStats = searchService.listZeroResultKeywords({ module: 'users' });
+      const topZero = zeroStats.find((item) => item.normalizedKeyword === 'chuyen gia ai quantum');
+      expect(topZero).toBeDefined();
+      expect(topZero?.searchCount).toBe(2);
+      expect(topZero?.sampleKeyword).toBe('Chuyên gia AI Quantum');
+      expect(topZero?.modules).toContain('users');
+      expect(topZero?.lastActorId).toBe(1);
+    });
+
+    it('8.5.5 (Multi-Page Rebuild) — Loads all user pages (> 500 users) when rebuilding Search Index without 500-item truncation', async () => {
+      const searchRegistry = new SearchRegistryService();
+      const totalUsers = 620;
+      const allMockUsers = Array.from({ length: totalUsers }, (_, idx) => ({
+        id: idx + 1,
+        username: `user_${idx + 1}`,
+        email: `user_${idx + 1}@core.vn`,
+        fullName: `Nhân sự Thứ ${idx + 1}`,
+        firstName: `${idx + 1}`,
+        lastName: 'Nhân sự',
+        phone: null,
+        avatarUrl: null,
+        profile: {
+          firstName: `${idx + 1}`,
+          lastName: 'Nhân sự',
+          fullName: `Nhân sự Thứ ${idx + 1}`,
+          avatarUrl: null,
+          dateOfBirth: null,
+          gender: null,
+          identityNumber: null,
+          address: null,
+          city: null,
+          country: null,
+          bio: null,
+        },
+        status: USER_STATUS.ACTIVE,
+        statusName: 'ACTIVE' as const,
+        emailVerifiedAt: null,
+        phoneVerifiedAt: null,
+        lockedUntil: null,
+        lockReason: null,
+        failedLoginAttempts: 0,
+        mfaEnabled: false,
+        primaryOrganizationUnitId: 10,
+        roles: [{ roleId: 1, code: 'staff', name: 'Staff' }],
+        organizationUnits: [
+          {
+            organizationUnitId: 10,
+            code: 'HO',
+            name: 'Hội sở',
+            isPrimary: true,
+            positionTitle: null,
+          },
+        ],
+        lastLoginAt: null,
+        passwordChangedAt: null,
+        archivedAt: null,
+        isArchived: false,
+        version: 1,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      }));
+
+      const pagesRequested: number[] = [];
+      const paginatedUsersService = {
+        listPaginated: async (query: { page?: number; limit?: number }) => {
+          const page = query.page ?? 1;
+          const limit = query.limit ?? 500;
+          pagesRequested.push(page);
+          const offset = (page - 1) * limit;
+          const slice = allMockUsers.slice(offset, offset + limit);
+          return {
+            data: slice,
+            meta: {
+              page,
+              limit,
+              total: totalUsers,
+              totalPages: Math.ceil(totalUsers / limit),
+              hasNextPage: offset + slice.length < totalUsers,
+              hasPreviousPage: page > 1,
+            },
+          };
+        },
+      } as unknown as UsersService;
+
+      const multiPageSearchService = new UserSearchService(
+        paginatedUsersService,
+        searchRegistry,
+        null,
+        null,
+        null,
+      );
+
+      const rebuildHistory = await multiPageSearchService.rebuildSearchIndex({
+        module: 'users',
+        entityType: 'user',
+        async: false,
+      });
+
+      expect(pagesRequested).toEqual([1, 2]);
+      expect(rebuildHistory.status).toBe('COMPLETED');
+      expect(rebuildHistory.indexedCount).toBe(620);
+      expect(searchRegistry.getIndexedDocumentCount({ module: 'users' })).toBe(620);
+    });
+  });
+
+  describe('Phase 9 — Section 9.2: Thành viên, chức vụ và người quản lý (9.2.1 – 9.2.7)', () => {
+    it('9.2.1, 9.2.2, 9.2.3 & 9.2.6 — Assigns multiple units with start/end dates, positionTitle independent of roles, and records membership transfer history (ASSIGN, UPDATE, TRANSFER, END)', async () => {
+      const usersStore = new Map<number, UserEntity>();
+      const profilesStore = new Map<number, UserProfileEntity>();
+      const orgsLinksStore = new Map<
+        number,
+        Array<{
+          userId: number;
+          organizationUnitId: number;
+          isPrimary: boolean;
+          positionTitle: string | null;
+          startDate: Date | null;
+          endDate: Date | null;
+        }>
+      >();
+      const orgHistoriesStore: Array<{
+        id: number;
+        userId: number;
+        organizationUnitId: number;
+        fromOrganizationUnitId: number | null;
+        actionType: 'ASSIGN' | 'UPDATE' | 'TRANSFER' | 'END';
+        isPrimary: boolean;
+        positionTitle: string | null;
+        startDate: Date | null;
+        endDate: Date | null;
+        reason: string | null;
+        changedBy: number | null;
+        createdAt: Date;
+      }> = [];
+      let nextUserId = 1;
+      let nextHistId = 1;
+
+      const mockUserRepo = {
+        findByIdWithArchived: async (id: number) => usersStore.get(Number(id)) ?? null,
+        findByUsername: async () => null,
+        findByEmail: async () => null,
+        findByPhoneHash: async () => null,
+        saveEntity: async (data: Partial<UserEntity>) => {
+          const id = data.id ? Number(data.id) : nextUserId++;
+          const existing = usersStore.get(id);
+          const saved = createMockUserEntity({
+            ...existing,
+            ...data,
+            id,
+            username: data.username ?? existing?.username ?? `user_${id}`,
+            email: data.email ?? existing?.email ?? `user_${id}@example.com`,
+          });
+          usersStore.set(id, saved);
+          return saved;
+        },
+      } as unknown as UserRepository;
+
+      const mockProfileRepo = {
+        upsertByUserId: async (userId: number, data: Partial<UserProfileEntity>) => {
+          const record = {
+            id: Number(userId),
+            userId: Number(userId),
+            firstName: data.firstName ?? 'Hải',
+            lastName: data.lastName ?? 'Nguyễn',
+            fullName: data.fullName ?? 'Nguyễn Hải',
+            avatarUrl: null,
+            dateOfBirth: null,
+            gender: null,
+            identityNumber: null,
+            address: null,
+            city: null,
+            country: null,
+            bio: null,
+            preferredLocale: 'vi',
+            preferredTimezone: 'Asia/Ho_Chi_Minh',
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          } as UserProfileEntity;
+          profilesStore.set(Number(userId), record);
+          return record;
+        },
+        findByUserIds: async (userIds: readonly number[]) =>
+          userIds
+            .map((id) => profilesStore.get(Number(id)))
+            .filter((p): p is UserProfileEntity => Boolean(p)),
+      } as unknown as UserProfileRepository;
+
+      const mockUserRoleRepo = {
+        findByUserIds: async () => [],
+        replaceUserRoles: async () => undefined,
+      } as unknown as UserRoleRepository;
+
+      const mockUserOrgRepo = {
+        findByUserIds: async (userIds: readonly number[]) =>
+          userIds.flatMap((uid) => orgsLinksStore.get(Number(uid)) ?? []),
+        replaceUserOrganizations: async (
+          userId: number,
+          items: ReadonlyArray<{
+            organizationUnitId: number;
+            isPrimary?: boolean;
+            positionTitle?: string | null;
+            startDate?: Date | string | null;
+            endDate?: Date | string | null;
+          }>,
+        ) => {
+          const normalized = items.map((item, idx) => ({
+            userId: Number(userId),
+            organizationUnitId: Number(item.organizationUnitId),
+            isPrimary: item.isPrimary ?? idx === 0,
+            positionTitle: item.positionTitle ?? null,
+            startDate: item.startDate ? new Date(item.startDate) : new Date('2026-01-01T00:00:00Z'),
+            endDate: item.endDate ? new Date(item.endDate) : null,
+          }));
+          orgsLinksStore.set(Number(userId), normalized);
+          return normalized;
+        },
+      } as unknown as UserOrganizationUnitRepository;
+
+      const mockOrgHistoryRepo = {
+        recordHistories: async (entries: ReadonlyArray<Record<string, unknown>>) => {
+          for (const entry of entries) {
+            orgHistoriesStore.push({
+              id: nextHistId++,
+              userId: Number(entry.userId),
+              organizationUnitId: Number(entry.organizationUnitId),
+              fromOrganizationUnitId:
+                entry.fromOrganizationUnitId !== null && entry.fromOrganizationUnitId !== undefined
+                  ? Number(entry.fromOrganizationUnitId)
+                  : null,
+              actionType: entry.actionType as 'ASSIGN' | 'UPDATE' | 'TRANSFER' | 'END',
+              isPrimary: Boolean(entry.isPrimary),
+              positionTitle: (entry.positionTitle as string | null) ?? null,
+              startDate: (entry.startDate as Date | null) ?? null,
+              endDate: (entry.endDate as Date | null) ?? null,
+              reason: (entry.reason as string | null) ?? null,
+              changedBy: (entry.changedBy as number | null) ?? null,
+              createdAt: new Date(),
+            });
+          }
+          return [];
+        },
+        findByUserId: async (userId: number) =>
+          orgHistoriesStore.filter((h) => h.userId === Number(userId)),
+      } as unknown as UserOrganizationHistoryRepository;
+
+      const mockStatusHistoryRepo = {
+        recordTransition: async () => undefined,
+        findByUserId: async () => [],
+      } as unknown as UserStatusHistoryRepository;
+
+      const mockPasswordHasher = {
+        hash: async (pwd: string) => `hashed:${pwd}`,
+        sha256: (val: string) => `sha256:${val}`,
+      } as unknown as PasswordHasherService;
+
+      const mockRolesService = {
+        ensureActiveRolesExist: async () => undefined,
+        findByIds: async () => [],
+        findByCodes: async () => [],
+        registerRoleUserCountDelegate: () => undefined,
+        registerRoleUsersListDelegate: () => undefined,
+      } as unknown as IRolesPublicService;
+
+      const mockOrgsService = {
+        ensureActiveUnitsExist: async () => undefined,
+        findByIds: async (ids: readonly number[]) =>
+          ids.map((id) => ({
+            id,
+            code: `UNIT_${id}`,
+            name: `Đơn vị ${id}`,
+            type: 20,
+            typeName: 'DEPARTMENT',
+            status: 1,
+          })),
+        registerUnitUsageCountDelegate: () => undefined,
+      } as unknown as IOrganizationsPublicService;
+
+      const service = new UsersService(
+        mockUserRepo,
+        mockUserRoleRepo,
+        mockUserOrgRepo,
+        new UsersMapper(),
+        mockPasswordHasher,
+        mockRolesService,
+        mockOrgsService,
+        mockStatusHistoryRepo,
+        null,
+        null,
+        null,
+        mockProfileRepo,
+        null,
+        null,
+        null,
+        mockOrgHistoryRepo,
+      );
+
+      // Rejects invalid membership period (startDate > endDate)
+      await expect(
+        service.create({
+          username: 'invalid.period',
+          email: 'invalid.period@core.vn',
+          fullName: 'Invalid Period User',
+          password: 'Password@123',
+          status: USER_STATUS.ACTIVE,
+          roleIds: [],
+          organizationUnits: [
+            {
+              organizationUnitId: 10,
+              isPrimary: true,
+              positionTitle: 'Trưởng phòng',
+              startDate: '2026-12-31',
+              endDate: '2026-01-01',
+            },
+          ],
+        }),
+      ).rejects.toThrow(BadRequestAppException);
+
+      // 1. Create user with 2 units (1 primary, 1 secondary) and start/end dates
+      const user = await service.create(
+        {
+          username: 'member.transfer',
+          email: 'member.transfer@core.vn',
+          fullName: 'Trần Minh Quân',
+          password: 'Password@123',
+          status: USER_STATUS.ACTIVE,
+          roleIds: [],
+          organizationUnits: [
+            {
+              organizationUnitId: 10,
+              isPrimary: true,
+              positionTitle: 'Trưởng nhóm',
+              startDate: '2026-01-01',
+              endDate: null,
+            },
+            {
+              organizationUnitId: 20,
+              isPrimary: false,
+              positionTitle: 'Chuyên viên',
+              startDate: '2026-02-01',
+              endDate: '2026-12-31',
+            },
+          ],
+        },
+        1,
+      );
+
+      expect(user.primaryOrganizationUnitId).toBe(10);
+      expect(user.organizationUnits).toHaveLength(2);
+      expect(user.organizationUnits[0]?.positionTitle).toBe('Trưởng nhóm');
+      expect(user.organizationUnits[0]?.startDate).toContain('2026-01-01');
+      expect(user.organizationUnits[1]?.endDate).toContain('2026-12-31');
+
+      // 2. Transfer user from primary unit 10 to new primary unit 30, while updating unit 20
+      const transferred = await service.assignOrganizations(
+        user.id,
+        {
+          organizationUnits: [
+            {
+              organizationUnitId: 30,
+              isPrimary: true,
+              positionTitle: 'Trưởng phòng',
+              startDate: '2026-06-01',
+              endDate: null,
+            },
+            {
+              organizationUnitId: 20,
+              isPrimary: false,
+              positionTitle: 'Trưởng nhóm',
+              startDate: '2026-02-01',
+              endDate: '2026-12-31',
+            },
+          ],
+          reason: 'Quyết định điều chuyển sang Đơn vị 30',
+        },
+        1,
+      );
+
+      expect(transferred.primaryOrganizationUnitId).toBe(30);
+      const history = await service.getOrganizationHistory(user.id);
+      // Initial 2 ASSIGN + 1 TRANSFER (10 -> 30) + 1 UPDATE (20 position changed) + 1 END (unit 10 ended)
+      expect(
+        history.some(
+          (h) =>
+            h.actionType === 'TRANSFER' &&
+            h.fromOrganizationUnitId === 10 &&
+            h.organizationUnitId === 30,
+        ),
+      ).toBe(true);
+      expect(history.some((h) => h.actionType === 'END' && h.organizationUnitId === 10)).toBe(true);
+      expect(
+        history.some(
+          (h) =>
+            h.actionType === 'UPDATE' &&
+            h.organizationUnitId === 20 &&
+            h.positionTitle === 'Trưởng nhóm',
+        ),
+      ).toBe(true);
+    });
+
+    it('9.2.4, 9.2.5 & 9.2.7 — Supports direct & temporary manager with expiration, subordinates lookup (DIRECT, TEMPORARY, INDIRECT), DataScope SUBORDINATES, and Approval Chain', async () => {
+      const now = Date.now();
+      const futureIso = new Date(now + 7 * 86400_000).toISOString();
+      const pastIso = new Date(now - 7 * 86400_000).toISOString();
+
+      // Hierarchy:
+      // User #1 (Director)
+      //   └── Direct manager of User #2 (Dept Head)
+      //   └── Active Temporary manager of User #4 (Specialist, whose direct manager is #5)
+      // User #2 (Dept Head)
+      //   └── Direct manager of User #3 (Team Lead)
+      const usersStore = new Map<number, UserEntity>([
+        [
+          1,
+          createMockUserEntity({
+            id: 1,
+            username: 'director',
+            email: 'director@core.vn',
+            primaryOrganizationUnitId: 10,
+          }),
+        ],
+        [
+          2,
+          createMockUserEntity({
+            id: 2,
+            username: 'dept.head',
+            email: 'dept.head@core.vn',
+            primaryOrganizationUnitId: 20,
+            managerId: 1,
+          }),
+        ],
+        [
+          3,
+          createMockUserEntity({
+            id: 3,
+            username: 'team.lead',
+            email: 'team.lead@core.vn',
+            primaryOrganizationUnitId: 20,
+            managerId: 2,
+          }),
+        ],
+        [
+          4,
+          createMockUserEntity({
+            id: 4,
+            username: 'specialist.temp',
+            email: 'specialist.temp@core.vn',
+            primaryOrganizationUnitId: 30,
+            managerId: 5,
+            temporaryManagerId: 1,
+            temporaryManagerFrom: new Date(pastIso),
+            temporaryManagerUntil: new Date(futureIso),
+          }),
+        ],
+        [
+          5,
+          createMockUserEntity({
+            id: 5,
+            username: 'other.mgr',
+            email: 'other.mgr@core.vn',
+            primaryOrganizationUnitId: 30,
+          }),
+        ],
+      ]);
+
+      const mockUserRepo = {
+        findByIdWithArchived: async (id: number) => usersStore.get(Number(id)) ?? null,
+        findSubordinateRelations: async (
+          managerId: number,
+          options?: { directOnly?: boolean; includeTemporary?: boolean },
+        ) => {
+          const directOnly = options?.directOnly ?? false;
+          const includeTemporary = options?.includeTemporary ?? true;
+          const visited = new Set<number>([Number(managerId)]);
+          const results: Array<{
+            userId: number;
+            relationType: 'DIRECT' | 'TEMPORARY' | 'INDIRECT';
+            level: number;
+          }> = [];
+          let frontier = [Number(managerId)];
+          let level = 1;
+
+          while (frontier.length > 0 && level <= 5) {
+            const nextFrontier: number[] = [];
+            for (const u of usersStore.values()) {
+              if (visited.has(u.id)) continue;
+              const isDirect = u.managerId !== null && frontier.includes(Number(u.managerId));
+              const isTemp =
+                includeTemporary &&
+                u.temporaryManagerId !== null &&
+                frontier.includes(Number(u.temporaryManagerId)) &&
+                Boolean(u.temporaryManagerUntil && u.temporaryManagerUntil.getTime() >= Date.now());
+              if (!isDirect && !isTemp) continue;
+              visited.add(u.id);
+              nextFrontier.push(u.id);
+              results.push({
+                userId: u.id,
+                relationType: level === 1 ? (isDirect ? 'DIRECT' : 'TEMPORARY') : 'INDIRECT',
+                level,
+              });
+            }
+            if (directOnly) break;
+            frontier = nextFrontier;
+            level += 1;
+          }
+          return results;
+        },
+        findSubordinateUserIds: async (
+          managerId: number,
+          options?: { directOnly?: boolean; includeTemporary?: boolean },
+        ) => {
+          const rels = await mockUserRepo.findSubordinateRelations(managerId, options);
+          return rels.map((r) => r.userId);
+        },
+        saveEntity: async (u: UserEntity) => {
+          usersStore.set(u.id, u);
+          return u;
+        },
+      } as unknown as UserRepository;
+
+      const mockProfileRepo = {
+        findByUserIds: async (userIds: readonly number[]) =>
+          userIds.map(
+            (id) =>
+              ({
+                id,
+                userId: id,
+                firstName: `U${id}`,
+                lastName: 'User',
+                fullName: `User #${id}`,
+              }) as UserProfileEntity,
+          ),
+      } as unknown as UserProfileRepository;
+
+      const mockUserRoleRepo = {
+        findByUserIds: async () => [],
+      } as unknown as UserRoleRepository;
+
+      const mockUserOrgRepo = {
+        findByUserIds: async (userIds: readonly number[]) =>
+          userIds.map((uid) => ({
+            userId: uid,
+            organizationUnitId: usersStore.get(uid)?.primaryOrganizationUnitId ?? 10,
+            isPrimary: true,
+            positionTitle: uid === 1 ? 'Giám đốc' : uid === 2 ? 'Trưởng phòng' : 'Chuyên viên',
+            startDate: new Date('2026-01-01T00:00:00Z'),
+            endDate: null,
+          })),
+      } as unknown as UserOrganizationUnitRepository;
+
+      const mockPasswordHasher = {
+        sha256: (v: string) => `sha_${v}`,
+      } as unknown as PasswordHasherService;
+
+      const mockRolesService = {
+        findByIds: async () => [],
+        findByCodes: async () => [
+          { id: 2, code: 'manager', status: 1, dataScope: DATA_SCOPE.SUBORDINATES },
+        ],
+        registerRoleUserCountDelegate: () => undefined,
+        registerRoleUsersListDelegate: () => undefined,
+      } as unknown as IRolesPublicService;
+
+      const mockOrgsService = {
+        findByIds: async (ids: readonly number[]) =>
+          ids.map((id) => ({ id, code: `U_${id}`, name: `Đơn vị ${id}`, type: 20, status: 1 })),
+        registerUnitUsageCountDelegate: () => undefined,
+      } as unknown as IOrganizationsPublicService;
+
+      const service = new UsersService(
+        mockUserRepo,
+        mockUserRoleRepo,
+        mockUserOrgRepo,
+        new UsersMapper(),
+        mockPasswordHasher,
+        mockRolesService,
+        mockOrgsService,
+        null,
+        null,
+        null,
+        null,
+        mockProfileRepo,
+      );
+
+      // 1. Subordinates overview for User #1 includes #2 (DIRECT), #4 (TEMPORARY), and #3 (INDIRECT)
+      const overview = await service.getSubordinatesOverview(1);
+      expect(overview.directCount).toBe(1);
+      expect(overview.temporaryCount).toBe(1);
+      expect(overview.indirectCount).toBe(1);
+      expect(overview.totalSubordinates).toBe(3);
+      expect(overview.subordinates.map((s) => `${s.id}:${s.relationType}:${s.level}`)).toEqual([
+        '2:DIRECT:1',
+        '4:TEMPORARY:1',
+        '3:INDIRECT:2',
+      ]);
+
+      // 2. Approval chain for User #4 uses active Temporary Manager (#1) instead of #5
+      const chainFor4 = await service.resolveApproverChain(4);
+      expect(chainFor4).toHaveLength(1);
+      expect(chainFor4[0]?.userId).toBe(1);
+      expect(chainFor4[0]?.sourceType).toBe('TEMPORARY_MANAGER');
+
+      // 3. Approval chain for User #3 goes #2 (Step 1) -> #1 (Step 2)
+      const chainFor3 = await service.resolveApproverChain(3);
+      expect(chainFor3.map((a) => `${a.step}:${a.userId}:${a.sourceType}`)).toEqual([
+        '1:2:DIRECT_MANAGER',
+        '2:1:DIRECT_MANAGER',
+      ]);
+
+      // 4. DataScope SUBORDINATES for User #1 allows access to temporary subordinate #4
+      const user4Resp = await service.getById(4);
+      expect(user4Resp.effectiveManagerId).toBe(1);
+      await expect(
+        service.assertCanAccessUserRecord(user4Resp, {
+          id: 1,
+          username: 'director',
+          roles: ['manager'],
+          permissions: ['users.read'],
+          dataScope: DATA_SCOPE.SUBORDINATES,
+        }),
+      ).resolves.toBeUndefined();
     });
   });
 });

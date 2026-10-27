@@ -6,7 +6,7 @@ import {
   NotFoundAppException,
   SettingRegistryService,
   buildExportFileArtifact,
-   buildImportTemplateFile,
+  buildImportTemplateFile,
   defaultExportRegistry,
   defaultSettingRegistry,
   resolveExportContentType,
@@ -36,10 +36,7 @@ import {
 } from '@modules/notifications/contracts/index.js';
 import { UserRepository } from '../repositories/user.repository.js';
 import { UsersService } from '../services/users.service.js';
-import type {
-  ListUserExportHistoriesQuery,
-  ListUsersQuery,
-} from '../requests/users.requests.js';
+import type { ListUserExportHistoriesQuery, ListUsersQuery } from '../requests/users.requests.js';
 import type { ExportUsersCsvResponse } from '../responses/users.response.js';
 import {
   DEFAULT_USER_EXPORT_REPORT_TITLE,
@@ -87,6 +84,61 @@ export class UserExportService {
   ) {
     this.settingRegistry = settingRegistry ?? defaultSettingRegistry;
     this.exportRegistry = exportRegistry ?? defaultExportRegistry;
+    this.registerUsersExportWorkerExecutor();
+  }
+
+  /**
+   * 8.3.4 — Đăng ký bộ thực thi Export nền của module `users` vào `ExportRegistryService`
+   * để `HeavyJobProcessor` tự động điều phối động mà không cần hardcode.
+   */
+  private registerUsersExportWorkerExecutor(): void {
+    const executor = {
+      profileCode: USERS_EXPORT_PROFILE_CODE,
+      module: 'users',
+      topic: 'users.export',
+      executeExport: async (input: {
+        readonly query?: Readonly<Record<string, unknown>> | undefined;
+        readonly format?: ExportFormat | string | undefined;
+        readonly notifyOnComplete?: boolean | undefined;
+        readonly actorId?: number | undefined;
+        readonly actor?: unknown;
+        readonly historyId?: number | undefined;
+        readonly jobId: string;
+      }) => {
+        const exportQuery: ListUsersQuery = {
+          sortBy: 'id',
+          sortOrder: 'ASC',
+          ...((input.query ?? {}) as Partial<ListUsersQuery>),
+          ...(input.format === 'csv' || input.format === 'xlsx' || input.format === 'pdf'
+            ? { format: input.format }
+            : {}),
+          async: false,
+          notifyOnComplete: input.notifyOnComplete ?? true,
+        };
+
+        const effectiveActor: UserIdentity | undefined =
+          (input.actor as UserIdentity | undefined) ??
+          (input.actorId !== undefined
+            ? {
+                id: input.actorId,
+                roles: [],
+                permissions: ['users.export'],
+              }
+            : undefined);
+
+        return this.exportUsersCsv(exportQuery, effectiveActor, {
+          skipQueuePublish: true,
+          ...(input.historyId !== undefined ? { existingHistoryId: input.historyId } : {}),
+          jobId: input.jobId,
+          forceNotify: input.notifyOnComplete !== false,
+        });
+      },
+    };
+
+    this.exportRegistry.registerWorkerExecutor(executor);
+    if (this.exportRegistry !== defaultExportRegistry) {
+      defaultExportRegistry.registerWorkerExecutor(executor);
+    }
   }
 
   /**

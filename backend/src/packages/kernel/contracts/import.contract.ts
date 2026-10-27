@@ -261,3 +261,57 @@ export interface ImportProfileHandler<TRow = Record<string, unknown>> {
       ) => Promise<ReadonlyMap<number, ExistingDuplicateMatch>>)
     | undefined;
 }
+
+/**
+ * Đầu vào khi Worker thực thi một chunk Import hàng loạt từ hàng đợi `system.heavy` (Mục 8.2.7).
+ */
+export interface ImportQueueChunkExecutionInput<TRow = unknown> {
+  readonly items?: readonly TRow[] | undefined;
+  readonly csvContent?: string | undefined;
+  readonly xlsxBase64?: string | undefined;
+  readonly columnMapping?: ImportColumnMappingInput | undefined;
+  readonly duplicateStrategy?: ImportDuplicateStrategy | undefined;
+  readonly skipDuplicates?: boolean | undefined;
+  readonly defaultPassword?: string | undefined;
+  readonly actorId?: number | undefined;
+  readonly options?:
+    | {
+        readonly skipQueuePublish?: boolean | undefined;
+        readonly skipHistoryRecord?: boolean | undefined;
+      }
+    | undefined;
+}
+
+/**
+ * Kết quả trả về sau khi Worker thực thi một chunk Import hàng loạt (Mục 8.2.7 & 8.2.8).
+ */
+export interface ImportQueueChunkExecutionResult {
+  readonly importedCount: number;
+  readonly updatedCount?: number | undefined;
+  readonly skippedCount: number;
+  readonly failedCount: number;
+  readonly errors: ReadonlyArray<{
+    readonly row: number;
+    readonly sheetRowNumber?: number | undefined;
+    readonly column?: string | null | undefined;
+    readonly columnLetter?: string | null | undefined;
+    readonly field?: string | null | undefined;
+    readonly code?: string | undefined;
+    readonly value?: unknown;
+    readonly message: string;
+  }>;
+}
+
+/**
+ * Hợp đồng đăng ký bộ thực thi Import nền (`ImportQueueWorkerExecutor`) vào `ImportRegistryService`
+ * giúp `HeavyJobProcessor` điều phối động cho mọi module mà không cần hardcode từng service.
+ */
+export interface ImportQueueWorkerExecutor<TRow = unknown> {
+  readonly profileCode: string;
+  readonly module: string;
+  readonly topic?: string | undefined;
+  parseImportRows(input: ImportQueueChunkExecutionInput<TRow>): readonly TRow[];
+  executeChunkImport(
+    input: ImportQueueChunkExecutionInput<TRow>,
+  ): Promise<ImportQueueChunkExecutionResult>;
+}

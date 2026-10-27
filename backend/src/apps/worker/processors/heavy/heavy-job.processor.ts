@@ -3,11 +3,20 @@ import { Processor } from '@nestjs/bullmq';
 import type { Job } from 'bullmq';
 import { CoreConfigService } from '@packages/config/index.js';
 import {
+  ExportRegistryService,
+  ImportRegistryService,
+  ReportRegistryService,
+  SearchRegistryService,
   defaultExportRegistry,
   defaultImportRegistry,
   defaultReportRegistry,
+  defaultSearchRegistry,
+  type ExportQueueWorkerExecutor,
   type ImportCellIssue,
   type ImportDuplicateStrategy,
+  type ImportQueueWorkerExecutor,
+  type ReportQueueWorkerExecutor,
+  type SearchQueueWorkerExecutor,
 } from '@packages/kernel/index.js';
 import { MetricsRegistryService } from '@packages/metrics/index.js';
 import { QUEUE_PROFILES, QUEUES, type MessageEnvelope } from '@packages/messaging/index.js';
@@ -17,6 +26,7 @@ import {
   UserExportService,
   UserImportService,
   UserReportService,
+  UserSearchService,
   type BulkImportUserRowInput,
   type ListUsersQuery,
   type RunUserReportRequest,
@@ -25,7 +35,15 @@ import { FilesService } from '@modules/files/index.js';
 import { BaseQueueProcessor } from '../base-queue.processor.js';
 
 export interface HeavyQueueJobPayload {
-  readonly operation?: 'import' | 'export' | 'report' | 'media_process' | 'trash_cleanup' | string;
+  readonly operation?:
+    | 'import'
+    | 'export'
+    | 'report'
+    | 'search_sync'
+    | 'search_rebuild'
+    | 'media_process'
+    | 'trash_cleanup'
+    | string;
   readonly executeInWorker?: boolean;
   readonly totalItems?: number;
   readonly chunkSize?: number;
@@ -43,6 +61,12 @@ export interface HeavyQueueJobPayload {
   readonly query?: Partial<ListUsersQuery>;
   readonly reportCode?: string;
   readonly request?: Partial<RunUserReportRequest>;
+  readonly userIds?: readonly number[];
+  readonly documentIds?: readonly (number | string)[];
+  readonly profileCode?: string;
+  readonly module?: string;
+  readonly entityType?: string;
+  readonly entityCode?: string;
   readonly filters?: Readonly<Record<string, unknown>>;
   readonly notifyOnComplete?: boolean;
   readonly fileId?: number | string | null;
@@ -79,6 +103,11 @@ export class HeavyJobProcessor extends BaseQueueProcessor {
     @Optional() private readonly filesService?: FilesService,
     @Optional() private readonly userExportService?: UserExportService,
     @Optional() private readonly userReportService?: UserReportService,
+    @Optional() private readonly userSearchService?: UserSearchService,
+    @Optional() private readonly importRegistry?: ImportRegistryService,
+    @Optional() private readonly exportRegistry?: ExportRegistryService,
+    @Optional() private readonly reportRegistry?: ReportRegistryService,
+    @Optional() private readonly searchRegistry?: SearchRegistryService,
   ) {
     super(config, metrics, progressTracker);
   }
@@ -149,6 +178,10 @@ export class HeavyJobProcessor extends BaseQueueProcessor {
       return this.handleUserReport(envelope.topic, envelope.id, job, payload);
     }
 
+    if (this.canExecuteUserSearchSync(envelope.topic, operation, payload)) {
+      return this.handleUserSearchSync(envelope.topic, envelope.id, job, payload, operation);
+    }
+
     if (this.canExecuteMediaProcess(envelope.topic, operation, payload)) {
       return this.handleMediaProcess(job, payload, total);
     }
@@ -160,27 +193,33 @@ export class HeavyJobProcessor extends BaseQueueProcessor {
     return this.handleChunkedProgress(envelope.topic, job, total, chunkSize);
   }
 
-  /** 1. Xử lý topic `users.import` — Import người dùng hàng loạt theo từng chunk */
+  /** 1. Xử lý topic `*.import` — Import dữ liệu hàng loạt theo từng chunk (điều phối động qua `ImportRegistryService`) */
   private async handleUserImport(
     topic: string,
     job: Job,
     payload: HeavyQueueJobPayload,
     chunkSize: number,
   ): Promise<HeavyHandlerResult> {
+    const importExecutor = this.resolveImportExecutor(topic, payload);
     const rawItems = Array.isArray(payload.items) ? payload.items : [];
     const resolvedRows: BulkImportUserRowInput[] =
       rawItems.length > 0
         ? (rawItems as BulkImportUserRowInput[])
-        : this.userImportService!.parseImportRows({
-            skipDuplicates: payload.skipDuplicates ?? true,
-            ...(payload.duplicateStrategy ? { duplicateStrategy: payload.duplicateStrategy } : {}),
-            ...(payload.columnMapping ? { columnMapping: payload.columnMapping } : {}),
-            ...(payload.csvContent ? { csvContent: payload.csvContent } : {}),
-            ...(payload.xlsxBase64 ? { xlsxBase64: payload.xlsxBase64 } : {}),
-          });
+        : ([
+            ...importExecutor!.parseImportRows({
+              skipDuplicates: payload.skipDuplicates ?? true,
+              ...(payload.duplicateStrategy
+                ? { duplicateStrategy: payload.duplicateStrategy }
+                : {}),
+              ...(payload.columnMapping ? { columnMapping: payload.columnMapping } : {}),
+              ...(payload.csvContent ? { csvContent: payload.csvContent } : {}),
+              ...(payload.xlsxBase64 ? { xlsxBase64: payload.xlsxBase64 } : {}),
+            }),
+          ] as BulkImportUserRowInput[]);
 
     const effectiveTotal = Math.max(1, resolvedRows.length);
     const historyRef = payload.historyId ?? String(job.id ?? '');
+    const activeImportRegistry = this.importRegistry ?? defaultImportRegistry;
     let processed = 0;
     let importedCount = 0;
     let updatedCount = 0;
@@ -191,18 +230,16 @@ export class HeavyJobProcessor extends BaseQueueProcessor {
     for (let offset = 0; offset < effectiveTotal; offset += chunkSize) {
       const chunk = resolvedRows.slice(offset, offset + chunkSize);
       if (chunk.length > 0) {
-        const chunkResult = await this.userImportService!.bulkImport(
-          {
-            items: chunk,
-            skipDuplicates: payload.skipDuplicates ?? true,
-            ...(payload.duplicateStrategy ? { duplicateStrategy: payload.duplicateStrategy } : {}),
-            ...(payload.defaultPassword !== undefined
-              ? { defaultPassword: payload.defaultPassword }
-              : {}),
-          },
-          payload.actorId,
-          { skipQueuePublish: true, skipHistoryRecord: true },
-        );
+        const chunkResult = await importExecutor!.executeChunkImport({
+          items: chunk,
+          skipDuplicates: payload.skipDuplicates ?? true,
+          ...(payload.duplicateStrategy ? { duplicateStrategy: payload.duplicateStrategy } : {}),
+          ...(payload.defaultPassword !== undefined
+            ? { defaultPassword: payload.defaultPassword }
+            : {}),
+          ...(payload.actorId !== undefined ? { actorId: payload.actorId } : {}),
+          options: { skipQueuePublish: true, skipHistoryRecord: true },
+        });
         importedCount += chunkResult.importedCount;
         updatedCount += chunkResult.updatedCount ?? 0;
         skippedCount += chunkResult.skippedCount;
@@ -239,7 +276,7 @@ export class HeavyJobProcessor extends BaseQueueProcessor {
         },
       );
       if (historyRef) {
-        defaultImportRegistry.updateImportHistory(historyRef, {
+        activeImportRegistry.updateImportHistory(historyRef, {
           status: processed >= effectiveTotal ? 'COMPLETED' : 'PROCESSING',
           totalRows: resolvedRows.length,
           processedRows: Math.min(resolvedRows.length, processed),
@@ -268,7 +305,7 @@ export class HeavyJobProcessor extends BaseQueueProcessor {
     };
   }
 
-  /** 2. Xử lý topic `users.export` — Xuất danh sách người dùng lớn chạy nền qua Queue (Mục 8.3.4 & 8.3.5) */
+  /** 2. Xử lý topic `*.export` — Xuất danh sách lớn chạy nền qua Queue (điều phối động qua `ExportRegistryService` — Mục 8.3.4 & 8.3.5) */
   private async handleUserExport(
     topic: string,
     envelopeId: string,
@@ -276,32 +313,16 @@ export class HeavyJobProcessor extends BaseQueueProcessor {
     payload: HeavyQueueJobPayload,
   ): Promise<HeavyHandlerResult> {
     const effectiveJobId = String(job.id ?? envelopeId);
-    const exportQuery: ListUsersQuery = {
-      sortBy: 'id',
-      sortOrder: 'ASC',
-      ...(payload.query ?? {}),
-      ...(payload.format === 'csv' || payload.format === 'xlsx' || payload.format === 'pdf'
-        ? { format: payload.format }
-        : {}),
-      async: false,
+    const exportExecutor = this.resolveExportExecutor(topic, payload);
+
+    const exportResult = await exportExecutor!.executeExport({
+      ...(payload.query ? { query: payload.query as Readonly<Record<string, unknown>> } : {}),
+      ...(payload.format ? { format: payload.format } : {}),
       notifyOnComplete: payload.notifyOnComplete ?? true,
-    };
-
-    const effectiveActor: UserIdentity | undefined =
-      payload.actor ??
-      (payload.actorId !== undefined
-        ? {
-            id: payload.actorId,
-            roles: [],
-            permissions: ['users.export'],
-          }
-        : undefined);
-
-    const exportResult = await this.userExportService!.exportUsersCsv(exportQuery, effectiveActor, {
-      skipQueuePublish: true,
-      ...(payload.historyId !== undefined ? { existingHistoryId: payload.historyId } : {}),
+      ...(payload.actorId !== undefined ? { actorId: payload.actorId } : {}),
+      ...(payload.actor ? { actor: payload.actor } : {}),
+      ...(payload.historyId !== undefined ? { historyId: payload.historyId } : {}),
       jobId: effectiveJobId,
-      forceNotify: payload.notifyOnComplete !== false,
     });
 
     const effectiveTotal = Math.max(1, exportResult.totalExported);
@@ -332,7 +353,7 @@ export class HeavyJobProcessor extends BaseQueueProcessor {
     };
   }
 
-  /** 2.5. Xử lý topic `users.report` — Chạy báo cáo nặng chạy nền qua Queue (Mục 8.4.4 & 8.4.6) */
+  /** 2.5. Xử lý topic `*.report` — Chạy báo cáo nặng chạy nền qua Queue (điều phối động qua `ReportRegistryService` — Mục 8.4.4 & 8.4.6) */
   private async handleUserReport(
     topic: string,
     envelopeId: string,
@@ -340,31 +361,18 @@ export class HeavyJobProcessor extends BaseQueueProcessor {
     payload: HeavyQueueJobPayload,
   ): Promise<HeavyHandlerResult> {
     const effectiveJobId = String(job.id ?? envelopeId);
-    const reportRequest: Partial<RunUserReportRequest> = {
-      reportCode: payload.reportCode ?? payload.request?.reportCode ?? 'users.security_compliance',
-      ...(payload.request ?? {}),
-      ...(payload.format === 'csv' || payload.format === 'xlsx' || payload.format === 'pdf'
-        ? { format: payload.format }
-        : {}),
-      async: false,
-    };
+    const reportCode =
+      payload.reportCode ?? payload.request?.reportCode ?? 'users.security_compliance';
+    const reportExecutor = this.resolveReportExecutor(topic, payload);
 
-    const effectiveActor: UserIdentity | undefined =
-      payload.actor ??
-      (payload.actorId !== undefined
-        ? {
-            id: payload.actorId,
-            roles: [],
-            permissions: ['users.report'],
-          }
-        : undefined);
-
-    const reportResult = await this.userReportService!.runReport(reportRequest, effectiveActor, {
-      skipQueuePublish: true,
-      ...(payload.historyId !== undefined ? { existingHistoryId: payload.historyId } : {}),
+    const reportResult = await reportExecutor!.executeReport({
+      reportCode,
+      ...(payload.request ? { request: payload.request as Readonly<Record<string, unknown>> } : {}),
+      ...(payload.format ? { format: payload.format } : {}),
+      ...(payload.actorId !== undefined ? { actorId: payload.actorId } : {}),
+      ...(payload.actor ? { actor: payload.actor } : {}),
+      ...(payload.historyId !== undefined ? { historyId: payload.historyId } : {}),
       jobId: effectiveJobId,
-      executionMode: 'QUEUE',
-      bypassPermissionCheck: effectiveActor === undefined,
     });
 
     const effectiveTotal = Math.max(1, reportResult.totalRecords);
@@ -392,6 +400,60 @@ export class HeavyJobProcessor extends BaseQueueProcessor {
         downloadUrl: reportResult.downloadUrl,
         expiresAt: reportResult.expiresAt,
         notifiedChannels: reportResult.notifiedChannels,
+      },
+    };
+  }
+
+  /** 2.6. Xử lý topic `*.search_sync` & `*.search_rebuild` — Đồng bộ hoặc tạo lại Search Index qua Queue (điều phối động qua `SearchRegistryService` — Mục 8.5.4 & 8.5.5) */
+  private async handleUserSearchSync(
+    topic: string,
+    envelopeId: string,
+    job: Job,
+    payload: HeavyQueueJobPayload,
+    operation: string,
+  ): Promise<HeavyHandlerResult> {
+    const effectiveJobId = String(job.id ?? envelopeId);
+    const isRebuild =
+      operation === 'search_rebuild' ||
+      topic.endsWith('.search_rebuild') ||
+      topic === 'search.rebuild_index';
+
+    const searchExecutor = this.resolveSearchExecutor(topic, payload);
+    const documentIds = payload.documentIds ?? payload.userIds;
+
+    const historyResult = await searchExecutor!.executeSearchJob({
+      operation: isRebuild ? 'search_rebuild' : 'search_sync',
+      ...(payload.module ? { module: payload.module } : {}),
+      ...(payload.entityType ? { entityType: payload.entityType } : {}),
+      ...(payload.entityCode ? { entityCode: payload.entityCode } : {}),
+      ...(Array.isArray(documentIds) ? { documentIds } : {}),
+      ...(payload.actorId !== undefined ? { actorId: payload.actorId } : {}),
+      ...(payload.actor ? { actor: payload.actor } : {}),
+      ...(payload.historyId !== undefined ? { historyId: payload.historyId } : {}),
+      jobId: effectiveJobId,
+    });
+
+    const effectiveTotal = Math.max(1, historyResult.indexedCount);
+    await this.reportProcessingStep(
+      job,
+      effectiveTotal,
+      effectiveTotal,
+      `Indexed ${historyResult.indexedCount} documents (${topic})`,
+      {
+        remaining: 0,
+        successCount: historyResult.indexedCount,
+      },
+    );
+
+    return {
+      processed: effectiveTotal,
+      total: effectiveTotal,
+      extra: {
+        historyId: historyResult.id,
+        syncOperation: historyResult.operation,
+        driverUsed: historyResult.driverUsed,
+        indexedCount: historyResult.indexedCount,
+        removedCount: historyResult.removedCount,
       },
     };
   }
@@ -462,7 +524,233 @@ export class HeavyJobProcessor extends BaseQueueProcessor {
     return { processed, total };
   }
 
-  /** Kiểm tra điều kiện chạy Import người dùng thật trong Worker */
+  /** Giải quyết động bộ thực thi Import theo Registry hoặc fallback service tiêm trực tiếp */
+  private resolveImportExecutor(
+    topic: string,
+    payload: HeavyQueueJobPayload,
+  ): ImportQueueWorkerExecutor<unknown> | undefined {
+    const isUsersTarget =
+      topic === 'users.import' ||
+      (!payload.module && !payload.profileCode) ||
+      payload.module === 'users' ||
+      payload.profileCode === 'users';
+
+    if (isUsersTarget && this.userImportService) {
+      return {
+        profileCode: 'users',
+        module: 'users',
+        topic: 'users.import',
+        parseImportRows: (input) =>
+          this.userImportService!.parseImportRows({
+            skipDuplicates: input.skipDuplicates ?? true,
+            ...(input.duplicateStrategy ? { duplicateStrategy: input.duplicateStrategy } : {}),
+            ...(input.columnMapping
+              ? {
+                  columnMapping: Object.fromEntries(
+                    Object.entries(input.columnMapping).filter(
+                      (entry): entry is [string, string | number] => entry[1] !== null,
+                    ),
+                  ),
+                }
+              : {}),
+            ...(input.csvContent ? { csvContent: input.csvContent } : {}),
+            ...(input.xlsxBase64 ? { xlsxBase64: input.xlsxBase64 } : {}),
+          }),
+        executeChunkImport: (input) =>
+          this.userImportService!.bulkImport(
+            {
+              items: (input.items ?? []) as BulkImportUserRowInput[],
+              skipDuplicates: input.skipDuplicates ?? true,
+              ...(input.duplicateStrategy ? { duplicateStrategy: input.duplicateStrategy } : {}),
+              ...(input.defaultPassword !== undefined
+                ? { defaultPassword: input.defaultPassword }
+                : {}),
+            },
+            input.actorId,
+            input.options ?? { skipQueuePublish: true, skipHistoryRecord: true },
+          ),
+      };
+    }
+
+    const activeRegistry = this.importRegistry ?? defaultImportRegistry;
+    return activeRegistry.resolveWorkerExecutor({
+      profileCode: payload.profileCode,
+      module: payload.module,
+      topic,
+    });
+  }
+
+  /** Giải quyết động bộ thực thi Export theo Registry hoặc fallback service tiêm trực tiếp */
+  private resolveExportExecutor(
+    topic: string,
+    payload: HeavyQueueJobPayload,
+  ): ExportQueueWorkerExecutor | undefined {
+    const isUsersTarget =
+      topic === 'users.export' ||
+      (!payload.module && !payload.profileCode) ||
+      payload.module === 'users' ||
+      payload.profileCode === 'users';
+
+    if (isUsersTarget && this.userExportService) {
+      return {
+        profileCode: 'users',
+        module: 'users',
+        topic: 'users.export',
+        executeExport: async (input) => {
+          const exportQuery: ListUsersQuery = {
+            sortBy: 'id',
+            sortOrder: 'ASC',
+            ...((input.query ?? {}) as Partial<ListUsersQuery>),
+            ...(input.format === 'csv' || input.format === 'xlsx' || input.format === 'pdf'
+              ? { format: input.format }
+              : {}),
+            async: false,
+            notifyOnComplete: input.notifyOnComplete ?? true,
+          };
+          const effectiveActor: UserIdentity | undefined =
+            (input.actor as UserIdentity | undefined) ??
+            (input.actorId !== undefined
+              ? { id: input.actorId, roles: [], permissions: ['users.export'] }
+              : undefined);
+          return this.userExportService!.exportUsersCsv(exportQuery, effectiveActor, {
+            skipQueuePublish: true,
+            ...(input.historyId !== undefined ? { existingHistoryId: input.historyId } : {}),
+            jobId: input.jobId,
+            forceNotify: input.notifyOnComplete !== false,
+          });
+        },
+      };
+    }
+
+    const activeRegistry = this.exportRegistry ?? defaultExportRegistry;
+    return activeRegistry.resolveWorkerExecutor({
+      profileCode: payload.profileCode,
+      module: payload.module,
+      topic,
+    });
+  }
+
+  /** Giải quyết động bộ thực thi Báo cáo theo Registry hoặc fallback service tiêm trực tiếp */
+  private resolveReportExecutor(
+    topic: string,
+    payload: HeavyQueueJobPayload,
+  ): ReportQueueWorkerExecutor | undefined {
+    const reportCode = payload.reportCode ?? payload.request?.reportCode;
+    const isUsersTarget =
+      topic === 'users.report' ||
+      (!payload.module && (!reportCode || reportCode.startsWith('users.'))) ||
+      payload.module === 'users';
+
+    if (isUsersTarget && this.userReportService) {
+      return {
+        module: 'users',
+        topic: 'users.report',
+        executeReport: async (input) => {
+          const reportRequest: Partial<RunUserReportRequest> = {
+            reportCode: input.reportCode || 'users.security_compliance',
+            ...((input.request ?? {}) as Partial<RunUserReportRequest>),
+            ...(input.format === 'csv' || input.format === 'xlsx' || input.format === 'pdf'
+              ? { format: input.format }
+              : {}),
+            async: false,
+          };
+          const effectiveActor: UserIdentity | undefined =
+            (input.actor as UserIdentity | undefined) ??
+            (input.actorId !== undefined
+              ? { id: input.actorId, roles: [], permissions: ['users.report'] }
+              : undefined);
+          return this.userReportService!.runReport(reportRequest, effectiveActor, {
+            skipQueuePublish: true,
+            ...(input.historyId !== undefined ? { existingHistoryId: input.historyId } : {}),
+            jobId: input.jobId,
+            executionMode: 'QUEUE',
+            bypassPermissionCheck: effectiveActor === undefined,
+          });
+        },
+      };
+    }
+
+    const activeRegistry = this.reportRegistry ?? defaultReportRegistry;
+    return activeRegistry.resolveWorkerExecutor({
+      reportCode,
+      module: payload.module,
+      topic,
+    });
+  }
+
+  /** Giải quyết động bộ thực thi đồng bộ Search Index theo Registry hoặc fallback service tiêm trực tiếp */
+  private resolveSearchExecutor(
+    topic: string,
+    payload: HeavyQueueJobPayload,
+  ): SearchQueueWorkerExecutor | undefined {
+    const isUsersTarget =
+      topic === 'users.search_sync' ||
+      topic === 'users.search_rebuild' ||
+      (!payload.module && !payload.entityCode) ||
+      payload.module === 'users' ||
+      payload.entityCode?.startsWith('users.');
+
+    if (isUsersTarget && this.userSearchService) {
+      return {
+        module: 'users',
+        entityCode: 'users.account',
+        syncTopic: 'users.search_sync',
+        rebuildTopic: 'users.search_rebuild',
+        executeSearchJob: async (input) => {
+          const effectiveActor: UserIdentity | undefined =
+            (input.actor as UserIdentity | undefined) ??
+            (input.actorId !== undefined
+              ? { id: input.actorId, roles: [], permissions: ['users.update', 'users.read'] }
+              : undefined);
+
+          if (input.operation === 'search_rebuild') {
+            return this.userSearchService!.rebuildSearchIndex(
+              {
+                ...(input.module ? { module: input.module } : {}),
+                ...(input.entityType ? { entityType: input.entityType } : {}),
+                ...(input.entityCode ? { entityCode: input.entityCode } : {}),
+                async: false,
+              },
+              effectiveActor,
+              {
+                skipQueuePublish: true,
+                ...(input.historyId !== undefined ? { existingHistoryId: input.historyId } : {}),
+                jobId: input.jobId,
+                executionMode: 'QUEUE',
+              },
+            );
+          }
+
+          const numericIds = Array.isArray(input.documentIds)
+            ? input.documentIds.map((id) => Number(id)).filter((id) => Number.isInteger(id))
+            : undefined;
+
+          return this.userSearchService!.syncUsersToSearchIndex(
+            {
+              ...(numericIds ? { userIds: numericIds } : {}),
+              async: false,
+            },
+            effectiveActor,
+            {
+              skipQueuePublish: true,
+              ...(input.historyId !== undefined ? { existingHistoryId: input.historyId } : {}),
+              jobId: input.jobId,
+              executionMode: 'QUEUE',
+            },
+          );
+        },
+      };
+    }
+
+    const activeRegistry = this.searchRegistry ?? defaultSearchRegistry;
+    return activeRegistry.resolveWorkerExecutor({
+      module: payload.module,
+      entityCode: payload.entityCode,
+      topic,
+    });
+  }
+
+  /** Kiểm tra điều kiện chạy Import dữ liệu thật trong Worker (hỗ trợ mọi module đăng ký qua `ImportRegistryService`) */
   private canExecuteUserImport(
     topic: string,
     operation: string,
@@ -474,35 +762,53 @@ export class HeavyJobProcessor extends BaseQueueProcessor {
       Boolean(payload.xlsxBase64);
 
     return (
-      (operation === 'import' || topic === 'users.import') &&
-      Boolean(this.userImportService) &&
+      (operation === 'import' || topic.endsWith('.import')) &&
+      Boolean(this.resolveImportExecutor(topic, payload)) &&
       payload.executeInWorker !== false &&
       hasInput
     );
   }
 
-  /** Kiểm tra điều kiện chạy Export người dùng thật trong Worker (Mục 8.3.4) */
+  /** Kiểm tra điều kiện chạy Export dữ liệu thật trong Worker (Mục 8.3.4 — hỗ trợ mọi module đăng ký qua `ExportRegistryService`) */
   private canExecuteUserExport(
     topic: string,
     operation: string,
     payload: HeavyQueueJobPayload,
   ): boolean {
     return (
-      (operation === 'export' || topic === 'users.export') &&
-      Boolean(this.userExportService) &&
+      (operation === 'export' || topic.endsWith('.export')) &&
+      Boolean(this.resolveExportExecutor(topic, payload)) &&
       payload.executeInWorker === true
     );
   }
 
-  /** Kiểm tra điều kiện chạy Báo cáo nặng người dùng thật trong Worker (Mục 8.4.4) */
+  /** Kiểm tra điều kiện chạy Báo cáo nặng thật trong Worker (Mục 8.4.4 — hỗ trợ mọi module đăng ký qua `ReportRegistryService`) */
   private canExecuteUserReport(
     topic: string,
     operation: string,
     payload: HeavyQueueJobPayload,
   ): boolean {
     return (
-      (operation === 'report' || topic === 'users.report') &&
-      Boolean(this.userReportService) &&
+      (operation === 'report' || topic.endsWith('.report')) &&
+      Boolean(this.resolveReportExecutor(topic, payload)) &&
+      payload.executeInWorker === true
+    );
+  }
+
+  /** Kiểm tra điều kiện chạy đồng bộ / rebuild Search Index trong Worker (Mục 8.5.4 & 8.5.5 — hỗ trợ mọi module đăng ký qua `SearchRegistryService`) */
+  private canExecuteUserSearchSync(
+    topic: string,
+    operation: string,
+    payload: HeavyQueueJobPayload,
+  ): boolean {
+    return (
+      (operation === 'search_sync' ||
+        operation === 'search_rebuild' ||
+        topic.endsWith('.search_sync') ||
+        topic.endsWith('.search_rebuild') ||
+        topic === 'search.index_sync' ||
+        topic === 'search.rebuild_index') &&
+      Boolean(this.resolveSearchExecutor(topic, payload)) &&
       payload.executeInWorker === true
     );
   }

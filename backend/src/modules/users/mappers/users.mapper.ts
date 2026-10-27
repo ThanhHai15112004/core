@@ -61,6 +61,21 @@ export class UsersMapper implements EntityMapperContract<UserEntity, UserRespons
       preferredTimezone,
     };
 
+    const managerId =
+      entity.managerId !== undefined && entity.managerId !== null ? Number(entity.managerId) : null;
+    const temporaryManagerId =
+      entity.temporaryManagerId !== undefined && entity.temporaryManagerId !== null
+        ? Number(entity.temporaryManagerId)
+        : null;
+    const tempFrom = entity.temporaryManagerFrom ? new Date(entity.temporaryManagerFrom) : null;
+    const tempUntil = entity.temporaryManagerUntil ? new Date(entity.temporaryManagerUntil) : null;
+    const nowMs = Date.now();
+    const isTempActive =
+      temporaryManagerId !== null &&
+      (!tempFrom || tempFrom.getTime() <= nowMs) &&
+      Boolean(tempUntil && tempUntil.getTime() >= nowMs);
+    const effectiveManagerId = isTempActive ? temporaryManagerId : managerId;
+
     return {
       id: Number(entity.id),
       username: entity.username,
@@ -85,10 +100,13 @@ export class UsersMapper implements EntityMapperContract<UserEntity, UserRespons
         entity.primaryOrganizationUnitId !== undefined && entity.primaryOrganizationUnitId !== null
           ? Number(entity.primaryOrganizationUnitId)
           : null,
-      managerId:
-        entity.managerId !== undefined && entity.managerId !== null
-          ? Number(entity.managerId)
-          : null,
+      managerId,
+      temporaryManagerId,
+      temporaryManagerFrom:
+        tempFrom && !Number.isNaN(tempFrom.getTime()) ? tempFrom.toISOString() : null,
+      temporaryManagerUntil:
+        tempUntil && !Number.isNaN(tempUntil.getTime()) ? tempUntil.toISOString() : null,
+      effectiveManagerId,
       roles: context.roles ?? [],
       organizationUnits: context.organizationUnits ?? [],
       lastLoginAt: entity.lastLoginAt ? entity.lastLoginAt.toISOString() : null,

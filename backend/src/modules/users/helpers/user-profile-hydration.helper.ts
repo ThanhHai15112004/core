@@ -101,6 +101,15 @@ export async function validateAndPrepareCreateUserContext(params: {
   }
 
   const orgInputs = dto.organizationUnits ?? [];
+  for (const item of orgInputs) {
+    if (item.startDate && item.endDate) {
+      const startMs = new Date(item.startDate).getTime();
+      const endMs = new Date(item.endDate).getTime();
+      if (!Number.isNaN(startMs) && !Number.isNaN(endMs) && endMs < startMs) {
+        throw new BadRequestAppException('users.invalidOrganizationMembershipPeriod');
+      }
+    }
+  }
   if (orgInputs.length > 0 && organizationsPublicService) {
     await organizationsPublicService.ensureActiveUnitsExist(
       orgInputs.map((o) => o.organizationUnitId),
@@ -111,6 +120,25 @@ export async function validateAndPrepareCreateUserContext(params: {
     const manager = await userRepository.findByIdWithArchived(dto.managerId, false);
     if (!manager) {
       throw new BadRequestAppException('users.managerNotFound', [{ managerId: dto.managerId }]);
+    }
+  }
+
+  if (dto.temporaryManagerId !== undefined && dto.temporaryManagerId !== null) {
+    const tempManager = await userRepository.findByIdWithArchived(dto.temporaryManagerId, false);
+    if (!tempManager) {
+      throw new BadRequestAppException('users.temporaryManagerNotFound', [
+        { temporaryManagerId: dto.temporaryManagerId },
+      ]);
+    }
+    const untilDate = dto.temporaryManagerUntil ? new Date(dto.temporaryManagerUntil) : null;
+    const fromDate = dto.temporaryManagerFrom ? new Date(dto.temporaryManagerFrom) : new Date();
+    if (
+      !untilDate ||
+      Number.isNaN(untilDate.getTime()) ||
+      Number.isNaN(fromDate.getTime()) ||
+      untilDate.getTime() <= fromDate.getTime()
+    ) {
+      throw new BadRequestAppException('users.invalidTemporaryManagerPeriod');
     }
   }
 
@@ -164,6 +192,61 @@ export async function validateAndApplyUserUpdateFields(params: {
         ]);
       }
       user.managerId = nextManagerId;
+    }
+  }
+
+  if (
+    dto.temporaryManagerId !== undefined ||
+    dto.temporaryManagerFrom !== undefined ||
+    dto.temporaryManagerUntil !== undefined
+  ) {
+    const nextTempId =
+      dto.temporaryManagerId !== undefined ? dto.temporaryManagerId : user.temporaryManagerId;
+    if (nextTempId === null || nextTempId === undefined) {
+      user.temporaryManagerId = null;
+      user.temporaryManagerFrom = null;
+      user.temporaryManagerUntil = null;
+    } else {
+      const numericTempId = Number(nextTempId);
+      if (numericTempId === Number(id)) {
+        throw new BadRequestAppException('users.cannotBeOwnTemporaryManager', [{ id }]);
+      }
+      const tempManager = await userRepository.findByIdWithArchived(numericTempId, false);
+      if (!tempManager) {
+        throw new BadRequestAppException('users.temporaryManagerNotFound', [
+          { temporaryManagerId: numericTempId },
+        ]);
+      }
+      const subordinates = await resolveSubordinateUserIds(Number(id));
+      if (subordinates.includes(numericTempId)) {
+        throw new BadRequestAppException('users.circularManagerHierarchy', [
+          { id, managerId: numericTempId },
+        ]);
+      }
+
+      const rawFrom =
+        dto.temporaryManagerFrom !== undefined
+          ? dto.temporaryManagerFrom
+          : user.temporaryManagerFrom;
+      const rawUntil =
+        dto.temporaryManagerUntil !== undefined
+          ? dto.temporaryManagerUntil
+          : user.temporaryManagerUntil;
+
+      const parsedFrom = rawFrom ? new Date(rawFrom) : new Date();
+      const parsedUntil = rawUntil ? new Date(rawUntil) : null;
+      if (
+        !parsedUntil ||
+        Number.isNaN(parsedFrom.getTime()) ||
+        Number.isNaN(parsedUntil.getTime()) ||
+        parsedUntil.getTime() <= parsedFrom.getTime()
+      ) {
+        throw new BadRequestAppException('users.invalidTemporaryManagerPeriod');
+      }
+
+      user.temporaryManagerId = numericTempId;
+      user.temporaryManagerFrom = parsedFrom;
+      user.temporaryManagerUntil = parsedUntil;
     }
   }
 
@@ -315,6 +398,14 @@ export async function hydrateUsersResponseList(params: {
         : {}),
       isPrimary: Boolean(link.isPrimary),
       positionTitle: link.positionTitle ?? null,
+      startDate:
+        link.startDate && !Number.isNaN(new Date(link.startDate).getTime())
+          ? new Date(link.startDate).toISOString()
+          : null,
+      endDate:
+        link.endDate && !Number.isNaN(new Date(link.endDate).getTime())
+          ? new Date(link.endDate).toISOString()
+          : null,
     });
     orgsByUser.set(uid, list);
   }

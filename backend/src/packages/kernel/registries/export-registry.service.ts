@@ -7,6 +7,7 @@ import {
   type ExportHistoryRecord,
   type ExportJobStatus,
   type ExportProgressSnapshot,
+  type ExportQueueWorkerExecutor,
   type IPdfExportAdapter,
   type TemporaryExportArtifact,
   type TemporaryExportArtifactSummary,
@@ -93,6 +94,7 @@ export interface RecordExportNotificationInput {
 @Injectable()
 export class ExportRegistryService {
   private pdfAdapter: IPdfExportAdapter | null = new SimpleTabularPdfAdapter();
+  private readonly workerExecutors = new Map<string, ExportQueueWorkerExecutor>();
   private readonly histories: ExportHistoryRecord[] = [];
   private readonly progressByJobId = new Map<string, ExportProgressSnapshot>();
   private readonly historyIdByJobId = new Map<string, number>();
@@ -100,6 +102,61 @@ export class ExportRegistryService {
   private readonly notifications: ExportCompletionNotification[] = [];
   private historySeq = 0;
   private notificationSeq = 0;
+
+  /**
+   * 8.3.4 — Đăng ký bộ thực thi Export nền (`ExportQueueWorkerExecutor`) của module vào Registry
+   * để `HeavyJobProcessor` tự động điều phối theo `profileCode`, `module` hoặc `topic` mà không cần hardcode.
+   */
+  public registerWorkerExecutor(executor: ExportQueueWorkerExecutor): void {
+    const profileKey = executor.profileCode.trim().toLowerCase();
+    const moduleKey = executor.module.trim().toLowerCase();
+    const topicKey = executor.topic?.trim().toLowerCase() || `${moduleKey}.export`;
+
+    if (profileKey) {
+      this.workerExecutors.set(`profile:${profileKey}`, executor);
+    }
+    if (moduleKey) {
+      this.workerExecutors.set(`module:${moduleKey}`, executor);
+    }
+    if (topicKey) {
+      this.workerExecutors.set(`topic:${topicKey}`, executor);
+    }
+  }
+
+  /**
+   * 8.3.4 — Tra cứu bộ thực thi Export nền theo `profileCode`, `module` hoặc `topic` (ví dụ: `'users.export'`, `'organizations.export'`).
+   */
+  public resolveWorkerExecutor(lookup: {
+    readonly profileCode?: string | undefined;
+    readonly module?: string | undefined;
+    readonly topic?: string | undefined;
+  }): ExportQueueWorkerExecutor | undefined {
+    if (lookup.profileCode?.trim()) {
+      const byProfile = this.workerExecutors.get(
+        `profile:${lookup.profileCode.trim().toLowerCase()}`,
+      );
+      if (byProfile) return byProfile;
+    }
+    if (lookup.module?.trim()) {
+      const byModule = this.workerExecutors.get(`module:${lookup.module.trim().toLowerCase()}`);
+      if (byModule) return byModule;
+    }
+    if (lookup.topic?.trim()) {
+      const normalizedTopic = lookup.topic.trim().toLowerCase();
+      const byTopic = this.workerExecutors.get(`topic:${normalizedTopic}`);
+      if (byTopic) return byTopic;
+      const topicPrefix = normalizedTopic.endsWith('.export')
+        ? normalizedTopic.slice(0, -'.export'.length)
+        : null;
+      if (topicPrefix) {
+        const byPrefix =
+          this.workerExecutors.get(`module:${topicPrefix}`) ??
+          this.workerExecutors.get(`profile:${topicPrefix}`);
+        if (byPrefix) return byPrefix;
+      }
+    }
+    return undefined;
+  }
 
   /**
    * 8.3.3 — Đăng ký PDF Adapter tùy chỉnh cho dự án (ví dụ: Puppeteer, PDFKit, Gotenberg...).
@@ -244,8 +301,7 @@ export class ExportRegistryService {
       expiresAt: update.expiresAt !== undefined ? update.expiresAt : current.expiresAt,
       isExpired: update.isExpired ?? current.isExpired,
       notifiedAt: update.notifiedAt !== undefined ? update.notifiedAt : current.notifiedAt,
-      errorMessage:
-        update.errorMessage !== undefined ? update.errorMessage : current.errorMessage,
+      errorMessage: update.errorMessage !== undefined ? update.errorMessage : current.errorMessage,
       completedAt,
     };
 
@@ -289,9 +345,7 @@ export class ExportRegistryService {
    * 8.3.5 & 8.3.8 — Lưu trữ file kết quả Export tạm thời kèm đường dẫn tải (`downloadUrl`) và thời hạn (`expiresAt`).
    * Không lưu file tạm vĩnh viễn: Tự động dọn các file đã hết hạn trước khi lưu file mới.
    */
-  public storeTemporaryArtifact(
-    input: StoreTemporaryExportArtifactInput,
-  ): TemporaryExportArtifact {
+  public storeTemporaryArtifact(input: StoreTemporaryExportArtifactInput): TemporaryExportArtifact {
     const now = input.now ?? new Date();
     this.purgeExpiredArtifacts(now);
 
@@ -456,7 +510,8 @@ export class ExportRegistryService {
     const sentAt = new Date().toISOString();
     const id = ++this.notificationSeq;
     const title =
-      input.title?.trim() || `Xuất dữ liệu ${input.format.toUpperCase()} hoàn tất (${input.fileName})`;
+      input.title?.trim() ||
+      `Xuất dữ liệu ${input.format.toUpperCase()} hoàn tất (${input.fileName})`;
     const message =
       input.message?.trim() ||
       `Đã xuất thành công ${input.totalExported} bản ghi ra file ${input.fileName}. Tải xuống tại: ${input.downloadUrl} (hết hạn lúc ${input.expiresAt}).`;

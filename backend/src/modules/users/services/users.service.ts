@@ -46,11 +46,13 @@ import {
   type UpdateUserPreferencesInput,
   type UserAuthCredentialsView,
   type UserAuthIdentityView,
+  type UserApproverSummaryView,
   type UserLoginHistoryItemView,
   type UserNotificationContactView,
   type UserPreferencesView,
   type UserProfileView,
   type UserStatusCode,
+  type UserSubordinateSummaryView,
   getUserStatusName,
   normalizePhoneNumber,
   parseUserStatus,
@@ -79,6 +81,11 @@ import {
   executeUserStatusTransition,
 } from '../helpers/user-lifecycle-assignment.helper.js';
 import {
+  resolveUserApproverChain,
+  resolveUserOrganizationHistoryList,
+  resolveUserSubordinatesList,
+} from '../helpers/user-subordinates-approval.helper.js';
+import {
   buildUserAuthCredentialsView,
   buildUserAuthIdentityView,
   executeAdminResetUserMfaFlow,
@@ -97,6 +104,7 @@ import { UserRepository } from '../repositories/user.repository.js';
 import { UserProfileRepository } from '../repositories/user-profile.repository.js';
 import { UserRoleRepository } from '../repositories/user-role.repository.js';
 import { UserOrganizationUnitRepository } from '../repositories/user-organization-unit.repository.js';
+import { UserOrganizationHistoryRepository } from '../repositories/user-organization-history.repository.js';
 import { UserStatusHistoryRepository } from '../repositories/user-status-history.repository.js';
 import { UsersMapper } from '../mappers/users.mapper.js';
 import type {
@@ -104,11 +112,17 @@ import type {
   AssignUserRolesRequest,
   ChangeUserStatusRequest,
   CreateUserRequest,
+  ListUserSubordinatesQuery,
   ListUsersQuery,
   LockUserRequest,
   UpdateUserRequest,
 } from '../requests/users.requests.js';
-import type { UserResponse, UserStatusHistoryItemResponse } from '../responses/users.response.js';
+import type {
+  UserOrganizationHistoryItemResponse,
+  UserResponse,
+  UserStatusHistoryItemResponse,
+  UserSubordinatesOverviewResponse,
+} from '../responses/users.response.js';
 
 export { USER_IDENTITY_CACHE_PREFIX };
 
@@ -171,6 +185,9 @@ export class UsersService implements IUsersPublicService {
     @Optional()
     @Inject(PlatformSecurityService)
     private readonly platformSecurityService: PlatformSecurityService | null = null,
+    @Optional()
+    @Inject(UserOrganizationHistoryRepository)
+    private readonly orgHistoryRepository: UserOrganizationHistoryRepository | null = null,
   ) {
     this.effectiveDataScopeService = this.dataScopeService ?? createDefaultDataScopeService();
 
@@ -238,11 +255,99 @@ export class UsersService implements IUsersPublicService {
     return this.effectiveDataScopeService;
   }
 
-  public async resolveSubordinateUserIds(managerId: number): Promise<number[]> {
+  public async resolveSubordinateUserIds(
+    managerId: number,
+    options?: { readonly directOnly?: boolean; readonly includeTemporary?: boolean },
+  ): Promise<number[]> {
     if (typeof this.userRepository.findSubordinateUserIds === 'function') {
-      return this.userRepository.findSubordinateUserIds(managerId);
+      return this.userRepository.findSubordinateUserIds(managerId, options);
     }
     return [];
+  }
+
+  public async listSubordinates(
+    managerId: number,
+    options?: { readonly directOnly?: boolean; readonly includeTemporary?: boolean },
+    actor?: UserIdentity,
+  ): Promise<UserSubordinateSummaryView[]> {
+    await this.getById(managerId, true, actor);
+    return resolveUserSubordinatesList({
+      managerId,
+      options,
+      userRepository: this.userRepository,
+      userOrgRepository: this.userOrgRepository,
+      findProfilesByUserIds: (uids) => this.findProfilesByUserIds(uids),
+      organizationsPublicService: this.organizationsPublicService,
+    });
+  }
+
+  public async resolveApproverChain(
+    userId: number,
+    maxLevels = 5,
+    actor?: UserIdentity,
+  ): Promise<UserApproverSummaryView[]> {
+    await this.getById(userId, true, actor);
+    return resolveUserApproverChain({
+      userId,
+      maxLevels,
+      userRepository: this.userRepository,
+      userOrgRepository: this.userOrgRepository,
+      findProfilesByUserIds: (uids) => this.findProfilesByUserIds(uids),
+    });
+  }
+
+  public async getSubordinatesOverview(
+    userId: number,
+    query?: ListUserSubordinatesQuery,
+    actor?: UserIdentity,
+  ): Promise<UserSubordinatesOverviewResponse> {
+    const userResp = await this.getById(userId, true, actor);
+    const options = {
+      ...(query?.directOnly !== undefined ? { directOnly: query.directOnly } : {}),
+      ...(query?.includeTemporary !== undefined
+        ? { includeTemporary: query.includeTemporary }
+        : {}),
+    };
+    const [subordinates, approverChain] = await Promise.all([
+      resolveUserSubordinatesList({
+        managerId: userResp.id,
+        options,
+        userRepository: this.userRepository,
+        userOrgRepository: this.userOrgRepository,
+        findProfilesByUserIds: (uids) => this.findProfilesByUserIds(uids),
+        organizationsPublicService: this.organizationsPublicService,
+      }),
+      resolveUserApproverChain({
+        userId: userResp.id,
+        maxLevels: 5,
+        userRepository: this.userRepository,
+        userOrgRepository: this.userOrgRepository,
+        findProfilesByUserIds: (uids) => this.findProfilesByUserIds(uids),
+      }),
+    ]);
+
+    return {
+      userId: userResp.id,
+      managerId: userResp.id,
+      directCount: subordinates.filter((s) => s.relationType === 'DIRECT').length,
+      temporaryCount: subordinates.filter((s) => s.relationType === 'TEMPORARY').length,
+      indirectCount: subordinates.filter((s) => s.relationType === 'INDIRECT').length,
+      totalSubordinates: subordinates.length,
+      subordinates,
+      approverChain,
+    };
+  }
+
+  public async getOrganizationHistory(
+    userId: number,
+    actor?: UserIdentity,
+  ): Promise<UserOrganizationHistoryItemResponse[]> {
+    const userResp = await this.getById(userId, true, actor);
+    return resolveUserOrganizationHistoryList({
+      userId: userResp.id,
+      userOrgHistoryRepository: this.orgHistoryRepository,
+      organizationsPublicService: this.organizationsPublicService,
+    });
   }
 
   public async resolveUserScopeFilter(
@@ -271,7 +376,7 @@ export class UsersService implements IUsersPublicService {
         ownerId: targetUser.id,
         primaryOrganizationUnitId: targetUser.primaryOrganizationUnitId,
         organizationUnitIds: [...new Set(orgIds)],
-        managerId: targetUser.managerId ?? null,
+        managerId: targetUser.effectiveManagerId ?? targetUser.managerId ?? null,
       },
       action,
     );
@@ -304,6 +409,14 @@ export class UsersService implements IUsersPublicService {
       limit,
       query.fields ? { fields: query.fields } : undefined,
     );
+  }
+
+  /** Alias chuẩn cho `listPaginated` để tương thích với các bộ nạp dữ liệu đồng bộ/tìm kiếm */
+  public async findAll(
+    query: ListUsersQuery = { sortBy: 'id', sortOrder: 'ASC' },
+    actor?: UserIdentity,
+  ): Promise<PaginatedResult<UserResponse>> {
+    return this.listPaginated(query, actor);
   }
 
   public async getById(
@@ -381,6 +494,17 @@ export class UsersService implements IUsersPublicService {
         mfaEnabled: false,
         primaryOrganizationUnitId: primaryOrgInput?.organizationUnitId ?? null,
         managerId: dto.managerId ?? null,
+        temporaryManagerId: dto.temporaryManagerId ?? null,
+        temporaryManagerFrom:
+          dto.temporaryManagerId && dto.temporaryManagerFrom
+            ? new Date(dto.temporaryManagerFrom)
+            : dto.temporaryManagerId
+              ? new Date()
+              : null,
+        temporaryManagerUntil:
+          dto.temporaryManagerId && dto.temporaryManagerUntil
+            ? new Date(dto.temporaryManagerUntil)
+            : null,
         passwordChangedAt: new Date(),
       });
 
@@ -409,6 +533,22 @@ export class UsersService implements IUsersPublicService {
 
       if (orgInputs.length > 0) {
         await this.userOrgRepository.replaceUserOrganizations(userId, orgInputs);
+        if (this.orgHistoryRepository) {
+          await this.orgHistoryRepository.recordHistories(
+            orgInputs.map((o) => ({
+              userId,
+              organizationUnitId: Number(o.organizationUnitId),
+              fromOrganizationUnitId: null,
+              actionType: 'ASSIGN' as const,
+              isPrimary: Boolean(o.isPrimary),
+              positionTitle: o.positionTitle ?? null,
+              startDate: o.startDate ? new Date(o.startDate) : new Date(),
+              endDate: o.endDate ? new Date(o.endDate) : null,
+              reason: 'Initial organization assignment',
+              changedBy: actorId ?? null,
+            })),
+          );
+        }
       }
 
       await this.recordStatusHistory(
@@ -466,6 +606,9 @@ export class UsersService implements IUsersPublicService {
       username: user.username,
       email: user.email,
       managerId: user.managerId ?? null,
+      temporaryManagerId: user.temporaryManagerId ?? null,
+      temporaryManagerFrom: user.temporaryManagerFrom ?? null,
+      temporaryManagerUntil: user.temporaryManagerUntil ?? null,
       status: user.status,
     };
 
@@ -497,6 +640,9 @@ export class UsersService implements IUsersPublicService {
           phone: user.phone ?? null,
           phoneHash: user.phoneHash ?? null,
           managerId: user.managerId ?? null,
+          temporaryManagerId: user.temporaryManagerId ?? null,
+          temporaryManagerFrom: user.temporaryManagerFrom ?? null,
+          temporaryManagerUntil: user.temporaryManagerUntil ?? null,
         });
       } else {
         await this.userRepository.saveEntity(user);
@@ -547,6 +693,9 @@ export class UsersService implements IUsersPublicService {
         username: updated.username,
         email: updated.email,
         managerId: updated.managerId,
+        temporaryManagerId: updated.temporaryManagerId,
+        temporaryManagerFrom: updated.temporaryManagerFrom,
+        temporaryManagerUntil: updated.temporaryManagerUntil,
         status: updated.status,
         fullName: updated.fullName,
       },
@@ -737,6 +886,7 @@ export class UsersService implements IUsersPublicService {
       actor,
       userRepository: this.userRepository,
       userOrgRepository: this.userOrgRepository,
+      userOrgHistoryRepository: this.orgHistoryRepository,
       organizationsPublicService: this.organizationsPublicService,
       transactionManager: this.transactionManager,
       ensureAccessUserEntity: (u, act, action) => this.ensureAccessUserEntity(u, act, action),

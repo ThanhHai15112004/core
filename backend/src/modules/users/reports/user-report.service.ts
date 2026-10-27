@@ -8,7 +8,6 @@ import {
   assertDistinctReportPermission,
   buildExportFileArtifact,
   buildReportCacheKey,
-  computeNextReportScheduleRun,
   defaultExportRegistry,
   defaultReportRegistry,
   defaultSettingRegistry,
@@ -162,6 +161,58 @@ export class UserReportService {
         isSystem: true,
         status: 1,
       });
+    }
+
+    const reportExecutor = {
+      module: 'users',
+      topic: 'users.report',
+      reportCodes: ['users.summary_dashboard', 'users.security_compliance'],
+      executeReport: async (input: {
+        readonly reportCode: string;
+        readonly request?: Readonly<Record<string, unknown>> | undefined;
+        readonly format?: ExportFormat | string | undefined;
+        readonly actorId?: number | undefined;
+        readonly actor?: unknown;
+        readonly historyId?: number | undefined;
+        readonly scheduleId?: number | undefined;
+        readonly executionMode?: ReportExecutionMode | undefined;
+        readonly jobId: string;
+      }) => {
+        const reportRequest: Partial<RunUserReportRequest> = {
+          reportCode: input.reportCode || 'users.security_compliance',
+          ...((input.request ?? {}) as Partial<RunUserReportRequest>),
+          ...(input.format === 'csv' || input.format === 'xlsx' || input.format === 'pdf'
+            ? { format: input.format }
+            : {}),
+          async: false,
+        };
+
+        const effectiveActor: UserIdentity | undefined =
+          (input.actor as UserIdentity | undefined) ??
+          (input.actorId !== undefined
+            ? {
+                id: input.actorId,
+                roles: [],
+                permissions: ['users.report'],
+              }
+            : undefined);
+
+        const effectiveMode: ReportExecutionMode = input.executionMode ?? 'QUEUE';
+
+        return this.runReport(reportRequest, effectiveActor, {
+          skipQueuePublish: true,
+          ...(input.historyId !== undefined ? { existingHistoryId: input.historyId } : {}),
+          ...(input.scheduleId !== undefined ? { scheduleId: input.scheduleId } : {}),
+          jobId: input.jobId,
+          executionMode: effectiveMode,
+          bypassPermissionCheck: effectiveActor === undefined || effectiveMode === 'SCHEDULED',
+        });
+      },
+    };
+
+    this.reportRegistry.registerWorkerExecutor(reportExecutor);
+    if (this.reportRegistry !== defaultReportRegistry) {
+      defaultReportRegistry.registerWorkerExecutor(reportExecutor);
     }
   }
 
@@ -658,84 +709,7 @@ export class UserReportService {
       readonly notifiedChannels: readonly ReportDeliveryChannel[];
     }>;
   }> {
-    const dueSchedules = this.reportRegistry
-      .findDueSchedules(now)
-      .filter((s) => s.module === 'users');
-    const results: Array<{
-      readonly scheduleId: number;
-      readonly reportCode: string;
-      readonly historyId: number;
-      readonly nextRunAt: string;
-      readonly downloadUrl: string | null;
-      readonly expiresAt: string | null;
-      readonly notifiedChannels: readonly ReportDeliveryChannel[];
-    }> = [];
-
-    for (const schedule of dueSchedules) {
-      const execResult = await this.runReport(
-        {
-          reportCode: schedule.reportCode,
-          fromDate: schedule.parameters.fromDate,
-          toDate: schedule.parameters.toDate,
-          status:
-            schedule.parameters.statuses.length === 1
-              ? (schedule.parameters.statuses[0] as UserStatusCode)
-              : (schedule.parameters.statuses as UserStatusCode[]),
-          organizationUnitId: schedule.parameters.organizationUnitId,
-          includeSubUnits: schedule.parameters.includeSubUnits,
-          filters: schedule.parameters.filters,
-          format: schedule.format,
-          ttlSeconds: schedule.ttlSeconds,
-          notifyChannels: [...schedule.channels],
-          recipientEmails: [...schedule.recipientEmails],
-          recipientUserIds: [...schedule.recipientUserIds],
-          async: false,
-        },
-        schedule.actorId
-          ? {
-              id: schedule.actorId,
-              email: schedule.recipientEmails[0] ?? 'scheduler@system.local',
-              roles: ['system_scheduler'],
-              permissions: ['users.report'],
-            }
-          : undefined,
-        {
-          skipQueuePublish: true,
-          scheduleId: schedule.id,
-          executionMode: 'SCHEDULED',
-          bypassPermissionCheck: true,
-        },
-      );
-
-      const nextRunDate = computeNextReportScheduleRun(
-        schedule.frequency,
-        schedule.hour,
-        schedule.minute,
-        schedule.dayOfWeek,
-        schedule.dayOfMonth,
-        now,
-      );
-      const updatedSchedule = this.reportRegistry.markScheduleExecuted(
-        schedule.id,
-        now.toISOString(),
-        nextRunDate.toISOString(),
-      );
-
-      results.push({
-        scheduleId: schedule.id,
-        reportCode: schedule.reportCode,
-        historyId: execResult.historyId,
-        nextRunAt: updatedSchedule?.nextRunAt ?? nextRunDate.toISOString(),
-        downloadUrl: execResult.downloadUrl ?? null,
-        expiresAt: execResult.expiresAt ?? null,
-        notifiedChannels: execResult.notifiedChannels,
-      });
-    }
-
-    return {
-      triggeredCount: results.length,
-      results,
-    };
+    return this.reportRegistry.triggerDueSchedules(now, { module: 'users' });
   }
 
   /**

@@ -19,14 +19,19 @@ import type {
   AdminResetPasswordResult,
   UserItem,
   UserLoginHistoryItem,
+  UserOrganizationHistoryItem,
   UserStatusHistoryItem,
+  UserSubordinatesOverview,
 } from '../types/users.types';
+import { UserMembershipAndSubordinatesPanel } from './UserMembershipAndSubordinatesPanel';
 
 interface UserLifecycleSecurityPanelProps {
   readonly users: readonly UserItem[];
   readonly selectedUser: UserItem | null;
   readonly onSelectUser: (id: number) => void;
   readonly statusHistory: readonly UserStatusHistoryItem[];
+  readonly organizationHistory: readonly UserOrganizationHistoryItem[];
+  readonly subordinatesOverview: UserSubordinatesOverview | null;
   readonly loginHistory: readonly UserLoginHistoryItem[];
   readonly loadingHistory: boolean;
   readonly submitting: boolean;
@@ -53,6 +58,8 @@ export const UserLifecycleSecurityPanel: React.FC<UserLifecycleSecurityPanelProp
   selectedUser,
   onSelectUser,
   statusHistory,
+  organizationHistory,
+  subordinatesOverview,
   loginHistory,
   loadingHistory,
   submitting,
@@ -404,6 +411,13 @@ export const UserLifecycleSecurityPanel: React.FC<UserLifecycleSecurityPanelProp
           </div>
         </div>
       </div>
+
+      {/* Section 9.2: Organization Membership History & Subordinates / Approval Chain */}
+      <UserMembershipAndSubordinatesPanel
+        organizationHistory={organizationHistory}
+        subordinatesOverview={subordinatesOverview}
+        loadingHistory={loadingHistory}
+      />
 
       {/* 2-Column History Tables: Status Transition History & Login History */}
       <div

@@ -50,6 +50,8 @@ export interface UpdateUserPreferencesInput {
   readonly preferredTimezone?: string | undefined;
 }
 
+export type UserOrganizationHistoryActionType = 'ASSIGN' | 'TRANSFER' | 'UPDATE' | 'END';
+
 export interface UserOrganizationAssignmentSummary {
   readonly organizationUnitId: number;
   readonly code?: string;
@@ -58,6 +60,58 @@ export interface UserOrganizationAssignmentSummary {
   readonly typeName?: string;
   readonly isPrimary: boolean;
   readonly positionTitle: string | null;
+  readonly startDate?: string | null;
+  readonly endDate?: string | null;
+}
+
+export interface UserOrganizationHistoryItemView {
+  readonly id: number;
+  readonly userId: number;
+  readonly organizationUnitId: number;
+  readonly organizationUnitCode?: string | null;
+  readonly organizationUnitName?: string | null;
+  readonly fromOrganizationUnitId: number | null;
+  readonly fromOrganizationUnitCode?: string | null;
+  readonly fromOrganizationUnitName?: string | null;
+  readonly actionType: UserOrganizationHistoryActionType;
+  readonly isPrimary: boolean;
+  readonly positionTitle: string | null;
+  readonly startDate: string | null;
+  readonly endDate: string | null;
+  readonly reason: string | null;
+  readonly changedBy: number | null;
+  readonly createdAt: string;
+}
+
+export interface UserSubordinateSummaryView {
+  readonly id: number;
+  readonly username: string;
+  readonly fullName: string;
+  readonly email: string;
+  readonly status: UserStatusCode;
+  readonly statusName: UserStatusName;
+  readonly primaryOrganizationUnitId: number | null;
+  readonly primaryOrganizationUnitName?: string | null;
+  readonly positionTitle: string | null;
+  readonly managerId: number | null;
+  readonly temporaryManagerId: number | null;
+  readonly temporaryManagerFrom: string | null;
+  readonly temporaryManagerUntil: string | null;
+  readonly effectiveManagerId: number | null;
+  readonly relationType: 'DIRECT' | 'TEMPORARY' | 'INDIRECT';
+  readonly level: number;
+}
+
+export interface UserApproverSummaryView {
+  readonly step: number;
+  readonly userId: number;
+  readonly username: string;
+  readonly fullName: string;
+  readonly email: string;
+  readonly status: UserStatusCode;
+  readonly primaryOrganizationUnitId: number | null;
+  readonly positionTitle: string | null;
+  readonly sourceType: 'DIRECT_MANAGER' | 'TEMPORARY_MANAGER';
 }
 
 export interface UserRoleAssignmentSummary {
@@ -106,6 +160,10 @@ export interface UserAuthIdentityView {
   readonly mfaEnabled: boolean;
   readonly primaryOrganizationUnitId: number | null;
   readonly managerId?: number | null;
+  readonly temporaryManagerId?: number | null;
+  readonly temporaryManagerFrom?: Date | string | null;
+  readonly temporaryManagerUntil?: Date | string | null;
+  readonly effectiveManagerId?: number | null;
   readonly organizationUnitIds: readonly number[];
   readonly roles: readonly string[];
   readonly permissions: readonly string[];
@@ -246,6 +304,15 @@ export interface IUsersPublicService {
   findActiveUserIdsByRoleIds?(roleIds: readonly number[]): Promise<number[]>;
   findActiveUserIdsByOrganizationUnitIds?(unitIds: readonly number[]): Promise<number[]>;
   findUserContactsByIds?(userIds: readonly number[]): Promise<UserNotificationContactView[]>;
+  resolveSubordinateUserIds?(
+    managerId: number,
+    options?: { readonly directOnly?: boolean; readonly includeTemporary?: boolean },
+  ): Promise<number[]>;
+  listSubordinates?(
+    managerId: number,
+    options?: { readonly directOnly?: boolean; readonly includeTemporary?: boolean },
+  ): Promise<UserSubordinateSummaryView[]>;
+  resolveApproverChain?(userId: number, maxLevels?: number): Promise<UserApproverSummaryView[]>;
 }
 
 export const USERS_PUBLIC_SERVICE = Symbol('USERS_PUBLIC_SERVICE');

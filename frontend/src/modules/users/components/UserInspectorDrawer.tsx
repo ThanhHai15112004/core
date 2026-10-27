@@ -30,6 +30,7 @@ interface UserInspectorDrawerProps {
   readonly onAssignOrganizations: (
     id: number,
     organizationUnits: readonly UserOrganizationAssignmentInput[],
+    reason?: string | null,
   ) => Promise<boolean>;
 }
 
@@ -61,9 +62,13 @@ export const UserInspectorDrawer: React.FC<UserInspectorDrawerProps> = ({
   const [preferredLocale, setPreferredLocale] = useState('vi');
   const [preferredTimezone, setPreferredTimezone] = useState('Asia/Ho_Chi_Minh');
   const [managerId, setManagerId] = useState<string>('');
+  const [temporaryManagerId, setTemporaryManagerId] = useState<string>('');
+  const [temporaryManagerFrom, setTemporaryManagerFrom] = useState<string>('');
+  const [temporaryManagerUntil, setTemporaryManagerUntil] = useState<string>('');
 
   const [selectedRoleIds, setSelectedRoleIds] = useState<number[]>([]);
   const [orgAssignments, setOrgAssignments] = useState<UserOrganizationAssignmentInput[]>([]);
+  const [orgAssignReason, setOrgAssignReason] = useState<string>('');
 
   useEffect(() => {
     if (mode === 'create') {
@@ -82,8 +87,12 @@ export const UserInspectorDrawer: React.FC<UserInspectorDrawerProps> = ({
       setPreferredLocale('vi');
       setPreferredTimezone('Asia/Ho_Chi_Minh');
       setManagerId('');
+      setTemporaryManagerId('');
+      setTemporaryManagerFrom('');
+      setTemporaryManagerUntil('');
       setSelectedRoleIds([]);
       setOrgAssignments([]);
+      setOrgAssignReason('');
       return;
     }
 
@@ -112,14 +121,26 @@ export const UserInspectorDrawer: React.FC<UserInspectorDrawerProps> = ({
           'Asia/Ho_Chi_Minh',
       );
       setManagerId(selectedUser.managerId ? String(selectedUser.managerId) : '');
+      setTemporaryManagerId(
+        selectedUser.temporaryManagerId ? String(selectedUser.temporaryManagerId) : '',
+      );
+      setTemporaryManagerFrom(
+        selectedUser.temporaryManagerFrom ? selectedUser.temporaryManagerFrom.slice(0, 10) : '',
+      );
+      setTemporaryManagerUntil(
+        selectedUser.temporaryManagerUntil ? selectedUser.temporaryManagerUntil.slice(0, 10) : '',
+      );
       setSelectedRoleIds(selectedUser.roles.map((r) => r.roleId));
       setOrgAssignments(
         selectedUser.organizationUnits.map((o) => ({
           organizationUnitId: o.organizationUnitId,
           isPrimary: o.isPrimary,
           positionTitle: o.positionTitle ?? '',
+          startDate: o.startDate ? o.startDate.slice(0, 10) : null,
+          endDate: o.endDate ? o.endDate.slice(0, 10) : null,
         })),
       );
+      setOrgAssignReason('');
     }
   }, [mode, selectedUser]);
 
@@ -140,6 +161,8 @@ export const UserInspectorDrawer: React.FC<UserInspectorDrawerProps> = ({
         organizationUnitId: firstAvailable.id,
         isPrimary: prev.length === 0,
         positionTitle: 'Chuyên viên',
+        startDate: new Date().toISOString().slice(0, 10),
+        endDate: null,
       },
     ]);
   };
@@ -191,9 +214,18 @@ export const UserInspectorDrawer: React.FC<UserInspectorDrawerProps> = ({
         preferredLocale,
         preferredTimezone,
         managerId: managerId ? Number(managerId) : null,
+        temporaryManagerId: temporaryManagerId ? Number(temporaryManagerId) : null,
+        temporaryManagerFrom:
+          temporaryManagerId && temporaryManagerFrom ? temporaryManagerFrom : null,
+        temporaryManagerUntil:
+          temporaryManagerId && temporaryManagerUntil ? temporaryManagerUntil : null,
         status: USER_STATUS.ACTIVE,
         roleIds: selectedRoleIds,
-        organizationUnits: orgAssignments,
+        organizationUnits: orgAssignments.map((o) => ({
+          ...o,
+          startDate: o.startDate || null,
+          endDate: o.endDate || null,
+        })),
       });
       if (ok) {
         onSwitchToEdit();
@@ -216,6 +248,11 @@ export const UserInspectorDrawer: React.FC<UserInspectorDrawerProps> = ({
       preferredLocale,
       preferredTimezone,
       managerId: managerId ? Number(managerId) : null,
+      temporaryManagerId: temporaryManagerId ? Number(temporaryManagerId) : null,
+      temporaryManagerFrom:
+        temporaryManagerId && temporaryManagerFrom ? temporaryManagerFrom : null,
+      temporaryManagerUntil:
+        temporaryManagerId && temporaryManagerUntil ? temporaryManagerUntil : null,
     });
   };
 
@@ -388,7 +425,7 @@ export const UserInspectorDrawer: React.FC<UserInspectorDrawerProps> = ({
           </div>
 
           <div>
-            <label style={authStyles.label}>Người quản lý trực tiếp (Manager)</label>
+            <label style={authStyles.label}>Người quản lý trực tiếp (Mục 9.2.4)</label>
             <select
               value={managerId}
               onChange={(e) => setManagerId(e.target.value)}
@@ -404,6 +441,56 @@ export const UserInspectorDrawer: React.FC<UserInspectorDrawerProps> = ({
                 ))}
             </select>
           </div>
+
+          <div>
+            <label style={authStyles.label}>Người quản lý tạm thời (Mục 9.2.5)</label>
+            <select
+              value={temporaryManagerId}
+              onChange={(e) => {
+                setTemporaryManagerId(e.target.value);
+                if (!e.target.value) {
+                  setTemporaryManagerFrom('');
+                  setTemporaryManagerUntil('');
+                } else if (!temporaryManagerFrom) {
+                  setTemporaryManagerFrom(new Date().toISOString().slice(0, 10));
+                }
+              }}
+              style={authStyles.input}
+            >
+              <option value="">-- Không ủy quyền tạm thời --</option>
+              {allUsers
+                .filter((u) => mode === 'create' || u.id !== selectedUser?.id)
+                .map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.fullName} (@{u.username})
+                  </option>
+                ))}
+            </select>
+          </div>
+
+          {temporaryManagerId && (
+            <>
+              <div>
+                <label style={authStyles.label}>Quản lý tạm thời: Từ ngày</label>
+                <input
+                  type="date"
+                  value={temporaryManagerFrom}
+                  onChange={(e) => setTemporaryManagerFrom(e.target.value)}
+                  style={authStyles.input}
+                />
+              </div>
+              <div>
+                <label style={authStyles.label}>Quản lý tạm thời: Đến ngày *</label>
+                <input
+                  type="date"
+                  required={Boolean(temporaryManagerId)}
+                  value={temporaryManagerUntil}
+                  onChange={(e) => setTemporaryManagerUntil(e.target.value)}
+                  style={authStyles.input}
+                />
+              </div>
+            </>
+          )}
 
           <div>
             <label style={authStyles.label}>Ngôn ngữ ưu tiên (Locale)</label>
@@ -547,10 +634,11 @@ export const UserInspectorDrawer: React.FC<UserInspectorDrawerProps> = ({
                 size={15}
                 style={{ verticalAlign: 'middle', marginRight: '6px', color: 'var(--secondary)' }}
               />
-              Phân công Đa Đơn vị & Phòng ban (1 Đơn vị chính)
+              Phân công Đa Đơn vị, Chức vụ & Thời hạn (Mục 9.2.1 – 9.2.3 & 9.2.6)
             </h4>
             <p style={{ ...authStyles.sectionDesc, marginBottom: 0 }}>
-              Nhân sự có thể thuộc nhiều đơn vị nhưng chỉ có 1 đơn vị chính (<code>isPrimary</code>).
+              Nhân sự có thể thuộc nhiều đơn vị (1 đơn vị chính <code>isPrimary</code>), gán chức
+              vụ độc lập với vai trò hệ thống và lưu lịch sử điều chuyển.
             </p>
           </div>
 
@@ -562,14 +650,46 @@ export const UserInspectorDrawer: React.FC<UserInspectorDrawerProps> = ({
               <button
                 type="button"
                 disabled={submitting}
-                onClick={() => void onAssignOrganizations(selectedUser.id, orgAssignments)}
+                onClick={() =>
+                  void onAssignOrganizations(
+                    selectedUser.id,
+                    orgAssignments.map((o) => ({
+                      ...o,
+                      startDate: o.startDate || null,
+                      endDate: o.endDate || null,
+                    })),
+                    orgAssignReason || null,
+                  )
+                }
                 style={authStyles.btnTeal}
               >
-                <Save size={14} /> Lưu Đơn vị
+                <Save size={14} /> Lưu Đơn vị & Điều chuyển
               </button>
             )}
           </div>
         </div>
+
+        <datalist id="user-position-title-options">
+          <option value="Giám đốc" />
+          <option value="Trưởng phòng" />
+          <option value="Trưởng nhóm" />
+          <option value="Chuyên viên" />
+        </datalist>
+
+        {mode === 'edit' && selectedUser && orgAssignments.length > 0 && (
+          <div style={{ marginBottom: '10px' }}>
+            <label style={authStyles.label}>
+              Lý do phân công / điều chuyển đơn vị (lưu vào <code>user_organization_histories</code>)
+            </label>
+            <input
+              type="text"
+              value={orgAssignReason}
+              onChange={(e) => setOrgAssignReason(e.target.value)}
+              placeholder="VD: Quyết định điều chuyển nhân sự số 15/QĐ-NS..."
+              style={authStyles.input}
+            />
+          </div>
+        )}
 
         {orgAssignments.length === 0 ? (
           <div
@@ -590,11 +710,10 @@ export const UserInspectorDrawer: React.FC<UserInspectorDrawerProps> = ({
               <div
                 key={`${item.organizationUnitId}-${idx}`}
                 style={{
-                  display: 'grid',
-                  gridTemplateColumns: '1.6fr 1.2fr auto auto',
+                  display: 'flex',
+                  flexDirection: 'column',
                   gap: '8px',
-                  alignItems: 'center',
-                  padding: '8px 10px',
+                  padding: '10px',
                   borderRadius: 'var(--radius-sm)',
                   border: item.isPrimary
                     ? '1px solid var(--secondary)'
@@ -602,63 +721,109 @@ export const UserInspectorDrawer: React.FC<UserInspectorDrawerProps> = ({
                   background: 'var(--bg-input)',
                 }}
               >
-                <select
-                  value={item.organizationUnitId}
-                  onChange={(e) =>
-                    updateOrgAssignment(idx, {
-                      organizationUnitId: Number(e.target.value),
-                    })
-                  }
-                  style={authStyles.input}
-                >
-                  {organizationOptions.map((o) => (
-                    <option key={o.id} value={o.id}>
-                      {o.name} ({o.code})
-                    </option>
-                  ))}
-                </select>
-
-                <input
-                  type="text"
-                  value={item.positionTitle ?? ''}
-                  onChange={(e) =>
-                    updateOrgAssignment(idx, { positionTitle: e.target.value })
-                  }
-                  placeholder="Chức danh (VD: Trưởng phòng)"
-                  style={authStyles.input}
-                />
-
-                <label
+                <div
                   style={{
-                    display: 'flex',
+                    display: 'grid',
+                    gridTemplateColumns: '1.5fr 1.2fr auto auto',
+                    gap: '8px',
                     alignItems: 'center',
-                    gap: '5px',
-                    fontSize: '12px',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    whiteSpace: 'nowrap',
                   }}
                 >
-                  <input
-                    type="radio"
-                    name="primaryOrgUnit"
-                    checked={Boolean(item.isPrimary)}
-                    onChange={() => updateOrgAssignment(idx, { isPrimary: true })}
-                  />
-                  Đơn vị chính
-                </label>
+                  <select
+                    value={item.organizationUnitId}
+                    onChange={(e) =>
+                      updateOrgAssignment(idx, {
+                        organizationUnitId: Number(e.target.value),
+                      })
+                    }
+                    style={authStyles.input}
+                  >
+                    {organizationOptions.map((o) => (
+                      <option key={o.id} value={o.id}>
+                        {o.name} ({o.code})
+                      </option>
+                    ))}
+                  </select>
 
-                <button
-                  type="button"
-                  onClick={() => removeOrgAssignment(idx)}
+                  <input
+                    type="text"
+                    list="user-position-title-options"
+                    value={item.positionTitle ?? ''}
+                    onChange={(e) =>
+                      updateOrgAssignment(idx, { positionTitle: e.target.value })
+                    }
+                    placeholder="Chức vụ (VD: Trưởng phòng)"
+                    style={authStyles.input}
+                  />
+
+                  <label
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '5px',
+                      fontSize: '12px',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    <input
+                      type="radio"
+                      name="primaryOrgUnit"
+                      checked={Boolean(item.isPrimary)}
+                      onChange={() => updateOrgAssignment(idx, { isPrimary: true })}
+                    />
+                    Đơn vị chính
+                  </label>
+
+                  <button
+                    type="button"
+                    onClick={() => removeOrgAssignment(idx)}
+                    style={{
+                      ...authStyles.btnDanger,
+                      padding: '6px 9px',
+                    }}
+                    title="Xóa đơn vị này"
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                </div>
+
+                <div
                   style={{
-                    ...authStyles.btnDanger,
-                    padding: '6px 9px',
+                    display: 'grid',
+                    gridTemplateColumns: '1fr 1fr',
+                    gap: '8px',
+                    alignItems: 'center',
                   }}
-                  title="Xóa đơn vị này"
                 >
-                  <Trash2 size={13} />
-                </button>
+                  <div>
+                    <label style={{ ...authStyles.label, fontSize: '11px', marginBottom: '2px' }}>
+                      Ngày bắt đầu (Start Date)
+                    </label>
+                    <input
+                      type="date"
+                      value={item.startDate ? item.startDate.slice(0, 10) : ''}
+                      onChange={(e) =>
+                        updateOrgAssignment(idx, { startDate: e.target.value || null })
+                      }
+                      style={authStyles.input}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ ...authStyles.label, fontSize: '11px', marginBottom: '2px' }}>
+                      Ngày kết thúc (End Date — Để trống nếu vô thời hạn)
+                    </label>
+                    <input
+                      type="date"
+                      value={item.endDate ? item.endDate.slice(0, 10) : ''}
+                      onChange={(e) =>
+                        updateOrgAssignment(idx, { endDate: e.target.value || null })
+                      }
+                      style={authStyles.input}
+                    />
+                  </div>
+                </div>
               </div>
             ))}
           </div>

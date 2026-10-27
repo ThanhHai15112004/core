@@ -46,12 +46,7 @@ export function resolveExportContentType(format: ExportFormat): string {
  * Trạng thái tiến độ / lịch sử của một phiên Xuất dữ liệu (Mục 8.3.4, 8.3.7 & 8.3.8).
  */
 export type ExportJobStatus =
-  | 'QUEUED'
-  | 'PROCESSING'
-  | 'COMPLETED'
-  | 'FAILED'
-  | 'EXPIRED'
-  | 'CANCELLED';
+  'QUEUED' | 'PROCESSING' | 'COMPLETED' | 'FAILED' | 'EXPIRED' | 'CANCELLED';
 
 /**
  * Tùy chọn định dạng khi kết xuất bảng dữ liệu sang PDF qua Adapter (Mục 8.3.3).
@@ -262,4 +257,42 @@ export interface ExportCompletionNotification {
   readonly title: string;
   readonly message: string;
   readonly sentAt: string;
+}
+
+/**
+ * Đầu vào khi Worker thực thi một tác vụ Export lớn chạy nền qua Queue (Mục 8.3.4).
+ */
+export interface ExportQueueWorkerExecutionInput {
+  readonly query?: Readonly<Record<string, unknown>> | undefined;
+  readonly format?: ExportFormat | string | undefined;
+  readonly notifyOnComplete?: boolean | undefined;
+  readonly actorId?: number | undefined;
+  readonly actor?: unknown;
+  readonly historyId?: number | undefined;
+  readonly jobId: string;
+}
+
+/**
+ * Kết quả trả về sau khi Worker thực thi tác vụ Export lớn (Mục 8.3.4 & 8.3.5).
+ */
+export interface ExportQueueWorkerExecutionResult {
+  readonly fileName: string;
+  readonly format: ExportFormat | string;
+  readonly totalExported: number;
+  readonly historyId?: number | null | undefined;
+  readonly downloadToken?: string | null | undefined;
+  readonly downloadUrl?: string | null | undefined;
+  readonly expiresAt?: string | null | undefined;
+  readonly notifiedAt?: string | null | undefined;
+}
+
+/**
+ * Hợp đồng đăng ký bộ thực thi Export nền (`ExportQueueWorkerExecutor`) vào `ExportRegistryService`
+ * giúp `HeavyJobProcessor` điều phối động cho mọi module mà không cần hardcode từng service.
+ */
+export interface ExportQueueWorkerExecutor {
+  readonly profileCode: string;
+  readonly module: string;
+  readonly topic?: string | undefined;
+  executeExport(input: ExportQueueWorkerExecutionInput): Promise<ExportQueueWorkerExecutionResult>;
 }

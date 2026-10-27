@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import {
   AlertCircle,
+  BarChart3,
   CheckCircle2,
   FileSpreadsheet,
   RefreshCw,
+  Search,
   ShieldAlert,
   Users,
 } from 'lucide-react';
@@ -14,6 +16,8 @@ import { UsersDirectoryTable } from './components/UsersDirectoryTable';
 import { UserInspectorDrawer } from './components/UserInspectorDrawer';
 import { UserLifecycleSecurityPanel } from './components/UserLifecycleSecurityPanel';
 import { UsersBulkImportExportTab } from './components/UsersBulkImportExportTab';
+import { UsersReportsDashboardTab } from './components/UsersReportsDashboardTab';
+import { UsersGlobalSearchTab } from './components/UsersGlobalSearchTab';
 
 export const UsersManagementPage: React.FC = () => {
   const {
@@ -31,6 +35,8 @@ export const UsersManagementPage: React.FC = () => {
     selectedUserId,
     setSelectedUserId,
     statusHistory,
+    organizationHistory,
+    subordinatesOverview,
     loginHistory,
     loadingHistory,
     roleOptions,
@@ -38,6 +44,20 @@ export const UsersManagementPage: React.FC = () => {
     lastPasswordResetResult,
     lastMfaResetResult,
     lastImportResult,
+    importPreview,
+    importJobProgress,
+    importHistories,
+    exportJobProgress,
+    exportHistories,
+    availableReports,
+    lastReportResult,
+    reportSchedules,
+    reportHistories,
+    searchableEntities,
+    searchResult,
+    lastSyncResult,
+    indexLagReport,
+    zeroResultKeywords,
     stats,
     refreshAll,
     handleCreateUser,
@@ -50,7 +70,21 @@ export const UsersManagementPage: React.FC = () => {
     handleRevokeSessions,
     handleDownloadTemplate,
     handleExportUsers,
+    handlePreviewImport,
     handleBulkImport,
+    handleRefreshImportJobProgress,
+    handleRefreshExportJobProgress,
+    handleDownloadTemporaryExport,
+    loadImportExportHistories,
+    handleRunReport,
+    handleCreateReportSchedule,
+    handleTriggerDueReportSchedules,
+    handleDownloadTemporaryReport,
+    loadReportsData,
+    handleSearchGlobal,
+    handleSyncSearchIndex,
+    handleRebuildSearchIndex,
+    loadSearchTelemetry,
   } = useUsersManagement();
 
   const [inspectorMode, setInspectorMode] = useState<'create' | 'edit'>('edit');
@@ -68,8 +102,18 @@ export const UsersManagementPage: React.FC = () => {
     },
     {
       id: USERS_TAB.BULK_IMPORT_EXPORT,
-      label: 'Nhập / Xuất Hàng loạt (CSV & XLSX)',
+      label: 'Nhập / Xuất Hàng loạt (Mục 8.2 & 8.3)',
       icon: <FileSpreadsheet size={15} />,
+    },
+    {
+      id: USERS_TAB.REPORTS_DASHBOARD,
+      label: 'Báo cáo & Lịch gửi định kỳ (Mục 8.4)',
+      icon: <BarChart3 size={15} />,
+    },
+    {
+      id: USERS_TAB.GLOBAL_SEARCH,
+      label: 'Tìm kiếm Toàn hệ thống (Mục 8.5)',
+      icon: <Search size={15} />,
     },
   ];
 
@@ -369,6 +413,8 @@ export const UsersManagementPage: React.FC = () => {
           selectedUser={selectedUser}
           onSelectUser={setSelectedUserId}
           statusHistory={statusHistory}
+          organizationHistory={organizationHistory}
+          subordinatesOverview={subordinatesOverview}
           loginHistory={loginHistory}
           loadingHistory={loadingHistory}
           submitting={submitting}
@@ -381,14 +427,59 @@ export const UsersManagementPage: React.FC = () => {
         />
       )}
 
-      {/* Tab 3: Bulk Import & Export */}
+      {/* Tab 3: Bulk Import & Export (Mục 8.2 & 8.3) */}
       {activeTab === USERS_TAB.BULK_IMPORT_EXPORT && (
         <UsersBulkImportExportTab
           submitting={submitting}
           lastImportResult={lastImportResult}
+          importPreview={importPreview}
+          importJobProgress={importJobProgress}
+          importHistories={importHistories}
+          exportJobProgress={exportJobProgress}
+          exportHistories={exportHistories}
           onDownloadTemplate={handleDownloadTemplate}
           onExportUsers={handleExportUsers}
           onBulkImport={handleBulkImport}
+          onPreviewImport={handlePreviewImport}
+          onRefreshImportJobProgress={handleRefreshImportJobProgress}
+          onRefreshImportHistories={loadImportExportHistories}
+          onRefreshExportJobProgress={handleRefreshExportJobProgress}
+          onRefreshExportHistories={loadImportExportHistories}
+          onDownloadTemporaryExport={handleDownloadTemporaryExport}
+        />
+      )}
+
+      {/* Tab 4: Reports & Dashboard (Mục 8.4) */}
+      {activeTab === USERS_TAB.REPORTS_DASHBOARD && (
+        <UsersReportsDashboardTab
+          submitting={submitting}
+          availableReports={availableReports}
+          organizationOptions={organizationOptions}
+          lastReportResult={lastReportResult}
+          reportSchedules={reportSchedules}
+          reportHistories={reportHistories}
+          onRunReport={handleRunReport}
+          onCreateSchedule={handleCreateReportSchedule}
+          onTriggerDueSchedules={handleTriggerDueReportSchedules}
+          onRefreshReportsData={loadReportsData}
+          onDownloadTemporaryReport={handleDownloadTemporaryReport}
+        />
+      )}
+
+      {/* Tab 5: Global Search (Mục 8.5) */}
+      {activeTab === USERS_TAB.GLOBAL_SEARCH && (
+        <UsersGlobalSearchTab
+          submitting={submitting}
+          searchableEntities={searchableEntities}
+          organizationOptions={organizationOptions}
+          searchResult={searchResult}
+          lastSyncResult={lastSyncResult}
+          indexLagReport={indexLagReport}
+          zeroResultKeywords={zeroResultKeywords}
+          onSearchGlobal={handleSearchGlobal}
+          onSyncIndex={handleSyncSearchIndex}
+          onRebuildIndex={handleRebuildSearchIndex}
+          onRefreshSearchTelemetry={loadSearchTelemetry}
         />
       )}
     </main>

@@ -3,7 +3,13 @@ import { UnrecoverableError, type Job } from 'bullmq';
 import { applyTestEnv } from '../../fixtures/env.fixture.js';
 import { mockRedisFactory } from '../../concerns/test-app.concern.js';
 import { CoreConfigService } from '@packages/config/index.js';
-import { ForbiddenAppException } from '@packages/kernel/index.js';
+import {
+  ExportRegistryService,
+  ForbiddenAppException,
+  ImportRegistryService,
+  ReportRegistryService,
+  SearchRegistryService,
+} from '@packages/kernel/index.js';
 import { MetricsRegistryService } from '@packages/metrics/index.js';
 import { RedisService } from '@packages/redis/index.js';
 import { AuditLogService } from '@packages/security/index.js';
@@ -630,22 +636,78 @@ describe('Phase 7.3 — Hàng đợi công việc (Multi-Queue, Worker Concurren
       opts: { priority: JOB_PRIORITIES.CRITICAL },
     });
 
-    // 6. SystemProcessor khi nhận system.maintenance.tick gọi thật purgeExpiredTrash & retryDueDeliveries
+    // 6. SystemProcessor khi nhận system.maintenance.tick gọi thật purgeExpiredTrash, retryDueDeliveries, dọn file Export/Report hết hạn (8.3.8/8.4.6) và tự động kích hoạt Lịch gửi báo cáo đến hạn (8.4.5)
     const fakeNotificationChannelsService = {
       retryDueDeliveries: async () => ({ retriedCount: 4 }),
     } as unknown as NotificationChannelsService;
+    const maintExportRegistry = new ExportRegistryService();
+    const maintReportRegistry = new ReportRegistryService(maintExportRegistry);
+
+    maintExportRegistry.storeTemporaryArtifact({
+      profileCode: 'users',
+      module: 'users',
+      fileName: 'expired_export.csv',
+      format: 'csv',
+      totalExported: 10,
+      buffer: Buffer.from('id,name\n1,A', 'utf8'),
+      ttlSeconds: 60,
+      now: new Date(Date.now() - 120_000),
+    });
+
+    maintReportRegistry.registerReport({
+      code: 'users.daily_summary',
+      module: 'users',
+      name: 'Báo cáo nhân sự định kỳ',
+      requiredPermission: 'users.report',
+    });
+    maintReportRegistry.registerWorkerExecutor({
+      module: 'users',
+      topic: 'users.report',
+      reportCodes: ['users.daily_summary'],
+      executeReport: async (input) => ({
+        reportCode: input.reportCode,
+        historyId: 701,
+        totalRecords: 12,
+        dataSourceUsed: 'REPLICA',
+        cacheHit: false,
+        downloadToken: 'sched_rep_701',
+        downloadUrl: '/api/v1/users/reports/downloads/sched_rep_701',
+        expiresAt: new Date(Date.now() + 86_400_000).toISOString(),
+        notifiedChannels: ['EMAIL', 'IN_APP'],
+      }),
+    });
+    const createdSchedule = maintReportRegistry.createSchedule({
+      reportCode: 'users.daily_summary',
+      module: 'users',
+      name: 'Lịch gửi báo cáo nhân sự 08:00 hàng ngày',
+      frequency: 'DAILY',
+      hour: 8,
+      minute: 0,
+      format: 'xlsx',
+      channels: ['EMAIL', 'IN_APP'],
+      recipientEmails: ['director@core.vn'],
+      recipientUserIds: [1],
+      isActive: true,
+    });
+
     const systemProcessor = new SystemProcessor(
       config,
       metrics,
       progressTracker,
       fakeFilesService,
       fakeNotificationChannelsService,
+      maintExportRegistry,
+      maintReportRegistry,
     );
+    const futureTickNow = new Date(Date.parse(createdSchedule.nextRunAt) + 60_000).toISOString();
     const maintenanceJob = {
       id: 'job-maint-505',
       name: 'system.maintenance.tick',
       queueName: QUEUES.SYSTEM_EVENTS,
-      data: serializeMessage('system.maintenance.tick', { triggeredBy: 'scheduler' }),
+      data: serializeMessage('system.maintenance.tick', {
+        triggeredBy: 'scheduler',
+        now: futureTickNow,
+      }),
       opts: { attempts: 3 },
       timestamp: Date.now() - 100,
       attemptsMade: 0,
@@ -661,6 +723,17 @@ describe('Phase 7.3 — Hàng đợi công việc (Multi-Queue, Worker Concurren
       topic: 'system.maintenance.tick',
       purgedTrashCount: 3,
       retriedDeliveriesCount: 4,
+      purgedExportArtifactsCount: 1,
+      triggeredReportSchedulesCount: 1,
+    });
+    expect(
+      (maintRes as { triggeredReportSchedules: Array<{ scheduleId: number; downloadUrl: string }> })
+        .triggeredReportSchedules[0],
+    ).toMatchObject({
+      scheduleId: createdSchedule.id,
+      reportCode: 'users.daily_summary',
+      historyId: 701,
+      downloadUrl: '/api/v1/users/reports/downloads/sched_rep_701',
     });
 
     // 7. HeavyJobProcessor chạy Export lớn (users.export) thực sự trong Worker, lưu file tạm và trả về downloadUrl (Mục 8.3.4 & 8.3.5)
@@ -809,6 +882,323 @@ describe('Phase 7.3 — Hàng đợi công việc (Multi-Queue, Worker Concurren
       dataSourceUsed: 'REPLICA',
       downloadToken: 'rep_tok_808',
       downloadUrl: '/api/v1/users/reports/downloads/rep_tok_808',
+    });
+
+    // 9. HeavyJobProcessor chạy đồng bộ & tạo lại Search Index (users.search_sync & users.search_rebuild — Mục 8.5.4 & 8.5.5)
+    const fakeUserSearchService = {
+      syncUsersToSearchIndex: async () => ({
+        id: 105,
+        operation: 'SYNC' as const,
+        module: 'users',
+        entityType: 'user',
+        entityCode: 'users.account',
+        driverUsed: 'DATABASE' as const,
+        executionMode: 'QUEUE' as const,
+        status: 'COMPLETED' as const,
+        indexedCount: 320,
+        removedCount: 0,
+        jobId: 'job-heavy-search-sync-909',
+        actorId: 1,
+        errorMessage: null,
+        startedAt: '2026-10-26T15:10:00.000Z',
+        completedAt: '2026-10-26T15:10:01.000Z',
+      }),
+      rebuildSearchIndex: async () => ({
+        id: 106,
+        operation: 'REBUILD' as const,
+        module: 'users',
+        entityType: 'user',
+        entityCode: 'users.account',
+        driverUsed: 'OPENSEARCH' as const,
+        executionMode: 'QUEUE' as const,
+        status: 'COMPLETED' as const,
+        indexedCount: 500,
+        removedCount: 480,
+        jobId: 'job-heavy-search-rebuild-910',
+        actorId: 1,
+        errorMessage: null,
+        startedAt: '2026-10-26T15:12:00.000Z',
+        completedAt: '2026-10-26T15:12:03.000Z',
+      }),
+    };
+
+    const heavySearchProcessor = new HeavyJobProcessor(
+      config,
+      metrics,
+      progressTracker,
+      userImportService,
+      fakeFilesService,
+      fakeUserExportService as never,
+      fakeUserReportService as never,
+      fakeUserSearchService as never,
+    );
+
+    const heavySearchSyncJob = {
+      id: 'job-heavy-search-sync-909',
+      name: 'users.search_sync',
+      queueName: QUEUES.SYSTEM_HEAVY,
+      data: serializeMessage('users.search_sync', {
+        operation: 'search_sync',
+        executeInWorker: true,
+        historyId: 105,
+        actorId: 1,
+        userIds: [1, 2, 3],
+      }),
+      opts: { attempts: 2 },
+      timestamp: Date.now() - 100,
+      attemptsMade: 0,
+      attemptsStarted: 1,
+      progress: 0,
+      updateProgress: async () => undefined,
+      log: async () => undefined,
+    } as unknown as Job;
+
+    const searchSyncRes = await heavySearchProcessor.process(heavySearchSyncJob);
+    expect(searchSyncRes).toMatchObject({
+      queue: QUEUES.SYSTEM_HEAVY,
+      topic: 'users.search_sync',
+      operation: 'search_sync',
+      processed: 320,
+      total: 320,
+      historyId: 105,
+      driverUsed: 'DATABASE',
+      indexedCount: 320,
+    });
+
+    const heavySearchRebuildJob = {
+      id: 'job-heavy-search-rebuild-910',
+      name: 'users.search_rebuild',
+      queueName: QUEUES.SYSTEM_HEAVY,
+      data: serializeMessage('users.search_rebuild', {
+        operation: 'search_rebuild',
+        executeInWorker: true,
+        historyId: 106,
+        actorId: 1,
+        module: 'users',
+        entityType: 'user',
+      }),
+      opts: { attempts: 2 },
+      timestamp: Date.now() - 100,
+      attemptsMade: 0,
+      attemptsStarted: 1,
+      progress: 0,
+      updateProgress: async () => undefined,
+      log: async () => undefined,
+    } as unknown as Job;
+
+    const searchRebuildRes = await heavySearchProcessor.process(heavySearchRebuildJob);
+    expect(searchRebuildRes).toMatchObject({
+      queue: QUEUES.SYSTEM_HEAVY,
+      topic: 'users.search_rebuild',
+      operation: 'search_rebuild',
+      processed: 500,
+      total: 500,
+      historyId: 106,
+      driverUsed: 'OPENSEARCH',
+      indexedCount: 500,
+      removedCount: 480,
+    });
+
+    // 10. HeavyJobProcessor điều phối động qua Registry cho bất kỳ module nào (vd: organizations.import / export / report / search_sync) không cần hardcode service
+    const customImportRegistry = new ImportRegistryService();
+    const customExportRegistry = new ExportRegistryService();
+    const customReportRegistry = new ReportRegistryService(customExportRegistry);
+    const customSearchRegistry = new SearchRegistryService();
+
+    customImportRegistry.registerWorkerExecutor({
+      profileCode: 'organizations',
+      module: 'organizations',
+      topic: 'organizations.import',
+      parseImportRows: (input) => input.items ?? [],
+      executeChunkImport: async (input) => ({
+        importedCount: (input.items ?? []).length,
+        updatedCount: 0,
+        skippedCount: 0,
+        failedCount: 0,
+        errors: [],
+      }),
+    });
+
+    customExportRegistry.registerWorkerExecutor({
+      profileCode: 'organizations',
+      module: 'organizations',
+      topic: 'organizations.export',
+      executeExport: async (input) => ({
+        fileName: 'danh_sach_don_vi.xlsx',
+        format: (input.format as 'xlsx') ?? 'xlsx',
+        totalExported: 45,
+        historyId: input.historyId ?? 301,
+        downloadToken: 'org_exp_301',
+        downloadUrl: '/api/v1/organizations/export/downloads/org_exp_301',
+        expiresAt: '2026-10-26T18:00:00.000Z',
+        notifiedAt: '2026-10-26T17:00:00.000Z',
+      }),
+    });
+
+    customReportRegistry.registerWorkerExecutor({
+      module: 'organizations',
+      topic: 'organizations.report',
+      reportCodes: ['organizations.structure_summary'],
+      executeReport: async (input) => ({
+        reportCode: input.reportCode,
+        historyId: input.historyId ?? 401,
+        totalRecords: 45,
+        dataSourceUsed: 'REPLICA',
+        cacheHit: false,
+        downloadToken: 'org_rep_401',
+        downloadUrl: '/api/v1/organizations/reports/downloads/org_rep_401',
+        expiresAt: '2026-10-26T18:00:00.000Z',
+        notifiedChannels: ['IN_APP'],
+      }),
+    });
+
+    customSearchRegistry.registerWorkerExecutor({
+      module: 'organizations',
+      entityCode: 'organizations.unit',
+      syncTopic: 'organizations.search_sync',
+      rebuildTopic: 'organizations.search_rebuild',
+      executeSearchJob: async (input) => ({
+        id: input.historyId ?? 501,
+        operation: input.operation === 'search_rebuild' ? 'REBUILD' : 'SYNC',
+        module: 'organizations',
+        entityType: 'unit',
+        entityCode: 'organizations.unit',
+        driverUsed: 'DATABASE',
+        executionMode: 'QUEUE',
+        status: 'COMPLETED',
+        indexedCount: 45,
+        removedCount: 0,
+        jobId: input.jobId,
+        actorId: input.actorId ?? null,
+        errorMessage: null,
+        startedAt: '2026-10-26T17:00:00.000Z',
+        completedAt: '2026-10-26T17:00:01.000Z',
+      }),
+    });
+
+    // Khởi tạo HeavyJobProcessor KHÔNG tiêm bất kỳ User*Service nào, chỉ dùng 4 Registry động
+    const dynamicHeavyProcessor = new HeavyJobProcessor(
+      config,
+      metrics,
+      progressTracker,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      customImportRegistry,
+      customExportRegistry,
+      customReportRegistry,
+      customSearchRegistry,
+    );
+
+    const orgImportJob = {
+      id: 'job-org-import-1',
+      name: 'organizations.import',
+      queueName: QUEUES.SYSTEM_HEAVY,
+      data: serializeMessage('organizations.import', {
+        operation: 'import',
+        module: 'organizations',
+        profileCode: 'organizations',
+        items: [{ code: 'OU_01' }, { code: 'OU_02' }, { code: 'OU_03' }],
+      }),
+      opts: { attempts: 2 },
+      timestamp: Date.now() - 100,
+      attemptsMade: 0,
+      attemptsStarted: 1,
+      progress: 0,
+      updateProgress: async () => undefined,
+      log: async () => undefined,
+    } as unknown as Job;
+
+    const orgImportRes = await dynamicHeavyProcessor.process(orgImportJob);
+    expect(orgImportRes).toMatchObject({
+      topic: 'organizations.import',
+      processed: 3,
+      total: 3,
+      importedCount: 3,
+    });
+
+    const orgExportJob = {
+      id: 'job-org-export-1',
+      name: 'organizations.export',
+      queueName: QUEUES.SYSTEM_HEAVY,
+      data: serializeMessage('organizations.export', {
+        operation: 'export',
+        executeInWorker: true,
+        module: 'organizations',
+        format: 'xlsx',
+        historyId: 301,
+      }),
+      opts: { attempts: 2 },
+      timestamp: Date.now() - 100,
+      attemptsMade: 0,
+      attemptsStarted: 1,
+      progress: 0,
+      updateProgress: async () => undefined,
+      log: async () => undefined,
+    } as unknown as Job;
+
+    const orgExportRes = await dynamicHeavyProcessor.process(orgExportJob);
+    expect(orgExportRes).toMatchObject({
+      topic: 'organizations.export',
+      totalExported: 45,
+      downloadToken: 'org_exp_301',
+    });
+
+    const orgReportJob = {
+      id: 'job-org-report-1',
+      name: 'organizations.report',
+      queueName: QUEUES.SYSTEM_HEAVY,
+      data: serializeMessage('organizations.report', {
+        operation: 'report',
+        executeInWorker: true,
+        module: 'organizations',
+        reportCode: 'organizations.structure_summary',
+        historyId: 401,
+      }),
+      opts: { attempts: 2 },
+      timestamp: Date.now() - 100,
+      attemptsMade: 0,
+      attemptsStarted: 1,
+      progress: 0,
+      updateProgress: async () => undefined,
+      log: async () => undefined,
+    } as unknown as Job;
+
+    const orgReportRes = await dynamicHeavyProcessor.process(orgReportJob);
+    expect(orgReportRes).toMatchObject({
+      topic: 'organizations.report',
+      reportCode: 'organizations.structure_summary',
+      totalRecords: 45,
+      downloadToken: 'org_rep_401',
+    });
+
+    const orgSearchJob = {
+      id: 'job-org-search-1',
+      name: 'organizations.search_sync',
+      queueName: QUEUES.SYSTEM_HEAVY,
+      data: serializeMessage('organizations.search_sync', {
+        operation: 'search_sync',
+        executeInWorker: true,
+        module: 'organizations',
+        entityCode: 'organizations.unit',
+        historyId: 501,
+      }),
+      opts: { attempts: 2 },
+      timestamp: Date.now() - 100,
+      attemptsMade: 0,
+      attemptsStarted: 1,
+      progress: 0,
+      updateProgress: async () => undefined,
+      log: async () => undefined,
+    } as unknown as Job;
+
+    const orgSearchRes = await dynamicHeavyProcessor.process(orgSearchJob);
+    expect(orgSearchRes).toMatchObject({
+      topic: 'organizations.search_sync',
+      indexedCount: 45,
+      historyId: 501,
     });
   });
 });

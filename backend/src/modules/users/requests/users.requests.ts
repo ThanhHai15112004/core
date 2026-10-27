@@ -48,11 +48,26 @@ export const userGenderSchema = z.preprocess(
 
 const coercePositiveInt = z.preprocess((v) => Number(v), z.number().int().min(1));
 
-export const userOrganizationAssignmentInputSchema = z.object({
-  organizationUnitId: coercePositiveInt,
-  isPrimary: z.boolean().optional().default(false),
-  positionTitle: z.string().trim().max(128).nullable().optional(),
-});
+export const userOrganizationAssignmentInputSchema = z
+  .object({
+    organizationUnitId: coercePositiveInt,
+    isPrimary: z.boolean().optional().default(false),
+    positionTitle: z.string().trim().max(128).nullable().optional(),
+    startDate: z.string().trim().max(64).nullable().optional(),
+    endDate: z.string().trim().max(64).nullable().optional(),
+  })
+  .refine(
+    (item) => {
+      if (!item.startDate || !item.endDate) return true;
+      const startMs = new Date(item.startDate).getTime();
+      const endMs = new Date(item.endDate).getTime();
+      if (Number.isNaN(startMs) || Number.isNaN(endMs)) return true;
+      return endMs >= startMs;
+    },
+    {
+      message: 'Organization membership endDate must be greater than or equal to startDate',
+    },
+  );
 
 export type UserOrganizationAssignmentInput = z.infer<typeof userOrganizationAssignmentInputSchema>;
 
@@ -86,6 +101,9 @@ export const createUserSchema = z
     password: z.string().min(8).max(128),
     status: userStatusSchema.default(USER_STATUS.ACTIVE),
     managerId: coercePositiveInt.nullable().optional(),
+    temporaryManagerId: coercePositiveInt.nullable().optional(),
+    temporaryManagerFrom: z.string().trim().max(64).nullable().optional(),
+    temporaryManagerUntil: z.string().trim().max(64).nullable().optional(),
     roleIds: z.array(coercePositiveInt).default([]),
     organizationUnits: z.array(userOrganizationAssignmentInputSchema).default([]),
   })
@@ -117,6 +135,9 @@ export const updateUserSchema = z.object({
   preferredLocale: preferredLocaleSchema.optional(),
   preferredTimezone: preferredTimezoneSchema.optional(),
   managerId: coercePositiveInt.nullable().optional(),
+  temporaryManagerId: coercePositiveInt.nullable().optional(),
+  temporaryManagerFrom: z.string().trim().max(64).nullable().optional(),
+  temporaryManagerUntil: z.string().trim().max(64).nullable().optional(),
   expectedVersion: z.number().int().min(1).optional(),
 });
 
@@ -158,9 +179,17 @@ export type AssignUserRolesRequest = z.infer<typeof assignUserRolesSchema>;
 
 export const assignUserOrganizationsSchema = z.object({
   organizationUnits: z.array(userOrganizationAssignmentInputSchema),
+  reason: z.string().trim().max(255).nullable().optional(),
 });
 
 export type AssignUserOrganizationsRequest = z.infer<typeof assignUserOrganizationsSchema>;
+
+export const listUserSubordinatesQuerySchema = z.object({
+  directOnly: optionalQueryParam(booleanQueryParam()),
+  includeTemporary: optionalQueryParam(booleanQueryParam()),
+});
+
+export type ListUserSubordinatesQuery = z.infer<typeof listUserSubordinatesQuerySchema>;
 
 export const USER_SELECTABLE_FIELDS = [
   'id',
@@ -191,6 +220,10 @@ export const USER_SELECTABLE_FIELDS = [
   'lockReason',
   'primaryOrganizationUnitId',
   'managerId',
+  'temporaryManagerId',
+  'temporaryManagerFrom',
+  'temporaryManagerUntil',
+  'effectiveManagerId',
   'roles',
   'organizationUnits',
   'version',
@@ -427,3 +460,51 @@ export const listUserReportHistoriesQuerySchema = z.object({
 });
 
 export type ListUserReportHistoriesQuery = z.infer<typeof listUserReportHistoriesQuerySchema>;
+
+export const searchUsersGlobalQuerySchema = z.object({
+  keyword: z.string().trim().default(''),
+  module: optionalQueryParam(z.string().trim().max(64)),
+  entityType: optionalQueryParam(z.string().trim().max(64)),
+  entityCode: optionalQueryParam(z.string().trim().max(120)),
+  status: optionalQueryParam(userStatusSchema),
+  organizationUnitId: optionalQueryParam(intQueryParam({ min: 1 })),
+  page: optionalQueryParam(intQueryParam({ min: 1 })),
+  limit: optionalQueryParam(intQueryParam({ min: 1, max: 200 })),
+  includeStale: optionalQueryParam(booleanQueryParam()),
+});
+
+export type SearchUsersGlobalQueryRequest = z.infer<typeof searchUsersGlobalQuerySchema>;
+
+export const syncUserSearchIndexSchema = z.object({
+  userIds: z.array(coercePositiveInt).optional(),
+  async: z.boolean().optional(),
+});
+
+export type SyncUserSearchIndexBody = z.infer<typeof syncUserSearchIndexSchema>;
+
+export const rebuildUserSearchIndexSchema = z.object({
+  module: z.string().trim().max(64).optional(),
+  entityType: z.string().trim().max(64).optional(),
+  entityCode: z.string().trim().max(120).optional(),
+  async: z.boolean().optional(),
+});
+
+export type RebuildUserSearchIndexBody = z.infer<typeof rebuildUserSearchIndexSchema>;
+
+export const searchIndexLagQuerySchema = z.object({
+  module: optionalQueryParam(z.string().trim().max(64)),
+  entityType: optionalQueryParam(z.string().trim().max(64)),
+  entityCode: optionalQueryParam(z.string().trim().max(120)),
+  staleOnly: optionalQueryParam(booleanQueryParam()),
+  staleThresholdMs: optionalQueryParam(intQueryParam({ min: 0 })),
+});
+
+export type SearchIndexLagQuery = z.infer<typeof searchIndexLagQuerySchema>;
+
+export const listZeroResultKeywordsQuerySchema = z.object({
+  module: optionalQueryParam(z.string().trim().max(64)),
+  entityType: optionalQueryParam(z.string().trim().max(64)),
+  limit: optionalQueryParam(intQueryParam({ min: 1, max: 200 })),
+});
+
+export type ListZeroResultKeywordsQuery = z.infer<typeof listZeroResultKeywordsQuerySchema>;

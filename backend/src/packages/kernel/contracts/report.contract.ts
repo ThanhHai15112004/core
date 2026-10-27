@@ -221,6 +221,60 @@ export interface ReportDeliveryNotification {
 }
 
 /**
+ * Đầu vào khi Worker hoặc Scheduler thực thi một tác vụ Báo cáo chạy nền qua Queue / Lịch định kỳ (Mục 8.4.4 & 8.4.5).
+ */
+export interface ReportQueueWorkerExecutionInput {
+  readonly reportCode: string;
+  readonly request?: Readonly<Record<string, unknown>> | undefined;
+  readonly format?: ExportFormat | string | undefined;
+  readonly actorId?: number | undefined;
+  readonly actor?: unknown;
+  readonly historyId?: number | undefined;
+  readonly scheduleId?: number | undefined;
+  readonly executionMode?: ReportExecutionMode | undefined;
+  readonly jobId: string;
+}
+
+/**
+ * Kết quả kích hoạt một lịch gửi báo cáo định kỳ đến hạn (Mục 8.4.5 & 8.4.6).
+ */
+export interface TriggeredReportScheduleItemResult {
+  readonly scheduleId: number;
+  readonly reportCode: string;
+  readonly historyId: number;
+  readonly nextRunAt: string;
+  readonly downloadUrl: string | null;
+  readonly expiresAt: string | null;
+  readonly notifiedChannels: readonly ReportDeliveryChannel[];
+}
+
+/**
+ * Kết quả trả về sau khi Worker thực thi tác vụ Báo cáo nặng (Mục 8.4.4 & 8.4.6).
+ */
+export interface ReportQueueWorkerExecutionResult {
+  readonly reportCode: string;
+  readonly historyId: number;
+  readonly totalRecords: number;
+  readonly dataSourceUsed: ReportDataSourceType;
+  readonly cacheHit: boolean;
+  readonly downloadToken?: string | null | undefined;
+  readonly downloadUrl?: string | null | undefined;
+  readonly expiresAt?: string | null | undefined;
+  readonly notifiedChannels?: readonly ReportDeliveryChannel[] | undefined;
+}
+
+/**
+ * Hợp đồng đăng ký bộ thực thi Báo cáo nền (`ReportQueueWorkerExecutor`) vào `ReportRegistryService`
+ * giúp `HeavyJobProcessor` điều phối động cho mọi module mà không cần hardcode từng service.
+ */
+export interface ReportQueueWorkerExecutor {
+  readonly module: string;
+  readonly topic?: string | undefined;
+  readonly reportCodes?: readonly string[] | undefined;
+  executeReport(input: ReportQueueWorkerExecutionInput): Promise<ReportQueueWorkerExecutionResult>;
+}
+
+/**
  * Quét tự động toàn bộ các tệp `module.manifest.json` trong `modules/*` và `project-modules/*`
  * để thu thập danh mục `"reports"` do từng module tự khai báo (Mục 8.4.1).
  */

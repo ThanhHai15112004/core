@@ -40,9 +40,16 @@ export const USER_ALLOWED_FILTER_COLUMN_MAP: Readonly<Record<string, string>> = 
   status: 'u.status',
   mfaEnabled: 'u.mfa_enabled',
   managerId: 'u.manager_id',
+  temporaryManagerId: 'u.temporary_manager_id',
   primaryOrganizationUnitId: 'u.primary_organization_unit_id',
   createdAt: 'u.createdAt',
 };
+
+export interface SubordinateRelationNode {
+  readonly userId: number;
+  readonly level: number;
+  readonly relationType: 'DIRECT' | 'TEMPORARY' | 'INDIRECT';
+}
 
 export interface SearchUsersFilter {
   readonly q?: string | undefined;
@@ -84,12 +91,63 @@ export class UserRepository extends BaseTypeOrmRepository<UserEntity> {
     });
   }
 
+  /** Tìm danh sách người dùng theo tập email (Batch IN query chống N+1 khi Import hàng loạt) */
+  public async findByEmails(emails: readonly string[], withDeleted = false): Promise<UserEntity[]> {
+    const normalized = [
+      ...new Set(emails.map((e) => e.trim().toLowerCase()).filter((e) => e.length > 0)),
+    ];
+    if (normalized.length === 0) {
+      return [];
+    }
+
+    const results: UserEntity[] = [];
+    const chunkSize = 500;
+    for (let offset = 0; offset < normalized.length; offset += chunkSize) {
+      const chunk = normalized.slice(offset, offset + chunkSize);
+      const qb = this.repository.createQueryBuilder('u');
+      if (withDeleted) {
+        qb.withDeleted();
+      }
+      qb.where('LOWER(u.email) IN (:...emails)', { emails: chunk });
+      const rows = await qb.getMany();
+      results.push(...rows);
+    }
+    return results;
+  }
+
   /** Tìm người dùng theo username (không phân biệt hoa thường) */
   public async findByUsername(username: string, withDeleted = false): Promise<UserEntity | null> {
     return this.repository.findOne({
       where: { username: username.trim().toLowerCase() },
       withDeleted,
     });
+  }
+
+  /** Tìm danh sách người dùng theo tập username (Batch IN query chống N+1 khi Import hàng loạt) */
+  public async findByUsernames(
+    usernames: readonly string[],
+    withDeleted = false,
+  ): Promise<UserEntity[]> {
+    const normalized = [
+      ...new Set(usernames.map((u) => u.trim().toLowerCase()).filter((u) => u.length > 0)),
+    ];
+    if (normalized.length === 0) {
+      return [];
+    }
+
+    const results: UserEntity[] = [];
+    const chunkSize = 500;
+    for (let offset = 0; offset < normalized.length; offset += chunkSize) {
+      const chunk = normalized.slice(offset, offset + chunkSize);
+      const qb = this.repository.createQueryBuilder('u');
+      if (withDeleted) {
+        qb.withDeleted();
+      }
+      qb.where('LOWER(u.username) IN (:...usernames)', { usernames: chunk });
+      const rows = await qb.getMany();
+      results.push(...rows);
+    }
+    return results;
   }
 
   /** Tìm người dùng theo mã băm SHA-256 của số điện thoại (blind index) */
@@ -127,43 +185,97 @@ export class UserRepository extends BaseTypeOrmRepository<UserEntity> {
   }
 
   /**
-   * Tìm toàn bộ ID nhân sự cấp dưới trực tiếp và gián tiếp theo cây quản lý (`manager_id` — Mục 4.3.3).
+   * Tìm toàn bộ quan hệ nhân sự cấp dưới trực tiếp, tạm thời và gián tiếp theo cây quản lý (`manager_id` & `temporary_manager_id` — Mục 4.3.3 & 9.2.7).
    */
-  public async findSubordinateUserIds(managerId: number): Promise<number[]> {
+  public async findSubordinateRelations(
+    managerId: number,
+    options?: { readonly directOnly?: boolean; readonly includeTemporary?: boolean },
+  ): Promise<SubordinateRelationNode[]> {
     const rootId = Number(managerId);
     if (!Number.isInteger(rootId) || rootId <= 0) return [];
 
+    const includeTemporary = options?.includeTemporary ?? true;
+    const directOnly = options?.directOnly ?? false;
+    const nowMs = Date.now();
+
     const allUsers = await this.repository.find({
-      select: { id: true, managerId: true },
+      select: {
+        id: true,
+        managerId: true,
+        temporaryManagerId: true,
+        temporaryManagerFrom: true,
+        temporaryManagerUntil: true,
+      },
     });
 
-    const childrenByManager = new Map<number, number[]>();
-    for (const u of allUsers) {
-      if (u.managerId !== undefined && u.managerId !== null) {
-        const mId = Number(u.managerId);
-        const list = childrenByManager.get(mId) ?? [];
-        list.push(Number(u.id));
-        childrenByManager.set(mId, list);
+    const childrenByManager = new Map<
+      number,
+      Array<{ readonly userId: number; readonly isTemporary: boolean }>
+    >();
+
+    const addEdge = (mgrId: number, childId: number, isTemporary: boolean): void => {
+      const list = childrenByManager.get(mgrId) ?? [];
+      if (!list.some((item) => item.userId === childId)) {
+        list.push({ userId: childId, isTemporary });
+        childrenByManager.set(mgrId, list);
       }
-    }
+    };
 
-    const subordinates = new Set<number>();
-    const visited = new Set<number>([rootId]);
-    const queue = [rootId];
-
-    while (queue.length > 0) {
-      const current = queue.shift()!;
-      const directReports = childrenByManager.get(current) ?? [];
-      for (const subId of directReports) {
-        if (!visited.has(subId)) {
-          visited.add(subId);
-          subordinates.add(subId);
-          queue.push(subId);
+    for (const u of allUsers) {
+      const uid = Number(u.id);
+      if (u.managerId !== undefined && u.managerId !== null) {
+        addEdge(Number(u.managerId), uid, false);
+      }
+      if (includeTemporary && u.temporaryManagerId !== undefined && u.temporaryManagerId !== null) {
+        const fromOk =
+          !u.temporaryManagerFrom || new Date(u.temporaryManagerFrom).getTime() <= nowMs;
+        const untilOk =
+          Boolean(u.temporaryManagerUntil) && new Date(u.temporaryManagerUntil!).getTime() >= nowMs;
+        if (fromOk && untilOk) {
+          addEdge(Number(u.temporaryManagerId), uid, true);
         }
       }
     }
 
-    return [...subordinates].sort((a, b) => a - b);
+    const result = new Map<number, SubordinateRelationNode>();
+    const visited = new Set<number>([rootId]);
+    const queue: Array<{ readonly id: number; readonly depth: number }> = [
+      { id: rootId, depth: 0 },
+    ];
+
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+      const directReports = childrenByManager.get(current.id) ?? [];
+      for (const report of directReports) {
+        if (!visited.has(report.userId)) {
+          visited.add(report.userId);
+          const nextLevel = current.depth + 1;
+          const relationType: 'DIRECT' | 'TEMPORARY' | 'INDIRECT' =
+            nextLevel > 1 ? 'INDIRECT' : report.isTemporary ? 'TEMPORARY' : 'DIRECT';
+          result.set(report.userId, {
+            userId: report.userId,
+            level: nextLevel,
+            relationType,
+          });
+          if (!directOnly) {
+            queue.push({ id: report.userId, depth: nextLevel });
+          }
+        }
+      }
+    }
+
+    return [...result.values()].sort((a, b) => a.level - b.level || a.userId - b.userId);
+  }
+
+  /**
+   * Tìm toàn bộ ID nhân sự cấp dưới trực tiếp và gián tiếp theo cây quản lý (`manager_id` & `temporary_manager_id` — Mục 4.3.3 & 9.2.7).
+   */
+  public async findSubordinateUserIds(
+    managerId: number,
+    options?: { readonly directOnly?: boolean; readonly includeTemporary?: boolean },
+  ): Promise<number[]> {
+    const relations = await this.findSubordinateRelations(managerId, options);
+    return relations.map((r) => r.userId).sort((a, b) => a - b);
   }
 
   /**
@@ -235,7 +347,10 @@ export class UserRepository extends BaseTypeOrmRepository<UserEntity> {
     }
 
     if (filter.managerId !== undefined) {
-      qb.andWhere('u.manager_id = :managerId', { managerId: filter.managerId });
+      qb.andWhere(
+        '(u.manager_id = :managerId OR (u.temporary_manager_id = :managerId AND (u.temporary_manager_from IS NULL OR u.temporary_manager_from <= CURRENT_TIMESTAMP) AND (u.temporary_manager_until IS NOT NULL AND u.temporary_manager_until >= CURRENT_TIMESTAMP)))',
+        { managerId: filter.managerId },
+      );
     }
 
     if (filter.roleId !== undefined) {

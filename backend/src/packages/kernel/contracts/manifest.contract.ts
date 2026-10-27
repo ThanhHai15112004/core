@@ -5,6 +5,7 @@ import type { CodeTypeManifestItem } from './code-lookup.contract.js';
 import type { FeatureFlagManifestItem } from './feature-flag.contract.js';
 import type { MenuManifestItem } from './menu.contract.js';
 import type { ReportManifestItem } from './report.contract.js';
+import type { SearchableEntityManifestItem } from './search.contract.js';
 import type { SequenceManifestItem } from './sequence.contract.js';
 import type { SettingGroupManifestItem, SettingManifestItem } from './setting-lookup.contract.js';
 
@@ -39,6 +40,7 @@ export interface ModuleManifest {
   sequences?: SequenceManifestItem[];
   menus?: MenuManifestItem[];
   reports?: ReportManifestItem[];
+  searchableEntities?: SearchableEntityManifestItem[];
   locales?: Record<string, unknown>[];
   timezones?: Record<string, unknown>[];
   translations?: Record<string, unknown>[];

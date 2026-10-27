@@ -16,8 +16,10 @@ import {
   type ReportJobStatus,
   type ReportManifestItem,
   type ReportParametersInput,
+  type ReportQueueWorkerExecutor,
   type ReportScheduleFrequency,
   type ReportScheduleRecord,
+  type TriggeredReportScheduleItemResult,
   REPORT_SCHEDULE_FREQUENCY,
   discoverManifestReports,
 } from '../contracts/report.contract.js';
@@ -107,6 +109,7 @@ export interface CreateReportScheduleInput {
 @Injectable()
 export class ReportRegistryService {
   private readonly definitions = new Map<string, RegisteredReportDefinition>();
+  private readonly workerExecutors = new Map<string, ReportQueueWorkerExecutor>();
   private readonly cacheEntries = new Map<string, CachedReportEntry>();
   private readonly histories: ReportExecutionHistoryRecord[] = [];
   private readonly schedules: ReportScheduleRecord[] = [];
@@ -119,6 +122,74 @@ export class ReportRegistryService {
   constructor(@Optional() exportRegistry?: ExportRegistryService) {
     this.exportRegistry = exportRegistry ?? defaultExportRegistry;
     this.syncFromManifests();
+  }
+
+  /**
+   * 8.4.4 — Đăng ký bộ thực thi Báo cáo nền (`ReportQueueWorkerExecutor`) của module vào Registry
+   * để `HeavyJobProcessor` tự động điều phối theo `reportCode`, `module` hoặc `topic` mà không cần hardcode.
+   */
+  public registerWorkerExecutor(executor: ReportQueueWorkerExecutor): void {
+    const moduleKey = executor.module.trim().toLowerCase();
+    const topicKey = executor.topic?.trim().toLowerCase() || `${moduleKey}.report`;
+
+    if (moduleKey) {
+      this.workerExecutors.set(`module:${moduleKey}`, executor);
+    }
+    if (topicKey) {
+      this.workerExecutors.set(`topic:${topicKey}`, executor);
+    }
+    if (Array.isArray(executor.reportCodes)) {
+      for (const code of executor.reportCodes) {
+        const normalizedCode = code.trim().toLowerCase();
+        if (normalizedCode) {
+          this.workerExecutors.set(`report:${normalizedCode}`, executor);
+        }
+      }
+    }
+  }
+
+  /**
+   * 8.4.4 — Tra cứu bộ thực thi Báo cáo nền theo `reportCode`, `module` hoặc `topic` (ví dụ: `'users.report'`, `'users.security_compliance'`).
+   */
+  public resolveWorkerExecutor(lookup: {
+    readonly reportCode?: string | undefined;
+    readonly module?: string | undefined;
+    readonly topic?: string | undefined;
+  }): ReportQueueWorkerExecutor | undefined {
+    if (lookup.reportCode?.trim()) {
+      const normalizedCode = lookup.reportCode.trim().toLowerCase();
+      const byCode = this.workerExecutors.get(`report:${normalizedCode}`);
+      if (byCode) return byCode;
+
+      const def = this.definitions.get(normalizedCode);
+      if (def?.module) {
+        const byDefModule = this.workerExecutors.get(`module:${def.module}`);
+        if (byDefModule) return byDefModule;
+      }
+
+      const codePrefix = normalizedCode.split('.')[0];
+      if (codePrefix) {
+        const byPrefix = this.workerExecutors.get(`module:${codePrefix}`);
+        if (byPrefix) return byPrefix;
+      }
+    }
+    if (lookup.module?.trim()) {
+      const byModule = this.workerExecutors.get(`module:${lookup.module.trim().toLowerCase()}`);
+      if (byModule) return byModule;
+    }
+    if (lookup.topic?.trim()) {
+      const normalizedTopic = lookup.topic.trim().toLowerCase();
+      const byTopic = this.workerExecutors.get(`topic:${normalizedTopic}`);
+      if (byTopic) return byTopic;
+      const topicPrefix = normalizedTopic.endsWith('.report')
+        ? normalizedTopic.slice(0, -'.report'.length)
+        : null;
+      if (topicPrefix) {
+        const byPrefix = this.workerExecutors.get(`module:${topicPrefix}`);
+        if (byPrefix) return byPrefix;
+      }
+    }
+    return undefined;
   }
 
   /**
@@ -538,6 +609,101 @@ export class ReportRegistryService {
     };
     this.schedules[idx] = updated;
     return updated;
+  }
+
+  /**
+   * 8.4.5 & 8.4.6 — Tự động kích hoạt tất cả các lịch báo cáo đang hoạt động và đã đến hạn (`nextRunAt <= now`)
+   * trên toàn hệ thống (hoặc lọc theo `module`), tạo file báo cáo tạm có thời hạn và gửi thông báo qua Email/In-App.
+   */
+  public async triggerDueSchedules(
+    now: Date = new Date(),
+    options?: { readonly module?: string | undefined },
+  ): Promise<{
+    readonly triggeredCount: number;
+    readonly results: ReadonlyArray<TriggeredReportScheduleItemResult>;
+  }> {
+    const targetModule = options?.module?.trim().toLowerCase();
+    const dueSchedules = this.findDueSchedules(now).filter((s) =>
+      targetModule ? s.module === targetModule : true,
+    );
+
+    const results: TriggeredReportScheduleItemResult[] = [];
+
+    for (const schedule of dueSchedules) {
+      const executor = this.resolveWorkerExecutor({
+        reportCode: schedule.reportCode,
+        module: schedule.module,
+      });
+      if (!executor) {
+        continue;
+      }
+
+      const execResult = await executor.executeReport({
+        reportCode: schedule.reportCode,
+        format: schedule.format,
+        scheduleId: schedule.id,
+        executionMode: 'SCHEDULED',
+        ...(schedule.actorId !== null ? { actorId: schedule.actorId } : {}),
+        ...(schedule.actorId !== null
+          ? {
+              actor: {
+                id: schedule.actorId,
+                email: schedule.recipientEmails[0] ?? 'scheduler@system.local',
+                roles: ['system_scheduler'],
+                permissions: [`${schedule.module}.report`],
+              },
+            }
+          : {}),
+        jobId: `sched_rpt_${schedule.id}_${now.getTime()}`,
+        request: {
+          reportCode: schedule.reportCode,
+          fromDate: schedule.parameters.fromDate,
+          toDate: schedule.parameters.toDate,
+          status:
+            schedule.parameters.statuses.length === 1
+              ? schedule.parameters.statuses[0]
+              : schedule.parameters.statuses,
+          organizationUnitId: schedule.parameters.organizationUnitId,
+          includeSubUnits: schedule.parameters.includeSubUnits,
+          filters: schedule.parameters.filters,
+          format: schedule.format,
+          ttlSeconds: schedule.ttlSeconds,
+          notifyChannels: [...schedule.channels],
+          recipientEmails: [...schedule.recipientEmails],
+          recipientUserIds: [...schedule.recipientUserIds],
+          async: false,
+        },
+      });
+
+      const nextRunDate = computeNextReportScheduleRun(
+        schedule.frequency,
+        schedule.hour,
+        schedule.minute,
+        schedule.dayOfWeek,
+        schedule.dayOfMonth,
+        now,
+      );
+      const updatedSchedule = this.markScheduleExecuted(
+        schedule.id,
+        now.toISOString(),
+        nextRunDate.toISOString(),
+      );
+
+      results.push({
+        scheduleId: schedule.id,
+        reportCode: schedule.reportCode,
+        historyId: execResult.historyId,
+        nextRunAt: updatedSchedule?.nextRunAt ?? nextRunDate.toISOString(),
+        downloadUrl: execResult.downloadUrl ?? null,
+        expiresAt: execResult.expiresAt ?? null,
+        notifiedChannels: execResult.notifiedChannels ?? [],
+      });
+    }
+
+    return {
+      triggeredCount: results.length,
+      results,
+    };
   }
 
   /**

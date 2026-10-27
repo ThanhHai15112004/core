@@ -125,6 +125,9 @@ export const API_ROUTES = {
     DETAIL: (id: string | number) => `/users/${id}`,
     UPDATE: (id: string | number) => `/users/${id}`,
     STATUS_HISTORY: (id: string | number) => `/users/${id}/status-history`,
+    ORGANIZATION_HISTORY: (id: string | number) => `/users/${id}/organization-history`,
+    SUBORDINATES: (id: string | number, qs = '') =>
+      `/users/${id}/subordinates${qs ? `?${qs}` : ''}`,
     LOGIN_HISTORY: (id: string | number) => `/users/${id}/login-history`,
     LOCK: (id: string | number) => `/users/${id}/lock`,
     UNLOCK: (id: string | number) => `/users/${id}/unlock`,

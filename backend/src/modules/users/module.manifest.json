@@ -43,6 +43,7 @@
       "user_profiles",
       "user_roles",
       "user_organization_units",
+      "user_organization_histories",
       "user_status_histories"
     ]
   },
@@ -420,6 +421,22 @@
         { "key": "organizationUnitId", "name": "Đơn vị / Phòng ban", "type": "organization-unit", "required": false },
         { "key": "filters", "name": "Bộ lọc mở rộng", "type": "filter", "required": false }
       ],
+      "isSystem": true,
+      "status": 1
+    }
+  ],
+  "searchableEntities": [
+    {
+      "code": "users.account",
+      "module": "users",
+      "entityType": "user",
+      "name": "Tài khoản & Hồ sơ nhân sự",
+      "description": "Tìm kiếm cán bộ nhân viên theo họ tên, mã nhân viên, tên đăng nhập, email và số điện thoại",
+      "requiredPermission": "users.read",
+      "searchableFields": ["fullName", "employeeCode", "username", "email", "phone"],
+      "titleField": "fullName",
+      "subtitleField": "email",
+      "staleThresholdMs": 300000,
       "isSystem": true,
       "status": 1
     }

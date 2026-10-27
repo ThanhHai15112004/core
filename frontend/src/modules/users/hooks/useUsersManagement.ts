@@ -4,18 +4,38 @@ import { usersApi } from '../services/users.api';
 import type {
   AdminResetMfaResult,
   AdminResetPasswordResult,
+  BulkImportUsersPayload,
   BulkImportUsersResult,
   CreateUserPayload,
+  CreateUserReportSchedulePayload,
+  ExportHistoryItem,
+  ExportJobProgress,
   ExportUsersFileResponse,
+  ImportHistoryItem,
+  ImportJobProgress,
+  ImportUsersPreviewResponse,
   ListUsersFilter,
   OrganizationOptionSummary,
+  RegisteredReportDefinition,
+  RegisteredSearchableEntity,
   RoleOptionSummary,
+  RunUserReportPayload,
+  SearchIndexLagReport,
+  SearchQueryResult,
+  SearchSyncHistoryItem,
+  TemporaryDownloadFileResponse,
   UpdateUserPayload,
   UserItem,
   UserLoginHistoryItem,
   UserOrganizationAssignmentInput,
+  UserOrganizationHistoryItem,
+  UserReportExecutionResult,
+  UserReportHistoryItem,
+  UserReportScheduleItem,
   UsersPaginationMeta,
   UserStatusHistoryItem,
+  UserSubordinatesOverview,
+  ZeroResultKeywordStat,
 } from '../types/users.types';
 
 export interface UsersBannerMessage {
@@ -50,6 +70,9 @@ export function useUsersManagement() {
 
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
   const [statusHistory, setStatusHistory] = useState<UserStatusHistoryItem[]>([]);
+  const [organizationHistory, setOrganizationHistory] = useState<UserOrganizationHistoryItem[]>([]);
+  const [subordinatesOverview, setSubordinatesOverview] =
+    useState<UserSubordinatesOverview | null>(null);
   const [loginHistory, setLoginHistory] = useState<UserLoginHistoryItem[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
 
@@ -60,6 +83,26 @@ export function useUsersManagement() {
     useState<AdminResetPasswordResult | null>(null);
   const [lastMfaResetResult, setLastMfaResetResult] = useState<AdminResetMfaResult | null>(null);
   const [lastImportResult, setLastImportResult] = useState<BulkImportUsersResult | null>(null);
+
+  // Phase 8: Import & Export States (Mục 8.2 & 8.3)
+  const [importPreview, setImportPreview] = useState<ImportUsersPreviewResponse | null>(null);
+  const [importJobProgress, setImportJobProgress] = useState<ImportJobProgress | null>(null);
+  const [importHistories, setImportHistories] = useState<ImportHistoryItem[]>([]);
+  const [exportJobProgress, setExportJobProgress] = useState<ExportJobProgress | null>(null);
+  const [exportHistories, setExportHistories] = useState<ExportHistoryItem[]>([]);
+
+  // Phase 8: Reports & Dashboard States (Mục 8.4)
+  const [availableReports, setAvailableReports] = useState<RegisteredReportDefinition[]>([]);
+  const [lastReportResult, setLastReportResult] = useState<UserReportExecutionResult | null>(null);
+  const [reportSchedules, setReportSchedules] = useState<UserReportScheduleItem[]>([]);
+  const [reportHistories, setReportHistories] = useState<UserReportHistoryItem[]>([]);
+
+  // Phase 8: Global Search States (Mục 8.5)
+  const [searchableEntities, setSearchableEntities] = useState<RegisteredSearchableEntity[]>([]);
+  const [searchResult, setSearchResult] = useState<SearchQueryResult | null>(null);
+  const [lastSyncResult, setLastSyncResult] = useState<SearchSyncHistoryItem | null>(null);
+  const [indexLagReport, setIndexLagReport] = useState<SearchIndexLagReport | null>(null);
+  const [zeroResultKeywords, setZeroResultKeywords] = useState<ZeroResultKeywordStat[]>([]);
 
   const showError = useCallback((err: unknown, fallback: string) => {
     const msg = err instanceof Error ? err.message : fallback;
@@ -116,12 +159,22 @@ export function useUsersManagement() {
   const loadSelectedUserHistories = useCallback(async (userId: number) => {
     setLoadingHistory(true);
     try {
-      const [statusRes, loginRes] = await Promise.allSettled([
+      const [statusRes, orgHistRes, subRes, loginRes] = await Promise.allSettled([
         usersApi.getStatusHistory(userId),
+        usersApi.getOrganizationHistory(userId),
+        usersApi.getSubordinates(userId),
         usersApi.getLoginHistory(userId),
       ]);
       setStatusHistory(
         statusRes.status === 'fulfilled' && Array.isArray(statusRes.value) ? statusRes.value : [],
+      );
+      setOrganizationHistory(
+        orgHistRes.status === 'fulfilled' && Array.isArray(orgHistRes.value)
+          ? orgHistRes.value
+          : [],
+      );
+      setSubordinatesOverview(
+        subRes.status === 'fulfilled' && subRes.value ? subRes.value : null,
       );
       setLoginHistory(
         loginRes.status === 'fulfilled' && Array.isArray(loginRes.value) ? loginRes.value : [],
@@ -150,6 +203,8 @@ export function useUsersManagement() {
       void loadSelectedUserHistories(selectedUserId);
     } else {
       setStatusHistory([]);
+      setOrganizationHistory([]);
+      setSubordinatesOverview(null);
       setLoginHistory([]);
     }
   }, [selectedUserId, loadSelectedUserHistories]);
@@ -223,7 +278,7 @@ export function useUsersManagement() {
           type: 'success',
           message: `Đã cập nhật hồ sơ "${updated.fullName}" thành công.`,
         });
-        await loadUsers(filter);
+        await Promise.all([loadUsers(filter), loadSelectedUserHistories(id)]);
         return true;
       } catch (err) {
         showError(err, 'Cập nhật hồ sơ thất bại.');
@@ -232,7 +287,7 @@ export function useUsersManagement() {
         setSubmitting(false);
       }
     },
-    [filter, loadUsers, showError],
+    [filter, loadSelectedUserHistories, loadUsers, showError],
   );
 
   const handleAssignRoles = useCallback(
@@ -261,16 +316,17 @@ export function useUsersManagement() {
     async (
       id: number,
       organizationUnits: readonly UserOrganizationAssignmentInput[],
+      reason?: string | null,
     ): Promise<boolean> => {
       setSubmitting(true);
       setBanner(null);
       try {
-        const updated = await usersApi.assignOrganizations(id, organizationUnits);
+        const updated = await usersApi.assignOrganizations(id, organizationUnits, reason);
         setBanner({
           type: 'success',
           message: `Đã cập nhật ${updated.organizationUnits.length} đơn vị công tác cho "@${updated.username}".`,
         });
-        await loadUsers(filter);
+        await Promise.all([loadUsers(filter), loadSelectedUserHistories(id)]);
         return true;
       } catch (err) {
         showError(err, 'Gán đơn vị công tác thất bại.');
@@ -279,7 +335,7 @@ export function useUsersManagement() {
         setSubmitting(false);
       }
     },
-    [filter, loadUsers, showError],
+    [filter, loadSelectedUserHistories, loadUsers, showError],
   );
 
   const handleLifecycleAction = useCallback(
@@ -401,33 +457,102 @@ export function useUsersManagement() {
     [showError],
   );
 
-  const triggerBrowserFileDownload = useCallback((fileRes: ExportUsersFileResponse) => {
-    let blob: Blob;
-    if (fileRes.format === 'xlsx' && fileRes.xlsxBase64) {
-      const binaryStr = window.atob(fileRes.xlsxBase64);
-      const bytes = new Uint8Array(binaryStr.length);
-      for (let i = 0; i < binaryStr.length; i++) {
-        bytes[i] = binaryStr.charCodeAt(i);
+  const triggerBrowserFileDownload = useCallback(
+    (fileRes: ExportUsersFileResponse | TemporaryDownloadFileResponse) => {
+      let blob: Blob;
+      if (fileRes.format === 'xlsx' && fileRes.xlsxBase64) {
+        const binaryStr = window.atob(fileRes.xlsxBase64);
+        const bytes = new Uint8Array(binaryStr.length);
+        for (let i = 0; i < binaryStr.length; i++) {
+          bytes[i] = binaryStr.charCodeAt(i);
+        }
+        blob = new Blob([bytes], {
+          type:
+            fileRes.contentType ||
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        });
+      } else if (fileRes.format === 'pdf' && fileRes.pdfBase64) {
+        const binaryStr = window.atob(fileRes.pdfBase64);
+        const bytes = new Uint8Array(binaryStr.length);
+        for (let i = 0; i < binaryStr.length; i++) {
+          bytes[i] = binaryStr.charCodeAt(i);
+        }
+        blob = new Blob([bytes], {
+          type: fileRes.contentType || 'application/pdf',
+        });
+      } else {
+        blob = new Blob(['\uFEFF' + (fileRes.csvContent || '')], {
+          type: fileRes.contentType || 'text/csv;charset=utf-8;',
+        });
       }
-      blob = new Blob([bytes], {
-        type:
-          fileRes.contentType ||
-          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      });
-    } else {
-      blob = new Blob(['\uFEFF' + (fileRes.csvContent || '')], {
-        type: fileRes.contentType || 'text/csv;charset=utf-8;',
-      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileRes.fileName || `users-export.${fileRes.format}`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    },
+    [],
+  );
+
+  const loadImportExportHistories = useCallback(async () => {
+    const [impRes, expRes] = await Promise.allSettled([
+      usersApi.listImportHistories({ limit: 30 }),
+      usersApi.listExportHistories({ includeExpired: true, limit: 30 }),
+    ]);
+    if (impRes.status === 'fulfilled' && Array.isArray(impRes.value)) {
+      setImportHistories(impRes.value);
     }
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = fileRes.fileName || `users-export.${fileRes.format}`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    if (expRes.status === 'fulfilled' && Array.isArray(expRes.value)) {
+      setExportHistories(expRes.value);
+    }
   }, []);
+
+  const loadReportsData = useCallback(async () => {
+    const [defsRes, schRes, histRes] = await Promise.allSettled([
+      usersApi.listAvailableReports(),
+      usersApi.listReportSchedules(),
+      usersApi.listReportHistories({ limit: 30 }),
+    ]);
+    if (defsRes.status === 'fulfilled' && Array.isArray(defsRes.value)) {
+      setAvailableReports(defsRes.value);
+    }
+    if (schRes.status === 'fulfilled' && Array.isArray(schRes.value)) {
+      setReportSchedules(schRes.value);
+    }
+    if (histRes.status === 'fulfilled' && Array.isArray(histRes.value)) {
+      setReportHistories(histRes.value);
+    }
+  }, []);
+
+  const loadSearchTelemetry = useCallback(async () => {
+    const [entRes, lagRes, zeroRes] = await Promise.allSettled([
+      usersApi.listSearchEntities(),
+      usersApi.getSearchIndexLag(),
+      usersApi.listZeroResultKeywords({ limit: 30 }),
+    ]);
+    if (entRes.status === 'fulfilled' && Array.isArray(entRes.value)) {
+      setSearchableEntities(entRes.value);
+    }
+    if (lagRes.status === 'fulfilled' && lagRes.value) {
+      setIndexLagReport(lagRes.value);
+    }
+    if (zeroRes.status === 'fulfilled' && Array.isArray(zeroRes.value)) {
+      setZeroResultKeywords(zeroRes.value);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === USERS_TAB.BULK_IMPORT_EXPORT) {
+      void loadImportExportHistories();
+    } else if (activeTab === USERS_TAB.REPORTS_DASHBOARD) {
+      void loadReportsData();
+    } else if (activeTab === USERS_TAB.GLOBAL_SEARCH) {
+      void loadSearchTelemetry();
+    }
+  }, [activeTab, loadImportExportHistories, loadReportsData, loadSearchTelemetry]);
 
   const handleDownloadTemplate = useCallback(
     async (format: 'csv' | 'xlsx') => {
@@ -449,45 +574,92 @@ export function useUsersManagement() {
   );
 
   const handleExportUsers = useCallback(
-    async (format: 'csv' | 'xlsx', title?: string) => {
+    async (
+      format: 'csv' | 'xlsx' | 'pdf',
+      title?: string,
+      options?: { async?: boolean; notifyOnComplete?: boolean; ttlSeconds?: number },
+    ) => {
       setSubmitting(true);
       try {
         const result = await usersApi.exportUsers({
           ...filter,
           format,
           ...(title ? { title } : {}),
+          ...(options?.async !== undefined ? { async: options.async } : {}),
+          ...(options?.notifyOnComplete !== undefined
+            ? { notifyOnComplete: options.notifyOnComplete }
+            : {}),
+          ...(options?.ttlSeconds !== undefined ? { ttlSeconds: options.ttlSeconds } : {}),
         });
-        triggerBrowserFileDownload(result);
-        setBanner({
-          type: 'success',
-          message: `Đã xuất ${result.totalExported} hồ sơ nhân sự ra tệp ${result.fileName}.`,
-        });
+        if (result.status === 'QUEUED' && result.jobId) {
+          setBanner({
+            type: 'success',
+            message: `Đã đẩy công việc Export (${format.toUpperCase()}) vào Queue (Job ID: ${result.jobId}).`,
+          });
+          const prog = await usersApi.getExportJobProgress(result.jobId);
+          setExportJobProgress(prog);
+        } else {
+          triggerBrowserFileDownload(result);
+          setBanner({
+            type: 'success',
+            message: `Đã xuất ${result.totalExported} hồ sơ nhân sự ra tệp ${result.fileName}.`,
+          });
+        }
+        await loadImportExportHistories();
       } catch (err) {
         showError(err, 'Xuất dữ liệu thất bại.');
       } finally {
         setSubmitting(false);
       }
     },
-    [filter, showError, triggerBrowserFileDownload],
+    [filter, loadImportExportHistories, showError, triggerBrowserFileDownload],
+  );
+
+  const handlePreviewImport = useCallback(
+    async (payload: BulkImportUsersPayload) => {
+      setSubmitting(true);
+      setBanner(null);
+      try {
+        const preview = await usersApi.previewBulkImportUsers(payload);
+        setImportPreview(preview);
+        setBanner({
+          type: 'success',
+          message: `Xem trước hoàn tất: ${preview.validRowsCount}/${preview.totalRows} dòng hợp lệ (${preview.willCreateCount} tạo mới, ${preview.willUpdateCount} cập nhật, ${preview.invalidRowsCount} lỗi).`,
+        });
+        return preview;
+      } catch (err) {
+        showError(err, 'Xem trước dữ liệu Import thất bại.');
+        return null;
+      } finally {
+        setSubmitting(false);
+      }
+    },
+    [showError],
   );
 
   const handleBulkImport = useCallback(
-    async (payload: {
-      xlsxBase64?: string;
-      csvContent?: string;
-      defaultPassword?: string;
-      skipDuplicates?: boolean;
-    }) => {
+    async (payload: BulkImportUsersPayload) => {
       setSubmitting(true);
       setBanner(null);
       try {
         const result = await usersApi.bulkImportUsers(payload);
         setLastImportResult(result);
+        if (result.jobId) {
+          try {
+            const prog = await usersApi.getImportJobProgress(result.jobId);
+            setImportJobProgress(prog);
+          } catch {
+            // ignore progress lookup error if job is transient
+          }
+        }
         setBanner({
           type: 'success',
-          message: `Nhập hàng loạt hoàn tất: ${result.importedCount}/${result.totalRows} thành công (${result.skippedCount} bỏ qua, ${result.failedCount} lỗi).`,
+          message:
+            result.status === 'QUEUED'
+              ? `Đã đẩy phiên Import vào Queue (Job ID: ${result.jobId}).`
+              : `Nhập hàng loạt hoàn tất: ${result.importedCount} tạo mới, ${result.updatedCount ?? 0} cập nhật, ${result.skippedCount} bỏ qua, ${result.failedCount} lỗi.`,
         });
-        await loadUsers(filter);
+        await Promise.all([loadUsers(filter), loadImportExportHistories()]);
         return result;
       } catch (err) {
         showError(err, 'Nhập dữ liệu hàng loạt thất bại.');
@@ -496,7 +668,199 @@ export function useUsersManagement() {
         setSubmitting(false);
       }
     },
-    [filter, loadUsers, showError],
+    [filter, loadImportExportHistories, loadUsers, showError],
+  );
+
+  const handleRefreshImportJobProgress = useCallback(
+    async (jobId: string) => {
+      try {
+        const prog = await usersApi.getImportJobProgress(jobId);
+        setImportJobProgress(prog);
+      } catch (err) {
+        showError(err, 'Không tìm thấy tiến độ Import Job.');
+      }
+    },
+    [showError],
+  );
+
+  const handleRefreshExportJobProgress = useCallback(
+    async (jobId: string) => {
+      try {
+        const prog = await usersApi.getExportJobProgress(jobId);
+        setExportJobProgress(prog);
+      } catch (err) {
+        showError(err, 'Không tìm thấy tiến độ Export Job.');
+      }
+    },
+    [showError],
+  );
+
+  const handleDownloadTemporaryExport = useCallback(
+    async (token: string) => {
+      setSubmitting(true);
+      try {
+        const fileRes = await usersApi.downloadTemporaryExport(token);
+        triggerBrowserFileDownload(fileRes);
+        setBanner({
+          type: 'success',
+          message: `Đã tải tệp tạm thời "${fileRes.fileName}".`,
+        });
+      } catch (err) {
+        showError(err, 'Tệp tạm thời đã hết hạn hoặc không hợp lệ.');
+      } finally {
+        setSubmitting(false);
+      }
+    },
+    [showError, triggerBrowserFileDownload],
+  );
+
+  const handleRunReport = useCallback(
+    async (payload: RunUserReportPayload) => {
+      setSubmitting(true);
+      setBanner(null);
+      try {
+        const res = await usersApi.runReport(payload);
+        setLastReportResult(res);
+        setBanner({
+          type: 'success',
+          message: `Đã chạy báo cáo "${res.reportName}" (${res.totalRecords} bản ghi • Nguồn: ${res.dataSourceUsed}).`,
+        });
+        await loadReportsData();
+        return res;
+      } catch (err) {
+        showError(err, 'Thực thi báo cáo thất bại.');
+        return null;
+      } finally {
+        setSubmitting(false);
+      }
+    },
+    [loadReportsData, showError],
+  );
+
+  const handleCreateReportSchedule = useCallback(
+    async (payload: CreateUserReportSchedulePayload) => {
+      setSubmitting(true);
+      setBanner(null);
+      try {
+        const created = await usersApi.createReportSchedule(payload);
+        setBanner({
+          type: 'success',
+          message: `Đã đăng ký lịch gửi báo cáo "${created.name}" (${created.frequency}).`,
+        });
+        await loadReportsData();
+        return created;
+      } catch (err) {
+        showError(err, 'Tạo lịch báo cáo thất bại.');
+        return null;
+      } finally {
+        setSubmitting(false);
+      }
+    },
+    [loadReportsData, showError],
+  );
+
+  const handleTriggerDueReportSchedules = useCallback(async () => {
+    setSubmitting(true);
+    setBanner(null);
+    try {
+      const res = await usersApi.triggerDueReportSchedules();
+      setBanner({
+        type: 'success',
+        message: `Đã kích hoạt ${res.triggeredCount} lịch báo cáo đến hạn.`,
+      });
+      await loadReportsData();
+    } catch (err) {
+      showError(err, 'Kích hoạt lịch báo cáo thất bại.');
+    } finally {
+      setSubmitting(false);
+    }
+  }, [loadReportsData, showError]);
+
+  const handleDownloadTemporaryReport = useCallback(
+    async (token: string) => {
+      setSubmitting(true);
+      try {
+        const fileRes = await usersApi.downloadTemporaryReport(token);
+        triggerBrowserFileDownload(fileRes);
+        setBanner({
+          type: 'success',
+          message: `Đã tải tệp báo cáo tạm thời "${fileRes.fileName}".`,
+        });
+      } catch (err) {
+        showError(err, 'Tệp báo cáo tạm thời đã hết hạn hoặc không tồn tại.');
+      } finally {
+        setSubmitting(false);
+      }
+    },
+    [showError, triggerBrowserFileDownload],
+  );
+
+  const handleSearchGlobal = useCallback(
+    async (searchFilter: {
+      keyword: string;
+      entityCode?: string;
+      status?: number | '';
+      organizationUnitId?: number | '';
+      includeStale?: boolean;
+    }) => {
+      setSubmitting(true);
+      try {
+        const res = await usersApi.searchGlobal(searchFilter);
+        setSearchResult(res);
+        await loadSearchTelemetry();
+      } catch (err) {
+        showError(err, 'Truy vấn tìm kiếm toàn hệ thống thất bại.');
+      } finally {
+        setSubmitting(false);
+      }
+    },
+    [loadSearchTelemetry, showError],
+  );
+
+  const handleSyncSearchIndex = useCallback(
+    async (options: { async?: boolean }) => {
+      setSubmitting(true);
+      try {
+        const res = await usersApi.syncSearchIndex(options);
+        setLastSyncResult(res);
+        setBanner({
+          type: 'success',
+          message:
+            res.executionMode === 'QUEUE'
+              ? `Đã đẩy yêu cầu đồng bộ Search Index vào Queue (Job ID: ${res.jobId}).`
+              : `Đã đồng bộ ${res.indexedCount} hồ sơ nhân sự vào Search Index (${res.driverUsed}).`,
+        });
+        await loadSearchTelemetry();
+      } catch (err) {
+        showError(err, 'Đồng bộ Search Index thất bại.');
+      } finally {
+        setSubmitting(false);
+      }
+    },
+    [loadSearchTelemetry, showError],
+  );
+
+  const handleRebuildSearchIndex = useCallback(
+    async (options: { module?: string; entityType?: string; async?: boolean }) => {
+      setSubmitting(true);
+      try {
+        const res = await usersApi.rebuildSearchIndex(options);
+        setLastSyncResult(res);
+        setBanner({
+          type: 'success',
+          message:
+            res.executionMode === 'QUEUE'
+              ? `Đã đẩy yêu cầu Rebuild Search Index vào Queue (Job ID: ${res.jobId}).`
+              : `Đã tạo lại toàn bộ Search Index (${res.indexedCount} tài liệu được lập chỉ mục).`,
+        });
+        await loadSearchTelemetry();
+      } catch (err) {
+        showError(err, 'Tạo lại Search Index thất bại.');
+      } finally {
+        setSubmitting(false);
+      }
+    },
+    [loadSearchTelemetry, showError],
   );
 
   return {
@@ -514,6 +878,8 @@ export function useUsersManagement() {
     selectedUserId,
     setSelectedUserId,
     statusHistory,
+    organizationHistory,
+    subordinatesOverview,
     loginHistory,
     loadingHistory,
     roleOptions,
@@ -521,6 +887,20 @@ export function useUsersManagement() {
     lastPasswordResetResult,
     lastMfaResetResult,
     lastImportResult,
+    importPreview,
+    importJobProgress,
+    importHistories,
+    exportJobProgress,
+    exportHistories,
+    availableReports,
+    lastReportResult,
+    reportSchedules,
+    reportHistories,
+    searchableEntities,
+    searchResult,
+    lastSyncResult,
+    indexLagReport,
+    zeroResultKeywords,
     stats,
     refreshAll,
     handleCreateUser,
@@ -533,7 +913,21 @@ export function useUsersManagement() {
     handleRevokeSessions,
     handleDownloadTemplate,
     handleExportUsers,
+    handlePreviewImport,
     handleBulkImport,
+    handleRefreshImportJobProgress,
+    handleRefreshExportJobProgress,
+    handleDownloadTemporaryExport,
+    loadImportExportHistories,
+    handleRunReport,
+    handleCreateReportSchedule,
+    handleTriggerDueReportSchedules,
+    handleDownloadTemporaryReport,
+    loadReportsData,
+    handleSearchGlobal,
+    handleSyncSearchIndex,
+    handleRebuildSearchIndex,
+    loadSearchTelemetry,
   };
 }
 

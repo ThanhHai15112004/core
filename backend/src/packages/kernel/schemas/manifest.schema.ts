@@ -198,6 +198,21 @@ export const ModuleReportManifestSchema = z.object({
   status: z.number().int().optional(),
 });
 
+export const ModuleSearchableEntityManifestSchema = z.object({
+  code: z.string().min(1),
+  module: z.string().optional(),
+  entityType: z.string().min(1),
+  name: z.string().min(1),
+  description: z.string().nullable().optional(),
+  requiredPermission: z.string().min(3),
+  searchableFields: z.array(z.string().min(1)).optional().default(['title', 'subtitle']),
+  titleField: z.string().min(1).optional(),
+  subtitleField: z.string().nullable().optional(),
+  staleThresholdMs: z.number().int().min(0).optional(),
+  isSystem: z.boolean().optional(),
+  status: z.number().int().optional(),
+});
+
 export const ModuleManifestSchema = z.object({
   $schema: z.string().optional(),
   name: z
@@ -220,6 +235,7 @@ export const ModuleManifestSchema = z.object({
   sequences: z.array(ModuleSequenceManifestSchema).optional().default([]),
   menus: z.array(ModuleMenuManifestSchema).optional().default([]),
   reports: z.array(ModuleReportManifestSchema).optional().default([]),
+  searchableEntities: z.array(ModuleSearchableEntityManifestSchema).optional().default([]),
   locales: z.array(ModuleLocaleManifestSchema).optional().default([]),
   timezones: z.array(ModuleTimezoneManifestSchema).optional().default([]),
   translations: z.array(ModuleTranslationManifestSchema).optional().default([]),

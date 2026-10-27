@@ -17,4 +17,10 @@ export class UserOrganizationUnitEntity extends TypeOrmBaseEntity {
 
   @Column({ name: 'position_title', type: 'varchar', length: 128, nullable: true })
   public positionTitle?: string | null;
+
+  @Column({ name: 'start_date', type: 'timestamp', nullable: true })
+  public startDate?: Date | null;
+
+  @Column({ name: 'end_date', type: 'timestamp', nullable: true })
+  public endDate?: Date | null;
 }

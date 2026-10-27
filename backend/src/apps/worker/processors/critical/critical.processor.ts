@@ -15,7 +15,7 @@ import {
   NOTIFICATION_ERROR_TYPE,
   NotificationChannelAdapterRegistry,
   type NotificationChannelCode,
-  type NotificationChannelProviderAdapter,
+  type INotificationChannelProviderAdapter,
 } from '@modules/notifications/index.js';
 import { BaseQueueProcessor } from '../base-queue.processor.js';
 
@@ -119,7 +119,7 @@ export class CriticalProcessor extends BaseQueueProcessor {
     payload: CriticalQueueJobPayload,
     recipients: readonly CriticalQueueRecipient[],
     channelCode: NotificationChannelCode,
-    adapter: NotificationChannelProviderAdapter,
+    adapter: INotificationChannelProviderAdapter,
   ): Promise<CriticalDeliveryResult> {
     let deliveredCount = 0;
     let providerMessageId: string | null = null;

@@ -20,6 +20,8 @@ export const USERS_TAB = {
   DIRECTORY: 'directory',
   LIFECYCLE_SECURITY: 'lifecycle_security',
   BULK_IMPORT_EXPORT: 'bulk_import_export',
+  REPORTS_DASHBOARD: 'reports_dashboard',
+  GLOBAL_SEARCH: 'global_search',
 } as const;
 
 export type UsersTabId = (typeof USERS_TAB)[keyof typeof USERS_TAB];

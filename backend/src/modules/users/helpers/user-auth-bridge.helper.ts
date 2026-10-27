@@ -124,12 +124,31 @@ export async function buildUserAuthIdentityView(params: {
     user.primaryOrganizationUnitId !== undefined && user.primaryOrganizationUnitId !== null
       ? Number(user.primaryOrganizationUnitId)
       : null;
+  const nowMs = Date.now();
+  const activeOrgLinks = orgLinks.filter((o) => {
+    if (o.startDate && new Date(o.startDate).getTime() > nowMs) return false;
+    if (o.endDate && new Date(o.endDate).getTime() < nowMs) return false;
+    return true;
+  });
   const organizationUnitIds = [
     ...new Set([
       ...(primaryOrgId ? [primaryOrgId] : []),
-      ...orgLinks.map((o) => Number(o.organizationUnitId)),
+      ...activeOrgLinks.map((o) => Number(o.organizationUnitId)),
     ]),
   ];
+  const managerId =
+    user.managerId !== undefined && user.managerId !== null ? Number(user.managerId) : null;
+  const temporaryManagerId =
+    user.temporaryManagerId !== undefined && user.temporaryManagerId !== null
+      ? Number(user.temporaryManagerId)
+      : null;
+  const tempFrom = user.temporaryManagerFrom ? new Date(user.temporaryManagerFrom) : null;
+  const tempUntil = user.temporaryManagerUntil ? new Date(user.temporaryManagerUntil) : null;
+  const isTempManagerActive =
+    temporaryManagerId !== null &&
+    (!tempFrom || tempFrom.getTime() <= nowMs) &&
+    Boolean(tempUntil && tempUntil.getTime() >= nowMs);
+  const effectiveManagerId = isTempManagerActive ? temporaryManagerId : managerId;
   const dataScopes =
     activeRoles.length > 0
       ? [...new Set(activeRoles.map((r) => parseDataScope(r.dataScope)))].sort((a, b) => a - b)
@@ -160,8 +179,11 @@ export async function buildUserAuthIdentityView(params: {
     lockedUntil: user.lockedUntil ?? null,
     mfaEnabled: Boolean(user.mfaEnabled),
     primaryOrganizationUnitId: primaryOrgId,
-    managerId:
-      user.managerId !== undefined && user.managerId !== null ? Number(user.managerId) : null,
+    managerId,
+    temporaryManagerId,
+    temporaryManagerFrom: tempFrom,
+    temporaryManagerUntil: tempUntil,
+    effectiveManagerId,
     organizationUnitIds,
     roles: roleCodes.length > 0 ? roleCodes : [defaultRoleCode],
     permissions,

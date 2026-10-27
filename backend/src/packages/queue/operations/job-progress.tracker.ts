@@ -405,7 +405,6 @@ export class JobProgressTrackerService {
     if (recipients.length > 0 && this.publisher && input.taskName !== 'scheduler.task.failed') {
       await this.publisher
         .publish(
-          QUEUES.SYSTEM_CRITICAL,
           'scheduler.task.failed',
           {
             channel: 'EMAIL',
@@ -413,15 +412,12 @@ export class JobProgressTrackerService {
             recipients: recipients.map((recipientAddress) => ({ recipientAddress })),
             metadata: record,
           },
+          QUEUES.SYSTEM_CRITICAL,
           {
-            correlationId: input.executionId,
-            job: {
-              source: {
-                kind: 'scheduler',
-                id: input.taskId,
-                name: record.taskName,
-                detail: input.executionId,
-              },
+            idempotencyKey: `scheduler-failure:${input.executionId}`,
+            index: {
+              taskId: input.taskId,
+              executionId: input.executionId,
             },
           },
         )

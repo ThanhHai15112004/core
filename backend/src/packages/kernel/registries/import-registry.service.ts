@@ -7,6 +7,7 @@ import type {
   ImportJobStatus,
   ImportProfileHandler,
   ImportProgressSnapshot,
+  ImportQueueWorkerExecutor,
 } from '../contracts/import.contract.js';
 
 export interface CreateImportHistoryInput {
@@ -43,6 +44,7 @@ export interface UpdateImportHistoryProgressInput {
 @Injectable()
 export class ImportRegistryService {
   private readonly profiles = new Map<string, ImportProfileHandler<unknown>>();
+  private readonly workerExecutors = new Map<string, ImportQueueWorkerExecutor<unknown>>();
   private readonly histories: ImportHistoryRecord[] = [];
   private readonly progressByJobId = new Map<string, ImportProgressSnapshot>();
   private readonly historyIdByJobId = new Map<string, number>();
@@ -55,6 +57,62 @@ export class ImportRegistryService {
     const key = handler.profileCode.trim().toLowerCase();
     if (!key) return;
     this.profiles.set(key, handler as ImportProfileHandler<unknown>);
+  }
+
+  /**
+   * 8.2.7 — Đăng ký bộ thực thi Import nền (`ImportQueueWorkerExecutor`) của module vào Registry
+   * để `HeavyJobProcessor` tự động điều phối theo `profileCode`, `module` hoặc `topic` mà không cần hardcode.
+   */
+  public registerWorkerExecutor<TRow = unknown>(executor: ImportQueueWorkerExecutor<TRow>): void {
+    const typed = executor as ImportQueueWorkerExecutor<unknown>;
+    const profileKey = executor.profileCode.trim().toLowerCase();
+    const moduleKey = executor.module.trim().toLowerCase();
+    const topicKey = executor.topic?.trim().toLowerCase() || `${moduleKey}.import`;
+
+    if (profileKey) {
+      this.workerExecutors.set(`profile:${profileKey}`, typed);
+    }
+    if (moduleKey) {
+      this.workerExecutors.set(`module:${moduleKey}`, typed);
+    }
+    if (topicKey) {
+      this.workerExecutors.set(`topic:${topicKey}`, typed);
+    }
+  }
+
+  /**
+   * 8.2.7 — Tra cứu bộ thực thi Import nền theo `profileCode`, `module` hoặc `topic` (ví dụ: `'users.import'`, `'organizations.import'`).
+   */
+  public resolveWorkerExecutor<TRow = unknown>(lookup: {
+    readonly profileCode?: string | undefined;
+    readonly module?: string | undefined;
+    readonly topic?: string | undefined;
+  }): ImportQueueWorkerExecutor<TRow> | undefined {
+    if (lookup.profileCode?.trim()) {
+      const byProfile = this.workerExecutors.get(
+        `profile:${lookup.profileCode.trim().toLowerCase()}`,
+      );
+      if (byProfile) return byProfile as ImportQueueWorkerExecutor<TRow>;
+    }
+    if (lookup.module?.trim()) {
+      const byModule = this.workerExecutors.get(`module:${lookup.module.trim().toLowerCase()}`);
+      if (byModule) return byModule as ImportQueueWorkerExecutor<TRow>;
+    }
+    if (lookup.topic?.trim()) {
+      const normalizedTopic = lookup.topic.trim().toLowerCase();
+      const byTopic = this.workerExecutors.get(`topic:${normalizedTopic}`);
+      if (byTopic) return byTopic as ImportQueueWorkerExecutor<TRow>;
+      const topicPrefix = normalizedTopic.endsWith('.import')
+        ? normalizedTopic.slice(0, -'.import'.length)
+        : null;
+      if (topicPrefix) {
+        const byPrefix =
+          this.workerExecutors.get(`module:${topicPrefix}`) ??
+          this.workerExecutors.get(`profile:${topicPrefix}`);
+        if (byPrefix) return byPrefix as ImportQueueWorkerExecutor<TRow>;
+      }
+    }
+    return undefined;
   }
 
   /** Lấy cấu hình Import theo `profileCode` */

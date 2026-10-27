@@ -2,12 +2,25 @@ import { Logger, Optional } from '@nestjs/common';
 import { Processor } from '@nestjs/bullmq';
 import type { Job } from 'bullmq';
 import { CoreConfigService } from '@packages/config/index.js';
+import {
+  ExportRegistryService,
+  ReportRegistryService,
+  defaultExportRegistry,
+  defaultReportRegistry,
+  type TriggeredReportScheduleItemResult,
+} from '@packages/kernel/index.js';
 import { MetricsRegistryService } from '@packages/metrics/index.js';
 import { JOB_LOCK_DURATION_MS, QUEUES, type MessageEnvelope } from '@packages/messaging/index.js';
 import { JobProgressTrackerService } from '@packages/queue/index.js';
 import { FilesService } from '@modules/files/index.js';
 import { NotificationChannelsService } from '@modules/notifications/index.js';
 import { BaseQueueProcessor } from '../base-queue.processor.js';
+
+export interface SystemMaintenanceTickPayload {
+  readonly triggeredBy?: string | undefined;
+  readonly now?: string | number | Date | undefined;
+  readonly module?: string | undefined;
+}
 
 /**
  * Consumer của queue `system.events` (`@nestjs/bullmq`). Mỗi job chạy trong correlation của envelope để lần theo
@@ -24,6 +37,8 @@ export class SystemProcessor extends BaseQueueProcessor {
     @Optional() progressTracker?: JobProgressTrackerService,
     @Optional() private readonly filesService?: FilesService,
     @Optional() private readonly notificationChannelsService?: NotificationChannelsService,
+    @Optional() private readonly exportRegistry?: ExportRegistryService,
+    @Optional() private readonly reportRegistry?: ReportRegistryService,
   ) {
     super(config, metrics, progressTracker);
   }
@@ -38,15 +53,33 @@ export class SystemProcessor extends BaseQueueProcessor {
       `Processing message "${envelope.topic}" (${envelope.id}) from ${envelope.producer ?? 'unknown'}`,
     );
 
-    if (envelope.topic === 'system.maintenance.tick') {
+    if (
+      envelope.topic === 'system.maintenance.tick' ||
+      envelope.topic === 'reports.schedule.tick'
+    ) {
       return this.handleMaintenanceTick(envelope);
     }
 
     return this.handleGenericSystemEvent(envelope);
   }
 
-  /** 1. Xử lý topic `system.maintenance.tick` — Dọn thùng rác quá hạn & retry các thông báo đến hạn */
+  /**
+   * 1. Xử lý topic `system.maintenance.tick` / `reports.schedule.tick`:
+   * - Dọn thùng rác quá hạn (`FilesService.purgeExpiredTrash`)
+   * - Retry các thông báo gửi lỗi đến hạn (`NotificationChannelsService.retryDueDeliveries`)
+   * - Tự động thu hồi file Export & Report tạm đã hết hạn (`8.3.8` & `8.4.6`)
+   * - Tự động kích hoạt các Lịch gửi báo cáo định kỳ đến hạn (`DAILY` / `WEEKLY` / `MONTHLY` — `8.4.5` & `8.4.6`)
+   */
   private async handleMaintenanceTick(envelope: MessageEnvelope): Promise<unknown> {
+    const payload = (envelope.payload ?? {}) as SystemMaintenanceTickPayload;
+    const effectiveNow =
+      payload.now instanceof Date
+        ? payload.now
+        : typeof payload.now === 'string' || typeof payload.now === 'number'
+          ? new Date(payload.now)
+          : new Date();
+    const nowDate = Number.isNaN(effectiveNow.getTime()) ? new Date() : effectiveNow;
+
     let purgedTrashCount = 0;
     let retriedDeliveriesCount = 0;
 
@@ -62,12 +95,32 @@ export class SystemProcessor extends BaseQueueProcessor {
       retriedDeliveriesCount = retryRes.retriedCount;
     }
 
+    const activeExportRegistry = this.exportRegistry ?? defaultExportRegistry;
+    const activeReportRegistry = this.reportRegistry ?? defaultReportRegistry;
+
+    const purgedExports = activeExportRegistry.purgeExpiredArtifacts(nowDate);
+    const purgedReports = activeReportRegistry.purgeExpiredReportArtifacts(nowDate);
+
+    let triggeredReportSchedulesCount = 0;
+    let triggeredReportSchedules: readonly TriggeredReportScheduleItemResult[] = [];
+
+    const dueScheduleResult = await activeReportRegistry.triggerDueSchedules(
+      nowDate,
+      payload.module ? { module: payload.module } : undefined,
+    );
+    triggeredReportSchedulesCount = dueScheduleResult.triggeredCount;
+    triggeredReportSchedules = dueScheduleResult.results;
+
     return {
       handled: true,
       topic: envelope.topic,
       id: envelope.id,
       purgedTrashCount,
       retriedDeliveriesCount,
+      purgedExportArtifactsCount: purgedExports.purgedCount,
+      purgedReportArtifactsCount: purgedReports.purgedCount,
+      triggeredReportSchedulesCount,
+      triggeredReportSchedules,
     };
   }
 

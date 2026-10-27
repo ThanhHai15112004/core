@@ -15,7 +15,7 @@ import {
   NOTIFICATION_ERROR_TYPE,
   NotificationChannelAdapterRegistry,
   type NotificationChannelCode,
-  type NotificationChannelProviderAdapter,
+  type INotificationChannelProviderAdapter,
 } from '@modules/notifications/index.js';
 import { BaseQueueProcessor } from '../base-queue.processor.js';
 
@@ -197,7 +197,7 @@ export class NotificationsProcessor extends BaseQueueProcessor {
     batchOffset: number,
     channelCode: NotificationChannelCode,
     providerCode: string,
-    adapter?: NotificationChannelProviderAdapter,
+    adapter?: INotificationChannelProviderAdapter | null,
   ): Promise<Omit<NotificationBatchDispatchResult, 'processed'>> {
     if (!adapter || batch.length === 0) {
       return {

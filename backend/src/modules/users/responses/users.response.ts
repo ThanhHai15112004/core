@@ -1,16 +1,40 @@
 import { z } from 'zod';
 import type {
+  UserApproverSummaryView,
   UserOrganizationAssignmentSummary,
+  UserOrganizationHistoryActionType,
+  UserOrganizationHistoryItemView,
   UserProfileView,
   UserRoleAssignmentSummary,
   UserStatusCode,
   UserStatusName,
+  UserSubordinateSummaryView,
 } from '../contracts/index.js';
+
+export type {
+  UserApproverSummaryView,
+  UserOrganizationHistoryItemView,
+  UserSubordinateSummaryView,
+};
+
+export type UserOrganizationHistoryItemResponse = UserOrganizationHistoryItemView;
+
+export interface UserSubordinatesOverviewResponse {
+  readonly userId: number;
+  readonly managerId: number;
+  readonly directCount: number;
+  readonly temporaryCount: number;
+  readonly indirectCount: number;
+  readonly totalSubordinates: number;
+  readonly subordinates: readonly UserSubordinateSummaryView[];
+  readonly approverChain: readonly UserApproverSummaryView[];
+}
 
 export interface UserResponse {
   readonly id: number;
   readonly username: string;
   readonly email: string;
+  readonly employeeCode?: string | null;
   readonly phone: string | null;
   readonly firstName: string;
   readonly lastName: string;
@@ -29,6 +53,10 @@ export interface UserResponse {
   readonly mfaEnabled: boolean;
   readonly primaryOrganizationUnitId: number | null;
   readonly managerId?: number | null;
+  readonly temporaryManagerId?: number | null;
+  readonly temporaryManagerFrom?: string | null;
+  readonly temporaryManagerUntil?: string | null;
+  readonly effectiveManagerId?: number | null;
   readonly roles: readonly UserRoleAssignmentSummary[];
   readonly organizationUnits: readonly UserOrganizationAssignmentSummary[];
   readonly lastLoginAt: string | null;
@@ -116,6 +144,8 @@ export const userOrganizationSummarySchema = z.object({
   typeName: z.string().optional(),
   isPrimary: z.boolean(),
   positionTitle: z.string().nullable(),
+  startDate: z.string().nullable().optional(),
+  endDate: z.string().nullable().optional(),
 });
 
 export const userProfileResponseSchema = z.object({
@@ -156,6 +186,10 @@ export const userResponseSchema = z.object({
   mfaEnabled: z.boolean(),
   primaryOrganizationUnitId: z.number().int().min(1).nullable(),
   managerId: z.number().int().min(1).nullable().optional(),
+  temporaryManagerId: z.number().int().min(1).nullable().optional(),
+  temporaryManagerFrom: z.string().nullable().optional(),
+  temporaryManagerUntil: z.string().nullable().optional(),
+  effectiveManagerId: z.number().int().min(1).nullable().optional(),
   roles: z.array(userRoleSummarySchema),
   organizationUnits: z.array(userOrganizationSummarySchema),
   lastLoginAt: z.string().nullable(),
@@ -177,6 +211,72 @@ export const userStatusHistoryItemSchema = z.object({
   reason: z.string().nullable(),
   changedBy: z.number().int().min(1).nullable(),
   createdAt: z.string(),
+});
+
+export const userOrganizationHistoryItemSchema = z.object({
+  id: z.number().int().min(1),
+  userId: z.number().int().min(1),
+  organizationUnitId: z.number().int().min(1),
+  organizationUnitCode: z.string().nullable().optional(),
+  organizationUnitName: z.string().nullable().optional(),
+  fromOrganizationUnitId: z.number().int().min(1).nullable(),
+  fromOrganizationUnitCode: z.string().nullable().optional(),
+  fromOrganizationUnitName: z.string().nullable().optional(),
+  actionType: z.enum([
+    'ASSIGN',
+    'TRANSFER',
+    'UPDATE',
+    'END',
+  ] satisfies readonly UserOrganizationHistoryActionType[]),
+  isPrimary: z.boolean(),
+  positionTitle: z.string().nullable(),
+  startDate: z.string().nullable(),
+  endDate: z.string().nullable(),
+  reason: z.string().nullable(),
+  changedBy: z.number().int().min(1).nullable(),
+  createdAt: z.string(),
+});
+
+export const userSubordinateSummarySchema = z.object({
+  id: z.number().int().min(1),
+  username: z.string(),
+  fullName: z.string(),
+  email: z.string(),
+  status: z.number().int().min(1).max(4),
+  statusName: z.enum(['ACTIVE', 'INACTIVE', 'LOCKED', 'ARCHIVED']),
+  primaryOrganizationUnitId: z.number().int().min(1).nullable(),
+  primaryOrganizationUnitName: z.string().nullable().optional(),
+  positionTitle: z.string().nullable(),
+  managerId: z.number().int().min(1).nullable(),
+  temporaryManagerId: z.number().int().min(1).nullable(),
+  temporaryManagerFrom: z.string().nullable(),
+  temporaryManagerUntil: z.string().nullable(),
+  effectiveManagerId: z.number().int().min(1).nullable(),
+  relationType: z.enum(['DIRECT', 'TEMPORARY', 'INDIRECT']),
+  level: z.number().int().min(1),
+});
+
+export const userApproverSummarySchema = z.object({
+  step: z.number().int().min(1),
+  userId: z.number().int().min(1),
+  username: z.string(),
+  fullName: z.string(),
+  email: z.string(),
+  status: z.number().int().min(1).max(4),
+  primaryOrganizationUnitId: z.number().int().min(1).nullable(),
+  positionTitle: z.string().nullable(),
+  sourceType: z.enum(['DIRECT_MANAGER', 'TEMPORARY_MANAGER']),
+});
+
+export const userSubordinatesOverviewResponseSchema = z.object({
+  userId: z.number().int().min(1),
+  managerId: z.number().int().min(1),
+  directCount: z.number().int().min(0),
+  temporaryCount: z.number().int().min(0),
+  indirectCount: z.number().int().min(0),
+  totalSubordinates: z.number().int().min(0),
+  subordinates: z.array(userSubordinateSummarySchema),
+  approverChain: z.array(userApproverSummarySchema),
 });
 
 export const bulkImportErrorItemSchema = z.object({
@@ -557,4 +657,103 @@ export const userReportHistoryItemResponseSchema = z.object({
   startedAt: z.string(),
   completedAt: z.string().nullable(),
   durationMs: z.number().nullable(),
+});
+
+export const registeredSearchableEntityResponseSchema = z.object({
+  code: z.string(),
+  module: z.string(),
+  entityType: z.string(),
+  name: z.string(),
+  description: z.string().nullable(),
+  requiredPermission: z.string(),
+  searchableFields: z.array(z.string()),
+  titleField: z.string(),
+  subtitleField: z.string().nullable(),
+  staleThresholdMs: z.number(),
+  isSystem: z.boolean(),
+  status: z.number(),
+  registeredAt: z.string(),
+});
+
+export const searchHitItemResponseSchema = z.object({
+  documentKey: z.string(),
+  id: z.union([z.string(), z.number()]),
+  entityCode: z.string(),
+  module: z.string(),
+  entityType: z.string(),
+  title: z.string(),
+  subtitle: z.string().nullable(),
+  score: z.number(),
+  matchedHighlights: z.array(z.string()),
+  ownerId: z.number().nullable(),
+  organizationUnitId: z.number().nullable(),
+  status: z.union([z.number(), z.string()]).nullable(),
+  metadata: z.record(z.string(), z.unknown()),
+  sourceUpdatedAt: z.string(),
+  indexedAt: z.string(),
+  indexLagMs: z.number(),
+  isStale: z.boolean(),
+});
+
+export const searchQueryResultResponseSchema = z.object({
+  keyword: z.string(),
+  normalizedKeyword: z.string(),
+  driverUsed: z.enum(['DATABASE', 'ELASTICSEARCH', 'OPENSEARCH']),
+  total: z.number(),
+  page: z.number(),
+  limit: z.number(),
+  staleHitCount: z.number(),
+  maxIndexLagMs: z.number(),
+  hits: z.array(searchHitItemResponseSchema),
+});
+
+export const searchSyncHistoryResponseSchema = z.object({
+  id: z.number(),
+  operation: z.enum(['SYNC', 'REBUILD', 'REMOVE']),
+  module: z.string().nullable(),
+  entityType: z.string().nullable(),
+  entityCode: z.string().nullable(),
+  driverUsed: z.enum(['DATABASE', 'ELASTICSEARCH', 'OPENSEARCH']),
+  executionMode: z.enum(['SYNC', 'QUEUE']),
+  status: z.enum(['QUEUED', 'PROCESSING', 'COMPLETED', 'FAILED']),
+  indexedCount: z.number(),
+  removedCount: z.number(),
+  jobId: z.string().nullable(),
+  actorId: z.number().nullable(),
+  errorMessage: z.string().nullable(),
+  startedAt: z.string(),
+  completedAt: z.string().nullable(),
+});
+
+export const searchIndexLagReportResponseSchema = z.object({
+  driverUsed: z.enum(['DATABASE', 'ELASTICSEARCH', 'OPENSEARCH']),
+  totalIndexedDocuments: z.number(),
+  staleDocumentCount: z.number(),
+  maxLagMs: z.number(),
+  averageLagMs: z.number(),
+  items: z.array(
+    z.object({
+      documentKey: z.string(),
+      id: z.union([z.string(), z.number()]),
+      entityCode: z.string(),
+      module: z.string(),
+      entityType: z.string(),
+      title: z.string(),
+      sourceUpdatedAt: z.string(),
+      indexedAt: z.string(),
+      lagMs: z.number(),
+      staleThresholdMs: z.number(),
+      isStale: z.boolean(),
+    }),
+  ),
+});
+
+export const zeroResultKeywordStatResponseSchema = z.object({
+  normalizedKeyword: z.string(),
+  sampleKeyword: z.string(),
+  searchCount: z.number(),
+  lastSearchedAt: z.string(),
+  modules: z.array(z.string()),
+  entityTypes: z.array(z.string()),
+  lastActorId: z.number().nullable(),
 });

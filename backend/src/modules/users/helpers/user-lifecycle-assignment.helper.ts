@@ -1,4 +1,4 @@
-import { NotFoundAppException } from '@packages/kernel/index.js';
+import { BadRequestAppException, NotFoundAppException } from '@packages/kernel/index.js';
 import type { TransactionManager } from '@packages/database/index.js';
 import type {
   AuditLogService,
@@ -11,6 +11,10 @@ import { USERS_AUDIT_META, type UserStatusCode } from '../enum/users.enum.js';
 import type { UserStatusTransitionAction } from '../types/users.types.js';
 import { parseUserStatus } from './user-normalizer.helper.js';
 import type { UserEntity } from '../entities/user.entity.js';
+import type {
+  RecordUserOrganizationHistoryInput,
+  UserOrganizationHistoryRepository,
+} from '../repositories/user-organization-history.repository.js';
 import type { UserOrganizationUnitRepository } from '../repositories/user-organization-unit.repository.js';
 import type { UserRoleRepository } from '../repositories/user-role.repository.js';
 import type { UserRepository } from '../repositories/user.repository.js';
@@ -228,6 +232,7 @@ export async function executeAssignUserOrganizationsFlow(params: {
   actor?: UserIdentity | undefined;
   userRepository: UserRepository;
   userOrgRepository: UserOrganizationUnitRepository;
+  userOrgHistoryRepository?: UserOrganizationHistoryRepository | null | undefined;
   organizationsPublicService: IOrganizationsPublicService | null;
   transactionManager: TransactionManager | null;
   ensureAccessUserEntity: (user: UserEntity, actor: UserIdentity, action: string) => Promise<void>;
@@ -242,6 +247,7 @@ export async function executeAssignUserOrganizationsFlow(params: {
     actor,
     userRepository,
     userOrgRepository,
+    userOrgHistoryRepository,
     organizationsPublicService,
     transactionManager,
     ensureAccessUserEntity,
@@ -258,6 +264,16 @@ export async function executeAssignUserOrganizationsFlow(params: {
     await ensureAccessUserEntity(user, actor, 'update');
   }
 
+  for (const item of dto.organizationUnits) {
+    if (item.startDate && item.endDate) {
+      const startMs = new Date(item.startDate).getTime();
+      const endMs = new Date(item.endDate).getTime();
+      if (!Number.isNaN(startMs) && !Number.isNaN(endMs) && endMs < startMs) {
+        throw new BadRequestAppException('users.invalidOrganizationMembershipPeriod');
+      }
+    }
+  }
+
   const prevLinks = await userOrgRepository.findByUserIds([id]);
   const prevOrgUnitIds = prevLinks.map((l) => Number(l.organizationUnitId));
   const unitIds = dto.organizationUnits.map((o) => o.organizationUnitId);
@@ -265,11 +281,95 @@ export async function executeAssignUserOrganizationsFlow(params: {
     await organizationsPublicService.ensureActiveUnitsExist(unitIds);
   }
 
+  const effectiveActorId = actorId ?? actor?.id ?? null;
+  const effectiveReason = dto.reason?.trim() || null;
+
   const work = async (): Promise<void> => {
     const savedLinks = await userOrgRepository.replaceUserOrganizations(id, dto.organizationUnits);
     const primaryLink = savedLinks.find((l) => l.isPrimary) ?? savedLinks[0];
     user.primaryOrganizationUnitId = primaryLink ? Number(primaryLink.organizationUnitId) : null;
     await userRepository.saveEntity(user);
+
+    if (userOrgHistoryRepository) {
+      const prevByUnitId = new Map(prevLinks.map((l) => [Number(l.organizationUnitId), l]));
+      const nextByUnitId = new Map(savedLinks.map((l) => [Number(l.organizationUnitId), l]));
+      const removedLinks = prevLinks.filter((l) => !nextByUnitId.has(Number(l.organizationUnitId)));
+      const primaryRemovedUnitId =
+        (removedLinks.find((r) => r.isPrimary) ?? removedLinks[0])?.organizationUnitId ?? null;
+
+      const historyEntries: RecordUserOrganizationHistoryInput[] = [];
+      const now = new Date();
+
+      for (const removed of removedLinks) {
+        historyEntries.push({
+          userId: id,
+          organizationUnitId: Number(removed.organizationUnitId),
+          fromOrganizationUnitId: null,
+          actionType: 'END',
+          isPrimary: Boolean(removed.isPrimary),
+          positionTitle: removed.positionTitle ?? null,
+          startDate: removed.startDate ? new Date(removed.startDate) : null,
+          endDate: removed.endDate ? new Date(removed.endDate) : now,
+          reason: effectiveReason ?? 'Ended organization unit membership',
+          changedBy: effectiveActorId,
+        });
+      }
+
+      for (const saved of savedLinks) {
+        const unitId = Number(saved.organizationUnitId);
+        const prev = prevByUnitId.get(unitId);
+        if (!prev) {
+          const isTransfer = removedLinks.length > 0;
+          historyEntries.push({
+            userId: id,
+            organizationUnitId: unitId,
+            fromOrganizationUnitId:
+              isTransfer && primaryRemovedUnitId !== null ? Number(primaryRemovedUnitId) : null,
+            actionType: isTransfer ? 'TRANSFER' : 'ASSIGN',
+            isPrimary: Boolean(saved.isPrimary),
+            positionTitle: saved.positionTitle ?? null,
+            startDate: saved.startDate ? new Date(saved.startDate) : now,
+            endDate: saved.endDate ? new Date(saved.endDate) : null,
+            reason:
+              effectiveReason ??
+              (isTransfer
+                ? 'Transferred user to new organization unit'
+                : 'Assigned user to organization unit'),
+            changedBy: effectiveActorId,
+          });
+        } else {
+          const prevStartIso = prev.startDate ? new Date(prev.startDate).toISOString() : null;
+          const nextStartIso = saved.startDate ? new Date(saved.startDate).toISOString() : null;
+          const prevEndIso = prev.endDate ? new Date(prev.endDate).toISOString() : null;
+          const nextEndIso = saved.endDate ? new Date(saved.endDate).toISOString() : null;
+          const hasChanged =
+            Boolean(prev.isPrimary) !== Boolean(saved.isPrimary) ||
+            (prev.positionTitle ?? null) !== (saved.positionTitle ?? null) ||
+            prevStartIso !== nextStartIso ||
+            prevEndIso !== nextEndIso ||
+            Boolean(effectiveReason);
+
+          if (hasChanged) {
+            historyEntries.push({
+              userId: id,
+              organizationUnitId: unitId,
+              fromOrganizationUnitId: unitId,
+              actionType: 'UPDATE',
+              isPrimary: Boolean(saved.isPrimary),
+              positionTitle: saved.positionTitle ?? null,
+              startDate: saved.startDate ? new Date(saved.startDate) : null,
+              endDate: saved.endDate ? new Date(saved.endDate) : null,
+              reason: effectiveReason ?? 'Updated organization unit membership details',
+              changedBy: effectiveActorId,
+            });
+          }
+        }
+      }
+
+      if (historyEntries.length > 0) {
+        await userOrgHistoryRepository.recordHistories(historyEntries);
+      }
+    }
   };
 
   if (transactionManager) {
@@ -281,7 +381,7 @@ export async function executeAssignUserOrganizationsFlow(params: {
   await invalidateIdentityCache(id);
   const updated = await getById(id);
   await auditLogService?.record({
-    actorUserId: actorId ?? actor?.id ?? null,
+    actorUserId: effectiveActorId,
     module: USERS_AUDIT_META.MODULE,
     feature: USERS_AUDIT_META.FEATURES.ORGANIZATIONS,
     action: 'user.assign_organizations',
@@ -292,7 +392,7 @@ export async function executeAssignUserOrganizationsFlow(params: {
       organizationUnitIds: updated.organizationUnits.map((o) => o.organizationUnitId),
       primaryOrganizationUnitId: updated.primaryOrganizationUnitId,
     },
-    reason: 'Updated user organization units assignment',
+    reason: effectiveReason ?? 'Updated user organization units assignment',
   });
   return updated;
 }

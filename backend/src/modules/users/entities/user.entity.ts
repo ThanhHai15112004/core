@@ -54,6 +54,16 @@ export class UserEntity extends VersionedTypeOrmEntity {
   @Column({ name: 'manager_id', type: 'int', nullable: true })
   public managerId?: number | null;
 
+  @Index()
+  @Column({ name: 'temporary_manager_id', type: 'int', nullable: true })
+  public temporaryManagerId?: number | null;
+
+  @Column({ name: 'temporary_manager_from', type: 'timestamp', nullable: true })
+  public temporaryManagerFrom?: Date | null;
+
+  @Column({ name: 'temporary_manager_until', type: 'timestamp', nullable: true })
+  public temporaryManagerUntil?: Date | null;
+
   @Column({ name: 'password_changed_at', type: 'timestamp', nullable: true })
   public passwordChangedAt?: Date | null;
 

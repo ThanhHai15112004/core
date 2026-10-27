@@ -17,6 +17,7 @@ import { UsersService } from '../services/users.service.js';
 import { UserImportService } from '../import/index.js';
 import { UserExportService } from '../export/index.js';
 import { UserReportService } from '../reports/index.js';
+import { UserSearchService } from '../search/index.js';
 import {
   type AdminResetUserMfaRequest,
   type AdminResetUserPasswordRequest,
@@ -30,10 +31,16 @@ import {
   type ListUserImportHistoriesQuery,
   type ListUserReportHistoriesQuery,
   type ListUserReportSchedulesQuery,
+  type ListUserSubordinatesQuery,
   type ListUsersQuery,
+  type ListZeroResultKeywordsQuery,
   type LockUserRequest,
   type PreviewImportUsersRequest,
+  type RebuildUserSearchIndexBody,
   type RunUserReportRequest,
+  type SearchIndexLagQuery,
+  type SearchUsersGlobalQueryRequest,
+  type SyncUserSearchIndexBody,
   type UpdateUserRequest,
   adminResetUserMfaSchema,
   adminResetUserPasswordSchema,
@@ -47,18 +54,26 @@ import {
   listUserImportHistoriesQuerySchema,
   listUserReportHistoriesQuerySchema,
   listUserReportSchedulesQuerySchema,
+  listUserSubordinatesQuerySchema,
   listUsersQuerySchema,
+  listZeroResultKeywordsQuerySchema,
   lockUserSchema,
   previewImportUsersSchema,
+  rebuildUserSearchIndexSchema,
   runUserReportSchema,
+  searchIndexLagQuerySchema,
+  searchUsersGlobalQuerySchema,
+  syncUserSearchIndexSchema,
   updateUserSchema,
 } from '../requests/users.requests.js';
 import {
   type BulkImportUsersResultResponse,
   type ExportUsersCsvResponse,
+  type UserOrganizationHistoryItemResponse,
   type UserReportExecutionResponse,
   type UserResponse,
   type UserStatusHistoryItemResponse,
+  type UserSubordinatesOverviewResponse,
   bulkImportUsersResultSchema,
   exportHistoryItemResponseSchema,
   exportJobProgressResponseSchema,
@@ -68,11 +83,18 @@ import {
   importJobProgressResponseSchema,
   importUsersPreviewResponseSchema,
   registeredReportDefinitionResponseSchema,
+  registeredSearchableEntityResponseSchema,
+  searchIndexLagReportResponseSchema,
+  searchQueryResultResponseSchema,
+  searchSyncHistoryResponseSchema,
+  userOrganizationHistoryItemSchema,
   userReportExecutionResponseSchema,
   userReportHistoryItemResponseSchema,
   userReportScheduleItemResponseSchema,
   userResponseSchema,
   userStatusHistoryItemSchema,
+  userSubordinatesOverviewResponseSchema,
+  zeroResultKeywordStatResponseSchema,
 } from '../responses/users.response.js';
 
 @ApiGroup('User Management', 'Quản lý vòng đời tài khoản người dùng (Mục 3.1)')
@@ -83,6 +105,7 @@ export class UsersController {
     private readonly importService: UserImportService,
     private readonly exportService: UserExportService,
     @Optional() private readonly reportService?: UserReportService,
+    @Optional() private readonly searchService?: UserSearchService,
   ) {}
 
   /** Tìm kiếm và lọc người dùng có phân trang kèm áp dụng Phạm vi dữ liệu (Mục 3.1.9 & 4.3.5) */
@@ -279,6 +302,86 @@ export class UsersController {
     return this.reportService!.downloadTemporaryReport(token);
   }
 
+  /** Tìm kiếm toàn hệ thống theo thực thể đã đăng ký, áp dụng quyền & Data Scope (Mục 8.5.1, 8.5.2, 8.5.3, 8.5.6, 8.5.7 & 8.5.8) */
+  @Get(USERS_ROUTES.SEARCH)
+  @RequirePermissions('users.read')
+  @ApiDoc({
+    summary:
+      'Tìm kiếm người dùng & thực thể liên quan qua Search Provider dùng chung (áp dụng Data Scope & theo dõi độ trễ Index)',
+    response: searchQueryResultResponseSchema,
+  })
+  public async searchGlobal(
+    @ValidatedQuery(searchUsersGlobalQuerySchema) query: SearchUsersGlobalQueryRequest,
+    @CurrentUser() actor?: UserIdentity,
+  ) {
+    return this.searchService!.searchUsers(query, actor);
+  }
+
+  /** Xem danh sách thực thể được phép tìm kiếm đã đăng ký theo module (Mục 8.5.1) */
+  @Get(USERS_ROUTES.SEARCH_ENTITIES)
+  @RequirePermissions('users.read')
+  @ApiDoc({
+    summary: 'Xem danh sách các thực thể đã đăng ký vào Search Provider dùng chung',
+    response: z.array(registeredSearchableEntityResponseSchema),
+  })
+  public listSearchableEntities() {
+    return this.searchService?.listSearchableEntities({ includeAllModules: true }) ?? [];
+  }
+
+  /** Đồng bộ dữ liệu người dùng sang Search Index trực tiếp hoặc qua Queue (Mục 8.5.4) */
+  @Post(USERS_ROUTES.SEARCH_SYNC)
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions('users.update')
+  @ApiDoc({
+    summary: 'Đồng bộ dữ liệu người dùng sang Search Index (trực tiếp hoặc chạy bằng Queue)',
+    response: searchSyncHistoryResponseSchema,
+  })
+  public async syncSearchIndex(
+    @ValidatedBody(syncUserSearchIndexSchema) body: SyncUserSearchIndexBody,
+    @CurrentUser() actor?: UserIdentity,
+  ) {
+    return this.searchService!.syncUsersToSearchIndex(body, actor);
+  }
+
+  /** Tạo lại toàn bộ Search Index theo module hoặc loại dữ liệu (Mục 8.5.5) */
+  @Post(USERS_ROUTES.SEARCH_REBUILD)
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions('users.update')
+  @ApiDoc({
+    summary: 'Tạo lại toàn bộ Search Index theo module hoặc loại dữ liệu (entityType)',
+    response: searchSyncHistoryResponseSchema,
+  })
+  public async rebuildSearchIndex(
+    @ValidatedBody(rebuildUserSearchIndexSchema) body: RebuildUserSearchIndexBody,
+    @CurrentUser() actor?: UserIdentity,
+  ) {
+    return this.searchService!.rebuildSearchIndex(body, actor);
+  }
+
+  /** Theo dõi độ trễ cập nhật Search Index để phát hiện kết quả tìm kiếm bị cũ (Mục 8.5.7) */
+  @Get(USERS_ROUTES.SEARCH_LAG)
+  @RequirePermissions('users.read')
+  @ApiDoc({
+    summary: 'Theo dõi độ trễ cập nhật Search Index (phát hiện kết quả tìm kiếm bị cũ)',
+    response: searchIndexLagReportResponseSchema,
+  })
+  public getSearchIndexLag(@ValidatedQuery(searchIndexLagQuerySchema) query: SearchIndexLagQuery) {
+    return this.searchService!.getSearchIndexLagReport(query);
+  }
+
+  /** Thống kê các từ khóa tìm kiếm không có kết quả để cải thiện chất lượng tìm kiếm (Mục 8.5.8) */
+  @Get(USERS_ROUTES.SEARCH_ZERO_RESULTS)
+  @RequirePermissions('users.read')
+  @ApiDoc({
+    summary: 'Thống kê từ khóa tìm kiếm không có kết quả (Zero-Result Keywords)',
+    response: z.array(zeroResultKeywordStatResponseSchema),
+  })
+  public listZeroResultKeywords(
+    @ValidatedQuery(listZeroResultKeywordsQuerySchema) query: ListZeroResultKeywordsQuery,
+  ) {
+    return this.searchService?.listZeroResultKeywords(query) ?? [];
+  }
+
   /** Tải file mẫu (Template) Excel (.xlsx) hoặc CSV (.csv) để nhập người dùng hàng loạt (Mục 3.1.7) */
   @Get(USERS_ROUTES.IMPORT_TEMPLATE)
   @RequirePermissions('users.import')
@@ -387,6 +490,37 @@ export class UsersController {
     @CurrentUser() actor?: UserIdentity,
   ): Promise<UserStatusHistoryItemResponse[]> {
     return this.usersService.getStatusHistory(id, actor);
+  }
+
+  /** Xem lịch sử tham gia & điều chuyển đơn vị của người dùng (Mục 9.2.6) */
+  @Get(USERS_ROUTES.ORGANIZATION_HISTORY)
+  @RequirePermissions('users.read')
+  @ApiDoc({
+    summary:
+      'Xem lịch sử gán, cập nhật, điều chuyển và kết thúc đơn vị tổ chức của người dùng (Mục 9.2.6)',
+    response: z.array(userOrganizationHistoryItemSchema),
+  })
+  public async getOrganizationHistory(
+    @ValidatedParams(positiveIntParamSchema, 'id') id: number,
+    @CurrentUser() actor?: UserIdentity,
+  ): Promise<UserOrganizationHistoryItemResponse[]> {
+    return this.usersService.getOrganizationHistory(id, actor);
+  }
+
+  /** Tra cứu danh sách cấp dưới và chuỗi phê duyệt của người dùng (Mục 9.2.7 — dùng cho Data Scope và Approval) */
+  @Get(USERS_ROUTES.SUBORDINATES)
+  @RequirePermissions('users.read')
+  @ApiDoc({
+    summary:
+      'Tra cứu danh sách cấp dưới (trực tiếp, tạm thời, gián tiếp) và chuỗi người phê duyệt (Approval Chain) của người dùng (Mục 9.2.7)',
+    response: userSubordinatesOverviewResponseSchema,
+  })
+  public async getSubordinates(
+    @ValidatedParams(positiveIntParamSchema, 'id') id: number,
+    @ValidatedQuery(listUserSubordinatesQuerySchema) query: ListUserSubordinatesQuery,
+    @CurrentUser() actor?: UserIdentity,
+  ): Promise<UserSubordinatesOverviewResponse> {
+    return this.usersService.getSubordinatesOverview(id, query, actor);
   }
 
   /** Tạo mới người dùng (Mục 3.1.1) */
