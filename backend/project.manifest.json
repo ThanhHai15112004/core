@@ -26,7 +26,8 @@
     "codes",
     "settings",
     "files",
-    "notifications"
+    "notifications",
+    "workflows"
   ],
   "settings": {
     "defaultLocale": "vi",

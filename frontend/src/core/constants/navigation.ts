@@ -9,7 +9,8 @@ export type NavigationTabId =
   | 'codes'
   | 'settings'
   | 'files'
-  | 'notifications';
+  | 'notifications'
+  | 'workflows';
 
 export interface NavigationItem {
   id: NavigationTabId;
@@ -73,6 +74,12 @@ export const NAVIGATION_ITEMS: readonly NavigationItem[] = [
     labelKey: 'header.notifications',
     icon: 'bell',
     route: ROUTES.NOTIFICATIONS,
+  },
+  {
+    id: 'workflows',
+    labelKey: 'header.workflows',
+    icon: 'git-branch',
+    route: ROUTES.WORKFLOWS,
   },
 ] as const;
 

@@ -8,6 +8,7 @@ export const ROUTES = {
   SETTINGS: '/settings',
   FILES: '/files',
   NOTIFICATIONS: '/notifications',
+  WORKFLOWS: '/workflows',
   SYSTEM_CONSOLE: '/system-console',
 } as const;
 

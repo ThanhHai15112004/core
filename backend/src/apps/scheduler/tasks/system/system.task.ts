@@ -23,5 +23,18 @@ export class SystemTask implements OnModuleInit {
       notifyOnFailure: true,
       misfirePolicy: 'run_once',
     });
+
+    this.registry.register({
+      id: 'workflows.sla.scan',
+      queue: QUEUES.SYSTEM_EVENTS,
+      name: 'workflows.sla.tick',
+      description:
+        'Quét thời hạn SLA của các quy trình xử lý (Workflows) đang chạy và gửi cảnh báo sắp quá hạn / quá hạn (Mục 9.3.8).',
+      pattern: '*/15 * * * *',
+      tz: this.config.scheduler.timezone,
+      data: { triggeredBy: 'scheduler', module: 'workflows' },
+      notifyOnFailure: true,
+      misfirePolicy: 'run_once',
+    });
   }
 }

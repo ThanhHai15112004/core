@@ -14,6 +14,7 @@ import { MetricsModule } from '@packages/metrics/index.js';
 import { UsersModule } from '@modules/users/index.js';
 import { FilesModule } from '@modules/files/index.js';
 import { NotificationsModule } from '@modules/notifications/index.js';
+import { WorkflowsModule } from '@modules/workflows/index.js';
 import { SystemProcessor } from './processors/system/system.processor.js';
 import { CriticalProcessor } from './processors/critical/critical.processor.js';
 import { NotificationsProcessor } from './processors/notifications/notifications.processor.js';
@@ -39,6 +40,7 @@ const PROCESSORS = [SystemProcessor, CriticalProcessor, NotificationsProcessor, 
     UsersModule,
     FilesModule,
     NotificationsModule,
+    WorkflowsModule,
   ],
   providers: [...PROCESSORS, WorkerRuntimeContributor],
   exports: [...PROCESSORS],

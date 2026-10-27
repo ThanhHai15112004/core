@@ -362,6 +362,37 @@ export const STANDARD_IAM_PERMISSIONS: readonly SeedPermissionDef[] = [
     description:
       'Quyền quản trị cấu hình vận hành hệ thống thông báo, kênh phát, hạn mức và chính sách sở thích nhận thông báo',
   },
+  {
+    id: 30,
+    code: 'workflows.read',
+    name: 'Xem quy trình xử lý, lịch sử & tiến độ phê duyệt',
+    module: 'workflows',
+    description:
+      'Quyền tra cứu danh sách quy trình xử lý, trạng thái hiện tại, bước duyệt và lịch sử quy trình',
+  },
+  {
+    id: 31,
+    code: 'workflows.manage',
+    name: 'Quản trị định nghĩa quy trình, điều kiện, hành động & SLA',
+    module: 'workflows',
+    description:
+      'Quyền tạo mới quy trình, phiên bản, trạng thái, điều kiện/hành động chuyển trạng thái và quét SLA',
+  },
+  {
+    id: 32,
+    code: 'workflows.execute',
+    name: 'Khởi tạo quy trình, chuyển trạng thái & phê duyệt',
+    module: 'workflows',
+    description:
+      'Quyền khởi tạo quy trình cho bản ghi, chuyển trạng thái, phê duyệt, từ chối và ủy quyền duyệt',
+  },
+  {
+    id: 33,
+    code: 'workflows.cancel',
+    name: 'Hủy hoặc kết thúc quy trình xử lý',
+    module: 'workflows',
+    description: 'Quyền hủy hoặc kết thúc cưỡng bức quy trình kèm lý do',
+  },
 ] as const;
 
 const ALL_IAM_PERMISSION_CODES = STANDARD_IAM_PERMISSIONS.map((p) => p.code);

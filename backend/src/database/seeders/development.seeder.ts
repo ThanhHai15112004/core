@@ -72,9 +72,12 @@ export class DevelopmentDataSeeder implements SeederContract {
     // Seed dữ liệu mẫu cho Module Thông báo trong hệ thống (Phase 7.1)
     affected += await this.seedSampleNotifications(ctx, isPostgres);
 
+    // Seed dữ liệu mẫu cho Module Quy trình xử lý & Phê duyệt (Phase 9 - Mục 9.3 & 9.4)
+    affected += await this.seedSampleWorkflows(ctx, isPostgres);
+
     return {
       affected,
-      details: `${affected} development record(s) (settings, folders, files, usages & notifications) seeded`,
+      details: `${affected} development record(s) (settings, folders, files, usages, notifications & workflows) seeded`,
     };
   }
 
@@ -588,6 +591,338 @@ export class DevelopmentDataSeeder implements SeederContract {
           `SELECT setval(pg_get_serial_sequence('notification_recipients', 'id'), COALESCE((SELECT MAX(id) FROM notification_recipients), 1), true)`,
         )
         .catch(() => undefined);
+    }
+
+    return count;
+  }
+
+  private async seedSampleWorkflows(ctx: SeederContext, isPostgres: boolean): Promise<number> {
+    let count = 0;
+
+    const defs = [
+      {
+        id: 1,
+        code: 'LEAVE_APPROVAL',
+        version: 1,
+        name: 'Quy trình Xin nghỉ phép & Công tác',
+        description:
+          'Quy trình xử lý đơn nghỉ phép và đi công tác kèm phê duyệt theo cấp quản lý và cảnh báo SLA',
+        targetEntityType: 'leave_request',
+        defaultSlaHours: 24,
+        warningBeforeMinutes: 120,
+      },
+      {
+        id: 2,
+        code: 'EXPENSE_REIMBURSEMENT',
+        version: 1,
+        name: 'Quy trình Duyệt Chi phí & Tạm ứng',
+        description:
+          'Quy trình kiểm tra chứng từ, điều kiện hạn mức ngân sách và phê duyệt thanh toán',
+        targetEntityType: 'expense_claim',
+        defaultSlaHours: 48,
+        warningBeforeMinutes: 180,
+      },
+    ];
+
+    for (const d of defs) {
+      if (isPostgres) {
+        await ctx.manager.query(
+          `INSERT INTO workflow_definitions (
+             id, code, version, name, description, target_entity_type,
+             default_sla_hours, warning_before_minutes, is_system, status, created_by_user_id
+           )
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true, 1, 1)
+           ON CONFLICT (code, version) DO UPDATE SET name = EXCLUDED.name, description = EXCLUDED.description`,
+          [
+            d.id,
+            d.code,
+            d.version,
+            d.name,
+            d.description,
+            d.targetEntityType,
+            d.defaultSlaHours,
+            d.warningBeforeMinutes,
+          ],
+        );
+      } else {
+        await ctx.manager.query(
+          `INSERT INTO workflow_definitions (
+             id, code, version, name, description, target_entity_type,
+             default_sla_hours, warning_before_minutes, is_system, status, created_by_user_id
+           )
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, true, 1, 1)
+           ON DUPLICATE KEY UPDATE name = VALUES(name), description = VALUES(description)`,
+          [
+            d.id,
+            d.code,
+            d.version,
+            d.name,
+            d.description,
+            d.targetEntityType,
+            d.defaultSlaHours,
+            d.warningBeforeMinutes,
+          ],
+        );
+      }
+      count++;
+    }
+
+    const states = [
+      {
+        id: 1,
+        defId: 1,
+        code: 'DRAFT',
+        name: 'Bản nháp (Draft)',
+        type: 'INITIAL',
+        tone: 'neutral',
+        sla: 24,
+        approval: null,
+        order: 1,
+      },
+      {
+        id: 2,
+        defId: 1,
+        code: 'PENDING',
+        name: 'Chờ phê duyệt (Pending)',
+        type: 'INTERMEDIATE',
+        tone: 'warning',
+        sla: 24,
+        approval: JSON.stringify({
+          enabled: true,
+          mode: 'SINGLE',
+          useManagerChain: true,
+          maxChainLevels: 2,
+          autoTransitionOnApprove: 'APPROVE',
+          autoTransitionOnReject: 'REJECT',
+          autoTransitionOnReturn: 'RETURN',
+        }),
+        order: 2,
+      },
+      {
+        id: 3,
+        defId: 1,
+        code: 'APPROVED',
+        name: 'Đã phê duyệt (Approved)',
+        type: 'FINAL_APPROVED',
+        tone: 'success',
+        sla: null,
+        approval: null,
+        order: 3,
+      },
+      {
+        id: 4,
+        defId: 1,
+        code: 'REJECTED',
+        name: 'Đã từ chối (Rejected)',
+        type: 'FINAL_REJECTED',
+        tone: 'danger',
+        sla: null,
+        approval: null,
+        order: 4,
+      },
+      {
+        id: 5,
+        defId: 2,
+        code: 'DRAFT',
+        name: 'Khởi tạo chứng từ (Draft)',
+        type: 'INITIAL',
+        tone: 'neutral',
+        sla: 24,
+        approval: null,
+        order: 1,
+      },
+      {
+        id: 6,
+        defId: 2,
+        code: 'PENDING',
+        name: 'Chờ duyệt ngân sách (Pending)',
+        type: 'INTERMEDIATE',
+        tone: 'warning',
+        sla: 48,
+        approval: JSON.stringify({
+          enabled: true,
+          mode: 'SINGLE',
+          useManagerChain: true,
+          maxChainLevels: 2,
+          autoTransitionOnApprove: 'APPROVE',
+          autoTransitionOnReject: 'REJECT',
+          autoTransitionOnReturn: 'RETURN',
+        }),
+        order: 2,
+      },
+      {
+        id: 7,
+        defId: 2,
+        code: 'APPROVED',
+        name: 'Đã duyệt chi (Approved)',
+        type: 'FINAL_APPROVED',
+        tone: 'success',
+        sla: null,
+        approval: null,
+        order: 3,
+      },
+      {
+        id: 8,
+        defId: 2,
+        code: 'REJECTED',
+        name: 'Từ chối chi (Rejected)',
+        type: 'FINAL_REJECTED',
+        tone: 'danger',
+        sla: null,
+        approval: null,
+        order: 4,
+      },
+    ];
+
+    for (const s of states) {
+      if (isPostgres) {
+        await ctx.manager.query(
+          `INSERT INTO workflow_states (
+             id, workflow_definition_id, code, name, state_type, badge_tone, sla_hours, approval_config_json, sort_order
+           )
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+           ON CONFLICT (workflow_definition_id, code) DO UPDATE SET name = EXCLUDED.name`,
+          [s.id, s.defId, s.code, s.name, s.type, s.tone, s.sla, s.approval, s.order],
+        );
+      } else {
+        await ctx.manager.query(
+          `INSERT INTO workflow_states (
+             id, workflow_definition_id, code, name, state_type, badge_tone, sla_hours, approval_config_json, sort_order
+           )
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON DUPLICATE KEY UPDATE name = VALUES(name)`,
+          [s.id, s.defId, s.code, s.name, s.type, s.tone, s.sla, s.approval, s.order],
+        );
+      }
+      count++;
+    }
+
+    const transitions = [
+      {
+        id: 1,
+        defId: 1,
+        code: 'SUBMIT',
+        name: 'Gửi đơn xin nghỉ (Submit)',
+        from: 'DRAFT',
+        to: 'PENDING',
+        conditions: JSON.stringify({
+          requireReason: false,
+          fieldRules: [{ field: 'days', operator: 'gte', value: 1 }],
+        }),
+        actions: JSON.stringify([
+          { type: 'RECORD_HISTORY' },
+          { type: 'NOTIFY', notifyTargets: ['NEXT_APPROVERS', 'INITIATOR'] },
+        ]),
+        order: 1,
+      },
+      {
+        id: 2,
+        defId: 1,
+        code: 'APPROVE',
+        name: 'Phê duyệt đơn nghỉ (Approve)',
+        from: 'PENDING',
+        to: 'APPROVED',
+        conditions: JSON.stringify({ requireReason: false }),
+        actions: JSON.stringify([
+          { type: 'RECORD_HISTORY' },
+          { type: 'NOTIFY', notifyTargets: ['INITIATOR'] },
+          { type: 'DISPATCH_JOB', jobTopic: 'workflows.leave.approved' },
+        ]),
+        order: 2,
+      },
+      {
+        id: 3,
+        defId: 1,
+        code: 'REJECT',
+        name: 'Từ chối đơn nghỉ (Reject)',
+        from: 'PENDING',
+        to: 'REJECTED',
+        conditions: JSON.stringify({ requireReason: true }),
+        actions: JSON.stringify([
+          { type: 'RECORD_HISTORY' },
+          { type: 'NOTIFY', notifyTargets: ['INITIATOR'] },
+        ]),
+        order: 3,
+      },
+      {
+        id: 4,
+        defId: 2,
+        code: 'SUBMIT',
+        name: 'Trình duyệt chi phí (Submit)',
+        from: 'DRAFT',
+        to: 'PENDING',
+        conditions: JSON.stringify({
+          requireReason: false,
+          fieldRules: [{ field: 'amount', operator: 'gt', value: 0 }],
+        }),
+        actions: JSON.stringify([
+          { type: 'RECORD_HISTORY' },
+          { type: 'NOTIFY', notifyTargets: ['NEXT_APPROVERS'] },
+        ]),
+        order: 1,
+      },
+      {
+        id: 5,
+        defId: 2,
+        code: 'APPROVE',
+        name: 'Phê duyệt thanh toán (Approve)',
+        from: 'PENDING',
+        to: 'APPROVED',
+        conditions: JSON.stringify({ requireReason: false }),
+        actions: JSON.stringify([
+          { type: 'RECORD_HISTORY' },
+          { type: 'NOTIFY', notifyTargets: ['INITIATOR'] },
+          { type: 'DISPATCH_JOB', jobTopic: 'workflows.expense.approved' },
+        ]),
+        order: 2,
+      },
+      {
+        id: 6,
+        defId: 2,
+        code: 'REJECT',
+        name: 'Từ chối thanh toán (Reject)',
+        from: 'PENDING',
+        to: 'REJECTED',
+        conditions: JSON.stringify({ requireReason: true }),
+        actions: JSON.stringify([
+          { type: 'RECORD_HISTORY' },
+          { type: 'NOTIFY', notifyTargets: ['INITIATOR'] },
+        ]),
+        order: 3,
+      },
+    ];
+
+    for (const t of transitions) {
+      if (isPostgres) {
+        await ctx.manager.query(
+          `INSERT INTO workflow_transitions (
+             id, workflow_definition_id, code, name, from_state_code, to_state_code, conditions_json, actions_json, sort_order
+           )
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+           ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name`,
+          [t.id, t.defId, t.code, t.name, t.from, t.to, t.conditions, t.actions, t.order],
+        );
+      } else {
+        await ctx.manager.query(
+          `INSERT INTO workflow_transitions (
+             id, workflow_definition_id, code, name, from_state_code, to_state_code, conditions_json, actions_json, sort_order
+           )
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON DUPLICATE KEY UPDATE name = VALUES(name)`,
+          [t.id, t.defId, t.code, t.name, t.from, t.to, t.conditions, t.actions, t.order],
+        );
+      }
+      count++;
+    }
+
+    if (isPostgres) {
+      for (const tbl of ['workflow_definitions', 'workflow_states', 'workflow_transitions']) {
+        await ctx.manager
+          .query(
+            `SELECT setval(pg_get_serial_sequence('${tbl}', 'id'), COALESCE((SELECT MAX(id) FROM ${tbl}), 1), true)`,
+          )
+          .catch(() => undefined);
+      }
     }
 
     return count;

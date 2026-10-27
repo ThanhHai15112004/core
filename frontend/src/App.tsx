@@ -50,6 +50,10 @@ const NotificationsManagementPage = loadPage(
   () => import('./modules/notifications/NotificationsManagementPage'),
   'NotificationsManagementPage',
 );
+const WorkflowsManagementPage = loadPage(
+  () => import('./modules/workflows/WorkflowsManagementPage'),
+  'WorkflowsManagementPage',
+);
 
 // Tải riêng: CSS/JS của System Console (Tailwind, ECharts…) chỉ nạp khi vào console.
 // Link cũ dạng `/#system-console/...` → đường dẫn thật.
@@ -115,6 +119,8 @@ function App() {
               <FileManagerPage />
             ) : activeTab === 'notifications' ? (
               <NotificationsManagementPage />
+            ) : activeTab === 'workflows' ? (
+              <WorkflowsManagementPage />
             ) : (
               <HomePage onNavigateTab={handleNavigateTab} />
             )}

@@ -64,6 +64,7 @@ export const en: TranslationKey = {
     iam: 'Users & Auth',
     files: 'Files & Media',
     notifications: 'Notifications & Inbox',
+    workflows: 'Workflows & Approvals',
     languageToggle: 'Language',
     themeLight: 'Light',
     themeDark: 'Dark',

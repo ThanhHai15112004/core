@@ -14,6 +14,7 @@ import { JOB_LOCK_DURATION_MS, QUEUES, type MessageEnvelope } from '@packages/me
 import { JobProgressTrackerService } from '@packages/queue/index.js';
 import { FilesService } from '@modules/files/index.js';
 import { NotificationChannelsService } from '@modules/notifications/index.js';
+import { WorkflowsService } from '@modules/workflows/index.js';
 import { BaseQueueProcessor } from '../base-queue.processor.js';
 
 export interface SystemMaintenanceTickPayload {
@@ -39,6 +40,7 @@ export class SystemProcessor extends BaseQueueProcessor {
     @Optional() private readonly notificationChannelsService?: NotificationChannelsService,
     @Optional() private readonly exportRegistry?: ExportRegistryService,
     @Optional() private readonly reportRegistry?: ReportRegistryService,
+    @Optional() private readonly workflowsService?: WorkflowsService,
   ) {
     super(config, metrics, progressTracker);
   }
@@ -55,7 +57,8 @@ export class SystemProcessor extends BaseQueueProcessor {
 
     if (
       envelope.topic === 'system.maintenance.tick' ||
-      envelope.topic === 'reports.schedule.tick'
+      envelope.topic === 'reports.schedule.tick' ||
+      envelope.topic === 'workflows.sla.tick'
     ) {
       return this.handleMaintenanceTick(envelope);
     }
@@ -103,6 +106,14 @@ export class SystemProcessor extends BaseQueueProcessor {
 
     let triggeredReportSchedulesCount = 0;
     let triggeredReportSchedules: readonly TriggeredReportScheduleItemResult[] = [];
+    let workflowSlaWarningsCount = 0;
+    let workflowSlaOverdueCount = 0;
+
+    if (this.workflowsService) {
+      const slaRes = await this.workflowsService.scanSlaAndNotifyOverdue(nowDate);
+      workflowSlaWarningsCount = slaRes.warningsTriggeredCount;
+      workflowSlaOverdueCount = slaRes.overdueMarkedCount;
+    }
 
     const dueScheduleResult = await activeReportRegistry.triggerDueSchedules(
       nowDate,
@@ -121,6 +132,8 @@ export class SystemProcessor extends BaseQueueProcessor {
       purgedReportArtifactsCount: purgedReports.purgedCount,
       triggeredReportSchedulesCount,
       triggeredReportSchedules,
+      workflowSlaWarningsCount,
+      workflowSlaOverdueCount,
     };
   }
 

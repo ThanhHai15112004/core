@@ -1,0 +1,219 @@
+{
+  "$schema": "../../packages/kernel/schemas/module.manifest.schema.json",
+  "name": "workflows",
+  "displayName": "Workflow Engine & Multi-Level Approval",
+  "version": "1.0.0",
+  "description": "Module quản lý Quy trình xử lý (Workflow — Mục 9.3) và Phê duyệt nhiều cấp (Approval — Mục 9.4): tạo định nghĩa quy trình có phiên bản, trạng thái, điều kiện & hành động chuyển trạng thái, khởi tạo quy trình cho bản ghi, hủy/kết thúc, theo dõi lịch sử và cảnh báo quá hạn SLA qua Scheduler.",
+  "type": "core",
+  "category": "core",
+  "author": "Core Platform Team",
+  "entryModule": "WorkflowsModule",
+  "dependencies": ["database", "security", "i18n", "users", "roles", "organizations", "codes", "settings", "notifications"],
+  "permissions": [
+    "workflows.read",
+    "workflows.manage",
+    "workflows.execute",
+    "workflows.cancel"
+  ],
+  "events": {
+    "published": [
+      "workflows.instance_started",
+      "workflows.state_transitioned",
+      "workflows.approval_decided",
+      "workflows.instance_cancelled",
+      "workflows.sla_warning",
+      "workflows.sla_overdue"
+    ],
+    "subscribed": []
+  },
+  "database": {
+    "hasMigrations": true,
+    "tables": [
+      "workflow_definitions",
+      "workflow_states",
+      "workflow_transitions",
+      "workflow_instances",
+      "workflow_approval_steps",
+      "workflow_histories"
+    ]
+  },
+  "codeTypes": [
+    {
+      "code": "workflows.definition_status",
+      "name": "Trạng thái định nghĩa quy trình",
+      "description": "Trạng thái hoạt động của một định nghĩa quy trình xử lý",
+      "isSystem": true,
+      "allowCustomValues": false,
+      "values": [
+        {
+          "numericCode": 1,
+          "code": "ACTIVE",
+          "behaviorCode": "ACTIVE",
+          "name": "Đang hoạt động",
+          "labels": { "vi": "Đang hoạt động", "en": "Active" },
+          "aliases": ["ACTIVE", "HOẠT ĐỘNG"],
+          "badgeTone": "success",
+          "sortOrder": 1,
+          "isSystem": true
+        },
+        {
+          "numericCode": 2,
+          "code": "INACTIVE",
+          "behaviorCode": "INACTIVE",
+          "name": "Tạm ngưng",
+          "labels": { "vi": "Tạm ngưng", "en": "Inactive" },
+          "aliases": ["INACTIVE", "TẠM NGƯNG"],
+          "badgeTone": "warning",
+          "sortOrder": 2,
+          "isSystem": true
+        },
+        {
+          "numericCode": 3,
+          "code": "DRAFT",
+          "behaviorCode": "DRAFT",
+          "name": "Bản nháp",
+          "labels": { "vi": "Bản nháp", "en": "Draft" },
+          "aliases": ["DRAFT", "NHÁP"],
+          "badgeTone": "info",
+          "sortOrder": 3,
+          "isSystem": true
+        },
+        {
+          "numericCode": 4,
+          "code": "ARCHIVED",
+          "behaviorCode": "ARCHIVED",
+          "name": "Lưu trữ",
+          "labels": { "vi": "Lưu trữ", "en": "Archived" },
+          "aliases": ["ARCHIVED", "LƯU TRỮ"],
+          "badgeTone": "neutral",
+          "sortOrder": 4,
+          "isSystem": true
+        }
+      ]
+    },
+    {
+      "code": "workflows.instance_status",
+      "name": "Trạng thái vận hành quy trình bản ghi",
+      "description": "Trạng thái thực thi của một phiên quy trình gắn với đối tượng nghiệp vụ",
+      "isSystem": true,
+      "allowCustomValues": false,
+      "values": [
+        {
+          "numericCode": 1,
+          "code": "RUNNING",
+          "behaviorCode": "RUNNING",
+          "name": "Đang xử lý",
+          "labels": { "vi": "Đang xử lý", "en": "Running" },
+          "aliases": ["RUNNING", "ĐANG XỬ LÝ"],
+          "badgeTone": "info",
+          "sortOrder": 1,
+          "isSystem": true
+        },
+        {
+          "numericCode": 2,
+          "code": "COMPLETED",
+          "behaviorCode": "COMPLETED",
+          "name": "Đã hoàn tất / Phê duyệt",
+          "labels": { "vi": "Đã hoàn tất / Phê duyệt", "en": "Completed / Approved" },
+          "aliases": ["COMPLETED", "APPROVED", "HOÀN TẤT"],
+          "badgeTone": "success",
+          "sortOrder": 2,
+          "isSystem": true
+        },
+        {
+          "numericCode": 3,
+          "code": "REJECTED",
+          "behaviorCode": "REJECTED",
+          "name": "Đã từ chối",
+          "labels": { "vi": "Đã từ chối", "en": "Rejected" },
+          "aliases": ["REJECTED", "TỪ CHỐI"],
+          "badgeTone": "danger",
+          "sortOrder": 3,
+          "isSystem": true
+        },
+        {
+          "numericCode": 4,
+          "code": "CANCELLED",
+          "behaviorCode": "CANCELLED",
+          "name": "Đã hủy / Kết thúc",
+          "labels": { "vi": "Đã hủy / Kết thúc", "en": "Cancelled / Terminated" },
+          "aliases": ["CANCELLED", "HỦY"],
+          "badgeTone": "warning",
+          "sortOrder": 4,
+          "isSystem": true
+        },
+        {
+          "numericCode": 5,
+          "code": "EXPIRED",
+          "behaviorCode": "EXPIRED",
+          "name": "Quá hạn kết thúc",
+          "labels": { "vi": "Quá hạn kết thúc", "en": "Expired" },
+          "aliases": ["EXPIRED", "QUÁ HẠN"],
+          "badgeTone": "danger",
+          "sortOrder": 5,
+          "isSystem": true
+        }
+      ]
+    }
+  ],
+  "settingGroups": [
+    {
+      "code": "workflows",
+      "module": "workflows",
+      "name": "Quy trình xử lý & Phê duyệt (Workflows)",
+      "description": "Cấu hình thời hạn SLA, cảnh báo quá hạn và phân trang cho module Quy trình xử lý",
+      "icon": "GitBranch",
+      "sortOrder": 95,
+      "isSystem": true
+    }
+  ],
+  "settings": [
+    {
+      "key": "workflows.sla.default_hours",
+      "groupCode": "workflows",
+      "module": "workflows",
+      "namespace": "workflows.sla",
+      "name": "Thời hạn SLA mặc định (Giờ)",
+      "description": "Số giờ mặc định để xử lý một quy trình nếu không khai báo riêng",
+      "valueType": "NUMBER",
+      "defaultValue": 24,
+      "validationRules": { "min": 1, "max": 720, "integerOnly": true },
+      "isSensitive": false,
+      "allowUnitOverride": true,
+      "isSystem": true,
+      "sortOrder": 1
+    },
+    {
+      "key": "workflows.sla.warning_before_minutes",
+      "groupCode": "workflows",
+      "module": "workflows",
+      "namespace": "workflows.sla",
+      "name": "Thời gian cảnh báo trước khi quá hạn (Phút)",
+      "description": "Gửi cảnh báo nhắc nhở trước thời điểm hết hạn SLA bao nhiêu phút",
+      "valueType": "NUMBER",
+      "defaultValue": 120,
+      "validationRules": { "min": 5, "max": 10080, "integerOnly": true },
+      "isSensitive": false,
+      "allowUnitOverride": true,
+      "isSystem": true,
+      "sortOrder": 2
+    }
+  ],
+  "menus": [
+    {
+      "code": "WORKFLOWS_MANAGER",
+      "name": "Quy trình & Phê duyệt",
+      "status": 1,
+      "link": "/workflows",
+      "linkApi": "/api/v1/workflows",
+      "type": 2,
+      "parent": null,
+      "level": 1,
+      "key": "workflows.read",
+      "numOrder": 25,
+      "icon": "GitBranch",
+      "position": "SIDEBAR"
+    }
+  ]
+}
+

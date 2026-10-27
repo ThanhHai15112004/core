@@ -22,6 +22,7 @@ import {
   Settings,
   FolderOpen,
   Bell,
+  GitBranch,
   Sun,
   Moon,
 } from 'lucide-react';
@@ -105,6 +106,8 @@ export const Header: React.FC<HeaderProps> = ({ activeTab, onTabChange }) => {
         return <FolderOpen size={15} />;
       case 'notifications':
         return <Bell size={15} />;
+      case 'workflows':
+        return <GitBranch size={15} />;
       case 'home':
       default:
         return <Home size={15} />;

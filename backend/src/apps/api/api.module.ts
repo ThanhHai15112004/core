@@ -26,6 +26,7 @@ import { CodesModule } from '@modules/codes/index.js';
 import { SettingsModule } from '@modules/settings/index.js';
 import { FilesModule } from '@modules/files/index.js';
 import { NotificationsModule } from '@modules/notifications/index.js';
+import { WorkflowsModule } from '@modules/workflows/index.js';
 import { RedisModule } from '@packages/redis/index.js';
 import { RuntimeAgentModule } from '@packages/runtime/index.js';
 import { ApiRuntimeContributor } from './runtime/api-runtime.contributor.js';
@@ -58,6 +59,7 @@ import { MetricsModule } from '@packages/metrics/index.js';
     AuthModule,
     FilesModule,
     NotificationsModule,
+    WorkflowsModule,
   ],
   providers: [
     ApiRuntimeContributor,
