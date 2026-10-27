@@ -1,0 +1,10 @@
+{
+  "reportNotFound": "Report definition not found for the requested code.",
+  "reportHistoryNotFound": "Report execution history record not found.",
+  "reportScheduleNotFound": "Recurring report schedule not found.",
+  "reportFileExpired": "Temporary report download link does not exist or has expired.",
+  "report.sharedListPermissionForbidden": "Report permission must not be shared with standard list/read permissions.",
+  "report.definitionNotFound": "Report definition not found.",
+  "report.permissionDenied": "You do not have permission to view or execute this report.",
+  "report.invalidDateRange": "Invalid report date range (fromDate must be less than or equal to toDate)."
+}

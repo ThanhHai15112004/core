@@ -1,0 +1,10 @@
+{
+  "reportNotFound": "Không tìm thấy báo cáo theo mã yêu cầu.",
+  "reportHistoryNotFound": "Không tìm thấy bản ghi lịch sử chạy báo cáo.",
+  "reportScheduleNotFound": "Không tìm thấy lịch gửi báo cáo định kỳ.",
+  "reportFileExpired": "Đường dẫn tải tệp báo cáo tạm thời không tồn tại hoặc đã hết hạn.",
+  "report.sharedListPermissionForbidden": "Quyền xem báo cáo không được dùng chung với quyền xem danh sách thông thường.",
+  "report.definitionNotFound": "Không tìm thấy định nghĩa báo cáo.",
+  "report.permissionDenied": "Bạn không có quyền truy cập hoặc thực thi báo cáo này.",
+  "report.invalidDateRange": "Khoảng thời gian báo cáo không hợp lệ (ngày bắt đầu phải nhỏ hơn hoặc bằng ngày kết thúc)."
+}

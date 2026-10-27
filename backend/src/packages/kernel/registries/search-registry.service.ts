@@ -974,6 +974,19 @@ export class SearchRegistryService {
       .slice(0, limit);
   }
 
+  public getSyncHistoryById(id: number): SearchSyncHistoryRecord | null {
+    return this.syncHistories.get(Number(id)) ?? null;
+  }
+
+  public deleteSyncHistory(id: number): boolean {
+    return this.syncHistories.delete(Number(id));
+  }
+
+  public deleteZeroResultKeyword(keyword: string): boolean {
+    const normalized = normalizeSearchText(keyword);
+    return this.zeroResultStats.delete(normalized) || this.zeroResultStats.delete(keyword.trim());
+  }
+
   public getIndexedDocumentCount(filter?: {
     readonly module?: string | undefined;
     readonly entityType?: string | undefined;

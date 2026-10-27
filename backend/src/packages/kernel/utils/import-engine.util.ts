@@ -1,6 +1,7 @@
 import type { z } from 'zod';
 import { BadRequestAppException } from '../errors/http-exceptions.js';
 import type {
+  CompiledDeclarativeImportSchema,
   ExistingDuplicateMatch,
   ExtractedImportMatrixRow,
   ImportCellIssue,
@@ -28,8 +29,62 @@ import {
 } from './spreadsheet.util.js';
 
 /**
+ * Biên dịch danh sách `ImportColumnDefinition` thành bộ metadata chuẩn (`headers`, `columnWidths`,
+ * `centerColumnIndices`, `textColumnIndices`, `sampleRows`).
+ * Cho phép các module chỉ cần khai báo cột 1 chỗ duy nhất (kèm `sampleValues`) mà không cần
+ * tạo rời rạc nhiều mảng `HEADERS`, `COLUMN_WIDTHS`, `CENTER_COLUMNS`, `TEXT_COLUMNS`, `SAMPLE_ROWS`.
+ */
+export function compileDeclarativeImportColumns<TField extends string = string>(
+  columns: readonly ImportColumnDefinition<TField>[],
+  fallbackSampleRows?: ReadonlyArray<ReadonlyArray<string | number>>,
+): CompiledDeclarativeImportSchema<TField> {
+  const headers: string[] = [];
+  const columnWidths: number[] = [];
+  const centerColumnIndices: number[] = [];
+  const textColumnIndices: number[] = [];
+  let maxSampleCount = 0;
+
+  columns.forEach((col, idx) => {
+    headers.push(col.header);
+    columnWidths.push(col.width ?? 20);
+    if (col.isCenter) {
+      centerColumnIndices.push(idx);
+    }
+    if (col.isText) {
+      textColumnIndices.push(idx);
+    }
+    if (col.sampleValues && col.sampleValues.length > maxSampleCount) {
+      maxSampleCount = col.sampleValues.length;
+    }
+  });
+
+  let sampleRows: ReadonlyArray<ReadonlyArray<string | number>>;
+  if (fallbackSampleRows !== undefined) {
+    sampleRows = fallbackSampleRows;
+  } else if (maxSampleCount > 0) {
+    const builtRows: Array<Array<string | number>> = [];
+    for (let rowIdx = 0; rowIdx < maxSampleCount; rowIdx++) {
+      builtRows.push(columns.map((col) => col.sampleValues?.[rowIdx] ?? ''));
+    }
+    sampleRows = builtRows;
+  } else {
+    sampleRows = [];
+  }
+
+  return {
+    columns,
+    headers,
+    columnWidths,
+    centerColumnIndices,
+    textColumnIndices,
+    sampleRows,
+  };
+}
+
+/**
  * Tạo file Mẫu Import (`.xlsx` hoặc `.csv`) dùng chung cho mọi module
  * (Mục 8.2.1 & 8.2.2 — Nhập dữ liệu từ Excel & CSV: Hỗ trợ file mẫu).
+ * Hỗ trợ truyền trực tiếp `columns` (tự sinh `headers`, `columnWidths`, `centerColumnIndices`, `textColumnIndices`, `sampleRows`).
  */
 export function buildImportTemplateFile(params: {
   readonly fileBaseName: string;
@@ -39,34 +94,29 @@ export function buildImportTemplateFile(params: {
   readonly subtitle?: string | null | undefined;
   readonly headers?: readonly string[] | undefined;
   readonly columns?: readonly ImportColumnDefinition[] | undefined;
-  readonly sampleRows: ReadonlyArray<ReadonlyArray<string | number>>;
+  readonly sampleRows?: ReadonlyArray<ReadonlyArray<string | number>> | undefined;
   readonly columnWidths?: readonly number[] | undefined;
   readonly centerColumnIndices?: readonly number[] | undefined;
   readonly textColumnIndices?: readonly number[] | undefined;
 }): ImportTemplateFileResult {
   const format: 'csv' | 'xlsx' = params.format === 'csv' ? 'csv' : 'xlsx';
-  const headers = params.headers ?? (params.columns ?? []).map((c) => c.header);
-  const columnWidths = params.columnWidths ?? (params.columns ?? []).map((c) => c.width ?? 20);
+  const compiled = params.columns
+    ? compileDeclarativeImportColumns(params.columns, params.sampleRows)
+    : null;
 
+  const headers = params.headers ?? compiled?.headers ?? [];
+  const columnWidths = params.columnWidths ?? compiled?.columnWidths ?? [];
   const centerColumnIndices: number[] = params.centerColumnIndices
     ? [...params.centerColumnIndices]
-    : [];
-  const textColumnIndices: number[] = params.textColumnIndices ? [...params.textColumnIndices] : [];
-
-  if (!params.centerColumnIndices && params.columns) {
-    params.columns.forEach((col, idx) => {
-      if (col.isCenter) centerColumnIndices.push(idx);
-    });
-  }
-  if (!params.textColumnIndices && params.columns) {
-    params.columns.forEach((col, idx) => {
-      if (col.isText) textColumnIndices.push(idx);
-    });
-  }
+    : [...(compiled?.centerColumnIndices ?? [])];
+  const textColumnIndices: number[] = params.textColumnIndices
+    ? [...params.textColumnIndices]
+    : [...(compiled?.textColumnIndices ?? [])];
+  const sampleRows = params.sampleRows ?? compiled?.sampleRows ?? [];
 
   const lines: string[] = [
     headers.join(','),
-    ...params.sampleRows.map((row) => row.map((v) => escapeCsvCell(v)).join(',')),
+    ...sampleRows.map((row) => row.map((v) => escapeCsvCell(v)).join(',')),
   ];
   const csvContent = `\uFEFF${lines.join('\r\n')}\r\n`;
 
@@ -79,7 +129,7 @@ export function buildImportTemplateFile(params: {
     textColumnIndices,
     freezeHeader: true,
   };
-  const xlsxBase64 = buildXlsxBuffer(headers, params.sampleRows, xlsxOpts).toString('base64');
+  const xlsxBase64 = buildXlsxBuffer(headers, sampleRows, xlsxOpts).toString('base64');
   const cleanBase = params.fileBaseName.replace(/\.(xlsx|csv)$/i, '');
 
   return {
@@ -89,7 +139,7 @@ export function buildImportTemplateFile(params: {
         ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         : 'text/csv; charset=utf-8',
     format,
-    totalExported: params.sampleRows.length,
+    totalExported: sampleRows.length,
     csvContent,
     xlsxBase64,
   };
@@ -489,5 +539,149 @@ export function buildImportPreviewResult<TRow>(params: {
     duplicateStrategy: params.duplicateStrategy,
     sampleRows,
     issues: allIssues,
+  };
+}
+
+/**
+ * Giải quyết ánh xạ cột (`resolveImportColumnMapping`) và trích xuất dữ liệu dòng (`extractMappedRowsFromMatrix`)
+ * kết hợp hàm chuyển đổi `mapRawRow` theo chuẩn Declarative Import Engine.
+ */
+export function extractDeclarativeImportMatrixData<TRow, TField extends string = string>(params: {
+  readonly matrix: ReadonlyArray<ReadonlyArray<string>>;
+  readonly columns: readonly ImportColumnDefinition<TField>[];
+  readonly customMapping?: ImportColumnMappingInput | null | undefined;
+  readonly mapRawRow: (
+    rawByField: Readonly<Record<string, string>>,
+    rowIndex: number,
+  ) => TRow | null;
+}): {
+  readonly mapping: ResolvedImportColumnMappingResult<TField>;
+  readonly extractedRows: readonly ExtractedImportMatrixRow[];
+  readonly rows: TRow[];
+} {
+  const mapping = resolveImportColumnMapping(params.matrix, params.columns, params.customMapping);
+  if (params.matrix.length < 2 || mapping.headerRowIndex >= params.matrix.length - 1) {
+    return {
+      mapping,
+      extractedRows: [],
+      rows: [],
+    };
+  }
+
+  const rawExtracted = extractMappedRowsFromMatrix(params.matrix, mapping);
+  const extractedRows: ExtractedImportMatrixRow[] = [];
+  const rows: TRow[] = [];
+
+  for (let i = 0; i < rawExtracted.length; i++) {
+    const item = rawExtracted[i]!;
+    const mapped = params.mapRawRow(item.rawByField, i);
+    if (!mapped) continue;
+    rows.push(mapped);
+    extractedRows.push({
+      row: rows.length,
+      sheetRowNumber: item.sheetRowNumber,
+      rawByField: item.rawByField,
+    });
+  }
+
+  return {
+    mapping,
+    extractedRows,
+    rows,
+  };
+}
+
+/**
+ * Giải mã thống nhất mọi nguồn đầu vào Import (`xlsxBase64`, `csvContent` hoặc mảng `items` JSON)
+ * thành `{ format, mapping, extractedRows, rows }` chỉ với 1 bảng cấu hình cột `columns` và hàm `mapRawRow`.
+ */
+export function parseDeclarativeImportPayload<TRow, TField extends string = string>(params: {
+  readonly dto: {
+    readonly xlsxBase64?: string | undefined;
+    readonly csvContent?: string | undefined;
+    readonly items?: readonly TRow[] | undefined;
+    readonly columnMapping?: ImportColumnMappingInput | null | undefined;
+  };
+  readonly columns: readonly ImportColumnDefinition<TField>[];
+  readonly mapRawRow: (
+    rawByField: Readonly<Record<string, string>>,
+    rowIndex: number,
+  ) => TRow | null;
+  readonly serializeItemToRawByField?:
+    ((item: TRow, index: number) => Readonly<Record<string, string>>) | undefined;
+  readonly invalidXlsxErrorKey?: string | undefined;
+}): {
+  readonly format: 'xlsx' | 'csv' | 'json';
+  readonly mapping: ResolvedImportColumnMappingResult<TField>;
+  readonly extractedRows: readonly ExtractedImportMatrixRow[];
+  readonly rows: TRow[];
+} {
+  const { dto, columns, mapRawRow } = params;
+
+  if (dto.xlsxBase64) {
+    let matrix: string[][];
+    try {
+      matrix = parseXlsxToMatrix(dto.xlsxBase64);
+    } catch (err: unknown) {
+      throw new BadRequestAppException(params.invalidXlsxErrorKey ?? 'import.invalidXlsxFile', [
+        err instanceof Error ? err.message : 'Unable to parse .xlsx file',
+      ]);
+    }
+    return {
+      format: 'xlsx',
+      ...extractDeclarativeImportMatrixData({
+        matrix,
+        columns,
+        customMapping: dto.columnMapping,
+        mapRawRow,
+      }),
+    };
+  }
+
+  if (dto.csvContent) {
+    const matrix = parseCsvToMatrix(dto.csvContent);
+    return {
+      format: 'csv',
+      ...extractDeclarativeImportMatrixData({
+        matrix,
+        columns,
+        customMapping: dto.columnMapping,
+        mapRawRow,
+      }),
+    };
+  }
+
+  const items = [...(dto.items ?? [])];
+  const headerRow = columns.map((c) => c.header);
+  const syntheticMatrix: string[][] = [headerRow];
+  const extractedRows: ExtractedImportMatrixRow[] = items.map((item, idx) => {
+    let rawByField: Record<string, string>;
+    if (params.serializeItemToRawByField) {
+      rawByField = { ...params.serializeItemToRawByField(item, idx) };
+    } else {
+      rawByField = {};
+      const record = item as Record<string, unknown>;
+      for (const col of columns) {
+        const val = record[col.field];
+        rawByField[col.field] = Array.isArray(val)
+          ? val.join('|')
+          : val === null || val === undefined
+            ? ''
+            : String(val);
+      }
+    }
+    return {
+      row: idx + 1,
+      sheetRowNumber: idx + 2,
+      rawByField,
+    };
+  });
+
+  const mapping = resolveImportColumnMapping(syntheticMatrix, columns, dto.columnMapping);
+  return {
+    format: 'json',
+    mapping,
+    extractedRows,
+    rows: items,
   };
 }

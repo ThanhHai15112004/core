@@ -1162,7 +1162,7 @@ export class UserReportService {
       historyId: params.historyId,
       jobId: params.jobId,
       ttlSeconds: params.ttlSeconds,
-      baseDownloadPath: '/api/v1/users/reports/downloads',
+      baseDownloadPath: '/api/v1/reports/downloads',
     });
   }
 

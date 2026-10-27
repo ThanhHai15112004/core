@@ -351,9 +351,10 @@ export class ExportRegistryService {
 
     const ttlSeconds = Math.max(1, input.ttlSeconds ?? DEFAULT_EXPORT_FILE_TTL_SECONDS);
     const token = input.token?.trim() || `exp_${randomBytes(16).toString('hex')}`;
-    const baseDownloadPath = (
-      input.baseDownloadPath ?? `/api/v1/${input.module.trim().toLowerCase()}/export/downloads`
-    ).replace(/\/+$/, '');
+    const baseDownloadPath = (input.baseDownloadPath ?? `/api/v1/exports/downloads`).replace(
+      /\/+$/,
+      '',
+    );
     const downloadUrl = `${baseDownloadPath}/${token}`;
     const createdAt = now.toISOString();
     const expiresAt = new Date(now.getTime() + ttlSeconds * 1_000).toISOString();
@@ -592,6 +593,23 @@ export class ExportRegistryService {
   public getHistoryById(id: number, now: Date = new Date()): ExportHistoryRecord | null {
     this.purgeExpiredArtifacts(now);
     return this.histories.find((h) => h.id === Number(id)) ?? null;
+  }
+
+  /** Xóa một bản ghi Lịch sử Export và thu hồi tệp tạm liên quan theo ID */
+  public deleteHistory(id: number): boolean {
+    const idx = this.histories.findIndex((h) => h.id === Number(id));
+    if (idx < 0) {
+      return false;
+    }
+    const [removed] = this.histories.splice(idx, 1);
+    if (removed?.jobId) {
+      this.historyIdByJobId.delete(removed.jobId);
+      this.progressByJobId.delete(removed.jobId);
+    }
+    if (removed?.downloadToken) {
+      this.artifactsByToken.delete(removed.downloadToken);
+    }
+    return true;
   }
 
   /** Tra cứu danh sách Lịch sử Export theo bộ lọc (Mục 8.3.7) */

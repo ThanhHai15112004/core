@@ -311,6 +311,20 @@ export class ImportRegistryService {
     return this.histories.find((h) => h.id === Number(id)) ?? null;
   }
 
+  /** Xóa một bản ghi Lịch sử Import theo ID khỏi bộ nhớ Registry */
+  public deleteHistory(id: number): boolean {
+    const idx = this.histories.findIndex((h) => h.id === Number(id));
+    if (idx < 0) {
+      return false;
+    }
+    const [removed] = this.histories.splice(idx, 1);
+    if (removed?.jobId) {
+      this.historyIdByJobId.delete(removed.jobId);
+      this.progressByJobId.delete(removed.jobId);
+    }
+    return true;
+  }
+
   /** Tra cứu danh sách Lịch sử Import theo bộ lọc (Mục 8.2.9) */
   public listHistories(filter: ImportHistoryQueryFilter = {}): ImportHistoryRecord[] {
     let list = [...this.histories];

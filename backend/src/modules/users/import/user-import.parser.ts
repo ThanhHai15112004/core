@@ -1,10 +1,9 @@
 import {
   cleanSpreadsheetCell as cleanCellValue,
   detectSpreadsheetHeaderRowIndex,
-  extractMappedRowsFromMatrix,
+  extractDeclarativeImportMatrixData,
   parseCsvLine,
   parseCsvToMatrix,
-  resolveImportColumnMapping,
   type ExtractedImportMatrixRow,
   type ImportColumnDefinition,
   type ImportColumnMappingInput,
@@ -260,7 +259,8 @@ export function mapExtractedUserImportRow(
 }
 
 /**
- * Giải quyết ánh xạ cột (auto-alias hoặc custom `columnMapping`) và trích xuất toàn bộ dòng dữ liệu từ ma trận.
+ * Giải quyết ánh xạ cột (auto-alias hoặc custom `columnMapping`) và trích xuất toàn bộ dòng dữ liệu từ ma trận
+ * qua Declarative Import Engine (`extractDeclarativeImportMatrixData`).
  */
 export function extractUserImportMatrixData(
   matrix: ReadonlyArray<ReadonlyArray<string>>,
@@ -270,35 +270,12 @@ export function extractUserImportMatrixData(
   readonly extractedRows: readonly ExtractedImportMatrixRow[];
   readonly rows: BulkImportUserRowInput[];
 } {
-  const mapping = resolveImportColumnMapping(matrix, USER_IMPORT_COLUMNS, customMapping);
-  if (matrix.length < 2 || mapping.headerRowIndex >= matrix.length - 1) {
-    return {
-      mapping,
-      extractedRows: [],
-      rows: [],
-    };
-  }
-
-  const rawExtracted = extractMappedRowsFromMatrix(matrix, mapping);
-  const extractedRows: ExtractedImportMatrixRow[] = [];
-  const rows: BulkImportUserRowInput[] = [];
-
-  for (const item of rawExtracted) {
-    const mapped = mapExtractedUserImportRow(item.rawByField);
-    if (!mapped) continue;
-    rows.push(mapped);
-    extractedRows.push({
-      row: rows.length,
-      sheetRowNumber: item.sheetRowNumber,
-      rawByField: item.rawByField,
-    });
-  }
-
-  return {
-    mapping,
-    extractedRows,
-    rows,
-  };
+  return extractDeclarativeImportMatrixData({
+    matrix,
+    columns: USER_IMPORT_COLUMNS,
+    customMapping,
+    mapRawRow: mapExtractedUserImportRow,
+  });
 }
 
 /** Chuyển đổi mảng 2 chiều (từ CSV hoặc Excel .xlsx) thành danh sách `BulkImportUserRowInput` */

@@ -1,4 +1,6 @@
 import {
+  type CompiledDeclarativeExportSchema,
+  type DeclarativeExportColumn,
   type ExportFormat,
   type ExportLimitPolicyInput,
   type IPdfExportAdapter,
@@ -156,9 +158,7 @@ export function resolveExportMaxRows(
   const orgUnitId = input.organizationUnitId ?? actor?.organizationUnitIds?.[0] ?? undefined;
 
   const lookupCtx: SettingResolveContext | undefined =
-    orgUnitId !== undefined && orgUnitId !== null
-      ? { organizationUnitId: orgUnitId }
-      : undefined;
+    orgUnitId !== undefined && orgUnitId !== null ? { organizationUnitId: orgUnitId } : undefined;
 
   const configuredBaseMax = settingRegistry.getNumber(input.settingKey, lookupCtx, defaultMaxRows);
   const baseMaxRows = Math.max(1, configuredBaseMax);
@@ -202,7 +202,11 @@ export function resolveExportMaxRows(
   }
   for (const roleCode of actorRoles) {
     const candidate = roleLimitsMap[roleCode] ?? roleLimitsMap[roleCode.toUpperCase()];
-    if (typeof candidate === 'number' && Number.isFinite(candidate) && candidate > roleSpecificMax) {
+    if (
+      typeof candidate === 'number' &&
+      Number.isFinite(candidate) &&
+      candidate > roleSpecificMax
+    ) {
       roleSpecificMax = Math.floor(candidate);
     }
   }
@@ -388,5 +392,173 @@ export async function buildExportFileArtifact(params: {
     xlsxBase64,
     ...(pdfBase64 !== undefined ? { pdfBase64 } : {}),
     primaryBuffer,
+  };
+}
+
+/**
+ * Biên dịch danh sách `DeclarativeExportColumn` thành bộ metadata cột chuẩn (`headers`, `columnWidths`,
+ * `centerColumnIndices`, `textColumnIndices`) kèm hàm ánh xạ dòng tự động.
+ * Giúp các module chỉ cần khai báo cột 1 chỗ duy nhất mà không cần tự đếm chỉ số cột thủ công.
+ */
+export function compileDeclarativeExportColumns<TItem = unknown, TContext = undefined>(
+  columns: readonly DeclarativeExportColumn<TItem, TContext>[],
+): CompiledDeclarativeExportSchema<TItem, TContext> {
+  const headers: string[] = [];
+  const columnWidths: number[] = [];
+  const centerColumnIndices: number[] = [];
+  const textColumnIndices: number[] = [];
+
+  columns.forEach((col, idx) => {
+    headers.push(col.header);
+    columnWidths.push(col.width ?? 18);
+    if (col.isCenter) {
+      centerColumnIndices.push(idx);
+    }
+    if (col.isText) {
+      textColumnIndices.push(idx);
+    }
+  });
+
+  const mapItemToRow = (item: TItem, index: number, context: TContext): Array<string | number> =>
+    columns.map((col) => {
+      const val = col.value(item, index, context);
+      return val === null || val === undefined ? '' : val;
+    });
+
+  const mapItemsToRows = (
+    items: readonly TItem[],
+    context: TContext,
+  ): Array<Array<string | number>> => items.map((item, idx) => mapItemToRow(item, idx, context));
+
+  return {
+    columns,
+    headers,
+    columnWidths,
+    centerColumnIndices,
+    textColumnIndices,
+    mapItemToRow,
+    mapItemsToRows,
+  };
+}
+
+/**
+ * Kết xuất trực tiếp danh sách đối tượng `items` thành file Excel (`.xlsx`), CSV (`.csv`) hoặc PDF (`.pdf`)
+ * chỉ từ 1 bảng cấu hình cột `columns` duy nhất (Declarative Export Engine — Mục 8.3).
+ */
+export async function buildDeclarativeExportArtifact<
+  TItem = unknown,
+  TContext = undefined,
+>(params: {
+  readonly fileBaseName: string;
+  readonly format?: ExportFormat | string | null | undefined;
+  readonly columns: readonly DeclarativeExportColumn<TItem, TContext>[];
+  readonly items: readonly TItem[];
+  readonly context?: TContext | undefined;
+  readonly sheetName?: string | undefined;
+  readonly title?: string | null | undefined;
+  readonly subtitle?: string | null | undefined;
+  readonly logoPng?: Buffer | string | null | undefined;
+  readonly landscape?: boolean | undefined;
+  readonly footerText?: string | null | undefined;
+  readonly pdfAdapter?: IPdfExportAdapter | null | undefined;
+  readonly onlyRequestedFormat?: boolean | undefined;
+}): Promise<{
+  readonly fileName: string;
+  readonly contentType: string;
+  readonly format: ExportFormat;
+  readonly totalExported: number;
+  readonly csvContent: string;
+  readonly xlsxBase64: string;
+  readonly pdfBase64?: string | undefined;
+  readonly primaryBuffer: Buffer;
+  readonly rows: ReadonlyArray<ReadonlyArray<string | number>>;
+}> {
+  const compiled = compileDeclarativeExportColumns(params.columns);
+  const rows = compiled.mapItemsToRows(params.items, params.context as TContext);
+
+  const built = await buildExportFileArtifact({
+    fileBaseName: params.fileBaseName,
+    format: params.format,
+    headers: compiled.headers,
+    rows,
+    xlsxOptions: {
+      sheetName: params.sheetName ?? 'Sheet1',
+      ...(params.title !== undefined ? { title: params.title } : {}),
+      ...(params.subtitle !== undefined ? { subtitle: params.subtitle } : {}),
+      ...(params.logoPng !== undefined ? { logoPng: params.logoPng } : {}),
+      columnWidths: compiled.columnWidths,
+      centerColumnIndices: compiled.centerColumnIndices,
+      textColumnIndices: compiled.textColumnIndices,
+      freezeHeader: true,
+    },
+    pdfOptions: {
+      ...(params.title !== undefined ? { title: params.title } : {}),
+      ...(params.subtitle !== undefined ? { subtitle: params.subtitle } : {}),
+      columnWidths: compiled.columnWidths,
+      centerColumnIndices: compiled.centerColumnIndices,
+      landscape: params.landscape ?? true,
+      ...(params.footerText !== undefined ? { footerText: params.footerText } : {}),
+    },
+    pdfAdapter: params.pdfAdapter,
+    onlyRequestedFormat: params.onlyRequestedFormat,
+  });
+
+  return {
+    ...built,
+    rows,
+  };
+}
+
+/**
+ * Kết xuất đồng bộ (Synchronous) danh sách `items` thành gói dữ liệu `.xlsx` + `.csv`
+ * chỉ từ 1 bảng cấu hình cột `columns` duy nhất.
+ */
+export function buildDeclarativeSpreadsheetExport<TItem = unknown, TContext = undefined>(params: {
+  readonly fileBaseName: string;
+  readonly format?: 'csv' | 'xlsx' | string | null | undefined;
+  readonly columns: readonly DeclarativeExportColumn<TItem, TContext>[];
+  readonly items: readonly TItem[];
+  readonly context?: TContext | undefined;
+  readonly sheetName?: string | undefined;
+  readonly title?: string | null | undefined;
+  readonly subtitle?: string | null | undefined;
+  readonly logoPng?: Buffer | string | null | undefined;
+}): {
+  readonly fileName: string;
+  readonly contentType: string;
+  readonly format: 'csv' | 'xlsx';
+  readonly totalExported: number;
+  readonly csvContent: string;
+  readonly xlsxBase64: string;
+  readonly rows: ReadonlyArray<ReadonlyArray<string | number>>;
+} {
+  const format: 'csv' | 'xlsx' = params.format === 'csv' ? 'csv' : 'xlsx';
+  const compiled = compileDeclarativeExportColumns(params.columns);
+  const rows = compiled.mapItemsToRows(params.items, params.context as TContext);
+
+  const csvContent = buildCsvContent(compiled.headers, rows);
+  const xlsxBuffer = buildXlsxBuffer(compiled.headers, rows, {
+    sheetName: params.sheetName ?? 'Sheet1',
+    ...(params.title !== undefined ? { title: params.title } : {}),
+    ...(params.subtitle !== undefined ? { subtitle: params.subtitle } : {}),
+    ...(params.logoPng !== undefined ? { logoPng: params.logoPng } : {}),
+    columnWidths: compiled.columnWidths,
+    centerColumnIndices: compiled.centerColumnIndices,
+    textColumnIndices: compiled.textColumnIndices,
+    freezeHeader: true,
+  });
+
+  const cleanBase = params.fileBaseName.replace(/\.(xlsx|csv)$/i, '');
+  return {
+    fileName: `${cleanBase}.${format}`,
+    contentType:
+      format === 'xlsx'
+        ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        : 'text/csv; charset=utf-8',
+    format,
+    totalExported: rows.length,
+    csvContent,
+    xlsxBase64: xlsxBuffer.toString('base64'),
+    rows,
   };
 }

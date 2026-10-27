@@ -442,6 +442,16 @@ export class ReportRegistryService {
     return found ?? null;
   }
 
+  /** Xóa một bản ghi Lịch sử chạy báo cáo theo ID */
+  public deleteHistory(id: number): boolean {
+    const idx = this.histories.findIndex((h) => h.id === Number(id));
+    if (idx < 0) {
+      return false;
+    }
+    this.histories.splice(idx, 1);
+    return true;
+  }
+
   /** Tra cứu danh sách Lịch sử chạy báo cáo theo bộ lọc (Mục 8.4.7) */
   public listHistories(
     filter: {
@@ -581,6 +591,108 @@ export class ReportRegistryService {
       list = list.filter((s) => s.isActive === filter.isActive);
     }
     return list;
+  }
+
+  /** Xem chi tiết một lịch gửi báo cáo định kỳ theo ID */
+  public getScheduleById(scheduleId: number): ReportScheduleRecord | null {
+    return this.schedules.find((s) => s.id === Number(scheduleId)) ?? null;
+  }
+
+  /** Cập nhật lịch gửi báo cáo định kỳ theo ID */
+  public updateSchedule(
+    scheduleId: number,
+    patch: Partial<CreateReportScheduleInput>,
+  ): ReportScheduleRecord | null {
+    const idx = this.schedules.findIndex((s) => s.id === Number(scheduleId));
+    if (idx < 0) {
+      return null;
+    }
+
+    const current = this.schedules[idx]!;
+    const now = new Date();
+    const nowIso = now.toISOString();
+
+    const frequency: ReportScheduleFrequency =
+      patch.frequency === REPORT_SCHEDULE_FREQUENCY.DAILY ||
+      patch.frequency === REPORT_SCHEDULE_FREQUENCY.WEEKLY ||
+      patch.frequency === REPORT_SCHEDULE_FREQUENCY.MONTHLY
+        ? patch.frequency
+        : current.frequency;
+
+    const hour =
+      patch.hour !== undefined ? Math.min(23, Math.max(0, Math.trunc(patch.hour))) : current.hour;
+    const minute =
+      patch.minute !== undefined
+        ? Math.min(59, Math.max(0, Math.trunc(patch.minute)))
+        : current.minute;
+    const dayOfWeek = patch.dayOfWeek !== undefined ? patch.dayOfWeek : current.dayOfWeek;
+    const dayOfMonth = patch.dayOfMonth !== undefined ? patch.dayOfMonth : current.dayOfMonth;
+
+    const nextRunDate = computeNextReportScheduleRun(
+      frequency,
+      hour,
+      minute,
+      dayOfWeek,
+      dayOfMonth,
+      now,
+    );
+
+    const updated: ReportScheduleRecord = {
+      ...current,
+      name: patch.name !== undefined ? patch.name.trim() : current.name,
+      frequency,
+      cronExpression: resolveReportScheduleCron(
+        frequency,
+        hour,
+        minute,
+        dayOfWeek,
+        dayOfMonth,
+        patch.cronExpression,
+      ),
+      hour,
+      minute,
+      dayOfWeek,
+      dayOfMonth,
+      timezone: patch.timezone !== undefined ? patch.timezone : current.timezone,
+      format:
+        patch.format !== undefined
+          ? resolveExportFormat(patch.format, current.format)
+          : current.format,
+      parameters:
+        patch.parameters !== undefined
+          ? normalizeReportParameters(patch.parameters)
+          : current.parameters,
+      channels:
+        patch.channels !== undefined && patch.channels.length > 0
+          ? [...new Set(patch.channels)]
+          : current.channels,
+      recipientEmails:
+        patch.recipientEmails !== undefined
+          ? [...new Set(patch.recipientEmails.map((e) => e.trim().toLowerCase()).filter(Boolean))]
+          : current.recipientEmails,
+      recipientUserIds:
+        patch.recipientUserIds !== undefined
+          ? [...new Set(patch.recipientUserIds)]
+          : current.recipientUserIds,
+      ttlSeconds:
+        patch.ttlSeconds !== undefined ? Math.max(60, patch.ttlSeconds) : current.ttlSeconds,
+      isActive: patch.isActive !== undefined ? patch.isActive : current.isActive,
+      nextRunAt: nextRunDate.toISOString(),
+      updatedAt: nowIso,
+    };
+
+    this.schedules[idx] = updated;
+    return updated;
+  }
+
+  /** Xóa lịch gửi báo cáo định kỳ theo ID */
+  public deleteSchedule(scheduleId: number): boolean {
+    const idx = this.schedules.findIndex((s) => s.id === Number(scheduleId));
+    if (idx < 0) {
+      return false;
+    }
+    this.schedules.splice(idx, 1);
+    return true;
   }
 
   /** Lấy các lịch gửi báo cáo đang hoạt động và đã đến hạn chạy (`nextRunAt <= now`) theo thứ tự tạo */

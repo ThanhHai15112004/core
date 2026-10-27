@@ -1,0 +1,61 @@
+{
+  "$schema": "../../packages/kernel/schemas/module.manifest.schema.json",
+  "name": "exports",
+  "displayName": "Data Export Engine, Temporary Artifacts & History",
+  "version": "1.0.0",
+  "description": "Module nền tảng quản lý Xuất dữ liệu (Export — Mục 8.3) dùng chung cho toàn hệ thống: hỗ trợ xuất Excel (.xlsx), CSV (.csv) và PDF (.pdf qua Pluggable Adapter), giữ đúng bộ lọc & Data Scope, giới hạn số dòng theo quyền/setting, chạy nền bằng Queue, gửi thông báo kèm link tải tạm thời tự hết hạn và ghi lịch sử Export vào Database.",
+  "type": "core",
+  "category": "core",
+  "author": "Core Platform Team",
+  "entryModule": "ExportsModule",
+  "dependencies": ["database", "security", "i18n", "users", "roles", "organizations", "codes", "settings", "notifications"],
+  "permissions": [
+    "exports.read",
+    "exports.execute",
+    "exports.manage"
+  ],
+  "events": {
+    "published": [
+      "exports.job_queued",
+      "exports.job_completed",
+      "exports.artifact_expired"
+    ],
+    "subscribed": []
+  },
+  "database": {
+    "hasMigrations": true,
+    "tables": [
+      "export_histories"
+    ]
+  },
+  "settings": [
+    {
+      "key": "exports.default_max_rows",
+      "group": "exports",
+      "name": "Số bản ghi xuất tối đa mặc định",
+      "description": "Giới hạn số lượng bản ghi tối đa được phép xuất trong một lần đối với người dùng thông thường",
+      "valueType": "NUMBER",
+      "defaultValue": 5000,
+      "isPublic": false
+    },
+    {
+      "key": "exports.privileged_max_rows",
+      "group": "exports",
+      "name": "Số bản ghi xuất tối đa cho quản trị viên",
+      "description": "Giới hạn số lượng bản ghi tối đa được phép xuất đối với vai trò đặc quyền (Admin/System)",
+      "valueType": "NUMBER",
+      "defaultValue": 50000,
+      "isPublic": false
+    },
+    {
+      "key": "exports.file_ttl_seconds",
+      "group": "exports",
+      "name": "Thời hạn lưu tệp Export tạm thời (giây)",
+      "description": "Thời gian sống (TTL) của đường dẫn tải file Export tạm thời trước khi tự động thu hồi",
+      "valueType": "NUMBER",
+      "defaultValue": 3600,
+      "isPublic": false
+    }
+  ]
+}
+

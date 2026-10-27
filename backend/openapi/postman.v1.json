@@ -2525,6 +2525,410 @@
       ]
     },
     {
+      "name": "Data Export Engine",
+      "item": [
+        {
+          "name": "Tải file Export tạm thời theo token (tự động hết hạn theo TTL cấu hình)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/exports/downloads/:token",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "exports",
+                "downloads",
+                ":token"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `users.export`"
+          }
+        },
+        {
+          "name": "Xem danh sách lịch sử Export (Người thực hiện, bộ lọc và số dòng)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/exports/histories?profileCode=profileCode_sample&module=module_sample&actorId=1&format=csv&status=QUEUED&includeExpired=true&limit=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "exports",
+                "histories"
+              ],
+              "query": [
+                {
+                  "key": "profileCode",
+                  "value": "profileCode_sample"
+                },
+                {
+                  "key": "module",
+                  "value": "module_sample"
+                },
+                {
+                  "key": "actorId",
+                  "value": "1"
+                },
+                {
+                  "key": "format",
+                  "value": "csv"
+                },
+                {
+                  "key": "status",
+                  "value": "QUEUED"
+                },
+                {
+                  "key": "includeExpired",
+                  "value": "true"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `users.export`"
+          }
+        },
+        {
+          "name": "Xem chi tiết bản ghi lịch sử Export theo ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/exports/histories/:historyId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "exports",
+                "histories",
+                ":historyId"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `users.export`"
+          }
+        },
+        {
+          "name": "Cập nhật trạng thái hoặc thông tin bản ghi lịch sử Export theo ID",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/exports/histories/:historyId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "exports",
+                "histories",
+                ":historyId"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"QUEUED\",\n  \"fileName\": \"fileName_sample\",\n  \"totalExported\": 0,\n  \"processedRows\": 0,\n  \"isExpired\": true,\n  \"errorMessage\": \"errorMessage_sample\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `users.export`"
+          }
+        },
+        {
+          "name": "Xóa bản ghi lịch sử Export theo ID",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/exports/histories/:historyId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "exports",
+                "histories",
+                ":historyId"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `users.export`"
+          }
+        },
+        {
+          "name": "Xem tiến độ công việc Export chạy nền qua Queue",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/exports/jobs/:jobId/progress",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "exports",
+                "jobs",
+                ":jobId",
+                "progress"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `users.export`"
+          }
+        },
+        {
+          "name": "Thu hồi & xóa toàn bộ các file Export tạm thời đã hết hạn",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/exports/purge-expired",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "exports",
+                "purge-expired"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `users.export`"
+          }
+        },
+        {
+          "name": "Xuất danh sách dữ liệu theo profileCode ra định dạng Excel (.xlsx), CSV (.csv) hoặc PDF (.pdf) theo bộ lọc & Data Scope",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/exports/:profileCode?q=q_sample&search=search_sample&status=1&roleId=1&organizationUnitId=1&managerId=1&includeArchived=true&mfaEnabled=true&createdFrom=createdFrom_sample&createdTo=createdTo_sample&fromDate=fromDate_sample&toDate=toDate_sample&fields=fields_sample&page=1&limit=20&countMode=exact&sort=sort_sample&sortBy=id&sortOrder=ASC&format=csv&title=title_sample&logoBase64=logoBase64_sample&async=true&notifyOnComplete=true&ttlSeconds=1&enforceStrictLimit=true&onlyRequestedFormat=true&stepUpToken=stepUpToken_sample&requireStepUp=true",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "exports",
+                ":profileCode"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "q_sample"
+                },
+                {
+                  "key": "search",
+                  "value": "search_sample"
+                },
+                {
+                  "key": "status",
+                  "value": "1"
+                },
+                {
+                  "key": "roleId",
+                  "value": "1"
+                },
+                {
+                  "key": "organizationUnitId",
+                  "value": "1"
+                },
+                {
+                  "key": "managerId",
+                  "value": "1"
+                },
+                {
+                  "key": "includeArchived",
+                  "value": "true"
+                },
+                {
+                  "key": "mfaEnabled",
+                  "value": "true"
+                },
+                {
+                  "key": "createdFrom",
+                  "value": "createdFrom_sample"
+                },
+                {
+                  "key": "createdTo",
+                  "value": "createdTo_sample"
+                },
+                {
+                  "key": "fromDate",
+                  "value": "fromDate_sample"
+                },
+                {
+                  "key": "toDate",
+                  "value": "toDate_sample"
+                },
+                {
+                  "key": "fields",
+                  "value": "fields_sample"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "countMode",
+                  "value": "exact"
+                },
+                {
+                  "key": "sort",
+                  "value": "sort_sample"
+                },
+                {
+                  "key": "sortBy",
+                  "value": "id"
+                },
+                {
+                  "key": "sortOrder",
+                  "value": "ASC"
+                },
+                {
+                  "key": "format",
+                  "value": "csv"
+                },
+                {
+                  "key": "title",
+                  "value": "title_sample"
+                },
+                {
+                  "key": "logoBase64",
+                  "value": "logoBase64_sample"
+                },
+                {
+                  "key": "async",
+                  "value": "true"
+                },
+                {
+                  "key": "notifyOnComplete",
+                  "value": "true"
+                },
+                {
+                  "key": "ttlSeconds",
+                  "value": "1"
+                },
+                {
+                  "key": "enforceStrictLimit",
+                  "value": "true"
+                },
+                {
+                  "key": "onlyRequestedFormat",
+                  "value": "true"
+                },
+                {
+                  "key": "stepUpToken",
+                  "value": "stepUpToken_sample"
+                },
+                {
+                  "key": "requireStepUp",
+                  "value": "true"
+                }
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `users.export`"
+          }
+        }
+      ]
+    },
+    {
       "name": "File Management",
       "item": [
         {
@@ -3798,6 +4202,350 @@
               ]
             },
             "description": "Trả về trạng thái kết nối thực tế của Database, Redis, Storage và mức sử dụng bộ nhớ Heap của tiến trình.\n\n### 🔐 Xác thực & Phân quyền (Access Control)\n- **Chế độ truy cập**: `Public` (Không yêu cầu đăng nhập)"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Data Import Engine",
+      "item": [
+        {
+          "name": "Xem danh sách lịch sử Import (File, người thực hiện và kết quả)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/imports/histories?profileCode=profileCode_sample&module=module_sample&actorId=1&status=QUEUED&limit=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "imports",
+                "histories"
+              ],
+              "query": [
+                {
+                  "key": "profileCode",
+                  "value": "profileCode_sample"
+                },
+                {
+                  "key": "module",
+                  "value": "module_sample"
+                },
+                {
+                  "key": "actorId",
+                  "value": "1"
+                },
+                {
+                  "key": "status",
+                  "value": "QUEUED"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `users.import`"
+          }
+        },
+        {
+          "name": "Xem chi tiết bản ghi lịch sử Import theo ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/imports/histories/:historyId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "imports",
+                "histories",
+                ":historyId"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `users.import`"
+          }
+        },
+        {
+          "name": "Cập nhật trạng thái hoặc thông tin bản ghi lịch sử Import theo ID",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/imports/histories/:historyId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "imports",
+                "histories",
+                ":historyId"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"QUEUED\",\n  \"fileName\": \"fileName_sample\",\n  \"totalRows\": 0,\n  \"processedRows\": 0,\n  \"createdCount\": 0,\n  \"updatedCount\": 0,\n  \"skippedCount\": 0,\n  \"failedCount\": 0,\n  \"completedAt\": \"2026-10-14T10:00:00.000Z\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `users.import`"
+          }
+        },
+        {
+          "name": "Xóa bản ghi lịch sử Import theo ID",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/imports/histories/:historyId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "imports",
+                "histories",
+                ":historyId"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `users.import`"
+          }
+        },
+        {
+          "name": "Xem tiến độ công việc Import chạy nền qua Queue (số dòng thành công, lỗi và còn lại)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/imports/jobs/:jobId/progress",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "imports",
+                "jobs",
+                ":jobId",
+                "progress"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `users.import`"
+          }
+        },
+        {
+          "name": "Lấy danh sách các cấu hình Import đã đăng ký của các module",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/imports/profiles",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "imports",
+                "profiles"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `users.import`"
+          }
+        },
+        {
+          "name": "Nhập dữ liệu hàng loạt từ file Excel (.xlsx base64), CSV hoặc JSON theo profileCode",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/imports/:profileCode",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "imports",
+                ":profileCode"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [\n    {}\n  ],\n  \"csvContent\": \"csvContent_sample\",\n  \"xlsxBase64\": \"xlsxBase64_sample\",\n  \"fileName\": \"fileName_sample\",\n  \"columnMapping\": {},\n  \"duplicateStrategy\": \"SKIP\",\n  \"skipDuplicates\": true,\n  \"defaultPassword\": \"defaultPassword_sample\",\n  \"async\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `users.import`"
+          }
+        },
+        {
+          "name": "Xem trước dữ liệu trước khi nhập (Preview / Dry-run): ánh xạ cột, dòng mẫu và kiểm tra lỗi theo dòng/cột",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/imports/:profileCode/preview",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "imports",
+                ":profileCode",
+                "preview"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [\n    {}\n  ],\n  \"csvContent\": \"csvContent_sample\",\n  \"xlsxBase64\": \"xlsxBase64_sample\",\n  \"columnMapping\": {},\n  \"duplicateStrategy\": \"SKIP\",\n  \"skipDuplicates\": true,\n  \"previewLimit\": 20\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `users.import`"
+          }
+        },
+        {
+          "name": "Tải file mẫu (Template) Excel (.xlsx) hoặc CSV (.csv) theo profileCode",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/imports/:profileCode/template?format=csv&includeSamples=true",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "imports",
+                ":profileCode",
+                "template"
+              ],
+              "query": [
+                {
+                  "key": "format",
+                  "value": "csv"
+                },
+                {
+                  "key": "includeSamples",
+                  "value": "true"
+                }
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `users.import`"
           }
         }
       ]
@@ -9933,6 +10681,462 @@
       ]
     },
     {
+      "name": "Reporting & Dashboard Engine",
+      "item": [
+        {
+          "name": "Lấy danh sách các báo cáo & dashboard đã đăng ký của các module (phân quyền riêng *.report)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/reports?module=module_sample&category=REPORT&includeAllModules=true",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "reports"
+              ],
+              "query": [
+                {
+                  "key": "module",
+                  "value": "module_sample"
+                },
+                {
+                  "key": "category",
+                  "value": "REPORT"
+                },
+                {
+                  "key": "includeAllModules",
+                  "value": "true"
+                }
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `users.report`"
+          }
+        },
+        {
+          "name": "Tải file báo cáo tạm thời theo token (tự động hết hạn theo TTL cấu hình)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/reports/downloads/:token",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "reports",
+                "downloads",
+                ":token"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `users.report`"
+          }
+        },
+        {
+          "name": "Xem danh sách lịch sử chạy báo cáo (Thời gian, người chạy, nguồn đọc và kết quả)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/reports/histories?module=module_sample&reportCode=reportCode_sample&actorId=1&status=QUEUED&executionMode=SYNC&limit=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "reports",
+                "histories"
+              ],
+              "query": [
+                {
+                  "key": "module",
+                  "value": "module_sample"
+                },
+                {
+                  "key": "reportCode",
+                  "value": "reportCode_sample"
+                },
+                {
+                  "key": "actorId",
+                  "value": "1"
+                },
+                {
+                  "key": "status",
+                  "value": "QUEUED"
+                },
+                {
+                  "key": "executionMode",
+                  "value": "SYNC"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `users.report`"
+          }
+        },
+        {
+          "name": "Xem chi tiết bản ghi lịch sử chạy báo cáo theo ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/reports/histories/:historyId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "reports",
+                "histories",
+                ":historyId"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `users.report`"
+          }
+        },
+        {
+          "name": "Xóa bản ghi lịch sử chạy báo cáo theo ID",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/reports/histories/:historyId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "reports",
+                "histories",
+                ":historyId"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `users.report`"
+          }
+        },
+        {
+          "name": "Chạy báo cáo / dashboard (hỗ trợ lọc khoảng ngày/trạng thái/đơn vị, Queue cho báo cáo nặng, Read Replica, Cache & file tạm)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/reports/run",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "reports",
+                "run"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reportCode\": \"users.summary_dashboard\",\n  \"fromDate\": \"fromDate_sample\",\n  \"toDate\": \"toDate_sample\",\n  \"status\": 1,\n  \"organizationUnitId\": 1,\n  \"includeSubUnits\": true,\n  \"filters\": {},\n  \"parameters\": {\n    \"fromDate\": \"fromDate_sample\",\n    \"toDate\": \"toDate_sample\",\n    \"status\": 1,\n    \"organizationUnitId\": 1,\n    \"includeSubUnits\": true,\n    \"filters\": {}\n  },\n  \"format\": \"csv\",\n  \"async\": true,\n  \"useCache\": true,\n  \"forceRefresh\": true,\n  \"preferReplica\": true,\n  \"ttlSeconds\": 1,\n  \"notifyChannels\": [\n    \"EMAIL\"\n  ],\n  \"recipientEmails\": [\n    \"user@example.com\"\n  ],\n  \"recipientUserIds\": [\n    1\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `users.report`"
+          }
+        },
+        {
+          "name": "Xem danh sách lịch gửi báo cáo định kỳ (DAILY / WEEKLY / MONTHLY)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/reports/schedules?module=module_sample&reportCode=reportCode_sample&frequency=DAILY&isActive=true",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "reports",
+                "schedules"
+              ],
+              "query": [
+                {
+                  "key": "module",
+                  "value": "module_sample"
+                },
+                {
+                  "key": "reportCode",
+                  "value": "reportCode_sample"
+                },
+                {
+                  "key": "frequency",
+                  "value": "DAILY"
+                },
+                {
+                  "key": "isActive",
+                  "value": "true"
+                }
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `users.report`"
+          }
+        },
+        {
+          "name": "Lên lịch gửi báo cáo định kỳ theo ngày (DAILY), tuần (WEEKLY) hoặc tháng (MONTHLY)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/reports/schedules",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "reports",
+                "schedules"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reportCode\": \"users.summary_dashboard\",\n  \"name\": \"name_sample\",\n  \"frequency\": \"DAILY\",\n  \"cronExpression\": \"cronExpression_sample\",\n  \"hour\": 0,\n  \"minute\": 0,\n  \"dayOfWeek\": 0,\n  \"dayOfMonth\": 1,\n  \"timezone\": \"timezone_sample\",\n  \"format\": \"xlsx\",\n  \"parameters\": {\n    \"fromDate\": \"fromDate_sample\",\n    \"toDate\": \"toDate_sample\",\n    \"status\": 1,\n    \"organizationUnitId\": 1,\n    \"includeSubUnits\": true,\n    \"filters\": {}\n  },\n  \"channels\": [\n    \"EMAIL\"\n  ],\n  \"recipientEmails\": [\n    \"user@example.com\"\n  ],\n  \"recipientUserIds\": [\n    1\n  ],\n  \"ttlSeconds\": 3600,\n  \"isActive\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `users.report`"
+          }
+        },
+        {
+          "name": "Kích hoạt thực thi các lịch báo cáo đã đến hạn kèm gửi Email / thông báo chứa file tạm",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/reports/schedules/trigger-due",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "reports",
+                "schedules",
+                "trigger-due"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `users.report`"
+          }
+        },
+        {
+          "name": "Xem chi tiết lịch gửi báo cáo định kỳ theo ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/reports/schedules/:scheduleId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "reports",
+                "schedules",
+                ":scheduleId"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `users.report`"
+          }
+        },
+        {
+          "name": "Cập nhật lịch gửi báo cáo định kỳ (tần suất, giờ chạy, người nhận, trạng thái...)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/reports/schedules/:scheduleId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "reports",
+                "schedules",
+                ":scheduleId"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reportCode\": \"users.summary_dashboard\",\n  \"name\": \"name_sample\",\n  \"frequency\": \"DAILY\",\n  \"cronExpression\": \"cronExpression_sample\",\n  \"hour\": 0,\n  \"minute\": 0,\n  \"dayOfWeek\": 0,\n  \"dayOfMonth\": 1,\n  \"timezone\": \"timezone_sample\",\n  \"format\": \"xlsx\",\n  \"parameters\": {\n    \"fromDate\": \"fromDate_sample\",\n    \"toDate\": \"toDate_sample\",\n    \"status\": 1,\n    \"organizationUnitId\": 1,\n    \"includeSubUnits\": true,\n    \"filters\": {}\n  },\n  \"channels\": [\n    \"EMAIL\"\n  ],\n  \"recipientEmails\": [\n    \"user@example.com\"\n  ],\n  \"recipientUserIds\": [\n    1\n  ],\n  \"ttlSeconds\": 3600,\n  \"isActive\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `users.report`"
+          }
+        },
+        {
+          "name": "Xóa lịch gửi báo cáo định kỳ theo ID",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/reports/schedules/:scheduleId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "reports",
+                "schedules",
+                ":scheduleId"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `users.report`"
+          }
+        }
+      ]
+    },
+    {
       "name": "Roles & Permissions",
       "item": [
         {
@@ -10846,6 +12050,504 @@
               ]
             },
             "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `roles.read`"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Global Search Engine",
+      "item": [
+        {
+          "name": "Tìm kiếm toàn hệ thống qua Search Provider dùng chung (áp dụng Data Scope & theo dõi độ trễ Index)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/search?keyword=&module=module_sample&entityType=entityType_sample&entityCode=entityCode_sample&status=1&organizationUnitId=1&page=1&limit=20&includeStale=true",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "keyword",
+                  "value": ""
+                },
+                {
+                  "key": "module",
+                  "value": "module_sample"
+                },
+                {
+                  "key": "entityType",
+                  "value": "entityType_sample"
+                },
+                {
+                  "key": "entityCode",
+                  "value": "entityCode_sample"
+                },
+                {
+                  "key": "status",
+                  "value": "1"
+                },
+                {
+                  "key": "organizationUnitId",
+                  "value": "1"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "includeStale",
+                  "value": "true"
+                }
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `users.read`"
+          }
+        },
+        {
+          "name": "Thêm mới hoặc cập nhật danh sách tài liệu vào Search Index (search_documents)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/search/documents",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "search",
+                "documents"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"documents\": [\n    {\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"entityCode\": \"entityCode_sample\",\n      \"module\": \"module_sample\",\n      \"entityType\": \"entityType_sample\",\n      \"title\": \"title_sample\",\n      \"subtitle\": \"subtitle_sample\",\n      \"keywords\": [\n        \"keywords_sample\"\n      ],\n      \"searchableText\": \"searchableText_sample\",\n      \"ownerId\": 1,\n      \"organizationUnitId\": 1,\n      \"status\": 1,\n      \"metadata\": {},\n      \"sourceUpdatedAt\": \"2026-10-14T10:00:00.000Z\",\n      \"indexedAt\": \"2026-10-14T10:00:00.000Z\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `users.update`"
+          }
+        },
+        {
+          "name": "Xóa tài liệu khỏi Search Index theo entityCode và entityId",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/search/documents/:entityCode/:entityId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "search",
+                "documents",
+                ":entityCode",
+                ":entityId"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `users.update`"
+          }
+        },
+        {
+          "name": "Xem danh sách các thực thể đã đăng ký vào Search Provider dùng chung",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/search/entities?module=module_sample&entityType=entityType_sample&includeAllModules=true",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "search",
+                "entities"
+              ],
+              "query": [
+                {
+                  "key": "module",
+                  "value": "module_sample"
+                },
+                {
+                  "key": "entityType",
+                  "value": "entityType_sample"
+                },
+                {
+                  "key": "includeAllModules",
+                  "value": "true"
+                }
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `users.read`"
+          }
+        },
+        {
+          "name": "Xem danh sách lịch sử đồng bộ & tạo lại Search Index",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/search/histories?module=module_sample&operation=SYNC&limit=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "search",
+                "histories"
+              ],
+              "query": [
+                {
+                  "key": "module",
+                  "value": "module_sample"
+                },
+                {
+                  "key": "operation",
+                  "value": "SYNC"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `users.read`"
+          }
+        },
+        {
+          "name": "Xem chi tiết bản ghi lịch sử đồng bộ Search Index theo ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/search/histories/:historyId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "search",
+                "histories",
+                ":historyId"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `users.read`"
+          }
+        },
+        {
+          "name": "Xóa bản ghi lịch sử đồng bộ Search Index theo ID",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/search/histories/:historyId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "search",
+                "histories",
+                ":historyId"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `users.update`"
+          }
+        },
+        {
+          "name": "Theo dõi độ trễ cập nhật Search Index (phát hiện kết quả tìm kiếm bị cũ)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/search/lag?module=module_sample&entityType=entityType_sample&entityCode=entityCode_sample&staleOnly=true&staleThresholdMs=0",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "search",
+                "lag"
+              ],
+              "query": [
+                {
+                  "key": "module",
+                  "value": "module_sample"
+                },
+                {
+                  "key": "entityType",
+                  "value": "entityType_sample"
+                },
+                {
+                  "key": "entityCode",
+                  "value": "entityCode_sample"
+                },
+                {
+                  "key": "staleOnly",
+                  "value": "true"
+                },
+                {
+                  "key": "staleThresholdMs",
+                  "value": "0"
+                }
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `users.read`"
+          }
+        },
+        {
+          "name": "Tạo lại toàn bộ Search Index theo module hoặc loại dữ liệu (entityType)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/search/rebuild",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "search",
+                "rebuild"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"module\": \"module_sample\",\n  \"entityType\": \"entityType_sample\",\n  \"entityCode\": \"entityCode_sample\",\n  \"async\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `users.update`"
+          }
+        },
+        {
+          "name": "Đồng bộ dữ liệu sang Search Index (trực tiếp hoặc chạy bằng Queue)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/search/sync",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "search",
+                "sync"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userIds\": [\n    1\n  ],\n  \"async\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `users.update`"
+          }
+        },
+        {
+          "name": "Thống kê từ khóa tìm kiếm không có kết quả (Zero-Result Keywords)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/search/zero-results?module=module_sample&entityType=entityType_sample&limit=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "search",
+                "zero-results"
+              ],
+              "query": [
+                {
+                  "key": "module",
+                  "value": "module_sample"
+                },
+                {
+                  "key": "entityType",
+                  "value": "entityType_sample"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `users.read`"
+          }
+        },
+        {
+          "name": "Xóa mục thống kê từ khóa 0 kết quả",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/search/zero-results/:keyword",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "search",
+                "zero-results",
+                ":keyword"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `users.update`"
           }
         }
       ]
@@ -13140,1221 +14842,6 @@
           }
         },
         {
-          "name": "Nhập người dùng hàng loạt từ file Excel (.xlsx base64), CSV hoặc danh sách JSON",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Accept",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{bearerToken}}"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/users/bulk-import",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "users",
-                "bulk-import"
-              ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"fileName\": \"fileName_sample\",\n  \"xlsxBase64\": \"xlsxBase64_sample\",\n  \"csvContent\": \"csvContent_sample\",\n  \"items\": [\n    {\n      \"username\": \"username_sample\",\n      \"email\": \"user@example.com\",\n      \"firstName\": \"firstName_sample\",\n      \"lastName\": \"lastName_sample\",\n      \"fullName\": \"fullName_sample\",\n      \"phone\": \"phone_sample\",\n      \"password\": \"password_sample\",\n      \"status\": 1,\n      \"positionTitle\": \"positionTitle_sample\",\n      \"roleCodes\": [\n        \"roleCodes_sample\"\n      ],\n      \"organizationCodes\": [\n        \"organizationCodes_sample\"\n      ]\n    }\n  ],\n  \"columnMapping\": {},\n  \"defaultPassword\": \"defaultPassword_sample\",\n  \"skipDuplicates\": true,\n  \"duplicateStrategy\": \"SKIP\",\n  \"async\": true,\n  \"previewLimit\": 1\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
-            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `users.import`"
-          }
-        },
-        {
-          "name": "Xem danh sách lịch sử Import người dùng (File, người thực hiện và kết quả)",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Accept",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{bearerToken}}"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/users/bulk-import/histories?actorId=1&status=QUEUED&limit=20",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "users",
-                "bulk-import",
-                "histories"
-              ],
-              "query": [
-                {
-                  "key": "actorId",
-                  "value": "1"
-                },
-                {
-                  "key": "status",
-                  "value": "QUEUED"
-                },
-                {
-                  "key": "limit",
-                  "value": "20"
-                }
-              ]
-            },
-            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `users.import`"
-          }
-        },
-        {
-          "name": "Xem chi tiết bản ghi lịch sử Import người dùng theo ID",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Accept",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{bearerToken}}"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/users/bulk-import/histories/:historyId",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "users",
-                "bulk-import",
-                "histories",
-                ":historyId"
-              ]
-            },
-            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `users.import`"
-          }
-        },
-        {
-          "name": "Xem tiến độ công việc Import người dùng (số dòng thành công, lỗi và còn lại)",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Accept",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{bearerToken}}"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/users/bulk-import/jobs/:jobId/progress",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "users",
-                "bulk-import",
-                "jobs",
-                ":jobId",
-                "progress"
-              ]
-            },
-            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `users.import`"
-          }
-        },
-        {
-          "name": "Xem trước dữ liệu trước khi nhập (Preview / Dry-run): ánh xạ cột, dòng mẫu và kiểm tra lỗi theo dòng/cột",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Accept",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{bearerToken}}"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/users/bulk-import/preview",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "users",
-                "bulk-import",
-                "preview"
-              ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"fileName\": \"fileName_sample\",\n  \"xlsxBase64\": \"xlsxBase64_sample\",\n  \"csvContent\": \"csvContent_sample\",\n  \"items\": [\n    {\n      \"username\": \"username_sample\",\n      \"email\": \"user@example.com\",\n      \"firstName\": \"firstName_sample\",\n      \"lastName\": \"lastName_sample\",\n      \"fullName\": \"fullName_sample\",\n      \"phone\": \"phone_sample\",\n      \"password\": \"password_sample\",\n      \"status\": 1,\n      \"positionTitle\": \"positionTitle_sample\",\n      \"roleCodes\": [\n        \"roleCodes_sample\"\n      ],\n      \"organizationCodes\": [\n        \"organizationCodes_sample\"\n      ]\n    }\n  ],\n  \"columnMapping\": {},\n  \"defaultPassword\": \"defaultPassword_sample\",\n  \"skipDuplicates\": true,\n  \"duplicateStrategy\": \"SKIP\",\n  \"async\": true,\n  \"previewLimit\": 1\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
-            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `users.import`"
-          }
-        },
-        {
-          "name": "Xuất danh sách người dùng ra định dạng Excel (.xlsx), CSV (.csv) hoặc PDF (.pdf) theo Data Scope",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Accept",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{bearerToken}}"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/users/export?q=q_sample&search=search_sample&status=1&roleId=1&organizationUnitId=1&managerId=1&includeArchived=true&mfaEnabled=true&createdFrom=createdFrom_sample&createdTo=createdTo_sample&fromDate=fromDate_sample&toDate=toDate_sample&fields=fields_sample&page=1&limit=20&countMode=exact&sort=sort_sample&sortBy=id&sortOrder=ASC&format=csv&title=title_sample&logoBase64=logoBase64_sample&async=true&notifyOnComplete=true&ttlSeconds=1&enforceStrictLimit=true&onlyRequestedFormat=true&stepUpToken=stepUpToken_sample&requireStepUp=true",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "users",
-                "export"
-              ],
-              "query": [
-                {
-                  "key": "q",
-                  "value": "q_sample"
-                },
-                {
-                  "key": "search",
-                  "value": "search_sample"
-                },
-                {
-                  "key": "status",
-                  "value": "1"
-                },
-                {
-                  "key": "roleId",
-                  "value": "1"
-                },
-                {
-                  "key": "organizationUnitId",
-                  "value": "1"
-                },
-                {
-                  "key": "managerId",
-                  "value": "1"
-                },
-                {
-                  "key": "includeArchived",
-                  "value": "true"
-                },
-                {
-                  "key": "mfaEnabled",
-                  "value": "true"
-                },
-                {
-                  "key": "createdFrom",
-                  "value": "createdFrom_sample"
-                },
-                {
-                  "key": "createdTo",
-                  "value": "createdTo_sample"
-                },
-                {
-                  "key": "fromDate",
-                  "value": "fromDate_sample"
-                },
-                {
-                  "key": "toDate",
-                  "value": "toDate_sample"
-                },
-                {
-                  "key": "fields",
-                  "value": "fields_sample"
-                },
-                {
-                  "key": "page",
-                  "value": "1"
-                },
-                {
-                  "key": "limit",
-                  "value": "20"
-                },
-                {
-                  "key": "countMode",
-                  "value": "exact"
-                },
-                {
-                  "key": "sort",
-                  "value": "sort_sample"
-                },
-                {
-                  "key": "sortBy",
-                  "value": "id"
-                },
-                {
-                  "key": "sortOrder",
-                  "value": "ASC"
-                },
-                {
-                  "key": "format",
-                  "value": "csv"
-                },
-                {
-                  "key": "title",
-                  "value": "title_sample"
-                },
-                {
-                  "key": "logoBase64",
-                  "value": "logoBase64_sample"
-                },
-                {
-                  "key": "async",
-                  "value": "true"
-                },
-                {
-                  "key": "notifyOnComplete",
-                  "value": "true"
-                },
-                {
-                  "key": "ttlSeconds",
-                  "value": "1"
-                },
-                {
-                  "key": "enforceStrictLimit",
-                  "value": "true"
-                },
-                {
-                  "key": "onlyRequestedFormat",
-                  "value": "true"
-                },
-                {
-                  "key": "stepUpToken",
-                  "value": "stepUpToken_sample"
-                },
-                {
-                  "key": "requireStepUp",
-                  "value": "true"
-                }
-              ]
-            },
-            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `users.export`"
-          }
-        },
-        {
-          "name": "Tải file Export tạm thời theo token (tự động hết hạn theo TTL cấu hình)",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Accept",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{bearerToken}}"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/users/export/downloads/:token",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "users",
-                "export",
-                "downloads",
-                ":token"
-              ]
-            },
-            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `users.export`"
-          }
-        },
-        {
-          "name": "Xem danh sách lịch sử Export người dùng (Người thực hiện, bộ lọc và số dòng)",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Accept",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{bearerToken}}"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/users/export/histories?actorId=1&format=csv&status=QUEUED&includeExpired=true&limit=20",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "users",
-                "export",
-                "histories"
-              ],
-              "query": [
-                {
-                  "key": "actorId",
-                  "value": "1"
-                },
-                {
-                  "key": "format",
-                  "value": "csv"
-                },
-                {
-                  "key": "status",
-                  "value": "QUEUED"
-                },
-                {
-                  "key": "includeExpired",
-                  "value": "true"
-                },
-                {
-                  "key": "limit",
-                  "value": "20"
-                }
-              ]
-            },
-            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `users.export`"
-          }
-        },
-        {
-          "name": "Xem chi tiết bản ghi lịch sử Export người dùng theo ID",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Accept",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{bearerToken}}"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/users/export/histories/:historyId",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "users",
-                "export",
-                "histories",
-                ":historyId"
-              ]
-            },
-            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `users.export`"
-          }
-        },
-        {
-          "name": "Xem tiến độ công việc Export người dùng chạy nền qua Queue",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Accept",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{bearerToken}}"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/users/export/jobs/:jobId/progress",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "users",
-                "export",
-                "jobs",
-                ":jobId",
-                "progress"
-              ]
-            },
-            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `users.export`"
-          }
-        },
-        {
-          "name": "Tải file mẫu (Template) Excel (.xlsx) hoặc CSV (.csv) cho chức năng Import người dùng",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Accept",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{bearerToken}}"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/users/import-template?q=q_sample&search=search_sample&status=1&roleId=1&organizationUnitId=1&managerId=1&includeArchived=true&mfaEnabled=true&createdFrom=createdFrom_sample&createdTo=createdTo_sample&fromDate=fromDate_sample&toDate=toDate_sample&fields=fields_sample&page=1&limit=20&countMode=exact&sort=sort_sample&sortBy=id&sortOrder=ASC&format=csv&title=title_sample&logoBase64=logoBase64_sample&async=true&notifyOnComplete=true&ttlSeconds=1&enforceStrictLimit=true&onlyRequestedFormat=true&stepUpToken=stepUpToken_sample&requireStepUp=true",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "users",
-                "import-template"
-              ],
-              "query": [
-                {
-                  "key": "q",
-                  "value": "q_sample"
-                },
-                {
-                  "key": "search",
-                  "value": "search_sample"
-                },
-                {
-                  "key": "status",
-                  "value": "1"
-                },
-                {
-                  "key": "roleId",
-                  "value": "1"
-                },
-                {
-                  "key": "organizationUnitId",
-                  "value": "1"
-                },
-                {
-                  "key": "managerId",
-                  "value": "1"
-                },
-                {
-                  "key": "includeArchived",
-                  "value": "true"
-                },
-                {
-                  "key": "mfaEnabled",
-                  "value": "true"
-                },
-                {
-                  "key": "createdFrom",
-                  "value": "createdFrom_sample"
-                },
-                {
-                  "key": "createdTo",
-                  "value": "createdTo_sample"
-                },
-                {
-                  "key": "fromDate",
-                  "value": "fromDate_sample"
-                },
-                {
-                  "key": "toDate",
-                  "value": "toDate_sample"
-                },
-                {
-                  "key": "fields",
-                  "value": "fields_sample"
-                },
-                {
-                  "key": "page",
-                  "value": "1"
-                },
-                {
-                  "key": "limit",
-                  "value": "20"
-                },
-                {
-                  "key": "countMode",
-                  "value": "exact"
-                },
-                {
-                  "key": "sort",
-                  "value": "sort_sample"
-                },
-                {
-                  "key": "sortBy",
-                  "value": "id"
-                },
-                {
-                  "key": "sortOrder",
-                  "value": "ASC"
-                },
-                {
-                  "key": "format",
-                  "value": "csv"
-                },
-                {
-                  "key": "title",
-                  "value": "title_sample"
-                },
-                {
-                  "key": "logoBase64",
-                  "value": "logoBase64_sample"
-                },
-                {
-                  "key": "async",
-                  "value": "true"
-                },
-                {
-                  "key": "notifyOnComplete",
-                  "value": "true"
-                },
-                {
-                  "key": "ttlSeconds",
-                  "value": "1"
-                },
-                {
-                  "key": "enforceStrictLimit",
-                  "value": "true"
-                },
-                {
-                  "key": "onlyRequestedFormat",
-                  "value": "true"
-                },
-                {
-                  "key": "stepUpToken",
-                  "value": "stepUpToken_sample"
-                },
-                {
-                  "key": "requireStepUp",
-                  "value": "true"
-                }
-              ]
-            },
-            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `users.import`"
-          }
-        },
-        {
-          "name": "Lấy danh sách các báo cáo & dashboard đã đăng ký của module người dùng (phân quyền riêng users.report)",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Accept",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{bearerToken}}"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/users/reports",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "users",
-                "reports"
-              ]
-            },
-            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `users.report`"
-          }
-        },
-        {
-          "name": "Tải file báo cáo tạm thời theo token (tự động hết hạn theo TTL cấu hình)",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Accept",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{bearerToken}}"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/users/reports/downloads/:token",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "users",
-                "reports",
-                "downloads",
-                ":token"
-              ]
-            },
-            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `users.report`"
-          }
-        },
-        {
-          "name": "Xem danh sách lịch sử chạy báo cáo (Thời gian, người chạy, nguồn đọc và kết quả)",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Accept",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{bearerToken}}"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/users/reports/histories?reportCode=reportCode_sample&actorId=1&status=QUEUED&executionMode=SYNC&limit=20",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "users",
-                "reports",
-                "histories"
-              ],
-              "query": [
-                {
-                  "key": "reportCode",
-                  "value": "reportCode_sample"
-                },
-                {
-                  "key": "actorId",
-                  "value": "1"
-                },
-                {
-                  "key": "status",
-                  "value": "QUEUED"
-                },
-                {
-                  "key": "executionMode",
-                  "value": "SYNC"
-                },
-                {
-                  "key": "limit",
-                  "value": "20"
-                }
-              ]
-            },
-            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `users.report`"
-          }
-        },
-        {
-          "name": "Xem chi tiết bản ghi lịch sử chạy báo cáo theo ID",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Accept",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{bearerToken}}"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/users/reports/histories/:historyId",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "users",
-                "reports",
-                "histories",
-                ":historyId"
-              ]
-            },
-            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `users.report`"
-          }
-        },
-        {
-          "name": "Chạy báo cáo / dashboard nhân sự (hỗ trợ lọc khoảng ngày/trạng thái/đơn vị, Queue cho báo cáo nặng, Read Replica, Cache & file tạm)",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Accept",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{bearerToken}}"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/users/reports/run",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "users",
-                "reports",
-                "run"
-              ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"reportCode\": \"users.summary_dashboard\",\n  \"fromDate\": \"fromDate_sample\",\n  \"toDate\": \"toDate_sample\",\n  \"status\": 1,\n  \"organizationUnitId\": 1,\n  \"includeSubUnits\": true,\n  \"filters\": {},\n  \"parameters\": {\n    \"fromDate\": \"fromDate_sample\",\n    \"toDate\": \"toDate_sample\",\n    \"status\": 1,\n    \"organizationUnitId\": 1,\n    \"includeSubUnits\": true,\n    \"filters\": {}\n  },\n  \"format\": \"csv\",\n  \"async\": true,\n  \"useCache\": true,\n  \"forceRefresh\": true,\n  \"preferReplica\": true,\n  \"ttlSeconds\": 1,\n  \"notifyChannels\": [\n    \"EMAIL\"\n  ],\n  \"recipientEmails\": [\n    \"user@example.com\"\n  ],\n  \"recipientUserIds\": [\n    1\n  ]\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
-            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `users.report`"
-          }
-        },
-        {
-          "name": "Xem danh sách lịch gửi báo cáo định kỳ (DAILY / WEEKLY / MONTHLY)",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Accept",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{bearerToken}}"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/users/reports/schedules?reportCode=reportCode_sample&frequency=DAILY&isActive=true",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "users",
-                "reports",
-                "schedules"
-              ],
-              "query": [
-                {
-                  "key": "reportCode",
-                  "value": "reportCode_sample"
-                },
-                {
-                  "key": "frequency",
-                  "value": "DAILY"
-                },
-                {
-                  "key": "isActive",
-                  "value": "true"
-                }
-              ]
-            },
-            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `users.report`"
-          }
-        },
-        {
-          "name": "Lên lịch gửi báo cáo nhân sự định kỳ theo ngày (DAILY), tuần (WEEKLY) hoặc tháng (MONTHLY)",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Accept",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{bearerToken}}"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/users/reports/schedules",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "users",
-                "reports",
-                "schedules"
-              ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"reportCode\": \"users.summary_dashboard\",\n  \"name\": \"name_sample\",\n  \"frequency\": \"DAILY\",\n  \"cronExpression\": \"cronExpression_sample\",\n  \"hour\": 0,\n  \"minute\": 0,\n  \"dayOfWeek\": 0,\n  \"dayOfMonth\": 1,\n  \"timezone\": \"timezone_sample\",\n  \"format\": \"xlsx\",\n  \"parameters\": {\n    \"fromDate\": \"fromDate_sample\",\n    \"toDate\": \"toDate_sample\",\n    \"status\": 1,\n    \"organizationUnitId\": 1,\n    \"includeSubUnits\": true,\n    \"filters\": {}\n  },\n  \"channels\": [\n    \"EMAIL\"\n  ],\n  \"recipientEmails\": [\n    \"user@example.com\"\n  ],\n  \"recipientUserIds\": [\n    1\n  ],\n  \"ttlSeconds\": 3600,\n  \"isActive\": true\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
-            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `users.report`"
-          }
-        },
-        {
-          "name": "Kích hoạt thực thi các lịch báo cáo đã đến hạn kèm gửi Email / thông báo chứa file tạm",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Accept",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{bearerToken}}"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/users/reports/schedules/trigger-due",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "users",
-                "reports",
-                "schedules",
-                "trigger-due"
-              ]
-            },
-            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `users.report`"
-          }
-        },
-        {
-          "name": "Tìm kiếm người dùng & thực thể liên quan qua Search Provider dùng chung (áp dụng Data Scope & theo dõi độ trễ Index)",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Accept",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{bearerToken}}"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/users/search?keyword=&module=module_sample&entityType=entityType_sample&entityCode=entityCode_sample&status=1&organizationUnitId=1&page=1&limit=20&includeStale=true",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "users",
-                "search"
-              ],
-              "query": [
-                {
-                  "key": "keyword",
-                  "value": ""
-                },
-                {
-                  "key": "module",
-                  "value": "module_sample"
-                },
-                {
-                  "key": "entityType",
-                  "value": "entityType_sample"
-                },
-                {
-                  "key": "entityCode",
-                  "value": "entityCode_sample"
-                },
-                {
-                  "key": "status",
-                  "value": "1"
-                },
-                {
-                  "key": "organizationUnitId",
-                  "value": "1"
-                },
-                {
-                  "key": "page",
-                  "value": "1"
-                },
-                {
-                  "key": "limit",
-                  "value": "20"
-                },
-                {
-                  "key": "includeStale",
-                  "value": "true"
-                }
-              ]
-            },
-            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `users.read`"
-          }
-        },
-        {
-          "name": "Xem danh sách các thực thể đã đăng ký vào Search Provider dùng chung",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Accept",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{bearerToken}}"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/users/search/entities",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "users",
-                "search",
-                "entities"
-              ]
-            },
-            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `users.read`"
-          }
-        },
-        {
-          "name": "Theo dõi độ trễ cập nhật Search Index (phát hiện kết quả tìm kiếm bị cũ)",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Accept",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{bearerToken}}"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/users/search/lag?module=module_sample&entityType=entityType_sample&entityCode=entityCode_sample&staleOnly=true&staleThresholdMs=0",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "users",
-                "search",
-                "lag"
-              ],
-              "query": [
-                {
-                  "key": "module",
-                  "value": "module_sample"
-                },
-                {
-                  "key": "entityType",
-                  "value": "entityType_sample"
-                },
-                {
-                  "key": "entityCode",
-                  "value": "entityCode_sample"
-                },
-                {
-                  "key": "staleOnly",
-                  "value": "true"
-                },
-                {
-                  "key": "staleThresholdMs",
-                  "value": "0"
-                }
-              ]
-            },
-            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `users.read`"
-          }
-        },
-        {
-          "name": "Tạo lại toàn bộ Search Index theo module hoặc loại dữ liệu (entityType)",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Accept",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{bearerToken}}"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/users/search/rebuild",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "users",
-                "search",
-                "rebuild"
-              ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"module\": \"module_sample\",\n  \"entityType\": \"entityType_sample\",\n  \"entityCode\": \"entityCode_sample\",\n  \"async\": true\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
-            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `users.update`"
-          }
-        },
-        {
-          "name": "Đồng bộ dữ liệu người dùng sang Search Index (trực tiếp hoặc chạy bằng Queue)",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Accept",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{bearerToken}}"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/users/search/sync",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "users",
-                "search",
-                "sync"
-              ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"userIds\": [\n    1\n  ],\n  \"async\": true\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
-            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `users.update`"
-          }
-        },
-        {
-          "name": "Thống kê từ khóa tìm kiếm không có kết quả (Zero-Result Keywords)",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Accept",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{bearerToken}}"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/users/search/zero-results?module=module_sample&entityType=entityType_sample&limit=20",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "users",
-                "search",
-                "zero-results"
-              ],
-              "query": [
-                {
-                  "key": "module",
-                  "value": "module_sample"
-                },
-                {
-                  "key": "entityType",
-                  "value": "entityType_sample"
-                },
-                {
-                  "key": "limit",
-                  "value": "20"
-                }
-              ]
-            },
-            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `users.read`"
-          }
-        },
-        {
           "name": "Xem chi tiết hồ sơ người dùng theo ID (kiểm tra Data Scope chống đổi ID — Mục 4.3.6)",
           "request": {
             "method": "GET",
@@ -15003,6 +15490,693 @@
               ]
             },
             "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `users.status`"
+          }
+        }
+      ]
+    },
+    {
+      "name": "workflows",
+      "item": [
+        {
+          "name": "Danh sách định nghĩa quy trình xử lý (Mục 9.3.1)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/workflows/definitions?page=1&limit=20&countMode=exact&search=search_sample&code=code_sample&targetEntityType=targetEntityType_sample&status=1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "workflows",
+                "definitions"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "countMode",
+                  "value": "exact"
+                },
+                {
+                  "key": "search",
+                  "value": "search_sample"
+                },
+                {
+                  "key": "code",
+                  "value": "code_sample"
+                },
+                {
+                  "key": "targetEntityType",
+                  "value": "targetEntityType_sample"
+                },
+                {
+                  "key": "status",
+                  "value": "1"
+                }
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `workflows.read`"
+          }
+        },
+        {
+          "name": "Tạo mới quy trình xử lý có tên, mã, phiên bản, trạng thái và điều kiện/hành động (Mục 9.3.1 – 9.3.4)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/workflows/definitions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "workflows",
+                "definitions"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"code_sample\",\n  \"version\": 1,\n  \"name\": \"name_sample\",\n  \"description\": \"description_sample\",\n  \"targetEntityType\": \"general\",\n  \"defaultSlaHours\": 24,\n  \"warningBeforeMinutes\": 120,\n  \"status\": 1,\n  \"states\": [\n    {\n      \"code\": \"code_sample\",\n      \"name\": \"name_sample\",\n      \"stateType\": \"INTERMEDIATE\",\n      \"badgeTone\": \"info\",\n      \"slaHours\": 1,\n      \"approvalConfig\": {\n        \"enabled\": false,\n        \"mode\": \"SINGLE\",\n        \"useManagerChain\": true,\n        \"maxChainLevels\": 1,\n        \"approverUserIds\": [\n          1\n        ],\n        \"approverRoleCodes\": [\n          \"approverRoleCodes_sample\"\n        ],\n        \"autoTransitionOnApprove\": \"autoTransitionOnApprove_sample\",\n        \"autoTransitionOnReject\": \"autoTransitionOnReject_sample\",\n        \"autoTransitionOnReturn\": \"autoTransitionOnReturn_sample\"\n      },\n      \"sortOrder\": 1\n    }\n  ],\n  \"transitions\": [\n    {\n      \"code\": \"code_sample\",\n      \"name\": \"name_sample\",\n      \"fromStateCode\": \"fromStateCode_sample\",\n      \"toStateCode\": \"toStateCode_sample\",\n      \"conditions\": {\n        \"requiredPermissions\": [\n          \"requiredPermissions_sample\"\n        ],\n        \"allowedRoleCodes\": [\n          \"allowedRoleCodes_sample\"\n        ],\n        \"onlyInitiator\": true,\n        \"onlyAssignedApprover\": true,\n        \"requireReason\": true,\n        \"fieldRules\": [\n          {\n            \"field\": \"field_sample\",\n            \"operator\": \"eq\",\n            \"value\": \"value_sample\"\n          }\n        ]\n      },\n      \"actions\": [\n        {\n          \"type\": \"RECORD_HISTORY\",\n          \"title\": \"title_sample\",\n          \"content\": \"content_sample\",\n          \"notifyTargets\": [\n            \"INITIATOR\"\n          ],\n          \"targetUserIds\": [\n            1\n          ],\n          \"targetRoleCodes\": [\n            \"targetRoleCodes_sample\"\n          ],\n          \"jobTopic\": \"jobTopic_sample\",\n          \"jobQueue\": \"jobQueue_sample\",\n          \"jobPayload\": {}\n        }\n      ],\n      \"sortOrder\": 1\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `workflows.manage`"
+          }
+        },
+        {
+          "name": "Xem chi tiết định nghĩa quy trình kèm các trạng thái và bước chuyển (Mục 9.3.1 – 9.3.4)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/workflows/definitions/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "workflows",
+                "definitions",
+                ":id"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `workflows.read`"
+          }
+        },
+        {
+          "name": "Cập nhật định nghĩa quy trình, trạng thái, điều kiện và hành động chuyển trạng thái",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/workflows/definitions/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "workflows",
+                "definitions",
+                ":id"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"name_sample\",\n  \"description\": \"description_sample\",\n  \"targetEntityType\": \"targetEntityType_sample\",\n  \"defaultSlaHours\": 1,\n  \"warningBeforeMinutes\": 5,\n  \"status\": 1,\n  \"states\": [\n    {\n      \"code\": \"code_sample\",\n      \"name\": \"name_sample\",\n      \"stateType\": \"INTERMEDIATE\",\n      \"badgeTone\": \"info\",\n      \"slaHours\": 1,\n      \"approvalConfig\": {\n        \"enabled\": false,\n        \"mode\": \"SINGLE\",\n        \"useManagerChain\": true,\n        \"maxChainLevels\": 1,\n        \"approverUserIds\": [\n          1\n        ],\n        \"approverRoleCodes\": [\n          \"approverRoleCodes_sample\"\n        ],\n        \"autoTransitionOnApprove\": \"autoTransitionOnApprove_sample\",\n        \"autoTransitionOnReject\": \"autoTransitionOnReject_sample\",\n        \"autoTransitionOnReturn\": \"autoTransitionOnReturn_sample\"\n      },\n      \"sortOrder\": 1\n    }\n  ],\n  \"transitions\": [\n    {\n      \"code\": \"code_sample\",\n      \"name\": \"name_sample\",\n      \"fromStateCode\": \"fromStateCode_sample\",\n      \"toStateCode\": \"toStateCode_sample\",\n      \"conditions\": {\n        \"requiredPermissions\": [\n          \"requiredPermissions_sample\"\n        ],\n        \"allowedRoleCodes\": [\n          \"allowedRoleCodes_sample\"\n        ],\n        \"onlyInitiator\": true,\n        \"onlyAssignedApprover\": true,\n        \"requireReason\": true,\n        \"fieldRules\": [\n          {\n            \"field\": \"field_sample\",\n            \"operator\": \"eq\",\n            \"value\": \"value_sample\"\n          }\n        ]\n      },\n      \"actions\": [\n        {\n          \"type\": \"RECORD_HISTORY\",\n          \"title\": \"title_sample\",\n          \"content\": \"content_sample\",\n          \"notifyTargets\": [\n            \"INITIATOR\"\n          ],\n          \"targetUserIds\": [\n            1\n          ],\n          \"targetRoleCodes\": [\n            \"targetRoleCodes_sample\"\n          ],\n          \"jobTopic\": \"jobTopic_sample\",\n          \"jobQueue\": \"jobQueue_sample\",\n          \"jobPayload\": {}\n        }\n      ],\n      \"sortOrder\": 1\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `workflows.manage`"
+          }
+        },
+        {
+          "name": "Tạo phiên bản mới (version + 1) cho định nghĩa quy trình hiện có (Mục 9.3.1)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/workflows/definitions/:id/new-version",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "workflows",
+                "definitions",
+                ":id",
+                "new-version"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `workflows.manage`"
+          }
+        },
+        {
+          "name": "Cập nhật danh sách trạng thái của quy trình (Draft, Pending, Approved, Rejected... — Mục 9.3.2)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/workflows/definitions/:id/states",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "workflows",
+                "definitions",
+                ":id",
+                "states"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"states\": [\n    {\n      \"code\": \"code_sample\",\n      \"name\": \"name_sample\",\n      \"stateType\": \"INTERMEDIATE\",\n      \"badgeTone\": \"info\",\n      \"slaHours\": 1,\n      \"approvalConfig\": {\n        \"enabled\": false,\n        \"mode\": \"SINGLE\",\n        \"useManagerChain\": true,\n        \"maxChainLevels\": 1,\n        \"approverUserIds\": [\n          1\n        ],\n        \"approverRoleCodes\": [\n          \"approverRoleCodes_sample\"\n        ],\n        \"autoTransitionOnApprove\": \"autoTransitionOnApprove_sample\",\n        \"autoTransitionOnReject\": \"autoTransitionOnReject_sample\",\n        \"autoTransitionOnReturn\": \"autoTransitionOnReturn_sample\"\n      },\n      \"sortOrder\": 1\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `workflows.manage`"
+          }
+        },
+        {
+          "name": "Cập nhật điều kiện chuyển trạng thái và hành động khi chuyển trạng thái (Mục 9.3.3 & 9.3.4)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/workflows/definitions/:id/transitions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "workflows",
+                "definitions",
+                ":id",
+                "transitions"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"transitions\": [\n    {\n      \"code\": \"code_sample\",\n      \"name\": \"name_sample\",\n      \"fromStateCode\": \"fromStateCode_sample\",\n      \"toStateCode\": \"toStateCode_sample\",\n      \"conditions\": {\n        \"requiredPermissions\": [\n          \"requiredPermissions_sample\"\n        ],\n        \"allowedRoleCodes\": [\n          \"allowedRoleCodes_sample\"\n        ],\n        \"onlyInitiator\": true,\n        \"onlyAssignedApprover\": true,\n        \"requireReason\": true,\n        \"fieldRules\": [\n          {\n            \"field\": \"field_sample\",\n            \"operator\": \"eq\",\n            \"value\": \"value_sample\"\n          }\n        ]\n      },\n      \"actions\": [\n        {\n          \"type\": \"RECORD_HISTORY\",\n          \"title\": \"title_sample\",\n          \"content\": \"content_sample\",\n          \"notifyTargets\": [\n            \"INITIATOR\"\n          ],\n          \"targetUserIds\": [\n            1\n          ],\n          \"targetRoleCodes\": [\n            \"targetRoleCodes_sample\"\n          ],\n          \"jobTopic\": \"jobTopic_sample\",\n          \"jobQueue\": \"jobQueue_sample\",\n          \"jobPayload\": {}\n        }\n      ],\n      \"sortOrder\": 1\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `workflows.manage`"
+          }
+        },
+        {
+          "name": "Danh sách các quy trình đã khởi tạo cho các bản ghi nghiệp vụ (Mục 9.3.5)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/workflows/instances?page=1&limit=20&countMode=exact&search=search_sample&workflowCode=workflowCode_sample&entityType=entityType_sample&entityId=550e8400-e29b-41d4-a716-446655440000&currentStateCode=currentStateCode_sample&status=1&isOverdue=true&initiatorUserId=1&organizationUnitId=1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "workflows",
+                "instances"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "countMode",
+                  "value": "exact"
+                },
+                {
+                  "key": "search",
+                  "value": "search_sample"
+                },
+                {
+                  "key": "workflowCode",
+                  "value": "workflowCode_sample"
+                },
+                {
+                  "key": "entityType",
+                  "value": "entityType_sample"
+                },
+                {
+                  "key": "entityId",
+                  "value": "550e8400-e29b-41d4-a716-446655440000"
+                },
+                {
+                  "key": "currentStateCode",
+                  "value": "currentStateCode_sample"
+                },
+                {
+                  "key": "status",
+                  "value": "1"
+                },
+                {
+                  "key": "isOverdue",
+                  "value": "true"
+                },
+                {
+                  "key": "initiatorUserId",
+                  "value": "1"
+                },
+                {
+                  "key": "organizationUnitId",
+                  "value": "1"
+                }
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `workflows.read`"
+          }
+        },
+        {
+          "name": "Khởi tạo quy trình xử lý cho một bản ghi nghiệp vụ (Mục 9.3.5)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/workflows/instances/start",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "workflows",
+                "instances",
+                "start"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"workflowCode\": \"workflowCode_sample\",\n  \"entityType\": \"entityType_sample\",\n  \"entityId\": \"550e8400-e29b-41d4-a716-446655440000\",\n  \"title\": \"title_sample\",\n  \"organizationUnitId\": 1,\n  \"contextData\": {},\n  \"dueHoursOverride\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `workflows.execute`"
+          }
+        },
+        {
+          "name": "Xem chi tiết quy trình của bản ghi kèm bước chuyển hợp lệ, phê duyệt và lịch sử (Mục 9.3.5 & 9.3.7)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/workflows/instances/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "workflows",
+                "instances",
+                ":id"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `workflows.read`"
+          }
+        },
+        {
+          "name": "Phê duyệt / Từ chối / Yêu cầu bổ sung tại bước hiện tại của quy trình (Mục 9.4)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/workflows/instances/:id/approve",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "workflows",
+                "instances",
+                ":id",
+                "approve"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"decision\": \"APPROVED\",\n  \"comment\": \"comment_sample\",\n  \"transitionCodeOverride\": \"transitionCodeOverride_sample\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `workflows.execute`"
+          }
+        },
+        {
+          "name": "Hủy hoặc kết thúc quy trình kèm lý do và kiểm tra quyền (Mục 9.3.6)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/workflows/instances/:id/cancel",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "workflows",
+                "instances",
+                ":id",
+                "cancel"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"reason_sample\",\n  \"action\": \"CANCEL\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `workflows.execute`"
+          }
+        },
+        {
+          "name": "Ủy quyền bước phê duyệt hiện tại cho nhân sự khác (Mục 9.4)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/workflows/instances/:id/delegate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "workflows",
+                "instances",
+                ":id",
+                "delegate"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"toUserId\": 1,\n  \"reason\": \"reason_sample\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `workflows.execute`"
+          }
+        },
+        {
+          "name": "Theo dõi lịch sử toàn bộ quy trình: ai chuyển trạng thái và khi nào (Mục 9.3.7)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/workflows/instances/:id/histories",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "workflows",
+                "instances",
+                ":id",
+                "histories"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `workflows.read`"
+          }
+        },
+        {
+          "name": "Chuyển trạng thái quy trình (kiểm tra điều kiện 9.3.3 và chạy hành động 9.3.4)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/workflows/instances/:id/transition",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "workflows",
+                "instances",
+                ":id",
+                "transition"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"transitionCode\": \"transitionCode_sample\",\n  \"reason\": \"reason_sample\",\n  \"contextDataPatch\": {}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `workflows.execute`"
+          }
+        },
+        {
+          "name": "Quét thời hạn SLA và gửi cảnh báo sắp đến hạn / quá hạn (Mục 9.3.8 — dùng cho Scheduler & Admin)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/workflows/sla/scan-overdue",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "workflows",
+                "sla",
+                "scan-overdue"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `workflows.manage`"
           }
         }
       ]

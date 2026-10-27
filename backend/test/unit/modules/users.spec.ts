@@ -1447,7 +1447,7 @@ describe('Users Module — Helpers & UsersService Unit Suite', () => {
       expect(completed.totalExported).toBe(2);
       expect(completed.downloadToken).toBeTruthy();
       expect(completed.downloadUrl).toContain(
-        `/api/v1/users/export/downloads/${completed.downloadToken}`,
+        `/api/v1/exports/downloads/${completed.downloadToken}`,
       );
       expect(completed.expiresAt).toBeTruthy();
       expect(completed.notifiedAt).toBeTruthy();
@@ -1961,7 +1961,7 @@ describe('Users Module — Helpers & UsersService Unit Suite', () => {
 
       expect(workerRes.status).toBe('COMPLETED');
       expect(workerRes.totalRecords).toBe(2);
-      expect(workerRes.downloadUrl).toContain('/api/v1/users/reports/downloads/');
+      expect(workerRes.downloadUrl).toContain('/api/v1/reports/downloads/');
       expect(workerRes.expiresAt).toBeTruthy();
     });
 
@@ -2042,7 +2042,7 @@ describe('Users Module — Helpers & UsersService Unit Suite', () => {
       expect(triggerRes.triggeredCount).toBe(3);
 
       const firstRun = triggerRes.results[0]!;
-      expect(firstRun.downloadUrl).toContain('/api/v1/users/reports/downloads/');
+      expect(firstRun.downloadUrl).toContain('/api/v1/reports/downloads/');
       expect(firstRun.expiresAt).toBeTruthy();
       expect(firstRun.notifiedChannels).toEqual(['EMAIL', 'IN_APP']);
 

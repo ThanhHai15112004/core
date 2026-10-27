@@ -27,7 +27,11 @@
     "settings",
     "files",
     "notifications",
-    "workflows"
+    "workflows",
+    "imports",
+    "exports",
+    "reports",
+    "search"
   ],
   "settings": {
     "defaultLocale": "vi",

@@ -1,0 +1,8 @@
+{
+  "profileNotFound": "Import profile configuration not found for the requested module.",
+  "invalidXlsxFile": "Invalid or corrupted Excel (.xlsx) file: {0}",
+  "importHistoryNotFound": "Import history record not found.",
+  "importJobNotFound": "Import job progress not found.",
+  "templateNotAvailable": "Import template is not configured for this profile."
+}
+

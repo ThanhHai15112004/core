@@ -1,14 +1,12 @@
 import { Inject, Injectable, Optional } from '@nestjs/common';
 import {
-  BadRequestAppException,
   ImportRegistryService,
   NotFoundAppException,
   SettingRegistryService,
   buildImportPreviewResult,
   defaultImportRegistry,
   defaultSettingRegistry,
-  parseCsvToMatrix,
-  parseXlsxToMatrix,
+  parseDeclarativeImportPayload,
   resolveImportDuplicateStrategy,
   validateImportRowsAndCells,
   type ExistingDuplicateMatch,
@@ -44,12 +42,7 @@ import type {
   BulkImportUsersErrorItem,
   BulkImportUsersResultResponse,
 } from '../responses/users.response.js';
-import {
-  USER_IMPORT_COLUMNS,
-  extractUserImportMatrixData,
-  mapMatrixToImportRows,
-  parseCsvToImportRows,
-} from './user-import.parser.js';
+import { USER_IMPORT_COLUMNS, mapExtractedUserImportRow } from './user-import.parser.js';
 
 const DEFAULT_BULK_PASSWORD = 'Abcd@454647#';
 const USERS_IMPORT_PROFILE_CODE = 'users';
@@ -237,74 +230,19 @@ export class UserImportService {
     return matches;
   }
 
-  /** Giải mã dữ liệu đầu vào (.xlsx base64, CSV hoặc mảng JSON) thành danh sách dòng import */
+  /** Giải mã dữ liệu đầu vào (.xlsx base64, CSV hoặc mảng JSON) thành danh sách dòng import qua Declarative Import Engine */
   public parseImportRows(dto: BulkImportUsersRequest): BulkImportUserRowInput[] {
-    if (dto.xlsxBase64) {
-      try {
-        const matrix = parseXlsxToMatrix(dto.xlsxBase64);
-        return mapMatrixToImportRows(matrix, dto.columnMapping);
-      } catch (err: unknown) {
-        throw new BadRequestAppException('users.invalidXlsxFile', [
-          err instanceof Error ? err.message : 'Unable to parse .xlsx file',
-        ]);
-      }
-    }
-    if (dto.csvContent) {
-      return parseCsvToImportRows(dto.csvContent, dto.columnMapping);
-    }
-    return dto.items ?? [];
+    return this.parseImportDataWithMatrixContext(dto).rows;
   }
 
   /** Phân tích dữ liệu kèm thông tin ánh xạ cột (`mapping`) và toạ độ dòng/ô (`extractedRows`) */
   private parseImportDataWithMatrixContext(dto: BulkImportUsersRequest) {
-    if (dto.xlsxBase64) {
-      try {
-        const matrix = parseXlsxToMatrix(dto.xlsxBase64);
-        return {
-          format: 'xlsx' as const,
-          ...extractUserImportMatrixData(matrix, dto.columnMapping),
-        };
-      } catch (err: unknown) {
-        throw new BadRequestAppException('users.invalidXlsxFile', [
-          err instanceof Error ? err.message : 'Unable to parse .xlsx file',
-        ]);
-      }
-    }
-    if (dto.csvContent) {
-      const matrix = parseCsvToMatrix(dto.csvContent);
-      return {
-        format: 'csv' as const,
-        ...extractUserImportMatrixData(matrix, dto.columnMapping),
-      };
-    }
-
-    const items = dto.items ?? [];
-    const headerRow = USER_IMPORT_COLUMNS.map((c) => c.header);
-    const syntheticMatrix: string[][] = [headerRow];
-    const extractedRows = items.map((item, idx) => ({
-      row: idx + 1,
-      sheetRowNumber: idx + 2,
-      rawByField: {
-        username: item.username ?? '',
-        email: item.email ?? '',
-        firstName: item.firstName ?? '',
-        lastName: item.lastName ?? '',
-        fullName: item.fullName ?? '',
-        phone: item.phone ?? '',
-        password: item.password ?? '',
-        status: String(item.status ?? USER_STATUS.ACTIVE),
-        positionTitle: item.positionTitle ?? '',
-        roleCodes: (item.roleCodes ?? []).join('|'),
-        organizationCodes: (item.organizationCodes ?? []).join('|'),
-      },
-    }));
-    const { mapping } = extractUserImportMatrixData(syntheticMatrix, dto.columnMapping);
-    return {
-      format: 'json' as const,
-      mapping,
-      extractedRows,
-      rows: items,
-    };
+    return parseDeclarativeImportPayload({
+      dto,
+      columns: USER_IMPORT_COLUMNS,
+      mapRawRow: mapExtractedUserImportRow,
+      invalidXlsxErrorKey: 'users.invalidXlsxFile',
+    });
   }
 
   /**

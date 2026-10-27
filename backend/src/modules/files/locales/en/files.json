@@ -36,5 +36,10 @@
   "error.fileInQuarantine": "File has been quarantined due to suspected malware or security violation",
   "error.duplicateFileDetected": "Uploaded file is a duplicate (matches SHA-256 checksum of file #{{duplicateFileId}})",
   "error.checksumTampered": "Security alert: Physical file content has been altered and no longer matches its original SHA-256 checksum",
-  "error.publicAccessDenied": "This file is not publicly accessible (only applicable to files with PUBLIC visibility)"
+  "error.publicAccessDenied": "This file is not publicly accessible (only applicable to files with PUBLIC visibility)",
+  "error.uploadSessionNotFound": "Chunked upload session was not found",
+  "error.chunkTooLarge": "Uploaded chunk size exceeds the maximum allowed limit",
+  "error.invalidChunkIndex": "Uploaded chunk index is invalid",
+  "error.chunkSizeExceedsDeclaredTotal": "Total uploaded chunk size exceeds the declared file size",
+  "error.incompleteChunkedUpload": "Chunked upload session has not received all required chunks yet"
 }

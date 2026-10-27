@@ -1,0 +1,52 @@
+{
+  "$schema": "../../packages/kernel/schemas/module.manifest.schema.json",
+  "name": "imports",
+  "displayName": "Data Import Engine & History Management",
+  "version": "1.0.0",
+  "description": "Module nền tảng quản lý Nhập dữ liệu (Import — Mục 8.2) dùng chung cho toàn hệ thống: hỗ trợ Excel (.xlsx) & CSV, tải file mẫu, ánh xạ cột động (columnMapping), xem trước dữ liệu (Preview/Dry-run), kiểm tra lỗi theo từng dòng/cột, xử lý trùng (SKIP/UPDATE/REJECT), chạy nền qua Queue, theo dõi tiến độ và lưu lịch sử Import vào Database.",
+  "type": "core",
+  "category": "core",
+  "author": "Core Platform Team",
+  "entryModule": "ImportsModule",
+  "dependencies": ["database", "security", "i18n", "users", "roles", "organizations", "codes", "settings"],
+  "permissions": [
+    "imports.read",
+    "imports.execute",
+    "imports.manage"
+  ],
+  "events": {
+    "published": [
+      "imports.job_queued",
+      "imports.job_completed",
+      "imports.job_failed"
+    ],
+    "subscribed": []
+  },
+  "database": {
+    "hasMigrations": true,
+    "tables": [
+      "import_histories"
+    ]
+  },
+  "settings": [
+    {
+      "key": "imports.max_rows_per_batch",
+      "group": "imports",
+      "name": "Số dòng tối đa mỗi lần Import",
+      "description": "Giới hạn số lượng dòng dữ liệu tối đa cho phép trong một tệp Import (.xlsx / .csv)",
+      "valueType": "NUMBER",
+      "defaultValue": 10000,
+      "isPublic": false
+    },
+    {
+      "key": "imports.preview_sample_limit",
+      "group": "imports",
+      "name": "Số dòng mẫu khi xem trước (Preview)",
+      "description": "Số lượng dòng mẫu hiển thị tối đa khi gọi API xem trước dữ liệu trước khi nhập",
+      "valueType": "NUMBER",
+      "defaultValue": 20,
+      "isPublic": true
+    }
+  ]
+}
+

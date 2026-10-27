@@ -1,0 +1,8 @@
+{
+  "entityNotFound": "Không tìm thấy cấu hình thực thể tìm kiếm theo mã yêu cầu.",
+  "searchFailed": "Không thể thực hiện truy vấn tìm kiếm toàn hệ thống.",
+  "syncHistoryNotFound": "Không tìm thấy bản ghi lịch sử đồng bộ Search Index.",
+  "zeroResultNotFound": "Không tìm thấy từ khóa thống kê 0 kết quả theo yêu cầu."
+}
+
+

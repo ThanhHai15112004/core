@@ -36,5 +36,10 @@
   "error.fileInQuarantine": "Tệp tin đã bị cách ly do nghi ngờ chứa mã độc hoặc vi phạm an toàn",
   "error.duplicateFileDetected": "Tệp tin tải lên bị trùng lặp hoàn toàn (trùng mã băm SHA-256 với tệp #{{duplicateFileId}})",
   "error.checksumTampered": "Cảnh báo an toàn: Nội dung vật lý của tệp đã bị thay đổi so với mã băm SHA-256 ban đầu",
-  "error.publicAccessDenied": "Tệp tin này không được phép truy cập công khai (chỉ áp dụng cho tệp có mức hiển thị PUBLIC)"
+  "error.publicAccessDenied": "Tệp tin này không được phép truy cập công khai (chỉ áp dụng cho tệp có mức hiển thị PUBLIC)",
+  "error.uploadSessionNotFound": "Không tìm thấy phiên tải tệp phân mảnh (chunked upload session)",
+  "error.chunkTooLarge": "Dung lượng mảnh tải lên (chunk) vượt quá giới hạn tối đa cho phép",
+  "error.invalidChunkIndex": "Thứ tự mảnh tải lên (chunk index) không hợp lệ",
+  "error.chunkSizeExceedsDeclaredTotal": "Tổng dung lượng các mảnh tải lên vượt quá dung lượng tệp đã khai báo",
+  "error.incompleteChunkedUpload": "Phiên tải tệp phân mảnh chưa nhận đủ tất cả các mảnh dữ liệu"
 }

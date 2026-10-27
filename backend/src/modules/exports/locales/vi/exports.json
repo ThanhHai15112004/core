@@ -1,0 +1,8 @@
+{
+  "profileNotFound": "Không tìm thấy cấu hình Export cho phân hệ yêu cầu.",
+  "exportHistoryNotFound": "Không tìm thấy bản ghi lịch sử Export.",
+  "exportJobNotFound": "Không tìm thấy tiến độ công việc Export.",
+  "exportFileExpired": "Đường dẫn tải tệp Export tạm thời không tồn tại hoặc đã hết hạn.",
+  "export.maxRowsExceeded": "Số lượng bản ghi yêu cầu xuất vượt quá giới hạn tối đa được phép.",
+  "export.pdfAdapterNotConfigured": "Bộ chuyển đổi xuất PDF chưa được cấu hình trên hệ thống."
+}

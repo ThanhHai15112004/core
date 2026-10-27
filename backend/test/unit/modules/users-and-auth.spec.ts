@@ -2393,7 +2393,7 @@ describe('Unit: Quản lý Người dùng (3.1) & Xác thực / Phiên / MFA (3)
     expect(verifiedPayload2).not.toBeNull();
     const resolvedIdentity2 = await h.identityResolver.resolveIdentity(verifiedPayload2, {
       ipAddress: '203.0.113.50',
-      endpoint: '/api/v1/users/export',
+      endpoint: '/api/v1/exports/users',
       method: 'GET',
     });
     expect(resolvedIdentity2).not.toBeNull();

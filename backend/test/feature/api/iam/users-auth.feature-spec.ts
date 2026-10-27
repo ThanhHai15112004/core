@@ -1413,7 +1413,7 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
       failedCount: number;
     }>({
       method: 'POST',
-      url: '/api/v1/users/bulk-import',
+      url: '/api/v1/imports/users',
       headers: authHeaders,
       payload: {
         csvContent,
@@ -1429,7 +1429,7 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
       totalExported: number;
     }>({
       method: 'GET',
-      url: '/api/v1/users/export',
+      url: '/api/v1/exports/users',
       headers: authHeaders,
     });
     expect(exportRes.status).toBe(HTTP_STATUS_CODE.OK);
@@ -2130,10 +2130,10 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
     });
     expect(clientReadUsersRes.status).toBe(HTTP_STATUS_CODE.OK);
 
-    // Client does NOT have 'users.export' -> GET /api/v1/users/export is forbidden (403)
+    // Client does NOT have 'users.export' -> GET /api/v1/exports/users is forbidden (403)
     const clientExportForbiddenRes = await context.injectJson({
       method: 'GET',
-      url: '/api/v1/users/export',
+      url: '/api/v1/exports/users',
       remoteAddress: '10.50.12.34',
       headers: { authorization: `Bearer ${clientAccessToken1}` },
     });
@@ -2213,7 +2213,7 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
 
     const clientExportAllowedRes = await context.injectJson({
       method: 'GET',
-      url: '/api/v1/users/export',
+      url: '/api/v1/exports/users',
       remoteAddress: '10.50.12.34',
       headers: { authorization: `Bearer ${clientAccessToken2}` },
     });
@@ -2736,7 +2736,7 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
     platformSecurity.setLargeExportThreshold(1);
     const exportRes = await context.injectJson<{ totalExported: number }>({
       method: 'GET',
-      url: '/api/v1/users/export?format=csv',
+      url: '/api/v1/exports/users?format=csv',
       headers: { authorization: `Bearer ${sec45Token}` },
     });
     expect(exportRes.status).toBe(HTTP_STATUS_CODE.OK);

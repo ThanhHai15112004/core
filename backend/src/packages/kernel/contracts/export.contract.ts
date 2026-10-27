@@ -296,3 +296,40 @@ export interface ExportQueueWorkerExecutor {
   readonly topic?: string | undefined;
   executeExport(input: ExportQueueWorkerExecutionInput): Promise<ExportQueueWorkerExecutionResult>;
 }
+
+/**
+ * Định nghĩa một cột xuất dữ liệu theo hướng khai báo (Declarative Export Column — Mục 8.3).
+ * Cho phép mỗi module chỉ cần khai báo 1 mảng cột duy nhất (tiêu đề, độ rộng, căn giữa, ép kiểu text, hàm lấy giá trị)
+ * mà không cần tách rời nhiều mảng `HEADERS`, `WIDTHS`, `CENTER_COLUMNS`, `TEXT_COLUMNS` hay đếm chỉ số cột thủ công.
+ */
+export interface DeclarativeExportColumn<TItem = unknown, TContext = unknown> {
+  /** Mã trường nội bộ (tùy chọn, phục vụ định danh hoặc chọn cột) */
+  readonly field?: string | undefined;
+  /** Tiêu đề cột hiển thị trên file Excel / CSV / PDF */
+  readonly header: string;
+  /** Độ rộng cột khi xuất Excel / PDF (mặc định `18`) */
+  readonly width?: number | undefined;
+  /** Căn giữa giá trị ô trong bảng Excel / PDF */
+  readonly isCenter?: boolean | undefined;
+  /** Ép định dạng Text `'@'` trên Excel để giữ số `0` ở đầu (ví dụ: SĐT, Mã nhân viên, Mã đơn vị) */
+  readonly isText?: boolean | undefined;
+  /** Hàm trích xuất giá trị của ô từ bản ghi `item`, vị trí `index` (0-based) và `context` */
+  readonly value: (
+    item: TItem,
+    index: number,
+    context: TContext,
+  ) => string | number | null | undefined;
+}
+
+/**
+ * Kết quả biên dịch mảng `DeclarativeExportColumn` thành bộ metadata cột chuẩn & hàm ánh xạ dòng.
+ */
+export interface CompiledDeclarativeExportSchema<TItem = unknown, TContext = unknown> {
+  readonly columns: readonly DeclarativeExportColumn<TItem, TContext>[];
+  readonly headers: readonly string[];
+  readonly columnWidths: readonly number[];
+  readonly centerColumnIndices: readonly number[];
+  readonly textColumnIndices: readonly number[];
+  mapItemToRow(item: TItem, index: number, context: TContext): Array<string | number>;
+  mapItemsToRows(items: readonly TItem[], context: TContext): Array<Array<string | number>>;
+}

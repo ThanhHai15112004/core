@@ -4,6 +4,7 @@ import {
   ForbiddenAppException,
   NotFoundAppException,
   type PaginatedResult,
+  defaultSearchRegistry,
   defaultSettingRegistry,
   resolvePagination,
 } from '@packages/kernel/index.js';
@@ -585,6 +586,7 @@ export class UsersService implements IUsersPublicService {
       },
       reason: 'Initial account creation',
     });
+    await this.syncUserSearchDocumentSafe(result, actorId);
     return result;
   }
 
@@ -700,6 +702,7 @@ export class UsersService implements IUsersPublicService {
         fullName: updated.fullName,
       },
     });
+    await this.syncUserSearchDocumentSafe(updated, actorId ?? actor?.id);
     return updated;
   }
 
@@ -855,7 +858,7 @@ export class UsersService implements IUsersPublicService {
     actorId?: number,
     actor?: UserIdentity,
   ): Promise<UserResponse> {
-    return executeAssignUserRolesFlow({
+    const updated = await executeAssignUserRolesFlow({
       id,
       dto,
       actorId,
@@ -871,6 +874,8 @@ export class UsersService implements IUsersPublicService {
       auditLogService: this.auditLogService,
       platformSecurityService: this.platformSecurityService,
     });
+    await this.syncUserSearchDocumentSafe(updated, actorId ?? actor?.id);
+    return updated;
   }
 
   public async assignOrganizations(
@@ -879,7 +884,7 @@ export class UsersService implements IUsersPublicService {
     actorId?: number,
     actor?: UserIdentity,
   ): Promise<UserResponse> {
-    return executeAssignUserOrganizationsFlow({
+    const updated = await executeAssignUserOrganizationsFlow({
       id,
       dto,
       actorId,
@@ -894,6 +899,8 @@ export class UsersService implements IUsersPublicService {
       getById: (uid) => this.getById(uid),
       auditLogService: this.auditLogService,
     });
+    await this.syncUserSearchDocumentSafe(updated, actorId ?? actor?.id);
+    return updated;
   }
 
   public async findAuthUserByIdentifier(
@@ -1231,7 +1238,7 @@ export class UsersService implements IUsersPublicService {
     archiveTimestamp?: Date | null | undefined;
     resetFailedAttempts?: boolean | undefined;
   }): Promise<UserResponse> {
-    return executeUserStatusTransition({
+    const result = await executeUserStatusTransition({
       ...params,
       userRepository: this.userRepository,
       ensureAccessUserRecord: (u, act, action) => this.ensureAccessUserEntity(u, act, action),
@@ -1240,6 +1247,69 @@ export class UsersService implements IUsersPublicService {
       getById: (uid, inc) => this.getById(uid, inc),
       auditLogService: this.auditLogService,
     });
+    if (params.toStatus === USER_STATUS.ARCHIVED) {
+      await defaultSearchRegistry.removeDocuments('users.account', [result.id]).catch(() => null);
+    } else {
+      await this.syncUserSearchDocumentSafe(result, params.actorId ?? params.actor?.id);
+    }
+    return result;
+  }
+
+  private async syncUserSearchDocumentSafe(user: UserResponse, actorId?: number): Promise<void> {
+    try {
+      const primaryOrg =
+        user.organizationUnits?.find((u) => u.isPrimary) ?? user.organizationUnits?.[0];
+      const orgId = primaryOrg?.organizationUnitId ?? user.primaryOrganizationUnitId ?? null;
+      const roleCodes = (user.roles ?? []).map((r) => r.code);
+      await defaultSearchRegistry.syncDocuments(
+        [
+          {
+            id: user.id,
+            entityCode: 'users.account',
+            module: 'users',
+            entityType: 'user',
+            title: user.fullName || user.username,
+            subtitle: user.email,
+            keywords: [
+              user.username,
+              user.email,
+              ...(user.employeeCode ? [user.employeeCode] : []),
+              ...(user.phone ? [user.phone] : []),
+              ...roleCodes,
+            ],
+            searchableText: [
+              user.fullName,
+              user.username,
+              user.email,
+              user.employeeCode ?? '',
+              user.phone ?? '',
+              primaryOrg?.name ?? '',
+            ]
+              .filter(Boolean)
+              .join(' '),
+            ownerId: user.id,
+            organizationUnitId: orgId,
+            status: user.status,
+            metadata: {
+              username: user.username,
+              email: user.email,
+              employeeCode: user.employeeCode ?? null,
+              phone: user.phone ?? null,
+              roles: roleCodes,
+              organizationUnitId: orgId,
+            },
+            sourceUpdatedAt: user.updatedAt ?? user.createdAt,
+            indexedAt: new Date().toISOString(),
+          },
+        ],
+        {
+          actorId: actorId ?? null,
+          executionMode: 'SYNC',
+        },
+      );
+    } catch {
+      // Ignore search index sync errors during user CRUD
+    }
   }
 
   public async setMfaEnabled(userId: number, enabled: boolean): Promise<void> {

@@ -1,0 +1,17 @@
+{
+  "definitionNotFound": "Workflow definition not found.",
+  "duplicateCodeAndVersion": "Workflow code and version already exist.",
+  "instanceNotFound": "Workflow instance not found.",
+  "activeDefinitionNotFound": "Active workflow definition not found for the requested code.",
+  "noInitialStateConfigured": "Workflow has no initial state configured.",
+  "instanceNotRunning": "Workflow instance is not currently running.",
+  "invalidTransitionFromCurrentState": "Invalid state transition from the current state.",
+  "transitionConditionNotMet": "Workflow transition condition is not met.",
+  "notAssignedApproverForStep": "You are not an assigned approver for this approval step.",
+  "noPendingApprovalStepToDelegate": "There is no pending approval step to delegate.",
+  "instanceAlreadyFinished": "Workflow instance has already finished.",
+  "cancelPermissionDenied": "You do not have permission to cancel this workflow instance.",
+  "statesCannotBeEmpty": "Workflow states list cannot be empty.",
+  "transitionReferencesUnknownState": "Workflow transition references an unknown state code."
+}
+

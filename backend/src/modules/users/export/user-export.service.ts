@@ -5,7 +5,7 @@ import {
   ExportRegistryService,
   NotFoundAppException,
   SettingRegistryService,
-  buildExportFileArtifact,
+  buildDeclarativeExportArtifact,
   buildImportTemplateFile,
   defaultExportRegistry,
   defaultSettingRegistry,
@@ -40,17 +40,9 @@ import type { ListUserExportHistoriesQuery, ListUsersQuery } from '../requests/u
 import type { ExportUsersCsvResponse } from '../responses/users.response.js';
 import {
   DEFAULT_USER_EXPORT_REPORT_TITLE,
-  USER_EXPORT_CENTER_COLUMNS,
-  USER_EXPORT_COLUMN_WIDTHS,
-  USER_EXPORT_HEADERS,
-  USER_EXPORT_TEXT_COLUMNS,
-  USER_IMPORT_TEMPLATE_CENTER_COLUMNS,
-  USER_IMPORT_TEMPLATE_COLUMN_WIDTHS,
-  USER_IMPORT_TEMPLATE_HEADERS,
-  USER_IMPORT_TEMPLATE_SAMPLE_ROWS,
-  USER_IMPORT_TEMPLATE_TEXT_COLUMNS,
+  USER_EXPORT_COLUMNS,
+  USER_IMPORT_TEMPLATE_COLUMNS,
   formatVietnameseDateTime,
-  mapUserToExportRow,
 } from './user-export.formatter.js';
 
 const MAX_EXPORT_ROWS = 5_000;
@@ -371,35 +363,18 @@ export class UserExportService {
     const reportTitle = query.title?.trim() || defaultReportTitle;
     const exportedAtSubtitle = `Ngày xuất dữ liệu: ${formatVietnameseDateTime(new Date(), effectiveTimezone)}`;
 
-    const matrixRows: Array<Array<string | number>> = [];
-    for (let i = 0; i < hydrated.length; i++) {
-      const user = hydrated[i]!;
-      matrixRows.push(mapUserToExportRow(user, i, { timeZone: effectiveTimezone }));
-    }
-
-    // 8.3.1, 8.3.2 & 8.3.3 — Kết xuất file Excel / CSV / PDF (qua Adapter)
-    const builtFile = await buildExportFileArtifact({
+    // 8.3.1, 8.3.2 & 8.3.3 — Kết xuất file Excel / CSV / PDF qua Declarative Export Engine
+    const builtFile = await buildDeclarativeExportArtifact({
       fileBaseName,
       format,
-      headers: USER_EXPORT_HEADERS,
-      rows: matrixRows,
-      xlsxOptions: {
-        sheetName: 'Sheet1',
-        title: reportTitle,
-        subtitle: exportedAtSubtitle,
-        logoPng: query.logoBase64 ?? null,
-        columnWidths: USER_EXPORT_COLUMN_WIDTHS,
-        centerColumnIndices: USER_EXPORT_CENTER_COLUMNS,
-        textColumnIndices: USER_EXPORT_TEXT_COLUMNS,
-        freezeHeader: true,
-      },
-      pdfOptions: {
-        title: reportTitle,
-        subtitle: exportedAtSubtitle,
-        columnWidths: USER_EXPORT_COLUMN_WIDTHS,
-        centerColumnIndices: USER_EXPORT_CENTER_COLUMNS,
-        landscape: true,
-      },
+      columns: USER_EXPORT_COLUMNS,
+      items: hydrated,
+      context: { timeZone: effectiveTimezone },
+      sheetName: 'Sheet1',
+      title: reportTitle,
+      subtitle: exportedAtSubtitle,
+      logoPng: query.logoBase64 ?? null,
+      landscape: true,
       pdfAdapter: this.exportRegistry.getPdfAdapter(),
       onlyRequestedFormat: query.onlyRequestedFormat === true,
     });
@@ -425,7 +400,7 @@ export class UserExportService {
       historyId: historyRecord.id,
       jobId: options?.jobId ?? historyRecord.jobId,
       ttlSeconds,
-      baseDownloadPath: '/api/v1/users/export/downloads',
+      baseDownloadPath: '/api/v1/exports/downloads',
     });
 
     // 8.3.7 — Ghi nhận hoàn tất Lịch sử Export (Người thực hiện, bộ lọc và số dòng)
@@ -724,17 +699,13 @@ export class UserExportService {
 
   /**
    * Xuất file mẫu (Template) Excel (.xlsx) & CSV phục vụ nhập người dùng hàng loạt (Mục 3.1.7 & 8.2.1/8.2.2).
-   * - Dùng chung `buildImportTemplateFile` từ `@packages/kernel`
+   * - Chỉ cần truyền `columns: USER_IMPORT_TEMPLATE_COLUMNS` (Declarative Template Engine)
    */
   public exportImportTemplate(format: 'csv' | 'xlsx' = 'xlsx'): ExportUsersCsvResponse {
     return buildImportTemplateFile({
       fileBaseName: 'mau_import_nhan_vien',
       format,
-      headers: USER_IMPORT_TEMPLATE_HEADERS,
-      sampleRows: USER_IMPORT_TEMPLATE_SAMPLE_ROWS,
-      columnWidths: USER_IMPORT_TEMPLATE_COLUMN_WIDTHS,
-      centerColumnIndices: USER_IMPORT_TEMPLATE_CENTER_COLUMNS,
-      textColumnIndices: USER_IMPORT_TEMPLATE_TEXT_COLUMNS,
+      columns: USER_IMPORT_TEMPLATE_COLUMNS,
     });
   }
 }

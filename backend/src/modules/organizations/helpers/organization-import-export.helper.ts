@@ -1,12 +1,11 @@
 import {
-  BadRequestAppException,
-  buildCsvContent,
-  buildXlsxBuffer,
+  type DeclarativeExportColumn,
+  type ImportColumnDefinition,
+  buildDeclarativeSpreadsheetExport,
+  buildImportTemplateFile,
   cleanSpreadsheetCell,
-  createSpreadsheetColumnFinder,
-  detectSpreadsheetHeaderRowIndex,
-  parseCsvToMatrix,
-  parseXlsxToMatrix,
+  extractDeclarativeImportMatrixData,
+  parseDeclarativeImportPayload,
 } from '@packages/kernel/index.js';
 import { LocaleContext, LocaleFormatter } from '@packages/i18n/index.js';
 import {
@@ -38,137 +37,168 @@ import type {
 } from '../responses/organizations.response.js';
 
 /**
- * Chuyển ma trận bảng tính (Excel/CSV) thành danh sách dòng nhập đơn vị tổ chức.
+ * Khai báo cột Import Cây tổ chức tập trung 1 chỗ duy nhất (Declarative Import Schema — Mục 8.2).
+ */
+export const ORGANIZATION_IMPORT_COLUMNS: readonly ImportColumnDefinition[] = [
+  {
+    field: 'code',
+    header: ORGANIZATION_IMPORT_TEMPLATE_HEADERS[0],
+    required: true,
+    width: 18,
+    isText: true,
+    aliases: ['mã đơn vị', 'ma don vi', 'code', 'unit_code', 'unitcode'],
+    sampleValues: ['HQ_VN', 'BRANCH_DANANG', 'DEPT_RND_DN', 'TEAM_AI_DN'],
+  },
+  {
+    field: 'name',
+    header: ORGANIZATION_IMPORT_TEMPLATE_HEADERS[1],
+    required: true,
+    width: 30,
+    aliases: [
+      'tên đơn vị / phòng ban',
+      'tên đơn vị',
+      'ten don vi',
+      'name',
+      'unit_name',
+      'unitname',
+      'tên hiển thị',
+    ],
+    sampleValues: [
+      'Trụ sở chính Việt Nam',
+      'Chi nhánh Đà Nẵng',
+      'Phòng Nghiên cứu & Phát triển Đà Nẵng',
+      'Nhóm Trí tuệ Nhân tạo (AI Lab)',
+    ],
+  },
+  {
+    field: 'type',
+    header: ORGANIZATION_IMPORT_TEMPLATE_HEADERS[2],
+    width: 22,
+    isCenter: true,
+    aliases: ['loại đơn vị', 'loai don vi', 'type', 'unit_type', 'unittype', 'cấp bậc'],
+    sampleValues: ['HEADQUARTERS', 'BRANCH', 'DEPARTMENT', 'TEAM'],
+  },
+  {
+    field: 'parentCode',
+    header: ORGANIZATION_IMPORT_TEMPLATE_HEADERS[3],
+    width: 24,
+    isText: true,
+    aliases: [
+      'mã đơn vị cấp trên',
+      'ma don vi cap tren',
+      'mã đơn vị cha',
+      'ma don vi cha',
+      'parent_code',
+      'parentcode',
+      'parent',
+    ],
+    sampleValues: ['', 'HQ_VN', 'BRANCH_DANANG', 'DEPT_RND_DN'],
+  },
+  {
+    field: 'manager',
+    header: ORGANIZATION_IMPORT_TEMPLATE_HEADERS[4],
+    width: 28,
+    isText: true,
+    aliases: [
+      'người phụ trách',
+      'nguoi phu trach',
+      'id người phụ trách',
+      'manager_id',
+      'managerid',
+      'manager',
+      'trưởng đơn vị',
+    ],
+    sampleValues: ['superadmin', 'director_hcm', 'manager_eng', 'manager_eng'],
+  },
+  {
+    field: 'status',
+    header: ORGANIZATION_IMPORT_TEMPLATE_HEADERS[5],
+    width: 24,
+    isCenter: true,
+    aliases: ['trạng thái', 'trang thai', 'status'],
+    sampleValues: ['ACTIVE', 'ACTIVE', 'ACTIVE', 'ACTIVE'],
+  },
+  {
+    field: 'description',
+    header: ORGANIZATION_IMPORT_TEMPLATE_HEADERS[6],
+    width: 34,
+    aliases: ['mô tả chức năng / địa chỉ', 'mô tả', 'mo ta', 'description', 'ghi chú', 'địa chỉ'],
+    sampleValues: [
+      'Trụ sở điều hành trung tâm',
+      'Chi nhánh khu vực Miền Trung',
+      'Phòng R&D trực thuộc Chi nhánh Đà Nẵng',
+      'Đội chuyên môn AI trực thuộc Phòng R&D',
+    ],
+  },
+] as const;
+
+export function mapExtractedOrganizationImportRow(
+  rawByField: Readonly<Record<string, string>>,
+): BulkImportOrganizationRowInput | null {
+  const rawCode = cleanSpreadsheetCell(rawByField['code'] ?? '').toUpperCase();
+  const rawName = cleanSpreadsheetCell(rawByField['name'] ?? '');
+  if (!rawCode && !rawName) return null;
+
+  const rawType = cleanSpreadsheetCell(rawByField['type'] ?? '');
+  const type = rawType ? parseOrgUnitType(rawType) : ORG_UNIT_TYPE.BRANCH;
+
+  const rawParentCode = cleanSpreadsheetCell(rawByField['parentCode'] ?? '').toUpperCase();
+  const parentCode =
+    rawParentCode && rawParentCode !== 'ROOT' && rawParentCode !== 'NULL' ? rawParentCode : null;
+
+  const rawManager = cleanSpreadsheetCell(rawByField['manager'] ?? '');
+  let managerId: number | null = null;
+  let managerIdentifier: string | null = null;
+  if (rawManager) {
+    const numericManager = Number(rawManager);
+    if (Number.isInteger(numericManager) && numericManager > 0) {
+      managerId = numericManager;
+    } else {
+      managerIdentifier = rawManager;
+    }
+  }
+
+  const rawStatus = cleanSpreadsheetCell(rawByField['status'] ?? '');
+  const status = rawStatus ? parseOrgUnitStatus(rawStatus) : ORG_UNIT_STATUS.ACTIVE;
+  const description = cleanSpreadsheetCell(rawByField['description'] ?? '') || null;
+
+  return {
+    code: rawCode,
+    name: rawName,
+    type,
+    parentCode,
+    managerId,
+    managerIdentifier,
+    status,
+    description,
+  };
+}
+
+/**
+ * Chuyển ma trận bảng tính (Excel/CSV) thành danh sách dòng nhập đơn vị tổ chức qua Declarative Import Engine.
  */
 export function mapMatrixToOrganizationImportRows(
   matrix: ReadonlyArray<ReadonlyArray<string>>,
 ): BulkImportOrganizationRowInput[] {
-  if (matrix.length < 2) return [];
-
-  const headerRowIdx = detectSpreadsheetHeaderRowIndex(matrix, [
-    'mã đơn vị',
-    'ma don vi',
-    'code',
-    'unit_code',
-    'tên đơn vị',
-    'ten don vi',
-    'name',
-    'mã đơn vị cấp trên',
-    'parent_code',
-    'parentcode',
-  ]);
-
-  if (headerRowIdx >= matrix.length - 1) return [];
-  const idxOf = createSpreadsheetColumnFinder(matrix[headerRowIdx]!);
-
-  const codeIdx = idxOf(['mã đơn vị', 'ma don vi', 'code', 'unit_code', 'unitcode']);
-  const nameIdx = idxOf([
-    'tên đơn vị / phòng ban',
-    'tên đơn vị',
-    'ten don vi',
-    'name',
-    'unit_name',
-    'unitname',
-    'tên hiển thị',
-  ]);
-  const typeIdx = idxOf(['loại đơn vị', 'loai don vi', 'type', 'unit_type', 'unittype', 'cấp bậc']);
-  const parentCodeIdx = idxOf([
-    'mã đơn vị cấp trên',
-    'ma don vi cap tren',
-    'mã đơn vị cha',
-    'ma don vi cha',
-    'parent_code',
-    'parentcode',
-    'parent',
-  ]);
-  const managerIdx = idxOf([
-    'người phụ trách',
-    'nguoi phu trach',
-    'id người phụ trách',
-    'manager_id',
-    'managerid',
-    'manager',
-    'trưởng đơn vị',
-  ]);
-  const statusIdx = idxOf(['trạng thái', 'trang thai', 'status']);
-  const descIdx = idxOf([
-    'mô tả chức năng / địa chỉ',
-    'mô tả',
-    'mo ta',
-    'description',
-    'ghi chú',
-    'địa chỉ',
-  ]);
-
-  const rows: BulkImportOrganizationRowInput[] = [];
-  for (let i = headerRowIdx + 1; i < matrix.length; i++) {
-    const cells = matrix[i]!;
-    const getCell = (idx: number): string =>
-      idx >= 0 ? cleanSpreadsheetCell(cells[idx] ?? '') : '';
-
-    const rawCode = getCell(codeIdx).toUpperCase();
-    const rawName = getCell(nameIdx);
-    if (!rawCode && !rawName) continue;
-
-    const rawType = getCell(typeIdx);
-    const type = rawType ? parseOrgUnitType(rawType) : ORG_UNIT_TYPE.BRANCH;
-
-    const rawParentCode = getCell(parentCodeIdx).toUpperCase();
-    const parentCode =
-      rawParentCode && rawParentCode !== 'ROOT' && rawParentCode !== 'NULL' ? rawParentCode : null;
-
-    const rawManager = getCell(managerIdx);
-    let managerId: number | null = null;
-    let managerIdentifier: string | null = null;
-    if (rawManager) {
-      const numericManager = Number(rawManager);
-      if (Number.isInteger(numericManager) && numericManager > 0) {
-        managerId = numericManager;
-      } else {
-        managerIdentifier = rawManager;
-      }
-    }
-
-    const rawStatus = getCell(statusIdx);
-    const status = rawStatus ? parseOrgUnitStatus(rawStatus) : ORG_UNIT_STATUS.ACTIVE;
-    const description = getCell(descIdx) || null;
-
-    rows.push({
-      code: rawCode,
-      name: rawName,
-      type,
-      parentCode,
-      managerId,
-      managerIdentifier,
-      status,
-      description,
-    });
-  }
-
-  return rows;
+  return extractDeclarativeImportMatrixData({
+    matrix,
+    columns: ORGANIZATION_IMPORT_COLUMNS,
+    mapRawRow: mapExtractedOrganizationImportRow,
+  }).rows;
 }
 
 /**
- * Phân tích đầu vào Import (`.xlsx` Base64, `.csv` hoặc mảng JSON).
+ * Phân tích đầu vào Import (`.xlsx` Base64, `.csv` hoặc mảng JSON) qua Declarative Import Engine.
  */
 export function parseOrganizationImportPayload(
   dto: BulkImportOrganizationsRequest,
 ): BulkImportOrganizationRowInput[] {
-  if (dto.xlsxBase64) {
-    try {
-      const matrix = parseXlsxToMatrix(dto.xlsxBase64);
-      return mapMatrixToOrganizationImportRows(matrix);
-    } catch (err: unknown) {
-      throw new BadRequestAppException('organizations.invalidXlsxFile', [
-        err instanceof Error ? err.message : 'Unable to parse .xlsx file',
-      ]);
-    }
-  }
-  if (dto.csvContent) {
-    const matrix = parseCsvToMatrix(dto.csvContent);
-    return mapMatrixToOrganizationImportRows(matrix);
-  }
-  return [...(dto.items ?? [])];
+  return parseDeclarativeImportPayload({
+    dto,
+    columns: ORGANIZATION_IMPORT_COLUMNS,
+    mapRawRow: mapExtractedOrganizationImportRow,
+    invalidXlsxErrorKey: 'organizations.invalidXlsxFile',
+  }).rows;
 }
 
 /**
@@ -459,8 +489,185 @@ export async function executeBulkImportOrganizations(params: {
   };
 }
 
+interface OrganizationTreeExportItem {
+  readonly node: OrganizationTreeNodeResponse;
+  readonly treeLabel: string;
+  readonly parentCode: string;
+  readonly managerDisplay: string;
+}
+
 /**
- * Xây dựng dữ liệu Export danh sách tổ chức theo Dạng cây (`tree`) hoặc Danh sách phẳng (`list`).
+ * Khai báo cột Xuất dữ liệu Tổ chức dạng Cây (`tree`) tập trung 1 chỗ duy nhất (Declarative Export Schema — Mục 8.3).
+ */
+export const ORGANIZATION_EXPORT_TREE_COLUMNS: readonly DeclarativeExportColumn<OrganizationTreeExportItem>[] =
+  [
+    {
+      field: 'stt',
+      header: ORGANIZATION_EXPORT_TREE_HEADERS[0],
+      width: 8,
+      isCenter: true,
+      value: (_item, idx) => idx + 1,
+    },
+    {
+      field: 'depth',
+      header: ORGANIZATION_EXPORT_TREE_HEADERS[1],
+      width: 16,
+      isCenter: true,
+      value: (item) => item.node.depth,
+    },
+    {
+      field: 'treeLabel',
+      header: ORGANIZATION_EXPORT_TREE_HEADERS[2],
+      width: 38,
+      value: (item) => item.treeLabel,
+    },
+    {
+      field: 'code',
+      header: ORGANIZATION_EXPORT_TREE_HEADERS[3],
+      width: 18,
+      isText: true,
+      value: (item) => item.node.code,
+    },
+    {
+      field: 'name',
+      header: ORGANIZATION_EXPORT_TREE_HEADERS[4],
+      width: 30,
+      value: (item) => item.node.name,
+    },
+    {
+      field: 'typeName',
+      header: ORGANIZATION_EXPORT_TREE_HEADERS[5],
+      width: 18,
+      value: (item) => item.node.typeName,
+    },
+    {
+      field: 'parentCode',
+      header: ORGANIZATION_EXPORT_TREE_HEADERS[6],
+      width: 20,
+      isText: true,
+      value: (item) => item.parentCode,
+    },
+    {
+      field: 'path',
+      header: ORGANIZATION_EXPORT_TREE_HEADERS[7],
+      width: 24,
+      isText: true,
+      value: (item) => item.node.path,
+    },
+    {
+      field: 'childrenCount',
+      header: ORGANIZATION_EXPORT_TREE_HEADERS[8],
+      width: 20,
+      isCenter: true,
+      value: (item) => item.node.childrenCount,
+    },
+    {
+      field: 'descendantCount',
+      header: ORGANIZATION_EXPORT_TREE_HEADERS[9],
+      width: 22,
+      isCenter: true,
+      value: (item) => item.node.descendantCount,
+    },
+    {
+      field: 'managerDisplay',
+      header: ORGANIZATION_EXPORT_TREE_HEADERS[10],
+      width: 24,
+      value: (item) => item.managerDisplay,
+    },
+    {
+      field: 'statusName',
+      header: ORGANIZATION_EXPORT_TREE_HEADERS[11],
+      width: 18,
+      isCenter: true,
+      value: (item) => item.node.statusName,
+    },
+    {
+      field: 'description',
+      header: ORGANIZATION_EXPORT_TREE_HEADERS[12],
+      width: 32,
+      value: (item) => item.node.description ?? '',
+    },
+  ] as const;
+
+/**
+ * Khai báo cột Xuất dữ liệu Tổ chức dạng Danh sách phẳng (`list`) tập trung 1 chỗ duy nhất (Declarative Export Schema — Mục 8.3).
+ */
+export const ORGANIZATION_EXPORT_LIST_COLUMNS: readonly DeclarativeExportColumn<
+  OrganizationUnitResponse,
+  { readonly unitById: ReadonlyMap<number, OrganizationUnitResponse> }
+>[] = [
+  {
+    field: 'stt',
+    header: ORGANIZATION_EXPORT_LIST_HEADERS[0],
+    width: 8,
+    isCenter: true,
+    value: (_u, idx) => idx + 1,
+  },
+  {
+    field: 'id',
+    header: ORGANIZATION_EXPORT_LIST_HEADERS[1],
+    width: 10,
+    isCenter: true,
+    value: (u) => u.id,
+  },
+  {
+    field: 'code',
+    header: ORGANIZATION_EXPORT_LIST_HEADERS[2],
+    width: 18,
+    isText: true,
+    value: (u) => u.code,
+  },
+  { field: 'name', header: ORGANIZATION_EXPORT_LIST_HEADERS[3], width: 30, value: (u) => u.name },
+  {
+    field: 'typeName',
+    header: ORGANIZATION_EXPORT_LIST_HEADERS[4],
+    width: 18,
+    value: (u) => u.typeName,
+  },
+  {
+    field: 'parentCode',
+    header: ORGANIZATION_EXPORT_LIST_HEADERS[5],
+    width: 20,
+    isText: true,
+    value: (u, _idx, ctx) => (u.parentId ? (ctx.unitById.get(u.parentId)?.code ?? '') : ''),
+  },
+  {
+    field: 'parentName',
+    header: ORGANIZATION_EXPORT_LIST_HEADERS[6],
+    width: 26,
+    value: (u, _idx, ctx) => (u.parentId ? (ctx.unitById.get(u.parentId)?.name ?? '') : ''),
+  },
+  {
+    field: 'managerId',
+    header: ORGANIZATION_EXPORT_LIST_HEADERS[7],
+    width: 18,
+    isCenter: true,
+    value: (u) => u.managerId ?? '',
+  },
+  {
+    field: 'managerName',
+    header: ORGANIZATION_EXPORT_LIST_HEADERS[8],
+    width: 24,
+    value: (u) => u.managerName ?? '',
+  },
+  {
+    field: 'statusName',
+    header: ORGANIZATION_EXPORT_LIST_HEADERS[9],
+    width: 18,
+    isCenter: true,
+    value: (u) => u.statusName,
+  },
+  {
+    field: 'description',
+    header: ORGANIZATION_EXPORT_LIST_HEADERS[10],
+    width: 32,
+    value: (u) => u.description ?? '',
+  },
+] as const;
+
+/**
+ * Xây dựng dữ liệu Export danh sách tổ chức theo Dạng cây (`tree`) hoặc Danh sách phẳng (`list`)
+ * qua Declarative Export Engine.
  */
 export function buildOrganizationsExportPayload(params: {
   units: readonly OrganizationUnitResponse[];
@@ -478,12 +685,10 @@ export function buildOrganizationsExportPayload(params: {
   const datePart = new Date().toISOString().slice(0, 10);
 
   if (mode === 'tree') {
-    const matrixRows: Array<Array<string | number>> = [];
-    let stt = 0;
+    const flattenedTreeItems: OrganizationTreeExportItem[] = [];
 
     const walkTree = (nodes: readonly OrganizationTreeNodeResponse[], prefix = '') => {
       nodes.forEach((node, idx) => {
-        stt++;
         const isLast = idx === nodes.length - 1;
         const branchConnector = node.depth === 1 ? '' : isLast ? '└── ' : '├── ';
         const treeLabel = `${prefix}${branchConnector}${node.name} (${node.code})`;
@@ -494,21 +699,12 @@ export function buildOrganizationsExportPayload(params: {
             ? `#${node.managerId}`
             : '';
 
-        matrixRows.push([
-          stt,
-          node.depth,
+        flattenedTreeItems.push({
+          node,
           treeLabel,
-          node.code,
-          node.name,
-          node.typeName,
-          parentUnit?.code ?? '',
-          node.path,
-          node.childrenCount,
-          node.descendantCount,
+          parentCode: parentUnit?.code ?? '',
           managerDisplay,
-          node.statusName,
-          node.description ?? '',
-        ]);
+        });
 
         if (node.children.length > 0) {
           const nextPrefix = node.depth === 1 ? '' : `${prefix}${isLast ? '    ' : '│   '}`;
@@ -519,140 +715,67 @@ export function buildOrganizationsExportPayload(params: {
 
     walkTree(treeNodes);
 
-    const reportTitle = query.title?.trim() || 'SƠ ĐỒ CÂY CƠ CẤU TỔ CHỨC, CHI NHÁNH & PHÒNG BAN';
-    const csvContent = buildCsvContent(ORGANIZATION_EXPORT_TREE_HEADERS, matrixRows);
-    const xlsxBuffer = buildXlsxBuffer(ORGANIZATION_EXPORT_TREE_HEADERS, matrixRows, {
+    const built = buildDeclarativeSpreadsheetExport({
+      fileBaseName: `so_do_cay_to_chuc_${datePart}`,
+      format,
+      columns: ORGANIZATION_EXPORT_TREE_COLUMNS,
+      items: flattenedTreeItems,
       sheetName: 'OrganizationTree',
-      title: reportTitle,
+      title: query.title?.trim() || 'SƠ ĐỒ CÂY CƠ CẤU TỔ CHỨC, CHI NHÁNH & PHÒNG BAN',
       subtitle: exportedAtSubtitle,
-      centerColumnIndices: [0, 1, 8, 9, 11],
-      textColumnIndices: [3, 6, 7],
-      freezeHeader: true,
     });
 
     return {
-      fileName: `so_do_cay_to_chuc_${datePart}.${format}`,
-      contentType:
-        format === 'xlsx'
-          ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-          : 'text/csv; charset=utf-8',
-      format,
+      fileName: built.fileName,
+      contentType: built.contentType,
+      format: built.format,
       mode: 'tree',
-      totalExported: matrixRows.length,
-      csvContent,
-      xlsxBase64: xlsxBuffer.toString('base64'),
+      totalExported: built.totalExported,
+      csvContent: built.csvContent,
+      xlsxBase64: built.xlsxBase64,
     };
   }
 
-  // mode === 'list'
-  const matrixRows: Array<Array<string | number>> = units.map((u, idx) => {
-    const parentUnit = u.parentId ? unitById.get(u.parentId) : undefined;
-    return [
-      idx + 1,
-      u.id,
-      u.code,
-      u.name,
-      u.typeName,
-      parentUnit?.code ?? '',
-      parentUnit?.name ?? '',
-      u.managerId ?? '',
-      u.managerName ?? '',
-      u.statusName,
-      u.description ?? '',
-    ];
-  });
-
-  const reportTitle = query.title?.trim() || 'DANH SÁCH ĐƠN VỊ, CHI NHÁNH & PHÒNG BAN TRỰC THUỘC';
-  const csvContent = buildCsvContent(ORGANIZATION_EXPORT_LIST_HEADERS, matrixRows);
-  const xlsxBuffer = buildXlsxBuffer(ORGANIZATION_EXPORT_LIST_HEADERS, matrixRows, {
+  const built = buildDeclarativeSpreadsheetExport({
+    fileBaseName: `danh_sach_to_chuc_${datePart}`,
+    format,
+    columns: ORGANIZATION_EXPORT_LIST_COLUMNS,
+    items: units,
+    context: { unitById },
     sheetName: 'OrganizationList',
-    title: reportTitle,
+    title: query.title?.trim() || 'DANH SÁCH ĐƠN VỊ, CHI NHÁNH & PHÒNG BAN TRỰC THUỘC',
     subtitle: exportedAtSubtitle,
-    centerColumnIndices: [0, 1, 7, 9],
-    textColumnIndices: [2, 5],
-    freezeHeader: true,
   });
 
   return {
-    fileName: `danh_sach_to_chuc_${datePart}.${format}`,
-    contentType:
-      format === 'xlsx'
-        ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-        : 'text/csv; charset=utf-8',
-    format,
+    fileName: built.fileName,
+    contentType: built.contentType,
+    format: built.format,
     mode: 'list',
-    totalExported: matrixRows.length,
-    csvContent,
-    xlsxBase64: xlsxBuffer.toString('base64'),
+    totalExported: built.totalExported,
+    csvContent: built.csvContent,
+    xlsxBase64: built.xlsxBase64,
   };
 }
 
 /**
- * Xây dựng file mẫu (Template) Import cây tổ chức.
+ * Xây dựng file mẫu (Template) Import cây tổ chức qua Declarative Import Template Engine.
  */
 export function buildOrganizationsImportTemplatePayload(
   format: 'csv' | 'xlsx' = 'xlsx',
 ): ExportOrganizationsResponse {
-  const sampleRows: Array<Array<string | number>> = [
-    [
-      'HQ_VN',
-      'Trụ sở chính Việt Nam',
-      'HEADQUARTERS',
-      '',
-      'superadmin',
-      'ACTIVE',
-      'Trụ sở điều hành trung tâm',
-    ],
-    [
-      'BRANCH_DANANG',
-      'Chi nhánh Đà Nẵng',
-      'BRANCH',
-      'HQ_VN',
-      'director_hcm',
-      'ACTIVE',
-      'Chi nhánh khu vực Miền Trung',
-    ],
-    [
-      'DEPT_RND_DN',
-      'Phòng Nghiên cứu & Phát triển Đà Nẵng',
-      'DEPARTMENT',
-      'BRANCH_DANANG',
-      'manager_eng',
-      'ACTIVE',
-      'Phòng R&D trực thuộc Chi nhánh Đà Nẵng',
-    ],
-    [
-      'TEAM_AI_DN',
-      'Nhóm Trí tuệ Nhân tạo (AI Lab)',
-      'TEAM',
-      'DEPT_RND_DN',
-      'manager_eng',
-      'ACTIVE',
-      'Đội chuyên môn AI trực thuộc Phòng R&D',
-    ],
-  ];
-
-  const csvContent = buildCsvContent(ORGANIZATION_IMPORT_TEMPLATE_HEADERS, sampleRows);
-  const xlsxBuffer = buildXlsxBuffer(ORGANIZATION_IMPORT_TEMPLATE_HEADERS, sampleRows, {
+  const built = buildImportTemplateFile({
+    fileBaseName: 'mau_import_cay_to_chuc',
+    format,
     sheetName: 'OrgImportTemplate',
     title: 'MẪU NHẬP CÂY SƠ ĐỒ TỔ CHỨC, CHI NHÁNH & PHÒNG BAN',
     subtitle:
       'Hỗ trợ nhập cây tổ chức nhiều cấp theo Mã đơn vị cấp trên (Parent Code), tự động kiểm tra mã trùng và quan hệ vòng',
-    centerColumnIndices: [2, 5],
-    textColumnIndices: [0, 3, 4],
-    freezeHeader: true,
+    columns: ORGANIZATION_IMPORT_COLUMNS,
   });
 
   return {
-    fileName: `mau_import_cay_to_chuc.${format}`,
-    contentType:
-      format === 'xlsx'
-        ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-        : 'text/csv; charset=utf-8',
-    format,
+    ...built,
     mode: 'tree',
-    totalExported: sampleRows.length,
-    csvContent,
-    xlsxBase64: xlsxBuffer.toString('base64'),
   };
 }

@@ -1,0 +1,8 @@
+{
+  "entityNotFound": "Requested searchable entity configuration not found.",
+  "searchFailed": "Unable to execute global search query.",
+  "syncHistoryNotFound": "Search index sync history record not found.",
+  "zeroResultNotFound": "Zero-result keyword stat not found."
+}
+
+

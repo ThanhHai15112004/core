@@ -1,0 +1,17 @@
+{
+  "definitionNotFound": "Không tìm thấy định nghĩa quy trình làm việc (workflow definition).",
+  "duplicateCodeAndVersion": "Mã quy trình và phiên bản này đã tồn tại trên hệ thống.",
+  "instanceNotFound": "Không tìm thấy phiên chạy quy trình (workflow instance).",
+  "activeDefinitionNotFound": "Không tìm thấy định nghĩa quy trình đang hoạt động cho mã yêu cầu.",
+  "noInitialStateConfigured": "Quy trình chưa được cấu hình trạng thái khởi tạo (initial state).",
+  "instanceNotRunning": "Phiên chạy quy trình không ở trạng thái đang thực thi.",
+  "invalidTransitionFromCurrentState": "Chuyển đổi trạng thái không hợp lệ từ trạng thái hiện tại.",
+  "transitionConditionNotMet": "Điều kiện chuyển đổi trạng thái của quy trình chưa được đáp ứng.",
+  "notAssignedApproverForStep": "Bạn không phải là người phê duyệt được phân công cho bước này.",
+  "noPendingApprovalStepToDelegate": "Không có bước phê duyệt đang chờ nào để ủy quyền.",
+  "instanceAlreadyFinished": "Phiên chạy quy trình đã kết thúc, không thể thao tác thêm.",
+  "cancelPermissionDenied": "Bạn không có quyền hủy phiên chạy quy trình này.",
+  "statesCannotBeEmpty": "Danh sách trạng thái của quy trình không được để trống.",
+  "transitionReferencesUnknownState": "Bước chuyển đổi tham chiếu tới mã trạng thái không tồn tại."
+}
+

@@ -2,16 +2,17 @@ import {
   BadRequestAppException,
   CODE_ITEM_STATUS,
   type CodeRegistryService,
+  type DeclarativeExportColumn,
+  type ImportColumnDefinition,
   type ResolvedCodeValueView,
-  buildCsvContent,
-  buildXlsxBuffer,
+  buildDeclarativeSpreadsheetExport,
+  buildImportTemplateFile,
   cleanSpreadsheetCell,
-  createSpreadsheetColumnFinder,
+  compileDeclarativeExportColumns,
   defaultExportRegistry,
   defaultSettingRegistry,
-  detectSpreadsheetHeaderRowIndex,
-  parseCsvToMatrix,
-  parseXlsxToMatrix,
+  extractDeclarativeImportMatrixData,
+  parseDeclarativeImportPayload,
   resolveExportMaxRows,
   sanitizeExportFilters,
 } from '@packages/kernel/index.js';
@@ -37,6 +38,181 @@ import type {
 
 export { CODES_EXPORT_HEADERS };
 
+export interface CodeExportRowItem {
+  readonly typeCode: string;
+  readonly typeName: string;
+  readonly val: ResolvedCodeValueView;
+}
+
+/**
+ * Khai báo cột Xuất dữ liệu Danh mục dùng chung (Master Data) tập trung 1 chỗ duy nhất (Declarative Export Schema — Mục 8.3).
+ */
+export const CODES_EXPORT_COLUMNS: readonly DeclarativeExportColumn<
+  CodeExportRowItem,
+  { readonly registry: CodeRegistryService }
+>[] = [
+  {
+    field: 'stt',
+    header: CODES_EXPORT_HEADERS[0],
+    width: 8,
+    isCenter: true,
+    value: (_item, idx) => idx + 1,
+  },
+  {
+    field: 'typeCode',
+    header: CODES_EXPORT_HEADERS[1],
+    width: 22,
+    isText: true,
+    value: (item) => item.typeCode,
+  },
+  { field: 'typeName', header: CODES_EXPORT_HEADERS[2], width: 26, value: (item) => item.typeName },
+  {
+    field: 'numericCode',
+    header: CODES_EXPORT_HEADERS[3],
+    width: 12,
+    isCenter: true,
+    value: (item) => item.val.numericCode,
+  },
+  {
+    field: 'code',
+    header: CODES_EXPORT_HEADERS[4],
+    width: 18,
+    isText: true,
+    value: (item) => item.val.code,
+  },
+  {
+    field: 'behaviorCode',
+    header: CODES_EXPORT_HEADERS[5],
+    width: 18,
+    isText: true,
+    value: (item) => item.val.behaviorCode ?? item.val.code,
+  },
+  {
+    field: 'labelVi',
+    header: CODES_EXPORT_HEADERS[6],
+    width: 24,
+    value: (item) => item.val.labels.vi || item.val.name,
+  },
+  {
+    field: 'labelEn',
+    header: CODES_EXPORT_HEADERS[7],
+    width: 24,
+    value: (item, _idx, ctx) =>
+      item.val.labels.en || ctx.registry.getLabel(item.typeCode, item.val.numericCode, 'en'),
+  },
+  {
+    field: 'aliases',
+    header: CODES_EXPORT_HEADERS[8],
+    width: 22,
+    value: (item) => item.val.aliases.join('|'),
+  },
+  {
+    field: 'sortOrder',
+    header: CODES_EXPORT_HEADERS[9],
+    width: 12,
+    isCenter: true,
+    value: (item) => item.val.sortOrder,
+  },
+  {
+    field: 'status',
+    header: CODES_EXPORT_HEADERS[10],
+    width: 18,
+    isCenter: true,
+    value: (item) =>
+      item.val.status === CODE_ITEM_STATUS.INACTIVE ? 'Khóa (INACTIVE)' : 'Hoạt động (ACTIVE)',
+  },
+  {
+    field: 'isSystem',
+    header: CODES_EXPORT_HEADERS[11],
+    width: 16,
+    isCenter: true,
+    value: (item) => (item.val.isSystem ? 'Hệ thống' : 'Tùy chỉnh'),
+  },
+] as const;
+
+const COMPILED_CODES_EXPORT_SCHEMA = compileDeclarativeExportColumns(CODES_EXPORT_COLUMNS);
+
+/**
+ * Khai báo cột Import Danh mục dùng chung (Master Data) tập trung 1 chỗ duy nhất (Declarative Import Schema — Mục 8.2).
+ */
+export const CODES_IMPORT_COLUMNS: readonly ImportColumnDefinition[] = [
+  { field: 'stt', header: CODES_EXPORT_HEADERS[0], width: 8, isCenter: true },
+  {
+    field: 'typeCode',
+    header: CODES_EXPORT_HEADERS[1],
+    width: 22,
+    isText: true,
+    aliases: ['mã nhóm danh mục', 'ma nhom danh muc', 'typecode', 'type_code', 'nhóm danh mục'],
+  },
+  {
+    field: 'typeName',
+    header: CODES_EXPORT_HEADERS[2],
+    width: 26,
+    aliases: ['tên nhóm danh mục', 'ten nhom danh muc', 'typename', 'type_name'],
+  },
+  {
+    field: 'numericCode',
+    header: CODES_EXPORT_HEADERS[3],
+    width: 12,
+    isCenter: true,
+    aliases: ['mã số', 'ma so', 'numericcode', 'numeric_code'],
+  },
+  {
+    field: 'code',
+    header: CODES_EXPORT_HEADERS[4],
+    required: true,
+    width: 18,
+    isText: true,
+    aliases: ['mã mục', 'ma muc', 'code', 'value_code', 'mã danh mục'],
+  },
+  {
+    field: 'behaviorCode',
+    header: CODES_EXPORT_HEADERS[5],
+    width: 18,
+    isText: true,
+    aliases: ['mã hành vi', 'ma hanh vi', 'behaviorcode', 'behavior_code'],
+  },
+  {
+    field: 'nameVi',
+    header: CODES_EXPORT_HEADERS[6],
+    required: true,
+    width: 24,
+    aliases: ['tên hiển thị', 'ten hien thi', 'name', 'tên mục', 'label_vi', 'vi'],
+  },
+  {
+    field: 'nameEn',
+    header: CODES_EXPORT_HEADERS[7],
+    width: 24,
+    aliases: ['tên tiếng anh', 'ten tieng anh', 'label_en', 'en', 'english'],
+  },
+  {
+    field: 'aliases',
+    header: CODES_EXPORT_HEADERS[8],
+    width: 22,
+    aliases: ['từ đồng nghĩa', 'tu dong nghia', 'aliases', 'alias'],
+  },
+  {
+    field: 'sortOrder',
+    header: CODES_EXPORT_HEADERS[9],
+    width: 12,
+    isCenter: true,
+    aliases: ['thứ tự', 'thu tu', 'sortorder', 'sort_order'],
+  },
+  {
+    field: 'status',
+    header: CODES_EXPORT_HEADERS[10],
+    width: 18,
+    isCenter: true,
+    aliases: ['trạng thái', 'trang thai', 'status'],
+  },
+  {
+    field: 'source',
+    header: CODES_EXPORT_HEADERS[11],
+    width: 16,
+    isCenter: true,
+  },
+] as const;
+
 export function formatCodeExportRow(
   registry: CodeRegistryService,
   stt: number,
@@ -44,141 +220,93 @@ export function formatCodeExportRow(
   typeName: string,
   val: ResolvedCodeValueView,
 ): Array<string | number> {
-  return [
-    stt,
+  return COMPILED_CODES_EXPORT_SCHEMA.mapItemToRow({ typeCode, typeName, val }, stt - 1, {
+    registry,
+  });
+}
+
+export function mapExtractedCodeImportRow(
+  rawByField: Readonly<Record<string, string>>,
+  fallbackTypeCode = '',
+): BulkImportCodeValueRowInput | null {
+  const code = cleanSpreadsheetCell(rawByField['code'] ?? '').toUpperCase();
+  const nameVi = cleanSpreadsheetCell(rawByField['nameVi'] ?? '');
+  if (!code && !nameVi) return null;
+
+  const typeCode = (
+    cleanSpreadsheetCell(rawByField['typeCode'] ?? '') || fallbackTypeCode
+  ).toLowerCase();
+  const typeName = cleanSpreadsheetCell(rawByField['typeName'] ?? '') || undefined;
+  const rawNumeric = cleanSpreadsheetCell(rawByField['numericCode'] ?? '');
+  const numericCode =
+    rawNumeric && Number.isInteger(Number(rawNumeric)) && Number(rawNumeric) > 0
+      ? Number(rawNumeric)
+      : undefined;
+  const rawBehavior = cleanSpreadsheetCell(rawByField['behaviorCode'] ?? '');
+  const behaviorCode = rawBehavior ? rawBehavior.toUpperCase() : undefined;
+  const nameEn = cleanSpreadsheetCell(rawByField['nameEn'] ?? '');
+  const labels: Record<string, string> = {};
+  if (nameVi) labels.vi = nameVi;
+  if (nameEn) labels.en = nameEn;
+
+  const aliases = cleanSpreadsheetCell(rawByField['aliases'] ?? '')
+    .split(/[|;,]/)
+    .map((s) => cleanSpreadsheetCell(s))
+    .filter(Boolean);
+
+  const rawSort = cleanSpreadsheetCell(rawByField['sortOrder'] ?? '');
+  const sortOrder =
+    rawSort && Number.isInteger(Number(rawSort)) && Number(rawSort) >= 0
+      ? Number(rawSort)
+      : undefined;
+
+  const rawStatus = cleanSpreadsheetCell(rawByField['status'] ?? '').toUpperCase();
+  const status =
+    rawStatus === '2' || rawStatus.includes('INACTIVE') || rawStatus.includes('KHÓA')
+      ? CODE_ITEM_STATUS.INACTIVE
+      : CODE_ITEM_STATUS.ACTIVE;
+
+  return {
     typeCode,
-    typeName,
-    val.numericCode,
-    val.code,
-    val.behaviorCode ?? val.code,
-    val.labels.vi || val.name,
-    val.labels.en || registry.getLabel(typeCode, val.numericCode, 'en'),
-    val.aliases.join('|'),
-    val.sortOrder,
-    val.status === CODE_ITEM_STATUS.INACTIVE ? 'Khóa (INACTIVE)' : 'Hoạt động (ACTIVE)',
-    val.isSystem ? 'Hệ thống' : 'Tùy chỉnh',
-  ];
+    ...(typeName ? { typeName } : {}),
+    ...(numericCode !== undefined ? { numericCode } : {}),
+    code,
+    ...(behaviorCode ? { behaviorCode } : {}),
+    name: nameVi || code,
+    ...(Object.keys(labels).length > 0 ? { labels } : {}),
+    ...(aliases.length > 0 ? { aliases } : {}),
+    ...(sortOrder !== undefined ? { sortOrder } : {}),
+    status,
+  };
 }
 
 export function mapMatrixToImportRows(
   matrix: ReadonlyArray<ReadonlyArray<string>>,
   fallbackTypeCode = '',
 ): BulkImportCodeValueRowInput[] {
-  if (matrix.length < 2) return [];
-
-  const headerRowIdx = detectSpreadsheetHeaderRowIndex(matrix, [
-    'mã mục',
-    'ma muc',
-    'code',
-    'value_code',
-    'mã nhóm danh mục',
-    'ma nhom danh muc',
-    'type_code',
-    'typecode',
-    'tên hiển thị',
-    'ten hien thi',
-    'name',
-  ]);
-
-  if (headerRowIdx >= matrix.length - 1) return [];
-  const idxOf = createSpreadsheetColumnFinder(matrix[headerRowIdx]!);
-
-  const typeCodeIdx = idxOf([
-    'mã nhóm danh mục',
-    'ma nhom danh muc',
-    'typecode',
-    'type_code',
-    'nhóm danh mục',
-  ]);
-  const typeNameIdx = idxOf(['tên nhóm danh mục', 'ten nhom danh muc', 'typename', 'type_name']);
-  const numericIdx = idxOf(['mã số', 'ma so', 'numericcode', 'numeric_code']);
-  const codeIdx = idxOf(['mã mục', 'ma muc', 'code', 'value_code', 'mã danh mục']);
-  const behaviorIdx = idxOf(['mã hành vi', 'ma hanh vi', 'behaviorcode', 'behavior_code']);
-  const nameViIdx = idxOf(['tên hiển thị', 'ten hien thi', 'name', 'tên mục', 'label_vi', 'vi']);
-  const nameEnIdx = idxOf(['tên tiếng anh', 'ten tieng anh', 'label_en', 'en', 'english']);
-  const aliasesIdx = idxOf(['từ đồng nghĩa', 'tu dong nghia', 'aliases', 'alias']);
-  const sortOrderIdx = idxOf(['thứ tự', 'thu tu', 'sortorder', 'sort_order']);
-  const statusIdx = idxOf(['trạng thái', 'trang thai', 'status']);
-
-  const rows: BulkImportCodeValueRowInput[] = [];
-  for (let i = headerRowIdx + 1; i < matrix.length; i++) {
-    const cells = matrix[i]!;
-    const getCell = (idx: number): string =>
-      idx >= 0 ? cleanSpreadsheetCell(cells[idx] ?? '') : '';
-
-    const code = getCell(codeIdx).toUpperCase();
-    const nameVi = getCell(nameViIdx);
-    if (!code && !nameVi) continue;
-
-    const typeCode = (getCell(typeCodeIdx) || fallbackTypeCode).toLowerCase();
-    const typeName = getCell(typeNameIdx) || undefined;
-    const rawNumeric = getCell(numericIdx);
-    const numericCode =
-      rawNumeric && Number.isInteger(Number(rawNumeric)) && Number(rawNumeric) > 0
-        ? Number(rawNumeric)
-        : undefined;
-    const behaviorCode = getCell(behaviorIdx) ? getCell(behaviorIdx).toUpperCase() : undefined;
-    const nameEn = getCell(nameEnIdx);
-    const labels: Record<string, string> = {};
-    if (nameVi) labels.vi = nameVi;
-    if (nameEn) labels.en = nameEn;
-
-    const aliases = getCell(aliasesIdx)
-      .split(/[|;,]/)
-      .map((s) => cleanSpreadsheetCell(s))
-      .filter(Boolean);
-
-    const rawSort = getCell(sortOrderIdx);
-    const sortOrder =
-      rawSort && Number.isInteger(Number(rawSort)) && Number(rawSort) >= 0
-        ? Number(rawSort)
-        : undefined;
-
-    const rawStatus = getCell(statusIdx).toUpperCase();
-    const status =
-      rawStatus === '2' || rawStatus.includes('INACTIVE') || rawStatus.includes('KHÓA')
-        ? CODE_ITEM_STATUS.INACTIVE
-        : CODE_ITEM_STATUS.ACTIVE;
-
-    rows.push({
-      typeCode,
-      ...(typeName ? { typeName } : {}),
-      ...(numericCode !== undefined ? { numericCode } : {}),
-      code,
-      ...(behaviorCode ? { behaviorCode } : {}),
-      name: nameVi || code,
-      ...(Object.keys(labels).length > 0 ? { labels } : {}),
-      ...(aliases.length > 0 ? { aliases } : {}),
-      ...(sortOrder !== undefined ? { sortOrder } : {}),
-      status,
-    });
-  }
-
-  return rows;
+  return extractDeclarativeImportMatrixData({
+    matrix,
+    columns: CODES_IMPORT_COLUMNS,
+    mapRawRow: (rawByField) => mapExtractedCodeImportRow(rawByField, fallbackTypeCode),
+  }).rows;
 }
 
 export function parseImportPayloadToRows(
   dto: BulkImportCodesRequest,
   fallbackTypeCode: string,
 ): BulkImportCodeValueRowInput[] {
-  if (dto.xlsxBase64) {
-    try {
-      const matrix = parseXlsxToMatrix(dto.xlsxBase64);
-      return mapMatrixToImportRows(matrix, fallbackTypeCode);
-    } catch (err: unknown) {
-      throw new BadRequestAppException('codes.invalidXlsxFile', [
-        err instanceof Error ? err.message : 'Unable to parse .xlsx file',
-      ]);
-    }
+  if (!dto.xlsxBase64 && !dto.csvContent) {
+    return (dto.items ?? []).map((item) => ({
+      ...item,
+      typeCode: item.typeCode ?? (fallbackTypeCode || undefined),
+    }));
   }
-  if (dto.csvContent) {
-    const matrix = parseCsvToMatrix(dto.csvContent);
-    return mapMatrixToImportRows(matrix, fallbackTypeCode);
-  }
-  return (dto.items ?? []).map((item) => ({
-    ...item,
-    typeCode: item.typeCode ?? (fallbackTypeCode || undefined),
-  }));
+  return parseDeclarativeImportPayload({
+    dto,
+    columns: CODES_IMPORT_COLUMNS,
+    mapRawRow: (rawByField) => mapExtractedCodeImportRow(rawByField, fallbackTypeCode),
+    invalidXlsxErrorKey: 'codes.invalidXlsxFile',
+  }).rows;
 }
 
 export async function executeBulkImportCodeValues(
@@ -411,24 +539,26 @@ export function buildCodesExportPayload(
   const { maxRowsAllowed } = resolveExportMaxRows(
     {
       settingKey: 'codes.export.max_rows',
-      defaultMaxRows: settingRegistry.getNumber(CODES_SETTING_KEYS.IMPORT_MAX_ROWS, undefined, 5000),
+      defaultMaxRows: settingRegistry.getNumber(
+        CODES_SETTING_KEYS.IMPORT_MAX_ROWS,
+        undefined,
+        5000,
+      ),
     },
     settingRegistry,
   );
 
-  const matrixRows: Array<Array<string | number>> = [];
-  let stt = 0;
+  const exportItems: CodeExportRowItem[] = [];
 
   for (const ct of filteredTypes) {
-    if (matrixRows.length >= maxRowsAllowed) break;
+    if (exportItems.length >= maxRowsAllowed) break;
     const values = registry.listValues(ct.code, {
       includeInactive,
       locale,
     });
     for (const val of values) {
-      if (matrixRows.length >= maxRowsAllowed) break;
-      stt++;
-      matrixRows.push(formatCodeExportRow(registry, stt, ct.code, ct.name, val));
+      if (exportItems.length >= maxRowsAllowed) break;
+      exportItems.push({ typeCode: ct.code, typeName: ct.name, val });
     }
   }
 
@@ -440,43 +570,39 @@ export function buildCodesExportPayload(
   );
   const reportTitle = query.title?.trim() || defaultReportTitle;
   const exportedAtSubtitle = `Ngày xuất dữ liệu: ${LocaleFormatter.formatReportDateTime(new Date(), effectiveTimezone)}`;
+  const datePart = new Date().toISOString().slice(0, 10);
 
-  const csvContent = buildCsvContent(CODES_EXPORT_HEADERS, matrixRows);
-  const xlsxBuffer = buildXlsxBuffer(CODES_EXPORT_HEADERS, matrixRows, {
+  const built = buildDeclarativeSpreadsheetExport({
+    fileBaseName: `danh_muc_dung_chung_${datePart}`,
+    format,
+    columns: CODES_EXPORT_COLUMNS,
+    items: exportItems,
+    context: { registry },
     sheetName: 'MasterData',
     title: reportTitle,
     subtitle: exportedAtSubtitle,
     logoPng: query.logoBase64 ?? null,
-    centerColumnIndices: [0, 3, 9, 10, 11],
-    textColumnIndices: [1, 4, 5],
-    freezeHeader: true,
   });
-
-  const datePart = new Date().toISOString().slice(0, 10);
-  const fileName = `danh_muc_dung_chung_${datePart}.${format}`;
 
   defaultExportRegistry.startExportHistory({
     profileCode: 'codes',
     module: 'codes',
-    fileName,
+    fileName: built.fileName,
     format,
     filters: sanitizeExportFilters(query),
-    totalExported: matrixRows.length,
-    processedRows: matrixRows.length,
+    totalExported: built.totalExported,
+    processedRows: built.totalExported,
     maxRowsApplied: maxRowsAllowed,
     status: 'COMPLETED',
   });
 
   return {
-    fileName,
-    contentType:
-      format === 'xlsx'
-        ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-        : 'text/csv; charset=utf-8',
-    format,
-    totalExported: matrixRows.length,
-    csvContent,
-    xlsxBase64: xlsxBuffer.toString('base64'),
+    fileName: built.fileName,
+    contentType: built.contentType,
+    format: built.format,
+    totalExported: built.totalExported,
+    csvContent: built.csvContent,
+    xlsxBase64: built.xlsxBase64,
   };
 }
 
@@ -494,23 +620,11 @@ export function buildCodesImportTemplatePayload(
     formatCodeExportRow(registry, idx + 1, sampleType!.code, sampleType!.name, val),
   );
 
-  const csvContent = buildCsvContent(CODES_EXPORT_HEADERS, sampleRows);
-  const xlsxBase64 = buildXlsxBuffer(CODES_EXPORT_HEADERS, sampleRows, {
-    sheetName: 'MasterDataTemplate',
-    centerColumnIndices: [0, 3, 9, 10, 11],
-    textColumnIndices: [1, 4, 5],
-    freezeHeader: true,
-  }).toString('base64');
-
-  return {
-    fileName: `mau_import_danh_muc.${format}`,
-    contentType:
-      format === 'xlsx'
-        ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-        : 'text/csv; charset=utf-8',
+  return buildImportTemplateFile({
+    fileBaseName: 'mau_import_danh_muc',
     format,
-    totalExported: sampleRows.length,
-    csvContent,
-    xlsxBase64,
-  };
+    sheetName: 'MasterDataTemplate',
+    columns: CODES_IMPORT_COLUMNS,
+    sampleRows,
+  });
 }

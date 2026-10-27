@@ -671,7 +671,7 @@ describe('Phase 7.3 — Hàng đợi công việc (Multi-Queue, Worker Concurren
         dataSourceUsed: 'REPLICA',
         cacheHit: false,
         downloadToken: 'sched_rep_701',
-        downloadUrl: '/api/v1/users/reports/downloads/sched_rep_701',
+        downloadUrl: '/api/v1/reports/downloads/sched_rep_701',
         expiresAt: new Date(Date.now() + 86_400_000).toISOString(),
         notifiedChannels: ['EMAIL', 'IN_APP'],
       }),
@@ -733,7 +733,7 @@ describe('Phase 7.3 — Hàng đợi công việc (Multi-Queue, Worker Concurren
       scheduleId: createdSchedule.id,
       reportCode: 'users.daily_summary',
       historyId: 701,
-      downloadUrl: '/api/v1/users/reports/downloads/sched_rep_701',
+      downloadUrl: '/api/v1/reports/downloads/sched_rep_701',
     });
 
     // 7. HeavyJobProcessor chạy Export lớn (users.export) thực sự trong Worker, lưu file tạm và trả về downloadUrl (Mục 8.3.4 & 8.3.5)
@@ -749,7 +749,7 @@ describe('Phase 7.3 — Hàng đợi công việc (Multi-Queue, Worker Concurren
         jobId: 'job-heavy-export-707',
         status: 'COMPLETED' as const,
         downloadToken: 'exp_tok_707',
-        downloadUrl: '/api/v1/users/export/downloads/exp_tok_707',
+        downloadUrl: '/api/v1/exports/downloads/exp_tok_707',
         expiresAt: '2026-10-26T15:00:00.000Z',
         notifiedAt: '2026-10-26T14:00:00.000Z',
       }),
@@ -797,7 +797,7 @@ describe('Phase 7.3 — Hàng đợi công việc (Multi-Queue, Worker Concurren
       totalExported: 250,
       historyId: 77,
       downloadToken: 'exp_tok_707',
-      downloadUrl: '/api/v1/users/export/downloads/exp_tok_707',
+      downloadUrl: '/api/v1/exports/downloads/exp_tok_707',
     });
 
     // 8. HeavyJobProcessor chạy Báo cáo nặng (users.report) thực sự trong Worker, lưu file tạm và trả về downloadUrl (Mục 8.4.4 & 8.4.6)
@@ -829,7 +829,7 @@ describe('Phase 7.3 — Hàng đợi công việc (Multi-Queue, Worker Concurren
         format: 'xlsx' as const,
         fileName: 'bao_cao_users_security_compliance_2026-10-26.xlsx',
         downloadToken: 'rep_tok_808',
-        downloadUrl: '/api/v1/users/reports/downloads/rep_tok_808',
+        downloadUrl: '/api/v1/reports/downloads/rep_tok_808',
         expiresAt: '2026-10-26T16:00:00.000Z',
         notifiedChannels: ['EMAIL', 'IN_APP'] as const,
         startedAt: '2026-10-26T15:00:00.000Z',
@@ -881,7 +881,7 @@ describe('Phase 7.3 — Hàng đợi công việc (Multi-Queue, Worker Concurren
       totalRecords: 180,
       dataSourceUsed: 'REPLICA',
       downloadToken: 'rep_tok_808',
-      downloadUrl: '/api/v1/users/reports/downloads/rep_tok_808',
+      downloadUrl: '/api/v1/reports/downloads/rep_tok_808',
     });
 
     // 9. HeavyJobProcessor chạy đồng bộ & tạo lại Search Index (users.search_sync & users.search_rebuild — Mục 8.5.4 & 8.5.5)

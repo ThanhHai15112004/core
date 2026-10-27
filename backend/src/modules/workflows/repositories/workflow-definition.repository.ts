@@ -1,6 +1,6 @@
 import { Injectable, Optional } from '@nestjs/common';
 import { DataSource } from 'typeorm';
-import type { PaginationCountMode } from '@packages/kernel/index.js';
+import type { CountMode as PaginationCountMode } from '@packages/kernel/index.js';
 import { BaseTypeOrmRepository, TransactionManager } from '@packages/database/index.js';
 import { WorkflowDefinitionEntity } from '../entities/workflow-definition.entity.js';
 import {
@@ -27,7 +27,7 @@ export class WorkflowDefinitionRepository extends BaseTypeOrmRepository<Workflow
     super(WorkflowDefinitionEntity, dataSource, transactionManager);
   }
 
-  public async findById(id: number): Promise<WorkflowDefinitionEntity | null> {
+  public override async findById(id: number): Promise<WorkflowDefinitionEntity | null> {
     return this.executeReadOnly((repo) => repo.findOne({ where: { id: Number(id) } }));
   }
 

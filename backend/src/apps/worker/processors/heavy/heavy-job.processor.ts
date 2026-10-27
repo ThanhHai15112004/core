@@ -32,6 +32,10 @@ import {
   type RunUserReportRequest,
 } from '@modules/users/index.js';
 import { FilesService } from '@modules/files/index.js';
+import { ImportsService } from '@modules/imports/index.js';
+import { ExportsService } from '@modules/exports/index.js';
+import { ReportsService } from '@modules/reports/index.js';
+import { SearchService } from '@modules/search/index.js';
 import { BaseQueueProcessor } from '../base-queue.processor.js';
 
 export interface HeavyQueueJobPayload {
@@ -108,6 +112,10 @@ export class HeavyJobProcessor extends BaseQueueProcessor {
     @Optional() private readonly exportRegistry?: ExportRegistryService,
     @Optional() private readonly reportRegistry?: ReportRegistryService,
     @Optional() private readonly searchRegistry?: SearchRegistryService,
+    @Optional() private readonly importsService?: ImportsService,
+    @Optional() private readonly exportsService?: ExportsService,
+    @Optional() private readonly reportsService?: ReportsService,
+    @Optional() private readonly searchService?: SearchService,
   ) {
     super(config, metrics, progressTracker);
   }
@@ -276,7 +284,7 @@ export class HeavyJobProcessor extends BaseQueueProcessor {
         },
       );
       if (historyRef) {
-        activeImportRegistry.updateImportHistory(historyRef, {
+        const updatedRecord = activeImportRegistry.updateImportHistory(historyRef, {
           status: processed >= effectiveTotal ? 'COMPLETED' : 'PROCESSING',
           totalRows: resolvedRows.length,
           processedRows: Math.min(resolvedRows.length, processed),
@@ -286,6 +294,9 @@ export class HeavyJobProcessor extends BaseQueueProcessor {
           failedCount,
           errors: accumulatedErrors,
         });
+        if (updatedRecord && processed >= effectiveTotal && this.importsService) {
+          await this.importsService.persistHistoryRecordToDb(updatedRecord);
+        }
       }
     }
 
@@ -337,6 +348,14 @@ export class HeavyJobProcessor extends BaseQueueProcessor {
       },
     );
 
+    if (exportResult.historyId && this.exportsService) {
+      const activeExportRegistry = this.exportRegistry ?? defaultExportRegistry;
+      const memRecord = activeExportRegistry.getHistoryById(exportResult.historyId);
+      if (memRecord) {
+        await this.exportsService.persistHistoryRecordToDb(memRecord);
+      }
+    }
+
     return {
       processed: effectiveTotal,
       total: effectiveTotal,
@@ -386,6 +405,14 @@ export class HeavyJobProcessor extends BaseQueueProcessor {
         successCount: reportResult.totalRecords,
       },
     );
+
+    if (reportResult.historyId && this.reportsService) {
+      const activeReportRegistry = this.reportRegistry ?? defaultReportRegistry;
+      const memHistory = activeReportRegistry.getHistoryById(reportResult.historyId);
+      if (memHistory) {
+        await this.reportsService.persistHistoryToDb(memHistory);
+      }
+    }
 
     return {
       processed: effectiveTotal,
@@ -444,6 +471,10 @@ export class HeavyJobProcessor extends BaseQueueProcessor {
         successCount: historyResult.indexedCount,
       },
     );
+
+    if (this.searchService) {
+      await this.searchService.persistSyncHistoryToDb(historyResult);
+    }
 
     return {
       processed: effectiveTotal,

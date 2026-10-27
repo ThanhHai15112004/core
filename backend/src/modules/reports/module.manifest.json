@@ -1,0 +1,54 @@
+{
+  "$schema": "../../packages/kernel/schemas/module.manifest.schema.json",
+  "name": "reports",
+  "displayName": "Reporting, Analytics Dashboard & Scheduled Delivery Engine",
+  "version": "1.0.0",
+  "description": "Module nền tảng quản lý Báo cáo và Dashboard (Mục 8.4) dùng chung cho toàn hệ thống: tự động quét danh mục báo cáo từ module.manifest.json, chuẩn hóa tham số (khoảng ngày, trạng thái, đơn vị, bộ lọc), phân quyền xem báo cáo riêng biệt, chạy báo cáo nặng bằng Queue, lập lịch gửi định kỳ (DAILY/WEEKLY/MONTHLY) qua Email/In-App, hỗ trợ Read Replica, Cache báo cáo và lưu lịch sử vào Database.",
+  "type": "core",
+  "category": "core",
+  "author": "Core Platform Team",
+  "entryModule": "ReportsModule",
+  "dependencies": ["database", "security", "i18n", "users", "roles", "organizations", "codes", "settings", "notifications", "exports"],
+  "permissions": [
+    "reports.read",
+    "reports.execute",
+    "reports.schedule",
+    "reports.manage"
+  ],
+  "events": {
+    "published": [
+      "reports.job_queued",
+      "reports.job_completed",
+      "reports.schedule_triggered"
+    ],
+    "subscribed": []
+  },
+  "database": {
+    "hasMigrations": true,
+    "tables": [
+      "report_schedules",
+      "report_histories"
+    ]
+  },
+  "settings": [
+    {
+      "key": "reports.default_cache_ttl_seconds",
+      "group": "reports",
+      "name": "Thời gian Cache báo cáo mặc định (giây)",
+      "description": "Thời gian lưu kết quả báo cáo trong Cache khi chạy lại cùng bộ tham số",
+      "valueType": "NUMBER",
+      "defaultValue": 300,
+      "isPublic": false
+    },
+    {
+      "key": "reports.file_ttl_seconds",
+      "group": "reports",
+      "name": "Thời hạn lưu tệp Báo cáo tạm thời (giây)",
+      "description": "Thời gian sống (TTL) của file báo cáo tạm thời đính kèm thông báo / Email",
+      "valueType": "NUMBER",
+      "defaultValue": 3600,
+      "isPublic": false
+    }
+  ]
+}
+

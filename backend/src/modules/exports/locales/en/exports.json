@@ -1,0 +1,8 @@
+{
+  "profileNotFound": "Export profile not found for the requested module.",
+  "exportHistoryNotFound": "Export history record not found.",
+  "exportJobNotFound": "Export job progress not found.",
+  "exportFileExpired": "Temporary export download link does not exist or has expired.",
+  "export.maxRowsExceeded": "Requested export row count exceeds the maximum allowed limit.",
+  "export.pdfAdapterNotConfigured": "PDF export adapter is not configured on this system."
+}

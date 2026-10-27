@@ -315,3 +315,15 @@ export interface ImportQueueWorkerExecutor<TRow = unknown> {
     input: ImportQueueChunkExecutionInput<TRow>,
   ): Promise<ImportQueueChunkExecutionResult>;
 }
+
+/**
+ * Kết quả biên dịch danh sách `ImportColumnDefinition` thành bộ metadata cột chuẩn & dữ liệu mẫu cho Template.
+ */
+export interface CompiledDeclarativeImportSchema<TField extends string = string> {
+  readonly columns: readonly ImportColumnDefinition<TField>[];
+  readonly headers: readonly string[];
+  readonly columnWidths: readonly number[];
+  readonly centerColumnIndices: readonly number[];
+  readonly textColumnIndices: readonly number[];
+  readonly sampleRows: ReadonlyArray<ReadonlyArray<string | number>>;
+}

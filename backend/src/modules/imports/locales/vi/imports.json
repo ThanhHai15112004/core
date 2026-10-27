@@ -1,0 +1,8 @@
+{
+  "profileNotFound": "Không tìm thấy cấu hình Import cho phân hệ yêu cầu.",
+  "invalidXlsxFile": "Tệp Excel (.xlsx) không hợp lệ hoặc bị hỏng: {0}",
+  "importHistoryNotFound": "Không tìm thấy bản ghi lịch sử Import.",
+  "importJobNotFound": "Không tìm thấy tiến độ công việc Import.",
+  "templateNotAvailable": "Phân hệ này chưa cấu hình biểu mẫu (Template) Import."
+}
+

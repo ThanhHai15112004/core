@@ -1,4 +1,4 @@
-import { safeJsonParseList, safeJsonParseObject } from '@packages/kernel/index.js';
+import { safeJsonParse, safeJsonParseObject } from '@packages/kernel/index.js';
 import type { UserIdentity } from '@packages/security/index.js';
 import type {
   IUsersPublicService,
@@ -379,10 +379,8 @@ export async function hydrateWorkflowInstanceDetail(params: {
       actorFullName: actorContact?.fullName ?? null,
       actorUsername: actorContact?.username ?? null,
       reason: h.reason ?? null,
-      triggeredActions: safeJsonParseList<WorkflowTriggeredActionResult>(
-        h.triggeredActionsJson,
-        [],
-      ),
+      triggeredActions:
+        safeJsonParse<WorkflowTriggeredActionResult[]>(h.triggeredActionsJson, []) ?? [],
       metadata: safeJsonParseObject<Record<string, unknown> | null>(h.metadataJson, null),
       createdAt: h.createdAt.toISOString(),
     };

@@ -1,0 +1,46 @@
+{
+  "$schema": "../../packages/kernel/schemas/module.manifest.schema.json",
+  "name": "search",
+  "displayName": "Global Search Provider, Index Sync & Analytics Engine",
+  "version": "1.0.0",
+  "description": "Module nền tảng quản lý Tìm kiếm toàn hệ thống (Mục 8.5) dùng chung cho mọi module: hỗ trợ Database Search cho dự án nhỏ và Pluggable Elasticsearch/OpenSearch Adapter cho dữ liệu lớn, đồng bộ Index bằng Queue, rebuild toàn bộ Index theo module/loại dữ liệu, áp dụng quyền & Data Scope vào kết quả, theo dõi độ trễ Index (Index Lag) và thống kê từ khóa không có kết quả vào Database.",
+  "type": "core",
+  "category": "core",
+  "author": "Core Platform Team",
+  "entryModule": "SearchModule",
+  "dependencies": ["database", "security", "i18n", "users", "roles", "organizations", "codes", "settings"],
+  "permissions": [
+    "search.read",
+    "search.sync",
+    "search.rebuild",
+    "search.manage"
+  ],
+  "events": {
+    "published": [
+      "search.index_synced",
+      "search.index_rebuilt",
+      "search.index_lag_detected"
+    ],
+    "subscribed": []
+  },
+  "database": {
+    "hasMigrations": true,
+    "tables": [
+      "search_documents",
+      "search_sync_histories",
+      "search_zero_result_keywords"
+    ]
+  },
+  "settings": [
+    {
+      "key": "search.stale_threshold_ms",
+      "group": "search",
+      "name": "Ngưỡng độ trễ cảnh báo Search Index (ms)",
+      "description": "Ngưỡng thời gian (mili-giây) để đánh dấu một bản ghi trong Search Index bị cũ so với dữ liệu gốc",
+      "valueType": "NUMBER",
+      "defaultValue": 300000,
+      "isPublic": false
+    }
+  ]
+}
+
