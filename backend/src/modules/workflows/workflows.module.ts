@@ -6,6 +6,8 @@ import { MessagingModule } from '@packages/messaging/index.js';
 import { UsersModule } from '@modules/users/index.js';
 import { NotificationsModule } from '@modules/notifications/index.js';
 import { FilesModule } from '@modules/files/index.js';
+import { ApprovalsModule } from '@modules/approvals/index.js';
+import { CommentsModule } from '@modules/comments/index.js';
 import { WORKFLOWS_PUBLIC_SERVICE } from './contracts/index.js';
 import { WorkflowDefinitionEntity } from './entities/workflow-definition.entity.js';
 import { WorkflowStateEntity } from './entities/workflow-state.entity.js';
@@ -41,6 +43,8 @@ new CoreI18nService().registerNamespace('workflows', { vi: viWorkflows, en: enWo
     UsersModule,
     NotificationsModule,
     FilesModule,
+    ApprovalsModule,
+    CommentsModule,
   ],
   controllers: [WorkflowsController],
   providers: [

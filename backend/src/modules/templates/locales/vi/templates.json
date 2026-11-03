@@ -1,0 +1,4 @@
+{
+  "templateNotFound": "Không tìm thấy mẫu nội dung #{id}.",
+  "templateInUseCannotDelete": "Mẫu nội dung đang được module sử dụng nên không thể xóa."
+}

@@ -1,0 +1,41 @@
+{
+  "$schema": "../../packages/kernel/schemas/module.manifest.schema.json",
+  "name": "approvals",
+  "displayName": "Multi-Step Approvals & Delegation",
+  "version": "1.0.0",
+  "description": "Module 9.4 — Phê duyệt một người, theo vai trò, tuần tự nhiều bước, song song (tất cả hoặc theo số lượng), từ chối kèm lý do, trả lại bước trước, ủy quyền phê duyệt có thời hạn/phạm vi và tự động leo thang khi quá hạn.",
+  "type": "core",
+  "category": "core",
+  "author": "Core Platform Team",
+  "entryModule": "ApprovalsModule",
+  "dependencies": ["database", "security", "i18n", "users", "roles", "organizations", "notifications"],
+  "permissions": [
+    "approvals.read",
+    "approvals.decide",
+    "approvals.delegate",
+    "approvals.manage"
+  ],
+  "database": {
+    "hasMigrations": true,
+    "tables": [
+      "workflow_approval_steps",
+      "workflow_approval_delegations"
+    ]
+  },
+  "menus": [
+    {
+      "code": "APPROVALS_MANAGER",
+      "name": "Phê duyệt & Ủy quyền",
+      "status": 1,
+      "link": "/approvals",
+      "linkApi": "/api/v1/approvals",
+      "type": 2,
+      "parent": null,
+      "level": 1,
+      "key": "approvals.read",
+      "numOrder": 26,
+      "icon": "CheckCircle2",
+      "position": "SIDEBAR"
+    }
+  ]
+}

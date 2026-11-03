@@ -437,4 +437,16 @@ export const API_ROUTES = {
     INTEGRATION_INBOUND_SYNC: (provider: string) =>
       `/calendar/integrations/${encodeURIComponent(provider)}/inbound-sync`,
   },
+  CUSTOM_FIELDS: {
+    ENTITIES: (qs = '') => `/custom-fields/entities${qs ? `?${qs}` : ''}`,
+    HISTORIES: (qs = '') => `/custom-fields/histories${qs ? `?${qs}` : ''}`,
+    FILTER: '/custom-fields/values/filter',
+    DEFINITIONS: (qs = '') => `/custom-fields/definitions${qs ? `?${qs}` : ''}`,
+    DEFINITION_BY_ID: (id: string | number) => `/custom-fields/definitions/${id}`,
+    DEFINITION_OPTIONS: (id: string | number) => `/custom-fields/definitions/${id}/options`,
+    DEFINITION_HISTORIES: (id: string | number, qs = '') =>
+      `/custom-fields/definitions/${id}/histories${qs ? `?${qs}` : ''}`,
+    VALUES_BY_RECORD: (entityCode: string, recordId: string | number, qs = '') =>
+      `/custom-fields/values/${encodeURIComponent(entityCode)}/${encodeURIComponent(String(recordId))}${qs ? `?${qs}` : ''}`,
+  },
 } as const;

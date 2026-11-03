@@ -1,0 +1,7 @@
+{
+  "memberNotFound": "Không tìm thấy thành viên #{userId}.",
+  "sourceUnitNotAssigned": "Thành viên #{userId} hiện không thuộc đơn vị nguồn #{fromOrganizationUnitId}.",
+  "sameTransferUnit": "Đơn vị đích phải khác đơn vị nguồn khi thực hiện điều chuyển.",
+  "invalidMembershipPeriod": "Ngày kết thúc tham gia đơn vị phải lớn hơn hoặc bằng ngày bắt đầu.",
+  "invalidTemporaryManagerPeriod": "Khoảng thời gian hiệu lực của người quản lý tạm thời không hợp lệ."
+}

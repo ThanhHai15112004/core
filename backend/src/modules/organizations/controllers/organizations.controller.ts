@@ -10,6 +10,7 @@ import {
   ValidatedQuery,
   positiveIntParamSchema,
 } from '@packages/http/index.js';
+import { CurrentUser, type UserIdentity } from '@packages/security/index.js';
 import { ORGANIZATIONS_ROUTES } from '../routes/organizations.routes.js';
 import { OrganizationsService } from '../services/organizations.service.js';
 import {
@@ -63,8 +64,9 @@ export class OrganizationsController {
   })
   public async list(
     @ValidatedQuery(listOrganizationUnitsQuerySchema) query: ListOrganizationUnitsQuery,
+    @CurrentUser() actor?: UserIdentity,
   ): Promise<OrganizationUnitResponse[]> {
-    return this.organizationsService.list(query);
+    return this.organizationsService.list(query, actor);
   }
 
   /** Lấy sơ đồ cây đơn vị/chi nhánh phân cấp */
@@ -76,8 +78,9 @@ export class OrganizationsController {
   })
   public async getTree(
     @ValidatedQuery(listOrganizationUnitsQuerySchema) query: ListOrganizationUnitsQuery,
+    @CurrentUser() actor?: UserIdentity,
   ): Promise<OrganizationTreeNodeResponse[]> {
-    return this.organizationsService.getTree(query);
+    return this.organizationsService.getTree(query, actor);
   }
 
   /** Lấy thống kê KPI tổng quan của sơ đồ tổ chức */
@@ -140,8 +143,9 @@ export class OrganizationsController {
   })
   public async getById(
     @ValidatedParams(positiveIntParamSchema, 'id') id: number,
+    @CurrentUser() actor?: UserIdentity,
   ): Promise<OrganizationUnitResponse> {
-    return this.organizationsService.getById(id);
+    return this.organizationsService.getById(id, actor);
   }
 
   /** Kiểm tra ảnh hưởng đến quyền và dữ liệu trước khi di chuyển đơn vị trong cây */
@@ -214,8 +218,9 @@ export class OrganizationsController {
   })
   public async create(
     @ValidatedBody(createOrganizationUnitSchema) body: CreateOrganizationUnitRequest,
+    @CurrentUser() actor?: UserIdentity,
   ): Promise<OrganizationUnitResponse> {
-    return this.organizationsService.create(body);
+    return this.organizationsService.create(body, actor);
   }
 
   /** Cập nhật đơn vị hoặc chi nhánh */
@@ -228,8 +233,9 @@ export class OrganizationsController {
   public async update(
     @ValidatedParams(positiveIntParamSchema, 'id') id: number,
     @ValidatedBody(updateOrganizationUnitSchema) body: UpdateOrganizationUnitRequest,
+    @CurrentUser() actor?: UserIdentity,
   ): Promise<OrganizationUnitResponse> {
-    return this.organizationsService.update(id, body);
+    return this.organizationsService.update(id, body, actor);
   }
 
   /** Xóa mềm đơn vị hoặc chi nhánh */

@@ -78,9 +78,12 @@ export class DevelopmentDataSeeder implements SeederContract {
     // Seed dữ liệu mẫu cho Module Lịch & Sự kiện (Phase 9 - Mục 9.7)
     affected += await this.seedSampleCalendarEvents(ctx, isPostgres);
 
+    // Seed dữ liệu mẫu cho Module Trường tùy chỉnh & Metadata (Phase 9 - Mục 9.8)
+    affected += await this.seedSampleCustomFields(ctx, isPostgres);
+
     return {
       affected,
-      details: `${affected} development record(s) (settings, folders, files, usages, notifications, workflows & calendar events) seeded`,
+      details: `${affected} development record(s) (settings, folders, files, usages, notifications, workflows, calendar events & custom fields) seeded`,
     };
   }
 
@@ -1174,6 +1177,835 @@ export class DevelopmentDataSeeder implements SeederContract {
         'calendar_events',
         'calendar_event_participants',
         'calendar_event_histories',
+      ]) {
+        await ctx.manager
+          .query(
+            `SELECT setval(pg_get_serial_sequence('${tbl}', 'id'), COALESCE((SELECT MAX(id) FROM ${tbl}), 1), true)`,
+          )
+          .catch(() => undefined);
+      }
+    }
+
+    return count;
+  }
+
+  private async seedSampleCustomFields(ctx: SeederContext, isPostgres: boolean): Promise<number> {
+    let count = 0;
+
+    const definitions = [
+      {
+        id: 1,
+        entityCode: 'users.user',
+        moduleCode: 'users',
+        fieldKey: 'employee_level',
+        name: 'Cấp bậc nhân sự (Employee Level)',
+        labelsJson: JSON.stringify({
+          vi: 'Cấp bậc nhân sự',
+          en: 'Employee Level',
+        }),
+        description: 'Cấp bậc chuyên môn của nhân sự trong tổ chức (L1..L5)',
+        dataType: 'SELECT',
+        isRequired: false,
+        defaultValueJson: JSON.stringify('L2'),
+        validationRulesJson: JSON.stringify({}),
+        viewPermission: 'users.read',
+        editPermission: 'users.update',
+        allowedViewRolesJson: null,
+        allowedEditRolesJson: null,
+        isSensitive: false,
+        showInApi: true,
+        showInList: true,
+        showInDetail: true,
+        isIndexed: true,
+        sortOrder: 1,
+        status: 1,
+        isSystem: true,
+        version: 1,
+      },
+      {
+        id: 2,
+        entityCode: 'users.user',
+        moduleCode: 'users',
+        fieldKey: 'onboarding_date',
+        name: 'Ngày nhận việc chính thức',
+        labelsJson: JSON.stringify({
+          vi: 'Ngày nhận việc chính thức',
+          en: 'Onboarding Date',
+        }),
+        description: 'Ngày bắt đầu làm việc chính thức tại doanh nghiệp',
+        dataType: 'DATE',
+        isRequired: false,
+        defaultValueJson: null,
+        validationRulesJson: JSON.stringify({
+          minDate: '2010-01-01',
+          maxDate: '2035-12-31',
+        }),
+        viewPermission: 'users.read',
+        editPermission: 'users.update',
+        allowedViewRolesJson: null,
+        allowedEditRolesJson: null,
+        isSensitive: false,
+        showInApi: true,
+        showInList: true,
+        showInDetail: true,
+        isIndexed: true,
+        sortOrder: 2,
+        status: 1,
+        isSystem: true,
+        version: 1,
+      },
+      {
+        id: 3,
+        entityCode: 'users.user',
+        moduleCode: 'users',
+        fieldKey: 'remote_eligible',
+        name: 'Đủ điều kiện làm việc từ xa (Remote Eligible)',
+        labelsJson: JSON.stringify({
+          vi: 'Đủ điều kiện làm việc từ xa',
+          en: 'Remote Eligible',
+        }),
+        description: 'Cho phép nhân sự đăng ký làm việc Hybrid/Remote',
+        dataType: 'BOOLEAN',
+        isRequired: false,
+        defaultValueJson: JSON.stringify(true),
+        validationRulesJson: JSON.stringify({}),
+        viewPermission: 'users.read',
+        editPermission: 'users.update',
+        allowedViewRolesJson: null,
+        allowedEditRolesJson: null,
+        isSensitive: false,
+        showInApi: true,
+        showInList: true,
+        showInDetail: true,
+        isIndexed: true,
+        sortOrder: 3,
+        status: 1,
+        isSystem: true,
+        version: 1,
+      },
+      {
+        id: 4,
+        entityCode: 'users.user',
+        moduleCode: 'users',
+        fieldKey: 'tax_id_number',
+        name: 'Mã số thuế cá nhân',
+        labelsJson: JSON.stringify({
+          vi: 'Mã số thuế cá nhân',
+          en: 'Personal Tax ID',
+        }),
+        description: 'Mã số thuế cá nhân (10-13 chữ số, trường nhạy cảm)',
+        dataType: 'TEXT',
+        isRequired: false,
+        defaultValueJson: null,
+        validationRulesJson: JSON.stringify({
+          minLength: 10,
+          maxLength: 14,
+          pattern: '^[0-9-]+$',
+        }),
+        viewPermission: 'custom-fields.sensitive.read',
+        editPermission: 'custom-fields.sensitive.write',
+        allowedViewRolesJson: JSON.stringify(['super_admin', 'admin', 'admin_hr', 'admin_finance']),
+        allowedEditRolesJson: JSON.stringify(['super_admin', 'admin', 'admin_hr']),
+        isSensitive: true,
+        showInApi: true,
+        showInList: false,
+        showInDetail: true,
+        isIndexed: false,
+        sortOrder: 4,
+        status: 1,
+        isSystem: true,
+        version: 1,
+      },
+      {
+        id: 5,
+        entityCode: 'users.user',
+        moduleCode: 'users',
+        fieldKey: 'annual_bonus_target',
+        name: 'Mục tiêu thưởng năm (%)',
+        labelsJson: JSON.stringify({
+          vi: 'Mục tiêu thưởng năm (%)',
+          en: 'Annual Bonus Target (%)',
+        }),
+        description: 'Tỷ lệ phần trăm thưởng hiệu suất mục tiêu hàng năm (0..200%)',
+        dataType: 'NUMBER',
+        isRequired: false,
+        defaultValueJson: JSON.stringify(15),
+        validationRulesJson: JSON.stringify({
+          min: 0,
+          max: 200,
+        }),
+        viewPermission: 'custom-fields.sensitive.read',
+        editPermission: 'custom-fields.sensitive.write',
+        allowedViewRolesJson: JSON.stringify(['super_admin', 'admin', 'admin_hr']),
+        allowedEditRolesJson: JSON.stringify(['super_admin', 'admin', 'admin_hr']),
+        isSensitive: true,
+        showInApi: true,
+        showInList: false,
+        showInDetail: true,
+        isIndexed: false,
+        sortOrder: 5,
+        status: 1,
+        isSystem: true,
+        version: 1,
+      },
+      {
+        id: 6,
+        entityCode: 'organizations.organization_unit',
+        moduleCode: 'organizations',
+        fieldKey: 'cost_center_code',
+        name: 'Mã trung tâm chi phí (Cost Center)',
+        labelsJson: JSON.stringify({
+          vi: 'Mã trung tâm chi phí (Cost Center)',
+          en: 'Cost Center Code',
+        }),
+        description: 'Mã hạch toán trung tâm chi phí ERP của đơn vị/phòng ban',
+        dataType: 'TEXT',
+        isRequired: false,
+        defaultValueJson: null,
+        validationRulesJson: JSON.stringify({
+          minLength: 3,
+          maxLength: 32,
+          pattern: '^[A-Z0-9_-]+$',
+        }),
+        viewPermission: 'organizations.read',
+        editPermission: 'organizations.manage',
+        allowedViewRolesJson: null,
+        allowedEditRolesJson: null,
+        isSensitive: false,
+        showInApi: true,
+        showInList: true,
+        showInDetail: true,
+        isIndexed: true,
+        sortOrder: 1,
+        status: 1,
+        isSystem: true,
+        version: 1,
+      },
+      {
+        id: 7,
+        entityCode: 'organizations.organization_unit',
+        moduleCode: 'organizations',
+        fieldKey: 'headcount_quota',
+        name: 'Định biên nhân sự (Headcount Quota)',
+        labelsJson: JSON.stringify({
+          vi: 'Định biên nhân sự',
+          en: 'Headcount Quota',
+        }),
+        description: 'Số lượng định biên nhân sự tối đa được phê duyệt cho đơn vị',
+        dataType: 'NUMBER',
+        isRequired: false,
+        defaultValueJson: JSON.stringify(25),
+        validationRulesJson: JSON.stringify({
+          min: 1,
+          max: 10000,
+          integerOnly: true,
+        }),
+        viewPermission: 'organizations.read',
+        editPermission: 'organizations.manage',
+        allowedViewRolesJson: null,
+        allowedEditRolesJson: null,
+        isSensitive: false,
+        showInApi: true,
+        showInList: true,
+        showInDetail: true,
+        isIndexed: true,
+        sortOrder: 2,
+        status: 1,
+        isSystem: true,
+        version: 1,
+      },
+      {
+        id: 8,
+        entityCode: 'organizations.organization_unit',
+        moduleCode: 'organizations',
+        fieldKey: 'region_tier',
+        name: 'Phân hạng vùng hoạt động (Region Tier)',
+        labelsJson: JSON.stringify({
+          vi: 'Phân hạng vùng hoạt động',
+          en: 'Operating Region Tier',
+        }),
+        description: 'Phân cấp chiến lược của đơn vị theo quy mô vận hành',
+        dataType: 'SELECT',
+        isRequired: false,
+        defaultValueJson: JSON.stringify('TIER_1'),
+        validationRulesJson: JSON.stringify({}),
+        viewPermission: 'organizations.read',
+        editPermission: 'organizations.manage',
+        allowedViewRolesJson: null,
+        allowedEditRolesJson: null,
+        isSensitive: false,
+        showInApi: true,
+        showInList: true,
+        showInDetail: true,
+        isIndexed: true,
+        sortOrder: 3,
+        status: 1,
+        isSystem: true,
+        version: 1,
+      },
+    ];
+
+    for (const def of definitions) {
+      if (isPostgres) {
+        await ctx.manager.query(
+          `INSERT INTO custom_field_definitions (
+             id, entity_code, module, field_key, name, description, data_type,
+             is_required, default_value_json, validation_rules_json, view_permission, edit_permission,
+             allowed_view_roles_json, allowed_edit_roles_json, is_sensitive, show_in_api, show_in_list,
+             show_in_detail, is_indexed, sort_order, status, is_system, version
+           )
+           VALUES (
+             $1, $2, $3, $4, $5, $6, $7,
+             $8, $9, $10, $11, $12,
+             $13, $14, $15, $16, $17,
+             $18, $19, $20, $21, $22, $23
+           )
+           ON CONFLICT (entity_code, field_key) DO UPDATE SET
+             name = EXCLUDED.name,
+             description = EXCLUDED.description,
+             validation_rules_json = EXCLUDED.validation_rules_json`,
+          [
+            def.id,
+            def.entityCode,
+            def.moduleCode,
+            def.fieldKey,
+            def.name,
+            def.description,
+            def.dataType,
+            def.isRequired,
+            def.defaultValueJson,
+            def.validationRulesJson,
+            def.viewPermission,
+            def.editPermission,
+            def.allowedViewRolesJson,
+            def.allowedEditRolesJson,
+            def.isSensitive,
+            def.showInApi,
+            def.showInList,
+            def.showInDetail,
+            def.isIndexed,
+            def.sortOrder,
+            def.status,
+            def.isSystem,
+            def.version,
+          ],
+        );
+      } else {
+        await ctx.manager.query(
+          `INSERT INTO custom_field_definitions (
+             id, entity_code, module, field_key, name, description, data_type,
+             is_required, default_value_json, validation_rules_json, view_permission, edit_permission,
+             allowed_view_roles_json, allowed_edit_roles_json, is_sensitive, show_in_api, show_in_list,
+             show_in_detail, is_indexed, sort_order, status, is_system, version
+           )
+           VALUES (
+             ?, ?, ?, ?, ?, ?, ?,
+             ?, ?, ?, ?, ?,
+             ?, ?, ?, ?, ?,
+             ?, ?, ?, ?, ?, ?
+           )
+           ON DUPLICATE KEY UPDATE
+             name = VALUES(name),
+             description = VALUES(description),
+             validation_rules_json = VALUES(validation_rules_json)`,
+          [
+            def.id,
+            def.entityCode,
+            def.moduleCode,
+            def.fieldKey,
+            def.name,
+            def.description,
+            def.dataType,
+            def.isRequired,
+            def.defaultValueJson,
+            def.validationRulesJson,
+            def.viewPermission,
+            def.editPermission,
+            def.allowedViewRolesJson,
+            def.allowedEditRolesJson,
+            def.isSensitive,
+            def.showInApi,
+            def.showInList,
+            def.showInDetail,
+            def.isIndexed,
+            def.sortOrder,
+            def.status,
+            def.isSystem,
+            def.version,
+          ],
+        );
+      }
+      count++;
+    }
+
+    const options = [
+      {
+        id: 1,
+        defId: 1,
+        entityCode: 'users.user',
+        fieldKey: 'employee_level',
+        value: 'L1',
+        label: 'L1 - Associate / Junior',
+        labelsJson: JSON.stringify({ vi: 'L1 - Chuyên viên sơ cấp', en: 'L1 - Associate / Junior' }),
+        color: '#64748b',
+        sortOrder: 1,
+        status: 1,
+        isDefault: false,
+      },
+      {
+        id: 2,
+        defId: 1,
+        entityCode: 'users.user',
+        fieldKey: 'employee_level',
+        value: 'L2',
+        label: 'L2 - Mid-Level Professional',
+        labelsJson: JSON.stringify({ vi: 'L2 - Chuyên viên chính', en: 'L2 - Mid-Level Professional' }),
+        color: '#0284c7',
+        sortOrder: 2,
+        status: 1,
+        isDefault: true,
+      },
+      {
+        id: 3,
+        defId: 1,
+        entityCode: 'users.user',
+        fieldKey: 'employee_level',
+        value: 'L3',
+        label: 'L3 - Senior Specialist',
+        labelsJson: JSON.stringify({ vi: 'L3 - Chuyên viên cao cấp', en: 'L3 - Senior Specialist' }),
+        color: '#4f46e5',
+        sortOrder: 3,
+        status: 1,
+        isDefault: false,
+      },
+      {
+        id: 4,
+        defId: 1,
+        entityCode: 'users.user',
+        fieldKey: 'employee_level',
+        value: 'L4',
+        label: 'L4 - Lead / Principal',
+        labelsJson: JSON.stringify({ vi: 'L4 - Trưởng nhóm / Chuyên gia', en: 'L4 - Lead / Principal' }),
+        color: '#7c3aed',
+        sortOrder: 4,
+        status: 1,
+        isDefault: false,
+      },
+      {
+        id: 5,
+        defId: 1,
+        entityCode: 'users.user',
+        fieldKey: 'employee_level',
+        value: 'L5',
+        label: 'L5 - Executive / Director',
+        labelsJson: JSON.stringify({ vi: 'L5 - Giám đốc / Điều hành', en: 'L5 - Executive / Director' }),
+        color: '#d97706',
+        sortOrder: 5,
+        status: 1,
+        isDefault: false,
+      },
+      {
+        id: 6,
+        defId: 1,
+        entityCode: 'users.user',
+        fieldKey: 'employee_level',
+        value: 'L0_LEGACY',
+        label: 'L0 - Legacy Contractor (Ngừng dùng)',
+        labelsJson: JSON.stringify({
+          vi: 'L0 - Cộng tác viên cũ (Ngừng dùng)',
+          en: 'L0 - Legacy Contractor (Inactive)',
+        }),
+        color: '#94a3b8',
+        sortOrder: 6,
+        status: 2,
+        isDefault: false,
+      },
+      {
+        id: 7,
+        defId: 8,
+        entityCode: 'organizations.organization_unit',
+        fieldKey: 'region_tier',
+        value: 'TIER_1',
+        label: 'Tier 1 - Trung tâm Chiến lược',
+        labelsJson: JSON.stringify({ vi: 'Tier 1 - Trung tâm Chiến lược', en: 'Tier 1 - Strategic Hub' }),
+        color: '#059669',
+        sortOrder: 1,
+        status: 1,
+        isDefault: true,
+      },
+      {
+        id: 8,
+        defId: 8,
+        entityCode: 'organizations.organization_unit',
+        fieldKey: 'region_tier',
+        value: 'TIER_2',
+        label: 'Tier 2 - Đơn vị Mở rộng',
+        labelsJson: JSON.stringify({ vi: 'Tier 2 - Đơn vị Mở rộng', en: 'Tier 2 - Growth Unit' }),
+        color: '#2563eb',
+        sortOrder: 2,
+        status: 1,
+        isDefault: false,
+      },
+      {
+        id: 9,
+        defId: 8,
+        entityCode: 'organizations.organization_unit',
+        fieldKey: 'region_tier',
+        value: 'TIER_3',
+        label: 'Tier 3 - Đơn vị Vệ tinh',
+        labelsJson: JSON.stringify({ vi: 'Tier 3 - Đơn vị Vệ tinh', en: 'Tier 3 - Satellite Unit' }),
+        color: '#64748b',
+        sortOrder: 3,
+        status: 1,
+        isDefault: false,
+      },
+    ];
+
+    for (const opt of options) {
+      if (isPostgres) {
+        await ctx.manager.query(
+          `INSERT INTO custom_field_options (
+             id, field_id, option_code, option_label, labels_json,
+             color, sort_order, status, is_default
+           )
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+           ON CONFLICT (field_id, option_code) DO UPDATE SET
+             option_label = EXCLUDED.option_label,
+             labels_json = EXCLUDED.labels_json,
+             sort_order = EXCLUDED.sort_order,
+             status = EXCLUDED.status`,
+          [
+            opt.id,
+            opt.defId,
+            opt.value,
+            opt.label,
+            opt.labelsJson,
+            opt.color,
+            opt.sortOrder,
+            opt.status,
+            opt.isDefault,
+          ],
+        );
+      } else {
+        await ctx.manager.query(
+          `INSERT INTO custom_field_options (
+             id, field_id, option_code, option_label, labels_json,
+             color, sort_order, status, is_default
+           )
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON DUPLICATE KEY UPDATE
+             option_label = VALUES(option_label),
+             labels_json = VALUES(labels_json),
+             sort_order = VALUES(sort_order),
+             status = VALUES(status)`,
+          [
+            opt.id,
+            opt.defId,
+            opt.value,
+            opt.label,
+            opt.labelsJson,
+            opt.color,
+            opt.sortOrder,
+            opt.status,
+            opt.isDefault,
+          ],
+        );
+      }
+      count++;
+    }
+
+    const values = [
+      {
+        id: 1,
+        defId: 1,
+        entityCode: 'users.user',
+        recordId: '1',
+        fieldKey: 'employee_level',
+        dataType: 'SELECT',
+        valueText: 'L5',
+        valueNumber: null,
+        valueDate: null,
+        valueBoolean: null,
+        valueJson: JSON.stringify('L5'),
+      },
+      {
+        id: 2,
+        defId: 2,
+        entityCode: 'users.user',
+        recordId: '1',
+        fieldKey: 'onboarding_date',
+        dataType: 'DATE',
+        valueText: '2020-01-15',
+        valueNumber: null,
+        valueDate: '2020-01-15',
+        valueBoolean: null,
+        valueJson: JSON.stringify('2020-01-15'),
+      },
+      {
+        id: 3,
+        defId: 3,
+        entityCode: 'users.user',
+        recordId: '1',
+        fieldKey: 'remote_eligible',
+        dataType: 'BOOLEAN',
+        valueText: 'true',
+        valueNumber: null,
+        valueDate: null,
+        valueBoolean: true,
+        valueJson: JSON.stringify(true),
+      },
+      {
+        id: 4,
+        defId: 1,
+        entityCode: 'users.user',
+        recordId: '2',
+        fieldKey: 'employee_level',
+        dataType: 'SELECT',
+        valueText: 'L4',
+        valueNumber: null,
+        valueDate: null,
+        valueBoolean: null,
+        valueJson: JSON.stringify('L4'),
+      },
+      {
+        id: 5,
+        defId: 2,
+        entityCode: 'users.user',
+        recordId: '2',
+        fieldKey: 'onboarding_date',
+        dataType: 'DATE',
+        valueText: '2021-06-01',
+        valueNumber: null,
+        valueDate: '2021-06-01',
+        valueBoolean: null,
+        valueJson: JSON.stringify('2021-06-01'),
+      },
+      {
+        id: 6,
+        defId: 6,
+        entityCode: 'organizations.organization_unit',
+        recordId: '1',
+        fieldKey: 'cost_center_code',
+        dataType: 'TEXT',
+        valueText: 'CC-HQ-HCM-001',
+        valueNumber: null,
+        valueDate: null,
+        valueBoolean: null,
+        valueJson: JSON.stringify('CC-HQ-HCM-001'),
+      },
+      {
+        id: 7,
+        defId: 7,
+        entityCode: 'organizations.organization_unit',
+        recordId: '1',
+        fieldKey: 'headcount_quota',
+        dataType: 'NUMBER',
+        valueText: '250',
+        valueNumber: 250,
+        valueDate: null,
+        valueBoolean: null,
+        valueJson: JSON.stringify(250),
+      },
+      {
+        id: 8,
+        defId: 8,
+        entityCode: 'organizations.organization_unit',
+        recordId: '1',
+        fieldKey: 'region_tier',
+        dataType: 'SELECT',
+        valueText: 'TIER_1',
+        valueNumber: null,
+        valueDate: null,
+        valueBoolean: null,
+        valueJson: JSON.stringify('TIER_1'),
+      },
+      {
+        id: 9,
+        defId: 6,
+        entityCode: 'organizations.organization_unit',
+        recordId: '3',
+        fieldKey: 'cost_center_code',
+        dataType: 'TEXT',
+        valueText: 'CC-ENG-HCM-003',
+        valueNumber: null,
+        valueDate: null,
+        valueBoolean: null,
+        valueJson: JSON.stringify('CC-ENG-HCM-003'),
+      },
+      {
+        id: 10,
+        defId: 7,
+        entityCode: 'organizations.organization_unit',
+        recordId: '3',
+        fieldKey: 'headcount_quota',
+        dataType: 'NUMBER',
+        valueText: '80',
+        valueNumber: 80,
+        valueDate: null,
+        valueBoolean: null,
+        valueJson: JSON.stringify(80),
+      },
+    ];
+
+    for (const val of values) {
+      const optionCode = val.dataType === 'SELECT' ? val.valueText : null;
+      if (isPostgres) {
+        await ctx.manager.query(
+          `INSERT INTO custom_field_values (
+             id, field_id, entity_code, record_id, field_key, data_type,
+             value_text, value_number, value_date, value_boolean, option_code, option_label, value_json,
+             encrypted_value, updated_by_user_id
+           )
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NULL, 1)
+           ON CONFLICT (entity_code, record_id, field_key) DO UPDATE SET
+             value_text = EXCLUDED.value_text,
+             value_number = EXCLUDED.value_number,
+             value_date = EXCLUDED.value_date,
+             value_boolean = EXCLUDED.value_boolean,
+             option_code = EXCLUDED.option_code,
+             value_json = EXCLUDED.value_json`,
+          [
+            val.id,
+            val.defId,
+            val.entityCode,
+            val.recordId,
+            val.fieldKey,
+            val.dataType,
+            val.valueText,
+            val.valueNumber,
+            val.valueDate,
+            val.valueBoolean,
+            optionCode,
+            optionCode,
+            val.valueJson,
+          ],
+        );
+      } else {
+        await ctx.manager.query(
+          `INSERT INTO custom_field_values (
+             id, field_id, entity_code, record_id, field_key, data_type,
+             value_text, value_number, value_date, value_boolean, option_code, option_label, value_json,
+             encrypted_value, updated_by_user_id
+           )
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 1)
+           ON DUPLICATE KEY UPDATE
+             value_text = VALUES(value_text),
+             value_number = VALUES(value_number),
+             value_date = VALUES(value_date),
+             value_boolean = VALUES(value_boolean),
+             option_code = VALUES(option_code),
+             value_json = VALUES(value_json)`,
+          [
+            val.id,
+            val.defId,
+            val.entityCode,
+            val.recordId,
+            val.fieldKey,
+            val.dataType,
+            val.valueText,
+            val.valueNumber,
+            val.valueDate,
+            val.valueBoolean,
+            optionCode,
+            optionCode,
+            val.valueJson,
+          ],
+        );
+      }
+      count++;
+    }
+
+    const histories = [
+      {
+        id: 1,
+        defId: 1,
+        entityCode: 'users.user',
+        fieldKey: 'employee_level',
+        actionType: 'MANIFEST_SYNC',
+        beforeSnapshotJson: null,
+        afterSnapshotJson: JSON.stringify({
+          fieldKey: 'employee_level',
+          dataType: 'SELECT',
+          isIndexed: true,
+          showInApi: true,
+        }),
+        changedFieldsJson: JSON.stringify(['*']),
+        actorUserId: 1,
+        reason: 'Đồng bộ trường tùy chỉnh employee_level từ users/module.manifest.json',
+      },
+      {
+        id: 2,
+        defId: 4,
+        entityCode: 'users.user',
+        fieldKey: 'tax_id_number',
+        actionType: 'DATA_TYPE_CHANGE_BLOCKED',
+        beforeSnapshotJson: JSON.stringify({
+          fieldKey: 'tax_id_number',
+          dataType: 'TEXT',
+          isSensitive: true,
+        }),
+        afterSnapshotJson: JSON.stringify({
+          attemptedDataType: 'NUMBER',
+        }),
+        changedFieldsJson: JSON.stringify(['dataType']),
+        actorUserId: 2,
+        reason: 'Chặn đổi kiểu dữ liệu tùy tiện từ TEXT sang NUMBER để bảo toàn dữ liệu lịch sử (Mục 9.8.8)',
+      },
+    ];
+
+    for (const h of histories) {
+      if (isPostgres) {
+        await ctx.manager.query(
+          `INSERT INTO custom_field_histories (
+             id, field_id, entity_code, field_key, action_type,
+             before_snapshot_json, after_snapshot_json, changed_fields_json, actor_user_id, reason
+           )
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+           ON CONFLICT (id) DO UPDATE SET reason = EXCLUDED.reason`,
+          [
+            h.id,
+            h.defId,
+            h.entityCode,
+            h.fieldKey,
+            h.actionType,
+            h.beforeSnapshotJson,
+            h.afterSnapshotJson,
+            h.changedFieldsJson,
+            h.actorUserId,
+            h.reason,
+          ],
+        );
+      } else {
+        await ctx.manager.query(
+          `INSERT INTO custom_field_histories (
+             id, field_id, entity_code, field_key, action_type,
+             before_snapshot_json, after_snapshot_json, changed_fields_json, actor_user_id, reason
+           )
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON DUPLICATE KEY UPDATE reason = VALUES(reason)`,
+          [
+            h.id,
+            h.defId,
+            h.entityCode,
+            h.fieldKey,
+            h.actionType,
+            h.beforeSnapshotJson,
+            h.afterSnapshotJson,
+            h.changedFieldsJson,
+            h.actorUserId,
+            h.reason,
+          ],
+        );
+      }
+      count++;
+    }
+
+    if (isPostgres) {
+      for (const tbl of [
+        'custom_field_definitions',
+        'custom_field_options',
+        'custom_field_values',
+        'custom_field_histories',
       ]) {
         await ctx.manager
           .query(

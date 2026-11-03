@@ -50,6 +50,7 @@ export const createOrganizationUnitSchema = z.object({
   managerId: coerceOptionalIntId,
   status: orgStatusSchema,
   description: z.string().trim().max(1000).nullable().optional(),
+  customFields: z.record(z.string(), z.unknown()).optional(),
 });
 
 export interface CreateOrganizationUnitRequest {
@@ -60,6 +61,7 @@ export interface CreateOrganizationUnitRequest {
   readonly managerId?: number | null | undefined;
   readonly status?: OrganizationUnitStatusCode | undefined;
   readonly description?: string | null | undefined;
+  readonly customFields?: Readonly<Record<string, unknown>> | undefined;
 }
 
 export const updateOrganizationUnitSchema = z.object({
@@ -70,6 +72,7 @@ export const updateOrganizationUnitSchema = z.object({
   managerId: coerceOptionalIntId,
   status: orgStatusSchema,
   description: z.string().trim().max(1000).nullable().optional(),
+  customFields: z.record(z.string(), z.unknown()).optional(),
 });
 
 export interface UpdateOrganizationUnitRequest {
@@ -80,6 +83,7 @@ export interface UpdateOrganizationUnitRequest {
   readonly managerId?: number | null | undefined;
   readonly status?: OrganizationUnitStatusCode | undefined;
   readonly description?: string | null | undefined;
+  readonly customFields?: Readonly<Record<string, unknown>> | undefined;
 }
 
 export const moveOrganizationUnitQuerySchema = z.object({
@@ -126,6 +130,7 @@ export const ORGANIZATION_UNIT_SELECTABLE_FIELDS = [
   'managerName',
   'status',
   'description',
+  'customFields',
   'createdAt',
   'updatedAt',
 ] as const;
@@ -148,6 +153,7 @@ export const listOrganizationUnitsQuerySchema = z
         z.number().int().min(1),
       )
       .optional(),
+    customFieldFilters: z.string().trim().max(2000).optional(),
     sortBy: z.enum(['id', 'code', 'name', 'createdAt']).optional(),
     sortOrder: z
       .preprocess(
@@ -174,6 +180,7 @@ export const listOrganizationUnitsQuerySchema = z
       status: raw.status,
       parentId: raw.parentId,
       managerId: raw.managerId,
+      customFieldFilters: raw.customFieldFilters,
       sortBy: raw.sortBy,
       sortOrder: raw.sortOrder,
       sort: raw.sort,
@@ -188,6 +195,7 @@ export interface ListOrganizationUnitsQuery {
   readonly status?: OrganizationUnitStatusCode | undefined;
   readonly parentId?: number | undefined;
   readonly managerId?: number | undefined;
+  readonly customFieldFilters?: string | undefined;
   readonly sortBy?: 'id' | 'code' | 'name' | 'createdAt' | undefined;
   readonly sortOrder?: 'ASC' | 'DESC' | undefined;
   readonly sort?: string | undefined;

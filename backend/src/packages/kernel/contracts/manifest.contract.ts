@@ -2,6 +2,10 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { safeJsonParse, safeJsonParseObject } from '../utils/json.util.js';
 import type { CodeTypeManifestItem } from './code-lookup.contract.js';
+import type {
+  CustomFieldManifestItem,
+  ExtensibleEntityManifestItem,
+} from './custom-field.contract.js';
 import type { FeatureFlagManifestItem } from './feature-flag.contract.js';
 import type { MenuManifestItem } from './menu.contract.js';
 import type { ReportManifestItem } from './report.contract.js';
@@ -41,6 +45,8 @@ export interface ModuleManifest {
   menus?: MenuManifestItem[];
   reports?: ReportManifestItem[];
   searchableEntities?: SearchableEntityManifestItem[];
+  extensibleEntities?: ExtensibleEntityManifestItem[];
+  customFields?: CustomFieldManifestItem[];
   locales?: Record<string, unknown>[];
   timezones?: Record<string, unknown>[];
   translations?: Record<string, unknown>[];

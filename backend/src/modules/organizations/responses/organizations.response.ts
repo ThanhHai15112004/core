@@ -27,6 +27,7 @@ export interface OrganizationUnitResponse {
   readonly status: OrganizationUnitStatusCode;
   readonly statusName: OrganizationUnitStatusName;
   readonly description: string | null;
+  readonly customFields?: Readonly<Record<string, unknown>> | undefined;
   readonly createdAt: string;
   readonly updatedAt: string;
 }
@@ -43,6 +44,7 @@ export const organizationUnitResponseSchema = z.object({
   status: z.union([z.literal(1), z.literal(2), z.literal(3)]),
   statusName: z.enum(['ACTIVE', 'INACTIVE', 'ARCHIVED']),
   description: z.string().nullable(),
+  customFields: z.record(z.string(), z.unknown()).optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });

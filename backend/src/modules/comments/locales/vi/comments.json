@@ -1,0 +1,9 @@
+{
+  "commentNotFound": "Không tìm thấy bình luận #{id}.",
+  "parentCommentNotFound": "Không tìm thấy bình luận gốc #{parentCommentId} để trả lời.",
+  "parentCommentEntityMismatch": "Bình luận trả lời phải thuộc cùng đối tượng nghiệp vụ với bình luận gốc.",
+  "internalNoteForbidden": "Bạn không có quyền tạo hoặc xem ghi chú nội bộ.",
+  "commentDeletedCannotEdit": "Bình luận #{id} đã bị xóa nên không thể chỉnh sửa.",
+  "commentEditForbidden": "Bạn chỉ có thể chỉnh sửa hoặc xóa bình luận của chính mình (trừ quản trị viên).",
+  "commentEditWindowExpired": "Đã quá thời hạn {maxEditMinutes} phút cho phép chỉnh sửa hoặc xóa bình luận."
+}

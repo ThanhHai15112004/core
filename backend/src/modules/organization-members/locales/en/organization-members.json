@@ -1,0 +1,7 @@
+{
+  "memberNotFound": "Organization member #{userId} was not found.",
+  "sourceUnitNotAssigned": "Member #{userId} is not currently assigned to source unit #{fromOrganizationUnitId}.",
+  "sameTransferUnit": "Destination organization unit must differ from source unit during transfer.",
+  "invalidMembershipPeriod": "Organization membership end date must be greater than or equal to start date.",
+  "invalidTemporaryManagerPeriod": "Temporary manager effective period is invalid."
+}

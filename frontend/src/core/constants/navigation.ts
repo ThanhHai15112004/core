@@ -11,7 +11,8 @@ export type NavigationTabId =
   | 'files'
   | 'notifications'
   | 'workflows'
-  | 'calendar';
+  | 'calendar'
+  | 'custom-fields';
 
 export interface NavigationItem {
   id: NavigationTabId;
@@ -87,6 +88,12 @@ export const NAVIGATION_ITEMS: readonly NavigationItem[] = [
     labelKey: 'header.calendar',
     icon: 'calendar',
     route: ROUTES.CALENDAR,
+  },
+  {
+    id: 'custom-fields',
+    labelKey: 'header.customFields',
+    icon: 'sliders',
+    route: ROUTES.CUSTOM_FIELDS,
   },
 ] as const;
 

@@ -1,0 +1,8 @@
+{
+  "delegationNotFound": "Không tìm thấy cấu hình ủy quyền phê duyệt #{id}.",
+  "cannotDelegateToSelf": "Không thể tự ủy quyền phê duyệt cho chính mình.",
+  "invalidDelegationPeriod": "Thời gian hiệu lực ủy quyền không hợp lệ (effectiveUntil phải lớn hơn effectiveFrom).",
+  "delegationForbidden": "Bạn chỉ có thể tạo hoặc thu hồi ủy quyền của chính mình (trừ quản trị viên phê duyệt).",
+  "instanceHandlerUnavailable": "Bộ điều phối phiên quy trình phê duyệt hiện chưa được kết nối.",
+  "instanceNotFound": "Không tìm thấy phiên phê duyệt #{id}."
+}

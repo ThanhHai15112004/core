@@ -1,0 +1,8 @@
+{
+  "delegationNotFound": "Approval delegation rule #{id} was not found.",
+  "cannotDelegateToSelf": "Cannot delegate approval authority to yourself.",
+  "invalidDelegationPeriod": "Invalid delegation period (effectiveUntil must be greater than effectiveFrom).",
+  "delegationForbidden": "You may only create or revoke your own approval delegation rules unless you have management permission.",
+  "instanceHandlerUnavailable": "Approval workflow instance coordinator is not currently connected.",
+  "instanceNotFound": "Approval instance #{id} was not found."
+}

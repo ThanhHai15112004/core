@@ -20,6 +20,7 @@
     "traffic",
     "performance",
     "organizations",
+    "organization-members",
     "roles",
     "users",
     "auth",
@@ -27,12 +28,16 @@
     "settings",
     "files",
     "notifications",
+    "templates",
     "workflows",
+    "approvals",
+    "comments",
     "calendar",
     "imports",
     "exports",
     "reports",
-    "search"
+    "search",
+    "custom-fields"
   ],
   "settings": {
     "defaultLocale": "vi",

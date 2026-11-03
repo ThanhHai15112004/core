@@ -2,8 +2,9 @@ import {
   BadRequestAppException,
   ConflictAppException,
   HTTP_ERROR_CODE,
+  defaultCustomFieldRegistry,
 } from '@packages/kernel/index.js';
-import type { PasswordHasherService } from '@packages/security/index.js';
+import type { PasswordHasherService, UserIdentity } from '@packages/security/index.js';
 import type {
   IOrganizationsPublicService,
   OrganizationUnitSummary,
@@ -324,6 +325,8 @@ export async function hydrateUsersResponseList(params: {
   organizationsPublicService: IOrganizationsPublicService | null;
   mapper: UsersMapper;
   decryptPhone: (phone?: string | null) => string | null;
+  viewMode?: 'list' | 'detail' | undefined;
+  actor?: UserIdentity | undefined;
 }): Promise<UserResponse[]> {
   const {
     users,
@@ -334,6 +337,8 @@ export async function hydrateUsersResponseList(params: {
     organizationsPublicService,
     mapper,
     decryptPhone,
+    viewMode,
+    actor,
   } = params;
 
   if (users.length === 0) return [];
@@ -410,12 +415,27 @@ export async function hydrateUsersResponseList(params: {
     orgsByUser.set(uid, list);
   }
 
+  const customFieldsByUser = defaultCustomFieldRegistry.resolveBatchRecordsCustomFieldsForApi({
+    entityCode: 'users.user',
+    recordIds: userIds,
+    viewMode: viewMode ?? 'detail',
+    actor: actor
+      ? {
+          id: actor.id,
+          roles: actor.roles,
+          permissions: actor.permissions,
+          bypassPermissionCheck: actor.roles?.includes('super_admin'),
+        }
+      : { bypassPermissionCheck: true },
+  });
+
   return users.map((user) =>
     mapper.toResponse(user, {
       profile: profileByUser.get(Number(user.id)) ?? null,
       roles: rolesByUser.get(Number(user.id)) ?? [],
       organizationUnits: orgsByUser.get(Number(user.id)) ?? [],
       decryptedPhone: decryptPhone(user.phone),
+      customFields: customFieldsByUser.get(String(user.id)),
     }),
   );
 }

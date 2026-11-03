@@ -1,0 +1,39 @@
+{
+  "$schema": "../../packages/kernel/schemas/module.manifest.schema.json",
+  "name": "organization-members",
+  "displayName": "Organization Members, Positions & Managers",
+  "version": "1.0.0",
+  "description": "Module 9.2 — Quản lý thành viên đơn vị (startDate/endDate, đa đơn vị chính/phụ), chức vụ (positionTitle), người quản lý trực tiếp & tạm thời có thời hạn, điều chuyển đơn vị giữ lịch sử và tra cứu cấp dưới phục vụ Data Scope & Approval.",
+  "type": "core",
+  "category": "core",
+  "author": "Core Platform Team",
+  "entryModule": "OrganizationMembersModule",
+  "dependencies": ["database", "security", "i18n", "organizations", "users", "roles"],
+  "permissions": [
+    "organization-members.read",
+    "organization-members.manage"
+  ],
+  "database": {
+    "hasMigrations": true,
+    "tables": [
+      "user_organization_units",
+      "user_organization_histories"
+    ]
+  },
+  "menus": [
+    {
+      "code": "ORGANIZATION_MEMBERS_MANAGER",
+      "name": "Thành viên & Chức vụ",
+      "status": 1,
+      "link": "/organization-members",
+      "linkApi": "/api/v1/organization-members",
+      "type": 2,
+      "parent": null,
+      "level": 1,
+      "key": "organization-members.read",
+      "numOrder": 21,
+      "icon": "UserCheck",
+      "position": "SIDEBAR"
+    }
+  ]
+}

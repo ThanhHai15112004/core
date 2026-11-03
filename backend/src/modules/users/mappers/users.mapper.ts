@@ -17,6 +17,7 @@ export interface UserRelationsContext {
   readonly roles?: readonly UserRoleAssignmentSummary[] | undefined;
   readonly organizationUnits?: readonly UserOrganizationAssignmentSummary[] | undefined;
   readonly decryptedPhone?: string | null | undefined;
+  readonly customFields?: Readonly<Record<string, unknown>> | undefined;
 }
 
 @Injectable()
@@ -109,6 +110,7 @@ export class UsersMapper implements EntityMapperContract<UserEntity, UserRespons
       effectiveManagerId,
       roles: context.roles ?? [],
       organizationUnits: context.organizationUnits ?? [],
+      ...(context.customFields !== undefined ? { customFields: context.customFields } : {}),
       lastLoginAt: entity.lastLoginAt ? entity.lastLoginAt.toISOString() : null,
       passwordChangedAt: entity.passwordChangedAt ? entity.passwordChangedAt.toISOString() : null,
       archivedAt: entity.archivedAt

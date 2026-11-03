@@ -20,6 +20,7 @@ import { ImportsModule } from '@modules/imports/index.js';
 import { ExportsModule } from '@modules/exports/index.js';
 import { ReportsModule } from '@modules/reports/index.js';
 import { SearchModule } from '@modules/search/index.js';
+import { CustomFieldsModule } from '@modules/custom-fields/index.js';
 import { SystemProcessor } from './processors/system/system.processor.js';
 import { CriticalProcessor } from './processors/critical/critical.processor.js';
 import { NotificationsProcessor } from './processors/notifications/notifications.processor.js';
@@ -51,6 +52,7 @@ const PROCESSORS = [SystemProcessor, CriticalProcessor, NotificationsProcessor, 
     ExportsModule,
     ReportsModule,
     SearchModule,
+    CustomFieldsModule,
   ],
   providers: [...PROCESSORS, WorkerRuntimeContributor],
   exports: [...PROCESSORS],

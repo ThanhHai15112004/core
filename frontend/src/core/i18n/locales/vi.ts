@@ -65,6 +65,7 @@ export const vi = {
     notifications: 'Thông báo & Hộp thư',
     workflows: 'Quy trình & Phê duyệt',
     calendar: 'Lịch & Sự kiện',
+    customFields: 'Trường tùy chỉnh & Metadata',
     languageToggle: 'Ngôn ngữ',
     themeLight: 'Sáng',
     themeDark: 'Tối',

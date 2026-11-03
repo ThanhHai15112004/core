@@ -189,5 +189,83 @@
       "icon": "Building2",
       "position": "SIDEBAR"
     }
+  ],
+  "extensibleEntities": [
+    {
+      "code": "organizations.organization_unit",
+      "module": "organizations",
+      "entityType": "organization_unit",
+      "name": "Đơn vị Tổ chức / Chi nhánh / Phòng ban",
+      "description": "Cho phép mở rộng các trường thông tin tùy chỉnh và metadata cho đơn vị, chi nhánh, phòng ban",
+      "primaryKeyField": "id",
+      "readPermission": "organizations.read",
+      "writePermission": "organizations.manage",
+      "maxCustomFields": 30,
+      "allowDynamicFields": true,
+      "isSystem": true,
+      "status": 1
+    }
+  ],
+  "customFields": [
+    {
+      "entityCode": "organizations.organization_unit",
+      "fieldKey": "cost_center_code",
+      "module": "organizations",
+      "name": "Mã trung tâm chi phí (Cost Center)",
+      "description": "Mã hạch toán trung tâm chi phí của đơn vị/phòng ban",
+      "dataType": "TEXT",
+      "validationRules": { "minLength": 3, "maxLength": 20, "pattern": "^[A-Z0-9-]+$" },
+      "isRequired": false,
+      "isIndexed": true,
+      "showInApi": true,
+      "showInList": true,
+      "showInDetail": true,
+      "isSensitive": false,
+      "sortOrder": 1,
+      "isSystem": true,
+      "status": 1
+    },
+    {
+      "entityCode": "organizations.organization_unit",
+      "fieldKey": "headcount_quota",
+      "module": "organizations",
+      "name": "Định biên nhân sự tối đa (Headcount Quota)",
+      "description": "Chỉ tiêu định biên nhân sự được phê duyệt cho đơn vị",
+      "dataType": "NUMBER",
+      "validationRules": { "min": 1, "max": 10000, "integerOnly": true },
+      "isRequired": false,
+      "isIndexed": true,
+      "showInApi": true,
+      "showInList": true,
+      "showInDetail": true,
+      "isSensitive": false,
+      "sortOrder": 2,
+      "isSystem": true,
+      "status": 1
+    },
+    {
+      "entityCode": "organizations.organization_unit",
+      "fieldKey": "region_tier",
+      "module": "organizations",
+      "name": "Phân vùng chiến lược (Region Tier)",
+      "description": "Phân hạng vùng hoạt động của đơn vị/chi nhánh",
+      "dataType": "SELECT",
+      "defaultValue": "TIER_1",
+      "options": [
+        { "optionCode": "TIER_1", "label": "Vùng trọng điểm 1 (Tier 1)", "sortOrder": 1, "isDefault": true, "status": 1 },
+        { "optionCode": "TIER_2", "label": "Vùng phát triển 2 (Tier 2)", "sortOrder": 2, "isDefault": false, "status": 1 },
+        { "optionCode": "TIER_3", "label": "Vùng mở rộng 3 (Tier 3)", "sortOrder": 3, "isDefault": false, "status": 1 },
+        { "optionCode": "DEPRECATED_ZONE", "label": "Vùng quy hoạch cũ (Ngừng dùng)", "sortOrder": 4, "isDefault": false, "status": 2 }
+      ],
+      "isRequired": false,
+      "isIndexed": true,
+      "showInApi": true,
+      "showInList": true,
+      "showInDetail": true,
+      "isSensitive": false,
+      "sortOrder": 3,
+      "isSystem": true,
+      "status": 1
+    }
   ]
 }

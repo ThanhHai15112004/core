@@ -58,6 +58,10 @@ const CalendarManagementPage = loadPage(
   () => import('./modules/calendar/CalendarManagementPage'),
   'CalendarManagementPage',
 );
+const CustomFieldsManagementPage = loadPage(
+  () => import('./modules/custom-fields/CustomFieldsManagementPage'),
+  'CustomFieldsManagementPage',
+);
 
 // Tải riêng: CSS/JS của System Console (Tailwind, ECharts…) chỉ nạp khi vào console.
 // Link cũ dạng `/#system-console/...` → đường dẫn thật.
@@ -127,6 +131,8 @@ function App() {
               <WorkflowsManagementPage />
             ) : activeTab === 'calendar' ? (
               <CalendarManagementPage />
+            ) : activeTab === 'custom-fields' ? (
+              <CustomFieldsManagementPage />
             ) : (
               <HomePage onNavigateTab={handleNavigateTab} />
             )}

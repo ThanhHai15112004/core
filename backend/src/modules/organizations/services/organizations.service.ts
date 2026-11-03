@@ -6,14 +6,16 @@ import {
   NotFoundAppException,
   SettingRegistryService,
   defaultCodeRegistry,
+  defaultCustomFieldRegistry,
   defaultExportRegistry,
   defaultImportRegistry,
   defaultSettingRegistry,
+  parseCustomFieldFiltersParam,
   pickSelectedFields,
   resolveExportFormat,
   resolveImportDuplicateStrategy,
 } from '@packages/kernel/index.js';
-import { AuditLogService, DataScopeService } from '@packages/security/index.js';
+import { AuditLogService, DataScopeService, type UserIdentity } from '@packages/security/index.js';
 import {
   type IOrganizationsPublicService,
   ORG_UNIT_STATUS,
@@ -170,13 +172,50 @@ export class OrganizationsService implements IOrganizationsPublicService {
   }
 
   /** Lấy danh sách đơn vị/chi nhánh có lọc */
-  public async list(query: ListOrganizationUnitsQuery = {}): Promise<OrganizationUnitResponse[]> {
-    const units = await this.repository.findFiltered(query);
+  public async list(
+    query: ListOrganizationUnitsQuery = {},
+    actor?: UserIdentity,
+  ): Promise<OrganizationUnitResponse[]> {
+    const cfActor = actor
+      ? {
+          id: actor.id,
+          roles: actor.roles,
+          permissions: actor.permissions,
+          bypassPermissionCheck: actor.roles?.includes('super_admin'),
+        }
+      : { bypassPermissionCheck: true };
+
+    let allowedUnitIds: Set<number> | null = null;
+    if (query.customFieldFilters) {
+      const cfFilters = parseCustomFieldFiltersParam(query.customFieldFilters);
+      if (cfFilters.length > 0) {
+        const matchedIds = defaultCustomFieldRegistry.filterRecordIdsByCustomFields({
+          entityCode: 'organizations.organization_unit',
+          filters: cfFilters,
+          actor: cfActor,
+        });
+        allowedUnitIds = new Set(
+          matchedIds.map((id) => Number(id)).filter((id) => Number.isInteger(id) && id > 0),
+        );
+      }
+    }
+
+    let units = await this.repository.findFiltered(query);
+    if (allowedUnitIds !== null) {
+      units = units.filter((u) => allowedUnitIds!.has(Number(u.id)));
+    }
+
     const managerNameById = await resolveUnitManagerNamesMap(
       units,
       this.unitManagerResolverDelegate,
     );
-    const items = this.mapper.toResponseList(units, managerNameById);
+    const customFieldsById = defaultCustomFieldRegistry.resolveBatchRecordsCustomFieldsForApi({
+      entityCode: 'organizations.organization_unit',
+      recordIds: units.map((u) => Number(u.id)),
+      viewMode: 'list',
+      actor: cfActor,
+    });
+    const items = this.mapper.toResponseList(units, managerNameById, customFieldsById);
     if (query.fields && query.fields.length > 0) {
       return pickSelectedFields(items, query.fields) as unknown as OrganizationUnitResponse[];
     }
@@ -186,8 +225,9 @@ export class OrganizationsService implements IOrganizationsPublicService {
   /** Lấy sơ đồ cây đơn vị phân cấp kèm depth, path và số lượng đơn vị con */
   public async getTree(
     query: ListOrganizationUnitsQuery = {},
+    actor?: UserIdentity,
   ): Promise<OrganizationTreeNodeResponse[]> {
-    const list = await this.list(query);
+    const list = await this.list(query, actor);
     return buildOrganizationTree(list);
   }
 
@@ -198,7 +238,7 @@ export class OrganizationsService implements IOrganizationsPublicService {
   }
 
   /** Lấy thông tin chi tiết đơn vị/chi nhánh theo ID */
-  public async getById(id: number): Promise<OrganizationUnitResponse> {
+  public async getById(id: number, actor?: UserIdentity): Promise<OrganizationUnitResponse> {
     const entity = await this.repository.findById(id);
     if (!entity) {
       throw new NotFoundAppException('organizations.notFound', { id });
@@ -209,11 +249,32 @@ export class OrganizationsService implements IOrganizationsPublicService {
     );
     const mId =
       entity.managerId !== undefined && entity.managerId !== null ? Number(entity.managerId) : null;
-    return this.mapper.toResponse(entity, mId !== null ? (managerNameById.get(mId) ?? null) : null);
+    const cfActor = actor
+      ? {
+          id: actor.id,
+          roles: actor.roles,
+          permissions: actor.permissions,
+          bypassPermissionCheck: actor.roles?.includes('super_admin'),
+        }
+      : { bypassPermissionCheck: true };
+    const customFields = defaultCustomFieldRegistry.resolveRecordCustomFieldsForApi({
+      entityCode: 'organizations.organization_unit',
+      recordId: Number(entity.id),
+      viewMode: 'detail',
+      actor: cfActor,
+    });
+    return this.mapper.toResponse(
+      entity,
+      mId !== null ? (managerNameById.get(mId) ?? null) : null,
+      customFields,
+    );
   }
 
   /** Tạo mới đơn vị hoặc chi nhánh */
-  public async create(dto: CreateOrganizationUnitRequest): Promise<OrganizationUnitResponse> {
+  public async create(
+    dto: CreateOrganizationUnitRequest,
+    actor?: UserIdentity,
+  ): Promise<OrganizationUnitResponse> {
     return executeCreateOrganizationUnit({
       dto,
       repository: this.repository,
@@ -221,6 +282,7 @@ export class OrganizationsService implements IOrganizationsPublicService {
       maxHierarchyDepth: this.maxHierarchyDepth,
       unitManagerResolverDelegate: this.unitManagerResolverDelegate,
       auditLogService: this.auditLogService,
+      actor,
     });
   }
 
@@ -228,6 +290,7 @@ export class OrganizationsService implements IOrganizationsPublicService {
   public async update(
     id: number,
     dto: UpdateOrganizationUnitRequest,
+    actor?: UserIdentity,
   ): Promise<OrganizationUnitResponse> {
     return executeUpdateOrganizationUnit({
       id,
@@ -237,6 +300,7 @@ export class OrganizationsService implements IOrganizationsPublicService {
       maxHierarchyDepth: this.maxHierarchyDepth,
       unitManagerResolverDelegate: this.unitManagerResolverDelegate,
       auditLogService: this.auditLogService,
+      actor,
     });
   }
 

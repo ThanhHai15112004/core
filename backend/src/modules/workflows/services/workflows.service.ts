@@ -22,6 +22,14 @@ import {
 import { type IFilesPublicService, FILES_PUBLIC_SERVICE } from '@modules/files/contracts/index.js';
 import { type IUsersPublicService, USERS_PUBLIC_SERVICE } from '@modules/users/contracts/index.js';
 import {
+  APPROVALS_PUBLIC_SERVICE,
+  type IApprovalsPublicService,
+} from '@modules/approvals/contracts/index.js';
+import {
+  COMMENTS_PUBLIC_SERVICE,
+  type ICommentsPublicService,
+} from '@modules/comments/contracts/index.js';
+import {
   type IWorkflowsPublicService,
   type StartWorkflowPublicInput,
   WORKFLOWS_SETTING_KEYS,
@@ -121,8 +129,58 @@ export class WorkflowsService implements IWorkflowsPublicService {
     @Optional()
     @Inject(FILES_PUBLIC_SERVICE)
     private readonly filesPublicService: IFilesPublicService | null = null,
+    @Optional()
+    @Inject(APPROVALS_PUBLIC_SERVICE)
+    private readonly approvalsPublicService: IApprovalsPublicService | null = null,
+    @Optional()
+    @Inject(COMMENTS_PUBLIC_SERVICE)
+    private readonly commentsPublicService: ICommentsPublicService | null = null,
   ) {
     this.effectiveDataScopeService = this.dataScopeService ?? createDefaultDataScopeService();
+    this.approvalsPublicService?.registerInstanceApprovalCoordinator?.({
+      getInstanceSteps: async (instanceId, actor) => {
+        const detail = await this.getInstanceById(instanceId, actor);
+        return {
+          instanceId: detail.id,
+          workflowCode: detail.workflowCode,
+          currentStateCode: detail.currentStateCode,
+          currentStepOrder: detail.currentStepOrder,
+          status: detail.status,
+          statusName: detail.statusName,
+          approvalSteps: detail.approvalSteps,
+        };
+      },
+      decideStep: async (instanceId, input, actor) =>
+        this.decideApproval(
+          instanceId,
+          {
+            decision:
+              input.decision === 'REJECT'
+                ? 'REJECTED'
+                : input.decision === 'RETURN'
+                  ? 'RETURNED'
+                  : 'APPROVED',
+            ...(input.stepId !== undefined ? { stepId: input.stepId } : {}),
+            comment: input.comment ?? null,
+            ...(input.targetStateCode !== undefined
+              ? { returnToStateCode: input.targetStateCode }
+              : {}),
+          },
+          actor,
+        ),
+    });
+    this.commentsPublicService?.registerWorkflowTimelineEntriesProvider?.(async (params) => {
+      const timeline = await this.getRecordActivityTimeline({
+        entityType: params.entityType,
+        entityId: params.entityId,
+        source: 'WORKFLOW',
+        sortOrder: 'DESC',
+        ...(params.workflowInstanceId !== undefined
+          ? { workflowInstanceId: params.workflowInstanceId }
+          : {}),
+      });
+      return timeline.items.filter((item) => item.source === 'WORKFLOW');
+    });
   }
 
   public async listDefinitionsPaginated(
@@ -445,6 +503,23 @@ export class WorkflowsService implements IWorkflowsPublicService {
       createdAt: new Date().toISOString(),
     };
     this.delegationRules.unshift(rule);
+    if (this.approvalsPublicService) {
+      await this.approvalsPublicService
+        .createDelegation(
+          {
+            fromUserId: Number(fromUserId),
+            toUserId: Number(dto.toUserId),
+            effectiveFrom: rule.effectiveFrom,
+            effectiveUntil: rule.effectiveUntil,
+            workflowCodes: dto.workflowCodes ?? [],
+            entityTypes: dto.entityTypes ?? [],
+            organizationUnitId: dto.organizationUnitId ?? null,
+            reason: dto.reason.trim(),
+          },
+          actor,
+        )
+        .catch(() => undefined);
+    }
     return rule;
   }
 
@@ -458,6 +533,9 @@ export class WorkflowsService implements IWorkflowsPublicService {
       isActive: false,
     };
     this.delegationRules[idx] = updated;
+    if (this.approvalsPublicService) {
+      await this.approvalsPublicService.revokeDelegation(Number(id)).catch(() => undefined);
+    }
     return updated;
   }
 
@@ -523,7 +601,7 @@ export class WorkflowsService implements IWorkflowsPublicService {
     dto: CreateWorkflowCommentRequest,
     actor?: UserIdentity,
   ): Promise<WorkflowCommentItemView> {
-    return executeCreateWorkflowComment({
+    const created = await executeCreateWorkflowComment({
       dto,
       actor,
       commentsStore: this.commentsStore,
@@ -533,6 +611,24 @@ export class WorkflowsService implements IWorkflowsPublicService {
       filesPublicService: this.filesPublicService,
       auditLogService: this.auditLogService,
     });
+    if (this.commentsPublicService) {
+      await this.commentsPublicService
+        .createComment(
+          {
+            entityType: dto.entityType,
+            entityId: dto.entityId,
+            workflowInstanceId: dto.workflowInstanceId ?? null,
+            parentCommentId: dto.parentCommentId ?? null,
+            content: dto.content,
+            isInternal: dto.isInternal ?? false,
+            mentionedUserIds: dto.mentionedUserIds ?? [],
+            attachmentFileIds: dto.attachmentFileIds ?? [],
+          },
+          actor,
+        )
+        .catch(() => undefined);
+    }
+    return created;
   }
 
   public async updateRecordComment(
@@ -541,7 +637,7 @@ export class WorkflowsService implements IWorkflowsPublicService {
     actor?: UserIdentity,
     now?: Date,
   ): Promise<WorkflowCommentItemView> {
-    return executeUpdateWorkflowComment({
+    const updated = await executeUpdateWorkflowComment({
       id,
       dto,
       actor,
@@ -552,6 +648,25 @@ export class WorkflowsService implements IWorkflowsPublicService {
       filesPublicService: this.filesPublicService,
       auditLogService: this.auditLogService,
     });
+    if (this.commentsPublicService) {
+      await this.commentsPublicService
+        .updateComment(
+          id,
+          {
+            content: dto.content,
+            ...(dto.mentionedUserIds !== undefined
+              ? { mentionedUserIds: dto.mentionedUserIds }
+              : {}),
+            ...(dto.attachmentFileIds !== undefined
+              ? { attachmentFileIds: dto.attachmentFileIds }
+              : {}),
+            editReason: dto.editReason ?? null,
+          },
+          actor,
+        )
+        .catch(() => undefined);
+    }
+    return updated;
   }
 
   public async deleteRecordComment(
@@ -559,7 +674,7 @@ export class WorkflowsService implements IWorkflowsPublicService {
     actor?: UserIdentity,
     now?: Date,
   ): Promise<WorkflowCommentItemView> {
-    return executeDeleteWorkflowComment({
+    const deleted = await executeDeleteWorkflowComment({
       id,
       actor,
       now,
@@ -568,6 +683,10 @@ export class WorkflowsService implements IWorkflowsPublicService {
       filesPublicService: this.filesPublicService,
       auditLogService: this.auditLogService,
     });
+    if (this.commentsPublicService) {
+      await this.commentsPublicService.deleteComment(id, actor).catch(() => undefined);
+    }
+    return deleted;
   }
 
   public async getRecordActivityTimeline(

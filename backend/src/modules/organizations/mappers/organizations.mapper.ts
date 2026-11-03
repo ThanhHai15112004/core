@@ -19,6 +19,7 @@ export class OrganizationsMapper implements EntityMapperContract<
   public toResponse(
     entity: OrganizationUnitEntity,
     managerName?: string | null,
+    customFields?: Readonly<Record<string, unknown>>,
   ): OrganizationUnitResponse {
     const typeCode = parseOrgUnitType(entity.type);
     const statusCode = parseOrgUnitStatus(entity.status);
@@ -38,6 +39,7 @@ export class OrganizationsMapper implements EntityMapperContract<
       status: statusCode,
       statusName: getOrgUnitStatusName(statusCode),
       description: entity.description ?? null,
+      ...(customFields !== undefined ? { customFields } : {}),
       createdAt: entity.createdAt.toISOString(),
       updatedAt: entity.updatedAt.toISOString(),
     };
@@ -47,12 +49,14 @@ export class OrganizationsMapper implements EntityMapperContract<
   public toResponseList(
     entities: OrganizationUnitEntity[],
     managerNameById?: ReadonlyMap<number, string>,
+    customFieldsById?: ReadonlyMap<string, Record<string, unknown>>,
   ): OrganizationUnitResponse[] {
     return entities.map((item) => {
       const mId =
         item.managerId !== undefined && item.managerId !== null ? Number(item.managerId) : null;
       const managerName = mId !== null ? (managerNameById?.get(mId) ?? null) : null;
-      return this.toResponse(item, managerName);
+      const customFields = customFieldsById?.get(String(item.id));
+      return this.toResponse(item, managerName, customFields);
     });
   }
 

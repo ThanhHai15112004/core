@@ -1,0 +1,9 @@
+{
+  "commentNotFound": "Comment #{id} was not found.",
+  "parentCommentNotFound": "Parent comment #{parentCommentId} was not found for reply.",
+  "parentCommentEntityMismatch": "Reply comment must belong to the same business entity as the parent comment.",
+  "internalNoteForbidden": "You do not have permission to create or view internal notes.",
+  "commentDeletedCannotEdit": "Comment #{id} has been deleted and cannot be edited.",
+  "commentEditForbidden": "You can only edit or delete your own comments unless you have administrator privileges.",
+  "commentEditWindowExpired": "The {maxEditMinutes}-minute window allowed for editing or deleting this comment has expired."
+}

@@ -10,6 +10,7 @@ export const ROUTES = {
   NOTIFICATIONS: '/notifications',
   WORKFLOWS: '/workflows',
   CALENDAR: '/calendar',
+  CUSTOM_FIELDS: '/custom-fields',
   SYSTEM_CONSOLE: '/system-console',
 } as const;
 

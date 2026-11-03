@@ -59,6 +59,7 @@ export interface UserResponse {
   readonly effectiveManagerId?: number | null;
   readonly roles: readonly UserRoleAssignmentSummary[];
   readonly organizationUnits: readonly UserOrganizationAssignmentSummary[];
+  readonly customFields?: Readonly<Record<string, unknown>> | undefined;
   readonly lastLoginAt: string | null;
   readonly passwordChangedAt: string | null;
   readonly archivedAt: string | null;
@@ -192,6 +193,7 @@ export const userResponseSchema = z.object({
   effectiveManagerId: z.number().int().min(1).nullable().optional(),
   roles: z.array(userRoleSummarySchema),
   organizationUnits: z.array(userOrganizationSummarySchema),
+  customFields: z.record(z.string(), z.unknown()).optional(),
   lastLoginAt: z.string().nullable(),
   passwordChangedAt: z.string().nullable(),
   archivedAt: z.string().nullable(),

@@ -24,6 +24,7 @@ import {
   Bell,
   GitBranch,
   Calendar,
+  SlidersHorizontal,
   Sun,
   Moon,
 } from 'lucide-react';
@@ -111,6 +112,8 @@ export const Header: React.FC<HeaderProps> = ({ activeTab, onTabChange }) => {
         return <GitBranch size={15} />;
       case 'calendar':
         return <Calendar size={15} />;
+      case 'custom-fields':
+        return <SlidersHorizontal size={15} />;
       case 'home':
       default:
         return <Home size={15} />;

@@ -65,6 +65,26 @@
       "items": { "type": "object" },
       "default": []
     },
+    "reports": {
+      "type": "array",
+      "items": { "type": "object" },
+      "default": []
+    },
+    "searchableEntities": {
+      "type": "array",
+      "items": { "type": "object" },
+      "default": []
+    },
+    "extensibleEntities": {
+      "type": "array",
+      "items": { "type": "object" },
+      "default": []
+    },
+    "customFields": {
+      "type": "array",
+      "items": { "type": "object" },
+      "default": []
+    },
     "locales": {
       "type": "array",
       "items": { "type": "object" },

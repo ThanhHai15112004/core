@@ -58,6 +58,7 @@ export interface SearchUsersFilter {
   readonly roleId?: number | undefined;
   readonly organizationUnitId?: number | undefined;
   readonly managerId?: number | undefined;
+  readonly allowedUserIds?: readonly number[] | undefined;
   readonly scopeFilter?: ResolvedDataScopeFilter | undefined;
   readonly includeArchived?: boolean | undefined;
   readonly mfaEnabled?: boolean | undefined;
@@ -389,6 +390,13 @@ export class UserRepository extends BaseTypeOrmRepository<UserEntity> {
 
     if (filter.status !== undefined) {
       qb.andWhere('u.status = :status', { status: filter.status });
+    }
+
+    if (filter.allowedUserIds !== undefined) {
+      if (filter.allowedUserIds.length === 0) {
+        return { items: [], total: 0 };
+      }
+      qb.andWhere('u.id IN (:...allowedUserIds)', { allowedUserIds: filter.allowedUserIds });
     }
 
     if (filter.mfaEnabled !== undefined) {

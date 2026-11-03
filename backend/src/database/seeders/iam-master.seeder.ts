@@ -440,6 +440,54 @@ export const STANDARD_IAM_PERMISSIONS: readonly SeedPermissionDef[] = [
     description:
       'Quyền đồng bộ sự kiện 2 chiều qua GoogleCalendarProviderAdapter và MicrosoftCalendarProviderAdapter',
   },
+  {
+    id: 40,
+    code: 'custom-fields.read',
+    name: 'Xem danh sách đối tượng mở rộng, cấu hình trường tùy chỉnh & lịch sử',
+    module: 'custom-fields',
+    description:
+      'Quyền xem danh sách đối tượng mở rộng (Extensible Entities), cấu hình trường tùy chỉnh (Custom Fields), danh sách lựa chọn và lịch sử thay đổi cấu hình',
+  },
+  {
+    id: 41,
+    code: 'custom-fields.manage',
+    name: 'Quản trị cấu hình trường tùy chỉnh, danh sách lựa chọn & đồng bộ Manifest',
+    module: 'custom-fields',
+    description:
+      'Quyền tạo mới, cập nhật quy tắc kiểm tra/quyền xem-sửa/index/hiển thị API, quản lý danh sách lựa chọn và đồng bộ trường tùy chỉnh từ module.manifest.json',
+  },
+  {
+    id: 42,
+    code: 'custom-fields.values.read',
+    name: 'Truy vấn & lọc giá trị trường tùy chỉnh của bản ghi',
+    module: 'custom-fields',
+    description:
+      'Quyền đọc giá trị trường tùy chỉnh của bản ghi và lọc theo các trường được đánh index',
+  },
+  {
+    id: 43,
+    code: 'custom-fields.values.write',
+    name: 'Lưu & cập nhật giá trị trường tùy chỉnh của bản ghi',
+    module: 'custom-fields',
+    description:
+      'Quyền thêm mới hoặc cập nhật giá trị trường tùy chỉnh của bản ghi theo quy tắc kiểm tra và phân quyền cấp trường',
+  },
+  {
+    id: 44,
+    code: 'custom-fields.sensitive.read',
+    name: 'Xem giá trị trường tùy chỉnh nhạy cảm (Sensitive Field Read)',
+    module: 'custom-fields',
+    description:
+      'Quyền xem các trường tùy chỉnh được đánh dấu nhạy cảm (isSensitive = true)',
+  },
+  {
+    id: 45,
+    code: 'custom-fields.sensitive.write',
+    name: 'Sửa giá trị trường tùy chỉnh nhạy cảm (Sensitive Field Write)',
+    module: 'custom-fields',
+    description:
+      'Quyền chỉnh sửa các trường tùy chỉnh được đánh dấu nhạy cảm (isSensitive = true)',
+  },
 ] as const;
 
 const ALL_IAM_PERMISSION_CODES = STANDARD_IAM_PERMISSIONS.map((p) => p.code);
@@ -502,6 +550,10 @@ export const STANDARD_IAM_ROLES: readonly SeedRoleDef[] = [
       'roles.read',
       'codes.read',
       'codes.manage',
+      'custom-fields.read',
+      'custom-fields.manage',
+      'custom-fields.values.read',
+      'custom-fields.values.write',
     ],
   },
   {

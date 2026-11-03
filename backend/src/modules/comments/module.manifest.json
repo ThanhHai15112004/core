@@ -1,0 +1,71 @@
+{
+  "$schema": "../../packages/kernel/schemas/module.manifest.schema.json",
+  "name": "comments",
+  "displayName": "Comments, Internal Notes, Mentions & Activity Timeline",
+  "version": "1.0.0",
+  "description": "Module 9.5 — Bình luận theo bản ghi, ghi chú nội bộ phân quyền, trả lời bình luận theo chuỗi, nhắc tên (@mention) gửi thông báo, đính kèm tệp qua File Core, chỉnh sửa/xóa theo thời hạn kèm lưu lịch sử chỉnh sửa và hiển thị dòng thời gian hoạt động hợp nhất.",
+  "type": "core",
+  "category": "core",
+  "author": "Core Platform Team",
+  "entryModule": "CommentsModule",
+  "dependencies": ["database", "security", "i18n", "users", "roles", "notifications", "files", "settings"],
+  "permissions": [
+    "comments.read",
+    "comments.create",
+    "comments.update",
+    "comments.delete",
+    "comments.internal_notes",
+    "comments.manage"
+  ],
+  "database": {
+    "hasMigrations": true,
+    "tables": [
+      "record_comments",
+      "record_comment_histories"
+    ]
+  },
+  "settingGroups": [
+    {
+      "code": "comments",
+      "module": "comments",
+      "name": "Bình luận & Ghi chú (Comments)",
+      "description": "Cấu hình thời hạn chỉnh sửa/xóa bình luận và ghi chú nội bộ",
+      "icon": "MessageSquare",
+      "sortOrder": 96,
+      "isSystem": true
+    }
+  ],
+  "settings": [
+    {
+      "key": "comments.edit_window_minutes",
+      "groupCode": "comments",
+      "module": "comments",
+      "namespace": "comments",
+      "name": "Thời hạn cho phép chỉnh sửa / xóa bình luận (Phút)",
+      "description": "Khoảng thời gian tối đa tính từ lúc tạo mà tác giả được phép chỉnh sửa hoặc xóa bình luận",
+      "valueType": "NUMBER",
+      "defaultValue": 60,
+      "validationRules": { "min": 1, "max": 10080, "integerOnly": true },
+      "isSensitive": false,
+      "allowUnitOverride": true,
+      "isSystem": true,
+      "sortOrder": 1
+    }
+  ],
+  "menus": [
+    {
+      "code": "COMMENTS_MANAGER",
+      "name": "Bình luận & Ghi chú",
+      "status": 1,
+      "link": "/comments",
+      "linkApi": "/api/v1/comments",
+      "type": 2,
+      "parent": null,
+      "level": 1,
+      "key": "comments.read",
+      "numOrder": 27,
+      "icon": "MessageSquare",
+      "position": "SIDEBAR"
+    }
+  ]
+}

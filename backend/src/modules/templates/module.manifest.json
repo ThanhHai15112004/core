@@ -1,0 +1,42 @@
+{
+  "$schema": "../../packages/kernel/schemas/module.manifest.schema.json",
+  "name": "templates",
+  "displayName": "Content Templates (Email, Notification & Document)",
+  "version": "1.0.0",
+  "description": "Module 9.6 — Quản lý mẫu Email, mẫu Thông báo (In-App, SMS, Push) và mẫu Tài liệu sinh file; xem trước mẫu với dữ liệu thử phát hiện biến thiếu; đa phiên bản (Draft/Publish/Rollback có Audit); đa ngôn ngữ (vi/en) và theo dõi module đang sử dụng mẫu chống xóa nhầm.",
+  "type": "core",
+  "category": "core",
+  "author": "Core Platform Team",
+  "entryModule": "TemplatesModule",
+  "dependencies": ["database", "security", "i18n", "codes", "settings", "notifications"],
+  "permissions": [
+    "templates.read",
+    "templates.manage",
+    "templates.publish",
+    "templates.render"
+  ],
+  "database": {
+    "hasMigrations": true,
+    "tables": [
+      "notification_templates",
+      "notification_template_versions",
+      "notification_template_usages"
+    ]
+  },
+  "menus": [
+    {
+      "code": "TEMPLATES_MANAGER",
+      "name": "Mẫu nội dung (Templates)",
+      "status": 1,
+      "link": "/templates",
+      "linkApi": "/api/v1/templates",
+      "type": 2,
+      "parent": null,
+      "level": 1,
+      "key": "templates.read",
+      "numOrder": 28,
+      "icon": "FileText",
+      "position": "SIDEBAR"
+    }
+  ]
+}

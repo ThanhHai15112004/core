@@ -106,6 +106,7 @@ export const createUserSchema = z
     temporaryManagerUntil: z.string().trim().max(64).nullable().optional(),
     roleIds: z.array(coercePositiveInt).default([]),
     organizationUnits: z.array(userOrganizationAssignmentInputSchema).default([]),
+    customFields: z.record(z.string(), z.unknown()).optional(),
   })
   .refine(
     (data) =>
@@ -139,6 +140,7 @@ export const updateUserSchema = z.object({
   temporaryManagerFrom: z.string().trim().max(64).nullable().optional(),
   temporaryManagerUntil: z.string().trim().max(64).nullable().optional(),
   expectedVersion: z.number().int().min(1).optional(),
+  customFields: z.record(z.string(), z.unknown()).optional(),
 });
 
 export type UpdateUserRequest = z.infer<typeof updateUserSchema>;
@@ -226,6 +228,7 @@ export const USER_SELECTABLE_FIELDS = [
   'effectiveManagerId',
   'roles',
   'organizationUnits',
+  'customFields',
   'version',
   'createdAt',
   'updatedAt',
@@ -244,6 +247,7 @@ export const listUsersQuerySchema = z.object({
   createdTo: optionalQueryParam(z.string().trim().max(64)),
   fromDate: optionalQueryParam(z.string().trim().max(64)),
   toDate: optionalQueryParam(z.string().trim().max(64)),
+  customFieldFilters: optionalQueryParam(z.string().trim().max(2000)),
   fields: optionalQueryParam(
     z.preprocess(
       (v) =>

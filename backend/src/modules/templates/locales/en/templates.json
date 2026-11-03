@@ -1,0 +1,4 @@
+{
+  "templateNotFound": "Content template #{id} was not found.",
+  "templateInUseCannotDelete": "Content template is currently in use by one or more modules and cannot be deleted."
+}

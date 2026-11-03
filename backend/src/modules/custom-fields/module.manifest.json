@@ -1,0 +1,181 @@
+{
+  "$schema": "../../packages/kernel/schemas/module.manifest.schema.json",
+  "name": "custom-fields",
+  "displayName": "Custom Fields & Metadata",
+  "version": "1.0.0",
+  "description": "Module quản lý Trường tùy chỉnh và Metadata: Đăng ký loại đối tượng mở rộng, tạo trường tùy chỉnh (TEXT/NUMBER/DATE/BOOLEAN/SELECT), thiết lập bắt buộc & validation, phân quyền xem/sửa từng trường, danh sách lựa chọn có thứ tự & trạng thái, hiển thị trong API, lọc trường đánh index và ghi lịch sử thay đổi cấu hình (chặn đổi kiểu dữ liệu tùy tiện)",
+  "type": "core",
+  "category": "Platform & Configuration",
+  "author": "Core Team",
+  "entryModule": "CustomFieldsModule",
+  "dependencies": ["codes", "settings", "roles"],
+  "permissions": [
+    "custom-fields.read",
+    "custom-fields.manage",
+    "custom-fields.values.read",
+    "custom-fields.values.write",
+    "custom-fields.sensitive.read",
+    "custom-fields.sensitive.write"
+  ],
+  "codeTypes": [
+    {
+      "code": "custom_fields.data_type",
+      "name": "Kiểu dữ liệu trường tùy chỉnh",
+      "description": "Các kiểu dữ liệu được hỗ trợ cho trường tùy chỉnh (9.8.2)",
+      "isSystem": true,
+      "allowCustomValues": false,
+      "values": [
+        {
+          "numericCode": 1,
+          "code": "TEXT",
+          "name": "Văn bản (Text)",
+          "labels": { "vi": "Văn bản (Text)", "en": "Text" },
+          "behaviorCode": "TEXT",
+          "badgeTone": "info",
+          "sortOrder": 1,
+          "isSystem": true
+        },
+        {
+          "numericCode": 2,
+          "code": "NUMBER",
+          "name": "Số (Number)",
+          "labels": { "vi": "Số (Number)", "en": "Number" },
+          "behaviorCode": "NUMBER",
+          "badgeTone": "info",
+          "sortOrder": 2,
+          "isSystem": true
+        },
+        {
+          "numericCode": 3,
+          "code": "DATE",
+          "name": "Ngày tháng (Date)",
+          "labels": { "vi": "Ngày tháng (Date)", "en": "Date" },
+          "behaviorCode": "DATE",
+          "badgeTone": "warning",
+          "sortOrder": 3,
+          "isSystem": true
+        },
+        {
+          "numericCode": 4,
+          "code": "BOOLEAN",
+          "name": "Đúng / Sai (Boolean)",
+          "labels": { "vi": "Đúng / Sai (Boolean)", "en": "Boolean" },
+          "behaviorCode": "BOOLEAN",
+          "badgeTone": "success",
+          "sortOrder": 4,
+          "isSystem": true
+        },
+        {
+          "numericCode": 5,
+          "code": "SELECT",
+          "name": "Danh sách lựa chọn (Select)",
+          "labels": { "vi": "Danh sách lựa chọn (Select)", "en": "Select Option" },
+          "behaviorCode": "SELECT",
+          "badgeTone": "neutral",
+          "sortOrder": 5,
+          "isSystem": true
+        }
+      ]
+    },
+    {
+      "code": "custom_fields.status",
+      "name": "Trạng thái cấu hình trường tùy chỉnh",
+      "description": "Trạng thái hoạt động của trường tùy chỉnh và danh sách lựa chọn",
+      "isSystem": true,
+      "allowCustomValues": false,
+      "values": [
+        {
+          "numericCode": 1,
+          "code": "ACTIVE",
+          "name": "Đang hoạt động",
+          "labels": { "vi": "Đang hoạt động", "en": "Active" },
+          "behaviorCode": "ACTIVE",
+          "badgeTone": "success",
+          "sortOrder": 1,
+          "isSystem": true
+        },
+        {
+          "numericCode": 2,
+          "code": "INACTIVE",
+          "name": "Ngừng hoạt động",
+          "labels": { "vi": "Ngừng hoạt động", "en": "Inactive" },
+          "behaviorCode": "INACTIVE",
+          "badgeTone": "neutral",
+          "sortOrder": 2,
+          "isSystem": true
+        }
+      ]
+    }
+  ],
+  "settingGroups": [
+    {
+      "code": "custom_fields",
+      "name": "Cấu hình Trường tùy chỉnh & Metadata",
+      "description": "Thiết lập giới hạn số lượng trường tùy chỉnh, số lượng lựa chọn tối đa và chính sách bảo vệ trường nhạy cảm",
+      "icon": "sliders",
+      "sortOrder": 14,
+      "isSystem": true
+    }
+  ],
+  "settings": [
+    {
+      "key": "custom_fields.max_fields_per_entity",
+      "groupCode": "custom_fields",
+      "name": "Số lượng trường tùy chỉnh tối đa mỗi đối tượng",
+      "description": "Giới hạn số lượng trường tùy chỉnh được tạo cho mỗi loại đối tượng mở rộng",
+      "valueType": "NUMBER",
+      "defaultValue": 50,
+      "validationRules": { "min": 5, "max": 200 },
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 1
+    },
+    {
+      "key": "custom_fields.max_indexed_fields_per_entity",
+      "groupCode": "custom_fields",
+      "name": "Số trường được đánh index lọc tối đa mỗi đối tượng",
+      "description": "Giới hạn số trường tùy chỉnh được bật cờ isIndexed để cho phép lọc trên API",
+      "valueType": "NUMBER",
+      "defaultValue": 15,
+      "validationRules": { "min": 1, "max": 50 },
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 2
+    }
+  ],
+  "menus": [
+    {
+      "code": "CUSTOM_FIELDS",
+      "name": "Trường tùy chỉnh & Metadata",
+      "status": 1,
+      "link": "/custom-fields",
+      "linkApi": "/api/v1/custom-fields/definitions, /api/v1/custom-fields/entities, /api/v1/custom-fields/values",
+      "type": 2,
+      "parentCode": "PLATFORM_ADMIN_GROUP",
+      "level": 2,
+      "key": "custom-fields.read",
+      "numOrder": 6,
+      "icon": "sliders",
+      "position": "SIDEBAR"
+    }
+  ],
+  "events": {
+    "published": [
+      "custom-fields.definition.created",
+      "custom-fields.definition.updated",
+      "custom-fields.values.saved"
+    ],
+    "subscribed": []
+  },
+  "database": {
+    "hasMigrations": true,
+    "tables": [
+      "custom_field_definitions",
+      "custom_field_options",
+      "custom_field_values",
+      "custom_field_histories"
+    ]
+  }
+}

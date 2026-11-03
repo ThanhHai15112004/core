@@ -138,7 +138,7 @@ export class UsersController {
     @ValidatedBody(createUserSchema) body: CreateUserRequest,
     @CurrentUser() actor?: UserIdentity,
   ): Promise<UserResponse> {
-    return this.usersService.create(body, actor?.id);
+    return this.usersService.create(body, actor?.id, actor);
   }
 
   /** Cập nhật thông tin người dùng (Mục 3.1.2) */

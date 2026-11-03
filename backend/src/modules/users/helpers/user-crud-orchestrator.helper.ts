@@ -1,6 +1,7 @@
 import {
   NotFoundAppException,
   type SearchDocumentInput,
+  defaultCustomFieldRegistry,
   defaultSearchRegistry,
 } from '@packages/kernel/index.js';
 import { resolveSystemDefaultLocale, resolveSystemDefaultTimezone } from '@packages/i18n/index.js';
@@ -249,6 +250,7 @@ export async function executeGetStatusHistoryFlow(params: {
 export async function executeCreateUserRecordFlow(params: {
   dto: CreateUserRequest;
   actorId?: number | undefined;
+  actor?: UserIdentity | undefined;
   userRepository: UserRepository;
   userRoleRepository: UserRoleRepository;
   userOrgRepository: UserOrganizationUnitRepository;
@@ -276,6 +278,7 @@ export async function executeCreateUserRecordFlow(params: {
   const {
     dto,
     actorId,
+    actor,
     userRepository,
     userRoleRepository,
     userOrgRepository,
@@ -300,6 +303,24 @@ export async function executeCreateUserRecordFlow(params: {
       rolesPublicService,
       organizationsPublicService,
     });
+
+  if (dto.customFields && Object.keys(dto.customFields).length > 0) {
+    defaultCustomFieldRegistry.setRecordCustomFields({
+      entityCode: 'users.user',
+      recordId: '__precheck__',
+      values: dto.customFields,
+      mode: 'create',
+      validateOnly: true,
+      actor: actor
+        ? {
+            id: actor.id,
+            roles: actor.roles,
+            permissions: actor.permissions,
+            bypassPermissionCheck: actor.roles?.includes('super_admin'),
+          }
+        : { id: actorId ?? null, bypassPermissionCheck: true },
+    });
+  }
 
   const nameParts = resolveVietnameseNameParts({
     firstName: dto.firstName,
@@ -388,6 +409,23 @@ export async function executeCreateUserRecordFlow(params: {
   const created = transactionManager
     ? await transactionManager.runInTransaction(work)
     : await work();
+
+  if (dto.customFields && Object.keys(dto.customFields).length > 0) {
+    defaultCustomFieldRegistry.setRecordCustomFields({
+      entityCode: 'users.user',
+      recordId: Number(created.id),
+      values: dto.customFields,
+      mode: 'create',
+      actor: actor
+        ? {
+            id: actor.id,
+            roles: actor.roles,
+            permissions: actor.permissions,
+            bypassPermissionCheck: actor.roles?.includes('super_admin'),
+          }
+        : { id: actorId ?? null, bypassPermissionCheck: true },
+    });
+  }
 
   const result = await getById(Number(created.id));
   await auditLogService?.record({
@@ -526,6 +564,23 @@ export async function executeUpdateUserRecordFlow(params: {
       preferredTimezone: nextPreferredTimezone,
     });
   };
+
+  if (dto.customFields && Object.keys(dto.customFields).length > 0) {
+    defaultCustomFieldRegistry.setRecordCustomFields({
+      entityCode: 'users.user',
+      recordId: id,
+      values: dto.customFields,
+      mode: 'update',
+      actor: actor
+        ? {
+            id: actor.id,
+            roles: actor.roles,
+            permissions: actor.permissions,
+            bypassPermissionCheck: actor.roles?.includes('super_admin'),
+          }
+        : { id: actorId ?? null, bypassPermissionCheck: true },
+    });
+  }
 
   if (transactionManager) {
     await transactionManager.runInTransaction(persistChanges);

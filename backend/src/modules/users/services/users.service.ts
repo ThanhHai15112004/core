@@ -4,8 +4,10 @@ import {
   ForbiddenAppException,
   NotFoundAppException,
   type PaginatedResult,
+  defaultCustomFieldRegistry,
   defaultSearchRegistry,
   defaultSettingRegistry,
+  parseCustomFieldFiltersParam,
   resolvePagination,
 } from '@packages/kernel/index.js';
 import { createPaginatedResult } from '@packages/http/index.js';
@@ -346,14 +348,37 @@ export class UsersService implements IUsersPublicService {
       context: actorOrgUnitId ? { organizationUnitId: actorOrgUnitId } : undefined,
     });
     const scopeFilter = await this.resolveUserScopeFilter(actor, 'read');
+    let allowedUserIds: number[] | undefined;
+    if (query.customFieldFilters) {
+      const cfFilters = parseCustomFieldFiltersParam(query.customFieldFilters);
+      if (cfFilters.length > 0) {
+        const matchedIds = defaultCustomFieldRegistry.filterRecordIdsByCustomFields({
+          entityCode: 'users.user',
+          filters: cfFilters,
+          actor: actor
+            ? {
+                id: actor.id,
+                roles: actor.roles,
+                permissions: actor.permissions,
+                bypassPermissionCheck: actor.roles?.includes('super_admin'),
+              }
+            : { bypassPermissionCheck: true },
+        });
+        allowedUserIds = matchedIds
+          .map((id) => Number(id))
+          .filter((id) => Number.isInteger(id) && id > 0);
+      }
+    }
+
     const { items, total } = await this.userRepository.searchPaginated({
       ...query,
       page,
       limit,
       countMode,
+      ...(allowedUserIds !== undefined ? { allowedUserIds } : {}),
       ...(scopeFilter ? { scopeFilter } : {}),
     });
-    const enriched = await this.hydrateUsersList(items);
+    const enriched = await this.hydrateUsersList(items, { viewMode: 'list', actor });
     return createPaginatedResult(
       enriched,
       countMode === 'none' ? null : total,
@@ -380,7 +405,7 @@ export class UsersService implements IUsersPublicService {
     if (!user) {
       throw new NotFoundAppException('users.notFound', { id });
     }
-    const [hydrated] = await this.hydrateUsersList([user]);
+    const [hydrated] = await this.hydrateUsersList([user], { viewMode: 'detail', actor });
     if (actor) {
       await this.assertCanAccessUserRecord(hydrated!, actor, 'read');
     }
@@ -398,10 +423,15 @@ export class UsersService implements IUsersPublicService {
     });
   }
 
-  public async create(dto: CreateUserRequest, actorId?: number): Promise<UserResponse> {
+  public async create(
+    dto: CreateUserRequest,
+    actorId?: number,
+    actor?: UserIdentity,
+  ): Promise<UserResponse> {
     return executeCreateUserRecordFlow({
       dto,
       actorId,
+      actor,
       userRepository: this.userRepository,
       userRoleRepository: this.userRoleRepository,
       userOrgRepository: this.userOrgRepository,
@@ -414,7 +444,7 @@ export class UsersService implements IUsersPublicService {
       encryptPhone: (p) => this.encryptPhone(p),
       upsertUserProfile: (uid, d) => this.upsertUserProfile(uid, d),
       recordStatusHistory: (uid, from, to, r, by) => this.recordStatusHistory(uid, from, to, r, by),
-      getById: (uid) => this.getById(uid),
+      getById: (uid) => this.getById(uid, true, actor),
       syncUserSearchDocumentSafe: (u, aid) => this.syncUserSearchDocumentSafe(u, aid),
     });
   }
@@ -1006,7 +1036,10 @@ export class UsersService implements IUsersPublicService {
     await this.invalidateIdentityCache(userId);
   }
 
-  public async hydrateUsersList(users: readonly UserEntity[]): Promise<UserResponse[]> {
+  public async hydrateUsersList(
+    users: readonly UserEntity[],
+    options?: { viewMode?: 'list' | 'detail' | undefined; actor?: UserIdentity | undefined },
+  ): Promise<UserResponse[]> {
     return hydrateUsersResponseList({
       users,
       userRoleRepository: this.userRoleRepository,
@@ -1016,6 +1049,8 @@ export class UsersService implements IUsersPublicService {
       organizationsPublicService: this.organizationsPublicService,
       mapper: this.mapper,
       decryptPhone: (p) => this.decryptPhone(p),
+      viewMode: options?.viewMode,
+      actor: options?.actor,
     });
   }
 

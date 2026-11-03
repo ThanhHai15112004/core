@@ -3,8 +3,9 @@ import {
   ConflictAppException,
   HTTP_ERROR_CODE,
   NotFoundAppException,
+  defaultCustomFieldRegistry,
 } from '@packages/kernel/index.js';
-import type { AuditLogService } from '@packages/security/index.js';
+import type { AuditLogService, UserIdentity } from '@packages/security/index.js';
 import {
   ORG_UNIT_STATUS,
   type OrganizationUnitSummary,
@@ -71,6 +72,7 @@ export async function executeCreateOrganizationUnit(params: {
   maxHierarchyDepth: number;
   unitManagerResolverDelegate?: UnitManagerResolverDelegate | undefined;
   auditLogService: AuditLogService | null;
+  actor?: UserIdentity | undefined;
 }): Promise<OrganizationUnitResponse> {
   const {
     dto,
@@ -79,6 +81,7 @@ export async function executeCreateOrganizationUnit(params: {
     maxHierarchyDepth,
     unitManagerResolverDelegate,
     auditLogService,
+    actor,
   } = params;
 
   const normalizedCode = dto.code.trim().toUpperCase();
@@ -118,6 +121,26 @@ export async function executeCreateOrganizationUnit(params: {
     unitManagerResolverDelegate,
   );
 
+  const cfActor = actor
+    ? {
+        id: actor.id,
+        roles: actor.roles,
+        permissions: actor.permissions,
+        bypassPermissionCheck: actor.roles?.includes('super_admin'),
+      }
+    : { bypassPermissionCheck: true };
+
+  if (dto.customFields && Object.keys(dto.customFields).length > 0) {
+    defaultCustomFieldRegistry.setRecordCustomFields({
+      entityCode: 'organizations.organization_unit',
+      recordId: '__precheck__',
+      values: dto.customFields,
+      mode: 'create',
+      validateOnly: true,
+      actor: cfActor,
+    });
+  }
+
   const saved = await repository.saveEntity({
     code: normalizedCode,
     name: dto.name.trim(),
@@ -128,7 +151,23 @@ export async function executeCreateOrganizationUnit(params: {
     description: dto.description ?? null,
   });
 
-  const response = mapper.toResponse(saved, managerName);
+  if (dto.customFields && Object.keys(dto.customFields).length > 0) {
+    defaultCustomFieldRegistry.setRecordCustomFields({
+      entityCode: 'organizations.organization_unit',
+      recordId: Number(saved.id),
+      values: dto.customFields,
+      mode: 'create',
+      actor: cfActor,
+    });
+  }
+
+  const customFields = defaultCustomFieldRegistry.resolveRecordCustomFieldsForApi({
+    entityCode: 'organizations.organization_unit',
+    recordId: Number(saved.id),
+    viewMode: 'detail',
+    actor: cfActor,
+  });
+  const response = mapper.toResponse(saved, managerName, customFields);
   await auditLogService?.record({
     module: 'organizations',
     feature: 'organization-unit-management',
@@ -158,6 +197,7 @@ export async function executeUpdateOrganizationUnit(params: {
   maxHierarchyDepth: number;
   unitManagerResolverDelegate?: UnitManagerResolverDelegate | undefined;
   auditLogService: AuditLogService | null;
+  actor?: UserIdentity | undefined;
 }): Promise<OrganizationUnitResponse> {
   const {
     id,
@@ -167,6 +207,7 @@ export async function executeUpdateOrganizationUnit(params: {
     maxHierarchyDepth,
     unitManagerResolverDelegate,
     auditLogService,
+    actor,
   } = params;
 
   const entity = await repository.findById(id);
@@ -229,8 +270,33 @@ export async function executeUpdateOrganizationUnit(params: {
   if (dto.status !== undefined) entity.status = dto.status;
   if (dto.description !== undefined) entity.description = dto.description;
 
+  const cfActor = actor
+    ? {
+        id: actor.id,
+        roles: actor.roles,
+        permissions: actor.permissions,
+        bypassPermissionCheck: actor.roles?.includes('super_admin'),
+      }
+    : { bypassPermissionCheck: true };
+
+  if (dto.customFields && Object.keys(dto.customFields).length > 0) {
+    defaultCustomFieldRegistry.setRecordCustomFields({
+      entityCode: 'organizations.organization_unit',
+      recordId: id,
+      values: dto.customFields,
+      mode: 'update',
+      actor: cfActor,
+    });
+  }
+
   const saved = await repository.saveEntity(entity);
-  const response = mapper.toResponse(saved, resolvedManagerName);
+  const customFields = defaultCustomFieldRegistry.resolveRecordCustomFieldsForApi({
+    entityCode: 'organizations.organization_unit',
+    recordId: Number(saved.id),
+    viewMode: 'detail',
+    actor: cfActor,
+  });
+  const response = mapper.toResponse(saved, resolvedManagerName, customFields);
   await auditLogService?.record({
     module: 'organizations',
     feature: 'organization-unit-management',

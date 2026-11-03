@@ -19,6 +19,7 @@ import { I18nModule } from '@packages/i18n/index.js';
 import { HealthModule } from '@modules/health/index.js';
 import { SystemOpsModule } from '@modules/system-ops/index.js';
 import { OrganizationsModule } from '@modules/organizations/index.js';
+import { OrganizationMembersModule } from '@modules/organization-members/index.js';
 import { RolesModule } from '@modules/roles/index.js';
 import { UsersModule } from '@modules/users/index.js';
 import { AuthModule } from '@modules/auth/index.js';
@@ -26,12 +27,16 @@ import { CodesModule } from '@modules/codes/index.js';
 import { SettingsModule } from '@modules/settings/index.js';
 import { FilesModule } from '@modules/files/index.js';
 import { NotificationsModule } from '@modules/notifications/index.js';
+import { TemplatesModule } from '@modules/templates/index.js';
 import { WorkflowsModule } from '@modules/workflows/index.js';
+import { ApprovalsModule } from '@modules/approvals/index.js';
+import { CommentsModule } from '@modules/comments/index.js';
 import { CalendarModule } from '@modules/calendar/index.js';
 import { ImportsModule } from '@modules/imports/index.js';
 import { ExportsModule } from '@modules/exports/index.js';
 import { ReportsModule } from '@modules/reports/index.js';
 import { SearchModule } from '@modules/search/index.js';
+import { CustomFieldsModule } from '@modules/custom-fields/index.js';
 import { RedisModule } from '@packages/redis/index.js';
 import { RuntimeAgentModule } from '@packages/runtime/index.js';
 import { ApiRuntimeContributor } from './runtime/api-runtime.contributor.js';
@@ -59,17 +64,22 @@ import { MetricsModule } from '@packages/metrics/index.js';
     CodesModule,
     SettingsModule,
     OrganizationsModule,
+    OrganizationMembersModule,
     RolesModule,
     UsersModule,
     AuthModule,
     FilesModule,
     NotificationsModule,
+    TemplatesModule,
     WorkflowsModule,
+    ApprovalsModule,
+    CommentsModule,
     CalendarModule,
     ImportsModule,
     ExportsModule,
     ReportsModule,
     SearchModule,
+    CustomFieldsModule,
   ],
   providers: [
     ApiRuntimeContributor,

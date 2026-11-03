@@ -29,6 +29,10 @@ import {
   SearchRegistryService,
   defaultSearchRegistry,
 } from './registries/search-registry.service.js';
+import {
+  CustomFieldRegistryService,
+  defaultCustomFieldRegistry,
+} from './registries/custom-field-registry.service.js';
 
 @Global()
 @Module({
@@ -69,6 +73,10 @@ import {
       provide: SearchRegistryService,
       useValue: defaultSearchRegistry,
     },
+    {
+      provide: CustomFieldRegistryService,
+      useValue: defaultCustomFieldRegistry,
+    },
   ],
   exports: [
     CodeRegistryService,
@@ -80,6 +88,7 @@ import {
     ExportRegistryService,
     ReportRegistryService,
     SearchRegistryService,
+    CustomFieldRegistryService,
   ],
 })
 export class KernelModule {}

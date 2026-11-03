@@ -213,6 +213,57 @@ export const ModuleSearchableEntityManifestSchema = z.object({
   status: z.number().int().optional(),
 });
 
+export const ModuleExtensibleEntityManifestSchema = z.object({
+  code: z.string().min(1),
+  module: z.string().optional(),
+  entityType: z.string().min(1),
+  name: z.string().min(1),
+  description: z.string().nullable().optional(),
+  primaryKeyField: z.string().optional(),
+  readPermission: z.string().optional(),
+  writePermission: z.string().optional(),
+  maxCustomFields: z.number().int().min(1).max(200).optional(),
+  allowDynamicFields: z.boolean().optional(),
+  isSystem: z.boolean().optional(),
+  status: z.number().int().optional(),
+});
+
+export const ModuleCustomFieldOptionManifestSchema = z.object({
+  optionCode: z.string().min(1),
+  label: z.string().min(1),
+  labels: z.record(z.string(), z.string()).optional(),
+  color: z.string().nullable().optional(),
+  sortOrder: z.number().int().optional(),
+  isDefault: z.boolean().optional(),
+  status: z.number().int().optional(),
+});
+
+export const ModuleCustomFieldManifestSchema = z.object({
+  entityCode: z.string().min(1),
+  fieldKey: z.string().min(1),
+  module: z.string().optional(),
+  name: z.string().min(1),
+  description: z.string().nullable().optional(),
+  dataType: z.enum(['TEXT', 'NUMBER', 'DATE', 'BOOLEAN', 'SELECT']),
+  defaultValue: z.unknown().optional(),
+  validationRules: z.record(z.string(), z.unknown()).nullable().optional(),
+  options: z.array(ModuleCustomFieldOptionManifestSchema).optional().default([]),
+  codeTypeCode: z.string().nullable().optional(),
+  viewPermission: z.string().nullable().optional(),
+  editPermission: z.string().nullable().optional(),
+  allowedViewRoles: z.array(z.string()).optional(),
+  allowedEditRoles: z.array(z.string()).optional(),
+  isRequired: z.boolean().optional(),
+  isSensitive: z.boolean().optional(),
+  showInApi: z.boolean().optional(),
+  showInList: z.boolean().optional(),
+  showInDetail: z.boolean().optional(),
+  isIndexed: z.boolean().optional(),
+  sortOrder: z.number().int().optional(),
+  isSystem: z.boolean().optional(),
+  status: z.number().int().optional(),
+});
+
 export const ModuleManifestSchema = z.object({
   $schema: z.string().optional(),
   name: z
@@ -236,6 +287,8 @@ export const ModuleManifestSchema = z.object({
   menus: z.array(ModuleMenuManifestSchema).optional().default([]),
   reports: z.array(ModuleReportManifestSchema).optional().default([]),
   searchableEntities: z.array(ModuleSearchableEntityManifestSchema).optional().default([]),
+  extensibleEntities: z.array(ModuleExtensibleEntityManifestSchema).optional().default([]),
+  customFields: z.array(ModuleCustomFieldManifestSchema).optional().default([]),
   locales: z.array(ModuleLocaleManifestSchema).optional().default([]),
   timezones: z.array(ModuleTimezoneManifestSchema).optional().default([]),
   translations: z.array(ModuleTranslationManifestSchema).optional().default([]),
