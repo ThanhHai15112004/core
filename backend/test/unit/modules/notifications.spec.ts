@@ -12,15 +12,19 @@ import type { IRolesPublicService, RoleSummary } from '@modules/roles/contracts/
 import type { IUsersPublicService } from '@modules/users/contracts/index.js';
 import {
   DEFAULT_SYSTEM_NOTIFICATION_TEMPLATES,
+  DEFAULT_SYSTEM_TEMPLATE_USAGES,
   EmailChannelProviderAdapter,
   NOTIFICATION_CATEGORY,
   NOTIFICATION_CHANNEL,
   NOTIFICATION_DELIVERY_STATUS,
+  NOTIFICATION_DOCUMENT_FORMAT,
   NOTIFICATION_ERROR_TYPE,
   NOTIFICATION_INBOX_STATUS,
   NOTIFICATION_PRIORITY,
   NOTIFICATION_SUPPRESSION_REASON,
   NOTIFICATION_TARGET_TYPE,
+  NOTIFICATION_TEMPLATE_TYPE,
+  NOTIFICATION_TEMPLATE_VERSION_STATUS,
   NotificationChannelAdapterRegistry,
   NotificationChannelsService,
   NotificationsController,
@@ -36,6 +40,8 @@ import type { NotificationPushSubscriptionEntity } from '@modules/notifications/
 import type { NotificationQuotaUsageEntity } from '@modules/notifications/entities/notification-quota-usage.entity.js';
 import type { NotificationRecipientEntity } from '@modules/notifications/entities/notification-recipient.entity.js';
 import type { NotificationSuppressionEntity } from '@modules/notifications/entities/notification-suppression.entity.js';
+import type { NotificationTemplateUsageEntity } from '@modules/notifications/entities/notification-template-usage.entity.js';
+import type { NotificationTemplateVersionEntity } from '@modules/notifications/entities/notification-template-version.entity.js';
 import type { NotificationTemplateEntity } from '@modules/notifications/entities/notification-template.entity.js';
 import type { NotificationEntity } from '@modules/notifications/entities/notification.entity.js';
 import type {
@@ -72,8 +78,21 @@ function createInMemoryNotificationsHarness() {
         code: t.code,
         name: t.name,
         channel: t.channel,
+        templateType:
+          t.templateType ??
+          (t.channel === NOTIFICATION_CHANNEL.DOCUMENT
+            ? NOTIFICATION_TEMPLATE_TYPE.DOCUMENT
+            : t.channel === NOTIFICATION_CHANNEL.EMAIL
+              ? NOTIFICATION_TEMPLATE_TYPE.EMAIL
+              : NOTIFICATION_TEMPLATE_TYPE.NOTIFICATION),
+        documentFormat: t.documentFormat ?? null,
         category: t.category,
         locale: t.locale,
+        version: 1,
+        publishedVersion: 1,
+        status: NOTIFICATION_TEMPLATE_VERSION_STATUS.PUBLISHED,
+        publishedAt: new Date(),
+        publishedByUserId: 1,
         subjectTemplate: t.subjectTemplate,
         bodyTemplate: t.bodyTemplate,
         htmlTemplate: t.htmlTemplate,
@@ -86,6 +105,51 @@ function createInMemoryNotificationsHarness() {
         deletedAt: null,
       }) as NotificationTemplateEntity,
   );
+  const templateVersionsStore: NotificationTemplateVersionEntity[] = templatesStore.map(
+    (t, idx) =>
+      ({
+        id: idx + 1,
+        templateId: Number(t.id),
+        code: t.code,
+        channel: Number(t.channel),
+        templateType: t.templateType,
+        documentFormat: t.documentFormat ?? null,
+        locale: t.locale,
+        version: 1,
+        status: NOTIFICATION_TEMPLATE_VERSION_STATUS.PUBLISHED,
+        name: t.name,
+        subjectTemplate: t.subjectTemplate,
+        bodyTemplate: t.bodyTemplate,
+        htmlTemplate: t.htmlTemplate,
+        variablesJson: t.variablesJson,
+        changeNote: 'Initial system seed',
+        createdByUserId: 1,
+        publishedByUserId: 1,
+        publishedAt: new Date(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        deletedAt: null,
+      }) as NotificationTemplateVersionEntity,
+  );
+  const templateUsagesStore: NotificationTemplateUsageEntity[] = DEFAULT_SYSTEM_TEMPLATE_USAGES.map(
+    (u, idx) =>
+      ({
+        id: idx + 1,
+        templateCode: u.templateCode,
+        channel: u.channel ?? null,
+        moduleName: u.moduleName,
+        featureCode: u.featureCode,
+        entityType: u.entityType ?? null,
+        entityId: u.entityId ?? null,
+        description: u.description ?? null,
+        isActive: true,
+        createdByUserId: 1,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        deletedAt: null,
+      }) as NotificationTemplateUsageEntity,
+  );
+  const auditLogsStore: Array<Record<string, unknown>> = [];
   const deliveriesStore: NotificationDeliveryEntity[] = [];
   const suppressionsStore: NotificationSuppressionEntity[] = [];
   const pushSubsStore: NotificationPushSubscriptionEntity[] = [];
@@ -95,6 +159,8 @@ function createInMemoryNotificationsHarness() {
   let nextRecId = 1;
   let nextPrefId = 1;
   let nextTplId = templatesStore.length + 1;
+  let nextTplVerId = templateVersionsStore.length + 1;
+  let nextTplUsageId = templateUsagesStore.length + 1;
   let nextDelivId = 1;
   let nextSuppId = 1;
   let nextPushSubId = 1;
@@ -471,6 +537,19 @@ function createInMemoryNotificationsHarness() {
     },
     findTemplateById: async (id: number) =>
       templatesStore.find((t) => Number(t.id) === id && !t.deletedAt) ?? null,
+    findExactTemplateByCodeChannelLocale: async (code: string, channel: number, locale = 'vi') => {
+      const cleanCode = code.trim().toUpperCase();
+      const cleanLocale = locale.trim().toLowerCase() || 'vi';
+      return (
+        templatesStore.find(
+          (t) =>
+            t.code === cleanCode &&
+            Number(t.channel) === channel &&
+            t.locale === cleanLocale &&
+            !t.deletedAt,
+        ) ?? null
+      );
+    },
     findTemplateByCodeChannelLocale: async (code: string, channel: number, locale = 'vi') => {
       const cleanCode = code.trim().toUpperCase();
       const cleanLocale = locale.trim().toLowerCase() || 'vi';
@@ -491,10 +570,20 @@ function createInMemoryNotificationsHarness() {
         null
       );
     },
+    findTemplatesByCodes: async (codes: readonly string[]) => {
+      const upper = new Set(codes.map((c) => c.trim().toUpperCase()));
+      return templatesStore.filter((t) => upper.has(t.code) && !t.deletedAt);
+    },
     findPaginatedTemplates: async (options: NotificationTemplateFilterOptions) => {
       let filtered = templatesStore.filter((t) => !t.deletedAt);
       if (options.channel !== undefined) {
         filtered = filtered.filter((t) => Number(t.channel) === options.channel);
+      }
+      if (options.templateType) {
+        filtered = filtered.filter((t) => t.templateType === options.templateType);
+      }
+      if (options.locale) {
+        filtered = filtered.filter((t) => t.locale === options.locale);
       }
       const page = options.page ?? 1;
       const limit = options.limit ?? 20;
@@ -531,14 +620,134 @@ function createInMemoryNotificationsHarness() {
         deletedAt: null,
         isSystem: false,
         isActive: true,
+        templateType:
+          data.templateType ??
+          (data.channel === NOTIFICATION_CHANNEL.DOCUMENT
+            ? NOTIFICATION_TEMPLATE_TYPE.DOCUMENT
+            : data.channel === NOTIFICATION_CHANNEL.EMAIL
+              ? NOTIFICATION_TEMPLATE_TYPE.EMAIL
+              : NOTIFICATION_TEMPLATE_TYPE.NOTIFICATION),
+        documentFormat: data.documentFormat ?? null,
+        version: data.version ?? 1,
+        publishedVersion: data.publishedVersion ?? 1,
+        status: data.status ?? NOTIFICATION_TEMPLATE_VERSION_STATUS.PUBLISHED,
+        publishedAt: data.publishedAt ?? new Date(),
+        publishedByUserId: data.publishedByUserId ?? null,
         ...data,
       } as NotificationTemplateEntity;
       templatesStore.push(created);
       return created;
     },
     deleteTemplateById: async (id: number) => {
+      for (let i = templateVersionsStore.length - 1; i >= 0; i--) {
+        if (Number(templateVersionsStore[i]!.templateId) === id) {
+          templateVersionsStore.splice(i, 1);
+        }
+      }
       const idx = templatesStore.findIndex((t) => Number(t.id) === id);
       if (idx >= 0) templatesStore.splice(idx, 1);
+    },
+    findTemplateVersions: async (templateId: number) =>
+      templateVersionsStore
+        .filter((v) => Number(v.templateId) === templateId && !v.deletedAt)
+        .sort((a, b) => Number(b.version) - Number(a.version)),
+    findTemplateVersionsByTemplateIds: async (templateIds: readonly number[]) => {
+      const set = new Set(templateIds.map((id) => Number(id)));
+      return templateVersionsStore
+        .filter((v) => set.has(Number(v.templateId)) && !v.deletedAt)
+        .sort((a, b) => Number(b.version) - Number(a.version));
+    },
+    findTemplateVersionByNumber: async (templateId: number, version: number) =>
+      templateVersionsStore.find(
+        (v) => Number(v.templateId) === templateId && Number(v.version) === version && !v.deletedAt,
+      ) ?? null,
+    saveTemplateVersion: async (data: Partial<NotificationTemplateVersionEntity>) => {
+      if (data.id) {
+        const existing = templateVersionsStore.find((v) => Number(v.id) === Number(data.id));
+        if (existing) {
+          Object.assign(existing, data, { updatedAt: new Date() });
+          return existing;
+        }
+      }
+      const created = {
+        id: nextTplVerId++,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        deletedAt: null,
+        ...data,
+      } as NotificationTemplateVersionEntity;
+      templateVersionsStore.push(created);
+      return created;
+    },
+    findTemplateUsagesByCode: async (templateCode: string) => {
+      const clean = templateCode.trim().toUpperCase();
+      return templateUsagesStore.filter(
+        (u) => u.templateCode === clean && u.isActive && !u.deletedAt,
+      );
+    },
+    findTemplateUsagesByCodes: async (templateCodes: readonly string[]) => {
+      const set = new Set(templateCodes.map((c) => c.trim().toUpperCase()));
+      return templateUsagesStore.filter(
+        (u) => set.has(u.templateCode) && u.isActive && !u.deletedAt,
+      );
+    },
+    upsertTemplateUsage: async (params: {
+      templateCode: string;
+      channel?: number | null;
+      moduleName: string;
+      featureCode: string;
+      entityType?: string | null;
+      entityId?: string | null;
+      description?: string | null;
+      createdByUserId?: number | null;
+    }) => {
+      const cleanTpl = params.templateCode.trim().toUpperCase();
+      const cleanMod = params.moduleName.trim().toLowerCase();
+      const cleanFeat = params.featureCode.trim().toLowerCase();
+      const existing = templateUsagesStore.find(
+        (u) =>
+          u.templateCode === cleanTpl &&
+          u.moduleName === cleanMod &&
+          u.featureCode === cleanFeat &&
+          !u.deletedAt,
+      );
+      if (existing) {
+        existing.channel = params.channel ?? null;
+        existing.entityType = params.entityType ?? null;
+        existing.entityId = params.entityId ?? null;
+        existing.description = params.description ?? null;
+        existing.isActive = true;
+        existing.createdByUserId = params.createdByUserId ?? null;
+        existing.updatedAt = new Date();
+        return existing;
+      }
+      const created = {
+        id: nextTplUsageId++,
+        templateCode: cleanTpl,
+        channel: params.channel ?? null,
+        moduleName: cleanMod,
+        featureCode: cleanFeat,
+        entityType: params.entityType ?? null,
+        entityId: params.entityId ?? null,
+        description: params.description ?? null,
+        isActive: true,
+        createdByUserId: params.createdByUserId ?? null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        deletedAt: null,
+      } as NotificationTemplateUsageEntity;
+      templateUsagesStore.push(created);
+      return created;
+    },
+    removeTemplateUsageById: async (id: number) => {
+      const idx = templateUsagesStore.findIndex((u) => Number(u.id) === id);
+      if (idx < 0) return null;
+      const [removed] = templateUsagesStore.splice(idx, 1);
+      return removed ?? null;
+    },
+    countDeliveriesByTemplateCode: async (templateCode: string) => {
+      const clean = templateCode.trim().toUpperCase();
+      return deliveriesStore.filter((d) => d.templateCode === clean && !d.deletedAt).length;
     },
     findDeliveryById: async (id: number) =>
       deliveriesStore.find((d) => Number(d.id) === id && !d.deletedAt) ?? null,
@@ -795,6 +1004,12 @@ function createInMemoryNotificationsHarness() {
     },
   } as unknown as NotificationChannelsRepository;
 
+  const auditLogService = {
+    record: async (entry: Record<string, unknown>) => {
+      auditLogsStore.push(entry);
+    },
+  } as never;
+
   const mapper = new NotificationsMapper();
   const adapterRegistry = new NotificationChannelAdapterRegistry(
     new EmailChannelProviderAdapter(),
@@ -805,7 +1020,7 @@ function createInMemoryNotificationsHarness() {
     channelsRepo,
     adapterRegistry,
     mapper,
-    null,
+    auditLogService,
     usersPublicService,
   );
   const service = new NotificationsService(
@@ -813,7 +1028,7 @@ function createInMemoryNotificationsHarness() {
     recipientsRepo,
     preferencesRepo,
     mapper,
-    null,
+    auditLogService,
     usersPublicService,
     rolesPublicService,
     organizationsPublicService,
@@ -831,6 +1046,9 @@ function createInMemoryNotificationsHarness() {
     recipientsStore,
     preferencesStore,
     templatesStore,
+    templateVersionsStore,
+    templateUsagesStore,
+    auditLogsStore,
     deliveriesStore,
     suppressionsStore,
     pushSubsStore,
@@ -1455,5 +1673,310 @@ describe('Phase 7.2 — Email, SMS & Push Notification (Multi-Channel Backend Su
     expect(smsQuota?.dailyCost).toBe(2000);
     expect(smsQuota?.dailyUsagePercent).toBe(100);
     expect(smsQuota?.isQuotaExceeded).toBe(true);
+  });
+});
+
+describe('Phase 9.6 — Mẫu nội dung (Template: Email, Thông báo, Tài liệu, Xem trước, Đa phiên bản Draft/Publish/Rollback có Audit, Đa ngôn ngữ & Chống xóa nhầm)', () => {
+  beforeEach(() => {
+    defaultFeatureFlagRegistry.setInstalledModules([
+      'core',
+      'organizations',
+      'roles',
+      'users',
+      'auth',
+      'codes',
+      'settings',
+      'files',
+      'notifications',
+    ]);
+  });
+
+  it('1. Tạo mẫu Email, mẫu Thông báo (IN_APP/SMS/Push) và mẫu Tài liệu (DOCUMENT) có biến dữ liệu & đa ngôn ngữ', async () => {
+    const { controller } = createInMemoryNotificationsHarness();
+
+    // 1.1 Tạo mẫu Email đa ngôn ngữ (vi & en)
+    const emailVi = await controller.upsertTemplate({
+      code: 'CONTRACT_SIGNED_NOTICE',
+      name: 'Thông báo ký hợp đồng (VI)',
+      channel: 'EMAIL',
+      category: 'WORK',
+      locale: 'vi',
+      subjectTemplate: 'Hợp đồng {{contractNo}} của {{customerName}} đã ký',
+      bodyTemplate:
+        'Xin chào {{customerName}}, hợp đồng {{contractNo}} trị giá {{amount}} đã có hiệu lực.',
+      htmlTemplate:
+        '<p>Xin chào <b>{{customerName}}</b>, hợp đồng <b>{{contractNo}}</b> trị giá {{amount}} đã có hiệu lực.</p>',
+      isActive: true,
+    });
+    expect(emailVi.templateType).toBe(NOTIFICATION_TEMPLATE_TYPE.EMAIL);
+    expect(emailVi.version).toBe(1);
+    expect(emailVi.status).toBe(NOTIFICATION_TEMPLATE_VERSION_STATUS.PUBLISHED);
+    expect(emailVi.variables).toEqual(['contractNo', 'customerName', 'amount']);
+
+    const emailEn = await controller.upsertTemplate({
+      code: 'CONTRACT_SIGNED_NOTICE',
+      name: 'Contract Signed Notice (EN)',
+      channel: 'EMAIL',
+      category: 'WORK',
+      locale: 'en',
+      subjectTemplate: 'Contract {{contractNo}} for {{customerName}} is signed',
+      bodyTemplate:
+        'Hello {{customerName}}, contract {{contractNo}} worth {{amount}} is now active.',
+      htmlTemplate:
+        '<p>Hello <b>{{customerName}}</b>, contract <b>{{contractNo}}</b> worth {{amount}} is now active.</p>',
+      isActive: true,
+    });
+    expect(emailEn.locale).toBe('en');
+    expect(emailEn.availableLocales).toEqual(expect.arrayContaining(['vi', 'en']));
+
+    // 1.2 Tạo mẫu Thông báo In-App
+    const inAppTpl = await controller.upsertTemplate({
+      code: 'CONTRACT_SIGNED_NOTICE',
+      name: 'Thông báo In-App ký hợp đồng',
+      channel: 'IN_APP',
+      category: 'WORK',
+      locale: 'vi',
+      subjectTemplate: 'Hợp đồng {{contractNo}} hoàn tất',
+      bodyTemplate: 'Khách hàng {{customerName}} vừa hoàn tất ký hợp đồng {{contractNo}}.',
+      isActive: true,
+    });
+    expect(inAppTpl.channel).toBe(NOTIFICATION_CHANNEL.IN_APP);
+    expect(inAppTpl.templateType).toBe(NOTIFICATION_TEMPLATE_TYPE.NOTIFICATION);
+
+    // 1.3 Tạo mẫu Tài liệu (DOCUMENT) dùng khi dự án cần sinh file
+    const docTpl = await controller.upsertTemplate({
+      code: 'INVOICE_EXPORT_DOC',
+      name: 'Mẫu chứng từ hóa đơn điện tử',
+      channel: 'DOCUMENT',
+      templateType: 'DOCUMENT',
+      documentFormat: 'PDF',
+      category: 'WORK',
+      locale: 'vi',
+      subjectTemplate: 'HÓA ĐƠN SỐ {{invoiceNo}}',
+      bodyTemplate: 'Khách hàng: {{customerName}} | Tổng thanh toán: {{totalAmount}} VND',
+      htmlTemplate:
+        '<div><h1>HÓA ĐƠN {{invoiceNo}}</h1><p>Khách hàng: {{customerName}}</p><p>Tổng: {{totalAmount}} VND</p></div>',
+      isActive: true,
+    });
+    expect(docTpl.channel).toBe(NOTIFICATION_CHANNEL.DOCUMENT);
+    expect(docTpl.templateType).toBe(NOTIFICATION_TEMPLATE_TYPE.DOCUMENT);
+    expect(docTpl.documentFormat).toBe(NOTIFICATION_DOCUMENT_FORMAT.PDF);
+    expect(docTpl.variables).toEqual(['invoiceNo', 'customerName', 'totalAmount']);
+  });
+
+  it('2. Xem trước mẫu với dữ liệu thử (Preview) phát hiện chính xác biến bị thiếu & Sinh file từ mẫu tài liệu (Render Document)', async () => {
+    const { controller } = createInMemoryNotificationsHarness();
+
+    // Preview mẫu hệ thống CONTRACT_HANDOVER_DOC khi truyền thiếu biến recipientName và summary
+    const preview = await controller.previewTemplate({
+      templateCode: 'CONTRACT_HANDOVER_DOC',
+      channel: 'DOCUMENT',
+      locale: 'vi',
+      variables: {
+        documentNumber: 'HD-2026-999',
+        organizationName: 'Công ty Cổ phần ABC',
+        senderName: 'Nguyễn Văn A',
+      },
+    });
+    expect(preview.templateType).toBe(NOTIFICATION_TEMPLATE_TYPE.DOCUMENT);
+    expect(preview.renderedSubject).toContain('HD-2026-999');
+    expect(preview.renderedBody).toContain('Công ty Cổ phần ABC');
+    expect(preview.missingVariables).toEqual(expect.arrayContaining(['recipientName', 'summary']));
+
+    // Sinh tài liệu (Render Document) định dạng HTML từ mẫu CONTRACT_HANDOVER_DOC (ngôn ngữ en)
+    const renderedDoc = await controller.renderDocumentFromTemplate({
+      templateCode: 'CONTRACT_HANDOVER_DOC',
+      locale: 'en',
+      outputFormat: 'HTML',
+      fileName: 'handover-hd-999',
+      variables: {
+        documentNumber: 'HD-2026-999',
+        organizationName: 'ABC Corp',
+        senderName: 'Alice',
+        recipientName: 'John Doe',
+        summary: 'Handover 10 enterprise laptops',
+      },
+    });
+    expect(renderedDoc.locale).toBe('en');
+    expect(renderedDoc.documentFormat).toBe('HTML');
+    expect(renderedDoc.fileName).toBe('handover-hd-999.html');
+    expect(renderedDoc.mimeType).toContain('text/html');
+    expect(renderedDoc.missingVariables).toHaveLength(0);
+    expect(renderedDoc.renderedContent).toContain('DOCUMENT HANDOVER RECORD #HD-2026-999');
+    expect(Buffer.from(renderedDoc.contentBase64, 'base64').toString('utf8')).toContain('ABC Corp');
+  });
+
+  it('3. Tạo nhiều phiên bản mẫu (không sửa trực tiếp bản đang dùng), Phát hành (Publish) và Quay lại phiên bản cũ (Rollback) có ghi Audit Log', async () => {
+    const { controller, auditLogsStore } = createInMemoryNotificationsHarness();
+    const actor = {
+      id: '1',
+      username: 'admin',
+      roles: ['SUPER_ADMIN'],
+      permissions: ['notifications.manage', 'notifications.read'],
+    };
+
+    // Bước 1: Tạo mẫu mới v1 (đang dùng - PUBLISHED)
+    const createdV1 = await controller.upsertTemplate(
+      {
+        code: 'PAYMENT_REMINDER',
+        name: 'Nhắc thanh toán v1',
+        channel: 'EMAIL',
+        category: 'WORK',
+        locale: 'vi',
+        subjectTemplate: '[v1] Nhắc thanh toán kỳ {{period}}',
+        bodyTemplate: 'Nội dung bản v1: Quý khách {{fullName}} vui lòng thanh toán {{amount}}.',
+        isActive: true,
+      },
+      actor as never,
+    );
+    expect(createdV1.version).toBe(1);
+    expect(createdV1.publishedVersion).toBe(1);
+    expect(createdV1.status).toBe(NOTIFICATION_TEMPLATE_VERSION_STATUS.PUBLISHED);
+
+    // Bước 2: Gọi upsertTemplate (hoặc createTemplateVersion) lên mẫu đang PUBLISHED -> Tạo bản nháp v2 (DRAFT), KHÔNG ghi đè bản v1 đang dùng!
+    const afterDraftV2 = await controller.upsertTemplate(
+      {
+        code: 'PAYMENT_REMINDER',
+        name: 'Nhắc thanh toán v2 (Nháp)',
+        channel: 'EMAIL',
+        category: 'WORK',
+        locale: 'vi',
+        subjectTemplate: '[v2-Draft] Nhắc thanh toán kỳ {{period}} kèm ưu đãi',
+        bodyTemplate:
+          'Nội dung bản v2: Quý khách {{fullName}} thanh toán {{amount}} trước {{dueDate}}.',
+        changeNote: 'Thêm biến dueDate cho bản v2',
+      },
+      actor as never,
+    );
+
+    // Bản đang active vẫn giữ nguyên v1!
+    expect(afterDraftV2.version).toBe(1);
+    expect(afterDraftV2.publishedVersion).toBe(1);
+    expect(afterDraftV2.latestDraftVersion).toBe(2);
+    expect(afterDraftV2.subjectTemplate).toBe('[v1] Nhắc thanh toán kỳ {{period}}');
+
+    // Kiểm tra preview bản đang dùng (v1) so với preview bản nháp (v2)
+    const previewActive = await controller.previewTemplate({
+      templateId: createdV1.id,
+      variables: { period: '11/2026', fullName: 'Anh Hải', amount: '5.000.000đ' },
+    });
+    expect(previewActive.version).toBe(1);
+    expect(previewActive.renderedSubject).toBe('[v1] Nhắc thanh toán kỳ 11/2026');
+
+    const previewDraftV2 = await controller.previewTemplate({
+      templateId: createdV1.id,
+      version: 2,
+      variables: { period: '11/2026', fullName: 'Anh Hải', amount: '5.000.000đ' },
+    });
+    expect(previewDraftV2.version).toBe(2);
+    expect(previewDraftV2.renderedSubject).toBe('[v2-Draft] Nhắc thanh toán kỳ 11/2026 kèm ưu đãi');
+    expect(previewDraftV2.missingVariables).toEqual(['dueDate']);
+
+    // Bước 3: Phát hành (Publish) phiên bản v2 -> v2 trở thành PUBLISHED, v1 chuyển sang ARCHIVED, có ghi Audit Log
+    const publishedRes = await controller.publishTemplateVersion(
+      createdV1.id,
+      { version: 2, changeNote: 'Phát hành chính thức v2' },
+      actor as never,
+    );
+    expect(publishedRes.template.version).toBe(2);
+    expect(publishedRes.template.publishedVersion).toBe(2);
+    expect(publishedRes.template.latestDraftVersion).toBeNull();
+    expect(publishedRes.template.subjectTemplate).toBe(
+      '[v2-Draft] Nhắc thanh toán kỳ {{period}} kèm ưu đãi',
+    );
+    expect(publishedRes.activeVersion.status).toBe(NOTIFICATION_TEMPLATE_VERSION_STATUS.PUBLISHED);
+
+    const publishAudit = auditLogsStore.find(
+      (a) => a.action === 'PUBLISH_NOTIFICATION_TEMPLATE_VERSION',
+    );
+    expect(publishAudit).toBeDefined();
+    expect((publishAudit?.afterData as Record<string, unknown>)?.publishedVersion).toBe(2);
+
+    // Bước 4: Quay lại phiên bản cũ (Rollback về v1) -> Khôi phục nội dung v1 thành PUBLISHED và ghi Audit Log
+    const rollbackRes = await controller.rollbackTemplateVersion(
+      createdV1.id,
+      { targetVersion: 1, reason: 'Phát hiện lỗi hiển thị, quay về bản v1' },
+      actor as never,
+    );
+    expect(rollbackRes.template.version).toBe(1);
+    expect(rollbackRes.template.publishedVersion).toBe(1);
+    expect(rollbackRes.template.subjectTemplate).toBe('[v1] Nhắc thanh toán kỳ {{period}}');
+
+    const versionsAfterRollback = await controller.listTemplateVersions(createdV1.id);
+    const v1Row = versionsAfterRollback.find((v) => v.version === 1);
+    const v2Row = versionsAfterRollback.find((v) => v.version === 2);
+    expect(v1Row?.status).toBe(NOTIFICATION_TEMPLATE_VERSION_STATUS.PUBLISHED);
+    expect(v2Row?.status).toBe(NOTIFICATION_TEMPLATE_VERSION_STATUS.ARCHIVED);
+
+    const rollbackAudit = auditLogsStore.find(
+      (a) => a.action === 'ROLLBACK_NOTIFICATION_TEMPLATE_VERSION',
+    );
+    expect(rollbackAudit).toBeDefined();
+    expect((rollbackAudit?.afterData as Record<string, unknown>)?.rolledBackToVersion).toBe(1);
+  });
+
+  it('4. Theo dõi module đang sử dụng mẫu (Usage Tracking) và chặn xóa nhầm khi mẫu đang được module khác tham chiếu', async () => {
+    const { controller } = createInMemoryNotificationsHarness();
+    const actor = {
+      id: '1',
+      username: 'admin',
+      roles: ['SUPER_ADMIN'],
+      permissions: ['notifications.manage', 'notifications.read'],
+    };
+
+    // Tạo mẫu tùy chỉnh
+    const customTpl = await controller.upsertTemplate(
+      {
+        code: 'WORKFLOW_SLA_ESCALATION',
+        name: 'Mẫu cảnh báo quá hạn SLA quy trình',
+        channel: 'EMAIL',
+        category: 'WORK',
+        locale: 'vi',
+        subjectTemplate: 'Cảnh báo quá hạn hồ sơ {{instanceCode}}',
+        bodyTemplate: 'Hồ sơ {{instanceCode}} tại bước {{stepName}} đã quá hạn SLA.',
+        isActive: true,
+      },
+      actor as never,
+    );
+
+    // Đăng ký module 'workflows' đang sử dụng mẫu này
+    const usage = await controller.registerTemplateUsage(
+      customTpl.id,
+      {
+        moduleName: 'workflows',
+        featureCode: 'sla_overdue_escalation',
+        description: 'Cảnh báo leo thang SLA quá hạn',
+      },
+      actor as never,
+    );
+    expect(usage.moduleName).toBe('workflows');
+    expect(usage.templateCode).toBe('WORKFLOW_SLA_ESCALATION');
+
+    // Kiểm tra danh sách templates trả về đúng usedByModules = ['workflows']
+    const listed = await controller.listTemplates({
+      page: 1,
+      limit: 50,
+      channel: undefined,
+      templateType: undefined,
+      category: undefined,
+      locale: undefined,
+      isActive: undefined,
+      search: undefined,
+    });
+    const foundTpl = listed.data.find((t) => t.id === customTpl.id);
+    expect(foundTpl?.usedByModules).toContain('workflows');
+    expect(foundTpl?.usageCount).toBe(1);
+
+    // Thử xóa mẫu khi module 'workflows' đang sử dụng -> Bắt buộc bị chặn (ConflictAppException) để tránh xóa nhầm!
+    await expect(controller.deleteTemplate(customTpl.id, actor as never)).rejects.toThrow(
+      /workflows/i,
+    );
+
+    // Sau khi gỡ đăng ký sử dụng của module 'workflows' -> Cho phép xóa an toàn
+    const removedUsage = await controller.unregisterTemplateUsage(usage.id, actor as never);
+    expect(removedUsage.removed).toBe(true);
+
+    const deleted = await controller.deleteTemplate(customTpl.id, actor as never);
+    expect(deleted.deleted).toBe(true);
   });
 });

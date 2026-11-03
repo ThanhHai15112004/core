@@ -8,12 +8,17 @@
   "category": "core",
   "author": "Core Platform Team",
   "entryModule": "NotificationsModule",
-  "dependencies": ["database", "security", "i18n", "users", "roles", "organizations", "codes", "settings"],
-  "permissions": [
-    "notifications.read",
-    "notifications.send",
-    "notifications.manage"
+  "dependencies": [
+    "database",
+    "security",
+    "i18n",
+    "users",
+    "roles",
+    "organizations",
+    "codes",
+    "settings"
   ],
+  "permissions": ["notifications.read", "notifications.send", "notifications.manage"],
   "events": {
     "published": [
       "notifications.dispatched",
@@ -31,6 +36,8 @@
       "notification_recipients",
       "notification_preferences",
       "notification_templates",
+      "notification_template_versions",
+      "notification_template_usages",
       "notification_deliveries",
       "notification_suppressions",
       "notification_push_subscriptions",
@@ -246,6 +253,17 @@
           "aliases": ["PUSH", "WEB_PUSH", "MOBILE_PUSH"],
           "badgeTone": "neutral",
           "sortOrder": 4,
+          "isSystem": true
+        },
+        {
+          "numericCode": 5,
+          "code": "DOCUMENT",
+          "behaviorCode": "DOCUMENT",
+          "name": "Mẫu tài liệu sinh file (Document)",
+          "labels": { "vi": "Mẫu tài liệu (Document)", "en": "Document Template" },
+          "aliases": ["DOCUMENT", "DOC", "FILE", "PDF", "TÀI LIỆU", "TAI LIEU"],
+          "badgeTone": "info",
+          "sortOrder": 5,
           "isSystem": true
         }
       ]
@@ -1144,4 +1162,3 @@
     }
   ]
 }
-

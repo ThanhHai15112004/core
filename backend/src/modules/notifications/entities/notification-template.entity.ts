@@ -1,6 +1,11 @@
 import { Column, Entity, Index } from 'typeorm';
 import { TypeOrmBaseEntity } from '@packages/database/index.js';
-import { NOTIFICATION_CATEGORY, NOTIFICATION_CHANNEL } from '../enum/notifications.enum.js';
+import {
+  NOTIFICATION_CATEGORY,
+  NOTIFICATION_CHANNEL,
+  NOTIFICATION_TEMPLATE_TYPE,
+  NOTIFICATION_TEMPLATE_VERSION_STATUS,
+} from '../enum/notifications.enum.js';
 
 @Entity('notification_templates')
 @Index('uq_notification_templates_code_channel_locale', ['code', 'channel', 'locale'], {
@@ -23,6 +28,36 @@ export class NotificationTemplateEntity extends TypeOrmBaseEntity {
 
   @Column({ type: 'varchar', length: 16, default: 'vi' })
   public locale!: string;
+
+  @Column({
+    name: 'template_type',
+    type: 'varchar',
+    length: 32,
+    default: NOTIFICATION_TEMPLATE_TYPE.NOTIFICATION,
+  })
+  public templateType!: string;
+
+  @Column({ name: 'document_format', type: 'varchar', length: 32, nullable: true })
+  public documentFormat?: string | null;
+
+  @Column({ type: 'int', default: 1 })
+  public version!: number;
+
+  @Column({ name: 'published_version', type: 'int', default: 1 })
+  public publishedVersion!: number;
+
+  @Column({
+    type: 'varchar',
+    length: 24,
+    default: NOTIFICATION_TEMPLATE_VERSION_STATUS.PUBLISHED,
+  })
+  public status!: string;
+
+  @Column({ name: 'published_at', type: 'timestamp', nullable: true })
+  public publishedAt?: Date | null;
+
+  @Column({ name: 'published_by_user_id', type: 'int', nullable: true })
+  public publishedByUserId?: number | null;
 
   @Column({ name: 'subject_template', type: 'varchar', length: 500, nullable: true })
   public subjectTemplate?: string | null;

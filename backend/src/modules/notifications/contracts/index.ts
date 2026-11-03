@@ -9,12 +9,15 @@ import {
   NOTIFICATION_CHANNEL,
   NOTIFICATION_DELIVERY_STATUS,
   NOTIFICATION_DISPATCH_STATUS,
+  NOTIFICATION_DOCUMENT_FORMAT,
   NOTIFICATION_ERROR_TYPE,
   NOTIFICATION_INBOX_STATUS,
   NOTIFICATION_PRIORITY,
   NOTIFICATION_PUSH_PLATFORM,
   NOTIFICATION_SUPPRESSION_REASON,
   NOTIFICATION_TARGET_TYPE,
+  NOTIFICATION_TEMPLATE_TYPE,
+  NOTIFICATION_TEMPLATE_VERSION_STATUS,
   type NotificationCategoryCode,
   type NotificationCategoryName,
   type NotificationChannelCode,
@@ -23,6 +26,7 @@ import {
   type NotificationDeliveryStatusName,
   type NotificationDispatchStatusCode,
   type NotificationDispatchStatusName,
+  type NotificationDocumentFormatName,
   type NotificationErrorTypeCode,
   type NotificationErrorTypeName,
   type NotificationInboxStatusCode,
@@ -35,6 +39,8 @@ import {
   type NotificationSuppressionReasonName,
   type NotificationTargetTypeCode,
   type NotificationTargetTypeName,
+  type NotificationTemplateTypeName,
+  type NotificationTemplateVersionStatusName,
 } from '../enum/notifications.enum.js';
 import type {
   NotificationBatchDeliverySummaryView,
@@ -49,8 +55,12 @@ import type {
   NotificationSuppressionItemView,
   NotificationTemplateItemView,
   NotificationTemplatePreviewView,
+  NotificationTemplateUsageItemView,
+  NotificationTemplateVersionItemView,
   NotificationUnreadSummaryView,
+  RenderedDocumentFromTemplateView,
   ResolvedNotificationRuntimeConfig,
+  TemplateVersionMutationResultView,
 } from '../types/notifications.types.js';
 
 export {
@@ -63,12 +73,15 @@ export {
   NOTIFICATION_CHANNEL,
   NOTIFICATION_DELIVERY_STATUS,
   NOTIFICATION_DISPATCH_STATUS,
+  NOTIFICATION_DOCUMENT_FORMAT,
   NOTIFICATION_ERROR_TYPE,
   NOTIFICATION_INBOX_STATUS,
   NOTIFICATION_PRIORITY,
   NOTIFICATION_PUSH_PLATFORM,
   NOTIFICATION_SUPPRESSION_REASON,
   NOTIFICATION_TARGET_TYPE,
+  NOTIFICATION_TEMPLATE_TYPE,
+  NOTIFICATION_TEMPLATE_VERSION_STATUS,
   type NotificationCategoryCode,
   type NotificationCategoryName,
   type NotificationChannelCode,
@@ -77,6 +90,7 @@ export {
   type NotificationDeliveryStatusName,
   type NotificationDispatchStatusCode,
   type NotificationDispatchStatusName,
+  type NotificationDocumentFormatName,
   type NotificationErrorTypeCode,
   type NotificationErrorTypeName,
   type NotificationInboxStatusCode,
@@ -89,6 +103,8 @@ export {
   type NotificationSuppressionReasonName,
   type NotificationTargetTypeCode,
   type NotificationTargetTypeName,
+  type NotificationTemplateTypeName,
+  type NotificationTemplateVersionStatusName,
   type NotificationBatchDeliverySummaryView,
   type NotificationChannelQuotaItemView,
   type NotificationDeliveryItemView,
@@ -101,8 +117,12 @@ export {
   type NotificationSuppressionItemView,
   type NotificationTemplateItemView,
   type NotificationTemplatePreviewView,
+  type NotificationTemplateUsageItemView,
+  type NotificationTemplateVersionItemView,
   type NotificationUnreadSummaryView,
+  type RenderedDocumentFromTemplateView,
   type ResolvedNotificationRuntimeConfig,
+  type TemplateVersionMutationResultView,
 };
 
 export function parseNotificationCategory(val: unknown): NotificationCategoryCode {
@@ -188,6 +208,18 @@ export function getNotificationTargetTypeLabel(code: number, locale = 'vi'): str
 }
 
 export function parseNotificationChannel(val: unknown): NotificationChannelCode {
+  if (
+    val === NOTIFICATION_CHANNEL.DOCUMENT ||
+    val === '5' ||
+    String(val ?? '')
+      .trim()
+      .toUpperCase() === 'DOCUMENT' ||
+    String(val ?? '')
+      .trim()
+      .toUpperCase() === 'DOC'
+  ) {
+    return NOTIFICATION_CHANNEL.DOCUMENT;
+  }
   const resolved = defaultCodeRegistry.parseToNumericCode(
     NOTIFICATIONS_CODE_TYPES.CHANNEL,
     val,
@@ -197,7 +229,8 @@ export function parseNotificationChannel(val: unknown): NotificationChannelCode 
     resolved === NOTIFICATION_CHANNEL.IN_APP ||
     resolved === NOTIFICATION_CHANNEL.EMAIL ||
     resolved === NOTIFICATION_CHANNEL.SMS ||
-    resolved === NOTIFICATION_CHANNEL.PUSH
+    resolved === NOTIFICATION_CHANNEL.PUSH ||
+    resolved === NOTIFICATION_CHANNEL.DOCUMENT
   ) {
     return resolved;
   }
@@ -205,8 +238,17 @@ export function parseNotificationChannel(val: unknown): NotificationChannelCode 
 }
 
 export function getNotificationChannelName(code: number): NotificationChannelName {
+  if (code === NOTIFICATION_CHANNEL.DOCUMENT) {
+    return 'DOCUMENT';
+  }
   const name = defaultCodeRegistry.getCodeName(NOTIFICATIONS_CODE_TYPES.CHANNEL, code, 'IN_APP');
-  if (name === 'IN_APP' || name === 'EMAIL' || name === 'SMS' || name === 'PUSH') {
+  if (
+    name === 'IN_APP' ||
+    name === 'EMAIL' ||
+    name === 'SMS' ||
+    name === 'PUSH' ||
+    name === 'DOCUMENT'
+  ) {
     return name;
   }
   return 'IN_APP';

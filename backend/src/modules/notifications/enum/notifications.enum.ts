@@ -36,11 +36,40 @@ export const NOTIFICATION_CHANNEL = {
   EMAIL: 2,
   SMS: 3,
   PUSH: 4,
+  DOCUMENT: 5,
 } as const;
 
 export type NotificationChannelCode =
   (typeof NOTIFICATION_CHANNEL)[keyof typeof NOTIFICATION_CHANNEL];
 export type NotificationChannelName = keyof typeof NOTIFICATION_CHANNEL;
+
+export const NOTIFICATION_TEMPLATE_TYPE = {
+  NOTIFICATION: 'NOTIFICATION',
+  EMAIL: 'EMAIL',
+  DOCUMENT: 'DOCUMENT',
+} as const;
+
+export type NotificationTemplateTypeName =
+  (typeof NOTIFICATION_TEMPLATE_TYPE)[keyof typeof NOTIFICATION_TEMPLATE_TYPE];
+
+export const NOTIFICATION_TEMPLATE_VERSION_STATUS = {
+  DRAFT: 'DRAFT',
+  PUBLISHED: 'PUBLISHED',
+  ARCHIVED: 'ARCHIVED',
+} as const;
+
+export type NotificationTemplateVersionStatusName =
+  (typeof NOTIFICATION_TEMPLATE_VERSION_STATUS)[keyof typeof NOTIFICATION_TEMPLATE_VERSION_STATUS];
+
+export const NOTIFICATION_DOCUMENT_FORMAT = {
+  HTML: 'HTML',
+  TXT: 'TXT',
+  MARKDOWN: 'MARKDOWN',
+  PDF: 'PDF',
+} as const;
+
+export type NotificationDocumentFormatName =
+  (typeof NOTIFICATION_DOCUMENT_FORMAT)[keyof typeof NOTIFICATION_DOCUMENT_FORMAT];
 
 export const NOTIFICATION_INBOX_STATUS = {
   ACTIVE: 1,
@@ -184,6 +213,8 @@ export const NOTIFICATIONS_AUDIT_META = {
   ENTITY_PREFERENCE: 'NotificationPreference',
   ENTITY_CONFIG: 'NotificationConfig',
   ENTITY_TEMPLATE: 'NotificationTemplate',
+  ENTITY_TEMPLATE_VERSION: 'NotificationTemplateVersion',
+  ENTITY_TEMPLATE_USAGE: 'NotificationTemplateUsage',
   ENTITY_DELIVERY: 'NotificationDelivery',
   ENTITY_SUPPRESSION: 'NotificationSuppression',
   ENTITY_PUSH_SUBSCRIPTION: 'NotificationPushSubscription',

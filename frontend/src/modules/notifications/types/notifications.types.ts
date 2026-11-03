@@ -1,7 +1,7 @@
 export type NotificationCategoryName = 'SYSTEM' | 'WORK' | 'SECURITY' | 'ANNOUNCEMENT' | string;
 export type NotificationPriorityName = 'LOW' | 'NORMAL' | 'HIGH' | 'URGENT';
 export type NotificationTargetTypeName = 'SINGLE_USER' | 'USER_GROUP' | 'ROLE' | 'ORG_UNIT';
-export type NotificationChannelName = 'IN_APP' | 'EMAIL' | 'SMS' | 'PUSH';
+export type NotificationChannelName = 'IN_APP' | 'EMAIL' | 'SMS' | 'PUSH' | 'DOCUMENT';
 export type NotificationInboxStatusName = 'ACTIVE' | 'ARCHIVED' | 'DELETED';
 
 export interface NotificationUnreadSummary {
@@ -195,15 +195,64 @@ export interface NotificationTemplateItem {
   name: string;
   channel: number;
   channelName: NotificationChannelName;
+  templateType?: string;
+  documentFormat?: string | null;
   category: number;
   categoryName: NotificationCategoryName;
   locale: string;
+  version?: number;
+  publishedVersion?: number;
+  latestDraftVersion?: number | null;
+  status?: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
   subjectTemplate: string | null;
   bodyTemplate: string;
   htmlTemplate: string | null;
   variables: string[];
+  usedByModules?: string[];
+  usageCount?: number;
+  availableLocales?: string[];
   isActive: boolean;
   isSystem: boolean;
+}
+
+export interface NotificationTemplateVersionItem {
+  id: number;
+  templateId: number;
+  code: string;
+  channel: number;
+  channelName: NotificationChannelName;
+  templateType: string;
+  documentFormat: string | null;
+  locale: string;
+  version: number;
+  status: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
+  name: string;
+  subjectTemplate: string | null;
+  bodyTemplate: string;
+  htmlTemplate: string | null;
+  variables: string[];
+  changeNote: string | null;
+  createdByUserId: number | null;
+  publishedByUserId: number | null;
+  publishedAt: string | null;
+  createdAt: string;
+}
+
+export interface NotificationTemplatePreviewResult {
+  code: string | null;
+  channel: number;
+  channelName: NotificationChannelName;
+  templateType?: string;
+  documentFormat?: string | null;
+  version?: number | null;
+  locale: string;
+  renderedSubject: string | null;
+  renderedBody: string;
+  renderedHtml: string | null;
+  detectedVariables: string[];
+  missingVariables: string[];
+  smsSegmentsCount: number;
+  smsEncoding: 'GSM_7BIT' | 'UCS2';
 }
 
 export interface NotificationDeliveryItem {

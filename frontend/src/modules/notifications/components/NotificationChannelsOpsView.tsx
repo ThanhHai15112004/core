@@ -7,6 +7,7 @@ import type {
   NotificationQuotaSummary,
   NotificationSuppressionItem,
   NotificationTemplateItem,
+  NotificationTemplatePreviewResult,
 } from '../types/notifications.types';
 
 export const NotificationChannelsOpsView: React.FC = () => {
@@ -20,8 +21,12 @@ export const NotificationChannelsOpsView: React.FC = () => {
   const [tplCode, setTplCode] = useState('');
   const [tplName, setTplName] = useState('');
   const [tplChannel, setTplChannel] = useState('EMAIL');
+  const [tplLocale, setTplLocale] = useState('vi');
   const [tplSubject, setTplSubject] = useState('');
   const [tplBody, setTplBody] = useState('');
+  const [previewResult, setPreviewResult] = useState<NotificationTemplatePreviewResult | null>(
+    null,
+  );
 
   const [suppChannel, setSuppChannel] = useState('EMAIL');
   const [suppDest, setSuppDest] = useState('');
@@ -58,6 +63,7 @@ export const NotificationChannelsOpsView: React.FC = () => {
       code: tplCode.trim(),
       name: tplName.trim() || tplCode.trim(),
       channel: tplChannel,
+      locale: tplLocale.trim() || 'vi',
       subjectTemplate: tplSubject.trim() || null,
       bodyTemplate: tplBody.trim(),
     });
@@ -66,6 +72,19 @@ export const NotificationChannelsOpsView: React.FC = () => {
     setTplSubject('');
     setTplBody('');
     await loadAll();
+  };
+
+  const handlePreviewTemplate = async () => {
+    if (!tplBody.trim() && !tplCode.trim()) return;
+    const res = await notificationsApi.previewTemplate({
+      templateCode: tplCode.trim() || undefined,
+      channel: tplChannel,
+      locale: tplLocale.trim() || 'vi',
+      subjectTemplate: tplSubject.trim() || null,
+      bodyTemplate: tplBody.trim() || undefined,
+      variables: { fullName: 'Nguyễn Văn A' },
+    });
+    setPreviewResult(res);
   };
 
   const handleAddSuppression = async (e: React.FormEvent) => {
@@ -284,12 +303,21 @@ export const NotificationChannelsOpsView: React.FC = () => {
                 className="form-input"
                 value={tplChannel}
                 onChange={(e) => setTplChannel(e.target.value)}
-                style={{ maxWidth: 120 }}
+                style={{ maxWidth: 130 }}
               >
+                <option value="IN_APP">IN_APP</option>
                 <option value="EMAIL">EMAIL</option>
                 <option value="SMS">SMS</option>
                 <option value="PUSH">PUSH</option>
+                <option value="DOCUMENT">DOCUMENT</option>
               </select>
+              <input
+                className="form-input"
+                placeholder="Locale (vi/en)"
+                value={tplLocale}
+                onChange={(e) => setTplLocale(e.target.value)}
+                style={{ maxWidth: 80 }}
+              />
             </div>
             <input
               className="form-input"
@@ -304,20 +332,98 @@ export const NotificationChannelsOpsView: React.FC = () => {
               value={tplBody}
               onChange={(e) => setTplBody(e.target.value)}
             />
-            <button type="submit" className="btn-primary" style={{ alignSelf: 'flex-start' }}>
-              Lưu Template
-            </button>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button type="submit" className="btn-primary">
+                Lưu Template (Tạo bản nháp nếu đang dùng)
+              </button>
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => void handlePreviewTemplate()}
+              >
+                Xem trước & Kiểm tra biến thiếu
+              </button>
+            </div>
           </form>
-          <div style={{ maxHeight: 160, overflowY: 'auto', fontSize: 12 }}>
+          {previewResult && (
+            <div
+              style={{
+                padding: 8,
+                marginBottom: 10,
+                borderRadius: 8,
+                background: 'rgba(15, 23, 42, 0.65)',
+                fontSize: 12,
+              }}
+            >
+              <div>
+                <b>Preview ({previewResult.locale}):</b> {previewResult.renderedBody}
+              </div>
+              {previewResult.missingVariables.length > 0 && (
+                <div style={{ color: '#F87171', marginTop: 4 }}>
+                  Biến bị thiếu: <b>{previewResult.missingVariables.join(', ')}</b>
+                </div>
+              )}
+            </div>
+          )}
+          <div style={{ maxHeight: 190, overflowY: 'auto', fontSize: 12 }}>
             {templates.map((t) => (
               <div
                 key={t.id}
                 style={{
                   padding: '6px 0',
                   borderBottom: '1px solid rgba(148,163,184,0.12)',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  gap: 8,
                 }}
               >
-                <b>{t.code}</b> ({t.channelName} - {t.locale}): {t.bodyTemplate.slice(0, 70)}...
+                <div>
+                  <b>{t.code}</b> ({t.channelName} - {t.locale} - v{t.version ?? 1}
+                  {t.latestDraftVersion ? ` | Draft v${t.latestDraftVersion}` : ''}):{' '}
+                  {t.bodyTemplate.slice(0, 55)}...
+                  {t.usedByModules && t.usedByModules.length > 0 && (
+                    <span style={{ marginLeft: 6, color: '#38BDF8' }}>
+                      [Modules: {t.usedByModules.join(', ')}]
+                    </span>
+                  )}
+                </div>
+                <div style={{ display: 'flex', gap: 4 }}>
+                  {t.latestDraftVersion && (
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      style={{ padding: '2px 6px', fontSize: 11 }}
+                      onClick={async () => {
+                        await notificationsApi.publishTemplateVersion(
+                          t.id,
+                          t.latestDraftVersion!,
+                          'Publish from UI',
+                        );
+                        await loadAll();
+                      }}
+                    >
+                      Publish v{t.latestDraftVersion}
+                    </button>
+                  )}
+                  {(t.version ?? 1) > 1 && (
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      style={{ padding: '2px 6px', fontSize: 11 }}
+                      onClick={async () => {
+                        await notificationsApi.rollbackTemplateVersion(
+                          t.id,
+                          (t.version ?? 2) - 1,
+                          'Rollback from UI',
+                        );
+                        await loadAll();
+                      }}
+                    >
+                      Rollback v{(t.version ?? 2) - 1}
+                    </button>
+                  )}
+                </div>
               </div>
             ))}
           </div>

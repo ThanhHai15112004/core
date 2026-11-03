@@ -6,6 +6,7 @@ export * from './helpers/notification-config.helper.js';
 export * from './helpers/notification-target-resolver.helper.js';
 export * from './helpers/notification-preference.helper.js';
 export * from './helpers/notification-template.helper.js';
+export * from './helpers/notification-template-lifecycle.helper.js';
 export * from './helpers/notification-delivery-policy.helper.js';
 export * from './routes/notifications.routes.js';
 export * from './requests/notifications.requests.js';

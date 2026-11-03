@@ -23,6 +23,8 @@ import {
   ArchiveNotificationRequestSchema,
   type CreateNotificationSuppressionRequest,
   CreateNotificationSuppressionRequestSchema,
+  type CreateNotificationTemplateVersionRequest,
+  CreateNotificationTemplateVersionRequestSchema,
   type ListNotificationDeliveriesQuery,
   ListNotificationDeliveriesQuerySchema,
   type ListNotificationDispatchesQuery,
@@ -39,8 +41,16 @@ import {
   MarkNotificationReadRequestSchema,
   type PreviewNotificationTemplateRequest,
   PreviewNotificationTemplateRequestSchema,
+  type PublishNotificationTemplateVersionRequest,
+  PublishNotificationTemplateVersionRequestSchema,
+  type RegisterNotificationTemplateUsageRequest,
+  RegisterNotificationTemplateUsageRequestSchema,
   type RegisterPushSubscriptionRequest,
   RegisterPushSubscriptionRequestSchema,
+  type RenderDocumentFromTemplateRequest,
+  RenderDocumentFromTemplateRequestSchema,
+  type RollbackNotificationTemplateVersionRequest,
+  RollbackNotificationTemplateVersionRequestSchema,
   type SendNotificationRequest,
   SendNotificationRequestSchema,
   type UpdateDeliveryStatusWebhookRequest,
@@ -68,8 +78,12 @@ import type {
   NotificationSuppressionItemResponse,
   NotificationTemplateItemResponse,
   NotificationTemplatePreviewResponse,
+  NotificationTemplateUsageItemResponse,
+  NotificationTemplateVersionItemResponse,
   NotificationUnreadSummaryResponse,
+  RenderedDocumentFromTemplateResponse,
   RetryDueDeliveriesResponse,
+  TemplateVersionMutationResultResponse,
 } from '../responses/notifications.response.js';
 import { NotificationChannelsService } from '../services/notification-channels.service.js';
 import { NotificationsService } from '../services/notifications.service.js';
@@ -346,13 +360,130 @@ export class NotificationsController {
   @Delete(NOTIFICATIONS_ROUTES.TEMPLATE_BY_ID)
   @RequirePermissions('notifications.manage')
   @ApiDoc({
-    summary: 'Xóa template thông báo tùy chỉnh (chặn xóa template hệ thống)',
+    summary:
+      'Xóa template thông báo tùy chỉnh (chặn xóa template hệ thống hoặc đang được module/lịch sử gửi sử dụng)',
   })
   public async deleteTemplate(
     @ValidatedParams(positiveIntParamSchema, 'id') id: number,
     @CurrentUser() actor?: UserIdentity,
   ): Promise<{ deleted: true; id: number }> {
     return this.channelsService.deleteTemplate(id, actor);
+  }
+
+  /** Danh sách lịch sử phiên bản của một mẫu nội dung (Mục 9.6) */
+  @Get(NOTIFICATIONS_ROUTES.TEMPLATE_VERSIONS_BY_ID)
+  @RequirePermissions('notifications.read')
+  @ApiDoc({
+    summary: 'Lấy danh sách các phiên bản (Draft / Published / Archived) của một mẫu nội dung',
+  })
+  public async listTemplateVersions(
+    @ValidatedParams(positiveIntParamSchema, 'id') id: number,
+  ): Promise<NotificationTemplateVersionItemResponse[]> {
+    return this.channelsService.listTemplateVersions(id);
+  }
+
+  /** Tạo phiên bản nháp mới cho mẫu nội dung mà không sửa trực tiếp bản đang dùng (Mục 9.6) */
+  @Post(NOTIFICATIONS_ROUTES.TEMPLATE_VERSIONS_BY_ID)
+  @RequirePermissions('notifications.manage')
+  @HttpCode(HTTP_STATUS_CODE.CREATED)
+  @ApiDoc({
+    summary: 'Tạo phiên bản mới (Draft hoặc Publish ngay) cho mẫu nội dung hiện có',
+  })
+  public async createTemplateVersion(
+    @ValidatedParams(positiveIntParamSchema, 'id') id: number,
+    @ValidatedBody(CreateNotificationTemplateVersionRequestSchema)
+    body: CreateNotificationTemplateVersionRequest,
+    @CurrentUser() actor?: UserIdentity,
+  ): Promise<NotificationTemplateVersionItemResponse> {
+    return this.channelsService.createTemplateVersion(id, body, actor);
+  }
+
+  /** Phát hành (Publish) một phiên bản mẫu nội dung kèm ghi Audit Log (Mục 9.6) */
+  @Post(NOTIFICATIONS_ROUTES.TEMPLATE_PUBLISH_BY_ID)
+  @RequirePermissions('notifications.manage')
+  @HttpCode(HttpStatus.OK)
+  @ApiDoc({
+    summary: 'Phát hành phiên bản mẫu nội dung để đưa vào sử dụng chính thức (có Audit Log)',
+  })
+  public async publishTemplateVersion(
+    @ValidatedParams(positiveIntParamSchema, 'id') id: number,
+    @ValidatedBody(PublishNotificationTemplateVersionRequestSchema)
+    body: PublishNotificationTemplateVersionRequest,
+    @CurrentUser() actor?: UserIdentity,
+  ): Promise<TemplateVersionMutationResultResponse> {
+    return this.channelsService.publishTemplateVersion(id, body, actor);
+  }
+
+  /** Quay lại (Rollback) một phiên bản cũ của mẫu nội dung kèm ghi Audit Log (Mục 9.6) */
+  @Post(NOTIFICATIONS_ROUTES.TEMPLATE_ROLLBACK_BY_ID)
+  @RequirePermissions('notifications.manage')
+  @HttpCode(HttpStatus.OK)
+  @ApiDoc({
+    summary: 'Quay lại (Rollback) một phiên bản cũ của mẫu nội dung (có Audit Log)',
+  })
+  public async rollbackTemplateVersion(
+    @ValidatedParams(positiveIntParamSchema, 'id') id: number,
+    @ValidatedBody(RollbackNotificationTemplateVersionRequestSchema)
+    body: RollbackNotificationTemplateVersionRequest,
+    @CurrentUser() actor?: UserIdentity,
+  ): Promise<TemplateVersionMutationResultResponse> {
+    return this.channelsService.rollbackTemplateVersion(id, body, actor);
+  }
+
+  /** Sinh nội dung tài liệu (HTML, PDF, Markdown, TXT) từ mẫu tài liệu DOCUMENT (Mục 9.6) */
+  @Post(NOTIFICATIONS_ROUTES.TEMPLATES_RENDER_DOCUMENT)
+  @RequirePermissions('notifications.read')
+  @HttpCode(HttpStatus.OK)
+  @ApiDoc({
+    summary:
+      'Sinh nội dung và tệp tài liệu (HTML, PDF, Markdown, TXT) từ mẫu tài liệu kèm phát hiện biến thiếu',
+  })
+  public async renderDocumentFromTemplate(
+    @ValidatedBody(RenderDocumentFromTemplateRequestSchema)
+    body: RenderDocumentFromTemplateRequest,
+  ): Promise<RenderedDocumentFromTemplateResponse> {
+    return this.channelsService.renderDocumentFromTemplate(body);
+  }
+
+  /** Danh sách các module và luồng nghiệp vụ đang sử dụng mẫu nội dung (Mục 9.6) */
+  @Get(NOTIFICATIONS_ROUTES.TEMPLATE_USAGES_BY_ID)
+  @RequirePermissions('notifications.read')
+  @ApiDoc({
+    summary: 'Xem danh sách các module và luồng nghiệp vụ đang tham chiếu mẫu nội dung',
+  })
+  public async listTemplateUsages(
+    @ValidatedParams(positiveIntParamSchema, 'id') id: number,
+  ): Promise<NotificationTemplateUsageItemResponse[]> {
+    return this.channelsService.listTemplateUsages(id);
+  }
+
+  /** Đăng ký module sử dụng mẫu nội dung để bảo vệ chống xóa nhầm (Mục 9.6) */
+  @Post(NOTIFICATIONS_ROUTES.TEMPLATE_USAGES_BY_ID)
+  @RequirePermissions('notifications.manage')
+  @HttpCode(HTTP_STATUS_CODE.CREATED)
+  @ApiDoc({
+    summary: 'Đăng ký module và luồng nghiệp vụ đang sử dụng mẫu nội dung',
+  })
+  public async registerTemplateUsage(
+    @ValidatedParams(positiveIntParamSchema, 'id') id: number,
+    @ValidatedBody(RegisterNotificationTemplateUsageRequestSchema)
+    body: RegisterNotificationTemplateUsageRequest,
+    @CurrentUser() actor?: UserIdentity,
+  ): Promise<NotificationTemplateUsageItemResponse> {
+    return this.channelsService.registerTemplateUsage(id, body, actor);
+  }
+
+  /** Gỡ đăng ký sử dụng mẫu nội dung (Mục 9.6) */
+  @Delete(NOTIFICATIONS_ROUTES.TEMPLATE_USAGE_BY_ID)
+  @RequirePermissions('notifications.manage')
+  @ApiDoc({
+    summary: 'Gỡ đăng ký liên kết module sử dụng mẫu nội dung',
+  })
+  public async unregisterTemplateUsage(
+    @ValidatedParams(positiveIntParamSchema, 'usageId') usageId: number,
+    @CurrentUser() actor?: UserIdentity,
+  ): Promise<{ removed: boolean; id: number }> {
+    return this.channelsService.unregisterTemplateUsage(usageId, actor);
   }
 
   /** Tra cứu lịch sử và trạng thái gửi từng kênh (Queued, Sent, Delivered, Failed, Suppressed) */

@@ -9,8 +9,12 @@ import type {
   NotificationSuppressionItemView,
   NotificationTemplateItemView,
   NotificationTemplatePreviewView,
+  NotificationTemplateUsageItemView,
+  NotificationTemplateVersionItemView,
   NotificationUnreadSummaryView,
+  RenderedDocumentFromTemplateView,
   ResolvedNotificationRuntimeConfig,
+  TemplateVersionMutationResultView,
 } from '../types/notifications.types.js';
 
 export type NotificationInboxItemResponse = NotificationInboxItemView;
@@ -20,7 +24,11 @@ export type NotificationDispatchHistoryItemResponse = NotificationDispatchHistor
 export type NotificationDispatchDetailResponse = NotificationDispatchDetailView;
 export type NotificationRuntimeConfigResponse = ResolvedNotificationRuntimeConfig;
 export type NotificationTemplateItemResponse = NotificationTemplateItemView;
+export type NotificationTemplateVersionItemResponse = NotificationTemplateVersionItemView;
+export type NotificationTemplateUsageItemResponse = NotificationTemplateUsageItemView;
 export type NotificationTemplatePreviewResponse = NotificationTemplatePreviewView;
+export type RenderedDocumentFromTemplateResponse = RenderedDocumentFromTemplateView;
+export type TemplateVersionMutationResultResponse = TemplateVersionMutationResultView;
 export type NotificationDeliveryItemResponse = NotificationDeliveryItemView;
 export type NotificationSuppressionItemResponse = NotificationSuppressionItemView;
 export type NotificationPushSubscriptionItemResponse = NotificationPushSubscriptionItemView;

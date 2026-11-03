@@ -13,6 +13,8 @@ import type {
   NotificationRuntimeConfig,
   NotificationSuppressionItem,
   NotificationTemplateItem,
+  NotificationTemplatePreviewResult,
+  NotificationTemplateVersionItem,
   NotificationUnreadSummary,
   SendNotificationPayload,
 } from '../types/notifications.types';
@@ -155,13 +157,60 @@ export const notificationsApi = {
     code: string;
     name: string;
     channel: string | number;
+    templateType?: string;
+    documentFormat?: string | null;
     locale?: string;
     subjectTemplate?: string | null;
     bodyTemplate: string;
+    saveAsDraft?: boolean;
+    autoPublish?: boolean;
   }) =>
     fetchApi<NotificationTemplateItem>(API_ROUTES.NOTIFICATIONS.TEMPLATES(), {
       method: 'POST',
       body: JSON.stringify(payload),
+    }),
+
+  previewTemplate: (payload: {
+    templateId?: number;
+    templateCode?: string;
+    channel?: string | number;
+    locale?: string;
+    version?: number;
+    subjectTemplate?: string | null;
+    bodyTemplate?: string;
+    variables?: Record<string, unknown>;
+  }) =>
+    fetchApi<NotificationTemplatePreviewResult>(API_ROUTES.NOTIFICATIONS.TEMPLATES_PREVIEW, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+
+  listTemplateVersions: (templateId: number) =>
+    fetchApi<NotificationTemplateVersionItem[]>(
+      API_ROUTES.NOTIFICATIONS.TEMPLATE_VERSIONS_BY_ID(templateId),
+    ),
+
+  publishTemplateVersion: (templateId: number, version: number, changeNote?: string) =>
+    fetchApi<{ template: NotificationTemplateItem; activeVersion: NotificationTemplateVersionItem }>(
+      API_ROUTES.NOTIFICATIONS.TEMPLATE_PUBLISH_BY_ID(templateId),
+      {
+        method: 'POST',
+        body: JSON.stringify({ version, changeNote }),
+      },
+    ),
+
+  rollbackTemplateVersion: (templateId: number, targetVersion: number, reason?: string) =>
+    fetchApi<{ template: NotificationTemplateItem; activeVersion: NotificationTemplateVersionItem }>(
+      API_ROUTES.NOTIFICATIONS.TEMPLATE_ROLLBACK_BY_ID(templateId),
+      {
+        method: 'POST',
+        body: JSON.stringify({ targetVersion, reason }),
+      },
+    ),
+
+  deleteTemplate: (templateId: number) =>
+    fetchApi<{ deleted: true; id: number }>(API_ROUTES.NOTIFICATIONS.TEMPLATE_BY_ID(templateId), {
+      method: 'DELETE',
     }),
 
   listDeliveries: () =>

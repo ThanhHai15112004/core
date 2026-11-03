@@ -20,6 +20,8 @@ import { NotificationPushSubscriptionEntity } from './entities/notification-push
 import { NotificationQuotaUsageEntity } from './entities/notification-quota-usage.entity.js';
 import { NotificationRecipientEntity } from './entities/notification-recipient.entity.js';
 import { NotificationSuppressionEntity } from './entities/notification-suppression.entity.js';
+import { NotificationTemplateUsageEntity } from './entities/notification-template-usage.entity.js';
+import { NotificationTemplateVersionEntity } from './entities/notification-template-version.entity.js';
 import { NotificationTemplateEntity } from './entities/notification-template.entity.js';
 import { NotificationEntity } from './entities/notification.entity.js';
 import { NotificationsMapper } from './mappers/notifications.mapper.js';
@@ -49,6 +51,8 @@ new CoreI18nService().registerNamespace('notifications', {
       NotificationRecipientEntity,
       NotificationPreferenceEntity,
       NotificationTemplateEntity,
+      NotificationTemplateVersionEntity,
+      NotificationTemplateUsageEntity,
       NotificationDeliveryEntity,
       NotificationSuppressionEntity,
       NotificationPushSubscriptionEntity,

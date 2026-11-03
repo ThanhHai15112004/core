@@ -2,7 +2,6 @@ import { Inject, Injectable, Optional } from '@nestjs/common';
 import { createPaginatedResult } from '@packages/http/index.js';
 import {
   BadRequestAppException,
-  ForbiddenAppException,
   NotFoundAppException,
   type PaginatedResult,
   resolvePagination,
@@ -51,18 +50,36 @@ import {
 } from '../helpers/notification-delivery-policy.helper.js';
 import {
   DEFAULT_SYSTEM_NOTIFICATION_TEMPLATES,
-  extractTemplateVariables,
   renderNotificationTemplateContent,
 } from '../helpers/notification-template.helper.js';
+import {
+  enrichTemplateItemsView,
+  executeCreateTemplateVersion,
+  executeListTemplateUsages,
+  executeListTemplateVersions,
+  executePreviewTemplate,
+  executePublishTemplateVersion,
+  executeRegisterTemplateUsage,
+  executeRenderDocumentFromTemplate,
+  executeRollbackTemplateVersion,
+  executeSafeDeleteTemplate,
+  executeUnregisterTemplateUsage,
+  executeUpsertVersionedTemplate,
+} from '../helpers/notification-template-lifecycle.helper.js';
 import { NotificationsMapper } from '../mappers/notifications.mapper.js';
 import { NotificationChannelsRepository } from '../repositories/notification-channels.repository.js';
 import type {
   CreateNotificationSuppressionRequest,
+  CreateNotificationTemplateVersionRequest,
   ListNotificationDeliveriesQuery,
   ListNotificationSuppressionsQuery,
   ListNotificationTemplatesQuery,
   PreviewNotificationTemplateRequest,
+  PublishNotificationTemplateVersionRequest,
+  RegisterNotificationTemplateUsageRequest,
   RegisterPushSubscriptionRequest,
+  RenderDocumentFromTemplateRequest,
+  RollbackNotificationTemplateVersionRequest,
   UpdateDeliveryStatusWebhookRequest,
   UpsertNotificationTemplateRequest,
 } from '../requests/notifications.requests.js';
@@ -73,7 +90,11 @@ import type {
   NotificationSuppressionItemResponse,
   NotificationTemplateItemResponse,
   NotificationTemplatePreviewResponse,
+  NotificationTemplateUsageItemResponse,
+  NotificationTemplateVersionItemResponse,
+  RenderedDocumentFromTemplateResponse,
   RetryDueDeliveriesResponse,
+  TemplateVersionMutationResultResponse,
 } from '../responses/notifications.response.js';
 import type {
   NotificationBatchDeliverySummaryView,
@@ -110,7 +131,7 @@ export class NotificationChannelsService {
     private readonly messagePublisher?: BaseMessagePublisherProvider | null,
   ) {}
 
-  // ==================== 1. TEMPLATE ENGINE & CRUD ====================
+  // ==================== 1. TEMPLATE ENGINE, VERSIONING, DOCUMENT RENDER & USAGE (PHASE 7.2 & 9.6) ====================
 
   public async listTemplates(
     query: ListNotificationTemplatesQuery,
@@ -124,10 +145,15 @@ export class NotificationChannelsService {
       channel: query.channel,
       category: query.category,
       locale: query.locale,
+      templateType: query.templateType,
       isActive: query.isActive,
     });
 
-    const items = paginated.items.map((item) => this.mapper.toTemplateItemView(item));
+    const items = await enrichTemplateItemsView({
+      entities: paginated.items,
+      channelsRepo: this.channelsRepo,
+      mapper: this.mapper,
+    });
     return createPaginatedResult(items, paginated.total, paginated.page, paginated.limit);
   }
 
@@ -135,122 +161,139 @@ export class NotificationChannelsService {
     input: UpsertNotificationTemplateRequest,
     actor?: UserIdentity,
   ): Promise<NotificationTemplateItemResponse> {
-    const code = input.code.trim().toUpperCase();
-    const channel = parseNotificationChannel(input.channel);
-    const category =
-      input.category !== undefined
-        ? parseNotificationCategory(input.category)
-        : NOTIFICATION_CATEGORY.SYSTEM;
-    const locale = input.locale?.trim().toLowerCase() || 'vi';
-
-    const autoVariables = [
-      ...new Set([
-        ...(input.variables ?? []),
-        ...extractTemplateVariables(input.subjectTemplate),
-        ...extractTemplateVariables(input.bodyTemplate),
-        ...extractTemplateVariables(input.htmlTemplate),
-      ]),
-    ];
-
-    const saved = await this.channelsRepo.upsertTemplate({
-      code,
-      name: input.name.trim(),
-      channel,
-      category,
-      locale,
-      subjectTemplate: input.subjectTemplate?.trim() || null,
-      bodyTemplate: input.bodyTemplate.trim(),
-      htmlTemplate: input.htmlTemplate?.trim() || null,
-      variablesJson: JSON.stringify(autoVariables),
-      isActive: input.isActive ?? true,
-      organizationUnitId: input.organizationUnitId ?? null,
-    });
-
-    await this.recordAudit(
+    return executeUpsertVersionedTemplate({
+      input,
       actor,
-      'UPSERT_NOTIFICATION_TEMPLATE',
-      NOTIFICATIONS_AUDIT_META.ENTITY_TEMPLATE,
-      String(saved.id),
-      null,
-      { code, channel, locale },
-    );
+      channelsRepo: this.channelsRepo,
+      mapper: this.mapper,
+      recordAudit: this.recordAudit.bind(this),
+    });
+  }
 
-    return this.mapper.toTemplateItemView(saved);
+  public async listTemplateVersions(
+    templateId: number,
+  ): Promise<NotificationTemplateVersionItemResponse[]> {
+    return executeListTemplateVersions({
+      templateId,
+      channelsRepo: this.channelsRepo,
+      mapper: this.mapper,
+    });
+  }
+
+  public async createTemplateVersion(
+    templateId: number,
+    input: CreateNotificationTemplateVersionRequest,
+    actor?: UserIdentity,
+  ): Promise<NotificationTemplateVersionItemResponse> {
+    return executeCreateTemplateVersion({
+      templateId,
+      input,
+      actor,
+      channelsRepo: this.channelsRepo,
+      mapper: this.mapper,
+      recordAudit: this.recordAudit.bind(this),
+    });
+  }
+
+  public async publishTemplateVersion(
+    templateId: number,
+    input: PublishNotificationTemplateVersionRequest,
+    actor?: UserIdentity,
+  ): Promise<TemplateVersionMutationResultResponse> {
+    return executePublishTemplateVersion({
+      templateId,
+      input,
+      actor,
+      channelsRepo: this.channelsRepo,
+      mapper: this.mapper,
+      recordAudit: this.recordAudit.bind(this),
+    });
+  }
+
+  public async rollbackTemplateVersion(
+    templateId: number,
+    input: RollbackNotificationTemplateVersionRequest,
+    actor?: UserIdentity,
+  ): Promise<TemplateVersionMutationResultResponse> {
+    return executeRollbackTemplateVersion({
+      templateId,
+      input,
+      actor,
+      channelsRepo: this.channelsRepo,
+      mapper: this.mapper,
+      recordAudit: this.recordAudit.bind(this),
+    });
+  }
+
+  public async previewTemplate(
+    input: PreviewNotificationTemplateRequest,
+  ): Promise<NotificationTemplatePreviewResponse> {
+    return executePreviewTemplate({
+      input,
+      channelsRepo: this.channelsRepo,
+      resolveTemplateByCode: this.resolveTemplateByCode.bind(this),
+    });
+  }
+
+  public async renderDocumentFromTemplate(
+    input: RenderDocumentFromTemplateRequest,
+    actor?: UserIdentity,
+  ): Promise<RenderedDocumentFromTemplateResponse> {
+    return executeRenderDocumentFromTemplate({
+      input,
+      actor,
+      channelsRepo: this.channelsRepo,
+      recordAudit: this.recordAudit.bind(this),
+    });
+  }
+
+  public async listTemplateUsages(
+    templateId: number,
+  ): Promise<NotificationTemplateUsageItemResponse[]> {
+    return executeListTemplateUsages({
+      templateId,
+      channelsRepo: this.channelsRepo,
+      mapper: this.mapper,
+    });
+  }
+
+  public async registerTemplateUsage(
+    templateId: number,
+    input: RegisterNotificationTemplateUsageRequest,
+    actor?: UserIdentity,
+  ): Promise<NotificationTemplateUsageItemResponse> {
+    return executeRegisterTemplateUsage({
+      templateId,
+      input,
+      actor,
+      channelsRepo: this.channelsRepo,
+      mapper: this.mapper,
+      recordAudit: this.recordAudit.bind(this),
+    });
+  }
+
+  public async unregisterTemplateUsage(
+    usageId: number,
+    actor?: UserIdentity,
+  ): Promise<{ removed: true; id: number }> {
+    return executeUnregisterTemplateUsage({
+      usageId,
+      actor,
+      channelsRepo: this.channelsRepo,
+      recordAudit: this.recordAudit.bind(this),
+    });
   }
 
   public async deleteTemplate(
     id: number,
     actor?: UserIdentity,
   ): Promise<{ deleted: true; id: number }> {
-    const existing = await this.channelsRepo.findTemplateById(id);
-    if (!existing) {
-      throw new NotFoundAppException('notifications.templateNotFound', { id });
-    }
-    if (existing.isSystem) {
-      throw new ForbiddenAppException('notifications.cannotDeleteSystemTemplate');
-    }
-
-    await this.channelsRepo.deleteTemplateById(id);
-    await this.recordAudit(
+    return executeSafeDeleteTemplate({
+      id,
       actor,
-      'DELETE_NOTIFICATION_TEMPLATE',
-      NOTIFICATIONS_AUDIT_META.ENTITY_TEMPLATE,
-      String(id),
-      { code: existing.code, channel: existing.channel },
-      null,
-    );
-
-    return { deleted: true, id };
-  }
-
-  public async previewTemplate(
-    input: PreviewNotificationTemplateRequest,
-  ): Promise<NotificationTemplatePreviewResponse> {
-    const channel =
-      input.channel !== undefined
-        ? parseNotificationChannel(input.channel)
-        : NOTIFICATION_CHANNEL.EMAIL;
-    const locale = input.locale?.trim().toLowerCase() || 'vi';
-
-    let subjectTemplate = input.subjectTemplate ?? null;
-    let bodyTemplate = input.bodyTemplate ?? '';
-    let htmlTemplate = input.htmlTemplate ?? null;
-    const code = input.templateCode?.trim().toUpperCase() || null;
-
-    if (code && !bodyTemplate) {
-      const resolved = await this.resolveTemplateByCode(code, channel, locale);
-      if (!resolved) {
-        throw new NotFoundAppException('notifications.templateNotFound', { code });
-      }
-      subjectTemplate = resolved.subjectTemplate;
-      bodyTemplate = resolved.bodyTemplate;
-      htmlTemplate = resolved.htmlTemplate;
-    }
-
-    if (!bodyTemplate) {
-      throw new BadRequestAppException('notifications.templateBodyRequired');
-    }
-
-    const rendered = renderNotificationTemplateContent({
-      subjectTemplate,
-      bodyTemplate,
-      htmlTemplate,
-      variables: input.variables ?? {},
+      channelsRepo: this.channelsRepo,
+      recordAudit: this.recordAudit.bind(this),
     });
-
-    const smsSegs = calculateSmsSegments(rendered.renderedBody);
-
-    return {
-      code,
-      channel,
-      channelName: getNotificationChannelName(channel),
-      locale,
-      renderedSubject: rendered.renderedSubject,
-      renderedBody: rendered.renderedBody,
-      renderedHtml: rendered.renderedHtml,
-      missingVariables: rendered.missingVariables,
-      smsSegmentsCount: smsSegs.segmentsCount,
-    };
   }
 
   public async resolveTemplateByCode(

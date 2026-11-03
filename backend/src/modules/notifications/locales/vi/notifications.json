@@ -19,11 +19,14 @@
   "dispatchNotFound": "Không tìm thấy bản ghi lịch sử phát thông báo.",
   "preferencesCustomizationDisabled": "Tính năng tùy chỉnh sở thích nhận thông báo của người dùng hiện đang bị khóa bởi quản trị viên.",
   "templateNotFound": "Không tìm thấy mẫu nội dung thông báo (Template) phù hợp.",
+  "templateVersionNotFound": "Không tìm thấy phiên bản v{{version}} của mẫu nội dung (#{{templateId}}).",
   "cannotDeleteSystemTemplate": "Không thể xóa mẫu thông báo mặc định của hệ thống.",
+  "cannotDeleteTemplateInUse": "Không thể xóa mẫu nội dung \"{{code}}\" vì đang được sử dụng bởi module: {{modules}}.",
+  "templateUsageNotFound": "Không tìm thấy bản ghi đăng ký sử dụng mẫu nội dung (#{{id}}).",
+  "documentTemplateCodeRequired": "Vui lòng truyền templateId hoặc templateCode để sinh tài liệu từ mẫu.",
   "templateBodyRequired": "Nội dung mẫu thông báo (bodyTemplate) không được để trống.",
   "deliveryNotFound": "Không tìm thấy bản ghi vận chuyển thông báo (#{{id}}).",
   "cannotRetrySuppressedDestination": "Không thể gửi lại vì địa chỉ hoặc token nhận đã nằm trong danh sách dừng gửi (Suppression List).",
   "suppressionNotFound": "Không tìm thấy bản ghi trong danh sách dừng gửi (#{{id}}).",
   "pushSubscriptionNotFound": "Không tìm thấy thiết bị đăng ký nhận Push Notification (#{{id}})."
 }
-
