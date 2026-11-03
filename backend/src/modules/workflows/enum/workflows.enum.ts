@@ -40,6 +40,7 @@ export const WORKFLOW_APPROVAL_MODE = {
   SINGLE: 'SINGLE',
   ALL: 'ALL',
   ANY: 'ANY',
+  QUORUM: 'QUORUM',
   SEQUENTIAL_CHAIN: 'SEQUENTIAL_CHAIN',
 } as const;
 

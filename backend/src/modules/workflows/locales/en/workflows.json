@@ -12,6 +12,10 @@
   "instanceAlreadyFinished": "Workflow instance has already finished.",
   "cancelPermissionDenied": "You do not have permission to cancel this workflow instance.",
   "statesCannotBeEmpty": "Workflow states list cannot be empty.",
-  "transitionReferencesUnknownState": "Workflow transition references an unknown state code."
+  "transitionReferencesUnknownState": "Workflow transition references an unknown state code.",
+  "approvalReasonRequired": "A reason or comment is required when rejecting or returning an approval step.",
+  "invalidDelegationTimeRange": "Invalid delegation effective time range (effectiveFrom must be before effectiveUntil).",
+  "delegationScopeMismatch": "Current workflow instance does not match the delegation scope.",
+  "delegationRuleNotFound": "Approval delegation rule not found."
 }
 

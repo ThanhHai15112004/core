@@ -123,11 +123,27 @@ export const workflowInstanceDetailResponseSchema = workflowInstanceResponseSche
   histories: z.array(workflowHistoryItemResponseSchema),
 });
 
+export const workflowDelegationRuleResponseSchema = z.object({
+  id: z.number().int(),
+  fromUserId: z.number().int(),
+  toUserId: z.number().int(),
+  effectiveFrom: z.string(),
+  effectiveUntil: z.string(),
+  workflowCodes: z.array(z.string()).optional(),
+  entityTypes: z.array(z.string()).optional(),
+  organizationUnitId: z.number().int().nullable().optional(),
+  reason: z.string(),
+  isActive: z.boolean(),
+  createdAt: z.string(),
+});
+
 export const workflowSlaScanResponseSchema = z.object({
   scannedAt: z.string(),
   totalRunningChecked: z.number().int(),
   warningsTriggeredCount: z.number().int(),
   overdueMarkedCount: z.number().int(),
+  escalatedCount: z.number().int().optional(),
   warningInstanceIds: z.array(z.number().int()),
   overdueInstanceIds: z.array(z.number().int()),
+  escalatedInstanceIds: z.array(z.number().int()).optional(),
 });

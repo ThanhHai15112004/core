@@ -388,7 +388,7 @@ describe('Workflows & Approval Module Unit Tests (Sections 9.3 & 9.4)', () => {
               stateCode: item.stateCode ?? 'PENDING_MANAGER',
               stepOrder: item.stepOrder ?? 1,
               approvalMode: item.approvalMode ?? WORKFLOW_APPROVAL_MODE.SINGLE,
-              approverUserId: item.approverUserId ?? 20,
+              approverUserId: item.approverUserId !== undefined ? item.approverUserId : 20,
               approverRoleCode: item.approverRoleCode ?? null,
               delegatedFromUserId: item.delegatedFromUserId ?? null,
               decision: item.decision ?? WORKFLOW_APPROVAL_DECISION.PENDING,
@@ -712,6 +712,434 @@ describe('Workflows & Approval Module Unit Tests (Sections 9.3 & 9.4)', () => {
 
       expect(cancelled.status).toBe(WORKFLOW_INSTANCE_STATUS.CANCELLED);
       expect(cancelled.cancelReason).toBe('Nhầm số tiền hóa đơn, hủy để tạo lại');
+    });
+
+    it('9.4.1 & 9.4.2 — supports single designated user approval and role-based approval with strict permission checks', async () => {
+      const { service } = createInMemoryWorkflowsService();
+
+      await service.createDefinition(
+        {
+          code: 'ROLE_APPROVAL_WF',
+          name: 'Quy trình duyệt theo vai trò Trưởng phòng',
+          targetEntityType: 'purchase_order',
+          defaultSlaHours: 24,
+          warningBeforeMinutes: 60,
+          status: WORKFLOW_DEFINITION_STATUS.ACTIVE,
+          states: [
+            {
+              code: 'PENDING_ROLE',
+              name: 'Chờ Trưởng phòng duyệt',
+              stateType: WORKFLOW_STATE_TYPE.INITIAL,
+              badgeTone: 'warning',
+              slaHours: 12,
+              approvalConfig: {
+                enabled: true,
+                mode: WORKFLOW_APPROVAL_MODE.SINGLE,
+                approverRoleCodes: ['department_head'],
+                autoTransitionOnApprove: 'APPROVE',
+              },
+              sortOrder: 1,
+            },
+            {
+              code: 'APPROVED',
+              name: 'Đã duyệt',
+              stateType: WORKFLOW_STATE_TYPE.FINAL_APPROVED,
+              badgeTone: 'success',
+              slaHours: null,
+              approvalConfig: null,
+              sortOrder: 2,
+            },
+          ],
+          transitions: [
+            {
+              code: 'APPROVE',
+              name: 'Phê duyệt',
+              fromStateCode: 'PENDING_ROLE',
+              toStateCode: 'APPROVED',
+              sortOrder: 1,
+            },
+          ],
+        },
+        1,
+      );
+
+      const started = await service.startWorkflowForEntity(
+        {
+          workflowCode: 'ROLE_APPROVAL_WF',
+          entityType: 'purchase_order',
+          entityId: 'PO-01',
+          title: 'Mua thiết bị văn phòng',
+        },
+        { id: 10, username: 'emp10', roles: ['employee'], permissions: ['workflows.execute'] },
+      );
+
+      expect(started.approvalSteps).toHaveLength(1);
+      expect(started.approvalSteps[0]?.approverUserId).toBeNull();
+      expect(started.approvalSteps[0]?.approverRoleCode).toBe('department_head');
+
+      // Nhân viên không có vai trò department_head bấm duyệt -> bị từ chối
+      await expect(
+        service.decideApproval(
+          started.id,
+          { decision: 'APPROVED', comment: 'Cố tình duyệt' },
+          { id: 99, username: 'emp99', roles: ['employee'], permissions: ['workflows.execute'] },
+        ),
+      ).rejects.toThrow();
+
+      // Trưởng phòng (có role department_head) bấm duyệt -> thành công
+      const approved = await service.decideApproval(
+        started.id,
+        { decision: 'APPROVED', comment: 'Trưởng phòng đồng ý' },
+        {
+          id: 50,
+          username: 'head50',
+          roles: ['department_head'],
+          permissions: ['workflows.execute'],
+        },
+      );
+      expect(approved.status).toBe(WORKFLOW_INSTANCE_STATUS.COMPLETED);
+      expect(approved.currentStateCode).toBe('APPROVED');
+    });
+
+    it('9.4.3 — enforces sequential multi-step approval (next step only opens after previous step completes)', async () => {
+      const { service } = createInMemoryWorkflowsService();
+
+      await service.createDefinition(
+        {
+          code: 'SEQ_WF',
+          name: 'Quy trình duyệt tuần tự 2 bước',
+          targetEntityType: 'contract',
+          defaultSlaHours: 24,
+          warningBeforeMinutes: 60,
+          status: WORKFLOW_DEFINITION_STATUS.ACTIVE,
+          states: [
+            {
+              code: 'PENDING_SEQ',
+              name: 'Chờ duyệt tuần tự',
+              stateType: WORKFLOW_STATE_TYPE.INITIAL,
+              badgeTone: 'warning',
+              slaHours: 24,
+              approvalConfig: {
+                enabled: true,
+                mode: WORKFLOW_APPROVAL_MODE.SEQUENTIAL_CHAIN,
+                approverUserIds: [21, 22],
+                autoTransitionOnApprove: 'APPROVE',
+              },
+              sortOrder: 1,
+            },
+            {
+              code: 'APPROVED',
+              name: 'Đã duyệt',
+              stateType: WORKFLOW_STATE_TYPE.FINAL_APPROVED,
+              badgeTone: 'success',
+              slaHours: null,
+              approvalConfig: null,
+              sortOrder: 2,
+            },
+          ],
+          transitions: [
+            {
+              code: 'APPROVE',
+              name: 'Phê duyệt',
+              fromStateCode: 'PENDING_SEQ',
+              toStateCode: 'APPROVED',
+              sortOrder: 1,
+            },
+          ],
+        },
+        1,
+      );
+
+      const started = await service.startWorkflowForEntity(
+        {
+          workflowCode: 'SEQ_WF',
+          entityType: 'contract',
+          entityId: 'CT-100',
+          title: 'Hợp đồng kinh tế',
+        },
+        { id: 10, username: 'emp10', roles: ['employee'], permissions: ['workflows.execute'] },
+      );
+
+      expect(started.currentStepOrder).toBe(1);
+      expect(started.approvalSteps).toHaveLength(2);
+
+      // Người duyệt bước 2 (User #22) cố duyệt khi bước 1 chưa xong -> bị chặn
+      await expect(
+        service.decideApproval(
+          started.id,
+          { decision: 'APPROVED', comment: 'Duyệt vượt bước' },
+          { id: 22, username: 'mgr22', roles: ['manager'], permissions: ['workflows.execute'] },
+        ),
+      ).rejects.toThrow();
+
+      // Người duyệt bước 1 (User #21) duyệt -> mở bước 2
+      const afterStep1 = await service.decideApproval(
+        started.id,
+        { decision: 'APPROVED', comment: 'Bước 1 đồng ý' },
+        { id: 21, username: 'mgr21', roles: ['manager'], permissions: ['workflows.execute'] },
+      );
+      expect(afterStep1.currentStateCode).toBe('PENDING_SEQ');
+      expect(afterStep1.currentStepOrder).toBe(2);
+
+      // Bây giờ người duyệt bước 2 (User #22) duyệt -> hoàn tất chuyển sang APPROVED
+      const afterStep2 = await service.decideApproval(
+        started.id,
+        { decision: 'APPROVED', comment: 'Bước 2 đồng ý' },
+        { id: 22, username: 'mgr22', roles: ['manager'], permissions: ['workflows.execute'] },
+      );
+      expect(afterStep2.currentStateCode).toBe('APPROVED');
+      expect(afterStep2.status).toBe(WORKFLOW_INSTANCE_STATUS.COMPLETED);
+    });
+
+    it('9.4.4 — supports parallel approval with quorum (minApprovals: 2 of 3 approvers)', async () => {
+      const { service } = createInMemoryWorkflowsService();
+
+      await service.createDefinition(
+        {
+          code: 'QUORUM_WF',
+          name: 'Quy trình duyệt song song 2/3 người đồng ý',
+          targetEntityType: 'proposal',
+          defaultSlaHours: 24,
+          warningBeforeMinutes: 60,
+          status: WORKFLOW_DEFINITION_STATUS.ACTIVE,
+          states: [
+            {
+              code: 'PENDING_COUNCIL',
+              name: 'Hội đồng duyệt song song',
+              stateType: WORKFLOW_STATE_TYPE.INITIAL,
+              badgeTone: 'warning',
+              slaHours: 24,
+              approvalConfig: {
+                enabled: true,
+                mode: WORKFLOW_APPROVAL_MODE.QUORUM,
+                minApprovals: 2,
+                approverUserIds: [31, 32, 33],
+                autoTransitionOnApprove: 'APPROVE',
+              },
+              sortOrder: 1,
+            },
+            {
+              code: 'APPROVED',
+              name: 'Đã duyệt',
+              stateType: WORKFLOW_STATE_TYPE.FINAL_APPROVED,
+              badgeTone: 'success',
+              slaHours: null,
+              approvalConfig: null,
+              sortOrder: 2,
+            },
+          ],
+          transitions: [
+            {
+              code: 'APPROVE',
+              name: 'Phê duyệt',
+              fromStateCode: 'PENDING_COUNCIL',
+              toStateCode: 'APPROVED',
+              sortOrder: 1,
+            },
+          ],
+        },
+        1,
+      );
+
+      const started = await service.startWorkflowForEntity(
+        {
+          workflowCode: 'QUORUM_WF',
+          entityType: 'proposal',
+          entityId: 'PR-01',
+          title: 'Đề xuất ngân sách',
+        },
+        { id: 10, username: 'emp10', roles: ['employee'], permissions: ['workflows.execute'] },
+      );
+      expect(started.approvalSteps).toHaveLength(3);
+
+      // Người thứ 1 (#31) đồng ý -> chưa đủ 2/3 nên vẫn ở PENDING_COUNCIL
+      const afterFirst = await service.decideApproval(
+        started.id,
+        { decision: 'APPROVED', comment: 'Thành viên 1 đồng ý' },
+        { id: 31, username: 'u31', roles: ['council'], permissions: ['workflows.execute'] },
+      );
+      expect(afterFirst.currentStateCode).toBe('PENDING_COUNCIL');
+
+      // Người thứ 2 (#32) đồng ý -> đủ 2/3, người thứ 3 (#33) tự động SKIPPED và chuyển sang APPROVED
+      const afterSecond = await service.decideApproval(
+        started.id,
+        { decision: 'APPROVED', comment: 'Thành viên 2 đồng ý' },
+        { id: 32, username: 'u32', roles: ['council'], permissions: ['workflows.execute'] },
+      );
+      expect(afterSecond.currentStateCode).toBe('APPROVED');
+      expect(afterSecond.status).toBe(WORKFLOW_INSTANCE_STATUS.COMPLETED);
+      const step33 = afterSecond.approvalSteps.find((s) => s.approverUserId === 33);
+      expect(step33?.decision).toBe(WORKFLOW_APPROVAL_DECISION.SKIPPED);
+    });
+
+    it('9.4.5 & 9.4.6 — requires reason on REJECTED/RETURNED, returns to previous state for creator to edit, and cleans up pending steps', async () => {
+      const { service } = createInMemoryWorkflowsService();
+
+      await service.createDefinition(
+        {
+          code: 'RETURN_REJECT_WF',
+          name: 'Quy trình trả lại & từ chối',
+          targetEntityType: 'document',
+          defaultSlaHours: 24,
+          warningBeforeMinutes: 60,
+          status: WORKFLOW_DEFINITION_STATUS.ACTIVE,
+        },
+        1,
+      );
+
+      const started = await service.startWorkflowForEntity(
+        {
+          workflowCode: 'RETURN_REJECT_WF',
+          entityType: 'document',
+          entityId: 'DOC-01',
+          title: 'Tờ trình phê duyệt',
+        },
+        { id: 10, username: 'emp10', roles: ['employee'], permissions: ['workflows.execute'] },
+      );
+
+      const submitted = await service.executeTransition(
+        started.id,
+        { transitionCode: 'SUBMIT', reason: 'Trình ký lần 1' },
+        { id: 10, username: 'emp10', roles: ['employee'], permissions: ['workflows.execute'] },
+      );
+      expect(submitted.currentStateCode).toBe('PENDING');
+
+      // 9.4.5: Từ chối không nhập lý do -> báo lỗi
+      await expect(
+        service.decideApproval(
+          started.id,
+          { decision: 'REJECTED', comment: '   ' },
+          { id: 20, username: 'mgr20', roles: ['manager'], permissions: ['workflows.execute'] },
+        ),
+      ).rejects.toThrow();
+
+      // 9.4.6: Trả lại bước trước (RETURNED) kèm lý do -> quay về DRAFT cho người tạo chỉnh sửa
+      const returned = await service.decideApproval(
+        started.id,
+        { decision: 'RETURNED', comment: 'Bổ sung bảng báo giá chi tiết' },
+        { id: 20, username: 'mgr20', roles: ['manager'], permissions: ['workflows.execute'] },
+      );
+      expect(returned.currentStateCode).toBe('DRAFT');
+
+      // Người tạo chỉnh sửa xong và gửi duyệt lại lần 2 -> vào lại PENDING, từ chối kèm lý do -> REJECTED
+      await service.executeTransition(
+        started.id,
+        { transitionCode: 'SUBMIT', reason: 'Đã bổ sung báo giá lần 2' },
+        { id: 10, username: 'emp10', roles: ['employee'], permissions: ['workflows.execute'] },
+      );
+
+      const rejected = await service.decideApproval(
+        started.id,
+        { decision: 'REJECTED', comment: 'Vượt ngân sách quý' },
+        { id: 20, username: 'mgr20', roles: ['manager'], permissions: ['workflows.execute'] },
+      );
+      expect(rejected.currentStateCode).toBe('REJECTED');
+      expect(rejected.status).toBe(WORKFLOW_INSTANCE_STATUS.REJECTED);
+      expect(
+        rejected.histories.some(
+          (h) =>
+            h.actionType === WORKFLOW_HISTORY_ACTION_TYPE.REJECT &&
+            h.reason === 'Vượt ngân sách quý',
+        ),
+      ).toBe(true);
+    });
+
+    it('9.4.7 & 9.4.8 — supports time-and-scope delegation rules and auto-reassigning approver on SLA overdue', async () => {
+      const { service, instances } = createInMemoryWorkflowsService();
+
+      // 9.4.7: Tạo quy tắc ủy quyền từ Quản lý #20 sang #28 có thời gian & phạm vi
+      const now = Date.now();
+      const rule = await service.createDelegationRule(
+        {
+          fromUserId: 20,
+          toUserId: 28,
+          effectiveFrom: new Date(now - 3600_000).toISOString(),
+          effectiveUntil: new Date(now + 86400_000).toISOString(),
+          workflowCodes: ['ESCALATE_WF'],
+          entityTypes: ['contract'],
+          organizationUnitId: 1,
+          reason: 'Ủy quyền trong thời gian công tác nước ngoài',
+        },
+        { id: 20, username: 'mgr20', roles: ['manager'], permissions: ['workflows.execute'] },
+      );
+      expect(rule.isActive).toBe(true);
+
+      await service.createDefinition(
+        {
+          code: 'ESCALATE_WF',
+          name: 'Quy trình tự động chuyển người duyệt khi quá hạn',
+          targetEntityType: 'contract',
+          defaultSlaHours: 8,
+          warningBeforeMinutes: 30,
+          status: WORKFLOW_DEFINITION_STATUS.ACTIVE,
+          states: [
+            {
+              code: 'PENDING_REVIEW',
+              name: 'Chờ duyệt',
+              stateType: WORKFLOW_STATE_TYPE.INITIAL,
+              badgeTone: 'warning',
+              slaHours: 8,
+              approvalConfig: {
+                enabled: true,
+                mode: WORKFLOW_APPROVAL_MODE.SINGLE,
+                approverUserIds: [20],
+                autoTransitionOnApprove: 'APPROVE',
+                autoEscalateOnOverdue: true,
+                escalateStrategy: 'SPECIFIC_USER',
+                escalateToUserId: 90,
+                escalateExtendHours: 12,
+              },
+              sortOrder: 1,
+            },
+            {
+              code: 'APPROVED',
+              name: 'Đã duyệt',
+              stateType: WORKFLOW_STATE_TYPE.FINAL_APPROVED,
+              badgeTone: 'success',
+              slaHours: null,
+              approvalConfig: null,
+              sortOrder: 2,
+            },
+          ],
+          transitions: [
+            {
+              code: 'APPROVE',
+              name: 'Phê duyệt',
+              fromStateCode: 'PENDING_REVIEW',
+              toStateCode: 'APPROVED',
+              sortOrder: 1,
+            },
+          ],
+        },
+        1,
+      );
+
+      // Khi khởi tạo trong thời gian & phạm vi ủy quyền, step tự động gán cho #28 (delegatedFromUserId = 20)
+      const started = await service.startWorkflowForEntity(
+        {
+          workflowCode: 'ESCALATE_WF',
+          entityType: 'contract',
+          entityId: 'CT-999',
+          title: 'Hợp đồng thiết bị',
+          organizationUnitId: 1,
+        },
+        { id: 10, username: 'emp10', roles: ['employee'], permissions: ['workflows.execute'] },
+      );
+      expect(started.approvalSteps[0]?.approverUserId).toBe(28);
+      expect(started.approvalSteps[0]?.delegatedFromUserId).toBe(20);
+
+      // 9.4.8: Giả lập quá hạn SLA -> Tự động chuyển người duyệt sang escalateToUserId = 90
+      const rawInstance = instances.get(started.id)!;
+      rawInstance.dueAt = new Date(Date.now() - 3600_000);
+
+      const scanRes = await service.scanSlaAndNotifyOverdue(new Date());
+      expect(scanRes.overdueMarkedCount).toBe(1);
+      expect(scanRes.escalatedCount).toBe(1);
+      expect(scanRes.escalatedInstanceIds).toContain(started.id);
+
+      const afterEscalate = await service.getInstanceById(started.id);
+      expect(afterEscalate.approvalSteps[0]?.approverUserId).toBe(90);
+      expect(afterEscalate.approvalSteps[0]?.delegatedFromUserId).toBe(28);
     });
   });
 });

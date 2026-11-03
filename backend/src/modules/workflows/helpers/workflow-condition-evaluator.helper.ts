@@ -196,15 +196,32 @@ export function evaluateTransitionConditions(params: {
   }
 
   if (conditions.onlyAssignedApprover && actor) {
-    const pendingStepsForCurrentState = approvalSteps.filter(
-      (s) =>
-        s.stateCode === instance.currentStateCode &&
-        s.decision === WORKFLOW_APPROVAL_DECISION.PENDING,
+    const stepsForCurrentState = approvalSteps.filter(
+      (s) => s.stateCode.toUpperCase() === instance.currentStateCode.toUpperCase(),
     );
+    const pendingStepsForCurrentState = stepsForCurrentState.filter(
+      (s) => s.decision === WORKFLOW_APPROVAL_DECISION.PENDING,
+    );
+    const minStepOrder =
+      pendingStepsForCurrentState.length > 0
+        ? Math.min(...pendingStepsForCurrentState.map((s) => Number(s.stepOrder ?? 1)))
+        : Number(instance.currentStepOrder ?? 1);
+    const activeOrder = pendingStepsForCurrentState.some(
+      (s) => Number(s.stepOrder ?? 1) === Number(instance.currentStepOrder ?? 1),
+    )
+      ? Number(instance.currentStepOrder ?? 1)
+      : minStepOrder;
+    const candidateSteps =
+      pendingStepsForCurrentState.length > 0
+        ? pendingStepsForCurrentState.filter((s) => Number(s.stepOrder ?? 1) === activeOrder)
+        : stepsForCurrentState;
     const userRoles = new Set((actor.roles ?? []).map((r) => r.toLowerCase()));
-    const isApprover = pendingStepsForCurrentState.some(
+    const isApprover = candidateSteps.some(
       (s) =>
         (s.approverUserId !== null && Number(s.approverUserId) === Number(actor.id)) ||
+        (s.decidedByUserId !== null &&
+          s.decidedByUserId !== undefined &&
+          Number(s.decidedByUserId) === Number(actor.id)) ||
         (s.approverRoleCode && userRoles.has(s.approverRoleCode.toLowerCase())),
     );
     if (!isApprover && !isSuperOrAdmin) {

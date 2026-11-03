@@ -35,6 +35,7 @@ export const WorkflowsManagementPage: React.FC = () => {
     handleStartInstance,
     handleExecuteTransition,
     handleDecideApproval,
+    handleDelegateApproval,
     handleCancelInstance,
     handleScanSlaOverdue,
   } = useWorkflowsManagement();
@@ -182,6 +183,7 @@ export const WorkflowsManagementPage: React.FC = () => {
           onStartInstance={handleStartInstance}
           onExecuteTransition={handleExecuteTransition}
           onDecideApproval={handleDecideApproval}
+          onDelegateApproval={handleDelegateApproval}
           onCancelInstance={handleCancelInstance}
           onScanSlaOverdue={handleScanSlaOverdue}
         />

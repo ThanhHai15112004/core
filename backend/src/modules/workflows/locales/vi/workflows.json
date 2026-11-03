@@ -12,6 +12,10 @@
   "instanceAlreadyFinished": "Phiên chạy quy trình đã kết thúc, không thể thao tác thêm.",
   "cancelPermissionDenied": "Bạn không có quyền hủy phiên chạy quy trình này.",
   "statesCannotBeEmpty": "Danh sách trạng thái của quy trình không được để trống.",
-  "transitionReferencesUnknownState": "Bước chuyển đổi tham chiếu tới mã trạng thái không tồn tại."
+  "transitionReferencesUnknownState": "Bước chuyển đổi tham chiếu tới mã trạng thái không tồn tại.",
+  "approvalReasonRequired": "Bắt buộc phải nhập lý do / ghi chú khi từ chối hoặc trả lại hồ sơ.",
+  "invalidDelegationTimeRange": "Thời gian hiệu lực ủy quyền không hợp lệ (thời gian bắt đầu phải trước thời gian kết thúc).",
+  "delegationScopeMismatch": "Hồ sơ hiện tại không nằm trong phạm vi ủy quyền phê duyệt.",
+  "delegationRuleNotFound": "Không tìm thấy cấu hình ủy quyền phê duyệt."
 }
 

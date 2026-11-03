@@ -61,9 +61,11 @@ export const workflowStateApprovalConfigSchema = z.object({
       WORKFLOW_APPROVAL_MODE.SINGLE,
       WORKFLOW_APPROVAL_MODE.ALL,
       WORKFLOW_APPROVAL_MODE.ANY,
+      WORKFLOW_APPROVAL_MODE.QUORUM,
       WORKFLOW_APPROVAL_MODE.SEQUENTIAL_CHAIN,
     ])
     .optional(),
+  minApprovals: z.coerce.number().int().min(1).max(100).nullable().optional(),
   useManagerChain: z.boolean().optional(),
   maxChainLevels: z.coerce.number().int().min(1).max(10).optional(),
   approverUserIds: z.array(z.coerce.number().int().positive()).optional(),
@@ -71,6 +73,12 @@ export const workflowStateApprovalConfigSchema = z.object({
   autoTransitionOnApprove: z.string().trim().max(64).nullable().optional(),
   autoTransitionOnReject: z.string().trim().max(64).nullable().optional(),
   autoTransitionOnReturn: z.string().trim().max(64).nullable().optional(),
+  returnToStateCode: z.string().trim().max(64).nullable().optional(),
+  autoEscalateOnOverdue: z.boolean().optional(),
+  escalateStrategy: z.enum(['NEXT_MANAGER', 'SPECIFIC_USER', 'SPECIFIC_ROLE']).optional(),
+  escalateToUserId: z.coerce.number().int().positive().nullable().optional(),
+  escalateToRoleCode: z.string().trim().max(64).nullable().optional(),
+  escalateExtendHours: z.coerce.number().int().min(1).max(720).nullable().optional(),
 });
 
 export const workflowStateInputSchema = z.object({
@@ -215,20 +223,53 @@ export const executeWorkflowTransitionSchema = z.object({
 
 export type ExecuteWorkflowTransitionRequest = z.infer<typeof executeWorkflowTransitionSchema>;
 
-export const decideWorkflowApprovalSchema = z.object({
-  decision: z.enum(['APPROVED', 'REJECTED', 'RETURNED']),
-  comment: z.string().trim().max(1000).nullable().optional(),
-  transitionCodeOverride: z.string().trim().max(64).nullable().optional(),
-});
+export const decideWorkflowApprovalSchema = z
+  .object({
+    decision: z.enum(['APPROVED', 'REJECTED', 'RETURNED']),
+    comment: z.string().trim().max(1000).nullable().optional(),
+    transitionCodeOverride: z.string().trim().max(64).nullable().optional(),
+  })
+  .superRefine((val, ctx) => {
+    if (
+      (val.decision === 'REJECTED' || val.decision === 'RETURNED') &&
+      (!val.comment || !val.comment.trim())
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['comment'],
+        message: 'Bắt buộc phải nhập lý do khi từ chối hoặc trả lại bước trước',
+      });
+    }
+  });
 
 export type DecideWorkflowApprovalRequest = z.infer<typeof decideWorkflowApprovalSchema>;
 
 export const delegateWorkflowApprovalSchema = z.object({
   toUserId: z.coerce.number().int().positive(),
   reason: z.string().trim().min(2).max(500),
+  effectiveFrom: z.string().trim().optional(),
+  effectiveUntil: z.string().trim().optional(),
+  workflowCodes: z.array(z.string().trim().min(1)).optional(),
+  entityTypes: z.array(z.string().trim().min(1)).optional(),
+  organizationUnitId: z.coerce.number().int().positive().nullable().optional(),
 });
 
 export type DelegateWorkflowApprovalRequest = z.infer<typeof delegateWorkflowApprovalSchema>;
+
+export const createWorkflowDelegationRuleSchema = z.object({
+  fromUserId: z.coerce.number().int().positive().optional(),
+  toUserId: z.coerce.number().int().positive(),
+  effectiveFrom: z.string().trim().min(1),
+  effectiveUntil: z.string().trim().min(1),
+  workflowCodes: z.array(z.string().trim().min(1)).optional(),
+  entityTypes: z.array(z.string().trim().min(1)).optional(),
+  organizationUnitId: z.coerce.number().int().positive().nullable().optional(),
+  reason: z.string().trim().min(2).max(500),
+});
+
+export type CreateWorkflowDelegationRuleRequest = z.infer<
+  typeof createWorkflowDelegationRuleSchema
+>;
 
 export const cancelWorkflowInstanceSchema = z.object({
   reason: z.string().trim().min(2).max(500),

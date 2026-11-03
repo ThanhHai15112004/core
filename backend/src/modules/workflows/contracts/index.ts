@@ -21,6 +21,7 @@ import {
 } from '../enum/workflows.enum.js';
 import type {
   AvailableWorkflowTransitionView,
+  WorkflowApprovalDelegationRule,
   WorkflowApprovalStepItemView,
   WorkflowConditionOperator,
   WorkflowDefinitionItemView,
@@ -28,6 +29,7 @@ import type {
   WorkflowHistoryItemView,
   WorkflowInstanceDetailView,
   WorkflowInstanceItemView,
+  WorkflowOverdueEscalateStrategy,
   WorkflowSlaScanResultView,
   WorkflowStateApprovalConfig,
   WorkflowStateItemView,
@@ -58,6 +60,7 @@ export {
   type WorkflowInstanceStatusName,
   type WorkflowStateType,
   type AvailableWorkflowTransitionView,
+  type WorkflowApprovalDelegationRule,
   type WorkflowApprovalStepItemView,
   type WorkflowConditionOperator,
   type WorkflowDefinitionItemView,
@@ -65,6 +68,7 @@ export {
   type WorkflowHistoryItemView,
   type WorkflowInstanceDetailView,
   type WorkflowInstanceItemView,
+  type WorkflowOverdueEscalateStrategy,
   type WorkflowSlaScanResultView,
   type WorkflowStateApprovalConfig,
   type WorkflowStateItemView,

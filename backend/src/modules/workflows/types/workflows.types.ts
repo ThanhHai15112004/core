@@ -42,9 +42,12 @@ export interface WorkflowTransitionActionConfig {
   readonly jobPayload?: Record<string, unknown> | undefined;
 }
 
+export type WorkflowOverdueEscalateStrategy = 'NEXT_MANAGER' | 'SPECIFIC_USER' | 'SPECIFIC_ROLE';
+
 export interface WorkflowStateApprovalConfig {
   readonly enabled: boolean;
   readonly mode?: WorkflowApprovalMode | undefined;
+  readonly minApprovals?: number | null | undefined;
   readonly useManagerChain?: boolean | undefined;
   readonly maxChainLevels?: number | undefined;
   readonly approverUserIds?: readonly number[] | undefined;
@@ -52,6 +55,26 @@ export interface WorkflowStateApprovalConfig {
   readonly autoTransitionOnApprove?: string | null | undefined;
   readonly autoTransitionOnReject?: string | null | undefined;
   readonly autoTransitionOnReturn?: string | null | undefined;
+  readonly returnToStateCode?: string | null | undefined;
+  readonly autoEscalateOnOverdue?: boolean | undefined;
+  readonly escalateStrategy?: WorkflowOverdueEscalateStrategy | undefined;
+  readonly escalateToUserId?: number | null | undefined;
+  readonly escalateToRoleCode?: string | null | undefined;
+  readonly escalateExtendHours?: number | null | undefined;
+}
+
+export interface WorkflowApprovalDelegationRule {
+  readonly id: number;
+  readonly fromUserId: number;
+  readonly toUserId: number;
+  readonly effectiveFrom: string;
+  readonly effectiveUntil: string;
+  readonly workflowCodes?: readonly string[] | undefined;
+  readonly entityTypes?: readonly string[] | undefined;
+  readonly organizationUnitId?: number | null | undefined;
+  readonly reason: string;
+  readonly isActive: boolean;
+  readonly createdAt: string;
 }
 
 export interface WorkflowTriggeredActionResult {
@@ -189,6 +212,8 @@ export interface WorkflowSlaScanResultView {
   readonly totalRunningChecked: number;
   readonly warningsTriggeredCount: number;
   readonly overdueMarkedCount: number;
+  readonly escalatedCount: number;
   readonly warningInstanceIds: readonly number[];
   readonly overdueInstanceIds: readonly number[];
+  readonly escalatedInstanceIds: readonly number[];
 }

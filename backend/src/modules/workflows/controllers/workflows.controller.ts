@@ -15,6 +15,7 @@ import { WorkflowsService } from '../services/workflows.service.js';
 import {
   type CancelWorkflowInstanceRequest,
   type CreateWorkflowDefinitionRequest,
+  type CreateWorkflowDelegationRuleRequest,
   type DecideWorkflowApprovalRequest,
   type DelegateWorkflowApprovalRequest,
   type ExecuteWorkflowTransitionRequest,
@@ -26,6 +27,7 @@ import {
   type UpdateWorkflowDefinitionRequest,
   cancelWorkflowInstanceSchema,
   createWorkflowDefinitionSchema,
+  createWorkflowDelegationRuleSchema,
   decideWorkflowApprovalSchema,
   delegateWorkflowApprovalSchema,
   executeWorkflowTransitionSchema,
@@ -39,6 +41,7 @@ import {
 } from '../requests/workflows.requests.js';
 import {
   workflowDefinitionResponseSchema,
+  workflowDelegationRuleResponseSchema,
   workflowHistoryItemResponseSchema,
   workflowInstanceDetailResponseSchema,
   workflowInstanceResponseSchema,
@@ -237,6 +240,41 @@ export class WorkflowsController {
     @CurrentUser() actor?: UserIdentity,
   ) {
     return this.workflowsService.delegateApproval(id, body, actor);
+  }
+
+  @Get(WORKFLOWS_ROUTES.DELEGATIONS)
+  @RequirePermissions('workflows.read')
+  @ApiDoc({
+    summary: 'Danh sách cấu hình ủy quyền phê duyệt theo thời gian và phạm vi (Mục 9.4)',
+    response: z.array(workflowDelegationRuleResponseSchema),
+  })
+  public listDelegationRules() {
+    return this.workflowsService.listDelegationRules();
+  }
+
+  @Post(WORKFLOWS_ROUTES.DELEGATIONS)
+  @RequirePermissions('workflows.execute')
+  @ApiDoc({
+    summary: 'Thiết lập ủy quyền phê duyệt có thời gian hiệu lực và phạm vi (Mục 9.4)',
+    status: HTTP_STATUS_CODE.CREATED,
+    response: workflowDelegationRuleResponseSchema,
+  })
+  public createDelegationRule(
+    @ValidatedBody(createWorkflowDelegationRuleSchema) body: CreateWorkflowDelegationRuleRequest,
+    @CurrentUser() actor?: UserIdentity,
+  ) {
+    return this.workflowsService.createDelegationRule(body, actor);
+  }
+
+  @Post(WORKFLOWS_ROUTES.DELEGATION_REVOKE)
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions('workflows.execute')
+  @ApiDoc({
+    summary: 'Thu hồi cấu hình ủy quyền phê duyệt (Mục 9.4)',
+    response: workflowDelegationRuleResponseSchema,
+  })
+  public revokeDelegationRule(@ValidatedParams(positiveIntParamSchema, 'id') id: number) {
+    return this.workflowsService.revokeDelegationRule(id);
   }
 
   @Post(WORKFLOWS_ROUTES.INSTANCE_CANCEL)

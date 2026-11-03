@@ -26,7 +26,8 @@ export interface WorkflowTransitionActionConfig {
 
 export interface WorkflowStateApprovalConfig {
   readonly enabled: boolean;
-  readonly mode?: 'SINGLE' | 'ALL' | 'ANY' | 'SEQUENTIAL_CHAIN';
+  readonly mode?: 'SINGLE' | 'ALL' | 'ANY' | 'QUORUM' | 'SEQUENTIAL_CHAIN';
+  readonly minApprovals?: number | null;
   readonly useManagerChain?: boolean;
   readonly maxChainLevels?: number;
   readonly approverUserIds?: readonly number[];
@@ -34,6 +35,12 @@ export interface WorkflowStateApprovalConfig {
   readonly autoTransitionOnApprove?: string | null;
   readonly autoTransitionOnReject?: string | null;
   readonly autoTransitionOnReturn?: string | null;
+  readonly returnToStateCode?: string | null;
+  readonly autoEscalateOnOverdue?: boolean;
+  readonly escalateStrategy?: 'NEXT_MANAGER' | 'SPECIFIC_USER' | 'SPECIFIC_ROLE';
+  readonly escalateToUserId?: number | null;
+  readonly escalateToRoleCode?: string | null;
+  readonly escalateExtendHours?: number | null;
 }
 
 export interface WorkflowStateItem {

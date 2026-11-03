@@ -36,6 +36,12 @@ interface WorkflowInstancesTabProps {
     decision: 'APPROVED' | 'REJECTED' | 'RETURNED',
     comment?: string | null,
   ) => Promise<void>;
+  readonly onDelegateApproval?: (
+    instanceId: number,
+    toUserId: number,
+    reason: string,
+    effectiveUntil?: string,
+  ) => Promise<void>;
   readonly onCancelInstance: (
     instanceId: number,
     reason: string,
@@ -54,6 +60,7 @@ export const WorkflowInstancesTab: React.FC<WorkflowInstancesTabProps> = ({
   onStartInstance,
   onExecuteTransition,
   onDecideApproval,
+  onDelegateApproval,
   onCancelInstance,
   onScanSlaOverdue,
 }) => {
@@ -69,6 +76,8 @@ export const WorkflowInstancesTab: React.FC<WorkflowInstancesTabProps> = ({
 
   const [transitionReason, setTransitionReason] = useState('');
   const [cancelReason, setCancelReason] = useState('');
+  const [delegateToUserId, setDelegateToUserId] = useState('');
+  const [delegateUntil, setDelegateUntil] = useState('');
 
   const handleStart = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -438,56 +447,126 @@ export const WorkflowInstancesTab: React.FC<WorkflowInstancesTabProps> = ({
                         paddingTop: '10px',
                         borderTop: '1px dashed var(--border-color)',
                         display: 'flex',
+                        flexDirection: 'column',
                         gap: '8px',
-                        flexWrap: 'wrap',
-                        alignItems: 'center',
                       }}
                     >
-                      <span style={{ fontSize: '12px', fontWeight: 700 }}>
-                        Phê duyệt nhanh tại bước hiện tại:
-                      </span>
-                      <button
-                        type="button"
-                        disabled={submitting}
-                        onClick={() =>
-                          void onDecideApproval(
-                            selectedInstance.id,
-                            'APPROVED',
-                            transitionReason || 'Đồng ý phê duyệt',
-                          )
-                        }
-                        style={authStyles.btnTeal}
+                      <div style={{ fontSize: '12px' }}>
+                        <strong>Các bước phê duyệt (Mục 9.4):</strong>{' '}
+                        {selectedInstance.approvalSteps.map((s) => (
+                          <span
+                            key={s.id}
+                            style={{
+                              marginRight: '8px',
+                              padding: '2px 6px',
+                              borderRadius: '4px',
+                              border: '1px solid var(--border-color)',
+                            }}
+                          >
+                            Bước #{s.stepOrder} ({s.approvalMode}):{' '}
+                            {s.approverFullName ||
+                              (s.approverUserId ? `User #${s.approverUserId}` : null) ||
+                              (s.approverRoleCode ? `Role: ${s.approverRoleCode}` : 'Mặc định')}{' '}
+                            [{s.decision}]
+                          </span>
+                        ))}
+                      </div>
+                      <div
+                        style={{
+                          display: 'flex',
+                          gap: '8px',
+                          flexWrap: 'wrap',
+                          alignItems: 'center',
+                        }}
                       >
-                        <CheckCircle2 size={14} /> Phê duyệt (Approve)
-                      </button>
-                      <button
-                        type="button"
-                        disabled={submitting}
-                        onClick={() =>
-                          void onDecideApproval(
-                            selectedInstance.id,
-                            'RETURNED',
-                            transitionReason || 'Yêu cầu bổ sung hồ sơ',
-                          )
-                        }
-                        style={authStyles.btnSecondary}
-                      >
-                        <RotateCcw size={14} /> Trả lại (Return)
-                      </button>
-                      <button
-                        type="button"
-                        disabled={submitting}
-                        onClick={() =>
-                          void onDecideApproval(
-                            selectedInstance.id,
-                            'REJECTED',
-                            transitionReason || 'Từ chối phê duyệt',
-                          )
-                        }
-                        style={authStyles.btnDanger}
-                      >
-                        <XCircle size={14} /> Từ chối (Reject)
-                      </button>
+                        <span style={{ fontSize: '12px', fontWeight: 700 }}>
+                          Phê duyệt nhanh tại bước hiện tại (#{selectedInstance.currentStepOrder}):
+                        </span>
+                        <button
+                          type="button"
+                          disabled={submitting}
+                          onClick={() =>
+                            void onDecideApproval(
+                              selectedInstance.id,
+                              'APPROVED',
+                              transitionReason || 'Đồng ý phê duyệt',
+                            )
+                          }
+                          style={authStyles.btnTeal}
+                        >
+                          <CheckCircle2 size={14} /> Phê duyệt (Approve)
+                        </button>
+                        <button
+                          type="button"
+                          disabled={submitting}
+                          onClick={() =>
+                            void onDecideApproval(
+                              selectedInstance.id,
+                              'RETURNED',
+                              transitionReason || 'Yêu cầu người tạo chỉnh sửa lại hồ sơ',
+                            )
+                          }
+                          style={authStyles.btnSecondary}
+                        >
+                          <RotateCcw size={14} /> Trả lại bước trước (Return)
+                        </button>
+                        <button
+                          type="button"
+                          disabled={submitting}
+                          onClick={() =>
+                            void onDecideApproval(
+                              selectedInstance.id,
+                              'REJECTED',
+                              transitionReason || 'Từ chối phê duyệt hồ sơ',
+                            )
+                          }
+                          style={authStyles.btnDanger}
+                        >
+                          <XCircle size={14} /> Từ chối (Reject)
+                        </button>
+                      </div>
+
+                      {onDelegateApproval && (
+                        <div
+                          style={{
+                            display: 'flex',
+                            gap: '6px',
+                            flexWrap: 'wrap',
+                            alignItems: 'center',
+                          }}
+                        >
+                          <input
+                            type="number"
+                            min={1}
+                            value={delegateToUserId}
+                            onChange={(e) => setDelegateToUserId(e.target.value)}
+                            placeholder="Ủy quyền cho User ID..."
+                            style={{ ...authStyles.input, width: '165px' }}
+                          />
+                          <input
+                            type="date"
+                            value={delegateUntil}
+                            onChange={(e) => setDelegateUntil(e.target.value)}
+                            style={{ ...authStyles.input, width: '150px' }}
+                          />
+                          <button
+                            type="button"
+                            disabled={submitting || !delegateToUserId}
+                            onClick={() => {
+                              void onDelegateApproval(
+                                selectedInstance.id,
+                                Number(delegateToUserId),
+                                transitionReason || 'Ủy quyền xử lý phê duyệt',
+                                delegateUntil || undefined,
+                              );
+                              setDelegateToUserId('');
+                            }}
+                            style={authStyles.btnSecondary}
+                          >
+                            Ủy quyền duyệt (9.4.7)
+                          </button>
+                        </div>
+                      )}
                     </div>
                   )}
 

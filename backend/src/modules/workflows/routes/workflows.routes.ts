@@ -13,5 +13,7 @@ export const WORKFLOWS_ROUTES = {
   INSTANCE_DELEGATE: 'instances/:id/delegate',
   INSTANCE_CANCEL: 'instances/:id/cancel',
   INSTANCE_HISTORIES: 'instances/:id/histories',
+  DELEGATIONS: 'delegations',
+  DELEGATION_REVOKE: 'delegations/:id/revoke',
   SLA_SCAN_OVERDUE: 'sla/scan-overdue',
 } as const;

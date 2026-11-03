@@ -91,6 +91,9 @@ export const workflowsApi = {
     payload: {
       readonly toUserId: number;
       readonly reason: string;
+      readonly effectiveFrom?: string;
+      readonly effectiveUntil?: string;
+      readonly workflowCodes?: readonly string[];
     },
   ): Promise<WorkflowInstanceDetail> =>
     fetchApi<WorkflowInstanceDetail>(API_ROUTES.WORKFLOWS.INSTANCE_DELEGATE(id), {

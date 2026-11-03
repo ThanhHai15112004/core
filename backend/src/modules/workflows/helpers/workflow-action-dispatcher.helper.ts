@@ -63,15 +63,27 @@ export async function executeWorkflowTransitionActions(params: {
 
       try {
         const recipientUserIds = new Set<number>();
+        const recipientRoleCodes = new Set<string>();
         const targets = action.notifyTargets ?? ['INITIATOR', 'NEXT_APPROVERS'];
 
         if (targets.includes('INITIATOR') && instance.initiatorUserId) {
           recipientUserIds.add(Number(instance.initiatorUserId));
         }
         if (targets.includes('NEXT_APPROVERS')) {
-          for (const step of nextApprovalSteps) {
+          const pendingSteps = nextApprovalSteps.filter(
+            (s) => !s.decision || s.decision === 'PENDING',
+          );
+          const minStepOrder =
+            pendingSteps.length > 0
+              ? Math.min(...pendingSteps.map((s) => Number(s.stepOrder ?? 1)))
+              : 1;
+          for (const step of pendingSteps) {
+            if (Number(step.stepOrder ?? 1) !== minStepOrder) continue;
             if (step.approverUserId) {
               recipientUserIds.add(Number(step.approverUserId));
+            }
+            if (step.approverRoleCode?.trim()) {
+              recipientRoleCodes.add(step.approverRoleCode.trim());
             }
           }
         }
@@ -79,6 +91,13 @@ export async function executeWorkflowTransitionActions(params: {
           for (const uid of action.targetUserIds) {
             if (Number.isInteger(Number(uid)) && Number(uid) > 0) {
               recipientUserIds.add(Number(uid));
+            }
+          }
+        }
+        if (action.targetRoleCodes) {
+          for (const rc of action.targetRoleCodes) {
+            if (rc.trim()) {
+              recipientRoleCodes.add(rc.trim());
             }
           }
         }
@@ -115,14 +134,34 @@ export async function executeWorkflowTransitionActions(params: {
             referenceId: dispatched.id,
             detail: `Notified ${userIdsArr.length} user(s)`,
           });
-        } else if (action.targetRoleCodes && action.targetRoleCodes.length > 0) {
+          if (recipientRoleCodes.size > 0) {
+            const roleArr = [...recipientRoleCodes];
+            await notificationsPublicService
+              .dispatch({
+                title,
+                content,
+                category: NOTIFICATION_CATEGORY.WORK,
+                priority: NOTIFICATION_PRIORITY.HIGH,
+                targetType: NOTIFICATION_TARGET_TYPE.ROLE,
+                roleCodes: roleArr,
+                referenceModule: 'workflows',
+                referenceType: instance.entityType,
+                referenceId: String(instance.id),
+                actionUrl: '/workflows',
+                senderUserId: actorId ?? null,
+                organizationUnitId: instance.organizationUnitId ?? null,
+              })
+              .catch(() => undefined);
+          }
+        } else if (recipientRoleCodes.size > 0) {
+          const roleArr = [...recipientRoleCodes];
           const dispatched = await notificationsPublicService.dispatch({
             title,
             content,
             category: NOTIFICATION_CATEGORY.WORK,
             priority: NOTIFICATION_PRIORITY.HIGH,
             targetType: NOTIFICATION_TARGET_TYPE.ROLE,
-            roleCodes: action.targetRoleCodes,
+            roleCodes: roleArr,
             referenceModule: 'workflows',
             referenceType: instance.entityType,
             referenceId: String(instance.id),
@@ -134,7 +173,7 @@ export async function executeWorkflowTransitionActions(params: {
             type: 'NOTIFY',
             status: 'SUCCESS',
             referenceId: dispatched.id,
-            detail: `Notified role(s): ${action.targetRoleCodes.join(', ')}`,
+            detail: `Notified role(s): ${roleArr.join(', ')}`,
           });
         } else {
           results.push({

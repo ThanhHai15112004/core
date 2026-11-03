@@ -30,7 +30,11 @@ import type {
   ExecuteWorkflowTransitionRequest,
 } from '../requests/workflows.requests.js';
 import { executeWorkflowTransitionActions } from './workflow-action-dispatcher.helper.js';
-import { generateApprovalStepsForState } from './workflow-approver-resolver.helper.js';
+import {
+  findActiveDelegationRuleForApprover,
+  generateApprovalStepsForState,
+  isDelegationScopeMatched,
+} from './workflow-approver-resolver.helper.js';
 import {
   evaluateTransitionConditions,
   parseInstanceContextData,
@@ -38,6 +42,7 @@ import {
   parseTransitionActions,
   resolveStateSlaDueDate,
 } from './workflow-condition-evaluator.helper.js';
+import type { WorkflowApprovalDelegationRule } from '../types/workflows.types.js';
 
 export async function executeStartWorkflowForEntity(params: {
   input: StartWorkflowPublicInput;
@@ -50,6 +55,7 @@ export async function executeStartWorkflowForEntity(params: {
   usersPublicService: IUsersPublicService | null;
   notificationsPublicService: INotificationsPublicService | null;
   messagePublisher: BaseMessagePublisherProvider | null;
+  delegationRules?: readonly WorkflowApprovalDelegationRule[] | undefined;
   getInstanceById: (id: number, actor?: UserIdentity) => Promise<WorkflowInstanceDetailView>;
 }): Promise<WorkflowInstanceDetailView> {
   const {
@@ -63,6 +69,7 @@ export async function executeStartWorkflowForEntity(params: {
     usersPublicService,
     notificationsPublicService,
     messagePublisher,
+    delegationRules,
     getInstanceById,
   } = params;
 
@@ -118,6 +125,12 @@ export async function executeStartWorkflowForEntity(params: {
     initiatorUserId,
     approvalStepRepository,
     usersPublicService,
+    delegationRules,
+    scopeContext: {
+      workflowCode: savedInstance.workflowCode,
+      entityType: savedInstance.entityType,
+      organizationUnitId: savedInstance.organizationUnitId ?? null,
+    },
   });
 
   const triggeredActions = await executeWorkflowTransitionActions({
@@ -169,6 +182,7 @@ export async function executeWorkflowStateTransition(params: {
   usersPublicService: IUsersPublicService | null;
   notificationsPublicService: INotificationsPublicService | null;
   messagePublisher: BaseMessagePublisherProvider | null;
+  delegationRules?: readonly WorkflowApprovalDelegationRule[] | undefined;
   getInstanceById: (id: number, actor?: UserIdentity) => Promise<WorkflowInstanceDetailView>;
 }): Promise<WorkflowInstanceDetailView> {
   const {
@@ -184,6 +198,7 @@ export async function executeWorkflowStateTransition(params: {
     usersPublicService,
     notificationsPublicService,
     messagePublisher,
+    delegationRules,
     getInstanceById,
   } = params;
 
@@ -284,6 +299,12 @@ export async function executeWorkflowStateTransition(params: {
     initiatorUserId: instance.initiatorUserId ?? null,
     approvalStepRepository,
     usersPublicService,
+    delegationRules,
+    scopeContext: {
+      workflowCode: instance.workflowCode,
+      entityType: instance.entityType,
+      organizationUnitId: instance.organizationUnitId ?? null,
+    },
   });
 
   const configuredActions = parseTransitionActions(transition.actionsJson);
@@ -323,6 +344,7 @@ export async function executeDecideWorkflowApproval(params: {
   instanceRepository: WorkflowInstanceRepository;
   approvalStepRepository: WorkflowApprovalStepRepository;
   historyRepository: WorkflowHistoryRepository;
+  delegationRules?: readonly WorkflowApprovalDelegationRule[] | undefined;
   executeTransition: (
     id: number,
     dto: ExecuteWorkflowTransitionRequest,
@@ -339,9 +361,19 @@ export async function executeDecideWorkflowApproval(params: {
     instanceRepository,
     approvalStepRepository,
     historyRepository,
+    delegationRules,
     executeTransition,
     getInstanceById,
   } = params;
+
+  if (
+    (dto.decision === 'REJECTED' || dto.decision === 'RETURNED') &&
+    (!dto.comment || !dto.comment.trim())
+  ) {
+    throw new BadRequestAppException('workflows.approvalReasonRequired', [
+      { decision: dto.decision },
+    ]);
+  }
 
   const instance = await instanceRepository.findById(id);
   if (!instance) {
@@ -351,7 +383,18 @@ export async function executeDecideWorkflowApproval(params: {
     throw new BadRequestAppException('workflows.instanceNotRunning', [{ id }]);
   }
 
-  const steps = await approvalStepRepository.findByInstanceId(Number(instance.id));
+  const defId = Number(instance.workflowDefinitionId);
+  const [states, transitions, steps] = await Promise.all([
+    stateRepository.findByDefinitionIds([defId]),
+    transitionRepository.findByDefinitionIds([defId]),
+    approvalStepRepository.findByInstanceId(Number(instance.id)),
+  ]);
+
+  const currentState = states.find(
+    (s) => s.code.toUpperCase() === instance.currentStateCode.toUpperCase(),
+  );
+  const approvalConfig = parseStateApprovalConfig(currentState?.approvalConfigJson);
+
   const pendingForState = steps.filter(
     (s) =>
       s.stateCode.toUpperCase() === instance.currentStateCode.toUpperCase() &&
@@ -359,41 +402,137 @@ export async function executeDecideWorkflowApproval(params: {
   );
 
   const actorId = actor?.id ?? null;
-  const isSuperOrAdmin =
-    actor?.roles?.includes('super_admin') || actor?.roles?.includes('admin') || false;
+  const userRoles = new Set((actor?.roles ?? []).map((r) => r.trim().toLowerCase()));
+  const isSuperOrAdmin = userRoles.has('super_admin') || userRoles.has('admin');
 
-  const matchingStep =
-    pendingForState.find(
+  const scopeContext = {
+    workflowCode: instance.workflowCode,
+    entityType: instance.entityType,
+    organizationUnitId: instance.organizationUnitId ?? null,
+  };
+
+  if (pendingForState.length > 0) {
+    // 9.4.3: Chỉ mở bước có stepOrder hiện tại (bước sau chỉ mở khi bước trước hoàn thành)
+    const minStepOrder = Math.min(...pendingForState.map((s) => Number(s.stepOrder ?? 1)));
+    const activeStepOrder = pendingForState.some(
+      (s) => Number(s.stepOrder ?? 1) === Number(instance.currentStepOrder ?? 1),
+    )
+      ? Number(instance.currentStepOrder ?? 1)
+      : minStepOrder;
+
+    const openSteps = pendingForState.filter((s) => Number(s.stepOrder ?? 1) === activeStepOrder);
+
+    let delegatedFromId: number | null = null;
+
+    // 1. Khớp trực tiếp theo approverUserId
+    let matchingStep = openSteps.find(
       (s) =>
         actorId !== null &&
         s.approverUserId !== null &&
+        s.approverUserId !== undefined &&
         Number(s.approverUserId) === Number(actorId),
-    ) ?? pendingForState[0];
+    );
 
-  if (matchingStep) {
-    if (
-      matchingStep.approverUserId !== null &&
-      actorId !== null &&
-      Number(matchingStep.approverUserId) !== Number(actorId) &&
-      !isSuperOrAdmin
-    ) {
+    // 2. Khớp theo cấu hình ủy quyền có thời gian & phạm vi (9.4.7)
+    if (!matchingStep && actorId !== null && delegationRules && delegationRules.length > 0) {
+      matchingStep = openSteps.find((s) => {
+        if (s.approverUserId === null || s.approverUserId === undefined) return false;
+        const rule = findActiveDelegationRuleForApprover({
+          approverUserId: Number(s.approverUserId),
+          delegationRules,
+          scopeContext,
+        });
+        if (rule && Number(rule.toUserId) === Number(actorId)) {
+          delegatedFromId = Number(s.approverUserId);
+          return true;
+        }
+        return false;
+      });
+    }
+
+    // 3. Khớp theo vai trò approverRoleCode (9.4.2)
+    if (!matchingStep) {
+      matchingStep = openSteps.find(
+        (s) =>
+          Boolean(s.approverRoleCode?.trim()) &&
+          userRoles.has(s.approverRoleCode!.trim().toLowerCase()),
+      );
+    }
+
+    // 4. Cho phép Admin/SuperAdmin hoặc lời gọi hệ thống (actorId === null)
+    if (!matchingStep && (isSuperOrAdmin || actorId === null)) {
+      matchingStep = openSteps[0];
+    }
+
+    if (!matchingStep) {
       throw new ForbiddenAppException('workflows.notAssignedApproverForStep', [
-        { stepId: matchingStep.id, approverUserId: matchingStep.approverUserId },
+        {
+          currentStateCode: instance.currentStateCode,
+          currentStepOrder: activeStepOrder,
+          actorUserId: actorId,
+        },
       ]);
     }
 
+    if (delegatedFromId !== null) {
+      matchingStep.delegatedFromUserId = delegatedFromId;
+      matchingStep.approverUserId = actorId;
+    }
+
     matchingStep.decision = dto.decision;
-    matchingStep.comment = dto.comment ?? null;
+    matchingStep.comment = dto.comment?.trim() || null;
     matchingStep.decidedAt = new Date();
     matchingStep.decidedByUserId = actorId;
     await approvalStepRepository.saveEntity(matchingStep);
 
-    if (
-      matchingStep.approvalMode === WORKFLOW_APPROVAL_MODE.ANY &&
-      dto.decision === WORKFLOW_APPROVAL_DECISION.APPROVED
+    // 9.4.4: Phê duyệt song song (ANY / QUORUM / minApprovals / ALL)
+    if (dto.decision === WORKFLOW_APPROVAL_DECISION.APPROVED) {
+      const mode =
+        matchingStep.approvalMode ?? approvalConfig?.mode ?? WORKFLOW_APPROVAL_MODE.SINGLE;
+      const configuredMinApprovals =
+        approvalConfig?.minApprovals !== undefined &&
+        approvalConfig?.minApprovals !== null &&
+        Number(approvalConfig.minApprovals) > 0
+          ? Number(approvalConfig.minApprovals)
+          : null;
+
+      const requiredApprovalsForOrder =
+        mode === WORKFLOW_APPROVAL_MODE.ANY
+          ? 1
+          : mode === WORKFLOW_APPROVAL_MODE.QUORUM || configuredMinApprovals !== null
+            ? (configuredMinApprovals ?? 1)
+            : null;
+
+      if (requiredApprovalsForOrder !== null) {
+        const stepsInSameOrder = steps.filter(
+          (s) =>
+            s.stateCode.toUpperCase() === instance.currentStateCode.toUpperCase() &&
+            Number(s.stepOrder ?? 1) === activeStepOrder,
+        );
+        const approvedCount = stepsInSameOrder.filter(
+          (s) => s.id === matchingStep!.id || s.decision === WORKFLOW_APPROVAL_DECISION.APPROVED,
+        ).length;
+
+        if (approvedCount >= requiredApprovalsForOrder) {
+          for (const other of openSteps) {
+            if (
+              other.id !== matchingStep.id &&
+              other.decision === WORKFLOW_APPROVAL_DECISION.PENDING
+            ) {
+              other.decision = WORKFLOW_APPROVAL_DECISION.SKIPPED;
+              other.decidedAt = new Date();
+              await approvalStepRepository.saveEntity(other);
+            }
+          }
+        }
+      }
+    } else if (
+      dto.decision === WORKFLOW_APPROVAL_DECISION.REJECTED ||
+      dto.decision === WORKFLOW_APPROVAL_DECISION.RETURNED
     ) {
+      // 9.4.5 & 9.4.6: Khi từ chối hoặc trả lại bước trước, hủy (SKIPPED) toàn bộ các bước PENDING còn lại của state này
       for (const other of pendingForState) {
-        if (other.id !== matchingStep.id) {
+        if (other.id !== matchingStep.id && other.decision === WORKFLOW_APPROVAL_DECISION.PENDING) {
           other.decision = WORKFLOW_APPROVAL_DECISION.SKIPPED;
           other.decidedAt = new Date();
           await approvalStepRepository.saveEntity(other);
@@ -409,6 +548,8 @@ export async function executeDecideWorkflowApproval(params: {
         ? WORKFLOW_HISTORY_ACTION_TYPE.REJECT
         : WORKFLOW_HISTORY_ACTION_TYPE.RETURN;
 
+  const trimmedReason = dto.comment?.trim() || `Quyết định phê duyệt: ${dto.decision}`;
+
   await historyRepository.recordHistory({
     workflowInstanceId: Number(instance.id),
     transitionCode: dto.decision,
@@ -416,7 +557,7 @@ export async function executeDecideWorkflowApproval(params: {
     fromStateCode: instance.currentStateCode,
     toStateCode: instance.currentStateCode,
     actorUserId: actorId,
-    reason: dto.comment ?? `Quyết định phê duyệt: ${dto.decision}`,
+    reason: trimmedReason,
   });
 
   const refreshedSteps = await approvalStepRepository.findByInstanceId(Number(instance.id));
@@ -427,16 +568,6 @@ export async function executeDecideWorkflowApproval(params: {
   );
 
   if (dto.decision === 'REJECTED' || dto.decision === 'RETURNED' || remainingPending.length === 0) {
-    const defId = Number(instance.workflowDefinitionId);
-    const [states, transitions] = await Promise.all([
-      stateRepository.findByDefinitionIds([defId]),
-      transitionRepository.findByDefinitionIds([defId]),
-    ]);
-    const currentState = states.find(
-      (s) => s.code.toUpperCase() === instance.currentStateCode.toUpperCase(),
-    );
-    const approvalConfig = parseStateApprovalConfig(currentState?.approvalConfigJson);
-
     const candidateCode =
       dto.transitionCodeOverride ??
       (dto.decision === 'APPROVED'
@@ -456,10 +587,39 @@ export async function executeDecideWorkflowApproval(params: {
         Number(instance.id),
         {
           transitionCode: candidateCode,
-          reason: dto.comment ?? `Auto-transition on ${dto.decision}`,
+          reason: trimmedReason,
         },
         actor,
       );
+    }
+
+    // 9.4.6 Fallback: Nếu quyết định là RETURNED nhưng quy trình chưa khai báo transition RETURN tường minh,
+    // tự động trả về trạng thái returnToStateCode hoặc trạng thái INITIAL (DRAFT) cho người tạo chỉnh sửa
+    if (dto.decision === 'RETURNED') {
+      const initialState =
+        states.find((s) => s.stateType === WORKFLOW_STATE_TYPE.INITIAL) ?? states[0];
+      const fallbackReturnStateCode = (
+        approvalConfig?.returnToStateCode?.trim() ||
+        initialState?.code ||
+        'DRAFT'
+      ).toUpperCase();
+      const fromStateCode = instance.currentStateCode;
+      instance.currentStateCode = fallbackReturnStateCode;
+      instance.currentStepOrder = 1;
+      instance.warningSentAt = null;
+      instance.overdueNotifiedAt = null;
+      instance.isOverdue = false;
+      await instanceRepository.saveEntity(instance);
+
+      await historyRepository.recordHistory({
+        workflowInstanceId: Number(instance.id),
+        transitionCode: 'RETURN',
+        actionType: WORKFLOW_HISTORY_ACTION_TYPE.TRANSITION,
+        fromStateCode,
+        toStateCode: fallbackReturnStateCode,
+        actorUserId: actorId,
+        reason: trimmedReason,
+      });
     }
   } else {
     const nextStepOrder = Math.min(...remainingPending.map((s) => Number(s.stepOrder)));
@@ -493,14 +653,89 @@ export async function executeDelegateWorkflowApproval(params: {
   if (!instance) {
     throw new NotFoundAppException('workflows.instanceNotFound', { id });
   }
+  if (instance.status !== WORKFLOW_INSTANCE_STATUS.RUNNING) {
+    throw new BadRequestAppException('workflows.instanceNotRunning', [{ id }]);
+  }
+
+  // 9.4.7: Kiểm tra thời gian hiệu lực nếu có truyền effectiveFrom / effectiveUntil
+  const nowMs = Date.now();
+  if (dto.effectiveFrom || dto.effectiveUntil) {
+    const fromMs = dto.effectiveFrom ? new Date(dto.effectiveFrom).getTime() : nowMs;
+    const untilMs = dto.effectiveUntil
+      ? new Date(dto.effectiveUntil).getTime()
+      : nowMs + 365 * 24 * 3600_000;
+    if (Number.isNaN(fromMs) || Number.isNaN(untilMs) || fromMs >= untilMs || nowMs > untilMs) {
+      throw new BadRequestAppException('workflows.invalidDelegationTimeRange', [
+        { effectiveFrom: dto.effectiveFrom ?? null, effectiveUntil: dto.effectiveUntil ?? null },
+      ]);
+    }
+  }
+
+  // 9.4.7: Kiểm tra phạm vi ủy quyền (workflowCodes, entityTypes, organizationUnitId)
+  if (
+    !isDelegationScopeMatched(
+      {
+        workflowCodes: dto.workflowCodes,
+        entityTypes: dto.entityTypes,
+        organizationUnitId: dto.organizationUnitId,
+      },
+      {
+        workflowCode: instance.workflowCode,
+        entityType: instance.entityType,
+        organizationUnitId: instance.organizationUnitId ?? null,
+      },
+    )
+  ) {
+    throw new BadRequestAppException('workflows.delegationScopeMismatch', [
+      {
+        workflowCode: instance.workflowCode,
+        entityType: instance.entityType,
+        organizationUnitId: instance.organizationUnitId ?? null,
+      },
+    ]);
+  }
+
   const steps = await approvalStepRepository.findByInstanceId(Number(instance.id));
-  const pendingStep = steps.find(
+  const pendingForState = steps.filter(
     (s) =>
       s.stateCode.toUpperCase() === instance.currentStateCode.toUpperCase() &&
       s.decision === WORKFLOW_APPROVAL_DECISION.PENDING,
   );
-  if (!pendingStep) {
+  if (pendingForState.length === 0) {
     throw new BadRequestAppException('workflows.noPendingApprovalStepToDelegate', [{ id }]);
+  }
+
+  const minStepOrder = Math.min(...pendingForState.map((s) => Number(s.stepOrder ?? 1)));
+  const activeStepOrder = pendingForState.some(
+    (s) => Number(s.stepOrder ?? 1) === Number(instance.currentStepOrder ?? 1),
+  )
+    ? Number(instance.currentStepOrder ?? 1)
+    : minStepOrder;
+  const openSteps = pendingForState.filter((s) => Number(s.stepOrder ?? 1) === activeStepOrder);
+
+  const actorId = actor?.id ?? null;
+  const userRoles = new Set((actor?.roles ?? []).map((r) => r.trim().toLowerCase()));
+  const isSuperOrAdmin = userRoles.has('super_admin') || userRoles.has('admin');
+
+  const pendingStep =
+    openSteps.find(
+      (s) =>
+        actorId !== null &&
+        s.approverUserId !== null &&
+        s.approverUserId !== undefined &&
+        Number(s.approverUserId) === Number(actorId),
+    ) ??
+    openSteps.find(
+      (s) =>
+        Boolean(s.approverRoleCode?.trim()) &&
+        userRoles.has(s.approverRoleCode!.trim().toLowerCase()),
+    ) ??
+    (isSuperOrAdmin || actorId === null ? openSteps[0] : undefined);
+
+  if (!pendingStep) {
+    throw new ForbiddenAppException('workflows.notAssignedApproverForStep', [
+      { id, actorUserId: actorId },
+    ]);
   }
 
   pendingStep.delegatedFromUserId = pendingStep.approverUserId ?? actor?.id ?? null;
@@ -518,6 +753,13 @@ export async function executeDelegateWorkflowApproval(params: {
     metadata: {
       delegatedToUserId: dto.toUserId,
       delegatedFromUserId: pendingStep.delegatedFromUserId,
+      ...(dto.effectiveFrom ? { effectiveFrom: dto.effectiveFrom } : {}),
+      ...(dto.effectiveUntil ? { effectiveUntil: dto.effectiveUntil } : {}),
+      ...(dto.workflowCodes ? { workflowCodes: dto.workflowCodes } : {}),
+      ...(dto.entityTypes ? { entityTypes: dto.entityTypes } : {}),
+      ...(dto.organizationUnitId !== undefined
+        ? { organizationUnitId: dto.organizationUnitId }
+        : {}),
     },
   });
 

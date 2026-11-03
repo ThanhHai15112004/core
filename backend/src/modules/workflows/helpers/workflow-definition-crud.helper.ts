@@ -205,6 +205,9 @@ export function buildClonedDefinitionVersionPayload(
         ? {
             enabled: s.approvalConfig.enabled,
             ...(s.approvalConfig.mode ? { mode: s.approvalConfig.mode } : {}),
+            ...(s.approvalConfig.minApprovals !== undefined
+              ? { minApprovals: s.approvalConfig.minApprovals }
+              : {}),
             ...(s.approvalConfig.useManagerChain !== undefined
               ? { useManagerChain: s.approvalConfig.useManagerChain }
               : {}),
@@ -225,6 +228,24 @@ export function buildClonedDefinitionVersionPayload(
               : {}),
             ...(s.approvalConfig.autoTransitionOnReturn !== undefined
               ? { autoTransitionOnReturn: s.approvalConfig.autoTransitionOnReturn }
+              : {}),
+            ...(s.approvalConfig.returnToStateCode !== undefined
+              ? { returnToStateCode: s.approvalConfig.returnToStateCode }
+              : {}),
+            ...(s.approvalConfig.autoEscalateOnOverdue !== undefined
+              ? { autoEscalateOnOverdue: s.approvalConfig.autoEscalateOnOverdue }
+              : {}),
+            ...(s.approvalConfig.escalateStrategy !== undefined
+              ? { escalateStrategy: s.approvalConfig.escalateStrategy }
+              : {}),
+            ...(s.approvalConfig.escalateToUserId !== undefined
+              ? { escalateToUserId: s.approvalConfig.escalateToUserId }
+              : {}),
+            ...(s.approvalConfig.escalateToRoleCode !== undefined
+              ? { escalateToRoleCode: s.approvalConfig.escalateToRoleCode }
+              : {}),
+            ...(s.approvalConfig.escalateExtendHours !== undefined
+              ? { escalateExtendHours: s.approvalConfig.escalateExtendHours }
               : {}),
           }
         : null,

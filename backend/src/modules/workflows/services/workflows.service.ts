@@ -1,5 +1,6 @@
 import { Inject, Injectable, Optional } from '@nestjs/common';
 import {
+  BadRequestAppException,
   NotFoundAppException,
   type PaginatedResult,
   defaultSettingRegistry,
@@ -23,6 +24,7 @@ import {
   type IWorkflowsPublicService,
   type StartWorkflowPublicInput,
   WORKFLOWS_SETTING_KEYS,
+  type WorkflowApprovalDelegationRule,
   type WorkflowDefinitionItemView,
   type WorkflowHistoryItemView,
   type WorkflowInstanceDetailView,
@@ -38,6 +40,7 @@ import { WorkflowHistoryRepository } from '../repositories/workflow-history.repo
 import type {
   CancelWorkflowInstanceRequest,
   CreateWorkflowDefinitionRequest,
+  CreateWorkflowDelegationRuleRequest,
   DecideWorkflowApprovalRequest,
   DelegateWorkflowApprovalRequest,
   ExecuteWorkflowTransitionRequest,
@@ -70,6 +73,8 @@ import { executeWorkflowSlaScan } from '../helpers/workflow-sla-scanner.helper.j
 @Injectable()
 export class WorkflowsService implements IWorkflowsPublicService {
   private readonly effectiveDataScopeService: DataScopeService;
+  private readonly delegationRules: WorkflowApprovalDelegationRule[] = [];
+  private delegationRuleSeq = 1;
 
   constructor(
     private readonly definitionRepository: WorkflowDefinitionRepository,
@@ -304,6 +309,7 @@ export class WorkflowsService implements IWorkflowsPublicService {
       usersPublicService: this.usersPublicService,
       notificationsPublicService: this.notificationsPublicService,
       messagePublisher: this.messagePublisher,
+      delegationRules: this.delegationRules,
       getInstanceById: (id, act) => this.getInstanceById(id, act),
     });
   }
@@ -326,6 +332,7 @@ export class WorkflowsService implements IWorkflowsPublicService {
       usersPublicService: this.usersPublicService,
       notificationsPublicService: this.notificationsPublicService,
       messagePublisher: this.messagePublisher,
+      delegationRules: this.delegationRules,
       getInstanceById: (instId, act) => this.getInstanceById(instId, act),
     });
   }
@@ -344,6 +351,7 @@ export class WorkflowsService implements IWorkflowsPublicService {
       instanceRepository: this.instanceRepository,
       approvalStepRepository: this.approvalStepRepository,
       historyRepository: this.historyRepository,
+      delegationRules: this.delegationRules,
       executeTransition: (instId, trDto, act) => this.executeTransition(instId, trDto, act),
       getInstanceById: (instId, act) => this.getInstanceById(instId, act),
     });
@@ -354,6 +362,21 @@ export class WorkflowsService implements IWorkflowsPublicService {
     dto: DelegateWorkflowApprovalRequest,
     actor?: UserIdentity,
   ): Promise<WorkflowInstanceDetailView> {
+    if (dto.effectiveFrom && dto.effectiveUntil && actor?.id) {
+      await this.createDelegationRule(
+        {
+          fromUserId: actor.id,
+          toUserId: dto.toUserId,
+          effectiveFrom: dto.effectiveFrom,
+          effectiveUntil: dto.effectiveUntil,
+          workflowCodes: dto.workflowCodes,
+          entityTypes: dto.entityTypes,
+          organizationUnitId: dto.organizationUnitId,
+          reason: dto.reason,
+        },
+        actor,
+      );
+    }
     return executeDelegateWorkflowApproval({
       id,
       dto,
@@ -363,6 +386,59 @@ export class WorkflowsService implements IWorkflowsPublicService {
       historyRepository: this.historyRepository,
       getInstanceById: (instId, act) => this.getInstanceById(instId, act),
     });
+  }
+
+  public async listDelegationRules(): Promise<readonly WorkflowApprovalDelegationRule[]> {
+    return [...this.delegationRules];
+  }
+
+  public async createDelegationRule(
+    dto: CreateWorkflowDelegationRuleRequest,
+    actor?: UserIdentity,
+  ): Promise<WorkflowApprovalDelegationRule> {
+    const fromMs = new Date(dto.effectiveFrom).getTime();
+    const untilMs = new Date(dto.effectiveUntil).getTime();
+    if (Number.isNaN(fromMs) || Number.isNaN(untilMs) || fromMs >= untilMs) {
+      throw new BadRequestAppException('workflows.invalidDelegationTimeRange', [
+        { effectiveFrom: dto.effectiveFrom, effectiveUntil: dto.effectiveUntil },
+      ]);
+    }
+
+    const fromUserId = dto.fromUserId ?? actor?.id ?? 1;
+    const rule: WorkflowApprovalDelegationRule = {
+      id: this.delegationRuleSeq++,
+      fromUserId: Number(fromUserId),
+      toUserId: Number(dto.toUserId),
+      effectiveFrom: new Date(fromMs).toISOString(),
+      effectiveUntil: new Date(untilMs).toISOString(),
+      ...(dto.workflowCodes && dto.workflowCodes.length > 0
+        ? { workflowCodes: dto.workflowCodes.map((c) => c.trim().toUpperCase()) }
+        : {}),
+      ...(dto.entityTypes && dto.entityTypes.length > 0
+        ? { entityTypes: dto.entityTypes.map((e) => e.trim().toLowerCase()) }
+        : {}),
+      ...(dto.organizationUnitId !== undefined
+        ? { organizationUnitId: dto.organizationUnitId }
+        : {}),
+      reason: dto.reason.trim(),
+      isActive: true,
+      createdAt: new Date().toISOString(),
+    };
+    this.delegationRules.unshift(rule);
+    return rule;
+  }
+
+  public async revokeDelegationRule(id: number): Promise<WorkflowApprovalDelegationRule> {
+    const idx = this.delegationRules.findIndex((r) => r.id === Number(id));
+    if (idx === -1) {
+      throw new NotFoundAppException('workflows.delegationRuleNotFound', { id });
+    }
+    const updated: WorkflowApprovalDelegationRule = {
+      ...this.delegationRules[idx]!,
+      isActive: false,
+    };
+    this.delegationRules[idx] = updated;
+    return updated;
   }
 
   public async cancelInstance(
@@ -401,9 +477,11 @@ export class WorkflowsService implements IWorkflowsPublicService {
     return executeWorkflowSlaScan({
       now,
       definitionRepository: this.definitionRepository,
+      stateRepository: this.stateRepository,
       instanceRepository: this.instanceRepository,
       approvalStepRepository: this.approvalStepRepository,
       historyRepository: this.historyRepository,
+      usersPublicService: this.usersPublicService,
       notificationsPublicService: this.notificationsPublicService,
       defaultWarningMinutes: warningMinutes,
     });

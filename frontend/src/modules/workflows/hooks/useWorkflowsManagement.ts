@@ -248,6 +248,41 @@ export function useWorkflowsManagement() {
     }
   };
 
+  const handleDelegateApproval = async (
+    instanceId: number,
+    toUserId: number,
+    reason: string,
+    effectiveUntil?: string,
+  ) => {
+    setSubmitting(true);
+    setBanner(null);
+    try {
+      const updated = await workflowsApi.delegateApproval(instanceId, {
+        toUserId,
+        reason,
+        ...(effectiveUntil
+          ? {
+              effectiveFrom: new Date().toISOString(),
+              effectiveUntil: new Date(effectiveUntil).toISOString(),
+            }
+          : {}),
+      });
+      setSelectedInstance(updated);
+      await refreshAll();
+      setBanner({
+        type: 'success',
+        text: `Đã ủy quyền phê duyệt quy trình #${instanceId} cho User #${toUserId}.`,
+      });
+    } catch (err) {
+      setBanner({
+        type: 'error',
+        text: err instanceof Error ? err.message : 'Ủy quyền phê duyệt thất bại.',
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const handleCancelInstance = async (
     instanceId: number,
     reason: string,
@@ -317,6 +352,7 @@ export function useWorkflowsManagement() {
     handleStartInstance,
     handleExecuteTransition,
     handleDecideApproval,
+    handleDelegateApproval,
     handleCancelInstance,
     handleScanSlaOverdue,
   };
