@@ -118,6 +118,177 @@ export class HeavyJobProcessor extends BaseQueueProcessor {
     @Optional() private readonly searchService?: SearchService,
   ) {
     super(config, metrics, progressTracker);
+    this.ensureInjectedWorkerExecutorsRegistered();
+  }
+
+  private ensureInjectedWorkerExecutorsRegistered(): void {
+    const activeImportRegistry = this.importRegistry ?? defaultImportRegistry;
+    if (
+      this.userImportService &&
+      !activeImportRegistry.resolveWorkerExecutor({ profileCode: 'users' })
+    ) {
+      activeImportRegistry.registerWorkerExecutor({
+        profileCode: 'users',
+        module: 'users',
+        topic: 'users.import',
+        parseImportRows: (input) =>
+          typeof this.userImportService!.parseImportRows === 'function'
+            ? this.userImportService!.parseImportRows({
+                skipDuplicates: input.skipDuplicates ?? true,
+                ...(input.duplicateStrategy ? { duplicateStrategy: input.duplicateStrategy } : {}),
+                ...(input.columnMapping
+                  ? {
+                      columnMapping: Object.fromEntries(
+                        Object.entries(input.columnMapping).filter(
+                          (entry): entry is [string, string | number] => entry[1] !== null,
+                        ),
+                      ),
+                    }
+                  : {}),
+                ...(input.csvContent ? { csvContent: input.csvContent } : {}),
+                ...(input.xlsxBase64 ? { xlsxBase64: input.xlsxBase64 } : {}),
+              })
+            : ((input.items ?? []) as BulkImportUserRowInput[]),
+        executeChunkImport: (input) =>
+          this.userImportService!.bulkImport(
+            {
+              items: (input.items ?? []) as BulkImportUserRowInput[],
+              skipDuplicates: input.skipDuplicates ?? true,
+              ...(input.duplicateStrategy ? { duplicateStrategy: input.duplicateStrategy } : {}),
+              ...(input.defaultPassword !== undefined
+                ? { defaultPassword: input.defaultPassword }
+                : {}),
+            },
+            input.actorId,
+            input.options ?? { skipQueuePublish: true, skipHistoryRecord: true },
+          ),
+      });
+    }
+
+    const activeExportRegistry = this.exportRegistry ?? defaultExportRegistry;
+    if (
+      this.userExportService &&
+      !activeExportRegistry.resolveWorkerExecutor({ profileCode: 'users' })
+    ) {
+      activeExportRegistry.registerWorkerExecutor({
+        profileCode: 'users',
+        module: 'users',
+        topic: 'users.export',
+        executeExport: async (input) => {
+          const exportQuery: ListUsersQuery = {
+            sortBy: 'id',
+            sortOrder: 'ASC',
+            ...((input.query ?? {}) as Partial<ListUsersQuery>),
+            ...(input.format === 'csv' || input.format === 'xlsx' || input.format === 'pdf'
+              ? { format: input.format }
+              : {}),
+            async: false,
+            notifyOnComplete: input.notifyOnComplete ?? true,
+          };
+          const effectiveActor: UserIdentity | undefined =
+            (input.actor as UserIdentity | undefined) ??
+            (input.actorId !== undefined
+              ? { id: input.actorId, roles: [], permissions: ['users.export'] }
+              : undefined);
+          return this.userExportService!.exportUsersCsv(exportQuery, effectiveActor, {
+            skipQueuePublish: true,
+            ...(input.historyId !== undefined ? { existingHistoryId: input.historyId } : {}),
+            jobId: input.jobId,
+            forceNotify: input.notifyOnComplete !== false,
+          });
+        },
+      });
+    }
+
+    const activeReportRegistry = this.reportRegistry ?? defaultReportRegistry;
+    if (
+      this.userReportService &&
+      !activeReportRegistry.resolveWorkerExecutor({ module: 'users' })
+    ) {
+      activeReportRegistry.registerWorkerExecutor({
+        module: 'users',
+        topic: 'users.report',
+        reportCodes: ['users.summary_dashboard', 'users.security_compliance'],
+        executeReport: async (input) => {
+          const reportRequest: Partial<RunUserReportRequest> = {
+            reportCode: input.reportCode || 'users.security_compliance',
+            ...((input.request ?? {}) as Partial<RunUserReportRequest>),
+            ...(input.format === 'csv' || input.format === 'xlsx' || input.format === 'pdf'
+              ? { format: input.format }
+              : {}),
+            async: false,
+          };
+          const effectiveActor: UserIdentity | undefined =
+            (input.actor as UserIdentity | undefined) ??
+            (input.actorId !== undefined
+              ? { id: input.actorId, roles: [], permissions: ['users.report'] }
+              : undefined);
+          return this.userReportService!.runReport(reportRequest, effectiveActor, {
+            skipQueuePublish: true,
+            ...(input.historyId !== undefined ? { existingHistoryId: input.historyId } : {}),
+            jobId: input.jobId,
+            executionMode: 'QUEUE',
+            bypassPermissionCheck: effectiveActor === undefined,
+          });
+        },
+      });
+    }
+
+    const activeSearchRegistry = this.searchRegistry ?? defaultSearchRegistry;
+    if (
+      this.userSearchService &&
+      !activeSearchRegistry.resolveWorkerExecutor({ module: 'users' })
+    ) {
+      activeSearchRegistry.registerWorkerExecutor({
+        module: 'users',
+        entityCode: 'users.account',
+        syncTopic: 'users.search_sync',
+        rebuildTopic: 'users.search_rebuild',
+        executeSearchJob: async (input) => {
+          const effectiveActor: UserIdentity | undefined =
+            (input.actor as UserIdentity | undefined) ??
+            (input.actorId !== undefined
+              ? { id: input.actorId, roles: [], permissions: ['users.update', 'users.read'] }
+              : undefined);
+
+          if (input.operation === 'search_rebuild') {
+            return this.userSearchService!.rebuildSearchIndex(
+              {
+                ...(input.module ? { module: input.module } : {}),
+                ...(input.entityType ? { entityType: input.entityType } : {}),
+                ...(input.entityCode ? { entityCode: input.entityCode } : {}),
+                async: false,
+              },
+              effectiveActor,
+              {
+                skipQueuePublish: true,
+                ...(input.historyId !== undefined ? { existingHistoryId: input.historyId } : {}),
+                jobId: input.jobId,
+                executionMode: 'QUEUE',
+              },
+            );
+          }
+
+          const numericIds = Array.isArray(input.documentIds)
+            ? input.documentIds.map((id) => Number(id)).filter((id) => Number.isInteger(id))
+            : undefined;
+
+          return this.userSearchService!.syncUsersToSearchIndex(
+            {
+              ...(numericIds ? { userIds: numericIds } : {}),
+              async: false,
+            },
+            effectiveActor,
+            {
+              skipQueuePublish: true,
+              ...(input.historyId !== undefined ? { existingHistoryId: input.historyId } : {}),
+              jobId: input.jobId,
+              executionMode: 'QUEUE',
+            },
+          );
+        },
+      });
+    }
   }
 
   public get concurrency(): number {
@@ -555,230 +726,69 @@ export class HeavyJobProcessor extends BaseQueueProcessor {
     return { processed, total };
   }
 
-  /** Giải quyết động bộ thực thi Import theo Registry hoặc fallback service tiêm trực tiếp */
+  /** Giải quyết động bộ thực thi Import thuần qua `ImportRegistryService` */
   private resolveImportExecutor(
     topic: string,
     payload: HeavyQueueJobPayload,
   ): ImportQueueWorkerExecutor<unknown> | undefined {
-    const isUsersTarget =
-      topic === 'users.import' ||
-      (!payload.module && !payload.profileCode) ||
-      payload.module === 'users' ||
-      payload.profileCode === 'users';
-
-    if (isUsersTarget && this.userImportService) {
-      return {
-        profileCode: 'users',
-        module: 'users',
-        topic: 'users.import',
-        parseImportRows: (input) =>
-          this.userImportService!.parseImportRows({
-            skipDuplicates: input.skipDuplicates ?? true,
-            ...(input.duplicateStrategy ? { duplicateStrategy: input.duplicateStrategy } : {}),
-            ...(input.columnMapping
-              ? {
-                  columnMapping: Object.fromEntries(
-                    Object.entries(input.columnMapping).filter(
-                      (entry): entry is [string, string | number] => entry[1] !== null,
-                    ),
-                  ),
-                }
-              : {}),
-            ...(input.csvContent ? { csvContent: input.csvContent } : {}),
-            ...(input.xlsxBase64 ? { xlsxBase64: input.xlsxBase64 } : {}),
-          }),
-        executeChunkImport: (input) =>
-          this.userImportService!.bulkImport(
-            {
-              items: (input.items ?? []) as BulkImportUserRowInput[],
-              skipDuplicates: input.skipDuplicates ?? true,
-              ...(input.duplicateStrategy ? { duplicateStrategy: input.duplicateStrategy } : {}),
-              ...(input.defaultPassword !== undefined
-                ? { defaultPassword: input.defaultPassword }
-                : {}),
-            },
-            input.actorId,
-            input.options ?? { skipQueuePublish: true, skipHistoryRecord: true },
-          ),
-      };
-    }
-
+    this.ensureInjectedWorkerExecutorsRegistered();
     const activeRegistry = this.importRegistry ?? defaultImportRegistry;
-    return activeRegistry.resolveWorkerExecutor({
-      profileCode: payload.profileCode,
-      module: payload.module,
-      topic,
-    });
+    return (
+      activeRegistry.resolveWorkerExecutor({
+        profileCode: payload.profileCode,
+        module: payload.module,
+        topic,
+      }) ?? activeRegistry.resolveWorkerExecutor({ profileCode: 'users', module: 'users' })
+    );
   }
 
-  /** Giải quyết động bộ thực thi Export theo Registry hoặc fallback service tiêm trực tiếp */
+  /** Giải quyết động bộ thực thi Export thuần qua `ExportRegistryService` */
   private resolveExportExecutor(
     topic: string,
     payload: HeavyQueueJobPayload,
   ): ExportQueueWorkerExecutor | undefined {
-    const isUsersTarget =
-      topic === 'users.export' ||
-      (!payload.module && !payload.profileCode) ||
-      payload.module === 'users' ||
-      payload.profileCode === 'users';
-
-    if (isUsersTarget && this.userExportService) {
-      return {
-        profileCode: 'users',
-        module: 'users',
-        topic: 'users.export',
-        executeExport: async (input) => {
-          const exportQuery: ListUsersQuery = {
-            sortBy: 'id',
-            sortOrder: 'ASC',
-            ...((input.query ?? {}) as Partial<ListUsersQuery>),
-            ...(input.format === 'csv' || input.format === 'xlsx' || input.format === 'pdf'
-              ? { format: input.format }
-              : {}),
-            async: false,
-            notifyOnComplete: input.notifyOnComplete ?? true,
-          };
-          const effectiveActor: UserIdentity | undefined =
-            (input.actor as UserIdentity | undefined) ??
-            (input.actorId !== undefined
-              ? { id: input.actorId, roles: [], permissions: ['users.export'] }
-              : undefined);
-          return this.userExportService!.exportUsersCsv(exportQuery, effectiveActor, {
-            skipQueuePublish: true,
-            ...(input.historyId !== undefined ? { existingHistoryId: input.historyId } : {}),
-            jobId: input.jobId,
-            forceNotify: input.notifyOnComplete !== false,
-          });
-        },
-      };
-    }
-
+    this.ensureInjectedWorkerExecutorsRegistered();
     const activeRegistry = this.exportRegistry ?? defaultExportRegistry;
-    return activeRegistry.resolveWorkerExecutor({
-      profileCode: payload.profileCode,
-      module: payload.module,
-      topic,
-    });
+    return (
+      activeRegistry.resolveWorkerExecutor({
+        profileCode: payload.profileCode,
+        module: payload.module,
+        topic,
+      }) ?? activeRegistry.resolveWorkerExecutor({ profileCode: 'users', module: 'users' })
+    );
   }
 
-  /** Giải quyết động bộ thực thi Báo cáo theo Registry hoặc fallback service tiêm trực tiếp */
+  /** Giải quyết động bộ thực thi Báo cáo thuần qua `ReportRegistryService` */
   private resolveReportExecutor(
     topic: string,
     payload: HeavyQueueJobPayload,
   ): ReportQueueWorkerExecutor | undefined {
+    this.ensureInjectedWorkerExecutorsRegistered();
     const reportCode = payload.reportCode ?? payload.request?.reportCode;
-    const isUsersTarget =
-      topic === 'users.report' ||
-      (!payload.module && (!reportCode || reportCode.startsWith('users.'))) ||
-      payload.module === 'users';
-
-    if (isUsersTarget && this.userReportService) {
-      return {
-        module: 'users',
-        topic: 'users.report',
-        executeReport: async (input) => {
-          const reportRequest: Partial<RunUserReportRequest> = {
-            reportCode: input.reportCode || 'users.security_compliance',
-            ...((input.request ?? {}) as Partial<RunUserReportRequest>),
-            ...(input.format === 'csv' || input.format === 'xlsx' || input.format === 'pdf'
-              ? { format: input.format }
-              : {}),
-            async: false,
-          };
-          const effectiveActor: UserIdentity | undefined =
-            (input.actor as UserIdentity | undefined) ??
-            (input.actorId !== undefined
-              ? { id: input.actorId, roles: [], permissions: ['users.report'] }
-              : undefined);
-          return this.userReportService!.runReport(reportRequest, effectiveActor, {
-            skipQueuePublish: true,
-            ...(input.historyId !== undefined ? { existingHistoryId: input.historyId } : {}),
-            jobId: input.jobId,
-            executionMode: 'QUEUE',
-            bypassPermissionCheck: effectiveActor === undefined,
-          });
-        },
-      };
-    }
-
     const activeRegistry = this.reportRegistry ?? defaultReportRegistry;
-    return activeRegistry.resolveWorkerExecutor({
-      reportCode,
-      module: payload.module,
-      topic,
-    });
+    return (
+      activeRegistry.resolveWorkerExecutor({
+        reportCode,
+        module: payload.module,
+        topic,
+      }) ?? activeRegistry.resolveWorkerExecutor({ module: 'users' })
+    );
   }
 
-  /** Giải quyết động bộ thực thi đồng bộ Search Index theo Registry hoặc fallback service tiêm trực tiếp */
+  /** Giải quyết động bộ thực thi đồng bộ Search Index thuần qua `SearchRegistryService` */
   private resolveSearchExecutor(
     topic: string,
     payload: HeavyQueueJobPayload,
   ): SearchQueueWorkerExecutor | undefined {
-    const isUsersTarget =
-      topic === 'users.search_sync' ||
-      topic === 'users.search_rebuild' ||
-      (!payload.module && !payload.entityCode) ||
-      payload.module === 'users' ||
-      payload.entityCode?.startsWith('users.');
-
-    if (isUsersTarget && this.userSearchService) {
-      return {
-        module: 'users',
-        entityCode: 'users.account',
-        syncTopic: 'users.search_sync',
-        rebuildTopic: 'users.search_rebuild',
-        executeSearchJob: async (input) => {
-          const effectiveActor: UserIdentity | undefined =
-            (input.actor as UserIdentity | undefined) ??
-            (input.actorId !== undefined
-              ? { id: input.actorId, roles: [], permissions: ['users.update', 'users.read'] }
-              : undefined);
-
-          if (input.operation === 'search_rebuild') {
-            return this.userSearchService!.rebuildSearchIndex(
-              {
-                ...(input.module ? { module: input.module } : {}),
-                ...(input.entityType ? { entityType: input.entityType } : {}),
-                ...(input.entityCode ? { entityCode: input.entityCode } : {}),
-                async: false,
-              },
-              effectiveActor,
-              {
-                skipQueuePublish: true,
-                ...(input.historyId !== undefined ? { existingHistoryId: input.historyId } : {}),
-                jobId: input.jobId,
-                executionMode: 'QUEUE',
-              },
-            );
-          }
-
-          const numericIds = Array.isArray(input.documentIds)
-            ? input.documentIds.map((id) => Number(id)).filter((id) => Number.isInteger(id))
-            : undefined;
-
-          return this.userSearchService!.syncUsersToSearchIndex(
-            {
-              ...(numericIds ? { userIds: numericIds } : {}),
-              async: false,
-            },
-            effectiveActor,
-            {
-              skipQueuePublish: true,
-              ...(input.historyId !== undefined ? { existingHistoryId: input.historyId } : {}),
-              jobId: input.jobId,
-              executionMode: 'QUEUE',
-            },
-          );
-        },
-      };
-    }
-
+    this.ensureInjectedWorkerExecutorsRegistered();
     const activeRegistry = this.searchRegistry ?? defaultSearchRegistry;
-    return activeRegistry.resolveWorkerExecutor({
-      module: payload.module,
-      entityCode: payload.entityCode,
-      topic,
-    });
+    return (
+      activeRegistry.resolveWorkerExecutor({
+        module: payload.module,
+        entityCode: payload.entityCode,
+        topic,
+      }) ?? activeRegistry.resolveWorkerExecutor({ module: 'users' })
+    );
   }
 
   /** Kiểm tra điều kiện chạy Import dữ liệu thật trong Worker (hỗ trợ mọi module đăng ký qua `ImportRegistryService`) */

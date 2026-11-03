@@ -265,13 +265,20 @@ export interface ReportQueueWorkerExecutionResult {
 
 /**
  * Hợp đồng đăng ký bộ thực thi Báo cáo nền (`ReportQueueWorkerExecutor`) vào `ReportRegistryService`
- * giúp `HeavyJobProcessor` điều phối động cho mọi module mà không cần hardcode từng service.
+ * giúp `HeavyJobProcessor` và `ReportsService` điều phối động cho mọi module mà không cần hardcode từng service.
  */
 export interface ReportQueueWorkerExecutor {
   readonly module: string;
   readonly topic?: string | undefined;
   readonly reportCodes?: readonly string[] | undefined;
   executeReport(input: ReportQueueWorkerExecutionInput): Promise<ReportQueueWorkerExecutionResult>;
+  /** Thực thi trực tiếp báo cáo (đồng bộ hoặc đẩy Queue) khi gọi qua `ReportsService.runReport` */
+  readonly runReport?:
+    | ((
+        request: Readonly<Record<string, unknown>>,
+        actor?: unknown,
+      ) => Promise<Readonly<Record<string, unknown>>>)
+    | undefined;
 }
 
 /**

@@ -88,6 +88,7 @@ export class UserExportService {
       profileCode: USERS_EXPORT_PROFILE_CODE,
       module: 'users',
       topic: 'users.export',
+      requiredPermission: 'users.export',
       executeExport: async (input: {
         readonly query?: Readonly<Record<string, unknown>> | undefined;
         readonly format?: ExportFormat | string | undefined;
@@ -663,27 +664,11 @@ export class UserExportService {
     readonly xlsxBase64?: string;
     readonly pdfBase64?: string;
   } {
-    const artifact = this.exportRegistry.getTemporaryArtifactByToken(token, now);
-    if (!artifact || artifact.profileCode !== USERS_EXPORT_PROFILE_CODE) {
-      throw new NotFoundAppException('users.exportFileExpired', { token });
-    }
-
-    return {
-      token: artifact.token,
-      downloadUrl: artifact.downloadUrl,
-      fileName: artifact.fileName,
-      contentType: artifact.contentType,
-      format: artifact.format,
-      totalExported: artifact.totalExported,
-      sizeBytes: artifact.sizeBytes,
-      createdAt: artifact.createdAt,
-      expiresAt: artifact.expiresAt,
-      ...(artifact.format === 'csv'
-        ? { csvContent: artifact.buffer.toString('utf8') }
-        : artifact.format === 'xlsx'
-          ? { xlsxBase64: artifact.buffer.toString('base64') }
-          : { pdfBase64: artifact.buffer.toString('base64') }),
-    };
+    return this.exportRegistry.formatTemporaryArtifactDownload(token, {
+      now,
+      expectedProfileCode: USERS_EXPORT_PROFILE_CODE,
+      expiredErrorKey: 'users.exportFileExpired',
+    });
   }
 
   /**

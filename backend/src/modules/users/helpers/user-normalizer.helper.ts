@@ -167,6 +167,9 @@ export function registerUsersUsageCheckers(params: {
     USERS_CODE_TYPES.STATUS,
     'users.status',
     async ({ numericCode }) => {
+      if (typeof userRepository.countByStatus === 'function') {
+        return userRepository.countByStatus(parseUserStatus(numericCode), true);
+      }
       const { total } = await userRepository.searchPaginated({
         status: parseUserStatus(numericCode),
         includeArchived: true,
@@ -182,6 +185,9 @@ export function registerUsersUsageCheckers(params: {
     'user_profiles.gender',
     async ({ numericCode }) => {
       if (!userProfileRepository) return 0;
+      if (typeof userProfileRepository.countByGender === 'function') {
+        return userProfileRepository.countByGender(numericCode);
+      }
       const { items } = await userRepository.searchPaginated({
         includeArchived: true,
         page: 1,
@@ -198,14 +204,6 @@ export function registerUsersUsageCheckers(params: {
     USERS_CODE_TYPES.POSITION_TITLE,
     'user_organization_units.position_title',
     async ({ numericCode, code }) => {
-      const { items } = await userRepository.searchPaginated({
-        includeArchived: true,
-        page: 1,
-        limit: 10000,
-      });
-      const userIds = items.filter((u) => !u.deletedAt).map((u) => Number(u.id));
-      if (userIds.length === 0) return 0;
-      const assignments = await userOrgRepository.findByUserIds(userIds);
       const labelVi = defaultCodeRegistry.getLabel(
         USERS_CODE_TYPES.POSITION_TITLE,
         numericCode,
@@ -221,6 +219,17 @@ export function registerUsersUsageCheckers(params: {
           .map((s) => s.trim().toUpperCase())
           .filter(Boolean),
       );
+      if (typeof userOrgRepository.countByPositionTitles === 'function') {
+        return userOrgRepository.countByPositionTitles([...candidates]);
+      }
+      const { items } = await userRepository.searchPaginated({
+        includeArchived: true,
+        page: 1,
+        limit: 10000,
+      });
+      const userIds = items.filter((u) => !u.deletedAt).map((u) => Number(u.id));
+      if (userIds.length === 0) return 0;
+      const assignments = await userOrgRepository.findByUserIds(userIds);
       return assignments.filter(
         (a) => a.positionTitle && candidates.has(a.positionTitle.trim().toUpperCase()),
       ).length;

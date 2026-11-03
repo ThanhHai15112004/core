@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import {
+  EXPORT_FORMAT,
   type ExportCompletionNotification,
   type ExportFormat,
   type ExportHistoryQueryFilter,
@@ -8,11 +9,13 @@ import {
   type ExportJobStatus,
   type ExportProgressSnapshot,
   type ExportQueueWorkerExecutor,
+  type FormattedTemporaryExportDownload,
   type IPdfExportAdapter,
   type TemporaryExportArtifact,
   type TemporaryExportArtifactSummary,
   resolveExportContentType,
 } from '../contracts/export.contract.js';
+import { NotFoundAppException } from '../errors/not-found.exception.js';
 import { SimpleTabularPdfAdapter } from '../utils/export-engine.util.js';
 
 const DEFAULT_EXPORT_FILE_TTL_SECONDS = 3_600; // 1 giờ
@@ -438,6 +441,48 @@ export class ExportRegistryService {
     return {
       ...summary,
       isExpired: false,
+    };
+  }
+
+  /**
+   * 8.3.5 & 8.3.8 — Tải xuống và định dạng chuẩn file Export/Báo cáo tạm thời theo `token`.
+   * Tự động thu hồi nếu file đã quá hạn và ném `NotFoundAppException` với khóa lỗi chuẩn.
+   */
+  public formatTemporaryArtifactDownload(
+    token: string,
+    options?: {
+      readonly now?: Date | undefined;
+      readonly expectedProfileCode?: string | undefined;
+      readonly expiredErrorKey?: string | undefined;
+    },
+  ): FormattedTemporaryExportDownload {
+    const now = options?.now ?? new Date();
+    const expiredErrorKey = options?.expiredErrorKey ?? 'users.exportFileExpiredOrNotFound';
+    const artifact = this.getTemporaryArtifactByToken(token, now);
+    if (!artifact) {
+      throw new NotFoundAppException(expiredErrorKey);
+    }
+
+    if (
+      options?.expectedProfileCode?.trim() &&
+      artifact.profileCode !== options.expectedProfileCode.trim().toLowerCase()
+    ) {
+      throw new NotFoundAppException(expiredErrorKey);
+    }
+
+    return {
+      token: artifact.token,
+      downloadUrl: artifact.downloadUrl,
+      fileName: artifact.fileName,
+      contentType: artifact.contentType,
+      format: artifact.format,
+      totalExported: artifact.totalExported,
+      sizeBytes: artifact.sizeBytes,
+      createdAt: artifact.createdAt,
+      expiresAt: artifact.expiresAt,
+      csvContent: artifact.format === EXPORT_FORMAT.CSV ? artifact.buffer.toString('utf8') : '',
+      xlsxBase64: artifact.format === EXPORT_FORMAT.XLSX ? artifact.buffer.toString('base64') : '',
+      pdfBase64: artifact.format === EXPORT_FORMAT.PDF ? artifact.buffer.toString('base64') : '',
     };
   }
 

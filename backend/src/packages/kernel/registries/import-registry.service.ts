@@ -290,6 +290,14 @@ export class ImportRegistryService {
     return updatedRecord;
   }
 
+  /** Alias tương thích cho `updateImportHistory` */
+  public updateImportProgress(
+    idOrJobId: number | string,
+    update: UpdateImportHistoryProgressInput,
+  ): ImportHistoryRecord | null {
+    return this.updateImportHistory(idOrJobId, update);
+  }
+
   /** Lấy tiến độ thực thi Import theo `jobId` hoặc `historyId` (Mục 8.2.8) */
   public getProgress(jobIdOrHistoryId: string | number): ImportProgressSnapshot | null {
     const key = String(jobIdOrHistoryId).trim();

@@ -208,6 +208,11 @@ export class UserReportService {
           bypassPermissionCheck: effectiveActor === undefined || effectiveMode === 'SCHEDULED',
         });
       },
+      runReport: async (request: Readonly<Record<string, unknown>>, actor?: unknown) =>
+        (await this.runReport(
+          request as Partial<RunUserReportRequest>,
+          actor as UserIdentity | undefined,
+        )) as unknown as Readonly<Record<string, unknown>>,
     };
 
     this.reportRegistry.registerWorkerExecutor(reportExecutor);
@@ -757,28 +762,12 @@ export class UserReportService {
     readonly xlsxBase64?: string;
     readonly pdfBase64?: string;
   } {
-    const artifact = this.exportRegistry.getTemporaryArtifactByToken(token, now);
-    if (!artifact || artifact.profileCode !== USERS_REPORT_PROFILE_CODE) {
-      this.reportRegistry.purgeExpiredReportArtifacts(now);
-      throw new NotFoundAppException('users.reportFileExpired', { token });
-    }
-
-    return {
-      token: artifact.token,
-      downloadUrl: artifact.downloadUrl,
-      fileName: artifact.fileName,
-      contentType: artifact.contentType,
-      format: artifact.format,
-      totalExported: artifact.totalExported,
-      sizeBytes: artifact.sizeBytes,
-      createdAt: artifact.createdAt,
-      expiresAt: artifact.expiresAt,
-      ...(artifact.format === 'csv'
-        ? { csvContent: artifact.buffer.toString('utf8') }
-        : artifact.format === 'xlsx'
-          ? { xlsxBase64: artifact.buffer.toString('base64') }
-          : { pdfBase64: artifact.buffer.toString('base64') }),
-    };
+    this.reportRegistry.purgeExpiredReportArtifacts(now);
+    return this.exportRegistry.formatTemporaryArtifactDownload(token, {
+      now,
+      expectedProfileCode: USERS_REPORT_PROFILE_CODE,
+      expiredErrorKey: 'users.reportFileExpired',
+    });
   }
 
   private extractNormalizedParameters(

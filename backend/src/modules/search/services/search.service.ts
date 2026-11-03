@@ -42,6 +42,58 @@ export class SearchService implements ISearchPublicService {
     @Optional() private readonly userSearchService?: UserSearchService,
   ) {
     this.searchRegistry = searchRegistry ?? defaultSearchRegistry;
+    this.ensureInjectedSearchAdaptersRegistered();
+  }
+
+  private ensureInjectedSearchAdaptersRegistered(): void {
+    this.userSearchService?.ensureModuleSearchEntitiesRegistered?.();
+    this.searchRegistry.syncFromManifests();
+
+    if (this.userSearchService && !this.searchRegistry.resolveWorkerExecutor({ module: 'users' })) {
+      this.searchRegistry.registerWorkerExecutor({
+        module: 'users',
+        entityCode: 'users.account',
+        syncTopic: 'users.search_sync',
+        rebuildTopic: 'users.search_rebuild',
+        executeSearchJob: async (input) => {
+          const effectiveActor = input.actor as UserIdentity | undefined;
+          if (input.operation === 'search_rebuild') {
+            return this.userSearchService!.rebuildSearchIndex(
+              {
+                ...(input.module ? { module: input.module } : {}),
+                ...(input.entityType ? { entityType: input.entityType } : {}),
+                ...(input.entityCode ? { entityCode: input.entityCode } : {}),
+              },
+              effectiveActor,
+            );
+          }
+          const numericUserIds = Array.isArray(input.documentIds)
+            ? input.documentIds
+                .map((id) => Number(id))
+                .filter((id) => Number.isInteger(id) && id > 0)
+            : undefined;
+          return this.userSearchService!.syncUsersToSearchIndex(
+            {
+              ...(numericUserIds && numericUserIds.length > 0 ? { userIds: numericUserIds } : {}),
+            },
+            effectiveActor,
+          );
+        },
+        search: async (query, actor, options) =>
+          this.userSearchService!.searchUsers(query, actor as UserIdentity | undefined, options),
+        loadDocuments: async (documentIds) => {
+          if (typeof this.userSearchService!.loadUserSearchDocuments !== 'function') {
+            return [];
+          }
+          const numericUserIds = Array.isArray(documentIds)
+            ? documentIds.map((id) => Number(id)).filter((id) => Number.isInteger(id) && id > 0)
+            : undefined;
+          return this.userSearchService!.loadUserSearchDocuments(
+            numericUserIds && numericUserIds.length > 0 ? numericUserIds : undefined,
+          );
+        },
+      });
+    }
   }
 
   /** 8.5.3 — Đăng ký hoặc thay thế client Elasticsearch / OpenSearch tùy chọn lúc runtime */
@@ -51,8 +103,7 @@ export class SearchService implements ISearchPublicService {
 
   /** 8.5.1 — Danh sách các thực thể được phép tìm kiếm đã đăng ký theo module */
   public listSearchableEntities(query?: ListSearchableEntitiesQuery): RegisteredSearchableEntity[] {
-    this.userSearchService?.ensureModuleSearchEntitiesRegistered();
-    this.searchRegistry.syncFromManifests();
+    this.ensureInjectedSearchAdaptersRegistered();
 
     return this.searchRegistry.listSearchableEntities({
       ...(query?.module ? { module: query.module } : {}),
@@ -69,8 +120,7 @@ export class SearchService implements ISearchPublicService {
     readonly indexedCount: number;
     readonly history: SearchSyncHistoryRecord;
   }> {
-    this.userSearchService?.ensureModuleSearchEntitiesRegistered();
-    this.searchRegistry.syncFromManifests();
+    this.ensureInjectedSearchAdaptersRegistered();
 
     const synced = await this.searchRegistry.syncDocuments(documents, {
       actorId: actorId ?? null,
@@ -120,7 +170,7 @@ export class SearchService implements ISearchPublicService {
   }
 
   /**
-   * 8.5.1, 8.5.2, 8.5.3, 8.5.6, 8.5.7 & 8.5.8 — Tìm kiếm toàn hệ thống qua Search Provider dùng chung,
+   * 8.5.1, 8.5.2, 8.5.3, 8.5.6, 8.5.7 & 8.5.8 — Tìm kiếm toàn hệ thống qua `SearchRegistryService`,
    * áp dụng quyền & Data Scope, theo dõi độ trễ Index và lưu thống kê từ khóa 0 kết quả vào DB.
    */
   public async searchGlobal(
@@ -131,12 +181,39 @@ export class SearchService implements ISearchPublicService {
       readonly scopeOverride?: SearchActorScopeContext | undefined;
     },
   ): Promise<SearchQueryResult> {
-    this.userSearchService?.ensureModuleSearchEntitiesRegistered();
-    this.searchRegistry.syncFromManifests();
+    this.ensureInjectedSearchAdaptersRegistered();
 
-    const result = this.userSearchService
-      ? await this.userSearchService.searchUsers(query, actor, options)
-      : await this.searchRegistry.search(query, options?.scopeOverride);
+    const targetModule = query.module ?? query.entityCode?.split('.')[0] ?? 'users';
+    const executor =
+      this.searchRegistry.resolveWorkerExecutor({
+        module: targetModule,
+        entityCode: query.entityCode,
+      }) ??
+      defaultSearchRegistry.resolveWorkerExecutor({
+        module: targetModule,
+        entityCode: query.entityCode,
+      });
+
+    const result =
+      executor && typeof executor.search === 'function'
+        ? await executor.search(query, actor, options)
+        : await this.searchRegistry.search(
+            query,
+            options?.scopeOverride ??
+              (actor
+                ? {
+                    actorId: actor.id,
+                    permissions: actor.permissions ?? [],
+                    roles: actor.roles ?? [],
+                    ...(actor.organizationUnitIds && actor.organizationUnitIds.length > 0
+                      ? {
+                          organizationUnitId: actor.organizationUnitIds[0],
+                          allowedOrganizationUnitIds: actor.organizationUnitIds,
+                        }
+                      : {}),
+                  }
+                : undefined),
+          );
 
     if (result.total === 0 && query.keyword.trim().length > 0) {
       const stats = this.searchRegistry.listZeroResultKeywords({ limit: 5 });
@@ -149,20 +226,28 @@ export class SearchService implements ISearchPublicService {
     return result;
   }
 
-  /** 8.5.4 — Đồng bộ dữ liệu sang Search Index (trực tiếp hoặc chạy bằng Queue `system.heavy`) */
+  /** 8.5.4 — Đồng bộ dữ liệu sang Search Index qua `SearchRegistryService` (trực tiếp hoặc chạy bằng Queue `system.heavy`) */
   public async syncSearchIndex(
     body?: SyncSearchIndexBody,
     actor?: UserIdentity,
   ): Promise<SearchSyncHistoryRecord> {
-    this.userSearchService?.ensureModuleSearchEntitiesRegistered();
-    this.searchRegistry.syncFromManifests();
+    this.ensureInjectedSearchAdaptersRegistered();
+    const executor =
+      this.searchRegistry.resolveWorkerExecutor({ module: 'users' }) ??
+      defaultSearchRegistry.resolveWorkerExecutor({ module: 'users' });
 
-    if (this.userSearchService) {
-      const history = await this.userSearchService.syncUsersToSearchIndex(body, actor);
+    if (executor) {
+      const history = await executor.executeSearchJob({
+        operation: 'search_sync',
+        ...(body?.userIds ? { documentIds: body.userIds } : {}),
+        ...(actor?.id !== undefined ? { actorId: actor.id } : {}),
+        actor,
+        jobId: `sync_${Date.now()}`,
+      });
       await this.persistSyncHistoryToDb(history);
 
-      if (body?.async !== true) {
-        const docs = await this.userSearchService.loadUserSearchDocuments(body?.userIds);
+      if (body?.async !== true && typeof executor.loadDocuments === 'function') {
+        const docs = await executor.loadDocuments(body?.userIds);
         await this.persistSearchDocumentsToDb(docs);
       }
 
@@ -177,16 +262,33 @@ export class SearchService implements ISearchPublicService {
     return synced.history;
   }
 
-  /** 8.5.5 — Tạo lại toàn bộ Search Index theo module hoặc loại dữ liệu (`entityType`) */
+  /** 8.5.5 — Tạo lại toàn bộ Search Index theo module hoặc loại dữ liệu (`entityType`) qua `SearchRegistryService` */
   public async rebuildSearchIndex(
     body?: RebuildSearchIndexBody,
     actor?: UserIdentity,
   ): Promise<SearchSyncHistoryRecord> {
-    this.userSearchService?.ensureModuleSearchEntitiesRegistered();
-    this.searchRegistry.syncFromManifests();
+    this.ensureInjectedSearchAdaptersRegistered();
+    const targetModule = body?.module ?? body?.entityCode?.split('.')[0] ?? 'users';
+    const executor =
+      this.searchRegistry.resolveWorkerExecutor({
+        module: targetModule,
+        entityCode: body?.entityCode,
+      }) ??
+      defaultSearchRegistry.resolveWorkerExecutor({
+        module: targetModule,
+        entityCode: body?.entityCode,
+      });
 
-    if (this.userSearchService) {
-      const history = await this.userSearchService.rebuildSearchIndex(body, actor);
+    if (executor) {
+      const history = await executor.executeSearchJob({
+        operation: 'search_rebuild',
+        ...(body?.module ? { module: body.module } : {}),
+        ...(body?.entityType ? { entityType: body.entityType } : {}),
+        ...(body?.entityCode ? { entityCode: body.entityCode } : {}),
+        ...(actor?.id !== undefined ? { actorId: actor.id } : {}),
+        actor,
+        jobId: `rebuild_${Date.now()}`,
+      });
       await this.persistSyncHistoryToDb(history);
 
       if (body?.async !== true) {
@@ -199,8 +301,10 @@ export class SearchService implements ISearchPublicService {
             })
             .catch(() => 0);
         }
-        const docs = await this.userSearchService.loadUserSearchDocuments();
-        await this.persistSearchDocumentsToDb(docs);
+        if (typeof executor.loadDocuments === 'function') {
+          const docs = await executor.loadDocuments();
+          await this.persistSearchDocumentsToDb(docs);
+        }
       }
       return history;
     }

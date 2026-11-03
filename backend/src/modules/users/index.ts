@@ -11,6 +11,7 @@ export * from './requests/users.requests.js';
 export * from './responses/users.response.js';
 export * from './mappers/users.mapper.js';
 export * from './services/users.service.js';
+export * from './helpers/user-crud-orchestrator.helper.js';
 export * from './import/index.js';
 export * from './export/index.js';
 export * from './reports/index.js';

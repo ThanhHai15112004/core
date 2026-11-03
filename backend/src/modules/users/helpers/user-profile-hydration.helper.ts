@@ -433,6 +433,22 @@ async function loadRoleLinks(userRoleRepository: UserRoleRepository, roleIds: re
   return [];
 }
 
+export async function fetchUsersByIdsBatch(
+  userRepository: UserRepository,
+  ids: readonly number[],
+  withDeleted = false,
+): Promise<UserEntity[]> {
+  const uniqueIds = [...new Set(ids.map(Number).filter((n) => Number.isFinite(n) && n >= 1))];
+  if (uniqueIds.length === 0) return [];
+  if (typeof userRepository.findByIdsWithArchived === 'function') {
+    return userRepository.findByIdsWithArchived(uniqueIds, withDeleted);
+  }
+  const rows = await Promise.all(
+    uniqueIds.map((uid) => userRepository.findByIdWithArchived(uid, withDeleted)),
+  );
+  return rows.filter((u): u is UserEntity => u !== null);
+}
+
 export async function countActiveUsersByRoleIds(params: {
   roleIds: readonly number[];
   userRoleRepository: UserRoleRepository;
@@ -447,14 +463,12 @@ export async function countActiveUsersByRoleIds(params: {
 
   const distinctUserIds = [...new Set(links.map((l) => Number(l.userId)))];
   const activeUserIds = new Set<number>();
-  await Promise.all(
-    distinctUserIds.map(async (uid) => {
-      const u = await userRepository.findByIdWithArchived(uid, false);
-      if (u && !u.deletedAt && !u.archivedAt && Number(u.status) !== USER_STATUS.ARCHIVED) {
-        activeUserIds.add(uid);
-      }
-    }),
-  );
+  const batchUsers = await fetchUsersByIdsBatch(userRepository, distinctUserIds, false);
+  for (const u of batchUsers) {
+    if (!u.deletedAt && !u.archivedAt && Number(u.status) !== USER_STATUS.ARCHIVED) {
+      activeUserIds.add(Number(u.id));
+    }
+  }
 
   const seenPairs = new Set<string>();
   for (const link of links) {
@@ -488,9 +502,11 @@ export async function listActiveUsersByRoleId(params: {
   }
 
   const userIds = [...assignedAtByUserId.keys()];
+  const batchUsers = await fetchUsersByIdsBatch(userRepository, userIds, false);
+  const userById = new Map(batchUsers.map((u) => [Number(u.id), u]));
   const users: UserEntity[] = [];
   for (const uid of userIds) {
-    const u = await userRepository.findByIdWithArchived(uid, false);
+    const u = userById.get(uid);
     if (u && !u.deletedAt && !u.archivedAt && Number(u.status) !== USER_STATUS.ARCHIVED) {
       users.push(u);
     }
@@ -533,9 +549,11 @@ export async function filterActiveUserIds(
     ...new Set(candidateIds.map(Number).filter((n) => Number.isFinite(n) && n >= 1)),
   ];
   if (uniqueIds.length === 0) return [];
+  const batchUsers = await fetchUsersByIdsBatch(userRepository, uniqueIds, false);
+  const userById = new Map(batchUsers.map((u) => [Number(u.id), u]));
   const activeIds: number[] = [];
   for (const uid of uniqueIds) {
-    const u = await userRepository.findByIdWithArchived(uid, false);
+    const u = userById.get(uid);
     if (u && !u.deletedAt && !u.archivedAt && Number(u.status) === USER_STATUS.ACTIVE) {
       activeIds.push(Number(u.id));
     }
@@ -586,9 +604,11 @@ export async function resolveUserNotificationContacts(params: {
   const uniqueIds = [...new Set(userIds.map(Number).filter((n) => Number.isFinite(n) && n >= 1))];
   if (uniqueIds.length === 0) return [];
 
+  const batchUsers = await fetchUsersByIdsBatch(userRepository, uniqueIds, false);
+  const userById = new Map(batchUsers.map((u) => [Number(u.id), u]));
   const users: UserEntity[] = [];
   for (const uid of uniqueIds) {
-    const u = await userRepository.findByIdWithArchived(uid, false);
+    const u = userById.get(uid);
     if (u && !u.deletedAt && !u.archivedAt) {
       users.push(u);
     }

@@ -1,20 +1,4 @@
-export const WORKFLOWS_ROUTES = {
-  ROOT: 'workflows',
-  DEFINITIONS: 'definitions',
-  DEFINITION_BY_ID: 'definitions/:id',
-  DEFINITION_NEW_VERSION: 'definitions/:id/new-version',
-  DEFINITION_STATES: 'definitions/:id/states',
-  DEFINITION_TRANSITIONS: 'definitions/:id/transitions',
-  INSTANCES: 'instances',
-  INSTANCE_BY_ID: 'instances/:id',
-  INSTANCE_START: 'instances/start',
-  INSTANCE_TRANSITION: 'instances/:id/transition',
-  INSTANCE_APPROVE: 'instances/:id/approve',
-  INSTANCE_DELEGATE: 'instances/:id/delegate',
-  INSTANCE_CANCEL: 'instances/:id/cancel',
-  INSTANCE_HISTORIES: 'instances/:id/histories',
-  SLA_SCAN_OVERDUE: 'sla/scan-overdue',
-} as const;
+export { WORKFLOWS_ROUTES } from '../routes/workflows.routes.js';
 
 export const WORKFLOW_DEFINITION_STATUS = {
   ACTIVE: 1,

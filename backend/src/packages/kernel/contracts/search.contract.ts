@@ -289,7 +289,7 @@ export interface SearchQueueWorkerExecutionInput {
 
 /**
  * Hợp đồng đăng ký bộ thực thi đồng bộ Search Index nền (`SearchQueueWorkerExecutor`) vào `SearchRegistryService`
- * giúp `HeavyJobProcessor` điều phối động cho mọi module mà không cần hardcode từng service.
+ * giúp `HeavyJobProcessor` và `SearchService` điều phối động cho mọi module mà không cần hardcode từng service.
  */
 export interface SearchQueueWorkerExecutor {
   readonly module: string;
@@ -297,6 +297,21 @@ export interface SearchQueueWorkerExecutor {
   readonly syncTopic?: string | undefined;
   readonly rebuildTopic?: string | undefined;
   executeSearchJob(input: SearchQueueWorkerExecutionInput): Promise<SearchSyncHistoryRecord>;
+  /** Tùy chọn xử lý tìm kiếm chuyên biệt theo module (tự động nạp/seed và áp dụng Data Scope của module) */
+  readonly search?:
+    | ((
+        query: SearchQueryInput,
+        actor?: unknown,
+        options?: {
+          readonly autoSeedFromDatabase?: boolean | undefined;
+          readonly scopeOverride?: SearchActorScopeContext | undefined;
+        },
+      ) => Promise<SearchQueryResult>)
+    | undefined;
+  /** Tùy chọn nạp danh sách tài liệu tìm kiếm theo danh sách ID cụ thể khi đồng bộ (`syncSearchIndex`) */
+  readonly loadDocuments?:
+    | ((documentIds?: readonly (number | string)[]) => Promise<readonly SearchDocumentInput[]>)
+    | undefined;
 }
 
 /**

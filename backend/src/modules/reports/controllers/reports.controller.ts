@@ -3,7 +3,7 @@ import { z } from 'zod';
 import {
   ApiDoc,
   ApiGroup,
-  RequirePermissions,
+  RequireAnyPermission,
   ValidatedBody,
   ValidatedParams,
   ValidatedQuery,
@@ -44,7 +44,7 @@ export class ReportsController {
 
   /** Danh sách các báo cáo & dashboard đã đăng ký theo module (Mục 8.4.1 & 8.4.3 — dùng quyền riêng `*.report`) */
   @Get(REPORTS_ROUTES.ROOT)
-  @RequirePermissions('users.report')
+  @RequireAnyPermission('reports.read', 'reports.execute', 'reports.manage', 'users.report')
   @ApiDoc({
     summary:
       'Lấy danh sách các báo cáo & dashboard đã đăng ký của các module (phân quyền riêng *.report)',
@@ -57,7 +57,7 @@ export class ReportsController {
   /** Thực thi báo cáo / dashboard (Mục 8.4.2, 8.4.3, 8.4.4, 8.4.6, 8.4.7, 8.4.8, 8.4.9) */
   @Post(REPORTS_ROUTES.RUN)
   @HttpCode(HttpStatus.OK)
-  @RequirePermissions('users.report')
+  @RequireAnyPermission('reports.execute', 'reports.read', 'reports.manage', 'users.report')
   @ApiDoc({
     summary:
       'Chạy báo cáo / dashboard (hỗ trợ lọc khoảng ngày/trạng thái/đơn vị, Queue cho báo cáo nặng, Read Replica, Cache & file tạm)',
@@ -73,7 +73,7 @@ export class ReportsController {
   /** Lên lịch gửi báo cáo định kỳ theo ngày, tuần hoặc tháng (Mục 8.4.5 & 8.4.6) */
   @Post(REPORTS_ROUTES.SCHEDULES)
   @HttpCode(HttpStatus.OK)
-  @RequirePermissions('users.report')
+  @RequireAnyPermission('reports.schedule', 'reports.manage', 'reports.execute', 'users.report')
   @ApiDoc({
     summary: 'Lên lịch gửi báo cáo định kỳ theo ngày (DAILY), tuần (WEEKLY) hoặc tháng (MONTHLY)',
     response: reportScheduleItemResponseSchema,
@@ -87,7 +87,13 @@ export class ReportsController {
 
   /** Xem danh sách lịch gửi báo cáo định kỳ từ bảng `report_schedules` (Mục 8.4.5) */
   @Get(REPORTS_ROUTES.SCHEDULES)
-  @RequirePermissions('users.report')
+  @RequireAnyPermission(
+    'reports.read',
+    'reports.schedule',
+    'reports.manage',
+    'reports.execute',
+    'users.report',
+  )
   @ApiDoc({
     summary: 'Xem danh sách lịch gửi báo cáo định kỳ (DAILY / WEEKLY / MONTHLY)',
     response: z.array(reportScheduleItemResponseSchema),
@@ -100,7 +106,13 @@ export class ReportsController {
 
   /** Xem chi tiết một lịch gửi báo cáo định kỳ theo ID (Mục 8.4.5) */
   @Get(REPORTS_ROUTES.SCHEDULE_BY_ID)
-  @RequirePermissions('users.report')
+  @RequireAnyPermission(
+    'reports.read',
+    'reports.schedule',
+    'reports.manage',
+    'reports.execute',
+    'users.report',
+  )
   @ApiDoc({
     summary: 'Xem chi tiết lịch gửi báo cáo định kỳ theo ID',
     response: reportScheduleItemResponseSchema,
@@ -113,7 +125,7 @@ export class ReportsController {
 
   /** Cập nhật lịch gửi báo cáo định kỳ theo ID (Mục 8.4.5) */
   @Patch(REPORTS_ROUTES.SCHEDULE_BY_ID)
-  @RequirePermissions('users.report')
+  @RequireAnyPermission('reports.schedule', 'reports.manage', 'reports.execute', 'users.report')
   @ApiDoc({
     summary: 'Cập nhật lịch gửi báo cáo định kỳ (tần suất, giờ chạy, người nhận, trạng thái...)',
     response: reportScheduleItemResponseSchema,
@@ -127,7 +139,7 @@ export class ReportsController {
 
   /** Xóa lịch gửi báo cáo định kỳ theo ID (Mục 8.4.5) */
   @Delete(REPORTS_ROUTES.SCHEDULE_BY_ID)
-  @RequirePermissions('users.report')
+  @RequireAnyPermission('reports.schedule', 'reports.manage', 'reports.execute', 'users.report')
   @ApiDoc({
     summary: 'Xóa lịch gửi báo cáo định kỳ theo ID',
   })
@@ -140,7 +152,7 @@ export class ReportsController {
   /** Kích hoạt chạy các lịch gửi báo cáo đã đến hạn (Mục 8.4.5 & 8.4.6) */
   @Post(REPORTS_ROUTES.SCHEDULES_TRIGGER_DUE)
   @HttpCode(HttpStatus.OK)
-  @RequirePermissions('users.report')
+  @RequireAnyPermission('reports.schedule', 'reports.manage', 'reports.execute', 'users.report')
   @ApiDoc({
     summary:
       'Kích hoạt thực thi các lịch báo cáo đã đến hạn kèm gửi Email / thông báo chứa file tạm',
@@ -151,7 +163,7 @@ export class ReportsController {
 
   /** Xem danh sách lịch sử chạy báo cáo từ bảng `report_histories` (Thời gian, người chạy và kết quả — Mục 8.4.7) */
   @Get(REPORTS_ROUTES.HISTORIES)
-  @RequirePermissions('users.report')
+  @RequireAnyPermission('reports.read', 'reports.execute', 'reports.manage', 'users.report')
   @ApiDoc({
     summary: 'Xem danh sách lịch sử chạy báo cáo (Thời gian, người chạy, nguồn đọc và kết quả)',
     response: z.array(reportHistoryItemResponseSchema),
@@ -164,7 +176,7 @@ export class ReportsController {
 
   /** Xem chi tiết một bản ghi lịch sử chạy báo cáo theo ID (Mục 8.4.7) */
   @Get(REPORTS_ROUTES.HISTORY_BY_ID)
-  @RequirePermissions('users.report')
+  @RequireAnyPermission('reports.read', 'reports.execute', 'reports.manage', 'users.report')
   @ApiDoc({
     summary: 'Xem chi tiết bản ghi lịch sử chạy báo cáo theo ID',
     response: reportHistoryItemResponseSchema,
@@ -177,7 +189,7 @@ export class ReportsController {
 
   /** Xóa một bản ghi lịch sử chạy báo cáo theo ID (Mục 8.4.7) */
   @Delete(REPORTS_ROUTES.HISTORY_BY_ID)
-  @RequirePermissions('users.report')
+  @RequireAnyPermission('reports.manage', 'reports.execute', 'users.report')
   @ApiDoc({
     summary: 'Xóa bản ghi lịch sử chạy báo cáo theo ID',
   })
@@ -189,7 +201,7 @@ export class ReportsController {
 
   /** Tải xuống file báo cáo tạm thời qua token (tự động chặn khi file đã hết hạn — Mục 8.4.6) */
   @Get(REPORTS_ROUTES.DOWNLOAD_BY_TOKEN)
-  @RequirePermissions('users.report')
+  @RequireAnyPermission('reports.read', 'reports.execute', 'reports.manage', 'users.report')
   @ApiDoc({
     summary: 'Tải file báo cáo tạm thời theo token (tự động hết hạn theo TTL cấu hình)',
     response: reportTemporaryDownloadResponseSchema,

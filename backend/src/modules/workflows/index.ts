@@ -1,6 +1,7 @@
 export { WorkflowsModule } from './workflows.module.js';
 export { WorkflowsService } from './services/workflows.service.js';
 export * from './contracts/index.js';
+export * from './routes/workflows.routes.js';
 export * from './enum/workflows.enum.js';
 export * from './types/workflows.types.js';
 export * from './helpers/workflow-condition-evaluator.helper.js';
@@ -8,3 +9,5 @@ export * from './helpers/workflow-action-dispatcher.helper.js';
 export * from './helpers/workflow-approver-resolver.helper.js';
 export * from './helpers/workflow-sla-scanner.helper.js';
 export * from './helpers/workflow-hydration.helper.js';
+export * from './helpers/workflow-definition-crud.helper.js';
+export * from './helpers/workflow-instance-execution.helper.js';

@@ -272,28 +272,54 @@ export interface ExportQueueWorkerExecutionInput {
   readonly jobId: string;
 }
 
+/** Kết quả chuẩn hóa khi tải xuống một file tạm thời (Export / Báo cáo) theo token (Mục 8.3.5 & 8.3.8) */
+export interface FormattedTemporaryExportDownload {
+  readonly token: string;
+  readonly downloadUrl: string;
+  readonly fileName: string;
+  readonly contentType: string;
+  readonly format: ExportFormat;
+  readonly totalExported: number;
+  readonly sizeBytes: number;
+  readonly createdAt: string;
+  readonly expiresAt: string;
+  readonly csvContent: string;
+  readonly xlsxBase64: string;
+  readonly pdfBase64: string;
+}
+
 /**
  * Kết quả trả về sau khi Worker thực thi tác vụ Export lớn (Mục 8.3.4 & 8.3.5).
  */
 export interface ExportQueueWorkerExecutionResult {
   readonly fileName: string;
+  readonly contentType?: string | undefined;
   readonly format: ExportFormat | string;
   readonly totalExported: number;
+  readonly maxRowsAllowed?: number | undefined;
+  readonly appliedLimitPolicy?: 'default' | 'setting' | 'role' | 'permission' | undefined;
+  readonly status?: ExportJobStatus | undefined;
+  readonly jobId?: string | null | undefined;
   readonly historyId?: number | null | undefined;
   readonly downloadToken?: string | null | undefined;
   readonly downloadUrl?: string | null | undefined;
   readonly expiresAt?: string | null | undefined;
   readonly notifiedAt?: string | null | undefined;
+  readonly csvContent?: string | undefined;
+  readonly xlsxBase64?: string | undefined;
+  readonly pdfBase64?: string | undefined;
 }
 
 /**
  * Hợp đồng đăng ký bộ thực thi Export nền (`ExportQueueWorkerExecutor`) vào `ExportRegistryService`
- * giúp `HeavyJobProcessor` điều phối động cho mọi module mà không cần hardcode từng service.
+ * giúp `HeavyJobProcessor` và `ExportsService` điều phối động cho mọi module mà không cần hardcode từng service.
  */
 export interface ExportQueueWorkerExecutor {
   readonly profileCode: string;
   readonly module: string;
   readonly topic?: string | undefined;
+  /** Quyền nghiệp vụ tương ứng của module (ví dụ: `'users.export'`, `'organizations.read'`, `'codes.read'`) */
+  readonly requiredPermission?: string | undefined;
   executeExport(input: ExportQueueWorkerExecutionInput): Promise<ExportQueueWorkerExecutionResult>;
 }
 

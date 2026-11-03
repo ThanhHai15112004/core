@@ -9,7 +9,6 @@ import {
   resolvePagination,
 } from '@packages/kernel/index.js';
 import { createPaginatedResult } from '@packages/http/index.js';
-import { resolveSystemDefaultLocale, resolveSystemDefaultTimezone } from '@packages/i18n/index.js';
 import { TransactionManager } from '@packages/database/index.js';
 import {
   AuditLogService,
@@ -20,7 +19,6 @@ import {
   type ResolvedDataScopeFilter,
   type UserIdentity,
   createDefaultDataScopeService,
-  parseDataScope,
 } from '@packages/security/index.js';
 import { RedisService } from '@packages/redis/index.js';
 import {
@@ -29,7 +27,6 @@ import {
 } from '@modules/organizations/contracts/index.js';
 import {
   type IRolesPublicService,
-  ROLE_STATUS,
   ROLES_PUBLIC_SERVICE,
   type RoleAssignedUserSummary,
 } from '@modules/roles/contracts/index.js';
@@ -42,7 +39,6 @@ import {
   type SelfRegisterUserInput,
   USER_IDENTITY_CACHE_PREFIX,
   USER_STATUS,
-  USERS_AUDIT_META,
   USERS_SETTING_KEYS,
   type UpdateUserPreferencesInput,
   type UserAuthCredentialsView,
@@ -54,17 +50,20 @@ import {
   type UserProfileView,
   type UserStatusCode,
   type UserSubordinateSummaryView,
-  getUserStatusName,
   normalizePhoneNumber,
-  parseUserStatus,
-  resolveVietnameseNameParts,
 } from '../contracts/index.js';
 import type { UserStatusTransitionAction } from '../types/users.types.js';
 import {
   normalizePreferredLocaleOrThrow,
   normalizePreferredTimezoneOrThrow,
-  registerUsersUsageCheckers,
 } from '../helpers/user-normalizer.helper.js';
+import {
+  executeCreateUserRecordFlow,
+  executeGetStatusHistoryFlow,
+  executeUpdateUserRecordFlow,
+  registerUsersCrossModuleDelegates,
+  syncUserSearchDocumentSafe,
+} from '../helpers/user-crud-orchestrator.helper.js';
 import {
   countActiveUsersByRoleIds,
   filterActiveUserIds,
@@ -73,8 +72,6 @@ import {
   resolveActiveUserIdsByOrganizationUnitIds,
   resolveActiveUserIdsByRoleIds,
   resolveUserNotificationContacts,
-  validateAndApplyUserUpdateFields,
-  validateAndPrepareCreateUserContext,
 } from '../helpers/user-profile-hydration.helper.js';
 import {
   executeAssignUserOrganizationsFlow,
@@ -191,64 +188,18 @@ export class UsersService implements IUsersPublicService {
     private readonly orgHistoryRepository: UserOrganizationHistoryRepository | null = null,
   ) {
     this.effectiveDataScopeService = this.dataScopeService ?? createDefaultDataScopeService();
-
-    this.rolesPublicService.registerRoleUserCountDelegate?.((roleIds) =>
-      this.countUsersByRoleIds(roleIds),
-    );
-    this.rolesPublicService.registerRoleUsersListDelegate?.((roleId) =>
-      this.listUsersByRoleId(roleId),
-    );
-
-    this.effectiveDataScopeService.registerSubordinateResolver((managerId) =>
-      this.resolveSubordinateUserIds(managerId),
-    );
-    if (this.organizationsPublicService?.resolveDescendantUnitIds) {
-      this.effectiveDataScopeService.registerOrgHierarchyResolver((unitIds) =>
-        this.organizationsPublicService!.resolveDescendantUnitIds!(unitIds),
-      );
-    }
-    this.organizationsPublicService?.registerUnitUsageCountDelegate?.(async (unitId) => {
-      const { total } = await this.userRepository.searchPaginated({
-        organizationUnitId: unitId,
-        includeArchived: false,
-        page: 1,
-        limit: 1,
-      });
-      return total;
-    });
-    this.organizationsPublicService?.registerUnitManagerResolverDelegate?.(
-      async ({ userIds, identifiers }) => {
-        const targetIds = new Set<number>(
-          (userIds ?? []).map(Number).filter((id) => Number.isInteger(id) && id > 0),
-        );
-        if (identifiers && identifiers.length > 0) {
-          for (const ident of identifiers) {
-            const found = await this.findAuthUserByIdentifier(ident).catch(() => null);
-            if (found) targetIds.add(Number(found.id));
-          }
-        }
-        if (targetIds.size === 0) return [];
-        const contacts = await this.findUserContactsByIds([...targetIds]);
-        return contacts.map((c) => ({
-          id: Number(c.id),
-          username: c.username,
-          fullName: c.fullName,
-          email: c.email,
-          status: USER_STATUS.ACTIVE,
-        }));
-      },
-    );
-    this.effectiveDataScopeService.registerRoleScopeResolver(async (roleCodes) => {
-      const roles = await this.rolesPublicService.findByCodes(roleCodes);
-      return roles
-        .filter((r) => r.status === ROLE_STATUS.ACTIVE)
-        .map((r) => parseDataScope(r.dataScope));
-    });
-
-    registerUsersUsageCheckers({
+    registerUsersCrossModuleDelegates({
+      rolesPublicService: this.rolesPublicService,
+      organizationsPublicService: this.organizationsPublicService,
+      effectiveDataScopeService: this.effectiveDataScopeService,
       userRepository: this.userRepository,
       userProfileRepository: this.userProfileRepository,
       userOrgRepository: this.userOrgRepository,
+      countUsersByRoleIds: (rids) => this.countUsersByRoleIds(rids),
+      listUsersByRoleId: (rid) => this.listUsersByRoleId(rid),
+      resolveSubordinateUserIds: (mid) => this.resolveSubordinateUserIds(mid),
+      findAuthUserByIdentifier: (ident) => this.findAuthUserByIdentifier(ident),
+      findUserContactsByIds: (uids) => this.findUserContactsByIds(uids),
     });
   }
 
@@ -441,153 +392,31 @@ export class UsersService implements IUsersPublicService {
     actor?: UserIdentity,
   ): Promise<UserStatusHistoryItemResponse[]> {
     const userResp = await this.getById(userId, true, actor);
-    if (!this.statusHistoryRepository) {
-      return [];
-    }
-    const rows = await this.statusHistoryRepository.findByUserId(userResp.id);
-    return rows.map((r) => {
-      const fromCode =
-        r.fromStatus !== undefined && r.fromStatus !== null ? parseUserStatus(r.fromStatus) : null;
-      const toCode = parseUserStatus(r.toStatus);
-      return {
-        id: Number(r.id),
-        userId: Number(r.userId),
-        fromStatus: fromCode,
-        fromStatusName: fromCode !== null ? getUserStatusName(fromCode) : null,
-        toStatus: toCode,
-        toStatusName: getUserStatusName(toCode),
-        reason: r.reason ?? null,
-        changedBy: r.changedBy !== undefined && r.changedBy !== null ? Number(r.changedBy) : null,
-        createdAt: r.createdAt.toISOString(),
-      };
+    return executeGetStatusHistoryFlow({
+      userId: userResp.id,
+      statusHistoryRepository: this.statusHistoryRepository,
     });
   }
 
   public async create(dto: CreateUserRequest, actorId?: number): Promise<UserResponse> {
-    const { normalizedEmail, finalUsername, normalizedPhone, phoneHash, roleIds, orgInputs } =
-      await validateAndPrepareCreateUserContext({
-        dto,
-        userRepository: this.userRepository,
-        passwordHasher: this.passwordHasher,
-        rolesPublicService: this.rolesPublicService,
-        organizationsPublicService: this.organizationsPublicService,
-      });
-
-    const nameParts = resolveVietnameseNameParts({
-      firstName: dto.firstName,
-      lastName: dto.lastName,
-      fullName: dto.fullName,
+    return executeCreateUserRecordFlow({
+      dto,
+      actorId,
+      userRepository: this.userRepository,
+      userRoleRepository: this.userRoleRepository,
+      userOrgRepository: this.userOrgRepository,
+      orgHistoryRepository: this.orgHistoryRepository,
+      passwordHasher: this.passwordHasher,
+      rolesPublicService: this.rolesPublicService,
+      organizationsPublicService: this.organizationsPublicService,
+      transactionManager: this.transactionManager,
+      auditLogService: this.auditLogService,
+      encryptPhone: (p) => this.encryptPhone(p),
+      upsertUserProfile: (uid, d) => this.upsertUserProfile(uid, d),
+      recordStatusHistory: (uid, from, to, r, by) => this.recordStatusHistory(uid, from, to, r, by),
+      getById: (uid) => this.getById(uid),
+      syncUserSearchDocumentSafe: (u, aid) => this.syncUserSearchDocumentSafe(u, aid),
     });
-    const passwordHash = await this.passwordHasher.hash(dto.password);
-    const primaryOrgInput = orgInputs.find((o) => o.isPrimary) ?? orgInputs[0];
-    const initialStatus = dto.status ?? USER_STATUS.ACTIVE;
-    const encryptedPhone = this.encryptPhone(normalizedPhone ?? dto.phone);
-
-    const work = async (): Promise<UserEntity> => {
-      const savedUser = await this.userRepository.saveEntity({
-        username: finalUsername,
-        email: normalizedEmail,
-        phone: encryptedPhone,
-        phoneHash,
-        passwordHash,
-        status: initialStatus,
-        failedLoginAttempts: 0,
-        mfaEnabled: false,
-        primaryOrganizationUnitId: primaryOrgInput?.organizationUnitId ?? null,
-        managerId: dto.managerId ?? null,
-        temporaryManagerId: dto.temporaryManagerId ?? null,
-        temporaryManagerFrom:
-          dto.temporaryManagerId && dto.temporaryManagerFrom
-            ? new Date(dto.temporaryManagerFrom)
-            : dto.temporaryManagerId
-              ? new Date()
-              : null,
-        temporaryManagerUntil:
-          dto.temporaryManagerId && dto.temporaryManagerUntil
-            ? new Date(dto.temporaryManagerUntil)
-            : null,
-        passwordChangedAt: new Date(),
-      });
-
-      const userId = Number(savedUser.id);
-      const preferredLocale = normalizePreferredLocaleOrThrow(dto.preferredLocale);
-      const preferredTimezone = normalizePreferredTimezoneOrThrow(dto.preferredTimezone);
-      await this.upsertUserProfile(userId, {
-        firstName: nameParts.firstName,
-        lastName: nameParts.lastName,
-        fullName: nameParts.fullName,
-        avatarUrl: dto.avatarUrl ?? null,
-        dateOfBirth: dto.dateOfBirth ?? null,
-        gender: dto.gender ?? null,
-        identityNumber: dto.identityNumber ?? null,
-        address: dto.address ?? null,
-        city: dto.city ?? null,
-        country: dto.country ?? null,
-        bio: dto.bio ?? null,
-        preferredLocale,
-        preferredTimezone,
-      });
-
-      if (roleIds.length > 0) {
-        await this.userRoleRepository.replaceUserRoles(userId, roleIds, actorId);
-      }
-
-      if (orgInputs.length > 0) {
-        await this.userOrgRepository.replaceUserOrganizations(userId, orgInputs);
-        if (this.orgHistoryRepository) {
-          await this.orgHistoryRepository.recordHistories(
-            orgInputs.map((o) => ({
-              userId,
-              organizationUnitId: Number(o.organizationUnitId),
-              fromOrganizationUnitId: null,
-              actionType: 'ASSIGN' as const,
-              isPrimary: Boolean(o.isPrimary),
-              positionTitle: o.positionTitle ?? null,
-              startDate: o.startDate ? new Date(o.startDate) : new Date(),
-              endDate: o.endDate ? new Date(o.endDate) : null,
-              reason: 'Initial organization assignment',
-              changedBy: actorId ?? null,
-            })),
-          );
-        }
-      }
-
-      await this.recordStatusHistory(
-        userId,
-        null,
-        initialStatus,
-        'Initial account creation',
-        actorId,
-      );
-
-      return savedUser;
-    };
-
-    const created = this.transactionManager
-      ? await this.transactionManager.runInTransaction(work)
-      : await work();
-
-    const result = await this.getById(Number(created.id));
-    await this.auditLogService?.record({
-      actorUserId: actorId ?? null,
-      module: USERS_AUDIT_META.MODULE,
-      feature: USERS_AUDIT_META.FEATURES.MANAGEMENT,
-      action: 'user.create',
-      resourceType: USERS_AUDIT_META.RESOURCE_TYPES.USER,
-      resourceId: result.id,
-      beforeData: null,
-      afterData: {
-        id: result.id,
-        username: result.username,
-        email: result.email,
-        status: result.status,
-        roleCodes: result.roles.map((r) => r.code),
-        organizationUnitIds: result.organizationUnits.map((o) => o.organizationUnitId),
-      },
-      reason: 'Initial account creation',
-    });
-    await this.syncUserSearchDocumentSafe(result, actorId);
-    return result;
   }
 
   public async update(
@@ -596,114 +425,24 @@ export class UsersService implements IUsersPublicService {
     actorId?: number,
     actor?: UserIdentity,
   ): Promise<UserResponse> {
-    const user = await this.userRepository.findByIdWithArchived(id, true);
-    if (!user) {
-      throw new NotFoundAppException('users.notFound', { id });
-    }
-    if (actor) {
-      await this.ensureAccessUserEntity(user, actor, 'update');
-    }
-    const beforeSnapshot = {
-      id: user.id,
-      username: user.username,
-      email: user.email,
-      managerId: user.managerId ?? null,
-      temporaryManagerId: user.temporaryManagerId ?? null,
-      temporaryManagerFrom: user.temporaryManagerFrom ?? null,
-      temporaryManagerUntil: user.temporaryManagerUntil ?? null,
-      status: user.status,
-    };
-
-    const currentProfile = await this.getUserProfile(id, user);
-    const { nextFirstName, nextLastName, nextFullName } = await validateAndApplyUserUpdateFields({
+    return executeUpdateUserRecordFlow({
       id,
-      user,
       dto,
-      currentProfile,
+      actorId,
+      actor,
       userRepository: this.userRepository,
       passwordHasher: this.passwordHasher,
+      transactionManager: this.transactionManager,
+      auditLogService: this.auditLogService,
+      ensureAccessUserEntity: (u, act, action) => this.ensureAccessUserEntity(u, act, action),
+      getUserProfile: (uid, u) => this.getUserProfile(uid, u),
       encryptPhone: (p) => this.encryptPhone(p),
       resolveSubordinateUserIds: (mid) => this.resolveSubordinateUserIds(mid),
+      upsertUserProfile: (uid, d) => this.upsertUserProfile(uid, d),
+      invalidateIdentityCache: (uid) => this.invalidateIdentityCache(uid),
+      getById: (uid, inc) => this.getById(uid, inc),
+      syncUserSearchDocumentSafe: (u, aid) => this.syncUserSearchDocumentSafe(u, aid),
     });
-
-    const nextPreferredLocale =
-      dto.preferredLocale !== undefined
-        ? normalizePreferredLocaleOrThrow(dto.preferredLocale)
-        : (currentProfile.preferredLocale ?? resolveSystemDefaultLocale());
-    const nextPreferredTimezone =
-      dto.preferredTimezone !== undefined
-        ? normalizePreferredTimezoneOrThrow(dto.preferredTimezone)
-        : (currentProfile.preferredTimezone ?? resolveSystemDefaultTimezone());
-
-    const persistChanges = async (): Promise<void> => {
-      if (dto.expectedVersion !== undefined) {
-        await this.userRepository.updateWithOptimisticLock(id, dto.expectedVersion, {
-          email: user.email,
-          phone: user.phone ?? null,
-          phoneHash: user.phoneHash ?? null,
-          managerId: user.managerId ?? null,
-          temporaryManagerId: user.temporaryManagerId ?? null,
-          temporaryManagerFrom: user.temporaryManagerFrom ?? null,
-          temporaryManagerUntil: user.temporaryManagerUntil ?? null,
-        });
-      } else {
-        await this.userRepository.saveEntity(user);
-      }
-
-      await this.upsertUserProfile(id, {
-        firstName: nextFirstName,
-        lastName: nextLastName,
-        fullName: nextFullName,
-        avatarUrl: dto.avatarUrl !== undefined ? dto.avatarUrl : (currentProfile.avatarUrl ?? null),
-        dateOfBirth:
-          dto.dateOfBirth !== undefined ? dto.dateOfBirth : (currentProfile.dateOfBirth ?? null),
-        gender: dto.gender !== undefined ? dto.gender : (currentProfile.gender ?? null),
-        identityNumber:
-          dto.identityNumber !== undefined
-            ? dto.identityNumber
-            : (currentProfile.identityNumber ?? null),
-        address: dto.address !== undefined ? dto.address : (currentProfile.address ?? null),
-        city: dto.city !== undefined ? dto.city : (currentProfile.city ?? null),
-        country: dto.country !== undefined ? dto.country : (currentProfile.country ?? null),
-        bio: dto.bio !== undefined ? dto.bio : (currentProfile.bio ?? null),
-        preferredLocale: nextPreferredLocale,
-        preferredTimezone: nextPreferredTimezone,
-      });
-    };
-
-    if (this.transactionManager) {
-      await this.transactionManager.runInTransaction(persistChanges);
-    } else {
-      await persistChanges();
-    }
-
-    await this.invalidateIdentityCache(id);
-    const updated = await this.getById(id, true);
-    await this.auditLogService?.record({
-      actorUserId: actorId ?? actor?.id ?? null,
-      module: USERS_AUDIT_META.MODULE,
-      feature: USERS_AUDIT_META.FEATURES.MANAGEMENT,
-      action: 'user.update',
-      resourceType: USERS_AUDIT_META.RESOURCE_TYPES.USER,
-      resourceId: id,
-      beforeData: {
-        ...beforeSnapshot,
-        fullName: currentProfile.fullName,
-      },
-      afterData: {
-        id: updated.id,
-        username: updated.username,
-        email: updated.email,
-        managerId: updated.managerId,
-        temporaryManagerId: updated.temporaryManagerId,
-        temporaryManagerFrom: updated.temporaryManagerFrom,
-        temporaryManagerUntil: updated.temporaryManagerUntil,
-        status: updated.status,
-        fullName: updated.fullName,
-      },
-    });
-    await this.syncUserSearchDocumentSafe(updated, actorId ?? actor?.id);
-    return updated;
   }
 
   public async lockUser(
@@ -1256,60 +995,7 @@ export class UsersService implements IUsersPublicService {
   }
 
   private async syncUserSearchDocumentSafe(user: UserResponse, actorId?: number): Promise<void> {
-    try {
-      const primaryOrg =
-        user.organizationUnits?.find((u) => u.isPrimary) ?? user.organizationUnits?.[0];
-      const orgId = primaryOrg?.organizationUnitId ?? user.primaryOrganizationUnitId ?? null;
-      const roleCodes = (user.roles ?? []).map((r) => r.code);
-      await defaultSearchRegistry.syncDocuments(
-        [
-          {
-            id: user.id,
-            entityCode: 'users.account',
-            module: 'users',
-            entityType: 'user',
-            title: user.fullName || user.username,
-            subtitle: user.email,
-            keywords: [
-              user.username,
-              user.email,
-              ...(user.employeeCode ? [user.employeeCode] : []),
-              ...(user.phone ? [user.phone] : []),
-              ...roleCodes,
-            ],
-            searchableText: [
-              user.fullName,
-              user.username,
-              user.email,
-              user.employeeCode ?? '',
-              user.phone ?? '',
-              primaryOrg?.name ?? '',
-            ]
-              .filter(Boolean)
-              .join(' '),
-            ownerId: user.id,
-            organizationUnitId: orgId,
-            status: user.status,
-            metadata: {
-              username: user.username,
-              email: user.email,
-              employeeCode: user.employeeCode ?? null,
-              phone: user.phone ?? null,
-              roles: roleCodes,
-              organizationUnitId: orgId,
-            },
-            sourceUpdatedAt: user.updatedAt ?? user.createdAt,
-            indexedAt: new Date().toISOString(),
-          },
-        ],
-        {
-          actorId: actorId ?? null,
-          executionMode: 'SYNC',
-        },
-      );
-    } catch {
-      // Ignore search index sync errors during user CRUD
-    }
+    await syncUserSearchDocumentSafe(user, actorId);
   }
 
   public async setMfaEnabled(userId: number, enabled: boolean): Promise<void> {

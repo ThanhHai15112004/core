@@ -9,6 +9,7 @@ import type {
 } from '../contracts/index.js';
 import { USER_STATUS } from '../enum/users.enum.js';
 import { getUserStatusName, parseUserStatus } from './user-normalizer.helper.js';
+import { fetchUsersByIdsBatch } from './user-profile-hydration.helper.js';
 import type { UserProfileEntity } from '../entities/user-profile.entity.js';
 import type { UserEntity } from '../entities/user.entity.js';
 import type { UserOrganizationHistoryRepository } from '../repositories/user-organization-history.repository.js';
@@ -134,7 +135,7 @@ export async function resolveUserSubordinatesList(params: {
 
   const subIds = relations.map((r) => r.userId);
   const [users, profiles, orgLinks] = await Promise.all([
-    Promise.all(subIds.map((uid) => userRepository.findByIdWithArchived(uid, false))),
+    fetchUsersByIdsBatch(userRepository, subIds, false),
     findProfilesByUserIds(subIds),
     userOrgRepository.findByUserIds(subIds),
   ]);

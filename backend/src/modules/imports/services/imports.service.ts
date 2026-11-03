@@ -1,7 +1,8 @@
 import { Injectable, Optional } from '@nestjs/common';
-import { z } from 'zod';
 import {
   BadRequestAppException,
+  ForbiddenAppException,
+  HTTP_ERROR_CODE,
   ImportRegistryService,
   NotFoundAppException,
   SettingRegistryService,
@@ -18,19 +19,32 @@ import {
   safeJsonParseObject,
   validateImportRowsAndCells,
   type ImportCellIssue,
+  type ImportDuplicateStrategy,
   type ImportHistoryQueryFilter,
   type ImportHistoryRecord,
   type ImportPreviewResult,
   type ImportProfileHandler,
   type ImportProgressSnapshot,
+  type ImportTemplateFileResult,
 } from '@packages/kernel/index.js';
+import type { UserIdentity } from '@packages/security/index.js';
 import {
+  USER_IMPORT_COLUMNS,
   UserExportService,
   UserImportService,
+  bulkImportUserRowSchema,
   type BulkImportUsersRequest,
 } from '@modules/users/index.js';
-import { OrganizationsService } from '@modules/organizations/index.js';
-import { CodesService } from '@modules/codes/index.js';
+import {
+  ORGANIZATION_IMPORT_COLUMNS,
+  OrganizationsService,
+  bulkImportOrganizationRowSchema,
+} from '@modules/organizations/index.js';
+import {
+  CODES_IMPORT_COLUMNS,
+  CodesService,
+  bulkImportCodeValueRowSchema,
+} from '@modules/codes/index.js';
 import type { IImportsPublicService } from '../contracts/index.js';
 import type { ImportHistoryEntity } from '../entities/import-history.entity.js';
 import { ImportHistoryRepository } from '../repositories/import-history.repository.js';
@@ -62,63 +76,149 @@ export class ImportsService implements IImportsPublicService {
   }
 
   private ensureDefaultProfilesRegistered(): void {
-    if (!this.importRegistry.getProfile('organizations')) {
+    const existingUsers = this.importRegistry.getProfile('users');
+    if (
+      (!existingUsers || !existingUsers.executeImport || !existingUsers.exportTemplate) &&
+      (this.userImportService || this.userExportService)
+    ) {
+      this.importRegistry.registerProfile({
+        profileCode: 'users',
+        module: 'users',
+        columns: existingUsers?.columns ?? USER_IMPORT_COLUMNS,
+        rowSchema: existingUsers?.rowSchema ?? bulkImportUserRowSchema,
+        uniqueKeyFields: existingUsers?.uniqueKeyFields ?? ['email', 'username'],
+        requiredPermission: 'users.import',
+        ...(existingUsers?.findExistingDuplicates
+          ? { findExistingDuplicates: existingUsers.findExistingDuplicates }
+          : {}),
+        ...(this.userExportService
+          ? {
+              exportTemplate: (format: 'csv' | 'xlsx') =>
+                this.userExportService!.exportImportTemplate(format) as ImportTemplateFileResult,
+            }
+          : existingUsers?.exportTemplate
+            ? { exportTemplate: existingUsers.exportTemplate }
+            : {}),
+        ...(this.userImportService
+          ? {
+              previewImport: (dto) =>
+                this.userImportService!.previewImport({
+                  ...(dto.items
+                    ? { items: dto.items as unknown as BulkImportUsersRequest['items'] }
+                    : {}),
+                  ...(dto.csvContent ? { csvContent: dto.csvContent } : {}),
+                  ...(dto.xlsxBase64 ? { xlsxBase64: dto.xlsxBase64 } : {}),
+                  ...(dto.columnMapping ? { columnMapping: dto.columnMapping } : {}),
+                  ...(dto.duplicateStrategy ? { duplicateStrategy: dto.duplicateStrategy } : {}),
+                  skipDuplicates: dto.skipDuplicates ?? true,
+                  previewLimit: dto.previewLimit ?? 20,
+                }),
+              executeImport: async (dto, actorId) =>
+                (await this.userImportService!.bulkImport(
+                  {
+                    ...(dto['items']
+                      ? { items: dto['items'] as unknown as BulkImportUsersRequest['items'] }
+                      : {}),
+                    ...(typeof dto['csvContent'] === 'string'
+                      ? { csvContent: dto['csvContent'] }
+                      : {}),
+                    ...(typeof dto['xlsxBase64'] === 'string'
+                      ? { xlsxBase64: dto['xlsxBase64'] }
+                      : {}),
+                    ...(typeof dto['fileName'] === 'string' ? { fileName: dto['fileName'] } : {}),
+                    ...(dto['columnMapping']
+                      ? {
+                          columnMapping: dto['columnMapping'] as Record<
+                            string,
+                            string | number | null
+                          >,
+                        }
+                      : {}),
+                    ...(typeof dto['duplicateStrategy'] === 'string'
+                      ? {
+                          duplicateStrategy: dto['duplicateStrategy'] as ImportDuplicateStrategy,
+                        }
+                      : {}),
+                    skipDuplicates:
+                      typeof dto['skipDuplicates'] === 'boolean' ? dto['skipDuplicates'] : true,
+                    ...(typeof dto['defaultPassword'] === 'string'
+                      ? { defaultPassword: dto['defaultPassword'] }
+                      : {}),
+                    async: dto['async'] === true,
+                  },
+                  actorId,
+                )) as unknown as Readonly<Record<string, unknown>>,
+            }
+          : {}),
+      });
+    }
+
+    const existingOrgs = this.importRegistry.getProfile('organizations');
+    if (!existingOrgs || (this.organizationsService && !existingOrgs.executeImport)) {
       this.importRegistry.registerProfile({
         profileCode: 'organizations',
         module: 'organizations',
         uniqueKeyFields: ['code'],
-        columns: [
-          { field: 'code', header: 'Mã đơn vị', required: true, aliases: ['code', 'ma_don_vi'] },
-          { field: 'name', header: 'Tên đơn vị', required: true, aliases: ['name', 'ten_don_vi'] },
-          {
-            field: 'type',
-            header: 'Loại đơn vị',
-            required: false,
-            aliases: ['type', 'loai_don_vi'],
-          },
-          {
-            field: 'parentCode',
-            header: 'Mã đơn vị cha',
-            required: false,
-            aliases: ['parent_code', 'ma_cha'],
-          },
-        ],
-        rowSchema: z.object({
-          code: z.string().trim().min(1),
-          name: z.string().trim().min(1),
-          type: z.union([z.string(), z.number()]).optional(),
-          parentCode: z.string().optional(),
-        }),
+        requiredPermission: 'organizations.manage',
+        columns: ORGANIZATION_IMPORT_COLUMNS,
+        rowSchema: bulkImportOrganizationRowSchema,
+        ...(this.organizationsService
+          ? {
+              exportTemplate: (format: 'csv' | 'xlsx') =>
+                this.organizationsService!.exportImportTemplate(format),
+              executeImport: async (dto, actorId) =>
+                (await this.organizationsService!.bulkImportUnits(
+                  {
+                    ...(dto['items'] ? { items: dto['items'] as never } : {}),
+                    ...(typeof dto['csvContent'] === 'string'
+                      ? { csvContent: dto['csvContent'] }
+                      : {}),
+                    ...(typeof dto['xlsxBase64'] === 'string'
+                      ? { xlsxBase64: dto['xlsxBase64'] }
+                      : {}),
+                    skipDuplicates:
+                      typeof dto['skipDuplicates'] === 'boolean' ? dto['skipDuplicates'] : true,
+                  },
+                  actorId,
+                  { skipHistoryRecord: true },
+                )) as unknown as Readonly<Record<string, unknown>>,
+            }
+          : {}),
       });
     }
 
-    if (!this.importRegistry.getProfile('codes')) {
+    const existingCodes = this.importRegistry.getProfile('codes');
+    if (!existingCodes || (this.codesService && !existingCodes.executeImport)) {
       this.importRegistry.registerProfile({
         profileCode: 'codes',
         module: 'codes',
-        uniqueKeyFields: ['typeCode', 'code'],
-        columns: [
-          {
-            field: 'typeCode',
-            header: 'Nhóm danh mục',
-            required: true,
-            aliases: ['type_code', 'nhom'],
-          },
-          {
-            field: 'numericCode',
-            header: 'Mã số',
-            required: true,
-            aliases: ['numeric_code', 'ma_so'],
-          },
-          { field: 'code', header: 'Mã định danh', required: true, aliases: ['code', 'ma_code'] },
-          { field: 'name', header: 'Tên hiển thị', required: true, aliases: ['name', 'ten'] },
-        ],
-        rowSchema: z.object({
-          typeCode: z.string().trim().min(1),
-          numericCode: z.coerce.number().int(),
-          code: z.string().trim().min(1),
-          name: z.string().trim().min(1),
-        }),
+        uniqueKeyFields: ['code'],
+        requiredPermission: 'codes.manage',
+        columns: CODES_IMPORT_COLUMNS,
+        rowSchema: bulkImportCodeValueRowSchema,
+        ...(this.codesService
+          ? {
+              exportTemplate: (format: 'csv' | 'xlsx') =>
+                this.codesService!.exportImportTemplate(format),
+              executeImport: async (dto, actorId) =>
+                (await this.codesService!.bulkImportCodeValues(
+                  {
+                    ...(dto['items'] ? { items: dto['items'] as never } : {}),
+                    ...(typeof dto['csvContent'] === 'string'
+                      ? { csvContent: dto['csvContent'] }
+                      : {}),
+                    ...(typeof dto['xlsxBase64'] === 'string'
+                      ? { xlsxBase64: dto['xlsxBase64'] }
+                      : {}),
+                    skipDuplicates:
+                      typeof dto['skipDuplicates'] === 'boolean' ? dto['skipDuplicates'] : true,
+                  },
+                  undefined,
+                  actorId,
+                  { skipHistoryRecord: true },
+                )) as unknown as Readonly<Record<string, unknown>>,
+            }
+          : {}),
       });
     }
   }
@@ -139,7 +239,7 @@ export class ImportsService implements IImportsPublicService {
     }));
   }
 
-  /** Tải file mẫu (Template) Excel (.xlsx) hoặc CSV (.csv) theo `profileCode` (Mục 8.2.1 & 8.2.2) */
+  /** Tải file mẫu (Template) Excel (.xlsx) hoặc CSV (.csv) theo `profileCode` (Mục 8.2.1 & 8.2.2 — Điều phối thuần qua Registry) */
   public exportImportTemplate(
     profileCode: string,
     format: 'csv' | 'xlsx' = 'xlsx',
@@ -151,20 +251,20 @@ export class ImportsService implements IImportsPublicService {
     readonly csvContent: string;
     readonly xlsxBase64: string;
   } {
+    this.ensureDefaultProfilesRegistered();
     const cleanProfile = profileCode.trim().toLowerCase();
-    if (cleanProfile === 'users' && this.userExportService) {
-      return this.userExportService.exportImportTemplate(format);
-    }
-    if (cleanProfile === 'organizations' && this.organizationsService) {
-      return this.organizationsService.exportImportTemplate(format);
-    }
-    if (cleanProfile === 'codes' && this.codesService) {
-      return this.codesService.exportImportTemplate(format);
-    }
-
-    const profile = this.importRegistry.getProfile(cleanProfile);
+    const profile =
+      this.importRegistry.getProfile(cleanProfile) ??
+      defaultImportRegistry.getProfile(cleanProfile);
     if (!profile) {
       throw new NotFoundAppException('imports.profileNotFound', { profileCode: cleanProfile });
+    }
+
+    if (typeof profile.exportTemplate === 'function') {
+      const customResult = profile.exportTemplate(format);
+      if (!(customResult instanceof Promise)) {
+        return customResult;
+      }
     }
 
     return buildImportTemplateFile({
@@ -176,12 +276,13 @@ export class ImportsService implements IImportsPublicService {
 
   /**
    * 8.2.3, 8.2.4, 8.2.5 — Xem trước dữ liệu trước khi nhập (Preview / Dry-run):
-   * Ánh xạ cột (`columnMapping`), dòng mẫu và kiểm tra lỗi theo từng dòng/cột.
+   * Ánh xạ cột (`columnMapping`), dòng mẫu và kiểm tra lỗi theo từng dòng/cột (điều phối qua `ImportRegistryService`).
    */
   public async previewImport(
     profileCode: string,
     dto: PreviewImportRequest,
   ): Promise<ImportPreviewResult> {
+    this.ensureDefaultProfilesRegistered();
     const cleanProfile = profileCode.trim().toLowerCase();
     const defaultPreviewLimit = this.settingRegistry.getNumber(
       'imports.preview_sample_limit',
@@ -189,9 +290,16 @@ export class ImportsService implements IImportsPublicService {
       20,
     );
 
-    if (cleanProfile === 'users' && this.userImportService) {
-      return this.userImportService.previewImport({
-        ...(dto.items ? { items: dto.items as unknown as BulkImportUsersRequest['items'] } : {}),
+    const profile =
+      this.importRegistry.getProfile(cleanProfile) ??
+      defaultImportRegistry.getProfile(cleanProfile);
+    if (!profile) {
+      throw new NotFoundAppException('imports.profileNotFound', { profileCode: cleanProfile });
+    }
+
+    if (typeof profile.previewImport === 'function') {
+      return profile.previewImport({
+        ...(dto.items ? { items: dto.items } : {}),
         ...(dto.csvContent ? { csvContent: dto.csvContent } : {}),
         ...(dto.xlsxBase64 ? { xlsxBase64: dto.xlsxBase64 } : {}),
         ...(dto.columnMapping ? { columnMapping: dto.columnMapping } : {}),
@@ -199,11 +307,6 @@ export class ImportsService implements IImportsPublicService {
         skipDuplicates: dto.skipDuplicates ?? true,
         previewLimit: dto.previewLimit ?? defaultPreviewLimit,
       });
-    }
-
-    const profile = this.importRegistry.getProfile(cleanProfile);
-    if (!profile) {
-      throw new NotFoundAppException('imports.profileNotFound', { profileCode: cleanProfile });
     }
 
     const duplicateStrategy = resolveImportDuplicateStrategy(
@@ -260,14 +363,16 @@ export class ImportsService implements IImportsPublicService {
   }
 
   /**
-   * 8.2.1 → 8.2.9 — Thực thi Nhập dữ liệu hàng loạt theo `profileCode`
+   * 8.2.1 → 8.2.9 — Thực thi Nhập dữ liệu hàng loạt theo `profileCode` qua `ImportRegistryService`
    * và đồng bộ bản ghi lịch sử vào bảng Database `import_histories`.
    */
   public async executeImport(
     profileCode: string,
     dto: ExecuteImportRequest,
     actorId?: number,
+    actor?: UserIdentity,
   ): Promise<ExecuteImportResultResponse> {
+    this.ensureDefaultProfilesRegistered();
     const cleanProfile = profileCode.trim().toLowerCase();
     const maxBatchRows = this.settingRegistry.getNumber(
       'imports.max_rows_per_batch',
@@ -280,149 +385,114 @@ export class ImportsService implements IImportsPublicService {
       ]);
     }
 
-    if (cleanProfile === 'users' && this.userImportService) {
-      const result = await this.userImportService.bulkImport(
-        {
-          ...(dto.items ? { items: dto.items as unknown as BulkImportUsersRequest['items'] } : {}),
-          ...(dto.csvContent ? { csvContent: dto.csvContent } : {}),
-          ...(dto.xlsxBase64 ? { xlsxBase64: dto.xlsxBase64 } : {}),
-          ...(dto.fileName ? { fileName: dto.fileName } : {}),
-          ...(dto.columnMapping ? { columnMapping: dto.columnMapping } : {}),
-          ...(dto.duplicateStrategy ? { duplicateStrategy: dto.duplicateStrategy } : {}),
-          skipDuplicates: dto.skipDuplicates ?? true,
-          ...(dto.defaultPassword ? { defaultPassword: dto.defaultPassword } : {}),
-          async: dto.async ?? false,
-        },
-        actorId,
-      );
+    const profile =
+      this.importRegistry.getProfile(cleanProfile) ??
+      defaultImportRegistry.getProfile(cleanProfile);
+    if (!profile || typeof profile.executeImport !== 'function') {
+      throw new NotFoundAppException('imports.profileNotFound', { profileCode: cleanProfile });
+    }
 
-      if (result.historyId) {
-        const memRecord = this.importRegistry.getHistoryById(result.historyId);
-        if (memRecord) {
-          await this.persistHistoryRecordToDb(memRecord);
-        }
+    this.assertProfilePermission(profile.requiredPermission, actor);
+
+    const rawResult = await profile.executeImport(
+      dto as unknown as Readonly<Record<string, unknown>>,
+      actorId ?? actor?.id,
+      actor,
+    );
+
+    if (typeof rawResult['historyId'] === 'number') {
+      const memRecord =
+        this.importRegistry.getHistoryById(rawResult['historyId']) ??
+        defaultImportRegistry.getHistoryById(rawResult['historyId']);
+      if (memRecord) {
+        await this.persistHistoryRecordToDb(memRecord);
       }
-
-      return result;
+      return rawResult as unknown as ExecuteImportResultResponse;
     }
 
-    if (cleanProfile === 'organizations' && this.organizationsService) {
-      const duplicateStrategy = resolveImportDuplicateStrategy(
-        dto.duplicateStrategy,
-        dto.skipDuplicates,
-      );
-      const format = dto.xlsxBase64 ? 'xlsx' : dto.csvContent ? 'csv' : 'json';
-      const orgResult = await this.organizationsService.bulkImportUnits({
-        ...(dto.items ? { items: dto.items as never } : {}),
-        ...(dto.csvContent ? { csvContent: dto.csvContent } : {}),
-        ...(dto.xlsxBase64 ? { xlsxBase64: dto.xlsxBase64 } : {}),
-        skipDuplicates: dto.skipDuplicates ?? true,
-      });
+    const duplicateStrategy = resolveImportDuplicateStrategy(
+      dto.duplicateStrategy,
+      dto.skipDuplicates,
+    );
+    const format = dto.xlsxBase64 ? 'xlsx' : dto.csvContent ? 'csv' : 'json';
+    const totalRows = Number(rawResult['totalRows'] ?? 0);
+    const importedCount = Number(rawResult['importedCount'] ?? 0);
+    const updatedCount = Number(rawResult['updatedCount'] ?? 0);
+    const skippedCount = Number(rawResult['skippedCount'] ?? 0);
+    const failedCount = Number(rawResult['failedCount'] ?? 0);
+    const rawErrors = Array.isArray(rawResult['errors'])
+      ? (rawResult['errors'] as ReadonlyArray<{
+          readonly row: number;
+          readonly identifier?: string;
+          readonly message: string;
+        }>)
+      : [];
 
-      const started = this.importRegistry.startImportHistory({
-        profileCode: 'organizations',
-        module: 'organizations',
-        fileName: dto.fileName ?? `organizations_import.${format}`,
-        format,
-        duplicateStrategy,
-        columnMapping: dto.columnMapping ?? null,
-        totalRows: orgResult.totalRows,
-        actorId: actorId ?? null,
-        status: orgResult.failedCount > 0 ? 'PARTIAL' : 'COMPLETED',
-      });
-      const updated =
-        this.importRegistry.updateImportHistory(started.id, {
-          status: orgResult.failedCount > 0 ? 'PARTIAL' : 'COMPLETED',
-          totalRows: orgResult.totalRows,
-          processedRows: orgResult.totalRows,
-          createdCount: orgResult.importedCount,
-          updatedCount: orgResult.updatedCount,
-          skippedCount: orgResult.skippedCount,
-          failedCount: orgResult.failedCount,
-        }) ?? started;
-      await this.persistHistoryRecordToDb(updated);
+    const started = this.importRegistry.startImportHistory({
+      profileCode: profile.profileCode,
+      module: profile.module,
+      fileName: dto.fileName ?? `${profile.profileCode}_import.${format}`,
+      format,
+      duplicateStrategy,
+      columnMapping: dto.columnMapping ?? null,
+      totalRows,
+      actorId: actorId ?? actor?.id ?? null,
+      status: failedCount > 0 ? 'PARTIAL' : 'COMPLETED',
+    });
+    const updated =
+      this.importRegistry.updateImportHistory(started.id, {
+        status: failedCount > 0 ? 'PARTIAL' : 'COMPLETED',
+        totalRows,
+        processedRows: totalRows,
+        createdCount: importedCount,
+        updatedCount,
+        skippedCount,
+        failedCount,
+      }) ?? started;
+    await this.persistHistoryRecordToDb(updated);
 
-      return {
-        totalRows: orgResult.totalRows,
-        importedCount: orgResult.importedCount,
-        updatedCount: orgResult.updatedCount,
-        successCount: orgResult.importedCount + orgResult.updatedCount,
-        skippedCount: orgResult.skippedCount,
-        failedCount: orgResult.failedCount,
-        remainingCount: 0,
-        duplicateStrategy,
-        historyId: updated.id,
-        jobId: updated.jobId,
-        status: updated.status,
-        importedUserIds: [],
-        updatedUserIds: [],
-        errors: orgResult.errors.map((e) => ({
-          row: e.row,
-          identifier: e.identifier,
-          message: e.message,
-        })),
-      };
+    return {
+      totalRows,
+      importedCount,
+      updatedCount,
+      successCount: importedCount + updatedCount,
+      skippedCount,
+      failedCount,
+      remainingCount: 0,
+      duplicateStrategy,
+      historyId: updated.id,
+      jobId: updated.jobId,
+      status: updated.status,
+      importedUserIds: [],
+      updatedUserIds: [],
+      errors: rawErrors.map((e) => ({
+        row: e.row,
+        identifier: e.identifier ?? '',
+        message: e.message,
+      })),
+    };
+  }
+
+  private assertProfilePermission(requiredPermission?: string, actor?: UserIdentity): void {
+    if (!requiredPermission || !actor || !Array.isArray(actor.permissions)) {
+      return;
     }
-
-    if (cleanProfile === 'codes' && this.codesService) {
-      const duplicateStrategy = resolveImportDuplicateStrategy(
-        dto.duplicateStrategy,
-        dto.skipDuplicates,
-      );
-      const format = dto.xlsxBase64 ? 'xlsx' : dto.csvContent ? 'csv' : 'json';
-      const codeResult = await this.codesService.bulkImportCodeValues({
-        ...(dto.items ? { items: dto.items as never } : {}),
-        ...(dto.csvContent ? { csvContent: dto.csvContent } : {}),
-        ...(dto.xlsxBase64 ? { xlsxBase64: dto.xlsxBase64 } : {}),
-        skipDuplicates: dto.skipDuplicates ?? true,
-      });
-
-      const started = this.importRegistry.startImportHistory({
-        profileCode: 'codes',
-        module: 'codes',
-        fileName: dto.fileName ?? `codes_import.${format}`,
-        format,
-        duplicateStrategy,
-        columnMapping: dto.columnMapping ?? null,
-        totalRows: codeResult.totalRows,
-        actorId: actorId ?? null,
-        status: codeResult.failedCount > 0 ? 'PARTIAL' : 'COMPLETED',
-      });
-      const updated =
-        this.importRegistry.updateImportHistory(started.id, {
-          status: codeResult.failedCount > 0 ? 'PARTIAL' : 'COMPLETED',
-          totalRows: codeResult.totalRows,
-          processedRows: codeResult.totalRows,
-          createdCount: codeResult.importedCount,
-          updatedCount: 0,
-          skippedCount: codeResult.skippedCount,
-          failedCount: codeResult.failedCount,
-        }) ?? started;
-      await this.persistHistoryRecordToDb(updated);
-
-      return {
-        totalRows: codeResult.totalRows,
-        importedCount: codeResult.importedCount,
-        updatedCount: 0,
-        successCount: codeResult.importedCount,
-        skippedCount: codeResult.skippedCount,
-        failedCount: codeResult.failedCount,
-        remainingCount: 0,
-        duplicateStrategy,
-        historyId: updated.id,
-        jobId: updated.jobId,
-        status: updated.status,
-        importedUserIds: [],
-        updatedUserIds: [],
-        errors: codeResult.errors.map((e) => ({
-          row: e.row,
-          identifier: e.identifier,
-          message: e.message,
-        })),
-      };
+    const perms = new Set(actor.permissions);
+    if (
+      perms.has('*') ||
+      perms.has('system.admin') ||
+      perms.has('imports.execute') ||
+      perms.has('imports.manage') ||
+      perms.has(requiredPermission)
+    ) {
+      return;
     }
-
-    throw new NotFoundAppException('imports.profileNotFound', { profileCode: cleanProfile });
+    throw new ForbiddenAppException(HTTP_ERROR_CODE.FORBIDDEN, [
+      {
+        requiredPermissions: ['imports.execute', requiredPermission],
+        missingPermissions: [requiredPermission],
+      },
+    ]);
   }
 
   /** 8.2.8 — Xem tiến độ Import theo `jobId` hoặc `historyId` */

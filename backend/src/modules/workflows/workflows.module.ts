@@ -1,5 +1,6 @@
-import { Module } from '@nestjs/common';
+import { Module, Optional } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { CoreI18nService } from '@packages/i18n/index.js';
 import { SecurityModule } from '@packages/security/index.js';
 import { MessagingModule } from '@packages/messaging/index.js';
 import { UsersModule } from '@modules/users/index.js';
@@ -19,6 +20,10 @@ import { WorkflowApprovalStepRepository } from './repositories/workflow-approval
 import { WorkflowHistoryRepository } from './repositories/workflow-history.repository.js';
 import { WorkflowsService } from './services/workflows.service.js';
 import { WorkflowsController } from './controllers/workflows.controller.js';
+import enWorkflows from './locales/en/workflows.json' with { type: 'json' };
+import viWorkflows from './locales/vi/workflows.json' with { type: 'json' };
+
+new CoreI18nService().registerNamespace('workflows', { vi: viWorkflows, en: enWorkflows });
 
 @Module({
   imports: [
@@ -51,4 +56,8 @@ import { WorkflowsController } from './controllers/workflows.controller.js';
   ],
   exports: [WorkflowsService, WORKFLOWS_PUBLIC_SERVICE],
 })
-export class WorkflowsModule {}
+export class WorkflowsModule {
+  constructor(@Optional() i18n?: CoreI18nService) {
+    i18n?.registerNamespace('workflows', { vi: viWorkflows, en: enWorkflows });
+  }
+}

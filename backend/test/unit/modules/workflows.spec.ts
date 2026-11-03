@@ -387,7 +387,6 @@ describe('Workflows & Approval Module Unit Tests (Sections 9.3 & 9.4)', () => {
               workflowInstanceId: item.workflowInstanceId ?? 1,
               stateCode: item.stateCode ?? 'PENDING_MANAGER',
               stepOrder: item.stepOrder ?? 1,
-              stepName: item.stepName ?? 'Bước 1',
               approvalMode: item.approvalMode ?? WORKFLOW_APPROVAL_MODE.SINGLE,
               approverUserId: item.approverUserId ?? 20,
               approverRoleCode: item.approverRoleCode ?? null,
@@ -396,10 +395,9 @@ describe('Workflows & Approval Module Unit Tests (Sections 9.3 & 9.4)', () => {
               comment: item.comment ?? null,
               decidedAt: item.decidedAt ?? null,
               decidedByUserId: item.decidedByUserId ?? null,
-              dueAt: item.dueAt ?? null,
               createdAt: new Date(),
               updatedAt: new Date(),
-            } as WorkflowApprovalStepEntity;
+            } as unknown as WorkflowApprovalStepEntity;
             approvalSteps.set(id, entity);
             created.push(entity);
           }
@@ -703,7 +701,7 @@ describe('Workflows & Approval Module Unit Tests (Sections 9.3 & 9.4)', () => {
       // 9.3.6: Hủy quy trình có lý do
       const cancelled = await service.cancelInstance(
         started.id,
-        { reason: 'Nhầm số tiền hóa đơn, hủy để tạo lại' },
+        { reason: 'Nhầm số tiền hóa đơn, hủy để tạo lại', action: 'CANCEL' },
         {
           id: 10,
           username: 'emp10',

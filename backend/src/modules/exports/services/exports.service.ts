@@ -1,8 +1,12 @@
 import { Injectable, Optional } from '@nestjs/common';
 import {
   ExportRegistryService,
+  ForbiddenAppException,
+  HTTP_ERROR_CODE,
   NotFoundAppException,
   defaultExportRegistry,
+  resolveExportContentType,
+  resolveExportFormat,
   safeJsonParseObject,
   type ExportFormat,
   type ExportHistoryQueryFilter,
@@ -37,6 +41,102 @@ export class ExportsService implements IExportsPublicService {
     @Optional() private readonly codesService?: CodesService,
   ) {
     this.exportRegistry = exportRegistry ?? defaultExportRegistry;
+    this.ensureDefaultExecutorsRegistered();
+  }
+
+  private ensureDefaultExecutorsRegistered(): void {
+    if (
+      this.userExportService &&
+      !this.exportRegistry.resolveWorkerExecutor({ profileCode: 'users' })
+    ) {
+      this.exportRegistry.registerWorkerExecutor({
+        profileCode: 'users',
+        module: 'users',
+        topic: 'users.export',
+        requiredPermission: 'users.export',
+        executeExport: async (input) => {
+          const query = (input.query ?? {}) as ExecuteExportQuery;
+          if (this.usersService) {
+            await this.usersService.verifySensitiveActionStepUp(
+              (input.actor as UserIdentity | undefined)?.id ?? input.actorId,
+              query.stepUpToken,
+              query.requireStepUp,
+              'users.export',
+            );
+          }
+          return this.userExportService!.exportUsersCsv(
+            query,
+            input.actor as UserIdentity | undefined,
+          );
+        },
+      });
+    }
+
+    if (
+      this.organizationsService &&
+      !this.exportRegistry.resolveWorkerExecutor({ profileCode: 'organizations' })
+    ) {
+      this.exportRegistry.registerWorkerExecutor({
+        profileCode: 'organizations',
+        module: 'organizations',
+        topic: 'organizations.export',
+        requiredPermission: 'organizations.read',
+        executeExport: async (input) => {
+          const query = (input.query ?? {}) as ExecuteExportQuery;
+          const format: 'csv' | 'xlsx' = input.format === 'xlsx' ? 'xlsx' : 'csv';
+          const orgStatus =
+            query.status === 1 || query.status === 2 || query.status === 3
+              ? query.status
+              : undefined;
+          const res = await this.organizationsService!.exportUnits(
+            {
+              ...(query.search ? { search: query.search } : {}),
+              ...(orgStatus !== undefined ? { status: orgStatus } : {}),
+              format,
+            },
+            input.actorId,
+            { skipHistoryRecord: true },
+          );
+          return {
+            fileName: res.fileName,
+            contentType: res.contentType,
+            format: res.format,
+            totalExported: res.totalExported,
+            csvContent: res.csvContent,
+            xlsxBase64: res.xlsxBase64,
+          };
+        },
+      });
+    }
+
+    if (this.codesService && !this.exportRegistry.resolveWorkerExecutor({ profileCode: 'codes' })) {
+      this.exportRegistry.registerWorkerExecutor({
+        profileCode: 'codes',
+        module: 'codes',
+        topic: 'codes.export',
+        requiredPermission: 'codes.read',
+        executeExport: async (input) => {
+          const query = (input.query ?? {}) as ExecuteExportQuery;
+          const format: 'csv' | 'xlsx' = input.format === 'xlsx' ? 'xlsx' : 'csv';
+          const res = await this.codesService!.exportCodes(
+            {
+              ...(query.search ? { search: query.search } : {}),
+              format,
+            },
+            input.actorId,
+            { skipHistoryRecord: true },
+          );
+          return {
+            fileName: res.fileName,
+            contentType: res.contentType,
+            format: res.format,
+            totalExported: res.totalExported,
+            csvContent: res.csvContent,
+            xlsxBase64: res.xlsxBase64,
+          };
+        },
+      });
+    }
   }
 
   /** 8.3.3 — Đăng ký hoặc thay thế Pluggable PDF Adapter dùng chung */
@@ -45,7 +145,7 @@ export class ExportsService implements IExportsPublicService {
   }
 
   /**
-   * 8.3.1 → 8.3.8 — Thực thi Xuất dữ liệu theo `profileCode` (Excel `.xlsx`, CSV `.csv` hoặc PDF `.pdf`),
+   * 8.3.1 → 8.3.8 — Thực thi Xuất dữ liệu theo `profileCode` qua `ExportRegistryService` (Excel `.xlsx`, CSV `.csv` hoặc PDF `.pdf`),
    * giữ đúng bộ lọc & Data Scope, hỗ trợ chạy nền qua Queue và lưu lịch sử vào bảng `export_histories`.
    */
   public async executeExport(
@@ -53,144 +153,25 @@ export class ExportsService implements IExportsPublicService {
     query: ExecuteExportQuery,
     actor?: UserIdentity,
   ): Promise<ExecuteExportResponse> {
+    this.ensureDefaultExecutorsRegistered();
     const cleanProfile = profileCode.trim().toLowerCase();
 
-    if (cleanProfile === 'users' && this.userExportService) {
-      if (this.usersService) {
-        await this.usersService.verifySensitiveActionStepUp(
-          actor?.id,
-          query.stepUpToken,
-          query.requireStepUp,
-          'users.export',
-        );
-      }
-
-      const result = await this.userExportService.exportUsersCsv(query, actor);
-      if (result.historyId) {
-        const memRecord = this.exportRegistry.getHistoryById(result.historyId);
-        if (memRecord) {
-          await this.persistHistoryRecordToDb(memRecord, result);
-        }
-      }
-      return result;
-    }
-
-    if (cleanProfile === 'organizations' && this.organizationsService) {
-      const format: 'csv' | 'xlsx' = query.format === 'xlsx' ? 'xlsx' : 'csv';
-      const orgStatus =
-        query.status === 1 || query.status === 2 || query.status === 3 ? query.status : undefined;
-      const orgResult = await this.organizationsService.exportUnits({
-        ...(query.search ? { search: query.search } : {}),
-        ...(orgStatus !== undefined ? { status: orgStatus } : {}),
-        format,
-      });
-
-      const started = this.exportRegistry.startExportHistory({
-        profileCode: 'organizations',
-        module: 'organizations',
-        fileName: orgResult.fileName,
-        format,
-        actorId: actor?.id ?? null,
-        filters: query as unknown as Readonly<Record<string, unknown>>,
-        totalExported: orgResult.totalExported,
-        processedRows: orgResult.totalExported,
-        status: 'COMPLETED',
-      });
-      const artifactBuffer =
-        format === 'xlsx'
-          ? Buffer.from(orgResult.xlsxBase64, 'base64')
-          : Buffer.from(orgResult.csvContent, 'utf8');
-      const artifact = this.exportRegistry.storeTemporaryArtifact({
-        profileCode: 'organizations',
-        module: 'organizations',
-        fileName: orgResult.fileName,
-        format,
-        contentType: orgResult.contentType,
-        totalExported: orgResult.totalExported,
-        buffer: artifactBuffer,
-        actorId: actor?.id ?? null,
-        historyId: started.id,
-        jobId: started.jobId,
-        baseDownloadPath: '/api/v1/exports/downloads',
-      });
-
-      const response: ExecuteExportResponse = {
-        fileName: orgResult.fileName,
-        contentType: orgResult.contentType,
-        format,
-        totalExported: orgResult.totalExported,
-        csvContent: orgResult.csvContent,
-        xlsxBase64: orgResult.xlsxBase64,
-        historyId: started.id,
-        jobId: started.jobId,
-        status: 'COMPLETED',
-        downloadToken: artifact.token,
-        downloadUrl: artifact.downloadUrl,
-        expiresAt: artifact.expiresAt,
-      };
-      const memRecord = this.exportRegistry.getHistoryById(started.id) ?? started;
-      await this.persistHistoryRecordToDb(memRecord, response);
-      return response;
-    }
-
-    if (cleanProfile === 'codes' && this.codesService) {
-      const format: 'csv' | 'xlsx' = query.format === 'xlsx' ? 'xlsx' : 'csv';
-      const codeResult = await this.codesService.exportCodes({
-        ...(query.search ? { search: query.search } : {}),
-        format,
-      });
-
-      const started = this.exportRegistry.startExportHistory({
-        profileCode: 'codes',
-        module: 'codes',
-        fileName: codeResult.fileName,
-        format,
-        actorId: actor?.id ?? null,
-        filters: query as unknown as Readonly<Record<string, unknown>>,
-        totalExported: codeResult.totalExported,
-        processedRows: codeResult.totalExported,
-        status: 'COMPLETED',
-      });
-      const artifactBuffer =
-        format === 'xlsx'
-          ? Buffer.from(codeResult.xlsxBase64, 'base64')
-          : Buffer.from(codeResult.csvContent, 'utf8');
-      const artifact = this.exportRegistry.storeTemporaryArtifact({
-        profileCode: 'codes',
-        module: 'codes',
-        fileName: codeResult.fileName,
-        format,
-        contentType: codeResult.contentType,
-        totalExported: codeResult.totalExported,
-        buffer: artifactBuffer,
-        actorId: actor?.id ?? null,
-        historyId: started.id,
-        jobId: started.jobId,
-        baseDownloadPath: '/api/v1/exports/downloads',
-      });
-
-      const response: ExecuteExportResponse = {
-        fileName: codeResult.fileName,
-        contentType: codeResult.contentType,
-        format,
-        totalExported: codeResult.totalExported,
-        csvContent: codeResult.csvContent,
-        xlsxBase64: codeResult.xlsxBase64,
-        historyId: started.id,
-        jobId: started.jobId,
-        status: 'COMPLETED',
-        downloadToken: artifact.token,
-        downloadUrl: artifact.downloadUrl,
-        expiresAt: artifact.expiresAt,
-      };
-      const memRecord = this.exportRegistry.getHistoryById(started.id) ?? started;
-      await this.persistHistoryRecordToDb(memRecord, response);
-      return response;
-    }
-
-    const executor = this.exportRegistry.resolveWorkerExecutor({ profileCode: cleanProfile });
+    const executor =
+      this.exportRegistry.resolveWorkerExecutor({ profileCode: cleanProfile }) ??
+      defaultExportRegistry.resolveWorkerExecutor({ profileCode: cleanProfile });
     if (!executor) {
       throw new NotFoundAppException('exports.profileNotFound', { profileCode: cleanProfile });
+    }
+
+    this.assertProfilePermission(executor.requiredPermission, actor);
+
+    if (cleanProfile === 'users' && this.usersService) {
+      await this.usersService.verifySensitiveActionStepUp(
+        actor?.id,
+        query.stepUpToken,
+        query.requireStepUp,
+        'users.export',
+      );
     }
 
     const jobResult = await executor.executeExport({
@@ -202,26 +183,112 @@ export class ExportsService implements IExportsPublicService {
       jobId: `exp_${Date.now()}`,
     });
 
-    if (jobResult.historyId) {
-      const memRecord = this.exportRegistry.getHistoryById(jobResult.historyId);
+    const resolvedFormat = resolveExportFormat(jobResult.format ?? query.format, 'csv');
+    const resolvedContentType = jobResult.contentType ?? resolveExportContentType(resolvedFormat);
+
+    if (typeof jobResult.historyId === 'number') {
+      const memRecord =
+        this.exportRegistry.getHistoryById(jobResult.historyId) ??
+        defaultExportRegistry.getHistoryById(jobResult.historyId);
+      const response: ExecuteExportResponse = {
+        fileName: jobResult.fileName ?? `${cleanProfile}_export.${resolvedFormat}`,
+        contentType: resolvedContentType,
+        format: resolvedFormat,
+        totalExported: jobResult.totalExported,
+        ...(jobResult.maxRowsAllowed !== undefined
+          ? { maxRowsAllowed: jobResult.maxRowsAllowed }
+          : {}),
+        ...(jobResult.appliedLimitPolicy !== undefined
+          ? { appliedLimitPolicy: jobResult.appliedLimitPolicy }
+          : {}),
+        csvContent: jobResult.csvContent ?? '',
+        xlsxBase64: jobResult.xlsxBase64 ?? '',
+        ...(jobResult.pdfBase64 !== undefined ? { pdfBase64: jobResult.pdfBase64 } : {}),
+        historyId: jobResult.historyId,
+        jobId: jobResult.jobId ?? memRecord?.jobId ?? null,
+        status: jobResult.status ?? memRecord?.status ?? 'COMPLETED',
+        downloadToken: jobResult.downloadToken ?? memRecord?.downloadToken ?? null,
+        downloadUrl: jobResult.downloadUrl ?? memRecord?.downloadUrl ?? null,
+        expiresAt: jobResult.expiresAt ?? memRecord?.expiresAt ?? null,
+        notifiedAt: jobResult.notifiedAt ?? memRecord?.notifiedAt ?? null,
+      };
       if (memRecord) {
-        await this.persistHistoryRecordToDb(memRecord);
+        await this.persistHistoryRecordToDb(memRecord, response);
       }
+      return response;
     }
 
-    return {
-      fileName: jobResult.fileName ?? `${cleanProfile}_export.${query.format ?? 'csv'}`,
-      contentType: 'text/csv; charset=utf-8',
-      format: (query.format as ExportFormat) ?? 'csv',
+    const started = this.exportRegistry.startExportHistory({
+      profileCode: executor.profileCode,
+      module: executor.module,
+      fileName: jobResult.fileName ?? `${cleanProfile}_export.${resolvedFormat}`,
+      format: resolvedFormat,
+      actorId: actor?.id ?? null,
+      filters: query as unknown as Readonly<Record<string, unknown>>,
       totalExported: jobResult.totalExported,
-      csvContent: '',
-      xlsxBase64: '',
-      ...(typeof jobResult.historyId === 'number' ? { historyId: jobResult.historyId } : {}),
-      downloadToken: jobResult.downloadToken ?? null,
-      downloadUrl: jobResult.downloadUrl ?? null,
-      expiresAt: jobResult.expiresAt ?? null,
+      processedRows: jobResult.totalExported,
       status: 'COMPLETED',
+    });
+    const artifactBuffer =
+      resolvedFormat === 'xlsx'
+        ? Buffer.from(jobResult.xlsxBase64 ?? '', 'base64')
+        : resolvedFormat === 'pdf'
+          ? Buffer.from(jobResult.pdfBase64 ?? '', 'base64')
+          : Buffer.from(jobResult.csvContent ?? '', 'utf8');
+    const artifact = this.exportRegistry.storeTemporaryArtifact({
+      profileCode: executor.profileCode,
+      module: executor.module,
+      fileName: started.fileName,
+      format: resolvedFormat,
+      contentType: resolvedContentType,
+      totalExported: jobResult.totalExported,
+      buffer: artifactBuffer,
+      actorId: actor?.id ?? null,
+      historyId: started.id,
+      jobId: started.jobId,
+      baseDownloadPath: '/api/v1/exports/downloads',
+    });
+
+    const response: ExecuteExportResponse = {
+      fileName: started.fileName,
+      contentType: resolvedContentType,
+      format: resolvedFormat,
+      totalExported: jobResult.totalExported,
+      csvContent: jobResult.csvContent ?? '',
+      xlsxBase64: jobResult.xlsxBase64 ?? '',
+      ...(jobResult.pdfBase64 !== undefined ? { pdfBase64: jobResult.pdfBase64 } : {}),
+      historyId: started.id,
+      jobId: started.jobId,
+      status: 'COMPLETED',
+      downloadToken: artifact.token,
+      downloadUrl: artifact.downloadUrl,
+      expiresAt: artifact.expiresAt,
     };
+    const memRecord = this.exportRegistry.getHistoryById(started.id) ?? started;
+    await this.persistHistoryRecordToDb(memRecord, response);
+    return response;
+  }
+
+  private assertProfilePermission(requiredPermission?: string, actor?: UserIdentity): void {
+    if (!requiredPermission || !actor || !Array.isArray(actor.permissions)) {
+      return;
+    }
+    const perms = new Set(actor.permissions);
+    if (
+      perms.has('*') ||
+      perms.has('system.admin') ||
+      perms.has('exports.execute') ||
+      perms.has('exports.manage') ||
+      perms.has(requiredPermission)
+    ) {
+      return;
+    }
+    throw new ForbiddenAppException(HTTP_ERROR_CODE.FORBIDDEN, [
+      {
+        requiredPermissions: ['exports.execute', requiredPermission],
+        missingPermissions: [requiredPermission],
+      },
+    ]);
   }
 
   /** 8.3.4 — Xem tiến độ thực thi Export theo `jobId` hoặc `historyId` */
@@ -368,24 +435,11 @@ export class ExportsService implements IExportsPublicService {
     readonly xlsxBase64?: string;
     readonly pdfBase64?: string;
   }> {
-    const artifact = this.exportRegistry.getTemporaryArtifactByToken(token, now);
-    if (artifact) {
-      return {
-        token: artifact.token,
-        downloadUrl: artifact.downloadUrl,
-        fileName: artifact.fileName,
-        contentType: artifact.contentType,
-        format: artifact.format,
-        totalExported: artifact.totalExported,
-        sizeBytes: artifact.sizeBytes,
-        createdAt: artifact.createdAt,
-        expiresAt: artifact.expiresAt,
-        ...(artifact.format === 'csv'
-          ? { csvContent: artifact.buffer.toString('utf8') }
-          : artifact.format === 'xlsx'
-            ? { xlsxBase64: artifact.buffer.toString('base64') }
-            : { pdfBase64: artifact.buffer.toString('base64') }),
-      };
+    if (this.exportRegistry.getTemporaryArtifactByToken(token, now)) {
+      return this.exportRegistry.formatTemporaryArtifactDownload(token, {
+        now,
+        expiredErrorKey: 'exports.exportFileExpired',
+      });
     }
 
     if (this.historyRepository) {

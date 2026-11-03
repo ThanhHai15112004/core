@@ -13,6 +13,7 @@ import {
   type ImportCellIssue,
   type ImportDuplicateStrategy,
   type ImportHistoryRecord,
+  type ImportPayloadInput,
   type ImportPreviewResult,
   type ImportProgressSnapshot,
 } from '@packages/kernel/index.js';
@@ -78,11 +79,21 @@ export class UserImportService {
       columns: USER_IMPORT_COLUMNS,
       rowSchema: bulkImportUserRowSchema,
       uniqueKeyFields: ['email', 'username'],
+      requiredPermission: 'users.import',
       findExistingDuplicates: (
         rows: ReadonlyArray<{ readonly row: number; readonly data: BulkImportUserRowInput }>,
       ) => this.findExistingUserDuplicates(rows),
+      previewImport: (dto: ImportPayloadInput<BulkImportUserRowInput>) =>
+        this.previewImport(dto as never),
+      executeImport: async (dto: Readonly<Record<string, unknown>>, actorId?: number) =>
+        (await this.bulkImport(dto as never, actorId)) as unknown as Readonly<
+          Record<string, unknown>
+        >,
     };
     this.importRegistry.registerProfile<BulkImportUserRowInput>(profileHandler);
+    if (this.importRegistry !== defaultImportRegistry) {
+      defaultImportRegistry.registerProfile<BulkImportUserRowInput>(profileHandler);
+    }
 
     const workerExecutor = {
       profileCode: USERS_IMPORT_PROFILE_CODE,

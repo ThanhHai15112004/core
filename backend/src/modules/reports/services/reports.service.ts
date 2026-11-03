@@ -3,6 +3,7 @@ import {
   ExportRegistryService,
   NotFoundAppException,
   ReportRegistryService,
+  assertDistinctReportPermission,
   defaultExportRegistry,
   defaultReportRegistry,
   normalizeReportParameters,
@@ -46,12 +47,47 @@ export class ReportsService implements IReportsPublicService {
   ) {
     this.reportRegistry = reportRegistry ?? defaultReportRegistry;
     this.exportRegistry = exportRegistry ?? defaultExportRegistry;
+    this.ensureInjectedReportAdaptersRegistered();
+  }
+
+  private ensureInjectedReportAdaptersRegistered(): void {
+    this.userReportService?.ensureModuleReportsRegistered?.();
+    this.reportRegistry.syncFromManifests();
+
+    if (this.userReportService && !this.reportRegistry.resolveWorkerExecutor({ module: 'users' })) {
+      this.reportRegistry.registerWorkerExecutor({
+        module: 'users',
+        topic: 'users.report',
+        reportCodes: ['users.summary_dashboard', 'users.security_compliance'],
+        executeReport: async (input) => {
+          const res = await this.userReportService!.runReport(
+            (input.request ?? { reportCode: input.reportCode }) as Partial<RunReportRequest>,
+            input.actor as UserIdentity | undefined,
+          );
+          return {
+            reportCode: res.reportCode,
+            historyId: res.historyId,
+            totalRecords: res.totalRecords,
+            dataSourceUsed: res.dataSourceUsed,
+            cacheHit: res.cacheHit,
+            downloadToken: res.downloadToken,
+            downloadUrl: res.downloadUrl,
+            expiresAt: res.expiresAt,
+            notifiedChannels: res.notifiedChannels,
+          };
+        },
+        runReport: async (request, actor) =>
+          (await this.userReportService!.runReport(
+            request as Partial<RunReportRequest>,
+            actor as UserIdentity | undefined,
+          )) as unknown as Readonly<Record<string, unknown>>,
+      });
+    }
   }
 
   /** 8.4.1 — Danh sách các báo cáo & dashboard đã đăng ký trên toàn hệ thống */
   public listAvailableReports(query?: ListReportsQuery): RegisteredReportDefinition[] {
-    this.userReportService?.ensureModuleReportsRegistered();
-    this.reportRegistry.syncFromManifests();
+    this.ensureInjectedReportAdaptersRegistered();
 
     return this.reportRegistry.listReports({
       ...(query?.module ? { module: query.module } : {}),
@@ -60,23 +96,52 @@ export class ReportsService implements IReportsPublicService {
   }
 
   /**
-   * 8.4.2 → 8.4.9 — Thực thi báo cáo / dashboard (hỗ trợ Queue cho báo cáo nặng, Read Replica, Cache & file tạm)
+   * 8.4.2 → 8.4.9 — Thực thi báo cáo / dashboard qua `ReportRegistryService` (hỗ trợ Queue cho báo cáo nặng, Read Replica, Cache & file tạm)
    * và lưu lịch sử vào bảng `report_histories`.
    */
   public async runReport(
     request: Partial<RunReportRequest> = {},
     actor?: UserIdentity,
   ): Promise<ReportExecutionResponse> {
-    this.userReportService?.ensureModuleReportsRegistered();
-    this.reportRegistry.syncFromManifests();
+    this.ensureInjectedReportAdaptersRegistered();
+    const reportCode = (request.reportCode ?? 'users.summary_dashboard').trim().toLowerCase();
+    const reportDef =
+      this.reportRegistry.getReport(reportCode) ?? defaultReportRegistry.getReport(reportCode);
+    const targetModule = reportDef?.module ?? reportCode.split('.')[0] ?? 'users';
 
-    if (this.userReportService) {
-      const result = await this.userReportService.runReport(request, actor);
-      const memHistory = this.reportRegistry.getHistoryById(result.historyId);
-      if (memHistory) {
-        await this.persistHistoryToDb(memHistory);
+    const executor =
+      this.reportRegistry.resolveWorkerExecutor({
+        reportCode,
+        module: targetModule,
+      }) ??
+      defaultReportRegistry.resolveWorkerExecutor({
+        reportCode,
+        module: targetModule,
+      });
+
+    if (executor) {
+      const rawResult =
+        typeof executor.runReport === 'function'
+          ? await executor.runReport(request as unknown as Readonly<Record<string, unknown>>, actor)
+          : ((await executor.executeReport({
+              reportCode,
+              request: request as unknown as Readonly<Record<string, unknown>>,
+              ...(request.format ? { format: request.format } : {}),
+              ...(actor?.id !== undefined ? { actorId: actor.id } : {}),
+              actor,
+              jobId: `rpt_${Date.now()}`,
+            })) as unknown as Readonly<Record<string, unknown>>);
+
+      const historyId = Number(rawResult['historyId'] ?? 0);
+      if (historyId > 0) {
+        const memHistory =
+          this.reportRegistry.getHistoryById(historyId) ??
+          defaultReportRegistry.getHistoryById(historyId);
+        if (memHistory) {
+          await this.persistHistoryToDb(memHistory);
+        }
       }
-      return result;
+      return rawResult as unknown as ReportExecutionResponse;
     }
 
     throw new NotFoundAppException('reports.reportNotFound', {
@@ -84,40 +149,46 @@ export class ReportsService implements IReportsPublicService {
     });
   }
 
-  /** 8.4.5 — Lên lịch gửi báo cáo định kỳ (`DAILY` / `WEEKLY` / `MONTHLY`) và lưu vào bảng `report_schedules` */
+  /** 8.4.5 — Lên lịch gửi báo cáo định kỳ (`DAILY` / `WEEKLY` / `MONTHLY`) trực tiếp qua `ReportRegistryService` và lưu vào bảng `report_schedules` */
   public async createReportSchedule(
     dto: CreateReportScheduleRequest,
     actor?: UserIdentity,
   ): Promise<ReportScheduleRecord> {
-    this.userReportService?.ensureModuleReportsRegistered();
-    this.reportRegistry.syncFromManifests();
+    this.ensureInjectedReportAdaptersRegistered();
+    const reportCode = (dto.reportCode ?? 'users.summary_dashboard').trim().toLowerCase();
+    const reportDef =
+      this.reportRegistry.getReport(reportCode) ?? defaultReportRegistry.getReport(reportCode);
+    if (!reportDef) {
+      throw new NotFoundAppException('reports.reportNotFound', { reportCode });
+    }
 
-    const record = this.userReportService
-      ? this.userReportService.createReportSchedule(dto, actor)
-      : this.reportRegistry.createSchedule({
-          reportCode: dto.reportCode ?? 'users.summary_dashboard',
-          name: dto.name,
-          frequency: dto.frequency,
-          cronExpression: dto.cronExpression,
-          hour: dto.hour,
-          minute: dto.minute,
-          dayOfWeek: dto.dayOfWeek ?? null,
-          dayOfMonth: dto.dayOfMonth ?? null,
-          timezone: dto.timezone ?? actor?.preferredTimezone ?? 'Asia/Ho_Chi_Minh',
-          format: dto.format ?? 'xlsx',
-          parameters: dto.parameters,
-          channels: dto.channels ?? ['EMAIL', 'IN_APP'],
-          recipientEmails: dto.recipientEmails ?? (actor?.email ? [actor.email] : []),
-          recipientUserIds:
-            dto.recipientUserIds && dto.recipientUserIds.length > 0
-              ? dto.recipientUserIds
-              : actor?.id
-                ? [actor.id]
-                : [],
-          ttlSeconds: dto.ttlSeconds ?? 3600,
-          actorId: actor?.id ?? null,
-          isActive: dto.isActive ?? true,
-        });
+    assertDistinctReportPermission(reportDef.requiredPermission, actor);
+
+    const record = this.reportRegistry.createSchedule({
+      reportCode: reportDef.code,
+      module: reportDef.module,
+      name: dto.name,
+      frequency: dto.frequency,
+      cronExpression: dto.cronExpression,
+      hour: dto.hour,
+      minute: dto.minute,
+      dayOfWeek: dto.dayOfWeek ?? null,
+      dayOfMonth: dto.dayOfMonth ?? null,
+      timezone: dto.timezone ?? actor?.preferredTimezone ?? 'Asia/Ho_Chi_Minh',
+      format: dto.format ?? 'xlsx',
+      parameters: dto.parameters,
+      channels: dto.channels ?? ['EMAIL', 'IN_APP'],
+      recipientEmails: dto.recipientEmails ?? (actor?.email ? [actor.email] : []),
+      recipientUserIds:
+        dto.recipientUserIds && dto.recipientUserIds.length > 0
+          ? dto.recipientUserIds
+          : actor?.id
+            ? [actor.id]
+            : [],
+      ttlSeconds: dto.ttlSeconds ?? 3600,
+      actorId: actor?.id ?? null,
+      isActive: dto.isActive ?? true,
+    });
 
     await this.persistScheduleToDb(record);
     return record;
@@ -375,32 +446,11 @@ export class ReportsService implements IReportsPublicService {
     readonly xlsxBase64?: string;
     readonly pdfBase64?: string;
   } {
-    if (this.userReportService) {
-      return this.userReportService.downloadTemporaryReport(token, now);
-    }
-
-    const artifact = this.exportRegistry.getTemporaryArtifactByToken(token, now);
-    if (!artifact) {
-      this.reportRegistry.purgeExpiredReportArtifacts(now);
-      throw new NotFoundAppException('reports.reportFileExpired', { token });
-    }
-
-    return {
-      token: artifact.token,
-      downloadUrl: artifact.downloadUrl,
-      fileName: artifact.fileName,
-      contentType: artifact.contentType,
-      format: artifact.format,
-      totalExported: artifact.totalExported,
-      sizeBytes: artifact.sizeBytes,
-      createdAt: artifact.createdAt,
-      expiresAt: artifact.expiresAt,
-      ...(artifact.format === 'csv'
-        ? { csvContent: artifact.buffer.toString('utf8') }
-        : artifact.format === 'xlsx'
-          ? { xlsxBase64: artifact.buffer.toString('base64') }
-          : { pdfBase64: artifact.buffer.toString('base64') }),
-    };
+    this.reportRegistry.purgeExpiredReportArtifacts(now);
+    return this.exportRegistry.formatTemporaryArtifactDownload(token, {
+      now,
+      expiredErrorKey: 'reports.reportFileExpired',
+    });
   }
 
   public async persistScheduleToDb(record: ReportScheduleRecord): Promise<void> {

@@ -1,6 +1,7 @@
 import { Injectable, Optional } from '@nestjs/common';
 import { DataSource, In } from 'typeorm';
 import { BaseTypeOrmRepository, TransactionManager } from '@packages/database/index.js';
+import { parseOrgUnitStatus } from '../contracts/index.js';
 import { OrganizationUnitEntity } from '../entities/organization-unit.entity.js';
 import type { ListOrganizationUnitsQuery } from '../requests/organizations.requests.js';
 
@@ -49,6 +50,24 @@ export class OrganizationUnitRepository extends BaseTypeOrmRepository<Organizati
       repo.find({
         where: { code: In(normalized) },
         order: { id: 'ASC' },
+      }),
+    );
+  }
+
+  /** Đếm số lượng đơn vị đang hoạt động (chưa xóa mềm) theo mã loại đơn vị */
+  public async countByType(type: number): Promise<number> {
+    return this.executeReadOnly(async (repo) =>
+      repo.count({
+        where: { type: Number(type) },
+      }),
+    );
+  }
+
+  /** Đếm số lượng đơn vị đang hoạt động (chưa xóa mềm) theo mã trạng thái */
+  public async countByStatus(status: number): Promise<number> {
+    return this.executeReadOnly(async (repo) =>
+      repo.count({
+        where: { status: parseOrgUnitStatus(status) },
       }),
     );
   }

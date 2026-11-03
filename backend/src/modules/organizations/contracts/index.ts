@@ -95,6 +95,9 @@ export interface IOrganizationsPublicService {
   resolveDescendantUnitIds?(rootUnitIds: readonly number[]): Promise<number[]>;
   getSubtreeUnitIds?(unitId: number): Promise<number[]>;
   registerUnitUsageCountDelegate?(delegate: (unitId: number) => Promise<number>): void;
+  registerUnitBatchUsageCountDelegate?(
+    delegate: (unitIds: readonly number[]) => Promise<number>,
+  ): void;
   registerUnitManagerResolverDelegate?(delegate: UnitManagerResolverDelegate): void;
 }
 

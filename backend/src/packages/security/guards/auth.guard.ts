@@ -8,6 +8,7 @@ import {
 } from '@packages/kernel/index.js';
 import {
   IS_PUBLIC_KEY,
+  REQUIRED_ANY_PERMISSIONS_KEY,
   REQUIRED_PERMISSIONS_KEY,
   REQUIRED_ROLES_KEY,
 } from '@packages/http/index.js';
@@ -170,12 +171,33 @@ export class AuthGuard implements CanActivate {
       ]) ?? [];
 
     if (requiredPermissions.length > 0) {
+      const matchAny = Boolean(
+        this.reflector.getAllAndOverride<boolean>(REQUIRED_ANY_PERMISSIONS_KEY, [
+          context.getHandler(),
+          context.getClass(),
+        ]),
+      );
       const userPermissions = new Set(user.permissions ?? []);
-      const missingPermissions = requiredPermissions.filter((perm) => !userPermissions.has(perm));
-      if (missingPermissions.length > 0) {
-        throw new ForbiddenAppException(HTTP_ERROR_CODE.FORBIDDEN, [
-          { requiredPermissions, missingPermissions },
-        ]);
+      const hasWildcard = userPermissions.has('*') || userPermissions.has('system.admin');
+
+      if (!hasWildcard) {
+        if (matchAny) {
+          const hasAny = requiredPermissions.some((perm) => userPermissions.has(perm));
+          if (!hasAny) {
+            throw new ForbiddenAppException(HTTP_ERROR_CODE.FORBIDDEN, [
+              { requiredPermissions, missingPermissions: requiredPermissions },
+            ]);
+          }
+        } else {
+          const missingPermissions = requiredPermissions.filter(
+            (perm) => !userPermissions.has(perm),
+          );
+          if (missingPermissions.length > 0) {
+            throw new ForbiddenAppException(HTTP_ERROR_CODE.FORBIDDEN, [
+              { requiredPermissions, missingPermissions },
+            ]);
+          }
+        }
       }
     }
 

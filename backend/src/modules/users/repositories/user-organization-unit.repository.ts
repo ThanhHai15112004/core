@@ -92,4 +92,21 @@ export class UserOrganizationUnitRepository extends BaseTypeOrmRepository<UserOr
 
     return this.repository.save(entities);
   }
+
+  /** Đếm số bản ghi gán đơn vị đang dùng chức vụ thuộc tập tên/mã truyền vào (phục vụ kiểm tra usage cho CodeRegistry) */
+  public async countByPositionTitles(candidates: readonly string[]): Promise<number> {
+    const normalized = [
+      ...new Set(candidates.map((c) => c.trim().toLowerCase()).filter((c) => c.length > 0)),
+    ];
+    if (normalized.length === 0) {
+      return 0;
+    }
+    return this.repository
+      .createQueryBuilder('uou')
+      .where('uou.position_title IS NOT NULL')
+      .andWhere('LOWER(TRIM(uou.position_title)) IN (:...candidates)', {
+        candidates: normalized,
+      })
+      .getCount();
+  }
 }

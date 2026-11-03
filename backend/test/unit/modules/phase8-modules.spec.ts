@@ -1,4 +1,5 @@
 import { describe, expect, it } from '@jest/globals';
+import { z } from 'zod';
 import {
   ExportRegistryService,
   ImportRegistryService,
@@ -6,6 +7,8 @@ import {
   SearchRegistryService,
   SettingRegistryService,
 } from '@packages/kernel/index.js';
+import { REQUIRED_ANY_PERMISSIONS_KEY, REQUIRED_PERMISSIONS_KEY } from '@packages/http/index.js';
+import { buildUserSearchDocument } from '@modules/users/index.js';
 import { ImportsController, ImportsService } from '@modules/imports/index.js';
 import type { ImportHistoryEntity } from '@modules/imports/entities/import-history.entity.js';
 import type { ImportHistoryRepository } from '@modules/imports/repositories/import-history.repository.js';
@@ -528,5 +531,126 @@ describe('Phase 8 Standalone Modules: imports (8.2), exports (8.3), reports (8.4
     const deletedZero = await searchController.deleteZeroResultKeyword('khong_ton_tai_xyz_999');
     expect(deletedZero).toEqual({ deleted: true, target: 'khong_ton_tai_xyz_999' });
     expect(zeroStore.size).toBe(0);
+  });
+
+  it('8.6 — Pure Registry Dispatch, Shared buildUserSearchDocument & Non-hardcoded Permissions across Phase 8 modules', async () => {
+    // 1. Shared buildUserSearchDocument helper
+    const searchDoc = buildUserSearchDocument({
+      id: 77,
+      username: 'shared_user',
+      email: 'shared@core.vn',
+      fullName: 'Shared Search User',
+      employeeCode: 'NV077',
+      phone: '0901234567',
+      status: 1,
+      statusName: 'ACTIVE',
+      mfaEnabled: false,
+      primaryOrganizationUnitId: 5,
+      roles: [{ id: 1, code: 'admin', name: 'Admin' }],
+      organizationUnits: [
+        { organizationUnitId: 5, code: 'IT', name: 'Khối CNTT', isPrimary: true },
+      ],
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-02T00:00:00.000Z',
+    } as never);
+    expect(searchDoc.entityCode).toBe('users.account');
+    expect(searchDoc.organizationUnitId).toBe(5);
+    expect(searchDoc.keywords).toContain('NV077');
+
+    // 2. Non-users module registered purely in Import/Export/Report Registries
+    const importRegistry = new ImportRegistryService();
+    importRegistry.registerProfile({
+      profileCode: 'courses',
+      module: 'lms',
+      requiredPermission: 'lms.import',
+      columns: [{ field: 'code', header: 'Mã khóa học', required: true }],
+      rowSchema: z.object({ code: z.string().min(1) }),
+      executeImport: async (dto) => ({
+        totalRows: Array.isArray(dto['items']) ? dto['items'].length : 1,
+        importedCount: 1,
+        updatedCount: 0,
+        skippedCount: 0,
+        failedCount: 0,
+        errors: [],
+      }),
+    });
+    const importsService = new ImportsService(
+      undefined,
+      importRegistry,
+      new SettingRegistryService(),
+    );
+    const importResult = await importsService.executeImport(
+      'courses',
+      { items: [{ code: 'LMS-101' }], skipDuplicates: true, async: false },
+      10,
+      { id: 10, roles: ['instructor'], permissions: ['lms.import'] },
+    );
+    expect(importResult.importedCount).toBe(1);
+    await expect(
+      importsService.executeImport(
+        'courses',
+        { items: [{ code: 'LMS-102' }], skipDuplicates: true, async: false },
+        10,
+        { id: 10, roles: ['guest'], permissions: ['users.read'] },
+      ),
+    ).rejects.toThrow();
+
+    // 3. Pure ReportRegistryService dispatch for custom module without UserReportService
+    const reportRegistry = new ReportRegistryService();
+    reportRegistry.registerReport({
+      code: 'lms.course_completion',
+      module: 'lms',
+      name: 'Báo cáo hoàn thành khóa học',
+      category: 'REPORT',
+      requiredPermission: 'lms.report',
+    });
+    reportRegistry.registerWorkerExecutor({
+      module: 'lms',
+      reportCodes: ['lms.course_completion'],
+      executeReport: async () => ({
+        reportCode: 'lms.course_completion',
+        historyId: 1,
+        totalRecords: 12,
+        dataSourceUsed: 'PRIMARY',
+        cacheHit: false,
+      }),
+    });
+    const reportsService = new ReportsService(undefined, undefined, reportRegistry);
+    const lmsReportRes = await reportsService.runReport(
+      { reportCode: 'lms.course_completion' },
+      { id: 10, roles: ['manager'], permissions: ['lms.report'] },
+    );
+    expect(lmsReportRes.reportCode).toBe('lms.course_completion');
+    expect(lmsReportRes.totalRecords).toBe(12);
+
+    // 4. Controller permission metadata includes module-level permissions (imports.*, exports.*, reports.*, search.*)
+    const importPerms = Reflect.getMetadata(
+      REQUIRED_PERMISSIONS_KEY,
+      ImportsController.prototype.executeImport,
+    ) as string[];
+    const importMatchAny = Reflect.getMetadata(
+      REQUIRED_ANY_PERMISSIONS_KEY,
+      ImportsController.prototype.executeImport,
+    ) as boolean;
+    expect(importPerms).toContain('imports.execute');
+    expect(importMatchAny).toBe(true);
+
+    const exportPerms = Reflect.getMetadata(
+      REQUIRED_PERMISSIONS_KEY,
+      ExportsController.prototype.executeExport,
+    ) as string[];
+    expect(exportPerms).toContain('exports.execute');
+
+    const reportPerms = Reflect.getMetadata(
+      REQUIRED_PERMISSIONS_KEY,
+      ReportsController.prototype.runReport,
+    ) as string[];
+    expect(reportPerms).toContain('reports.execute');
+
+    const searchPerms = Reflect.getMetadata(
+      REQUIRED_PERMISSIONS_KEY,
+      SearchController.prototype.searchGlobal,
+    ) as string[];
+    expect(searchPerms).toContain('search.read');
   });
 });

@@ -1,5 +1,5 @@
 import { Injectable, Optional } from '@nestjs/common';
-import { DataSource, type Repository } from 'typeorm';
+import { DataSource, In, type Repository } from 'typeorm';
 import { BaseTypeOrmRepository, TransactionManager } from '@packages/database/index.js';
 import {
   type CountMode,
@@ -182,6 +182,55 @@ export class UserRepository extends BaseTypeOrmRepository<UserEntity> {
       where: { id: Number(id) },
       withDeleted,
     });
+  }
+
+  /** Tìm danh sách người dùng theo tập ID số nguyên (Batch IN query chống N+1) */
+  public async findByIdsWithArchived(
+    ids: readonly number[],
+    withDeleted = false,
+  ): Promise<UserEntity[]> {
+    const normalized = [
+      ...new Set(ids.map((id) => Number(id)).filter((id) => Number.isInteger(id) && id > 0)),
+    ];
+    if (normalized.length === 0) {
+      return [];
+    }
+
+    const results: UserEntity[] = [];
+    const chunkSize = 500;
+    for (let offset = 0; offset < normalized.length; offset += chunkSize) {
+      const chunk = normalized.slice(offset, offset + chunkSize);
+      const rows = await this.repository.find({
+        where: { id: In(chunk) },
+        withDeleted,
+      });
+      results.push(...rows);
+    }
+    return results;
+  }
+
+  /** Đếm số người dùng theo trạng thái trực tiếp tại DB (phục vụ kiểm tra usage cho CodeRegistry) */
+  public async countByStatus(status: UserStatusCode, withDeleted = false): Promise<number> {
+    return this.repository.count({
+      where: { status },
+      withDeleted,
+    });
+  }
+
+  /** Đếm số người dùng thuộc tập đơn vị/chi nhánh trực tiếp tại DB (phục vụ kiểm tra ảnh hưởng xóa/di chuyển cây đơn vị) */
+  public async countUsersByOrganizationUnitIds(unitIds: readonly number[]): Promise<number> {
+    const normalized = [
+      ...new Set(unitIds.map((id) => Number(id)).filter((id) => Number.isInteger(id) && id > 0)),
+    ];
+    if (normalized.length === 0) {
+      return 0;
+    }
+    const qb = this.repository.createQueryBuilder('u');
+    qb.where(
+      '(u.primary_organization_unit_id IN (:...unitIds) OR EXISTS (SELECT 1 FROM user_organization_units uou WHERE uou.user_id = u.id AND uou.organization_unit_id IN (:...unitIds) AND uou.deleted_at IS NULL))',
+      { unitIds: normalized },
+    );
+    return qb.getCount();
   }
 
   /**

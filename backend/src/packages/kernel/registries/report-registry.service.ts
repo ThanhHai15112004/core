@@ -2,6 +2,7 @@ import { Injectable, Optional } from '@nestjs/common';
 import {
   EXPORT_FORMAT,
   type ExportFormat,
+  type FormattedTemporaryExportDownload,
   resolveExportFormat,
 } from '../contracts/export.contract.js';
 import {
@@ -891,6 +892,20 @@ export class ReportRegistryService {
       purgedCount: Math.max(purgedExport.purgedCount, purgedHistoryIds.length),
       purgedHistoryIds,
     };
+  }
+
+  /**
+   * 8.4.6 — Tải xuống file Báo cáo tạm có thời hạn theo `token` (tự động dọn dẹp file quá hạn trước khi kiểm tra).
+   */
+  public formatTemporaryReportDownload(
+    token: string,
+    now: Date = new Date(),
+  ): FormattedTemporaryExportDownload {
+    this.purgeExpiredReportArtifacts(now);
+    return this.exportRegistry.formatTemporaryArtifactDownload(token, {
+      now,
+      expiredErrorKey: 'users.reportFileExpiredOrNotFound',
+    });
   }
 }
 

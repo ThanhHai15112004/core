@@ -254,11 +254,28 @@ export interface ImportProfileHandler<TRow = Record<string, unknown>> {
   readonly columns: readonly ImportColumnDefinition[];
   readonly rowSchema: z.ZodType<TRow>;
   readonly uniqueKeyFields?: readonly string[] | undefined;
+  /** Quyền nghiệp vụ tương ứng của module (ví dụ: `'users.import'`, `'organizations.manage'`, `'codes.manage'`) */
+  readonly requiredPermission?: string | undefined;
   /** Kiểm tra trùng lặp hàng loạt với dữ liệu đã có trong DB (Batch 1 lần để tránh N+1 query) */
   readonly findExistingDuplicates?:
     | ((
         rows: ReadonlyArray<{ readonly row: number; readonly data: TRow }>,
       ) => Promise<ReadonlyMap<number, ExistingDuplicateMatch>>)
+    | undefined;
+  /** Tùy chọn ghi đè hàm xuất file mẫu của module (nếu có logic mẫu riêng) */
+  readonly exportTemplate?:
+    | ((format: 'csv' | 'xlsx') => Promise<ImportTemplateFileResult> | ImportTemplateFileResult)
+    | undefined;
+  /** Tùy chọn ghi đè hàm xem trước dữ liệu Import của module */
+  readonly previewImport?:
+    ((dto: ImportPayloadInput<TRow>) => Promise<ImportPreviewResult<TRow>>) | undefined;
+  /** Thực thi Import hàng loạt của module thông qua điều phối Registry */
+  readonly executeImport?:
+    | ((
+        dto: Readonly<Record<string, unknown>>,
+        actorId?: number,
+        actor?: unknown,
+      ) => Promise<Readonly<Record<string, unknown>>>)
     | undefined;
 }
 

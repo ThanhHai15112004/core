@@ -34,8 +34,12 @@ import {
 } from '@modules/organizations/contracts/index.js';
 import { UsersService } from '../services/users.service.js';
 import type { UserResponse } from '../responses/users.response.js';
+import {
+  USERS_SEARCH_ENTITY_CODE,
+  buildUserSearchDocument,
+} from '../helpers/user-crud-orchestrator.helper.js';
 
-export const USERS_SEARCH_ENTITY_CODE = 'users.account';
+export { USERS_SEARCH_ENTITY_CODE, buildUserSearchDocument };
 
 export interface SyncUserSearchIndexRequest {
   readonly userIds?: readonly number[] | undefined;
@@ -182,6 +186,22 @@ export class UserSearchService {
           },
         );
       },
+      search: async (
+        query: SearchQueryInput,
+        actor?: unknown,
+        options?: {
+          readonly autoSeedFromDatabase?: boolean | undefined;
+          readonly scopeOverride?: SearchActorScopeContext | undefined;
+        },
+      ) => this.searchUsers(query, actor as UserIdentity | undefined, options),
+      loadDocuments: async (documentIds?: readonly (number | string)[]) => {
+        const numericUserIds = Array.isArray(documentIds)
+          ? documentIds.map((id) => Number(id)).filter((id) => Number.isInteger(id) && id > 0)
+          : undefined;
+        return this.loadUserSearchDocuments(
+          numericUserIds && numericUserIds.length > 0 ? numericUserIds : undefined,
+        );
+      },
     };
 
     this.searchRegistry.registerWorkerExecutor(searchExecutor);
@@ -224,51 +244,7 @@ export class UserSearchService {
       readonly indexedAt?: string | Date | undefined;
     },
   ): SearchDocumentInput {
-    const primaryOrgUnit =
-      user.organizationUnits?.find((unit) => unit.isPrimary) ?? user.organizationUnits?.[0];
-    const organizationUnitId = primaryOrgUnit?.organizationUnitId ?? null;
-    const roleCodes = (user.roles ?? []).map((role) => role.code);
-
-    const keywords: string[] = [
-      user.username,
-      user.email,
-      ...(user.employeeCode ? [user.employeeCode] : []),
-      ...(user.phone ? [user.phone] : []),
-      ...roleCodes,
-    ];
-
-    return {
-      id: user.id,
-      entityCode: USERS_SEARCH_ENTITY_CODE,
-      module: 'users',
-      entityType: 'user',
-      title: user.fullName || user.username,
-      subtitle: user.email,
-      keywords,
-      searchableText: [
-        user.fullName,
-        user.username,
-        user.email,
-        user.employeeCode ?? '',
-        user.phone ?? '',
-        primaryOrgUnit?.name ?? '',
-      ]
-        .filter((part) => Boolean(part))
-        .join(' '),
-      ownerId: user.id,
-      organizationUnitId,
-      status: user.status,
-      metadata: {
-        username: user.username,
-        email: user.email,
-        employeeCode: user.employeeCode ?? null,
-        phone: user.phone ?? null,
-        roles: roleCodes,
-        organizationUnitId,
-      },
-      sourceUpdatedAt: overrides?.sourceUpdatedAt ?? user.updatedAt ?? user.createdAt,
-      indexedAt: overrides?.indexedAt ?? new Date().toISOString(),
-    };
+    return buildUserSearchDocument(user, overrides);
   }
 
   /**

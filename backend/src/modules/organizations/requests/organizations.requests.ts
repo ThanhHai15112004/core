@@ -268,6 +268,8 @@ export const bulkImportOrganizationsSchema = z.object({
   items: z.array(bulkImportOrganizationRowSchema).optional(),
   csvContent: z.string().optional(),
   xlsxBase64: z.string().optional(),
+  duplicateStrategy: z.enum(['SKIP', 'UPDATE', 'REJECT']).optional(),
+  columnMapping: z.record(z.string(), z.union([z.string(), z.number()])).optional(),
   skipDuplicates: z.boolean().default(true),
   updateExisting: z.boolean().default(false),
 });
@@ -276,6 +278,8 @@ export interface BulkImportOrganizationsRequest {
   readonly items?: readonly BulkImportOrganizationRowInput[] | undefined;
   readonly csvContent?: string | undefined;
   readonly xlsxBase64?: string | undefined;
+  readonly duplicateStrategy?: 'SKIP' | 'UPDATE' | 'REJECT' | undefined;
+  readonly columnMapping?: Readonly<Record<string, string | number>> | undefined;
   readonly skipDuplicates?: boolean | undefined;
   readonly updateExisting?: boolean | undefined;
 }

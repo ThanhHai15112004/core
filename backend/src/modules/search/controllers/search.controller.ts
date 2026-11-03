@@ -3,7 +3,7 @@ import { z } from 'zod';
 import {
   ApiDoc,
   ApiGroup,
-  RequirePermissions,
+  RequireAnyPermission,
   ValidatedBody,
   ValidatedParams,
   ValidatedQuery,
@@ -52,7 +52,7 @@ export class SearchController {
 
   /** Tìm kiếm toàn hệ thống theo thực thể đã đăng ký, áp dụng quyền & Data Scope (Mục 8.5.1, 8.5.2, 8.5.3, 8.5.6, 8.5.7 & 8.5.8) */
   @Get(SEARCH_ROUTES.ROOT)
-  @RequirePermissions('users.read')
+  @RequireAnyPermission('search.read', 'search.manage', 'users.read')
   @ApiDoc({
     summary:
       'Tìm kiếm toàn hệ thống qua Search Provider dùng chung (áp dụng Data Scope & theo dõi độ trễ Index)',
@@ -67,7 +67,7 @@ export class SearchController {
 
   /** Xem danh sách thực thể được phép tìm kiếm đã đăng ký theo module (Mục 8.5.1) */
   @Get(SEARCH_ROUTES.ENTITIES)
-  @RequirePermissions('users.read')
+  @RequireAnyPermission('search.read', 'search.manage', 'users.read')
   @ApiDoc({
     summary: 'Xem danh sách các thực thể đã đăng ký vào Search Provider dùng chung',
     response: z.array(registeredSearchableEntityResponseSchema),
@@ -81,7 +81,7 @@ export class SearchController {
   /** Thêm mới hoặc cập nhật tài liệu vào Search Index & bảng `search_documents` */
   @Post(SEARCH_ROUTES.DOCUMENTS)
   @HttpCode(HttpStatus.OK)
-  @RequirePermissions('users.update')
+  @RequireAnyPermission('search.sync', 'search.manage', 'users.update')
   @ApiDoc({
     summary: 'Thêm mới hoặc cập nhật danh sách tài liệu vào Search Index (search_documents)',
   })
@@ -94,7 +94,7 @@ export class SearchController {
 
   /** Xóa một tài liệu khỏi Search Index & bảng `search_documents` theo `entityCode` và `entityId` */
   @Delete(SEARCH_ROUTES.DOCUMENT_BY_ENTITY_AND_ID)
-  @RequirePermissions('users.update')
+  @RequireAnyPermission('search.sync', 'search.manage', 'users.update')
   @ApiDoc({
     summary: 'Xóa tài liệu khỏi Search Index theo entityCode và entityId',
   })
@@ -109,7 +109,7 @@ export class SearchController {
   /** Đồng bộ dữ liệu sang Search Index trực tiếp hoặc qua Queue (Mục 8.5.4) */
   @Post(SEARCH_ROUTES.SYNC)
   @HttpCode(HttpStatus.OK)
-  @RequirePermissions('users.update')
+  @RequireAnyPermission('search.sync', 'search.manage', 'users.update')
   @ApiDoc({
     summary: 'Đồng bộ dữ liệu sang Search Index (trực tiếp hoặc chạy bằng Queue)',
     response: searchSyncHistoryResponseSchema,
@@ -124,7 +124,7 @@ export class SearchController {
   /** Tạo lại toàn bộ Search Index theo module hoặc loại dữ liệu (Mục 8.5.5) */
   @Post(SEARCH_ROUTES.REBUILD)
   @HttpCode(HttpStatus.OK)
-  @RequirePermissions('users.update')
+  @RequireAnyPermission('search.rebuild', 'search.manage', 'users.update')
   @ApiDoc({
     summary: 'Tạo lại toàn bộ Search Index theo module hoặc loại dữ liệu (entityType)',
     response: searchSyncHistoryResponseSchema,
@@ -138,7 +138,7 @@ export class SearchController {
 
   /** Theo dõi độ trễ cập nhật Search Index để phát hiện kết quả tìm kiếm bị cũ (Mục 8.5.7) */
   @Get(SEARCH_ROUTES.LAG)
-  @RequirePermissions('users.read')
+  @RequireAnyPermission('search.read', 'search.manage', 'users.read')
   @ApiDoc({
     summary: 'Theo dõi độ trễ cập nhật Search Index (phát hiện kết quả tìm kiếm bị cũ)',
     response: searchIndexLagReportResponseSchema,
@@ -149,7 +149,7 @@ export class SearchController {
 
   /** Thống kê các từ khóa tìm kiếm không có kết quả để cải thiện chất lượng tìm kiếm (Mục 8.5.8) */
   @Get(SEARCH_ROUTES.ZERO_RESULTS)
-  @RequirePermissions('users.read')
+  @RequireAnyPermission('search.read', 'search.manage', 'users.read')
   @ApiDoc({
     summary: 'Thống kê từ khóa tìm kiếm không có kết quả (Zero-Result Keywords)',
     response: z.array(zeroResultKeywordStatResponseSchema),
@@ -162,7 +162,7 @@ export class SearchController {
 
   /** Xóa thống kê một từ khóa không có kết quả theo từ khóa hoặc ID */
   @Delete(SEARCH_ROUTES.ZERO_RESULT_BY_KEYWORD)
-  @RequirePermissions('users.update')
+  @RequireAnyPermission('search.manage', 'search.sync', 'users.update')
   @ApiDoc({
     summary: 'Xóa mục thống kê từ khóa 0 kết quả',
   })
@@ -174,7 +174,7 @@ export class SearchController {
 
   /** Xem lịch sử đồng bộ / tạo lại Search Index (Mục 8.5.4 & 8.5.5) */
   @Get(SEARCH_ROUTES.HISTORIES)
-  @RequirePermissions('users.read')
+  @RequireAnyPermission('search.read', 'search.manage', 'users.read')
   @ApiDoc({
     summary: 'Xem danh sách lịch sử đồng bộ & tạo lại Search Index',
     response: z.array(searchSyncHistoryResponseSchema),
@@ -187,7 +187,7 @@ export class SearchController {
 
   /** Xem chi tiết một bản ghi lịch sử đồng bộ Search Index theo ID */
   @Get(SEARCH_ROUTES.HISTORY_BY_ID)
-  @RequirePermissions('users.read')
+  @RequireAnyPermission('search.read', 'search.manage', 'users.read')
   @ApiDoc({
     summary: 'Xem chi tiết bản ghi lịch sử đồng bộ Search Index theo ID',
     response: searchSyncHistoryResponseSchema,
@@ -200,7 +200,7 @@ export class SearchController {
 
   /** Xóa một bản ghi lịch sử đồng bộ Search Index theo ID */
   @Delete(SEARCH_ROUTES.HISTORY_BY_ID)
-  @RequirePermissions('users.update')
+  @RequireAnyPermission('search.manage', 'search.sync', 'users.update')
   @ApiDoc({
     summary: 'Xóa bản ghi lịch sử đồng bộ Search Index theo ID',
   })

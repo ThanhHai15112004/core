@@ -6,14 +6,20 @@ import {
   type CodeTypeManifestItem,
   type CodeValueUsageCheckResult,
   ConflictAppException,
+  ExportRegistryService,
   ForbiddenAppException,
   HTTP_ERROR_CODE,
+  ImportRegistryService,
   NotFoundAppException,
   type ResolvedCodeValueView,
   SettingRegistryService,
   defaultCodeRegistry,
+  defaultExportRegistry,
+  defaultImportRegistry,
   defaultSettingRegistry,
   discoverManifestCodeTypes,
+  resolveExportFormat,
+  resolveImportDuplicateStrategy,
 } from '@packages/kernel/index.js';
 import {
   CoreI18nService,
@@ -27,6 +33,7 @@ import type { CodeTypeEntity } from '../entities/code-type.entity.js';
 import type { CodeValueEntity } from '../entities/code-value.entity.js';
 import { CODES_AUDIT_META } from '../enum/codes.enum.js';
 import {
+  CODES_IMPORT_COLUMNS,
   buildCodesExportPayload,
   buildCodesImportTemplatePayload,
   executeBulkImportCodeValues,
@@ -44,17 +51,19 @@ import {
 } from '../helpers/codes-value-mutation.helper.js';
 import { CodeTypeRepository } from '../repositories/code-type.repository.js';
 import { CodeValueRepository } from '../repositories/code-value.repository.js';
-import type {
-  BootstrapCodesQuery,
-  BulkImportCodesRequest,
-  CreateCodeTypeRequest,
-  CreateCodeValueRequest,
-  ExportCodesQuery,
-  ListCodeTypesQuery,
-  ListCodeValuesQuery,
-  ReorderCodeValuesRequest,
-  UpdateCodeTypeRequest,
-  UpdateCodeValueRequest,
+import {
+  type BootstrapCodesQuery,
+  type BulkImportCodeValueRowInput,
+  type BulkImportCodesRequest,
+  type CreateCodeTypeRequest,
+  type CreateCodeValueRequest,
+  type ExportCodesQuery,
+  type ListCodeTypesQuery,
+  type ListCodeValuesQuery,
+  type ReorderCodeValuesRequest,
+  type UpdateCodeTypeRequest,
+  type UpdateCodeValueRequest,
+  bulkImportCodeValueRowSchema,
 } from '../requests/codes.requests.js';
 import type {
   BulkImportCodesResultResponse,
@@ -67,6 +76,8 @@ export class CodesService implements ICodesPublicService, OnModuleInit {
   private readonly manifestCodeTypes = new Map<string, CodeTypeManifestItem>();
   private readonly registry: CodeRegistryService;
   private readonly settingRegistry: SettingRegistryService;
+  private readonly importRegistry: ImportRegistryService;
+  private readonly exportRegistry: ExportRegistryService;
 
   constructor(
     private readonly codeTypeRepository: CodeTypeRepository,
@@ -83,11 +94,130 @@ export class CodesService implements ICodesPublicService, OnModuleInit {
     @Optional()
     @Inject(SettingRegistryService)
     settingRegistryService: SettingRegistryService | null = null,
+    @Optional()
+    importRegistry?: ImportRegistryService,
+    @Optional()
+    exportRegistry?: ExportRegistryService,
   ) {
     this.registry = codeRegistryService ?? defaultCodeRegistry;
     this.settingRegistry = settingRegistryService ?? defaultSettingRegistry;
+    this.importRegistry = importRegistry ?? defaultImportRegistry;
+    this.exportRegistry = exportRegistry ?? defaultExportRegistry;
     this.configureI18nBridge();
     this.discoverManifestCodeTypes();
+    this.registerImportExportAdapters();
+  }
+
+  /** Đăng ký profile Import & Worker Executor của module `codes` vào Registry dùng chung (Mục 8.2 & 8.3) */
+  private registerImportExportAdapters(): void {
+    const profileHandler = {
+      profileCode: 'codes',
+      module: 'codes',
+      columns: CODES_IMPORT_COLUMNS,
+      rowSchema: bulkImportCodeValueRowSchema,
+      uniqueKeyFields: ['code'],
+      requiredPermission: 'codes.manage',
+      exportTemplate: (format: 'csv' | 'xlsx') => this.exportImportTemplate(format),
+      executeImport: async (dto: Readonly<Record<string, unknown>>, actorId?: number) =>
+        (await this.bulkImportCodeValues(
+          dto as unknown as BulkImportCodesRequest,
+          typeof dto['typeCode'] === 'string' ? dto['typeCode'] : undefined,
+          actorId,
+          { skipHistoryRecord: true },
+        )) as unknown as Readonly<Record<string, unknown>>,
+    };
+    this.importRegistry.registerProfile<BulkImportCodeValueRowInput>(profileHandler);
+    if (this.importRegistry !== defaultImportRegistry) {
+      defaultImportRegistry.registerProfile<BulkImportCodeValueRowInput>(profileHandler);
+    }
+
+    const importExecutor = {
+      profileCode: 'codes',
+      module: 'codes',
+      topic: 'codes.import',
+      parseImportRows: (input: {
+        readonly items?: readonly BulkImportCodeValueRowInput[] | undefined;
+      }) => (Array.isArray(input.items) ? input.items : []),
+      executeChunkImport: async (input: {
+        readonly items?: readonly BulkImportCodeValueRowInput[] | undefined;
+        readonly csvContent?: string | undefined;
+        readonly xlsxBase64?: string | undefined;
+        readonly columnMapping?: Readonly<Record<string, string | number | null>> | undefined;
+        readonly duplicateStrategy?: 'SKIP' | 'UPDATE' | 'REJECT' | undefined;
+        readonly skipDuplicates?: boolean | undefined;
+        readonly actorId?: number | undefined;
+      }) => {
+        const res = await this.bulkImportCodeValues(
+          {
+            skipDuplicates: input.skipDuplicates ?? true,
+            ...(input.duplicateStrategy ? { duplicateStrategy: input.duplicateStrategy } : {}),
+            ...(input.items ? { items: [...input.items] } : {}),
+            ...(input.csvContent ? { csvContent: input.csvContent } : {}),
+            ...(input.xlsxBase64 ? { xlsxBase64: input.xlsxBase64 } : {}),
+            ...(input.columnMapping
+              ? {
+                  columnMapping: Object.fromEntries(
+                    Object.entries(input.columnMapping).filter(
+                      (entry): entry is [string, string | number] => entry[1] !== null,
+                    ),
+                  ),
+                }
+              : {}),
+          },
+          undefined,
+          input.actorId,
+          { skipHistoryRecord: true },
+        );
+        return {
+          importedCount: res.importedCount,
+          updatedCount: 0,
+          skippedCount: res.skippedCount,
+          failedCount: res.failedCount,
+          errors: res.errors,
+        };
+      },
+    };
+    this.importRegistry.registerWorkerExecutor(importExecutor);
+    if (this.importRegistry !== defaultImportRegistry) {
+      defaultImportRegistry.registerWorkerExecutor(importExecutor);
+    }
+
+    const exportExecutor = {
+      profileCode: 'codes',
+      module: 'codes',
+      topic: 'codes.export',
+      requiredPermission: 'codes.read',
+      executeExport: async (input: {
+        readonly query?: Readonly<Record<string, unknown>> | undefined;
+        readonly format?: string | undefined;
+        readonly actorId?: number | undefined;
+        readonly historyId?: number | undefined;
+        readonly jobId: string;
+      }) => {
+        const res = await this.exportCodes(
+          {
+            ...((input.query ?? {}) as Partial<ExportCodesQuery>),
+            format: input.format === 'csv' ? 'csv' : 'xlsx',
+          },
+          input.actorId,
+          { skipHistoryRecord: true },
+        );
+        return {
+          fileName: res.fileName,
+          contentType: res.contentType,
+          format: res.format,
+          totalExported: res.totalExported,
+          csvContent: res.csvContent,
+          xlsxBase64: res.xlsxBase64,
+          ...(input.historyId !== undefined ? { historyId: input.historyId } : {}),
+          jobId: input.jobId,
+        };
+      },
+    };
+    this.exportRegistry.registerWorkerExecutor(exportExecutor);
+    if (this.exportRegistry !== defaultExportRegistry) {
+      defaultExportRegistry.registerWorkerExecutor(exportExecutor);
+    }
   }
 
   public async onModuleInit(): Promise<void> {
@@ -596,6 +726,8 @@ export class CodesService implements ICodesPublicService, OnModuleInit {
   public async bulkImportCodeValues(
     dto: BulkImportCodesRequest,
     routeTypeCode?: string,
+    actorId?: number,
+    options?: { readonly skipHistoryRecord?: boolean | undefined },
   ): Promise<BulkImportCodesResultResponse> {
     const fallbackTypeCode = (routeTypeCode ?? dto.typeCode ?? '').trim().toLowerCase();
     const result = await executeBulkImportCodeValues({
@@ -609,6 +741,36 @@ export class CodesService implements ICodesPublicService, OnModuleInit {
       syncManifests: () => this.syncManifests(),
       createCodeValue: (typeCode, payload) => this.createCodeValue(typeCode, payload),
     });
+
+    if (options?.skipHistoryRecord !== true) {
+      const format: 'xlsx' | 'csv' | 'json' = dto.xlsxBase64
+        ? 'xlsx'
+        : dto.csvContent
+          ? 'csv'
+          : 'json';
+      const duplicateStrategy = resolveImportDuplicateStrategy(undefined, dto.skipDuplicates);
+      const history = this.importRegistry.startImportHistory({
+        profileCode: 'codes',
+        module: 'codes',
+        fileName: `codes_import.${format}`,
+        format,
+        duplicateStrategy,
+        columnMapping: null,
+        totalRows: result.totalRows,
+        actorId: actorId ?? null,
+        status: 'PROCESSING',
+      });
+      this.importRegistry.updateImportHistory(history.id, {
+        status: result.failedCount > 0 && result.importedCount === 0 ? 'FAILED' : 'COMPLETED',
+        totalRows: result.totalRows,
+        processedRows: result.totalRows,
+        createdCount: result.importedCount,
+        updatedCount: 0,
+        skippedCount: result.skippedCount,
+        failedCount: result.failedCount,
+        completedAt: new Date().toISOString(),
+      });
+    }
 
     await this.auditLogService?.record({
       module: CODES_AUDIT_META.MODULE,
@@ -630,7 +792,11 @@ export class CodesService implements ICodesPublicService, OnModuleInit {
   }
 
   /** Xuất danh mục dùng chung ra Excel (.xlsx) hoặc CSV (.csv) phục vụ quản trị (Mục 5.4.7) */
-  public async exportCodes(query: Partial<ExportCodesQuery> = {}): Promise<ExportCodesResponse> {
+  public async exportCodes(
+    query: Partial<ExportCodesQuery> = {},
+    actorId?: number,
+    options?: { readonly skipHistoryRecord?: boolean | undefined },
+  ): Promise<ExportCodesResponse> {
     const locale = this.resolveEffectiveLocale();
     const allTypes = await this.listCodeTypes({
       module: query.module,
@@ -645,6 +811,36 @@ export class CodesService implements ICodesPublicService, OnModuleInit {
       query,
       locale,
     });
+
+    if (options?.skipHistoryRecord !== true) {
+      const resolvedFormat = resolveExportFormat(response.format, 'xlsx');
+      const history = this.exportRegistry.startExportHistory({
+        profileCode: 'codes',
+        module: 'codes',
+        fileName: response.fileName,
+        format: resolvedFormat,
+        actorId: actorId ?? null,
+        filters: query as Readonly<Record<string, unknown>>,
+        totalExported: response.totalExported,
+        processedRows: response.totalExported,
+        status: 'COMPLETED',
+      });
+      const buffer =
+        resolvedFormat === 'csv'
+          ? Buffer.from(response.csvContent ?? '', 'utf8')
+          : Buffer.from(response.xlsxBase64 ?? '', 'base64');
+      this.exportRegistry.storeTemporaryArtifact({
+        historyId: history.id,
+        profileCode: 'codes',
+        module: 'codes',
+        actorId: actorId ?? null,
+        fileName: response.fileName,
+        contentType: response.contentType,
+        format: resolvedFormat,
+        totalExported: response.totalExported,
+        buffer,
+      });
+    }
 
     await this.auditLogService?.record({
       module: CODES_AUDIT_META.MODULE,

@@ -8,6 +8,7 @@ import type {
 } from '../contracts/index.js';
 
 export type UnitUsageCountDelegate = (unitId: number) => Promise<number>;
+export type UnitBatchUsageCountDelegate = (unitIds: readonly number[]) => Promise<number>;
 export type { UnitManagerResolverDelegate, UnitManagerSummary };
 
 export interface HierarchyNodeInput {

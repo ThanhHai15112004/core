@@ -43,4 +43,11 @@ export class UserProfileRepository extends BaseTypeOrmRepository<UserProfileEnti
       userId: Number(userId),
     });
   }
+
+  /** Đếm số hồ sơ người dùng theo giới tính trực tiếp tại DB (phục vụ kiểm tra usage cho CodeRegistry) */
+  public async countByGender(gender: number): Promise<number> {
+    return this.repository.count({
+      where: { gender: Number(gender) },
+    });
+  }
 }

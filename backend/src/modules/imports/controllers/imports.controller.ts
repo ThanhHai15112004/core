@@ -3,7 +3,7 @@ import { z } from 'zod';
 import {
   ApiDoc,
   ApiGroup,
-  RequirePermissions,
+  RequireAnyPermission,
   ValidatedBody,
   ValidatedParams,
   ValidatedQuery,
@@ -46,7 +46,14 @@ export class ImportsController {
 
   /** Danh sách các cấu hình Import (`profileCode`) đã đăng ký trong hệ thống */
   @Get(IMPORTS_ROUTES.PROFILES)
-  @RequirePermissions('users.import')
+  @RequireAnyPermission(
+    'imports.read',
+    'imports.execute',
+    'imports.manage',
+    'users.import',
+    'organizations.manage',
+    'codes.manage',
+  )
   @ApiDoc({
     summary: 'Lấy danh sách các cấu hình Import đã đăng ký của các module',
   })
@@ -56,7 +63,14 @@ export class ImportsController {
 
   /** Xem danh sách lịch sử Import từ bảng `import_histories` (File, người thực hiện và kết quả — Mục 8.2.9) */
   @Get(IMPORTS_ROUTES.HISTORIES)
-  @RequirePermissions('users.import')
+  @RequireAnyPermission(
+    'imports.read',
+    'imports.execute',
+    'imports.manage',
+    'users.import',
+    'organizations.manage',
+    'codes.manage',
+  )
   @ApiDoc({
     summary: 'Xem danh sách lịch sử Import (File, người thực hiện và kết quả)',
     response: z.array(importHistoryItemResponseSchema),
@@ -69,7 +83,14 @@ export class ImportsController {
 
   /** Xem chi tiết một bản ghi lịch sử Import theo ID (Mục 8.2.9) */
   @Get(IMPORTS_ROUTES.HISTORY_BY_ID)
-  @RequirePermissions('users.import')
+  @RequireAnyPermission(
+    'imports.read',
+    'imports.execute',
+    'imports.manage',
+    'users.import',
+    'organizations.manage',
+    'codes.manage',
+  )
   @ApiDoc({
     summary: 'Xem chi tiết bản ghi lịch sử Import theo ID',
     response: importHistoryItemResponseSchema,
@@ -82,7 +103,7 @@ export class ImportsController {
 
   /** Cập nhật bản ghi lịch sử Import theo ID */
   @Patch(IMPORTS_ROUTES.HISTORY_BY_ID)
-  @RequirePermissions('users.import')
+  @RequireAnyPermission('imports.manage', 'imports.execute', 'users.import')
   @ApiDoc({
     summary: 'Cập nhật trạng thái hoặc thông tin bản ghi lịch sử Import theo ID',
     response: importHistoryItemResponseSchema,
@@ -96,7 +117,7 @@ export class ImportsController {
 
   /** Xóa một bản ghi lịch sử Import theo ID */
   @Delete(IMPORTS_ROUTES.HISTORY_BY_ID)
-  @RequirePermissions('users.import')
+  @RequireAnyPermission('imports.manage', 'imports.execute', 'users.import')
   @ApiDoc({
     summary: 'Xóa bản ghi lịch sử Import theo ID',
   })
@@ -108,7 +129,14 @@ export class ImportsController {
 
   /** Theo dõi tiến độ công việc Import chạy nền qua Queue (Số dòng thành công, lỗi và còn lại — Mục 8.2.7 & 8.2.8) */
   @Get(IMPORTS_ROUTES.JOB_PROGRESS)
-  @RequirePermissions('users.import')
+  @RequireAnyPermission(
+    'imports.read',
+    'imports.execute',
+    'imports.manage',
+    'users.import',
+    'organizations.manage',
+    'codes.manage',
+  )
   @ApiDoc({
     summary: 'Xem tiến độ công việc Import chạy nền qua Queue (số dòng thành công, lỗi và còn lại)',
     response: importJobProgressResponseSchema,
@@ -119,7 +147,14 @@ export class ImportsController {
 
   /** Tải file mẫu (Template) Excel (.xlsx) hoặc CSV (.csv) theo `profileCode` (Mục 8.2.1 & 8.2.2) */
   @Get(IMPORTS_ROUTES.TEMPLATE_BY_PROFILE)
-  @RequirePermissions('users.import')
+  @RequireAnyPermission(
+    'imports.execute',
+    'imports.read',
+    'imports.manage',
+    'users.import',
+    'organizations.manage',
+    'codes.manage',
+  )
   @ApiDoc({
     summary: 'Tải file mẫu (Template) Excel (.xlsx) hoặc CSV (.csv) theo profileCode',
     response: importTemplateFileResponseSchema,
@@ -137,7 +172,13 @@ export class ImportsController {
   /** Xem trước dữ liệu trước khi nhập (Preview / Dry-run): ánh xạ cột, dòng mẫu và lỗi từng dòng/cột (Mục 8.2.3, 8.2.4, 8.2.5) */
   @Post(IMPORTS_ROUTES.PREVIEW_BY_PROFILE)
   @HttpCode(HttpStatus.OK)
-  @RequirePermissions('users.import')
+  @RequireAnyPermission(
+    'imports.execute',
+    'imports.manage',
+    'users.import',
+    'organizations.manage',
+    'codes.manage',
+  )
   @ApiDoc({
     summary:
       'Xem trước dữ liệu trước khi nhập (Preview / Dry-run): ánh xạ cột, dòng mẫu và kiểm tra lỗi theo dòng/cột',
@@ -153,7 +194,13 @@ export class ImportsController {
   /** Nhập dữ liệu hàng loạt từ file Excel (.xlsx), CSV hoặc JSON theo `profileCode` (Mục 8.2) */
   @Post(IMPORTS_ROUTES.EXECUTE_BY_PROFILE)
   @HttpCode(HttpStatus.OK)
-  @RequirePermissions('users.import')
+  @RequireAnyPermission(
+    'imports.execute',
+    'imports.manage',
+    'users.import',
+    'organizations.manage',
+    'codes.manage',
+  )
   @ApiDoc({
     summary: 'Nhập dữ liệu hàng loạt từ file Excel (.xlsx base64), CSV hoặc JSON theo profileCode',
     response: executeImportResultResponseSchema,
@@ -163,6 +210,6 @@ export class ImportsController {
     @ValidatedBody(executeImportRequestSchema) body: ExecuteImportRequest,
     @CurrentUser() actor?: UserIdentity,
   ): Promise<ExecuteImportResultResponse> {
-    return this.importsService.executeImport(profileCode, body, actor?.id);
+    return this.importsService.executeImport(profileCode, body, actor?.id, actor);
   }
 }

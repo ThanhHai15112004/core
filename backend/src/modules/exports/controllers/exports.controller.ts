@@ -3,7 +3,7 @@ import { z } from 'zod';
 import {
   ApiDoc,
   ApiGroup,
-  RequirePermissions,
+  RequireAnyPermission,
   ValidatedBody,
   ValidatedParams,
   ValidatedQuery,
@@ -42,7 +42,14 @@ export class ExportsController {
 
   /** Xem danh sách lịch sử Export từ bảng `export_histories` (Người thực hiện, bộ lọc và số dòng — Mục 8.3.7) */
   @Get(EXPORTS_ROUTES.HISTORIES)
-  @RequirePermissions('users.export')
+  @RequireAnyPermission(
+    'exports.read',
+    'exports.execute',
+    'exports.manage',
+    'users.export',
+    'organizations.read',
+    'codes.read',
+  )
   @ApiDoc({
     summary: 'Xem danh sách lịch sử Export (Người thực hiện, bộ lọc và số dòng)',
     response: z.array(exportHistoryItemResponseSchema),
@@ -55,7 +62,14 @@ export class ExportsController {
 
   /** Xem chi tiết một bản ghi lịch sử Export theo ID (Mục 8.3.7) */
   @Get(EXPORTS_ROUTES.HISTORY_BY_ID)
-  @RequirePermissions('users.export')
+  @RequireAnyPermission(
+    'exports.read',
+    'exports.execute',
+    'exports.manage',
+    'users.export',
+    'organizations.read',
+    'codes.read',
+  )
   @ApiDoc({
     summary: 'Xem chi tiết bản ghi lịch sử Export theo ID',
     response: exportHistoryItemResponseSchema,
@@ -68,7 +82,7 @@ export class ExportsController {
 
   /** Cập nhật bản ghi lịch sử Export theo ID */
   @Patch(EXPORTS_ROUTES.HISTORY_BY_ID)
-  @RequirePermissions('users.export')
+  @RequireAnyPermission('exports.manage', 'exports.execute', 'users.export')
   @ApiDoc({
     summary: 'Cập nhật trạng thái hoặc thông tin bản ghi lịch sử Export theo ID',
     response: exportHistoryItemResponseSchema,
@@ -82,7 +96,7 @@ export class ExportsController {
 
   /** Xóa bản ghi lịch sử Export và thu hồi tệp tạm liên quan theo ID */
   @Delete(EXPORTS_ROUTES.HISTORY_BY_ID)
-  @RequirePermissions('users.export')
+  @RequireAnyPermission('exports.manage', 'exports.execute', 'users.export')
   @ApiDoc({
     summary: 'Xóa bản ghi lịch sử Export theo ID',
   })
@@ -94,7 +108,14 @@ export class ExportsController {
 
   /** Theo dõi tiến độ công việc Export chạy nền qua Queue (Mục 8.3.4) */
   @Get(EXPORTS_ROUTES.JOB_PROGRESS)
-  @RequirePermissions('users.export')
+  @RequireAnyPermission(
+    'exports.read',
+    'exports.execute',
+    'exports.manage',
+    'users.export',
+    'organizations.read',
+    'codes.read',
+  )
   @ApiDoc({
     summary: 'Xem tiến độ công việc Export chạy nền qua Queue',
     response: exportJobProgressResponseSchema,
@@ -105,7 +126,14 @@ export class ExportsController {
 
   /** Tải xuống file Export qua đường dẫn tạm thời (tự động chặn khi file đã hết hạn — Mục 8.3.5 & 8.3.8) */
   @Get(EXPORTS_ROUTES.DOWNLOAD_BY_TOKEN)
-  @RequirePermissions('users.export')
+  @RequireAnyPermission(
+    'exports.read',
+    'exports.execute',
+    'exports.manage',
+    'users.export',
+    'organizations.read',
+    'codes.read',
+  )
   @ApiDoc({
     summary: 'Tải file Export tạm thời theo token (tự động hết hạn theo TTL cấu hình)',
     response: exportTemporaryDownloadResponseSchema,
@@ -117,7 +145,7 @@ export class ExportsController {
   /** Dọn dẹp các file Export tạm thời đã hết hạn (Mục 8.3.8) */
   @Post(EXPORTS_ROUTES.PURGE_EXPIRED)
   @HttpCode(HttpStatus.OK)
-  @RequirePermissions('users.export')
+  @RequireAnyPermission('exports.manage', 'exports.execute', 'users.export')
   @ApiDoc({
     summary: 'Thu hồi & xóa toàn bộ các file Export tạm thời đã hết hạn',
   })
@@ -127,7 +155,13 @@ export class ExportsController {
 
   /** Xuất danh sách dữ liệu theo `profileCode` ra Excel (.xlsx), CSV (.csv) hoặc PDF (.pdf) giữ đúng bộ lọc & Data Scope (Mục 8.3) */
   @Get(EXPORTS_ROUTES.EXECUTE_BY_PROFILE)
-  @RequirePermissions('users.export')
+  @RequireAnyPermission(
+    'exports.execute',
+    'exports.manage',
+    'users.export',
+    'organizations.read',
+    'codes.read',
+  )
   @ApiDoc({
     summary:
       'Xuất danh sách dữ liệu theo profileCode ra định dạng Excel (.xlsx), CSV (.csv) hoặc PDF (.pdf) theo bộ lọc & Data Scope',
