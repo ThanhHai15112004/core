@@ -1,3 +1,5 @@
+import { BadRequestAppException, ForbiddenAppException } from '@packages/kernel/index.js';
+import { AuditLogService } from '@packages/security/index.js';
 import {
   WORKFLOW_APPROVAL_DECISION,
   WORKFLOW_APPROVAL_MODE,
@@ -464,9 +466,40 @@ describe('Workflows & Approval Module Unit Tests (Sections 9.3 & 9.4)', () => {
         ],
       };
 
+      const dispatchedNotifications: Array<Record<string, unknown>> = [];
       const notificationsPublicService = {
-        dispatch: async () => ({ id: 1, recipientCount: 1 }),
+        dispatch: async (input: Record<string, unknown>) => {
+          dispatchedNotifications.push(input);
+          return { id: dispatchedNotifications.length, recipientCount: 1 };
+        },
       };
+
+      const syncedFileUsages: Array<Record<string, unknown>> = [];
+      const filesPublicService = {
+        ensureActiveFilesExist: async (ids: readonly number[]) =>
+          ids.map((fileId) => ({
+            id: fileId,
+            code: `FILE_${fileId}`,
+            displayName: `Tài liệu đính kèm #${fileId}.pdf`,
+            originalName: `attachment-${fileId}.pdf`,
+            mimeType: 'application/pdf',
+            extension: 'pdf',
+            category: 4,
+            categoryName: 'DOCUMENT',
+            sizeBytes: 2048,
+            sizeFormatted: '2 KB',
+            status: 1,
+            statusName: 'ACTIVE',
+            visibility: 2,
+            visibilityName: 'INTERNAL',
+            usageCount: 1,
+          })),
+        syncEntityFileUsages: async (params: Record<string, unknown>) => {
+          syncedFileUsages.push(params);
+        },
+      };
+
+      const auditLogService = new AuditLogService();
 
       const service = new WorkflowsService(
         definitionRepo as never,
@@ -480,10 +513,19 @@ describe('Workflows & Approval Module Unit Tests (Sections 9.3 & 9.4)', () => {
         null,
         null,
         null,
-        null,
+        auditLogService,
+        filesPublicService as never,
       );
 
-      return { service, instances, approvalSteps, histories };
+      return {
+        service,
+        instances,
+        approvalSteps,
+        histories,
+        dispatchedNotifications,
+        syncedFileUsages,
+        auditLogService,
+      };
     };
 
     it('creates workflow definition, clones new version, starts instance, transitions to approval, delegates & approves step, and records full history', async () => {
@@ -1140,6 +1182,255 @@ describe('Workflows & Approval Module Unit Tests (Sections 9.3 & 9.4)', () => {
       const afterEscalate = await service.getInstanceById(started.id);
       expect(afterEscalate.approvalSteps[0]?.approverUserId).toBe(90);
       expect(afterEscalate.approvalSteps[0]?.delegatedFromUserId).toBe(28);
+    });
+
+    it('9.5 — supports record comments, internal notes permission filtering, threaded replies, @mentions notifications, File Core attachments, edit history preservation, time window enforcement, and unified activity timeline', async () => {
+      const { service, dispatchedNotifications, syncedFileUsages } =
+        createInMemoryWorkflowsService();
+
+      const regularEmployee = {
+        id: 10,
+        username: 'emp10',
+        roles: ['employee'],
+        permissions: ['workflows.read', 'workflows.execute'],
+      };
+      const reviewerWithInternalPerm = {
+        id: 20,
+        username: 'mgr20',
+        roles: ['manager'],
+        permissions: ['workflows.read', 'workflows.execute', 'workflows.internal_notes'],
+      };
+      const workflowAdmin = {
+        id: 1,
+        username: 'admin1',
+        roles: ['admin'],
+        permissions: ['workflows.read', 'workflows.manage', 'workflows.internal_notes'],
+      };
+
+      // Khởi tạo 1 quy trình cho bản ghi contract#CT-500 để có sự kiện Workflow trên Timeline
+      await service.createDefinition(
+        {
+          code: 'CONTRACT_REVIEW_95',
+          name: 'Duyệt hợp đồng Mục 9.5',
+          targetEntityType: 'contract',
+          defaultSlaHours: 24,
+          warningBeforeMinutes: 60,
+          status: WORKFLOW_DEFINITION_STATUS.ACTIVE,
+          states: [
+            {
+              code: 'DRAFT',
+              name: 'Nháp',
+              stateType: WORKFLOW_STATE_TYPE.INITIAL,
+              badgeTone: 'info',
+              slaHours: 12,
+              approvalConfig: null,
+              sortOrder: 1,
+            },
+            {
+              code: 'APPROVED',
+              name: 'Đã duyệt',
+              stateType: WORKFLOW_STATE_TYPE.FINAL_APPROVED,
+              badgeTone: 'success',
+              slaHours: null,
+              approvalConfig: null,
+              sortOrder: 2,
+            },
+          ],
+          transitions: [
+            {
+              code: 'APPROVE_DIRECT',
+              name: 'Duyệt ngay',
+              fromStateCode: 'DRAFT',
+              toStateCode: 'APPROVED',
+              sortOrder: 1,
+            },
+          ],
+        },
+        1,
+      );
+
+      const instance = await service.startWorkflowForEntity(
+        {
+          workflowCode: 'CONTRACT_REVIEW_95',
+          entityType: 'contract',
+          entityId: 'CT-500',
+          title: 'Hợp đồng cung cấp phần mềm #CT-500',
+        },
+        regularEmployee,
+      );
+
+      // 9.5.1, 9.5.4 & 9.5.5: Thêm bình luận công khai có nhắc tên (@user_25 + mentionedUserIds) và đính kèm File Core
+      const rootComment = await service.addRecordComment(
+        {
+          entityType: 'contract',
+          entityId: 'CT-500',
+          workflowInstanceId: instance.id,
+          content: 'Đã đính kèm bản dự thảo hợp đồng, nhờ @user_25 và @20 kiểm tra giúp.',
+          isInternal: false,
+          mentionedUserIds: [30],
+          attachmentFileIds: [101, 102],
+        },
+        regularEmployee,
+      );
+
+      expect(rootComment.id).toBe(1);
+      expect(rootComment.isInternal).toBe(false);
+      expect(rootComment.authorUserId).toBe(10);
+      expect(rootComment.authorFullName).toBe('Nhân sự #10');
+      expect(rootComment.mentions.map((m) => m.userId).sort((a, b) => a - b)).toEqual([20, 25, 30]);
+      expect(rootComment.attachmentFileIds).toEqual([101, 102]);
+      expect(rootComment.attachments).toHaveLength(2);
+      expect(rootComment.attachments[0]?.displayName).toContain('#101');
+      expect(syncedFileUsages.length).toBeGreaterThanOrEqual(1);
+      expect(dispatchedNotifications.length).toBeGreaterThanOrEqual(1);
+
+      // 9.5.3: Trả lời bình luận (Tạo chuỗi trao đổi)
+      const replyComment = await service.addRecordComment(
+        {
+          entityType: 'contract',
+          entityId: 'CT-500',
+          workflowInstanceId: instance.id,
+          parentCommentId: rootComment.id,
+          content: 'Tôi đã nhận được file đính kèm và đang rà soát điều khoản thanh toán.',
+          isInternal: false,
+        },
+        reviewerWithInternalPerm,
+      );
+      expect(replyComment.parentCommentId).toBe(rootComment.id);
+
+      // 9.5.2: Người dùng không có quyền workflows.internal_notes bị chặn khi tạo ghi chú nội bộ
+      await expect(
+        service.addRecordComment(
+          {
+            entityType: 'contract',
+            entityId: 'CT-500',
+            content: 'Ghi chú nội bộ trái phép',
+            isInternal: true,
+          },
+          regularEmployee,
+        ),
+      ).rejects.toBeInstanceOf(ForbiddenAppException);
+
+      // 9.5.2: Người có quyền workflows.internal_notes tạo ghi chú nội bộ thành công
+      const internalNote = await service.addRecordComment(
+        {
+          entityType: 'contract',
+          entityId: 'CT-500',
+          workflowInstanceId: instance.id,
+          content: 'Ghi chú nội bộ: Đối tác này cần kiểm tra kỹ hạn mức tín dụng.',
+          isInternal: true,
+        },
+        reviewerWithInternalPerm,
+      );
+      expect(internalNote.isInternal).toBe(true);
+
+      // 9.5.1, 9.5.2 & 9.5.3: Kiểm tra danh sách bình luận theo quyền
+      const visibleToEmployee = await service.listRecordComments(
+        { entityType: 'contract', entityId: 'CT-500', sortOrder: 'ASC' },
+        regularEmployee,
+      );
+      // Nhân viên thường chỉ thấy 1 root comment công khai (kèm 1 reply bên trong), không thấy internalNote
+      expect(visibleToEmployee).toHaveLength(1);
+      expect(visibleToEmployee[0]?.id).toBe(rootComment.id);
+      expect(visibleToEmployee[0]?.replies).toHaveLength(1);
+      expect(visibleToEmployee[0]?.replies[0]?.id).toBe(replyComment.id);
+
+      const visibleToReviewer = await service.listRecordComments(
+        { entityType: 'contract', entityId: 'CT-500', sortOrder: 'ASC' },
+        reviewerWithInternalPerm,
+      );
+      // Người có quyền xem nội bộ thấy cả rootComment và internalNote
+      expect(visibleToReviewer).toHaveLength(2);
+      expect(visibleToReviewer.some((c) => c.isInternal)).toBe(true);
+
+      // 9.5.6 & 9.5.7: Chỉnh sửa bình luận trong thời hạn -> Lưu lịch sử chỉnh sửa (không mất nội dung cũ)
+      const updatedComment = await service.updateRecordComment(
+        rootComment.id,
+        {
+          content: 'Đã cập nhật bản dự thảo hợp đồng v2 (bổ sung phụ lục 01).',
+          attachmentFileIds: [101, 103],
+          editReason: 'Bổ sung thêm phụ lục 01',
+        },
+        regularEmployee,
+      );
+      expect(updatedComment.isEdited).toBe(true);
+      expect(updatedComment.content).toContain('bản dự thảo hợp đồng v2');
+      expect(updatedComment.attachmentFileIds).toEqual([101, 103]);
+      expect(updatedComment.editHistories).toHaveLength(1);
+      expect(updatedComment.editHistories[0]?.previousContent).toContain('nhờ @user_25');
+      expect(updatedComment.editHistories[0]?.previousAttachmentFileIds).toEqual([101, 102]);
+      expect(updatedComment.editHistories[0]?.editReason).toBe('Bổ sung thêm phụ lục 01');
+
+      // 9.5.6: Người khác không phải tác giả (và không có quyền manage) không được sửa bình luận
+      await expect(
+        service.updateRecordComment(
+          rootComment.id,
+          { content: 'Sửa trái phép' },
+          reviewerWithInternalPerm,
+        ),
+      ).rejects.toBeInstanceOf(ForbiddenAppException);
+
+      // 9.5.6: Quá thời hạn cho phép (mặc định 15 phút) tác giả không được sửa/xóa
+      const futureAfterWindow = new Date(Date.now() + 30 * 60_000);
+      await expect(
+        service.updateRecordComment(
+          rootComment.id,
+          { content: 'Sửa khi đã quá hạn 15 phút' },
+          regularEmployee,
+          futureAfterWindow,
+        ),
+      ).rejects.toBeInstanceOf(BadRequestAppException);
+
+      await expect(
+        service.deleteRecordComment(rootComment.id, regularEmployee, futureAfterWindow),
+      ).rejects.toBeInstanceOf(BadRequestAppException);
+
+      // Người có quyền workflows.manage vẫn được phép sửa/xóa ngay cả khi đã qua thời hạn của tác giả
+      const adminEdited = await service.updateRecordComment(
+        rootComment.id,
+        {
+          content: 'Đã xác nhận bản dự thảo v2 và khóa nội dung.',
+          editReason: 'Admin chuẩn hóa ghi chú',
+        },
+        workflowAdmin,
+        futureAfterWindow,
+      );
+      expect(adminEdited.editHistories).toHaveLength(2);
+
+      // 9.5.8: Hiển thị dòng thời gian hoạt động hợp nhất (Comment + Workflow + Audit)
+      const timelineForReviewer = await service.getRecordActivityTimeline(
+        {
+          entityType: 'contract',
+          entityId: 'CT-500',
+          source: 'ALL',
+          sortOrder: 'DESC',
+        },
+        reviewerWithInternalPerm,
+      );
+      expect(timelineForReviewer.totalItems).toBeGreaterThanOrEqual(4);
+      const sources = new Set(timelineForReviewer.items.map((item) => item.source));
+      expect(sources.has('COMMENT')).toBe(true);
+      expect(sources.has('WORKFLOW')).toBe(true);
+      expect(sources.has('AUDIT')).toBe(true);
+
+      // Kiểm tra timeline đối với nhân viên thường: không bị lộ ghi chú nội bộ
+      const timelineForEmployee = await service.getRecordActivityTimeline(
+        {
+          entityType: 'contract',
+          entityId: 'CT-500',
+          source: 'ALL',
+          sortOrder: 'DESC',
+        },
+        regularEmployee,
+      );
+      expect(timelineForEmployee.items.some((item) => item.isInternal)).toBe(false);
+
+      // Xóa mềm bình luận trả lời trong thời hạn
+      const deletedReply = await service.deleteRecordComment(
+        replyComment.id,
+        reviewerWithInternalPerm,
+      );
+      expect(deletedReply.isDeleted).toBe(true);
     });
   });
 });

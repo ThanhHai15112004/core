@@ -83,6 +83,7 @@ export const WORKFLOWS_SETTING_KEYS = {
   PAGINATION_PREFIX: 'workflows.pagination',
   SLA_DEFAULT_HOURS: 'workflows.sla.default_hours',
   SLA_WARNING_BEFORE_MINUTES: 'workflows.sla.warning_before_minutes',
+  COMMENT_EDIT_WINDOW_MINUTES: 'workflows.comments.edit_window_minutes',
 } as const;
 
 export const WORKFLOWS_AUDIT_META = {
@@ -92,9 +93,11 @@ export const WORKFLOWS_AUDIT_META = {
     INSTANCE: 'workflow_instance',
     APPROVAL: 'workflow_approval',
     SLA: 'workflow_sla',
+    COMMENT: 'workflow_comment',
   },
   RESOURCE_TYPES: {
     DEFINITION: 'workflow_definition',
     INSTANCE: 'workflow_instance',
+    COMMENT: 'workflow_comment',
   },
 } as const;

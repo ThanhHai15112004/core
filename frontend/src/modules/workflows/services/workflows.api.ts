@@ -3,10 +3,12 @@ import { API_ROUTES } from '../../../routes/api.routes';
 import type {
   CreateWorkflowDefinitionPayload,
   StartWorkflowInstancePayload,
+  WorkflowCommentItem,
   WorkflowDefinitionItem,
   WorkflowHistoryItem,
   WorkflowInstanceDetail,
   WorkflowInstanceItem,
+  WorkflowRecordActivityTimeline,
   WorkflowSlaScanResult,
   WorkflowStateItem,
   WorkflowTransitionItem,
@@ -121,4 +123,49 @@ export const workflowsApi = {
       method: 'POST',
       body: JSON.stringify({}),
     }),
+
+  listComments: (entityType: string, entityId: string): Promise<WorkflowCommentItem[]> =>
+    fetchApi<WorkflowCommentItem[]>(
+      API_ROUTES.WORKFLOWS.COMMENTS(
+        `entityType=${encodeURIComponent(entityType)}&entityId=${encodeURIComponent(entityId)}`,
+      ),
+    ),
+
+  addComment: (payload: {
+    readonly entityType: string;
+    readonly entityId: string;
+    readonly workflowInstanceId?: number | null;
+    readonly parentCommentId?: number | null;
+    readonly content: string;
+    readonly isInternal?: boolean;
+    readonly attachmentFileIds?: readonly number[];
+  }): Promise<WorkflowCommentItem> =>
+    fetchApi<WorkflowCommentItem>(API_ROUTES.WORKFLOWS.COMMENTS(), {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+
+  updateComment: (
+    id: number,
+    payload: {
+      readonly content: string;
+      readonly editReason?: string | null;
+    },
+  ): Promise<WorkflowCommentItem> =>
+    fetchApi<WorkflowCommentItem>(API_ROUTES.WORKFLOWS.COMMENT_BY_ID(id), {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    }),
+
+  deleteComment: (id: number): Promise<WorkflowCommentItem> =>
+    fetchApi<WorkflowCommentItem>(API_ROUTES.WORKFLOWS.COMMENT_BY_ID(id), {
+      method: 'DELETE',
+    }),
+
+  getTimeline: (entityType: string, entityId: string): Promise<WorkflowRecordActivityTimeline> =>
+    fetchApi<WorkflowRecordActivityTimeline>(
+      API_ROUTES.WORKFLOWS.TIMELINE(
+        `entityType=${encodeURIComponent(entityType)}&entityId=${encodeURIComponent(entityId)}`,
+      ),
+    ),
 };

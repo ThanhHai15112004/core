@@ -9,6 +9,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import { authStyles } from '../../auth/components/auth-ui.styles';
+import { WorkflowCommentsTimelinePanel } from './WorkflowCommentsTimelinePanel';
 import type {
   StartWorkflowInstancePayload,
   WorkflowDefinitionItem,
@@ -662,6 +663,13 @@ export const WorkflowInstancesTab: React.FC<WorkflowInstancesTabProps> = ({
                   ))}
                 </div>
               </div>
+
+              {/* Section 9.5: Comments, Internal Notes, File Attachments & Unified Activity Timeline */}
+              <WorkflowCommentsTimelinePanel
+                entityType={selectedInstance.entityType}
+                entityId={selectedInstance.entityId}
+                workflowInstanceId={selectedInstance.id}
+              />
             </div>
           )}
         </div>

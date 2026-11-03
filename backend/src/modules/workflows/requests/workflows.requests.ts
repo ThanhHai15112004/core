@@ -277,3 +277,45 @@ export const cancelWorkflowInstanceSchema = z.object({
 });
 
 export type CancelWorkflowInstanceRequest = z.infer<typeof cancelWorkflowInstanceSchema>;
+
+export const listWorkflowCommentsQuerySchema = z.object({
+  entityType: z.string().trim().min(1).max(64),
+  entityId: z.string().trim().min(1).max(128),
+  workflowInstanceId: optionalQueryParam(z.coerce.number().int().positive()),
+  includeDeleted: booleanQueryParam().optional(),
+  sortOrder: optionalQueryParam(z.enum(['ASC', 'DESC'])).default('ASC'),
+});
+
+export type ListWorkflowCommentsQuery = z.infer<typeof listWorkflowCommentsQuerySchema>;
+
+export const createWorkflowCommentSchema = z.object({
+  entityType: z.string().trim().min(1).max(64),
+  entityId: z.string().trim().min(1).max(128),
+  workflowInstanceId: z.coerce.number().int().positive().nullable().optional(),
+  parentCommentId: z.coerce.number().int().positive().nullable().optional(),
+  content: z.string().trim().min(1).max(5000),
+  isInternal: z.boolean().optional(),
+  mentionedUserIds: z.array(z.coerce.number().int().positive()).optional(),
+  attachmentFileIds: z.array(z.coerce.number().int().positive()).optional(),
+});
+
+export type CreateWorkflowCommentRequest = z.infer<typeof createWorkflowCommentSchema>;
+
+export const updateWorkflowCommentSchema = z.object({
+  content: z.string().trim().min(1).max(5000),
+  mentionedUserIds: z.array(z.coerce.number().int().positive()).optional(),
+  attachmentFileIds: z.array(z.coerce.number().int().positive()).optional(),
+  editReason: z.string().trim().max(500).nullable().optional(),
+});
+
+export type UpdateWorkflowCommentRequest = z.infer<typeof updateWorkflowCommentSchema>;
+
+export const listWorkflowTimelineQuerySchema = z.object({
+  entityType: z.string().trim().min(1).max(64),
+  entityId: z.string().trim().min(1).max(128),
+  workflowInstanceId: optionalQueryParam(z.coerce.number().int().positive()),
+  source: optionalQueryParam(z.enum(['ALL', 'COMMENT', 'WORKFLOW', 'AUDIT'])).default('ALL'),
+  sortOrder: optionalQueryParam(z.enum(['ASC', 'DESC'])).default('DESC'),
+});
+
+export type ListWorkflowTimelineQuery = z.infer<typeof listWorkflowTimelineQuerySchema>;

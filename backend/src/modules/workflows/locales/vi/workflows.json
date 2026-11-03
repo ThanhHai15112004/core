@@ -16,6 +16,13 @@
   "approvalReasonRequired": "Bắt buộc phải nhập lý do / ghi chú khi từ chối hoặc trả lại hồ sơ.",
   "invalidDelegationTimeRange": "Thời gian hiệu lực ủy quyền không hợp lệ (thời gian bắt đầu phải trước thời gian kết thúc).",
   "delegationScopeMismatch": "Hồ sơ hiện tại không nằm trong phạm vi ủy quyền phê duyệt.",
-  "delegationRuleNotFound": "Không tìm thấy cấu hình ủy quyền phê duyệt."
+  "delegationRuleNotFound": "Không tìm thấy cấu hình ủy quyền phê duyệt.",
+  "commentNotFound": "Không tìm thấy bình luận hoặc ghi chú yêu cầu.",
+  "parentCommentNotFound": "Không tìm thấy bình luận gốc để trả lời.",
+  "commentEntityMismatch": "Bình luận trả lời phải thuộc cùng một bản ghi với bình luận gốc.",
+  "internalNotePermissionDenied": "Bạn không có quyền tạo hoặc xem ghi chú nội bộ.",
+  "commentPermissionDenied": "Bạn không có quyền chỉnh sửa hoặc xóa bình luận này.",
+  "commentEditWindowExpired": "Đã hết thời hạn cho phép chỉnh sửa hoặc xóa bình luận.",
+  "commentAlreadyDeleted": "Bình luận này đã bị xóa trước đó."
 }
 

@@ -16,4 +16,7 @@ export const WORKFLOWS_ROUTES = {
   DELEGATIONS: 'delegations',
   DELEGATION_REVOKE: 'delegations/:id/revoke',
   SLA_SCAN_OVERDUE: 'sla/scan-overdue',
+  COMMENTS: 'comments',
+  COMMENT_BY_ID: 'comments/:id',
+  TIMELINE: 'timeline',
 } as const;

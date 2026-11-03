@@ -147,3 +147,73 @@ export const workflowSlaScanResponseSchema = z.object({
   overdueInstanceIds: z.array(z.number().int()),
   escalatedInstanceIds: z.array(z.number().int()).optional(),
 });
+
+export const workflowCommentEditHistoryResponseSchema = z.object({
+  previousContent: z.string(),
+  previousAttachmentFileIds: z.array(z.number().int()),
+  editedByUserId: z.number().int().nullable(),
+  editedByFullName: z.string().nullable(),
+  editedAt: z.string(),
+  editReason: z.string().nullable(),
+});
+
+export const workflowCommentAttachmentResponseSchema = z.object({
+  fileId: z.number().int(),
+  code: z.string(),
+  displayName: z.string(),
+  originalName: z.string(),
+  mimeType: z.string(),
+  sizeBytes: z.number().int(),
+  sizeFormatted: z.string(),
+});
+
+export const workflowCommentMentionResponseSchema = z.object({
+  userId: z.number().int(),
+  username: z.string().nullable(),
+  fullName: z.string().nullable(),
+});
+
+export const workflowCommentItemResponseSchema = z.object({
+  id: z.number().int(),
+  entityType: z.string(),
+  entityId: z.string(),
+  workflowInstanceId: z.number().int().nullable(),
+  parentCommentId: z.number().int().nullable(),
+  content: z.string(),
+  isInternal: z.boolean(),
+  authorUserId: z.number().int().nullable(),
+  authorFullName: z.string().nullable(),
+  authorUsername: z.string().nullable(),
+  mentions: z.array(workflowCommentMentionResponseSchema),
+  attachmentFileIds: z.array(z.number().int()),
+  attachments: z.array(workflowCommentAttachmentResponseSchema),
+  editHistories: z.array(workflowCommentEditHistoryResponseSchema),
+  replies: z.array(z.record(z.string(), z.unknown())),
+  isEdited: z.boolean(),
+  isDeleted: z.boolean(),
+  deletedAt: z.string().nullable(),
+  deletedByUserId: z.number().int().nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+export const workflowActivityTimelineEntryResponseSchema = z.object({
+  id: z.string(),
+  source: z.enum(['COMMENT', 'WORKFLOW', 'AUDIT']),
+  actionType: z.string(),
+  title: z.string(),
+  summary: z.string().nullable(),
+  isInternal: z.boolean(),
+  actorUserId: z.number().int().nullable(),
+  actorFullName: z.string().nullable(),
+  actorUsername: z.string().nullable(),
+  occurredAt: z.string(),
+  metadata: z.record(z.string(), z.unknown()).nullable(),
+});
+
+export const workflowRecordActivityTimelineResponseSchema = z.object({
+  entityType: z.string(),
+  entityId: z.string(),
+  totalItems: z.number().int(),
+  items: z.array(workflowActivityTimelineEntryResponseSchema),
+});

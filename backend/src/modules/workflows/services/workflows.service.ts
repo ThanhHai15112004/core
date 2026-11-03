@@ -19,16 +19,19 @@ import {
   type INotificationsPublicService,
   NOTIFICATIONS_PUBLIC_SERVICE,
 } from '@modules/notifications/contracts/index.js';
+import { type IFilesPublicService, FILES_PUBLIC_SERVICE } from '@modules/files/contracts/index.js';
 import { type IUsersPublicService, USERS_PUBLIC_SERVICE } from '@modules/users/contracts/index.js';
 import {
   type IWorkflowsPublicService,
   type StartWorkflowPublicInput,
   WORKFLOWS_SETTING_KEYS,
   type WorkflowApprovalDelegationRule,
+  type WorkflowCommentItemView,
   type WorkflowDefinitionItemView,
   type WorkflowHistoryItemView,
   type WorkflowInstanceDetailView,
   type WorkflowInstanceItemView,
+  type WorkflowRecordActivityTimelineView,
   type WorkflowSlaScanResultView,
 } from '../contracts/index.js';
 import { WorkflowDefinitionRepository } from '../repositories/workflow-definition.repository.js';
@@ -39,15 +42,19 @@ import { WorkflowApprovalStepRepository } from '../repositories/workflow-approva
 import { WorkflowHistoryRepository } from '../repositories/workflow-history.repository.js';
 import type {
   CancelWorkflowInstanceRequest,
+  CreateWorkflowCommentRequest,
   CreateWorkflowDefinitionRequest,
   CreateWorkflowDelegationRuleRequest,
   DecideWorkflowApprovalRequest,
   DelegateWorkflowApprovalRequest,
   ExecuteWorkflowTransitionRequest,
+  ListWorkflowCommentsQuery,
   ListWorkflowDefinitionsQuery,
   ListWorkflowInstancesQuery,
+  ListWorkflowTimelineQuery,
   ReplaceWorkflowStatesRequest,
   ReplaceWorkflowTransitionsRequest,
+  UpdateWorkflowCommentRequest,
   UpdateWorkflowDefinitionRequest,
 } from '../requests/workflows.requests.js';
 import {
@@ -69,12 +76,22 @@ import {
   executeWorkflowStateTransition,
 } from '../helpers/workflow-instance-execution.helper.js';
 import { executeWorkflowSlaScan } from '../helpers/workflow-sla-scanner.helper.js';
+import {
+  type StoredWorkflowCommentRecord,
+  executeBuildRecordActivityTimeline,
+  executeCreateWorkflowComment,
+  executeDeleteWorkflowComment,
+  executeListWorkflowComments,
+  executeUpdateWorkflowComment,
+} from '../helpers/workflow-comments-timeline.helper.js';
 
 @Injectable()
 export class WorkflowsService implements IWorkflowsPublicService {
   private readonly effectiveDataScopeService: DataScopeService;
   private readonly delegationRules: WorkflowApprovalDelegationRule[] = [];
   private delegationRuleSeq = 1;
+  private readonly commentsStore: StoredWorkflowCommentRecord[] = [];
+  private commentSeq = 1;
 
   constructor(
     private readonly definitionRepository: WorkflowDefinitionRepository,
@@ -101,6 +118,9 @@ export class WorkflowsService implements IWorkflowsPublicService {
     @Optional()
     @Inject(AuditLogService)
     private readonly auditLogService: AuditLogService | null = null,
+    @Optional()
+    @Inject(FILES_PUBLIC_SERVICE)
+    private readonly filesPublicService: IFilesPublicService | null = null,
   ) {
     this.effectiveDataScopeService = this.dataScopeService ?? createDefaultDataScopeService();
   }
@@ -484,6 +504,84 @@ export class WorkflowsService implements IWorkflowsPublicService {
       usersPublicService: this.usersPublicService,
       notificationsPublicService: this.notificationsPublicService,
       defaultWarningMinutes: warningMinutes,
+    });
+  }
+
+  public async listRecordComments(
+    query: ListWorkflowCommentsQuery,
+    actor?: UserIdentity,
+  ): Promise<WorkflowCommentItemView[]> {
+    return executeListWorkflowComments({
+      query,
+      actor,
+      commentsStore: this.commentsStore,
+      usersPublicService: this.usersPublicService,
+    });
+  }
+
+  public async addRecordComment(
+    dto: CreateWorkflowCommentRequest,
+    actor?: UserIdentity,
+  ): Promise<WorkflowCommentItemView> {
+    return executeCreateWorkflowComment({
+      dto,
+      actor,
+      commentsStore: this.commentsStore,
+      nextCommentId: () => this.commentSeq++,
+      usersPublicService: this.usersPublicService,
+      notificationsPublicService: this.notificationsPublicService,
+      filesPublicService: this.filesPublicService,
+      auditLogService: this.auditLogService,
+    });
+  }
+
+  public async updateRecordComment(
+    id: number,
+    dto: UpdateWorkflowCommentRequest,
+    actor?: UserIdentity,
+    now?: Date,
+  ): Promise<WorkflowCommentItemView> {
+    return executeUpdateWorkflowComment({
+      id,
+      dto,
+      actor,
+      now,
+      commentsStore: this.commentsStore,
+      usersPublicService: this.usersPublicService,
+      notificationsPublicService: this.notificationsPublicService,
+      filesPublicService: this.filesPublicService,
+      auditLogService: this.auditLogService,
+    });
+  }
+
+  public async deleteRecordComment(
+    id: number,
+    actor?: UserIdentity,
+    now?: Date,
+  ): Promise<WorkflowCommentItemView> {
+    return executeDeleteWorkflowComment({
+      id,
+      actor,
+      now,
+      commentsStore: this.commentsStore,
+      usersPublicService: this.usersPublicService,
+      filesPublicService: this.filesPublicService,
+      auditLogService: this.auditLogService,
+    });
+  }
+
+  public async getRecordActivityTimeline(
+    query: ListWorkflowTimelineQuery,
+    actor?: UserIdentity,
+  ): Promise<WorkflowRecordActivityTimelineView> {
+    return executeBuildRecordActivityTimeline({
+      query,
+      actor,
+      commentsStore: this.commentsStore,
+      instanceRepository: this.instanceRepository,
+      historyRepository: this.historyRepository,
+      usersPublicService: this.usersPublicService,
+      auditLogService: this.auditLogService,
     });
   }
 }

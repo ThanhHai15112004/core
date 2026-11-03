@@ -406,5 +406,8 @@ export const API_ROUTES = {
     INSTANCE_CANCEL: (id: string | number) => `/workflows/instances/${id}/cancel`,
     INSTANCE_HISTORIES: (id: string | number) => `/workflows/instances/${id}/histories`,
     SLA_SCAN_OVERDUE: '/workflows/sla/scan-overdue',
+    COMMENTS: (qs = '') => `/workflows/comments${qs ? `?${qs}` : ''}`,
+    COMMENT_BY_ID: (id: string | number) => `/workflows/comments/${id}`,
+    TIMELINE: (qs = '') => `/workflows/timeline${qs ? `?${qs}` : ''}`,
   },
 } as const;

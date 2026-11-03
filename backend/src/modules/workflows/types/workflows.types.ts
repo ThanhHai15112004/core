@@ -217,3 +217,75 @@ export interface WorkflowSlaScanResultView {
   readonly overdueInstanceIds: readonly number[];
   readonly escalatedInstanceIds: readonly number[];
 }
+
+export interface WorkflowCommentEditHistoryItemView {
+  readonly previousContent: string;
+  readonly previousAttachmentFileIds: readonly number[];
+  readonly editedByUserId: number | null;
+  readonly editedByFullName: string | null;
+  readonly editedAt: string;
+  readonly editReason: string | null;
+}
+
+export interface WorkflowCommentAttachmentItemView {
+  readonly fileId: number;
+  readonly code: string;
+  readonly displayName: string;
+  readonly originalName: string;
+  readonly mimeType: string;
+  readonly sizeBytes: number;
+  readonly sizeFormatted: string;
+}
+
+export interface WorkflowCommentMentionItemView {
+  readonly userId: number;
+  readonly username: string | null;
+  readonly fullName: string | null;
+}
+
+export interface WorkflowCommentItemView {
+  readonly id: number;
+  readonly entityType: string;
+  readonly entityId: string;
+  readonly workflowInstanceId: number | null;
+  readonly parentCommentId: number | null;
+  readonly content: string;
+  readonly isInternal: boolean;
+  readonly authorUserId: number | null;
+  readonly authorFullName: string | null;
+  readonly authorUsername: string | null;
+  readonly mentions: readonly WorkflowCommentMentionItemView[];
+  readonly attachmentFileIds: readonly number[];
+  readonly attachments: readonly WorkflowCommentAttachmentItemView[];
+  readonly editHistories: readonly WorkflowCommentEditHistoryItemView[];
+  readonly replies: readonly WorkflowCommentItemView[];
+  readonly isEdited: boolean;
+  readonly isDeleted: boolean;
+  readonly deletedAt: string | null;
+  readonly deletedByUserId: number | null;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+}
+
+export type WorkflowActivityTimelineSource = 'COMMENT' | 'WORKFLOW' | 'AUDIT';
+
+export interface WorkflowActivityTimelineEntryView {
+  readonly id: string;
+  readonly source: WorkflowActivityTimelineSource;
+  readonly actionType: string;
+  readonly title: string;
+  readonly summary: string | null;
+  readonly isInternal: boolean;
+  readonly actorUserId: number | null;
+  readonly actorFullName: string | null;
+  readonly actorUsername: string | null;
+  readonly occurredAt: string;
+  readonly metadata: Record<string, unknown> | null;
+}
+
+export interface WorkflowRecordActivityTimelineView {
+  readonly entityType: string;
+  readonly entityId: string;
+  readonly totalItems: number;
+  readonly items: readonly WorkflowActivityTimelineEntryView[];
+}

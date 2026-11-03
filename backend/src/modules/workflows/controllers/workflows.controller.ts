@@ -1,4 +1,13 @@
-import { Controller, Get, HttpCode, HttpStatus, Post, Put, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Post,
+  Put,
+  UseGuards,
+} from '@nestjs/common';
 import { z } from 'zod';
 import { HTTP_STATUS_CODE } from '@packages/kernel/index.js';
 import {
@@ -14,42 +23,52 @@ import { WORKFLOWS_ROUTES } from '../contracts/index.js';
 import { WorkflowsService } from '../services/workflows.service.js';
 import {
   type CancelWorkflowInstanceRequest,
+  type CreateWorkflowCommentRequest,
   type CreateWorkflowDefinitionRequest,
   type CreateWorkflowDelegationRuleRequest,
   type DecideWorkflowApprovalRequest,
   type DelegateWorkflowApprovalRequest,
   type ExecuteWorkflowTransitionRequest,
+  type ListWorkflowCommentsQuery,
   type ListWorkflowDefinitionsQuery,
   type ListWorkflowInstancesQuery,
+  type ListWorkflowTimelineQuery,
   type ReplaceWorkflowStatesRequest,
   type ReplaceWorkflowTransitionsRequest,
   type StartWorkflowInstanceRequest,
+  type UpdateWorkflowCommentRequest,
   type UpdateWorkflowDefinitionRequest,
   cancelWorkflowInstanceSchema,
+  createWorkflowCommentSchema,
   createWorkflowDefinitionSchema,
   createWorkflowDelegationRuleSchema,
   decideWorkflowApprovalSchema,
   delegateWorkflowApprovalSchema,
   executeWorkflowTransitionSchema,
+  listWorkflowCommentsQuerySchema,
   listWorkflowDefinitionsQuerySchema,
   listWorkflowInstancesQuerySchema,
+  listWorkflowTimelineQuerySchema,
   positiveIntParamSchema,
   replaceWorkflowStatesSchema,
   replaceWorkflowTransitionsSchema,
   startWorkflowInstanceSchema,
+  updateWorkflowCommentSchema,
   updateWorkflowDefinitionSchema,
 } from '../requests/workflows.requests.js';
 import {
+  workflowCommentItemResponseSchema,
   workflowDefinitionResponseSchema,
   workflowDelegationRuleResponseSchema,
   workflowHistoryItemResponseSchema,
   workflowInstanceDetailResponseSchema,
   workflowInstanceResponseSchema,
+  workflowRecordActivityTimelineResponseSchema,
   workflowSlaScanResponseSchema,
 } from '../responses/workflows.response.js';
 
 @Controller(WORKFLOWS_ROUTES.ROOT)
-@ApiGroup(WORKFLOWS_ROUTES.ROOT, 'Workflows & Multi-Level Approvals (Mục 9.3 & 9.4)')
+@ApiGroup(WORKFLOWS_ROUTES.ROOT, 'Workflows, Multi-Level Approvals & Comments (Mục 9.3, 9.4 & 9.5)')
 @UseGuards(AuthGuard)
 export class WorkflowsController {
   constructor(private readonly workflowsService: WorkflowsService) {}
@@ -315,5 +334,75 @@ export class WorkflowsController {
   })
   public scanSlaAndNotifyOverdue() {
     return this.workflowsService.scanSlaAndNotifyOverdue();
+  }
+
+  @Get(WORKFLOWS_ROUTES.COMMENTS)
+  @RequirePermissions('workflows.read')
+  @ApiDoc({
+    summary:
+      'Danh sách bình luận, ghi chú nội bộ (lọc theo quyền) và chuỗi phản hồi của một bản ghi (Mục 9.5)',
+    response: z.array(workflowCommentItemResponseSchema),
+  })
+  public listComments(
+    @ValidatedQuery(listWorkflowCommentsQuerySchema) query: ListWorkflowCommentsQuery,
+    @CurrentUser() actor?: UserIdentity,
+  ) {
+    return this.workflowsService.listRecordComments(query, actor);
+  }
+
+  @Post(WORKFLOWS_ROUTES.COMMENTS)
+  @RequirePermissions('workflows.read')
+  @ApiDoc({
+    summary:
+      'Thêm bình luận, ghi chú nội bộ, trả lời bình luận, nhắc tên (@mention) và đính kèm file cho bản ghi (Mục 9.5)',
+    status: HTTP_STATUS_CODE.CREATED,
+    response: workflowCommentItemResponseSchema,
+  })
+  public addComment(
+    @ValidatedBody(createWorkflowCommentSchema) body: CreateWorkflowCommentRequest,
+    @CurrentUser() actor?: UserIdentity,
+  ) {
+    return this.workflowsService.addRecordComment(body, actor);
+  }
+
+  @Put(WORKFLOWS_ROUTES.COMMENT_BY_ID)
+  @RequirePermissions('workflows.read')
+  @ApiDoc({
+    summary: 'Chỉnh sửa bình luận theo thời hạn/quyền và lưu lại lịch sử nội dung cũ (Mục 9.5)',
+    response: workflowCommentItemResponseSchema,
+  })
+  public updateComment(
+    @ValidatedParams(positiveIntParamSchema, 'id') id: number,
+    @ValidatedBody(updateWorkflowCommentSchema) body: UpdateWorkflowCommentRequest,
+    @CurrentUser() actor?: UserIdentity,
+  ) {
+    return this.workflowsService.updateRecordComment(id, body, actor);
+  }
+
+  @Delete(WORKFLOWS_ROUTES.COMMENT_BY_ID)
+  @RequirePermissions('workflows.read')
+  @ApiDoc({
+    summary: 'Xóa bình luận theo thời hạn và quyền (Mục 9.5)',
+    response: workflowCommentItemResponseSchema,
+  })
+  public deleteComment(
+    @ValidatedParams(positiveIntParamSchema, 'id') id: number,
+    @CurrentUser() actor?: UserIdentity,
+  ) {
+    return this.workflowsService.deleteRecordComment(id, actor);
+  }
+
+  @Get(WORKFLOWS_ROUTES.TIMELINE)
+  @RequirePermissions('workflows.read')
+  @ApiDoc({
+    summary:
+      'Hiển thị dòng thời gian hoạt động hợp nhất (Comment + Workflow + Audit) của một bản ghi (Mục 9.5)',
+    response: workflowRecordActivityTimelineResponseSchema,
+  })
+  public getTimeline(
+    @ValidatedQuery(listWorkflowTimelineQuerySchema) query: ListWorkflowTimelineQuery,
+    @CurrentUser() actor?: UserIdentity,
+  ) {
+    return this.workflowsService.getRecordActivityTimeline(query, actor);
   }
 }

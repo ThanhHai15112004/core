@@ -199,3 +199,63 @@ export interface StartWorkflowInstancePayload {
   readonly dueHoursOverride?: number | null;
 }
 
+export interface WorkflowCommentEditHistoryItem {
+  readonly previousContent: string;
+  readonly previousAttachmentFileIds: readonly number[];
+  readonly editedByUserId: number | null;
+  readonly editedByFullName: string | null;
+  readonly editedAt: string;
+  readonly editReason: string | null;
+}
+
+export interface WorkflowCommentAttachmentItem {
+  readonly fileId: number;
+  readonly code: string;
+  readonly displayName: string;
+  readonly originalName: string;
+  readonly mimeType: string;
+  readonly sizeBytes: number;
+  readonly sizeFormatted: string;
+}
+
+export interface WorkflowCommentItem {
+  readonly id: number;
+  readonly entityType: string;
+  readonly entityId: string;
+  readonly workflowInstanceId: number | null;
+  readonly parentCommentId: number | null;
+  readonly content: string;
+  readonly isInternal: boolean;
+  readonly authorUserId: number | null;
+  readonly authorFullName: string | null;
+  readonly authorUsername: string | null;
+  readonly attachmentFileIds: readonly number[];
+  readonly attachments: readonly WorkflowCommentAttachmentItem[];
+  readonly editHistories: readonly WorkflowCommentEditHistoryItem[];
+  readonly replies: readonly WorkflowCommentItem[];
+  readonly isEdited: boolean;
+  readonly isDeleted: boolean;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+}
+
+export interface WorkflowActivityTimelineEntry {
+  readonly id: string;
+  readonly source: 'COMMENT' | 'WORKFLOW' | 'AUDIT';
+  readonly actionType: string;
+  readonly title: string;
+  readonly summary: string | null;
+  readonly isInternal: boolean;
+  readonly actorUserId: number | null;
+  readonly actorFullName: string | null;
+  readonly actorUsername: string | null;
+  readonly occurredAt: string;
+}
+
+export interface WorkflowRecordActivityTimeline {
+  readonly entityType: string;
+  readonly entityId: string;
+  readonly totalItems: number;
+  readonly items: readonly WorkflowActivityTimelineEntry[];
+}
+

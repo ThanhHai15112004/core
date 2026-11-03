@@ -16,6 +16,13 @@
   "approvalReasonRequired": "A reason or comment is required when rejecting or returning an approval step.",
   "invalidDelegationTimeRange": "Invalid delegation effective time range (effectiveFrom must be before effectiveUntil).",
   "delegationScopeMismatch": "Current workflow instance does not match the delegation scope.",
-  "delegationRuleNotFound": "Approval delegation rule not found."
+  "delegationRuleNotFound": "Approval delegation rule not found.",
+  "commentNotFound": "Requested comment or note not found.",
+  "parentCommentNotFound": "Parent comment to reply to was not found.",
+  "commentEntityMismatch": "Reply comment must belong to the same record as the parent comment.",
+  "internalNotePermissionDenied": "You do not have permission to create or view internal notes.",
+  "commentPermissionDenied": "You do not have permission to edit or delete this comment.",
+  "commentEditWindowExpired": "The allowed time window to edit or delete this comment has expired.",
+  "commentAlreadyDeleted": "This comment has already been deleted."
 }
 

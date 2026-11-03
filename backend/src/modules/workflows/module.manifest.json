@@ -3,17 +3,18 @@
   "name": "workflows",
   "displayName": "Workflow Engine & Multi-Level Approval",
   "version": "1.0.0",
-  "description": "Module quản lý Quy trình xử lý (Workflow — Mục 9.3) và Phê duyệt nhiều cấp (Approval — Mục 9.4): tạo định nghĩa quy trình có phiên bản, trạng thái, điều kiện & hành động chuyển trạng thái, khởi tạo quy trình cho bản ghi, hủy/kết thúc, theo dõi lịch sử và cảnh báo quá hạn SLA qua Scheduler.",
+  "description": "Module quản lý Quy trình xử lý (Workflow — Mục 9.3), Phê duyệt nhiều cấp (Approval — Mục 9.4) và Bình luận, ghi chú nội bộ, tệp đính kèm & dòng thời gian hoạt động (Mục 9.5).",
   "type": "core",
   "category": "core",
   "author": "Core Platform Team",
   "entryModule": "WorkflowsModule",
-  "dependencies": ["database", "security", "i18n", "users", "roles", "organizations", "codes", "settings", "notifications"],
+  "dependencies": ["database", "security", "i18n", "users", "roles", "organizations", "codes", "settings", "notifications", "files"],
   "permissions": [
     "workflows.read",
     "workflows.manage",
     "workflows.execute",
-    "workflows.cancel"
+    "workflows.cancel",
+    "workflows.internal_notes"
   ],
   "events": {
     "published": [
@@ -22,7 +23,10 @@
       "workflows.approval_decided",
       "workflows.instance_cancelled",
       "workflows.sla_warning",
-      "workflows.sla_overdue"
+      "workflows.sla_overdue",
+      "workflows.comment_added",
+      "workflows.comment_updated",
+      "workflows.comment_deleted"
     ],
     "subscribed": []
   },
@@ -197,6 +201,21 @@
       "allowUnitOverride": true,
       "isSystem": true,
       "sortOrder": 2
+    },
+    {
+      "key": "workflows.comments.edit_window_minutes",
+      "groupCode": "workflows",
+      "module": "workflows",
+      "namespace": "workflows.comments",
+      "name": "Thời hạn cho phép chỉnh sửa / xóa bình luận (Phút)",
+      "description": "Khoảng thời gian tối đa tính từ lúc tạo mà tác giả được phép chỉnh sửa hoặc xóa bình luận",
+      "valueType": "NUMBER",
+      "defaultValue": 15,
+      "validationRules": { "min": 1, "max": 10080, "integerOnly": true },
+      "isSensitive": false,
+      "allowUnitOverride": true,
+      "isSystem": true,
+      "sortOrder": 3
     }
   ],
   "menus": [
