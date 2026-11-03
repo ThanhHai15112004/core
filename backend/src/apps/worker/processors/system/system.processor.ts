@@ -15,6 +15,7 @@ import { JobProgressTrackerService } from '@packages/queue/index.js';
 import { FilesService } from '@modules/files/index.js';
 import { NotificationChannelsService } from '@modules/notifications/index.js';
 import { WorkflowsService } from '@modules/workflows/index.js';
+import { CalendarService } from '@modules/calendar/index.js';
 import { BaseQueueProcessor } from '../base-queue.processor.js';
 
 export interface SystemMaintenanceTickPayload {
@@ -41,6 +42,7 @@ export class SystemProcessor extends BaseQueueProcessor {
     @Optional() private readonly exportRegistry?: ExportRegistryService,
     @Optional() private readonly reportRegistry?: ReportRegistryService,
     @Optional() private readonly workflowsService?: WorkflowsService,
+    @Optional() private readonly calendarService?: CalendarService,
   ) {
     super(config, metrics, progressTracker);
   }
@@ -58,7 +60,8 @@ export class SystemProcessor extends BaseQueueProcessor {
     if (
       envelope.topic === 'system.maintenance.tick' ||
       envelope.topic === 'reports.schedule.tick' ||
-      envelope.topic === 'workflows.sla.tick'
+      envelope.topic === 'workflows.sla.tick' ||
+      envelope.topic === 'calendar.reminder.tick'
     ) {
       return this.handleMaintenanceTick(envelope);
     }
@@ -108,11 +111,17 @@ export class SystemProcessor extends BaseQueueProcessor {
     let triggeredReportSchedules: readonly TriggeredReportScheduleItemResult[] = [];
     let workflowSlaWarningsCount = 0;
     let workflowSlaOverdueCount = 0;
+    let calendarRemindersDispatchedCount = 0;
 
     if (this.workflowsService) {
       const slaRes = await this.workflowsService.scanSlaAndNotifyOverdue(nowDate);
       workflowSlaWarningsCount = slaRes.warningsTriggeredCount;
       workflowSlaOverdueCount = slaRes.overdueMarkedCount;
+    }
+
+    if (this.calendarService) {
+      const calRes = await this.calendarService.scanAndDispatchReminders(nowDate);
+      calendarRemindersDispatchedCount = calRes.dispatchedCount;
     }
 
     const dueScheduleResult = await activeReportRegistry.triggerDueSchedules(
@@ -134,6 +143,7 @@ export class SystemProcessor extends BaseQueueProcessor {
       triggeredReportSchedules,
       workflowSlaWarningsCount,
       workflowSlaOverdueCount,
+      calendarRemindersDispatchedCount,
     };
   }
 

@@ -27,6 +27,7 @@ import { SettingsModule } from '@modules/settings/index.js';
 import { FilesModule } from '@modules/files/index.js';
 import { NotificationsModule } from '@modules/notifications/index.js';
 import { WorkflowsModule } from '@modules/workflows/index.js';
+import { CalendarModule } from '@modules/calendar/index.js';
 import { ImportsModule } from '@modules/imports/index.js';
 import { ExportsModule } from '@modules/exports/index.js';
 import { ReportsModule } from '@modules/reports/index.js';
@@ -64,6 +65,7 @@ import { MetricsModule } from '@packages/metrics/index.js';
     FilesModule,
     NotificationsModule,
     WorkflowsModule,
+    CalendarModule,
     ImportsModule,
     ExportsModule,
     ReportsModule,

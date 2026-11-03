@@ -65,6 +65,7 @@ export const en: TranslationKey = {
     files: 'Files & Media',
     notifications: 'Notifications & Inbox',
     workflows: 'Workflows & Approvals',
+    calendar: 'Calendar & Events',
     languageToggle: 'Language',
     themeLight: 'Light',
     themeDark: 'Dark',

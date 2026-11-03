@@ -36,5 +36,18 @@ export class SystemTask implements OnModuleInit {
       notifyOnFailure: true,
       misfirePolicy: 'run_once',
     });
+
+    this.registry.register({
+      id: 'calendar.reminder.scan',
+      queue: QUEUES.SYSTEM_EVENTS,
+      name: 'calendar.reminder.tick',
+      description:
+        'Quét các lịch nhắc sự kiện (Calendar & Events) đến hạn và gửi thông báo qua Notification (Mục 9.7.4).',
+      pattern: '*/5 * * * *',
+      tz: this.config.scheduler.timezone,
+      data: { triggeredBy: 'scheduler', module: 'calendar' },
+      notifyOnFailure: true,
+      misfirePolicy: 'run_once',
+    });
   }
 }

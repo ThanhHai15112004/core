@@ -1,0 +1,18 @@
+export const CALENDAR_ROUTES = {
+  ROOT: 'calendar',
+  EVENTS: 'events',
+  OCCURRENCES: 'occurrences',
+  EVENT_BY_ID: 'events/:id',
+  EVENT_PARTICIPANTS: 'events/:id/participants',
+  EVENT_PARTICIPANT_BY_ID: 'events/:id/participants/:participantId',
+  EVENT_RSVP: 'events/:id/rsvp',
+  EVENT_CANCEL: 'events/:id/cancel',
+  EVENT_ACCESS: 'events/:id/access',
+  EVENT_HISTORIES: 'events/:id/histories',
+  EVENT_SYNC_EXTERNAL: 'events/:id/sync',
+  CONFLICTS_CHECK: 'conflicts/check',
+  REMINDERS_SCAN: 'reminders/scan',
+  EVENT_REMINDERS: 'events/:id/reminders',
+  INTEGRATION_PROVIDERS: 'integrations/providers',
+  INTEGRATION_INBOUND_SYNC: 'integrations/:provider/inbound-sync',
+} as const;

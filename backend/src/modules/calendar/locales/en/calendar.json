@@ -1,0 +1,13 @@
+{
+  "eventNotFound": "Calendar event #{{id}} was not found",
+  "participantNotFound": "Participant was not found in this calendar event",
+  "invalidTimeRange": "Event end time must be greater than start time",
+  "invalidRecurrenceRule": "Invalid event recurrence rule: {{reason}}",
+  "invalidParticipantTarget": "Each participant entry must specify either userId (USER) or organizationUnitId (ORGANIZATION_UNIT)",
+  "scheduleConflictDetected": "Detected {{conflictCount}} schedule conflict(s) for participants or resources",
+  "forbiddenView": "You do not have permission to view this calendar event (Owner, Participant, or Manager required)",
+  "forbiddenEdit": "You do not have permission to edit this calendar event (Owner, editable Participant, or Manager required)",
+  "forbiddenRsvp": "You are not listed as a participant of this calendar event",
+  "providerDisabled": "External calendar provider ({{provider}}) is currently disabled",
+  "eventAlreadyCancelled": "This calendar event has already been cancelled"
+}

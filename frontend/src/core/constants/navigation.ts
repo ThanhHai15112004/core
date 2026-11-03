@@ -10,7 +10,8 @@ export type NavigationTabId =
   | 'settings'
   | 'files'
   | 'notifications'
-  | 'workflows';
+  | 'workflows'
+  | 'calendar';
 
 export interface NavigationItem {
   id: NavigationTabId;
@@ -80,6 +81,12 @@ export const NAVIGATION_ITEMS: readonly NavigationItem[] = [
     labelKey: 'header.workflows',
     icon: 'git-branch',
     route: ROUTES.WORKFLOWS,
+  },
+  {
+    id: 'calendar',
+    labelKey: 'header.calendar',
+    icon: 'calendar',
+    route: ROUTES.CALENDAR,
   },
 ] as const;
 

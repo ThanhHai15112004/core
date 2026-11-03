@@ -417,4 +417,24 @@ export const API_ROUTES = {
     COMMENT_BY_ID: (id: string | number) => `/workflows/comments/${id}`,
     TIMELINE: (qs = '') => `/workflows/timeline${qs ? `?${qs}` : ''}`,
   },
+  CALENDAR: {
+    EVENTS: (qs = '') => `/calendar/events${qs ? `?${qs}` : ''}`,
+    OCCURRENCES: (qs = '') => `/calendar/occurrences${qs ? `?${qs}` : ''}`,
+    EVENT_BY_ID: (id: string | number) => `/calendar/events/${id}`,
+    EVENT_PARTICIPANTS: (id: string | number) => `/calendar/events/${id}/participants`,
+    EVENT_PARTICIPANT_BY_ID: (id: string | number, participantId: string | number) =>
+      `/calendar/events/${id}/participants/${participantId}`,
+    EVENT_RSVP: (id: string | number) => `/calendar/events/${id}/rsvp`,
+    EVENT_CANCEL: (id: string | number) => `/calendar/events/${id}/cancel`,
+    EVENT_ACCESS: (id: string | number) => `/calendar/events/${id}/access`,
+    EVENT_HISTORIES: (id: string | number, qs = '') =>
+      `/calendar/events/${id}/histories${qs ? `?${qs}` : ''}`,
+    EVENT_SYNC_EXTERNAL: (id: string | number) => `/calendar/events/${id}/sync`,
+    CONFLICTS_CHECK: '/calendar/conflicts/check',
+    REMINDERS_SCAN: '/calendar/reminders/scan',
+    EVENT_REMINDERS: (id: string | number) => `/calendar/events/${id}/reminders`,
+    INTEGRATION_PROVIDERS: '/calendar/integrations/providers',
+    INTEGRATION_INBOUND_SYNC: (provider: string) =>
+      `/calendar/integrations/${encodeURIComponent(provider)}/inbound-sync`,
+  },
 } as const;

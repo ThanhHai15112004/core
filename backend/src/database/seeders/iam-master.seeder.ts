@@ -393,6 +393,53 @@ export const STANDARD_IAM_PERMISSIONS: readonly SeedPermissionDef[] = [
     module: 'workflows',
     description: 'Quyền hủy hoặc kết thúc cưỡng bức quy trình kèm lý do',
   },
+  {
+    id: 34,
+    code: 'calendar.read',
+    name: 'Xem lịch làm việc, sự kiện & kiểm tra trùng lịch',
+    module: 'calendar',
+    description:
+      'Quyền xem danh sách sự kiện lịch, chu kỳ lặp, kiểm tra trùng lịch và lịch sử thay đổi',
+  },
+  {
+    id: 35,
+    code: 'calendar.create',
+    name: 'Tạo mới sự kiện lịch & sự kiện lặp lại',
+    module: 'calendar',
+    description:
+      'Quyền tạo mới sự kiện có thời gian bắt đầu/kết thúc, người tham gia và chu kỳ lặp',
+  },
+  {
+    id: 36,
+    code: 'calendar.update',
+    name: 'Cập nhật, quản lý người tham gia & hủy sự kiện lịch',
+    module: 'calendar',
+    description:
+      'Quyền cập nhật sự kiện, thêm/xóa người tham gia (User/Đơn vị) và hủy sự kiện lịch',
+  },
+  {
+    id: 37,
+    code: 'calendar.delete',
+    name: 'Xóa sự kiện lịch',
+    module: 'calendar',
+    description: 'Quyền xóa sự kiện lịch trong phạm vi quản lý',
+  },
+  {
+    id: 38,
+    code: 'calendar.manage',
+    name: 'Quản trị toàn cục Lịch & Quét nhắc lịch Scheduler',
+    module: 'calendar',
+    description:
+      'Quyền quản trị toàn bộ lịch và kích hoạt quét nhắc lịch qua Notification & Scheduler',
+  },
+  {
+    id: 39,
+    code: 'calendar.sync',
+    name: 'Đồng bộ tích hợp Google Calendar & Microsoft Outlook Calendar',
+    module: 'calendar',
+    description:
+      'Quyền đồng bộ sự kiện 2 chiều qua GoogleCalendarProviderAdapter và MicrosoftCalendarProviderAdapter',
+  },
 ] as const;
 
 const ALL_IAM_PERMISSION_CODES = STANDARD_IAM_PERMISSIONS.map((p) => p.code);

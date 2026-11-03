@@ -1,0 +1,398 @@
+{
+  "$schema": "../../packages/kernel/schemas/module.manifest.schema.json",
+  "name": "calendar",
+  "displayName": "Calendar & Event Management",
+  "version": "1.0.0",
+  "description": "Module quản lý Lịch và Sự kiện (Mục 9.7): Tạo sự kiện, người tham gia (User/Đơn vị), sự kiện lặp lại (Ngày/Tuần/Tháng), nhắc lịch qua Notification & Scheduler, kiểm tra trùng lịch, phân quyền xem/sửa lịch, tích hợp Google/Microsoft Calendar và lịch sử thay đổi sự kiện.",
+  "type": "core",
+  "category": "core",
+  "author": "Core Platform Team",
+  "entryModule": "CalendarModule",
+  "dependencies": [
+    "database",
+    "security",
+    "i18n",
+    "users",
+    "roles",
+    "organizations",
+    "codes",
+    "settings",
+    "notifications"
+  ],
+  "permissions": [
+    "calendar.read",
+    "calendar.create",
+    "calendar.update",
+    "calendar.delete",
+    "calendar.manage",
+    "calendar.sync"
+  ],
+  "events": {
+    "published": [
+      "calendar.event_created",
+      "calendar.event_updated",
+      "calendar.event_cancelled",
+      "calendar.reminder_dispatched",
+      "calendar.external_synced"
+    ],
+    "subscribed": []
+  },
+  "database": {
+    "hasMigrations": true,
+    "tables": [
+      "calendar_events",
+      "calendar_event_participants",
+      "calendar_event_reminders",
+      "calendar_event_histories"
+    ]
+  },
+  "codeTypes": [
+    {
+      "code": "calendar.event_status",
+      "name": "Trạng thái sự kiện lịch",
+      "description": "Trạng thái vòng đời của một sự kiện trong lịch làm việc",
+      "isSystem": true,
+      "allowCustomValues": false,
+      "values": [
+        {
+          "numericCode": 1,
+          "code": "SCHEDULED",
+          "behaviorCode": "SCHEDULED",
+          "name": "Đã lên lịch",
+          "labels": { "vi": "Đã lên lịch", "en": "Scheduled" },
+          "aliases": ["SCHEDULED", "PLANNED", "ĐÃ LÊN LỊCH"],
+          "badgeTone": "info",
+          "sortOrder": 1,
+          "isSystem": true
+        },
+        {
+          "numericCode": 2,
+          "code": "IN_PROGRESS",
+          "behaviorCode": "IN_PROGRESS",
+          "name": "Đang diễn ra",
+          "labels": { "vi": "Đang diễn ra", "en": "In Progress" },
+          "aliases": ["IN_PROGRESS", "ONGOING", "ĐANG DIỄN RA"],
+          "badgeTone": "success",
+          "sortOrder": 2,
+          "isSystem": true
+        },
+        {
+          "numericCode": 3,
+          "code": "COMPLETED",
+          "behaviorCode": "COMPLETED",
+          "name": "Đã hoàn thành",
+          "labels": { "vi": "Đã hoàn thành", "en": "Completed" },
+          "aliases": ["COMPLETED", "DONE", "ĐÃ HOÀN THÀNH"],
+          "badgeTone": "neutral",
+          "sortOrder": 3,
+          "isSystem": true
+        },
+        {
+          "numericCode": 4,
+          "code": "CANCELLED",
+          "behaviorCode": "CANCELLED",
+          "name": "Đã hủy",
+          "labels": { "vi": "Đã hủy", "en": "Cancelled" },
+          "aliases": ["CANCELLED", "CANCELED", "ĐÃ HỦY"],
+          "badgeTone": "danger",
+          "sortOrder": 4,
+          "isSystem": true
+        },
+        {
+          "numericCode": 5,
+          "code": "POSTPONED",
+          "behaviorCode": "POSTPONED",
+          "name": "Tạm hoãn",
+          "labels": { "vi": "Tạm hoãn", "en": "Postponed" },
+          "aliases": ["POSTPONED", "DELAYED", "TẠM HOÃN"],
+          "badgeTone": "warning",
+          "sortOrder": 5,
+          "isSystem": true
+        }
+      ]
+    },
+    {
+      "code": "calendar.event_type",
+      "name": "Phân loại sự kiện lịch",
+      "description": "Các loại sự kiện lịch (Cuộc họp, Đào tạo, Hạn chót, Bảo trì, Nghỉ lễ...)",
+      "isSystem": true,
+      "allowCustomValues": true,
+      "values": [
+        {
+          "numericCode": 1,
+          "code": "MEETING",
+          "behaviorCode": "MEETING",
+          "name": "Cuộc họp",
+          "labels": { "vi": "Cuộc họp", "en": "Meeting" },
+          "aliases": ["MEETING", "HỌP", "CUỘC HỌP"],
+          "badgeTone": "info",
+          "sortOrder": 1,
+          "isSystem": true
+        },
+        {
+          "numericCode": 2,
+          "code": "TRAINING",
+          "behaviorCode": "TRAINING",
+          "name": "Đào tạo & Huấn luyện",
+          "labels": { "vi": "Đào tạo & Huấn luyện", "en": "Training & Workshop" },
+          "aliases": ["TRAINING", "WORKSHOP", "ĐÀO TẠO"],
+          "badgeTone": "success",
+          "sortOrder": 2,
+          "isSystem": true
+        },
+        {
+          "numericCode": 3,
+          "code": "DEADLINE",
+          "behaviorCode": "DEADLINE",
+          "name": "Hạn chót công việc",
+          "labels": { "vi": "Hạn chót công việc", "en": "Milestone / Deadline" },
+          "aliases": ["DEADLINE", "MILESTONE", "HẠN CHÓT"],
+          "badgeTone": "danger",
+          "sortOrder": 3,
+          "isSystem": true
+        },
+        {
+          "numericCode": 4,
+          "code": "MAINTENANCE",
+          "behaviorCode": "MAINTENANCE",
+          "name": "Bảo trì hệ thống",
+          "labels": { "vi": "Bảo trì hệ thống", "en": "System Maintenance" },
+          "aliases": ["MAINTENANCE", "BẢO TRÌ"],
+          "badgeTone": "warning",
+          "sortOrder": 4,
+          "isSystem": true
+        },
+        {
+          "numericCode": 5,
+          "code": "HOLIDAY",
+          "behaviorCode": "HOLIDAY",
+          "name": "Ngày lễ / Sự kiện chung",
+          "labels": { "vi": "Ngày lễ / Sự kiện chung", "en": "Holiday / Company Event" },
+          "aliases": ["HOLIDAY", "NGÀY LỄ"],
+          "badgeTone": "success",
+          "sortOrder": 5,
+          "isSystem": true
+        },
+        {
+          "numericCode": 6,
+          "code": "OTHER",
+          "behaviorCode": "OTHER",
+          "name": "Sự kiện khác",
+          "labels": { "vi": "Sự kiện khác", "en": "Other Event" },
+          "aliases": ["OTHER", "KHÁC"],
+          "badgeTone": "neutral",
+          "sortOrder": 6,
+          "isSystem": true
+        }
+      ]
+    }
+  ],
+  "settingGroups": [
+    {
+      "code": "calendar",
+      "module": "calendar",
+      "name": "Lịch & Sự kiện (Calendar & Events)",
+      "description": "Cấu hình nhắc lịch, giới hạn sự kiện lặp lại, kiểm tra trùng lịch và đồng bộ Google / Microsoft Calendar",
+      "icon": "Calendar",
+      "sortOrder": 97,
+      "isSystem": true
+    }
+  ],
+  "settings": [
+    {
+      "key": "calendar.pagination.default_limit",
+      "groupCode": "calendar",
+      "module": "calendar",
+      "namespace": "calendar.pagination",
+      "name": "Số bản ghi sự kiện mặc định trên mỗi trang",
+      "description": "Giới hạn số lượng sự kiện trả về mặc định khi truy vấn phân trang",
+      "valueType": "NUMBER",
+      "defaultValue": 20,
+      "validationRules": { "min": 1, "max": 200, "integerOnly": true },
+      "isSensitive": false,
+      "allowUnitOverride": true,
+      "isSystem": true,
+      "sortOrder": 1
+    },
+    {
+      "key": "calendar.pagination.max_limit",
+      "groupCode": "calendar",
+      "module": "calendar",
+      "namespace": "calendar.pagination",
+      "name": "Số bản ghi sự kiện tối đa trên mỗi trang",
+      "description": "Giới hạn tối đa số lượng sự kiện cho phép trong 1 truy vấn",
+      "valueType": "NUMBER",
+      "defaultValue": 200,
+      "validationRules": { "min": 10, "max": 1000, "integerOnly": true },
+      "isSensitive": false,
+      "allowUnitOverride": true,
+      "isSystem": true,
+      "sortOrder": 2
+    },
+    {
+      "key": "calendar.reminder.default_minutes_before",
+      "groupCode": "calendar",
+      "module": "calendar",
+      "namespace": "calendar.reminder",
+      "name": "Thời gian nhắc lịch mặc định trước sự kiện (Phút)",
+      "description": "Số phút nhắc trước thời điểm bắt đầu sự kiện nếu người tạo không chỉ định riêng",
+      "valueType": "NUMBER",
+      "defaultValue": 15,
+      "validationRules": { "min": 1, "max": 10080, "integerOnly": true },
+      "isSensitive": false,
+      "allowUnitOverride": true,
+      "isSystem": true,
+      "sortOrder": 3
+    },
+    {
+      "key": "calendar.recurrence.max_occurrences",
+      "groupCode": "calendar",
+      "module": "calendar",
+      "namespace": "calendar.recurrence",
+      "name": "Số phiên lặp tối đa của một chuỗi sự kiện",
+      "description": "Giới hạn số lần lặp tối đa khi mở rộng sự kiện lặp theo ngày, tuần hoặc tháng",
+      "valueType": "NUMBER",
+      "defaultValue": 180,
+      "validationRules": { "min": 1, "max": 730, "integerOnly": true },
+      "isSensitive": false,
+      "allowUnitOverride": true,
+      "isSystem": true,
+      "sortOrder": 4
+    },
+    {
+      "key": "calendar.conflict.block_on_resource_conflict",
+      "groupCode": "calendar",
+      "module": "calendar",
+      "namespace": "calendar.conflict",
+      "name": "Chặn tự động khi trùng tài nguyên / phòng họp",
+      "description": "Từ chối tạo/cập nhật sự kiện nếu phát hiện tài nguyên (resourceCode) đã được đặt trùng khung giờ",
+      "valueType": "BOOLEAN",
+      "defaultValue": true,
+      "isSensitive": false,
+      "allowUnitOverride": true,
+      "isSystem": true,
+      "sortOrder": 5
+    },
+    {
+      "key": "calendar.conflict.block_on_participant_conflict",
+      "groupCode": "calendar",
+      "module": "calendar",
+      "namespace": "calendar.conflict",
+      "name": "Chặn tự động khi trùng lịch người tham gia",
+      "description": "Từ chối tạo/cập nhật sự kiện nếu người tham gia đang có sự kiện khác trùng khung giờ (nếu tắt thì chỉ cảnh báo)",
+      "valueType": "BOOLEAN",
+      "defaultValue": false,
+      "isSensitive": false,
+      "allowUnitOverride": true,
+      "isSystem": true,
+      "sortOrder": 6
+    },
+    {
+      "key": "calendar.sync.auto_sync_on_change",
+      "groupCode": "calendar",
+      "module": "calendar",
+      "namespace": "calendar.sync",
+      "name": "Tự động đồng bộ sang Google / Microsoft Calendar khi thay đổi",
+      "description": "Khi bật, sự kiện có cấu hình kết nối ngoài sẽ tự động đồng bộ qua Adapter khi tạo, sửa hoặc hủy",
+      "valueType": "BOOLEAN",
+      "defaultValue": true,
+      "isSensitive": false,
+      "allowUnitOverride": true,
+      "isSystem": true,
+      "sortOrder": 7
+    },
+    {
+      "key": "calendar.google.calendar_id",
+      "groupCode": "calendar",
+      "module": "calendar",
+      "namespace": "calendar.google",
+      "name": "Google Calendar ID mặc định",
+      "description": "Định danh lịch Google mặc định khi đồng bộ qua GoogleCalendarProviderAdapter",
+      "valueType": "TEXT",
+      "defaultValue": "primary",
+      "isSensitive": false,
+      "allowUnitOverride": true,
+      "isSystem": true,
+      "sortOrder": 8
+    },
+    {
+      "key": "calendar.microsoft.calendar_id",
+      "groupCode": "calendar",
+      "module": "calendar",
+      "namespace": "calendar.microsoft",
+      "name": "Microsoft Outlook Calendar ID mặc định",
+      "description": "Định danh lịch Microsoft 365 / Outlook mặc định khi đồng bộ qua MicrosoftCalendarProviderAdapter",
+      "valueType": "TEXT",
+      "defaultValue": "primary",
+      "isSensitive": false,
+      "allowUnitOverride": true,
+      "isSystem": true,
+      "sortOrder": 9
+    }
+  ],
+  "featureFlags": [
+    {
+      "key": "calendar.reminders_enabled",
+      "module": "calendar",
+      "name": "Bật gửi nhắc lịch tự động qua Notification & Scheduler",
+      "description": "Cho phép Scheduler quét và gửi thông báo nhắc lịch trước thời điểm diễn ra sự kiện",
+      "isEnabled": true,
+      "rolloutPercentage": 100,
+      "isSystem": true
+    },
+    {
+      "key": "calendar.google_sync_enabled",
+      "module": "calendar",
+      "name": "Bật Adapter tích hợp Google Calendar",
+      "description": "Cho phép đồng bộ 2 chiều sự kiện với Google Calendar qua GoogleCalendarProviderAdapter",
+      "isEnabled": true,
+      "rolloutPercentage": 100,
+      "isSystem": true
+    },
+    {
+      "key": "calendar.microsoft_sync_enabled",
+      "module": "calendar",
+      "name": "Bật Adapter tích hợp Microsoft Outlook Calendar",
+      "description": "Cho phép đồng bộ 2 chiều sự kiện với Microsoft 365 / Outlook Calendar qua MicrosoftCalendarProviderAdapter",
+      "isEnabled": true,
+      "rolloutPercentage": 100,
+      "isSystem": true
+    }
+  ],
+  "sequences": [
+    {
+      "key": "calendar.event_code",
+      "module": "calendar",
+      "name": "Mã định danh sự kiện lịch (Calendar Event Sequence)",
+      "description": "Quy tắc sinh mã tự động cho sự kiện lịch (ví dụ: EVT-202611-000001)",
+      "prefix": "EVT",
+      "suffix": "",
+      "separator": "-",
+      "dateFormat": "YYYYMM",
+      "paddingLength": 6,
+      "startValue": 1,
+      "step": 1,
+      "resetPolicy": "MONTHLY",
+      "scopeByUnit": false,
+      "timezone": "Asia/Ho_Chi_Minh",
+      "isSystem": true
+    }
+  ],
+  "menus": [
+    {
+      "code": "CALENDAR_EVENTS",
+      "name": "Lịch & Sự kiện",
+      "module": "calendar",
+      "status": 1,
+      "link": "/calendar",
+      "linkApi": "/api/v1/calendar/events",
+      "type": 2,
+      "parent": null,
+      "level": 1,
+      "key": "calendar.read",
+      "numOrder": 28,
+      "icon": "Calendar",
+      "position": "SIDEBAR"
+    }
+  ]
+}

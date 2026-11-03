@@ -75,9 +75,12 @@ export class DevelopmentDataSeeder implements SeederContract {
     // Seed dữ liệu mẫu cho Module Quy trình xử lý & Phê duyệt (Phase 9 - Mục 9.3 & 9.4)
     affected += await this.seedSampleWorkflows(ctx, isPostgres);
 
+    // Seed dữ liệu mẫu cho Module Lịch & Sự kiện (Phase 9 - Mục 9.7)
+    affected += await this.seedSampleCalendarEvents(ctx, isPostgres);
+
     return {
       affected,
-      details: `${affected} development record(s) (settings, folders, files, usages, notifications & workflows) seeded`,
+      details: `${affected} development record(s) (settings, folders, files, usages, notifications, workflows & calendar events) seeded`,
     };
   }
 
@@ -917,6 +920,261 @@ export class DevelopmentDataSeeder implements SeederContract {
 
     if (isPostgres) {
       for (const tbl of ['workflow_definitions', 'workflow_states', 'workflow_transitions']) {
+        await ctx.manager
+          .query(
+            `SELECT setval(pg_get_serial_sequence('${tbl}', 'id'), COALESCE((SELECT MAX(id) FROM ${tbl}), 1), true)`,
+          )
+          .catch(() => undefined);
+      }
+    }
+
+    return count;
+  }
+
+  private async seedSampleCalendarEvents(ctx: SeederContext, isPostgres: boolean): Promise<number> {
+    let count = 0;
+
+    const events = [
+      {
+        id: 1,
+        code: 'EVT-202611-000001',
+        title: 'Họp giao ban Công nghệ & Vận hành Hàng tuần',
+        description: 'Rà soát tiến độ các dự án Core Platform, SLA hạ tầng và kế hoạch phát hành.',
+        eventType: 'MEETING',
+        status: 1,
+        visibility: 'PUBLIC',
+        startAt: '2026-11-09 09:00:00',
+        endAt: '2026-11-09 10:30:00',
+        location: 'Phòng họp A1 - Tầng 12 Trụ sở TP.HCM',
+        resourceCode: 'ROOM_HCM_A1',
+        resourceName: 'Phòng họp Lớn A1 (Sức chứa 30 người)',
+        ownerUserId: 10,
+        organizationUnitId: 3,
+        recurrenceRuleJson: JSON.stringify({
+          frequency: 'WEEKLY',
+          interval: 1,
+          byWeekDays: [1],
+          count: 12,
+        }),
+        remindersJson: JSON.stringify([
+          { minutesBefore: 30, channels: ['IN_APP', 'EMAIL'] },
+          { minutesBefore: 10, channels: ['IN_APP'] },
+        ]),
+        externalBindingsJson: JSON.stringify({
+          GOOGLE: {
+            provider: 'GOOGLE',
+            calendarId: 'primary',
+            externalEventId: 'gcal_evt_202611_000001',
+            etag: '"gcal-etag-seed001"',
+            externalUrl: 'https://calendar.google.com/calendar/event?eid=gcal_evt_202611_000001',
+            conferenceUrl: 'https://meet.google.com/hcm-eng-sync',
+            lastSyncedAt: '2026-11-03T08:00:00.000Z',
+            syncStatus: 'SYNCED',
+          },
+        }),
+      },
+      {
+        id: 2,
+        code: 'EVT-202611-000002',
+        title: 'Đào tạo An toàn Thông tin & Bảo mật Dữ liệu Quý 4',
+        description:
+          'Buổi huấn luyện bắt buộc về chính sách MFA, phân quyền RBAC và bảo vệ dữ liệu.',
+        eventType: 'TRAINING',
+        status: 1,
+        visibility: 'INTERNAL',
+        startAt: '2026-11-12 14:00:00',
+        endAt: '2026-11-12 16:30:00',
+        location: 'Hội trường Đa năng B2 - Chi nhánh TP.HCM',
+        resourceCode: 'HALL_HCM_B2',
+        resourceName: 'Hội trường Đào tạo B2',
+        ownerUserId: 3,
+        organizationUnitId: 5,
+        recurrenceRuleJson: null,
+        remindersJson: JSON.stringify([{ minutesBefore: 60, channels: ['IN_APP', 'EMAIL'] }]),
+        externalBindingsJson: JSON.stringify({
+          MICROSOFT: {
+            provider: 'MICROSOFT',
+            calendarId: 'primary',
+            externalEventId: 'msgraph_evt_202611_000002',
+            etag: 'W/"ms-change-seed002"',
+            externalUrl: 'https://outlook.office.com/calendar/item/msgraph_evt_202611_000002',
+            conferenceUrl: 'https://teams.microsoft.com/l/meetup-join/secops-q4',
+            lastSyncedAt: '2026-11-03T08:15:00.000Z',
+            syncStatus: 'SYNCED',
+          },
+        }),
+      },
+    ];
+
+    for (const ev of events) {
+      if (isPostgres) {
+        await ctx.manager.query(
+          `INSERT INTO calendar_events (
+             id, code, title, description, event_type, status, visibility,
+             start_at, end_at, timezone, is_all_day, location, resource_code, resource_name,
+             owner_user_id, organization_unit_id, recurrence_rule_json, reminders_json, external_bindings_json
+           )
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'Asia/Ho_Chi_Minh', FALSE, $10, $11, $12, $13, $14, $15, $16, $17)
+           ON CONFLICT (code) DO UPDATE SET title = EXCLUDED.title, description = EXCLUDED.description`,
+          [
+            ev.id,
+            ev.code,
+            ev.title,
+            ev.description,
+            ev.eventType,
+            ev.status,
+            ev.visibility,
+            ev.startAt,
+            ev.endAt,
+            ev.location,
+            ev.resourceCode,
+            ev.resourceName,
+            ev.ownerUserId,
+            ev.organizationUnitId,
+            ev.recurrenceRuleJson,
+            ev.remindersJson,
+            ev.externalBindingsJson,
+          ],
+        );
+      } else {
+        await ctx.manager.query(
+          `INSERT INTO calendar_events (
+             id, code, title, description, event_type, status, visibility,
+             start_at, end_at, timezone, is_all_day, location, resource_code, resource_name,
+             owner_user_id, organization_unit_id, recurrence_rule_json, reminders_json, external_bindings_json
+           )
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Asia/Ho_Chi_Minh', FALSE, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON DUPLICATE KEY UPDATE title = VALUES(title), description = VALUES(description)`,
+          [
+            ev.id,
+            ev.code,
+            ev.title,
+            ev.description,
+            ev.eventType,
+            ev.status,
+            ev.visibility,
+            ev.startAt,
+            ev.endAt,
+            ev.location,
+            ev.resourceCode,
+            ev.resourceName,
+            ev.ownerUserId,
+            ev.organizationUnitId,
+            ev.recurrenceRuleJson,
+            ev.remindersJson,
+            ev.externalBindingsJson,
+          ],
+        );
+      }
+      count++;
+    }
+
+    const participants = [
+      {
+        id: 1,
+        eventId: 1,
+        type: 'USER',
+        userId: 6,
+        orgId: null,
+        role: 'REQUIRED',
+        canEdit: true,
+        rsvp: 'ACCEPTED',
+      },
+      {
+        id: 2,
+        eventId: 1,
+        type: 'ORGANIZATION_UNIT',
+        userId: null,
+        orgId: 3,
+        role: 'ATTENDEE',
+        canEdit: false,
+        rsvp: 'ACCEPTED',
+      },
+      {
+        id: 3,
+        eventId: 2,
+        type: 'ORGANIZATION_UNIT',
+        userId: null,
+        orgId: 2,
+        role: 'REQUIRED',
+        canEdit: false,
+        rsvp: 'PENDING',
+      },
+    ];
+
+    for (const p of participants) {
+      if (isPostgres) {
+        await ctx.manager.query(
+          `INSERT INTO calendar_event_participants (
+             id, calendar_event_id, participant_type, user_id, organization_unit_id,
+             participant_role, can_edit, rsvp_status, added_by_user_id
+           )
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 1)
+           ON CONFLICT (id) DO UPDATE SET rsvp_status = EXCLUDED.rsvp_status`,
+          [p.id, p.eventId, p.type, p.userId, p.orgId, p.role, p.canEdit, p.rsvp],
+        );
+      } else {
+        await ctx.manager.query(
+          `INSERT INTO calendar_event_participants (
+             id, calendar_event_id, participant_type, user_id, organization_unit_id,
+             participant_role, can_edit, rsvp_status, added_by_user_id
+           )
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)
+           ON DUPLICATE KEY UPDATE rsvp_status = VALUES(rsvp_status)`,
+          [p.id, p.eventId, p.type, p.userId, p.orgId, p.role, p.canEdit, p.rsvp],
+        );
+      }
+      count++;
+    }
+
+    const histories = [
+      {
+        id: 1,
+        eventId: 1,
+        actionType: 'CREATED',
+        changeSource: 'SYSTEM',
+        actorUserId: 10,
+        reason: 'Khởi tạo lịch họp giao ban hàng tuần từ Seeder',
+      },
+      {
+        id: 2,
+        eventId: 2,
+        actionType: 'CREATED',
+        changeSource: 'SYSTEM',
+        actorUserId: 3,
+        reason: 'Khởi tạo lịch đào tạo An toàn thông tin Quý 4',
+      },
+    ];
+
+    for (const h of histories) {
+      if (isPostgres) {
+        await ctx.manager.query(
+          `INSERT INTO calendar_event_histories (
+             id, calendar_event_id, action_type, change_source, actor_user_id, reason
+           )
+           VALUES ($1, $2, $3, $4, $5, $6)
+           ON CONFLICT (id) DO UPDATE SET reason = EXCLUDED.reason`,
+          [h.id, h.eventId, h.actionType, h.changeSource, h.actorUserId, h.reason],
+        );
+      } else {
+        await ctx.manager.query(
+          `INSERT INTO calendar_event_histories (
+             id, calendar_event_id, action_type, change_source, actor_user_id, reason
+           )
+           VALUES (?, ?, ?, ?, ?, ?)
+           ON DUPLICATE KEY UPDATE reason = VALUES(reason)`,
+          [h.id, h.eventId, h.actionType, h.changeSource, h.actorUserId, h.reason],
+        );
+      }
+      count++;
+    }
+
+    if (isPostgres) {
+      for (const tbl of [
+        'calendar_events',
+        'calendar_event_participants',
+        'calendar_event_histories',
+      ]) {
         await ctx.manager
           .query(
             `SELECT setval(pg_get_serial_sequence('${tbl}', 'id'), COALESCE((SELECT MAX(id) FROM ${tbl}), 1), true)`,

@@ -9,6 +9,7 @@ export const ROUTES = {
   FILES: '/files',
   NOTIFICATIONS: '/notifications',
   WORKFLOWS: '/workflows',
+  CALENDAR: '/calendar',
   SYSTEM_CONSOLE: '/system-console',
 } as const;
 

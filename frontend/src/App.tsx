@@ -54,6 +54,10 @@ const WorkflowsManagementPage = loadPage(
   () => import('./modules/workflows/WorkflowsManagementPage'),
   'WorkflowsManagementPage',
 );
+const CalendarManagementPage = loadPage(
+  () => import('./modules/calendar/CalendarManagementPage'),
+  'CalendarManagementPage',
+);
 
 // Tải riêng: CSS/JS của System Console (Tailwind, ECharts…) chỉ nạp khi vào console.
 // Link cũ dạng `/#system-console/...` → đường dẫn thật.
@@ -121,6 +125,8 @@ function App() {
               <NotificationsManagementPage />
             ) : activeTab === 'workflows' ? (
               <WorkflowsManagementPage />
+            ) : activeTab === 'calendar' ? (
+              <CalendarManagementPage />
             ) : (
               <HomePage onNavigateTab={handleNavigateTab} />
             )}

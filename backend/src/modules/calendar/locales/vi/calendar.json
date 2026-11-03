@@ -1,0 +1,13 @@
+{
+  "eventNotFound": "Không tìm thấy sự kiện lịch với mã định danh #{{id}}",
+  "participantNotFound": "Không tìm thấy người tham gia hoặc đơn vị trong sự kiện lịch này",
+  "invalidTimeRange": "Thời gian kết thúc sự kiện phải lớn hơn thời gian bắt đầu",
+  "invalidRecurrenceRule": "Quy tắc lặp lại sự kiện không hợp lệ: {{reason}}",
+  "invalidParticipantTarget": "Mỗi thành phần tham gia phải chỉ định chính xác userId (USER) hoặc organizationUnitId (ORGANIZATION_UNIT)",
+  "scheduleConflictDetected": "Phát hiện {{conflictCount}} xung đột lịch theo người tham gia hoặc tài nguyên phòng họp",
+  "forbiddenView": "Bạn không có quyền xem sự kiện lịch này (chỉ Owner, Participant hoặc Manager được phép)",
+  "forbiddenEdit": "Bạn không có quyền chỉnh sửa sự kiện lịch này (chỉ Owner, Participant được cấp quyền sửa hoặc Manager được phép)",
+  "forbiddenRsvp": "Bạn không nằm trong danh sách người tham gia của sự kiện lịch này",
+  "providerDisabled": "Bộ tích hợp lịch ngoài ({{provider}}) hiện đang tắt hoặc chưa được kích hoạt",
+  "eventAlreadyCancelled": "Sự kiện lịch này đã bị hủy trước đó"
+}
