@@ -8,13 +8,11 @@ import { RolesModule } from '@modules/roles/index.js';
 import { USERS_PUBLIC_SERVICE } from './contracts/index.js';
 import { UserEntity } from './entities/user.entity.js';
 import { UserProfileEntity } from './entities/user-profile.entity.js';
-import { UserRoleEntity } from './entities/user-role.entity.js';
 import { UserOrganizationUnitEntity } from './entities/user-organization-unit.entity.js';
 import { UserOrganizationHistoryEntity } from './entities/user-organization-history.entity.js';
 import { UserStatusHistoryEntity } from './entities/user-status-history.entity.js';
 import { UserRepository } from './repositories/user.repository.js';
 import { UserProfileRepository } from './repositories/user-profile.repository.js';
-import { UserRoleRepository } from './repositories/user-role.repository.js';
 import { UserOrganizationUnitRepository } from './repositories/user-organization-unit.repository.js';
 import { UserOrganizationHistoryRepository } from './repositories/user-organization-history.repository.js';
 import { UserStatusHistoryRepository } from './repositories/user-status-history.repository.js';
@@ -39,7 +37,6 @@ new CoreI18nService().registerNamespace('users', { vi: viUsers, en: enUsers });
     TypeOrmModule.forFeature([
       UserEntity,
       UserProfileEntity,
-      UserRoleEntity,
       UserOrganizationUnitEntity,
       UserOrganizationHistoryEntity,
       UserStatusHistoryEntity,
@@ -49,7 +46,6 @@ new CoreI18nService().registerNamespace('users', { vi: viUsers, en: enUsers });
   providers: [
     UserRepository,
     UserProfileRepository,
-    UserRoleRepository,
     UserOrganizationUnitRepository,
     UserOrganizationHistoryRepository,
     UserStatusHistoryRepository,

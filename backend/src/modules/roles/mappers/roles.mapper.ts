@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import type { EntityMapperContract } from '@packages/database/index.js';
+import type { PermissionItemSummary } from '@modules/permissions/index.js';
 import {
   type RoleSummary,
   getDataScopeName,
@@ -8,16 +9,15 @@ import {
   parseDataScope,
   parseRoleStatus,
 } from '../contracts/index.js';
-import type { PermissionEntity } from '../entities/permission.entity.js';
 import type { RoleEntity } from '../entities/role.entity.js';
 import type { RoleResponse } from '../responses/roles.response.js';
 
 @Injectable()
 export class RolesMapper implements EntityMapperContract<RoleEntity, RoleResponse> {
-  /** Chuyển đổi từ RoleEntity kèm danh sách PermissionEntity sang RoleResponse DTO */
+  /** Chuyển đổi từ RoleEntity kèm danh sách quyền sang RoleResponse DTO */
   public toResponse(
     entity: RoleEntity,
-    permissions: readonly PermissionEntity[] = [],
+    permissions: readonly Pick<PermissionItemSummary, 'id' | 'code'>[] = [],
     userCount = 0,
   ): RoleResponse {
     const statusCode = parseRoleStatus(entity.status);
@@ -49,7 +49,10 @@ export class RolesMapper implements EntityMapperContract<RoleEntity, RoleRespons
   }
 
   /** Chuyển đổi sang bản tóm tắt phục vụ giao tiếp liên module */
-  public toSummary(entity: RoleEntity, permissions: readonly PermissionEntity[] = []): RoleSummary {
+  public toSummary(
+    entity: RoleEntity,
+    permissions: readonly Pick<PermissionItemSummary, 'id' | 'code'>[] = [],
+  ): RoleSummary {
     const statusCode = parseRoleStatus(entity.status);
     const dataScopeCode = parseDataScope(
       entity.dataScope,

@@ -41,7 +41,6 @@
     "tables": [
       "users",
       "user_profiles",
-      "user_roles",
       "user_organization_units",
       "user_organization_histories",
       "user_status_histories"

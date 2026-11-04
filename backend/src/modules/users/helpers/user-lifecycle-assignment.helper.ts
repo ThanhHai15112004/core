@@ -16,7 +16,6 @@ import type {
   UserOrganizationHistoryRepository,
 } from '../repositories/user-organization-history.repository.js';
 import type { UserOrganizationUnitRepository } from '../repositories/user-organization-unit.repository.js';
-import type { UserRoleRepository } from '../repositories/user-role.repository.js';
 import type { UserRepository } from '../repositories/user.repository.js';
 import type {
   AssignUserOrganizationsRequest,
@@ -137,7 +136,6 @@ export async function executeAssignUserRolesFlow(params: {
   actorId?: number | undefined;
   actor?: UserIdentity | undefined;
   userRepository: UserRepository;
-  userRoleRepository: UserRoleRepository;
   rolesPublicService: IRolesPublicService;
   verifySensitiveActionStepUp: (
     actorId?: number,
@@ -157,7 +155,6 @@ export async function executeAssignUserRolesFlow(params: {
     actorId,
     actor,
     userRepository,
-    userRoleRepository,
     rolesPublicService,
     verifySensitiveActionStepUp,
     ensureAccessUserEntity,
@@ -181,13 +178,15 @@ export async function executeAssignUserRolesFlow(params: {
     await ensureAccessUserEntity(user, actor, 'update');
   }
 
-  const prevLinks = await userRoleRepository.findByUserIds([id]);
+  const prevLinks = rolesPublicService.findUserRoleLinksByUserIds
+    ? await rolesPublicService.findUserRoleLinksByUserIds([id])
+    : [];
   const prevRoleIds = prevLinks.map((l) => Number(l.roleId));
   if (dto.roleIds.length > 0) {
     await rolesPublicService.ensureActiveRolesExist(dto.roleIds);
   }
 
-  await userRoleRepository.replaceUserRoles(id, dto.roleIds, actorId);
+  await rolesPublicService.replaceUserRoles?.(id, dto.roleIds, actorId);
   await invalidateIdentityCache(id);
   const updated = await getById(id);
 

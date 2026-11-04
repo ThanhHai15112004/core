@@ -1,0 +1,5 @@
+{
+  "auditLogNotFound": "Audit log entry with ID '{{id}}' was not found.",
+  "immutable": "Audit log records are append-only and cannot be modified or deleted."
+}
+

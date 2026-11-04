@@ -1,0 +1,24 @@
+{
+  "$schema": "../../packages/kernel/schemas/module.manifest.schema.json",
+  "name": "permissions",
+  "displayName": "Permissions Catalog Management",
+  "version": "1.0.0",
+  "description": "Module quản lý danh mục quyền hạn hệ thống, nhóm quyền theo chức năng, đồng bộ quyền idempotent từ module manifests, cảnh báo quyền mồ côi và ma trận Vai trò × Quyền",
+  "type": "core",
+  "category": "core",
+  "author": "Core Platform Team",
+  "entryModule": "PermissionsModule",
+  "dependencies": ["database"],
+  "permissions": ["permissions.read", "permissions.manage"],
+  "events": {
+    "published": ["permissions.synced"],
+    "subscribed": []
+  },
+  "database": {
+    "hasMigrations": true,
+    "tables": ["permissions"]
+  },
+  "codeTypes": [],
+  "settings": [],
+  "menus": []
+}

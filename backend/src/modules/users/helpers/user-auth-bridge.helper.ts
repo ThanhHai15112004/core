@@ -46,7 +46,6 @@ import type { UserProfileEntity } from '../entities/user-profile.entity.js';
 import type { UserEntity } from '../entities/user.entity.js';
 import type { UserOrganizationUnitRepository } from '../repositories/user-organization-unit.repository.js';
 import type { UserProfileRepository } from '../repositories/user-profile.repository.js';
-import type { UserRoleRepository } from '../repositories/user-role.repository.js';
 import type { UserRepository } from '../repositories/user.repository.js';
 
 export async function buildUserAuthCredentialsView(params: {
@@ -95,7 +94,6 @@ export async function buildUserAuthCredentialsView(params: {
 export async function buildUserAuthIdentityView(params: {
   userId: number;
   userRepository: UserRepository;
-  userRoleRepository: UserRoleRepository;
   userOrgRepository: UserOrganizationUnitRepository;
   rolesPublicService: IRolesPublicService;
   getUserProfile: (userId: number, user?: UserEntity) => Promise<UserProfileView>;
@@ -104,7 +102,6 @@ export async function buildUserAuthIdentityView(params: {
   const {
     userId,
     userRepository,
-    userRoleRepository,
     userOrgRepository,
     rolesPublicService,
     getUserProfile,
@@ -117,7 +114,9 @@ export async function buildUserAuthIdentityView(params: {
   }
 
   const [roleLinks, orgLinks, profile] = await Promise.all([
-    userRoleRepository.findByUserIds([userId]),
+    rolesPublicService.findUserRoleLinksByUserIds
+      ? rolesPublicService.findUserRoleLinksByUserIds([userId])
+      : Promise.resolve([]),
     userOrgRepository.findByUserIds([userId]),
     getUserProfile(userId, user),
   ]);

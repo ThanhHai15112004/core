@@ -86,30 +86,37 @@ export const rolesApi = {
       headers: resolveAuthHeaders(),
     }),
 
+  assignUserRoles: (userId: number, roleIds: readonly number[]) =>
+    fetchApi(API_ROUTES.ROLES.ASSIGN_USER_ROLES(userId), {
+      method: 'PUT',
+      headers: resolveAuthHeaders(),
+      body: JSON.stringify({ roleIds }),
+    }),
+
   listPermissionsCatalog: () =>
-    fetchApi<PermissionCatalogItem[]>(API_ROUTES.ROLES.PERMISSIONS, {
+    fetchApi<PermissionCatalogItem[]>(API_ROUTES.PERMISSIONS.CATALOG, {
       headers: resolveAuthHeaders(),
     }),
 
   listPermissionsGrouped: () =>
-    fetchApi<PermissionFunctionalGroup[]>(API_ROUTES.ROLES.PERMISSIONS_GROUPED, {
+    fetchApi<PermissionFunctionalGroup[]>(API_ROUTES.PERMISSIONS.GROUPED, {
       headers: resolveAuthHeaders(),
     }),
 
   syncPermissions: () =>
-    fetchApi<SyncPermissionsResult>(API_ROUTES.ROLES.PERMISSIONS_SYNC, {
+    fetchApi<SyncPermissionsResult>(API_ROUTES.PERMISSIONS.SYNC, {
       method: 'POST',
       headers: resolveAuthHeaders(),
       body: JSON.stringify({}),
     }),
 
   listOrphanedPermissions: () =>
-    fetchApi<OrphanedPermissionWarning[]>(API_ROUTES.ROLES.PERMISSIONS_ORPHANS, {
+    fetchApi<OrphanedPermissionWarning[]>(API_ROUTES.PERMISSIONS.ORPHANS, {
       headers: resolveAuthHeaders(),
     }),
 
   getPermissionMatrix: () =>
-    fetchApi<RolePermissionMatrix>(API_ROUTES.ROLES.PERMISSIONS_MATRIX, {
+    fetchApi<RolePermissionMatrix>(API_ROUTES.ROLES.MATRIX, {
       headers: resolveAuthHeaders(),
     }),
 
@@ -140,19 +147,19 @@ export const rolesApi = {
     sortOrder?: 'ASC' | 'DESC';
   }) => {
     const qs = buildQueryString(params ?? {});
-    return fetchApi<AuditLogPaginatedResponse>(API_ROUTES.ROLES.AUDIT_LOGS(qs), {
+    return fetchApi<AuditLogPaginatedResponse>(API_ROUTES.AUDIT.LOGS(qs), {
       headers: resolveAuthHeaders(),
     });
   },
 
   getAuditLogById: (id: number) =>
-    fetchApi<AuditLogItem>(API_ROUTES.ROLES.AUDIT_LOG_DETAIL(id), {
+    fetchApi<AuditLogItem>(API_ROUTES.AUDIT.LOG_DETAIL(id), {
       headers: resolveAuthHeaders(),
     }),
 
   listSecurityEvents: (params?: { eventType?: string; limit?: number }) => {
     const qs = buildQueryString(params ?? {});
-    return fetchApi<SecurityEventItem[]>(API_ROUTES.ROLES.SECURITY_EVENTS(qs), {
+    return fetchApi<SecurityEventItem[]>(API_ROUTES.AUDIT.SECURITY_EVENTS(qs), {
       headers: resolveAuthHeaders(),
     });
   },
@@ -163,7 +170,7 @@ export const rolesApi = {
     limit?: number;
   }) => {
     const qs = buildQueryString(params ?? {});
-    return fetchApi<SecurityAlertItem[]>(API_ROUTES.ROLES.SECURITY_ALERTS(qs), {
+    return fetchApi<SecurityAlertItem[]>(API_ROUTES.AUDIT.SECURITY_ALERTS(qs), {
       headers: resolveAuthHeaders(),
     });
   },

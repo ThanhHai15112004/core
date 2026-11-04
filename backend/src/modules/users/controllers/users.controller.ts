@@ -15,7 +15,6 @@ import { USERS_ROUTES } from '../routes/users.routes.js';
 import { UsersService } from '../services/users.service.js';
 import {
   type AssignUserOrganizationsRequest,
-  type AssignUserRolesRequest,
   type ChangeUserStatusRequest,
   type CreateUserRequest,
   type ListUserSubordinatesQuery,
@@ -23,7 +22,6 @@ import {
   type LockUserRequest,
   type UpdateUserRequest,
   assignUserOrganizationsSchema,
-  assignUserRolesSchema,
   changeUserStatusSchema,
   createUserSchema,
   listUserSubordinatesQuerySchema,
@@ -256,21 +254,6 @@ export class UsersController {
     @CurrentUser() actor?: UserIdentity,
   ): Promise<UserResponse> {
     return this.usersService.restoreUser(id, actor?.id, actor);
-  }
-
-  /** Gán vai trò cho người dùng (Mục 3.1.5) */
-  @Put(USERS_ROUTES.ROLES)
-  @RequirePermissions('users.update')
-  @ApiDoc({
-    summary: 'Gán danh sách vai trò cho người dùng',
-    response: userResponseSchema,
-  })
-  public async assignRoles(
-    @ValidatedParams(positiveIntParamSchema, 'id') id: number,
-    @ValidatedBody(assignUserRolesSchema) body: AssignUserRolesRequest,
-    @CurrentUser() actor?: UserIdentity,
-  ): Promise<UserResponse> {
-    return this.usersService.assignRoles(id, body, actor?.id, actor);
   }
 
   /** Gán người dùng vào các đơn vị hoặc chi nhánh (Mục 3.1.6) */

@@ -15,6 +15,7 @@ import {
 } from '@packages/security/index.js';
 import type { IOrganizationsPublicService } from '@modules/organizations/contracts/index.js';
 import {
+  type AssignUserRolesContractInput,
   type IRolesPublicService,
   ROLE_STATUS,
   type RoleAssignedUserSummary,
@@ -44,7 +45,6 @@ import type { UserProfileEntity } from '../entities/user-profile.entity.js';
 import type { UserOrganizationHistoryRepository } from '../repositories/user-organization-history.repository.js';
 import type { UserOrganizationUnitRepository } from '../repositories/user-organization-unit.repository.js';
 import type { UserProfileRepository } from '../repositories/user-profile.repository.js';
-import type { UserRoleRepository } from '../repositories/user-role.repository.js';
 import type { UserStatusHistoryRepository } from '../repositories/user-status-history.repository.js';
 import type { UserRepository } from '../repositories/user.repository.js';
 import type { CreateUserRequest, UpdateUserRequest } from '../requests/users.requests.js';
@@ -130,6 +130,12 @@ export function registerUsersCrossModuleDelegates(params: {
   userOrgRepository: UserOrganizationUnitRepository;
   countUsersByRoleIds: (roleIds: readonly number[]) => Promise<Map<number, number>>;
   listUsersByRoleId: (roleId: number) => Promise<RoleAssignedUserSummary[]>;
+  assignRoles?: (
+    userId: number,
+    dto: AssignUserRolesContractInput,
+    actorId?: number,
+    actor?: UserIdentity,
+  ) => Promise<unknown>;
   resolveSubordinateUserIds: (managerId: number) => Promise<number[]>;
   findAuthUserByIdentifier: (identifier: string) => Promise<UserAuthCredentialsView | null>;
   findUserContactsByIds: (userIds: readonly number[]) => Promise<UserNotificationContactView[]>;
@@ -143,6 +149,7 @@ export function registerUsersCrossModuleDelegates(params: {
     userOrgRepository,
     countUsersByRoleIds,
     listUsersByRoleId,
+    assignRoles,
     resolveSubordinateUserIds,
     findAuthUserByIdentifier,
     findUserContactsByIds,
@@ -150,6 +157,11 @@ export function registerUsersCrossModuleDelegates(params: {
 
   rolesPublicService.registerRoleUserCountDelegate?.((roleIds) => countUsersByRoleIds(roleIds));
   rolesPublicService.registerRoleUsersListDelegate?.((roleId) => listUsersByRoleId(roleId));
+  if (assignRoles) {
+    rolesPublicService.registerUserRoleAssignmentDelegate?.((userId, dto, actorId, actor) =>
+      assignRoles(userId, dto, actorId, actor),
+    );
+  }
 
   effectiveDataScopeService.registerSubordinateResolver((managerId) =>
     resolveSubordinateUserIds(managerId),
@@ -252,7 +264,6 @@ export async function executeCreateUserRecordFlow(params: {
   actorId?: number | undefined;
   actor?: UserIdentity | undefined;
   userRepository: UserRepository;
-  userRoleRepository: UserRoleRepository;
   userOrgRepository: UserOrganizationUnitRepository;
   orgHistoryRepository: UserOrganizationHistoryRepository | null;
   passwordHasher: PasswordHasherService;
@@ -289,7 +300,6 @@ export async function executeCreateUserRecordFlow(params: {
     actorId,
     actor,
     userRepository,
-    userRoleRepository,
     userOrgRepository,
     orgHistoryRepository,
     passwordHasher,
@@ -390,7 +400,7 @@ export async function executeCreateUserRecordFlow(params: {
     });
 
     if (roleIds.length > 0) {
-      await userRoleRepository.replaceUserRoles(userId, roleIds, actorId);
+      await rolesPublicService.replaceUserRoles?.(userId, roleIds, actorId);
     }
 
     if (orgInputs.length > 0) {

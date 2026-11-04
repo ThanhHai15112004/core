@@ -20,6 +20,8 @@ import { HealthModule } from '@modules/health/index.js';
 import { SystemOpsModule } from '@modules/system-ops/index.js';
 import { OrganizationsModule } from '@modules/organizations/index.js';
 import { OrganizationMembersModule } from '@modules/organization-members/index.js';
+import { PermissionsModule } from '@modules/permissions/index.js';
+import { AuditModule } from '@modules/audit/index.js';
 import { RolesModule } from '@modules/roles/index.js';
 import { UsersModule } from '@modules/users/index.js';
 import { SessionsModule } from '@modules/sessions/index.js';
@@ -69,6 +71,8 @@ import { MetricsModule } from '@packages/metrics/index.js';
     SettingsModule,
     OrganizationsModule,
     OrganizationMembersModule,
+    PermissionsModule,
+    AuditModule,
     RolesModule,
     UsersModule,
     SessionsModule,

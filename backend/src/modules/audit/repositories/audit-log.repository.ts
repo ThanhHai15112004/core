@@ -22,6 +22,7 @@ import {
   getAuditActorTypeName,
   parseAuditActorType,
 } from '@packages/security/index.js';
+import { AUDIT_SETTING_KEYS } from '../contracts/index.js';
 import { AuditLogEntity } from '../entities/audit-log.entity.js';
 
 const AUDIT_LOG_SORT_COLUMN_MAP: Readonly<Record<string, string>> = {
@@ -219,7 +220,7 @@ export class AuditLogRepository implements IAuditLogPersistencePort {
     );
 
     const { items: entities, total } = await paginateSelectQueryBuilder(qb, filter, {
-      settingPrefix: 'roles.audit_log',
+      settingPrefix: AUDIT_SETTING_KEYS.AUDIT_LOG_PREFIX,
       defaultLimit: 20,
       maxLimit: 200,
       registry: this.settingRegistry,

@@ -3,6 +3,7 @@ import {
   ForbiddenAppException,
   defaultSettingRegistry,
 } from '@packages/kernel/index.js';
+import { AuditLogService } from '@packages/security/index.js';
 import {
   DATA_SCOPE,
   PERMISSION_STATUS,
@@ -20,11 +21,14 @@ import {
   mapPermissionsToCatalogItems,
   matchesWildcardPattern,
 } from '@modules/roles/index.js';
-import type { PermissionEntity } from '@modules/roles/entities/permission.entity.js';
+import { PermissionsService } from '@modules/permissions/index.js';
+import { AuditService } from '@modules/audit/index.js';
+import type { PermissionEntity } from '@modules/permissions/entities/permission.entity.js';
 import type { RoleEntity } from '@modules/roles/entities/role.entity.js';
-import type { PermissionRepository } from '@modules/roles/repositories/permission.repository.js';
+import type { PermissionRepository } from '@modules/permissions/repositories/permission.repository.js';
 import type { RoleRepository } from '@modules/roles/repositories/role.repository.js';
 import type { RolePermissionRepository } from '@modules/roles/repositories/role-permission.repository.js';
+import type { UserRoleRepository } from '@modules/roles/repositories/user-role.repository.js';
 
 function createMockRole(overrides: Partial<RoleEntity> & { id: number; code: string }): RoleEntity {
   const now = new Date('2026-01-01T00:00:00.000Z');
@@ -284,6 +288,168 @@ describe('Roles Module — Helpers & RolesService Unit Suite', () => {
       // 5. Can delete custom role with 0 assigned users
       const deleted = await service.remove(cloned.id);
       expect(deleted).toEqual({ deleted: true, id: cloned.id });
+    });
+
+    it('supports bounded-context PermissionsService, AuditService and RolesService user-role assignment ownership', async () => {
+      const permsStore = new Map<number, PermissionEntity>([
+        [101, createMockPermission({ id: 101, code: 'roles.read', module: 'roles' })],
+        [102, createMockPermission({ id: 102, code: 'roles.manage', module: 'roles' })],
+      ]);
+      let nextPermId = 103;
+
+      const mockPermRepo = {
+        findAll: async () => [...permsStore.values()],
+        findAllOrdered: async () => [...permsStore.values()],
+        findByIds: async (ids: readonly number[]) =>
+          ids
+            .map((id) => permsStore.get(Number(id)))
+            .filter((p): p is PermissionEntity => Boolean(p)),
+        findByCodes: async (codes: readonly string[]) =>
+          [...permsStore.values()].filter((p) => codes.includes(p.code)),
+        ensureByCodes: async (codes: readonly string[]) => {
+          const result: PermissionEntity[] = [];
+          for (const code of codes) {
+            let found = [...permsStore.values()].find((p) => p.code === code);
+            if (!found) {
+              found = createMockPermission({ id: nextPermId++, code });
+              permsStore.set(found.id, found);
+            }
+            result.push(found);
+          }
+          return result;
+        },
+        ensurePermissionsByCodes: async (codes: readonly string[]) => {
+          const result: PermissionEntity[] = [];
+          for (const code of codes) {
+            let found = [...permsStore.values()].find((p) => p.code === code);
+            if (!found) {
+              found = createMockPermission({ id: nextPermId++, code });
+              permsStore.set(found.id, found);
+            }
+            result.push(found);
+          }
+          return result;
+        },
+        upsertCatalogItems: async (
+          items: readonly {
+            code: string;
+            name: string;
+            module: string;
+            description: string | null;
+          }[],
+        ) => {
+          const createdCodes: string[] = [];
+          for (const item of items) {
+            const existing = [...permsStore.values()].find((p) => p.code === item.code);
+            if (!existing) {
+              permsStore.set(
+                nextPermId,
+                createMockPermission({
+                  id: nextPermId++,
+                  code: item.code,
+                  name: item.name,
+                  module: item.module,
+                  description: item.description,
+                }),
+              );
+              createdCodes.push(item.code);
+            }
+          }
+          return {
+            createdCodes,
+            updatedCodes: [],
+            unchangedCount: items.length - createdCodes.length,
+            items: [...permsStore.values()],
+          };
+        },
+      } as unknown as PermissionRepository;
+
+      const permissionsService = new PermissionsService(mockPermRepo);
+      const syncResult = await permissionsService.syncModulePermissions({
+        replaceActiveModules: true,
+        modules: [
+          {
+            module: 'courses',
+            displayName: 'Courses',
+            permissions: ['courses.read', 'courses.manage'],
+          },
+        ],
+      });
+      expect(syncResult.createdCount).toBe(2);
+      const catalog = await permissionsService.listPermissionsCatalog();
+      expect(catalog.some((p) => p.code === 'courses.read')).toBe(true);
+
+      const userRoleLinks: { userId: number; roleId: number; assignedBy: number | null }[] = [];
+      const mockUserRoleRepo = {
+        findByUserIds: async (userIds: readonly number[]) =>
+          userRoleLinks.filter((ur) => userIds.includes(ur.userId)),
+        findByRoleIds: async (roleIds: readonly number[]) =>
+          userRoleLinks.filter((ur) => roleIds.includes(ur.roleId)),
+        findUserIdsByRoleIds: async (roleIds: readonly number[]) => [
+          ...new Set(
+            userRoleLinks.filter((ur) => roleIds.includes(ur.roleId)).map((ur) => ur.userId),
+          ),
+        ],
+        replaceUserRoles: async (
+          userId: number,
+          roleIds: readonly number[],
+          assignedBy?: number | null,
+        ) => {
+          for (let i = userRoleLinks.length - 1; i >= 0; i--) {
+            if (userRoleLinks[i]?.userId === userId) userRoleLinks.splice(i, 1);
+          }
+          for (const roleId of roleIds) {
+            userRoleLinks.push({ userId, roleId, assignedBy: assignedBy ?? null });
+          }
+        },
+      } as unknown as UserRoleRepository;
+
+      const mockRoleRepo = {
+        findFiltered: async () => [createMockRole({ id: 1, code: 'admin', isSystem: true })],
+        findById: async (id: number) =>
+          id === 1 ? createMockRole({ id: 1, code: 'admin', isSystem: true }) : null,
+        findByIds: async (ids: readonly number[]) =>
+          ids.includes(1) ? [createMockRole({ id: 1, code: 'admin', isSystem: true })] : [],
+      } as unknown as RoleRepository;
+
+      const mockRolePermRepo = {
+        findByRoleIds: async () => [{ roleId: 1, permissionId: 101 }],
+      } as unknown as RolePermissionRepository;
+
+      const auditLogService = new AuditLogService();
+      const auditService = new AuditService(null, auditLogService);
+
+      const rolesService = new RolesService(
+        mockRoleRepo,
+        mockRolePermRepo,
+        new RolesMapper(),
+        permissionsService,
+        null,
+        null,
+        auditLogService,
+        null,
+        undefined,
+        mockUserRoleRepo,
+      );
+
+      await rolesService.replaceUserRoles(42, [1], 1);
+      const assignedLinks = await rolesService.findUserRoleLinksByUserIds([42]);
+      expect(assignedLinks).toEqual([{ userId: 42, roleId: 1, assignedBy: 1 }]);
+
+      const matrix = await rolesService.getPermissionMatrix();
+      expect(matrix.summary.totalRoles).toBe(1);
+      expect(matrix.summary.totalPermissions).toBeGreaterThanOrEqual(4);
+
+      await auditLogService.record({
+        module: 'roles',
+        feature: 'user_roles',
+        action: 'ASSIGN_ROLES',
+        resourceType: 'user',
+        resourceId: '42',
+        actorId: 1,
+      });
+      const logs = await auditService.listAuditLogs({ module: 'roles', page: 1, limit: 10 });
+      expect(logs.data.length).toBeGreaterThanOrEqual(1);
     });
   });
 });

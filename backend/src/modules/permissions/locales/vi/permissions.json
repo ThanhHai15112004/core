@@ -1,0 +1,5 @@
+{
+  "notFound": "Không tìm thấy quyền hạn với định danh '{{id}}'.",
+  "syncCompleted": "Đồng bộ danh mục quyền hạn từ các module thành công."
+}
+

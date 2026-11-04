@@ -31,10 +31,10 @@ import type { OrganizationUnitRepository } from '@modules/organizations/reposito
 import { OrganizationsMapper } from '@modules/organizations/mappers/organizations.mapper.js';
 import { OrganizationsService } from '@modules/organizations/services/organizations.service.js';
 import { PERMISSION_STATUS, ROLE_STATUS } from '@modules/roles/contracts/index.js';
-import type { PermissionEntity } from '@modules/roles/entities/permission.entity.js';
+import type { PermissionEntity } from '@modules/permissions/entities/permission.entity.js';
 import type { RoleEntity } from '@modules/roles/entities/role.entity.js';
 import type { RolePermissionEntity } from '@modules/roles/entities/role-permission.entity.js';
-import { PermissionRepository } from '@modules/roles/repositories/permission.repository.js';
+import { PermissionRepository } from '@modules/permissions/repositories/permission.repository.js';
 import type { RoleRepository } from '@modules/roles/repositories/role.repository.js';
 import type { RolePermissionRepository } from '@modules/roles/repositories/role-permission.repository.js';
 import { RolesMapper } from '@modules/roles/mappers/roles.mapper.js';
@@ -42,7 +42,7 @@ import { RolesService } from '@modules/roles/services/roles.service.js';
 import { USER_STATUS, normalizePhoneNumber } from '@modules/users/contracts/index.js';
 import type { UserEntity } from '@modules/users/entities/user.entity.js';
 import type { UserProfileEntity } from '@modules/users/entities/user-profile.entity.js';
-import type { UserRoleEntity } from '@modules/users/entities/user-role.entity.js';
+import type { UserRoleEntity } from '@modules/roles/entities/user-role.entity.js';
 import type { UserOrganizationUnitEntity } from '@modules/users/entities/user-organization-unit.entity.js';
 import type { UserStatusHistoryEntity } from '@modules/users/entities/user-status-history.entity.js';
 import type {
@@ -50,7 +50,7 @@ import type {
   SearchUsersFilter,
 } from '@modules/users/repositories/user.repository.js';
 import type { UserProfileRepository } from '@modules/users/repositories/user-profile.repository.js';
-import type { UserRoleRepository } from '@modules/users/repositories/user-role.repository.js';
+import type { UserRoleRepository } from '@modules/roles/repositories/user-role.repository.js';
 import type {
   UserOrganizationInputItem,
   UserOrganizationUnitRepository,
@@ -1071,10 +1071,11 @@ function createIamInMemoryHarness() {
     dataScopeService,
     auditLogService,
     platformSecurityService,
+    undefined,
+    userRoleRepo,
   );
   const usersService = new UsersService(
     userRepo,
-    userRoleRepo,
     userOrgRepo,
     new UsersMapper(),
     passwordHasher,
@@ -4867,10 +4868,17 @@ describe('Unit: Quản lý Người dùng (3.1) & Xác thực / Phiên / MFA (3)
     expect(iamUsersAfterCascadeOn.status).toBe(MENU_STATUS.ACTIVE);
 
     // 5.6.2: Lọc theo trạng thái cài đặt của module (`enabledModules`): nếu gỡ module `users` khỏi danh sách cài đặt, IAM_USERS tự động ẩn
-    menusService.setInstalledModules(['settings', 'roles', 'organizations', 'codes']);
+    menusService.setInstalledModules([
+      'settings',
+      'roles',
+      'permissions',
+      'audit',
+      'organizations',
+      'codes',
+    ]);
     const treeWithoutUsersMod = await menusService.getAuthorizedMenuTree({
       position: MENU_POSITION.SIDEBAR,
-      permissions: ['users.read', 'roles.read'],
+      permissions: ['users.read', 'roles.read', 'audit.read'],
     });
     const iamNodeWithoutUsers = treeWithoutUsersMod.items.find((n) => n.code === 'IAM');
     expect(iamNodeWithoutUsers?.children.map((c) => c.code)).toEqual([
@@ -4879,7 +4887,15 @@ describe('Unit: Quản lý Người dùng (3.1) & Xác thực / Phiên / MFA (3)
     ]);
 
     // Khôi phục danh sách module cài đặt
-    menusService.setInstalledModules(['settings', 'users', 'roles', 'organizations', 'codes']);
+    menusService.setInstalledModules([
+      'settings',
+      'users',
+      'roles',
+      'permissions',
+      'audit',
+      'organizations',
+      'codes',
+    ]);
 
     // 5.6.1: Sắp xếp lại thứ tự hiển thị (`numOrder`) hàng loạt
     await menusService.reorderMenus(

@@ -4,6 +4,7 @@ import { HTTP_STATUS_CODE } from '@packages/kernel/index.js';
 import {
   ApiDoc,
   ApiGroup,
+  RequireAnyPermission,
   RequirePermissions,
   ValidatedBody,
   ValidatedParams,
@@ -14,41 +15,31 @@ import { CurrentUser, type UserIdentity } from '@packages/security/index.js';
 import { ROLES_ROUTES } from '../routes/roles.routes.js';
 import { RolesService } from '../services/roles.service.js';
 import {
+  type AssignUserRolesRequest,
   type CloneRoleRequest,
   type CreateRoleRequest,
-  type ListAuditLogsQuery,
   type ListRolesQuery,
   type SetRolePermissionsRequest,
-  type SyncPermissionsRequest,
   type UpdateRoleRequest,
+  assignUserRolesSchema,
   cloneRoleSchema,
   createRoleSchema,
-  listAuditLogsQuerySchema,
   listRolesQuerySchema,
   setRolePermissionsSchema,
-  syncPermissionsSchema,
   updateRoleSchema,
 } from '../requests/roles.requests.js';
 import {
-  type OrphanedPermissionWarningResponse,
-  type PermissionCatalogItemResponse,
-  type PermissionFunctionalGroupResponse,
   type RoleAssignedUserResponse,
   type RolePermissionMatrixResponse,
   type RoleResponse,
-  type SyncPermissionsResultResponse,
-  orphanedPermissionWarningResponseSchema,
-  permissionCatalogItemResponseSchema,
-  permissionFunctionalGroupResponseSchema,
   roleAssignedUserResponseSchema,
   rolePermissionMatrixResponseSchema,
   roleResponseSchema,
-  syncPermissionsResultResponseSchema,
 } from '../responses/roles.response.js';
 
 @ApiGroup(
-  'Roles & Permissions',
-  'Quản lý vai trò, phân quyền RBAC, Phạm vi dữ liệu Data Scope & Nhật ký thao tác Audit Log (Mục 4.1 -> 4.4)',
+  'Roles',
+  'Quản lý vai trò, gán quyền cho vai trò, gán vai trò cho người dùng, ma trận vai trò × quyền & Phạm vi dữ liệu Data Scope (Mục 4.1 -> 4.3)',
 )
 @Controller(ROLES_ROUTES.PREFIX)
 export class RolesController {
@@ -121,169 +112,29 @@ export class RolesController {
     return this.rolesService.registerDeclarativeCustomScopeRule(body);
   }
 
-  /** Tra cứu Nhật ký thao tác (Audit Log — Mục 4.4.7) lọc theo người dùng, Service Account, module, thời gian và hành động */
-  @Get(ROLES_ROUTES.AUDIT_LOGS)
-  @RequirePermissions('roles.read')
-  @ApiDoc({
-    summary:
-      'Tra cứu Nhật ký thao tác (Audit Log) lọc theo người dùng, Service Account, module, thời gian và hành động (Mục 4.4)',
-  })
-  public async listAuditLogs(@ValidatedQuery(listAuditLogsQuerySchema) query: ListAuditLogsQuery) {
-    return this.rolesService.listAuditLogs(query);
-  }
-
-  /** Xem chi tiết một bản ghi Audit Log (bao gồm dữ liệu Trước/Sau — Mục 4.4.4 & 4.4.7) */
-  @Get(ROLES_ROUTES.AUDIT_LOG_BY_ID)
-  @RequirePermissions('roles.read')
-  @ApiDoc({
-    summary:
-      'Xem chi tiết bản ghi Nhật ký thao tác (Audit Log) kèm dữ liệu trước và sau khi thay đổi (Mục 4.4)',
-  })
-  public async getAuditLogById(@ValidatedParams(positiveIntParamSchema, 'id') id: number) {
-    return this.rolesService.getAuditLogById(id);
-  }
-
-  /** Chặn sửa Audit Log bằng API thường (Mục 4.4.8 — Bảo vệ tính toàn vẹn) */
-  @Put(ROLES_ROUTES.AUDIT_LOG_BY_ID)
-  @RequirePermissions('roles.manage')
-  @ApiDoc({
-    summary: 'Không cho phép sửa Audit Log qua API thường (Mục 4.4.8 — Bảo vệ tính toàn vẹn)',
-  })
-  public async updateAuditLogPut(@ValidatedParams(positiveIntParamSchema, 'id') id: number) {
-    return this.rolesService.updateAuditLog(id);
-  }
-
-  /** Chặn sửa một phần Audit Log bằng API thường (Mục 4.4.8 — Bảo vệ tính toàn vẹn) */
-  @Patch(ROLES_ROUTES.AUDIT_LOG_BY_ID)
-  @RequirePermissions('roles.manage')
-  @ApiDoc({
-    summary: 'Không cho phép sửa Audit Log qua API thường (Mục 4.4.8 — Bảo vệ tính toàn vẹn)',
-  })
-  public async updateAuditLogPatch(@ValidatedParams(positiveIntParamSchema, 'id') id: number) {
-    return this.rolesService.updateAuditLog(id);
-  }
-
-  /** Chặn xóa Audit Log bằng API thường (Mục 4.4.8 — Bảo vệ tính toàn vẹn) */
-  @Delete(ROLES_ROUTES.AUDIT_LOG_BY_ID)
-  @RequirePermissions('roles.manage')
-  @ApiDoc({
-    summary: 'Không cho phép xóa Audit Log qua API thường (Mục 4.4.8 — Bảo vệ tính toàn vẹn)',
-  })
-  public async deleteAuditLog(@ValidatedParams(positiveIntParamSchema, 'id') id: number) {
-    return this.rolesService.deleteAuditLog(id);
-  }
-
-  /** Tra cứu danh sách Sự kiện bảo mật (Security Events — Mục 4.5.7: Login sai, đổi quyền, tắt MFA, export dữ liệu lớn) */
-  @Get(ROLES_ROUTES.SECURITY_EVENTS)
-  @RequirePermissions('roles.read')
-  @ApiDoc({
-    summary:
-      'Tra cứu các sự kiện bảo mật nền tảng: Login sai, đổi quyền, tắt MFA, export dữ liệu lớn (Mục 4.5.7)',
-  })
-  public listSecurityEvents(
-    @ValidatedQuery(
-      z.object({
-        eventType: z.string().trim().optional(),
-        actorId: z.coerce.number().int().min(1).optional(),
-        targetUserId: z.coerce.number().int().min(1).optional(),
-        limit: z.coerce.number().int().min(1).max(200).optional(),
-      }),
-    )
-    query: {
-      eventType?: string;
-      actorId?: number;
-      targetUserId?: number;
-      limit?: number;
-    },
-  ) {
-    return this.rolesService.listSecurityEvents(
-      query as Parameters<RolesService['listSecurityEvents']>[0],
-    );
-  }
-
-  /** Tra cứu danh sách Cảnh báo thao tác bất thường (SIEM Anomaly Alerts — Mục 4.5.8) */
-  @Get(ROLES_ROUTES.SECURITY_ALERTS)
-  @RequirePermissions('roles.read')
-  @ApiDoc({
-    summary:
-      'Tra cứu danh sách cảnh báo thao tác bất thường gửi sang Monitoring / SIEM (Mục 4.5.8)',
-  })
-  public listSecurityAlerts(
-    @ValidatedQuery(
-      z.object({
-        anomalyType: z.string().trim().optional(),
-        severity: z.enum(['INFO', 'WARNING', 'HIGH', 'CRITICAL']).optional(),
-        actorId: z.coerce.number().int().min(1).optional(),
-        limit: z.coerce.number().int().min(1).max(200).optional(),
-      }),
-    )
-    query: {
-      anomalyType?: string;
-      severity?: 'INFO' | 'WARNING' | 'HIGH' | 'CRITICAL';
-      actorId?: number;
-      limit?: number;
-    },
-  ) {
-    return this.rolesService.listSecurityAlerts(query);
-  }
-
-  /** Danh mục toàn bộ mã quyền hạn trong bảng permissions */
-  @Get(ROLES_ROUTES.PERMISSIONS_CATALOG)
-  @RequirePermissions('roles.read')
-  @ApiDoc({
-    summary: 'Danh mục các quyền hạn từ bảng permissions kèm nhóm chức năng và cảnh báo mồ côi',
-    response: z.array(permissionCatalogItemResponseSchema),
-  })
-  public async permissionsCatalog(): Promise<PermissionCatalogItemResponse[]> {
-    return this.rolesService.listPermissionsCatalog();
-  }
-
-  /** Danh mục quyền được nhóm theo module và nhóm chức năng (Mục 4.2) */
-  @Get(ROLES_ROUTES.PERMISSIONS_GROUPED)
-  @RequirePermissions('roles.read')
-  @ApiDoc({
-    summary: 'Danh sách quyền được nhóm theo module và chức năng (Mục 4.2)',
-    response: z.array(permissionFunctionalGroupResponseSchema),
-  })
-  public async permissionsGrouped(): Promise<PermissionFunctionalGroupResponse[]> {
-    return this.rolesService.listPermissionsGrouped();
-  }
-
-  /** Đồng bộ idempotent danh sách quyền từ các module manifests vào bảng permissions (Mục 4.2) */
-  @Post(ROLES_ROUTES.PERMISSIONS_SYNC)
-  @HttpCode(HttpStatus.OK)
-  @RequirePermissions('roles.manage')
-  @ApiDoc({
-    summary: 'Đồng bộ quyền từ các module manifest (không tạo trùng quyền, phát hiện quyền mồ côi)',
-    status: HTTP_STATUS_CODE.OK,
-    response: syncPermissionsResultResponseSchema,
-  })
-  public async syncPermissions(
-    @ValidatedBody(syncPermissionsSchema) body: SyncPermissionsRequest,
-  ): Promise<SyncPermissionsResultResponse> {
-    return this.rolesService.syncModulePermissions(body);
-  }
-
-  /** Danh sách cảnh báo các quyền mồ côi không còn thuộc bất kỳ module hoạt động nào (Mục 4.2) */
-  @Get(ROLES_ROUTES.PERMISSIONS_ORPHANS)
-  @RequirePermissions('roles.read')
-  @ApiDoc({
-    summary: 'Cảnh báo danh sách quyền không còn module sử dụng (Mục 4.2)',
-    response: z.array(orphanedPermissionWarningResponseSchema),
-  })
-  public async permissionsOrphans(): Promise<OrphanedPermissionWarningResponse[]> {
-    return this.rolesService.listOrphanedPermissions();
-  }
-
-  /** Bảng tổng hợp ma trận Vai trò × Quyền toàn hệ thống (Mục 4.2) */
-  @Get(ROLES_ROUTES.PERMISSIONS_MATRIX)
-  @RequirePermissions('roles.read')
+  /** Bảng tổng hợp ma trận Vai trò × Quyền toàn hệ thống (Mục 4.2 — Dựng 1 chiều từ roles -> permissions) */
+  @Get(ROLES_ROUTES.MATRIX)
+  @RequireAnyPermission('roles.read', 'permissions.read')
   @ApiDoc({
     summary: 'Bảng ma trận tổng hợp vai trò và quyền toàn hệ thống (Mục 4.2)',
     response: rolePermissionMatrixResponseSchema,
   })
   public async permissionsMatrix(): Promise<RolePermissionMatrixResponse> {
     return this.rolesService.getPermissionMatrix();
+  }
+
+  /** Gán vai trò cho người dùng (Mục 4.1 — Quản lý vai trò là nơi duy nhất sở hữu thao tác ghi gán role cho user) */
+  @Put(ROLES_ROUTES.USER_ROLES)
+  @RequireAnyPermission('roles.manage', 'users.assign_roles', 'users.update')
+  @ApiDoc({
+    summary: 'Gán danh sách vai trò cho người dùng (Mục 4.1)',
+  })
+  public async assignUserRoles(
+    @ValidatedParams(positiveIntParamSchema, 'userId') userId: number,
+    @ValidatedBody(assignUserRolesSchema) body: AssignUserRolesRequest,
+    @CurrentUser() actor?: UserIdentity,
+  ) {
+    return this.rolesService.assignUserRoles(userId, body, actor?.id, actor);
   }
 
   /** Xem danh sách người dùng đang sử dụng vai trò (Mục 4.1 — kiểm tra trước khi thay đổi hoặc xóa) */

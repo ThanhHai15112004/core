@@ -1,0 +1,5 @@
+{
+  "notFound": "Permission with identifier '{{id}}' was not found.",
+  "syncCompleted": "Module permissions catalog synchronized successfully."
+}
+

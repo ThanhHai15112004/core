@@ -36,7 +36,7 @@ import type { UserEntity } from '@modules/users/entities/user.entity.js';
 import type { UserProfileEntity } from '@modules/users/entities/user-profile.entity.js';
 import type { UserRepository } from '@modules/users/repositories/user.repository.js';
 import type { UserProfileRepository } from '@modules/users/repositories/user-profile.repository.js';
-import type { UserRoleRepository } from '@modules/users/repositories/user-role.repository.js';
+import type { UserRoleRepository } from '@modules/roles/repositories/user-role.repository.js';
 import type { UserOrganizationUnitRepository } from '@modules/users/repositories/user-organization-unit.repository.js';
 import type { UserOrganizationHistoryRepository } from '@modules/users/repositories/user-organization-history.repository.js';
 import type { UserStatusHistoryRepository } from '@modules/users/repositories/user-status-history.repository.js';
@@ -404,6 +404,8 @@ describe('Users Module — Helpers & UsersService Unit Suite', () => {
             permissions: ['users.read'],
           })),
         findByCodes: async () => [],
+        findUserRoleLinksByUserIds: mockUserRoleRepo.findByUserIds,
+        replaceUserRoles: mockUserRoleRepo.replaceUserRoles,
         registerRoleUserCountDelegate: () => undefined,
         registerRoleUsersListDelegate: () => undefined,
       } as unknown as IRolesPublicService;
@@ -424,7 +426,6 @@ describe('Users Module — Helpers & UsersService Unit Suite', () => {
 
       const service = new UsersService(
         mockUserRepo,
-        mockUserRoleRepo,
         mockUserOrgRepo,
         new UsersMapper(),
         mockPasswordHasher,
@@ -620,6 +621,8 @@ describe('Users Module — Helpers & UsersService Unit Suite', () => {
             name: c.toUpperCase(),
             status: 1,
           })),
+        findUserRoleLinksByUserIds: mockUserRoleRepo.findByUserIds,
+        replaceUserRoles: mockUserRoleRepo.replaceUserRoles,
         registerRoleUserCountDelegate: () => undefined,
         registerRoleUsersListDelegate: () => undefined,
       } as unknown as IRolesPublicService;
@@ -665,7 +668,6 @@ describe('Users Module — Helpers & UsersService Unit Suite', () => {
 
       const usersService = new UsersService(
         mockUserRepo,
-        mockUserRoleRepo,
         mockUserOrgRepo,
         new UsersMapper(),
         mockPasswordHasher,
@@ -1190,6 +1192,7 @@ describe('Users Module — Helpers & UsersService Unit Suite', () => {
             status: 1,
             dataScope: 1,
           })),
+        findUserRoleLinksByUserIds: mockUserRoleRepo.findByUserIds,
         registerRoleUserCountDelegate: () => undefined,
         registerRoleUsersListDelegate: () => undefined,
       } as unknown as IRolesPublicService;
@@ -1220,7 +1223,6 @@ describe('Users Module — Helpers & UsersService Unit Suite', () => {
 
       const usersService = new UsersService(
         mockUserRepo,
-        mockUserRoleRepo,
         mockUserOrgRepo,
         new UsersMapper(),
         mockPasswordHasher,
@@ -1724,6 +1726,7 @@ describe('Users Module — Helpers & UsersService Unit Suite', () => {
             status: 1,
             dataScope: 1,
           })),
+        findUserRoleLinksByUserIds: userRoleRepository.findByUserIds,
         registerRoleUserCountDelegate: () => undefined,
         registerRoleUsersListDelegate: () => undefined,
       } as unknown as IRolesPublicService;
@@ -1744,7 +1747,6 @@ describe('Users Module — Helpers & UsersService Unit Suite', () => {
 
       const usersService = new UsersService(
         userRepository,
-        userRoleRepository,
         userOrgRepository,
         new UsersMapper(),
         passwordHasher,
@@ -2683,6 +2685,8 @@ describe('Users Module — Helpers & UsersService Unit Suite', () => {
         ensureActiveRolesExist: async () => undefined,
         findByIds: async () => [],
         findByCodes: async () => [],
+        findUserRoleLinksByUserIds: mockUserRoleRepo.findByUserIds,
+        replaceUserRoles: mockUserRoleRepo.replaceUserRoles,
         registerRoleUserCountDelegate: () => undefined,
         registerRoleUsersListDelegate: () => undefined,
       } as unknown as IRolesPublicService;
@@ -2703,7 +2707,6 @@ describe('Users Module — Helpers & UsersService Unit Suite', () => {
 
       const service = new UsersService(
         mockUserRepo,
-        mockUserRoleRepo,
         mockUserOrgRepo,
         new UsersMapper(),
         mockPasswordHasher,
@@ -2982,6 +2985,7 @@ describe('Users Module — Helpers & UsersService Unit Suite', () => {
         findByCodes: async () => [
           { id: 2, code: 'manager', status: 1, dataScope: DATA_SCOPE.SUBORDINATES },
         ],
+        findUserRoleLinksByUserIds: mockUserRoleRepo.findByUserIds,
         registerRoleUserCountDelegate: () => undefined,
         registerRoleUsersListDelegate: () => undefined,
       } as unknown as IRolesPublicService;
@@ -2994,7 +2998,6 @@ describe('Users Module — Helpers & UsersService Unit Suite', () => {
 
       const service = new UsersService(
         mockUserRepo,
-        mockUserRoleRepo,
         mockUserOrgRepo,
         new UsersMapper(),
         mockPasswordHasher,

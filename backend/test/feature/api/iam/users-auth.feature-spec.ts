@@ -14,16 +14,16 @@ import {
 import type { OrganizationUnitEntity } from '@modules/organizations/entities/organization-unit.entity.js';
 import { OrganizationUnitRepository } from '@modules/organizations/repositories/organization-unit.repository.js';
 import { PERMISSION_STATUS, ROLE_STATUS } from '@modules/roles/contracts/index.js';
-import type { PermissionEntity } from '@modules/roles/entities/permission.entity.js';
+import type { PermissionEntity } from '@modules/permissions/entities/permission.entity.js';
 import type { RoleEntity } from '@modules/roles/entities/role.entity.js';
 import type { RolePermissionEntity } from '@modules/roles/entities/role-permission.entity.js';
-import { PermissionRepository } from '@modules/roles/repositories/permission.repository.js';
+import { PermissionRepository } from '@modules/permissions/repositories/permission.repository.js';
 import { RoleRepository } from '@modules/roles/repositories/role.repository.js';
 import { RolePermissionRepository } from '@modules/roles/repositories/role-permission.repository.js';
 import { USER_STATUS, normalizePhoneNumber } from '@modules/users/contracts/index.js';
 import type { UserEntity } from '@modules/users/entities/user.entity.js';
 import type { UserProfileEntity } from '@modules/users/entities/user-profile.entity.js';
-import type { UserRoleEntity } from '@modules/users/entities/user-role.entity.js';
+import type { UserRoleEntity } from '@modules/roles/entities/user-role.entity.js';
 import type { UserOrganizationUnitEntity } from '@modules/users/entities/user-organization-unit.entity.js';
 import type { UserStatusHistoryEntity } from '@modules/users/entities/user-status-history.entity.js';
 import {
@@ -31,7 +31,7 @@ import {
   type SearchUsersFilter,
 } from '@modules/users/repositories/user.repository.js';
 import { UserProfileRepository } from '@modules/users/repositories/user-profile.repository.js';
-import { UserRoleRepository } from '@modules/users/repositories/user-role.repository.js';
+import { UserRoleRepository } from '@modules/roles/repositories/user-role.repository.js';
 import {
   type UserOrganizationInputItem,
   UserOrganizationUnitRepository,
@@ -1335,12 +1335,12 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
     expect(meRes.body.data.roles).toContain('super_admin');
     expect(meRes.body.data.permissions).toContain('users.create');
 
-    // Verify GET /api/v1/roles/permissions returns dedicated permissions table rows with integer id & status
+    // Verify GET /api/v1/permissions returns dedicated permissions table rows with integer id & status
     const permsRes = await context.injectJson<
       Array<{ id: number; code: string; status: number; statusName: string }>
     >({
       method: 'GET',
-      url: '/api/v1/roles/permissions',
+      url: '/api/v1/permissions',
       headers: { authorization: `Bearer ${adminAccessToken}` },
     });
     expect(permsRes.status).toBe(HTTP_STATUS_CODE.OK);
@@ -2526,10 +2526,10 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
     });
     expect(deleteInUseRes.status).toBe(HTTP_STATUS_CODE.CONFLICT);
 
-    // Gỡ vai trò clonedRole khỏi người dùng -> xóa thành công
+    // Gỡ vai trò clonedRole khỏi người dùng qua endpoint sở hữu bởi module roles -> xóa thành công
     const reassignRes = await context.injectJson({
       method: 'PUT',
-      url: `/api/v1/users/${createdUserId}/roles`,
+      url: `/api/v1/roles/users/${createdUserId}`,
       headers: adminHeaders,
       payload: {
         roleIds: [studentRoleId],
@@ -2557,7 +2557,7 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
   it('supports Section 4.2 Permission Management E2E: module permission sync (idempotent), grouped permissions, orphan warnings, role-permission matrix & server-side API permission enforcement', async () => {
     const adminHeaders = { authorization: `Bearer ${adminAccessToken}` };
 
-    // 1. Đồng bộ quyền khi thêm module mới 'lms_courses' (POST /api/v1/roles/permissions/sync)
+    // 1. Đồng bộ quyền khi thêm module mới 'lms_courses' (POST /api/v1/permissions/sync)
     const syncRes1 = await context.injectJson<{
       totalDeclared: number;
       createdCount: number;
@@ -2567,7 +2567,7 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
       syncedModules: string[];
     }>({
       method: 'POST',
-      url: '/api/v1/roles/permissions/sync',
+      url: '/api/v1/permissions/sync',
       headers: adminHeaders,
       payload: {
         modules: [
@@ -2601,7 +2601,7 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
       unchangedCount: number;
     }>({
       method: 'POST',
-      url: '/api/v1/roles/permissions/sync',
+      url: '/api/v1/permissions/sync',
       headers: adminHeaders,
       payload: {},
     });
@@ -2609,7 +2609,7 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
     expect(syncRes2.body.data.createdCount).toBe(0);
     expect(syncRes2.body.data.unchangedCount).toBe(syncRes1.body.data.totalDeclared);
 
-    // 2. Nhóm quyền theo chức năng (GET /api/v1/roles/permissions/grouped)
+    // 2. Nhóm quyền theo chức năng (GET /api/v1/permissions/grouped)
     const groupedRes = await context.injectJson<
       Array<{
         module: string;
@@ -2620,7 +2620,7 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
       }>
     >({
       method: 'GET',
-      url: '/api/v1/roles/permissions/grouped',
+      url: '/api/v1/permissions/grouped',
       headers: adminHeaders,
     });
     expect(groupedRes.status).toBe(HTTP_STATUS_CODE.OK);
@@ -2646,7 +2646,7 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
     expect(viewerRoleRes.status).toBe(HTTP_STATUS_CODE.CREATED);
     const viewerRoleId = viewerRoleRes.body.data.id;
 
-    // 4. Cảnh báo quyền không còn module sử dụng (GET /api/v1/roles/permissions/orphans)
+    // 4. Cảnh báo quyền không còn module sử dụng (GET /api/v1/permissions/orphans)
     const orphansRes = await context.injectJson<
       Array<{
         code: string;
@@ -2656,15 +2656,15 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
       }>
     >({
       method: 'GET',
-      url: '/api/v1/roles/permissions/orphans',
+      url: '/api/v1/permissions/orphans',
       headers: adminHeaders,
     });
     expect(orphansRes.status).toBe(HTTP_STATUS_CODE.OK);
     const deprecatedOrphan = orphansRes.body.data.find((o) => o.code === 'deprecated_module.write');
     expect(deprecatedOrphan).toBeDefined();
-    expect(deprecatedOrphan?.assignedRoles.map((r) => r.code)).toContain('permission_viewer');
+    expect(deprecatedOrphan?.warningMessage).toContain('deprecated_module.write');
 
-    // 5. Bảng tổng hợp ma trận Vai trò × Quyền (GET /api/v1/roles/permissions/matrix)
+    // 5. Bảng tổng hợp ma trận Vai trò × Quyền (GET /api/v1/roles/matrix — dựng 1 chiều roles -> permissions)
     const matrixRes = await context.injectJson<{
       roles: Array<{ id: number; code: string; totalGrantedPermissions: number }>;
       modules: string[];
@@ -2681,7 +2681,7 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
       };
     }>({
       method: 'GET',
-      url: '/api/v1/roles/permissions/matrix',
+      url: '/api/v1/roles/matrix',
       headers: adminHeaders,
     });
     expect(matrixRes.status).toBe(HTTP_STATUS_CODE.OK);
@@ -2691,6 +2691,7 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
       (r) => r.code === 'deprecated_module.write',
     );
     expect(orphanMatrixRow?.isOrphaned).toBe(true);
+    expect(orphanMatrixRow?.grantedRoleCodes).toContain('permission_viewer');
     expect(orphanMatrixRow?.roleGrants['permission_viewer']).toBe(true);
 
     // 6. Kiểm tra quyền tại API (không tin quyền do frontend gửi lên) & dữ liệu permission cho Frontend (/auth/me)
@@ -2739,7 +2740,7 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
     // Dù Frontend giả mạo header quyền 'roles.manage', API vẫn chặn 403 Forbidden vì kiểm tra từ DB/Session tại Backend
     const forgedSyncAttempt = await context.injectJson({
       method: 'POST',
-      url: '/api/v1/roles/permissions/sync',
+      url: '/api/v1/permissions/sync',
       headers: {
         authorization: `Bearer ${viewerToken}`,
         'x-permissions': 'roles.manage,super_admin',
@@ -2887,10 +2888,10 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
       expect.arrayContaining(['LOGIN_FAILED', 'LOGIN_SUCCESS', 'LOGOUT']),
     );
 
-    // Verify Audit Logs via GET /api/v1/roles/audit-logs?module=auth
+    // Verify Audit Logs via GET /api/v1/audit/logs?module=auth
     const authAuditRes = await context.injectJson<Array<{ action: string; module: string }>>({
       method: 'GET',
-      url: '/api/v1/roles/audit-logs?module=auth&limit=50',
+      url: '/api/v1/audit/logs?module=auth&limit=50',
       headers: adminHeaders,
     });
     expect(authAuditRes.status).toBe(HTTP_STATUS_CODE.OK);
@@ -2898,10 +2899,10 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
       expect.arrayContaining(['LOGIN_FAILED', 'LOGIN_SUCCESS', 'LOGOUT']),
     );
 
-    // 5. Query Security Events & SIEM Anomaly Alerts via GET /api/v1/roles/security-events & /security-alerts (4.5.7 & 4.5.8)
+    // 5. Query Security Events & SIEM Anomaly Alerts via GET /api/v1/audit/security-events & /audit/security-alerts (4.5.7 & 4.5.8)
     const secEventsRes = await context.injectJson<Array<{ eventType: string }>>({
       method: 'GET',
-      url: '/api/v1/roles/security-events?limit=50',
+      url: '/api/v1/audit/security-events?limit=50',
       headers: adminHeaders,
     });
     expect(secEventsRes.status).toBe(HTTP_STATUS_CODE.OK);
@@ -2912,7 +2913,7 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
     const secAlertsRes = await context.injectJson<Array<{ anomalyType: string; severity: string }>>(
       {
         method: 'GET',
-        url: '/api/v1/roles/security-alerts?limit=50',
+        url: '/api/v1/audit/security-alerts?limit=50',
         headers: adminHeaders,
       },
     );

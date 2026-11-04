@@ -33,7 +33,6 @@ import type { UserProfileEntity } from '../entities/user-profile.entity.js';
 import type { UserEntity } from '../entities/user.entity.js';
 import type { UsersMapper } from '../mappers/users.mapper.js';
 import type { UserOrganizationUnitRepository } from '../repositories/user-organization-unit.repository.js';
-import type { UserRoleRepository } from '../repositories/user-role.repository.js';
 import type { UserRepository } from '../repositories/user.repository.js';
 import type { CreateUserRequest, UpdateUserRequest } from '../requests/users.requests.js';
 import type { UserResponse } from '../responses/users.response.js';
@@ -319,7 +318,6 @@ export async function validateAndApplyUserUpdateFields(params: {
 
 export async function hydrateUsersResponseList(params: {
   users: readonly UserEntity[];
-  userRoleRepository: UserRoleRepository;
   userOrgRepository: UserOrganizationUnitRepository;
   findProfilesByUserIds: (userIds: readonly number[]) => Promise<UserProfileEntity[]>;
   findCredentialsByUserIds?:
@@ -334,7 +332,6 @@ export async function hydrateUsersResponseList(params: {
 }): Promise<UserResponse[]> {
   const {
     users,
-    userRoleRepository,
     userOrgRepository,
     findProfilesByUserIds,
     findCredentialsByUserIds,
@@ -350,7 +347,9 @@ export async function hydrateUsersResponseList(params: {
   const userIds = users.map((u) => Number(u.id));
 
   const [allRoleLinks, allOrgLinks, allProfiles, credentialsMap] = await Promise.all([
-    userRoleRepository.findByUserIds(userIds),
+    rolesPublicService.findUserRoleLinksByUserIds
+      ? rolesPublicService.findUserRoleLinksByUserIds(userIds)
+      : Promise.resolve([]),
     userOrgRepository.findByUserIds(userIds),
     findProfilesByUserIds(userIds),
     findCredentialsByUserIds
@@ -450,13 +449,16 @@ export async function hydrateUsersResponseList(params: {
   });
 }
 
-async function loadRoleLinks(userRoleRepository: UserRoleRepository, roleIds: readonly number[]) {
-  if (typeof userRoleRepository.findByRoleIds === 'function') {
-    return userRoleRepository.findByRoleIds(roleIds);
+async function loadRoleLinks(rolesPublicService: IRolesPublicService, roleIds: readonly number[]) {
+  if (typeof rolesPublicService.findUserRoleLinksByRoleIds === 'function') {
+    return rolesPublicService.findUserRoleLinksByRoleIds(roleIds);
   }
-  if (typeof userRoleRepository.findUserIdsByRoleIds === 'function') {
-    const uids = await userRoleRepository.findUserIdsByRoleIds(roleIds);
-    const allLinks = await userRoleRepository.findByUserIds(uids);
+  if (
+    typeof rolesPublicService.findUserIdsByRoleIds === 'function' &&
+    typeof rolesPublicService.findUserRoleLinksByUserIds === 'function'
+  ) {
+    const uids = await rolesPublicService.findUserIdsByRoleIds(roleIds);
+    const allLinks = await rolesPublicService.findUserRoleLinksByUserIds(uids);
     const roleSet = new Set(roleIds.map(Number));
     return allLinks.filter((l) => roleSet.has(Number(l.roleId)));
   }
@@ -481,14 +483,14 @@ export async function fetchUsersByIdsBatch(
 
 export async function countActiveUsersByRoleIds(params: {
   roleIds: readonly number[];
-  userRoleRepository: UserRoleRepository;
+  rolesPublicService: IRolesPublicService;
   userRepository: UserRepository;
 }): Promise<Map<number, number>> {
-  const { roleIds, userRoleRepository, userRepository } = params;
+  const { roleIds, rolesPublicService, userRepository } = params;
   const counts = new Map<number, number>();
   if (roleIds.length === 0) return counts;
 
-  const links = await loadRoleLinks(userRoleRepository, roleIds);
+  const links = await loadRoleLinks(rolesPublicService, roleIds);
   if (links.length === 0) return counts;
 
   const distinctUserIds = [...new Set(links.map((l) => Number(l.userId)))];
@@ -515,12 +517,12 @@ export async function countActiveUsersByRoleIds(params: {
 
 export async function listActiveUsersByRoleId(params: {
   roleId: number;
-  userRoleRepository: UserRoleRepository;
+  rolesPublicService: IRolesPublicService;
   userRepository: UserRepository;
   findProfilesByUserIds: (userIds: readonly number[]) => Promise<UserProfileEntity[]>;
 }): Promise<RoleAssignedUserSummary[]> {
-  const { roleId, userRoleRepository, userRepository, findProfilesByUserIds } = params;
-  const links = await loadRoleLinks(userRoleRepository, [roleId]);
+  const { roleId, rolesPublicService, userRepository, findProfilesByUserIds } = params;
+  const links = await loadRoleLinks(rolesPublicService, [roleId]);
   if (links.length === 0) return [];
 
   const assignedAtByUserId = new Map<number, Date>();
@@ -593,12 +595,12 @@ export async function filterActiveUserIds(
 
 export async function resolveActiveUserIdsByRoleIds(params: {
   roleIds: readonly number[];
-  userRoleRepository: UserRoleRepository;
+  rolesPublicService: IRolesPublicService;
   userRepository: UserRepository;
 }): Promise<number[]> {
-  const { roleIds, userRoleRepository, userRepository } = params;
+  const { roleIds, rolesPublicService, userRepository } = params;
   if (roleIds.length === 0) return [];
-  const links = await loadRoleLinks(userRoleRepository, roleIds);
+  const links = await loadRoleLinks(rolesPublicService, roleIds);
   const candidateIds = links.map((l) => Number(l.userId));
   return filterActiveUserIds(userRepository, candidateIds);
 }

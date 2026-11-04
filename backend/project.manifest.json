@@ -21,6 +21,8 @@
     "performance",
     "organizations",
     "organization-members",
+    "permissions",
+    "audit",
     "roles",
     "users",
     "sessions",

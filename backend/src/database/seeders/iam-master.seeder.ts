@@ -486,6 +486,35 @@ export const STANDARD_IAM_PERMISSIONS: readonly SeedPermissionDef[] = [
     module: 'custom-fields',
     description: 'Quyền chỉnh sửa các trường tùy chỉnh được đánh dấu nhạy cảm (isSensitive = true)',
   },
+  {
+    id: 46,
+    code: 'permissions.read',
+    name: 'Xem danh mục quyền hạn & ma trận phân quyền',
+    module: 'permissions',
+    description:
+      'Quyền xem danh mục quyền hạn, nhóm quyền theo chức năng, cảnh báo quyền mồ côi và ma trận quyền',
+  },
+  {
+    id: 47,
+    code: 'permissions.manage',
+    name: 'Đồng bộ & quản trị danh mục quyền hạn',
+    module: 'permissions',
+    description: 'Quyền đồng bộ idempotent danh sách quyền từ module manifests vào hệ thống',
+  },
+  {
+    id: 48,
+    code: 'audit.read',
+    name: 'Xem Nhật ký thao tác (Audit Log) & Sự kiện bảo mật',
+    module: 'audit',
+    description: 'Quyền tra cứu Nhật ký thao tác (Audit Log), sự kiện bảo mật và cảnh báo SIEM',
+  },
+  {
+    id: 49,
+    code: 'audit.manage',
+    name: 'Quản trị Nhật ký thao tác (Audit Log)',
+    module: 'audit',
+    description: 'Quyền quản trị cấu hình và kiểm soát tính toàn vẹn Nhật ký thao tác',
+  },
 ] as const;
 
 const ALL_IAM_PERMISSION_CODES = STANDARD_IAM_PERMISSIONS.map((p) => p.code);

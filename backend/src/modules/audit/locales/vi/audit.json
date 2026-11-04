@@ -1,0 +1,5 @@
+{
+  "auditLogNotFound": "Không tìm thấy bản ghi Nhật ký thao tác (Audit Log) với ID '{{id}}'.",
+  "immutable": "Nhật ký thao tác (Audit Log) là bất biến, không được phép chỉnh sửa hoặc xóa."
+}
+

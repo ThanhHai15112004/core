@@ -1,6 +1,11 @@
 import { z } from 'zod';
-import { resolveDateRange } from '@packages/kernel/index.js';
 import { parseSelectFields } from '@packages/http/index.js';
+import {
+  AUDIT_LOG_SELECTABLE_FIELDS,
+  type ListAuditLogsQuery,
+  listAuditLogsQuerySchema,
+} from '@modules/audit/index.js';
+import { type SyncPermissionsRequest, syncPermissionsSchema } from '@modules/permissions/index.js';
 import {
   DATA_SCOPE,
   type DataScopeCode,
@@ -9,6 +14,14 @@ import {
   parseDataScope,
   parseRoleStatus,
 } from '../contracts/index.js';
+
+export {
+  AUDIT_LOG_SELECTABLE_FIELDS,
+  type ListAuditLogsQuery,
+  listAuditLogsQuerySchema,
+  type SyncPermissionsRequest,
+  syncPermissionsSchema,
+};
 
 const roleStatusSchema = z
   .preprocess(
@@ -84,6 +97,20 @@ export interface SetRolePermissionsRequest {
   readonly permissions?: readonly string[] | undefined;
 }
 
+export const assignUserRolesSchema = z.object({
+  roleIds: z
+    .array(z.preprocess((v) => Number(v), z.number().int().min(1)))
+    .min(1, 'At least one role is required'),
+  stepUpToken: z.string().trim().min(10).optional(),
+  requireStepUp: z.boolean().optional(),
+});
+
+export interface AssignUserRolesRequest {
+  readonly roleIds: readonly number[];
+  readonly stepUpToken?: string | undefined;
+  readonly requireStepUp?: boolean | undefined;
+}
+
 export const cloneRoleSchema = z.object({
   code: z
     .string()
@@ -119,29 +146,6 @@ export const ROLE_SELECTABLE_FIELDS = [
   'permissionItems',
   'createdAt',
   'updatedAt',
-] as const;
-
-export const AUDIT_LOG_SELECTABLE_FIELDS = [
-  'id',
-  'actorType',
-  'actorTypeName',
-  'actorUserId',
-  'actorServiceAccountId',
-  'actorApiClientId',
-  'actorIdentifier',
-  'module',
-  'feature',
-  'action',
-  'resourceType',
-  'resourceId',
-  'beforeData',
-  'afterData',
-  'reason',
-  'ipAddress',
-  'userAgent',
-  'requestId',
-  'correlationId',
-  'createdAt',
 ] as const;
 
 const normalizedSortOrderSchema = z
@@ -188,147 +192,6 @@ export interface ListRolesQuery {
   readonly status?: RoleStatusCode | undefined;
   readonly dataScope?: DataScopeCode | undefined;
   readonly sortBy?: 'id' | 'code' | 'name' | 'createdAt' | undefined;
-  readonly sortOrder?: 'ASC' | 'DESC' | undefined;
-  readonly sort?: string | undefined;
-  readonly fields?: readonly string[] | undefined;
-}
-
-const modulePermissionDeclarationSchema = z.union([
-  z.string().trim().min(2).max(128),
-  z.object({
-    code: z.string().trim().min(2).max(128),
-    name: z.string().trim().min(1).max(150).optional(),
-    description: z.string().trim().max(500).nullable().optional(),
-    featureGroup: z.string().trim().min(1).max(100).optional(),
-  }),
-]);
-
-export const syncPermissionsSchema = z
-  .object({
-    modules: z
-      .array(
-        z.object({
-          module: z
-            .string()
-            .trim()
-            .min(1)
-            .max(64)
-            .regex(/^[a-z0-9_-]+$/i, 'Module name may only contain letters, digits, _ and -'),
-          displayName: z.string().trim().min(1).max(150).optional(),
-          permissions: z.array(modulePermissionDeclarationSchema),
-        }),
-      )
-      .optional(),
-    replaceActiveModules: z.boolean().optional(),
-  })
-  .default({});
-
-export interface SyncPermissionsRequest {
-  readonly modules?:
-    | readonly {
-        readonly module: string;
-        readonly displayName?: string | undefined;
-        readonly permissions: readonly (
-          | string
-          | {
-              readonly code: string;
-              readonly name?: string | undefined;
-              readonly description?: string | null | undefined;
-              readonly featureGroup?: string | undefined;
-            }
-        )[];
-      }[]
-    | undefined;
-  readonly replaceActiveModules?: boolean | undefined;
-}
-
-const optionalPositiveIntQuery = z
-  .preprocess(
-    (v) => (v === '' || v === undefined || v === null ? undefined : Number(v)),
-    z.number().int().min(1).optional(),
-  )
-  .optional();
-
-export const listAuditLogsQuerySchema = z
-  .object({
-    page: optionalPositiveIntQuery,
-    limit: optionalPositiveIntQuery,
-    q: z.string().trim().max(150).optional(),
-    search: z.string().trim().max(150).optional(),
-    actorType: z
-      .preprocess(
-        (v) => (v === '' || v === undefined || v === null ? undefined : Number(v)),
-        z.union([z.literal(1), z.literal(2), z.literal(3)]).optional(),
-      )
-      .optional(),
-    actorUserId: optionalPositiveIntQuery,
-    actorServiceAccountId: optionalPositiveIntQuery,
-    module: z.string().trim().max(64).optional(),
-    feature: z.string().trim().max(128).optional(),
-    action: z.string().trim().max(128).optional(),
-    resourceType: z.string().trim().max(64).optional(),
-    resourceId: z.string().trim().max(64).optional(),
-    requestId: z.string().trim().max(128).optional(),
-    correlationId: z.string().trim().max(128).optional(),
-    ipAddress: z.string().trim().max(64).optional(),
-    fromDate: z.string().trim().max(64).optional(),
-    toDate: z.string().trim().max(64).optional(),
-    sortBy: z.enum(['id', 'createdAt', 'module', 'action']).optional(),
-    sortOrder: normalizedSortOrderSchema,
-    sort: z.string().trim().max(120).optional(),
-    fields: z.union([z.string(), z.array(z.string())]).optional(),
-  })
-  .transform((raw): ListAuditLogsQuery => {
-    resolveDateRange(raw.fromDate, raw.toDate, {
-      fromFieldName: 'fromDate',
-      toFieldName: 'toDate',
-    });
-    const fields = parseSelectFields(raw.fields, AUDIT_LOG_SELECTABLE_FIELDS);
-    const keyword = raw.q ?? raw.search;
-    return {
-      page: raw.page,
-      limit: raw.limit,
-      q: keyword,
-      search: keyword,
-      actorType: raw.actorType,
-      actorUserId: raw.actorUserId,
-      actorServiceAccountId: raw.actorServiceAccountId,
-      module: raw.module,
-      feature: raw.feature,
-      action: raw.action,
-      resourceType: raw.resourceType,
-      resourceId: raw.resourceId,
-      requestId: raw.requestId,
-      correlationId: raw.correlationId,
-      ipAddress: raw.ipAddress,
-      fromDate: raw.fromDate,
-      toDate: raw.toDate,
-      sortBy: raw.sortBy,
-      sortOrder: raw.sortOrder,
-      sort: raw.sort,
-      fields,
-    };
-  });
-
-export interface ListAuditLogsQuery {
-  readonly page?: number | undefined;
-  readonly limit?: number | undefined;
-  readonly q?: string | undefined;
-  readonly search?: string | undefined;
-  readonly actorType?: 1 | 2 | 3 | undefined;
-  readonly actorUserId?: number | undefined;
-  readonly actorServiceAccountId?: number | undefined;
-  readonly module?: string | undefined;
-  readonly feature?: string | undefined;
-  readonly action?: string | undefined;
-  readonly resourceType?: string | undefined;
-  readonly resourceId?: string | undefined;
-  readonly requestId?: string | undefined;
-  readonly correlationId?: string | undefined;
-  readonly ipAddress?: string | undefined;
-  readonly fromDate?: string | undefined;
-  readonly toDate?: string | undefined;
-  readonly sortBy?: 'id' | 'createdAt' | 'module' | 'action' | undefined;
   readonly sortOrder?: 'ASC' | 'DESC' | undefined;
   readonly sort?: string | undefined;
   readonly fields?: readonly string[] | undefined;

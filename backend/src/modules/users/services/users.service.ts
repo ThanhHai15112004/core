@@ -98,7 +98,6 @@ import type { UserEntity } from '../entities/user.entity.js';
 import type { UserProfileEntity } from '../entities/user-profile.entity.js';
 import { UserRepository } from '../repositories/user.repository.js';
 import { UserProfileRepository } from '../repositories/user-profile.repository.js';
-import { UserRoleRepository } from '../repositories/user-role.repository.js';
 import { UserOrganizationUnitRepository } from '../repositories/user-organization-unit.repository.js';
 import { UserOrganizationHistoryRepository } from '../repositories/user-organization-history.repository.js';
 import { UserStatusHistoryRepository } from '../repositories/user-status-history.repository.js';
@@ -136,7 +135,6 @@ export class UsersService implements IUsersPublicService {
 
   constructor(
     private readonly userRepository: UserRepository,
-    private readonly userRoleRepository: UserRoleRepository,
     private readonly userOrgRepository: UserOrganizationUnitRepository,
     private readonly mapper: UsersMapper,
     private readonly passwordHasher: PasswordHasherService,
@@ -186,6 +184,17 @@ export class UsersService implements IUsersPublicService {
       userOrgRepository: this.userOrgRepository,
       countUsersByRoleIds: (rids) => this.countUsersByRoleIds(rids),
       listUsersByRoleId: (rid) => this.listUsersByRoleId(rid),
+      assignRoles: (uid, dto, aid, act) =>
+        this.assignRoles(
+          uid,
+          {
+            roleIds: [...dto.roleIds],
+            ...(dto.stepUpToken !== undefined ? { stepUpToken: dto.stepUpToken } : {}),
+            ...(dto.requireStepUp !== undefined ? { requireStepUp: dto.requireStepUp } : {}),
+          },
+          aid,
+          act,
+        ),
       resolveSubordinateUserIds: (mid) => this.resolveSubordinateUserIds(mid),
       findAuthUserByIdentifier: (ident) => this.findAuthUserByIdentifier(ident),
       findUserContactsByIds: (uids) => this.findUserContactsByIds(uids),
@@ -420,7 +429,6 @@ export class UsersService implements IUsersPublicService {
       actorId,
       actor,
       userRepository: this.userRepository,
-      userRoleRepository: this.userRoleRepository,
       userOrgRepository: this.userOrgRepository,
       orgHistoryRepository: this.orgHistoryRepository,
       passwordHasher: this.passwordHasher,
@@ -621,7 +629,6 @@ export class UsersService implements IUsersPublicService {
       actorId,
       actor,
       userRepository: this.userRepository,
-      userRoleRepository: this.userRoleRepository,
       rolesPublicService: this.rolesPublicService,
       verifySensitiveActionStepUp: (aid, tok, req, act) =>
         this.verifySensitiveActionStepUp(aid, tok, req, act),
@@ -700,7 +707,6 @@ export class UsersService implements IUsersPublicService {
     return buildUserAuthIdentityView({
       userId,
       userRepository: this.userRepository,
-      userRoleRepository: this.userRoleRepository,
       userOrgRepository: this.userOrgRepository,
       rolesPublicService: this.rolesPublicService,
       getUserProfile: (uid, u) => this.getUserProfile(uid, u),
@@ -1002,7 +1008,6 @@ export class UsersService implements IUsersPublicService {
   ): Promise<UserResponse[]> {
     return hydrateUsersResponseList({
       users,
-      userRoleRepository: this.userRoleRepository,
       userOrgRepository: this.userOrgRepository,
       findProfilesByUserIds: (uids) => this.findProfilesByUserIds(uids),
       findCredentialsByUserIds: (uids) => this.findCredentialsByUserIds(uids),
@@ -1068,7 +1073,7 @@ export class UsersService implements IUsersPublicService {
   private async countUsersByRoleIds(roleIds: readonly number[]): Promise<Map<number, number>> {
     return countActiveUsersByRoleIds({
       roleIds,
-      userRoleRepository: this.userRoleRepository,
+      rolesPublicService: this.rolesPublicService,
       userRepository: this.userRepository,
     });
   }
@@ -1076,7 +1081,7 @@ export class UsersService implements IUsersPublicService {
   private async listUsersByRoleId(roleId: number): Promise<RoleAssignedUserSummary[]> {
     return listActiveUsersByRoleId({
       roleId,
-      userRoleRepository: this.userRoleRepository,
+      rolesPublicService: this.rolesPublicService,
       userRepository: this.userRepository,
       findProfilesByUserIds: (uids) => this.findProfilesByUserIds(uids),
     });
@@ -1089,7 +1094,7 @@ export class UsersService implements IUsersPublicService {
   public async findActiveUserIdsByRoleIds(roleIds: readonly number[]): Promise<number[]> {
     return resolveActiveUserIdsByRoleIds({
       roleIds,
-      userRoleRepository: this.userRoleRepository,
+      rolesPublicService: this.rolesPublicService,
       userRepository: this.userRepository,
     });
   }

@@ -1,14 +1,14 @@
 {
   "$schema": "../../packages/kernel/schemas/module.manifest.schema.json",
   "name": "roles",
-  "displayName": "Roles & Permissions Management",
+  "displayName": "Roles & RBAC Management",
   "version": "1.0.0",
-  "description": "Module quản lý Vai trò (Roles) và ánh xạ Quyền hạn (Permissions) phục vụ RBAC",
+  "description": "Module quản lý Vai trò (Roles), ánh xạ Quyền hạn cho Vai trò (role_permissions) và Gán Vai trò cho Người dùng (user_roles)",
   "type": "core",
   "category": "core",
   "author": "Core Platform Team",
   "entryModule": "RolesModule",
-  "dependencies": ["database"],
+  "dependencies": ["database", "permissions", "audit"],
   "permissions": ["roles.read", "roles.manage"],
   "events": {
     "published": ["role.created", "role.updated", "role.deleted", "role.permissions_updated"],
@@ -16,7 +16,7 @@
   },
   "database": {
     "hasMigrations": true,
-    "tables": ["roles", "permissions", "role_permissions", "audit_logs"]
+    "tables": ["roles", "role_permissions", "user_roles"]
   },
   "codeTypes": [
     {
@@ -155,36 +155,6 @@
       "allowUnitOverride": false,
       "isSystem": true,
       "sortOrder": 41
-    },
-    {
-      "key": "roles.audit_log.default_page_size",
-      "groupCode": "security",
-      "module": "roles",
-      "namespace": "roles.audit_log",
-      "name": "Số dòng mặc định mỗi trang khi tra cứu Nhật ký thao tác (Audit Log)",
-      "description": "Số lượng bản ghi Audit Log trả về mặc định khi client không truyền tham số limit",
-      "valueType": "NUMBER",
-      "defaultValue": 20,
-      "validationRules": { "min": 1, "max": 200, "integerOnly": true },
-      "isSensitive": false,
-      "allowUnitOverride": false,
-      "isSystem": true,
-      "sortOrder": 42
-    },
-    {
-      "key": "roles.audit_log.max_page_size",
-      "groupCode": "security",
-      "module": "roles",
-      "namespace": "roles.audit_log",
-      "name": "Số dòng tối đa mỗi trang khi tra cứu Nhật ký thao tác (Audit Log)",
-      "description": "Giới hạn số bản ghi Audit Log tối đa được phép lấy trong một lần truy vấn phân trang",
-      "valueType": "NUMBER",
-      "defaultValue": 200,
-      "validationRules": { "min": 10, "max": 1000, "integerOnly": true },
-      "isSensitive": false,
-      "allowUnitOverride": false,
-      "isSystem": true,
-      "sortOrder": 43
     }
   ],
   "menus": [
@@ -200,20 +170,6 @@
       "key": "roles.read",
       "numOrder": 2,
       "icon": "KeyRound",
-      "position": "SIDEBAR"
-    },
-    {
-      "code": "IAM_AUDIT_LOGS",
-      "name": "Nhật ký Kiểm toán (Audit Log)",
-      "status": 1,
-      "link": "/iam/audit-logs",
-      "linkApi": "/api/v1/roles/audit-logs",
-      "type": 2,
-      "parentCode": "IAM",
-      "level": 2,
-      "key": "roles.read",
-      "numOrder": 4,
-      "icon": "FileCheck",
       "position": "SIDEBAR"
     }
   ]
