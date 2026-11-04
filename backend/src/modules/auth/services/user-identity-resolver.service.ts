@@ -11,8 +11,8 @@ import {
   USERS_PUBLIC_SERVICE,
   USER_STATUS,
 } from '@modules/users/contracts/index.js';
-import { SessionService } from './session.service.js';
-import { ServiceAccountService } from './service-account.service.js';
+import { SessionService } from '@modules/sessions/index.js';
+import { ServiceAccountService } from '@modules/machine-identities/index.js';
 
 @Injectable()
 export class UserIdentityResolverService implements IUserIdentityResolver {

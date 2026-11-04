@@ -15,6 +15,7 @@ import type {
   RoleSummary,
 } from '@modules/roles/contracts/index.js';
 import type {
+  UserCredentialRecordView,
   UserNotificationContactView,
   UserOrganizationAssignmentSummary,
   UserProfileView,
@@ -321,6 +322,9 @@ export async function hydrateUsersResponseList(params: {
   userRoleRepository: UserRoleRepository;
   userOrgRepository: UserOrganizationUnitRepository;
   findProfilesByUserIds: (userIds: readonly number[]) => Promise<UserProfileEntity[]>;
+  findCredentialsByUserIds?:
+    | ((userIds: readonly number[]) => Promise<ReadonlyMap<number, UserCredentialRecordView>>)
+    | undefined;
   rolesPublicService: IRolesPublicService;
   organizationsPublicService: IOrganizationsPublicService | null;
   mapper: UsersMapper;
@@ -333,6 +337,7 @@ export async function hydrateUsersResponseList(params: {
     userRoleRepository,
     userOrgRepository,
     findProfilesByUserIds,
+    findCredentialsByUserIds,
     rolesPublicService,
     organizationsPublicService,
     mapper,
@@ -344,10 +349,13 @@ export async function hydrateUsersResponseList(params: {
   if (users.length === 0) return [];
   const userIds = users.map((u) => Number(u.id));
 
-  const [allRoleLinks, allOrgLinks, allProfiles] = await Promise.all([
+  const [allRoleLinks, allOrgLinks, allProfiles, credentialsMap] = await Promise.all([
     userRoleRepository.findByUserIds(userIds),
     userOrgRepository.findByUserIds(userIds),
     findProfilesByUserIds(userIds),
+    findCredentialsByUserIds
+      ? findCredentialsByUserIds(userIds)
+      : Promise.resolve(new Map<number, UserCredentialRecordView>()),
   ]);
 
   const profileByUser = new Map<number, UserProfileEntity>();
@@ -429,15 +437,17 @@ export async function hydrateUsersResponseList(params: {
       : { bypassPermissionCheck: true },
   });
 
-  return users.map((user) =>
-    mapper.toResponse(user, {
+  return users.map((user) => {
+    const cred = credentialsMap.get(Number(user.id));
+    return mapper.toResponse(user, {
       profile: profileByUser.get(Number(user.id)) ?? null,
       roles: rolesByUser.get(Number(user.id)) ?? [],
       organizationUnits: orgsByUser.get(Number(user.id)) ?? [],
       decryptedPhone: decryptPhone(user.phone),
       customFields: customFieldsByUser.get(String(user.id)),
-    }),
-  );
+      ...(cred !== undefined ? { passwordChangedAt: cred.passwordChangedAt } : {}),
+    });
+  });
 }
 
 async function loadRoleLinks(userRoleRepository: UserRoleRepository, roleIds: readonly number[]) {

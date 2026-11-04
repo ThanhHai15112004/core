@@ -1,0 +1,288 @@
+{
+  "$schema": "../../packages/kernel/schemas/module.manifest.schema.json",
+  "name": "mfa",
+  "displayName": "Multi-Factor Authentication (MFA)",
+  "version": "1.0.0",
+  "description": "Module xác thực nhiều lớp (TOTP, Email OTP, SMS OTP, Recovery Codes), thiết bị tin cậy (Trusted Devices), Step-Up Authentication và Reset MFA có kiểm soát",
+  "type": "core",
+  "category": "core",
+  "author": "Core Platform Team",
+  "entryModule": "MfaModule",
+  "dependencies": ["database", "redis", "security", "users", "sessions", "credentials"],
+  "permissions": [
+    "auth.mfa.manage"
+  ],
+  "events": {
+    "published": [
+      "auth.mfa_challenged",
+      "auth.mfa_verified",
+      "auth.mfa_email_otp_sent"
+    ],
+    "subscribed": []
+  },
+  "database": {
+    "hasMigrations": true,
+    "tables": [
+      "auth_mfa_configs"
+    ]
+  },
+  "codeTypes": [
+    {
+      "code": "auth.mfa_method",
+      "name": "Phương thức xác thực đa nhân tố (MFA)",
+      "description": "Các phương thức xác thực bước 2 được hỗ trợ trên nền tảng",
+      "isSystem": true,
+      "allowCustomValues": false,
+      "values": [
+        {
+          "numericCode": 1,
+          "code": "TOTP",
+          "behaviorCode": "TOTP",
+          "name": "Ứng dụng Authenticator (TOTP)",
+          "labels": { "vi": "Ứng dụng Authenticator (TOTP)", "en": "Authenticator App (TOTP)" },
+          "badgeTone": "success",
+          "sortOrder": 1,
+          "isDefault": true,
+          "isSystem": true
+        },
+        {
+          "numericCode": 2,
+          "code": "EMAIL_OTP",
+          "behaviorCode": "EMAIL_OTP",
+          "name": "Mã OTP qua Email",
+          "labels": { "vi": "Mã OTP qua Email", "en": "Email OTP" },
+          "badgeTone": "info",
+          "sortOrder": 2,
+          "isSystem": true
+        },
+        {
+          "numericCode": 3,
+          "code": "RECOVERY_CODE",
+          "behaviorCode": "RECOVERY_CODE",
+          "name": "Mã khôi phục dự phòng",
+          "labels": { "vi": "Mã khôi phục dự phòng", "en": "Recovery Code" },
+          "badgeTone": "warning",
+          "sortOrder": 3,
+          "isSystem": true
+        },
+        {
+          "numericCode": 4,
+          "code": "SMS_OTP",
+          "behaviorCode": "SMS_OTP",
+          "name": "Mã OTP qua tin nhắn SMS",
+          "labels": { "vi": "Mã OTP qua tin nhắn SMS", "en": "SMS OTP" },
+          "badgeTone": "info",
+          "sortOrder": 4,
+          "isSystem": true
+        }
+      ]
+    },
+    {
+      "code": "auth.mfa_policy",
+      "name": "Chính sách bắt buộc MFA",
+      "description": "Chính sách yêu cầu xác thực đa nhân tố trên toàn hệ thống",
+      "isSystem": true,
+      "allowCustomValues": false,
+      "values": [
+        {
+          "numericCode": 1,
+          "code": "OPTIONAL",
+          "behaviorCode": "OPTIONAL",
+          "name": "Tùy chọn (Người dùng tự bật)",
+          "labels": { "vi": "Tùy chọn (Người dùng tự bật)", "en": "Optional" },
+          "badgeTone": "neutral",
+          "sortOrder": 1,
+          "isDefault": true,
+          "isSystem": true
+        },
+        {
+          "numericCode": 2,
+          "code": "REQUIRED_FOR_ADMINS",
+          "behaviorCode": "REQUIRED_FOR_ADMINS",
+          "name": "Bắt buộc với Quản trị viên",
+          "labels": { "vi": "Bắt buộc với Quản trị viên", "en": "Required for Admins" },
+          "badgeTone": "warning",
+          "sortOrder": 2,
+          "isSystem": true
+        },
+        {
+          "numericCode": 3,
+          "code": "REQUIRED_FOR_ALL",
+          "behaviorCode": "REQUIRED_FOR_ALL",
+          "name": "Bắt buộc toàn bộ người dùng",
+          "labels": { "vi": "Bắt buộc toàn bộ người dùng", "en": "Required for All Users" },
+          "badgeTone": "danger",
+          "sortOrder": 3,
+          "isSystem": true
+        }
+      ]
+    }
+  ],
+  "settings": [
+    {
+      "key": "security.mfa.policy",
+      "groupCode": "security",
+      "module": "auth",
+      "namespace": "auth.mfa",
+      "name": "Chính sách bắt buộc xác thực đa lớp (MFA)",
+      "description": "Chính sách áp dụng MFA khi đăng nhập (OPTIONAL, REQUIRED_FOR_ADMINS, REQUIRED_FOR_ALL)",
+      "valueType": "TEXT",
+      "defaultValue": "OPTIONAL",
+      "validationRules": {
+        "enumOptions": ["OPTIONAL", "REQUIRED_FOR_ADMINS", "REQUIRED_FOR_ALL"]
+      },
+      "isSensitive": false,
+      "allowUnitOverride": true,
+      "isSystem": true,
+      "sortOrder": 18
+    },
+    {
+      "key": "security.mfa.allowed_methods",
+      "groupCode": "security",
+      "module": "auth",
+      "namespace": "auth.mfa",
+      "name": "Các phương thức MFA được phép sử dụng",
+      "description": "Danh sách phương thức xác thực bước 2 được bật trên hệ thống",
+      "valueType": "JSON",
+      "defaultValue": ["TOTP", "EMAIL_OTP", "RECOVERY_CODE"],
+      "isSensitive": false,
+      "allowUnitOverride": true,
+      "isSystem": true,
+      "sortOrder": 19
+    },
+    {
+      "key": "security.mfa.email_otp_ttl_seconds",
+      "groupCode": "security",
+      "module": "auth",
+      "namespace": "auth.mfa",
+      "name": "Thời hạn mã MFA Email OTP (giây)",
+      "description": "Thời gian hiệu lực của mã OTP 6 chữ số gửi qua Email khi xác thực bước 2",
+      "valueType": "NUMBER",
+      "defaultValue": 300,
+      "validationRules": { "min": 30, "max": 3600, "integerOnly": true },
+      "isSensitive": false,
+      "allowUnitOverride": true,
+      "isSystem": true,
+      "sortOrder": 20
+    },
+    {
+      "key": "security.mfa.sms_otp_ttl_seconds",
+      "groupCode": "security",
+      "module": "auth",
+      "namespace": "auth.mfa",
+      "name": "Thời hạn mã MFA SMS OTP (giây)",
+      "description": "Thời gian hiệu lực của mã OTP 6 chữ số gửi qua SMS khi xác thực bước 2",
+      "valueType": "NUMBER",
+      "defaultValue": 300,
+      "validationRules": { "min": 30, "max": 3600, "integerOnly": true },
+      "isSensitive": false,
+      "allowUnitOverride": true,
+      "isSystem": true,
+      "sortOrder": 21
+    },
+    {
+      "key": "security.mfa.trusted_device_days",
+      "groupCode": "security",
+      "module": "auth",
+      "namespace": "auth.mfa",
+      "name": "Thời hạn ghi nhớ Thiết bị tin cậy mặc định (ngày)",
+      "description": "Số ngày mặc định không hỏi lại MFA trên thiết bị đã được người dùng đánh dấu tin cậy",
+      "valueType": "NUMBER",
+      "defaultValue": 30,
+      "validationRules": { "min": 1, "max": 365, "integerOnly": true },
+      "isSensitive": false,
+      "allowUnitOverride": true,
+      "isSystem": true,
+      "sortOrder": 22
+    },
+    {
+      "key": "security.mfa.max_trusted_devices",
+      "groupCode": "security",
+      "module": "auth",
+      "namespace": "auth.mfa",
+      "name": "Số lượng Thiết bị tin cậy tối đa mỗi người dùng",
+      "description": "Giới hạn số thiết bị tin cậy được lưu đồng thời cho mỗi tài khoản",
+      "valueType": "NUMBER",
+      "defaultValue": 20,
+      "validationRules": { "min": 1, "max": 100, "integerOnly": true },
+      "isSensitive": false,
+      "allowUnitOverride": true,
+      "isSystem": true,
+      "sortOrder": 23
+    },
+    {
+      "key": "security.mfa.recovery_code_count",
+      "groupCode": "security",
+      "module": "auth",
+      "namespace": "auth.mfa",
+      "name": "Số lượng mã khôi phục dự phòng (Recovery Codes)",
+      "description": "Số lượng mã dự phòng một lần được phát hành khi người dùng kích hoạt hoặc tạo mới bộ mã khôi phục MFA",
+      "valueType": "NUMBER",
+      "defaultValue": 8,
+      "validationRules": { "min": 4, "max": 20, "integerOnly": true },
+      "isSensitive": false,
+      "allowUnitOverride": true,
+      "isSystem": true,
+      "sortOrder": 24
+    },
+    {
+      "key": "security.mfa.challenge_ttl_seconds",
+      "groupCode": "security",
+      "module": "auth",
+      "namespace": "auth.mfa",
+      "name": "Thời hạn phiên thử thách MFA bước 2 (giây)",
+      "description": "Thời gian lưu bộ đếm số lần thử mã MFA bước 2 trước khi hết hạn",
+      "valueType": "NUMBER",
+      "defaultValue": 300,
+      "validationRules": { "min": 60, "max": 1800, "integerOnly": true },
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 25
+    },
+    {
+      "key": "security.mfa.admin_role_codes",
+      "groupCode": "security",
+      "module": "auth",
+      "namespace": "auth.mfa",
+      "name": "Danh sách mã vai trò Quản trị viên áp dụng chính sách MFA",
+      "description": "Các mã vai trò được tính là Quản trị viên khi chính sách MFA đặt là REQUIRED_FOR_ADMINS",
+      "valueType": "JSON",
+      "defaultValue": ["SUPER_ADMIN", "ADMIN", "SYSTEM_ADMIN", "IAM_ADMIN", "SECURITY_ADMIN"],
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 26
+    },
+    {
+      "key": "security.step_up.ttl_seconds",
+      "groupCode": "security",
+      "module": "auth",
+      "namespace": "auth.step_up",
+      "name": "Thời hạn Step-Up Token cho thao tác nhạy cảm (giây)",
+      "description": "Thời gian hiệu lực của token xác thực lại (Step-Up Authentication) trước khi thực hiện thao tác nhạy cảm",
+      "valueType": "NUMBER",
+      "defaultValue": 300,
+      "validationRules": { "min": 60, "max": 3600, "integerOnly": true },
+      "isSensitive": false,
+      "allowUnitOverride": true,
+      "isSystem": true,
+      "sortOrder": 27
+    }
+  ],
+  "featureFlags": [
+    {
+      "key": "auth.mfa_enforcement_pilot",
+      "module": "auth",
+      "name": "Thử nghiệm bắt buộc MFA theo nhóm vai trò và chi nhánh",
+      "description": "Tính năng thử nghiệm yêu cầu xác thực đa yếu tố (TOTP/Email OTP) theo nhóm người dùng, vai trò hoặc đơn vị chỉ định",
+      "isEnabled": false,
+      "rolloutPercentage": 100,
+      "targetUserIds": [],
+      "targetRoles": ["SUPER_ADMIN", "SECURITY_ADMIN"],
+      "targetOrganizationUnitIds": [],
+      "isSystem": true
+    }
+  ]
+}
+

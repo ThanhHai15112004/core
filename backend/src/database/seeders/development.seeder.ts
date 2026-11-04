@@ -45,6 +45,10 @@ export class DevelopmentDataSeeder implements SeederContract {
       )
     `);
 
+    if (!isPostgres) {
+      await ctx.manager.query('START TRANSACTION');
+    }
+
     let affected = 0;
 
     for (const item of DEV_SAMPLE_SETTINGS) {
@@ -1546,7 +1550,10 @@ export class DevelopmentDataSeeder implements SeederContract {
         fieldKey: 'employee_level',
         value: 'L1',
         label: 'L1 - Associate / Junior',
-        labelsJson: JSON.stringify({ vi: 'L1 - Chuyên viên sơ cấp', en: 'L1 - Associate / Junior' }),
+        labelsJson: JSON.stringify({
+          vi: 'L1 - Chuyên viên sơ cấp',
+          en: 'L1 - Associate / Junior',
+        }),
         color: '#64748b',
         sortOrder: 1,
         status: 1,
@@ -1559,7 +1566,10 @@ export class DevelopmentDataSeeder implements SeederContract {
         fieldKey: 'employee_level',
         value: 'L2',
         label: 'L2 - Mid-Level Professional',
-        labelsJson: JSON.stringify({ vi: 'L2 - Chuyên viên chính', en: 'L2 - Mid-Level Professional' }),
+        labelsJson: JSON.stringify({
+          vi: 'L2 - Chuyên viên chính',
+          en: 'L2 - Mid-Level Professional',
+        }),
         color: '#0284c7',
         sortOrder: 2,
         status: 1,
@@ -1572,7 +1582,10 @@ export class DevelopmentDataSeeder implements SeederContract {
         fieldKey: 'employee_level',
         value: 'L3',
         label: 'L3 - Senior Specialist',
-        labelsJson: JSON.stringify({ vi: 'L3 - Chuyên viên cao cấp', en: 'L3 - Senior Specialist' }),
+        labelsJson: JSON.stringify({
+          vi: 'L3 - Chuyên viên cao cấp',
+          en: 'L3 - Senior Specialist',
+        }),
         color: '#4f46e5',
         sortOrder: 3,
         status: 1,
@@ -1585,7 +1598,10 @@ export class DevelopmentDataSeeder implements SeederContract {
         fieldKey: 'employee_level',
         value: 'L4',
         label: 'L4 - Lead / Principal',
-        labelsJson: JSON.stringify({ vi: 'L4 - Trưởng nhóm / Chuyên gia', en: 'L4 - Lead / Principal' }),
+        labelsJson: JSON.stringify({
+          vi: 'L4 - Trưởng nhóm / Chuyên gia',
+          en: 'L4 - Lead / Principal',
+        }),
         color: '#7c3aed',
         sortOrder: 4,
         status: 1,
@@ -1598,7 +1614,10 @@ export class DevelopmentDataSeeder implements SeederContract {
         fieldKey: 'employee_level',
         value: 'L5',
         label: 'L5 - Executive / Director',
-        labelsJson: JSON.stringify({ vi: 'L5 - Giám đốc / Điều hành', en: 'L5 - Executive / Director' }),
+        labelsJson: JSON.stringify({
+          vi: 'L5 - Giám đốc / Điều hành',
+          en: 'L5 - Executive / Director',
+        }),
         color: '#d97706',
         sortOrder: 5,
         status: 1,
@@ -1627,7 +1646,10 @@ export class DevelopmentDataSeeder implements SeederContract {
         fieldKey: 'region_tier',
         value: 'TIER_1',
         label: 'Tier 1 - Trung tâm Chiến lược',
-        labelsJson: JSON.stringify({ vi: 'Tier 1 - Trung tâm Chiến lược', en: 'Tier 1 - Strategic Hub' }),
+        labelsJson: JSON.stringify({
+          vi: 'Tier 1 - Trung tâm Chiến lược',
+          en: 'Tier 1 - Strategic Hub',
+        }),
         color: '#059669',
         sortOrder: 1,
         status: 1,
@@ -1653,7 +1675,10 @@ export class DevelopmentDataSeeder implements SeederContract {
         fieldKey: 'region_tier',
         value: 'TIER_3',
         label: 'Tier 3 - Đơn vị Vệ tinh',
-        labelsJson: JSON.stringify({ vi: 'Tier 3 - Đơn vị Vệ tinh', en: 'Tier 3 - Satellite Unit' }),
+        labelsJson: JSON.stringify({
+          vi: 'Tier 3 - Đơn vị Vệ tinh',
+          en: 'Tier 3 - Satellite Unit',
+        }),
         color: '#64748b',
         sortOrder: 3,
         status: 1,
@@ -1949,7 +1974,8 @@ export class DevelopmentDataSeeder implements SeederContract {
         }),
         changedFieldsJson: JSON.stringify(['dataType']),
         actorUserId: 2,
-        reason: 'Chặn đổi kiểu dữ liệu tùy tiện từ TEXT sang NUMBER để bảo toàn dữ liệu lịch sử (Mục 9.8.8)',
+        reason:
+          'Chặn đổi kiểu dữ liệu tùy tiện từ TEXT sang NUMBER để bảo toàn dữ liệu lịch sử (Mục 9.8.8)',
       },
     ];
 

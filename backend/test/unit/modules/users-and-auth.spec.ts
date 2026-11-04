@@ -60,42 +60,44 @@ import { UsersMapper } from '@modules/users/mappers/users.mapper.js';
 import { UsersService } from '@modules/users/services/users.service.js';
 import { UserImportService } from '@modules/users/import/index.js';
 import { UserExportService } from '@modules/users/export/index.js';
+import type { AuthSessionEntity } from '@modules/sessions/entities/auth-session.entity.js';
+import type { AuthLoginHistoryEntity } from '@modules/sessions/entities/auth-login-history.entity.js';
+import type { AuthSessionRepository } from '@modules/sessions/repositories/auth-session.repository.js';
+import type { AuthLoginHistoryRepository } from '@modules/sessions/repositories/auth-login-history.repository.js';
+import { SessionService } from '@modules/sessions/index.js';
+import type { AuthPasswordResetEntity } from '@modules/credentials/entities/auth-password-reset.entity.js';
+import type { AuthSecuritySettingEntity } from '@modules/credentials/entities/auth-security-setting.entity.js';
+import type { AuthPasswordResetRepository } from '@modules/credentials/repositories/auth-password-reset.repository.js';
+import type { AuthSecuritySettingRepository } from '@modules/credentials/repositories/auth-security-setting.repository.js';
 import {
-  API_CLIENT_STATUS,
   DB_ENCRYPTION_ALGO_CODE,
+  DefaultEmailNotificationAdapter,
+  DefaultSmsOtpProvider,
   MFA_METHOD,
   MFA_POLICY_CODE,
   PASSWORD_HASH_ALGO_CODE,
-  SERVICE_ACCOUNT_STATUS,
-} from '@modules/auth/contracts/index.js';
-import type { AuthSessionEntity } from '@modules/auth/entities/auth-session.entity.js';
-import type { AuthMfaConfigEntity } from '@modules/auth/entities/auth-mfa-config.entity.js';
-import type { AuthPasswordResetEntity } from '@modules/auth/entities/auth-password-reset.entity.js';
-import type { AuthSecuritySettingEntity } from '@modules/auth/entities/auth-security-setting.entity.js';
-import type { AuthVerificationCodeEntity } from '@modules/auth/entities/auth-verification-code.entity.js';
-import type { AuthServiceAccountEntity } from '@modules/auth/entities/auth-service-account.entity.js';
-import type { AuthApiClientEntity } from '@modules/auth/entities/auth-api-client.entity.js';
-import type { AuthLoginHistoryEntity } from '@modules/auth/entities/auth-login-history.entity.js';
-import type { AuthSessionRepository } from '@modules/auth/repositories/auth-session.repository.js';
-import type { AuthMfaConfigRepository } from '@modules/auth/repositories/auth-mfa-config.repository.js';
-import type { AuthPasswordResetRepository } from '@modules/auth/repositories/auth-password-reset.repository.js';
-import type { AuthSecuritySettingRepository } from '@modules/auth/repositories/auth-security-setting.repository.js';
-import type { AuthVerificationCodeRepository } from '@modules/auth/repositories/auth-verification-code.repository.js';
-import type { AuthServiceAccountRepository } from '@modules/auth/repositories/auth-service-account.repository.js';
-import type { AuthApiClientRepository } from '@modules/auth/repositories/auth-api-client.repository.js';
-import type { AuthLoginHistoryRepository } from '@modules/auth/repositories/auth-login-history.repository.js';
-import { SessionService } from '@modules/auth/services/session.service.js';
-import { PasswordService } from '@modules/auth/services/password.service.js';
-import { MfaService } from '@modules/auth/services/mfa.service.js';
+  PasswordService,
+  SecuritySettingsService,
+} from '@modules/credentials/index.js';
+import type { AuthMfaConfigEntity } from '@modules/mfa/entities/auth-mfa-config.entity.js';
+import type { AuthMfaConfigRepository } from '@modules/mfa/repositories/auth-mfa-config.repository.js';
+import { MfaService } from '@modules/mfa/index.js';
+import type { AuthServiceAccountEntity } from '@modules/machine-identities/entities/auth-service-account.entity.js';
+import type { AuthApiClientEntity } from '@modules/machine-identities/entities/auth-api-client.entity.js';
+import type { AuthServiceAccountRepository } from '@modules/machine-identities/repositories/auth-service-account.repository.js';
+import type { AuthApiClientRepository } from '@modules/machine-identities/repositories/auth-api-client.repository.js';
 import {
-  DefaultEmailNotificationAdapter,
-  DefaultSmsOtpProvider,
-} from '@modules/auth/services/notification-adapters.provider.js';
-import { SecuritySettingsService } from '@modules/auth/services/security-settings.service.js';
-import { VerificationService } from '@modules/auth/services/verification.service.js';
-import { ServiceAccountService } from '@modules/auth/services/service-account.service.js';
-import { UserIdentityResolverService } from '@modules/auth/services/user-identity-resolver.service.js';
-import { AuthService } from '@modules/auth/services/auth.service.js';
+  API_CLIENT_STATUS,
+  SERVICE_ACCOUNT_STATUS,
+  ServiceAccountService,
+} from '@modules/machine-identities/index.js';
+import type { AuthVerificationCodeEntity } from '@modules/auth/entities/auth-verification-code.entity.js';
+import type { AuthVerificationCodeRepository } from '@modules/auth/repositories/auth-verification-code.repository.js';
+import {
+  AuthService,
+  UserIdentityResolverService,
+  VerificationService,
+} from '@modules/auth/index.js';
 import {
   CODE_ITEM_STATUS,
   computeFeatureFlagRolloutBucket,
@@ -442,9 +444,15 @@ function createIamInMemoryHarness() {
         phone: partial.phone !== undefined ? partial.phone : (existing?.phone ?? null),
         phoneHash:
           partial.phoneHash !== undefined ? partial.phoneHash : (existing?.phoneHash ?? null),
-        passwordHash: partial.passwordHash ?? existing!.passwordHash,
+        passwordHash:
+          (partial as { passwordHash?: string }).passwordHash ??
+          (existing as { passwordHash?: string } | undefined)?.passwordHash ??
+          '',
         passwordHistoryHashesJson:
-          partial.passwordHistoryHashesJson ?? existing?.passwordHistoryHashesJson ?? '[]',
+          (partial as { passwordHistoryHashesJson?: string }).passwordHistoryHashesJson ??
+          (existing as { passwordHistoryHashesJson?: string } | undefined)
+            ?.passwordHistoryHashesJson ??
+          '[]',
         status: partial.status ?? existing?.status ?? USER_STATUS.ACTIVE,
         emailVerifiedAt:
           partial.emailVerifiedAt !== undefined

@@ -1,0 +1,15 @@
+{
+  "serviceAccountNotFound": "Không tìm thấy tài khoản hệ thống (Service Account)",
+  "serviceAccountCodeExists": "Mã tài khoản hệ thống ({code}) đã tồn tại",
+  "duplicateServiceAccountCode": "Mã tài khoản hệ thống (Service Account Code) đã tồn tại",
+  "serviceAccountInactive": "Tài khoản hệ thống đang bị vô hiệu hóa hoặc đã bị thu hồi",
+  "apiClientNotFound": "Không tìm thấy thông tin API Client",
+  "apiClientScopesRequired": "Vui lòng cung cấp ít nhất một phạm vi quyền (scope) cho API Client",
+  "invalidApiClientCredentials": "Thông tin Client ID hoặc Client Secret không chính xác",
+  "apiClientRevoked": "API Client này đã bị thu hồi và không còn hiệu lực sử dụng",
+  "apiClientExpired": "API Client này đã hết hạn hiệu lực sử dụng",
+  "apiClientIpDenied": "Địa chỉ IP ({ip}) không nằm trong danh sách IP được phép của API Client",
+  "apiClientIpNotAllowed": "Địa chỉ IP gọi đến không nằm trong danh sách IP được phép của API Client",
+  "apiClientScopeDenied": "Phạm vi quyền (scopes) yêu cầu không nằm trong phạm vi được cấp cho API Client",
+  "apiClientScopeExceeded": "Phạm vi quyền (scopes) yêu cầu vượt quá phạm vi được cấp cho API Client hoặc Service Account"
+}

@@ -22,6 +22,10 @@ import { OrganizationsModule } from '@modules/organizations/index.js';
 import { OrganizationMembersModule } from '@modules/organization-members/index.js';
 import { RolesModule } from '@modules/roles/index.js';
 import { UsersModule } from '@modules/users/index.js';
+import { SessionsModule } from '@modules/sessions/index.js';
+import { CredentialsModule } from '@modules/credentials/index.js';
+import { MfaModule } from '@modules/mfa/index.js';
+import { MachineIdentitiesModule } from '@modules/machine-identities/index.js';
 import { AuthModule } from '@modules/auth/index.js';
 import { CodesModule } from '@modules/codes/index.js';
 import { SettingsModule } from '@modules/settings/index.js';
@@ -67,6 +71,10 @@ import { MetricsModule } from '@packages/metrics/index.js';
     OrganizationMembersModule,
     RolesModule,
     UsersModule,
+    SessionsModule,
+    CredentialsModule,
+    MfaModule,
+    MachineIdentitiesModule,
     AuthModule,
     FilesModule,
     NotificationsModule,

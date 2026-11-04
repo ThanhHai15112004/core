@@ -272,6 +272,15 @@ export async function executeCreateUserRecordFlow(params: {
     reason?: string | null,
     changedBy?: number | null,
   ) => Promise<void>;
+  saveUserPasswordHash: (
+    userId: number,
+    passwordHash: string,
+    options?: {
+      readonly recordHistory?: boolean;
+      readonly maxHistory?: number;
+      readonly passwordChangedAt?: Date | null;
+    },
+  ) => Promise<void>;
   getById: (id: number) => Promise<UserResponse>;
   syncUserSearchDocumentSafe: (user: UserResponse, actorId?: number) => Promise<void>;
 }): Promise<UserResponse> {
@@ -291,6 +300,7 @@ export async function executeCreateUserRecordFlow(params: {
     encryptPhone,
     upsertUserProfile,
     recordStatusHistory,
+    saveUserPasswordHash,
     getById,
     syncUserSearchDocumentSafe,
   } = params;
@@ -338,7 +348,6 @@ export async function executeCreateUserRecordFlow(params: {
       email: normalizedEmail,
       phone: encryptedPhone,
       phoneHash,
-      passwordHash,
       status: initialStatus,
       failedLoginAttempts: 0,
       mfaEnabled: false,
@@ -355,10 +364,13 @@ export async function executeCreateUserRecordFlow(params: {
         dto.temporaryManagerId && dto.temporaryManagerUntil
           ? new Date(dto.temporaryManagerUntil)
           : null,
-      passwordChangedAt: new Date(),
     });
 
     const userId = Number(savedUser.id);
+    await saveUserPasswordHash(userId, passwordHash, {
+      recordHistory: false,
+      passwordChangedAt: new Date(),
+    });
     const preferredLocale = normalizePreferredLocaleOrThrow(dto.preferredLocale);
     const preferredTimezone = normalizePreferredTimezoneOrThrow(dto.preferredTimezone);
     await upsertUserProfile(userId, {

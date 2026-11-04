@@ -20,9 +20,6 @@ export class UserEntity extends VersionedTypeOrmEntity {
   @Column({ name: 'phone_hash', type: 'varchar', length: 64, nullable: true })
   public phoneHash?: string | null;
 
-  @Column({ name: 'password_hash', type: 'varchar', length: 255 })
-  public passwordHash!: string;
-
   /** Trạng thái: 1 = ACTIVE, 2 = INACTIVE, 3 = LOCKED, 4 = ARCHIVED */
   @Index()
   @Column({ type: 'int', default: USER_STATUS.ACTIVE })
@@ -63,12 +60,6 @@ export class UserEntity extends VersionedTypeOrmEntity {
 
   @Column({ name: 'temporary_manager_until', type: 'timestamp', nullable: true })
   public temporaryManagerUntil?: Date | null;
-
-  @Column({ name: 'password_changed_at', type: 'timestamp', nullable: true })
-  public passwordChangedAt?: Date | null;
-
-  @Column({ name: 'password_history_hashes_json', type: 'text', nullable: true })
-  public passwordHistoryHashesJson?: string | null;
 
   @Column({ name: 'last_login_at', type: 'timestamp', nullable: true })
   public lastLoginAt?: Date | null;

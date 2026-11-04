@@ -1,0 +1,106 @@
+{
+  "$schema": "../../packages/kernel/schemas/module.manifest.schema.json",
+  "name": "sessions",
+  "displayName": "Session & Token Management",
+  "version": "1.0.0",
+  "description": "Module quản lý phiên đăng nhập đa thiết bị, Access/Refresh Token rotation, tự động hết hạn, thu hồi từ xa và lịch sử đăng nhập/đăng xuất",
+  "type": "core",
+  "category": "core",
+  "author": "Core Platform Team",
+  "entryModule": "SessionsModule",
+  "dependencies": ["database", "redis", "security", "users"],
+  "permissions": [
+    "auth.sessions.manage"
+  ],
+  "events": {
+    "published": [
+      "auth.session_created",
+      "auth.session_revoked"
+    ],
+    "subscribed": []
+  },
+  "database": {
+    "hasMigrations": true,
+    "tables": [
+      "auth_sessions",
+      "auth_login_histories"
+    ]
+  },
+  "settings": [
+    {
+      "key": "security.session.idle_timeout_minutes",
+      "groupCode": "security",
+      "module": "auth",
+      "namespace": "auth.session",
+      "name": "Thời gian chờ phiên không hoạt động (phút)",
+      "description": "Tự động thu hồi phiên nếu người dùng không thao tác quá thời gian quy định",
+      "valueType": "NUMBER",
+      "defaultValue": 30,
+      "validationRules": { "min": 0, "max": 10080, "integerOnly": true },
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 7
+    },
+    {
+      "key": "security.session.max_lifetime_minutes",
+      "groupCode": "security",
+      "module": "auth",
+      "namespace": "auth.session",
+      "name": "Thời gian sống tối đa của phiên đăng nhập (phút)",
+      "description": "Tổng thời gian tối đa một phiên đăng nhập được phép duy trì kể từ lúc đăng nhập (bắt buộc đăng nhập lại khi chạm ngưỡng)",
+      "valueType": "NUMBER",
+      "defaultValue": 10080,
+      "validationRules": { "min": 5, "max": 43200, "integerOnly": true },
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 37
+    },
+    {
+      "key": "security.session.access_token_ttl_seconds",
+      "groupCode": "security",
+      "module": "auth",
+      "namespace": "auth.session",
+      "name": "Thời hạn Access Token (giây)",
+      "description": "Thời gian hiệu lực của JWT Access Token cấp cho phiên đăng nhập người dùng (mặc định 900 giây = 15 phút)",
+      "valueType": "NUMBER",
+      "defaultValue": 900,
+      "validationRules": { "min": 60, "max": 86400, "integerOnly": true },
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 38
+    },
+    {
+      "key": "security.session.refresh_token_ttl_seconds",
+      "groupCode": "security",
+      "module": "auth",
+      "namespace": "auth.session",
+      "name": "Thời hạn Refresh Token (giây)",
+      "description": "Thời gian hiệu lực của JWT Refresh Token cấp cho phiên đăng nhập người dùng (mặc định 604800 giây = 7 ngày)",
+      "valueType": "NUMBER",
+      "defaultValue": 604800,
+      "validationRules": { "min": 300, "max": 7776000, "integerOnly": true },
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 39
+    },
+    {
+      "key": "security.audit.enable_login_log",
+      "groupCode": "security",
+      "module": "auth",
+      "namespace": "auth.audit",
+      "name": "Ghi nhật ký lịch sử đăng nhập & sự kiện bảo mật",
+      "description": "Bật hoặc tắt việc ghi nhận lịch sử đăng nhập, đăng xuất và sự kiện bảo mật vào bảng auth_login_histories",
+      "valueType": "BOOLEAN",
+      "defaultValue": true,
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 40
+    }
+  ]
+}
+

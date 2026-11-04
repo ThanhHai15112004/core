@@ -192,7 +192,14 @@ export class FeatureFlagsService implements IFeatureFlagsPublicService, OnModule
     });
 
     const existingInRegistry = this.registry.getDefinition(key);
-    const existingInDb = this.flagRepository ? await this.flagRepository.findByKey(key) : null;
+    let existingInDb = null;
+    if (this.flagRepository) {
+      try {
+        existingInDb = await this.flagRepository.findByKey(key);
+      } catch {
+        existingInDb = null;
+      }
+    }
     if (existingInRegistry || existingInDb) {
       throw new ConflictAppException(
         `Feature flag "${key}" already exists.`,

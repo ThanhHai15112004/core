@@ -20,7 +20,10 @@ import {
   AUTH_SMS_OTP_PROVIDER,
   type IEmailNotificationAdapter,
   type ISmsOtpProvider,
-} from '../contracts/index.js';
+  SecuritySettingsService,
+  createDefaultEmailNotificationAdapter,
+  createDefaultSmsOtpProvider,
+} from '@modules/credentials/index.js';
 import {
   type AuthVerificationCodeEntity,
   VERIFICATION_CHANNEL,
@@ -29,11 +32,6 @@ import {
   type VerificationPurposeCode,
 } from '../entities/auth-verification-code.entity.js';
 import { AuthVerificationCodeRepository } from '../repositories/auth-verification-code.repository.js';
-import { SecuritySettingsService } from './security-settings.service.js';
-import {
-  createDefaultEmailNotificationAdapter,
-  createDefaultSmsOtpProvider,
-} from './notification-adapters.provider.js';
 import type {
   ConfirmEmailVerificationRequest,
   ConfirmPhoneOtpVerificationRequest,
@@ -44,7 +42,6 @@ import type {
   VerificationConfirmResponse,
   VerificationSendResponse,
 } from '../responses/auth.response.js';
-
 import {
   DEFAULT_OTP_COOLDOWN_SECONDS,
   DEFAULT_OTP_MAX_ATTEMPTS,

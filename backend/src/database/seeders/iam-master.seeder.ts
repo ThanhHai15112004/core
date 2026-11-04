@@ -477,16 +477,14 @@ export const STANDARD_IAM_PERMISSIONS: readonly SeedPermissionDef[] = [
     code: 'custom-fields.sensitive.read',
     name: 'Xem giá trị trường tùy chỉnh nhạy cảm (Sensitive Field Read)',
     module: 'custom-fields',
-    description:
-      'Quyền xem các trường tùy chỉnh được đánh dấu nhạy cảm (isSensitive = true)',
+    description: 'Quyền xem các trường tùy chỉnh được đánh dấu nhạy cảm (isSensitive = true)',
   },
   {
     id: 45,
     code: 'custom-fields.sensitive.write',
     name: 'Sửa giá trị trường tùy chỉnh nhạy cảm (Sensitive Field Write)',
     module: 'custom-fields',
-    description:
-      'Quyền chỉnh sửa các trường tùy chỉnh được đánh dấu nhạy cảm (isSensitive = true)',
+    description: 'Quyền chỉnh sửa các trường tùy chỉnh được đánh dấu nhạy cảm (isSensitive = true)',
   },
 ] as const;
 
@@ -928,20 +926,25 @@ export class IamMasterSeeder implements SeederContract {
 
       if (isPostgres) {
         await ctx.manager.query(
-          `INSERT INTO users (id, username, email, phone, phone_hash, password_hash, status, email_verified_at, phone_verified_at, primary_organization_unit_id, manager_id, version)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, $8, $9, 1)
-           ON CONFLICT (username) DO UPDATE SET email = EXCLUDED.email, phone = EXCLUDED.phone, phone_hash = EXCLUDED.phone_hash, password_hash = EXCLUDED.password_hash, manager_id = EXCLUDED.manager_id`,
+          `INSERT INTO users (id, username, email, phone, phone_hash, status, email_verified_at, phone_verified_at, primary_organization_unit_id, manager_id, version)
+           VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, $7, $8, 1)
+           ON CONFLICT (username) DO UPDATE SET email = EXCLUDED.email, phone = EXCLUDED.phone, phone_hash = EXCLUDED.phone_hash, manager_id = EXCLUDED.manager_id`,
           [
             acc.id,
             acc.username,
             acc.email,
             acc.phone,
             phoneHash,
-            privilegedPasswordHash,
             USER_STATUS.ACTIVE,
             primaryOrg.id,
             acc.managerId,
           ],
+        );
+        await ctx.manager.query(
+          `INSERT INTO user_credentials (user_id, password_hash, password_changed_at)
+           VALUES ($1, $2, CURRENT_TIMESTAMP)
+           ON CONFLICT (user_id) DO UPDATE SET password_hash = EXCLUDED.password_hash`,
+          [acc.id, privilegedPasswordHash],
         );
         await ctx.manager.query(
           `INSERT INTO user_profiles (user_id, first_name, last_name, full_name, city, country)
@@ -951,20 +954,25 @@ export class IamMasterSeeder implements SeederContract {
         );
       } else {
         await ctx.manager.query(
-          `INSERT INTO users (id, username, email, phone, phone_hash, password_hash, status, email_verified_at, phone_verified_at, primary_organization_unit_id, manager_id, version)
-           VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?, ?, 1)
-           ON DUPLICATE KEY UPDATE email = VALUES(email), phone = VALUES(phone), phone_hash = VALUES(phone_hash), password_hash = VALUES(password_hash), manager_id = VALUES(manager_id)`,
+          `INSERT INTO users (id, username, email, phone, phone_hash, status, email_verified_at, phone_verified_at, primary_organization_unit_id, manager_id, version)
+           VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?, ?, 1)
+           ON DUPLICATE KEY UPDATE email = VALUES(email), phone = VALUES(phone), phone_hash = VALUES(phone_hash), manager_id = VALUES(manager_id)`,
           [
             acc.id,
             acc.username,
             acc.email,
             acc.phone,
             phoneHash,
-            privilegedPasswordHash,
             USER_STATUS.ACTIVE,
             primaryOrg.id,
             acc.managerId,
           ],
+        );
+        await ctx.manager.query(
+          `INSERT INTO user_credentials (user_id, password_hash, password_changed_at)
+           VALUES (?, ?, CURRENT_TIMESTAMP)
+           ON DUPLICATE KEY UPDATE password_hash = VALUES(password_hash)`,
+          [acc.id, privilegedPasswordHash],
         );
         await ctx.manager.query(
           `INSERT INTO user_profiles (user_id, first_name, last_name, full_name, city, country)

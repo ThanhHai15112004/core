@@ -1,0 +1,11 @@
+{
+  "sessionRevoked": "Phiên đăng nhập đã bị thu hồi. Vui lòng đăng nhập lại",
+  "sessionExpired": "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại",
+  "sessionIdleExpired": "Phiên đăng nhập đã hết hạn do không hoạt động. Vui lòng đăng nhập lại",
+  "sessionNotFound": "Không tìm thấy phiên đăng nhập #{sessionId}",
+  "refreshTokenReused": "Phát hiện sử dụng lại Refresh Token cũ, phiên đăng nhập đã bị thu hồi để bảo mật",
+  "invalidRefreshToken": "Mã làm mới phiên (Refresh Token) không hợp lệ hoặc đã hết hạn",
+  "sessionExpiredOrRevoked": "Phiên đăng nhập đã hết hạn hoặc đã bị thu hồi",
+  "userNotFound": "Không tìm thấy thông tin người dùng",
+  "accountNotActive": "Tài khoản không ở trạng thái hoạt động hợp lệ"
+}

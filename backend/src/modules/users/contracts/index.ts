@@ -252,6 +252,27 @@ export interface UserNotificationContactView {
   readonly primaryOrganizationUnitId: number | null;
 }
 
+export interface UserCredentialRecordView {
+  readonly userId: number;
+  readonly passwordHash: string;
+  readonly passwordChangedAt: Date | null;
+  readonly passwordHistoryHashes: readonly string[];
+}
+
+export interface IUserCredentialStoreDelegate {
+  getByUserId(userId: number): Promise<UserCredentialRecordView | null>;
+  getByUserIds?(userIds: readonly number[]): Promise<ReadonlyMap<number, UserCredentialRecordView>>;
+  saveUserPasswordHash(
+    userId: number,
+    passwordHash: string,
+    options?: {
+      readonly recordHistory?: boolean;
+      readonly maxHistory?: number;
+      readonly passwordChangedAt?: Date | null;
+    },
+  ): Promise<void>;
+}
+
 export interface IUsersPublicService {
   findAuthUserByIdentifier(identifier: string): Promise<UserAuthCredentialsView | null>;
   findAuthCredentialsByUserId?(userId: number): Promise<UserAuthCredentialsView | null>;
@@ -300,6 +321,7 @@ export interface IUsersPublicService {
   registerStepUpVerificationDelegate?(
     delegate: (userId: number, stepUpToken: string, action?: string) => Promise<boolean>,
   ): void;
+  registerUserCredentialStoreDelegate?(delegate: IUserCredentialStoreDelegate): void;
   findActiveUserIdsByIds?(userIds: readonly number[]): Promise<number[]>;
   findActiveUserIdsByRoleIds?(roleIds: readonly number[]): Promise<number[]>;
   findActiveUserIdsByOrganizationUnitIds?(unitIds: readonly number[]): Promise<number[]>;

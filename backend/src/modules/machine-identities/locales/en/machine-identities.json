@@ -1,0 +1,15 @@
+{
+  "serviceAccountNotFound": "Service account not found",
+  "serviceAccountCodeExists": "Service account code ({code}) already exists",
+  "duplicateServiceAccountCode": "Service account code already exists",
+  "serviceAccountInactive": "Service account is inactive or revoked",
+  "apiClientNotFound": "API client not found",
+  "apiClientScopesRequired": "At least one scope is required for the API client",
+  "invalidApiClientCredentials": "Invalid Client ID or Client Secret",
+  "apiClientRevoked": "This API client has been revoked and is no longer valid",
+  "apiClientExpired": "This API client has expired",
+  "apiClientIpDenied": "Caller IP address ({ip}) is not in the allowed IP whitelist for this API client",
+  "apiClientIpNotAllowed": "Caller IP address is not in the allowed IP whitelist for this API client",
+  "apiClientScopeDenied": "Requested scopes are not permitted for this API client",
+  "apiClientScopeExceeded": "Requested scopes exceed the scopes granted to the API client or service account"
+}

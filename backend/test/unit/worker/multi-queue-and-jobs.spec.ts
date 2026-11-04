@@ -39,7 +39,7 @@ import { CriticalProcessor } from '@apps/worker/processors/critical/critical.pro
 import { NotificationsProcessor } from '@apps/worker/processors/notifications/notifications.processor.js';
 import { HeavyJobProcessor } from '@apps/worker/processors/heavy/heavy-job.processor.js';
 import { SystemProcessor } from '@apps/worker/processors/system/system.processor.js';
-import { DefaultEmailNotificationAdapter } from '@modules/auth/index.js';
+import { DefaultEmailNotificationAdapter } from '@modules/credentials/index.js';
 import { UserImportService, type UsersService } from '@modules/users/index.js';
 import type { FilesService } from '@modules/files/index.js';
 import type { NotificationChannelsService } from '@modules/notifications/index.js';

@@ -184,6 +184,285 @@ export class MasterPermissionSeeder implements SeederContract {
       )
     `);
 
+    await ctx.manager.query(`
+      CREATE TABLE IF NOT EXISTS setting_groups (
+        id ${pkDef},
+        code VARCHAR(64) NOT NULL UNIQUE,
+        module VARCHAR(64) NOT NULL DEFAULT 'settings',
+        name VARCHAR(255) NOT NULL,
+        description TEXT NULL,
+        icon VARCHAR(64) NULL,
+        sort_order INT NOT NULL DEFAULT 0,
+        is_system BOOLEAN NOT NULL DEFAULT TRUE,
+        status INT NOT NULL DEFAULT 1,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        deleted_at TIMESTAMP NULL
+      )
+    `);
+
+    await ctx.manager.query(`
+      CREATE TABLE IF NOT EXISTS system_settings (
+        id ${pkDef},
+        setting_key VARCHAR(150) NOT NULL UNIQUE,
+        group_id INT NOT NULL,
+        module VARCHAR(64) NOT NULL,
+        namespace VARCHAR(120) NOT NULL,
+        name VARCHAR(255) NOT NULL,
+        description TEXT NULL,
+        value_type INT NOT NULL DEFAULT 1,
+        default_value TEXT NOT NULL,
+        global_value TEXT NOT NULL,
+        validation_rules_json TEXT NULL,
+        is_sensitive BOOLEAN NOT NULL DEFAULT FALSE,
+        is_encrypted BOOLEAN NOT NULL DEFAULT FALSE,
+        allow_unit_override BOOLEAN NOT NULL DEFAULT TRUE,
+        is_system BOOLEAN NOT NULL DEFAULT TRUE,
+        sort_order INT NOT NULL DEFAULT 0,
+        status INT NOT NULL DEFAULT 1,
+        updated_by INT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        deleted_at TIMESTAMP NULL
+      )
+    `);
+
+    await ctx.manager.query(`
+      CREATE TABLE IF NOT EXISTS system_setting_scopes (
+        id ${pkDef},
+        setting_id INT NOT NULL,
+        environment INT NOT NULL DEFAULT 1,
+        organization_unit_id INT NULL,
+        setting_value TEXT NOT NULL,
+        is_encrypted BOOLEAN NOT NULL DEFAULT FALSE,
+        updated_by INT NULL,
+        reason VARCHAR(500) NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        deleted_at TIMESTAMP NULL
+      )
+    `);
+
+    await ctx.manager.query(`
+      CREATE TABLE IF NOT EXISTS system_setting_histories (
+        id ${pkDef},
+        setting_id INT NOT NULL,
+        environment INT NOT NULL DEFAULT 1,
+        organization_unit_id INT NULL,
+        value_type INT NOT NULL DEFAULT 1,
+        old_value TEXT NULL,
+        new_value TEXT NOT NULL,
+        actor_user_id INT NULL,
+        actor_identifier VARCHAR(150) NULL,
+        reason VARCHAR(500) NULL,
+        ip_address VARCHAR(64) NULL,
+        user_agent VARCHAR(255) NULL,
+        request_id VARCHAR(128) NULL,
+        correlation_id VARCHAR(128) NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        deleted_at TIMESTAMP NULL
+      )
+    `);
+
+    await ctx.manager.query(`
+      CREATE TABLE IF NOT EXISTS feature_flags (
+        id ${pkDef},
+        flag_key VARCHAR(150) NOT NULL UNIQUE,
+        module VARCHAR(64) NOT NULL,
+        name VARCHAR(255) NOT NULL,
+        description TEXT NOT NULL,
+        is_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+        rollout_percentage INT NOT NULL DEFAULT 100,
+        target_user_ids_json TEXT NOT NULL,
+        target_roles_json TEXT NOT NULL,
+        target_org_unit_ids_json TEXT NOT NULL,
+        starts_at TIMESTAMP NULL,
+        ends_at TIMESTAMP NULL,
+        metadata_json TEXT NULL,
+        is_system BOOLEAN NOT NULL DEFAULT TRUE,
+        status INT NOT NULL DEFAULT 1,
+        updated_by INT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        deleted_at TIMESTAMP NULL
+      )
+    `);
+
+    await ctx.manager.query(`
+      CREATE TABLE IF NOT EXISTS feature_flag_histories (
+        id ${pkDef},
+        flag_id INT NOT NULL,
+        flag_key VARCHAR(150) NOT NULL,
+        action VARCHAR(32) NOT NULL,
+        old_state_json TEXT NULL,
+        new_state_json TEXT NOT NULL,
+        actor_user_id INT NULL,
+        actor_identifier VARCHAR(150) NULL,
+        reason VARCHAR(500) NULL,
+        ip_address VARCHAR(64) NULL,
+        user_agent VARCHAR(255) NULL,
+        request_id VARCHAR(128) NULL,
+        correlation_id VARCHAR(128) NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        deleted_at TIMESTAMP NULL
+      )
+    `);
+
+    await ctx.manager.query(`
+      CREATE TABLE IF NOT EXISTS i18n_locales (
+        id ${pkDef},
+        code VARCHAR(16) NOT NULL UNIQUE,
+        bcp47_tag VARCHAR(32) NOT NULL,
+        name VARCHAR(100) NOT NULL,
+        native_name VARCHAR(100) NOT NULL,
+        direction VARCHAR(8) NOT NULL DEFAULT 'ltr',
+        date_format VARCHAR(32) NOT NULL DEFAULT 'dd/MM/yyyy',
+        datetime_format VARCHAR(64) NOT NULL DEFAULT 'dd/MM/yyyy HH:mm:ss',
+        currency_code VARCHAR(8) NOT NULL DEFAULT 'VND',
+        number_decimal_separator VARCHAR(4) NOT NULL DEFAULT ',',
+        number_group_separator VARCHAR(4) NOT NULL DEFAULT '.',
+        is_default BOOLEAN NOT NULL DEFAULT FALSE,
+        is_system BOOLEAN NOT NULL DEFAULT TRUE,
+        sort_order INT NOT NULL DEFAULT 0,
+        status INT NOT NULL DEFAULT 1,
+        updated_by INT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        deleted_at TIMESTAMP NULL
+      )
+    `);
+
+    await ctx.manager.query(`
+      CREATE TABLE IF NOT EXISTS i18n_timezones (
+        id ${pkDef},
+        code VARCHAR(64) NOT NULL UNIQUE,
+        name VARCHAR(150) NOT NULL,
+        labels_json TEXT NULL,
+        utc_offset VARCHAR(16) NOT NULL,
+        utc_offset_minutes INT NOT NULL DEFAULT 0,
+        region VARCHAR(64) NOT NULL DEFAULT 'Asia',
+        is_default BOOLEAN NOT NULL DEFAULT FALSE,
+        is_system BOOLEAN NOT NULL DEFAULT TRUE,
+        sort_order INT NOT NULL DEFAULT 0,
+        status INT NOT NULL DEFAULT 1,
+        updated_by INT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        deleted_at TIMESTAMP NULL
+      )
+    `);
+
+    await ctx.manager.query(`
+      CREATE TABLE IF NOT EXISTS i18n_translations (
+        id ${pkDef},
+        locale VARCHAR(16) NOT NULL,
+        namespace VARCHAR(64) NOT NULL DEFAULT 'common',
+        translation_key VARCHAR(191) NOT NULL,
+        translation_value TEXT NOT NULL,
+        description VARCHAR(255) NULL,
+        is_system BOOLEAN NOT NULL DEFAULT TRUE,
+        status INT NOT NULL DEFAULT 1,
+        updated_by INT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        deleted_at TIMESTAMP NULL,
+        CONSTRAINT uq_i18n_translations_locale_key UNIQUE (locale, translation_key)
+      )
+    `);
+
+    await ctx.manager.query(`
+      CREATE TABLE IF NOT EXISTS sequence_rules (
+        id ${pkDef},
+        sequence_key VARCHAR(150) NOT NULL UNIQUE,
+        module VARCHAR(64) NOT NULL,
+        name VARCHAR(255) NOT NULL,
+        description TEXT NULL,
+        prefix VARCHAR(32) NOT NULL DEFAULT '',
+        suffix VARCHAR(32) NOT NULL DEFAULT '',
+        separator_char VARCHAR(8) NOT NULL DEFAULT '-',
+        date_format INT NOT NULL DEFAULT 1,
+        template_pattern VARCHAR(255) NULL,
+        padding_length INT NOT NULL DEFAULT 6,
+        start_value BIGINT NOT NULL DEFAULT 1,
+        step INT NOT NULL DEFAULT 1,
+        reset_policy INT NOT NULL DEFAULT 2,
+        scope_by_unit BOOLEAN NOT NULL DEFAULT FALSE,
+        timezone VARCHAR(64) NOT NULL DEFAULT 'Asia/Ho_Chi_Minh',
+        is_system BOOLEAN NOT NULL DEFAULT TRUE,
+        status INT NOT NULL DEFAULT 1,
+        updated_by INT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        deleted_at TIMESTAMP NULL
+      )
+    `);
+
+    await ctx.manager.query(`
+      CREATE TABLE IF NOT EXISTS sequence_counters (
+        id ${pkDef},
+        sequence_id INT NOT NULL,
+        sequence_key VARCHAR(150) NOT NULL,
+        period_key VARCHAR(32) NOT NULL DEFAULT 'ALL',
+        organization_unit_id INT NULL,
+        unit_scope_key VARCHAR(64) NOT NULL DEFAULT 'GLOBAL',
+        current_value BIGINT NOT NULL DEFAULT 0,
+        version INT NOT NULL DEFAULT 1,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        deleted_at TIMESTAMP NULL,
+        CONSTRAINT uq_sequence_counters_scope UNIQUE (sequence_id, period_key, unit_scope_key)
+      )
+    `);
+
+    await ctx.manager.query(`
+      CREATE TABLE IF NOT EXISTS sequence_rule_histories (
+        id ${pkDef},
+        sequence_id INT NOT NULL,
+        sequence_key VARCHAR(150) NOT NULL,
+        action VARCHAR(32) NOT NULL,
+        old_state_json TEXT NULL,
+        new_state_json TEXT NOT NULL,
+        actor_user_id INT NULL,
+        actor_identifier VARCHAR(150) NULL,
+        reason VARCHAR(500) NULL,
+        ip_address VARCHAR(64) NULL,
+        user_agent VARCHAR(255) NULL,
+        request_id VARCHAR(128) NULL,
+        correlation_id VARCHAR(128) NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        deleted_at TIMESTAMP NULL
+      )
+    `);
+
+    const menuKeyCol = isPostgres ? '"key"' : '`key`';
+    await ctx.manager.query(`
+      CREATE TABLE IF NOT EXISTS menus (
+        id ${pkDef},
+        code VARCHAR(100) NOT NULL UNIQUE,
+        name VARCHAR(255) NOT NULL,
+        status INT NOT NULL DEFAULT 1,
+        link VARCHAR(255) NULL,
+        link_api VARCHAR(255) NULL,
+        type INT NOT NULL DEFAULT 1,
+        parent INT NULL,
+        level INT NOT NULL DEFAULT 1,
+        ${menuKeyCol} VARCHAR(150) NULL,
+        num_order INT NOT NULL DEFAULT 0,
+        icon VARCHAR(64) NULL,
+        position VARCHAR(32) NOT NULL DEFAULT 'SIDEBAR',
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        deleted_at TIMESTAMP NULL
+      )
+    `);
+
+    if (!isPostgres) {
+      await ctx.manager.query('START TRANSACTION');
+    }
+
     let affected = 0;
 
     for (const perm of this.permissions) {
@@ -387,87 +666,6 @@ export class MasterPermissionSeeder implements SeederContract {
         affected++;
       }
     }
-
-    await ctx.manager.query(`
-      CREATE TABLE IF NOT EXISTS setting_groups (
-        id ${pkDef},
-        code VARCHAR(64) NOT NULL UNIQUE,
-        module VARCHAR(64) NOT NULL DEFAULT 'settings',
-        name VARCHAR(255) NOT NULL,
-        description TEXT NULL,
-        icon VARCHAR(64) NULL,
-        sort_order INT NOT NULL DEFAULT 0,
-        is_system BOOLEAN NOT NULL DEFAULT TRUE,
-        status INT NOT NULL DEFAULT 1,
-        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        deleted_at TIMESTAMP NULL
-      )
-    `);
-
-    await ctx.manager.query(`
-      CREATE TABLE IF NOT EXISTS system_settings (
-        id ${pkDef},
-        setting_key VARCHAR(150) NOT NULL UNIQUE,
-        group_id INT NOT NULL,
-        module VARCHAR(64) NOT NULL,
-        namespace VARCHAR(120) NOT NULL,
-        name VARCHAR(255) NOT NULL,
-        description TEXT NULL,
-        value_type INT NOT NULL DEFAULT 1,
-        default_value TEXT NOT NULL,
-        global_value TEXT NOT NULL,
-        validation_rules_json TEXT NULL,
-        is_sensitive BOOLEAN NOT NULL DEFAULT FALSE,
-        is_encrypted BOOLEAN NOT NULL DEFAULT FALSE,
-        allow_unit_override BOOLEAN NOT NULL DEFAULT TRUE,
-        is_system BOOLEAN NOT NULL DEFAULT TRUE,
-        sort_order INT NOT NULL DEFAULT 0,
-        status INT NOT NULL DEFAULT 1,
-        updated_by INT NULL,
-        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        deleted_at TIMESTAMP NULL
-      )
-    `);
-
-    await ctx.manager.query(`
-      CREATE TABLE IF NOT EXISTS system_setting_scopes (
-        id ${pkDef},
-        setting_id INT NOT NULL,
-        environment INT NOT NULL DEFAULT 1,
-        organization_unit_id INT NULL,
-        setting_value TEXT NOT NULL,
-        is_encrypted BOOLEAN NOT NULL DEFAULT FALSE,
-        updated_by INT NULL,
-        reason VARCHAR(500) NULL,
-        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        deleted_at TIMESTAMP NULL
-      )
-    `);
-
-    await ctx.manager.query(`
-      CREATE TABLE IF NOT EXISTS system_setting_histories (
-        id ${pkDef},
-        setting_id INT NOT NULL,
-        environment INT NOT NULL DEFAULT 1,
-        organization_unit_id INT NULL,
-        value_type INT NOT NULL DEFAULT 1,
-        old_value TEXT NULL,
-        new_value TEXT NOT NULL,
-        actor_user_id INT NULL,
-        actor_identifier VARCHAR(150) NULL,
-        reason VARCHAR(500) NULL,
-        ip_address VARCHAR(64) NULL,
-        user_agent VARCHAR(255) NULL,
-        request_id VARCHAR(128) NULL,
-        correlation_id VARCHAR(128) NULL,
-        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        deleted_at TIMESTAMP NULL
-      )
-    `);
 
     const discoveredSettings = discoverManifestSettings();
     const mergedSettingGroups = new Map<string, SettingGroupManifestItem>();
@@ -681,51 +879,6 @@ export class MasterPermissionSeeder implements SeederContract {
       }
     }
 
-    await ctx.manager.query(`
-      CREATE TABLE IF NOT EXISTS feature_flags (
-        id ${pkDef},
-        flag_key VARCHAR(150) NOT NULL UNIQUE,
-        module VARCHAR(64) NOT NULL,
-        name VARCHAR(255) NOT NULL,
-        description TEXT NOT NULL,
-        is_enabled BOOLEAN NOT NULL DEFAULT FALSE,
-        rollout_percentage INT NOT NULL DEFAULT 100,
-        target_user_ids_json TEXT NOT NULL,
-        target_roles_json TEXT NOT NULL,
-        target_org_unit_ids_json TEXT NOT NULL,
-        starts_at TIMESTAMP NULL,
-        ends_at TIMESTAMP NULL,
-        metadata_json TEXT NULL,
-        is_system BOOLEAN NOT NULL DEFAULT TRUE,
-        status INT NOT NULL DEFAULT 1,
-        updated_by INT NULL,
-        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        deleted_at TIMESTAMP NULL
-      )
-    `);
-
-    await ctx.manager.query(`
-      CREATE TABLE IF NOT EXISTS feature_flag_histories (
-        id ${pkDef},
-        flag_id INT NOT NULL,
-        flag_key VARCHAR(150) NOT NULL,
-        action VARCHAR(32) NOT NULL,
-        old_state_json TEXT NULL,
-        new_state_json TEXT NOT NULL,
-        actor_user_id INT NULL,
-        actor_identifier VARCHAR(150) NULL,
-        reason VARCHAR(500) NULL,
-        ip_address VARCHAR(64) NULL,
-        user_agent VARCHAR(255) NULL,
-        request_id VARCHAR(128) NULL,
-        correlation_id VARCHAR(128) NULL,
-        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        deleted_at TIMESTAMP NULL
-      )
-    `);
-
     const mergedFeatureFlags = new Map<string, FeatureFlagManifestItem>();
     for (const item of discoverManifestFeatureFlags()) {
       mergedFeatureFlags.set(item.key.trim().toLowerCase(), item);
@@ -808,68 +961,6 @@ export class MasterPermissionSeeder implements SeederContract {
       featureFlagsSeeded++;
       affected++;
     }
-
-    await ctx.manager.query(`
-      CREATE TABLE IF NOT EXISTS i18n_locales (
-        id ${pkDef},
-        code VARCHAR(16) NOT NULL UNIQUE,
-        bcp47_tag VARCHAR(32) NOT NULL,
-        name VARCHAR(100) NOT NULL,
-        native_name VARCHAR(100) NOT NULL,
-        direction VARCHAR(8) NOT NULL DEFAULT 'ltr',
-        date_format VARCHAR(32) NOT NULL DEFAULT 'dd/MM/yyyy',
-        datetime_format VARCHAR(64) NOT NULL DEFAULT 'dd/MM/yyyy HH:mm:ss',
-        currency_code VARCHAR(8) NOT NULL DEFAULT 'VND',
-        number_decimal_separator VARCHAR(4) NOT NULL DEFAULT ',',
-        number_group_separator VARCHAR(4) NOT NULL DEFAULT '.',
-        is_default BOOLEAN NOT NULL DEFAULT FALSE,
-        is_system BOOLEAN NOT NULL DEFAULT TRUE,
-        sort_order INT NOT NULL DEFAULT 0,
-        status INT NOT NULL DEFAULT 1,
-        updated_by INT NULL,
-        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        deleted_at TIMESTAMP NULL
-      )
-    `);
-
-    await ctx.manager.query(`
-      CREATE TABLE IF NOT EXISTS i18n_timezones (
-        id ${pkDef},
-        code VARCHAR(64) NOT NULL UNIQUE,
-        name VARCHAR(150) NOT NULL,
-        labels_json TEXT NULL,
-        utc_offset VARCHAR(16) NOT NULL,
-        utc_offset_minutes INT NOT NULL DEFAULT 0,
-        region VARCHAR(64) NOT NULL DEFAULT 'Asia',
-        is_default BOOLEAN NOT NULL DEFAULT FALSE,
-        is_system BOOLEAN NOT NULL DEFAULT TRUE,
-        sort_order INT NOT NULL DEFAULT 0,
-        status INT NOT NULL DEFAULT 1,
-        updated_by INT NULL,
-        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        deleted_at TIMESTAMP NULL
-      )
-    `);
-
-    await ctx.manager.query(`
-      CREATE TABLE IF NOT EXISTS i18n_translations (
-        id ${pkDef},
-        locale VARCHAR(16) NOT NULL,
-        namespace VARCHAR(64) NOT NULL DEFAULT 'common',
-        translation_key VARCHAR(191) NOT NULL,
-        translation_value TEXT NOT NULL,
-        description VARCHAR(255) NULL,
-        is_system BOOLEAN NOT NULL DEFAULT TRUE,
-        status INT NOT NULL DEFAULT 1,
-        updated_by INT NULL,
-        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        deleted_at TIMESTAMP NULL,
-        CONSTRAINT uq_i18n_translations_locale_key UNIQUE (locale, translation_key)
-      )
-    `);
 
     const discoveredI18n = discoverManifestI18n();
     const mergedLocales = new Map<string, I18nLocaleManifestItem>();
@@ -1088,71 +1179,6 @@ export class MasterPermissionSeeder implements SeederContract {
     }
 
     // 7. Đồng bộ Quy tắc Sinh mã Nghiệp vụ (Mục 5.5 — sequence_rules, sequence_counters, sequence_rule_histories)
-    await ctx.manager.query(`
-      CREATE TABLE IF NOT EXISTS sequence_rules (
-        id ${pkDef},
-        sequence_key VARCHAR(150) NOT NULL UNIQUE,
-        module VARCHAR(64) NOT NULL,
-        name VARCHAR(255) NOT NULL,
-        description TEXT NULL,
-        prefix VARCHAR(32) NOT NULL DEFAULT '',
-        suffix VARCHAR(32) NOT NULL DEFAULT '',
-        separator_char VARCHAR(8) NOT NULL DEFAULT '-',
-        date_format INT NOT NULL DEFAULT 1,
-        template_pattern VARCHAR(255) NULL,
-        padding_length INT NOT NULL DEFAULT 6,
-        start_value BIGINT NOT NULL DEFAULT 1,
-        step INT NOT NULL DEFAULT 1,
-        reset_policy INT NOT NULL DEFAULT 2,
-        scope_by_unit BOOLEAN NOT NULL DEFAULT FALSE,
-        timezone VARCHAR(64) NOT NULL DEFAULT 'Asia/Ho_Chi_Minh',
-        is_system BOOLEAN NOT NULL DEFAULT TRUE,
-        status INT NOT NULL DEFAULT 1,
-        updated_by INT NULL,
-        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        deleted_at TIMESTAMP NULL
-      )
-    `);
-
-    await ctx.manager.query(`
-      CREATE TABLE IF NOT EXISTS sequence_counters (
-        id ${pkDef},
-        sequence_id INT NOT NULL,
-        sequence_key VARCHAR(150) NOT NULL,
-        period_key VARCHAR(32) NOT NULL DEFAULT 'ALL',
-        organization_unit_id INT NULL,
-        unit_scope_key VARCHAR(64) NOT NULL DEFAULT 'GLOBAL',
-        current_value BIGINT NOT NULL DEFAULT 0,
-        version INT NOT NULL DEFAULT 1,
-        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        deleted_at TIMESTAMP NULL,
-        CONSTRAINT uq_sequence_counters_scope UNIQUE (sequence_id, period_key, unit_scope_key)
-      )
-    `);
-
-    await ctx.manager.query(`
-      CREATE TABLE IF NOT EXISTS sequence_rule_histories (
-        id ${pkDef},
-        sequence_id INT NOT NULL,
-        sequence_key VARCHAR(150) NOT NULL,
-        action VARCHAR(32) NOT NULL,
-        old_state_json TEXT NULL,
-        new_state_json TEXT NOT NULL,
-        actor_user_id INT NULL,
-        actor_identifier VARCHAR(150) NULL,
-        reason VARCHAR(500) NULL,
-        ip_address VARCHAR(64) NULL,
-        user_agent VARCHAR(255) NULL,
-        request_id VARCHAR(128) NULL,
-        correlation_id VARCHAR(128) NULL,
-        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        deleted_at TIMESTAMP NULL
-      )
-    `);
-
     const discoveredSequences: SequenceManifestItem[] = discoverManifestSequences();
     let sequencesSeeded = 0;
     for (const seq of discoveredSequences) {
@@ -1244,28 +1270,6 @@ export class MasterPermissionSeeder implements SeederContract {
     }
 
     // 8. Đồng bộ Cấu trúc Menu & Điều hướng Động (Mục 5.6 — bảng menus duy nhất)
-    const menuKeyCol = isPostgres ? '"key"' : '`key`';
-    await ctx.manager.query(`
-      CREATE TABLE IF NOT EXISTS menus (
-        id ${pkDef},
-        code VARCHAR(100) NOT NULL UNIQUE,
-        name VARCHAR(255) NOT NULL,
-        status INT NOT NULL DEFAULT 1,
-        link VARCHAR(255) NULL,
-        link_api VARCHAR(255) NULL,
-        type INT NOT NULL DEFAULT 1,
-        parent INT NULL,
-        level INT NOT NULL DEFAULT 1,
-        ${menuKeyCol} VARCHAR(150) NULL,
-        num_order INT NOT NULL DEFAULT 0,
-        icon VARCHAR(64) NULL,
-        position VARCHAR(32) NOT NULL DEFAULT 'SIDEBAR',
-        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        deleted_at TIMESTAMP NULL
-      )
-    `);
-
     const discoveredMenus: MenuManifestItem[] = discoverManifestMenus();
     let menusSeeded = 0;
 

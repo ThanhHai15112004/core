@@ -18,6 +18,7 @@ export interface UserRelationsContext {
   readonly organizationUnits?: readonly UserOrganizationAssignmentSummary[] | undefined;
   readonly decryptedPhone?: string | null | undefined;
   readonly customFields?: Readonly<Record<string, unknown>> | undefined;
+  readonly passwordChangedAt?: Date | null | undefined;
 }
 
 @Injectable()
@@ -112,7 +113,13 @@ export class UsersMapper implements EntityMapperContract<UserEntity, UserRespons
       organizationUnits: context.organizationUnits ?? [],
       ...(context.customFields !== undefined ? { customFields: context.customFields } : {}),
       lastLoginAt: entity.lastLoginAt ? entity.lastLoginAt.toISOString() : null,
-      passwordChangedAt: entity.passwordChangedAt ? entity.passwordChangedAt.toISOString() : null,
+      passwordChangedAt: (() => {
+        const changedAt =
+          context.passwordChangedAt !== undefined
+            ? context.passwordChangedAt
+            : (entity as unknown as { passwordChangedAt?: Date | null }).passwordChangedAt;
+        return changedAt ? changedAt.toISOString() : null;
+      })(),
       archivedAt: entity.archivedAt
         ? entity.archivedAt.toISOString()
         : entity.deletedAt

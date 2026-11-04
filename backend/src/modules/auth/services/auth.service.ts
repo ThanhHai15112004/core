@@ -16,39 +16,38 @@ import {
   USER_STATUS,
   type UserAuthIdentityView,
 } from '@modules/users/contracts/index.js';
-import { AUTH_EVENT_STATUS, AUTH_EVENT_TYPE, type IAuthPublicService } from '../contracts/index.js';
-import { SessionService } from './session.service.js';
-import { MfaService } from './mfa.service.js';
-import { DEFAULT_ADMIN_ROLE_CODES, STEP_UP_TOKEN_TTL_SECONDS } from '../enum/auth.enum.js';
+import { AUTH_EVENT_STATUS, AUTH_EVENT_TYPE, SessionService } from '@modules/sessions/index.js';
 import {
+  type AdminResetMfaRequest,
+  type AdminResetMfaResponse,
+  type DisableMfaRequest,
   MfaChallengeAttemptTracker,
+  MfaService,
+  type MfaStatusResponse,
+  type SendEmailOtpRequest,
+  type SendEmailOtpResponse,
+  type SendSmsOtpRequest,
+  type SendSmsOtpResponse,
+  type VerifyMfaChallengeRequest,
   issueLoginMfaStep2Challenge,
   verifyAndEnforceLoginAccountStatus,
   verifyLoginPasswordAndRehashIfNeeded,
-} from '../helpers/mfa-challenge-attempt.helper.js';
-import { resolveUserCredentialsById } from './password.service.js';
-import { SecuritySettingsService } from './security-settings.service.js';
+} from '@modules/mfa/index.js';
+import { SecuritySettingsService, resolveUserCredentialsById } from '@modules/credentials/index.js';
+import type { IAuthPublicService } from '../contracts/index.js';
+import { DEFAULT_ADMIN_ROLE_CODES, STEP_UP_TOKEN_TTL_SECONDS } from '../enum/auth.enum.js';
 import { VerificationService } from './verification.service.js';
 import type {
-  AdminResetMfaRequest,
-  DisableMfaRequest,
   LoginRequest,
   RefreshTokenRequest,
   RegisterRequest,
-  SendEmailOtpRequest,
-  SendSmsOtpRequest,
   StepUpVerifyRequest,
   UpdateMyPreferencesRequest,
-  VerifyMfaChallengeRequest,
 } from '../requests/auth.requests.js';
 import type {
-  AdminResetMfaResponse,
   AuthenticatedUserProfileResponse,
   LoginResponse,
-  MfaStatusResponse,
   RegisterResponse,
-  SendEmailOtpResponse,
-  SendSmsOtpResponse,
   StepUpVerifyResponse,
   UserPreferencesResponse,
 } from '../responses/auth.response.js';

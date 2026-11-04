@@ -31,6 +31,7 @@ import type {
   UpdateUserPreferencesInput,
   UserAuthCredentialsView,
   UserAuthIdentityView,
+  UserCredentialRecordView,
   UserPreferencesView,
   UserProfileView,
 } from '../contracts/index.js';
@@ -56,10 +57,21 @@ import type { UserRepository } from '../repositories/user.repository.js';
 export async function buildUserAuthCredentialsView(params: {
   user: UserEntity;
   getUserProfile: (userId: number, user?: UserEntity) => Promise<UserProfileView>;
+  getUserCredential: (
+    userId: number,
+    user?: UserEntity,
+  ) => Promise<UserCredentialRecordView | null>;
   decryptPhone: (phone?: string | null) => string | null;
 }): Promise<UserAuthCredentialsView> {
-  const { user, getUserProfile, decryptPhone } = params;
-  const profile = await getUserProfile(Number(user.id), user);
+  const { user, getUserProfile, getUserCredential, decryptPhone } = params;
+  const [profile, cred] = await Promise.all([
+    getUserProfile(Number(user.id), user),
+    getUserCredential(Number(user.id), user),
+  ]);
+  const legacyUser = user as unknown as {
+    passwordHash?: string;
+    passwordHistoryHashesJson?: string | null;
+  };
   const statusCode =
     user.deletedAt || user.archivedAt ? USER_STATUS.ARCHIVED : parseUserStatus(user.status);
   return {
@@ -70,8 +82,9 @@ export async function buildUserAuthCredentialsView(params: {
     firstName: profile.firstName,
     lastName: profile.lastName,
     fullName: profile.fullName,
-    passwordHash: user.passwordHash,
-    passwordHistoryHashes: safeJsonParseStringArray(user.passwordHistoryHashesJson),
+    passwordHash: cred?.passwordHash ?? legacyUser.passwordHash ?? '',
+    passwordHistoryHashes:
+      cred?.passwordHistoryHashes ?? safeJsonParseStringArray(legacyUser.passwordHistoryHashesJson),
     status: statusCode,
     statusName: getUserStatusName(statusCode),
     emailVerifiedAt: user.emailVerifiedAt ?? null,
@@ -213,6 +226,15 @@ export async function executeSelfRegisterUser(params: {
     reason?: string | null,
     changedBy?: number | null,
   ) => Promise<void>;
+  saveUserPasswordHash: (
+    userId: number,
+    passwordHash: string,
+    options?: {
+      readonly recordHistory?: boolean;
+      readonly maxHistory?: number;
+      readonly passwordChangedAt?: Date | null;
+    },
+  ) => Promise<void>;
   findAuthUserById: (userId: number) => Promise<UserAuthIdentityView | null>;
 }): Promise<UserAuthIdentityView> {
   const {
@@ -224,6 +246,7 @@ export async function executeSelfRegisterUser(params: {
     normalizePreferredTimezone,
     upsertUserProfile,
     recordStatusHistory,
+    saveUserPasswordHash,
     findAuthUserById,
   } = params;
 
@@ -307,17 +330,19 @@ export async function executeSelfRegisterUser(params: {
     email: fallbackEmail,
     phone: encryptedPhone,
     phoneHash,
-    passwordHash,
     status: initialStatus,
     emailVerifiedAt: null,
     phoneVerifiedAt: null,
     failedLoginAttempts: 0,
     mfaEnabled: false,
     primaryOrganizationUnitId: null,
-    passwordChangedAt: new Date(),
   });
 
   const userId = Number(savedUser.id);
+  await saveUserPasswordHash(userId, passwordHash, {
+    recordHistory: false,
+    passwordChangedAt: new Date(),
+  });
   const preferredLocale = normalizePreferredLocale(input.preferredLocale);
   const preferredTimezone = normalizePreferredTimezone(input.preferredTimezone);
   await upsertUserProfile(userId, {
@@ -784,30 +809,34 @@ export async function executeUpdateUserPasswordHash(params: {
   newPasswordHash: string;
   options?: { recordHistory?: boolean; maxHistory?: number } | undefined;
   userRepository: UserRepository;
+  saveUserPasswordHash: (
+    userId: number,
+    passwordHash: string,
+    options?: {
+      readonly recordHistory?: boolean;
+      readonly maxHistory?: number;
+      readonly passwordChangedAt?: Date | null;
+    },
+  ) => Promise<void>;
   invalidateIdentityCache: (userId: number) => Promise<void>;
 }): Promise<void> {
-  const { userId, newPasswordHash, options, userRepository, invalidateIdentityCache } = params;
+  const {
+    userId,
+    newPasswordHash,
+    options,
+    userRepository,
+    saveUserPasswordHash,
+    invalidateIdentityCache,
+  } = params;
   const user = await userRepository.findByIdWithArchived(userId, false);
   if (!user) {
     throw new NotFoundAppException('users.notFound', { id: userId });
   }
 
-  if (
-    options?.recordHistory !== false &&
-    user.passwordHash &&
-    user.passwordHash !== newPasswordHash
-  ) {
-    const maxHistory = Math.max(1, Math.min(20, options?.maxHistory ?? 10));
-    const currentHistory = safeJsonParseStringArray(user.passwordHistoryHashesJson);
-    const nextHistory = [
-      user.passwordHash,
-      ...currentHistory.filter((h) => h !== user.passwordHash),
-    ].slice(0, maxHistory);
-    user.passwordHistoryHashesJson = JSON.stringify(nextHistory);
-  }
-
-  user.passwordHash = newPasswordHash;
-  user.passwordChangedAt = new Date();
-  await userRepository.saveEntity(user);
+  await saveUserPasswordHash(userId, newPasswordHash, {
+    ...(options?.recordHistory !== undefined ? { recordHistory: options.recordHistory } : {}),
+    ...(options?.maxHistory !== undefined ? { maxHistory: options.maxHistory } : {}),
+    passwordChangedAt: new Date(),
+  });
   await invalidateIdentityCache(userId);
 }

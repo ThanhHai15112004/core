@@ -87,12 +87,19 @@ export class DatabaseSeederService {
 
         const startedAt = Date.now();
         try {
-          const res = await this.transactionManager.runInTransaction((manager) =>
-            seeder.run({
-              manager,
-              driver: this.connection.driver,
-              environment: this.config.app.env,
-            }),
+          const res = await this.transactionManager.runInTransaction(
+            (manager) =>
+              seeder.run({
+                manager,
+                driver: this.connection.driver,
+                environment: this.config.app.env,
+              }),
+            {
+              timeoutMs: Math.max(
+                this.config.database.transactionTimeoutMs ?? 30_000,
+                SEED_LOCK_SEC * 1000,
+              ),
+            },
           );
           const durationMs = Date.now() - startedAt;
           items.push({

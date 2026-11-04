@@ -1,0 +1,11 @@
+{
+  "sessionRevoked": "Authentication session has been revoked. Please sign in again",
+  "sessionExpired": "Authentication session has expired. Please sign in again",
+  "sessionIdleExpired": "Authentication session has expired due to inactivity. Please sign in again",
+  "sessionNotFound": "Authentication session #{sessionId} not found",
+  "refreshTokenReused": "Refresh token reuse detected; session revoked for security",
+  "invalidRefreshToken": "Invalid or expired refresh token",
+  "sessionExpiredOrRevoked": "Authentication session has expired or been revoked",
+  "userNotFound": "User account not found",
+  "accountNotActive": "Account is not in an active state"
+}

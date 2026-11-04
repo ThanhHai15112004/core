@@ -273,20 +273,16 @@ export class IamThousandUsersSeeder implements SeederContract {
         const phoneHash = this.passwordHasher.sha256(u.phone.trim());
         if (isPostgres) {
           await ctx.manager.query(
-            `INSERT INTO users (id, username, email, phone, phone_hash, password_hash, status, email_verified_at, phone_verified_at, primary_organization_unit_id, manager_id, version)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, $8, $9, 1)
+            `INSERT INTO users (id, username, email, phone, phone_hash, status, email_verified_at, phone_verified_at, primary_organization_unit_id, manager_id, version)
+             VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, $7, $8, 1)
              ON CONFLICT (username) DO NOTHING`,
-            [
-              u.id,
-              u.username,
-              u.email,
-              u.phone,
-              phoneHash,
-              defaultPasswordHash,
-              u.status,
-              u.primaryOrgId,
-              u.managerId,
-            ],
+            [u.id, u.username, u.email, u.phone, phoneHash, u.status, u.primaryOrgId, u.managerId],
+          );
+          await ctx.manager.query(
+            `INSERT INTO user_credentials (user_id, password_hash, password_changed_at)
+             VALUES ($1, $2, CURRENT_TIMESTAMP)
+             ON CONFLICT (user_id) DO NOTHING`,
+            [u.id, defaultPasswordHash],
           );
           await ctx.manager.query(
             `INSERT INTO user_profiles (user_id, first_name, last_name, full_name, city, country)
@@ -308,20 +304,16 @@ export class IamThousandUsersSeeder implements SeederContract {
           );
         } else {
           await ctx.manager.query(
-            `INSERT INTO users (id, username, email, phone, phone_hash, password_hash, status, email_verified_at, phone_verified_at, primary_organization_unit_id, manager_id, version)
-             VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?, ?, 1)
+            `INSERT INTO users (id, username, email, phone, phone_hash, status, email_verified_at, phone_verified_at, primary_organization_unit_id, manager_id, version)
+             VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?, ?, 1)
              ON DUPLICATE KEY UPDATE status = VALUES(status), manager_id = VALUES(manager_id)`,
-            [
-              u.id,
-              u.username,
-              u.email,
-              u.phone,
-              phoneHash,
-              defaultPasswordHash,
-              u.status,
-              u.primaryOrgId,
-              u.managerId,
-            ],
+            [u.id, u.username, u.email, u.phone, phoneHash, u.status, u.primaryOrgId, u.managerId],
+          );
+          await ctx.manager.query(
+            `INSERT INTO user_credentials (user_id, password_hash, password_changed_at)
+             VALUES (?, ?, CURRENT_TIMESTAMP)
+             ON DUPLICATE KEY UPDATE password_hash = VALUES(password_hash)`,
+            [u.id, defaultPasswordHash],
           );
           await ctx.manager.query(
             `INSERT INTO user_profiles (user_id, first_name, last_name, full_name, city, country)

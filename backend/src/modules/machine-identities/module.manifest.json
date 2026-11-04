@@ -1,0 +1,57 @@
+{
+  "$schema": "../../packages/kernel/schemas/module.manifest.schema.json",
+  "name": "machine-identities",
+  "displayName": "Service Accounts & API Clients (M2M)",
+  "version": "1.0.0",
+  "description": "Module quản lý tài khoản hệ thống (Service Accounts), API Clients (Client ID & Client Secret), phạm vi truy cập (Scopes), xoay vòng Secret, giới hạn IP (Allowlist/CIDR) và theo dõi lịch sử sử dụng",
+  "type": "core",
+  "category": "core",
+  "author": "Core Platform Team",
+  "entryModule": "MachineIdentitiesModule",
+  "dependencies": ["database", "redis", "security"],
+  "permissions": [],
+  "events": {
+    "published": [],
+    "subscribed": []
+  },
+  "database": {
+    "hasMigrations": true,
+    "tables": [
+      "auth_service_accounts",
+      "auth_api_clients"
+    ]
+  },
+  "settings": [
+    {
+      "key": "security.api_client.default_token_ttl_seconds",
+      "groupCode": "security",
+      "module": "auth",
+      "namespace": "auth.api_client",
+      "name": "Thời hạn Access Token mặc định của API Client (giây)",
+      "description": "Thời gian hiệu lực mặc định của M2M Access Token cấp cho API Client khi không truyền expiresInSeconds",
+      "valueType": "NUMBER",
+      "defaultValue": 3600,
+      "validationRules": { "min": 60, "max": 86400, "integerOnly": true },
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 41
+    },
+    {
+      "key": "security.api_client.max_usage_logs",
+      "groupCode": "security",
+      "module": "auth",
+      "namespace": "auth.api_client",
+      "name": "Số bản ghi lịch sử gọi API tối đa lưu trên mỗi API Client",
+      "description": "Số lượng mục nhật ký sử dụng gần nhất được giữ lại trong trường usageLogs của mỗi API Client",
+      "valueType": "NUMBER",
+      "defaultValue": 50,
+      "validationRules": { "min": 5, "max": 500, "integerOnly": true },
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 42
+    }
+  ]
+}
+

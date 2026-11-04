@@ -12,6 +12,8 @@ import { RedisModule } from '@packages/redis/index.js';
 import { RuntimeAgentModule } from '@packages/runtime/index.js';
 import { MetricsModule } from '@packages/metrics/index.js';
 import { UsersModule } from '@modules/users/index.js';
+import { SessionsModule } from '@modules/sessions/index.js';
+import { CredentialsModule } from '@modules/credentials/index.js';
 import { FilesModule } from '@modules/files/index.js';
 import { NotificationsModule } from '@modules/notifications/index.js';
 import { WorkflowsModule } from '@modules/workflows/index.js';
@@ -44,6 +46,8 @@ const PROCESSORS = [SystemProcessor, CriticalProcessor, NotificationsProcessor, 
     CacheModule,
     StorageModule,
     UsersModule,
+    SessionsModule,
+    CredentialsModule,
     FilesModule,
     NotificationsModule,
     WorkflowsModule,

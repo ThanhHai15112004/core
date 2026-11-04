@@ -9,6 +9,7 @@ import {
   defaultSettingRegistry,
   parseCustomFieldFiltersParam,
   resolvePagination,
+  safeJsonParseStringArray,
 } from '@packages/kernel/index.js';
 import { createPaginatedResult } from '@packages/http/index.js';
 import { TransactionManager } from '@packages/database/index.js';
@@ -37,6 +38,7 @@ import {
   type AdminResetUserMfaResult,
   type AdminResetUserPasswordInput,
   type AdminResetUserPasswordResult,
+  type IUserCredentialStoreDelegate,
   type IUsersPublicService,
   type SelfRegisterUserInput,
   USER_IDENTITY_CACHE_PREFIX,
@@ -46,6 +48,7 @@ import {
   type UserAuthCredentialsView,
   type UserAuthIdentityView,
   type UserApproverSummaryView,
+  type UserCredentialRecordView,
   type UserLoginHistoryItemView,
   type UserNotificationContactView,
   type UserPreferencesView,
@@ -149,6 +152,15 @@ export class UsersService implements IUsersPublicService {
     stepUpToken: string,
     action?: string,
   ) => Promise<boolean>;
+  private userCredentialStoreDelegate?: IUserCredentialStoreDelegate;
+  private readonly fallbackCredentialStore = new Map<
+    number,
+    {
+      passwordHash: string;
+      passwordChangedAt: Date | null;
+      passwordHistoryHashes: string[];
+    }
+  >();
 
   constructor(
     private readonly userRepository: UserRepository,
@@ -444,6 +456,7 @@ export class UsersService implements IUsersPublicService {
       encryptPhone: (p) => this.encryptPhone(p),
       upsertUserProfile: (uid, d) => this.upsertUserProfile(uid, d),
       recordStatusHistory: (uid, from, to, r, by) => this.recordStatusHistory(uid, from, to, r, by),
+      saveUserPasswordHash: (uid, hash, opts) => this.saveUserPasswordHash(uid, hash, opts),
       getById: (uid) => this.getById(uid, true, actor),
       syncUserSearchDocumentSafe: (u, aid) => this.syncUserSearchDocumentSafe(u, aid),
     });
@@ -703,6 +716,7 @@ export class UsersService implements IUsersPublicService {
     return buildUserAuthCredentialsView({
       user,
       getUserProfile: (uid, u) => this.getUserProfile(uid, u),
+      getUserCredential: (uid) => this.getUserCredential(uid),
       decryptPhone: (p) => this.decryptPhone(p),
     });
   }
@@ -754,6 +768,7 @@ export class UsersService implements IUsersPublicService {
       normalizePreferredTimezone: (tz) => normalizePreferredTimezoneOrThrow(tz),
       upsertUserProfile: (uid, d) => this.upsertUserProfile(uid, d),
       recordStatusHistory: (uid, from, to, r, by) => this.recordStatusHistory(uid, from, to, r, by),
+      saveUserPasswordHash: (uid, hash, opts) => this.saveUserPasswordHash(uid, hash, opts),
       findAuthUserById: (uid) => this.findAuthUserById(uid),
     });
   }
@@ -824,8 +839,115 @@ export class UsersService implements IUsersPublicService {
       newPasswordHash,
       options,
       userRepository: this.userRepository,
+      saveUserPasswordHash: (uid, hash, opts) => this.saveUserPasswordHash(uid, hash, opts),
       invalidateIdentityCache: (uid) => this.invalidateIdentityCache(uid),
     });
+  }
+
+  public registerUserCredentialStoreDelegate(delegate: IUserCredentialStoreDelegate): void {
+    this.userCredentialStoreDelegate = delegate;
+  }
+
+  private async getUserCredential(userId: number): Promise<UserCredentialRecordView | null> {
+    const uid = Number(userId);
+    if (this.userCredentialStoreDelegate) {
+      const delegated = await this.userCredentialStoreDelegate.getByUserId(uid);
+      if (delegated) return delegated;
+    }
+    const local = this.fallbackCredentialStore.get(uid);
+    if (local) {
+      return {
+        userId: uid,
+        passwordHash: local.passwordHash,
+        passwordChangedAt: local.passwordChangedAt,
+        passwordHistoryHashes: local.passwordHistoryHashes,
+      };
+    }
+    const entity = (await this.userRepository.findByIdWithArchived(uid, true)) as unknown as {
+      passwordHash?: string;
+      passwordChangedAt?: Date | null;
+      passwordHistoryHashesJson?: string;
+    } | null;
+    if (entity?.passwordHash) {
+      return {
+        userId: uid,
+        passwordHash: entity.passwordHash,
+        passwordChangedAt: entity.passwordChangedAt ?? null,
+        passwordHistoryHashes: safeJsonParseStringArray(entity.passwordHistoryHashesJson),
+      };
+    }
+    return null;
+  }
+
+  private async findCredentialsByUserIds(
+    userIds: readonly number[],
+  ): Promise<ReadonlyMap<number, UserCredentialRecordView>> {
+    const result = new Map<number, UserCredentialRecordView>();
+    if (userIds.length === 0) return result;
+    if (this.userCredentialStoreDelegate?.getByUserIds) {
+      const map = await this.userCredentialStoreDelegate.getByUserIds(userIds);
+      for (const [uid, val] of map.entries()) {
+        result.set(Number(uid), val);
+      }
+      return result;
+    }
+    for (const rawId of userIds) {
+      const uid = Number(rawId);
+      const cred = await this.getUserCredential(uid);
+      if (cred) {
+        result.set(uid, cred);
+      }
+    }
+    return result;
+  }
+
+  private async saveUserPasswordHash(
+    userId: number,
+    passwordHash: string,
+    options?: {
+      readonly recordHistory?: boolean;
+      readonly maxHistory?: number;
+      readonly passwordChangedAt?: Date | null;
+    },
+  ): Promise<void> {
+    const uid = Number(userId);
+    const changedAt =
+      options?.passwordChangedAt !== undefined ? options.passwordChangedAt : new Date();
+    const existingLocal = this.fallbackCredentialStore.get(uid);
+    let nextHistory = existingLocal ? [...existingLocal.passwordHistoryHashes] : [];
+    if (
+      options?.recordHistory !== false &&
+      existingLocal?.passwordHash &&
+      existingLocal.passwordHash !== passwordHash
+    ) {
+      const maxHistory = Math.max(1, Math.min(20, options?.maxHistory ?? 10));
+      nextHistory = [
+        existingLocal.passwordHash,
+        ...nextHistory.filter((h) => h !== existingLocal.passwordHash),
+      ].slice(0, maxHistory);
+    }
+    this.fallbackCredentialStore.set(uid, {
+      passwordHash,
+      passwordChangedAt: changedAt,
+      passwordHistoryHashes: nextHistory,
+    });
+    const entity = (await this.userRepository.findByIdWithArchived(uid, true)) as unknown as {
+      passwordHash?: string;
+      passwordChangedAt?: Date | null;
+      passwordHistoryHashesJson?: string;
+    } | null;
+    if (entity) {
+      entity.passwordHash = passwordHash;
+      entity.passwordChangedAt = changedAt;
+      entity.passwordHistoryHashesJson = JSON.stringify(nextHistory);
+    }
+    if (this.userCredentialStoreDelegate) {
+      await this.userCredentialStoreDelegate.saveUserPasswordHash(uid, passwordHash, {
+        ...(options?.recordHistory !== undefined ? { recordHistory: options.recordHistory } : {}),
+        ...(options?.maxHistory !== undefined ? { maxHistory: options.maxHistory } : {}),
+        passwordChangedAt: changedAt,
+      });
+    }
   }
 
   public registerAdminPasswordResetDelegate(
@@ -1045,6 +1167,7 @@ export class UsersService implements IUsersPublicService {
       userRoleRepository: this.userRoleRepository,
       userOrgRepository: this.userOrgRepository,
       findProfilesByUserIds: (uids) => this.findProfilesByUserIds(uids),
+      findCredentialsByUserIds: (uids) => this.findCredentialsByUserIds(uids),
       rolesPublicService: this.rolesPublicService,
       organizationsPublicService: this.organizationsPublicService,
       mapper: this.mapper,

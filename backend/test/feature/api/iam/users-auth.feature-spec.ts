@@ -36,31 +36,36 @@ import {
   type UserOrganizationInputItem,
   UserOrganizationUnitRepository,
 } from '@modules/users/repositories/user-organization-unit.repository.js';
+import { UserOrganizationHistoryRepository } from '@modules/users/repositories/user-organization-history.repository.js';
 import { UserStatusHistoryRepository } from '@modules/users/repositories/user-status-history.repository.js';
 import {
-  API_CLIENT_STATUS,
   DB_ENCRYPTION_ALGO_CODE,
-  MFA_METHOD,
   MFA_POLICY_CODE,
   PASSWORD_HASH_ALGO_CODE,
+} from '@modules/credentials/contracts/index.js';
+import { MFA_METHOD } from '@modules/mfa/contracts/index.js';
+import {
+  API_CLIENT_STATUS,
   SERVICE_ACCOUNT_STATUS,
-} from '@modules/auth/contracts/index.js';
-import type { AuthSessionEntity } from '@modules/auth/entities/auth-session.entity.js';
-import type { AuthMfaConfigEntity } from '@modules/auth/entities/auth-mfa-config.entity.js';
-import type { AuthPasswordResetEntity } from '@modules/auth/entities/auth-password-reset.entity.js';
-import type { AuthSecuritySettingEntity } from '@modules/auth/entities/auth-security-setting.entity.js';
+} from '@modules/machine-identities/contracts/index.js';
+import type { AuthSessionEntity } from '@modules/sessions/entities/auth-session.entity.js';
+import type { AuthMfaConfigEntity } from '@modules/mfa/entities/auth-mfa-config.entity.js';
+import type { UserCredentialEntity } from '@modules/credentials/entities/user-credential.entity.js';
+import type { AuthPasswordResetEntity } from '@modules/credentials/entities/auth-password-reset.entity.js';
+import type { AuthSecuritySettingEntity } from '@modules/credentials/entities/auth-security-setting.entity.js';
 import type { AuthVerificationCodeEntity } from '@modules/auth/entities/auth-verification-code.entity.js';
-import type { AuthServiceAccountEntity } from '@modules/auth/entities/auth-service-account.entity.js';
-import type { AuthApiClientEntity } from '@modules/auth/entities/auth-api-client.entity.js';
-import type { AuthLoginHistoryEntity } from '@modules/auth/entities/auth-login-history.entity.js';
-import { AuthSessionRepository } from '@modules/auth/repositories/auth-session.repository.js';
-import { AuthMfaConfigRepository } from '@modules/auth/repositories/auth-mfa-config.repository.js';
-import { AuthPasswordResetRepository } from '@modules/auth/repositories/auth-password-reset.repository.js';
-import { AuthSecuritySettingRepository } from '@modules/auth/repositories/auth-security-setting.repository.js';
+import type { AuthServiceAccountEntity } from '@modules/machine-identities/entities/auth-service-account.entity.js';
+import type { AuthApiClientEntity } from '@modules/machine-identities/entities/auth-api-client.entity.js';
+import type { AuthLoginHistoryEntity } from '@modules/sessions/entities/auth-login-history.entity.js';
+import { AuthSessionRepository } from '@modules/sessions/repositories/auth-session.repository.js';
+import { AuthMfaConfigRepository } from '@modules/mfa/repositories/auth-mfa-config.repository.js';
+import { UserCredentialRepository } from '@modules/credentials/repositories/user-credential.repository.js';
+import { AuthPasswordResetRepository } from '@modules/credentials/repositories/auth-password-reset.repository.js';
+import { AuthSecuritySettingRepository } from '@modules/credentials/repositories/auth-security-setting.repository.js';
 import { AuthVerificationCodeRepository } from '@modules/auth/repositories/auth-verification-code.repository.js';
-import { AuthServiceAccountRepository } from '@modules/auth/repositories/auth-service-account.repository.js';
-import { AuthApiClientRepository } from '@modules/auth/repositories/auth-api-client.repository.js';
-import { AuthLoginHistoryRepository } from '@modules/auth/repositories/auth-login-history.repository.js';
+import { AuthServiceAccountRepository } from '@modules/machine-identities/repositories/auth-service-account.repository.js';
+import { AuthApiClientRepository } from '@modules/machine-identities/repositories/auth-api-client.repository.js';
+import { AuthLoginHistoryRepository } from '@modules/sessions/repositories/auth-login-history.repository.js';
 import { CODE_ITEM_STATUS } from '@packages/kernel/index.js';
 import type { CodeTypeEntity } from '@modules/codes/entities/code-type.entity.js';
 import type { CodeValueEntity } from '@modules/codes/entities/code-value.entity.js';
@@ -130,6 +135,9 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
         }
         return all;
       },
+      countByType: async (type: number) =>
+        [...orgStore.values()].filter((o) => !o.deletedAt && Number(o.type) === Number(type))
+          .length,
       saveEntity: async (partial: Partial<OrganizationUnitEntity>) => {
         const now = new Date();
         const entity: OrganizationUnitEntity = {
@@ -335,6 +343,12 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
         if (!withDeleted && (u.deletedAt || u.archivedAt)) return null;
         return u;
       },
+      findByIdsWithArchived: async (ids: readonly number[], withDeleted = false) => {
+        const set = new Set(ids.map(Number));
+        return [...userStore.values()].filter(
+          (u) => set.has(u.id) && (withDeleted || (!u.deletedAt && !u.archivedAt)),
+        );
+      },
       findByEmail: async (email: string, withDeleted = false) => {
         const norm = email.trim().toLowerCase();
         return (
@@ -343,12 +357,24 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
           ) ?? null
         );
       },
+      findByEmails: async (emails: readonly string[], withDeleted = false) => {
+        const set = new Set(emails.map((e) => e.trim().toLowerCase()));
+        return [...userStore.values()].filter(
+          (u) => set.has(u.email) && (withDeleted || (!u.deletedAt && !u.archivedAt)),
+        );
+      },
       findByUsername: async (username: string, withDeleted = false) => {
         const norm = username.trim().toLowerCase();
         return (
           [...userStore.values()].find(
             (u) => u.username === norm && (withDeleted || (!u.deletedAt && !u.archivedAt)),
           ) ?? null
+        );
+      },
+      findByUsernames: async (usernames: readonly string[], withDeleted = false) => {
+        const set = new Set(usernames.map((n) => n.trim().toLowerCase()));
+        return [...userStore.values()].filter(
+          (u) => set.has(u.username) && (withDeleted || (!u.deletedAt && !u.archivedAt)),
         );
       },
       findByPhoneHash: async (phoneHash: string, withDeleted = false) => {
@@ -380,9 +406,15 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
           phone: partial.phone !== undefined ? partial.phone : (existing?.phone ?? null),
           phoneHash:
             partial.phoneHash !== undefined ? partial.phoneHash : (existing?.phoneHash ?? null),
-          passwordHash: partial.passwordHash ?? existing!.passwordHash,
+          passwordHash:
+            (partial as { passwordHash?: string }).passwordHash ??
+            (existing as { passwordHash?: string } | undefined)?.passwordHash ??
+            '',
           passwordHistoryHashesJson:
-            partial.passwordHistoryHashesJson ?? existing?.passwordHistoryHashesJson ?? '[]',
+            (partial as { passwordHistoryHashesJson?: string }).passwordHistoryHashesJson ??
+            (existing as { passwordHistoryHashesJson?: string } | undefined)
+              ?.passwordHistoryHashesJson ??
+            '[]',
           status: partial.status ?? existing?.status ?? USER_STATUS.ACTIVE,
           emailVerifiedAt:
             partial.emailVerifiedAt !== undefined
@@ -405,9 +437,10 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
               ? partial.primaryOrganizationUnitId
               : (existing?.primaryOrganizationUnitId ?? null),
           passwordChangedAt:
-            partial.passwordChangedAt !== undefined
-              ? partial.passwordChangedAt
-              : (existing?.passwordChangedAt ?? now),
+            (partial as { passwordChangedAt?: Date | null }).passwordChangedAt !== undefined
+              ? (partial as { passwordChangedAt?: Date | null }).passwordChangedAt
+              : ((existing as { passwordChangedAt?: Date | null } | undefined)?.passwordChangedAt ??
+                now),
           lastLoginAt:
             partial.lastLoginAt !== undefined
               ? partial.lastLoginAt
@@ -565,6 +598,14 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
       },
     });
 
+    const userOrgHistoryRepo = context.moduleFixture.get(UserOrganizationHistoryRepository, {
+      strict: false,
+    });
+    Object.assign(userOrgHistoryRepo, {
+      recordHistories: async () => [],
+      findByUserId: async () => [],
+    });
+
     const userStatusHistoryRepo = context.moduleFixture.get(UserStatusHistoryRepository, {
       strict: false,
     });
@@ -677,6 +718,79 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
         } as AuthMfaConfigEntity;
         mfaStore.set(entity.userId, entity);
         return entity;
+      },
+    });
+
+    const userCredentialRepo = context.moduleFixture.get(UserCredentialRepository, {
+      strict: false,
+    });
+    Object.assign(userCredentialRepo, {
+      findByUserId: async (userId: number) => {
+        const u = userStore.get(Number(userId)) as unknown as
+          | {
+              id: number;
+              passwordHash?: string;
+              passwordChangedAt?: Date | null;
+              passwordHistoryHashesJson?: string | null;
+              createdAt?: Date;
+              updatedAt?: Date;
+            }
+          | undefined;
+        if (!u || !u.passwordHash) return null;
+        return {
+          id: u.id,
+          userId: u.id,
+          passwordHash: u.passwordHash,
+          passwordChangedAt: u.passwordChangedAt ?? null,
+          passwordHistoryHashesJson: u.passwordHistoryHashesJson ?? '[]',
+          createdAt: u.createdAt ?? new Date(),
+          updatedAt: u.updatedAt ?? new Date(),
+        } as UserCredentialEntity;
+      },
+      findByUserIds: async (userIds: readonly number[]) => {
+        const rows: UserCredentialEntity[] = [];
+        for (const rawId of userIds) {
+          const cred = await userCredentialRepo.findByUserId(Number(rawId));
+          if (cred) rows.push(cred);
+        }
+        return rows;
+      },
+      saveEntity: async (partial: Partial<UserCredentialEntity>) => {
+        const uid = Number(partial.userId);
+        const u = userStore.get(uid) as unknown as
+          | {
+              id: number;
+              passwordHash?: string;
+              passwordChangedAt?: Date | null;
+              passwordHistoryHashesJson?: string | null;
+              createdAt?: Date;
+              updatedAt?: Date;
+            }
+          | undefined;
+        const now = new Date();
+        if (u) {
+          if (partial.passwordHash !== undefined) u.passwordHash = partial.passwordHash;
+          if (partial.passwordChangedAt !== undefined)
+            u.passwordChangedAt = partial.passwordChangedAt;
+          if (partial.passwordHistoryHashesJson !== undefined)
+            u.passwordHistoryHashesJson = partial.passwordHistoryHashesJson;
+          u.updatedAt = now;
+        }
+        return {
+          id: partial.id ?? uid,
+          userId: uid,
+          passwordHash: partial.passwordHash ?? u?.passwordHash ?? '',
+          passwordChangedAt:
+            partial.passwordChangedAt !== undefined
+              ? partial.passwordChangedAt
+              : (u?.passwordChangedAt ?? now),
+          passwordHistoryHashesJson:
+            partial.passwordHistoryHashesJson !== undefined
+              ? partial.passwordHistoryHashesJson
+              : (u?.passwordHistoryHashesJson ?? '[]'),
+          createdAt: u?.createdAt ?? now,
+          updatedAt: now,
+        } as UserCredentialEntity;
       },
     });
 
@@ -1156,7 +1270,7 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
       username: 'superadmin',
       passwordHash: adminPasswordHash,
       status: USER_STATUS.ACTIVE,
-    });
+    } as Partial<UserEntity>);
     await userProfileRepo.upsertByUserId(adminUser.id, {
       firstName: 'Sơn',
       lastName: 'Nguyễn Thái',
@@ -1234,14 +1348,14 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
     expect(permsRes.body.data[0]?.id).toBe(1);
     expect(permsRes.body.data[0]?.status).toBe(1);
 
-    // Verify GET & PUT /api/v1/auth/security-settings (System Console -> Security)
+    // Verify GET & PUT /api/v1/credentials/security-settings (System Console -> Security)
     const getSecRes = await context.injectJson<{
       passwordHashAlgorithm: string;
       dbEncryptionAlgorithm: string;
       encryptFieldsAtRest: boolean;
     }>({
       method: 'GET',
-      url: '/api/v1/auth/security-settings',
+      url: '/api/v1/credentials/security-settings',
     });
     expect(getSecRes.status).toBe(HTTP_STATUS_CODE.OK);
     expect(getSecRes.body.data.passwordHashAlgorithm).toBe('SCRYPT');
@@ -1253,7 +1367,7 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
       encryptFieldsAtRest: boolean;
     }>({
       method: 'PUT',
-      url: '/api/v1/auth/security-settings',
+      url: '/api/v1/credentials/security-settings',
       payload: {
         passwordHashAlgorithm: 'PBKDF2_SHA512',
         dbEncryptionAlgorithm: 'CHACHA20_POLY1305',
@@ -1444,7 +1558,7 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
     // Setup and enable TOTP for admin
     const totpSetupRes = await context.injectJson<{ secret: string }>({
       method: 'POST',
-      url: '/api/v1/auth/mfa/totp/setup',
+      url: '/api/v1/mfa/totp/setup',
       headers: authHeaders,
     });
     expect(totpSetupRes.status).toBe(HTTP_STATUS_CODE.OK);
@@ -1455,7 +1569,7 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
       recoveryCodes: string[];
     }>({
       method: 'POST',
-      url: '/api/v1/auth/mfa/totp/enable',
+      url: '/api/v1/mfa/totp/enable',
       headers: authHeaders,
       payload: { code: totpService.generateCode(secret) },
     });
@@ -1466,7 +1580,7 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
     // Enable Email OTP for admin
     const emailOtpEnableRes = await context.injectJson<{ emailOtpEnabled: boolean }>({
       method: 'POST',
-      url: '/api/v1/auth/mfa/email-otp/enable',
+      url: '/api/v1/mfa/email-otp/enable',
       headers: authHeaders,
       payload: {},
     });
@@ -1501,7 +1615,7 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
       devOtpCode?: string;
     }>({
       method: 'POST',
-      url: '/api/v1/auth/mfa/email-otp/send',
+      url: '/api/v1/mfa/email-otp/send',
       payload: { mfaChallengeToken },
     });
     expect(sendOtpRes.status).toBe(HTTP_STATUS_CODE.OK);
@@ -1514,7 +1628,7 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
       sessionId?: number;
     }>({
       method: 'POST',
-      url: '/api/v1/auth/mfa/verify',
+      url: '/api/v1/mfa/verify',
       payload: {
         mfaChallengeToken,
         method: 'EMAIL_OTP',
@@ -1532,7 +1646,7 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
       devOtpCode?: string;
     }>({
       method: 'POST',
-      url: '/api/v1/auth/mfa/email-otp/send',
+      url: '/api/v1/mfa/email-otp/send',
       headers: authHeaders,
       payload: {},
     });
@@ -1546,7 +1660,7 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
       emailOtpEnabled: boolean;
     }>({
       method: 'POST',
-      url: '/api/v1/auth/mfa/email-otp/enable',
+      url: '/api/v1/mfa/email-otp/enable',
       headers: authHeaders,
       payload: { enabled: false },
     });
@@ -1554,11 +1668,11 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
     expect(disableEmailOtpRes.body.data.emailOtpEnabled).toBe(false);
     expect(disableEmailOtpRes.body.data.totpEnabled).toBe(true);
 
-    // Verify Fastify accepts Content-Type: application/json with empty body on DELETE /auth/sessions/:id
+    // Verify Fastify accepts Content-Type: application/json with empty body on DELETE /sessions/:id
     if (verifyOtpRes.body.data.sessionId) {
       const rawRevokeRes = await context.app.inject({
         method: 'DELETE',
-        url: `/api/v1/auth/sessions/${verifyOtpRes.body.data.sessionId}`,
+        url: `/api/v1/sessions/${verifyOtpRes.body.data.sessionId}`,
         headers: {
           ...authHeaders,
           'content-type': 'application/json',
@@ -1612,10 +1726,10 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
     expect(savedProfile?.firstName).toBe('Thảo');
     expect(savedProfile?.city).toBe('Đà Nẵng');
 
-    // 2. Toggle off allowEmailRegistration via PUT /api/v1/auth/security-settings (3.2.1)
+    // 2. Toggle off allowEmailRegistration via PUT /api/v1/credentials/security-settings (3.2.1)
     await context.injectJson({
       method: 'PUT',
-      url: '/api/v1/auth/security-settings',
+      url: '/api/v1/credentials/security-settings',
       payload: {
         allowEmailRegistration: false,
         allowPhoneRegistration: true,
@@ -1765,7 +1879,7 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
     // Increase otpMaxSendCount to issue a fresh OTP and confirm successfully
     await context.injectJson({
       method: 'PUT',
-      url: '/api/v1/auth/security-settings',
+      url: '/api/v1/credentials/security-settings',
       payload: { allowEmailRegistration: true, otpMaxSendCount: 5, otpMaxAttempts: 5 },
     });
 
@@ -1792,21 +1906,21 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
   it('Section 3.3 E2E: Suggested password, Password policy & disallowed list, Change password (with requireCurrentPasswordOnChange setting), Password reuse prevention, Forgot/Reset via 6-digit OTP, Admin Reset Password & Session Revocation', async () => {
     const adminHeaders = { authorization: `Bearer ${adminAccessToken}` };
 
-    // 1. GET /api/v1/auth/password/suggest returns strong passwords respecting policy
+    // 1. GET /api/v1/credentials/password/suggest returns strong passwords respecting policy
     const suggestRes = await context.injectJson<{
       password: string;
       suggestions: string[];
       policy: { minLength: number };
     }>({
       method: 'GET',
-      url: '/api/v1/auth/password/suggest?count=4&length=16',
+      url: '/api/v1/credentials/password/suggest?count=4&length=16',
     });
     expect(suggestRes.status).toBe(HTTP_STATUS_CODE.OK);
     expect(suggestRes.body.data.suggestions).toHaveLength(4);
     expect(suggestRes.body.data.password).toBe(suggestRes.body.data.suggestions[0]);
     expect(suggestRes.body.data.password.length).toBeGreaterThanOrEqual(16);
 
-    // 2. Configure Section 3.3 password settings via PUT /api/v1/auth/security-settings
+    // 2. Configure Section 3.3 password settings via PUT /api/v1/credentials/security-settings
     const updateSecRes = await context.injectJson<{
       requireCurrentPasswordOnChange: boolean;
       disallowedPasswords: string[];
@@ -1816,7 +1930,7 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
       revokeSessionsOnPasswordChange: boolean;
     }>({
       method: 'PUT',
-      url: '/api/v1/auth/security-settings',
+      url: '/api/v1/credentials/security-settings',
       payload: {
         passwordMinLength: 10,
         requireUppercase: true,
@@ -1868,7 +1982,7 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
     // 4. Reject disallowed password or password containing email prefix
     const disallowedRes = await context.injectJson({
       method: 'POST',
-      url: '/api/v1/auth/password/change',
+      url: '/api/v1/credentials/password/change',
       headers: { authorization: `Bearer ${userToken1}` },
       payload: {
         currentPassword: 'First#Password101',
@@ -1879,7 +1993,7 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
 
     const userInfoInPwdRes = await context.injectJson({
       method: 'POST',
-      url: '/api/v1/auth/password/change',
+      url: '/api/v1/credentials/password/change',
       headers: { authorization: `Bearer ${userToken1}` },
       payload: {
         currentPassword: 'First#Password101',
@@ -1894,7 +2008,7 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
       revokedSessionsCount: number;
     }>({
       method: 'POST',
-      url: '/api/v1/auth/password/change',
+      url: '/api/v1/credentials/password/change',
       headers: { authorization: `Bearer ${userToken1}` },
       payload: {
         currentPassword: 'First#Password101',
@@ -1908,7 +2022,7 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
     // 6. Prevent reusing old password ('First#Password101')
     const reuseRes = await context.injectJson({
       method: 'POST',
-      url: '/api/v1/auth/password/change',
+      url: '/api/v1/credentials/password/change',
       headers: { authorization: `Bearer ${userToken1}` },
       payload: {
         currentPassword: 'Second#Password202',
@@ -1924,7 +2038,7 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
       devResetOtp?: string;
     }>({
       method: 'POST',
-      url: '/api/v1/auth/password/forgot',
+      url: '/api/v1/credentials/password/forgot',
       payload: { email: 'sec33.user@gmail.com' },
     });
     expect(forgotRes.status).toBe(HTTP_STATUS_CODE.OK);
@@ -1935,7 +2049,7 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
       revokedSessionsCount: number;
     }>({
       method: 'POST',
-      url: '/api/v1/auth/password/reset',
+      url: '/api/v1/credentials/password/reset',
       payload: {
         email: 'sec33.user@gmail.com',
         otpCode: forgotRes.body.data.devResetOtp,
@@ -1967,10 +2081,14 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
     expect(adminResetRes.body.data.generatedPassword).toBeDefined();
 
     // 9. Automatic password hash algorithm upgrade on login (3.3.6: PBKDF2_SHA512 -> PBKDF2_SHA256)
-    expect(userStore.get(userId)?.passwordHash.startsWith('pbkdf2_sha512$')).toBe(true);
+    expect(
+      (userStore.get(userId) as unknown as { passwordHash: string })?.passwordHash.startsWith(
+        'pbkdf2_sha512$',
+      ),
+    ).toBe(true);
     await context.injectJson({
       method: 'PUT',
-      url: '/api/v1/auth/security-settings',
+      url: '/api/v1/credentials/security-settings',
       payload: { passwordHashAlgorithm: 'PBKDF2_SHA256', passwordMinLength: 8 },
     });
 
@@ -1984,7 +2102,11 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
     });
     expect(loginAfterAdminReset.status).toBe(HTTP_STATUS_CODE.OK);
     expect(loginAfterAdminReset.body.data.accessToken).toBeDefined();
-    expect(userStore.get(userId)?.passwordHash.startsWith('pbkdf2_sha256$')).toBe(true);
+    expect(
+      (userStore.get(userId) as unknown as { passwordHash: string })?.passwordHash.startsWith(
+        'pbkdf2_sha256$',
+      ),
+    ).toBe(true);
   });
 
   it('Section 3.6 E2E: Service Accounts & API Clients (3.6.1 -> 3.6.7) — create service account, create API client with one-time secret, issue token, enforce scopes on /api/v1/users, rotate secret, enforce IP whitelist, track usage logs, and revoke client tokens immediately', async () => {
@@ -2002,7 +2124,7 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
       scopes: string[];
     }>({
       method: 'POST',
-      url: '/api/v1/auth/service-accounts',
+      url: '/api/v1/machine-identities/service-accounts',
       headers: adminHeaders,
       payload: {
         code: 'crm_webhook_sync',
@@ -2041,7 +2163,7 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
       tokenVersion: number;
     }>({
       method: 'POST',
-      url: '/api/v1/auth/api-clients',
+      url: '/api/v1/machine-identities/api-clients',
       headers: adminHeaders,
       payload: {
         serviceAccountId: saId,
@@ -2064,10 +2186,10 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
     const clientId = createClientRes.body.data.clientId;
     const initialSecret = createClientRes.body.data.clientSecret;
 
-    // 3.6.4: Subsequent GET /api/v1/auth/api-clients/:id and GET /api/v1/auth/api-clients NEVER return plain clientSecret
+    // 3.6.4: Subsequent GET /api/v1/machine-identities/api-clients/:id and GET /api/v1/machine-identities/api-clients NEVER return plain clientSecret
     const getClientRes = await context.injectJson<Record<string, unknown>>({
       method: 'GET',
-      url: `/api/v1/auth/api-clients/${apiClientNumericId}`,
+      url: `/api/v1/machine-identities/api-clients/${apiClientNumericId}`,
       headers: adminHeaders,
     });
     expect(getClientRes.status).toBe(HTTP_STATUS_CODE.OK);
@@ -2076,7 +2198,7 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
 
     const listClientsRes = await context.injectJson<Array<Record<string, unknown>>>({
       method: 'GET',
-      url: `/api/v1/auth/api-clients?serviceAccountId=${saId}`,
+      url: `/api/v1/machine-identities/api-clients?serviceAccountId=${saId}`,
       headers: adminHeaders,
     });
     expect(listClientsRes.status).toBe(HTTP_STATUS_CODE.OK);
@@ -2086,7 +2208,7 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
     // 4. IP Whitelist check on token issuance (3.6.6): request from disallowed IP 198.51.100.77 is rejected (403)
     const tokenDeniedIpRes = await context.injectJson({
       method: 'POST',
-      url: '/api/v1/auth/api-clients/token',
+      url: '/api/v1/machine-identities/api-clients/token',
       remoteAddress: '198.51.100.77',
       payload: {
         clientId,
@@ -2106,7 +2228,7 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
       scopes: string[];
     }>({
       method: 'POST',
-      url: '/api/v1/auth/api-clients/token',
+      url: '/api/v1/machine-identities/api-clients/token',
       remoteAddress: '10.50.12.34',
       payload: {
         clientId,
@@ -2151,7 +2273,7 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
     // 7. Grant additional scope 'users.export' to API Client (3.6.3) & Rotate Client Secret (3.6.4)
     const updateScopesRes = await context.injectJson<{ scopes: string[] }>({
       method: 'PUT',
-      url: `/api/v1/auth/api-clients/${apiClientNumericId}/scopes`,
+      url: `/api/v1/machine-identities/api-clients/${apiClientNumericId}/scopes`,
       headers: adminHeaders,
       payload: {
         scopes: ['users.read', 'users.export'],
@@ -2170,7 +2292,7 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
       oneTimeSecretWarning: boolean;
     }>({
       method: 'POST',
-      url: `/api/v1/auth/api-clients/${apiClientNumericId}/rotate-secret`,
+      url: `/api/v1/machine-identities/api-clients/${apiClientNumericId}/rotate-secret`,
       headers: adminHeaders,
       payload: {
         reason: 'Xoay vòng định kỳ theo chính sách bảo mật',
@@ -2199,7 +2321,7 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
       scopes: string[];
     }>({
       method: 'POST',
-      url: '/api/v1/auth/api-clients/token',
+      url: '/api/v1/machine-identities/api-clients/token',
       remoteAddress: '10.50.12.34',
       payload: {
         clientId,
@@ -2226,7 +2348,7 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
       tokenVersion: number;
     }>({
       method: 'POST',
-      url: `/api/v1/auth/api-clients/${apiClientNumericId}/revoke`,
+      url: `/api/v1/machine-identities/api-clients/${apiClientNumericId}/revoke`,
       headers: adminHeaders,
       payload: {
         reason: 'Ngừng kết nối máy chủ CRM cũ',
@@ -2262,7 +2384,7 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
       }>;
     }>({
       method: 'GET',
-      url: `/api/v1/auth/api-clients/${apiClientNumericId}/usage`,
+      url: `/api/v1/machine-identities/api-clients/${apiClientNumericId}/usage`,
       headers: adminHeaders,
     });
     expect(usageRes.status).toBe(HTTP_STATUS_CODE.OK);
@@ -2799,7 +2921,7 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
     );
 
     // 6. Rate Limit enforcement (4.5.3): Exceed IP rate limit on a specific route -> 429 Too Many Requests
-    platformSecurity.setRateLimitRule('GET /api/v1/auth/password/suggest', {
+    platformSecurity.setRateLimitRule('GET /api/v1/credentials/password/suggest', {
       ipLimit: 2,
       userLimit: 10,
       apiLimit: 50,
@@ -2807,19 +2929,19 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
     });
     const rlOk1 = await context.injectJson({
       method: 'GET',
-      url: '/api/v1/auth/password/suggest',
+      url: '/api/v1/credentials/password/suggest',
       remoteAddress: '198.51.100.250',
     });
     expect(rlOk1.status).toBe(HTTP_STATUS_CODE.OK);
     const rlOk2 = await context.injectJson({
       method: 'GET',
-      url: '/api/v1/auth/password/suggest',
+      url: '/api/v1/credentials/password/suggest',
       remoteAddress: '198.51.100.250',
     });
     expect(rlOk2.status).toBe(HTTP_STATUS_CODE.OK);
     const rlExceeded = await context.injectJson({
       method: 'GET',
-      url: '/api/v1/auth/password/suggest',
+      url: '/api/v1/credentials/password/suggest',
       remoteAddress: '198.51.100.250',
     });
     expect(rlExceeded.status).toBe(HTTP_STATUS_CODE.TOO_MANY_REQUESTS);
@@ -3302,23 +3424,23 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
     expect(updateMinLenRes.status).toBe(HTTP_STATUS_CODE.OK);
     expect(updateMinLenRes.body.data.value).toBe(11);
 
-    // Verify SecuritySettingsService (/api/v1/auth/security-settings) immediately reflects passwordMinLength = 11
+    // Verify SecuritySettingsService (/api/v1/credentials/security-settings) immediately reflects passwordMinLength = 11
     const authSecRes = await context.injectJson<{
       passwordMinLength: number;
     }>({
       method: 'GET',
-      url: '/api/v1/auth/security-settings',
+      url: '/api/v1/credentials/security-settings',
       headers: adminHeaders,
     });
     expect(authSecRes.status).toBe(HTTP_STATUS_CODE.OK);
     expect(authSecRes.body.data.passwordMinLength).toBe(11);
 
-    // Reverse bridge: Update passwordMinLength = 10 via PUT /api/v1/auth/security-settings -> /api/v1/settings/resolve reflects 10 immediately
+    // Reverse bridge: Update passwordMinLength = 10 via PUT /api/v1/credentials/security-settings -> /api/v1/settings/resolve reflects 10 immediately
     const updateViaAuthApiRes = await context.injectJson<{
       passwordMinLength: number;
     }>({
       method: 'PUT',
-      url: '/api/v1/auth/security-settings',
+      url: '/api/v1/credentials/security-settings',
       headers: adminHeaders,
       payload: {
         passwordMinLength: 10,

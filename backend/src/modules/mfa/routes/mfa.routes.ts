@@ -1,0 +1,16 @@
+export const MFA_ROUTES = {
+  PREFIX: 'mfa',
+  STATUS: 'status',
+  VERIFY: 'verify',
+  TOTP_SETUP: 'totp/setup',
+  TOTP_ENABLE: 'totp/enable',
+  EMAIL_OTP_ENABLE: 'email-otp/enable',
+  EMAIL_OTP_SEND: 'email-otp/send',
+  SMS_OTP_ENABLE: 'sms-otp/enable',
+  SMS_OTP_SEND: 'sms-otp/send',
+  TRUSTED_DEVICES: 'trusted-devices',
+  TRUSTED_DEVICE_BY_ID: 'trusted-devices/:deviceId',
+  ADMIN_RESET: 'admin-reset',
+  DISABLE: 'disable',
+  RECOVERY_CODES: 'recovery-codes',
+} as const;
