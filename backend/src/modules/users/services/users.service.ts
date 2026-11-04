@@ -1,4 +1,5 @@
 import { Inject, Injectable, Optional } from '@nestjs/common';
+import { CoreConfigService } from '@packages/config/index.js';
 import {
   BadRequestAppException,
   ForbiddenAppException,
@@ -6,7 +7,6 @@ import {
   type PaginatedResult,
   defaultCustomFieldRegistry,
   defaultSearchRegistry,
-  defaultSettingRegistry,
   parseCustomFieldFiltersParam,
   resolvePagination,
   safeJsonParseStringArray,
@@ -20,6 +20,7 @@ import {
   PasswordHasherService,
   PlatformSecurityService,
   type ResolvedDataScopeFilter,
+  TokenService,
   type UserIdentity,
   createDefaultDataScopeService,
 } from '@packages/security/index.js';
@@ -34,11 +35,6 @@ import {
   type RoleAssignedUserSummary,
 } from '@modules/roles/contracts/index.js';
 import {
-  type AdminResetUserMfaInput,
-  type AdminResetUserMfaResult,
-  type AdminResetUserPasswordInput,
-  type AdminResetUserPasswordResult,
-  type IUserCredentialStoreDelegate,
   type IUsersPublicService,
   type SelfRegisterUserInput,
   USER_IDENTITY_CACHE_PREFIX,
@@ -49,7 +45,6 @@ import {
   type UserAuthIdentityView,
   type UserApproverSummaryView,
   type UserCredentialRecordView,
-  type UserLoginHistoryItemView,
   type UserNotificationContactView,
   type UserPreferencesView,
   type UserProfileView,
@@ -91,8 +86,6 @@ import {
 import {
   buildUserAuthCredentialsView,
   buildUserAuthIdentityView,
-  executeAdminResetUserMfaFlow,
-  executeAdminResetUserPasswordFlow,
   executeSelfRegisterUser,
   executeUpdateUserPasswordHash,
   markUserChannelVerified,
@@ -132,27 +125,6 @@ export { USER_IDENTITY_CACHE_PREFIX };
 @Injectable()
 export class UsersService implements IUsersPublicService {
   private readonly effectiveDataScopeService: DataScopeService;
-  private adminPasswordResetDelegate?: (
-    userId: number,
-    input: AdminResetUserPasswordInput,
-    actorId?: number,
-  ) => Promise<AdminResetUserPasswordResult>;
-  private adminRevokeSessionsDelegate?: (userId: number, reason?: string) => Promise<number>;
-  private userLoginHistoryDelegate?: (
-    userId: number,
-    limit?: number,
-  ) => Promise<UserLoginHistoryItemView[]>;
-  private adminResetMfaDelegate?: (
-    userId: number,
-    input: AdminResetUserMfaInput,
-    actorId?: number,
-  ) => Promise<AdminResetUserMfaResult>;
-  private stepUpVerificationDelegate?: (
-    userId: number,
-    stepUpToken: string,
-    action?: string,
-  ) => Promise<boolean>;
-  private userCredentialStoreDelegate?: IUserCredentialStoreDelegate;
   private readonly fallbackCredentialStore = new Map<
     number,
     {
@@ -200,6 +172,9 @@ export class UsersService implements IUsersPublicService {
     @Optional()
     @Inject(UserOrganizationHistoryRepository)
     private readonly orgHistoryRepository: UserOrganizationHistoryRepository | null = null,
+    @Optional()
+    @Inject(TokenService)
+    private readonly tokenService: TokenService | null = null,
   ) {
     this.effectiveDataScopeService = this.dataScopeService ?? createDefaultDataScopeService();
     registerUsersCrossModuleDelegates({
@@ -844,14 +819,11 @@ export class UsersService implements IUsersPublicService {
     });
   }
 
-  public registerUserCredentialStoreDelegate(delegate: IUserCredentialStoreDelegate): void {
-    this.userCredentialStoreDelegate = delegate;
-  }
-
   private async getUserCredential(userId: number): Promise<UserCredentialRecordView | null> {
     const uid = Number(userId);
-    if (this.userCredentialStoreDelegate) {
-      const delegated = await this.userCredentialStoreDelegate.getByUserId(uid);
+    const credentialStore = this.passwordHasher?.getCredentialStoreAdapter?.();
+    if (credentialStore) {
+      const delegated = await credentialStore.getByUserId(uid);
       if (delegated) return delegated;
     }
     const local = this.fallbackCredentialStore.get(uid);
@@ -863,7 +835,7 @@ export class UsersService implements IUsersPublicService {
         passwordHistoryHashes: local.passwordHistoryHashes,
       };
     }
-    const entity = (await this.userRepository.findByIdWithArchived(uid, true)) as unknown as {
+    const entity = (await this.userRepository.findByIdWithArchived?.(uid, true)) as unknown as {
       passwordHash?: string;
       passwordChangedAt?: Date | null;
       passwordHistoryHashesJson?: string;
@@ -884,8 +856,9 @@ export class UsersService implements IUsersPublicService {
   ): Promise<ReadonlyMap<number, UserCredentialRecordView>> {
     const result = new Map<number, UserCredentialRecordView>();
     if (userIds.length === 0) return result;
-    if (this.userCredentialStoreDelegate?.getByUserIds) {
-      const map = await this.userCredentialStoreDelegate.getByUserIds(userIds);
+    const credentialStore = this.passwordHasher?.getCredentialStoreAdapter?.();
+    if (credentialStore?.getByUserIds) {
+      const map = await credentialStore.getByUserIds(userIds);
       for (const [uid, val] of map.entries()) {
         result.set(Number(uid), val);
       }
@@ -931,7 +904,7 @@ export class UsersService implements IUsersPublicService {
       passwordChangedAt: changedAt,
       passwordHistoryHashes: nextHistory,
     });
-    const entity = (await this.userRepository.findByIdWithArchived(uid, true)) as unknown as {
+    const entity = (await this.userRepository.findByIdWithArchived?.(uid, true)) as unknown as {
       passwordHash?: string;
       passwordChangedAt?: Date | null;
       passwordHistoryHashesJson?: string;
@@ -941,51 +914,14 @@ export class UsersService implements IUsersPublicService {
       entity.passwordChangedAt = changedAt;
       entity.passwordHistoryHashesJson = JSON.stringify(nextHistory);
     }
-    if (this.userCredentialStoreDelegate) {
-      await this.userCredentialStoreDelegate.saveUserPasswordHash(uid, passwordHash, {
+    const credentialStore = this.passwordHasher?.getCredentialStoreAdapter?.();
+    if (credentialStore) {
+      await credentialStore.saveUserPasswordHash(uid, passwordHash, {
         ...(options?.recordHistory !== undefined ? { recordHistory: options.recordHistory } : {}),
         ...(options?.maxHistory !== undefined ? { maxHistory: options.maxHistory } : {}),
         passwordChangedAt: changedAt,
       });
     }
-  }
-
-  public registerAdminPasswordResetDelegate(
-    delegate: (
-      userId: number,
-      input: AdminResetUserPasswordInput,
-      actorId?: number,
-    ) => Promise<AdminResetUserPasswordResult>,
-  ): void {
-    this.adminPasswordResetDelegate = delegate;
-  }
-
-  public registerAdminRevokeSessionsDelegate(
-    delegate: (userId: number, reason?: string) => Promise<number>,
-  ): void {
-    this.adminRevokeSessionsDelegate = delegate;
-  }
-
-  public registerUserLoginHistoryDelegate(
-    delegate: (userId: number, limit?: number) => Promise<UserLoginHistoryItemView[]>,
-  ): void {
-    this.userLoginHistoryDelegate = delegate;
-  }
-
-  public registerAdminResetMfaDelegate(
-    delegate: (
-      userId: number,
-      input: AdminResetUserMfaInput,
-      actorId?: number,
-    ) => Promise<AdminResetUserMfaResult>,
-  ): void {
-    this.adminResetMfaDelegate = delegate;
-  }
-
-  public registerStepUpVerificationDelegate(
-    delegate: (userId: number, stepUpToken: string, action?: string) => Promise<boolean>,
-  ): void {
-    this.stepUpVerificationDelegate = delegate;
   }
 
   public async verifySensitiveActionStepUp(
@@ -998,113 +934,15 @@ export class UsersService implements IUsersPublicService {
     if (!stepUpToken || !stepUpToken.trim()) {
       throw new ForbiddenAppException('auth.stepUpAuthenticationRequired', [{ action }]);
     }
-    if (!this.stepUpVerificationDelegate) return;
-    const isValid = await this.stepUpVerificationDelegate(actorId ?? 0, stepUpToken.trim(), action);
+    const effectiveTokenService = this.tokenService ?? new TokenService(new CoreConfigService());
+    const isValid = await effectiveTokenService.verifyStepUpActionToken(
+      actorId ?? 0,
+      stepUpToken.trim(),
+      action,
+    );
     if (!isValid) {
       throw new ForbiddenAppException('auth.invalidOrExpiredStepUpToken', [{ action }]);
     }
-  }
-
-  public async adminResetMfa(
-    id: number,
-    dto: AdminResetUserMfaInput,
-    actorId?: number,
-    actor?: UserIdentity,
-  ): Promise<AdminResetUserMfaResult> {
-    return executeAdminResetUserMfaFlow({
-      id,
-      dto,
-      actorId,
-      actor,
-      userRepository: this.userRepository,
-      verifySensitiveActionStepUp: (aid, tok, req, act) =>
-        this.verifySensitiveActionStepUp(aid, tok, req, act),
-      ensureAccessUserRecord: (u, act, action) => this.ensureAccessUserEntity(u, act, action),
-      adminResetMfaDelegate: this.adminResetMfaDelegate,
-      adminRevokeSessionsDelegate: this.adminRevokeSessionsDelegate,
-      invalidateIdentityCache: (uid) => this.invalidateIdentityCache(uid),
-    });
-  }
-
-  public async revokeUserSessions(
-    id: number,
-    reason?: string,
-    actorId?: number,
-    actor?: UserIdentity,
-  ): Promise<{
-    revoked: true;
-    userId: number;
-    revokedCount: number;
-    revokedSessionsCount: number;
-    reason: string;
-  }> {
-    const user = await this.userRepository.findByIdWithArchived(id, true);
-    if (!user) throw new NotFoundAppException('users.notFound', { id });
-    if (actor) await this.ensureAccessUserEntity(user, actor, 'status');
-
-    const effectiveReason =
-      reason?.trim() ||
-      (actorId
-        ? `Revoked all sessions by administrator #${actorId} due to security incident`
-        : 'Revoked all sessions by administrator due to security incident');
-
-    const revokedCount = this.adminRevokeSessionsDelegate
-      ? await this.adminRevokeSessionsDelegate(id, effectiveReason)
-      : 0;
-
-    await this.invalidateIdentityCache(id);
-    return {
-      revoked: true,
-      userId: Number(id),
-      revokedCount,
-      revokedSessionsCount: revokedCount,
-      reason: effectiveReason,
-    };
-  }
-
-  public async getLoginHistory(
-    id: number,
-    limit?: number,
-    actor?: UserIdentity,
-  ): Promise<UserLoginHistoryItemView[]> {
-    const userResp = await this.getById(id, true, actor);
-    if (!this.userLoginHistoryDelegate) return [];
-    const effectiveLimit =
-      limit ??
-      defaultSettingRegistry.getNumber(
-        USERS_SETTING_KEYS.LOGIN_HISTORY_DEFAULT_LIMIT,
-        undefined,
-        50,
-      );
-    return this.userLoginHistoryDelegate(userResp.id, effectiveLimit);
-  }
-
-  public async getUserLoginHistory(
-    id: number,
-    limit?: number,
-    actor?: UserIdentity,
-  ): Promise<UserLoginHistoryItemView[]> {
-    return this.getLoginHistory(id, limit, actor);
-  }
-
-  public async adminResetPassword(
-    id: number,
-    dto: AdminResetUserPasswordInput,
-    actorId?: number,
-    actor?: UserIdentity,
-  ): Promise<AdminResetUserPasswordResult> {
-    return executeAdminResetUserPasswordFlow({
-      id,
-      dto,
-      actorId,
-      actor,
-      userRepository: this.userRepository,
-      passwordHasher: this.passwordHasher,
-      ensureAccessUserRecord: (u, act, action) => this.ensureAccessUserEntity(u, act, action),
-      adminPasswordResetDelegate: this.adminPasswordResetDelegate,
-      updatePasswordHash: (uid, hash) => this.updatePasswordHash(uid, hash),
-      unlockUser: (uid, aid) => this.unlockUser(uid, aid),
-    });
   }
 
   private async ensureAccessUserEntity(

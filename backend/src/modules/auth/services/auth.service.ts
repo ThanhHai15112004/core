@@ -1,5 +1,6 @@
 import { Inject, Injectable, Optional } from '@nestjs/common';
 import { BaseCacheProvider } from '@packages/cache/index.js';
+import { TransactionManager } from '@packages/database/index.js';
 import {
   BadRequestAppException,
   ForbiddenAppException,
@@ -9,8 +10,6 @@ import {
 } from '@packages/kernel/index.js';
 import { PasswordHasherService, TokenService } from '@packages/security/index.js';
 import {
-  type AdminResetUserMfaInput,
-  type AdminResetUserMfaResult,
   type IUsersPublicService,
   USERS_PUBLIC_SERVICE,
   USER_STATUS,
@@ -18,8 +17,10 @@ import {
 } from '@modules/users/contracts/index.js';
 import { AUTH_EVENT_STATUS, AUTH_EVENT_TYPE, SessionService } from '@modules/sessions/index.js';
 import {
+  type AdminResetMfaInput,
   type AdminResetMfaRequest,
   type AdminResetMfaResponse,
+  type AdminResetMfaResult,
   type DisableMfaRequest,
   MfaChallengeAttemptTracker,
   MfaService,
@@ -33,7 +34,12 @@ import {
   verifyAndEnforceLoginAccountStatus,
   verifyLoginPasswordAndRehashIfNeeded,
 } from '@modules/mfa/index.js';
-import { SecuritySettingsService, resolveUserCredentialsById } from '@modules/credentials/index.js';
+import {
+  CREDENTIALS_PUBLIC_SERVICE,
+  type ICredentialsPublicService,
+  SecuritySettingsService,
+  resolveUserCredentialsById,
+} from '@modules/credentials/index.js';
 import type { IAuthPublicService } from '../contracts/index.js';
 import { DEFAULT_ADMIN_ROLE_CODES, STEP_UP_TOKEN_TTL_SECONDS } from '../enum/auth.enum.js';
 import { VerificationService } from './verification.service.js';
@@ -68,6 +74,10 @@ export class AuthService implements IAuthPublicService {
     @Optional() private readonly verificationService?: VerificationService,
     @Optional() private readonly cacheProvider?: BaseCacheProvider | null,
     @Optional() settingRegistry?: SettingRegistryService,
+    @Optional()
+    @Inject(CREDENTIALS_PUBLIC_SERVICE)
+    private readonly credentialsPublicService?: ICredentialsPublicService,
+    @Optional() private readonly transactionManager?: TransactionManager,
   ) {
     this.settingRegistry = settingRegistry ?? defaultSettingRegistry;
     this.mfaAttemptTracker = new MfaChallengeAttemptTracker(
@@ -75,18 +85,6 @@ export class AuthService implements IAuthPublicService {
       this.settingRegistry,
     );
     this.sessionService.setSecuritySettingsService(this.securitySettingsService);
-    this.usersPublicService.registerAdminRevokeSessionsDelegate?.((userId, reason) =>
-      this.sessionService.revokeAllUserSessions(userId, reason),
-    );
-    this.usersPublicService.registerUserLoginHistoryDelegate?.((userId, limit) =>
-      this.sessionService.listUserLoginHistory(userId, limit),
-    );
-    this.usersPublicService.registerAdminResetMfaDelegate?.((userId, input, actorId) =>
-      this.adminResetUserMfa(userId, input, actorId),
-    );
-    this.usersPublicService.registerStepUpVerificationDelegate?.((userId, stepUpToken, action) =>
-      this.verifyStepUpToken(userId, stepUpToken, action),
-    );
     this.mfaService.registerSecurityEventDelegate?.((evt) =>
       this.sessionService.recordAuthEvent({
         userId: evt.userId,
@@ -136,25 +134,41 @@ export class AuthService implements IAuthPublicService {
       !emailVerifyRequired && hasPhone && Boolean(settings?.requirePhoneVerification);
     const verificationRequired = emailVerifyRequired || phoneVerifyRequired;
 
-    const created = await this.usersPublicService.registerSelfUser({
-      username: dto.username,
-      email: dto.email ?? null,
-      phone: dto.phone ?? null,
-      password: dto.password,
-      firstName: dto.firstName,
-      lastName: dto.lastName,
-      fullName: dto.fullName,
-      avatarUrl: dto.avatarUrl ?? null,
-      dateOfBirth: dto.dateOfBirth ?? null,
-      gender: dto.gender ?? null,
-      address: dto.address ?? null,
-      city: dto.city ?? null,
-      country: dto.country ?? null,
-      bio: dto.bio ?? null,
-      preferredLocale: dto.preferredLocale ?? null,
-      preferredTimezone: dto.preferredTimezone ?? null,
-      status: verificationRequired ? USER_STATUS.INACTIVE : USER_STATUS.ACTIVE,
-    });
+    const persistRegistrationRecord = async (): Promise<UserAuthIdentityView> => {
+      const user = await this.usersPublicService.registerSelfUser({
+        username: dto.username,
+        email: dto.email ?? null,
+        phone: dto.phone ?? null,
+        firstName: dto.firstName,
+        lastName: dto.lastName,
+        fullName: dto.fullName,
+        avatarUrl: dto.avatarUrl ?? null,
+        dateOfBirth: dto.dateOfBirth ?? null,
+        gender: dto.gender ?? null,
+        address: dto.address ?? null,
+        city: dto.city ?? null,
+        country: dto.country ?? null,
+        bio: dto.bio ?? null,
+        preferredLocale: dto.preferredLocale ?? null,
+        preferredTimezone: dto.preferredTimezone ?? null,
+        status: verificationRequired ? USER_STATUS.INACTIVE : USER_STATUS.ACTIVE,
+      });
+
+      if (this.credentialsPublicService?.initializeUserPassword) {
+        await this.credentialsPublicService.initializeUserPassword(user.id, dto.password);
+      } else {
+        const passwordHash = await this.passwordHasher.hash(dto.password);
+        await this.usersPublicService.updatePasswordHash(user.id, passwordHash, {
+          recordHistory: false,
+        });
+      }
+
+      return user;
+    };
+
+    const created = this.transactionManager
+      ? await this.transactionManager.runInTransaction(() => persistRegistrationRecord())
+      : await persistRegistrationRecord();
 
     if (verificationRequired) {
       if (emailVerifyRequired && this.verificationService) {
@@ -500,25 +514,7 @@ export class AuthService implements IAuthPublicService {
     stepUpToken: string,
     expectedAction?: string,
   ): Promise<boolean> {
-    if (!stepUpToken || !stepUpToken.trim()) {
-      return false;
-    }
-    const payload = await this.tokenService.verifyStepUpToken(stepUpToken.trim());
-    if (!payload || !payload.sub) {
-      return false;
-    }
-    if (userId > 0 && Number(payload.sub) !== Number(userId)) {
-      return false;
-    }
-    if (
-      expectedAction &&
-      typeof payload.action === 'string' &&
-      payload.action.trim().length > 0 &&
-      payload.action !== expectedAction
-    ) {
-      return false;
-    }
-    return true;
+    return this.tokenService.verifyStepUpActionToken(userId, stepUpToken, expectedAction);
   }
 
   /** Tắt MFA có kiểm tra xác thực lại (Step-Up Token, mật khẩu hiện tại hoặc mã MFA — Mục 3.5.7) */
@@ -548,9 +544,9 @@ export class AuthService implements IAuthPublicService {
    */
   public async adminResetUserMfa(
     userId: number,
-    input: AdminResetUserMfaInput | AdminResetMfaRequest,
+    input: AdminResetMfaInput | AdminResetMfaRequest,
     actorId?: number,
-  ): Promise<AdminResetUserMfaResult & AdminResetMfaResponse> {
+  ): Promise<AdminResetMfaResult & AdminResetMfaResponse> {
     if (input.stepUpToken && actorId) {
       const ok = await this.verifyStepUpToken(actorId, input.stepUpToken, 'users.resetMfa');
       if (!ok) {

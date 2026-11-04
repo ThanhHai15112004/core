@@ -2060,7 +2060,7 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
     expect(resetViaOtpRes.body.data.reset).toBe(true);
     expect(resetViaOtpRes.body.data.revokedSessionsCount).toBe(1);
 
-    // 8. Admin Reset User Password via POST /api/v1/users/:id/reset-password (requires users.update)
+    // 8. Admin Reset User Password via POST /api/v1/credentials/password/admin-reset (requires users.update)
     const adminResetRes = await context.injectJson<{
       reset: boolean;
       userId: number;
@@ -2068,9 +2068,10 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
       revokedSessionsCount: number;
     }>({
       method: 'POST',
-      url: `/api/v1/users/${userId}/reset-password`,
+      url: '/api/v1/credentials/password/admin-reset',
       headers: adminHeaders,
       payload: {
+        userId,
         useSuggestedPassword: true,
         revokeSessions: true,
       },
@@ -2873,12 +2874,12 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
     expect(logoutRes.status).toBe(HTTP_STATUS_CODE.OK);
     expect(logoutRes.body.data.loggedOut).toBe(true);
 
-    // Verify user login history via GET /api/v1/users/:id/login-history
+    // Verify user login history via GET /api/v1/sessions/users/:id/login-history
     const userHistoryRes = await context.injectJson<
       Array<{ eventTypeName: string; statusName: string }>
     >({
       method: 'GET',
-      url: `/api/v1/users/${sanitizedUserRes.body.data.id}/login-history`,
+      url: `/api/v1/sessions/users/${sanitizedUserRes.body.data.id}/login-history`,
       headers: adminHeaders,
     });
     expect(userHistoryRes.status).toBe(HTTP_STATUS_CODE.OK);

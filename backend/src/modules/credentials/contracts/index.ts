@@ -1,8 +1,4 @@
-import type {
-  AdminResetUserPasswordInput,
-  AdminResetUserPasswordResult,
-  UserAuthCredentialsView,
-} from '@modules/users/contracts/index.js';
+import type { UserAuthCredentialsView } from '@modules/users/contracts/index.js';
 import type {
   AdminResetPasswordRequest,
   ChangePasswordRequest,
@@ -12,6 +8,8 @@ import type {
 } from '../requests/credentials.requests.js';
 import type {
   AdminResetPasswordResponse,
+  AdminResetUserPasswordInput,
+  AdminResetUserPasswordResult,
   ForgotPasswordResponse,
   SuggestedPasswordResponse,
 } from '../types/credentials.types.js';
@@ -21,6 +19,7 @@ export * from '../types/credentials.types.js';
 
 export interface ICredentialsPublicService {
   suggestPasswords(query?: Partial<SuggestPasswordQuery>): Promise<SuggestedPasswordResponse>;
+  initializeUserPassword(userId: number, plainPassword: string): Promise<void>;
   changePassword(
     userId: number,
     dto: ChangePasswordRequest,

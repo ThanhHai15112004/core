@@ -188,6 +188,33 @@ export class TokenService implements TokenVerificationStrategy {
     return payload;
   }
 
+  /** Kiểm tra tính hợp lệ của Step-Up Token gắn với userId và mã thao tác nhạy cảm (Mục 3.5.7) */
+  public async verifyStepUpActionToken(
+    userId: number,
+    stepUpToken: string,
+    expectedAction?: string,
+  ): Promise<boolean> {
+    if (!stepUpToken || !stepUpToken.trim()) {
+      return false;
+    }
+    const payload = await this.verifyStepUpToken(stepUpToken.trim());
+    if (!payload || !payload.sub) {
+      return false;
+    }
+    if (userId > 0 && Number(payload.sub) !== Number(userId)) {
+      return false;
+    }
+    if (
+      expectedAction &&
+      typeof payload.action === 'string' &&
+      payload.action.trim().length > 0 &&
+      payload.action !== expectedAction
+    ) {
+      return false;
+    }
+    return true;
+  }
+
   /** Xác thực thông tin danh tính tài khoản người dùng hoặc Service Account từ payload JWT */
   public async validateUser(
     payload: TokenPayload,

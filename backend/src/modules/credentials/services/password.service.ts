@@ -12,8 +12,6 @@ import {
 } from '@packages/kernel/index.js';
 import { PasswordHasherService } from '@packages/security/index.js';
 import {
-  type AdminResetUserPasswordInput,
-  type AdminResetUserPasswordResult,
   type IUsersPublicService,
   USERS_PUBLIC_SERVICE,
   USER_STATUS,
@@ -23,6 +21,8 @@ import { AUTH_EVENT_STATUS, AUTH_EVENT_TYPE, SessionService } from '@modules/ses
 import {
   AUTH_EMAIL_NOTIFICATION_ADAPTER,
   type AdminResetPasswordResponse,
+  type AdminResetUserPasswordInput,
+  type AdminResetUserPasswordResult,
   DEFAULT_RESET_OTP_MAX_ATTEMPTS,
   type ForgotPasswordResponse,
   type ICredentialsPublicService,
@@ -83,12 +83,9 @@ export class PasswordService implements ICredentialsPublicService {
     this.emailAdapter = emailAdapter ?? createDefaultEmailNotificationAdapter();
     this.settingRegistry = settingRegistry ?? defaultSettingRegistry;
     this.sessionService?.setSecuritySettingsService?.(this.securitySettingsService);
-    this.usersPublicService.registerAdminPasswordResetDelegate?.((userId, input, actorId) =>
-      this.adminResetUserPassword(userId, input, actorId),
-    );
     if (this.userCredentialRepository) {
       const repo = this.userCredentialRepository;
-      this.usersPublicService.registerUserCredentialStoreDelegate?.({
+      this.passwordHasher.setCredentialStoreAdapter({
         getByUserId: async (uid: number) => {
           const cred = await repo.findByUserId(uid);
           if (!cred) return null;
@@ -125,6 +122,13 @@ export class PasswordService implements ICredentialsPublicService {
         },
       });
     }
+  }
+
+  public async initializeUserPassword(userId: number, plainPassword: string): Promise<void> {
+    const passwordHash = await this.passwordHasher.hash(plainPassword);
+    await this.usersPublicService.updatePasswordHash(userId, passwordHash, {
+      recordHistory: false,
+    });
   }
 
   private getPasswordResetTtlSeconds(): number {

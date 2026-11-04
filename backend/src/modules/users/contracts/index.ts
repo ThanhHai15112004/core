@@ -178,7 +178,7 @@ export interface SelfRegisterUserInput {
   readonly username?: string | undefined;
   readonly email?: string | null | undefined;
   readonly phone?: string | null | undefined;
-  readonly password: string;
+  readonly password?: string | undefined;
   readonly firstName?: string | undefined;
   readonly lastName?: string | undefined;
   readonly fullName?: string | undefined;
@@ -192,53 +192,6 @@ export interface SelfRegisterUserInput {
   readonly preferredLocale?: string | null | undefined;
   readonly preferredTimezone?: string | null | undefined;
   readonly status?: UserStatusCode | undefined;
-}
-
-export interface AdminResetUserPasswordInput {
-  readonly newPassword?: string | undefined;
-  readonly useSuggestedPassword?: boolean | undefined;
-  readonly revokeSessions?: boolean | undefined;
-}
-
-export interface AdminResetUserPasswordResult {
-  readonly reset: true;
-  readonly userId: number;
-  readonly revokedSessionsCount: number;
-  readonly generatedPassword?: string;
-}
-
-export interface UserLoginHistoryItemView {
-  readonly id: number;
-  readonly userId: number | null;
-  readonly sessionId: number | null;
-  readonly identifier: string | null;
-  readonly eventType: number;
-  readonly eventTypeName: string;
-  readonly status: number;
-  readonly statusName: 'SUCCESS' | 'FAILED';
-  readonly ipAddress: string | null;
-  readonly userAgent: string | null;
-  readonly deviceName: string | null;
-  readonly reason: string | null;
-  readonly createdAt: string;
-}
-
-export interface AdminResetUserMfaInput {
-  readonly reason: string;
-  readonly verificationReference?: string | undefined;
-  readonly revokeSessions?: boolean | undefined;
-  readonly stepUpToken?: string | undefined;
-}
-
-export interface AdminResetUserMfaResult {
-  readonly reset: true;
-  readonly userId: number;
-  readonly revokedSessionsCount: number;
-  readonly revokedTrustedDevicesCount: number;
-  readonly reason: string;
-  readonly verificationReference?: string | null;
-  readonly resetByActorId?: number | null;
-  readonly resetAt: string;
 }
 
 export interface UserNotificationContactView {
@@ -257,20 +210,6 @@ export interface UserCredentialRecordView {
   readonly passwordHash: string;
   readonly passwordChangedAt: Date | null;
   readonly passwordHistoryHashes: readonly string[];
-}
-
-export interface IUserCredentialStoreDelegate {
-  getByUserId(userId: number): Promise<UserCredentialRecordView | null>;
-  getByUserIds?(userIds: readonly number[]): Promise<ReadonlyMap<number, UserCredentialRecordView>>;
-  saveUserPasswordHash(
-    userId: number,
-    passwordHash: string,
-    options?: {
-      readonly recordHistory?: boolean;
-      readonly maxHistory?: number;
-      readonly passwordChangedAt?: Date | null;
-    },
-  ): Promise<void>;
 }
 
 export interface IUsersPublicService {
@@ -298,30 +237,6 @@ export interface IUsersPublicService {
     userId: number,
     input: UpdateUserPreferencesInput,
   ): Promise<UserPreferencesView>;
-  registerAdminPasswordResetDelegate?(
-    delegate: (
-      userId: number,
-      input: AdminResetUserPasswordInput,
-      actorId?: number,
-    ) => Promise<AdminResetUserPasswordResult>,
-  ): void;
-  registerAdminRevokeSessionsDelegate?(
-    delegate: (userId: number, reason?: string) => Promise<number>,
-  ): void;
-  registerUserLoginHistoryDelegate?(
-    delegate: (userId: number, limit?: number) => Promise<UserLoginHistoryItemView[]>,
-  ): void;
-  registerAdminResetMfaDelegate?(
-    delegate: (
-      userId: number,
-      input: AdminResetUserMfaInput,
-      actorId?: number,
-    ) => Promise<AdminResetUserMfaResult>,
-  ): void;
-  registerStepUpVerificationDelegate?(
-    delegate: (userId: number, stepUpToken: string, action?: string) => Promise<boolean>,
-  ): void;
-  registerUserCredentialStoreDelegate?(delegate: IUserCredentialStoreDelegate): void;
   findActiveUserIdsByIds?(userIds: readonly number[]): Promise<number[]>;
   findActiveUserIdsByRoleIds?(roleIds: readonly number[]): Promise<number[]>;
   findActiveUserIdsByOrganizationUnitIds?(unitIds: readonly number[]): Promise<number[]>;

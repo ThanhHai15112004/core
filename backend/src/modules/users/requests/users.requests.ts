@@ -357,25 +357,6 @@ export const listUserImportHistoriesQuerySchema = z.object({
 
 export type ListUserImportHistoriesQuery = z.infer<typeof listUserImportHistoriesQuerySchema>;
 
-export const adminResetUserPasswordSchema = z
-  .object({
-    newPassword: z.string().min(6).max(128).optional(),
-    useSuggestedPassword: z.boolean().optional().default(false),
-    revokeSessions: z.boolean().optional().default(true),
-  })
-  .default({ useSuggestedPassword: false, revokeSessions: true });
-
-export type AdminResetUserPasswordRequest = z.infer<typeof adminResetUserPasswordSchema>;
-
-export const adminResetUserMfaSchema = z.object({
-  reason: z.string().trim().min(3).max(500),
-  verificationReference: z.string().trim().max(255).optional(),
-  revokeSessions: z.boolean().optional().default(true),
-  stepUpToken: z.string().trim().min(10).optional(),
-});
-
-export type AdminResetUserMfaRequest = z.infer<typeof adminResetUserMfaSchema>;
-
 export const reportParametersInputSchema = z.object({
   fromDate: z.string().trim().max(64).nullable().optional(),
   toDate: z.string().trim().max(64).nullable().optional(),

@@ -18,15 +18,10 @@ import {
   type AuditLogService,
   DATA_SCOPE,
   type PasswordHasherService,
-  type UserIdentity,
   parseDataScope,
 } from '@packages/security/index.js';
 import { type IRolesPublicService, ROLE_STATUS } from '@modules/roles/contracts/index.js';
 import type {
-  AdminResetUserMfaInput,
-  AdminResetUserMfaResult,
-  AdminResetUserPasswordInput,
-  AdminResetUserPasswordResult,
   SelfRegisterUserInput,
   UpdateUserPreferencesInput,
   UserAuthCredentialsView,
@@ -321,7 +316,6 @@ export async function executeSelfRegisterUser(params: {
     fullName: input.fullName,
   });
 
-  const passwordHash = await passwordHasher.hash(input.password);
   const encryptedPhone = encryptPhone(normalizedPhone ?? input.phone);
   const initialStatus = input.status ?? USER_STATUS.ACTIVE;
 
@@ -339,10 +333,13 @@ export async function executeSelfRegisterUser(params: {
   });
 
   const userId = Number(savedUser.id);
-  await saveUserPasswordHash(userId, passwordHash, {
-    recordHistory: false,
-    passwordChangedAt: new Date(),
-  });
+  if (input.password) {
+    const passwordHash = await passwordHasher.hash(input.password);
+    await saveUserPasswordHash(userId, passwordHash, {
+      recordHistory: false,
+      passwordChangedAt: new Date(),
+    });
+  }
   const preferredLocale = normalizePreferredLocale(input.preferredLocale);
   const preferredTimezone = normalizePreferredTimezone(input.preferredTimezone);
   await upsertUserProfile(userId, {
@@ -628,149 +625,6 @@ export async function recordUserLoginAttemptState(params: {
     failedAttempts: user.failedLoginAttempts,
     locked,
     lockedUntil,
-  };
-}
-
-export async function executeAdminResetUserMfaFlow(params: {
-  id: number;
-  dto: AdminResetUserMfaInput;
-  actorId?: number | undefined;
-  actor?: UserIdentity | undefined;
-  userRepository: UserRepository;
-  verifySensitiveActionStepUp: (
-    actorId?: number,
-    stepUpToken?: string,
-    requireStepUp?: boolean,
-    action?: string,
-  ) => Promise<void>;
-  ensureAccessUserRecord: (user: UserEntity, actor: UserIdentity, action: string) => Promise<void>;
-  adminResetMfaDelegate?:
-    | ((
-        userId: number,
-        input: AdminResetUserMfaInput,
-        actorId?: number,
-      ) => Promise<AdminResetUserMfaResult>)
-    | undefined;
-  adminRevokeSessionsDelegate?: ((userId: number, reason?: string) => Promise<number>) | undefined;
-  invalidateIdentityCache: (userId: number) => Promise<void>;
-}): Promise<AdminResetUserMfaResult> {
-  const {
-    id,
-    dto,
-    actorId,
-    actor,
-    userRepository,
-    verifySensitiveActionStepUp,
-    ensureAccessUserRecord,
-    adminResetMfaDelegate,
-    adminRevokeSessionsDelegate,
-    invalidateIdentityCache,
-  } = params;
-
-  const reason = dto.reason?.trim();
-  if (!reason || reason.length < 3) {
-    throw new BadRequestAppException('auth.mfaResetReasonRequired');
-  }
-
-  if (dto.stepUpToken) {
-    await verifySensitiveActionStepUp(actorId, dto.stepUpToken, true, 'users.resetMfa');
-  }
-
-  const user = await userRepository.findByIdWithArchived(id, true);
-  if (!user) {
-    throw new NotFoundAppException('users.notFound', { id });
-  }
-  if (actor) {
-    await ensureAccessUserRecord(user, actor, 'update');
-  }
-
-  if (adminResetMfaDelegate) {
-    const result = await adminResetMfaDelegate(id, dto, actorId);
-    await invalidateIdentityCache(id);
-    return result;
-  }
-
-  user.mfaEnabled = false;
-  await userRepository.saveEntity(user);
-  const revokedSessionsCount =
-    dto.revokeSessions !== false && adminRevokeSessionsDelegate
-      ? await adminRevokeSessionsDelegate(id, `MFA reset by administrator: ${reason}`)
-      : 0;
-  await invalidateIdentityCache(id);
-
-  return {
-    reset: true,
-    userId: Number(id),
-    revokedSessionsCount,
-    revokedTrustedDevicesCount: 0,
-    reason,
-    verificationReference: dto.verificationReference ?? null,
-    resetByActorId: actorId ?? null,
-    resetAt: new Date().toISOString(),
-  };
-}
-
-export async function executeAdminResetUserPasswordFlow(params: {
-  id: number;
-  dto: AdminResetUserPasswordInput;
-  actorId?: number | undefined;
-  actor?: UserIdentity | undefined;
-  userRepository: UserRepository;
-  passwordHasher: PasswordHasherService;
-  ensureAccessUserRecord: (user: UserEntity, actor: UserIdentity, action: string) => Promise<void>;
-  adminPasswordResetDelegate?:
-    | ((
-        userId: number,
-        input: AdminResetUserPasswordInput,
-        actorId?: number,
-      ) => Promise<AdminResetUserPasswordResult>)
-    | undefined;
-  updatePasswordHash: (userId: number, newHash: string) => Promise<void>;
-  unlockUser: (id: number, actorId?: number) => Promise<unknown>;
-}): Promise<AdminResetUserPasswordResult> {
-  const {
-    id,
-    dto,
-    actorId,
-    actor,
-    userRepository,
-    passwordHasher,
-    ensureAccessUserRecord,
-    adminPasswordResetDelegate,
-    updatePasswordHash,
-    unlockUser,
-  } = params;
-
-  const user = await userRepository.findByIdWithArchived(id, false);
-  if (!user) {
-    throw new NotFoundAppException('users.notFound', { id });
-  }
-  if (actor) {
-    await ensureAccessUserRecord(user, actor, 'update');
-  }
-
-  if (adminPasswordResetDelegate) {
-    return adminPasswordResetDelegate(id, dto, actorId);
-  }
-
-  const useSuggested = Boolean(dto.useSuggestedPassword || !dto.newPassword?.trim());
-  const plainPassword = useSuggested
-    ? passwordHasher.generateSuggestedPassword()
-    : dto.newPassword!.trim();
-  const newHash = await passwordHasher.hash(plainPassword);
-  await updatePasswordHash(id, newHash);
-  if (Number(user.status) === USER_STATUS.LOCKED) {
-    await unlockUser(id, actorId);
-  } else if (user.failedLoginAttempts > 0) {
-    user.failedLoginAttempts = 0;
-    await userRepository.saveEntity(user);
-  }
-
-  return {
-    reset: true,
-    userId: Number(id),
-    revokedSessionsCount: 0,
-    ...(useSuggested ? { generatedPassword: plainPassword } : {}),
   };
 }
 

@@ -1165,13 +1165,9 @@ function createIamInMemoryHarness() {
     usersService,
     securitySettingsService,
     verificationService,
-  );
-
-  usersService.registerAdminRevokeSessionsDelegate((userId, reason) =>
-    sessionService.revokeAllUserSessions(userId, reason),
-  );
-  usersService.registerUserLoginHistoryDelegate((userId, limit) =>
-    sessionService.listUserLoginHistory(userId, limit),
+    undefined,
+    undefined,
+    passwordService,
   );
 
   return {
@@ -1850,7 +1846,7 @@ describe('Unit: Quản lý Người dùng (3.1) & Xác thực / Phiên / MFA (3)
       password: 'Fourth#Password404',
       deviceName: 'Device After Reset',
     });
-    const adminResetRes = await h.usersService.adminResetPassword(
+    const adminResetRes = await h.passwordService.adminResetUserPassword(
       user.id,
       { useSuggestedPassword: true, revokeSessions: true },
       1,
@@ -1965,15 +1961,14 @@ describe('Unit: Quản lý Người dùng (3.1) & Xác thực / Phiên / MFA (3)
       },
       { ipAddress: '192.168.1.20', userAgent: 'Android 15' },
     );
-    const adminRevoke = await h.usersService.revokeUserSessions(
+    const adminRevoke = await h.sessionService.revokeAllUserSessions(
       user.id,
       'Tài khoản có dấu hiệu bất thường cần thu hồi khẩn cấp',
-      1,
     );
-    expect(adminRevoke.revokedSessionsCount).toBe(1);
+    expect(adminRevoke).toBe(1);
 
     // 8. Kiểm tra Lịch sử đăng nhập & đăng xuất theo thời gian, IP và thiết bị
-    const history = await h.usersService.getUserLoginHistory(user.id, 50);
+    const history = await h.sessionService.listUserLoginHistory(user.id, 50);
     expect(history.length).toBeGreaterThanOrEqual(6);
     const eventNames = history.map((item) => item.eventTypeName);
     expect(eventNames).toEqual(
@@ -2177,7 +2172,7 @@ describe('Unit: Quản lý Người dùng (3.1) & Xác thực / Phiên / MFA (3)
     expect(promotedUser.roles[0]?.code).toBe('super_admin');
 
     // 5. Reset MFA có kiểm soát từ trang quản trị (3.5.8 — Có lý do xác minh / phê duyệt & thu hồi phiên)
-    const resetMfaResult = await h.usersService.adminResetMfa(
+    const resetMfaResult = await h.authService.adminResetUserMfa(
       adminUser.id,
       {
         reason: 'Người dùng mất điện thoại, đã xác minh danh tính qua video call với IT Helpdesk',

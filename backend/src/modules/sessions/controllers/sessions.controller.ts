@@ -9,7 +9,7 @@ import {
   ValidatedQuery,
   positiveIntParamSchema,
 } from '@packages/http/index.js';
-import { CurrentUser, type UserIdentity } from '@packages/security/index.js';
+import { CurrentUser, RequirePermissions, type UserIdentity } from '@packages/security/index.js';
 import {
   type LoginHistoryQuery,
   type RevokeAllSessionsRequest,
@@ -101,5 +101,64 @@ export class SessionsController {
       },
     );
     return { revokedCount };
+  }
+
+  /** Xem lịch sử đăng nhập & đăng xuất của một người dùng cụ thể (Dành cho Quản trị viên — Mục 3.4.7) */
+  @Get(SESSIONS_ROUTES.USER_LOGIN_HISTORY)
+  @RequirePermissions('users.read')
+  @ApiDoc({
+    summary: 'Xem lịch sử đăng nhập & đăng xuất của một người dùng theo userId',
+    response: z.array(loginHistoryItemResponseSchema),
+  })
+  public async listUserLoginHistory(
+    @ValidatedParams(positiveIntParamSchema, 'userId') userId: number,
+    @ValidatedQuery(loginHistoryQuerySchema) query?: LoginHistoryQuery,
+  ): Promise<LoginHistoryItemResponse[]> {
+    return this.sessionService.listUserLoginHistory(userId, query?.limit);
+  }
+
+  /** Thu hồi toàn bộ phiên đăng nhập của một người dùng khi có sự cố bảo mật (Dành cho Quản trị viên — Mục 3.4.6) */
+  @Post(SESSIONS_ROUTES.USER_REVOKE_ALL)
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions('users.status')
+  @ApiDoc({
+    summary: 'Thu hồi toàn bộ phiên đăng nhập của một người dùng theo userId',
+    response: z.object({
+      revoked: z.literal(true),
+      userId: z.number().int().positive(),
+      revokedCount: z.number(),
+      revokedSessionsCount: z.number(),
+    }),
+  })
+  public async revokeUserSessionsByAdmin(
+    @ValidatedParams(positiveIntParamSchema, 'userId') userId: number,
+    @CurrentUser() actor?: UserIdentity,
+    @Req() req?: FastifyRequest,
+  ): Promise<{
+    revoked: true;
+    userId: number;
+    revokedCount: number;
+    revokedSessionsCount: number;
+  }> {
+    const userAgent =
+      typeof req?.headers?.['user-agent'] === 'string' ? req.headers['user-agent'] : null;
+    const reason = actor?.id
+      ? `Revoked all sessions by administrator #${actor.id} due to security incident`
+      : 'Revoked all sessions by administrator due to security incident';
+    const revokedCount = await this.sessionService.revokeAllUserSessions(
+      userId,
+      reason,
+      undefined,
+      {
+        ipAddress: req?.ip ?? null,
+        userAgent,
+      },
+    );
+    return {
+      revoked: true,
+      userId,
+      revokedCount,
+      revokedSessionsCount: revokedCount,
+    };
   }
 }

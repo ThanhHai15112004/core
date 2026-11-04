@@ -113,6 +113,19 @@ export interface SuggestedPasswordResponse {
   };
 }
 
+export interface AdminResetUserPasswordInput {
+  readonly newPassword?: string | undefined;
+  readonly useSuggestedPassword?: boolean | undefined;
+  readonly revokeSessions?: boolean | undefined;
+}
+
+export interface AdminResetUserPasswordResult {
+  readonly reset: true;
+  readonly userId: number;
+  readonly revokedSessionsCount: number;
+  readonly generatedPassword?: string;
+}
+
 export interface AdminResetPasswordResponse {
   readonly reset: true;
   readonly userId: number;

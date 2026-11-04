@@ -14,8 +14,6 @@ import { CurrentUser, type UserIdentity } from '@packages/security/index.js';
 import { USERS_ROUTES } from '../routes/users.routes.js';
 import { UsersService } from '../services/users.service.js';
 import {
-  type AdminResetUserMfaRequest,
-  type AdminResetUserPasswordRequest,
   type AssignUserOrganizationsRequest,
   type AssignUserRolesRequest,
   type ChangeUserStatusRequest,
@@ -24,8 +22,6 @@ import {
   type ListUsersQuery,
   type LockUserRequest,
   type UpdateUserRequest,
-  adminResetUserMfaSchema,
-  adminResetUserPasswordSchema,
   assignUserOrganizationsSchema,
   assignUserRolesSchema,
   changeUserStatusSchema,
@@ -290,88 +286,5 @@ export class UsersController {
     @CurrentUser() actor?: UserIdentity,
   ): Promise<UserResponse> {
     return this.usersService.assignOrganizations(id, body, actor?.id, actor);
-  }
-
-  /** Reset mật khẩu người dùng từ trang quản trị (Mục 3.3.3 — chỉ người có quyền được thực hiện) */
-  @Post(USERS_ROUTES.RESET_PASSWORD)
-  @HttpCode(HttpStatus.OK)
-  @RequirePermissions('users.update')
-  @ApiDoc({
-    summary: 'Đặt lại mật khẩu người dùng từ trang quản trị và thu hồi phiên đăng nhập',
-    response: z.object({
-      reset: z.literal(true),
-      userId: z.number().int().positive(),
-      revokedSessionsCount: z.number().int().min(0),
-      generatedPassword: z.string().optional(),
-    }),
-  })
-  public async resetUserPassword(
-    @ValidatedParams(positiveIntParamSchema, 'id') id: number,
-    @ValidatedBody(adminResetUserPasswordSchema) body: AdminResetUserPasswordRequest,
-    @CurrentUser() actor?: UserIdentity,
-  ) {
-    return this.usersService.adminResetPassword(id, body ?? {}, actor?.id, actor);
-  }
-
-  /** Reset MFA có kiểm soát từ trang quản trị (Mục 3.5.8 — có xác minh hoặc phê duyệt) */
-  @Post(USERS_ROUTES.RESET_MFA)
-  @HttpCode(HttpStatus.OK)
-  @RequirePermissions('users.update')
-  @ApiDoc({
-    summary:
-      'Reset MFA có kiểm soát cho người dùng bị mất thiết bị xác thực (kèm lý do/xác minh và thu hồi phiên)',
-    response: z.object({
-      reset: z.literal(true),
-      userId: z.number().int().positive(),
-      revokedSessionsCount: z.number().int().min(0),
-      revokedTrustedDevicesCount: z.number().int().min(0),
-      reason: z.string(),
-      verificationReference: z.string().nullable().optional(),
-      resetByActorId: z.number().int().nullable().optional(),
-      resetAt: z.string(),
-    }),
-  })
-  public async resetUserMfa(
-    @ValidatedParams(positiveIntParamSchema, 'id') id: number,
-    @ValidatedBody(adminResetUserMfaSchema) body: AdminResetUserMfaRequest,
-    @CurrentUser() actor?: UserIdentity,
-  ) {
-    return this.usersService.adminResetMfa(id, body, actor?.id, actor);
-  }
-
-  /** Thu hồi toàn bộ phiên đăng nhập của người dùng khi có sự cố (Mục 3.4.6) */
-  @Post(USERS_ROUTES.REVOKE_SESSIONS)
-  @HttpCode(HttpStatus.OK)
-  @RequirePermissions('users.status')
-  @ApiDoc({
-    summary: 'Thu hồi toàn bộ phiên đăng nhập của người dùng khi phát hiện sự cố bảo mật',
-    response: z.object({
-      revoked: z.literal(true),
-      userId: z.number().int().positive(),
-      revokedCount: z.number().int().min(0),
-      revokedSessionsCount: z.number().int().min(0).optional(),
-      reason: z.string().optional(),
-    }),
-  })
-  public async revokeUserSessions(
-    @ValidatedParams(positiveIntParamSchema, 'id') id: number,
-    @ValidatedBody(z.object({ reason: z.string().trim().max(255).optional() }).default({}))
-    body?: { reason?: string },
-    @CurrentUser() actor?: UserIdentity,
-  ) {
-    return this.usersService.revokeUserSessions(id, body?.reason, actor?.id, actor);
-  }
-
-  /** Xem lịch sử đăng nhập & đăng xuất của một người dùng theo thời gian, IP và thiết bị (Mục 3.4.7 & 4.3.6) */
-  @Get(USERS_ROUTES.LOGIN_HISTORY)
-  @RequirePermissions('users.read')
-  @ApiDoc({
-    summary: 'Xem lịch sử đăng nhập và đăng xuất của người dùng theo thời gian, IP và thiết bị',
-  })
-  public async getLoginHistory(
-    @ValidatedParams(positiveIntParamSchema, 'id') id: number,
-    @CurrentUser() actor?: UserIdentity,
-  ) {
-    return this.usersService.getLoginHistory(id, 50, actor);
   }
 }

@@ -22,9 +22,41 @@ export const PASSWORD_HASH_ALGORITHMS = ['SCRYPT', 'PBKDF2_SHA512', 'PBKDF2_SHA2
 
 export type PasswordHashAlgorithm = (typeof PASSWORD_HASH_ALGORITHMS)[number];
 
+export interface StoredCredentialRecord {
+  readonly userId: number;
+  readonly passwordHash: string;
+  readonly passwordChangedAt: Date | null;
+  readonly passwordHistoryHashes: readonly string[];
+}
+
+export interface ICredentialStoreAdapter {
+  getByUserId(userId: number): Promise<StoredCredentialRecord | null>;
+  getByUserIds?(userIds: readonly number[]): Promise<ReadonlyMap<number, StoredCredentialRecord>>;
+  saveUserPasswordHash(
+    userId: number,
+    passwordHash: string,
+    options?: {
+      readonly recordHistory?: boolean;
+      readonly maxHistory?: number;
+      readonly passwordChangedAt?: Date | null;
+    },
+  ): Promise<void>;
+}
+
 @Injectable()
 export class PasswordHasherService {
   private defaultAlgorithm: PasswordHashAlgorithm = 'SCRYPT';
+  private credentialStoreAdapter?: ICredentialStoreAdapter;
+
+  /** Đăng ký adapter lưu trữ bảng `user_credentials` từ module `credentials` */
+  public setCredentialStoreAdapter(adapter: ICredentialStoreAdapter): void {
+    this.credentialStoreAdapter = adapter;
+  }
+
+  /** Lấy adapter lưu trữ bảng `user_credentials` hiện hành (nếu đã đăng ký) */
+  public getCredentialStoreAdapter(): ICredentialStoreAdapter | undefined {
+    return this.credentialStoreAdapter;
+  }
 
   /** Lấy thuật toán băm mật khẩu mặc định hiện hành */
   public getDefaultAlgorithm(): PasswordHashAlgorithm {
