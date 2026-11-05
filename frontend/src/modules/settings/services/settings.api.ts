@@ -432,7 +432,7 @@ export const settingsApi = {
   }): Promise<MenuTreeEvaluationResult> {
     const qs = toQueryString(params ?? {});
     return fetchApi<MenuTreeEvaluationResult>(
-      `/settings/menus/tree${qs ? `?${qs}` : ''}`,
+      `/navigation/menus/tree${qs ? `?${qs}` : ''}`,
     );
   },
 

@@ -20,6 +20,7 @@ import {
   type ListUserSubordinatesQuery,
   type ListUsersQuery,
   type LockUserRequest,
+  type UpdateUserPreferencesRequest,
   type UpdateUserRequest,
   assignUserOrganizationsSchema,
   changeUserStatusSchema,
@@ -27,14 +28,17 @@ import {
   listUserSubordinatesQuerySchema,
   listUsersQuerySchema,
   lockUserSchema,
+  updateUserPreferencesSchema,
   updateUserSchema,
 } from '../requests/users.requests.js';
 import {
   type UserOrganizationHistoryItemResponse,
+  type UserPreferencesResponse,
   type UserResponse,
   type UserStatusHistoryItemResponse,
   type UserSubordinatesOverviewResponse,
   userOrganizationHistoryItemSchema,
+  userPreferencesResponseSchema,
   userResponseSchema,
   userStatusHistoryItemSchema,
   userSubordinatesOverviewResponseSchema,
@@ -58,6 +62,31 @@ export class UsersController {
     @CurrentUser() actor?: UserIdentity,
   ): Promise<PaginatedResult<UserResponse>> {
     return this.usersService.listPaginated(query, actor);
+  }
+
+  /** Xem cấu hình ngôn ngữ và múi giờ cá nhân của người dùng hiện tại (Mục 5.3.2 & 5.3.5) */
+  @Get(USERS_ROUTES.ME_PREFERENCES)
+  @ApiDoc({
+    summary: 'Xem cấu hình ngôn ngữ (preferredLocale) và múi giờ (preferredTimezone) cá nhân',
+    response: userPreferencesResponseSchema,
+  })
+  public async getMyPreferences(
+    @CurrentUser() actor: UserIdentity,
+  ): Promise<UserPreferencesResponse> {
+    return this.usersService.getUserPreferences(actor.id);
+  }
+
+  /** Cập nhật ngôn ngữ và múi giờ cá nhân của người dùng hiện tại (Mục 5.3.2 & 5.3.5) */
+  @Patch(USERS_ROUTES.ME_PREFERENCES)
+  @ApiDoc({
+    summary: 'Cập nhật ngôn ngữ (preferredLocale) và múi giờ (preferredTimezone) cá nhân',
+    response: userPreferencesResponseSchema,
+  })
+  public async updateMyPreferences(
+    @CurrentUser() actor: UserIdentity,
+    @ValidatedBody(updateUserPreferencesSchema) body: UpdateUserPreferencesRequest,
+  ): Promise<UserPreferencesResponse> {
+    return this.usersService.updateUserPreferences(actor.id, body);
   }
 
   /** Xem chi tiết thông tin một người dùng kèm kiểm tra phạm vi dữ liệu chống đổi ID (Mục 4.3.6) */

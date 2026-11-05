@@ -1,0 +1,6 @@
+{
+  "featureFlagNotFound": "Feature flag '{{key}}' not found",
+  "featureFlagAlreadyExists": "Feature flag '{{key}}' already exists",
+  "featureFlagModuleRequired": "Feature flag must belong to a valid module (<module>.<feature>)",
+  "invalidFeatureFlagWindow": "Feature flag end time must be after start time"
+}

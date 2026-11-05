@@ -1,6 +1,7 @@
 export const USERS_ROUTES = {
   PREFIX: 'users',
   ROOT: '',
+  ME_PREFERENCES: 'me/preferences',
   BY_ID: ':id',
   LOCK: ':id/lock',
   UNLOCK: ':id/unlock',

@@ -1,16 +1,5 @@
 import type {
-  FeatureFlagEvaluationContext,
-  FeatureFlagEvaluationResult,
-  FeatureFlagManifestItem,
-  FeatureFlagRegistryService,
-  MenuManifestItem,
-  MenuRegistryService,
-  RegisteredFeatureFlagDefinition,
-  RegisteredMenuDefinition,
-  RegisteredSequenceRuleDefinition,
   RegisteredSettingDefinition,
-  SequenceManifestItem,
-  SequenceRegistryService,
   SettingEnvironmentCode,
   SettingGroupManifestItem,
   SettingManifestItem,
@@ -24,17 +13,7 @@ import type {
   FieldEncryptionService,
   UserIdentity,
 } from '@packages/security/index.js';
-import type {
-  FeatureFlagHistoryRecord,
-  SequenceRuleHistoryRecord,
-  SettingHistoryRecord,
-} from '../contracts/index.js';
-import type { FeatureFlagHistoryRepository } from '../repositories/feature-flag-history.repository.js';
-import type { FeatureFlagRepository } from '../repositories/feature-flag.repository.js';
-import type { MenuRepository } from '../repositories/menu.repository.js';
-import type { SequenceCounterRepository } from '../repositories/sequence-counter.repository.js';
-import type { SequenceRuleHistoryRepository } from '../repositories/sequence-rule-history.repository.js';
-import type { SequenceRuleRepository } from '../repositories/sequence-rule.repository.js';
+import type { SettingHistoryRecord } from '../contracts/index.js';
 import type { SettingGroupRepository } from '../repositories/setting-group.repository.js';
 import type { SystemSettingHistoryRepository } from '../repositories/system-setting-history.repository.js';
 import type { SystemSettingScopeRepository } from '../repositories/system-setting-scope.repository.js';
@@ -43,11 +22,6 @@ import type {
   CreateSettingRequest,
   UpdateSettingValueRequest,
 } from '../requests/settings.requests.js';
-import type {
-  FeatureFlagHistoryActionType,
-  MenuAuditActionType,
-  SequenceHistoryActionType,
-} from '../enum/settings.enum.js';
 
 export interface UpsertSettingGroupManifestParams {
   grp: SettingGroupManifestItem;
@@ -146,73 +120,3 @@ export interface PersistScopedSettingUpdateParams {
   scopeRepository?: SystemSettingScopeRepository | null | undefined;
   decryptIfNeeded: (raw: string, isEncrypted: boolean) => string;
 }
-
-export interface SyncManifestFeatureFlagsParams {
-  customFlags?: readonly FeatureFlagManifestItem[] | undefined;
-  registry: FeatureFlagRegistryService;
-  flagRepository?: FeatureFlagRepository | null | undefined;
-  upsertDefinitionSilent: (def: RegisteredFeatureFlagDefinition) => void;
-  markHydrated: () => void;
-}
-
-export interface RecordFeatureFlagHistoryParams {
-  flagId: number;
-  flagKey: string;
-  action: FeatureFlagHistoryActionType;
-  oldState: Record<string, unknown> | null;
-  newState: Record<string, unknown>;
-  reason: string | null;
-  actor?: UserIdentity | undefined;
-  nextHistoryId: () => number;
-  historyRepository?: FeatureFlagHistoryRepository | null | undefined;
-  auditLogService?: AuditLogService | null | undefined;
-  inMemoryHistory: FeatureFlagHistoryRecord[];
-}
-
-export interface SyncManifestSequencesParams {
-  customSequences?: readonly SequenceManifestItem[] | undefined;
-  registry: SequenceRegistryService;
-  ruleRepository?: SequenceRuleRepository | null | undefined;
-  counterRepository?: SequenceCounterRepository | null | undefined;
-  nextRuleId: () => number;
-  markHydrated: () => void;
-}
-
-export interface RecordSequenceHistoryParams {
-  sequenceId: number;
-  sequenceKey: string;
-  action: SequenceHistoryActionType;
-  oldState: Record<string, unknown> | null;
-  newState: Record<string, unknown>;
-  actor?: UserIdentity | undefined;
-  reason?: string | null | undefined;
-  nextHistoryId: () => number;
-  historyRepository?: SequenceRuleHistoryRepository | null | undefined;
-  auditLogService?: AuditLogService | null | undefined;
-  inMemoryHistory: SequenceRuleHistoryRecord[];
-}
-
-export interface SyncManifestMenusParams {
-  customMenus?: readonly MenuManifestItem[] | undefined;
-  registry: MenuRegistryService;
-  menuRepository?: MenuRepository | null | undefined;
-  clearL2CacheSafe: () => Promise<void>;
-  markHydrated: () => void;
-}
-
-export interface RecordMenuAuditParams {
-  action: MenuAuditActionType;
-  code: string;
-  oldState: Record<string, unknown> | null;
-  newState: Record<string, unknown>;
-  actor?: UserIdentity | undefined;
-  reason?: string | null | undefined;
-  auditLogService?: AuditLogService | null | undefined;
-}
-
-export type {
-  FeatureFlagEvaluationContext,
-  FeatureFlagEvaluationResult,
-  RegisteredMenuDefinition,
-  RegisteredSequenceRuleDefinition,
-};

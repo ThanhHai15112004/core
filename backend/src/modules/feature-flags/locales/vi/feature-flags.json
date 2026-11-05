@@ -1,0 +1,6 @@
+{
+  "featureFlagNotFound": "Không tìm thấy feature flag '{{key}}'",
+  "featureFlagAlreadyExists": "Feature flag '{{key}}' đã tồn tại",
+  "featureFlagModuleRequired": "Feature flag bắt buộc phải thuộc về một module hợp lệ (<module>.<feature>)",
+  "invalidFeatureFlagWindow": "Thời gian kết thúc của feature flag phải lớn hơn thời gian bắt đầu"
+}

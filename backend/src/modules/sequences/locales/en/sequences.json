@@ -1,0 +1,7 @@
+{
+  "sequenceRuleNotFound": "Sequence rule '{{key}}' not found",
+  "sequenceRuleAlreadyExists": "Sequence rule '{{key}}' already exists",
+  "invalidSequenceRule": "Invalid sequence rule configuration",
+  "invalidSequenceStatus": "Invalid sequence rule status",
+  "sequenceUnitContextRequired": "Sequence rule '{{key}}' requires an organizationUnitId"
+}

@@ -1,0 +1,6 @@
+{
+  "menuNotFound": "Menu item '{{code}}' not found",
+  "menuAlreadyExists": "Menu item '{{code}}' already exists",
+  "menuCircularReference": "Cannot set parent menu that creates a circular hierarchy",
+  "menuHasChildren": "Cannot delete a menu item that still has children"
+}

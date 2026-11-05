@@ -1,0 +1,6 @@
+{
+  "menuNotFound": "Không tìm thấy mục menu '{{code}}'",
+  "menuAlreadyExists": "Mục menu '{{code}}' đã tồn tại",
+  "menuCircularReference": "Không thể đặt menu cha gây vòng lặp phân cấp",
+  "menuHasChildren": "Không thể xóa mục menu đang có mục con"
+}

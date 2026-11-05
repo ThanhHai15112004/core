@@ -1,0 +1,7 @@
+{
+  "sequenceRuleNotFound": "Không tìm thấy quy tắc sinh mã '{{key}}'",
+  "sequenceRuleAlreadyExists": "Quy tắc sinh mã '{{key}}' đã tồn tại",
+  "invalidSequenceRule": "Cấu hình quy tắc sinh mã không hợp lệ",
+  "invalidSequenceStatus": "Trạng thái quy tắc sinh mã (sequence status) không hợp lệ",
+  "sequenceUnitContextRequired": "Quy tắc sinh mã '{{key}}' yêu cầu đơn vị (organizationUnitId)"
+}

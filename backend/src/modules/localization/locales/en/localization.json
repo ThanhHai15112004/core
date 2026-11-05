@@ -1,0 +1,9 @@
+{
+  "localeNotFound": "System locale '{code}' not found",
+  "localeAlreadyExists": "Locale code '{code}' already exists in the database",
+  "timezoneNotFound": "System timezone '{code}' not found",
+  "timezoneAlreadyExists": "Timezone '{code}' already exists in the database",
+  "translationNotFound": "Translation not found (locale: {locale}, key: {key})",
+  "cannotSetInactiveLocaleDefault": "Cannot set an INACTIVE locale as the system default locale",
+  "cannotSetInactiveTimezoneDefault": "Cannot set an INACTIVE timezone as the system default timezone"
+}

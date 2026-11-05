@@ -515,6 +515,69 @@ export const STANDARD_IAM_PERMISSIONS: readonly SeedPermissionDef[] = [
     module: 'audit',
     description: 'Quyền quản trị cấu hình và kiểm soát tính toàn vẹn Nhật ký thao tác',
   },
+  {
+    id: 50,
+    code: 'feature-flags.read',
+    name: 'Xem danh sách & đánh giá Feature Flags',
+    module: 'feature-flags',
+    description:
+      'Quyền xem danh sách Feature Flags, lịch sử thay đổi và đánh giá trạng thái bật/tắt',
+  },
+  {
+    id: 51,
+    code: 'feature-flags.manage',
+    name: 'Quản trị Feature Flags & đồng bộ Manifest',
+    module: 'feature-flags',
+    description:
+      'Quyền tạo mới, cập nhật targeting/rollout/thời gian, bật/tắt Feature Flags và đồng bộ từ module.manifest.json',
+  },
+  {
+    id: 52,
+    code: 'localization.read',
+    name: 'Xem danh mục Ngôn ngữ, Múi giờ & Từ điển dịch',
+    module: 'localization',
+    description:
+      'Quyền xem danh sách ngôn ngữ (locales), múi giờ (timezones) và bản dịch động (translations)',
+  },
+  {
+    id: 53,
+    code: 'localization.manage',
+    name: 'Quản trị Ngôn ngữ, Múi giờ & Từ điển dịch',
+    module: 'localization',
+    description:
+      'Quyền thêm mới, chỉnh sửa ngôn ngữ/múi giờ, cập nhật bản dịch và đồng bộ từ module.manifest.json',
+  },
+  {
+    id: 54,
+    code: 'sequences.read',
+    name: 'Xem quy tắc sinh mã nghiệp vụ & lịch sử',
+    module: 'sequences',
+    description:
+      'Quyền xem danh sách quy tắc sinh mã nghiệp vụ, xem trước mẫu mã và lịch sử cấu hình',
+  },
+  {
+    id: 55,
+    code: 'sequences.manage',
+    name: 'Quản trị quy tắc sinh mã nghiệp vụ & cấp mã',
+    module: 'sequences',
+    description:
+      'Quyền tạo mới, cập nhật quy tắc sinh mã, cấp mã nghiệp vụ và đồng bộ từ module.manifest.json',
+  },
+  {
+    id: 56,
+    code: 'navigation.read',
+    name: 'Xem cấu trúc cây Menu & Điều hướng',
+    module: 'navigation',
+    description: 'Quyền xem danh sách và cây menu quản trị toàn hệ thống',
+  },
+  {
+    id: 57,
+    code: 'navigation.manage',
+    name: 'Quản trị cây Menu, sắp xếp & xóa cache điều hướng',
+    module: 'navigation',
+    description:
+      'Quyền tạo mới, chỉnh sửa, sắp xếp thứ tự, bật/tắt, xóa menu và làm mới cache điều hướng',
+  },
 ] as const;
 
 const ALL_IAM_PERMISSION_CODES = STANDARD_IAM_PERMISSIONS.map((p) => p.code);

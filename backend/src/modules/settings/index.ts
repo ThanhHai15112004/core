@@ -1,14 +1,7 @@
+export { SettingsModule } from './settings.module.js';
+export { SettingsService } from './services/settings.service.js';
+export { SETTINGS_ROUTES } from './routes/settings.routes.js';
 export * from './contracts/index.js';
 export * from './enum/settings.enum.js';
-export * from './types/settings.types.js';
-export * from './routes/settings.routes.js';
 export * from './requests/settings.requests.js';
-export * from './requests/i18n.requests.js';
 export * from './responses/settings.response.js';
-export * from './responses/i18n.response.js';
-export * from './services/settings.service.js';
-export * from './services/feature-flags.service.js';
-export * from './services/i18n-management.service.js';
-export * from './services/sequences.service.js';
-export * from './services/menus.service.js';
-export * from './settings.module.js';

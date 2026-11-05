@@ -16,7 +16,8 @@
     "roles",
     "organizations",
     "codes",
-    "settings"
+    "settings",
+    "sequences"
   ],
   "permissions": ["notifications.read", "notifications.send", "notifications.manage"],
   "events": {

@@ -21,7 +21,7 @@ import { type IRolesPublicService, ROLES_PUBLIC_SERVICE } from '@modules/roles/c
 import {
   type ISequencesPublicService,
   SEQUENCES_PUBLIC_SERVICE,
-} from '@modules/settings/contracts/index.js';
+} from '@modules/sequences/contracts/index.js';
 import { type IUsersPublicService, USERS_PUBLIC_SERVICE } from '@modules/users/contracts/index.js';
 import {
   type DispatchNotificationPublicInput,

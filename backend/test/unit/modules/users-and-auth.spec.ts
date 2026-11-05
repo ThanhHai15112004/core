@@ -118,10 +118,10 @@ import type { CodeValueEntity } from '@modules/codes/entities/code-value.entity.
 import type { CodeTypeRepository } from '@modules/codes/repositories/code-type.repository.js';
 import type { CodeValueRepository } from '@modules/codes/repositories/code-value.repository.js';
 import { CodesService } from '@modules/codes/services/codes.service.js';
-import { FeatureFlagsService } from '@modules/settings/services/feature-flags.service.js';
-import { MenusService } from '@modules/settings/services/menus.service.js';
-import { SequenceCounterRepository } from '@modules/settings/repositories/sequence-counter.repository.js';
-import { SequencesService } from '@modules/settings/services/sequences.service.js';
+import { FeatureFlagsService } from '@modules/feature-flags/services/feature-flags.service.js';
+import { MenusService } from '@modules/navigation/services/menus.service.js';
+import { SequenceCounterRepository } from '@modules/sequences/repositories/sequence-counter.repository.js';
+import { SequencesService } from '@modules/sequences/services/sequences.service.js';
 import { SettingsService } from '@modules/settings/services/settings.service.js';
 import { MasterPermissionSeeder } from '../../../src/database/seeders/master-permission.seeder.js';
 
@@ -4278,7 +4278,7 @@ describe('Unit: Quản lý Người dùng (3.1) & Xác thực / Phiên / MFA (3)
     });
 
     const auditEntries = await auditLogService.listPaginated({
-      module: 'settings',
+      module: 'feature-flags',
       feature: 'feature_flags',
     });
     expect(auditEntries.meta.totalItems).toBeGreaterThanOrEqual(5);
@@ -4870,6 +4870,10 @@ describe('Unit: Quản lý Người dùng (3.1) & Xác thực / Phiên / MFA (3)
     // 5.6.2: Lọc theo trạng thái cài đặt của module (`enabledModules`): nếu gỡ module `users` khỏi danh sách cài đặt, IAM_USERS tự động ẩn
     menusService.setInstalledModules([
       'settings',
+      'navigation',
+      'feature-flags',
+      'localization',
+      'sequences',
       'roles',
       'permissions',
       'audit',
@@ -4889,6 +4893,10 @@ describe('Unit: Quản lý Người dùng (3.1) & Xác thực / Phiên / MFA (3)
     // Khôi phục danh sách module cài đặt
     menusService.setInstalledModules([
       'settings',
+      'navigation',
+      'feature-flags',
+      'localization',
+      'sequences',
       'users',
       'roles',
       'permissions',

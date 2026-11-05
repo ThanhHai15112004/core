@@ -31,6 +31,10 @@ import { MachineIdentitiesModule } from '@modules/machine-identities/index.js';
 import { AuthModule } from '@modules/auth/index.js';
 import { CodesModule } from '@modules/codes/index.js';
 import { SettingsModule } from '@modules/settings/index.js';
+import { FeatureFlagsModule } from '@modules/feature-flags/index.js';
+import { LocalizationModule } from '@modules/localization/index.js';
+import { SequencesModule } from '@modules/sequences/index.js';
+import { NavigationModule } from '@modules/navigation/index.js';
 import { FilesModule } from '@modules/files/index.js';
 import { NotificationsModule } from '@modules/notifications/index.js';
 import { TemplatesModule } from '@modules/templates/index.js';
@@ -69,6 +73,10 @@ import { MetricsModule } from '@packages/metrics/index.js';
     SystemOpsModule,
     CodesModule,
     SettingsModule,
+    FeatureFlagsModule,
+    LocalizationModule,
+    SequencesModule,
+    NavigationModule,
     OrganizationsModule,
     OrganizationMembersModule,
     PermissionsModule,

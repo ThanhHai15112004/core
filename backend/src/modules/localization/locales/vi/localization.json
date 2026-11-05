@@ -1,0 +1,9 @@
+{
+  "localeNotFound": "Không tìm thấy ngôn ngữ hệ thống (mã: {code})",
+  "localeAlreadyExists": "Mã ngôn ngữ '{code}' đã tồn tại trong cơ sở dữ liệu",
+  "timezoneNotFound": "Không tìm thấy khung giờ/múi giờ hệ thống (mã: {code})",
+  "timezoneAlreadyExists": "Khung giờ/múi giờ '{code}' đã tồn tại trong cơ sở dữ liệu",
+  "translationNotFound": "Không tìm thấy bản dịch thông báo (locale: {locale}, key: {key})",
+  "cannotSetInactiveLocaleDefault": "Không thể đặt ngôn ngữ đang ngừng hoạt động (INACTIVE) làm ngôn ngữ mặc định của hệ thống",
+  "cannotSetInactiveTimezoneDefault": "Không thể đặt múi giờ đang ngừng hoạt động (INACTIVE) làm múi giờ mặc định của hệ thống"
+}

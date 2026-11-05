@@ -19,6 +19,20 @@ export type {
 
 export type UserOrganizationHistoryItemResponse = UserOrganizationHistoryItemView;
 
+export interface UserPreferencesResponse {
+  readonly userId: number;
+  readonly preferredLocale: string;
+  readonly preferredTimezone: string;
+  readonly updatedAt: string;
+}
+
+export const userPreferencesResponseSchema = z.object({
+  userId: z.number().int().min(1),
+  preferredLocale: z.string(),
+  preferredTimezone: z.string(),
+  updatedAt: z.string(),
+});
+
 export interface UserSubordinatesOverviewResponse {
   readonly userId: number;
   readonly managerId: number;

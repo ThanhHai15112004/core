@@ -11,13 +11,13 @@ import {
 } from '@packages/kernel/index.js';
 import { FieldEncryptionService } from '@packages/security/index.js';
 import {
+  FEATURE_FLAGS_AUDIT_META,
   FeatureFlagsService,
-  I18nManagementService,
-  MenusService,
-  SETTINGS_AUDIT_META,
-  SequencesService,
-  SettingsService,
-} from '../../../src/modules/settings/index.js';
+} from '../../../src/modules/feature-flags/index.js';
+import { I18nManagementService } from '../../../src/modules/localization/index.js';
+import { MenusService } from '../../../src/modules/navigation/index.js';
+import { SequencesService } from '../../../src/modules/sequences/index.js';
+import { SETTINGS_AUDIT_META, SettingsService } from '../../../src/modules/settings/index.js';
 
 describe('SettingsModule — 5 Sub-domains & Helpers Unit Tests', () => {
   let settingRegistry: SettingRegistryService;
@@ -100,6 +100,7 @@ describe('SettingsModule — 5 Sub-domains & Helpers Unit Tests', () => {
   });
 
   it('2. FeatureFlags: creates, toggles, evaluates targeting rules and records history', async () => {
+    expect(FEATURE_FLAGS_AUDIT_META.MODULE).toBe('feature-flags');
     const flag = await featureFlagsService.createFeatureFlag({
       key: 'users.smart_export_v2',
       module: 'users',

@@ -13,7 +13,7 @@ import {
   resolveRequestTimezone,
 } from '@packages/i18n/index.js';
 import { defaultSettingRegistry } from '@packages/kernel/index.js';
-import { I18nManagementService } from '@modules/settings/index.js';
+import { I18nManagementService } from '@modules/localization/index.js';
 
 describe('i18n & Timezone / Locale Formatting (Section 5.3)', () => {
   const i18n = new CoreI18nService();
@@ -27,6 +27,7 @@ describe('i18n & Timezone / Locale Formatting (Section 5.3)', () => {
       ['vi-VN', 'vi'],
       ['ja', 'vi'],
     ])('resolves %p to %p', (header, expected) => {
+      resetRegisteredLocales();
       expect(resolveHeaderLocale(header)).toBe(expected);
     });
 

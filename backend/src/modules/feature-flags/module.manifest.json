@@ -1,0 +1,56 @@
+{
+  "$schema": "../../packages/kernel/schemas/module.manifest.schema.json",
+  "name": "feature-flags",
+  "displayName": "Feature Flags & Progressive Rollout",
+  "version": "1.0.0",
+  "description": "Module quản lý cờ tính năng (Feature Flags), bật/tắt theo module đã cài, targeting theo người dùng/vai trò/đơn vị, rollout theo tỷ lệ %, khung thời gian hiệu lực và lịch sử thay đổi",
+  "type": "core",
+  "category": "core",
+  "author": "Core Platform Team",
+  "entryModule": "FeatureFlagsModule",
+  "dependencies": ["database", "cache", "security", "i18n"],
+  "permissions": ["feature-flags.read", "feature-flags.manage"],
+  "events": {
+    "published": [
+      "settings.feature_flags_synced",
+      "settings.feature_flag_created",
+      "settings.feature_flag_updated",
+      "settings.feature_flag_toggled"
+    ],
+    "subscribed": []
+  },
+  "database": {
+    "hasMigrations": true,
+    "tables": ["feature_flags", "feature_flag_histories"]
+  },
+  "featureFlags": [
+    {
+      "key": "settings.realtime_broadcast",
+      "module": "settings",
+      "name": "Đồng bộ tức thời cấu hình qua sự kiện phân tán",
+      "description": "Phát sóng thay đổi cấu hình và Feature Flag theo tỷ lệ rollout để làm mới cache các node ứng dụng",
+      "isEnabled": true,
+      "rolloutPercentage": 50,
+      "targetUserIds": [],
+      "targetRoles": [],
+      "targetOrganizationUnitIds": [],
+      "isSystem": true
+    }
+  ],
+  "menus": [
+    {
+      "code": "SETTINGS_FEATURE_FLAGS",
+      "name": "Cờ tính năng (Feature Flags)",
+      "status": 1,
+      "link": "/settings/feature-flags",
+      "linkApi": "/api/v1/feature-flags",
+      "type": 2,
+      "parentCode": "SETTINGS",
+      "level": 2,
+      "key": "settings.read",
+      "numOrder": 2,
+      "icon": "Flag",
+      "position": "SIDEBAR"
+    }
+  ]
+}

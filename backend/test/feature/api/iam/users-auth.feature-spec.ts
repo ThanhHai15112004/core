@@ -3495,7 +3495,7 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
     expect(historyRes.body.data.some((h) => h.newValue === 11)).toBe(true);
   });
 
-  it('5.2 & 5.3 Feature E2E: Feature Flags HTTP APIs (/api/v1/settings/feature-flags/*) & Multilingual / Timezone User Preferences (/api/v1/auth/preferences)', async () => {
+  it('5.2 & 5.3 Feature E2E: Feature Flags HTTP APIs (/api/v1/feature-flags/*) & Multilingual / Timezone User Preferences (/api/v1/users/me/preferences & /api/v1/auth/preferences)', async () => {
     const adminHeaders = { authorization: `Bearer ${adminAccessToken}` };
 
     // =========================================================================
@@ -3510,7 +3510,7 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
       }>
     >({
       method: 'GET',
-      url: '/api/v1/settings/feature-flags',
+      url: '/api/v1/feature-flags',
       headers: adminHeaders,
     });
     expect(listFlagsRes.status).toBe(HTTP_STATUS_CODE.OK);
@@ -3525,7 +3525,7 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
       rolloutPercentage: number;
     }>({
       method: 'POST',
-      url: '/api/v1/settings/feature-flags',
+      url: '/api/v1/feature-flags',
       headers: adminHeaders,
       payload: {
         key: 'users.e2e_pilot_export',
@@ -3549,7 +3549,7 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
     // 5.2.2: Chặn tạo flag cho module chưa cài đặt ('uninstalled_mod.feature_x')
     const invalidModuleFlagRes = await context.injectJson({
       method: 'POST',
-      url: '/api/v1/settings/feature-flags',
+      url: '/api/v1/feature-flags',
       headers: adminHeaders,
       payload: {
         key: 'uninstalled_mod.feature_x',
@@ -3561,7 +3561,7 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
     });
     expect(invalidModuleFlagRes.status).toBe(HTTP_STATUS_CODE.UNPROCESSABLE_ENTITY);
 
-    // 5.2.3 -> 5.2.7: Đánh giá Feature Flag qua GET /api/v1/settings/feature-flags/evaluate
+    // 5.2.3 -> 5.2.7: Đánh giá Feature Flag qua GET /api/v1/feature-flags/evaluate
     const evalMatchUserRes = await context.injectJson<
       Array<{
         key: string;
@@ -3570,7 +3570,7 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
       }>
     >({
       method: 'GET',
-      url: '/api/v1/settings/feature-flags/evaluate?key=users.e2e_pilot_export&userId=1&at=2026-10-20T10:00:00.000Z',
+      url: '/api/v1/feature-flags/evaluate?key=users.e2e_pilot_export&userId=1&at=2026-10-20T10:00:00.000Z',
       headers: adminHeaders,
     });
     expect(evalMatchUserRes.status).toBe(HTTP_STATUS_CODE.OK);
@@ -3586,7 +3586,7 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
       }>
     >({
       method: 'GET',
-      url: '/api/v1/settings/feature-flags/evaluate?key=users.e2e_pilot_export&userId=999&roles=GUEST&organizationUnitId=99&at=2026-10-20T10:00:00.000Z',
+      url: '/api/v1/feature-flags/evaluate?key=users.e2e_pilot_export&userId=999&roles=GUEST&organizationUnitId=99&at=2026-10-20T10:00:00.000Z',
       headers: adminHeaders,
     });
     expect(evalMismatchRes.status).toBe(HTTP_STATUS_CODE.OK);
@@ -3602,20 +3602,20 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
       }>
     >({
       method: 'GET',
-      url: '/api/v1/settings/feature-flags/evaluate?key=users.e2e_pilot_export&userId=1&at=2027-01-02T00:00:00.000Z',
+      url: '/api/v1/feature-flags/evaluate?key=users.e2e_pilot_export&userId=1&at=2027-01-02T00:00:00.000Z',
       headers: adminHeaders,
     });
     expect(evalExpiredRes.status).toBe(HTTP_STATUS_CODE.OK);
     expect(evalExpiredRes.body.data[0]?.enabled).toBe(false);
     expect(evalExpiredRes.body.data[0]?.reason).toBe('EXPIRED');
 
-    // Toggle tắt flag qua PATCH /api/v1/settings/feature-flags/:key/toggle
+    // Toggle tắt flag qua PATCH /api/v1/feature-flags/:key/toggle
     const toggleFlagRes = await context.injectJson<{
       key: string;
       isEnabled: boolean;
     }>({
       method: 'PATCH',
-      url: '/api/v1/settings/feature-flags/users.e2e_pilot_export/toggle',
+      url: '/api/v1/feature-flags/users.e2e_pilot_export/toggle',
       headers: adminHeaders,
       payload: {
         isEnabled: false,
@@ -3625,7 +3625,7 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
     expect(toggleFlagRes.status).toBe(HTTP_STATUS_CODE.OK);
     expect(toggleFlagRes.body.data.isEnabled).toBe(false);
 
-    // 5.2.8: Kiểm tra lịch sử thay đổi Feature Flag qua GET /api/v1/settings/feature-flags/:key/history
+    // 5.2.8: Kiểm tra lịch sử thay đổi Feature Flag qua GET /api/v1/feature-flags/:key/history
     const flagHistoryRes = await context.injectJson<
       Array<{
         flagKey: string;
@@ -3634,7 +3634,7 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
       }>
     >({
       method: 'GET',
-      url: '/api/v1/settings/feature-flags/users.e2e_pilot_export/history',
+      url: '/api/v1/feature-flags/users.e2e_pilot_export/history',
       headers: adminHeaders,
     });
     expect(flagHistoryRes.status).toBe(HTTP_STATUS_CODE.OK);
@@ -3646,28 +3646,28 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
     // =========================================================================
     // PHẦN 2: ĐA NGÔN NGỮ VÀ MÚI GIỜ HTTP E2E (Mục 5.3.1 -> 5.3.6)
     // =========================================================================
-    // 5.3.1 & 5.3.2: Lấy tùy chọn ngôn ngữ & múi giờ mặc định của người dùng (vi, Asia/Ho_Chi_Minh)
+    // 5.3.1 & 5.3.2: Lấy tùy chọn ngôn ngữ & múi giờ mặc định của người dùng (vi, Asia/Ho_Chi_Minh) qua /users/me/preferences
     const getPrefsRes = await context.injectJson<{
       userId: number;
       preferredLocale: 'vi' | 'en';
       preferredTimezone: string;
     }>({
       method: 'GET',
-      url: '/api/v1/auth/preferences',
+      url: '/api/v1/users/me/preferences',
       headers: adminHeaders,
     });
     expect(getPrefsRes.status).toBe(HTTP_STATUS_CODE.OK);
     expect(getPrefsRes.body.data.preferredLocale).toBe('vi');
     expect(getPrefsRes.body.data.preferredTimezone).toBe('Asia/Ho_Chi_Minh');
 
-    // 5.3.2 & 5.3.5: Người dùng đổi ngôn ngữ sang 'en' và múi giờ sang 'America/New_York'
+    // 5.3.2 & 5.3.5: Người dùng đổi ngôn ngữ sang 'en' và múi giờ sang 'America/New_York' qua /users/me/preferences
     const updatePrefsRes = await context.injectJson<{
       userId: number;
       preferredLocale: 'vi' | 'en';
       preferredTimezone: string;
     }>({
       method: 'PATCH',
-      url: '/api/v1/auth/preferences',
+      url: '/api/v1/users/me/preferences',
       headers: adminHeaders,
       payload: {
         preferredLocale: 'en',
@@ -3718,14 +3718,14 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
     // =========================================================================
     // PHẦN 3: SINH MÃ NGHIỆP VỤ ĐỘNG ĐA MODULE HTTP E2E (Mục 5.5.1 -> 5.5.8)
     // =========================================================================
-    // 5.5.7: Xem trước mẫu mã (POST /api/v1/settings/sequences/preview) trước khi áp dụng
+    // 5.5.7: Xem trước mẫu mã (POST /api/v1/sequences/preview) trước khi áp dụng
     const previewSeqRes = await context.injectJson<{
       sampleCode: string;
       nextSampleCodes: string[];
       periodKey: string;
     }>({
       method: 'POST',
-      url: '/api/v1/settings/sequences/preview',
+      url: '/api/v1/sequences/preview',
       headers: adminHeaders,
       payload: {
         prefix: 'ORD',
@@ -3746,7 +3746,7 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
       'ORD-2026-000003',
     ]);
 
-    // 5.5.1 -> 5.5.3: Tạo mới quy tắc sinh mã (POST /api/v1/settings/sequences)
+    // 5.5.1 -> 5.5.3: Tạo mới quy tắc sinh mã (POST /api/v1/sequences)
     const createSeqRes = await context.injectJson<{
       key: string;
       module: string;
@@ -3754,7 +3754,7 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
       samplePreview: string;
     }>({
       method: 'POST',
-      url: '/api/v1/settings/sequences',
+      url: '/api/v1/sequences',
       headers: adminHeaders,
       payload: {
         key: 'orders.e2e_sales_order',
@@ -3777,14 +3777,14 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
     expect(createSeqRes.body.data.key).toBe('orders.e2e_sales_order');
     expect(createSeqRes.body.data.prefix).toBe('ORD');
 
-    // 5.5.4: Sinh số thứ tự an toàn khi nhiều request cùng lúc qua HTTP (POST /api/v1/settings/sequences/:key/next)
+    // 5.5.4: Sinh số thứ tự an toàn khi nhiều request cùng lúc qua HTTP (POST /api/v1/sequences/:key/next)
     const parallelHttpReqs = Array.from({ length: 10 }, () =>
       context.injectJson<{
         code: string;
         sequenceNumber: number;
       }>({
         method: 'POST',
-        url: '/api/v1/settings/sequences/orders.e2e_sales_order/next',
+        url: '/api/v1/sequences/orders.e2e_sales_order/next',
         headers: adminHeaders,
         payload: {
           at: '2026-10-20T09:00:00.000Z',
@@ -3803,7 +3803,7 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
       unitScopeKey: string;
     }>({
       method: 'POST',
-      url: '/api/v1/settings/sequences/organizations.contract_code/next',
+      url: '/api/v1/sequences/organizations.contract_code/next',
       headers: adminHeaders,
       payload: {
         organizationUnitId: 10,
@@ -3816,7 +3816,7 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
       unitScopeKey: string;
     }>({
       method: 'POST',
-      url: '/api/v1/settings/sequences/organizations.contract_code/next',
+      url: '/api/v1/sequences/organizations.contract_code/next',
       headers: adminHeaders,
       payload: {
         organizationUnitId: 20,
@@ -3836,7 +3836,7 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
       suffix: string;
     }>({
       method: 'PUT',
-      url: '/api/v1/settings/sequences/orders.e2e_sales_order',
+      url: '/api/v1/sequences/orders.e2e_sales_order',
       headers: adminHeaders,
       payload: {
         prefix: 'ORDX',
@@ -3854,7 +3854,7 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
       sequenceNumber: number;
     }>({
       method: 'POST',
-      url: '/api/v1/settings/sequences/orders.e2e_sales_order/next',
+      url: '/api/v1/sequences/orders.e2e_sales_order/next',
       headers: adminHeaders,
       payload: {
         at: '2026-10-20T10:00:00.000Z',
@@ -3872,7 +3872,7 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
       }>
     >({
       method: 'GET',
-      url: '/api/v1/settings/sequences/orders.e2e_sales_order/history',
+      url: '/api/v1/sequences/orders.e2e_sales_order/history',
       headers: adminHeaders,
     });
     expect(seqHistoryRes.status).toBe(HTTP_STATUS_CODE.OK);
@@ -3885,13 +3885,13 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
   it('supports Section 5.6 Dynamic Menu & Navigation Management E2E: manifest sync, authorized menu tree by user permissions, create/update/reorder/delete menu, enable/disable toggle (status 1/0), and automatic cache invalidation', async () => {
     const adminHeaders = { authorization: `Bearer ${adminAccessToken}` };
 
-    // 5.6.3: Đồng bộ Idempotent cấu trúc menu mặc định từ module.manifest.json (POST /api/v1/settings/menus/sync)
+    // 5.6.3: Đồng bộ Idempotent cấu trúc menu mặc định từ module.manifest.json (POST /api/v1/navigation/menus/sync)
     const syncMenusRes = await context.injectJson<{
       syncedModules: string[];
       totalMenus: number;
     }>({
       method: 'POST',
-      url: '/api/v1/settings/menus/sync',
+      url: '/api/v1/navigation/menus/sync',
       headers: adminHeaders,
       payload: {},
     });
@@ -3901,7 +3901,7 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
     );
     expect(syncMenusRes.body.data.totalMenus).toBeGreaterThanOrEqual(12);
 
-    // 5.6.1: Liệt kê danh sách menu quản trị (GET /api/v1/settings/menus)
+    // 5.6.1: Liệt kê danh sách menu quản trị (GET /api/v1/navigation/menus)
     const listMenusRes = await context.injectJson<
       Array<{
         id: number;
@@ -3914,7 +3914,7 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
       }>
     >({
       method: 'GET',
-      url: '/api/v1/settings/menus?position=SIDEBAR',
+      url: '/api/v1/navigation/menus?position=SIDEBAR',
       headers: adminHeaders,
     });
     expect(listMenusRes.status).toBe(HTTP_STATUS_CODE.OK);
@@ -3922,7 +3922,7 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
       expect.arrayContaining(['HOME', 'IAM', 'IAM_USERS', 'SETTINGS', 'SETTINGS_MENUS']),
     );
 
-    // 5.6.1: Tạo mới mục menu động dưới nhóm SETTINGS (POST /api/v1/settings/menus)
+    // 5.6.1: Tạo mới mục menu động dưới nhóm SETTINGS (POST /api/v1/navigation/menus)
     const createMenuRes = await context.injectJson<{
       id: number;
       code: string;
@@ -3935,7 +3935,7 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
       key: string | null;
     }>({
       method: 'POST',
-      url: '/api/v1/settings/menus',
+      url: '/api/v1/navigation/menus',
       headers: adminHeaders,
       payload: {
         code: 'SETTINGS_CUSTOM_PORTAL',
@@ -3959,7 +3959,7 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
     expect(createMenuRes.body.data.level).toBe(2);
     expect(createMenuRes.body.data.status).toBe(1);
 
-    // 5.6.2 & 5.6.4: Lấy cây menu điều hướng đã lọc theo quyền hạn người dùng hiện tại (GET /api/v1/settings/menus/tree)
+    // 5.6.2 & 5.6.4: Lấy cây menu điều hướng đã lọc theo quyền hạn người dùng hiện tại (GET /api/v1/navigation/menus/tree)
     const treeRes1 = await context.injectJson<{
       position: string;
       totalNodes: number;
@@ -3972,7 +3972,7 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
       }>;
     }>({
       method: 'GET',
-      url: '/api/v1/settings/menus/tree?position=SIDEBAR',
+      url: '/api/v1/navigation/menus/tree?position=SIDEBAR',
       headers: adminHeaders,
     });
     expect(treeRes1.status).toBe(HTTP_STATUS_CODE.OK);
@@ -3986,14 +3986,14 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
       cacheVersion: number;
     }>({
       method: 'GET',
-      url: '/api/v1/settings/menus/tree?position=SIDEBAR',
+      url: '/api/v1/navigation/menus/tree?position=SIDEBAR',
       headers: adminHeaders,
     });
     expect(treeRes2.status).toBe(HTTP_STATUS_CODE.OK);
     expect(treeRes2.body.data.fromCache).toBe(true);
     expect(treeRes2.body.data.cacheVersion).toBe(treeRes1.body.data.cacheVersion);
 
-    // 5.6.1 & 5.6.4: Tắt hiển thị mục menu (PATCH /api/v1/settings/menus/:code/toggle với status = 0)
+    // 5.6.1 & 5.6.4: Tắt hiển thị mục menu (PATCH /api/v1/navigation/menus/:code/toggle với status = 0)
     // -> Tự động xóa cache và ẩn mục menu khỏi cây điều hướng
     const toggleOffRes = await context.injectJson<{
       code: string;
@@ -4001,7 +4001,7 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
       statusName: string;
     }>({
       method: 'PATCH',
-      url: '/api/v1/settings/menus/SETTINGS_CUSTOM_PORTAL/toggle',
+      url: '/api/v1/navigation/menus/SETTINGS_CUSTOM_PORTAL/toggle',
       headers: adminHeaders,
       payload: {
         status: 0,
@@ -4020,7 +4020,7 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
       }>;
     }>({
       method: 'GET',
-      url: '/api/v1/settings/menus/tree?position=SIDEBAR',
+      url: '/api/v1/navigation/menus/tree?position=SIDEBAR',
       headers: adminHeaders,
     });
     expect(treeAfterToggleOff.status).toBe(HTTP_STATUS_CODE.OK);
@@ -4039,7 +4039,7 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
       statusName: string;
     }>({
       method: 'PATCH',
-      url: '/api/v1/settings/menus/SETTINGS_CUSTOM_PORTAL/toggle',
+      url: '/api/v1/navigation/menus/SETTINGS_CUSTOM_PORTAL/toggle',
       headers: adminHeaders,
       payload: {
         status: 1,
@@ -4054,7 +4054,7 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
       numOrder: number;
     }>({
       method: 'PUT',
-      url: '/api/v1/settings/menus/SETTINGS_CUSTOM_PORTAL',
+      url: '/api/v1/navigation/menus/SETTINGS_CUSTOM_PORTAL',
       headers: adminHeaders,
       payload: {
         name: 'Cổng thông tin Doanh nghiệp',
@@ -4065,10 +4065,10 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
     expect(updateMenuRes.body.data.name).toBe('Cổng thông tin Doanh nghiệp');
     expect(updateMenuRes.body.data.numOrder).toBe(5);
 
-    // Sắp xếp lại thứ tự hiển thị (POST /api/v1/settings/menus/reorder)
+    // Sắp xếp lại thứ tự hiển thị (POST /api/v1/navigation/menus/reorder)
     const reorderRes = await context.injectJson<Array<{ code: string; numOrder: number }>>({
       method: 'POST',
-      url: '/api/v1/settings/menus/reorder',
+      url: '/api/v1/navigation/menus/reorder',
       headers: adminHeaders,
       payload: {
         items: [{ code: 'SETTINGS_CUSTOM_PORTAL', numOrder: 1 }],
@@ -4077,26 +4077,26 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
     expect(reorderRes.status).toBe(HTTP_STATUS_CODE.OK);
     expect(reorderRes.body.data[0]?.numOrder).toBe(1);
 
-    // Xóa cache điều hướng chủ động (POST /api/v1/settings/menus/cache/invalidate)
+    // Xóa cache điều hướng chủ động (POST /api/v1/navigation/menus/cache/invalidate)
     const invalidateRes = await context.injectJson<{
       invalidated: boolean;
       cacheVersion: number;
     }>({
       method: 'POST',
-      url: '/api/v1/settings/menus/cache/invalidate',
+      url: '/api/v1/navigation/menus/cache/invalidate',
       headers: adminHeaders,
       payload: {},
     });
     expect(invalidateRes.status).toBe(HTTP_STATUS_CODE.OK);
     expect(invalidateRes.body.data.invalidated).toBe(true);
 
-    // Xóa mục menu vừa tạo (DELETE /api/v1/settings/menus/:code)
+    // Xóa mục menu vừa tạo (DELETE /api/v1/navigation/menus/:code)
     const deleteMenuRes = await context.injectJson<{
       deleted: boolean;
       code: string;
     }>({
       method: 'DELETE',
-      url: '/api/v1/settings/menus/SETTINGS_CUSTOM_PORTAL',
+      url: '/api/v1/navigation/menus/SETTINGS_CUSTOM_PORTAL',
       headers: adminHeaders,
     });
     expect(deleteMenuRes.status).toBe(HTTP_STATUS_CODE.OK);

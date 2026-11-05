@@ -1,0 +1,78 @@
+{
+  "$schema": "../../packages/kernel/schemas/module.manifest.schema.json",
+  "name": "sequences",
+  "displayName": "Business Code Sequence Generator",
+  "version": "1.0.0",
+  "description": "Module quản lý quy tắc sinh mã nghiệp vụ tự động (sequence_rules, sequence_counters, sequence_rule_histories), cấp phát số thứ tự an toàn đồng thời, reset theo kỳ và phân tách theo đơn vị",
+  "type": "core",
+  "category": "core",
+  "author": "Core Platform Team",
+  "entryModule": "SequencesModule",
+  "dependencies": ["database", "cache", "security", "i18n"],
+  "permissions": ["sequences.read", "sequences.manage"],
+  "events": {
+    "published": [
+      "settings.sequences_synced",
+      "settings.sequence_created",
+      "settings.sequence_updated",
+      "settings.sequence_generated"
+    ],
+    "subscribed": []
+  },
+  "database": {
+    "hasMigrations": true,
+    "tables": ["sequence_rules", "sequence_counters", "sequence_rule_histories"]
+  },
+  "sequences": [
+    {
+      "key": "settings.order_code",
+      "module": "settings",
+      "name": "Mã đơn hàng nghiệp vụ (Order Sequence)",
+      "description": "Mẫu sinh mã đơn hàng chuẩn theo năm (ví dụ: ORD-2026-000001), tự động reset số thứ tự khi sang năm mới",
+      "prefix": "ORD",
+      "suffix": "",
+      "separator": "-",
+      "dateFormat": "YYYY",
+      "paddingLength": 6,
+      "startValue": 1,
+      "step": 1,
+      "resetPolicy": "YEARLY",
+      "scopeByUnit": false,
+      "timezone": "Asia/Ho_Chi_Minh",
+      "isSystem": true
+    },
+    {
+      "key": "settings.invoice_code",
+      "module": "settings",
+      "name": "Mã hóa đơn tài chính (Invoice Sequence)",
+      "description": "Mẫu sinh mã hóa đơn theo năm và tháng (ví dụ: INV-202610-000001), tự động reset số thứ tự hàng tháng",
+      "prefix": "INV",
+      "suffix": "",
+      "separator": "-",
+      "dateFormat": "YYYYMM",
+      "paddingLength": 6,
+      "startValue": 1,
+      "step": 1,
+      "resetPolicy": "MONTHLY",
+      "scopeByUnit": false,
+      "timezone": "Asia/Ho_Chi_Minh",
+      "isSystem": true
+    }
+  ],
+  "menus": [
+    {
+      "code": "SETTINGS_SEQUENCES",
+      "name": "Quy tắc sinh mã (Sequences)",
+      "status": 1,
+      "link": "/settings/sequences",
+      "linkApi": "/api/v1/sequences",
+      "type": 2,
+      "parentCode": "SETTINGS",
+      "level": 2,
+      "key": "settings.read",
+      "numOrder": 4,
+      "icon": "Hash",
+      "position": "SIDEBAR"
+    }
+  ]
+}
