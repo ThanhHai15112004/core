@@ -5,7 +5,7 @@ import {
   NOTIFICATION_CHANNEL,
   NOTIFICATION_TEMPLATE_TYPE,
   NOTIFICATION_TEMPLATE_VERSION_STATUS,
-} from '../enum/notifications.enum.js';
+} from '../enum/templates.enum.js';
 
 @Entity('notification_templates')
 @Index('uq_notification_templates_code_channel_locale', ['code', 'channel', 'locale'], {

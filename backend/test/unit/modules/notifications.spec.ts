@@ -34,22 +34,34 @@ import {
   SmsChannelProviderAdapter,
   calculateSmsSegments,
 } from '@modules/notifications/index.js';
-import type { NotificationDeliveryEntity } from '@modules/notifications/entities/notification-delivery.entity.js';
-import type { NotificationPreferenceEntity } from '@modules/notifications/entities/notification-preference.entity.js';
-import type { NotificationPushSubscriptionEntity } from '@modules/notifications/entities/notification-push-subscription.entity.js';
-import type { NotificationQuotaUsageEntity } from '@modules/notifications/entities/notification-quota-usage.entity.js';
-import type { NotificationRecipientEntity } from '@modules/notifications/entities/notification-recipient.entity.js';
-import type { NotificationSuppressionEntity } from '@modules/notifications/entities/notification-suppression.entity.js';
-import type { NotificationTemplateUsageEntity } from '@modules/notifications/entities/notification-template-usage.entity.js';
-import type { NotificationTemplateVersionEntity } from '@modules/notifications/entities/notification-template-version.entity.js';
-import type { NotificationTemplateEntity } from '@modules/notifications/entities/notification-template.entity.js';
-import type { NotificationEntity } from '@modules/notifications/entities/notification.entity.js';
+import {
+  NotificationDeliveryController,
+  NotificationDeliveryMapper,
+} from '@modules/notification-delivery/index.js';
+import type { NotificationDeliveryEntity } from '@modules/notification-delivery/entities/notification-delivery.entity.js';
+import type { NotificationPushSubscriptionEntity } from '@modules/notification-delivery/entities/notification-push-subscription.entity.js';
+import type { NotificationQuotaUsageEntity } from '@modules/notification-delivery/entities/notification-quota-usage.entity.js';
+import type { NotificationSuppressionEntity } from '@modules/notification-delivery/entities/notification-suppression.entity.js';
 import type {
   NotificationChannelsRepository,
   NotificationDeliveryFilterOptions,
   NotificationSuppressionFilterOptions,
+} from '@modules/notification-delivery/repositories/notification-delivery.repository.js';
+import {
+  TemplatesController,
+  TemplatesMapper,
+  TemplatesService,
+} from '@modules/templates/index.js';
+import type { NotificationTemplateUsageEntity } from '@modules/templates/entities/notification-template-usage.entity.js';
+import type { NotificationTemplateVersionEntity } from '@modules/templates/entities/notification-template-version.entity.js';
+import type { NotificationTemplateEntity } from '@modules/templates/entities/notification-template.entity.js';
+import type {
   NotificationTemplateFilterOptions,
-} from '@modules/notifications/repositories/notification-channels.repository.js';
+  TemplatesRepository,
+} from '@modules/templates/repositories/templates.repository.js';
+import type { NotificationPreferenceEntity } from '@modules/notifications/entities/notification-preference.entity.js';
+import type { NotificationRecipientEntity } from '@modules/notifications/entities/notification-recipient.entity.js';
+import type { NotificationEntity } from '@modules/notifications/entities/notification.entity.js';
 import type { NotificationPreferencesRepository } from '@modules/notifications/repositories/notification-preferences.repository.js';
 import type {
   NotificationDispatchAggregateStats,
@@ -198,8 +210,8 @@ function createInMemoryNotificationsHarness() {
         filtered = filtered.filter((n) => Number(n.targetType) === options.targetType);
       }
       filtered.sort((a, b) => Number(b.id) - Number(a.id));
-      const page = options.page ?? 1;
-      const limit = options.limit ?? 20;
+      const page = Number(options.page ?? 1);
+      const limit = Number(options.limit ?? 20);
       return {
         items: filtered,
         total: filtered.length,
@@ -264,8 +276,8 @@ function createInMemoryNotificationsHarness() {
         });
       }
       filtered.sort((a, b) => Number(b.id) - Number(a.id));
-      const page = options.page ?? 1;
-      const limit = options.limit ?? 20;
+      const page = Number(options.page ?? 1);
+      const limit = Number(options.limit ?? 20);
       return {
         items: filtered,
         total: filtered.length,
@@ -597,8 +609,8 @@ function createInMemoryNotificationsHarness() {
       if (options.locale) {
         filtered = filtered.filter((t) => t.locale === options.locale);
       }
-      const page = options.page ?? 1;
-      const limit = options.limit ?? 20;
+      const page = Number(options.page ?? 1);
+      const limit = Number(options.limit ?? 20);
       return {
         items: filtered,
         total: filtered.length,
@@ -785,8 +797,8 @@ function createInMemoryNotificationsHarness() {
       if (options.status !== undefined) {
         filtered = filtered.filter((d) => Number(d.status) === options.status);
       }
-      const page = options.page ?? 1;
-      const limit = options.limit ?? 20;
+      const page = Number(options.page ?? 1);
+      const limit = Number(options.limit ?? 20);
       return {
         items: filtered,
         total: filtered.length,
@@ -875,8 +887,8 @@ function createInMemoryNotificationsHarness() {
       if (options.isActive !== undefined) {
         filtered = filtered.filter((s) => Boolean(s.isActive) === options.isActive);
       }
-      const page = options.page ?? 1;
-      const limit = options.limit ?? 20;
+      const page = Number(options.page ?? 1);
+      const limit = Number(options.limit ?? 20);
       return {
         items: filtered,
         total: filtered.length,
@@ -1023,18 +1035,41 @@ function createInMemoryNotificationsHarness() {
   } as never;
 
   const mapper = new NotificationsMapper();
+  const templatesMapper = new TemplatesMapper();
+  const deliveryMapper = new NotificationDeliveryMapper();
   const adapterRegistry = new NotificationChannelAdapterRegistry(
     new EmailChannelProviderAdapter(),
     new SmsChannelProviderAdapter(),
     new PushChannelProviderAdapter(),
   );
-  const channelsService = new NotificationChannelsService(
+  const templatesService = new TemplatesService(
+    channelsRepo as unknown as TemplatesRepository,
+    templatesMapper,
+    auditLogService,
+  );
+  const deliveryService = new NotificationChannelsService(
     channelsRepo,
     adapterRegistry,
-    mapper,
+    deliveryMapper,
     auditLogService,
     usersPublicService,
+    undefined,
+    templatesService,
   );
+  const channelsService = Object.assign(deliveryService, {
+    listTemplates: templatesService.listTemplates.bind(templatesService),
+    upsertTemplate: templatesService.upsertTemplate.bind(templatesService),
+    previewTemplate: templatesService.previewTemplate.bind(templatesService),
+    deleteTemplate: templatesService.deleteTemplate.bind(templatesService),
+    listTemplateVersions: templatesService.listTemplateVersions.bind(templatesService),
+    createTemplateVersion: templatesService.createTemplateVersion.bind(templatesService),
+    publishTemplateVersion: templatesService.publishTemplateVersion.bind(templatesService),
+    rollbackTemplateVersion: templatesService.rollbackTemplateVersion.bind(templatesService),
+    renderDocumentFromTemplate: templatesService.renderDocumentFromTemplate.bind(templatesService),
+    listTemplateUsages: templatesService.listTemplateUsages.bind(templatesService),
+    registerTemplateUsage: templatesService.registerTemplateUsage.bind(templatesService),
+    unregisterTemplateUsage: templatesService.unregisterTemplateUsage.bind(templatesService),
+  });
   const service = new NotificationsService(
     notificationsRepo,
     recipientsRepo,
@@ -1045,14 +1080,51 @@ function createInMemoryNotificationsHarness() {
     rolesPublicService,
     organizationsPublicService,
     sequenceRegistry,
-    channelsService,
+    deliveryService,
+    undefined,
+    templatesService,
   );
-  const controller = new NotificationsController(service, channelsService);
+  const notificationsController = new NotificationsController(service);
+  const templatesController = new TemplatesController(templatesService);
+  const deliveryController = new NotificationDeliveryController(deliveryService);
+  const controller = Object.assign(notificationsController, {
+    listTemplates: templatesController.listTemplates.bind(templatesController),
+    upsertTemplate: templatesController.upsertTemplate.bind(templatesController),
+    previewTemplate: templatesController.previewTemplate.bind(templatesController),
+    deleteTemplate: templatesController.deleteTemplate.bind(templatesController),
+    listTemplateVersions: templatesController.listTemplateVersions.bind(templatesController),
+    createTemplateVersion: templatesController.createTemplateVersion.bind(templatesController),
+    publishTemplateVersion: templatesController.publishTemplateVersion.bind(templatesController),
+    rollbackTemplateVersion: templatesController.rollbackTemplateVersion.bind(templatesController),
+    renderDocumentFromTemplate: templatesController.renderDocument.bind(templatesController),
+    listTemplateUsages: templatesController.listTemplateUsages.bind(templatesController),
+    registerTemplateUsage: templatesController.registerTemplateUsage.bind(templatesController),
+    unregisterTemplateUsage: templatesController.unregisterTemplateUsage.bind(templatesController),
+    listDeliveries: deliveryController.listDeliveries.bind(deliveryController),
+    retrySingleDelivery: deliveryController.retrySingleDelivery.bind(deliveryController),
+    retryDueDeliveries: deliveryController.retryDueDeliveries.bind(deliveryController),
+    updateDeliveryStatusWebhook:
+      deliveryController.updateDeliveryStatusWebhook.bind(deliveryController),
+    listSuppressions: deliveryController.listSuppressions.bind(deliveryController),
+    addSuppression: deliveryController.addSuppression.bind(deliveryController),
+    removeSuppression: deliveryController.removeSuppression.bind(deliveryController),
+    listPushSubscriptions: deliveryController.listMyPushSubscriptions.bind(deliveryController),
+    listMyPushSubscriptions: deliveryController.listMyPushSubscriptions.bind(deliveryController),
+    registerPushSubscription: deliveryController.registerPushSubscription.bind(deliveryController),
+    unregisterPushSubscription:
+      deliveryController.unregisterPushSubscription.bind(deliveryController),
+    getQuotaSummary: deliveryController.getQuotaSummary.bind(deliveryController),
+  });
 
   return {
     service,
+    templatesService,
+    deliveryService,
     channelsService,
     adapterRegistry,
+    notificationsController,
+    templatesController,
+    deliveryController,
     controller,
     notificationsStore,
     recipientsStore,
@@ -1080,6 +1152,8 @@ describe('Phase 7.1 — In-App Notifications Module (Backend Unit & Feature Test
       'settings',
       'files',
       'notifications',
+      'notification-delivery',
+      'templates',
     ]);
   });
 
@@ -1330,6 +1404,8 @@ describe('Phase 7.2 — Email, SMS & Push Notification (Multi-Channel Backend Su
       'settings',
       'files',
       'notifications',
+      'notification-delivery',
+      'templates',
     ]);
   });
 
@@ -1700,6 +1776,8 @@ describe('Phase 9.6 — Mẫu nội dung (Template: Email, Thông báo, Tài li�
       'settings',
       'files',
       'notifications',
+      'notification-delivery',
+      'templates',
     ]);
   });
 

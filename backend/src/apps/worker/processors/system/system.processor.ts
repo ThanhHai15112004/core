@@ -13,7 +13,7 @@ import { MetricsRegistryService } from '@packages/metrics/index.js';
 import { JOB_LOCK_DURATION_MS, QUEUES, type MessageEnvelope } from '@packages/messaging/index.js';
 import { JobProgressTrackerService } from '@packages/queue/index.js';
 import { FILES_PUBLIC_SERVICE, type IFilesPublicService } from '@modules/files/contracts/index.js';
-import { NotificationChannelsService } from '@modules/notifications/index.js';
+import { NotificationChannelsService } from '@modules/notification-delivery/index.js';
 import { WorkflowsService } from '@modules/workflows/index.js';
 import { CalendarService } from '@modules/calendar/index.js';
 import { BaseQueueProcessor } from '../base-queue.processor.js';

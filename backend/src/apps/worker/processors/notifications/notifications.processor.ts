@@ -16,7 +16,7 @@ import {
   NotificationChannelAdapterRegistry,
   type NotificationChannelCode,
   type INotificationChannelProviderAdapter,
-} from '@modules/notifications/index.js';
+} from '@modules/notification-delivery/index.js';
 import { BaseQueueProcessor } from '../base-queue.processor.js';
 
 export interface NotificationQueueRecipient {

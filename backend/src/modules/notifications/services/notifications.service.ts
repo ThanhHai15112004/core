@@ -14,6 +14,10 @@ import {
 } from '@packages/kernel/index.js';
 import { AuditLogService, type UserIdentity } from '@packages/security/index.js';
 import {
+  type INotificationDeliveryPublicService,
+  NOTIFICATION_DELIVERY_PUBLIC_SERVICE,
+} from '@modules/notification-delivery/index.js';
+import {
   type IOrganizationsPublicService,
   ORGANIZATIONS_PUBLIC_SERVICE,
 } from '@modules/organizations/contracts/index.js';
@@ -22,6 +26,11 @@ import {
   type ISequencesPublicService,
   SEQUENCES_PUBLIC_SERVICE,
 } from '@modules/sequences/contracts/index.js';
+import {
+  type ITemplatesPublicService,
+  TEMPLATES_PUBLIC_SERVICE,
+  renderNotificationTemplateContent,
+} from '@modules/templates/index.js';
 import { type IUsersPublicService, USERS_PUBLIC_SERVICE } from '@modules/users/contracts/index.js';
 import {
   type DispatchNotificationPublicInput,
@@ -54,12 +63,10 @@ import {
   isChannelAllowedForRecipient,
 } from '../helpers/notification-preference.helper.js';
 import { resolveNotificationTargetRecipients } from '../helpers/notification-target-resolver.helper.js';
-import { renderNotificationTemplateContent } from '../helpers/notification-template.helper.js';
 import { NotificationsMapper } from '../mappers/notifications.mapper.js';
 import { NotificationPreferencesRepository } from '../repositories/notification-preferences.repository.js';
 import { NotificationRecipientsRepository } from '../repositories/notification-recipients.repository.js';
 import { NotificationsRepository } from '../repositories/notifications.repository.js';
-import { NotificationChannelsService } from './notification-channels.service.js';
 import type {
   ArchiveNotificationRequest,
   ListNotificationDispatchesQuery,
@@ -107,10 +114,14 @@ export class NotificationsService implements INotificationsPublicService {
     @Inject(SequenceRegistryService)
     sequenceRegistry?: SequenceRegistryService | null,
     @Optional()
-    private readonly channelsService?: NotificationChannelsService | null,
+    @Inject(NOTIFICATION_DELIVERY_PUBLIC_SERVICE)
+    private readonly channelsService?: INotificationDeliveryPublicService | null,
     @Optional()
     @Inject(SEQUENCES_PUBLIC_SERVICE)
     private readonly sequencesPublicService?: ISequencesPublicService | null,
+    @Optional()
+    @Inject(TEMPLATES_PUBLIC_SERVICE)
+    private readonly templatesService?: ITemplatesPublicService | null,
   ) {
     this.sequenceRegistry = sequenceRegistry ?? defaultSequenceRegistry;
     this.registerCodeUsageCheckers();
@@ -140,16 +151,6 @@ export class NotificationsService implements INotificationsPublicService {
     defaultCodeRegistry.registerUsageChecker(
       NOTIFICATIONS_CODE_TYPES.INBOX_STATUS,
       NOTIFICATIONS_CODE_TYPES.INBOX_STATUS,
-      async () => 0,
-    );
-    defaultCodeRegistry.registerUsageChecker(
-      NOTIFICATIONS_CODE_TYPES.DELIVERY_STATUS,
-      NOTIFICATIONS_CODE_TYPES.DELIVERY_STATUS,
-      async () => 0,
-    );
-    defaultCodeRegistry.registerUsageChecker(
-      NOTIFICATIONS_CODE_TYPES.SUPPRESSION_REASON,
-      NOTIFICATIONS_CODE_TYPES.SUPPRESSION_REASON,
       async () => 0,
     );
   }
@@ -433,9 +434,10 @@ export class NotificationsService implements INotificationsPublicService {
     let title = (input.title ?? '').trim();
     let content = (input.content ?? '').trim();
 
-    if (templateCode && (!title || !content) && this.channelsService) {
+    const templateResolver = this.templatesService ?? this.channelsService;
+    if (templateCode && (!title || !content) && templateResolver) {
       const primaryChannel = requestedChannels[0] ?? 2;
-      const tpl = await this.channelsService.resolveTemplateByCode(
+      const tpl = await templateResolver.resolveTemplateByCode(
         templateCode,
         primaryChannel,
         locale,

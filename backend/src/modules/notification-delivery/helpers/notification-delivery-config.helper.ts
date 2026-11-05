@@ -1,0 +1,386 @@
+import {
+  defaultFeatureFlagRegistry,
+  defaultSettingRegistry,
+  discoverInstalledModules,
+} from '@packages/kernel/index.js';
+import {
+  NOTIFICATION_DELIVERY_FEATURE_FLAG_KEYS,
+  NOTIFICATION_DELIVERY_SETTING_KEYS,
+  type NotificationChannelName,
+} from '../enum/notification-delivery.enum.js';
+import type {
+  DefaultCategoryChannelMatrix,
+  ResolvedNotificationRuntimeConfig,
+} from '../types/notification-delivery.types.js';
+
+export const DEFAULT_NOTIFICATION_PREFERENCE_MATRIX: DefaultCategoryChannelMatrix = {
+  SYSTEM: { inApp: true, email: true, sms: false, push: true },
+  WORK: { inApp: true, email: true, sms: false, push: true },
+  SECURITY: { inApp: true, email: true, sms: true, push: true },
+  ANNOUNCEMENT: { inApp: true, email: false, sms: false, push: true },
+};
+
+const VALID_CHANNEL_NAMES = new Set<NotificationChannelName>(['IN_APP', 'EMAIL', 'SMS', 'PUSH']);
+
+function normalizeChannelNameList(
+  raw: unknown,
+  fallback: readonly NotificationChannelName[],
+): NotificationChannelName[] {
+  if (!Array.isArray(raw)) return [...fallback];
+  const result: NotificationChannelName[] = [];
+  for (const item of raw) {
+    const norm = String(item ?? '')
+      .trim()
+      .toUpperCase() as NotificationChannelName;
+    if (VALID_CHANNEL_NAMES.has(norm) && !result.includes(norm)) {
+      result.push(norm);
+    }
+  }
+  return result.length > 0 ? result : [...fallback];
+}
+
+function normalizeDefaultPreferenceMatrix(raw: unknown): DefaultCategoryChannelMatrix {
+  const result: DefaultCategoryChannelMatrix = {
+    SYSTEM: { ...DEFAULT_NOTIFICATION_PREFERENCE_MATRIX.SYSTEM! },
+    WORK: { ...DEFAULT_NOTIFICATION_PREFERENCE_MATRIX.WORK! },
+    SECURITY: { ...DEFAULT_NOTIFICATION_PREFERENCE_MATRIX.SECURITY! },
+    ANNOUNCEMENT: { ...DEFAULT_NOTIFICATION_PREFERENCE_MATRIX.ANNOUNCEMENT! },
+  };
+
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return result;
+  }
+
+  for (const [key, val] of Object.entries(raw as Record<string, unknown>)) {
+    if (!val || typeof val !== 'object' || Array.isArray(val)) continue;
+    const catKey = key.trim().toUpperCase();
+    const record = val as Record<string, unknown>;
+    const base = result[catKey] ?? { inApp: true, email: true, sms: false, push: true };
+    result[catKey] = {
+      inApp: typeof record.inApp === 'boolean' ? record.inApp : base.inApp,
+      email: typeof record.email === 'boolean' ? record.email : base.email,
+      sms: typeof record.sms === 'boolean' ? record.sms : base.sms,
+      push: typeof record.push === 'boolean' ? record.push : base.push,
+    };
+  }
+
+  return result;
+}
+
+export function resolveNotificationRuntimeConfig(
+  organizationUnitId?: number | null,
+  actorContext?: {
+    userId?: number | string | null;
+    roles?: readonly string[];
+  },
+): ResolvedNotificationRuntimeConfig {
+  const settingCtx =
+    organizationUnitId !== undefined && organizationUnitId !== null
+      ? { organizationUnitId: Number(organizationUnitId) }
+      : undefined;
+
+  const flagCtx = {
+    ...(actorContext?.userId !== undefined && actorContext?.userId !== null
+      ? { userId: String(actorContext.userId) }
+      : {}),
+    ...(actorContext?.roles ? { roles: actorContext.roles } : {}),
+    ...(organizationUnitId !== undefined && organizationUnitId !== null
+      ? { organizationUnitIds: [String(organizationUnitId)] }
+      : {}),
+  };
+
+  const registryModules = defaultFeatureFlagRegistry.getInstalledModules();
+  const activeInstalledModules =
+    registryModules.length > 0 ? registryModules : discoverInstalledModules();
+  const installedModules = new Set(activeInstalledModules.map((m) => m.trim().toLowerCase()));
+  const orgUnitModuleInstalled = installedModules.has('organizations');
+
+  const enabled = defaultSettingRegistry.getBoolean(
+    NOTIFICATION_DELIVERY_SETTING_KEYS.ENABLED,
+    settingCtx,
+    true,
+  );
+  const inAppFeatureEnabled = defaultFeatureFlagRegistry.isEnabled(
+    NOTIFICATION_DELIVERY_FEATURE_FLAG_KEYS.IN_APP_ENABLED,
+    flagCtx,
+  );
+
+  const orgUnitTargetingEnabled = defaultSettingRegistry.getBoolean(
+    NOTIFICATION_DELIVERY_SETTING_KEYS.ORG_UNIT_TARGETING_ENABLED,
+    settingCtx,
+    true,
+  );
+  const orgUnitBroadcastFlagEnabled = defaultFeatureFlagRegistry.isEnabled(
+    NOTIFICATION_DELIVERY_FEATURE_FLAG_KEYS.ORG_UNIT_BROADCAST,
+    flagCtx,
+  );
+  const orgUnitIncludeSubUnitsDefault = defaultSettingRegistry.getBoolean(
+    NOTIFICATION_DELIVERY_SETTING_KEYS.ORG_UNIT_INCLUDE_SUB_UNITS_DEFAULT,
+    settingCtx,
+    true,
+  );
+
+  const roleTargetingEnabled = defaultSettingRegistry.getBoolean(
+    NOTIFICATION_DELIVERY_SETTING_KEYS.ROLE_TARGETING_ENABLED,
+    settingCtx,
+    true,
+  );
+  const roleBroadcastFlagEnabled = defaultFeatureFlagRegistry.isEnabled(
+    NOTIFICATION_DELIVERY_FEATURE_FLAG_KEYS.ROLE_BROADCAST,
+    flagCtx,
+  );
+
+  const allowUserCustomization = defaultSettingRegistry.getBoolean(
+    NOTIFICATION_DELIVERY_SETTING_KEYS.ALLOW_USER_CUSTOMIZATION,
+    settingCtx,
+    true,
+  );
+  const userPreferencesFlagEnabled = defaultFeatureFlagRegistry.isEnabled(
+    NOTIFICATION_DELIVERY_FEATURE_FLAG_KEYS.USER_PREFERENCES,
+    flagCtx,
+  );
+  const lockSecurityInApp = defaultSettingRegistry.getBoolean(
+    NOTIFICATION_DELIVERY_SETTING_KEYS.LOCK_SECURITY_IN_APP,
+    settingCtx,
+    true,
+  );
+
+  const autoReadOnOpen = defaultSettingRegistry.getBoolean(
+    NOTIFICATION_DELIVERY_SETTING_KEYS.AUTO_READ_ON_OPEN,
+    settingCtx,
+    true,
+  );
+  const retentionDays = defaultSettingRegistry.getNumber(
+    NOTIFICATION_DELIVERY_SETTING_KEYS.RETENTION_DAYS,
+    settingCtx,
+    90,
+  );
+  const pollingIntervalSec = defaultSettingRegistry.getNumber(
+    NOTIFICATION_DELIVERY_SETTING_KEYS.POLLING_INTERVAL_SEC,
+    settingCtx,
+    30,
+  );
+  const maxRecipientsPerBatch = defaultSettingRegistry.getNumber(
+    NOTIFICATION_DELIVERY_SETTING_KEYS.MAX_RECIPIENTS_PER_BATCH,
+    settingCtx,
+    5000,
+  );
+  const maxTitleLength = defaultSettingRegistry.getNumber(
+    NOTIFICATION_DELIVERY_SETTING_KEYS.MAX_TITLE_LENGTH,
+    settingCtx,
+    255,
+  );
+  const maxBodyLength = defaultSettingRegistry.getNumber(
+    NOTIFICATION_DELIVERY_SETTING_KEYS.MAX_BODY_LENGTH,
+    settingCtx,
+    5000,
+  );
+  const paginationDefaultPageSize = defaultSettingRegistry.getNumber(
+    NOTIFICATION_DELIVERY_SETTING_KEYS.PAGINATION_DEFAULT_PAGE_SIZE,
+    settingCtx,
+    20,
+  );
+  const paginationMaxPageSize = defaultSettingRegistry.getNumber(
+    NOTIFICATION_DELIVERY_SETTING_KEYS.PAGINATION_MAX_PAGE_SIZE,
+    settingCtx,
+    100,
+  );
+
+  const rawEnabledChannels = defaultSettingRegistry.getJson<unknown>(
+    NOTIFICATION_DELIVERY_SETTING_KEYS.CHANNELS_ENABLED,
+    settingCtx,
+    ['IN_APP', 'EMAIL', 'SMS', 'PUSH'],
+  );
+  const enabledChannels = normalizeChannelNameList(rawEnabledChannels, [
+    'IN_APP',
+    'EMAIL',
+    'SMS',
+    'PUSH',
+  ]);
+
+  const rawDefaultChannels = defaultSettingRegistry.getJson<unknown>(
+    NOTIFICATION_DELIVERY_SETTING_KEYS.CHANNELS_DEFAULT,
+    settingCtx,
+    ['IN_APP'],
+  );
+  const defaultChannels = normalizeChannelNameList(rawDefaultChannels, ['IN_APP']).filter((c) =>
+    enabledChannels.includes(c),
+  );
+
+  const rawDefaultMatrix = defaultSettingRegistry.getJson<unknown>(
+    NOTIFICATION_DELIVERY_SETTING_KEYS.DEFAULT_PREFERENCE_MATRIX,
+    settingCtx,
+    DEFAULT_NOTIFICATION_PREFERENCE_MATRIX,
+  );
+  const defaultPreferenceMatrix = normalizeDefaultPreferenceMatrix(rawDefaultMatrix);
+
+  const emailFeatureEnabled = defaultFeatureFlagRegistry.isEnabled(
+    NOTIFICATION_DELIVERY_FEATURE_FLAG_KEYS.EMAIL_ENABLED,
+    flagCtx,
+  );
+  const smsFeatureEnabled = defaultFeatureFlagRegistry.isEnabled(
+    NOTIFICATION_DELIVERY_FEATURE_FLAG_KEYS.SMS_ENABLED,
+    flagCtx,
+  );
+  const pushFeatureEnabled = defaultFeatureFlagRegistry.isEnabled(
+    NOTIFICATION_DELIVERY_FEATURE_FLAG_KEYS.PUSH_ENABLED,
+    flagCtx,
+  );
+
+  const emailProvider = defaultSettingRegistry.getString(
+    NOTIFICATION_DELIVERY_SETTING_KEYS.EMAIL_PROVIDER,
+    settingCtx,
+    'CONSOLE',
+  );
+  const emailFromAddress = defaultSettingRegistry.getString(
+    NOTIFICATION_DELIVERY_SETTING_KEYS.EMAIL_FROM_ADDRESS,
+    settingCtx,
+    'no-reply@core.local',
+  );
+  const emailFromName = defaultSettingRegistry.getString(
+    NOTIFICATION_DELIVERY_SETTING_KEYS.EMAIL_FROM_NAME,
+    settingCtx,
+    'Core System',
+  );
+  const smsProvider = defaultSettingRegistry.getString(
+    NOTIFICATION_DELIVERY_SETTING_KEYS.SMS_PROVIDER,
+    settingCtx,
+    'CONSOLE',
+  );
+  const smsSenderId = defaultSettingRegistry.getString(
+    NOTIFICATION_DELIVERY_SETTING_KEYS.SMS_SENDER_ID,
+    settingCtx,
+    'CORE_APP',
+  );
+  const pushProvider = defaultSettingRegistry.getString(
+    NOTIFICATION_DELIVERY_SETTING_KEYS.PUSH_PROVIDER,
+    settingCtx,
+    'CONSOLE',
+  );
+
+  const dispatchBatchSize = defaultSettingRegistry.getNumber(
+    NOTIFICATION_DELIVERY_SETTING_KEYS.DISPATCH_BATCH_SIZE,
+    settingCtx,
+    100,
+  );
+  const dispatchRateLimitPerSec = defaultSettingRegistry.getNumber(
+    NOTIFICATION_DELIVERY_SETTING_KEYS.DISPATCH_RATE_LIMIT_PER_SEC,
+    settingCtx,
+    50,
+  );
+  const retryEnabled = defaultSettingRegistry.getBoolean(
+    NOTIFICATION_DELIVERY_SETTING_KEYS.RETRY_ENABLED,
+    settingCtx,
+    true,
+  );
+  const retryMaxAttempts = defaultSettingRegistry.getNumber(
+    NOTIFICATION_DELIVERY_SETTING_KEYS.RETRY_MAX_ATTEMPTS,
+    settingCtx,
+    3,
+  );
+  const retryBaseDelaySec = defaultSettingRegistry.getNumber(
+    NOTIFICATION_DELIVERY_SETTING_KEYS.RETRY_BASE_DELAY_SEC,
+    settingCtx,
+    30,
+  );
+  const autoSuppressOnPermanentFailure = defaultSettingRegistry.getBoolean(
+    NOTIFICATION_DELIVERY_SETTING_KEYS.AUTO_SUPPRESS_ON_PERMANENT_FAILURE,
+    settingCtx,
+    true,
+  );
+
+  const quotaCurrency = defaultSettingRegistry.getString(
+    NOTIFICATION_DELIVERY_SETTING_KEYS.QUOTA_CURRENCY,
+    settingCtx,
+    'VND',
+  );
+  const quotaHardStopOnExceed = defaultSettingRegistry.getBoolean(
+    NOTIFICATION_DELIVERY_SETTING_KEYS.QUOTA_HARD_STOP_ON_EXCEED,
+    settingCtx,
+    true,
+  );
+  const smsDailyQuota = defaultSettingRegistry.getNumber(
+    NOTIFICATION_DELIVERY_SETTING_KEYS.SMS_DAILY_QUOTA,
+    settingCtx,
+    10000,
+  );
+  const smsMonthlyBudget = defaultSettingRegistry.getNumber(
+    NOTIFICATION_DELIVERY_SETTING_KEYS.SMS_MONTHLY_BUDGET,
+    settingCtx,
+    5000000,
+  );
+  const smsCostPerSegment = defaultSettingRegistry.getNumber(
+    NOTIFICATION_DELIVERY_SETTING_KEYS.SMS_COST_PER_SEGMENT,
+    settingCtx,
+    800,
+  );
+  const emailDailyQuota = defaultSettingRegistry.getNumber(
+    NOTIFICATION_DELIVERY_SETTING_KEYS.EMAIL_DAILY_QUOTA,
+    settingCtx,
+    50000,
+  );
+  const emailCostPerMessage = defaultSettingRegistry.getNumber(
+    NOTIFICATION_DELIVERY_SETTING_KEYS.EMAIL_COST_PER_MESSAGE,
+    settingCtx,
+    20,
+  );
+  const pushDailyQuota = defaultSettingRegistry.getNumber(
+    NOTIFICATION_DELIVERY_SETTING_KEYS.PUSH_DAILY_QUOTA,
+    settingCtx,
+    100000,
+  );
+  const pushCostPerMessage = defaultSettingRegistry.getNumber(
+    NOTIFICATION_DELIVERY_SETTING_KEYS.PUSH_COST_PER_MESSAGE,
+    settingCtx,
+    0,
+  );
+
+  return {
+    enabled,
+    inAppFeatureEnabled,
+    orgUnitModuleInstalled,
+    orgUnitTargetingEnabled,
+    orgUnitBroadcastFlagEnabled,
+    orgUnitIncludeSubUnitsDefault,
+    roleTargetingEnabled,
+    roleBroadcastFlagEnabled,
+    allowUserCustomization,
+    userPreferencesFlagEnabled,
+    lockSecurityInApp,
+    autoReadOnOpen,
+    retentionDays,
+    pollingIntervalSec,
+    maxRecipientsPerBatch,
+    maxTitleLength,
+    maxBodyLength,
+    paginationDefaultPageSize,
+    paginationMaxPageSize,
+    enabledChannels,
+    defaultChannels: defaultChannels.length > 0 ? defaultChannels : ['IN_APP'],
+    defaultPreferenceMatrix,
+    emailFeatureEnabled,
+    smsFeatureEnabled,
+    pushFeatureEnabled,
+    emailProvider,
+    emailFromAddress,
+    emailFromName,
+    smsProvider,
+    smsSenderId,
+    pushProvider,
+    dispatchBatchSize,
+    dispatchRateLimitPerSec,
+    retryEnabled,
+    retryMaxAttempts,
+    retryBaseDelaySec,
+    autoSuppressOnPermanentFailure,
+    quotaCurrency,
+    quotaHardStopOnExceed,
+    smsDailyQuota,
+    smsMonthlyBudget,
+    smsCostPerSegment,
+    emailDailyQuota,
+    emailCostPerMessage,
+    pushDailyQuota,
+    pushCostPerMessage,
+  };
+}

@@ -8,12 +8,12 @@ import {
 } from '@packages/kernel/index.js';
 import type { UserIdentity } from '@packages/security/index.js';
 import {
-  NOTIFICATIONS_AUDIT_META,
   NOTIFICATION_CATEGORY,
   NOTIFICATION_CHANNEL,
   NOTIFICATION_DOCUMENT_FORMAT,
   NOTIFICATION_TEMPLATE_TYPE,
   NOTIFICATION_TEMPLATE_VERSION_STATUS,
+  TEMPLATES_AUDIT_META,
   getNotificationChannelName,
   parseNotificationCategory,
   parseNotificationChannel,
@@ -21,8 +21,8 @@ import {
   type NotificationDocumentFormatName,
 } from '../contracts/index.js';
 import type { NotificationTemplateEntity } from '../entities/notification-template.entity.js';
-import type { NotificationsMapper } from '../mappers/notifications.mapper.js';
-import type { NotificationChannelsRepository } from '../repositories/notification-channels.repository.js';
+import type { TemplatesMapper } from '../mappers/templates.mapper.js';
+import type { TemplatesRepository } from '../repositories/templates.repository.js';
 import type {
   CreateNotificationTemplateVersionRequest,
   PreviewNotificationTemplateRequest,
@@ -31,7 +31,7 @@ import type {
   RenderDocumentFromTemplateRequest,
   RollbackNotificationTemplateVersionRequest,
   UpsertNotificationTemplateRequest,
-} from '../requests/notifications.requests.js';
+} from '../requests/templates.requests.js';
 import type {
   NotificationTemplateItemResponse,
   NotificationTemplatePreviewResponse,
@@ -39,12 +39,12 @@ import type {
   NotificationTemplateVersionItemResponse,
   RenderedDocumentFromTemplateResponse,
   TemplateVersionMutationResultResponse,
-} from '../responses/notifications.response.js';
-import { calculateSmsSegments } from './notification-delivery-policy.helper.js';
+} from '../responses/templates.response.js';
 import {
   DEFAULT_SYSTEM_NOTIFICATION_TEMPLATES,
   DEFAULT_SYSTEM_TEMPLATE_USAGES,
   buildRenderedDocumentPayload,
+  calculateSmsSegments,
   extractTemplateVariables,
   normalizeDocumentFormat,
   renderNotificationTemplateContent,
@@ -60,10 +60,15 @@ export type AuditRecorderFn = (
   afterData: Record<string, unknown> | null,
 ) => Promise<void>;
 
+export type TemplateLifecycleMapper = Pick<
+  TemplatesMapper,
+  'toTemplateItemView' | 'toTemplateVersionItemView' | 'toTemplateUsageItemView'
+>;
+
 export async function enrichTemplateItemsView(params: {
   entities: readonly NotificationTemplateEntity[];
-  channelsRepo: NotificationChannelsRepository;
-  mapper: NotificationsMapper;
+  channelsRepo: TemplatesRepository;
+  mapper: TemplateLifecycleMapper;
 }): Promise<NotificationTemplateItemResponse[]> {
   const { entities, channelsRepo, mapper } = params;
   if (entities.length === 0) return [];
@@ -144,7 +149,7 @@ export async function enrichTemplateItemsView(params: {
 
 async function ensureBaselineVersionSnapshot(
   template: NotificationTemplateEntity,
-  channelsRepo: NotificationChannelsRepository,
+  channelsRepo: TemplatesRepository,
 ): Promise<void> {
   if (!channelsRepo.findTemplateVersions || !channelsRepo.saveTemplateVersion) return;
   const existingVersions = await channelsRepo.findTemplateVersions(Number(template.id));
@@ -181,8 +186,8 @@ async function ensureBaselineVersionSnapshot(
 export async function executeUpsertVersionedTemplate(params: {
   input: UpsertNotificationTemplateRequest;
   actor?: UserIdentity | undefined;
-  channelsRepo: NotificationChannelsRepository;
-  mapper: NotificationsMapper;
+  channelsRepo: TemplatesRepository;
+  mapper: TemplateLifecycleMapper;
   recordAudit: AuditRecorderFn;
 }): Promise<NotificationTemplateItemResponse> {
   const { input, actor, channelsRepo, mapper, recordAudit } = params;
@@ -264,7 +269,7 @@ export async function executeUpsertVersionedTemplate(params: {
     await recordAudit(
       actor,
       'CREATE_NOTIFICATION_TEMPLATE_DRAFT_VERSION',
-      NOTIFICATIONS_AUDIT_META.ENTITY_TEMPLATE_VERSION,
+      TEMPLATES_AUDIT_META.ENTITY_TEMPLATE_VERSION,
       `${existing.id}:v${nextVersion}`,
       {
         templateId: existing.id,
@@ -368,7 +373,7 @@ export async function executeUpsertVersionedTemplate(params: {
   await recordAudit(
     actor,
     'UPSERT_NOTIFICATION_TEMPLATE',
-    NOTIFICATIONS_AUDIT_META.ENTITY_TEMPLATE,
+    TEMPLATES_AUDIT_META.ENTITY_TEMPLATE,
     String(saved.id),
     existing
       ? {
@@ -390,8 +395,8 @@ export async function executeUpsertVersionedTemplate(params: {
 
 export async function executeListTemplateVersions(params: {
   templateId: number;
-  channelsRepo: NotificationChannelsRepository;
-  mapper: NotificationsMapper;
+  channelsRepo: TemplatesRepository;
+  mapper: TemplateLifecycleMapper;
 }): Promise<NotificationTemplateVersionItemResponse[]> {
   const { templateId, channelsRepo, mapper } = params;
   const template = await channelsRepo.findTemplateById(templateId);
@@ -409,8 +414,8 @@ export async function executeCreateTemplateVersion(params: {
   templateId: number;
   input: CreateNotificationTemplateVersionRequest;
   actor?: UserIdentity | undefined;
-  channelsRepo: NotificationChannelsRepository;
-  mapper: NotificationsMapper;
+  channelsRepo: TemplatesRepository;
+  mapper: TemplateLifecycleMapper;
   recordAudit: AuditRecorderFn;
 }): Promise<NotificationTemplateVersionItemResponse> {
   const { templateId, input, actor, channelsRepo, mapper, recordAudit } = params;
@@ -476,7 +481,7 @@ export async function executeCreateTemplateVersion(params: {
   await recordAudit(
     actor,
     'CREATE_NOTIFICATION_TEMPLATE_VERSION',
-    NOTIFICATIONS_AUDIT_META.ENTITY_TEMPLATE_VERSION,
+    TEMPLATES_AUDIT_META.ENTITY_TEMPLATE_VERSION,
     `${templateId}:v${nextVersion}`,
     {
       activePublishedVersion: template.publishedVersion ?? template.version ?? 1,
@@ -510,8 +515,8 @@ export async function executePublishTemplateVersion(params: {
   templateId: number;
   input: PublishNotificationTemplateVersionRequest;
   actor?: UserIdentity | undefined;
-  channelsRepo: NotificationChannelsRepository;
-  mapper: NotificationsMapper;
+  channelsRepo: TemplatesRepository;
+  mapper: TemplateLifecycleMapper;
   recordAudit: AuditRecorderFn;
 }): Promise<TemplateVersionMutationResultResponse> {
   const { templateId, input, actor, channelsRepo, mapper, recordAudit } = params;
@@ -595,7 +600,7 @@ export async function executePublishTemplateVersion(params: {
   await recordAudit(
     actor,
     'PUBLISH_NOTIFICATION_TEMPLATE_VERSION',
-    NOTIFICATIONS_AUDIT_META.ENTITY_TEMPLATE_VERSION,
+    TEMPLATES_AUDIT_META.ENTITY_TEMPLATE_VERSION,
     `${templateId}:v${publishedVerEntity.version}`,
     beforeData,
     {
@@ -628,8 +633,8 @@ export async function executeRollbackTemplateVersion(params: {
   templateId: number;
   input: RollbackNotificationTemplateVersionRequest;
   actor?: UserIdentity | undefined;
-  channelsRepo: NotificationChannelsRepository;
-  mapper: NotificationsMapper;
+  channelsRepo: TemplatesRepository;
+  mapper: TemplateLifecycleMapper;
   recordAudit: AuditRecorderFn;
 }): Promise<TemplateVersionMutationResultResponse> {
   const { templateId, input, actor, channelsRepo, mapper, recordAudit } = params;
@@ -715,7 +720,7 @@ export async function executeRollbackTemplateVersion(params: {
   await recordAudit(
     actor,
     'ROLLBACK_NOTIFICATION_TEMPLATE_VERSION',
-    NOTIFICATIONS_AUDIT_META.ENTITY_TEMPLATE_VERSION,
+    TEMPLATES_AUDIT_META.ENTITY_TEMPLATE_VERSION,
     `${templateId}:v${restoredVerEntity.version}`,
     beforeData,
     {
@@ -747,7 +752,7 @@ export async function executeRollbackTemplateVersion(params: {
 
 export async function executePreviewTemplate(params: {
   input: PreviewNotificationTemplateRequest;
-  channelsRepo: NotificationChannelsRepository;
+  channelsRepo: TemplatesRepository;
   resolveTemplateByCode: (
     code: string,
     channel: NotificationChannelCode,
@@ -888,7 +893,7 @@ export async function executePreviewTemplate(params: {
 export async function executeRenderDocumentFromTemplate(params: {
   input: RenderDocumentFromTemplateRequest;
   actor?: UserIdentity | undefined;
-  channelsRepo: NotificationChannelsRepository;
+  channelsRepo: TemplatesRepository;
   recordAudit: AuditRecorderFn;
 }): Promise<RenderedDocumentFromTemplateResponse> {
   const { input, actor, channelsRepo, recordAudit } = params;
@@ -1027,7 +1032,7 @@ export async function executeRenderDocumentFromTemplate(params: {
   await recordAudit(
     actor,
     'RENDER_DOCUMENT_FROM_TEMPLATE',
-    NOTIFICATIONS_AUDIT_META.ENTITY_TEMPLATE,
+    TEMPLATES_AUDIT_META.ENTITY_TEMPLATE,
     `${templateCode}:v${versionUsed}`,
     null,
     {
@@ -1047,8 +1052,8 @@ export async function executeRenderDocumentFromTemplate(params: {
 
 export async function executeListTemplateUsages(params: {
   templateId: number;
-  channelsRepo: NotificationChannelsRepository;
-  mapper: NotificationsMapper;
+  channelsRepo: TemplatesRepository;
+  mapper: TemplateLifecycleMapper;
 }): Promise<NotificationTemplateUsageItemResponse[]> {
   const { templateId, channelsRepo, mapper } = params;
   const template = await channelsRepo.findTemplateById(templateId);
@@ -1100,8 +1105,8 @@ export async function executeRegisterTemplateUsage(params: {
   templateId: number;
   input: RegisterNotificationTemplateUsageRequest;
   actor?: UserIdentity | undefined;
-  channelsRepo: NotificationChannelsRepository;
-  mapper: NotificationsMapper;
+  channelsRepo: TemplatesRepository;
+  mapper: TemplateLifecycleMapper;
   recordAudit: AuditRecorderFn;
 }): Promise<NotificationTemplateUsageItemResponse> {
   const { templateId, input, actor, channelsRepo, mapper, recordAudit } = params;
@@ -1124,7 +1129,7 @@ export async function executeRegisterTemplateUsage(params: {
   await recordAudit(
     actor,
     'REGISTER_NOTIFICATION_TEMPLATE_USAGE',
-    NOTIFICATIONS_AUDIT_META.ENTITY_TEMPLATE_USAGE,
+    TEMPLATES_AUDIT_META.ENTITY_TEMPLATE_USAGE,
     String(saved.id),
     null,
     {
@@ -1141,7 +1146,7 @@ export async function executeRegisterTemplateUsage(params: {
 export async function executeUnregisterTemplateUsage(params: {
   usageId: number;
   actor?: UserIdentity | undefined;
-  channelsRepo: NotificationChannelsRepository;
+  channelsRepo: TemplatesRepository;
   recordAudit: AuditRecorderFn;
 }): Promise<{ removed: true; id: number }> {
   const { usageId, actor, channelsRepo, recordAudit } = params;
@@ -1153,7 +1158,7 @@ export async function executeUnregisterTemplateUsage(params: {
   await recordAudit(
     actor,
     'UNREGISTER_NOTIFICATION_TEMPLATE_USAGE',
-    NOTIFICATIONS_AUDIT_META.ENTITY_TEMPLATE_USAGE,
+    TEMPLATES_AUDIT_META.ENTITY_TEMPLATE_USAGE,
     String(usageId),
     {
       templateCode: removed.templateCode,
@@ -1169,7 +1174,7 @@ export async function executeUnregisterTemplateUsage(params: {
 export async function executeSafeDeleteTemplate(params: {
   id: number;
   actor?: UserIdentity | undefined;
-  channelsRepo: NotificationChannelsRepository;
+  channelsRepo: TemplatesRepository;
   recordAudit: AuditRecorderFn;
 }): Promise<{ deleted: true; id: number }> {
   const { id, actor, channelsRepo, recordAudit } = params;
@@ -1210,7 +1215,7 @@ export async function executeSafeDeleteTemplate(params: {
   await recordAudit(
     actor,
     'DELETE_NOTIFICATION_TEMPLATE',
-    NOTIFICATIONS_AUDIT_META.ENTITY_TEMPLATE,
+    TEMPLATES_AUDIT_META.ENTITY_TEMPLATE,
     String(id),
     {
       code: existing.code,

@@ -6,7 +6,59 @@ import {
   type NotificationChannelCode,
   type NotificationDocumentFormatName,
   type NotificationTemplateTypeName,
-} from '../enum/notifications.enum.js';
+} from '../enum/templates.enum.js';
+
+// GSM 03.38 Basic Character Set regex
+const GSM_7BIT_REGEX =
+  /^[@£$¥èéùìòÇ\nØø\rÅåΔ_ΦΓΛΩΠΨΣΘΞ !"#¤%&'()*+,\-./0-9:;<=>?¡A-ZÄÖÑÜ§¿a-zäöñüà^{}\\[~\]|€]*$/;
+
+export interface SmsSegmentCalculationResult {
+  readonly encoding: 'GSM_7BIT' | 'UCS2_UNICODE';
+  readonly charLength: number;
+  readonly segmentsCount: number;
+  readonly maxCharsPerSegment: number;
+}
+
+/**
+ * Tính số bản tin SMS (Segments) theo chuẩn viễn thông:
+ * - GSM-7 (không dấu): 160 ký tự / 1 tin; nếu > 160 ký tự thì 153 ký tự / tin ghép.
+ * - UCS-2 Unicode (Tiếng Việt có dấu / Emoji): 70 ký tự / 1 tin; nếu > 70 ký tự thì 67 ký tự / tin ghép.
+ */
+export function calculateSmsSegments(content: string): SmsSegmentCalculationResult {
+  const text = content ?? '';
+  const charLength = Array.from(text).length;
+  if (charLength === 0) {
+    return {
+      encoding: 'GSM_7BIT',
+      charLength: 0,
+      segmentsCount: 1,
+      maxCharsPerSegment: 160,
+    };
+  }
+
+  const isGsm7 = GSM_7BIT_REGEX.test(text);
+  if (isGsm7) {
+    const maxSingle = 160;
+    const maxMulti = 153;
+    const segmentsCount = charLength <= maxSingle ? 1 : Math.ceil(charLength / maxMulti);
+    return {
+      encoding: 'GSM_7BIT',
+      charLength,
+      segmentsCount,
+      maxCharsPerSegment: charLength <= maxSingle ? maxSingle : maxMulti,
+    };
+  }
+
+  const maxSingle = 70;
+  const maxMulti = 67;
+  const segmentsCount = charLength <= maxSingle ? 1 : Math.ceil(charLength / maxMulti);
+  return {
+    encoding: 'UCS2_UNICODE',
+    charLength,
+    segmentsCount,
+    maxCharsPerSegment: charLength <= maxSingle ? maxSingle : maxMulti,
+  };
+}
 
 export interface NotificationTemplateSeedDefinition {
   readonly code: string;
@@ -374,7 +426,6 @@ export function renderNotificationTemplateContent(params: {
       if (!key) continue;
       const val = resolveNestedValue(vars, key);
       if (val === undefined || val === null || String(val).trim() === '') {
-        // Check if template has a fallback for this key; if not, mark as missing
         const hasFallbackRegex = new RegExp(
           `\\{\\{\\{?\\s*${key.replace(/\./g, '\\.')}\\|[^}]+\\}\\}\\}?`,
         );

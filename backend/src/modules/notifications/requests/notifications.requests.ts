@@ -120,9 +120,13 @@ export const UpdateNotificationPreferencesRequestSchema = z.object({
   preferences: z.array(NotificationPreferenceEntryInputSchema).min(1).max(20),
 });
 
-export type UpdateNotificationPreferencesRequest = z.infer<
-  typeof UpdateNotificationPreferencesRequestSchema
->;
+export type UpdateNotificationPreferencesRequest = {
+  preferences: Array<
+    Omit<z.infer<typeof NotificationPreferenceEntryInputSchema>, 'category'> & {
+      category: number | string;
+    }
+  >;
+};
 
 export const UpdateNotificationRuntimeConfigRequestSchema = z.object({
   enabled: z.boolean().optional(),

@@ -16,6 +16,8 @@ import { SessionsModule } from '@modules/sessions/index.js';
 import { CredentialsModule } from '@modules/credentials/index.js';
 import { FilesModule } from '@modules/files/index.js';
 import { NotificationsModule } from '@modules/notifications/index.js';
+import { NotificationDeliveryModule } from '@modules/notification-delivery/index.js';
+import { TemplatesModule } from '@modules/templates/index.js';
 import { WorkflowsModule } from '@modules/workflows/index.js';
 import { CalendarModule } from '@modules/calendar/index.js';
 import { ImportsModule } from '@modules/imports/index.js';
@@ -50,6 +52,8 @@ const PROCESSORS = [SystemProcessor, CriticalProcessor, NotificationsProcessor, 
     CredentialsModule,
     FilesModule,
     NotificationsModule,
+    NotificationDeliveryModule,
+    TemplatesModule,
     WorkflowsModule,
     CalendarModule,
     ImportsModule,

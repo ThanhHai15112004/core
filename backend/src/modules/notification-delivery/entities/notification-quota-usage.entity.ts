@@ -1,6 +1,6 @@
 import { Column, Entity, Index } from 'typeorm';
 import { TypeOrmBaseEntity } from '@packages/database/index.js';
-import { NOTIFICATION_CHANNEL } from '../enum/notifications.enum.js';
+import { NOTIFICATION_CHANNEL } from '../enum/notification-delivery.enum.js';
 
 @Entity('notification_quota_usages')
 @Index(

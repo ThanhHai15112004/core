@@ -13,8 +13,9 @@ import type { RecordCommentEntity } from '@modules/comments/entities/record-comm
 import type { RecordCommentHistoryRepository } from '@modules/comments/repositories/record-comment-history.repository.js';
 import type { RecordCommentRepository } from '@modules/comments/repositories/record-comment.repository.js';
 import { TemplatesController } from '@modules/templates/controllers/templates.controller.js';
+import { TemplatesMapper } from '@modules/templates/mappers/templates.mapper.js';
+import type { TemplatesRepository } from '@modules/templates/repositories/templates.repository.js';
 import { TemplatesService } from '@modules/templates/services/templates.service.js';
-import type { NotificationChannelsService } from '@modules/notifications/services/notification-channels.service.js';
 
 describe('Phase 9 Standalone Modules: organization-members (9.2), approvals (9.4), comments (9.5) & templates (9.6) with DB Persistence', () => {
   it('9.2 — OrganizationMembersModule assigns memberships, transfers units keeping history, configures direct/temporary managers & queries subordinates', async () => {
@@ -405,35 +406,54 @@ describe('Phase 9 Standalone Modules: organization-members (9.2), approvals (9.4
   });
 
   it('9.6 — TemplatesModule manages Email/Notification/Document templates, preview missing variables, versioning & usage tracking', async () => {
-    const fakeChannelsService = {
-      listTemplates: async () => ({
-        data: [],
-        meta: { page: 1, limit: 20, total: 0, totalPages: 0 },
+    const fakeTemplatesRepo = {
+      findTemplateByCodeChannelLocale: async (code: string, channel: number, locale: string) => ({
+        id: 1,
+        code,
+        name: 'Mẫu thông báo đơn hàng',
+        channel,
+        templateType: 'NOTIFICATION',
+        documentFormat: null,
+        category: 2,
+        locale,
+        version: 2,
+        publishedVersion: 2,
+        status: 'PUBLISHED',
+        subjectTemplate: 'Xin chào {{fullName}}',
+        bodyTemplate: 'Đơn hàng #{{orderCode}} đang chờ xử lý tại {{missingBranch}}',
+        htmlTemplate: null,
+        variablesJson: JSON.stringify(['fullName', 'orderCode', 'missingBranch']),
+        isActive: true,
+        isSystem: false,
+        organizationUnitId: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
       }),
-      previewTemplate: async () => ({
-        subject: 'Xin chào Nguyễn Văn A',
-        body: 'Đơn hàng #ORD-01 đang chờ xử lý tại {{missingBranch}}',
-        htmlBody: null,
-        providedVariables: ['fullName', 'orderCode'],
-        requiredVariables: ['fullName', 'orderCode', 'missingBranch'],
-        missingVariables: ['missingBranch'],
-        resolvedVersion: 2,
-        locale: 'vi',
+      findTemplateByCodeAndLocale: async (code: string, locale: string) => ({
+        id: 2,
+        code,
+        name: 'Hợp đồng bàn giao',
+        channel: 5,
+        templateType: 'DOCUMENT',
+        documentFormat: 'HTML',
+        category: 2,
+        locale,
+        version: 1,
+        publishedVersion: 1,
+        status: 'PUBLISHED',
+        subjectTemplate: 'Hợp đồng #{{orderCode}}',
+        bodyTemplate: 'Hợp đồng #{{orderCode}}',
+        htmlTemplate: '<h1>Hợp đồng #{{orderCode}}</h1>',
+        variablesJson: JSON.stringify(['orderCode']),
+        isActive: true,
+        isSystem: true,
+        organizationUnitId: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
       }),
-      renderDocumentFromTemplate: async () => ({
-        templateCode: 'CONTRACT_DOC',
-        locale: 'vi',
-        versionNumber: 1,
-        fileName: 'contract-ORD-01.html',
-        mimeType: 'text/html',
-        title: 'Hợp đồng #ORD-01',
-        content: '<h1>Hợp đồng #ORD-01</h1>',
-        missingVariables: [],
-        renderedAt: new Date().toISOString(),
-      }),
-    } as unknown as NotificationChannelsService;
+    } as unknown as TemplatesRepository;
 
-    const service = new TemplatesService(fakeChannelsService);
+    const service = new TemplatesService(fakeTemplatesRepo, new TemplatesMapper());
     const controller = new TemplatesController(service);
 
     const preview = await controller.previewTemplate({

@@ -38,6 +38,7 @@
     "navigation",
     "files",
     "notifications",
+    "notification-delivery",
     "templates",
     "workflows",
     "approvals",

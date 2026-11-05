@@ -21,71 +21,33 @@ import { NOTIFICATIONS_ROUTES } from '../routes/notifications.routes.js';
 import {
   type ArchiveNotificationRequest,
   ArchiveNotificationRequestSchema,
-  type CreateNotificationSuppressionRequest,
-  CreateNotificationSuppressionRequestSchema,
-  type CreateNotificationTemplateVersionRequest,
-  CreateNotificationTemplateVersionRequestSchema,
-  type ListNotificationDeliveriesQuery,
-  ListNotificationDeliveriesQuerySchema,
   type ListNotificationDispatchesQuery,
   ListNotificationDispatchesQuerySchema,
-  type ListNotificationSuppressionsQuery,
-  ListNotificationSuppressionsQuerySchema,
-  type ListNotificationTemplatesQuery,
-  ListNotificationTemplatesQuerySchema,
   type ListUserInboxQuery,
   ListUserInboxQuerySchema,
   type MarkAllNotificationsReadRequest,
   MarkAllNotificationsReadRequestSchema,
   type MarkNotificationReadRequest,
   MarkNotificationReadRequestSchema,
-  type PreviewNotificationTemplateRequest,
-  PreviewNotificationTemplateRequestSchema,
-  type PublishNotificationTemplateVersionRequest,
-  PublishNotificationTemplateVersionRequestSchema,
-  type RegisterNotificationTemplateUsageRequest,
-  RegisterNotificationTemplateUsageRequestSchema,
-  type RegisterPushSubscriptionRequest,
-  RegisterPushSubscriptionRequestSchema,
-  type RenderDocumentFromTemplateRequest,
-  RenderDocumentFromTemplateRequestSchema,
-  type RollbackNotificationTemplateVersionRequest,
-  RollbackNotificationTemplateVersionRequestSchema,
   type SendNotificationRequest,
   SendNotificationRequestSchema,
-  type UpdateDeliveryStatusWebhookRequest,
-  UpdateDeliveryStatusWebhookRequestSchema,
   type UpdateNotificationPreferencesRequest,
   UpdateNotificationPreferencesRequestSchema,
   type UpdateNotificationRuntimeConfigRequest,
   UpdateNotificationRuntimeConfigRequestSchema,
-  type UpsertNotificationTemplateRequest,
-  UpsertNotificationTemplateRequestSchema,
 } from '../requests/notifications.requests.js';
 import type {
   MarkAllNotificationsReadResponse,
   NotificationArchiveMutationResponse,
   NotificationDeleteFromInboxResponse,
-  NotificationDeliveryItemResponse,
   NotificationDispatchDetailResponse,
   NotificationDispatchHistoryItemResponse,
   NotificationInboxItemResponse,
   NotificationPreferenceItemResponse,
-  NotificationPushSubscriptionItemResponse,
-  NotificationQuotaAndCostSummaryResponse,
   NotificationReadStateMutationResponse,
   NotificationRuntimeConfigResponse,
-  NotificationSuppressionItemResponse,
-  NotificationTemplateItemResponse,
-  NotificationTemplatePreviewResponse,
-  NotificationTemplateUsageItemResponse,
-  NotificationTemplateVersionItemResponse,
   NotificationUnreadSummaryResponse,
-  RenderedDocumentFromTemplateResponse,
-  RetryDueDeliveriesResponse,
-  TemplateVersionMutationResultResponse,
 } from '../responses/notifications.response.js';
-import { NotificationChannelsService } from '../services/notification-channels.service.js';
 import { NotificationsService } from '../services/notifications.service.js';
 
 const runtimeConfigQuerySchema = z.object({
@@ -98,10 +60,7 @@ const runtimeConfigQuerySchema = z.object({
 )
 @Controller(NOTIFICATIONS_ROUTES.PREFIX)
 export class NotificationsController {
-  constructor(
-    private readonly notificationsService: NotificationsService,
-    private readonly channelsService: NotificationChannelsService,
-  ) {}
+  constructor(private readonly notificationsService: NotificationsService) {}
 
   private resolveCurrentUserId(actor?: UserIdentity): number {
     return parseNumericUserId(actor?.id) ?? 1;
@@ -311,338 +270,5 @@ export class NotificationsController {
   ): Promise<NotificationDispatchDetailResponse> {
     const locale = this.resolveCurrentLocale(actor);
     return this.notificationsService.getDispatchDetail(id, locale);
-  }
-
-  // ==================== 7.2 EMAIL, SMS & PUSH NOTIFICATION ENDPOINTS ====================
-
-  /** Danh sách Template thông báo đa kênh (Email, SMS, Push, In-App) */
-  @Get(NOTIFICATIONS_ROUTES.TEMPLATES)
-  @RequirePermissions('notifications.read')
-  @ApiDoc({
-    summary: 'Lấy danh sách template thông báo đa kênh (Email, SMS, Push)',
-    pagination: 'offset',
-  })
-  public async listTemplates(
-    @ValidatedQuery(ListNotificationTemplatesQuerySchema) query: ListNotificationTemplatesQuery,
-  ): Promise<PaginatedResult<NotificationTemplateItemResponse>> {
-    return this.channelsService.listTemplates(query);
-  }
-
-  /** Tạo mới hoặc cập nhật Template thông báo */
-  @Post(NOTIFICATIONS_ROUTES.TEMPLATES)
-  @RequirePermissions('notifications.manage')
-  @ApiDoc({
-    summary: 'Tạo hoặc cập nhật template thông báo đa kênh (tách nội dung khỏi code nghiệp vụ)',
-  })
-  public async upsertTemplate(
-    @ValidatedBody(UpsertNotificationTemplateRequestSchema)
-    body: UpsertNotificationTemplateRequest,
-    @CurrentUser() actor?: UserIdentity,
-  ): Promise<NotificationTemplateItemResponse> {
-    return this.channelsService.upsertTemplate(body, actor);
-  }
-
-  /** Xem trước nội dung render của Template với biến động */
-  @Post(NOTIFICATIONS_ROUTES.TEMPLATES_PREVIEW)
-  @RequirePermissions('notifications.read')
-  @HttpCode(HttpStatus.OK)
-  @ApiDoc({
-    summary: 'Render thử nghiệm template thông báo với các biến mẫu và tính số segment SMS',
-  })
-  public async previewTemplate(
-    @ValidatedBody(PreviewNotificationTemplateRequestSchema)
-    body: PreviewNotificationTemplateRequest,
-  ): Promise<NotificationTemplatePreviewResponse> {
-    return this.channelsService.previewTemplate(body);
-  }
-
-  /** Xóa Template thông báo tùy chỉnh */
-  @Delete(NOTIFICATIONS_ROUTES.TEMPLATE_BY_ID)
-  @RequirePermissions('notifications.manage')
-  @ApiDoc({
-    summary:
-      'Xóa template thông báo tùy chỉnh (chặn xóa template hệ thống hoặc đang được module/lịch sử gửi sử dụng)',
-  })
-  public async deleteTemplate(
-    @ValidatedParams(positiveIntParamSchema, 'id') id: number,
-    @CurrentUser() actor?: UserIdentity,
-  ): Promise<{ deleted: true; id: number }> {
-    return this.channelsService.deleteTemplate(id, actor);
-  }
-
-  /** Danh sách lịch sử phiên bản của một mẫu nội dung (Mục 9.6) */
-  @Get(NOTIFICATIONS_ROUTES.TEMPLATE_VERSIONS_BY_ID)
-  @RequirePermissions('notifications.read')
-  @ApiDoc({
-    summary: 'Lấy danh sách các phiên bản (Draft / Published / Archived) của một mẫu nội dung',
-  })
-  public async listTemplateVersions(
-    @ValidatedParams(positiveIntParamSchema, 'id') id: number,
-  ): Promise<NotificationTemplateVersionItemResponse[]> {
-    return this.channelsService.listTemplateVersions(id);
-  }
-
-  /** Tạo phiên bản nháp mới cho mẫu nội dung mà không sửa trực tiếp bản đang dùng (Mục 9.6) */
-  @Post(NOTIFICATIONS_ROUTES.TEMPLATE_VERSIONS_BY_ID)
-  @RequirePermissions('notifications.manage')
-  @HttpCode(HTTP_STATUS_CODE.CREATED)
-  @ApiDoc({
-    summary: 'Tạo phiên bản mới (Draft hoặc Publish ngay) cho mẫu nội dung hiện có',
-  })
-  public async createTemplateVersion(
-    @ValidatedParams(positiveIntParamSchema, 'id') id: number,
-    @ValidatedBody(CreateNotificationTemplateVersionRequestSchema)
-    body: CreateNotificationTemplateVersionRequest,
-    @CurrentUser() actor?: UserIdentity,
-  ): Promise<NotificationTemplateVersionItemResponse> {
-    return this.channelsService.createTemplateVersion(id, body, actor);
-  }
-
-  /** Phát hành (Publish) một phiên bản mẫu nội dung kèm ghi Audit Log (Mục 9.6) */
-  @Post(NOTIFICATIONS_ROUTES.TEMPLATE_PUBLISH_BY_ID)
-  @RequirePermissions('notifications.manage')
-  @HttpCode(HttpStatus.OK)
-  @ApiDoc({
-    summary: 'Phát hành phiên bản mẫu nội dung để đưa vào sử dụng chính thức (có Audit Log)',
-  })
-  public async publishTemplateVersion(
-    @ValidatedParams(positiveIntParamSchema, 'id') id: number,
-    @ValidatedBody(PublishNotificationTemplateVersionRequestSchema)
-    body: PublishNotificationTemplateVersionRequest,
-    @CurrentUser() actor?: UserIdentity,
-  ): Promise<TemplateVersionMutationResultResponse> {
-    return this.channelsService.publishTemplateVersion(id, body, actor);
-  }
-
-  /** Quay lại (Rollback) một phiên bản cũ của mẫu nội dung kèm ghi Audit Log (Mục 9.6) */
-  @Post(NOTIFICATIONS_ROUTES.TEMPLATE_ROLLBACK_BY_ID)
-  @RequirePermissions('notifications.manage')
-  @HttpCode(HttpStatus.OK)
-  @ApiDoc({
-    summary: 'Quay lại (Rollback) một phiên bản cũ của mẫu nội dung (có Audit Log)',
-  })
-  public async rollbackTemplateVersion(
-    @ValidatedParams(positiveIntParamSchema, 'id') id: number,
-    @ValidatedBody(RollbackNotificationTemplateVersionRequestSchema)
-    body: RollbackNotificationTemplateVersionRequest,
-    @CurrentUser() actor?: UserIdentity,
-  ): Promise<TemplateVersionMutationResultResponse> {
-    return this.channelsService.rollbackTemplateVersion(id, body, actor);
-  }
-
-  /** Sinh nội dung tài liệu (HTML, PDF, Markdown, TXT) từ mẫu tài liệu DOCUMENT (Mục 9.6) */
-  @Post(NOTIFICATIONS_ROUTES.TEMPLATES_RENDER_DOCUMENT)
-  @RequirePermissions('notifications.read')
-  @HttpCode(HttpStatus.OK)
-  @ApiDoc({
-    summary:
-      'Sinh nội dung và tệp tài liệu (HTML, PDF, Markdown, TXT) từ mẫu tài liệu kèm phát hiện biến thiếu',
-  })
-  public async renderDocumentFromTemplate(
-    @ValidatedBody(RenderDocumentFromTemplateRequestSchema)
-    body: RenderDocumentFromTemplateRequest,
-  ): Promise<RenderedDocumentFromTemplateResponse> {
-    return this.channelsService.renderDocumentFromTemplate(body);
-  }
-
-  /** Danh sách các module và luồng nghiệp vụ đang sử dụng mẫu nội dung (Mục 9.6) */
-  @Get(NOTIFICATIONS_ROUTES.TEMPLATE_USAGES_BY_ID)
-  @RequirePermissions('notifications.read')
-  @ApiDoc({
-    summary: 'Xem danh sách các module và luồng nghiệp vụ đang tham chiếu mẫu nội dung',
-  })
-  public async listTemplateUsages(
-    @ValidatedParams(positiveIntParamSchema, 'id') id: number,
-  ): Promise<NotificationTemplateUsageItemResponse[]> {
-    return this.channelsService.listTemplateUsages(id);
-  }
-
-  /** Đăng ký module sử dụng mẫu nội dung để bảo vệ chống xóa nhầm (Mục 9.6) */
-  @Post(NOTIFICATIONS_ROUTES.TEMPLATE_USAGES_BY_ID)
-  @RequirePermissions('notifications.manage')
-  @HttpCode(HTTP_STATUS_CODE.CREATED)
-  @ApiDoc({
-    summary: 'Đăng ký module và luồng nghiệp vụ đang sử dụng mẫu nội dung',
-  })
-  public async registerTemplateUsage(
-    @ValidatedParams(positiveIntParamSchema, 'id') id: number,
-    @ValidatedBody(RegisterNotificationTemplateUsageRequestSchema)
-    body: RegisterNotificationTemplateUsageRequest,
-    @CurrentUser() actor?: UserIdentity,
-  ): Promise<NotificationTemplateUsageItemResponse> {
-    return this.channelsService.registerTemplateUsage(id, body, actor);
-  }
-
-  /** Gỡ đăng ký sử dụng mẫu nội dung (Mục 9.6) */
-  @Delete(NOTIFICATIONS_ROUTES.TEMPLATE_USAGE_BY_ID)
-  @RequirePermissions('notifications.manage')
-  @ApiDoc({
-    summary: 'Gỡ đăng ký liên kết module sử dụng mẫu nội dung',
-  })
-  public async unregisterTemplateUsage(
-    @ValidatedParams(positiveIntParamSchema, 'usageId') usageId: number,
-    @CurrentUser() actor?: UserIdentity,
-  ): Promise<{ removed: boolean; id: number }> {
-    return this.channelsService.unregisterTemplateUsage(usageId, actor);
-  }
-
-  /** Tra cứu lịch sử và trạng thái gửi từng kênh (Queued, Sent, Delivered, Failed, Suppressed) */
-  @Get(NOTIFICATIONS_ROUTES.DELIVERIES)
-  @RequirePermissions('notifications.read')
-  @ApiDoc({
-    summary:
-      'Tra cứu lịch sử gửi đa kênh (Queued, Sent, Delivered, Failed, Suppressed), số lần retry và chi phí',
-    pagination: 'offset',
-  })
-  public async listDeliveries(
-    @ValidatedQuery(ListNotificationDeliveriesQuerySchema) query: ListNotificationDeliveriesQuery,
-    @CurrentUser() actor?: UserIdentity,
-  ): Promise<PaginatedResult<NotificationDeliveryItemResponse>> {
-    const locale = this.resolveCurrentLocale(actor);
-    return this.channelsService.listDeliveries(query, locale);
-  }
-
-  /** Gửi lại thủ công 1 lệnh gửi kênh ngoài (đảm bảo idempotency không gửi trùng) */
-  @Post(NOTIFICATIONS_ROUTES.DELIVERY_RETRY_BY_ID)
-  @RequirePermissions('notifications.send')
-  @HttpCode(HttpStatus.OK)
-  @ApiDoc({
-    summary: 'Thử gửi lại 1 bản tin lỗi (đảm bảo không gửi trùng nếu đã Sent/Delivered)',
-  })
-  public async retrySingleDelivery(
-    @ValidatedParams(positiveIntParamSchema, 'id') id: number,
-    @CurrentUser() actor?: UserIdentity,
-  ): Promise<NotificationDeliveryItemResponse> {
-    const locale = this.resolveCurrentLocale(actor);
-    return this.channelsService.retrySingleDelivery(id, actor, locale);
-  }
-
-  /** Tự động quét và gửi lại các lệnh gửi lỗi tạm thời đã tới hạn nextRetryAt */
-  @Post(NOTIFICATIONS_ROUTES.DELIVERIES_RETRY_DUE)
-  @RequirePermissions('notifications.send')
-  @HttpCode(HttpStatus.OK)
-  @ApiDoc({
-    summary: 'Quét và tự động gửi lại theo lô các bản tin bị lỗi tạm thời đã tới hạn retry',
-  })
-  public async retryDueDeliveries(
-    @CurrentUser() actor?: UserIdentity,
-  ): Promise<RetryDueDeliveriesResponse> {
-    const locale = this.resolveCurrentLocale(actor);
-    return this.channelsService.retryDueDeliveries(new Date(), actor, locale);
-  }
-
-  /** Cập nhật trạng thái gửi từ Provider Webhook (Sent -> Delivered / Failed) */
-  @Post(NOTIFICATIONS_ROUTES.DELIVERY_STATUS_BY_ID)
-  @RequirePermissions('notifications.send')
-  @HttpCode(HttpStatus.OK)
-  @ApiDoc({
-    summary:
-      'Cập nhật trạng thái gửi từ Provider Webhook (Delivered / Failed + tự động chặn nếu Hard Bounce)',
-  })
-  public async updateDeliveryStatusWebhook(
-    @ValidatedParams(positiveIntParamSchema, 'id') id: number,
-    @ValidatedBody(UpdateDeliveryStatusWebhookRequestSchema)
-    body: UpdateDeliveryStatusWebhookRequest,
-    @CurrentUser() actor?: UserIdentity,
-  ): Promise<NotificationDeliveryItemResponse> {
-    const locale = this.resolveCurrentLocale(actor);
-    return this.channelsService.updateDeliveryStatusWebhook(id, body, actor, locale);
-  }
-
-  /** Danh sách địa chỉ Email / SĐT / Push Token bị dừng gửi (Suppression List) */
-  @Get(NOTIFICATIONS_ROUTES.SUPPRESSIONS)
-  @RequirePermissions('notifications.read')
-  @ApiDoc({
-    summary: 'Lấy danh sách các địa chỉ Email, SĐT hoặc Push Token bị dừng gửi (Suppression List)',
-    pagination: 'offset',
-  })
-  public async listSuppressions(
-    @ValidatedQuery(ListNotificationSuppressionsQuerySchema)
-    query: ListNotificationSuppressionsQuery,
-    @CurrentUser() actor?: UserIdentity,
-  ): Promise<PaginatedResult<NotificationSuppressionItemResponse>> {
-    const locale = this.resolveCurrentLocale(actor);
-    return this.channelsService.listSuppressions(query, locale);
-  }
-
-  /** Thêm địa chỉ hoặc token vào danh sách dừng gửi */
-  @Post(NOTIFICATIONS_ROUTES.SUPPRESSIONS)
-  @RequirePermissions('notifications.manage')
-  @ApiDoc({
-    summary: 'Thêm địa chỉ Email, SĐT hoặc Push Token vào danh sách dừng gửi (Suppression List)',
-  })
-  public async addSuppression(
-    @ValidatedBody(CreateNotificationSuppressionRequestSchema)
-    body: CreateNotificationSuppressionRequest,
-    @CurrentUser() actor?: UserIdentity,
-  ): Promise<NotificationSuppressionItemResponse> {
-    const locale = this.resolveCurrentLocale(actor);
-    return this.channelsService.addSuppression(body, actor, locale);
-  }
-
-  /** Gỡ địa chỉ hoặc token khỏi danh sách dừng gửi */
-  @Delete(NOTIFICATIONS_ROUTES.SUPPRESSION_BY_ID)
-  @RequirePermissions('notifications.manage')
-  @ApiDoc({
-    summary: 'Gỡ chặn địa chỉ hoặc token khỏi danh sách dừng gửi',
-  })
-  public async removeSuppression(
-    @ValidatedParams(positiveIntParamSchema, 'id') id: number,
-    @CurrentUser() actor?: UserIdentity,
-  ): Promise<{ removed: boolean; id: number }> {
-    return this.channelsService.removeSuppression(id, actor);
-  }
-
-  /** Lấy danh sách thiết bị nhận Push Notification của người dùng hiện tại */
-  @Get(NOTIFICATIONS_ROUTES.PUSH_SUBSCRIPTIONS)
-  @ApiDoc({
-    summary: 'Lấy danh sách thiết bị đã đăng ký nhận Push Notification của người dùng hiện tại',
-  })
-  public async listMyPushSubscriptions(
-    @CurrentUser() actor?: UserIdentity,
-  ): Promise<NotificationPushSubscriptionItemResponse[]> {
-    const userId = this.resolveCurrentUserId(actor);
-    return this.channelsService.listUserPushSubscriptions(userId);
-  }
-
-  /** Đăng ký thiết bị/trình duyệt nhận Push Notification */
-  @Post(NOTIFICATIONS_ROUTES.PUSH_SUBSCRIPTIONS)
-  @ApiDoc({
-    summary: 'Đăng ký token thiết bị hoặc Web Push endpoint để nhận Push Notification',
-  })
-  public async registerPushSubscription(
-    @ValidatedBody(RegisterPushSubscriptionRequestSchema) body: RegisterPushSubscriptionRequest,
-    @CurrentUser() actor?: UserIdentity,
-  ): Promise<NotificationPushSubscriptionItemResponse> {
-    const userId = this.resolveCurrentUserId(actor);
-    return this.channelsService.registerPushSubscription(userId, body, actor);
-  }
-
-  /** Hủy đăng ký thiết bị nhận Push Notification */
-  @Delete(NOTIFICATIONS_ROUTES.PUSH_SUBSCRIPTION_BY_ID)
-  @ApiDoc({
-    summary: 'Hủy đăng ký thiết bị nhận Push Notification',
-  })
-  public async unregisterPushSubscription(
-    @ValidatedParams(positiveIntParamSchema, 'id') id: number,
-    @CurrentUser() actor?: UserIdentity,
-  ): Promise<{ removed: true; id: number }> {
-    const userId = this.resolveCurrentUserId(actor);
-    return this.channelsService.unregisterPushSubscription(userId, id, actor);
-  }
-
-  /** Thống kê chi phí lũy kế và hạn mức nhà cung cấp (Quota & Cost Summary) */
-  @Get(NOTIFICATIONS_ROUTES.QUOTA_SUMMARY)
-  @RequirePermissions('notifications.read')
-  @ApiDoc({
-    summary:
-      'Theo dõi chi phí lũy kế, số lượng segment SMS và hạn mức Quota ngày/tháng của nhà cung cấp',
-  })
-  public async getQuotaSummary(
-    @ValidatedQuery(runtimeConfigQuerySchema) query: { organizationUnitId?: number | undefined },
-    @CurrentUser() actor?: UserIdentity,
-  ): Promise<NotificationQuotaAndCostSummaryResponse> {
-    const orgId = query.organizationUnitId ?? actor?.organizationUnitIds?.[0] ?? null;
-    return this.channelsService.getQuotaAndCostSummary(orgId);
   }
 }

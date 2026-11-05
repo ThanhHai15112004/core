@@ -3,7 +3,7 @@ import { HTTP_STATUS_CODE, type PaginatedResult } from '@packages/kernel/index.j
 import {
   ApiDoc,
   ApiGroup,
-  RequirePermissions,
+  RequireAnyPermission,
   ValidatedBody,
   ValidatedParams,
   ValidatedQuery,
@@ -41,7 +41,7 @@ import type {
 
 @ApiGroup(
   'Content Templates (Email, Notification & Document)',
-  'Quản lý mẫu nội dung Email, Thông báo (In-App, SMS, Push) và Tài liệu; đa phiên bản, đa ngôn ngữ và theo dõi module sử dụng (Mục 9.6)',
+  'Quản lý mẫu nội dung Email, Thông báo (In-App, SMS, Push) và Tài liệu; đa phiên bản, đa ngôn ngữ và theo dõi module sử dụng (Mục 7.2.1 & 9.6)',
 )
 @Controller(TEMPLATES_ROUTES.PREFIX)
 export class TemplatesController {
@@ -49,7 +49,7 @@ export class TemplatesController {
 
   /** Danh sách mẫu nội dung Email, Thông báo và Tài liệu (Mục 9.6.1–9.6.6) */
   @Get()
-  @RequirePermissions('templates.read')
+  @RequireAnyPermission('templates.read', 'notifications.read', 'notifications.manage')
   @ApiDoc({
     summary: 'Danh sách mẫu nội dung Email, Thông báo (In-App, SMS, Push) và Tài liệu (Mục 9.6)',
     pagination: 'offset',
@@ -62,7 +62,7 @@ export class TemplatesController {
 
   /** Tạo mới hoặc cập nhật mẫu nội dung (Mục 9.6.1–9.6.6) */
   @Post()
-  @RequirePermissions('templates.manage')
+  @RequireAnyPermission('templates.manage', 'notifications.manage')
   @ApiDoc({
     summary: 'Tạo hoặc cập nhật mẫu Email, Thông báo hoặc Tài liệu đa ngôn ngữ (Mục 9.6.1–9.6.6)',
     status: HTTP_STATUS_CODE.CREATED,
@@ -77,7 +77,7 @@ export class TemplatesController {
   /** Xóa mẫu nội dung có kiểm tra module đang sử dụng (Mục 9.6.8) */
   @Delete(TEMPLATES_ROUTES.BY_ID)
   @HttpCode(HttpStatus.OK)
-  @RequirePermissions('templates.manage')
+  @RequireAnyPermission('templates.manage', 'notifications.manage')
   @ApiDoc({
     summary: 'Xóa mẫu nội dung (chặn xóa nếu đang có module sử dụng — Mục 9.6.8)',
   })
@@ -91,7 +91,7 @@ export class TemplatesController {
   /** Xem trước mẫu với dữ liệu thử và phát hiện biến bị thiếu (Mục 9.6.4) */
   @Post(TEMPLATES_ROUTES.PREVIEW)
   @HttpCode(HttpStatus.OK)
-  @RequirePermissions('templates.render')
+  @RequireAnyPermission('templates.render', 'templates.read', 'notifications.read')
   @ApiDoc({
     summary: 'Xem trước mẫu với dữ liệu thử và phát hiện biến bị thiếu (Mục 9.6.4)',
   })
@@ -104,7 +104,7 @@ export class TemplatesController {
   /** Kết xuất tài liệu từ mẫu nội dung (Mục 9.6.3) */
   @Post(TEMPLATES_ROUTES.RENDER_DOCUMENT)
   @HttpCode(HttpStatus.OK)
-  @RequirePermissions('templates.render')
+  @RequireAnyPermission('templates.render', 'notifications.read', 'notifications.send')
   @ApiDoc({
     summary: 'Kết xuất nội dung tài liệu từ mẫu DOCUMENT (Mục 9.6.3)',
   })
@@ -115,9 +115,16 @@ export class TemplatesController {
     return this.templatesService.renderDocumentFromTemplate(body, actor);
   }
 
+  public async renderDocumentFromTemplate(
+    body: RenderDocumentFromTemplateRequest,
+    actor?: UserIdentity,
+  ): Promise<RenderedDocumentFromTemplateResponse> {
+    return this.templatesService.renderDocumentFromTemplate(body, actor);
+  }
+
   /** Danh sách các phiên bản của một mẫu (Mục 9.6.5) */
   @Get(TEMPLATES_ROUTES.VERSIONS)
-  @RequirePermissions('templates.read')
+  @RequireAnyPermission('templates.read', 'notifications.read', 'notifications.manage')
   @ApiDoc({
     summary: 'Danh sách các phiên bản của mẫu nội dung (Mục 9.6.5)',
   })
@@ -127,9 +134,13 @@ export class TemplatesController {
     return this.templatesService.listTemplateVersions(id);
   }
 
+  public async listTemplateVersions(id: number): Promise<TemplateVersionItemResponse[]> {
+    return this.templatesService.listTemplateVersions(id);
+  }
+
   /** Tạo phiên bản mới (Draft hoặc Publish) không sửa trực tiếp bản đang dùng (Mục 9.6.5) */
   @Post(TEMPLATES_ROUTES.VERSIONS)
-  @RequirePermissions('templates.manage')
+  @RequireAnyPermission('templates.manage', 'notifications.manage')
   @ApiDoc({
     summary: 'Tạo phiên bản mẫu mới không sửa trực tiếp bản đang dùng (Mục 9.6.5)',
     status: HTTP_STATUS_CODE.CREATED,
@@ -142,10 +153,18 @@ export class TemplatesController {
     return this.templatesService.createTemplateVersion(id, body, actor);
   }
 
+  public async createTemplateVersion(
+    id: number,
+    body: CreateTemplateVersionRequest,
+    actor?: UserIdentity,
+  ): Promise<TemplateVersionItemResponse> {
+    return this.templatesService.createTemplateVersion(id, body, actor);
+  }
+
   /** Phát hành phiên bản mẫu kèm ghi nhật ký Audit (Mục 9.6.7) */
-  @Post(TEMPLATES_ROUTES.VERSION_PUBLISH)
+  @Post([TEMPLATES_ROUTES.VERSION_PUBLISH, TEMPLATES_ROUTES.PUBLISH])
   @HttpCode(HttpStatus.OK)
-  @RequirePermissions('templates.publish')
+  @RequireAnyPermission('templates.publish', 'templates.manage', 'notifications.manage')
   @ApiDoc({
     summary: 'Phát hành phiên bản mẫu nội dung kèm Audit (Mục 9.6.7)',
   })
@@ -157,10 +176,18 @@ export class TemplatesController {
     return this.templatesService.publishTemplateVersion(id, body, actor);
   }
 
+  public async publishTemplateVersion(
+    id: number,
+    body: PublishTemplateVersionRequest,
+    actor?: UserIdentity,
+  ): Promise<TemplateVersionMutationResultResponse> {
+    return this.templatesService.publishTemplateVersion(id, body, actor);
+  }
+
   /** Quay lại phiên bản cũ (Rollback) kèm ghi nhật ký Audit (Mục 9.6.7) */
-  @Post(TEMPLATES_ROUTES.VERSION_ROLLBACK)
+  @Post([TEMPLATES_ROUTES.VERSION_ROLLBACK, TEMPLATES_ROUTES.ROLLBACK])
   @HttpCode(HttpStatus.OK)
-  @RequirePermissions('templates.publish')
+  @RequireAnyPermission('templates.publish', 'templates.manage', 'notifications.manage')
   @ApiDoc({
     summary: 'Quay lại phiên bản mẫu cũ (Rollback) kèm Audit (Mục 9.6.7)',
   })
@@ -172,9 +199,17 @@ export class TemplatesController {
     return this.templatesService.rollbackTemplateVersion(id, body, actor);
   }
 
+  public async rollbackTemplateVersion(
+    id: number,
+    body: RollbackTemplateVersionRequest,
+    actor?: UserIdentity,
+  ): Promise<TemplateVersionMutationResultResponse> {
+    return this.templatesService.rollbackTemplateVersion(id, body, actor);
+  }
+
   /** Danh sách module đang sử dụng mẫu (Mục 9.6.8) */
   @Get(TEMPLATES_ROUTES.USAGES)
-  @RequirePermissions('templates.read')
+  @RequireAnyPermission('templates.read', 'notifications.read', 'notifications.manage')
   @ApiDoc({
     summary: 'Theo dõi danh sách module đang sử dụng mẫu nội dung (Mục 9.6.8)',
   })
@@ -184,9 +219,13 @@ export class TemplatesController {
     return this.templatesService.listTemplateUsages(id);
   }
 
+  public async listTemplateUsages(id: number): Promise<TemplateUsageItemResponse[]> {
+    return this.templatesService.listTemplateUsages(id);
+  }
+
   /** Đăng ký module sử dụng mẫu để tránh xóa nhầm (Mục 9.6.8) */
   @Post(TEMPLATES_ROUTES.USAGES)
-  @RequirePermissions('templates.manage')
+  @RequireAnyPermission('templates.manage', 'notifications.manage')
   @ApiDoc({
     summary: 'Đăng ký module sử dụng mẫu nội dung (Mục 9.6.8)',
     status: HTTP_STATUS_CODE.CREATED,
@@ -199,10 +238,18 @@ export class TemplatesController {
     return this.templatesService.registerTemplateUsage(id, body, actor);
   }
 
+  public async registerTemplateUsage(
+    id: number,
+    body: RegisterTemplateUsageRequest,
+    actor?: UserIdentity,
+  ): Promise<TemplateUsageItemResponse> {
+    return this.templatesService.registerTemplateUsage(id, body, actor);
+  }
+
   /** Gỡ đăng ký module sử dụng mẫu (Mục 9.6.8) */
   @Delete(TEMPLATES_ROUTES.USAGE_BY_ID)
   @HttpCode(HttpStatus.OK)
-  @RequirePermissions('templates.manage')
+  @RequireAnyPermission('templates.manage', 'notifications.manage')
   @ApiDoc({
     summary: 'Gỡ đăng ký liên kết sử dụng mẫu nội dung (Mục 9.6.8)',
   })
@@ -210,6 +257,10 @@ export class TemplatesController {
     @ValidatedParams(positiveIntParamSchema, 'id') id: number,
     @CurrentUser() actor?: UserIdentity,
   ) {
+    return this.templatesService.unregisterTemplateUsage(id, actor);
+  }
+
+  public async unregisterTemplateUsage(id: number, actor?: UserIdentity) {
     return this.templatesService.unregisterTemplateUsage(id, actor);
   }
 }

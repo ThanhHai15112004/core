@@ -1,0 +1,6 @@
+{
+  "deliveryNotFound": "Không tìm thấy bản ghi vận chuyển thông báo (#{{id}}).",
+  "cannotRetrySuppressedDestination": "Không thể gửi lại vì địa chỉ hoặc token nhận đã nằm trong danh sách dừng gửi (Suppression List).",
+  "suppressionNotFound": "Không tìm thấy bản ghi trong danh sách dừng gửi (#{{id}}).",
+  "pushSubscriptionNotFound": "Không tìm thấy thiết bị đăng ký nhận Push Notification (#{{id}})."
+}

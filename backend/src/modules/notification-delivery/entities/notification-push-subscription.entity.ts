@@ -1,6 +1,6 @@
 import { Column, Entity, Index } from 'typeorm';
 import { TypeOrmBaseEntity } from '@packages/database/index.js';
-import { NOTIFICATION_PUSH_PLATFORM } from '../enum/notifications.enum.js';
+import { NOTIFICATION_PUSH_PLATFORM } from '../enum/notification-delivery.enum.js';
 
 @Entity('notification_push_subscriptions')
 @Index('uq_notification_push_subs_user_token', ['userId', 'deviceToken'], { unique: true })

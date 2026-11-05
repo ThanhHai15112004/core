@@ -1,65 +1,19 @@
 import { PasswordHasherService } from '@packages/security/index.js';
 import {
+  calculateSmsSegments,
+  type SmsSegmentCalculationResult,
+} from '@modules/templates/index.js';
+import {
   NOTIFICATION_CHANNEL,
   NOTIFICATION_SUPPRESSION_REASON,
   type NotificationChannelCode,
   type NotificationSuppressionReasonCode,
-} from '../enum/notifications.enum.js';
-import type { ResolvedNotificationRuntimeConfig } from '../types/notifications.types.js';
+} from '../enum/notification-delivery.enum.js';
+import type { ResolvedNotificationRuntimeConfig } from '../types/notification-delivery.types.js';
 
 const hasher = new PasswordHasherService();
 
-// GSM 03.38 Basic Character Set regex
-const GSM_7BIT_REGEX =
-  /^[@£$¥èéùìòÇ\nØø\rÅåΔ_ΦΓΛΩΠΨΣΘΞ !"#¤%&'()*+,\-./0-9:;<=>?¡A-ZÄÖÑÜ§¿a-zäöñüà^{}\\[~\]|€]*$/;
-
-export interface SmsSegmentCalculationResult {
-  readonly encoding: 'GSM_7BIT' | 'UCS2_UNICODE';
-  readonly charLength: number;
-  readonly segmentsCount: number;
-  readonly maxCharsPerSegment: number;
-}
-
-/**
- * Tính số bản tin SMS (Segments) theo chuẩn viễn thông:
- * - GSM-7 (không dấu): 160 ký tự / 1 tin; nếu > 160 ký tự thì 153 ký tự / tin ghép.
- * - UCS-2 Unicode (Tiếng Việt có dấu / Emoji): 70 ký tự / 1 tin; nếu > 70 ký tự thì 67 ký tự / tin ghép.
- */
-export function calculateSmsSegments(content: string): SmsSegmentCalculationResult {
-  const text = content ?? '';
-  const charLength = Array.from(text).length;
-  if (charLength === 0) {
-    return {
-      encoding: 'GSM_7BIT',
-      charLength: 0,
-      segmentsCount: 1,
-      maxCharsPerSegment: 160,
-    };
-  }
-
-  const isGsm7 = GSM_7BIT_REGEX.test(text);
-  if (isGsm7) {
-    const maxSingle = 160;
-    const maxMulti = 153;
-    const segmentsCount = charLength <= maxSingle ? 1 : Math.ceil(charLength / maxMulti);
-    return {
-      encoding: 'GSM_7BIT',
-      charLength,
-      segmentsCount,
-      maxCharsPerSegment: charLength <= maxSingle ? maxSingle : maxMulti,
-    };
-  }
-
-  const maxSingle = 70;
-  const maxMulti = 67;
-  const segmentsCount = charLength <= maxSingle ? 1 : Math.ceil(charLength / maxMulti);
-  return {
-    encoding: 'UCS2_UNICODE',
-    charLength,
-    segmentsCount,
-    maxCharsPerSegment: charLength <= maxSingle ? maxSingle : maxMulti,
-  };
-}
+export { calculateSmsSegments, type SmsSegmentCalculationResult };
 
 export function calculateChannelEstimatedCost(
   channel: NotificationChannelCode,

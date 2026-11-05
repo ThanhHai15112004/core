@@ -4,7 +4,7 @@ import {
   NOTIFICATION_CHANNEL,
   NOTIFICATION_DELIVERY_STATUS,
   NOTIFICATION_ERROR_TYPE,
-} from '../enum/notifications.enum.js';
+} from '../enum/notification-delivery.enum.js';
 
 @Entity('notification_deliveries')
 @Index('uq_notification_deliveries_idempotency_key', ['idempotencyKey'], { unique: true })

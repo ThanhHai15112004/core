@@ -1,0 +1,6 @@
+{
+  "deliveryNotFound": "Notification delivery record (#{{id}}) was not found.",
+  "cannotRetrySuppressedDestination": "Cannot retry delivery because the destination address or token is in the active suppression list.",
+  "suppressionNotFound": "Suppression record (#{{id}}) was not found.",
+  "pushSubscriptionNotFound": "Push subscription (#{{id}}) was not found."
+}

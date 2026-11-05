@@ -7,7 +7,7 @@ import {
   type NotificationChannelCode,
   type NotificationErrorTypeCode,
   type NotificationSuppressionReasonCode,
-} from '../enum/notifications.enum.js';
+} from '../enum/notification-delivery.enum.js';
 
 export interface ChannelProviderSendRequest {
   readonly channel: NotificationChannelCode;

@@ -4,7 +4,7 @@ import {
   NOTIFICATION_CHANNEL,
   NOTIFICATION_TEMPLATE_TYPE,
   NOTIFICATION_TEMPLATE_VERSION_STATUS,
-} from '../enum/notifications.enum.js';
+} from '../enum/templates.enum.js';
 
 @Entity('notification_template_versions')
 @Index('uq_notification_tpl_versions_tpl_ver', ['templateId', 'version'], {

@@ -37,6 +37,7 @@ import { SequencesModule } from '@modules/sequences/index.js';
 import { NavigationModule } from '@modules/navigation/index.js';
 import { FilesModule } from '@modules/files/index.js';
 import { NotificationsModule } from '@modules/notifications/index.js';
+import { NotificationDeliveryModule } from '@modules/notification-delivery/index.js';
 import { TemplatesModule } from '@modules/templates/index.js';
 import { WorkflowsModule } from '@modules/workflows/index.js';
 import { ApprovalsModule } from '@modules/approvals/index.js';
@@ -90,6 +91,7 @@ import { MetricsModule } from '@packages/metrics/index.js';
     AuthModule,
     FilesModule,
     NotificationsModule,
+    NotificationDeliveryModule,
     TemplatesModule,
     WorkflowsModule,
     ApprovalsModule,

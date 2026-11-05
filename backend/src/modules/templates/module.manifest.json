@@ -8,7 +8,7 @@
   "category": "core",
   "author": "Core Platform Team",
   "entryModule": "TemplatesModule",
-  "dependencies": ["database", "security", "i18n", "codes", "settings", "notifications"],
+  "dependencies": ["database", "security", "i18n", "codes", "settings"],
   "permissions": [
     "templates.read",
     "templates.manage",

@@ -4,6 +4,7 @@ import {
   BadRequestAppException,
   NotFoundAppException,
   type PaginatedResult,
+  defaultCodeRegistry,
   resolvePagination,
 } from '@packages/kernel/index.js';
 import { AuditLogService, type UserIdentity } from '@packages/security/index.js';
@@ -14,15 +15,23 @@ import {
   type MessageEnvelope,
 } from '@packages/messaging/index.js';
 import {
+  DEFAULT_SYSTEM_NOTIFICATION_TEMPLATES,
+  type ITemplatesPublicService,
+  TEMPLATES_PUBLIC_SERVICE,
+  renderNotificationTemplateContent,
+} from '@modules/templates/index.js';
+import {
   type IUsersPublicService,
   USERS_PUBLIC_SERVICE,
   type UserNotificationContactView,
 } from '@modules/users/contracts/index.js';
 import { NotificationChannelAdapterRegistry } from '../adapters/notification-channel.adapters.js';
 import {
-  NOTIFICATIONS_AUDIT_META,
+  type INotificationDeliveryPublicService,
   NOTIFICATION_CATEGORY,
   NOTIFICATION_CHANNEL,
+  NOTIFICATION_DELIVERY_AUDIT_META,
+  NOTIFICATION_DELIVERY_CODE_TYPES,
   NOTIFICATION_DELIVERY_STATUS,
   NOTIFICATION_ERROR_TYPE,
   NOTIFICATION_PUSH_PLATFORM,
@@ -33,12 +42,10 @@ import {
   parseNotificationDeliveryStatus,
   parseNotificationPushPlatform,
   parseNotificationSuppressionReason,
+  type NotificationChannelCode,
 } from '../contracts/index.js';
 import type { NotificationDeliveryEntity } from '../entities/notification-delivery.entity.js';
-import type { NotificationRecipientEntity } from '../entities/notification-recipient.entity.js';
-import type { NotificationEntity } from '../entities/notification.entity.js';
-import type { NotificationChannelCode } from '../enum/notifications.enum.js';
-import { resolveNotificationRuntimeConfig } from '../helpers/notification-config.helper.js';
+import { resolveNotificationRuntimeConfig } from '../helpers/notification-delivery-config.helper.js';
 import {
   buildDeliveryIdempotencyKey,
   calculateChannelEstimatedCost,
@@ -48,64 +55,34 @@ import {
   resolveCurrentQuotaPeriodKeys,
   validateAndNormalizeDestination,
 } from '../helpers/notification-delivery-policy.helper.js';
-import {
-  DEFAULT_SYSTEM_NOTIFICATION_TEMPLATES,
-  renderNotificationTemplateContent,
-} from '../helpers/notification-template.helper.js';
-import {
-  enrichTemplateItemsView,
-  executeCreateTemplateVersion,
-  executeListTemplateUsages,
-  executeListTemplateVersions,
-  executePreviewTemplate,
-  executePublishTemplateVersion,
-  executeRegisterTemplateUsage,
-  executeRenderDocumentFromTemplate,
-  executeRollbackTemplateVersion,
-  executeSafeDeleteTemplate,
-  executeUnregisterTemplateUsage,
-  executeUpsertVersionedTemplate,
-} from '../helpers/notification-template-lifecycle.helper.js';
-import { NotificationsMapper } from '../mappers/notifications.mapper.js';
-import { NotificationChannelsRepository } from '../repositories/notification-channels.repository.js';
+import { NotificationDeliveryMapper } from '../mappers/notification-delivery.mapper.js';
+import { NotificationDeliveryRepository } from '../repositories/notification-delivery.repository.js';
 import type {
   CreateNotificationSuppressionRequest,
-  CreateNotificationTemplateVersionRequest,
   ListNotificationDeliveriesQuery,
   ListNotificationSuppressionsQuery,
-  ListNotificationTemplatesQuery,
-  PreviewNotificationTemplateRequest,
-  PublishNotificationTemplateVersionRequest,
-  RegisterNotificationTemplateUsageRequest,
   RegisterPushSubscriptionRequest,
-  RenderDocumentFromTemplateRequest,
-  RollbackNotificationTemplateVersionRequest,
   UpdateDeliveryStatusWebhookRequest,
-  UpsertNotificationTemplateRequest,
-} from '../requests/notifications.requests.js';
+} from '../requests/notification-delivery.requests.js';
 import type {
   NotificationDeliveryItemResponse,
   NotificationPushSubscriptionItemResponse,
   NotificationQuotaAndCostSummaryResponse,
   NotificationSuppressionItemResponse,
-  NotificationTemplateItemResponse,
-  NotificationTemplatePreviewResponse,
-  NotificationTemplateUsageItemResponse,
-  NotificationTemplateVersionItemResponse,
-  RenderedDocumentFromTemplateResponse,
   RetryDueDeliveriesResponse,
-  TemplateVersionMutationResultResponse,
-} from '../responses/notifications.response.js';
+} from '../responses/notification-delivery.response.js';
 import type {
+  DispatchExternalChannelNotificationInput,
+  DispatchExternalChannelRecipientEntryInput,
   NotificationBatchDeliverySummaryView,
   NotificationChannelQuotaItemView,
   NotificationDeliveryItemView,
   ResolvedNotificationRuntimeConfig,
-} from '../types/notifications.types.js';
+} from '../types/notification-delivery.types.js';
 
 interface PendingChannelDeliveryTask {
-  readonly notification: NotificationEntity;
-  readonly recipientEntry: NotificationRecipientEntity | null;
+  readonly notification: DispatchExternalChannelNotificationInput;
+  readonly recipientEntry: DispatchExternalChannelRecipientEntryInput | null;
   readonly recipientUserId: number;
   readonly channel: NotificationChannelCode;
   readonly destination: string;
@@ -118,182 +95,35 @@ interface PendingChannelDeliveryTask {
 }
 
 @Injectable()
-export class NotificationChannelsService {
+export class NotificationDeliveryService implements INotificationDeliveryPublicService {
   constructor(
-    private readonly channelsRepo: NotificationChannelsRepository,
+    private readonly channelsRepo: NotificationDeliveryRepository,
     private readonly adapterRegistry: NotificationChannelAdapterRegistry,
-    private readonly mapper: NotificationsMapper,
+    private readonly mapper: NotificationDeliveryMapper = new NotificationDeliveryMapper(),
     @Optional() private readonly auditLogService?: AuditLogService | null,
     @Optional()
     @Inject(USERS_PUBLIC_SERVICE)
     private readonly usersPublicService?: IUsersPublicService | null,
     @Optional()
     private readonly messagePublisher?: BaseMessagePublisherProvider | null,
-  ) {}
-
-  // ==================== 1. TEMPLATE ENGINE, VERSIONING, DOCUMENT RENDER & USAGE (PHASE 7.2 & 9.6) ====================
-
-  public async listTemplates(
-    query: ListNotificationTemplatesQuery,
-  ): Promise<PaginatedResult<NotificationTemplateItemResponse>> {
-    const pagination = resolvePagination(query, {
-      settingPrefix: 'notifications.pagination',
-    });
-    const paginated = await this.channelsRepo.findPaginatedTemplates({
-      ...pagination,
-      search: query.search,
-      channel: query.channel,
-      category: query.category,
-      locale: query.locale,
-      templateType: query.templateType,
-      isActive: query.isActive,
-    });
-
-    const items = await enrichTemplateItemsView({
-      entities: paginated.items,
-      channelsRepo: this.channelsRepo,
-      mapper: this.mapper,
-    });
-    return createPaginatedResult(items, paginated.total, paginated.page, paginated.limit);
+    @Optional()
+    @Inject(TEMPLATES_PUBLIC_SERVICE)
+    private readonly templatesPublicService?: ITemplatesPublicService | null,
+  ) {
+    this.registerCodeUsageCheckers();
   }
 
-  public async upsertTemplate(
-    input: UpsertNotificationTemplateRequest,
-    actor?: UserIdentity,
-  ): Promise<NotificationTemplateItemResponse> {
-    return executeUpsertVersionedTemplate({
-      input,
-      actor,
-      channelsRepo: this.channelsRepo,
-      mapper: this.mapper,
-      recordAudit: this.recordAudit.bind(this),
-    });
-  }
-
-  public async listTemplateVersions(
-    templateId: number,
-  ): Promise<NotificationTemplateVersionItemResponse[]> {
-    return executeListTemplateVersions({
-      templateId,
-      channelsRepo: this.channelsRepo,
-      mapper: this.mapper,
-    });
-  }
-
-  public async createTemplateVersion(
-    templateId: number,
-    input: CreateNotificationTemplateVersionRequest,
-    actor?: UserIdentity,
-  ): Promise<NotificationTemplateVersionItemResponse> {
-    return executeCreateTemplateVersion({
-      templateId,
-      input,
-      actor,
-      channelsRepo: this.channelsRepo,
-      mapper: this.mapper,
-      recordAudit: this.recordAudit.bind(this),
-    });
-  }
-
-  public async publishTemplateVersion(
-    templateId: number,
-    input: PublishNotificationTemplateVersionRequest,
-    actor?: UserIdentity,
-  ): Promise<TemplateVersionMutationResultResponse> {
-    return executePublishTemplateVersion({
-      templateId,
-      input,
-      actor,
-      channelsRepo: this.channelsRepo,
-      mapper: this.mapper,
-      recordAudit: this.recordAudit.bind(this),
-    });
-  }
-
-  public async rollbackTemplateVersion(
-    templateId: number,
-    input: RollbackNotificationTemplateVersionRequest,
-    actor?: UserIdentity,
-  ): Promise<TemplateVersionMutationResultResponse> {
-    return executeRollbackTemplateVersion({
-      templateId,
-      input,
-      actor,
-      channelsRepo: this.channelsRepo,
-      mapper: this.mapper,
-      recordAudit: this.recordAudit.bind(this),
-    });
-  }
-
-  public async previewTemplate(
-    input: PreviewNotificationTemplateRequest,
-  ): Promise<NotificationTemplatePreviewResponse> {
-    return executePreviewTemplate({
-      input,
-      channelsRepo: this.channelsRepo,
-      resolveTemplateByCode: this.resolveTemplateByCode.bind(this),
-    });
-  }
-
-  public async renderDocumentFromTemplate(
-    input: RenderDocumentFromTemplateRequest,
-    actor?: UserIdentity,
-  ): Promise<RenderedDocumentFromTemplateResponse> {
-    return executeRenderDocumentFromTemplate({
-      input,
-      actor,
-      channelsRepo: this.channelsRepo,
-      recordAudit: this.recordAudit.bind(this),
-    });
-  }
-
-  public async listTemplateUsages(
-    templateId: number,
-  ): Promise<NotificationTemplateUsageItemResponse[]> {
-    return executeListTemplateUsages({
-      templateId,
-      channelsRepo: this.channelsRepo,
-      mapper: this.mapper,
-    });
-  }
-
-  public async registerTemplateUsage(
-    templateId: number,
-    input: RegisterNotificationTemplateUsageRequest,
-    actor?: UserIdentity,
-  ): Promise<NotificationTemplateUsageItemResponse> {
-    return executeRegisterTemplateUsage({
-      templateId,
-      input,
-      actor,
-      channelsRepo: this.channelsRepo,
-      mapper: this.mapper,
-      recordAudit: this.recordAudit.bind(this),
-    });
-  }
-
-  public async unregisterTemplateUsage(
-    usageId: number,
-    actor?: UserIdentity,
-  ): Promise<{ removed: true; id: number }> {
-    return executeUnregisterTemplateUsage({
-      usageId,
-      actor,
-      channelsRepo: this.channelsRepo,
-      recordAudit: this.recordAudit.bind(this),
-    });
-  }
-
-  public async deleteTemplate(
-    id: number,
-    actor?: UserIdentity,
-  ): Promise<{ deleted: true; id: number }> {
-    return executeSafeDeleteTemplate({
-      id,
-      actor,
-      channelsRepo: this.channelsRepo,
-      recordAudit: this.recordAudit.bind(this),
-    });
+  private registerCodeUsageCheckers(): void {
+    defaultCodeRegistry.registerUsageChecker(
+      NOTIFICATION_DELIVERY_CODE_TYPES.DELIVERY_STATUS,
+      NOTIFICATION_DELIVERY_CODE_TYPES.DELIVERY_STATUS,
+      async () => 0,
+    );
+    defaultCodeRegistry.registerUsageChecker(
+      NOTIFICATION_DELIVERY_CODE_TYPES.SUPPRESSION_REASON,
+      NOTIFICATION_DELIVERY_CODE_TYPES.SUPPRESSION_REASON,
+      async () => 0,
+    );
   }
 
   public async resolveTemplateByCode(
@@ -308,18 +138,37 @@ export class NotificationChannelsService {
   } | null> {
     const cleanCode = code.trim().toUpperCase();
     const cleanLocale = locale.trim().toLowerCase() || 'vi';
-    const dbTemplate = await this.channelsRepo.findTemplateByCodeChannelLocale(
-      cleanCode,
-      channel,
-      cleanLocale,
-    );
-    if (dbTemplate) {
-      return {
-        code: dbTemplate.code,
-        subjectTemplate: dbTemplate.subjectTemplate ?? null,
-        bodyTemplate: dbTemplate.bodyTemplate,
-        htmlTemplate: dbTemplate.htmlTemplate ?? null,
-      };
+
+    if (this.templatesPublicService?.resolveTemplateByCode) {
+      return this.templatesPublicService.resolveTemplateByCode(cleanCode, channel, cleanLocale);
+    }
+
+    const repoWithTemplates = this.channelsRepo as unknown as {
+      findTemplateByCodeChannelLocale?: (
+        c: string,
+        ch: number,
+        loc: string,
+      ) => Promise<{
+        code: string;
+        subjectTemplate?: string | null;
+        bodyTemplate: string;
+        htmlTemplate?: string | null;
+      } | null>;
+    };
+    if (repoWithTemplates.findTemplateByCodeChannelLocale) {
+      const dbTemplate = await repoWithTemplates.findTemplateByCodeChannelLocale(
+        cleanCode,
+        channel,
+        cleanLocale,
+      );
+      if (dbTemplate) {
+        return {
+          code: dbTemplate.code,
+          subjectTemplate: dbTemplate.subjectTemplate ?? null,
+          bodyTemplate: dbTemplate.bodyTemplate,
+          htmlTemplate: dbTemplate.htmlTemplate ?? null,
+        };
+      }
     }
 
     const fallback =
@@ -342,11 +191,11 @@ export class NotificationChannelsService {
     return null;
   }
 
-  // ==================== 2. MULTI-CHANNEL BATCH DISPATCH, QUOTA, SUPPRESSION & RETRY ====================
+  // ==================== 1. MULTI-CHANNEL BATCH DISPATCH, QUOTA, SUPPRESSION & RETRY ====================
 
   public async dispatchExternalChannelDeliveries(params: {
-    notification: NotificationEntity;
-    savedRecipients: readonly NotificationRecipientEntity[];
+    notification: DispatchExternalChannelNotificationInput;
+    savedRecipients: readonly DispatchExternalChannelRecipientEntryInput[];
     recipientUserIds: readonly number[];
     templateCode?: string | null | undefined;
     templateVariables?: Record<string, unknown> | null | undefined;
@@ -703,7 +552,7 @@ export class NotificationChannelsService {
 
       const suppressedEntity = this.channelsRepo.repository.create({
         notificationId: Number(task.notification.id),
-        recipientId: task.recipientEntry ? Number(task.recipientEntry.id) : null,
+        recipientId: task.recipientEntry?.id !== undefined ? Number(task.recipientEntry.id) : null,
         recipientUserId: task.recipientUserId,
         organizationUnitId: task.notification.organizationUnitId ?? null,
         channel: task.channel,
@@ -759,7 +608,7 @@ export class NotificationChannelsService {
     if (!quotaCheck.allowed && runtimeConfig.quotaHardStopOnExceed) {
       const quotaFailedEntity = this.channelsRepo.repository.create({
         notificationId: Number(task.notification.id),
-        recipientId: task.recipientEntry ? Number(task.recipientEntry.id) : null,
+        recipientId: task.recipientEntry?.id !== undefined ? Number(task.recipientEntry.id) : null,
         recipientUserId: task.recipientUserId,
         organizationUnitId: task.notification.organizationUnitId ?? null,
         channel: task.channel,
@@ -803,7 +652,7 @@ export class NotificationChannelsService {
     // 6. Create QUEUED delivery record and invoke channel adapter
     const initialEntity = this.channelsRepo.repository.create({
       notificationId: Number(task.notification.id),
-      recipientId: task.recipientEntry ? Number(task.recipientEntry.id) : null,
+      recipientId: task.recipientEntry?.id !== undefined ? Number(task.recipientEntry.id) : null,
       recipientUserId: task.recipientUserId,
       organizationUnitId: task.notification.organizationUnitId ?? null,
       channel: task.channel,
@@ -980,7 +829,7 @@ export class NotificationChannelsService {
     return savedFailed;
   }
 
-  // ==================== 3. RETRY & WEBHOOK STATUS TRACKING ====================
+  // ==================== 2. RETRY & WEBHOOK STATUS TRACKING ====================
 
   public async retrySingleDelivery(
     deliveryId: number,
@@ -1029,7 +878,7 @@ export class NotificationChannelsService {
     await this.recordAudit(
       actor,
       'RETRY_NOTIFICATION_DELIVERY',
-      NOTIFICATIONS_AUDIT_META.ENTITY_DELIVERY,
+      NOTIFICATION_DELIVERY_AUDIT_META.ENTITY_DELIVERY,
       String(deliveryId),
       null,
       { status: updated.status, attemptCount: updated.attemptCount },
@@ -1087,7 +936,7 @@ export class NotificationChannelsService {
       await this.recordAudit(
         actor,
         'RETRY_DUE_NOTIFICATION_DELIVERIES',
-        NOTIFICATIONS_AUDIT_META.ENTITY_DELIVERY,
+        NOTIFICATION_DELIVERY_AUDIT_META.ENTITY_DELIVERY,
         'batch',
         null,
         {
@@ -1169,10 +1018,11 @@ export class NotificationChannelsService {
 
       if (input.isPermanentFailure && runtimeConfig.autoSuppressOnPermanentFailure) {
         const reason =
-          input.suppressionReason ??
-          (Number(delivery.channel) === NOTIFICATION_CHANNEL.PUSH
-            ? NOTIFICATION_SUPPRESSION_REASON.UNREGISTERED_TOKEN
-            : NOTIFICATION_SUPPRESSION_REASON.HARD_BOUNCE);
+          input.suppressionReason !== undefined
+            ? parseNotificationSuppressionReason(input.suppressionReason)
+            : Number(delivery.channel) === NOTIFICATION_CHANNEL.PUSH
+              ? NOTIFICATION_SUPPRESSION_REASON.UNREGISTERED_TOKEN
+              : NOTIFICATION_SUPPRESSION_REASON.HARD_BOUNCE;
 
         await this.channelsRepo.upsertSuppression({
           channel: Number(delivery.channel),
@@ -1197,7 +1047,7 @@ export class NotificationChannelsService {
     await this.recordAudit(
       actor,
       'UPDATE_NOTIFICATION_DELIVERY_STATUS',
-      NOTIFICATIONS_AUDIT_META.ENTITY_DELIVERY,
+      NOTIFICATION_DELIVERY_AUDIT_META.ENTITY_DELIVERY,
       String(deliveryId),
       { status: previousStatus },
       { status: targetStatus },
@@ -1236,7 +1086,7 @@ export class NotificationChannelsService {
     return list.map((d) => this.mapper.toDeliveryItemView(d, locale));
   }
 
-  // ==================== 4. SUPPRESSION LIST MANAGEMENT ====================
+  // ==================== 3. SUPPRESSION LIST MANAGEMENT ====================
 
   public async listSuppressions(
     query: ListNotificationSuppressionsQuery,
@@ -1288,7 +1138,7 @@ export class NotificationChannelsService {
     await this.recordAudit(
       actor,
       'ADD_NOTIFICATION_SUPPRESSION',
-      NOTIFICATIONS_AUDIT_META.ENTITY_SUPPRESSION,
+      NOTIFICATION_DELIVERY_AUDIT_META.ENTITY_SUPPRESSION,
       String(saved.id),
       null,
       { channel, destination: saved.destination, reason },
@@ -1308,7 +1158,7 @@ export class NotificationChannelsService {
     await this.recordAudit(
       actor,
       'REMOVE_NOTIFICATION_SUPPRESSION',
-      NOTIFICATIONS_AUDIT_META.ENTITY_SUPPRESSION,
+      NOTIFICATION_DELIVERY_AUDIT_META.ENTITY_SUPPRESSION,
       String(id),
       null,
       { isActive: false },
@@ -1316,7 +1166,7 @@ export class NotificationChannelsService {
     return { removed: true, id };
   }
 
-  // ==================== 5. PUSH SUBSCRIPTIONS MANAGEMENT ====================
+  // ==================== 4. PUSH SUBSCRIPTIONS MANAGEMENT ====================
 
   public async listUserPushSubscriptions(
     userId: number,
@@ -1348,7 +1198,7 @@ export class NotificationChannelsService {
     await this.recordAudit(
       actor,
       'REGISTER_PUSH_SUBSCRIPTION',
-      NOTIFICATIONS_AUDIT_META.ENTITY_PUSH_SUBSCRIPTION,
+      NOTIFICATION_DELIVERY_AUDIT_META.ENTITY_PUSH_SUBSCRIPTION,
       String(saved.id),
       null,
       { userId, platform, deviceName: saved.deviceName },
@@ -1371,7 +1221,7 @@ export class NotificationChannelsService {
     await this.recordAudit(
       actor,
       'UNREGISTER_PUSH_SUBSCRIPTION',
-      NOTIFICATIONS_AUDIT_META.ENTITY_PUSH_SUBSCRIPTION,
+      NOTIFICATION_DELIVERY_AUDIT_META.ENTITY_PUSH_SUBSCRIPTION,
       String(subscriptionId),
       { userId },
       null,
@@ -1379,7 +1229,7 @@ export class NotificationChannelsService {
     return { removed: true, id: subscriptionId };
   }
 
-  // ==================== 6. QUOTA & COST TRACKING SUMMARY ====================
+  // ==================== 5. QUOTA & COST TRACKING SUMMARY ====================
 
   public async getQuotaAndCostSummary(
     organizationUnitId?: number | null,
@@ -1688,7 +1538,7 @@ export class NotificationChannelsService {
         actor: actor ?? null,
         actorUserId: actor?.id ?? null,
         actorIdentifier: actor?.email ?? actor?.username ?? 'system',
-        module: NOTIFICATIONS_AUDIT_META.MODULE,
+        module: NOTIFICATION_DELIVERY_AUDIT_META.MODULE,
         feature: 'multi_channel_notifications',
         action,
         resourceType,
@@ -1699,3 +1549,5 @@ export class NotificationChannelsService {
       .catch(() => undefined);
   }
 }
+
+export { NotificationDeliveryService as NotificationChannelsService };

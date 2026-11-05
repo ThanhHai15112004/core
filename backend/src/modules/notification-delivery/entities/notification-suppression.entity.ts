@@ -3,7 +3,7 @@ import { TypeOrmBaseEntity } from '@packages/database/index.js';
 import {
   NOTIFICATION_CHANNEL,
   NOTIFICATION_SUPPRESSION_REASON,
-} from '../enum/notifications.enum.js';
+} from '../enum/notification-delivery.enum.js';
 
 @Entity('notification_suppressions')
 @Index('uq_notification_suppressions_channel_dest', ['channel', 'destination'], { unique: true })
