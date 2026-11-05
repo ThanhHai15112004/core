@@ -8,7 +8,7 @@
   "category": "operations",
   "author": "Core Platform Team",
   "entryModule": "SystemOpsModule",
-  "dependencies": ["redis", "runtime", "security", "config"],
+  "dependencies": ["redis", "runtime", "security", "config", "storage", "health"],
   "permissions": [
     "system.ops.read",
     "system.ops.manage",

@@ -52,7 +52,7 @@ new CoreI18nService().registerNamespace('files', { vi: viFiles, en: enFiles });
       useExisting: FilesService,
     },
   ],
-  exports: [FilesService, FileValidationService, FILES_PUBLIC_SERVICE],
+  exports: [FilesService, FILES_PUBLIC_SERVICE],
 })
 export class FilesModule {
   constructor(@Optional() i18n?: CoreI18nService) {

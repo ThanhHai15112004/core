@@ -1,6 +1,6 @@
 import { createHash, randomUUID, type Hash } from 'node:crypto';
 import { BadRequestAppException, NotFoundAppException } from '@packages/kernel/index.js';
-import type { BaseStorageProvider } from '@packages/storage/index.js';
+import type { StorageContract } from '@packages/storage/index.js';
 import type { FileCategoryCode, FileVisibilityCode } from '../contracts/index.js';
 import {
   DEFAULT_CHUNK_SESSION_TTL_MS,
@@ -52,7 +52,7 @@ export interface ActiveChunkedUploadSession {
 export class ChunkedUploadSessionManager {
   private readonly sessions = new Map<string, ActiveChunkedUploadSession>();
 
-  public async cleanupExpired(storage: BaseStorageProvider, nowMs = Date.now()): Promise<void> {
+  public async cleanupExpired(storage: StorageContract, nowMs = Date.now()): Promise<void> {
     for (const [id, session] of this.sessions.entries()) {
       if (session.expiresAtMs <= nowMs) {
         this.sessions.delete(id);
@@ -169,7 +169,7 @@ export class ChunkedUploadSessionManager {
     session: ActiveChunkedUploadSession,
     chunkIndex: number,
     chunkBuffer: Buffer,
-    storage: BaseStorageProvider,
+    storage: StorageContract,
   ): Promise<number> {
     // Hỗ trợ Idempotent Retry: nếu trình duyệt gửi lại đúng mảnh vừa ghi thành công trước đó do đứt mạng tạm thời
     if (session.expectedChunkIndex > 0 && chunkIndex === session.expectedChunkIndex - 1) {
@@ -211,7 +211,7 @@ export class ChunkedUploadSessionManager {
   public async finalizeToStorageKey(
     session: ActiveChunkedUploadSession,
     targetStorageKey: string,
-    storage: BaseStorageProvider,
+    storage: StorageContract,
   ): Promise<void> {
     this.sessions.delete(session.uploadId);
     if (
@@ -230,7 +230,7 @@ export class ChunkedUploadSessionManager {
     await storage.upload(targetStorageKey, combined, session.mimeType);
   }
 
-  public async abortSession(uploadId: string, storage: BaseStorageProvider): Promise<void> {
+  public async abortSession(uploadId: string, storage: StorageContract): Promise<void> {
     const session = this.sessions.get(uploadId);
     if (!session) return;
     this.sessions.delete(uploadId);

@@ -1,4 +1,4 @@
-import { Logger, Optional } from '@nestjs/common';
+import { Inject, Logger, Optional } from '@nestjs/common';
 import { Processor } from '@nestjs/bullmq';
 import type { Job } from 'bullmq';
 import { CoreConfigService } from '@packages/config/index.js';
@@ -31,7 +31,7 @@ import {
   type ListUsersQuery,
   type RunUserReportRequest,
 } from '@modules/users/index.js';
-import { FilesService } from '@modules/files/index.js';
+import { FILES_PUBLIC_SERVICE, type IFilesPublicService } from '@modules/files/contracts/index.js';
 import { ImportsService } from '@modules/imports/index.js';
 import { ExportsService } from '@modules/exports/index.js';
 import { ReportsService } from '@modules/reports/index.js';
@@ -104,7 +104,9 @@ export class HeavyJobProcessor extends BaseQueueProcessor {
     metrics: MetricsRegistryService,
     @Optional() progressTracker?: JobProgressTrackerService,
     @Optional() private readonly userImportService?: UserImportService,
-    @Optional() private readonly filesService?: FilesService,
+    @Optional()
+    @Inject(FILES_PUBLIC_SERVICE)
+    private readonly filesService?: IFilesPublicService,
     @Optional() private readonly userExportService?: UserExportService,
     @Optional() private readonly userReportService?: UserReportService,
     @Optional() private readonly userSearchService?: UserSearchService,

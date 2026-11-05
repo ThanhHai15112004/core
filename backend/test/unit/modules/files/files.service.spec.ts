@@ -14,8 +14,8 @@ import {
   FILE_STATUS,
   FILE_VISIBILITY,
   FilesService,
-  FileValidationService,
 } from '@modules/files/index.js';
+import { FileValidationService } from '@modules/files/services/file-validation.service.js';
 import type { FileFolderEntity } from '@modules/files/entities/file-folder.entity.js';
 import type { FilePermissionEntity } from '@modules/files/entities/file-permission.entity.js';
 import type { FileRecordEntity } from '@modules/files/entities/file-record.entity.js';
@@ -388,20 +388,21 @@ function createInMemoryFilesHarness() {
     },
   } as unknown as FilePermissionsRepository;
 
+  const streamFromMemory = async (key: string, range?: { start: number; end: number }) => {
+    const obj = storageObjects.get(key);
+    if (!obj) throw new Error('ENOENT');
+    const slice = range ? obj.buffer.subarray(range.start, range.end + 1) : obj.buffer;
+    return {
+      body: Readable.from(slice),
+      size: slice.length,
+      contentType: obj.mimeType,
+    };
+  };
+
   const storageProvider = {
-    driver: {
-      name: 'local' as const,
-      stream: async (key: string, range?: { start: number; end: number }) => {
-        const obj = storageObjects.get(key);
-        if (!obj) throw new Error('ENOENT');
-        const slice = range ? obj.buffer.subarray(range.start, range.end + 1) : obj.buffer;
-        return {
-          body: Readable.from(slice),
-          size: slice.length,
-          contentType: obj.mimeType,
-        };
-      },
-    },
+    driverName: 'local' as const,
+    stream: streamFromMemory,
+    getUrl: async () => '',
     upload: async (
       key: string,
       content: Buffer | Uint8Array,

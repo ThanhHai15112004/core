@@ -1,4 +1,5 @@
 import { defaultCodeRegistry } from '@packages/kernel/index.js';
+import type { UserIdentity } from '@packages/security/index.js';
 
 export const FILE_STATUS = {
   ACTIVE: 1,
@@ -197,6 +198,17 @@ export interface AttachFileUsageInput {
   readonly actorId?: number | null;
 }
 
+export interface FileIntegrityVerificationSummary {
+  readonly fileId: number;
+  readonly expectedChecksumSha256: string;
+  readonly actualChecksumSha256: string | null;
+  readonly intact: boolean;
+  readonly status: FileStatusCode;
+  readonly statusName: FileStatusName;
+  readonly duplicateFileIds: readonly number[];
+  readonly verifiedAt: string;
+}
+
 export interface IFilesPublicService {
   findByIds(ids: readonly number[]): Promise<FileSummary[]>;
   ensureActiveFilesExist(ids: readonly number[]): Promise<FileSummary[]>;
@@ -217,6 +229,24 @@ export interface IFilesPublicService {
     readonly note?: string | null;
     readonly actorId?: number | null;
   }): Promise<void>;
+  purgeExpiredTrash(
+    actor?: UserIdentity,
+    options?: { readonly skipQueuePublish?: boolean },
+  ): Promise<{ purgedCount: number; purgedIds: number[] }>;
+  verifyFileIntegrity(id: number, actor?: UserIdentity): Promise<FileIntegrityVerificationSummary>;
+  cleanupUnusedFiles(
+    input?: {
+      readonly olderThanDays?: number;
+      readonly action?: 'trash' | 'purge';
+      readonly organizationUnitId?: number;
+    },
+    actor?: UserIdentity,
+  ): Promise<{
+    readonly retentionDays: number;
+    readonly action: 'trash' | 'purge';
+    readonly cleanedCount: number;
+    readonly cleanedIds: readonly number[];
+  }>;
 }
 
 export const FILES_PUBLIC_SERVICE = Symbol('FILES_PUBLIC_SERVICE');

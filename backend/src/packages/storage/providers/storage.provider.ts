@@ -8,7 +8,7 @@ import {
   type OnApplicationBootstrap,
   type OnModuleDestroy,
 } from '@nestjs/common';
-import { CoreConfigService } from '@packages/config/index.js';
+import { CoreConfigService, type StorageDriverName } from '@packages/config/index.js';
 import { RedisService } from '@packages/redis/index.js';
 import { RequestContextService } from '@packages/logging/index.js';
 import { RUNTIME_IDENTITY, type RuntimeIdentity } from '@packages/runtime/index.js';
@@ -20,7 +20,7 @@ import type {
   StorageOp,
 } from '../contracts/storage-events.types.js';
 import { STORAGE_ERROR_LOG_SIZE, storageKeys } from '../constants/storage.keys.js';
-import type { StorageDriver } from '../drivers/storage-driver.js';
+import type { ObjectStream, StorageDriver } from '../drivers/storage-driver.js';
 import { LocalStorageDriver } from '../drivers/local-storage.driver.js';
 import { S3StorageDriver } from '../drivers/s3-storage.driver.js';
 import { containerOf, isValidKey, mimeOf } from '../utils/object-kind.js';
@@ -213,6 +213,11 @@ export class BaseStorageProvider
     }
   }
 
+  /** Tên driver lưu trữ hiện hành (`local` | `s3`) để tầng nghiệp vụ đọc qua Adapter mà không chạm trực tiếp driver */
+  public get driverName(): StorageDriverName {
+    return this.driver.name;
+  }
+
   /** Tải xuống nội dung tệp tin từ hệ thống lưu trữ */
   public async download(path: string): Promise<Buffer> {
     this.assertKey(path);
@@ -222,6 +227,19 @@ export class BaseStorageProvider
       null,
       () => this.driver.get(path),
       (b) => b.length,
+    );
+  }
+
+  /** Mở luồng đọc dữ liệu (stream / Byte-Range) qua Storage Adapter */
+  public async stream(path: string, range?: { start: number; end: number }): Promise<ObjectStream> {
+    this.assertKey(path);
+    const requestedSize = range ? Math.max(0, range.end - range.start + 1) : null;
+    return this.measure(
+      'get',
+      path,
+      requestedSize,
+      () => this.driver.stream(path, range),
+      (s) => s.size ?? 0,
     );
   }
 

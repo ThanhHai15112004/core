@@ -1,4 +1,4 @@
-import { Logger, Optional } from '@nestjs/common';
+import { Inject, Logger, Optional } from '@nestjs/common';
 import { Processor } from '@nestjs/bullmq';
 import type { Job } from 'bullmq';
 import { CoreConfigService } from '@packages/config/index.js';
@@ -12,7 +12,7 @@ import {
 import { MetricsRegistryService } from '@packages/metrics/index.js';
 import { JOB_LOCK_DURATION_MS, QUEUES, type MessageEnvelope } from '@packages/messaging/index.js';
 import { JobProgressTrackerService } from '@packages/queue/index.js';
-import { FilesService } from '@modules/files/index.js';
+import { FILES_PUBLIC_SERVICE, type IFilesPublicService } from '@modules/files/contracts/index.js';
 import { NotificationChannelsService } from '@modules/notifications/index.js';
 import { WorkflowsService } from '@modules/workflows/index.js';
 import { CalendarService } from '@modules/calendar/index.js';
@@ -37,7 +37,9 @@ export class SystemProcessor extends BaseQueueProcessor {
     config: CoreConfigService,
     metrics: MetricsRegistryService,
     @Optional() progressTracker?: JobProgressTrackerService,
-    @Optional() private readonly filesService?: FilesService,
+    @Optional()
+    @Inject(FILES_PUBLIC_SERVICE)
+    private readonly filesService?: IFilesPublicService,
     @Optional() private readonly notificationChannelsService?: NotificationChannelsService,
     @Optional() private readonly exportRegistry?: ExportRegistryService,
     @Optional() private readonly reportRegistry?: ReportRegistryService,
