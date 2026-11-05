@@ -110,7 +110,7 @@ export interface OverviewData {
 
 /* ==========================================================================
    DYNAMIC MENU TREE MODEL
-   Khớp với response của GET /settings/menus/tree?position=SYSTEM_CONSOLE
+   Khớp với response của GET /navigation/menus/tree?position=SYSTEM_CONSOLE
    ========================================================================== */
 
 export interface ConsoleMenuTreeNode {

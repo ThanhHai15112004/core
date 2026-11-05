@@ -5,7 +5,7 @@ import type { PackageActionResult } from '../types/packages.types';
 export interface ConsoleDataContextValue {
   health: HealthData;
   packages: PackageSummary[];
-  /** Cây menu động từ backend (`GET /settings/menus/tree?position=SYSTEM_CONSOLE`), `null` khi chưa tải xong. */
+  /** Cây menu động từ backend (`GET /navigation/menus/tree?position=SYSTEM_CONSOLE`), `null` khi chưa tải xong. */
   menuTree: ConsoleMenuTreeNode[] | null;
   executeAction: (packageId: string, actionId: string, params?: unknown) => Promise<PackageActionResult>;
   /** Round-trip lần gọi `/health` gần nhất (ms). */

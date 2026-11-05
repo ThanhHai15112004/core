@@ -422,6 +422,18 @@ function createInMemoryNotificationsHarness() {
     autoUnlockExpiredLock: async () => undefined,
     updatePasswordHash: async () => undefined,
     setMfaEnabled: async () => undefined,
+    getUserPreferences: async (userId) => ({
+      userId,
+      preferredLocale: 'vi',
+      preferredTimezone: 'Asia/Ho_Chi_Minh',
+      updatedAt: new Date().toISOString(),
+    }),
+    updateUserPreferences: async (userId, input) => ({
+      userId,
+      preferredLocale: input.preferredLocale ?? 'vi',
+      preferredTimezone: input.preferredTimezone ?? 'Asia/Ho_Chi_Minh',
+      updatedAt: new Date().toISOString(),
+    }),
     findActiveUserIdsByIds: async (ids) => ids.filter((id) => id >= 1 && id <= 10),
     findActiveUserIdsByRoleIds: async (roleIds) => {
       const set = new Set<number>();

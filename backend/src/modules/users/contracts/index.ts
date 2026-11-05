@@ -232,8 +232,8 @@ export interface IUsersPublicService {
     options?: { recordHistory?: boolean; maxHistory?: number },
   ): Promise<void>;
   setMfaEnabled(userId: number, enabled: boolean): Promise<void>;
-  getUserPreferences?(userId: number): Promise<UserPreferencesView>;
-  updateUserPreferences?(
+  getUserPreferences(userId: number): Promise<UserPreferencesView>;
+  updateUserPreferences(
     userId: number,
     input: UpdateUserPreferencesInput,
   ): Promise<UserPreferencesView>;

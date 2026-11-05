@@ -600,23 +600,7 @@ export class AuthService implements IAuthPublicService {
 
   /** 5.3.2 & 5.3.5: Lấy tùy chọn ngôn ngữ (`preferredLocale`) và múi giờ (`preferredTimezone`) của người dùng đang đăng nhập */
   public async getMyPreferences(userId: number): Promise<UserPreferencesResponse> {
-    if (typeof this.usersPublicService.getUserPreferences === 'function') {
-      return this.usersPublicService.getUserPreferences(userId);
-    }
-    const identity = await this.usersPublicService.findAuthUserById(userId);
-    if (!identity) {
-      throw new UnauthorizedAppException('auth.userNotFound');
-    }
-    const preferredLocale =
-      identity.preferredLocale === 'en' || identity.profile?.preferredLocale === 'en' ? 'en' : 'vi';
-    const preferredTimezone =
-      identity.preferredTimezone ?? identity.profile?.preferredTimezone ?? 'Asia/Ho_Chi_Minh';
-    return {
-      userId: identity.id,
-      preferredLocale,
-      preferredTimezone,
-      updatedAt: new Date().toISOString(),
-    };
+    return this.usersPublicService.getUserPreferences(userId);
   }
 
   /** 5.3.2 & 5.3.5: Cập nhật tùy chọn ngôn ngữ (`preferredLocale`) và múi giờ (`preferredTimezone`) của người dùng đang đăng nhập */
@@ -624,10 +608,7 @@ export class AuthService implements IAuthPublicService {
     userId: number,
     dto: UpdateMyPreferencesRequest,
   ): Promise<UserPreferencesResponse> {
-    if (typeof this.usersPublicService.updateUserPreferences === 'function') {
-      return this.usersPublicService.updateUserPreferences(userId, dto);
-    }
-    throw new BadRequestAppException('users.invalidPreferredLocale');
+    return this.usersPublicService.updateUserPreferences(userId, dto);
   }
 
   /** Đăng xuất phiên hiện tại bằng Refresh Token hoặc theo (userId, sessionId) (Mục 3.2.4 & 3.4.5) */

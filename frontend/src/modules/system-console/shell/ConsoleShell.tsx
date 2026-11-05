@@ -80,7 +80,7 @@ export const ConsoleShell: React.FC<{ children: React.ReactNode }> = ({ children
       ...(s.id === 'packages' ? { count: problemPackages, countLabel: t('ov.sidebar.problemPackages') } : {}),
     });
 
-    // Nếu đã tải được cây menu động từ Backend (GET /settings/menus/tree?position=SYSTEM_CONSOLE)
+    // Nếu đã tải được cây menu động từ Backend (GET /navigation/menus/tree?position=SYSTEM_CONSOLE)
     if (menuTree !== null && menuTree.length > 0) {
       const rootItems: NavGroup['items'] = [];
       const dynamicGroups: NavGroup[] = [];
