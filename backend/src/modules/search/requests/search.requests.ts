@@ -1,25 +1,53 @@
 import { z } from 'zod';
-import { booleanQueryParam, optionalQueryParam } from '@packages/http/index.js';
-import {
-  listZeroResultKeywordsQuerySchema,
-  rebuildUserSearchIndexSchema,
-  searchIndexLagQuerySchema,
-  searchUsersGlobalQuerySchema,
-  syncUserSearchIndexSchema,
-} from '@modules/users/index.js';
+import { booleanQueryParam, intQueryParam, optionalQueryParam } from '@packages/http/index.js';
 
-export const searchGlobalQuerySchema = searchUsersGlobalQuerySchema;
+const coercePositiveInt = z.coerce.number().int().min(1);
+
+export const searchGlobalQuerySchema = z.object({
+  keyword: z.string().trim().default(''),
+  module: optionalQueryParam(z.string().trim().max(64)),
+  entityType: optionalQueryParam(z.string().trim().max(64)),
+  entityCode: optionalQueryParam(z.string().trim().max(120)),
+  status: optionalQueryParam(z.union([z.coerce.number().int().min(1).max(4), z.string().trim()])),
+  organizationUnitId: optionalQueryParam(intQueryParam({ min: 1 })),
+  page: optionalQueryParam(intQueryParam({ min: 1 })),
+  limit: optionalQueryParam(intQueryParam({ min: 1, max: 200 })),
+  includeStale: optionalQueryParam(booleanQueryParam()),
+});
 export type SearchGlobalQuery = z.infer<typeof searchGlobalQuerySchema>;
 
-export const syncSearchIndexBodySchema = syncUserSearchIndexSchema;
+export const syncSearchIndexBodySchema = z.object({
+  module: z.string().trim().max(64).optional(),
+  entityType: z.string().trim().max(64).optional(),
+  entityCode: z.string().trim().max(120).optional(),
+  userIds: z.array(coercePositiveInt).optional(),
+  documentIds: z.array(z.union([coercePositiveInt, z.string().trim().min(1)])).optional(),
+  async: z.boolean().optional(),
+});
 export type SyncSearchIndexBody = z.infer<typeof syncSearchIndexBodySchema>;
 
-export const rebuildSearchIndexBodySchema = rebuildUserSearchIndexSchema;
+export const rebuildSearchIndexBodySchema = z.object({
+  module: z.string().trim().max(64).optional(),
+  entityType: z.string().trim().max(64).optional(),
+  entityCode: z.string().trim().max(120).optional(),
+  async: z.boolean().optional(),
+});
 export type RebuildSearchIndexBody = z.infer<typeof rebuildSearchIndexBodySchema>;
 
-export { listZeroResultKeywordsQuerySchema, searchIndexLagQuerySchema };
-
+export const searchIndexLagQuerySchema = z.object({
+  module: optionalQueryParam(z.string().trim().max(64)),
+  entityType: optionalQueryParam(z.string().trim().max(64)),
+  entityCode: optionalQueryParam(z.string().trim().max(120)),
+  staleOnly: optionalQueryParam(booleanQueryParam()),
+  staleThresholdMs: optionalQueryParam(intQueryParam({ min: 0 })),
+});
 export type SearchIndexLagQuery = z.infer<typeof searchIndexLagQuerySchema>;
+
+export const listZeroResultKeywordsQuerySchema = z.object({
+  module: optionalQueryParam(z.string().trim().max(64)),
+  entityType: optionalQueryParam(z.string().trim().max(64)),
+  limit: optionalQueryParam(intQueryParam({ min: 1, max: 200 })),
+});
 export type ListZeroResultKeywordsQuery = z.infer<typeof listZeroResultKeywordsQuerySchema>;
 
 export const listSearchableEntitiesQuerySchema = z.object({

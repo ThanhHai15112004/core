@@ -8,6 +8,7 @@ import type {
   ZeroResultKeywordStat,
 } from '@packages/kernel/index.js';
 import type { UserIdentity } from '@packages/security/index.js';
+import type { RebuildSearchIndexBody, SyncSearchIndexBody } from '../requests/search.requests.js';
 
 export const SEARCH_PUBLIC_SERVICE = Symbol('SEARCH_PUBLIC_SERVICE');
 
@@ -49,6 +50,14 @@ export interface ISearchPublicService {
     },
     actor?: UserIdentity,
   ): Promise<SearchQueryResult>;
+  syncSearchIndex(
+    body?: SyncSearchIndexBody,
+    actor?: UserIdentity,
+  ): Promise<SearchSyncHistoryRecord>;
+  rebuildSearchIndex(
+    body?: RebuildSearchIndexBody,
+    actor?: UserIdentity,
+  ): Promise<SearchSyncHistoryRecord>;
   getSearchIndexLagReport(filter?: {
     readonly module?: string | undefined;
     readonly entityType?: string | undefined;
@@ -73,4 +82,6 @@ export interface ISearchPublicService {
   deleteSearchSyncHistory(
     historyId: number,
   ): Promise<{ readonly deleted: true; readonly id: number }>;
+  persistSearchDocumentsToDb(docs: readonly SearchDocumentInput[]): Promise<void>;
+  persistSyncHistoryToDb(record: SearchSyncHistoryRecord): Promise<void>;
 }

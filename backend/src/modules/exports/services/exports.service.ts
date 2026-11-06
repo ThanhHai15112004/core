@@ -15,9 +15,6 @@ import {
   type IPdfExportAdapter,
 } from '@packages/kernel/index.js';
 import type { UserIdentity } from '@packages/security/index.js';
-import { UserExportService, UsersService } from '@modules/users/index.js';
-import { OrganizationsService } from '@modules/organizations/index.js';
-import { CodesService } from '@modules/codes/index.js';
 import type { IExportsPublicService } from '../contracts/index.js';
 import type { ExportHistoryEntity } from '../entities/export-history.entity.js';
 import { ExportHistoryRepository } from '../repositories/export-history.repository.js';
@@ -28,6 +25,56 @@ import type {
 } from '../requests/exports.requests.js';
 import type { ExecuteExportResponse } from '../responses/exports.response.js';
 
+interface LegacyUserExportAdapter {
+  exportUsersCsv(query: ExecuteExportQuery, actor?: UserIdentity): Promise<ExecuteExportResponse>;
+}
+
+interface LegacyUsersStepUpAdapter {
+  verifySensitiveActionStepUp(
+    userId: number | undefined,
+    stepUpToken: string | undefined,
+    requireStepUp: boolean | undefined,
+    action: string,
+  ): Promise<void>;
+}
+
+interface LegacyOrgExportAdapter {
+  exportUnits(
+    query: {
+      readonly search?: string;
+      readonly status?: 1 | 2 | 3;
+      readonly format: 'csv' | 'xlsx';
+    },
+    actorId?: number,
+    options?: { readonly skipHistoryRecord?: boolean },
+  ): Promise<{
+    readonly fileName: string;
+    readonly contentType: string;
+    readonly format: 'csv' | 'xlsx';
+    readonly totalExported: number;
+    readonly csvContent: string;
+    readonly xlsxBase64: string;
+  }>;
+}
+
+interface LegacyCodesExportAdapter {
+  exportCodes(
+    query: {
+      readonly search?: string;
+      readonly format: 'csv' | 'xlsx';
+    },
+    actorId?: number,
+    options?: { readonly skipHistoryRecord?: boolean },
+  ): Promise<{
+    readonly fileName: string;
+    readonly contentType: string;
+    readonly format: 'csv' | 'xlsx';
+    readonly totalExported: number;
+    readonly csvContent: string;
+    readonly xlsxBase64: string;
+  }>;
+}
+
 @Injectable()
 export class ExportsService implements IExportsPublicService {
   private readonly exportRegistry: ExportRegistryService;
@@ -35,10 +82,10 @@ export class ExportsService implements IExportsPublicService {
   constructor(
     @Optional() private readonly historyRepository?: ExportHistoryRepository,
     @Optional() exportRegistry?: ExportRegistryService,
-    @Optional() private readonly userExportService?: UserExportService,
-    @Optional() private readonly usersService?: UsersService,
-    @Optional() private readonly organizationsService?: OrganizationsService,
-    @Optional() private readonly codesService?: CodesService,
+    @Optional() private readonly userExportService?: LegacyUserExportAdapter,
+    @Optional() private readonly usersService?: LegacyUsersStepUpAdapter,
+    @Optional() private readonly organizationsService?: LegacyOrgExportAdapter,
+    @Optional() private readonly codesService?: LegacyCodesExportAdapter,
   ) {
     this.exportRegistry = exportRegistry ?? defaultExportRegistry;
     this.ensureDefaultExecutorsRegistered();

@@ -8,7 +8,7 @@
   "category": "core",
   "author": "Core Platform Team",
   "entryModule": "SearchModule",
-  "dependencies": ["database", "security", "i18n", "users", "roles", "organizations", "codes", "settings"],
+  "dependencies": ["database", "security", "i18n", "settings"],
   "permissions": [
     "search.read",
     "search.sync",

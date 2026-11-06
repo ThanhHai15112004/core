@@ -3,9 +3,11 @@ import { z } from 'zod';
 import {
   ExportRegistryService,
   ImportRegistryService,
+  type ModuleManifest,
   ReportRegistryService,
   SearchRegistryService,
   SettingRegistryService,
+  scanModuleManifests,
 } from '@packages/kernel/index.js';
 import { REQUIRED_ANY_PERMISSIONS_KEY, REQUIRED_PERMISSIONS_KEY } from '@packages/http/index.js';
 import { buildUserSearchDocument } from '@modules/users/index.js';
@@ -652,5 +654,51 @@ describe('Phase 8 Standalone Modules: imports (8.2), exports (8.3), reports (8.4
       SearchController.prototype.searchGlobal,
     ) as string[];
     expect(searchPerms).toContain('search.read');
+
+    // 5. Pure SearchRegistryService dispatch for custom module in syncSearchIndex without hardcoding 'users'
+    const customSearchRegistry = new SearchRegistryService();
+    customSearchRegistry.registerWorkerExecutor({
+      module: 'lms',
+      entityCode: 'lms.course',
+      syncTopic: 'lms.search_sync',
+      rebuildTopic: 'lms.search_rebuild',
+      executeSearchJob: async (input) =>
+        customSearchRegistry.createSyncHistory({
+          operation: input.operation === 'search_rebuild' ? 'REBUILD' : 'SYNC',
+          module: 'lms',
+          entityType: 'course',
+          entityCode: 'lms.course',
+          driverUsed: 'DATABASE',
+          executionMode: 'SYNC',
+          status: 'COMPLETED',
+          indexedCount: 5,
+          removedCount: 0,
+          actorId: input.actorId ?? null,
+        }),
+    });
+    const customSearchService = new SearchService(
+      undefined,
+      undefined,
+      undefined,
+      customSearchRegistry,
+    );
+    const lmsSyncRes = await customSearchService.syncSearchIndex(
+      { module: 'lms', entityCode: 'lms.course', async: false },
+      { id: 10, roles: ['manager'], permissions: ['search.sync'] },
+    );
+    expect(lmsSyncRes.module).toBe('lms');
+    expect(lmsSyncRes.entityCode).toBe('lms.course');
+    expect(lmsSyncRes.indexedCount).toBe(5);
+
+    // 6. Phase 8 modules (imports, exports, reports, search) have no reverse dependencies on source domain modules (users, organizations, codes)
+    const manifests = scanModuleManifests<ModuleManifest>();
+    for (const modName of ['imports', 'exports', 'reports', 'search']) {
+      const item = manifests.find((m) => m.moduleName === modName);
+      expect(item).toBeDefined();
+      const deps = item?.raw.dependencies ?? [];
+      expect(deps).not.toContain('users');
+      expect(deps).not.toContain('organizations');
+      expect(deps).not.toContain('codes');
+    }
   });
 });

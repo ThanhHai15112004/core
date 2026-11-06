@@ -8,7 +8,7 @@
   "category": "core",
   "author": "Core Platform Team",
   "entryModule": "ExportsModule",
-  "dependencies": ["database", "security", "i18n", "users", "roles", "organizations", "codes", "settings", "notifications"],
+  "dependencies": ["database", "security", "i18n", "settings", "notifications"],
   "permissions": [
     "exports.read",
     "exports.execute",

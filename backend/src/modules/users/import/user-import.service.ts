@@ -4,6 +4,7 @@ import {
   NotFoundAppException,
   SettingRegistryService,
   buildImportPreviewResult,
+  buildImportTemplateFile,
   defaultImportRegistry,
   defaultSettingRegistry,
   parseDeclarativeImportPayload,
@@ -43,6 +44,7 @@ import type {
   BulkImportUsersErrorItem,
   BulkImportUsersResultResponse,
 } from '../responses/users.response.js';
+import { USER_IMPORT_TEMPLATE_COLUMNS } from '../export/user-export.formatter.js';
 import { USER_IMPORT_COLUMNS, mapExtractedUserImportRow } from './user-import.parser.js';
 
 const DEFAULT_BULK_PASSWORD = 'Abcd@454647#';
@@ -80,6 +82,12 @@ export class UserImportService {
       rowSchema: bulkImportUserRowSchema,
       uniqueKeyFields: ['email', 'username'],
       requiredPermission: 'users.import',
+      exportTemplate: (format: 'csv' | 'xlsx') =>
+        buildImportTemplateFile({
+          fileBaseName: 'mau_import_nhan_vien',
+          format,
+          columns: USER_IMPORT_TEMPLATE_COLUMNS,
+        }),
       findExistingDuplicates: (
         rows: ReadonlyArray<{ readonly row: number; readonly data: BulkImportUserRowInput }>,
       ) => this.findExistingUserDuplicates(rows),

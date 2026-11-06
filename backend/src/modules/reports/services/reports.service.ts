@@ -17,7 +17,6 @@ import {
   type ReportScheduleRecord,
 } from '@packages/kernel/index.js';
 import type { UserIdentity } from '@packages/security/index.js';
-import { UserReportService } from '@modules/users/index.js';
 import type { IReportsPublicService } from '../contracts/index.js';
 import type { ReportHistoryEntity } from '../entities/report-history.entity.js';
 import type { ReportScheduleEntity } from '../entities/report-schedule.entity.js';
@@ -33,6 +32,14 @@ import type {
 } from '../requests/reports.requests.js';
 import type { ReportExecutionResponse } from '../responses/reports.response.js';
 
+interface LegacyReportAdapter {
+  ensureModuleReportsRegistered?(): void;
+  runReport(
+    request?: Partial<RunReportRequest>,
+    actor?: UserIdentity,
+  ): Promise<ReportExecutionResponse>;
+}
+
 @Injectable()
 export class ReportsService implements IReportsPublicService {
   private readonly reportRegistry: ReportRegistryService;
@@ -43,7 +50,7 @@ export class ReportsService implements IReportsPublicService {
     @Optional() private readonly historyRepository?: ReportHistoryRepository,
     @Optional() reportRegistry?: ReportRegistryService,
     @Optional() exportRegistry?: ExportRegistryService,
-    @Optional() private readonly userReportService?: UserReportService,
+    @Optional() private readonly userReportService?: LegacyReportAdapter,
   ) {
     this.reportRegistry = reportRegistry ?? defaultReportRegistry;
     this.exportRegistry = exportRegistry ?? defaultExportRegistry;
@@ -339,7 +346,7 @@ export class ReportsService implements IReportsPublicService {
       readonly notifiedChannels: readonly ReportDeliveryChannel[];
     }>;
   }> {
-    this.userReportService?.ensureModuleReportsRegistered();
+    this.userReportService?.ensureModuleReportsRegistered?.();
     const res = await this.reportRegistry.triggerDueSchedules(now);
 
     for (const item of res.results) {

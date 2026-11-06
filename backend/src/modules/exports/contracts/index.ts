@@ -4,11 +4,19 @@ import type {
   ExportProgressSnapshot,
   IPdfExportAdapter,
 } from '@packages/kernel/index.js';
+import type { UserIdentity } from '@packages/security/index.js';
+import type { ExecuteExportQuery } from '../requests/exports.requests.js';
+import type { ExecuteExportResponse } from '../responses/exports.response.js';
 
 export const EXPORTS_PUBLIC_SERVICE = Symbol('EXPORTS_PUBLIC_SERVICE');
 
 export interface IExportsPublicService {
   registerPdfAdapter(adapter: IPdfExportAdapter): void;
+  executeExport(
+    profileCode: string,
+    query: ExecuteExportQuery,
+    actor?: UserIdentity,
+  ): Promise<ExecuteExportResponse>;
   listHistories(filter?: {
     readonly profileCode?: string | undefined;
     readonly module?: string | undefined;
@@ -47,4 +55,8 @@ export interface IExportsPublicService {
     readonly purgedTokens: readonly string[];
     readonly purgedHistoryIds: readonly number[];
   }>;
+  persistHistoryRecordToDb(
+    record: ExportHistoryRecord,
+    payload?: ExecuteExportResponse,
+  ): Promise<void>;
 }

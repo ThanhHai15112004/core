@@ -3,7 +3,6 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { DatabaseModule } from '@packages/database/index.js';
 import { CoreI18nService } from '@packages/i18n/index.js';
 import { SecurityModule } from '@packages/security/index.js';
-import { UsersModule } from '@modules/users/index.js';
 import { ExportsModule } from '@modules/exports/index.js';
 import { REPORTS_PUBLIC_SERVICE } from './contracts/index.js';
 import { ReportScheduleEntity } from './entities/report-schedule.entity.js';
@@ -21,7 +20,6 @@ new CoreI18nService().registerNamespace('reports', { vi: viReports, en: enReport
   imports: [
     DatabaseModule,
     SecurityModule,
-    UsersModule,
     ExportsModule,
     TypeOrmModule.forFeature([ReportScheduleEntity, ReportHistoryEntity]),
   ],

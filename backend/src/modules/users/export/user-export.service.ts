@@ -98,6 +98,9 @@ export class UserExportService {
         readonly historyId?: number | undefined;
         readonly jobId: string;
       }) => {
+        const isWorkerExecution = input.historyId !== undefined;
+        const requestedAsync =
+          !isWorkerExecution && (input.query as { async?: boolean } | undefined)?.async === true;
         const exportQuery: ListUsersQuery = {
           sortBy: 'id',
           sortOrder: 'ASC',
@@ -105,7 +108,7 @@ export class UserExportService {
           ...(input.format === 'csv' || input.format === 'xlsx' || input.format === 'pdf'
             ? { format: input.format }
             : {}),
-          async: false,
+          async: requestedAsync,
           notifyOnComplete: input.notifyOnComplete ?? true,
         };
 
@@ -119,8 +122,17 @@ export class UserExportService {
               }
             : undefined);
 
+        if (typeof this.usersService?.verifySensitiveActionStepUp === 'function') {
+          await this.usersService.verifySensitiveActionStepUp(
+            effectiveActor?.id ?? input.actorId,
+            exportQuery.stepUpToken,
+            exportQuery.requireStepUp,
+            'users.export',
+          );
+        }
+
         return this.exportUsersCsv(exportQuery, effectiveActor, {
-          skipQueuePublish: true,
+          skipQueuePublish: !requestedAsync,
           ...(input.historyId !== undefined ? { existingHistoryId: input.historyId } : {}),
           jobId: input.jobId,
           forceNotify: input.notifyOnComplete !== false,

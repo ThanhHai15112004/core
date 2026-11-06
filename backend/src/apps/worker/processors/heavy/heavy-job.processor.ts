@@ -32,10 +32,22 @@ import {
   type RunUserReportRequest,
 } from '@modules/users/index.js';
 import { FILES_PUBLIC_SERVICE, type IFilesPublicService } from '@modules/files/contracts/index.js';
-import { ImportsService } from '@modules/imports/index.js';
-import { ExportsService } from '@modules/exports/index.js';
-import { ReportsService } from '@modules/reports/index.js';
-import { SearchService } from '@modules/search/index.js';
+import {
+  IMPORTS_PUBLIC_SERVICE,
+  type IImportsPublicService,
+} from '@modules/imports/contracts/index.js';
+import {
+  EXPORTS_PUBLIC_SERVICE,
+  type IExportsPublicService,
+} from '@modules/exports/contracts/index.js';
+import {
+  REPORTS_PUBLIC_SERVICE,
+  type IReportsPublicService,
+} from '@modules/reports/contracts/index.js';
+import {
+  SEARCH_PUBLIC_SERVICE,
+  type ISearchPublicService,
+} from '@modules/search/contracts/index.js';
 import { BaseQueueProcessor } from '../base-queue.processor.js';
 
 export interface HeavyQueueJobPayload {
@@ -114,10 +126,18 @@ export class HeavyJobProcessor extends BaseQueueProcessor {
     @Optional() private readonly exportRegistry?: ExportRegistryService,
     @Optional() private readonly reportRegistry?: ReportRegistryService,
     @Optional() private readonly searchRegistry?: SearchRegistryService,
-    @Optional() private readonly importsService?: ImportsService,
-    @Optional() private readonly exportsService?: ExportsService,
-    @Optional() private readonly reportsService?: ReportsService,
-    @Optional() private readonly searchService?: SearchService,
+    @Optional()
+    @Inject(IMPORTS_PUBLIC_SERVICE)
+    private readonly importsService?: IImportsPublicService,
+    @Optional()
+    @Inject(EXPORTS_PUBLIC_SERVICE)
+    private readonly exportsService?: IExportsPublicService,
+    @Optional()
+    @Inject(REPORTS_PUBLIC_SERVICE)
+    private readonly reportsService?: IReportsPublicService,
+    @Optional()
+    @Inject(SEARCH_PUBLIC_SERVICE)
+    private readonly searchService?: ISearchPublicService,
   ) {
     super(config, metrics, progressTracker);
     this.ensureInjectedWorkerExecutorsRegistered();

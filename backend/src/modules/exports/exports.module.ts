@@ -3,9 +3,6 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { DatabaseModule } from '@packages/database/index.js';
 import { CoreI18nService } from '@packages/i18n/index.js';
 import { SecurityModule } from '@packages/security/index.js';
-import { UsersModule } from '@modules/users/index.js';
-import { OrganizationsModule } from '@modules/organizations/index.js';
-import { CodesModule } from '@modules/codes/index.js';
 import { EXPORTS_PUBLIC_SERVICE } from './contracts/index.js';
 import { ExportHistoryEntity } from './entities/export-history.entity.js';
 import { ExportHistoryRepository } from './repositories/export-history.repository.js';
@@ -17,14 +14,7 @@ import viExports from './locales/vi/exports.json' with { type: 'json' };
 new CoreI18nService().registerNamespace('exports', { vi: viExports, en: enExports });
 
 @Module({
-  imports: [
-    DatabaseModule,
-    SecurityModule,
-    UsersModule,
-    OrganizationsModule,
-    CodesModule,
-    TypeOrmModule.forFeature([ExportHistoryEntity]),
-  ],
+  imports: [DatabaseModule, SecurityModule, TypeOrmModule.forFeature([ExportHistoryEntity])],
   controllers: [ExportsController],
   providers: [
     ExportHistoryRepository,

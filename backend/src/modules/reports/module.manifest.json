@@ -8,7 +8,7 @@
   "category": "core",
   "author": "Core Platform Team",
   "entryModule": "ReportsModule",
-  "dependencies": ["database", "security", "i18n", "users", "roles", "organizations", "codes", "settings", "notifications", "exports"],
+  "dependencies": ["database", "security", "i18n", "settings", "notifications", "exports"],
   "permissions": [
     "reports.read",
     "reports.execute",

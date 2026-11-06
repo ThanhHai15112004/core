@@ -3,7 +3,6 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { DatabaseModule } from '@packages/database/index.js';
 import { CoreI18nService } from '@packages/i18n/index.js';
 import { SecurityModule } from '@packages/security/index.js';
-import { UsersModule } from '@modules/users/index.js';
 import { SEARCH_PUBLIC_SERVICE } from './contracts/index.js';
 import { SearchDocumentEntity } from './entities/search-document.entity.js';
 import { SearchSyncHistoryEntity } from './entities/search-sync-history.entity.js';
@@ -22,7 +21,6 @@ new CoreI18nService().registerNamespace('search', { vi: viSearch, en: enSearch }
   imports: [
     DatabaseModule,
     SecurityModule,
-    UsersModule,
     TypeOrmModule.forFeature([
       SearchDocumentEntity,
       SearchSyncHistoryEntity,

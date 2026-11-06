@@ -13,7 +13,6 @@ import {
   type ZeroResultKeywordStat,
 } from '@packages/kernel/index.js';
 import type { UserIdentity } from '@packages/security/index.js';
-import { UserSearchService } from '@modules/users/index.js';
 import type { ISearchPublicService } from '../contracts/index.js';
 import type { SearchSyncHistoryEntity } from '../entities/search-sync-history.entity.js';
 import type { SearchZeroResultKeywordEntity } from '../entities/search-zero-result-keyword.entity.js';
@@ -30,6 +29,27 @@ import type {
   SyncSearchIndexBody,
 } from '../requests/search.requests.js';
 
+interface LegacySearchAdapter {
+  ensureModuleSearchEntitiesRegistered?(): void;
+  rebuildSearchIndex(
+    body?: RebuildSearchIndexBody,
+    actor?: UserIdentity,
+  ): Promise<SearchSyncHistoryRecord>;
+  syncUsersToSearchIndex(
+    body?: SyncSearchIndexBody,
+    actor?: UserIdentity,
+  ): Promise<SearchSyncHistoryRecord>;
+  searchUsers(
+    query: SearchGlobalQuery,
+    actor?: UserIdentity,
+    options?: {
+      readonly autoSeedFromDatabase?: boolean | undefined;
+      readonly scopeOverride?: SearchActorScopeContext | undefined;
+    },
+  ): Promise<SearchQueryResult>;
+  loadUserSearchDocuments?(userIds?: readonly number[]): Promise<SearchDocumentInput[]>;
+}
+
 @Injectable()
 export class SearchService implements ISearchPublicService {
   private readonly searchRegistry: SearchRegistryService;
@@ -39,7 +59,7 @@ export class SearchService implements ISearchPublicService {
     @Optional() private readonly syncHistoryRepository?: SearchSyncHistoryRepository,
     @Optional() private readonly zeroResultRepository?: SearchZeroResultKeywordRepository,
     @Optional() searchRegistry?: SearchRegistryService,
-    @Optional() private readonly userSearchService?: UserSearchService,
+    @Optional() private readonly userSearchService?: LegacySearchAdapter,
   ) {
     this.searchRegistry = searchRegistry ?? defaultSearchRegistry;
     this.ensureInjectedSearchAdaptersRegistered();
@@ -80,7 +100,11 @@ export class SearchService implements ISearchPublicService {
           );
         },
         search: async (query, actor, options) =>
-          this.userSearchService!.searchUsers(query, actor as UserIdentity | undefined, options),
+          this.userSearchService!.searchUsers(
+            query as SearchGlobalQuery,
+            actor as UserIdentity | undefined,
+            options,
+          ),
         loadDocuments: async (documentIds) => {
           if (typeof this.userSearchService!.loadUserSearchDocuments !== 'function') {
             return [];
@@ -232,9 +256,16 @@ export class SearchService implements ISearchPublicService {
     actor?: UserIdentity,
   ): Promise<SearchSyncHistoryRecord> {
     this.ensureInjectedSearchAdaptersRegistered();
+    const targetModule = body?.module ?? body?.entityCode?.split('.')[0] ?? 'users';
     const executor =
-      this.searchRegistry.resolveWorkerExecutor({ module: 'users' }) ??
-      defaultSearchRegistry.resolveWorkerExecutor({ module: 'users' });
+      this.searchRegistry.resolveWorkerExecutor({
+        module: targetModule,
+        entityCode: body?.entityCode,
+      }) ??
+      defaultSearchRegistry.resolveWorkerExecutor({
+        module: targetModule,
+        entityCode: body?.entityCode,
+      });
 
     if (executor) {
       const history = await executor.executeSearchJob({
@@ -322,7 +353,7 @@ export class SearchService implements ISearchPublicService {
 
   /** 8.5.7 — Báo cáo độ trễ cập nhật Search Index (phát hiện kết quả tìm kiếm bị cũ) */
   public getSearchIndexLagReport(query?: SearchIndexLagQuery): SearchIndexLagReport {
-    this.userSearchService?.ensureModuleSearchEntitiesRegistered();
+    this.userSearchService?.ensureModuleSearchEntitiesRegistered?.();
     this.searchRegistry.syncFromManifests();
 
     return this.searchRegistry.getIndexLagReport({

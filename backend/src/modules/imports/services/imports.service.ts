@@ -1,4 +1,5 @@
 import { Injectable, Optional } from '@nestjs/common';
+import { z } from 'zod';
 import {
   BadRequestAppException,
   ForbiddenAppException,
@@ -28,23 +29,6 @@ import {
   type ImportTemplateFileResult,
 } from '@packages/kernel/index.js';
 import type { UserIdentity } from '@packages/security/index.js';
-import {
-  USER_IMPORT_COLUMNS,
-  UserExportService,
-  UserImportService,
-  bulkImportUserRowSchema,
-  type BulkImportUsersRequest,
-} from '@modules/users/index.js';
-import {
-  ORGANIZATION_IMPORT_COLUMNS,
-  OrganizationsService,
-  bulkImportOrganizationRowSchema,
-} from '@modules/organizations/index.js';
-import {
-  CODES_IMPORT_COLUMNS,
-  CodesService,
-  bulkImportCodeValueRowSchema,
-} from '@modules/codes/index.js';
 import type { IImportsPublicService } from '../contracts/index.js';
 import type { ImportHistoryEntity } from '../entities/import-history.entity.js';
 import { ImportHistoryRepository } from '../repositories/import-history.repository.js';
@@ -56,6 +40,39 @@ import type {
 } from '../requests/imports.requests.js';
 import type { ExecuteImportResultResponse } from '../responses/imports.response.js';
 
+interface LegacyUserImportAdapter {
+  previewImport(dto: Readonly<Record<string, unknown>>): Promise<ImportPreviewResult>;
+  bulkImport(
+    dto: Readonly<Record<string, unknown>>,
+    actorId?: number,
+  ): Promise<Readonly<Record<string, unknown>>>;
+}
+
+interface LegacyUserExportTemplateAdapter {
+  exportImportTemplate(format?: 'csv' | 'xlsx'): ImportTemplateFileResult;
+}
+
+interface LegacyOrgImportAdapter {
+  exportImportTemplate(format?: 'csv' | 'xlsx'): ImportTemplateFileResult;
+  bulkImportUnits(
+    dto: Readonly<Record<string, unknown>>,
+    actorId?: number,
+    options?: { readonly skipHistoryRecord?: boolean },
+  ): Promise<Readonly<Record<string, unknown>>>;
+}
+
+interface LegacyCodesImportAdapter {
+  exportImportTemplate(format?: 'csv' | 'xlsx'): ImportTemplateFileResult;
+  bulkImportCodeValues(
+    dto: Readonly<Record<string, unknown>>,
+    typeCode?: string,
+    actorId?: number,
+    options?: { readonly skipHistoryRecord?: boolean },
+  ): Promise<Readonly<Record<string, unknown>>>;
+}
+
+const DEFAULT_FALLBACK_ROW_SCHEMA = z.record(z.string(), z.unknown());
+
 @Injectable()
 export class ImportsService implements IImportsPublicService {
   private readonly importRegistry: ImportRegistryService;
@@ -65,10 +82,10 @@ export class ImportsService implements IImportsPublicService {
     @Optional() private readonly historyRepository?: ImportHistoryRepository,
     @Optional() importRegistry?: ImportRegistryService,
     @Optional() settingRegistry?: SettingRegistryService,
-    @Optional() private readonly userImportService?: UserImportService,
-    @Optional() private readonly userExportService?: UserExportService,
-    @Optional() private readonly organizationsService?: OrganizationsService,
-    @Optional() private readonly codesService?: CodesService,
+    @Optional() private readonly userImportService?: LegacyUserImportAdapter,
+    @Optional() private readonly userExportService?: LegacyUserExportTemplateAdapter,
+    @Optional() private readonly organizationsService?: LegacyOrgImportAdapter,
+    @Optional() private readonly codesService?: LegacyCodesImportAdapter,
   ) {
     this.importRegistry = importRegistry ?? defaultImportRegistry;
     this.settingRegistry = settingRegistry ?? defaultSettingRegistry;
@@ -76,7 +93,8 @@ export class ImportsService implements IImportsPublicService {
   }
 
   private ensureDefaultProfilesRegistered(): void {
-    const existingUsers = this.importRegistry.getProfile('users');
+    const existingUsers =
+      this.importRegistry.getProfile('users') ?? defaultImportRegistry.getProfile('users');
     if (
       (!existingUsers || !existingUsers.executeImport || !existingUsers.exportTemplate) &&
       (this.userImportService || this.userExportService)
@@ -84,8 +102,11 @@ export class ImportsService implements IImportsPublicService {
       this.importRegistry.registerProfile({
         profileCode: 'users',
         module: 'users',
-        columns: existingUsers?.columns ?? USER_IMPORT_COLUMNS,
-        rowSchema: existingUsers?.rowSchema ?? bulkImportUserRowSchema,
+        columns: existingUsers?.columns ?? [
+          { field: 'username', header: 'username', required: true },
+          { field: 'email', header: 'email', required: true },
+        ],
+        rowSchema: existingUsers?.rowSchema ?? DEFAULT_FALLBACK_ROW_SCHEMA,
         uniqueKeyFields: existingUsers?.uniqueKeyFields ?? ['email', 'username'],
         requiredPermission: 'users.import',
         ...(existingUsers?.findExistingDuplicates
@@ -94,7 +115,7 @@ export class ImportsService implements IImportsPublicService {
         ...(this.userExportService
           ? {
               exportTemplate: (format: 'csv' | 'xlsx') =>
-                this.userExportService!.exportImportTemplate(format) as ImportTemplateFileResult,
+                this.userExportService!.exportImportTemplate(format),
             }
           : existingUsers?.exportTemplate
             ? { exportTemplate: existingUsers.exportTemplate }
@@ -103,9 +124,7 @@ export class ImportsService implements IImportsPublicService {
           ? {
               previewImport: (dto) =>
                 this.userImportService!.previewImport({
-                  ...(dto.items
-                    ? { items: dto.items as unknown as BulkImportUsersRequest['items'] }
-                    : {}),
+                  ...(dto.items ? { items: dto.items } : {}),
                   ...(dto.csvContent ? { csvContent: dto.csvContent } : {}),
                   ...(dto.xlsxBase64 ? { xlsxBase64: dto.xlsxBase64 } : {}),
                   ...(dto.columnMapping ? { columnMapping: dto.columnMapping } : {}),
@@ -114,11 +133,9 @@ export class ImportsService implements IImportsPublicService {
                   previewLimit: dto.previewLimit ?? 20,
                 }),
               executeImport: async (dto, actorId) =>
-                (await this.userImportService!.bulkImport(
+                await this.userImportService!.bulkImport(
                   {
-                    ...(dto['items']
-                      ? { items: dto['items'] as unknown as BulkImportUsersRequest['items'] }
-                      : {}),
+                    ...(dto['items'] ? { items: dto['items'] } : {}),
                     ...(typeof dto['csvContent'] === 'string'
                       ? { csvContent: dto['csvContent'] }
                       : {}),
@@ -147,78 +164,70 @@ export class ImportsService implements IImportsPublicService {
                     async: dto['async'] === true,
                   },
                   actorId,
-                )) as unknown as Readonly<Record<string, unknown>>,
+                ),
             }
           : {}),
       });
     }
 
-    const existingOrgs = this.importRegistry.getProfile('organizations');
-    if (!existingOrgs || (this.organizationsService && !existingOrgs.executeImport)) {
+    const existingOrgs =
+      this.importRegistry.getProfile('organizations') ??
+      defaultImportRegistry.getProfile('organizations');
+    if (this.organizationsService && (!existingOrgs || !existingOrgs.executeImport)) {
       this.importRegistry.registerProfile({
         profileCode: 'organizations',
         module: 'organizations',
-        uniqueKeyFields: ['code'],
+        uniqueKeyFields: existingOrgs?.uniqueKeyFields ?? ['code'],
         requiredPermission: 'organizations.manage',
-        columns: ORGANIZATION_IMPORT_COLUMNS,
-        rowSchema: bulkImportOrganizationRowSchema,
-        ...(this.organizationsService
-          ? {
-              exportTemplate: (format: 'csv' | 'xlsx') =>
-                this.organizationsService!.exportImportTemplate(format),
-              executeImport: async (dto, actorId) =>
-                (await this.organizationsService!.bulkImportUnits(
-                  {
-                    ...(dto['items'] ? { items: dto['items'] as never } : {}),
-                    ...(typeof dto['csvContent'] === 'string'
-                      ? { csvContent: dto['csvContent'] }
-                      : {}),
-                    ...(typeof dto['xlsxBase64'] === 'string'
-                      ? { xlsxBase64: dto['xlsxBase64'] }
-                      : {}),
-                    skipDuplicates:
-                      typeof dto['skipDuplicates'] === 'boolean' ? dto['skipDuplicates'] : true,
-                  },
-                  actorId,
-                  { skipHistoryRecord: true },
-                )) as unknown as Readonly<Record<string, unknown>>,
-            }
-          : {}),
+        columns: existingOrgs?.columns ?? [
+          { field: 'code', header: 'code', required: true },
+          { field: 'name', header: 'name', required: true },
+        ],
+        rowSchema: existingOrgs?.rowSchema ?? DEFAULT_FALLBACK_ROW_SCHEMA,
+        exportTemplate: (format: 'csv' | 'xlsx') =>
+          this.organizationsService!.exportImportTemplate(format),
+        executeImport: async (dto, actorId) =>
+          await this.organizationsService!.bulkImportUnits(
+            {
+              ...(dto['items'] ? { items: dto['items'] } : {}),
+              ...(typeof dto['csvContent'] === 'string' ? { csvContent: dto['csvContent'] } : {}),
+              ...(typeof dto['xlsxBase64'] === 'string' ? { xlsxBase64: dto['xlsxBase64'] } : {}),
+              skipDuplicates:
+                typeof dto['skipDuplicates'] === 'boolean' ? dto['skipDuplicates'] : true,
+            },
+            actorId,
+            { skipHistoryRecord: true },
+          ),
       });
     }
 
-    const existingCodes = this.importRegistry.getProfile('codes');
-    if (!existingCodes || (this.codesService && !existingCodes.executeImport)) {
+    const existingCodes =
+      this.importRegistry.getProfile('codes') ?? defaultImportRegistry.getProfile('codes');
+    if (this.codesService && (!existingCodes || !existingCodes.executeImport)) {
       this.importRegistry.registerProfile({
         profileCode: 'codes',
         module: 'codes',
-        uniqueKeyFields: ['code'],
+        uniqueKeyFields: existingCodes?.uniqueKeyFields ?? ['code'],
         requiredPermission: 'codes.manage',
-        columns: CODES_IMPORT_COLUMNS,
-        rowSchema: bulkImportCodeValueRowSchema,
-        ...(this.codesService
-          ? {
-              exportTemplate: (format: 'csv' | 'xlsx') =>
-                this.codesService!.exportImportTemplate(format),
-              executeImport: async (dto, actorId) =>
-                (await this.codesService!.bulkImportCodeValues(
-                  {
-                    ...(dto['items'] ? { items: dto['items'] as never } : {}),
-                    ...(typeof dto['csvContent'] === 'string'
-                      ? { csvContent: dto['csvContent'] }
-                      : {}),
-                    ...(typeof dto['xlsxBase64'] === 'string'
-                      ? { xlsxBase64: dto['xlsxBase64'] }
-                      : {}),
-                    skipDuplicates:
-                      typeof dto['skipDuplicates'] === 'boolean' ? dto['skipDuplicates'] : true,
-                  },
-                  undefined,
-                  actorId,
-                  { skipHistoryRecord: true },
-                )) as unknown as Readonly<Record<string, unknown>>,
-            }
-          : {}),
+        columns: existingCodes?.columns ?? [
+          { field: 'typeCode', header: 'typeCode', required: true },
+          { field: 'code', header: 'code', required: true },
+        ],
+        rowSchema: existingCodes?.rowSchema ?? DEFAULT_FALLBACK_ROW_SCHEMA,
+        exportTemplate: (format: 'csv' | 'xlsx') => this.codesService!.exportImportTemplate(format),
+        executeImport: async (dto, actorId) =>
+          await this.codesService!.bulkImportCodeValues(
+            {
+              ...(dto['items'] ? { items: dto['items'] } : {}),
+              ...(typeof dto['csvContent'] === 'string' ? { csvContent: dto['csvContent'] } : {}),
+              ...(typeof dto['xlsxBase64'] === 'string' ? { xlsxBase64: dto['xlsxBase64'] } : {}),
+              skipDuplicates:
+                typeof dto['skipDuplicates'] === 'boolean' ? dto['skipDuplicates'] : true,
+            },
+            undefined,
+            actorId,
+            { skipHistoryRecord: true },
+          ),
       });
     }
   }
@@ -233,24 +242,21 @@ export class ImportsService implements IImportsPublicService {
   /** Danh sách các cấu hình Import đã đăng ký của toàn bộ module */
   public listProfiles(): ReadonlyArray<{ readonly profileCode: string; readonly module: string }> {
     this.ensureDefaultProfilesRegistered();
-    return this.importRegistry.listProfiles().map((p) => ({
-      profileCode: p.profileCode,
-      module: p.module,
-    }));
+    const byCode = new Map<string, { readonly profileCode: string; readonly module: string }>();
+    for (const p of defaultImportRegistry.listProfiles()) {
+      byCode.set(p.profileCode, { profileCode: p.profileCode, module: p.module });
+    }
+    for (const p of this.importRegistry.listProfiles()) {
+      byCode.set(p.profileCode, { profileCode: p.profileCode, module: p.module });
+    }
+    return [...byCode.values()];
   }
 
   /** Tải file mẫu (Template) Excel (.xlsx) hoặc CSV (.csv) theo `profileCode` (Mục 8.2.1 & 8.2.2 — Điều phối thuần qua Registry) */
   public exportImportTemplate(
     profileCode: string,
     format: 'csv' | 'xlsx' = 'xlsx',
-  ): {
-    readonly fileName: string;
-    readonly contentType: string;
-    readonly format: 'csv' | 'xlsx' | 'pdf';
-    readonly totalExported: number;
-    readonly csvContent: string;
-    readonly xlsxBase64: string;
-  } {
+  ): ImportTemplateFileResult {
     this.ensureDefaultProfilesRegistered();
     const cleanProfile = profileCode.trim().toLowerCase();
     const profile =

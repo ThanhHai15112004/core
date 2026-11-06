@@ -1,6 +1,5 @@
 import { z } from 'zod';
 import { IMPORT_DUPLICATE_STRATEGY } from '@packages/kernel/index.js';
-import type { BulkImportUsersResultResponse } from '@modules/users/index.js';
 
 export const importCellIssueSchema = z.object({
   row: z.number().int().positive(),
@@ -50,7 +49,7 @@ export const executeImportResultResponseSchema = z.object({
   errors: z.array(importErrorItemSchema),
 });
 
-export type ExecuteImportResultResponse = BulkImportUsersResultResponse;
+export type ExecuteImportResultResponse = z.infer<typeof executeImportResultResponseSchema>;
 
 export const importPreviewResponseSchema = z.object({
   profileCode: z.string(),
