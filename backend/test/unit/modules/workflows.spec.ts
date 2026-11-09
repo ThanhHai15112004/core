@@ -15,7 +15,7 @@ import type { WorkflowDefinitionEntity } from '../../../src/modules/workflows/en
 import type { WorkflowStateEntity } from '../../../src/modules/workflows/entities/workflow-state.entity.js';
 import type { WorkflowTransitionEntity } from '../../../src/modules/workflows/entities/workflow-transition.entity.js';
 import type { WorkflowInstanceEntity } from '../../../src/modules/workflows/entities/workflow-instance.entity.js';
-import type { WorkflowApprovalStepEntity } from '../../../src/modules/workflows/entities/workflow-approval-step.entity.js';
+import type { WorkflowApprovalStepEntity } from '../../../src/modules/approvals/entities/workflow-approval-step.entity.js';
 import type { WorkflowHistoryEntity } from '../../../src/modules/workflows/entities/workflow-history.entity.js';
 
 describe('Workflows & Approval Module Unit Tests (Sections 9.3 & 9.4)', () => {

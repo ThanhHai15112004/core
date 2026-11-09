@@ -1,6 +1,6 @@
 import { safeJsonParse, safeJsonParseObject } from '@packages/kernel/index.js';
 import type { UserIdentity } from '@packages/security/index.js';
-import type { WorkflowApprovalStepEntity } from '../entities/workflow-approval-step.entity.js';
+import type { WorkflowApprovalStepRecord } from '@modules/approvals/index.js';
 import type { WorkflowInstanceEntity } from '../entities/workflow-instance.entity.js';
 import type { WorkflowStateEntity } from '../entities/workflow-state.entity.js';
 import type { WorkflowTransitionEntity } from '../entities/workflow-transition.entity.js';
@@ -142,7 +142,7 @@ export function evaluateTransitionConditions(params: {
   transition: WorkflowTransitionEntity;
   instance: WorkflowInstanceEntity;
   contextData: Record<string, unknown>;
-  approvalSteps: readonly WorkflowApprovalStepEntity[];
+  approvalSteps: readonly WorkflowApprovalStepRecord[];
   actor?: UserIdentity | undefined;
   reason?: string | null | undefined;
   checkReasonProvided?: boolean | undefined;
@@ -254,7 +254,7 @@ export function computeAvailableTransitions(params: {
   transitions: readonly WorkflowTransitionEntity[];
   instance: WorkflowInstanceEntity;
   contextData: Record<string, unknown>;
-  approvalSteps: readonly WorkflowApprovalStepEntity[];
+  approvalSteps: readonly WorkflowApprovalStepRecord[];
   actor?: UserIdentity | undefined;
 }): AvailableWorkflowTransitionView[] {
   const { transitions, instance, contextData, approvalSteps, actor } = params;

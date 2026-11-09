@@ -10,7 +10,4 @@ export const USERS_ROUTES = {
   STATUS: ':id/status',
   STATUS_HISTORY: ':id/status-history',
   RESTORE: ':id/restore',
-  ORGANIZATIONS: ':id/organizations',
-  ORGANIZATION_HISTORY: ':id/organization-history',
-  SUBORDINATES: ':id/subordinates',
 } as const;

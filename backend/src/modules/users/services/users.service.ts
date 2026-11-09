@@ -94,12 +94,16 @@ import {
   resolveUserProfileView,
   updateUserPreferencesRecord,
 } from '../helpers/user-auth-bridge.helper.js';
+import {
+  type IOrganizationMembersHistoryPersistenceContract,
+  type IOrganizationMembersPublicService,
+  type IOrganizationMembersUnitPersistenceContract,
+  ORGANIZATION_MEMBERS_PUBLIC_SERVICE,
+} from '@modules/organization-members/index.js';
 import type { UserEntity } from '../entities/user.entity.js';
 import type { UserProfileEntity } from '../entities/user-profile.entity.js';
 import { UserRepository } from '../repositories/user.repository.js';
 import { UserProfileRepository } from '../repositories/user-profile.repository.js';
-import { UserOrganizationUnitRepository } from '../repositories/user-organization-unit.repository.js';
-import { UserOrganizationHistoryRepository } from '../repositories/user-organization-history.repository.js';
 import { UserStatusHistoryRepository } from '../repositories/user-status-history.repository.js';
 import { UsersMapper } from '../mappers/users.mapper.js';
 import type {
@@ -135,7 +139,9 @@ export class UsersService implements IUsersPublicService {
 
   constructor(
     private readonly userRepository: UserRepository,
-    private readonly userOrgRepository: UserOrganizationUnitRepository,
+    @Inject(ORGANIZATION_MEMBERS_PUBLIC_SERVICE)
+    private readonly userOrgRepository: IOrganizationMembersUnitPersistenceContract &
+      Partial<IOrganizationMembersPublicService>,
     private readonly mapper: UsersMapper,
     private readonly passwordHasher: PasswordHasherService,
     @Inject(ROLES_PUBLIC_SERVICE)
@@ -168,13 +174,72 @@ export class UsersService implements IUsersPublicService {
     @Inject(PlatformSecurityService)
     private readonly platformSecurityService: PlatformSecurityService | null = null,
     @Optional()
-    @Inject(UserOrganizationHistoryRepository)
-    private readonly orgHistoryRepository: UserOrganizationHistoryRepository | null = null,
+    @Inject(ORGANIZATION_MEMBERS_PUBLIC_SERVICE)
+    private readonly orgHistoryRepository: IOrganizationMembersHistoryPersistenceContract | null = null,
     @Optional()
     @Inject(TokenService)
     private readonly tokenService: TokenService | null = null,
   ) {
     this.effectiveDataScopeService = this.dataScopeService ?? createDefaultDataScopeService();
+    if (typeof this.userOrgRepository?.registerMemberUsersDelegate === 'function') {
+      this.userOrgRepository.registerMemberUsersDelegate({
+        listPaginated: (query, actor) =>
+          this.listPaginated(
+            {
+              q: query.q,
+              organizationUnitId: query.organizationUnitId,
+              managerId: query.managerId,
+              status: query.status,
+              page: query.page,
+              limit: query.limit,
+              sortBy: query.sortBy ?? 'id',
+              sortOrder: query.sortOrder ?? 'ASC',
+            },
+            actor,
+          ),
+        getById: (uid, includeRelations = true, actor) =>
+          this.getById(uid, includeRelations, actor),
+        assignOrganizations: (uid, dto, aid, act) =>
+          this.assignOrganizations(
+            uid,
+            {
+              organizationUnits: dto.organizationUnits.map((u) => ({
+                organizationUnitId: u.organizationUnitId,
+                isPrimary: Boolean(u.isPrimary),
+                positionTitle: u.positionTitle ?? null,
+                startDate: u.startDate ?? null,
+                endDate: u.endDate ?? null,
+              })),
+              reason: dto.reason ?? null,
+            },
+            aid,
+            act,
+          ),
+        update: (uid, dto, aid, act) =>
+          this.update(
+            uid,
+            {
+              ...(dto.managerId !== undefined ? { managerId: dto.managerId } : {}),
+              ...(dto.temporaryManagerId !== undefined
+                ? { temporaryManagerId: dto.temporaryManagerId }
+                : {}),
+              ...(dto.temporaryManagerFrom !== undefined
+                ? { temporaryManagerFrom: dto.temporaryManagerFrom }
+                : {}),
+              ...(dto.temporaryManagerUntil !== undefined
+                ? { temporaryManagerUntil: dto.temporaryManagerUntil }
+                : {}),
+            },
+            aid,
+            act,
+          ),
+        getOrganizationHistory: (uid, act) => this.getOrganizationHistory(uid, act),
+        getSubordinatesOverview: (uid, q, act) => this.getSubordinatesOverview(uid, q ?? {}, act),
+        listSubordinates: (mid, opts, act) => this.listSubordinates(mid, opts, act),
+        resolveSubordinateUserIds: (mid, opts) => this.resolveSubordinateUserIds(mid, opts),
+        resolveApproverChain: (uid, maxLevels) => this.resolveApproverChain(uid, maxLevels),
+      });
+    }
     registerUsersCrossModuleDelegates({
       rolesPublicService: this.rolesPublicService,
       organizationsPublicService: this.organizationsPublicService,

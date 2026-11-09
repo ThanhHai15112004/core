@@ -14,34 +14,26 @@ import { CurrentUser, type UserIdentity } from '@packages/security/index.js';
 import { USERS_ROUTES } from '../routes/users.routes.js';
 import { UsersService } from '../services/users.service.js';
 import {
-  type AssignUserOrganizationsRequest,
   type ChangeUserStatusRequest,
   type CreateUserRequest,
-  type ListUserSubordinatesQuery,
   type ListUsersQuery,
   type LockUserRequest,
   type UpdateUserPreferencesRequest,
   type UpdateUserRequest,
-  assignUserOrganizationsSchema,
   changeUserStatusSchema,
   createUserSchema,
-  listUserSubordinatesQuerySchema,
   listUsersQuerySchema,
   lockUserSchema,
   updateUserPreferencesSchema,
   updateUserSchema,
 } from '../requests/users.requests.js';
 import {
-  type UserOrganizationHistoryItemResponse,
   type UserPreferencesResponse,
   type UserResponse,
   type UserStatusHistoryItemResponse,
-  type UserSubordinatesOverviewResponse,
-  userOrganizationHistoryItemSchema,
   userPreferencesResponseSchema,
   userResponseSchema,
   userStatusHistoryItemSchema,
-  userSubordinatesOverviewResponseSchema,
 } from '../responses/users.response.js';
 
 @ApiGroup('User Management', 'Quản lý vòng đời tài khoản người dùng (Mục 3.1)')
@@ -116,37 +108,6 @@ export class UsersController {
     @CurrentUser() actor?: UserIdentity,
   ): Promise<UserStatusHistoryItemResponse[]> {
     return this.usersService.getStatusHistory(id, actor);
-  }
-
-  /** Xem lịch sử tham gia & điều chuyển đơn vị của người dùng (Mục 9.2.6) */
-  @Get(USERS_ROUTES.ORGANIZATION_HISTORY)
-  @RequirePermissions('users.read')
-  @ApiDoc({
-    summary:
-      'Xem lịch sử gán, cập nhật, điều chuyển và kết thúc đơn vị tổ chức của người dùng (Mục 9.2.6)',
-    response: z.array(userOrganizationHistoryItemSchema),
-  })
-  public async getOrganizationHistory(
-    @ValidatedParams(positiveIntParamSchema, 'id') id: number,
-    @CurrentUser() actor?: UserIdentity,
-  ): Promise<UserOrganizationHistoryItemResponse[]> {
-    return this.usersService.getOrganizationHistory(id, actor);
-  }
-
-  /** Tra cứu danh sách cấp dưới và chuỗi phê duyệt của người dùng (Mục 9.2.7 — dùng cho Data Scope và Approval) */
-  @Get(USERS_ROUTES.SUBORDINATES)
-  @RequirePermissions('users.read')
-  @ApiDoc({
-    summary:
-      'Tra cứu danh sách cấp dưới (trực tiếp, tạm thời, gián tiếp) và chuỗi người phê duyệt (Approval Chain) của người dùng (Mục 9.2.7)',
-    response: userSubordinatesOverviewResponseSchema,
-  })
-  public async getSubordinates(
-    @ValidatedParams(positiveIntParamSchema, 'id') id: number,
-    @ValidatedQuery(listUserSubordinatesQuerySchema) query: ListUserSubordinatesQuery,
-    @CurrentUser() actor?: UserIdentity,
-  ): Promise<UserSubordinatesOverviewResponse> {
-    return this.usersService.getSubordinatesOverview(id, query, actor);
   }
 
   /** Tạo mới người dùng (Mục 3.1.1) */
@@ -283,20 +244,5 @@ export class UsersController {
     @CurrentUser() actor?: UserIdentity,
   ): Promise<UserResponse> {
     return this.usersService.restoreUser(id, actor?.id, actor);
-  }
-
-  /** Gán người dùng vào các đơn vị hoặc chi nhánh (Mục 3.1.6) */
-  @Put(USERS_ROUTES.ORGANIZATIONS)
-  @RequirePermissions('users.update')
-  @ApiDoc({
-    summary: 'Gán người dùng vào các đơn vị hoặc chi nhánh',
-    response: userResponseSchema,
-  })
-  public async assignOrganizations(
-    @ValidatedParams(positiveIntParamSchema, 'id') id: number,
-    @ValidatedBody(assignUserOrganizationsSchema) body: AssignUserOrganizationsRequest,
-    @CurrentUser() actor?: UserIdentity,
-  ): Promise<UserResponse> {
-    return this.usersService.assignOrganizations(id, body, actor?.id, actor);
   }
 }

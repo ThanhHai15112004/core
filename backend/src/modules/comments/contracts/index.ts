@@ -103,6 +103,8 @@ export interface GetRecordActivityTimelineQueryInput {
   readonly entityId: string;
   readonly workflowInstanceId?: number | undefined;
   readonly includeInternal?: boolean | undefined;
+  readonly source?: 'ALL' | 'COMMENT' | 'WORKFLOW' | 'AUDIT' | undefined;
+  readonly sortOrder?: 'ASC' | 'DESC' | undefined;
   readonly limit?: number | undefined;
 }
 
@@ -119,11 +121,13 @@ export interface ICommentsPublicService {
     id: number,
     input: UpdateRecordCommentInput,
     actor?: UserIdentity,
+    now?: Date,
   ): Promise<RecordCommentItemView>;
   deleteComment(
     id: number,
     actor?: UserIdentity,
-  ): Promise<{ readonly id: number; readonly deleted: true }>;
+    now?: Date,
+  ): Promise<RecordCommentItemView & { readonly id: number; readonly deleted: true }>;
   getRecordTimeline(
     query: GetRecordActivityTimelineQueryInput,
     actor?: UserIdentity,

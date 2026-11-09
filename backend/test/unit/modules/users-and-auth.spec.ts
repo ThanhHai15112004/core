@@ -43,7 +43,7 @@ import { USER_STATUS, normalizePhoneNumber } from '@modules/users/contracts/inde
 import type { UserEntity } from '@modules/users/entities/user.entity.js';
 import type { UserProfileEntity } from '@modules/users/entities/user-profile.entity.js';
 import type { UserRoleEntity } from '@modules/roles/entities/user-role.entity.js';
-import type { UserOrganizationUnitEntity } from '@modules/users/entities/user-organization-unit.entity.js';
+import type { UserOrganizationUnitEntity } from '@modules/organization-members/entities/user-organization-unit.entity.js';
 import type { UserStatusHistoryEntity } from '@modules/users/entities/user-status-history.entity.js';
 import type {
   UserRepository,
@@ -54,7 +54,7 @@ import type { UserRoleRepository } from '@modules/roles/repositories/user-role.r
 import type {
   UserOrganizationInputItem,
   UserOrganizationUnitRepository,
-} from '@modules/users/repositories/user-organization-unit.repository.js';
+} from '@modules/organization-members/repositories/user-organization-unit.repository.js';
 import type { UserStatusHistoryRepository } from '@modules/users/repositories/user-status-history.repository.js';
 import { UsersMapper } from '@modules/users/mappers/users.mapper.js';
 import { UsersService } from '@modules/users/services/users.service.js';

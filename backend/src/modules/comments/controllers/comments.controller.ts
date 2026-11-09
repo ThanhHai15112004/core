@@ -1,4 +1,4 @@
-import { Controller, Delete, Get, HttpCode, HttpStatus, Patch, Post } from '@nestjs/common';
+import { Controller, Delete, Get, HttpCode, HttpStatus, Patch, Post, Put } from '@nestjs/common';
 import { z } from 'zod';
 import { HTTP_STATUS_CODE } from '@packages/kernel/index.js';
 import {
@@ -74,6 +74,21 @@ export class CommentsController {
     response: recordCommentItemResponseSchema,
   })
   public async updateComment(
+    @ValidatedParams(positiveIntParamSchema, 'id') id: number,
+    @ValidatedBody(updateRecordCommentSchema) body: UpdateRecordCommentRequest,
+    @CurrentUser() actor?: UserIdentity,
+  ) {
+    return this.commentsService.updateComment(id, body, actor);
+  }
+
+  /** Chỉnh sửa bình luận qua PUT theo thời hạn/quyền và lưu lịch sử chỉnh sửa (Mục 9.5.6 & 9.5.7) */
+  @Put(COMMENTS_ROUTES.BY_ID)
+  @RequirePermissions('comments.update')
+  @ApiDoc({
+    summary: 'Chỉnh sửa bình luận qua PUT và lưu lịch sử nội dung cũ (Mục 9.5.6 & 9.5.7)',
+    response: recordCommentItemResponseSchema,
+  })
+  public async updateCommentPut(
     @ValidatedParams(positiveIntParamSchema, 'id') id: number,
     @ValidatedBody(updateRecordCommentSchema) body: UpdateRecordCommentRequest,
     @CurrentUser() actor?: UserIdentity,

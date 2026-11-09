@@ -16,9 +16,11 @@ import { ApprovalsService } from '../services/approvals.service.js';
 import {
   type CreateApprovalDelegationRuleRequest,
   type DecideApprovalInstanceStepRequest,
+  type DelegateApprovalInstanceStepRequest,
   type ListApprovalDelegationRulesQuery,
   createApprovalDelegationRuleSchema,
   decideApprovalInstanceStepSchema,
+  delegateApprovalInstanceStepSchema,
   listApprovalDelegationRulesQuerySchema,
 } from '../requests/approvals.requests.js';
 import {
@@ -28,31 +30,30 @@ import {
 } from '../responses/approvals.response.js';
 
 @ApiGroup(
-  'Approvals & Delegation',
-  'Quản lý phê duyệt nhiều bước (đơn lẻ, vai trò, tuần tự, song song), từ chối/trả lại và ủy quyền phê duyệt có thời hạn (Mục 9.4)',
+  'Approvals & Delegation Engine',
+  'Quản lý phê duyệt đơn lẻ/theo vai trò/tuần tự/song song, từ chối kèm lý do, trả lại bước trước và ủy quyền phê duyệt có thời hạn/phạm vi (Mục 9.4)',
 )
 @Controller(APPROVALS_ROUTES.PREFIX)
 export class ApprovalsController {
   constructor(private readonly approvalsService: ApprovalsService) {}
 
-  /** Danh sách quy tắc ủy quyền phê duyệt (Mục 9.4.7) */
   @Get(APPROVALS_ROUTES.DELEGATIONS)
   @RequirePermissions('approvals.read')
   @ApiDoc({
-    summary: 'Danh sách quy tắc ủy quyền phê duyệt theo thời gian và phạm vi (Mục 9.4.7)',
+    summary: 'Danh sách quy tắc ủy quyền phê duyệt có thời hạn và phạm vi (Mục 9.4.7)',
     response: z.array(approvalDelegationRuleResponseSchema),
   })
   public async listDelegations(
-    @ValidatedQuery(listApprovalDelegationRulesQuerySchema) query: ListApprovalDelegationRulesQuery,
+    @ValidatedQuery(listApprovalDelegationRulesQuerySchema)
+    query: ListApprovalDelegationRulesQuery,
   ): Promise<ApprovalDelegationRuleResponse[]> {
     return this.approvalsService.listDelegations(query);
   }
 
-  /** Tạo mới ủy quyền phê duyệt có thời hạn và phạm vi (Mục 9.4.7) */
   @Post(APPROVALS_ROUTES.DELEGATIONS)
   @RequirePermissions('approvals.delegate')
   @ApiDoc({
-    summary: 'Thiết lập ủy quyền phê duyệt có thời gian hiệu lực và phạm vi (Mục 9.4.7)',
+    summary: 'Tạo quy tắc ủy quyền phê duyệt có thời gian và phạm vi (Mục 9.4.7)',
     status: HTTP_STATUS_CODE.CREATED,
     response: approvalDelegationRuleResponseSchema,
   })
@@ -63,7 +64,6 @@ export class ApprovalsController {
     return this.approvalsService.createDelegation(body, actor);
   }
 
-  /** Thu hồi ủy quyền phê duyệt (Mục 9.4.7) */
   @Delete(APPROVALS_ROUTES.DELEGATION_BY_ID)
   @HttpCode(HttpStatus.OK)
   @RequirePermissions('approvals.delegate')
@@ -73,37 +73,64 @@ export class ApprovalsController {
   public async revokeDelegation(
     @ValidatedParams(positiveIntParamSchema, 'id') id: number,
     @CurrentUser() actor?: UserIdentity,
-  ) {
+  ): Promise<{ readonly revoked: true; readonly id: number }> {
     return this.approvalsService.revokeDelegation(id, actor);
   }
 
-  /** Xem danh sách các bước phê duyệt của một phiên quy trình (Mục 9.4.1–9.4.8) */
+  @Post(APPROVALS_ROUTES.DELEGATION_REVOKE)
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions('approvals.delegate')
+  @ApiDoc({
+    summary: 'Thu hồi quy tắc ủy quyền phê duyệt qua POST (Mục 9.4.7)',
+  })
+  public async revokeDelegationPost(
+    @ValidatedParams(positiveIntParamSchema, 'id') id: number,
+    @CurrentUser() actor?: UserIdentity,
+  ): Promise<{ readonly revoked: true; readonly id: number }> {
+    return this.approvalsService.revokeDelegation(id, actor);
+  }
+
   @Get(APPROVALS_ROUTES.INSTANCE_STEPS)
   @RequirePermissions('approvals.read')
   @ApiDoc({
-    summary: 'Xem danh sách các bước phê duyệt và tiến độ duyệt của một phiên (Mục 9.4)',
+    summary:
+      'Xem danh sách các bước phê duyệt (đơn lẻ, theo vai trò, tuần tự nhiều bước, song song) của một hồ sơ (Mục 9.4.1–9.4.4)',
     response: approvalInstanceStepsOverviewResponseSchema,
   })
   public async getInstanceSteps(
-    @ValidatedParams(positiveIntParamSchema, 'id') id: number,
+    @ValidatedParams(positiveIntParamSchema, 'id') instanceId: number,
     @CurrentUser() actor?: UserIdentity,
   ) {
-    return this.approvalsService.getInstanceSteps(id, actor);
+    return this.approvalsService.getInstanceSteps(instanceId, actor);
   }
 
-  /** Thực hiện phê duyệt, từ chối (kèm lý do) hoặc trả lại bước trước (Mục 9.4.1–9.4.6) */
   @Post(APPROVALS_ROUTES.INSTANCE_DECIDE)
   @HttpCode(HttpStatus.OK)
   @RequirePermissions('approvals.decide')
   @ApiDoc({
     summary:
-      'Thực hiện phê duyệt (APPROVE), từ chối kèm lý do (REJECT) hoặc trả lại bước trước (RETURN) (Mục 9.4.1–9.4.6)',
+      'Ra quyết định phê duyệt (APPROVE / APPROVED), từ chối kèm lý do (REJECT / REJECTED) hoặc trả lại bước trước (RETURN / RETURNED) (Mục 9.4.1–9.4.6)',
   })
   public async decideInstanceStep(
-    @ValidatedParams(positiveIntParamSchema, 'id') id: number,
+    @ValidatedParams(positiveIntParamSchema, 'id') instanceId: number,
     @ValidatedBody(decideApprovalInstanceStepSchema) body: DecideApprovalInstanceStepRequest,
     @CurrentUser() actor?: UserIdentity,
   ) {
-    return this.approvalsService.decideInstanceStep(id, body, actor);
+    return this.approvalsService.decideInstanceStep(instanceId, body, actor);
+  }
+
+  @Post(APPROVALS_ROUTES.INSTANCE_DELEGATE)
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions('approvals.delegate')
+  @ApiDoc({
+    summary:
+      'Ủy quyền trực tiếp bước phê duyệt đang chờ của một hồ sơ sang người dùng khác (Mục 9.4.7)',
+  })
+  public async delegateInstanceStep(
+    @ValidatedParams(positiveIntParamSchema, 'id') instanceId: number,
+    @ValidatedBody(delegateApprovalInstanceStepSchema) body: DelegateApprovalInstanceStepRequest,
+    @CurrentUser() actor?: UserIdentity,
+  ) {
+    return this.approvalsService.delegateInstanceStep(instanceId, body, actor);
   }
 }

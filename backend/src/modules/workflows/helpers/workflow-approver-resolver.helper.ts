@@ -1,11 +1,11 @@
-import type { IUsersPublicService } from '@modules/users/contracts/index.js';
-import type { WorkflowApprovalStepEntity } from '../entities/workflow-approval-step.entity.js';
-import type { WorkflowStateEntity } from '../entities/workflow-state.entity.js';
-import { WORKFLOW_APPROVAL_DECISION, WORKFLOW_APPROVAL_MODE } from '../enum/workflows.enum.js';
 import type {
   CreateWorkflowApprovalStepInput,
-  WorkflowApprovalStepRepository,
-} from '../repositories/workflow-approval-step.repository.js';
+  IApprovalStepsPersistenceContract,
+  WorkflowApprovalStepRecord,
+} from '@modules/approvals/index.js';
+import type { IUsersPublicService } from '@modules/users/contracts/index.js';
+import type { WorkflowStateEntity } from '../entities/workflow-state.entity.js';
+import { WORKFLOW_APPROVAL_DECISION, WORKFLOW_APPROVAL_MODE } from '../enum/workflows.enum.js';
 import type { WorkflowApprovalDelegationRule } from '../types/workflows.types.js';
 import { parseStateApprovalConfig } from './workflow-condition-evaluator.helper.js';
 
@@ -72,11 +72,11 @@ export async function generateApprovalStepsForState(params: {
   workflowInstanceId: number;
   targetState: WorkflowStateEntity | undefined;
   initiatorUserId: number | null;
-  approvalStepRepository: WorkflowApprovalStepRepository;
+  approvalStepRepository: IApprovalStepsPersistenceContract;
   usersPublicService: IUsersPublicService | null;
   delegationRules?: readonly WorkflowApprovalDelegationRule[] | undefined;
   scopeContext?: WorkflowDelegationScopeContext | undefined;
-}): Promise<WorkflowApprovalStepEntity[]> {
+}): Promise<WorkflowApprovalStepRecord[]> {
   const {
     workflowInstanceId,
     targetState,

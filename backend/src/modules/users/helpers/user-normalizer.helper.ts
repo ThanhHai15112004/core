@@ -13,7 +13,7 @@ import {
   type UserStatusCode,
   type UserStatusName,
 } from '../enum/users.enum.js';
-import type { UserOrganizationUnitRepository } from '../repositories/user-organization-unit.repository.js';
+import type { IOrganizationMembersUnitPersistenceContract } from '@modules/organization-members/index.js';
 import type { UserProfileRepository } from '../repositories/user-profile.repository.js';
 import type { UserRepository } from '../repositories/user.repository.js';
 
@@ -159,7 +159,7 @@ export function normalizePreferredTimezoneOrThrow(timezone?: string | null): str
 export function registerUsersUsageCheckers(params: {
   userRepository: UserRepository;
   userProfileRepository: UserProfileRepository | null;
-  userOrgRepository: UserOrganizationUnitRepository;
+  userOrgRepository: IOrganizationMembersUnitPersistenceContract;
 }): void {
   const { userRepository, userProfileRepository, userOrgRepository } = params;
 

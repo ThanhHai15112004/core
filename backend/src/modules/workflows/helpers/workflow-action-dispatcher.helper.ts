@@ -5,7 +5,7 @@ import {
   NOTIFICATION_PRIORITY,
   NOTIFICATION_TARGET_TYPE,
 } from '@modules/notifications/contracts/index.js';
-import type { WorkflowApprovalStepEntity } from '../entities/workflow-approval-step.entity.js';
+import type { WorkflowApprovalStepRecord } from '@modules/approvals/index.js';
 import type { WorkflowInstanceEntity } from '../entities/workflow-instance.entity.js';
 import type {
   WorkflowTransitionActionConfig,
@@ -18,7 +18,7 @@ export async function executeWorkflowTransitionActions(params: {
   toStateCode: string;
   transitionCode: string | null;
   actions: readonly WorkflowTransitionActionConfig[];
-  nextApprovalSteps: readonly WorkflowApprovalStepEntity[];
+  nextApprovalSteps: readonly WorkflowApprovalStepRecord[];
   actorId?: number | null | undefined;
   reason?: string | null | undefined;
   notificationsPublicService: INotificationsPublicService | null;

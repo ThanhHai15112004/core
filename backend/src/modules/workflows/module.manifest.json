@@ -8,13 +8,12 @@
   "category": "core",
   "author": "Core Platform Team",
   "entryModule": "WorkflowsModule",
-  "dependencies": ["database", "security", "i18n", "users", "roles", "organizations", "codes", "settings", "notifications", "files"],
+  "dependencies": ["database", "security", "i18n", "users", "roles", "organizations", "codes", "settings", "notifications", "files", "approvals", "comments"],
   "permissions": [
     "workflows.read",
     "workflows.manage",
     "workflows.execute",
-    "workflows.cancel",
-    "workflows.internal_notes"
+    "workflows.cancel"
   ],
   "events": {
     "published": [
@@ -23,10 +22,7 @@
       "workflows.approval_decided",
       "workflows.instance_cancelled",
       "workflows.sla_warning",
-      "workflows.sla_overdue",
-      "workflows.comment_added",
-      "workflows.comment_updated",
-      "workflows.comment_deleted"
+      "workflows.sla_overdue"
     ],
     "subscribed": []
   },
@@ -37,7 +33,6 @@
       "workflow_states",
       "workflow_transitions",
       "workflow_instances",
-      "workflow_approval_steps",
       "workflow_histories"
     ]
   },
@@ -201,21 +196,6 @@
       "allowUnitOverride": true,
       "isSystem": true,
       "sortOrder": 2
-    },
-    {
-      "key": "workflows.comments.edit_window_minutes",
-      "groupCode": "workflows",
-      "module": "workflows",
-      "namespace": "workflows.comments",
-      "name": "Thời hạn cho phép chỉnh sửa / xóa bình luận (Phút)",
-      "description": "Khoảng thời gian tối đa tính từ lúc tạo mà tác giả được phép chỉnh sửa hoặc xóa bình luận",
-      "valueType": "NUMBER",
-      "defaultValue": 15,
-      "validationRules": { "min": 1, "max": 10080, "integerOnly": true },
-      "isSensitive": false,
-      "allowUnitOverride": true,
-      "isSystem": true,
-      "sortOrder": 3
     }
   ],
   "menus": [

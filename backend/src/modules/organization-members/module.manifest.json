@@ -1,39 +1,46 @@
 {
-  "$schema": "../../packages/kernel/schemas/module.manifest.schema.json",
+  "$schema": "../../../schemas/module.manifest.schema.json",
   "name": "organization-members",
-  "displayName": "Organization Members, Positions & Managers",
+  "displayName": "Thành viên, chức vụ và người quản lý (Organization Members)",
   "version": "1.0.0",
-  "description": "Module 9.2 — Quản lý thành viên đơn vị (startDate/endDate, đa đơn vị chính/phụ), chức vụ (positionTitle), người quản lý trực tiếp & tạm thời có thời hạn, điều chuyển đơn vị giữ lịch sử và tra cứu cấp dưới phục vụ Data Scope & Approval.",
+  "description": "Module quản lý thành viên thuộc đơn vị tổ chức (đơn vị chính/phụ, thời hạn bắt đầu/kết thúc), chức vụ độc lập với vai trò, người quản lý trực tiếp/tạm thời, điều chuyển giữ lịch sử membership và tra cứu cấp dưới cho Data Scope & Approval (Mục 9.2)",
   "type": "core",
-  "category": "core",
-  "author": "Core Platform Team",
-  "entryModule": "OrganizationMembersModule",
-  "dependencies": ["database", "security", "i18n", "organizations", "users", "roles"],
+  "required": false,
+  "dependencies": ["database", "security", "i18n", "organizations", "roles"],
+  "database": {
+    "tables": ["user_organization_units", "user_organization_histories"]
+  },
   "permissions": [
     "organization-members.read",
     "organization-members.manage"
   ],
-  "database": {
-    "hasMigrations": true,
-    "tables": [
-      "user_organization_units",
-      "user_organization_histories"
-    ]
-  },
   "menus": [
     {
-      "code": "ORGANIZATION_MEMBERS_MANAGER",
-      "name": "Thành viên & Chức vụ",
-      "status": 1,
+      "code": "IAM_ORGANIZATION_MEMBERS",
+      "parentCode": "IAM_GROUP",
+      "position": "SIDEBAR",
+      "menuType": "ITEM",
+      "name": {
+        "vi": "Thành viên & Chức vụ",
+        "en": "Organization Members"
+      },
+      "icon": "UserCheck",
       "link": "/organization-members",
       "linkApi": "/api/v1/organization-members",
-      "type": 2,
-      "parent": null,
-      "level": 1,
+      "openType": "INTERNAL",
+      "order": 35,
+      "isVisible": true,
       "key": "organization-members.read",
-      "numOrder": 21,
-      "icon": "UserCheck",
-      "position": "SIDEBAR"
+      "description": "Quản lý thành viên đơn vị, chức vụ, người quản lý trực tiếp/tạm thời và lịch sử điều chuyển"
     }
-  ]
+  ],
+  "codeTypes": [],
+  "settings": [],
+  "events": {
+    "publishes": [],
+    "subscribes": []
+  },
+  "queues": [],
+  "schedules": [],
+  "healthChecks": []
 }

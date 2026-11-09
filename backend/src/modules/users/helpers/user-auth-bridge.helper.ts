@@ -42,9 +42,9 @@ import {
   parseUserStatus,
   resolveVietnameseNameParts,
 } from './user-normalizer.helper.js';
+import type { IOrganizationMembersUnitPersistenceContract } from '@modules/organization-members/index.js';
 import type { UserProfileEntity } from '../entities/user-profile.entity.js';
 import type { UserEntity } from '../entities/user.entity.js';
-import type { UserOrganizationUnitRepository } from '../repositories/user-organization-unit.repository.js';
 import type { UserProfileRepository } from '../repositories/user-profile.repository.js';
 import type { UserRepository } from '../repositories/user.repository.js';
 
@@ -94,7 +94,7 @@ export async function buildUserAuthCredentialsView(params: {
 export async function buildUserAuthIdentityView(params: {
   userId: number;
   userRepository: UserRepository;
-  userOrgRepository: UserOrganizationUnitRepository;
+  userOrgRepository: IOrganizationMembersUnitPersistenceContract;
   rolesPublicService: IRolesPublicService;
   getUserProfile: (userId: number, user?: UserEntity) => Promise<UserProfileView>;
   decryptPhone: (phone?: string | null) => string | null;

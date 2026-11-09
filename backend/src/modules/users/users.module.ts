@@ -1,59 +1,52 @@
 import { Module, Optional } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { DatabaseModule } from '@packages/database/index.js';
 import { CoreI18nService } from '@packages/i18n/index.js';
-import { SecurityModule } from '@packages/security/index.js';
-import { OrganizationsModule } from '@modules/organizations/index.js';
+import { OrganizationMembersModule } from '@modules/organization-members/index.js';
 import { RolesModule } from '@modules/roles/index.js';
+import { OrganizationsModule } from '@modules/organizations/index.js';
+import { CodesModule } from '@modules/codes/index.js';
+import { SettingsModule } from '@modules/settings/index.js';
 import { USERS_PUBLIC_SERVICE } from './contracts/index.js';
 import { UserEntity } from './entities/user.entity.js';
 import { UserProfileEntity } from './entities/user-profile.entity.js';
-import { UserOrganizationUnitEntity } from './entities/user-organization-unit.entity.js';
-import { UserOrganizationHistoryEntity } from './entities/user-organization-history.entity.js';
 import { UserStatusHistoryEntity } from './entities/user-status-history.entity.js';
 import { UserRepository } from './repositories/user.repository.js';
 import { UserProfileRepository } from './repositories/user-profile.repository.js';
-import { UserOrganizationUnitRepository } from './repositories/user-organization-unit.repository.js';
-import { UserOrganizationHistoryRepository } from './repositories/user-organization-history.repository.js';
 import { UserStatusHistoryRepository } from './repositories/user-status-history.repository.js';
 import { UsersMapper } from './mappers/users.mapper.js';
 import { UsersService } from './services/users.service.js';
-import { UserImportService } from './import/index.js';
-import { UserExportService } from './export/index.js';
-import { UserReportService } from './reports/index.js';
-import { UserSearchService } from './search/index.js';
 import { UsersController } from './controllers/users.controller.js';
+import { UserImportService } from './import/user-import.service.js';
+import { UserExportService } from './export/user-export.service.js';
+import { UserReportsService } from './reports/user-reports.service.js';
+import { UserSearchService } from './search/user-search.service.js';
 import enUsers from './locales/en/users.json' with { type: 'json' };
 import viUsers from './locales/vi/users.json' with { type: 'json' };
 
-new CoreI18nService().registerNamespace('users', { vi: viUsers, en: enUsers });
+new CoreI18nService().registerNamespace('users', {
+  en: enUsers,
+  vi: viUsers,
+});
 
 @Module({
   imports: [
-    DatabaseModule,
-    SecurityModule,
+    TypeOrmModule.forFeature([UserEntity, UserProfileEntity, UserStatusHistoryEntity]),
     RolesModule,
     OrganizationsModule,
-    TypeOrmModule.forFeature([
-      UserEntity,
-      UserProfileEntity,
-      UserOrganizationUnitEntity,
-      UserOrganizationHistoryEntity,
-      UserStatusHistoryEntity,
-    ]),
+    OrganizationMembersModule,
+    CodesModule,
+    SettingsModule,
   ],
   controllers: [UsersController],
   providers: [
     UserRepository,
     UserProfileRepository,
-    UserOrganizationUnitRepository,
-    UserOrganizationHistoryRepository,
     UserStatusHistoryRepository,
     UsersMapper,
     UsersService,
     UserImportService,
     UserExportService,
-    UserReportService,
+    UserReportsService,
     UserSearchService,
     {
       provide: USERS_PUBLIC_SERVICE,
@@ -64,14 +57,16 @@ new CoreI18nService().registerNamespace('users', { vi: viUsers, en: enUsers });
     UsersService,
     UserImportService,
     UserExportService,
-    UserReportService,
+    UserReportsService,
     UserSearchService,
-    UserProfileRepository,
     USERS_PUBLIC_SERVICE,
   ],
 })
 export class UsersModule {
   constructor(@Optional() i18n?: CoreI18nService) {
-    i18n?.registerNamespace('users', { vi: viUsers, en: enUsers });
+    i18n?.registerNamespace('users', {
+      en: enUsers,
+      vi: viUsers,
+    });
   }
 }

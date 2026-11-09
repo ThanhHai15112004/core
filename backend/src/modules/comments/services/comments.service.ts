@@ -178,6 +178,12 @@ export class CommentsService implements ICommentsPublicService {
         if (numericId >= 1) ids.add(numericId);
         continue;
       }
+      const userPrefixMatch = token.match(/^user_(\d+)$/i);
+      if (userPrefixMatch?.[1]) {
+        const numericId = Number(userPrefixMatch[1]);
+        if (numericId >= 1) ids.add(numericId);
+        continue;
+      }
       if (this.usersPublicService?.findAuthUserByIdentifier) {
         const found = await this.usersPublicService
           .findAuthUserByIdentifier(token)
@@ -206,10 +212,17 @@ export class CommentsService implements ICommentsPublicService {
       for (const fid of item.attachmentFileIds) fileIds.add(Number(fid));
     }
 
+    const findContactsFn =
+      this.usersPublicService?.findUserContactsByIds?.bind(this.usersPublicService) ??
+      (
+        this.usersPublicService as unknown as {
+          findUsersByIds?: (
+            ids: readonly number[],
+          ) => Promise<Array<{ id: number; username: string; fullName: string }>>;
+        } | null
+      )?.findUsersByIds?.bind(this.usersPublicService);
     const contacts =
-      userIds.size > 0 && this.usersPublicService?.findUserContactsByIds
-        ? await this.usersPublicService.findUserContactsByIds([...userIds]).catch(() => [])
-        : [];
+      userIds.size > 0 && findContactsFn ? await findContactsFn([...userIds]).catch(() => []) : [];
     const userMap = new Map(contacts.map((c) => [Number(c.id), c]));
 
     const files =
@@ -218,7 +231,10 @@ export class CommentsService implements ICommentsPublicService {
         : [];
     const fileMap = new Map(files.map((f) => [Number(f.id), f]));
 
-    const viewById = new Map<number, RecordCommentItemView & { replies: RecordCommentItemView[] }>();
+    const viewById = new Map<
+      number,
+      RecordCommentItemView & { replies: RecordCommentItemView[] }
+    >();
     const roots: Array<RecordCommentItemView & { replies: RecordCommentItemView[] }> = [];
 
     const sorted = [...items].sort((a, b) => a.id - b.id);
@@ -462,7 +478,9 @@ export class CommentsService implements ICommentsPublicService {
   ): Promise<RecordCommentItemView[]> {
     const canSeeInternal = this.canViewInternalNotes(actor);
     const includeInternal =
-      query.includeInternal !== undefined ? query.includeInternal && canSeeInternal : canSeeInternal;
+      query.includeInternal !== undefined
+        ? query.includeInternal && canSeeInternal
+        : canSeeInternal;
 
     if (this.commentRepository) {
       try {
@@ -519,6 +537,7 @@ export class CommentsService implements ICommentsPublicService {
   private assertCanModifyOrDeleteComment(
     target: StoredRecordCommentItem,
     actor?: UserIdentity,
+    now?: Date,
   ): void {
     const isAdmin =
       actor?.roles?.includes('super_admin') ||
@@ -532,9 +551,10 @@ export class CommentsService implements ICommentsPublicService {
       const maxEditMinutes = defaultSettingRegistry.getNumber(
         'comments.edit_window_minutes',
         undefined,
-        60,
+        15,
       );
-      const ageMinutes = (Date.now() - new Date(target.createdAt).getTime()) / (60 * 1000);
+      const refNowMs = (now ?? new Date()).getTime();
+      const ageMinutes = (refNowMs - new Date(target.createdAt).getTime()) / (60 * 1000);
       if (ageMinutes > maxEditMinutes) {
         throw new BadRequestAppException('comments.commentEditWindowExpired', [
           {
@@ -549,6 +569,7 @@ export class CommentsService implements ICommentsPublicService {
     id: number,
     input: UpdateRecordCommentInput,
     actor?: UserIdentity,
+    now?: Date,
   ): Promise<RecordCommentItemView> {
     let target = this.memoryComments.get(Number(id));
     let dbEntity: RecordCommentEntity | null = null;
@@ -578,9 +599,9 @@ export class CommentsService implements ICommentsPublicService {
       throw new ForbiddenAppException('comments.internalNoteForbidden');
     }
 
-    this.assertCanModifyOrDeleteComment(target, actor);
+    this.assertCanModifyOrDeleteComment(target, actor, now);
 
-    const nowDate = new Date();
+    const nowDate = now ?? new Date();
     const nowIso = nowDate.toISOString();
 
     if (this.commentHistoryRepository) {
@@ -657,7 +678,8 @@ export class CommentsService implements ICommentsPublicService {
   public async deleteComment(
     id: number,
     actor?: UserIdentity,
-  ): Promise<{ readonly id: number; readonly deleted: true }> {
+    now?: Date,
+  ): Promise<RecordCommentItemView & { readonly id: number; readonly deleted: true }> {
     let target = this.memoryComments.get(Number(id));
     let dbEntity: RecordCommentEntity | null = null;
 
@@ -677,9 +699,9 @@ export class CommentsService implements ICommentsPublicService {
       throw new NotFoundAppException('comments.commentNotFound', { id });
     }
 
-    this.assertCanModifyOrDeleteComment(target, actor);
+    this.assertCanModifyOrDeleteComment(target, actor, now);
 
-    const nowDate = new Date();
+    const nowDate = now ?? new Date();
     target.isDeleted = true;
     target.deletedAt = nowDate.toISOString();
     target.deletedByUserId = actor?.id ?? null;
@@ -697,7 +719,12 @@ export class CommentsService implements ICommentsPublicService {
     }
 
     this.memoryComments.set(target.id, target);
-    return { id: Number(id), deleted: true };
+    const [hydrated] = await this.hydrateCommentTree([target]);
+    return {
+      ...hydrated!,
+      id: Number(id),
+      deleted: true,
+    };
   }
 
   public async getRecordTimeline(
@@ -708,7 +735,9 @@ export class CommentsService implements ICommentsPublicService {
     const normalizedEntityId = String(query.entityId).trim();
     const canSeeInternal = this.canViewInternalNotes(actor);
     const includeInternal =
-      query.includeInternal !== undefined ? query.includeInternal && canSeeInternal : canSeeInternal;
+      query.includeInternal !== undefined
+        ? query.includeInternal && canSeeInternal
+        : canSeeInternal;
     const limit = query.limit ?? 100;
 
     // Sync from DB if available
@@ -763,10 +792,17 @@ export class CommentsService implements ICommentsPublicService {
       if (a.actorUserId) userIds.add(Number(a.actorUserId));
     }
 
+    const findContactsFn =
+      this.usersPublicService?.findUserContactsByIds?.bind(this.usersPublicService) ??
+      (
+        this.usersPublicService as unknown as {
+          findUsersByIds?: (
+            ids: readonly number[],
+          ) => Promise<Array<{ id: number; username: string; fullName: string }>>;
+        } | null
+      )?.findUsersByIds?.bind(this.usersPublicService);
     const contacts =
-      userIds.size > 0 && this.usersPublicService?.findUserContactsByIds
-        ? await this.usersPublicService.findUserContactsByIds([...userIds]).catch(() => [])
-        : [];
+      userIds.size > 0 && findContactsFn ? await findContactsFn([...userIds]).catch(() => []) : [];
     const userMap = new Map(contacts.map((u) => [Number(u.id), u]));
 
     const entries: RecordActivityTimelineEntryView[] = [...workflowEntries];
@@ -822,13 +858,22 @@ export class CommentsService implements ICommentsPublicService {
       });
     }
 
-    entries.sort((x, y) => new Date(y.occurredAt).getTime() - new Date(x.occurredAt).getTime());
-    const sliced = entries.slice(0, limit);
+    const sourceFilter = query.source && query.source !== 'ALL' ? query.source : null;
+    const filteredEntries = sourceFilter
+      ? entries.filter((item) => item.source === sourceFilter)
+      : entries;
+
+    const sortAsc = query.sortOrder === 'ASC';
+    filteredEntries.sort((x, y) => {
+      const diff = new Date(x.occurredAt).getTime() - new Date(y.occurredAt).getTime();
+      return sortAsc ? diff : -diff;
+    });
+    const sliced = filteredEntries.slice(0, limit);
 
     return {
       entityType: normalizedEntityType,
       entityId: normalizedEntityId,
-      totalItems: entries.length,
+      totalItems: filteredEntries.length,
       items: sliced,
     };
   }

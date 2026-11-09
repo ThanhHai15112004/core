@@ -24,7 +24,7 @@ import { USER_STATUS, normalizePhoneNumber } from '@modules/users/contracts/inde
 import type { UserEntity } from '@modules/users/entities/user.entity.js';
 import type { UserProfileEntity } from '@modules/users/entities/user-profile.entity.js';
 import type { UserRoleEntity } from '@modules/roles/entities/user-role.entity.js';
-import type { UserOrganizationUnitEntity } from '@modules/users/entities/user-organization-unit.entity.js';
+import type { UserOrganizationUnitEntity } from '@modules/organization-members/entities/user-organization-unit.entity.js';
 import type { UserStatusHistoryEntity } from '@modules/users/entities/user-status-history.entity.js';
 import {
   UserRepository,
@@ -35,8 +35,8 @@ import { UserRoleRepository } from '@modules/roles/repositories/user-role.reposi
 import {
   type UserOrganizationInputItem,
   UserOrganizationUnitRepository,
-} from '@modules/users/repositories/user-organization-unit.repository.js';
-import { UserOrganizationHistoryRepository } from '@modules/users/repositories/user-organization-history.repository.js';
+} from '@modules/organization-members/repositories/user-organization-unit.repository.js';
+import { UserOrganizationHistoryRepository } from '@modules/organization-members/repositories/user-organization-history.repository.js';
 import { UserStatusHistoryRepository } from '@modules/users/repositories/user-status-history.repository.js';
 import {
   DB_ENCRYPTION_ALGO_CODE,

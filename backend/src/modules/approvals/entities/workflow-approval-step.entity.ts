@@ -5,7 +5,7 @@ import {
   WORKFLOW_APPROVAL_MODE,
   type WorkflowApprovalDecision,
   type WorkflowApprovalMode,
-} from '../enum/workflows.enum.js';
+} from '../contracts/index.js';
 
 @Entity('workflow_approval_steps')
 @Index(['workflowInstanceId', 'stepOrder'])

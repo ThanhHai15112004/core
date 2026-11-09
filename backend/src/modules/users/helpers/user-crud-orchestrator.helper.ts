@@ -40,10 +40,12 @@ import {
   validateAndApplyUserUpdateFields,
   validateAndPrepareCreateUserContext,
 } from './user-profile-hydration.helper.js';
+import type {
+  IOrganizationMembersHistoryPersistenceContract,
+  IOrganizationMembersUnitPersistenceContract,
+} from '@modules/organization-members/index.js';
 import type { UserEntity } from '../entities/user.entity.js';
 import type { UserProfileEntity } from '../entities/user-profile.entity.js';
-import type { UserOrganizationHistoryRepository } from '../repositories/user-organization-history.repository.js';
-import type { UserOrganizationUnitRepository } from '../repositories/user-organization-unit.repository.js';
 import type { UserProfileRepository } from '../repositories/user-profile.repository.js';
 import type { UserStatusHistoryRepository } from '../repositories/user-status-history.repository.js';
 import type { UserRepository } from '../repositories/user.repository.js';
@@ -127,7 +129,7 @@ export function registerUsersCrossModuleDelegates(params: {
   effectiveDataScopeService: DataScopeService;
   userRepository: UserRepository;
   userProfileRepository: UserProfileRepository | null;
-  userOrgRepository: UserOrganizationUnitRepository;
+  userOrgRepository: IOrganizationMembersUnitPersistenceContract;
   countUsersByRoleIds: (roleIds: readonly number[]) => Promise<Map<number, number>>;
   listUsersByRoleId: (roleId: number) => Promise<RoleAssignedUserSummary[]>;
   assignRoles?: (
@@ -264,8 +266,8 @@ export async function executeCreateUserRecordFlow(params: {
   actorId?: number | undefined;
   actor?: UserIdentity | undefined;
   userRepository: UserRepository;
-  userOrgRepository: UserOrganizationUnitRepository;
-  orgHistoryRepository: UserOrganizationHistoryRepository | null;
+  userOrgRepository: IOrganizationMembersUnitPersistenceContract;
+  orgHistoryRepository: IOrganizationMembersHistoryPersistenceContract | null;
   passwordHasher: PasswordHasherService;
   rolesPublicService: IRolesPublicService;
   organizationsPublicService: IOrganizationsPublicService | null;

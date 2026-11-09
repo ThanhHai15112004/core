@@ -1,20 +1,21 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import { BadRequestAppException, type PaginatedResult } from '@packages/kernel/index.js';
 import type { UserIdentity } from '@packages/security/index.js';
-import {
-  type UserApproverSummaryView,
-  type UserOrganizationAssignmentSummary,
-  type UserOrganizationHistoryItemResponse,
-  type UserResponse,
-  UsersService,
-  type UserSubordinateSummaryView,
-  type UserSubordinatesOverviewResponse,
-} from '@modules/users/index.js';
 import type {
   IOrganizationMembersPublicService,
-  OrganizationMemberManagersInput,
-  OrganizationMemberTransferInput,
+  OrganizationMemberSummaryView,
+  OrganizationMemberUsersDelegate,
+  RecordUserOrganizationHistoryInput,
+  ReplaceUserOrganizationInput,
+  UserApproverSummaryView,
+  UserOrganizationAssignmentSummary,
+  UserOrganizationHistoryItemView,
+  UserOrganizationHistoryRecordView,
+  UserOrganizationUnitLinkView,
+  UserSubordinateSummaryView,
 } from '../contracts/index.js';
+import { UserOrganizationHistoryRepository } from '../repositories/user-organization-history.repository.js';
+import { UserOrganizationUnitRepository } from '../repositories/user-organization-unit.repository.js';
 import type {
   AssignOrganizationMembershipsRequest,
   ListMemberSubordinatesQuery,
@@ -22,26 +23,113 @@ import type {
   TransferOrganizationMemberRequest,
   UpdateOrganizationMemberManagersRequest,
 } from '../requests/organization-members.requests.js';
-import type { OrganizationMemberDetailResponse } from '../responses/organization-members.response.js';
+import type {
+  OrganizationMemberDetailResponse,
+  OrganizationMemberResponse,
+  UserOrganizationHistoryItemResponse,
+  UserSubordinatesOverviewResponse,
+} from '../responses/organization-members.response.js';
 
 @Injectable()
 export class OrganizationMembersService implements IOrganizationMembersPublicService {
-  constructor(private readonly usersService: UsersService) {}
+  private readonly userOrgRepository: UserOrganizationUnitRepository | null;
+  private usersDelegate: OrganizationMemberUsersDelegate | null = null;
+
+  constructor(
+    @Optional()
+    @Inject(UserOrganizationUnitRepository)
+    userOrgRepoOrDelegate:
+      UserOrganizationUnitRepository | OrganizationMemberUsersDelegate | null = null,
+    @Optional()
+    @Inject(UserOrganizationHistoryRepository)
+    private readonly orgHistoryRepository: UserOrganizationHistoryRepository | null = null,
+  ) {
+    if (userOrgRepoOrDelegate && 'getById' in userOrgRepoOrDelegate) {
+      this.usersDelegate = userOrgRepoOrDelegate;
+      this.userOrgRepository = null;
+    } else {
+      this.userOrgRepository = userOrgRepoOrDelegate;
+    }
+  }
+
+  public registerMemberUsersDelegate(delegate: OrganizationMemberUsersDelegate): void {
+    this.usersDelegate = delegate;
+  }
+
+  private requireUsersDelegate(): OrganizationMemberUsersDelegate {
+    if (!this.usersDelegate) {
+      throw new BadRequestAppException('organization-members.delegateUnavailable');
+    }
+    return this.usersDelegate;
+  }
+
+  public async findByUserIds(userIds: readonly number[]): Promise<UserOrganizationUnitLinkView[]> {
+    if (!this.userOrgRepository) return [];
+    return this.userOrgRepository.findByUserIds(userIds);
+  }
+
+  public async findUserOrganizationLinksByUserIds(
+    userIds: readonly number[],
+  ): Promise<UserOrganizationUnitLinkView[]> {
+    return this.findByUserIds(userIds);
+  }
+
+  public async findUserIdsByOrganizationUnitIds(
+    organizationUnitIds: readonly number[],
+  ): Promise<number[]> {
+    if (!this.userOrgRepository) return [];
+    return this.userOrgRepository.findUserIdsByOrganizationUnitIds(organizationUnitIds);
+  }
+
+  public async countByPositionTitles(candidates: readonly string[]): Promise<number> {
+    if (!this.userOrgRepository) return 0;
+    return this.userOrgRepository.countByPositionTitles(candidates);
+  }
+
+  public async replaceUserOrganizations(
+    userId: number,
+    inputs: readonly ReplaceUserOrganizationInput[],
+  ): Promise<UserOrganizationUnitLinkView[]> {
+    if (!this.userOrgRepository) return [];
+    return this.userOrgRepository.replaceUserOrganizations(userId, inputs);
+  }
+
+  public async recordHistories(
+    inputs: readonly RecordUserOrganizationHistoryInput[],
+  ): Promise<UserOrganizationHistoryRecordView[]> {
+    if (!this.orgHistoryRepository) return [];
+    return this.orgHistoryRepository.recordHistories(inputs);
+  }
+
+  public async recordOrganizationHistories(
+    inputs: readonly RecordUserOrganizationHistoryInput[],
+  ): Promise<UserOrganizationHistoryRecordView[]> {
+    return this.recordHistories(inputs);
+  }
+
+  public async findByUserId(userId: number): Promise<UserOrganizationHistoryRecordView[]> {
+    if (!this.orgHistoryRepository) return [];
+    return this.orgHistoryRepository.findByUserId(userId);
+  }
+
+  public async findOrganizationHistoriesByUserId(
+    userId: number,
+  ): Promise<UserOrganizationHistoryRecordView[]> {
+    return this.findByUserId(userId);
+  }
 
   public async listMembersPaginated(
     query: ListOrganizationMembersQuery,
     actor?: UserIdentity,
-  ): Promise<PaginatedResult<UserResponse>> {
-    return this.usersService.listPaginated(
+  ): Promise<PaginatedResult<OrganizationMemberResponse>> {
+    return this.requireUsersDelegate().listPaginated(
       {
-        ...(query.q !== undefined ? { q: query.q } : {}),
-        ...(query.organizationUnitId !== undefined
-          ? { organizationUnitId: query.organizationUnitId }
-          : {}),
-        ...(query.managerId !== undefined ? { managerId: query.managerId } : {}),
-        ...(query.status !== undefined ? { status: query.status } : {}),
-        ...(query.page !== undefined ? { page: query.page } : {}),
-        ...(query.limit !== undefined ? { limit: query.limit } : {}),
+        q: query.q,
+        organizationUnitId: query.organizationUnitId,
+        managerId: query.managerId,
+        status: query.status,
+        page: query.page,
+        limit: query.limit,
         sortBy: 'id',
         sortOrder: 'ASC',
       },
@@ -53,10 +141,11 @@ export class OrganizationMembersService implements IOrganizationMembersPublicSer
     userId: number,
     actor?: UserIdentity,
   ): Promise<OrganizationMemberDetailResponse> {
+    const delegate = this.requireUsersDelegate();
     const [member, history, subordinatesOverview] = await Promise.all([
-      this.usersService.getById(userId, true, actor),
-      this.usersService.getOrganizationHistory(userId, actor),
-      this.usersService.getSubordinatesOverview(userId, undefined, actor),
+      delegate.getById(userId, true, actor),
+      delegate.getOrganizationHistory(userId, actor),
+      delegate.getSubordinatesOverview(userId, { includeTemporary: true }, actor),
     ]);
     return {
       member,
@@ -65,62 +154,73 @@ export class OrganizationMembersService implements IOrganizationMembersPublicSer
     };
   }
 
-  public async assignOrganizationMemberships(
+  public async getMemberAssignments(
+    userId: number,
+    actor?: UserIdentity,
+  ): Promise<UserOrganizationAssignmentSummary[]> {
+    const member = await this.requireUsersDelegate().getById(userId, true, actor);
+    return [...(member.organizationUnits ?? [])];
+  }
+
+  public async assignMemberships(
     userId: number,
     dto: AssignOrganizationMembershipsRequest,
     actorId?: number,
     actor?: UserIdentity,
-  ): Promise<UserResponse> {
-    for (const unit of dto.organizationUnits) {
-      if (unit.startDate && unit.endDate) {
-        const startMs = new Date(unit.startDate).getTime();
-        const endMs = new Date(unit.endDate).getTime();
+  ): Promise<OrganizationMemberResponse> {
+    for (const item of dto.organizationUnits) {
+      if (item.startDate && item.endDate) {
+        const startMs = new Date(item.startDate).getTime();
+        const endMs = new Date(item.endDate).getTime();
         if (!Number.isNaN(startMs) && !Number.isNaN(endMs) && endMs < startMs) {
           throw new BadRequestAppException('organization-members.invalidMembershipPeriod');
         }
       }
     }
-    return this.usersService.assignOrganizations(userId, dto, actorId, actor);
+    return this.requireUsersDelegate().assignOrganizations(userId, dto, actorId, actor);
   }
 
-  public async assignMemberships(
+  public async assignOrganizationMemberships(
     userId: number,
-    organizationUnits: readonly {
-      readonly organizationUnitId: number;
-      readonly isPrimary?: boolean | undefined;
-      readonly positionTitle?: string | null | undefined;
-      readonly startDate?: string | null | undefined;
-      readonly endDate?: string | null | undefined;
-    }[],
-    reason?: string | null,
+    input: {
+      readonly organizationUnits: ReadonlyArray<{
+        readonly organizationUnitId: number;
+        readonly isPrimary?: boolean | undefined;
+        readonly positionTitle?: string | null | undefined;
+        readonly startDate?: string | null | undefined;
+        readonly endDate?: string | null | undefined;
+      }>;
+      readonly reason?: string | null | undefined;
+    },
     actorId?: number,
-  ): Promise<readonly UserOrganizationAssignmentSummary[]> {
-    const updated = await this.assignOrganizationMemberships(
+  ): Promise<UserOrganizationAssignmentSummary[]> {
+    const updated = await this.assignMemberships(
       userId,
       {
-        organizationUnits: organizationUnits.map((item) => ({
-          organizationUnitId: item.organizationUnitId,
-          isPrimary: Boolean(item.isPrimary),
-          positionTitle: item.positionTitle ?? null,
-          startDate: item.startDate ?? null,
-          endDate: item.endDate ?? null,
+        organizationUnits: input.organizationUnits.map((u) => ({
+          organizationUnitId: u.organizationUnitId,
+          isPrimary: Boolean(u.isPrimary),
+          positionTitle: u.positionTitle ?? null,
+          startDate: u.startDate ?? null,
+          endDate: u.endDate ?? null,
         })),
-        reason: reason ?? null,
+        reason: input.reason ?? null,
       },
       actorId,
     );
-    return updated.organizationUnits;
+    return [...(updated.organizationUnits ?? [])];
   }
 
-  public async transferMemberOrganization(
+  public async transferMemberUnit(
     userId: number,
     dto: TransferOrganizationMemberRequest,
     actorId?: number,
     actor?: UserIdentity,
-  ): Promise<UserResponse> {
-    if (Number(dto.fromOrganizationUnitId) === Number(dto.toOrganizationUnitId)) {
+  ): Promise<OrganizationMemberResponse> {
+    if (dto.fromOrganizationUnitId === dto.toOrganizationUnitId) {
       throw new BadRequestAppException('organization-members.sameTransferUnit');
     }
+
     if (dto.startDate && dto.endDate) {
       const startMs = new Date(dto.startDate).getTime();
       const endMs = new Date(dto.endDate).getTime();
@@ -129,93 +229,96 @@ export class OrganizationMembersService implements IOrganizationMembersPublicSer
       }
     }
 
-    const current = await this.usersService.getById(userId, true, actor);
-    const existingLinks = current.organizationUnits ?? [];
-    const sourceLink = existingLinks.find(
-      (item) => Number(item.organizationUnitId) === Number(dto.fromOrganizationUnitId),
+    const delegate = this.requireUsersDelegate();
+    const current = await delegate.getById(userId, true, actor);
+    const existingUnits = current.organizationUnits ?? [];
+    const sourceUnit = existingUnits.find(
+      (u) => Number(u.organizationUnitId) === Number(dto.fromOrganizationUnitId),
     );
-    if (!sourceLink) {
+    if (!sourceUnit) {
       throw new BadRequestAppException('organization-members.sourceUnitNotAssigned', [
         {
-          userId,
-          fromOrganizationUnitId: dto.fromOrganizationUnitId,
+          field: 'fromOrganizationUnitId',
+          message: `User #${userId} is not currently assigned to organization unit #${dto.fromOrganizationUnitId}`,
         },
       ]);
     }
 
-    const nextUnits = existingLinks
-      .filter((item) => Number(item.organizationUnitId) !== Number(dto.fromOrganizationUnitId))
-      .map((item) => ({
-        organizationUnitId: Number(item.organizationUnitId),
-        isPrimary: dto.isPrimary === true ? false : Boolean(item.isPrimary),
-        positionTitle: item.positionTitle ?? null,
-        startDate: item.startDate ?? null,
-        endDate: item.endDate ?? null,
+    const transferredIsPrimary = dto.isPrimary ?? sourceUnit.isPrimary;
+    const remainingUnits = existingUnits
+      .filter(
+        (u) =>
+          Number(u.organizationUnitId) !== Number(dto.fromOrganizationUnitId) &&
+          Number(u.organizationUnitId) !== Number(dto.toOrganizationUnitId),
+      )
+      .map((u) => ({
+        organizationUnitId: Number(u.organizationUnitId),
+        isPrimary: transferredIsPrimary ? false : Boolean(u.isPrimary),
+        positionTitle: u.positionTitle ?? null,
+        startDate: u.startDate ?? null,
+        endDate: u.endDate ?? null,
       }));
 
-    const existingDestIdx = nextUnits.findIndex(
-      (item) => Number(item.organizationUnitId) === Number(dto.toOrganizationUnitId),
-    );
-    const transferredEntry = {
-      organizationUnitId: Number(dto.toOrganizationUnitId),
-      isPrimary: dto.isPrimary !== undefined ? Boolean(dto.isPrimary) : Boolean(sourceLink.isPrimary),
-      positionTitle:
-        dto.positionTitle !== undefined ? dto.positionTitle : (sourceLink.positionTitle ?? null),
-      startDate: dto.startDate ?? new Date().toISOString(),
-      endDate: dto.endDate ?? null,
-    };
+    const nextUnits = [
+      ...remainingUnits,
+      {
+        organizationUnitId: Number(dto.toOrganizationUnitId),
+        isPrimary:
+          transferredIsPrimary ||
+          remainingUnits.length === 0 ||
+          !remainingUnits.some((u) => u.isPrimary),
+        positionTitle:
+          dto.positionTitle !== undefined ? dto.positionTitle : (sourceUnit.positionTitle ?? null),
+        startDate: dto.startDate !== undefined ? dto.startDate : new Date().toISOString(),
+        endDate: dto.endDate !== undefined ? dto.endDate : null,
+      },
+    ];
 
-    if (existingDestIdx >= 0) {
-      nextUnits[existingDestIdx] = transferredEntry;
-    } else {
-      nextUnits.push(transferredEntry);
-    }
-
-    if (nextUnits.length > 0 && !nextUnits.some((u) => u.isPrimary)) {
-      nextUnits[0] = { ...nextUnits[0]!, isPrimary: true };
-    }
-
-    return this.usersService.assignOrganizations(
+    return delegate.assignOrganizations(
       userId,
       {
         organizationUnits: nextUnits,
         reason:
           dto.reason ??
-          `Transferred from unit #${dto.fromOrganizationUnitId} to unit #${dto.toOrganizationUnitId}`,
+          `Transfer from unit #${dto.fromOrganizationUnitId} to unit #${dto.toOrganizationUnitId}`,
       },
       actorId,
       actor,
     );
   }
 
-  public async transferMemberUnit(
+  public async transferMemberOrganization(
     userId: number,
-    input: OrganizationMemberTransferInput,
+    input: {
+      readonly fromOrganizationUnitId: number;
+      readonly toOrganizationUnitId: number;
+      readonly isPrimary?: boolean | undefined;
+      readonly positionTitle?: string | null | undefined;
+      readonly startDate?: string | null | undefined;
+      readonly endDate?: string | null | undefined;
+      readonly reason?: string | null | undefined;
+    },
     actorId?: number,
-  ): Promise<readonly UserOrganizationAssignmentSummary[]> {
-    const updated = await this.transferMemberOrganization(userId, input, actorId);
-    return updated.organizationUnits;
+  ): Promise<UserOrganizationAssignmentSummary[]> {
+    const updated = await this.transferMemberUnit(userId, input, actorId);
+    return [...(updated.organizationUnits ?? [])];
   }
 
-  public async updateManagers(
+  public async updateMemberManagers(
     userId: number,
     dto: UpdateOrganizationMemberManagersRequest,
     actorId?: number,
     actor?: UserIdentity,
-  ): Promise<UserResponse> {
-    if (dto.temporaryManagerId !== undefined && dto.temporaryManagerId !== null) {
-      const fromDate = dto.temporaryManagerFrom ? new Date(dto.temporaryManagerFrom) : new Date();
-      const untilDate = dto.temporaryManagerUntil ? new Date(dto.temporaryManagerUntil) : null;
-      if (
-        !untilDate ||
-        Number.isNaN(fromDate.getTime()) ||
-        Number.isNaN(untilDate.getTime()) ||
-        untilDate.getTime() <= fromDate.getTime()
-      ) {
+  ): Promise<OrganizationMemberSummaryView> {
+    if (dto.temporaryManagerFrom && dto.temporaryManagerUntil) {
+      const fromMs = new Date(dto.temporaryManagerFrom).getTime();
+      const untilMs = new Date(dto.temporaryManagerUntil).getTime();
+      if (!Number.isNaN(fromMs) && !Number.isNaN(untilMs) && untilMs <= fromMs) {
         throw new BadRequestAppException('organization-members.invalidTemporaryManagerPeriod');
       }
     }
-    return this.usersService.update(
+
+    return this.requireUsersDelegate().update(
       userId,
       {
         ...(dto.managerId !== undefined ? { managerId: dto.managerId } : {}),
@@ -234,34 +337,18 @@ export class OrganizationMembersService implements IOrganizationMembersPublicSer
     );
   }
 
-  public async updateMemberManagers(
-    userId: number,
-    input: OrganizationMemberManagersInput,
-    actorId?: number,
-  ): Promise<{
-    readonly userId: number;
-    readonly managerId: number | null;
-    readonly temporaryManagerId: number | null;
-    readonly temporaryManagerFrom: string | null;
-    readonly temporaryManagerUntil: string | null;
-    readonly effectiveManagerId: number | null;
-  }> {
-    const updated = await this.updateManagers(userId, input, actorId);
-    return {
-      userId: updated.id,
-      managerId: updated.managerId ?? null,
-      temporaryManagerId: updated.temporaryManagerId ?? null,
-      temporaryManagerFrom: updated.temporaryManagerFrom ?? null,
-      temporaryManagerUntil: updated.temporaryManagerUntil ?? null,
-      effectiveManagerId: updated.effectiveManagerId ?? null,
-    };
-  }
-
   public async getOrganizationHistory(
     userId: number,
     actor?: UserIdentity,
+  ): Promise<UserOrganizationHistoryItemView[]> {
+    return this.requireUsersDelegate().getOrganizationHistory(userId, actor);
+  }
+
+  public async getMemberHistory(
+    userId: number,
+    actor?: UserIdentity,
   ): Promise<UserOrganizationHistoryItemResponse[]> {
-    return this.usersService.getOrganizationHistory(userId, actor);
+    return this.requireUsersDelegate().getOrganizationHistory(userId, actor);
   }
 
   public async getSubordinatesOverview(
@@ -269,27 +356,49 @@ export class OrganizationMembersService implements IOrganizationMembersPublicSer
     query?: ListMemberSubordinatesQuery,
     actor?: UserIdentity,
   ): Promise<UserSubordinatesOverviewResponse> {
-    return this.usersService.getSubordinatesOverview(userId, query, actor);
-  }
-
-  public async listSubordinates(
-    managerId: number,
-    options?: { readonly directOnly?: boolean; readonly includeTemporary?: boolean },
-  ): Promise<UserSubordinateSummaryView[]> {
-    return this.usersService.listSubordinates(managerId, options);
+    return this.requireUsersDelegate().getSubordinatesOverview(
+      userId,
+      {
+        ...(query?.directOnly !== undefined ? { directOnly: query.directOnly } : {}),
+        ...(query?.includeTemporary !== undefined
+          ? { includeTemporary: query.includeTemporary }
+          : {}),
+      },
+      actor,
+    );
   }
 
   public async resolveSubordinateUserIds(
     managerId: number,
     options?: { readonly directOnly?: boolean; readonly includeTemporary?: boolean },
   ): Promise<number[]> {
-    return this.usersService.resolveSubordinateUserIds(managerId, options);
+    const delegate = this.requireUsersDelegate();
+    if (typeof delegate.resolveSubordinateUserIds === 'function') {
+      return delegate.resolveSubordinateUserIds(managerId, options);
+    }
+    return [];
+  }
+
+  public async listSubordinates(
+    managerId: number,
+    options?: { readonly directOnly?: boolean; readonly includeTemporary?: boolean },
+    actor?: UserIdentity,
+  ): Promise<UserSubordinateSummaryView[]> {
+    const delegate = this.requireUsersDelegate();
+    if (typeof delegate.listSubordinates === 'function') {
+      return delegate.listSubordinates(managerId, options, actor);
+    }
+    return [];
   }
 
   public async resolveApproverChain(
     userId: number,
-    maxLevels = 5,
+    maxLevels?: number,
   ): Promise<UserApproverSummaryView[]> {
-    return this.usersService.resolveApproverChain(userId, maxLevels);
+    const delegate = this.requireUsersDelegate();
+    if (typeof delegate.resolveApproverChain === 'function') {
+      return delegate.resolveApproverChain(userId, maxLevels);
+    }
+    return [];
   }
 }

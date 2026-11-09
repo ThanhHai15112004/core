@@ -17,7 +17,7 @@ import {
   WORKFLOW_STATE_TYPE,
   type WorkflowInstanceDetailView,
 } from '../contracts/index.js';
-import type { WorkflowApprovalStepRepository } from '../repositories/workflow-approval-step.repository.js';
+import type { IApprovalStepsPersistenceContract } from '@modules/approvals/index.js';
 import type { WorkflowDefinitionRepository } from '../repositories/workflow-definition.repository.js';
 import type { WorkflowHistoryRepository } from '../repositories/workflow-history.repository.js';
 import type { WorkflowInstanceRepository } from '../repositories/workflow-instance.repository.js';
@@ -50,7 +50,7 @@ export async function executeStartWorkflowForEntity(params: {
   definitionRepository: WorkflowDefinitionRepository;
   stateRepository: WorkflowStateRepository;
   instanceRepository: WorkflowInstanceRepository;
-  approvalStepRepository: WorkflowApprovalStepRepository;
+  approvalStepRepository: IApprovalStepsPersistenceContract;
   historyRepository: WorkflowHistoryRepository;
   usersPublicService: IUsersPublicService | null;
   notificationsPublicService: INotificationsPublicService | null;
@@ -177,7 +177,7 @@ export async function executeWorkflowStateTransition(params: {
   stateRepository: WorkflowStateRepository;
   transitionRepository: WorkflowTransitionRepository;
   instanceRepository: WorkflowInstanceRepository;
-  approvalStepRepository: WorkflowApprovalStepRepository;
+  approvalStepRepository: IApprovalStepsPersistenceContract;
   historyRepository: WorkflowHistoryRepository;
   usersPublicService: IUsersPublicService | null;
   notificationsPublicService: INotificationsPublicService | null;
@@ -342,7 +342,7 @@ export async function executeDecideWorkflowApproval(params: {
   stateRepository: WorkflowStateRepository;
   transitionRepository: WorkflowTransitionRepository;
   instanceRepository: WorkflowInstanceRepository;
-  approvalStepRepository: WorkflowApprovalStepRepository;
+  approvalStepRepository: IApprovalStepsPersistenceContract;
   historyRepository: WorkflowHistoryRepository;
   delegationRules?: readonly WorkflowApprovalDelegationRule[] | undefined;
   executeTransition: (
@@ -635,7 +635,7 @@ export async function executeDelegateWorkflowApproval(params: {
   dto: DelegateWorkflowApprovalRequest;
   actor?: UserIdentity | undefined;
   instanceRepository: WorkflowInstanceRepository;
-  approvalStepRepository: WorkflowApprovalStepRepository;
+  approvalStepRepository: IApprovalStepsPersistenceContract;
   historyRepository: WorkflowHistoryRepository;
   getInstanceById: (id: number, actor?: UserIdentity) => Promise<WorkflowInstanceDetailView>;
 }): Promise<WorkflowInstanceDetailView> {
@@ -771,7 +771,7 @@ export async function executeCancelWorkflowInstance(params: {
   dto: CancelWorkflowInstanceRequest;
   actor?: UserIdentity | undefined;
   instanceRepository: WorkflowInstanceRepository;
-  approvalStepRepository: WorkflowApprovalStepRepository;
+  approvalStepRepository: IApprovalStepsPersistenceContract;
   historyRepository: WorkflowHistoryRepository;
   auditLogService: AuditLogService | null;
   getInstanceById: (id: number, actor?: UserIdentity) => Promise<WorkflowInstanceDetailView>;

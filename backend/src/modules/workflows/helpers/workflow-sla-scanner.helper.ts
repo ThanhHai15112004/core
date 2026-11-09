@@ -9,7 +9,7 @@ import {
   WORKFLOW_APPROVAL_DECISION,
   WORKFLOW_HISTORY_ACTION_TYPE,
 } from '../enum/workflows.enum.js';
-import type { WorkflowApprovalStepRepository } from '../repositories/workflow-approval-step.repository.js';
+import type { IApprovalStepsPersistenceContract } from '@modules/approvals/index.js';
 import type { WorkflowDefinitionRepository } from '../repositories/workflow-definition.repository.js';
 import type { WorkflowHistoryRepository } from '../repositories/workflow-history.repository.js';
 import type { WorkflowInstanceRepository } from '../repositories/workflow-instance.repository.js';
@@ -22,7 +22,7 @@ export async function executeWorkflowSlaScan(params: {
   definitionRepository: WorkflowDefinitionRepository;
   stateRepository?: WorkflowStateRepository | null | undefined;
   instanceRepository: WorkflowInstanceRepository;
-  approvalStepRepository: WorkflowApprovalStepRepository;
+  approvalStepRepository: IApprovalStepsPersistenceContract;
   historyRepository: WorkflowHistoryRepository;
   usersPublicService?: IUsersPublicService | null | undefined;
   notificationsPublicService: INotificationsPublicService | null;

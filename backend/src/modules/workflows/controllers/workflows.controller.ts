@@ -1,15 +1,6 @@
-import {
-  Controller,
-  Delete,
-  Get,
-  HttpCode,
-  HttpStatus,
-  Post,
-  Put,
-  UseGuards,
-} from '@nestjs/common';
+import { Controller, Get, HttpCode, HttpStatus, Patch, Post, Put } from '@nestjs/common';
 import { z } from 'zod';
-import { HTTP_STATUS_CODE } from '@packages/kernel/index.js';
+import { HTTP_STATUS_CODE, type PaginatedResult } from '@packages/kernel/index.js';
 import {
   ApiDoc,
   ApiGroup,
@@ -17,392 +8,251 @@ import {
   ValidatedBody,
   ValidatedParams,
   ValidatedQuery,
+  positiveIntParamSchema,
 } from '@packages/http/index.js';
-import { AuthGuard, CurrentUser, type UserIdentity } from '@packages/security/index.js';
-import { WORKFLOWS_ROUTES } from '../contracts/index.js';
-import { WorkflowsService } from '../services/workflows.service.js';
+import { CurrentUser, type UserIdentity } from '@packages/security/index.js';
 import {
   type CancelWorkflowInstanceRequest,
-  type CreateWorkflowCommentRequest,
   type CreateWorkflowDefinitionRequest,
-  type CreateWorkflowDelegationRuleRequest,
-  type DecideWorkflowApprovalRequest,
-  type DelegateWorkflowApprovalRequest,
   type ExecuteWorkflowTransitionRequest,
-  type ListWorkflowCommentsQuery,
   type ListWorkflowDefinitionsQuery,
   type ListWorkflowInstancesQuery,
-  type ListWorkflowTimelineQuery,
   type ReplaceWorkflowStatesRequest,
   type ReplaceWorkflowTransitionsRequest,
   type StartWorkflowInstanceRequest,
-  type UpdateWorkflowCommentRequest,
   type UpdateWorkflowDefinitionRequest,
   cancelWorkflowInstanceSchema,
-  createWorkflowCommentSchema,
   createWorkflowDefinitionSchema,
-  createWorkflowDelegationRuleSchema,
-  decideWorkflowApprovalSchema,
-  delegateWorkflowApprovalSchema,
   executeWorkflowTransitionSchema,
-  listWorkflowCommentsQuerySchema,
   listWorkflowDefinitionsQuerySchema,
   listWorkflowInstancesQuerySchema,
-  listWorkflowTimelineQuerySchema,
-  positiveIntParamSchema,
   replaceWorkflowStatesSchema,
   replaceWorkflowTransitionsSchema,
   startWorkflowInstanceSchema,
-  updateWorkflowCommentSchema,
   updateWorkflowDefinitionSchema,
 } from '../requests/workflows.requests.js';
 import {
-  workflowCommentItemResponseSchema,
+  type WorkflowDefinitionResponse,
+  type WorkflowHistoryItemResponse,
+  type WorkflowInstanceDetailResponse,
+  type WorkflowInstanceItemResponse,
+  type WorkflowSlaScanResultResponse,
   workflowDefinitionResponseSchema,
-  workflowDelegationRuleResponseSchema,
-  workflowHistoryItemResponseSchema,
+  workflowHistoryItemSchema,
   workflowInstanceDetailResponseSchema,
-  workflowInstanceResponseSchema,
-  workflowRecordActivityTimelineResponseSchema,
-  workflowSlaScanResponseSchema,
+  workflowInstanceItemResponseSchema,
+  workflowSlaScanResultResponseSchema,
 } from '../responses/workflows.response.js';
+import { WORKFLOWS_ROUTES } from '../routes/workflows.routes.js';
+import { WorkflowsService } from '../services/workflows.service.js';
 
+@ApiGroup('Workflows Engine', 'Quản lý quy trình xử lý (Workflow Engine — Mục 9.3)')
 @Controller(WORKFLOWS_ROUTES.ROOT)
-@ApiGroup(WORKFLOWS_ROUTES.ROOT, 'Workflows, Multi-Level Approvals & Comments (Mục 9.3, 9.4 & 9.5)')
-@UseGuards(AuthGuard)
 export class WorkflowsController {
   constructor(private readonly workflowsService: WorkflowsService) {}
 
+  /** Danh sách quy trình xử lý có phân trang & lọc (Mục 9.3.1) */
   @Get(WORKFLOWS_ROUTES.DEFINITIONS)
   @RequirePermissions('workflows.read')
   @ApiDoc({
-    summary: 'Danh sách định nghĩa quy trình xử lý (Mục 9.3.1)',
-    response: z.array(workflowDefinitionResponseSchema),
+    summary: 'Danh sách định nghĩa quy trình (Workflow Definitions — Mục 9.3.1)',
+    response: workflowDefinitionResponseSchema,
+    pagination: 'offset',
   })
-  public listDefinitions(
+  public async listDefinitions(
     @ValidatedQuery(listWorkflowDefinitionsQuerySchema) query: ListWorkflowDefinitionsQuery,
-  ) {
+  ): Promise<PaginatedResult<WorkflowDefinitionResponse>> {
     return this.workflowsService.listDefinitionsPaginated(query);
   }
 
+  /** Xem chi tiết một quy trình kèm trạng thái & điều kiện chuyển trạng thái (Mục 9.3.1–9.3.4) */
   @Get(WORKFLOWS_ROUTES.DEFINITION_BY_ID)
   @RequirePermissions('workflows.read')
   @ApiDoc({
-    summary:
-      'Xem chi tiết định nghĩa quy trình kèm các trạng thái và bước chuyển (Mục 9.3.1 – 9.3.4)',
+    summary: 'Chi tiết định nghĩa quy trình kèm danh sách trạng thái và bước chuyển (Mục 9.3.1)',
     response: workflowDefinitionResponseSchema,
   })
-  public getDefinitionById(@ValidatedParams(positiveIntParamSchema, 'id') id: number) {
+  public async getDefinitionById(
+    @ValidatedParams(positiveIntParamSchema, 'id') id: number,
+  ): Promise<WorkflowDefinitionResponse> {
     return this.workflowsService.getDefinitionById(id);
   }
 
+  /** Tạo mới quy trình có tên, mã, phiên bản, các trạng thái và bước chuyển (Mục 9.3.1–9.3.4) */
   @Post(WORKFLOWS_ROUTES.DEFINITIONS)
   @RequirePermissions('workflows.manage')
   @ApiDoc({
-    summary:
-      'Tạo mới quy trình xử lý có tên, mã, phiên bản, trạng thái và điều kiện/hành động (Mục 9.3.1 – 9.3.4)',
+    summary: 'Tạo mới quy trình xử lý (Mục 9.3.1–9.3.4)',
     status: HTTP_STATUS_CODE.CREATED,
     response: workflowDefinitionResponseSchema,
   })
-  public createDefinition(
+  public async createDefinition(
     @ValidatedBody(createWorkflowDefinitionSchema) body: CreateWorkflowDefinitionRequest,
     @CurrentUser() actor?: UserIdentity,
-  ) {
+  ): Promise<WorkflowDefinitionResponse> {
     return this.workflowsService.createDefinition(body, actor?.id);
   }
 
-  @Put(WORKFLOWS_ROUTES.DEFINITION_BY_ID)
+  /** Cập nhật thông tin quy trình (Mục 9.3.1 & 9.3.8) */
+  @Patch(WORKFLOWS_ROUTES.DEFINITION_BY_ID)
   @RequirePermissions('workflows.manage')
   @ApiDoc({
-    summary: 'Cập nhật định nghĩa quy trình, trạng thái, điều kiện và hành động chuyển trạng thái',
+    summary: 'Cập nhật định nghĩa quy trình xử lý (Mục 9.3.1 & 9.3.8)',
     response: workflowDefinitionResponseSchema,
   })
-  public updateDefinition(
+  public async updateDefinition(
     @ValidatedParams(positiveIntParamSchema, 'id') id: number,
     @ValidatedBody(updateWorkflowDefinitionSchema) body: UpdateWorkflowDefinitionRequest,
     @CurrentUser() actor?: UserIdentity,
-  ) {
+  ): Promise<WorkflowDefinitionResponse> {
     return this.workflowsService.updateDefinition(id, body, actor?.id);
   }
 
+  /** Tạo phiên bản mới của quy trình bằng cách nhân bản trạng thái & bước chuyển (Mục 9.3.1) */
   @Post(WORKFLOWS_ROUTES.DEFINITION_NEW_VERSION)
-  @HttpCode(HttpStatus.OK)
   @RequirePermissions('workflows.manage')
   @ApiDoc({
-    summary: 'Tạo phiên bản mới (version + 1) cho định nghĩa quy trình hiện có (Mục 9.3.1)',
+    summary: 'Nhân bản phiên bản mới cho quy trình xử lý (Mục 9.3.1)',
+    status: HTTP_STATUS_CODE.CREATED,
     response: workflowDefinitionResponseSchema,
   })
-  public createNewVersion(
+  public async createNewVersion(
     @ValidatedParams(positiveIntParamSchema, 'id') id: number,
     @CurrentUser() actor?: UserIdentity,
-  ) {
+  ): Promise<WorkflowDefinitionResponse> {
     return this.workflowsService.createNewVersion(id, actor?.id);
   }
 
-  @Post(WORKFLOWS_ROUTES.DEFINITION_STATES)
-  @HttpCode(HttpStatus.OK)
+  /** Cấu hình danh sách trạng thái của quy trình (Draft, Pending, Approved, Rejected... — Mục 9.3.2) */
+  @Put(WORKFLOWS_ROUTES.DEFINITION_STATES)
   @RequirePermissions('workflows.manage')
   @ApiDoc({
-    summary:
-      'Cập nhật danh sách trạng thái của quy trình (Draft, Pending, Approved, Rejected... — Mục 9.3.2)',
+    summary: 'Thiết lập các trạng thái của quy trình (Mục 9.3.2)',
     response: workflowDefinitionResponseSchema,
   })
-  public replaceStates(
+  public async replaceStates(
     @ValidatedParams(positiveIntParamSchema, 'id') id: number,
     @ValidatedBody(replaceWorkflowStatesSchema) body: ReplaceWorkflowStatesRequest,
-  ) {
+  ): Promise<WorkflowDefinitionResponse> {
     return this.workflowsService.replaceStates(id, body);
   }
 
-  @Post(WORKFLOWS_ROUTES.DEFINITION_TRANSITIONS)
-  @HttpCode(HttpStatus.OK)
+  /** Cấu hình điều kiện chuyển trạng thái & hành động khi chuyển trạng thái (Mục 9.3.3 & 9.3.4) */
+  @Put(WORKFLOWS_ROUTES.DEFINITION_TRANSITIONS)
   @RequirePermissions('workflows.manage')
   @ApiDoc({
-    summary:
-      'Cập nhật điều kiện chuyển trạng thái và hành động khi chuyển trạng thái (Mục 9.3.3 & 9.3.4)',
+    summary: 'Thiết lập điều kiện chuyển trạng thái và hành động tự động (Mục 9.3.3 & 9.3.4)',
     response: workflowDefinitionResponseSchema,
   })
-  public replaceTransitions(
+  public async replaceTransitions(
     @ValidatedParams(positiveIntParamSchema, 'id') id: number,
     @ValidatedBody(replaceWorkflowTransitionsSchema) body: ReplaceWorkflowTransitionsRequest,
-  ) {
+  ): Promise<WorkflowDefinitionResponse> {
     return this.workflowsService.replaceTransitions(id, body);
   }
 
+  /** Danh sách các hồ sơ quy trình đang chạy / hoàn tất / quá hạn (Mục 9.3.5–9.3.8) */
   @Get(WORKFLOWS_ROUTES.INSTANCES)
   @RequirePermissions('workflows.read')
   @ApiDoc({
-    summary: 'Danh sách các quy trình đã khởi tạo cho các bản ghi nghiệp vụ (Mục 9.3.5)',
-    response: z.array(workflowInstanceResponseSchema),
+    summary: 'Danh sách phiên thực thi quy trình (Workflow Instances — Mục 9.3.5)',
+    response: workflowInstanceItemResponseSchema,
+    pagination: 'offset',
   })
-  public listInstances(
+  public async listInstances(
     @ValidatedQuery(listWorkflowInstancesQuerySchema) query: ListWorkflowInstancesQuery,
     @CurrentUser() actor?: UserIdentity,
-  ) {
+  ): Promise<PaginatedResult<WorkflowInstanceItemResponse>> {
     return this.workflowsService.listInstancesPaginated(query, actor);
   }
 
+  /** Xem chi tiết phiên thực thi quy trình kèm các bước chuyển hợp lệ & toàn bộ lịch sử (Mục 9.3.5 & 9.3.7) */
   @Get(WORKFLOWS_ROUTES.INSTANCE_BY_ID)
   @RequirePermissions('workflows.read')
   @ApiDoc({
     summary:
-      'Xem chi tiết quy trình của bản ghi kèm bước chuyển hợp lệ, phê duyệt và lịch sử (Mục 9.3.5 & 9.3.7)',
+      'Chi tiết phiên quy trình kèm bước chuyển hợp lệ, các bước phê duyệt và lịch sử (Mục 9.3.5 & 9.3.7)',
     response: workflowInstanceDetailResponseSchema,
   })
-  public getInstanceById(
+  public async getInstanceById(
     @ValidatedParams(positiveIntParamSchema, 'id') id: number,
     @CurrentUser() actor?: UserIdentity,
-  ) {
+  ): Promise<WorkflowInstanceDetailResponse> {
     return this.workflowsService.getInstanceById(id, actor);
   }
 
+  /** Khởi tạo quy trình cho một bản ghi nghiệp vụ (Mục 9.3.5) */
   @Post(WORKFLOWS_ROUTES.INSTANCE_START)
   @RequirePermissions('workflows.execute')
   @ApiDoc({
-    summary: 'Khởi tạo quy trình xử lý cho một bản ghi nghiệp vụ (Mục 9.3.5)',
+    summary: 'Khởi tạo quy trình cho một bản ghi nghiệp vụ (Mục 9.3.5)',
     status: HTTP_STATUS_CODE.CREATED,
     response: workflowInstanceDetailResponseSchema,
   })
-  public startInstance(
+  public async startInstance(
     @ValidatedBody(startWorkflowInstanceSchema) body: StartWorkflowInstanceRequest,
     @CurrentUser() actor?: UserIdentity,
-  ) {
-    return this.workflowsService.startWorkflowForEntity(
-      {
-        ...body,
-        initiatorUserId: actor?.id ?? null,
-      },
-      actor,
-    );
+  ): Promise<WorkflowInstanceDetailResponse> {
+    return this.workflowsService.startWorkflowForEntity(body, actor);
   }
 
+  /** Thực hiện chuyển trạng thái khi thỏa mãn điều kiện & kích hoạt hành động (Mục 9.3.3 & 9.3.4) */
   @Post(WORKFLOWS_ROUTES.INSTANCE_TRANSITION)
   @HttpCode(HttpStatus.OK)
   @RequirePermissions('workflows.execute')
   @ApiDoc({
-    summary: 'Chuyển trạng thái quy trình (kiểm tra điều kiện 9.3.3 và chạy hành động 9.3.4)',
+    summary:
+      'Thực hiện chuyển trạng thái quy trình (kiểm tra điều kiện & kích hoạt hành động — Mục 9.3.3 & 9.3.4)',
     response: workflowInstanceDetailResponseSchema,
   })
-  public executeTransition(
+  public async executeTransition(
     @ValidatedParams(positiveIntParamSchema, 'id') id: number,
     @ValidatedBody(executeWorkflowTransitionSchema) body: ExecuteWorkflowTransitionRequest,
     @CurrentUser() actor?: UserIdentity,
-  ) {
+  ): Promise<WorkflowInstanceDetailResponse> {
     return this.workflowsService.executeTransition(id, body, actor);
   }
 
-  @Post(WORKFLOWS_ROUTES.INSTANCE_APPROVE)
-  @HttpCode(HttpStatus.OK)
-  @RequirePermissions('workflows.execute')
-  @ApiDoc({
-    summary: 'Phê duyệt / Từ chối / Yêu cầu bổ sung tại bước hiện tại của quy trình (Mục 9.4)',
-    response: workflowInstanceDetailResponseSchema,
-  })
-  public decideApproval(
-    @ValidatedParams(positiveIntParamSchema, 'id') id: number,
-    @ValidatedBody(decideWorkflowApprovalSchema) body: DecideWorkflowApprovalRequest,
-    @CurrentUser() actor?: UserIdentity,
-  ) {
-    return this.workflowsService.decideApproval(id, body, actor);
-  }
-
-  @Post(WORKFLOWS_ROUTES.INSTANCE_DELEGATE)
-  @HttpCode(HttpStatus.OK)
-  @RequirePermissions('workflows.execute')
-  @ApiDoc({
-    summary: 'Ủy quyền bước phê duyệt hiện tại cho nhân sự khác (Mục 9.4)',
-    response: workflowInstanceDetailResponseSchema,
-  })
-  public delegateApproval(
-    @ValidatedParams(positiveIntParamSchema, 'id') id: number,
-    @ValidatedBody(delegateWorkflowApprovalSchema) body: DelegateWorkflowApprovalRequest,
-    @CurrentUser() actor?: UserIdentity,
-  ) {
-    return this.workflowsService.delegateApproval(id, body, actor);
-  }
-
-  @Get(WORKFLOWS_ROUTES.DELEGATIONS)
-  @RequirePermissions('workflows.read')
-  @ApiDoc({
-    summary: 'Danh sách cấu hình ủy quyền phê duyệt theo thời gian và phạm vi (Mục 9.4)',
-    response: z.array(workflowDelegationRuleResponseSchema),
-  })
-  public listDelegationRules() {
-    return this.workflowsService.listDelegationRules();
-  }
-
-  @Post(WORKFLOWS_ROUTES.DELEGATIONS)
-  @RequirePermissions('workflows.execute')
-  @ApiDoc({
-    summary: 'Thiết lập ủy quyền phê duyệt có thời gian hiệu lực và phạm vi (Mục 9.4)',
-    status: HTTP_STATUS_CODE.CREATED,
-    response: workflowDelegationRuleResponseSchema,
-  })
-  public createDelegationRule(
-    @ValidatedBody(createWorkflowDelegationRuleSchema) body: CreateWorkflowDelegationRuleRequest,
-    @CurrentUser() actor?: UserIdentity,
-  ) {
-    return this.workflowsService.createDelegationRule(body, actor);
-  }
-
-  @Post(WORKFLOWS_ROUTES.DELEGATION_REVOKE)
-  @HttpCode(HttpStatus.OK)
-  @RequirePermissions('workflows.execute')
-  @ApiDoc({
-    summary: 'Thu hồi cấu hình ủy quyền phê duyệt (Mục 9.4)',
-    response: workflowDelegationRuleResponseSchema,
-  })
-  public revokeDelegationRule(@ValidatedParams(positiveIntParamSchema, 'id') id: number) {
-    return this.workflowsService.revokeDelegationRule(id);
-  }
-
+  /** Hủy hoặc kết thúc cưỡng bức quy trình kèm lý do và kiểm tra quyền (Mục 9.3.6) */
   @Post(WORKFLOWS_ROUTES.INSTANCE_CANCEL)
   @HttpCode(HttpStatus.OK)
-  @RequirePermissions('workflows.execute')
+  @RequirePermissions('workflows.cancel')
   @ApiDoc({
     summary: 'Hủy hoặc kết thúc quy trình kèm lý do và kiểm tra quyền (Mục 9.3.6)',
     response: workflowInstanceDetailResponseSchema,
   })
-  public cancelInstance(
+  public async cancelInstance(
     @ValidatedParams(positiveIntParamSchema, 'id') id: number,
     @ValidatedBody(cancelWorkflowInstanceSchema) body: CancelWorkflowInstanceRequest,
     @CurrentUser() actor?: UserIdentity,
-  ) {
+  ): Promise<WorkflowInstanceDetailResponse> {
     return this.workflowsService.cancelInstance(id, body, actor);
   }
 
+  /** Theo dõi lịch sử toàn bộ quy trình — biết ai chuyển trạng thái và khi nào (Mục 9.3.7) */
   @Get(WORKFLOWS_ROUTES.INSTANCE_HISTORIES)
   @RequirePermissions('workflows.read')
   @ApiDoc({
-    summary: 'Theo dõi lịch sử toàn bộ quy trình: ai chuyển trạng thái và khi nào (Mục 9.3.7)',
-    response: z.array(workflowHistoryItemResponseSchema),
+    summary:
+      'Xem lịch sử toàn bộ quy trình (biết ai chuyển trạng thái, từ đâu sang đâu và khi nào — Mục 9.3.7)',
+    response: z.array(workflowHistoryItemSchema),
   })
-  public getInstanceHistories(
+  public async getInstanceHistories(
     @ValidatedParams(positiveIntParamSchema, 'id') id: number,
     @CurrentUser() actor?: UserIdentity,
-  ) {
+  ): Promise<readonly WorkflowHistoryItemResponse[]> {
     return this.workflowsService.getInstanceHistories(id, actor);
   }
 
+  /** Quét cảnh báo sắp đến hạn & đánh dấu quá hạn SLA cho quy trình đang chạy (Mục 9.3.8 — dùng Scheduler) */
   @Post(WORKFLOWS_ROUTES.SLA_SCAN_OVERDUE)
   @HttpCode(HttpStatus.OK)
   @RequirePermissions('workflows.manage')
   @ApiDoc({
-    summary:
-      'Quét thời hạn SLA và gửi cảnh báo sắp đến hạn / quá hạn (Mục 9.3.8 — dùng cho Scheduler & Admin)',
-    response: workflowSlaScanResponseSchema,
+    summary: 'Quét SLA thời hạn và gửi cảnh báo quá hạn cho quy trình đang chạy (Mục 9.3.8)',
+    response: workflowSlaScanResultResponseSchema,
   })
-  public scanSlaAndNotifyOverdue() {
+  public async scanOverdueSla(): Promise<WorkflowSlaScanResultResponse> {
     return this.workflowsService.scanSlaAndNotifyOverdue();
-  }
-
-  @Get(WORKFLOWS_ROUTES.COMMENTS)
-  @RequirePermissions('workflows.read')
-  @ApiDoc({
-    summary:
-      'Danh sách bình luận, ghi chú nội bộ (lọc theo quyền) và chuỗi phản hồi của một bản ghi (Mục 9.5)',
-    response: z.array(workflowCommentItemResponseSchema),
-  })
-  public listComments(
-    @ValidatedQuery(listWorkflowCommentsQuerySchema) query: ListWorkflowCommentsQuery,
-    @CurrentUser() actor?: UserIdentity,
-  ) {
-    return this.workflowsService.listRecordComments(query, actor);
-  }
-
-  @Post(WORKFLOWS_ROUTES.COMMENTS)
-  @RequirePermissions('workflows.read')
-  @ApiDoc({
-    summary:
-      'Thêm bình luận, ghi chú nội bộ, trả lời bình luận, nhắc tên (@mention) và đính kèm file cho bản ghi (Mục 9.5)',
-    status: HTTP_STATUS_CODE.CREATED,
-    response: workflowCommentItemResponseSchema,
-  })
-  public addComment(
-    @ValidatedBody(createWorkflowCommentSchema) body: CreateWorkflowCommentRequest,
-    @CurrentUser() actor?: UserIdentity,
-  ) {
-    return this.workflowsService.addRecordComment(body, actor);
-  }
-
-  @Put(WORKFLOWS_ROUTES.COMMENT_BY_ID)
-  @RequirePermissions('workflows.read')
-  @ApiDoc({
-    summary: 'Chỉnh sửa bình luận theo thời hạn/quyền và lưu lại lịch sử nội dung cũ (Mục 9.5)',
-    response: workflowCommentItemResponseSchema,
-  })
-  public updateComment(
-    @ValidatedParams(positiveIntParamSchema, 'id') id: number,
-    @ValidatedBody(updateWorkflowCommentSchema) body: UpdateWorkflowCommentRequest,
-    @CurrentUser() actor?: UserIdentity,
-  ) {
-    return this.workflowsService.updateRecordComment(id, body, actor);
-  }
-
-  @Delete(WORKFLOWS_ROUTES.COMMENT_BY_ID)
-  @RequirePermissions('workflows.read')
-  @ApiDoc({
-    summary: 'Xóa bình luận theo thời hạn và quyền (Mục 9.5)',
-    response: workflowCommentItemResponseSchema,
-  })
-  public deleteComment(
-    @ValidatedParams(positiveIntParamSchema, 'id') id: number,
-    @CurrentUser() actor?: UserIdentity,
-  ) {
-    return this.workflowsService.deleteRecordComment(id, actor);
-  }
-
-  @Get(WORKFLOWS_ROUTES.TIMELINE)
-  @RequirePermissions('workflows.read')
-  @ApiDoc({
-    summary:
-      'Hiển thị dòng thời gian hoạt động hợp nhất (Comment + Workflow + Audit) của một bản ghi (Mục 9.5)',
-    response: workflowRecordActivityTimelineResponseSchema,
-  })
-  public getTimeline(
-    @ValidatedQuery(listWorkflowTimelineQuerySchema) query: ListWorkflowTimelineQuery,
-    @CurrentUser() actor?: UserIdentity,
-  ) {
-    return this.workflowsService.getRecordActivityTimeline(query, actor);
   }
 }

@@ -1,24 +1,14 @@
 import { Injectable, Optional } from '@nestjs/common';
 import { DataSource, In } from 'typeorm';
 import { BaseTypeOrmRepository, TransactionManager } from '@packages/database/index.js';
-import { WorkflowApprovalStepEntity } from '../entities/workflow-approval-step.entity.js';
 import {
+  type CreateWorkflowApprovalStepInput,
   WORKFLOW_APPROVAL_DECISION,
   WORKFLOW_APPROVAL_MODE,
-  type WorkflowApprovalDecision,
-  type WorkflowApprovalMode,
-} from '../enum/workflows.enum.js';
+} from '../contracts/index.js';
+import { WorkflowApprovalStepEntity } from '../entities/workflow-approval-step.entity.js';
 
-export interface CreateWorkflowApprovalStepInput {
-  readonly workflowInstanceId: number;
-  readonly stateCode: string;
-  readonly stepOrder: number;
-  readonly approvalMode?: WorkflowApprovalMode | undefined;
-  readonly approverUserId?: number | null | undefined;
-  readonly delegatedFromUserId?: number | null | undefined;
-  readonly approverRoleCode?: string | null | undefined;
-  readonly decision?: WorkflowApprovalDecision | undefined;
-}
+export type { CreateWorkflowApprovalStepInput };
 
 @Injectable()
 export class WorkflowApprovalStepRepository extends BaseTypeOrmRepository<WorkflowApprovalStepEntity> {

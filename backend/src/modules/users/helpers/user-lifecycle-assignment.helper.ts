@@ -10,12 +10,12 @@ import type { IRolesPublicService } from '@modules/roles/contracts/index.js';
 import { USERS_AUDIT_META, type UserStatusCode } from '../enum/users.enum.js';
 import type { UserStatusTransitionAction } from '../types/users.types.js';
 import { parseUserStatus } from './user-normalizer.helper.js';
-import type { UserEntity } from '../entities/user.entity.js';
 import type {
+  IOrganizationMembersHistoryPersistenceContract,
+  IOrganizationMembersUnitPersistenceContract,
   RecordUserOrganizationHistoryInput,
-  UserOrganizationHistoryRepository,
-} from '../repositories/user-organization-history.repository.js';
-import type { UserOrganizationUnitRepository } from '../repositories/user-organization-unit.repository.js';
+} from '@modules/organization-members/index.js';
+import type { UserEntity } from '../entities/user.entity.js';
 import type { UserRepository } from '../repositories/user.repository.js';
 import type {
   AssignUserOrganizationsRequest,
@@ -230,8 +230,8 @@ export async function executeAssignUserOrganizationsFlow(params: {
   actorId?: number | undefined;
   actor?: UserIdentity | undefined;
   userRepository: UserRepository;
-  userOrgRepository: UserOrganizationUnitRepository;
-  userOrgHistoryRepository?: UserOrganizationHistoryRepository | null | undefined;
+  userOrgRepository: IOrganizationMembersUnitPersistenceContract;
+  userOrgHistoryRepository?: IOrganizationMembersHistoryPersistenceContract | null | undefined;
   organizationsPublicService: IOrganizationsPublicService | null;
   transactionManager: TransactionManager | null;
   ensureAccessUserEntity: (user: UserEntity, actor: UserIdentity, action: string) => Promise<void>;

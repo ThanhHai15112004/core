@@ -4,7 +4,7 @@ import type {
   IUsersPublicService,
   UserNotificationContactView,
 } from '@modules/users/contracts/index.js';
-import type { WorkflowApprovalStepEntity } from '../entities/workflow-approval-step.entity.js';
+import type { WorkflowApprovalStepRecord } from '@modules/approvals/index.js';
 import type { WorkflowDefinitionEntity } from '../entities/workflow-definition.entity.js';
 import type { WorkflowHistoryEntity } from '../entities/workflow-history.entity.js';
 import type { WorkflowInstanceEntity } from '../entities/workflow-instance.entity.js';
@@ -298,7 +298,7 @@ export async function hydrateWorkflowInstanceDetail(params: {
   definition: WorkflowDefinitionEntity | null;
   states: readonly WorkflowStateEntity[];
   transitions: readonly WorkflowTransitionEntity[];
-  approvalSteps: readonly WorkflowApprovalStepEntity[];
+  approvalSteps: readonly WorkflowApprovalStepRecord[];
   histories: readonly WorkflowHistoryEntity[];
   usersPublicService: IUsersPublicService | null;
   actor?: UserIdentity | undefined;

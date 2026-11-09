@@ -37,8 +37,8 @@ import type { UserProfileEntity } from '@modules/users/entities/user-profile.ent
 import type { UserRepository } from '@modules/users/repositories/user.repository.js';
 import type { UserProfileRepository } from '@modules/users/repositories/user-profile.repository.js';
 import type { UserRoleRepository } from '@modules/roles/repositories/user-role.repository.js';
-import type { UserOrganizationUnitRepository } from '@modules/users/repositories/user-organization-unit.repository.js';
-import type { UserOrganizationHistoryRepository } from '@modules/users/repositories/user-organization-history.repository.js';
+import type { UserOrganizationUnitRepository } from '@modules/organization-members/repositories/user-organization-unit.repository.js';
+import type { UserOrganizationHistoryRepository } from '@modules/organization-members/repositories/user-organization-history.repository.js';
 import type { UserStatusHistoryRepository } from '@modules/users/repositories/user-status-history.repository.js';
 import { DATA_SCOPE, type PasswordHasherService } from '@packages/security/index.js';
 import type { IRolesPublicService } from '@modules/roles/contracts/index.js';

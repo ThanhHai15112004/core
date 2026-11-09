@@ -29,10 +29,10 @@ import {
   parseUserStatus,
   resolveVietnameseNameParts,
 } from './user-normalizer.helper.js';
+import type { IOrganizationMembersUnitPersistenceContract } from '@modules/organization-members/index.js';
 import type { UserProfileEntity } from '../entities/user-profile.entity.js';
 import type { UserEntity } from '../entities/user.entity.js';
 import type { UsersMapper } from '../mappers/users.mapper.js';
-import type { UserOrganizationUnitRepository } from '../repositories/user-organization-unit.repository.js';
 import type { UserRepository } from '../repositories/user.repository.js';
 import type { CreateUserRequest, UpdateUserRequest } from '../requests/users.requests.js';
 import type { UserResponse } from '../responses/users.response.js';
@@ -318,7 +318,7 @@ export async function validateAndApplyUserUpdateFields(params: {
 
 export async function hydrateUsersResponseList(params: {
   users: readonly UserEntity[];
-  userOrgRepository: UserOrganizationUnitRepository;
+  userOrgRepository: IOrganizationMembersUnitPersistenceContract;
   findProfilesByUserIds: (userIds: readonly number[]) => Promise<UserProfileEntity[]>;
   findCredentialsByUserIds?:
     | ((userIds: readonly number[]) => Promise<ReadonlyMap<number, UserCredentialRecordView>>)
@@ -607,7 +607,7 @@ export async function resolveActiveUserIdsByRoleIds(params: {
 
 export async function resolveActiveUserIdsByOrganizationUnitIds(params: {
   unitIds: readonly number[];
-  userOrgRepository: UserOrganizationUnitRepository | null;
+  userOrgRepository: IOrganizationMembersUnitPersistenceContract | null;
   userRepository: UserRepository;
 }): Promise<number[]> {
   const { unitIds, userOrgRepository, userRepository } = params;

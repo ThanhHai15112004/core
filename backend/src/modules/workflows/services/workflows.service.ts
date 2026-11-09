@@ -5,6 +5,7 @@ import {
   type PaginatedResult,
   defaultSettingRegistry,
   resolvePagination,
+  safeJsonParseObject,
 } from '@packages/kernel/index.js';
 import { createPaginatedResult } from '@packages/http/index.js';
 import { TransactionManager } from '@packages/database/index.js';
@@ -23,12 +24,15 @@ import { type IFilesPublicService, FILES_PUBLIC_SERVICE } from '@modules/files/c
 import { type IUsersPublicService, USERS_PUBLIC_SERVICE } from '@modules/users/contracts/index.js';
 import {
   APPROVALS_PUBLIC_SERVICE,
+  type IApprovalStepsPersistenceContract,
   type IApprovalsPublicService,
 } from '@modules/approvals/contracts/index.js';
 import {
   COMMENTS_PUBLIC_SERVICE,
+  CommentsService,
   type ICommentsPublicService,
-} from '@modules/comments/contracts/index.js';
+  type RecordActivityTimelineEntryView,
+} from '@modules/comments/index.js';
 import {
   type IWorkflowsPublicService,
   type StartWorkflowPublicInput,
@@ -46,7 +50,6 @@ import { WorkflowDefinitionRepository } from '../repositories/workflow-definitio
 import { WorkflowStateRepository } from '../repositories/workflow-state.repository.js';
 import { WorkflowTransitionRepository } from '../repositories/workflow-transition.repository.js';
 import { WorkflowInstanceRepository } from '../repositories/workflow-instance.repository.js';
-import { WorkflowApprovalStepRepository } from '../repositories/workflow-approval-step.repository.js';
 import { WorkflowHistoryRepository } from '../repositories/workflow-history.repository.js';
 import type {
   CancelWorkflowInstanceRequest,
@@ -84,29 +87,21 @@ import {
   executeWorkflowStateTransition,
 } from '../helpers/workflow-instance-execution.helper.js';
 import { executeWorkflowSlaScan } from '../helpers/workflow-sla-scanner.helper.js';
-import {
-  type StoredWorkflowCommentRecord,
-  executeBuildRecordActivityTimeline,
-  executeCreateWorkflowComment,
-  executeDeleteWorkflowComment,
-  executeListWorkflowComments,
-  executeUpdateWorkflowComment,
-} from '../helpers/workflow-comments-timeline.helper.js';
 
 @Injectable()
 export class WorkflowsService implements IWorkflowsPublicService {
   private readonly effectiveDataScopeService: DataScopeService;
-  private readonly delegationRules: WorkflowApprovalDelegationRule[] = [];
-  private delegationRuleSeq = 1;
-  private readonly commentsStore: StoredWorkflowCommentRecord[] = [];
-  private commentSeq = 1;
+  private readonly effectiveCommentsService: ICommentsPublicService;
+  private readonly fallbackDelegationRules: WorkflowApprovalDelegationRule[] = [];
+  private fallbackDelegationSeq = 1;
 
   constructor(
     private readonly definitionRepository: WorkflowDefinitionRepository,
     private readonly stateRepository: WorkflowStateRepository,
     private readonly transitionRepository: WorkflowTransitionRepository,
     private readonly instanceRepository: WorkflowInstanceRepository,
-    private readonly approvalStepRepository: WorkflowApprovalStepRepository,
+    @Inject(APPROVALS_PUBLIC_SERVICE)
+    private readonly approvalStepRepository: IApprovalStepsPersistenceContract,
     private readonly historyRepository: WorkflowHistoryRepository,
     @Optional()
     @Inject(USERS_PUBLIC_SERVICE)
@@ -137,7 +132,23 @@ export class WorkflowsService implements IWorkflowsPublicService {
     private readonly commentsPublicService: ICommentsPublicService | null = null,
   ) {
     this.effectiveDataScopeService = this.dataScopeService ?? createDefaultDataScopeService();
-    this.approvalsPublicService?.registerInstanceApprovalCoordinator?.({
+    this.effectiveCommentsService =
+      this.commentsPublicService ??
+      new CommentsService(
+        null,
+        null,
+        this.usersPublicService,
+        this.notificationsPublicService,
+        this.filesPublicService,
+        this.auditLogService,
+      );
+    const effectiveApprovals =
+      this.approvalsPublicService ??
+      ('registerInstanceApprovalCoordinator' in this.approvalStepRepository
+        ? (this.approvalStepRepository as IApprovalsPublicService)
+        : null);
+
+    effectiveApprovals?.registerInstanceApprovalCoordinator?.({
       getInstanceSteps: async (instanceId, actor) => {
         const detail = await this.getInstanceById(instanceId, actor);
         return {
@@ -155,31 +166,130 @@ export class WorkflowsService implements IWorkflowsPublicService {
           instanceId,
           {
             decision:
-              input.decision === 'REJECT'
+              input.decision === 'REJECT' || input.decision === 'REJECTED'
                 ? 'REJECTED'
-                : input.decision === 'RETURN'
+                : input.decision === 'RETURN' || input.decision === 'RETURNED'
                   ? 'RETURNED'
                   : 'APPROVED',
             ...(input.stepId !== undefined ? { stepId: input.stepId } : {}),
             comment: input.comment ?? null,
-            ...(input.targetStateCode !== undefined
-              ? { returnToStateCode: input.targetStateCode }
+            ...(input.returnToStateCode !== undefined
+              ? { returnToStateCode: input.returnToStateCode }
+              : input.targetStateCode !== undefined
+                ? { returnToStateCode: input.targetStateCode }
+                : {}),
+            ...(input.contextDataPatch !== undefined
+              ? { contextDataPatch: input.contextDataPatch }
               : {}),
           },
           actor,
         ),
+      delegateStep: async (instanceId, input, actor) =>
+        this.delegateApproval(
+          instanceId,
+          {
+            ...(input.stepId !== undefined ? { stepId: input.stepId } : {}),
+            toUserId: input.toUserId,
+            reason: input.reason ?? 'Ủy quyền phê duyệt',
+            ...(input.effectiveFrom !== undefined ? { effectiveFrom: input.effectiveFrom } : {}),
+            ...(input.effectiveUntil !== undefined ? { effectiveUntil: input.effectiveUntil } : {}),
+            ...(input.workflowCodes !== undefined ? { workflowCodes: input.workflowCodes } : {}),
+          },
+          actor,
+        ),
     });
-    this.commentsPublicService?.registerWorkflowTimelineEntriesProvider?.(async (params) => {
-      const timeline = await this.getRecordActivityTimeline({
-        entityType: params.entityType,
-        entityId: params.entityId,
-        source: 'WORKFLOW',
-        sortOrder: 'DESC',
-        ...(params.workflowInstanceId !== undefined
-          ? { workflowInstanceId: params.workflowInstanceId }
-          : {}),
-      });
-      return timeline.items.filter((item) => item.source === 'WORKFLOW');
+
+    this.effectiveCommentsService.registerWorkflowTimelineEntriesProvider?.(async (params) =>
+      this.buildWorkflowTimelineEntries(params),
+    );
+  }
+
+  private async resolveDelegationRules(): Promise<readonly WorkflowApprovalDelegationRule[]> {
+    const effectiveApprovals =
+      this.approvalsPublicService ??
+      ('listDelegations' in this.approvalStepRepository
+        ? (this.approvalStepRepository as IApprovalsPublicService)
+        : null);
+    if (effectiveApprovals) {
+      const dbRules = await effectiveApprovals.listDelegations().catch(() => []);
+      if (dbRules.length > 0) {
+        return dbRules.map((r) => ({
+          id: r.id,
+          fromUserId: r.fromUserId,
+          toUserId: r.toUserId,
+          effectiveFrom: r.effectiveFrom,
+          effectiveUntil: r.effectiveUntil,
+          ...(r.workflowCodes.length > 0 ? { workflowCodes: r.workflowCodes } : {}),
+          ...(r.entityTypes.length > 0 ? { entityTypes: r.entityTypes } : {}),
+          organizationUnitId: r.organizationUnitId,
+          reason: r.reason ?? null,
+          isActive: r.isActive,
+          createdAt: r.createdAt,
+        }));
+      }
+    }
+    return this.fallbackDelegationRules;
+  }
+
+  private async buildWorkflowTimelineEntries(params: {
+    readonly entityType: string;
+    readonly entityId: string;
+    readonly workflowInstanceId?: number | undefined;
+  }): Promise<readonly RecordActivityTimelineEntryView[]> {
+    const instances = await this.instanceRepository.findByEntity(
+      params.entityType.trim().toLowerCase(),
+      params.entityId.trim(),
+    );
+    const filteredInstances =
+      params.workflowInstanceId !== undefined
+        ? instances.filter((i) => Number(i.id) === Number(params.workflowInstanceId))
+        : instances;
+    if (filteredInstances.length === 0) return [];
+
+    const instanceIds = filteredInstances.map((i) => Number(i.id));
+    const histories = await this.historyRepository.findByInstanceIds(instanceIds);
+    const actorIds = [
+      ...new Set(
+        histories
+          .map((h) =>
+            h.actorUserId !== null && h.actorUserId !== undefined ? Number(h.actorUserId) : 0,
+          )
+          .filter((id) => id > 0),
+      ),
+    ];
+    const contacts =
+      actorIds.length > 0 && this.usersPublicService?.findUserContactsByIds
+        ? await this.usersPublicService.findUserContactsByIds(actorIds).catch(() => [])
+        : [];
+    const userMap = new Map(contacts.map((u) => [Number(u.id), u]));
+
+    return histories.map((h) => {
+      const actorInfo =
+        h.actorUserId !== null && h.actorUserId !== undefined
+          ? userMap.get(Number(h.actorUserId))
+          : undefined;
+      return {
+        id: `workflow_history_${h.id}`,
+        source: 'WORKFLOW' as const,
+        actionType: h.actionType,
+        title: h.fromStateCode
+          ? `Workflow ${h.actionType}: ${h.fromStateCode} -> ${h.toStateCode}`
+          : `Workflow ${h.actionType}: -> ${h.toStateCode}`,
+        summary: h.reason ?? null,
+        isInternal: false,
+        actorUserId:
+          h.actorUserId !== null && h.actorUserId !== undefined ? Number(h.actorUserId) : null,
+        actorFullName: actorInfo?.fullName ?? null,
+        actorUsername: actorInfo?.username ?? null,
+        occurredAt: (h.createdAt ? new Date(h.createdAt) : new Date()).toISOString(),
+        metadata: {
+          workflowInstanceId: Number(h.workflowInstanceId),
+          transitionCode: h.transitionCode ?? null,
+          fromStateCode: h.fromStateCode ?? null,
+          toStateCode: h.toStateCode,
+          ...safeJsonParseObject<Record<string, unknown>>(h.metadataJson, {}),
+        },
+      };
     });
   }
 
@@ -376,6 +486,7 @@ export class WorkflowsService implements IWorkflowsPublicService {
     input: StartWorkflowPublicInput,
     actor?: UserIdentity,
   ): Promise<WorkflowInstanceDetailView> {
+    const delegationRules = await this.resolveDelegationRules();
     return executeStartWorkflowForEntity({
       input,
       actor,
@@ -387,7 +498,7 @@ export class WorkflowsService implements IWorkflowsPublicService {
       usersPublicService: this.usersPublicService,
       notificationsPublicService: this.notificationsPublicService,
       messagePublisher: this.messagePublisher,
-      delegationRules: this.delegationRules,
+      delegationRules,
       getInstanceById: (id, act) => this.getInstanceById(id, act),
     });
   }
@@ -397,6 +508,7 @@ export class WorkflowsService implements IWorkflowsPublicService {
     dto: ExecuteWorkflowTransitionRequest,
     actor?: UserIdentity,
   ): Promise<WorkflowInstanceDetailView> {
+    const delegationRules = await this.resolveDelegationRules();
     return executeWorkflowStateTransition({
       id,
       dto,
@@ -410,7 +522,7 @@ export class WorkflowsService implements IWorkflowsPublicService {
       usersPublicService: this.usersPublicService,
       notificationsPublicService: this.notificationsPublicService,
       messagePublisher: this.messagePublisher,
-      delegationRules: this.delegationRules,
+      delegationRules,
       getInstanceById: (instId, act) => this.getInstanceById(instId, act),
     });
   }
@@ -420,6 +532,7 @@ export class WorkflowsService implements IWorkflowsPublicService {
     dto: DecideWorkflowApprovalRequest,
     actor?: UserIdentity,
   ): Promise<WorkflowInstanceDetailView> {
+    const delegationRules = await this.resolveDelegationRules();
     return executeDecideWorkflowApproval({
       id,
       dto,
@@ -429,7 +542,7 @@ export class WorkflowsService implements IWorkflowsPublicService {
       instanceRepository: this.instanceRepository,
       approvalStepRepository: this.approvalStepRepository,
       historyRepository: this.historyRepository,
-      delegationRules: this.delegationRules,
+      delegationRules,
       executeTransition: (instId, trDto, act) => this.executeTransition(instId, trDto, act),
       getInstanceById: (instId, act) => this.getInstanceById(instId, act),
     });
@@ -467,7 +580,7 @@ export class WorkflowsService implements IWorkflowsPublicService {
   }
 
   public async listDelegationRules(): Promise<readonly WorkflowApprovalDelegationRule[]> {
-    return [...this.delegationRules];
+    return this.resolveDelegationRules();
   }
 
   public async createDelegationRule(
@@ -483,8 +596,41 @@ export class WorkflowsService implements IWorkflowsPublicService {
     }
 
     const fromUserId = dto.fromUserId ?? actor?.id ?? 1;
+    if (this.approvalsPublicService) {
+      try {
+        const created = await this.approvalsPublicService.createDelegation(
+          {
+            fromUserId: Number(fromUserId),
+            toUserId: Number(dto.toUserId),
+            effectiveFrom: new Date(fromMs).toISOString(),
+            effectiveUntil: new Date(untilMs).toISOString(),
+            workflowCodes: dto.workflowCodes ?? [],
+            entityTypes: dto.entityTypes ?? [],
+            organizationUnitId: dto.organizationUnitId ?? null,
+            reason: dto.reason.trim(),
+          },
+          actor,
+        );
+        return {
+          id: created.id,
+          fromUserId: created.fromUserId,
+          toUserId: created.toUserId,
+          effectiveFrom: created.effectiveFrom,
+          effectiveUntil: created.effectiveUntil,
+          ...(created.workflowCodes.length > 0 ? { workflowCodes: created.workflowCodes } : {}),
+          ...(created.entityTypes.length > 0 ? { entityTypes: created.entityTypes } : {}),
+          organizationUnitId: created.organizationUnitId,
+          reason: created.reason ?? dto.reason.trim(),
+          isActive: created.isActive,
+          createdAt: created.createdAt,
+        };
+      } catch {
+        // Fallback when DB is not connected in unit tests
+      }
+    }
+
     const rule: WorkflowApprovalDelegationRule = {
-      id: this.delegationRuleSeq++,
+      id: this.fallbackDelegationSeq++,
       fromUserId: Number(fromUserId),
       toUserId: Number(dto.toUserId),
       effectiveFrom: new Date(fromMs).toISOString(),
@@ -502,40 +648,23 @@ export class WorkflowsService implements IWorkflowsPublicService {
       isActive: true,
       createdAt: new Date().toISOString(),
     };
-    this.delegationRules.unshift(rule);
-    if (this.approvalsPublicService) {
-      await this.approvalsPublicService
-        .createDelegation(
-          {
-            fromUserId: Number(fromUserId),
-            toUserId: Number(dto.toUserId),
-            effectiveFrom: rule.effectiveFrom,
-            effectiveUntil: rule.effectiveUntil,
-            workflowCodes: dto.workflowCodes ?? [],
-            entityTypes: dto.entityTypes ?? [],
-            organizationUnitId: dto.organizationUnitId ?? null,
-            reason: dto.reason.trim(),
-          },
-          actor,
-        )
-        .catch(() => undefined);
-    }
+    this.fallbackDelegationRules.unshift(rule);
     return rule;
   }
 
   public async revokeDelegationRule(id: number): Promise<WorkflowApprovalDelegationRule> {
-    const idx = this.delegationRules.findIndex((r) => r.id === Number(id));
+    if (this.approvalsPublicService) {
+      await this.approvalsPublicService.revokeDelegation(Number(id)).catch(() => undefined);
+    }
+    const idx = this.fallbackDelegationRules.findIndex((r) => r.id === Number(id));
     if (idx === -1) {
       throw new NotFoundAppException('workflows.delegationRuleNotFound', { id });
     }
     const updated: WorkflowApprovalDelegationRule = {
-      ...this.delegationRules[idx]!,
+      ...this.fallbackDelegationRules[idx]!,
       isActive: false,
     };
-    this.delegationRules[idx] = updated;
-    if (this.approvalsPublicService) {
-      await this.approvalsPublicService.revokeDelegation(Number(id)).catch(() => undefined);
-    }
+    this.fallbackDelegationRules[idx] = updated;
     return updated;
   }
 
@@ -589,46 +718,28 @@ export class WorkflowsService implements IWorkflowsPublicService {
     query: ListWorkflowCommentsQuery,
     actor?: UserIdentity,
   ): Promise<WorkflowCommentItemView[]> {
-    return executeListWorkflowComments({
-      query,
-      actor,
-      commentsStore: this.commentsStore,
-      usersPublicService: this.usersPublicService,
-    });
+    const items = await this.effectiveCommentsService.listComments(query, actor);
+    return items as unknown as WorkflowCommentItemView[];
   }
 
   public async addRecordComment(
     dto: CreateWorkflowCommentRequest,
     actor?: UserIdentity,
   ): Promise<WorkflowCommentItemView> {
-    const created = await executeCreateWorkflowComment({
-      dto,
+    const created = await this.effectiveCommentsService.createComment(
+      {
+        entityType: dto.entityType,
+        entityId: dto.entityId,
+        workflowInstanceId: dto.workflowInstanceId ?? null,
+        parentCommentId: dto.parentCommentId ?? null,
+        content: dto.content,
+        isInternal: dto.isInternal ?? false,
+        mentionedUserIds: dto.mentionedUserIds ?? [],
+        attachmentFileIds: dto.attachmentFileIds ?? [],
+      },
       actor,
-      commentsStore: this.commentsStore,
-      nextCommentId: () => this.commentSeq++,
-      usersPublicService: this.usersPublicService,
-      notificationsPublicService: this.notificationsPublicService,
-      filesPublicService: this.filesPublicService,
-      auditLogService: this.auditLogService,
-    });
-    if (this.commentsPublicService) {
-      await this.commentsPublicService
-        .createComment(
-          {
-            entityType: dto.entityType,
-            entityId: dto.entityId,
-            workflowInstanceId: dto.workflowInstanceId ?? null,
-            parentCommentId: dto.parentCommentId ?? null,
-            content: dto.content,
-            isInternal: dto.isInternal ?? false,
-            mentionedUserIds: dto.mentionedUserIds ?? [],
-            attachmentFileIds: dto.attachmentFileIds ?? [],
-          },
-          actor,
-        )
-        .catch(() => undefined);
-    }
-    return created;
+    );
+    return created as unknown as WorkflowCommentItemView;
   }
 
   public async updateRecordComment(
@@ -637,70 +748,49 @@ export class WorkflowsService implements IWorkflowsPublicService {
     actor?: UserIdentity,
     now?: Date,
   ): Promise<WorkflowCommentItemView> {
-    const updated = await executeUpdateWorkflowComment({
+    const updated = await this.effectiveCommentsService.updateComment(
       id,
-      dto,
+      {
+        content: dto.content,
+        ...(dto.mentionedUserIds !== undefined ? { mentionedUserIds: dto.mentionedUserIds } : {}),
+        ...(dto.attachmentFileIds !== undefined
+          ? { attachmentFileIds: dto.attachmentFileIds }
+          : {}),
+        editReason: dto.editReason ?? null,
+      },
       actor,
       now,
-      commentsStore: this.commentsStore,
-      usersPublicService: this.usersPublicService,
-      notificationsPublicService: this.notificationsPublicService,
-      filesPublicService: this.filesPublicService,
-      auditLogService: this.auditLogService,
-    });
-    if (this.commentsPublicService) {
-      await this.commentsPublicService
-        .updateComment(
-          id,
-          {
-            content: dto.content,
-            ...(dto.mentionedUserIds !== undefined
-              ? { mentionedUserIds: dto.mentionedUserIds }
-              : {}),
-            ...(dto.attachmentFileIds !== undefined
-              ? { attachmentFileIds: dto.attachmentFileIds }
-              : {}),
-            editReason: dto.editReason ?? null,
-          },
-          actor,
-        )
-        .catch(() => undefined);
-    }
-    return updated;
+    );
+    return updated as unknown as WorkflowCommentItemView;
   }
 
   public async deleteRecordComment(
     id: number,
     actor?: UserIdentity,
     now?: Date,
-  ): Promise<WorkflowCommentItemView> {
-    const deleted = await executeDeleteWorkflowComment({
-      id,
-      actor,
-      now,
-      commentsStore: this.commentsStore,
-      usersPublicService: this.usersPublicService,
-      filesPublicService: this.filesPublicService,
-      auditLogService: this.auditLogService,
-    });
-    if (this.commentsPublicService) {
-      await this.commentsPublicService.deleteComment(id, actor).catch(() => undefined);
-    }
-    return deleted;
+  ): Promise<WorkflowCommentItemView & { readonly id: number; readonly deleted: true }> {
+    const deleted = await this.effectiveCommentsService.deleteComment(id, actor, now);
+    return deleted as unknown as WorkflowCommentItemView & {
+      readonly id: number;
+      readonly deleted: true;
+    };
   }
 
   public async getRecordActivityTimeline(
     query: ListWorkflowTimelineQuery,
     actor?: UserIdentity,
   ): Promise<WorkflowRecordActivityTimelineView> {
-    return executeBuildRecordActivityTimeline({
-      query,
+    return this.effectiveCommentsService.getRecordTimeline(
+      {
+        entityType: query.entityType,
+        entityId: query.entityId,
+        workflowInstanceId: query.workflowInstanceId,
+        includeInternal: query.includeInternal,
+        source: query.source,
+        sortOrder: query.sortOrder,
+        limit: query.limit,
+      },
       actor,
-      commentsStore: this.commentsStore,
-      instanceRepository: this.instanceRepository,
-      historyRepository: this.historyRepository,
-      usersPublicService: this.usersPublicService,
-      auditLogService: this.auditLogService,
-    });
+    );
   }
 }

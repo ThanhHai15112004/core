@@ -38,6 +38,8 @@ export const getRecordActivityTimelineQuerySchema = z.object({
   entityId: z.string().trim().min(1).max(128),
   workflowInstanceId: optionalQueryParam(intQueryParam({ min: 1 })),
   includeInternal: optionalQueryParam(booleanQueryParam()),
+  source: optionalQueryParam(z.enum(['ALL', 'COMMENT', 'WORKFLOW', 'AUDIT'])),
+  sortOrder: optionalQueryParam(z.enum(['ASC', 'DESC'])),
   limit: optionalQueryParam(intQueryParam({ min: 1, max: 500 })),
 });
 

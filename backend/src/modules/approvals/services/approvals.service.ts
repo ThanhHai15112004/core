@@ -1,61 +1,274 @@
 import { Inject, Injectable, Optional } from '@nestjs/common';
 import {
   BadRequestAppException,
-  ForbiddenAppException,
   NotFoundAppException,
   safeJsonParseStringArray,
 } from '@packages/kernel/index.js';
-import { AuditLogService, type UserIdentity } from '@packages/security/index.js';
+import type { UserIdentity } from '@packages/security/index.js';
+import {
+  type INotificationsPublicService,
+  NOTIFICATIONS_PUBLIC_SERVICE,
+  NOTIFICATION_CATEGORY,
+  NOTIFICATION_PRIORITY,
+  NOTIFICATION_TARGET_TYPE,
+} from '@modules/notifications/contracts/index.js';
 import type {
   ApprovalDelegationRuleView,
-  ApprovalInstanceStepsOverview,
+  ApprovalInstanceStepsOverviewView,
   CreateApprovalDelegationRuleInput,
+  CreateWorkflowApprovalStepInput,
   DecideApprovalStepInput,
+  DelegateApprovalStepInput,
   IApprovalsPublicService,
+  InstanceApprovalCoordinator,
+  WorkflowApprovalStepRecord,
 } from '../contracts/index.js';
 import type { WorkflowApprovalDelegationEntity } from '../entities/workflow-approval-delegation.entity.js';
+import type { WorkflowApprovalStepEntity } from '../entities/workflow-approval-step.entity.js';
 import { WorkflowApprovalDelegationRepository } from '../repositories/workflow-approval-delegation.repository.js';
+import { WorkflowApprovalStepRepository } from '../repositories/workflow-approval-step.repository.js';
 
 @Injectable()
 export class ApprovalsService implements IApprovalsPublicService {
-  private readonly memoryDelegations = new Map<number, ApprovalDelegationRuleView>();
-  private nextMemoryId = 1;
-  private instanceCoordinator: {
-    readonly getInstanceSteps: (
-      instanceId: number,
-      actor?: UserIdentity,
-    ) => Promise<ApprovalInstanceStepsOverview>;
-    readonly decideStep: (
-      instanceId: number,
-      input: DecideApprovalStepInput,
-      actor?: UserIdentity,
-    ) => Promise<unknown>;
-  } | null = null;
+  private instanceCoordinator: InstanceApprovalCoordinator | null = null;
 
   constructor(
+    private readonly delegationRepository: WorkflowApprovalDelegationRepository,
     @Optional()
-    @Inject(WorkflowApprovalDelegationRepository)
-    private readonly delegationRepository: WorkflowApprovalDelegationRepository | null = null,
+    @Inject(NOTIFICATIONS_PUBLIC_SERVICE)
+    private readonly notificationsPublicService: INotificationsPublicService | null = null,
     @Optional()
-    @Inject(AuditLogService)
-    private readonly auditLogService: AuditLogService | null = null,
+    @Inject(WorkflowApprovalStepRepository)
+    private readonly stepRepository: WorkflowApprovalStepRepository | null = null,
   ) {}
 
-  public registerInstanceApprovalCoordinator(coordinator: {
-    readonly getInstanceSteps: (
-      instanceId: number,
-      actor?: UserIdentity,
-    ) => Promise<ApprovalInstanceStepsOverview>;
-    readonly decideStep: (
-      instanceId: number,
-      input: DecideApprovalStepInput,
-      actor?: UserIdentity,
-    ) => Promise<unknown>;
-  }): void {
+  public registerInstanceApprovalCoordinator(coordinator: InstanceApprovalCoordinator): void {
     this.instanceCoordinator = coordinator;
   }
 
-  private toDelegationRuleView(
+  public async findByInstanceId(workflowInstanceId: number): Promise<WorkflowApprovalStepRecord[]> {
+    if (!this.stepRepository) return [];
+    return this.stepRepository.findByInstanceId(workflowInstanceId);
+  }
+
+  public async findByInstanceIds(
+    instanceIds: readonly number[],
+  ): Promise<WorkflowApprovalStepRecord[]> {
+    if (!this.stepRepository) return [];
+    return this.stepRepository.findByInstanceIds(instanceIds);
+  }
+
+  public async createSteps(
+    inputs: readonly CreateWorkflowApprovalStepInput[],
+  ): Promise<WorkflowApprovalStepRecord[]> {
+    if (!this.stepRepository) return [];
+    return this.stepRepository.createSteps(inputs);
+  }
+
+  public async saveEntity(step: WorkflowApprovalStepRecord): Promise<WorkflowApprovalStepRecord> {
+    if (!this.stepRepository) return step;
+    return this.stepRepository.saveEntity(step as WorkflowApprovalStepEntity);
+  }
+
+  public async createDelegation(
+    input: CreateApprovalDelegationRuleInput,
+    actor?: UserIdentity,
+  ): Promise<ApprovalDelegationRuleView> {
+    const fromUserId = Number(input.fromUserId ?? actor?.id ?? 0);
+    const toUserId = Number(input.toUserId);
+
+    if (!fromUserId || fromUserId <= 0) {
+      throw new BadRequestAppException('approvals.delegationMissingFromUser');
+    }
+    if (fromUserId === toUserId) {
+      throw new BadRequestAppException('approvals.delegationSelfNotAllowed');
+    }
+
+    const fromDate = new Date(input.effectiveFrom);
+    const untilDate = new Date(input.effectiveUntil);
+    if (
+      Number.isNaN(fromDate.getTime()) ||
+      Number.isNaN(untilDate.getTime()) ||
+      untilDate.getTime() <= fromDate.getTime()
+    ) {
+      throw new BadRequestAppException('approvals.delegationInvalidPeriod');
+    }
+
+    const workflowCodes = (input.workflowCodes ?? [])
+      .map((c) => c.trim().toUpperCase())
+      .filter(Boolean);
+    const entityTypes = (input.entityTypes ?? [])
+      .map((c) => c.trim().toLowerCase())
+      .filter(Boolean);
+
+    const saved = await this.delegationRepository.createRule({
+      fromUserId,
+      toUserId,
+      effectiveFrom: fromDate,
+      effectiveUntil: untilDate,
+      workflowCodesJson: JSON.stringify(workflowCodes),
+      entityTypesJson: JSON.stringify(entityTypes),
+      organizationUnitId: input.organizationUnitId ?? null,
+      reason: input.reason ?? null,
+      isActive: true,
+      createdByUserId: actor?.id ?? fromUserId,
+    });
+
+    if (this.notificationsPublicService) {
+      await this.notificationsPublicService
+        .dispatch({
+          title: 'Bạn được ủy quyền phê duyệt hồ sơ',
+          content: `Người dùng #${fromUserId} đã ủy quyền phê duyệt cho bạn từ ${fromDate.toLocaleDateString('vi-VN')} đến ${untilDate.toLocaleDateString('vi-VN')}.`,
+          category: NOTIFICATION_CATEGORY.WORK,
+          priority: NOTIFICATION_PRIORITY.NORMAL,
+          targetType: NOTIFICATION_TARGET_TYPE.SINGLE_USER,
+          userId: toUserId,
+          referenceModule: 'approvals',
+          referenceType: 'approval_delegation',
+          referenceId: String(saved.id),
+          actionUrl: '/approvals',
+        })
+        .catch(() => undefined);
+    }
+
+    return this.mapDelegationEntity(saved);
+  }
+
+  public async listDelegations(query?: {
+    readonly fromUserId?: number | undefined;
+    readonly toUserId?: number | undefined;
+    readonly activeOnly?: boolean | undefined;
+  }): Promise<ApprovalDelegationRuleView[]> {
+    const entities = await this.delegationRepository.findAllRules();
+    const nowMs = Date.now();
+
+    return entities
+      .filter((entity) => {
+        if (query?.fromUserId && Number(entity.fromUserId) !== Number(query.fromUserId)) {
+          return false;
+        }
+        if (query?.toUserId && Number(entity.toUserId) !== Number(query.toUserId)) {
+          return false;
+        }
+        if (query?.activeOnly) {
+          const fromMs = new Date(entity.effectiveFrom).getTime();
+          const untilMs = new Date(entity.effectiveUntil).getTime();
+          if (!entity.isActive || nowMs < fromMs || nowMs > untilMs) {
+            return false;
+          }
+        }
+        return true;
+      })
+      .map((entity) => this.mapDelegationEntity(entity));
+  }
+
+  public async revokeDelegation(
+    ruleId: number,
+    actor?: UserIdentity,
+  ): Promise<{ readonly revoked: true; readonly id: number }> {
+    const entity = await this.delegationRepository.findById(ruleId);
+    if (!entity) {
+      throw new NotFoundAppException('approvals.delegationNotFound', { id: ruleId });
+    }
+
+    const isSuperOrAdmin =
+      actor?.roles?.includes('super_admin') || actor?.roles?.includes('admin') || false;
+    if (actor && !isSuperOrAdmin && Number(actor.id) !== Number(entity.fromUserId)) {
+      throw new BadRequestAppException('approvals.delegationRevokeForbidden');
+    }
+
+    entity.isActive = false;
+    await this.delegationRepository.saveEntity(entity);
+    return { revoked: true, id: Number(entity.id) };
+  }
+
+  public async findActiveDelegationForApprover(params: {
+    readonly fromUserId: number;
+    readonly workflowCode?: string | null | undefined;
+    readonly entityType?: string | null | undefined;
+    readonly organizationUnitId?: number | null | undefined;
+    readonly at?: Date | undefined;
+  }): Promise<ApprovalDelegationRuleView | null> {
+    const atMs = (params.at ?? new Date()).getTime();
+    const entities = await this.delegationRepository.findAllRules();
+
+    for (const entity of entities) {
+      if (!entity.isActive || Number(entity.fromUserId) !== Number(params.fromUserId)) {
+        continue;
+      }
+      const fromMs = new Date(entity.effectiveFrom).getTime();
+      const untilMs = new Date(entity.effectiveUntil).getTime();
+      if (atMs < fromMs || atMs > untilMs) {
+        continue;
+      }
+
+      const wfCodes = safeJsonParseStringArray(entity.workflowCodesJson);
+      if (
+        wfCodes.length > 0 &&
+        params.workflowCode &&
+        !wfCodes.includes(params.workflowCode.toUpperCase())
+      ) {
+        continue;
+      }
+
+      const entityTypes = safeJsonParseStringArray(entity.entityTypesJson);
+      if (
+        entityTypes.length > 0 &&
+        params.entityType &&
+        !entityTypes.includes(params.entityType.toLowerCase())
+      ) {
+        continue;
+      }
+
+      if (
+        entity.organizationUnitId !== null &&
+        entity.organizationUnitId !== undefined &&
+        params.organizationUnitId !== null &&
+        params.organizationUnitId !== undefined &&
+        Number(entity.organizationUnitId) !== Number(params.organizationUnitId)
+      ) {
+        continue;
+      }
+
+      return this.mapDelegationEntity(entity);
+    }
+
+    return null;
+  }
+
+  public async getInstanceSteps(
+    instanceId: number,
+    actor?: UserIdentity,
+  ): Promise<ApprovalInstanceStepsOverviewView> {
+    if (!this.instanceCoordinator) {
+      throw new NotFoundAppException('approvals.coordinatorNotRegistered');
+    }
+    return this.instanceCoordinator.getInstanceSteps(instanceId, actor);
+  }
+
+  public async decideInstanceStep(
+    instanceId: number,
+    input: DecideApprovalStepInput,
+    actor?: UserIdentity,
+  ): Promise<unknown> {
+    if (!this.instanceCoordinator) {
+      throw new NotFoundAppException('approvals.coordinatorNotRegistered');
+    }
+    return this.instanceCoordinator.decideStep(instanceId, input, actor);
+  }
+
+  public async delegateInstanceStep(
+    instanceId: number,
+    input: DelegateApprovalStepInput,
+    actor?: UserIdentity,
+  ): Promise<unknown> {
+    if (!this.instanceCoordinator || typeof this.instanceCoordinator.delegateStep !== 'function') {
+      throw new NotFoundAppException('approvals.coordinatorNotRegistered');
+    }
+    return this.instanceCoordinator.delegateStep(instanceId, input, actor);
+  }
+
+  private mapDelegationEntity(
     entity: WorkflowApprovalDelegationEntity,
   ): ApprovalDelegationRuleView {
     return {
@@ -67,212 +280,14 @@ export class ApprovalsService implements IApprovalsPublicService {
       workflowCodes: safeJsonParseStringArray(entity.workflowCodesJson),
       entityTypes: safeJsonParseStringArray(entity.entityTypesJson),
       organizationUnitId:
-        entity.organizationUnitId !== undefined && entity.organizationUnitId !== null
+        entity.organizationUnitId !== null && entity.organizationUnitId !== undefined
           ? Number(entity.organizationUnitId)
           : null,
       reason: entity.reason ?? null,
       isActive: Boolean(entity.isActive),
-      createdAt: (entity.createdAt ? new Date(entity.createdAt) : new Date()).toISOString(),
+      createdAt: entity.createdAt
+        ? new Date(entity.createdAt).toISOString()
+        : new Date().toISOString(),
     };
-  }
-
-  public async createDelegation(
-    input: CreateApprovalDelegationRuleInput,
-    actor?: UserIdentity,
-  ): Promise<ApprovalDelegationRuleView> {
-    const fromUserId = input.fromUserId ?? actor?.id;
-    if (!fromUserId || fromUserId < 1) {
-      throw new BadRequestAppException('approvals.delegationForbidden');
-    }
-    const isAdmin =
-      actor?.roles?.includes('super_admin') ||
-      actor?.permissions?.includes('approvals.manage') ||
-      actor?.permissions?.includes('workflows.manage');
-    if (actor && Number(actor.id) !== Number(fromUserId) && !isAdmin) {
-      throw new ForbiddenAppException('approvals.delegationForbidden');
-    }
-    if (Number(fromUserId) === Number(input.toUserId)) {
-      throw new BadRequestAppException('approvals.cannotDelegateToSelf');
-    }
-
-    const fromDate = new Date(input.effectiveFrom);
-    const untilDate = new Date(input.effectiveUntil);
-    if (
-      Number.isNaN(fromDate.getTime()) ||
-      Number.isNaN(untilDate.getTime()) ||
-      untilDate.getTime() <= fromDate.getTime()
-    ) {
-      throw new BadRequestAppException('approvals.invalidDelegationPeriod');
-    }
-
-    const workflowCodes = (input.workflowCodes ?? []).map((c) => c.trim().toUpperCase());
-    const entityTypes = (input.entityTypes ?? []).map((t) => t.trim().toLowerCase());
-
-    let ruleView: ApprovalDelegationRuleView | null = null;
-    if (this.delegationRepository) {
-      try {
-        const created = await this.delegationRepository.createRule({
-          fromUserId: Number(fromUserId),
-          toUserId: Number(input.toUserId),
-          effectiveFrom: fromDate,
-          effectiveUntil: untilDate,
-          workflowCodesJson: JSON.stringify(workflowCodes),
-          entityTypesJson: JSON.stringify(entityTypes),
-          organizationUnitId: input.organizationUnitId ?? null,
-          reason: input.reason ?? null,
-          isActive: true,
-          createdByUserId: actor?.id ?? Number(fromUserId),
-        });
-        ruleView = this.toDelegationRuleView(created);
-      } catch {
-        // Fallback to in-memory when DB is not connected in unit tests
-      }
-    }
-
-    if (!ruleView) {
-      const id = this.nextMemoryId++;
-      ruleView = {
-        id,
-        fromUserId: Number(fromUserId),
-        toUserId: Number(input.toUserId),
-        effectiveFrom: fromDate.toISOString(),
-        effectiveUntil: untilDate.toISOString(),
-        workflowCodes,
-        entityTypes,
-        organizationUnitId: input.organizationUnitId ?? null,
-        reason: input.reason ?? null,
-        isActive: true,
-        createdAt: new Date().toISOString(),
-      };
-    }
-
-    this.memoryDelegations.set(ruleView.id, ruleView);
-
-    if (this.auditLogService) {
-      await this.auditLogService
-        .record({
-          actor,
-          actorUserId: actor?.id ?? Number(fromUserId),
-          module: 'approvals',
-          feature: 'delegation',
-          action: 'CREATE_DELEGATION',
-          resourceType: 'workflow_approval_delegation',
-          resourceId: String(ruleView.id),
-          afterData: ruleView as unknown as Record<string, unknown>,
-        })
-        .catch(() => undefined);
-    }
-
-    return ruleView;
-  }
-
-  public async listDelegations(query?: {
-    readonly fromUserId?: number | undefined;
-    readonly toUserId?: number | undefined;
-    readonly activeOnly?: boolean | undefined;
-  }): Promise<ApprovalDelegationRuleView[]> {
-    if (this.delegationRepository) {
-      try {
-        const rows = await this.delegationRepository.findAllRules(query);
-        const views = rows.map((row) => this.toDelegationRuleView(row));
-        for (const v of views) {
-          this.memoryDelegations.set(v.id, v);
-        }
-        return views;
-      } catch {
-        // Fallback to memory store
-      }
-    }
-
-    let items = [...this.memoryDelegations.values()];
-    if (query?.fromUserId !== undefined) {
-      items = items.filter((r) => Number(r.fromUserId) === Number(query.fromUserId));
-    }
-    if (query?.toUserId !== undefined) {
-      items = items.filter((r) => Number(r.toUserId) === Number(query.toUserId));
-    }
-    if (query?.activeOnly) {
-      const nowMs = Date.now();
-      items = items.filter(
-        (r) =>
-          r.isActive &&
-          new Date(r.effectiveFrom).getTime() <= nowMs &&
-          new Date(r.effectiveUntil).getTime() >= nowMs,
-      );
-    }
-    return items.sort((a, b) => b.id - a.id);
-  }
-
-  public async revokeDelegation(
-    id: number,
-    actor?: UserIdentity,
-  ): Promise<{ readonly id: number; readonly revoked: true }> {
-    let target: ApprovalDelegationRuleView | undefined = this.memoryDelegations.get(Number(id));
-    let dbEntity: WorkflowApprovalDelegationEntity | null = null;
-
-    if (this.delegationRepository) {
-      try {
-        dbEntity = await this.delegationRepository.findById(Number(id));
-        if (dbEntity) {
-          target = this.toDelegationRuleView(dbEntity);
-        }
-      } catch {
-        // Fallback to memory
-      }
-    }
-
-    if (!target) {
-      throw new NotFoundAppException('approvals.delegationNotFound', { id });
-    }
-
-    const isAdmin =
-      actor?.roles?.includes('super_admin') ||
-      actor?.permissions?.includes('approvals.manage') ||
-      actor?.permissions?.includes('workflows.manage');
-    if (actor && Number(actor.id) !== Number(target.fromUserId) && !isAdmin) {
-      throw new ForbiddenAppException('approvals.delegationForbidden');
-    }
-
-    if (dbEntity && this.delegationRepository) {
-      try {
-        dbEntity.isActive = false;
-        await this.delegationRepository.saveEntity(dbEntity);
-      } catch {
-        // Ignore in unit tests without DB
-      }
-    }
-
-    this.memoryDelegations.set(Number(id), { ...target, isActive: false });
-    return { id: Number(id), revoked: true };
-  }
-
-  public async getActiveDelegationMap(): Promise<Map<number, ApprovalDelegationRuleView>> {
-    const list = await this.listDelegations();
-    const map = new Map<number, ApprovalDelegationRuleView>();
-    for (const item of list) {
-      map.set(item.id, item);
-    }
-    return map;
-  }
-
-  public async getInstanceSteps(
-    instanceId: number,
-    actor?: UserIdentity,
-  ): Promise<ApprovalInstanceStepsOverview> {
-    if (!this.instanceCoordinator) {
-      throw new BadRequestAppException('approvals.instanceHandlerUnavailable');
-    }
-    return this.instanceCoordinator.getInstanceSteps(instanceId, actor);
-  }
-
-  public async decideInstanceStep(
-    instanceId: number,
-    input: DecideApprovalStepInput,
-    actor?: UserIdentity,
-  ): Promise<unknown> {
-    if (!this.instanceCoordinator) {
-      throw new BadRequestAppException('approvals.instanceHandlerUnavailable');
-    }
-    return this.instanceCoordinator.decideStep(instanceId, input, actor);
   }
 }

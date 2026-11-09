@@ -10,10 +10,12 @@ import type {
 import { USER_STATUS } from '../enum/users.enum.js';
 import { getUserStatusName, parseUserStatus } from './user-normalizer.helper.js';
 import { fetchUsersByIdsBatch } from './user-profile-hydration.helper.js';
+import type {
+  IOrganizationMembersHistoryPersistenceContract,
+  IOrganizationMembersUnitPersistenceContract,
+} from '@modules/organization-members/index.js';
 import type { UserProfileEntity } from '../entities/user-profile.entity.js';
 import type { UserEntity } from '../entities/user.entity.js';
-import type { UserOrganizationHistoryRepository } from '../repositories/user-organization-history.repository.js';
-import type { UserOrganizationUnitRepository } from '../repositories/user-organization-unit.repository.js';
 import type { UserRepository } from '../repositories/user.repository.js';
 
 export function resolveEffectiveManagerForUser(
@@ -57,7 +59,7 @@ export function resolveEffectiveManagerForUser(
 
 export async function resolveUserOrganizationHistoryList(params: {
   userId: number;
-  userOrgHistoryRepository: UserOrganizationHistoryRepository | null;
+  userOrgHistoryRepository: IOrganizationMembersHistoryPersistenceContract | null;
   organizationsPublicService: IOrganizationsPublicService | null;
 }): Promise<UserOrganizationHistoryItemView[]> {
   const { userId, userOrgHistoryRepository, organizationsPublicService } = params;
@@ -113,7 +115,7 @@ export async function resolveUserSubordinatesList(params: {
   managerId: number;
   options?: { readonly directOnly?: boolean; readonly includeTemporary?: boolean } | undefined;
   userRepository: UserRepository;
-  userOrgRepository: UserOrganizationUnitRepository;
+  userOrgRepository: IOrganizationMembersUnitPersistenceContract;
   findProfilesByUserIds: (userIds: readonly number[]) => Promise<UserProfileEntity[]>;
   organizationsPublicService: IOrganizationsPublicService | null;
 }): Promise<UserSubordinateSummaryView[]> {
@@ -214,7 +216,7 @@ export async function resolveUserApproverChain(params: {
   userId: number;
   maxLevels?: number | undefined;
   userRepository: UserRepository;
-  userOrgRepository: UserOrganizationUnitRepository;
+  userOrgRepository: IOrganizationMembersUnitPersistenceContract;
   findProfilesByUserIds: (userIds: readonly number[]) => Promise<UserProfileEntity[]>;
 }): Promise<UserApproverSummaryView[]> {
   const {
