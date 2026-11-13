@@ -1,0 +1,18 @@
+{
+  "$schema": "../../packages/kernel/schemas/module.manifest.schema.json",
+  "name": "jobs-ops",
+  "displayName": "Job Explorer & Operations",
+  "version": "1.0.0",
+  "description": "Module tra cứu và vận hành Job: tổng quan, tìm kiếm, chi tiết vòng đời, lỗi theo nhóm, báo cáo; retry / huỷ / xoá có audit",
+  "type": "core",
+  "category": "operations",
+  "author": "Core Platform Team",
+  "entryModule": "JobsOpsModule",
+  "dependencies": ["messaging", "config", "runtimes", "worker-ops"],
+  "permissions": [],
+  "events": {},
+  "database": {
+    "hasMigrations": false,
+    "tables": []
+  }
+}

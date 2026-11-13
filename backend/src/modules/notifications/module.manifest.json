@@ -1,10 +1,12 @@
 {
+  "$schema": "../../packages/kernel/schemas/module.manifest.schema.json",
   "name": "notifications",
+  "displayName": "Notifications",
   "version": "1.0.0",
-  "tier": "optional",
+  "type": "core",
   "category": "Communication & Notification",
   "description": "In-app notifications (7.1): single/multi-user/role/organization-unit dispatch, read/unread state & badge counter, archive & inbox delete (preserving dispatch history), categories (system, work, security, general), and user channel preferences.",
-  "entry": "index.ts",
+  "entryModule": "NotificationsModule",
   "dependencies": [
     "database",
     "security",
@@ -18,23 +20,9 @@
     "templates",
     "notification-delivery"
   ],
-  "permissions": [
-    {
-      "key": "notifications.send",
-      "name": "Send & Broadcast Notifications",
-      "description": "Allow creating and dispatching notifications to users, roles, or organization units."
-    },
-    {
-      "key": "notifications.manage",
-      "name": "Manage Notification Settings & History",
-      "description": "Allow viewing system-wide notification dispatch history and managing notification runtime policies."
-    }
-  ],
-  "routes": {
-    "prefix": "/notifications"
-  },
+  "permissions": ["notifications.send", "notifications.manage"],
   "database": {
-    "migrations": "src/database/migrations",
+    "hasMigrations": true,
     "tables": [
       "notifications",
       "notification_recipients",

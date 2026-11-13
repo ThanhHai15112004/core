@@ -1,0 +1,18 @@
+{
+  "$schema": "../../packages/kernel/schemas/module.manifest.schema.json",
+  "name": "logs-ops",
+  "displayName": "Logs Investigation Center",
+  "version": "1.0.0",
+  "description": "Module điều tra Log: Explorer, live tail, chi tiết, nhóm lỗi, trace theo correlation, audit hợp nhất, báo cáo và đổi log level tạm thời",
+  "type": "core",
+  "category": "operations",
+  "author": "Core Platform Team",
+  "entryModule": "LogsOpsModule",
+  "dependencies": ["database", "redis", "cache", "storage", "messaging", "runtime", "config"],
+  "permissions": [],
+  "events": {},
+  "database": {
+    "hasMigrations": false,
+    "tables": []
+  }
+}

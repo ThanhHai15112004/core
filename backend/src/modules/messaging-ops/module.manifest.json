@@ -1,0 +1,18 @@
+{
+  "$schema": "../../packages/kernel/schemas/module.manifest.schema.json",
+  "name": "messaging-ops",
+  "displayName": "Messaging Monitor",
+  "version": "1.0.0",
+  "description": "Module giám sát Messaging: hàng đợi, retry, Dead Letter, lỗi & sự kiện; thao tác retry / replay / discard có xác nhận và audit",
+  "type": "core",
+  "category": "operations",
+  "author": "Core Platform Team",
+  "entryModule": "MessagingOpsModule",
+  "dependencies": ["redis", "messaging", "config", "worker-ops"],
+  "permissions": [],
+  "events": {},
+  "database": {
+    "hasMigrations": false,
+    "tables": []
+  }
+}

@@ -33,7 +33,7 @@
   "settings": [
     {
       "key": "reports.default_cache_ttl_seconds",
-      "group": "reports",
+      "groupCode": "reports",
       "name": "Thời gian Cache báo cáo mặc định (giây)",
       "description": "Thời gian lưu kết quả báo cáo trong Cache khi chạy lại cùng bộ tham số",
       "valueType": "NUMBER",
@@ -42,7 +42,7 @@
     },
     {
       "key": "reports.file_ttl_seconds",
-      "group": "reports",
+      "groupCode": "reports",
       "name": "Thời hạn lưu tệp Báo cáo tạm thời (giây)",
       "description": "Thời gian sống (TTL) của file báo cáo tạm thời đính kèm thông báo / Email",
       "valueType": "NUMBER",

@@ -1,0 +1,18 @@
+{
+  "$schema": "../../packages/kernel/schemas/module.manifest.schema.json",
+  "name": "worker-ops",
+  "displayName": "Worker & Queue Operations",
+  "version": "1.0.0",
+  "description": "Module vận hành Worker & Queue: bảng queue, chi tiết, job, lỗi, số đo; pause / resume / retry / drain có xác nhận và audit",
+  "type": "core",
+  "category": "operations",
+  "author": "Core Platform Team",
+  "entryModule": "WorkerOpsModule",
+  "dependencies": ["redis", "messaging", "runtime", "config", "runtimes"],
+  "permissions": [],
+  "events": {},
+  "database": {
+    "hasMigrations": false,
+    "tables": []
+  }
+}

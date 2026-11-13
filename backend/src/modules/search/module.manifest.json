@@ -34,7 +34,7 @@
   "settings": [
     {
       "key": "search.stale_threshold_ms",
-      "group": "search",
+      "groupCode": "search",
       "name": "Ngưỡng độ trễ cảnh báo Search Index (ms)",
       "description": "Ngưỡng thời gian (mili-giây) để đánh dấu một bản ghi trong Search Index bị cũ so với dữ liệu gốc",
       "valueType": "NUMBER",

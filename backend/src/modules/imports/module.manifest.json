@@ -31,7 +31,7 @@
   "settings": [
     {
       "key": "imports.max_rows_per_batch",
-      "group": "imports",
+      "groupCode": "imports",
       "name": "Số dòng tối đa mỗi lần Import",
       "description": "Giới hạn số lượng dòng dữ liệu tối đa cho phép trong một tệp Import (.xlsx / .csv)",
       "valueType": "NUMBER",
@@ -40,7 +40,7 @@
     },
     {
       "key": "imports.preview_sample_limit",
-      "group": "imports",
+      "groupCode": "imports",
       "name": "Số dòng mẫu khi xem trước (Preview)",
       "description": "Số lượng dòng mẫu hiển thị tối đa khi gọi API xem trước dữ liệu trước khi nhập",
       "valueType": "NUMBER",

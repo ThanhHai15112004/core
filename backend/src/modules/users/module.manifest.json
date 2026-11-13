@@ -8,7 +8,15 @@
   "category": "core",
   "author": "Core Platform Team",
   "entryModule": "UsersModule",
-  "dependencies": ["database", "redis", "organizations", "organization-members", "roles"],
+  "dependencies": [
+    "database",
+    "redis",
+    "organizations",
+    "organization-members",
+    "roles",
+    "codes",
+    "settings"
+  ],
   "permissions": [
     "users.read",
     "users.create",

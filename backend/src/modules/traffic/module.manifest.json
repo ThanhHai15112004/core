@@ -1,0 +1,18 @@
+{
+  "$schema": "../../packages/kernel/schemas/module.manifest.schema.json",
+  "name": "traffic",
+  "displayName": "HTTP Traffic",
+  "version": "1.0.0",
+  "description": "Module theo dõi lưu lượng HTTP: lưu lượng, latency, lỗi theo endpoint (Prometheus)",
+  "type": "core",
+  "category": "operations",
+  "author": "Core Platform Team",
+  "entryModule": "TrafficOpsModule",
+  "dependencies": ["config"],
+  "permissions": [],
+  "events": {},
+  "database": {
+    "hasMigrations": false,
+    "tables": []
+  }
+}

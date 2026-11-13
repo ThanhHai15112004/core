@@ -1,0 +1,18 @@
+{
+  "$schema": "../../packages/kernel/schemas/module.manifest.schema.json",
+  "name": "scheduler-ops",
+  "displayName": "Scheduler Operations",
+  "version": "1.0.0",
+  "description": "Module vận hành Scheduler: task, lịch sử thực thi, lịch sắp tới, lỗi / lỡ lịch, Cron Inspector; Run Now / Enable / Disable có audit",
+  "type": "core",
+  "category": "operations",
+  "author": "Core Platform Team",
+  "entryModule": "SchedulerOpsModule",
+  "dependencies": ["redis", "messaging", "runtime", "security", "config"],
+  "permissions": [],
+  "events": {},
+  "database": {
+    "hasMigrations": false,
+    "tables": []
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "$schema": "../../packages/kernel/schemas/module.manifest.schema.json",
+  "name": "cache-ops",
+  "displayName": "Cache Monitor",
+  "version": "1.0.0",
+  "description": "Module giám sát Cache: hiệu quả, keyspace/namespace, bộ nhớ, kết nối, lỗi & sự kiện và thao tác xoá vùng cache của core",
+  "type": "core",
+  "category": "operations",
+  "author": "Core Platform Team",
+  "entryModule": "CacheOpsModule",
+  "dependencies": ["redis", "cache", "runtime", "config"],
+  "permissions": [],
+  "events": {},
+  "database": {
+    "hasMigrations": false,
+    "tables": []
+  }
+}

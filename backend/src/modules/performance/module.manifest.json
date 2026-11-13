@@ -1,0 +1,18 @@
+{
+  "$schema": "../../packages/kernel/schemas/module.manifest.schema.json",
+  "name": "performance",
+  "displayName": "Performance Monitor",
+  "version": "1.0.0",
+  "description": "Module theo dõi hiệu năng toàn hệ thống: tài nguyên runtime, latency/throughput, database, cache, worker/queue, điểm nghẽn (chỉ đọc)",
+  "type": "core",
+  "category": "operations",
+  "author": "Core Platform Team",
+  "entryModule": "PerformanceOpsModule",
+  "dependencies": ["database", "redis", "config", "runtimes", "traffic"],
+  "permissions": [],
+  "events": {},
+  "database": {
+    "hasMigrations": false,
+    "tables": []
+  }
+}

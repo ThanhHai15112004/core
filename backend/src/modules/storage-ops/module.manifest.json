@@ -1,0 +1,18 @@
+{
+  "$schema": "../../packages/kernel/schemas/module.manifest.schema.json",
+  "name": "storage-ops",
+  "displayName": "Storage Monitor",
+  "version": "1.0.0",
+  "description": "Module giám sát Storage: health, capacity, traffic, container, object, upload, lifecycle, lỗi & sự kiện và thao tác có xác nhận, audit",
+  "type": "core",
+  "category": "operations",
+  "author": "Core Platform Team",
+  "entryModule": "StorageOpsModule",
+  "dependencies": ["redis", "storage", "runtime", "security", "config"],
+  "permissions": [],
+  "events": {},
+  "database": {
+    "hasMigrations": false,
+    "tables": []
+  }
+}

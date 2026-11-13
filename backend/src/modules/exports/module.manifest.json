@@ -31,7 +31,7 @@
   "settings": [
     {
       "key": "exports.default_max_rows",
-      "group": "exports",
+      "groupCode": "exports",
       "name": "Số bản ghi xuất tối đa mặc định",
       "description": "Giới hạn số lượng bản ghi tối đa được phép xuất trong một lần đối với người dùng thông thường",
       "valueType": "NUMBER",
@@ -40,7 +40,7 @@
     },
     {
       "key": "exports.privileged_max_rows",
-      "group": "exports",
+      "groupCode": "exports",
       "name": "Số bản ghi xuất tối đa cho quản trị viên",
       "description": "Giới hạn số lượng bản ghi tối đa được phép xuất đối với vai trò đặc quyền (Admin/System)",
       "valueType": "NUMBER",
@@ -49,7 +49,7 @@
     },
     {
       "key": "exports.file_ttl_seconds",
-      "group": "exports",
+      "groupCode": "exports",
       "name": "Thời hạn lưu tệp Export tạm thời (giây)",
       "description": "Thời gian sống (TTL) của đường dẫn tải file Export tạm thời trước khi tự động thu hồi",
       "valueType": "NUMBER",

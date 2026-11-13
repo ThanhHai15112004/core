@@ -1,0 +1,18 @@
+{
+  "$schema": "../../packages/kernel/schemas/module.manifest.schema.json",
+  "name": "database-ops",
+  "displayName": "Database Monitor",
+  "version": "1.0.0",
+  "description": "Module giám sát Database: sức khoẻ, query, session, transaction/lock, bảng/dung lượng, migration, lỗi & sự kiện",
+  "type": "core",
+  "category": "operations",
+  "author": "Core Platform Team",
+  "entryModule": "DatabaseOpsModule",
+  "dependencies": ["database", "redis", "runtime", "config"],
+  "permissions": [],
+  "events": {},
+  "database": {
+    "hasMigrations": false,
+    "tables": []
+  }
+}

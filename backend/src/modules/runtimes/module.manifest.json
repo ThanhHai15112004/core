@@ -1,0 +1,18 @@
+{
+  "$schema": "../../packages/kernel/schemas/module.manifest.schema.json",
+  "name": "runtimes",
+  "displayName": "Runtime Operations",
+  "version": "1.0.0",
+  "description": "Module theo dõi và điều khiển các runtime API / Worker / Scheduler / CLI",
+  "type": "core",
+  "category": "operations",
+  "author": "Core Platform Team",
+  "entryModule": "RuntimesModule",
+  "dependencies": ["redis", "runtime", "config"],
+  "permissions": [],
+  "events": {},
+  "database": {
+    "hasMigrations": false,
+    "tables": []
+  }
+}
