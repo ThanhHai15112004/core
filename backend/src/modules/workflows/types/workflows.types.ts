@@ -142,6 +142,7 @@ export interface WorkflowApprovalStepItemView {
   readonly comment: string | null;
   readonly decidedAt: string | null;
   readonly decidedByUserId: number | null;
+  readonly createdAt: string;
 }
 
 export interface WorkflowHistoryItemView {

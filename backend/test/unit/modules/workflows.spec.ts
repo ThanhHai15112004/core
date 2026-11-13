@@ -416,6 +416,10 @@ describe('Workflows & Approval Module Unit Tests (Sections 9.3 & 9.4)', () => {
           Array.from(histories.values())
             .filter((h) => Number(h.workflowInstanceId) === Number(instanceId))
             .sort((a, b) => Number(a.id) - Number(b.id)),
+        findByInstanceIds: async (instanceIds: readonly number[]) =>
+          Array.from(histories.values())
+            .filter((h) => instanceIds.includes(Number(h.workflowInstanceId)))
+            .sort((a, b) => Number(a.id) - Number(b.id)),
         recordHistory: async (data: {
           workflowInstanceId: number;
           transitionCode?: string | null;
@@ -1370,12 +1374,12 @@ describe('Workflows & Approval Module Unit Tests (Sections 9.3 & 9.4)', () => {
         ),
       ).rejects.toBeInstanceOf(ForbiddenAppException);
 
-      // 9.5.6: Quá thời hạn cho phép (mặc định 15 phút) tác giả không được sửa/xóa
-      const futureAfterWindow = new Date(Date.now() + 30 * 60_000);
+      // 9.5.6: Quá thời hạn cho phép (mặc định 60 phút — comments.edit_window_minutes) tác giả không được sửa/xóa
+      const futureAfterWindow = new Date(Date.now() + 90 * 60_000);
       await expect(
         service.updateRecordComment(
           rootComment.id,
-          { content: 'Sửa khi đã quá hạn 15 phút' },
+          { content: 'Sửa khi đã quá hạn 60 phút' },
           regularEmployee,
           futureAfterWindow,
         ),

@@ -359,6 +359,7 @@ export async function hydrateWorkflowInstanceDetail(params: {
         s.decidedByUserId !== null && s.decidedByUserId !== undefined
           ? Number(s.decidedByUserId)
           : null,
+      createdAt: s.createdAt ? new Date(s.createdAt).toISOString() : new Date().toISOString(),
     };
   });
 

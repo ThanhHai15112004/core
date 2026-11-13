@@ -31,17 +31,19 @@ import {
   startWorkflowInstanceSchema,
   updateWorkflowDefinitionSchema,
 } from '../requests/workflows.requests.js';
+import type {
+  WorkflowDefinitionItemView,
+  WorkflowHistoryItemView,
+  WorkflowInstanceDetailView,
+  WorkflowInstanceItemView,
+  WorkflowSlaScanResultView,
+} from '../contracts/index.js';
 import {
-  type WorkflowDefinitionResponse,
-  type WorkflowHistoryItemResponse,
-  type WorkflowInstanceDetailResponse,
-  type WorkflowInstanceItemResponse,
-  type WorkflowSlaScanResultResponse,
   workflowDefinitionResponseSchema,
-  workflowHistoryItemSchema,
+  workflowHistoryItemResponseSchema,
   workflowInstanceDetailResponseSchema,
-  workflowInstanceItemResponseSchema,
-  workflowSlaScanResultResponseSchema,
+  workflowInstanceResponseSchema,
+  workflowSlaScanResponseSchema,
 } from '../responses/workflows.response.js';
 import { WORKFLOWS_ROUTES } from '../routes/workflows.routes.js';
 import { WorkflowsService } from '../services/workflows.service.js';
@@ -61,7 +63,7 @@ export class WorkflowsController {
   })
   public async listDefinitions(
     @ValidatedQuery(listWorkflowDefinitionsQuerySchema) query: ListWorkflowDefinitionsQuery,
-  ): Promise<PaginatedResult<WorkflowDefinitionResponse>> {
+  ): Promise<PaginatedResult<WorkflowDefinitionItemView>> {
     return this.workflowsService.listDefinitionsPaginated(query);
   }
 
@@ -74,7 +76,7 @@ export class WorkflowsController {
   })
   public async getDefinitionById(
     @ValidatedParams(positiveIntParamSchema, 'id') id: number,
-  ): Promise<WorkflowDefinitionResponse> {
+  ): Promise<WorkflowDefinitionItemView> {
     return this.workflowsService.getDefinitionById(id);
   }
 
@@ -89,7 +91,7 @@ export class WorkflowsController {
   public async createDefinition(
     @ValidatedBody(createWorkflowDefinitionSchema) body: CreateWorkflowDefinitionRequest,
     @CurrentUser() actor?: UserIdentity,
-  ): Promise<WorkflowDefinitionResponse> {
+  ): Promise<WorkflowDefinitionItemView> {
     return this.workflowsService.createDefinition(body, actor?.id);
   }
 
@@ -104,7 +106,7 @@ export class WorkflowsController {
     @ValidatedParams(positiveIntParamSchema, 'id') id: number,
     @ValidatedBody(updateWorkflowDefinitionSchema) body: UpdateWorkflowDefinitionRequest,
     @CurrentUser() actor?: UserIdentity,
-  ): Promise<WorkflowDefinitionResponse> {
+  ): Promise<WorkflowDefinitionItemView> {
     return this.workflowsService.updateDefinition(id, body, actor?.id);
   }
 
@@ -119,7 +121,7 @@ export class WorkflowsController {
   public async createNewVersion(
     @ValidatedParams(positiveIntParamSchema, 'id') id: number,
     @CurrentUser() actor?: UserIdentity,
-  ): Promise<WorkflowDefinitionResponse> {
+  ): Promise<WorkflowDefinitionItemView> {
     return this.workflowsService.createNewVersion(id, actor?.id);
   }
 
@@ -133,7 +135,7 @@ export class WorkflowsController {
   public async replaceStates(
     @ValidatedParams(positiveIntParamSchema, 'id') id: number,
     @ValidatedBody(replaceWorkflowStatesSchema) body: ReplaceWorkflowStatesRequest,
-  ): Promise<WorkflowDefinitionResponse> {
+  ): Promise<WorkflowDefinitionItemView> {
     return this.workflowsService.replaceStates(id, body);
   }
 
@@ -147,7 +149,7 @@ export class WorkflowsController {
   public async replaceTransitions(
     @ValidatedParams(positiveIntParamSchema, 'id') id: number,
     @ValidatedBody(replaceWorkflowTransitionsSchema) body: ReplaceWorkflowTransitionsRequest,
-  ): Promise<WorkflowDefinitionResponse> {
+  ): Promise<WorkflowDefinitionItemView> {
     return this.workflowsService.replaceTransitions(id, body);
   }
 
@@ -156,13 +158,13 @@ export class WorkflowsController {
   @RequirePermissions('workflows.read')
   @ApiDoc({
     summary: 'Danh sách phiên thực thi quy trình (Workflow Instances — Mục 9.3.5)',
-    response: workflowInstanceItemResponseSchema,
+    response: workflowInstanceResponseSchema,
     pagination: 'offset',
   })
   public async listInstances(
     @ValidatedQuery(listWorkflowInstancesQuerySchema) query: ListWorkflowInstancesQuery,
     @CurrentUser() actor?: UserIdentity,
-  ): Promise<PaginatedResult<WorkflowInstanceItemResponse>> {
+  ): Promise<PaginatedResult<WorkflowInstanceItemView>> {
     return this.workflowsService.listInstancesPaginated(query, actor);
   }
 
@@ -177,7 +179,7 @@ export class WorkflowsController {
   public async getInstanceById(
     @ValidatedParams(positiveIntParamSchema, 'id') id: number,
     @CurrentUser() actor?: UserIdentity,
-  ): Promise<WorkflowInstanceDetailResponse> {
+  ): Promise<WorkflowInstanceDetailView> {
     return this.workflowsService.getInstanceById(id, actor);
   }
 
@@ -192,7 +194,7 @@ export class WorkflowsController {
   public async startInstance(
     @ValidatedBody(startWorkflowInstanceSchema) body: StartWorkflowInstanceRequest,
     @CurrentUser() actor?: UserIdentity,
-  ): Promise<WorkflowInstanceDetailResponse> {
+  ): Promise<WorkflowInstanceDetailView> {
     return this.workflowsService.startWorkflowForEntity(body, actor);
   }
 
@@ -209,7 +211,7 @@ export class WorkflowsController {
     @ValidatedParams(positiveIntParamSchema, 'id') id: number,
     @ValidatedBody(executeWorkflowTransitionSchema) body: ExecuteWorkflowTransitionRequest,
     @CurrentUser() actor?: UserIdentity,
-  ): Promise<WorkflowInstanceDetailResponse> {
+  ): Promise<WorkflowInstanceDetailView> {
     return this.workflowsService.executeTransition(id, body, actor);
   }
 
@@ -225,7 +227,7 @@ export class WorkflowsController {
     @ValidatedParams(positiveIntParamSchema, 'id') id: number,
     @ValidatedBody(cancelWorkflowInstanceSchema) body: CancelWorkflowInstanceRequest,
     @CurrentUser() actor?: UserIdentity,
-  ): Promise<WorkflowInstanceDetailResponse> {
+  ): Promise<WorkflowInstanceDetailView> {
     return this.workflowsService.cancelInstance(id, body, actor);
   }
 
@@ -235,12 +237,12 @@ export class WorkflowsController {
   @ApiDoc({
     summary:
       'Xem lịch sử toàn bộ quy trình (biết ai chuyển trạng thái, từ đâu sang đâu và khi nào — Mục 9.3.7)',
-    response: z.array(workflowHistoryItemSchema),
+    response: z.array(workflowHistoryItemResponseSchema),
   })
   public async getInstanceHistories(
     @ValidatedParams(positiveIntParamSchema, 'id') id: number,
     @CurrentUser() actor?: UserIdentity,
-  ): Promise<readonly WorkflowHistoryItemResponse[]> {
+  ): Promise<readonly WorkflowHistoryItemView[]> {
     return this.workflowsService.getInstanceHistories(id, actor);
   }
 
@@ -250,9 +252,9 @@ export class WorkflowsController {
   @RequirePermissions('workflows.manage')
   @ApiDoc({
     summary: 'Quét SLA thời hạn và gửi cảnh báo quá hạn cho quy trình đang chạy (Mục 9.3.8)',
-    response: workflowSlaScanResultResponseSchema,
+    response: workflowSlaScanResponseSchema,
   })
-  public async scanOverdueSla(): Promise<WorkflowSlaScanResultResponse> {
+  public async scanOverdueSla(): Promise<WorkflowSlaScanResultView> {
     return this.workflowsService.scanSlaAndNotifyOverdue();
   }
 }

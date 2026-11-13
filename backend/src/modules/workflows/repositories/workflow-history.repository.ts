@@ -1,5 +1,5 @@
 import { Injectable, Optional } from '@nestjs/common';
-import { DataSource } from 'typeorm';
+import { DataSource, In } from 'typeorm';
 import { BaseTypeOrmRepository, TransactionManager } from '@packages/database/index.js';
 import { WorkflowHistoryEntity } from '../entities/workflow-history.entity.js';
 import {
@@ -33,6 +33,18 @@ export class WorkflowHistoryRepository extends BaseTypeOrmRepository<WorkflowHis
     return this.executeReadOnly((repo) =>
       repo.find({
         where: { workflowInstanceId: Number(workflowInstanceId) },
+        order: { id: 'ASC' },
+      }),
+    );
+  }
+
+  public async findByInstanceIds(
+    workflowInstanceIds: readonly number[],
+  ): Promise<WorkflowHistoryEntity[]> {
+    if (workflowInstanceIds.length === 0) return [];
+    return this.executeReadOnly((repo) =>
+      repo.find({
+        where: { workflowInstanceId: In(workflowInstanceIds.map(Number)) },
         order: { id: 'ASC' },
       }),
     );

@@ -18,7 +18,7 @@ import { UsersService } from './services/users.service.js';
 import { UsersController } from './controllers/users.controller.js';
 import { UserImportService } from './import/user-import.service.js';
 import { UserExportService } from './export/user-export.service.js';
-import { UserReportsService } from './reports/user-reports.service.js';
+import { UserReportService } from './reports/user-report.service.js';
 import { UserSearchService } from './search/user-search.service.js';
 import enUsers from './locales/en/users.json' with { type: 'json' };
 import viUsers from './locales/vi/users.json' with { type: 'json' };
@@ -46,7 +46,7 @@ new CoreI18nService().registerNamespace('users', {
     UsersService,
     UserImportService,
     UserExportService,
-    UserReportsService,
+    UserReportService,
     UserSearchService,
     {
       provide: USERS_PUBLIC_SERVICE,
@@ -57,7 +57,7 @@ new CoreI18nService().registerNamespace('users', {
     UsersService,
     UserImportService,
     UserExportService,
-    UserReportsService,
+    UserReportService,
     UserSearchService,
     USERS_PUBLIC_SERVICE,
   ],

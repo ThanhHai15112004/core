@@ -193,7 +193,9 @@ export class WorkflowsService implements IWorkflowsPublicService {
             reason: input.reason ?? 'Ủy quyền phê duyệt',
             ...(input.effectiveFrom !== undefined ? { effectiveFrom: input.effectiveFrom } : {}),
             ...(input.effectiveUntil !== undefined ? { effectiveUntil: input.effectiveUntil } : {}),
-            ...(input.workflowCodes !== undefined ? { workflowCodes: input.workflowCodes } : {}),
+            ...(input.workflowCodes !== undefined
+              ? { workflowCodes: [...input.workflowCodes] }
+              : {}),
           },
           actor,
         ),
@@ -222,7 +224,7 @@ export class WorkflowsService implements IWorkflowsPublicService {
           ...(r.workflowCodes.length > 0 ? { workflowCodes: r.workflowCodes } : {}),
           ...(r.entityTypes.length > 0 ? { entityTypes: r.entityTypes } : {}),
           organizationUnitId: r.organizationUnitId,
-          reason: r.reason ?? null,
+          reason: r.reason ?? '',
           isActive: r.isActive,
           createdAt: r.createdAt,
         }));
@@ -785,10 +787,8 @@ export class WorkflowsService implements IWorkflowsPublicService {
         entityType: query.entityType,
         entityId: query.entityId,
         workflowInstanceId: query.workflowInstanceId,
-        includeInternal: query.includeInternal,
         source: query.source,
         sortOrder: query.sortOrder,
-        limit: query.limit,
       },
       actor,
     );

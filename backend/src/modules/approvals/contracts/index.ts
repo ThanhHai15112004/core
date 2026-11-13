@@ -2,8 +2,10 @@ import type { UserIdentity } from '@packages/security/index.js';
 
 export const WORKFLOW_APPROVAL_MODE = {
   SINGLE: 'SINGLE',
-  SEQUENTIAL: 'SEQUENTIAL',
-  PARALLEL: 'PARALLEL',
+  ALL: 'ALL',
+  ANY: 'ANY',
+  QUORUM: 'QUORUM',
+  SEQUENTIAL_CHAIN: 'SEQUENTIAL_CHAIN',
 } as const;
 
 export type WorkflowApprovalMode =

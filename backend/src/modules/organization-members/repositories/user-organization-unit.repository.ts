@@ -7,6 +7,15 @@ import { UserOrganizationUnitEntity } from '../entities/user-organization-unit.e
 export type { ReplaceUserOrganizationInput };
 export type UserOrganizationInputItem = ReplaceUserOrganizationInput;
 
+function parseOptionalDate(val?: Date | string | null): Date | null {
+  if (!val) return null;
+  if (val instanceof Date) {
+    return Number.isNaN(val.getTime()) ? null : val;
+  }
+  const parsed = new Date(val);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
 @Injectable()
 export class UserOrganizationUnitRepository extends BaseTypeOrmRepository<UserOrganizationUnitEntity> {
   constructor(dataSource: DataSource, @Optional() transactionManager?: TransactionManager) {
@@ -29,11 +38,17 @@ export class UserOrganizationUnitRepository extends BaseTypeOrmRepository<UserOr
     if (organizationUnitIds.length === 0) return [];
     const rows = await this.executeReadOnly((repo) =>
       repo.find({
-        select: ['userId'],
         where: { organizationUnitId: In([...organizationUnitIds]) },
+        select: { userId: true, startDate: true, endDate: true },
       }),
     );
-    return [...new Set(rows.map((r) => Number(r.userId)))];
+    const now = Date.now();
+    const activeRows = rows.filter((r) => {
+      if (r.startDate && new Date(r.startDate).getTime() > now) return false;
+      if (r.endDate && new Date(r.endDate).getTime() < now) return false;
+      return true;
+    });
+    return [...new Set(activeRows.map((r) => Number(r.userId)))];
   }
 
   public async countByPositionTitles(candidates: readonly string[]): Promise<number> {
@@ -54,23 +69,30 @@ export class UserOrganizationUnitRepository extends BaseTypeOrmRepository<UserOr
     userId: number,
     inputs: readonly ReplaceUserOrganizationInput[],
   ): Promise<UserOrganizationUnitEntity[]> {
-    const repo = this.getRepository();
-    await repo.delete({ userId });
+    await this.repository.delete({ userId });
 
     if (inputs.length === 0) {
       return [];
     }
 
-    const entities = inputs.map((item) =>
-      repo.create({
+    const deduped = new Map<number, ReplaceUserOrganizationInput>();
+    for (const item of inputs) {
+      deduped.set(Number(item.organizationUnitId), item);
+    }
+
+    const items = [...deduped.values()];
+    const hasPrimary = items.some((i) => i.isPrimary === true);
+
+    const entities = items.map((item, idx) =>
+      this.repository.create({
         userId,
-        organizationUnitId: item.organizationUnitId,
-        isPrimary: item.isPrimary,
-        positionTitle: item.positionTitle,
-        startDate: item.startDate ?? null,
-        endDate: item.endDate ?? null,
+        organizationUnitId: Number(item.organizationUnitId),
+        isPrimary: hasPrimary ? Boolean(item.isPrimary) : idx === 0,
+        positionTitle: item.positionTitle?.trim() || null,
+        startDate: parseOptionalDate(item.startDate),
+        endDate: parseOptionalDate(item.endDate),
       }),
     );
-    return repo.save(entities);
+    return this.repository.save(entities);
   }
 }

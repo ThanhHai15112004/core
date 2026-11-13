@@ -90,10 +90,10 @@ export interface UserOrganizationUnitLinkView {
 
 export interface ReplaceUserOrganizationInput {
   readonly organizationUnitId: number;
-  readonly isPrimary: boolean;
-  readonly positionTitle: string | null;
-  readonly startDate?: Date | null;
-  readonly endDate?: Date | null;
+  readonly isPrimary?: boolean | undefined;
+  readonly positionTitle?: string | null | undefined;
+  readonly startDate?: Date | string | null | undefined;
+  readonly endDate?: Date | string | null | undefined;
 }
 
 export interface RecordUserOrganizationHistoryInput {
@@ -153,7 +153,6 @@ export interface OrganizationMemberSummaryView {
   readonly temporaryManagerUntil?: string | null;
   readonly effectiveManagerId?: number | null;
   readonly organizationUnits: readonly UserOrganizationAssignmentSummary[];
-  readonly [key: string]: unknown;
 }
 
 export interface OrganizationMemberUsersDelegate<
