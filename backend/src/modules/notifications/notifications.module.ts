@@ -1,6 +1,7 @@
-import { Module, Optional } from '@nestjs/common';
+import { Global, Module, Optional } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { DatabaseModule } from '@packages/database/index.js';
+import { NOTIFICATION_DISPATCHER } from '@packages/kernel/index.js';
 import { CoreI18nService } from '@packages/i18n/index.js';
 import { SecurityModule } from '@packages/security/index.js';
 import { NotificationDeliveryModule } from '@modules/notification-delivery/index.js';
@@ -26,6 +27,7 @@ new CoreI18nService().registerNamespace('notifications', {
   en: enNotifications,
 });
 
+@Global()
 @Module({
   imports: [
     DatabaseModule,
@@ -52,10 +54,15 @@ new CoreI18nService().registerNamespace('notifications', {
       provide: NOTIFICATIONS_PUBLIC_SERVICE,
       useExisting: NotificationsService,
     },
+    {
+      provide: NOTIFICATION_DISPATCHER,
+      useExisting: NotificationsService,
+    },
   ],
   exports: [
     NotificationsService,
     NOTIFICATIONS_PUBLIC_SERVICE,
+    NOTIFICATION_DISPATCHER,
     TemplatesModule,
     NotificationDeliveryModule,
   ],

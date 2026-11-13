@@ -22,6 +22,7 @@ export * from './contracts/export.contract.js';
 export * from './contracts/report.contract.js';
 export * from './contracts/search.contract.js';
 export * from './contracts/custom-field.contract.js';
+export * from './contracts/notification-dispatch.contract.js';
 export * from './registries/code-registry.service.js';
 export * from './registries/setting-registry.service.js';
 export * from './registries/feature-flag-registry.service.js';

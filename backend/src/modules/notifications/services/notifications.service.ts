@@ -4,6 +4,7 @@ import {
   BadRequestAppException,
   ForbiddenAppException,
   NotFoundAppException,
+  type INotificationDispatcher,
   type PaginatedResult,
   SequenceRegistryService,
   defaultCodeRegistry,
@@ -92,7 +93,7 @@ import type {
 import type { ResolvedNotificationRuntimeConfig } from '../types/notifications.types.js';
 
 @Injectable()
-export class NotificationsService implements INotificationsPublicService {
+export class NotificationsService implements INotificationsPublicService, INotificationDispatcher {
   private readonly sequenceRegistry: SequenceRegistryService;
 
   constructor(

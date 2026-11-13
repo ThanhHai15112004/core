@@ -23,6 +23,8 @@ import {
   type ReportExecutionMode,
   type ReportParametersInput,
   type ReportScheduleRecord,
+  type INotificationDispatcher,
+  NOTIFICATION_DISPATCHER,
 } from '@packages/kernel/index.js';
 import {
   BaseMessagePublisherProvider,
@@ -35,10 +37,6 @@ import {
   PlatformSecurityService,
   type UserIdentity,
 } from '@packages/security/index.js';
-import {
-  type INotificationsPublicService,
-  NOTIFICATIONS_PUBLIC_SERVICE,
-} from '@modules/notifications/contracts/index.js';
 import {
   type IOrganizationsPublicService,
   ORGANIZATIONS_PUBLIC_SERVICE,
@@ -82,8 +80,8 @@ export class UserReportService {
     @Optional() private readonly auditLogService?: AuditLogService,
     @Optional() private readonly platformSecurityService?: PlatformSecurityService,
     @Optional()
-    @Inject(NOTIFICATIONS_PUBLIC_SERVICE)
-    private readonly notificationsPublicService?: INotificationsPublicService | null,
+    @Inject(NOTIFICATION_DISPATCHER)
+    private readonly notificationsPublicService?: INotificationDispatcher | null,
     @Optional()
     @Inject(ORGANIZATIONS_PUBLIC_SERVICE)
     private readonly organizationsPublicService?: IOrganizationsPublicService | null,

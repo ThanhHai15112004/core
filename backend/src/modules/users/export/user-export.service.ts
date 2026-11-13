@@ -18,6 +18,8 @@ import {
   type ExportHistoryRecord,
   type ExportProgressSnapshot,
   type IPdfExportAdapter,
+  type INotificationDispatcher,
+  NOTIFICATION_DISPATCHER,
 } from '@packages/kernel/index.js';
 import {
   BaseMessagePublisherProvider,
@@ -30,10 +32,6 @@ import {
   PlatformSecurityService,
   type UserIdentity,
 } from '@packages/security/index.js';
-import {
-  type INotificationsPublicService,
-  NOTIFICATIONS_PUBLIC_SERVICE,
-} from '@modules/notifications/contracts/index.js';
 import { UserRepository } from '../repositories/user.repository.js';
 import { UsersService } from '../services/users.service.js';
 import type { ListUserExportHistoriesQuery, ListUsersQuery } from '../requests/users.requests.js';
@@ -71,8 +69,8 @@ export class UserExportService {
     @Optional() private readonly messagePublisher?: BaseMessagePublisherProvider | null,
     @Optional() exportRegistry?: ExportRegistryService,
     @Optional()
-    @Inject(NOTIFICATIONS_PUBLIC_SERVICE)
-    private readonly notificationsPublicService?: INotificationsPublicService | null,
+    @Inject(NOTIFICATION_DISPATCHER)
+    private readonly notificationsPublicService?: INotificationDispatcher | null,
   ) {
     this.settingRegistry = settingRegistry ?? defaultSettingRegistry;
     this.exportRegistry = exportRegistry ?? defaultExportRegistry;
