@@ -4,5 +4,10 @@
   "invalidDelegationPeriod": "Invalid delegation period (effectiveUntil must be greater than effectiveFrom).",
   "delegationForbidden": "You may only create or revoke your own approval delegation rules unless you have management permission.",
   "instanceHandlerUnavailable": "Approval workflow instance coordinator is not currently connected.",
-  "instanceNotFound": "Approval instance #{id} was not found."
+  "instanceNotFound": "Approval instance #{id} was not found.",
+  "delegationMissingFromUser": "The delegating user (fromUserId) is required to create an approval delegation rule.",
+  "delegationSelfNotAllowed": "Cannot delegate approval authority to yourself.",
+  "delegationInvalidPeriod": "Invalid delegation period (effectiveUntil must be greater than effectiveFrom).",
+  "delegationRevokeForbidden": "You may only revoke your own approval delegation rules unless you are an administrator.",
+  "coordinatorNotRegistered": "Approval workflow instance coordinator is not currently connected."
 }

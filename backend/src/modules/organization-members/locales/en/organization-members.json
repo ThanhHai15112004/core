@@ -3,5 +3,6 @@
   "sourceUnitNotAssigned": "Member #{userId} is not currently assigned to source unit #{fromOrganizationUnitId}.",
   "sameTransferUnit": "Destination organization unit must differ from source unit during transfer.",
   "invalidMembershipPeriod": "Organization membership end date must be greater than or equal to start date.",
-  "invalidTemporaryManagerPeriod": "Temporary manager effective period is invalid."
+  "invalidTemporaryManagerPeriod": "Temporary manager effective period is invalid.",
+  "delegateUnavailable": "The users service is not connected to the organization members module."
 }

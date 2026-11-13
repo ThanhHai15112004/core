@@ -4,5 +4,10 @@
   "invalidDelegationPeriod": "Thời gian hiệu lực ủy quyền không hợp lệ (effectiveUntil phải lớn hơn effectiveFrom).",
   "delegationForbidden": "Bạn chỉ có thể tạo hoặc thu hồi ủy quyền của chính mình (trừ quản trị viên phê duyệt).",
   "instanceHandlerUnavailable": "Bộ điều phối phiên quy trình phê duyệt hiện chưa được kết nối.",
-  "instanceNotFound": "Không tìm thấy phiên phê duyệt #{id}."
+  "instanceNotFound": "Không tìm thấy phiên phê duyệt #{id}.",
+  "delegationMissingFromUser": "Thiếu người ủy quyền (fromUserId) khi tạo ủy quyền phê duyệt.",
+  "delegationSelfNotAllowed": "Không thể tự ủy quyền phê duyệt cho chính mình.",
+  "delegationInvalidPeriod": "Thời gian hiệu lực ủy quyền không hợp lệ (effectiveUntil phải lớn hơn effectiveFrom).",
+  "delegationRevokeForbidden": "Bạn chỉ có thể thu hồi ủy quyền phê duyệt của chính mình (trừ quản trị viên).",
+  "coordinatorNotRegistered": "Bộ điều phối phiên quy trình phê duyệt hiện chưa được kết nối."
 }
