@@ -47,6 +47,9 @@ export const API_ROUTES = {
     MESSAGING: {
       path: (path: string, qs = '') => `${OPS_PREFIX}/messaging/${path}${qs ? `?${qs}` : ''}`,
     },
+    HTTP_CLIENT: {
+      path: (path: string, qs = '') => `${OPS_PREFIX}/http-client/${path}${qs ? `?${qs}` : ''}`,
+    },
     WORKERS: {
       path: (path: string, qs = '') => `${OPS_PREFIX}/workers${path ? `/${path}` : ''}${qs ? `?${qs}` : ''}`,
     },

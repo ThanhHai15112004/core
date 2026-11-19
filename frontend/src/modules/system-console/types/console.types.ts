@@ -9,6 +9,7 @@ export type ConsoleSectionId =
   | 'cache'
   | 'storage'
   | 'messaging'
+  | 'http-client'
   | 'worker'
   | 'scheduler'
   | 'jobs'

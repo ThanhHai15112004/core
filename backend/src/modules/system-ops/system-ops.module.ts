@@ -12,6 +12,7 @@ import { DatabaseOpsModule } from '@modules/database-ops/index.js';
 import { CacheOpsModule } from '@modules/cache-ops/index.js';
 import { StorageOpsModule } from '@modules/storage-ops/index.js';
 import { MessagingOpsModule } from '@modules/messaging-ops/index.js';
+import { HttpClientOpsModule } from '@modules/http-client-ops/index.js';
 import { WorkerOpsModule } from '@modules/worker-ops/index.js';
 import { SchedulerOpsModule } from '@modules/scheduler-ops/index.js';
 import { JobsOpsModule } from '@modules/jobs-ops/index.js';
@@ -28,6 +29,7 @@ import { LogsOpsModule } from '@modules/logs-ops/index.js';
     CacheOpsModule,
     StorageOpsModule,
     MessagingOpsModule,
+    HttpClientOpsModule,
     WorkerOpsModule,
     SchedulerOpsModule,
     JobsOpsModule,
@@ -47,6 +49,7 @@ import { LogsOpsModule } from '@modules/logs-ops/index.js';
     CacheOpsModule,
     StorageOpsModule,
     MessagingOpsModule,
+    HttpClientOpsModule,
     WorkerOpsModule,
     SchedulerOpsModule,
     JobsOpsModule,

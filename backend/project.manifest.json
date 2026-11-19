@@ -12,6 +12,7 @@
     "cache-ops",
     "storage-ops",
     "messaging-ops",
+    "http-client-ops",
     "worker-ops",
     "scheduler-ops",
     "jobs-ops",

@@ -1,0 +1,18 @@
+{
+  "$schema": "../../packages/kernel/schemas/module.manifest.schema.json",
+  "name": "http-client-ops",
+  "displayName": "Outbound HTTP Client Monitor",
+  "version": "1.0.0",
+  "description": "Module giám sát HTTP Client dùng chung: timeout theo dịch vụ, retry/backoff, độ trễ, tỷ lệ lỗi, Circuit Breaker và thao tác đặt lại mạch",
+  "type": "core",
+  "category": "operations",
+  "author": "Core Platform Team",
+  "entryModule": "HttpClientOpsModule",
+  "dependencies": ["http-client", "config", "metrics"],
+  "permissions": [],
+  "events": {},
+  "database": {
+    "hasMigrations": false,
+    "tables": []
+  }
+}

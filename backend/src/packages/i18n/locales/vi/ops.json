@@ -49,5 +49,12 @@
   "ops.metrics.displayName": "Metrics (Prometheus)",
   "ops.metrics.summary": "Registry prom-client, Prometheus {state}.",
   "ops.queue.displayName": "Queue (BullMQ)",
-  "ops.queue.summary": "{count} queue, {state}."
+  "ops.queue.summary": "{count} queue, {state}.",
+  "ops.httpClient.displayName": "HTTP Client dùng chung",
+  "ops.httpClient.summary": "{services} dịch vụ, {openCircuits} mạch đang mở, {requests} request.",
+  "ops.httpClient.resetCircuits.label": "Đặt lại toàn bộ Circuit Breaker",
+  "ops.httpClient.resetCircuits.description": "Đóng lại toàn bộ mạch đang mở để cho phép gọi lại các nhà cung cấp.",
+  "ops.httpClient.resetCircuits.success": "Đã đặt lại {count} circuit breaker.",
+  "ops.httpClient.error.serviceNotFound": "Không tìm thấy dịch vụ HTTP [{service}].",
+  "ops.httpClient.error.resetDisabled": "Thao tác đặt lại Circuit Breaker đang bị tắt bởi cấu hình."
 }

@@ -247,6 +247,26 @@ export class ArchitectureLinterService {
         }
       }
 
+      if (
+        currentModule &&
+        !line.trim().startsWith('//') &&
+        !line.trim().startsWith('*') &&
+        !line.includes('@allow-raw-http') &&
+        !prevLine.includes('@allow-raw-http')
+      ) {
+        if (
+          /(?:^|[\s(=:;,!]|globalThis\.)fetch\s*\(/.test(line) ||
+          /from\s+['"](?:axios|undici|node-fetch)['"]/.test(line)
+        ) {
+          violations.push({
+            rule: 'RULE_8_SHARED_UTILS_AND_CLEAN_CODE',
+            file: path.relative(backendRoot, file),
+            line: i + 1,
+            message: `Direct HTTP client call/import detected in module "${currentModule}". Inject HTTP_CLIENT_TOKEN / BaseHttpClientProvider from @packages/http-client instead.`,
+          });
+        }
+      }
+
       if (/throw\s+new\s+\w*Exception\s*\(/.test(line)) {
         const block = lines
           .slice(i, Math.min(lines.length, i + 6))

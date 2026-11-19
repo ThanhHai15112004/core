@@ -4,6 +4,7 @@ import { dbEn } from './console/db.en';
 import { cacheEn } from './console/cache.en';
 import { storageEn } from './console/storage.en';
 import { messagingEn } from './console/messaging.en';
+import { httpClientEn } from './console/http-client.en';
 import { wqEn } from './console/wq.en';
 import { jobsEn } from './console/jobs.en';
 import { logsEn } from './console/logs.en';
@@ -24,6 +25,7 @@ export const en: TranslationKey = {
     cache: 'Cache',
     storage: 'Storage',
     messaging: 'Messaging',
+    'http-client': 'HTTP Client',
     worker: 'Worker & Queue',
     scheduler: 'Scheduler',
     jobs: 'Jobs',
@@ -170,6 +172,7 @@ export const en: TranslationKey = {
   cache: cacheEn,
   storage: storageEn,
   messaging: messagingEn,
+  httpClient: httpClientEn,
   wq: wqEn,
   jobs: jobsEn,
   logs: logsEn,

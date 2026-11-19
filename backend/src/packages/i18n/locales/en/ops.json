@@ -49,5 +49,12 @@
   "ops.metrics.displayName": "Metrics (Prometheus)",
   "ops.metrics.summary": "prom-client registry, Prometheus {state}.",
   "ops.queue.displayName": "Queue (BullMQ)",
-  "ops.queue.summary": "{count} queues, {state}."
+  "ops.queue.summary": "{count} queues, {state}.",
+  "ops.httpClient.displayName": "Outbound HTTP Client",
+  "ops.httpClient.summary": "{services} services, {openCircuits} open circuits, {requests} requests.",
+  "ops.httpClient.resetCircuits.label": "Reset all Circuit Breakers",
+  "ops.httpClient.resetCircuits.description": "Close all open circuits to resume calling external providers.",
+  "ops.httpClient.resetCircuits.success": "Reset {count} circuit breaker(s).",
+  "ops.httpClient.error.serviceNotFound": "HTTP service [{service}] was not found.",
+  "ops.httpClient.error.resetDisabled": "Resetting circuit breakers is disabled by configuration."
 }

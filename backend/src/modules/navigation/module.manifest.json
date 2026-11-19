@@ -188,6 +188,20 @@
       "position": "SYSTEM_CONSOLE"
     },
     {
+      "code": "SC_HTTP_CLIENT",
+      "name": "HTTP Client",
+      "status": 1,
+      "link": "/system-console/http-client",
+      "linkApi": "/api/v1/ops/http-client/overview",
+      "type": 2,
+      "parentCode": "SC_INFRASTRUCTURE",
+      "level": 2,
+      "key": "settings.read",
+      "numOrder": 5,
+      "icon": "Network",
+      "position": "SYSTEM_CONSOLE"
+    },
+    {
       "code": "SC_BACKGROUND",
       "name": "Tác vụ nền",
       "status": 1,

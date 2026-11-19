@@ -25,4 +25,5 @@ export enum CorePackageId {
   QUEUE = 'queue',
   RUNTIME = 'runtime',
   REDIS = 'redis',
+  HTTP_CLIENT = 'http-client',
 }

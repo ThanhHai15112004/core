@@ -4,6 +4,7 @@ import { dbVi } from './console/db.vi';
 import { cacheVi } from './console/cache.vi';
 import { storageVi } from './console/storage.vi';
 import { messagingVi } from './console/messaging.vi';
+import { httpClientVi } from './console/http-client.vi';
 import { wqVi } from './console/wq.vi';
 import { jobsVi } from './console/jobs.vi';
 import { logsVi } from './console/logs.vi';
@@ -23,6 +24,7 @@ export const vi = {
     cache: 'Bộ nhớ đệm',
     storage: 'Lưu trữ',
     messaging: 'Messaging',
+    'http-client': 'HTTP Client',
     worker: 'Worker & Queue',
     scheduler: 'Scheduler',
     jobs: 'Jobs',
@@ -169,6 +171,7 @@ export const vi = {
   cache: cacheVi,
   storage: storageVi,
   messaging: messagingVi,
+  httpClient: httpClientVi,
   wq: wqVi,
   jobs: jobsVi,
   logs: logsVi,

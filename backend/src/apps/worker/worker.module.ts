@@ -8,6 +8,7 @@ import { MessagingModule } from '@packages/messaging/index.js';
 import { QueueModule } from '@packages/queue/index.js';
 import { CacheModule } from '@packages/cache/index.js';
 import { StorageModule } from '@packages/storage/index.js';
+import { HttpClientModule } from '@packages/http-client/index.js';
 import { RedisModule } from '@packages/redis/index.js';
 import { RuntimeAgentModule } from '@packages/runtime/index.js';
 import { MetricsModule } from '@packages/metrics/index.js';
@@ -47,6 +48,7 @@ const PROCESSORS = [SystemProcessor, CriticalProcessor, NotificationsProcessor, 
     QueueModule,
     CacheModule,
     StorageModule,
+    HttpClientModule,
     UsersModule,
     SessionsModule,
     CredentialsModule,

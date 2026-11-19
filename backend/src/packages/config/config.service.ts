@@ -14,6 +14,7 @@ import { runtimeConfig, type RuntimeConfig } from './runtime.config.js';
 import { trafficConfig, type TrafficConfig } from './traffic.config.js';
 import { performanceConfig, type PerformanceConfig } from './performance.config.js';
 import { metricsConfig, type MetricsConfig } from './metrics.config.js';
+import { httpClientConfig, type HttpClientConfig } from './http-client.config.js';
 
 @Injectable()
 export class CoreConfigService {
@@ -31,6 +32,7 @@ export class CoreConfigService {
   public readonly traffic: TrafficConfig;
   public readonly performance: PerformanceConfig;
   public readonly metrics: MetricsConfig;
+  public readonly httpClient: HttpClientConfig;
 
   constructor() {
     this.app = appConfig();
@@ -48,6 +50,7 @@ export class CoreConfigService {
     this.traffic = trafficConfig();
     this.performance = performanceConfig();
     this.metrics = metricsConfig();
+    this.httpClient = httpClientConfig();
   }
 
   public get isProduction(): boolean {
@@ -82,6 +85,7 @@ export class CoreConfigService {
       traffic: this.traffic,
       performance: this.performance,
       metrics: this.metrics,
+      httpClient: this.httpClient,
     };
     const parts = path.split('.');
     let current: unknown = root;

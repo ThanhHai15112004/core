@@ -6,6 +6,7 @@ import { I18nModule } from '@packages/i18n/index.js';
 import { DatabaseModule } from '@packages/database/index.js';
 import { CacheModule } from '@packages/cache/index.js';
 import { StorageModule } from '@packages/storage/index.js';
+import { HttpClientModule } from '@packages/http-client/index.js';
 import { QueueModule } from '@packages/queue/index.js';
 import { MessagingModule } from '@packages/messaging/index.js';
 import { RedisModule } from '@packages/redis/index.js';
@@ -28,6 +29,7 @@ import { SchedulerRuntimeContributor } from './runtime/scheduler-runtime.contrib
     DatabaseModule,
     CacheModule,
     StorageModule,
+    HttpClientModule,
     QueueModule,
     MessagingModule,
   ],
