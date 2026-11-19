@@ -69,6 +69,7 @@ export const en: TranslationKey = {
     workflows: 'Workflows & Approvals',
     calendar: 'Calendar & Events',
     customFields: 'Custom Fields & Metadata',
+    webhooks: 'Outbound Webhooks',
     languageToggle: 'Language',
     themeLight: 'Light',
     themeDark: 'Dark',

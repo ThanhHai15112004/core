@@ -16,6 +16,12 @@ import { FILES_PUBLIC_SERVICE, type IFilesPublicService } from '@modules/files/c
 import { NotificationChannelsService } from '@modules/notification-delivery/index.js';
 import { WorkflowsService } from '@modules/workflows/index.js';
 import { CalendarService } from '@modules/calendar/index.js';
+import {
+  WEBHOOKS_PUBLIC_SERVICE,
+  WEBHOOKS_QUEUE_TOPICS,
+  type IWebhooksPublicService,
+  type QueuedWebhookDeliveryJobPayload,
+} from '@modules/webhooks/contracts/index.js';
 import { BaseQueueProcessor } from '../base-queue.processor.js';
 
 export interface SystemMaintenanceTickPayload {
@@ -45,6 +51,9 @@ export class SystemProcessor extends BaseQueueProcessor {
     @Optional() private readonly reportRegistry?: ReportRegistryService,
     @Optional() private readonly workflowsService?: WorkflowsService,
     @Optional() private readonly calendarService?: CalendarService,
+    @Optional()
+    @Inject(WEBHOOKS_PUBLIC_SERVICE)
+    private readonly webhooksService?: IWebhooksPublicService,
   ) {
     super(config, metrics, progressTracker);
   }
@@ -54,10 +63,25 @@ export class SystemProcessor extends BaseQueueProcessor {
   }
 
   /** Điều phối sự kiện hệ thống sang hàm xử lý chuyên biệt theo từng topic */
-  protected async handle(envelope: MessageEnvelope, _job: Job): Promise<unknown> {
+  protected async handle(envelope: MessageEnvelope, job: Job): Promise<unknown> {
     this.logger.log(
       `Processing message "${envelope.topic}" (${envelope.id}) from ${envelope.producer ?? 'unknown'}`,
     );
+
+    if (envelope.topic === WEBHOOKS_QUEUE_TOPICS.DELIVERY_SEND) {
+      if (!this.webhooksService) {
+        this.logger.warn(
+          `Received "${envelope.topic}" (${envelope.id}) but WebhooksService is not available`,
+        );
+        return { handled: false, skipped: true, reason: 'webhooks_service_unavailable' };
+      }
+      const payload = (envelope.payload ?? {}) as QueuedWebhookDeliveryJobPayload;
+      return this.webhooksService.processQueuedDelivery(payload, {
+        attemptNumber: (job.attemptsMade ?? 0) + 1,
+        maxAttempts: job.opts?.attempts ?? 1,
+        jobId: String(job.id ?? envelope.id),
+      });
+    }
 
     if (
       envelope.topic === 'system.maintenance.tick' ||

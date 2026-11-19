@@ -547,4 +547,15 @@ export const API_ROUTES = {
     VALUES_BY_RECORD: (entityCode: string, recordId: string | number, qs = '') =>
       `/custom-fields/values/${encodeURIComponent(entityCode)}/${encodeURIComponent(String(recordId))}${qs ? `?${qs}` : ''}`,
   },
+  WEBHOOKS: {
+    EVENTS: '/webhooks/events',
+    ENDPOINTS: (qs = '') => `/webhooks/endpoints${qs ? `?${qs}` : ''}`,
+    ENDPOINT_BY_ID: (id: string | number) => `/webhooks/endpoints/${id}`,
+    ENDPOINT_ROTATE_SECRET: (id: string | number) => `/webhooks/endpoints/${id}/rotate-secret`,
+    ENDPOINT_REACTIVATE: (id: string | number) => `/webhooks/endpoints/${id}/reactivate`,
+    ENDPOINT_TEST: (id: string | number) => `/webhooks/endpoints/${id}/test`,
+    DELIVERIES: (qs = '') => `/webhooks/deliveries${qs ? `?${qs}` : ''}`,
+    DELIVERY_BY_ID: (id: string | number) => `/webhooks/deliveries/${id}`,
+    DELIVERY_REPLAY: (id: string | number) => `/webhooks/deliveries/${id}/replay`,
+  },
 } as const;

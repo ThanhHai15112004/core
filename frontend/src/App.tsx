@@ -62,6 +62,10 @@ const CustomFieldsManagementPage = loadPage(
   () => import('./modules/custom-fields/CustomFieldsManagementPage'),
   'CustomFieldsManagementPage',
 );
+const WebhooksManagementPage = loadPage(
+  () => import('./modules/webhooks/WebhooksManagementPage'),
+  'WebhooksManagementPage',
+);
 
 // Tải riêng: CSS/JS của System Console (Tailwind, ECharts…) chỉ nạp khi vào console.
 // Link cũ dạng `/#system-console/...` → đường dẫn thật.
@@ -133,6 +137,8 @@ function App() {
               <CalendarManagementPage />
             ) : activeTab === 'custom-fields' ? (
               <CustomFieldsManagementPage />
+            ) : activeTab === 'webhooks' ? (
+              <WebhooksManagementPage />
             ) : (
               <HomePage onNavigateTab={handleNavigateTab} />
             )}

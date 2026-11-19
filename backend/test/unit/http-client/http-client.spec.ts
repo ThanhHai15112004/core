@@ -11,6 +11,7 @@ import {
   HttpTimeoutError,
   computeBackoffDelayMs,
   parseRetryAfterMs,
+  type HttpRedirectMode,
   type HttpRetryPolicy,
 } from '@packages/http-client/index.js';
 import { RequestContextService } from '@packages/logging/index.js';
@@ -410,5 +411,30 @@ describe('Phase 10.1 — Shared HTTP Client Adapter (@packages/http-client)', ()
     expect(recovered.ok).toBe(true);
     expect(calls).toBe(9);
     expect(circuitBreaker.getSnapshot('erp')?.state).toBe('CLOSED');
+  });
+
+  it('9. Forwards explicit redirect mode (e.g. manual for webhook SSRF protection) to fetch', async () => {
+    const { client } = createProvider();
+    let capturedRedirect: HttpRedirectMode | undefined;
+    globalThis.fetch = (async (_input: string | URL | Request, init?: RequestInit) => {
+      capturedRedirect = init?.redirect as HttpRedirectMode | undefined;
+      return new Response('', {
+        status: 302,
+        headers: { location: 'http://127.0.0.1/admin' },
+      });
+    }) as typeof fetch;
+
+    await expect(
+      client.requestRaw(
+        'POST',
+        'https://hooks.example.com/events',
+        { ok: true },
+        {
+          redirect: 'manual',
+          retry: { maxRetries: 0 },
+        },
+      ),
+    ).rejects.toBeInstanceOf(HttpStatusError);
+    expect(capturedRedirect).toBe('manual');
   });
 });

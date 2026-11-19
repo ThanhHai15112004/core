@@ -25,6 +25,7 @@ import {
   GitBranch,
   Calendar,
   SlidersHorizontal,
+  Webhook,
   Sun,
   Moon,
 } from 'lucide-react';
@@ -114,6 +115,8 @@ export const Header: React.FC<HeaderProps> = ({ activeTab, onTabChange }) => {
         return <Calendar size={15} />;
       case 'custom-fields':
         return <SlidersHorizontal size={15} />;
+      case 'webhooks':
+        return <Webhook size={15} />;
       case 'home':
       default:
         return <Home size={15} />;

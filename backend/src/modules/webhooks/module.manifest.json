@@ -1,0 +1,284 @@
+{
+  "$schema": "../../packages/kernel/schemas/module.manifest.schema.json",
+  "name": "webhooks",
+  "displayName": "Outbound Webhooks",
+  "version": "1.0.0",
+  "description": "Module quản lý Outbound Webhooks (10.2): Đăng ký Webhook Endpoint, chọn sự kiện từ catalog hoặc tùy chỉnh, ký chữ ký HMAC-SHA256, gửi bất đồng bộ qua Queue với retry/backoff, lưu lịch sử từng lần gửi, replay thủ công có audit, tự khóa endpoint lỗi kéo dài kèm cảnh báo quản trị và chống SSRF.",
+  "type": "core",
+  "category": "Integrations",
+  "author": "Core Platform Team",
+  "entryModule": "WebhooksModule",
+  "dependencies": ["database", "security", "settings", "codes", "notifications", "audit"],
+  "permissions": [
+    "webhooks.read",
+    "webhooks.manage",
+    "webhooks.replay",
+    "webhooks.secret.rotate"
+  ],
+  "codeTypes": [
+    {
+      "code": "webhooks.endpoint_status",
+      "name": "Trạng thái Webhook Endpoint",
+      "description": "Trạng thái hoạt động của endpoint nhận webhook gửi ra ngoài",
+      "isSystem": true,
+      "allowCustomValues": false,
+      "values": [
+        {
+          "numericCode": 1,
+          "code": "ACTIVE",
+          "name": "Đang hoạt động",
+          "labels": { "vi": "Đang hoạt động", "en": "Active" },
+          "behaviorCode": "ACTIVE",
+          "badgeTone": "success",
+          "sortOrder": 1,
+          "isSystem": true
+        },
+        {
+          "numericCode": 2,
+          "code": "PAUSED",
+          "name": "Tạm dừng",
+          "labels": { "vi": "Tạm dừng", "en": "Paused" },
+          "behaviorCode": "PAUSED",
+          "badgeTone": "warning",
+          "sortOrder": 2,
+          "isSystem": true
+        },
+        {
+          "numericCode": 3,
+          "code": "AUTO_DISABLED",
+          "name": "Tự khóa do lỗi kéo dài",
+          "labels": { "vi": "Tự khóa do lỗi", "en": "Auto Disabled" },
+          "behaviorCode": "AUTO_DISABLED",
+          "badgeTone": "danger",
+          "sortOrder": 3,
+          "isSystem": true
+        }
+      ]
+    },
+    {
+      "code": "webhooks.delivery_status",
+      "name": "Trạng thái gửi Webhook",
+      "description": "Vòng đời xử lý và giao nhận một bản ghi webhook delivery",
+      "isSystem": true,
+      "allowCustomValues": false,
+      "values": [
+        {
+          "numericCode": 1,
+          "code": "PENDING",
+          "name": "Đang chờ gửi",
+          "labels": { "vi": "Đang chờ gửi", "en": "Pending" },
+          "behaviorCode": "PENDING",
+          "badgeTone": "info",
+          "sortOrder": 1,
+          "isSystem": true
+        },
+        {
+          "numericCode": 2,
+          "code": "RETRYING",
+          "name": "Đang thử lại",
+          "labels": { "vi": "Đang thử lại", "en": "Retrying" },
+          "behaviorCode": "RETRYING",
+          "badgeTone": "warning",
+          "sortOrder": 2,
+          "isSystem": true
+        },
+        {
+          "numericCode": 3,
+          "code": "DELIVERED",
+          "name": "Đã gửi thành công",
+          "labels": { "vi": "Thành công", "en": "Delivered" },
+          "behaviorCode": "DELIVERED",
+          "badgeTone": "success",
+          "sortOrder": 3,
+          "isSystem": true
+        },
+        {
+          "numericCode": 4,
+          "code": "FAILED",
+          "name": "Thất bại",
+          "labels": { "vi": "Thất bại", "en": "Failed" },
+          "behaviorCode": "FAILED",
+          "badgeTone": "danger",
+          "sortOrder": 4,
+          "isSystem": true
+        },
+        {
+          "numericCode": 5,
+          "code": "CANCELLED",
+          "name": "Đã hủy",
+          "labels": { "vi": "Đã hủy", "en": "Cancelled" },
+          "behaviorCode": "CANCELLED",
+          "badgeTone": "neutral",
+          "sortOrder": 5,
+          "isSystem": true
+        }
+      ]
+    }
+  ],
+  "settingGroups": [
+    {
+      "code": "webhooks",
+      "name": "Webhooks gửi ra ngoài",
+      "description": "Tham số timeout, retry/backoff, ngưỡng tự khóa endpoint lỗi kéo dài và cảnh báo quản trị",
+      "icon": "Webhook",
+      "sortOrder": 65,
+      "isSystem": true
+    }
+  ],
+  "settings": [
+    {
+      "key": "webhooks.default_timeout_ms",
+      "groupCode": "webhooks",
+      "module": "webhooks",
+      "namespace": "webhooks.delivery",
+      "name": "Thời gian chờ mặc định khi gửi Webhook (ms)",
+      "description": "Timeout mặc định cho mỗi yêu cầu HTTP gửi webhook ra ngoài",
+      "valueType": "NUMBER",
+      "defaultValue": 10000,
+      "validationRules": { "min": 1000, "max": 60000, "integerOnly": true },
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 1
+    },
+    {
+      "key": "webhooks.default_max_retries",
+      "groupCode": "webhooks",
+      "module": "webhooks",
+      "namespace": "webhooks.delivery",
+      "name": "Số lần thử lại tối đa mặc định",
+      "description": "Số lần retry tự động tối đa khi gửi webhook gặp lỗi tạm thời (không tính lần gửi đầu)",
+      "valueType": "NUMBER",
+      "defaultValue": 5,
+      "validationRules": { "min": 0, "max": 9, "integerOnly": true },
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 2
+    },
+    {
+      "key": "webhooks.retry_base_delay_ms",
+      "groupCode": "webhooks",
+      "module": "webhooks",
+      "namespace": "webhooks.delivery",
+      "name": "Thời gian chờ nền cho Exponential Backoff (ms)",
+      "description": "Khoảng trễ cơ sở trước lần retry đầu tiên (tăng theo cấp số nhân)",
+      "valueType": "NUMBER",
+      "defaultValue": 5000,
+      "validationRules": { "min": 500, "max": 300000, "integerOnly": true },
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 3
+    },
+    {
+      "key": "webhooks.default_failure_threshold",
+      "groupCode": "webhooks",
+      "module": "webhooks",
+      "namespace": "webhooks.governance",
+      "name": "Ngưỡng lỗi liên tiếp để tự động khóa Endpoint",
+      "description": "Số lần delivery thất bại liên tiếp trước khi hệ thống tự động khóa endpoint và cảnh báo quản trị",
+      "valueType": "NUMBER",
+      "defaultValue": 10,
+      "validationRules": { "min": 2, "max": 100, "integerOnly": true },
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 4
+    },
+    {
+      "key": "webhooks.max_response_snippet_length",
+      "groupCode": "webhooks",
+      "module": "webhooks",
+      "namespace": "webhooks.delivery",
+      "name": "Độ dài tối đa đoạn phản hồi lưu lịch sử (ký tự)",
+      "description": "Giới hạn số ký tự response body được cắt ngắn và lưu trong bảng attempt",
+      "valueType": "NUMBER",
+      "defaultValue": 2048,
+      "validationRules": { "min": 256, "max": 16384, "integerOnly": true },
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 5
+    },
+    {
+      "key": "webhooks.allow_http_in_dev",
+      "groupCode": "webhooks",
+      "module": "webhooks",
+      "namespace": "webhooks.security",
+      "name": "Cho phép HTTP thường trong môi trường phát triển",
+      "description": "Mặc định luôn yêu cầu HTTPS; chỉ bật khi kiểm thử ở môi trường dev an toàn (vẫn chặn IP nội bộ/SSRF)",
+      "valueType": "BOOLEAN",
+      "defaultValue": false,
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 6
+    },
+    {
+      "key": "webhooks.alert_admin_roles",
+      "groupCode": "webhooks",
+      "module": "webhooks",
+      "namespace": "webhooks.governance",
+      "name": "Danh sách mã vai trò nhận cảnh báo khóa Webhook",
+      "description": "Các vai trò quản trị sẽ nhận thông báo khi một Webhook Endpoint bị tự khóa do lỗi kéo dài",
+      "valueType": "JSON",
+      "defaultValue": ["super_admin", "admin"],
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 7
+    },
+    {
+      "key": "webhooks.alert_channels",
+      "groupCode": "webhooks",
+      "module": "webhooks",
+      "namespace": "webhooks.governance",
+      "name": "Các kênh gửi cảnh báo khóa Webhook",
+      "description": "Kênh thông báo khi Webhook Endpoint bị tự động vô hiệu hóa (IN_APP, EMAIL)",
+      "valueType": "JSON",
+      "defaultValue": ["IN_APP", "EMAIL"],
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 8
+    }
+  ],
+  "menus": [
+    {
+      "code": "WEBHOOKS",
+      "name": "Webhooks gửi ra ngoài",
+      "module": "webhooks",
+      "status": 1,
+      "link": "/webhooks",
+      "linkApi": "/api/v1/webhooks/endpoints",
+      "type": 2,
+      "parent": null,
+      "level": 1,
+      "key": "webhooks.read",
+      "numOrder": 60,
+      "icon": "Webhook",
+      "position": "SIDEBAR"
+    }
+  ],
+  "events": {
+    "published": [
+      "webhooks.endpoint.created",
+      "webhooks.endpoint.updated",
+      "webhooks.endpoint.auto_disabled",
+      "webhooks.endpoint.reactivated",
+      "webhooks.delivery.succeeded",
+      "webhooks.delivery.failed",
+      "webhooks.delivery.replayed"
+    ],
+    "subscribed": []
+  },
+  "database": {
+    "hasMigrations": true,
+    "tables": [
+      "webhook_endpoints",
+      "webhook_deliveries",
+      "webhook_delivery_attempts"
+    ]
+  }
+}

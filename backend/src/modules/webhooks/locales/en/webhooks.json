@@ -1,0 +1,12 @@
+{
+  "endpointNotFound": "Webhook endpoint was not found.",
+  "deliveryNotFound": "Webhook delivery record was not found.",
+  "ssrfBlocked": "Target URL is blocked by SSRF protection policy (private/internal networks or unsafe protocol are not allowed).",
+  "invalidEvents": "Subscribed events list is empty or contains invalid event patterns.",
+  "invalidHeaders": "Custom headers contain forbidden header names or invalid values.",
+  "endpointNotActiveForReplay": "Webhook endpoint is not ACTIVE; reactivate it before manually replaying a delivery.",
+  "endpointNotActiveForTest": "Webhook endpoint is paused or auto-disabled; reactivate it before sending a test event.",
+  "deliveryNotReplayable": "This webhook delivery cannot be manually replayed in its current state.",
+  "endpointReactivateInvalidState": "Only PAUSED or AUTO_DISABLED webhook endpoints can be reactivated.",
+  "queuePublishFailed": "Failed to enqueue outbound webhook delivery job."
+}

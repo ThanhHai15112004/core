@@ -1,0 +1,12 @@
+{
+  "endpointNotFound": "Không tìm thấy Webhook Endpoint.",
+  "deliveryNotFound": "Không tìm thấy lịch sử gửi Webhook.",
+  "ssrfBlocked": "URL đích bị chặn bởi chính sách bảo vệ chống SSRF (không được trỏ tới địa chỉ nội bộ hoặc giao thức không an toàn).",
+  "invalidEvents": "Danh sách sự kiện đăng ký không hợp lệ hoặc bị trống.",
+  "invalidHeaders": "Custom headers chứa tên header bị cấm hoặc giá trị không hợp lệ.",
+  "endpointNotActiveForReplay": "Endpoint hiện không ở trạng thái hoạt động (ACTIVE); vui lòng kích hoạt lại trước khi gửi lại thủ công.",
+  "endpointNotActiveForTest": "Endpoint đang bị tạm dừng hoặc tự khóa; hãy kích hoạt lại trước khi gửi sự kiện kiểm thử.",
+  "deliveryNotReplayable": "Bản ghi gửi Webhook này chưa hoàn tất hoặc không hỗ trợ gửi lại thủ công.",
+  "endpointReactivateInvalidState": "Chỉ có thể mở khóa hoặc kích hoạt lại Webhook Endpoint đang ở trạng thái PAUSED hoặc AUTO_DISABLED.",
+  "queuePublishFailed": "Không thể đẩy tác vụ gửi Webhook vào hàng đợi xử lý."
+}

@@ -6,6 +6,8 @@ export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD' | 
 
 export type HttpResponseType = 'json' | 'text' | 'arrayBuffer' | 'void';
 
+export type HttpRedirectMode = 'follow' | 'error' | 'manual';
+
 export type CircuitBreakerState = 'CLOSED' | 'OPEN' | 'HALF_OPEN';
 
 export type HttpRequestOutcome =
@@ -55,6 +57,7 @@ export interface HttpRequestOptions {
   readonly skipCircuitBreaker?: boolean | undefined;
   readonly responseType?: HttpResponseType | undefined;
   readonly signal?: AbortSignal | undefined;
+  readonly redirect?: HttpRedirectMode | undefined;
   readonly idempotencyKey?: string | undefined;
   readonly requestId?: string | undefined;
   readonly traceId?: string | undefined;

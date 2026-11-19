@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { KernelModule } from '@packages/kernel/index.js';
 import { ConfigModule } from '@packages/config/index.js';
 import { LoggingModule } from '@packages/logging/index.js';
+import { SecurityModule } from '@packages/security/index.js';
 import { I18nModule } from '@packages/i18n/index.js';
 import { DatabaseModule } from '@packages/database/index.js';
 import { MessagingModule } from '@packages/messaging/index.js';
@@ -12,6 +13,7 @@ import { HttpClientModule } from '@packages/http-client/index.js';
 import { RedisModule } from '@packages/redis/index.js';
 import { RuntimeAgentModule } from '@packages/runtime/index.js';
 import { MetricsModule } from '@packages/metrics/index.js';
+import { AuditModule } from '@modules/audit/index.js';
 import { UsersModule } from '@modules/users/index.js';
 import { SessionsModule } from '@modules/sessions/index.js';
 import { CredentialsModule } from '@modules/credentials/index.js';
@@ -26,6 +28,7 @@ import { ExportsModule } from '@modules/exports/index.js';
 import { ReportsModule } from '@modules/reports/index.js';
 import { SearchModule } from '@modules/search/index.js';
 import { CustomFieldsModule } from '@modules/custom-fields/index.js';
+import { WebhooksModule } from '@modules/webhooks/index.js';
 import { SystemProcessor } from './processors/system/system.processor.js';
 import { CriticalProcessor } from './processors/critical/critical.processor.js';
 import { NotificationsProcessor } from './processors/notifications/notifications.processor.js';
@@ -44,11 +47,13 @@ const PROCESSORS = [SystemProcessor, CriticalProcessor, NotificationsProcessor, 
     I18nModule,
     LoggingModule.forRoot({ runtime: 'worker' }),
     DatabaseModule,
+    SecurityModule,
     MessagingModule,
     QueueModule,
     CacheModule,
     StorageModule,
     HttpClientModule,
+    AuditModule,
     UsersModule,
     SessionsModule,
     CredentialsModule,
@@ -63,6 +68,7 @@ const PROCESSORS = [SystemProcessor, CriticalProcessor, NotificationsProcessor, 
     ReportsModule,
     SearchModule,
     CustomFieldsModule,
+    WebhooksModule,
   ],
   providers: [...PROCESSORS, WorkerRuntimeContributor],
   exports: [...PROCESSORS],

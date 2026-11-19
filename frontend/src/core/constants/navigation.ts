@@ -12,7 +12,8 @@ export type NavigationTabId =
   | 'notifications'
   | 'workflows'
   | 'calendar'
-  | 'custom-fields';
+  | 'custom-fields'
+  | 'webhooks';
 
 export interface NavigationItem {
   id: NavigationTabId;
@@ -94,6 +95,12 @@ export const NAVIGATION_ITEMS: readonly NavigationItem[] = [
     labelKey: 'header.customFields',
     icon: 'sliders',
     route: ROUTES.CUSTOM_FIELDS,
+  },
+  {
+    id: 'webhooks',
+    labelKey: 'header.webhooks',
+    icon: 'webhook',
+    route: ROUTES.WEBHOOKS,
   },
 ] as const;
 

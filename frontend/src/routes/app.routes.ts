@@ -11,6 +11,7 @@ export const ROUTES = {
   WORKFLOWS: '/workflows',
   CALENDAR: '/calendar',
   CUSTOM_FIELDS: '/custom-fields',
+  WEBHOOKS: '/webhooks',
   SYSTEM_CONSOLE: '/system-console',
 } as const;
 

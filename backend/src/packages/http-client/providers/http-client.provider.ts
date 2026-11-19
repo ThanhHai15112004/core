@@ -255,6 +255,7 @@ export class BaseHttpClientProvider implements HttpClientContract {
         method,
         headers,
         signal,
+        ...(options?.redirect ? { redirect: options.redirect } : {}),
       };
       if (body !== undefined && method !== 'GET' && method !== 'HEAD') {
         const rawBody: unknown = body;
