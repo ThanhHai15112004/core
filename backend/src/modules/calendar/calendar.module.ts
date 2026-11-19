@@ -14,6 +14,7 @@ import { CalendarEventRepository } from './repositories/calendar-event.repositor
 import { CalendarEventParticipantRepository } from './repositories/calendar-event-participant.repository.js';
 import { CalendarEventReminderRepository } from './repositories/calendar-event-reminder.repository.js';
 import { CalendarEventHistoryRepository } from './repositories/calendar-event-history.repository.js';
+import { CalendarCollaborationService } from './services/calendar-collaboration.service.js';
 import { CalendarService } from './services/calendar.service.js';
 import { CalendarController } from './controllers/calendar.controller.js';
 import enCalendar from './locales/en/calendar.json' with { type: 'json' };
@@ -40,6 +41,7 @@ new CoreI18nService().registerNamespace('calendar', { vi: viCalendar, en: enCale
     CalendarEventParticipantRepository,
     CalendarEventReminderRepository,
     CalendarEventHistoryRepository,
+    CalendarCollaborationService,
     CalendarService,
     {
       provide: CALENDAR_PUBLIC_SERVICE,

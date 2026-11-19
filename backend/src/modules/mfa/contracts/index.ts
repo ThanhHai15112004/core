@@ -59,6 +59,10 @@ export interface IMfaPublicService {
   ): Promise<AdminResetMfaResult & AdminResetMfaResponse>;
   disableMfa(userId: number, dto: DisableMfaRequest): Promise<MfaStatusResponse>;
   regenerateRecoveryCodes(userId: number): Promise<{ recoveryCodes: string[] }>;
+  maskEmail(email: string): string;
+  getChallengeAttempts(challengeHash: string): Promise<number>;
+  incrementChallengeAttempts(challengeHash: string, currentAttempts: number): Promise<number>;
+  clearChallengeAttempts(challengeHash: string): Promise<void>;
 }
 
 export const MFA_PUBLIC_SERVICE = Symbol('MFA_PUBLIC_SERVICE');

@@ -12,6 +12,7 @@ import { RoleRepository } from './repositories/role.repository.js';
 import { RolePermissionRepository } from './repositories/role-permission.repository.js';
 import { UserRoleRepository } from './repositories/user-role.repository.js';
 import { RolesMapper } from './mappers/roles.mapper.js';
+import { RoleMutationService } from './services/role-mutation.service.js';
 import { RolesService } from './services/roles.service.js';
 import { RolesController } from './controllers/roles.controller.js';
 import enRoles from './locales/en/roles.json' with { type: 'json' };
@@ -32,6 +33,7 @@ new CoreI18nService().registerNamespace('roles', { vi: viRoles, en: enRoles });
     RolePermissionRepository,
     UserRoleRepository,
     RolesMapper,
+    RoleMutationService,
     RolesService,
     {
       provide: ROLES_PUBLIC_SERVICE,

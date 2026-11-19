@@ -21,6 +21,7 @@ import enNotificationDelivery from './locales/en/notification-delivery.json' wit
 import viNotificationDelivery from './locales/vi/notification-delivery.json' with { type: 'json' };
 import { NotificationDeliveryMapper } from './mappers/notification-delivery.mapper.js';
 import { NotificationDeliveryRepository } from './repositories/notification-delivery.repository.js';
+import { NotificationDeliveryGovernanceService } from './services/notification-delivery-governance.service.js';
 import { NotificationDeliveryService } from './services/notification-delivery.service.js';
 
 new CoreI18nService().registerNamespace('notification-delivery', {
@@ -57,6 +58,7 @@ new CoreI18nService().registerNamespace('notification-delivery', {
       ) => new NotificationChannelAdapterRegistry(emailAdapter, smsAdapter, pushAdapter),
       inject: [EmailChannelProviderAdapter, SmsChannelProviderAdapter, PushChannelProviderAdapter],
     },
+    NotificationDeliveryGovernanceService,
     NotificationDeliveryService,
     {
       provide: NOTIFICATION_DELIVERY_PUBLIC_SERVICE,

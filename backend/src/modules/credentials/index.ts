@@ -3,7 +3,6 @@ export * from './contracts/index.js';
 export * from './services/password.service.js';
 export * from './services/security-settings.service.js';
 export * from './services/notification-adapters.provider.js';
-export * from './controllers/credentials.controller.js';
 export * from './requests/credentials.requests.js';
 export * from './responses/credentials.response.js';
 export * from './routes/credentials.routes.js';

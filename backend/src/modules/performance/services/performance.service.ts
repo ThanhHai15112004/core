@@ -37,7 +37,11 @@ import type {
 } from '../responses/performance.response.js';
 import { PerformanceEventsService } from './performance-events.service.js';
 import { PerformanceInputsService, type WindowMetrics } from './performance-inputs.service.js';
-import { evaluateRules, overallLevel, type Violation } from './performance-rules.js';
+import {
+  evaluateRules,
+  overallLevel,
+  type Violation,
+} from '../helpers/performance-rules.helper.js';
 
 export const PERF_RANGES: Record<PerfRange, number> = TRAFFIC_RANGES;
 export const TIMESERIES_METRICS: TimeseriesMetric[] = [

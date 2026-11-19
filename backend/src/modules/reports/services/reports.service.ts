@@ -1,4 +1,4 @@
-import { Injectable, Optional } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import {
   ExportRegistryService,
   NotFoundAppException,
@@ -32,16 +32,9 @@ import type {
 } from '../requests/reports.requests.js';
 import type { ReportExecutionResponse } from '../responses/reports.response.js';
 
-interface LegacyReportAdapter {
-  ensureModuleReportsRegistered?(): void;
-  runReport(
-    request?: Partial<RunReportRequest>,
-    actor?: UserIdentity,
-  ): Promise<ReportExecutionResponse>;
-}
-
 @Injectable()
 export class ReportsService implements IReportsPublicService {
+  private readonly logger = new Logger(ReportsService.name);
   private readonly reportRegistry: ReportRegistryService;
   private readonly exportRegistry: ExportRegistryService;
 
@@ -50,7 +43,6 @@ export class ReportsService implements IReportsPublicService {
     @Optional() private readonly historyRepository?: ReportHistoryRepository,
     @Optional() reportRegistry?: ReportRegistryService,
     @Optional() exportRegistry?: ExportRegistryService,
-    @Optional() private readonly userReportService?: LegacyReportAdapter,
   ) {
     this.reportRegistry = reportRegistry ?? defaultReportRegistry;
     this.exportRegistry = exportRegistry ?? defaultExportRegistry;
@@ -58,38 +50,7 @@ export class ReportsService implements IReportsPublicService {
   }
 
   private ensureInjectedReportAdaptersRegistered(): void {
-    this.userReportService?.ensureModuleReportsRegistered?.();
     this.reportRegistry.syncFromManifests();
-
-    if (this.userReportService && !this.reportRegistry.resolveWorkerExecutor({ module: 'users' })) {
-      this.reportRegistry.registerWorkerExecutor({
-        module: 'users',
-        topic: 'users.report',
-        reportCodes: ['users.summary_dashboard', 'users.security_compliance'],
-        executeReport: async (input) => {
-          const res = await this.userReportService!.runReport(
-            (input.request ?? { reportCode: input.reportCode }) as Partial<RunReportRequest>,
-            input.actor as UserIdentity | undefined,
-          );
-          return {
-            reportCode: res.reportCode,
-            historyId: res.historyId,
-            totalRecords: res.totalRecords,
-            dataSourceUsed: res.dataSourceUsed,
-            cacheHit: res.cacheHit,
-            downloadToken: res.downloadToken,
-            downloadUrl: res.downloadUrl,
-            expiresAt: res.expiresAt,
-            notifiedChannels: res.notifiedChannels,
-          };
-        },
-        runReport: async (request, actor) =>
-          (await this.userReportService!.runReport(
-            request as Partial<RunReportRequest>,
-            actor as UserIdentity | undefined,
-          )) as unknown as Readonly<Record<string, unknown>>,
-      });
-    }
   }
 
   /** 8.4.1 — Danh sách các báo cáo & dashboard đã đăng ký trên toàn hệ thống */
@@ -244,7 +205,12 @@ export class ReportsService implements IReportsPublicService {
     }
 
     if (this.scheduleRepository) {
-      const entity = await this.scheduleRepository.findById(scheduleId).catch(() => null);
+      const entity = await this.scheduleRepository.findById(scheduleId).catch((err) => {
+        this.logger.warn(
+          `Failed to query report schedule #${scheduleId}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+        return null;
+      });
       if (entity) {
         return this.mapScheduleEntityToRecord(entity);
       }
@@ -346,7 +312,6 @@ export class ReportsService implements IReportsPublicService {
       readonly notifiedChannels: readonly ReportDeliveryChannel[];
     }>;
   }> {
-    this.userReportService?.ensureModuleReportsRegistered?.();
     const res = await this.reportRegistry.triggerDueSchedules(now);
 
     for (const item of res.results) {

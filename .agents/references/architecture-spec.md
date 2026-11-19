@@ -207,8 +207,10 @@ core/
 │   │   │   ├── worker-ops/ · scheduler-ops/ · jobs-ops/ · logs-ops/
 │   │   │   └── <module-name>/       # Cấu trúc chuẩn của 1 module nghiệp vụ:
 │   │   │       ├── entities/          # (hoặc models/)
-│   │   │       ├── enums/
-│   │   │       ├── interfaces/
+│   │   │       ├── enum/              # (hoặc enums/, constants/)
+│   │   │       ├── types/             # (hoặc interfaces/)
+│   │   │       ├── contracts/         # Hợp đồng công khai & token DI của module
+│   │   │       ├── helpers/           # (hoặc utils/)
 │   │   │       ├── requests/
 │   │   │       ├── responses/
 │   │   │       ├── repositories/

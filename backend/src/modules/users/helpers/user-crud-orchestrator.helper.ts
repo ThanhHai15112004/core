@@ -174,8 +174,13 @@ export function registerUsersCrossModuleDelegates(params: {
     );
   }
   organizationsPublicService?.registerUnitUsageCountDelegate?.(async (unitId) => {
+    const memberIds =
+      typeof userOrgRepository.findUserIdsByOrganizationUnitIds === 'function'
+        ? await userOrgRepository.findUserIdsByOrganizationUnitIds([unitId])
+        : [];
     const { total } = await userRepository.searchPaginated({
       organizationUnitId: unitId,
+      organizationMemberUserIds: memberIds,
       includeArchived: false,
       page: 1,
       limit: 1,
@@ -183,13 +188,22 @@ export function registerUsersCrossModuleDelegates(params: {
     return total;
   });
   organizationsPublicService?.registerUnitBatchUsageCountDelegate?.(async (unitIds) => {
+    const memberIds =
+      typeof userOrgRepository.findUserIdsByOrganizationUnitIds === 'function'
+        ? await userOrgRepository.findUserIdsByOrganizationUnitIds(unitIds)
+        : [];
     if (typeof userRepository.countUsersByOrganizationUnitIds === 'function') {
-      return userRepository.countUsersByOrganizationUnitIds(unitIds);
+      return userRepository.countUsersByOrganizationUnitIds(unitIds, memberIds);
     }
     let count = 0;
     for (const unitId of unitIds) {
+      const unitMemberIds =
+        typeof userOrgRepository.findUserIdsByOrganizationUnitIds === 'function'
+          ? await userOrgRepository.findUserIdsByOrganizationUnitIds([unitId])
+          : [];
       const { total } = await userRepository.searchPaginated({
         organizationUnitId: unitId,
+        organizationMemberUserIds: unitMemberIds,
         includeArchived: false,
         page: 1,
         limit: 1,

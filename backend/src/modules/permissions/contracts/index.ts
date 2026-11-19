@@ -78,3 +78,12 @@ export interface IPermissionsPublicService {
 }
 
 export const PERMISSIONS_PUBLIC_SERVICE = Symbol('PERMISSIONS_PUBLIC_SERVICE');
+export {
+  buildDeclaredPermissionsMap,
+  derivePermissionFeatureGroup,
+  extractModuleFromPermissionCode,
+  formatPermissionDisplayName,
+  groupPermissionCatalogItems,
+  mapPermissionsToCatalogItems,
+  type NormalizedPermissionDeclaration,
+} from '../helpers/permission-catalog.helper.js';

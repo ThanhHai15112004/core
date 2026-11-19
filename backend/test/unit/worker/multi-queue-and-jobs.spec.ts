@@ -40,9 +40,10 @@ import { NotificationsProcessor } from '@apps/worker/processors/notifications/no
 import { HeavyJobProcessor } from '@apps/worker/processors/heavy/heavy-job.processor.js';
 import { SystemProcessor } from '@apps/worker/processors/system/system.processor.js';
 import { DefaultEmailNotificationAdapter } from '@modules/credentials/index.js';
-import { UserImportService, type UsersService } from '@modules/users/index.js';
+import { type UsersService } from '@modules/users/index.js';
+import { UserImportService } from '@modules/users/import/user-import.service.js';
 import type { FilesService } from '@modules/files/index.js';
-import type { NotificationChannelsService } from '@modules/notifications/index.js';
+import type { NotificationDeliveryService as NotificationChannelsService } from '@modules/notification-delivery/index.js';
 
 describe('Phase 7.3 — Hàng đợi công việc (Multi-Queue, Worker Concurrency, Retry/Timeout, Priority, Progress, Cancel & RBAC Audit)', () => {
   let redis: RedisService;

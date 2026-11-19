@@ -25,9 +25,11 @@ import {
   CALENDAR_RSVP_STATUS,
   CALENDAR_VISIBILITY,
   CalendarService,
+} from '../../../src/modules/calendar/index.js';
+import {
   expandEventOccurrences,
   validateRecurrenceRule,
-} from '../../../src/modules/calendar/index.js';
+} from '../../../src/modules/calendar/helpers/calendar-recurrence.helper.js';
 import type { CalendarEventEntity } from '../../../src/modules/calendar/entities/calendar-event.entity.js';
 import type { CalendarEventParticipantEntity } from '../../../src/modules/calendar/entities/calendar-event-participant.entity.js';
 import type { CalendarEventReminderEntity } from '../../../src/modules/calendar/entities/calendar-event-reminder.entity.js';

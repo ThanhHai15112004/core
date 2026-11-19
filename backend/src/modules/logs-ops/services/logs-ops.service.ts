@@ -23,7 +23,7 @@ import {
   newerThan,
   olderThan,
   type LogFilter,
-} from './log-query.js';
+} from '../helpers/log-query.helper.js';
 import {
   LogNotFoundException,
   LogsActionRejectedException,

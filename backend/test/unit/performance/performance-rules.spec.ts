@@ -5,7 +5,7 @@ import {
   evaluateRules,
   overallLevel,
   type RuleSnapshot,
-} from '@modules/performance/index.js';
+} from '@modules/performance/helpers/performance-rules.helper.js';
 
 const rules = performanceConfig().rules;
 

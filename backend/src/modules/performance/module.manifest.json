@@ -7,7 +7,7 @@
   "type": "core",
   "category": "operations",
   "author": "Core Platform Team",
-  "entryModule": "PerformanceOpsModule",
+  "entryModule": "PerformanceModule",
   "dependencies": ["database", "redis", "config", "runtimes", "traffic"],
   "permissions": [],
   "events": {},

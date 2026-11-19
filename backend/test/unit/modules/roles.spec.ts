@@ -4,13 +4,13 @@ import {
   defaultSettingRegistry,
 } from '@packages/kernel/index.js';
 import { AuditLogService } from '@packages/security/index.js';
+import { DATA_SCOPE, PERMISSION_STATUS, ROLE_STATUS, RolesService } from '@modules/roles/index.js';
+import { RolesMapper } from '@modules/roles/mappers/roles.mapper.js';
 import {
-  DATA_SCOPE,
-  PERMISSION_STATUS,
-  ROLE_STATUS,
-  RolesMapper,
-  RolesService,
   assertDataScopeAllAllowedForRole,
+  matchesWildcardPattern,
+} from '@modules/roles/helpers/role-data-scope.helper.js';
+import {
   buildDeclaredPermissionsMap,
   buildOrphanedPermissionWarnings,
   buildRolePermissionMatrix,
@@ -19,8 +19,7 @@ import {
   formatPermissionDisplayName,
   groupPermissionCatalogItems,
   mapPermissionsToCatalogItems,
-  matchesWildcardPattern,
-} from '@modules/roles/index.js';
+} from '@modules/roles/helpers/role-permission-catalog.helper.js';
 import { PermissionsService } from '@modules/permissions/index.js';
 import { AuditService } from '@modules/audit/index.js';
 import type { PermissionEntity } from '@modules/permissions/entities/permission.entity.js';

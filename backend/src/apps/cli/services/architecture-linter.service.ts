@@ -58,11 +58,13 @@ export class ArchitectureLinterService {
 
     // Đồ thị module để kiểm tra circular dependencies (Rule 4)
     const moduleDependencies = new Map<string, Set<string>>();
+    const providedTokens = new Map<string, string>();
+    const injectedTokens = new Map<string, Set<string>>();
 
     // Rule 7a: Kiểm tra đồng bộ khóa dịch đa ngôn ngữ (vi/en) và nạp từ điển toàn cục
     const globalDict = await this.collectAndValidateLocales(srcDir, backendRoot, violations);
 
-    // Rule 9a: Thu thập danh mục khóa cấu hình động & sequences đã khai báo trong module.manifest.json
+    // Rule 9a: Thu thập danh mục khóa cấu hình động, sequences & bảng DB đã khai báo trong module.manifest.json
     const manifestKeys = this.collectManifestConfigKeys();
 
     // Kiểm tra Rule 1, Rule 2, Rule 5, Rule 6, Rule 7b, Rule 8 & Rule 9
@@ -74,8 +76,20 @@ export class ArchitectureLinterService {
         globalDict,
         manifestKeys,
         moduleDependencies,
+        providedTokens,
+        injectedTokens,
         violations,
       });
+    }
+
+    // Bổ sung cạnh phụ thuộc ngầm qua DI token (@Global() hoặc custom token xuyên module) vào đồ thị
+    for (const [consumerMod, tokens] of injectedTokens.entries()) {
+      for (const tok of tokens) {
+        const providerMod = providedTokens.get(tok);
+        if (providerMod && providerMod !== consumerMod) {
+          moduleDependencies.get(consumerMod)?.add(providerMod);
+        }
+      }
     }
 
     // Rule 4: Circular dependencies giữa các module
@@ -100,12 +114,27 @@ export class ArchitectureLinterService {
     srcDir: string;
     backendRoot: string;
     globalDict: { vi: Set<string>; en: Set<string> };
-    manifestKeys: { settingKeys: Set<string>; sequenceKeys: Set<string> };
+    manifestKeys: {
+      settingKeys: Set<string>;
+      sequenceKeys: Set<string>;
+      tableOwners: Map<string, string>;
+    };
     moduleDependencies: Map<string, Set<string>>;
+    providedTokens: Map<string, string>;
+    injectedTokens: Map<string, Set<string>>;
     violations: ArchitectureViolation[];
   }): Promise<void> {
-    const { file, srcDir, backendRoot, globalDict, manifestKeys, moduleDependencies, violations } =
-      params;
+    const {
+      file,
+      srcDir,
+      backendRoot,
+      globalDict,
+      manifestKeys,
+      moduleDependencies,
+      providedTokens,
+      injectedTokens,
+      violations,
+    } = params;
     const relativePath = path.relative(srcDir, file).replace(/\\/g, '/');
 
     let content = '';
@@ -122,6 +151,7 @@ export class ArchitectureLinterService {
       Boolean(currentModule) &&
       (relativePath === `modules/${currentModule}/index.ts` ||
         relativePath === `project-modules/${currentModule}/index.ts`);
+    const isModuleDefinitionFile = Boolean(currentModule) && relativePath.endsWith('.module.ts');
     const isControllerFile = Boolean(currentModule) && relativePath.includes('/controllers/');
     const isServiceFile = Boolean(currentModule) && relativePath.includes('/services/');
     const isRequestFile = Boolean(currentModule) && relativePath.includes('/requests/');
@@ -130,6 +160,43 @@ export class ArchitectureLinterService {
 
     if (currentModule && !moduleDependencies.has(currentModule)) {
       moduleDependencies.set(currentModule, new Set<string>());
+    }
+    if (currentModule && !injectedTokens.has(currentModule)) {
+      injectedTokens.set(currentModule, new Set<string>());
+    }
+
+    if (currentModule && isModuleDefinitionFile) {
+      for (const pm of content.matchAll(/provide\s*:\s*([A-Za-z0-9_]+)/g)) {
+        const tok = pm[1]?.trim();
+        if (tok) {
+          providedTokens.set(tok, currentModule);
+        }
+      }
+      const exportsMatch = content.match(/exports\s*:\s*\[([\s\S]*?)\]/);
+      if (exportsMatch?.[1]) {
+        const exportedItems = exportsMatch[1]
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean);
+        for (const item of exportedItems) {
+          if (item.endsWith('Repository') || item.endsWith('Entity')) {
+            violations.push({
+              rule: 'RULE_5_ENTITY_EXPOSURE',
+              file: path.relative(backendRoot, file),
+              message: `Module "${currentModule}" must not export internal repository or entity "${item}" in @Module({ exports }). Export only Public Service and contract tokens.`,
+            });
+          }
+        }
+      }
+    }
+
+    if (currentModule) {
+      for (const im of content.matchAll(/@Inject\(\s*([A-Za-z0-9_]+)\s*\)/g)) {
+        const tok = im[1]?.trim();
+        if (tok) {
+          injectedTokens.get(currentModule)?.add(tok);
+        }
+      }
     }
 
     // Rule 9: Kiểm tra cấu hình động, tránh hardcode tham số vận hành trong module nghiệp vụ
@@ -240,12 +307,26 @@ export class ArchitectureLinterService {
       }
 
       if (isModuleIndexFile && /^\s*export\s+/.test(line)) {
-        if (importPath.includes('/entities/') || importPath.includes('/repositories/')) {
+        const forbiddenIndexExports = [
+          '/entities/',
+          '/repositories/',
+          '/helpers/',
+          '/mappers/',
+          '/controllers/',
+          '/adapters/',
+          '/import/',
+          '/export/',
+          '/reports/',
+          '/search/',
+          '@modules/',
+          '@project-modules/',
+        ];
+        if (forbiddenIndexExports.some((segment) => importPath.includes(segment))) {
           violations.push({
             rule: 'RULE_5_ENTITY_EXPOSURE',
             file: path.relative(backendRoot, file),
             line: i + 1,
-            message: `Module "${currentModule}" must not export internal ORM entities or repositories in index.ts. Export Response DTOs and Public Service/Facade contracts instead. Violated export: "${importPath}"`,
+            message: `Module "${currentModule}" must not re-export internal layer or other module (${importPath}) in index.ts. Only export <Name>Module, contracts/, routes/, requests/, responses/, and public services.`,
           });
         }
       }
@@ -491,17 +572,28 @@ export class ArchitectureLinterService {
     return globalDict;
   }
 
-  /** Thu thập tập hợp các khóa setting và sequence đã khai báo trong `module.manifest.json` */
+  /** Thu thập tập hợp các khóa setting, sequence và bảng DB đã khai báo trong `module.manifest.json` */
   private collectManifestConfigKeys(): {
     settingKeys: Set<string>;
     sequenceKeys: Set<string>;
+    tableOwners: Map<string, string>;
   } {
     const settingKeys = new Set<string>();
     const sequenceKeys = new Set<string>();
+    const tableOwners = new Map<string, string>();
     const scanned = scanModuleManifests();
 
     for (const item of scanned) {
       const raw = item.raw;
+      const modName = item.moduleName;
+      const db = raw.database as { tables?: unknown } | undefined;
+      if (modName && db && Array.isArray(db.tables)) {
+        for (const tbl of db.tables) {
+          if (typeof tbl === 'string' && tbl.trim()) {
+            tableOwners.set(tbl.trim(), modName);
+          }
+        }
+      }
       if (Array.isArray(raw.settings)) {
         for (const s of raw.settings) {
           if (s && typeof s === 'object' && typeof (s as { key?: unknown }).key === 'string') {
@@ -522,7 +614,7 @@ export class ArchitectureLinterService {
       }
     }
 
-    return { settingKeys, sequenceKeys };
+    return { settingKeys, sequenceKeys, tableOwners };
   }
 
   /**
@@ -541,7 +633,11 @@ export class ArchitectureLinterService {
     isRequestFile: boolean;
     content: string;
     lines: string[];
-    manifestKeys: { settingKeys: Set<string>; sequenceKeys: Set<string> };
+    manifestKeys: {
+      settingKeys: Set<string>;
+      sequenceKeys: Set<string>;
+      tableOwners: Map<string, string>;
+    };
     violations: ArchitectureViolation[];
   }): void {
     const {
@@ -564,11 +660,34 @@ export class ArchitectureLinterService {
 
       if (
         trimmed.startsWith('//') ||
+        trimmed.startsWith('/*') ||
         trimmed.startsWith('*') ||
         line.includes('@allow-hardcode') ||
         prevLine.includes('@allow-hardcode')
       ) {
         continue;
+      }
+
+      // 9.0. Cấm truy vấn SQL thô / QueryBuilder xuyên sang bảng vật lý của module khác
+      if (
+        /\b(?:FROM|JOIN|INTO|UPDATE)\s+[a-z_][a-z0-9_]*\b/i.test(line) ||
+        /\btable\s*:\s*['"][a-z_][a-z0-9_]*['"]/.test(line)
+      ) {
+        for (const [tableName, ownerModule] of manifestKeys.tableOwners.entries()) {
+          if (ownerModule === currentModule) continue;
+          const sqlTableRegex = new RegExp(
+            `(?:\\b(?:FROM|JOIN|INTO|UPDATE)\\s+${tableName}\\b|\\btable\\s*:\\s*['"]${tableName}['"])`,
+            'i',
+          );
+          if (sqlTableRegex.test(line)) {
+            violations.push({
+              rule: 'RULE_1_CROSS_MODULE',
+              file: relFile,
+              line: i + 1,
+              message: `Cross-module SQL table access detected: module "${currentModule}" directly references table "${tableName}" owned by module "${ownerModule}". Use "${ownerModule}" public service contract instead.`,
+            });
+          }
+        }
       }
 
       // 9.1. Cấm đọc trực tiếp process.env trong module nghiệp vụ

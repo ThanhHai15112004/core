@@ -42,14 +42,7 @@ new CoreI18nService().registerNamespace('i18n', {
       useExisting: I18nManagementService,
     },
   ],
-  exports: [
-    I18nManagementService,
-    I18N_MANAGEMENT_PUBLIC_SERVICE,
-    LOCALIZATION_PUBLIC_SERVICE,
-    I18nLocaleRepository,
-    I18nTimezoneRepository,
-    I18nTranslationRepository,
-  ],
+  exports: [I18nManagementService, I18N_MANAGEMENT_PUBLIC_SERVICE, LOCALIZATION_PUBLIC_SERVICE],
 })
 export class LocalizationModule {
   constructor(@Optional() i18n?: CoreI18nService) {

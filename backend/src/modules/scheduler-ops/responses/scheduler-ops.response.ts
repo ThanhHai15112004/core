@@ -5,7 +5,7 @@ import type {
   GeneratedJobRef,
   SchedulerOperationAction,
   SchedulerTaskType,
-} from '../contracts/scheduler.types.js';
+} from '../types/scheduler.types.js';
 
 export type SchedulerRange = '1h' | '6h' | '24h' | '7d';
 export type SchedulerMetric = 'executions' | 'duration' | 'failures';

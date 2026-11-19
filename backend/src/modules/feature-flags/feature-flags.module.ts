@@ -29,12 +29,7 @@ new CoreI18nService().registerNamespace('feature-flags', {
       useExisting: FeatureFlagsService,
     },
   ],
-  exports: [
-    FeatureFlagsService,
-    FEATURE_FLAGS_PUBLIC_SERVICE,
-    FeatureFlagRepository,
-    FeatureFlagHistoryRepository,
-  ],
+  exports: [FeatureFlagsService, FEATURE_FLAGS_PUBLIC_SERVICE],
 })
 export class FeatureFlagsModule {
   constructor(@Optional() i18n?: CoreI18nService) {

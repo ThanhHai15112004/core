@@ -1,15 +1,12 @@
-import { Inject, Injectable, Optional } from '@nestjs/common';
-import { CoreConfigService } from '@packages/config/index.js';
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import {
   BadRequestAppException,
-  ForbiddenAppException,
   NotFoundAppException,
   type PaginatedResult,
   defaultCustomFieldRegistry,
   defaultSearchRegistry,
   parseCustomFieldFiltersParam,
   resolvePagination,
-  safeJsonParseStringArray,
 } from '@packages/kernel/index.js';
 import { createPaginatedResult } from '@packages/http/index.js';
 import { TransactionManager } from '@packages/database/index.js';
@@ -29,11 +26,7 @@ import {
   type IOrganizationsPublicService,
   ORGANIZATIONS_PUBLIC_SERVICE,
 } from '@modules/organizations/contracts/index.js';
-import {
-  type IRolesPublicService,
-  ROLES_PUBLIC_SERVICE,
-  type RoleAssignedUserSummary,
-} from '@modules/roles/contracts/index.js';
+import { type IRolesPublicService, ROLES_PUBLIC_SERVICE } from '@modules/roles/contracts/index.js';
 import {
   type IUsersPublicService,
   type SelfRegisterUserInput,
@@ -44,19 +37,12 @@ import {
   type UserAuthCredentialsView,
   type UserAuthIdentityView,
   type UserApproverSummaryView,
-  type UserCredentialRecordView,
   type UserNotificationContactView,
   type UserPreferencesView,
-  type UserProfileView,
   type UserStatusCode,
   type UserSubordinateSummaryView,
-  normalizePhoneNumber,
 } from '../contracts/index.js';
 import type { UserStatusTransitionAction } from '../types/users.types.js';
-import {
-  normalizePreferredLocaleOrThrow,
-  normalizePreferredTimezoneOrThrow,
-} from '../helpers/user-normalizer.helper.js';
 import {
   executeCreateUserRecordFlow,
   executeGetStatusHistoryFlow,
@@ -64,15 +50,7 @@ import {
   registerUsersCrossModuleDelegates,
   syncUserSearchDocumentSafe,
 } from '../helpers/user-crud-orchestrator.helper.js';
-import {
-  countActiveUsersByRoleIds,
-  filterActiveUserIds,
-  hydrateUsersResponseList,
-  listActiveUsersByRoleId,
-  resolveActiveUserIdsByOrganizationUnitIds,
-  resolveActiveUserIdsByRoleIds,
-  resolveUserNotificationContacts,
-} from '../helpers/user-profile-hydration.helper.js';
+import { hydrateUsersResponseList } from '../helpers/user-profile-hydration.helper.js';
 import {
   executeAssignUserOrganizationsFlow,
   executeAssignUserRolesFlow,
@@ -84,25 +62,13 @@ import {
   resolveUserSubordinatesList,
 } from '../helpers/user-subordinates-approval.helper.js';
 import {
-  buildUserAuthCredentialsView,
-  buildUserAuthIdentityView,
-  executeSelfRegisterUser,
-  executeUpdateUserPasswordHash,
-  markUserChannelVerified,
-  recordUserLoginAttemptState,
-  resolveUserPreferencesView,
-  resolveUserProfileView,
-  updateUserPreferencesRecord,
-} from '../helpers/user-auth-bridge.helper.js';
-import {
   type IOrganizationMembersHistoryPersistenceContract,
   type IOrganizationMembersPublicService,
   type IOrganizationMembersUnitPersistenceContract,
   ORGANIZATION_MEMBERS_PUBLIC_SERVICE,
 } from '@modules/organization-members/index.js';
 import type { UserEntity } from '../entities/user.entity.js';
-import type { UserProfileEntity } from '../entities/user-profile.entity.js';
-import { UserRepository } from '../repositories/user.repository.js';
+import { UserRepository, type SearchUsersFilter } from '../repositories/user.repository.js';
 import { UserProfileRepository } from '../repositories/user-profile.repository.js';
 import { UserStatusHistoryRepository } from '../repositories/user-status-history.repository.js';
 import { UsersMapper } from '../mappers/users.mapper.js';
@@ -122,20 +88,15 @@ import type {
   UserStatusHistoryItemResponse,
   UserSubordinatesOverviewResponse,
 } from '../responses/users.response.js';
+import { UserIdentityBridgeService } from './user-identity-bridge.service.js';
 
 export { USER_IDENTITY_CACHE_PREFIX };
 
 @Injectable()
 export class UsersService implements IUsersPublicService {
+  private readonly logger = new Logger(UsersService.name);
   private readonly effectiveDataScopeService: DataScopeService;
-  private readonly fallbackCredentialStore = new Map<
-    number,
-    {
-      passwordHash: string;
-      passwordChangedAt: Date | null;
-      passwordHistoryHashes: string[];
-    }
-  >();
+  private readonly identityBridge: UserIdentityBridgeService;
 
   constructor(
     private readonly userRepository: UserRepository,
@@ -179,8 +140,24 @@ export class UsersService implements IUsersPublicService {
     @Optional()
     @Inject(TokenService)
     private readonly tokenService: TokenService | null = null,
+    @Optional()
+    identityBridge?: UserIdentityBridgeService | null,
   ) {
     this.effectiveDataScopeService = this.dataScopeService ?? createDefaultDataScopeService();
+    this.identityBridge =
+      identityBridge ??
+      new UserIdentityBridgeService(
+        this.userRepository,
+        this.userOrgRepository,
+        this.passwordHasher,
+        this.rolesPublicService,
+        this.statusHistoryRepository,
+        this.fieldEncryption,
+        this.redis,
+        this.userProfileRepository,
+        this.auditLogService,
+        this.tokenService,
+      );
     if (typeof this.userOrgRepository?.registerMemberUsersDelegate === 'function') {
       this.userOrgRepository.registerMemberUsersDelegate({
         listPaginated: (query, actor) =>
@@ -247,8 +224,8 @@ export class UsersService implements IUsersPublicService {
       userRepository: this.userRepository,
       userProfileRepository: this.userProfileRepository,
       userOrgRepository: this.userOrgRepository,
-      countUsersByRoleIds: (rids) => this.countUsersByRoleIds(rids),
-      listUsersByRoleId: (rid) => this.listUsersByRoleId(rid),
+      countUsersByRoleIds: (rids) => this.identityBridge.countUsersByRoleIds(rids),
+      listUsersByRoleId: (rid) => this.identityBridge.listUsersByRoleId(rid),
       assignRoles: (uid, dto, aid, act) =>
         this.assignRoles(
           uid,
@@ -291,7 +268,7 @@ export class UsersService implements IUsersPublicService {
       options,
       userRepository: this.userRepository,
       userOrgRepository: this.userOrgRepository,
-      findProfilesByUserIds: (uids) => this.findProfilesByUserIds(uids),
+      findProfilesByUserIds: (uids) => this.identityBridge.findProfilesByUserIds(uids),
       organizationsPublicService: this.organizationsPublicService,
     });
   }
@@ -307,7 +284,7 @@ export class UsersService implements IUsersPublicService {
       maxLevels,
       userRepository: this.userRepository,
       userOrgRepository: this.userOrgRepository,
-      findProfilesByUserIds: (uids) => this.findProfilesByUserIds(uids),
+      findProfilesByUserIds: (uids) => this.identityBridge.findProfilesByUserIds(uids),
     });
   }
 
@@ -329,7 +306,7 @@ export class UsersService implements IUsersPublicService {
         options,
         userRepository: this.userRepository,
         userOrgRepository: this.userOrgRepository,
-        findProfilesByUserIds: (uids) => this.findProfilesByUserIds(uids),
+        findProfilesByUserIds: (uids) => this.identityBridge.findProfilesByUserIds(uids),
         organizationsPublicService: this.organizationsPublicService,
       }),
       resolveUserApproverChain({
@@ -337,7 +314,7 @@ export class UsersService implements IUsersPublicService {
         maxLevels: 5,
         userRepository: this.userRepository,
         userOrgRepository: this.userOrgRepository,
-        findProfilesByUserIds: (uids) => this.findProfilesByUserIds(uids),
+        findProfilesByUserIds: (uids) => this.identityBridge.findProfilesByUserIds(uids),
       }),
     ]);
 
@@ -370,7 +347,57 @@ export class UsersService implements IUsersPublicService {
     action = 'read',
   ): Promise<ResolvedDataScopeFilter | undefined> {
     if (!actor) return undefined;
-    return this.effectiveDataScopeService.resolveScopeFilter(actor, 'users', action);
+    const scopeFilter = await this.effectiveDataScopeService.resolveScopeFilter(
+      actor,
+      'users',
+      action,
+    );
+    if (
+      scopeFilter &&
+      !scopeFilter.isUnrestricted &&
+      scopeFilter.allowedOrganizationUnitIds.length > 0 &&
+      typeof this.userOrgRepository?.findUserIdsByOrganizationUnitIds === 'function'
+    ) {
+      const orgMemberIds = await this.userOrgRepository.findUserIdsByOrganizationUnitIds(
+        scopeFilter.allowedOrganizationUnitIds,
+      );
+      if (orgMemberIds.length > 0) {
+        return {
+          ...scopeFilter,
+          allowedUserIds: [...new Set([...scopeFilter.allowedUserIds, ...orgMemberIds])],
+        };
+      }
+    }
+    return scopeFilter;
+  }
+
+  public async enrichSearchUsersFilter(filter: SearchUsersFilter): Promise<SearchUsersFilter> {
+    let roleMemberUserIds = filter.roleMemberUserIds;
+    if (filter.roleId !== undefined && roleMemberUserIds === undefined) {
+      if (typeof this.rolesPublicService?.findUserIdsByRoleIds === 'function') {
+        roleMemberUserIds = await this.rolesPublicService.findUserIdsByRoleIds([filter.roleId]);
+      } else if (typeof this.rolesPublicService?.findUserRoleLinksByRoleIds === 'function') {
+        const links = await this.rolesPublicService.findUserRoleLinksByRoleIds([filter.roleId]);
+        roleMemberUserIds = [...new Set(links.map((l) => Number(l.userId)))];
+      }
+    }
+
+    let organizationMemberUserIds = filter.organizationMemberUserIds;
+    if (
+      filter.organizationUnitId !== undefined &&
+      organizationMemberUserIds === undefined &&
+      typeof this.userOrgRepository?.findUserIdsByOrganizationUnitIds === 'function'
+    ) {
+      organizationMemberUserIds = await this.userOrgRepository.findUserIdsByOrganizationUnitIds([
+        filter.organizationUnitId,
+      ]);
+    }
+
+    return {
+      ...filter,
+      ...(roleMemberUserIds !== undefined ? { roleMemberUserIds } : {}),
+      ...(organizationMemberUserIds !== undefined ? { organizationMemberUserIds } : {}),
+    };
   }
 
   public async assertCanAccessUserRecord(
@@ -431,7 +458,7 @@ export class UsersService implements IUsersPublicService {
       }
     }
 
-    const { items, total } = await this.userRepository.searchPaginated({
+    const searchFilter = await this.enrichSearchUsersFilter({
       ...query,
       page,
       limit,
@@ -439,6 +466,7 @@ export class UsersService implements IUsersPublicService {
       ...(allowedUserIds !== undefined ? { allowedUserIds } : {}),
       ...(scopeFilter ? { scopeFilter } : {}),
     });
+    const { items, total } = await this.userRepository.searchPaginated(searchFilter);
     const enriched = await this.hydrateUsersList(items, { viewMode: 'list', actor });
     return createPaginatedResult(
       enriched,
@@ -501,10 +529,12 @@ export class UsersService implements IUsersPublicService {
       organizationsPublicService: this.organizationsPublicService,
       transactionManager: this.transactionManager,
       auditLogService: this.auditLogService,
-      encryptPhone: (p) => this.encryptPhone(p),
-      upsertUserProfile: (uid, d) => this.upsertUserProfile(uid, d),
-      recordStatusHistory: (uid, from, to, r, by) => this.recordStatusHistory(uid, from, to, r, by),
-      saveUserPasswordHash: (uid, hash, opts) => this.saveUserPasswordHash(uid, hash, opts),
+      encryptPhone: (p) => this.identityBridge.encryptPhone(p),
+      upsertUserProfile: (uid, d) => this.identityBridge.upsertUserProfile(uid, d),
+      recordStatusHistory: (uid, from, to, r, by) =>
+        this.identityBridge.recordStatusHistory(uid, from, to, r, by),
+      saveUserPasswordHash: (uid, hash, opts) =>
+        this.identityBridge.saveUserPasswordHash(uid, hash, opts),
       getById: (uid) => this.getById(uid, true, actor),
       syncUserSearchDocumentSafe: (u, aid) => this.syncUserSearchDocumentSafe(u, aid),
     });
@@ -526,11 +556,11 @@ export class UsersService implements IUsersPublicService {
       transactionManager: this.transactionManager,
       auditLogService: this.auditLogService,
       ensureAccessUserEntity: (u, act, action) => this.ensureAccessUserEntity(u, act, action),
-      getUserProfile: (uid, u) => this.getUserProfile(uid, u),
-      encryptPhone: (p) => this.encryptPhone(p),
+      getUserProfile: (uid, u) => this.identityBridge.getUserProfile(uid, u),
+      encryptPhone: (p) => this.identityBridge.encryptPhone(p),
       resolveSubordinateUserIds: (mid) => this.resolveSubordinateUserIds(mid),
-      upsertUserProfile: (uid, d) => this.upsertUserProfile(uid, d),
-      invalidateIdentityCache: (uid) => this.invalidateIdentityCache(uid),
+      upsertUserProfile: (uid, d) => this.identityBridge.upsertUserProfile(uid, d),
+      invalidateIdentityCache: (uid) => this.identityBridge.invalidateIdentityCache(uid),
       getById: (uid, inc) => this.getById(uid, inc),
       syncUserSearchDocumentSafe: (u, aid) => this.syncUserSearchDocumentSafe(u, aid),
     });
@@ -698,7 +728,7 @@ export class UsersService implements IUsersPublicService {
       verifySensitiveActionStepUp: (aid, tok, req, act) =>
         this.verifySensitiveActionStepUp(aid, tok, req, act),
       ensureAccessUserEntity: (u, act, action) => this.ensureAccessUserEntity(u, act, action),
-      invalidateIdentityCache: (uid) => this.invalidateIdentityCache(uid),
+      invalidateIdentityCache: (uid) => this.identityBridge.invalidateIdentityCache(uid),
       getById: (uid) => this.getById(uid),
       auditLogService: this.auditLogService,
       platformSecurityService: this.platformSecurityService,
@@ -724,7 +754,7 @@ export class UsersService implements IUsersPublicService {
       organizationsPublicService: this.organizationsPublicService,
       transactionManager: this.transactionManager,
       ensureAccessUserEntity: (u, act, action) => this.ensureAccessUserEntity(u, act, action),
-      invalidateIdentityCache: (uid) => this.invalidateIdentityCache(uid),
+      invalidateIdentityCache: (uid) => this.identityBridge.invalidateIdentityCache(uid),
       getById: (uid) => this.getById(uid),
       auditLogService: this.auditLogService,
     });
@@ -735,118 +765,44 @@ export class UsersService implements IUsersPublicService {
   public async findAuthUserByIdentifier(
     identifier: string,
   ): Promise<UserAuthCredentialsView | null> {
-    const trimmed = identifier.trim();
-    const normalizedPhone = normalizePhoneNumber(trimmed);
-    const phoneHash =
-      normalizedPhone && /^[0-9+]+$/.test(trimmed.replace(/[\s.\-()]/g, ''))
-        ? this.passwordHasher.sha256(normalizedPhone)
-        : null;
-
-    let user = await this.userRepository.findByIdentifier(trimmed, phoneHash);
-    if (!user && phoneHash && typeof this.userRepository.findByPhoneHash === 'function') {
-      user = await this.userRepository.findByPhoneHash(phoneHash, true);
-    }
-
-    if (!user) return null;
-    return this.toAuthCredentialsView(user);
+    return this.identityBridge.findAuthUserByIdentifier(identifier);
   }
 
   public async findAuthCredentialsByUserId(
     userId: number,
   ): Promise<UserAuthCredentialsView | null> {
-    const user = await this.userRepository.findByIdWithArchived(userId, true);
-    if (!user) return null;
-    return this.toAuthCredentialsView(user);
-  }
-
-  private async toAuthCredentialsView(user: UserEntity): Promise<UserAuthCredentialsView> {
-    return buildUserAuthCredentialsView({
-      user,
-      getUserProfile: (uid, u) => this.getUserProfile(uid, u),
-      getUserCredential: (uid) => this.getUserCredential(uid),
-      decryptPhone: (p) => this.decryptPhone(p),
-    });
+    return this.identityBridge.findAuthCredentialsByUserId(userId);
   }
 
   public async findAuthUserById(userId: number): Promise<UserAuthIdentityView | null> {
-    return buildUserAuthIdentityView({
-      userId,
-      userRepository: this.userRepository,
-      userOrgRepository: this.userOrgRepository,
-      rolesPublicService: this.rolesPublicService,
-      getUserProfile: (uid, u) => this.getUserProfile(uid, u),
-      decryptPhone: (p) => this.decryptPhone(p),
-    });
+    return this.identityBridge.findAuthUserById(userId);
   }
 
   public async getUserPreferences(userId: number): Promise<UserPreferencesView> {
-    return resolveUserPreferencesView({
-      userId,
-      userRepository: this.userRepository,
-      userProfileRepository: this.userProfileRepository,
-    });
+    return this.identityBridge.getUserPreferences(userId);
   }
 
   public async updateUserPreferences(
     userId: number,
     input: UpdateUserPreferencesInput,
   ): Promise<UserPreferencesView> {
-    return updateUserPreferencesRecord({
-      userId,
-      input,
-      userRepository: this.userRepository,
-      getUserProfile: (uid, u) => this.getUserProfile(uid, u),
-      normalizePreferredLocale: (l) => normalizePreferredLocaleOrThrow(l),
-      normalizePreferredTimezone: (tz) => normalizePreferredTimezoneOrThrow(tz),
-      upsertUserProfile: (uid, d) => this.upsertUserProfile(uid, d),
-      invalidateIdentityCache: (uid) => this.invalidateIdentityCache(uid),
-      auditLogService: this.auditLogService,
-    });
+    return this.identityBridge.updateUserPreferences(userId, input);
   }
 
   public async registerSelfUser(input: SelfRegisterUserInput): Promise<UserAuthIdentityView> {
-    return executeSelfRegisterUser({
-      input,
-      userRepository: this.userRepository,
-      passwordHasher: this.passwordHasher,
-      encryptPhone: (p) => this.encryptPhone(p),
-      normalizePreferredLocale: (l) => normalizePreferredLocaleOrThrow(l),
-      normalizePreferredTimezone: (tz) => normalizePreferredTimezoneOrThrow(tz),
-      upsertUserProfile: (uid, d) => this.upsertUserProfile(uid, d),
-      recordStatusHistory: (uid, from, to, r, by) => this.recordStatusHistory(uid, from, to, r, by),
-      saveUserPasswordHash: (uid, hash, opts) => this.saveUserPasswordHash(uid, hash, opts),
-      findAuthUserById: (uid) => this.findAuthUserById(uid),
-    });
+    return this.identityBridge.registerSelfUser(input);
   }
 
   public async markEmailVerified(userId: number): Promise<void> {
-    await markUserChannelVerified({
-      userId,
-      channel: 'EMAIL',
-      userRepository: this.userRepository,
-      recordStatusHistory: (uid, from, to, r, by) => this.recordStatusHistory(uid, from, to, r, by),
-      invalidateIdentityCache: (uid) => this.invalidateIdentityCache(uid),
-    });
+    await this.identityBridge.markEmailVerified(userId);
   }
 
   public async markPhoneVerified(userId: number): Promise<void> {
-    await markUserChannelVerified({
-      userId,
-      channel: 'PHONE',
-      userRepository: this.userRepository,
-      recordStatusHistory: (uid, from, to, r, by) => this.recordStatusHistory(uid, from, to, r, by),
-      invalidateIdentityCache: (uid) => this.invalidateIdentityCache(uid),
-    });
+    await this.identityBridge.markPhoneVerified(userId);
   }
 
   public async recordLoginSuccess(userId: number): Promise<void> {
-    await recordUserLoginAttemptState({
-      userId,
-      outcome: 'SUCCESS',
-      userRepository: this.userRepository,
-      recordStatusHistory: (uid, from, to, r, by) => this.recordStatusHistory(uid, from, to, r, by),
-      invalidateIdentityCache: (uid) => this.invalidateIdentityCache(uid),
-    });
+    await this.identityBridge.recordLoginSuccess(userId);
   }
 
   public async recordLoginFailure(
@@ -854,25 +810,11 @@ export class UsersService implements IUsersPublicService {
     maxAttempts = 5,
     lockDurationMinutes = 15,
   ): Promise<{ failedAttempts: number; locked: boolean; lockedUntil: Date | null }> {
-    return recordUserLoginAttemptState({
-      userId,
-      outcome: 'FAILURE',
-      maxAttempts,
-      lockDurationMinutes,
-      userRepository: this.userRepository,
-      recordStatusHistory: (uid, from, to, r, by) => this.recordStatusHistory(uid, from, to, r, by),
-      invalidateIdentityCache: (uid) => this.invalidateIdentityCache(uid),
-    });
+    return this.identityBridge.recordLoginFailure(userId, maxAttempts, lockDurationMinutes);
   }
 
   public async autoUnlockExpiredLock(userId: number): Promise<void> {
-    await recordUserLoginAttemptState({
-      userId,
-      outcome: 'AUTO_UNLOCK',
-      userRepository: this.userRepository,
-      recordStatusHistory: (uid, from, to, r, by) => this.recordStatusHistory(uid, from, to, r, by),
-      invalidateIdentityCache: (uid) => this.invalidateIdentityCache(uid),
-    });
+    await this.identityBridge.autoUnlockExpiredLock(userId);
   }
 
   public async updatePasswordHash(
@@ -880,119 +822,7 @@ export class UsersService implements IUsersPublicService {
     newPasswordHash: string,
     options?: { recordHistory?: boolean; maxHistory?: number },
   ): Promise<void> {
-    await executeUpdateUserPasswordHash({
-      userId,
-      newPasswordHash,
-      options,
-      userRepository: this.userRepository,
-      saveUserPasswordHash: (uid, hash, opts) => this.saveUserPasswordHash(uid, hash, opts),
-      invalidateIdentityCache: (uid) => this.invalidateIdentityCache(uid),
-    });
-  }
-
-  private async getUserCredential(userId: number): Promise<UserCredentialRecordView | null> {
-    const uid = Number(userId);
-    const credentialStore = this.passwordHasher?.getCredentialStoreAdapter?.();
-    if (credentialStore) {
-      const delegated = await credentialStore.getByUserId(uid);
-      if (delegated) return delegated;
-    }
-    const local = this.fallbackCredentialStore.get(uid);
-    if (local) {
-      return {
-        userId: uid,
-        passwordHash: local.passwordHash,
-        passwordChangedAt: local.passwordChangedAt,
-        passwordHistoryHashes: local.passwordHistoryHashes,
-      };
-    }
-    const entity = (await this.userRepository.findByIdWithArchived?.(uid, true)) as unknown as {
-      passwordHash?: string;
-      passwordChangedAt?: Date | null;
-      passwordHistoryHashesJson?: string;
-    } | null;
-    if (entity?.passwordHash) {
-      return {
-        userId: uid,
-        passwordHash: entity.passwordHash,
-        passwordChangedAt: entity.passwordChangedAt ?? null,
-        passwordHistoryHashes: safeJsonParseStringArray(entity.passwordHistoryHashesJson),
-      };
-    }
-    return null;
-  }
-
-  private async findCredentialsByUserIds(
-    userIds: readonly number[],
-  ): Promise<ReadonlyMap<number, UserCredentialRecordView>> {
-    const result = new Map<number, UserCredentialRecordView>();
-    if (userIds.length === 0) return result;
-    const credentialStore = this.passwordHasher?.getCredentialStoreAdapter?.();
-    if (credentialStore?.getByUserIds) {
-      const map = await credentialStore.getByUserIds(userIds);
-      for (const [uid, val] of map.entries()) {
-        result.set(Number(uid), val);
-      }
-      return result;
-    }
-    for (const rawId of userIds) {
-      const uid = Number(rawId);
-      const cred = await this.getUserCredential(uid);
-      if (cred) {
-        result.set(uid, cred);
-      }
-    }
-    return result;
-  }
-
-  private async saveUserPasswordHash(
-    userId: number,
-    passwordHash: string,
-    options?: {
-      readonly recordHistory?: boolean;
-      readonly maxHistory?: number;
-      readonly passwordChangedAt?: Date | null;
-    },
-  ): Promise<void> {
-    const uid = Number(userId);
-    const changedAt =
-      options?.passwordChangedAt !== undefined ? options.passwordChangedAt : new Date();
-    const existingLocal = this.fallbackCredentialStore.get(uid);
-    let nextHistory = existingLocal ? [...existingLocal.passwordHistoryHashes] : [];
-    if (
-      options?.recordHistory !== false &&
-      existingLocal?.passwordHash &&
-      existingLocal.passwordHash !== passwordHash
-    ) {
-      const maxHistory = Math.max(1, Math.min(20, options?.maxHistory ?? 10));
-      nextHistory = [
-        existingLocal.passwordHash,
-        ...nextHistory.filter((h) => h !== existingLocal.passwordHash),
-      ].slice(0, maxHistory);
-    }
-    this.fallbackCredentialStore.set(uid, {
-      passwordHash,
-      passwordChangedAt: changedAt,
-      passwordHistoryHashes: nextHistory,
-    });
-    const entity = (await this.userRepository.findByIdWithArchived?.(uid, true)) as unknown as {
-      passwordHash?: string;
-      passwordChangedAt?: Date | null;
-      passwordHistoryHashesJson?: string;
-    } | null;
-    if (entity) {
-      entity.passwordHash = passwordHash;
-      entity.passwordChangedAt = changedAt;
-      entity.passwordHistoryHashesJson = JSON.stringify(nextHistory);
-    }
-    const credentialStore = this.passwordHasher?.getCredentialStoreAdapter?.();
-    if (credentialStore) {
-      await credentialStore.saveUserPasswordHash(uid, passwordHash, {
-        ...(options?.recordHistory !== undefined ? { recordHistory: options.recordHistory } : {}),
-        ...(options?.maxHistory !== undefined ? { maxHistory: options.maxHistory } : {}),
-        passwordChangedAt: changedAt,
-      });
-    }
+    await this.identityBridge.updatePasswordHash(userId, newPasswordHash, options);
   }
 
   public async verifySensitiveActionStepUp(
@@ -1001,19 +831,12 @@ export class UsersService implements IUsersPublicService {
     requireStepUp?: boolean,
     action?: string,
   ): Promise<void> {
-    if (!requireStepUp && !stepUpToken) return;
-    if (!stepUpToken || !stepUpToken.trim()) {
-      throw new ForbiddenAppException('auth.stepUpAuthenticationRequired', [{ action }]);
-    }
-    const effectiveTokenService = this.tokenService ?? new TokenService(new CoreConfigService());
-    const isValid = await effectiveTokenService.verifyStepUpActionToken(
-      actorId ?? 0,
-      stepUpToken.trim(),
+    await this.identityBridge.verifySensitiveActionStepUp(
+      actorId,
+      stepUpToken,
+      requireStepUp,
       action,
     );
-    if (!isValid) {
-      throw new ForbiddenAppException('auth.invalidOrExpiredStepUpToken', [{ action }]);
-    }
   }
 
   private async ensureAccessUserEntity(
@@ -1042,13 +865,18 @@ export class UsersService implements IUsersPublicService {
       ...params,
       userRepository: this.userRepository,
       ensureAccessUserRecord: (u, act, action) => this.ensureAccessUserEntity(u, act, action),
-      recordStatusHistory: (uid, from, to, r, by) => this.recordStatusHistory(uid, from, to, r, by),
-      invalidateIdentityCache: (uid) => this.invalidateIdentityCache(uid),
+      recordStatusHistory: (uid, from, to, r, by) =>
+        this.identityBridge.recordStatusHistory(uid, from, to, r, by),
+      invalidateIdentityCache: (uid) => this.identityBridge.invalidateIdentityCache(uid),
       getById: (uid, inc) => this.getById(uid, inc),
       auditLogService: this.auditLogService,
     });
     if (params.toStatus === USER_STATUS.ARCHIVED) {
-      await defaultSearchRegistry.removeDocuments('users.account', [result.id]).catch(() => null);
+      await defaultSearchRegistry.removeDocuments('users.account', [result.id]).catch((err) => {
+        this.logger.warn(
+          `Failed to remove archived user #${result.id} from search index: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      });
     } else {
       await this.syncUserSearchDocumentSafe(result, params.actorId ?? params.actor?.id);
     }
@@ -1060,11 +888,7 @@ export class UsersService implements IUsersPublicService {
   }
 
   public async setMfaEnabled(userId: number, enabled: boolean): Promise<void> {
-    const user = await this.userRepository.findByIdWithArchived(userId, false);
-    if (!user) throw new NotFoundAppException('users.notFound', { id: userId });
-    user.mfaEnabled = enabled;
-    await this.userRepository.saveEntity(user);
-    await this.invalidateIdentityCache(userId);
+    await this.identityBridge.setMfaEnabled(userId, enabled);
   }
 
   public async hydrateUsersList(
@@ -1074,119 +898,34 @@ export class UsersService implements IUsersPublicService {
     return hydrateUsersResponseList({
       users,
       userOrgRepository: this.userOrgRepository,
-      findProfilesByUserIds: (uids) => this.findProfilesByUserIds(uids),
-      findCredentialsByUserIds: (uids) => this.findCredentialsByUserIds(uids),
+      findProfilesByUserIds: (uids) => this.identityBridge.findProfilesByUserIds(uids),
+      findCredentialsByUserIds: (uids) => this.identityBridge.findCredentialsByUserIds(uids),
       rolesPublicService: this.rolesPublicService,
       organizationsPublicService: this.organizationsPublicService,
       mapper: this.mapper,
-      decryptPhone: (p) => this.decryptPhone(p),
+      decryptPhone: (p) => this.identityBridge.decryptPhone(p),
       viewMode: options?.viewMode,
       actor: options?.actor,
     });
   }
 
-  private async upsertUserProfile(
-    userId: number,
-    data: Partial<UserProfileEntity>,
-  ): Promise<UserProfileEntity> {
-    if (!this.userProfileRepository) throw new Error('UserProfileRepository is not initialized');
-    return await this.userProfileRepository.upsertByUserId(userId, data);
-  }
-
-  private async findProfilesByUserIds(userIds: readonly number[]): Promise<UserProfileEntity[]> {
-    if (!this.userProfileRepository) throw new Error('UserProfileRepository is not initialized');
-    return await this.userProfileRepository.findByUserIds(userIds);
-  }
-
-  private async getUserProfile(userId: number, user?: UserEntity): Promise<UserProfileView> {
-    return resolveUserProfileView({
-      userId,
-      user,
-      userProfileRepository: this.userProfileRepository,
-    });
-  }
-
-  private encryptPhone(phone?: string | null): string | null {
-    if (!phone || !phone.trim()) return null;
-    const trimmed = phone.trim();
-    return this.fieldEncryption ? this.fieldEncryption.encrypt(trimmed) : trimmed;
-  }
-
-  private decryptPhone(phone?: string | null): string | null {
-    if (!phone) return null;
-    return this.fieldEncryption ? this.fieldEncryption.decrypt(phone) : phone;
-  }
-
-  private async recordStatusHistory(
-    userId: number,
-    fromStatus: UserStatusCode | null,
-    toStatus: UserStatusCode,
-    reason?: string | null,
-    changedBy?: number | null,
-  ): Promise<void> {
-    if (!this.statusHistoryRepository)
-      throw new Error('UserStatusHistoryRepository is not initialized');
-    await this.statusHistoryRepository.recordTransition({
-      userId,
-      fromStatus,
-      toStatus,
-      reason: reason ?? null,
-      changedBy: changedBy ?? null,
-    });
-  }
-
-  private async countUsersByRoleIds(roleIds: readonly number[]): Promise<Map<number, number>> {
-    return countActiveUsersByRoleIds({
-      roleIds,
-      rolesPublicService: this.rolesPublicService,
-      userRepository: this.userRepository,
-    });
-  }
-
-  private async listUsersByRoleId(roleId: number): Promise<RoleAssignedUserSummary[]> {
-    return listActiveUsersByRoleId({
-      roleId,
-      rolesPublicService: this.rolesPublicService,
-      userRepository: this.userRepository,
-      findProfilesByUserIds: (uids) => this.findProfilesByUserIds(uids),
-    });
-  }
-
   public async findActiveUserIdsByIds(userIds: readonly number[]): Promise<number[]> {
-    return filterActiveUserIds(this.userRepository, userIds);
+    return this.identityBridge.findActiveUserIdsByIds(userIds);
   }
 
   public async findActiveUserIdsByRoleIds(roleIds: readonly number[]): Promise<number[]> {
-    return resolveActiveUserIdsByRoleIds({
-      roleIds,
-      rolesPublicService: this.rolesPublicService,
-      userRepository: this.userRepository,
-    });
+    return this.identityBridge.findActiveUserIdsByRoleIds(roleIds);
   }
 
   public async findActiveUserIdsByOrganizationUnitIds(
     unitIds: readonly number[],
   ): Promise<number[]> {
-    return resolveActiveUserIdsByOrganizationUnitIds({
-      unitIds,
-      userOrgRepository: this.userOrgRepository,
-      userRepository: this.userRepository,
-    });
+    return this.identityBridge.findActiveUserIdsByOrganizationUnitIds(unitIds);
   }
 
   public async findUserContactsByIds(
     userIds: readonly number[],
   ): Promise<UserNotificationContactView[]> {
-    return resolveUserNotificationContacts({
-      userIds,
-      userRepository: this.userRepository,
-      findProfilesByUserIds: (uids) => this.findProfilesByUserIds(uids),
-      decryptPhone: (p) => this.decryptPhone(p),
-    });
-  }
-
-  private async invalidateIdentityCache(userId: number): Promise<void> {
-    if (!this.redis?.isReady()) return;
-    await this.redis.client.del(`${USER_IDENTITY_CACHE_PREFIX}${userId}`).catch(() => undefined);
+    return this.identityBridge.findUserContactsByIds(userIds);
   }
 }

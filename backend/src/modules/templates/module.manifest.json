@@ -15,6 +15,10 @@
     "templates.publish",
     "templates.render"
   ],
+  "events": {
+    "published": [],
+    "subscribed": []
+  },
   "database": {
     "hasMigrations": true,
     "tables": [

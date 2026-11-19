@@ -10,19 +10,23 @@ import {
   scanModuleManifests,
 } from '@packages/kernel/index.js';
 import { REQUIRED_ANY_PERMISSIONS_KEY, REQUIRED_PERMISSIONS_KEY } from '@packages/http/index.js';
-import { buildUserSearchDocument } from '@modules/users/index.js';
-import { ImportsController, ImportsService } from '@modules/imports/index.js';
+import { buildUserSearchDocument } from '@modules/users/search/user-search.service.js';
+import { ImportsService } from '@modules/imports/index.js';
+import { ImportsController } from '@modules/imports/controllers/imports.controller.js';
 import type { ImportHistoryEntity } from '@modules/imports/entities/import-history.entity.js';
 import type { ImportHistoryRepository } from '@modules/imports/repositories/import-history.repository.js';
-import { ExportsController, ExportsService } from '@modules/exports/index.js';
+import { ExportsService } from '@modules/exports/index.js';
+import { ExportsController } from '@modules/exports/controllers/exports.controller.js';
 import type { ExportHistoryEntity } from '@modules/exports/entities/export-history.entity.js';
 import type { ExportHistoryRepository } from '@modules/exports/repositories/export-history.repository.js';
-import { ReportsController, ReportsService } from '@modules/reports/index.js';
+import { ReportsService } from '@modules/reports/index.js';
+import { ReportsController } from '@modules/reports/controllers/reports.controller.js';
 import type { ReportHistoryEntity } from '@modules/reports/entities/report-history.entity.js';
 import type { ReportScheduleEntity } from '@modules/reports/entities/report-schedule.entity.js';
 import type { ReportHistoryRepository } from '@modules/reports/repositories/report-history.repository.js';
 import type { ReportScheduleRepository } from '@modules/reports/repositories/report-schedule.repository.js';
-import { SearchController, SearchService } from '@modules/search/index.js';
+import { SearchService } from '@modules/search/index.js';
+import { SearchController } from '@modules/search/controllers/search.controller.js';
 import type { SearchDocumentEntity } from '@modules/search/entities/search-document.entity.js';
 import type { SearchSyncHistoryEntity } from '@modules/search/entities/search-sync-history.entity.js';
 import type { SearchZeroResultKeywordEntity } from '@modules/search/entities/search-zero-result-keyword.entity.js';
@@ -148,13 +152,23 @@ describe('Phase 8 Standalone Modules: imports (8.2), exports (8.3), reports (8.4
       }),
     };
 
-    const importsService = new ImportsService(
-      fakeHistoryRepo,
-      importRegistry,
-      settingRegistry,
-      fakeUserImportService as never,
-      fakeUserExportService as never,
-    );
+    importRegistry.registerProfile({
+      profileCode: 'users',
+      module: 'users',
+      columns: [
+        { field: 'username', header: 'username', required: true },
+        { field: 'email', header: 'email', required: true },
+      ],
+      rowSchema: z.record(z.string(), z.unknown()),
+      uniqueKeyFields: ['email', 'username'],
+      requiredPermission: 'users.import',
+      exportTemplate: (format: 'csv' | 'xlsx') =>
+        fakeUserExportService.exportImportTemplate(format),
+      previewImport: () => fakeUserImportService.previewImport() as never,
+      executeImport: (dto, actorId) => fakeUserImportService.bulkImport(dto, actorId),
+    });
+
+    const importsService = new ImportsService(fakeHistoryRepo, importRegistry, settingRegistry);
     const controller = new ImportsController(importsService);
 
     const tpl = controller.exportImportTemplate('users', { format: 'csv', includeSamples: true });
@@ -290,11 +304,15 @@ describe('Phase 8 Standalone Modules: imports (8.2), exports (8.3), reports (8.4
       },
     };
 
-    const exportsService = new ExportsService(
-      fakeExportHistoryRepo,
-      exportRegistry,
-      fakeUserExportService as never,
-    );
+    exportRegistry.registerWorkerExecutor({
+      profileCode: 'users',
+      module: 'users',
+      topic: 'users.export',
+      requiredPermission: 'users.export',
+      executeExport: () => fakeUserExportService.exportUsersCsv(),
+    });
+
+    const exportsService = new ExportsService(fakeExportHistoryRepo, exportRegistry);
     const controller = new ExportsController(exportsService);
 
     const res = await controller.executeExport(
@@ -392,6 +410,10 @@ describe('Phase 8 Standalone Modules: imports (8.2), exports (8.3), reports (8.4
         minute: 0,
         dayOfWeek: 1,
         format: 'xlsx',
+        channels: ['IN_APP'],
+        recipientEmails: [],
+        recipientUserIds: [],
+        ttlSeconds: 3600,
         isActive: true,
       },
       { id: 1, email: 'admin@core.vn', roles: ['admin'], permissions: ['users.report'] },

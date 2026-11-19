@@ -1,22 +1,18 @@
 import { Column, Entity, Index } from 'typeorm';
 import { TypeOrmBaseEntity } from '@packages/database/index.js';
+import {
+  VERIFICATION_CHANNEL,
+  VERIFICATION_PURPOSE,
+  type VerificationChannelCode,
+  type VerificationPurposeCode,
+} from '../enum/auth.enum.js';
 
-export const VERIFICATION_CHANNEL = {
-  EMAIL: 1,
-  PHONE_OTP: 2,
-} as const;
-
-export type VerificationChannelCode =
-  (typeof VERIFICATION_CHANNEL)[keyof typeof VERIFICATION_CHANNEL];
-
-export const VERIFICATION_PURPOSE = {
-  VERIFY_EMAIL: 1,
-  VERIFY_PHONE: 2,
-  MFA_SMS: 3,
-} as const;
-
-export type VerificationPurposeCode =
-  (typeof VERIFICATION_PURPOSE)[keyof typeof VERIFICATION_PURPOSE];
+export {
+  VERIFICATION_CHANNEL,
+  VERIFICATION_PURPOSE,
+  type VerificationChannelCode,
+  type VerificationPurposeCode,
+};
 
 @Entity('auth_verification_codes')
 export class AuthVerificationCodeEntity extends TypeOrmBaseEntity {

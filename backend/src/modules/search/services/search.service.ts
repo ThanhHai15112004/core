@@ -1,4 +1,4 @@
-import { Injectable, Optional } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import {
   NotFoundAppException,
   SearchRegistryService,
@@ -29,29 +29,9 @@ import type {
   SyncSearchIndexBody,
 } from '../requests/search.requests.js';
 
-interface LegacySearchAdapter {
-  ensureModuleSearchEntitiesRegistered?(): void;
-  rebuildSearchIndex(
-    body?: RebuildSearchIndexBody,
-    actor?: UserIdentity,
-  ): Promise<SearchSyncHistoryRecord>;
-  syncUsersToSearchIndex(
-    body?: SyncSearchIndexBody,
-    actor?: UserIdentity,
-  ): Promise<SearchSyncHistoryRecord>;
-  searchUsers(
-    query: SearchGlobalQuery,
-    actor?: UserIdentity,
-    options?: {
-      readonly autoSeedFromDatabase?: boolean | undefined;
-      readonly scopeOverride?: SearchActorScopeContext | undefined;
-    },
-  ): Promise<SearchQueryResult>;
-  loadUserSearchDocuments?(userIds?: readonly number[]): Promise<SearchDocumentInput[]>;
-}
-
 @Injectable()
 export class SearchService implements ISearchPublicService {
+  private readonly logger = new Logger(SearchService.name);
   private readonly searchRegistry: SearchRegistryService;
 
   constructor(
@@ -59,65 +39,13 @@ export class SearchService implements ISearchPublicService {
     @Optional() private readonly syncHistoryRepository?: SearchSyncHistoryRepository,
     @Optional() private readonly zeroResultRepository?: SearchZeroResultKeywordRepository,
     @Optional() searchRegistry?: SearchRegistryService,
-    @Optional() private readonly userSearchService?: LegacySearchAdapter,
   ) {
     this.searchRegistry = searchRegistry ?? defaultSearchRegistry;
     this.ensureInjectedSearchAdaptersRegistered();
   }
 
   private ensureInjectedSearchAdaptersRegistered(): void {
-    this.userSearchService?.ensureModuleSearchEntitiesRegistered?.();
     this.searchRegistry.syncFromManifests();
-
-    if (this.userSearchService && !this.searchRegistry.resolveWorkerExecutor({ module: 'users' })) {
-      this.searchRegistry.registerWorkerExecutor({
-        module: 'users',
-        entityCode: 'users.account',
-        syncTopic: 'users.search_sync',
-        rebuildTopic: 'users.search_rebuild',
-        executeSearchJob: async (input) => {
-          const effectiveActor = input.actor as UserIdentity | undefined;
-          if (input.operation === 'search_rebuild') {
-            return this.userSearchService!.rebuildSearchIndex(
-              {
-                ...(input.module ? { module: input.module } : {}),
-                ...(input.entityType ? { entityType: input.entityType } : {}),
-                ...(input.entityCode ? { entityCode: input.entityCode } : {}),
-              },
-              effectiveActor,
-            );
-          }
-          const numericUserIds = Array.isArray(input.documentIds)
-            ? input.documentIds
-                .map((id) => Number(id))
-                .filter((id) => Number.isInteger(id) && id > 0)
-            : undefined;
-          return this.userSearchService!.syncUsersToSearchIndex(
-            {
-              ...(numericUserIds && numericUserIds.length > 0 ? { userIds: numericUserIds } : {}),
-            },
-            effectiveActor,
-          );
-        },
-        search: async (query, actor, options) =>
-          this.userSearchService!.searchUsers(
-            query as SearchGlobalQuery,
-            actor as UserIdentity | undefined,
-            options,
-          ),
-        loadDocuments: async (documentIds) => {
-          if (typeof this.userSearchService!.loadUserSearchDocuments !== 'function') {
-            return [];
-          }
-          const numericUserIds = Array.isArray(documentIds)
-            ? documentIds.map((id) => Number(id)).filter((id) => Number.isInteger(id) && id > 0)
-            : undefined;
-          return this.userSearchService!.loadUserSearchDocuments(
-            numericUserIds && numericUserIds.length > 0 ? numericUserIds : undefined,
-          );
-        },
-      });
-    }
   }
 
   /** 8.5.3 — Đăng ký hoặc thay thế client Elasticsearch / OpenSearch tùy chọn lúc runtime */
@@ -353,7 +281,6 @@ export class SearchService implements ISearchPublicService {
 
   /** 8.5.7 — Báo cáo độ trễ cập nhật Search Index (phát hiện kết quả tìm kiếm bị cũ) */
   public getSearchIndexLagReport(query?: SearchIndexLagQuery): SearchIndexLagReport {
-    this.userSearchService?.ensureModuleSearchEntitiesRegistered?.();
     this.searchRegistry.syncFromManifests();
 
     return this.searchRegistry.getIndexLagReport({
@@ -449,7 +376,12 @@ export class SearchService implements ISearchPublicService {
     }
 
     if (this.syncHistoryRepository) {
-      const entity = await this.syncHistoryRepository.findById(historyId).catch(() => null);
+      const entity = await this.syncHistoryRepository.findById(historyId).catch((err) => {
+        this.logger.warn(
+          `Failed to query search sync history #${historyId}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+        return null;
+      });
       if (entity) {
         return this.mapSyncHistoryEntityToRecord(entity);
       }

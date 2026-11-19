@@ -13,9 +13,19 @@ export const DEFAULT_OTP_MAX_SENDS = 5;
 export const DEFAULT_OTP_MAX_ATTEMPTS = 5;
 export const DEFAULT_OTP_COOLDOWN_SECONDS = 60;
 
-export {
-  VERIFICATION_CHANNEL,
-  VERIFICATION_PURPOSE,
-  type VerificationChannelCode,
-  type VerificationPurposeCode,
-} from '../entities/auth-verification-code.entity.js';
+export const VERIFICATION_CHANNEL = {
+  EMAIL: 1,
+  PHONE_OTP: 2,
+} as const;
+
+export type VerificationChannelCode =
+  (typeof VERIFICATION_CHANNEL)[keyof typeof VERIFICATION_CHANNEL];
+
+export const VERIFICATION_PURPOSE = {
+  VERIFY_EMAIL: 1,
+  VERIFY_PHONE: 2,
+  MFA_SMS: 3,
+} as const;
+
+export type VerificationPurposeCode =
+  (typeof VERIFICATION_PURPOSE)[keyof typeof VERIFICATION_PURPOSE];

@@ -1,7 +1,9 @@
 import { Module, Optional } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
 import { CoreI18nService } from '@packages/i18n/index.js';
 import { ORGANIZATIONS_PUBLIC_SERVICE } from './contracts/index.js';
 import { OrganizationsController } from './controllers/organizations.controller.js';
+import { OrganizationUnitEntity } from './entities/organization-unit.entity.js';
 import { OrganizationsMapper } from './mappers/organizations.mapper.js';
 import { OrganizationUnitRepository } from './repositories/organization-unit.repository.js';
 import { OrganizationsService } from './services/organizations.service.js';
@@ -11,6 +13,7 @@ import viOrgs from './locales/vi/organizations.json' with { type: 'json' };
 new CoreI18nService().registerNamespace('organizations', { vi: viOrgs, en: enOrgs });
 
 @Module({
+  imports: [TypeOrmModule.forFeature([OrganizationUnitEntity])],
   controllers: [OrganizationsController],
   providers: [
     OrganizationUnitRepository,

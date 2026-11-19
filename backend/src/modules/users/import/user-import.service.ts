@@ -1,4 +1,4 @@
-import { Inject, Injectable, Optional } from '@nestjs/common';
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import {
   ImportRegistryService,
   NotFoundAppException,
@@ -52,6 +52,7 @@ const USERS_IMPORT_PROFILE_CODE = 'users';
 
 @Injectable()
 export class UserImportService {
+  private readonly logger = new Logger(UserImportService.name);
   private readonly settingRegistry: SettingRegistryService;
   private readonly importRegistry: ImportRegistryService;
 
@@ -751,7 +752,12 @@ export class UserImportService {
             },
           },
         )
-        .catch(() => null);
+        .catch((err) => {
+          this.logger.warn(
+            `Failed to publish user import telemetry job: ${err instanceof Error ? err.message : String(err)}`,
+          );
+          return null;
+        });
       publishedJobId = env?.id ?? null;
     }
 

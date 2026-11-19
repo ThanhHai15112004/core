@@ -10,6 +10,7 @@ import { MFA_PUBLIC_SERVICE } from './contracts/index.js';
 import { MfaController } from './controllers/mfa.controller.js';
 import { AuthMfaConfigEntity } from './entities/auth-mfa-config.entity.js';
 import { AuthMfaConfigRepository } from './repositories/auth-mfa-config.repository.js';
+import { MfaLifecycleService } from './services/mfa-lifecycle.service.js';
 import { MfaService } from './services/mfa.service.js';
 import enMfa from './locales/en/mfa.json' with { type: 'json' };
 import viMfa from './locales/vi/mfa.json' with { type: 'json' };
@@ -29,6 +30,7 @@ new CoreI18nService().registerNamespace('auth', { vi: viMfa, en: enMfa });
   controllers: [MfaController],
   providers: [
     AuthMfaConfigRepository,
+    MfaLifecycleService,
     MfaService,
     {
       provide: MFA_PUBLIC_SERVICE,

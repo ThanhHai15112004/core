@@ -3,7 +3,6 @@ export * from './contracts/index.js';
 export * from './services/auth.service.js';
 export * from './services/verification.service.js';
 export * from './services/user-identity-resolver.service.js';
-export * from './controllers/auth.controller.js';
 export * from './requests/auth.requests.js';
 export * from './responses/auth.response.js';
 export * from './routes/auth.routes.js';

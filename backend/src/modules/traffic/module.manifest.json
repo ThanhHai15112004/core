@@ -7,7 +7,7 @@
   "type": "core",
   "category": "operations",
   "author": "Core Platform Team",
-  "entryModule": "TrafficOpsModule",
+  "entryModule": "TrafficModule",
   "dependencies": ["config"],
   "permissions": [],
   "events": {},

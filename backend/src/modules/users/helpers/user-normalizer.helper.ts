@@ -202,7 +202,7 @@ export function registerUsersUsageCheckers(params: {
 
   defaultCodeRegistry.registerUsageChecker(
     USERS_CODE_TYPES.POSITION_TITLE,
-    'user_organization_units.position_title',
+    'users.position_title',
     async ({ numericCode, code }) => {
       const labelVi = defaultCodeRegistry.getLabel(
         USERS_CODE_TYPES.POSITION_TITLE,

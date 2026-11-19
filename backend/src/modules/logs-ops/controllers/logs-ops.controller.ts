@@ -25,7 +25,7 @@ import {
   parseLogQuery,
   parseStatus,
   type LogFilter,
-} from '../services/log-query.js';
+} from '../helpers/log-query.helper.js';
 import {
   LogsActionRejectedException,
   LogsUnavailableException,

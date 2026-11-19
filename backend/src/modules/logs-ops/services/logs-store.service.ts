@@ -11,7 +11,7 @@ import {
   type LogLevelOverrideRecord,
   type LogsOperationRecord,
 } from '@packages/logging/index.js';
-import { compareNewestFirst } from './log-query.js';
+import { compareNewestFirst } from '../helpers/log-query.helper.js';
 
 /** Số log gần nhất đọc từ stream cho mỗi lần tìm / tổng hợp (cửa sổ phân tích của trang Logs). */
 export const LOG_SCAN_LIMIT = 10_000;

@@ -7,7 +7,7 @@ import {
   EXECUTION_TRIGGERS,
   type ExecutionStatus,
   type ExecutionTrigger,
-} from '../contracts/scheduler.types.js';
+} from '../types/scheduler.types.js';
 import { SCHEDULER_OPS_ROUTES as R } from '../routes/scheduler-ops.routes.js';
 import { SCHEDULER_RANGES, SchedulerOpsService } from '../services/scheduler-ops.service.js';
 import type { SchedulerOperationContext } from '../services/scheduler-operations.service.js';

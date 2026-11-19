@@ -1,4 +1,4 @@
-import { Inject, Injectable, Optional } from '@nestjs/common';
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import {
   EXPORT_FORMAT,
   ExportRegistryService,
@@ -23,8 +23,6 @@ import {
   type ReportExecutionMode,
   type ReportParametersInput,
   type ReportScheduleRecord,
-  type INotificationDispatcher,
-  NOTIFICATION_DISPATCHER,
 } from '@packages/kernel/index.js';
 import {
   BaseMessagePublisherProvider,
@@ -66,6 +64,7 @@ export interface ExecuteUserReportOptions {
 
 @Injectable()
 export class UserReportService {
+  private readonly logger = new Logger(UserReportService.name);
   private readonly reportRegistry: ReportRegistryService;
   private readonly exportRegistry: ExportRegistryService;
   private readonly settingRegistry: SettingRegistryService;
@@ -79,9 +78,6 @@ export class UserReportService {
     @Optional() private readonly messagePublisher?: BaseMessagePublisherProvider | null,
     @Optional() private readonly auditLogService?: AuditLogService,
     @Optional() private readonly platformSecurityService?: PlatformSecurityService,
-    @Optional()
-    @Inject(NOTIFICATION_DISPATCHER)
-    private readonly notificationsPublicService?: INotificationDispatcher | null,
     @Optional()
     @Inject(ORGANIZATIONS_PUBLIC_SERVICE)
     private readonly organizationsPublicService?: IOrganizationsPublicService | null,
@@ -855,7 +851,7 @@ export class UserReportService {
       allowedSubtreeUnitIds = new Set([params.organizationUnitId, ...subtreeIds]);
     }
 
-    const searchFilter: SearchUsersFilter = {
+    const rawSearchFilter: SearchUsersFilter = {
       ...(singleStatus !== undefined ? { status: singleStatus } : {}),
       ...(params.organizationUnitId !== null && !allowedSubtreeUnitIds
         ? { organizationUnitId: params.organizationUnitId }
@@ -871,6 +867,11 @@ export class UserReportService {
       page: 1,
       limit: 5000,
     };
+
+    const searchFilter =
+      typeof this.usersService.enrichSearchUsersFilter === 'function'
+        ? await this.usersService.enrichSearchUsersFilter(rawSearchFilter)
+        : rawSearchFilter;
 
     const { items, dataSourceUsed } = await this.userRepository.searchPaginatedReadOnly(
       searchFilter,
@@ -1185,36 +1186,47 @@ export class UserReportService {
       expiresAt: params.expiresAt,
     });
 
-    if (this.notificationsPublicService) {
+    if (this.messagePublisher) {
       const targetUserId = params.recipientUserIds[0];
-      await this.notificationsPublicService
-        .dispatch({
-          title: recorded.title,
-          content: recorded.message,
-          category: 'SYSTEM',
-          priority: 'NORMAL',
-          targetType: params.recipientUserIds.length > 1 ? 'USER_GROUP' : 'SINGLE_USER',
-          ...(targetUserId ? { userId: targetUserId } : {}),
-          ...(params.recipientUserIds.length > 1 ? { userIds: [...params.recipientUserIds] } : {}),
-          channels: [...params.channels],
-          actionUrl: params.downloadUrl,
-          referenceModule: 'users',
-          referenceType: 'user_report',
-          referenceId: String(params.historyId),
-          metadata: {
-            reportCode: params.reportDef.code,
-            channels: params.channels,
-            recipientEmails: params.recipientEmails,
-            downloadToken: params.downloadToken,
-            downloadUrl: params.downloadUrl,
-            expiresAt: params.expiresAt,
-            fileName: params.fileName,
-            format: params.format,
-            totalRecords: params.totalRecords,
+      await this.messagePublisher
+        .publish(
+          'notifications.dispatch',
+          {
+            title: recorded.title,
+            content: recorded.message,
+            category: 'SYSTEM',
+            priority: 'NORMAL',
+            targetType: params.recipientUserIds.length > 1 ? 'USER_GROUP' : 'SINGLE_USER',
+            ...(targetUserId ? { userId: targetUserId } : {}),
+            ...(params.recipientUserIds.length > 1
+              ? { userIds: [...params.recipientUserIds] }
+              : {}),
+            channels: [...params.channels],
+            actionUrl: params.downloadUrl,
+            referenceModule: 'users',
+            referenceType: 'user_report',
+            referenceId: String(params.historyId),
+            metadata: {
+              reportCode: params.reportDef.code,
+              channels: params.channels,
+              recipientEmails: params.recipientEmails,
+              downloadToken: params.downloadToken,
+              downloadUrl: params.downloadUrl,
+              expiresAt: params.expiresAt,
+              fileName: params.fileName,
+              format: params.format,
+              totalRecords: params.totalRecords,
+            },
+            organizationUnitId: params.organizationUnitId,
           },
-          organizationUnitId: params.organizationUnitId,
-        })
-        .catch(() => null);
+          QUEUES.SYSTEM_NOTIFICATIONS,
+        )
+        .catch((err) => {
+          this.logger.warn(
+            `Failed to publish report completion notification for history #${params.historyId}: ${err instanceof Error ? err.message : String(err)}`,
+          );
+          return null;
+        });
     }
 
     return recorded;

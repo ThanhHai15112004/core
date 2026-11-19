@@ -27,7 +27,7 @@ new CoreI18nService().registerNamespace('navigation', { vi: viNavigation, en: en
       useExisting: MenusService,
     },
   ],
-  exports: [MenusService, MENUS_PUBLIC_SERVICE, NAVIGATION_PUBLIC_SERVICE, MenuRepository],
+  exports: [MenusService, MENUS_PUBLIC_SERVICE, NAVIGATION_PUBLIC_SERVICE],
 })
 export class NavigationModule {
   constructor(@Optional() i18n?: CoreI18nService) {

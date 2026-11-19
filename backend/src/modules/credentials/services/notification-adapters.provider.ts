@@ -91,7 +91,12 @@ export class DefaultEmailNotificationAdapter implements IEmailNotificationAdapte
             },
           },
         )
-        .catch(() => null);
+        .catch((err) => {
+          this.logger.warn(
+            `Failed to enqueue critical OTP email for user #${payload.userId}: ${err instanceof Error ? err.message : String(err)}`,
+          );
+          return null;
+        });
     }
 
     this.logger.log(
@@ -165,7 +170,12 @@ export class DefaultSmsOtpProvider implements ISmsOtpProvider {
             },
           },
         )
-        .catch(() => null);
+        .catch((err) => {
+          this.logger.warn(
+            `Failed to enqueue critical OTP SMS for user #${payload.userId}: ${err instanceof Error ? err.message : String(err)}`,
+          );
+          return null;
+        });
     }
 
     this.logger.log(

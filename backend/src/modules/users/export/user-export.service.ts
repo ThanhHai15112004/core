@@ -1,4 +1,4 @@
-import { Inject, Injectable, Optional } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { LocaleContext, LocaleFormatter } from '@packages/i18n/index.js';
 import {
   EXPORT_FORMAT,
@@ -18,8 +18,6 @@ import {
   type ExportHistoryRecord,
   type ExportProgressSnapshot,
   type IPdfExportAdapter,
-  type INotificationDispatcher,
-  NOTIFICATION_DISPATCHER,
 } from '@packages/kernel/index.js';
 import {
   BaseMessagePublisherProvider,
@@ -57,6 +55,7 @@ export interface ExecuteUserExportOptions {
 
 @Injectable()
 export class UserExportService {
+  private readonly logger = new Logger(UserExportService.name);
   private readonly settingRegistry: SettingRegistryService;
   private readonly exportRegistry: ExportRegistryService;
 
@@ -68,9 +67,6 @@ export class UserExportService {
     @Optional() settingRegistry?: SettingRegistryService,
     @Optional() private readonly messagePublisher?: BaseMessagePublisherProvider | null,
     @Optional() exportRegistry?: ExportRegistryService,
-    @Optional()
-    @Inject(NOTIFICATION_DISPATCHER)
-    private readonly notificationsPublicService?: INotificationDispatcher | null,
   ) {
     this.settingRegistry = settingRegistry ?? defaultSettingRegistry;
     this.exportRegistry = exportRegistry ?? defaultExportRegistry;
@@ -359,12 +355,17 @@ export class UserExportService {
 
     // 8.3.1 — Truy vấn giữ đúng bộ lọc hiện tại (`query`) kết hợp với Phạm vi dữ liệu (`scopeFilter`)
     const scopeFilter = await this.usersService.resolveUserScopeFilter(actor, 'export');
-    const { items } = await this.userRepository.searchPaginated({
+    const rawSearchFilter = {
       ...query,
       ...(scopeFilter ? { scopeFilter } : {}),
       page: 1,
       limit: effectiveLimit,
-    });
+    };
+    const searchFilter =
+      typeof this.usersService.enrichSearchUsersFilter === 'function'
+        ? await this.usersService.enrichSearchUsersFilter(rawSearchFilter)
+        : rawSearchFilter;
+    const { items } = await this.userRepository.searchPaginated(searchFilter);
 
     const hydrated = await this.usersService.hydrateUsersList(items);
 
@@ -443,7 +444,12 @@ export class UserExportService {
             },
           },
         )
-        .catch(() => null);
+        .catch((err) => {
+          this.logger.warn(
+            `Failed to publish user export telemetry job #${historyRecord.id}: ${err instanceof Error ? err.message : String(err)}`,
+          );
+          return null;
+        });
       if (env?.id) {
         publishedJobId = env.id;
       }
@@ -587,30 +593,39 @@ export class UserExportService {
       expiresAt: params.expiresAt,
     });
 
-    if (this.notificationsPublicService) {
-      await this.notificationsPublicService
-        .dispatch({
-          title: recorded.title,
-          content: recorded.message,
-          category: 'SYSTEM',
-          priority: 'NORMAL',
-          targetType: 'SINGLE_USER',
-          userId: params.recipientUserId,
-          actionUrl: params.downloadUrl,
-          referenceModule: 'users',
-          referenceType: 'user_export',
-          referenceId: String(params.historyId ?? params.downloadToken),
-          metadata: {
-            downloadToken: params.downloadToken,
-            downloadUrl: params.downloadUrl,
-            expiresAt: params.expiresAt,
-            fileName: params.fileName,
-            format: params.format,
-            totalExported: params.totalExported,
+    if (this.messagePublisher) {
+      await this.messagePublisher
+        .publish(
+          'notifications.dispatch',
+          {
+            title: recorded.title,
+            content: recorded.message,
+            category: 'SYSTEM',
+            priority: 'NORMAL',
+            targetType: 'SINGLE_USER',
+            userId: params.recipientUserId,
+            actionUrl: params.downloadUrl,
+            referenceModule: 'users',
+            referenceType: 'user_export',
+            referenceId: String(params.historyId ?? params.downloadToken),
+            metadata: {
+              downloadToken: params.downloadToken,
+              downloadUrl: params.downloadUrl,
+              expiresAt: params.expiresAt,
+              fileName: params.fileName,
+              format: params.format,
+              totalExported: params.totalExported,
+            },
+            organizationUnitId: params.organizationUnitId ?? null,
           },
-          organizationUnitId: params.organizationUnitId ?? null,
-        })
-        .catch(() => null);
+          QUEUES.SYSTEM_NOTIFICATIONS,
+        )
+        .catch((err) => {
+          this.logger.warn(
+            `Failed to publish user export completion notification for user #${params.recipientUserId}: ${err instanceof Error ? err.message : String(err)}`,
+          );
+          return null;
+        });
     }
 
     return recorded;

@@ -1,21 +1,25 @@
 import {
-  ensureScopesWithinAllowed,
   extractDeviceNameFromUserAgent,
-  filterActiveTrustedDevices,
   inferTrustedDeviceName,
-  ipv4ToUint32,
-  isCallerIpAllowed,
-  matchIpv4Cidr,
-  MfaChallengeAttemptTracker,
-  normalizeAllowedIpList,
-  normalizeCallerIp,
+} from '../../../src/modules/sessions/helpers/session-device.helper.js';
+import {
+  filterActiveTrustedDevices,
   normalizeRecoveryCode,
-  normalizeScopesList,
-  parseApiClientUsageLogs,
   parseExtendedMfaEnvelope,
   serializeExtendedMfaEnvelope,
   toTrustedDeviceResponse,
-} from '../../../src/modules/auth/index.js';
+} from '../../../src/modules/mfa/helpers/mfa-envelope.helper.js';
+import { MfaChallengeAttemptTracker } from '../../../src/modules/mfa/helpers/mfa-challenge-attempt.helper.js';
+import {
+  ensureScopesWithinAllowed,
+  ipv4ToUint32,
+  isCallerIpAllowed,
+  matchIpv4Cidr,
+  normalizeAllowedIpList,
+  normalizeCallerIp,
+  normalizeScopesList,
+  parseApiClientUsageLogs,
+} from '../../../src/modules/machine-identities/helpers/api-client-security.helper.js';
 
 describe('Auth Module Helpers Unit Tests', () => {
   describe('auth-device.helper', () => {

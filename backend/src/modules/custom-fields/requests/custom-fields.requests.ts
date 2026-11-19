@@ -1,9 +1,5 @@
 import { z } from 'zod';
-import {
-  booleanQueryParam,
-  createPaginationQuerySchema,
-  optionalQueryParam,
-} from '@packages/http/index.js';
+import { booleanQueryParam, optionalQueryParam } from '@packages/http/index.js';
 import {
   CUSTOM_FIELD_DATA_TYPE,
   CUSTOM_FIELD_STATUS,
@@ -176,18 +172,14 @@ export const ListCustomFieldHistoriesQuerySchema = z.object({
   actionType: optionalQueryParam(z.string().min(1)),
 });
 
-export type ListCustomFieldDefinitionsQuery = z.infer<
-  typeof ListCustomFieldDefinitionsQuerySchema
->;
+export type ListCustomFieldDefinitionsQuery = z.infer<typeof ListCustomFieldDefinitionsQuerySchema>;
 export type CreateCustomFieldDefinitionRequest = z.infer<
   typeof CreateCustomFieldDefinitionRequestSchema
 >;
 export type UpdateCustomFieldDefinitionRequest = z.infer<
   typeof UpdateCustomFieldDefinitionRequestSchema
 >;
-export type UpdateCustomFieldOptionsRequest = z.infer<
-  typeof UpdateCustomFieldOptionsRequestSchema
->;
+export type UpdateCustomFieldOptionsRequest = z.infer<typeof UpdateCustomFieldOptionsRequestSchema>;
 export type SaveCustomFieldValuesRequest = z.infer<typeof SaveCustomFieldValuesRequestSchema>;
 export type FilterRecordsByCustomFieldsRequest = z.infer<
   typeof FilterRecordsByCustomFieldsRequestSchema

@@ -14,22 +14,20 @@ import {
   type ExportQueueWorkerExecutor,
   type ImportCellIssue,
   type ImportDuplicateStrategy,
+  type ImportQueueChunkExecutionResult,
   type ImportQueueWorkerExecutor,
   type ReportQueueWorkerExecutor,
   type SearchQueueWorkerExecutor,
+  type SearchSyncHistoryRecord,
 } from '@packages/kernel/index.js';
 import { MetricsRegistryService } from '@packages/metrics/index.js';
 import { QUEUE_PROFILES, QUEUES, type MessageEnvelope } from '@packages/messaging/index.js';
 import { JobProgressTrackerService } from '@packages/queue/index.js';
 import type { UserIdentity } from '@packages/security/index.js';
-import {
-  UserExportService,
-  UserImportService,
-  UserReportService,
-  UserSearchService,
-  type BulkImportUserRowInput,
-  type ListUsersQuery,
-  type RunUserReportRequest,
+import type {
+  BulkImportUserRowInput,
+  ListUsersQuery,
+  RunUserReportRequest,
 } from '@modules/users/index.js';
 import { FILES_PUBLIC_SERVICE, type IFilesPublicService } from '@modules/files/contracts/index.js';
 import {
@@ -49,6 +47,68 @@ import {
   type ISearchPublicService,
 } from '@modules/search/contracts/index.js';
 import { BaseQueueProcessor } from '../base-queue.processor.js';
+
+interface UserImportWorkerPort {
+  parseImportRows?(input: Readonly<Record<string, unknown>>): BulkImportUserRowInput[];
+  bulkImport(
+    dto: {
+      items: BulkImportUserRowInput[];
+      skipDuplicates: boolean;
+      duplicateStrategy?: ImportDuplicateStrategy;
+      defaultPassword?: string;
+    },
+    actorId?: number,
+    options?: Readonly<Record<string, unknown>>,
+  ): Promise<ImportQueueChunkExecutionResult>;
+}
+
+interface UserExportWorkerPort {
+  exportUsersCsv(
+    query: ListUsersQuery,
+    actor?: UserIdentity,
+    options?: Readonly<Record<string, unknown>>,
+  ): Promise<{
+    readonly historyId?: number;
+    readonly format: 'csv' | 'xlsx' | 'pdf';
+    readonly fileName: string;
+    readonly contentType: string;
+    readonly totalExported: number;
+    readonly downloadToken?: string;
+    readonly downloadUrl?: string;
+    readonly expiresAt?: string;
+  }>;
+}
+
+interface UserReportWorkerPort {
+  runReport(
+    request?: Partial<RunUserReportRequest>,
+    actor?: UserIdentity,
+    options?: Readonly<Record<string, unknown>>,
+  ): Promise<{
+    readonly reportCode: string;
+    readonly historyId: number;
+    readonly totalRecords: number;
+    readonly dataSourceUsed: 'REPLICA' | 'PRIMARY';
+    readonly cacheHit: boolean;
+    readonly downloadToken?: string;
+    readonly downloadUrl?: string;
+    readonly expiresAt?: string;
+    readonly notifiedChannels?: readonly ('EMAIL' | 'IN_APP')[];
+  }>;
+}
+
+interface UserSearchWorkerPort {
+  rebuildSearchIndex(
+    body?: Readonly<Record<string, unknown>>,
+    actor?: UserIdentity,
+    options?: Readonly<Record<string, unknown>>,
+  ): Promise<SearchSyncHistoryRecord>;
+  syncUsersToSearchIndex(
+    body?: Readonly<Record<string, unknown>>,
+    actor?: UserIdentity,
+    options?: Readonly<Record<string, unknown>>,
+  ): Promise<SearchSyncHistoryRecord>;
+}
 
 export interface HeavyQueueJobPayload {
   readonly operation?:
@@ -115,13 +175,13 @@ export class HeavyJobProcessor extends BaseQueueProcessor {
     config: CoreConfigService,
     metrics: MetricsRegistryService,
     @Optional() progressTracker?: JobProgressTrackerService,
-    @Optional() private readonly userImportService?: UserImportService,
+    @Optional() private readonly userImportService?: UserImportWorkerPort,
     @Optional()
     @Inject(FILES_PUBLIC_SERVICE)
     private readonly filesService?: IFilesPublicService,
-    @Optional() private readonly userExportService?: UserExportService,
-    @Optional() private readonly userReportService?: UserReportService,
-    @Optional() private readonly userSearchService?: UserSearchService,
+    @Optional() private readonly userExportService?: UserExportWorkerPort,
+    @Optional() private readonly userReportService?: UserReportWorkerPort,
+    @Optional() private readonly userSearchService?: UserSearchWorkerPort,
     @Optional() private readonly importRegistry?: ImportRegistryService,
     @Optional() private readonly exportRegistry?: ExportRegistryService,
     @Optional() private readonly reportRegistry?: ReportRegistryService,

@@ -74,7 +74,7 @@ describe('Phase 7.4 — Công việc định kỳ (Scheduler: Cron/Interval, Tim
     process.env['SCHEDULER_ALERT_RECIPIENTS'] = 'ops-lead@example.com';
 
     config = new CoreConfigService();
-    i18n = new CoreI18nService(config);
+    i18n = new CoreI18nService();
     redis = new RedisService(config, mockRedisFactory);
     await redis.client.flushall();
     auditLogService = new AuditLogService();
@@ -176,7 +176,12 @@ describe('Phase 7.4 — Công việc định kỳ (Scheduler: Cron/Interval, Tim
 
     fakePublisher = {
       recordPublished: () => undefined,
-      publish: async (queue: string, topic: string, payload: unknown, options?: unknown) => {
+      publish: async (
+        topic: string,
+        payload: unknown,
+        queue: string = QUEUES.SYSTEM_EVENTS,
+        options?: unknown,
+      ) => {
         publishedMessages.push({ queue, topic, payload, options });
       },
     } as unknown as BaseMessagePublisherProvider;
@@ -287,7 +292,7 @@ describe('Phase 7.4 — Công việc định kỳ (Scheduler: Cron/Interval, Tim
     ).rejects.toThrow(SchedulerActionRejectedException);
 
     // 4. Worker nhận một job trùng khi lock đang giữ bởi exec_running_1 -> tự động skip (không chạy chồng)
-    const metrics = new MetricsRegistryService(config, 'worker', 0);
+    const metrics = new MetricsRegistryService({ runtime: 'worker' });
     let handlerCount = 0;
     const processor = new SystemProcessor(config, metrics, progressTracker, {
       purgeExpiredTrash: async () => {
@@ -416,7 +421,10 @@ describe('Phase 7.4 — Công việc định kỳ (Scheduler: Cron/Interval, Tim
     auditLogService.record = async (input) => {
       recordedAudits.push({
         action: input.action,
-        resourceId: input.resourceId ?? null,
+        resourceId:
+          input.resourceId !== undefined && input.resourceId !== null
+            ? String(input.resourceId)
+            : null,
         actorIdentifier: input.actorIdentifier ?? null,
       });
       return {} as never;
@@ -507,7 +515,7 @@ describe('Phase 7.4 — Công việc định kỳ (Scheduler: Cron/Interval, Tim
     });
     await scheduleSync.sync();
 
-    const metrics = new MetricsRegistryService(config, 'worker', 0);
+    const metrics = new MetricsRegistryService({ runtime: 'worker' });
     const failingProcessor = new SystemProcessor(config, metrics, progressTracker, {
       purgeExpiredTrash: async () => {
         throw new Error('Upstream settlement gateway 503');

@@ -39,14 +39,7 @@ new CoreI18nService().registerNamespace('settings', { vi: viSettings, en: enSett
       useExisting: SettingsService,
     },
   ],
-  exports: [
-    SettingsService,
-    SETTINGS_PUBLIC_SERVICE,
-    SettingGroupRepository,
-    SystemSettingRepository,
-    SystemSettingScopeRepository,
-    SystemSettingHistoryRepository,
-  ],
+  exports: [SettingsService, SETTINGS_PUBLIC_SERVICE],
 })
 export class SettingsModule {
   constructor(@Optional() i18n?: CoreI18nService) {

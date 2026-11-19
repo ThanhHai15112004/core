@@ -24,6 +24,10 @@
     "notification-delivery.send",
     "notification-delivery.manage"
   ],
+  "events": {
+    "published": [],
+    "subscribed": []
+  },
   "database": {
     "hasMigrations": true,
     "tables": [

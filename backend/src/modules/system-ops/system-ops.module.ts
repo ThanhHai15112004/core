@@ -6,8 +6,8 @@ import { OpsEventService } from './services/ops-event.service.js';
 import { SystemOpsController } from './controllers/system-ops.controller.js';
 import { HealthModule } from '@modules/health/index.js';
 import { RuntimesModule } from '@modules/runtimes/index.js';
-import { TrafficOpsModule } from '@modules/traffic/index.js';
-import { PerformanceOpsModule } from '@modules/performance/index.js';
+import { TrafficModule } from '@modules/traffic/index.js';
+import { PerformanceModule } from '@modules/performance/index.js';
 import { DatabaseOpsModule } from '@modules/database-ops/index.js';
 import { CacheOpsModule } from '@modules/cache-ops/index.js';
 import { StorageOpsModule } from '@modules/storage-ops/index.js';
@@ -22,8 +22,8 @@ import { LogsOpsModule } from '@modules/logs-ops/index.js';
     DiscoveryModule,
     HealthModule,
     RuntimesModule,
-    TrafficOpsModule,
-    PerformanceOpsModule,
+    TrafficModule,
+    PerformanceModule,
     DatabaseOpsModule,
     CacheOpsModule,
     StorageOpsModule,
@@ -41,8 +41,8 @@ import { LogsOpsModule } from '@modules/logs-ops/index.js';
     OpsEventService,
     HealthModule,
     RuntimesModule,
-    TrafficOpsModule,
-    PerformanceOpsModule,
+    TrafficModule,
+    PerformanceModule,
     DatabaseOpsModule,
     CacheOpsModule,
     StorageOpsModule,

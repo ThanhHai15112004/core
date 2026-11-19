@@ -21,6 +21,10 @@
     "notification-delivery"
   ],
   "permissions": ["notifications.send", "notifications.manage"],
+  "events": {
+    "published": [],
+    "subscribed": []
+  },
   "database": {
     "hasMigrations": true,
     "tables": [

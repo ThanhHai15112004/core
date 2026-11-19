@@ -191,3 +191,13 @@ export interface ITemplatesPublicService {
 }
 
 export const TEMPLATES_PUBLIC_SERVICE = Symbol('TEMPLATES_PUBLIC_SERVICE');
+export {
+  DEFAULT_SYSTEM_NOTIFICATION_TEMPLATES,
+  DEFAULT_SYSTEM_TEMPLATE_USAGES,
+  buildRenderedDocumentPayload,
+  calculateSmsSegments,
+  extractTemplateVariables,
+  renderNotificationTemplateContent,
+  resolveTemplateTypeAndFormat,
+  type SmsSegmentCalculationResult,
+} from '../helpers/notification-template.helper.js';

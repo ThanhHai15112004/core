@@ -1,7 +1,6 @@
 import { describe, expect, it } from '@jest/globals';
 import { OrganizationMembersController } from '@modules/organization-members/controllers/organization-members.controller.js';
 import { OrganizationMembersService } from '@modules/organization-members/services/organization-members.service.js';
-import type { UsersService } from '@modules/users/services/users.service.js';
 import { ApprovalsController } from '@modules/approvals/controllers/approvals.controller.js';
 import { ApprovalsService } from '@modules/approvals/services/approvals.service.js';
 import type { WorkflowApprovalDelegationEntity } from '@modules/approvals/entities/workflow-approval-delegation.entity.js';
@@ -156,7 +155,7 @@ describe('Phase 9 Standalone Modules: organization-members (9.2), approvals (9.4
         subordinates: [],
         approverChain: [],
       }),
-    } as unknown as UsersService;
+    } as unknown as ConstructorParameters<typeof OrganizationMembersService>[0];
 
     const service = new OrganizationMembersService(fakeUsersService);
     const controller = new OrganizationMembersController(service);

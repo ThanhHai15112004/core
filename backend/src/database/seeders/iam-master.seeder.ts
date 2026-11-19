@@ -7,7 +7,7 @@ import {
 } from '@modules/organizations/contracts/index.js';
 import { PERMISSION_STATUS, ROLE_STATUS } from '@modules/roles/contracts/index.js';
 import { USER_STATUS } from '@modules/users/contracts/index.js';
-import { DEFAULT_SYSTEM_NOTIFICATION_TEMPLATES } from '@modules/notifications/index.js';
+import { DEFAULT_SYSTEM_NOTIFICATION_TEMPLATES } from '@modules/templates/index.js';
 
 export const PRIVILEGED_DEFAULT_PASSWORD = '!P@ssw0rd#';
 

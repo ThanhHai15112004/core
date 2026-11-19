@@ -43,10 +43,74 @@ export interface ICredentialStoreAdapter {
   ): Promise<void>;
 }
 
+function createInMemoryCredentialStoreAdapter(): ICredentialStoreAdapter {
+  const store = new Map<
+    number,
+    {
+      passwordHash: string;
+      passwordChangedAt: Date | null;
+      passwordHistoryHashes: string[];
+    }
+  >();
+
+  return {
+    getByUserId: async (userId: number) => {
+      const uid = Number(userId);
+      const entry = store.get(uid);
+      if (!entry) return null;
+      return {
+        userId: uid,
+        passwordHash: entry.passwordHash,
+        passwordChangedAt: entry.passwordChangedAt,
+        passwordHistoryHashes: entry.passwordHistoryHashes,
+      };
+    },
+    getByUserIds: async (userIds: readonly number[]) => {
+      const result = new Map<number, StoredCredentialRecord>();
+      for (const rawId of userIds) {
+        const uid = Number(rawId);
+        const entry = store.get(uid);
+        if (entry) {
+          result.set(uid, {
+            userId: uid,
+            passwordHash: entry.passwordHash,
+            passwordChangedAt: entry.passwordChangedAt,
+            passwordHistoryHashes: entry.passwordHistoryHashes,
+          });
+        }
+      }
+      return result;
+    },
+    saveUserPasswordHash: async (userId, passwordHash, options) => {
+      const uid = Number(userId);
+      const changedAt =
+        options?.passwordChangedAt !== undefined ? options.passwordChangedAt : new Date();
+      const existing = store.get(uid);
+      let nextHistory = existing ? [...existing.passwordHistoryHashes] : [];
+      if (
+        options?.recordHistory !== false &&
+        existing?.passwordHash &&
+        existing.passwordHash !== passwordHash
+      ) {
+        const maxHistory = Math.max(1, Math.min(20, options?.maxHistory ?? 10));
+        nextHistory = [
+          existing.passwordHash,
+          ...nextHistory.filter((h) => h !== existing.passwordHash),
+        ].slice(0, maxHistory);
+      }
+      store.set(uid, {
+        passwordHash,
+        passwordChangedAt: changedAt,
+        passwordHistoryHashes: nextHistory,
+      });
+    },
+  };
+}
+
 @Injectable()
 export class PasswordHasherService {
   private defaultAlgorithm: PasswordHashAlgorithm = 'SCRYPT';
-  private credentialStoreAdapter?: ICredentialStoreAdapter;
+  private credentialStoreAdapter: ICredentialStoreAdapter = createInMemoryCredentialStoreAdapter();
 
   /** Đăng ký adapter lưu trữ bảng `user_credentials` từ module `credentials` */
   public setCredentialStoreAdapter(adapter: ICredentialStoreAdapter): void {

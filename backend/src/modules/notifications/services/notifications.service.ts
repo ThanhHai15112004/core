@@ -1,4 +1,4 @@
-import { Inject, Injectable, Optional } from '@nestjs/common';
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { createPaginatedResult } from '@packages/http/index.js';
 import {
   BadRequestAppException,
@@ -94,6 +94,7 @@ import type { ResolvedNotificationRuntimeConfig } from '../types/notifications.t
 
 @Injectable()
 export class NotificationsService implements INotificationsPublicService, INotificationDispatcher {
+  private readonly logger = new Logger(NotificationsService.name);
   private readonly sequenceRegistry: SequenceRegistryService;
 
   constructor(
@@ -631,7 +632,12 @@ export class NotificationsService implements INotificationsPublicService, INotif
               ? `${input.idempotencyKey}:${channelName}`
               : `dispatch:${savedNotification.code}:${channelName}`,
           })
-          .catch(() => null);
+          .catch((err) => {
+            this.logger.warn(
+              `Failed to enqueue notification channel job (${channelName}) for ${savedNotification.code}: ${err instanceof Error ? err.message : String(err)}`,
+            );
+            return null;
+          });
       }
     }
 

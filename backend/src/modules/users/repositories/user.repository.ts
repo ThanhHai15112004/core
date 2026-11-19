@@ -56,7 +56,9 @@ export interface SearchUsersFilter {
   readonly search?: string | undefined;
   readonly status?: UserStatusCode | undefined;
   readonly roleId?: number | undefined;
+  readonly roleMemberUserIds?: readonly number[] | undefined;
   readonly organizationUnitId?: number | undefined;
+  readonly organizationMemberUserIds?: readonly number[] | undefined;
   readonly managerId?: number | undefined;
   readonly allowedUserIds?: readonly number[] | undefined;
   readonly scopeFilter?: ResolvedDataScopeFilter | undefined;
@@ -219,18 +221,32 @@ export class UserRepository extends BaseTypeOrmRepository<UserEntity> {
   }
 
   /** Đếm số người dùng thuộc tập đơn vị/chi nhánh trực tiếp tại DB (phục vụ kiểm tra ảnh hưởng xóa/di chuyển cây đơn vị) */
-  public async countUsersByOrganizationUnitIds(unitIds: readonly number[]): Promise<number> {
+  public async countUsersByOrganizationUnitIds(
+    unitIds: readonly number[],
+    memberUserIds?: readonly number[],
+  ): Promise<number> {
     const normalized = [
       ...new Set(unitIds.map((id) => Number(id)).filter((id) => Number.isInteger(id) && id > 0)),
     ];
     if (normalized.length === 0) {
       return 0;
     }
+    const normalizedMemberIds = [
+      ...new Set(
+        (memberUserIds ?? [])
+          .map((id) => Number(id))
+          .filter((id) => Number.isInteger(id) && id > 0),
+      ),
+    ];
     const qb = this.repository.createQueryBuilder('u');
-    qb.where(
-      '(u.primary_organization_unit_id IN (:...unitIds) OR EXISTS (SELECT 1 FROM user_organization_units uou WHERE uou.user_id = u.id AND uou.organization_unit_id IN (:...unitIds) AND uou.deleted_at IS NULL))',
-      { unitIds: normalized },
-    );
+    if (normalizedMemberIds.length > 0) {
+      qb.where('(u.primary_organization_unit_id IN (:...unitIds) OR u.id IN (:...memberUserIds))', {
+        unitIds: normalized,
+        memberUserIds: normalizedMemberIds,
+      });
+    } else {
+      qb.where('u.primary_organization_unit_id IN (:...unitIds)', { unitIds: normalized });
+    }
     return qb.getCount();
   }
 
@@ -411,17 +427,37 @@ export class UserRepository extends BaseTypeOrmRepository<UserEntity> {
     }
 
     if (filter.roleId !== undefined) {
-      qb.andWhere(
-        'EXISTS (SELECT 1 FROM user_roles ur WHERE ur.user_id = u.id AND ur.role_id = :roleId AND ur.deleted_at IS NULL)',
-        { roleId: filter.roleId },
-      );
+      const roleUserIds = [
+        ...new Set(
+          (filter.roleMemberUserIds ?? [])
+            .map((id) => Number(id))
+            .filter((id) => Number.isInteger(id) && id > 0),
+        ),
+      ];
+      if (roleUserIds.length === 0) {
+        return { items: [], total: 0 };
+      }
+      qb.andWhere('u.id IN (:...roleMemberUserIds)', { roleMemberUserIds: roleUserIds });
     }
 
     if (filter.organizationUnitId !== undefined) {
-      qb.andWhere(
-        '(u.primary_organization_unit_id = :orgId OR EXISTS (SELECT 1 FROM user_organization_units uou WHERE uou.user_id = u.id AND uou.organization_unit_id = :orgId AND uou.deleted_at IS NULL))',
-        { orgId: filter.organizationUnitId },
-      );
+      const orgMemberIds = [
+        ...new Set(
+          (filter.organizationMemberUserIds ?? [])
+            .map((id) => Number(id))
+            .filter((id) => Number.isInteger(id) && id > 0),
+        ),
+      ];
+      if (orgMemberIds.length > 0) {
+        qb.andWhere('(u.primary_organization_unit_id = :orgId OR u.id IN (:...orgMemberUserIds))', {
+          orgId: filter.organizationUnitId,
+          orgMemberUserIds: orgMemberIds,
+        });
+      } else {
+        qb.andWhere('u.primary_organization_unit_id = :orgId', {
+          orgId: filter.organizationUnitId,
+        });
+      }
     }
 
     this.applyDateRange(
@@ -445,14 +481,6 @@ export class UserRepository extends BaseTypeOrmRepository<UserEntity> {
     this.applyDataScope(qb, filter.scopeFilter, {
       userColumn: 'u.id',
       orgUnitColumn: 'u.primary_organization_unit_id',
-      orgMembershipSubquery: {
-        table: 'user_organization_units',
-        alias: 'uou_s',
-        foreignKeyColumn: 'user_id',
-        entityPrimaryColumn: 'u.id',
-        orgUnitColumn: 'organization_unit_id',
-        softDeleteColumn: 'deleted_at',
-      },
     });
 
     this.applySort(qb, filter, USER_SORT_COLUMN_MAP, {

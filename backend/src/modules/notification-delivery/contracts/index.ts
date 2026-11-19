@@ -368,3 +368,12 @@ export interface INotificationDeliveryPublicService {
 }
 
 export const NOTIFICATION_DELIVERY_PUBLIC_SERVICE = Symbol('NOTIFICATION_DELIVERY_PUBLIC_SERVICE');
+export {
+  EmailChannelProviderAdapter,
+  NotificationChannelAdapterRegistry,
+  PushChannelProviderAdapter,
+  SmsChannelProviderAdapter,
+  type ChannelProviderSendRequest,
+  type ChannelProviderSendResult,
+  type INotificationChannelProviderAdapter,
+} from '../adapters/notification-channel.adapters.js';

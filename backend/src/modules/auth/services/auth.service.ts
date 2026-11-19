@@ -22,7 +22,6 @@ import {
   type AdminResetMfaResponse,
   type AdminResetMfaResult,
   type DisableMfaRequest,
-  MfaChallengeAttemptTracker,
   MfaService,
   type MfaStatusResponse,
   type SendEmailOtpRequest,
@@ -30,9 +29,6 @@ import {
   type SendSmsOtpRequest,
   type SendSmsOtpResponse,
   type VerifyMfaChallengeRequest,
-  issueLoginMfaStep2Challenge,
-  verifyAndEnforceLoginAccountStatus,
-  verifyLoginPasswordAndRehashIfNeeded,
 } from '@modules/mfa/index.js';
 import {
   CREDENTIALS_PUBLIC_SERVICE,
@@ -42,6 +38,11 @@ import {
 } from '@modules/credentials/index.js';
 import type { IAuthPublicService } from '../contracts/index.js';
 import { DEFAULT_ADMIN_ROLE_CODES, STEP_UP_TOKEN_TTL_SECONDS } from '../enum/auth.enum.js';
+import {
+  issueLoginMfaStep2Challenge,
+  verifyAndEnforceLoginAccountStatus,
+  verifyLoginPasswordAndRehashIfNeeded,
+} from '../helpers/auth-login.helper.js';
 import { VerificationService } from './verification.service.js';
 import type {
   LoginRequest,
@@ -60,7 +61,6 @@ import type {
 
 @Injectable()
 export class AuthService implements IAuthPublicService {
-  private readonly mfaAttemptTracker: MfaChallengeAttemptTracker;
   private readonly settingRegistry: SettingRegistryService;
 
   constructor(
@@ -80,10 +80,6 @@ export class AuthService implements IAuthPublicService {
     @Optional() private readonly transactionManager?: TransactionManager,
   ) {
     this.settingRegistry = settingRegistry ?? defaultSettingRegistry;
-    this.mfaAttemptTracker = new MfaChallengeAttemptTracker(
-      () => this.cacheProvider,
-      this.settingRegistry,
-    );
     this.sessionService.setSecuritySettingsService(this.securitySettingsService);
     this.mfaService.registerSecurityEventDelegate?.((evt) =>
       this.sessionService.recordAuthEvent({
@@ -344,7 +340,7 @@ export class AuthService implements IAuthPublicService {
     }
 
     const challengeHash = this.passwordHasher.sha256(dto.mfaChallengeToken);
-    const currentAttempts = await this.mfaAttemptTracker.getAttempts(challengeHash);
+    const currentAttempts = await this.mfaService.getChallengeAttempts(challengeHash);
     const settings = await this.securitySettingsService?.getSettings();
     const maxMfaAttempts =
       settings?.otpMaxAttempts ??
@@ -367,7 +363,7 @@ export class AuthService implements IAuthPublicService {
     const userId = Number(challengePayload.sub);
     const isCodeValid = await this.mfaService.verifyMfaCode(userId, dto.code, dto.method);
     if (!isCodeValid) {
-      await this.mfaAttemptTracker.incrementAttempts(challengeHash, currentAttempts);
+      await this.mfaService.incrementChallengeAttempts(challengeHash, currentAttempts);
       await this.sessionService.recordAuthEvent({
         userId,
         identifier: challengePayload.email ?? null,
@@ -381,7 +377,7 @@ export class AuthService implements IAuthPublicService {
       throw new UnauthorizedAppException('auth.invalidMfaCode');
     }
 
-    await this.mfaAttemptTracker.clearAttempts(challengeHash);
+    await this.mfaService.clearChallengeAttempts(challengeHash);
 
     await this.usersPublicService.recordLoginSuccess(userId);
     const identity = await this.usersPublicService.findAuthUserById(userId);

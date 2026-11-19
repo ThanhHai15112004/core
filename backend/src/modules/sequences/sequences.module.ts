@@ -35,13 +35,7 @@ new CoreI18nService().registerNamespace('sequences', { vi: viSequences, en: enSe
       useExisting: SequencesService,
     },
   ],
-  exports: [
-    SequencesService,
-    SEQUENCES_PUBLIC_SERVICE,
-    SequenceRuleRepository,
-    SequenceCounterRepository,
-    SequenceRuleHistoryRepository,
-  ],
+  exports: [SequencesService, SEQUENCES_PUBLIC_SERVICE],
 })
 export class SequencesModule {
   constructor(@Optional() i18n?: CoreI18nService) {

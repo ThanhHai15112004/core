@@ -14,6 +14,7 @@ import { UserRepository } from './repositories/user.repository.js';
 import { UserProfileRepository } from './repositories/user-profile.repository.js';
 import { UserStatusHistoryRepository } from './repositories/user-status-history.repository.js';
 import { UsersMapper } from './mappers/users.mapper.js';
+import { UserIdentityBridgeService } from './services/user-identity-bridge.service.js';
 import { UsersService } from './services/users.service.js';
 import { UsersController } from './controllers/users.controller.js';
 import { UserImportService } from './import/user-import.service.js';
@@ -43,6 +44,7 @@ new CoreI18nService().registerNamespace('users', {
     UserProfileRepository,
     UserStatusHistoryRepository,
     UsersMapper,
+    UserIdentityBridgeService,
     UsersService,
     UserImportService,
     UserExportService,
@@ -53,14 +55,7 @@ new CoreI18nService().registerNamespace('users', {
       useExisting: UsersService,
     },
   ],
-  exports: [
-    UsersService,
-    UserImportService,
-    UserExportService,
-    UserReportService,
-    UserSearchService,
-    USERS_PUBLIC_SERVICE,
-  ],
+  exports: [UsersService, USERS_PUBLIC_SERVICE],
 })
 export class UsersModule {
   constructor(@Optional() i18n?: CoreI18nService) {

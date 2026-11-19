@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { TrafficOpsModule } from '@modules/traffic/index.js';
+import { TrafficModule } from '@modules/traffic/index.js';
 import { RuntimesModule } from '@modules/runtimes/index.js';
 import { PerformanceController } from './controllers/performance.controller.js';
 import { PerformanceService } from './services/performance.service.js';
@@ -9,7 +9,7 @@ import { PerformanceMonitorService } from './services/performance-monitor.servic
 
 /** API phân tích hiệu năng cho System Console (`/ops/performance/*`) + monitor ghi sự kiện nghẽn. */
 @Module({
-  imports: [TrafficOpsModule, RuntimesModule],
+  imports: [TrafficModule, RuntimesModule],
   controllers: [PerformanceController],
   providers: [
     PerformanceService,
@@ -19,4 +19,6 @@ import { PerformanceMonitorService } from './services/performance-monitor.servic
   ],
   exports: [PerformanceService],
 })
-export class PerformanceOpsModule {}
+export class PerformanceModule {}
+
+export { PerformanceModule as PerformanceOpsModule };

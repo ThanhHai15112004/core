@@ -17,6 +17,10 @@
     "comments.internal_notes",
     "comments.manage"
   ],
+  "events": {
+    "published": [],
+    "subscribed": []
+  },
   "database": {
     "hasMigrations": true,
     "tables": [

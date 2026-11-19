@@ -1,5 +1,4 @@
-import { Injectable, Optional } from '@nestjs/common';
-import { z } from 'zod';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import {
   BadRequestAppException,
   ForbiddenAppException,
@@ -20,7 +19,6 @@ import {
   safeJsonParseObject,
   validateImportRowsAndCells,
   type ImportCellIssue,
-  type ImportDuplicateStrategy,
   type ImportHistoryQueryFilter,
   type ImportHistoryRecord,
   type ImportPreviewResult,
@@ -40,41 +38,9 @@ import type {
 } from '../requests/imports.requests.js';
 import type { ExecuteImportResultResponse } from '../responses/imports.response.js';
 
-interface LegacyUserImportAdapter {
-  previewImport(dto: Readonly<Record<string, unknown>>): Promise<ImportPreviewResult>;
-  bulkImport(
-    dto: Readonly<Record<string, unknown>>,
-    actorId?: number,
-  ): Promise<Readonly<Record<string, unknown>>>;
-}
-
-interface LegacyUserExportTemplateAdapter {
-  exportImportTemplate(format?: 'csv' | 'xlsx'): ImportTemplateFileResult;
-}
-
-interface LegacyOrgImportAdapter {
-  exportImportTemplate(format?: 'csv' | 'xlsx'): ImportTemplateFileResult;
-  bulkImportUnits(
-    dto: Readonly<Record<string, unknown>>,
-    actorId?: number,
-    options?: { readonly skipHistoryRecord?: boolean },
-  ): Promise<Readonly<Record<string, unknown>>>;
-}
-
-interface LegacyCodesImportAdapter {
-  exportImportTemplate(format?: 'csv' | 'xlsx'): ImportTemplateFileResult;
-  bulkImportCodeValues(
-    dto: Readonly<Record<string, unknown>>,
-    typeCode?: string,
-    actorId?: number,
-    options?: { readonly skipHistoryRecord?: boolean },
-  ): Promise<Readonly<Record<string, unknown>>>;
-}
-
-const DEFAULT_FALLBACK_ROW_SCHEMA = z.record(z.string(), z.unknown());
-
 @Injectable()
 export class ImportsService implements IImportsPublicService {
+  private readonly logger = new Logger(ImportsService.name);
   private readonly importRegistry: ImportRegistryService;
   private readonly settingRegistry: SettingRegistryService;
 
@@ -82,154 +48,13 @@ export class ImportsService implements IImportsPublicService {
     @Optional() private readonly historyRepository?: ImportHistoryRepository,
     @Optional() importRegistry?: ImportRegistryService,
     @Optional() settingRegistry?: SettingRegistryService,
-    @Optional() private readonly userImportService?: LegacyUserImportAdapter,
-    @Optional() private readonly userExportService?: LegacyUserExportTemplateAdapter,
-    @Optional() private readonly organizationsService?: LegacyOrgImportAdapter,
-    @Optional() private readonly codesService?: LegacyCodesImportAdapter,
   ) {
     this.importRegistry = importRegistry ?? defaultImportRegistry;
     this.settingRegistry = settingRegistry ?? defaultSettingRegistry;
-    this.ensureDefaultProfilesRegistered();
   }
 
   private ensureDefaultProfilesRegistered(): void {
-    const existingUsers =
-      this.importRegistry.getProfile('users') ?? defaultImportRegistry.getProfile('users');
-    if (
-      (!existingUsers || !existingUsers.executeImport || !existingUsers.exportTemplate) &&
-      (this.userImportService || this.userExportService)
-    ) {
-      this.importRegistry.registerProfile({
-        profileCode: 'users',
-        module: 'users',
-        columns: existingUsers?.columns ?? [
-          { field: 'username', header: 'username', required: true },
-          { field: 'email', header: 'email', required: true },
-        ],
-        rowSchema: existingUsers?.rowSchema ?? DEFAULT_FALLBACK_ROW_SCHEMA,
-        uniqueKeyFields: existingUsers?.uniqueKeyFields ?? ['email', 'username'],
-        requiredPermission: 'users.import',
-        ...(existingUsers?.findExistingDuplicates
-          ? { findExistingDuplicates: existingUsers.findExistingDuplicates }
-          : {}),
-        ...(this.userExportService
-          ? {
-              exportTemplate: (format: 'csv' | 'xlsx') =>
-                this.userExportService!.exportImportTemplate(format),
-            }
-          : existingUsers?.exportTemplate
-            ? { exportTemplate: existingUsers.exportTemplate }
-            : {}),
-        ...(this.userImportService
-          ? {
-              previewImport: (dto) =>
-                this.userImportService!.previewImport({
-                  ...(dto.items ? { items: dto.items } : {}),
-                  ...(dto.csvContent ? { csvContent: dto.csvContent } : {}),
-                  ...(dto.xlsxBase64 ? { xlsxBase64: dto.xlsxBase64 } : {}),
-                  ...(dto.columnMapping ? { columnMapping: dto.columnMapping } : {}),
-                  ...(dto.duplicateStrategy ? { duplicateStrategy: dto.duplicateStrategy } : {}),
-                  skipDuplicates: dto.skipDuplicates ?? true,
-                  previewLimit: dto.previewLimit ?? 20,
-                }),
-              executeImport: async (dto, actorId) =>
-                await this.userImportService!.bulkImport(
-                  {
-                    ...(dto['items'] ? { items: dto['items'] } : {}),
-                    ...(typeof dto['csvContent'] === 'string'
-                      ? { csvContent: dto['csvContent'] }
-                      : {}),
-                    ...(typeof dto['xlsxBase64'] === 'string'
-                      ? { xlsxBase64: dto['xlsxBase64'] }
-                      : {}),
-                    ...(typeof dto['fileName'] === 'string' ? { fileName: dto['fileName'] } : {}),
-                    ...(dto['columnMapping']
-                      ? {
-                          columnMapping: dto['columnMapping'] as Record<
-                            string,
-                            string | number | null
-                          >,
-                        }
-                      : {}),
-                    ...(typeof dto['duplicateStrategy'] === 'string'
-                      ? {
-                          duplicateStrategy: dto['duplicateStrategy'] as ImportDuplicateStrategy,
-                        }
-                      : {}),
-                    skipDuplicates:
-                      typeof dto['skipDuplicates'] === 'boolean' ? dto['skipDuplicates'] : true,
-                    ...(typeof dto['defaultPassword'] === 'string'
-                      ? { defaultPassword: dto['defaultPassword'] }
-                      : {}),
-                    async: dto['async'] === true,
-                  },
-                  actorId,
-                ),
-            }
-          : {}),
-      });
-    }
-
-    const existingOrgs =
-      this.importRegistry.getProfile('organizations') ??
-      defaultImportRegistry.getProfile('organizations');
-    if (this.organizationsService && (!existingOrgs || !existingOrgs.executeImport)) {
-      this.importRegistry.registerProfile({
-        profileCode: 'organizations',
-        module: 'organizations',
-        uniqueKeyFields: existingOrgs?.uniqueKeyFields ?? ['code'],
-        requiredPermission: 'organizations.manage',
-        columns: existingOrgs?.columns ?? [
-          { field: 'code', header: 'code', required: true },
-          { field: 'name', header: 'name', required: true },
-        ],
-        rowSchema: existingOrgs?.rowSchema ?? DEFAULT_FALLBACK_ROW_SCHEMA,
-        exportTemplate: (format: 'csv' | 'xlsx') =>
-          this.organizationsService!.exportImportTemplate(format),
-        executeImport: async (dto, actorId) =>
-          await this.organizationsService!.bulkImportUnits(
-            {
-              ...(dto['items'] ? { items: dto['items'] } : {}),
-              ...(typeof dto['csvContent'] === 'string' ? { csvContent: dto['csvContent'] } : {}),
-              ...(typeof dto['xlsxBase64'] === 'string' ? { xlsxBase64: dto['xlsxBase64'] } : {}),
-              skipDuplicates:
-                typeof dto['skipDuplicates'] === 'boolean' ? dto['skipDuplicates'] : true,
-            },
-            actorId,
-            { skipHistoryRecord: true },
-          ),
-      });
-    }
-
-    const existingCodes =
-      this.importRegistry.getProfile('codes') ?? defaultImportRegistry.getProfile('codes');
-    if (this.codesService && (!existingCodes || !existingCodes.executeImport)) {
-      this.importRegistry.registerProfile({
-        profileCode: 'codes',
-        module: 'codes',
-        uniqueKeyFields: existingCodes?.uniqueKeyFields ?? ['code'],
-        requiredPermission: 'codes.manage',
-        columns: existingCodes?.columns ?? [
-          { field: 'typeCode', header: 'typeCode', required: true },
-          { field: 'code', header: 'code', required: true },
-        ],
-        rowSchema: existingCodes?.rowSchema ?? DEFAULT_FALLBACK_ROW_SCHEMA,
-        exportTemplate: (format: 'csv' | 'xlsx') => this.codesService!.exportImportTemplate(format),
-        executeImport: async (dto, actorId) =>
-          await this.codesService!.bulkImportCodeValues(
-            {
-              ...(dto['items'] ? { items: dto['items'] } : {}),
-              ...(typeof dto['csvContent'] === 'string' ? { csvContent: dto['csvContent'] } : {}),
-              ...(typeof dto['xlsxBase64'] === 'string' ? { xlsxBase64: dto['xlsxBase64'] } : {}),
-              skipDuplicates:
-                typeof dto['skipDuplicates'] === 'boolean' ? dto['skipDuplicates'] : true,
-            },
-            undefined,
-            actorId,
-            { skipHistoryRecord: true },
-          ),
-      });
-    }
+    // Profiles are registered declaratively by each module via ImportRegistryService
   }
 
   /** Đăng ký một cấu hình Import nghiệp vụ của module vào `ImportRegistryService` */
@@ -553,7 +378,12 @@ export class ImportsService implements IImportsPublicService {
     }
 
     if (this.historyRepository) {
-      const entity = await this.historyRepository.findById(historyId).catch(() => null);
+      const entity = await this.historyRepository.findById(historyId).catch((err) => {
+        this.logger.warn(
+          `Failed to query import history #${historyId}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+        return null;
+      });
       if (entity) {
         return this.mapEntityToRecord(entity);
       }

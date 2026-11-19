@@ -4,7 +4,7 @@ import { CoreConfigService } from '@packages/config/index.js';
 import { safeJsonParse as parse } from '@packages/kernel/index.js';
 import { RedisService } from '@packages/redis/index.js';
 import type { PerfSeverity, RuleKey } from '../responses/performance.response.js';
-import type { ActiveBottleneck } from './performance-rules.js';
+import type { ActiveBottleneck } from '../helpers/performance-rules.helper.js';
 
 /** Một lần chuyển trạng thái điểm nghẽn do Performance Monitor ghi. */
 export interface StoredPerfEvent {

@@ -1,18 +1,16 @@
 import { describe, it, expect, jest } from '@jest/globals';
+import { LogsOpsService, LogsStoreService, type LogAuditService } from '@modules/logs-ops/index.js';
 import {
   EMPTY_LOG_FILTER,
-  LogsOpsService,
-  LogsStoreService,
   decodeLogCursor,
   encodeLogCursor,
   looksLikeId,
   matchesLog,
+  newerThan,
   normalizeStoredEntry,
   olderThan,
-  newerThan,
   parseLogQuery,
-  type LogAuditService,
-} from '@modules/logs-ops/index.js';
+} from '@modules/logs-ops/helpers/log-query.helper.js';
 import type { CoreConfigService } from '@packages/config/index.js';
 import { LogStreamReader, type LogEntry } from '@packages/logging/index.js';
 import type { RedisService } from '@packages/redis/index.js';

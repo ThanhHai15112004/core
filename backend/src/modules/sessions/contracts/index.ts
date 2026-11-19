@@ -9,6 +9,10 @@ import type {
 
 export * from '../enum/sessions.enum.js';
 export * from '../types/sessions.types.js';
+export {
+  extractDeviceNameFromUserAgent,
+  inferTrustedDeviceName,
+} from '../helpers/session-device.helper.js';
 
 export interface ISessionsPublicService {
   createSession(

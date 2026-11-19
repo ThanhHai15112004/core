@@ -1,4 +1,4 @@
-import { Injectable, Optional } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import {
   ExportRegistryService,
   ForbiddenAppException,
@@ -25,165 +25,20 @@ import type {
 } from '../requests/exports.requests.js';
 import type { ExecuteExportResponse } from '../responses/exports.response.js';
 
-interface LegacyUserExportAdapter {
-  exportUsersCsv(query: ExecuteExportQuery, actor?: UserIdentity): Promise<ExecuteExportResponse>;
-}
-
-interface LegacyUsersStepUpAdapter {
-  verifySensitiveActionStepUp(
-    userId: number | undefined,
-    stepUpToken: string | undefined,
-    requireStepUp: boolean | undefined,
-    action: string,
-  ): Promise<void>;
-}
-
-interface LegacyOrgExportAdapter {
-  exportUnits(
-    query: {
-      readonly search?: string;
-      readonly status?: 1 | 2 | 3;
-      readonly format: 'csv' | 'xlsx';
-    },
-    actorId?: number,
-    options?: { readonly skipHistoryRecord?: boolean },
-  ): Promise<{
-    readonly fileName: string;
-    readonly contentType: string;
-    readonly format: 'csv' | 'xlsx';
-    readonly totalExported: number;
-    readonly csvContent: string;
-    readonly xlsxBase64: string;
-  }>;
-}
-
-interface LegacyCodesExportAdapter {
-  exportCodes(
-    query: {
-      readonly search?: string;
-      readonly format: 'csv' | 'xlsx';
-    },
-    actorId?: number,
-    options?: { readonly skipHistoryRecord?: boolean },
-  ): Promise<{
-    readonly fileName: string;
-    readonly contentType: string;
-    readonly format: 'csv' | 'xlsx';
-    readonly totalExported: number;
-    readonly csvContent: string;
-    readonly xlsxBase64: string;
-  }>;
-}
-
 @Injectable()
 export class ExportsService implements IExportsPublicService {
+  private readonly logger = new Logger(ExportsService.name);
   private readonly exportRegistry: ExportRegistryService;
 
   constructor(
     @Optional() private readonly historyRepository?: ExportHistoryRepository,
     @Optional() exportRegistry?: ExportRegistryService,
-    @Optional() private readonly userExportService?: LegacyUserExportAdapter,
-    @Optional() private readonly usersService?: LegacyUsersStepUpAdapter,
-    @Optional() private readonly organizationsService?: LegacyOrgExportAdapter,
-    @Optional() private readonly codesService?: LegacyCodesExportAdapter,
   ) {
     this.exportRegistry = exportRegistry ?? defaultExportRegistry;
-    this.ensureDefaultExecutorsRegistered();
   }
 
   private ensureDefaultExecutorsRegistered(): void {
-    if (
-      this.userExportService &&
-      !this.exportRegistry.resolveWorkerExecutor({ profileCode: 'users' })
-    ) {
-      this.exportRegistry.registerWorkerExecutor({
-        profileCode: 'users',
-        module: 'users',
-        topic: 'users.export',
-        requiredPermission: 'users.export',
-        executeExport: async (input) => {
-          const query = (input.query ?? {}) as ExecuteExportQuery;
-          if (this.usersService) {
-            await this.usersService.verifySensitiveActionStepUp(
-              (input.actor as UserIdentity | undefined)?.id ?? input.actorId,
-              query.stepUpToken,
-              query.requireStepUp,
-              'users.export',
-            );
-          }
-          return this.userExportService!.exportUsersCsv(
-            query,
-            input.actor as UserIdentity | undefined,
-          );
-        },
-      });
-    }
-
-    if (
-      this.organizationsService &&
-      !this.exportRegistry.resolveWorkerExecutor({ profileCode: 'organizations' })
-    ) {
-      this.exportRegistry.registerWorkerExecutor({
-        profileCode: 'organizations',
-        module: 'organizations',
-        topic: 'organizations.export',
-        requiredPermission: 'organizations.read',
-        executeExport: async (input) => {
-          const query = (input.query ?? {}) as ExecuteExportQuery;
-          const format: 'csv' | 'xlsx' = input.format === 'xlsx' ? 'xlsx' : 'csv';
-          const orgStatus =
-            query.status === 1 || query.status === 2 || query.status === 3
-              ? query.status
-              : undefined;
-          const res = await this.organizationsService!.exportUnits(
-            {
-              ...(query.search ? { search: query.search } : {}),
-              ...(orgStatus !== undefined ? { status: orgStatus } : {}),
-              format,
-            },
-            input.actorId,
-            { skipHistoryRecord: true },
-          );
-          return {
-            fileName: res.fileName,
-            contentType: res.contentType,
-            format: res.format,
-            totalExported: res.totalExported,
-            csvContent: res.csvContent,
-            xlsxBase64: res.xlsxBase64,
-          };
-        },
-      });
-    }
-
-    if (this.codesService && !this.exportRegistry.resolveWorkerExecutor({ profileCode: 'codes' })) {
-      this.exportRegistry.registerWorkerExecutor({
-        profileCode: 'codes',
-        module: 'codes',
-        topic: 'codes.export',
-        requiredPermission: 'codes.read',
-        executeExport: async (input) => {
-          const query = (input.query ?? {}) as ExecuteExportQuery;
-          const format: 'csv' | 'xlsx' = input.format === 'xlsx' ? 'xlsx' : 'csv';
-          const res = await this.codesService!.exportCodes(
-            {
-              ...(query.search ? { search: query.search } : {}),
-              format,
-            },
-            input.actorId,
-            { skipHistoryRecord: true },
-          );
-          return {
-            fileName: res.fileName,
-            contentType: res.contentType,
-            format: res.format,
-            totalExported: res.totalExported,
-            csvContent: res.csvContent,
-            xlsxBase64: res.xlsxBase64,
-          };
-        },
-      });
-    }
+    // Executors are registered declaratively by each module via ExportRegistryService
   }
 
   /** 8.3.3 — Đăng ký hoặc thay thế Pluggable PDF Adapter dùng chung */
@@ -211,15 +66,6 @@ export class ExportsService implements IExportsPublicService {
     }
 
     this.assertProfilePermission(executor.requiredPermission, actor);
-
-    if (cleanProfile === 'users' && this.usersService) {
-      await this.usersService.verifySensitiveActionStepUp(
-        actor?.id,
-        query.stepUpToken,
-        query.requireStepUp,
-        'users.export',
-      );
-    }
 
     const jobResult = await executor.executeExport({
       query: query as unknown as Readonly<Record<string, unknown>>,
@@ -392,7 +238,12 @@ export class ExportsService implements IExportsPublicService {
     }
 
     if (this.historyRepository) {
-      const entity = await this.historyRepository.findById(historyId).catch(() => null);
+      const entity = await this.historyRepository.findById(historyId).catch((err) => {
+        this.logger.warn(
+          `Failed to query export history #${historyId}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+        return null;
+      });
       if (entity) {
         return this.mapEntityToRecord(entity);
       }

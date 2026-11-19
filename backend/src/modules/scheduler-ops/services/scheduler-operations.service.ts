@@ -27,7 +27,7 @@ import type {
   SchedulerMisfirePolicy,
   SchedulerOperationAction,
   SchedulerOperationRecord,
-} from '../contracts/scheduler.types.js';
+} from '../types/scheduler.types.js';
 import {
   SchedulerActionRejectedException,
   SchedulerNotFoundException,

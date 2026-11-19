@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { CoreConfigService } from '@packages/config/index.js';
 import { PrometheusQueryClient, round, type PromSample } from '@packages/metrics/index.js';
 import { internalRouteRegex } from '@modules/traffic/index.js';
-import type { RuleSnapshot } from './performance-rules.js';
+import type { RuleSnapshot } from '../helpers/performance-rules.helper.js';
 
 const H = 'http_request_duration_seconds';
 const MB = 1024 * 1024;
@@ -101,12 +101,12 @@ export class PerformanceInputsService {
     return { w, off, inc: (m: string) => `increase(${m}[${w}]${off})` };
   }
 
-  /** Trích xuất giá trị số từ đối tượng đo lường */
+  /** Truy vấn một giá trị vô hướng (scalar) từ Prometheus theo biểu thức PromQL */
   private v(expr: string): Promise<number | null> {
     return this.prom.value(expr);
   }
 
-  /** Chuẩn hóa chuỗi truy vấn đầu vào */
+  /** Thực thi truy vấn vector tức thời từ Prometheus theo biểu thức PromQL */
   private q(expr: string): Promise<PromSample[]> {
     return this.prom.safeQuery(expr);
   }
@@ -116,7 +116,7 @@ export class PerformanceInputsService {
     const { w, off, inc } = this.range(seconds, offsetSec);
     const sel = this.httpSel;
     const sel5xx = sel.replace('{', '{status=~"5..",');
-    /** Làm tròn giá trị số theo độ chia nhỏ nhất (quantum) */
+    /** Tính phân vị (quantile p50/p95/p99) từ histogram độ trễ HTTP */
     const quant = (p: number) =>
       this.v(`histogram_quantile(${p}, sum by (le) (rate(${H}_bucket${sel}[${w}]${off})))`);
     const [

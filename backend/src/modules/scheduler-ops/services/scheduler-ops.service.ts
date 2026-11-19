@@ -21,7 +21,7 @@ import type {
   MissedExecutionRecord,
   SchedulerFailureAlertRecord,
   SchedulerOperationRecord,
-} from '../contracts/scheduler.types.js';
+} from '../types/scheduler.types.js';
 import { SchedulerNotFoundException } from '../exceptions/scheduler-ops.exceptions.js';
 import { liveQueues, readSchedulerHeartbeat, startOfDay, utcOffsetOf } from './scheduler-utils.js';
 import type {

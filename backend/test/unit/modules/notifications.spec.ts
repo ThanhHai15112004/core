@@ -11,9 +11,6 @@ import type {
 import type { IRolesPublicService, RoleSummary } from '@modules/roles/contracts/index.js';
 import type { IUsersPublicService } from '@modules/users/contracts/index.js';
 import {
-  DEFAULT_SYSTEM_NOTIFICATION_TEMPLATES,
-  DEFAULT_SYSTEM_TEMPLATE_USAGES,
-  EmailChannelProviderAdapter,
   NOTIFICATION_CATEGORY,
   NOTIFICATION_CHANNEL,
   NOTIFICATION_DELIVERY_STATUS,
@@ -25,19 +22,19 @@ import {
   NOTIFICATION_TARGET_TYPE,
   NOTIFICATION_TEMPLATE_TYPE,
   NOTIFICATION_TEMPLATE_VERSION_STATUS,
-  NotificationChannelAdapterRegistry,
-  NotificationChannelsService,
-  NotificationsController,
-  NotificationsMapper,
   NotificationsService,
+} from '@modules/notifications/index.js';
+import { NotificationsController } from '@modules/notifications/controllers/notifications.controller.js';
+import { NotificationsMapper } from '@modules/notifications/mappers/notifications.mapper.js';
+import {
+  EmailChannelProviderAdapter,
+  NotificationChannelAdapterRegistry,
+  NotificationDeliveryService as NotificationChannelsService,
   PushChannelProviderAdapter,
   SmsChannelProviderAdapter,
-  calculateSmsSegments,
-} from '@modules/notifications/index.js';
-import {
-  NotificationDeliveryController,
-  NotificationDeliveryMapper,
 } from '@modules/notification-delivery/index.js';
+import { NotificationDeliveryController } from '@modules/notification-delivery/controllers/notification-delivery.controller.js';
+import { NotificationDeliveryMapper } from '@modules/notification-delivery/mappers/notification-delivery.mapper.js';
 import type { NotificationDeliveryEntity } from '@modules/notification-delivery/entities/notification-delivery.entity.js';
 import type { NotificationPushSubscriptionEntity } from '@modules/notification-delivery/entities/notification-push-subscription.entity.js';
 import type { NotificationQuotaUsageEntity } from '@modules/notification-delivery/entities/notification-quota-usage.entity.js';
@@ -48,10 +45,13 @@ import type {
   NotificationSuppressionFilterOptions,
 } from '@modules/notification-delivery/repositories/notification-delivery.repository.js';
 import {
-  TemplatesController,
-  TemplatesMapper,
+  DEFAULT_SYSTEM_NOTIFICATION_TEMPLATES,
+  DEFAULT_SYSTEM_TEMPLATE_USAGES,
   TemplatesService,
+  calculateSmsSegments,
 } from '@modules/templates/index.js';
+import { TemplatesController } from '@modules/templates/controllers/templates.controller.js';
+import { TemplatesMapper } from '@modules/templates/mappers/templates.mapper.js';
 import type { NotificationTemplateUsageEntity } from '@modules/templates/entities/notification-template-usage.entity.js';
 import type { NotificationTemplateVersionEntity } from '@modules/templates/entities/notification-template-version.entity.js';
 import type { NotificationTemplateEntity } from '@modules/templates/entities/notification-template.entity.js';

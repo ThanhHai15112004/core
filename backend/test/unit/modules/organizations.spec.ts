@@ -1,16 +1,18 @@
 import {
+  ORG_UNIT_STATUS,
+  ORG_UNIT_TYPE,
+  OrganizationsService,
+  type OrganizationUnitResponse,
+} from '../../../src/modules/organizations/index.js';
+import {
   buildOrganizationTree,
   calculateAncestorCount,
   calculateSubtreeDepthBelow,
   collectDescendantUnitIds,
   computeOrganizationStats,
   ensureHierarchyDepthAllowed,
-  ORG_UNIT_STATUS,
-  ORG_UNIT_TYPE,
-  OrganizationsMapper,
-  OrganizationsService,
-  type OrganizationUnitResponse,
-} from '../../../src/modules/organizations/index.js';
+} from '../../../src/modules/organizations/helpers/organization-hierarchy.helper.js';
+import { OrganizationsMapper } from '../../../src/modules/organizations/mappers/organizations.mapper.js';
 import type { OrganizationUnitEntity } from '../../../src/modules/organizations/entities/organization-unit.entity.js';
 
 describe('Organizations Module Unit Tests (Section 9.1)', () => {

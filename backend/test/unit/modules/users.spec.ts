@@ -17,11 +17,6 @@ import type { BaseMessagePublisherProvider } from '@packages/messaging/index.js'
 import {
   USER_GENDER,
   USER_STATUS,
-  UserExportService,
-  UserImportService,
-  UserReportService,
-  UserSearchService,
-  UsersMapper,
   UsersService,
   getUserGenderName,
   getUserStatusName,
@@ -29,9 +24,16 @@ import {
   parseUserGender,
   parseUserStatus,
   resolveVietnameseNameParts,
+} from '@modules/users/index.js';
+import { UsersMapper } from '@modules/users/mappers/users.mapper.js';
+import {
   validateAndApplyUserUpdateFields,
   validateAndPrepareCreateUserContext,
-} from '@modules/users/index.js';
+} from '@modules/users/helpers/user-profile-hydration.helper.js';
+import { UserImportService } from '@modules/users/import/user-import.service.js';
+import { UserExportService } from '@modules/users/export/user-export.service.js';
+import { UserReportService } from '@modules/users/reports/user-report.service.js';
+import { UserSearchService } from '@modules/users/search/user-search.service.js';
 import type { UserEntity } from '@modules/users/entities/user.entity.js';
 import type { UserProfileEntity } from '@modules/users/entities/user-profile.entity.js';
 import type { UserRepository } from '@modules/users/repositories/user.repository.js';
@@ -54,8 +56,6 @@ function createMockUserEntity(
     email: overrides.email,
     phone: overrides.phone ?? null,
     phoneHash: overrides.phoneHash ?? null,
-    passwordHash: overrides.passwordHash ?? 'hashed_pwd',
-    passwordHistoryHashesJson: overrides.passwordHistoryHashesJson ?? null,
     status: overrides.status ?? USER_STATUS.ACTIVE,
     emailVerifiedAt: overrides.emailVerifiedAt ?? null,
     phoneVerifiedAt: overrides.phoneVerifiedAt ?? null,
@@ -69,13 +69,12 @@ function createMockUserEntity(
     temporaryManagerFrom: overrides.temporaryManagerFrom ?? null,
     temporaryManagerUntil: overrides.temporaryManagerUntil ?? null,
     lastLoginAt: overrides.lastLoginAt ?? null,
-    passwordChangedAt: overrides.passwordChangedAt ?? now,
     archivedAt: overrides.archivedAt ?? null,
     version: overrides.version ?? 1,
     createdAt: overrides.createdAt ?? now,
     updatedAt: overrides.updatedAt ?? now,
     deletedAt: overrides.deletedAt ?? null,
-  } as UserEntity;
+  } as unknown as UserEntity;
 }
 
 describe('Users Module — Helpers & UsersService Unit Suite', () => {
@@ -1237,6 +1236,9 @@ describe('Users Module — Helpers & UsersService Unit Suite', () => {
 
       const mockPublisher = {
         publish: async (topic: string, payload: unknown, queue: string) => {
+          if (topic === 'notifications.dispatch') {
+            dispatchedNotifications.push((payload ?? {}) as Record<string, unknown>);
+          }
           const id = `job_export_${publishedJobs.length + 1}`;
           publishedJobs.push({ id, topic, payload, queue });
           return {
@@ -1255,13 +1257,6 @@ describe('Users Module — Helpers & UsersService Unit Suite', () => {
         },
       };
 
-      const mockNotificationsService = {
-        dispatch: async (input: Record<string, unknown>) => {
-          dispatchedNotifications.push(input);
-          return { notificationId: dispatchedNotifications.length };
-        },
-      };
-
       const settingRegistry = new SettingRegistryService();
       const exportRegistry = new ExportRegistryService();
 
@@ -1273,7 +1268,6 @@ describe('Users Module — Helpers & UsersService Unit Suite', () => {
         settingRegistry,
         mockPublisher,
         exportRegistry,
-        mockNotificationsService as never,
       );
 
       return {
@@ -1769,8 +1763,12 @@ describe('Users Module — Helpers & UsersService Unit Suite', () => {
         payload: Record<string, unknown>;
         queueName?: string | undefined;
       }> = [];
+      const dispatchedNotifications: Array<Record<string, unknown>> = [];
       const messagePublisher = {
         publish: async (topic: string, payload: Record<string, unknown>, queueName?: string) => {
+          if (topic === 'notifications.dispatch') {
+            dispatchedNotifications.push(payload);
+          }
           publishedMessages.push({ topic, payload, queueName });
           return {
             id: `msg_rep_${publishedMessages.length}`,
@@ -1779,14 +1777,6 @@ describe('Users Module — Helpers & UsersService Unit Suite', () => {
           };
         },
       } as unknown as BaseMessagePublisherProvider;
-
-      const dispatchedNotifications: Array<Record<string, unknown>> = [];
-      const notificationsPublicService = {
-        dispatch: async (dto: Record<string, unknown>) => {
-          dispatchedNotifications.push(dto);
-          return { notificationId: dispatchedNotifications.length, queuedDeliveries: 1 };
-        },
-      };
 
       const recordedAuditEvents: Array<Record<string, unknown>> = [];
       const auditLogService = {
@@ -1804,7 +1794,6 @@ describe('Users Module — Helpers & UsersService Unit Suite', () => {
         messagePublisher,
         auditLogService as never,
         undefined,
-        notificationsPublicService as never,
         orgsPublicService,
       );
 

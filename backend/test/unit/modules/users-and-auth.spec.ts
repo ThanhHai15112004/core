@@ -474,10 +474,6 @@ function createIamInMemoryHarness() {
             : (existing?.primaryOrganizationUnitId ?? null),
         managerId:
           partial.managerId !== undefined ? partial.managerId : (existing?.managerId ?? null),
-        passwordChangedAt:
-          partial.passwordChangedAt !== undefined
-            ? partial.passwordChangedAt
-            : (existing?.passwordChangedAt ?? now),
         lastLoginAt:
           partial.lastLoginAt !== undefined ? partial.lastLoginAt : (existing?.lastLoginAt ?? null),
         archivedAt:
@@ -1178,6 +1174,7 @@ function createIamInMemoryHarness() {
     mfaStore,
     permStore,
     roleRepo,
+    passwordHasher,
     fieldEncryption,
     emailAdapter,
     smsProvider,
@@ -1858,7 +1855,10 @@ describe('Unit: Quản lý Người dùng (3.1) & Xác thực / Phiên / MFA (3)
     expect(adminResetRes.revokedSessionsCount).toBe(1);
 
     // 9. Tự nâng cấp thuật toán băm mật khẩu khi người dùng đăng nhập (3.3.6: SCRYPT -> PBKDF2_SHA512)
-    expect(h.userStore.get(user.id)?.passwordHash.startsWith('scrypt$')).toBe(true);
+    const credBeforeRehash = await h.passwordHasher
+      .getCredentialStoreAdapter()
+      ?.getByUserId(user.id);
+    expect(credBeforeRehash?.passwordHash.startsWith('scrypt$')).toBe(true);
     await h.securitySettingsService.updateSettings({
       passwordHashAlgorithm: 'PBKDF2_SHA512',
     });
@@ -1868,7 +1868,10 @@ describe('Unit: Quản lý Người dùng (3.1) & Xác thực / Phiên / MFA (3)
       password: adminResetRes.generatedPassword!,
     });
     expect(loginAfterAdminReset.accessToken).toBeDefined();
-    expect(h.userStore.get(user.id)?.passwordHash.startsWith('pbkdf2_sha512$')).toBe(true);
+    const credAfterRehash = await h.passwordHasher
+      .getCredentialStoreAdapter()
+      ?.getByUserId(user.id);
+    expect(credAfterRehash?.passwordHash.startsWith('pbkdf2_sha512$')).toBe(true);
   });
 
   it('Mục 3.4: Quản lý phiên đăng nhập — Idle Timeout, Max Session Lifetime, Thu hồi phiên từ xa / Khẩn cấp (Admin & User) và Ghi lịch sử đăng nhập & đăng xuất (bật/tắt enableLoginAuditLog)', async () => {

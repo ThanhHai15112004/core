@@ -7,7 +7,7 @@ import {
 import { CoreConfigService } from '@packages/config/index.js';
 import { PerformanceEventsService, type StoredPerfEvent } from './performance-events.service.js';
 import { PerformanceService } from './performance.service.js';
-import { diffBottlenecks } from './performance-rules.js';
+import { diffBottlenecks } from '../helpers/performance-rules.helper.js';
 
 /**
  * Chạy nền trong API (một instance mỗi chu kỳ nhờ lock Redis): đánh giá rule nghẽn mỗi `PERF_EVALUATE_MS`, lưu

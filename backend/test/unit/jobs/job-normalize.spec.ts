@@ -170,6 +170,7 @@ describe('nguồn / tiến độ / priority', () => {
       percent: 68,
       processed: 6821,
       total: 10000,
+      remaining: 3179,
       step: 'Generating PDF',
       phases: [{ name: 'Fetch', state: 'done' }],
     });

@@ -8,4 +8,6 @@ import { TrafficService } from './services/traffic.service.js';
   providers: [TrafficService],
   exports: [TrafficService],
 })
-export class TrafficOpsModule {}
+export class TrafficModule {}
+
+export { TrafficModule as TrafficOpsModule };

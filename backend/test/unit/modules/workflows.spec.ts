@@ -8,9 +8,9 @@ import {
   WORKFLOW_INSTANCE_STATUS,
   WORKFLOW_STATE_TYPE,
   WorkflowsService,
-  evaluateTransitionConditions,
-  executeWorkflowTransitionActions,
 } from '../../../src/modules/workflows/index.js';
+import { evaluateTransitionConditions } from '../../../src/modules/workflows/helpers/workflow-condition-evaluator.helper.js';
+import { executeWorkflowTransitionActions } from '../../../src/modules/workflows/helpers/workflow-action-dispatcher.helper.js';
 import type { WorkflowDefinitionEntity } from '../../../src/modules/workflows/entities/workflow-definition.entity.js';
 import type { WorkflowStateEntity } from '../../../src/modules/workflows/entities/workflow-state.entity.js';
 import type { WorkflowTransitionEntity } from '../../../src/modules/workflows/entities/workflow-transition.entity.js';
