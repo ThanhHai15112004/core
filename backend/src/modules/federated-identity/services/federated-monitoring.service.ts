@@ -1,7 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { createPaginatedResult, maskIp } from '@packages/http/index.js';
-import type { PaginatedResult } from '@packages/kernel/index.js';
+import {
+  PROVIDER_TYPE,
+  ProviderRegistryService as KernelProviderRegistryService,
+  defaultProviderRegistry,
+  type PaginatedResult,
+} from '@packages/kernel/index.js';
 import { RequestContextService } from '@packages/logging/index.js';
 import { MetricsRegistryService } from '@packages/metrics/index.js';
 import {
@@ -75,6 +80,7 @@ export class FederatedMonitoringService {
   private readonly attemptsCounter: Counter<'provider' | 'flow' | 'outcome'> | null;
   private readonly failuresCounter: Counter<'provider' | 'stage' | 'reason'> | null;
   private readonly durationHistogram: Histogram<'provider' | 'operation'> | null;
+  private readonly kernelProviderRegistry: KernelProviderRegistryService;
 
   constructor(
     private readonly eventRepo: FederatedAuthEventRepository,
@@ -84,7 +90,9 @@ export class FederatedMonitoringService {
     @Optional()
     @Inject(SESSIONS_PUBLIC_SERVICE)
     private readonly sessionsPublicService?: ISessionsPublicService,
+    @Optional() kernelProviderRegistry?: KernelProviderRegistryService,
   ) {
+    this.kernelProviderRegistry = kernelProviderRegistry ?? defaultProviderRegistry;
     if (metrics) {
       this.attemptsCounter = metrics.counter(
         'federated_auth_attempts_total',
@@ -153,6 +161,17 @@ export class FederatedMonitoringService {
     const sourceIpMasked = rawIp ? maskIp(rawIp) : null;
     const safeMetadata = input.metadata ? redactFederatedMetadata(input.metadata) : null;
     const safeMessage = sanitizeFederatedErrorMessage(input.errorMessage);
+
+    if (this.kernelProviderRegistry.hasProvidersOfType(PROVIDER_TYPE.IDENTITY)) {
+      void this.kernelProviderRegistry.recordInvocation({
+        providerType: PROVIDER_TYPE.IDENTITY,
+        providerCode,
+        success: outcome === FEDERATED_AUTH_OUTCOME.SUCCESS,
+        latencyMs: durationMs,
+        errorCode: outcome === FEDERATED_AUTH_OUTCOME.SUCCESS ? null : (errorCode ?? providerError),
+        errorMessage: safeMessage,
+      });
+    }
 
     try {
       await this.eventRepo.saveEntity({

@@ -1,4 +1,5 @@
 import { Global, Module } from '@nestjs/common';
+import { PROVIDER_REGISTRY_PORT } from './contracts/provider-registry.contract.js';
 import { CodeRegistryService, defaultCodeRegistry } from './registries/code-registry.service.js';
 import {
   FeatureFlagRegistryService,
@@ -33,6 +34,10 @@ import {
   CustomFieldRegistryService,
   defaultCustomFieldRegistry,
 } from './registries/custom-field-registry.service.js';
+import {
+  ProviderRegistryService,
+  defaultProviderRegistry,
+} from './registries/provider-registry.service.js';
 
 @Global()
 @Module({
@@ -77,6 +82,14 @@ import {
       provide: CustomFieldRegistryService,
       useValue: defaultCustomFieldRegistry,
     },
+    {
+      provide: ProviderRegistryService,
+      useValue: defaultProviderRegistry,
+    },
+    {
+      provide: PROVIDER_REGISTRY_PORT,
+      useValue: defaultProviderRegistry,
+    },
   ],
   exports: [
     CodeRegistryService,
@@ -89,6 +102,8 @@ import {
     ReportRegistryService,
     SearchRegistryService,
     CustomFieldRegistryService,
+    ProviderRegistryService,
+    PROVIDER_REGISTRY_PORT,
   ],
 })
 export class KernelModule {}

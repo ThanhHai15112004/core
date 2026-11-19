@@ -70,6 +70,10 @@ const PaymentsManagementPage = loadPage(
   () => import('./modules/payments/PaymentsManagementPage'),
   'PaymentsManagementPage',
 );
+const ProviderRegistryPage = loadPage(
+  () => import('./modules/provider-registry/ProviderRegistryPage'),
+  'ProviderRegistryPage',
+);
 
 // Tải riêng: CSS/JS của System Console (Tailwind, ECharts…) chỉ nạp khi vào console.
 // Link cũ dạng `/#system-console/...` → đường dẫn thật.
@@ -145,6 +149,8 @@ function App() {
               <WebhooksManagementPage />
             ) : activeTab === 'payments' ? (
               <PaymentsManagementPage />
+            ) : activeTab === 'provider-registry' ? (
+              <ProviderRegistryPage />
             ) : (
               <HomePage onNavigateTab={handleNavigateTab} />
             )}

@@ -1,7 +1,10 @@
-import { Injectable, Optional } from '@nestjs/common';
+import { Injectable, Optional, type OnModuleDestroy } from '@nestjs/common';
 import {
   NotFoundAppException,
+  PROVIDER_TYPE,
+  ProviderRegistryService as KernelProviderRegistryService,
   SettingRegistryService,
+  defaultProviderRegistry,
   defaultSettingRegistry,
   parseNumericUserId,
   safeJsonParseObject,
@@ -41,9 +44,11 @@ function buildSecretHint(secret: string): string {
 }
 
 @Injectable()
-export class FederatedProvidersService {
+export class FederatedProvidersService implements OnModuleDestroy {
   private readonly settingRegistry: SettingRegistryService;
   private readonly encryptionService: FieldEncryptionService;
+  private readonly kernelProviderRegistry: KernelProviderRegistryService;
+  private unregisterProbe: (() => void) | null = null;
 
   constructor(
     private readonly providerRepo: FederatedIdentityProviderRepository,
@@ -51,9 +56,40 @@ export class FederatedProvidersService {
     @Optional() settingRegistry?: SettingRegistryService,
     @Optional() encryptionService?: FieldEncryptionService,
     @Optional() private readonly auditLogService?: AuditLogService,
+    @Optional() kernelProviderRegistry?: KernelProviderRegistryService,
   ) {
     this.settingRegistry = settingRegistry ?? defaultSettingRegistry;
     this.encryptionService = encryptionService ?? defaultFieldEncryptionService;
+    this.kernelProviderRegistry = kernelProviderRegistry ?? defaultProviderRegistry;
+    this.registerHealthProbe();
+  }
+
+  public onModuleDestroy(): void {
+    this.unregisterProbe?.();
+    this.unregisterProbe = null;
+  }
+
+  private registerHealthProbe(): void {
+    this.unregisterProbe = this.kernelProviderRegistry.registerHealthProbe(
+      PROVIDER_TYPE.IDENTITY,
+      '*',
+      async (input) => {
+        const refCode = (input.domainRefCode ?? input.providerCode).trim().toLowerCase();
+        const res = await this.testProviderConnection(refCode);
+        return {
+          status: res.ok ? 'HEALTHY' : res.configured ? 'DOWN' : 'DEGRADED',
+          latencyMs: res.durationMs,
+          errorCode: res.errorCode,
+          errorMessage: res.errorMessage,
+          details: {
+            providerCode: res.providerCode,
+            driverCode: res.driverCode,
+            jwksUri: res.jwksUri,
+            keyCount: res.keyCount,
+          },
+        };
+      },
+    );
   }
 
   public listDrivers(): FederatedDriverMetadata[] {

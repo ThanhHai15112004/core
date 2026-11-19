@@ -9,6 +9,11 @@ import {
   type OnModuleDestroy,
 } from '@nestjs/common';
 import { CoreConfigService, type StorageDriverName } from '@packages/config/index.js';
+import {
+  PROVIDER_TYPE,
+  ProviderRegistryService,
+  defaultProviderRegistry,
+} from '@packages/kernel/index.js';
 import { RedisService } from '@packages/redis/index.js';
 import { RequestContextService } from '@packages/logging/index.js';
 import { RUNTIME_IDENTITY, type RuntimeIdentity } from '@packages/runtime/index.js';
@@ -55,13 +60,16 @@ export class BaseStorageProvider
   private timer: NodeJS.Timeout | null = null;
   private errorWindow = { at: 0, n: 0 };
   private lastLoggedError: string | null = null;
+  private readonly providerRegistry: ProviderRegistryService;
 
   constructor(
     private readonly configService: CoreConfigService,
     @Optional() private readonly redis?: RedisService,
     @Optional() private readonly secrets?: SecretService,
     @Optional() @Inject(RUNTIME_IDENTITY) private readonly identity?: RuntimeIdentity,
+    @Optional() providerRegistry?: ProviderRegistryService,
   ) {
+    this.providerRegistry = providerRegistry ?? defaultProviderRegistry;
     const cfg = this.configService.storage;
     this.driver =
       cfg.driver === 's3'
@@ -122,9 +130,30 @@ export class BaseStorageProvider
     const started = performance.now();
     const container = this.trackedContainer(key);
     try {
-      return await fn();
+      const result = await fn();
+      const latencyMs = performance.now() - started;
+      if (this.providerRegistry.hasProvidersOfType(PROVIDER_TYPE.STORAGE)) {
+        void this.providerRegistry.recordInvocation({
+          providerType: PROVIDER_TYPE.STORAGE,
+          driverCode: this.configService.storage.driver,
+          success: true,
+          latencyMs,
+        });
+      }
+      return result;
     } catch (err) {
-      this.fail(op, key, container, size, err, performance.now() - started);
+      const latencyMs = performance.now() - started;
+      if (this.providerRegistry.hasProvidersOfType(PROVIDER_TYPE.STORAGE)) {
+        void this.providerRegistry.recordInvocation({
+          providerType: PROVIDER_TYPE.STORAGE,
+          driverCode: this.configService.storage.driver,
+          success: false,
+          latencyMs,
+          errorCode: storageErrorCode(err) ?? 'STORAGE_ERROR',
+          errorMessage: err instanceof Error ? err.message : String(err),
+        });
+      }
+      this.fail(op, key, container, size, err, latencyMs);
       throw err;
     }
   }

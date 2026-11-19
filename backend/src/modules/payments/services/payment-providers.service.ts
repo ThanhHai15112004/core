@@ -1,9 +1,13 @@
-import { Injectable, Optional } from '@nestjs/common';
+import { performance } from 'node:perf_hooks';
+import { Injectable, Optional, type OnModuleDestroy } from '@nestjs/common';
 import {
   BadRequestAppException,
   ConflictAppException,
   NotFoundAppException,
+  PROVIDER_TYPE,
+  ProviderRegistryService,
   SettingRegistryService,
+  defaultProviderRegistry,
   defaultSettingRegistry,
   parseNumericUserId,
   safeJsonParseObject,
@@ -36,9 +40,11 @@ import type { PaymentAdapterResolvedConfig, PaymentProviderView } from '../types
 import { PaymentAdapterRegistryService } from './payment-adapter-registry.service.js';
 
 @Injectable()
-export class PaymentProvidersService {
+export class PaymentProvidersService implements OnModuleDestroy {
   private readonly settingRegistry: SettingRegistryService;
   private readonly encryptionService: FieldEncryptionService;
+  private readonly providerRegistry: ProviderRegistryService;
+  private unregisterProbe: (() => void) | null = null;
 
   constructor(
     private readonly providerRepo: PaymentProviderRepository,
@@ -46,9 +52,74 @@ export class PaymentProvidersService {
     @Optional() settingRegistry?: SettingRegistryService,
     @Optional() encryptionService?: FieldEncryptionService,
     @Optional() private readonly auditLogService?: AuditLogService,
+    @Optional() providerRegistry?: ProviderRegistryService,
   ) {
     this.settingRegistry = settingRegistry ?? defaultSettingRegistry;
     this.encryptionService = encryptionService ?? defaultFieldEncryptionService;
+    this.providerRegistry = providerRegistry ?? defaultProviderRegistry;
+    this.registerHealthProbe();
+  }
+
+  public onModuleDestroy(): void {
+    this.unregisterProbe?.();
+    this.unregisterProbe = null;
+  }
+
+  private registerHealthProbe(): void {
+    this.unregisterProbe = this.providerRegistry.registerHealthProbe(
+      PROVIDER_TYPE.PAYMENT,
+      '*',
+      async (input) => {
+        const started = performance.now();
+        const refCode = (input.domainRefCode ?? input.providerCode).trim().toLowerCase();
+        const entity = await this.providerRepo.findByCode(refCode);
+        if (!entity) {
+          return {
+            status: 'DOWN',
+            latencyMs: Math.round(performance.now() - started),
+            errorCode: 'PAYMENT_PROVIDER_NOT_FOUND',
+            errorMessage: `Payment provider "${refCode}" not found in payments module`,
+          };
+        }
+        if (!entity.isEnabled || entity.status !== PAYMENT_PROVIDER_STATUS.ACTIVE) {
+          return {
+            status: 'DOWN',
+            latencyMs: Math.round(performance.now() - started),
+            errorCode: 'PAYMENT_PROVIDER_INACTIVE',
+            errorMessage: `Payment provider "${entity.providerCode}" is inactive or disabled`,
+          };
+        }
+        let hasAdapter = true;
+        try {
+          this.adapterRegistry.getAdapterOrThrow(entity.driverCode);
+        } catch {
+          hasAdapter = false;
+        }
+        if (!hasAdapter) {
+          return {
+            status: 'DOWN',
+            latencyMs: Math.round(performance.now() - started),
+            errorCode: 'PAYMENT_ADAPTER_MISSING',
+            errorMessage: `Payment adapter "${entity.driverCode}" is not registered`,
+          };
+        }
+        const secrets = this.decryptSecrets(entity.secretsEncrypted);
+        if (entity.driverCode !== 'sandbox' && Object.keys(secrets).length === 0) {
+          return {
+            status: 'DEGRADED',
+            latencyMs: Math.round(performance.now() - started),
+            errorCode: 'PAYMENT_SECRETS_MISSING',
+            errorMessage: `Payment provider "${entity.providerCode}" has no configured secrets`,
+            details: { driverCode: entity.driverCode, secretConfigured: false },
+          };
+        }
+        return {
+          status: 'HEALTHY',
+          latencyMs: Math.round(performance.now() - started),
+          details: { driverCode: entity.driverCode, environment: entity.environment },
+        };
+      },
+    );
   }
 
   public async listProvidersPaginated(
@@ -234,12 +305,46 @@ export class PaymentProvidersService {
     return { deleted: true, id: Number(existing.id) };
   }
 
-  public async resolveActiveProviderEntity(providerCode?: string): Promise<PaymentProviderEntity> {
+  public async resolveActiveProviderEntity(
+    providerCode?: string,
+    organizationUnitId?: number | null,
+  ): Promise<PaymentProviderEntity> {
     let entity: PaymentProviderEntity | null = null;
     if (providerCode?.trim()) {
-      entity = await this.providerRepo.findByCode(providerCode.trim().toLowerCase());
+      const cleanCode = providerCode.trim().toLowerCase();
+      if (this.providerRegistry.isProviderPaused(PROVIDER_TYPE.PAYMENT, cleanCode)) {
+        throw new BadRequestAppException('payments.providerDisabled', [
+          { providerCode: cleanCode },
+        ]);
+      }
+      entity = await this.providerRepo.findByCode(cleanCode);
       if (!entity) {
         throw new NotFoundAppException('payments.providerNotFound', { providerCode });
+      }
+    } else if (this.providerRegistry.hasProvidersOfType(PROVIDER_TYPE.PAYMENT)) {
+      const resolution = this.providerRegistry.resolveProvider({
+        providerType: PROVIDER_TYPE.PAYMENT,
+        organizationUnitId: organizationUnitId ?? null,
+      });
+      if (resolution.resolved && resolution.provider) {
+        const refCode = (resolution.provider.domainRefCode ?? resolution.provider.providerCode)
+          .trim()
+          .toLowerCase();
+        entity =
+          (await this.providerRepo.findByCode(refCode)) ??
+          (await this.providerRepo.findByCode(resolution.provider.providerCode));
+        if (!entity) {
+          throw new NotFoundAppException('payments.providerNotFound', { providerCode: refCode });
+        }
+      } else if (resolution.blockedByPolicy) {
+        throw new BadRequestAppException('payments.providerDisabled', [
+          { providerCode: resolution.primaryProviderCode ?? 'default' },
+        ]);
+      } else {
+        entity = await this.providerRepo.findDefaultActiveProvider();
+        if (!entity) {
+          throw new BadRequestAppException('payments.noDefaultProvider');
+        }
       }
     } else {
       entity = await this.providerRepo.findDefaultActiveProvider();

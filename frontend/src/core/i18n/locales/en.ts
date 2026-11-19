@@ -71,6 +71,7 @@ export const en: TranslationKey = {
     customFields: 'Custom Fields & Metadata',
     webhooks: 'Outbound Webhooks',
     payments: 'Payments & Reconciliation',
+    providerRegistry: 'Providers',
     languageToggle: 'Language',
     themeLight: 'Light',
     themeDark: 'Dark',

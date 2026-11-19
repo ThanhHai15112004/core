@@ -1,0 +1,14 @@
+{
+  "providerNotFound": "Provider entry not found in Provider Registry.",
+  "providerCodeConflict": "Provider code already exists for this provider type.",
+  "unitAssignmentNotFound": "Organization unit provider assignment not found.",
+  "unitNotFound": "Organization unit not found or not active.",
+  "providerTypeMismatch": "Selected provider does not match the specified provider type.",
+  "samePrimaryAndFallback": "Fallback provider cannot be the same as the primary provider.",
+  "invalidHealthCheckUrl": "Health check URL is invalid or blocked by SSRF security policy.",
+  "cannotSetInactiveAsPrimary": "Cannot set a paused or disabled provider as primary.",
+  "providerAlreadyPaused": "This provider is already paused.",
+  "providerNotPaused": "Only paused providers can be resumed.",
+  "unitRoutingDisabled": "Unit-level provider routing is currently disabled in settings.",
+  "invalidProviderType": "Invalid provider type (supported: EMAIL, SMS, PAYMENT, STORAGE, IDENTITY)."
+}

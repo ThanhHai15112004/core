@@ -1,3 +1,4 @@
+import { performance } from 'node:perf_hooks';
 import { Injectable, Logger, Optional } from '@nestjs/common';
 import { isUniqueConstraintError } from '@packages/database/index.js';
 import { createPaginatedResult } from '@packages/http/index.js';
@@ -6,8 +7,11 @@ import {
   BadRequestAppException,
   ConflictAppException,
   NotFoundAppException,
+  PROVIDER_TYPE,
+  ProviderRegistryService,
   SequenceRegistryService,
   SettingRegistryService,
+  defaultProviderRegistry,
   defaultSequenceRegistry,
   defaultSettingRegistry,
   parseNumericUserId,
@@ -55,6 +59,7 @@ export class PaymentTransactionsService {
   private readonly logger = new Logger(PaymentTransactionsService.name);
   private readonly settingRegistry: SettingRegistryService;
   private readonly sequenceRegistry: SequenceRegistryService;
+  private readonly providerRegistry: ProviderRegistryService;
 
   constructor(
     private readonly transactionRepo: PaymentTransactionRepository,
@@ -67,9 +72,11 @@ export class PaymentTransactionsService {
     @Optional() sequenceRegistry?: SequenceRegistryService,
     @Optional() private readonly auditLogService?: AuditLogService,
     @Optional() private readonly messagePublisher?: BaseMessagePublisherProvider,
+    @Optional() providerRegistry?: ProviderRegistryService,
   ) {
     this.settingRegistry = settingRegistry ?? defaultSettingRegistry;
     this.sequenceRegistry = sequenceRegistry ?? defaultSequenceRegistry;
+    this.providerRegistry = providerRegistry ?? defaultProviderRegistry;
   }
 
   public async createPayment(
@@ -86,7 +93,10 @@ export class PaymentTransactionsService {
     const amount = assertSafeMinorAmount(input.amount);
     const runtimeConfig = resolvePaymentRuntimeConfig(this.settingRegistry);
     const currency = normalizeCurrencyCode(input.currency ?? runtimeConfig.defaultCurrency);
-    const provider = await this.providersService.resolveActiveProviderEntity(input.providerCode);
+    const provider = await this.providersService.resolveActiveProviderEntity(
+      input.providerCode,
+      input.organizationUnitId ?? null,
+    );
     const resolvedConfig = this.providersService.buildAdapterResolvedConfig(provider);
 
     if (!resolvedConfig.allowedCurrencies.includes(currency)) {
@@ -181,6 +191,7 @@ export class PaymentTransactionsService {
       throw err;
     }
 
+    const gatewayStarted = performance.now();
     try {
       const adapterResult = await adapter.createPayment({
         config: resolvedConfig,
@@ -197,6 +208,20 @@ export class PaymentTransactionsService {
         customer: input.customer ?? null,
         metadata: input.metadata ?? {},
       });
+      const gatewayLatencyMs = performance.now() - gatewayStarted;
+      const gatewaySucceeded = adapterResult.status !== PAYMENT_TRANSACTION_STATUS.FAILED;
+
+      if (this.providerRegistry.hasProvidersOfType(PROVIDER_TYPE.PAYMENT)) {
+        void this.providerRegistry.recordInvocation({
+          providerType: PROVIDER_TYPE.PAYMENT,
+          providerCode: provider.providerCode,
+          driverCode: provider.driverCode,
+          success: gatewaySucceeded,
+          latencyMs: gatewayLatencyMs,
+          errorCode: gatewaySucceeded ? null : 'PROVIDER_INITIATION_FAILED',
+          organizationUnitId: input.organizationUnitId ?? null,
+        });
+      }
 
       txEntity.providerTransactionId = adapterResult.providerTransactionId;
       txEntity.status = adapterResult.status;
@@ -239,6 +264,7 @@ export class PaymentTransactionsService {
 
       return { idempotentReplay: false, transaction: view };
     } catch (err) {
+      const gatewayLatencyMs = performance.now() - gatewayStarted;
       const msg = err instanceof Error ? err.message : String(err);
       txEntity.status = PAYMENT_TRANSACTION_STATUS.FAILED;
       txEntity.failureCode = err instanceof AppException ? err.code : 'GATEWAY_ERROR';
@@ -248,6 +274,19 @@ export class PaymentTransactionsService {
         lastErrorAt: new Date(),
         lastErrorCode: txEntity.failureCode,
       });
+
+      if (this.providerRegistry.hasProvidersOfType(PROVIDER_TYPE.PAYMENT)) {
+        void this.providerRegistry.recordInvocation({
+          providerType: PROVIDER_TYPE.PAYMENT,
+          providerCode: provider.providerCode,
+          driverCode: provider.driverCode,
+          success: false,
+          latencyMs: gatewayLatencyMs,
+          errorCode: txEntity.failureCode,
+          errorMessage: txEntity.failureMessage,
+          organizationUnitId: input.organizationUnitId ?? null,
+        });
+      }
 
       if (err instanceof AppException) {
         throw err;

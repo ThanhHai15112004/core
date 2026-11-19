@@ -6,8 +6,11 @@ import {
   ConflictAppException,
   ForbiddenAppException,
   NotFoundAppException,
+  PROVIDER_TYPE,
+  ProviderRegistryService as KernelProviderRegistryService,
   SettingRegistryService,
   UnauthorizedAppException,
+  defaultProviderRegistry,
   defaultSettingRegistry,
   safeJsonParseStringArray,
 } from '@packages/kernel/index.js';
@@ -92,6 +95,7 @@ export interface CallbackRequestContext {
 export class FederatedAuthFlowService {
   private readonly settingRegistry: SettingRegistryService;
   private readonly encryptionService: FieldEncryptionService;
+  private readonly kernelProviderRegistry: KernelProviderRegistryService;
 
   constructor(
     private readonly providerRepo: FederatedIdentityProviderRepository,
@@ -112,9 +116,11 @@ export class FederatedAuthFlowService {
     @Optional() encryptionService?: FieldEncryptionService,
     @Optional() private readonly transactionManager?: TransactionManager,
     @Optional() private readonly auditLogService?: AuditLogService,
+    @Optional() kernelProviderRegistry?: KernelProviderRegistryService,
   ) {
     this.settingRegistry = settingRegistry ?? defaultSettingRegistry;
     this.encryptionService = encryptionService ?? defaultFieldEncryptionService;
+    this.kernelProviderRegistry = kernelProviderRegistry ?? defaultProviderRegistry;
   }
 
   public async initiateAuthorize(
@@ -453,6 +459,22 @@ export class FederatedAuthFlowService {
     flowType: FederatedFlowType,
     context: AuthorizeRequestContext,
   ): Promise<FederatedIdentityProviderEntity> {
+    if (this.kernelProviderRegistry.isProviderPaused(PROVIDER_TYPE.IDENTITY, providerCode)) {
+      await this.monitoringService.recordEvent({
+        providerCode,
+        flowType,
+        stage: FEDERATED_AUTH_STAGE.AUTHORIZE,
+        outcome: FEDERATED_AUTH_OUTCOME.FAILED,
+        errorCode: 'PROVIDER_PAUSED',
+        errorMessage: `Provider ${providerCode} is paused in Provider Registry`,
+        userId: context.actorUserId ?? null,
+        ipAddress: context.ipAddress,
+        userAgent: context.userAgent,
+      });
+      throw new ForbiddenAppException('federated-identity.providerDisabled', [{ providerCode }], {
+        providerCode,
+      });
+    }
     const provider = await this.providerRepo.findByCode(providerCode);
     if (!provider) {
       throw new NotFoundAppException('federated-identity.providerNotFound', { providerCode });

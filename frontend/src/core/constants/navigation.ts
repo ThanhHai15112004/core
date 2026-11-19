@@ -14,7 +14,8 @@ export type NavigationTabId =
   | 'calendar'
   | 'custom-fields'
   | 'webhooks'
-  | 'payments';
+  | 'payments'
+  | 'provider-registry';
 
 export interface NavigationItem {
   id: NavigationTabId;
@@ -108,6 +109,12 @@ export const NAVIGATION_ITEMS: readonly NavigationItem[] = [
     labelKey: 'header.payments',
     icon: 'credit-card',
     route: ROUTES.PAYMENTS,
+  },
+  {
+    id: 'provider-registry',
+    labelKey: 'header.providerRegistry',
+    icon: 'server',
+    route: ROUTES.PROVIDER_REGISTRY,
   },
 ] as const;
 

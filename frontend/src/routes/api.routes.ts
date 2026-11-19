@@ -617,4 +617,24 @@ export const API_ROUTES = {
     RECONCILIATION_RESOLVE_ITEM: (id: string | number, itemId: string | number) =>
       `/payments/reconciliations/${id}/items/${itemId}/resolve`,
   },
+  PROVIDER_REGISTRY: {
+    CATALOG: '/provider-registry/catalog',
+    DASHBOARD: (qs = '') => `/provider-registry/dashboard${qs ? `?${qs}` : ''}`,
+    PROVIDERS: (qs = '') => `/provider-registry/providers${qs ? `?${qs}` : ''}`,
+    PROVIDER_BY_ID: (id: string | number) => `/provider-registry/providers/${id}`,
+    PROVIDER_SET_PRIMARY: (id: string | number) => `/provider-registry/providers/${id}/set-primary`,
+    PROVIDER_PAUSE: (id: string | number) => `/provider-registry/providers/${id}/pause`,
+    PROVIDER_RESUME: (id: string | number) => `/provider-registry/providers/${id}/resume`,
+    PROVIDER_HEALTH_CHECK: (id: string | number) =>
+      `/provider-registry/providers/${id}/health-check`,
+    PROVIDER_HEALTH_CHECKS: (id: string | number, qs = '') =>
+      `/provider-registry/providers/${id}/health-checks${qs ? `?${qs}` : ''}`,
+    PROVIDER_OBSERVATIONS: (id: string | number) =>
+      `/provider-registry/providers/${id}/observations`,
+    HEALTH_CHECK_ALL: '/provider-registry/health-check-all',
+    RESOLVE: '/provider-registry/resolve',
+    UNIT_ASSIGNMENTS: (qs = '') => `/provider-registry/unit-assignments${qs ? `?${qs}` : ''}`,
+    UNIT_ASSIGNMENT_BY_ID: (id: string | number) => `/provider-registry/unit-assignments/${id}`,
+    HISTORIES: (qs = '') => `/provider-registry/histories${qs ? `?${qs}` : ''}`,
+  },
 } as const;

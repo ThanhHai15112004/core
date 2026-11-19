@@ -1,0 +1,412 @@
+{
+  "$schema": "../../packages/kernel/schemas/module.manifest.schema.json",
+  "name": "provider-registry",
+  "displayName": "Provider Registry & Routing Control Plane",
+  "version": "1.0.0",
+  "description": "Quản lý nhà cung cấp hạ tầng (10.6): Đăng ký nhà cung cấp theo loại (Email, SMS, Payment, Storage, Identity), cấu hình Primary/Fallback theo policy, chọn nhà cung cấp theo đơn vị, kiểm tra sức khỏe (Healthy/Degraded/Down), theo dõi độ trễ & tỷ lệ lỗi trên dashboard, tạm dừng không cần sửa code và ghi lịch sử audit thay đổi.",
+  "type": "core",
+  "category": "Integrations",
+  "author": "Core Platform Team",
+  "entryModule": "ProviderRegistryModule",
+  "dependencies": [
+    "database",
+    "security",
+    "http-client",
+    "settings",
+    "codes",
+    "audit"
+  ],
+  "permissions": [
+    "provider-registry.read",
+    "provider-registry.manage",
+    "provider-registry.health"
+  ],
+  "codeTypes": [
+    {
+      "code": "provider_registry.provider_type",
+      "name": "Loại nhà cung cấp (Provider Type)",
+      "description": "Phân loại nhà cung cấp hạ tầng được quản lý tập trung",
+      "isSystem": true,
+      "allowCustomValues": false,
+      "values": [
+        {
+          "numericCode": 1,
+          "code": "EMAIL",
+          "name": "Email Provider",
+          "labels": { "vi": "Nhà cung cấp Email", "en": "Email Provider" },
+          "behaviorCode": "EMAIL",
+          "badgeTone": "info",
+          "sortOrder": 1,
+          "isSystem": true
+        },
+        {
+          "numericCode": 2,
+          "code": "SMS",
+          "name": "SMS Provider",
+          "labels": { "vi": "Nhà cung cấp SMS", "en": "SMS Provider" },
+          "behaviorCode": "SMS",
+          "badgeTone": "info",
+          "sortOrder": 2,
+          "isSystem": true
+        },
+        {
+          "numericCode": 3,
+          "code": "PAYMENT",
+          "name": "Payment Provider",
+          "labels": { "vi": "Cổng thanh toán", "en": "Payment Provider" },
+          "behaviorCode": "PAYMENT",
+          "badgeTone": "success",
+          "sortOrder": 3,
+          "isSystem": true
+        },
+        {
+          "numericCode": 4,
+          "code": "STORAGE",
+          "name": "Storage Provider",
+          "labels": { "vi": "Lưu trữ tệp (Storage)", "en": "Storage Provider" },
+          "behaviorCode": "STORAGE",
+          "badgeTone": "neutral",
+          "sortOrder": 4,
+          "isSystem": true
+        },
+        {
+          "numericCode": 5,
+          "code": "IDENTITY",
+          "name": "Identity Provider",
+          "labels": { "vi": "Định danh (OAuth/OIDC)", "en": "Identity Provider" },
+          "behaviorCode": "IDENTITY",
+          "badgeTone": "warning",
+          "sortOrder": 5,
+          "isSystem": true
+        }
+      ]
+    },
+    {
+      "code": "provider_registry.status",
+      "name": "Trạng thái vận hành nhà cung cấp",
+      "description": "Trạng thái hoạt động, tạm dừng runtime hoặc vô hiệu hóa của provider",
+      "isSystem": true,
+      "allowCustomValues": false,
+      "values": [
+        {
+          "numericCode": 1,
+          "code": "ACTIVE",
+          "name": "Đang hoạt động",
+          "labels": { "vi": "Đang hoạt động", "en": "Active" },
+          "behaviorCode": "ACTIVE",
+          "badgeTone": "success",
+          "sortOrder": 1,
+          "isSystem": true
+        },
+        {
+          "numericCode": 2,
+          "code": "PAUSED",
+          "name": "Đang tạm dừng",
+          "labels": { "vi": "Đang tạm dừng", "en": "Paused" },
+          "behaviorCode": "PAUSED",
+          "badgeTone": "warning",
+          "sortOrder": 2,
+          "isSystem": true
+        },
+        {
+          "numericCode": 3,
+          "code": "DISABLED",
+          "name": "Vô hiệu hóa",
+          "labels": { "vi": "Vô hiệu hóa", "en": "Disabled" },
+          "behaviorCode": "DISABLED",
+          "badgeTone": "neutral",
+          "sortOrder": 3,
+          "isSystem": true
+        }
+      ]
+    },
+    {
+      "code": "provider_registry.health_status",
+      "name": "Trạng thái sức khỏe nhà cung cấp",
+      "description": "Trạng thái kiểm tra sức khỏe của nhà cung cấp (Unknown, Healthy, Degraded, Down)",
+      "isSystem": true,
+      "allowCustomValues": false,
+      "values": [
+        {
+          "numericCode": 0,
+          "code": "UNKNOWN",
+          "name": "Chưa kiểm tra",
+          "labels": { "vi": "Chưa kiểm tra", "en": "Unknown" },
+          "behaviorCode": "UNKNOWN",
+          "badgeTone": "neutral",
+          "sortOrder": 1,
+          "isSystem": true
+        },
+        {
+          "numericCode": 1,
+          "code": "HEALTHY",
+          "name": "Ổn định (Healthy)",
+          "labels": { "vi": "Ổn định (Healthy)", "en": "Healthy" },
+          "behaviorCode": "HEALTHY",
+          "badgeTone": "success",
+          "sortOrder": 2,
+          "isSystem": true
+        },
+        {
+          "numericCode": 2,
+          "code": "DEGRADED",
+          "name": "Suy giảm (Degraded)",
+          "labels": { "vi": "Suy giảm (Degraded)", "en": "Degraded" },
+          "behaviorCode": "DEGRADED",
+          "badgeTone": "warning",
+          "sortOrder": 3,
+          "isSystem": true
+        },
+        {
+          "numericCode": 3,
+          "code": "DOWN",
+          "name": "Ngưng hoạt động (Down)",
+          "labels": { "vi": "Ngưng hoạt động (Down)", "en": "Down" },
+          "behaviorCode": "DOWN",
+          "badgeTone": "danger",
+          "sortOrder": 4,
+          "isSystem": true
+        }
+      ]
+    }
+  ],
+  "settingGroups": [
+    {
+      "code": "provider_registry",
+      "name": "Quản lý Nhà cung cấp (Provider Registry)",
+      "description": "Chính sách chuyển đổi dự phòng (Fallback), định tuyến theo đơn vị, ngưỡng cảnh báo độ trễ/tỷ lệ lỗi và kiểm tra sức khỏe provider",
+      "icon": "Server",
+      "sortOrder": 69,
+      "isSystem": true
+    }
+  ],
+  "settings": [
+    {
+      "key": "provider_registry.fallback_enabled",
+      "groupCode": "provider_registry",
+      "module": "provider-registry",
+      "namespace": "provider_registry.policy",
+      "name": "Cho phép chuyển sang nhà cung cấp dự phòng (Fallback)",
+      "description": "Mặc định tắt: chỉ dùng nhà cung cấp dự phòng khi chính sách hệ thống hoặc cấu hình đơn vị cho phép",
+      "valueType": "BOOLEAN",
+      "defaultValue": false,
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 1
+    },
+    {
+      "key": "provider_registry.fallback_allowed_types",
+      "groupCode": "provider_registry",
+      "module": "provider-registry",
+      "namespace": "provider_registry.policy",
+      "name": "Các loại Provider được phép Fallback",
+      "description": "Danh sách loại nhà cung cấp (EMAIL, SMS, PAYMENT, STORAGE, IDENTITY) được phép dùng cơ chế dự phòng khi bật policy",
+      "valueType": "JSON",
+      "defaultValue": ["EMAIL", "SMS", "PAYMENT", "STORAGE", "IDENTITY"],
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 2
+    },
+    {
+      "key": "provider_registry.fallback_on_paused",
+      "groupCode": "provider_registry",
+      "module": "provider-registry",
+      "namespace": "provider_registry.policy",
+      "name": "Fallback khi Provider chính bị tạm dừng",
+      "description": "Cho phép tự động chọn provider dự phòng khi provider chính đang ở trạng thái PAUSED (nếu chính sách fallback đang bật)",
+      "valueType": "BOOLEAN",
+      "defaultValue": true,
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 3
+    },
+    {
+      "key": "provider_registry.fallback_on_down",
+      "groupCode": "provider_registry",
+      "module": "provider-registry",
+      "namespace": "provider_registry.policy",
+      "name": "Fallback khi Provider chính bị Down",
+      "description": "Cho phép chuyển sang provider dự phòng khi sức khỏe provider chính là DOWN (nếu chính sách fallback đang bật)",
+      "valueType": "BOOLEAN",
+      "defaultValue": true,
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 4
+    },
+    {
+      "key": "provider_registry.fallback_on_degraded",
+      "groupCode": "provider_registry",
+      "module": "provider-registry",
+      "namespace": "provider_registry.policy",
+      "name": "Fallback khi Provider chính bị suy giảm (Degraded)",
+      "description": "Mặc định tắt: chỉ chuyển sang provider dự phòng khi provider chính ở trạng thái DEGRADED nếu bật cờ này",
+      "valueType": "BOOLEAN",
+      "defaultValue": false,
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 5
+    },
+    {
+      "key": "provider_registry.unit_routing_enabled",
+      "groupCode": "provider_registry",
+      "module": "provider-registry",
+      "namespace": "provider_registry.routing",
+      "name": "Bật định tuyến nhà cung cấp theo Đơn vị",
+      "description": "Cho phép chọn nhà cung cấp chính và dự phòng riêng theo organizationUnitId",
+      "valueType": "BOOLEAN",
+      "defaultValue": true,
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 6
+    },
+    {
+      "key": "provider_registry.health_check_timeout_ms",
+      "groupCode": "provider_registry",
+      "module": "provider-registry",
+      "namespace": "provider_registry.health",
+      "name": "Thời gian chờ kiểm tra sức khỏe Provider (ms)",
+      "description": "Timeout tối đa cho mỗi lần gọi health probe tới nhà cung cấp ngoài",
+      "valueType": "NUMBER",
+      "defaultValue": 5000,
+      "validationRules": { "min": 500, "max": 30000, "integerOnly": true },
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 7
+    },
+    {
+      "key": "provider_registry.degraded_latency_ms",
+      "groupCode": "provider_registry",
+      "module": "provider-registry",
+      "namespace": "provider_registry.health",
+      "name": "Ngưỡng độ trễ đánh dấu Degraded (ms)",
+      "description": "Nếu thời gian phản hồi vượt ngưỡng này, sức khỏe provider được phân loại là DEGRADED",
+      "valueType": "NUMBER",
+      "defaultValue": 1500,
+      "validationRules": { "min": 100, "max": 60000, "integerOnly": true },
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 8
+    },
+    {
+      "key": "provider_registry.degraded_error_rate_pct",
+      "groupCode": "provider_registry",
+      "module": "provider-registry",
+      "namespace": "provider_registry.health",
+      "name": "Ngưỡng tỷ lệ lỗi đánh dấu Degraded (%)",
+      "description": "Tỷ lệ lỗi trên cửa sổ theo dõi vượt ngưỡng này sẽ đánh dấu DEGRADED",
+      "valueType": "NUMBER",
+      "defaultValue": 5,
+      "validationRules": { "min": 0.1, "max": 100 },
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 9
+    },
+    {
+      "key": "provider_registry.down_error_rate_pct",
+      "groupCode": "provider_registry",
+      "module": "provider-registry",
+      "namespace": "provider_registry.health",
+      "name": "Ngưỡng tỷ lệ lỗi đánh dấu Down (%)",
+      "description": "Tỷ lệ lỗi trên cửa sổ theo dõi vượt ngưỡng này sẽ đánh dấu DOWN",
+      "valueType": "NUMBER",
+      "defaultValue": 50,
+      "validationRules": { "min": 1, "max": 100 },
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 10
+    },
+    {
+      "key": "provider_registry.consecutive_failures_for_down",
+      "groupCode": "provider_registry",
+      "module": "provider-registry",
+      "namespace": "provider_registry.health",
+      "name": "Số lần lỗi liên tiếp để đánh dấu Down",
+      "description": "Số lần kiểm tra sức khỏe thất bại liên tiếp trước khi chuyển trạng thái sang DOWN",
+      "valueType": "NUMBER",
+      "defaultValue": 3,
+      "validationRules": { "min": 1, "max": 20, "integerOnly": true },
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 11
+    },
+    {
+      "key": "provider_registry.allow_private_health_urls",
+      "groupCode": "provider_registry",
+      "module": "provider-registry",
+      "namespace": "provider_registry.security",
+      "name": "Cho phép Health URL nội bộ (Private/Localhost)",
+      "description": "Mặc định chặn địa chỉ IP private/localhost để chống SSRF khi cấu hình healthCheckUrl",
+      "valueType": "BOOLEAN",
+      "defaultValue": false,
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 12
+    },
+    {
+      "key": "provider_registry.telemetry_window_minutes",
+      "groupCode": "provider_registry",
+      "module": "provider-registry",
+      "namespace": "provider_registry.telemetry",
+      "name": "Cửa sổ tổng hợp độ trễ & tỷ lệ lỗi (phút)",
+      "description": "Khoảng thời gian mặc định hiển thị độ trễ và tỷ lệ lỗi trên dashboard Provider Registry",
+      "valueType": "NUMBER",
+      "defaultValue": 60,
+      "validationRules": { "min": 5, "max": 1440, "integerOnly": true },
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 13
+    }
+  ],
+  "menus": [
+    {
+      "code": "PROVIDER_REGISTRY",
+      "name": "Quản lý Nhà cung cấp",
+      "module": "provider-registry",
+      "status": 1,
+      "link": "/provider-registry",
+      "linkApi": "/api/v1/provider-registry/dashboard",
+      "type": 2,
+      "parent": null,
+      "level": 1,
+      "key": "provider-registry.read",
+      "numOrder": 63,
+      "icon": "Server",
+      "position": "SIDEBAR"
+    }
+  ],
+  "events": {
+    "published": [
+      "provider-registry.provider.created",
+      "provider-registry.provider.updated",
+      "provider-registry.provider.primary_changed",
+      "provider-registry.provider.paused",
+      "provider-registry.provider.resumed",
+      "provider-registry.unit_assignment.updated",
+      "provider-registry.health.changed"
+    ],
+    "subscribed": []
+  },
+  "database": {
+    "hasMigrations": true,
+    "tables": [
+      "provider_registry_entries",
+      "provider_unit_assignments",
+      "provider_health_checks",
+      "provider_metric_buckets",
+      "provider_config_histories"
+    ]
+  }
+}

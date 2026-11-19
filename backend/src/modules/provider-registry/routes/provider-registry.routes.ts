@@ -1,0 +1,18 @@
+export const PROVIDER_REGISTRY_ROUTES = {
+  PREFIX: 'provider-registry',
+  CATALOG: 'catalog',
+  DASHBOARD: 'dashboard',
+  PROVIDERS: 'providers',
+  PROVIDER_BY_ID: 'providers/:id',
+  PROVIDER_SET_PRIMARY: 'providers/:id/set-primary',
+  PROVIDER_PAUSE: 'providers/:id/pause',
+  PROVIDER_RESUME: 'providers/:id/resume',
+  PROVIDER_HEALTH_CHECK: 'providers/:id/health-check',
+  PROVIDER_HEALTH_CHECKS: 'providers/:id/health-checks',
+  PROVIDER_OBSERVATIONS: 'providers/:id/observations',
+  HEALTH_CHECK_ALL: 'health-check-all',
+  RESOLVE: 'resolve',
+  UNIT_ASSIGNMENTS: 'unit-assignments',
+  UNIT_ASSIGNMENT_BY_ID: 'unit-assignments/:id',
+  HISTORIES: 'histories',
+} as const;

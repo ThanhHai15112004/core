@@ -70,6 +70,7 @@ export const vi = {
     customFields: 'Trường tùy chỉnh & Metadata',
     webhooks: 'Webhooks gửi ra ngoài',
     payments: 'Thanh toán & Đối soát',
+    providerRegistry: 'Nhà cung cấp',
     languageToggle: 'Ngôn ngữ',
     themeLight: 'Sáng',
     themeDark: 'Tối',

@@ -13,6 +13,7 @@ export const ROUTES = {
   CUSTOM_FIELDS: '/custom-fields',
   WEBHOOKS: '/webhooks',
   PAYMENTS: '/payments',
+  PROVIDER_REGISTRY: '/provider-registry',
   SYSTEM_CONSOLE: '/system-console',
 } as const;
 

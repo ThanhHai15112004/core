@@ -7,6 +7,11 @@ import {
   type OnModuleDestroy,
 } from '@nestjs/common';
 import { CoreConfigService } from '@packages/config/index.js';
+import {
+  PROVIDER_TYPE,
+  ProviderRegistryService,
+  defaultProviderRegistry,
+} from '@packages/kernel/index.js';
 import { RedisService } from '@packages/redis/index.js';
 import { RUNTIME_IDENTITY, type RuntimeIdentity } from '@packages/runtime/index.js';
 import type {
@@ -36,16 +41,22 @@ export class StorageConnectionService implements OnApplicationBootstrap, OnModul
   private failures = 0;
   private lostAt: number | null = null;
   private timer: NodeJS.Timeout | null = null;
+  private readonly providerRegistry: ProviderRegistryService;
+  private unregisterProbes: (() => void)[] = [];
 
   constructor(
     private readonly storage: BaseStorageProvider,
     private readonly config: CoreConfigService,
     @Optional() private readonly redis?: RedisService,
     @Optional() @Inject(RUNTIME_IDENTITY) private readonly identity?: RuntimeIdentity,
-  ) {}
+    @Optional() providerRegistry?: ProviderRegistryService,
+  ) {
+    this.providerRegistry = providerRegistry ?? defaultProviderRegistry;
+  }
 
   /** Chờ lần kiểm tra đầu (tối đa BOOT_CHECK_MS) để trạng thái xác định ngay khi app sẵn sàng. */
   public async onApplicationBootstrap(): Promise<void> {
+    this.registerStorageHealthProbes();
     await Promise.race([this.check(), new Promise((r) => setTimeout(r, BOOT_CHECK_MS).unref())]);
     if (this.config.isTest) return;
     this.timer = setInterval(() => void this.check(), CHECK_MS);
@@ -56,6 +67,36 @@ export class StorageConnectionService implements OnApplicationBootstrap, OnModul
   public onModuleDestroy(): void {
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
+    for (const unreg of this.unregisterProbes) {
+      unreg();
+    }
+    this.unregisterProbes = [];
+  }
+
+  private registerStorageHealthProbes(): void {
+    const probe = async () => {
+      const status = await this.check();
+      return {
+        status:
+          status.state === 'connected'
+            ? ('HEALTHY' as const)
+            : status.state === 'reconnecting'
+              ? ('DEGRADED' as const)
+              : ('DOWN' as const),
+        latencyMs: Math.max(0, Math.round(status.lastPingMs ?? 0)),
+        errorCode: status.lastError ? 'STORAGE_CONNECTION_ERROR' : null,
+        errorMessage: status.lastError,
+        details: { driver: this.config.storage.driver, state: status.state },
+      };
+    };
+    this.unregisterProbes.push(
+      this.providerRegistry.registerHealthProbe(
+        PROVIDER_TYPE.STORAGE,
+        this.config.storage.driver,
+        probe,
+      ),
+      this.providerRegistry.registerHealthProbe(PROVIDER_TYPE.STORAGE, '*', probe),
+    );
   }
 
   /** Lưu trữ một giá trị theo khóa định danh */

@@ -1,9 +1,14 @@
+import { performance } from 'node:perf_hooks';
 import { Inject, Injectable, Optional } from '@nestjs/common';
 import {
   BadRequestAppException,
   NotFoundAppException,
+  PROVIDER_TYPE,
+  ProviderRegistryService,
   type PaginatedResult,
+  type ProviderTypeName,
   defaultCodeRegistry,
+  defaultProviderRegistry,
 } from '@packages/kernel/index.js';
 import { AuditLogService, type UserIdentity } from '@packages/security/index.js';
 import {
@@ -90,6 +95,7 @@ interface PendingChannelDeliveryTask {
 @Injectable()
 export class NotificationDeliveryService implements INotificationDeliveryPublicService {
   private readonly governanceService: NotificationDeliveryGovernanceService;
+  private readonly providerRegistry: ProviderRegistryService;
 
   constructor(
     private readonly channelsRepo: NotificationDeliveryRepository,
@@ -106,6 +112,8 @@ export class NotificationDeliveryService implements INotificationDeliveryPublicS
     private readonly templatesPublicService?: ITemplatesPublicService | null,
     @Optional()
     governanceService?: NotificationDeliveryGovernanceService | null,
+    @Optional()
+    providerRegistry?: ProviderRegistryService | null,
   ) {
     this.governanceService =
       governanceService ??
@@ -114,7 +122,33 @@ export class NotificationDeliveryService implements INotificationDeliveryPublicS
         this.mapper,
         this.auditLogService,
       );
+    this.providerRegistry = providerRegistry ?? defaultProviderRegistry;
     this.registerCodeUsageCheckers();
+    this.registerChannelHealthProbes();
+  }
+
+  private registerChannelHealthProbes(): void {
+    const createProbe = (channel: NotificationChannelCode) => async () => {
+      const started = performance.now();
+      const adapter = this.adapterRegistry.getAdapter(channel);
+      return {
+        status: adapter ? ('HEALTHY' as const) : ('DOWN' as const),
+        latencyMs: Math.round(performance.now() - started),
+        errorCode: adapter ? null : 'ADAPTER_NOT_FOUND',
+        errorMessage: adapter ? null : `No notification adapter registered for channel ${channel}`,
+        details: { channel },
+      };
+    };
+    this.providerRegistry.registerHealthProbe(
+      PROVIDER_TYPE.EMAIL,
+      '*',
+      createProbe(NOTIFICATION_CHANNEL.EMAIL),
+    );
+    this.providerRegistry.registerHealthProbe(
+      PROVIDER_TYPE.SMS,
+      '*',
+      createProbe(NOTIFICATION_CHANNEL.SMS),
+    );
   }
 
   private registerCodeUsageCheckers(): void {
@@ -482,7 +516,12 @@ export class NotificationDeliveryService implements INotificationDeliveryPublicS
     runtimeConfig: ResolvedNotificationRuntimeConfig;
   }): Promise<{ readonly entity: NotificationDeliveryEntity; readonly deduplicated: boolean }> {
     const { task, batchKey, suppressedSet, runtimeConfig } = params;
-    const providerCode = this.resolveProviderCodeForChannel(task.channel, runtimeConfig);
+    const providerSelection = this.resolveChannelProviderSelection(
+      task.channel,
+      runtimeConfig,
+      task.notification.organizationUnitId ?? null,
+    );
+    const providerCode = providerSelection.providerCode;
     const destValidation = validateAndNormalizeDestination(task.channel, task.destination);
     const normalizedDest = destValidation.normalizedDestination || task.destination || 'MISSING';
 
@@ -653,6 +692,50 @@ export class NotificationDeliveryService implements INotificationDeliveryPublicS
       return { entity: savedQuotaFailed, deduplicated: false };
     }
 
+    if (providerSelection.blockedReason) {
+      const blockedEntity = this.channelsRepo.repository.create({
+        notificationId: Number(task.notification.id),
+        recipientId: task.recipientEntry?.id !== undefined ? Number(task.recipientEntry.id) : null,
+        recipientUserId: task.recipientUserId,
+        organizationUnitId: task.notification.organizationUnitId ?? null,
+        channel: task.channel,
+        providerCode,
+        destination: normalizedDest,
+        templateCode: task.templateCode ?? null,
+        renderedSubject,
+        renderedBody,
+        idempotencyKey,
+        batchKey,
+        status: NOTIFICATION_DELIVERY_STATUS.FAILED,
+        errorType: NOTIFICATION_ERROR_TYPE.TRANSIENT,
+        errorCode: providerSelection.blockedReason,
+        errorMessage: `Provider blocked or paused by Provider Registry policy (${providerSelection.blockedReason})`,
+        attemptCount: 1,
+        maxAttempts: runtimeConfig.retryMaxAttempts,
+        nextRetryAt: null,
+        providerMessageId: null,
+        segmentsCount,
+        estimatedCost: '0.0000',
+        currency: runtimeConfig.quotaCurrency,
+        queuedAt: now,
+        sentAt: null,
+        deliveredAt: null,
+        failedAt: now,
+      });
+
+      const savedBlocked = await this.channelsRepo.saveEntity(blockedEntity);
+      await this.channelsRepo.recordQuotaDelta({
+        channel: task.channel,
+        providerCode,
+        dailyPeriodKey: periodKeys.dailyPeriodKey,
+        monthlyPeriodKey: periodKeys.monthlyPeriodKey,
+        currency: runtimeConfig.quotaCurrency,
+        failedDelta: 1,
+      });
+
+      return { entity: savedBlocked, deduplicated: false };
+    }
+
     // 6. Create QUEUED delivery record and invoke channel adapter
     const initialEntity = this.channelsRepo.repository.create({
       notificationId: Number(task.notification.id),
@@ -721,6 +804,7 @@ export class NotificationDeliveryService implements INotificationDeliveryPublicS
       return this.channelsRepo.saveEntity(delivery);
     }
 
+    const sendStarted = performance.now();
     const sendResult = await adapter.send({
       channel,
       providerCode: delivery.providerCode,
@@ -734,6 +818,19 @@ export class NotificationDeliveryService implements INotificationDeliveryPublicS
       idempotencyKey: delivery.idempotencyKey,
       metadata: metadata ?? null,
     });
+    const sendLatencyMs = performance.now() - sendStarted;
+    const registryType = this.mapChannelToProviderType(channel);
+    if (registryType && this.providerRegistry.hasProvidersOfType(registryType)) {
+      void this.providerRegistry.recordInvocation({
+        providerType: registryType,
+        providerCode: delivery.providerCode,
+        success: sendResult.success,
+        latencyMs: sendLatencyMs,
+        errorCode: sendResult.errorCode,
+        errorMessage: sendResult.errorMessage,
+        organizationUnitId: delivery.organizationUnitId ?? null,
+      });
+    }
 
     if (sendResult.success) {
       delivery.status =
@@ -1041,6 +1138,45 @@ export class NotificationDeliveryService implements INotificationDeliveryPublicS
     now: Date = new Date(),
   ): Promise<NotificationQuotaAndCostSummaryResponse> {
     return this.governanceService.getQuotaAndCostSummary(organizationUnitId, now);
+  }
+
+  private mapChannelToProviderType(channel: NotificationChannelCode): ProviderTypeName | null {
+    if (channel === NOTIFICATION_CHANNEL.EMAIL) return PROVIDER_TYPE.EMAIL;
+    if (channel === NOTIFICATION_CHANNEL.SMS) return PROVIDER_TYPE.SMS;
+    return null;
+  }
+
+  private resolveChannelProviderSelection(
+    channel: NotificationChannelCode,
+    runtimeConfig: ResolvedNotificationRuntimeConfig,
+    organizationUnitId?: number | null,
+  ): { readonly providerCode: string; readonly blockedReason: string | null } {
+    const registryType = this.mapChannelToProviderType(channel);
+    if (registryType && this.providerRegistry.hasProvidersOfType(registryType)) {
+      const resolution = this.providerRegistry.resolveProvider({
+        providerType: registryType,
+        organizationUnitId: organizationUnitId ?? null,
+      });
+      if (resolution.resolved && resolution.provider) {
+        return {
+          providerCode: resolution.provider.providerCode.toUpperCase(),
+          blockedReason: null,
+        };
+      }
+      if (resolution.blockedByPolicy) {
+        return {
+          providerCode: (
+            resolution.primaryProviderCode ??
+            this.resolveProviderCodeForChannel(channel, runtimeConfig)
+          ).toUpperCase(),
+          blockedReason: resolution.reason,
+        };
+      }
+    }
+    return {
+      providerCode: this.resolveProviderCodeForChannel(channel, runtimeConfig),
+      blockedReason: null,
+    };
   }
 
   private resolveProviderCodeForChannel(

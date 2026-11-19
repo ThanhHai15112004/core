@@ -1,0 +1,14 @@
+{
+  "providerNotFound": "Không tìm thấy cấu hình nhà cung cấp trong Provider Registry.",
+  "providerCodeConflict": "Mã nhà cung cấp đã tồn tại cho loại provider này.",
+  "unitAssignmentNotFound": "Không tìm thấy cấu hình gán nhà cung cấp cho đơn vị.",
+  "unitNotFound": "Không tìm thấy đơn vị tổ chức hoặc đơn vị chưa được kích hoạt.",
+  "providerTypeMismatch": "Nhà cung cấp được chọn không khớp với loại provider đã khai báo.",
+  "samePrimaryAndFallback": "Nhà cung cấp dự phòng không được trùng với nhà cung cấp chính.",
+  "invalidHealthCheckUrl": "Địa chỉ Health Check URL không hợp lệ hoặc vi phạm chính sách bảo mật SSRF.",
+  "cannotSetInactiveAsPrimary": "Không thể đặt nhà cung cấp đang tạm dừng hoặc vô hiệu hóa làm nhà cung cấp chính.",
+  "providerAlreadyPaused": "Nhà cung cấp này hiện đã ở trạng thái tạm dừng.",
+  "providerNotPaused": "Chỉ có thể khôi phục hoạt động đối với nhà cung cấp đang tạm dừng.",
+  "unitRoutingDisabled": "Chính sách định tuyến theo đơn vị hiện đang tắt trong cấu hình hệ thống.",
+  "invalidProviderType": "Loại nhà cung cấp không hợp lệ (chỉ hỗ trợ EMAIL, SMS, PAYMENT, STORAGE, IDENTITY)."
+}
