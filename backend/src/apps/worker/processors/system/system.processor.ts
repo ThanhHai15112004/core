@@ -22,6 +22,12 @@ import {
   type IWebhooksPublicService,
   type QueuedWebhookDeliveryJobPayload,
 } from '@modules/webhooks/contracts/index.js';
+import {
+  INBOUND_WEBHOOKS_PUBLIC_SERVICE,
+  INBOUND_WEBHOOKS_QUEUE_TOPICS,
+  type IInboundWebhooksPublicService,
+  type QueuedInboundWebhookJobPayload,
+} from '@modules/inbound-webhooks/contracts/index.js';
 import { BaseQueueProcessor } from '../base-queue.processor.js';
 
 export interface SystemMaintenanceTickPayload {
@@ -54,6 +60,9 @@ export class SystemProcessor extends BaseQueueProcessor {
     @Optional()
     @Inject(WEBHOOKS_PUBLIC_SERVICE)
     private readonly webhooksService?: IWebhooksPublicService,
+    @Optional()
+    @Inject(INBOUND_WEBHOOKS_PUBLIC_SERVICE)
+    private readonly inboundWebhooksService?: IInboundWebhooksPublicService,
   ) {
     super(config, metrics, progressTracker);
   }
@@ -77,6 +86,21 @@ export class SystemProcessor extends BaseQueueProcessor {
       }
       const payload = (envelope.payload ?? {}) as QueuedWebhookDeliveryJobPayload;
       return this.webhooksService.processQueuedDelivery(payload, {
+        attemptNumber: (job.attemptsMade ?? 0) + 1,
+        maxAttempts: job.opts?.attempts ?? 1,
+        jobId: String(job.id ?? envelope.id),
+      });
+    }
+
+    if (envelope.topic === INBOUND_WEBHOOKS_QUEUE_TOPICS.EVENT_PROCESS) {
+      if (!this.inboundWebhooksService) {
+        this.logger.warn(
+          `Received "${envelope.topic}" (${envelope.id}) but InboundWebhooksService is not available`,
+        );
+        return { handled: false, skipped: true, reason: 'inbound_webhooks_service_unavailable' };
+      }
+      const payload = (envelope.payload ?? {}) as QueuedInboundWebhookJobPayload;
+      return this.inboundWebhooksService.processQueuedEvent(payload, {
         attemptNumber: (job.attemptsMade ?? 0) + 1,
         maxAttempts: job.opts?.attempts ?? 1,
         jobId: String(job.id ?? envelope.id),

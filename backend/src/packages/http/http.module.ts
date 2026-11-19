@@ -5,6 +5,11 @@ import { TransformResponseInterceptor } from './interceptors/transform-response.
 
 const RELAXED_JSON_PARSER_WATERMARK = Symbol.for('core:fastify_relaxed_json_parser');
 const DEFAULT_JSON_BODY_LIMIT_BYTES = 32 * 1024 * 1024; // 32 MB
+export const MAX_RAW_BODY_CAPTURE_BYTES = 2 * 1024 * 1024; // 2 MB
+
+export interface RawBodyRequest {
+  rawBody?: string;
+}
 
 interface FastifyLikeInstance {
   removeContentTypeParser?: (contentType: string) => void;
@@ -12,7 +17,7 @@ interface FastifyLikeInstance {
     contentType: string,
     opts: { parseAs: 'string' | 'buffer'; bodyLimit?: number },
     parser: (
-      req: { headers?: Record<string, unknown> },
+      req: { headers?: Record<string, unknown>; rawBody?: string },
       body: unknown,
       done: (err: Error | null, value?: unknown) => void,
     ) => void,
@@ -43,8 +48,19 @@ export function configureFastifyEmptyJsonBodyParser(instance: unknown): void {
     fastify.addContentTypeParser(
       'application/json',
       { parseAs: 'string', bodyLimit: DEFAULT_JSON_BODY_LIMIT_BYTES },
-      (_req: unknown, rawBody: unknown, done: (err: Error | null, value?: unknown) => void) => {
+      (
+        req: { headers?: Record<string, unknown>; rawBody?: string },
+        rawBody: unknown,
+        done: (err: Error | null, value?: unknown) => void,
+      ) => {
         const body = typeof rawBody === 'string' ? rawBody : '';
+        if (
+          req &&
+          typeof req === 'object' &&
+          Buffer.byteLength(body, 'utf8') <= MAX_RAW_BODY_CAPTURE_BYTES
+        ) {
+          req.rawBody = body;
+        }
         if (!body || body.trim().length === 0) {
           done(null, {});
           return;

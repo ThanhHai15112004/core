@@ -50,7 +50,8 @@
     "reports",
     "search",
     "custom-fields",
-    "webhooks"
+    "webhooks",
+    "inbound-webhooks"
   ],
   "settings": {
     "defaultLocale": "vi",

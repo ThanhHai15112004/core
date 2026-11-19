@@ -1,0 +1,16 @@
+{
+  "providerNotFound": "Không tìm thấy cấu hình Inbound Webhook Provider.",
+  "providerCodeExists": "Mã providerCode này đã tồn tại trong hệ thống.",
+  "providerPaused": "Inbound Webhook Provider đang tạm dừng, không tiếp nhận sự kiện.",
+  "eventNotFound": "Không tìm thấy bản ghi sự kiện Inbound Webhook.",
+  "invalidSignature": "Xác minh chữ ký Webhook không hợp lệ.",
+  "invalidToken": "Xác minh Token Webhook không hợp lệ.",
+  "missingTimestamp": "Thiếu header thời gian (timestamp) bắt buộc của Webhook.",
+  "invalidTimestamp": "Định dạng thời gian (timestamp) của Webhook không hợp lệ.",
+  "timestampExpired": "Thời gian Webhook nằm ngoài ngưỡng dung sai cho phép (nghi ngờ replay request cũ).",
+  "missingEventId": "Thiếu mã sự kiện ngoài (Event ID) để kiểm tra Idempotency.",
+  "idempotencyPayloadMismatch": "Mã sự kiện trùng lặp nhưng nội dung payload không khớp với bản ghi gốc.",
+  "invalidHeaderName": "Tên header cấu hình chứa ký tự không hợp lệ.",
+  "eventNotReprocessable": "Chỉ cho phép xử lý lại các sự kiện Inbound Webhook đang ở trạng thái FAILED.",
+  "queuePublishFailed": "Không thể đẩy sự kiện Inbound Webhook vào hàng đợi xử lý nền."
+}

@@ -558,4 +558,16 @@ export const API_ROUTES = {
     DELIVERY_BY_ID: (id: string | number) => `/webhooks/deliveries/${id}`,
     DELIVERY_REPLAY: (id: string | number) => `/webhooks/deliveries/${id}/replay`,
   },
+  INBOUND_WEBHOOKS: {
+    PROVIDERS: (qs = '') => `/inbound-webhooks/providers${qs ? `?${qs}` : ''}`,
+    PROVIDER_BY_ID: (id: string | number) => `/inbound-webhooks/providers/${id}`,
+    PROVIDER_ROTATE_SECRET: (id: string | number) =>
+      `/inbound-webhooks/providers/${id}/rotate-secret`,
+    PROVIDER_SIMULATE: (id: string | number) => `/inbound-webhooks/providers/${id}/simulate`,
+    RECEIVE_BY_PROVIDER: (providerCode: string) =>
+      `/inbound-webhooks/receive/${encodeURIComponent(providerCode)}`,
+    EVENTS: (qs = '') => `/inbound-webhooks/events${qs ? `?${qs}` : ''}`,
+    EVENT_BY_ID: (id: string | number) => `/inbound-webhooks/events/${id}`,
+    EVENT_REPROCESS: (id: string | number) => `/inbound-webhooks/events/${id}/reprocess`,
+  },
 } as const;

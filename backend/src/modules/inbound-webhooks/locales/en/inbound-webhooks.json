@@ -1,0 +1,16 @@
+{
+  "providerNotFound": "Inbound webhook provider was not found.",
+  "providerCodeExists": "An inbound webhook provider with this providerCode already exists.",
+  "providerPaused": "Inbound webhook provider is currently paused and not accepting events.",
+  "eventNotFound": "Inbound webhook event record was not found.",
+  "invalidSignature": "Webhook signature verification failed.",
+  "invalidToken": "Webhook static token verification failed.",
+  "missingTimestamp": "Webhook timestamp header is required but missing.",
+  "invalidTimestamp": "Webhook timestamp format is invalid.",
+  "timestampExpired": "Webhook timestamp is outside the allowed tolerance window.",
+  "missingEventId": "Webhook external event ID is required for idempotency but missing.",
+  "idempotencyPayloadMismatch": "Duplicate webhook event ID received with a different payload digest.",
+  "invalidHeaderName": "Configured header name contains invalid characters.",
+  "eventNotReprocessable": "Only FAILED inbound webhook events can be manually reprocessed.",
+  "queuePublishFailed": "Failed to enqueue inbound webhook event for asynchronous processing."
+}

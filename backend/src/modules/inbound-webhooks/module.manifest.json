@@ -1,0 +1,230 @@
+{
+  "$schema": "../../packages/kernel/schemas/module.manifest.schema.json",
+  "name": "inbound-webhooks",
+  "displayName": "Inbound Webhooks",
+  "version": "1.0.0",
+  "description": "Module quản lý Inbound Webhooks (10.3): Endpoint nhận webhook tách theo provider, xác minh chữ ký HMAC hoặc static token, kiểm tra timestamp chống replay, chống xử lý trùng theo Idempotency, lưu payload đối soát đã che dữ liệu nhạy cảm, đẩy xử lý nặng vào Queue và ghi lịch sử kết quả từng lần chạy.",
+  "type": "core",
+  "category": "Integrations",
+  "author": "Core Platform Team",
+  "entryModule": "InboundWebhooksModule",
+  "dependencies": ["database", "security", "settings", "codes", "audit"],
+  "permissions": [
+    "inbound-webhooks.read",
+    "inbound-webhooks.manage",
+    "inbound-webhooks.replay",
+    "inbound-webhooks.secret.rotate"
+  ],
+  "codeTypes": [
+    {
+      "code": "inbound_webhooks.provider_status",
+      "name": "Trạng thái Inbound Webhook Provider",
+      "description": "Trạng thái kích hoạt tiếp nhận webhook từ hệ thống ngoài theo từng provider",
+      "isSystem": true,
+      "allowCustomValues": false,
+      "values": [
+        {
+          "numericCode": 1,
+          "code": "ACTIVE",
+          "name": "Đang hoạt động",
+          "labels": { "vi": "Đang hoạt động", "en": "Active" },
+          "behaviorCode": "ACTIVE",
+          "badgeTone": "success",
+          "sortOrder": 1,
+          "isSystem": true
+        },
+        {
+          "numericCode": 2,
+          "code": "PAUSED",
+          "name": "Tạm dừng",
+          "labels": { "vi": "Tạm dừng", "en": "Paused" },
+          "behaviorCode": "PAUSED",
+          "badgeTone": "warning",
+          "sortOrder": 2,
+          "isSystem": true
+        }
+      ]
+    },
+    {
+      "code": "inbound_webhooks.event_status",
+      "name": "Trạng thái xử lý Inbound Webhook Event",
+      "description": "Vòng đời tiếp nhận, kiểm tra hợp lệ và xử lý bất đồng bộ một webhook từ ngoài vào",
+      "isSystem": true,
+      "allowCustomValues": false,
+      "values": [
+        {
+          "numericCode": 1,
+          "code": "QUEUED",
+          "name": "Đã đưa vào hàng đợi",
+          "labels": { "vi": "Trong hàng đợi", "en": "Queued" },
+          "behaviorCode": "QUEUED",
+          "badgeTone": "info",
+          "sortOrder": 1,
+          "isSystem": true
+        },
+        {
+          "numericCode": 2,
+          "code": "PROCESSING",
+          "name": "Đang xử lý",
+          "labels": { "vi": "Đang xử lý", "en": "Processing" },
+          "behaviorCode": "PROCESSING",
+          "badgeTone": "warning",
+          "sortOrder": 2,
+          "isSystem": true
+        },
+        {
+          "numericCode": 3,
+          "code": "PROCESSED",
+          "name": "Đã xử lý thành công",
+          "labels": { "vi": "Thành công", "en": "Processed" },
+          "behaviorCode": "PROCESSED",
+          "badgeTone": "success",
+          "sortOrder": 3,
+          "isSystem": true
+        },
+        {
+          "numericCode": 4,
+          "code": "FAILED",
+          "name": "Xử lý thất bại",
+          "labels": { "vi": "Thất bại", "en": "Failed" },
+          "behaviorCode": "FAILED",
+          "badgeTone": "danger",
+          "sortOrder": 4,
+          "isSystem": true
+        },
+        {
+          "numericCode": 5,
+          "code": "REJECTED",
+          "name": "Bị từ chối xác thực",
+          "labels": { "vi": "Bị từ chối", "en": "Rejected" },
+          "behaviorCode": "REJECTED",
+          "badgeTone": "neutral",
+          "sortOrder": 5,
+          "isSystem": true
+        }
+      ]
+    }
+  ],
+  "settingGroups": [
+    {
+      "code": "inbound_webhooks",
+      "name": "Webhooks nhận vào",
+      "description": "Tham số dung sai thời gian chống replay, retry, giới hạn lưu payload đối soát và che dữ liệu nhạy cảm",
+      "icon": "Webhook",
+      "sortOrder": 66,
+      "isSystem": true
+    }
+  ],
+  "settings": [
+    {
+      "key": "inbound_webhooks.default_tolerance_sec",
+      "groupCode": "inbound_webhooks",
+      "module": "inbound-webhooks",
+      "namespace": "inbound_webhooks.security",
+      "name": "Dung sai thời gian mặc định chống Replay (giây)",
+      "description": "Khoảng chênh lệch thời gian tối đa cho phép của webhook timestamp so với thời điểm máy chủ",
+      "valueType": "NUMBER",
+      "defaultValue": 300,
+      "validationRules": { "min": 10, "max": 86400, "integerOnly": true },
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 1
+    },
+    {
+      "key": "inbound_webhooks.default_max_retries",
+      "groupCode": "inbound_webhooks",
+      "module": "inbound-webhooks",
+      "namespace": "inbound_webhooks.processing",
+      "name": "Số lần thử lại tối đa mặc định trên Queue",
+      "description": "Số lần Worker tự động thử lại khi xử lý inbound webhook gặp lỗi tạm thời",
+      "valueType": "NUMBER",
+      "defaultValue": 3,
+      "validationRules": { "min": 0, "max": 9, "integerOnly": true },
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 2
+    },
+    {
+      "key": "inbound_webhooks.retry_base_delay_ms",
+      "groupCode": "inbound_webhooks",
+      "module": "inbound-webhooks",
+      "namespace": "inbound_webhooks.processing",
+      "name": "Thời gian chờ nền khi retry Queue (ms)",
+      "description": "Khoảng trễ cơ sở cho Exponential Backoff khi Worker thử lại sự kiện inbound lỗi tạm thời",
+      "valueType": "NUMBER",
+      "defaultValue": 5000,
+      "validationRules": { "min": 500, "max": 300000, "integerOnly": true },
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 3
+    },
+    {
+      "key": "inbound_webhooks.max_stored_payload_bytes",
+      "groupCode": "inbound_webhooks",
+      "module": "inbound-webhooks",
+      "namespace": "inbound_webhooks.storage",
+      "name": "Giới hạn dung lượng payload lưu đối soát (bytes)",
+      "description": "Dung lượng tối đa bản ghi payload đã che dữ liệu nhạy cảm được lưu trong DB để đối soát",
+      "valueType": "NUMBER",
+      "defaultValue": 65536,
+      "validationRules": { "min": 1024, "max": 1048576, "integerOnly": true },
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 4
+    },
+    {
+      "key": "inbound_webhooks.record_rejected_requests",
+      "groupCode": "inbound_webhooks",
+      "module": "inbound-webhooks",
+      "namespace": "inbound_webhooks.audit",
+      "name": "Lưu lịch sử các request bị từ chối xác thực",
+      "description": "Khi bật, các request sai chữ ký, hết hạn timestamp hoặc thiếu mã sự kiện vẫn được lưu ở trạng thái REJECTED (không gán idempotency key) để điều tra lỗi",
+      "valueType": "BOOLEAN",
+      "defaultValue": true,
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 5
+    },
+    {
+      "key": "inbound_webhooks.mask_pii_in_payload",
+      "groupCode": "inbound-webhooks",
+      "module": "inbound-webhooks",
+      "namespace": "inbound_webhooks.security",
+      "name": "Che thông tin cá nhân Email/SĐT trong payload đối soát",
+      "description": "Mặc định tắt để handler nghiệp vụ đọc được email khách hàng từ payload đối soát; bật khi cần che thêm email và số điện thoại",
+      "valueType": "BOOLEAN",
+      "defaultValue": false,
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 6
+    }
+  ],
+  "menus": [],
+  "events": {
+    "published": [
+      "inbound_webhooks.provider.created",
+      "inbound_webhooks.provider.updated",
+      "inbound_webhooks.provider.secret_rotated",
+      "inbound_webhooks.event.received",
+      "inbound_webhooks.event.processed",
+      "inbound_webhooks.event.failed",
+      "inbound_webhooks.event.rejected",
+      "inbound_webhooks.event.reprocessed"
+    ],
+    "subscribed": []
+  },
+  "database": {
+    "hasMigrations": true,
+    "tables": [
+      "inbound_webhook_providers",
+      "inbound_webhook_events",
+      "inbound_webhook_attempts"
+    ]
+  }
+}
