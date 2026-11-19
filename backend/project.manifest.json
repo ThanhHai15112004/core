@@ -51,7 +51,8 @@
     "search",
     "custom-fields",
     "webhooks",
-    "inbound-webhooks"
+    "inbound-webhooks",
+    "federated-identity"
   ],
   "settings": {
     "defaultLocale": "vi",

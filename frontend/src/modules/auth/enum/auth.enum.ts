@@ -3,7 +3,8 @@ export type AuthSubTabId =
   | 'mfa-devices'
   | 'sessions-history'
   | 'password-policy'
-  | 'service-accounts';
+  | 'service-accounts'
+  | 'federated-identity';
 
 export interface AuthSubTabMeta {
   readonly id: AuthSubTabId;
@@ -42,6 +43,12 @@ export const AUTH_MODULE_TABS: readonly AuthSubTabMeta[] = [
     label: 'Service Accounts & API Clients',
     badge: '3.6',
     description: 'Tài khoản hệ thống M2M, Client ID/Secret, Scopes, Allowed IPs/CIDR & Usage Logs',
+  },
+  {
+    id: 'federated-identity',
+    label: 'OAuth / Tài khoản ngoài',
+    badge: '10.4',
+    description: 'Đăng nhập Google/Microsoft (State/Nonce/PKCE), liên kết tài khoản & monitoring lỗi',
   },
 ] as const;
 

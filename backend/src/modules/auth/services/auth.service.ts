@@ -37,6 +37,7 @@ import {
   resolveUserCredentialsById,
 } from '@modules/credentials/index.js';
 import type { IAuthPublicService } from '../contracts/index.js';
+import type { CompleteExternalLoginInput } from '../types/auth.types.js';
 import { DEFAULT_ADMIN_ROLE_CODES, STEP_UP_TOKEN_TTL_SECONDS } from '../enum/auth.enum.js';
 import {
   issueLoginMfaStep2Challenge,
@@ -317,6 +318,141 @@ export class AuthService implements IAuthPublicService {
       ipAddress: meta.ipAddress ?? null,
       userAgent: meta.userAgent ?? null,
       deviceName: dto.deviceName ?? null,
+    });
+
+    return {
+      mfaRequired: false,
+      accessToken: issued.accessToken,
+      refreshToken: issued.refreshToken,
+      sessionId: issued.sessionId,
+      expiresInSeconds: issued.expiresInSeconds,
+      user: this.toProfileResponse(identity),
+    };
+  }
+
+  /**
+   * Hoàn tất đăng nhập từ nhà cung cấp ngoài (OAuth / Federated Identity):
+   * - Tái sử dụng kiểm tra trạng thái tài khoản (active/locked/archived, auto-unlock)
+   * - Áp dụng đầy đủ chính sách MFA & thiết bị tin cậy
+   * - Cấp phát phiên đăng nhập và ghi lịch sử `OAUTH_LOGIN_SUCCESS`
+   */
+  public async completeExternalLogin(input: CompleteExternalLoginInput): Promise<LoginResponse> {
+    const rawCredentials = await resolveUserCredentialsById(this.usersPublicService, input.userId);
+    const meta = {
+      ipAddress: input.ipAddress ?? null,
+      userAgent: input.userAgent ?? null,
+    };
+    const dtoLike = {
+      identifier: `oauth:${input.providerCode}:${input.userId}`,
+      password: '',
+      deviceName: input.deviceName ?? undefined,
+      trustedDeviceToken: input.trustedDeviceToken ?? undefined,
+    };
+
+    const credentials = await verifyAndEnforceLoginAccountStatus({
+      credentials: rawCredentials,
+      dto: dtoLike,
+      meta,
+      sessionService: this.sessionService,
+      usersPublicService: this.usersPublicService,
+    });
+
+    const identity = await this.usersPublicService.findAuthUserById(credentials.id);
+    if (!identity) {
+      throw new UnauthorizedAppException('auth.userNotFound');
+    }
+
+    const activeSettings = await this.securitySettingsService?.getSettings();
+    const mfaPolicy = activeSettings?.mfaPolicy ?? 'OPTIONAL';
+    const isAdminUser = this.isAdministrativeUser(identity);
+    const isPolicyEnforced =
+      mfaPolicy === 'REQUIRED_FOR_ALL' || (mfaPolicy === 'REQUIRED_FOR_ADMINS' && isAdminUser);
+    const mfaRequired = Boolean(credentials.mfaEnabled || isPolicyEnforced);
+
+    if (mfaRequired) {
+      if (input.trustedDeviceToken) {
+        const isTrustedDevice = await this.mfaService.verifyTrustedDevice(
+          credentials.id,
+          input.trustedDeviceToken,
+        );
+        if (isTrustedDevice) {
+          await this.usersPublicService.recordLoginSuccess(credentials.id);
+          const issued = await this.sessionService.createSession(identity, {
+            ipAddress: meta.ipAddress,
+            userAgent: meta.userAgent,
+            deviceName: input.deviceName ?? null,
+          });
+          await this.sessionService.recordAuthEvent({
+            userId: credentials.id,
+            actorId: credentials.id,
+            sessionId: issued.sessionId,
+            identifier: identity.email || identity.username,
+            eventType: AUTH_EVENT_TYPE.OAUTH_LOGIN_SUCCESS,
+            status: AUTH_EVENT_STATUS.SUCCESS,
+            ipAddress: meta.ipAddress,
+            userAgent: meta.userAgent,
+            deviceName: input.deviceName ?? null,
+            reason: `External OAuth login via ${input.providerCode} (trusted device)`,
+            metadata: {
+              providerCode: input.providerCode,
+              issuer: input.issuer,
+              identityId: input.identityId ?? null,
+            },
+          });
+          return {
+            mfaRequired: false,
+            trustedDeviceBypassed: true,
+            accessToken: issued.accessToken,
+            refreshToken: issued.refreshToken,
+            sessionId: issued.sessionId,
+            expiresInSeconds: issued.expiresInSeconds,
+            user: this.toProfileResponse(identity),
+          };
+        }
+      }
+
+      const allowedByPolicy = activeSettings?.allowedMfaMethods ?? [
+        'TOTP',
+        'EMAIL_OTP',
+        'SMS_OTP',
+        'RECOVERY_CODE',
+      ];
+      return issueLoginMfaStep2Challenge({
+        credentials,
+        identity,
+        dto: dtoLike,
+        meta,
+        mfaPolicy,
+        isPolicyEnforced,
+        allowedByPolicy,
+        mfaService: this.mfaService,
+        tokenService: this.tokenService,
+        sessionService: this.sessionService,
+      });
+    }
+
+    await this.usersPublicService.recordLoginSuccess(credentials.id);
+    const issued = await this.sessionService.createSession(identity, {
+      ipAddress: meta.ipAddress,
+      userAgent: meta.userAgent,
+      deviceName: input.deviceName ?? null,
+    });
+    await this.sessionService.recordAuthEvent({
+      userId: credentials.id,
+      actorId: credentials.id,
+      sessionId: issued.sessionId,
+      identifier: identity.email || identity.username,
+      eventType: AUTH_EVENT_TYPE.OAUTH_LOGIN_SUCCESS,
+      status: AUTH_EVENT_STATUS.SUCCESS,
+      ipAddress: meta.ipAddress,
+      userAgent: meta.userAgent,
+      deviceName: input.deviceName ?? null,
+      reason: `External OAuth login via ${input.providerCode}`,
+      metadata: {
+        providerCode: input.providerCode,
+        issuer: input.issuer,
+        identityId: input.identityId ?? null,
+      },
     });
 
     return {

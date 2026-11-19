@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   KeyRound,
   UserPlus,
@@ -10,11 +10,16 @@ import {
   ShieldAlert,
   Globe,
   CheckCircle2,
+  ExternalLink,
 } from 'lucide-react';
 import { PRIVILEGED_PRESET_ACCOUNTS } from '../enum/auth.enum';
 import { authApi } from '../services/auth.api';
 import { authStyles } from './auth-ui.styles';
 import type { AuthenticatedUserProfile, MfaMethodType } from '../types/auth.types';
+import type {
+  OAuthCallbackResponseData,
+  PublicFederatedProvider,
+} from '../types/federated-identity.types';
 
 interface AuthGatewayPanelProps {
   accessToken: string;
@@ -24,6 +29,14 @@ interface AuthGatewayPanelProps {
   onLogout: () => Promise<void>;
   onRotateRefresh: () => Promise<void>;
   notify: (type: 'ok' | 'err', text: string) => void;
+  publicProviders?: PublicFederatedProvider[];
+  oauthBusy?: boolean;
+  onStartOAuthLogin?: (providerCode: string, deviceName?: string) => Promise<void>;
+  onConsumeOAuthCallback?: (options?: {
+    readonly deviceName?: string;
+    readonly trustedDeviceToken?: string;
+  }) => Promise<OAuthCallbackResponseData | null>;
+  onOAuthLinkedSuccess?: () => void;
 }
 
 export const AuthGatewayPanel: React.FC<AuthGatewayPanelProps> = ({
@@ -34,6 +47,11 @@ export const AuthGatewayPanel: React.FC<AuthGatewayPanelProps> = ({
   onLogout,
   onRotateRefresh,
   notify,
+  publicProviders = [],
+  oauthBusy = false,
+  onStartOAuthLogin,
+  onConsumeOAuthCallback,
+  onOAuthLinkedSuccess,
 }) => {
   // Login & MFA step-2 state
   const [identifier, setIdentifier] = useState('superadmin@gmail.com');
@@ -72,6 +90,66 @@ export const AuthGatewayPanel: React.FC<AuthGatewayPanelProps> = ({
     currentUser?.preferredTimezone ?? 'Asia/Ho_Chi_Minh',
   );
   const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const handledOAuthCallbackRef = useRef(false);
+
+  useEffect(() => {
+    if (handledOAuthCallbackRef.current || !onConsumeOAuthCallback) return;
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    if (!params.get('state') && !params.get('error') && !params.get('code')) return;
+
+    handledOAuthCallbackRef.current = true;
+    void (async () => {
+      try {
+        const res = await onConsumeOAuthCallback({
+          deviceName,
+          ...(trustedDeviceToken ? { trustedDeviceToken } : {}),
+        });
+        if (!res) return;
+        if (res.flowType === 'LINK') {
+          notify(
+            'ok',
+            res.alreadyLinked
+              ? `Tài khoản ${res.providerCode} đã được liên kết trước đó.`
+              : `Liên kết tài khoản ${res.providerCode} thành công!`,
+          );
+          onOAuthLinkedSuccess?.();
+          return;
+        }
+        const loginRes = res.loginResult;
+        if (loginRes.mfaRequired && loginRes.mfaChallengeToken) {
+          setMfaChallengeToken(loginRes.mfaChallengeToken);
+          const methods = loginRes.availableMfaMethods ?? ['TOTP'];
+          setAvailableMfaMethods(methods);
+          setSelectedMfaMethod(methods[0] ?? 'TOTP');
+          if (loginRes.devOtpCode) {
+            setMfaCode(loginRes.devOtpCode);
+            notify('ok', `OAuth bước 1 đạt — Yêu cầu MFA bước 2. Mã OTP (Dev): ${loginRes.devOtpCode}`);
+          } else {
+            notify('ok', 'Vui lòng nhập mã xác thực MFA bước 2 để hoàn tất đăng nhập OAuth.');
+          }
+          return;
+        }
+        if (loginRes.accessToken) {
+          setMfaChallengeToken(null);
+          await onAuthenticated(loginRes.accessToken, loginRes.refreshToken ?? '');
+          notify(
+            'ok',
+            `Đăng nhập bằng ${res.providerCode} thành công${res.isNewUser ? ' (tài khoản mới)' : ''}.`,
+          );
+        }
+      } catch (err) {
+        notify('err', err instanceof Error ? err.message : 'Xác thực OAuth callback thất bại');
+      }
+    })();
+  }, [
+    deviceName,
+    notify,
+    onAuthenticated,
+    onConsumeOAuthCallback,
+    onOAuthLinkedSuccess,
+    trustedDeviceToken,
+  ]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -354,6 +432,48 @@ export const AuthGatewayPanel: React.FC<AuthGatewayPanelProps> = ({
             )}
           </div>
         </form>
+
+        {/* Đăng nhập bằng nhà cung cấp ngoài (Google / Microsoft) */}
+        {onStartOAuthLogin && (
+          <div
+            style={{
+              marginTop: '14px',
+              paddingTop: '12px',
+              borderTop: '1px solid var(--border-color)',
+            }}
+          >
+            <div
+              style={{
+                fontSize: '12px',
+                fontWeight: 600,
+                color: 'var(--text-muted)',
+                marginBottom: '8px',
+              }}
+            >
+              Hoặc đăng nhập bằng nhà cung cấp ngoài (OAuth + PKCE)
+            </div>
+            {publicProviders.length === 0 ? (
+              <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                Chưa có nhà cung cấp OAuth nào đang bật (cấu hình trong tab OAuth / Tài khoản ngoài).
+              </div>
+            ) : (
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                {publicProviders.map((provider) => (
+                  <button
+                    key={provider.providerCode}
+                    type="button"
+                    disabled={oauthBusy}
+                    onClick={() => void onStartOAuthLogin(provider.providerCode, deviceName)}
+                    style={authStyles.btnSecondary}
+                  >
+                    <ExternalLink size={14} />
+                    <span>Đăng nhập bằng {provider.displayName}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Bước 2 MFA Challenge */}
         {mfaChallengeToken && (

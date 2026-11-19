@@ -1,0 +1,109 @@
+export const FEDERATED_PROVIDER_STATUS = {
+  ACTIVE: 1,
+  INACTIVE: 2,
+} as const;
+
+export type FederatedProviderStatusCode =
+  (typeof FEDERATED_PROVIDER_STATUS)[keyof typeof FEDERATED_PROVIDER_STATUS];
+
+export type FederatedProviderStatusName = 'ACTIVE' | 'INACTIVE';
+
+export function getFederatedProviderStatusName(code: number): FederatedProviderStatusName {
+  return Number(code) === FEDERATED_PROVIDER_STATUS.ACTIVE ? 'ACTIVE' : 'INACTIVE';
+}
+
+export const FEDERATED_DRIVER_CODE = {
+  GOOGLE: 'google',
+  MICROSOFT: 'microsoft',
+} as const;
+
+export type FederatedDriverCode =
+  (typeof FEDERATED_DRIVER_CODE)[keyof typeof FEDERATED_DRIVER_CODE];
+
+export const FEDERATED_FLOW_TYPE = {
+  LOGIN: 'LOGIN',
+  LINK: 'LINK',
+} as const;
+
+export type FederatedFlowType = (typeof FEDERATED_FLOW_TYPE)[keyof typeof FEDERATED_FLOW_TYPE];
+
+export const FEDERATED_AUTH_STAGE = {
+  AUTHORIZE: 'AUTHORIZE',
+  CALLBACK_VALIDATION: 'CALLBACK_VALIDATION',
+  STATE_PKCE: 'STATE_PKCE',
+  TOKEN_EXCHANGE: 'TOKEN_EXCHANGE',
+  JWKS_FETCH: 'JWKS_FETCH',
+  ID_TOKEN_VERIFY: 'ID_TOKEN_VERIFY',
+  USERINFO_FETCH: 'USERINFO_FETCH',
+  ACCOUNT_RESOLUTION: 'ACCOUNT_RESOLUTION',
+  LOGIN_COMPLETION: 'LOGIN_COMPLETION',
+  LINK: 'LINK',
+  UNLINK: 'UNLINK',
+  TEST_CONNECTION: 'TEST_CONNECTION',
+} as const;
+
+export type FederatedAuthStage = (typeof FEDERATED_AUTH_STAGE)[keyof typeof FEDERATED_AUTH_STAGE];
+
+export const FEDERATED_AUTH_OUTCOME = {
+  SUCCESS: 'SUCCESS',
+  FAILED: 'FAILED',
+} as const;
+
+export type FederatedAuthOutcome =
+  (typeof FEDERATED_AUTH_OUTCOME)[keyof typeof FEDERATED_AUTH_OUTCOME];
+
+export const FEDERATED_SETTING_KEYS = {
+  AUTO_LINK_VERIFIED_EMAIL: 'federated_identity.auto_link_verified_email',
+  ALLOW_AUTO_REGISTER: 'federated_identity.allow_auto_register',
+  REQUIRE_VERIFIED_EMAIL_FOR_REGISTER: 'federated_identity.require_verified_email_for_register',
+  TRANSACTION_TTL_SECONDS: 'federated_identity.transaction_ttl_seconds',
+  JWKS_CACHE_TTL_SECONDS: 'federated_identity.jwks_cache_ttl_seconds',
+  REQUIRE_STEP_UP_FOR_UNLINK: 'federated_identity.require_step_up_for_unlink',
+  ALLOWED_REDIRECT_URIS: 'federated_identity.allowed_redirect_uris',
+} as const;
+
+export const FEDERATED_DEFAULTS = {
+  AUTO_LINK_VERIFIED_EMAIL: false,
+  ALLOW_AUTO_REGISTER: true,
+  REQUIRE_VERIFIED_EMAIL_FOR_REGISTER: true,
+  TRANSACTION_TTL_SECONDS: 600,
+  JWKS_CACHE_TTL_SECONDS: 3600,
+  REQUIRE_STEP_UP_FOR_UNLINK: false,
+  ALLOWED_REDIRECT_URIS: [
+    'http://localhost:5173/auth',
+    'http://localhost:5173/auth/oauth/callback',
+    'http://127.0.0.1:5173/auth',
+    'http://127.0.0.1:5173/auth/oauth/callback',
+  ] as readonly string[],
+} as const;
+
+export const FEDERATED_AUDIT_META = {
+  MODULE: 'federated-identity',
+  FEATURE_PROVIDER: 'oauth-provider',
+  FEATURE_IDENTITY: 'external-identity',
+} as const;
+
+export const GOOGLE_OIDC_DEFAULTS = {
+  DISPLAY_NAME: 'Google',
+  ISSUER_URL: 'https://accounts.google.com',
+  ACCEPTED_ISSUERS: ['https://accounts.google.com', 'accounts.google.com'] as readonly string[],
+  AUTHORIZATION_ENDPOINT: 'https://accounts.google.com/o/oauth2/v2/auth',
+  TOKEN_ENDPOINT: 'https://oauth2.googleapis.com/token',
+  JWKS_URI: 'https://www.googleapis.com/oauth2/v3/certs',
+  USERINFO_ENDPOINT: 'https://openidconnect.googleapis.com/v1/userinfo',
+  SCOPES: ['openid', 'email', 'profile'] as readonly string[],
+} as const;
+
+export const MICROSOFT_OIDC_DEFAULTS = {
+  DISPLAY_NAME: 'Microsoft',
+  DEFAULT_TENANT_ID: 'common',
+  MULTI_TENANT_MODES: ['common', 'organizations', 'consumers'] as readonly string[],
+  SCOPES: ['openid', 'profile', 'email'] as readonly string[],
+  buildIssuerUrl: (tenantId: string) => `https://login.microsoftonline.com/${tenantId}/v2.0`,
+  buildAuthorizationEndpoint: (tenantId: string) =>
+    `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/authorize`,
+  buildTokenEndpoint: (tenantId: string) =>
+    `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`,
+  buildJwksUri: (tenantId: string) =>
+    `https://login.microsoftonline.com/${tenantId}/discovery/v2.0/keys`,
+} as const;

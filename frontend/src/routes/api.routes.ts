@@ -122,6 +122,32 @@ export const API_ROUTES = {
     API_CLIENT_REVOKE: (id: string | number) => `/auth/api-clients/${id}/revoke`,
     API_CLIENT_USAGE: (id: string | number) => `/auth/api-clients/${id}/usage`,
   },
+  FEDERATED_IDENTITY: {
+    PUBLIC_PROVIDERS: '/federated-identity/providers/public',
+    AUTHORIZE: (providerCode: string) =>
+      `/federated-identity/providers/${encodeURIComponent(providerCode)}/authorize`,
+    CALLBACK: (providerCode: string) =>
+      `/federated-identity/providers/${encodeURIComponent(providerCode)}/callback`,
+    MY_ACCOUNTS: '/federated-identity/accounts/me',
+    LINK_AUTHORIZE: (providerCode: string) =>
+      `/federated-identity/accounts/link/${encodeURIComponent(providerCode)}/authorize`,
+    LINK_CALLBACK: (providerCode: string) =>
+      `/federated-identity/accounts/link/${encodeURIComponent(providerCode)}/callback`,
+    UNLINK_ACCOUNT: (id: string | number, stepUpToken?: string) =>
+      `/federated-identity/accounts/${id}${stepUpToken ? `?stepUpToken=${encodeURIComponent(stepUpToken)}` : ''}`,
+    DRIVERS: '/federated-identity/drivers',
+    POLICY: '/federated-identity/policy',
+    PROVIDERS: '/federated-identity/providers',
+    PROVIDER_BY_CODE: (providerCode: string) =>
+      `/federated-identity/providers/${encodeURIComponent(providerCode)}`,
+    PROVIDER_TEST: (providerCode: string) =>
+      `/federated-identity/providers/${encodeURIComponent(providerCode)}/test`,
+    USER_ACCOUNTS: (userId: string | number) => `/federated-identity/users/${userId}/accounts`,
+    MONITORING_SUMMARY: (qs = '') =>
+      `/federated-identity/monitoring/summary${qs ? `?${qs}` : ''}`,
+    MONITORING_ERRORS: (qs = '') =>
+      `/federated-identity/monitoring/errors${qs ? `?${qs}` : ''}`,
+  },
   USERS: {
     LIST: (qs = '') => `/users${qs ? `?${qs}` : ''}`,
     CREATE: '/users',

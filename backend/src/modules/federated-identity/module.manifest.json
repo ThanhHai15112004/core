@@ -1,0 +1,223 @@
+{
+  "$schema": "../../packages/kernel/schemas/module.manifest.schema.json",
+  "name": "federated-identity",
+  "displayName": "Federated Identity (OAuth / External Login)",
+  "version": "1.0.0",
+  "description": "Module đăng nhập và liên kết tài khoản qua nhà cung cấp ngoài (10.4): Adapter tùy chọn Google & Microsoft, kiểm tra State/Nonce/PKCE, liên kết chống trùng user, bảo vệ chống gỡ phương thức đăng nhập cuối, định danh ổn định theo (provider, issuer, sub) và monitoring lỗi nhà cung cấp.",
+  "type": "core",
+  "category": "Integrations",
+  "author": "Core Platform Team",
+  "entryModule": "FederatedIdentityModule",
+  "dependencies": [
+    "database",
+    "security",
+    "http-client",
+    "users",
+    "credentials",
+    "sessions",
+    "auth",
+    "settings",
+    "codes",
+    "audit"
+  ],
+  "permissions": [
+    "federated-identity.read",
+    "federated-identity.manage"
+  ],
+  "codeTypes": [
+    {
+      "code": "federated_identity.provider_status",
+      "name": "Trạng thái nhà cung cấp OAuth",
+      "description": "Trạng thái cấu hình của nhà cung cấp định danh bên ngoài (Google, Microsoft...)",
+      "isSystem": true,
+      "allowCustomValues": false,
+      "values": [
+        {
+          "numericCode": 1,
+          "code": "ACTIVE",
+          "name": "Đang hoạt động",
+          "labels": { "vi": "Đang hoạt động", "en": "Active" },
+          "behaviorCode": "ACTIVE",
+          "badgeTone": "success",
+          "sortOrder": 1,
+          "isSystem": true
+        },
+        {
+          "numericCode": 2,
+          "code": "INACTIVE",
+          "name": "Tạm tắt",
+          "labels": { "vi": "Tạm tắt", "en": "Inactive" },
+          "behaviorCode": "INACTIVE",
+          "badgeTone": "neutral",
+          "sortOrder": 2,
+          "isSystem": true
+        }
+      ]
+    },
+    {
+      "code": "federated_identity.flow_type",
+      "name": "Loại luồng xác thực OAuth",
+      "description": "Phân loại luồng đăng nhập hoặc liên kết tài khoản ngoài vào tài khoản hiện có",
+      "isSystem": true,
+      "allowCustomValues": false,
+      "values": [
+        {
+          "numericCode": 1,
+          "code": "LOGIN",
+          "name": "Đăng nhập ngoài",
+          "labels": { "vi": "Đăng nhập ngoài", "en": "External Login" },
+          "behaviorCode": "LOGIN",
+          "badgeTone": "info",
+          "sortOrder": 1,
+          "isSystem": true
+        },
+        {
+          "numericCode": 2,
+          "code": "LINK",
+          "name": "Liên kết tài khoản",
+          "labels": { "vi": "Liên kết tài khoản", "en": "Account Link" },
+          "behaviorCode": "LINK",
+          "badgeTone": "success",
+          "sortOrder": 2,
+          "isSystem": true
+        }
+      ]
+    }
+  ],
+  "settingGroups": [
+    {
+      "code": "federated_identity",
+      "name": "Đăng nhập ngoài (OAuth / SSO)",
+      "description": "Chính sách liên kết tài khoản, tự đăng ký từ OAuth, PKCE/State TTL, JWKS cache và allowlist Redirect URI",
+      "icon": "KeyRound",
+      "sortOrder": 67,
+      "isSystem": true
+    }
+  ],
+  "settings": [
+    {
+      "key": "federated_identity.auto_link_verified_email",
+      "groupCode": "federated_identity",
+      "module": "federated-identity",
+      "namespace": "federated_identity.policy",
+      "name": "Tự động liên kết khi Email đã xác minh trùng tài khoản sẵn có",
+      "description": "Mặc định tắt để đảm bảo an toàn: yêu cầu người dùng đăng nhập tài khoản hiện có rồi liên kết thủ công. Khi bật, hệ thống chỉ tự liên kết nếu nhà cung cấp xác nhận email_verified=true.",
+      "valueType": "BOOLEAN",
+      "defaultValue": false,
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 1
+    },
+    {
+      "key": "federated_identity.allow_auto_register",
+      "groupCode": "federated_identity",
+      "module": "federated-identity",
+      "namespace": "federated_identity.policy",
+      "name": "Cho phép tự đăng ký người dùng mới khi đăng nhập OAuth lần đầu",
+      "description": "Khi bật, người dùng đăng nhập qua Google/Microsoft lần đầu mà chưa có tài khoản trong hệ thống sẽ được tự động tạo tài khoản mới.",
+      "valueType": "BOOLEAN",
+      "defaultValue": true,
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 2
+    },
+    {
+      "key": "federated_identity.require_verified_email_for_register",
+      "groupCode": "federated_identity",
+      "module": "federated-identity",
+      "namespace": "federated_identity.policy",
+      "name": "Bắt buộc Email đã xác minh khi tự đăng ký từ OAuth",
+      "description": "Từ chối tự tạo tài khoản mới nếu nhà cung cấp ngoài không xác nhận email_verified=true.",
+      "valueType": "BOOLEAN",
+      "defaultValue": true,
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 3
+    },
+    {
+      "key": "federated_identity.transaction_ttl_seconds",
+      "groupCode": "federated_identity",
+      "module": "federated-identity",
+      "namespace": "federated_identity.security",
+      "name": "Thời hạn giao dịch OAuth State/Nonce/PKCE (giây)",
+      "description": "Thời gian hiệu lực tối đa của phiên State + Nonce + PKCE kể từ lúc khởi tạo authorize cho đến khi callback.",
+      "valueType": "NUMBER",
+      "defaultValue": 600,
+      "validationRules": { "min": 60, "max": 1800, "integerOnly": true },
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 4
+    },
+    {
+      "key": "federated_identity.jwks_cache_ttl_seconds",
+      "groupCode": "federated_identity",
+      "module": "federated-identity",
+      "namespace": "federated_identity.security",
+      "name": "Thời gian lưu cache khóa công khai JWKS (giây)",
+      "description": "TTL bộ nhớ đệm JWKS lấy từ Google/Microsoft; tự động làm mới khi gặp kid mới.",
+      "valueType": "NUMBER",
+      "defaultValue": 3600,
+      "validationRules": { "min": 60, "max": 86400, "integerOnly": true },
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 5
+    },
+    {
+      "key": "federated_identity.require_step_up_for_unlink",
+      "groupCode": "federated_identity",
+      "module": "federated-identity",
+      "namespace": "federated_identity.security",
+      "name": "Yêu cầu Step-Up Authentication khi gỡ liên kết tài khoản ngoài",
+      "description": "Khi bật, người dùng tự gỡ liên kết Google/Microsoft phải gửi kèm stepUpToken hợp lệ.",
+      "valueType": "BOOLEAN",
+      "defaultValue": false,
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 6
+    },
+    {
+      "key": "federated_identity.allowed_redirect_uris",
+      "groupCode": "federated_identity",
+      "module": "federated-identity",
+      "namespace": "federated_identity.security",
+      "name": "Danh sách Redirect URI mặc định được phép (Allowlist)",
+      "description": "Các địa chỉ callback SPA hợp lệ được phép sử dụng khi khởi tạo luồng OAuth nếu provider không cấu hình danh sách riêng.",
+      "valueType": "JSON",
+      "defaultValue": [
+        "http://localhost:5173/auth",
+        "http://localhost:5173/auth/oauth/callback",
+        "http://127.0.0.1:5173/auth",
+        "http://127.0.0.1:5173/auth/oauth/callback"
+      ],
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 7
+    }
+  ],
+  "events": {
+    "published": [
+      "federated-identity.provider.updated",
+      "federated-identity.account.linked",
+      "federated-identity.account.unlinked",
+      "federated-identity.login.succeeded",
+      "federated-identity.login.failed"
+    ],
+    "subscribed": []
+  },
+  "database": {
+    "hasMigrations": true,
+    "tables": [
+      "federated_identity_providers",
+      "federated_identities",
+      "federated_auth_transactions",
+      "federated_auth_events"
+    ]
+  }
+}

@@ -36,6 +36,7 @@ export interface ICredentialsPublicService {
     actorId?: number,
   ): Promise<AdminResetUserPasswordResult & AdminResetPasswordResponse>;
   resolveUserCredentialsById(userId: number): Promise<UserAuthCredentialsView | null>;
+  hasPassword(userId: number): Promise<boolean>;
 }
 
 export const CREDENTIALS_PUBLIC_SERVICE = Symbol('CREDENTIALS_PUBLIC_SERVICE');

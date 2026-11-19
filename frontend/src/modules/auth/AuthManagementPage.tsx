@@ -9,14 +9,17 @@ import {
   CheckCircle2,
   AlertCircle,
   RefreshCw,
+  Link2,
 } from 'lucide-react';
 import { AUTH_MODULE_TABS, type AuthSubTabId } from './enum/auth.enum';
 import { useAuthManagement } from './hooks/useAuthManagement';
+import { useFederatedIdentity } from './hooks/useFederatedIdentity';
 import { AuthGatewayPanel } from './components/AuthGatewayPanel';
 import { MfaAndDevicesPanel } from './components/MfaAndDevicesPanel';
 import { SessionsAndHistoryPanel } from './components/SessionsAndHistoryPanel';
 import { PasswordAndPolicyPanel } from './components/PasswordAndPolicyPanel';
 import { ServiceAccountsPanel } from './components/ServiceAccountsPanel';
+import { FederatedIdentityPanel } from './components/FederatedIdentityPanel';
 import { authStyles } from './components/auth-ui.styles';
 
 export const AuthManagementPage: React.FC = () => {
@@ -44,6 +47,8 @@ export const AuthManagementPage: React.FC = () => {
     handleRotateRefreshToken,
   } = useAuthManagement();
 
+  const federated = useFederatedIdentity(accessToken, notify);
+
   const resolveTabIcon = (id: AuthSubTabId) => {
     switch (id) {
       case 'gateway':
@@ -56,6 +61,8 @@ export const AuthManagementPage: React.FC = () => {
         return <Lock size={15} />;
       case 'service-accounts':
         return <Bot size={15} />;
+      case 'federated-identity':
+        return <Link2 size={15} />;
     }
   };
 
@@ -258,6 +265,14 @@ export const AuthManagementPage: React.FC = () => {
           onLogout={handleLogout}
           onRotateRefresh={handleRotateRefreshToken}
           notify={notify}
+          publicProviders={federated.publicProviders}
+          oauthBusy={federated.busy}
+          onStartOAuthLogin={federated.startOAuthLogin}
+          onConsumeOAuthCallback={federated.consumePendingOAuthCallback}
+          onOAuthLinkedSuccess={() => {
+            setSubTab('federated-identity');
+            void federated.refreshAllFederatedState();
+          }}
         />
       )}
 
@@ -298,6 +313,26 @@ export const AuthManagementPage: React.FC = () => {
           apiClients={apiClients}
           onRefresh={() => refreshProfileAndCoreState()}
           notify={notify}
+        />
+      )}
+
+      {subTab === 'federated-identity' && (
+        <FederatedIdentityPanel
+          accessToken={accessToken}
+          busy={federated.busy}
+          publicProviders={federated.publicProviders}
+          myAccounts={federated.myAccounts}
+          drivers={federated.drivers}
+          adminProviders={federated.adminProviders}
+          policy={federated.policy}
+          monitoringSummary={federated.monitoringSummary}
+          monitoringEvents={federated.monitoringEvents}
+          onRefresh={federated.refreshAllFederatedState}
+          onStartLink={federated.startOAuthLink}
+          onUnlink={federated.unlinkAccount}
+          onSaveProvider={federated.saveProvider}
+          onTestProvider={federated.testProvider}
+          onSaveGlobalPolicy={federated.saveGlobalPolicy}
         />
       )}
     </main>

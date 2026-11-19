@@ -14,6 +14,10 @@ export const AUTH_EVENT_TYPE = {
   PASSWORD_RESET: 13,
   PERMISSION_CHANGED: 14,
   DATA_EXPORT: 15,
+  OAUTH_LOGIN_SUCCESS: 16,
+  OAUTH_LOGIN_FAILED: 17,
+  OAUTH_LINKED: 18,
+  OAUTH_UNLINKED: 19,
 } as const;
 
 export const LOGIN_EVENT_TYPE = AUTH_EVENT_TYPE;
@@ -65,6 +69,14 @@ export function getAuthEventTypeName(code: number): AuthEventTypeName {
       return 'PERMISSION_CHANGED';
     case AUTH_EVENT_TYPE.DATA_EXPORT:
       return 'DATA_EXPORT';
+    case AUTH_EVENT_TYPE.OAUTH_LOGIN_SUCCESS:
+      return 'OAUTH_LOGIN_SUCCESS';
+    case AUTH_EVENT_TYPE.OAUTH_LOGIN_FAILED:
+      return 'OAUTH_LOGIN_FAILED';
+    case AUTH_EVENT_TYPE.OAUTH_LINKED:
+      return 'OAUTH_LINKED';
+    case AUTH_EVENT_TYPE.OAUTH_UNLINKED:
+      return 'OAUTH_UNLINKED';
     case AUTH_EVENT_TYPE.LOGIN_SUCCESS:
     default:
       return 'LOGIN_SUCCESS';

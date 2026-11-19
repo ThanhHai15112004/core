@@ -539,6 +539,22 @@ export class PasswordService implements ICredentialsPublicService {
     return resolveUserCredentialsById(this.usersPublicService, userId);
   }
 
+  /** Kiểm tra tài khoản người dùng đã thiết lập mật khẩu cục bộ hay chưa */
+  public async hasPassword(userId: number): Promise<boolean> {
+    const uid = Number(userId);
+    if (!Number.isInteger(uid) || uid <= 0) {
+      return false;
+    }
+    if (this.userCredentialRepository) {
+      const record = await this.userCredentialRepository.findByUserId(uid);
+      if (record) {
+        return Boolean(record.passwordHash && record.passwordHash.trim().length > 0);
+      }
+    }
+    const credentials = await this.resolveUserCredentialsById(uid);
+    return Boolean(credentials?.passwordHash && credentials.passwordHash.trim().length > 0);
+  }
+
   private async findLatestResetRecordForUser(
     userId: number,
   ): Promise<AuthPasswordResetEntity | null> {

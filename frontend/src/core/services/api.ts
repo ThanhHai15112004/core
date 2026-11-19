@@ -54,11 +54,15 @@ const PUBLIC_ENDPOINT_PREFIXES = [
   '/auth/verify/email/confirm',
   '/auth/verify/phone/confirm',
   '/auth/api-clients/token',
+  '/federated-identity/providers/public',
   '/health',
   '/ops/',
 ] as const;
 
 function isPublicEndpoint(endpoint: string): boolean {
+  if (/^\/federated-identity\/providers\/[^/]+\/(authorize|callback)(?:\?|$)/.test(endpoint)) {
+    return true;
+  }
   return PUBLIC_ENDPOINT_PREFIXES.some(
     (prefix) => endpoint === prefix || endpoint.startsWith(prefix),
   );
