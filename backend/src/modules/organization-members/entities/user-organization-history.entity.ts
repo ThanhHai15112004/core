@@ -25,10 +25,10 @@ export class UserOrganizationHistoryEntity extends TypeOrmBaseEntity {
   @Column({ name: 'position_title', type: 'varchar', length: 128, nullable: true })
   public positionTitle!: string | null;
 
-  @Column({ name: 'start_date', type: 'timestamptz', nullable: true })
+  @Column({ name: 'start_date', type: 'timestamp', nullable: true })
   public startDate!: Date | null;
 
-  @Column({ name: 'end_date', type: 'timestamptz', nullable: true })
+  @Column({ name: 'end_date', type: 'timestamp', nullable: true })
   public endDate!: Date | null;
 
   @Column({ name: 'reason', type: 'varchar', length: 255, nullable: true })
