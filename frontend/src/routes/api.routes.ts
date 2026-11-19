@@ -596,4 +596,25 @@ export const API_ROUTES = {
     EVENT_BY_ID: (id: string | number) => `/inbound-webhooks/events/${id}`,
     EVENT_REPROCESS: (id: string | number) => `/inbound-webhooks/events/${id}/reprocess`,
   },
+  PAYMENTS: {
+    DRIVERS: '/payments/drivers',
+    PROVIDERS: (qs = '') => `/payments/providers${qs ? `?${qs}` : ''}`,
+    PROVIDER_BY_ID: (id: string | number) => `/payments/providers/${id}`,
+    TRANSACTIONS: (qs = '') => `/payments/transactions${qs ? `?${qs}` : ''}`,
+    TRANSACTION_BY_ID: (id: string | number) => `/payments/transactions/${id}`,
+    TRANSACTION_REFUNDS: (id: string | number) => `/payments/transactions/${id}/refunds`,
+    TRANSACTION_SIMULATE_CALLBACK: (id: string | number) =>
+      `/payments/transactions/${id}/simulate-callback`,
+    REFUNDS: (qs = '') => `/payments/refunds${qs ? `?${qs}` : ''}`,
+    CALLBACKS: (qs = '') => `/payments/callbacks${qs ? `?${qs}` : ''}`,
+    CALLBACK_LOG_BY_ID: (id: string | number) => `/payments/callback-logs/${id}`,
+    CALLBACK_RECEIVE: (providerCode: string) =>
+      `/payments/callbacks/${encodeURIComponent(providerCode)}`,
+    RECONCILIATIONS: (qs = '') => `/payments/reconciliations${qs ? `?${qs}` : ''}`,
+    RECONCILIATION_RUN: '/payments/reconciliations/run',
+    RECONCILIATION_BY_ID: (id: string | number, qs = '') =>
+      `/payments/reconciliations/${id}${qs ? `?${qs}` : ''}`,
+    RECONCILIATION_RESOLVE_ITEM: (id: string | number, itemId: string | number) =>
+      `/payments/reconciliations/${id}/items/${itemId}/resolve`,
+  },
 } as const;

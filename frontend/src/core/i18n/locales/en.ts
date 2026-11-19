@@ -70,6 +70,7 @@ export const en: TranslationKey = {
     calendar: 'Calendar & Events',
     customFields: 'Custom Fields & Metadata',
     webhooks: 'Outbound Webhooks',
+    payments: 'Payments & Reconciliation',
     languageToggle: 'Language',
     themeLight: 'Light',
     themeDark: 'Dark',

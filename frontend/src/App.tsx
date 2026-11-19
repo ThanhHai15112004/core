@@ -66,6 +66,10 @@ const WebhooksManagementPage = loadPage(
   () => import('./modules/webhooks/WebhooksManagementPage'),
   'WebhooksManagementPage',
 );
+const PaymentsManagementPage = loadPage(
+  () => import('./modules/payments/PaymentsManagementPage'),
+  'PaymentsManagementPage',
+);
 
 // Tải riêng: CSS/JS của System Console (Tailwind, ECharts…) chỉ nạp khi vào console.
 // Link cũ dạng `/#system-console/...` → đường dẫn thật.
@@ -139,6 +143,8 @@ function App() {
               <CustomFieldsManagementPage />
             ) : activeTab === 'webhooks' ? (
               <WebhooksManagementPage />
+            ) : activeTab === 'payments' ? (
+              <PaymentsManagementPage />
             ) : (
               <HomePage onNavigateTab={handleNavigateTab} />
             )}

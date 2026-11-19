@@ -55,6 +55,7 @@ const PUBLIC_ENDPOINT_PREFIXES = [
   '/auth/verify/phone/confirm',
   '/auth/api-clients/token',
   '/federated-identity/providers/public',
+  '/payments/callbacks/',
   '/health',
   '/ops/',
 ] as const;

@@ -12,6 +12,7 @@ export const ROUTES = {
   CALENDAR: '/calendar',
   CUSTOM_FIELDS: '/custom-fields',
   WEBHOOKS: '/webhooks',
+  PAYMENTS: '/payments',
   SYSTEM_CONSOLE: '/system-console',
 } as const;
 

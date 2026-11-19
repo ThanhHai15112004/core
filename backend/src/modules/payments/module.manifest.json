@@ -1,0 +1,411 @@
+{
+  "$schema": "../../packages/kernel/schemas/module.manifest.schema.json",
+  "name": "payments",
+  "displayName": "Payments (Payment Port & Reconciliation)",
+  "version": "1.0.0",
+  "description": "Cổng thanh toán trung lập nhà cung cấp (10.5): Cấu trúc yêu cầu & kết quả thanh toán thống nhất, adapter Sandbox/VNPay/MoMo/Stripe, chống tạo trùng bằng Idempotency Key, xác minh chữ ký/số tiền/mã giao dịch callback, hoàn tiền toàn phần/một phần, lưu lịch sử và đối soát 2 chiều.",
+  "type": "core",
+  "category": "Integrations",
+  "author": "Core Platform Team",
+  "entryModule": "PaymentsModule",
+  "dependencies": [
+    "database",
+    "security",
+    "http-client",
+    "settings",
+    "codes",
+    "sequences",
+    "audit"
+  ],
+  "permissions": [
+    "payments.read",
+    "payments.create",
+    "payments.manage",
+    "payments.refund",
+    "payments.reconcile"
+  ],
+  "codeTypes": [
+    {
+      "code": "payments.provider_status",
+      "name": "Trạng thái cổng thanh toán",
+      "description": "Trạng thái kích hoạt của cấu hình cổng thanh toán",
+      "isSystem": true,
+      "allowCustomValues": false,
+      "values": [
+        {
+          "numericCode": 1,
+          "code": "ACTIVE",
+          "name": "Đang hoạt động",
+          "labels": { "vi": "Đang hoạt động", "en": "Active" },
+          "behaviorCode": "ACTIVE",
+          "badgeTone": "success",
+          "sortOrder": 1,
+          "isSystem": true
+        },
+        {
+          "numericCode": 2,
+          "code": "INACTIVE",
+          "name": "Tạm tắt",
+          "labels": { "vi": "Tạm tắt", "en": "Inactive" },
+          "behaviorCode": "INACTIVE",
+          "badgeTone": "neutral",
+          "sortOrder": 2,
+          "isSystem": true
+        }
+      ]
+    },
+    {
+      "code": "payments.transaction_status",
+      "name": "Trạng thái giao dịch thanh toán",
+      "description": "Trạng thái chuẩn hóa thống nhất giữa các cổng thanh toán",
+      "isSystem": true,
+      "allowCustomValues": false,
+      "values": [
+        {
+          "numericCode": 1,
+          "code": "PENDING",
+          "name": "Chờ thanh toán",
+          "labels": { "vi": "Chờ thanh toán", "en": "Pending" },
+          "behaviorCode": "PENDING",
+          "badgeTone": "info",
+          "sortOrder": 1,
+          "isSystem": true
+        },
+        {
+          "numericCode": 2,
+          "code": "PROCESSING",
+          "name": "Đang xử lý",
+          "labels": { "vi": "Đang xử lý", "en": "Processing" },
+          "behaviorCode": "PROCESSING",
+          "badgeTone": "warning",
+          "sortOrder": 2,
+          "isSystem": true
+        },
+        {
+          "numericCode": 3,
+          "code": "SUCCEEDED",
+          "name": "Thành công",
+          "labels": { "vi": "Thành công", "en": "Succeeded" },
+          "behaviorCode": "SUCCEEDED",
+          "badgeTone": "success",
+          "sortOrder": 3,
+          "isSystem": true
+        },
+        {
+          "numericCode": 4,
+          "code": "FAILED",
+          "name": "Thất bại",
+          "labels": { "vi": "Thất bại", "en": "Failed" },
+          "behaviorCode": "FAILED",
+          "badgeTone": "danger",
+          "sortOrder": 4,
+          "isSystem": true
+        },
+        {
+          "numericCode": 5,
+          "code": "CANCELLED",
+          "name": "Đã hủy",
+          "labels": { "vi": "Đã hủy", "en": "Cancelled" },
+          "behaviorCode": "CANCELLED",
+          "badgeTone": "neutral",
+          "sortOrder": 5,
+          "isSystem": true
+        },
+        {
+          "numericCode": 6,
+          "code": "EXPIRED",
+          "name": "Hết hạn",
+          "labels": { "vi": "Hết hạn", "en": "Expired" },
+          "behaviorCode": "EXPIRED",
+          "badgeTone": "neutral",
+          "sortOrder": 6,
+          "isSystem": true
+        },
+        {
+          "numericCode": 7,
+          "code": "PARTIALLY_REFUNDED",
+          "name": "Hoàn một phần",
+          "labels": { "vi": "Hoàn một phần", "en": "Partially Refunded" },
+          "behaviorCode": "PARTIALLY_REFUNDED",
+          "badgeTone": "warning",
+          "sortOrder": 7,
+          "isSystem": true
+        },
+        {
+          "numericCode": 8,
+          "code": "REFUNDED",
+          "name": "Đã hoàn toàn phần",
+          "labels": { "vi": "Đã hoàn tiền", "en": "Refunded" },
+          "behaviorCode": "REFUNDED",
+          "badgeTone": "neutral",
+          "sortOrder": 8,
+          "isSystem": true
+        }
+      ]
+    },
+    {
+      "code": "payments.reconciliation_discrepancy",
+      "name": "Trạng thái đối soát thanh toán",
+      "description": "Phân loại kết quả so sánh giữa dữ liệu nội bộ và cổng thanh toán",
+      "isSystem": true,
+      "allowCustomValues": false,
+      "values": [
+        {
+          "numericCode": 1,
+          "code": "MATCHED",
+          "name": "Khớp hoàn toàn",
+          "labels": { "vi": "Khớp", "en": "Matched" },
+          "behaviorCode": "MATCHED",
+          "badgeTone": "success",
+          "sortOrder": 1,
+          "isSystem": true
+        },
+        {
+          "numericCode": 2,
+          "code": "STATUS_MISMATCH",
+          "name": "Lệch trạng thái",
+          "labels": { "vi": "Lệch trạng thái", "en": "Status Mismatch" },
+          "behaviorCode": "STATUS_MISMATCH",
+          "badgeTone": "warning",
+          "sortOrder": 2,
+          "isSystem": true
+        },
+        {
+          "numericCode": 3,
+          "code": "AMOUNT_MISMATCH",
+          "name": "Lệch số tiền",
+          "labels": { "vi": "Lệch số tiền", "en": "Amount Mismatch" },
+          "behaviorCode": "AMOUNT_MISMATCH",
+          "badgeTone": "danger",
+          "sortOrder": 3,
+          "isSystem": true
+        },
+        {
+          "numericCode": 4,
+          "code": "REFUND_MISMATCH",
+          "name": "Lệch số tiền hoàn",
+          "labels": { "vi": "Lệch hoàn tiền", "en": "Refund Mismatch" },
+          "behaviorCode": "REFUND_MISMATCH",
+          "badgeTone": "danger",
+          "sortOrder": 4,
+          "isSystem": true
+        },
+        {
+          "numericCode": 5,
+          "code": "MISSING_AT_PROVIDER",
+          "name": "Thiếu bên cổng thanh toán",
+          "labels": { "vi": "Thiếu bên Provider", "en": "Missing at Provider" },
+          "behaviorCode": "MISSING_AT_PROVIDER",
+          "badgeTone": "danger",
+          "sortOrder": 5,
+          "isSystem": true
+        },
+        {
+          "numericCode": 6,
+          "code": "MISSING_INTERNALLY",
+          "name": "Thiếu trong nội bộ",
+          "labels": { "vi": "Thiếu nội bộ", "en": "Missing Internally" },
+          "behaviorCode": "MISSING_INTERNALLY",
+          "badgeTone": "danger",
+          "sortOrder": 6,
+          "isSystem": true
+        }
+      ]
+    }
+  ],
+  "settingGroups": [
+    {
+      "code": "payments",
+      "name": "Cổng thanh toán & Đối soát",
+      "description": "Tiền tệ mặc định, thời hạn giao dịch, dung sai callback, giới hạn payload lưu đối soát và truy vấn đối soát",
+      "icon": "CreditCard",
+      "sortOrder": 68,
+      "isSystem": true
+    }
+  ],
+  "settings": [
+    {
+      "key": "payments.default_currency",
+      "groupCode": "payments",
+      "module": "payments",
+      "namespace": "payments.general",
+      "name": "Đơn vị tiền tệ mặc định (ISO 4217)",
+      "description": "Mã tiền tệ mặc định áp dụng khi tạo yêu cầu thanh toán không truyền currency",
+      "valueType": "TEXT",
+      "defaultValue": "VND",
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 1
+    },
+    {
+      "key": "payments.default_expiry_seconds",
+      "groupCode": "payments",
+      "module": "payments",
+      "namespace": "payments.general",
+      "name": "Thời hạn hiệu lực mặc định của giao dịch (giây)",
+      "description": "Thời gian hết hạn mặc định khi khởi tạo phiên thanh toán nếu caller không chỉ định",
+      "valueType": "NUMBER",
+      "defaultValue": 900,
+      "validationRules": { "min": 60, "max": 86400, "integerOnly": true },
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 2
+    },
+    {
+      "key": "payments.callback_tolerance_sec",
+      "groupCode": "payments",
+      "module": "payments",
+      "namespace": "payments.security",
+      "name": "Dung sai thời gian xác minh Callback (giây)",
+      "description": "Khoảng chênh lệch tối đa cho phép đối với timestamp chữ ký callback (Stripe/Sandbox)",
+      "valueType": "NUMBER",
+      "defaultValue": 300,
+      "validationRules": { "min": 30, "max": 86400, "integerOnly": true },
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 3
+    },
+    {
+      "key": "payments.max_stored_payload_bytes",
+      "groupCode": "payments",
+      "module": "payments",
+      "namespace": "payments.storage",
+      "name": "Giới hạn dung lượng payload callback lưu đối soát (bytes)",
+      "description": "Dung lượng tối đa JSON payload callback đã che thông tin nhạy cảm được lưu trong DB",
+      "valueType": "NUMBER",
+      "defaultValue": 65536,
+      "validationRules": { "min": 1024, "max": 1048576, "integerOnly": true },
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 4
+    },
+    {
+      "key": "payments.record_rejected_callbacks",
+      "groupCode": "payments",
+      "module": "payments",
+      "namespace": "payments.audit",
+      "name": "Lưu lịch sử callback bị từ chối",
+      "description": "Lưu đầy đủ các callback sai chữ ký, lệch số tiền hoặc sai tiền tệ để điều tra và đối soát",
+      "valueType": "BOOLEAN",
+      "defaultValue": true,
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 5
+    },
+    {
+      "key": "payments.reconcile_max_live_queries",
+      "groupCode": "payments",
+      "module": "payments",
+      "namespace": "payments.reconciliation",
+      "name": "Số giao dịch tối đa mỗi lần đối soát Live Query",
+      "description": "Giới hạn số lượng giao dịch gọi API query trực tiếp tới provider trong một đợt đối soát",
+      "valueType": "NUMBER",
+      "defaultValue": 100,
+      "validationRules": { "min": 1, "max": 1000, "integerOnly": true },
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 6
+    }
+  ],
+  "sequences": [
+    {
+      "key": "payments.transaction_code",
+      "module": "payments",
+      "name": "Mã giao dịch thanh toán",
+      "description": "Sinh mã giao dịch thanh toán nội bộ duy nhất (ví dụ: PAY-202611-000001)",
+      "prefix": "PAY",
+      "suffix": "",
+      "separator": "-",
+      "dateFormat": "YYYYMM",
+      "paddingLength": 6,
+      "startValue": 1,
+      "step": 1,
+      "resetPolicy": "MONTHLY",
+      "scopeByUnit": false,
+      "timezone": "Asia/Ho_Chi_Minh",
+      "isSystem": true
+    },
+    {
+      "key": "payments.refund_code",
+      "module": "payments",
+      "name": "Mã yêu cầu hoàn tiền",
+      "description": "Sinh mã yêu cầu hoàn tiền duy nhất (ví dụ: RFD-202611-000001)",
+      "prefix": "RFD",
+      "suffix": "",
+      "separator": "-",
+      "dateFormat": "YYYYMM",
+      "paddingLength": 6,
+      "startValue": 1,
+      "step": 1,
+      "resetPolicy": "MONTHLY",
+      "scopeByUnit": false,
+      "timezone": "Asia/Ho_Chi_Minh",
+      "isSystem": true
+    },
+    {
+      "key": "payments.reconciliation_code",
+      "module": "payments",
+      "name": "Mã phiên đối soát thanh toán",
+      "description": "Sinh mã phiên đối soát thanh toán duy nhất (ví dụ: REC-202611-000001)",
+      "prefix": "REC",
+      "suffix": "",
+      "separator": "-",
+      "dateFormat": "YYYYMM",
+      "paddingLength": 6,
+      "startValue": 1,
+      "step": 1,
+      "resetPolicy": "MONTHLY",
+      "scopeByUnit": false,
+      "timezone": "Asia/Ho_Chi_Minh",
+      "isSystem": true
+    }
+  ],
+  "menus": [
+    {
+      "code": "PAYMENTS",
+      "name": "Thanh toán & Đối soát",
+      "module": "payments",
+      "status": 1,
+      "link": "/payments",
+      "linkApi": "/api/v1/payments/reconciliations",
+      "type": 2,
+      "parent": null,
+      "level": 1,
+      "key": "payments.read",
+      "numOrder": 62,
+      "icon": "CreditCard",
+      "position": "SIDEBAR"
+    }
+  ],
+  "events": {
+    "published": [
+      "payments.provider.updated",
+      "payments.transaction.created",
+      "payments.transaction.succeeded",
+      "payments.transaction.failed",
+      "payments.transaction.cancelled",
+      "payments.refund.succeeded",
+      "payments.refund.failed",
+      "payments.callback.rejected",
+      "payments.reconciliation.completed"
+    ],
+    "subscribed": []
+  },
+  "database": {
+    "hasMigrations": true,
+    "tables": [
+      "payment_providers",
+      "payment_transactions",
+      "payment_refunds",
+      "payment_callbacks",
+      "payment_reconciliations",
+      "payment_reconciliation_items"
+    ]
+  }
+}

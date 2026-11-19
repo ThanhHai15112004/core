@@ -26,6 +26,7 @@ import {
   Calendar,
   SlidersHorizontal,
   Webhook,
+  CreditCard,
   Sun,
   Moon,
 } from 'lucide-react';
@@ -117,6 +118,8 @@ export const Header: React.FC<HeaderProps> = ({ activeTab, onTabChange }) => {
         return <SlidersHorizontal size={15} />;
       case 'webhooks':
         return <Webhook size={15} />;
+      case 'payments':
+        return <CreditCard size={15} />;
       case 'home':
       default:
         return <Home size={15} />;

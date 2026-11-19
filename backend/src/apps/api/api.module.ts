@@ -51,6 +51,7 @@ import { CustomFieldsModule } from '@modules/custom-fields/index.js';
 import { WebhooksModule } from '@modules/webhooks/index.js';
 import { InboundWebhooksModule } from '@modules/inbound-webhooks/index.js';
 import { FederatedIdentityModule } from '@modules/federated-identity/index.js';
+import { PaymentsModule } from '@modules/payments/index.js';
 import { RedisModule } from '@packages/redis/index.js';
 import { RuntimeAgentModule } from '@packages/runtime/index.js';
 import { ApiRuntimeContributor } from './runtime/api-runtime.contributor.js';
@@ -108,6 +109,7 @@ import { MetricsModule } from '@packages/metrics/index.js';
     WebhooksModule,
     InboundWebhooksModule,
     FederatedIdentityModule,
+    PaymentsModule,
   ],
   providers: [
     ApiRuntimeContributor,

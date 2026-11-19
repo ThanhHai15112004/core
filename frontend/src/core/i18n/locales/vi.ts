@@ -69,6 +69,7 @@ export const vi = {
     calendar: 'Lịch & Sự kiện',
     customFields: 'Trường tùy chỉnh & Metadata',
     webhooks: 'Webhooks gửi ra ngoài',
+    payments: 'Thanh toán & Đối soát',
     languageToggle: 'Ngôn ngữ',
     themeLight: 'Sáng',
     themeDark: 'Tối',
