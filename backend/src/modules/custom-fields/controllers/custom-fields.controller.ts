@@ -1,21 +1,7 @@
-import {
-  Body,
-  Controller,
-  Get,
-  Param,
-  Patch,
-  Post,
-  Put,
-  Query,
-  UseGuards,
-} from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Put, Query, UseGuards } from '@nestjs/common';
 import { parseOrThrow, RequirePermissions } from '@packages/http/index.js';
 import type { CustomFieldActorContext } from '@packages/kernel/index.js';
-import {
-  AuthGuard,
-  CurrentUser,
-  type UserIdentity,
-} from '@packages/security/index.js';
+import { AuthGuard, CurrentUser, type UserIdentity } from '@packages/security/index.js';
 import {
   CreateCustomFieldDefinitionRequestSchema,
   FilterRecordsByCustomFieldsRequestSchema,
@@ -36,7 +22,7 @@ function toActorContext(user?: UserIdentity): CustomFieldActorContext {
     permissions: user?.permissions ?? [],
     bypassPermissionCheck: Boolean(
       user?.roles?.some((r: string) => r.toLowerCase() === 'super_admin') ||
-        user?.permissions?.includes('*'),
+      user?.permissions?.includes('*'),
     ),
   };
 }
@@ -71,15 +57,9 @@ export class CustomFieldsController {
   /** 9.8.2, 9.8.3, 9.8.4, 9.8.5, 9.8.6, 9.8.7, 9.8.8: Tạo mới trường tùy chỉnh */
   @Post(CUSTOM_FIELDS_ROUTES.DEFINITIONS)
   @RequirePermissions('custom-fields.manage')
-  public async createDefinition(
-    @Body() rawBody: unknown,
-    @CurrentUser() user?: UserIdentity,
-  ) {
+  public async createDefinition(@Body() rawBody: unknown, @CurrentUser() user?: UserIdentity) {
     const body = parseOrThrow(CreateCustomFieldDefinitionRequestSchema, rawBody);
-    return this.customFieldsService.createDefinition(
-      body,
-      user?.id ? Number(user.id) : null,
-    );
+    return this.customFieldsService.createDefinition(body, user?.id ? Number(user.id) : null);
   }
 
   /** 9.8.3, 9.8.4, 9.8.6, 9.8.7, 9.8.8: Cập nhật cấu hình trường (Chặn đổi kiểu dữ liệu tùy tiện) */
@@ -187,10 +167,7 @@ export class CustomFieldsController {
   /** 9.8.7: Lọc bản ghi theo trường tùy chỉnh (Chỉ cho phép trường được đánh index) */
   @Post(CUSTOM_FIELDS_ROUTES.VALUES_FILTER)
   @RequirePermissions('custom-fields.values.read')
-  public async filterRecords(
-    @Body() rawBody: unknown,
-    @CurrentUser() user?: UserIdentity,
-  ) {
+  public async filterRecords(@Body() rawBody: unknown, @CurrentUser() user?: UserIdentity) {
     const body = parseOrThrow(FilterRecordsByCustomFieldsRequestSchema, rawBody);
     return this.customFieldsService.filterRecordsEndpoint(body, toActorContext(user));
   }

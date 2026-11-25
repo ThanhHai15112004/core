@@ -57,10 +57,9 @@ describe('Outbound HTTP Client Tracing Unit Tests', () => {
     }) as typeof globalThis.fetch;
 
     await runInSpan('usecase.payments.create', { category: 'usecase' }, async () => {
-      const res = await client.forService('vnpay').post<{ ok: boolean }>(
-        '/pay?apiKey=secret_val',
-        { amount: 100 },
-      );
+      const res = await client
+        .forService('vnpay')
+        .post<{ ok: boolean }>('/pay?apiKey=secret_val', { amount: 100 });
       expect(res.ok).toBe(true);
     });
 

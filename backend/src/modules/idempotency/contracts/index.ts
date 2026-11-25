@@ -31,11 +31,7 @@ export interface IIdempotencyPublicService {
   listRecords(query: ListIdempotencyRecordsInput): Promise<PaginatedResult<IdempotencyRecordView>>;
   getRecordById(id: number): Promise<IdempotencyRecordDetailView>;
   getMetrics(windowHours?: number): Promise<IdempotencyMetricsSnapshot>;
-  revokeRecord(
-    id: number,
-    reason?: string,
-    actor?: UserIdentity,
-  ): Promise<IdempotencyRevokeResult>;
+  revokeRecord(id: number, reason?: string, actor?: UserIdentity): Promise<IdempotencyRevokeResult>;
   purgeExpiredRecords(
     options?: IdempotencyPurgeOptions,
     actor?: UserIdentity,

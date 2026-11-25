@@ -1,10 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import {
-  SpanKind,
-  context,
-  isSpanContextValid,
-  trace,
-} from '@opentelemetry/api';
+import { SpanKind, context, isSpanContextValid, trace } from '@opentelemetry/api';
 import { SPAN_CATEGORY_ATTR } from '../constants/tracing.constant.js';
 import { finishHttpTraceSpan, setHttpTraceState } from '../utils/http-trace-meta.js';
 import { extractTraceContext, formatTraceParent } from '../utils/trace-context.util.js';

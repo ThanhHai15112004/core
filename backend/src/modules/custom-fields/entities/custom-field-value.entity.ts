@@ -3,11 +3,9 @@ import { VersionedTypeOrmEntity } from '@packages/database/index.js';
 import { CUSTOM_FIELD_DATA_TYPE, type CustomFieldDataType } from '@packages/kernel/index.js';
 
 @Entity({ name: 'custom_field_values' })
-@Index(
-  'UQ_custom_field_values_entity_record_field',
-  ['entityCode', 'recordId', 'fieldKey'],
-  { unique: true },
-)
+@Index('UQ_custom_field_values_entity_record_field', ['entityCode', 'recordId', 'fieldKey'], {
+  unique: true,
+})
 @Index('IDX_custom_field_values_entity_record', ['entityCode', 'recordId'])
 @Index('IDX_custom_field_values_indexed_text', ['entityCode', 'fieldKey', 'valueText'])
 @Index('IDX_custom_field_values_indexed_number', ['entityCode', 'fieldKey', 'valueNumber'])

@@ -395,7 +395,10 @@ export class BaseHttpClientProvider implements HttpClientContract {
               });
 
               if (res.ok) {
-                const parsed = await this.parseResponseBody<T>(res, options?.responseType ?? 'json');
+                const parsed = await this.parseResponseBody<T>(
+                  res,
+                  options?.responseType ?? 'json',
+                );
                 const totalDurationMs = Date.now() - totalStartMs;
                 if (!options?.skipCircuitBreaker) {
                   const state = this.circuitBreaker.onSuccess(service);
@@ -513,7 +516,8 @@ export class BaseHttpClientProvider implements HttpClientContract {
               }
 
               const delayMs = computeBackoffDelayMs(attempt, policy.retry, lastError.retryAfterMs);
-              const reason = lastError.status !== null ? `http_${lastError.status}` : lastError.code;
+              const reason =
+                lastError.status !== null ? `http_${lastError.status}` : lastError.code;
               const afterRetrySnap = this.retryStorm.recordRetry(service);
               this.metrics.recordRetryStormState(service, afterRetrySnap.active);
               this.metrics.recordRetry(service, method, reason);

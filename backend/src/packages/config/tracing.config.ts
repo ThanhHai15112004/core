@@ -59,9 +59,7 @@ export const tracingConfig = () => {
     TRACING_EXPORTERS.includes(exporterRaw as TracingExporterType) ? exporterRaw : 'none'
   ) as TracingExporterType;
 
-  const samplerRaw = (
-    env('TRACING_SAMPLER', false) || 'parentbased_traceidratio'
-  ).toLowerCase();
+  const samplerRaw = (env('TRACING_SAMPLER', false) || 'parentbased_traceidratio').toLowerCase();
   const sampler = (
     TRACING_SAMPLERS.includes(samplerRaw as TracingSamplerType)
       ? samplerRaw
@@ -70,7 +68,9 @@ export const tracingConfig = () => {
 
   const defaultRatio = nodeEnv === 'production' ? 0.1 : 1;
   const rawRatio = numberOr('TRACING_SAMPLING_RATIO', defaultRatio);
-  const samplingRatio = Number.isFinite(rawRatio) ? Math.min(1, Math.max(0, rawRatio)) : defaultRatio;
+  const samplingRatio = Number.isFinite(rawRatio)
+    ? Math.min(1, Math.max(0, rawRatio))
+    : defaultRatio;
 
   return {
     /** Bật/tắt tạo và xuất OpenTelemetry span (mặc định bật ở dev/prod, tắt ở test). */

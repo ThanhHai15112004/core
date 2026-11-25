@@ -154,9 +154,7 @@ export class ReconciliationService implements IReconciliationPublicService {
     return this.dataRepairService.proposeRepair(input, actor);
   }
 
-  public listRepairs(
-    query: ListDataRepairsQuery,
-  ): Promise<PaginatedResult<DataRepairRequestView>> {
+  public listRepairs(query: ListDataRepairsQuery): Promise<PaginatedResult<DataRepairRequestView>> {
     return this.dataRepairService.listRepairs(query);
   }
 

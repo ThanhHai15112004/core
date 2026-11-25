@@ -71,5 +71,8 @@ export interface IOutboxPublicService {
   ): Promise<OutboxReplayBatchResult>;
   processPendingBatch(options?: OutboxDispatchBatchOptions): Promise<OutboxDispatchBatchResult>;
   checkLagAndAlert(now?: Date): Promise<OutboxLagAlertCheckResult>;
-  purgeExpiredEvents(options?: OutboxPurgeOptions, actor?: UserIdentity): Promise<OutboxPurgeResult>;
+  purgeExpiredEvents(
+    options?: OutboxPurgeOptions,
+    actor?: UserIdentity,
+  ): Promise<OutboxPurgeResult>;
 }

@@ -100,7 +100,12 @@ export class IdempotencyStoreService implements IIdempotencyStoreDelegate {
     const now = input.now ?? new Date();
     const scopeTarget = normalizeIdempotencyScopeTarget(input.scopeTarget);
     const config = resolveIdempotencyRuntimeConfig(this.settingRegistry);
-    const ttlSec = resolveEffectiveIdempotencyTtlSec(config, input.scope, scopeTarget, input.ttlSec);
+    const ttlSec = resolveEffectiveIdempotencyTtlSec(
+      config,
+      input.scope,
+      scopeTarget,
+      input.ttlSec,
+    );
     const leaseSec =
       input.leaseSec && input.leaseSec > 0 ? Math.round(input.leaseSec) : config.lockLeaseSec;
     const expiresAt = new Date(now.getTime() + ttlSec * 1000);
@@ -213,7 +218,12 @@ export class IdempotencyStoreService implements IIdempotencyStoreDelegate {
     const now = input.now ?? new Date();
     const scopeTarget = normalizeIdempotencyScopeTarget(input.scopeTarget);
     const config = resolveIdempotencyRuntimeConfig(this.settingRegistry);
-    const ttlSec = resolveEffectiveIdempotencyTtlSec(config, input.scope, scopeTarget, input.ttlSec);
+    const ttlSec = resolveEffectiveIdempotencyTtlSec(
+      config,
+      input.scope,
+      scopeTarget,
+      input.ttlSec,
+    );
     const expiresAt = new Date(now.getTime() + ttlSec * 1000);
     const clientIdentifier = input.clientIdentifier?.trim().slice(0, 160) || null;
     const correlationId = input.correlationId?.trim().slice(0, 120) || null;

@@ -116,7 +116,9 @@ function createTransactionalOutboxFixture() {
       rows.set(id, entity);
       return Object.assign(new OutboxEventEntity(), entity);
     },
-    listPaginated: async (filter: ListOutboxEventsInput): Promise<PaginatedResult<OutboxEventEntity>> => {
+    listPaginated: async (
+      filter: ListOutboxEventsInput,
+    ): Promise<PaginatedResult<OutboxEventEntity>> => {
       const all = [...activeRows().values()].filter((row) => {
         if (filter.status !== undefined && row.status !== filter.status) return false;
         if (filter.sourceModule && row.sourceModule !== filter.sourceModule) return false;
@@ -150,7 +152,8 @@ function createTransactionalOutboxFixture() {
       for (const row of sorted) {
         if (claimed.length >= batchSize) break;
         const isRetryableDue =
-          (row.status === OUTBOX_EVENT_STATUS.PENDING || row.status === OUTBOX_EVENT_STATUS.FAILED) &&
+          (row.status === OUTBOX_EVENT_STATUS.PENDING ||
+            row.status === OUTBOX_EVENT_STATUS.FAILED) &&
           (!row.nextAttemptAt || row.nextAttemptAt.getTime() <= now.getTime());
         const isExpiredLease =
           row.status === OUTBOX_EVENT_STATUS.PROCESSING &&
@@ -166,7 +169,12 @@ function createTransactionalOutboxFixture() {
       }
       return claimed;
     },
-    markPublished: async (id: number, workerId: string, attemptCount: number, publishedAt: Date) => {
+    markPublished: async (
+      id: number,
+      workerId: string,
+      attemptCount: number,
+      publishedAt: Date,
+    ) => {
       const row = activeRows().get(id);
       if (!row || row.lockedBy !== workerId) return;
       row.status = OUTBOX_EVENT_STATUS.PUBLISHED;
@@ -251,7 +259,10 @@ function createTransactionalOutboxFixture() {
           row.status === OUTBOX_EVENT_STATUS.PENDING ||
           row.status === OUTBOX_EVENT_STATUS.FAILED
         ) {
-          if (!oldestPendingCreatedAt || row.createdAt.getTime() < oldestPendingCreatedAt.getTime()) {
+          if (
+            !oldestPendingCreatedAt ||
+            row.createdAt.getTime() < oldestPendingCreatedAt.getTime()
+          ) {
             oldestPendingCreatedAt = row.createdAt;
           }
         }
@@ -536,9 +547,21 @@ describe('Transactional Outbox (Phase 11.2)', () => {
     expect((await service.getEventById(leaseRec.id!)).statusName).toBe('PUBLISHED');
 
     // Backoff tăng lũy thừa có giới hạn trần
-    const d1 = computeOutboxRetryDelayMs(1, { retryBaseDelayMs: 5000, retryMaxDelayMs: 60000 }, () => 0.5);
-    const d2 = computeOutboxRetryDelayMs(2, { retryBaseDelayMs: 5000, retryMaxDelayMs: 60000 }, () => 0.5);
-    const d8 = computeOutboxRetryDelayMs(8, { retryBaseDelayMs: 5000, retryMaxDelayMs: 60000 }, () => 0.5);
+    const d1 = computeOutboxRetryDelayMs(
+      1,
+      { retryBaseDelayMs: 5000, retryMaxDelayMs: 60000 },
+      () => 0.5,
+    );
+    const d2 = computeOutboxRetryDelayMs(
+      2,
+      { retryBaseDelayMs: 5000, retryMaxDelayMs: 60000 },
+      () => 0.5,
+    );
+    const d8 = computeOutboxRetryDelayMs(
+      8,
+      { retryBaseDelayMs: 5000, retryMaxDelayMs: 60000 },
+      () => 0.5,
+    );
     expect(d1).toBe(5000);
     expect(d2).toBe(10000);
     expect(d8).toBe(60000);
@@ -598,9 +621,9 @@ describe('Transactional Outbox (Phase 11.2)', () => {
     expect(reflector.get(REQUIRED_PERMISSIONS_KEY, OutboxController.prototype.listEvents)).toEqual([
       'outbox.read',
     ]);
-    expect(reflector.get(REQUIRED_PERMISSIONS_KEY, OutboxController.prototype.replayEvent)).toEqual([
-      'outbox.replay',
-    ]);
+    expect(reflector.get(REQUIRED_PERMISSIONS_KEY, OutboxController.prototype.replayEvent)).toEqual(
+      ['outbox.replay'],
+    );
     expect(reflector.get(REQUIRED_PERMISSIONS_KEY, OutboxController.prototype.cleanup)).toEqual([
       'outbox.manage',
     ]);

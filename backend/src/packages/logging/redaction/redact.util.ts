@@ -102,9 +102,7 @@ export function redactSensitiveData<T>(input: T, options?: RedactOptions, depth 
   };
 
   if (Array.isArray(input)) {
-    return input.map((item) =>
-      redactSensitiveData(item, nextOptions, depth + 1),
-    ) as unknown as T;
+    return input.map((item) => redactSensitiveData(item, nextOptions, depth + 1)) as unknown as T;
   }
 
   const redacted: Record<string, unknown> = {};

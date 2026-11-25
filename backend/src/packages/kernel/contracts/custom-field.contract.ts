@@ -19,11 +19,7 @@ export const CUSTOM_FIELD_STATUS = {
 export type CustomFieldStatusCode = (typeof CUSTOM_FIELD_STATUS)[keyof typeof CUSTOM_FIELD_STATUS];
 
 export type CustomFieldHistoryActionType =
-  | 'CREATED'
-  | 'UPDATED'
-  | 'OPTIONS_UPDATED'
-  | 'STATUS_CHANGED'
-  | 'DATA_TYPE_CHANGE_BLOCKED';
+  'CREATED' | 'UPDATED' | 'OPTIONS_UPDATED' | 'STATUS_CHANGED' | 'DATA_TYPE_CHANGE_BLOCKED';
 
 /**
  * 9.8.1 — Khai báo loại đối tượng được phép mở rộng (`extensibleEntities`) trong `module.manifest.json`.
@@ -204,14 +200,7 @@ export interface CustomFieldActorContext {
  * 9.8.7 — Điều kiện lọc theo trường tùy chỉnh (chỉ cho phép lọc các trường có `isIndexed: true`).
  */
 export type CustomFieldFilterOperator =
-  | 'eq'
-  | 'ne'
-  | 'contains'
-  | 'gt'
-  | 'gte'
-  | 'lt'
-  | 'lte'
-  | 'in';
+  'eq' | 'ne' | 'contains' | 'gt' | 'gte' | 'lt' | 'lte' | 'in';
 
 export interface CustomFieldFilterCondition {
   readonly fieldKey: string;
@@ -292,9 +281,13 @@ export function parseCustomFieldFiltersParam(
 ): CustomFieldFilterCondition[] {
   if (!raw) return [];
   if (Array.isArray(raw)) {
-    return raw.filter(
-      (item): item is CustomFieldFilterCondition =>
-        Boolean(item && typeof item === 'object' && typeof item.fieldKey === 'string' && item.fieldKey.trim().length > 0),
+    return raw.filter((item): item is CustomFieldFilterCondition =>
+      Boolean(
+        item &&
+        typeof item === 'object' &&
+        typeof item.fieldKey === 'string' &&
+        item.fieldKey.trim().length > 0,
+      ),
     );
   }
   if (typeof raw === 'object') {
@@ -310,9 +303,12 @@ export function parseCustomFieldFiltersParam(
       const parsed: unknown = JSON.parse(trimmed);
       if (Array.isArray(parsed)) {
         return parsed
-          .filter(
-            (item): item is Record<string, unknown> =>
-              Boolean(item && typeof item === 'object' && typeof (item as Record<string, unknown>).fieldKey === 'string'),
+          .filter((item): item is Record<string, unknown> =>
+            Boolean(
+              item &&
+              typeof item === 'object' &&
+              typeof (item as Record<string, unknown>).fieldKey === 'string',
+            ),
           )
           .map((item) => ({
             fieldKey: String(item.fieldKey).trim(),
@@ -344,4 +340,3 @@ export function parseCustomFieldFiltersParam(
     })
     .filter((item) => item.fieldKey.length > 0);
 }
-

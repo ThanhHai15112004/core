@@ -124,8 +124,12 @@ describe('Job Producer <-> Worker Distributed Tracing Unit Tests', () => {
     expect(spans).toHaveLength(4);
 
     const apiSpan = spans.find((s) => s.name === 'POST /api/v1/exports');
-    const producerSpan = spans.find((s) => s.name === 'queue.publish system.events/export.generate');
-    const consumerSpan = spans.find((s) => s.name === 'queue.process system.events/export.generate');
+    const producerSpan = spans.find(
+      (s) => s.name === 'queue.publish system.events/export.generate',
+    );
+    const consumerSpan = spans.find(
+      (s) => s.name === 'queue.process system.events/export.generate',
+    );
     const usecaseSpan = spans.find((s) => s.name === 'usecase.export.run');
 
     expect(apiSpan).toBeDefined();

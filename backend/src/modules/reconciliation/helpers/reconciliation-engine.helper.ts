@@ -57,9 +57,7 @@ function normalizeStatus(
   const trimmed = String(status).trim();
   if (!trimmed) return null;
   const aliased =
-    rules.statusAliases?.[trimmed] ??
-    rules.statusAliases?.[trimmed.toUpperCase()] ??
-    trimmed;
+    rules.statusAliases?.[trimmed] ?? rules.statusAliases?.[trimmed.toUpperCase()] ?? trimmed;
   return rules.ignoreCaseOnStatus === false ? aliased : aliased.toUpperCase();
 }
 

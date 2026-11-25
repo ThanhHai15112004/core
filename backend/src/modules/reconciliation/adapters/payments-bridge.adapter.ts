@@ -83,7 +83,9 @@ export class PaymentsBridgeReconciliationAdapter implements IReconciliationSourc
     private readonly paymentsPublicService: IPaymentsPublicService | null = null,
   ) {}
 
-  public async fetchData(context: ReconciliationAdapterContext): Promise<ReconciliationDatasetPair> {
+  public async fetchData(
+    context: ReconciliationAdapterContext,
+  ): Promise<ReconciliationDatasetPair> {
     if (!this.paymentsPublicService) {
       throw new BadRequestAppException('reconciliation.paymentsBridgeUnavailable');
     }
@@ -91,7 +93,8 @@ export class PaymentsBridgeReconciliationAdapter implements IReconciliationSourc
     const providerCode =
       typeof context.parameters?.providerCode === 'string' && context.parameters.providerCode.trim()
         ? context.parameters.providerCode.trim()
-        : typeof context.jobConfig.providerCode === 'string' && context.jobConfig.providerCode.trim()
+        : typeof context.jobConfig.providerCode === 'string' &&
+            context.jobConfig.providerCode.trim()
           ? context.jobConfig.providerCode.trim()
           : undefined;
 
@@ -110,10 +113,7 @@ export class PaymentsBridgeReconciliationAdapter implements IReconciliationSourc
 
       for (const tx of paged.data) {
         const createdMs = Date.parse(tx.createdAt);
-        if (
-          !Number.isNaN(createdMs) &&
-          (createdMs < periodStartMs || createdMs > periodEndMs)
-        ) {
+        if (!Number.isNaN(createdMs) && (createdMs < periodStartMs || createdMs > periodEndMs)) {
           continue;
         }
         internalRecords.push(mapPaymentTxToComparable(tx));
@@ -132,10 +132,10 @@ export class PaymentsBridgeReconciliationAdapter implements IReconciliationSourc
     const externalFromCsv = context.externalCsv?.trim()
       ? parseComparableRecordsFromCsv(context.externalCsv)
       : [];
-    const externalRecords = [
-      ...(context.externalRecords ?? []),
-      ...externalFromCsv,
-    ].slice(0, context.maxRecords);
+    const externalRecords = [...(context.externalRecords ?? []), ...externalFromCsv].slice(
+      0,
+      context.maxRecords,
+    );
 
     return {
       internalRecords,
@@ -273,9 +273,7 @@ export class PaymentsBridgeRepairHandler implements IDataRepairHandler {
           ...(context.target.internalSnapshot ?? {}),
         };
 
-    if (
-      context.compensationType === RECONCILIATION_COMPENSATION_TYPES.REFUND_COMPENSATION
-    ) {
+    if (context.compensationType === RECONCILIATION_COMPENSATION_TYPES.REFUND_COMPENSATION) {
       if (!this.paymentsPublicService) {
         throw new BadRequestAppException('reconciliation.paymentsBridgeUnavailable');
       }
@@ -334,7 +332,9 @@ export class PaymentsBridgeRepairHandler implements IDataRepairHandler {
       compensationType: context.compensationType,
       paymentCode: tx?.paymentCode ?? context.target.targetEntityId,
       adjustmentAmount,
-      currency: tx?.currency ?? (typeof context.payload.currency === 'string' ? context.payload.currency : 'VND'),
+      currency:
+        tx?.currency ??
+        (typeof context.payload.currency === 'string' ? context.payload.currency : 'VND'),
       referenceCode: `PAY-COMP-${context.repairCode}`,
       reason: context.reason,
       recordedAt: new Date().toISOString(),
@@ -357,7 +357,9 @@ export class PaymentsBridgeRepairHandler implements IDataRepairHandler {
     };
   }
 
-  private async resolvePaymentTransaction(targetId: string): Promise<PaymentTransactionView | null> {
+  private async resolvePaymentTransaction(
+    targetId: string,
+  ): Promise<PaymentTransactionView | null> {
     if (!this.paymentsPublicService) return null;
     const trimmed = targetId.trim();
     if (!trimmed) return null;

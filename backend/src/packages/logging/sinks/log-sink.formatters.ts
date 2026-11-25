@@ -57,10 +57,7 @@ export function formatLokiPayload(
   config: LogSinkConfig,
   ctx: SinkRuntimeContext,
 ): FormattedSinkRequest {
-  const groups = new Map<
-    string,
-    { stream: Record<string, string>; values: [string, string][] }
-  >();
+  const groups = new Map<string, { stream: Record<string, string>; values: [string, string][] }>();
 
   for (const line of lines) {
     const parsed = safeJsonParse<Record<string, unknown> | null>(line, null);

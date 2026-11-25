@@ -98,7 +98,9 @@ export class ReconciliationController {
 
   @Patch(RECONCILIATION_ROUTES.JOB_BY_ID)
   @RequirePermissions('reconciliation.job.manage')
-  @ApiDoc({ summary: 'Cập nhật cấu hình Job đối soát (lịch chạy, người phụ trách mặc định, quy tắc khớp)' })
+  @ApiDoc({
+    summary: 'Cập nhật cấu hình Job đối soát (lịch chạy, người phụ trách mặc định, quy tắc khớp)',
+  })
   public async updateJob(
     @ValidatedParams(intIdParamSchema) params: { id: number },
     @ValidatedBody(UpdateReconciliationJobSchema) body: UpdateReconciliationJobRequest,
@@ -138,7 +140,9 @@ export class ReconciliationController {
 
   @Get(RECONCILIATION_ROUTES.DISCREPANCIES_REPORT)
   @RequirePermissions('reconciliation.read')
-  @ApiDoc({ summary: 'Báo cáo tổng hợp sai lệch theo loại, mức độ nghiêm trọng và người phụ trách' })
+  @ApiDoc({
+    summary: 'Báo cáo tổng hợp sai lệch theo loại, mức độ nghiêm trọng và người phụ trách',
+  })
   public async getDiscrepancyReport(
     @ValidatedQuery(DiscrepancyReportQuerySchema) query: DiscrepancyReportQuery,
   ): Promise<ReconciliationDiscrepancyReportView> {
@@ -162,7 +166,10 @@ export class ReconciliationController {
 
   @Get(RECONCILIATION_ROUTES.DISCREPANCIES)
   @RequirePermissions('reconciliation.read')
-  @ApiDoc({ summary: 'Danh sách chi tiết sai lệch đối soát (lọc theo loại, mức độ, trạng thái, người phụ trách)' })
+  @ApiDoc({
+    summary:
+      'Danh sách chi tiết sai lệch đối soát (lọc theo loại, mức độ, trạng thái, người phụ trách)',
+  })
   public async listDiscrepancies(
     @ValidatedQuery(ListDiscrepanciesQuerySchema) query: ListDiscrepanciesQuery,
   ): Promise<PaginatedResult<ReconciliationDiscrepancyView>> {
@@ -221,7 +228,10 @@ export class ReconciliationController {
 
   @Post(RECONCILIATION_ROUTES.REPAIRS)
   @RequirePermissions('reconciliation.repair.propose')
-  @ApiDoc({ summary: 'Tạo đề xuất sửa dữ liệu (tự động Dry-Run & định tuyến duyệt Maker-Checker nếu nhạy cảm)' })
+  @ApiDoc({
+    summary:
+      'Tạo đề xuất sửa dữ liệu (tự động Dry-Run & định tuyến duyệt Maker-Checker nếu nhạy cảm)',
+  })
   public async proposeRepair(
     @ValidatedBody(ProposeDataRepairSchema) body: ProposeDataRepairRequest,
     @CurrentUser() actor?: UserIdentity,
@@ -240,7 +250,9 @@ export class ReconciliationController {
 
   @Post(RECONCILIATION_ROUTES.REPAIR_APPROVE)
   @RequirePermissions('reconciliation.repair.approve')
-  @ApiDoc({ summary: 'Phê duyệt yêu cầu sửa dữ liệu nhạy cảm (bắt buộc người duyệt khác người đề xuất)' })
+  @ApiDoc({
+    summary: 'Phê duyệt yêu cầu sửa dữ liệu nhạy cảm (bắt buộc người duyệt khác người đề xuất)',
+  })
   public async approveRepair(
     @ValidatedParams(intIdParamSchema) params: { id: number },
     @ValidatedBody(DecideDataRepairSchema) body: DecideDataRepairRequest,
@@ -262,7 +274,10 @@ export class ReconciliationController {
 
   @Post(RECONCILIATION_ROUTES.REPAIR_APPLY)
   @RequirePermissions('reconciliation.repair.execute')
-  @ApiDoc({ summary: 'Áp dụng thực thi lệnh sửa dữ liệu hoặc hành động bù (ghi dữ liệu trước & sau + Audit)' })
+  @ApiDoc({
+    summary:
+      'Áp dụng thực thi lệnh sửa dữ liệu hoặc hành động bù (ghi dữ liệu trước & sau + Audit)',
+  })
   public async applyRepair(
     @ValidatedParams(intIdParamSchema) params: { id: number },
     @CurrentUser() actor?: UserIdentity,
@@ -272,7 +287,10 @@ export class ReconciliationController {
 
   @Post(RECONCILIATION_ROUTES.REPAIR_COMPENSATE)
   @RequirePermissions('reconciliation.repair.propose')
-  @ApiDoc({ summary: 'Đề xuất hành động bù cho bản ghi không thể rollback (giữ nguyên toàn bộ lịch sử lệnh gốc)' })
+  @ApiDoc({
+    summary:
+      'Đề xuất hành động bù cho bản ghi không thể rollback (giữ nguyên toàn bộ lịch sử lệnh gốc)',
+  })
   public async proposeCompensation(
     @ValidatedParams(intIdParamSchema) params: { id: number },
     @ValidatedBody(CreateCompensationSchema) body: CreateCompensationRequest,

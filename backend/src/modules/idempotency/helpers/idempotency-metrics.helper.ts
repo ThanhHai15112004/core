@@ -4,10 +4,7 @@ import type {
   IdempotencyMetricsSnapshot,
   IdempotencyScopeMetrics,
 } from '@packages/kernel/index.js';
-import {
-  IDEMPOTENCY_ALERT_STATUS,
-  IDEMPOTENCY_SCOPES,
-} from '../enum/idempotency.enum.js';
+import { IDEMPOTENCY_ALERT_STATUS, IDEMPOTENCY_SCOPES } from '../enum/idempotency.enum.js';
 import type {
   IdempotencyRuntimeConfig,
   RawIdempotencyMetricsSummary,

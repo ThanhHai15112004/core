@@ -53,14 +53,21 @@ describe('ExternalLogSink Unit Tests', () => {
 
   it('formats Loki Push API, OpenSearch Bulk NDJSON, and SIEM payloads', () => {
     const line1 = JSON.stringify({ time: 1700000000000, level: 30, runtime: 'api', msg: 'hello' });
-    const line2 = JSON.stringify({ time: 1700000001000, level: 50, runtime: 'worker', msg: 'boom' });
+    const line2 = JSON.stringify({
+      time: 1700000001000,
+      level: 50,
+      runtime: 'worker',
+      msg: 'boom',
+    });
 
     const loki = formatLokiPayload([line1, line2], makeConfig(), {
       env: 'production',
       serviceName: 'core-api',
     });
     expect(loki.headers['x-scope-orgid']).toBe('tenant-a');
-    const lokiParsed = JSON.parse(loki.body) as { streams: { stream: Record<string, string>; values: [string, string][] }[] };
+    const lokiParsed = JSON.parse(loki.body) as {
+      streams: { stream: Record<string, string>; values: [string, string][] }[];
+    };
     expect(lokiParsed.streams).toHaveLength(2);
     expect(lokiParsed.streams[0]?.stream.service).toBe('core-api');
     expect(lokiParsed.streams[0]?.values[0]?.[0]).toBe('1700000000000000000');

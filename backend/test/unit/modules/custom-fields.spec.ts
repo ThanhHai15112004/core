@@ -71,7 +71,9 @@ function createInMemoryCustomFieldsHarness() {
 
   const optionRepository = {
     findAllOrdered: async () =>
-      [...options.values()].sort((a, b) => a.sortOrder - b.sortOrder || Number(a.id) - Number(b.id)),
+      [...options.values()].sort(
+        (a, b) => a.sortOrder - b.sortOrder || Number(a.id) - Number(b.id),
+      ),
     replaceOptionsForField: async (
       fieldId: string,
       items: Array<Partial<CustomFieldOptionEntity>>,
@@ -171,9 +173,9 @@ describe('Phase 9.8 — Trường tùy chỉnh và Metadata (Custom Fields & Met
 
       const discoveredEntities = discoverManifestExtensibleEntities();
       expect(discoveredEntities.some((e) => e.code === 'users.user')).toBe(true);
-      expect(
-        discoveredEntities.some((e) => e.code === 'organizations.organization_unit'),
-      ).toBe(true);
+      expect(discoveredEntities.some((e) => e.code === 'organizations.organization_unit')).toBe(
+        true,
+      );
 
       const discoveredFields = discoverManifestCustomFields();
       expect(discoveredFields.some((f) => f.fieldKey === 'employee_level')).toBe(true);
@@ -256,9 +258,30 @@ describe('Phase 9.8 — Trường tùy chỉnh và Metadata (Custom Fields & Met
         name: 'Cỡ áo đồng phục',
         dataType: 'SELECT',
         options: [
-          { optionCode: 'S', label: 'Size S', color: null, sortOrder: 1, isDefault: false, status: 1 },
-          { optionCode: 'M', label: 'Size M', color: null, sortOrder: 2, isDefault: true, status: 1 },
-          { optionCode: 'L', label: 'Size L', color: null, sortOrder: 3, isDefault: false, status: 1 },
+          {
+            optionCode: 'S',
+            label: 'Size S',
+            color: null,
+            sortOrder: 1,
+            isDefault: false,
+            status: 1,
+          },
+          {
+            optionCode: 'M',
+            label: 'Size M',
+            color: null,
+            sortOrder: 2,
+            isDefault: true,
+            status: 1,
+          },
+          {
+            optionCode: 'L',
+            label: 'Size L',
+            color: null,
+            sortOrder: 3,
+            isDefault: false,
+            status: 1,
+          },
         ],
         isIndexed: true,
       });
@@ -443,7 +466,8 @@ describe('Phase 9.8 — Trường tùy chỉnh và Metadata (Custom Fields & Met
 
       // Kiểm tra trong DB: trường nhạy cảm `tax_id_number` được mã hóa AES-256-GCM (encryptedValue có giá trị, valueText = null)
       const storedTaxRow = [...values.values()].find(
-        (v) => v.entityCode === 'users.user' && v.recordId === '1' && v.fieldKey === 'tax_id_number',
+        (v) =>
+          v.entityCode === 'users.user' && v.recordId === '1' && v.fieldKey === 'tax_id_number',
       );
       expect(storedTaxRow).toBeDefined();
       expect(storedTaxRow?.encryptedValue).toBeTruthy();
@@ -479,22 +503,45 @@ describe('Phase 9.8 — Trường tùy chỉnh và Metadata (Custom Fields & Met
       const updatedDef = await service.updateFieldOptions(
         empLevelDef.id,
         [
-          { optionCode: 'L3', label: 'Senior', color: null, sortOrder: 30, isDefault: false, status: 1 },
-          { optionCode: 'L1', label: 'Junior', color: null, sortOrder: 10, isDefault: false, status: 1 },
-          { optionCode: 'L2', label: 'Mid', color: null, sortOrder: 20, isDefault: true, status: 1 },
-          { optionCode: 'L0_RETIRED', label: 'Retired Level', color: null, sortOrder: 40, isDefault: false, status: 2 },
+          {
+            optionCode: 'L3',
+            label: 'Senior',
+            color: null,
+            sortOrder: 30,
+            isDefault: false,
+            status: 1,
+          },
+          {
+            optionCode: 'L1',
+            label: 'Junior',
+            color: null,
+            sortOrder: 10,
+            isDefault: false,
+            status: 1,
+          },
+          {
+            optionCode: 'L2',
+            label: 'Mid',
+            color: null,
+            sortOrder: 20,
+            isDefault: true,
+            status: 1,
+          },
+          {
+            optionCode: 'L0_RETIRED',
+            label: 'Retired Level',
+            color: null,
+            sortOrder: 40,
+            isDefault: false,
+            status: 2,
+          },
         ],
         1,
         'Sắp xếp lại thứ tự và khóa lựa chọn L0_RETIRED',
       );
 
       // Các lựa chọn phải được sắp xếp đúng theo sortOrder (10 -> 20 -> 30 -> 40)
-      expect(updatedDef.options.map((o) => o.optionCode)).toEqual([
-        'L1',
-        'L2',
-        'L3',
-        'L0_RETIRED',
-      ]);
+      expect(updatedDef.options.map((o) => o.optionCode)).toEqual(['L1', 'L2', 'L3', 'L0_RETIRED']);
 
       // Chọn giá trị đang INACTIVE (status = 2) phải bị từ chối khi lưu
       await expect(
@@ -551,11 +598,7 @@ describe('Phase 9.8 — Trường tùy chỉnh và Metadata (Custom Fields & Met
 
       // Tắt showInApi trên employee_level -> biến mất khỏi cả list và detail API
       const empLevelDef = registry.getFieldDefinition('users.user', 'employee_level')!;
-      await service.updateDefinition(
-        empLevelDef.id,
-        { showInApi: false },
-        1,
-      );
+      await service.updateDefinition(empLevelDef.id, { showInApi: false }, 1);
 
       const afterHideApi = await service.getRecordValuesForApi('users.user', 5, {
         viewMode: 'detail',

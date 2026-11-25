@@ -1,10 +1,7 @@
 import { getHeapStatistics } from 'node:v8';
 import { Injectable, Optional } from '@nestjs/common';
 import { CoreConfigService } from '@packages/config/index.js';
-import {
-  DatabaseConnectionService,
-  DatabaseOperationsService,
-} from '@packages/database/index.js';
+import { DatabaseConnectionService, DatabaseOperationsService } from '@packages/database/index.js';
 import { RedisService } from '@packages/redis/index.js';
 import { StorageConnectionService } from '@packages/storage/index.js';
 import {

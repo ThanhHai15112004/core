@@ -5,10 +5,7 @@ import {
 } from '@packages/kernel/index.js';
 import type { AlertEventEntity } from '../entities/alert-event.entity.js';
 import type { AlertRuleEntity } from '../entities/alert-rule.entity.js';
-import {
-  ALL_ALERT_CHANNELS,
-  type AlertChannel,
-} from '../enum/metrics-ops.enum.js';
+import { ALL_ALERT_CHANNELS, type AlertChannel } from '../enum/metrics-ops.enum.js';
 import type {
   AlertDeliveryRecord,
   AlertEventView,

@@ -11,12 +11,7 @@ export type HttpRedirectMode = 'follow' | 'error' | 'manual';
 export type CircuitBreakerState = 'CLOSED' | 'OPEN' | 'HALF_OPEN';
 
 export type HttpRequestOutcome =
-  | 'success'
-  | 'http_error'
-  | 'timeout'
-  | 'network_error'
-  | 'circuit_open'
-  | 'concurrency_rejected';
+  'success' | 'http_error' | 'timeout' | 'network_error' | 'circuit_open' | 'concurrency_rejected';
 
 export interface HttpRetryPolicy {
   readonly maxRetries: number;

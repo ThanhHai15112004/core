@@ -31,10 +31,7 @@ export class WorkflowApprovalDelegationRepository extends BaseTypeOrmRepository<
     readonly activeOnly?: boolean | undefined;
   }): Promise<WorkflowApprovalDelegationEntity[]> {
     return this.executeReadOnly((repo) => {
-      const qb = repo
-        .createQueryBuilder('d')
-        .where('d.deletedAt IS NULL')
-        .orderBy('d.id', 'DESC');
+      const qb = repo.createQueryBuilder('d').where('d.deletedAt IS NULL').orderBy('d.id', 'DESC');
 
       if (params?.fromUserId !== undefined) {
         qb.andWhere('d.fromUserId = :fromUserId', { fromUserId: Number(params.fromUserId) });

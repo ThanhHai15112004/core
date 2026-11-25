@@ -88,12 +88,7 @@ export type ReconciliationDiscrepancyStatusCode =
   (typeof RECONCILIATION_DISCREPANCY_STATUS)[keyof typeof RECONCILIATION_DISCREPANCY_STATUS];
 
 export type ReconciliationDiscrepancyStatusName =
-  | 'OPEN'
-  | 'ASSIGNED'
-  | 'IN_REPAIR'
-  | 'RESOLVED'
-  | 'COMPENSATED'
-  | 'IGNORED';
+  'OPEN' | 'ASSIGNED' | 'IN_REPAIR' | 'RESOLVED' | 'COMPENSATED' | 'IGNORED';
 
 export const DATA_REPAIR_ACTION_MODE = {
   DIRECT_REPAIR: 'DIRECT_REPAIR',

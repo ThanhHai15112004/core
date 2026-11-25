@@ -17,10 +17,7 @@ import {
   SettingRegistryService,
   discoverManifestSettings,
 } from '@packages/kernel/index.js';
-import {
-  DatabaseConnectionService,
-  DatabaseOperationsService,
-} from '@packages/database/index.js';
+import { DatabaseConnectionService, DatabaseOperationsService } from '@packages/database/index.js';
 import { MessagingConnectionService } from '@packages/messaging/index.js';
 import { QueueMonitoringService } from '@packages/queue/index.js';
 import { RedisService } from '@packages/redis/index.js';
@@ -121,7 +118,15 @@ async function buildHarness(opts: TestHarnessOptions = {}) {
   const dbState = opts.dbState ?? 'connected';
   const msgState = opts.messagingState ?? 'connected';
   const queuesData = opts.queues ?? [
-    { name: 'system.events', waiting: 2, active: 1, delayed: 0, failed: 0, paused: false, workers: 2 },
+    {
+      name: 'system.events',
+      waiting: 2,
+      active: 1,
+      delayed: 0,
+      failed: 0,
+      paused: false,
+      workers: 2,
+    },
   ];
 
   const moduleRef = await Test.createTestingModule({
@@ -146,7 +151,10 @@ async function buildHarness(opts: TestHarnessOptions = {}) {
               : {
                   ok: false,
                   latencyMs: null,
-                  error: { code: 'ECONNREFUSED', message: 'mysql://root:secret@localhost:3306 refused' },
+                  error: {
+                    code: 'ECONNREFUSED',
+                    message: 'mysql://root:secret@localhost:3306 refused',
+                  },
                 };
           },
         },
@@ -161,7 +169,14 @@ async function buildHarness(opts: TestHarnessOptions = {}) {
         provide: RedisService,
         useValue: {
           isReady: () => opts.redisReady ?? opts.redisUp ?? true,
-          getLatencySnapshot: () => ({ count: 10, avgMs: 1.2, p50Ms: 1, p95Ms: 2.5, p99Ms: 3.1, lastPingMs: 1 }),
+          getLatencySnapshot: () => ({
+            count: 10,
+            avgMs: 1.2,
+            p50Ms: 1,
+            p95Ms: 2.5,
+            p99Ms: 3.1,
+            lastPingMs: 1,
+          }),
           client: {
             ping: async () => {
               if (opts.redisDelayMs) {
@@ -313,18 +328,38 @@ describe('Health Check 12.4 (Liveness, Readiness, Degraded vs Critical, Provider
     const degraded = await buildHarness({
       redisDelayMs: 60,
       messagingState: 'connected',
-      queues: [{ name: 'system.events', waiting: 1500, active: 1, delayed: 0, failed: 2, paused: false, workers: 1 }],
+      queues: [
+        {
+          name: 'system.events',
+          waiting: 1500,
+          active: 1,
+          delayed: 0,
+          failed: 2,
+          paused: false,
+          workers: 1,
+        },
+      ],
     });
     setHealthSetting(degraded.settingRegistry, HEALTH_SETTING_KEYS.REDIS_DEGRADED_LATENCY_MS, 20);
-    setHealthSetting(degraded.settingRegistry, HEALTH_SETTING_KEYS.QUEUE_BACKLOG_WARN_THRESHOLD, 1000);
+    setHealthSetting(
+      degraded.settingRegistry,
+      HEALTH_SETTING_KEYS.QUEUE_BACKLOG_WARN_THRESHOLD,
+      1000,
+    );
 
     const degradedReply = createReplyMock();
     const readyDegraded = await degraded.controller.readiness(ADMIN_ACTOR, degradedReply.reply);
     expect(readyDegraded.ready).toBe(true);
     expect(readyDegraded.status).toBe('degraded');
     expect(degradedReply.statusCalls).toEqual([]);
-    expect(readyDegraded.checks?.['redis']).toMatchObject({ status: 'degraded', severity: 'degraded' });
-    expect(readyDegraded.checks?.['queue']).toMatchObject({ status: 'degraded', severity: 'degraded' });
+    expect(readyDegraded.checks?.['redis']).toMatchObject({
+      status: 'degraded',
+      severity: 'degraded',
+    });
+    expect(readyDegraded.checks?.['queue']).toMatchObject({
+      status: 'degraded',
+      severity: 'degraded',
+    });
 
     // Nghiêm trọng: Redis chết + Broker unavailable
     const critical = await buildHarness({ redisUp: false, messagingState: 'unavailable' });
@@ -515,7 +550,11 @@ describe('Health Check 12.4 (Liveness, Readiness, Degraded vs Critical, Provider
     expect(h.migrationsSpy).toHaveBeenCalledTimes(1);
 
     // Bật setting chặn Readiness khi còn pending migration → HTTP 503
-    setHealthSetting(h.settingRegistry, HEALTH_SETTING_KEYS.READINESS_FAIL_ON_PENDING_MIGRATION, true);
+    setHealthSetting(
+      h.settingRegistry,
+      HEALTH_SETTING_KEYS.READINESS_FAIL_ON_PENDING_MIGRATION,
+      true,
+    );
     h.service.invalidateMigrationCache();
     const replyMock = createReplyMock();
     const readyBlocked = await h.controller.readiness(ADMIN_ACTOR, replyMock.reply);

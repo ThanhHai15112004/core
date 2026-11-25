@@ -12,19 +12,13 @@ import {
   getProviderHealthStatusName,
   getProviderStatusName,
 } from '@packages/kernel/index.js';
-import {
-  DatabaseConnectionService,
-  DatabaseOperationsService,
-} from '@packages/database/index.js';
+import { DatabaseConnectionService, DatabaseOperationsService } from '@packages/database/index.js';
 import { MessagingConnectionService } from '@packages/messaging/index.js';
 import { QueueMonitoringService } from '@packages/queue/index.js';
 import { RedisService } from '@packages/redis/index.js';
 import { RuntimeAgentService } from '@packages/runtime/index.js';
 import { StorageConnectionService } from '@packages/storage/index.js';
-import {
-  HEALTH_INDICATOR_STATUS,
-  type HealthIndicatorStatusValue,
-} from '../enum/health.enum.js';
+import { HEALTH_INDICATOR_STATUS, type HealthIndicatorStatusValue } from '../enum/health.enum.js';
 import {
   measureEventLoopLagMs,
   sanitizeHealthError,
@@ -121,9 +115,7 @@ export class HealthProbesService {
     const heapLimitMb = Math.round((heapLimit / BYTES_PER_MB) * 10) / 10;
     const rssMb = Math.round((mem.rss / BYTES_PER_MB) * 10) / 10;
     const runtimeState =
-      typeof this.runtimeAgent?.getState === 'function'
-        ? this.runtimeAgent.getState()
-        : 'running';
+      typeof this.runtimeAgent?.getState === 'function' ? this.runtimeAgent.getState() : 'running';
     const shuttingDown =
       typeof this.runtimeAgent?.isShuttingDown === 'function'
         ? this.runtimeAgent.isShuttingDown()
@@ -133,7 +125,8 @@ export class HealthProbesService {
     const live = !shuttingDown && !heapExceeded;
     const warnings: string[] = [];
     if (shuttingDown) warnings.push('Runtime is shutting down');
-    if (heapExceeded) warnings.push(`V8 heap usage (${Math.round(heapRatio * 100)}%) reached limit`);
+    if (heapExceeded)
+      warnings.push(`V8 heap usage (${Math.round(heapRatio * 100)}%) reached limit`);
     if (eventLoopLagMs >= cfg.eventLoopLagWarnMs) {
       warnings.push(`Event loop lag (${eventLoopLagMs}ms) exceeded ${cfg.eventLoopLagWarnMs}ms`);
     }
@@ -529,11 +522,7 @@ export class HealthProbesService {
 
     let adapterReady: boolean | null = null;
     if (entries.length === 0) {
-      const fallbackProbe = this.kernelProviders.resolveHealthProbe(
-        providerType,
-        '*',
-        'default',
-      );
+      const fallbackProbe = this.kernelProviders.resolveHealthProbe(providerType, '*', 'default');
       if (fallbackProbe) {
         try {
           const probeRes = await withHealthTimeout(

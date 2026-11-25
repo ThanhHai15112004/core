@@ -125,7 +125,12 @@ export function sanitizeDbMessage(err: unknown): string {
   return clean.length > MAX_MESSAGE ? `${clean.slice(0, MAX_MESSAGE)}…` : clean;
 }
 
-const NON_TRANSIENT_CONNECTION_CODES = new Set(['ER_ACCESS_DENIED_ERROR', '1045', '28P01', '28000']);
+const NON_TRANSIENT_CONNECTION_CODES = new Set([
+  'ER_ACCESS_DENIED_ERROR',
+  '1045',
+  '28P01',
+  '28000',
+]);
 
 /**
  * Kiểm tra lỗi DB có phải lỗi tạm thời (deadlock, lock_timeout, rớt kết nối tạm thời) để được phép retry hay không.

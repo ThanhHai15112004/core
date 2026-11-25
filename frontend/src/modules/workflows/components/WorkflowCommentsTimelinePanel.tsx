@@ -19,7 +19,7 @@ export const WorkflowCommentsTimelinePanel: React.FC<WorkflowCommentsTimelinePan
   workflowInstanceId,
 }) => {
   const [comments, setComments] = useState<WorkflowCommentItem[]>([]);
-  const [timeline, setTimeline] = useState<WorkflowActivityTimelineEntry[]>([]);
+  const [timeline, setTimeline] = useState<readonly WorkflowActivityTimelineEntry[]>([]);
   const [content, setContent] = useState('');
   const [isInternal, setIsInternal] = useState(false);
   const [replyToId, setReplyToId] = useState<number | null>(null);

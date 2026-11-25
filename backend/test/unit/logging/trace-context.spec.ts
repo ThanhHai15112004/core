@@ -33,13 +33,21 @@ describe('Trace & RequestContext Unit Tests', () => {
   });
 
   it('resolves traceId from traceparent, x-trace-id, or generates 32-hex id', () => {
-    const { req: req1, res: res1, resHeaders: h1 } = createMockHttp({
+    const {
+      req: req1,
+      res: res1,
+      resHeaders: h1,
+    } = createMockHttp({
       traceparent: '00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-bbbbbbbbbbbbbbbb-01',
     });
     expect(resolveTraceId(req1, res1)).toBe('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa');
     expect(h1.get('x-trace-id')).toBe('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa');
 
-    const { req: req2, res: res2, resHeaders: h2 } = createMockHttp({
+    const {
+      req: req2,
+      res: res2,
+      resHeaders: h2,
+    } = createMockHttp({
       'x-trace-id': 'custom-trace-123',
     });
     expect(resolveTraceId(req2, res2)).toBe('custom-trace-123');
@@ -66,7 +74,12 @@ describe('Trace & RequestContext Unit Tests', () => {
     expect(captured?.correlationId).toBe('corr-1');
     expect(captured?.requestId).toBe('req-1');
     expect(captured?.traceId).toBe('trace-1');
-    expect(RequestContextService.withLogContext({ module: 'Users', action: 'create' }, () => RequestContextService.current()?.action)).toBe('create');
+    expect(
+      RequestContextService.withLogContext(
+        { module: 'Users', action: 'create' },
+        () => RequestContextService.current()?.action,
+      ),
+    ).toBe('create');
     expect(resHeaders.get('x-correlation-id')).toBe('corr-1');
     expect(resHeaders.get('x-request-id')).toBe('req-1');
     expect(resHeaders.get('x-trace-id')).toBe('trace-1');

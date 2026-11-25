@@ -1,9 +1,5 @@
 import { Injectable, Optional } from '@nestjs/common';
-import {
-  BaseMessagePublisherProvider,
-  QUEUES,
-  type QueueName,
-} from '@packages/messaging/index.js';
+import { BaseMessagePublisherProvider, QUEUES, type QueueName } from '@packages/messaging/index.js';
 import type { IOutboxTransport } from '../contracts/index.js';
 import type {
   OutboxTransportDispatchInput,
@@ -21,9 +17,7 @@ const VALID_QUEUES = new Set<string>(Object.values(QUEUES));
 export class BullMqOutboxTransport implements IOutboxTransport {
   public readonly driverName = 'bullmq';
 
-  constructor(
-    @Optional() private readonly messagePublisher?: BaseMessagePublisherProvider,
-  ) {}
+  constructor(@Optional() private readonly messagePublisher?: BaseMessagePublisherProvider) {}
 
   public async dispatch(
     input: OutboxTransportDispatchInput,

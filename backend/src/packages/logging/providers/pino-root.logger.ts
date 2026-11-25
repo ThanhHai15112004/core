@@ -113,10 +113,7 @@ export function createRootLogger(opts: RootLoggerOptions): Logger {
   if (root) return root;
   const extraKeys = (opts.extraRedactKeys ?? []).map((k) => k.trim()).filter(Boolean);
   configureExtraSensitiveKeys(extraKeys);
-  const redactPaths = [
-    ...REDACT_PATHS,
-    ...extraKeys.flatMap((k) => [k, `*.${k}`, `*.*.${k}`]),
-  ];
+  const redactPaths = [...REDACT_PATHS, ...extraKeys.flatMap((k) => [k, `*.${k}`, `*.*.${k}`])];
   const stdout: DestinationStream = opts.format === 'json' ? process.stdout : textStdout;
   root = pino(
     {

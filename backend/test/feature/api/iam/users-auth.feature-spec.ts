@@ -565,6 +565,22 @@ describe('Feature E2E: IAM — Auth (3.2), Security Settings, Users + UserProfil
         const set = new Set(userIds.map(Number));
         return userOrgStore.filter((uo) => set.has(uo.userId));
       },
+      findUserIdsByOrganizationUnitIds: async (organizationUnitIds: readonly number[]) => {
+        const set = new Set(organizationUnitIds.map(Number));
+        const now = Date.now();
+        return [
+          ...new Set(
+            userOrgStore
+              .filter((uo) => {
+                if (!set.has(uo.organizationUnitId)) return false;
+                if (uo.startDate && new Date(uo.startDate).getTime() > now) return false;
+                if (uo.endDate && new Date(uo.endDate).getTime() < now) return false;
+                return true;
+              })
+              .map((uo) => Number(uo.userId)),
+          ),
+        ];
+      },
       replaceUserOrganizations: async (
         userId: number,
         items: readonly UserOrganizationInputItem[],

@@ -27,7 +27,9 @@ export class AlertRulesService {
     private readonly txManager: TransactionManager,
   ) {}
 
-  public async listPaginated(filter: ListAlertRulesFilter): Promise<PaginatedResult<AlertRuleView>> {
+  public async listPaginated(
+    filter: ListAlertRulesFilter,
+  ): Promise<PaginatedResult<AlertRuleView>> {
     const page = await this.ruleRepo.listPaginated(filter);
     return {
       ...page,

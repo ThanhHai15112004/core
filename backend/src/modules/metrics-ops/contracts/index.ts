@@ -45,10 +45,4 @@ export interface AlertDomainEventPayload extends Record<string, unknown> {
   readonly occurredAt: string;
 }
 
-export type {
-  AlertChannel,
-  AlertMetricKey,
-  AlertOperator,
-  AlertRuleScope,
-  AlertSeverity,
-};
+export type { AlertChannel, AlertMetricKey, AlertOperator, AlertRuleScope, AlertSeverity };

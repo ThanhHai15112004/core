@@ -173,7 +173,9 @@ describe('12.3 Alert Rules Engine & Severity Dispatch Unit Tests', () => {
       ]),
     };
     const dispatcher = {
-      dispatch: jest.fn(async () => [{ channel: 'log' as const, status: 'sent' as const, at: new Date().toISOString() }]),
+      dispatch: jest.fn(async () => [
+        { channel: 'log' as const, status: 'sent' as const, at: new Date().toISOString() },
+      ]),
     };
     const txManager = {
       runInTransaction: async <T>(fn: () => Promise<T>) => fn(),
@@ -218,6 +220,8 @@ describe('12.3 Alert Rules Engine & Severity Dispatch Unit Tests', () => {
     expect(r4.autoResolved).toBe(1);
     expect(eventsStore[0]?.status).toBe('RESOLVED');
     expect(dispatcher.dispatch).toHaveBeenCalledTimes(2);
-    expect((dispatcher.dispatch as jest.Mock).mock.calls[1]?.[0]).toMatchObject({ kind: 'resolved' });
+    expect((dispatcher.dispatch as jest.Mock).mock.calls[1]?.[0]).toMatchObject({
+      kind: 'resolved',
+    });
   });
 });

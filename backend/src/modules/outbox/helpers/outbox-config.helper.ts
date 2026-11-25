@@ -196,7 +196,10 @@ export function computeOutboxRetryDelayMs(
   const exponent = Math.max(0, Math.min(20, attemptCount - 1));
   const exponential = Math.min(config.retryMaxDelayMs, config.retryBaseDelayMs * 2 ** exponent);
   const jitterFactor = 0.8 + Math.max(0, Math.min(1, randomFn())) * 0.4;
-  return Math.max(config.retryBaseDelayMs, Math.min(config.retryMaxDelayMs, Math.round(exponential * jitterFactor)));
+  return Math.max(
+    config.retryBaseDelayMs,
+    Math.min(config.retryMaxDelayMs, Math.round(exponential * jitterFactor)),
+  );
 }
 
 /**

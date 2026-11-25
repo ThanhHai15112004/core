@@ -10,11 +10,7 @@ import {
 } from '@packages/kernel/index.js';
 import { MetricsRegistryService } from '@packages/metrics/index.js';
 import { DatabaseConnectionService } from '../providers/database-connection.service.js';
-import {
-  DB_MAX_RETRIES_CAP,
-  classifyDbError,
-  withDbRetry,
-} from '../utils/error-classify.js';
+import { DB_MAX_RETRIES_CAP, classifyDbError, withDbRetry } from '../utils/error-classify.js';
 import type {
   TransactionIsolationLevel,
   TransactionOptions,
@@ -222,22 +218,19 @@ export class TransactionManager implements UnitOfWorkContract {
       let retried = false;
       let lastRetryReason = 'deadlock';
       try {
-        const result = await withDbRetry(
-          () => this.executeSingleTransaction(operation, options),
-          {
-            ...retryCfg,
-            onRetry: ({ attempt, delayMs, kind }) => {
-              retried = true;
-              lastRetryReason = kind;
-              this.retryCount += 1;
-              this.lastRetryAt = new Date().toISOString();
-              this.retriesCounter?.inc({ reason: kind, outcome: 'scheduled' });
-              this.logger.warn(
-                `Retrying database transaction (attempt=${attempt}, reason=${kind}, delayMs=${delayMs})`,
-              );
-            },
+        const result = await withDbRetry(() => this.executeSingleTransaction(operation, options), {
+          ...retryCfg,
+          onRetry: ({ attempt, delayMs, kind }) => {
+            retried = true;
+            lastRetryReason = kind;
+            this.retryCount += 1;
+            this.lastRetryAt = new Date().toISOString();
+            this.retriesCounter?.inc({ reason: kind, outcome: 'scheduled' });
+            this.logger.warn(
+              `Retrying database transaction (attempt=${attempt}, reason=${kind}, delayMs=${delayMs})`,
+            );
           },
-        );
+        });
         if (retried) {
           this.retryRecoveredCount += 1;
           this.retriesCounter?.inc({ reason: lastRetryReason, outcome: 'recovered' });
@@ -366,6 +359,7 @@ export class TransactionManager implements UnitOfWorkContract {
 
   /** Thiết lập timeout cấp phiên của Database Server cho giao dịch hiện tại (best-effort). */
   private async applySessionTimeout(runner: QueryRunner, timeoutMs: number): Promise<void> {
+    if (typeof runner.query !== 'function') return;
     const driver = this.connection.driver;
     if (driver === 'postgres') {
       await runner

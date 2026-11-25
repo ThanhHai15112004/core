@@ -50,17 +50,13 @@ export function normalizeCarrier(
 }
 
 /** Ghi W3C `traceparent` / `tracestate` của active span vào carrier outbound (HTTP header / Job meta). */
-export function injectTraceContext(
-  carrier: Record<string, string> = {},
-): Record<string, string> {
+export function injectTraceContext(carrier: Record<string, string> = {}): Record<string, string> {
   propagation.inject(context.active(), carrier);
   return carrier;
 }
 
 /** Khôi phục OTel Context từ carrier inbound (HTTP headers hoặc Job envelope meta). */
-export function extractTraceContext(
-  carrier: Record<string, unknown> | null | undefined,
-): Context {
+export function extractTraceContext(carrier: Record<string, unknown> | null | undefined): Context {
   const normalized = normalizeCarrier(carrier);
   if (Object.keys(normalized).length === 0) return ROOT_CONTEXT;
   return propagation.extract(ROOT_CONTEXT, normalized);

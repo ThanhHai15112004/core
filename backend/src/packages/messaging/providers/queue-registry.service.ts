@@ -4,10 +4,7 @@ import { getQueueToken } from '@nestjs/bullmq';
 import type { JobsOptions, Queue } from 'bullmq';
 import type { Redis } from 'ioredis';
 import { CoreConfigService } from '@packages/config/index.js';
-import {
-  RESILIENCE_SETTING_KEYS,
-  readDynamicResilienceNumber,
-} from '@packages/kernel/index.js';
+import { RESILIENCE_SETTING_KEYS, readDynamicResilienceNumber } from '@packages/kernel/index.js';
 import {
   MAX_JOB_ATTEMPTS_CAP,
   QUEUE_PROFILES,

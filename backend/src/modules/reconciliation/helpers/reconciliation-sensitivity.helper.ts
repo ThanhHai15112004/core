@@ -79,7 +79,8 @@ export function evaluateRepairSensitivity(params: {
   if (typeof params.amountDiff === 'number' && !Number.isNaN(params.amountDiff)) {
     candidateAmounts.push(Math.abs(params.amountDiff));
   }
-  const payloadAmount = params.payload?.amount ?? params.payload?.adjustmentAmount ?? params.payload?.refundAmount;
+  const payloadAmount =
+    params.payload?.amount ?? params.payload?.adjustmentAmount ?? params.payload?.refundAmount;
   if (typeof payloadAmount === 'number' && !Number.isNaN(payloadAmount)) {
     candidateAmounts.push(Math.abs(payloadAmount));
   }

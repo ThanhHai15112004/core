@@ -31,9 +31,7 @@ export interface DomainEventMetadata {
   readonly dotName: string;
 }
 
-export interface DomainEvent<
-  TPayload extends Record<string, unknown> = Record<string, unknown>,
-> {
+export interface DomainEvent<TPayload extends Record<string, unknown> = Record<string, unknown>> {
   /** Mã định danh duy nhất của sự kiện (UUID v4). */
   readonly id: string;
   /** Tên sự kiện chuẩn PascalCase (vd `UserCreated`, `OrderApproved`). */
@@ -75,9 +73,8 @@ export interface CreateDomainEventInput<
   readonly actorId?: string | number | null | undefined;
 }
 
-export type DomainEventHandler<
-  TPayload extends Record<string, unknown> = Record<string, unknown>,
-> = (event: DomainEvent<TPayload>) => Promise<void> | void;
+export type DomainEventHandler<TPayload extends Record<string, unknown> = Record<string, unknown>> =
+  (event: DomainEvent<TPayload>) => Promise<void> | void;
 
 export interface DomainEventHandlerRegistration<
   TPayload extends Record<string, unknown> = Record<string, unknown>,

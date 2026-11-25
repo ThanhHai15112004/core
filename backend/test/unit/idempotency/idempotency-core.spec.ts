@@ -88,7 +88,8 @@ function createIdempotencyFixture() {
     return null;
   };
 
-  const cloneRow = (row: IdempotencyRecordEntity) => Object.assign(new IdempotencyRecordEntity(), row);
+  const cloneRow = (row: IdempotencyRecordEntity) =>
+    Object.assign(new IdempotencyRecordEntity(), row);
 
   const repo = {
     isDatabaseReady: () => true,
@@ -252,10 +253,12 @@ function createIdempotencyFixture() {
           if (filter.status !== undefined && r.status !== filter.status) return false;
           if (filter.onlyDuplicates && r.duplicateHits <= 0) return false;
           if (filter.onlyConflicts && r.conflictHits <= 0) return false;
-          if (filter.includeExpired === false && r.expiresAt.getTime() <= now.getTime()) return false;
+          if (filter.includeExpired === false && r.expiresAt.getTime() <= now.getTime())
+            return false;
           if (filter.search?.trim()) {
             const needle = filter.search.trim().toLowerCase();
-            const haystack = `${r.idempotencyKey} ${r.scopeTarget} ${r.clientIdentifier ?? ''}`.toLowerCase();
+            const haystack =
+              `${r.idempotencyKey} ${r.scopeTarget} ${r.clientIdentifier ?? ''}`.toLowerCase();
             if (!haystack.includes(needle)) return false;
           }
           return true;
@@ -984,13 +987,22 @@ describe('Phase 11.3 — Idempotency Core, API, Job, Webhook, Event Inbox & Metr
       reflector.get<string[]>(REQUIRED_PERMISSIONS_KEY, IdempotencyController.prototype.getMetrics),
     ).toEqual(['idempotency.read']);
     expect(
-      reflector.get<string[]>(REQUIRED_PERMISSIONS_KEY, IdempotencyController.prototype.listRecords),
+      reflector.get<string[]>(
+        REQUIRED_PERMISSIONS_KEY,
+        IdempotencyController.prototype.listRecords,
+      ),
     ).toEqual(['idempotency.read']);
     expect(
-      reflector.get<string[]>(REQUIRED_PERMISSIONS_KEY, IdempotencyController.prototype.revokeRecord),
+      reflector.get<string[]>(
+        REQUIRED_PERMISSIONS_KEY,
+        IdempotencyController.prototype.revokeRecord,
+      ),
     ).toEqual(['idempotency.manage']);
     expect(
-      reflector.get<string[]>(REQUIRED_PERMISSIONS_KEY, IdempotencyController.prototype.purgeExpired),
+      reflector.get<string[]>(
+        REQUIRED_PERMISSIONS_KEY,
+        IdempotencyController.prototype.purgeExpired,
+      ),
     ).toEqual(['idempotency.manage']);
 
     const pilotMeta = reflector.get<IdempotentOptions>(

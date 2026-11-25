@@ -24,11 +24,7 @@ export const OUTBOX_EVENT_STATUS = {
 export type OutboxEventStatusCode = (typeof OUTBOX_EVENT_STATUS)[keyof typeof OUTBOX_EVENT_STATUS];
 
 export type OutboxEventStatusName =
-  | 'PENDING'
-  | 'PROCESSING'
-  | 'PUBLISHED'
-  | 'FAILED'
-  | 'DEAD_LETTER';
+  'PENDING' | 'PROCESSING' | 'PUBLISHED' | 'FAILED' | 'DEAD_LETTER';
 
 export const OUTBOX_LAG_STATUS = {
   HEALTHY: 'HEALTHY',

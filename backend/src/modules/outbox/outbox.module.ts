@@ -41,12 +41,7 @@ new CoreI18nService().registerNamespace('outbox', {
       useExisting: OutboxService,
     },
   ],
-  exports: [
-    OutboxService,
-    OutboxRelayService,
-    OUTBOX_PUBLIC_SERVICE,
-    OUTBOX_TRANSPORT_PORT,
-  ],
+  exports: [OutboxService, OutboxRelayService, OUTBOX_PUBLIC_SERVICE, OUTBOX_TRANSPORT_PORT],
 })
 export class OutboxModule {
   constructor(@Optional() i18n?: CoreI18nService) {

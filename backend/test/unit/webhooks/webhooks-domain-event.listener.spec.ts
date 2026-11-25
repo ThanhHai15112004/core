@@ -94,7 +94,9 @@ describe('Decoupled Users -> Webhooks Domain Event flow', () => {
     );
 
     listener.onModuleDestroy();
-    expect(bus.listHandlers().find((h) => h.id === WEBHOOKS_DOMAIN_EVENT_HANDLER_ID)).toBeUndefined();
+    expect(
+      bus.listHandlers().find((h) => h.id === WEBHOOKS_DOMAIN_EVENT_HANDLER_ID),
+    ).toBeUndefined();
     harness.dispose();
   });
 

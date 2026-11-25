@@ -35,8 +35,7 @@ export const IDEMPOTENCY_STATUS = {
   FAILED: 3,
 } as const;
 
-export type IdempotencyStatusCode =
-  (typeof IDEMPOTENCY_STATUS)[keyof typeof IDEMPOTENCY_STATUS];
+export type IdempotencyStatusCode = (typeof IDEMPOTENCY_STATUS)[keyof typeof IDEMPOTENCY_STATUS];
 
 export type IdempotencyStatusName = 'IN_PROGRESS' | 'COMPLETED' | 'FAILED';
 

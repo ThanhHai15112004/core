@@ -1,7 +1,4 @@
-import {
-  computeResilienceBackoffMs,
-  sleepWithAbortSignal,
-} from '@packages/kernel/index.js';
+import { computeResilienceBackoffMs, sleepWithAbortSignal } from '@packages/kernel/index.js';
 import type { HttpMethod, HttpRetryPolicy } from '../contracts/http-client.contract.js';
 import type { HttpClientError } from '../errors/http-client.errors.js';
 

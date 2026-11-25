@@ -93,10 +93,7 @@ export class CustomFieldsService implements ICustomFieldsPublicService, OnModule
       }
 
       for (const def of dbDefs) {
-        const record = mapDefinitionEntityToRecord(
-          def,
-          optionsByFieldId.get(String(def.id)) ?? [],
-        );
+        const record = mapDefinitionEntityToRecord(def, optionsByFieldId.get(String(def.id)) ?? []);
         this.registry.hydrateFieldDefinition(record);
       }
     }
@@ -416,9 +413,7 @@ export class CustomFieldsService implements ICustomFieldsPublicService, OnModule
       items = items.filter((h) => h.actionType.toUpperCase() === ct);
     }
     const total = items.length;
-    const paged = items
-      .slice(skip, skip + limit)
-      .map(CustomFieldResponseMapper.toHistoryResponse);
+    const paged = items.slice(skip, skip + limit).map(CustomFieldResponseMapper.toHistoryResponse);
     return createPaginatedResult(paged, total, page, limit);
   }
 

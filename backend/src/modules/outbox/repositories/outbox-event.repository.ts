@@ -351,9 +351,12 @@ export class OutboxEventRepository extends BaseTypeOrmRepository<OutboxEventEnti
       .where('evt.status = :status', { status });
 
     if (status === OUTBOX_EVENT_STATUS.PUBLISHED) {
-      qb.andWhere('(evt.publishedAt <= :cutoff OR (evt.publishedAt IS NULL AND evt.updatedAt <= :cutoff))', {
-        cutoff: cutoffDate,
-      });
+      qb.andWhere(
+        '(evt.publishedAt <= :cutoff OR (evt.publishedAt IS NULL AND evt.updatedAt <= :cutoff))',
+        {
+          cutoff: cutoffDate,
+        },
+      );
     } else {
       qb.andWhere(
         '(evt.deadLetteredAt <= :cutoff OR (evt.deadLetteredAt IS NULL AND evt.updatedAt <= :cutoff))',
@@ -361,7 +364,10 @@ export class OutboxEventRepository extends BaseTypeOrmRepository<OutboxEventEnti
       );
     }
 
-    const rows = await qb.orderBy('evt.id', 'ASC').take(limit).getRawMany<{ id: string | number }>();
+    const rows = await qb
+      .orderBy('evt.id', 'ASC')
+      .take(limit)
+      .getRawMany<{ id: string | number }>();
     const ids = rows.map((r) => Number(r.id)).filter((id) => Number.isInteger(id) && id > 0);
     if (ids.length === 0) {
       return 0;

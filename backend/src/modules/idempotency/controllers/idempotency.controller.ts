@@ -65,7 +65,8 @@ export class IdempotencyController {
   @Get(IDEMPOTENCY_ROUTES.RECORD_BY_ID)
   @RequirePermissions('idempotency.read')
   @ApiDoc({
-    summary: 'Chi tiết một bản ghi khóa Idempotency gồm fingerprint, TTL, phản hồi replay và lượt trùng',
+    summary:
+      'Chi tiết một bản ghi khóa Idempotency gồm fingerprint, TTL, phản hồi replay và lượt trùng',
   })
   public async getRecordById(
     @ValidatedParams(intIdParamSchema) params: { id: number },

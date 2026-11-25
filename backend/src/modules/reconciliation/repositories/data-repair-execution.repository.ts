@@ -16,7 +16,9 @@ export class DataRepairExecutionRepository extends BaseTypeOrmRepository<DataRep
     return Boolean(this.dataSource?.isInitialized || this.transactionManager?.isInTransaction());
   }
 
-  public async listByRepairRequestId(repairRequestId: number): Promise<DataRepairExecutionEntity[]> {
+  public async listByRepairRequestId(
+    repairRequestId: number,
+  ): Promise<DataRepairExecutionEntity[]> {
     if (!this.isDatabaseReady()) return [];
     return this.repository.find({
       where: { repairRequestId },

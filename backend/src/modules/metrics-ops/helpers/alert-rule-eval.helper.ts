@@ -57,10 +57,7 @@ export function compareMetric(value: number, operator: AlertOperator, threshold:
 }
 
 /** Sinh fingerprint cố định (dedup theo ruleCode + nhãn đối tượng) và cắt ngắn vừa cột VARCHAR(191). */
-export function buildAlertFingerprint(
-  ruleCode: string,
-  labels: Record<string, string>,
-): string {
+export function buildAlertFingerprint(ruleCode: string, labels: Record<string, string>): string {
   const sorted = Object.entries(labels)
     .filter(([, v]) => v !== '')
     .sort(([a], [b]) => a.localeCompare(b))

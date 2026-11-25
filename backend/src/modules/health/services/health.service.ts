@@ -12,10 +12,7 @@ import {
   defaultProviderRegistry,
   defaultSettingRegistry,
 } from '@packages/kernel/index.js';
-import {
-  DatabaseConnectionService,
-  DatabaseOperationsService,
-} from '@packages/database/index.js';
+import { DatabaseConnectionService, DatabaseOperationsService } from '@packages/database/index.js';
 import { MessagingConnectionService } from '@packages/messaging/index.js';
 import { QueueMonitoringService } from '@packages/queue/index.js';
 import { RedisService } from '@packages/redis/index.js';

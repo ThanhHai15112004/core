@@ -482,7 +482,9 @@ export class CustomFieldRegistryService {
         changedFields: ['dataType'],
         beforeSnapshot,
         afterSnapshot: { attemptedDataType: input.dataType },
-        reason: input.reason ?? `Blocked arbitrary dataType change from ${existing.dataType} to ${input.dataType}`,
+        reason:
+          input.reason ??
+          `Blocked arbitrary dataType change from ${existing.dataType} to ${input.dataType}`,
         actorUserId: actorId ?? null,
       });
       throw new ConflictAppException('customFields.dataTypeChangeForbidden', [
@@ -499,7 +501,9 @@ export class CustomFieldRegistryService {
     const nextOptions =
       input.options !== undefined ? normalizeOptions(input.options) : existing.options;
     const nextCodeTypeCode =
-      input.codeTypeCode !== undefined ? (input.codeTypeCode?.trim() ?? null) : existing.codeTypeCode;
+      input.codeTypeCode !== undefined
+        ? (input.codeTypeCode?.trim() ?? null)
+        : existing.codeTypeCode;
 
     if (
       existing.dataType === CUSTOM_FIELD_DATA_TYPE.SELECT &&
@@ -515,9 +519,10 @@ export class CustomFieldRegistryService {
       ...existing,
       name: input.name !== undefined ? input.name.trim() : existing.name,
       description:
-        input.description !== undefined ? (input.description?.trim() ?? null) : existing.description,
-      defaultValue:
-        input.defaultValue !== undefined ? input.defaultValue : existing.defaultValue,
+        input.description !== undefined
+          ? (input.description?.trim() ?? null)
+          : existing.description,
+      defaultValue: input.defaultValue !== undefined ? input.defaultValue : existing.defaultValue,
       validationRules:
         input.validationRules !== undefined ? input.validationRules : existing.validationRules,
       options: nextOptions,
@@ -546,8 +551,7 @@ export class CustomFieldRegistryService {
         input.allowedEditRoles !== undefined
           ? [...input.allowedEditRoles]
           : existing.allowedEditRoles,
-      sortOrder:
-        input.sortOrder !== undefined ? Math.trunc(input.sortOrder) : existing.sortOrder,
+      sortOrder: input.sortOrder !== undefined ? Math.trunc(input.sortOrder) : existing.sortOrder,
       status: input.status !== undefined ? input.status : existing.status,
       version: existing.version + 1,
       updatedBy: actorId ?? existing.updatedBy,
@@ -627,8 +631,7 @@ export class CustomFieldRegistryService {
       existing.defaultValue !== undefined &&
       activeOpts.some(
         (o) =>
-          o.optionCode.trim().toLowerCase() ===
-          String(existing.defaultValue).trim().toLowerCase(),
+          o.optionCode.trim().toLowerCase() === String(existing.defaultValue).trim().toLowerCase(),
       );
     const nextDefaultValue = explicitDefault
       ? explicitDefault.optionCode
@@ -669,9 +672,7 @@ export class CustomFieldRegistryService {
       })
       .sort(
         (a, b) =>
-          a.entityCode.localeCompare(b.entityCode) ||
-          a.sortOrder - b.sortOrder ||
-          a.id - b.id,
+          a.entityCode.localeCompare(b.entityCode) || a.sortOrder - b.sortOrder || a.id - b.id,
       );
   }
 
@@ -907,7 +908,8 @@ export class CustomFieldRegistryService {
             { fieldKey: field.fieldKey, received: rawValue },
           ]);
         }
-        const isoDate = dateStr.length === 10 ? dateStr : new Date(parsedMs).toISOString().slice(0, 10);
+        const isoDate =
+          dateStr.length === 10 ? dateStr : new Date(parsedMs).toISOString().slice(0, 10);
         if (rules.minDate) {
           const minMs = new Date(rules.minDate).getTime();
           if (!Number.isNaN(minMs) && parsedMs < minMs) {
@@ -1058,7 +1060,10 @@ export class CustomFieldRegistryService {
 
       if (!hasInputKey) {
         if (isCreateMode) {
-          const initialRaw = def.defaultValue !== null && def.defaultValue !== undefined ? def.defaultValue : undefined;
+          const initialRaw =
+            def.defaultValue !== null && def.defaultValue !== undefined
+              ? def.defaultValue
+              : undefined;
           const validated = this.validateSingleFieldValueOrThrow(def, initialRaw, true);
           if (validated.normalizedValue !== null && !params.validateOnly) {
             const valRecord: CustomFieldValueRecord = {
@@ -1259,15 +1264,29 @@ export class CustomFieldRegistryService {
             typeof target === 'boolean' ? target : String(target).toLowerCase() === 'true';
           return Boolean(actual) === targetBool;
         }
-        return String(actual).toLowerCase() === String(target ?? '').trim().toLowerCase();
+        return (
+          String(actual).toLowerCase() ===
+          String(target ?? '')
+            .trim()
+            .toLowerCase()
+        );
 
       case 'ne':
-        return String(actual).toLowerCase() !== String(target ?? '').trim().toLowerCase();
+        return (
+          String(actual).toLowerCase() !==
+          String(target ?? '')
+            .trim()
+            .toLowerCase()
+        );
 
       case 'contains':
         return String(actual)
           .toLowerCase()
-          .includes(String(target ?? '').trim().toLowerCase());
+          .includes(
+            String(target ?? '')
+              .trim()
+              .toLowerCase(),
+          );
 
       case 'gt':
         if (def.dataType === CUSTOM_FIELD_DATA_TYPE.NUMBER) {

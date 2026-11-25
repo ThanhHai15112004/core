@@ -14,10 +14,7 @@ export const DOMAIN_EVENT_ERROR_CODE = {
 export type DomainEventErrorCode =
   (typeof DOMAIN_EVENT_ERROR_CODE)[keyof typeof DOMAIN_EVENT_ERROR_CODE];
 
-export type DomainEventPayloadViolationKind =
-  | 'entity_leak'
-  | 'secret_leak'
-  | 'invalid_payload';
+export type DomainEventPayloadViolationKind = 'entity_leak' | 'secret_leak' | 'invalid_payload';
 
 /**
  * Lỗi vi phạm quy tắc đặt tên Domain Event (yêu cầu PascalCase chuẩn như `UserCreated`

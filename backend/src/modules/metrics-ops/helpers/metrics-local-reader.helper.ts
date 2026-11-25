@@ -236,11 +236,20 @@ export function readLocalHistogramQuantiles(
   metrics: readonly PromMetric[],
   metricName: string,
   groupByLabel?: string,
-): Map<string, { count: number; sumMs: number; p50Ms: number | null; p95Ms: number | null; p99Ms: number | null }> {
+): Map<
+  string,
+  { count: number; sumMs: number; p50Ms: number | null; p95Ms: number | null; p99Ms: number | null }
+> {
   const hist = metrics.find((m) => m.name === metricName);
   const out = new Map<
     string,
-    { count: number; sumMs: number; p50Ms: number | null; p95Ms: number | null; p99Ms: number | null }
+    {
+      count: number;
+      sumMs: number;
+      p50Ms: number | null;
+      p95Ms: number | null;
+      p99Ms: number | null;
+    }
   >();
   if (!hist) return out;
 

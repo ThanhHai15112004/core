@@ -71,8 +71,10 @@ export function mapDefinitionEntityToRecord(
     isSystem: Boolean(entity.isSystem),
     status: (entity.status ?? CUSTOM_FIELD_STATUS.ACTIVE) as CustomFieldStatusCode,
     version: Number(entity.version ?? 1),
-    createdBy: entity.createdBy !== null && entity.createdBy !== undefined ? Number(entity.createdBy) : null,
-    updatedBy: entity.updatedBy !== null && entity.updatedBy !== undefined ? Number(entity.updatedBy) : null,
+    createdBy:
+      entity.createdBy !== null && entity.createdBy !== undefined ? Number(entity.createdBy) : null,
+    updatedBy:
+      entity.updatedBy !== null && entity.updatedBy !== undefined ? Number(entity.updatedBy) : null,
     createdAt:
       entity.createdAt instanceof Date
         ? entity.createdAt.toISOString()
@@ -98,9 +100,7 @@ export function mapDefinitionRecordToEntityPayload(
       record.defaultValue !== null && record.defaultValue !== undefined
         ? JSON.stringify(record.defaultValue)
         : null,
-    validationRulesJson: record.validationRules
-      ? JSON.stringify(record.validationRules)
-      : null,
+    validationRulesJson: record.validationRules ? JSON.stringify(record.validationRules) : null,
     codeTypeCode: record.codeTypeCode,
     isRequired: record.isRequired,
     isIndexed: record.isIndexed,
@@ -201,7 +201,8 @@ export function mapValueRecordToEntityPayload(
     optionLabel: record.isEncrypted && !isIndexed ? null : (record.optionLabel ?? null),
     valueJson: record.isEncrypted ? null : JSON.stringify(record.value),
     encryptedValue: encryptedPayload,
-    updatedByUserId: record.updatedBy !== null && record.updatedBy !== undefined ? String(record.updatedBy) : null,
+    updatedByUserId:
+      record.updatedBy !== null && record.updatedBy !== undefined ? String(record.updatedBy) : null,
   };
 }
 

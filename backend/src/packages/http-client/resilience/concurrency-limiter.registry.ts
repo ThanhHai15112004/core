@@ -100,23 +100,26 @@ export class ConcurrencyLimiterRegistry {
       const waiter: Waiter = {
         resolve,
         reject,
-        timer: setTimeout(() => {
-          const idx = entry.queue.indexOf(waiter);
-          if (idx >= 0) entry.queue.splice(idx, 1);
-          waiter.cleanupAbort();
-          entry.totalRejected += 1;
-          reject(
-            new HttpConcurrencyLimitError({
-              service,
-              method,
-              url: redactedUrl,
-              maxConcurrent: policy.maxConcurrent,
-              inFlight: entry.inFlight,
-              queued: entry.queue.length,
-              reason: 'queue_timeout',
-            }),
-          );
-        }, Math.max(50, policy.queueTimeoutMs)),
+        timer: setTimeout(
+          () => {
+            const idx = entry.queue.indexOf(waiter);
+            if (idx >= 0) entry.queue.splice(idx, 1);
+            waiter.cleanupAbort();
+            entry.totalRejected += 1;
+            reject(
+              new HttpConcurrencyLimitError({
+                service,
+                method,
+                url: redactedUrl,
+                maxConcurrent: policy.maxConcurrent,
+                inFlight: entry.inFlight,
+                queued: entry.queue.length,
+                reason: 'queue_timeout',
+              }),
+            );
+          },
+          Math.max(50, policy.queueTimeoutMs),
+        ),
         cleanupAbort: () => undefined,
       };
       waiter.timer.unref?.();

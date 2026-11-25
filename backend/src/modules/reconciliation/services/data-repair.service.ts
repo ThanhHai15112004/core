@@ -776,10 +776,7 @@ export class DataRepairService {
     };
   }
 
-  private assertIndependentChecker(
-    requestedBy: number | null,
-    actor?: UserIdentity,
-  ): number {
+  private assertIndependentChecker(requestedBy: number | null, actor?: UserIdentity): number {
     const checkerUserId = parseNumericUserId(actor?.id);
     if (checkerUserId === null) {
       throw new ForbiddenAppException('reconciliation.invalidActorForApproval');

@@ -56,9 +56,21 @@ describe('12.3 Metrics Collectors Unit Tests', () => {
     expect(onResponseCb).not.toBeNull();
 
     const done = jest.fn();
-    onResponseCb!({ method: 'GET', routeOptions: { url: '/api/v1/users/:id' } }, { statusCode: 200, elapsedTime: 25 }, done);
-    onResponseCb!({ method: 'POST', routeOptions: { url: '/api/v1/users' } }, { statusCode: 500, elapsedTime: 300 }, done);
-    onResponseCb!({ method: 'GET', routeOptions: { url: '/api/v1/orders' } }, { statusCode: 404, elapsedTime: 10 }, done);
+    onResponseCb!(
+      { method: 'GET', routeOptions: { url: '/api/v1/users/:id' } },
+      { statusCode: 200, elapsedTime: 25 },
+      done,
+    );
+    onResponseCb!(
+      { method: 'POST', routeOptions: { url: '/api/v1/users' } },
+      { statusCode: 500, elapsedTime: 300 },
+      done,
+    );
+    onResponseCb!(
+      { method: 'GET', routeOptions: { url: '/api/v1/orders' } },
+      { statusCode: 404, elapsedTime: 10 },
+      done,
+    );
     expect(done).toHaveBeenCalledTimes(3);
 
     const text = await registry.metrics();

@@ -77,11 +77,7 @@ export function recordSpanError(span: Span, error: unknown): void {
  * Thực thi hàm sync hoặc async bên trong một OpenTelemetry span,
  * tự động lan truyền active context, đánh dấu OK/ERROR và đóng span ở `finally`.
  */
-export function runInSpan<T>(
-  name: string,
-  options: RunInSpanOptions,
-  fn: (span: Span) => T,
-): T {
+export function runInSpan<T>(name: string, options: RunInSpanOptions, fn: (span: Span) => T): T {
   const tracer = trace.getTracer(TRACING_INSTRUMENTATION_NAME);
   const baseCtx = options.parentContext ?? context.active();
   const attributes = sanitizeSpanAttributes(options.attributes, options.category ?? 'internal');

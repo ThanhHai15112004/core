@@ -13,9 +13,7 @@ export function Traced(spanName?: string, options?: TracedOptions): MethodDecora
     }
 
     const className =
-      typeof target === 'function'
-        ? target.name
-        : (target.constructor?.name ?? 'UnknownService');
+      typeof target === 'function' ? target.name : (target.constructor?.name ?? 'UnknownService');
     const methodName = String(propertyKey);
     const resolvedName = spanName?.trim() || `${className}.${methodName}`;
 

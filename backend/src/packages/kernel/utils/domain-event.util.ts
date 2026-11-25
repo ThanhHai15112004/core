@@ -122,9 +122,7 @@ export function toPascalEventName(rawName: string): string {
   const lowered = trimmed.toLowerCase();
   if (isValidDotEventName(lowered)) {
     const tokens = lowered.split(/[._-]+/).filter(Boolean);
-    const pascal = tokens
-      .map((token) => token.charAt(0).toUpperCase() + token.slice(1))
-      .join('');
+    const pascal = tokens.map((token) => token.charAt(0).toUpperCase() + token.slice(1)).join('');
     if (isValidPascalEventName(pascal)) {
       return pascal;
     }
@@ -273,7 +271,12 @@ function isOrmEntityOrClassInstance(value: unknown): { detected: boolean; reason
 export function assertSafeDomainEventPayload<TPayload extends Record<string, unknown>>(
   payload: TPayload,
 ): Readonly<TPayload> {
-  if (payload === null || payload === undefined || typeof payload !== 'object' || Array.isArray(payload)) {
+  if (
+    payload === null ||
+    payload === undefined ||
+    typeof payload !== 'object' ||
+    Array.isArray(payload)
+  ) {
     throw new DomainEventPayloadViolationException({
       code: DOMAIN_EVENT_ERROR_CODE.INVALID_PAYLOAD,
       violationKind: 'invalid_payload',
@@ -475,8 +478,7 @@ export function createDomainEvent<
   const safePayload = assertSafeDomainEventPayload(input.payload);
   const id = input.id?.trim() || randomUUID();
   const occurredAt = input.occurredAt?.trim() || new Date().toISOString();
-  const requestId =
-    input.requestId !== undefined ? input.requestId : (context?.requestId ?? null);
+  const requestId = input.requestId !== undefined ? input.requestId : (context?.requestId ?? null);
   const correlationId =
     input.correlationId !== undefined
       ? input.correlationId

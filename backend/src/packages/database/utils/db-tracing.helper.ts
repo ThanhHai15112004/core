@@ -52,9 +52,7 @@ function wrapQueryMethod<TArgs extends unknown[], TResult>(
       context.active(),
       async (span) => {
         try {
-          const result = await DB_IN_QUERY_SPAN.run(true, () =>
-            originalQuery.apply(thisArg, args),
-          );
+          const result = await DB_IN_QUERY_SPAN.run(true, () => originalQuery.apply(thisArg, args));
           span.setStatus({ code: SpanStatusCode.OK });
           return result;
         } catch (err) {
@@ -121,11 +119,6 @@ export function instrumentDataSourceTracing(
       parameters?: unknown[],
       queryRunner?: QueryRunner,
     ) => Promise<unknown>;
-    ds.query = wrapQueryMethod(
-      origDataSourceQuery,
-      ds,
-      dbSystem,
-      dbName,
-    ) as typeof ds.query;
+    ds.query = wrapQueryMethod(origDataSourceQuery, ds, dbSystem, dbName) as typeof ds.query;
   }
 }

@@ -13,10 +13,7 @@ import {
   retryDelayWithJitterMs,
   withDbRetry,
 } from '@packages/database/index.js';
-import {
-  REQUEST_TIMEOUT_METADATA_KEY,
-  RequestTimeoutInterceptor,
-} from '@packages/http/index.js';
+import { REQUEST_TIMEOUT_METADATA_KEY, RequestTimeoutInterceptor } from '@packages/http/index.js';
 import {
   BaseHttpClientProvider,
   CircuitBreakerOpenError,
@@ -57,10 +54,7 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
-function makeHttpExecutionContext(
-  method = 'GET',
-  url = '/api/v1/demo',
-): ExecutionContext {
+function makeHttpExecutionContext(method = 'GET', url = '/api/v1/demo'): ExecutionContext {
   const req = {
     method,
     url,
@@ -68,7 +62,7 @@ function makeHttpExecutionContext(
   };
   return {
     getType: () => 'http',
-    getHandler: () => (() => undefined),
+    getHandler: () => () => undefined,
     getClass: () => class DummyController {},
     switchToHttp: () => ({
       getRequest: () => req,
@@ -237,7 +231,9 @@ describe('Phase 11.4 — Retry, Timeout, Circuit Breaker, Bulkhead & Retry Storm
     };
 
     await expect(
-      firstValueFrom(interceptor.intercept(makeHttpExecutionContext('GET', '/api/v1/slow'), slowHandler)),
+      firstValueFrom(
+        interceptor.intercept(makeHttpExecutionContext('GET', '/api/v1/slow'), slowHandler),
+      ),
     ).rejects.toBeInstanceOf(GatewayTimeoutAppException);
 
     const stats = interceptor.getStats();
@@ -452,7 +448,7 @@ describe('Phase 11.4 — Retry, Timeout, Circuit Breaker, Bulkhead & Retry Storm
     const stormSnap = storm.getServiceSnapshot('payment-gw');
     expect(stormSnap?.active).toBe(true);
     expect(stormSnap?.sheddingActive).toBe(true);
-    expect((stormSnap?.sheddedRetriesCount ?? 0)).toBeGreaterThanOrEqual(1);
+    expect(stormSnap?.sheddedRetriesCount ?? 0).toBeGreaterThanOrEqual(1);
     expect(fetchCount).toBeLessThan(8); // Shedding suppressed retries
     expect(events).toContain('started:payment-gw');
 

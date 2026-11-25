@@ -203,7 +203,9 @@ export class ReconciliationRunnerService {
   }
 
   /** Quét và thực thi các Job đối soát định kỳ đến hạn (được Scheduler kích hoạt) */
-  public async triggerDueScheduledJobs(now = new Date()): Promise<ScheduledReconciliationTickResult> {
+  public async triggerDueScheduledJobs(
+    now = new Date(),
+  ): Promise<ScheduledReconciliationTickResult> {
     const dueJobs = await this.jobsService.listDueScheduledJobs(now);
     const triggeredRunIds: number[] = [];
 

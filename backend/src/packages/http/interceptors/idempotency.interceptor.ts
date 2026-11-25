@@ -199,7 +199,8 @@ export class IdempotencyInterceptor implements NestInterceptor {
                 scope: IDEMPOTENCY_SCOPE.API,
                 scopeTarget,
                 idempotencyKey,
-                reason: 'Another request with the same Idempotency-Key is currently being processed',
+                reason:
+                  'Another request with the same Idempotency-Key is currently being processed',
               }),
           );
         }

@@ -22,7 +22,8 @@ export class IdempotencyResponseMapper {
   ): IdempotencyRecordView {
     const expiresAtDate =
       entity.expiresAt instanceof Date ? entity.expiresAt : new Date(entity.expiresAt);
-    const expired = !Number.isNaN(expiresAtDate.getTime()) && expiresAtDate.getTime() <= now.getTime();
+    const expired =
+      !Number.isNaN(expiresAtDate.getTime()) && expiresAtDate.getTime() <= now.getTime();
 
     return {
       id: Number(entity.id),

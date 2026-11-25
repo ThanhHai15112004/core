@@ -1,4 +1,8 @@
-import { statusClassOf, type PrometheusQueryClient, type PromSample } from '@packages/metrics/index.js';
+import {
+  statusClassOf,
+  type PrometheusQueryClient,
+  type PromSample,
+} from '@packages/metrics/index.js';
 import type {
   DbPoolMetricSummary,
   HttpApiMetricItem,
@@ -54,7 +58,9 @@ export async function queryPromHttpSummary(
   const sec = Math.max(60, Math.round(rangeMinutes * 60));
   const w = `${sec}s`;
 
-  const statusRows = await prom.query(`sum by (status) (increase(${H_REQ}[${w}]))`).catch(() => null);
+  const statusRows = await prom
+    .query(`sum by (status) (increase(${H_REQ}[${w}]))`)
+    .catch(() => null);
   if (!statusRows) return null;
 
   const [
@@ -80,15 +86,27 @@ export async function queryPromHttpSummary(
     prom.safeQuery(`sum by (method, route, module) (increase(${H_REQ}[${w}]))`),
     prom.safeQuery(`sum by (method, route, module) (increase(${H_REQ}{status_class="4xx"}[${w}]))`),
     prom.safeQuery(`sum by (method, route, module) (increase(${H_REQ}{status_class="5xx"}[${w}]))`),
-    prom.safeQuery(`histogram_quantile(0.5, sum by (method, route, le) (rate(${H_DUR}_bucket[${w}])))`),
-    prom.safeQuery(`histogram_quantile(0.95, sum by (method, route, le) (rate(${H_DUR}_bucket[${w}])))`),
-    prom.safeQuery(`histogram_quantile(0.99, sum by (method, route, le) (rate(${H_DUR}_bucket[${w}])))`),
+    prom.safeQuery(
+      `histogram_quantile(0.5, sum by (method, route, le) (rate(${H_DUR}_bucket[${w}])))`,
+    ),
+    prom.safeQuery(
+      `histogram_quantile(0.95, sum by (method, route, le) (rate(${H_DUR}_bucket[${w}])))`,
+    ),
+    prom.safeQuery(
+      `histogram_quantile(0.99, sum by (method, route, le) (rate(${H_DUR}_bucket[${w}])))`,
+    ),
     prom.safeQuery(`sum by (module, version) (increase(${H_REQ}[${w}]))`),
     prom.safeQuery(`sum by (module, version) (increase(${H_REQ}{status_class="4xx"}[${w}]))`),
     prom.safeQuery(`sum by (module, version) (increase(${H_REQ}{status_class="5xx"}[${w}]))`),
-    prom.safeQuery(`histogram_quantile(0.5, sum by (module, version, le) (rate(${H_DUR}_bucket[${w}])))`),
-    prom.safeQuery(`histogram_quantile(0.95, sum by (module, version, le) (rate(${H_DUR}_bucket[${w}])))`),
-    prom.safeQuery(`histogram_quantile(0.99, sum by (module, version, le) (rate(${H_DUR}_bucket[${w}])))`),
+    prom.safeQuery(
+      `histogram_quantile(0.5, sum by (module, version, le) (rate(${H_DUR}_bucket[${w}])))`,
+    ),
+    prom.safeQuery(
+      `histogram_quantile(0.95, sum by (module, version, le) (rate(${H_DUR}_bucket[${w}])))`,
+    ),
+    prom.safeQuery(
+      `histogram_quantile(0.99, sum by (module, version, le) (rate(${H_DUR}_bucket[${w}])))`,
+    ),
   ]);
 
   const byStatus: HttpStatusMetricItem[] = statusRows
@@ -191,7 +209,9 @@ export async function queryPromInstances(
   defaultVersion: string,
 ): Promise<InstanceResourceMetricItem[]> {
   const [cpuRows, rssRows, heapRows, elpRows] = await Promise.all([
-    prom.safeQuery('sum by (runtime, instance, version) (rate(process_cpu_seconds_total[2m])) * 100'),
+    prom.safeQuery(
+      'sum by (runtime, instance, version) (rate(process_cpu_seconds_total[2m])) * 100',
+    ),
     prom.safeQuery('max by (runtime, instance, version) (process_resident_memory_bytes)'),
     prom.safeQuery('max by (runtime, instance, version) (nodejs_heap_size_used_bytes)'),
     prom.safeQuery('max by (runtime, instance, version) (nodejs_eventloop_lag_p99_seconds) * 1000'),
@@ -283,7 +303,13 @@ export async function queryPromQueues(
 
   const map = new Map<
     string,
-    { waiting: number; active: number; delayed: number; failed: number; oldestJobAgeSec: number | null }
+    {
+      waiting: number;
+      active: number;
+      delayed: number;
+      failed: number;
+      oldestJobAgeSec: number | null;
+    }
   >();
   for (const row of stateRows) {
     const q = row.labels['queue'];
@@ -330,9 +356,15 @@ export async function queryPromRedisLatency(
   const w = `${Math.max(60, Math.round(rangeMinutes * 60))}s`;
   const [pingSec, p50, p95, p99] = await Promise.all([
     prom.value('max(core_redis_ping_duration_seconds)'),
-    prom.value(`histogram_quantile(0.5, sum by (le) (rate(core_redis_latency_seconds_bucket[${w}])))`),
-    prom.value(`histogram_quantile(0.95, sum by (le) (rate(core_redis_latency_seconds_bucket[${w}])))`),
-    prom.value(`histogram_quantile(0.99, sum by (le) (rate(core_redis_latency_seconds_bucket[${w}])))`),
+    prom.value(
+      `histogram_quantile(0.5, sum by (le) (rate(core_redis_latency_seconds_bucket[${w}])))`,
+    ),
+    prom.value(
+      `histogram_quantile(0.95, sum by (le) (rate(core_redis_latency_seconds_bucket[${w}])))`,
+    ),
+    prom.value(
+      `histogram_quantile(0.99, sum by (le) (rate(core_redis_latency_seconds_bucket[${w}])))`,
+    ),
   ]);
   if (pingSec === null && p50 === null && p95 === null && p99 === null) return null;
   return {

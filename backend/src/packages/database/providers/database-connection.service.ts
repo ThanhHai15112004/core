@@ -12,10 +12,7 @@ import { DataSource } from 'typeorm';
 import { CoreConfigService } from '@packages/config/index.js';
 import { RedisService } from '@packages/redis/index.js';
 import { RUNTIME_IDENTITY, type RuntimeIdentity } from '@packages/runtime/index.js';
-import {
-  computeResilienceBackoffMs,
-  type BackoffOptions,
-} from '@packages/kernel/index.js';
+import { computeResilienceBackoffMs, type BackoffOptions } from '@packages/kernel/index.js';
 import { databaseKeys } from '../constants/database.keys.js';
 import type { ConnectionState, ConnectionStatus } from '../contracts/database-events.types.js';
 import { errorCodeOf, sanitizeDbMessage } from '../utils/error-classify.js';

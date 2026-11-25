@@ -1,10 +1,4 @@
-import {
-  Inject,
-  Injectable,
-  OnModuleDestroy,
-  OnModuleInit,
-  Optional,
-} from '@nestjs/common';
+import { Inject, Injectable, OnModuleDestroy, OnModuleInit, Optional } from '@nestjs/common';
 import {
   BadRequestAppException,
   DomainEventBusService,
@@ -199,9 +193,7 @@ export class OutboxService implements IOutboxPublicService, OnModuleInit, OnModu
     };
   }
 
-  public async listEvents(
-    query: ListOutboxEventsInput,
-  ): Promise<PaginatedResult<OutboxEventView>> {
+  public async listEvents(query: ListOutboxEventsInput): Promise<PaginatedResult<OutboxEventView>> {
     const paged = await this.outboxRepo.listPaginated(query);
     return createPaginatedResult(
       paged.data.map((entity) => OutboxResponseMapper.toEventView(entity)),
@@ -353,7 +345,10 @@ export class OutboxService implements IOutboxPublicService, OnModuleInit, OnModu
     const now = options?.now ?? new Date();
     const publishedDays = Math.max(
       1,
-      Math.min(365, Math.round(options?.publishedRetentionDays ?? runtimeConfig.retentionPublishedDays)),
+      Math.min(
+        365,
+        Math.round(options?.publishedRetentionDays ?? runtimeConfig.retentionPublishedDays),
+      ),
     );
     const deadLetterDays = Math.max(
       1,

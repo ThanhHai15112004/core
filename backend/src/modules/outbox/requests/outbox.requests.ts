@@ -3,19 +3,18 @@ import { createPaginationQuerySchema, optionalQueryParam } from '@packages/http/
 import { parseOutboxEventStatus } from '../enum/outbox.enum.js';
 
 const optionalStatusSchema = optionalQueryParam(
-  z
-    .union([z.number(), z.string()])
-    .transform((val, ctx) => {
-      const parsed = parseOutboxEventStatus(val);
-      if (parsed === null) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: 'Invalid outbox event status (expected 1..5 or PENDING/PROCESSING/PUBLISHED/FAILED/DEAD_LETTER)',
-        });
-        return z.NEVER;
-      }
-      return parsed;
-    }),
+  z.union([z.number(), z.string()]).transform((val, ctx) => {
+    const parsed = parseOutboxEventStatus(val);
+    if (parsed === null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          'Invalid outbox event status (expected 1..5 or PENDING/PROCESSING/PUBLISHED/FAILED/DEAD_LETTER)',
+      });
+      return z.NEVER;
+    }
+    return parsed;
+  }),
 );
 
 export const ListOutboxEventsQuerySchema = createPaginationQuerySchema({ defaultLimit: 20 }).and(

@@ -1,9 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { CoreConfigService } from '@packages/config/index.js';
-import {
-  RESILIENCE_SETTING_KEYS,
-  readDynamicResilienceNumber,
-} from '@packages/kernel/index.js';
+import { RESILIENCE_SETTING_KEYS, readDynamicResilienceNumber } from '@packages/kernel/index.js';
 import { CoreI18nService } from '@packages/i18n/index.js';
 import {
   JOB_LOCK_DURATION_MS,

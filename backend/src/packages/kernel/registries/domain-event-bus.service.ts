@@ -82,9 +82,7 @@ export class DomainEventBusService implements IDomainEventBus {
   private totalRequiredFailures = 0;
   private totalOptionalFailures = 0;
 
-  constructor(
-    @Optional() idempotencyRegistry?: IdempotencyRegistryService,
-  ) {
+  constructor(@Optional() idempotencyRegistry?: IdempotencyRegistryService) {
     this.idempotencyRegistry = idempotencyRegistry ?? defaultIdempotencyRegistry;
   }
 

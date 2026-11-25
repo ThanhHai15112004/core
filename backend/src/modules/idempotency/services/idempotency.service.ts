@@ -1,10 +1,4 @@
-import {
-  Inject,
-  Injectable,
-  OnModuleDestroy,
-  OnModuleInit,
-  Optional,
-} from '@nestjs/common';
+import { Inject, Injectable, OnModuleDestroy, OnModuleInit, Optional } from '@nestjs/common';
 import { createPaginatedResult } from '@packages/http/index.js';
 import {
   IDEMPOTENCY_DEFAULTS,
@@ -18,10 +12,7 @@ import {
   type PaginatedResult,
 } from '@packages/kernel/index.js';
 import { AuditLogService, type UserIdentity } from '@packages/security/index.js';
-import type {
-  IIdempotencyPublicService,
-  ListIdempotencyRecordsInput,
-} from '../contracts/index.js';
+import type { IIdempotencyPublicService, ListIdempotencyRecordsInput } from '../contracts/index.js';
 import { IDEMPOTENCY_AUDIT_META } from '../enum/idempotency.enum.js';
 import { resolveIdempotencyRuntimeConfig } from '../helpers/idempotency-config.helper.js';
 import { IdempotencyRecordRepository } from '../repositories/idempotency-record.repository.js';

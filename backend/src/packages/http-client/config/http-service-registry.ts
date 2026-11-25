@@ -528,9 +528,7 @@ export class HttpServiceRegistry {
         ...(defaultHeaders !== undefined ? { defaultHeaders } : {}),
         ...(Object.keys(retryPartial).length > 0 ? { retry: retryPartial } : {}),
         ...(Object.keys(cbPartial).length > 0 ? { circuitBreaker: cbPartial } : {}),
-        ...(Object.keys(concurrencyPartial).length > 0
-          ? { concurrency: concurrencyPartial }
-          : {}),
+        ...(Object.keys(concurrencyPartial).length > 0 ? { concurrency: concurrencyPartial } : {}),
       });
     }
   }

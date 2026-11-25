@@ -209,9 +209,7 @@ export class ReconciliationResponseMapper {
       errorMessage: entity.errorMessage ?? null,
       createdAt: toIso(entity.createdAt),
       updatedAt: toIso(entity.updatedAt),
-      ...(executions
-        ? { executions: executions.map((e) => this.toRepairExecutionView(e)) }
-        : {}),
+      ...(executions ? { executions: executions.map((e) => this.toRepairExecutionView(e)) } : {}),
     };
   }
 }

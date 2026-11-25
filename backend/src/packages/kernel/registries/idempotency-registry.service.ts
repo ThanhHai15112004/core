@@ -227,7 +227,9 @@ export class IdempotencyRegistryService implements IIdempotencyPort {
     });
   }
 
-  public async getMetricsSnapshot(windowHours?: number): Promise<IdempotencyMetricsSnapshot | null> {
+  public async getMetricsSnapshot(
+    windowHours?: number,
+  ): Promise<IdempotencyMetricsSnapshot | null> {
     if (!this.store) return null;
     try {
       return await this.store.getMetricsSnapshot(windowHours);

@@ -34,7 +34,9 @@ export class ReconciliationRegistryService implements IReconciliationRegistryPor
       description: adapter.description,
       targetModule: adapter.targetModule,
       supportsExternalUpload: adapter.supportsExternalUpload,
-      ...(adapter.defaultMatchingRules ? { defaultMatchingRules: adapter.defaultMatchingRules } : {}),
+      ...(adapter.defaultMatchingRules
+        ? { defaultMatchingRules: adapter.defaultMatchingRules }
+        : {}),
     }));
   }
 

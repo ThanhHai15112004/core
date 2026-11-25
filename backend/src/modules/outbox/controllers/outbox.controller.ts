@@ -48,7 +48,9 @@ export class OutboxController {
 
   @Get(OUTBOX_ROUTES.EVENTS)
   @RequirePermissions('outbox.read')
-  @ApiDoc({ summary: 'Danh sách Outbox Events (phân trang, lọc theo trạng thái/module/event/correlation)' })
+  @ApiDoc({
+    summary: 'Danh sách Outbox Events (phân trang, lọc theo trạng thái/module/event/correlation)',
+  })
   public async listEvents(
     @ValidatedQuery(ListOutboxEventsQuerySchema) query: ListOutboxEventsQuery,
   ): Promise<PaginatedResult<OutboxEventView>> {
@@ -77,7 +79,9 @@ export class OutboxController {
 
   @Post(OUTBOX_ROUTES.EVENTS_REPLAY_BATCH)
   @RequirePermissions('outbox.replay')
-  @ApiDoc({ summary: 'Phát lại hàng loạt tối đa 100 sự kiện Outbox (có kiểm tra quyền & Audit Log)' })
+  @ApiDoc({
+    summary: 'Phát lại hàng loạt tối đa 100 sự kiện Outbox (có kiểm tra quyền & Audit Log)',
+  })
   public async replayBatch(
     @ValidatedBody(ReplayOutboxBatchRequestSchema) body: ReplayOutboxBatchRequest,
     @CurrentUser() actor?: UserIdentity,

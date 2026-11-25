@@ -98,7 +98,9 @@ export class AlertDispatcherService {
     at: string,
   ): Promise<AlertDeliveryRecord> {
     const type =
-      input.kind === 'resolved' ? METRICS_OPS_EVENTS.ALERT_RESOLVED : METRICS_OPS_EVENTS.ALERT_FIRED;
+      input.kind === 'resolved'
+        ? METRICS_OPS_EVENTS.ALERT_RESOLVED
+        : METRICS_OPS_EVENTS.ALERT_FIRED;
     const payload: AlertDomainEventPayload = {
       eventId: input.eventId,
       ruleId: input.ruleId,
@@ -285,7 +287,9 @@ export class AlertDispatcherService {
       return {
         channel: ALERT_CHANNEL.NOTIFICATION,
         status: 'sent',
-        target: [...userIds.map((u) => `user:${u}`), ...roleCodes.map((r) => `role:${r}`)].join(','),
+        target: [...userIds.map((u) => `user:${u}`), ...roleCodes.map((r) => `role:${r}`)].join(
+          ',',
+        ),
         at,
       };
     } catch (err) {

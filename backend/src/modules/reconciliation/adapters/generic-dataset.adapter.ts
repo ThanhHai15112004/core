@@ -32,21 +32,25 @@ function normalizeRecordArray(raw: unknown): ReconciliationComparableRecord[] {
     const amount =
       typeof rawAmount === 'number' && !Number.isNaN(rawAmount)
         ? Math.trunc(rawAmount)
-        : typeof rawAmount === 'string' && rawAmount.trim() !== '' && !Number.isNaN(Number(rawAmount))
+        : typeof rawAmount === 'string' &&
+            rawAmount.trim() !== '' &&
+            !Number.isNaN(Number(rawAmount))
           ? Math.trunc(Number(rawAmount))
           : null;
 
     results.push({
       recordKey,
       entityType: typeof rec.entityType === 'string' ? rec.entityType : 'dataset_record',
-      entityId: typeof rec.entityId === 'string' || typeof rec.entityId === 'number'
-        ? String(rec.entityId)
-        : recordKey,
+      entityId:
+        typeof rec.entityId === 'string' || typeof rec.entityId === 'number'
+          ? String(rec.entityId)
+          : recordKey,
       status: rec.status !== undefined && rec.status !== null ? String(rec.status) : null,
       amount,
-      currency: typeof rec.currency === 'string' && rec.currency.trim()
-        ? rec.currency.trim().toUpperCase()
-        : null,
+      currency:
+        typeof rec.currency === 'string' && rec.currency.trim()
+          ? rec.currency.trim().toUpperCase()
+          : null,
       occurredAt: typeof rec.occurredAt === 'string' ? rec.occurredAt : null,
       fields:
         rec.fields && typeof rec.fields === 'object' && !Array.isArray(rec.fields)
@@ -75,7 +79,9 @@ export class GenericDatasetReconciliationAdapter implements IReconciliationSourc
     ignoreCaseOnStatus: true,
   };
 
-  public async fetchData(context: ReconciliationAdapterContext): Promise<ReconciliationDatasetPair> {
+  public async fetchData(
+    context: ReconciliationAdapterContext,
+  ): Promise<ReconciliationDatasetPair> {
     const internalFromCsv = context.internalCsv?.trim()
       ? parseComparableRecordsFromCsv(context.internalCsv)
       : [];
@@ -140,8 +146,7 @@ export class GenericDatasetRepairHandler implements IDataRepairHandler {
 
     const patchFields = this.extractPatchFields(context);
     const isCompensating = context.actionMode === DATA_REPAIR_ACTION_MODE.COMPENSATING_ACTION;
-    const canRollback =
-      !isCompensating && context.payload.nonRollbackable !== true;
+    const canRollback = !isCompensating && context.payload.nonRollbackable !== true;
 
     const predictedAfter: Record<string, unknown> = isCompensating
       ? {

@@ -89,7 +89,10 @@ export class IdempotencyRecordRepository extends BaseTypeOrmRepository<Idempoten
    */
   public async tryInsertRecord(
     params: InsertIdempotencyRecordParams,
-  ): Promise<{ readonly inserted: true; readonly entity: IdempotencyRecordEntity } | { readonly inserted: false }> {
+  ): Promise<
+    | { readonly inserted: true; readonly entity: IdempotencyRecordEntity }
+    | { readonly inserted: false }
+  > {
     try {
       const entity = await this.saveEntity({
         scope: params.scope,
@@ -188,19 +191,16 @@ export class IdempotencyRecordRepository extends BaseTypeOrmRepository<Idempoten
   }): Promise<void> {
     if (!this.isDatabaseReady()) return;
 
-    const qb = this.repository
-      .createQueryBuilder()
-      .update(IdempotencyRecordEntity)
-      .set({
-        status: IDEMPOTENCY_STATUS.COMPLETED,
-        responseStatusCode: params.statusCode,
-        responseBodyJson: params.responseBodyJson,
-        responseHeadersJson: params.responseHeadersJson,
-        lockedUntil: null,
-        lastErrorCode: null,
-        lastErrorMessage: null,
-        completedAt: params.now,
-      });
+    const qb = this.repository.createQueryBuilder().update(IdempotencyRecordEntity).set({
+      status: IDEMPOTENCY_STATUS.COMPLETED,
+      responseStatusCode: params.statusCode,
+      responseBodyJson: params.responseBodyJson,
+      responseHeadersJson: params.responseHeadersJson,
+      lockedUntil: null,
+      lastErrorCode: null,
+      lastErrorMessage: null,
+      completedAt: params.now,
+    });
 
     if (params.id) {
       qb.where('id = :id', { id: params.id });
@@ -401,10 +401,7 @@ export class IdempotencyRecordRepository extends BaseTypeOrmRepository<Idempoten
 
     const [activeKeysCount, expiredPendingPurgeCount, rawScopeRows, rawClientRows] =
       await Promise.all([
-        this.repository
-          .createQueryBuilder('rec')
-          .where('rec.expiresAt > :now', { now })
-          .getCount(),
+        this.repository.createQueryBuilder('rec').where('rec.expiresAt > :now', { now }).getCount(),
         this.repository
           .createQueryBuilder('rec')
           .where('rec.expiresAt <= :now', { now })
@@ -458,7 +455,10 @@ export class IdempotencyRecordRepository extends BaseTypeOrmRepository<Idempoten
           .groupBy('rec.client_identifier')
           .addGroupBy('rec.scope')
           .addGroupBy('rec.scope_target')
-          .orderBy('COALESCE(SUM(rec.duplicate_hits), 0) + COALESCE(SUM(rec.conflict_hits), 0)', 'DESC')
+          .orderBy(
+            'COALESCE(SUM(rec.duplicate_hits), 0) + COALESCE(SUM(rec.conflict_hits), 0)',
+            'DESC',
+          )
           .limit(20)
           .getRawMany<{
             clientIdentifier: string;

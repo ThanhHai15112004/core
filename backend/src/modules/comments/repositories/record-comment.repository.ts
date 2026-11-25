@@ -30,7 +30,10 @@ export class RecordCommentRepository extends BaseTypeOrmRepository<RecordComment
     readonly workflowInstanceId?: number | undefined;
   }): Promise<RecordCommentEntity[]> {
     return this.executeReadOnly((repo) => {
-      const qb = repo.createQueryBuilder('c').orderBy('c.createdAt', 'ASC').addOrderBy('c.id', 'ASC');
+      const qb = repo
+        .createQueryBuilder('c')
+        .orderBy('c.createdAt', 'ASC')
+        .addOrderBy('c.id', 'ASC');
 
       if (params.entityType) {
         qb.andWhere('c.entityType = :entityType', {

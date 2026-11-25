@@ -77,7 +77,9 @@ export async function allocateReconciliationCode(
  * Chuyển đổi CSV sao kê / tập dữ liệu đối soát thành mảng `ReconciliationComparableRecord`.
  * Hỗ trợ nhiều tên cột phổ biến (`recordKey`, `paymentCode`, `orderCode`, `code`, `id`, `status`, `amount`, `currency`, `occurredAt`).
  */
-export function parseComparableRecordsFromCsv(csvContent: string): ReconciliationComparableRecord[] {
+export function parseComparableRecordsFromCsv(
+  csvContent: string,
+): ReconciliationComparableRecord[] {
   const matrix = parseCsvToMatrix(csvContent);
   if (matrix.length < 2) {
     throw new BadRequestAppException('reconciliation.invalidCsvInput');
@@ -129,7 +131,9 @@ export function parseComparableRecordsFromCsv(csvContent: string): Reconciliatio
     'date',
   ]);
 
-  const normalizedHeaders = headerRow.map((cell, idx) => cleanSpreadsheetCell(cell) || `col_${idx}`);
+  const normalizedHeaders = headerRow.map(
+    (cell, idx) => cleanSpreadsheetCell(cell) || `col_${idx}`,
+  );
   const records: ReconciliationComparableRecord[] = [];
 
   for (let rowIdx = headerIdx + 1; rowIdx < matrix.length; rowIdx++) {
@@ -172,7 +176,8 @@ export function parseComparableRecordsFromCsv(csvContent: string): Reconciliatio
       entityType: entityTypeRaw || null,
       entityId: entityIdRaw || recordKey,
       status: statusRaw || null,
-      amount: parsedAmount !== null && !Number.isNaN(parsedAmount) ? Math.trunc(parsedAmount) : null,
+      amount:
+        parsedAmount !== null && !Number.isNaN(parsedAmount) ? Math.trunc(parsedAmount) : null,
       currency: currencyRaw ? currencyRaw.toUpperCase() : null,
       occurredAt: occurredAtRaw || null,
       fields,
@@ -187,7 +192,10 @@ export function parseComparableRecordsFromCsv(csvContent: string): Reconciliatio
  * Ước lượng thời điểm chạy kế tiếp đơn giản từ biểu thức cron phổ biến (không phụ thuộc lib ngoài).
  * Hỗ trợ `* /N * * * *` (mỗi N phút), `0 * /N * * *` (mỗi N giờ), `M H * * *` (hàng ngày).
  */
-export function computeNextRunAt(scheduleCron: string | null | undefined, from = new Date()): Date | null {
+export function computeNextRunAt(
+  scheduleCron: string | null | undefined,
+  from = new Date(),
+): Date | null {
   const cron = scheduleCron?.trim();
   if (!cron) return null;
   const parts = cron.split(/\s+/);

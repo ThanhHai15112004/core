@@ -68,9 +68,7 @@ function createInMemoryRepos() {
 
   const jobRepo = {
     findByIdSafe: jest.fn(async (id: number) => jobs.find((j) => Number(j.id) === id) ?? null),
-    findByJobCode: jest.fn(
-      async (code: string) => jobs.find((j) => j.jobCode === code) ?? null,
-    ),
+    findByJobCode: jest.fn(async (code: string) => jobs.find((j) => j.jobCode === code) ?? null),
     listPaginated: jest.fn(async () => createPaginatedResult([...jobs], jobs.length, 1, 20)),
     listDueScheduledJobs: jest.fn(async (now: Date) =>
       jobs.filter(
@@ -103,9 +101,7 @@ function createInMemoryRepos() {
 
   const runRepo = {
     findByIdSafe: jest.fn(async (id: number) => runs.find((r) => Number(r.id) === id) ?? null),
-    findByRunCode: jest.fn(
-      async (code: string) => runs.find((r) => r.runCode === code) ?? null,
-    ),
+    findByRunCode: jest.fn(async (code: string) => runs.find((r) => r.runCode === code) ?? null),
     listPaginated: jest.fn(async () => createPaginatedResult([...runs], runs.length, 1, 20)),
     saveEntity: jest.fn(async (partial: Partial<ReconciliationRunEntity>) => {
       if (partial.id) {
@@ -324,7 +320,12 @@ describe('Phase 11.5 — Reconciliation & Data Repair Core', () => {
     const notifyDispatch = jest.fn(async () => ({ id: 1 }));
     const notificationsService = { dispatch: notifyDispatch } as never;
 
-    const jobsService = new ReconciliationJobsService(jobRepo, registry, undefined, auditLogService);
+    const jobsService = new ReconciliationJobsService(
+      jobRepo,
+      registry,
+      undefined,
+      auditLogService,
+    );
     const runnerService = new ReconciliationRunnerService(
       jobsService,
       jobRepo,
@@ -389,9 +390,7 @@ describe('Phase 11.5 — Reconciliation & Data Repair Core', () => {
       }),
     );
     // HIGH/CRITICAL discrepancy notifies default owner #21
-    expect(notifyDispatch).toHaveBeenCalledWith(
-      expect.objectContaining({ userId: 21 }),
-    );
+    expect(notifyDispatch).toHaveBeenCalledWith(expect.objectContaining({ userId: 21 }));
 
     const report = await discrepanciesService.getDiscrepancyReport({ runId: run.id });
     expect(report.totalDiscrepancies).toBe(2);
@@ -433,10 +432,7 @@ describe('Phase 11.5 — Reconciliation & Data Repair Core', () => {
       RECONCILIATION_SETTING_KEYS.SENSITIVE_AMOUNT_THRESHOLD,
       1_000_000,
     );
-    settingRegistry.setGlobalValue(
-      RECONCILIATION_SETTING_KEYS.REQUIRE_DRY_RUN_BEFORE_APPLY,
-      true,
-    );
+    settingRegistry.setGlobalValue(RECONCILIATION_SETTING_KEYS.REQUIRE_DRY_RUN_BEFORE_APPLY, true);
 
     const repairService = new DataRepairService(
       repairRepo,
@@ -594,7 +590,12 @@ describe('Phase 11.5 — Reconciliation & Data Repair Core', () => {
   it('bridges with payments module for cross-reconciliation and refund compensation', async () => {
     const refundPaymentMock = jest.fn(async () => ({
       refund: { id: 55, refundCode: 'RFD-202611-000055' },
-      transaction: { id: 9, paymentCode: 'PAY-202611-000009', statusName: 'PARTIALLY_REFUNDED', refundedAmount: 200_000 },
+      transaction: {
+        id: 9,
+        paymentCode: 'PAY-202611-000009',
+        statusName: 'PARTIALLY_REFUNDED',
+        refundedAmount: 200_000,
+      },
     }));
     const paymentsPublicMock = {
       listTransactions: jest.fn(async () =>

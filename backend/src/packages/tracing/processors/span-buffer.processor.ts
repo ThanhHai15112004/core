@@ -112,10 +112,7 @@ export class SpanBufferProcessor implements SpanProcessor {
     const sc = span.spanContext();
     const startTimeMs = Math.round(hrTimeToMilliseconds(span.startTime));
     const endTimeMs = Math.round(hrTimeToMilliseconds(span.endTime));
-    const durationMs = Math.max(
-      0,
-      Math.round(hrTimeToMilliseconds(span.duration) * 100) / 100,
-    );
+    const durationMs = Math.max(0, Math.round(hrTimeToMilliseconds(span.duration) * 100) / 100);
 
     const recorded: RecordedSpan = {
       traceId: sc.traceId,
@@ -157,9 +154,7 @@ export class SpanBufferProcessor implements SpanProcessor {
   /** Lấy danh sách span thuộc một `traceId` (hợp nhất Redis + bộ nhớ cục bộ, sắp xếp theo thời gian). */
   public async getSpansByTraceId(traceId: string): Promise<RecordedSpan[]> {
     const all = await this.readCombinedSpans();
-    return all
-      .filter((s) => s.traceId === traceId)
-      .sort((a, b) => a.startTimeMs - b.startTimeMs);
+    return all.filter((s) => s.traceId === traceId).sort((a, b) => a.startTimeMs - b.startTimeMs);
   }
 
   /** Tóm tắt các trace gần nhất từ buffer để hiển thị danh sách chọn nhanh trên System Console. */

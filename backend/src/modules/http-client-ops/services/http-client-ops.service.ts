@@ -16,10 +16,7 @@ import {
   type RetryStormServiceSnapshot,
 } from '@packages/http-client/index.js';
 import { CoreI18nService } from '@packages/i18n/index.js';
-import {
-  RESILIENCE_SETTING_KEYS,
-  readDynamicResilienceNumber,
-} from '@packages/kernel/index.js';
+import { RESILIENCE_SETTING_KEYS, readDynamicResilienceNumber } from '@packages/kernel/index.js';
 import { QUEUE_PROFILES } from '@packages/messaging/index.js';
 import {
   HttpClientActionRejectedException,

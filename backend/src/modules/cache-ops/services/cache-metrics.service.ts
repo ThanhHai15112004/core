@@ -89,7 +89,10 @@ export class CacheMetricsService implements OnModuleDestroy {
       ['operation'],
       REDIS_LATENCY_BUCKETS,
     );
-    this.pingGauge = registry.gauge(REDIS_PING_GAUGE, 'Last measured Redis PING latency in seconds');
+    this.pingGauge = registry.gauge(
+      REDIS_PING_GAUGE,
+      'Last measured Redis PING latency in seconds',
+    );
     this.unsubscribeLatency = redis
       ? redis.registerLatencyObserver((operation, durationMs) => {
           this.commandLatency.observe({ operation }, durationMs / 1000);

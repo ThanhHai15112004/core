@@ -58,10 +58,13 @@ export class MetricsCollectorQueryService {
     const version = this.config.app.version;
     const promReady = Boolean(this.prom?.configured);
 
-    const promHttp = promReady && this.prom ? await queryPromHttpSummary(this.prom, rangeMinutes, version) : null;
+    const promHttp =
+      promReady && this.prom ? await queryPromHttpSummary(this.prom, rangeMinutes, version) : null;
     const source: MetricsTelemetrySource = promHttp ? 'prometheus' : 'local';
 
-    const localMetrics = this.metricsRegistry ? await this.metricsRegistry.getMetricsJson().catch(() => []) : [];
+    const localMetrics = this.metricsRegistry
+      ? await this.metricsRegistry.getMetricsJson().catch(() => [])
+      : [];
     const http =
       promHttp ??
       (() => {
@@ -110,8 +113,11 @@ export class MetricsCollectorQueryService {
       const promHttp = await queryPromHttpSummary(this.prom, rangeMinutes, version);
       if (promHttp) return promHttp.errorsByModule;
     }
-    const localMetrics = this.metricsRegistry ? await this.metricsRegistry.getMetricsJson().catch(() => []) : [];
-    return buildLocalHttpSnapshot(localMetrics, version, Math.max(60, rangeMinutes * 60)).errorsByModule;
+    const localMetrics = this.metricsRegistry
+      ? await this.metricsRegistry.getMetricsJson().catch(() => [])
+      : [];
+    return buildLocalHttpSnapshot(localMetrics, version, Math.max(60, rangeMinutes * 60))
+      .errorsByModule;
   }
 
   public async getDependencies(
@@ -123,8 +129,10 @@ export class MetricsCollectorQueryService {
     providers: ProviderLatencyMetricItem[];
   }> {
     const useProm = preferredSource !== 'local' && Boolean(this.prom?.configured);
-    const promRedis = useProm && this.prom ? await queryPromRedisLatency(this.prom, rangeMinutes) : null;
-    const promProviders = useProm && this.prom ? await queryPromProviders(this.prom, rangeMinutes) : [];
+    const promRedis =
+      useProm && this.prom ? await queryPromRedisLatency(this.prom, rangeMinutes) : null;
+    const promProviders =
+      useProm && this.prom ? await queryPromProviders(this.prom, rangeMinutes) : [];
 
     const redisSnap = this.redis?.getLatencySnapshot() ?? {
       count: 0,
@@ -291,8 +299,7 @@ export class MetricsCollectorQueryService {
     const pool = readPoolStats(this.dbConnection?.connected()?.driver);
     const limit = this.config.database.maxConnections;
     const used = pool?.used ?? null;
-    const utilizationPercent =
-      used !== null && limit > 0 ? round2((used / limit) * 100) : null;
+    const utilizationPercent = used !== null && limit > 0 ? round2((used / limit) * 100) : null;
     return {
       state: dbState,
       used,
@@ -320,7 +327,9 @@ export class MetricsCollectorQueryService {
             failed: q.counts.failed,
             backlog: waiting + delayed,
             oldestJobAgeSec:
-              q.oldestWaitingAt === null ? 0 : Math.max(0, round2((now - q.oldestWaitingAt) / 1000)),
+              q.oldestWaitingAt === null
+                ? 0
+                : Math.max(0, round2((now - q.oldestWaitingAt) / 1000)),
             paused: q.paused,
           };
         });

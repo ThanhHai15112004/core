@@ -149,7 +149,14 @@ export class AlertEvaluatorService implements OnApplicationBootstrap, OnModuleDe
 
         const existing = openByFingerprint.get(fingerprint);
         if (!existing) {
-          const created = await this.createAndDispatchEvent(rule, fingerprint, sample.value, sample.labels, summary, nowDate);
+          const created = await this.createAndDispatchEvent(
+            rule,
+            fingerprint,
+            sample.value,
+            sample.labels,
+            summary,
+            nowDate,
+          );
           openByFingerprint.set(fingerprint, created);
           firedNew += 1;
         } else {
@@ -248,7 +255,9 @@ export class AlertEvaluatorService implements OnApplicationBootstrap, OnModuleDe
   }
 
   private parseChannels(channelsJson: string | null): AlertChannel[] {
-    return safeJsonParseStringArray(channelsJson).filter((c) => CHANNEL_SET.has(c)) as AlertChannel[];
+    return safeJsonParseStringArray(channelsJson).filter((c) =>
+      CHANNEL_SET.has(c),
+    ) as AlertChannel[];
   }
 
   private async createAndDispatchEvent(
@@ -357,7 +366,9 @@ export class AlertEvaluatorService implements OnApplicationBootstrap, OnModuleDe
     event.lastEvaluatedAt = nowDate;
 
     const labels = safeJsonParse<Record<string, string>>(event.labelsJson, {}) ?? {};
-    const channels = rule ? this.parseChannels(rule.channelsJson) : [ALERT_CHANNEL.LOG, ALERT_CHANNEL.DOMAIN_EVENT];
+    const channels = rule
+      ? this.parseChannels(rule.channelsJson)
+      : [ALERT_CHANNEL.LOG, ALERT_CHANNEL.DOMAIN_EVENT];
     const delivery = await this.dispatcher.dispatch({
       kind: 'resolved',
       eventId: Number(event.id),

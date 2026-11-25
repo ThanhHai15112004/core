@@ -76,7 +76,11 @@ describe('Domain Event Standard & Bus (Phase 11.1)', () => {
           sourceModule: 'orders',
           aggregateType: 'Order',
           aggregateId: 'ORD-1001',
-          payload: { orderId: 'ORD-1001', totalAmount: 500000, approvedAt: new Date('2026-11-25T00:00:00.000Z') },
+          payload: {
+            orderId: 'ORD-1001',
+            totalAmount: 500000,
+            approvedAt: new Date('2026-11-25T00:00:00.000Z'),
+          },
         },
         {
           requestId: 'req-abc-123',
@@ -85,9 +89,7 @@ describe('Domain Event Standard & Bus (Phase 11.1)', () => {
         },
       );
 
-      expect(event.id).toMatch(
-        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
-      );
+      expect(event.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
       expect(event.type).toBe('OrderApproved');
       expect(event.version).toBe(2);
       expect(Number.isNaN(Date.parse(event.occurredAt))).toBe(false);

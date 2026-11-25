@@ -18,11 +18,7 @@ new CoreI18nService().registerNamespace('idempotency', {
 });
 
 @Module({
-  imports: [
-    DatabaseModule,
-    SecurityModule,
-    TypeOrmModule.forFeature([IdempotencyRecordEntity]),
-  ],
+  imports: [DatabaseModule, SecurityModule, TypeOrmModule.forFeature([IdempotencyRecordEntity])],
   controllers: [IdempotencyController],
   providers: [
     IdempotencyRecordRepository,
