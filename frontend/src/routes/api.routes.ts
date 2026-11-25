@@ -637,4 +637,13 @@ export const API_ROUTES = {
     UNIT_ASSIGNMENT_BY_ID: (id: string | number) => `/provider-registry/unit-assignments/${id}`,
     HISTORIES: (qs = '') => `/provider-registry/histories${qs ? `?${qs}` : ''}`,
   },
+  OUTBOX: {
+    METRICS: '/outbox/metrics',
+    EVENTS: (qs = '') => `/outbox/events${qs ? `?${qs}` : ''}`,
+    EVENT_BY_ID: (id: string | number) => `/outbox/events/${id}`,
+    EVENT_REPLAY: (id: string | number) => `/outbox/events/${id}/replay`,
+    EVENTS_REPLAY_BATCH: '/outbox/events/replay-batch',
+    CLEANUP: '/outbox/cleanup',
+    PROCESS_NOW: '/outbox/process-now',
+  },
 } as const;

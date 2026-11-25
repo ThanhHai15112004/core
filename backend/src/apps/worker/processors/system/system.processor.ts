@@ -3,10 +3,14 @@ import { Processor } from '@nestjs/bullmq';
 import type { Job } from 'bullmq';
 import { CoreConfigService } from '@packages/config/index.js';
 import {
+  DomainEventBusService,
   ExportRegistryService,
+  OUTBOX_QUEUE_TOPICS,
   ReportRegistryService,
+  defaultDomainEventBus,
   defaultExportRegistry,
   defaultReportRegistry,
+  type DomainEvent,
   type TriggeredReportScheduleItemResult,
 } from '@packages/kernel/index.js';
 import { MetricsRegistryService } from '@packages/metrics/index.js';
@@ -28,6 +32,10 @@ import {
   type IInboundWebhooksPublicService,
   type QueuedInboundWebhookJobPayload,
 } from '@modules/inbound-webhooks/contracts/index.js';
+import {
+  OUTBOX_PUBLIC_SERVICE,
+  type IOutboxPublicService,
+} from '@modules/outbox/contracts/index.js';
 import { BaseQueueProcessor } from '../base-queue.processor.js';
 
 export interface SystemMaintenanceTickPayload {
@@ -63,6 +71,11 @@ export class SystemProcessor extends BaseQueueProcessor {
     @Optional()
     @Inject(INBOUND_WEBHOOKS_PUBLIC_SERVICE)
     private readonly inboundWebhooksService?: IInboundWebhooksPublicService,
+    @Optional()
+    @Inject(OUTBOX_PUBLIC_SERVICE)
+    private readonly outboxService?: IOutboxPublicService,
+    @Optional()
+    private readonly domainEventBus: DomainEventBusService = defaultDomainEventBus,
   ) {
     super(config, metrics, progressTracker);
   }
@@ -105,6 +118,43 @@ export class SystemProcessor extends BaseQueueProcessor {
         maxAttempts: job.opts?.attempts ?? 1,
         jobId: String(job.id ?? envelope.id),
       });
+    }
+
+    if (envelope.topic === OUTBOX_QUEUE_TOPICS.DOMAIN_EVENT) {
+      const payload = (envelope.payload ?? {}) as {
+        readonly outboxId?: number;
+        readonly event?: DomainEvent;
+      };
+      if (!payload.event || typeof payload.event !== 'object') {
+        this.logger.warn(
+          `Received "${envelope.topic}" (${envelope.id}) without valid DomainEvent payload`,
+        );
+        return { handled: false, skipped: true, reason: 'invalid_outbox_domain_event' };
+      }
+      const dispatchReport = await this.domainEventBus.publish(payload.event);
+      return {
+        handled: true,
+        outboxId: payload.outboxId ?? null,
+        eventId: dispatchReport.event.id,
+        eventType: dispatchReport.event.type,
+        matchedHandlers: dispatchReport.matchedHandlers,
+        succeededCount: dispatchReport.succeededCount,
+        failedOptionalCount: dispatchReport.failedOptionalCount,
+      };
+    }
+
+    if (envelope.topic === OUTBOX_QUEUE_TOPICS.CLEANUP_TICK) {
+      if (!this.outboxService) {
+        return { handled: false, skipped: true, reason: 'outbox_service_unavailable' };
+      }
+      return this.outboxService.purgeExpiredEvents();
+    }
+
+    if (envelope.topic === OUTBOX_QUEUE_TOPICS.LAG_ALERT_TICK) {
+      if (!this.outboxService) {
+        return { handled: false, skipped: true, reason: 'outbox_service_unavailable' };
+      }
+      return this.outboxService.checkLagAndAlert();
     }
 
     if (

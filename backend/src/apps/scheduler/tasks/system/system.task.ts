@@ -1,5 +1,6 @@
 import { Injectable, type OnModuleInit } from '@nestjs/common';
 import { CoreConfigService } from '@packages/config/index.js';
+import { OUTBOX_QUEUE_TOPICS } from '@packages/kernel/index.js';
 import { QUEUES } from '@packages/messaging/index.js';
 import { ScheduledTaskRegistry } from '../../registry/scheduled-task.registry.js';
 
@@ -46,6 +47,32 @@ export class SystemTask implements OnModuleInit {
       pattern: '*/5 * * * *',
       tz: this.config.scheduler.timezone,
       data: { triggeredBy: 'scheduler', module: 'calendar' },
+      notifyOnFailure: true,
+      misfirePolicy: 'run_once',
+    });
+
+    this.registry.register({
+      id: 'outbox.lag.check',
+      queue: QUEUES.SYSTEM_EVENTS,
+      name: OUTBOX_QUEUE_TOPICS.LAG_ALERT_TICK,
+      description:
+        'Kiểm tra độ trễ, tồn đọng và Dead Letter của Transactional Outbox (11.2), cảnh báo quản trị khi vượt ngưỡng.',
+      pattern: '*/5 * * * *',
+      tz: this.config.scheduler.timezone,
+      data: { triggeredBy: 'scheduler', module: 'outbox' },
+      notifyOnFailure: true,
+      misfirePolicy: 'run_once',
+    });
+
+    this.registry.register({
+      id: 'outbox.cleanup',
+      queue: QUEUES.SYSTEM_EVENTS,
+      name: OUTBOX_QUEUE_TOPICS.CLEANUP_TICK,
+      description:
+        'Tự động dọn các sự kiện Outbox PUBLISHED / DEAD_LETTER đã quá hạn lưu trữ theo chính sách retention (11.2).',
+      pattern: '15 3 * * *',
+      tz: this.config.scheduler.timezone,
+      data: { triggeredBy: 'scheduler', module: 'outbox' },
       notifyOnFailure: true,
       misfirePolicy: 'run_once',
     });

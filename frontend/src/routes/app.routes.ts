@@ -14,6 +14,7 @@ export const ROUTES = {
   WEBHOOKS: '/webhooks',
   PAYMENTS: '/payments',
   PROVIDER_REGISTRY: '/provider-registry',
+  OUTBOX: '/outbox',
   SYSTEM_CONSOLE: '/system-console',
 } as const;
 

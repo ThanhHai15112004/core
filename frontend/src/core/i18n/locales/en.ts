@@ -72,6 +72,7 @@ export const en: TranslationKey = {
     webhooks: 'Outbound Webhooks',
     payments: 'Payments & Reconciliation',
     providerRegistry: 'Providers',
+    outbox: 'Outbox Events',
     languageToggle: 'Language',
     themeLight: 'Light',
     themeDark: 'Dark',

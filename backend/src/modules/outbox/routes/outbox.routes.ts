@@ -1,0 +1,17 @@
+export const OUTBOX_ROUTES = {
+  PREFIX: 'outbox',
+  EVENTS: 'events',
+  EVENT_BY_ID: 'events/:id',
+  EVENT_REPLAY: 'events/:id/replay',
+  EVENTS_REPLAY_BATCH: 'events/replay-batch',
+  METRICS: 'metrics',
+  CLEANUP: 'cleanup',
+  PROCESS_NOW: 'process-now',
+  buildEventsPath: () => '/api/v1/outbox/events',
+  buildEventByIdPath: (id: number | string) => `/api/v1/outbox/events/${id}`,
+  buildEventReplayPath: (id: number | string) => `/api/v1/outbox/events/${id}/replay`,
+  buildReplayBatchPath: () => '/api/v1/outbox/events/replay-batch',
+  buildMetricsPath: () => '/api/v1/outbox/metrics',
+  buildCleanupPath: () => '/api/v1/outbox/cleanup',
+  buildProcessNowPath: () => '/api/v1/outbox/process-now',
+} as const;

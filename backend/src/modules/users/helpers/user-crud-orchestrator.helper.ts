@@ -1,5 +1,6 @@
 import {
   NotFoundAppException,
+  type OutboxPublisherService,
   type SearchDocumentInput,
   defaultCustomFieldRegistry,
   defaultSearchRegistry,
@@ -51,6 +52,10 @@ import type { UserStatusHistoryRepository } from '../repositories/user-status-hi
 import type { UserRepository } from '../repositories/user.repository.js';
 import type { CreateUserRequest, UpdateUserRequest } from '../requests/users.requests.js';
 import type { UserResponse, UserStatusHistoryItemResponse } from '../responses/users.response.js';
+import {
+  buildUserCreatedEventInput,
+  buildUserUpdatedEventInput,
+} from '../events/user-domain.events.js';
 
 export const USERS_SEARCH_ENTITY_CODE = 'users.account';
 
@@ -310,6 +315,8 @@ export async function executeCreateUserRecordFlow(params: {
   ) => Promise<void>;
   getById: (id: number) => Promise<UserResponse>;
   syncUserSearchDocumentSafe: (user: UserResponse, actorId?: number) => Promise<void>;
+  outboxPublisher?: OutboxPublisherService | null;
+  onOutboxPersisted?: (persisted: boolean) => void;
 }): Promise<UserResponse> {
   const {
     dto,
@@ -329,6 +336,8 @@ export async function executeCreateUserRecordFlow(params: {
     saveUserPasswordHash,
     getById,
     syncUserSearchDocumentSafe,
+    outboxPublisher,
+    onOutboxPersisted,
   } = params;
 
   const { normalizedEmail, finalUsername, normalizedPhone, phoneHash, roleIds, orgInputs } =
@@ -441,6 +450,22 @@ export async function executeCreateUserRecordFlow(params: {
 
     await recordStatusHistory(userId, null, initialStatus, 'Initial account creation', actorId);
 
+    if (outboxPublisher?.isReady()) {
+      const enqueued = await outboxPublisher.enqueue(
+        buildUserCreatedEventInput(
+          {
+            id: userId,
+            username: savedUser.username,
+            status: savedUser.status,
+            primaryOrganizationUnitId: primaryOrgInput?.organizationUnitId ?? null,
+            roles: roleIds.map((roleId) => ({ roleId })),
+          },
+          actorId ?? actor?.id ?? null,
+        ),
+      );
+      onOutboxPersisted?.(enqueued.persisted);
+    }
+
     return savedUser;
   };
 
@@ -508,6 +533,8 @@ export async function executeUpdateUserRecordFlow(params: {
   invalidateIdentityCache: (userId: number) => Promise<void>;
   getById: (id: number, includeArchived?: boolean) => Promise<UserResponse>;
   syncUserSearchDocumentSafe: (user: UserResponse, actorId?: number) => Promise<void>;
+  outboxPublisher?: OutboxPublisherService | null;
+  onOutboxPersisted?: (persisted: boolean) => void;
 }): Promise<UserResponse> {
   const {
     id,
@@ -526,6 +553,8 @@ export async function executeUpdateUserRecordFlow(params: {
     invalidateIdentityCache,
     getById,
     syncUserSearchDocumentSafe,
+    outboxPublisher,
+    onOutboxPersisted,
   } = params;
 
   const user = await userRepository.findByIdWithArchived(id, true);
@@ -601,6 +630,20 @@ export async function executeUpdateUserRecordFlow(params: {
       preferredLocale: nextPreferredLocale,
       preferredTimezone: nextPreferredTimezone,
     });
+
+    if (outboxPublisher?.isReady()) {
+      const changedFields = Object.keys(dto).filter(
+        (k) => (dto as Record<string, unknown>)[k] !== undefined,
+      );
+      const enqueued = await outboxPublisher.enqueue(
+        buildUserUpdatedEventInput(
+          { id, username: user.username, status: user.status },
+          changedFields,
+          actorId ?? actor?.id ?? null,
+        ),
+      );
+      onOutboxPersisted?.(enqueued.persisted);
+    }
   };
 
   if (dto.customFields && Object.keys(dto.customFields).length > 0) {

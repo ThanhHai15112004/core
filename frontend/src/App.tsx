@@ -74,6 +74,10 @@ const ProviderRegistryPage = loadPage(
   () => import('./modules/provider-registry/ProviderRegistryPage'),
   'ProviderRegistryPage',
 );
+const OutboxManagementPage = loadPage(
+  () => import('./modules/outbox/OutboxManagementPage'),
+  'OutboxManagementPage',
+);
 
 // Tải riêng: CSS/JS của System Console (Tailwind, ECharts…) chỉ nạp khi vào console.
 // Link cũ dạng `/#system-console/...` → đường dẫn thật.
@@ -151,6 +155,8 @@ function App() {
               <PaymentsManagementPage />
             ) : activeTab === 'provider-registry' ? (
               <ProviderRegistryPage />
+            ) : activeTab === 'outbox' ? (
+              <OutboxManagementPage />
             ) : (
               <HomePage onNavigateTab={handleNavigateTab} />
             )}

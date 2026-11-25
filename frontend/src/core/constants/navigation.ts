@@ -15,7 +15,8 @@ export type NavigationTabId =
   | 'custom-fields'
   | 'webhooks'
   | 'payments'
-  | 'provider-registry';
+  | 'provider-registry'
+  | 'outbox';
 
 export interface NavigationItem {
   id: NavigationTabId;
@@ -115,6 +116,12 @@ export const NAVIGATION_ITEMS: readonly NavigationItem[] = [
     labelKey: 'header.providerRegistry',
     icon: 'server',
     route: ROUTES.PROVIDER_REGISTRY,
+  },
+  {
+    id: 'outbox',
+    labelKey: 'header.outbox',
+    icon: 'inbox',
+    route: ROUTES.OUTBOX,
   },
 ] as const;
 

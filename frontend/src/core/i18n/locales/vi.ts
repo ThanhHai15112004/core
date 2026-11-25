@@ -71,6 +71,7 @@ export const vi = {
     webhooks: 'Webhooks gửi ra ngoài',
     payments: 'Thanh toán & Đối soát',
     providerRegistry: 'Nhà cung cấp',
+    outbox: 'Outbox Events',
     languageToggle: 'Ngôn ngữ',
     themeLight: 'Sáng',
     themeDark: 'Tối',

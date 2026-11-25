@@ -54,7 +54,8 @@
     "inbound-webhooks",
     "federated-identity",
     "payments",
-    "provider-registry"
+    "provider-registry",
+    "outbox"
   ],
   "settings": {
     "defaultLocale": "vi",

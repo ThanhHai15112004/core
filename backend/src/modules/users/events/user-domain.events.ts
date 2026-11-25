@@ -39,7 +39,15 @@ export interface UserUpdatedEventPayload extends Record<string, unknown> {
 }
 
 export function buildUserCreatedEventInput(
-  user: Pick<UserResponse, 'id' | 'username' | 'status' | 'primaryOrganizationUnitId' | 'roles'>,
+  user: Pick<UserResponse, 'id' | 'username' | 'status' | 'primaryOrganizationUnitId'> & {
+    readonly roles?:
+      | readonly {
+          readonly roleId: number;
+          readonly code?: string | undefined;
+          readonly name?: string | undefined;
+        }[]
+      | undefined;
+  },
   actorId?: number | null,
 ): CreateDomainEventInput<UserCreatedEventPayload> {
   return {

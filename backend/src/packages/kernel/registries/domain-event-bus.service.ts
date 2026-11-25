@@ -151,6 +151,19 @@ export class DomainEventBusService implements IDomainEventBus {
   }
 
   /**
+   * Chuẩn hóa và kiểm định một Domain Event kèm ngữ cảnh hiện tại (`requestId`, `correlationId`, `actorId`)
+   * mà chưa phát tới các handler (dùng chung cho Transactional Outbox Phase 11.2).
+   */
+  public resolveEvent<TPayload extends Record<string, unknown> = Record<string, unknown>>(
+    input: CreateDomainEventInput<TPayload> | DomainEvent<TPayload>,
+  ): DomainEvent<TPayload> {
+    const context = this.contextResolver?.();
+    return isDomainEventEnvelope(input)
+      ? this.normalizeExistingEvent(input, context)
+      : createDomainEvent(input, context);
+  }
+
+  /**
    * Phát một Domain Event tới tất cả các handler khớp mẫu:
    * - Handler `required` chạy trước; nếu lỗi sẽ ghi log mức `error` và ném `DomainEventRequiredHandlerException`.
    * - Handler `optional` chạy tiếp; nếu lỗi chỉ ghi log mức `warn` và không làm hỏng luồng chính.
@@ -158,10 +171,7 @@ export class DomainEventBusService implements IDomainEventBus {
   public async publish<TPayload extends Record<string, unknown> = Record<string, unknown>>(
     input: CreateDomainEventInput<TPayload> | DomainEvent<TPayload>,
   ): Promise<DomainEventDispatchReport<TPayload>> {
-    const context = this.contextResolver?.();
-    const event = isDomainEventEnvelope(input)
-      ? this.normalizeExistingEvent(input, context)
-      : createDomainEvent(input, context);
+    const event = this.resolveEvent(input);
 
     this.totalPublished += 1;
     if (this.recordingEnabled) {

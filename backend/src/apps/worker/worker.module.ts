@@ -30,11 +30,13 @@ import { SearchModule } from '@modules/search/index.js';
 import { CustomFieldsModule } from '@modules/custom-fields/index.js';
 import { WebhooksModule } from '@modules/webhooks/index.js';
 import { InboundWebhooksModule } from '@modules/inbound-webhooks/index.js';
+import { OutboxModule } from '@modules/outbox/index.js';
 import { SystemProcessor } from './processors/system/system.processor.js';
 import { CriticalProcessor } from './processors/critical/critical.processor.js';
 import { NotificationsProcessor } from './processors/notifications/notifications.processor.js';
 import { HeavyJobProcessor } from './processors/heavy/heavy-job.processor.js';
 import { WorkerRuntimeContributor } from './runtime/worker-runtime.contributor.js';
+import { OutboxRelayRunner } from './runtime/outbox-relay.runner.js';
 
 const PROCESSORS = [SystemProcessor, CriticalProcessor, NotificationsProcessor, HeavyJobProcessor];
 
@@ -71,8 +73,9 @@ const PROCESSORS = [SystemProcessor, CriticalProcessor, NotificationsProcessor, 
     CustomFieldsModule,
     WebhooksModule,
     InboundWebhooksModule,
+    OutboxModule,
   ],
-  providers: [...PROCESSORS, WorkerRuntimeContributor],
+  providers: [...PROCESSORS, WorkerRuntimeContributor, OutboxRelayRunner],
   exports: [...PROCESSORS],
 })
 export class WorkerModule {}

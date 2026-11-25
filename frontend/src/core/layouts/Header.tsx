@@ -28,6 +28,7 @@ import {
   Webhook,
   CreditCard,
   Server,
+  Inbox,
   Sun,
   Moon,
 } from 'lucide-react';
@@ -123,6 +124,8 @@ export const Header: React.FC<HeaderProps> = ({ activeTab, onTabChange }) => {
         return <CreditCard size={15} />;
       case 'provider-registry':
         return <Server size={15} />;
+      case 'outbox':
+        return <Inbox size={15} />;
       case 'home':
       default:
         return <Home size={15} />;

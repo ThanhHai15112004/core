@@ -43,6 +43,11 @@ import {
   DomainEventBusService,
   defaultDomainEventBus,
 } from './registries/domain-event-bus.service.js';
+import { OUTBOX_PUBLISHER_PORT } from './contracts/outbox.contract.js';
+import {
+  OutboxPublisherService,
+  defaultOutboxPublisher,
+} from './registries/outbox-publisher.service.js';
 
 @Global()
 @Module({
@@ -103,6 +108,14 @@ import {
       provide: DOMAIN_EVENT_BUS_PORT,
       useValue: defaultDomainEventBus,
     },
+    {
+      provide: OutboxPublisherService,
+      useValue: defaultOutboxPublisher,
+    },
+    {
+      provide: OUTBOX_PUBLISHER_PORT,
+      useValue: defaultOutboxPublisher,
+    },
   ],
   exports: [
     CodeRegistryService,
@@ -119,6 +132,8 @@ import {
     PROVIDER_REGISTRY_PORT,
     DomainEventBusService,
     DOMAIN_EVENT_BUS_PORT,
+    OutboxPublisherService,
+    OUTBOX_PUBLISHER_PORT,
   ],
 })
 export class KernelModule {}

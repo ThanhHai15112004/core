@@ -1,0 +1,6 @@
+{
+  "eventNotFound": "Không tìm thấy sự kiện Outbox #{{id}}",
+  "transactionRequired": "Bắt buộc phải ghi Outbox bên trong một transaction nghiệp vụ đang mở",
+  "replayInvalidState": "Không thể phát lại sự kiện #{{id}} đang ở trạng thái {{status}} (chỉ hỗ trợ FAILED, DEAD_LETTER hoặc bật force cho PUBLISHED)",
+  "databaseUnavailable": "Cơ sở dữ liệu chưa sẵn sàng cho thao tác Outbox"
+}

@@ -3,9 +3,11 @@ import {
   BadRequestAppException,
   DomainEventBusService,
   NotFoundAppException,
+  OutboxPublisherService,
   type PaginatedResult,
   defaultCustomFieldRegistry,
   defaultDomainEventBus,
+  defaultOutboxPublisher,
   defaultSearchRegistry,
   parseCustomFieldFiltersParam,
   resolvePagination,
@@ -150,6 +152,8 @@ export class UsersService implements IUsersPublicService {
     identityBridge?: UserIdentityBridgeService | null,
     @Optional()
     private readonly domainEventBus: DomainEventBusService = defaultDomainEventBus,
+    @Optional()
+    private readonly outboxPublisher: OutboxPublisherService = defaultOutboxPublisher,
   ) {
     this.effectiveDataScopeService = this.dataScopeService ?? createDefaultDataScopeService();
     this.identityBridge =
@@ -525,6 +529,7 @@ export class UsersService implements IUsersPublicService {
     actorId?: number,
     actor?: UserIdentity,
   ): Promise<UserResponse> {
+    let outboxPersisted = false;
     const created = await executeCreateUserRecordFlow({
       dto,
       actorId,
@@ -545,10 +550,16 @@ export class UsersService implements IUsersPublicService {
         this.identityBridge.saveUserPasswordHash(uid, hash, opts),
       getById: (uid) => this.getById(uid, true, actor),
       syncUserSearchDocumentSafe: (u, aid) => this.syncUserSearchDocumentSafe(u, aid),
+      outboxPublisher: this.outboxPublisher,
+      onOutboxPersisted: (persisted) => {
+        outboxPersisted = persisted;
+      },
     });
-    await this.domainEventBus.publish(
-      buildUserCreatedEventInput(created, actorId ?? actor?.id ?? null),
-    );
+    if (!outboxPersisted) {
+      await this.domainEventBus.publish(
+        buildUserCreatedEventInput(created, actorId ?? actor?.id ?? null),
+      );
+    }
     return created;
   }
 
@@ -558,6 +569,7 @@ export class UsersService implements IUsersPublicService {
     actorId?: number,
     actor?: UserIdentity,
   ): Promise<UserResponse> {
+    let outboxPersisted = false;
     const updated = await executeUpdateUserRecordFlow({
       id,
       dto,
@@ -575,13 +587,19 @@ export class UsersService implements IUsersPublicService {
       invalidateIdentityCache: (uid) => this.identityBridge.invalidateIdentityCache(uid),
       getById: (uid, inc) => this.getById(uid, inc),
       syncUserSearchDocumentSafe: (u, aid) => this.syncUserSearchDocumentSafe(u, aid),
+      outboxPublisher: this.outboxPublisher,
+      onOutboxPersisted: (persisted) => {
+        outboxPersisted = persisted;
+      },
     });
-    const changedFields = Object.keys(dto).filter(
-      (k) => (dto as Record<string, unknown>)[k] !== undefined,
-    );
-    await this.domainEventBus.publish(
-      buildUserUpdatedEventInput(updated, changedFields, actorId ?? actor?.id ?? null),
-    );
+    if (!outboxPersisted) {
+      const changedFields = Object.keys(dto).filter(
+        (k) => (dto as Record<string, unknown>)[k] !== undefined,
+      );
+      await this.domainEventBus.publish(
+        buildUserUpdatedEventInput(updated, changedFields, actorId ?? actor?.id ?? null),
+      );
+    }
     return updated;
   }
 

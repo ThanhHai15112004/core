@@ -1,0 +1,6 @@
+{
+  "eventNotFound": "Outbox event #{{id}} was not found",
+  "transactionRequired": "Outbox enqueue requires an active database transaction",
+  "replayInvalidState": "Cannot replay outbox event #{{id}} in status {{status}} (only FAILED, DEAD_LETTER, or PUBLISHED with force=true are allowed)",
+  "databaseUnavailable": "Database is not available for outbox operations"
+}

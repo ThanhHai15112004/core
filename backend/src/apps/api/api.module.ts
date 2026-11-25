@@ -53,6 +53,7 @@ import { InboundWebhooksModule } from '@modules/inbound-webhooks/index.js';
 import { FederatedIdentityModule } from '@modules/federated-identity/index.js';
 import { PaymentsModule } from '@modules/payments/index.js';
 import { ProviderRegistryModule } from '@modules/provider-registry/index.js';
+import { OutboxModule } from '@modules/outbox/index.js';
 import { RedisModule } from '@packages/redis/index.js';
 import { RuntimeAgentModule } from '@packages/runtime/index.js';
 import { ApiRuntimeContributor } from './runtime/api-runtime.contributor.js';
@@ -112,6 +113,7 @@ import { MetricsModule } from '@packages/metrics/index.js';
     FederatedIdentityModule,
     PaymentsModule,
     ProviderRegistryModule,
+    OutboxModule,
   ],
   providers: [
     ApiRuntimeContributor,
