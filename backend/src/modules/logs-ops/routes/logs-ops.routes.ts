@@ -5,6 +5,7 @@ export const LOGS_OPS_ROUTES = {
   METRICS: 'metrics',
   SEARCH: '',
   TAIL: 'tail',
+  SLOW_REQUESTS: 'slow-requests',
   EXPORT: 'export',
   ENTRY: 'entries/:id',
   ERRORS: 'errors',

@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import { CoreConfigService } from '@packages/config/index.js';
 import { CoreI18nService } from '@packages/i18n/index.js';
@@ -6,11 +7,14 @@ import {
   DatabaseMonitoringService,
   DatabaseOperationError,
   DatabaseOperationsService,
+  type DbBackupReportRecord,
+  type DbBackupRunStatus,
   type DbErrorKind,
   type DbErrorRecord,
   type DbEventRecord,
   type DbLockWait,
   type DbDigestStat,
+  type DbSlowQueryRecord,
   type DbTable,
   type MonitoringCapability,
   type MonitoringContext,
@@ -34,6 +38,7 @@ import {
 import type {
   BlockingNodeDto,
   DbAlertDto,
+  DbBackupSummaryDto,
   DbConfigDto,
   DbConnectionDetailDto,
   DbConnectionsDto,
@@ -54,6 +59,7 @@ import type {
   DbRange,
   DbReasonDto,
   DbReportDto,
+  DbSlowQueriesDto,
   DbStorageDto,
   DbTableDetailDto,
   DbTableRowDto,
@@ -639,6 +645,112 @@ export class DatabaseOpsService {
     } catch (err) {
       throw this.operationError(err);
     }
+  }
+
+  // ─── Slow queries (with requestId / traceId) & Backup Status ──────────────
+
+  /** Danh sách các truy vấn chậm đã ghi nhận kèm requestId / traceId để truy vết. */
+  public async getSlowQueries(range: DbRange, limit = 100): Promise<DbSlowQueriesDto> {
+    const thresholdMs = this.db.slowQueryMs ?? 500;
+    if (!this.store.isAvailable()) {
+      return { available: false, thresholdMs, items: [] };
+    }
+    const from = Date.now() - DB_RANGES[range] * MINUTE;
+    const rows = await this.store.slowQueries().catch(() => [] as DbSlowQueryRecord[]);
+    const items = rows
+      .filter((r) => r.at >= from)
+      .slice(0, limit)
+      .map((r) => ({
+        at: new Date(r.at).toISOString(),
+        durationMs: r.durationMs,
+        thresholdMs: r.thresholdMs,
+        sql: r.sql,
+        runtime: r.runtime,
+        requestId: r.requestId,
+        traceId: r.traceId,
+        correlationId: r.correlationId,
+      }));
+    return { available: true, thresholdMs, items };
+  }
+
+  /** Đọc trạng thái backup database gần nhất và lịch sử các lần chạy đã báo cáo. */
+  public async getBackupStatus(): Promise<DbBackupSummaryDto> {
+    const maxAgeHours = this.db.backupMaxAgeHours ?? 26;
+    if (!this.store.isAvailable()) {
+      return {
+        status: 'unknown',
+        stale: false,
+        maxAgeHours,
+        source: 'unconfigured',
+        latest: null,
+        history: [],
+      };
+    }
+    const [latest, history] = await Promise.all([
+      this.store.getBackupStatus().catch(() => null),
+      this.store.getBackupHistory().catch(() => [] as DbBackupReportRecord[]),
+    ]);
+    if (!latest) {
+      return {
+        status: 'unknown',
+        stale: false,
+        maxAgeHours,
+        source: 'unconfigured',
+        latest: null,
+        history,
+      };
+    }
+    const atMs = Date.parse(latest.at);
+    const stale = !Number.isNaN(atMs) && Date.now() - atMs > maxAgeHours * 60 * MINUTE;
+    const status =
+      latest.status === 'failed'
+        ? 'critical'
+        : stale
+          ? 'warning'
+          : latest.status === 'unknown'
+            ? 'unknown'
+            : 'healthy';
+    return {
+      status,
+      stale,
+      maxAgeHours,
+      source: 'reported',
+      latest,
+      history,
+    };
+  }
+
+  /** Ghi nhận báo cáo kết quả backup mới từ cron / script vận hành. */
+  public async reportBackup(input: {
+    status: DbBackupRunStatus;
+    at?: string | undefined;
+    durationMs?: number | null | undefined;
+    sizeBytes?: number | null | undefined;
+    location?: string | null | undefined;
+    provider?: string | null | undefined;
+    retentionDays?: number | null | undefined;
+    nextScheduledAt?: string | null | undefined;
+    error?: string | null | undefined;
+    reportedBy?: string | null | undefined;
+  }): Promise<DbBackupSummaryDto> {
+    if (!this.store.isAvailable()) {
+      throw new DatabaseNotConnectedException('Redis store unavailable');
+    }
+    const record: DbBackupReportRecord = {
+      id: `bkp-${randomUUID()}`,
+      at: input.at ?? new Date().toISOString(),
+      status: input.status,
+      durationMs: input.durationMs ?? null,
+      sizeBytes: input.sizeBytes ?? null,
+      location: input.location ?? null,
+      provider: input.provider ?? null,
+      retentionDays: input.retentionDays ?? null,
+      nextScheduledAt: input.nextScheduledAt ?? null,
+      error: input.error ?? null,
+      reportedBy: input.reportedBy ?? null,
+    };
+    await this.store.saveBackupReport(record);
+    return this.getBackupStatus();
   }
 
   // ─── Actions ──────────────────────────────────────────────────────────────

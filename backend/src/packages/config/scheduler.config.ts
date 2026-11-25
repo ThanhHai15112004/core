@@ -53,6 +53,8 @@ export const schedulerConfig = () => ({
     recentFailuresWarn: numberOr('SCHEDULER_RECENT_FAILURES_WARN', 3),
     /** Số task khác nhau cùng rơi vào một cửa sổ 5 phút → cảnh báo dồn lịch. */
     concentrationTasks: numberOr('SCHEDULER_CONCENTRATION_TASKS', 5),
+    /** Ngưỡng thời gian (ms) để đánh dấu một lần chạy scheduler task là chạy chậm. */
+    slowTaskMs: Math.max(100, numberOr('SCHEDULER_SLOW_TASK_MS', 10_000)),
   },
   /** Run Now từ System Console. */
   run: booleanOr('OPS_SCHEDULER_RUN_ENABLED', true),

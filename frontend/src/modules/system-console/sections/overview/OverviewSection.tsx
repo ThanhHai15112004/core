@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { ArrowRight, FileText, LayoutDashboard, RefreshCw } from 'lucide-react';
+import { ArrowRight, Boxes, Clock, Database, FileText, LayoutDashboard, RefreshCw } from 'lucide-react';
 import { useLocale } from '@core/i18n/index';
 import { toneOf } from '@core/theme';
 import { useTimeRange } from '@core/data';
@@ -10,6 +10,7 @@ import {
   ActivityFeed,
   AlertList,
   HealthGrid,
+  KeyValueGrid,
   PageHeader,
   Panel,
   PanelGrid,
@@ -38,7 +39,7 @@ const iconOf = (path: string) => {
  * Mọi số liệu lấy từ backend; không có dữ liệu thì hiện `—`, không tự điền 0.
  */
 export const OverviewSection: React.FC = () => {
-  const { t } = useLocale();
+  const { t, formatTime } = useLocale();
   const f = useFormat();
   const { navigate } = useConsoleRoute();
   const { overview, overviewLoading, overviewError, refetchOverview, isOffline, lastSuccessfulSync } = useConsoleData();
@@ -85,6 +86,9 @@ export const OverviewSection: React.FC = () => {
   }));
 
   const kpis = overview?.keyMetrics ?? [];
+  const sys = overview?.systemInfo;
+  const mig = overview?.migrationStatus;
+  const bkp = overview?.backupStatus;
 
   return (
     <div>
@@ -164,6 +168,69 @@ export const OverviewSection: React.FC = () => {
               );
             })}
       </StatGrid>
+
+      {sys && (
+        <Panel
+          className="mb-4"
+          title={t('ov.system.title')}
+          actions={
+            <div className="flex flex-wrap items-center gap-1.5">
+              <Button size="xs" variant="ghost" onClick={() => navigate('packages?tab=modules')}>
+                <Boxes />
+                {t('ov.system.openModules')}
+              </Button>
+              <Button size="xs" variant="ghost" onClick={() => navigate('database/tables?view=migrations')}>
+                <Database />
+                {t('ov.system.openMigrations')}
+              </Button>
+              <Button size="xs" variant="ghost" onClick={() => navigate('logs/explorer?slowOnly=true')}>
+                <Clock />
+                {t('ov.system.openSlowApis')}
+              </Button>
+            </div>
+          }
+        >
+          <KeyValueGrid
+            columns={4}
+            items={[
+              { label: t('ov.system.coreVersion'), value: sys.coreVersion, mono: true },
+              { label: t('ov.system.projectVersion'), value: `${sys.projectName} · v${sys.projectVersion}`, mono: true },
+              { label: t('ov.system.modules'), value: t('ov.system.modulesValue', { enabled: sys.modules.enabled, total: sys.modules.total }), mono: true },
+              { label: t('ov.system.commit'), value: sys.deployment.shortCommit ?? NO_VALUE, mono: true },
+              { label: t('ov.system.image'), value: sys.deployment.image ?? NO_VALUE, mono: true },
+              { label: t('ov.system.buildTime'), value: sys.deployment.buildTime ? formatTime(sys.deployment.buildTime, true) : NO_VALUE, mono: true },
+              {
+                label: t('ov.system.migration'),
+                value: mig ? (
+                  <Badge tone={mig.upToDate ? 'ok' : 'warn'} size="xs">
+                    {mig.upToDate
+                      ? t('ov.system.migrationSynced', { applied: mig.applied })
+                      : t('ov.system.migrationPending', { pending: mig.pending, applied: mig.applied })}
+                  </Badge>
+                ) : (
+                  NO_VALUE
+                ),
+              },
+              {
+                label: t('ov.system.backup'),
+                value: bkp ? (
+                  bkp.lastBackupAt ? (
+                    <Badge tone={toneOf(bkp.status)} size="xs">
+                      {t(`db.backup.runStatus.${bkp.lastStatus}`)} · <RelativeTime value={bkp.lastBackupAt} />
+                    </Badge>
+                  ) : (
+                    <Badge tone="unknown" size="xs">
+                      {t('ov.system.backupNone')}
+                    </Badge>
+                  )
+                ) : (
+                  NO_VALUE
+                ),
+              },
+            ]}
+          />
+        </Panel>
+      )}
 
       <PanelGrid layout="2-1">
         <Panel title={t('ov.page.components')}>

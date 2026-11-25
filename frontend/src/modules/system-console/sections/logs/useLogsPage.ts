@@ -12,6 +12,8 @@ function filtersOf(q: URLSearchParams): LogFilters {
     if (!v) continue;
     if (k === 'window') {
       if (LOGS_WINDOWS.includes(v as LogsWindow)) f.window = v as LogsWindow;
+    } else if (k === 'slowOnly') {
+      if (v === 'true' || v === '1') f.slowOnly = true;
     } else f[k] = v;
   }
   return f;

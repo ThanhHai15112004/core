@@ -1,7 +1,13 @@
 import { Controller, Get, HttpCode, HttpStatus, Param, Post, Query, Req } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import { Public, extractRequestContext, isPrintableString } from '@packages/http/index.js';
+import {
+  Public,
+  booleanQueryParam,
+  extractRequestContext,
+  isPrintableString,
+  optionalQueryParam,
+} from '@packages/http/index.js';
 import {
   EXECUTION_STATUSES,
   EXECUTION_TRIGGERS,
@@ -44,6 +50,7 @@ const executionsSchema = z.object({
   task: idSchema.optional(),
   status: csv<ExecutionStatus>(EXECUTION_STATUSES),
   trigger: csv<ExecutionTrigger>(EXECUTION_TRIGGERS),
+  slowOnly: optionalQueryParam(booleanQueryParam()),
   limit: z.coerce.number().int().min(10).max(500).default(100),
 });
 const upcomingSchema = z.object({ hours: z.coerce.number().int().min(1).max(168).default(24) });
@@ -104,8 +111,15 @@ export class SchedulerOpsController {
   @Public()
   @Get(R.EXECUTIONS)
   public executions(@Query() q: Record<string, string>) {
-    const { range, task, status, trigger, limit } = parse(executionsSchema, q);
-    return this.scheduler.getExecutions({ range, taskId: task ?? null, status, trigger, limit });
+    const { range, task, status, trigger, slowOnly, limit } = parse(executionsSchema, q);
+    return this.scheduler.getExecutions({
+      range,
+      taskId: task ?? null,
+      status,
+      trigger,
+      slowOnly: slowOnly ?? false,
+      limit,
+    });
   }
 
   /** Lấy chi tiết một lần thực thi của scheduled task */

@@ -66,6 +66,7 @@ export interface Execution {
   finishedAt: string | null;
   durationMs: number | null;
   runningMs: number | null;
+  slow?: boolean;
   attempts: number;
   correlationId: string;
   error: ExecutionError | null;

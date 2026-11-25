@@ -124,32 +124,44 @@ export function scanModuleManifests<
 }
 
 /**
- * Đọc danh sách các module đã được cài đặt và kích hoạt từ `project.manifest.json`.
- * Nếu không tìm thấy `project.manifest.json`, fallback về danh sách module quét được từ `scanModuleManifests()`.
+ * Đọc và parse `project.manifest.json` từ root backend hoặc thư mục hiện tại.
+ * Trả về `null` nếu không tìm thấy hoặc file không hợp lệ.
  */
-export function discoverInstalledModules(): string[] {
+export function loadProjectManifest(): Partial<ProjectManifest> | null {
   const candidateFiles = [
     resolve(process.cwd(), 'project.manifest.json'),
     resolve(process.cwd(), 'backend/project.manifest.json'),
   ];
 
-  const installedSet = new Set<string>(['core']);
-
   for (const filePath of candidateFiles) {
     if (!existsSync(filePath)) continue;
     try {
       const raw = safeJsonParseObject<Partial<ProjectManifest>>(readFileSync(filePath, 'utf8'));
-      if (Array.isArray(raw.enabledModules)) {
-        for (const mod of raw.enabledModules) {
-          if (typeof mod === 'string' && mod.trim().length > 0) {
-            installedSet.add(mod.trim().toLowerCase());
-          }
-        }
-        return Array.from(installedSet);
+      if (Object.keys(raw).length > 0) {
+        return raw;
       }
     } catch {
       // Ignore malformed project manifest
     }
+  }
+  return null;
+}
+
+/**
+ * Đọc danh sách các module đã được cài đặt và kích hoạt từ `project.manifest.json`.
+ * Nếu không tìm thấy `project.manifest.json`, fallback về danh sách module quét được từ `scanModuleManifests()`.
+ */
+export function discoverInstalledModules(): string[] {
+  const installedSet = new Set<string>(['core']);
+  const raw = loadProjectManifest();
+
+  if (raw && Array.isArray(raw.enabledModules)) {
+    for (const mod of raw.enabledModules) {
+      if (typeof mod === 'string' && mod.trim().length > 0) {
+        installedSet.add(mod.trim().toLowerCase());
+      }
+    }
+    return Array.from(installedSet);
   }
 
   for (const entry of scanModuleManifests()) {

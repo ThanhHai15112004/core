@@ -14,6 +14,7 @@ import { useConsoleData } from '../../context/console-data-context';
 import { FILTER_ALL, PACKAGE_CATEGORIES, PACKAGE_CATEGORY_ICON, PACKAGE_METRICS_PREVIEW, PACKAGE_STATUS_TONE } from '../../constants/governance';
 import { usePackagesQuery } from './usePackages';
 import { PackageDetailSheet } from './PackageDetailSheet';
+import { InstalledModulesView } from './InstalledModulesView';
 
 const col = createColumnHelper<PackageSummary>();
 
@@ -34,6 +35,7 @@ export const PackagesSection: React.FC = () => {
   const [search, setSearch] = useQueryState('q', '');
   const [category, setCategory] = useQueryState('category', FILTER_ALL);
   const [itemId] = useQueryState('item', '');
+  const [tab, setTab] = useQueryState('tab', 'packages');
   const [confirm, setConfirm] = useState<PendingAction | null>(null);
   const data = query.data;
 
@@ -149,7 +151,23 @@ export const PackagesSection: React.FC = () => {
         title={t('nav.packages')}
         icon={Package}
         status={tone ? { tone, label: problems > 0 ? t('gov.packages.needAttention', { count: f.number(problems) }) : t('console.status.healthy') } : undefined}
+        actions={
+          <ToggleGroup
+            type="single"
+            value={tab}
+            onValueChange={(v) => v && setTab(v === 'packages' ? null : v)}
+            aria-label={t('nav.packages')}
+          >
+            <ToggleGroupItem value="packages">{t('gov.modules.tabPackages')}</ToggleGroupItem>
+            <ToggleGroupItem value="modules">{t('gov.modules.tabModules')}</ToggleGroupItem>
+          </ToggleGroup>
+        }
       />
+
+      {tab === 'modules' ? (
+        <InstalledModulesView />
+      ) : (
+        <>
 
       <StatGrid columns={4}>
         <StatTile label={t('gov.packages.kpi.total')} value={data ? f.number(data.length) : NO_VALUE} sub={data && counts.idle > 0 ? t('gov.packages.kpi.idle', { count: f.number(counts.idle) }) : undefined} loading={query.isPending} />
@@ -217,6 +235,8 @@ export const PackagesSection: React.FC = () => {
         loading={run.isPending}
         onConfirm={() => confirm && run.mutate(confirm)}
       />
+        </>
+      )}
     </div>
   );
 };

@@ -19,6 +19,7 @@ export interface HistoryFilters {
   trigger: ExecutionTrigger[];
   /** Task id ('' = mọi task). */
   task: string;
+  slowOnly: boolean;
 }
 
 const listOf = <T extends string>(raw: string | null, allowed: readonly T[]): T[] =>
@@ -48,9 +49,15 @@ export function useSchedulerPage() {
   const statusQ = query.get('status');
   const triggerQ = query.get('trigger');
   const taskQ = query.get('task');
+  const slowOnlyQ = query.get('slowOnly') === 'true';
   const filters = useMemo<HistoryFilters>(
-    () => ({ status: listOf(statusQ, EXECUTION_STATUSES), trigger: listOf(triggerQ, EXECUTION_TRIGGERS), task: taskQ ?? '' }),
-    [statusQ, triggerQ, taskQ],
+    () => ({
+      status: listOf(statusQ, EXECUTION_STATUSES),
+      trigger: listOf(triggerQ, EXECUTION_TRIGGERS),
+      task: taskQ ?? '',
+      slowOnly: slowOnlyQ,
+    }),
+    [statusQ, triggerQ, taskQ, slowOnlyQ],
   );
 
   const go = useCallback((tab: SchedulerPageTab, q?: Record<string, string>) => r.go(tab, [], q), [r]);
@@ -58,7 +65,12 @@ export function useSchedulerPage() {
   const setFilters = useCallback(
     (patch: Partial<HistoryFilters>) => {
       const f = { ...filters, ...patch };
-      r.setQuery({ status: f.status.join(',') || null, trigger: f.trigger.join(',') || null, task: f.task || null });
+      r.setQuery({
+        status: f.status.join(',') || null,
+        trigger: f.trigger.join(',') || null,
+        task: f.task || null,
+        slowOnly: f.slowOnly ? 'true' : null,
+      });
     },
     [filters, r],
   );

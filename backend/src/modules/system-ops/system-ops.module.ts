@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { DiscoveryModule } from '@nestjs/core';
 import { PackageRegistryService } from './services/package-registry.service.js';
+import { SystemInfoService } from './services/system-info.service.js';
 import { SystemOverviewService } from './services/system-overview.service.js';
 import { OpsEventService } from './services/ops-event.service.js';
 import { SystemOpsController } from './controllers/system-ops.controller.js';
@@ -38,9 +39,10 @@ import { MetricsOpsModule } from '@modules/metrics-ops/index.js';
     MetricsOpsModule,
   ],
   controllers: [SystemOpsController],
-  providers: [PackageRegistryService, SystemOverviewService, OpsEventService],
+  providers: [PackageRegistryService, SystemInfoService, SystemOverviewService, OpsEventService],
   exports: [
     PackageRegistryService,
+    SystemInfoService,
     SystemOverviewService,
     OpsEventService,
     HealthModule,

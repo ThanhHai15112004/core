@@ -311,3 +311,46 @@ export interface DbPing {
   checkedAt: string;
   state: string;
 }
+
+export interface DbSlowQueryRecord {
+  at: string;
+  durationMs: number;
+  thresholdMs: number;
+  sql: string;
+  runtime: string | null;
+  requestId: string | null;
+  traceId: string | null;
+  correlationId: string | null;
+}
+
+export interface DbSlowQueries {
+  available: boolean;
+  thresholdMs: number;
+  items: DbSlowQueryRecord[];
+}
+
+export type DbBackupRunStatus = 'success' | 'failed' | 'running' | 'unknown';
+export type DbBackupHealthStatus = 'healthy' | 'warning' | 'critical' | 'unknown';
+
+export interface DbBackupReportRecord {
+  id: string;
+  at: string;
+  status: DbBackupRunStatus;
+  durationMs: number | null;
+  sizeBytes: number | null;
+  location: string | null;
+  provider: string | null;
+  retentionDays: number | null;
+  nextScheduledAt: string | null;
+  error: string | null;
+  reportedBy: string | null;
+}
+
+export interface DbBackupSummary {
+  status: DbBackupHealthStatus;
+  stale: boolean;
+  maxAgeHours: number;
+  source: 'reported' | 'unconfigured';
+  latest: DbBackupReportRecord | null;
+  history: DbBackupReportRecord[];
+}

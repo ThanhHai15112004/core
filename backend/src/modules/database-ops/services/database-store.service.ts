@@ -2,10 +2,13 @@ import { Injectable } from '@nestjs/common';
 import { safeJsonParse, safeJsonParseList } from '@packages/kernel/index.js';
 import { RedisService } from '@packages/redis/index.js';
 import {
+  BACKUP_HISTORY_SIZE,
   databaseKeys,
   type ConnectionStatus,
+  type DbBackupReportRecord,
   type DbErrorRecord,
   type DbEventRecord,
+  type DbSlowQueryRecord,
 } from '@packages/database/index.js';
 import type { StoredAlert } from './database-rules.js';
 
@@ -54,6 +57,37 @@ export class DatabaseStoreService {
     return safeJsonParseList<DbErrorRecord>(
       await this.redis.client.lrange(this.keys.errors(), 0, -1),
     );
+  }
+
+  /** Truy vấn danh sách các câu query chậm đã ghi nhận kèm requestId/traceId */
+  public async slowQueries(): Promise<DbSlowQueryRecord[]> {
+    return safeJsonParseList<DbSlowQueryRecord>(
+      await this.redis.client.lrange(this.keys.slowQueries(), 0, -1),
+    );
+  }
+
+  /** Đọc báo cáo trạng thái backup gần nhất */
+  public async getBackupStatus(): Promise<DbBackupReportRecord | null> {
+    const raw = await this.redis.client.get(this.keys.backupStatus());
+    return raw ? safeJsonParse<DbBackupReportRecord>(raw) : null;
+  }
+
+  /** Đọc lịch sử các lần backup gần đây */
+  public async getBackupHistory(): Promise<DbBackupReportRecord[]> {
+    return safeJsonParseList<DbBackupReportRecord>(
+      await this.redis.client.lrange(this.keys.backupHistory(), 0, -1),
+    );
+  }
+
+  /** Lưu trạng thái và lịch sử backup mới */
+  public async saveBackupReport(record: DbBackupReportRecord): Promise<void> {
+    const json = JSON.stringify(record);
+    await this.redis.client
+      .multi()
+      .set(this.keys.backupStatus(), json)
+      .lpush(this.keys.backupHistory(), json)
+      .ltrim(this.keys.backupHistory(), 0, BACKUP_HISTORY_SIZE - 1)
+      .exec();
   }
 
   /** Lấy các bản chụp lịch sử dung lượng lưu trữ */

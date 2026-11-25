@@ -27,7 +27,8 @@ import { toQuery } from './traffic.api';
 
 const L = API_ROUTES.OPS.LOGS_CENTER.path;
 const id = (v: string) => encodeURIComponent(v);
-const filterQuery = (f: LogFilters) => ({ ...f }) as Record<string, string | undefined>;
+const filterQuery = (f: LogFilters) =>
+  ({ ...f, slowOnly: f.slowOnly ? 'true' : undefined }) as Record<string, string | undefined>;
 
 export const logsApi = {
   overview: (range: LogsRange) => fetchApi<LogsOverview>(L('overview', toQuery({ range }))),

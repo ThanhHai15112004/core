@@ -204,6 +204,10 @@ export class SchedulerOpsService {
         if (!owner) continue;
         const status = STATE_OF[state] ?? 'scheduled';
         const def = defs.get(owner.taskId);
+        const durationMs =
+          job.processedOn && job.finishedOn ? Math.max(0, job.finishedOn - job.processedOn) : null;
+        const runningMs = status === 'running' && job.processedOn ? now - job.processedOn : null;
+        const slowThreshold = this.config.scheduler.rules.slowTaskMs ?? 10_000;
         out.push({
           id: String(job.id),
           taskId: owner.taskId,
@@ -214,11 +218,9 @@ export class SchedulerOpsService {
           scheduledAt: iso(job.timestamp + (job.delay ?? 0)),
           startedAt: iso(job.processedOn),
           finishedAt: iso(job.finishedOn),
-          durationMs:
-            job.processedOn && job.finishedOn
-              ? Math.max(0, job.finishedOn - job.processedOn)
-              : null,
-          runningMs: status === 'running' && job.processedOn ? now - job.processedOn : null,
+          durationMs,
+          runningMs,
+          slow: (durationMs ?? runningMs ?? 0) >= slowThreshold,
           attempts: job.attemptsMade,
           correlationId: String(job.id),
           error: job.failedReason
@@ -689,6 +691,7 @@ export class SchedulerOpsService {
     taskId?: string | null;
     status?: ExecutionStatus[] | null;
     trigger?: ExecutionTrigger[] | null;
+    slowOnly?: boolean | null;
     limit?: number;
   }): Promise<ExecutionsListDto> {
     const limit = filter.limit ?? 50;
@@ -698,7 +701,8 @@ export class SchedulerOpsService {
         (e.status === 'running' || Date.parse(e.scheduledAt ?? '') >= from) &&
         (!filter.taskId || e.taskId === filter.taskId) &&
         (!filter.status?.length || filter.status.includes(e.status)) &&
-        (!filter.trigger?.length || filter.trigger.includes(e.trigger)),
+        (!filter.trigger?.length || filter.trigger.includes(e.trigger)) &&
+        (!filter.slowOnly || e.slow),
     );
     return { items: items.slice(0, limit), truncated: items.length > limit };
   }
@@ -862,6 +866,7 @@ export class SchedulerOpsService {
         { group: 'thresholds', key: 'consecutiveFailuresWarn', value: r.consecutiveFailuresWarn },
         { group: 'thresholds', key: 'consecutiveFailuresCrit', value: r.consecutiveFailuresCrit },
         { group: 'thresholds', key: 'concentrationTasks', value: r.concentrationTasks },
+        { group: 'thresholds', key: 'slowTaskMs', value: r.slowTaskMs ?? 10_000 },
       ],
       tasks: [...s.defs.values()].map((d) => ({
         id: d.id,

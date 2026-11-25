@@ -134,6 +134,7 @@ export const schVi = {
     openQueue: 'Mở queue',
     openRuntime: 'Scheduler runtime',
     runAgain: 'Chạy lại',
+    slow: 'Chậm',
   },
   downstream: {
     title: 'Downstream',
@@ -179,6 +180,7 @@ export const schVi = {
     title: 'Lịch sử thực thi',
     filterStatus: 'Lọc theo kết quả',
     filterTrigger: 'Lọc theo trigger',
+    slowOnly: 'Chỉ task chậm',
     allTasks: 'Tất cả task',
     empty: 'Không có lần chạy nào khớp bộ lọc trong khoảng này.',
     count: '{{count}} lần chạy',
@@ -266,6 +268,7 @@ export const schVi = {
       consecutiveFailuresWarn: 'Lỗi liên tiếp — cảnh báo',
       consecutiveFailuresCrit: 'Lỗi liên tiếp — nghiêm trọng',
       concentrationTasks: 'Số task mỗi cửa sổ 5 phút',
+      slowTaskMs: 'Ngưỡng task chạy chậm (ms)',
       queue: 'Queue',
       pattern: 'Biểu thức cron',
       every: 'Chu kỳ',

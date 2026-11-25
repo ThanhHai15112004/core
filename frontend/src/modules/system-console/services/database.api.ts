@@ -1,6 +1,7 @@
 import { fetchApi } from '../../../core/services/api';
 import { API_ROUTES } from '../../../routes/index';
 import type {
+  DbBackupSummary,
   DbConfig,
   DbConnectionDetail,
   DbConnections,
@@ -16,6 +17,7 @@ import type {
   DbQueryStat,
   DbRange,
   DbSession,
+  DbSlowQueries,
   DbStorage,
   DbTableDetail,
   DbTable,
@@ -32,6 +34,8 @@ export const databaseApi = {
   overview: (range: DbRange) => fetchApi<DbOverview>(D('overview', toQuery({ range }))),
   metrics: (range: DbRange, metric: DbMetric) => fetchApi<DbMetrics>(D('metrics', toQuery({ range, metric }))),
   liveQueries: () => fetchApi<{ sessions: Section<DbSession[]>; slowQueryMs: number; actionsEnabled: boolean }>(D('queries')),
+  slowQueries: (range: DbRange, limit = 100) =>
+    fetchApi<DbSlowQueries>(D('queries/slow', toQuery({ range, limit }))),
   queryStats: (range: DbRange, minMs: number) =>
     fetchApi<{ stats: Section<DbQueryStat[]> }>(D('queries/stats', toQuery({ range, minMs }))),
   queryDetail: (id: string) => fetchApi<DbQueryDetail>(D(`queries/stats/${encodeURIComponent(id)}`)),
@@ -46,6 +50,7 @@ export const databaseApi = {
   storage: () => fetchApi<DbStorage>(D('storage')),
   migrations: () => fetchApi<DbMigrations>(D('migrations')),
   runMigrations: (confirm: string) => post<DbMigrations['lastRun']>('migrations/run', confirm),
+  backup: () => fetchApi<DbBackupSummary>(D('backup')),
   events: (range: DbRange) => fetchApi<DbEvent[]>(D('events', toQuery({ range }))),
   errors: (range: DbRange) => fetchApi<DbErrors>(D('errors', toQuery({ range }))),
   config: () => fetchApi<DbConfig>(D('config')),

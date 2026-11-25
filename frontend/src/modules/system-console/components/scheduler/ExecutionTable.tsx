@@ -4,7 +4,7 @@ import { FileText } from 'lucide-react';
 import { useLocale } from '@core/i18n/index';
 import { useFormat } from '@core/hooks/useFormat';
 import { NO_VALUE } from '@core/lib/format';
-import { Button, Hint } from '@core/ui/primitives';
+import { Badge, Button, Hint } from '@core/ui/primitives';
 import { DataTable } from '@core/ui/blocks';
 import type { Execution } from '../../types/scheduler.types';
 import { EXECUTION_TONE } from '../../constants/scheduler';
@@ -51,8 +51,17 @@ export function ExecutionTable({ rows, columns, onOpen, activeId, navigate, empt
       duration: col.accessor((e) => execDurationMs(e) ?? -1, {
         id: 'duration',
         header: t('sch.exec.col.duration'),
-        cell: (c) => f.duration(execDurationMs(c.row.original)),
-        meta: { mono: true, align: 'right', width: '96px' },
+        cell: (c) => (
+          <span className="inline-flex items-center justify-end gap-1.5">
+            {c.row.original.slow && (
+              <Badge tone="warn" size="xs">
+                {t('sch.exec.slow')}
+              </Badge>
+            )}
+            <span>{f.duration(execDurationMs(c.row.original))}</span>
+          </span>
+        ),
+        meta: { mono: true, align: 'right', width: '125px' },
       }),
       trigger: col.accessor('trigger', { header: t('sch.exec.col.trigger'), cell: (c) => t(`sch.exec.trigger.${c.getValue()}`), meta: { width: '100px' } }),
       error: col.accessor((e) => e.error?.message ?? '', {

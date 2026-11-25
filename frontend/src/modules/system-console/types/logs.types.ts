@@ -25,6 +25,7 @@ export interface LogFilters {
   errorType?: string;
   instance?: string;
   fingerprint?: string;
+  slowOnly?: boolean;
   window?: LogsWindow;
   from?: string;
   to?: string;

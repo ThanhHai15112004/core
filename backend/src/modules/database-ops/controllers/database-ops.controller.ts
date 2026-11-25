@@ -12,6 +12,28 @@ const metricsSchema = rangeSchema.extend({
   metric: z.enum(DB_METRICS as [DbMetric, ...DbMetric[]]).default('queries'),
 });
 const statsSchema = rangeSchema.extend({ minMs: z.coerce.number().min(0).max(600_000).default(0) });
+const slowQueriesSchema = rangeSchema.extend({
+  limit: z.coerce.number().int().min(1).max(500).default(100),
+});
+const backupReportSchema = z.object({
+  status: z.enum(['success', 'failed', 'running', 'unknown']),
+  at: z
+    .string()
+    .refine((v) => !Number.isNaN(Date.parse(v)))
+    .optional(),
+  durationMs: z.coerce.number().min(0).nullable().optional(),
+  sizeBytes: z.coerce.number().min(0).nullable().optional(),
+  location: z.string().max(300).nullable().optional(),
+  provider: z.string().max(100).nullable().optional(),
+  retentionDays: z.coerce.number().int().min(1).max(3650).nullable().optional(),
+  nextScheduledAt: z
+    .string()
+    .refine((v) => !Number.isNaN(Date.parse(v)))
+    .nullable()
+    .optional(),
+  error: z.string().max(500).nullable().optional(),
+  reportedBy: z.string().max(120).nullable().optional(),
+});
 const sessionId = z.string().regex(/^\d{1,20}$/);
 const digest = z.string().regex(/^[\w-]{1,128}$/);
 /** Xác nhận hành động vận hành quan trọng trước khi thực thi */
@@ -52,6 +74,14 @@ export class DatabaseOpsController {
   @Get(R.QUERIES)
   public queries() {
     return this.db.getLiveQueries();
+  }
+
+  /** Lấy danh sách các truy vấn chậm đã ghi nhận kèm requestId / traceId */
+  @Public()
+  @Get(R.SLOW_QUERIES)
+  public slowQueries(@Query() q: Record<string, string>) {
+    const { range, limit } = parse(slowQueriesSchema, q);
+    return this.db.getSlowQueries(range, limit);
   }
 
   /** Lấy thống kê hiệu năng thực thi của các truy vấn */
@@ -150,6 +180,22 @@ export class DatabaseOpsController {
   public runMigrations(@Body() body?: unknown) {
     parse(confirm('MIGRATE'), body ?? {});
     return this.db.runMigrations();
+  }
+
+  /** Lấy trạng thái và lịch sử backup database */
+  @Public()
+  @Get(R.BACKUP)
+  public backup() {
+    return this.db.getBackupStatus();
+  }
+
+  /** Ghi nhận trạng thái sau khi chạy backup từ script/cron vận hành */
+  @Public()
+  @Post(R.BACKUP_REPORT)
+  @HttpCode(HttpStatus.OK)
+  public reportBackup(@Body() body?: unknown) {
+    const payload = parse(backupReportSchema, body ?? {});
+    return this.db.reportBackup(payload);
   }
 
   /** Truy vấn danh sách các sự kiện vận hành gần đây */

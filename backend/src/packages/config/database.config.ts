@@ -68,6 +68,8 @@ export const databaseConfig = () => {
     /** Chạy migration từ System Console (nên tắt ở production khi chưa có RBAC). */
     migrationsEnabled: booleanOr('OPS_DATABASE_MIGRATIONS_ENABLED', false),
     migrationsTableName: env('DB_MIGRATIONS_TABLE', false) || 'core_migrations',
+    /** Tuổi tối đa của bản backup gần nhất (giờ) trước khi đánh dấu cảnh báo quá hạn (stale). */
+    backupMaxAgeHours: Math.max(1, numberOr('DB_BACKUP_MAX_AGE_HOURS', 26)),
   };
 };
 

@@ -136,6 +136,7 @@ export const schEn: typeof schVi = {
     openQueue: 'Open queue',
     openRuntime: 'Scheduler runtime',
     runAgain: 'Run again',
+    slow: 'Slow',
   },
   downstream: {
     title: 'Downstream',
@@ -181,6 +182,7 @@ export const schEn: typeof schVi = {
     title: 'Execution history',
     filterStatus: 'Filter by result',
     filterTrigger: 'Filter by trigger',
+    slowOnly: 'Slow tasks only',
     allTasks: 'All tasks',
     empty: 'No execution matches the filters in this range.',
     count: '{{count}} runs',
@@ -268,6 +270,7 @@ export const schEn: typeof schVi = {
       consecutiveFailuresWarn: 'Consecutive failures — warning',
       consecutiveFailuresCrit: 'Consecutive failures — critical',
       concentrationTasks: 'Tasks per 5-minute window',
+      slowTaskMs: 'Slow task threshold (ms)',
       queue: 'Queue',
       pattern: 'Cron expression',
       every: 'Interval',

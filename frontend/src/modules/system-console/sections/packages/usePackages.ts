@@ -1,6 +1,6 @@
 import { useLiveQuery } from '@core/data';
 import { consoleKeys } from '../../context/console-data-context';
-import { fetchPackages } from '../../services/packages.api';
+import { fetchInstalledModules, fetchPackages } from '../../services/packages.api';
 
 /**
  * Danh sách package hạ tầng — cùng key với dữ liệu chung của console (không gọi API hai lần), nhưng trả về
@@ -8,4 +8,8 @@ import { fetchPackages } from '../../services/packages.api';
  */
 export function usePackagesQuery() {
   return useLiveQuery(consoleKeys.packages, fetchPackages, { tier: 'slow' });
+}
+
+export function useInstalledModulesQuery() {
+  return useLiveQuery(['console', 'modules'], fetchInstalledModules, { tier: 'slow' });
 }

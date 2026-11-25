@@ -19,7 +19,7 @@ import {
   StatusDot,
   UsageBar, AvailableView } from '@core/ui/blocks';
 import { BarList } from '@core/ui/charts';
-import type { DbOverview, DbQueryStat, DbSession, DbTransaction } from '../../types/database.types';
+import type { DbOverview, DbQueryStat, DbSession, DbSlowQueryRecord, DbTransaction } from '../../types/database.types';
 import { databaseApi } from '../../services/database.api';
 import {
   DB_QUERY_VIEWS,
@@ -67,11 +67,13 @@ const matchesState = (s: DbSession, filter: LiveStateFilter, slowMs: number) =>
   filter === 'running' ? s.state === 'active' : filter === 'slow' ? (s.queryMs ?? 0) >= slowMs : filter === 'blocked' ? s.state === 'blocked' : true;
 
 const statCol = createColumnHelper<DbQueryStat>();
+const slowCol = createColumnHelper<DbSlowQueryRecord>();
 
 function QueriesView({ page, overview, actions }: TabProps) {
-  const { t } = useLocale();
+  const { t, formatTime } = useLocale();
   const f = useFormat();
   const live = useLiveQuery(dbKeys.live(), () => databaseApi.liveQueries());
+  const slow = useLiveQuery(dbKeys.slowQueries(page.range), () => databaseApi.slowQueries(page.range), { tier: 'slow' });
   const stats = useLiveQuery(dbKeys.stats(page.range, page.minMs), () => databaseApi.queryStats(page.range, page.minMs), { tier: 'slow' });
   const driver = overview?.driver;
   const canCancel = overview?.capabilities.includes('cancel') ?? false;
@@ -110,6 +112,75 @@ function QueriesView({ page, overview, actions }: TabProps) {
       }),
     ],
     [t, f],
+  );
+
+  const slowColumns = useMemo(
+    () => [
+      slowCol.accessor('at', {
+        header: t('db.slowQueries.col.time'),
+        cell: (c) => formatTime(c.getValue(), true),
+        meta: { mono: true, width: '140px' },
+      }),
+      slowCol.accessor('durationMs', {
+        header: t('db.slowQueries.col.duration'),
+        cell: (c) => <Badge tone="warn">{f.duration(c.getValue())}</Badge>,
+        meta: { align: 'right', mono: true, width: '110px' },
+      }),
+      slowCol.accessor('sql', {
+        header: t('db.slowQueries.col.sql'),
+        enableSorting: false,
+        cell: (c) => (
+          <span className="block truncate font-mono text-xs text-fg-2" title={c.getValue()}>
+            {c.getValue()}
+          </span>
+        ),
+        meta: { truncate: true },
+      }),
+      slowCol.accessor('requestId', {
+        header: t('db.slowQueries.col.requestId'),
+        cell: (c) => {
+          const val = c.getValue();
+          return val ? (
+            <Button
+              size="xs"
+              variant="ghost"
+              className="h-6 px-1.5 font-mono text-xs"
+              onClick={() => page.navigate(`logs/explorer?requestId=${encodeURIComponent(val)}`)}
+            >
+              {f.shortId(val, 10, 0)}
+            </Button>
+          ) : (
+            <span className="text-faint">{NO_VALUE}</span>
+          );
+        },
+        meta: { mono: true, width: '125px' },
+      }),
+      slowCol.accessor('traceId', {
+        header: t('db.slowQueries.col.traceId'),
+        cell: (c) => {
+          const val = c.getValue();
+          return val ? (
+            <Button
+              size="xs"
+              variant="ghost"
+              className="h-6 px-1.5 font-mono text-xs"
+              onClick={() => page.navigate(`logs/traces/${encodeURIComponent(val)}`)}
+            >
+              {f.shortId(val, 10, 0)}
+            </Button>
+          ) : (
+            <span className="text-faint">{NO_VALUE}</span>
+          );
+        },
+        meta: { mono: true, width: '125px' },
+      }),
+      slowCol.accessor('runtime', {
+        header: t('db.slowQueries.col.runtime'),
+        cell: (c) => runtimeLabel(c.getValue(), t),
+        meta: { width: '110px', truncate: true },
+      }),
+    ],
+    [t, f, formatTime, page],
   );
 
   return (
@@ -183,6 +254,29 @@ function QueriesView({ page, overview, actions }: TabProps) {
               )}
             </AvailableView>
           )}
+        </QueryView>
+      </Panel>
+
+      <Panel
+        className="mt-4"
+        title={t('db.slowQueries.title')}
+        hint={t('db.slowQueries.hint', { ms: slow.data?.thresholdMs ?? overview?.settings.slowQueryMs ?? 500 })}
+        flush
+      >
+        <QueryView query={slow}>
+          {(d) =>
+            !d.available ? (
+              <PanelState status="no-source" compact message={t('db.slowQueries.unavailable')} />
+            ) : (
+              <DataTable
+                data={d.items}
+                columns={slowColumns}
+                getRowId={(r) => `${r.at}-${r.sql}-${r.requestId ?? ''}`}
+                maxHeight={DB_TABLE_MAX_HEIGHT_PX}
+                emptyMessage={t('db.slowQueries.empty')}
+              />
+            )
+          }
         </QueryView>
       </Panel>
     </>

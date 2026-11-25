@@ -23,6 +23,12 @@ export const appConfig = () => ({
   connectionTimeoutMs: Math.max(0, numberOr('API_CONNECTION_TIMEOUT_MS', 10_000)),
   /** Thời gian giữ kết nối HTTP keep-alive (ms) tại Fastify/Node server. */
   keepAliveTimeoutMs: Math.max(0, numberOr('API_KEEP_ALIVE_TIMEOUT_MS', 5_000)),
+  /** Metadata bản build / deployment do CI/CD hoặc Docker image truyền qua env. */
+  deployment: {
+    commit: env('APP_GIT_COMMIT', false) || env('GIT_COMMIT', false) || null,
+    image: env('APP_IMAGE', false) || env('DOCKER_IMAGE', false) || null,
+    buildTime: env('APP_BUILD_TIME', false) || env('BUILD_TIME', false) || null,
+  },
 });
 
 export type AppConfig = ReturnType<typeof appConfig>;

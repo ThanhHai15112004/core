@@ -74,6 +74,11 @@ export function LogTable({ rows, onOpen, activeId, freshIds, maxHeight, emptyMes
                 {r.module && <span className="mr-1.5 font-mono text-xs text-muted">[{r.module}]</span>}
                 {r.message}
               </div>
+              {r.slowRequest && r.durationMs !== null && (
+                <Badge tone="warn" size="xs">
+                  {`${Math.round(r.durationMs)} ms`}
+                </Badge>
+              )}
               {r.errorType && (
                 <Badge tone="crit" size="xs" className="max-w-40 truncate">
                   {r.errorType}

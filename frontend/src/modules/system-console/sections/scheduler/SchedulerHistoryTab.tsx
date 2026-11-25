@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { FileText } from 'lucide-react';
+import { Clock, FileText } from 'lucide-react';
 import { useLocale } from '@core/i18n/index';
 import { useLiveQuery } from '@core/data';
 import { useFormat } from '@core/hooks/useFormat';
@@ -32,11 +32,22 @@ export function ExecutionHistory({ page, tasks = [], taskId }: { page: Scheduler
   const { filters, setFilters, range } = page;
   const task = taskId ?? filters.task;
   const filter = useMemo<ExecutionFilter>(
-    () => ({ range, status: filters.status, trigger: filters.trigger, limit: taskId ? TASK_HISTORY_LIMIT : HISTORY_LIMIT, ...(task ? { task } : {}) }),
-    [range, filters.status, filters.trigger, task, taskId],
+    () => ({
+      range,
+      status: filters.status,
+      trigger: filters.trigger,
+      slowOnly: filters.slowOnly,
+      limit: taskId ? TASK_HISTORY_LIMIT : HISTORY_LIMIT,
+      ...(task ? { task } : {}),
+    }),
+    [range, filters.status, filters.trigger, filters.slowOnly, task, taskId],
   );
   const query = useLiveQuery(schedulerKeys.executions(filter), () => schedulerApi.executions(filter));
-  const active = filters.status.length > 0 || filters.trigger.length > 0 || (!taskId && filters.task !== '');
+  const active =
+    filters.status.length > 0 ||
+    filters.trigger.length > 0 ||
+    filters.slowOnly ||
+    (!taskId && filters.task !== '');
 
   return (
     <Panel
@@ -51,7 +62,7 @@ export function ExecutionHistory({ page, tasks = [], taskId }: { page: Scheduler
       }
     >
       <div className="border-b border-border px-3 pt-3">
-        <FilterBar active={active} onClear={() => setFilters({ status: [], trigger: [], ...(taskId ? {} : { task: '' }) })}>
+        <FilterBar active={active} onClear={() => setFilters({ status: [], trigger: [], slowOnly: false, ...(taskId ? {} : { task: '' }) })}>
           {!taskId && tasks.length > 1 && (
             <Select value={filters.task || ALL} onValueChange={(v) => setFilters({ task: v === ALL ? '' : v })}>
               <SelectTrigger size="sm" className="w-52" aria-label={t('sch.exec.col.task')}>
@@ -82,6 +93,16 @@ export function ExecutionHistory({ page, tasks = [], taskId }: { page: Scheduler
               </ToggleGroupItem>
             ))}
           </ToggleGroup>
+          <Button
+            type="button"
+            size="sm"
+            variant={filters.slowOnly ? 'primary' : 'secondary'}
+            aria-pressed={filters.slowOnly}
+            onClick={() => setFilters({ slowOnly: !filters.slowOnly })}
+          >
+            <Clock />
+            {t('sch.history.slowOnly')}
+          </Button>
         </FilterBar>
       </div>
       <QueryView query={query}>

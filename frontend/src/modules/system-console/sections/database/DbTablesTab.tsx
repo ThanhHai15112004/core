@@ -4,6 +4,7 @@ import { Play } from 'lucide-react';
 import { useLocale } from '@core/i18n/index';
 import { useLiveQuery } from '@core/data';
 import { useFormat } from '@core/hooks/useFormat';
+import { toneOf } from '@core/theme';
 import { formatSignedBytes, NO_VALUE, UNIT } from '@core/lib/format';
 import { Badge, Button, Hint } from '@core/ui/primitives';
 import { DataTable, KeyValueGrid, Panel, PanelGrid, QueryView, RelativeTime, StatGrid, StatTile, StatusBanner, UsageBar, AvailableView } from '@core/ui/blocks';
@@ -149,7 +150,9 @@ function MigrationsView({ actions }: { actions: DbActions }) {
   const { t, locale, formatTime } = useLocale();
   const f = useFormat();
   const q = useLiveQuery(dbKeys.migrations(), () => databaseApi.migrations(), { tier: 'slow' });
+  const backupQ = useLiveQuery(dbKeys.backup(), () => databaseApi.backup(), { tier: 'slow' });
   const d = q.data;
+  const b = backupQ.data;
   const failed = d?.lastRun?.status === 'failed';
 
   const columns = useMemo(
@@ -175,6 +178,87 @@ function MigrationsView({ actions }: { actions: DbActions }) {
 
   return (
     <>
+      <Panel
+        className="mb-4"
+        title={t('db.backup.title')}
+        hint={b ? t('db.backup.hint', { hours: b.maxAgeHours }) : undefined}
+        actions={
+          b ? (
+            <Badge tone={toneOf(b.status)}>
+              {t(`db.backup.state.${b.status}`)}
+            </Badge>
+          ) : undefined
+        }
+      >
+        <QueryView query={backupQ} compact>
+          {(backup) =>
+            !backup.latest ? (
+              <StatusBanner tone="unknown" title={t('db.backup.unconfigured')} />
+            ) : (
+              <>
+                {backup.stale && (
+                  <StatusBanner
+                    tone="warn"
+                    title={t('db.backup.staleWarning', { hours: backup.maxAgeHours })}
+                  />
+                )}
+                {backup.latest.status === 'failed' && backup.latest.error && (
+                  <StatusBanner tone="crit" title={backup.latest.error} />
+                )}
+                <KeyValueGrid
+                  columns={3}
+                  items={[
+                    {
+                      label: t('db.backup.lastAt'),
+                      value: (
+                        <span>
+                          {formatTime(backup.latest.at, true)} (
+                          <RelativeTime value={backup.latest.at} />)
+                        </span>
+                      ),
+                    },
+                    {
+                      label: t('db.backup.lastStatus'),
+                      value: (
+                        <Badge tone={toneOf(backup.status)} size="xs">
+                          {t(`db.backup.runStatus.${backup.latest.status}`)}
+                        </Badge>
+                      ),
+                    },
+                    {
+                      label: t('db.backup.size'),
+                      value:
+                        backup.latest.sizeBytes !== null
+                          ? f.bytes(backup.latest.sizeBytes)
+                          : NO_VALUE,
+                      mono: true,
+                    },
+                    {
+                      label: t('db.backup.provider'),
+                      value: backup.latest.provider ?? NO_VALUE,
+                      mono: true,
+                    },
+                    {
+                      label: t('db.backup.location'),
+                      value: backup.latest.location ?? NO_VALUE,
+                      mono: true,
+                    },
+                    {
+                      label: t('db.backup.retention'),
+                      value:
+                        backup.latest.retentionDays !== null
+                          ? f.number(backup.latest.retentionDays)
+                          : NO_VALUE,
+                      mono: true,
+                    },
+                  ]}
+                />
+              </>
+            )
+          }
+        </QueryView>
+      </Panel>
+
       {d && d.pending > 0 && d.environment === 'production' && <StatusBanner tone="warn" title={t('db.migrations.pendingProd', { count: d.pending })} />}
       {failed && <StatusBanner tone="crit" title={t('db.migrations.lastFailedTitle')} description={d?.lastRun?.error ?? undefined} />}
 

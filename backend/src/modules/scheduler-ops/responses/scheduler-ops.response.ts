@@ -66,6 +66,8 @@ export interface ExecutionDto {
   durationMs: number | null;
   /** Đang chạy: đã chạy bao lâu. */
   runningMs: number | null;
+  /** Thời lượng vượt ngưỡng `SCHEDULER_SLOW_TASK_MS`. */
+  slow: boolean;
   attempts: number;
   correlationId: string;
   error: ExecutionError | null;

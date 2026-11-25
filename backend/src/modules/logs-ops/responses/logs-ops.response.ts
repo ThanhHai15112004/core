@@ -65,6 +65,25 @@ export interface LogTailDto {
   latestCursor: string | null;
 }
 
+export interface SlowRequestItemDto {
+  id: string;
+  at: string;
+  method: string | null;
+  route: string | null;
+  status: number | null;
+  durationMs: number | null;
+  requestId: string | null;
+  traceId: string | null;
+  correlationId: string | null;
+  runtime: string | null;
+}
+
+export interface SlowRequestsDto {
+  available: boolean;
+  thresholdMs: number;
+  items: SlowRequestItemDto[];
+}
+
 export type ResolvedIdKind = 'request' | 'job' | 'execution' | 'correlation' | 'trace' | 'log';
 
 export interface ResolvedIdDto {

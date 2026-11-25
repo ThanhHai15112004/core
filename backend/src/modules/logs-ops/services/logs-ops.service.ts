@@ -53,6 +53,7 @@ import type {
   RecentTraceSummaryDto,
   ResolvedIdDto,
   ResolvedIdKind,
+  SlowRequestsDto,
   TraceDto,
   TraceEventDto,
   TraceNodeDto,
@@ -474,6 +475,35 @@ export class LogsOpsService {
     };
   }
 
+  /** Danh sách HTTP request chậm (vượt `LOG_SLOW_REQUEST_MS`) kèm `requestId` và `traceId`. */
+  public async getSlowRequests(range: LogsRange, limit = 50): Promise<SlowRequestsDto> {
+    const thresholdMs = this.config.logs.slowRequestMs;
+    if (!this.store.isAvailable()) {
+      return { available: false, thresholdMs, items: [] };
+    }
+    const from = Date.now() - LOGS_RANGES[range] * 60_000;
+    const snap = await this.store.logs();
+    const items = snap.entries
+      .filter((e) => e.slowRequest === true && entryTime(e) >= from)
+      .slice(0, limit)
+      .map((e) => {
+        const meta = e.metadata;
+        return {
+          id: e.id ?? '',
+          at: e.t,
+          method: typeof meta?.method === 'string' ? meta.method : null,
+          route: e.route ?? (typeof meta?.path === 'string' ? meta.path : null),
+          status: typeof meta?.status === 'number' ? meta.status : null,
+          durationMs: typeof e.durationMs === 'number' ? e.durationMs : null,
+          requestId: e.requestId ?? null,
+          traceId: e.traceId ?? null,
+          correlationId: e.correlationId ?? null,
+          runtime: e.runtime ?? null,
+        };
+      });
+    return { available: true, thresholdMs, items };
+  }
+
   /** Thực hiện xuất danh sách log ra định dạng tệp yêu cầu */
   public async exportLogs(
     filter: LogFilter,
@@ -785,9 +815,7 @@ export class LogsOpsService {
       const spanMinStart = spans[0]?.startTimeMs;
       const spanMaxEnd = spans.reduce((acc, s) => Math.max(acc, s.endTimeMs), 0);
       const spanDuration =
-        spanMinStart !== undefined && spanMaxEnd >= spanMinStart
-          ? spanMaxEnd - spanMinStart
-          : null;
+        spanMinStart !== undefined && spanMaxEnd >= spanMinStart ? spanMaxEnd - spanMinStart : null;
       const logDuration = entryTime(last) - entryTime(first);
 
       return {

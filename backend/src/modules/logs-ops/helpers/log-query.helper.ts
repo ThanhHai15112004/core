@@ -101,6 +101,8 @@ const KEY_ALIASES: Record<string, string> = {
   host: 'instance',
   fp: 'fingerprint',
   fingerprint: 'fingerprint',
+  slow: 'slowOnly',
+  slowonly: 'slowOnly',
   id: 'anyId',
 };
 
@@ -163,6 +165,9 @@ export function parseLogQuery(raw: string, base: LogFilter = EMPTY_LOG_FILTER): 
           break;
         case 'anyId':
           f.anyId = value;
+          break;
+        case 'slowOnly':
+          f.slowOnly = value === 'true' || value === '1';
           break;
         case 'service':
         case 'module':
@@ -273,7 +278,8 @@ export function matchesLog(e: LogEntry, f: LogFilter): boolean {
   if (f.instance && !(e.instance ?? '').includes(f.instance)) return false;
   if (f.fingerprint && e.fingerprint !== f.fingerprint) return false;
   if (f.terms.length) {
-    const hay = `${e.message} ${e.context ?? ''} ${e.action ?? ''} ${e.errorType ?? ''}`.toLowerCase();
+    const hay =
+      `${e.message} ${e.context ?? ''} ${e.action ?? ''} ${e.errorType ?? ''}`.toLowerCase();
     if (!f.terms.every((t) => hay.includes(t))) return false;
   }
   return true;

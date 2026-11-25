@@ -105,6 +105,50 @@ export interface RecentActivityEvent {
   message: string;
 }
 
+export interface DeploymentInfo {
+  commit: string | null;
+  shortCommit: string | null;
+  image: string | null;
+  buildTime: string | null;
+  nodeVersion: string;
+}
+
+export interface SystemModulesSummary {
+  total: number;
+  enabled: number;
+  disabled: number;
+  core: number;
+  project: number;
+}
+
+export interface SystemInfo {
+  projectName: string;
+  coreVersion: string;
+  projectVersion: string;
+  environment: SystemEnvironment;
+  uptimeSeconds: number;
+  deployment: DeploymentInfo;
+  modules: SystemModulesSummary;
+}
+
+export interface OverviewMigrationSummary {
+  status: 'up' | 'degraded' | 'down' | 'unknown';
+  enabled: boolean;
+  upToDate: boolean;
+  applied: number;
+  pending: number;
+  tampered: number;
+}
+
+export interface OverviewBackupSummary {
+  status: 'healthy' | 'warning' | 'critical' | 'unknown';
+  lastBackupAt: string | null;
+  lastStatus: 'success' | 'failed' | 'running' | 'unknown';
+  sizeBytes: number | null;
+  provider: string | null;
+  stale: boolean;
+}
+
 export interface OverviewData {
   environment: SystemEnvironment;
   overallHealth: OverallHealthReport;
@@ -112,6 +156,9 @@ export interface OverviewData {
   healthMap: HealthMapItem[];
   incidents: ActiveIncidentItem[];
   recentActivities: RecentActivityEvent[];
+  systemInfo?: SystemInfo;
+  migrationStatus?: OverviewMigrationSummary;
+  backupStatus?: OverviewBackupSummary;
 }
 
 /* ==========================================================================

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowDownToLine, Briefcase, CalendarClock, Download, Filter, GitBranch, Globe, Pause, Play, Radio, Search, X } from 'lucide-react';
+import { ArrowDownToLine, Briefcase, CalendarClock, Clock, Download, Filter, GitBranch, Globe, Pause, Play, Radio, Search, X } from 'lucide-react';
 import { useLocale } from '@core/i18n/index';
 import { useAppMutation, useLive } from '@core/data';
 import { useFormat } from '@core/hooks/useFormat';
@@ -144,6 +144,16 @@ export function LogsExplorerTab({ page, overview }: { page: LogsPage; overview: 
             aria-label={t('logs.filter.module')}
             className="h-7 w-40"
           />
+          <Button
+            type="button"
+            size="sm"
+            variant={filters.slowOnly ? 'primary' : 'secondary'}
+            aria-pressed={Boolean(filters.slowOnly)}
+            onClick={() => apply({ ...filters, slowOnly: filters.slowOnly ? undefined : true })}
+          >
+            <Clock />
+            {t('logs.filter.slowOnly')}
+          </Button>
           <Popover>
             <PopoverTrigger asChild>
               <Button size="sm">
@@ -185,7 +195,13 @@ export function LogsExplorerTab({ page, overview }: { page: LogsPage; overview: 
           {chips.map((k) => (
             <Badge key={k} className="h-7 gap-1.5 pr-1">
               <span className="text-muted">{t(`logs.filter.${k}`)}:</span>
-              <span className="max-w-48 truncate font-mono text-fg">{k === 'from' || k === 'to' ? new Date(filters[k]!).toLocaleString() : filters[k]}</span>
+              <span className="max-w-48 truncate font-mono text-fg">
+                {k === 'from' || k === 'to'
+                  ? new Date(String(filters[k])).toLocaleString()
+                  : k === 'slowOnly'
+                    ? t('ui.action.yes')
+                    : String(filters[k])}
+              </span>
               <button type="button" onClick={() => apply({ ...filters, [k]: undefined })} className="rounded-sm p-0.5 text-faint hover:text-fg" aria-label={t('ui.action.clear')}>
                 <X className="size-3" />
               </button>

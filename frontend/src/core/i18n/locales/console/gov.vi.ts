@@ -136,6 +136,34 @@ export const govVi = {
       run: 'Thực thi',
     },
   },
+  modules: {
+    tabPackages: 'Packages hạ tầng',
+    tabModules: 'Modules đang cài',
+    search: 'Lọc theo tên, danh mục hoặc phụ thuộc…',
+    empty: 'Không tìm thấy module nào.',
+    filterAll: 'Tất cả',
+    filterEnabled: 'Đang bật',
+    filterDisabled: 'Đang tắt',
+    typeCore: 'Core',
+    typeProject: 'Project',
+    statusEnabled: 'Đang bật',
+    statusDisabled: 'Đã tắt',
+    kpi: {
+      total: 'Tổng module',
+      enabled: 'Đang bật',
+      disabled: 'Đang tắt',
+      project: 'Module dự án',
+    },
+    col: {
+      name: 'Module',
+      version: 'Phiên bản',
+      type: 'Loại',
+      status: 'Trạng thái',
+      category: 'Danh mục',
+      dependencies: 'Phụ thuộc',
+      tables: 'Bảng DB',
+    },
+  },
 };
 
 export type GovTranslation = typeof govVi;

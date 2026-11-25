@@ -7,8 +7,13 @@ import {
   PackageRegistryService,
   type PackageSummaryDto,
 } from '../services/package-registry.service.js';
+import { SystemInfoService } from '../services/system-info.service.js';
 import { SystemOverviewService } from '../services/system-overview.service.js';
-import type { SystemOverviewResponseDto } from '../responses/overview.response.js';
+import type {
+  InstalledModulesResponseDto,
+  SystemInfoResponseDto,
+  SystemOverviewResponseDto,
+} from '../responses/overview.response.js';
 import { SYSTEM_OPS_ROUTES } from '../routes/system-ops.routes.js';
 
 @Controller(SYSTEM_OPS_ROUTES.PREFIX)
@@ -16,6 +21,7 @@ export class SystemOpsController {
   constructor(
     private readonly registryService: PackageRegistryService,
     private readonly overviewService: SystemOverviewService,
+    private readonly systemInfoService: SystemInfoService,
     private readonly secretRegistry: SecretRegistryService,
     private readonly configInspector: ConfigInspectorService,
   ) {}
@@ -25,6 +31,20 @@ export class SystemOpsController {
   @Get(SYSTEM_OPS_ROUTES.OVERVIEW)
   public async getOverview(): Promise<SystemOverviewResponseDto> {
     return this.overviewService.getOverview();
+  }
+
+  /** Lấy thông tin phiên bản Core/Project, deployment (commit, image, build time) và tóm tắt module */
+  @Public()
+  @Get(SYSTEM_OPS_ROUTES.SYSTEM_INFO)
+  public getSystemInfo(): SystemInfoResponseDto {
+    return this.systemInfoService.getSystemInfo();
+  }
+
+  /** Lấy danh sách các module đang được cài đặt kèm tên, phiên bản và trạng thái */
+  @Public()
+  @Get(SYSTEM_OPS_ROUTES.MODULES)
+  public getModules(): InstalledModulesResponseDto {
+    return this.systemInfoService.getInstalledModules();
   }
 
   /** Lấy danh sách tóm tắt tất cả các packages hạ tầng đã đăng ký */

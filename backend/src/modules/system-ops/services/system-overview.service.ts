@@ -1,6 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import { CoreConfigService } from '@packages/config/index.js';
 import { CoreI18nService } from '@packages/i18n/index.js';
+import { DatabaseOpsService } from '@modules/database-ops/index.js';
 import {
   TrafficService,
   type TrafficProblemDto,
@@ -13,6 +14,7 @@ import { HttpMetricsReader, type HttpMetricsSnapshot } from '@packages/metrics/i
 import { CorePackageId, PackageStatus } from '@packages/kernel/index.js';
 import { PackageRegistryService, type PackageSummaryDto } from './package-registry.service.js';
 import { OpsEventService } from './ops-event.service.js';
+import { SystemInfoService } from './system-info.service.js';
 import { RuntimesService, type RuntimeSummaryDto } from '@modules/runtimes/index.js';
 import type {
   SystemOverviewResponseDto,
@@ -20,6 +22,8 @@ import type {
   ActiveIncidentItemDto,
   KeyMetricItemDto,
   OverallHealthReportDto,
+  OverviewBackupSummaryDto,
+  OverviewMigrationSummaryDto,
 } from '../responses/overview.response.js';
 
 const BYTES_PER_MB = 1024 * 1024;
@@ -97,6 +101,8 @@ export class SystemOverviewService {
     private readonly performance: PerformanceService,
     private readonly dbConnection: DatabaseConnectionService,
     private readonly healthService: HealthService,
+    @Optional() private readonly systemInfoService?: SystemInfoService,
+    @Optional() private readonly databaseOps?: DatabaseOpsService,
   ) {}
 
   /** Lấy dữ liệu tổng quan trạng thái hệ thống */
@@ -111,6 +117,7 @@ export class SystemOverviewService {
       bottlenecks,
       http,
       health,
+      backupSummary,
     ] = await Promise.all([
       this.registryService.getAllSummaries(),
       this.pingDatabase(),
@@ -123,6 +130,7 @@ export class SystemOverviewService {
       this.performance.getBottlenecks().catch(() => null),
       this.httpMetrics.snapshot(),
       this.healthService.check().catch(() => null),
+      this.databaseOps?.getBackupStatus().catch(() => null) ?? Promise.resolve(null),
     ]);
     const runtimes = new Map(runtimeList.map((r) => [r.id, r]));
     const ctx: OverviewContext = {
@@ -137,6 +145,36 @@ export class SystemOverviewService {
       dbPingMs,
     };
 
+    const migrationCheck = health?.checks['migration'];
+    const migrationStatus: OverviewMigrationSummaryDto | undefined = migrationCheck
+      ? {
+          status:
+            migrationCheck.status === 'up' ||
+            migrationCheck.status === 'degraded' ||
+            migrationCheck.status === 'down'
+              ? migrationCheck.status
+              : 'unknown',
+          enabled: Boolean(migrationCheck['enabled']),
+          upToDate: Boolean(migrationCheck['upToDate']),
+          applied: typeof migrationCheck['applied'] === 'number' ? migrationCheck['applied'] : 0,
+          pending: typeof migrationCheck['pending'] === 'number' ? migrationCheck['pending'] : 0,
+          tampered: typeof migrationCheck['tampered'] === 'number' ? migrationCheck['tampered'] : 0,
+        }
+      : undefined;
+
+    const backupStatus: OverviewBackupSummaryDto | undefined = backupSummary
+      ? {
+          status: backupSummary.status,
+          lastBackupAt: backupSummary.latest?.at ?? null,
+          lastStatus: backupSummary.latest?.status ?? 'unknown',
+          sizeBytes: backupSummary.latest?.sizeBytes ?? null,
+          provider: backupSummary.latest?.provider ?? null,
+          stale: backupSummary.stale,
+        }
+      : undefined;
+
+    const systemInfo = this.systemInfoService?.getSystemInfo();
+
     return {
       environment: this.environment,
       overallHealth: this.buildOverallHealth(ctx),
@@ -144,6 +182,9 @@ export class SystemOverviewService {
       healthMap: this.buildHealthMap(ctx),
       incidents: this.buildIncidents(ctx),
       recentActivities: this.events.getRecent(20),
+      ...(systemInfo ? { systemInfo } : {}),
+      ...(migrationStatus ? { migrationStatus } : {}),
+      ...(backupStatus ? { backupStatus } : {}),
     };
   }
 

@@ -3,6 +3,7 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import {
   Public,
+  booleanQueryParam,
   extractRequestContext,
   isPrintableString,
   optionalQueryParam,
@@ -65,6 +66,7 @@ const filterSchema = z.object({
   errorType: optionalQueryParam(text(200)),
   instance: optionalQueryParam(text(200)),
   fingerprint: optionalQueryParam(z.string().regex(/^[0-9a-f]{6,40}$/)),
+  slowOnly: optionalQueryParam(booleanQueryParam()),
   window: optionalQueryParam(z.enum(Object.keys(WINDOWS) as [LogWindowKey, ...LogWindowKey[]])),
   from: optionalQueryParam(isoDate),
   to: optionalQueryParam(isoDate),
@@ -84,6 +86,9 @@ const exportSchema = filterSchema.extend({
 const errorsSchema = rangeSchema.extend({ q: optionalQueryParam(text(200)) });
 const recentTracesSchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(20),
+});
+const slowRequestsSchema = rangeSchema.extend({
+  limit: z.coerce.number().int().min(1).max(200).default(50),
 });
 const AUDIT_DOMAINS: AuditDomain[] = [
   'cache',
@@ -145,6 +150,7 @@ export function toFilter(f: z.infer<typeof filterSchema>, now = Date.now()): Log
     errorType: f.errorType ?? null,
     instance: f.instance ?? null,
     fingerprint: f.fingerprint ?? null,
+    slowOnly: f.slowOnly ?? false,
     from: f.from ? Date.parse(f.from) : f.window ? now - WINDOWS[f.window] * 60_000 : null,
     to: f.to ? Date.parse(f.to) : null,
   };
@@ -192,6 +198,14 @@ export class LogsOpsController {
   public tail(@Query() q: Record<string, string>) {
     const f = parse(tailSchema, q);
     return this.logs.tail(toFilter(f), f.after ?? null, f.limit);
+  }
+
+  /** Danh sách HTTP request chậm kèm `requestId` và `traceId` */
+  @Public()
+  @Get(R.SLOW_REQUESTS)
+  public slowRequests(@Query() q: Record<string, string>) {
+    const { range, limit } = parse(slowRequestsSchema, q);
+    return this.logs.getSlowRequests(range, limit);
   }
 
   /** Xuất danh sách log ra tệp theo định dạng yêu cầu */

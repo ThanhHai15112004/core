@@ -223,6 +223,7 @@ export const logsEn = {
     instance: 'Host / instance',
     fingerprint: 'Error group',
     window: 'Time',
+    slowOnly: 'Slow APIs only',
   },
   levelPreset: {
     error_fatal: 'Errors',

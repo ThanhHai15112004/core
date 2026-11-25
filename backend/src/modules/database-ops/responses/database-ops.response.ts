@@ -1,5 +1,6 @@
 import type {
   ConnectionState,
+  DbBackupReportRecord,
   DbDigestStat,
   DbErrorKind,
   DbLockWait,
@@ -255,4 +256,32 @@ export interface DbErrorsDto {
 
 export interface DbConfigDto {
   items: { key: string; value: string | number | boolean | null; sensitive?: boolean }[];
+}
+
+export interface DbSlowQueryDto {
+  at: string;
+  durationMs: number;
+  thresholdMs: number;
+  sql: string;
+  runtime: string | null;
+  requestId: string | null;
+  traceId: string | null;
+  correlationId: string | null;
+}
+
+export interface DbSlowQueriesDto {
+  available: boolean;
+  thresholdMs: number;
+  items: DbSlowQueryDto[];
+}
+
+export type DbBackupHealthStatus = 'healthy' | 'warning' | 'critical' | 'unknown';
+
+export interface DbBackupSummaryDto {
+  status: DbBackupHealthStatus;
+  stale: boolean;
+  maxAgeHours: number;
+  source: 'reported' | 'unconfigured';
+  latest: DbBackupReportRecord | null;
+  history: DbBackupReportRecord[];
 }

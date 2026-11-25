@@ -2,6 +2,9 @@ import { describe, beforeAll, afterAll, it, expect } from '@jest/globals';
 import { createTestApp, type TestAppContext } from '../../../concerns/test-app.concern.js';
 import { PackageStatus, PackageCategory, CorePackageId } from '@packages/kernel/index.js';
 import { SYSTEM_OPS_ROUTES } from '@modules/system-ops/index.js';
+import { DATABASE_OPS_ROUTES } from '@modules/database-ops/index.js';
+import { LOGS_OPS_ROUTES } from '@modules/logs-ops/index.js';
+import { SCHEDULER_OPS_ROUTES } from '@modules/scheduler-ops/index.js';
 import { CacheAction } from '@packages/cache/index.js';
 import { LoggingAction, LogLevel } from '@packages/logging/index.js';
 
@@ -165,10 +168,11 @@ describe('Feature: System Ops overview (/ops/overview)', () => {
       };
     };
 
-    // 10 package + worker + scheduler; trong test không có telemetry runtime (worker/scheduler unknown), không có
-    // database thật, broker không kết nối được (messaging + queue lỗi) và security ổn định (HS256) → 7 ổn định.
-    expect(body.data.overallHealth.totalServices).toBe(12);
-    expect(body.data.overallHealth.healthyServices).toBe(7);
+    // 12 package (gồm metrics & tracing mới) + worker + scheduler; trong test không có telemetry runtime
+    // (worker/scheduler unknown), không có database thật, broker không kết nối được (messaging + queue lỗi)
+    // → 14 tổng cộng và 9 ổn định.
+    expect(body.data.overallHealth.totalServices).toBe(14);
+    expect(body.data.overallHealth.healthyServices).toBe(9);
     expect(body.data.keyMetrics.find((m) => m.id === 'req_sec')?.label).toBe('Requests / Sec');
     expect(body.data.healthMap.find((m) => m.id === 'runtime-worker')?.status).toBe('unknown');
     // API theo health check thật: database của test không chạy → không báo "healthy" giả.
@@ -178,5 +182,133 @@ describe('Feature: System Ops overview (/ops/overview)', () => {
     // Không có Prometheus → KPI HTTP không có số liệu ("--"), không phải 0.
     expect(body.data.keyMetrics.find((m) => m.id === 'req_sec')?.value).toBe('--');
     expect(body.data.keyMetrics.find((m) => m.id === 'err_rate')?.value).toBe('--');
+  });
+});
+
+describe('Feature: Operations Console Section 12.5 (/ops/...)', () => {
+  let context: TestAppContext;
+
+  beforeAll(async () => {
+    context = await createTestApp();
+  });
+
+  afterAll(async () => {
+    await context?.close();
+  });
+
+  it('GET /ops/system-info & GET /ops/modules should return versions, deployment info and installed modules', async () => {
+    const infoRes = await context.app.inject({
+      method: 'GET',
+      url: SYSTEM_OPS_ROUTES.buildSystemInfoPath(),
+    });
+    expect(infoRes.statusCode).toBe(200);
+    const infoBody = JSON.parse(infoRes.payload) as {
+      success: boolean;
+      data: {
+        coreVersion: string;
+        projectVersion: string;
+        deployment: { nodeVersion: string };
+        modules: { total: number; enabled: number };
+      };
+    };
+    expect(infoBody.success).toBe(true);
+    expect(infoBody.data.coreVersion).toBeTruthy();
+    expect(infoBody.data.projectVersion).toBeTruthy();
+    expect(infoBody.data.deployment.nodeVersion).toBeTruthy();
+    expect(infoBody.data.modules.total).toBeGreaterThan(0);
+
+    const modRes = await context.app.inject({
+      method: 'GET',
+      url: SYSTEM_OPS_ROUTES.buildModulesPath(),
+    });
+    expect(modRes.statusCode).toBe(200);
+    const modBody = JSON.parse(modRes.payload) as {
+      success: boolean;
+      data: {
+        summary: { total: number };
+        items: Array<{ name: string; version: string; status: string }>;
+      };
+    };
+    expect(modBody.success).toBe(true);
+    expect(modBody.data.items.length).toBe(modBody.data.summary.total);
+    const healthMod = modBody.data.items.find((m) => m.name === 'health');
+    expect(healthMod).toBeDefined();
+    expect(healthMod?.status).toBe('enabled');
+  });
+
+  it('POST /ops/database/backup/report, GET /ops/database/backup, GET /ops/database/queries/slow and GET /ops/overview should reflect 12.5 fields', async () => {
+    const reportRes = await context.app.inject({
+      method: 'POST',
+      url: `/${DATABASE_OPS_ROUTES.PREFIX}/${DATABASE_OPS_ROUTES.BACKUP_REPORT}`,
+      payload: {
+        status: 'success',
+        sizeBytes: 2048,
+        durationMs: 1200,
+        provider: 'pg_dump',
+        location: 's3://backups/test.dump',
+      },
+    });
+    expect(reportRes.statusCode).toBe(200);
+    const reportBody = JSON.parse(reportRes.payload) as {
+      data: { status: string; latest: { provider: string | null } | null };
+    };
+    expect(reportBody.data.status).toBe('healthy');
+    expect(reportBody.data.latest?.provider).toBe('pg_dump');
+
+    const backupRes = await context.app.inject({
+      method: 'GET',
+      url: `/${DATABASE_OPS_ROUTES.PREFIX}/${DATABASE_OPS_ROUTES.BACKUP}`,
+    });
+    expect(backupRes.statusCode).toBe(200);
+    const backupBody = JSON.parse(backupRes.payload) as { data: { status: string } };
+    expect(backupBody.data.status).toBe('healthy');
+
+    const slowSqlRes = await context.app.inject({
+      method: 'GET',
+      url: `/${DATABASE_OPS_ROUTES.PREFIX}/${DATABASE_OPS_ROUTES.SLOW_QUERIES}?range=1h&limit=20`,
+    });
+    expect(slowSqlRes.statusCode).toBe(200);
+    const slowSqlBody = JSON.parse(slowSqlRes.payload) as {
+      data: { available: boolean; thresholdMs: number; items: unknown[] };
+    };
+    expect(slowSqlBody.data.available).toBe(true);
+    expect(Array.isArray(slowSqlBody.data.items)).toBe(true);
+
+    const overviewRes = await context.app.inject({
+      method: 'GET',
+      url: SYSTEM_OPS_ROUTES.buildOverviewPath(),
+    });
+    expect(overviewRes.statusCode).toBe(200);
+    const overviewBody = JSON.parse(overviewRes.payload) as {
+      data: {
+        systemInfo?: { coreVersion: string };
+        backupStatus?: { status: string };
+      };
+    };
+    expect(overviewBody.data.systemInfo?.coreVersion).toBeTruthy();
+    expect(overviewBody.data.backupStatus?.status).toBe('healthy');
+  });
+
+  it('GET /ops/logs/slow-requests and GET /ops/scheduler/executions?slowOnly=true should work', async () => {
+    const slowLogsRes = await context.app.inject({
+      method: 'GET',
+      url: `/${LOGS_OPS_ROUTES.PREFIX}/${LOGS_OPS_ROUTES.SLOW_REQUESTS}?range=1h&limit=20`,
+    });
+    expect(slowLogsRes.statusCode).toBe(200);
+    const slowLogsBody = JSON.parse(slowLogsRes.payload) as {
+      data: { thresholdMs: number; items: unknown[] };
+    };
+    expect(typeof slowLogsBody.data.thresholdMs).toBe('number');
+    expect(Array.isArray(slowLogsBody.data.items)).toBe(true);
+
+    const slowExecRes = await context.app.inject({
+      method: 'GET',
+      url: `/${SCHEDULER_OPS_ROUTES.PREFIX}/${SCHEDULER_OPS_ROUTES.EXECUTIONS}?range=1h&slowOnly=true&limit=20`,
+    });
+    expect(slowExecRes.statusCode).toBe(200);
+    const slowExecBody = JSON.parse(slowExecRes.payload) as {
+      data: { items: unknown[] };
+    };
+    expect(Array.isArray(slowExecBody.data.items)).toBe(true);
   });
 });

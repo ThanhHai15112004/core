@@ -223,6 +223,7 @@ export const logsVi = {
     instance: 'Host / instance',
     fingerprint: 'Nhóm lỗi',
     window: 'Thời gian',
+    slowOnly: 'Chỉ API chậm',
   },
   levelPreset: {
     error_fatal: 'Error',

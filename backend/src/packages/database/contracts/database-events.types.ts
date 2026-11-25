@@ -21,6 +21,35 @@ export interface DbErrorRecord {
   correlationId: string | null;
 }
 
+/** Bản ghi query chậm — SQL đã chuẩn hoá, kèm ngữ cảnh requestId/traceId để truy vết. */
+export interface DbSlowQueryRecord {
+  /** epoch ms */
+  at: number;
+  durationMs: number;
+  thresholdMs: number;
+  sql: string;
+  runtime: string | null;
+  requestId: string | null;
+  traceId: string | null;
+  correlationId: string | null;
+}
+
+export type DbBackupRunStatus = 'success' | 'failed' | 'running' | 'unknown';
+
+export interface DbBackupReportRecord {
+  id: string;
+  at: string;
+  status: DbBackupRunStatus;
+  durationMs: number | null;
+  sizeBytes: number | null;
+  location: string | null;
+  provider: string | null;
+  retentionDays: number | null;
+  nextScheduledAt: string | null;
+  error: string | null;
+  reportedBy: string | null;
+}
+
 export type DbEventType =
   | 'connection_lost'
   | 'connection_recovered'

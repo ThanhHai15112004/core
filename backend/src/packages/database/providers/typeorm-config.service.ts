@@ -2,6 +2,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Inject, Injectable, Optional } from '@nestjs/common';
 import type { TypeOrmOptionsFactory, TypeOrmModuleOptions } from '@nestjs/typeorm';
+import { context, isSpanContextValid, trace } from '@opentelemetry/api';
 import type { Counter } from 'prom-client';
 import { CoreConfigService } from '@packages/config/index.js';
 import { DatabaseDriver } from '@packages/kernel/index.js';
@@ -9,8 +10,8 @@ import { RequestContextService } from '@packages/logging/index.js';
 import { MetricsRegistryService } from '@packages/metrics/index.js';
 import { RedisService } from '@packages/redis/index.js';
 import { RUNTIME_IDENTITY, type RuntimeIdentity } from '@packages/runtime/index.js';
-import { ERROR_LOG_SIZE, databaseKeys } from '../constants/database.keys.js';
-import type { DbErrorRecord } from '../contracts/database-events.types.js';
+import { ERROR_LOG_SIZE, SLOW_QUERY_LOG_SIZE, databaseKeys } from '../constants/database.keys.js';
+import type { DbErrorRecord, DbSlowQueryRecord } from '../contracts/database-events.types.js';
 import { classifyDbError, errorCodeOf, sanitizeDbMessage } from '../utils/error-classify.js';
 import { normalizeSql } from '../utils/sql-normalize.js';
 
@@ -32,12 +33,14 @@ const MIGRATIONS_GLOBS = [
   path.join(srcRoot, 'project-modules/*/migrations', migrationExt),
 ];
 
-/** Tối đa số lỗi query ghi vào Redis mỗi giây (database sập → mọi query lỗi, không ghi tràn). */
+/** Tối đa số lỗi query / slow query ghi vào Redis mỗi giây (tránh ghi tràn khi sự cố). */
 const ERROR_RECORDS_PER_SEC = 5;
+const SLOW_QUERY_RECORDS_PER_SEC = 10;
 
 @Injectable()
 export class TypeOrmConfigService implements TypeOrmOptionsFactory {
   private errorWindow = { at: 0, n: 0 };
+  private slowQueryWindow = { at: 0, n: 0 };
   private readonly dbTimeoutsCounter: Counter<'kind'> | null;
 
   constructor(
@@ -53,6 +56,51 @@ export class TypeOrmConfigService implements TypeOrmOptionsFactory {
           ['kind'],
         )
       : null;
+  }
+
+  /** Trích xuất requestId / traceId / correlationId từ AsyncLocalStorage & OpenTelemetry span. */
+  private resolveRequestTraceContext(): {
+    requestId: string | null;
+    traceId: string | null;
+    correlationId: string | null;
+  } {
+    const store = RequestContextService.current();
+    const sc = trace.getSpan(context.active())?.spanContext();
+    const validSpan = Boolean(sc && isSpanContextValid(sc));
+    const traceId = validSpan && sc ? sc.traceId : (store?.traceId ?? null);
+    const requestId =
+      store?.requestId ?? (store?.source?.kind === 'http' ? (store.source.id ?? null) : null);
+    return {
+      requestId,
+      traceId,
+      correlationId: store?.correlationId ?? null,
+    };
+  }
+
+  /** Lưu query chậm (SQL đã chuẩn hoá) kèm requestId/traceId cho trang Database → Queries. */
+  private recordSlowQuery(durationMs: number, query: string): void {
+    const now = Date.now();
+    if (now - this.slowQueryWindow.at >= 1000) this.slowQueryWindow = { at: now, n: 0 };
+    if (++this.slowQueryWindow.n > SLOW_QUERY_RECORDS_PER_SEC || !this.redis?.isReady()) return;
+
+    const ctx = this.resolveRequestTraceContext();
+    const record: DbSlowQueryRecord = {
+      at: now,
+      durationMs: Math.round(durationMs * 100) / 100,
+      thresholdMs: this.configService.database.slowQueryMs ?? 500,
+      sql: normalizeSql(query),
+      runtime: this.identity?.id ?? null,
+      requestId: ctx.requestId,
+      traceId: ctx.traceId,
+      correlationId: ctx.correlationId,
+    };
+    const key = databaseKeys(this.redis).slowQueries();
+    void this.redis.client
+      .multi()
+      .lpush(key, JSON.stringify(record))
+      .ltrim(key, 0, SLOW_QUERY_LOG_SIZE - 1)
+      .exec()
+      .catch(() => undefined);
   }
 
   /** Lưu lỗi query (đã phân loại, SQL đã chuẩn hoá) cho trang Database → Errors / deadlock. */
@@ -95,7 +143,11 @@ export class TypeOrmConfigService implements TypeOrmOptionsFactory {
 
     const baseOptions = {
       synchronize: db.synchronize,
-      logger: new TypeOrmPinoLogger(db.logging, (err, query) => this.recordQueryError(err, query)),
+      logger: new TypeOrmPinoLogger(
+        db.logging,
+        (err, query) => this.recordQueryError(err, query),
+        (durationMs, query) => this.recordSlowQuery(durationMs, query),
+      ),
       maxQueryExecutionTime: db.slowQueryMs ?? 500,
       autoLoadEntities: true,
       entities: ENTITIES_GLOBS,

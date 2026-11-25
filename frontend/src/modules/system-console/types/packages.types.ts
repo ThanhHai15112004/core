@@ -30,3 +30,27 @@ export interface PackageActionResult {
   message: string;
   data?: unknown;
 }
+
+export interface InstalledModule {
+  name: string;
+  displayName: string;
+  version: string;
+  type: 'core' | 'project';
+  category: string;
+  description: string | null;
+  status: 'enabled' | 'disabled';
+  dependencies: string[];
+  hasMigrations: boolean;
+  tablesCount: number;
+}
+
+export interface InstalledModulesResponse {
+  summary: {
+    total: number;
+    enabled: number;
+    disabled: number;
+    core: number;
+    project: number;
+  };
+  items: InstalledModule[];
+}

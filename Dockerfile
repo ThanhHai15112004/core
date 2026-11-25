@@ -23,8 +23,15 @@ RUN npm --prefix frontend run build
 # ==============================================================================
 FROM node:22-alpine AS runner
 
+ARG APP_GIT_COMMIT=""
+ARG APP_IMAGE=""
+ARG APP_BUILD_TIME=""
+
 WORKDIR /app
-ENV NODE_ENV=production
+ENV NODE_ENV=production \
+    APP_GIT_COMMIT=${APP_GIT_COMMIT} \
+    APP_IMAGE=${APP_IMAGE} \
+    APP_BUILD_TIME=${APP_BUILD_TIME}
 
 COPY package.json pnpm-workspace.yaml* ./
 COPY backend/package*.json backend/project.manifest.json ./backend/

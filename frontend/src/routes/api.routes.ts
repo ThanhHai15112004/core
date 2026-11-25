@@ -15,6 +15,8 @@ export const API_ROUTES = {
   },
   OPS: {
     OVERVIEW: `${OPS_PREFIX}/overview`,
+    SYSTEM_INFO: `${OPS_PREFIX}/system-info`,
+    MODULES: `${OPS_PREFIX}/modules`,
     PACKAGES: `${OPS_PREFIX}/packages`,
     EXECUTE_ACTION: (packageId: string, actionId: string) =>
       `${OPS_PREFIX}/packages/${packageId}/actions/${actionId}`,

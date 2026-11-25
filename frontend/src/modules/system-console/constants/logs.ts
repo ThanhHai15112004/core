@@ -33,6 +33,7 @@ export const FILTER_KEYS: (keyof LogFilters)[] = [
   'errorType',
   'instance',
   'fingerprint',
+  'slowOnly',
   'window',
   'from',
   'to',

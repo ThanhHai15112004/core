@@ -12,6 +12,7 @@ export class TypeOrmPinoLogger implements ITypeOrmLogger {
   constructor(
     private readonly loggingEnabled = false,
     private readonly onQueryError?: (error: unknown, query: string) => void,
+    private readonly onQuerySlow?: (durationMs: number, query: string) => void,
   ) {}
 
   /** Ghi log thông tin câu truy vấn cơ sở dữ liệu vừa thực thi */
@@ -44,6 +45,7 @@ export class TypeOrmPinoLogger implements ITypeOrmLogger {
       { query, durationMs: time, parameters },
       `[Slow Query] Execution took ${time}ms: ${query.slice(0, 300)}`,
     );
+    this.onQuerySlow?.(time, query);
   }
 
   /** Ghi log quá trình khởi tạo hoặc cập nhật schema cơ sở dữ liệu */

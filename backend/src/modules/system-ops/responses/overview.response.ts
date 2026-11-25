@@ -51,6 +51,68 @@ export interface RecentActivityEventDto {
   message: string;
 }
 
+export interface DeploymentInfoDto {
+  commit: string | null;
+  shortCommit: string | null;
+  image: string | null;
+  buildTime: string | null;
+  nodeVersion: string;
+}
+
+export interface SystemModulesSummaryDto {
+  total: number;
+  enabled: number;
+  disabled: number;
+  core: number;
+  project: number;
+}
+
+export interface SystemInfoResponseDto {
+  projectName: string;
+  coreVersion: string;
+  projectVersion: string;
+  environment: 'production' | 'staging' | 'development';
+  uptimeSeconds: number;
+  deployment: DeploymentInfoDto;
+  modules: SystemModulesSummaryDto;
+}
+
+export interface InstalledModuleDto {
+  name: string;
+  displayName: string;
+  version: string;
+  type: 'core' | 'project';
+  category: string;
+  description: string | null;
+  status: 'enabled' | 'disabled';
+  dependencies: string[];
+  hasMigrations: boolean;
+  tablesCount: number;
+}
+
+export interface InstalledModulesResponseDto {
+  summary: SystemModulesSummaryDto;
+  items: InstalledModuleDto[];
+}
+
+export interface OverviewMigrationSummaryDto {
+  status: 'up' | 'degraded' | 'down' | 'unknown';
+  enabled: boolean;
+  upToDate: boolean;
+  applied: number;
+  pending: number;
+  tampered: number;
+}
+
+export interface OverviewBackupSummaryDto {
+  status: 'healthy' | 'warning' | 'critical' | 'unknown';
+  lastBackupAt: string | null;
+  lastStatus: 'success' | 'failed' | 'running' | 'unknown';
+  sizeBytes: number | null;
+  provider: string | null;
+  stale: boolean;
+}
+
 export interface SystemOverviewResponseDto {
   environment: 'production' | 'staging' | 'development';
   overallHealth: OverallHealthReportDto;
@@ -58,4 +120,7 @@ export interface SystemOverviewResponseDto {
   healthMap: HealthMapItemDto[];
   incidents: ActiveIncidentItemDto[];
   recentActivities: RecentActivityEventDto[];
+  systemInfo?: SystemInfoResponseDto;
+  migrationStatus?: OverviewMigrationSummaryDto;
+  backupStatus?: OverviewBackupSummaryDto;
 }

@@ -30,6 +30,7 @@ export interface ExecutionFilter {
   task?: string;
   status?: ExecutionStatus[];
   trigger?: ExecutionTrigger[];
+  slowOnly?: boolean;
   limit?: number;
 }
 
@@ -39,6 +40,7 @@ const filterQuery = (f: ExecutionFilter) =>
     task: f.task,
     status: f.status?.length ? f.status.join(',') : undefined,
     trigger: f.trigger?.length ? f.trigger.join(',') : undefined,
+    slowOnly: f.slowOnly ? 'true' : undefined,
     limit: f.limit,
   });
 
