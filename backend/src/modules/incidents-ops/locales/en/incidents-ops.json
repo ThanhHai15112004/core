@@ -1,0 +1,14 @@
+{
+  "error.policyNotFound": "Incident severity policy {{severity}} not found",
+  "error.runbookNotFound": "Incident runbook #{{id}} not found",
+  "error.runbookCodeDuplicate": "Runbook code '{{code}}' already exists",
+  "error.ownerMappingNotFound": "Alert owner mapping #{{id}} not found",
+  "error.ownerMappingDuplicate": "Alert code '{{alertCode}}' already has an owner mapping",
+  "error.ownerRequired": "Each alert type must have a valid owner (ownerUserId)",
+  "error.incidentNotFound": "Incident #{{id}} not found",
+  "error.postmortemNotFound": "Post-mortem report not found for incident #{{incidentId}}",
+  "error.invalidStatusTransition": "Cannot transition incident status from {{from}} to {{to}}",
+  "error.rootCauseRequired": "Root cause and mitigation summary are required before resolving an incident",
+  "error.invalidSiemEndpoint": "Invalid SIEM endpoint URL (must use http or https)",
+  "siem.testSummary": "SIEM connectivity test event from Core Incident & SIEM Manager"
+}

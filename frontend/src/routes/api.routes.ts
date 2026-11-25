@@ -82,6 +82,10 @@ export const API_ROUTES = {
     METRICS: {
       path: (path: string, qs = '') => `${OPS_PREFIX}/metrics/${path}${qs ? `?${qs}` : ''}`,
     },
+    INCIDENTS: {
+      path: (path = '', qs = '') =>
+        `${OPS_PREFIX}/incidents${path ? `/${path}` : ''}${qs ? `?${qs}` : ''}`,
+    },
   },
   AUTH: {
     REGISTER: '/auth/register',

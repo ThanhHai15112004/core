@@ -1,0 +1,156 @@
+{
+  "$schema": "../../packages/kernel/schemas/module.manifest.schema.json",
+  "name": "incidents-ops",
+  "displayName": "Incident Management & SIEM",
+  "version": "1.0.0",
+  "description": "Module quản lý sự cố, mức độ P1-P4, phân công người phụ trách cảnh báo, Runbook xử lý, giảm alert noise, báo cáo hậu kiểm (Post-mortem) và tích hợp SIEM (Mục 12.6)",
+  "type": "core",
+  "category": "operations",
+  "author": "Core Platform Team",
+  "entryModule": "IncidentsOpsModule",
+  "dependencies": [
+    "database",
+    "security",
+    "settings",
+    "sequences",
+    "http-client",
+    "notifications",
+    "audit"
+  ],
+  "permissions": [
+    "incidents.read",
+    "incidents.manage"
+  ],
+  "events": {
+    "published": [
+      "incidents.incident.created",
+      "incidents.incident.repeated",
+      "incidents.incident.acknowledged",
+      "incidents.incident.mitigated",
+      "incidents.incident.resolved",
+      "incidents.postmortem.published",
+      "incidents.siem.dispatched"
+    ],
+    "subscribed": [
+      "metrics.alert.fired"
+    ]
+  },
+  "database": {
+    "hasMigrations": true,
+    "tables": [
+      "incident_severity_policies",
+      "incident_runbooks",
+      "alert_owner_mappings",
+      "incidents",
+      "incident_postmortems",
+      "siem_dispatch_logs"
+    ]
+  },
+  "settings": [
+    {
+      "key": "incidents.default_owner_user_id",
+      "groupCode": "security",
+      "module": "incidents-ops",
+      "namespace": "incidents",
+      "name": "ID người phụ trách mặc định cho cảnh báo chưa map owner",
+      "description": "Đảm bảo mọi cảnh báo/sự cố đều có người phụ trách khi chưa có mapping riêng",
+      "valueType": "NUMBER",
+      "defaultValue": 1,
+      "validationRules": { "min": 1, "integerOnly": true },
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 60
+    },
+    {
+      "key": "incidents.dedup_window_minutes",
+      "groupCode": "security",
+      "module": "incidents-ops",
+      "namespace": "incidents",
+      "name": "Cửa sổ gộp cảnh báo lặp (phút)",
+      "description": "Khoảng thời gian gộp các cảnh báo cùng fingerprint vào sự cố đang mở để giảm alert noise",
+      "valueType": "NUMBER",
+      "defaultValue": 60,
+      "validationRules": { "min": 1, "max": 10080, "integerOnly": true },
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 61
+    },
+    {
+      "key": "siem.enabled",
+      "groupCode": "security",
+      "module": "incidents-ops",
+      "namespace": "siem",
+      "name": "Bật gửi sự kiện bảo mật ra hệ thống SIEM ngoài",
+      "description": "Khi bật, các sự kiện bảo mật (đăng nhập sai, đổi quyền, export lớn...) sẽ được đẩy ra SIEM đích",
+      "valueType": "BOOLEAN",
+      "defaultValue": false,
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 62
+    },
+    {
+      "key": "siem.driver",
+      "groupCode": "security",
+      "module": "incidents-ops",
+      "namespace": "siem",
+      "name": "Driver tích hợp SIEM",
+      "description": "Chuẩn đóng gói payload gửi SIEM: internal_log | webhook | splunk_hec | elastic",
+      "valueType": "TEXT",
+      "defaultValue": "internal_log",
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 63
+    },
+    {
+      "key": "siem.endpoint",
+      "groupCode": "security",
+      "module": "incidents-ops",
+      "namespace": "siem",
+      "name": "Endpoint HTTP/HEC của SIEM",
+      "description": "URL nhận sự kiện bảo mật (Webhook, Splunk HEC /services/collector hoặc Elastic _bulk)",
+      "valueType": "TEXT",
+      "defaultValue": "",
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 64
+    },
+    {
+      "key": "siem.auth_token",
+      "groupCode": "security",
+      "module": "incidents-ops",
+      "namespace": "siem",
+      "name": "Token / API Key xác thực SIEM",
+      "description": "Bearer Token, Splunk HEC Token hoặc API Key gửi sang SIEM (được mã hóa AES-256-GCM)",
+      "valueType": "TEXT",
+      "defaultValue": "",
+      "isSensitive": true,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 65
+    }
+  ],
+  "sequences": [
+    {
+      "key": "incidents.incident_code",
+      "module": "incidents-ops",
+      "name": "Mã sự cố vận hành & bảo mật",
+      "description": "Sinh mã sự cố duy nhất (ví dụ: INC-202611-000001)",
+      "prefix": "INC",
+      "suffix": "",
+      "separator": "-",
+      "dateFormat": "YYYYMM",
+      "paddingLength": 6,
+      "startValue": 1,
+      "step": 1,
+      "resetPolicy": "MONTHLY",
+      "scopeByUnit": false,
+      "timezone": "Asia/Ho_Chi_Minh",
+      "isSystem": true
+    }
+  ]
+}

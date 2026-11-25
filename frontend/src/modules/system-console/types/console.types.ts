@@ -16,6 +16,7 @@ export type ConsoleSectionId =
   | 'scheduler'
   | 'jobs'
   | 'logs'
+  | 'incidents'
   | 'security'
   | 'secrets'
   | 'configuration'

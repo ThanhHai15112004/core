@@ -14,7 +14,7 @@ import {
   type ExportProgressSnapshot,
   type IPdfExportAdapter,
 } from '@packages/kernel/index.js';
-import type { UserIdentity } from '@packages/security/index.js';
+import { PlatformSecurityService, type UserIdentity } from '@packages/security/index.js';
 import type { IExportsPublicService } from '../contracts/index.js';
 import type { ExportHistoryEntity } from '../entities/export-history.entity.js';
 import { ExportHistoryRepository } from '../repositories/export-history.repository.js';
@@ -33,6 +33,7 @@ export class ExportsService implements IExportsPublicService {
   constructor(
     @Optional() private readonly historyRepository?: ExportHistoryRepository,
     @Optional() exportRegistry?: ExportRegistryService,
+    @Optional() private readonly platformSecurityService?: PlatformSecurityService,
   ) {
     this.exportRegistry = exportRegistry ?? defaultExportRegistry;
   }
@@ -108,6 +109,7 @@ export class ExportsService implements IExportsPublicService {
       if (memRecord) {
         await this.persistHistoryRecordToDb(memRecord, response);
       }
+      await this.recordExportSecurityEvent(executor.module, cleanProfile, response, actor);
       return response;
     }
 
@@ -159,7 +161,41 @@ export class ExportsService implements IExportsPublicService {
     };
     const memRecord = this.exportRegistry.getHistoryById(started.id) ?? started;
     await this.persistHistoryRecordToDb(memRecord, response);
+    await this.recordExportSecurityEvent(executor.module, cleanProfile, response, actor);
     return response;
+  }
+
+  private async recordExportSecurityEvent(
+    moduleName: string,
+    profileCode: string,
+    response: ExecuteExportResponse,
+    actor?: UserIdentity,
+  ): Promise<void> {
+    if (!this.platformSecurityService || moduleName === 'users') {
+      return;
+    }
+    try {
+      await this.platformSecurityService.recordSecurityEvent({
+        eventType: 'DATA_EXPORT',
+        module: moduleName,
+        feature: 'exports',
+        action: 'DATA_EXPORTED',
+        actorId: actor?.id ?? null,
+        resourceType: 'export_history',
+        resourceId: response.historyId ?? response.fileName,
+        exportedRowCount: response.totalExported,
+        reason: `Exported ${response.totalExported} row(s) via profile '${profileCode}' (${response.format.toUpperCase()})`,
+        metadata: {
+          profileCode,
+          format: response.format,
+          fileName: response.fileName,
+          totalExported: response.totalExported,
+        },
+        persistToAuditLog: false,
+      });
+    } catch {
+      // Non-blocking security event recording
+    }
   }
 
   private assertProfilePermission(requiredPermission?: string, actor?: UserIdentity): void {

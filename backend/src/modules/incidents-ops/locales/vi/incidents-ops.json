@@ -1,0 +1,14 @@
+{
+  "error.policyNotFound": "Không tìm thấy chính sách mức độ sự cố {{severity}}",
+  "error.runbookNotFound": "Không tìm thấy Runbook xử lý sự cố #{{id}}",
+  "error.runbookCodeDuplicate": "Mã Runbook '{{code}}' đã tồn tại",
+  "error.ownerMappingNotFound": "Không tìm thấy cấu hình người phụ trách cho mã cảnh báo #{{id}}",
+  "error.ownerMappingDuplicate": "Mã cảnh báo '{{alertCode}}' đã được gán người phụ trách",
+  "error.ownerRequired": "Mỗi loại cảnh báo bắt buộc phải có người phụ trách hợp lệ (ownerUserId)",
+  "error.incidentNotFound": "Không tìm thấy sự cố #{{id}}",
+  "error.postmortemNotFound": "Chưa có báo cáo sau sự cố cho sự cố #{{incidentId}}",
+  "error.invalidStatusTransition": "Không thể chuyển trạng thái sự cố từ {{from}} sang {{to}}",
+  "error.rootCauseRequired": "Vui lòng nhập nguyên nhân gốc rễ (rootCause) và tóm tắt xử lý trước khi đánh dấu đã khắc phục",
+  "error.invalidSiemEndpoint": "URL Endpoint SIEM không hợp lệ (chỉ chấp nhận http/https)",
+  "siem.testSummary": "Kiểm tra kết nối SIEM từ Core Incident & SIEM Manager"
+}

@@ -22,6 +22,7 @@ import { DevelopmentDataSeeder } from '../../../../database/seeders/development.
 import { IamMasterSeeder } from '../../../../database/seeders/iam-master.seeder.js';
 import { IamThousandUsersSeeder } from '../../../../database/seeders/iam-thousand-users.seeder.js';
 import { MetricsAlertsSeeder } from '../../../../database/seeders/metrics-alerts.seeder.js';
+import { IncidentsSiemSeeder } from '../../../../database/seeders/incidents-siem.seeder.js';
 
 @Injectable()
 export class SeedCommand implements ICliCommandProvider {
@@ -65,6 +66,7 @@ export class SeedCommand implements ICliCommandProvider {
       new MasterPermissionSeeder(permissions, undefined, codeTypes),
       new IamMasterSeeder(),
       new MetricsAlertsSeeder(),
+      new IncidentsSiemSeeder(),
       new DevelopmentDataSeeder(),
       new IamThousandUsersSeeder(),
     ];

@@ -13,6 +13,7 @@ import { perfEn } from './console/perf.en';
 import { rtEn } from './console/rt.en';
 import { govEn } from './console/gov.en';
 import { metricsAlertsEn } from './console/metrics-alerts.en';
+import { incidentsEn } from './console/incidents.en';
 import { healthEn } from './console/health.en';
 import { uiEn } from './ui.en';
 
@@ -34,6 +35,7 @@ export const en: TranslationKey = {
     scheduler: 'Scheduler',
     jobs: 'Jobs',
     logs: 'Logs',
+    incidents: 'Incidents & SIEM',
     security: 'Security',
     secrets: 'Secrets',
     configuration: 'Configuration',
@@ -211,5 +213,6 @@ export const en: TranslationKey = {
   rt: rtEn,
   gov: govEn,
   metricsAlerts: metricsAlertsEn,
+  incidents: incidentsEn,
   health: healthEn,
 };

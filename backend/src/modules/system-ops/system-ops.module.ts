@@ -19,6 +19,7 @@ import { SchedulerOpsModule } from '@modules/scheduler-ops/index.js';
 import { JobsOpsModule } from '@modules/jobs-ops/index.js';
 import { LogsOpsModule } from '@modules/logs-ops/index.js';
 import { MetricsOpsModule } from '@modules/metrics-ops/index.js';
+import { IncidentsOpsModule } from '@modules/incidents-ops/index.js';
 
 @Module({
   imports: [
@@ -37,6 +38,7 @@ import { MetricsOpsModule } from '@modules/metrics-ops/index.js';
     JobsOpsModule,
     LogsOpsModule,
     MetricsOpsModule,
+    IncidentsOpsModule,
   ],
   controllers: [SystemOpsController],
   providers: [PackageRegistryService, SystemInfoService, SystemOverviewService, OpsEventService],
@@ -59,6 +61,7 @@ import { MetricsOpsModule } from '@modules/metrics-ops/index.js';
     JobsOpsModule,
     LogsOpsModule,
     MetricsOpsModule,
+    IncidentsOpsModule,
   ],
 })
 export class SystemOpsModule {}

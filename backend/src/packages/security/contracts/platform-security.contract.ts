@@ -307,3 +307,15 @@ export interface ISiemAlertSink {
   readonly name: string;
   sendAlert(alert: SecurityAnomalyAlert): Promise<void> | void;
 }
+
+/**
+ * Cổng lắng nghe toàn bộ sự kiện bảo mật (kèm cảnh báo bất thường nếu có)
+ * để chuyển tiếp sang SIEM ngoài hoặc hệ thống Quản lý sự cố.
+ */
+export interface ISecurityEventSink {
+  readonly name: string;
+  onSecurityEvent(
+    event: SecurityEventRecord,
+    alert: SecurityAnomalyAlert | null,
+  ): Promise<void> | void;
+}

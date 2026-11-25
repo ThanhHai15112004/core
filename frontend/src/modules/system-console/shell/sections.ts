@@ -18,6 +18,7 @@ import {
   Package,
   Radio,
   Settings2,
+  ShieldAlert,
   ShieldCheck,
   Zap,
 } from 'lucide-react';
@@ -32,6 +33,7 @@ import { SCHEDULER_RANGES, SCHEDULER_TABS } from '../constants/scheduler';
 import { RUNTIME_RANGES } from '../constants/runtime-metrics';
 import { PERF_RANGES, PERF_TABS } from '../constants/performance';
 import { METRICS_ALERTS_RANGES, METRICS_ALERTS_TABS } from '../constants/metrics-alerts';
+import { INCIDENTS_TABS } from '../constants/incidents';
 import { DB_RANGES, DB_TABS } from '../constants/database';
 import { WORKER_PAGE_TABS, WORKER_RANGES } from '../constants/worker';
 import { JOBS_RANGES, JOBS_TABS, SHORT_ID_HEAD } from '../constants/jobs';
@@ -230,6 +232,15 @@ export const SECTIONS: SectionDef[] = [
     controls: {},
     keywords: ['package', 'action'],
   },
+  {
+    id: 'incidents',
+    group: 'governance',
+    icon: ShieldAlert,
+    component: load(() => import('../sections/incidents/IncidentsSection'), 'IncidentsSection'),
+    controls: {},
+    crumb: (p, t) => ((INCIDENTS_TABS as readonly string[]).includes(p[0] ?? '') ? t(`incidents.tab.${p[0]}`) : null),
+    keywords: ['incident', 'siem', 'runbook', 'postmortem', 'alert', 'p1', 'p2'],
+  },
 ];
 
 const SECTION_MAP = new Map<string, SectionDef>(SECTIONS.map((s) => [s.id, s]));
@@ -257,6 +268,7 @@ const MENU_CODE_TO_SECTION: Record<string, ConsoleSectionId> = {
   SC_SECRETS: 'secrets',
   SC_CONFIGURATION: 'configuration',
   SC_PACKAGES: 'packages',
+  SC_INCIDENTS: 'incidents',
 };
 
 const MENU_CODE_TO_GROUP: Record<string, SectionGroupId> = {
@@ -284,6 +296,7 @@ const ICON_BY_NAME: Record<string, LucideIcon> = {
   Package,
   Radio,
   Settings2,
+  ShieldAlert,
   ShieldCheck,
   Zap,
 };

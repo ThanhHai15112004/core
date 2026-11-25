@@ -1,0 +1,25 @@
+const PREFIX = 'ops/incidents';
+
+export const INCIDENTS_OPS_ROUTES = {
+  PREFIX,
+  OVERVIEW: 'overview',
+  POLICIES: 'policies',
+  POLICY_BY_SEVERITY: 'policies/:severity',
+  RUNBOOKS: 'runbooks',
+  RUNBOOK_BY_ID: 'runbooks/:id',
+  OWNERS: 'owners',
+  OWNER_BY_ID: 'owners/:id',
+  REPEATED_ALERTS: 'repeated-alerts',
+  POSTMORTEMS: 'postmortems',
+  SIEM_LOGS: 'siem/logs',
+  SIEM_TEST: 'siem/test',
+  INCIDENTS_ROOT: '',
+  INCIDENT_BY_ID: ':id',
+  INCIDENT_ACK: ':id/acknowledge',
+  INCIDENT_MITIGATE: ':id/mitigate',
+  INCIDENT_RESOLVE: ':id/resolve',
+  INCIDENT_CLOSE: ':id/close',
+  INCIDENT_ASSIGN_OWNER: ':id/assign-owner',
+  INCIDENT_POSTMORTEM: ':id/postmortem',
+  INCIDENT_POSTMORTEM_PUBLISH: ':id/postmortem/publish',
+} as const;

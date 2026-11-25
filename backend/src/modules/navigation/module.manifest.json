@@ -368,6 +368,20 @@
       "numOrder": 5,
       "icon": "Package",
       "position": "SYSTEM_CONSOLE"
+    },
+    {
+      "code": "SC_INCIDENTS",
+      "name": "Sự cố & SIEM",
+      "status": 1,
+      "link": "/system-console/incidents",
+      "linkApi": "/api/v1/ops/incidents/overview",
+      "type": 2,
+      "parentCode": "SC_GOVERNANCE",
+      "level": 2,
+      "key": "settings.read",
+      "numOrder": 6,
+      "icon": "ShieldAlert",
+      "position": "SYSTEM_CONSOLE"
     }
   ]
 }

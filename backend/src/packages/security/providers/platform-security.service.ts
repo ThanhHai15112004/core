@@ -7,6 +7,7 @@ import {
   type CorsEvaluationResult,
   DEFAULT_CORS_ALLOWED_ORIGINS,
   DEFAULT_SECURITY_HEADERS,
+  type ISecurityEventSink,
   type ISiemAlertSink,
   type RateLimitCheckInput,
   type RateLimitCheckResult,
@@ -197,6 +198,7 @@ export class PlatformSecurityService {
   private readonly securityEvents: SecurityEventRecord[] = [];
   private readonly anomalyAlerts: SecurityAnomalyAlert[] = [];
   private readonly siemSinks: ISiemAlertSink[] = [];
+  private readonly securityEventSinks: ISecurityEventSink[] = [];
 
   private readonly failedLoginCounterByTarget = new Map<
     string,
@@ -566,6 +568,24 @@ export class PlatformSecurityService {
     return true;
   }
 
+  /** Đăng ký cổng nhận toàn bộ sự kiện bảo mật (kèm cảnh báo bất thường nếu phát sinh) */
+  public registerSecurityEventSink(sink: ISecurityEventSink): void {
+    const existingIdx = this.securityEventSinks.findIndex((s) => s.name === sink.name);
+    if (existingIdx >= 0) {
+      this.securityEventSinks[existingIdx] = sink;
+    } else {
+      this.securityEventSinks.push(sink);
+    }
+  }
+
+  /** Gỡ cổng nhận sự kiện bảo mật theo tên */
+  public unregisterSecurityEventSink(name: string): boolean {
+    const idx = this.securityEventSinks.findIndex((s) => s.name === name);
+    if (idx === -1) return false;
+    this.securityEventSinks.splice(idx, 1);
+    return true;
+  }
+
   /**
    * Ghi nhận sự kiện bảo mật (Login, Login sai, Logout, Đổi quyền, Tắt MFA, Export dữ liệu lớn)
    * và tự động đánh giá phát cảnh báo bất thường sang Monitoring / SIEM (Mục 4.5.7 & 4.5.8).
@@ -659,6 +679,15 @@ export class PlatformSecurityService {
     }
 
     const alert = await this.evaluateAndDispatchAnomalyAlert(eventRecord, input);
+    for (const sink of this.securityEventSinks) {
+      try {
+        await sink.onSecurityEvent(eventRecord, alert);
+      } catch (err) {
+        this.logger.error(
+          `Failed to forward security event ${eventRecord.eventTypeName} to sink '${sink.name}': ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
     return { event: eventRecord, alert };
   }
 

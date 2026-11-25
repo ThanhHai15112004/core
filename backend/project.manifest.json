@@ -18,6 +18,7 @@
     "jobs-ops",
     "logs-ops",
     "metrics-ops",
+    "incidents-ops",
     "runtimes",
     "traffic",
     "performance",

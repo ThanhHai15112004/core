@@ -13,6 +13,7 @@ import { perfVi } from './console/perf.vi';
 import { rtVi } from './console/rt.vi';
 import { govVi } from './console/gov.vi';
 import { metricsAlertsVi } from './console/metrics-alerts.vi';
+import { incidentsVi } from './console/incidents.vi';
 import { healthVi } from './console/health.vi';
 
 export const vi = {
@@ -33,6 +34,7 @@ export const vi = {
     scheduler: 'Scheduler',
     jobs: 'Jobs',
     logs: 'Nhật ký',
+    incidents: 'Sự cố & SIEM',
     security: 'Bảo mật',
     secrets: 'Secrets',
     configuration: 'Cấu hình',
@@ -210,6 +212,7 @@ export const vi = {
   rt: rtVi,
   gov: govVi,
   metricsAlerts: metricsAlertsVi,
+  incidents: incidentsVi,
   health: healthVi,
 };
 
