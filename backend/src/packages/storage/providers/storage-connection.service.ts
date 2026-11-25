@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import {
   Inject,
@@ -6,7 +7,7 @@ import {
   type OnApplicationBootstrap,
   type OnModuleDestroy,
 } from '@nestjs/common';
-import { CoreConfigService } from '@packages/config/index.js';
+import { CoreConfigService, type StorageDriverName } from '@packages/config/index.js';
 import {
   PROVIDER_TYPE,
   ProviderRegistryService,
@@ -106,16 +107,39 @@ export class StorageConnectionService implements OnApplicationBootstrap, OnModul
     this.since = Date.now();
   }
 
-  /** Kiểm tra ngay (public cho Test Storage/overview). */
-  public async check(): Promise<StorageConnectionStatus> {
+  /** Tên driver lưu trữ hiện tại (`local` | `s3`). */
+  public getDriverName(): StorageDriverName {
+    return this.config.storage.driver;
+  }
+
+  /** Kiểm tra ngay (public cho Test Storage/overview/health). Hỗ trợ `writeProbe` để xác minh ghi-đọc-xóa thực tế. */
+  public async check(options?: { writeProbe?: boolean }): Promise<StorageConnectionStatus> {
     const started = performance.now();
     try {
       await this.storage.driver.ping();
+      if (options?.writeProbe) {
+        await this.runWriteProbe();
+      }
       this.markSuccess(Number((performance.now() - started).toFixed(2)));
     } catch (err) {
       this.markFailure(err);
     }
     return this.getStatus();
+  }
+
+  /** Ghi, đọc lại đối chiếu và xóa bỏ tệp thăm dò tạm để kiểm chứng Storage có thể ghi dữ liệu thực tế. */
+  private async runWriteProbe(): Promise<void> {
+    const probeKey = `.tmp-healthcheck-${process.pid}-${Date.now()}-${randomBytes(4).toString('hex')}.txt`;
+    const payload = Buffer.from('core-health-probe', 'utf8');
+    await this.storage.driver.put(probeKey, payload, { contentType: 'text/plain' });
+    try {
+      const readBack = await this.storage.driver.get(probeKey);
+      if (readBack.toString('utf8') !== 'core-health-probe') {
+        throw new Error('Storage write probe verification failed');
+      }
+    } finally {
+      await this.storage.driver.delete(probeKey).catch(() => undefined);
+    }
   }
 
   /** Ghi nhận tin nhắn đã được xử lý thành công */

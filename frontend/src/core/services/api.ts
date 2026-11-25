@@ -56,11 +56,16 @@ const PUBLIC_ENDPOINT_PREFIXES = [
   '/auth/api-clients/token',
   '/federated-identity/providers/public',
   '/payments/callbacks/',
-  '/health',
   '/ops/',
 ] as const;
 
+const PUBLIC_HEALTH_PATHS = new Set(['/health', '/health/live', '/health/ready']);
+
 function isPublicEndpoint(endpoint: string): boolean {
+  const pathOnly = endpoint.split('?')[0] ?? endpoint;
+  if (PUBLIC_HEALTH_PATHS.has(pathOnly)) {
+    return true;
+  }
   if (/^\/federated-identity\/providers\/[^/]+\/(authorize|callback)(?:\?|$)/.test(endpoint)) {
     return true;
   }

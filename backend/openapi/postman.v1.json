@@ -6310,7 +6310,86 @@
                 "health"
               ]
             },
-            "description": "Trả về trạng thái kết nối thực tế của Database, Redis, Storage và mức sử dụng bộ nhớ Heap của tiến trình.\n\n### 🔐 Xác thực & Phân quyền (Access Control)\n- **Chế độ truy cập**: `Public` (Không yêu cầu đăng nhập)"
+            "description": "Endpoint tổng hợp cho Load Balancer và Console. Khi bật `health.public.hide_details`, người dùng công khai chỉ nhận trạng thái tổng quát (`status`, `ready`, `live`, `uptime`); quản trị viên có JWT hợp lệ sẽ nhận đầy đủ `checks`.\n\n### 🔐 Xác thực & Phân quyền (Access Control)\n- **Chế độ truy cập**: `Public` (Không yêu cầu đăng nhập)"
+          }
+        },
+        {
+          "name": "Chi tiết Health Check & Dependencies (Admin only)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/health/details",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "health",
+                "details"
+              ]
+            },
+            "description": "Trả về thông số đầy đủ của Process/Event Loop, Database timeout, Redis & Queue (critical vs degraded), Storage, Email/SMS/Provider, cảnh báo phiên bản Migration và bộ cấu hình Health Settings đang áp dụng.\n\n### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `health.read`, `system.ops.read`, `settings.read`"
+          }
+        },
+        {
+          "name": "Liveness Check (kiểm tra process còn sống)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/health/live",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "health",
+                "live"
+              ]
+            },
+            "description": "Dùng cho Kubernetes/Load Balancer livenessProbe. Kiểm tra tiến trình chưa shutdown, Event Loop và V8 Heap; trả 503 khi tiến trình không còn sống.\n\n### 🔐 Xác thực & Phân quyền (Access Control)\n- **Chế độ truy cập**: `Public` (Không yêu cầu đăng nhập)"
+          }
+        },
+        {
+          "name": "Readiness Check (kiểm tra sẵn sàng nhận request)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/health/ready",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "health",
+                "ready"
+              ]
+            },
+            "description": "Dùng cho Kubernetes/Load Balancer readinessProbe. Kiểm tra runtime, Database (có timeout), Redis, Storage và tùy chọn Migration. Trả HTTP 503 khi chưa sẵn sàng; ẩn chi tiết nhạy cảm khỏi người gọi công khai.\n\n### 🔐 Xác thực & Phân quyền (Access Control)\n- **Chế độ truy cập**: `Public` (Không yêu cầu đăng nhập)"
           }
         }
       ]

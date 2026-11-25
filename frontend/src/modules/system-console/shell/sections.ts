@@ -1,6 +1,7 @@
 import { lazy, type ComponentType, type LazyExoticComponent } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import {
+  Activity,
   BellRing,
   Boxes,
   Clock,
@@ -108,6 +109,14 @@ export const SECTIONS: SectionDef[] = [
     controls: { ranges: METRICS_ALERTS_RANGES },
     crumb: (p, t) => ((METRICS_ALERTS_TABS as readonly string[]).includes(p[0] ?? '') ? t(`metricsAlerts.tab.${p[0]}`) : null),
     keywords: ['metrics', 'alert', 'rule', 'latency', 'p95', 'p99', 'redis'],
+  },
+  {
+    id: 'health',
+    group: 'runtime-traffic',
+    icon: Activity,
+    component: load(() => import('../sections/health/HealthSection'), 'HealthSection'),
+    controls: {},
+    keywords: ['health', 'live', 'ready', 'liveness', 'readiness', 'migration', 'provider'],
   },
   {
     id: 'database',
@@ -234,6 +243,7 @@ const MENU_CODE_TO_SECTION: Record<string, ConsoleSectionId> = {
   SC_HTTP_TRAFFIC: 'http-traffic',
   SC_PERFORMANCE: 'performance',
   SC_METRICS_ALERTS: 'metrics-alerts',
+  SC_HEALTH: 'health',
   SC_DATABASE: 'database',
   SC_CACHE: 'cache',
   SC_STORAGE: 'storage',
@@ -257,6 +267,7 @@ const MENU_CODE_TO_GROUP: Record<string, SectionGroupId> = {
 };
 
 const ICON_BY_NAME: Record<string, LucideIcon> = {
+  Activity,
   BellRing,
   Boxes,
   Clock,

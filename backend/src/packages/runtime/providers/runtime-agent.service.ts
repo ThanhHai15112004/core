@@ -65,6 +65,16 @@ export class RuntimeAgentService implements OnApplicationBootstrap, BeforeApplic
     this.contributor = contributor;
   }
 
+  /** Trạng thái vòng đời hiện tại của runtime process (`starting` | `running` | `paused` | `stopping`). */
+  public getState(): AgentState {
+    return this.state;
+  }
+
+  /** Kiểm tra process có đang trong giai đoạn tắt dần (graceful shutdown) hay không. */
+  public isShuttingDown(): boolean {
+    return this.state === 'stopping';
+  }
+
   /** Ghi sự kiện `crashed` trước khi process chết vì lỗi không bắt được. */
   public installCrashHandlers(): void {
     /** Xử lý sự cố nghiêm trọng không thể phục hồi (fatal error) */

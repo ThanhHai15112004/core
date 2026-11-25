@@ -13,6 +13,7 @@ import { perfEn } from './console/perf.en';
 import { rtEn } from './console/rt.en';
 import { govEn } from './console/gov.en';
 import { metricsAlertsEn } from './console/metrics-alerts.en';
+import { healthEn } from './console/health.en';
 import { uiEn } from './ui.en';
 
 export const en: TranslationKey = {
@@ -23,6 +24,7 @@ export const en: TranslationKey = {
     'http-traffic': 'HTTP Traffic',
     performance: 'Performance',
     'metrics-alerts': 'Metrics & Alerts',
+    health: 'Health Check',
     database: 'Database',
     cache: 'Cache',
     storage: 'Storage',
@@ -189,4 +191,5 @@ export const en: TranslationKey = {
   rt: rtEn,
   gov: govEn,
   metricsAlerts: metricsAlertsEn,
+  health: healthEn,
 };

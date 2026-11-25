@@ -1,7 +1,10 @@
 import { getHeapStatistics } from 'node:v8';
 import { Injectable, Optional } from '@nestjs/common';
 import { CoreConfigService } from '@packages/config/index.js';
-import { DatabaseConnectionService } from '@packages/database/index.js';
+import {
+  DatabaseConnectionService,
+  DatabaseOperationsService,
+} from '@packages/database/index.js';
 import { RedisService } from '@packages/redis/index.js';
 import { StorageConnectionService } from '@packages/storage/index.js';
 import {
@@ -23,6 +26,7 @@ export class DoctorCommand implements ICliCommandProvider {
     private readonly redis: RedisService,
     @Optional() private readonly database?: DatabaseConnectionService,
     @Optional() private readonly storage?: StorageConnectionService,
+    @Optional() private readonly databaseOperations?: DatabaseOperationsService,
   ) {}
 
   /** Khai báo danh mục các lệnh kiểm tra sức khỏe hệ thống (Diagnostics) */
@@ -125,6 +129,33 @@ export class DoctorCommand implements ICliCommandProvider {
           name: 'Database (TypeORM)',
           passed: false,
           message: `Connection error: ${err instanceof Error ? err.message : String(err)}`,
+        });
+      }
+    }
+
+    // 4b. Check Database Migrations
+    if (this.databaseOperations && this.database?.connected()) {
+      try {
+        const { items } = await this.databaseOperations.migrations();
+        const pending = items.filter((m) => m.status === 'pending').length;
+        const tampered = items.filter(
+          (m) => m.status === 'applied' && m.integrity && m.integrity !== 'ok',
+        ).length;
+        const ok = pending === 0 && tampered === 0;
+        results.push({
+          name: 'Database Migrations',
+          passed: true,
+          warning: !ok,
+          message: ok
+            ? `Up to date (${items.length} applied)`
+            : `${pending} pending, ${tampered} integrity warning(s) — run migration:check`,
+        });
+      } catch (err) {
+        results.push({
+          name: 'Database Migrations',
+          passed: true,
+          warning: true,
+          message: `Skipped: ${err instanceof Error ? err.message : String(err)}`,
         });
       }
     }

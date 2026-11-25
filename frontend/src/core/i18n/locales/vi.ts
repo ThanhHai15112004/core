@@ -13,6 +13,7 @@ import { perfVi } from './console/perf.vi';
 import { rtVi } from './console/rt.vi';
 import { govVi } from './console/gov.vi';
 import { metricsAlertsVi } from './console/metrics-alerts.vi';
+import { healthVi } from './console/health.vi';
 
 export const vi = {
   ui: uiVi,
@@ -22,6 +23,7 @@ export const vi = {
     'http-traffic': 'HTTP Traffic',
     performance: 'Hiệu năng',
     'metrics-alerts': 'Metrics & Cảnh báo',
+    health: 'Health Check',
     database: 'Cơ sở dữ liệu',
     cache: 'Bộ nhớ đệm',
     storage: 'Lưu trữ',
@@ -188,6 +190,7 @@ export const vi = {
   rt: rtVi,
   gov: govVi,
   metricsAlerts: metricsAlertsVi,
+  health: healthVi,
 };
 
 export type TranslationKey = typeof vi;

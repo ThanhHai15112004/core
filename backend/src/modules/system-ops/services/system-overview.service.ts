@@ -454,9 +454,10 @@ export class SystemOverviewService {
   /** API: trạng thái theo health check (terminus) — không mặc định "healthy". */
   private apiItem(ctx: OverviewContext): HealthMapItemDto {
     const { app } = this.configService;
-    const down = Object.entries(ctx.health?.checks ?? {})
-      .filter(([, c]) => c.status === 'down')
-      .map(([k]) => k);
+    const entries = Object.entries(ctx.health?.checks ?? {});
+    const down = entries.filter(([, c]) => c.status === 'down').map(([k]) => k);
+    const degraded = entries.filter(([, c]) => c.status === 'degraded').map(([k]) => k);
+    const affected = down.length > 0 ? down : degraded;
     const status: HealthMapItemDto['status'] = !ctx.health
       ? 'unknown'
       : ctx.health.status === 'ok'
@@ -470,8 +471,8 @@ export class SystemOverviewService {
       name: this.i18n.t('overview.map.api.name'),
       category: 'runtime',
       status,
-      subtext: down.length
-        ? this.i18n.t('overview.map.api.degraded', { checks: down.join(', ') })
+      subtext: affected.length
+        ? this.i18n.t('overview.map.api.degraded', { checks: affected.join(', ') })
         : this.i18n.t('overview.map.api.subtext', { port: app.port }),
       secondarySubtext: this.i18n.t('overview.map.api.secondary', {
         heap: ctx.runtime.heapUsedMb,

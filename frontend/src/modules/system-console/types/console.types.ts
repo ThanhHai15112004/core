@@ -6,6 +6,7 @@ export type ConsoleSectionId =
   | 'http-traffic'
   | 'performance'
   | 'metrics-alerts'
+  | 'health'
   | 'database'
   | 'cache'
   | 'storage'
@@ -25,10 +26,13 @@ export type ConsolePath = string;
 
 export interface HealthData {
   status: 'ok' | 'degraded' | 'down';
+  ready?: boolean;
+  live?: boolean;
+  redacted?: boolean;
   uptime: number;
   timestamp: string;
-  /** Kết quả từng phụ thuộc (database, redis, heap) — không có khi gọi `/health` thất bại. */
-  checks?: Record<string, { status: 'up' | 'down' } & Record<string, unknown>>;
+  /** Kết quả từng phụ thuộc — ẩn với endpoint công khai khi `health.public.hide_details=true`. */
+  checks?: Record<string, { status: 'up' | 'degraded' | 'down' } & Record<string, unknown>>;
   service?: string;
   version?: string;
 }

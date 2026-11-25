@@ -7,6 +7,12 @@ const OPS_PREFIX = '/ops';
 
 export const API_ROUTES = {
   HEALTH: HEALTH_PREFIX,
+  HEALTH_ENDPOINTS: {
+    CHECK: HEALTH_PREFIX,
+    LIVE: `${HEALTH_PREFIX}/live`,
+    READY: `${HEALTH_PREFIX}/ready`,
+    DETAILS: `${HEALTH_PREFIX}/details`,
+  },
   OPS: {
     OVERVIEW: `${OPS_PREFIX}/overview`,
     PACKAGES: `${OPS_PREFIX}/packages`,

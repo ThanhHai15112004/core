@@ -132,6 +132,20 @@
       "position": "SYSTEM_CONSOLE"
     },
     {
+      "code": "SC_HEALTH",
+      "name": "Health Check",
+      "status": 1,
+      "link": "/system-console/health",
+      "linkApi": "/api/v1/health/details",
+      "type": 2,
+      "parentCode": "SC_RUNTIME_TRAFFIC",
+      "level": 2,
+      "key": "settings.read",
+      "numOrder": 5,
+      "icon": "Activity",
+      "position": "SYSTEM_CONSOLE"
+    },
+    {
       "code": "SC_INFRASTRUCTURE",
       "name": "Hạ tầng",
       "status": 1,
