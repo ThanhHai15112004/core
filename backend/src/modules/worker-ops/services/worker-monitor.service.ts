@@ -5,10 +5,7 @@ import {
   type OnModuleDestroy,
 } from '@nestjs/common';
 import { CoreConfigService } from '@packages/config/index.js';
-import {
-  RESILIENCE_SETTING_KEYS,
-  readDynamicResilienceNumber,
-} from '@packages/kernel/index.js';
+import { RESILIENCE_SETTING_KEYS, readDynamicResilienceNumber } from '@packages/kernel/index.js';
 import { RedisService } from '@packages/redis/index.js';
 import {
   MessagingConnectionService,

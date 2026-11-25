@@ -64,9 +64,7 @@ export function buildUserCreatedEventInput(
       status: user.status,
       primaryOrganizationUnitId: user.primaryOrganizationUnitId ?? null,
       roleIds: Array.isArray(user.roles)
-        ? user.roles
-            .map((r) => Number(r.roleId))
-            .filter((roleId) => Number.isFinite(roleId))
+        ? user.roles.map((r) => Number(r.roleId)).filter((roleId) => Number.isFinite(roleId))
         : [],
     },
   };
