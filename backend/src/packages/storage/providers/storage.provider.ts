@@ -1,5 +1,5 @@
 import { performance } from 'node:perf_hooks';
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import {
   Inject,
   Injectable,
@@ -335,6 +335,73 @@ export class BaseStorageProvider
       return;
     }
     await this.driver.delete(tempKey).catch(() => undefined);
+  }
+
+  /** Ghi một mảnh dữ liệu độc lập (`<tempPrefix>.part.XXXXXX`) phục vụ chunked upload stateless. */
+  public async putChunkPart(
+    tempPrefix: string,
+    chunkIndex: number,
+    chunk: Buffer,
+  ): Promise<number> {
+    const partKey = `${tempPrefix}.part.${String(chunkIndex).padStart(6, '0')}`;
+    this.assertKey(partKey);
+    if (typeof this.driver.putChunkPart === 'function') {
+      return this.measure(
+        'put',
+        partKey,
+        chunk.length,
+        () => this.driver.putChunkPart!(tempPrefix, chunkIndex, chunk),
+        () => chunk.length,
+      );
+    }
+    await this.upload(partKey, chunk, 'application/octet-stream');
+    return chunk.length;
+  }
+
+  /** Ghép các mảnh `.part.*` thành khóa lưu trữ đích và trả về SHA-256 + tổng byte. */
+  public async finalizeChunkedParts(
+    tempPrefix: string,
+    totalChunks: number,
+    targetKey: string,
+    mimeType?: string,
+  ): Promise<{ checksumSha256: string; sizeBytes: number }> {
+    this.assertKey(tempPrefix);
+    this.assertKey(targetKey);
+    if (typeof this.driver.finalizeChunkedParts === 'function') {
+      return this.measure('put', targetKey, null, () =>
+        this.driver.finalizeChunkedParts!(tempPrefix, totalChunks, targetKey, {
+          contentType: mimeType ?? mimeOf(targetKey),
+        }),
+      );
+    }
+    const buffers: Buffer[] = [];
+    for (let i = 0; i < totalChunks; i++) {
+      const partKey = `${tempPrefix}.part.${String(i).padStart(6, '0')}`;
+      buffers.push(await this.download(partKey));
+    }
+    const combined = Buffer.concat(buffers);
+    const checksumSha256 = createHash('sha256').update(combined).digest('hex');
+    await this.upload(targetKey, combined, mimeType);
+    await this.abortChunkedParts(tempPrefix, totalChunks);
+    return { checksumSha256, sizeBytes: combined.length };
+  }
+
+  /** Xóa toàn bộ mảnh tạm `.part.*` của phiên tải lên. */
+  public async abortChunkedParts(tempPrefix: string, totalChunks?: number): Promise<void> {
+    if (!isValidKey(tempPrefix)) return;
+    if (typeof this.driver.abortChunkedParts === 'function') {
+      await this.driver.abortChunkedParts(tempPrefix, totalChunks).catch(() => undefined);
+      return;
+    }
+    if (typeof totalChunks === 'number' && totalChunks > 0) {
+      await Promise.all(
+        Array.from({ length: totalChunks }, (_, idx) =>
+          this.driver
+            .delete(`${tempPrefix}.part.${String(idx).padStart(6, '0')}`)
+            .catch(() => undefined),
+        ),
+      );
+    }
   }
 
   /** Upload đang chạy trong process này. */

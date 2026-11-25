@@ -4,6 +4,7 @@ import { CoreConfigService } from '@packages/config/index.js';
 import { DatabaseConnectionService, DatabaseOperationsService } from '@packages/database/index.js';
 import { RedisService } from '@packages/redis/index.js';
 import { StorageConnectionService } from '@packages/storage/index.js';
+import { evaluateStatelessReadiness } from '@packages/runtime/index.js';
 import {
   type CliCommandDescriptor,
   type ICliCommandProvider,
@@ -175,7 +176,33 @@ export class DoctorCommand implements ICliCommandProvider {
       }
     }
 
-    // 6. Check Memory Heap
+    // 6. Check Stateless Readiness (Phase 13.1)
+    const statelessReport = evaluateStatelessReadiness({
+      environment: this.config.app.env,
+      instanceId: this.config.app.instanceId,
+      runtimeState: 'running',
+      draining: false,
+      inFlightRequests: 0,
+      storageDriver: this.config.storage.driver,
+      allowLocalStorageInProd: this.config.storage.allowLocalInProduction,
+      cacheDriver: this.config.cache.driver,
+      allowMemoryCacheInProd: this.config.cache.allowMemoryInProduction,
+      redisReady: this.redis.isReady(),
+      databaseEnabled: this.config.database.enabled,
+      distributedRateLimitReady: this.redis.isReady(),
+      drainDelayMs: this.config.runtime.drainDelayMs,
+      gracefulTimeoutMs: this.config.runtime.gracefulTimeoutMs,
+    });
+    const statelessWarnCount = statelessReport.checks.filter((c) => c.status === 'warn').length;
+    const statelessFailCount = statelessReport.checks.filter((c) => c.status === 'fail').length;
+    results.push({
+      name: 'Stateless Readiness',
+      passed: statelessFailCount === 0,
+      warning: statelessWarnCount > 0,
+      message: `${statelessReport.status.toUpperCase()} (storage=${this.config.storage.driver}, cache=${this.config.cache.driver}, drainDelayMs=${this.config.runtime.drainDelayMs}, gracefulTimeoutMs=${this.config.runtime.gracefulTimeoutMs})`,
+    });
+
+    // 7. Check Memory Heap
     const heapStats = getHeapStatistics();
     const heapUsedMb = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
     const heapLimitMb = Math.round(heapStats.heap_size_limit / 1024 / 1024);

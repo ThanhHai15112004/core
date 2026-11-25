@@ -45,6 +45,7 @@
   "runtime.mode.graceful": "graceful",
   "runtime.mode.force": "force",
   "runtime.event.started": "{runtime} đã khởi động",
+  "runtime.event.draining": "{runtime} đang rút kết nối (draining)",
   "runtime.event.stopping": "{runtime} đang dừng",
   "runtime.event.stopped": "{runtime} đã dừng ({reason}, exit {exitCode})",
   "runtime.event.crashed": "{runtime} crash: {message}",

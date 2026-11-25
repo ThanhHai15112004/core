@@ -7,6 +7,20 @@ import { cacheKeys } from '../constants/cache.keys.js';
 export const DEFAULT_DISTRIBUTED_LOCK_TTL_MS = 30_000;
 export const MIN_DISTRIBUTED_LOCK_TTL_MS = 50;
 
+const LUA_RELEASE_LOCK = `
+if redis.call("get", KEYS[1]) == ARGV[1] then
+  return redis.call("del", KEYS[1])
+end
+return 0
+`;
+
+const LUA_EXTEND_LOCK = `
+if redis.call("get", KEYS[1]) == ARGV[1] then
+  return redis.call("pexpire", KEYS[1], ARGV[2])
+end
+return 0
+`;
+
 export interface AcquireLockOptions {
   /** Thời gian hết hạn của khóa (ms). Bắt buộc dương (mặc định 30_000ms) để tránh khóa bị giữ vĩnh viễn. */
   ttlMs?: number;
@@ -183,11 +197,24 @@ export class DistributedLockService {
     const lockKey = this.buildLockKey(normResource);
 
     if (this.usesRedis && this.redis) {
-      const currentHolder = await this.redis.client.get(lockKey).catch(() => null);
+      const client = this.redis.client as unknown as {
+        eval?: (script: string, numKeys: number, ...args: (string | number)[]) => Promise<unknown>;
+        get: (key: string) => Promise<string | null>;
+        del: (key: string) => Promise<number>;
+      };
+      if (typeof client.eval === 'function') {
+        try {
+          const res = await client.eval(LUA_RELEASE_LOCK, 1, lockKey, input.token);
+          return Number(res) > 0;
+        } catch {
+          // Fallback for mock Redis clients that do not implement Lua eval
+        }
+      }
+      const currentHolder = await client.get(lockKey).catch(() => null);
       if (currentHolder !== input.token) {
         return false;
       }
-      const deleted = await this.redis.client.del(lockKey).catch(() => 0);
+      const deleted = await client.del(lockKey).catch(() => 0);
       return deleted > 0;
     }
 
@@ -209,11 +236,24 @@ export class DistributedLockService {
     const lockKey = this.buildLockKey(normResource);
 
     if (this.usesRedis && this.redis) {
-      const currentHolder = await this.redis.client.get(lockKey).catch(() => null);
+      const client = this.redis.client as unknown as {
+        eval?: (script: string, numKeys: number, ...args: (string | number)[]) => Promise<unknown>;
+        get: (key: string) => Promise<string | null>;
+        pexpire: (key: string, ms: number) => Promise<number>;
+      };
+      if (typeof client.eval === 'function') {
+        try {
+          const updated = await client.eval(LUA_EXTEND_LOCK, 1, lockKey, input.token, effectiveTtlMs);
+          return Number(updated) > 0;
+        } catch {
+          // Fallback for mock Redis clients that do not implement Lua eval
+        }
+      }
+      const currentHolder = await client.get(lockKey).catch(() => null);
       if (currentHolder !== input.token) {
         return false;
       }
-      const updated = await this.redis.client.pexpire(lockKey, effectiveTtlMs).catch(() => 0);
+      const updated = await client.pexpire(lockKey, effectiveTtlMs).catch(() => 0);
       return Number(updated) > 0;
     }
 

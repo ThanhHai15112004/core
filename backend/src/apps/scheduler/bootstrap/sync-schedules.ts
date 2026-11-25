@@ -1,11 +1,13 @@
 import {
   Injectable,
   Logger,
+  Optional,
   type OnApplicationBootstrap,
   type OnModuleDestroy,
 } from '@nestjs/common';
 import type { Queue } from 'bullmq';
 import { CronExpressionParser } from 'cron-parser';
+import { DistributedLockService } from '@packages/cache/index.js';
 import { CoreConfigService } from '@packages/config/index.js';
 import { CATCHUP_RUN_PREFIX, MessagingConnectionService } from '@packages/messaging/index.js';
 import { QueueRegistry, SCHEDULER_MISSED_LOG_SIZE, schedulerKeys } from '@packages/queue/index.js';
@@ -50,6 +52,7 @@ export class ScheduleSyncService implements OnApplicationBootstrap, OnModuleDest
     private readonly redis: RedisService,
     private readonly taskRegistry: ScheduledTaskRegistry,
     private readonly config: CoreConfigService,
+    @Optional() private readonly distributedLock?: DistributedLockService,
   ) {}
 
   /** Kích hoạt đồng bộ lịch tác vụ khi ứng dụng hoàn tất bootstrap */
@@ -76,9 +79,37 @@ export class ScheduleSyncService implements OnApplicationBootstrap, OnModuleDest
     this.retry.unref();
   }
 
-  /** Một lượt đồng bộ; `false` khi Redis / broker chưa sẵn sàng (sẽ thử lại). */
+  /** Một lượt đồng bộ; `false` khi Redis / broker chưa sẵn sàng hoặc replica khác đang giữ lock. */
   public async sync(): Promise<boolean> {
     if (!this.redis.isReady() || this.connection.getStatus().state !== 'connected') return false;
+
+    const lockHandle = this.distributedLock
+      ? await this.distributedLock
+          .acquire('scheduler:bootstrap-sync', {
+            ttlMs: 30_000,
+            retryCount: 3,
+            retryDelayMs: 500,
+          })
+          .catch(() => null)
+      : null;
+
+    if (this.distributedLock && !lockHandle) {
+      this.logger.warn(
+        'Another scheduler instance holds scheduler:bootstrap-sync lock; skipping duplicate sync cycle',
+      );
+      return false;
+    }
+
+    try {
+      return await this.performSync();
+    } finally {
+      if (lockHandle) {
+        await lockHandle.release().catch(() => undefined);
+      }
+    }
+  }
+
+  private async performSync(): Promise<boolean> {
     const keys = schedulerKeys(this.redis);
     /** Bọc Promise với timeout từ QueueRegistry */
     const t = <T>(task: Promise<T>) => this.queueRegistry.withTimeout(task);

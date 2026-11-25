@@ -20,11 +20,16 @@ import {
   StatusDot,
 } from '@core/ui/blocks';
 import { healthConsoleApi } from '../../services/health.api';
-import type { ProviderChannelHealthDto, QueueHealthItemDto } from '../../types/health.types';
+import type {
+  ProviderChannelHealthDto,
+  QueueHealthItemDto,
+  StatelessCheckItemDto,
+} from '../../types/health.types';
 import { HealthSettingsSheet } from './HealthSettingsSheet';
 
 const queueCol = createColumnHelper<QueueHealthItemDto>();
 const provCol = createColumnHelper<ProviderChannelHealthDto>();
+const statelessCol = createColumnHelper<StatelessCheckItemDto>();
 
 export const HealthSection: React.FC = () => {
   const { t } = useLocale();
@@ -145,6 +150,33 @@ export const HealthSection: React.FC = () => {
   const providerRows = useMemo(
     () => (details ? Object.values(details.dependencies.providers.byType) : []),
     [details],
+  );
+
+  const statelessColumns = useMemo(
+    () => [
+      statelessCol.accessor('key', {
+        header: t('health.col.criterion'),
+        cell: (c) => <span className="font-mono text-xs">{c.getValue()}</span>,
+      }),
+      statelessCol.accessor('status', {
+        header: t('health.col.status'),
+        cell: (c) => {
+          const val = c.getValue();
+          const tone = val === 'pass' ? 'ok' : val === 'warn' ? 'warn' : 'crit';
+          return (
+            <Badge tone={tone}>
+              <StatusDot tone={tone} size="xs" />
+              {t(`health.statelessCheck.${val}`)}
+            </Badge>
+          );
+        },
+      }),
+      statelessCol.accessor('detail', {
+        header: t('health.col.detail'),
+        cell: (c) => <span className="text-xs text-muted-foreground">{c.getValue()}</span>,
+      }),
+    ],
+    [t],
   );
 
   const bannerReasons = useMemo(() => {
@@ -428,6 +460,49 @@ export const HealthSection: React.FC = () => {
               />
             </Panel>
           </PanelGrid>
+
+          {details.stateless && (
+            <Panel title={t('health.section.stateless')}>
+              <div className="mb-4">
+                <KeyValueGrid
+                  columns={4}
+                  items={[
+                    {
+                      label: t('health.field.instanceId'),
+                      value: details.stateless.instanceId,
+                      mono: true,
+                    },
+                    {
+                      label: t('health.field.draining'),
+                      value: details.stateless.draining ? t('health.common.on') : t('health.common.off'),
+                      mono: true,
+                    },
+                    {
+                      label: t('health.field.inFlightRequests'),
+                      value: details.stateless.inFlightRequests,
+                      mono: true,
+                    },
+                    {
+                      label: t('health.field.drainDelay'),
+                      value: `${details.stateless.drainDelayMs} ms`,
+                      mono: true,
+                    },
+                    {
+                      label: t('health.field.gracefulTimeout'),
+                      value: `${details.stateless.gracefulTimeoutMs} ms`,
+                      mono: true,
+                    },
+                  ]}
+                />
+              </div>
+              <DataTable
+                data={[...details.stateless.checks]}
+                columns={statelessColumns}
+                getRowId={(r) => r.key}
+                emptyMessage={t('health.common.unconfigured')}
+              />
+            </Panel>
+          )}
         </>
       )}
 

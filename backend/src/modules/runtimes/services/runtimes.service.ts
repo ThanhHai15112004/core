@@ -31,6 +31,7 @@ export type MetricRange = keyof typeof METRIC_RANGES;
 
 const EVENT_LEVEL: Record<RuntimeEventType, RuntimeEventDto['level']> = {
   started: 'success',
+  draining: 'warn',
   stopping: 'info',
   stopped: 'info',
   crashed: 'error',
@@ -287,7 +288,7 @@ export class RuntimesService {
       return { stop: down, start: down };
     }
 
-    const busy = hb.state === 'stopping';
+    const busy = hb.state === 'stopping' || hb.state === 'draining';
     return {
       stop:
         id === 'api'

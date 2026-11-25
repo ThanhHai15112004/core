@@ -4,7 +4,7 @@ import { Logger } from '@nestjs/common';
 import { CoreConfigService, appConfig } from '@packages/config/index.js';
 import { normalizeApiPrefix } from '@packages/http/index.js';
 import { PinoNestLogger } from '@packages/logging/index.js';
-import { RuntimeAgentService } from '@packages/runtime/index.js';
+import { RuntimeAgentService, installGracefulShutdown } from '@packages/runtime/index.js';
 import { PlatformSecurityService } from '@packages/security/index.js';
 import { ApiRuntimeContributor } from '../runtime/api-runtime.contributor.js';
 import { ApiModule } from '../api.module.js';
@@ -32,7 +32,9 @@ export async function bootstrapApi(): Promise<NestFastifyApplication> {
 
   const agent = app.get(RuntimeAgentService);
   agent.installCrashHandlers();
-  app.get(ApiRuntimeContributor).attachServer(app.getHttpServer());
+  const apiContributor = app.get(ApiRuntimeContributor);
+  apiContributor.attachServer(app.getHttpServer());
+  apiContributor.attachFastifyDrainingHooks(app.getHttpAdapter().getInstance());
 
   const configService = app.get(CoreConfigService);
   const platformSecurity = app.get(PlatformSecurityService);
@@ -48,7 +50,17 @@ export async function bootstrapApi(): Promise<NestFastifyApplication> {
 
   app.setGlobalPrefix(prefix);
   setupApiDocs(app);
-  app.enableShutdownHooks();
+  if (!configService.isTest) {
+    installGracefulShutdown({
+      app,
+      agent,
+      logger,
+      drainDelayMs: configService.runtime.drainDelayMs,
+      gracefulTimeoutMs: configService.runtime.gracefulTimeoutMs,
+    });
+  } else {
+    app.enableShutdownHooks();
+  }
 
   await app.listen(port, host);
   logger.log(`HTTP API server started on http://${host}:${port}/${prefix}`);

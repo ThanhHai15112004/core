@@ -228,7 +228,11 @@ describe('TransactionManager, Migration Immutability & DatabaseSeederService (2.
     });
 
     it('chặn rollback migration trên môi trường production nếu không có cờ force', async () => {
-      applyTestEnv({ NODE_ENV: 'production', OPS_DATABASE_MIGRATIONS_ENABLED: 'true' });
+      applyTestEnv({
+        NODE_ENV: 'production',
+        STORAGE_DRIVER: 's3',
+        OPS_DATABASE_MIGRATIONS_ENABLED: 'true',
+      });
       config = new CoreConfigService();
 
       let undone = false;
@@ -287,7 +291,7 @@ describe('TransactionManager, Migration Immutability & DatabaseSeederService (2.
     });
 
     it('chặn chạy DevelopmentDataSeeder khi NODE_ENV=production', async () => {
-      applyTestEnv({ NODE_ENV: 'production' });
+      applyTestEnv({ NODE_ENV: 'production', STORAGE_DRIVER: 's3' });
       config = new CoreConfigService();
 
       const mock = createMockQueryRunner();

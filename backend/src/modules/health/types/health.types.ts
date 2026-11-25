@@ -1,4 +1,5 @@
 import type { ProviderTypeName } from '@packages/kernel/index.js';
+import type { StatelessReadinessReport } from '@packages/runtime/index.js';
 import type {
   HealthIndicatorStatusValue,
   HealthSeverityValue,
@@ -141,6 +142,8 @@ export interface DetailedHealthCheckResult {
     readonly process: {
       readonly status: HealthIndicatorStatusValue;
       readonly runtimeState: string;
+      readonly draining: boolean;
+      readonly inFlightRequests: number;
       readonly eventLoopLagMs: number;
       readonly heapUsedMb: number;
       readonly heapLimitMb: number;
@@ -164,5 +167,6 @@ export interface DetailedHealthCheckResult {
       readonly byType: Record<ProviderTypeName, ProviderChannelHealthSummary>;
     };
   };
+  readonly stateless?: StatelessReadinessReport;
   readonly settings: HealthRuntimeConfig;
 }

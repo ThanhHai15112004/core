@@ -10,7 +10,7 @@ export interface RuntimeIdentity {
 }
 
 /** Trạng thái do chính process báo (trạng thái hiển thị được suy ra ở API). */
-export type AgentState = 'starting' | 'running' | 'paused' | 'stopping';
+export type AgentState = 'starting' | 'running' | 'paused' | 'draining' | 'stopping';
 
 export type MetricValue = number | string | boolean | null;
 
@@ -112,6 +112,7 @@ export interface RuntimeSample {
 
 export type RuntimeEventType =
   | 'started'
+  | 'draining'
   | 'stopping'
   | 'stopped'
   | 'crashed'

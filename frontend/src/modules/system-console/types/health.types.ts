@@ -101,6 +101,25 @@ export interface HealthRuntimeConfigDto {
   hidePublicDetails: boolean;
 }
 
+export interface StatelessCheckItemDto {
+  key: string;
+  status: 'pass' | 'warn' | 'fail';
+  detail: string;
+}
+
+export interface StatelessReadinessDto {
+  compliant: boolean;
+  status: HealthOverallStatus;
+  environment: string;
+  instanceId: string;
+  runtimeState: string;
+  draining: boolean;
+  inFlightRequests: number;
+  drainDelayMs: number;
+  gracefulTimeoutMs: number;
+  checks: StatelessCheckItemDto[];
+}
+
 export interface DetailedHealthDto {
   status: HealthOverallStatus;
   live: boolean;
@@ -115,6 +134,8 @@ export interface DetailedHealthDto {
     process: {
       status: HealthIndicatorState;
       runtimeState: string;
+      draining?: boolean;
+      inFlightRequests?: number;
       eventLoopLagMs: number;
       heapUsedMb: number;
       heapLimitMb: number;
@@ -138,6 +159,7 @@ export interface DetailedHealthDto {
       byType: Record<string, ProviderChannelHealthDto>;
     };
   };
+  stateless?: StatelessReadinessDto;
   settings: HealthRuntimeConfigDto;
 }
 

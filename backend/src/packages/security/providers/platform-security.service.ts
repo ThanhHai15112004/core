@@ -1,7 +1,8 @@
-import { Injectable, Logger, Optional } from '@nestjs/common';
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { CoreConfigService } from '@packages/config/index.js';
 import { HTTP_ERROR_CODE, TooManyRequestsAppException } from '@packages/kernel/index.js';
 import { RequestContextService } from '@packages/logging/index.js';
+import { RedisService } from '@packages/redis/index.js';
 import { AuditLogService } from './audit-log.service.js';
 import {
   type CorsEvaluationResult,
@@ -30,6 +31,17 @@ interface RateLimitBucket {
   count: number;
   resetAtMs: number;
 }
+
+const LUA_FIXED_WINDOW_INCR = `
+local current = redis.call("incr", KEYS[1])
+if current == 1 then
+  redis.call("pexpire", KEYS[1], ARGV[1])
+end
+local pttl = redis.call("pttl", KEYS[1])
+return {current, pttl}
+`;
+
+const FAILED_LOGIN_WINDOW_MS = 15 * 60_000;
 
 const PASSWORD_PRESERVE_KEYS = new Set([
   'password',
@@ -177,6 +189,8 @@ export function redactSensitiveResponseData<T>(payload: T, depth = 0): T {
 export class PlatformSecurityService {
   private readonly logger = new Logger(PlatformSecurityService.name);
   private readonly auditLogService?: AuditLogService;
+  private readonly redis?: RedisService;
+  private readonly redisPrefix: string;
   private securityHeaders: Record<string, string> = { ...DEFAULT_SECURITY_HEADERS };
   private allowedOrigins = new Set<string>(DEFAULT_CORS_ALLOWED_ORIGINS);
   private allowCredentials = true;
@@ -208,13 +222,21 @@ export class PlatformSecurityService {
   private largeExportRowThreshold = 50;
 
   constructor(
-    @Optional() auditLogOrConfig?: AuditLogService | CoreConfigService | null,
-    @Optional() maybeAuditLogOrConfig?: AuditLogService | CoreConfigService | null,
+    @Optional() auditLogOrConfig?: AuditLogService | CoreConfigService | RedisService | null,
+    @Optional() maybeAuditLogOrConfig?: AuditLogService | CoreConfigService | RedisService | null,
+    @Optional() @Inject(RedisService) maybeRedis?: RedisService | null,
   ) {
-    const candidates = [auditLogOrConfig, maybeAuditLogOrConfig];
+    const candidates = [auditLogOrConfig, maybeAuditLogOrConfig, maybeRedis];
     for (const candidate of candidates) {
       if (candidate && typeof (candidate as AuditLogService).record === 'function') {
         this.auditLogService = candidate as AuditLogService;
+      }
+      if (
+        candidate &&
+        typeof (candidate as RedisService).isReady === 'function' &&
+        typeof (candidate as RedisService).client === 'object'
+      ) {
+        this.redis = candidate as RedisService;
       }
     }
 
@@ -225,6 +247,7 @@ export class PlatformSecurityService {
         (c as CoreConfigService).app !== null,
       ),
     );
+    this.redisPrefix = configSvc?.cache?.redis?.prefix || 'core:';
     const rawEnvOrigins = configSvc?.app.corsAllowedOrigins ?? '';
     if (rawEnvOrigins && rawEnvOrigins.trim().length > 0) {
       const parsed = rawEnvOrigins
@@ -402,13 +425,25 @@ export class PlatformSecurityService {
     }
   }
 
+  private buildRedisKey(...parts: string[]): string {
+    if (this.redis && typeof this.redis.key === 'function') {
+      return this.redis.key(...parts);
+    }
+    return `${this.redisPrefix}${parts.join(':')}`;
+  }
+
+  /** Kiểm tra hệ thống đã có Shared Store (Redis) cho Rate Limit & Security counters hay chưa. */
+  public isDistributedStoreReady(): boolean {
+    return Boolean(this.redis?.isReady());
+  }
+
   /** Alias tiêu thụ & kiểm tra Rate Limit theo 3 chiều (IP, User, API Route) */
   public consumeRateLimit(input: RateLimitCheckInput): RateLimitCheckResult {
     return this.checkRateLimit(input);
   }
 
-  /** Kiểm tra tần suất gọi API theo đồng thời 3 chiều: IP, User ID và Route API (Mục 4.5.3) */
-  public checkRateLimit(input: RateLimitCheckInput): RateLimitCheckResult {
+  /** Phân tích input thành routeKey, rule, windowMs và ipAddress dùng chung cho local & distributed mode. */
+  private prepareRateLimitContext(input: RateLimitCheckInput) {
     let method = (input.method ?? 'GET').trim().toUpperCase();
     let rawPath = (input.url ?? '/').split('?')[0]?.trim() || '/';
     if (input.routeKey && input.routeKey.trim().length > 0) {
@@ -425,6 +460,131 @@ export class PlatformSecurityService {
     const windowMs = Math.max(1, rule.windowSeconds) * 1000;
     const nowMs = Date.now();
     const resolvedIp = (input.ipAddress ?? input.ip ?? '127.0.0.1').trim();
+    return { routeKey, rule, windowMs, nowMs, resolvedIp };
+  }
+
+  /**
+   * Kiểm tra Rate Limit dùng chung giữa nhiều API instance qua Redis (`INCR` + `PEXPIRE` atomic);
+   * tự động fallback về bộ đếm RAM nếu Redis chưa cấu hình hoặc tạm mất kết nối.
+   */
+  public async checkRateLimitDistributed(
+    input: RateLimitCheckInput,
+  ): Promise<RateLimitCheckResult> {
+    if (!this.isDistributedStoreReady() || !this.redis) {
+      return this.checkRateLimit(input);
+    }
+
+    const { routeKey, rule, windowMs, nowMs, resolvedIp } = this.prepareRateLimitContext(input);
+    try {
+      const ipKey = this.buildRedisKey('sec', 'rl', rule.routePattern, 'ip', resolvedIp);
+      const ipBucket = await this.incrementRedisBucket(ipKey, windowMs, nowMs);
+      if (ipBucket.count > rule.maxRequestsPerIp) {
+        return this.buildRateLimitResult(
+          false,
+          'IP',
+          rule.maxRequestsPerIp,
+          0,
+          ipBucket.resetAtMs,
+          nowMs,
+          routeKey,
+        );
+      }
+
+      if (input.userId !== undefined && input.userId !== null && String(input.userId).trim() !== '') {
+        const userKey = this.buildRedisKey(
+          'sec',
+          'rl',
+          rule.routePattern,
+          'user',
+          String(input.userId).trim(),
+        );
+        const userBucket = await this.incrementRedisBucket(userKey, windowMs, nowMs);
+        if (userBucket.count > rule.maxRequestsPerUser) {
+          return this.buildRateLimitResult(
+            false,
+            'USER',
+            rule.maxRequestsPerUser,
+            0,
+            userBucket.resetAtMs,
+            nowMs,
+            routeKey,
+          );
+        }
+      }
+
+      const apiKey = this.buildRedisKey('sec', 'rl', rule.routePattern, 'api', routeKey);
+      const apiBucket = await this.incrementRedisBucket(apiKey, windowMs, nowMs);
+      if (apiBucket.count > rule.maxRequestsPerApi) {
+        return this.buildRateLimitResult(
+          false,
+          'API',
+          rule.maxRequestsPerApi,
+          0,
+          apiBucket.resetAtMs,
+          nowMs,
+          routeKey,
+        );
+      }
+
+      const effectiveLimit = rule.maxRequestsPerIp;
+      const effectiveRemaining = Math.max(0, effectiveLimit - ipBucket.count);
+      return this.buildRateLimitResult(
+        true,
+        undefined,
+        effectiveLimit,
+        effectiveRemaining,
+        ipBucket.resetAtMs,
+        nowMs,
+        routeKey,
+      );
+    } catch {
+      return this.checkRateLimit(input);
+    }
+  }
+
+  private async incrementRedisBucket(
+    key: string,
+    windowMs: number,
+    nowMs: number,
+  ): Promise<RateLimitBucket> {
+    const client = this.redis!.client as unknown as {
+      eval?: (script: string, numKeys: number, ...args: (string | number)[]) => Promise<unknown>;
+      incr: (k: string) => Promise<number>;
+      pexpire: (k: string, ms: number) => Promise<number>;
+      pttl: (k: string) => Promise<number>;
+    };
+
+    if (typeof client.eval === 'function') {
+      try {
+        const raw = (await client.eval(LUA_FIXED_WINDOW_INCR, 1, key, windowMs)) as [
+          number | string,
+          number | string,
+        ];
+        const count = Number(raw?.[0] ?? 1);
+        const pttl = Number(raw?.[1] ?? windowMs);
+        return {
+          count,
+          resetAtMs: nowMs + (pttl > 0 ? pttl : windowMs),
+        };
+      } catch {
+        // Fallback when mock Redis client does not implement Lua eval
+      }
+    }
+
+    const count = await client.incr(key);
+    if (count === 1) {
+      await client.pexpire(key, windowMs);
+    }
+    const pttl = await client.pttl(key).catch(() => windowMs);
+    return {
+      count,
+      resetAtMs: nowMs + (pttl > 0 ? pttl : windowMs),
+    };
+  }
+
+  /** Kiểm tra tần suất gọi API theo đồng thời 3 chiều: IP, User ID và Route API (Mục 4.5.3) */
+  public checkRateLimit(input: RateLimitCheckInput): RateLimitCheckResult {
+    const { routeKey, rule, windowMs, nowMs, resolvedIp } = this.prepareRateLimitContext(input);
 
     const ipKey = `${rule.routePattern}:ip:${resolvedIp}`;
     const ipBucket = this.incrementBucket(this.ipBuckets, ipKey, windowMs, nowMs);
@@ -485,7 +645,7 @@ export class PlatformSecurityService {
 
   /** Kiểm tra Rate Limit và ném ngoại lệ 429 Too Many Requests nếu vượt ngưỡng */
   public async assertRateLimit(input: RateLimitCheckInput): Promise<RateLimitCheckResult> {
-    const result = this.checkRateLimit(input);
+    const result = await this.checkRateLimitDistributed(input);
     if (!result.allowed) {
       await this.recordSecurityEvent({
         eventType: SECURITY_EVENT_TYPE.RATE_LIMIT_EXCEEDED,
@@ -774,19 +934,39 @@ export class PlatformSecurityService {
     if (event.eventTypeCode === SECURITY_EVENT_TYPE.LOGIN_SUCCESS) {
       const key = `${event.ipAddress ?? 'unknown'}:${event.identifier ?? event.actorUserId ?? 'unknown'}`;
       this.failedLoginCounterByTarget.delete(key);
+      if (this.isDistributedStoreReady() && this.redis) {
+        await this.redis.client
+          .del(this.buildRedisKey('sec', 'failed-login', key))
+          .catch(() => undefined);
+      }
       return null;
     }
 
     if (event.eventTypeCode === SECURITY_EVENT_TYPE.LOGIN_FAILED) {
       const key = `${event.ipAddress ?? 'unknown'}:${event.identifier ?? event.targetUserId ?? 'unknown'}`;
       const nowMs = Date.now();
-      const current = this.failedLoginCounterByTarget.get(key);
-      const windowValid = current && nowMs - current.firstAtMs <= 15 * 60_000;
-      const nextCount = windowValid ? current.count + 1 : 1;
-      this.failedLoginCounterByTarget.set(key, {
-        count: nextCount,
-        firstAtMs: windowValid ? current.firstAtMs : nowMs,
-      });
+      let nextCount: number | null = null;
+      if (this.isDistributedStoreReady() && this.redis) {
+        try {
+          const bucket = await this.incrementRedisBucket(
+            this.buildRedisKey('sec', 'failed-login', key),
+            FAILED_LOGIN_WINDOW_MS,
+            nowMs,
+          );
+          nextCount = bucket.count;
+        } catch {
+          nextCount = null;
+        }
+      }
+      if (nextCount === null) {
+        const current = this.failedLoginCounterByTarget.get(key);
+        const windowValid = current && nowMs - current.firstAtMs <= FAILED_LOGIN_WINDOW_MS;
+        nextCount = windowValid ? current.count + 1 : 1;
+        this.failedLoginCounterByTarget.set(key, {
+          count: nextCount,
+          firstAtMs: windowValid ? current.firstAtMs : nowMs,
+        });
+      }
       extraMeta['consecutiveFailedAttempts'] = nextCount;
 
       const isLockedReason = (event.reason ?? '').toLowerCase().includes('locked');

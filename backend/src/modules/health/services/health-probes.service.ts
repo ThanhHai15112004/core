@@ -39,6 +39,9 @@ const BYTES_PER_MB = 1024 * 1024;
 export interface ProcessProbeResult {
   readonly indicator: HealthIndicatorDetail;
   readonly live: boolean;
+  readonly ready: boolean;
+  readonly draining: boolean;
+  readonly inFlightRequests: number;
   readonly runtimeState: string;
   readonly eventLoopLagMs: number;
   readonly heapUsedMb: number;
@@ -116,14 +119,25 @@ export class HealthProbesService {
     const rssMb = Math.round((mem.rss / BYTES_PER_MB) * 10) / 10;
     const runtimeState =
       typeof this.runtimeAgent?.getState === 'function' ? this.runtimeAgent.getState() : 'running';
+    const draining =
+      typeof this.runtimeAgent?.isDraining === 'function'
+        ? this.runtimeAgent.isDraining()
+        : runtimeState === 'draining';
     const shuttingDown =
       typeof this.runtimeAgent?.isShuttingDown === 'function'
         ? this.runtimeAgent.isShuttingDown()
         : runtimeState === 'stopping';
+    const inFlightRequests =
+      typeof this.runtimeAgent?.getInFlightCount === 'function'
+        ? this.runtimeAgent.getInFlightCount()
+        : 0;
 
     const heapExceeded = heapRatio >= cfg.heapLimitRatio;
+    // Khi `draining`, process vẫn `live` (HTTP 200 ở `/health/live`) nhưng `ready = false` (HTTP 503 ở `/health/ready`).
     const live = !shuttingDown && !heapExceeded;
+    const ready = live && !draining;
     const warnings: string[] = [];
+    if (draining) warnings.push('Runtime is draining connections');
     if (shuttingDown) warnings.push('Runtime is shutting down');
     if (heapExceeded)
       warnings.push(`V8 heap usage (${Math.round(heapRatio * 100)}%) reached limit`);
@@ -133,7 +147,7 @@ export class HealthProbesService {
 
     const status: HealthIndicatorStatusValue = !live
       ? HEALTH_INDICATOR_STATUS.DOWN
-      : eventLoopLagMs >= cfg.eventLoopLagWarnMs
+      : draining || eventLoopLagMs >= cfg.eventLoopLagWarnMs
         ? HEALTH_INDICATOR_STATUS.DEGRADED
         : HEALTH_INDICATOR_STATUS.UP;
 
@@ -142,6 +156,8 @@ export class HealthProbesService {
         status,
         severity: toIndicatorSeverity(status),
         state: runtimeState,
+        draining,
+        inFlightRequests,
         eventLoopLagMs,
         heapUsedMb,
         heapLimitMb,
@@ -150,6 +166,9 @@ export class HealthProbesService {
         ...(warnings.length > 0 ? { warnings } : {}),
       },
       live,
+      ready,
+      draining,
+      inFlightRequests,
       runtimeState,
       eventLoopLagMs,
       heapUsedMb,

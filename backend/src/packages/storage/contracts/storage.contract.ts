@@ -19,4 +19,12 @@ export interface StorageContract {
   appendChunk?(tempKey: string, chunk: Buffer): Promise<number>;
   finalizeChunkedUpload?(tempKey: string, targetKey: string, mimeType?: string): Promise<string>;
   abortChunkedUpload?(tempKey: string): Promise<void>;
+  putChunkPart?(tempPrefix: string, chunkIndex: number, chunk: Buffer): Promise<number>;
+  finalizeChunkedParts?(
+    tempPrefix: string,
+    totalChunks: number,
+    targetKey: string,
+    mimeType?: string,
+  ): Promise<{ checksumSha256: string; sizeBytes: number }>;
+  abortChunkedParts?(tempPrefix: string, totalChunks?: number): Promise<void>;
 }

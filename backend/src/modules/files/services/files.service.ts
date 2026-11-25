@@ -1,4 +1,5 @@
 import { Inject, Injectable, Optional } from '@nestjs/common';
+import { BaseCacheProvider } from '@packages/cache/index.js';
 import { createPaginatedResult } from '@packages/http/index.js';
 import {
   NotFoundAppException,
@@ -123,7 +124,7 @@ export type { ResolvedByteRange };
 @Injectable()
 export class FilesService implements IFilesPublicService {
   private readonly sequenceRegistry: SequenceRegistryService;
-  public readonly chunkSessionManager = new ChunkedUploadSessionManager();
+  public readonly chunkSessionManager: ChunkedUploadSessionManager;
 
   constructor(
     public readonly filesRepo: FilesRepository,
@@ -153,8 +154,12 @@ export class FilesService implements IFilesPublicService {
     public readonly tokenService?: TokenService | null,
     @Optional()
     public readonly messagePublisher?: BaseMessagePublisherProvider | null,
+    @Optional()
+    @Inject(BaseCacheProvider)
+    cacheProvider?: BaseCacheProvider | null,
   ) {
     this.sequenceRegistry = sequenceRegistry ?? defaultSequenceRegistry;
+    this.chunkSessionManager = new ChunkedUploadSessionManager(cacheProvider);
     this.registerCodeUsageCheckers();
   }
 

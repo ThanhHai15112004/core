@@ -1,5 +1,5 @@
-import { Inject, Injectable, type OnModuleInit, Optional } from '@nestjs/common';
-import { BaseCacheProvider } from '@packages/cache/index.js';
+import { Inject, Injectable, type OnModuleDestroy, type OnModuleInit, Optional } from '@nestjs/common';
+import { BaseCacheProvider, CacheInvalidationService } from '@packages/cache/index.js';
 import {
   ConflictAppException,
   FEATURE_FLAG_STATUS,
@@ -50,7 +50,7 @@ import type {
 } from '../requests/feature-flags.requests.js';
 
 @Injectable()
-export class FeatureFlagsService implements IFeatureFlagsPublicService, OnModuleInit {
+export class FeatureFlagsService implements IFeatureFlagsPublicService, OnModuleInit, OnModuleDestroy {
   private readonly registry: FeatureFlagRegistryService;
   private readonly evaluationCache = new Map<
     string,
@@ -60,7 +60,9 @@ export class FeatureFlagsService implements IFeatureFlagsPublicService, OnModule
   private historySeq = 0;
   private flagSeq = 100;
   private isPublishingChange = false;
+  private suppressBroadcast = false;
   private dbHydrated = false;
+  private unsubscribeCacheInvalidation: (() => void) | null = null;
 
   constructor(
     @Optional()
@@ -78,6 +80,9 @@ export class FeatureFlagsService implements IFeatureFlagsPublicService, OnModule
     @Optional()
     @Inject(BaseCacheProvider)
     private readonly cacheProvider?: BaseCacheProvider | null,
+    @Optional()
+    @Inject(CacheInvalidationService)
+    private readonly cacheInvalidation?: CacheInvalidationService | null,
   ) {
     this.registry = featureFlagRegistry ?? defaultFeatureFlagRegistry;
     this.registry.onFlagChanged(async (evt) => {
@@ -108,11 +113,46 @@ export class FeatureFlagsService implements IFeatureFlagsPublicService, OnModule
   }
 
   public async onModuleInit(): Promise<void> {
+    if (this.cacheInvalidation) {
+      this.unsubscribeCacheInvalidation = this.cacheInvalidation.subscribe(
+        'feature-flags',
+        async (evt) => {
+          this.suppressBroadcast = true;
+          try {
+            if (evt.key) {
+              await this.invalidateCacheForFlag(evt.key);
+            } else {
+              this.evaluationCache.clear();
+              defaultMenuRegistry.invalidateCache();
+            }
+            if (this.flagRepository) {
+              this.dbHydrated = false;
+              const rows = await this.flagRepository.findFiltered().catch(() => []);
+              for (const row of rows) {
+                this.upsertDefinitionSilent(mapFeatureFlagEntityToDefinition(row));
+              }
+              this.dbHydrated = true;
+            }
+          } finally {
+            this.suppressBroadcast = false;
+          }
+        },
+      );
+    }
+
+    this.suppressBroadcast = true;
     try {
       await this.syncManifests();
     } catch {
       // Allow graceful startup before migration/seeding
+    } finally {
+      this.suppressBroadcast = false;
     }
+  }
+
+  public onModuleDestroy(): void {
+    this.unsubscribeCacheInvalidation?.();
+    this.unsubscribeCacheInvalidation = null;
   }
 
   public setInstalledModules(modules: readonly string[]): void {
@@ -746,5 +786,11 @@ export class FeatureFlagsService implements IFeatureFlagsPublicService, OnModule
       }
     }
     defaultMenuRegistry.invalidateCache();
+    if (!this.suppressBroadcast && this.cacheInvalidation) {
+      void this.cacheInvalidation.publish('feature-flags', {
+        key: normalized,
+        action: 'invalidate',
+      });
+    }
   }
 }

@@ -1,5 +1,5 @@
-import { Inject, Injectable, type OnModuleInit, Optional } from '@nestjs/common';
-import { BaseCacheProvider } from '@packages/cache/index.js';
+import { Inject, Injectable, type OnModuleDestroy, type OnModuleInit, Optional } from '@nestjs/common';
+import { BaseCacheProvider, CacheInvalidationService } from '@packages/cache/index.js';
 import {
   ConflictAppException,
   ForbiddenAppException,
@@ -66,7 +66,7 @@ import type {
 } from '../requests/settings.requests.js';
 
 @Injectable()
-export class SettingsService implements ISettingsPublicService, OnModuleInit {
+export class SettingsService implements ISettingsPublicService, OnModuleInit, OnModuleDestroy {
   private readonly registry: SettingRegistryService;
   private readonly encryptionService: FieldEncryptionService;
   private readonly resolvedCache = new Map<
@@ -79,6 +79,8 @@ export class SettingsService implements ISettingsPublicService, OnModuleInit {
   private settingSeq = 100;
   private scopeSeq = 100;
   private isPublishingChange = false;
+  private suppressBroadcast = false;
+  private unsubscribeCacheInvalidation: (() => void) | null = null;
 
   constructor(
     @Optional()
@@ -105,6 +107,9 @@ export class SettingsService implements ISettingsPublicService, OnModuleInit {
     @Optional()
     @Inject(BaseCacheProvider)
     private readonly cacheProvider?: BaseCacheProvider | null,
+    @Optional()
+    @Inject(CacheInvalidationService)
+    private readonly cacheInvalidation?: CacheInvalidationService | null,
   ) {
     this.registry = settingRegistry ?? defaultSettingRegistry;
     this.encryptionService = fieldEncryptionService ?? defaultFieldEncryptionService;
@@ -153,11 +158,40 @@ export class SettingsService implements ISettingsPublicService, OnModuleInit {
   }
 
   public async onModuleInit(): Promise<void> {
+    if (this.cacheInvalidation) {
+      this.unsubscribeCacheInvalidation = this.cacheInvalidation.subscribe(
+        'settings',
+        async (evt) => {
+          this.suppressBroadcast = true;
+          try {
+            if (evt.key) {
+              await this.invalidateSettingCacheForKey(evt.key);
+            } else {
+              await this.invalidateAllSettingCache();
+            }
+            if (this.settingRepository) {
+              await this.hydrateRegistryFromDbSafe();
+            }
+          } finally {
+            this.suppressBroadcast = false;
+          }
+        },
+      );
+    }
+
+    this.suppressBroadcast = true;
     try {
       await this.syncManifests();
     } catch {
       // Safe fallback to L1 memory when DB tables are not yet initialized in isolated unit tests
+    } finally {
+      this.suppressBroadcast = false;
     }
+  }
+
+  public onModuleDestroy(): void {
+    this.unsubscribeCacheInvalidation?.();
+    this.unsubscribeCacheInvalidation = null;
   }
 
   /**
@@ -856,6 +890,9 @@ export class SettingsService implements ISettingsPublicService, OnModuleInit {
         await this.cacheProvider.delete(k);
       }
     }
+    if (!this.suppressBroadcast && this.cacheInvalidation) {
+      void this.cacheInvalidation.publish('settings', { key: normKey, action: 'invalidate' });
+    }
   }
 
   private async invalidateAllSettingCache(): Promise<void> {
@@ -865,6 +902,9 @@ export class SettingsService implements ISettingsPublicService, OnModuleInit {
       for (const k of keys) {
         await this.cacheProvider.delete(k);
       }
+    }
+    if (!this.suppressBroadcast && this.cacheInvalidation) {
+      void this.cacheInvalidation.publish('settings', { action: 'invalidate_all' });
     }
   }
 

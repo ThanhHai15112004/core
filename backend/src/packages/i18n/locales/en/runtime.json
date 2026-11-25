@@ -45,6 +45,7 @@
   "runtime.mode.graceful": "graceful",
   "runtime.mode.force": "force",
   "runtime.event.started": "{runtime} started",
+  "runtime.event.draining": "{runtime} draining connections",
   "runtime.event.stopping": "{runtime} stopping",
   "runtime.event.stopped": "{runtime} stopped ({reason}, exit {exitCode})",
   "runtime.event.crashed": "{runtime} crashed: {message}",

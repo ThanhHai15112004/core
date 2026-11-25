@@ -24,6 +24,8 @@ export type StorageDriverName = 'local' | 's3';
 export const storageConfig = () => ({
   /** `local`: filesystem dưới `localPath`; `s3`: S3-compatible (AWS S3, MinIO…). */
   driver: (env('STORAGE_DRIVER', false) === 's3' ? 's3' : 'local') as StorageDriverName,
+  /** Chỉ bật `true` khi chủ đích triển khai đơn node (1 server nhỏ) dùng local disk ở production. */
+  allowLocalInProduction: booleanOr('STORAGE_ALLOW_LOCAL_IN_PRODUCTION', false),
   localPath: env('STORAGE_LOCAL_PATH', false) || './uploads',
   /** Domain CDN hoặc URL công khai gốc (ví dụ: `https://cdn.example.com`). Chỉ dùng cho file được phép công khai. */
   cdnUrl: env('STORAGE_CDN_URL', false) || null,

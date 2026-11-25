@@ -1,9 +1,12 @@
-import type { Readable } from 'node:stream';
+import { createHash } from 'node:crypto';
+import { once } from 'node:events';
+import { PassThrough, type Readable } from 'node:stream';
 import {
   DeleteObjectCommand,
   GetObjectCommand,
   HeadBucketCommand,
   HeadObjectCommand,
+  ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3';
@@ -152,5 +155,116 @@ export class S3StorageDriver implements StorageDriver {
     return this.cfg.endpoint || this.cfg.forcePathStyle
       ? `${base.replace(/\/$/, '')}/${this.bucket}/${cleanKey}`
       : `${base}/${cleanKey}`;
+  }
+
+  private partKey(tempPrefix: string, chunkIndex: number): string {
+    return `${tempPrefix}.part.${String(chunkIndex).padStart(6, '0')}`;
+  }
+
+  /** Ghi một mảnh dữ liệu độc lập lên S3 (`<tempPrefix>.part.XXXXXX`) — stateless đa instance. */
+  public async putChunkPart(
+    tempPrefix: string,
+    chunkIndex: number,
+    chunk: Buffer,
+  ): Promise<number> {
+    const key = this.partKey(tempPrefix, chunkIndex);
+    await this.client.send(
+      new PutObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+        Body: chunk,
+        ContentType: 'application/octet-stream',
+      }),
+    );
+    return chunk.length;
+  }
+
+  /**
+   * Stream tuần tự các mảnh `.part.*` từ S3 qua `PassThrough` vào `Upload` sang `targetKey`,
+   * đồng thời tính SHA-256 streaming với bộ nhớ hằng số, sau đó dọn sạch `.part.*`.
+   */
+  public async finalizeChunkedParts(
+    tempPrefix: string,
+    totalChunks: number,
+    targetKey: string,
+    opts?: PutOptions,
+  ): Promise<{ checksumSha256: string; sizeBytes: number }> {
+    const passThrough = new PassThrough();
+    const hash = createHash('sha256');
+    let sizeBytes = 0;
+
+    const upload = new Upload({
+      client: this.client,
+      params: {
+        Bucket: this.bucket,
+        Key: targetKey,
+        Body: passThrough,
+        ContentType: opts?.contentType ?? 'application/octet-stream',
+      },
+      partSize: PART_SIZE,
+      queueSize: 2,
+      leavePartsOnError: false,
+    });
+
+    const uploadPromise = upload.done();
+
+    try {
+      for (let i = 0; i < totalChunks; i++) {
+        const res = await this.client.send(
+          new GetObjectCommand({
+            Bucket: this.bucket,
+            Key: this.partKey(tempPrefix, i),
+          }),
+        );
+        const body = res.Body as AsyncIterable<Uint8Array> | undefined;
+        if (!body) {
+          throw new Error(`Missing S3 chunk part body at index ${i}`);
+        }
+        for await (const piece of body) {
+          const buf = Buffer.isBuffer(piece) ? piece : Buffer.from(piece);
+          hash.update(buf);
+          sizeBytes += buf.length;
+          if (!passThrough.write(buf)) {
+            await once(passThrough, 'drain');
+          }
+        }
+      }
+      passThrough.end();
+      await uploadPromise;
+    } catch (err) {
+      passThrough.destroy(err instanceof Error ? err : new Error(String(err)));
+      await uploadPromise.catch(() => undefined);
+      throw err;
+    }
+
+    await this.abortChunkedParts(tempPrefix, totalChunks);
+    return {
+      checksumSha256: hash.digest('hex'),
+      sizeBytes,
+    };
+  }
+
+  /** Xóa các mảnh `.part.*` đã tạo trên S3 khi hoàn tất hoặc hủy bỏ. */
+  public async abortChunkedParts(tempPrefix: string, totalChunks?: number): Promise<void> {
+    if (typeof totalChunks === 'number' && totalChunks > 0) {
+      await Promise.all(
+        Array.from({ length: totalChunks }, (_, idx) =>
+          this.delete(this.partKey(tempPrefix, idx)).catch(() => undefined),
+        ),
+      );
+      return;
+    }
+    try {
+      const listed = await this.client.send(
+        new ListObjectsV2Command({
+          Bucket: this.bucket,
+          Prefix: `${tempPrefix}.part.`,
+        }),
+      );
+      const keys = (listed.Contents ?? []).map((item) => item.Key).filter((k): k is string => Boolean(k));
+      await Promise.all(keys.map((k) => this.delete(k).catch(() => undefined)));
+    } catch {
+      // Best-effort cleanup
+    }
   }
 }

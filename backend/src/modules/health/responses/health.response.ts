@@ -38,5 +38,6 @@ export const detailedHealthResponseSchema = z.object({
   criticalErrors: z.array(z.string()),
   checks: z.record(z.string(), z.unknown()),
   dependencies: z.record(z.string(), z.unknown()),
+  stateless: z.record(z.string(), z.unknown()).optional(),
   settings: z.record(z.string(), z.unknown()),
 });

@@ -26,6 +26,7 @@ describe('Phase 7.5 — Bộ nhớ đệm và khóa phân tán (Cache & Lock: Ad
       APP_NAME: 'CorePlatform',
       NODE_ENV: 'production',
       CACHE_DRIVER: 'redis',
+      STORAGE_DRIVER: 's3',
       CACHE_DEFAULT_TTL_SEC: '300',
     });
     config = new CoreConfigService();
@@ -35,13 +36,14 @@ describe('Phase 7.5 — Bộ nhớ đệm và khóa phân tán (Cache & Lock: Ad
 
   afterAll(() => {
     delete process.env['CACHE_DRIVER'];
+    delete process.env['STORAGE_DRIVER'];
     delete process.env['CACHE_DEFAULT_TTL_SEC'];
     applyTestEnv();
   });
 
   it('7.5.1: Tạo Cache Adapter — dùng Redis ở Production và tự động dùng Memory ở Test', async () => {
     // 1. Môi trường Production → dùng RedisCacheDriver
-    applyTestEnv({ NODE_ENV: 'production', CACHE_DRIVER: 'redis' });
+    applyTestEnv({ NODE_ENV: 'production', CACHE_DRIVER: 'redis', STORAGE_DRIVER: 's3' });
     const prodConfig = new CoreConfigService();
     const prodCache = BaseCacheProvider.createForEnvironment(prodConfig, redis);
     expect(prodCache.driver).toBeInstanceOf(RedisCacheDriver);

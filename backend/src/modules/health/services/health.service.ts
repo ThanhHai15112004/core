@@ -6,6 +6,7 @@ import {
   MemoryHealthIndicator,
   type HealthIndicatorResult,
 } from '@nestjs/terminus';
+import { CoreConfigService } from '@packages/config/index.js';
 import {
   ProviderRegistryService as KernelProviderRegistryService,
   SettingRegistryService,
@@ -16,8 +17,11 @@ import { DatabaseConnectionService, DatabaseOperationsService } from '@packages/
 import { MessagingConnectionService } from '@packages/messaging/index.js';
 import { QueueMonitoringService } from '@packages/queue/index.js';
 import { RedisService } from '@packages/redis/index.js';
-import { RuntimeAgentService } from '@packages/runtime/index.js';
-import type { UserIdentity } from '@packages/security/index.js';
+import {
+  RuntimeAgentService,
+  evaluateStatelessReadiness,
+} from '@packages/runtime/index.js';
+import { PlatformSecurityService, type UserIdentity } from '@packages/security/index.js';
 import { StorageConnectionService } from '@packages/storage/index.js';
 import {
   HEALTH_INDICATOR_STATUS,
@@ -48,6 +52,8 @@ import { HealthProbesService } from './health-probes.service.js';
 export class HealthService {
   private readonly probes: HealthProbesService;
   private readonly settingRegistry: SettingRegistryService;
+  private readonly redisRef?: RedisService;
+  private readonly databaseRef?: DatabaseConnectionService;
 
   constructor(
     @Inject(HealthCheckService) private readonly health: HealthCheckService,
@@ -79,7 +85,15 @@ export class HealthService {
     @Optional()
     @Inject(KernelProviderRegistryService)
     kernelProviderRegistry?: KernelProviderRegistryService,
+    @Optional()
+    @Inject(CoreConfigService)
+    private readonly configService?: CoreConfigService,
+    @Optional()
+    @Inject(PlatformSecurityService)
+    private readonly platformSecurity?: PlatformSecurityService,
   ) {
+    this.redisRef = redis;
+    this.databaseRef = database;
     this.settingRegistry = settingRegistry ?? defaultSettingRegistry;
     this.probes =
       probes ??
@@ -149,7 +163,7 @@ export class HealthService {
     };
 
     const criticalReady =
-      proc.live &&
+      proc.ready &&
       database.status !== HEALTH_INDICATOR_STATUS.DOWN &&
       redisAndQueue.redis.status !== HEALTH_INDICATOR_STATUS.DOWN &&
       storage.indicator.status !== HEALTH_INDICATOR_STATUS.DOWN &&
@@ -219,7 +233,7 @@ export class HealthService {
 
     const migrationBlocksReady = !migration.upToDate && cfg.failOnPendingMigration;
     const criticalReady =
-      proc.live &&
+      proc.ready &&
       database.status !== HEALTH_INDICATOR_STATUS.DOWN &&
       redisAndQueue.redis.status !== HEALTH_INDICATOR_STATUS.DOWN &&
       storage.indicator.status !== HEALTH_INDICATOR_STATUS.DOWN &&
@@ -295,7 +309,7 @@ export class HealthService {
 
     const migrationBlocksReady = !migration.upToDate && cfg.failOnPendingMigration;
     const criticalReady =
-      proc.live &&
+      proc.ready &&
       database.status !== HEALTH_INDICATOR_STATUS.DOWN &&
       redisAndQueue.redis.status !== HEALTH_INDICATOR_STATUS.DOWN &&
       storage.indicator.status !== HEALTH_INDICATOR_STATUS.DOWN &&
@@ -339,6 +353,8 @@ export class HealthService {
         process: {
           status: proc.indicator.status,
           runtimeState: proc.runtimeState,
+          draining: proc.draining,
+          inFlightRequests: proc.inFlightRequests,
           eventLoopLagMs: proc.eventLoopLagMs,
           heapUsedMb: proc.heapUsedMb,
           heapLimitMb: proc.heapLimitMb,
@@ -357,6 +373,32 @@ export class HealthService {
           byType: providers.byType,
         },
       },
+      stateless: evaluateStatelessReadiness({
+        environment: this.configService?.app.env ?? 'development',
+        instanceId: this.configService?.app.instanceId ?? `${process.pid}`,
+        runtimeState: proc.runtimeState,
+        draining: proc.draining,
+        inFlightRequests: proc.inFlightRequests,
+        storageDriver:
+          this.configService?.storage.driver ??
+          (storage.indicator.driver === 's3' ? 's3' : 'local'),
+        allowLocalStorageInProd: this.configService?.storage.allowLocalInProduction ?? false,
+        cacheDriver: this.configService?.cache.driver ?? 'redis',
+        allowMemoryCacheInProd: this.configService?.cache.allowMemoryInProduction ?? false,
+        redisReady:
+          typeof this.redisRef?.isReady === 'function'
+            ? this.redisRef.isReady()
+            : redisAndQueue.redis.status !== HEALTH_INDICATOR_STATUS.DOWN,
+        databaseEnabled:
+          this.configService?.database.enabled ??
+          (this.databaseRef?.getStatus?.().state ?? 'connected') !== 'disabled',
+        distributedRateLimitReady:
+          typeof this.platformSecurity?.isDistributedStoreReady === 'function'
+            ? this.platformSecurity.isDistributedStoreReady()
+            : redisAndQueue.redis.status !== HEALTH_INDICATOR_STATUS.DOWN,
+        drainDelayMs: this.configService?.runtime.drainDelayMs ?? 0,
+        gracefulTimeoutMs: this.configService?.runtime.gracefulTimeoutMs ?? 30_000,
+      }),
       settings: cfg,
     };
   }

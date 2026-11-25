@@ -44,4 +44,15 @@ export interface StorageDriver {
   finalizeTempObject?(tempKey: string, targetKey: string, opts?: PutOptions): Promise<void>;
   /** Hủy bỏ và xóa tệp tạm của phiên tải lên theo chunk */
   abortTempObject?(tempKey: string): Promise<void>;
+  /** Ghi một mảnh dữ liệu độc lập (`tempPrefix.part.XXXXXX`) phục vụ chunked upload stateless đa instance. */
+  putChunkPart?(tempPrefix: string, chunkIndex: number, chunk: Buffer): Promise<number>;
+  /** Ghép các mảnh `.part.XXXXXX` thành object chính thức, tính SHA-256 streaming và dọn các mảnh tạm. */
+  finalizeChunkedParts?(
+    tempPrefix: string,
+    totalChunks: number,
+    targetKey: string,
+    opts?: PutOptions,
+  ): Promise<{ checksumSha256: string; sizeBytes: number }>;
+  /** Xóa toàn bộ các mảnh `.part.*` khi hủy phiên chunked upload. */
+  abortChunkedParts?(tempPrefix: string, totalChunks?: number): Promise<void>;
 }

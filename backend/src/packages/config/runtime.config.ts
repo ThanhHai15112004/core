@@ -29,7 +29,16 @@ export const runtimeConfig = () => {
     actionsEnabled: env('OPS_RUNTIME_ACTIONS_ENABLED', false)
       ? env.boolean('OPS_RUNTIME_ACTIONS_ENABLED')
       : true,
-    gracefulTimeoutMs: env.number('RUNTIME_GRACEFUL_TIMEOUT_MS', false) || 30000,
+    gracefulTimeoutMs: Math.max(
+      1000,
+      env.number('RUNTIME_GRACEFUL_TIMEOUT_MS', false) || 30000,
+    ),
+    /** Thời gian chờ (ms) sau khi chuyển readiness=503 để Load Balancer rút instance khỏi pool trước khi đóng kết nối. */
+    drainDelayMs: (() => {
+      const raw = env('RUNTIME_DRAIN_DELAY_MS', false);
+      if (raw !== '') return Math.max(0, env.number('RUNTIME_DRAIN_DELAY_MS'));
+      return env('NODE_ENV', false) === 'test' ? 0 : 5000;
+    })(),
     worker: {
       concurrency: defaultConcurrency,
       criticalConcurrency: env.number('WORKER_CRITICAL_CONCURRENCY', false) || 10,

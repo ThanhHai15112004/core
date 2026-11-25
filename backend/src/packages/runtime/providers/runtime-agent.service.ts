@@ -49,6 +49,8 @@ export class RuntimeAgentService implements OnApplicationBootstrap, BeforeApplic
   private timers: NodeJS.Timeout[] = [];
   private started = false;
   private registered = false;
+  private drained = false;
+  private subscriber: ReturnType<RedisService['createSubscriber']> | null = null;
   private readonly sampler = new ResourceSampler();
 
   constructor(
@@ -70,9 +72,80 @@ export class RuntimeAgentService implements OnApplicationBootstrap, BeforeApplic
     return this.state;
   }
 
+  /** Kiểm tra process có đang trong giai đoạn rút kết nối (Connection Draining) hay không. */
+  public isDraining(): boolean {
+    return this.state === 'draining';
+  }
+
   /** Kiểm tra process có đang trong giai đoạn tắt dần (graceful shutdown) hay không. */
   public isShuttingDown(): boolean {
     return this.state === 'stopping';
+  }
+
+  /** Số request/job đang xử lý đồng thời (in-flight) do RuntimeContributor báo cáo. */
+  public getInFlightCount(): number {
+    return this.contributor?.getInFlightCount?.() ?? 0;
+  }
+
+  /**
+   * Chuyển runtime sang trạng thái `draining` (ngay khi nhận SIGTERM/SIGINT):
+   * - `/health/ready` trả 503 để Load Balancer ngừng đẩy request mới, `/health/live` vẫn 200.
+   * - Ghi sự kiện `draining` và phát heartbeat ngay lập tức.
+   */
+  public async beginDraining(reason = 'SIGTERM'): Promise<void> {
+    if (this.state === 'draining' || this.state === 'stopping') {
+      return;
+    }
+    this.stopReason = reason;
+    this.state = 'draining';
+    if (!this.started) {
+      return;
+    }
+    await this.recordEvent('draining', {
+      reason,
+      inFlight: this.getInFlightCount(),
+    });
+    await this.beat();
+  }
+
+  /**
+   * Gọi `contributor.drain()` (idempotent) có giới hạn timeout để chờ in-flight requests/jobs hoàn tất.
+   */
+  public async executeContributorDrain(timeoutMs?: number): Promise<void> {
+    if (this.drained) {
+      return;
+    }
+    this.drained = true;
+    const drainFn = this.contributor?.drain;
+    if (typeof drainFn !== 'function') {
+      return;
+    }
+
+    const effectiveTimeoutMs = Math.max(
+      100,
+      timeoutMs ?? this.config.runtime.gracefulTimeoutMs ?? 30_000,
+    );
+    let timer: NodeJS.Timeout | null = null;
+    try {
+      await Promise.race([
+        drainFn.call(this.contributor),
+        new Promise<void>((resolve) => {
+          timer = setTimeout(() => {
+            this.logger.warn(
+              `Contributor drain timed out after ${effectiveTimeoutMs}ms (inFlight=${this.getInFlightCount()})`,
+            );
+            resolve();
+          }, effectiveTimeoutMs);
+          timer.unref();
+        }),
+      ]);
+    } catch (error) {
+      this.logger.warn(
+        `Contributor drain failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
   }
 
   /** Ghi sự kiện `crashed` trước khi process chết vì lỗi không bắt được. */
@@ -132,8 +205,16 @@ export class RuntimeAgentService implements OnApplicationBootstrap, BeforeApplic
 
   /** Thực hiện dọn dẹp tài nguyên trước khi ứng dụng tắt */
   public async beforeApplicationShutdown(): Promise<void> {
+    if (!this.drained) {
+      await this.executeContributorDrain();
+    }
     for (const timer of this.timers) clearInterval(timer);
     this.timers = [];
+    if (this.subscriber) {
+      const sub = this.subscriber;
+      this.subscriber = null;
+      await sub.quit().catch(() => undefined);
+    }
     if (!this.started) return;
     this.sampler.stop();
     this.state = 'stopping';
@@ -159,6 +240,7 @@ export class RuntimeAgentService implements OnApplicationBootstrap, BeforeApplic
     if (!this.redis.isReady()) return;
     const channel = this.keys.commandChannel(this.identity.id);
     const subscriber = this.redis.createSubscriber();
+    this.subscriber = subscriber;
     subscriber.on('message', (ch: string, raw: string) => {
       if (ch !== channel) return;
       const command = safeJsonParse<RuntimeCommand | null>(raw, null);

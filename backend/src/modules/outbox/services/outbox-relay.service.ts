@@ -58,6 +58,7 @@ export class OutboxRelayService implements OnModuleDestroy {
   private pollTimer: NodeJS.Timeout | null = null;
   private pollingActive = false;
   private inFlight = false;
+  private currentTickPromise: Promise<void> | null = null;
   private lastAlertSentAtMs = 0;
 
   constructor(
@@ -120,11 +121,35 @@ export class OutboxRelayService implements OnModuleDestroy {
     }
   }
 
+  /** Dừng vòng poll và chờ batch hiện tại đang gửi (nếu có) hoàn tất trước khi tắt Worker. */
+  public async stopPollingAndDrain(timeoutMs = 15_000): Promise<void> {
+    this.stopPolling();
+    const pending = this.currentTickPromise;
+    if (!pending) return;
+    let timer: NodeJS.Timeout | null = null;
+    try {
+      await Promise.race([
+        pending,
+        new Promise<void>((resolve) => {
+          timer = setTimeout(resolve, Math.max(100, timeoutMs));
+          timer.unref();
+        }),
+      ]);
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  }
+
   private scheduleNextTick(workerId: string, delayMs: number): void {
     if (!this.pollingActive) return;
     if (this.pollTimer) clearTimeout(this.pollTimer);
     this.pollTimer = setTimeout(() => {
-      void this.runPollTick(workerId);
+      const tick = this.runPollTick(workerId).finally(() => {
+        if (this.currentTickPromise === tick) {
+          this.currentTickPromise = null;
+        }
+      });
+      this.currentTickPromise = tick;
     }, delayMs);
     this.pollTimer.unref();
   }

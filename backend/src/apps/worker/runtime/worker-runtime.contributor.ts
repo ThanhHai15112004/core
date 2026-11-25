@@ -7,6 +7,7 @@ import {
   type RuntimeContributor,
   type RuntimeDescriptor,
 } from '@packages/runtime/index.js';
+import { OutboxRelayService } from '@modules/outbox/index.js';
 import type { BaseQueueProcessor } from '../processors/base-queue.processor.js';
 import { SystemProcessor } from '../processors/system/system.processor.js';
 import { CriticalProcessor } from '../processors/critical/critical.processor.js';
@@ -24,6 +25,7 @@ export class WorkerRuntimeContributor implements RuntimeContributor, OnModuleIni
     @Optional() criticalProcessor?: CriticalProcessor,
     @Optional() notificationsProcessor?: NotificationsProcessor,
     @Optional() heavyJobProcessor?: HeavyJobProcessor,
+    @Optional() private readonly outboxRelay?: OutboxRelayService,
   ) {
     this.processors = [
       processor,
@@ -130,8 +132,11 @@ export class WorkerRuntimeContributor implements RuntimeContributor, OnModuleIni
     }
   }
 
-  /** Đóng worker sau khi hoàn tất job đang xử lý. */
+  /** Đóng worker và outbox relay sau khi hoàn tất job/batch đang xử lý. */
   public async drain(): Promise<void> {
-    await Promise.all(this.processors.map((p) => p.worker?.close()));
+    await Promise.all([
+      ...this.processors.map((p) => p.worker?.close()),
+      this.outboxRelay?.stopPollingAndDrain(),
+    ]);
   }
 }

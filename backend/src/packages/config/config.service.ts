@@ -17,6 +17,31 @@ import { metricsConfig, type MetricsConfig } from './metrics.config.js';
 import { tracingConfig, type TracingConfig } from './tracing.config.js';
 import { httpClientConfig, type HttpClientConfig } from './http-client.config.js';
 
+/**
+ * Kiểm tra fail-fast cấu hình Stateless khi chạy `production`:
+ * Ngăn vô tình deploy `STORAGE_DRIVER=local` hoặc `CACHE_DRIVER=memory` lên cụm multi-node.
+ * Mô hình 1 server nhỏ có thể chủ đích opt-in qua `STORAGE_ALLOW_LOCAL_IN_PRODUCTION=true` / `CACHE_ALLOW_MEMORY_IN_PRODUCTION=true`.
+ */
+export function assertProductionStatelessConfig(
+  app: Pick<AppConfig, 'env'>,
+  storage: Pick<StorageConfig, 'driver' | 'allowLocalInProduction'>,
+  cache: Pick<CacheConfig, 'driver' | 'allowMemoryInProduction'>,
+): void {
+  if (app.env !== 'production') {
+    return;
+  }
+  if (storage.driver === 'local' && !storage.allowLocalInProduction) {
+    throw new Error(
+      '[ConfigError] STORAGE_DRIVER=local is forbidden in production because instances must be stateless. Configure STORAGE_DRIVER=s3 (S3/MinIO) or explicitly set STORAGE_ALLOW_LOCAL_IN_PRODUCTION=true for single-server deployments.',
+    );
+  }
+  if (cache.driver === 'memory' && !cache.allowMemoryInProduction) {
+    throw new Error(
+      '[ConfigError] CACHE_DRIVER=memory is forbidden in production because instances must share state. Configure CACHE_DRIVER=redis or explicitly set CACHE_ALLOW_MEMORY_IN_PRODUCTION=true for single-server deployments.',
+    );
+  }
+}
+
 @Injectable()
 export class CoreConfigService {
   public readonly app: AppConfig;
@@ -43,6 +68,7 @@ export class CoreConfigService {
     this.auth = authConfig();
     this.cache = cacheConfig();
     this.storage = storageConfig();
+    assertProductionStatelessConfig(this.app, this.storage, this.cache);
     this.messaging = messagingConfig();
     this.queue = queueConfig();
     this.scheduler = schedulerConfig();

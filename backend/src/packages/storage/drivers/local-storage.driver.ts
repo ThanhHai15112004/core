@@ -1,6 +1,6 @@
 import { createReadStream, promises as fs } from 'node:fs';
 import path from 'node:path';
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { isValidKey, mimeOf } from '../utils/object-kind.js';
 import { StorageObjectError } from '../utils/storage-errors.js';
 import type { ObjectMeta, ObjectStream, PutOptions, StorageDriver } from './storage-driver.js';
@@ -155,5 +155,94 @@ export class LocalStorageDriver implements StorageDriver {
   public async abortTempObject(tempKey: string): Promise<void> {
     const tempFull = await this.resolve(tempKey, false);
     await fs.rm(tempFull, { force: true }).catch(() => undefined);
+  }
+
+  private partKey(tempPrefix: string, chunkIndex: number): string {
+    return `${tempPrefix}.part.${String(chunkIndex).padStart(6, '0')}`;
+  }
+
+  /** Ghi một mảnh dữ liệu độc lập (`<tempPrefix>.part.XXXXXX`) xuống local disk. */
+  public async putChunkPart(
+    tempPrefix: string,
+    chunkIndex: number,
+    chunk: Buffer,
+  ): Promise<number> {
+    await this.put(this.partKey(tempPrefix, chunkIndex), chunk, {
+      contentType: 'application/octet-stream',
+    });
+    return chunk.length;
+  }
+
+  /** Ghép các mảnh `.part.*` theo thứ tự vào file đích, tính SHA-256 streaming và dọn `.part.*`. */
+  public async finalizeChunkedParts(
+    tempPrefix: string,
+    totalChunks: number,
+    targetKey: string,
+  ): Promise<{ checksumSha256: string; sizeBytes: number }> {
+    const targetFull = await this.resolve(targetKey, true);
+    const tmp = path.join(
+      path.dirname(targetFull),
+      `${LOCAL_TMP_PREFIX}${randomBytes(6).toString('hex')}`,
+    );
+    const hash = createHash('sha256');
+    let sizeBytes = 0;
+
+    const handle = await fs.open(tmp, 'w');
+    try {
+      for (let i = 0; i < totalChunks; i++) {
+        const partFull = await this.resolve(this.partKey(tempPrefix, i), false);
+        const stream = createReadStream(partFull);
+        for await (const piece of stream) {
+          const buf = Buffer.isBuffer(piece) ? piece : Buffer.from(piece);
+          hash.update(buf);
+          sizeBytes += buf.length;
+          await handle.write(buf);
+        }
+      }
+    } catch (err) {
+      await handle.close().catch(() => undefined);
+      await fs.rm(tmp, { force: true }).catch(() => undefined);
+      throw err;
+    }
+    await handle.close();
+
+    try {
+      await fs.rename(tmp, targetFull);
+    } catch (err) {
+      await fs.rm(tmp, { force: true }).catch(() => undefined);
+      throw err;
+    }
+
+    await this.abortChunkedParts(tempPrefix, totalChunks);
+    return {
+      checksumSha256: hash.digest('hex'),
+      sizeBytes,
+    };
+  }
+
+  /** Xóa các mảnh `.part.*` trên local disk. */
+  public async abortChunkedParts(tempPrefix: string, totalChunks?: number): Promise<void> {
+    if (typeof totalChunks === 'number' && totalChunks > 0) {
+      await Promise.all(
+        Array.from({ length: totalChunks }, async (_, idx) => {
+          const partFull = await this.resolve(this.partKey(tempPrefix, idx), false).catch(() => null);
+          if (partFull) await fs.rm(partFull, { force: true }).catch(() => undefined);
+        }),
+      );
+      return;
+    }
+    try {
+      const sampleFull = await this.resolve(`${tempPrefix}.part.000000`, false);
+      const dir = path.dirname(sampleFull);
+      const prefix = `${path.basename(tempPrefix)}.part.`;
+      const entries = await fs.readdir(dir).catch(() => []);
+      await Promise.all(
+        entries
+          .filter((name) => name.startsWith(prefix))
+          .map((name) => fs.rm(path.join(dir, name), { force: true }).catch(() => undefined)),
+      );
+    } catch {
+      // Best-effort cleanup
+    }
   }
 }

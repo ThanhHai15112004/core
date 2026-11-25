@@ -343,7 +343,7 @@ export async function initChunkedFileUpload(
   const validated = ctx.validationService.validateChunkedInitInput(input, orgId);
   await assertStorageQuotaWithinLimit(ctx, validated.sizeBytes, orgId, actor?.id ?? null);
 
-  const session = ctx.chunkSessionManager.createSession({
+  const session = await ctx.chunkSessionManager.createSession({
     storagePrefix: ctx.validationService.getStorageKeyPrefix(),
     input,
     originalName: validated.originalName,
@@ -366,7 +366,7 @@ export async function initChunkedFileUpload(
 }
 
 /**
- * Ghi nối tiếp một mảnh dữ liệu (chunk) vào tệp tạm trên đĩa và cập nhật mã băm SHA-256 streaming.
+ * Ghi nối tiếp một mảnh dữ liệu (chunk) vào tệp tạm trên Object Storage (stateless đa instance).
  * Ở mảnh đầu tiên (`chunkIndex === 0`), kiểm tra ngay Magic Bytes và quét mã độc.
  */
 export async function uploadFileChunkPart(
@@ -375,7 +375,7 @@ export async function uploadFileChunkPart(
   input: UploadChunkPartRequest,
   actor?: UserIdentity,
 ): Promise<ChunkedUploadPartResponse> {
-  const session = ctx.chunkSessionManager.getActiveSession(uploadId, actor?.id ?? null);
+  const session = await ctx.chunkSessionManager.getActiveSession(uploadId, actor?.id ?? null);
   const chunkBuffer = ctx.chunkSessionManager.decodeChunkPayload(input, session.originalName);
 
   if (input.chunkIndex === 0) {
@@ -394,7 +394,7 @@ export async function uploadFileChunkPart(
         session.extension,
       );
     } catch (err) {
-      await ctx.chunkSessionManager.abortSession(uploadId, ctx.storage);
+      await ctx.chunkSessionManager.abortSession(uploadId, ctx.storage, session);
       throw err;
     }
   }
@@ -421,8 +421,8 @@ export async function uploadFileChunkPart(
 
 /**
  * Hoàn tất phiên tải lên theo mảnh (Chunked Upload Complete):
- * Đối chiếu tổng số byte đã nhận, chốt mã băm SHA-256 toàn file, kiểm tra trùng lặp,
- * đổi tên nguyên tử tệp tạm sang `storageKey` chính thức và lưu bản ghi DB.
+ * Đối chiếu tổng số byte đã nhận, chốt các mảnh sang `storageKey` chính thức, tính SHA-256 streaming,
+ * kiểm tra trùng lặp và lưu bản ghi DB.
  */
 export async function completeChunkedFileUpload(
   ctx: FilesServiceContext,
@@ -430,21 +430,28 @@ export async function completeChunkedFileUpload(
   input?: CompleteChunkedUploadRequest,
   actor?: UserIdentity,
 ): Promise<FileRecordResponse> {
-  const session = ctx.chunkSessionManager.getActiveSession(uploadId, actor?.id ?? null);
+  const session = await ctx.chunkSessionManager.getActiveSession(uploadId, actor?.id ?? null);
 
   if (
     session.receivedBytes !== session.totalBytes ||
     session.expectedChunkIndex < session.totalChunks
   ) {
-    await ctx.chunkSessionManager.abortSession(uploadId, ctx.storage);
+    await ctx.chunkSessionManager.abortSession(uploadId, ctx.storage, session);
     throw new BadRequestAppException('files.error.incompleteChunkedUpload', [], {
       expectedBytes: session.totalBytes,
       receivedBytes: session.receivedBytes,
     });
   }
 
-  const checksumSha256 = session.sha256Hash.digest('hex');
   const orgId = session.organizationUnitId;
+  const storagePrefix = ctx.validationService.getStorageKeyPrefix();
+  const storageKey = buildImmutableStorageKey(storagePrefix, session.extension);
+  const finalized = await ctx.chunkSessionManager.finalizeToStorageKey(
+    session,
+    storageKey,
+    ctx.storage,
+  );
+  const checksumSha256 = finalized.checksumSha256;
 
   const duplicateMatches =
     typeof ctx.filesRepo.findByChecksumSha256 === 'function'
@@ -461,20 +468,16 @@ export async function completeChunkedFileUpload(
 
   if (existingDuplicate) {
     if (duplicatePolicy === 'REJECT') {
-      await ctx.chunkSessionManager.abortSession(uploadId, ctx.storage);
+      await ctx.storage.delete(storageKey).catch(() => undefined);
       throw new ConflictAppException('files.error.duplicateFileDetected', [], {
         duplicateFileId: existingDuplicate.id,
       });
     }
     if (duplicatePolicy === 'REUSE') {
-      await ctx.chunkSessionManager.abortSession(uploadId, ctx.storage);
+      await ctx.storage.delete(storageKey).catch(() => undefined);
       return ctx.getById(existingDuplicate.id, actor);
     }
   }
-
-  const storagePrefix = ctx.validationService.getStorageKeyPrefix();
-  const storageKey = buildImmutableStorageKey(storagePrefix, session.extension);
-  await ctx.chunkSessionManager.finalizeToStorageKey(session, storageKey, ctx.storage);
 
   const shouldStage =
     Boolean(session.stageForScan) || ctx.validationService.shouldStageBeforePublish(orgId);

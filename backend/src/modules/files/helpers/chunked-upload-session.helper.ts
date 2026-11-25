@@ -1,4 +1,5 @@
-import { createHash, randomUUID, type Hash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
+import type { BaseCacheProvider } from '@packages/cache/index.js';
 import { BadRequestAppException, NotFoundAppException } from '@packages/kernel/index.js';
 import type { StorageContract } from '@packages/storage/index.js';
 import type { FileCategoryCode, FileVisibilityCode } from '../contracts/index.js';
@@ -35,8 +36,6 @@ export interface ActiveChunkedUploadSession {
   readonly rejectDuplicate?: boolean | undefined;
   readonly reuseDuplicate?: boolean | undefined;
   readonly metadata?: Record<string, unknown> | null | undefined;
-  readonly sha256Hash: Hash;
-  readonly fallbackBuffers: Buffer[];
   expectedChunkIndex: number;
   receivedBytes: number;
   malwareScan: MalwareScanResult;
@@ -44,26 +43,72 @@ export interface ActiveChunkedUploadSession {
   expiresAtMs: number;
 }
 
+const CHUNK_SESSION_CACHE_PREFIX = 'files:chunk-session:';
+
+function partStorageKey(tempPrefix: string, chunkIndex: number): string {
+  return `${tempPrefix}.part.${String(chunkIndex).padStart(6, '0')}`;
+}
+
 /**
- * Quản lý các phiên tải lên theo mảnh (Chunked Upload Sessions).
- * Ghi nối tiếp từng mảnh xuống đĩa qua `storage.appendChunk` và cộng dồn mã băm SHA-256 dạng streaming
- * để RAM luôn giữ ở mức vài MB ngay cả khi tải tệp 2GB–5GB+.
+ * Quản lý các phiên tải lên theo mảnh (Chunked Upload Sessions) hoàn toàn **Stateless**:
+ * - Metadata phiên (100% JSON-serializable) được lưu trên Shared Cache (`BaseCacheProvider` / Redis) với TTL,
+ *   cho phép mỗi chunk đi qua bất kỳ API instance nào mà không cần Sticky Session.
+ * - Các mảnh dữ liệu được đẩy thẳng xuống Object Storage (`putChunkPart` / `appendChunk`) và tính SHA-256
+ *   streaming lúc `finalizeChunkedParts`.
+ * - Hỗ trợ fallback `Map` cục bộ khi chạy unit test cô lập không truyền `cacheProvider`.
  */
 export class ChunkedUploadSessionManager {
-  private readonly sessions = new Map<string, ActiveChunkedUploadSession>();
+  private readonly fallbackSessions = new Map<string, ActiveChunkedUploadSession>();
+
+  constructor(private readonly cacheProvider?: BaseCacheProvider | null) {}
+
+  private cacheKey(uploadId: string): string {
+    return `${CHUNK_SESSION_CACHE_PREFIX}${uploadId}`;
+  }
+
+  private getSessionTtlSec(): number {
+    return Math.max(60, Math.ceil(DEFAULT_CHUNK_SESSION_TTL_MS / 1000));
+  }
+
+  private async readSession(uploadId: string): Promise<ActiveChunkedUploadSession | null> {
+    if (this.cacheProvider) {
+      const cached = await this.cacheProvider
+        .get<ActiveChunkedUploadSession>(this.cacheKey(uploadId))
+        .catch(() => null);
+      if (cached) return cached;
+    }
+    return this.fallbackSessions.get(uploadId) ?? null;
+  }
+
+  public async saveSession(session: ActiveChunkedUploadSession): Promise<void> {
+    if (this.cacheProvider) {
+      await this.cacheProvider.set(
+        this.cacheKey(session.uploadId),
+        session,
+        this.getSessionTtlSec(),
+      );
+      return;
+    }
+    this.fallbackSessions.set(session.uploadId, session);
+  }
+
+  private async deleteSession(uploadId: string): Promise<void> {
+    this.fallbackSessions.delete(uploadId);
+    if (this.cacheProvider) {
+      await this.cacheProvider.delete(this.cacheKey(uploadId)).catch(() => undefined);
+    }
+  }
 
   public async cleanupExpired(storage: StorageContract, nowMs = Date.now()): Promise<void> {
-    for (const [id, session] of this.sessions.entries()) {
+    for (const [id, session] of this.fallbackSessions.entries()) {
       if (session.expiresAtMs <= nowMs) {
-        this.sessions.delete(id);
-        if (typeof storage.abortChunkedUpload === 'function') {
-          await storage.abortChunkedUpload(session.tempStorageKey).catch(() => undefined);
-        }
+        this.fallbackSessions.delete(id);
+        await this.cleanupStorageArtifacts(session, storage);
       }
     }
   }
 
-  public createSession(params: {
+  public async createSession(params: {
     storagePrefix: string;
     input: InitChunkedUploadRequest;
     originalName: string;
@@ -75,7 +120,7 @@ export class ChunkedUploadSessionManager {
     folderName: string | null;
     organizationUnitId: number | null;
     actorUserId: number | null;
-  }): ActiveChunkedUploadSession {
+  }): Promise<ActiveChunkedUploadSession> {
     const uploadId = randomUUID();
     const chunkSizeBytes =
       params.input.sizeBytes >= LARGE_FILE_CHUNK_THRESHOLD_BYTES
@@ -110,8 +155,6 @@ export class ChunkedUploadSessionManager {
       rejectDuplicate: params.input.rejectDuplicate,
       reuseDuplicate: params.input.reuseDuplicate,
       metadata: params.input.metadata,
-      sha256Hash: createHash('sha256'),
-      fallbackBuffers: [],
       expectedChunkIndex: 0,
       receivedBytes: 0,
       malwareScan: {
@@ -123,17 +166,17 @@ export class ChunkedUploadSessionManager {
       expiresAtMs: now.getTime() + DEFAULT_CHUNK_SESSION_TTL_MS,
     };
 
-    this.sessions.set(uploadId, session);
+    await this.saveSession(session);
     return session;
   }
 
-  public getActiveSession(
+  public async getActiveSession(
     uploadId: string,
     actorUserId?: number | null,
-  ): ActiveChunkedUploadSession {
-    const session = this.sessions.get(uploadId);
+  ): Promise<ActiveChunkedUploadSession> {
+    const session = await this.readSession(uploadId);
     if (!session || session.expiresAtMs <= Date.now()) {
-      this.sessions.delete(uploadId);
+      await this.deleteSession(uploadId);
       throw new NotFoundAppException('files.error.uploadSessionNotFound');
     }
     if (
@@ -174,6 +217,7 @@ export class ChunkedUploadSessionManager {
     // Hỗ trợ Idempotent Retry: nếu trình duyệt gửi lại đúng mảnh vừa ghi thành công trước đó do đứt mạng tạm thời
     if (session.expectedChunkIndex > 0 && chunkIndex === session.expectedChunkIndex - 1) {
       session.expiresAtMs = Date.now() + DEFAULT_CHUNK_SESSION_TTL_MS;
+      await this.saveSession(session);
       return session.receivedBytes;
     }
 
@@ -186,24 +230,29 @@ export class ChunkedUploadSessionManager {
 
     const nextReceivedBytes = session.receivedBytes + chunkBuffer.length;
     if (nextReceivedBytes > session.totalBytes) {
-      await this.abortSession(session.uploadId, storage);
+      await this.abortSession(session.uploadId, storage, session);
       throw new BadRequestAppException('files.error.chunkSizeExceedsDeclaredTotal', [], {
         declaredBytes: session.totalBytes,
         receivedBytes: nextReceivedBytes,
       });
     }
 
-    session.sha256Hash.update(chunkBuffer);
-
-    if (typeof storage.appendChunk === 'function') {
+    if (typeof storage.putChunkPart === 'function') {
+      await storage.putChunkPart(session.tempStorageKey, chunkIndex, chunkBuffer);
+    } else if (typeof storage.appendChunk === 'function') {
       await storage.appendChunk(session.tempStorageKey, chunkBuffer);
     } else {
-      session.fallbackBuffers.push(chunkBuffer);
+      await storage.upload(
+        partStorageKey(session.tempStorageKey, chunkIndex),
+        chunkBuffer,
+        'application/octet-stream',
+      );
     }
 
     session.expectedChunkIndex += 1;
     session.receivedBytes = nextReceivedBytes;
     session.expiresAtMs = Date.now() + DEFAULT_CHUNK_SESSION_TTL_MS;
+    await this.saveSession(session);
 
     return session.receivedBytes;
   }
@@ -212,31 +261,89 @@ export class ChunkedUploadSessionManager {
     session: ActiveChunkedUploadSession,
     targetStorageKey: string,
     storage: StorageContract,
-  ): Promise<void> {
-    this.sessions.delete(session.uploadId);
-    if (
-      typeof storage.finalizeChunkedUpload === 'function' &&
-      session.fallbackBuffers.length === 0
-    ) {
+  ): Promise<{ checksumSha256: string; sizeBytes: number }> {
+    await this.deleteSession(session.uploadId);
+
+    if (typeof storage.finalizeChunkedParts === 'function') {
+      return storage.finalizeChunkedParts(
+        session.tempStorageKey,
+        session.totalChunks,
+        targetStorageKey,
+        session.mimeType,
+      );
+    }
+
+    if (typeof storage.finalizeChunkedUpload === 'function') {
       await storage.finalizeChunkedUpload(
         session.tempStorageKey,
         targetStorageKey,
         session.mimeType,
       );
-      return;
+      return this.computeStorageObjectHash(storage, targetStorageKey);
     }
-    const combined = Buffer.concat(session.fallbackBuffers);
-    session.fallbackBuffers.length = 0;
+
+    const buffers: Buffer[] = [];
+    for (let i = 0; i < session.totalChunks; i++) {
+      const partKey = partStorageKey(session.tempStorageKey, i);
+      buffers.push(await storage.download(partKey));
+    }
+    const combined = Buffer.concat(buffers);
+    const checksumSha256 = createHash('sha256').update(combined).digest('hex');
     await storage.upload(targetStorageKey, combined, session.mimeType);
+    await Promise.all(
+      Array.from({ length: session.totalChunks }, (_, idx) =>
+        storage.delete(partStorageKey(session.tempStorageKey, idx)).catch(() => undefined),
+      ),
+    );
+    return { checksumSha256, sizeBytes: combined.length };
   }
 
-  public async abortSession(uploadId: string, storage: StorageContract): Promise<void> {
-    const session = this.sessions.get(uploadId);
+  public async abortSession(
+    uploadId: string,
+    storage: StorageContract,
+    knownSession?: ActiveChunkedUploadSession,
+  ): Promise<void> {
+    const session = knownSession ?? (await this.readSession(uploadId));
+    await this.deleteSession(uploadId);
     if (!session) return;
-    this.sessions.delete(uploadId);
-    session.fallbackBuffers.length = 0;
+    await this.cleanupStorageArtifacts(session, storage);
+  }
+
+  private async cleanupStorageArtifacts(
+    session: ActiveChunkedUploadSession,
+    storage: StorageContract,
+  ): Promise<void> {
+    if (typeof storage.abortChunkedParts === 'function') {
+      await storage.abortChunkedParts(session.tempStorageKey, session.totalChunks).catch(() => undefined);
+    } else {
+      await Promise.all(
+        Array.from({ length: session.totalChunks }, (_, idx) =>
+          storage.delete(partStorageKey(session.tempStorageKey, idx)).catch(() => undefined),
+        ),
+      );
+    }
     if (typeof storage.abortChunkedUpload === 'function') {
       await storage.abortChunkedUpload(session.tempStorageKey).catch(() => undefined);
     }
+  }
+
+  private async computeStorageObjectHash(
+    storage: StorageContract,
+    storageKey: string,
+  ): Promise<{ checksumSha256: string; sizeBytes: number }> {
+    const hash = createHash('sha256');
+    let sizeBytes = 0;
+    if (typeof storage.stream === 'function') {
+      const streamRes = await storage.stream(storageKey);
+      for await (const chunk of streamRes.body) {
+        const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+        hash.update(buf);
+        sizeBytes += buf.length;
+      }
+      return { checksumSha256: hash.digest('hex'), sizeBytes };
+    }
+    const buf = await storage.download(storageKey);
+    hash.update(buf);
+    return { checksumSha256: hash.digest('hex'), sizeBytes: buf.length };
   }
 }

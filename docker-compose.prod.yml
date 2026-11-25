@@ -54,11 +54,12 @@ services:
       - .env.docker.prod
     mem_limit: 512m
     mem_reservation: 256m
+    stop_grace_period: 40s
     restart: always
     networks:
       - core_prod_net
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3005/api/v1/health >/dev/null || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3005/api/v1/health/ready >/dev/null || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 5
@@ -86,6 +87,7 @@ services:
       - .env.docker.prod
     mem_limit: 512m
     mem_reservation: 256m
+    stop_grace_period: 40s
     restart: always
     depends_on:
       backend:
@@ -118,6 +120,7 @@ services:
       - .env.docker.prod
     mem_limit: 256m
     mem_reservation: 128m
+    stop_grace_period: 40s
     restart: always
     depends_on:
       backend:

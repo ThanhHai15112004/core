@@ -17,4 +17,6 @@ export interface RuntimeContributor {
   capabilities?(): { pause: boolean };
   /** Chờ việc đang chạy hoàn tất trước khi tắt process (graceful shutdown). */
   drain?(): Promise<void>;
+  /** Số request/tác vụ đang chạy đồng thời (in-flight) tại thời điểm hiện tại. */
+  getInFlightCount?(): number;
 }

@@ -32,7 +32,9 @@ export function deriveRuntimeStatus(input: StatusInput): {
   if (!input.telemetryAvailable) return { status: 'unknown', reasons: [{ code: 'noTelemetry' }] };
 
   if (hb) {
-    if (hb.state === 'stopping') return { status: 'stopping', reasons: [] };
+    if (hb.state === 'stopping' || hb.state === 'draining') {
+      return { status: 'stopping', reasons: [] };
+    }
     if (hb.state === 'paused') return { status: 'stopped', reasons: [{ code: 'paused' }] };
     if (hb.uptimeSec < STARTING_GRACE_SEC) return { status: 'starting', reasons: [] };
 

@@ -1,6 +1,7 @@
 import { Global, Module, type OnModuleInit, Optional } from '@nestjs/common';
 import { HttpAdapterHost } from '@nestjs/core';
 import { CoreConfigService } from '@packages/config/index.js';
+import { RedisService } from '@packages/redis/index.js';
 import { SECRET_PROVIDER } from './contracts/secret-provider.contract.js';
 import { EnvironmentSecretProvider } from './providers/env-secret.provider.js';
 import { FileSecretProvider } from './providers/file-secret.provider.js';
@@ -170,7 +171,15 @@ export function configureFastifyPlatformSecurityHooks(
     TokenService,
     DataScopeService,
     AuditLogService,
-    PlatformSecurityService,
+    {
+      provide: PlatformSecurityService,
+      useFactory: (
+        auditLogService: AuditLogService,
+        configService: CoreConfigService,
+        redisService?: RedisService,
+      ) => new PlatformSecurityService(auditLogService, configService, redisService),
+      inject: [AuditLogService, CoreConfigService, { token: RedisService, optional: true }],
+    },
     AuthGuard,
     SecurityManageableAdapter,
   ],
@@ -186,7 +195,15 @@ export function configureFastifyPlatformSecurityHooks(
     TokenService,
     DataScopeService,
     AuditLogService,
-    PlatformSecurityService,
+    {
+      provide: PlatformSecurityService,
+      useFactory: (
+        auditLogService: AuditLogService,
+        configService: CoreConfigService,
+        redisService?: RedisService,
+      ) => new PlatformSecurityService(auditLogService, configService, redisService),
+      inject: [AuditLogService, CoreConfigService, { token: RedisService, optional: true }],
+    },
     AuthGuard,
     SecurityManageableAdapter,
   ],

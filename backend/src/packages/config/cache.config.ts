@@ -31,6 +31,8 @@ export const cacheConfig = () => ({
   },
   /** `redis`: dùng chung giữa các runtime (key `<prefix>cache:*`); `memory`: Map riêng từng process. */
   driver: (env('CACHE_DRIVER', false) === 'memory' ? 'memory' : 'redis') as CacheDriverName,
+  /** Chỉ bật `true` khi chủ đích triển khai đơn node (1 server nhỏ) dùng memory cache ở production. */
+  allowMemoryInProduction: booleanOr('CACHE_ALLOW_MEMORY_IN_PRODUCTION', false),
   /** TTL mặc định khi `set()` không truyền TTL; 0 = không hết hạn. */
   defaultTtlSec: numberOr('CACHE_DEFAULT_TTL_SEC', 0),
   /** Số segment tối đa của namespace (`data:users:12` → `data:users`). */

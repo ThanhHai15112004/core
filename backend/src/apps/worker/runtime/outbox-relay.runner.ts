@@ -1,7 +1,7 @@
 import {
   Injectable,
+  type BeforeApplicationShutdown,
   type OnApplicationBootstrap,
-  type OnApplicationShutdown,
 } from '@nestjs/common';
 import { CoreConfigService } from '@packages/config/index.js';
 import { OutboxRelayService } from '@modules/outbox/index.js';
@@ -11,7 +11,7 @@ import { OutboxRelayService } from '@modules/outbox/index.js';
  * và đẩy sự kiện an toàn ra Queue/Broker; dừng êm khi Worker shutdown.
  */
 @Injectable()
-export class OutboxRelayRunner implements OnApplicationBootstrap, OnApplicationShutdown {
+export class OutboxRelayRunner implements OnApplicationBootstrap, BeforeApplicationShutdown {
   constructor(
     private readonly outboxRelay: OutboxRelayService,
     private readonly config: CoreConfigService,
@@ -22,7 +22,9 @@ export class OutboxRelayRunner implements OnApplicationBootstrap, OnApplicationS
     this.outboxRelay.startPolling();
   }
 
-  public onApplicationShutdown(): void {
-    this.outboxRelay.stopPolling();
+  public async beforeApplicationShutdown(): Promise<void> {
+    await this.outboxRelay.stopPollingAndDrain(
+      Math.min(15_000, this.config.runtime.gracefulTimeoutMs),
+    );
   }
 }
