@@ -82,9 +82,16 @@ export class DatabaseMonitorService implements OnApplicationBootstrap, OnModuleD
 
   /** Một chu kỳ (public để test). */
   public async tick(now = Date.now()): Promise<void> {
-    if (this.running || !this.store.isAvailable()) return;
+    if (this.running) return;
     this.running = true;
     try {
+      // Pool TypeORM là tài nguyên cục bộ của từng instance → ghi metric cho instance này trước khi tranh lock Redis.
+      const connectedDriver = this.connection.connected()?.driver;
+      if (connectedDriver) {
+        const localPool = readPoolStats(connectedDriver);
+        this.metrics.recordPool(localPool, this.config.database.maxConnections);
+      }
+      if (!this.store.isAvailable()) return;
       const locked = await this.store.client.set(
         this.store.keys.collectLock(),
         String(now),
@@ -93,7 +100,7 @@ export class DatabaseMonitorService implements OnApplicationBootstrap, OnModuleD
         'NX',
       );
       if (locked !== 'OK') return;
-      const snapshot = this.connection.connected() ? await this.collect(now) : null;
+      const snapshot = connectedDriver ? await this.collect(now) : null;
       await this.evaluate(snapshot, now);
     } catch (err) {
       this.logger.warn(

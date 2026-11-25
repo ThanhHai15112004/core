@@ -1,5 +1,15 @@
-import { Inject, Injectable } from '@nestjs/common';
-import { Counter, Gauge, Histogram, Registry, collectDefaultMetrics } from 'prom-client';
+import * as os from 'node:os';
+import { Inject, Injectable, Optional } from '@nestjs/common';
+import {
+  Counter,
+  Gauge,
+  Histogram,
+  Registry,
+  collectDefaultMetrics,
+  type MetricObjectWithValues,
+  type MetricValue,
+} from 'prom-client';
+import { CoreConfigService } from '@packages/config/index.js';
 import { METRICS_OPTIONS, type MetricsModuleOptions } from '../contracts/metrics.types.js';
 
 /** Bucket (giây) cho thời gian xử lý HTTP/job — đủ mịn để tính p95/p99 bằng `histogram_quantile`. */
@@ -7,23 +17,43 @@ export const DURATION_BUCKETS = [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.
 
 /**
  * Registry prom-client của runtime. Mỗi instance có registry riêng (không dùng registry toàn cục) để test tạo nhiều
- * app trong cùng process không bị "metric already registered". Mọi metric mang nhãn `runtime`.
+ * app trong cùng process không bị "metric already registered". Mọi metric mang nhãn `runtime`, `instance`, `version`.
  */
 @Injectable()
 export class MetricsRegistryService {
   public readonly registry = new Registry();
   public readonly runtime: string;
-  public readonly httpDuration: Histogram<'method' | 'route' | 'status'>;
+  public readonly instance: string;
+  public readonly version: string;
+  public readonly httpDuration: Histogram<'method' | 'route' | 'status' | 'module'>;
+  public readonly httpRequestsTotal: Counter<
+    'method' | 'route' | 'status' | 'status_class' | 'module'
+  >;
 
-  constructor(@Inject(METRICS_OPTIONS) options: MetricsModuleOptions) {
+  constructor(
+    @Inject(METRICS_OPTIONS) options: MetricsModuleOptions,
+    @Optional() config?: CoreConfigService,
+  ) {
     this.runtime = options.runtime;
-    this.registry.setDefaultLabels({ runtime: options.runtime });
+    this.instance = options.instance ?? config?.app.instanceId ?? `${os.hostname()}:${process.pid}`;
+    this.version = options.version ?? config?.app.version ?? '1.0.0';
+    this.registry.setDefaultLabels({
+      runtime: this.runtime,
+      instance: this.instance,
+      version: this.version,
+    });
     collectDefaultMetrics({ register: this.registry });
     this.httpDuration = new Histogram({
       name: 'http_request_duration_seconds',
       help: 'HTTP request duration in seconds',
-      labelNames: ['method', 'route', 'status'],
+      labelNames: ['method', 'route', 'status', 'module'],
       buckets: DURATION_BUCKETS,
+      registers: [this.registry],
+    });
+    this.httpRequestsTotal = new Counter({
+      name: 'http_requests_total',
+      help: 'Total HTTP API requests by method, route, status, status_class and module',
+      labelNames: ['method', 'route', 'status', 'status_class', 'module'],
       registers: [this.registry],
     });
   }
@@ -61,6 +91,11 @@ export class MetricsRegistryService {
   /** Nội dung định dạng text exposition của Prometheus. */
   public metrics(): Promise<string> {
     return this.registry.metrics();
+  }
+
+  /** Xuất toàn bộ metric trong registry ở dạng JSON (dùng cho local fallback khi không có Prometheus). */
+  public getMetricsJson(): Promise<MetricObjectWithValues<MetricValue<string>>[]> {
+    return this.registry.getMetricsAsJSON();
   }
 
   /** Đếm tổng số lượng mẫu đo lường hiện có */

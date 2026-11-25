@@ -12,6 +12,7 @@ import { schVi } from './console/sch.vi';
 import { perfVi } from './console/perf.vi';
 import { rtVi } from './console/rt.vi';
 import { govVi } from './console/gov.vi';
+import { metricsAlertsVi } from './console/metrics-alerts.vi';
 
 export const vi = {
   ui: uiVi,
@@ -20,6 +21,7 @@ export const vi = {
     runtimes: 'Runtimes',
     'http-traffic': 'HTTP Traffic',
     performance: 'Hiệu năng',
+    'metrics-alerts': 'Metrics & Cảnh báo',
     database: 'Cơ sở dữ liệu',
     cache: 'Bộ nhớ đệm',
     storage: 'Lưu trữ',
@@ -185,6 +187,7 @@ export const vi = {
   perf: perfVi,
   rt: rtVi,
   gov: govVi,
+  metricsAlerts: metricsAlertsVi,
 };
 
 export type TranslationKey = typeof vi;

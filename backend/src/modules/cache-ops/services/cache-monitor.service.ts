@@ -125,7 +125,11 @@ export class CacheMonitorService implements OnApplicationBootstrap, OnModuleDest
 
   /** Thu thập các chỉ số đo lường định kỳ từ hệ thống */
   private async collect(now: number): Promise<Collected> {
-    const keyspace = await this.monitoring.refreshKeyspace().catch(() => null);
+    const [keyspace, pingMs] = await Promise.all([
+      this.monitoring.refreshKeyspace().catch(() => null),
+      this.redis ? this.redis.measurePingMs().catch(() => null) : Promise.resolve(null),
+    ]);
+    this.metrics.recordPingLatency(pingMs);
 
     const out: Collected = {
       keyspace,

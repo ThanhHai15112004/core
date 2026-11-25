@@ -4,6 +4,9 @@ import type { RuntimeId } from '../contracts/runtime.types.js';
 /** Tất cả key Redis của runtime telemetry (đã có REDIS_PREFIX). */
 export const runtimeKeys = (redis: RedisService) => ({
   heartbeat: (id: RuntimeId) => redis.key('runtime', 'hb', id),
+  instanceHeartbeat: (id: RuntimeId, instance: string) =>
+    redis.key('runtime', 'hb', 'instance', id, instance),
+  instanceIndex: (id: RuntimeId) => redis.key('runtime', 'instances', id),
   starts: (id: RuntimeId) => redis.key('runtime', 'starts', id),
   paused: (id: RuntimeId) => redis.key('runtime', 'paused', id),
   commandChannel: (id: RuntimeId) => redis.key('runtime', 'cmd', id),

@@ -118,7 +118,7 @@ export class WorkerMonitorService implements OnApplicationBootstrap, OnModuleDes
           ])
         : [null, null];
       const consumers = await this.messaging.consumers().catch(() => [] as ConsumerRegistration[]);
-      if (queues) this.record(queues);
+      if (queues) this.record(queues, now);
       await this.evaluate(queues, active, consumers, now);
     } catch (err) {
       this.logger.warn(
@@ -130,8 +130,8 @@ export class WorkerMonitorService implements OnApplicationBootstrap, OnModuleDes
   }
 
   /** Ghi nhận một sự kiện vận hành mới vào bộ nhớ */
-  private record(queues: QueueInfo[]): void {
-    this.metrics.recordQueues(queues);
+  private record(queues: QueueInfo[], now: number): void {
+    this.metrics.recordQueues(queues, now);
   }
 
   /** Lỗi consume trong `since` → nay, đọc từ job lỗi còn trong broker (Dead Letter + chờ retry). */

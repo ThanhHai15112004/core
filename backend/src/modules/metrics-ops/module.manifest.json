@@ -1,0 +1,26 @@
+{
+  "$schema": "../../packages/kernel/schemas/module.manifest.schema.json",
+  "name": "metrics-ops",
+  "displayName": "Metrics & Alerting Monitor",
+  "version": "1.0.0",
+  "description": "Module tổng hợp metrics hệ thống (HTTP theo API/status/module/version, p50/p95/p99, instance CPU/RAM/EventLoop, DB pool, Queue backlog/tuổi Job, Redis & Provider latency) và rule cảnh báo theo mức độ nghiêm trọng (Mục 12.3)",
+  "type": "core",
+  "category": "operations",
+  "author": "Core Platform Team",
+  "entryModule": "MetricsOpsModule",
+  "dependencies": ["metrics", "database", "redis", "http-client", "notifications"],
+  "permissions": [],
+  "events": {
+    "publishes": [
+      "metrics.alert.fired",
+      "metrics.alert.resolved"
+    ]
+  },
+  "database": {
+    "hasMigrations": true,
+    "tables": [
+      "alert_rules",
+      "alert_events"
+    ]
+  }
+}

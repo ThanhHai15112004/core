@@ -1,7 +1,8 @@
-import { Injectable } from '@nestjs/common';
-import type { Gauge } from 'prom-client';
+import { Injectable, Optional, type OnModuleDestroy } from '@nestjs/common';
+import type { Gauge, Histogram } from 'prom-client';
 import type { KeyspaceSnapshot, ServerInfo } from '@packages/cache/index.js';
 import { MetricsRegistryService, PrometheusQueryClient, round } from '@packages/metrics/index.js';
+import { RedisService } from '@packages/redis/index.js';
 
 /**
  * Số đo cache trong một khoảng, đọc lại từ Prometheus. Nguồn là Redis `INFO` (toàn server, không theo namespace)
@@ -28,6 +29,10 @@ export interface CacheSeriesDef {
 }
 
 /** Gauge Prometheus của cache (chỉ instance giữ lock của monitor ghi mỗi chu kỳ). */
+export const REDIS_LATENCY_BUCKETS = [
+  0.0005, 0.001, 0.0025, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1,
+];
+
 export const CACHE_GAUGES = {
   hits: 'core_redis_keyspace_hits',
   misses: 'core_redis_keyspace_misses',
@@ -40,6 +45,9 @@ export const CACHE_GAUGES = {
   bytes: 'core_cache_bytes',
 } as const;
 
+export const REDIS_LATENCY_HISTOGRAM = 'core_redis_latency_seconds';
+export const REDIS_PING_GAUGE = 'core_redis_ping_duration_seconds';
+
 const MAX_POINTS = 120;
 
 /** Tính toán tỷ lệ cache hit rate của hệ thống */
@@ -47,12 +55,16 @@ export const hitRate = (hits: number | null, reads: number | null) =>
   hits !== null && reads ? round((hits / reads) * 100, 2) : null;
 
 @Injectable()
-export class CacheMetricsService {
+export class CacheMetricsService implements OnModuleDestroy {
   private readonly gauges: Record<keyof typeof CACHE_GAUGES, Gauge>;
+  private readonly commandLatency: Histogram<'operation'>;
+  private readonly pingGauge: Gauge;
+  private readonly unsubscribeLatency: (() => void) | null;
 
   constructor(
     registry: MetricsRegistryService,
     private readonly prom: PrometheusQueryClient,
+    @Optional() redis?: RedisService,
   ) {
     const help: Record<keyof typeof CACHE_GAUGES, string> = {
       hits: 'Redis INFO keyspace_hits (cumulative, server-wide)',
@@ -71,6 +83,29 @@ export class CacheMetricsService {
         registry.gauge(name, help[k as keyof typeof CACHE_GAUGES]),
       ]),
     ) as Record<keyof typeof CACHE_GAUGES, Gauge>;
+    this.commandLatency = registry.histogram(
+      REDIS_LATENCY_HISTOGRAM,
+      'Redis command execution latency in seconds',
+      ['operation'],
+      REDIS_LATENCY_BUCKETS,
+    );
+    this.pingGauge = registry.gauge(REDIS_PING_GAUGE, 'Last measured Redis PING latency in seconds');
+    this.unsubscribeLatency = redis
+      ? redis.registerLatencyObserver((operation, durationMs) => {
+          this.commandLatency.observe({ operation }, durationMs / 1000);
+        })
+      : null;
+  }
+
+  public onModuleDestroy(): void {
+    this.unsubscribeLatency?.();
+  }
+
+  /** Ghi nhận độ trễ PING Redis (ms) lên gauge Prometheus. */
+  public recordPingLatency(ms: number | null): void {
+    if (ms !== null && Number.isFinite(ms)) {
+      this.pingGauge.set(ms / 1000);
+    }
   }
 
   /** Ghi gauge từ snapshot của monitor (giá trị null → không ghi, Prometheus giữ khoảng trống). */

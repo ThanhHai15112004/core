@@ -118,6 +118,20 @@
       "position": "SYSTEM_CONSOLE"
     },
     {
+      "code": "SC_METRICS_ALERTS",
+      "name": "Metrics & Cảnh báo",
+      "status": 1,
+      "link": "/system-console/metrics-alerts",
+      "linkApi": "/api/v1/ops/metrics/overview",
+      "type": 2,
+      "parentCode": "SC_RUNTIME_TRAFFIC",
+      "level": 2,
+      "key": "settings.read",
+      "numOrder": 4,
+      "icon": "BellRing",
+      "position": "SYSTEM_CONSOLE"
+    },
+    {
       "code": "SC_INFRASTRUCTURE",
       "name": "Hạ tầng",
       "status": 1,

@@ -12,6 +12,7 @@ import { schEn } from './console/sch.en';
 import { perfEn } from './console/perf.en';
 import { rtEn } from './console/rt.en';
 import { govEn } from './console/gov.en';
+import { metricsAlertsEn } from './console/metrics-alerts.en';
 import { uiEn } from './ui.en';
 
 export const en: TranslationKey = {
@@ -21,6 +22,7 @@ export const en: TranslationKey = {
     runtimes: 'Runtimes',
     'http-traffic': 'HTTP Traffic',
     performance: 'Performance',
+    'metrics-alerts': 'Metrics & Alerts',
     database: 'Database',
     cache: 'Cache',
     storage: 'Storage',
@@ -186,4 +188,5 @@ export const en: TranslationKey = {
   perf: perfEn,
   rt: rtEn,
   gov: govEn,
+  metricsAlerts: metricsAlertsEn,
 };

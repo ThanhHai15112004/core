@@ -71,6 +71,9 @@ export const API_ROUTES = {
       EVENTS: (qs: string) => `${OPS_PREFIX}/performance/events?${qs}`,
       COMPONENT: (id: string, qs: string) => `${OPS_PREFIX}/performance/components/${id}?${qs}`,
     },
+    METRICS: {
+      path: (path: string, qs = '') => `${OPS_PREFIX}/metrics/${path}${qs ? `?${qs}` : ''}`,
+    },
   },
   AUTH: {
     REGISTER: '/auth/register',

@@ -1,0 +1,8 @@
+{
+  "error.ruleNotFound": "Alert rule #{id} not found",
+  "error.ruleCodeDuplicate": "Alert rule code '{code}' already exists",
+  "error.eventNotFound": "Alert event #{id} not found",
+  "error.invalidWebhookUrl": "Invalid alert webhook URL (only http/https is allowed)",
+  "error.cannotDeleteSystemRule": "System default alert rule cannot be deleted; disable it instead",
+  "alert.summary": "[{severity}] {ruleName}: {metricKey} is {value}{unit} (threshold {operator} {threshold}{unit})"
+}

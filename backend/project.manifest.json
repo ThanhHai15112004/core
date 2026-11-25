@@ -17,6 +17,7 @@
     "scheduler-ops",
     "jobs-ops",
     "logs-ops",
+    "metrics-ops",
     "runtimes",
     "traffic",
     "performance",

@@ -6,4 +6,5 @@ export * from './providers/metrics-server.js';
 export * from './providers/metrics-manageable.adapter.js';
 export * from './providers/http-metrics.hook.js';
 export * from './utils/metric-math.js';
+export * from './utils/http-module.util.js';
 export * from './metrics.module.js';

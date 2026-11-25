@@ -1,3 +1,4 @@
+import { performance } from 'node:perf_hooks';
 import { Inject, Injectable, Logger, Optional, type OnApplicationShutdown } from '@nestjs/common';
 import type { Redis, RedisOptions } from 'ioredis';
 import type { ConnectionOptions } from 'bullmq';
@@ -6,6 +7,48 @@ import { RUNTIME_IDENTITY } from '@packages/runtime/constants/runtime.tokens.js'
 import { REDIS_CLIENT_FACTORY, type RedisClientFactory } from './redis.constants.js';
 
 const MAX_RETRY_DELAY_MS = 5000;
+const MAX_LATENCY_SAMPLES = 200;
+
+const TRACKED_COMMANDS = new Set([
+  'get',
+  'set',
+  'del',
+  'hget',
+  'hset',
+  'hgetall',
+  'lpush',
+  'rpush',
+  'xadd',
+  'xrange',
+  'scan',
+  'info',
+  'ping',
+  'eval',
+  'exec',
+]);
+
+export type RedisLatencyObserver = (operation: string, durationMs: number) => void;
+
+export interface RedisLatencySnapshot {
+  count: number;
+  avgMs: number | null;
+  p50Ms: number | null;
+  p95Ms: number | null;
+  p99Ms: number | null;
+  lastPingMs: number | null;
+}
+
+function normalizeRedisCommand(name: unknown): string {
+  const op = typeof name === 'string' ? name.toLowerCase() : 'other';
+  return TRACKED_COMMANDS.has(op) ? op : 'other';
+}
+
+function quantile(sorted: readonly number[], q: number): number | null {
+  if (sorted.length === 0) return null;
+  const idx = Math.min(sorted.length - 1, Math.max(0, Math.ceil(sorted.length * q) - 1));
+  const val = sorted[idx];
+  return val === undefined ? null : Math.round(val * 100) / 100;
+}
 
 /**
  * Kết nối Redis dùng chung cho mọi runtime.
@@ -19,6 +62,9 @@ export class RedisService implements OnApplicationShutdown {
   private readonly options: RedisOptions;
   private readonly prefix: string;
   private readonly subscribers: Redis[] = [];
+  private readonly latencySamples: number[] = [];
+  private readonly latencyObservers = new Set<RedisLatencyObserver>();
+  private lastPingMs: number | null = null;
   private lastError: string | null = null;
   public readonly client: Redis;
   /** Tên kết nối `core-<runtime>` (CLIENT SETNAME). */
@@ -110,14 +156,102 @@ export class RedisService implements OnApplicationShutdown {
     return sub;
   }
 
+  /** Đăng ký observer nhận độ trễ từng lệnh Redis (trả về hàm hủy đăng ký). */
+  public registerLatencyObserver(observer: RedisLatencyObserver): () => void {
+    this.latencyObservers.add(observer);
+    return () => {
+      this.latencyObservers.delete(observer);
+    };
+  }
+
+  /** Đo RTT lệnh PING tới Redis (ms); trả về `null` nếu chưa sẵn sàng hoặc lỗi. */
+  public async measurePingMs(): Promise<number | null> {
+    if (!this.isReady()) return null;
+    const started = performance.now();
+    try {
+      await this.client.ping();
+      const ms = Math.round((performance.now() - started) * 100) / 100;
+      this.lastPingMs = ms;
+      return ms;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Ảnh chụp phân vị độ trễ lệnh Redis (p50/p95/p99, avg, lastPingMs) từ ring buffer. */
+  public getLatencySnapshot(): RedisLatencySnapshot {
+    const count = this.latencySamples.length;
+    if (count === 0) {
+      return {
+        count: 0,
+        avgMs: null,
+        p50Ms: null,
+        p95Ms: null,
+        p99Ms: null,
+        lastPingMs: this.lastPingMs,
+      };
+    }
+    const sorted = [...this.latencySamples].sort((a, b) => a - b);
+    const sum = sorted.reduce((acc, v) => acc + v, 0);
+    return {
+      count,
+      avgMs: Math.round((sum / count) * 100) / 100,
+      p50Ms: quantile(sorted, 0.5),
+      p95Ms: quantile(sorted, 0.95),
+      p99Ms: quantile(sorted, 0.99),
+      lastPingMs: this.lastPingMs,
+    };
+  }
+
   /** Đóng ở pha cuối để các provider khác còn ghi được sự kiện lúc shutdown. */
   public async onApplicationShutdown(): Promise<void> {
     await Promise.allSettled([this.client, ...this.subscribers].map((c) => c.quit()));
   }
 
+  /** Ghi nhận mẫu độ trễ vào ring buffer và thông báo cho các observer. */
+  private recordCommandLatency(operation: string, durationMs: number): void {
+    if (!Number.isFinite(durationMs) || durationMs < 0) return;
+    this.latencySamples.push(durationMs);
+    if (this.latencySamples.length > MAX_LATENCY_SAMPLES) {
+      this.latencySamples.shift();
+    }
+    for (const observer of this.latencyObservers) {
+      try {
+        observer(operation, durationMs);
+      } catch {
+        // Bỏ qua lỗi từ observer đo lường để không ảnh hưởng luồng Redis chính.
+      }
+    }
+  }
+
+  /** Bọc `sendCommand` của ioredis (nếu có) để đo độ trễ lệnh mà vẫn tương thích mock client trong test. */
+  private instrumentClient(client: Redis): void {
+    const rawSend = (client as unknown as { sendCommand?: (cmd: unknown) => unknown }).sendCommand;
+    if (typeof rawSend !== 'function') return;
+
+    (client as unknown as { sendCommand: (cmd: unknown) => unknown }).sendCommand = (
+      command: unknown,
+    ) => {
+      const cmdObj = command as { name?: unknown; promise?: Promise<unknown> } | null;
+      const started = performance.now();
+      const op = normalizeRedisCommand(cmdObj?.name);
+      const result = rawSend.call(client, command);
+      const promise = cmdObj?.promise;
+      if (promise && typeof promise.finally === 'function') {
+        void promise
+          .finally(() => {
+            this.recordCommandLatency(op, performance.now() - started);
+          })
+          .catch(() => undefined);
+      }
+      return result;
+    };
+  }
+
   /** Khởi tạo một client kết nối mới tới dịch vụ */
   private createClient(overrides: Partial<RedisOptions> = {}): Redis {
     const client = this.factory({ ...this.options, ...overrides });
+    this.instrumentClient(client);
     client.on('ready', () => {
       if (this.lastError) this.logger.log('Redis connection restored');
       this.lastError = null;

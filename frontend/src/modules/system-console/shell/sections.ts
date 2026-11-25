@@ -1,6 +1,7 @@
 import { lazy, type ComponentType, type LazyExoticComponent } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import {
+  BellRing,
   Boxes,
   Clock,
   Cpu,
@@ -29,6 +30,7 @@ import { routeIdOf } from '../utils/traffic-format';
 import { SCHEDULER_RANGES, SCHEDULER_TABS } from '../constants/scheduler';
 import { RUNTIME_RANGES } from '../constants/runtime-metrics';
 import { PERF_RANGES, PERF_TABS } from '../constants/performance';
+import { METRICS_ALERTS_RANGES, METRICS_ALERTS_TABS } from '../constants/metrics-alerts';
 import { DB_RANGES, DB_TABS } from '../constants/database';
 import { WORKER_PAGE_TABS, WORKER_RANGES } from '../constants/worker';
 import { JOBS_RANGES, JOBS_TABS, SHORT_ID_HEAD } from '../constants/jobs';
@@ -97,6 +99,15 @@ export const SECTIONS: SectionDef[] = [
     controls: { ranges: PERF_RANGES },
     crumb: (p, t) => ((PERF_TABS as readonly string[]).includes(p[0] ?? '') ? t(`perf.tab.${p[0]}`) : null),
     keywords: ['latency', 'bottleneck', 'cpu'],
+  },
+  {
+    id: 'metrics-alerts',
+    group: 'runtime-traffic',
+    icon: BellRing,
+    component: load(() => import('../sections/metrics-alerts/MetricsAlertsSection'), 'MetricsAlertsSection'),
+    controls: { ranges: METRICS_ALERTS_RANGES },
+    crumb: (p, t) => ((METRICS_ALERTS_TABS as readonly string[]).includes(p[0] ?? '') ? t(`metricsAlerts.tab.${p[0]}`) : null),
+    keywords: ['metrics', 'alert', 'rule', 'latency', 'p95', 'p99', 'redis'],
   },
   {
     id: 'database',
@@ -222,6 +233,7 @@ const MENU_CODE_TO_SECTION: Record<string, ConsoleSectionId> = {
   SC_RUNTIMES: 'runtimes',
   SC_HTTP_TRAFFIC: 'http-traffic',
   SC_PERFORMANCE: 'performance',
+  SC_METRICS_ALERTS: 'metrics-alerts',
   SC_DATABASE: 'database',
   SC_CACHE: 'cache',
   SC_STORAGE: 'storage',
@@ -245,6 +257,7 @@ const MENU_CODE_TO_GROUP: Record<string, SectionGroupId> = {
 };
 
 const ICON_BY_NAME: Record<string, LucideIcon> = {
+  BellRing,
   Boxes,
   Clock,
   Cpu,

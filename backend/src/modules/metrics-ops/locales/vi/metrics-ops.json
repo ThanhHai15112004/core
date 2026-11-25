@@ -1,0 +1,8 @@
+{
+  "error.ruleNotFound": "Không tìm thấy rule cảnh báo #{id}",
+  "error.ruleCodeDuplicate": "Mã rule cảnh báo '{code}' đã tồn tại",
+  "error.eventNotFound": "Không tìm thấy sự kiện cảnh báo #{id}",
+  "error.invalidWebhookUrl": "URL webhook cảnh báo không hợp lệ (chỉ chấp nhận http/https)",
+  "error.cannotDeleteSystemRule": "Không thể xóa rule cảnh báo mặc định của hệ thống; hãy tắt rule thay thế",
+  "alert.summary": "[{severity}] {ruleName}: {metricKey} đạt {value}{unit} (ngưỡng {operator} {threshold}{unit})"
+}

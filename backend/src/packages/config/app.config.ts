@@ -1,3 +1,4 @@
+import * as os from 'node:os';
 import { env } from './env.js';
 
 /** Chuyển đổi giá trị sang kiểu số hoặc trả về giá trị mặc định */
@@ -9,6 +10,8 @@ const numberOr = (key: string, fallback: number): number => {
 /** Lấy thông tin cấu hình ứng dụng từ môi trường */
 export const appConfig = () => ({
   name: env('APP_NAME'),
+  version: env('APP_VERSION', false) || '1.0.0',
+  instanceId: env('INSTANCE_ID', false) || `${os.hostname()}:${process.pid}`,
   env: env('NODE_ENV'),
   port: env.number('PORT'),
   host: env('HOST'),

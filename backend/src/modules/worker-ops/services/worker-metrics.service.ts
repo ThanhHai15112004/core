@@ -42,6 +42,7 @@ export interface JobCounts {
 }
 
 export const QUEUE_JOBS_METRIC = 'core_queue_jobs';
+export const QUEUE_OLDEST_JOB_AGE_METRIC = 'core_queue_oldest_job_age_seconds';
 const MAX_POINTS = 120;
 const QUEUE_STATES = ['waiting', 'active', 'delayed', 'failed'] as const;
 
@@ -70,6 +71,7 @@ const emptyStats = (): QueueStats => ({
 @Injectable()
 export class WorkerMetricsService {
   private readonly queueJobs: Gauge<'queue' | 'state'>;
+  private readonly oldestJobAge: Gauge<'queue'>;
 
   constructor(
     private readonly prom: PrometheusQueryClient,
@@ -79,15 +81,23 @@ export class WorkerMetricsService {
       'queue',
       'state',
     ]);
+    this.oldestJobAge = metrics.gauge(
+      QUEUE_OLDEST_JOB_AGE_METRIC,
+      'Age in seconds of the oldest waiting job per queue',
+      ['queue'],
+    );
   }
 
-  /** Ghi độ sâu queue (monitor nền gọi mỗi tick). */
-  public recordQueues(queues: readonly QueueInfo[]): void {
+  /** Ghi độ sâu queue và tuổi job chờ lâu nhất (monitor nền gọi mỗi tick). */
+  public recordQueues(queues: readonly QueueInfo[], now = Date.now()): void {
     for (const q of queues) {
       for (const state of QUEUE_STATES) {
         const v = state === 'waiting' ? waitingOf(q) : q.counts[state];
         this.queueJobs.set({ queue: q.name, state }, v);
       }
+      const ageSec =
+        q.oldestWaitingAt === null ? 0 : Math.max(0, round((now - q.oldestWaitingAt) / 1000, 2));
+      this.oldestJobAge.set({ queue: q.name }, ageSec);
     }
   }
 

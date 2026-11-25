@@ -5,6 +5,7 @@ export type ConsoleSectionId =
   | 'runtimes'
   | 'http-traffic'
   | 'performance'
+  | 'metrics-alerts'
   | 'database'
   | 'cache'
   | 'storage'

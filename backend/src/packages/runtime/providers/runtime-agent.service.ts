@@ -40,7 +40,7 @@ const HEARTBEAT_TTL_SEC = 30;
 export class RuntimeAgentService implements OnApplicationBootstrap, BeforeApplicationShutdown {
   private readonly logger = new Logger(RuntimeAgentService.name);
   private readonly keys: ReturnType<typeof runtimeKeys>;
-  private readonly instance = `${os.hostname()}:${process.pid}`;
+  private readonly instance: string;
   private readonly startedAt = new Date();
   private contributor: RuntimeContributor | null = null;
   private state: AgentState = 'starting';
@@ -57,6 +57,7 @@ export class RuntimeAgentService implements OnApplicationBootstrap, BeforeApplic
     private readonly config: CoreConfigService,
   ) {
     this.keys = runtimeKeys(redis);
+    this.instance = config.app.instanceId || `${os.hostname()}:${process.pid}`;
   }
 
   /** Contributor tự đăng ký trong `onModuleInit` của nó. */
@@ -130,7 +131,14 @@ export class RuntimeAgentService implements OnApplicationBootstrap, BeforeApplic
       reason: this.stopReason ?? 'graceful_shutdown',
       uptimeSec: Math.round(process.uptime()),
     });
-    await this.safe(() => this.redis.client.del(this.keys.heartbeat(this.identity.id)));
+    await this.safe(() =>
+      this.redis.client
+        .multi()
+        .del(this.keys.heartbeat(this.identity.id))
+        .del(this.keys.instanceHeartbeat(this.identity.id, this.instance))
+        .srem(this.keys.instanceIndex(this.identity.id), this.instance)
+        .exec(),
+    );
     this.started = false;
   }
 
@@ -211,13 +219,16 @@ export class RuntimeAgentService implements OnApplicationBootstrap, BeforeApplic
       HEARTBEAT_TTL_SEC,
       Math.ceil((this.config.runtime.heartbeatMs * 2) / 1000),
     );
+    const serialized = JSON.stringify(heartbeat);
+    const indexKey = this.keys.instanceIndex(this.identity.id);
     await this.safe(() =>
-      this.redis.client.set(
-        this.keys.heartbeat(this.identity.id),
-        JSON.stringify(heartbeat),
-        'EX',
-        ttlSec,
-      ),
+      this.redis.client
+        .multi()
+        .set(this.keys.heartbeat(this.identity.id), serialized, 'EX', ttlSec)
+        .set(this.keys.instanceHeartbeat(this.identity.id, this.instance), serialized, 'EX', ttlSec)
+        .sadd(indexKey, this.instance)
+        .expire(indexKey, Math.max(ttlSec * 2, 120))
+        .exec(),
     );
   }
 

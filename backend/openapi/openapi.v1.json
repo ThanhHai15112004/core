@@ -113,6 +113,9 @@
       "name": "Metrics"
     },
     {
+      "name": "Metrics Ops"
+    },
+    {
       "name": "Multi-Channel Notification Delivery (Email, SMS & Push)",
       "description": "Vận chuyển thông báo đa kênh (Email theo template, SMS qua nhà cung cấp, Web/Mobile Push Notification); theo dõi trạng thái gửi, tự động gửi lại lỗi tạm thời, danh sách dừng gửi (Suppression List) và theo dõi chi phí/hạn mức (Phase 7 — Mục 7.2)"
     },
@@ -166430,6 +166433,2668 @@
         "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Chế độ truy cập**: `Public` (Không yêu cầu đăng nhập)",
         "tags": [
           "Messaging Ops"
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success Response Envelope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "statusCode",
+                    "data",
+                    "timestamp"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ],
+                      "example": true
+                    },
+                    "statusCode": {
+                      "type": "integer",
+                      "example": 200
+                    },
+                    "data": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time",
+                      "example": "2026-10-14T10:00:00.000Z"
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "statusCode": 200,
+                  "data": {},
+                  "timestamp": "2026-10-14T10:00:00.000Z"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Lỗi hệ thống nội bộ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "statusCode",
+                    "error",
+                    "timestamp"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        false
+                      ],
+                      "example": false
+                    },
+                    "statusCode": {
+                      "type": "integer",
+                      "example": 500
+                    },
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "example": "INTERNAL_SERVER_ERROR"
+                        },
+                        "message": {
+                          "type": "string",
+                          "example": "Lỗi hệ thống nội bộ"
+                        },
+                        "details": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "field": {
+                                "type": "string"
+                              },
+                              "message": {
+                                "type": "string"
+                              },
+                              "code": {
+                                "type": "string"
+                              },
+                              "source": {
+                                "type": "string",
+                                "enum": [
+                                  "body",
+                                  "query",
+                                  "params"
+                                ]
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time",
+                      "example": "2026-10-14T10:00:00.000Z"
+                    }
+                  }
+                },
+                "example": {
+                  "success": false,
+                  "statusCode": 500,
+                  "error": {
+                    "code": "INTERNAL_SERVER_ERROR",
+                    "message": "Lỗi hệ thống nội bộ"
+                  },
+                  "timestamp": "2026-10-14T10:00:00.000Z"
+                }
+              }
+            }
+          }
+        },
+        "x-public": true
+      }
+    },
+    "/api/v1/ops/metrics/alerts/evaluate": {
+      "post": {
+        "operationId": "MetricsOpsController_evaluateNow",
+        "summary": "POST /api/v1/ops/metrics/alerts/evaluate (evaluateNow)",
+        "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Chế độ truy cập**: `Public` (Không yêu cầu đăng nhập)",
+        "tags": [
+          "Metrics Ops"
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success Response Envelope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "statusCode",
+                    "data",
+                    "timestamp"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ],
+                      "example": true
+                    },
+                    "statusCode": {
+                      "type": "integer",
+                      "example": 200
+                    },
+                    "data": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time",
+                      "example": "2026-10-14T10:00:00.000Z"
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "statusCode": 200,
+                  "data": {},
+                  "timestamp": "2026-10-14T10:00:00.000Z"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Lỗi hệ thống nội bộ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "statusCode",
+                    "error",
+                    "timestamp"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        false
+                      ],
+                      "example": false
+                    },
+                    "statusCode": {
+                      "type": "integer",
+                      "example": 500
+                    },
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "example": "INTERNAL_SERVER_ERROR"
+                        },
+                        "message": {
+                          "type": "string",
+                          "example": "Lỗi hệ thống nội bộ"
+                        },
+                        "details": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "field": {
+                                "type": "string"
+                              },
+                              "message": {
+                                "type": "string"
+                              },
+                              "code": {
+                                "type": "string"
+                              },
+                              "source": {
+                                "type": "string",
+                                "enum": [
+                                  "body",
+                                  "query",
+                                  "params"
+                                ]
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time",
+                      "example": "2026-10-14T10:00:00.000Z"
+                    }
+                  }
+                },
+                "example": {
+                  "success": false,
+                  "statusCode": 500,
+                  "error": {
+                    "code": "INTERNAL_SERVER_ERROR",
+                    "message": "Lỗi hệ thống nội bộ"
+                  },
+                  "timestamp": "2026-10-14T10:00:00.000Z"
+                }
+              }
+            }
+          }
+        },
+        "x-public": true
+      }
+    },
+    "/api/v1/ops/metrics/alerts/events": {
+      "get": {
+        "operationId": "MetricsOpsController_listEvents",
+        "summary": "GET /api/v1/ops/metrics/alerts/events (listEvents)",
+        "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Chế độ truy cập**: `Public` (Không yêu cầu đăng nhập)",
+        "tags": [
+          "Metrics Ops"
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success Response Envelope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "statusCode",
+                    "data",
+                    "timestamp"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ],
+                      "example": true
+                    },
+                    "statusCode": {
+                      "type": "integer",
+                      "example": 200
+                    },
+                    "data": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time",
+                      "example": "2026-10-14T10:00:00.000Z"
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "statusCode": 200,
+                  "data": {},
+                  "timestamp": "2026-10-14T10:00:00.000Z"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Lỗi hệ thống nội bộ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "statusCode",
+                    "error",
+                    "timestamp"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        false
+                      ],
+                      "example": false
+                    },
+                    "statusCode": {
+                      "type": "integer",
+                      "example": 500
+                    },
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "example": "INTERNAL_SERVER_ERROR"
+                        },
+                        "message": {
+                          "type": "string",
+                          "example": "Lỗi hệ thống nội bộ"
+                        },
+                        "details": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "field": {
+                                "type": "string"
+                              },
+                              "message": {
+                                "type": "string"
+                              },
+                              "code": {
+                                "type": "string"
+                              },
+                              "source": {
+                                "type": "string",
+                                "enum": [
+                                  "body",
+                                  "query",
+                                  "params"
+                                ]
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time",
+                      "example": "2026-10-14T10:00:00.000Z"
+                    }
+                  }
+                },
+                "example": {
+                  "success": false,
+                  "statusCode": 500,
+                  "error": {
+                    "code": "INTERNAL_SERVER_ERROR",
+                    "message": "Lỗi hệ thống nội bộ"
+                  },
+                  "timestamp": "2026-10-14T10:00:00.000Z"
+                }
+              }
+            }
+          }
+        },
+        "x-public": true
+      }
+    },
+    "/api/v1/ops/metrics/alerts/events/{id}/acknowledge": {
+      "post": {
+        "operationId": "MetricsOpsController_acknowledgeEvent",
+        "summary": "POST /api/v1/ops/metrics/alerts/events/{id}/acknowledge (acknowledgeEvent)",
+        "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Chế độ truy cập**: `Public` (Không yêu cầu đăng nhập)",
+        "tags": [
+          "Metrics Ops"
+        ],
+        "security": [],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "example": "550e8400-e29b-41d4-a716-446655440000"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success Response Envelope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "statusCode",
+                    "data",
+                    "timestamp"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ],
+                      "example": true
+                    },
+                    "statusCode": {
+                      "type": "integer",
+                      "example": 200
+                    },
+                    "data": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time",
+                      "example": "2026-10-14T10:00:00.000Z"
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "statusCode": 200,
+                  "data": {},
+                  "timestamp": "2026-10-14T10:00:00.000Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Dữ liệu đầu vào không hợp lệ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "statusCode",
+                    "error",
+                    "timestamp"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        false
+                      ],
+                      "example": false
+                    },
+                    "statusCode": {
+                      "type": "integer",
+                      "example": 400
+                    },
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "example": "VALIDATION_FAILED"
+                        },
+                        "message": {
+                          "type": "string",
+                          "example": "Dữ liệu đầu vào không hợp lệ"
+                        },
+                        "details": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "field": {
+                                "type": "string"
+                              },
+                              "message": {
+                                "type": "string"
+                              },
+                              "code": {
+                                "type": "string"
+                              },
+                              "source": {
+                                "type": "string",
+                                "enum": [
+                                  "body",
+                                  "query",
+                                  "params"
+                                ]
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time",
+                      "example": "2026-10-14T10:00:00.000Z"
+                    }
+                  }
+                },
+                "example": {
+                  "success": false,
+                  "statusCode": 400,
+                  "error": {
+                    "code": "VALIDATION_FAILED",
+                    "message": "Dữ liệu đầu vào không hợp lệ",
+                    "details": [
+                      {
+                        "field": "fieldName",
+                        "message": "Invalid input value",
+                        "code": "invalid_type",
+                        "source": "body"
+                      }
+                    ]
+                  },
+                  "timestamp": "2026-10-14T10:00:00.000Z"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Không tìm thấy tài nguyên yêu cầu",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "statusCode",
+                    "error",
+                    "timestamp"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        false
+                      ],
+                      "example": false
+                    },
+                    "statusCode": {
+                      "type": "integer",
+                      "example": 404
+                    },
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "example": "NOT_FOUND"
+                        },
+                        "message": {
+                          "type": "string",
+                          "example": "Không tìm thấy tài nguyên yêu cầu"
+                        },
+                        "details": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "field": {
+                                "type": "string"
+                              },
+                              "message": {
+                                "type": "string"
+                              },
+                              "code": {
+                                "type": "string"
+                              },
+                              "source": {
+                                "type": "string",
+                                "enum": [
+                                  "body",
+                                  "query",
+                                  "params"
+                                ]
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time",
+                      "example": "2026-10-14T10:00:00.000Z"
+                    }
+                  }
+                },
+                "example": {
+                  "success": false,
+                  "statusCode": 404,
+                  "error": {
+                    "code": "NOT_FOUND",
+                    "message": "Không tìm thấy tài nguyên yêu cầu"
+                  },
+                  "timestamp": "2026-10-14T10:00:00.000Z"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Lỗi hệ thống nội bộ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "statusCode",
+                    "error",
+                    "timestamp"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        false
+                      ],
+                      "example": false
+                    },
+                    "statusCode": {
+                      "type": "integer",
+                      "example": 500
+                    },
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "example": "INTERNAL_SERVER_ERROR"
+                        },
+                        "message": {
+                          "type": "string",
+                          "example": "Lỗi hệ thống nội bộ"
+                        },
+                        "details": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "field": {
+                                "type": "string"
+                              },
+                              "message": {
+                                "type": "string"
+                              },
+                              "code": {
+                                "type": "string"
+                              },
+                              "source": {
+                                "type": "string",
+                                "enum": [
+                                  "body",
+                                  "query",
+                                  "params"
+                                ]
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time",
+                      "example": "2026-10-14T10:00:00.000Z"
+                    }
+                  }
+                },
+                "example": {
+                  "success": false,
+                  "statusCode": 500,
+                  "error": {
+                    "code": "INTERNAL_SERVER_ERROR",
+                    "message": "Lỗi hệ thống nội bộ"
+                  },
+                  "timestamp": "2026-10-14T10:00:00.000Z"
+                }
+              }
+            }
+          }
+        },
+        "x-public": true
+      }
+    },
+    "/api/v1/ops/metrics/alerts/events/{id}/resolve": {
+      "post": {
+        "operationId": "MetricsOpsController_resolveEvent",
+        "summary": "POST /api/v1/ops/metrics/alerts/events/{id}/resolve (resolveEvent)",
+        "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Chế độ truy cập**: `Public` (Không yêu cầu đăng nhập)",
+        "tags": [
+          "Metrics Ops"
+        ],
+        "security": [],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "example": "550e8400-e29b-41d4-a716-446655440000"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success Response Envelope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "statusCode",
+                    "data",
+                    "timestamp"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ],
+                      "example": true
+                    },
+                    "statusCode": {
+                      "type": "integer",
+                      "example": 200
+                    },
+                    "data": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time",
+                      "example": "2026-10-14T10:00:00.000Z"
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "statusCode": 200,
+                  "data": {},
+                  "timestamp": "2026-10-14T10:00:00.000Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Dữ liệu đầu vào không hợp lệ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "statusCode",
+                    "error",
+                    "timestamp"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        false
+                      ],
+                      "example": false
+                    },
+                    "statusCode": {
+                      "type": "integer",
+                      "example": 400
+                    },
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "example": "VALIDATION_FAILED"
+                        },
+                        "message": {
+                          "type": "string",
+                          "example": "Dữ liệu đầu vào không hợp lệ"
+                        },
+                        "details": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "field": {
+                                "type": "string"
+                              },
+                              "message": {
+                                "type": "string"
+                              },
+                              "code": {
+                                "type": "string"
+                              },
+                              "source": {
+                                "type": "string",
+                                "enum": [
+                                  "body",
+                                  "query",
+                                  "params"
+                                ]
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time",
+                      "example": "2026-10-14T10:00:00.000Z"
+                    }
+                  }
+                },
+                "example": {
+                  "success": false,
+                  "statusCode": 400,
+                  "error": {
+                    "code": "VALIDATION_FAILED",
+                    "message": "Dữ liệu đầu vào không hợp lệ",
+                    "details": [
+                      {
+                        "field": "fieldName",
+                        "message": "Invalid input value",
+                        "code": "invalid_type",
+                        "source": "body"
+                      }
+                    ]
+                  },
+                  "timestamp": "2026-10-14T10:00:00.000Z"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Không tìm thấy tài nguyên yêu cầu",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "statusCode",
+                    "error",
+                    "timestamp"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        false
+                      ],
+                      "example": false
+                    },
+                    "statusCode": {
+                      "type": "integer",
+                      "example": 404
+                    },
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "example": "NOT_FOUND"
+                        },
+                        "message": {
+                          "type": "string",
+                          "example": "Không tìm thấy tài nguyên yêu cầu"
+                        },
+                        "details": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "field": {
+                                "type": "string"
+                              },
+                              "message": {
+                                "type": "string"
+                              },
+                              "code": {
+                                "type": "string"
+                              },
+                              "source": {
+                                "type": "string",
+                                "enum": [
+                                  "body",
+                                  "query",
+                                  "params"
+                                ]
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time",
+                      "example": "2026-10-14T10:00:00.000Z"
+                    }
+                  }
+                },
+                "example": {
+                  "success": false,
+                  "statusCode": 404,
+                  "error": {
+                    "code": "NOT_FOUND",
+                    "message": "Không tìm thấy tài nguyên yêu cầu"
+                  },
+                  "timestamp": "2026-10-14T10:00:00.000Z"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Lỗi hệ thống nội bộ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "statusCode",
+                    "error",
+                    "timestamp"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        false
+                      ],
+                      "example": false
+                    },
+                    "statusCode": {
+                      "type": "integer",
+                      "example": 500
+                    },
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "example": "INTERNAL_SERVER_ERROR"
+                        },
+                        "message": {
+                          "type": "string",
+                          "example": "Lỗi hệ thống nội bộ"
+                        },
+                        "details": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "field": {
+                                "type": "string"
+                              },
+                              "message": {
+                                "type": "string"
+                              },
+                              "code": {
+                                "type": "string"
+                              },
+                              "source": {
+                                "type": "string",
+                                "enum": [
+                                  "body",
+                                  "query",
+                                  "params"
+                                ]
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time",
+                      "example": "2026-10-14T10:00:00.000Z"
+                    }
+                  }
+                },
+                "example": {
+                  "success": false,
+                  "statusCode": 500,
+                  "error": {
+                    "code": "INTERNAL_SERVER_ERROR",
+                    "message": "Lỗi hệ thống nội bộ"
+                  },
+                  "timestamp": "2026-10-14T10:00:00.000Z"
+                }
+              }
+            }
+          }
+        },
+        "x-public": true
+      }
+    },
+    "/api/v1/ops/metrics/alerts/rules": {
+      "get": {
+        "operationId": "MetricsOpsController_listRules",
+        "summary": "GET /api/v1/ops/metrics/alerts/rules (listRules)",
+        "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Chế độ truy cập**: `Public` (Không yêu cầu đăng nhập)",
+        "tags": [
+          "Metrics Ops"
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success Response Envelope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "statusCode",
+                    "data",
+                    "timestamp"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ],
+                      "example": true
+                    },
+                    "statusCode": {
+                      "type": "integer",
+                      "example": 200
+                    },
+                    "data": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time",
+                      "example": "2026-10-14T10:00:00.000Z"
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "statusCode": 200,
+                  "data": {},
+                  "timestamp": "2026-10-14T10:00:00.000Z"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Lỗi hệ thống nội bộ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "statusCode",
+                    "error",
+                    "timestamp"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        false
+                      ],
+                      "example": false
+                    },
+                    "statusCode": {
+                      "type": "integer",
+                      "example": 500
+                    },
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "example": "INTERNAL_SERVER_ERROR"
+                        },
+                        "message": {
+                          "type": "string",
+                          "example": "Lỗi hệ thống nội bộ"
+                        },
+                        "details": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "field": {
+                                "type": "string"
+                              },
+                              "message": {
+                                "type": "string"
+                              },
+                              "code": {
+                                "type": "string"
+                              },
+                              "source": {
+                                "type": "string",
+                                "enum": [
+                                  "body",
+                                  "query",
+                                  "params"
+                                ]
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time",
+                      "example": "2026-10-14T10:00:00.000Z"
+                    }
+                  }
+                },
+                "example": {
+                  "success": false,
+                  "statusCode": 500,
+                  "error": {
+                    "code": "INTERNAL_SERVER_ERROR",
+                    "message": "Lỗi hệ thống nội bộ"
+                  },
+                  "timestamp": "2026-10-14T10:00:00.000Z"
+                }
+              }
+            }
+          }
+        },
+        "x-public": true
+      },
+      "post": {
+        "operationId": "MetricsOpsController_createRule",
+        "summary": "POST /api/v1/ops/metrics/alerts/rules (createRule)",
+        "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Chế độ truy cập**: `Public` (Không yêu cầu đăng nhập)",
+        "tags": [
+          "Metrics Ops"
+        ],
+        "security": [],
+        "responses": {
+          "201": {
+            "description": "Success Response Envelope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "statusCode",
+                    "data",
+                    "timestamp"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ],
+                      "example": true
+                    },
+                    "statusCode": {
+                      "type": "integer",
+                      "example": 201
+                    },
+                    "data": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time",
+                      "example": "2026-10-14T10:00:00.000Z"
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "statusCode": 201,
+                  "data": {},
+                  "timestamp": "2026-10-14T10:00:00.000Z"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Lỗi hệ thống nội bộ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "statusCode",
+                    "error",
+                    "timestamp"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        false
+                      ],
+                      "example": false
+                    },
+                    "statusCode": {
+                      "type": "integer",
+                      "example": 500
+                    },
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "example": "INTERNAL_SERVER_ERROR"
+                        },
+                        "message": {
+                          "type": "string",
+                          "example": "Lỗi hệ thống nội bộ"
+                        },
+                        "details": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "field": {
+                                "type": "string"
+                              },
+                              "message": {
+                                "type": "string"
+                              },
+                              "code": {
+                                "type": "string"
+                              },
+                              "source": {
+                                "type": "string",
+                                "enum": [
+                                  "body",
+                                  "query",
+                                  "params"
+                                ]
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time",
+                      "example": "2026-10-14T10:00:00.000Z"
+                    }
+                  }
+                },
+                "example": {
+                  "success": false,
+                  "statusCode": 500,
+                  "error": {
+                    "code": "INTERNAL_SERVER_ERROR",
+                    "message": "Lỗi hệ thống nội bộ"
+                  },
+                  "timestamp": "2026-10-14T10:00:00.000Z"
+                }
+              }
+            }
+          }
+        },
+        "x-public": true
+      }
+    },
+    "/api/v1/ops/metrics/alerts/rules/{id}": {
+      "patch": {
+        "operationId": "MetricsOpsController_updateRule",
+        "summary": "PATCH /api/v1/ops/metrics/alerts/rules/{id} (updateRule)",
+        "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Chế độ truy cập**: `Public` (Không yêu cầu đăng nhập)",
+        "tags": [
+          "Metrics Ops"
+        ],
+        "security": [],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "example": "550e8400-e29b-41d4-a716-446655440000"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success Response Envelope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "statusCode",
+                    "data",
+                    "timestamp"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ],
+                      "example": true
+                    },
+                    "statusCode": {
+                      "type": "integer",
+                      "example": 200
+                    },
+                    "data": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time",
+                      "example": "2026-10-14T10:00:00.000Z"
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "statusCode": 200,
+                  "data": {},
+                  "timestamp": "2026-10-14T10:00:00.000Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Dữ liệu đầu vào không hợp lệ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "statusCode",
+                    "error",
+                    "timestamp"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        false
+                      ],
+                      "example": false
+                    },
+                    "statusCode": {
+                      "type": "integer",
+                      "example": 400
+                    },
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "example": "VALIDATION_FAILED"
+                        },
+                        "message": {
+                          "type": "string",
+                          "example": "Dữ liệu đầu vào không hợp lệ"
+                        },
+                        "details": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "field": {
+                                "type": "string"
+                              },
+                              "message": {
+                                "type": "string"
+                              },
+                              "code": {
+                                "type": "string"
+                              },
+                              "source": {
+                                "type": "string",
+                                "enum": [
+                                  "body",
+                                  "query",
+                                  "params"
+                                ]
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time",
+                      "example": "2026-10-14T10:00:00.000Z"
+                    }
+                  }
+                },
+                "example": {
+                  "success": false,
+                  "statusCode": 400,
+                  "error": {
+                    "code": "VALIDATION_FAILED",
+                    "message": "Dữ liệu đầu vào không hợp lệ",
+                    "details": [
+                      {
+                        "field": "fieldName",
+                        "message": "Invalid input value",
+                        "code": "invalid_type",
+                        "source": "body"
+                      }
+                    ]
+                  },
+                  "timestamp": "2026-10-14T10:00:00.000Z"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Không tìm thấy tài nguyên yêu cầu",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "statusCode",
+                    "error",
+                    "timestamp"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        false
+                      ],
+                      "example": false
+                    },
+                    "statusCode": {
+                      "type": "integer",
+                      "example": 404
+                    },
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "example": "NOT_FOUND"
+                        },
+                        "message": {
+                          "type": "string",
+                          "example": "Không tìm thấy tài nguyên yêu cầu"
+                        },
+                        "details": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "field": {
+                                "type": "string"
+                              },
+                              "message": {
+                                "type": "string"
+                              },
+                              "code": {
+                                "type": "string"
+                              },
+                              "source": {
+                                "type": "string",
+                                "enum": [
+                                  "body",
+                                  "query",
+                                  "params"
+                                ]
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time",
+                      "example": "2026-10-14T10:00:00.000Z"
+                    }
+                  }
+                },
+                "example": {
+                  "success": false,
+                  "statusCode": 404,
+                  "error": {
+                    "code": "NOT_FOUND",
+                    "message": "Không tìm thấy tài nguyên yêu cầu"
+                  },
+                  "timestamp": "2026-10-14T10:00:00.000Z"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Lỗi hệ thống nội bộ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "statusCode",
+                    "error",
+                    "timestamp"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        false
+                      ],
+                      "example": false
+                    },
+                    "statusCode": {
+                      "type": "integer",
+                      "example": 500
+                    },
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "example": "INTERNAL_SERVER_ERROR"
+                        },
+                        "message": {
+                          "type": "string",
+                          "example": "Lỗi hệ thống nội bộ"
+                        },
+                        "details": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "field": {
+                                "type": "string"
+                              },
+                              "message": {
+                                "type": "string"
+                              },
+                              "code": {
+                                "type": "string"
+                              },
+                              "source": {
+                                "type": "string",
+                                "enum": [
+                                  "body",
+                                  "query",
+                                  "params"
+                                ]
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time",
+                      "example": "2026-10-14T10:00:00.000Z"
+                    }
+                  }
+                },
+                "example": {
+                  "success": false,
+                  "statusCode": 500,
+                  "error": {
+                    "code": "INTERNAL_SERVER_ERROR",
+                    "message": "Lỗi hệ thống nội bộ"
+                  },
+                  "timestamp": "2026-10-14T10:00:00.000Z"
+                }
+              }
+            }
+          }
+        },
+        "x-public": true
+      },
+      "delete": {
+        "operationId": "MetricsOpsController_deleteRule",
+        "summary": "DELETE /api/v1/ops/metrics/alerts/rules/{id} (deleteRule)",
+        "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Chế độ truy cập**: `Public` (Không yêu cầu đăng nhập)",
+        "tags": [
+          "Metrics Ops"
+        ],
+        "security": [],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "example": "550e8400-e29b-41d4-a716-446655440000"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success Response Envelope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "statusCode",
+                    "data",
+                    "timestamp"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ],
+                      "example": true
+                    },
+                    "statusCode": {
+                      "type": "integer",
+                      "example": 200
+                    },
+                    "data": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time",
+                      "example": "2026-10-14T10:00:00.000Z"
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "statusCode": 200,
+                  "data": {},
+                  "timestamp": "2026-10-14T10:00:00.000Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Dữ liệu đầu vào không hợp lệ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "statusCode",
+                    "error",
+                    "timestamp"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        false
+                      ],
+                      "example": false
+                    },
+                    "statusCode": {
+                      "type": "integer",
+                      "example": 400
+                    },
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "example": "VALIDATION_FAILED"
+                        },
+                        "message": {
+                          "type": "string",
+                          "example": "Dữ liệu đầu vào không hợp lệ"
+                        },
+                        "details": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "field": {
+                                "type": "string"
+                              },
+                              "message": {
+                                "type": "string"
+                              },
+                              "code": {
+                                "type": "string"
+                              },
+                              "source": {
+                                "type": "string",
+                                "enum": [
+                                  "body",
+                                  "query",
+                                  "params"
+                                ]
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time",
+                      "example": "2026-10-14T10:00:00.000Z"
+                    }
+                  }
+                },
+                "example": {
+                  "success": false,
+                  "statusCode": 400,
+                  "error": {
+                    "code": "VALIDATION_FAILED",
+                    "message": "Dữ liệu đầu vào không hợp lệ",
+                    "details": [
+                      {
+                        "field": "fieldName",
+                        "message": "Invalid input value",
+                        "code": "invalid_type",
+                        "source": "body"
+                      }
+                    ]
+                  },
+                  "timestamp": "2026-10-14T10:00:00.000Z"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Không tìm thấy tài nguyên yêu cầu",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "statusCode",
+                    "error",
+                    "timestamp"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        false
+                      ],
+                      "example": false
+                    },
+                    "statusCode": {
+                      "type": "integer",
+                      "example": 404
+                    },
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "example": "NOT_FOUND"
+                        },
+                        "message": {
+                          "type": "string",
+                          "example": "Không tìm thấy tài nguyên yêu cầu"
+                        },
+                        "details": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "field": {
+                                "type": "string"
+                              },
+                              "message": {
+                                "type": "string"
+                              },
+                              "code": {
+                                "type": "string"
+                              },
+                              "source": {
+                                "type": "string",
+                                "enum": [
+                                  "body",
+                                  "query",
+                                  "params"
+                                ]
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time",
+                      "example": "2026-10-14T10:00:00.000Z"
+                    }
+                  }
+                },
+                "example": {
+                  "success": false,
+                  "statusCode": 404,
+                  "error": {
+                    "code": "NOT_FOUND",
+                    "message": "Không tìm thấy tài nguyên yêu cầu"
+                  },
+                  "timestamp": "2026-10-14T10:00:00.000Z"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Lỗi hệ thống nội bộ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "statusCode",
+                    "error",
+                    "timestamp"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        false
+                      ],
+                      "example": false
+                    },
+                    "statusCode": {
+                      "type": "integer",
+                      "example": 500
+                    },
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "example": "INTERNAL_SERVER_ERROR"
+                        },
+                        "message": {
+                          "type": "string",
+                          "example": "Lỗi hệ thống nội bộ"
+                        },
+                        "details": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "field": {
+                                "type": "string"
+                              },
+                              "message": {
+                                "type": "string"
+                              },
+                              "code": {
+                                "type": "string"
+                              },
+                              "source": {
+                                "type": "string",
+                                "enum": [
+                                  "body",
+                                  "query",
+                                  "params"
+                                ]
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time",
+                      "example": "2026-10-14T10:00:00.000Z"
+                    }
+                  }
+                },
+                "example": {
+                  "success": false,
+                  "statusCode": 500,
+                  "error": {
+                    "code": "INTERNAL_SERVER_ERROR",
+                    "message": "Lỗi hệ thống nội bộ"
+                  },
+                  "timestamp": "2026-10-14T10:00:00.000Z"
+                }
+              }
+            }
+          }
+        },
+        "x-public": true
+      }
+    },
+    "/api/v1/ops/metrics/alerts/rules/{id}/test": {
+      "post": {
+        "operationId": "MetricsOpsController_testRule",
+        "summary": "POST /api/v1/ops/metrics/alerts/rules/{id}/test (testRule)",
+        "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Chế độ truy cập**: `Public` (Không yêu cầu đăng nhập)",
+        "tags": [
+          "Metrics Ops"
+        ],
+        "security": [],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "example": "550e8400-e29b-41d4-a716-446655440000"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success Response Envelope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "statusCode",
+                    "data",
+                    "timestamp"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ],
+                      "example": true
+                    },
+                    "statusCode": {
+                      "type": "integer",
+                      "example": 200
+                    },
+                    "data": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time",
+                      "example": "2026-10-14T10:00:00.000Z"
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "statusCode": 200,
+                  "data": {},
+                  "timestamp": "2026-10-14T10:00:00.000Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Dữ liệu đầu vào không hợp lệ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "statusCode",
+                    "error",
+                    "timestamp"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        false
+                      ],
+                      "example": false
+                    },
+                    "statusCode": {
+                      "type": "integer",
+                      "example": 400
+                    },
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "example": "VALIDATION_FAILED"
+                        },
+                        "message": {
+                          "type": "string",
+                          "example": "Dữ liệu đầu vào không hợp lệ"
+                        },
+                        "details": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "field": {
+                                "type": "string"
+                              },
+                              "message": {
+                                "type": "string"
+                              },
+                              "code": {
+                                "type": "string"
+                              },
+                              "source": {
+                                "type": "string",
+                                "enum": [
+                                  "body",
+                                  "query",
+                                  "params"
+                                ]
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time",
+                      "example": "2026-10-14T10:00:00.000Z"
+                    }
+                  }
+                },
+                "example": {
+                  "success": false,
+                  "statusCode": 400,
+                  "error": {
+                    "code": "VALIDATION_FAILED",
+                    "message": "Dữ liệu đầu vào không hợp lệ",
+                    "details": [
+                      {
+                        "field": "fieldName",
+                        "message": "Invalid input value",
+                        "code": "invalid_type",
+                        "source": "body"
+                      }
+                    ]
+                  },
+                  "timestamp": "2026-10-14T10:00:00.000Z"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Không tìm thấy tài nguyên yêu cầu",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "statusCode",
+                    "error",
+                    "timestamp"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        false
+                      ],
+                      "example": false
+                    },
+                    "statusCode": {
+                      "type": "integer",
+                      "example": 404
+                    },
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "example": "NOT_FOUND"
+                        },
+                        "message": {
+                          "type": "string",
+                          "example": "Không tìm thấy tài nguyên yêu cầu"
+                        },
+                        "details": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "field": {
+                                "type": "string"
+                              },
+                              "message": {
+                                "type": "string"
+                              },
+                              "code": {
+                                "type": "string"
+                              },
+                              "source": {
+                                "type": "string",
+                                "enum": [
+                                  "body",
+                                  "query",
+                                  "params"
+                                ]
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time",
+                      "example": "2026-10-14T10:00:00.000Z"
+                    }
+                  }
+                },
+                "example": {
+                  "success": false,
+                  "statusCode": 404,
+                  "error": {
+                    "code": "NOT_FOUND",
+                    "message": "Không tìm thấy tài nguyên yêu cầu"
+                  },
+                  "timestamp": "2026-10-14T10:00:00.000Z"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Lỗi hệ thống nội bộ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "statusCode",
+                    "error",
+                    "timestamp"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        false
+                      ],
+                      "example": false
+                    },
+                    "statusCode": {
+                      "type": "integer",
+                      "example": 500
+                    },
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "example": "INTERNAL_SERVER_ERROR"
+                        },
+                        "message": {
+                          "type": "string",
+                          "example": "Lỗi hệ thống nội bộ"
+                        },
+                        "details": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "field": {
+                                "type": "string"
+                              },
+                              "message": {
+                                "type": "string"
+                              },
+                              "code": {
+                                "type": "string"
+                              },
+                              "source": {
+                                "type": "string",
+                                "enum": [
+                                  "body",
+                                  "query",
+                                  "params"
+                                ]
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time",
+                      "example": "2026-10-14T10:00:00.000Z"
+                    }
+                  }
+                },
+                "example": {
+                  "success": false,
+                  "statusCode": 500,
+                  "error": {
+                    "code": "INTERNAL_SERVER_ERROR",
+                    "message": "Lỗi hệ thống nội bộ"
+                  },
+                  "timestamp": "2026-10-14T10:00:00.000Z"
+                }
+              }
+            }
+          }
+        },
+        "x-public": true
+      }
+    },
+    "/api/v1/ops/metrics/dependencies": {
+      "get": {
+        "operationId": "MetricsOpsController_dependencies",
+        "summary": "GET /api/v1/ops/metrics/dependencies (dependencies)",
+        "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Chế độ truy cập**: `Public` (Không yêu cầu đăng nhập)",
+        "tags": [
+          "Metrics Ops"
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success Response Envelope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "statusCode",
+                    "data",
+                    "timestamp"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ],
+                      "example": true
+                    },
+                    "statusCode": {
+                      "type": "integer",
+                      "example": 200
+                    },
+                    "data": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time",
+                      "example": "2026-10-14T10:00:00.000Z"
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "statusCode": 200,
+                  "data": {},
+                  "timestamp": "2026-10-14T10:00:00.000Z"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Lỗi hệ thống nội bộ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "statusCode",
+                    "error",
+                    "timestamp"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        false
+                      ],
+                      "example": false
+                    },
+                    "statusCode": {
+                      "type": "integer",
+                      "example": 500
+                    },
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "example": "INTERNAL_SERVER_ERROR"
+                        },
+                        "message": {
+                          "type": "string",
+                          "example": "Lỗi hệ thống nội bộ"
+                        },
+                        "details": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "field": {
+                                "type": "string"
+                              },
+                              "message": {
+                                "type": "string"
+                              },
+                              "code": {
+                                "type": "string"
+                              },
+                              "source": {
+                                "type": "string",
+                                "enum": [
+                                  "body",
+                                  "query",
+                                  "params"
+                                ]
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time",
+                      "example": "2026-10-14T10:00:00.000Z"
+                    }
+                  }
+                },
+                "example": {
+                  "success": false,
+                  "statusCode": 500,
+                  "error": {
+                    "code": "INTERNAL_SERVER_ERROR",
+                    "message": "Lỗi hệ thống nội bộ"
+                  },
+                  "timestamp": "2026-10-14T10:00:00.000Z"
+                }
+              }
+            }
+          }
+        },
+        "x-public": true
+      }
+    },
+    "/api/v1/ops/metrics/errors-by-module": {
+      "get": {
+        "operationId": "MetricsOpsController_errorsByModule",
+        "summary": "GET /api/v1/ops/metrics/errors-by-module (errorsByModule)",
+        "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Chế độ truy cập**: `Public` (Không yêu cầu đăng nhập)",
+        "tags": [
+          "Metrics Ops"
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success Response Envelope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "statusCode",
+                    "data",
+                    "timestamp"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ],
+                      "example": true
+                    },
+                    "statusCode": {
+                      "type": "integer",
+                      "example": 200
+                    },
+                    "data": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time",
+                      "example": "2026-10-14T10:00:00.000Z"
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "statusCode": 200,
+                  "data": {},
+                  "timestamp": "2026-10-14T10:00:00.000Z"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Lỗi hệ thống nội bộ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "statusCode",
+                    "error",
+                    "timestamp"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        false
+                      ],
+                      "example": false
+                    },
+                    "statusCode": {
+                      "type": "integer",
+                      "example": 500
+                    },
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "example": "INTERNAL_SERVER_ERROR"
+                        },
+                        "message": {
+                          "type": "string",
+                          "example": "Lỗi hệ thống nội bộ"
+                        },
+                        "details": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "field": {
+                                "type": "string"
+                              },
+                              "message": {
+                                "type": "string"
+                              },
+                              "code": {
+                                "type": "string"
+                              },
+                              "source": {
+                                "type": "string",
+                                "enum": [
+                                  "body",
+                                  "query",
+                                  "params"
+                                ]
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time",
+                      "example": "2026-10-14T10:00:00.000Z"
+                    }
+                  }
+                },
+                "example": {
+                  "success": false,
+                  "statusCode": 500,
+                  "error": {
+                    "code": "INTERNAL_SERVER_ERROR",
+                    "message": "Lỗi hệ thống nội bộ"
+                  },
+                  "timestamp": "2026-10-14T10:00:00.000Z"
+                }
+              }
+            }
+          }
+        },
+        "x-public": true
+      }
+    },
+    "/api/v1/ops/metrics/overview": {
+      "get": {
+        "operationId": "MetricsOpsController_overview",
+        "summary": "GET /api/v1/ops/metrics/overview (overview)",
+        "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Chế độ truy cập**: `Public` (Không yêu cầu đăng nhập)",
+        "tags": [
+          "Metrics Ops"
         ],
         "security": [],
         "responses": {
