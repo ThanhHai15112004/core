@@ -40,6 +40,8 @@ export interface PublishOptions {
   backoff?: 'exponential' | 'fixed';
   /** Thời gian chờ cơ sở trước lần retry đầu tiên (ms). */
   backoffDelayMs?: number;
+  /** Hệ số jitter cho backoff (0..1) để tránh thundering herd khi nhiều job lỗi cùng lúc. */
+  backoffJitter?: number;
   /** Thời gian thực thi tối đa của job (ms) trước khi ngắt lỗi Timeout. */
   timeoutMs?: number;
   idempotencyKey?: string;

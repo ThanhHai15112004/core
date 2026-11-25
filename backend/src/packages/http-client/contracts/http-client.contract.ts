@@ -11,10 +11,16 @@ export type HttpRedirectMode = 'follow' | 'error' | 'manual';
 export type CircuitBreakerState = 'CLOSED' | 'OPEN' | 'HALF_OPEN';
 
 export type HttpRequestOutcome =
-  'success' | 'http_error' | 'timeout' | 'network_error' | 'circuit_open';
+  | 'success'
+  | 'http_error'
+  | 'timeout'
+  | 'network_error'
+  | 'circuit_open'
+  | 'concurrency_rejected';
 
 export interface HttpRetryPolicy {
   readonly maxRetries: number;
+  readonly maxRetriesCap?: number | undefined;
   readonly baseDelayMs: number;
   readonly maxDelayMs: number;
   readonly jitter: boolean;
@@ -29,6 +35,21 @@ export interface HttpCircuitBreakerPolicy {
   readonly failureWindowMs: number;
   readonly resetTimeoutMs: number;
   readonly halfOpenMaxProbes: number;
+  readonly halfOpenSuccessThreshold?: number | undefined;
+}
+
+export interface HttpConcurrencyPolicy {
+  readonly enabled: boolean;
+  readonly maxConcurrent: number;
+  readonly maxQueue: number;
+  readonly queueTimeoutMs: number;
+}
+
+export interface HttpRetryStormPolicy {
+  readonly retriesPerMinThreshold: number;
+  readonly retryRatioPercent: number;
+  readonly minRequests: number;
+  readonly sheddingEnabled: boolean;
 }
 
 export interface HttpServicePolicy {
@@ -38,6 +59,7 @@ export interface HttpServicePolicy {
   readonly defaultHeaders?: Record<string, string> | undefined;
   readonly retry: HttpRetryPolicy;
   readonly circuitBreaker: HttpCircuitBreakerPolicy;
+  readonly concurrency: HttpConcurrencyPolicy;
 }
 
 export interface HttpServicePolicyInput {
@@ -46,6 +68,7 @@ export interface HttpServicePolicyInput {
   readonly defaultHeaders?: Record<string, string> | undefined;
   readonly retry?: Partial<HttpRetryPolicy> | undefined;
   readonly circuitBreaker?: Partial<HttpCircuitBreakerPolicy> | undefined;
+  readonly concurrency?: Partial<HttpConcurrencyPolicy> | undefined;
 }
 
 export interface HttpRequestOptions {
@@ -55,6 +78,7 @@ export interface HttpRequestOptions {
   readonly timeoutMs?: number | undefined;
   readonly retry?: Partial<HttpRetryPolicy> | undefined;
   readonly skipCircuitBreaker?: boolean | undefined;
+  readonly skipConcurrencyLimit?: boolean | undefined;
   readonly responseType?: HttpResponseType | undefined;
   readonly signal?: AbortSignal | undefined;
   readonly redirect?: HttpRedirectMode | undefined;
@@ -103,7 +127,45 @@ export interface CircuitBreakerSnapshot {
   readonly nextAttemptAt: string | null;
   readonly lastFailureReason: string | null;
   readonly halfOpenInFlight: number;
+  readonly halfOpenSuccesses: number;
+  readonly halfOpenSuccessThreshold: number;
   readonly totalTrips: number;
+}
+
+export interface ConcurrencyLimiterSnapshot {
+  readonly service: string;
+  readonly enabled: boolean;
+  readonly inFlight: number;
+  readonly maxConcurrent: number;
+  readonly queued: number;
+  readonly maxQueue: number;
+  readonly peakInFlight: number;
+  readonly totalRejected: number;
+}
+
+export type RetryStormSeverity = 'warning' | 'critical';
+
+export interface RetryStormServiceSnapshot {
+  readonly service: string;
+  readonly active: boolean;
+  readonly severity: RetryStormSeverity | null;
+  readonly retriesInLastMin: number;
+  readonly requestsInLastMin: number;
+  readonly retryRatioPercent: number;
+  readonly retriesPerMinThreshold: number;
+  readonly retryRatioThresholdPercent: number;
+  readonly sheddingActive: boolean;
+  readonly sheddedRetriesCount: number;
+  readonly detectedAt: string | null;
+  readonly reason: string | null;
+}
+
+export interface RetryStormOverviewSnapshot {
+  readonly activeStormCount: number;
+  readonly totalRetriesInLastMin: number;
+  readonly totalSheddedRetries: number;
+  readonly policy: HttpRetryStormPolicy;
+  readonly alerts: readonly RetryStormServiceSnapshot[];
 }
 
 export interface HttpServiceMetricsSnapshot {
@@ -114,6 +176,8 @@ export interface HttpServiceMetricsSnapshot {
   readonly retryCount: number;
   readonly timeoutCount: number;
   readonly circuitRejectedCount: number;
+  readonly concurrencyRejectedCount: number;
+  readonly retryStormSheddedCount: number;
   readonly errorRatePercent: number;
   readonly avgDurationMs: number;
   readonly p95DurationMs: number;

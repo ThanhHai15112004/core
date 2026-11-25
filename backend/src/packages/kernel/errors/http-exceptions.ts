@@ -17,6 +17,7 @@ export const HTTP_STATUS_CODE = {
   UNAUTHORIZED: 401,
   FORBIDDEN: 403,
   NOT_FOUND: 404,
+  REQUEST_TIMEOUT: 408,
   CONFLICT: 409,
   PAYLOAD_TOO_LARGE: 413,
   UNSUPPORTED_MEDIA_TYPE: 415,
@@ -24,6 +25,7 @@ export const HTTP_STATUS_CODE = {
   TOO_MANY_REQUESTS: 429,
   INTERNAL_SERVER_ERROR: 500,
   SERVICE_UNAVAILABLE: 503,
+  GATEWAY_TIMEOUT: 504,
 } as const;
 
 export type HttpStatusCodeValue = (typeof HTTP_STATUS_CODE)[keyof typeof HTTP_STATUS_CODE];
@@ -55,6 +57,7 @@ export const HTTP_ERROR_CODE = {
   UNAUTHORIZED: 'UNAUTHORIZED',
   FORBIDDEN: 'FORBIDDEN',
   NOT_FOUND: 'NOT_FOUND',
+  REQUEST_TIMEOUT: 'REQUEST_TIMEOUT',
   CONFLICT: 'CONFLICT',
   DUPLICATE_RESOURCE: 'DUPLICATE_RESOURCE',
   OPTIMISTIC_LOCK_VERSION_MISMATCH: 'OPTIMISTIC_LOCK_VERSION_MISMATCH',
@@ -65,6 +68,7 @@ export const HTTP_ERROR_CODE = {
   TOO_MANY_REQUESTS: 'TOO_MANY_REQUESTS',
   INTERNAL_SERVER_ERROR: 'INTERNAL_SERVER_ERROR',
   SERVICE_UNAVAILABLE: 'SERVICE_UNAVAILABLE',
+  GATEWAY_TIMEOUT: 'GATEWAY_TIMEOUT',
   HTTP_ERROR: 'HTTP_ERROR',
 } as const;
 
@@ -337,6 +341,52 @@ export class ServiceUnavailableAppException extends AppException {
     super(
       message,
       HTTP_STATUS_CODE.SERVICE_UNAVAILABLE,
+      details,
+      messageParams,
+      ERROR_CATEGORY.SYSTEM,
+      false,
+    );
+    this.code = code;
+  }
+}
+
+/** Lỗi 408 Request Timeout — Yêu cầu từ phía client vượt quá thời gian cho phép. */
+export class RequestTimeoutAppException extends AppException {
+  public override readonly code: string;
+
+  /** Khởi tạo ngoại lệ 408 Request Timeout */
+  constructor(
+    message: string = HTTP_ERROR_CODE.REQUEST_TIMEOUT,
+    details: unknown[] = [],
+    messageParams?: MessageParams,
+    code: string = HTTP_ERROR_CODE.REQUEST_TIMEOUT,
+  ) {
+    super(
+      message,
+      HTTP_STATUS_CODE.REQUEST_TIMEOUT,
+      details,
+      messageParams,
+      ERROR_CATEGORY.CLIENT,
+      true,
+    );
+    this.code = code;
+  }
+}
+
+/** Lỗi 504 Gateway Timeout — Thao tác xử lý API vượt quá ngưỡng thời gian tối đa cho phép. */
+export class GatewayTimeoutAppException extends AppException {
+  public override readonly code: string;
+
+  /** Khởi tạo ngoại lệ 504 Gateway Timeout khi API/downstream không phản hồi kịp thời hạn */
+  constructor(
+    message: string = HTTP_ERROR_CODE.GATEWAY_TIMEOUT,
+    details: unknown[] = [],
+    messageParams?: MessageParams,
+    code: string = HTTP_ERROR_CODE.GATEWAY_TIMEOUT,
+  ) {
+    super(
+      message,
+      HTTP_STATUS_CODE.GATEWAY_TIMEOUT,
       details,
       messageParams,
       ERROR_CATEGORY.SYSTEM,

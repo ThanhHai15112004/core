@@ -1,4 +1,5 @@
 import { UnrecoverableError } from 'bullmq';
+import { AppException, classifyTransientError } from '@packages/kernel/index.js';
 import { MessageDeserializeError, sanitizeMessagingMessage } from './messaging-errors.js';
 
 /** Hệ thống phụ thuộc gây lỗi — chỉ khi có bằng chứng (processor khai báo hoặc tên lỗi / message nói rõ). */
@@ -104,6 +105,32 @@ export function classifyJobError(err: unknown): JobErrorInfo {
       retryable: false,
       dependency: dependencyOf(message),
     };
+  if (code === 'HTTP_CIRCUIT_OPEN' || code === 'HTTP_CONCURRENCY_LIMIT') {
+    return {
+      type: name || code,
+      message,
+      retryable: true,
+      dependency: 'http',
+    };
+  }
+  if (err instanceof AppException) {
+    const transient = classifyTransientError(err);
+    return {
+      type: err.code || name || 'AppException',
+      message,
+      retryable: transient,
+      dependency: dependencyOf(`${err.code} ${message}`),
+    };
+  }
+  const transientHint = classifyTransientError(err);
+  if (transientHint === false) {
+    return {
+      type: name || code || errorTypeOf(message) || 'NonRetryableError',
+      message,
+      retryable: false,
+      dependency: dependencyOf(`${name} ${message}`),
+    };
+  }
   if (CONNECTION.test(code))
     return {
       type: 'DependencyUnavailable',

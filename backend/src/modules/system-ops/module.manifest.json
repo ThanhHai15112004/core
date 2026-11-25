@@ -165,6 +165,26 @@
       "validationRules": { "min": 100, "max": 300000 }
     },
     {
+      "key": "queue.retry.backoff_jitter",
+      "groupCode": "queue_worker",
+      "module": "system-ops",
+      "name": "Hệ số Jitter cho Backoff hàng đợi (0..1)",
+      "description": "Tỷ lệ ngẫu nhiên hóa độ trễ retry của BullMQ (0 = tắt, 0.3 = ±30%) để tránh bão retry đồng thời",
+      "valueType": "NUMBER",
+      "defaultValue": "0.3",
+      "validationRules": { "min": 0, "max": 1 }
+    },
+    {
+      "key": "queue.retry.storm_per_min",
+      "groupCode": "queue_worker",
+      "module": "system-ops",
+      "name": "Ngưỡng cảnh báo Retry Storm của Queue (lượt/phút)",
+      "description": "Số lượt retry job trong 1 phút đạt hoặc vượt ngưỡng này sẽ kích hoạt cảnh báo Retry Storm",
+      "valueType": "NUMBER",
+      "defaultValue": "100",
+      "validationRules": { "min": 1, "max": 100000 }
+    },
+    {
       "key": "queue.execution.timeout_ms",
       "groupCode": "queue_worker",
       "module": "system-ops",

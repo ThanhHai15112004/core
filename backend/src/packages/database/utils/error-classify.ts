@@ -1,6 +1,12 @@
+import {
+  clampRetryCount,
+  computeResilienceBackoffMs,
+  sleepWithAbortSignal,
+} from '@packages/kernel/index.js';
 import type { DbErrorKind } from '../contracts/database-events.types.js';
 
 const MAX_MESSAGE = 300;
+export const DB_MAX_RETRIES_CAP = 5;
 
 const DEADLOCK = new Set(['ER_LOCK_DEADLOCK', '1213', '40P01']);
 const LOCK_TIMEOUT = new Set(['ER_LOCK_WAIT_TIMEOUT', '1205', '55P03']);
@@ -117,4 +123,77 @@ export function sanitizeDbMessage(err: unknown): string {
     .replace(/\s+/g, ' ')
     .trim();
   return clean.length > MAX_MESSAGE ? `${clean.slice(0, MAX_MESSAGE)}…` : clean;
+}
+
+const NON_TRANSIENT_CONNECTION_CODES = new Set(['ER_ACCESS_DENIED_ERROR', '1045', '28P01', '28000']);
+
+/**
+ * Kiểm tra lỗi DB có phải lỗi tạm thời (deadlock, lock_timeout, rớt kết nối tạm thời) để được phép retry hay không.
+ * Tuyệt đối KHÔNG retry lỗi ràng buộc (unique/FK), lỗi cú pháp SQL, lỗi phân quyền hay thao tác bị hủy.
+ */
+export function isTransientDbError(err: unknown, includeTimeout = false): boolean {
+  const code = errorCodeOf(err);
+  if (code !== null && NON_TRANSIENT_CONNECTION_CODES.has(code)) {
+    return false;
+  }
+  const kind = classifyDbError(err);
+  if (kind === 'deadlock' || kind === 'lock_timeout' || kind === 'connection') {
+    return true;
+  }
+  return includeTimeout && kind === 'timeout';
+}
+
+export interface DbRetryOptions {
+  readonly maxRetries?: number | undefined;
+  readonly baseDelayMs?: number | undefined;
+  readonly maxDelayMs?: number | undefined;
+  readonly jitter?: boolean | undefined;
+  readonly includeTimeout?: boolean | undefined;
+  readonly signal?: AbortSignal | undefined;
+  readonly randomFn?: (() => number) | undefined;
+  readonly onRetry?:
+    | ((info: { attempt: number; delayMs: number; kind: DbErrorKind; error: unknown }) => void)
+    | undefined;
+}
+
+/**
+ * Thực thi thao tác DB có retry giới hạn (chặn trần `DB_MAX_RETRIES_CAP`) cho lỗi tạm thời
+ * kèm exponential backoff + jitter.
+ */
+export async function withDbRetry<T>(
+  operation: (attempt: number) => Promise<T>,
+  options: DbRetryOptions = {},
+): Promise<T> {
+  const maxRetries = clampRetryCount(options.maxRetries ?? 2, DB_MAX_RETRIES_CAP);
+  const baseDelayMs = Math.max(10, Math.round(options.baseDelayMs ?? 100));
+  const maxDelayMs = Math.max(baseDelayMs, Math.round(options.maxDelayMs ?? 2_000));
+  const jitter = options.jitter ?? true;
+  const maxAttempts = 1 + maxRetries;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      return await operation(attempt);
+    } catch (err) {
+      const canRetry =
+        attempt < maxAttempts && isTransientDbError(err, options.includeTimeout ?? false);
+      if (!canRetry) {
+        throw err;
+      }
+      const delayMs = computeResilienceBackoffMs(
+        attempt,
+        { baseDelayMs, maxDelayMs, jitter, strategy: 'exponential', respectRetryAfter: false },
+        options.randomFn,
+      );
+      options.onRetry?.({
+        attempt,
+        delayMs,
+        kind: classifyDbError(err),
+        error: err,
+      });
+      await sleepWithAbortSignal(delayMs, options.signal);
+    }
+  }
+
+  // Unreachable because loop always returns or throws on final attempt
+  throw new Error('DB retry loop exited unexpectedly');
 }

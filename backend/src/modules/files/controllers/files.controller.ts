@@ -15,7 +15,9 @@ import { HTTP_STATUS_CODE, type PaginatedResult } from '@packages/kernel/index.j
 import {
   ApiDoc,
   ApiGroup,
+  NoRequestTimeout,
   Public,
+  RequestTimeout,
   RequirePermissions,
   ValidatedBody,
   ValidatedParams,
@@ -182,6 +184,7 @@ export class FilesController {
 
   /** Tải một file lên hệ thống (kiểm tra chữ ký Magic Bytes & dung lượng trước khi lưu) */
   @Post(FILES_ROUTES.UPLOAD)
+  @RequestTimeout(120_000)
   @RequirePermissions('files.upload')
   @ApiDoc({
     summary:
@@ -198,6 +201,7 @@ export class FilesController {
 
   /** Tải nhiều file lên hệ thống cùng lúc */
   @Post(FILES_ROUTES.UPLOAD_BATCH)
+  @RequestTimeout(180_000)
   @RequirePermissions('files.upload')
   @ApiDoc({
     summary: 'Tải nhiều file lên hệ thống cùng lúc (Batch Upload)',
@@ -231,6 +235,7 @@ export class FilesController {
 
   /** Tải lên một mảnh dữ liệu (4MB Chunk) của phiên Chunked Upload */
   @Post(FILES_ROUTES.UPLOAD_CHUNKED_PART)
+  @RequestTimeout(120_000)
   @HttpCode(HttpStatus.OK)
   @RequirePermissions('files.upload')
   @ApiDoc({
@@ -295,6 +300,7 @@ export class FilesController {
 
   /** Tải file qua đường dẫn tạm thời tự hết hạn (Signed Temporary Download Link — Mục 6.2) */
   @Get(FILES_ROUTES.TEMPORARY_DOWNLOAD)
+  @NoRequestTimeout()
   @Public()
   @ApiDoc({
     summary: 'Tải file thông qua đường dẫn tạm thời có chữ ký và thời hạn tự hết hạn (Mục 6.2)',
@@ -420,6 +426,7 @@ export class FilesController {
 
   /** Tải file xuống (Kiểm tra quyền tải trước khi cho tải, trả về tên hiển thị mới) */
   @Get(FILES_ROUTES.DOWNLOAD)
+  @NoRequestTimeout()
   @RequirePermissions('files.download')
   @ApiDoc({
     summary: 'Tải file xuống sau khi kiểm tra quyền tải (có thể khác quyền xem thông tin)',
@@ -447,6 +454,7 @@ export class FilesController {
 
   /** Phát luồng Media/Video trực tiếp hỗ trợ tua nhanh Byte-Range (`206 Partial Content`) */
   @Get(FILES_ROUTES.STREAM)
+  @NoRequestTimeout()
   @RequirePermissions('files.download')
   @ApiDoc({
     summary: 'Phát luồng Video/Audio/Preview hỗ trợ HTTP Byte-Range (206 Partial Content)',
@@ -485,6 +493,7 @@ export class FilesController {
 
   /** Truy cập file công khai hoặc điều hướng qua CDN (Chỉ áp dụng cho file PUBLIC — Mục 6.4.7) */
   @Get(FILES_ROUTES.PUBLIC_ACCESS)
+  @NoRequestTimeout()
   @Public()
   @ApiDoc({
     summary:

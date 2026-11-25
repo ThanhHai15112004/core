@@ -9,4 +9,5 @@ export const HTTP_CLIENT_OPS_ROUTES = {
   CIRCUIT_RESET: 'circuits/:service/reset',
   ERRORS: 'errors',
   CONFIG: 'config',
+  RESILIENCE: 'resilience',
 } as const;

@@ -5,6 +5,10 @@ import type { JobsOptions, Queue } from 'bullmq';
 import type { Redis } from 'ioredis';
 import { CoreConfigService } from '@packages/config/index.js';
 import {
+  RESILIENCE_SETTING_KEYS,
+  readDynamicResilienceNumber,
+} from '@packages/kernel/index.js';
+import {
   MAX_JOB_ATTEMPTS_CAP,
   QUEUE_PROFILES,
   QUEUES,
@@ -91,11 +95,26 @@ export class QueueRegistry implements OnModuleInit {
     const backoffType = options?.backoff ?? m?.backoff ?? prof?.defaultBackoff ?? 'exponential';
     const backoffDelay =
       options?.backoffDelayMs ?? (m ? m.backoffDelayMs : (prof?.defaultBackoffDelayMs ?? 0));
+    const configuredJitter = readDynamicResilienceNumber(
+      RESILIENCE_SETTING_KEYS.QUEUE_RETRY_BACKOFF_JITTER,
+      m?.backoffJitter ?? 0.3,
+      { min: 0, max: 1 },
+    );
+    const backoffJitter =
+      options?.backoffJitter !== undefined
+        ? Math.min(1, Math.max(0, options.backoffJitter))
+        : configuredJitter;
 
     return {
       attempts,
       ...(attempts > 1 && backoffDelay > 0
-        ? { backoff: { type: backoffType, delay: Math.max(0, Math.round(backoffDelay)) } }
+        ? {
+            backoff: {
+              type: backoffType,
+              delay: Math.max(0, Math.round(backoffDelay)),
+              ...(backoffJitter > 0 ? { jitter: backoffJitter } : {}),
+            },
+          }
         : {}),
       removeOnComplete: { count: m?.keepCompleted ?? 1000 },
       removeOnFail: { count: m?.keepDeadLetter ?? 1000 },

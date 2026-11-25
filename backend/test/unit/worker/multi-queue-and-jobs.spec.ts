@@ -158,7 +158,11 @@ describe('Phase 7.3 — Hàng đợi công việc (Multi-Queue, Worker Concurren
       backoffDelayMs: 2500,
     });
     expect(capped.attempts).toBe(MAX_JOB_ATTEMPTS_CAP);
-    expect(capped.backoff).toEqual({ type: 'exponential', delay: 2500 });
+    expect(capped.backoff).toEqual({
+      type: 'exponential',
+      delay: 2500,
+      jitter: config.messaging.backoffJitter,
+    });
 
     await expect(
       withJobExecutionTimeout(

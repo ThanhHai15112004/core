@@ -25,6 +25,8 @@ export const messagingConfig = () => {
       : 'exponential') as MessagingBackoff,
     /** Độ trễ retry đầu tiên (ms); exponential: delay × 2^(attempt-1). */
     backoffDelayMs: Math.max(0, numberOr('MESSAGING_BACKOFF_DELAY_MS', 1000)),
+    /** Hệ số jitter (0..1) áp dụng vào thời gian chờ retry của BullMQ chống bão retry đồng thời. */
+    backoffJitter: Math.min(1, Math.max(0, numberOr('MESSAGING_BACKOFF_JITTER', 0.3))),
     /** Thời gian thực thi tối đa mặc định của một job trước khi bị ngắt Timeout (ms). */
     executionTimeoutMs: Math.max(1000, numberOr('MESSAGING_EXECUTION_TIMEOUT_MS', 60000)),
     /** Số message đã xử lý xong giữ lại để tra cứu (Messages explorer). */

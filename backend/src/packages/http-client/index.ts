@@ -3,6 +3,8 @@ export * from './errors/http-client.errors.js';
 export * from './config/http-service-registry.js';
 export * from './resilience/retry.policy.js';
 export * from './resilience/circuit-breaker.registry.js';
+export * from './resilience/concurrency-limiter.registry.js';
+export * from './resilience/retry-storm.monitor.js';
 export * from './interceptors/http-client-logging.interceptor.js';
 export * from './monitoring/http-client-metrics.service.js';
 export * from './providers/http-client.provider.js';

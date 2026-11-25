@@ -12,6 +12,10 @@ import { DataSource } from 'typeorm';
 import { CoreConfigService } from '@packages/config/index.js';
 import { RedisService } from '@packages/redis/index.js';
 import { RUNTIME_IDENTITY, type RuntimeIdentity } from '@packages/runtime/index.js';
+import {
+  computeResilienceBackoffMs,
+  type BackoffOptions,
+} from '@packages/kernel/index.js';
 import { databaseKeys } from '../constants/database.keys.js';
 import type { ConnectionState, ConnectionStatus } from '../contracts/database-events.types.js';
 import { errorCodeOf, sanitizeDbMessage } from '../utils/error-classify.js';
@@ -25,6 +29,21 @@ const FAILURES_BEFORE_UNAVAILABLE = 3;
 /** Backoff lũy thừa có trần: 1s, 2s, 4s … 30s. */
 export function retryDelayMs(attempt: number): number {
   return Math.min(RETRY_MAX_MS, RETRY_MIN_MS * 2 ** Math.max(0, attempt - 1));
+}
+
+/** Backoff lũy thừa có trần kèm Equal Jitter chống reconnect đồng loạt. */
+export function retryDelayWithJitterMs(
+  attempt: number,
+  options?: { jitter?: boolean; randomFn?: () => number },
+): number {
+  const opts: BackoffOptions = {
+    baseDelayMs: RETRY_MIN_MS,
+    maxDelayMs: RETRY_MAX_MS,
+    jitter: options?.jitter ?? true,
+    strategy: 'exponential',
+    respectRetryAfter: false,
+  };
+  return computeResilienceBackoffMs(attempt, opts, options?.randomFn);
 }
 
 /**
@@ -188,7 +207,11 @@ export class DatabaseConnectionService implements OnApplicationBootstrap, OnAppl
         void this.publish();
       }
     }
-    this.schedule(result.ok ? this.config.database.healthIntervalMs : retryDelayMs(this.failures));
+    this.schedule(
+      result.ok
+        ? this.config.database.healthIntervalMs
+        : retryDelayWithJitterMs(this.failures, { jitter: !this.config.isTest }),
+    );
   }
 
   /** Khởi tạo kết nối và các thiết lập ban đầu cho dịch vụ */
@@ -222,7 +245,7 @@ export class DatabaseConnectionService implements OnApplicationBootstrap, OnAppl
           this.status.lastError = error;
           void this.publish();
         }
-        this.schedule(retryDelayMs(this.failures));
+        this.schedule(retryDelayWithJitterMs(this.failures, { jitter: !this.config.isTest }));
       } finally {
         this.initializing = null;
       }

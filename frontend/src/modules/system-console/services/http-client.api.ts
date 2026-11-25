@@ -4,10 +4,15 @@ import type {
   HttpClientAllCircuitsResetResultDto,
   HttpClientCircuitResetResultDto,
   HttpClientOpsOverviewDto,
+  ResilienceLayersSummaryDto,
 } from '../types/http-client.types';
 
 export function fetchHttpClientOverview(): Promise<HttpClientOpsOverviewDto> {
   return fetchApi<HttpClientOpsOverviewDto>(API_ROUTES.OPS.HTTP_CLIENT.path('overview'));
+}
+
+export function fetchResilienceSummary(): Promise<ResilienceLayersSummaryDto> {
+  return fetchApi<ResilienceLayersSummaryDto>(API_ROUTES.OPS.HTTP_CLIENT.path('resilience'));
 }
 
 export function resetHttpClientCircuit(service: string): Promise<HttpClientCircuitResetResultDto> {

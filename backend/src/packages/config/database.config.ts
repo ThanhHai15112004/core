@@ -51,6 +51,13 @@ export const databaseConfig = () => {
     longTransactionSec: numberOr('DB_LONG_TX_SEC', 10),
     /** Thời gian tối đa (ms) cho phép một transaction chạy trong TransactionManager trước khi tự động rollback (0 = không giới hạn). */
     transactionTimeoutMs: numberOr('DB_TRANSACTION_TIMEOUT_MS', 30_000),
+    /** Chính sách retry cho lỗi DB tạm thời (deadlock / lock_timeout) có giới hạn trần và jitter. */
+    retry: {
+      maxRetries: Math.min(5, Math.max(0, numberOr('DB_RETRY_MAX', 2))),
+      baseDelayMs: Math.max(10, numberOr('DB_RETRY_BASE_DELAY_MS', 100)),
+      maxDelayMs: Math.max(50, numberOr('DB_RETRY_MAX_DELAY_MS', 2_000)),
+      jitter: booleanOr('DB_RETRY_JITTER', true),
+    },
     /** Chặn chạy migration nếu phát hiện migration đã áp dụng bị sửa đổi hoặc xóa file. */
     migrationStrict: booleanOr('DB_MIGRATION_STRICT', true),
     /** Dung lượng tối đa cấp cho database (GB) để tính % sử dụng; 0 = không biết. */

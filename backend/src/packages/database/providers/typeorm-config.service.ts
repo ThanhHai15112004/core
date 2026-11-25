@@ -2,9 +2,11 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Inject, Injectable, Optional } from '@nestjs/common';
 import type { TypeOrmOptionsFactory, TypeOrmModuleOptions } from '@nestjs/typeorm';
+import type { Counter } from 'prom-client';
 import { CoreConfigService } from '@packages/config/index.js';
 import { DatabaseDriver } from '@packages/kernel/index.js';
 import { RequestContextService } from '@packages/logging/index.js';
+import { MetricsRegistryService } from '@packages/metrics/index.js';
 import { RedisService } from '@packages/redis/index.js';
 import { RUNTIME_IDENTITY, type RuntimeIdentity } from '@packages/runtime/index.js';
 import { ERROR_LOG_SIZE, databaseKeys } from '../constants/database.keys.js';
@@ -36,21 +38,35 @@ const ERROR_RECORDS_PER_SEC = 5;
 @Injectable()
 export class TypeOrmConfigService implements TypeOrmOptionsFactory {
   private errorWindow = { at: 0, n: 0 };
+  private readonly dbTimeoutsCounter: Counter<'kind'> | null;
 
   constructor(
     private readonly configService: CoreConfigService,
     @Optional() @Inject(RUNTIME_IDENTITY) private readonly identity: RuntimeIdentity | null = null,
     @Optional() private readonly redis: RedisService | null = null,
-  ) {}
+    @Optional() metrics: MetricsRegistryService | null = null,
+  ) {
+    this.dbTimeoutsCounter = metrics
+      ? metrics.counter(
+          'core_db_timeouts_total',
+          'Total database query, lock, and transaction timeouts',
+          ['kind'],
+        )
+      : null;
+  }
 
   /** Lưu lỗi query (đã phân loại, SQL đã chuẩn hoá) cho trang Database → Errors / deadlock. */
   private recordQueryError(error: unknown, query: string): void {
+    const kind = classifyDbError(error);
+    if (kind === 'timeout' || kind === 'lock_timeout') {
+      this.dbTimeoutsCounter?.inc({ kind: kind === 'lock_timeout' ? 'lock_timeout' : 'query' });
+    }
     const now = Date.now();
     if (now - this.errorWindow.at >= 1000) this.errorWindow = { at: now, n: 0 };
     if (++this.errorWindow.n > ERROR_RECORDS_PER_SEC || !this.redis?.isReady()) return;
     const record: DbErrorRecord = {
       at: now,
-      kind: classifyDbError(error),
+      kind,
       code: errorCodeOf(error),
       message: sanitizeDbMessage(error),
       sql: normalizeSql(query),

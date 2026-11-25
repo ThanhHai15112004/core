@@ -18,6 +18,8 @@ interface ServiceStatsAccumulator {
   retryCount: number;
   timeoutCount: number;
   circuitRejectedCount: number;
+  concurrencyRejectedCount: number;
+  retryStormSheddedCount: number;
   durationSamples: number[];
   durationSumMs: number;
   lastRequestAt: string | null;
@@ -46,8 +48,9 @@ function computeP95(samples: readonly number[]): number {
 }
 
 /**
- * Thu thập chỉ số thời gian phản hồi, tỷ lệ lỗi, số lần retry và trạng thái Circuit Breaker
- * cho các outbound HTTP requests, xuất ra Prometheus (`@packages/metrics`) và ảnh chụp in-memory.
+ * Thu thập chỉ số thời gian phản hồi, tỷ lệ lỗi, số lần retry, timeout, bulkhead concurrency,
+ * Retry Storm và trạng thái Circuit Breaker cho các outbound HTTP requests,
+ * xuất ra Prometheus (`@packages/metrics`) và ảnh chụp in-memory.
  */
 @Injectable()
 export class HttpClientMetricsService {
@@ -57,7 +60,12 @@ export class HttpClientMetricsService {
   private readonly durationHistogram: Histogram<'service' | 'method' | 'status' | 'outcome'> | null;
   private readonly requestsCounter: Counter<'service' | 'method' | 'status' | 'outcome'> | null;
   private readonly retriesCounter: Counter<'service' | 'method' | 'reason'> | null;
+  private readonly timeoutsCounter: Counter<'service' | 'method'> | null;
   private readonly circuitGauge: Gauge<'service'> | null;
+  private readonly inFlightGauge: Gauge<'service'> | null;
+  private readonly concurrencyRejectedCounter: Counter<'service' | 'method'> | null;
+  private readonly retryStormGauge: Gauge<'service'> | null;
+  private readonly retryStormSheddedCounter: Counter<'service' | 'method'> | null;
 
   constructor(@Optional() metrics?: MetricsRegistryService) {
     if (metrics) {
@@ -76,16 +84,46 @@ export class HttpClientMetricsService {
         'Total outbound HTTP retry attempts by service, method and reason',
         ['service', 'method', 'reason'],
       );
+      this.timeoutsCounter = metrics.counter(
+        'outbound_http_timeouts_total',
+        'Total outbound HTTP request attempt timeouts by service and method',
+        ['service', 'method'],
+      );
       this.circuitGauge = metrics.gauge(
         'outbound_http_circuit_state',
         'Circuit breaker state per external service (0=CLOSED, 1=HALF_OPEN, 2=OPEN)',
         ['service'],
       );
+      this.inFlightGauge = metrics.gauge(
+        'outbound_http_in_flight_requests',
+        'Current concurrent in-flight outbound HTTP requests per external service',
+        ['service'],
+      );
+      this.concurrencyRejectedCounter = metrics.counter(
+        'outbound_http_concurrency_rejected_total',
+        'Total outbound HTTP requests rejected by per-service concurrency bulkhead limit',
+        ['service', 'method'],
+      );
+      this.retryStormGauge = metrics.gauge(
+        'outbound_http_retry_storm_active',
+        'Whether a retry storm is currently active for an external service (0=normal, 1=storm)',
+        ['service'],
+      );
+      this.retryStormSheddedCounter = metrics.counter(
+        'outbound_http_retry_storm_shedded_total',
+        'Total outbound HTTP retries suppressed by retry storm shedding budget',
+        ['service', 'method'],
+      );
     } else {
       this.durationHistogram = null;
       this.requestsCounter = null;
       this.retriesCounter = null;
+      this.timeoutsCounter = null;
       this.circuitGauge = null;
+      this.inFlightGauge = null;
+      this.concurrencyRejectedCounter = null;
+      this.retryStormGauge = null;
+      this.retryStormSheddedCounter = null;
     }
   }
 
@@ -118,6 +156,10 @@ export class HttpClientMetricsService {
       acc.failedRequests += 1;
       if (input.outcome === 'timeout') acc.timeoutCount += 1;
       if (input.outcome === 'circuit_open') acc.circuitRejectedCount += 1;
+      if (input.outcome === 'concurrency_rejected') {
+        acc.concurrencyRejectedCount += 1;
+        this.concurrencyRejectedCounter?.inc({ service: input.service, method: input.method });
+      }
     }
 
     acc.durationSumMs += input.durationMs;
@@ -175,9 +217,31 @@ export class HttpClientMetricsService {
     this.retriesCounter?.inc({ service, method, reason });
   }
 
+  /** Ghi nhận một lần attempt vượt quá timeout trên Prometheus */
+  public recordTimeout(service: string, method: HttpMethod): void {
+    this.timeoutsCounter?.inc({ service, method });
+  }
+
   /** Cập nhật gauge trạng thái Circuit Breaker của dịch vụ lên Prometheus */
   public recordCircuitState(service: string, state: CircuitBreakerState): void {
     this.circuitGauge?.set({ service }, CIRCUIT_STATE_VALUE[state]);
+  }
+
+  /** Cập nhật số lượng request đang thực thi đồng thời (in-flight) lên Prometheus */
+  public recordInFlight(service: string, count: number): void {
+    this.inFlightGauge?.set({ service }, Math.max(0, count));
+  }
+
+  /** Cập nhật trạng thái Retry Storm đang hoạt động (0/1) lên Prometheus */
+  public recordRetryStormState(service: string, active: boolean): void {
+    this.retryStormGauge?.set({ service }, active ? 1 : 0);
+  }
+
+  /** Ghi nhận lượt retry bị tự động chặn do Retry Storm Shedding */
+  public recordRetryStormShedded(service: string, method: HttpMethod): void {
+    const acc = this.getOrCreate(service);
+    acc.retryStormSheddedCount += 1;
+    this.retryStormSheddedCounter?.inc({ service, method });
   }
 
   /** Lấy thống kê hiệu năng và tỷ lệ lỗi của một dịch vụ */
@@ -212,6 +276,8 @@ export class HttpClientMetricsService {
     retryCount: number;
     timeoutCount: number;
     circuitRejectedCount: number;
+    concurrencyRejectedCount: number;
+    retryStormSheddedCount: number;
     errorRatePercent: number;
     avgDurationMs: number;
     p95DurationMs: number;
@@ -222,6 +288,8 @@ export class HttpClientMetricsService {
     let retryCount = 0;
     let timeoutCount = 0;
     let circuitRejectedCount = 0;
+    let concurrencyRejectedCount = 0;
+    let retryStormSheddedCount = 0;
     let durationSumMs = 0;
     const allSamples: number[] = [];
 
@@ -232,6 +300,8 @@ export class HttpClientMetricsService {
       retryCount += acc.retryCount;
       timeoutCount += acc.timeoutCount;
       circuitRejectedCount += acc.circuitRejectedCount;
+      concurrencyRejectedCount += acc.concurrencyRejectedCount;
+      retryStormSheddedCount += acc.retryStormSheddedCount;
       durationSumMs += acc.durationSumMs;
       allSamples.push(...acc.durationSamples);
     }
@@ -243,6 +313,8 @@ export class HttpClientMetricsService {
       retryCount,
       timeoutCount,
       circuitRejectedCount,
+      concurrencyRejectedCount,
+      retryStormSheddedCount,
       errorRatePercent: totalRequests > 0 ? round2((failedRequests / totalRequests) * 100) : 0,
       avgDurationMs: totalRequests > 0 ? round2(durationSumMs / totalRequests) : 0,
       p95DurationMs: computeP95(allSamples),
@@ -259,6 +331,8 @@ export class HttpClientMetricsService {
         retryCount: 0,
         timeoutCount: 0,
         circuitRejectedCount: 0,
+        concurrencyRejectedCount: 0,
+        retryStormSheddedCount: 0,
         durationSamples: [],
         durationSumMs: 0,
         lastRequestAt: null,
@@ -279,6 +353,8 @@ export class HttpClientMetricsService {
       retryCount: acc.retryCount,
       timeoutCount: acc.timeoutCount,
       circuitRejectedCount: acc.circuitRejectedCount,
+      concurrencyRejectedCount: acc.concurrencyRejectedCount,
+      retryStormSheddedCount: acc.retryStormSheddedCount,
       errorRatePercent:
         acc.totalRequests > 0 ? round2((acc.failedRequests / acc.totalRequests) * 100) : 0,
       avgDurationMs: acc.totalRequests > 0 ? round2(acc.durationSumMs / acc.totalRequests) : 0,

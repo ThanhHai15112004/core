@@ -2,6 +2,7 @@ import { Global, Module, type OnModuleInit, Optional } from '@nestjs/common';
 import { HttpAdapterHost } from '@nestjs/core';
 import { GlobalExceptionFilter } from './filters/global-exception.filter.js';
 import { IdempotencyInterceptor } from './interceptors/idempotency.interceptor.js';
+import { RequestTimeoutInterceptor } from './interceptors/request-timeout.interceptor.js';
 import { TransformResponseInterceptor } from './interceptors/transform-response.interceptor.js';
 
 const RELAXED_JSON_PARSER_WATERMARK = Symbol.for('core:fastify_relaxed_json_parser');
@@ -116,8 +117,18 @@ export function configureFastifyEmptyJsonBodyParser(instance: unknown): void {
 
 @Global()
 @Module({
-  providers: [GlobalExceptionFilter, TransformResponseInterceptor, IdempotencyInterceptor],
-  exports: [GlobalExceptionFilter, TransformResponseInterceptor, IdempotencyInterceptor],
+  providers: [
+    GlobalExceptionFilter,
+    TransformResponseInterceptor,
+    IdempotencyInterceptor,
+    RequestTimeoutInterceptor,
+  ],
+  exports: [
+    GlobalExceptionFilter,
+    TransformResponseInterceptor,
+    IdempotencyInterceptor,
+    RequestTimeoutInterceptor,
+  ],
 })
 export class HttpModule implements OnModuleInit {
   constructor(@Optional() private readonly adapterHost?: HttpAdapterHost) {}

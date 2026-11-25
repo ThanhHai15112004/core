@@ -1,5 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { CoreConfigService } from '@packages/config/index.js';
+import {
+  RESILIENCE_SETTING_KEYS,
+  readDynamicResilienceNumber,
+} from '@packages/kernel/index.js';
 import { CoreI18nService } from '@packages/i18n/index.js';
 import {
   JOB_LOCK_DURATION_MS,
@@ -92,7 +96,15 @@ export class JobsInspectorService {
     now: number;
   }): JobProblemDto[] {
     const r = this.cfg.rules;
-    const q = this.config.queue.rules;
+    const rawQ = this.config.queue.rules;
+    const q = {
+      ...rawQ,
+      retryStormPerMin: readDynamicResilienceNumber(
+        RESILIENCE_SETTING_KEYS.QUEUE_RETRY_STORM_PER_MIN,
+        rawQ.retryStormPerMin,
+        { min: 1, max: 100_000, round: true },
+      ),
+    };
     const out: JobProblemDto[] = [];
     const add = (p: Omit<JobProblemDto, 'message'>, params: Record<string, string | number>) =>
       out.push({ ...p, message: this.i18n.t(`jobs.problem.${p.code}`, params) });

@@ -1,7 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
 import { Logger } from '@nestjs/common';
-import { CoreConfigService } from '@packages/config/index.js';
+import { CoreConfigService, appConfig } from '@packages/config/index.js';
 import { normalizeApiPrefix } from '@packages/http/index.js';
 import { PinoNestLogger } from '@packages/logging/index.js';
 import { RuntimeAgentService } from '@packages/runtime/index.js';
@@ -13,6 +13,7 @@ import { setupApiDocs } from './api-docs.bootstrap.js';
 /** Khởi tạo và khởi chạy HTTP API server với NestJS và Fastify */
 export async function bootstrapApi(): Promise<NestFastifyApplication> {
   const logger = new Logger('ApiBootstrap');
+  const bootAppCfg = appConfig();
   // Parser JSON chấp nhận body rỗng được thay trong HttpModule.onModuleInit (sau khi Nest
   // đăng ký parser mặc định). KHÔNG gọi trước NestFactory.create → FST_ERR_CTP_ALREADY_PRESENT.
   // Nâng bodyLimit lên 32 MB để hỗ trợ tải lên theo mảnh tốc độ cao (Chunked Upload 4MB–10MB Base64).
@@ -20,6 +21,8 @@ export async function bootstrapApi(): Promise<NestFastifyApplication> {
     logger: false,
     bodyLimit: 32 * 1024 * 1024,
     maxParamLength: 1024,
+    connectionTimeout: bootAppCfg.connectionTimeoutMs,
+    keepAliveTimeout: bootAppCfg.keepAliveTimeoutMs,
   });
 
   const app = await NestFactory.create<NestFastifyApplication>(ApiModule, adapter, {

@@ -29,6 +29,8 @@ import type {
   HttpClientRecentErrorDto,
   HttpClientServiceOverviewDto,
 } from '../../types/http-client.types';
+import { ResilienceLayersPanel } from './ResilienceLayersPanel';
+import { RetryStormPanel } from './RetryStormPanel';
 
 const svcCol = createColumnHelper<HttpClientServiceOverviewDto>();
 const errCol = createColumnHelper<HttpClientRecentErrorDto>();
@@ -85,6 +87,11 @@ export const HttpClientSection: React.FC = () => {
               <Badge size="xs" variant="outline">
                 {t(row.configured ? 'httpClient.configuredTag' : 'httpClient.dynamicTag')}
               </Badge>
+              {row.retryStorm?.active && (
+                <Badge size="xs" tone={row.retryStorm.severity === 'critical' ? 'crit' : 'warn'}>
+                  {t('httpClient.storm.badge')}
+                </Badge>
+              )}
             </div>
           );
         },
@@ -103,7 +110,31 @@ export const HttpClientSection: React.FC = () => {
             </Badge>
           );
         },
-        meta: { width: '10rem' },
+        meta: { width: '9rem' },
+      }),
+      svcCol.display({
+        id: 'concurrency',
+        header: t('httpClient.col.concurrency'),
+        cell: (c) => {
+          const conc = c.row.original.concurrency;
+          if (!conc) return NO_VALUE;
+          return (
+            <div className="flex items-center gap-1.5 font-mono text-xs">
+              <span>
+                {t('httpClient.concurrencyPair', {
+                  inFlight: f.number(conc.inFlight),
+                  max: f.number(conc.maxConcurrent),
+                })}
+              </span>
+              {conc.totalRejected > 0 && (
+                <Badge size="xs" tone="warn">
+                  {t('httpClient.concurrencyRejected', { count: f.number(conc.totalRejected) })}
+                </Badge>
+              )}
+            </div>
+          );
+        },
+        meta: { width: '11rem' },
       }),
       svcCol.display({
         id: 'policy',
@@ -119,19 +150,19 @@ export const HttpClientSection: React.FC = () => {
             </span>
           );
         },
-        meta: { width: '13rem' },
+        meta: { width: '12rem' },
       }),
       svcCol.accessor((r) => r.metrics.totalRequests, {
         id: 'requests',
         header: t('httpClient.col.requests'),
         cell: (c) => f.number(c.getValue()),
-        meta: { align: 'right', mono: true, width: '7rem' },
+        meta: { align: 'right', mono: true, width: '6rem' },
       }),
       svcCol.accessor((r) => r.metrics.errorRatePercent, {
         id: 'errorRate',
         header: t('httpClient.col.errorRate'),
         cell: (c) => t('httpClient.percentValue', { value: f.number(c.getValue()) }),
-        meta: { align: 'right', mono: true, width: '7rem' },
+        meta: { align: 'right', mono: true, width: '6rem' },
       }),
       svcCol.display({
         id: 'latency',
@@ -143,7 +174,7 @@ export const HttpClientSection: React.FC = () => {
             p95: f.number(m.p95DurationMs),
           });
         },
-        meta: { align: 'right', mono: true, width: '9rem' },
+        meta: { align: 'right', mono: true, width: '8rem' },
       }),
       svcCol.display({
         id: 'action',
@@ -166,7 +197,7 @@ export const HttpClientSection: React.FC = () => {
             </Button>
           );
         },
-        meta: { align: 'right', width: '7rem' },
+        meta: { align: 'right', width: '6.5rem' },
       }),
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -242,6 +273,7 @@ export const HttpClientSection: React.FC = () => {
               ? t('httpClient.kpi.requestsSub', {
                   success: f.number(data.totals.successRequests),
                   retries: f.number(data.totals.retryCount),
+                  perMin: f.number(data.totals.retriesInLastMin),
                 })
               : undefined
           }
@@ -255,10 +287,15 @@ export const HttpClientSection: React.FC = () => {
               ? t('httpClient.kpi.errorRateSub', {
                   timeouts: f.number(data.totals.timeoutCount),
                   blocked: f.number(data.totals.circuitRejectedCount),
+                  rejected: f.number(data.totals.concurrencyRejectedCount),
                 })
               : undefined
           }
-          tone={data && data.totals.errorRatePercent >= 5 ? 'warn' : undefined}
+          tone={
+            data && (data.totals.errorRatePercent >= 5 || data.totals.concurrencyRejectedCount > 0)
+              ? 'warn'
+              : undefined
+          }
           loading={query.isPending}
         />
         <StatTile
@@ -271,23 +308,42 @@ export const HttpClientSection: React.FC = () => {
                 })
               : NO_VALUE
           }
+          sub={
+            data
+              ? t('httpClient.kpi.inFlightSub', {
+                  inFlight: f.number(data.totals.totalInFlight),
+                  shedded: f.number(data.totals.retryStormSheddedCount),
+                })
+              : undefined
+          }
           loading={query.isPending}
         />
         <StatTile
           label={t('httpClient.kpi.circuits')}
-          value={data ? f.number(data.totals.openCircuits) : NO_VALUE}
+          value={
+            data ? `${f.number(data.totals.openCircuits)} / ${f.number(data.totals.activeRetryStorms)}` : NO_VALUE
+          }
           sub={
             data
               ? t('httpClient.kpi.circuitsSub', {
                   halfOpen: f.number(data.totals.halfOpenCircuits),
+                  storms: f.number(data.totals.activeRetryStorms),
                   services: f.number(data.totals.serviceCount),
                 })
               : undefined
           }
-          tone={data && data.totals.openCircuits > 0 ? 'crit' : undefined}
+          tone={
+            data && (data.totals.openCircuits > 0 || data.totals.activeRetryStorms > 0)
+              ? 'crit'
+              : undefined
+          }
           loading={query.isPending}
         />
       </StatGrid>
+
+      {data?.retryStorm && <RetryStormPanel storm={data.retryStorm} />}
+
+      {data?.resilience && <ResilienceLayersPanel data={data.resilience} />}
 
       <Panel title={t('httpClient.servicesTitle')} flush className="mt-4">
         <QueryView query={query} isEmpty={(d) => d.services.length === 0} emptyMessage={t('httpClient.emptyServices')}>
@@ -296,7 +352,15 @@ export const HttpClientSection: React.FC = () => {
               data={d.services}
               columns={serviceColumns}
               getRowId={(r) => r.service}
-              rowTone={(r) => (r.circuit.state === 'CLOSED' ? undefined : CIRCUIT_TONE[r.circuit.state])}
+              rowTone={(r) =>
+                r.retryStorm?.active
+                  ? r.retryStorm.severity === 'critical'
+                    ? 'crit'
+                    : 'warn'
+                  : r.circuit.state === 'CLOSED'
+                    ? undefined
+                    : CIRCUIT_TONE[r.circuit.state]
+              }
               emptyMessage={t('httpClient.emptyServices')}
             />
           )}

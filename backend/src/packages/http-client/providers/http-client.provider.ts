@@ -13,6 +13,7 @@ import type {
 import {
   CircuitBreakerOpenError,
   HttpClientError,
+  HttpConcurrencyLimitError,
   HttpNetworkError,
   HttpStatusError,
   HttpTimeoutError,
@@ -20,6 +21,7 @@ import {
 import { HttpClientLoggingInterceptor } from '../interceptors/http-client-logging.interceptor.js';
 import { HttpClientMetricsService } from '../monitoring/http-client-metrics.service.js';
 import { CircuitBreakerRegistry } from '../resilience/circuit-breaker.registry.js';
+import { ConcurrencyLimiterRegistry } from '../resilience/concurrency-limiter.registry.js';
 import {
   computeBackoffDelayMs,
   parseRetryAfterMs,
@@ -27,6 +29,7 @@ import {
   shouldRetryStatus,
   sleepWithAbort,
 } from '../resilience/retry.policy.js';
+import { RetryStormMonitor } from '../resilience/retry-storm.monitor.js';
 
 function hasHeaderIgnoreCase(headers: Record<string, string>, targetName: string): boolean {
   const target = targetName.toLowerCase();
@@ -75,12 +78,14 @@ function isAbortTimeoutError(err: unknown): boolean {
   );
 }
 
-/** Client HTTP dùng chung cho mọi lệnh gọi dịch vụ ngoài (timeout, retry, backoff, trace ID, redact log, metrics, circuit breaker) */
+/** Client HTTP dùng chung cho mọi lệnh gọi dịch vụ ngoài (timeout, retry, backoff+jitter, bulkhead, retry storm, trace ID, redact log, metrics, circuit breaker) */
 @Injectable()
 export class BaseHttpClientProvider implements HttpClientContract {
   private readonly registry: HttpServiceRegistry;
   private readonly circuitBreaker: CircuitBreakerRegistry;
   private readonly metrics: HttpClientMetricsService;
+  private readonly concurrencyLimiter: ConcurrencyLimiterRegistry;
+  private readonly retryStorm: RetryStormMonitor;
   private readonly logEnabled: boolean;
   private readonly maxErrorBodyLength: number;
 
@@ -89,10 +94,14 @@ export class BaseHttpClientProvider implements HttpClientContract {
     @Optional() circuitBreaker?: CircuitBreakerRegistry,
     @Optional() metrics?: HttpClientMetricsService,
     @Optional() config?: CoreConfigService,
+    @Optional() concurrencyLimiter?: ConcurrencyLimiterRegistry,
+    @Optional() retryStorm?: RetryStormMonitor,
   ) {
     this.registry = registry ?? new HttpServiceRegistry(config);
     this.circuitBreaker = circuitBreaker ?? new CircuitBreakerRegistry();
     this.metrics = metrics ?? new HttpClientMetricsService();
+    this.concurrencyLimiter = concurrencyLimiter ?? new ConcurrencyLimiterRegistry();
+    this.retryStorm = retryStorm ?? new RetryStormMonitor(config);
     this.logEnabled = config?.httpClient?.logging?.enabled ?? true;
     this.maxErrorBodyLength = config?.httpClient?.logging?.maxErrorBodyLength ?? 256;
   }
@@ -187,6 +196,8 @@ export class BaseHttpClientProvider implements HttpClientContract {
     const hasIdempotencyKey =
       Boolean(options?.idempotencyKey) || hasHeaderIgnoreCase(headers, 'idempotency-key');
 
+    this.retryStorm.recordRequest(service);
+
     if (!options?.skipCircuitBreaker) {
       try {
         const state = this.circuitBreaker.beforeRequest(
@@ -231,160 +242,247 @@ export class BaseHttpClientProvider implements HttpClientContract {
       }
     }
 
+    let releaseSlot: (() => void) | null = null;
+    if (!options?.skipConcurrencyLimit && policy.concurrency.enabled) {
+      try {
+        const acquired = await this.concurrencyLimiter.acquire(
+          service,
+          policy.concurrency,
+          method,
+          redactedUrl,
+          options?.signal,
+        );
+        releaseSlot = acquired.release;
+        this.metrics.recordInFlight(service, acquired.inFlight);
+      } catch (err) {
+        if (!options?.skipCircuitBreaker) {
+          // Giải phóng probe slot HALF_OPEN nếu đã chiếm trước khi bị bulkhead từ chối (không tính lỗi mạch)
+          const state = this.circuitBreaker.onFailure(
+            service,
+            policy.circuitBreaker,
+            err instanceof Error ? err.message : 'concurrency_limit',
+            false,
+          );
+          this.metrics.recordCircuitState(service, state);
+        }
+        if (err instanceof HttpConcurrencyLimitError) {
+          this.metrics.recordRequestOutcome({
+            service,
+            method,
+            status: null,
+            outcome: 'concurrency_rejected',
+            durationMs: 0,
+            error: {
+              url: redactedUrl,
+              code: err.code,
+              message: err.message,
+              attempts: 0,
+              requestId,
+              traceId,
+            },
+          });
+          HttpClientLoggingInterceptor.logError({
+            service,
+            method,
+            url: redactedUrl,
+            status: null,
+            code: err.code,
+            durationMs: 0,
+            attempts: 0,
+            message: err.message,
+            requestId,
+            traceId,
+            enabled: this.logEnabled,
+          });
+        }
+        throw err;
+      }
+    }
+
     const totalStartMs = Date.now();
     const maxAttempts = 1 + Math.max(0, policy.retry.maxRetries);
     let lastError: HttpClientError | null = null;
 
-    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-      const attemptStartMs = HttpClientLoggingInterceptor.logRequest({
-        service,
-        method,
-        url: redactedUrl,
-        attempt,
-        requestId,
-        traceId,
-        enabled: this.logEnabled,
-      });
-
-      const timeoutSignal = AbortSignal.timeout(policy.timeoutMs);
-      const signal = options?.signal
-        ? AbortSignal.any([options.signal, timeoutSignal])
-        : timeoutSignal;
-
-      const init: RequestInit = {
-        method,
-        headers,
-        signal,
-        ...(options?.redirect ? { redirect: options.redirect } : {}),
-      };
-      if (body !== undefined && method !== 'GET' && method !== 'HEAD') {
-        const rawBody: unknown = body;
-        init.body = isRawFetchBody(rawBody) ? rawBody : JSON.stringify(rawBody);
-      }
-
-      try {
-        const res = await fetch(fullUrl, init);
-        const attemptDurationMs = Date.now() - attemptStartMs;
-
-        HttpClientLoggingInterceptor.logResponse({
+    try {
+      for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+        const attemptStartMs = HttpClientLoggingInterceptor.logRequest({
           service,
           method,
           url: redactedUrl,
-          status: res.status,
-          durationMs: attemptDurationMs,
           attempt,
           requestId,
           traceId,
           enabled: this.logEnabled,
         });
 
-        if (res.ok) {
-          const parsed = await this.parseResponseBody<T>(res, options?.responseType ?? 'json');
-          const totalDurationMs = Date.now() - totalStartMs;
-          if (!options?.skipCircuitBreaker) {
-            const state = this.circuitBreaker.onSuccess(service);
-            this.metrics.recordCircuitState(service, state);
-          }
-          this.metrics.recordRequestOutcome({
-            service,
-            method,
-            status: res.status,
-            outcome: 'success',
-            durationMs: totalDurationMs,
-          });
-          return {
-            status: res.status,
-            headers: headersToRecord(res.headers),
-            data: parsed,
-            durationMs: totalDurationMs,
-            attempts: attempt,
-            service,
-            url: redactedUrl,
-          };
+        const timeoutSignal = AbortSignal.timeout(policy.timeoutMs);
+        const signal = options?.signal
+          ? AbortSignal.any([options.signal, timeoutSignal])
+          : timeoutSignal;
+
+        const init: RequestInit = {
+          method,
+          headers,
+          signal,
+          ...(options?.redirect ? { redirect: options.redirect } : {}),
+        };
+        if (body !== undefined && method !== 'GET' && method !== 'HEAD') {
+          const rawBody: unknown = body;
+          init.body = isRawFetchBody(rawBody) ? rawBody : JSON.stringify(rawBody);
         }
 
-        const retryable = shouldRetryStatus(res.status, policy.retry);
-        const retryAfterMs = parseRetryAfterMs(
-          res.headers.get('retry-after'),
-          policy.retry.maxDelayMs,
-        );
-        const rawText = await res.text().catch(() => '');
-        const responseSnippet = HttpClientLoggingInterceptor.sanitizeSnippet(
-          rawText,
-          this.maxErrorBodyLength,
-        );
+        try {
+          const res = await fetch(fullUrl, init);
+          const attemptDurationMs = Date.now() - attemptStartMs;
 
-        lastError = new HttpStatusError({
-          service,
-          method,
-          url: redactedUrl,
-          status: res.status,
-          retryable,
-          durationMs: Date.now() - totalStartMs,
-          attempts: attempt,
-          retryAfterMs,
-          responseSnippet,
-        });
-      } catch (err) {
-        const elapsedMs = Date.now() - totalStartMs;
-        if (options?.signal?.aborted) {
-          lastError = new HttpNetworkError({
+          HttpClientLoggingInterceptor.logResponse({
             service,
             method,
             url: redactedUrl,
-            detail: 'Request aborted by caller signal',
-            durationMs: elapsedMs,
-            attempts: attempt,
-            cause: err,
+            status: res.status,
+            durationMs: attemptDurationMs,
+            attempt,
+            requestId,
+            traceId,
+            enabled: this.logEnabled,
           });
-          // Do not retry if caller explicitly cancelled their own AbortSignal
+
+          if (res.ok) {
+            const parsed = await this.parseResponseBody<T>(res, options?.responseType ?? 'json');
+            const totalDurationMs = Date.now() - totalStartMs;
+            if (!options?.skipCircuitBreaker) {
+              const state = this.circuitBreaker.onSuccess(service);
+              this.metrics.recordCircuitState(service, state);
+            }
+            const stormSnap = this.retryStorm.evaluateService(service);
+            this.metrics.recordRetryStormState(service, stormSnap.active);
+            this.metrics.recordRequestOutcome({
+              service,
+              method,
+              status: res.status,
+              outcome: 'success',
+              durationMs: totalDurationMs,
+            });
+            return {
+              status: res.status,
+              headers: headersToRecord(res.headers),
+              data: parsed,
+              durationMs: totalDurationMs,
+              attempts: attempt,
+              service,
+              url: redactedUrl,
+            };
+          }
+
+          const retryable = shouldRetryStatus(res.status, policy.retry);
+          const retryAfterMs = parseRetryAfterMs(
+            res.headers.get('retry-after'),
+            policy.retry.maxDelayMs,
+          );
+          const rawText = await res.text().catch(() => '');
+          const responseSnippet = HttpClientLoggingInterceptor.sanitizeSnippet(
+            rawText,
+            this.maxErrorBodyLength,
+          );
+
+          lastError = new HttpStatusError({
+            service,
+            method,
+            url: redactedUrl,
+            status: res.status,
+            retryable,
+            durationMs: Date.now() - totalStartMs,
+            attempts: attempt,
+            retryAfterMs,
+            responseSnippet,
+          });
+        } catch (err) {
+          const elapsedMs = Date.now() - totalStartMs;
+          if (options?.signal?.aborted) {
+            lastError = new HttpNetworkError({
+              service,
+              method,
+              url: redactedUrl,
+              detail: 'Request aborted by caller signal',
+              durationMs: elapsedMs,
+              attempts: attempt,
+              cause: err,
+            });
+            // Do not retry if caller explicitly cancelled their own AbortSignal
+            break;
+          }
+          if (timeoutSignal.aborted || isAbortTimeoutError(err)) {
+            this.metrics.recordTimeout(service, method);
+            lastError = new HttpTimeoutError({
+              service,
+              method,
+              url: redactedUrl,
+              timeoutMs: policy.timeoutMs,
+              durationMs: elapsedMs,
+              attempts: attempt,
+              cause: err,
+            });
+          } else {
+            const detail = err instanceof Error ? err.message : String(err);
+            lastError = new HttpNetworkError({
+              service,
+              method,
+              url: redactedUrl,
+              detail,
+              durationMs: elapsedMs,
+              attempts: attempt,
+              cause: err,
+            });
+          }
+        }
+
+        if (
+          attempt < maxAttempts &&
+          shouldRetryError(lastError, method, hasIdempotencyKey, policy.retry)
+        ) {
+          const stormCheck = this.retryStorm.shouldShedRetry(service);
+          this.metrics.recordRetryStormState(service, stormCheck.snapshot.active);
+          if (stormCheck.shed) {
+            this.metrics.recordRetryStormShedded(service, method);
+            HttpClientLoggingInterceptor.logRetry({
+              service,
+              method,
+              url: redactedUrl,
+              attempt,
+              nextDelayMs: 0,
+              reason: `retry_storm_shedded(${stormCheck.snapshot.reason ?? 'active'})`,
+              requestId,
+              traceId,
+              enabled: this.logEnabled,
+            });
+            break;
+          }
+
+          const delayMs = computeBackoffDelayMs(attempt, policy.retry, lastError.retryAfterMs);
+          const reason = lastError.status !== null ? `http_${lastError.status}` : lastError.code;
+          const afterRetrySnap = this.retryStorm.recordRetry(service);
+          this.metrics.recordRetryStormState(service, afterRetrySnap.active);
+          this.metrics.recordRetry(service, method, reason);
+          HttpClientLoggingInterceptor.logRetry({
+            service,
+            method,
+            url: redactedUrl,
+            attempt,
+            nextDelayMs: delayMs,
+            reason,
+            requestId,
+            traceId,
+            enabled: this.logEnabled,
+          });
+          await sleepWithAbort(delayMs, options?.signal);
+        } else {
           break;
         }
-        if (timeoutSignal.aborted || isAbortTimeoutError(err)) {
-          lastError = new HttpTimeoutError({
-            service,
-            method,
-            url: redactedUrl,
-            timeoutMs: policy.timeoutMs,
-            durationMs: elapsedMs,
-            attempts: attempt,
-            cause: err,
-          });
-        } else {
-          const detail = err instanceof Error ? err.message : String(err);
-          lastError = new HttpNetworkError({
-            service,
-            method,
-            url: redactedUrl,
-            detail,
-            durationMs: elapsedMs,
-            attempts: attempt,
-            cause: err,
-          });
-        }
       }
-
-      if (
-        attempt < maxAttempts &&
-        shouldRetryError(lastError, method, hasIdempotencyKey, policy.retry)
-      ) {
-        const delayMs = computeBackoffDelayMs(attempt, policy.retry, lastError.retryAfterMs);
-        const reason = lastError.status !== null ? `http_${lastError.status}` : lastError.code;
-        this.metrics.recordRetry(service, method, reason);
-        HttpClientLoggingInterceptor.logRetry({
-          service,
-          method,
-          url: redactedUrl,
-          attempt,
-          nextDelayMs: delayMs,
-          reason,
-          requestId,
-          traceId,
-          enabled: this.logEnabled,
-        });
-        await sleepWithAbort(delayMs, options?.signal);
-      } else {
-        break;
+    } finally {
+      if (releaseSlot) {
+        releaseSlot();
+        this.metrics.recordInFlight(service, this.concurrencyLimiter.getInFlight(service));
       }
     }
 

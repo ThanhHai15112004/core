@@ -1,3 +1,7 @@
+import {
+  computeResilienceBackoffMs,
+  sleepWithAbortSignal,
+} from '@packages/kernel/index.js';
 import type { HttpMethod, HttpRetryPolicy } from '../contracts/http-client.contract.js';
 import type { HttpClientError } from '../errors/http-client.errors.js';
 
@@ -64,39 +68,21 @@ export function computeBackoffDelayMs(
   retryAfterMs?: number | null,
   randomFn: () => number = Math.random,
 ): number {
-  if (policy.respectRetryAfter && retryAfterMs !== null && retryAfterMs !== undefined) {
-    return Math.min(policy.maxDelayMs, Math.max(0, Math.round(retryAfterMs)));
-  }
-  const exponent = Math.max(0, attempt - 1);
-  const raw = policy.baseDelayMs * Math.pow(2, exponent);
-  const cap = Math.min(policy.maxDelayMs, raw);
-  if (!policy.jitter) {
-    return Math.round(cap);
-  }
-  const r = Math.min(1, Math.max(0, randomFn()));
-  return Math.round(cap * (0.5 + 0.5 * r));
+  return computeResilienceBackoffMs(
+    attempt,
+    {
+      baseDelayMs: policy.baseDelayMs,
+      maxDelayMs: policy.maxDelayMs,
+      jitter: policy.jitter,
+      strategy: 'exponential',
+      respectRetryAfter: policy.respectRetryAfter,
+      retryAfterMs,
+    },
+    randomFn,
+  );
 }
 
 /** Tạm dừng có hỗ trợ hủy sớm khi request bị abort từ caller */
 export function sleepWithAbort(delayMs: number, signal?: AbortSignal): Promise<void> {
-  if (delayMs <= 0) {
-    return signal?.aborted ? Promise.reject(signal.reason) : Promise.resolve();
-  }
-  return new Promise<void>((resolve, reject) => {
-    if (signal?.aborted) {
-      reject(signal.reason);
-      return;
-    }
-    const timer = setTimeout(() => {
-      signal?.removeEventListener('abort', onAbort);
-      resolve();
-    }, delayMs);
-
-    const onAbort = () => {
-      clearTimeout(timer);
-      reject(signal?.reason ?? new Error('Aborted during retry backoff'));
-    };
-
-    signal?.addEventListener('abort', onAbort, { once: true });
-  });
+  return sleepWithAbortSignal(delayMs, signal);
 }

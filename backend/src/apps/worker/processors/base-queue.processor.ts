@@ -47,6 +47,8 @@ export abstract class BaseQueueProcessor extends WorkerHost implements OnApplica
   private readonly wait: Histogram<'queue'>;
   private readonly attemptFailures: Counter<'queue' | 'channel' | 'final'>;
   private readonly recovered: Counter<'queue'>;
+  private readonly timeouts: Counter<'queue' | 'channel'>;
+  private readonly retries: Counter<'queue' | 'channel' | 'reason'>;
   /** Số job đã xử lý xong (thành công hoặc lỗi) từ khi process chạy — để tính job/phút. */
   public processed = 0;
 
@@ -81,6 +83,16 @@ export abstract class BaseQueueProcessor extends WorkerHost implements OnApplica
     this.recovered = metrics.counter('job_recovered_total', 'Jobs that succeeded after a retry', [
       'queue',
     ]);
+    this.timeouts = metrics.counter(
+      'job_timeouts_total',
+      'Total background jobs that exceeded execution timeout',
+      ['queue', 'channel'],
+    );
+    this.retries = metrics.counter(
+      'job_retries_total',
+      'Total background job retry attempts scheduled by queue, channel and error type',
+      ['queue', 'channel', 'reason'],
+    );
   }
 
   /** Số luồng xử lý đồng thời của processor này (đọc từ cấu hình môi trường). */
@@ -285,6 +297,16 @@ export abstract class BaseQueueProcessor extends WorkerHost implements OnApplica
         channel: envelope.topic,
         final: String(final),
       });
+      if (info.type === 'Timeout' || /timeout/i.test(info.type)) {
+        this.timeouts.inc({ queue: job.queueName, channel: envelope.topic });
+      }
+      if (!final) {
+        this.retries.inc({
+          queue: job.queueName,
+          channel: envelope.topic,
+          reason: info.type,
+        });
+      }
 
       logLifecycle(job, 'failed', {
         attempt,

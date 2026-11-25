@@ -74,4 +74,11 @@ export class HttpClientOpsController {
   public config() {
     return this.httpClientOps.getConfig();
   }
+
+  /** Tổng hợp chính sách & chỉ số Retry, Timeout, Circuit Breaker, Bulkhead của 4 tầng (API, DB, Queue, Provider) */
+  @Public()
+  @Get(R.RESILIENCE)
+  public resilience() {
+    return this.httpClientOps.getResilienceSummary();
+  }
 }

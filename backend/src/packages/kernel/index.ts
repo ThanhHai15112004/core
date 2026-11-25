@@ -53,4 +53,5 @@ export * from './utils/report-engine.util.js';
 export * from './utils/search-engine.util.js';
 export * from './utils/json.util.js';
 export * from './utils/format.util.js';
+export * from './utils/resilience.util.js';
 export * from './kernel.module.js';

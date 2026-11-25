@@ -29,6 +29,7 @@ const UNAVAILABLE = '--';
 const PACKAGE_SECTION: Record<string, string> = {
   [CorePackageId.CACHE]: 'cache',
   [CorePackageId.DATABASE]: 'database',
+  [CorePackageId.HTTP_CLIENT]: 'http-client',
   [CorePackageId.LOGGING]: 'logs',
   [CorePackageId.SECURITY]: 'security',
 };

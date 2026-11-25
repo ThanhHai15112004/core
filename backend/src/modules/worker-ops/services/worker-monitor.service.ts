@@ -5,6 +5,10 @@ import {
   type OnModuleDestroy,
 } from '@nestjs/common';
 import { CoreConfigService } from '@packages/config/index.js';
+import {
+  RESILIENCE_SETTING_KEYS,
+  readDynamicResilienceNumber,
+} from '@packages/kernel/index.js';
 import { RedisService } from '@packages/redis/index.js';
 import {
   MessagingConnectionService,
@@ -143,7 +147,15 @@ export class WorkerMonitorService implements OnApplicationBootstrap, OnModuleDes
     consumers: ConsumerRegistration[],
     now: number,
   ): Promise<void> {
-    const rules = this.config.queue.rules;
+    const rawRules = this.config.queue.rules;
+    const rules = {
+      ...rawRules,
+      retryStormPerMin: readDynamicResilienceNumber(
+        RESILIENCE_SETTING_KEYS.QUEUE_RETRY_STORM_PER_MIN,
+        rawRules.retryStormPerMin,
+        { min: 1, max: 100_000, round: true },
+      ),
+    };
     const [win, minuteWin, alerts] = await Promise.all([
       this.metrics.window(now - RULE_WINDOW_MS, now, now),
       this.metrics.window(now - MINUTE, now, now),

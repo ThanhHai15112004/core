@@ -6,6 +6,7 @@ import {
   GlobalExceptionFilter,
   HttpModule,
   IdempotencyInterceptor,
+  RequestTimeoutInterceptor,
   TransformResponseInterceptor,
 } from '@packages/http/index.js';
 import { DatabaseModule } from '@packages/database/index.js';
@@ -123,6 +124,10 @@ import { MetricsModule } from '@packages/metrics/index.js';
     {
       provide: APP_FILTER,
       useClass: GlobalExceptionFilter,
+    },
+    {
+      provide: APP_INTERCEPTOR,
+      useExisting: RequestTimeoutInterceptor,
     },
     {
       provide: APP_INTERCEPTOR,

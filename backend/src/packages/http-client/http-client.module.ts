@@ -5,12 +5,16 @@ import { HttpClientMetricsService } from './monitoring/http-client-metrics.servi
 import { HttpClientManageableAdapter } from './providers/http-client-manageable.adapter.js';
 import { BaseHttpClientProvider } from './providers/http-client.provider.js';
 import { CircuitBreakerRegistry } from './resilience/circuit-breaker.registry.js';
+import { ConcurrencyLimiterRegistry } from './resilience/concurrency-limiter.registry.js';
+import { RetryStormMonitor } from './resilience/retry-storm.monitor.js';
 
 @Global()
 @Module({
   providers: [
     HttpServiceRegistry,
     CircuitBreakerRegistry,
+    ConcurrencyLimiterRegistry,
+    RetryStormMonitor,
     HttpClientMetricsService,
     BaseHttpClientProvider,
     {
@@ -22,6 +26,8 @@ import { CircuitBreakerRegistry } from './resilience/circuit-breaker.registry.js
   exports: [
     HttpServiceRegistry,
     CircuitBreakerRegistry,
+    ConcurrencyLimiterRegistry,
+    RetryStormMonitor,
     HttpClientMetricsService,
     BaseHttpClientProvider,
     HTTP_CLIENT_TOKEN,

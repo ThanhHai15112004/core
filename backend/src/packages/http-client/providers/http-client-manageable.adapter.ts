@@ -13,6 +13,7 @@ import {
 import { HttpServiceRegistry } from '../config/http-service-registry.js';
 import { HttpClientMetricsService } from '../monitoring/http-client-metrics.service.js';
 import { CircuitBreakerRegistry } from '../resilience/circuit-breaker.registry.js';
+import { RetryStormMonitor } from '../resilience/retry-storm.monitor.js';
 
 const ACTION_RESET_ALL_CIRCUITS = 'reset-all-circuits';
 
@@ -29,18 +30,22 @@ export class HttpClientManageableAdapter implements ManageablePackage {
     private readonly metrics: HttpClientMetricsService,
     @Optional() private readonly config?: CoreConfigService,
     @Optional() private readonly i18n?: CoreI18nService,
+    @Optional() private readonly retryStorm?: RetryStormMonitor,
   ) {}
 
   public get displayName(): string {
     return this.t('ops.httpClient.displayName', {}, 'Outbound HTTP Client');
   }
 
-  /** Tổng hợp trạng thái các mạch Circuit Breaker, số lượng dịch vụ và tỷ lệ lỗi outbound */
+  /** Tổng hợp trạng thái các mạch Circuit Breaker, số lượng dịch vụ, Retry Storm và tỷ lệ lỗi outbound */
   public async getStatus(): Promise<PackageStatusReport> {
     const circuits = this.circuitBreaker.listSnapshots();
     const openCircuits = circuits.filter((c) => c.state === 'OPEN').length;
     const halfOpenCircuits = circuits.filter((c) => c.state === 'HALF_OPEN').length;
     const totals = this.metrics.getTotals();
+    const storm = this.retryStorm?.getOverview();
+    const activeRetryStorms = storm?.activeStormCount ?? 0;
+    const hasCriticalStorm = Boolean(storm?.alerts.some((a) => a.severity === 'critical'));
     const serviceNames = new Set<string>([
       ...this.registry.listServices().map((s) => s.name),
       ...this.metrics.listServiceMetrics().map((m) => m.service),
@@ -48,9 +53,14 @@ export class HttpClientManageableAdapter implements ManageablePackage {
     ]);
 
     let status = PackageStatus.HEALTHY;
-    if (openCircuits > 0) {
+    if (openCircuits > 0 || hasCriticalStorm) {
       status = PackageStatus.ERROR;
-    } else if (halfOpenCircuits > 0 || (totals.totalRequests > 0 && totals.errorRatePercent >= 5)) {
+    } else if (
+      halfOpenCircuits > 0 ||
+      activeRetryStorms > 0 ||
+      totals.concurrencyRejectedCount > 0 ||
+      (totals.totalRequests > 0 && totals.errorRatePercent >= 5)
+    ) {
       status = PackageStatus.WARNING;
     } else if (totals.totalRequests === 0 && serviceNames.size === 0) {
       status = PackageStatus.IDLE;
@@ -71,7 +81,12 @@ export class HttpClientManageableAdapter implements ManageablePackage {
         services: serviceNames.size,
         openCircuits,
         halfOpenCircuits,
+        activeRetryStorms,
         totalRequests: totals.totalRequests,
+        retries: totals.retryCount,
+        timeouts: totals.timeoutCount,
+        concurrencyRejected: totals.concurrencyRejectedCount,
+        retryStormShedded: totals.retryStormSheddedCount,
         errorRatePercent: totals.errorRatePercent,
         avgDurationMs: totals.avgDurationMs,
         p95DurationMs: totals.p95DurationMs,

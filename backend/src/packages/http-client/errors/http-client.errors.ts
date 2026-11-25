@@ -156,3 +156,42 @@ export class CircuitBreakerOpenError extends HttpClientError {
     this.nextAttemptAt = params.nextAttemptAt;
   }
 }
+
+/** Lỗi từ chối gọi khi vượt giới hạn số request đồng thời (Bulkhead) tới nhà cung cấp */
+export class HttpConcurrencyLimitError extends HttpClientError {
+  public readonly maxConcurrent: number;
+  public readonly inFlight: number;
+  public readonly queued: number;
+
+  constructor(params: {
+    service: string;
+    method: HttpMethod;
+    url: string;
+    maxConcurrent: number;
+    inFlight: number;
+    queued: number;
+    reason?: 'limit_exceeded' | 'queue_timeout' | 'aborted';
+  }) {
+    const suffix =
+      params.reason === 'queue_timeout'
+        ? 'queue wait timed out'
+        : params.reason === 'aborted'
+          ? 'aborted while waiting for concurrency slot'
+          : `concurrency limit ${params.inFlight}/${params.maxConcurrent} reached`;
+    super({
+      message: `[HttpConcurrencyLimitError] ${params.method} ${params.url} (service=${params.service}) rejected: ${suffix}`,
+      code: 'HTTP_CONCURRENCY_LIMIT',
+      service: params.service,
+      method: params.method,
+      url: params.url,
+      status: null,
+      retryable: false,
+      countsTowardCircuit: false,
+      durationMs: 0,
+      attempts: 0,
+    });
+    this.maxConcurrent = params.maxConcurrent;
+    this.inFlight = params.inFlight;
+    this.queued = params.queued;
+  }
+}
