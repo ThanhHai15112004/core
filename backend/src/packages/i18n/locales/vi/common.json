@@ -30,5 +30,11 @@
   "security.userNotFoundOrDisabled": "Tài khoản người dùng không tồn tại hoặc đã bị vô hiệu hóa",
   "kernel.menu.invalidNameLength": "Tên hiển thị menu phải từ 1 đến 255 ký tự",
   "kernel.menu.hierarchyDepthExceeded": "Độ sâu phân cấp cây menu vượt quá giới hạn an toàn",
-  "import.invalidXlsxFile": "Tệp Excel (.xlsx) tải lên không hợp lệ hoặc bị hỏng"
+  "import.invalidXlsxFile": "Tệp Excel (.xlsx) tải lên không hợp lệ hoặc bị hỏng",
+  "DOMAIN_EVENT_INVALID_NAME": "Tên Domain Event không đúng chuẩn quy định",
+  "DOMAIN_EVENT_INVALID_VERSION": "Phiên bản Domain Event phải là số nguyên dương (>= 1)",
+  "DOMAIN_EVENT_ENTITY_LEAK": "Cấm đưa trực tiếp ORM Entity hoặc instance class vào payload Domain Event",
+  "DOMAIN_EVENT_SECRET_LEAK": "Cấm đưa trường dữ liệu nhạy cảm/secret vào payload Domain Event",
+  "DOMAIN_EVENT_INVALID_PAYLOAD": "Dữ liệu payload của Domain Event không hợp lệ",
+  "DOMAIN_EVENT_REQUIRED_HANDLER_FAILED": "Xử lý sự kiện bắt buộc (required handler) thất bại"
 }

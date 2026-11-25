@@ -3,6 +3,7 @@ import type { ChartColor } from '@core/ui/charts';
 import type {
   ChannelStatus,
   ConsumerStatus,
+  DomainEventCriticality,
   LifecycleType,
   MessageStatus,
   MessagingCapability,
@@ -35,9 +36,14 @@ export const MESSAGING_ERROR_KINDS: MessagingErrorKind[] = ['processing', 'timeo
 export const MESSAGE_STATES = ['all', 'retry', 'dead-letter'] as const;
 export type MessageState = (typeof MESSAGE_STATES)[number];
 
-/** Hai bảng của tab Channels & Consumers (`?view=`). */
-export const FLOW_VIEWS = ['channels', 'consumers'] as const;
+/** Ba bảng của tab Channels & Consumers (`?view=`). */
+export const FLOW_VIEWS = ['channels', 'consumers', 'domain-events'] as const;
 export type FlowView = (typeof FLOW_VIEWS)[number];
+
+export const DOMAIN_EVENT_CRITICALITY_TONE: Record<DomainEventCriticality, Tone> = {
+  required: 'crit',
+  optional: 'info',
+};
 
 /** Phần cần capability nào (broker không hỗ trợ → nói rõ, không có số giả). */
 export const VIEW_CAPABILITY: Partial<Record<FlowView | MessageState | 'browse', MessagingCapability>> = {

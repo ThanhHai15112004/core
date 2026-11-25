@@ -382,3 +382,66 @@ export interface MessagingTest {
   roundTripMs: number | null;
   failedStep: BrokerTestStep | null;
 }
+
+export type DomainEventCriticality = 'required' | 'optional';
+
+export interface DomainEventCatalogRow {
+  type: string;
+  dotName: string;
+  module: string;
+  moduleDisplayName: string;
+  subscribedHandlers: number;
+}
+
+export interface DomainEventHandlerRow {
+  id: string;
+  module: string;
+  eventPattern: string;
+  criticality: DomainEventCriticality;
+  description: string | null;
+  registeredAt: string;
+  invokedCount: number;
+  succeededCount: number;
+  failedCount: number;
+  lastInvokedAt: string | null;
+  lastErrorAt: string | null;
+  lastErrorMessage: string | null;
+}
+
+export interface DomainEventRecentDispatch {
+  id: string;
+  type: string;
+  dotName: string;
+  version: number;
+  sourceModule: string;
+  occurredAt: string;
+  requestId: string | null;
+  correlationId: string | null;
+  matchedHandlers: number;
+  succeededCount: number;
+  failedRequiredCount: number;
+  failedOptionalCount: number;
+}
+
+export interface MessagingDomainEvents {
+  policy: {
+    canonicalFormat: 'PascalCase';
+    aliasFormat: 'dot.snake_case';
+    examples: string[];
+    maxPayloadBytes: number;
+    maxPayloadDepth: number;
+    blockOrmEntities: boolean;
+    blockSecrets: boolean;
+  };
+  stats: {
+    catalogCount: number;
+    handlerCount: number;
+    totalPublished: number;
+    totalHandlerInvocations: number;
+    totalRequiredFailures: number;
+    totalOptionalFailures: number;
+  };
+  catalog: DomainEventCatalogRow[];
+  handlers: DomainEventHandlerRow[];
+  recentDispatches: DomainEventRecentDispatch[];
+}

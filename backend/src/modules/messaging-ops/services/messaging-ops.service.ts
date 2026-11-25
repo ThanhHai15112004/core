@@ -1,6 +1,15 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import { CoreConfigService } from '@packages/config/index.js';
 import { CoreI18nService } from '@packages/i18n/index.js';
+import {
+  DOMAIN_EVENT_MAX_PAYLOAD_BYTES,
+  DOMAIN_EVENT_MAX_PAYLOAD_DEPTH,
+  DomainEventBusService,
+  defaultDomainEventBus,
+  matchesDomainEventPattern,
+  scanModuleManifests,
+  toPascalEventName,
+} from '@packages/kernel/index.js';
 import {
   MessagingConnectionService,
   MessagingMonitoringService,
@@ -52,6 +61,7 @@ import type {
   MessagingConfigDto,
   MessagingConsumersDto,
   MessagingDeadLetterDto,
+  MessagingDomainEventsDto,
   MessagingErrorDto,
   MessagingErrorsDto,
   MessagingEventDto,
@@ -132,6 +142,8 @@ export class MessagingOpsService {
     private readonly store: MessagingStoreService,
     private readonly config: CoreConfigService,
     private readonly i18n: CoreI18nService,
+    @Optional()
+    private readonly domainEventBus: DomainEventBusService = defaultDomainEventBus,
   ) {}
 
   private get cfg() {
@@ -980,6 +992,77 @@ export class MessagingOpsService {
     } catch (err) {
       throw this.operationError(err);
     }
+  }
+
+  /** Danh mục Domain Event khai báo trong manifests + danh sách handler & thống kê runtime trên DomainEventBus. */
+  public getDomainEvents(): MessagingDomainEventsDto {
+    const snapshot = this.domainEventBus.getSnapshot();
+    const manifests = scanModuleManifests();
+    const seen = new Set<string>();
+    const catalog: MessagingDomainEventsDto['catalog'] = [];
+
+    for (const entry of manifests) {
+      const published = entry.raw.events?.published;
+      if (!Array.isArray(published)) continue;
+      const moduleDisplayName = entry.raw.displayName ?? entry.moduleName;
+      for (const rawName of published) {
+        if (typeof rawName !== 'string') continue;
+        const dotName = rawName.trim().toLowerCase();
+        if (!dotName || seen.has(dotName)) continue;
+        seen.add(dotName);
+        let pascalType = rawName.trim();
+        try {
+          pascalType = toPascalEventName(rawName);
+        } catch {
+          // Giữ nguyên nếu manifest cũ có định dạng đặc biệt
+        }
+        const subscribedHandlers = snapshot.handlers.filter((h) =>
+          matchesDomainEventPattern(h.eventPattern, {
+            type: pascalType,
+            metadata: {
+              requestId: null,
+              correlationId: null,
+              causationId: null,
+              actorId: null,
+              sourceModule: entry.moduleName,
+              dotName,
+            },
+          }),
+        ).length;
+        catalog.push({
+          type: pascalType,
+          dotName,
+          module: entry.moduleName,
+          moduleDisplayName,
+          subscribedHandlers,
+        });
+      }
+    }
+
+    catalog.sort((a, b) => a.type.localeCompare(b.type));
+
+    return {
+      policy: {
+        canonicalFormat: 'PascalCase',
+        aliasFormat: 'dot.snake_case',
+        examples: ['UserCreated', 'OrderApproved'],
+        maxPayloadBytes: DOMAIN_EVENT_MAX_PAYLOAD_BYTES,
+        maxPayloadDepth: DOMAIN_EVENT_MAX_PAYLOAD_DEPTH,
+        blockOrmEntities: true,
+        blockSecrets: true,
+      },
+      stats: {
+        catalogCount: catalog.length,
+        handlerCount: snapshot.handlers.length,
+        totalPublished: snapshot.totalPublished,
+        totalHandlerInvocations: snapshot.totalHandlerInvocations,
+        totalRequiredFailures: snapshot.totalRequiredFailures,
+        totalOptionalFailures: snapshot.totalOptionalFailures,
+      },
+      catalog,
+      handlers: snapshot.handlers.map((h) => ({ ...h })),
+      recentDispatches: snapshot.recentDispatches.map((d) => ({ ...d })),
+    };
   }
 
   /** Lấy danh sách các sự kiện ghi nhận từ mốc thời gian chỉ định */

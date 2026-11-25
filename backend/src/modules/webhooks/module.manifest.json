@@ -271,7 +271,9 @@
       "webhooks.delivery.failed",
       "webhooks.delivery.replayed"
     ],
-    "subscribed": []
+    "subscribed": [
+      "*"
+    ]
   },
   "database": {
     "hasMigrations": true,

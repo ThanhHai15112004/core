@@ -216,6 +216,13 @@ export class MessagingOpsController {
     return this.messaging.getEvents(parse(rangeSchema, q).range);
   }
 
+  /** Danh mục Domain Event, handler đăng ký (required/optional) và thống kê phát sự kiện runtime */
+  @Public()
+  @Get(R.DOMAIN_EVENTS)
+  public domainEvents() {
+    return this.messaging.getDomainEvents();
+  }
+
   /** Truy vấn lịch sử các thao tác vận hành đã thực hiện */
   @Public()
   @Get(R.OPERATIONS)

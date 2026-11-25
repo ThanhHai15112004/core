@@ -344,3 +344,64 @@ export interface MessagingConfigDto {
 }
 
 export type MessagingTestDto = MessagingTestResult;
+
+export interface DomainEventCatalogRowDto {
+  type: string;
+  dotName: string;
+  module: string;
+  moduleDisplayName: string;
+  subscribedHandlers: number;
+}
+
+export interface DomainEventHandlerRowDto {
+  id: string;
+  module: string;
+  eventPattern: string;
+  criticality: 'required' | 'optional';
+  description: string | null;
+  registeredAt: string;
+  invokedCount: number;
+  succeededCount: number;
+  failedCount: number;
+  lastInvokedAt: string | null;
+  lastErrorAt: string | null;
+  lastErrorMessage: string | null;
+}
+
+export interface DomainEventRecentDispatchDto {
+  id: string;
+  type: string;
+  dotName: string;
+  version: number;
+  sourceModule: string;
+  occurredAt: string;
+  requestId: string | null;
+  correlationId: string | null;
+  matchedHandlers: number;
+  succeededCount: number;
+  failedRequiredCount: number;
+  failedOptionalCount: number;
+}
+
+export interface MessagingDomainEventsDto {
+  policy: {
+    canonicalFormat: 'PascalCase';
+    aliasFormat: 'dot.snake_case';
+    examples: readonly string[];
+    maxPayloadBytes: number;
+    maxPayloadDepth: number;
+    blockOrmEntities: true;
+    blockSecrets: true;
+  };
+  stats: {
+    catalogCount: number;
+    handlerCount: number;
+    totalPublished: number;
+    totalHandlerInvocations: number;
+    totalRequiredFailures: number;
+    totalOptionalFailures: number;
+  };
+  catalog: DomainEventCatalogRowDto[];
+  handlers: DomainEventHandlerRowDto[];
+  recentDispatches: DomainEventRecentDispatchDto[];
+}

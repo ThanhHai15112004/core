@@ -9,6 +9,7 @@ import { messagingApi } from '../../services/messaging.api';
 import { FLOW_VIEWS, VIEW_CAPABILITY, type FlowView } from '../../constants/messaging';
 import { ChannelTable } from '../../components/messaging/ChannelTable';
 import { ConsumerTable } from '../../components/messaging/ConsumerTable';
+import { DomainEventsPanel } from '../../components/messaging/DomainEventsPanel';
 import { formatAge } from '../../utils/messaging-format';
 import { messagingKeys } from './messaging-keys';
 import type { MessagingPage } from './useMessagingPage';
@@ -17,7 +18,11 @@ import type { MessagingPage } from './useMessagingPage';
 export function MessagingFlowTab({ page, overview }: { page: MessagingPage; overview: MessagingOverview | undefined }) {
   const { t } = useLocale();
   const f = useFormat();
-  const counts: Record<FlowView, number | null> = { channels: overview?.kpis.channels ?? null, consumers: overview?.kpis.consumers ?? null };
+  const counts: Record<FlowView, number | null> = {
+    channels: overview?.kpis.channels ?? null,
+    consumers: overview?.kpis.consumers ?? null,
+    'domain-events': null,
+  };
   const cap = VIEW_CAPABILITY[page.view];
   const unsupported = overview && cap && !overview.capabilities.includes(cap);
   return (
@@ -34,6 +39,8 @@ export function MessagingFlowTab({ page, overview }: { page: MessagingPage; over
         <Panel>
           <PanelState status="no-source" message={t('messaging.unsupported', { product: overview.provider.product })} />
         </Panel>
+      ) : page.view === 'domain-events' ? (
+        <DomainEventsPanel />
       ) : page.view === 'consumers' ? (
         <ConsumersView page={page} />
       ) : (

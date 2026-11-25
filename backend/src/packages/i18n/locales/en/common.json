@@ -30,5 +30,11 @@
   "security.userNotFoundOrDisabled": "User not found or disabled",
   "kernel.menu.invalidNameLength": "Menu name must be between 1 and 255 characters",
   "kernel.menu.hierarchyDepthExceeded": "Menu hierarchy depth exceeded safe limit",
-  "import.invalidXlsxFile": "Uploaded Excel (.xlsx) file is invalid or corrupted"
+  "import.invalidXlsxFile": "Uploaded Excel (.xlsx) file is invalid or corrupted",
+  "DOMAIN_EVENT_INVALID_NAME": "Domain Event name violates naming convention",
+  "DOMAIN_EVENT_INVALID_VERSION": "Domain Event version must be a positive integer (>= 1)",
+  "DOMAIN_EVENT_ENTITY_LEAK": "Direct ORM Entity or class instance is forbidden in Domain Event payload",
+  "DOMAIN_EVENT_SECRET_LEAK": "Sensitive or secret field is strictly forbidden in Domain Event payload",
+  "DOMAIN_EVENT_INVALID_PAYLOAD": "Invalid Domain Event payload",
+  "DOMAIN_EVENT_REQUIRED_HANDLER_FAILED": "Required Domain Event handler execution failed"
 }

@@ -17,6 +17,7 @@ export const messagingKeys = {
   broker: () => ['messaging', 'broker'] as const,
   errors: (range: MessagingRange) => ['messaging', 'errors', range] as const,
   events: (range: MessagingRange) => ['messaging', 'events', range] as const,
+  domainEvents: () => ['messaging', 'domain-events'] as const,
   operations: () => ['messaging', 'operations'] as const,
   config: () => ['messaging', 'config'] as const,
 };

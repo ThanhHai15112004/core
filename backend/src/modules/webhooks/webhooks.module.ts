@@ -15,6 +15,7 @@ import { WebhookEndpointRepository } from './repositories/webhook-endpoint.repos
 import { WebhooksDeliveryService } from './services/webhooks-delivery.service.js';
 import { WebhooksEndpointsService } from './services/webhooks-endpoints.service.js';
 import { WebhooksService } from './services/webhooks.service.js';
+import { WebhooksDomainEventListener } from './listeners/webhooks-domain-event.listener.js';
 import enWebhooks from './locales/en/webhooks.json' with { type: 'json' };
 import viWebhooks from './locales/vi/webhooks.json' with { type: 'json' };
 
@@ -42,6 +43,7 @@ new CoreI18nService().registerNamespace('webhooks', {
     WebhooksEndpointsService,
     WebhooksDeliveryService,
     WebhooksService,
+    WebhooksDomainEventListener,
     {
       provide: WEBHOOKS_PUBLIC_SERVICE,
       useExisting: WebhooksService,

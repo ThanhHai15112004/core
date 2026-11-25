@@ -19,6 +19,7 @@ export const MESSAGING_OPS_ROUTES = {
   BROKER: 'broker',
   ERRORS: 'errors',
   EVENTS: 'events',
+  DOMAIN_EVENTS: 'domain-events',
   OPERATIONS: 'operations',
   CONFIG: 'config',
   TEST: 'test',

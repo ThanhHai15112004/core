@@ -38,6 +38,11 @@ import {
   ProviderRegistryService,
   defaultProviderRegistry,
 } from './registries/provider-registry.service.js';
+import { DOMAIN_EVENT_BUS_PORT } from './contracts/domain-event.contract.js';
+import {
+  DomainEventBusService,
+  defaultDomainEventBus,
+} from './registries/domain-event-bus.service.js';
 
 @Global()
 @Module({
@@ -90,6 +95,14 @@ import {
       provide: PROVIDER_REGISTRY_PORT,
       useValue: defaultProviderRegistry,
     },
+    {
+      provide: DomainEventBusService,
+      useValue: defaultDomainEventBus,
+    },
+    {
+      provide: DOMAIN_EVENT_BUS_PORT,
+      useValue: defaultDomainEventBus,
+    },
   ],
   exports: [
     CodeRegistryService,
@@ -104,6 +117,8 @@ import {
     CustomFieldRegistryService,
     ProviderRegistryService,
     PROVIDER_REGISTRY_PORT,
+    DomainEventBusService,
+    DOMAIN_EVENT_BUS_PORT,
   ],
 })
 export class KernelModule {}

@@ -1,9 +1,11 @@
 import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import {
   BadRequestAppException,
+  DomainEventBusService,
   NotFoundAppException,
   type PaginatedResult,
   defaultCustomFieldRegistry,
+  defaultDomainEventBus,
   defaultSearchRegistry,
   parseCustomFieldFiltersParam,
   resolvePagination,
@@ -89,6 +91,10 @@ import type {
   UserSubordinatesOverviewResponse,
 } from '../responses/users.response.js';
 import { UserIdentityBridgeService } from './user-identity-bridge.service.js';
+import {
+  buildUserCreatedEventInput,
+  buildUserUpdatedEventInput,
+} from '../events/user-domain.events.js';
 
 export { USER_IDENTITY_CACHE_PREFIX };
 
@@ -142,6 +148,8 @@ export class UsersService implements IUsersPublicService {
     private readonly tokenService: TokenService | null = null,
     @Optional()
     identityBridge?: UserIdentityBridgeService | null,
+    @Optional()
+    private readonly domainEventBus: DomainEventBusService = defaultDomainEventBus,
   ) {
     this.effectiveDataScopeService = this.dataScopeService ?? createDefaultDataScopeService();
     this.identityBridge =
@@ -517,7 +525,7 @@ export class UsersService implements IUsersPublicService {
     actorId?: number,
     actor?: UserIdentity,
   ): Promise<UserResponse> {
-    return executeCreateUserRecordFlow({
+    const created = await executeCreateUserRecordFlow({
       dto,
       actorId,
       actor,
@@ -538,6 +546,10 @@ export class UsersService implements IUsersPublicService {
       getById: (uid) => this.getById(uid, true, actor),
       syncUserSearchDocumentSafe: (u, aid) => this.syncUserSearchDocumentSafe(u, aid),
     });
+    await this.domainEventBus.publish(
+      buildUserCreatedEventInput(created, actorId ?? actor?.id ?? null),
+    );
+    return created;
   }
 
   public async update(
@@ -546,7 +558,7 @@ export class UsersService implements IUsersPublicService {
     actorId?: number,
     actor?: UserIdentity,
   ): Promise<UserResponse> {
-    return executeUpdateUserRecordFlow({
+    const updated = await executeUpdateUserRecordFlow({
       id,
       dto,
       actorId,
@@ -564,6 +576,13 @@ export class UsersService implements IUsersPublicService {
       getById: (uid, inc) => this.getById(uid, inc),
       syncUserSearchDocumentSafe: (u, aid) => this.syncUserSearchDocumentSafe(u, aid),
     });
+    const changedFields = Object.keys(dto).filter(
+      (k) => (dto as Record<string, unknown>)[k] !== undefined,
+    );
+    await this.domainEventBus.publish(
+      buildUserUpdatedEventInput(updated, changedFields, actorId ?? actor?.id ?? null),
+    );
+    return updated;
   }
 
   public async lockUser(

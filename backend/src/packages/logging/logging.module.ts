@@ -4,10 +4,13 @@ import {
   Module,
   type MiddlewareConsumer,
   type NestModule,
+  type OnModuleInit,
+  Optional,
 } from '@nestjs/common';
-import { LoggerModule } from 'nestjs-pino';
+import { LoggerModule, PinoLogger } from 'nestjs-pino';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { CoreConfigService } from '@packages/config/index.js';
+import { DomainEventBusService, defaultDomainEventBus } from '@packages/kernel/index.js';
 import { RequestContextService } from './context/request-context.service.js';
 import { LOGGING_OPTIONS, type LoggingModuleOptions } from './contracts/logging-options.js';
 import { requestContextMiddleware } from './middleware/request-context.middleware.js';
@@ -29,7 +32,33 @@ const CHUNK_PART_URL = /\/upload-chunked\/[^/]+\/chunk(\/|\?|$)/;
  */
 @Global()
 @Module({})
-export class LoggingModule implements NestModule {
+export class LoggingModule implements NestModule, OnModuleInit {
+  constructor(
+    @Optional() private readonly domainEventBus?: DomainEventBusService,
+    @Optional() private readonly pinoLogger?: PinoLogger,
+  ) {}
+
+  /** Tự động gắn RequestContext (requestId/correlationId/userId) và structured logger vào DomainEventBus. */
+  public onModuleInit(): void {
+    const bus = this.domainEventBus ?? defaultDomainEventBus;
+    bus.setContextResolver(() => {
+      const store = RequestContextService.current();
+      if (!store) return undefined;
+      return {
+        requestId: store.requestId ?? (store.source?.kind === 'http' ? store.source.id : null),
+        correlationId: store.correlationId ?? null,
+        actorId: store.userId ?? null,
+      };
+    });
+    if (this.pinoLogger) {
+      const logger = this.pinoLogger;
+      bus.setLogger({
+        log: (msg, meta) => logger.info(meta ?? {}, msg),
+        warn: (msg, meta) => logger.warn(meta ?? {}, msg),
+        error: (msg, meta) => logger.error(meta ?? {}, msg),
+      });
+    }
+  }
   /** Đăng ký dynamic module ở cấp root với cấu hình chỉ định */
   public static forRoot(options: LoggingModuleOptions): DynamicModule {
     return {
