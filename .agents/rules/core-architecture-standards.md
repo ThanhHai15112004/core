@@ -30,3 +30,4 @@
 ## 3. KIỂM THỬ & BÀN GIAO
 - **Cấu trúc `backend/test/`**: `fixtures/`, `concerns/`, `unit/`, `feature/` (tuyệt đối không để test trong `src/`).
 - **Lệnh kiểm tra toàn diện (WSL2 bash)**: `npm --prefix backend run check` (`lint` + `typecheck` + `test` + `build`). Tuân thủ Conventional Commits.
+- **Quy tắc đồng bộ trước khi Commit / Push**: Khi chuẩn bị `git commit` / `git push`, bắt buộc kiểm tra xem có file migration, seeder hoặc `module.manifest.json` mới/đã sửa hay migration đang chờ (`pending`) không; nếu có thì **chạy luôn** `migration:check --run` và `seed:run` (build trước `npm --prefix backend run build` nếu chạy trên host, hoặc chạy trong container `core-backend-dev` khi đang chạy Docker dev) rồi mới `git commit` / `git push`.
