@@ -19,6 +19,7 @@ import {
 import { databaseKeys } from '../constants/database.keys.js';
 import type { ConnectionState, ConnectionStatus } from '../contracts/database-events.types.js';
 import { errorCodeOf, sanitizeDbMessage } from '../utils/error-classify.js';
+import { instrumentDataSourceTracing, runWithoutDbTracing } from '../utils/db-tracing.helper.js';
 import { recordDbEvent } from '../monitoring/db-events.js';
 
 const RETRY_MIN_MS = 1000;
@@ -149,7 +150,7 @@ export class DatabaseConnectionService implements OnApplicationBootstrap, OnAppl
     let timeoutId: NodeJS.Timeout | null = null;
     try {
       await Promise.race([
-        ds.query('SELECT 1'),
+        runWithoutDbTracing(() => ds.query('SELECT 1')),
         new Promise<never>((_, reject) => {
           timeoutId = setTimeout(
             () =>
@@ -221,6 +222,7 @@ export class DatabaseConnectionService implements OnApplicationBootstrap, OnAppl
       this.status.attempts++;
       try {
         await ds.initialize();
+        instrumentDataSourceTracing(ds, this.driver, this.config.database.database);
         this.applyMysqlQueryTimeout(ds);
         this.failures = 0;
         this.status.lastSuccessAt = new Date().toISOString();

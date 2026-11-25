@@ -9,6 +9,7 @@ import {
   defaultSettingRegistry,
 } from '@packages/kernel/index.js';
 import { PasswordHasherService, TokenService } from '@packages/security/index.js';
+import { Traced } from '@packages/tracing/index.js';
 import {
   type IUsersPublicService,
   USERS_PUBLIC_SERVICE,
@@ -234,6 +235,7 @@ export class AuthService implements IAuthPublicService {
    * - Thực thi chính sách bắt buộc MFA theo vai trò (`mfaPolicy`: `REQUIRED_FOR_ADMINS` / `REQUIRED_FOR_ALL`).
    * - Hỗ trợ bỏ qua MFA trên Thiết bị tin cậy (`trustedDeviceToken`) còn thời hạn hiệu lực.
    */
+  @Traced('usecase.auth.login')
   public async login(
     dto: LoginRequest,
     meta: { ipAddress?: string | null; userAgent?: string | null } = {},

@@ -1,4 +1,5 @@
 import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
+import { Traced } from '@packages/tracing/index.js';
 import {
   BadRequestAppException,
   DomainEventBusService,
@@ -524,6 +525,7 @@ export class UsersService implements IUsersPublicService {
     });
   }
 
+  @Traced('usecase.users.create')
   public async create(
     dto: CreateUserRequest,
     actorId?: number,

@@ -10,6 +10,8 @@ export interface MessageEnvelope<T = unknown> {
   readonly producer?: string | null;
   /** Correlation ID của request/tác vụ đã publish — consumer chạy trong cùng correlation để lần theo log. */
   readonly correlationId?: string | null;
+  /** OpenTelemetry trace ID (32 hex) liên kết API ↔ Worker. */
+  readonly traceId?: string | null;
   /** Nguồn tạo job, idempotency key, field index… (envelope cũ không có). */
   readonly meta?: JobMeta | null;
 }

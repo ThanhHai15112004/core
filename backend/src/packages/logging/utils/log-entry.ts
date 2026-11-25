@@ -29,6 +29,7 @@ const KNOWN = new Set([
   'requestId',
   'correlationId',
   'traceId',
+  'spanId',
   'jobId',
   'jobType',
   'messageId',
@@ -103,6 +104,7 @@ export function toLogEntry(id: string, raw: string): LogEntry | null {
   set('requestId', str(o.requestId) ?? str(o.reqId));
   set('correlationId', str(o.correlationId) ?? str(o.reqId));
   set('traceId', str(o.traceId));
+  set('spanId', str(o.spanId));
   set('jobId', str(o.jobId));
   set('jobType', str(o.jobType));
   set('messageId', str(o.messageId));

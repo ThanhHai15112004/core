@@ -48,6 +48,8 @@
   "ops.messaging.test.failed": "Messaging health check failed at step {step}.",
   "ops.metrics.displayName": "Metrics (Prometheus)",
   "ops.metrics.summary": "prom-client registry, Prometheus {state}.",
+  "ops.tracing.displayName": "Tracing (OpenTelemetry)",
+  "ops.tracing.summary": "OpenTelemetry {state}, exporter={exporter}, sampling={ratio}%.",
   "ops.queue.displayName": "Queue (BullMQ)",
   "ops.queue.summary": "{count} queues, {state}.",
   "ops.httpClient.displayName": "Outbound HTTP Client",

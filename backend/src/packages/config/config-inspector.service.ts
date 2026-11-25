@@ -9,7 +9,8 @@ export interface ConfigItemDto {
   sensitive: boolean;
 }
 
-const SENSITIVE_REGEX = /(password|secret|token|private_key|api_key|secret_key|access_key)/i;
+const SENSITIVE_REGEX =
+  /(password|secret|token|private_key|api_key|secret_key|access_key|otlpheaders|authheader)/i;
 
 /**
  * Kiểm tra xem một key có phải là thông tin nhạy cảm hay không.
@@ -51,6 +52,7 @@ export class ConfigInspectorService {
       'traffic',
       'performance',
       'metrics',
+      'tracing',
       'httpClient',
     ];
 

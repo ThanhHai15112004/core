@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { Traced } from '@packages/tracing/index.js';
 import type { PaginatedResult } from '@packages/kernel/index.js';
 import type { UserIdentity } from '@packages/security/index.js';
 import type { IPaymentsPublicService } from '../contracts/index.js';
@@ -89,6 +90,7 @@ export class PaymentsService implements IPaymentsPublicService {
     return this.providersService.deleteProvider(id, actor);
   }
 
+  @Traced('usecase.payments.create')
   public async createPayment(
     input: CreatePaymentInput,
     actor?: UserIdentity,
@@ -111,6 +113,7 @@ export class PaymentsService implements IPaymentsPublicService {
     return this.transactionsService.getTransactionByCode(paymentCode);
   }
 
+  @Traced('usecase.payments.refund')
   public async refundPayment(
     transactionId: number,
     input: RefundPaymentInput,

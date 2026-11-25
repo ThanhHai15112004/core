@@ -1,4 +1,5 @@
 import { hostname } from 'node:os';
+import { context, isSpanContextValid, trace } from '@opentelemetry/api';
 import { multistream, pino, type DestinationStream, type Logger } from 'pino';
 import { PINO_LEVEL, PINO_LEVEL_LABEL } from '../constants/logging.constant.js';
 import { RequestContextService } from '../context/request-context.service.js';
@@ -78,21 +79,29 @@ const textStdout: DestinationStream = {
   },
 };
 
-/** Field ngữ cảnh (request / trace / module / action / job / user) từ RequestContext gắn vào mọi log. */
+/** Field ngữ cảnh (request / trace / span / module / action / job / user) từ RequestContext & active OTel span gắn vào mọi log. */
 function contextFields(): Record<string, unknown> {
   const s = RequestContextService.current();
-  if (!s) return {};
+  const sc = trace.getSpan(context.active())?.spanContext();
+  const hasValidSpan = Boolean(sc && isSpanContextValid(sc));
+  if (!s && !hasValidSpan) return {};
+
   const out: Record<string, unknown> = {};
-  if (s.correlationId) out.correlationId = s.correlationId;
-  if (s.requestId) out.requestId = s.requestId;
-  if (s.traceId) out.traceId = s.traceId;
-  if (s.module) out.module = s.module;
-  if (s.action) out.action = s.action;
-  if (s.jobId) out.jobId = s.jobId;
-  if (s.userId) out.userId = s.userId;
-  if (typeof s.messageId === 'string') out.messageId = s.messageId;
-  if (s.source?.kind === 'scheduler' && s.source.id) out.executionId = s.source.id;
-  if (s.source?.kind === 'job' && s.source.name) out.jobType = s.source.name;
+  if (s?.correlationId) out.correlationId = s.correlationId;
+  if (s?.requestId) out.requestId = s.requestId;
+
+  const traceId = hasValidSpan && sc ? sc.traceId : s?.traceId;
+  const spanId = hasValidSpan && sc ? sc.spanId : s?.spanId;
+  if (traceId) out.traceId = traceId;
+  if (spanId) out.spanId = spanId;
+
+  if (s?.module) out.module = s.module;
+  if (s?.action) out.action = s.action;
+  if (s?.jobId) out.jobId = s.jobId;
+  if (s?.userId) out.userId = s.userId;
+  if (typeof s?.messageId === 'string') out.messageId = s.messageId;
+  if (s?.source?.kind === 'scheduler' && s.source.id) out.executionId = s.source.id;
+  if (s?.source?.kind === 'job' && s.source.name) out.jobType = s.source.name;
   return out;
 }
 

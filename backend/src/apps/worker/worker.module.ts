@@ -13,6 +13,7 @@ import { HttpClientModule } from '@packages/http-client/index.js';
 import { RedisModule } from '@packages/redis/index.js';
 import { RuntimeAgentModule } from '@packages/runtime/index.js';
 import { MetricsModule } from '@packages/metrics/index.js';
+import { TracingModule } from '@packages/tracing/index.js';
 import { AuditModule } from '@modules/audit/index.js';
 import { UsersModule } from '@modules/users/index.js';
 import { SessionsModule } from '@modules/sessions/index.js';
@@ -51,6 +52,7 @@ const PROCESSORS = [SystemProcessor, CriticalProcessor, NotificationsProcessor, 
     RuntimeAgentModule.forRuntime({ id: 'worker', kind: 'long-running' }),
     MetricsModule.forRuntime({ runtime: 'worker', port: 9101 }),
     I18nModule,
+    TracingModule.forRuntime({ runtime: 'worker' }),
     LoggingModule.forRoot({ runtime: 'worker' }),
     DatabaseModule,
     SecurityModule,

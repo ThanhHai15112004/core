@@ -48,6 +48,8 @@
   "ops.messaging.test.failed": "Kiểm tra messaging thất bại ở bước {step}.",
   "ops.metrics.displayName": "Metrics (Prometheus)",
   "ops.metrics.summary": "Registry prom-client, Prometheus {state}.",
+  "ops.tracing.displayName": "Tracing (OpenTelemetry)",
+  "ops.tracing.summary": "OpenTelemetry {state}, exporter={exporter}, lấy mẫu={ratio}%.",
   "ops.queue.displayName": "Queue (BullMQ)",
   "ops.queue.summary": "{count} queue, {state}.",
   "ops.httpClient.displayName": "HTTP Client dùng chung",

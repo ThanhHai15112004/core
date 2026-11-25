@@ -22,6 +22,7 @@ export enum CorePackageId {
   STORAGE = 'storage',
   SECURITY = 'security',
   METRICS = 'metrics',
+  TRACING = 'tracing',
   QUEUE = 'queue',
   RUNTIME = 'runtime',
   REDIS = 'redis',

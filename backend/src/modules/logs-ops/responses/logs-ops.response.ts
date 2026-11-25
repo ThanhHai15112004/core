@@ -1,4 +1,9 @@
 import type { LogEntryLevel, LogMetadata, LogSinkStats } from '@packages/logging/index.js';
+import type {
+  RecentTraceSummary,
+  RecordedSpan,
+  TracingConfigStats,
+} from '@packages/tracing/index.js';
 
 export type LogsRange = '15m' | '1h' | '6h' | '24h' | '7d';
 
@@ -297,6 +302,10 @@ export interface TraceNodeDto {
   link: TraceEventDto['link'];
 }
 
+export type TraceSpanDto = RecordedSpan;
+export type RecentTraceSummaryDto = RecentTraceSummary;
+export type TracingConfigStatsDto = TracingConfigStats;
+
 export interface TraceDto {
   id: string;
   resolvedFrom: ResolvedIdKind[];
@@ -316,6 +325,7 @@ export interface TraceDto {
   } | null;
   flow: TraceNodeDto[];
   events: TraceEventDto[];
+  spans: TraceSpanDto[];
   /** Log ngoài buffer (đã bị ghi đè) thì không còn trong trace. */
   truncated: boolean;
 }
@@ -350,6 +360,7 @@ export interface LogsConfigDto {
   redaction: { keys: string[]; patterns: string[] };
   requestBody: { enabled: boolean; allowlist: string[]; maxBytes: number };
   sink: LogSinkStats;
+  tracing: TracingConfigStatsDto | null;
   permissions: {
     levelChange: boolean;
     levelPermanent: boolean;

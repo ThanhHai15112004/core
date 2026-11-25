@@ -20,6 +20,7 @@ import type {
   LogsSeries,
   LogsWindow,
   OverrideLevel,
+  RecentTraceSummary,
   Trace,
 } from '../types/logs.types';
 import { toQuery } from './traffic.api';
@@ -39,6 +40,7 @@ export const logsApi = {
   errors: (range: LogsRange, q?: string) => fetchApi<ErrorGroups>(L('errors', toQuery({ range, q }))),
   errorGroup: (fingerprint: string, range: LogsRange) => fetchApi<ErrorGroupDetail>(L(`errors/${id(fingerprint)}`, toQuery({ range }))),
   trace: (traceId: string) => fetchApi<Trace>(L(`trace/${id(traceId)}`)),
+  recentTraces: (limit = 20) => fetchApi<RecentTraceSummary[]>(L('traces/recent', toQuery({ limit }))),
   audit: (q: { window?: LogsWindow; domain?: AuditDomain; result?: 'success' | 'failed'; q?: string }, cursor?: string | null) =>
     fetchApi<AuditList>(L('audit', toQuery({ ...q, cursor: cursor ?? undefined }))),
   report: () => fetchApi<LogsReport>(L('report')),

@@ -10,6 +10,7 @@ export const logsKeys = {
   errorGroup: (fp: string, range: LogsRange) => ['logs', 'error-group', fp, range] as const,
   entry: (id: string) => ['logs', 'entry', id] as const,
   trace: (id: string) => ['logs', 'trace', id] as const,
+  recentTraces: () => ['logs', 'recent-traces'] as const,
   recentFailing: () => ['logs', 'recent-failing'] as const,
   audit: (q: object) => ['logs', 'audit', q] as const,
   config: () => ['logs', 'config'] as const,

@@ -14,6 +14,7 @@ import { runtimeConfig, type RuntimeConfig } from './runtime.config.js';
 import { trafficConfig, type TrafficConfig } from './traffic.config.js';
 import { performanceConfig, type PerformanceConfig } from './performance.config.js';
 import { metricsConfig, type MetricsConfig } from './metrics.config.js';
+import { tracingConfig, type TracingConfig } from './tracing.config.js';
 import { httpClientConfig, type HttpClientConfig } from './http-client.config.js';
 
 @Injectable()
@@ -32,6 +33,7 @@ export class CoreConfigService {
   public readonly traffic: TrafficConfig;
   public readonly performance: PerformanceConfig;
   public readonly metrics: MetricsConfig;
+  public readonly tracing: TracingConfig;
   public readonly httpClient: HttpClientConfig;
 
   constructor() {
@@ -50,6 +52,7 @@ export class CoreConfigService {
     this.traffic = trafficConfig();
     this.performance = performanceConfig();
     this.metrics = metricsConfig();
+    this.tracing = tracingConfig();
     this.httpClient = httpClientConfig();
   }
 
@@ -85,6 +88,7 @@ export class CoreConfigService {
       traffic: this.traffic,
       performance: this.performance,
       metrics: this.metrics,
+      tracing: this.tracing,
       httpClient: this.httpClient,
     };
     const parts = path.split('.');

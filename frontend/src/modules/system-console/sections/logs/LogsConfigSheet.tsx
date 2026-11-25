@@ -272,6 +272,24 @@ function ConfigBody({ d }: { d: LogsConfig }) {
         </DetailSection>
       )}
 
+      {d.tracing && (
+        <DetailSection
+          title={t('logs.config.tracingTitle')}
+          actions={<Badge tone={d.tracing.enabled ? 'ok' : 'unknown'}>{d.tracing.enabled ? t('logs.config.enabled') : t('logs.config.disabled')}</Badge>}
+        >
+          <KeyValueGrid
+            items={[
+              { label: t('logs.config.tracingExporter'), value: d.tracing.exporter, mono: true },
+              { label: t('logs.config.tracingEndpoint'), value: d.tracing.otlpEndpoint ?? NO_VALUE, mono: true },
+              { label: t('logs.config.tracingSampler'), value: `${d.tracing.sampler} (${Math.round(d.tracing.samplingRatio * 100)}%)`, mono: true },
+              { label: t('logs.config.tracingIgnoreRoutes'), value: d.tracing.ignoreRoutes.join(', ') || NO_VALUE, mono: true },
+              { label: t('logs.config.tracingBuffered'), value: `${f.compact(d.tracing.bufferedSpans)} / ${f.compact(d.tracing.consoleBufferMax)}`, mono: true },
+              { label: t('logs.config.tracingExported'), value: f.compact(d.tracing.exportedSpans), mono: true },
+            ]}
+          />
+        </DetailSection>
+      )}
+
       <DetailSection title={t('logs.config.permissionsTitle')}>
         <KeyValueGrid
           columns={3}

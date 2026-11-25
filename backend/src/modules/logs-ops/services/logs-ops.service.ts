@@ -1,5 +1,6 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import { CoreConfigService } from '@packages/config/index.js';
+import { TracingService } from '@packages/tracing/index.js';
 import {
   LOGS_STREAM_MAXLEN,
   LOG_ENTRY_LEVELS,
@@ -49,6 +50,7 @@ import type {
   LogsReportDto,
   LogsReportTotalsDto,
   LogsSeriesDto,
+  RecentTraceSummaryDto,
   ResolvedIdDto,
   ResolvedIdKind,
   TraceDto,
@@ -137,6 +139,7 @@ export class LogsOpsService {
     private readonly config: CoreConfigService,
     private readonly store: LogsStoreService,
     private readonly audit: LogAuditService,
+    @Optional() private readonly tracing?: TracingService,
   ) {}
 
   public get available(): boolean {
@@ -707,22 +710,34 @@ export class LogsOpsService {
 
   // ─── Trace theo ID ────────────────────────────────────────────────────────
 
+  public async getRecentTraces(limit = 20): Promise<RecentTraceSummaryDto[]> {
+    if (!this.tracing) return [];
+    return this.tracing.getRecentTraces(limit);
+  }
+
   public async getTrace(id: string): Promise<TraceDto> {
-    this.assertAvailable();
-    const snap = await this.store.logs();
-    const resolved = this.resolve(id, snap.entries);
-    const corr = resolved.correlationId;
-    const trace = resolved.traceId;
-    const related = snap.entries
-      .filter(
-        (e) =>
-          e.id === id ||
-          LOG_ID_FIELDS.some((k) => e[k] === id) ||
-          (corr !== null && e.correlationId === corr) ||
-          (trace !== null && e.traceId === trace),
-      )
-      .reverse();
-    if (!related.length) throw new LogNotFoundException('TRACE_NOT_FOUND', { id });
+    const storeAvailable = this.store.isAvailable();
+    const snap = storeAvailable ? await this.store.logs() : null;
+    const resolved = snap ? this.resolve(id, snap.entries) : null;
+    const corr = resolved?.correlationId ?? null;
+    const trace = resolved?.traceId ?? null;
+    const related = snap
+      ? snap.entries
+          .filter(
+            (e) =>
+              e.id === id ||
+              LOG_ID_FIELDS.some((k) => e[k] === id) ||
+              (corr !== null && e.correlationId === corr) ||
+              (trace !== null && e.traceId === trace),
+          )
+          .reverse()
+      : [];
+
+    const spans = (await this.tracing?.getSpansByTraceId(trace ?? id)) ?? [];
+    if (!related.length && !spans.length) {
+      if (!storeAvailable && !this.tracing) throw new LogsUnavailableException();
+      throw new LogNotFoundException('TRACE_NOT_FOUND', { id });
+    }
 
     const events: TraceEventDto[] = related.slice(0, TRACE_MAX_EVENTS).map((e) => ({
       at: e.t,
@@ -760,37 +775,83 @@ export class LogsOpsService {
           link: ev.link,
         });
     }
-    const first = related[0]!;
-    const last = related[related.length - 1]!;
-    // `events` cùng thứ tự với `related` → chỉ số của sự kiện lỗi đầu tiên cũng là chỉ số log gốc.
-    const failureAt = events.findIndex((ev) => ev.level === 'error');
-    const failure = events[failureAt] ?? null;
+
+    if (related.length > 0) {
+      const first = related[0]!;
+      const last = related[related.length - 1]!;
+      // `events` cùng thứ tự với `related` → chỉ số của sự kiện lỗi đầu tiên cũng là chỉ số log gốc.
+      const failureAt = events.findIndex((ev) => ev.level === 'error');
+      const failure = events[failureAt] ?? null;
+      const spanMinStart = spans[0]?.startTimeMs;
+      const spanMaxEnd = spans.reduce((acc, s) => Math.max(acc, s.endTimeMs), 0);
+      const spanDuration =
+        spanMinStart !== undefined && spanMaxEnd >= spanMinStart
+          ? spanMaxEnd - spanMinStart
+          : null;
+      const logDuration = entryTime(last) - entryTime(first);
+
+      return {
+        id,
+        resolvedFrom: resolved?.kinds ?? ['trace'],
+        correlationId: corr,
+        traceId: trace ?? spans[0]?.traceId ?? null,
+        durationMs: Math.max(logDuration, spanDuration ?? 0),
+        status: failure || spans.some((s) => s.status === 'error') ? 'failed' : 'ok',
+        services: [...new Set([...flow.keys(), ...spans.map((s) => s.runtime)])],
+        counts: {
+          logs: related.length,
+          errors: related.filter(isError).length,
+          jobs: new Set(related.map((e) => e.jobId).filter(Boolean)).size,
+          requests: new Set(related.map((e) => e.requestId).filter(Boolean)).size,
+        },
+        root: events[0] ? { label: events[0].label, at: events[0].at } : null,
+        failurePoint: failure
+          ? {
+              component: failure.component,
+              label: failure.label,
+              errorType: related[failureAt]!.errorType ?? null,
+              logId: failure.logId,
+            }
+          : null,
+        flow: [...flow.values()],
+        events,
+        spans,
+        truncated: related.length > TRACE_MAX_EVENTS,
+      };
+    }
+
+    const rootSpan = spans.find((s) => !s.parentSpanId) ?? spans[0]!;
+    const minStart = spans[0]!.startTimeMs;
+    const maxEnd = spans.reduce((acc, s) => Math.max(acc, s.endTimeMs), rootSpan.endTimeMs);
+    const failedSpan = spans.find((s) => s.status === 'error') ?? null;
+
     return {
       id,
-      resolvedFrom: resolved.kinds,
-      correlationId: corr,
-      traceId: trace,
-      durationMs: entryTime(last) - entryTime(first),
-      status: failure ? 'failed' : 'ok',
-      services: [...flow.keys()],
+      resolvedFrom: ['trace'],
+      correlationId: null,
+      traceId: rootSpan.traceId,
+      durationMs: Math.max(rootSpan.durationMs, maxEnd - minStart),
+      status: failedSpan ? 'failed' : 'ok',
+      services: [...new Set(spans.map((s) => s.runtime))],
       counts: {
-        logs: related.length,
-        errors: related.filter(isError).length,
-        jobs: new Set(related.map((e) => e.jobId).filter(Boolean)).size,
-        requests: new Set(related.map((e) => e.requestId).filter(Boolean)).size,
+        logs: 0,
+        errors: spans.filter((s) => s.status === 'error').length,
+        jobs: spans.filter((s) => s.category === 'job').length,
+        requests: spans.filter((s) => s.category === 'api').length,
       },
-      root: events[0] ? { label: events[0].label, at: events[0].at } : null,
-      failurePoint: failure
+      root: { label: rootSpan.name, at: new Date(rootSpan.startTimeMs).toISOString() },
+      failurePoint: failedSpan
         ? {
-            component: failure.component,
-            label: failure.label,
-            errorType: related[failureAt]!.errorType ?? null,
-            logId: failure.logId,
+            component: failedSpan.runtime,
+            label: failedSpan.name,
+            errorType: failedSpan.statusMessage ?? null,
+            logId: null,
           }
         : null,
-      flow: [...flow.values()],
-      events,
-      truncated: related.length > TRACE_MAX_EVENTS,
+      flow: [],
+      events: [],
+      spans,
+      truncated: false,
     };
   }
 
@@ -896,6 +957,7 @@ export class LogsOpsService {
         maxBytes: l.requestBody.maxBytes,
       },
       sink: externalLogSink.getStats(),
+      tracing: this.tracing?.getStats() ?? null,
       permissions: {
         levelChange: l.levelChange,
         levelPermanent: l.levelPermanent,

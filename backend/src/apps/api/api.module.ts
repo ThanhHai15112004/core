@@ -62,6 +62,7 @@ import { RedisModule } from '@packages/redis/index.js';
 import { RuntimeAgentModule } from '@packages/runtime/index.js';
 import { ApiRuntimeContributor } from './runtime/api-runtime.contributor.js';
 import { MetricsModule } from '@packages/metrics/index.js';
+import { TracingModule } from '@packages/tracing/index.js';
 
 @Module({
   imports: [
@@ -72,6 +73,7 @@ import { MetricsModule } from '@packages/metrics/index.js';
     MetricsModule.forRuntime({ runtime: 'api' }),
     HttpModule,
     DatabaseModule,
+    TracingModule.forRuntime({ runtime: 'api' }),
     LoggingModule.forRoot({ runtime: 'api' }),
     SecurityModule,
     MessagingModule,

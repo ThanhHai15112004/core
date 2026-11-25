@@ -13,6 +13,7 @@ export * from './runtime.config.js';
 export * from './traffic.config.js';
 export * from './performance.config.js';
 export * from './metrics.config.js';
+export * from './tracing.config.js';
 export * from './http-client.config.js';
 export * from './config.service.js';
 export * from './config-inspector.service.js';

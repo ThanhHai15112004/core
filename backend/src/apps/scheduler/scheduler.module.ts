@@ -12,6 +12,7 @@ import { MessagingModule } from '@packages/messaging/index.js';
 import { RedisModule } from '@packages/redis/index.js';
 import { RuntimeAgentModule } from '@packages/runtime/index.js';
 import { MetricsModule } from '@packages/metrics/index.js';
+import { TracingModule } from '@packages/tracing/index.js';
 import { ScheduledTaskRegistry } from './registry/scheduled-task.registry.js';
 import { SystemTask } from './tasks/system/system.task.js';
 import { ScheduleSyncService } from './bootstrap/sync-schedules.js';
@@ -25,6 +26,7 @@ import { SchedulerRuntimeContributor } from './runtime/scheduler-runtime.contrib
     RuntimeAgentModule.forRuntime({ id: 'scheduler', kind: 'long-running' }),
     MetricsModule.forRuntime({ runtime: 'scheduler', port: 9102 }),
     I18nModule,
+    TracingModule.forRuntime({ runtime: 'scheduler' }),
     LoggingModule.forRoot({ runtime: 'scheduler' }),
     DatabaseModule,
     CacheModule,

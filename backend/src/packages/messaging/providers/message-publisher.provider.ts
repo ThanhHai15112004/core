@@ -1,4 +1,12 @@
 import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
+import {
+  SpanKind,
+  SpanStatusCode,
+  context,
+  isSpanContextValid,
+  propagation,
+  trace,
+} from '@opentelemetry/api';
 import type { Counter } from 'prom-client';
 import { RequestContextService } from '@packages/logging/index.js';
 import { MetricsRegistryService } from '@packages/metrics/index.js';
@@ -58,33 +66,67 @@ export class BaseMessagePublisherProvider implements MessagePublisherContract {
     queue: QueueName = QUEUES.SYSTEM_EVENTS,
     options: PublishOptions = {},
   ): Promise<MessageEnvelope<T>> {
-    const producer = this.identity?.id ?? null;
-    const correlationId = RequestContextService.currentCorrelationId() ?? null;
-    const profile = QUEUE_PROFILES[queue];
-    const resolvedPriority =
-      options.priority !== undefined && options.priority > 0
-        ? Math.round(options.priority)
-        : profile?.defaultPriority;
-    const envelope = serializeMessage(topic, payload, {
-      producer,
-      correlationId,
-      job: this.meta(producer, queue, options),
-    });
-    const opts = {
-      ...this.queues.jobOptions(envelope.id, queue, options),
-      ...(options.delayMs && options.delayMs > 0 ? { delay: Math.round(options.delayMs) } : {}),
-      ...(resolvedPriority && resolvedPriority > 0 ? { priority: resolvedPriority } : {}),
-    };
-    try {
-      await this.queues.withTimeout(this.queues.get(queue).add(topic, envelope, opts));
-    } catch (err) {
-      this.recordPublished(queue, topic, false);
-      this.logger.warn(`Publish ${queue}/${topic} failed: ${sanitizeMessagingMessage(err)}`);
-      throw err;
-    }
-    this.recordPublished(queue, topic, true);
-    this.logger.log(`[EventPublished] ${queue}/${topic} ID:${envelope.id}`);
-    return envelope;
+    const tracer = trace.getTracer('core-framework');
+    return tracer.startActiveSpan(
+      `queue.publish ${queue}/${topic}`,
+      {
+        kind: SpanKind.PRODUCER,
+        attributes: {
+          'core.span.category': 'job',
+          'messaging.system': 'bullmq',
+          'messaging.destination.name': queue,
+          'messaging.operation.name': 'publish',
+          'messaging.message.topic': topic,
+        },
+      },
+      context.active(),
+      async (span) => {
+        const producer = this.identity?.id ?? null;
+        const correlationId = RequestContextService.currentCorrelationId() ?? null;
+        const sc = span.spanContext();
+        const activeTraceId = isSpanContextValid(sc) ? sc.traceId : null;
+        const traceId = activeTraceId ?? RequestContextService.currentTraceId() ?? null;
+        const traceContext: Record<string, string> = {};
+        propagation.inject(context.active(), traceContext);
+
+        const profile = QUEUE_PROFILES[queue];
+        const resolvedPriority =
+          options.priority !== undefined && options.priority > 0
+            ? Math.round(options.priority)
+            : profile?.defaultPriority;
+        const envelope = serializeMessage(topic, payload, {
+          producer,
+          correlationId,
+          traceId,
+          job: this.meta(producer, queue, options, traceContext),
+        });
+        span.setAttribute('messaging.message.id', envelope.id);
+
+        const opts = {
+          ...this.queues.jobOptions(envelope.id, queue, options),
+          ...(options.delayMs && options.delayMs > 0 ? { delay: Math.round(options.delayMs) } : {}),
+          ...(resolvedPriority && resolvedPriority > 0 ? { priority: resolvedPriority } : {}),
+        };
+        try {
+          await this.queues.withTimeout(this.queues.get(queue).add(topic, envelope, opts));
+        } catch (err) {
+          this.recordPublished(queue, topic, false);
+          this.logger.warn(`Publish ${queue}/${topic} failed: ${sanitizeMessagingMessage(err)}`);
+          span.recordException(err instanceof Error ? err : new Error(String(err)));
+          span.setStatus({
+            code: SpanStatusCode.ERROR,
+            message: err instanceof Error ? err.message : String(err),
+          });
+          span.end();
+          throw err;
+        }
+        this.recordPublished(queue, topic, true);
+        this.logger.log(`[EventPublished] ${queue}/${topic} ID:${envelope.id}`);
+        span.setStatus({ code: SpanStatusCode.OK });
+        span.end();
+        return envelope;
+      },
+    );
   }
 
   /**
@@ -97,7 +139,12 @@ export class BaseMessagePublisherProvider implements MessagePublisherContract {
   }
 
   /** Trích xuất thông tin metadata từ đối tượng hoặc tin nhắn */
-  private meta(producer: string | null, queue: QueueName, options: PublishOptions): JobMeta {
+  private meta(
+    producer: string | null,
+    queue: QueueName,
+    options: PublishOptions,
+    traceContext?: Record<string, string>,
+  ): JobMeta {
     const source = jobSourceOf(producer);
     const index: Record<string, string> = {};
     for (const [k, v] of Object.entries(options.index ?? {}).slice(0, MAX_INDEX_FIELDS)) {
@@ -118,6 +165,7 @@ export class BaseMessagePublisherProvider implements MessagePublisherContract {
       index,
       schema: options.schema ?? null,
       timeoutMs,
+      ...(traceContext && Object.keys(traceContext).length > 0 ? { traceContext } : {}),
     };
   }
 }

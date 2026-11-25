@@ -82,6 +82,9 @@ const exportSchema = filterSchema.extend({
   limit: z.coerce.number().int().min(1).max(100_000).default(10_000),
 });
 const errorsSchema = rangeSchema.extend({ q: optionalQueryParam(text(200)) });
+const recentTracesSchema = z.object({
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+});
 const AUDIT_DOMAINS: AuditDomain[] = [
   'cache',
   'storage',
@@ -231,6 +234,13 @@ export class LogsOpsController {
       parse(z.string().regex(/^[0-9a-f]{6,40}$/), fingerprint),
       parse(rangeSchema, q).range,
     );
+  }
+
+  /** Danh sách các trace OpenTelemetry gần đây từ buffer */
+  @Public()
+  @Get(R.TRACES_RECENT)
+  public recentTraces(@Query() q: Record<string, string>) {
+    return this.logs.getRecentTraces(parse(recentTracesSchema, q).limit);
   }
 
   /** Truy vết chuỗi sự kiện log theo correlation ID */

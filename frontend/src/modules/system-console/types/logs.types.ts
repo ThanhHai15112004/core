@@ -263,10 +263,57 @@ export interface TraceNode {
   link: TraceEvent['link'];
 }
 
+export type SpanCategory = 'api' | 'db' | 'http' | 'job' | 'usecase' | 'internal';
+
+export interface TraceSpan {
+  traceId: string;
+  spanId: string;
+  parentSpanId: string | null;
+  name: string;
+  category: SpanCategory;
+  kind: 'server' | 'client' | 'producer' | 'consumer' | 'internal';
+  runtime: string;
+  service: string;
+  startTimeMs: number;
+  endTimeMs: number;
+  durationMs: number;
+  status: 'ok' | 'error' | 'unset';
+  statusMessage: string | null;
+  attributes: Record<string, string | number | boolean>;
+}
+
+export interface RecentTraceSummary {
+  traceId: string;
+  rootName: string;
+  runtime: string;
+  service: string;
+  status: 'ok' | 'error';
+  durationMs: number;
+  spanCount: number;
+  startedAt: string;
+}
+
+export interface TracingConfigStats {
+  enabled: boolean;
+  serviceName: string;
+  runtime: string;
+  exporter: string;
+  otlpEndpoint: string | null;
+  sampler: string;
+  samplingRatio: number;
+  ignoreRoutes: string[];
+  consoleBufferEnabled: boolean;
+  consoleBufferMax: number;
+  bufferedSpans: number;
+  exportedSpans: number;
+  droppedSpans: number;
+}
+
 export interface Trace {
   id: string;
   resolvedFrom: ResolvedIdKind[];
   correlationId: string | null;
+  traceId?: string | null;
   durationMs: number | null;
   status: 'failed' | 'ok' | 'running' | 'unknown';
   services: string[];
@@ -275,6 +322,7 @@ export interface Trace {
   failurePoint: { component: string; label: string; errorType: string | null; logId: string | null } | null;
   flow: TraceNode[];
   events: TraceEvent[];
+  spans?: TraceSpan[];
   truncated: boolean;
 }
 
@@ -320,6 +368,7 @@ export interface LogsConfig {
   redaction: Redaction;
   requestBody?: { enabled: boolean; allowlist: string[]; maxBytes: number };
   sink?: LogSinkStats;
+  tracing?: TracingConfigStats | null;
   permissions: { levelChange: boolean; levelPermanent: boolean; export: boolean; exportMax: number; details: boolean; audit: boolean };
   rules: Record<string, number>;
   modules: string[];

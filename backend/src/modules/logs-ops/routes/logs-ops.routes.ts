@@ -9,6 +9,7 @@ export const LOGS_OPS_ROUTES = {
   ENTRY: 'entries/:id',
   ERRORS: 'errors',
   ERROR_GROUP: 'errors/:fingerprint',
+  TRACES_RECENT: 'traces/recent',
   TRACE: 'trace/:id',
   AUDIT: 'audit',
   REPORT: 'report',

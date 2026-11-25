@@ -1,5 +1,14 @@
 import { Logger, Optional, type OnApplicationBootstrap } from '@nestjs/common';
 import { WorkerHost } from '@nestjs/bullmq';
+import {
+  ROOT_CONTEXT,
+  SpanKind,
+  SpanStatusCode,
+  context,
+  isSpanContextValid,
+  propagation,
+  trace,
+} from '@opentelemetry/api';
 import { UnrecoverableError, type Job } from 'bullmq';
 import type { Counter, Histogram } from 'prom-client';
 import { CoreConfigService } from '@packages/config/index.js';
@@ -142,6 +151,8 @@ export abstract class BaseQueueProcessor extends WorkerHost implements OnApplica
     }
 
     const startedMs = Date.now();
+    const waitMs =
+      job.timestamp > 0 ? Math.max(0, (job.processedOn ?? Date.now()) - job.timestamp) : null;
     const end = this.duration.startTimer({ queue: job.queueName, channel: envelope.topic });
     const timeoutMs = this.resolveExecutionTimeoutMs(envelope);
     const scheduledTaskId = resolveScheduledTaskId(job) ?? envelope.meta?.index?.['taskId'] ?? null;
@@ -150,6 +161,33 @@ export abstract class BaseQueueProcessor extends WorkerHost implements OnApplica
     let lockAcquired = false;
     let jobIdempotencyRecordId: number | null = null;
     let jobIdempotencyLockAcquired = false;
+
+    const parentTraceCtx = envelope.meta?.traceContext
+      ? propagation.extract(ROOT_CONTEXT, envelope.meta.traceContext)
+      : ROOT_CONTEXT;
+    const tracer = trace.getTracer('core-framework');
+    const consumerSpan = tracer.startSpan(
+      `queue.process ${job.queueName}/${envelope.topic}`,
+      {
+        kind: SpanKind.CONSUMER,
+        attributes: {
+          'core.span.category': 'job',
+          'messaging.system': 'bullmq',
+          'messaging.destination.name': job.queueName,
+          'messaging.operation.name': 'process',
+          'messaging.message.id': jobId,
+          'messaging.message.topic': envelope.topic,
+          'job.attempt': attempt,
+          ...(waitMs !== null ? { 'job.wait_ms': waitMs } : {}),
+        },
+      },
+      parentTraceCtx,
+    );
+    const consumerSc = consumerSpan.spanContext();
+    const traceId = isSpanContextValid(consumerSc)
+      ? consumerSc.traceId
+      : (envelope.traceId ?? undefined);
+    const spanId = isSpanContextValid(consumerSc) ? consumerSc.spanId : undefined;
 
     try {
       if (this.progressTracker) {
@@ -180,6 +218,8 @@ export abstract class BaseQueueProcessor extends WorkerHost implements OnApplica
             error: `Idempotent duplicate skipped for job business key "${jobBusinessKey}"`,
           });
           this.consumed.inc({ queue: job.queueName, channel: envelope.topic, result: 'success' });
+          consumerSpan.setAttribute('job.skipped', 'idempotent_duplicate');
+          consumerSpan.setStatus({ code: SpanStatusCode.OK });
           return {
             skipped: true,
             duplicate: true,
@@ -222,6 +262,8 @@ export abstract class BaseQueueProcessor extends WorkerHost implements OnApplica
             consumer: this.constructor.name,
             error: `Overlap prevented: task "${scheduledTaskId}" is already locked by execution "${lockRes.holder ?? 'unknown'}"`,
           });
+          consumerSpan.setAttribute('job.skipped', 'overlap_prevented');
+          consumerSpan.setStatus({ code: SpanStatusCode.OK });
           return {
             skipped: true,
             reason: 'overlap_prevented',
@@ -232,18 +274,23 @@ export abstract class BaseQueueProcessor extends WorkerHost implements OnApplica
         lockAcquired = true;
       }
 
-      const result = await RequestContextService.runWith(
-        {
-          correlationId: envelope.correlationId ?? envelope.id,
-          jobId,
-          source: { kind: 'job', id: jobId, name: job.name, detail: job.queueName },
-        },
-        () =>
-          withJobExecutionTimeout(
-            () => this.handle(envelope, job),
-            timeoutMs,
-            `${job.queueName}/${envelope.topic}`,
-          ),
+      const activeSpanCtx = trace.setSpan(parentTraceCtx, consumerSpan);
+      const result = await context.with(activeSpanCtx, () =>
+        RequestContextService.runWith(
+          {
+            correlationId: envelope.correlationId ?? envelope.id,
+            ...(traceId ? { traceId } : {}),
+            ...(spanId ? { spanId } : {}),
+            jobId,
+            source: { kind: 'job', id: jobId, name: job.name, detail: job.queueName },
+          },
+          () =>
+            withJobExecutionTimeout(
+              () => this.handle(envelope, job),
+              timeoutMs,
+              `${job.queueName}/${envelope.topic}`,
+            ),
+        ),
       );
 
       if (jobIdempotencyLockAcquired && jobBusinessKey) {
@@ -270,10 +317,13 @@ export abstract class BaseQueueProcessor extends WorkerHost implements OnApplica
       });
       this.consumed.inc({ queue: job.queueName, channel: envelope.topic, result: 'success' });
       if (job.attemptsMade > 0) this.recovered.inc({ queue: job.queueName });
+      consumerSpan.setStatus({ code: SpanStatusCode.OK });
       return result;
     } catch (err) {
       this.consumed.inc({ queue: job.queueName, channel: envelope.topic, result: 'failed' });
       const info = classifyJobError(err);
+      consumerSpan.recordException(err instanceof Error ? err : new Error(info.message));
+      consumerSpan.setStatus({ code: SpanStatusCode.ERROR, message: info.message });
 
       if (jobIdempotencyLockAcquired && jobBusinessKey) {
         await this.idempotencyRegistry
@@ -364,6 +414,7 @@ export abstract class BaseQueueProcessor extends WorkerHost implements OnApplica
       if (lockAcquired && scheduledTaskId && this.progressTracker) {
         await this.progressTracker.releaseScheduledTaskLock(scheduledTaskId, jobId);
       }
+      consumerSpan.end();
       this.processed++;
       end();
     }

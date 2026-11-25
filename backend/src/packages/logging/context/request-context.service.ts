@@ -19,6 +19,7 @@ export interface RequestContextStore {
   correlationId: string;
   requestId?: string;
   traceId?: string;
+  spanId?: string;
   module?: string;
   action?: string;
   startedAt?: number;
@@ -76,5 +77,10 @@ export class RequestContextService {
   /** Lấy `traceId` từ AsyncLocalStorage hiện tại (nếu có). */
   public static currentTraceId(): string | undefined {
     return RequestContextService.storage.getStore()?.traceId;
+  }
+
+  /** Lấy `spanId` từ AsyncLocalStorage hiện tại (nếu có). */
+  public static currentSpanId(): string | undefined {
+    return RequestContextService.storage.getStore()?.spanId;
   }
 }

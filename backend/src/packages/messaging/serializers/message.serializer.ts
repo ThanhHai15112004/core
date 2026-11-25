@@ -6,7 +6,12 @@ import type { JobMeta } from '../contracts/job-meta.types.js';
 export function serializeMessage<T>(
   topic: string,
   payload: T,
-  meta: { producer?: string | null; correlationId?: string | null; job?: JobMeta | null } = {},
+  meta: {
+    producer?: string | null;
+    correlationId?: string | null;
+    traceId?: string | null;
+    job?: JobMeta | null;
+  } = {},
 ): MessageEnvelope<T> {
   return {
     id: randomUUID(),
@@ -15,6 +20,7 @@ export function serializeMessage<T>(
     timestamp: new Date().toISOString(),
     producer: meta.producer ?? null,
     correlationId: meta.correlationId ?? null,
+    ...(meta.traceId ? { traceId: meta.traceId } : {}),
     ...(meta.job ? { meta: meta.job } : {}),
   };
 }
@@ -31,6 +37,18 @@ function parseMeta(raw: unknown): JobMeta | null {
   if (m['index'] && typeof m['index'] === 'object')
     for (const [k, v] of Object.entries(m['index'] as Record<string, unknown>))
       if (typeof v === 'string' || typeof v === 'number') index[k] = String(v);
+  const traceContext: Record<string, string> = {};
+  if (m['traceContext'] && typeof m['traceContext'] === 'object') {
+    for (const [k, v] of Object.entries(m['traceContext'] as Record<string, unknown>)) {
+      if (typeof v === 'string' && v) traceContext[k] = v;
+    }
+  }
+  const idempotencyTtlSec =
+    typeof m['idempotencyTtlSec'] === 'number' && Number.isFinite(m['idempotencyTtlSec'])
+      ? m['idempotencyTtlSec']
+      : null;
+  const timeoutMs =
+    typeof m['timeoutMs'] === 'number' && Number.isFinite(m['timeoutMs']) ? m['timeoutMs'] : null;
   return {
     source: {
       kind: (kinds.includes(String(src?.['kind']))
@@ -42,8 +60,11 @@ function parseMeta(raw: unknown): JobMeta | null {
     },
     requestId: str(m['requestId']),
     idempotencyKey: str(m['idempotencyKey']),
+    ...(idempotencyTtlSec !== null ? { idempotencyTtlSec } : {}),
     index,
     schema: str(m['schema']),
+    ...(timeoutMs !== null ? { timeoutMs } : {}),
+    ...(Object.keys(traceContext).length > 0 ? { traceContext } : {}),
   };
 }
 
@@ -62,6 +83,7 @@ export function parseEnvelope(data: unknown): MessageEnvelope | null {
     timestamp: d['timestamp'],
     producer: typeof d['producer'] === 'string' ? d['producer'] : null,
     correlationId: typeof d['correlationId'] === 'string' ? d['correlationId'] : null,
+    traceId: typeof d['traceId'] === 'string' ? d['traceId'] : null,
     meta: parseMeta(d['meta']),
   };
 }

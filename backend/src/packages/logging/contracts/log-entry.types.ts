@@ -40,6 +40,8 @@ export interface LogEntry {
   requestId?: string;
   /** ID distributed trace (`traceparent` / `x-trace-id`). */
   traceId?: string;
+  /** ID span OpenTelemetry hiện tại. */
+  spanId?: string;
   jobId?: string;
   jobType?: string;
   messageId?: string;

@@ -27,6 +27,8 @@ export interface JobMeta {
   schema: string | null;
   /** Thời gian chờ thực thi tối đa (ms) cho job trước khi bị ngắt Timeout. */
   timeoutMs?: number | null;
+  /** W3C TraceContext carrier (`traceparent`, `tracestate`) để worker nối span cha-con với API. */
+  traceContext?: Record<string, string> | null;
 }
 
 export interface PublishOptions {

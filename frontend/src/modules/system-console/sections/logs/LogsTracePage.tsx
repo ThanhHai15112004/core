@@ -5,8 +5,9 @@ import { useLocale } from '@core/i18n/index';
 import { useLiveQuery } from '@core/data';
 import { useFormat } from '@core/hooks/useFormat';
 import { NO_VALUE } from '@core/lib/format';
-import { Button, Hint, Input } from '@core/ui/primitives';
+import { Badge, Button, Hint, Input } from '@core/ui/primitives';
 import { KeyValueGrid, Panel, QueryView, RelativeTime, StatGrid, StatTile, StatusBanner } from '@core/ui/blocks';
+import { TraceSpanWaterfall } from '../../components/logs/TraceSpanWaterfall';
 import type { LogRow, TraceEvent } from '../../types/logs.types';
 import { logsApi } from '../../services/logs.api';
 import { contextPath, logTime } from '../../utils/logs-format';
@@ -52,8 +53,46 @@ export function LogsTracePage({ page }: { page: LogsPage }) {
         </form>
         <p className="mt-1.5 text-xs text-faint">{t('logs.trace.hint')}</p>
       </Panel>
-      {id ? <TraceView id={id} page={page} /> : <RecentFailing page={page} />}
+      {id ? (
+        <TraceView id={id} page={page} />
+      ) : (
+        <>
+          <RecentTraces page={page} />
+          <RecentFailing page={page} />
+        </>
+      )}
     </>
+  );
+}
+
+function RecentTraces({ page }: { page: LogsPage }) {
+  const { t } = useLocale();
+  const f = useFormat();
+  const query = useLiveQuery(logsKeys.recentTraces(), () => logsApi.recentTraces(15), { tier: 'slow' });
+  return (
+    <Panel title={t('logs.trace.recentTraces')} className="mb-4">
+      <QueryView query={query} isEmpty={(d) => d.length === 0} emptyMessage={t('logs.trace.noneTraces')}>
+        {(items) => (
+          <ul className="flex flex-col divide-y divide-border">
+            {items.map((tr) => (
+              <li key={tr.traceId}>
+                <button type="button" onClick={() => page.openTrace(tr.traceId)} className="flex w-full items-center gap-3 px-1 py-2 text-left hover:bg-panel-2">
+                  <Badge size="xs" tone={tr.status === 'error' ? 'crit' : 'ok'}>
+                    {t(`logs.trace.status.${tr.status}`)}
+                  </Badge>
+                  <span className="w-36 shrink-0 truncate font-mono text-xs text-info-fg">{tr.traceId}</span>
+                  <span className="min-w-0 flex-1 truncate font-mono text-xs text-fg-2">{tr.rootName}</span>
+                  <span className="shrink-0 font-mono text-xs text-muted">{f.duration(tr.durationMs)}</span>
+                  <span className="shrink-0 text-xs text-faint">
+                    {tr.spanCount} spans · <RelativeTime value={tr.startedAt} />
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </QueryView>
+    </Panel>
   );
 }
 
@@ -150,7 +189,10 @@ function TraceView({ id, page }: { id: string; page: LogsPage }) {
           </Panel>
           {d.truncated && <StatusBanner tone="warn" title={t('logs.trace.truncated')} />}
 
-          <Panel title={t('logs.trace.flow')} className="mb-4">
+          <TraceSpanWaterfall spans={d.spans ?? []} />
+
+          {d.flow.length > 0 && (
+            <Panel title={t('logs.trace.flow')} className="mb-4">
             <div className="flex flex-wrap items-center gap-2">
               {d.flow.map((n, i) => (
                 <Fragment key={`${n.component}-${n.label}-${i}`}>
@@ -174,6 +216,7 @@ function TraceView({ id, page }: { id: string; page: LogsPage }) {
               ))}
             </div>
           </Panel>
+          )}
 
           <Panel title={`${t('logs.trace.timeline')} · ${t('logs.trace.events', { count: d.events.length })}`} flush>
             <ol className="flex flex-col">
