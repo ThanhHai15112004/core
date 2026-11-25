@@ -29,6 +29,7 @@ import {
   CreditCard,
   Server,
   Inbox,
+  Scale,
   Sun,
   Moon,
 } from 'lucide-react';
@@ -128,6 +129,8 @@ export const Header: React.FC<HeaderProps> = ({ activeTab, onTabChange }) => {
         return <Inbox size={15} />;
       case 'idempotency':
         return <ShieldCheck size={15} />;
+      case 'reconciliation':
+        return <Scale size={15} />;
       case 'home':
       default:
         return <Home size={15} />;

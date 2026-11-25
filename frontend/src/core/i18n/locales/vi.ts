@@ -73,6 +73,7 @@ export const vi = {
     providerRegistry: 'Nhà cung cấp',
     outbox: 'Outbox Events',
     idempotency: 'Idempotency',
+    reconciliation: 'Đối soát & Sửa dữ liệu',
     languageToggle: 'Ngôn ngữ',
     themeLight: 'Sáng',
     themeDark: 'Tối',

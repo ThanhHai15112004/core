@@ -56,7 +56,8 @@
     "payments",
     "provider-registry",
     "outbox",
-    "idempotency"
+    "idempotency",
+    "reconciliation"
   ],
   "settings": {
     "defaultLocale": "vi",

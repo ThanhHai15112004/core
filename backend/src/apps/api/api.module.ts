@@ -57,6 +57,7 @@ import { PaymentsModule } from '@modules/payments/index.js';
 import { ProviderRegistryModule } from '@modules/provider-registry/index.js';
 import { OutboxModule } from '@modules/outbox/index.js';
 import { IdempotencyModule } from '@modules/idempotency/index.js';
+import { ReconciliationModule } from '@modules/reconciliation/index.js';
 import { RedisModule } from '@packages/redis/index.js';
 import { RuntimeAgentModule } from '@packages/runtime/index.js';
 import { ApiRuntimeContributor } from './runtime/api-runtime.contributor.js';
@@ -118,6 +119,7 @@ import { MetricsModule } from '@packages/metrics/index.js';
     ProviderRegistryModule,
     OutboxModule,
     IdempotencyModule,
+    ReconciliationModule,
   ],
   providers: [
     ApiRuntimeContributor,

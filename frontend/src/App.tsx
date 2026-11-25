@@ -82,6 +82,10 @@ const IdempotencyManagementPage = loadPage(
   () => import('./modules/idempotency/IdempotencyManagementPage'),
   'IdempotencyManagementPage',
 );
+const ReconciliationManagementPage = loadPage(
+  () => import('./modules/reconciliation/ReconciliationManagementPage'),
+  'ReconciliationManagementPage',
+);
 
 // Tải riêng: CSS/JS của System Console (Tailwind, ECharts…) chỉ nạp khi vào console.
 // Link cũ dạng `/#system-console/...` → đường dẫn thật.
@@ -163,6 +167,8 @@ function App() {
               <OutboxManagementPage />
             ) : activeTab === 'idempotency' ? (
               <IdempotencyManagementPage />
+            ) : activeTab === 'reconciliation' ? (
+              <ReconciliationManagementPage />
             ) : (
               <HomePage onNavigateTab={handleNavigateTab} />
             )}

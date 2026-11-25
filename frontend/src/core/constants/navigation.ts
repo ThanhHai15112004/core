@@ -17,7 +17,8 @@ export type NavigationTabId =
   | 'payments'
   | 'provider-registry'
   | 'outbox'
-  | 'idempotency';
+  | 'idempotency'
+  | 'reconciliation';
 
 export interface NavigationItem {
   id: NavigationTabId;
@@ -129,6 +130,12 @@ export const NAVIGATION_ITEMS: readonly NavigationItem[] = [
     labelKey: 'header.idempotency',
     icon: 'shield-check',
     route: ROUTES.IDEMPOTENCY,
+  },
+  {
+    id: 'reconciliation',
+    labelKey: 'header.reconciliation',
+    icon: 'scale',
+    route: ROUTES.RECONCILIATION,
   },
 ] as const;
 

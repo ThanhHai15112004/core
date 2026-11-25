@@ -53,6 +53,11 @@ import {
   IdempotencyRegistryService,
   defaultIdempotencyRegistry,
 } from './registries/idempotency-registry.service.js';
+import { RECONCILIATION_PORT } from './contracts/reconciliation.contract.js';
+import {
+  ReconciliationRegistryService,
+  defaultReconciliationRegistry,
+} from './registries/reconciliation-registry.service.js';
 
 @Global()
 @Module({
@@ -129,6 +134,14 @@ import {
       provide: IDEMPOTENCY_PORT,
       useValue: defaultIdempotencyRegistry,
     },
+    {
+      provide: ReconciliationRegistryService,
+      useValue: defaultReconciliationRegistry,
+    },
+    {
+      provide: RECONCILIATION_PORT,
+      useValue: defaultReconciliationRegistry,
+    },
   ],
   exports: [
     CodeRegistryService,
@@ -149,6 +162,8 @@ import {
     OUTBOX_PUBLISHER_PORT,
     IdempotencyRegistryService,
     IDEMPOTENCY_PORT,
+    ReconciliationRegistryService,
+    RECONCILIATION_PORT,
   ],
 })
 export class KernelModule {}

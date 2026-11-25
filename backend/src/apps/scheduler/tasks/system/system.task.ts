@@ -1,6 +1,10 @@
 import { Injectable, type OnModuleInit } from '@nestjs/common';
 import { CoreConfigService } from '@packages/config/index.js';
-import { IDEMPOTENCY_QUEUE_TOPICS, OUTBOX_QUEUE_TOPICS } from '@packages/kernel/index.js';
+import {
+  IDEMPOTENCY_QUEUE_TOPICS,
+  OUTBOX_QUEUE_TOPICS,
+  RECONCILIATION_QUEUE_TOPICS,
+} from '@packages/kernel/index.js';
 import { QUEUES } from '@packages/messaging/index.js';
 import { ScheduledTaskRegistry } from '../../registry/scheduled-task.registry.js';
 
@@ -86,6 +90,19 @@ export class SystemTask implements OnModuleInit {
       pattern: '30 3 * * *',
       tz: this.config.scheduler.timezone,
       data: { triggeredBy: 'scheduler', module: 'idempotency' },
+      notifyOnFailure: true,
+      misfirePolicy: 'run_once',
+    });
+
+    this.registry.register({
+      id: 'reconciliation.schedule.scan',
+      queue: QUEUES.SYSTEM_EVENTS,
+      name: RECONCILIATION_QUEUE_TOPICS.SCHEDULE_TICK,
+      description:
+        'Quét và kích hoạt các Job đối soát dữ liệu định kỳ đến hạn giữa hệ thống nội bộ và nguồn bên ngoài (11.5).',
+      pattern: '*/10 * * * *',
+      tz: this.config.scheduler.timezone,
+      data: { triggeredBy: 'scheduler', module: 'reconciliation' },
       notifyOnFailure: true,
       misfirePolicy: 'run_once',
     });

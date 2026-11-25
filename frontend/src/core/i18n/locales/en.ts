@@ -74,6 +74,7 @@ export const en: TranslationKey = {
     providerRegistry: 'Providers',
     outbox: 'Outbox Events',
     idempotency: 'Idempotency',
+    reconciliation: 'Reconciliation & Repair',
     languageToggle: 'Language',
     themeLight: 'Light',
     themeDark: 'Dark',

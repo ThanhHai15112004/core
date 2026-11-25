@@ -16,6 +16,7 @@ export const ROUTES = {
   PROVIDER_REGISTRY: '/provider-registry',
   OUTBOX: '/outbox',
   IDEMPOTENCY: '/idempotency',
+  RECONCILIATION: '/reconciliation',
   SYSTEM_CONSOLE: '/system-console',
 } as const;
 

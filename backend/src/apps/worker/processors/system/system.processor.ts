@@ -7,6 +7,7 @@ import {
   ExportRegistryService,
   IDEMPOTENCY_QUEUE_TOPICS,
   OUTBOX_QUEUE_TOPICS,
+  RECONCILIATION_QUEUE_TOPICS,
   ReportRegistryService,
   defaultDomainEventBus,
   defaultExportRegistry,
@@ -41,6 +42,11 @@ import {
   IDEMPOTENCY_PUBLIC_SERVICE,
   type IIdempotencyPublicService,
 } from '@modules/idempotency/contracts/index.js';
+import {
+  RECONCILIATION_PUBLIC_SERVICE,
+  type IReconciliationPublicService,
+} from '@modules/reconciliation/contracts/index.js';
+import type { QueuedReconciliationRunJobPayload } from '@modules/reconciliation/index.js';
 import { BaseQueueProcessor } from '../base-queue.processor.js';
 
 export interface SystemMaintenanceTickPayload {
@@ -84,6 +90,9 @@ export class SystemProcessor extends BaseQueueProcessor {
     @Optional()
     @Inject(IDEMPOTENCY_PUBLIC_SERVICE)
     private readonly idempotencyService?: IIdempotencyPublicService,
+    @Optional()
+    @Inject(RECONCILIATION_PUBLIC_SERVICE)
+    private readonly reconciliationService?: IReconciliationPublicService,
   ) {
     super(config, metrics, progressTracker);
   }
@@ -176,6 +185,21 @@ export class SystemProcessor extends BaseQueueProcessor {
         return { handled: false, skipped: true, reason: 'outbox_service_unavailable' };
       }
       return this.outboxService.checkLagAndAlert();
+    }
+
+    if (envelope.topic === RECONCILIATION_QUEUE_TOPICS.RUN_JOB) {
+      if (!this.reconciliationService) {
+        return { handled: false, skipped: true, reason: 'reconciliation_service_unavailable' };
+      }
+      const payload = (envelope.payload ?? {}) as QueuedReconciliationRunJobPayload;
+      return this.reconciliationService.processQueuedRun(payload);
+    }
+
+    if (envelope.topic === RECONCILIATION_QUEUE_TOPICS.SCHEDULE_TICK) {
+      if (!this.reconciliationService) {
+        return { handled: false, skipped: true, reason: 'reconciliation_service_unavailable' };
+      }
+      return this.reconciliationService.triggerDueScheduledJobs();
     }
 
     if (

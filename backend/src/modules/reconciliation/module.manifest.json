@@ -1,0 +1,584 @@
+{
+  "$schema": "../../packages/kernel/schemas/module.manifest.schema.json",
+  "name": "reconciliation",
+  "displayName": "Reconciliation & Data Repair",
+  "version": "1.0.0",
+  "description": "Module Đối soát và Sửa dữ liệu tổng quát (11.5): Job đối soát định kỳ/thủ công có quyền & audit, phân loại sai lệch (thiếu, trùng, sai trạng thái, sai số tiền), báo cáo mức độ & người phụ trách, công cụ sửa dữ liệu có chế độ Dry-Run xem trước, phê duyệt tách người đề xuất và người duyệt cho dữ liệu nhạy cảm, ghi dữ liệu trước/sau và hành động bù không mất lịch sử.",
+  "type": "core",
+  "category": "Reliability",
+  "author": "Core Platform Team",
+  "entryModule": "ReconciliationModule",
+  "dependencies": [
+    "database",
+    "messaging",
+    "security",
+    "settings",
+    "codes",
+    "sequences",
+    "notifications",
+    "audit",
+    "idempotency",
+    "payments"
+  ],
+  "permissions": [
+    "reconciliation.read",
+    "reconciliation.job.manage",
+    "reconciliation.run.execute",
+    "reconciliation.discrepancy.manage",
+    "reconciliation.repair.propose",
+    "reconciliation.repair.approve",
+    "reconciliation.repair.execute"
+  ],
+  "codeTypes": [
+    {
+      "code": "reconciliation.run_status",
+      "name": "Trạng thái phiên đối soát",
+      "description": "Vòng đời thực thi một phiên đối soát dữ liệu",
+      "isSystem": true,
+      "allowCustomValues": false,
+      "values": [
+        {
+          "numericCode": 1,
+          "code": "QUEUED",
+          "name": "Đang chờ chạy",
+          "labels": { "vi": "Đang chờ chạy", "en": "Queued" },
+          "behaviorCode": "QUEUED",
+          "badgeTone": "neutral",
+          "sortOrder": 1,
+          "isSystem": true
+        },
+        {
+          "numericCode": 2,
+          "code": "RUNNING",
+          "name": "Đang đối soát",
+          "labels": { "vi": "Đang đối soát", "en": "Running" },
+          "behaviorCode": "RUNNING",
+          "badgeTone": "info",
+          "sortOrder": 2,
+          "isSystem": true
+        },
+        {
+          "numericCode": 3,
+          "code": "COMPLETED",
+          "name": "Hoàn tất",
+          "labels": { "vi": "Hoàn tất", "en": "Completed" },
+          "behaviorCode": "COMPLETED",
+          "badgeTone": "success",
+          "sortOrder": 3,
+          "isSystem": true
+        },
+        {
+          "numericCode": 4,
+          "code": "FAILED",
+          "name": "Thất bại",
+          "labels": { "vi": "Thất bại", "en": "Failed" },
+          "behaviorCode": "FAILED",
+          "badgeTone": "danger",
+          "sortOrder": 4,
+          "isSystem": true
+        }
+      ]
+    },
+    {
+      "code": "reconciliation.discrepancy_type",
+      "name": "Loại sai lệch dữ liệu đối soát",
+      "description": "Phân loại các nhóm sai lệch giữa dữ liệu nội bộ và nguồn bên ngoài",
+      "isSystem": true,
+      "allowCustomValues": false,
+      "values": [
+        {
+          "numericCode": 1,
+          "code": "MISSING_INTERNAL",
+          "name": "Thiếu nội bộ",
+          "labels": { "vi": "Thiếu nội bộ", "en": "Missing Internally" },
+          "behaviorCode": "MISSING_INTERNAL",
+          "badgeTone": "danger",
+          "sortOrder": 1,
+          "isSystem": true
+        },
+        {
+          "numericCode": 2,
+          "code": "MISSING_EXTERNAL",
+          "name": "Thiếu nguồn ngoài",
+          "labels": { "vi": "Thiếu nguồn ngoài", "en": "Missing Externally" },
+          "behaviorCode": "MISSING_EXTERNAL",
+          "badgeTone": "danger",
+          "sortOrder": 2,
+          "isSystem": true
+        },
+        {
+          "numericCode": 3,
+          "code": "DUPLICATE_INTERNAL",
+          "name": "Trùng dữ liệu nội bộ",
+          "labels": { "vi": "Trùng nội bộ", "en": "Duplicate Internal" },
+          "behaviorCode": "DUPLICATE_INTERNAL",
+          "badgeTone": "warning",
+          "sortOrder": 3,
+          "isSystem": true
+        },
+        {
+          "numericCode": 4,
+          "code": "DUPLICATE_EXTERNAL",
+          "name": "Trùng dữ liệu nguồn ngoài",
+          "labels": { "vi": "Trùng nguồn ngoài", "en": "Duplicate External" },
+          "behaviorCode": "DUPLICATE_EXTERNAL",
+          "badgeTone": "warning",
+          "sortOrder": 4,
+          "isSystem": true
+        },
+        {
+          "numericCode": 5,
+          "code": "STATUS_MISMATCH",
+          "name": "Sai trạng thái",
+          "labels": { "vi": "Sai trạng thái", "en": "Status Mismatch" },
+          "behaviorCode": "STATUS_MISMATCH",
+          "badgeTone": "warning",
+          "sortOrder": 5,
+          "isSystem": true
+        },
+        {
+          "numericCode": 6,
+          "code": "AMOUNT_MISMATCH",
+          "name": "Sai số tiền",
+          "labels": { "vi": "Sai số tiền", "en": "Amount Mismatch" },
+          "behaviorCode": "AMOUNT_MISMATCH",
+          "badgeTone": "danger",
+          "sortOrder": 6,
+          "isSystem": true
+        },
+        {
+          "numericCode": 7,
+          "code": "DATA_MISMATCH",
+          "name": "Sai trường dữ liệu",
+          "labels": { "vi": "Sai dữ liệu khác", "en": "Data Mismatch" },
+          "behaviorCode": "DATA_MISMATCH",
+          "badgeTone": "info",
+          "sortOrder": 7,
+          "isSystem": true
+        }
+      ]
+    },
+    {
+      "code": "reconciliation.severity",
+      "name": "Mức độ nghiêm trọng sai lệch",
+      "description": "Phân cấp mức độ ưu tiên xử lý sai lệch đối soát",
+      "isSystem": true,
+      "allowCustomValues": false,
+      "values": [
+        {
+          "numericCode": 1,
+          "code": "LOW",
+          "name": "Thấp",
+          "labels": { "vi": "Thấp", "en": "Low" },
+          "behaviorCode": "LOW",
+          "badgeTone": "neutral",
+          "sortOrder": 1,
+          "isSystem": true
+        },
+        {
+          "numericCode": 2,
+          "code": "MEDIUM",
+          "name": "Trung bình",
+          "labels": { "vi": "Trung bình", "en": "Medium" },
+          "behaviorCode": "MEDIUM",
+          "badgeTone": "info",
+          "sortOrder": 2,
+          "isSystem": true
+        },
+        {
+          "numericCode": 3,
+          "code": "HIGH",
+          "name": "Cao",
+          "labels": { "vi": "Cao", "en": "High" },
+          "behaviorCode": "HIGH",
+          "badgeTone": "warning",
+          "sortOrder": 3,
+          "isSystem": true
+        },
+        {
+          "numericCode": 4,
+          "code": "CRITICAL",
+          "name": "Nghiêm trọng",
+          "labels": { "vi": "Nghiêm trọng", "en": "Critical" },
+          "behaviorCode": "CRITICAL",
+          "badgeTone": "danger",
+          "sortOrder": 4,
+          "isSystem": true
+        }
+      ]
+    },
+    {
+      "code": "reconciliation.discrepancy_status",
+      "name": "Trạng thái xử lý sai lệch",
+      "description": "Trạng thái theo dõi xử lý một bản ghi sai lệch đối soát",
+      "isSystem": true,
+      "allowCustomValues": false,
+      "values": [
+        {
+          "numericCode": 1,
+          "code": "OPEN",
+          "name": "Mở",
+          "labels": { "vi": "Mở", "en": "Open" },
+          "behaviorCode": "OPEN",
+          "badgeTone": "danger",
+          "sortOrder": 1,
+          "isSystem": true
+        },
+        {
+          "numericCode": 2,
+          "code": "ASSIGNED",
+          "name": "Đã giao phụ trách",
+          "labels": { "vi": "Đã giao", "en": "Assigned" },
+          "behaviorCode": "ASSIGNED",
+          "badgeTone": "info",
+          "sortOrder": 2,
+          "isSystem": true
+        },
+        {
+          "numericCode": 3,
+          "code": "IN_REPAIR",
+          "name": "Đang sửa dữ liệu",
+          "labels": { "vi": "Đang sửa", "en": "In Repair" },
+          "behaviorCode": "IN_REPAIR",
+          "badgeTone": "warning",
+          "sortOrder": 3,
+          "isSystem": true
+        },
+        {
+          "numericCode": 4,
+          "code": "RESOLVED",
+          "name": "Đã xử lý",
+          "labels": { "vi": "Đã xử lý", "en": "Resolved" },
+          "behaviorCode": "RESOLVED",
+          "badgeTone": "success",
+          "sortOrder": 4,
+          "isSystem": true
+        },
+        {
+          "numericCode": 5,
+          "code": "COMPENSATED",
+          "name": "Đã bù dữ liệu",
+          "labels": { "vi": "Đã bù", "en": "Compensated" },
+          "behaviorCode": "COMPENSATED",
+          "badgeTone": "success",
+          "sortOrder": 5,
+          "isSystem": true
+        },
+        {
+          "numericCode": 6,
+          "code": "IGNORED",
+          "name": "Bỏ qua",
+          "labels": { "vi": "Bỏ qua", "en": "Ignored" },
+          "behaviorCode": "IGNORED",
+          "badgeTone": "neutral",
+          "sortOrder": 6,
+          "isSystem": true
+        }
+      ]
+    },
+    {
+      "code": "reconciliation.repair_status",
+      "name": "Trạng thái yêu cầu sửa dữ liệu",
+      "description": "Vòng đời phê duyệt, thực thi và hành động bù của yêu cầu sửa dữ liệu",
+      "isSystem": true,
+      "allowCustomValues": false,
+      "values": [
+        {
+          "numericCode": 1,
+          "code": "DRAFT_PREVIEW",
+          "name": "Đã xem trước (Dry-Run)",
+          "labels": { "vi": "Đã Dry-Run", "en": "Previewed" },
+          "behaviorCode": "DRAFT_PREVIEW",
+          "badgeTone": "info",
+          "sortOrder": 1,
+          "isSystem": true
+        },
+        {
+          "numericCode": 2,
+          "code": "PENDING_APPROVAL",
+          "name": "Chờ phê duyệt",
+          "labels": { "vi": "Chờ duyệt", "en": "Pending Approval" },
+          "behaviorCode": "PENDING_APPROVAL",
+          "badgeTone": "warning",
+          "sortOrder": 2,
+          "isSystem": true
+        },
+        {
+          "numericCode": 3,
+          "code": "APPROVED",
+          "name": "Đã phê duyệt",
+          "labels": { "vi": "Đã duyệt", "en": "Approved" },
+          "behaviorCode": "APPROVED",
+          "badgeTone": "success",
+          "sortOrder": 3,
+          "isSystem": true
+        },
+        {
+          "numericCode": 4,
+          "code": "REJECTED",
+          "name": "Bị từ chối",
+          "labels": { "vi": "Từ chối", "en": "Rejected" },
+          "behaviorCode": "REJECTED",
+          "badgeTone": "danger",
+          "sortOrder": 4,
+          "isSystem": true
+        },
+        {
+          "numericCode": 5,
+          "code": "EXECUTED",
+          "name": "Đã thực thi",
+          "labels": { "vi": "Đã thực thi", "en": "Executed" },
+          "behaviorCode": "EXECUTED",
+          "badgeTone": "success",
+          "sortOrder": 5,
+          "isSystem": true
+        },
+        {
+          "numericCode": 6,
+          "code": "FAILED",
+          "name": "Thực thi lỗi",
+          "labels": { "vi": "Lỗi", "en": "Failed" },
+          "behaviorCode": "FAILED",
+          "badgeTone": "danger",
+          "sortOrder": 6,
+          "isSystem": true
+        },
+        {
+          "numericCode": 7,
+          "code": "COMPENSATED",
+          "name": "Đã tạo hành động bù",
+          "labels": { "vi": "Đã bù", "en": "Compensated" },
+          "behaviorCode": "COMPENSATED",
+          "badgeTone": "neutral",
+          "sortOrder": 7,
+          "isSystem": true
+        }
+      ]
+    }
+  ],
+  "settingGroups": [
+    {
+      "code": "reconciliation",
+      "name": "Đối soát & Sửa dữ liệu",
+      "description": "Cấu hình ngưỡng mức độ sai lệch tiền, ngưỡng dữ liệu nhạy cảm yêu cầu duyệt 2 lớp (Maker-Checker), bắt buộc Dry-Run và giới hạn bản ghi mỗi phiên đối soát",
+      "icon": "Scale",
+      "sortOrder": 71,
+      "isSystem": true
+    }
+  ],
+  "settings": [
+    {
+      "key": "reconciliation.high_amount_diff_threshold",
+      "groupCode": "reconciliation",
+      "module": "reconciliation",
+      "namespace": "reconciliation.severity",
+      "name": "Ngưỡng chênh lệch số tiền mức Cao (HIGH)",
+      "description": "Giá trị tuyệt đối chênh lệch số tiền đạt ngưỡng này sẽ gắn mức độ HIGH",
+      "valueType": "NUMBER",
+      "defaultValue": 1000000,
+      "validationRules": { "min": 1, "max": 1000000000000, "integerOnly": true },
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 1
+    },
+    {
+      "key": "reconciliation.critical_amount_diff_threshold",
+      "groupCode": "reconciliation",
+      "module": "reconciliation",
+      "namespace": "reconciliation.severity",
+      "name": "Ngưỡng chênh lệch số tiền mức Nghiêm trọng (CRITICAL)",
+      "description": "Giá trị tuyệt đối chênh lệch số tiền đạt ngưỡng này sẽ gắn mức độ CRITICAL",
+      "valueType": "NUMBER",
+      "defaultValue": 10000000,
+      "validationRules": { "min": 1, "max": 1000000000000, "integerOnly": true },
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 2
+    },
+    {
+      "key": "reconciliation.sensitive_amount_threshold",
+      "groupCode": "reconciliation",
+      "module": "reconciliation",
+      "namespace": "reconciliation.repair",
+      "name": "Ngưỡng số tiền yêu cầu phê duyệt nhạy cảm",
+      "description": "Mọi lệnh sửa có chênh lệch số tiền đạt ngưỡng này bắt buộc qua duyệt 2 người (Maker-Checker)",
+      "valueType": "NUMBER",
+      "defaultValue": 1000000,
+      "validationRules": { "min": 0, "max": 1000000000000, "integerOnly": true },
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 3
+    },
+    {
+      "key": "reconciliation.require_dry_run_before_apply",
+      "groupCode": "reconciliation",
+      "module": "reconciliation",
+      "namespace": "reconciliation.repair",
+      "name": "Bắt buộc chạy thử Dry-Run trước khi áp dụng sửa dữ liệu",
+      "description": "Chặn thực thi lệnh sửa nếu chưa có bản xem trước Dry-Run hợp lệ",
+      "valueType": "BOOLEAN",
+      "defaultValue": true,
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 4
+    },
+    {
+      "key": "reconciliation.require_approval_for_all_repairs",
+      "groupCode": "reconciliation",
+      "module": "reconciliation",
+      "namespace": "reconciliation.repair",
+      "name": "Bắt buộc phê duyệt Maker-Checker cho mọi lệnh sửa dữ liệu",
+      "description": "Khi bật, ngay cả lệnh sửa dữ liệu thông thường cũng cần người thứ hai phê duyệt",
+      "valueType": "BOOLEAN",
+      "defaultValue": false,
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 5
+    },
+    {
+      "key": "reconciliation.max_records_per_run",
+      "groupCode": "reconciliation",
+      "module": "reconciliation",
+      "namespace": "reconciliation.execution",
+      "name": "Số bản ghi tối đa mỗi phiên đối soát",
+      "description": "Giới hạn số bản ghi tải từ mỗi nguồn trong một phiên đối soát để bảo vệ bộ nhớ",
+      "valueType": "NUMBER",
+      "defaultValue": 5000,
+      "validationRules": { "min": 50, "max": 100000, "integerOnly": true },
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 6
+    },
+    {
+      "key": "reconciliation.retention_days",
+      "groupCode": "reconciliation",
+      "module": "reconciliation",
+      "namespace": "reconciliation.retention",
+      "name": "Số ngày lưu trữ lịch sử phiên đối soát",
+      "description": "Thời gian lưu giữ kết quả đối soát phục vụ kiểm toán",
+      "valueType": "NUMBER",
+      "defaultValue": 90,
+      "validationRules": { "min": 7, "max": 3650, "integerOnly": true },
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 7
+    }
+  ],
+  "sequences": [
+    {
+      "key": "reconciliation.job_code",
+      "module": "reconciliation",
+      "name": "Mã cấu hình Job đối soát",
+      "description": "Sinh mã cấu hình Job đối soát duy nhất (ví dụ: RJB-202611-000001)",
+      "prefix": "RJB",
+      "suffix": "",
+      "separator": "-",
+      "dateFormat": "YYYYMM",
+      "paddingLength": 6,
+      "startValue": 1,
+      "step": 1,
+      "resetPolicy": "MONTHLY",
+      "scopeByUnit": false,
+      "timezone": "Asia/Ho_Chi_Minh",
+      "isSystem": true
+    },
+    {
+      "key": "reconciliation.run_code",
+      "module": "reconciliation",
+      "name": "Mã phiên chạy đối soát",
+      "description": "Sinh mã phiên chạy đối soát duy nhất (ví dụ: RRN-202611-000001)",
+      "prefix": "RRN",
+      "suffix": "",
+      "separator": "-",
+      "dateFormat": "YYYYMM",
+      "paddingLength": 6,
+      "startValue": 1,
+      "step": 1,
+      "resetPolicy": "MONTHLY",
+      "scopeByUnit": false,
+      "timezone": "Asia/Ho_Chi_Minh",
+      "isSystem": true
+    },
+    {
+      "key": "reconciliation.discrepancy_code",
+      "module": "reconciliation",
+      "name": "Mã bản ghi sai lệch đối soát",
+      "description": "Sinh mã sai lệch duy nhất (ví dụ: RDS-202611-000001)",
+      "prefix": "RDS",
+      "suffix": "",
+      "separator": "-",
+      "dateFormat": "YYYYMM",
+      "paddingLength": 6,
+      "startValue": 1,
+      "step": 1,
+      "resetPolicy": "MONTHLY",
+      "scopeByUnit": false,
+      "timezone": "Asia/Ho_Chi_Minh",
+      "isSystem": true
+    },
+    {
+      "key": "reconciliation.repair_code",
+      "module": "reconciliation",
+      "name": "Mã yêu cầu sửa dữ liệu / hành động bù",
+      "description": "Sinh mã lệnh sửa dữ liệu duy nhất (ví dụ: RPR-202611-000001)",
+      "prefix": "RPR",
+      "suffix": "",
+      "separator": "-",
+      "dateFormat": "YYYYMM",
+      "paddingLength": 6,
+      "startValue": 1,
+      "step": 1,
+      "resetPolicy": "MONTHLY",
+      "scopeByUnit": false,
+      "timezone": "Asia/Ho_Chi_Minh",
+      "isSystem": true
+    }
+  ],
+  "menus": [
+    {
+      "code": "RECONCILIATION",
+      "name": "Đối soát & Sửa dữ liệu",
+      "module": "reconciliation",
+      "status": 1,
+      "link": "/reconciliation",
+      "linkApi": "/api/v1/reconciliation/jobs",
+      "type": 2,
+      "parent": null,
+      "level": 1,
+      "key": "reconciliation.read",
+      "numOrder": 65,
+      "icon": "Scale",
+      "position": "SIDEBAR"
+    }
+  ],
+  "events": {
+    "published": [
+      "reconciliation.run.completed",
+      "reconciliation.run.failed",
+      "reconciliation.discrepancy.assigned",
+      "reconciliation.repair.proposed",
+      "reconciliation.repair.approved",
+      "reconciliation.repair.rejected",
+      "reconciliation.repair.executed",
+      "reconciliation.repair.compensated"
+    ],
+    "subscribed": []
+  },
+  "database": {
+    "hasMigrations": true,
+    "tables": [
+      "reconciliation_jobs",
+      "reconciliation_runs",
+      "reconciliation_discrepancies",
+      "data_repair_requests",
+      "data_repair_executions"
+    ]
+  }
+}
