@@ -11,7 +11,7 @@ import { RedisService } from '@packages/redis/index.js';
 import { logsKeys } from '../constants/logs.keys.js';
 import type { LogIngestState, LogLevelOverrideRecord } from '../contracts/log-store.types.js';
 import { LOGGING_OPTIONS, type LoggingModuleOptions } from '../contracts/logging-options.js';
-import { PINO_LEVEL, getRootLogger, redisStream } from './pino-root.logger.js';
+import { PINO_LEVEL, externalLogSink, getRootLogger, redisStream } from './pino-root.logger.js';
 
 const SYNC_MS = 5_000;
 const LABEL_OF: Record<string, string> = Object.fromEntries(
@@ -40,6 +40,11 @@ export class LogLevelService implements OnApplicationBootstrap, OnApplicationShu
   /** Thực thi tác vụ khởi động sau khi toàn bộ ứng dụng hoàn tất bootstrap */
   public onApplicationBootstrap(): void {
     redisStream.attach(this.redis, logsKeys(this.redis).stream(this.config.app.env));
+    externalLogSink.configure(
+      this.config.logs.sink,
+      this.config.app.env,
+      this.config.logs.serviceName,
+    );
     if (this.options.runtime === 'cli') return;
     void this.sync();
     this.timer = setInterval(() => void this.sync(), SYNC_MS);
@@ -50,7 +55,7 @@ export class LogLevelService implements OnApplicationBootstrap, OnApplicationShu
   public async onApplicationShutdown(): Promise<void> {
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
-    await redisStream.flush();
+    await Promise.all([redisStream.flush(), externalLogSink.flush()]);
     if (this.options.runtime !== 'cli' && this.redis.isReady())
       await this.redis.client.hdel(logsKeys(this.redis).ingest(), this.ingestField).catch(() => 0);
     redisStream.detach(this.redis);

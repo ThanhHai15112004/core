@@ -19,11 +19,16 @@ const KNOWN = new Set([
   'message',
   'pid',
   'hostname',
+  'service',
   'context',
+  'module',
+  'action',
   'runtime',
   'instance',
   'reqId',
+  'requestId',
   'correlationId',
+  'traceId',
   'jobId',
   'jobType',
   'messageId',
@@ -37,6 +42,7 @@ const KNOWN = new Set([
   'errorType',
   'errorCode',
   'durationMs',
+  'slowRequest',
 ]);
 
 /** Message → mẫu để gom lỗi cùng loại: `User 821 not found` và `User 822 not found` → `User {n} not found`. */
@@ -89,11 +95,14 @@ export function toLogEntry(id: string, raw: string): LogEntry | null {
   const set = <K extends keyof LogEntry>(k: K, v: LogEntry[K] | undefined) => {
     if (v !== undefined) e[k] = v;
   };
-  set('context', str(o.context));
+  set('service', str(o.service));
+  set('context', str(o.context) ?? str(o.module));
+  set('action', str(o.action));
   set('runtime', str(o.runtime));
   set('instance', str(o.instance));
-  set('requestId', str(o.reqId));
+  set('requestId', str(o.requestId) ?? str(o.reqId));
   set('correlationId', str(o.correlationId) ?? str(o.reqId));
+  set('traceId', str(o.traceId));
   set('jobId', str(o.jobId));
   set('jobType', str(o.jobType));
   set('messageId', str(o.messageId));
@@ -112,6 +121,7 @@ export function toLogEntry(id: string, raw: string): LogEntry | null {
         ? o.durationMs
         : undefined;
   set('durationMs', duration);
+  if (o.slowRequest === true) set('slowRequest', true);
 
   const metadata: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(o)) if (!KNOWN.has(k)) metadata[k] = v;

@@ -55,11 +55,23 @@ describe('log query', () => {
     ).toBe(true);
   });
 
-  it('anyId khớp correlation / job / request / message', () => {
+  it('anyId khớp correlation / trace / job / request / message và hỗ trợ traceId / action / svc', () => {
     const f = { ...EMPTY_LOG_FILTER, anyId: 'corr-7' };
     expect(matchesLog(e({ correlationId: 'corr-7' }), f)).toBe(true);
+    expect(matchesLog(e({ traceId: 'corr-7' }), f)).toBe(true);
     expect(matchesLog(e({ jobId: 'corr-7' }), f)).toBe(true);
     expect(matchesLog(e({}), f)).toBe(false);
+
+    const parsed = parseLogQuery('traceId:trace-99 action:UsersController.create svc:core-api');
+    expect(parsed.ids.traceId).toBe('trace-99');
+    expect(parsed.action).toBe('UsersController.create');
+    expect(parsed.service).toBe('core-api');
+    expect(
+      matchesLog(
+        e({ traceId: 'trace-99', action: 'UsersController.create', service: 'core-api' }),
+        parsed,
+      ),
+    ).toBe(true);
   });
 
   it('cursor mới nhất trước: older / newer theo (thời gian, id)', () => {

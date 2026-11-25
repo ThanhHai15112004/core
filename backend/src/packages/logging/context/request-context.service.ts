@@ -18,6 +18,10 @@ export interface RequestSource {
 export interface RequestContextStore {
   correlationId: string;
   requestId?: string;
+  traceId?: string;
+  module?: string;
+  action?: string;
+  startedAt?: number;
   userId?: string;
   ipAddress?: string | null;
   userAgent?: string | null;
@@ -42,6 +46,18 @@ export class RequestContextService {
     return RequestContextService.storage.run(store, callback);
   }
 
+  /** Chạy hàm con với ngữ cảnh log bổ sung (`module`, `action`, `traceId`) kế thừa store hiện tại. */
+  public static withLogContext<R>(
+    patch: Partial<Pick<RequestContextStore, 'module' | 'action' | 'traceId'>>,
+    callback: () => R,
+  ): R {
+    const parent = RequestContextService.storage.getStore();
+    const nextStore: RequestContextStore = parent
+      ? { ...parent, ...patch }
+      : { correlationId: patch.traceId ?? 'internal', ...patch };
+    return RequestContextService.storage.run(nextStore, callback);
+  }
+
   /** Lấy kho lưu trữ ngữ cảnh bất đồng bộ (AsyncLocalStorage) hiện tại */
   public getStore(): RequestContextStore | undefined {
     return RequestContextService.storage.getStore();
@@ -55,5 +71,10 @@ export class RequestContextService {
   /** Dùng ở nơi không inject được (vd. logger khởi tạo sớm). */
   public static currentCorrelationId(): string | undefined {
     return RequestContextService.storage.getStore()?.correlationId;
+  }
+
+  /** Lấy `traceId` từ AsyncLocalStorage hiện tại (nếu có). */
+  public static currentTraceId(): string | undefined {
+    return RequestContextService.storage.getStore()?.traceId;
   }
 }

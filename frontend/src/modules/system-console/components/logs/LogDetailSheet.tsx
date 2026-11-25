@@ -67,7 +67,7 @@ function DetailBody({ d, onOpenLog, onTrace, onError, navigate }: { d: LogDetail
   const { t, formatRelative } = useLocale();
   const f = useFormat();
   const l = d.links;
-  const traceId = l.correlationId ?? d.requestId ?? d.jobId;
+  const traceId = d.traceId ?? l.traceId ?? l.correlationId ?? d.requestId ?? d.jobId;
   const code = (v: string | null | undefined) => (v ? <span className="font-mono text-xs">{v}</span> : null);
   const withNote = (main: React.ReactNode, note: string | null | undefined) => (
     <>
@@ -77,10 +77,13 @@ function DetailBody({ d, onOpenLog, onTrace, onError, navigate }: { d: LogDetail
   );
 
   const context: KeyValueItem[] = [
+    ...(d.service ? [{ label: t('logs.detail.service'), value: d.service }] : []),
     { label: t('logs.detail.source'), value: d.runtime },
     { label: t('logs.detail.instance'), value: code(d.instance) },
     { label: t('logs.detail.module'), value: d.module },
+    ...(d.action ? [{ label: t('logs.detail.action'), value: code(d.action) }] : []),
     ...(d.correlationId ? [{ label: t('logs.ctx.correlation'), value: code(d.correlationId) }] : []),
+    ...(d.traceId ? [{ label: t('logs.ctx.trace'), value: code(d.traceId) }] : []),
     ...(d.requestId
       ? [{ label: t('logs.ctx.request'), value: withNote(code(d.requestId), l.request?.route ? `${l.request.method ?? ''} ${l.request.route} ${l.request.status ?? ''}` : null) }]
       : []),
@@ -92,7 +95,15 @@ function DetailBody({ d, onOpenLog, onTrace, onError, navigate }: { d: LogDetail
     ...(d.status !== null ? [{ label: t('logs.detail.status'), value: String(d.status), mono: true }] : []),
     ...(d.errorType ? [{ label: t('logs.detail.errorType'), value: code(d.errorType) }] : []),
     ...(d.errorCode ? [{ label: t('logs.detail.errorCode'), value: code(d.errorCode) }] : []),
-    ...(d.durationMs !== null ? [{ label: t('logs.detail.duration'), value: f.duration(d.durationMs), mono: true }] : []),
+    ...(d.durationMs !== null
+      ? [
+          {
+            label: t('logs.detail.duration'),
+            value: d.slowRequest ? `${f.duration(d.durationMs)} (${t('logs.detail.slow')})` : f.duration(d.durationMs),
+            mono: true,
+          },
+        ]
+      : []),
   ];
 
   /** Theo thời gian: cũ hơn → log này → mới hơn (bảng hiển thị mới nhất trên cùng). */

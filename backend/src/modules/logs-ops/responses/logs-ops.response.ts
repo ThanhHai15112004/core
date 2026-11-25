@@ -1,4 +1,4 @@
-import type { LogEntryLevel, LogMetadata } from '@packages/logging/index.js';
+import type { LogEntryLevel, LogMetadata, LogSinkStats } from '@packages/logging/index.js';
 
 export type LogsRange = '15m' | '1h' | '6h' | '24h' | '7d';
 
@@ -8,12 +8,15 @@ export interface LogRowDto {
   /** ISO 8601 */
   at: string;
   level: LogEntryLevel;
+  service: string | null;
   runtime: string | null;
   instance: string | null;
   module: string | null;
+  action: string | null;
   message: string;
   correlationId: string | null;
   requestId: string | null;
+  traceId: string | null;
   jobId: string | null;
   jobType: string | null;
   messageId: string | null;
@@ -23,6 +26,7 @@ export interface LogRowDto {
   errorType: string | null;
   errorCode: string | null;
   durationMs: number | null;
+  slowRequest: boolean;
   /** HTTP status (log request). */
   status: number | null;
   fingerprint: string | null;
@@ -56,7 +60,7 @@ export interface LogTailDto {
   latestCursor: string | null;
 }
 
-export type ResolvedIdKind = 'request' | 'job' | 'execution' | 'correlation' | 'log';
+export type ResolvedIdKind = 'request' | 'job' | 'execution' | 'correlation' | 'trace' | 'log';
 
 export interface ResolvedIdDto {
   id: string;
@@ -77,6 +81,7 @@ export interface LogLinksDto {
   message: { id: string } | null;
   /** Có log / sự kiện khác cùng correlation → xem trace. */
   correlationId: string | null;
+  traceId: string | null;
   /** Thành phần hạ tầng liên quan (theo loại lỗi / metadata) → mở màn tương ứng. */
   dependency: 'database' | 'cache' | 'storage' | 'messaging' | 'http' | null;
 }
@@ -296,6 +301,7 @@ export interface TraceDto {
   id: string;
   resolvedFrom: ResolvedIdKind[];
   correlationId: string | null;
+  traceId: string | null;
   durationMs: number | null;
   status: 'failed' | 'ok' | 'running' | 'unknown';
   services: string[];
@@ -334,12 +340,16 @@ export interface LogsReportDto {
 
 export interface LogsConfigDto {
   backend: LogsBackendDto;
+  serviceName: string;
+  slowRequestMs: number;
   environment: string;
   runtimes: LevelStateDto[];
   buffers: LogCoverageDto[];
   /** `stream` = số log đang có, `streamMax` = sức chứa stream, `scan` = số log đọc mỗi lần phân tích. */
   retention: { key: string; value: string | number }[];
   redaction: { keys: string[]; patterns: string[] };
+  requestBody: { enabled: boolean; allowlist: string[]; maxBytes: number };
+  sink: LogSinkStats;
   permissions: {
     levelChange: boolean;
     levelPermanent: boolean;

@@ -179,10 +179,16 @@ function ConfigBody({ d }: { d: LogsConfig }) {
       <DetailSection title={t('logs.config.backendTitle')}>
         <KeyValueGrid
           items={[
+            { label: t('logs.config.serviceName'), value: d.serviceName ?? NO_VALUE, mono: true },
             { label: t('logs.pipeline.backend'), value: t('logs.backend.redis') },
             { label: t('logs.pipeline.history'), value: t('logs.pipeline.limited', { count: f.compact(d.backend.bufferSize) }) },
             { label: t('logs.config.search'), value: t('logs.config.searchScan') },
             { label: t('logs.config.format'), value: d.backend.consoleFormat, mono: true },
+            {
+              label: t('logs.config.slowRequestMs'),
+              value: d.slowRequestMs !== undefined ? (d.slowRequestMs > 0 ? `${f.number(d.slowRequestMs)} ms` : t('logs.config.disabled')) : NO_VALUE,
+              mono: true,
+            },
           ]}
         />
       </DetailSection>
@@ -234,6 +240,37 @@ function ConfigBody({ d }: { d: LogsConfig }) {
         </div>
         <p className="text-xs text-muted">{t('logs.config.patterns', { list: d.redaction.patterns.join(', ') })}</p>
       </DetailSection>
+
+      {d.requestBody && (
+        <DetailSection
+          title={t('logs.config.requestBodyTitle')}
+          actions={<Badge tone={d.requestBody.enabled ? 'ok' : 'unknown'}>{d.requestBody.enabled ? t('logs.config.enabled') : t('logs.config.disabled')}</Badge>}
+        >
+          <KeyValueGrid
+            items={[
+              { label: t('logs.config.requestBodyMaxBytes'), value: `${f.number(d.requestBody.maxBytes)} B`, mono: true },
+              { label: t('logs.config.requestBodyAllowlist'), value: d.requestBody.allowlist.length ? d.requestBody.allowlist.join(', ') : NO_VALUE, mono: true },
+            ]}
+          />
+        </DetailSection>
+      )}
+
+      {d.sink && (
+        <DetailSection
+          title={t('logs.config.sinkTitle')}
+          actions={<Badge tone={d.sink.enabled ? 'ok' : 'unknown'}>{d.sink.enabled ? t('logs.config.enabled') : t('logs.config.disabled')}</Badge>}
+        >
+          <KeyValueGrid
+            items={[
+              { label: t('logs.config.sinkDriver'), value: d.sink.driver, mono: true },
+              { label: t('logs.config.sinkEndpoint'), value: d.sink.endpoint ?? NO_VALUE, mono: true },
+              { label: t('logs.config.sinkSent'), value: f.compact(d.sink.sent), mono: true },
+              { label: t('logs.config.sinkDropped'), value: f.compact(d.sink.dropped), mono: true },
+              ...(d.sink.lastError ? [{ label: t('logs.config.sinkLastError'), value: d.sink.lastError }] : []),
+            ]}
+          />
+        </DetailSection>
+      )}
 
       <DetailSection title={t('logs.config.permissionsTitle')}>
         <KeyValueGrid

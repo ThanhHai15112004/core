@@ -13,11 +13,13 @@ import { CoreConfigService } from '@packages/config/index.js';
 import { DomainEventBusService, defaultDomainEventBus } from '@packages/kernel/index.js';
 import { RequestContextService } from './context/request-context.service.js';
 import { LOGGING_OPTIONS, type LoggingModuleOptions } from './contracts/logging-options.js';
+import { HttpLoggingContextInterceptor } from './interceptors/http-logging-context.interceptor.js';
 import { requestContextMiddleware } from './middleware/request-context.middleware.js';
 import { createRootLogger } from './providers/pino-root.logger.js';
 import { LogLevelService } from './providers/log-level.service.js';
 import { LogStreamReader } from './providers/log-stream.reader.js';
 import { LoggingManageableAdapter } from './providers/logging-manageable.adapter.js';
+import { getHttpLogMeta } from './utils/http-log-meta.js';
 import { resolveRequestId } from './utils/request-id.js';
 
 /** Request không ghi log tự động (scrape metric, health check). */
@@ -27,8 +29,8 @@ const OPS_URL = /\/ops(\/|\?|$)/;
 const CHUNK_PART_URL = /\/upload-chunked\/[^/]+\/chunk(\/|\?|$)/;
 
 /**
- * Structured logging bằng pino (nestjs-pino + pino-http): JSON ra stdout và Redis Stream `logs:<env>`, mỗi request
- * một `reqId`, log trong request / job mang ID ngữ cảnh. Bootstrap gắn bằng `app.useLogger(app.get(Logger))`.
+ * Structured logging bằng pino (nestjs-pino + pino-http): JSON ra stdout, Redis Stream `logs:<env>` và external sink
+ * (khi bật). Mỗi request mang `reqId`, `requestId`, `correlationId`, `traceId`, `module`, `action`.
  */
 @Global()
 @Module({})
@@ -59,6 +61,7 @@ export class LoggingModule implements NestModule, OnModuleInit {
       });
     }
   }
+
   /** Đăng ký dynamic module ở cấp root với cấu hình chỉ định */
   public static forRoot(options: LoggingModuleOptions): DynamicModule {
     return {
@@ -72,6 +75,8 @@ export class LoggingModule implements NestModule, OnModuleInit {
                 runtime: options.runtime,
                 level: config.logs.level,
                 format: config.logs.format,
+                serviceName: config.logs.serviceName,
+                extraRedactKeys: config.logs.redaction.extraKeys,
               }),
               genReqId: (req: IncomingMessage, res: ServerResponse) => resolveRequestId(req, res),
               customAttributeKeys: { reqId: 'reqId' },
@@ -88,7 +93,27 @@ export class LoggingModule implements NestModule, OnModuleInit {
                 if (CHUNK_PART_URL.test(req.url ?? '')) {
                   return 'silent';
                 }
+                const meta = getHttpLogMeta(req);
+                const slowMs = config.logs.slowRequestMs;
+                if (slowMs > 0 && meta?.startedAt && Date.now() - meta.startedAt >= slowMs) {
+                  return 'warn';
+                }
                 return 'info';
+              },
+              customProps: (req: IncomingMessage) => {
+                const meta = getHttpLogMeta(req);
+                if (!meta) return {};
+                const slowMs = config.logs.slowRequestMs;
+                const isSlow = slowMs > 0 && Date.now() - meta.startedAt >= slowMs;
+                return {
+                  requestId: meta.requestId,
+                  correlationId: meta.correlationId,
+                  traceId: meta.traceId,
+                  ...(meta.module ? { module: meta.module } : {}),
+                  ...(meta.action ? { action: meta.action } : {}),
+                  ...(isSlow ? { slowRequest: true } : {}),
+                  ...(meta.reqBody ? { reqBody: meta.reqBody } : {}),
+                };
               },
               autoLogging: { ignore: (req: IncomingMessage) => QUIET_URL.test(req.url ?? '') },
               serializers: {
@@ -108,8 +133,15 @@ export class LoggingModule implements NestModule, OnModuleInit {
         LogLevelService,
         LogStreamReader,
         LoggingManageableAdapter,
+        HttpLoggingContextInterceptor,
       ],
-      exports: [RequestContextService, LogLevelService, LogStreamReader, LoggerModule],
+      exports: [
+        RequestContextService,
+        LogLevelService,
+        LogStreamReader,
+        HttpLoggingContextInterceptor,
+        LoggerModule,
+      ],
     };
   }
 

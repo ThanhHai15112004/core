@@ -3,8 +3,9 @@ import { CoreConfigService } from '@packages/config/index.js';
 import {
   LOGS_STREAM_MAXLEN,
   LOG_ENTRY_LEVELS,
-  SENSITIVE_KEY_NAMES,
   TEXT_REDACTION_PATTERNS,
+  externalLogSink,
+  getSensitiveKeyNames,
   messageTemplate,
   type LogEntry,
   type LogEntryLevel,
@@ -162,7 +163,7 @@ export class LogsOpsService {
   /** Lấy cấu hình che giấu các trường dữ liệu nhạy cảm trong log */
   private redaction(): LogsConfigDto['redaction'] {
     return {
-      keys: [...SENSITIVE_KEY_NAMES],
+      keys: getSensitiveKeyNames(),
       patterns: [...TEXT_REDACTION_PATTERNS],
     };
   }
@@ -493,12 +494,15 @@ export class LogsOpsService {
       const cols = [
         'at',
         'level',
+        'service',
         'runtime',
         'instance',
         'module',
+        'action',
         'message',
         'correlationId',
         'requestId',
+        'traceId',
         'jobId',
         'messageId',
         'executionId',
@@ -507,6 +511,7 @@ export class LogsOpsService {
         'status',
         'errorType',
         'durationMs',
+        'slowRequest',
         'fingerprint',
       ] as const;
       body = [
@@ -600,37 +605,46 @@ export class LogsOpsService {
         : null,
       message: e.messageId ? { id: e.messageId } : null,
       correlationId: e.correlationId ?? null,
+      traceId: e.traceId ?? null,
       dependency: isError(e) ? dependencyOf(e) : null,
     };
   }
 
-  /** Một ID dán vào ô tìm là gì (request / job / execution / correlation / log). */
+  /** Một ID dán vào ô tìm là gì (request / job / execution / correlation / trace / log). */
   private resolvedId(id: string, entries: LogEntry[]): ResolvedIdDto {
     const { kinds, queue } = this.resolve(id, entries);
     return { id, kinds, queue };
   }
 
-  /** Loại ID, queue (job) và correlation ID của chuỗi xử lý chứa ID đó (trace mở rộng theo correlation). */
+  /** Loại ID, queue (job), correlation/trace ID của chuỗi xử lý chứa ID đó (trace mở rộng theo correlation/traceId). */
   private resolve(
     id: string,
     entries: LogEntry[],
-  ): { kinds: ResolvedIdKind[]; queue: string | null; correlationId: string | null } {
+  ): {
+    kinds: ResolvedIdKind[];
+    queue: string | null;
+    correlationId: string | null;
+    traceId: string | null;
+  } {
     const kinds = new Set<ResolvedIdKind>();
     let queue: string | null = null;
     let correlationId: string | null = null;
+    let traceId: string | null = null;
     for (const e of entries) {
       if (e.id === id) kinds.add('log');
       if (e.requestId === id) kinds.add('request');
       if (e.executionId === id) kinds.add('execution');
       if (e.correlationId === id) kinds.add('correlation');
+      if (e.traceId === id) kinds.add('trace');
       if (e.jobId === id) {
         kinds.add('job');
         if (!queue && typeof e.metadata?.queue === 'string') queue = e.metadata.queue;
       }
       if (!correlationId && LOG_ID_FIELDS.some((k) => e[k] === id))
         correlationId = e.correlationId ?? null;
+      if (!traceId && LOG_ID_FIELDS.some((k) => e[k] === id)) traceId = e.traceId ?? null;
     }
-    return { kinds: [...kinds], queue, correlationId };
+    return { kinds: [...kinds], queue, correlationId, traceId };
   }
 
   // ─── Nhóm lỗi ─────────────────────────────────────────────────────────────
@@ -698,12 +712,14 @@ export class LogsOpsService {
     const snap = await this.store.logs();
     const resolved = this.resolve(id, snap.entries);
     const corr = resolved.correlationId;
+    const trace = resolved.traceId;
     const related = snap.entries
       .filter(
         (e) =>
           e.id === id ||
           LOG_ID_FIELDS.some((k) => e[k] === id) ||
-          (corr !== null && e.correlationId === corr),
+          (corr !== null && e.correlationId === corr) ||
+          (trace !== null && e.traceId === trace),
       )
       .reverse();
     if (!related.length) throw new LogNotFoundException('TRACE_NOT_FOUND', { id });
@@ -753,6 +769,7 @@ export class LogsOpsService {
       id,
       resolvedFrom: resolved.kinds,
       correlationId: corr,
+      traceId: trace,
       durationMs: entryTime(last) - entryTime(first),
       status: failure ? 'failed' : 'ok',
       services: [...flow.keys()],
@@ -862,6 +879,8 @@ export class LogsOpsService {
     ]);
     return {
       backend: this.backend(),
+      serviceName: l.serviceName,
+      slowRequestMs: l.slowRequestMs,
       environment: this.config.app.env,
       runtimes,
       buffers: snap ? this.coverage(snap) : [],
@@ -871,6 +890,12 @@ export class LogsOpsService {
         { key: 'scan', value: this.store.capacity },
       ],
       redaction: this.redaction(),
+      requestBody: {
+        enabled: l.requestBody.enabled,
+        allowlist: [...l.requestBody.allowlist],
+        maxBytes: l.requestBody.maxBytes,
+      },
+      sink: externalLogSink.getStats(),
       permissions: {
         levelChange: l.levelChange,
         levelPermanent: l.levelPermanent,

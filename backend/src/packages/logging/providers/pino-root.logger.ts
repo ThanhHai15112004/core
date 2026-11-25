@@ -1,26 +1,13 @@
 import { hostname } from 'node:os';
 import { multistream, pino, type DestinationStream, type Logger } from 'pino';
+import { PINO_LEVEL, PINO_LEVEL_LABEL } from '../constants/logging.constant.js';
 import { RequestContextService } from '../context/request-context.service.js';
+import { configureExtraSensitiveKeys, redactSensitiveData } from '../redaction/redact.util.js';
+import { ExternalLogSinkDestination } from '../sinks/external-log-sink.destination.js';
 import { redactText } from '../utils/log-redaction.js';
 import { RedisStreamDestination } from './redis-stream.destination.js';
 
-/** Level cấu hình (`LOG_LEVEL`) → level pino. */
-export const PINO_LEVEL: Record<string, string> = {
-  VERBOSE: 'trace',
-  DEBUG: 'debug',
-  INFO: 'info',
-  WARN: 'warn',
-  ERROR: 'error',
-};
-/** Level pino (số) → nhãn. */
-export const PINO_LEVEL_LABEL: Record<number, string> = {
-  10: 'TRACE',
-  20: 'DEBUG',
-  30: 'INFO',
-  40: 'WARN',
-  50: 'ERROR',
-  60: 'FATAL',
-};
+export { PINO_LEVEL, PINO_LEVEL_LABEL };
 
 /** Field nhạy cảm luôn bị che (ở gốc log, sâu 1 và 2 cấp). */
 const SENSITIVE_FIELDS = [
@@ -54,10 +41,14 @@ export interface RootLoggerOptions {
   /** `VERBOSE` | `DEBUG` | `INFO` | `WARN` | `ERROR` */
   level: string;
   format: 'json' | 'text';
+  serviceName?: string;
+  extraRedactKeys?: readonly string[];
 }
 
 /** Đích Redis Stream dùng chung của process (gắn Redis khi app khởi động — xem LogLevelService). */
 export const redisStream = new RedisStreamDestination();
+/** Đích gửi log tập trung sang Loki / OpenSearch / SIEM (tắt mặc định nếu chưa bật). */
+export const externalLogSink = new ExternalLogSinkDestination();
 
 let root: Logger | null = null;
 
@@ -87,12 +78,16 @@ const textStdout: DestinationStream = {
   },
 };
 
-/** Field ngữ cảnh (job / execution / user) từ RequestContext gắn vào mọi log. */
+/** Field ngữ cảnh (request / trace / module / action / job / user) từ RequestContext gắn vào mọi log. */
 function contextFields(): Record<string, unknown> {
   const s = RequestContextService.current();
   if (!s) return {};
   const out: Record<string, unknown> = {};
   if (s.correlationId) out.correlationId = s.correlationId;
+  if (s.requestId) out.requestId = s.requestId;
+  if (s.traceId) out.traceId = s.traceId;
+  if (s.module) out.module = s.module;
+  if (s.action) out.action = s.action;
   if (s.jobId) out.jobId = s.jobId;
   if (s.userId) out.userId = s.userId;
   if (typeof s.messageId === 'string') out.messageId = s.messageId;
@@ -102,23 +97,46 @@ function contextFields(): Record<string, unknown> {
 }
 
 /**
- * Pino root logger của process (singleton — nestjs-pino cũng giữ root ở mức module). Ghi JSON ra stdout và Redis
- * Stream; che field nhạy cảm theo tên (`redact`) và theo mẫu trong chuỗi (Bearer, JWT, `password=…`).
+ * Pino root logger của process (singleton — nestjs-pino cũng giữ root ở mức module). Ghi JSON ra stdout, Redis
+ * Stream và external sink (nếu bật); che field nhạy cảm đệ quy (`redact` + `redactSensitiveData`) và theo mẫu chuỗi.
  */
 export function createRootLogger(opts: RootLoggerOptions): Logger {
   if (root) return root;
+  const extraKeys = (opts.extraRedactKeys ?? []).map((k) => k.trim()).filter(Boolean);
+  configureExtraSensitiveKeys(extraKeys);
+  const redactPaths = [
+    ...REDACT_PATHS,
+    ...extraKeys.flatMap((k) => [k, `*.${k}`, `*.*.${k}`]),
+  ];
   const stdout: DestinationStream = opts.format === 'json' ? process.stdout : textStdout;
   root = pino(
     {
       level: PINO_LEVEL[opts.level] ?? 'info',
-      base: { runtime: opts.runtime, instance: `${hostname()}:${process.pid}` },
-      redact: { paths: REDACT_PATHS, censor: '[REDACTED]' },
+      base: {
+        ...(opts.serviceName ? { service: opts.serviceName } : {}),
+        runtime: opts.runtime,
+        instance: `${hostname()}:${process.pid}`,
+      },
+      redact: { paths: redactPaths, censor: '[REDACTED]' },
       mixin: contextFields,
       formatters: {
-        /** Ghi log thông điệp với mức độ tương ứng */
+        /** Che đệ quy dữ liệu nhạy cảm trong payload log và stack trace trước khi ghi. */
         log(obj) {
-          if (typeof obj.stack === 'string') obj.stack = redactText(obj.stack).text;
-          return obj;
+          const sanitized = redactSensitiveData(obj, {
+            maxDepth: 6,
+            redactStrings: (s) => redactText(s).text,
+          }) as Record<string, unknown>;
+          if (typeof sanitized.stack === 'string') {
+            sanitized.stack = redactText(sanitized.stack).text;
+          }
+          if (sanitized.err && typeof sanitized.err === 'object') {
+            const errObj = sanitized.err as { stack?: unknown; message?: unknown };
+            if (typeof errObj.stack === 'string') errObj.stack = redactText(errObj.stack).text;
+            if (typeof errObj.message === 'string') {
+              errObj.message = redactText(errObj.message).text;
+            }
+          }
+          return sanitized;
         },
       },
       hooks: {
@@ -135,6 +153,7 @@ export function createRootLogger(opts: RootLoggerOptions): Logger {
     multistream([
       { level: 'trace', stream: stdout },
       { level: 'trace', stream: redisStream },
+      { level: 'trace', stream: externalLogSink },
     ]),
   );
   return root;

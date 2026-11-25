@@ -10,7 +10,7 @@ import {
   TransformResponseInterceptor,
 } from '@packages/http/index.js';
 import { DatabaseModule } from '@packages/database/index.js';
-import { LoggingModule } from '@packages/logging/index.js';
+import { HttpLoggingContextInterceptor, LoggingModule } from '@packages/logging/index.js';
 import { AuthGuard, SecurityModule } from '@packages/security/index.js';
 import { MessagingModule } from '@packages/messaging/index.js';
 import { QueueModule } from '@packages/queue/index.js';
@@ -130,6 +130,10 @@ import { MetricsModule } from '@packages/metrics/index.js';
     {
       provide: APP_INTERCEPTOR,
       useExisting: RequestTimeoutInterceptor,
+    },
+    {
+      provide: APP_INTERCEPTOR,
+      useExisting: HttpLoggingContextInterceptor,
     },
     {
       provide: APP_INTERCEPTOR,

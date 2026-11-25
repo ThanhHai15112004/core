@@ -9,9 +9,12 @@ export interface LogFilters {
   q?: string;
   level?: string;
   runtime?: string;
+  service?: string;
   module?: string;
+  action?: string;
   correlationId?: string;
   requestId?: string;
+  traceId?: string;
   jobId?: string;
   messageId?: string;
   executionId?: string;
@@ -31,12 +34,15 @@ export interface LogRow {
   id: string;
   at: string;
   level: LogLevel;
+  service?: string | null;
   runtime: string | null;
   instance: string | null;
   module: string | null;
+  action?: string | null;
   message: string;
   correlationId: string | null;
   requestId: string | null;
+  traceId?: string | null;
   jobId: string | null;
   jobType: string | null;
   messageId: string | null;
@@ -46,6 +52,7 @@ export interface LogRow {
   errorType: string | null;
   errorCode: string | null;
   durationMs: number | null;
+  slowRequest?: boolean;
   status: number | null;
   fingerprint: string | null;
   hasStack: boolean;
@@ -59,7 +66,7 @@ export interface LogCoverage {
   oldestAt: string | null;
 }
 
-export type ResolvedIdKind = 'request' | 'job' | 'execution' | 'correlation' | 'log';
+export type ResolvedIdKind = 'request' | 'job' | 'execution' | 'correlation' | 'trace' | 'log';
 
 export interface ResolvedId {
   id: string;
@@ -90,6 +97,7 @@ export interface LogLinks {
   execution: { id: string; taskId: string | null } | null;
   message: { id: string } | null;
   correlationId: string | null;
+  traceId?: string | null;
   dependency: LogDependency | null;
 }
 
@@ -287,13 +295,31 @@ export interface LogsReport {
   available: boolean;
 }
 
+export interface LogSinkStats {
+  enabled: boolean;
+  driver: string;
+  endpoint: string | null;
+  batchSize: number;
+  flushMs: number;
+  indexPrefix: string;
+  sent: number;
+  dropped: number;
+  lastSuccessAt: string | null;
+  lastErrorAt: string | null;
+  lastError: string | null;
+}
+
 export interface LogsConfig {
   backend: LogsBackend;
+  serviceName?: string;
+  slowRequestMs?: number;
   environment: string;
   runtimes: LevelState[];
   buffers: LogCoverage[];
   retention: { key: string; value: string | number }[];
   redaction: Redaction;
+  requestBody?: { enabled: boolean; allowlist: string[]; maxBytes: number };
+  sink?: LogSinkStats;
   permissions: { levelChange: boolean; levelPermanent: boolean; export: boolean; exportMax: number; details: boolean; audit: boolean };
   rules: Record<string, number>;
   modules: string[];

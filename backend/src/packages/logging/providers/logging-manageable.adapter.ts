@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { CoreConfigService } from '@packages/config/index.js';
 import {
   type ManageablePackage,
   type PackageActionDescriptor,
@@ -10,6 +11,7 @@ import {
 } from '@packages/kernel/index.js';
 import { CoreI18nService } from '@packages/i18n/index.js';
 import { LogLevelService } from './log-level.service.js';
+import { externalLogSink } from './pino-root.logger.js';
 import { LogLevel, LoggingAction } from '../constants/logging.constant.js';
 
 /** Mỗi action đổi log level: action id → level + prefix key i18n. */
@@ -30,6 +32,7 @@ export class LoggingManageableAdapter implements ManageablePackage {
   constructor(
     private readonly levels: LogLevelService,
     private readonly i18n: CoreI18nService,
+    private readonly config: CoreConfigService,
   ) {}
 
   public get displayName(): string {
@@ -39,6 +42,7 @@ export class LoggingManageableAdapter implements ManageablePackage {
   /** Lấy báo cáo tình trạng hoạt động và các chỉ số của package */
   public async getStatus(): Promise<PackageStatusReport> {
     const currentLevel = this.levels.current();
+    const sinkStats = externalLogSink.getStats();
 
     return {
       status: PackageStatus.HEALTHY,
@@ -46,7 +50,12 @@ export class LoggingManageableAdapter implements ManageablePackage {
       metrics: {
         currentLevel,
         redaction: 'enabled',
-        transport: 'pino → stdout + redis-stream',
+        slowRequestMs: this.config.logs.slowRequestMs,
+        sinkEnabled: sinkStats.enabled,
+        sinkDriver: sinkStats.driver,
+        transport: sinkStats.enabled
+          ? `pino → stdout + redis-stream + ${sinkStats.driver}`
+          : 'pino → stdout + redis-stream',
       },
     };
   }

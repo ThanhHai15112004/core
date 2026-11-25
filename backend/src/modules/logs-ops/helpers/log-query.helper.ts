@@ -6,6 +6,7 @@ import { LOG_ENTRY_LEVELS, type LogEntry, type LogEntryLevel } from '@packages/l
 export const LOG_ID_FIELDS = [
   'correlationId',
   'requestId',
+  'traceId',
   'jobId',
   'messageId',
   'executionId',
@@ -16,8 +17,14 @@ export type LogIdField = (typeof LOG_ID_FIELDS)[number];
 export interface LogFilter {
   levels: LogEntryLevel[] | null;
   runtimes: string[] | null;
+  /** Tên service (`LOG_SERVICE_NAME` / `APP_NAME`). */
+  service: string | null;
   /** Module (Nest context) — so khớp chính xác, không phân biệt hoa thường. */
   module: string | null;
+  /** Tên chức năng / handler (`UsersController.create`). */
+  action: string | null;
+  /** Chỉ lọc các HTTP request chậm (`slowRequest: true`). */
+  slowOnly: boolean;
   ids: Partial<Record<LogIdField, string>>;
   /** Một ID bất kỳ (dán ID vào ô tìm): khớp mọi field ID hoặc có trong message. */
   anyId: string | null;
@@ -37,7 +44,10 @@ export interface LogFilter {
 export const EMPTY_LOG_FILTER: LogFilter = {
   levels: null,
   runtimes: null,
+  service: null,
   module: null,
+  action: null,
+  slowOnly: false,
   ids: {},
   anyId: null,
   terms: [],
@@ -56,8 +66,12 @@ const KEY_ALIASES: Record<string, string> = {
   source: 'runtime',
   runtime: 'runtime',
   service: 'runtime',
+  svc: 'service',
+  servicename: 'service',
   module: 'module',
   context: 'module',
+  action: 'action',
+  feature: 'action',
   jobid: 'jobId',
   job: 'jobId',
   requestid: 'requestId',
@@ -66,8 +80,8 @@ const KEY_ALIASES: Record<string, string> = {
   correlationid: 'correlationId',
   correlation: 'correlationId',
   corr: 'correlationId',
-  trace: 'correlationId',
-  traceid: 'correlationId',
+  trace: 'traceId',
+  traceid: 'traceId',
   messageid: 'messageId',
   msg: 'messageId',
   message: 'messageId',
@@ -150,7 +164,9 @@ export function parseLogQuery(raw: string, base: LogFilter = EMPTY_LOG_FILTER): 
         case 'anyId':
           f.anyId = value;
           break;
+        case 'service':
         case 'module':
+        case 'action':
         case 'endpoint':
         case 'errorType':
         case 'instance':
@@ -226,7 +242,10 @@ export function matchesLog(e: LogEntry, f: LogFilter): boolean {
   if (f.to !== null && at > f.to) return false;
   if (f.levels && !f.levels.includes(e.level)) return false;
   if (f.runtimes && !f.runtimes.includes(e.runtime ?? '')) return false;
+  if (f.service && (e.service ?? '').toLowerCase() !== f.service.toLowerCase()) return false;
   if (f.module && (e.context ?? '').toLowerCase() !== f.module.toLowerCase()) return false;
+  if (f.action && !(e.action ?? '').toLowerCase().includes(f.action.toLowerCase())) return false;
+  if (f.slowOnly && !e.slowRequest) return false;
   for (const k of LOG_ID_FIELDS) {
     const want = f.ids[k];
     if (want && e[k] !== want) return false;
@@ -237,7 +256,7 @@ export function matchesLog(e: LogEntry, f: LogFilter): boolean {
     if (
       !LOG_ID_FIELDS.some((k) => e[k] === id) &&
       e.id !== id &&
-      !`${e.message} ${e.context ?? ''} ${e.errorType ?? ''}`
+      !`${e.message} ${e.context ?? ''} ${e.action ?? ''} ${e.errorType ?? ''}`
         .toLowerCase()
         .includes(id.toLowerCase())
     )
@@ -254,7 +273,7 @@ export function matchesLog(e: LogEntry, f: LogFilter): boolean {
   if (f.instance && !(e.instance ?? '').includes(f.instance)) return false;
   if (f.fingerprint && e.fingerprint !== f.fingerprint) return false;
   if (f.terms.length) {
-    const hay = `${e.message} ${e.context ?? ''} ${e.errorType ?? ''}`.toLowerCase();
+    const hay = `${e.message} ${e.context ?? ''} ${e.action ?? ''} ${e.errorType ?? ''}`.toLowerCase();
     if (!f.terms.every((t) => hay.includes(t))) return false;
   }
   return true;
