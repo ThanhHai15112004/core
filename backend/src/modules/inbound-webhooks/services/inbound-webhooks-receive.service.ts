@@ -4,9 +4,12 @@ import {
   BadRequestAppException,
   ConflictAppException,
   ForbiddenAppException,
+  IDEMPOTENCY_SCOPE,
+  IdempotencyRegistryService,
   NotFoundAppException,
   SettingRegistryService,
   UnauthorizedAppException,
+  defaultIdempotencyRegistry,
   defaultSettingRegistry,
   parseNumericUserId,
   safeJsonParseObject,
@@ -82,6 +85,7 @@ function isUniqueConstraintViolation(err: unknown): boolean {
 export class InboundWebhooksReceiveService {
   private readonly logger = new Logger(InboundWebhooksReceiveService.name);
   private readonly settingRegistry: SettingRegistryService;
+  private readonly idempotencyRegistry: IdempotencyRegistryService;
 
   constructor(
     private readonly providersService: InboundWebhooksProvidersService,
@@ -90,8 +94,10 @@ export class InboundWebhooksReceiveService {
     @Optional() private readonly messagePublisher?: BaseMessagePublisherProvider,
     @Optional() settingRegistry?: SettingRegistryService,
     @Optional() private readonly auditLogService?: AuditLogService,
+    @Optional() idempotencyRegistry?: IdempotencyRegistryService,
   ) {
     this.settingRegistry = settingRegistry ?? defaultSettingRegistry;
+    this.idempotencyRegistry = idempotencyRegistry ?? defaultIdempotencyRegistry;
   }
 
   public async receiveWebhook(
@@ -278,6 +284,23 @@ export class InboundWebhooksReceiveService {
     await this.providerRepo.saveEntity(provider);
 
     await this.enqueueEventProcessing(saved, externalEventId, runtimeConfig);
+
+    await this.idempotencyRegistry.recordExternalObservation({
+      scope: IDEMPOTENCY_SCOPE.WEBHOOK,
+      scopeTarget: saved.providerCode,
+      idempotencyKey: externalEventId,
+      requestFingerprint: payloadHash,
+      outcome: 'CREATED',
+      clientIdentifier: `provider:${saved.providerCode}`,
+      correlationId,
+      statusCode: 202,
+      responseBody: {
+        eventId: Number(saved.id),
+        eventUid: saved.eventUid,
+        eventType: saved.eventType ?? null,
+      },
+      now,
+    });
 
     return {
       accepted: true,
@@ -583,6 +606,18 @@ export class InboundWebhooksReceiveService {
       existing.lastDuplicateAt = params.now;
       await this.eventRepo.saveEntity(existing);
 
+      await this.idempotencyRegistry.recordExternalObservation({
+        scope: IDEMPOTENCY_SCOPE.WEBHOOK,
+        scopeTarget: existing.providerCode,
+        idempotencyKey: existing.externalEventId ?? params.externalEventId,
+        requestFingerprint: params.payloadHash,
+        outcome: 'DUPLICATE',
+        clientIdentifier: `provider:${existing.providerCode}`,
+        correlationId: params.correlationId,
+        statusCode: 200,
+        now: params.now,
+      });
+
       return {
         accepted: true,
         duplicate: true,
@@ -608,6 +643,18 @@ export class InboundWebhooksReceiveService {
       rejectionReason: INBOUND_WEBHOOK_REJECTION_REASON.IDEMPOTENCY_PAYLOAD_MISMATCH,
       eventType: params.eventType,
       eventTimestamp: params.eventTimestamp,
+      errorMessage: `Duplicate externalEventId "${params.externalEventId}" with mismatched payload digest`,
+      now: params.now,
+    });
+
+    await this.idempotencyRegistry.recordExternalObservation({
+      scope: IDEMPOTENCY_SCOPE.WEBHOOK,
+      scopeTarget: params.provider.providerCode,
+      idempotencyKey: params.externalEventId,
+      requestFingerprint: params.payloadHash,
+      outcome: 'PAYLOAD_MISMATCH',
+      clientIdentifier: `provider:${params.provider.providerCode}`,
+      correlationId: params.correlationId,
       errorMessage: `Duplicate externalEventId "${params.externalEventId}" with mismatched payload digest`,
       now: params.now,
     });

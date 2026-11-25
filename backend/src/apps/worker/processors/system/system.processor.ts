@@ -5,6 +5,7 @@ import { CoreConfigService } from '@packages/config/index.js';
 import {
   DomainEventBusService,
   ExportRegistryService,
+  IDEMPOTENCY_QUEUE_TOPICS,
   OUTBOX_QUEUE_TOPICS,
   ReportRegistryService,
   defaultDomainEventBus,
@@ -36,6 +37,10 @@ import {
   OUTBOX_PUBLIC_SERVICE,
   type IOutboxPublicService,
 } from '@modules/outbox/contracts/index.js';
+import {
+  IDEMPOTENCY_PUBLIC_SERVICE,
+  type IIdempotencyPublicService,
+} from '@modules/idempotency/contracts/index.js';
 import { BaseQueueProcessor } from '../base-queue.processor.js';
 
 export interface SystemMaintenanceTickPayload {
@@ -76,6 +81,9 @@ export class SystemProcessor extends BaseQueueProcessor {
     private readonly outboxService?: IOutboxPublicService,
     @Optional()
     private readonly domainEventBus: DomainEventBusService = defaultDomainEventBus,
+    @Optional()
+    @Inject(IDEMPOTENCY_PUBLIC_SERVICE)
+    private readonly idempotencyService?: IIdempotencyPublicService,
   ) {
     super(config, metrics, progressTracker);
   }
@@ -131,7 +139,10 @@ export class SystemProcessor extends BaseQueueProcessor {
         );
         return { handled: false, skipped: true, reason: 'invalid_outbox_domain_event' };
       }
-      const dispatchReport = await this.domainEventBus.publish(payload.event);
+      const dispatchReport = await this.domainEventBus.publish(payload.event, {
+        enforceIdempotency: true,
+        clientIdentifier: 'outbox:relay',
+      });
       return {
         handled: true,
         outboxId: payload.outboxId ?? null,
@@ -139,8 +150,18 @@ export class SystemProcessor extends BaseQueueProcessor {
         eventType: dispatchReport.event.type,
         matchedHandlers: dispatchReport.matchedHandlers,
         succeededCount: dispatchReport.succeededCount,
+        skippedDuplicateCount: dispatchReport.skippedDuplicateCount ?? 0,
         failedOptionalCount: dispatchReport.failedOptionalCount,
       };
+    }
+
+    if (envelope.topic === IDEMPOTENCY_QUEUE_TOPICS.CLEANUP_TICK) {
+      if (!this.idempotencyService) {
+        return { handled: false, skipped: true, reason: 'idempotency_service_unavailable' };
+      }
+      return this.idempotencyService.purgeExpiredRecords({
+        reason: 'Scheduled cleanup of expired idempotency records',
+      });
     }
 
     if (envelope.topic === OUTBOX_QUEUE_TOPICS.CLEANUP_TICK) {

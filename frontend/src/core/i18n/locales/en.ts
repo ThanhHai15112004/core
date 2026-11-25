@@ -73,6 +73,7 @@ export const en: TranslationKey = {
     payments: 'Payments & Reconciliation',
     providerRegistry: 'Providers',
     outbox: 'Outbox Events',
+    idempotency: 'Idempotency',
     languageToggle: 'Language',
     themeLight: 'Light',
     themeDark: 'Dark',

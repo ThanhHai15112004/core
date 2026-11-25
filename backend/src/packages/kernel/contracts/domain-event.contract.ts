@@ -95,16 +95,35 @@ export interface DomainEventHandlerRegistration<
   readonly eventPattern: string;
   /** Mức độ quan trọng: `'required'` (lỗi bắt buộc) hoặc `'optional'` (lỗi phụ). Mặc định `'optional'`. */
   readonly criticality?: DomainEventCriticality | undefined;
+  /**
+   * Chống xử lý trùng theo cặp `(handlerId, event.id)` (Phase 11.3 — Inbox Pattern):
+   * - `true`: luôn kiểm tra danh sách Event đã xử lý trước khi chạy handler.
+   * - `false`: tắt khử trùng riêng cho handler này ngay cả khi `publish` bật `enforceIdempotency`.
+   * - `undefined`: tự động khử trùng khi `publish` bật `enforceIdempotency` (vd event từ Outbox Worker).
+   */
+  readonly idempotent?: boolean | undefined;
+  /** Thời gian lưu vết Event đã xử lý riêng cho handler này (giây). */
+  readonly idempotencyTtlSec?: number | undefined;
   readonly description?: string | undefined;
   readonly handler: DomainEventHandler<TPayload>;
+}
+
+export interface DomainEventPublishOptions {
+  /** Bật chống xử lý Event trùng cho tất cả handler không đặt `idempotent: false` (dùng cho Outbox/Worker relay). */
+  readonly enforceIdempotency?: boolean | undefined;
+  /** Định danh nguồn phát/chuyển tiếp phục vụ theo dõi tỷ lệ event trùng (vd `outbox:relay`). */
+  readonly clientIdentifier?: string | null | undefined;
+  /** Thời gian lưu vết Event đã xử lý mặc định cho lần phát này (giây). */
+  readonly idempotencyTtlSec?: number | undefined;
 }
 
 export interface DomainEventHandlerExecutionResult {
   readonly handlerId: string;
   readonly module: string;
   readonly criticality: DomainEventCriticality;
-  readonly status: 'succeeded' | 'failed';
+  readonly status: 'succeeded' | 'failed' | 'skipped_duplicate';
   readonly durationMs: number;
+  readonly skippedReason?: string | undefined;
   readonly errorName?: string | undefined;
   readonly errorMessage?: string | undefined;
 }
@@ -115,6 +134,7 @@ export interface DomainEventDispatchReport<
   readonly event: DomainEvent<TPayload>;
   readonly matchedHandlers: number;
   readonly succeededCount: number;
+  readonly skippedDuplicateCount?: number | undefined;
   readonly failedRequiredCount: number;
   readonly failedOptionalCount: number;
   readonly results: readonly DomainEventHandlerExecutionResult[];
@@ -143,6 +163,7 @@ export interface DomainEventHandlerStats {
   readonly registeredAt: string;
   readonly invokedCount: number;
   readonly succeededCount: number;
+  readonly skippedDuplicateCount?: number | undefined;
   readonly failedCount: number;
   readonly lastInvokedAt: string | null;
   readonly lastErrorAt: string | null;
@@ -160,6 +181,7 @@ export interface DomainEventRecentDispatch {
   readonly correlationId: string | null;
   readonly matchedHandlers: number;
   readonly succeededCount: number;
+  readonly skippedDuplicateCount?: number | undefined;
   readonly failedRequiredCount: number;
   readonly failedOptionalCount: number;
 }
@@ -180,6 +202,7 @@ export interface IDomainEventBus {
   unregisterHandler(handlerId: string): boolean;
   publish<TPayload extends Record<string, unknown> = Record<string, unknown>>(
     input: CreateDomainEventInput<TPayload> | DomainEvent<TPayload>,
+    options?: DomainEventPublishOptions,
   ): Promise<DomainEventDispatchReport<TPayload>>;
   listHandlers(): readonly DomainEventHandlerStats[];
   getSnapshot(): DomainEventRuntimeSnapshot;

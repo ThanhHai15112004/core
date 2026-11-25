@@ -1,6 +1,6 @@
 import { Injectable, type OnModuleInit } from '@nestjs/common';
 import { CoreConfigService } from '@packages/config/index.js';
-import { OUTBOX_QUEUE_TOPICS } from '@packages/kernel/index.js';
+import { IDEMPOTENCY_QUEUE_TOPICS, OUTBOX_QUEUE_TOPICS } from '@packages/kernel/index.js';
 import { QUEUES } from '@packages/messaging/index.js';
 import { ScheduledTaskRegistry } from '../../registry/scheduled-task.registry.js';
 
@@ -73,6 +73,19 @@ export class SystemTask implements OnModuleInit {
       pattern: '15 3 * * *',
       tz: this.config.scheduler.timezone,
       data: { triggeredBy: 'scheduler', module: 'outbox' },
+      notifyOnFailure: true,
+      misfirePolicy: 'run_once',
+    });
+
+    this.registry.register({
+      id: 'idempotency.cleanup',
+      queue: QUEUES.SYSTEM_EVENTS,
+      name: IDEMPOTENCY_QUEUE_TOPICS.CLEANUP_TICK,
+      description:
+        'Tự động dọn các bản ghi khóa chống xử lý trùng (Idempotency) đã hết hạn TTL theo từng luồng (11.3).',
+      pattern: '30 3 * * *',
+      tz: this.config.scheduler.timezone,
+      data: { triggeredBy: 'scheduler', module: 'idempotency' },
       notifyOnFailure: true,
       misfirePolicy: 'run_once',
     });

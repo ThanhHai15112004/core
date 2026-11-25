@@ -1,0 +1,327 @@
+{
+  "$schema": "../../packages/kernel/schemas/module.manifest.schema.json",
+  "name": "idempotency",
+  "displayName": "Idempotency & Deduplication",
+  "version": "1.0.0",
+  "description": "Module chống xử lý trùng tập trung (11.3): Idempotency Key cho HTTP API, khóa nghiệp vụ cho Background Job, khử trùng Webhook theo Event ID của provider, Event Inbox chống xử lý Domain Event trùng, kiểm tra sai lệch payload, cấu hình TTL theo từng luồng và theo dõi tỷ lệ trùng phát hiện client gửi lặp.",
+  "type": "core",
+  "category": "Reliability",
+  "author": "Core Platform Team",
+  "entryModule": "IdempotencyModule",
+  "dependencies": ["database", "security", "settings", "codes", "audit"],
+  "permissions": [
+    "idempotency.read",
+    "idempotency.manage"
+  ],
+  "codeTypes": [
+    {
+      "code": "idempotency.scope",
+      "name": "Luồng chống xử lý trùng (Idempotency Scope)",
+      "description": "Phân loại luồng áp dụng khóa chống xử lý trùng",
+      "isSystem": true,
+      "allowCustomValues": false,
+      "values": [
+        {
+          "numericCode": 1,
+          "code": "API",
+          "name": "HTTP API",
+          "labels": { "vi": "HTTP API", "en": "HTTP API" },
+          "behaviorCode": "API",
+          "badgeTone": "info",
+          "sortOrder": 1,
+          "isSystem": true
+        },
+        {
+          "numericCode": 2,
+          "code": "JOB",
+          "name": "Background Job",
+          "labels": { "vi": "Background Job", "en": "Background Job" },
+          "behaviorCode": "JOB",
+          "badgeTone": "neutral",
+          "sortOrder": 2,
+          "isSystem": true
+        },
+        {
+          "numericCode": 3,
+          "code": "WEBHOOK",
+          "name": "Inbound Webhook",
+          "labels": { "vi": "Inbound Webhook", "en": "Inbound Webhook" },
+          "behaviorCode": "WEBHOOK",
+          "badgeTone": "warning",
+          "sortOrder": 3,
+          "isSystem": true
+        },
+        {
+          "numericCode": 4,
+          "code": "EVENT",
+          "name": "Domain Event",
+          "labels": { "vi": "Domain Event", "en": "Domain Event" },
+          "behaviorCode": "EVENT",
+          "badgeTone": "success",
+          "sortOrder": 4,
+          "isSystem": true
+        }
+      ]
+    },
+    {
+      "code": "idempotency.status",
+      "name": "Trạng thái khóa Idempotency",
+      "description": "Vòng đời xử lý của một bản ghi khóa chống trùng",
+      "isSystem": true,
+      "allowCustomValues": false,
+      "values": [
+        {
+          "numericCode": 1,
+          "code": "IN_PROGRESS",
+          "name": "Đang xử lý",
+          "labels": { "vi": "Đang xử lý", "en": "In Progress" },
+          "behaviorCode": "IN_PROGRESS",
+          "badgeTone": "info",
+          "sortOrder": 1,
+          "isSystem": true
+        },
+        {
+          "numericCode": 2,
+          "code": "COMPLETED",
+          "name": "Đã hoàn tất",
+          "labels": { "vi": "Hoàn tất", "en": "Completed" },
+          "behaviorCode": "COMPLETED",
+          "badgeTone": "success",
+          "sortOrder": 2,
+          "isSystem": true
+        },
+        {
+          "numericCode": 3,
+          "code": "FAILED",
+          "name": "Thất bại (cho thử lại)",
+          "labels": { "vi": "Thất bại", "en": "Failed" },
+          "behaviorCode": "FAILED",
+          "badgeTone": "danger",
+          "sortOrder": 3,
+          "isSystem": true
+        }
+      ]
+    }
+  ],
+  "settingGroups": [
+    {
+      "code": "idempotency",
+      "name": "Chống xử lý trùng (Idempotency)",
+      "description": "Cấu hình thời gian lưu khóa chống trùng (TTL) theo từng luồng API/Job/Webhook/Event, thời gian khóa xử lý và ngưỡng phát hiện client gửi lặp",
+      "icon": "ShieldCheck",
+      "sortOrder": 70,
+      "isSystem": true
+    }
+  ],
+  "settings": [
+    {
+      "key": "idempotency.ttl.api_sec",
+      "groupCode": "idempotency",
+      "module": "idempotency",
+      "namespace": "idempotency.ttl",
+      "name": "TTL khóa chống trùng mặc định cho HTTP API (giây)",
+      "description": "Thời gian lưu khóa Idempotency-Key và phản hồi replay cho các API ghi (mặc định 86400s = 24 giờ)",
+      "valueType": "NUMBER",
+      "defaultValue": 86400,
+      "validationRules": { "min": 60, "max": 7776000, "integerOnly": true },
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 1
+    },
+    {
+      "key": "idempotency.ttl.job_sec",
+      "groupCode": "idempotency",
+      "module": "idempotency",
+      "namespace": "idempotency.ttl",
+      "name": "TTL khóa chống trùng mặc định cho Background Job (giây)",
+      "description": "Thời gian lưu khóa nghiệp vụ chống chạy trùng Job trên BullMQ Worker (mặc định 86400s = 24 giờ)",
+      "valueType": "NUMBER",
+      "defaultValue": 86400,
+      "validationRules": { "min": 60, "max": 7776000, "integerOnly": true },
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 2
+    },
+    {
+      "key": "idempotency.ttl.webhook_sec",
+      "groupCode": "idempotency",
+      "module": "idempotency",
+      "namespace": "idempotency.ttl",
+      "name": "TTL khóa chống trùng mặc định cho Inbound Webhook (giây)",
+      "description": "Thời gian lưu Event ID của đối tác webhook để chống xử lý trùng (mặc định 604800s = 7 ngày)",
+      "valueType": "NUMBER",
+      "defaultValue": 604800,
+      "validationRules": { "min": 300, "max": 31536000, "integerOnly": true },
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 3
+    },
+    {
+      "key": "idempotency.ttl.event_sec",
+      "groupCode": "idempotency",
+      "module": "idempotency",
+      "namespace": "idempotency.ttl",
+      "name": "TTL lưu danh sách Domain Event đã xử lý (giây)",
+      "description": "Thời gian giữ bản ghi Event Inbox chống xử lý trùng theo cặp (handlerId, eventId) (mặc định 604800s = 7 ngày)",
+      "valueType": "NUMBER",
+      "defaultValue": 604800,
+      "validationRules": { "min": 300, "max": 31536000, "integerOnly": true },
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 4
+    },
+    {
+      "key": "idempotency.flow_ttl_overrides",
+      "groupCode": "idempotency",
+      "module": "idempotency",
+      "namespace": "idempotency.ttl",
+      "name": "Cấu hình TTL riêng theo từng luồng (JSON)",
+      "description": "Bảng ghi đè thời gian lưu khóa (giây) theo khóa \"<SCOPE>:<scopeTarget>\" hoặc \"<scopeTarget>\", ví dụ {\"API:POST /api/v1/users\": 3600}",
+      "valueType": "JSON",
+      "defaultValue": {},
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 5
+    },
+    {
+      "key": "idempotency.lock_lease_sec",
+      "groupCode": "idempotency",
+      "module": "idempotency",
+      "namespace": "idempotency.locking",
+      "name": "Thời gian giữ khóa xử lý đồng thời (giây)",
+      "description": "Lease tối đa cho trạng thái IN_PROGRESS trước khi cho phép thu hồi khóa nếu tiến trình trước bị treo/crash",
+      "valueType": "NUMBER",
+      "defaultValue": 60,
+      "validationRules": { "min": 5, "max": 3600, "integerOnly": true },
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 6
+    },
+    {
+      "key": "idempotency.max_response_bytes",
+      "groupCode": "idempotency",
+      "module": "idempotency",
+      "namespace": "idempotency.storage",
+      "name": "Giới hạn kích thước phản hồi lưu replay (bytes)",
+      "description": "Phản hồi lớn hơn ngưỡng này sẽ không lưu toàn bộ body mà chỉ đánh dấu metadata replay",
+      "valueType": "NUMBER",
+      "defaultValue": 262144,
+      "validationRules": { "min": 1024, "max": 2097152, "integerOnly": true },
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 7
+    },
+    {
+      "key": "idempotency.cleanup_batch_size",
+      "groupCode": "idempotency",
+      "module": "idempotency",
+      "namespace": "idempotency.retention",
+      "name": "Số bản ghi xóa tối đa mỗi đợt dọn khóa hết hạn",
+      "description": "Giới hạn số dòng xóa mỗi lượt chạy cron cleanup để tránh khóa bảng lâu",
+      "valueType": "NUMBER",
+      "defaultValue": 1000,
+      "validationRules": { "min": 50, "max": 10000, "integerOnly": true },
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 8
+    },
+    {
+      "key": "idempotency.duplicate_rate_warn_percent",
+      "groupCode": "idempotency",
+      "module": "idempotency",
+      "namespace": "idempotency.monitoring",
+      "name": "Ngưỡng cảnh báo tỷ lệ request/event bị trùng (%)",
+      "description": "Tỷ lệ trùng toàn hệ thống vượt ngưỡng này sẽ nâng trạng thái lên WARNING",
+      "valueType": "NUMBER",
+      "defaultValue": 15,
+      "validationRules": { "min": 1, "max": 95, "integerOnly": false },
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 9
+    },
+    {
+      "key": "idempotency.duplicate_rate_crit_percent",
+      "groupCode": "idempotency",
+      "module": "idempotency",
+      "namespace": "idempotency.monitoring",
+      "name": "Ngưỡng nghiêm trọng tỷ lệ request/event bị trùng (%)",
+      "description": "Tỷ lệ trùng toàn hệ thống vượt ngưỡng này sẽ nâng trạng thái lên CRITICAL",
+      "valueType": "NUMBER",
+      "defaultValue": 35,
+      "validationRules": { "min": 5, "max": 100, "integerOnly": false },
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 10
+    },
+    {
+      "key": "idempotency.client_repeat_warn_hits",
+      "groupCode": "idempotency",
+      "module": "idempotency",
+      "namespace": "idempotency.monitoring",
+      "name": "Ngưỡng số lần trùng để gắn cờ client gửi lặp (WARNING)",
+      "description": "Client / provider có số lần gửi lặp trong cửa sổ thống kê đạt ngưỡng này sẽ bị đánh dấu nghi ngờ",
+      "valueType": "NUMBER",
+      "defaultValue": 10,
+      "validationRules": { "min": 2, "max": 100000, "integerOnly": true },
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 11
+    },
+    {
+      "key": "idempotency.client_repeat_crit_hits",
+      "groupCode": "idempotency",
+      "module": "idempotency",
+      "namespace": "idempotency.monitoring",
+      "name": "Ngưỡng số lần trùng mức nghiêm trọng của một client (CRITICAL)",
+      "description": "Client / provider đạt ngưỡng này sẽ được đánh dấu mức CRITICAL",
+      "valueType": "NUMBER",
+      "defaultValue": 50,
+      "validationRules": { "min": 5, "max": 1000000, "integerOnly": true },
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 12
+    }
+  ],
+  "menus": [
+    {
+      "code": "IDEMPOTENCY",
+      "name": "Idempotency & Chống trùng",
+      "module": "idempotency",
+      "status": 1,
+      "link": "/idempotency",
+      "linkApi": "/api/v1/idempotency/records",
+      "type": 2,
+      "parent": null,
+      "level": 1,
+      "key": "idempotency.read",
+      "numOrder": 64,
+      "icon": "ShieldCheck",
+      "position": "SIDEBAR"
+    }
+  ],
+  "events": {
+    "published": [
+      "idempotency.record.revoked",
+      "idempotency.cleanup.completed"
+    ],
+    "subscribed": []
+  },
+  "database": {
+    "hasMigrations": true,
+    "tables": [
+      "idempotency_records"
+    ]
+  }
+}

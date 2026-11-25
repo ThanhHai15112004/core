@@ -78,6 +78,10 @@ const OutboxManagementPage = loadPage(
   () => import('./modules/outbox/OutboxManagementPage'),
   'OutboxManagementPage',
 );
+const IdempotencyManagementPage = loadPage(
+  () => import('./modules/idempotency/IdempotencyManagementPage'),
+  'IdempotencyManagementPage',
+);
 
 // Tải riêng: CSS/JS của System Console (Tailwind, ECharts…) chỉ nạp khi vào console.
 // Link cũ dạng `/#system-console/...` → đường dẫn thật.
@@ -157,6 +161,8 @@ function App() {
               <ProviderRegistryPage />
             ) : activeTab === 'outbox' ? (
               <OutboxManagementPage />
+            ) : activeTab === 'idempotency' ? (
+              <IdempotencyManagementPage />
             ) : (
               <HomePage onNavigateTab={handleNavigateTab} />
             )}

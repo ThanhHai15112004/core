@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import {
   DOMAIN_EVENT_CRITICALITY,
   type CreateDomainEventInput,
@@ -11,14 +11,20 @@ import {
   type DomainEventHandlerRegistration,
   type DomainEventHandlerStats,
   type DomainEventLogger,
+  type DomainEventPublishOptions,
   type DomainEventRecentDispatch,
   type DomainEventRuntimeSnapshot,
   type IDomainEventBus,
 } from '../contracts/domain-event.contract.js';
+import { IDEMPOTENCY_OUTCOME, IDEMPOTENCY_SCOPE } from '../contracts/idempotency.contract.js';
 import {
   DomainEventRequiredHandlerException,
   type RequiredHandlerFailureDetail,
 } from '../errors/domain-event.exception.js';
+import {
+  IdempotencyInProgressException,
+  IdempotencyPayloadMismatchException,
+} from '../errors/idempotency.exception.js';
 import {
   assertSafeDomainEventPayload,
   createDomainEvent,
@@ -26,17 +32,25 @@ import {
   matchesDomainEventPattern,
   normalizeDomainEventType,
 } from '../utils/domain-event.util.js';
+import { computeIdempotencyFingerprint } from '../utils/idempotency.util.js';
+import {
+  IdempotencyRegistryService,
+  defaultIdempotencyRegistry,
+} from './idempotency-registry.service.js';
 
 interface InternalHandlerEntry {
   readonly id: string;
   readonly module: string;
   readonly eventPattern: string;
   readonly criticality: DomainEventCriticality;
+  readonly idempotent: boolean | undefined;
+  readonly idempotencyTtlSec: number | undefined;
   readonly description: string | null;
   readonly registeredAt: string;
   readonly handler: DomainEventHandler<Record<string, unknown>>;
   invokedCount: number;
   succeededCount: number;
+  skippedDuplicateCount: number;
   failedCount: number;
   lastInvokedAt: string | null;
   lastErrorAt: string | null;
@@ -61,11 +75,23 @@ export class DomainEventBusService implements IDomainEventBus {
   private recordingEnabled = false;
   private contextResolver: DomainEventContextResolver | null = null;
   private customLogger: DomainEventLogger | null = null;
+  private idempotencyRegistry: IdempotencyRegistryService;
 
   private totalPublished = 0;
   private totalHandlerInvocations = 0;
   private totalRequiredFailures = 0;
   private totalOptionalFailures = 0;
+
+  constructor(
+    @Optional() idempotencyRegistry?: IdempotencyRegistryService,
+  ) {
+    this.idempotencyRegistry = idempotencyRegistry ?? defaultIdempotencyRegistry;
+  }
+
+  /** Nối bộ chống xử lý trùng (`IdempotencyRegistryService`) cho Event Inbox (Phase 11.3). */
+  public setIdempotencyRegistry(registry: IdempotencyRegistryService | null): void {
+    this.idempotencyRegistry = registry ?? defaultIdempotencyRegistry;
+  }
 
   /** Nối bộ giải ngữ cảnh hiện tại (`RequestContextService`) từ `@packages/logging`. */
   public setContextResolver(resolver: DomainEventContextResolver | null): void {
@@ -96,11 +122,14 @@ export class DomainEventBusService implements IDomainEventBus {
       module: moduleName,
       eventPattern: pattern,
       criticality,
+      idempotent: registration.idempotent,
+      idempotencyTtlSec: registration.idempotencyTtlSec,
       description: registration.description?.trim() || null,
       registeredAt: new Date().toISOString(),
       handler: registration.handler as DomainEventHandler<Record<string, unknown>>,
       invokedCount: 0,
       succeededCount: 0,
+      skippedDuplicateCount: 0,
       failedCount: 0,
       lastInvokedAt: null,
       lastErrorAt: null,
@@ -131,6 +160,7 @@ export class DomainEventBusService implements IDomainEventBus {
       registeredAt: h.registeredAt,
       invokedCount: h.invokedCount,
       succeededCount: h.succeededCount,
+      skippedDuplicateCount: h.skippedDuplicateCount,
       failedCount: h.failedCount,
       lastInvokedAt: h.lastInvokedAt,
       lastErrorAt: h.lastErrorAt,
@@ -170,6 +200,7 @@ export class DomainEventBusService implements IDomainEventBus {
    */
   public async publish<TPayload extends Record<string, unknown> = Record<string, unknown>>(
     input: CreateDomainEventInput<TPayload> | DomainEvent<TPayload>,
+    options?: DomainEventPublishOptions,
   ): Promise<DomainEventDispatchReport<TPayload>> {
     const event = this.resolveEvent(input);
 
@@ -192,8 +223,10 @@ export class DomainEventBusService implements IDomainEventBus {
     const requiredFailures: RequiredHandlerFailureDetail[] = [];
     let firstRequiredCause: unknown;
     let succeededCount = 0;
+    let skippedDuplicateCount = 0;
     let failedRequiredCount = 0;
     let failedOptionalCount = 0;
+    let cachedEventFingerprint: string | null = null;
 
     for (const entry of [...requiredHandlers, ...optionalHandlers]) {
       const startedAt = Date.now();
@@ -201,8 +234,95 @@ export class DomainEventBusService implements IDomainEventBus {
       entry.lastInvokedAt = new Date().toISOString();
       this.totalHandlerInvocations += 1;
 
+      const shouldDeduplicate =
+        this.idempotencyRegistry.isReady() &&
+        (entry.idempotent === true ||
+          (options?.enforceIdempotency === true && entry.idempotent !== false));
+
+      let acquiredRecordId: number | null = null;
+      let acquiredLockOwner: string | null = null;
+      let acquiredLock = false;
+
       try {
+        if (shouldDeduplicate) {
+          if (cachedEventFingerprint === null) {
+            cachedEventFingerprint = computeIdempotencyFingerprint({
+              type: event.type,
+              version: event.version,
+              payload: event.payload,
+            });
+          }
+          const lockOwner = event.metadata.correlationId ?? `evt:${event.id}`;
+          const clientIdentifier =
+            options?.clientIdentifier ?? `module:${event.metadata.sourceModule}`;
+          const acquired = await this.idempotencyRegistry.acquire({
+            scope: IDEMPOTENCY_SCOPE.EVENT,
+            scopeTarget: entry.id,
+            idempotencyKey: event.id,
+            requestFingerprint: cachedEventFingerprint,
+            ttlSec: entry.idempotencyTtlSec ?? options?.idempotencyTtlSec,
+            lockOwner,
+            clientIdentifier,
+            correlationId: event.metadata.correlationId,
+          });
+
+          if (acquired.outcome === IDEMPOTENCY_OUTCOME.REPLAYED) {
+            const durationMs = Math.max(0, Date.now() - startedAt);
+            entry.skippedDuplicateCount += 1;
+            skippedDuplicateCount += 1;
+            results.push({
+              handlerId: entry.id,
+              module: entry.module,
+              criticality: entry.criticality,
+              status: 'skipped_duplicate',
+              skippedReason: 'already_processed',
+              durationMs,
+            });
+            continue;
+          }
+
+          if (acquired.outcome === IDEMPOTENCY_OUTCOME.PAYLOAD_MISMATCH) {
+            throw new IdempotencyPayloadMismatchException({
+              scope: IDEMPOTENCY_SCOPE.EVENT,
+              scopeTarget: entry.id,
+              idempotencyKey: event.id,
+              reason: `Domain Event "${event.type}" (${event.id}) reused with mismatched payload`,
+            });
+          }
+
+          if (acquired.outcome === IDEMPOTENCY_OUTCOME.IN_PROGRESS) {
+            throw new IdempotencyInProgressException({
+              scope: IDEMPOTENCY_SCOPE.EVENT,
+              scopeTarget: entry.id,
+              idempotencyKey: event.id,
+              reason: `Domain Event "${event.type}" (${event.id}) is currently being processed by handler "${entry.id}"`,
+            });
+          }
+
+          acquiredRecordId = acquired.recordId;
+          acquiredLockOwner = acquired.lockOwner;
+          acquiredLock = acquired.persisted;
+        }
+
         await entry.handler(event);
+
+        if (acquiredLock) {
+          await this.idempotencyRegistry.complete({
+            scope: IDEMPOTENCY_SCOPE.EVENT,
+            scopeTarget: entry.id,
+            idempotencyKey: event.id,
+            recordId: acquiredRecordId,
+            lockOwner: acquiredLockOwner,
+            statusCode: 200,
+            responseBody: {
+              eventId: event.id,
+              eventType: event.type,
+              handlerId: entry.id,
+              module: entry.module,
+            },
+          });
+        }
+
         const durationMs = Math.max(0, Date.now() - startedAt);
         entry.succeededCount += 1;
         succeededCount += 1;
@@ -217,6 +337,20 @@ export class DomainEventBusService implements IDomainEventBus {
         const durationMs = Math.max(0, Date.now() - startedAt);
         const errorName = err instanceof Error ? err.name : 'Error';
         const errorMessage = err instanceof Error ? err.message : String(err);
+
+        if (acquiredLock) {
+          await this.idempotencyRegistry
+            .fail({
+              scope: IDEMPOTENCY_SCOPE.EVENT,
+              scopeTarget: entry.id,
+              idempotencyKey: event.id,
+              recordId: acquiredRecordId,
+              lockOwner: acquiredLockOwner,
+              errorCode: errorName.slice(0, 80),
+              errorMessage: errorMessage.slice(0, 1000),
+            })
+            .catch(() => undefined);
+        }
 
         entry.failedCount += 1;
         entry.lastErrorAt = new Date().toISOString();
@@ -286,6 +420,7 @@ export class DomainEventBusService implements IDomainEventBus {
       correlationId: event.metadata.correlationId,
       matchedHandlers: matched.length,
       succeededCount,
+      skippedDuplicateCount,
       failedRequiredCount,
       failedOptionalCount,
     });
@@ -303,6 +438,7 @@ export class DomainEventBusService implements IDomainEventBus {
       event,
       matchedHandlers: matched.length,
       succeededCount,
+      skippedDuplicateCount,
       failedRequiredCount,
       failedOptionalCount,
       results,

@@ -5,6 +5,7 @@ import { ConfigModule } from '@packages/config/index.js';
 import {
   GlobalExceptionFilter,
   HttpModule,
+  IdempotencyInterceptor,
   TransformResponseInterceptor,
 } from '@packages/http/index.js';
 import { DatabaseModule } from '@packages/database/index.js';
@@ -54,6 +55,7 @@ import { FederatedIdentityModule } from '@modules/federated-identity/index.js';
 import { PaymentsModule } from '@modules/payments/index.js';
 import { ProviderRegistryModule } from '@modules/provider-registry/index.js';
 import { OutboxModule } from '@modules/outbox/index.js';
+import { IdempotencyModule } from '@modules/idempotency/index.js';
 import { RedisModule } from '@packages/redis/index.js';
 import { RuntimeAgentModule } from '@packages/runtime/index.js';
 import { ApiRuntimeContributor } from './runtime/api-runtime.contributor.js';
@@ -114,6 +116,7 @@ import { MetricsModule } from '@packages/metrics/index.js';
     PaymentsModule,
     ProviderRegistryModule,
     OutboxModule,
+    IdempotencyModule,
   ],
   providers: [
     ApiRuntimeContributor,
@@ -124,6 +127,10 @@ import { MetricsModule } from '@packages/metrics/index.js';
     {
       provide: APP_INTERCEPTOR,
       useClass: TransformResponseInterceptor,
+    },
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: IdempotencyInterceptor,
     },
     {
       provide: APP_GUARD,

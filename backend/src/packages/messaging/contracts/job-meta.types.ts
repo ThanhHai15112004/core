@@ -19,6 +19,8 @@ export interface JobMeta {
   requestId: string | null;
   /** Khoá idempotency do producer khai báo (vd. `payment:821`). */
   idempotencyKey: string | null;
+  /** Thời gian lưu khóa chống trùng riêng cho job này (giây, mặc định theo setting `idempotency.ttl.job_sec`). */
+  idempotencyTtlSec?: number | null;
   /** Field nghiệp vụ được index để tìm kiếm (vd. `{ orderId: '82918' }`) — không quét payload. */
   index: Record<string, string>;
   /** Tên schema / phiên bản payload (vd. `GenerateReportPayload:v2`). */
@@ -41,6 +43,8 @@ export interface PublishOptions {
   /** Thời gian thực thi tối đa của job (ms) trước khi ngắt lỗi Timeout. */
   timeoutMs?: number;
   idempotencyKey?: string;
+  /** Thời gian lưu khóa chống trùng riêng cho job này (giây). */
+  idempotencyTtlSec?: number;
   index?: Record<string, string | number>;
   schema?: string;
 }

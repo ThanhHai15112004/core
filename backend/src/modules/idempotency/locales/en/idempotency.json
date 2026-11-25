@@ -1,0 +1,7 @@
+{
+  "recordNotFound": "Idempotency record not found.",
+  "invalidScope": "Invalid idempotency scope. Supported values: API, JOB, WEBHOOK, EVENT.",
+  "invalidStatus": "Invalid idempotency status. Supported values: IN_PROGRESS, COMPLETED, FAILED.",
+  "recordRevoked": "Idempotency record revoked successfully.",
+  "cleanupCompleted": "Expired idempotency records purged successfully."
+}

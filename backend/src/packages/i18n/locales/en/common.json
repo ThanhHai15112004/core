@@ -36,5 +36,9 @@
   "DOMAIN_EVENT_ENTITY_LEAK": "Direct ORM Entity or class instance is forbidden in Domain Event payload",
   "DOMAIN_EVENT_SECRET_LEAK": "Sensitive or secret field is strictly forbidden in Domain Event payload",
   "DOMAIN_EVENT_INVALID_PAYLOAD": "Invalid Domain Event payload",
-  "DOMAIN_EVENT_REQUIRED_HANDLER_FAILED": "Required Domain Event handler execution failed"
+  "DOMAIN_EVENT_REQUIRED_HANDLER_FAILED": "Required Domain Event handler execution failed",
+  "IDEMPOTENCY_KEY_REQUIRED": "Idempotency-Key header is required to prevent duplicate processing",
+  "IDEMPOTENCY_KEY_INVALID": "Idempotency-Key header is invalid or exceeds maximum allowed length",
+  "IDEMPOTENCY_PAYLOAD_MISMATCH": "Idempotency Key was already used with a different request payload",
+  "IDEMPOTENCY_IN_PROGRESS": "Another request with the same Idempotency Key is currently in progress"
 }

@@ -31,6 +31,7 @@ import { CustomFieldsModule } from '@modules/custom-fields/index.js';
 import { WebhooksModule } from '@modules/webhooks/index.js';
 import { InboundWebhooksModule } from '@modules/inbound-webhooks/index.js';
 import { OutboxModule } from '@modules/outbox/index.js';
+import { IdempotencyModule } from '@modules/idempotency/index.js';
 import { SystemProcessor } from './processors/system/system.processor.js';
 import { CriticalProcessor } from './processors/critical/critical.processor.js';
 import { NotificationsProcessor } from './processors/notifications/notifications.processor.js';
@@ -74,6 +75,7 @@ const PROCESSORS = [SystemProcessor, CriticalProcessor, NotificationsProcessor, 
     WebhooksModule,
     InboundWebhooksModule,
     OutboxModule,
+    IdempotencyModule,
   ],
   providers: [...PROCESSORS, WorkerRuntimeContributor, OutboxRelayRunner],
   exports: [...PROCESSORS],

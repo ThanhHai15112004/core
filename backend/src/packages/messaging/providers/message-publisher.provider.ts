@@ -112,6 +112,9 @@ export class BaseMessagePublisherProvider implements MessagePublisherContract {
       source,
       requestId: source.kind === 'http' ? source.id : null,
       idempotencyKey: options.idempotencyKey ? indexValue(options.idempotencyKey) : null,
+      ...(options.idempotencyTtlSec && options.idempotencyTtlSec > 0
+        ? { idempotencyTtlSec: Math.round(options.idempotencyTtlSec) }
+        : {}),
       index,
       schema: options.schema ?? null,
       timeoutMs,

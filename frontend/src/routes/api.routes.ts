@@ -646,4 +646,12 @@ export const API_ROUTES = {
     CLEANUP: '/outbox/cleanup',
     PROCESS_NOW: '/outbox/process-now',
   },
+  IDEMPOTENCY: {
+    METRICS: (windowHours = 24) => `/idempotency/metrics?windowHours=${windowHours}`,
+    RECORDS: (qs = '') => `/idempotency/records${qs ? `?${qs}` : ''}`,
+    RECORD_BY_ID: (id: string | number) => `/idempotency/records/${id}`,
+    REVOKE_RECORD: (id: string | number, reason?: string) =>
+      `/idempotency/records/${id}${reason ? `?reason=${encodeURIComponent(reason)}` : ''}`,
+    PURGE_EXPIRED: '/idempotency/purge-expired',
+  },
 } as const;

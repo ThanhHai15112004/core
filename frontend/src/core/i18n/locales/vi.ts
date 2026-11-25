@@ -72,6 +72,7 @@ export const vi = {
     payments: 'Thanh toán & Đối soát',
     providerRegistry: 'Nhà cung cấp',
     outbox: 'Outbox Events',
+    idempotency: 'Idempotency',
     languageToggle: 'Ngôn ngữ',
     themeLight: 'Sáng',
     themeDark: 'Tối',

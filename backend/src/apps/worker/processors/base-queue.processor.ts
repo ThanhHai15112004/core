@@ -3,9 +3,18 @@ import { WorkerHost } from '@nestjs/bullmq';
 import { UnrecoverableError, type Job } from 'bullmq';
 import type { Counter, Histogram } from 'prom-client';
 import { CoreConfigService } from '@packages/config/index.js';
+import {
+  IDEMPOTENCY_OUTCOME,
+  IDEMPOTENCY_SCOPE,
+  IdempotencyRegistryService,
+  computeIdempotencyFingerprint,
+  defaultIdempotencyRegistry,
+  normalizeIdempotencyKey,
+} from '@packages/kernel/index.js';
 import { RequestContextService } from '@packages/logging/index.js';
 import { MetricsRegistryService } from '@packages/metrics/index.js';
 import {
+  JobError,
   QUEUE_PROFILES,
   classifyJobError,
   logLifecycle,
@@ -45,6 +54,8 @@ export abstract class BaseQueueProcessor extends WorkerHost implements OnApplica
     protected readonly config: CoreConfigService,
     metrics: MetricsRegistryService,
     @Optional() protected readonly progressTracker?: JobProgressTrackerService,
+    @Optional()
+    protected readonly idempotencyRegistry: IdempotencyRegistryService = defaultIdempotencyRegistry,
   ) {
     super();
     this.consumed = metrics.counter('messages_consumed_total', 'Messages consumed', [
@@ -122,11 +133,68 @@ export abstract class BaseQueueProcessor extends WorkerHost implements OnApplica
     const end = this.duration.startTimer({ queue: job.queueName, channel: envelope.topic });
     const timeoutMs = this.resolveExecutionTimeoutMs(envelope);
     const scheduledTaskId = resolveScheduledTaskId(job) ?? envelope.meta?.index?.['taskId'] ?? null;
+    const jobBusinessKey = normalizeIdempotencyKey(envelope.meta?.idempotencyKey);
+    const jobScopeTarget = `${job.queueName}:${envelope.topic}`;
     let lockAcquired = false;
+    let jobIdempotencyRecordId: number | null = null;
+    let jobIdempotencyLockAcquired = false;
 
     try {
       if (this.progressTracker) {
         await this.progressTracker.assertNotCancelled(job.queueName, jobId, job);
+      }
+
+      if (jobBusinessKey && this.idempotencyRegistry.isReady()) {
+        const jobFingerprint = computeIdempotencyFingerprint(envelope.payload ?? null);
+        const acquired = await this.idempotencyRegistry.acquire({
+          scope: IDEMPOTENCY_SCOPE.JOB,
+          scopeTarget: jobScopeTarget,
+          idempotencyKey: jobBusinessKey,
+          requestFingerprint: jobFingerprint,
+          ttlSec: envelope.meta?.idempotencyTtlSec ?? undefined,
+          lockOwner: jobId,
+          clientIdentifier: envelope.producer
+            ? `producer:${envelope.producer}`
+            : `queue:${job.queueName}`,
+          correlationId: envelope.correlationId ?? envelope.id,
+          allowSameOwnerRetry: true,
+        });
+
+        if (acquired.outcome === IDEMPOTENCY_OUTCOME.REPLAYED) {
+          logLifecycle(job, 'skipped', {
+            attempt,
+            runtime: 'worker',
+            consumer: this.constructor.name,
+            error: `Idempotent duplicate skipped for job business key "${jobBusinessKey}"`,
+          });
+          this.consumed.inc({ queue: job.queueName, channel: envelope.topic, result: 'success' });
+          return {
+            skipped: true,
+            duplicate: true,
+            reason: 'idempotent_duplicate',
+            idempotencyKey: jobBusinessKey,
+            previousResult: acquired.response?.body ?? null,
+          };
+        }
+
+        if (acquired.outcome === IDEMPOTENCY_OUTCOME.PAYLOAD_MISMATCH) {
+          throw new JobError(
+            'IDEMPOTENCY_PAYLOAD_MISMATCH',
+            `Job business key "${jobBusinessKey}" on "${jobScopeTarget}" was reused with mismatched payload`,
+            { retryable: false },
+          );
+        }
+
+        if (acquired.outcome === IDEMPOTENCY_OUTCOME.IN_PROGRESS) {
+          throw new JobError(
+            'IDEMPOTENCY_IN_PROGRESS',
+            `Another job with business key "${jobBusinessKey}" on "${jobScopeTarget}" is currently in progress`,
+            { retryable: true },
+          );
+        }
+
+        jobIdempotencyRecordId = acquired.recordId;
+        jobIdempotencyLockAcquired = acquired.persisted;
       }
 
       if (scheduledTaskId && this.progressTracker) {
@@ -166,6 +234,18 @@ export abstract class BaseQueueProcessor extends WorkerHost implements OnApplica
           ),
       );
 
+      if (jobIdempotencyLockAcquired && jobBusinessKey) {
+        await this.idempotencyRegistry.complete({
+          scope: IDEMPOTENCY_SCOPE.JOB,
+          scopeTarget: jobScopeTarget,
+          idempotencyKey: jobBusinessKey,
+          recordId: jobIdempotencyRecordId,
+          lockOwner: jobId,
+          statusCode: 200,
+          responseBody: result,
+        });
+      }
+
       if (scheduledTaskId && this.progressTracker) {
         await this.progressTracker.recordScheduledTaskCheckpoint(scheduledTaskId, Date.now());
       }
@@ -182,6 +262,20 @@ export abstract class BaseQueueProcessor extends WorkerHost implements OnApplica
     } catch (err) {
       this.consumed.inc({ queue: job.queueName, channel: envelope.topic, result: 'failed' });
       const info = classifyJobError(err);
+
+      if (jobIdempotencyLockAcquired && jobBusinessKey) {
+        await this.idempotencyRegistry
+          .fail({
+            scope: IDEMPOTENCY_SCOPE.JOB,
+            scopeTarget: jobScopeTarget,
+            idempotencyKey: jobBusinessKey,
+            recordId: jobIdempotencyRecordId,
+            lockOwner: jobId,
+            errorCode: info.type,
+            errorMessage: info.message,
+          })
+          .catch(() => undefined);
+      }
       const maxAttempts = Math.max(1, job.opts?.attempts ?? 1);
       const unrecoverable = info.retryable === false;
       const final = unrecoverable || attempt >= maxAttempts;

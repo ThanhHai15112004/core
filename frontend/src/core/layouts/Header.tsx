@@ -126,6 +126,8 @@ export const Header: React.FC<HeaderProps> = ({ activeTab, onTabChange }) => {
         return <Server size={15} />;
       case 'outbox':
         return <Inbox size={15} />;
+      case 'idempotency':
+        return <ShieldCheck size={15} />;
       case 'home':
       default:
         return <Home size={15} />;

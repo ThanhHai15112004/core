@@ -1,0 +1,7 @@
+{
+  "recordNotFound": "Không tìm thấy bản ghi khóa chống xử lý trùng (Idempotency) yêu cầu.",
+  "invalidScope": "Phạm vi chống xử lý trùng (scope) không hợp lệ. Chỉ chấp nhận API, JOB, WEBHOOK, EVENT.",
+  "invalidStatus": "Trạng thái khóa chống trùng không hợp lệ. Chỉ chấp nhận IN_PROGRESS, COMPLETED, FAILED.",
+  "recordRevoked": "Đã thu hồi khóa chống xử lý trùng thành công.",
+  "cleanupCompleted": "Đã dọn dẹp các khóa chống xử lý trùng hết hạn."
+}

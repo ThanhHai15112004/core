@@ -48,6 +48,11 @@ import {
   OutboxPublisherService,
   defaultOutboxPublisher,
 } from './registries/outbox-publisher.service.js';
+import { IDEMPOTENCY_PORT } from './contracts/idempotency.contract.js';
+import {
+  IdempotencyRegistryService,
+  defaultIdempotencyRegistry,
+} from './registries/idempotency-registry.service.js';
 
 @Global()
 @Module({
@@ -116,6 +121,14 @@ import {
       provide: OUTBOX_PUBLISHER_PORT,
       useValue: defaultOutboxPublisher,
     },
+    {
+      provide: IdempotencyRegistryService,
+      useValue: defaultIdempotencyRegistry,
+    },
+    {
+      provide: IDEMPOTENCY_PORT,
+      useValue: defaultIdempotencyRegistry,
+    },
   ],
   exports: [
     CodeRegistryService,
@@ -134,6 +147,8 @@ import {
     DOMAIN_EVENT_BUS_PORT,
     OutboxPublisherService,
     OUTBOX_PUBLISHER_PORT,
+    IdempotencyRegistryService,
+    IDEMPOTENCY_PORT,
   ],
 })
 export class KernelModule {}

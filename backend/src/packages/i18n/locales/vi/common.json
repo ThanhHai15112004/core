@@ -36,5 +36,9 @@
   "DOMAIN_EVENT_ENTITY_LEAK": "Cấm đưa trực tiếp ORM Entity hoặc instance class vào payload Domain Event",
   "DOMAIN_EVENT_SECRET_LEAK": "Cấm đưa trường dữ liệu nhạy cảm/secret vào payload Domain Event",
   "DOMAIN_EVENT_INVALID_PAYLOAD": "Dữ liệu payload của Domain Event không hợp lệ",
-  "DOMAIN_EVENT_REQUIRED_HANDLER_FAILED": "Xử lý sự kiện bắt buộc (required handler) thất bại"
+  "DOMAIN_EVENT_REQUIRED_HANDLER_FAILED": "Xử lý sự kiện bắt buộc (required handler) thất bại",
+  "IDEMPOTENCY_KEY_REQUIRED": "Thiếu header Idempotency-Key bắt buộc để chống xử lý trùng",
+  "IDEMPOTENCY_KEY_INVALID": "Giá trị Idempotency-Key không hợp lệ hoặc vượt quá độ dài cho phép",
+  "IDEMPOTENCY_PAYLOAD_MISMATCH": "Idempotency Key đã được sử dụng với dữ liệu đầu vào khác",
+  "IDEMPOTENCY_IN_PROGRESS": "Một yêu cầu khác cùng Idempotency Key đang được xử lý, vui lòng thử lại sau"
 }

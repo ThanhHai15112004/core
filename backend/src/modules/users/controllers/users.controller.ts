@@ -4,6 +4,7 @@ import { HTTP_STATUS_CODE, type PaginatedResult } from '@packages/kernel/index.j
 import {
   ApiDoc,
   ApiGroup,
+  Idempotent,
   RequirePermissions,
   ValidatedBody,
   ValidatedParams,
@@ -110,8 +111,9 @@ export class UsersController {
     return this.usersService.getStatusHistory(id, actor);
   }
 
-  /** Tạo mới người dùng (Mục 3.1.1) */
+  /** Tạo mới người dùng (Mục 3.1.1 — hỗ trợ Idempotency-Key chống tạo trùng) */
   @Post()
+  @Idempotent({ scopeTarget: 'POST /api/v1/users', required: false })
   @RequirePermissions('users.create')
   @ApiDoc({
     summary: 'Tạo mới người dùng',

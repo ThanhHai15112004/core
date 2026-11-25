@@ -55,7 +55,8 @@
     "federated-identity",
     "payments",
     "provider-registry",
-    "outbox"
+    "outbox",
+    "idempotency"
   ],
   "settings": {
     "defaultLocale": "vi",

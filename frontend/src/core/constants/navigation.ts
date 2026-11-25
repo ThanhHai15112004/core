@@ -16,7 +16,8 @@ export type NavigationTabId =
   | 'webhooks'
   | 'payments'
   | 'provider-registry'
-  | 'outbox';
+  | 'outbox'
+  | 'idempotency';
 
 export interface NavigationItem {
   id: NavigationTabId;
@@ -122,6 +123,12 @@ export const NAVIGATION_ITEMS: readonly NavigationItem[] = [
     labelKey: 'header.outbox',
     icon: 'inbox',
     route: ROUTES.OUTBOX,
+  },
+  {
+    id: 'idempotency',
+    labelKey: 'header.idempotency',
+    icon: 'shield-check',
+    route: ROUTES.IDEMPOTENCY,
   },
 ] as const;
 
