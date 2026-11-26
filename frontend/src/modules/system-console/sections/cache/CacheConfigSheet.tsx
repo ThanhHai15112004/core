@@ -6,7 +6,7 @@ import { cacheApi } from '../../services/cache.api';
 import { cacheKeys } from './cache-keys';
 
 /** Giá trị số hiển thị nguyên dạng (không phân cách hàng nghìn). */
-const RAW_NUMBER_KEYS = new Set(['port', 'database']);
+const RAW_NUMBER_KEYS = new Set(['port', 'database', 'maxRetriesPerRequest']);
 
 /** Cấu hình cache đang nạp (chỉ đọc) — host/port/prefix ở đây; mật khẩu chỉ hiện "đã cấu hình". */
 export function CacheConfigSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
@@ -19,6 +19,7 @@ export function CacheConfigSheet({ open, onOpenChange }: { open: boolean; onOpen
     if (i.key === 'maxMemory') return i.value === 0 ? t('cache.memory.unlimited') : f.bytes(Number(i.value));
     if (i.key === 'largeKeyBytes') return f.bytes(Number(i.value));
     if (i.key === 'defaultTtlSec') return i.value === 0 ? t('cache.ttl.none') : f.duration(Number(i.value) * 1000);
+    if (i.key === 'connectTimeoutMs' || i.key === 'commandTimeoutMs') return f.duration(Number(i.value));
     if (RAW_NUMBER_KEYS.has(i.key)) return String(i.value);
     return undefined;
   };

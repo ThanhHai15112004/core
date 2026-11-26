@@ -1,20 +1,23 @@
 import { randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
-import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
+import { Inject, Injectable, Logger, Optional, type OnModuleDestroy } from '@nestjs/common';
 import { CoreConfigService } from '@packages/config/index.js';
 import { RedisService } from '@packages/redis/index.js';
 import { RequestContextService } from '@packages/logging/index.js';
 import { RUNTIME_IDENTITY, type RuntimeIdentity } from '@packages/runtime/index.js';
 import type {
   CacheContract,
+  CacheDegradedStatus,
   CacheGetOrSetOptions,
   CacheLatencyStats,
+  HotKeySnapshot,
 } from '../contracts/cache.contract.js';
 import type { CacheErrorRecord } from '../contracts/cache-events.types.js';
 import { CACHE_ERROR_LOG_SIZE, cacheKeys } from '../constants/cache.keys.js';
 import type { CacheDriver } from '../drivers/cache-driver.js';
 import { MemoryCacheDriver } from '../drivers/memory-cache.driver.js';
 import { RedisCacheDriver } from '../drivers/redis-cache.driver.js';
+import { HotKeyTracker } from '../monitoring/hot-keys.tracker.js';
 import { buildStandardCacheKey, namespaceOf, normalizeCacheSegment } from '../utils/namespace.js';
 import { classifyCacheError, sanitizeCacheMessage } from '../utils/cache-errors.js';
 
@@ -32,14 +35,17 @@ export interface CacheAdapterOptions {
 /**
  * Cache của Core. Driver chọn theo `CACHE_DRIVER` (redis dùng chung giữa runtime / memory riêng từng process),
  * API không đổi. Hit/miss đọc từ `INFO` của Redis (không tự đếm); lỗi được ghi lại cho trang Cache và không bao
- * giờ ném ra caller: đọc lỗi = miss, ghi lỗi = bỏ qua.
+ * giờ ném ra caller: đọc lỗi = miss, ghi lỗi = bỏ qua. Hỗ trợ circuit fail-fast khi Redis lỗi liên tiếp.
  */
 @Injectable()
-export class BaseCacheProvider implements CacheContract {
+export class BaseCacheProvider implements CacheContract, OnModuleDestroy {
   private readonly logger = new Logger('Cache');
   public readonly driver: CacheDriver;
   private readonly depth: number;
   private readonly defaultTtlSec: number;
+  private readonly degradedThreshold: number;
+  private readonly degradedCooldownMs: number;
+  private readonly hotKeyTracker: HotKeyTracker;
   private readonly inFlight = new Map<string, Promise<unknown>>();
   private errorWindow = { at: 0, n: 0 };
   private lastLoggedError: string | null = null;
@@ -47,6 +53,14 @@ export class BaseCacheProvider implements CacheContract {
   private errorCount = 0;
   private lastLatencyMs: number | null = null;
   private readonly latencySamples: number[] = [];
+
+  private consecutiveFailures = 0;
+  private bypassedCount = 0;
+  private degradedOpenedAt: number | null = null;
+  private degradedCooldownUntil: number | null = null;
+  private lastErrorKind: string | null = null;
+  private lastErrorMessage: string | null = null;
+  private readonly onRedisReadyBound: (() => void) | null = null;
 
   constructor(
     private readonly configService: CoreConfigService,
@@ -57,11 +71,40 @@ export class BaseCacheProvider implements CacheContract {
     const cfg = this.configService.cache;
     this.depth = cfg.namespaceDepth;
     this.defaultTtlSec = cfg.defaultTtlSec;
+    this.degradedThreshold = cfg.degraded.failureThreshold;
+    this.degradedCooldownMs = cfg.degraded.cooldownMs;
+    this.hotKeyTracker = new HotKeyTracker({
+      windowSec: cfg.hotKeys.windowSec,
+      warnRpm: cfg.hotKeys.warnRpm,
+      maxTrackedKeys: cfg.hotKeys.maxTrackedKeys,
+      depth: this.depth,
+    });
+
     const useMemoryForTest = Boolean(options?.preferMemoryInTest && this.configService.isTest);
     this.driver =
       !useMemoryForTest && cfg.driver === 'redis' && this.redis
         ? new RedisCacheDriver(this.redis)
         : new MemoryCacheDriver();
+
+    if (
+      this.driver.name === 'redis' &&
+      this.redis?.client &&
+      typeof this.redis.client.on === 'function'
+    ) {
+      this.onRedisReadyBound = () => this.resetDegradedState();
+      this.redis.client.on('ready', this.onRedisReadyBound);
+    }
+  }
+
+  /** Dọn dẹp listener khi module bị hủy. */
+  public onModuleDestroy(): void {
+    if (
+      this.onRedisReadyBound &&
+      this.redis?.client &&
+      typeof this.redis.client.off === 'function'
+    ) {
+      this.redis.client.off('ready', this.onRedisReadyBound);
+    }
   }
 
   /**
@@ -98,6 +141,27 @@ export class BaseCacheProvider implements CacheContract {
       module: moduleName,
       key,
     });
+  }
+
+  /** Chụp danh sách Hot Keys trong cửa sổ trượt hiện tại. */
+  public getHotKeys(limit: number = 20): HotKeySnapshot {
+    return this.hotKeyTracker.snapshot(limit);
+  }
+
+  /** Trạng thái mạch fail-fast (Cache Degraded Bypass) khi Redis lỗi/timeout liên tiếp. */
+  public getDegradedStatus(now: number = Date.now()): CacheDegradedStatus {
+    const active = this.degradedCooldownUntil !== null && now < this.degradedCooldownUntil;
+    return {
+      degraded: active,
+      consecutiveFailures: this.consecutiveFailures,
+      bypassedCount: this.bypassedCount,
+      openedAt: this.degradedOpenedAt ? new Date(this.degradedOpenedAt).toISOString() : null,
+      cooldownUntil: this.degradedCooldownUntil
+        ? new Date(this.degradedCooldownUntil).toISOString()
+        : null,
+      lastErrorKind: this.lastErrorKind,
+      lastErrorMessage: this.lastErrorMessage,
+    };
   }
 
   /** Ghi nhận thời gian phản hồi của một thao tác bộ nhớ đệm */
@@ -146,15 +210,50 @@ export class BaseCacheProvider implements CacheContract {
     this.latencySamples.length = 0;
   }
 
+  private isBypassActive(now: number = Date.now()): boolean {
+    if (this.driver.name !== 'redis') return false;
+    if (this.degradedCooldownUntil === null) return false;
+    if (now < this.degradedCooldownUntil) {
+      this.bypassedCount++;
+      return true;
+    }
+    // Hết cooldown → cho phép 1 lệnh thăm dò (half-open) đi qua.
+    return false;
+  }
+
+  private resetDegradedState(): void {
+    if (this.degradedOpenedAt !== null) {
+      this.logger.log('Cache degraded circuit closed — Redis recovered');
+    }
+    this.consecutiveFailures = 0;
+    this.degradedOpenedAt = null;
+    this.degradedCooldownUntil = null;
+  }
+
   /** Ghi nhận lỗi vận hành và lưu vào `cachemon:errors` phục vụ giám sát */
   private fail(operation: CacheErrorRecord['operation'], key: string | null, err: unknown): void {
     this.errorCount++;
     const kind = classifyCacheError(err);
     const message = sanitizeCacheMessage(err);
+    this.lastErrorKind = kind;
+    this.lastErrorMessage = message;
     if (this.lastLoggedError !== message) this.logger.warn(`Cache ${operation} failed: ${message}`);
     this.lastLoggedError = message;
 
     const now = Date.now();
+    if (this.driver.name === 'redis' && (kind === 'connection' || kind === 'timeout')) {
+      this.consecutiveFailures++;
+      if (this.consecutiveFailures >= this.degradedThreshold) {
+        if (this.degradedOpenedAt === null) {
+          this.degradedOpenedAt = now;
+          this.logger.warn(
+            `Cache degraded circuit opened after ${this.consecutiveFailures} ${kind} failure(s); bypassing Redis for ${this.degradedCooldownMs}ms`,
+          );
+        }
+        this.degradedCooldownUntil = now + this.degradedCooldownMs;
+      }
+    }
+
     if (now - this.errorWindow.at >= 1000) this.errorWindow = { at: now, n: 0 };
     if (++this.errorWindow.n > ERROR_RECORDS_PER_SEC || !this.redis?.isReady()) return;
     const record: CacheErrorRecord = {
@@ -178,10 +277,13 @@ export class BaseCacheProvider implements CacheContract {
 
   /** Lấy dữ liệu hoặc đối tượng theo khóa định danh */
   public async get<T>(key: string): Promise<T | null> {
+    this.hotKeyTracker.record(key, 'get');
+    if (this.isBypassActive()) return null;
     const started = performance.now();
     try {
       const result = await this.driver.get(key);
       this.recordLatency(started);
+      this.resetDegradedState();
       return result.found ? (result.value as T) : null;
     } catch (err) {
       this.recordLatency(started);
@@ -192,10 +294,13 @@ export class BaseCacheProvider implements CacheContract {
 
   /** Lưu trữ một giá trị theo khóa định danh kèm thời gian hết hạn (TTL) */
   public async set<T>(key: string, value: T, ttlSeconds?: number): Promise<void> {
+    this.hotKeyTracker.record(key, 'set');
+    if (this.isBypassActive()) return;
     const started = performance.now();
     try {
       await this.driver.set(key, value, ttlSeconds ?? this.defaultTtlSec);
       this.recordLatency(started);
+      this.resetDegradedState();
     } catch (err) {
       this.recordLatency(started);
       this.fail('set', key, err);
@@ -204,10 +309,13 @@ export class BaseCacheProvider implements CacheContract {
 
   /** Xóa bản ghi khỏi hệ thống theo mã định danh */
   public async delete(key: string): Promise<void> {
+    this.hotKeyTracker.record(key, 'delete');
+    if (this.isBypassActive()) return;
     const started = performance.now();
     try {
       await this.driver.delete(key);
       this.recordLatency(started);
+      this.resetDegradedState();
     } catch (err) {
       this.recordLatency(started);
       this.fail('delete', key, err);
@@ -218,10 +326,12 @@ export class BaseCacheProvider implements CacheContract {
    * 7.5.4 — Xóa hàng loạt các khóa cache có chung tiền tố `prefix` khi dữ liệu thay đổi.
    */
   public async deleteByPrefix(prefix: string): Promise<number> {
+    if (this.isBypassActive()) return 0;
     const started = performance.now();
     try {
       const deleted = await this.driver.deleteByPrefix(prefix);
       this.recordLatency(started);
+      this.resetDegradedState();
       return deleted;
     } catch (err) {
       this.recordLatency(started);
@@ -299,8 +409,12 @@ export class BaseCacheProvider implements CacheContract {
     factory: () => Promise<T>,
     opts: Required<Pick<CacheGetOrSetOptions, 'ttlSeconds'>> & CacheGetOrSetOptions,
   ): Promise<T> {
+    const bypassed = this.degradedCooldownUntil !== null && Date.now() < this.degradedCooldownUntil;
     const useRedisLock =
-      opts.stampedeLock !== false && this.driver.name === 'redis' && Boolean(this.redis?.isReady());
+      !bypassed &&
+      opts.stampedeLock !== false &&
+      this.driver.name === 'redis' &&
+      Boolean(this.redis?.isReady());
 
     if (!useRedisLock || !this.redis) {
       const freshValue = await factory();
@@ -361,10 +475,13 @@ export class BaseCacheProvider implements CacheContract {
 
   /** Kiểm tra sự tồn tại của một khóa trong bộ lưu trữ */
   public async has(key: string): Promise<boolean> {
+    this.hotKeyTracker.record(key, 'has');
+    if (this.isBypassActive()) return false;
     const started = performance.now();
     try {
       const exists = await this.driver.has(key);
       this.recordLatency(started);
+      this.resetDegradedState();
       return exists;
     } catch (err) {
       this.recordLatency(started);
@@ -384,6 +501,7 @@ export class BaseCacheProvider implements CacheContract {
     try {
       const deleted = await this.driver.clear();
       this.recordLatency(started);
+      this.resetDegradedState();
       return deleted;
     } catch (err) {
       this.recordLatency(started);

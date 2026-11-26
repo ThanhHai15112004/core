@@ -11,11 +11,13 @@ import type {
   CacheConnectionState,
   CacheConnectionStatus,
 } from '../contracts/cache-events.types.js';
+import { recordCacheEvent } from '../utils/cache-events.js';
 import { BaseCacheProvider } from './cache.provider.js';
 
 /**
- * Trạng thái kết nối của backend cache. Driver redis: theo dõi sự kiện của client ioredis (tự kết nối lại),
- * ghi sự kiện mất/khôi phục kết nối (chỉ runtime API ghi để không lặp 3 lần). Driver memory: luôn sẵn sàng.
+ * Trạng thái kết nối của backend cache. Driver redis: theo dõi sự kiện của client ioredis (tự kết nối lại)
+ * và failover HA, ghi sự kiện mất/khôi phục kết nối & đổi Primary (chỉ runtime API ghi để không lặp).
+ * Driver memory: luôn sẵn sàng.
  */
 @Injectable()
 export class CacheConnectionService implements OnApplicationBootstrap, OnModuleDestroy {
@@ -51,8 +53,29 @@ export class CacheConnectionService implements OnApplicationBootstrap, OnModuleD
     };
     on('ready', () => this.onReady());
     on('close', () => this.onLost());
-    on('reconnecting', () => this.set(this.lastSuccessAt ? 'reconnecting' : 'connecting'));
+    on('reconnecting', () => {
+      if (this.state === 'connected') this.lostAt = Date.now();
+      this.set(this.lastSuccessAt ? 'reconnecting' : 'connecting');
+    });
     on('end', () => this.set('unavailable'));
+
+    if (typeof this.redis.onFailover === 'function') {
+      const offFailover = this.redis.onFailover((event) => {
+        if (this.identity?.id !== 'api') return;
+        void recordCacheEvent(this.redis, {
+          type: 'failover_detected',
+          severity: 'warning',
+          params: {
+            mode: event.mode,
+            reason: event.reason,
+            primary: event.currentPrimary ?? 'unknown',
+          },
+          runtime: this.identity.id,
+          at: event.at,
+        });
+      });
+      this.off.push(offFailover);
+    }
   }
 
   /** Dọn dẹp tài nguyên và ngắt kết nối khi module bị hủy */
@@ -71,9 +94,20 @@ export class CacheConnectionService implements OnApplicationBootstrap, OnModuleD
   /** Xử lý sự kiện khi kết nối dịch vụ đã sẵn sàng hoạt động */
   private onReady(): void {
     const now = Date.now();
+    const previousLostAt = this.lostAt;
     this.set('connected');
     this.lastSuccessAt = now;
     this.lostAt = null;
+    if (previousLostAt !== null && this.identity?.id === 'api') {
+      const seconds = Math.max(1, Math.round((now - previousLostAt) / 1000));
+      void recordCacheEvent(this.redis, {
+        type: 'connection_recovered',
+        severity: 'success',
+        params: { seconds },
+        runtime: this.identity.id,
+        at: now,
+      });
+    }
   }
 
   /** Xử lý sự kiện khi kết nối dịch vụ bị gián đoạn hoặc mất kết nối */

@@ -9,6 +9,7 @@ import {
 import { CoreConfigService } from '@packages/config/index.js';
 import { RedisService } from '@packages/redis/index.js';
 import {
+  BaseCacheProvider,
   CacheConnectionService,
   CacheMonitoringService,
   recordCacheEvent,
@@ -83,6 +84,7 @@ export class CacheMonitorService implements OnApplicationBootstrap, OnModuleDest
     private readonly config: CoreConfigService,
     @Optional() private readonly redis?: RedisService,
     @Optional() @Inject(RUNTIME_IDENTITY) private readonly identity?: RuntimeIdentity,
+    @Optional() private readonly cacheProvider?: BaseCacheProvider,
   ) {}
 
   /** Thực thi tác vụ khởi động sau khi toàn bộ ứng dụng hoàn tất bootstrap */
@@ -193,6 +195,12 @@ export class CacheMonitorService implements OnApplicationBootstrap, OnModuleDest
       .filter((n) => n.persistent > 0)
       .sort((a, b) => b.persistent - a.persistent)[0];
     const largest = ks?.largestKeys[0] ?? null;
+    const topHotKey = this.cacheProvider?.getHotKeys(1).items[0] ?? null;
+    const haStatus = this.redis?.getHaStatus?.();
+    const degradedStatus = this.cacheProvider?.getDegradedStatus?.();
+    const clusterDegraded = Boolean(
+      haStatus?.clusterNodes && haStatus.clusterNodes.readyMasters < haStatus.clusterNodes.masters,
+    );
 
     const input: CacheRuleInput = {
       connection: this.connection.getStatus().state,
@@ -212,6 +220,21 @@ export class CacheMonitorService implements OnApplicationBootstrap, OnModuleDest
       },
       expiringNext60s: ks?.expiringNext60s ?? null,
       largestKey: largest ? { key: largest.key, bytes: largest.bytes } : null,
+      hotKey: topHotKey
+        ? { key: topHotKey.key, rpm: topHotKey.rpm, sharePercent: topHotKey.sharePercent }
+        : null,
+      ha: haStatus
+        ? {
+            mode: haStatus.mode,
+            degraded: Boolean(degradedStatus?.degraded) || clusterDegraded,
+            ...(haStatus.clusterNodes
+              ? {
+                  clusterReadyMasters: haStatus.clusterNodes.readyMasters,
+                  clusterMasters: haStatus.clusterNodes.masters,
+                }
+              : {}),
+          }
+        : null,
       persistent:
         ks && ks.persistent > 0
           ? {

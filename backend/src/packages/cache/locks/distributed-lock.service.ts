@@ -79,9 +79,21 @@ export class DistributedLockService {
     @Optional() private readonly redis?: RedisService,
   ) {}
 
+  private get isRedisConfigured(): boolean {
+    return Boolean(this.redis) && this.config?.cache.driver !== 'memory';
+  }
+
+  private get allowMemoryFallback(): boolean {
+    return Boolean(this.config?.cache.lock?.allowMemoryFallback);
+  }
+
   private get usesRedis(): boolean {
-    const preferMemory = this.config?.cache.driver === 'memory';
-    return !preferMemory && Boolean(this.redis?.isReady());
+    return this.isRedisConfigured && Boolean(this.redis?.isReady());
+  }
+
+  /** Khi `CACHE_DRIVER=redis` và Redis đang mất kết nối: mặc định fail-closed (không fallback RAM để tránh split-brain). */
+  private get shouldFailClosed(): boolean {
+    return this.isRedisConfigured && !this.redis?.isReady() && !this.allowMemoryFallback;
   }
 
   private normalizeResource(resource: string): string {
@@ -180,6 +192,10 @@ export class DistributedLockService {
       return false;
     }
 
+    if (this.shouldFailClosed) {
+      return false;
+    }
+
     this.pruneExpiredMemoryLock(lockKey, now);
     const existing = this.memoryLocks.get(lockKey);
     if (!existing || existing.token === token) {
@@ -218,6 +234,10 @@ export class DistributedLockService {
       return deleted > 0;
     }
 
+    if (this.shouldFailClosed) {
+      return false;
+    }
+
     this.pruneExpiredMemoryLock(lockKey);
     const existing = this.memoryLocks.get(lockKey);
     if (!existing || existing.token !== input.token) {
@@ -243,7 +263,13 @@ export class DistributedLockService {
       };
       if (typeof client.eval === 'function') {
         try {
-          const updated = await client.eval(LUA_EXTEND_LOCK, 1, lockKey, input.token, effectiveTtlMs);
+          const updated = await client.eval(
+            LUA_EXTEND_LOCK,
+            1,
+            lockKey,
+            input.token,
+            effectiveTtlMs,
+          );
           return Number(updated) > 0;
         } catch {
           // Fallback for mock Redis clients that do not implement Lua eval
@@ -255,6 +281,10 @@ export class DistributedLockService {
       }
       const updated = await client.pexpire(lockKey, effectiveTtlMs).catch(() => 0);
       return Number(updated) > 0;
+    }
+
+    if (this.shouldFailClosed) {
+      return false;
     }
 
     const now = Date.now();
@@ -283,6 +313,10 @@ export class DistributedLockService {
         return null;
       }
       return this.redis.client.get(lockKey).catch(() => null);
+    }
+
+    if (this.shouldFailClosed) {
+      return null;
     }
 
     this.pruneExpiredMemoryLock(lockKey);

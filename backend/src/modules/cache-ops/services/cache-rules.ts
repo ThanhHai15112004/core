@@ -1,9 +1,11 @@
 import type { CacheConfig } from '@packages/config/index.js';
 import type { CacheConnectionState } from '@packages/cache/index.js';
+import type { RedisHaMode } from '@packages/redis/index.js';
 import type { CacheSeverity } from '../responses/cache-ops.response.js';
 
 export type CacheRule =
   | 'CACHE_UNAVAILABLE'
+  | 'REDIS_HA_DEGRADED'
   | 'HIT_RATE_LOW'
   | 'MISS_STORM'
   | 'MEMORY_PRESSURE'
@@ -12,11 +14,13 @@ export type CacheRule =
   | 'CONNECTIONS_HIGH'
   | 'EXPIRY_SPIKE'
   | 'LARGE_KEY'
+  | 'HOT_KEY'
   | 'PERSISTENT_KEYS';
 
 /** Tab của trang Cache để xử lý từng loại cảnh báo. */
 export const RULE_TAB: Record<CacheRule, string> = {
   CACHE_UNAVAILABLE: 'overview',
+  REDIS_HA_DEGRADED: 'overview',
   HIT_RATE_LOW: 'namespaces',
   MISS_STORM: 'namespaces',
   MEMORY_PRESSURE: 'memory',
@@ -25,6 +29,7 @@ export const RULE_TAB: Record<CacheRule, string> = {
   CONNECTIONS_HIGH: 'connections',
   EXPIRY_SPIKE: 'ttl',
   LARGE_KEY: 'memory',
+  HOT_KEY: 'memory',
   PERSISTENT_KEYS: 'ttl',
 };
 
@@ -39,6 +44,13 @@ export interface CacheRuleInput {
   connections: { used: number | null; max: number | null };
   expiringNext60s: number | null;
   largestKey: { key: string; bytes: number } | null;
+  hotKey?: { key: string; rpm: number; sharePercent: number } | null;
+  ha?: {
+    mode: RedisHaMode;
+    degraded: boolean;
+    clusterReadyMasters?: number;
+    clusterMasters?: number;
+  } | null;
   persistent: { keys: number; topNamespace: string | null } | null;
 }
 
@@ -57,7 +69,8 @@ export interface CacheViolation {
   extra: Record<string, string | number>;
 }
 
-const EVICTION_CRIT_PER_MIN = 100;
+const DEFAULT_EVICTION_CRIT_PER_MIN = 100;
+const DEFAULT_HOT_KEY_WARN_RPM = 120;
 const HIT_RATE_CRIT_GAP = 20;
 
 /** Rule cảnh báo cache theo ngưỡng cấu hình. Không đủ lượt đọc → không kết luận. */
@@ -87,6 +100,14 @@ export function evaluateCacheRules(input: CacheRuleInput, cfg: CacheRuleConfig):
   if (input.connection !== 'connected') {
     add('CACHE_UNAVAILABLE', 'critical', 0, 0, '');
     return out;
+  }
+
+  if (input.ha?.degraded) {
+    add('REDIS_HA_DEGRADED', 'warning', 1, 0, '', null, {
+      mode: input.ha.mode,
+      readyMasters: input.ha.clusterReadyMasters ?? 0,
+      masters: input.ha.clusterMasters ?? 0,
+    });
   }
 
   const enough = input.hitRate.reads >= cfg.minReads;
@@ -121,9 +142,10 @@ export function evaluateCacheRules(input: CacheRuleInput, cfg: CacheRuleConfig):
       '%',
     );
 
+  const evictionCrit = cfg.evictionCritPerMin ?? DEFAULT_EVICTION_CRIT_PER_MIN;
   const ev = input.evictionsPerMin;
   if (ev !== null && ev > 0)
-    add('EVICTIONS', ev >= EVICTION_CRIT_PER_MIN ? 'critical' : 'warning', ev, 0, '/min');
+    add('EVICTIONS', ev >= evictionCrit ? 'critical' : 'warning', ev, 0, '/min');
 
   if ((input.rejectedDelta ?? 0) > 0)
     add('REJECTED_CONNECTIONS', 'warning', input.rejectedDelta!, 0, '');
@@ -148,6 +170,22 @@ export function evaluateCacheRules(input: CacheRuleInput, cfg: CacheRuleConfig):
     add('LARGE_KEY', 'warning', input.largestKey.bytes, cfg.largeKeyBytes, 'B', null, {
       key: input.largestKey.key,
     });
+
+  const hotThreshold = cfg.hotKeyWarnRpm ?? DEFAULT_HOT_KEY_WARN_RPM;
+  if (input.hotKey && input.hotKey.rpm >= hotThreshold) {
+    add(
+      'HOT_KEY',
+      input.hotKey.rpm >= hotThreshold * 3 ? 'critical' : 'warning',
+      input.hotKey.rpm,
+      hotThreshold,
+      '/min',
+      null,
+      {
+        key: input.hotKey.key,
+        share: input.hotKey.sharePercent,
+      },
+    );
+  }
 
   // Key không TTL có thể là chủ ý → chỉ thông tin.
   if (input.persistent && input.persistent.keys > 0)

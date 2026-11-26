@@ -35,6 +35,7 @@ export class RedisManageableAdapter implements ManageablePackage {
 
   /** Lấy báo cáo tình trạng hoạt động và các chỉ số của package */
   public async getStatus(): Promise<PackageStatusReport> {
+    const ha = this.redis.getHaStatus();
     if (!this.redis.isReady()) {
       const err = this.redis.getLastError();
       return {
@@ -42,6 +43,9 @@ export class RedisManageableAdapter implements ManageablePackage {
         summary: err ? `Redis error: ${err}` : 'Redis is not connected',
         metrics: {
           ready: false,
+          mode: ha.mode,
+          reconnectCount: ha.reconnectCount,
+          failoverCount: ha.failoverCount,
           error: err ?? 'disconnected',
         },
       };
@@ -69,9 +73,12 @@ export class RedisManageableAdapter implements ManageablePackage {
 
       return {
         status: PackageStatus.HEALTHY,
-        summary: `Redis v${version} up ${days}d, mem: ${usedMemory}, clients: ${connectedClients}`,
+        summary: `Redis v${version} (${ha.mode}) up ${days}d, mem: ${usedMemory}, clients: ${connectedClients}`,
         metrics: {
           ready: true,
+          mode: ha.mode,
+          failoverCount: ha.failoverCount,
+          reconnectCount: ha.reconnectCount,
           version,
           uptimeSeconds: uptimeSec,
           usedMemory,
@@ -88,6 +95,9 @@ export class RedisManageableAdapter implements ManageablePackage {
         summary: `Redis ping/info warning: ${msg}`,
         metrics: {
           ready: true,
+          mode: ha.mode,
+          failoverCount: ha.failoverCount,
+          reconnectCount: ha.reconnectCount,
           error: msg,
         },
       };

@@ -261,6 +261,7 @@ export class HealthProbesService {
         typeof this.redis.getLatencySnapshot === 'function'
           ? this.redis.getLatencySnapshot()
           : null;
+      const ha = typeof this.redis.getHaStatus === 'function' ? this.redis.getHaStatus() : null;
       const warnings: string[] = [];
 
       if (!isReady) {
@@ -269,6 +270,11 @@ export class HealthProbesService {
       if (latencyMs >= cfg.redisDegradedLatencyMs) {
         warnings.push(
           `Redis PING latency (${latencyMs}ms) exceeded degraded threshold (${cfg.redisDegradedLatencyMs}ms)`,
+        );
+      }
+      if (ha?.clusterNodes && ha.clusterNodes.readyMasters < ha.clusterNodes.masters) {
+        warnings.push(
+          `Redis Cluster degraded: ${ha.clusterNodes.readyMasters}/${ha.clusterNodes.masters} masters ready`,
         );
       }
 
@@ -281,6 +287,8 @@ export class HealthProbesService {
         state: isReady ? 'connected' : 'reconnecting',
         latencyMs,
         timeoutMs: cfg.redisTimeoutMs,
+        ...(ha ? { mode: ha.mode } : {}),
+        ...(ha && ha.failoverCount > 0 ? { failoverCount: ha.failoverCount } : {}),
         ...(snap?.p95Ms !== null && snap?.p95Ms !== undefined ? { p95Ms: snap.p95Ms } : {}),
         ...(warnings.length > 0 ? { warnings } : {}),
       };

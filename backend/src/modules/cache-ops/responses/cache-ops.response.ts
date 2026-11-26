@@ -1,13 +1,16 @@
 import type {
   CacheCapability,
   CacheConnectionState,
+  CacheDegradedStatus,
   CacheErrorKind,
   CacheEventType,
   CacheOperationAction,
   CacheSection,
+  HotKeyStat,
   TtlBucketId,
   ValueSample,
 } from '@packages/cache/index.js';
+import type { RedisHaStatus } from '@packages/redis/index.js';
 
 export type CacheRange = '15m' | '1h' | '6h' | '24h';
 export type CacheMetric = 'hitRate' | 'reads' | 'operations' | 'memory' | 'keys' | 'evictions';
@@ -145,7 +148,14 @@ export interface CacheSettingsDto {
   largeKeyBytes: number;
   expirySpikeKeys: number;
   hitRateWarnPercent: number;
+  hotKeyWarnRpm?: number;
 }
+
+export type RedisHaOverviewDto = RedisHaStatus & {
+  degraded: CacheDegradedStatus;
+};
+
+export type HotKeyDto = HotKeyStat;
 
 export interface CacheOverviewDto {
   range: CacheRange;
@@ -153,6 +163,7 @@ export interface CacheOverviewDto {
   environment: string;
   capabilities: CacheCapability[];
   health: CacheHealthDto;
+  ha?: RedisHaOverviewDto;
   kpis: CacheKpisDto;
   hitRate: HitRateContextDto;
   alerts: CacheAlertDto[];
@@ -233,6 +244,9 @@ export interface KeyDetailDto {
 export interface CacheMemoryDto {
   largestKeys: LargeKeyDto[];
   largeKeyBytes: number;
+  hotKeys?: HotKeyDto[];
+  hotKeyWarnRpm?: number;
+  hotKeyWindowSec?: number;
 }
 
 export interface CacheClientDto {

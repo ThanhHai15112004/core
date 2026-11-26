@@ -26,7 +26,7 @@ import {
   type ComparisonRow,
 } from '@core/ui/blocks';
 import { BarList, MetricChart, type TimeSeries } from '@core/ui/charts';
-import type { CacheMetric, CacheOverview, CacheReport, LargeKey } from '../../types/cache.types';
+import type { CacheMetric, CacheOverview, CacheReport, HotKey, LargeKey } from '../../types/cache.types';
 import { cacheApi } from '../../services/cache.api';
 import {
   CACHE_METRICS,
@@ -42,12 +42,14 @@ import {
 } from '../../constants/cache';
 import { NamespaceTable } from '../../components/cache/NamespaceTable';
 import { ClientsSheet } from '../../components/cache/ClientsSheet';
+import { RedisHaPanel } from '../../components/cache/RedisHaPanel';
 import { alertTone } from '../../utils/alert-tone';
 import { cacheKeys } from './cache-keys';
 import type { CachePage } from './useCachePage';
 
 const runtimeCol = createColumnHelper<{ runtime: string; connections: number; blocked: number; bull: number }>();
 const largeCol = createColumnHelper<LargeKey>();
+const hotCol = createColumnHelper<HotKey>();
 
 /**
  * Tổng quan Cache: 6 chỉ số → biểu đồ + vấn đề → hiệu quả / bộ nhớ / TTL → namespace + kết nối → key lớn + báo cáo.
@@ -115,6 +117,40 @@ export function CacheOverviewTab({ page, query }: { page: CachePage; query: UseQ
         header: t('cache.key.ttl'),
         cell: (c) => (c.getValue() === null ? t('cache.ttl.none') : f.duration(c.getValue())),
         meta: { align: 'right', mono: true, width: '120px', className: 'whitespace-nowrap' },
+      }),
+    ],
+    [t, f],
+  );
+  const hotCols = useMemo(
+    () => [
+      hotCol.accessor('key', {
+        header: t('cache.key.key'),
+        cell: (c) => (
+          <span className="flex min-w-0 items-center gap-1.5">
+            <span className="truncate font-mono text-xs text-fg">{c.getValue()}</span>
+            {c.row.original.hot && (
+              <Badge tone="warn" size="xs">
+                {t('cache.memory.hotKey')}
+              </Badge>
+            )}
+          </span>
+        ),
+        meta: { truncate: true },
+      }),
+      hotCol.accessor('rpm', {
+        header: t('cache.memory.rpm'),
+        cell: (c) => f.rate(c.getValue(), 'min'),
+        meta: { align: 'right', mono: true, width: '95px' },
+      }),
+      hotCol.accessor('hits', {
+        header: t('cache.memory.hits'),
+        cell: (c) => f.compact(c.getValue()),
+        meta: { align: 'right', mono: true, width: '80px' },
+      }),
+      hotCol.accessor('sharePercent', {
+        header: t('cache.memory.share'),
+        cell: (c) => f.percent(c.getValue(), 1),
+        meta: { align: 'right', mono: true, width: '80px' },
       }),
     ],
     [t, f],
@@ -393,6 +429,8 @@ export function CacheOverviewTab({ page, query }: { page: CachePage; query: UseQ
         </Panel>
       </PanelGrid>
 
+      {redis && data.ha && <RedisHaPanel ha={data.ha} />}
+
       <PanelGrid>
         <Panel title={t('cache.memory.largestKeys')} hint={t('cache.memory.largeHint', { size: f.bytes(memory.data?.largeKeyBytes ?? data.settings.largeKeyBytes) })} flush>
           <QueryView query={memory} compact>
@@ -408,20 +446,35 @@ export function CacheOverviewTab({ page, query }: { page: CachePage; query: UseQ
             )}
           </QueryView>
         </Panel>
-        <Panel title={t('cache.report.title')}>
-          <ComparisonTable
-            rows={[
-              reportRow('hits', (v) => f.compact(v), null),
-              reportRow('misses', (v) => f.compact(v), true),
-              reportRow('hitRatePercent', (v) => f.percent(v), false),
-              reportRow('errors', (v) => f.number(v), true),
-              reportRow('peakMemoryBytes', (v) => f.bytes(v), true),
-              reportRow('peakKeys', (v) => f.compact(v), null),
-              ...(redis ? [reportRow('evictions', (v) => f.compact(v), true), reportRow('expired', (v) => f.compact(v), null)] : []),
-            ]}
-          />
+        <Panel title={t('cache.memory.hotKeys')} hint={t('cache.memory.hotHint', { rpm: f.number(memory.data?.hotKeyWarnRpm ?? data.settings.hotKeyWarnRpm ?? 120) })} flush>
+          <QueryView query={memory} compact>
+            {(m) => (
+              <DataTable
+                data={m.hotKeys ?? []}
+                columns={hotCols}
+                getRowId={(r) => r.key}
+                onRowClick={(r) => openKey(r.key)}
+                rowTone={(r) => (r.hot ? 'warn' : undefined)}
+                emptyMessage={t('cache.memory.noHotKeys')}
+              />
+            )}
+          </QueryView>
         </Panel>
       </PanelGrid>
+
+      <Panel title={t('cache.report.title')}>
+        <ComparisonTable
+          rows={[
+            reportRow('hits', (v) => f.compact(v), null),
+            reportRow('misses', (v) => f.compact(v), true),
+            reportRow('hitRatePercent', (v) => f.percent(v), false),
+            reportRow('errors', (v) => f.number(v), true),
+            reportRow('peakMemoryBytes', (v) => f.bytes(v), true),
+            reportRow('peakKeys', (v) => f.compact(v), null),
+            ...(redis ? [reportRow('evictions', (v) => f.compact(v), true), reportRow('expired', (v) => f.compact(v), null)] : []),
+          ]}
+        />
+      </Panel>
 
       <ClientsSheet open={clientsOpen} onOpenChange={setClientsOpen} navigate={page.navigate} />
     </>

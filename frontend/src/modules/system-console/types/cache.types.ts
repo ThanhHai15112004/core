@@ -10,7 +10,7 @@ export type CacheCapability = 'keyspace' | 'namespaces' | 'ttl' | 'memory' | 'ke
 export type TtlBucketId = 'lt1m' | '1to10m' | '10to60m' | '1to24h' | 'gt24h' | 'none';
 export type CacheErrorKind = 'connection' | 'timeout' | 'command' | 'oom' | 'serialization';
 export type CacheEventType =
-  'connection_lost' | 'connection_recovered' | 'alert_started' | 'alert_recovered' | 'key_deleted' | 'namespace_cleared' | 'cache_flushed';
+  'connection_lost' | 'connection_recovered' | 'failover_detected' | 'alert_started' | 'alert_recovered' | 'key_deleted' | 'namespace_cleared' | 'cache_flushed';
 export type CacheOperationAction = 'delete_key' | 'clear_namespace' | 'flush_all';
 
 export interface CacheAlert {
@@ -109,12 +109,62 @@ export interface ServerMemory {
   fragmentationRatio: number | null;
 }
 
+export type RedisHaMode = 'standalone' | 'sentinel' | 'cluster';
+
+export interface CacheDegradedStatus {
+  degraded: boolean;
+  consecutiveFailures: number;
+  bypassedCount: number;
+  openedAt: string | null;
+  cooldownUntil: string | null;
+  lastErrorKind: string | null;
+  lastErrorMessage: string | null;
+}
+
+export interface RedisHaOverview {
+  mode: RedisHaMode;
+  state: string;
+  ready: boolean;
+  endpoints: string[];
+  currentPrimary: string | null;
+  masterName: string | null;
+  reconnectCount: number;
+  failoverCount: number;
+  lastFailoverAt: string | null;
+  lastSwitchReason: string | null;
+  lastError: string | null;
+  timeouts: {
+    connectTimeoutMs: number;
+    commandTimeoutMs: number;
+    maxRetriesPerRequest: number;
+    retryBaseDelayMs: number;
+    retryMaxDelayMs: number;
+  };
+  clusterNodes?: {
+    total: number;
+    masters: number;
+    readyMasters: number;
+  };
+  degraded: CacheDegradedStatus;
+}
+
+export interface HotKey {
+  key: string;
+  namespace: string;
+  hits: number;
+  rpm: number;
+  sharePercent: number;
+  lastAccessedAt: string;
+  hot: boolean;
+}
+
 export interface CacheOverview {
   range: CacheRange;
   driver: 'redis' | 'memory';
   environment: string;
   capabilities: CacheCapability[];
   health: CacheHealth;
+  ha?: RedisHaOverview;
   kpis: CacheKpis;
   hitRate: {
     currentPercent: number | null;
@@ -135,6 +185,7 @@ export interface CacheOverview {
     largeKeyBytes: number;
     expirySpikeKeys: number;
     hitRateWarnPercent: number;
+    hotKeyWarnRpm?: number;
   };
 }
 
@@ -209,6 +260,9 @@ export interface KeyDetail {
 export interface CacheMemory {
   largestKeys: LargeKey[];
   largeKeyBytes: number;
+  hotKeys?: HotKey[];
+  hotKeyWarnRpm?: number;
+  hotKeyWindowSec?: number;
 }
 
 export interface CacheClient {

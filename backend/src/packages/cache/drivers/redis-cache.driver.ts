@@ -81,25 +81,31 @@ export async function unlinkMatching(
   guard: (key: string) => boolean = () => true,
 ): Promise<number> {
   const prefix = cacheKeys(redis).dataPrefix();
-  let cursor = '0';
+  const nodes =
+    typeof redis.getMasterClients === 'function' ? redis.getMasterClients() : [redis.client];
   let deleted = 0;
-  let batch: string[] = [];
-  /** Đóng và dọn sạch các tác vụ trong hàng đợi khi kết thúc */
-  const drain = async () => {
-    if (batch.length === 0) return;
-    deleted += await redis.client.unlink(...batch);
-    batch = [];
-  };
-  do {
-    const [next, keys] = await redis.client.scan(cursor, 'MATCH', pattern, 'COUNT', SCAN_COUNT);
-    cursor = next;
-    for (const k of keys) {
-      // Tuyệt đối không xoá ngoài vùng cache của core.
-      if (!k.startsWith(prefix) || !guard(k.slice(prefix.length))) continue;
-      batch.push(k);
-      if (batch.length >= UNLINK_BATCH) await drain();
-    }
-  } while (cursor !== '0');
-  await drain();
+
+  for (const node of nodes) {
+    let cursor = '0';
+    let batch: string[] = [];
+    /** Đóng và dọn sạch các tác vụ trong hàng đợi khi kết thúc */
+    const drain = async () => {
+      if (batch.length === 0) return;
+      deleted += await node.unlink(...batch);
+      batch = [];
+    };
+    do {
+      const [next, keys] = await node.scan(cursor, 'MATCH', pattern, 'COUNT', SCAN_COUNT);
+      cursor = next;
+      for (const k of keys) {
+        // Tuyệt đối không xoá ngoài vùng cache của core.
+        if (!k.startsWith(prefix) || !guard(k.slice(prefix.length))) continue;
+        batch.push(k);
+        if (batch.length >= UNLINK_BATCH) await drain();
+      }
+    } while (cursor !== '0');
+    await drain();
+  }
+
   return deleted;
 }

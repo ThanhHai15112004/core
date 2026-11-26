@@ -8,6 +8,7 @@ export * from './drivers/redis-cache.driver.js';
 export * from './utils/namespace.js';
 export * from './utils/cache-errors.js';
 export * from './monitoring/monitoring.types.js';
+export * from './monitoring/hot-keys.tracker.js';
 export * from './monitoring/keyspace.js';
 export * from './monitoring/redis-info.js';
 export * from './monitoring/redis-monitoring.provider.js';

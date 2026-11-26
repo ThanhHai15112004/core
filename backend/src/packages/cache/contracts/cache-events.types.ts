@@ -16,6 +16,7 @@ export interface CacheErrorRecord {
 export type CacheEventType =
   | 'connection_lost'
   | 'connection_recovered'
+  | 'failover_detected'
   | 'alert_started'
   | 'alert_recovered'
   | 'key_deleted'

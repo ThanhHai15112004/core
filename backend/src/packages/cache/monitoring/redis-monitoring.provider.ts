@@ -1,5 +1,5 @@
 import { performance } from 'node:perf_hooks';
-import type { ChainableCommander } from 'ioredis';
+import type { ChainableCommander, Redis } from 'ioredis';
 import type { RedisService } from '@packages/redis/index.js';
 import { cacheKeys } from '../constants/cache.keys.js';
 import { escapeGlob } from '../drivers/redis-cache.driver.js';
@@ -40,7 +40,68 @@ const LENGTH_CMD: Record<string, 'strlen' | 'hlen' | 'llen' | 'scard' | 'zcard' 
   stream: 'xlen',
 };
 
-/** Theo dõi cache Redis. Chỉ đọc, chỉ trong vùng `<prefix>cache:*`; không dùng KEYS, không CONFIG SET. */
+/** Cộng dồn số liệu dạng số có hỗ trợ null. */
+function sumNullable(values: (number | null)[]): number | null {
+  let sum = 0;
+  let hasAny = false;
+  for (const v of values) {
+    if (v !== null && Number.isFinite(v)) {
+      sum += v;
+      hasAny = true;
+    }
+  }
+  return hasAny ? sum : null;
+}
+
+/** Tổng hợp `ServerInfo` từ nhiều master nodes trong Redis Cluster. */
+export function aggregateClusterServerInfo(infos: readonly ServerInfo[]): ServerInfo {
+  if (infos.length === 0) {
+    throw new Error('Cannot aggregate empty ServerInfo list');
+  }
+  if (infos.length === 1) return infos[0]!;
+  const first = infos[0]!;
+  const frags = infos
+    .map((s) => s.fragmentationRatio)
+    .filter((v): v is number => v !== null && Number.isFinite(v));
+  const maxFrag = frags.length > 0 ? Math.max(...frags) : null;
+
+  const dbTotals = new Map<string, { keys: number; expires: number }>();
+  for (const info of infos) {
+    for (const ks of info.keyspace) {
+      const cur = dbTotals.get(ks.db) ?? { keys: 0, expires: 0 };
+      cur.keys += ks.keys;
+      cur.expires += ks.expires;
+      dbTotals.set(ks.db, cur);
+    }
+  }
+
+  return {
+    version: first.version,
+    mode: 'cluster',
+    uptimeSec: first.uptimeSec,
+    usedMemory: sumNullable(infos.map((s) => s.usedMemory)),
+    peakMemory: sumNullable(infos.map((s) => s.peakMemory)),
+    maxMemory: infos.every((s) => s.maxMemory !== null && s.maxMemory > 0)
+      ? sumNullable(infos.map((s) => s.maxMemory))
+      : null,
+    maxMemoryPolicy: first.maxMemoryPolicy,
+    fragmentationRatio: maxFrag,
+    rssMemory: sumNullable(infos.map((s) => s.rssMemory)),
+    connectedClients: sumNullable(infos.map((s) => s.connectedClients)),
+    maxClients: first.maxClients,
+    blockedClients: sumNullable(infos.map((s) => s.blockedClients)),
+    rejectedConnections: sumNullable(infos.map((s) => s.rejectedConnections)),
+    evictedKeys: sumNullable(infos.map((s) => s.evictedKeys)),
+    expiredKeys: sumNullable(infos.map((s) => s.expiredKeys)),
+    keyspaceHits: sumNullable(infos.map((s) => s.keyspaceHits)),
+    keyspaceMisses: sumNullable(infos.map((s) => s.keyspaceMisses)),
+    opsPerSec: sumNullable(infos.map((s) => s.opsPerSec)),
+    keyspace: [...dbTotals.entries()].map(([db, v]) => ({ db, ...v })),
+    currentDb: first.currentDb,
+  };
+}
+
+/** Theo dõi cache Redis (Standalone, Sentinel & Cluster). Chỉ đọc, chỉ trong vùng `<prefix>cache:*`. */
 export class RedisMonitoringProvider implements CacheMonitoringProvider {
   public readonly driver = 'redis' as const;
   public readonly capabilities: ReadonlySet<CacheCapability> = new Set<CacheCapability>([
@@ -65,8 +126,18 @@ export class RedisMonitoringProvider implements CacheMonitoringProvider {
     this.prefix = cacheKeys(redis).dataPrefix();
   }
 
-  private get client() {
+  private get client(): Redis {
     return this.redis.client;
+  }
+
+  private getMasterNodes(): Redis[] {
+    return typeof this.redis.getMasterClients === 'function'
+      ? this.redis.getMasterClients()
+      : [this.redis.client];
+  }
+
+  private isClusterMode(): boolean {
+    return typeof this.redis.isCluster === 'function' && this.redis.isCluster();
   }
 
   /** Loại bỏ tiền tố namespace khỏi khóa bộ nhớ đệm */
@@ -117,29 +188,43 @@ export class RedisMonitoringProvider implements CacheMonitoringProvider {
     return out;
   }
 
-  /** Quét toàn bộ danh sách các khóa trong bộ lưu trữ */
+  /** Quét toàn bộ danh sách các khóa trong bộ lưu trữ (hỗ trợ nhiều master nodes ở Cluster). */
   public async scanAll(
     limit: number,
   ): Promise<{ keys: ScannedKey[]; total: number; truncated: boolean }> {
     const keys: ScannedKey[] = [];
-    let cursor = '0';
+    const seen = new Set<string>();
     let total = 0;
     const countCap = limit * COUNT_FACTOR;
-    do {
-      const [next, batch] = await this.client.scan(
-        cursor,
-        'MATCH',
-        `${escapeGlob(this.prefix)}*`,
-        'COUNT',
-        SCAN_COUNT,
-      );
-      cursor = next;
-      const room = Math.max(0, limit - keys.length);
-      if (room > 0) keys.push(...(await this.metadata(batch.slice(0, room), true)));
-      total += batch.length;
-    } while (cursor !== '0' && total < countCap);
-    // SCAN có thể trả trùng key → total là ước lượng trên; khi quét hết thì dùng số đã có metadata.
-    const complete = cursor === '0' && total <= limit;
+    const nodes = this.getMasterNodes();
+    let incomplete = false;
+
+    for (const node of nodes) {
+      let cursor = '0';
+      do {
+        const [next, batch] = await node.scan(
+          cursor,
+          'MATCH',
+          `${escapeGlob(this.prefix)}*`,
+          'COUNT',
+          SCAN_COUNT,
+        );
+        cursor = next;
+        const fresh = batch.filter((k) => !seen.has(k));
+        fresh.forEach((k) => seen.add(k));
+        const room = Math.max(0, limit - keys.length);
+        if (room > 0 && fresh.length > 0) {
+          keys.push(...(await this.metadata(fresh.slice(0, room), true)));
+        }
+        total += fresh.length;
+      } while (cursor !== '0' && total < countCap);
+      if (cursor !== '0') {
+        incomplete = true;
+        break;
+      }
+    }
+
+    const complete = !incomplete && total <= limit;
     return {
       keys,
       total: complete ? keys.length : total,
@@ -155,35 +240,66 @@ export class RedisMonitoringProvider implements CacheMonitoringProvider {
     const found: ScannedKey[] = [];
     const seen = new Set<string>();
     let examined = 0;
+
+    if (this.isClusterMode() && this.getMasterNodes().length > 1) {
+      for (const node of this.getMasterNodes()) {
+        let nodeCursor = '0';
+        let rounds = 0;
+        do {
+          const [next, batch] = await node.scan(
+            nodeCursor,
+            'MATCH',
+            pattern,
+            'COUNT',
+            Math.max(count, PAGE_SCAN_COUNT),
+          );
+          nodeCursor = next;
+          examined += batch.length;
+          const fresh = batch.filter((k) => !seen.has(k) && k.startsWith(this.prefix));
+          fresh.forEach((k) => seen.add(k));
+          const meta = await this.metadata(fresh, true);
+          this.appendMatched(meta, filter, found);
+          rounds++;
+        } while (nodeCursor !== '0' && found.length < count && rounds < PAGE_MAX_ROUNDS);
+        if (found.length >= count) break;
+      }
+      return { keys: found.slice(0, count), cursor: '0', examined };
+    }
+
     let rounds = 0;
+    let nextCursor = cursor;
     do {
       const [next, batch] = await this.client.scan(
-        cursor,
+        nextCursor,
         'MATCH',
         pattern,
         'COUNT',
         Math.max(count, PAGE_SCAN_COUNT),
       );
-      cursor = next;
+      nextCursor = next;
       examined += batch.length;
       const fresh = batch.filter((k) => !seen.has(k) && k.startsWith(this.prefix));
       fresh.forEach((k) => seen.add(k));
       const meta = await this.metadata(fresh, true);
-      for (const k of meta) {
-        if (filter.namespace && namespaceOf(k.key, this.depth) !== filter.namespace) continue;
-        if (filter.match && filter.namespace && !globMatch(filter.match, k.key)) continue;
-        if (filter.type && k.type !== filter.type) continue;
-        if (filter.ttl === 'persistent' && k.ttlMs !== null) continue;
-        if (filter.ttl === 'expiring' && k.ttlMs === null) continue;
-        if (filter.ttl === 'lt1m' && (k.ttlMs === null || k.ttlMs >= 60_000)) continue;
-        found.push(k);
-      }
+      this.appendMatched(meta, filter, found);
       rounds++;
-    } while (cursor !== '0' && found.length < count && rounds < PAGE_MAX_ROUNDS);
-    return { keys: found, cursor, examined };
+    } while (nextCursor !== '0' && found.length < count && rounds < PAGE_MAX_ROUNDS);
+    return { keys: found, cursor: nextCursor, examined };
   }
 
-  /** Lấy thông tin chi tiết về kiểu dữ liệu, TTL và dung lượng của khóa */
+  private appendMatched(meta: ScannedKey[], filter: KeyFilter, found: ScannedKey[]): void {
+    for (const k of meta) {
+      if (filter.namespace && namespaceOf(k.key, this.depth) !== filter.namespace) continue;
+      if (filter.match && filter.namespace && !globMatch(filter.match, k.key)) continue;
+      if (filter.type && k.type !== filter.type) continue;
+      if (filter.ttl === 'persistent' && k.ttlMs !== null) continue;
+      if (filter.ttl === 'expiring' && k.ttlMs === null) continue;
+      if (filter.ttl === 'lt1m' && (k.ttlMs === null || k.ttlMs >= 60_000)) continue;
+      found.push(k);
+    }
+  }
+
+  /** Lấy thông tin chi tiết về kiểu dữ liệu, TTL, dung lượng và LFU freq của khóa */
   public async keyInfo(key: string): Promise<KeyTypeInfo | null> {
     const full = this.prefix + key;
     const type = await this.client.type(full);
@@ -197,6 +313,13 @@ export class RedisMonitoringProvider implements CacheMonitoringProvider {
     if (memory) pipe.memory('USAGE', full);
     const res = (await pipe.exec()) ?? [];
     const pttl = toInt(res[0]?.[1]);
+    let lfuFreq: number | null = null;
+    try {
+      const freqRaw = await this.client.object('FREQ', full);
+      lfuFreq = toInt(freqRaw);
+    } catch {
+      lfuFreq = null;
+    }
     return {
       key,
       namespace: namespaceOf(key, this.depth),
@@ -205,6 +328,7 @@ export class RedisMonitoringProvider implements CacheMonitoringProvider {
       encoding: typeof res[1]?.[1] === 'string' ? res[1][1] : null,
       length: lengthCmd ? toInt(res[2]?.[1]) : null,
       bytes: memory ? toInt(res[lengthCmd ? 3 : 2]?.[1]) : null,
+      ...(lfuFreq !== null ? { lfuFreq } : {}),
     };
   }
 
@@ -280,19 +404,29 @@ export class RedisMonitoringProvider implements CacheMonitoringProvider {
     }
   }
 
-  /** Lấy thông tin cấu hình và thống kê hoạt động của máy chủ */
+  /** Lấy thông tin cấu hình và thống kê hoạt động của máy chủ (hỗ trợ tổng hợp Cluster). */
   public async serverInfo(): Promise<ServerInfo> {
+    if (this.isClusterMode()) {
+      const masters = this.getMasterNodes();
+      const infos = await Promise.all(
+        masters.map(async (node) => {
+          const [raw, config] = await Promise.all([node.info(), this.readConfig(node)]);
+          return serverInfoFrom(parseInfo(raw), config, this.redis.db);
+        }),
+      );
+      return aggregateClusterServerInfo(infos);
+    }
     const raw = await this.client.info();
-    const config = await this.readConfig();
+    const config = await this.readConfig(this.client);
     return serverInfoFrom(parseInfo(raw), config, this.redis.db);
   }
 
   /** CONFIG GET có thể bị chặn (Redis managed) → bỏ qua; chỉ đọc, không bao giờ CONFIG SET. */
-  private async readConfig() {
+  private async readConfig(node: Redis) {
     /** Lấy dữ liệu hoặc đối tượng theo khóa định danh */
     const get = async (name: string) => {
       try {
-        const res = (await this.client.config('GET', name)) as unknown as string[];
+        const res = (await node.config('GET', name)) as unknown as string[];
         return res?.[1] ?? null;
       } catch {
         return null;
@@ -308,27 +442,38 @@ export class RedisMonitoringProvider implements CacheMonitoringProvider {
 
   /** Kết nối của core (tên `core-<runtime>`); kết nối của project khác không được liệt kê. */
   public async clients(): Promise<CacheClient[]> {
-    const raw = (await this.client.client('LIST')) as unknown as string;
-    return parseClientList(raw)
-      .filter((c) => (c['name'] ?? '').startsWith('core-'))
-      .map((c) => {
+    const nodes = this.isClusterMode() ? this.getMasterNodes() : [this.client];
+    const seen = new Set<string>();
+    const out: CacheClient[] = [];
+
+    for (const node of nodes) {
+      const raw = (await node.client('LIST')) as unknown as string;
+      for (const c of parseClientList(raw)) {
         const name = c['name'] ?? '';
+        if (!name.startsWith('core-')) continue;
+        const id = c['id'] ?? '';
+        const addr = c['addr'] ?? null;
+        const dedupKey = `${id}:${addr ?? ''}`;
+        if (seen.has(dedupKey)) continue;
+        seen.add(dedupKey);
         const bull = name.endsWith('-bull');
         const cmd = c['cmd'] ?? null;
-        return {
-          id: c['id'] ?? '',
+        out.push({
+          id,
           name,
           runtime: name.replace(/^core-/, '').replace(/-bull$/, '') || null,
           bull,
-          addr: c['addr'] ?? null,
+          addr,
           ageSec: nonNegative(toInt(c['age'])),
           idleSec: nonNegative(toInt(c['idle'])),
           db: toInt(c['db']),
           command: cmd,
           // flag `b` = đang chờ lệnh blocking (BullMQ chờ job là bình thường).
           blocked: (c['flags'] ?? '').includes('b') || (cmd !== null && BLOCKING.test(cmd)),
-        };
-      });
+        });
+      }
+    }
+    return out;
   }
 
   /** Kiểm tra trạng thái sẵn sàng và đo độ trễ kết nối */

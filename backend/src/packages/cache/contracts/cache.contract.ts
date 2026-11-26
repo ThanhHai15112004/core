@@ -20,6 +20,33 @@ export interface CacheLatencyStats {
   p95LatencyMs: number | null;
 }
 
+export interface CacheDegradedStatus {
+  degraded: boolean;
+  consecutiveFailures: number;
+  bypassedCount: number;
+  openedAt: string | null;
+  cooldownUntil: string | null;
+  lastErrorKind: string | null;
+  lastErrorMessage: string | null;
+}
+
+export interface HotKeyStat {
+  key: string;
+  namespace: string;
+  hits: number;
+  rpm: number;
+  sharePercent: number;
+  lastAccessedAt: string;
+  hot: boolean;
+}
+
+export interface HotKeySnapshot {
+  windowSec: number;
+  warnRpm: number;
+  totalAccesses: number;
+  items: HotKeyStat[];
+}
+
 export interface CacheContract {
   get<T>(key: string): Promise<T | null>;
   set<T>(key: string, value: T, ttlSeconds?: number): Promise<void>;

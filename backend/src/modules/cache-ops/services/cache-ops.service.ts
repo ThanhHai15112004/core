@@ -1,9 +1,10 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import { CoreConfigService } from '@packages/config/index.js';
 import { CoreI18nService } from '@packages/i18n/index.js';
 import { formatBytes } from '@packages/kernel/index.js';
 import { RedisService } from '@packages/redis/index.js';
 import {
+  BaseCacheProvider,
   CacheConnectionService,
   CacheMonitoringService,
   CacheOperationError,
@@ -120,6 +121,7 @@ export class CacheOpsService {
     private readonly redis: RedisService,
     private readonly config: CoreConfigService,
     private readonly i18n: CoreI18nService,
+    @Optional() private readonly cacheProvider?: BaseCacheProvider,
   ) {}
 
   private get cfg() {
@@ -244,6 +246,22 @@ export class CacheOpsService {
       environment: this.config.app.env,
       capabilities: [...this.monitoring.provider.capabilities],
       health: await this.health(alerts),
+      ...(this.monitoring.driver === 'redis' && typeof this.redis.getHaStatus === 'function'
+        ? {
+            ha: {
+              ...this.redis.getHaStatus(),
+              degraded: this.cacheProvider?.getDegradedStatus() ?? {
+                degraded: false,
+                consecutiveFailures: 0,
+                bypassedCount: 0,
+                openedAt: null,
+                cooldownUntil: null,
+                lastErrorKind: null,
+                lastErrorMessage: null,
+              },
+            },
+          }
+        : {}),
       kpis: {
         hitRatePercent: stats.hitRatePercent,
         missRatePercent: stats.missRatePercent,
@@ -296,6 +314,7 @@ export class CacheOpsService {
         largeKeyBytes: this.cfg.rules.largeKeyBytes,
         expirySpikeKeys: this.cfg.rules.expirySpikeKeys,
         hitRateWarnPercent: this.cfg.rules.hitRateWarnPercent,
+        hotKeyWarnRpm: this.cfg.rules.hotKeyWarnRpm,
       },
     };
   }
@@ -368,6 +387,8 @@ export class CacheOpsService {
       threshold,
       namespace: String(p['namespace'] ?? ''),
       key: String(p['key'] ?? ''),
+      share: Number(p['share'] ?? 0),
+      mode: String(p['mode'] ?? ''),
       size: rule === 'LARGE_KEY' ? formatBytes(value) : '',
       limit: rule === 'LARGE_KEY' ? formatBytes(threshold) : '',
     });
@@ -527,9 +548,13 @@ export class CacheOpsService {
 
   public async getMemory(): Promise<CacheMemoryDto> {
     const keyspace = await this.keyspace();
+    const hotSnap = this.cacheProvider?.getHotKeys(20);
     return {
       largestKeys: (keyspace?.largestKeys ?? []).map((k) => this.largeKeyDto(k)),
       largeKeyBytes: this.cfg.rules.largeKeyBytes,
+      hotKeys: hotSnap?.items ?? [],
+      hotKeyWarnRpm: this.cfg.hotKeys.warnRpm,
+      hotKeyWindowSec: this.cfg.hotKeys.windowSec,
     };
   }
 
@@ -625,12 +650,46 @@ export class CacheOpsService {
       { group: 'driver', key: 'provider', value: redis ? 'RedisCacheDriver' : 'MemoryCacheDriver' },
       ...(redis
         ? [
+            { group: 'connection', key: 'mode', value: r.mode },
             { group: 'connection', key: 'host', value: r.host },
             { group: 'connection', key: 'port', value: r.port },
-            { group: 'connection', key: 'database', value: r.db ?? 0 },
+            ...(r.mode === 'sentinel'
+              ? [
+                  {
+                    group: 'connection',
+                    key: 'sentinels',
+                    value: r.sentinels.map((s) => `${s.host}:${s.port}`).join(', '),
+                  },
+                  {
+                    group: 'connection',
+                    key: 'sentinelMasterName',
+                    value: r.sentinelMasterName ?? null,
+                  },
+                  {
+                    group: 'connection',
+                    key: 'sentinelPassword',
+                    value: Boolean(r.sentinelPassword),
+                    sensitive: true,
+                  },
+                ]
+              : []),
+            ...(r.mode === 'cluster'
+              ? [
+                  {
+                    group: 'connection',
+                    key: 'clusterNodes',
+                    value: r.clusterNodes.map((n) => `${n.host}:${n.port}`).join(', '),
+                  },
+                  { group: 'connection', key: 'clusterScaleReads', value: r.clusterScaleReads },
+                ]
+              : []),
+            { group: 'connection', key: 'database', value: r.mode === 'cluster' ? 0 : (r.db ?? 0) },
             { group: 'connection', key: 'prefix', value: r.prefix },
             { group: 'connection', key: 'dataPrefix', value: cacheKeys(this.redis).dataPrefix() },
             { group: 'connection', key: 'password', value: Boolean(r.password), sensitive: true },
+            { group: 'connection', key: 'connectTimeoutMs', value: r.connectTimeoutMs },
+            { group: 'connection', key: 'commandTimeoutMs', value: r.commandTimeoutMs },
+            { group: 'connection', key: 'maxRetriesPerRequest', value: r.maxRetriesPerRequest },
             { group: 'server', key: 'version', value: s?.version ?? null },
             { group: 'server', key: 'maxMemory', value: s ? (s.maxMemory ?? 0) : null },
             { group: 'server', key: 'evictionPolicy', value: s?.maxMemoryPolicy ?? null },
@@ -647,13 +706,20 @@ export class CacheOpsService {
         key: 'sensitiveNamespaces',
         value: this.cfg.sensitiveNamespaces.join(', '),
       },
+      {
+        group: 'behavior',
+        key: 'lockAllowMemoryFallback',
+        value: this.cfg.lock.allowMemoryFallback,
+      },
       { group: 'thresholds', key: 'hitRateWarnPercent', value: this.cfg.rules.hitRateWarnPercent },
       { group: 'thresholds', key: 'hitRateDropPoints', value: this.cfg.rules.hitRateDropPoints },
       { group: 'thresholds', key: 'minReads', value: this.cfg.rules.minReads },
       { group: 'thresholds', key: 'memoryWarnPercent', value: this.cfg.rules.memoryWarnPercent },
       { group: 'thresholds', key: 'memoryCritPercent', value: this.cfg.rules.memoryCritPercent },
+      { group: 'thresholds', key: 'evictionCritPerMin', value: this.cfg.rules.evictionCritPerMin },
       { group: 'thresholds', key: 'expirySpikeKeys', value: this.cfg.rules.expirySpikeKeys },
       { group: 'thresholds', key: 'largeKeyBytes', value: this.cfg.rules.largeKeyBytes },
+      { group: 'thresholds', key: 'hotKeyWarnRpm', value: this.cfg.rules.hotKeyWarnRpm },
       {
         group: 'thresholds',
         key: 'connectionWarnPercent',

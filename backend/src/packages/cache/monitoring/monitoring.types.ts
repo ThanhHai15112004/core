@@ -87,6 +87,8 @@ export interface KeyTypeInfo {
   encoding: string | null;
   /** Độ dài: số byte (string) / số phần tử (hash, list, set, zset, stream). */
   length: number | null;
+  /** Tần suất truy cập LFU (`OBJECT FREQ`, chỉ có khi Redis bật policy LFU). */
+  lfuFreq?: number | null;
 }
 
 /** Mẫu value (chưa redact — tầng API sẽ redact trước khi trả ra). */

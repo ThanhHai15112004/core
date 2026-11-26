@@ -56,16 +56,34 @@ describe('Cache Monitor (/ops/cache)', () => {
     const { status, body } = await call<{
       driver: string;
       health: { status: string; pingMs: number | null };
+      ha?: {
+        mode: string;
+        ready: boolean;
+        degraded: { degraded: boolean; bypassedCount: number };
+        timeouts: { connectTimeoutMs: number; commandTimeoutMs: number };
+      };
       kpis: { keys: number | null };
       keyspace: { totalKeys: number; persistent: number; expiringNext60s: number } | null;
-      settings: { flushEnabled: boolean };
+      settings: { flushEnabled: boolean; hotKeyWarnRpm?: number };
     }>('GET', `${base}/overview?range=15m`);
     expect(status).toBe(200);
     expect(body.data.driver).toBe('redis');
     expect(body.data.health.status).toBe('healthy');
+    expect(body.data.ha?.mode).toBe('standalone');
+    expect(body.data.ha?.ready).toBe(true);
+    expect(body.data.ha?.degraded.degraded).toBe(false);
+    expect(body.data.ha?.timeouts.connectTimeoutMs).toBeGreaterThan(0);
     expect(body.data.kpis.keys).toBe(4);
     expect(body.data.keyspace).toMatchObject({ totalKeys: 4, persistent: 1, expiringNext60s: 1 });
     expect(body.data.settings.flushEnabled).toBe(false);
+
+    const memory = await call<{
+      largestKeys: unknown[];
+      hotKeys?: { key: string; hits: number }[];
+    }>('GET', `${base}/memory`);
+    expect(memory.status).toBe(200);
+    expect(Array.isArray(memory.body.data.hotKeys)).toBe(true);
+    expect(memory.body.data.hotKeys!.some((k) => k.key === 'user:1')).toBe(true);
   });
 
   it('namespaces + key explorer (SCAN) + chi tiết key có mask', async () => {
@@ -139,6 +157,7 @@ describe('Cache Monitor (/ops/cache)', () => {
     expect(ping.body.data.ok).toBe(true);
     const cfg = await call<{ items: { key: string; value: unknown }[] }>('GET', `${base}/config`);
     expect(cfg.body.data.items.find((i) => i.key === 'password')!.value).toBe(false);
+    expect(cfg.body.data.items.find((i) => i.key === 'mode')!.value).toBe('standalone');
     const metrics = await call<{ series: { id: string; points: unknown[] }[] }>(
       'GET',
       `${base}/metrics?metric=operations`,
