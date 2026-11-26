@@ -3,6 +3,7 @@ import { Processor } from '@nestjs/bullmq';
 import type { Job } from 'bullmq';
 import { CoreConfigService } from '@packages/config/index.js';
 import {
+  BACKUP_QUEUE_TOPICS,
   DomainEventBusService,
   ExportRegistryService,
   IDEMPOTENCY_QUEUE_TOPICS,
@@ -47,6 +48,11 @@ import {
   type IReconciliationPublicService,
 } from '@modules/reconciliation/contracts/index.js';
 import type { QueuedReconciliationRunJobPayload } from '@modules/reconciliation/index.js';
+import {
+  BACKUP_OPS_PUBLIC_SERVICE,
+  type IBackupOpsPublicService,
+} from '@modules/backup-ops/contracts/index.js';
+import type { BackupTargetType } from '@modules/backup-ops/index.js';
 import { BaseQueueProcessor } from '../base-queue.processor.js';
 
 export interface SystemMaintenanceTickPayload {
@@ -93,6 +99,9 @@ export class SystemProcessor extends BaseQueueProcessor {
     @Optional()
     @Inject(RECONCILIATION_PUBLIC_SERVICE)
     private readonly reconciliationService?: IReconciliationPublicService,
+    @Optional()
+    @Inject(BACKUP_OPS_PUBLIC_SERVICE)
+    private readonly backupOpsService?: IBackupOpsPublicService,
   ) {
     super(config, metrics, progressTracker);
   }
@@ -200,6 +209,48 @@ export class SystemProcessor extends BaseQueueProcessor {
         return { handled: false, skipped: true, reason: 'reconciliation_service_unavailable' };
       }
       return this.reconciliationService.triggerDueScheduledJobs();
+    }
+
+    if (envelope.topic === BACKUP_QUEUE_TOPICS.SCHEDULE_TICK) {
+      if (!this.backupOpsService) {
+        return { handled: false, skipped: true, reason: 'backup_ops_service_unavailable' };
+      }
+      return this.backupOpsService.triggerDueScheduledBackups();
+    }
+
+    if (envelope.topic === BACKUP_QUEUE_TOPICS.RETENTION_PRUNE_TICK) {
+      if (!this.backupOpsService) {
+        return { handled: false, skipped: true, reason: 'backup_ops_service_unavailable' };
+      }
+      return this.backupOpsService.pruneExpiredBackups();
+    }
+
+    if (envelope.topic === BACKUP_QUEUE_TOPICS.VERIFY_DRILL_TICK) {
+      if (!this.backupOpsService) {
+        return { handled: false, skipped: true, reason: 'backup_ops_service_unavailable' };
+      }
+      return (await this.backupOpsService.runScheduledVerifyDrill()) ?? {
+        handled: true,
+        skipped: true,
+        reason: 'no_backup_candidate_or_drill_disabled',
+      };
+    }
+
+    if (envelope.topic === BACKUP_QUEUE_TOPICS.RUN_JOB) {
+      if (!this.backupOpsService) {
+        return { handled: false, skipped: true, reason: 'backup_ops_service_unavailable' };
+      }
+      const payload = (envelope.payload ?? {}) as {
+        policyId?: number;
+        policyCode?: string;
+        targetType?: BackupTargetType;
+        actorName?: string;
+        note?: string;
+      };
+      return this.backupOpsService.runBackup({
+        ...payload,
+        triggerSource: 'SCHEDULED',
+      });
     }
 
     if (

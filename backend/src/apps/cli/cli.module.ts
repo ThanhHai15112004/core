@@ -9,6 +9,7 @@ import { StorageModule } from '@packages/storage/index.js';
 import { MessagingModule } from '@packages/messaging/index.js';
 import { RedisModule } from '@packages/redis/index.js';
 import { RuntimeAgentModule } from '@packages/runtime/index.js';
+import { BackupOpsModule } from '@modules/backup-ops/index.js';
 
 // CLI Dispatcher & Services
 import { CliDispatcherService } from './dispatcher/cli-dispatcher.service.js';
@@ -23,6 +24,7 @@ import { DoctorCommand } from './commands/health/doctor.command.js';
 import { MigrationCommand } from './commands/database/migration.command.js';
 import { SeedCommand } from './commands/database/seed.command.js';
 import { DataRepairCommand } from './commands/database/data-repair.command.js';
+import { BackupCommand } from './commands/database/backup.command.js';
 import { ArchitectureCommand } from './commands/architecture/architecture.command.js';
 import { OpenApiCommand } from './commands/architecture/openapi.command.js';
 
@@ -38,6 +40,7 @@ import { OpenApiCommand } from './commands/architecture/openapi.command.js';
     CacheModule,
     StorageModule,
     MessagingModule,
+    BackupOpsModule,
   ],
   providers: [
     CliDispatcherService,
@@ -50,6 +53,7 @@ import { OpenApiCommand } from './commands/architecture/openapi.command.js';
     MigrationCommand,
     SeedCommand,
     DataRepairCommand,
+    BackupCommand,
     ArchitectureCommand,
     OpenApiCommand,
   ],
@@ -64,6 +68,7 @@ import { OpenApiCommand } from './commands/architecture/openapi.command.js';
     MigrationCommand,
     SeedCommand,
     DataRepairCommand,
+    BackupCommand,
     ArchitectureCommand,
     OpenApiCommand,
   ],
@@ -77,6 +82,7 @@ export class CliModule implements OnApplicationBootstrap {
     private readonly migrationCommand: MigrationCommand,
     private readonly seedCommand: SeedCommand,
     private readonly dataRepairCommand: DataRepairCommand,
+    private readonly backupCommand: BackupCommand,
     private readonly architectureCommand: ArchitectureCommand,
     private readonly openApiCommand: OpenApiCommand,
   ) {}
@@ -90,6 +96,7 @@ export class CliModule implements OnApplicationBootstrap {
     this.dispatcher.registerProvider(this.migrationCommand);
     this.dispatcher.registerProvider(this.seedCommand);
     this.dispatcher.registerProvider(this.dataRepairCommand);
+    this.dispatcher.registerProvider(this.backupCommand);
     this.dispatcher.registerProvider(this.architectureCommand);
     this.dispatcher.registerProvider(this.openApiCommand);
   }

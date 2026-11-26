@@ -1,0 +1,10 @@
+{
+  "error.policyNotFound": "Backup policy \"{{identifier}}\" was not found.",
+  "error.policyCodeDuplicate": "Backup policy code \"{{code}}\" already exists.",
+  "error.recordNotFound": "Backup record #{{id}} was not found.",
+  "error.inProgress": "Another {{targetType}} backup job is currently running.",
+  "error.encryptionConfig": "Invalid backup encryption key configuration: {{message}}",
+  "error.integrityFailed": "Backup integrity verification failed: {{detail}}",
+  "error.restoreGuardBlocked": "Restore action blocked by safety guard: {{reason}}",
+  "error.validation": "Invalid backup/restore request: {{detail}}"
+}

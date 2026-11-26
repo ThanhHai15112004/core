@@ -1,6 +1,7 @@
 import { Injectable, type OnModuleInit } from '@nestjs/common';
 import { CoreConfigService } from '@packages/config/index.js';
 import {
+  BACKUP_QUEUE_TOPICS,
   IDEMPOTENCY_QUEUE_TOPICS,
   OUTBOX_QUEUE_TOPICS,
   RECONCILIATION_QUEUE_TOPICS,
@@ -103,6 +104,44 @@ export class SystemTask implements OnModuleInit {
       pattern: '*/10 * * * *',
       tz: this.config.scheduler.timezone,
       data: { triggeredBy: 'scheduler', module: 'reconciliation' },
+      notifyOnFailure: true,
+      misfirePolicy: 'run_once',
+    });
+
+    this.registry.register({
+      id: 'backup.schedule.scan',
+      queue: QUEUES.SYSTEM_EVENTS,
+      name: BACKUP_QUEUE_TOPICS.SCHEDULE_TICK,
+      description:
+        'Quét và kích hoạt các chính sách sao lưu Database/Storage đến hạn theo lịch Cron (13.6).',
+      pattern: '*/15 * * * *',
+      tz: this.config.scheduler.timezone,
+      data: { triggeredBy: 'scheduler', module: 'backup-ops' },
+      notifyOnFailure: true,
+      misfirePolicy: 'run_once',
+    });
+
+    this.registry.register({
+      id: 'backup.retention.prune',
+      queue: QUEUES.SYSTEM_EVENTS,
+      name: BACKUP_QUEUE_TOPICS.RETENTION_PRUNE_TICK,
+      description: 'Tự động dọn dẹp các bản backup hết hạn lưu trữ theo chính sách Retention (13.6).',
+      pattern: this.config.backup.retentionPruneCron,
+      tz: this.config.scheduler.timezone,
+      data: { triggeredBy: 'scheduler', module: 'backup-ops' },
+      notifyOnFailure: true,
+      misfirePolicy: 'run_once',
+    });
+
+    this.registry.register({
+      id: 'backup.verify.drill',
+      queue: QUEUES.SYSTEM_EVENTS,
+      name: BACKUP_QUEUE_TOPICS.VERIFY_DRILL_TICK,
+      description:
+        'Tự động kiểm tra và chạy Restore Drill vào môi trường cô lập cho bản backup mới nhất (13.6).',
+      pattern: this.config.backup.drillCron,
+      tz: this.config.scheduler.timezone,
+      data: { triggeredBy: 'scheduler', module: 'backup-ops' },
       notifyOnFailure: true,
       misfirePolicy: 'run_once',
     });

@@ -10,7 +10,7 @@ export interface ConfigItemDto {
 }
 
 const SENSITIVE_REGEX =
-  /(password|secret|token|private_key|api_key|secret_key|access_key|otlpheaders|authheader)/i;
+  /(password|secret|token|private_key|api_key|secret_key|access_key|encryption_?key|otlpheaders|authheader)/i;
 
 /**
  * Kiểm tra xem một key có phải là thông tin nhạy cảm hay không.
@@ -55,6 +55,7 @@ export class ConfigInspectorService {
       'tracing',
       'httpClient',
       'gateway',
+      'backup',
     ];
 
     const results: ConfigItemDto[] = [];

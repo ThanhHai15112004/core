@@ -90,6 +90,10 @@ export const API_ROUTES = {
       path: (path = '', qs = '') =>
         `${OPS_PREFIX}/incidents${path ? `/${path}` : ''}${qs ? `?${qs}` : ''}`,
     },
+    BACKUPS: {
+      path: (path = '', qs = '') =>
+        `${OPS_PREFIX}/backups${path ? `/${path}` : ''}${qs ? `?${qs}` : ''}`,
+    },
   },
   AUTH: {
     REGISTER: '/auth/register',

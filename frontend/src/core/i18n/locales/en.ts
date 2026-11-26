@@ -15,6 +15,7 @@ import { govEn } from './console/gov.en';
 import { metricsAlertsEn } from './console/metrics-alerts.en';
 import { incidentsEn } from './console/incidents.en';
 import { healthEn } from './console/health.en';
+import { backupsEn } from './console/backups.en';
 import { uiEn } from './ui.en';
 
 export const en: TranslationKey = {
@@ -29,6 +30,7 @@ export const en: TranslationKey = {
     database: 'Database',
     cache: 'Cache',
     storage: 'Storage',
+    backups: 'Backup & Restore',
     messaging: 'Messaging',
     'http-client': 'HTTP Client',
     worker: 'Worker & Queue',
@@ -215,4 +217,5 @@ export const en: TranslationKey = {
   metricsAlerts: metricsAlertsEn,
   incidents: incidentsEn,
   health: healthEn,
+  backups: backupsEn,
 };

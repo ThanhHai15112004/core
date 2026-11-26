@@ -15,6 +15,7 @@ import { govVi } from './console/gov.vi';
 import { metricsAlertsVi } from './console/metrics-alerts.vi';
 import { incidentsVi } from './console/incidents.vi';
 import { healthVi } from './console/health.vi';
+import { backupsVi } from './console/backups.vi';
 
 export const vi = {
   ui: uiVi,
@@ -28,6 +29,7 @@ export const vi = {
     database: 'Cơ sở dữ liệu',
     cache: 'Bộ nhớ đệm',
     storage: 'Lưu trữ',
+    backups: 'Sao lưu & Khôi phục',
     messaging: 'Messaging',
     'http-client': 'HTTP Client',
     worker: 'Worker & Queue',
@@ -214,6 +216,7 @@ export const vi = {
   metricsAlerts: metricsAlertsVi,
   incidents: incidentsVi,
   health: healthVi,
+  backups: backupsVi,
 };
 
 export type TranslationKey = typeof vi;

@@ -19,6 +19,7 @@
     "logs-ops",
     "metrics-ops",
     "incidents-ops",
+    "backup-ops",
     "runtimes",
     "traffic",
     "performance",

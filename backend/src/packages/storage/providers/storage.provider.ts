@@ -247,6 +247,54 @@ export class BaseStorageProvider
     return this.driver.name;
   }
 
+  /** Kiểm tra trạng thái Bucket Versioning (hỗ trợ S3/MinIO; Local trả về unsupported). */
+  public async getBucketVersioningStatus(): Promise<{
+    driver: StorageDriverName;
+    supported: boolean;
+    status: 'enabled' | 'suspended' | 'disabled' | 'unsupported';
+    bucket: string | null;
+  }> {
+    if (this.driver instanceof S3StorageDriver) {
+      const status = await this.driver.getBucketVersioning();
+      return {
+        driver: 's3',
+        supported: true,
+        status,
+        bucket: this.driver.bucket,
+      };
+    }
+    return {
+      driver: this.driver.name,
+      supported: false,
+      status: 'unsupported',
+      bucket: null,
+    };
+  }
+
+  /** Bật Bucket Versioning cho S3/MinIO để bảo vệ file người dùng khỏi ghi đè/xóa nhầm. */
+  public async enableBucketVersioning(): Promise<{
+    driver: StorageDriverName;
+    supported: boolean;
+    status: 'enabled' | 'suspended' | 'unsupported';
+    bucket: string | null;
+  }> {
+    if (this.driver instanceof S3StorageDriver) {
+      const status = await this.driver.setBucketVersioning(true);
+      return {
+        driver: 's3',
+        supported: true,
+        status,
+        bucket: this.driver.bucket,
+      };
+    }
+    return {
+      driver: this.driver.name,
+      supported: false,
+      status: 'unsupported',
+      bucket: null,
+    };
+  }
+
   /** Tải xuống nội dung tệp tin từ hệ thống lưu trữ */
   public async download(path: string): Promise<Buffer> {
     this.assertKey(path);

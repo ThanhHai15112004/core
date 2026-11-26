@@ -20,6 +20,7 @@ import { JobsOpsModule } from '@modules/jobs-ops/index.js';
 import { LogsOpsModule } from '@modules/logs-ops/index.js';
 import { MetricsOpsModule } from '@modules/metrics-ops/index.js';
 import { IncidentsOpsModule } from '@modules/incidents-ops/index.js';
+import { BackupOpsModule } from '@modules/backup-ops/index.js';
 
 @Module({
   imports: [
@@ -39,6 +40,7 @@ import { IncidentsOpsModule } from '@modules/incidents-ops/index.js';
     LogsOpsModule,
     MetricsOpsModule,
     IncidentsOpsModule,
+    BackupOpsModule,
   ],
   controllers: [SystemOpsController],
   providers: [PackageRegistryService, SystemInfoService, SystemOverviewService, OpsEventService],
@@ -62,6 +64,7 @@ import { IncidentsOpsModule } from '@modules/incidents-ops/index.js';
     LogsOpsModule,
     MetricsOpsModule,
     IncidentsOpsModule,
+    BackupOpsModule,
   ],
 })
 export class SystemOpsModule {}

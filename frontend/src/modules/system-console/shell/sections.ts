@@ -2,6 +2,7 @@ import { lazy, type ComponentType, type LazyExoticComponent } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import {
   Activity,
+  ArchiveRestore,
   BellRing,
   Boxes,
   Clock,
@@ -39,6 +40,7 @@ import { WORKER_PAGE_TABS, WORKER_RANGES } from '../constants/worker';
 import { JOBS_RANGES, JOBS_TABS, SHORT_ID_HEAD } from '../constants/jobs';
 import { CACHE_RANGES } from '../constants/cache';
 import { STORAGE_RANGES } from '../constants/storage';
+import { BACKUPS_TABS } from '../constants/backups';
 
 type Translate = (path: string, params?: Record<string, string | number>) => string;
 
@@ -146,6 +148,15 @@ export const SECTIONS: SectionDef[] = [
     controls: { ranges: STORAGE_RANGES },
     crumb: tabCrumb('storage'),
     keywords: ['file', 's3', 'bucket', 'upload'],
+  },
+  {
+    id: 'backups',
+    group: 'infrastructure',
+    icon: ArchiveRestore,
+    component: load(() => import('../sections/backups/BackupsSection'), 'BackupsSection'),
+    controls: {},
+    crumb: (p, t) => ((BACKUPS_TABS as readonly string[]).includes(p[0] ?? '') ? t(`backups.tab.${p[0]}`) : null),
+    keywords: ['backup', 'restore', 'drill', 'retention', 'versioning', 'runbook'],
   },
   {
     id: 'messaging',
@@ -280,6 +291,7 @@ const MENU_CODE_TO_GROUP: Record<string, SectionGroupId> = {
 
 const ICON_BY_NAME: Record<string, LucideIcon> = {
   Activity,
+  ArchiveRestore,
   BellRing,
   Boxes,
   Clock,

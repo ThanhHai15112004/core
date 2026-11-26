@@ -1,0 +1,45 @@
+{
+  "$schema": "../../packages/kernel/schemas/module.manifest.schema.json",
+  "name": "backup-ops",
+  "displayName": "Backup & Restore Operations",
+  "version": "1.0.0",
+  "description": "Module sao lưu và khôi phục dữ liệu (Mục 13.6): lập lịch backup Database/Storage, mã hóa AES-256-GCM, chính sách retention, bật/kiểm tra Object Storage Versioning, cảnh báo lỗi, tự động Restore Drill cô lập, Runbook và lịch sử Audit Restore.",
+  "type": "core",
+  "category": "operations",
+  "author": "Core Platform Team",
+  "entryModule": "BackupOpsModule",
+  "dependencies": [
+    "database",
+    "storage",
+    "redis",
+    "security",
+    "notifications",
+    "audit"
+  ],
+  "permissions": [
+    "backups.read",
+    "backups.manage",
+    "backups.restore"
+  ],
+  "events": {
+    "published": [
+      "backup.completed",
+      "backup.failed",
+      "backup.stale",
+      "backup.pruned",
+      "backup.drill.passed",
+      "backup.drill.failed",
+      "backup.restore.recorded",
+      "backup.storage_versioning.updated"
+    ],
+    "subscribed": []
+  },
+  "database": {
+    "hasMigrations": true,
+    "tables": [
+      "backup_policies",
+      "backup_records",
+      "backup_restore_histories"
+    ]
+  }
+}

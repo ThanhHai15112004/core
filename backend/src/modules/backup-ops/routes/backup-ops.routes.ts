@@ -1,0 +1,15 @@
+export const BACKUP_OPS_ROUTES = {
+  PREFIX: 'ops/backups',
+  OVERVIEW: 'overview',
+  POLICIES: 'policies',
+  POLICY_BY_ID: 'policies/:id',
+  RECORDS: 'records',
+  RECORD_BY_ID: 'records/:id',
+  RECORD_VERIFY: 'records/:id/verify',
+  RUN: 'run',
+  PRUNE: 'prune',
+  STORAGE_VERSIONING: 'storage/versioning',
+  STORAGE_VERSIONING_ENABLE: 'storage/versioning/enable',
+  RESTORES: 'restores',
+  RUNBOOK: 'runbook',
+} as const;

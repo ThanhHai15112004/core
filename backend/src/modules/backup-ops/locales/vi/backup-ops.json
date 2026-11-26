@@ -1,0 +1,10 @@
+{
+  "error.policyNotFound": "Không tìm thấy chính sách sao lưu \"{{identifier}}\".",
+  "error.policyCodeDuplicate": "Mã chính sách sao lưu \"{{code}}\" đã tồn tại.",
+  "error.recordNotFound": "Không tìm thấy bản sao lưu #{{id}}.",
+  "error.inProgress": "Đang có tiến trình sao lưu {{targetType}} khác chạy, vui lòng thử lại sau.",
+  "error.encryptionConfig": "Cấu hình khóa mã hóa sao lưu không hợp lệ: {{message}}",
+  "error.integrityFailed": "Kiểm tra toàn vẹn bản sao lưu thất bại: {{detail}}",
+  "error.restoreGuardBlocked": "Thao tác khôi phục bị chặn bởi lớp bảo vệ an toàn: {{reason}}",
+  "error.validation": "Dữ liệu yêu cầu sao lưu/khôi phục không hợp lệ: {{detail}}"
+}

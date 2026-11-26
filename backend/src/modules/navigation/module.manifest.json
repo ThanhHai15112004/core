@@ -202,6 +202,20 @@
       "position": "SYSTEM_CONSOLE"
     },
     {
+      "code": "SC_BACKUPS",
+      "name": "Sao lưu & Khôi phục",
+      "status": 1,
+      "link": "/system-console/backups",
+      "linkApi": "/api/v1/ops/backups/overview",
+      "type": 2,
+      "parentCode": "SC_INFRASTRUCTURE",
+      "level": 2,
+      "key": "settings.read",
+      "numOrder": 4,
+      "icon": "ArchiveRestore",
+      "position": "SYSTEM_CONSOLE"
+    },
+    {
       "code": "SC_MESSAGING",
       "name": "Messaging",
       "status": 1,

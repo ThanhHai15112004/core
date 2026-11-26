@@ -35,6 +35,7 @@ import { OutboxModule } from '@modules/outbox/index.js';
 import { IdempotencyModule } from '@modules/idempotency/index.js';
 import { PaymentsModule } from '@modules/payments/index.js';
 import { ReconciliationModule } from '@modules/reconciliation/index.js';
+import { BackupOpsModule } from '@modules/backup-ops/index.js';
 import { SystemProcessor } from './processors/system/system.processor.js';
 import { CriticalProcessor } from './processors/critical/critical.processor.js';
 import { NotificationsProcessor } from './processors/notifications/notifications.processor.js';
@@ -82,6 +83,7 @@ const PROCESSORS = [SystemProcessor, CriticalProcessor, NotificationsProcessor, 
     IdempotencyModule,
     PaymentsModule,
     ReconciliationModule,
+    BackupOpsModule,
   ],
   providers: [...PROCESSORS, WorkerRuntimeContributor, OutboxRelayRunner],
   exports: [...PROCESSORS],

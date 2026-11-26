@@ -3,10 +3,12 @@ import { once } from 'node:events';
 import { PassThrough, type Readable } from 'node:stream';
 import {
   DeleteObjectCommand,
+  GetBucketVersioningCommand,
   GetObjectCommand,
   HeadBucketCommand,
   HeadObjectCommand,
   ListObjectsV2Command,
+  PutBucketVersioningCommand,
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3';
@@ -143,6 +145,26 @@ export class S3StorageDriver implements StorageDriver {
   /** Kiểm tra trạng thái sẵn sàng và đo độ trễ kết nối */
   public async ping(): Promise<void> {
     await this.client.send(new HeadBucketCommand({ Bucket: this.bucket }));
+  }
+
+  /** Kiểm tra trạng thái Versioning của bucket S3/MinIO */
+  public async getBucketVersioning(): Promise<'enabled' | 'suspended' | 'disabled'> {
+    const res = await this.client.send(new GetBucketVersioningCommand({ Bucket: this.bucket }));
+    if (res.Status === 'Enabled') return 'enabled';
+    if (res.Status === 'Suspended') return 'suspended';
+    return 'disabled';
+  }
+
+  /** Bật hoặc tạm dừng Versioning trên bucket S3/MinIO */
+  public async setBucketVersioning(enabled: boolean): Promise<'enabled' | 'suspended'> {
+    const status = enabled ? 'Enabled' : 'Suspended';
+    await this.client.send(
+      new PutBucketVersioningCommand({
+        Bucket: this.bucket,
+        VersioningConfiguration: { Status: status },
+      }),
+    );
+    return enabled ? 'enabled' : 'suspended';
   }
 
   /** Lấy đường dẫn URL truy cập công khai của tệp tin lưu trữ */
