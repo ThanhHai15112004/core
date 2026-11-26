@@ -1,0 +1,118 @@
+export const DR_TOPOLOGY_MODE = {
+  BACKUP_RESTORE: 'BACKUP_RESTORE',
+  PILOT_LIGHT: 'PILOT_LIGHT',
+  WARM_STANDBY: 'WARM_STANDBY',
+  HOT_STANDBY: 'HOT_STANDBY',
+} as const;
+export type DrTopologyMode = (typeof DR_TOPOLOGY_MODE)[keyof typeof DR_TOPOLOGY_MODE];
+
+export const DR_SITE_ROLE = {
+  PRIMARY: 'PRIMARY',
+  DR: 'DR',
+} as const;
+export type DrSiteRole = (typeof DR_SITE_ROLE)[keyof typeof DR_SITE_ROLE];
+
+export const DR_OPERATIONAL_STATE = {
+  NORMAL: 'NORMAL',
+  FAILING_OVER: 'FAILING_OVER',
+  RUNNING_ON_DR: 'RUNNING_ON_DR',
+  FAILING_BACK: 'FAILING_BACK',
+  DEGRADED: 'DEGRADED',
+} as const;
+export type DrOperationalState = (typeof DR_OPERATIONAL_STATE)[keyof typeof DR_OPERATIONAL_STATE];
+
+export const DR_SYNC_SCOPE = {
+  DATABASE: 'DATABASE',
+  STORAGE: 'STORAGE',
+  FULL: 'FULL',
+} as const;
+export type DrSyncScope = (typeof DR_SYNC_SCOPE)[keyof typeof DR_SYNC_SCOPE];
+
+export const DR_SYNC_TRIGGER = {
+  MANUAL: 'MANUAL',
+  SCHEDULED: 'SCHEDULED',
+  PRE_SWITCH: 'PRE_SWITCH',
+  CLI: 'CLI',
+} as const;
+export type DrSyncTrigger = (typeof DR_SYNC_TRIGGER)[keyof typeof DR_SYNC_TRIGGER];
+
+export const DR_SYNC_STATUS = {
+  RUNNING: 'RUNNING',
+  SUCCESS: 'SUCCESS',
+  DEGRADED: 'DEGRADED',
+  FAILED: 'FAILED',
+} as const;
+export type DrSyncStatus = (typeof DR_SYNC_STATUS)[keyof typeof DR_SYNC_STATUS];
+
+export const DR_SWITCH_DIRECTION = {
+  FAILOVER: 'FAILOVER',
+  FAILBACK: 'FAILBACK',
+} as const;
+export type DrSwitchDirection = (typeof DR_SWITCH_DIRECTION)[keyof typeof DR_SWITCH_DIRECTION];
+
+export const DR_SWITCH_MODE = {
+  SIMULATED: 'SIMULATED',
+  LIVE: 'LIVE',
+} as const;
+export type DrSwitchMode = (typeof DR_SWITCH_MODE)[keyof typeof DR_SWITCH_MODE];
+
+export const DR_SWITCH_STATUS = {
+  IN_PROGRESS: 'IN_PROGRESS',
+  COMPLETED: 'COMPLETED',
+  ABORTED: 'ABORTED',
+  FAILED: 'FAILED',
+} as const;
+export type DrSwitchStatus = (typeof DR_SWITCH_STATUS)[keyof typeof DR_SWITCH_STATUS];
+
+export const DR_CHECKLIST_STEP_STATUS = {
+  PENDING: 'PENDING',
+  COMPLETED: 'COMPLETED',
+  SKIPPED: 'SKIPPED',
+  FAILED: 'FAILED',
+} as const;
+export type DrChecklistStepStatus =
+  (typeof DR_CHECKLIST_STEP_STATUS)[keyof typeof DR_CHECKLIST_STEP_STATUS];
+
+export const DR_RECONCILE_STATUS = {
+  PASSED: 'PASSED',
+  DISCREPANCIES_FOUND: 'DISCREPANCIES_FOUND',
+  FAILED: 'FAILED',
+} as const;
+export type DrReconcileStatus = (typeof DR_RECONCILE_STATUS)[keyof typeof DR_RECONCILE_STATUS];
+
+export const DR_DISCREPANCY_KIND = {
+  MISSING_ON_TARGET: 'MISSING_ON_TARGET',
+  EXTRA_ON_TARGET: 'EXTRA_ON_TARGET',
+  DUPLICATE_KEY: 'DUPLICATE_KEY',
+  ROW_COUNT_MISMATCH: 'ROW_COUNT_MISMATCH',
+  SIZE_MISMATCH: 'SIZE_MISMATCH',
+} as const;
+export type DrDiscrepancyKind = (typeof DR_DISCREPANCY_KIND)[keyof typeof DR_DISCREPANCY_KIND];
+
+export const DR_DRILL_TYPE = {
+  SCHEDULED_SIMULATION: 'SCHEDULED_SIMULATION',
+  MANUAL_SIMULATION: 'MANUAL_SIMULATION',
+  LIVE_GAME_DAY: 'LIVE_GAME_DAY',
+  TABLETOP: 'TABLETOP',
+} as const;
+export type DrDrillType = (typeof DR_DRILL_TYPE)[keyof typeof DR_DRILL_TYPE];
+
+export const DR_DRILL_STATUS = {
+  RUNNING: 'RUNNING',
+  PASSED: 'PASSED',
+  FAILED: 'FAILED',
+} as const;
+export type DrDrillStatus = (typeof DR_DRILL_STATUS)[keyof typeof DR_DRILL_STATUS];
+
+export const DR_AUDIT_ACTIONS = {
+  PROFILE_UPDATED: 'DR_PROFILE_UPDATED',
+  SYNC_EXECUTED: 'DR_SYNC_EXECUTED',
+  FAILOVER_INITIATED: 'DR_FAILOVER_INITIATED',
+  FAILOVER_COMPLETED: 'DR_FAILOVER_COMPLETED',
+  FAILBACK_INITIATED: 'DR_FAILBACK_INITIATED',
+  FAILBACK_COMPLETED: 'DR_FAILBACK_COMPLETED',
+  SWITCH_ABORTED: 'DR_SWITCH_ABORTED',
+  CHECKLIST_UPDATED: 'DR_CHECKLIST_UPDATED',
+  RECONCILE_EXECUTED: 'DR_RECONCILE_EXECUTED',
+  DRILL_EXECUTED: 'DR_DRILL_EXECUTED',
+} as const;

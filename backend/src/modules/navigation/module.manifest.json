@@ -216,6 +216,20 @@
       "position": "SYSTEM_CONSOLE"
     },
     {
+      "code": "SC_DR",
+      "name": "Disaster Recovery (DR)",
+      "status": 1,
+      "link": "/system-console/dr",
+      "linkApi": "/api/v1/ops/dr/overview",
+      "type": 2,
+      "parentCode": "SC_INFRASTRUCTURE",
+      "level": 2,
+      "key": "settings.read",
+      "numOrder": 5,
+      "icon": "RefreshCw",
+      "position": "SYSTEM_CONSOLE"
+    },
+    {
       "code": "SC_MESSAGING",
       "name": "Messaging",
       "status": 1,

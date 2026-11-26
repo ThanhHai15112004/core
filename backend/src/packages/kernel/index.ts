@@ -31,6 +31,7 @@ export * from './contracts/outbox.contract.js';
 export * from './contracts/idempotency.contract.js';
 export * from './contracts/reconciliation.contract.js';
 export * from './contracts/backup.contract.js';
+export * from './contracts/dr.contract.js';
 export * from './registries/code-registry.service.js';
 export * from './registries/setting-registry.service.js';
 export * from './registries/feature-flag-registry.service.js';

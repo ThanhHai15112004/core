@@ -21,6 +21,7 @@ import { LogsOpsModule } from '@modules/logs-ops/index.js';
 import { MetricsOpsModule } from '@modules/metrics-ops/index.js';
 import { IncidentsOpsModule } from '@modules/incidents-ops/index.js';
 import { BackupOpsModule } from '@modules/backup-ops/index.js';
+import { DrOpsModule } from '@modules/dr-ops/index.js';
 
 @Module({
   imports: [
@@ -41,6 +42,7 @@ import { BackupOpsModule } from '@modules/backup-ops/index.js';
     MetricsOpsModule,
     IncidentsOpsModule,
     BackupOpsModule,
+    DrOpsModule,
   ],
   controllers: [SystemOpsController],
   providers: [PackageRegistryService, SystemInfoService, SystemOverviewService, OpsEventService],
@@ -65,6 +67,7 @@ import { BackupOpsModule } from '@modules/backup-ops/index.js';
     MetricsOpsModule,
     IncidentsOpsModule,
     BackupOpsModule,
+    DrOpsModule,
   ],
 })
 export class SystemOpsModule {}

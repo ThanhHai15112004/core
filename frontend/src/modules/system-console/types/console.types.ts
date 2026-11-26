@@ -11,6 +11,7 @@ export type ConsoleSectionId =
   | 'cache'
   | 'storage'
   | 'backups'
+  | 'dr'
   | 'messaging'
   | 'http-client'
   | 'worker'

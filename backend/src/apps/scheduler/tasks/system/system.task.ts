@@ -2,6 +2,7 @@ import { Injectable, type OnModuleInit } from '@nestjs/common';
 import { CoreConfigService } from '@packages/config/index.js';
 import {
   BACKUP_QUEUE_TOPICS,
+  DR_QUEUE_TOPICS,
   IDEMPOTENCY_QUEUE_TOPICS,
   OUTBOX_QUEUE_TOPICS,
   RECONCILIATION_QUEUE_TOPICS,
@@ -142,6 +143,32 @@ export class SystemTask implements OnModuleInit {
       pattern: this.config.backup.drillCron,
       tz: this.config.scheduler.timezone,
       data: { triggeredBy: 'scheduler', module: 'backup-ops' },
+      notifyOnFailure: true,
+      misfirePolicy: 'run_once',
+    });
+
+    this.registry.register({
+      id: 'dr.sync.schedule',
+      queue: QUEUES.SYSTEM_EVENTS,
+      name: DR_QUEUE_TOPICS.SYNC_TICK,
+      description:
+        'Đồng bộ Database/Storage sang DR và kiểm tra ngưỡng RPO theo lịch (13.7 — tự bỏ qua nếu DR đang tắt).',
+      pattern: this.config.dr.syncCron,
+      tz: this.config.scheduler.timezone,
+      data: { triggeredBy: 'scheduler', module: 'dr-ops' },
+      notifyOnFailure: true,
+      misfirePolicy: 'run_once',
+    });
+
+    this.registry.register({
+      id: 'dr.drill.check',
+      queue: QUEUES.SYSTEM_EVENTS,
+      name: DR_QUEUE_TOPICS.DRILL_CHECK_TICK,
+      description:
+        'Kiểm tra hạn diễn tập Disaster Recovery định kỳ và cảnh báo hoặc tự chạy Simulation Drill (13.7).',
+      pattern: this.config.dr.drillCron,
+      tz: this.config.scheduler.timezone,
+      data: { triggeredBy: 'scheduler', module: 'dr-ops' },
       notifyOnFailure: true,
       misfirePolicy: 'run_once',
     });

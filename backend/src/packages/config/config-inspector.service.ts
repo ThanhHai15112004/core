@@ -56,6 +56,7 @@ export class ConfigInspectorService {
       'httpClient',
       'gateway',
       'backup',
+      'dr',
     ];
 
     const results: ConfigItemDto[] = [];

@@ -17,6 +17,7 @@ export * from './tracing.config.js';
 export * from './http-client.config.js';
 export * from './gateway.config.js';
 export * from './backup.config.js';
+export * from './dr.config.js';
 export * from './config.service.js';
 export * from './config-inspector.service.js';
 export * from './config.module.js';

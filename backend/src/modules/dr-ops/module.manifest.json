@@ -1,0 +1,52 @@
+{
+  "$schema": "../../packages/kernel/schemas/module.manifest.schema.json",
+  "name": "dr-ops",
+  "displayName": "Disaster Recovery Operations",
+  "version": "1.0.0",
+  "description": "Module Phục hồi thảm họa Disaster Recovery (Mục 13.7 — Opt-in): định nghĩa RPO/RTO, mô hình DC chính và DR dự phòng, đồng bộ Database/Storage, kịch bản Failover/Failback có checklist chống split-brain, đối soát dữ liệu hậu chuyển đổi và diễn tập DR định kỳ.",
+  "type": "core",
+  "category": "operations",
+  "author": "Core Platform Team",
+  "entryModule": "DrOpsModule",
+  "dependencies": [
+    "database",
+    "storage",
+    "redis",
+    "security",
+    "notifications",
+    "audit"
+  ],
+  "permissions": [
+    "dr.read",
+    "dr.manage",
+    "dr.execute"
+  ],
+  "events": {
+    "published": [
+      "dr.profile.updated",
+      "dr.sync.completed",
+      "dr.sync.rpo_breached",
+      "dr.failover.initiated",
+      "dr.failover.completed",
+      "dr.failback.initiated",
+      "dr.failback.completed",
+      "dr.switch.aborted",
+      "dr.reconciliation.completed",
+      "dr.reconciliation.discrepancy_detected",
+      "dr.drill.passed",
+      "dr.drill.failed",
+      "dr.drill.overdue"
+    ],
+    "subscribed": []
+  },
+  "database": {
+    "hasMigrations": true,
+    "tables": [
+      "dr_profiles",
+      "dr_sync_runs",
+      "dr_switch_executions",
+      "dr_reconciliation_reports",
+      "dr_drills"
+    ]
+  }
+}

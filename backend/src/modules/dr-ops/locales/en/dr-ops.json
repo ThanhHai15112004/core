@@ -1,0 +1,8 @@
+{
+  "error.disabled": "Disaster Recovery is disabled on this environment: {{detail}}",
+  "error.profileNotFound": "Disaster Recovery profile \"{{code}}\" was not found.",
+  "error.switchNotFound": "DR switch execution #{{id}} was not found.",
+  "error.switchGuardBlocked": "Blocked by DR switchover safety guard: {{reason}}",
+  "error.splitBrainGuard": "Blocked to prevent primary/DR split-brain: {{reason}}",
+  "error.validation": "Invalid Disaster Recovery parameter: {{detail}}"
+}

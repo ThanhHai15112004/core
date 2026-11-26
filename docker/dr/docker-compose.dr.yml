@@ -1,0 +1,61 @@
+# Reference Docker Compose Overlay cho mô hình DC chính + DR dự phòng (Mục 13.7 — Opt-in)
+# Chỉ sử dụng khi dự án cần chạy song song site DR / Standby Database / DR Object Storage.
+# Ví dụ chạy thử cục bộ:
+#   docker compose -f docker-compose.yml -f docker/dr/docker-compose.dr.yml up -d
+
+services:
+  dr-db-standby:
+    image: mysql:8.0
+    container_name: core-dr-db-standby
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DR_DB_PASSWORD:-dr_standby_secret_change_me}
+      MYSQL_DATABASE: ${DR_DB_DATABASE:-core_db}
+    ports:
+      - '${DR_DB_EXTERNAL_PORT:-3307}:3306'
+    volumes:
+      - dr_db_data:/var/lib/mysql
+    healthcheck:
+      test: ['CMD-SHELL', 'mysqladmin ping -h localhost -p"$MYSQL_ROOT_PASSWORD"']
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  dr-minio:
+    image: minio/minio:latest
+    container_name: core-dr-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${DR_STORAGE_S3_ACCESS_KEY:-drminioadmin}
+      MINIO_ROOT_PASSWORD: ${DR_STORAGE_S3_SECRET_KEY:-drminioadmin123}
+    ports:
+      - '${DR_MINIO_API_PORT:-9010}:9000'
+      - '${DR_MINIO_CONSOLE_PORT:-9011}:9001'
+    volumes:
+      - dr_minio_data:/data
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:9000/minio/health/live']
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  # Mẫu cấu hình biến môi trường cần gắn cho api / worker / scheduler ở dự án bật DR:
+  # environment:
+  #   DR_ENABLED: "true"
+  #   DR_TOPOLOGY_MODE: "WARM_STANDBY"
+  #   DR_RPO_TARGET_SECONDS: "900"
+  #   DR_RTO_TARGET_SECONDS: "1800"
+  #   DR_PRIMARY_SITE_CODE: "dc-primary"
+  #   DR_SECONDARY_SITE_CODE: "dc-dr"
+  #   DR_DB_HOST: "dr-db-standby"
+  #   DR_DB_PORT: "3306"
+  #   DR_DB_DATABASE: "${DR_DB_DATABASE:-core_db}"
+  #   DR_STORAGE_DRIVER: "s3"
+  #   DR_STORAGE_S3_ENDPOINT: "http://dr-minio:9000"
+  #   DR_STORAGE_S3_BUCKET: "core-dr-bucket"
+  #   DR_LIVE_SWITCH_ENABLED: "false"
+
+volumes:
+  dr_db_data:
+  dr_minio_data:

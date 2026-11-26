@@ -1,0 +1,8 @@
+{
+  "error.disabled": "Disaster Recovery đang tắt trên môi trường này: {{detail}}",
+  "error.profileNotFound": "Không tìm thấy hồ sơ Disaster Recovery \"{{code}}\".",
+  "error.switchNotFound": "Không tìm thấy phiên chuyển đổi Failover/Failback #{{id}}.",
+  "error.switchGuardBlocked": "Bị chặn bởi chốt an toàn chuyển đổi DR: {{reason}}",
+  "error.splitBrainGuard": "Ngăn chặn nguy cơ split-brain giữa DC chính và DR: {{reason}}",
+  "error.validation": "Tham số Disaster Recovery không hợp lệ: {{detail}}"
+}

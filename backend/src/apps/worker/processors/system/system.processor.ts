@@ -4,6 +4,7 @@ import type { Job } from 'bullmq';
 import { CoreConfigService } from '@packages/config/index.js';
 import {
   BACKUP_QUEUE_TOPICS,
+  DR_QUEUE_TOPICS,
   DomainEventBusService,
   ExportRegistryService,
   IDEMPOTENCY_QUEUE_TOPICS,
@@ -53,6 +54,10 @@ import {
   type IBackupOpsPublicService,
 } from '@modules/backup-ops/contracts/index.js';
 import type { BackupTargetType } from '@modules/backup-ops/index.js';
+import {
+  DR_OPS_PUBLIC_SERVICE,
+  type IDrOpsPublicService,
+} from '@modules/dr-ops/contracts/index.js';
 import { BaseQueueProcessor } from '../base-queue.processor.js';
 
 export interface SystemMaintenanceTickPayload {
@@ -102,6 +107,9 @@ export class SystemProcessor extends BaseQueueProcessor {
     @Optional()
     @Inject(BACKUP_OPS_PUBLIC_SERVICE)
     private readonly backupOpsService?: IBackupOpsPublicService,
+    @Optional()
+    @Inject(DR_OPS_PUBLIC_SERVICE)
+    private readonly drOpsService?: IDrOpsPublicService,
   ) {
     super(config, metrics, progressTracker);
   }
@@ -251,6 +259,20 @@ export class SystemProcessor extends BaseQueueProcessor {
         ...payload,
         triggerSource: 'SCHEDULED',
       });
+    }
+
+    if (envelope.topic === DR_QUEUE_TOPICS.SYNC_TICK) {
+      if (!this.drOpsService) {
+        return { handled: false, skipped: true, reason: 'dr_ops_service_unavailable' };
+      }
+      return this.drOpsService.runScheduledSync();
+    }
+
+    if (envelope.topic === DR_QUEUE_TOPICS.DRILL_CHECK_TICK) {
+      if (!this.drOpsService) {
+        return { handled: false, skipped: true, reason: 'dr_ops_service_unavailable' };
+      }
+      return this.drOpsService.runScheduledDrillCheck();
     }
 
     if (

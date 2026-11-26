@@ -18,6 +18,7 @@ import { tracingConfig, type TracingConfig } from './tracing.config.js';
 import { httpClientConfig, type HttpClientConfig } from './http-client.config.js';
 import { gatewayConfig, type GatewayConfig } from './gateway.config.js';
 import { backupConfig, type BackupConfig } from './backup.config.js';
+import { drConfig, type DrConfig } from './dr.config.js';
 
 /**
  * Kiểm tra fail-fast cấu hình Stateless khi chạy `production`:
@@ -64,6 +65,7 @@ export class CoreConfigService {
   public readonly httpClient: HttpClientConfig;
   public readonly gateway: GatewayConfig;
   public readonly backup: BackupConfig;
+  public readonly dr: DrConfig;
 
   constructor() {
     this.app = appConfig();
@@ -86,6 +88,7 @@ export class CoreConfigService {
     this.httpClient = httpClientConfig();
     this.gateway = gatewayConfig();
     this.backup = backupConfig();
+    this.dr = drConfig();
   }
 
   public get isProduction(): boolean {
@@ -124,6 +127,7 @@ export class CoreConfigService {
       httpClient: this.httpClient,
       gateway: this.gateway,
       backup: this.backup,
+      dr: this.dr,
     };
     const parts = path.split('.');
     let current: unknown = root;

@@ -16,6 +16,7 @@ import { metricsAlertsEn } from './console/metrics-alerts.en';
 import { incidentsEn } from './console/incidents.en';
 import { healthEn } from './console/health.en';
 import { backupsEn } from './console/backups.en';
+import { drEn } from './console/dr.en';
 import { uiEn } from './ui.en';
 
 export const en: TranslationKey = {
@@ -31,6 +32,7 @@ export const en: TranslationKey = {
     cache: 'Cache',
     storage: 'Storage',
     backups: 'Backup & Restore',
+    dr: 'Disaster Recovery (DR)',
     messaging: 'Messaging',
     'http-client': 'HTTP Client',
     worker: 'Worker & Queue',
@@ -218,4 +220,5 @@ export const en: TranslationKey = {
   incidents: incidentsEn,
   health: healthEn,
   backups: backupsEn,
+  dr: drEn,
 };

@@ -18,6 +18,7 @@ import {
   Network,
   Package,
   Radio,
+  RefreshCw,
   Settings2,
   ShieldAlert,
   ShieldCheck,
@@ -41,6 +42,7 @@ import { JOBS_RANGES, JOBS_TABS, SHORT_ID_HEAD } from '../constants/jobs';
 import { CACHE_RANGES } from '../constants/cache';
 import { STORAGE_RANGES } from '../constants/storage';
 import { BACKUPS_TABS } from '../constants/backups';
+import { DR_TABS } from '../constants/dr';
 
 type Translate = (path: string, params?: Record<string, string | number>) => string;
 
@@ -159,6 +161,15 @@ export const SECTIONS: SectionDef[] = [
     keywords: ['backup', 'restore', 'drill', 'retention', 'versioning', 'runbook'],
   },
   {
+    id: 'dr',
+    group: 'infrastructure',
+    icon: RefreshCw,
+    component: load(() => import('../sections/dr/DrSection'), 'DrSection'),
+    controls: {},
+    crumb: (p, t) => ((DR_TABS as readonly string[]).includes(p[0] ?? '') ? t(`dr.tab.${p[0]}`) : null),
+    keywords: ['dr', 'disaster recovery', 'rpo', 'rto', 'failover', 'failback', 'drill'],
+  },
+  {
     id: 'messaging',
     group: 'infrastructure',
     icon: Radio,
@@ -269,6 +280,8 @@ const MENU_CODE_TO_SECTION: Record<string, ConsoleSectionId> = {
   SC_DATABASE: 'database',
   SC_CACHE: 'cache',
   SC_STORAGE: 'storage',
+  SC_BACKUPS: 'backups',
+  SC_DR: 'dr',
   SC_MESSAGING: 'messaging',
   SC_HTTP_CLIENT: 'http-client',
   SC_WORKER: 'worker',
@@ -307,6 +320,7 @@ const ICON_BY_NAME: Record<string, LucideIcon> = {
   Network,
   Package,
   Radio,
+  RefreshCw,
   Settings2,
   ShieldAlert,
   ShieldCheck,
