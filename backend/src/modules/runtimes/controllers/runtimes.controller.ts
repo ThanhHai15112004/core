@@ -5,7 +5,13 @@ import { LONG_RUNNING_RUNTIMES, type LongRunningRuntimeId } from '@packages/runt
 import { RUNTIMES_ROUTES } from '../routes/runtimes.routes.js';
 import { RuntimesService, METRIC_RANGES, type MetricRange } from '../services/runtimes.service.js';
 import { RuntimeCommandService } from '../services/runtime-command.service.js';
+import { RuntimeAutoscalingService } from '../services/runtime-autoscaling.service.js';
 import { RuntimeValidationException } from '../exceptions/runtime.exceptions.js';
+import type {
+  AutoscalingHpaDto,
+  AutoscalingOverviewDto,
+  AutoscalingSimulateResultDto,
+} from '../responses/autoscaling.response.js';
 import type {
   RuntimeCommandDto,
   RuntimeDetailDto,
@@ -16,6 +22,7 @@ import type {
 } from '../responses/runtime.response.js';
 
 const LOG_LEVELS = ['verbose', 'debug', 'info', 'warn', 'error', 'fatal'] as const;
+const AUTOSCALING_TARGETS = ['api', 'worker'] as const;
 const rangeSchema = z
   .enum(Object.keys(METRIC_RANGES) as [MetricRange, ...MetricRange[]])
   .default('15m');
@@ -23,6 +30,53 @@ const rangeSchema = z
 const limitSchema = (max: number, fallback: number) =>
   z.coerce.number().int().min(1).max(max).default(fallback);
 const stopSchema = z.object({ confirm: z.literal('STOP') });
+const hpaQuerySchema = z.object({
+  target: z.enum(AUTOSCALING_TARGETS).default('api'),
+  namespace: z
+    .string()
+    .trim()
+    .regex(/^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/)
+    .max(63)
+    .optional(),
+  deploymentName: z
+    .string()
+    .trim()
+    .regex(/^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/)
+    .max(63)
+    .optional(),
+});
+const simulateAutoscalingSchema = z.object({
+  target: z.enum(AUTOSCALING_TARGETS),
+  currentReplicas: z.coerce.number().int().min(0).max(500),
+  signals: z.object({
+    cpuPercent: z.coerce.number().min(0).max(1000).nullable().optional().default(null),
+    memoryPercent: z.coerce.number().min(0).max(1000).nullable().optional().default(null),
+    inFlightRequests: z.coerce.number().min(0).max(10_000_000).nullable().optional(),
+    queueBacklog: z.coerce.number().min(0).max(100_000_000).nullable().optional(),
+  }),
+  cooldown: z
+    .object({
+      lastScaleUpAtMs: z.coerce.number().int().min(0).nullable().optional(),
+      lastScaleDownAtMs: z.coerce.number().int().min(0).nullable().optional(),
+    })
+    .optional(),
+  policyOverrides: z
+    .object({
+      minReplicas: z.coerce.number().int().min(1).max(200).optional(),
+      maxReplicas: z.coerce.number().int().min(1).max(500).optional(),
+      scaleUpCooldownSec: z.coerce.number().int().min(0).max(3600).optional(),
+      scaleDownCooldownSec: z.coerce.number().int().min(0).max(7200).optional(),
+      scaleUpMaxStep: z.coerce.number().int().min(1).max(50).optional(),
+      scaleDownMaxStep: z.coerce.number().int().min(1).max(50).optional(),
+      targetCpuPercent: z.coerce.number().min(10).max(95).optional(),
+      targetMemoryPercent: z.coerce.number().min(10).max(95).optional(),
+      targetInFlightPerInstance: z.coerce.number().int().min(1).max(100_000).optional(),
+      targetBacklogPerInstance: z.coerce.number().int().min(1).max(1_000_000).optional(),
+    })
+    .optional(),
+  tolerancePercent: z.coerce.number().min(0).max(50).optional(),
+  nowMs: z.coerce.number().int().min(0).optional(),
+});
 
 /** Xác thực và ép kiểu dữ liệu đầu vào theo schema Zod */
 function parse<T>(schema: z.ZodType<T>, value: unknown): T {
@@ -33,7 +87,7 @@ function parse<T>(schema: z.ZodType<T>, value: unknown): T {
 }
 
 /**
- * Runtime Operations — theo dõi & điều khiển API/Worker/Scheduler/CLI.
+ * Runtime Operations — theo dõi & điều khiển API/Worker/Scheduler/CLI và Autoscaling.
  * Lưu ý: /ops/* chưa có RBAC (TokenService còn là skeleton); action có thể khoá bằng OPS_RUNTIME_ACTIONS_ENABLED.
  */
 @Controller(RUNTIMES_ROUTES.PREFIX)
@@ -41,6 +95,7 @@ export class RuntimesController {
   constructor(
     private readonly runtimes: RuntimesService,
     private readonly commands: RuntimeCommandService,
+    private readonly autoscaling: RuntimeAutoscalingService,
   ) {}
 
   /** Lấy dữ liệu tổng quan trạng thái hệ thống */
@@ -65,6 +120,37 @@ export class RuntimesController {
     @Query('limit') limit?: string,
   ): Promise<RuntimeEventDto[]> {
     return this.runtimes.getEvents(runtime || undefined, parse(limitSchema(500, 50), limit));
+  }
+
+  /** Trạng thái Autoscaling, tín hiệu CPU/RAM/in-flight/backlog, cấu hình min/max/cooldown và dự báo tải DB. */
+  @Public()
+  @Get(RUNTIMES_ROUTES.AUTOSCALING)
+  public getAutoscalingOverview(): Promise<AutoscalingOverviewDto> {
+    return this.autoscaling.getOverview();
+  }
+
+  /** Giả lập đánh giá chính sách Autoscaling (min/max, cooldown, tolerance) theo bộ tín hiệu đầu vào. */
+  @Public()
+  @Post(RUNTIMES_ROUTES.AUTOSCALING_SIMULATE)
+  @HttpCode(HttpStatus.OK)
+  public simulateAutoscaling(@Body() body: unknown): AutoscalingSimulateResultDto {
+    const parsed = parse(simulateAutoscalingSchema, body ?? {});
+    return this.autoscaling.simulate(parsed);
+  }
+
+  /** Sinh manifest Kubernetes HPA (`autoscaling/v2`) khớp chính sách Autoscaling hiện hành. */
+  @Public()
+  @Get(RUNTIMES_ROUTES.AUTOSCALING_HPA)
+  public getAutoscalingHpa(
+    @Query('target') target?: string,
+    @Query('namespace') namespace?: string,
+    @Query('deploymentName') deploymentName?: string,
+  ): AutoscalingHpaDto {
+    const parsed = parse(hpaQuerySchema, { target, namespace, deploymentName });
+    return this.autoscaling.renderHpa(parsed.target, {
+      namespace: parsed.namespace,
+      deploymentName: parsed.deploymentName,
+    });
   }
 
   /** Lấy thông tin chi tiết một lệnh điều khiển runtime theo ID */

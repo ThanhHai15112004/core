@@ -42,6 +42,9 @@ export interface JobCounts {
 }
 
 export const QUEUE_JOBS_METRIC = 'core_queue_jobs';
+export const QUEUE_BACKLOG_METRIC = 'core_queue_backlog';
+export const QUEUE_BACKLOG_TOTAL_METRIC = 'core_queue_backlog_total';
+export const QUEUE_ACTIVE_WORKERS_METRIC = 'core_queue_active_workers';
 export const QUEUE_OLDEST_JOB_AGE_METRIC = 'core_queue_oldest_job_age_seconds';
 const MAX_POINTS = 120;
 const QUEUE_STATES = ['waiting', 'active', 'delayed', 'failed'] as const;
@@ -71,6 +74,9 @@ const emptyStats = (): QueueStats => ({
 @Injectable()
 export class WorkerMetricsService {
   private readonly queueJobs: Gauge<'queue' | 'state'>;
+  private readonly queueBacklog: Gauge<'queue'>;
+  private readonly queueBacklogTotal: Gauge;
+  private readonly queueActiveWorkers: Gauge<'queue'>;
   private readonly oldestJobAge: Gauge<'queue'>;
 
   constructor(
@@ -81,24 +87,46 @@ export class WorkerMetricsService {
       'queue',
       'state',
     ]);
+    this.queueBacklog = metrics.gauge(
+      QUEUE_BACKLOG_METRIC,
+      'Current queue backlog (waiting + prioritized + delayed) per queue',
+      ['queue'],
+    );
+    this.queueBacklogTotal = metrics.gauge(
+      QUEUE_BACKLOG_TOTAL_METRIC,
+      'Total queue backlog (waiting + prioritized + delayed) across all queues',
+    );
+    this.queueActiveWorkers = metrics.gauge(
+      QUEUE_ACTIVE_WORKERS_METRIC,
+      'Number of active BullMQ workers per queue',
+      ['queue'],
+    );
     this.oldestJobAge = metrics.gauge(
       QUEUE_OLDEST_JOB_AGE_METRIC,
       'Age in seconds of the oldest waiting job per queue',
       ['queue'],
     );
+    this.queueBacklogTotal.set(0);
   }
 
-  /** Ghi độ sâu queue và tuổi job chờ lâu nhất (monitor nền gọi mỗi tick). */
+  /** Ghi độ sâu queue, tổng backlog, số worker hoạt động và tuổi job chờ lâu nhất. */
   public recordQueues(queues: readonly QueueInfo[], now = Date.now()): void {
+    let totalBacklog = 0;
     for (const q of queues) {
+      const waiting = waitingOf(q);
       for (const state of QUEUE_STATES) {
-        const v = state === 'waiting' ? waitingOf(q) : q.counts[state];
+        const v = state === 'waiting' ? waiting : q.counts[state];
         this.queueJobs.set({ queue: q.name, state }, v);
       }
+      const backlog = waiting + q.counts.delayed;
+      totalBacklog += backlog;
+      this.queueBacklog.set({ queue: q.name }, backlog);
+      this.queueActiveWorkers.set({ queue: q.name }, q.workers?.length ?? 0);
       const ageSec =
         q.oldestWaitingAt === null ? 0 : Math.max(0, round((now - q.oldestWaitingAt) / 1000, 2));
       this.oldestJobAge.set({ queue: q.name }, ageSec);
     }
+    this.queueBacklogTotal.set(totalBacklog);
   }
 
   /** Xác định khung cửa sổ thời gian cho việc tính toán số liệu */

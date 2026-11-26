@@ -94,14 +94,6 @@ export class WorkerMonitorService implements OnApplicationBootstrap, OnModuleDes
     if (this.running || !this.store.isAvailable()) return;
     this.running = true;
     try {
-      const locked = await this.store.client.set(
-        this.store.keys.collectLock(),
-        String(now),
-        'PX',
-        TICK_MS - 1000,
-        'NX',
-      );
-      if (locked !== 'OK') return;
       const usable = this.queues.usable();
       const [queues, active] = usable
         ? await Promise.all([
@@ -114,8 +106,21 @@ export class WorkerMonitorService implements OnApplicationBootstrap, OnModuleDes
             this.queues.provider.jobs(null, ['active'], STALLED_SCAN).catch(() => null),
           ])
         : [null, null];
-      const consumers = await this.messaging.consumers().catch(() => [] as ConsumerRegistration[]);
+
+      // Cập nhật Prometheus gauges trên MỌI API replica để scraper đọc được backlog tươi không bị stale khi scale.
       if (queues) this.record(queues, now);
+
+      // Chỉ 1 instance chạy đánh giá cảnh báo & ghi Redis events mỗi chu kỳ để tránh bắn alert trùng.
+      const locked = await this.store.client.set(
+        this.store.keys.collectLock(),
+        String(now),
+        'PX',
+        TICK_MS - 1000,
+        'NX',
+      );
+      if (locked !== 'OK') return;
+
+      const consumers = await this.messaging.consumers().catch(() => [] as ConsumerRegistration[]);
       await this.evaluate(queues, active, consumers, now);
     } catch (err) {
       this.logger.warn(

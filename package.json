@@ -32,7 +32,8 @@
     "docker:smoke": "./docker-dev.sh smoke",
     "docker:prod:up": "./docker-prod.sh up",
     "docker:prod:down": "./docker-prod.sh down",
-    "docker:prod:smoke": "./docker-prod.sh smoke"
+    "docker:prod:smoke": "./docker-prod.sh smoke",
+    "load-test:autoscaling": "node scripts/load-test/autoscaling-load-test.mjs"
   },
   "devDependencies": {
     "@commitlint/cli": "^21.2.1",

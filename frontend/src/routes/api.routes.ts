@@ -27,6 +27,9 @@ export const API_ROUTES = {
       METRICS_ALL: (range: string) => `${OPS_PREFIX}/runtimes/metrics?range=${range}`,
       EVENTS: (limit: number, runtime?: string) =>
         `${OPS_PREFIX}/runtimes/events?limit=${limit}${runtime ? `&runtime=${runtime}` : ''}`,
+      AUTOSCALING: `${OPS_PREFIX}/runtimes/autoscaling`,
+      AUTOSCALING_HPA: (target: 'api' | 'worker') =>
+        `${OPS_PREFIX}/runtimes/autoscaling/hpa?target=${target}`,
       COMMAND: (commandId: string) => `${OPS_PREFIX}/runtimes/commands/${commandId}`,
       DETAIL: (id: string) => `${OPS_PREFIX}/runtimes/${id}`,
       METRICS: (id: string, range: string) => `${OPS_PREFIX}/runtimes/${id}/metrics?range=${range}`,

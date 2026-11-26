@@ -1,6 +1,9 @@
 import { fetchApi } from '../../../core/services/api';
 import { API_ROUTES } from '../../../routes/index';
 import type {
+  AutoscalingHpa,
+  AutoscalingOverview,
+  AutoscalingTarget,
   MetricRange,
   RuntimeCommand,
   RuntimeDetail,
@@ -15,6 +18,8 @@ const R = API_ROUTES.OPS.RUNTIMES;
 
 export const runtimesApi = {
   overview: () => fetchApi<RuntimesOverview>(R.LIST),
+  autoscaling: () => fetchApi<AutoscalingOverview>(R.AUTOSCALING),
+  autoscalingHpa: (target: AutoscalingTarget) => fetchApi<AutoscalingHpa>(R.AUTOSCALING_HPA(target)),
   detail: (id: RuntimeId) => fetchApi<RuntimeDetail>(R.DETAIL(id)),
   series: (range: MetricRange) => fetchApi<RuntimeSeries>(R.METRICS_ALL(range)),
   runtimeSeries: (id: RuntimeId, range: MetricRange) => fetchApi<RuntimeSeries>(R.METRICS(id, range)),

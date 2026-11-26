@@ -179,3 +179,81 @@ export interface RuntimeCommand {
   status: 'pending' | 'accepted' | 'completed' | 'failed';
   message?: string;
 }
+
+export type AutoscalingTarget = 'api' | 'worker';
+export type AutoscalingAction = 'scale_up' | 'scale_down' | 'hold';
+
+export interface AutoscalingWorkloadPolicy {
+  minReplicas: number;
+  maxReplicas: number;
+  scaleUpCooldownSec: number;
+  scaleDownCooldownSec: number;
+  scaleUpMaxStep: number;
+  scaleDownMaxStep: number;
+  targetCpuPercent: number;
+  targetMemoryPercent: number;
+  targetInFlightPerInstance?: number;
+  targetBacklogPerInstance?: number;
+}
+
+export interface AutoscalingDecision {
+  target: AutoscalingTarget;
+  currentReplicas: number;
+  rawDesiredReplicas: number;
+  clampedDesiredReplicas: number;
+  recommendedReplicas: number;
+  action: AutoscalingAction;
+  clampedBy: 'min' | 'max' | null;
+  dominantSignal: string | null;
+  cooldownActive: boolean;
+  cooldownRemainingSec: number;
+  blockedReason: string | null;
+}
+
+export interface AutoscalingWorkloadStatus {
+  target: AutoscalingTarget;
+  activeInstances: number;
+  metrics: {
+    avgCpuPercent: number | null;
+    avgMemoryPercent: number | null;
+    inFlightRequests?: number | null;
+    queueBacklogTotal?: number | null;
+  };
+  policy: AutoscalingWorkloadPolicy;
+  decision: AutoscalingDecision;
+}
+
+export interface AutoscalingDbImpact {
+  perInstancePoolLimit: number;
+  maxConnectionsBudget: number;
+  currentProjectedConnections: number;
+  recommendedProjectedConnections: number;
+  maxProjectedConnections: number;
+  recommendedBudgetPercent: number;
+  maxBudgetPercent: number;
+  observedPoolUsed: number | null;
+  observedPoolWaiting: number | null;
+  observedDbSessions: number | null;
+  risk: 'ok' | 'warn' | 'crit';
+  message: string;
+}
+
+export interface AutoscalingOverview {
+  enabled: boolean;
+  tolerancePercent: number;
+  collectedAt: string;
+  configSource: 'env' | 'settings_override';
+  overriddenKeys: string[];
+  workloads: {
+    api: AutoscalingWorkloadStatus;
+    worker: AutoscalingWorkloadStatus;
+  };
+  databaseImpact: AutoscalingDbImpact;
+}
+
+export interface AutoscalingHpa {
+  target: AutoscalingTarget;
+  filename: string;
+  policy: AutoscalingWorkloadPolicy;
+  yaml: string;
+}

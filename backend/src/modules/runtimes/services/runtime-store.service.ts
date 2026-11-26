@@ -52,6 +52,30 @@ export class RuntimeStoreService {
     return map;
   }
 
+  /**
+   * Đọc toàn bộ heartbeat còn hạn của mọi instance thuộc một runtime (phục vụ đếm active replicas).
+   * Tự động fallback về key đơn `heartbeat(id)` khi tập `instanceIndex` rỗng.
+   */
+  public async instanceHeartbeats(id: LongRunningRuntimeId): Promise<RuntimeHeartbeat[]> {
+    if (!this.isAvailable()) return [];
+    const members = await this.redis.client
+      .smembers(this.keys.instanceIndex(id))
+      .catch(() => [] as string[]);
+    const raws: Array<string | null> =
+      members.length > 0
+        ? await this.redis.client
+            .mget(...members.map((inst) => this.keys.instanceHeartbeat(id, inst)))
+            .catch(() => [])
+        : [await this.redis.client.get(this.keys.heartbeat(id)).catch(() => null)];
+
+    const result: RuntimeHeartbeat[] = [];
+    for (const raw of raws) {
+      const hb = safeJsonParse<RuntimeHeartbeat | null>(raw, null);
+      if (hb) result.push(hb);
+    }
+    return result;
+  }
+
   /** Sự kiện mới nhất trước. */
   public async events(limit = EVENT_SCAN_LIMIT): Promise<RuntimeEvent[]> {
     const entries = await this.redis.client.xrevrange(this.keys.events(), '+', '-', 'COUNT', limit);

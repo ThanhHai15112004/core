@@ -1,0 +1,66 @@
+# ==============================================================================
+# Core Framework — Kubernetes HorizontalPodAutoscaler cho HTTP API (autoscaling/v2)
+# Chỉ áp dụng khi triển khai trên Kubernetes có metrics-server + prometheus-adapter.
+#
+# Lưu ý Database:
+#   Tổng kết nối DB tối đa = (api.maxReplicas + worker.maxReplicas) × DB_MAX_CONNECTIONS
+#   Đảm bảo tổng này < max_connections của MySQL/PostgreSQL (hoặc dùng ProxySQL/PgBouncer).
+# ==============================================================================
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: core-api-hpa
+  namespace: default
+  labels:
+    app.kubernetes.io/name: core-api
+    app.kubernetes.io/component: api
+    app.kubernetes.io/managed-by: core-framework
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: core-api
+  # Giữ tối thiểu 2 replica ở production để đảm bảo HA và rolling deploy không downtime
+  minReplicas: 2
+  # Giới hạn trần tránh scale không kiểm soát và cạn kiệt DB connection pool
+  maxReplicas: 10
+  metrics:
+    # 1. Autoscaler cơ bản theo CPU
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    # 2. Autoscaler cơ bản theo RAM
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 75
+    # 3. Custom metric: số HTTP request đang xử lý (http_requests_in_flight)
+    - type: Pods
+      pods:
+        metric:
+          name: http_requests_in_flight
+        target:
+          type: AverageValue
+          averageValue: "100"
+  behavior:
+    # Scale-up nhanh có kiểm soát (chờ ổn định 60s, tăng tối đa 2 pod / 60s)
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      selectPolicy: Max
+      policies:
+        - type: Pods
+          value: 2
+          periodSeconds: 60
+    # Scale-down chậm để chống tăng giảm liên tục (flapping)
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      selectPolicy: Min
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 60

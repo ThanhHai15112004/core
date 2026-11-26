@@ -29,6 +29,7 @@ export class MetricsRegistryService {
   public readonly httpRequestsTotal: Counter<
     'method' | 'route' | 'status' | 'status_class' | 'module'
   >;
+  public readonly httpRequestsInFlight: Gauge;
 
   constructor(
     @Inject(METRICS_OPTIONS) options: MetricsModuleOptions,
@@ -56,6 +57,12 @@ export class MetricsRegistryService {
       labelNames: ['method', 'route', 'status', 'status_class', 'module'],
       registers: [this.registry],
     });
+    this.httpRequestsInFlight = new Gauge({
+      name: 'http_requests_in_flight',
+      help: 'Current number of in-flight inbound HTTP API requests being processed',
+      registers: [this.registry],
+    });
+    this.httpRequestsInFlight.set(0);
   }
 
   /** Lấy counter đã có hoặc tạo mới (package khác dùng để khai báo metric riêng). */

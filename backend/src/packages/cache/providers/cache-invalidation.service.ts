@@ -1,9 +1,4 @@
-import {
-  Injectable,
-  Logger,
-  Optional,
-  type OnApplicationShutdown,
-} from '@nestjs/common';
+import { Inject, Injectable, Logger, Optional, type OnApplicationShutdown } from '@nestjs/common';
 import { CoreConfigService } from '@packages/config/index.js';
 import { safeJsonParse } from '@packages/kernel/index.js';
 import { RedisService } from '@packages/redis/index.js';
@@ -16,9 +11,7 @@ export interface CacheInvalidationMessage {
   readonly at: string;
 }
 
-export type CacheInvalidationHandler = (
-  message: CacheInvalidationMessage,
-) => void | Promise<void>;
+export type CacheInvalidationHandler = (message: CacheInvalidationMessage) => void | Promise<void>;
 
 export interface CacheInvalidationOptions {
   readonly allowInTest?: boolean;
@@ -42,7 +35,7 @@ export class CacheInvalidationService implements OnApplicationShutdown {
   constructor(
     @Optional() private readonly redis?: RedisService | null,
     @Optional() private readonly config?: CoreConfigService | null,
-    options?: CacheInvalidationOptions,
+    @Optional() @Inject('CACHE_INVALIDATION_OPTIONS') options?: CacheInvalidationOptions,
   ) {
     this.instanceId =
       config?.app?.instanceId || `${process.pid}-${Math.random().toString(36).slice(2, 8)}`;

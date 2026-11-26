@@ -1,0 +1,64 @@
+# ==============================================================================
+# Core Framework — Kubernetes HorizontalPodAutoscaler cho Background Worker (autoscaling/v2)
+# Chỉ áp dụng khi triển khai trên Kubernetes có metrics-server + prometheus-adapter.
+#
+# Lưu ý:
+#   - Worker phải có terminationGracePeriodSeconds >= RUNTIME_GRACEFUL_TIMEOUT_MS (mặc định 40s+)
+#     để hoàn tất job đang chạy khi scale-down (connection/job draining — Phase 13.1).
+# ==============================================================================
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: core-worker-hpa
+  namespace: default
+  labels:
+    app.kubernetes.io/name: core-worker
+    app.kubernetes.io/component: worker
+    app.kubernetes.io/managed-by: core-framework
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: core-worker
+  minReplicas: 1
+  maxReplicas: 8
+  metrics:
+    # 1. Autoscaler cơ bản theo CPU
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 75
+    # 2. Autoscaler cơ bản theo RAM
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+    # 3. External metric: tổng Queue backlog BullMQ (waiting + prioritized + delayed)
+    - type: External
+      external:
+        metric:
+          name: core_queue_backlog_total
+        target:
+          type: AverageValue
+          averageValue: "50"
+  behavior:
+    # Phản ứng nhanh khi queue backlog tăng đột biến (chờ ổn định 30s)
+    scaleUp:
+      stabilizationWindowSeconds: 30
+      selectPolicy: Max
+      policies:
+        - type: Pods
+          value: 2
+          periodSeconds: 30
+    # Hạ replica chậm (300s) để tránh rút worker giữa chừng khi queue còn burst tiếp theo
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      selectPolicy: Min
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 60

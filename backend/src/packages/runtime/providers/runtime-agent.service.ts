@@ -2,12 +2,15 @@ import {
   Inject,
   Injectable,
   Logger,
+  Optional,
   type BeforeApplicationShutdown,
   type OnApplicationBootstrap,
 } from '@nestjs/common';
 import * as os from 'node:os';
+import type { Gauge } from 'prom-client';
 import { CoreConfigService } from '@packages/config/index.js';
 import { safeJsonParse } from '@packages/kernel/index.js';
+import { MetricsRegistryService } from '@packages/metrics/index.js';
 import { RedisService } from '@packages/redis/index.js';
 import { COMMAND_TTL_SEC, runtimeKeys } from '../constants/runtime.keys.js';
 import { RUNTIME_IDENTITY } from '../constants/runtime.tokens.js';
@@ -24,12 +27,19 @@ import type {
   RuntimeIdentity,
   RuntimeIssue,
   RuntimeProcessInfo,
+  RuntimeResources,
 } from '../contracts/runtime.types.js';
 import { ResourceSampler } from './resource-sampler.js';
 
 const REDIS_BOOT_WAIT_MS = 5000;
 /** Heartbeat sống tối thiểu chừng này (giây) — mất heartbeat 30s mới coi là runtime chết. */
 const HEARTBEAT_TTL_SEC = 30;
+const BYTES_PER_MB = 1024 * 1024;
+
+export const RUNTIME_CPU_PERCENT_METRIC = 'core_runtime_cpu_percent';
+export const RUNTIME_MEMORY_PERCENT_METRIC = 'core_runtime_memory_percent';
+export const RUNTIME_MEMORY_RSS_BYTES_METRIC = 'core_runtime_memory_rss_bytes';
+export const RUNTIME_MEMORY_LIMIT_BYTES_METRIC = 'core_runtime_memory_limit_bytes';
 
 /**
  * Agent chạy trong mỗi runtime chạy liên tục (API, Worker, Scheduler):
@@ -52,14 +62,57 @@ export class RuntimeAgentService implements OnApplicationBootstrap, BeforeApplic
   private drained = false;
   private subscriber: ReturnType<RedisService['createSubscriber']> | null = null;
   private readonly sampler = new ResourceSampler();
+  private readonly cpuPercentGauge: Gauge | null;
+  private readonly memoryPercentGauge: Gauge | null;
+  private readonly memoryRssBytesGauge: Gauge | null;
+  private readonly memoryLimitBytesGauge: Gauge | null;
 
   constructor(
     @Inject(RUNTIME_IDENTITY) public readonly identity: RuntimeIdentity,
     private readonly redis: RedisService,
     private readonly config: CoreConfigService,
+    @Optional() metrics?: MetricsRegistryService,
   ) {
     this.keys = runtimeKeys(redis);
     this.instance = config.app.instanceId || `${os.hostname()}:${process.pid}`;
+    this.cpuPercentGauge = metrics
+      ? metrics.gauge(
+          RUNTIME_CPU_PERCENT_METRIC,
+          'Process CPU utilization percentage sampled by RuntimeAgent (100 = 1 core)',
+        )
+      : null;
+    this.memoryPercentGauge = metrics
+      ? metrics.gauge(
+          RUNTIME_MEMORY_PERCENT_METRIC,
+          'Process memory utilization percentage against cgroup or V8 heap limit',
+        )
+      : null;
+    this.memoryRssBytesGauge = metrics
+      ? metrics.gauge(
+          RUNTIME_MEMORY_RSS_BYTES_METRIC,
+          'Process resident set size (RSS) memory in bytes',
+        )
+      : null;
+    this.memoryLimitBytesGauge = metrics
+      ? metrics.gauge(
+          RUNTIME_MEMORY_LIMIT_BYTES_METRIC,
+          'Effective container/process memory limit in bytes (cgroup or V8 heap)',
+        )
+      : null;
+  }
+
+  /** Cập nhật các gauge CPU và RAM lên Prometheus registry (phục vụ autoscaler). */
+  public recordResourceMetrics(resources: RuntimeResources): void {
+    this.cpuPercentGauge?.set(Math.max(0, resources.cpuPercent));
+    if (resources.memoryPercent !== null && Number.isFinite(resources.memoryPercent)) {
+      this.memoryPercentGauge?.set(Math.max(0, resources.memoryPercent));
+    }
+    this.memoryRssBytesGauge?.set(Math.max(0, Math.round(resources.rssMb * BYTES_PER_MB)));
+    if (resources.memoryLimitMb !== null && Number.isFinite(resources.memoryLimitMb)) {
+      this.memoryLimitBytesGauge?.set(
+        Math.max(0, Math.round(resources.memoryLimitMb * BYTES_PER_MB)),
+      );
+    }
   }
 
   /** Contributor tự đăng ký trong `onModuleInit` của nó. */
@@ -341,6 +394,7 @@ export class RuntimeAgentService implements OnApplicationBootstrap, BeforeApplic
   /** Xây dựng gói tin heartbeat chứa thông tin sức khỏe của tiến trình */
   private async buildHeartbeat(): Promise<RuntimeHeartbeat> {
     const resources = this.sampler.sample();
+    this.recordResourceMetrics(resources);
     const [metrics, issues, details] = await Promise.all([
       this.contributor?.collectMetrics().catch(() => ({})) ??
         Promise.resolve({} as Record<string, MetricValue>),

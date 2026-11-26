@@ -5,6 +5,8 @@ export * from './constants/runtime.tokens.js';
 export * from './providers/runtime-agent.service.js';
 export * from './providers/graceful-shutdown.coordinator.js';
 export * from './providers/stateless-readiness.evaluator.js';
+export * from './providers/autoscaling-policy.evaluator.js';
+export * from './providers/k8s-hpa.renderer.js';
 export * from './providers/resource-sampler.js';
 export * from './providers/cli-history.service.js';
 export * from './providers/runtime-manageable.adapter.js';

@@ -14,6 +14,7 @@ import { EVENTS_MAX_HEIGHT_PX, LIST_EVENTS_LIMIT } from '../../constants/runtime
 import { RuntimeCard } from '../../components/runtimes/RuntimeCard';
 import { CliCard, CliSheet } from '../../components/runtimes/CliRuntime';
 import { RuntimeMetricChart } from '../../components/runtimes/RuntimeMetricChart';
+import { AutoscalingPanel } from '../../components/runtimes/AutoscalingPanel';
 import { eventToActivity } from '../../components/runtimes/runtime-view';
 import { runtimesKeys } from './runtimes-keys';
 import type { RuntimesPage } from './useRuntimesPage';
@@ -112,6 +113,10 @@ export function RuntimesListPage({ page }: { page: RuntimesPage }) {
           <MemoryShare data={data} error={overview.isError ? overview.error : undefined} onRetry={() => void overview.refetch()} />
         </Panel>
       </PanelGrid>
+
+      <div className="mb-4">
+        <AutoscalingPanel />
+      </div>
 
       <Panel
         title={t('rt.events.title')}

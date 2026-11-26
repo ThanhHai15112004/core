@@ -1,4 +1,6 @@
 import { Injectable, Optional, type OnModuleInit } from '@nestjs/common';
+import type { Gauge } from 'prom-client';
+import { MetricsRegistryService } from '@packages/metrics/index.js';
 import { QUEUES, QueueRegistry } from '@packages/messaging/index.js';
 import {
   RuntimeAgentService,
@@ -17,6 +19,9 @@ import { HeavyJobProcessor } from '../processors/heavy/heavy-job.processor.js';
 @Injectable()
 export class WorkerRuntimeContributor implements RuntimeContributor, OnModuleInit {
   private readonly processors: BaseQueueProcessor[];
+  private readonly queueBacklogGauge: Gauge<'queue'> | null;
+  private readonly queueBacklogTotalGauge: Gauge | null;
+  private readonly queueActiveWorkersGauge: Gauge<'queue'> | null;
 
   constructor(
     private readonly agent: RuntimeAgentService,
@@ -26,6 +31,7 @@ export class WorkerRuntimeContributor implements RuntimeContributor, OnModuleIni
     @Optional() notificationsProcessor?: NotificationsProcessor,
     @Optional() heavyJobProcessor?: HeavyJobProcessor,
     @Optional() private readonly outboxRelay?: OutboxRelayService,
+    @Optional() metrics?: MetricsRegistryService,
   ) {
     this.processors = [
       processor,
@@ -33,6 +39,25 @@ export class WorkerRuntimeContributor implements RuntimeContributor, OnModuleIni
       ...(notificationsProcessor ? [notificationsProcessor] : []),
       ...(heavyJobProcessor ? [heavyJobProcessor] : []),
     ];
+    this.queueBacklogGauge = metrics
+      ? metrics.gauge(
+          'core_queue_backlog',
+          'Current queue backlog (waiting + prioritized + delayed) per queue',
+          ['queue'],
+        )
+      : null;
+    this.queueBacklogTotalGauge = metrics
+      ? metrics.gauge(
+          'core_queue_backlog_total',
+          'Total queue backlog (waiting + prioritized + delayed) across all queues',
+        )
+      : null;
+    this.queueActiveWorkersGauge = metrics
+      ? metrics.gauge('core_queue_active_workers', 'Number of active BullMQ workers per queue', [
+          'queue',
+        ])
+      : null;
+    this.queueBacklogTotalGauge?.set(0);
   }
 
   /** Đăng ký contributor này với RuntimeAgentService khi khởi tạo module */
@@ -77,21 +102,53 @@ export class WorkerRuntimeContributor implements RuntimeContributor, OnModuleIni
     };
   }
 
-  /** Số job đọc thẳng từ BullMQ (`getJobCounts`, `getWorkersCount`); throughput/thời gian xử lý ở Prometheus. */
+  /** Số job đọc thẳng từ BullMQ (`getJobCounts`, `getWorkersCount`) và cập nhật Prometheus backlog gauges. */
   public async collectMetrics(): Promise<Record<string, MetricValue>> {
-    const queue = this.queues.get(this.queueName);
-    const [counts, consumers] = await Promise.all([
-      this.queues
-        .withTimeout(queue.getJobCounts('active', 'waiting', 'delayed', 'failed', 'completed'))
-        .catch(() => null),
-      this.queues.withTimeout(queue.getWorkersCount()).catch(() => null),
-    ]);
+    const queueNames = this.queues.names();
+    const snapshots = await Promise.all(
+      queueNames.map(async (name) => {
+        const q = this.queues.get(name);
+        const [counts, workers] = await Promise.all([
+          this.queues
+            .withTimeout(
+              q.getJobCounts('active', 'waiting', 'prioritized', 'delayed', 'failed', 'completed'),
+            )
+            .catch(() => null),
+          this.queues.withTimeout(q.getWorkersCount()).catch(() => null),
+        ]);
+        return { name, counts, workers };
+      }),
+    );
+
+    let totalBacklog = 0;
+    let hasAnyCount = false;
+    for (const snap of snapshots) {
+      if (snap.counts) {
+        hasAnyCount = true;
+        const waiting = (snap.counts['waiting'] ?? 0) + (snap.counts['prioritized'] ?? 0);
+        const delayed = snap.counts['delayed'] ?? 0;
+        const backlog = waiting + delayed;
+        totalBacklog += backlog;
+        this.queueBacklogGauge?.set({ queue: snap.name }, backlog);
+      }
+      if (snap.workers !== null) {
+        this.queueActiveWorkersGauge?.set({ queue: snap.name }, snap.workers);
+      }
+    }
+    if (hasAnyCount) {
+      this.queueBacklogTotalGauge?.set(totalBacklog);
+    }
+
+    const primary = snapshots.find((s) => s.name === this.queueName);
+    const counts = primary?.counts ?? null;
+    const consumers = primary?.workers ?? null;
     return {
       activeJobs: counts?.['active'] ?? null,
       waitingJobs: counts?.['waiting'] ?? null,
       delayedJobs: counts?.['delayed'] ?? null,
       failedJobs: counts?.['failed'] ?? null,
       completedJobs: counts?.['completed'] ?? null,
+      totalBacklog: hasAnyCount ? totalBacklog : null,
       consumers,
       concurrency: this.totalConcurrency,
       jobsPerMinute: this.jobsPerMinute(),

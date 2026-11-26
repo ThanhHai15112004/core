@@ -1,0 +1,64 @@
+# ==============================================================================
+# Prometheus Adapter Rules — Ánh xạ Prometheus metrics của Core sang Kubernetes
+# Custom Metrics API (`custom.metrics.k8s.io`) và External Metrics API (`external.metrics.k8s.io`)
+# phục vụ hpa-api.yaml và hpa-worker.yaml.
+# ==============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: core-prometheus-adapter-rules
+  namespace: monitoring
+data:
+  config.yaml: |
+    rules:
+      # API in-flight requests per pod -> dùng cho hpa-api.yaml (type: Pods)
+      - seriesQuery: 'http_requests_in_flight{runtime="api",kubernetes_namespace!="",kubernetes_pod_name!=""}'
+        resources:
+          overrides:
+            kubernetes_namespace: { resource: "namespace" }
+            kubernetes_pod_name: { resource: "pod" }
+        name:
+          matches: "^http_requests_in_flight$"
+          as: "http_requests_in_flight"
+        metricsQuery: 'avg_over_time(<<.Series>>{<<.LabelMatchers>>}[1m])'
+
+      # Process CPU% (cgroup-aware) cho custom scaler nếu không dùng metrics-server
+      - seriesQuery: 'core_runtime_cpu_percent{kubernetes_namespace!="",kubernetes_pod_name!=""}'
+        resources:
+          overrides:
+            kubernetes_namespace: { resource: "namespace" }
+            kubernetes_pod_name: { resource: "pod" }
+        name:
+          matches: "^core_runtime_cpu_percent$"
+          as: "core_runtime_cpu_percent"
+        metricsQuery: 'avg_over_time(<<.Series>>{<<.LabelMatchers>>}[1m])'
+
+      # Process Memory% (cgroup-aware)
+      - seriesQuery: 'core_runtime_memory_percent{kubernetes_namespace!="",kubernetes_pod_name!=""}'
+        resources:
+          overrides:
+            kubernetes_namespace: { resource: "namespace" }
+            kubernetes_pod_name: { resource: "pod" }
+        name:
+          matches: "^core_runtime_memory_percent$"
+          as: "core_runtime_memory_percent"
+        metricsQuery: 'avg_over_time(<<.Series>>{<<.LabelMatchers>>}[1m])'
+
+    externalRules:
+      # Tổng queue backlog toàn hệ thống -> dùng cho hpa-worker.yaml (type: External)
+      - seriesQuery: 'core_queue_backlog_total'
+        resources:
+          template: <<.Resource>>
+        name:
+          matches: "^core_queue_backlog_total$"
+          as: "core_queue_backlog_total"
+        metricsQuery: 'max(core_queue_backlog_total)'
+
+      # Backlog chi tiết theo từng queue (nếu muốn tách HPA riêng cho queue nặng)
+      - seriesQuery: 'core_queue_backlog{queue!=""}'
+        resources:
+          template: <<.Resource>>
+        name:
+          matches: "^core_queue_backlog$"
+          as: "core_queue_backlog"
+        metricsQuery: 'max by (queue) (core_queue_backlog{<<.LabelMatchers>>})'
