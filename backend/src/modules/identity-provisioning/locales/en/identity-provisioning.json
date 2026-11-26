@@ -1,0 +1,15 @@
+{
+  "clientNotFound": "SCIM Client #{id} not found",
+  "clientCodeConflict": "SCIM Client code '{code}' already exists",
+  "clientInactive": "SCIM Client is currently inactive",
+  "invalidToken": "Invalid SCIM Bearer token",
+  "ipNotAllowed": "Caller IP ({ip}) is not in the SCIM Client allowed IP list",
+  "scopeDenied": "SCIM Client lacks required scope '{scope}'",
+  "featureDisabled": "SCIM 2.0 provisioning is disabled by feature flag",
+  "userNotFound": "SCIM User #{id} not found",
+  "groupNotFound": "SCIM Group #{id} not found",
+  "externalIdConflict": "External ID '{externalId}' conflicts with different payload",
+  "versionMismatch": "ETag / If-Match version does not match the current resource",
+  "ifMatchRequired": "If-Match header is required by SCIM concurrency policy",
+  "reconciliationNotFound": "SCIM reconciliation run #{id} not found"
+}

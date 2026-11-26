@@ -65,35 +65,49 @@ export function configureFastifyEmptyJsonBodyParser(
   );
 
   try {
+    const parseRelaxedJsonBody = (
+      req: { headers?: Record<string, unknown>; rawBody?: string },
+      rawBody: unknown,
+      done: (err: Error | null, value?: unknown) => void,
+    ): void => {
+      const body = typeof rawBody === 'string' ? rawBody : '';
+      if (
+        req &&
+        typeof req === 'object' &&
+        Buffer.byteLength(body, 'utf8') <= MAX_RAW_BODY_CAPTURE_BYTES
+      ) {
+        req.rawBody = body;
+      }
+      if (!body || body.trim().length === 0) {
+        done(null, {});
+        return;
+      }
+      try {
+        done(null, JSON.parse(body));
+      } catch (err) {
+        const syntaxError = err instanceof Error ? err : new Error('Invalid JSON body');
+        (syntaxError as Error & { statusCode?: number }).statusCode = 400;
+        done(syntaxError, undefined);
+      }
+    };
+
     fastify.removeContentTypeParser('application/json');
     fastify.addContentTypeParser(
       'application/json',
       { parseAs: 'string', bodyLimit: jsonBodyLimit },
-      (
-        req: { headers?: Record<string, unknown>; rawBody?: string },
-        rawBody: unknown,
-        done: (err: Error | null, value?: unknown) => void,
-      ) => {
-        const body = typeof rawBody === 'string' ? rawBody : '';
-        if (
-          req &&
-          typeof req === 'object' &&
-          Buffer.byteLength(body, 'utf8') <= MAX_RAW_BODY_CAPTURE_BYTES
-        ) {
-          req.rawBody = body;
-        }
-        if (!body || body.trim().length === 0) {
-          done(null, {});
-          return;
-        }
-        try {
-          done(null, JSON.parse(body));
-        } catch (err) {
-          const syntaxError = err instanceof Error ? err : new Error('Invalid JSON body');
-          (syntaxError as Error & { statusCode?: number }).statusCode = 400;
-          done(syntaxError, undefined);
-        }
-      },
+      parseRelaxedJsonBody,
+    );
+
+    // Hỗ trợ chuẩn SCIM 2.0 RFC 7644 (`Content-Type: application/scim+json`)
+    try {
+      fastify.removeContentTypeParser('application/scim+json');
+    } catch {
+      // Ignore if not registered yet
+    }
+    fastify.addContentTypeParser(
+      'application/scim+json',
+      { parseAs: 'string', bodyLimit: jsonBodyLimit },
+      parseRelaxedJsonBody,
     );
 
     // Hỗ trợ nhận trực tiếp luồng nhị phân (Blob / Buffer) cho Chunked Upload mà không cần mã hóa Base64 JSON

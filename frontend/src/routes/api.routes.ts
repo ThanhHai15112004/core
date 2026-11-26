@@ -185,6 +185,19 @@ export const API_ROUTES = {
     SAML_EXCHANGE: (providerCode: string) =>
       `/federated-identity/saml/${encodeURIComponent(providerCode)}/exchange`,
   },
+  IDENTITY_PROVISIONING: {
+    CLIENTS: '/identity-provisioning/clients',
+    CLIENT_BY_ID: (id: string | number) => `/identity-provisioning/clients/${id}`,
+    CLIENT_ROTATE_TOKEN: (id: string | number) =>
+      `/identity-provisioning/clients/${id}/rotate-token`,
+    CLIENT_RECONCILE: (id: string | number) => `/identity-provisioning/clients/${id}/reconcile`,
+    USER_LINKS: (qs = '') => `/identity-provisioning/user-links${qs ? `?${qs}` : ''}`,
+    GROUPS: (qs = '') => `/identity-provisioning/groups${qs ? `?${qs}` : ''}`,
+    SYNC_LOGS: (qs = '') => `/identity-provisioning/sync-logs${qs ? `?${qs}` : ''}`,
+    RECONCILIATIONS: (qs = '') => `/identity-provisioning/reconciliations${qs ? `?${qs}` : ''}`,
+    RECONCILIATION_BY_ID: (id: string | number) =>
+      `/identity-provisioning/reconciliations/${id}`,
+  },
   USERS: {
     LIST: (qs = '') => `/users${qs ? `?${qs}` : ''}`,
     CREATE: '/users',

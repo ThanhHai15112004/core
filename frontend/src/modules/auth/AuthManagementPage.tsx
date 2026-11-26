@@ -10,16 +10,19 @@ import {
   AlertCircle,
   RefreshCw,
   Link2,
+  UserCheck,
 } from 'lucide-react';
 import { AUTH_MODULE_TABS, type AuthSubTabId } from './enum/auth.enum';
 import { useAuthManagement } from './hooks/useAuthManagement';
 import { useFederatedIdentity } from './hooks/useFederatedIdentity';
+import { useScimProvisioning } from './hooks/useScimProvisioning';
 import { AuthGatewayPanel } from './components/AuthGatewayPanel';
 import { MfaAndDevicesPanel } from './components/MfaAndDevicesPanel';
 import { SessionsAndHistoryPanel } from './components/SessionsAndHistoryPanel';
 import { PasswordAndPolicyPanel } from './components/PasswordAndPolicyPanel';
 import { ServiceAccountsPanel } from './components/ServiceAccountsPanel';
 import { FederatedIdentityPanel } from './components/FederatedIdentityPanel';
+import { ScimProvisioningPanel } from './components/ScimProvisioningPanel';
 import { authStyles } from './components/auth-ui.styles';
 
 export const AuthManagementPage: React.FC = () => {
@@ -48,6 +51,7 @@ export const AuthManagementPage: React.FC = () => {
   } = useAuthManagement();
 
   const federated = useFederatedIdentity(accessToken, notify);
+  const scim = useScimProvisioning(accessToken, notify);
 
   const resolveTabIcon = (id: AuthSubTabId) => {
     switch (id) {
@@ -63,6 +67,8 @@ export const AuthManagementPage: React.FC = () => {
         return <Bot size={15} />;
       case 'federated-identity':
         return <Link2 size={15} />;
+      case 'scim-provisioning':
+        return <UserCheck size={15} />;
     }
   };
 
@@ -337,6 +343,27 @@ export const AuthManagementPage: React.FC = () => {
           onDeleteProvider={federated.deleteProvider}
           onFilterEvents={federated.loadMonitoringEvents}
           onSaveGlobalPolicy={federated.saveGlobalPolicy}
+        />
+      )}
+
+      {subTab === 'scim-provisioning' && (
+        <ScimProvisioningPanel
+          accessToken={accessToken}
+          busy={scim.busy}
+          clients={scim.clients}
+          userLinks={scim.userLinks}
+          groups={scim.groups}
+          syncLogs={scim.syncLogs}
+          reconciliations={scim.reconciliations}
+          issuedTokenBanner={scim.issuedTokenBanner}
+          onClearIssuedToken={scim.clearIssuedTokenBanner}
+          onRefresh={scim.refreshAll}
+          onCreateClient={scim.createClient}
+          onUpdateClient={scim.updateClient}
+          onRotateToken={scim.rotateToken}
+          onDeleteClient={scim.deleteClient}
+          onFilterLogs={scim.loadSyncLogs}
+          onRunReconciliation={scim.runReconciliation}
         />
       )}
     </main>

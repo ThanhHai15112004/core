@@ -1,0 +1,247 @@
+{
+  "$schema": "../../packages/kernel/schemas/module.manifest.schema.json",
+  "name": "identity-provisioning",
+  "displayName": "Identity Provisioning (SCIM 2.0)",
+  "version": "1.0.0",
+  "description": "Module đồng bộ người dùng và nhóm theo chuẩn SCIM 2.0 RFC 7643/7644 (Mục 14.3): SCIM Users/Groups APIs, xác thực Bearer Token + IP Allowlist, chống xử lý trùng theo External ID & Version/ETag, lưu lịch sử đồng bộ, đối soát dữ liệu với Identity Provider và tự động khóa + thu hồi session khi ngừng cung cấp.",
+  "type": "core",
+  "category": "Integrations",
+  "author": "Core Platform Team",
+  "entryModule": "IdentityProvisioningModule",
+  "dependencies": [
+    "database",
+    "security",
+    "users",
+    "roles",
+    "sessions",
+    "settings",
+    "feature-flags",
+    "codes",
+    "audit",
+    "reconciliation"
+  ],
+  "permissions": [
+    "identity-provisioning.read",
+    "identity-provisioning.manage"
+  ],
+  "codeTypes": [
+    {
+      "code": "identity_provisioning.client_status",
+      "name": "Trạng thái SCIM Client",
+      "description": "Trạng thái hoạt động của kết nối SCIM Client từ Identity Provider",
+      "isSystem": true,
+      "allowCustomValues": false,
+      "values": [
+        {
+          "numericCode": 1,
+          "code": "ACTIVE",
+          "name": "Đang hoạt động",
+          "labels": { "vi": "Đang hoạt động", "en": "Active" },
+          "behaviorCode": "ACTIVE",
+          "badgeTone": "success",
+          "sortOrder": 1,
+          "isSystem": true
+        },
+        {
+          "numericCode": 2,
+          "code": "INACTIVE",
+          "name": "Tạm tắt",
+          "labels": { "vi": "Tạm tắt", "en": "Inactive" },
+          "behaviorCode": "INACTIVE",
+          "badgeTone": "neutral",
+          "sortOrder": 2,
+          "isSystem": true
+        }
+      ]
+    },
+    {
+      "code": "identity_provisioning.deprovision_mode",
+      "name": "Chế độ ngừng cung cấp tài khoản SCIM",
+      "description": "Hành động xử lý tài khoản nội bộ khi IdP ngừng cung cấp người dùng qua SCIM",
+      "isSystem": true,
+      "allowCustomValues": false,
+      "values": [
+        {
+          "numericCode": 1,
+          "code": "LOCK_AND_REVOKE",
+          "name": "Khóa tài khoản và thu hồi toàn bộ phiên",
+          "labels": {
+            "vi": "Khóa tài khoản & thu hồi session",
+            "en": "Lock & Revoke Sessions"
+          },
+          "behaviorCode": "LOCK_AND_REVOKE",
+          "badgeTone": "danger",
+          "sortOrder": 1,
+          "isSystem": true
+        },
+        {
+          "numericCode": 2,
+          "code": "DEACTIVATE_AND_REVOKE",
+          "name": "Ngưng kích hoạt và thu hồi toàn bộ phiên",
+          "labels": {
+            "vi": "Ngưng kích hoạt & thu hồi session",
+            "en": "Deactivate & Revoke Sessions"
+          },
+          "behaviorCode": "DEACTIVATE_AND_REVOKE",
+          "badgeTone": "warning",
+          "sortOrder": 2,
+          "isSystem": true
+        }
+      ]
+    },
+    {
+      "code": "identity_provisioning.sync_outcome",
+      "name": "Kết quả đồng bộ SCIM",
+      "description": "Phân loại kết quả xử lý mỗi request SCIM",
+      "isSystem": true,
+      "allowCustomValues": false,
+      "values": [
+        {
+          "numericCode": 1,
+          "code": "SUCCESS",
+          "name": "Thành công",
+          "labels": { "vi": "Thành công", "en": "Success" },
+          "behaviorCode": "SUCCESS",
+          "badgeTone": "success",
+          "sortOrder": 1,
+          "isSystem": true
+        },
+        {
+          "numericCode": 2,
+          "code": "NOOP_DUPLICATE",
+          "name": "Bỏ qua trùng lặp (Idempotent)",
+          "labels": { "vi": "Trùng lặp an toàn", "en": "Idempotent No-op" },
+          "behaviorCode": "NOOP_DUPLICATE",
+          "badgeTone": "info",
+          "sortOrder": 2,
+          "isSystem": true
+        },
+        {
+          "numericCode": 3,
+          "code": "CONFLICT",
+          "name": "Xung đột dữ liệu / Phiên bản",
+          "labels": { "vi": "Xung đột", "en": "Conflict" },
+          "behaviorCode": "CONFLICT",
+          "badgeTone": "warning",
+          "sortOrder": 3,
+          "isSystem": true
+        },
+        {
+          "numericCode": 4,
+          "code": "FAILED",
+          "name": "Thất bại",
+          "labels": { "vi": "Thất bại", "en": "Failed" },
+          "behaviorCode": "FAILED",
+          "badgeTone": "danger",
+          "sortOrder": 4,
+          "isSystem": true
+        }
+      ]
+    }
+  ],
+  "settingGroups": [
+    {
+      "code": "identity_provisioning",
+      "name": "Đồng bộ danh tính SCIM 2.0",
+      "description": "Tham số phân trang SCIM, chính sách deprovision mặc định, lưu vết đồng bộ và kiểm soát ETag/If-Match",
+      "icon": "UserCheck",
+      "sortOrder": 68,
+      "isSystem": true
+    }
+  ],
+  "settings": [
+    {
+      "key": "identity_provisioning.max_page_size",
+      "groupCode": "identity_provisioning",
+      "module": "identity-provisioning",
+      "namespace": "identity_provisioning.scim",
+      "name": "Số phần tử tối đa mỗi trang SCIM ListResponse",
+      "description": "Giới hạn tham số count trong truy vấn SCIM Users/Groups.",
+      "valueType": "NUMBER",
+      "defaultValue": 100,
+      "validationRules": { "min": 10, "max": 500, "integerOnly": true },
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 1
+    },
+    {
+      "key": "identity_provisioning.default_deprovision_mode",
+      "groupCode": "identity_provisioning",
+      "module": "identity-provisioning",
+      "namespace": "identity_provisioning.lifecycle",
+      "name": "Chế độ xử lý mặc định khi ngừng cung cấp người dùng",
+      "description": "LOCK_AND_REVOKE (khóa tài khoản + thu hồi phiên) hoặc DEACTIVATE_AND_REVOKE.",
+      "valueType": "TEXT",
+      "defaultValue": "LOCK_AND_REVOKE",
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 2
+    },
+    {
+      "key": "identity_provisioning.sync_log_retention_days",
+      "groupCode": "identity_provisioning",
+      "module": "identity-provisioning",
+      "namespace": "identity_provisioning.audit",
+      "name": "Số ngày lưu nhật ký đồng bộ SCIM",
+      "description": "Thời gian lưu giữ lịch sử request/response SCIM phục vụ kiểm toán.",
+      "valueType": "NUMBER",
+      "defaultValue": 90,
+      "validationRules": { "min": 7, "max": 365, "integerOnly": true },
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 3
+    },
+    {
+      "key": "identity_provisioning.require_if_match_on_write",
+      "groupCode": "identity_provisioning",
+      "module": "identity-provisioning",
+      "namespace": "identity_provisioning.concurrency",
+      "name": "Bắt buộc header If-Match khi cập nhật/xóa SCIM",
+      "description": "Khi bật, mọi request PUT/PATCH/DELETE SCIM phải kèm If-Match khớp ETag version hiện tại.",
+      "valueType": "BOOLEAN",
+      "defaultValue": false,
+      "isSensitive": false,
+      "allowUnitOverride": false,
+      "isSystem": true,
+      "sortOrder": 4
+    }
+  ],
+  "featureFlags": [
+    {
+      "key": "identity_provisioning.scim_v2",
+      "module": "identity-provisioning",
+      "name": "Đồng bộ người dùng & nhóm doanh nghiệp (SCIM 2.0)",
+      "description": "Bật hoặc tắt các endpoint SCIM 2.0 (/scim/v2/*) cho các kết nối IdP doanh nghiệp.",
+      "isEnabled": true,
+      "rolloutPercentage": 100,
+      "targetUserIds": [],
+      "targetRoles": [],
+      "targetOrganizationUnitIds": [],
+      "isSystem": true
+    }
+  ],
+  "events": {
+    "published": [
+      "identity-provisioning.user.provisioned",
+      "identity-provisioning.user.updated",
+      "identity-provisioning.user.deprovisioned",
+      "identity-provisioning.group.synced",
+      "identity-provisioning.reconciliation.completed"
+    ],
+    "subscribed": []
+  },
+  "database": {
+    "hasMigrations": true,
+    "tables": [
+      "scim_clients",
+      "scim_user_links",
+      "scim_groups",
+      "scim_group_members",
+      "scim_sync_logs",
+      "scim_reconciliation_runs"
+    ]
+  }
+}

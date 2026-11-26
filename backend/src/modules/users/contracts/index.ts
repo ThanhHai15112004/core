@@ -212,6 +212,50 @@ export interface UserCredentialRecordView {
   readonly passwordHistoryHashes: readonly string[];
 }
 
+export interface ProvisionedUserView {
+  readonly id: number;
+  readonly username: string;
+  readonly email: string;
+  readonly phone: string | null;
+  readonly firstName: string;
+  readonly lastName: string;
+  readonly fullName: string;
+  readonly status: UserStatusCode;
+  readonly statusName: UserStatusName;
+  readonly lockedUntil: string | null;
+  readonly lockReason: string | null;
+  readonly roles: readonly UserRoleAssignmentSummary[];
+  readonly createdAt: string;
+  readonly updatedAt: string;
+}
+
+export interface CreateProvisionedUserInput {
+  readonly username: string;
+  readonly email: string;
+  readonly phone?: string | null | undefined;
+  readonly password: string;
+  readonly firstName: string;
+  readonly lastName: string;
+  readonly fullName?: string | undefined;
+  readonly status?: UserStatusCode | undefined;
+}
+
+export interface UpdateProvisionedUserInput {
+  readonly username?: string | undefined;
+  readonly email?: string | undefined;
+  readonly phone?: string | null | undefined;
+  readonly firstName?: string | undefined;
+  readonly lastName?: string | undefined;
+  readonly fullName?: string | undefined;
+}
+
+export interface ListProvisionedUsersInput {
+  readonly q?: string | undefined;
+  readonly status?: UserStatusCode | undefined;
+  readonly page?: number | undefined;
+  readonly limit?: number | undefined;
+}
+
 export interface IUsersPublicService {
   findAuthUserByIdentifier(identifier: string): Promise<UserAuthCredentialsView | null>;
   findAuthCredentialsByUserId?(userId: number): Promise<UserAuthCredentialsView | null>;
@@ -250,6 +294,32 @@ export interface IUsersPublicService {
     options?: { readonly directOnly?: boolean; readonly includeTemporary?: boolean },
   ): Promise<UserSubordinateSummaryView[]>;
   resolveApproverChain?(userId: number, maxLevels?: number): Promise<UserApproverSummaryView[]>;
+  getProvisionedUserById?(userId: number): Promise<ProvisionedUserView | null>;
+  findProvisionedUserByIdentifier?(identifier: string): Promise<ProvisionedUserView | null>;
+  listProvisionedUsers?(
+    query: ListProvisionedUsersInput,
+  ): Promise<{ readonly items: ProvisionedUserView[]; readonly total: number }>;
+  createProvisionedUser?(
+    input: CreateProvisionedUserInput,
+    actorId?: number,
+  ): Promise<ProvisionedUserView>;
+  updateProvisionedUser?(
+    userId: number,
+    input: UpdateProvisionedUserInput,
+    actorId?: number,
+  ): Promise<ProvisionedUserView>;
+  lockProvisionedUser?(
+    userId: number,
+    reason: string,
+    actorId?: number,
+  ): Promise<ProvisionedUserView>;
+  unlockProvisionedUser?(userId: number, actorId?: number): Promise<ProvisionedUserView>;
+  deactivateProvisionedUser?(
+    userId: number,
+    reason?: string | null,
+    actorId?: number,
+  ): Promise<ProvisionedUserView>;
+  activateProvisionedUser?(userId: number, actorId?: number): Promise<ProvisionedUserView>;
 }
 
 export const USERS_PUBLIC_SERVICE = Symbol('USERS_PUBLIC_SERVICE');

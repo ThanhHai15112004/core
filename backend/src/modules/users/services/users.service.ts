@@ -33,11 +33,15 @@ import {
 } from '@modules/organizations/contracts/index.js';
 import { type IRolesPublicService, ROLES_PUBLIC_SERVICE } from '@modules/roles/contracts/index.js';
 import {
+  type CreateProvisionedUserInput,
   type IUsersPublicService,
+  type ListProvisionedUsersInput,
+  type ProvisionedUserView,
   type SelfRegisterUserInput,
   USER_IDENTITY_CACHE_PREFIX,
   USER_STATUS,
   USERS_SETTING_KEYS,
+  type UpdateProvisionedUserInput,
   type UpdateUserPreferencesInput,
   type UserAuthCredentialsView,
   type UserAuthIdentityView,
@@ -966,5 +970,138 @@ export class UsersService implements IUsersPublicService {
     userIds: readonly number[],
   ): Promise<UserNotificationContactView[]> {
     return this.identityBridge.findUserContactsByIds(userIds);
+  }
+
+  private toProvisionedUserView(user: UserResponse): ProvisionedUserView {
+    return {
+      id: user.id,
+      username: user.username,
+      email: user.email,
+      phone: user.phone,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      fullName: user.fullName,
+      status: user.status,
+      statusName: user.statusName,
+      lockedUntil: user.lockedUntil,
+      lockReason: user.lockReason,
+      roles: user.roles,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt,
+    };
+  }
+
+  public async getProvisionedUserById(userId: number): Promise<ProvisionedUserView | null> {
+    try {
+      const user = await this.getById(userId, true);
+      return this.toProvisionedUserView(user);
+    } catch (error) {
+      if (error instanceof NotFoundAppException) {
+        return null;
+      }
+      throw error;
+    }
+  }
+
+  public async findProvisionedUserByIdentifier(
+    identifier: string,
+  ): Promise<ProvisionedUserView | null> {
+    const found = await this.findAuthUserByIdentifier(identifier);
+    if (!found) {
+      return null;
+    }
+    return this.getProvisionedUserById(found.id);
+  }
+
+  public async listProvisionedUsers(
+    query: ListProvisionedUsersInput,
+  ): Promise<{ readonly items: ProvisionedUserView[]; readonly total: number }> {
+    const result = await this.listPaginated({
+      page: query.page ?? 1,
+      limit: query.limit ?? 100,
+      ...(query.q ? { q: query.q } : {}),
+      ...(query.status !== undefined ? { status: query.status } : {}),
+      sortBy: 'id',
+      sortOrder: 'ASC',
+    });
+    return {
+      items: result.data.map((item) => this.toProvisionedUserView(item)),
+      total: result.meta.total ?? result.data.length,
+    };
+  }
+
+  public async createProvisionedUser(
+    input: CreateProvisionedUserInput,
+    actorId?: number,
+  ): Promise<ProvisionedUserView> {
+    const created = await this.create(
+      {
+        username: input.username,
+        email: input.email,
+        phone: input.phone ?? null,
+        password: input.password,
+        firstName: input.firstName,
+        lastName: input.lastName,
+        fullName: input.fullName ?? `${input.firstName} ${input.lastName}`.trim(),
+        status: input.status ?? USER_STATUS.ACTIVE,
+        roleIds: [],
+        organizationUnits: [],
+      },
+      actorId,
+    );
+    return this.toProvisionedUserView(created);
+  }
+
+  public async updateProvisionedUser(
+    userId: number,
+    input: UpdateProvisionedUserInput,
+    actorId?: number,
+  ): Promise<ProvisionedUserView> {
+    const updated = await this.update(
+      userId,
+      {
+        ...(input.email !== undefined ? { email: input.email } : {}),
+        ...(input.phone !== undefined ? { phone: input.phone } : {}),
+        ...(input.firstName !== undefined ? { firstName: input.firstName } : {}),
+        ...(input.lastName !== undefined ? { lastName: input.lastName } : {}),
+        ...(input.fullName !== undefined ? { fullName: input.fullName } : {}),
+      },
+      actorId,
+    );
+    return this.toProvisionedUserView(updated);
+  }
+
+  public async lockProvisionedUser(
+    userId: number,
+    reason: string,
+    actorId?: number,
+  ): Promise<ProvisionedUserView> {
+    const locked = await this.lockUser(userId, { reason }, actorId);
+    return this.toProvisionedUserView(locked);
+  }
+
+  public async unlockProvisionedUser(
+    userId: number,
+    actorId?: number,
+  ): Promise<ProvisionedUserView> {
+    const unlocked = await this.unlockUser(userId, actorId);
+    return this.toProvisionedUserView(unlocked);
+  }
+
+  public async deactivateProvisionedUser(
+    userId: number,
+    reason?: string | null,
+    actorId?: number,
+  ): Promise<ProvisionedUserView> {
+    const deactivated = await this.deactivateUser(userId, reason ?? null, actorId);
+    return this.toProvisionedUserView(deactivated);
+  }
+
+  public async activateProvisionedUser(
+    userId: number,
+    actorId?: number,
+  ): Promise<ProvisionedUserView> {
+    const activated = await this.activateUser(userId, actorId);
+    return this.toProvisionedUserView(activated);
   }
 }

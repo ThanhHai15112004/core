@@ -1,0 +1,15 @@
+{
+  "clientNotFound": "Không tìm thấy SCIM Client #{id}",
+  "clientCodeConflict": "Mã SCIM Client '{code}' đã tồn tại",
+  "clientInactive": "SCIM Client hiện đang tạm tắt",
+  "invalidToken": "Bearer Token SCIM không hợp lệ",
+  "ipNotAllowed": "Địa chỉ IP ({ip}) không nằm trong danh sách cho phép của SCIM Client",
+  "scopeDenied": "SCIM Client không có quyền thực hiện thao tác '{scope}'",
+  "featureDisabled": "Tính năng SCIM 2.0 đang tắt bởi Feature Flag hệ thống",
+  "userNotFound": "Không tìm thấy người dùng SCIM #{id}",
+  "groupNotFound": "Không tìm thấy nhóm SCIM #{id}",
+  "externalIdConflict": "Xung đột External ID '{externalId}' với dữ liệu khác",
+  "versionMismatch": "Phiên bản ETag/If-Match không khớp với tài nguyên hiện tại",
+  "ifMatchRequired": "Yêu cầu bắt buộc header If-Match theo chính sách SCIM",
+  "reconciliationNotFound": "Không tìm thấy phiên đối soát SCIM #{id}"
+}

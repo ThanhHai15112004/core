@@ -4,7 +4,8 @@ export type AuthSubTabId =
   | 'sessions-history'
   | 'password-policy'
   | 'service-accounts'
-  | 'federated-identity';
+  | 'federated-identity'
+  | 'scim-provisioning';
 
 export interface AuthSubTabMeta {
   readonly id: AuthSubTabId;
@@ -49,6 +50,13 @@ export const AUTH_MODULE_TABS: readonly AuthSubTabMeta[] = [
     label: 'OAuth / Tài khoản ngoài',
     badge: '10.4',
     description: 'Đăng nhập Google/Microsoft (State/Nonce/PKCE), liên kết tài khoản & monitoring lỗi',
+  },
+  {
+    id: 'scim-provisioning',
+    label: 'SCIM 2.0 Provisioning',
+    badge: '14.3',
+    description:
+      'Đồng bộ người dùng & nhóm SCIM 2.0, token & IP allowlist, lịch sử đồng bộ và đối soát IdP',
   },
 ] as const;
 
