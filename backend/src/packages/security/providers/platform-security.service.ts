@@ -463,6 +463,19 @@ export class PlatformSecurityService {
     return { routeKey, rule, windowMs, nowMs, resolvedIp };
   }
 
+  /** Trả về tóm tắt chính sách Rate Limit hiện hành của Backend. */
+  public getRateLimitPolicySummary(): {
+    defaultRule: RateLimitRuleConfig;
+    customRuleCount: number;
+    distributedStoreReady: boolean;
+  } {
+    return {
+      defaultRule: { ...this.defaultRateLimitRule },
+      customRuleCount: this.customRateLimitRules.size,
+      distributedStoreReady: this.isDistributedStoreReady(),
+    };
+  }
+
   /**
    * Kiểm tra Rate Limit dùng chung giữa nhiều API instance qua Redis (`INCR` + `PEXPIRE` atomic);
    * tự động fallback về bộ đếm RAM nếu Redis chưa cấu hình hoặc tạm mất kết nối.
@@ -475,21 +488,27 @@ export class PlatformSecurityService {
     }
 
     const { routeKey, rule, windowMs, nowMs, resolvedIp } = this.prepareRateLimitContext(input);
+    const scope: RateLimitCheckResult['scope'] = input.skipIpCheck ? 'USER_API' : 'IP_USER_API';
     try {
-      const ipKey = this.buildRedisKey('sec', 'rl', rule.routePattern, 'ip', resolvedIp);
-      const ipBucket = await this.incrementRedisBucket(ipKey, windowMs, nowMs);
-      if (ipBucket.count > rule.maxRequestsPerIp) {
-        return this.buildRateLimitResult(
-          false,
-          'IP',
-          rule.maxRequestsPerIp,
-          0,
-          ipBucket.resetAtMs,
-          nowMs,
-          routeKey,
-        );
+      let ipBucket: RateLimitBucket | null = null;
+      if (!input.skipIpCheck) {
+        const ipKey = this.buildRedisKey('sec', 'rl', rule.routePattern, 'ip', resolvedIp);
+        ipBucket = await this.incrementRedisBucket(ipKey, windowMs, nowMs);
+        if (ipBucket.count > rule.maxRequestsPerIp) {
+          return this.buildRateLimitResult(
+            false,
+            'IP',
+            rule.maxRequestsPerIp,
+            0,
+            ipBucket.resetAtMs,
+            nowMs,
+            routeKey,
+            scope,
+          );
+        }
       }
 
+      let userBucket: RateLimitBucket | null = null;
       if (input.userId !== undefined && input.userId !== null && String(input.userId).trim() !== '') {
         const userKey = this.buildRedisKey(
           'sec',
@@ -498,7 +517,7 @@ export class PlatformSecurityService {
           'user',
           String(input.userId).trim(),
         );
-        const userBucket = await this.incrementRedisBucket(userKey, windowMs, nowMs);
+        userBucket = await this.incrementRedisBucket(userKey, windowMs, nowMs);
         if (userBucket.count > rule.maxRequestsPerUser) {
           return this.buildRateLimitResult(
             false,
@@ -508,6 +527,7 @@ export class PlatformSecurityService {
             userBucket.resetAtMs,
             nowMs,
             routeKey,
+            scope,
           );
         }
       }
@@ -523,19 +543,26 @@ export class PlatformSecurityService {
           apiBucket.resetAtMs,
           nowMs,
           routeKey,
+          scope,
         );
       }
 
-      const effectiveLimit = rule.maxRequestsPerIp;
-      const effectiveRemaining = Math.max(0, effectiveLimit - ipBucket.count);
+      const activeBucket = ipBucket ?? userBucket ?? apiBucket;
+      const effectiveLimit = ipBucket
+        ? rule.maxRequestsPerIp
+        : userBucket
+          ? rule.maxRequestsPerUser
+          : rule.maxRequestsPerApi;
+      const effectiveRemaining = Math.max(0, effectiveLimit - activeBucket.count);
       return this.buildRateLimitResult(
         true,
         undefined,
         effectiveLimit,
         effectiveRemaining,
-        ipBucket.resetAtMs,
+        activeBucket.resetAtMs,
         nowMs,
         routeKey,
+        scope,
       );
     } catch {
       return this.checkRateLimit(input);
@@ -585,24 +612,30 @@ export class PlatformSecurityService {
   /** Kiểm tra tần suất gọi API theo đồng thời 3 chiều: IP, User ID và Route API (Mục 4.5.3) */
   public checkRateLimit(input: RateLimitCheckInput): RateLimitCheckResult {
     const { routeKey, rule, windowMs, nowMs, resolvedIp } = this.prepareRateLimitContext(input);
+    const scope: RateLimitCheckResult['scope'] = input.skipIpCheck ? 'USER_API' : 'IP_USER_API';
 
-    const ipKey = `${rule.routePattern}:ip:${resolvedIp}`;
-    const ipBucket = this.incrementBucket(this.ipBuckets, ipKey, windowMs, nowMs);
-    if (ipBucket.count > rule.maxRequestsPerIp) {
-      return this.buildRateLimitResult(
-        false,
-        'IP',
-        rule.maxRequestsPerIp,
-        0,
-        ipBucket.resetAtMs,
-        nowMs,
-        routeKey,
-      );
+    let ipBucket: RateLimitBucket | null = null;
+    if (!input.skipIpCheck) {
+      const ipKey = `${rule.routePattern}:ip:${resolvedIp}`;
+      ipBucket = this.incrementBucket(this.ipBuckets, ipKey, windowMs, nowMs);
+      if (ipBucket.count > rule.maxRequestsPerIp) {
+        return this.buildRateLimitResult(
+          false,
+          'IP',
+          rule.maxRequestsPerIp,
+          0,
+          ipBucket.resetAtMs,
+          nowMs,
+          routeKey,
+          scope,
+        );
+      }
     }
 
+    let userBucket: RateLimitBucket | null = null;
     if (input.userId !== undefined && input.userId !== null && String(input.userId).trim() !== '') {
       const userKey = `${rule.routePattern}:user:${String(input.userId).trim()}`;
-      const userBucket = this.incrementBucket(this.userBuckets, userKey, windowMs, nowMs);
+      userBucket = this.incrementBucket(this.userBuckets, userKey, windowMs, nowMs);
       if (userBucket.count > rule.maxRequestsPerUser) {
         return this.buildRateLimitResult(
           false,
@@ -612,6 +645,7 @@ export class PlatformSecurityService {
           userBucket.resetAtMs,
           nowMs,
           routeKey,
+          scope,
         );
       }
     }
@@ -627,19 +661,26 @@ export class PlatformSecurityService {
         apiBucket.resetAtMs,
         nowMs,
         routeKey,
+        scope,
       );
     }
 
-    const effectiveLimit = rule.maxRequestsPerIp;
-    const effectiveRemaining = Math.max(0, effectiveLimit - ipBucket.count);
+    const activeBucket = ipBucket ?? userBucket ?? apiBucket;
+    const effectiveLimit = ipBucket
+      ? rule.maxRequestsPerIp
+      : userBucket
+        ? rule.maxRequestsPerUser
+        : rule.maxRequestsPerApi;
+    const effectiveRemaining = Math.max(0, effectiveLimit - activeBucket.count);
     return this.buildRateLimitResult(
       true,
       undefined,
       effectiveLimit,
       effectiveRemaining,
-      ipBucket.resetAtMs,
+      activeBucket.resetAtMs,
       nowMs,
       routeKey,
+      scope,
     );
   }
 
@@ -1162,6 +1203,7 @@ export class PlatformSecurityService {
     resetAtMs: number,
     nowMs: number,
     routeKey: string,
+    scope: RateLimitCheckResult['scope'] = 'IP_USER_API',
   ): RateLimitCheckResult {
     const retryAfterSeconds = Math.max(1, Math.ceil((resetAtMs - nowMs) / 1000));
     return {
@@ -1172,6 +1214,7 @@ export class PlatformSecurityService {
       resetAtMs,
       retryAfterSeconds,
       routeKey,
+      scope,
     };
   }
 }

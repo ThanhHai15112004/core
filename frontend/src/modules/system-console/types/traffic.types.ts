@@ -108,7 +108,7 @@ export interface TrafficInsights {
     count: number;
     topRoute: { method: string; route: string } | null;
   }[];
-  rateLimit: { configured: false; message: string };
+  rateLimit: { configured: boolean; mode: string; message: string };
   last24h: {
     total: number;
     successful: number;
@@ -116,6 +116,79 @@ export interface TrafficInsights {
     serverErrors: number;
     peak: { at: string; requestsPerSecond: number } | null;
     slowest: { from: string; to: string; p95LatencyMs: number } | null;
+  };
+}
+
+export interface GatewayConsistencyCheck {
+  id: string;
+  status: 'pass' | 'warn' | 'fail';
+  message: string;
+  details?: Record<string, unknown>;
+}
+
+export interface GatewayServiceDomain {
+  domain: string;
+  serviceName: string;
+  upstreamDefault: string;
+  prefixes: string[];
+  stripPrefix: boolean;
+  stability: 'v1-stable';
+  description: string;
+}
+
+export interface TrafficGatewayConfig {
+  status: 'ok' | 'warn' | 'fail';
+  proxy: {
+    trustMode: string;
+    trustedCidrs: string[];
+    maxHops: number;
+    ipHeaders: string[];
+    forwardedPrefixHeader: string;
+  };
+  timeouts: {
+    lbConnectTimeoutMs: number;
+    lbSendTimeoutMs: number;
+    lbReadTimeoutMs: number;
+    lbKeepAliveTimeoutMs: number;
+    apiConnectionTimeoutMs: number;
+    apiRequestTimeoutMs: number;
+    apiKeepAliveTimeoutMs: number;
+    apiHeadersTimeoutMs: number;
+  };
+  bodyLimits: {
+    gatewayMaxBodySizeBytes: number;
+    apiMaxBodySizeBytes: number;
+    apiJsonBodyLimitBytes: number;
+    maxParamLength: number;
+  };
+  rateLimit: {
+    layerMode: string;
+    gatewaySourceHeader: string;
+    gatewaySourceValue: string;
+    skipBackendIpWhenEdgeApplied: boolean;
+    alwaysEnforceIpRoutes: string[];
+    gatewayEdgeRps: number;
+    gatewayEdgeBurst: number;
+    backendDefaultRule: {
+      windowSeconds: number;
+      maxRequestsPerIp: number;
+      maxRequestsPerUser: number;
+      maxRequestsPerApi: number;
+    } | null;
+    distributedStoreReady: boolean;
+  };
+  gateway: {
+    vendor: string;
+    sharedSecretHeader: string;
+    sharedSecretConfigured: boolean;
+    strictConsistencyCheck: boolean;
+  };
+  checks: GatewayConsistencyCheck[];
+  serviceRouting: {
+    apiPrefix: string;
+    valid: boolean;
+    collisions: { prefix: string; domains: string[] }[];
+    domains: GatewayServiceDomain[];
   };
 }
 

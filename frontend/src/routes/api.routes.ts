@@ -45,6 +45,7 @@ export const API_ROUTES = {
         `${OPS_PREFIX}/traffic/endpoints/${encodeURIComponent(routeId)}?${qs}`,
       ERRORS: (qs: string) => `${OPS_PREFIX}/traffic/errors?${qs}`,
       INSIGHTS: (qs: string) => `${OPS_PREFIX}/traffic/insights?${qs}`,
+      GATEWAY: `${OPS_PREFIX}/traffic/gateway`,
     },
     DATABASE: {
       path: (path: string, qs = '') => `${OPS_PREFIX}/database/${path}${qs ? `?${qs}` : ''}`,

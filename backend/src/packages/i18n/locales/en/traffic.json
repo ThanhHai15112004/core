@@ -14,6 +14,7 @@
   "traffic.problem.endpoint.high_error.title": "High error endpoint: {endpoint}",
   "traffic.problem.endpoint.failing.title": "Failing endpoint: {endpoint}",
   "traffic.problem.none": "no baseline",
+  "traffic.rateLimit.configured": "Rate limiting active in \"{mode}\" mode (Edge/Gateway IP protection separated from Backend user/route rules).",
   "traffic.rateLimit.notConfigured": "Rate limiting is not configured — no requests are being throttled. 429 responses (if any) are counted above.",
   "traffic.error.telemetryUnavailable": "Prometheus is unreachable or PROMETHEUS_URL is not set, so HTTP telemetry is unavailable.",
   "traffic.error.endpointNotFound": "Endpoint {id} not found."

@@ -105,4 +105,18 @@ describe('Feature: Health API (GET /health)', () => {
       registry.upsertDefinition(baseDef);
     }
   });
+
+  it('should support HEAD probes with Cache-Control: no-store for Load Balancers (13.5)', async () => {
+    const checkHead = await context.app.inject({ method: 'HEAD', url: '/health' });
+    expect(checkHead.statusCode).toBe(200);
+    expect(checkHead.headers['cache-control']).toBe('no-store');
+
+    const liveHead = await context.app.inject({ method: 'HEAD', url: '/health/live' });
+    expect(liveHead.statusCode).toBe(200);
+    expect(liveHead.headers['cache-control']).toBe('no-store');
+
+    const readyHead = await context.app.inject({ method: 'HEAD', url: '/health/ready' });
+    expect([200, 503]).toContain(readyHead.statusCode);
+    expect(readyHead.headers['cache-control']).toBe('no-store');
+  });
 });

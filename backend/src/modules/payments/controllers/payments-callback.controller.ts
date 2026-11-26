@@ -6,6 +6,7 @@ import {
   Public,
   type RawBodyRequest,
   ValidatedParams,
+  resolveClientIp,
 } from '@packages/http/index.js';
 import { paymentProviderCodeParamSchema } from '../requests/payments.requests.js';
 import { PAYMENTS_ROUTES } from '../routes/payments.routes.js';
@@ -67,12 +68,7 @@ export class PaymentsCallbackController {
             ? JSON.stringify(req.body)
             : '';
 
-    const forwarded = req.headers['x-forwarded-for'];
-    const rawForwarded = Array.isArray(forwarded) ? forwarded[0] : forwarded;
-    const sourceIp =
-      (typeof rawForwarded === 'string' ? rawForwarded.split(',')[0]?.trim() : undefined) ||
-      req.ip ||
-      undefined;
+    const sourceIp = resolveClientIp(req) ?? undefined;
 
     const result = await this.paymentsService.receiveCallback({
       providerCode,

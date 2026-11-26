@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { context, isSpanContextValid, trace } from '@opentelemetry/api';
+import { resolveClientIp } from '@packages/kernel/index.js';
 import { RequestContextService } from '../context/request-context.service.js';
 import { setHttpLogMeta } from '../utils/http-log-meta.js';
 import { resolveHttpRequestId, resolveRequestId, resolveTraceId } from '../utils/request-id.js';
@@ -20,11 +21,7 @@ export function requestContextMiddleware(
     res.setHeader('x-trace-id', traceId);
   }
   const startedAt = Date.now();
-  const forwardedFor = req.headers['x-forwarded-for'];
-  const ipAddress =
-    (Array.isArray(forwardedFor) ? forwardedFor[0] : forwardedFor?.split(',')[0]?.trim()) ||
-    req.socket?.remoteAddress ||
-    null;
+  const ipAddress = resolveClientIp(req);
   const rawUa = req.headers['user-agent'];
   const userAgent = (Array.isArray(rawUa) ? rawUa[0] : rawUa) ?? null;
 

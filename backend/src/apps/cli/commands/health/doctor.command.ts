@@ -2,6 +2,7 @@ import { getHeapStatistics } from 'node:v8';
 import { Injectable, Optional } from '@nestjs/common';
 import { CoreConfigService } from '@packages/config/index.js';
 import { DatabaseConnectionService, DatabaseOperationsService } from '@packages/database/index.js';
+import { evaluateGatewayConsistency } from '@packages/http/index.js';
 import { RedisService } from '@packages/redis/index.js';
 import { StorageConnectionService } from '@packages/storage/index.js';
 import { evaluateStatelessReadiness } from '@packages/runtime/index.js';
@@ -200,6 +201,21 @@ export class DoctorCommand implements ICliCommandProvider {
       passed: statelessFailCount === 0,
       warning: statelessWarnCount > 0,
       message: `${statelessReport.status.toUpperCase()} (storage=${this.config.storage.driver}, cache=${this.config.cache.driver}, drainDelayMs=${this.config.runtime.drainDelayMs}, gracefulTimeoutMs=${this.config.runtime.gracefulTimeoutMs})`,
+    });
+
+    // 6b. Check Gateway & Load Balancer Consistency (Phase 13.5)
+    const gatewayReport = evaluateGatewayConsistency(
+      this.config.gateway,
+      this.config.app.env,
+      this.config.app.apiPrefix,
+    );
+    const gwFailCount = gatewayReport.checks.filter((c) => c.status === 'fail').length;
+    const gwWarnCount = gatewayReport.checks.filter((c) => c.status === 'warn').length;
+    results.push({
+      name: 'Gateway & LB Config',
+      passed: gwFailCount === 0,
+      warning: gwWarnCount > 0,
+      message: `${gatewayReport.status.toUpperCase()} (trust=${this.config.gateway.proxy.trustMode}, keepAlive=${this.config.gateway.timeouts.apiKeepAliveTimeoutMs}ms/${this.config.gateway.timeouts.lbKeepAliveTimeoutMs}ms, maxBody=${Math.round(this.config.gateway.bodyLimits.apiMaxBodySizeBytes / 1048576)}MB, rateLayer=${this.config.gateway.rateLimit.layerMode})`,
     });
 
     // 7. Check Memory Heap

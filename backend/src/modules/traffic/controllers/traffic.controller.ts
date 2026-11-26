@@ -15,6 +15,7 @@ import type {
   EndpointRowDto,
   ErrorAnalysisDto,
   TimeseriesDto,
+  TrafficGatewayConfigDto,
   TrafficInsightsDto,
   TrafficSummaryDto,
 } from '../responses/traffic.response.js';
@@ -110,5 +111,12 @@ export class TrafficController {
   @Get(TRAFFIC_ROUTES.INSIGHTS)
   public getInsights(@Query() query: RawQuery): Promise<TrafficInsightsDto> {
     return this.traffic.getInsights(toTrafficQuery(query));
+  }
+
+  /** Lấy cấu hình đồng bộ Load Balancer, Trusted Proxy, Rate Limit Layering và bảng định tuyến tách service */
+  @Public()
+  @Get(TRAFFIC_ROUTES.GATEWAY)
+  public getGatewayConfig(): TrafficGatewayConfigDto {
+    return this.traffic.getGatewayConfig();
   }
 }

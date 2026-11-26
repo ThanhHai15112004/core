@@ -1,13 +1,20 @@
 import { Global, Module, type OnModuleInit, Optional } from '@nestjs/common';
 import { HttpAdapterHost } from '@nestjs/core';
+import { CoreConfigService } from '@packages/config/index.js';
 import { GlobalExceptionFilter } from './filters/global-exception.filter.js';
 import { IdempotencyInterceptor } from './interceptors/idempotency.interceptor.js';
 import { RequestTimeoutInterceptor } from './interceptors/request-timeout.interceptor.js';
 import { TransformResponseInterceptor } from './interceptors/transform-response.interceptor.js';
 
 const RELAXED_JSON_PARSER_WATERMARK = Symbol.for('core:fastify_relaxed_json_parser');
-const DEFAULT_JSON_BODY_LIMIT_BYTES = 32 * 1024 * 1024; // 32 MB
+const DEFAULT_JSON_BODY_LIMIT_BYTES = 16 * 1024 * 1024; // 16 MB
+const DEFAULT_UPLOAD_BODY_LIMIT_BYTES = 32 * 1024 * 1024; // 32 MB
 export const MAX_RAW_BODY_CAPTURE_BYTES = 2 * 1024 * 1024; // 2 MB
+
+export interface ConfigureFastifyBodyParserOptions {
+  readonly jsonBodyLimitBytes?: number | undefined;
+  readonly uploadBodyLimitBytes?: number | undefined;
+}
 
 export interface RawBodyRequest {
   rawBody?: string;
@@ -32,7 +39,10 @@ interface FastifyLikeInstance {
  * tự động chuyển thành `{}` thay vì ném lỗi 400 `FST_ERR_CTP_EMPTY_JSON_BODY`
  * (`Body cannot be empty when content-type is set to 'application/json'`).
  */
-export function configureFastifyEmptyJsonBodyParser(instance: unknown): void {
+export function configureFastifyEmptyJsonBodyParser(
+  instance: unknown,
+  options?: ConfigureFastifyBodyParserOptions,
+): void {
   if (!instance || typeof instance !== 'object') {
     return;
   }
@@ -45,11 +55,20 @@ export function configureFastifyEmptyJsonBodyParser(instance: unknown): void {
     return;
   }
 
+  const jsonBodyLimit = Math.max(
+    1024,
+    options?.jsonBodyLimitBytes ?? DEFAULT_JSON_BODY_LIMIT_BYTES,
+  );
+  const uploadBodyLimit = Math.max(
+    jsonBodyLimit,
+    options?.uploadBodyLimitBytes ?? DEFAULT_UPLOAD_BODY_LIMIT_BYTES,
+  );
+
   try {
     fastify.removeContentTypeParser('application/json');
     fastify.addContentTypeParser(
       'application/json',
-      { parseAs: 'string', bodyLimit: DEFAULT_JSON_BODY_LIMIT_BYTES },
+      { parseAs: 'string', bodyLimit: jsonBodyLimit },
       (
         req: { headers?: Record<string, unknown>; rawBody?: string },
         rawBody: unknown,
@@ -85,7 +104,7 @@ export function configureFastifyEmptyJsonBodyParser(instance: unknown): void {
     }
     fastify.addContentTypeParser(
       'application/octet-stream',
-      { parseAs: 'buffer', bodyLimit: DEFAULT_JSON_BODY_LIMIT_BYTES },
+      { parseAs: 'buffer', bodyLimit: uploadBodyLimit },
       (
         req: { headers?: Record<string, unknown>; url?: string },
         rawBody: unknown,
@@ -131,10 +150,16 @@ export function configureFastifyEmptyJsonBodyParser(instance: unknown): void {
   ],
 })
 export class HttpModule implements OnModuleInit {
-  constructor(@Optional() private readonly adapterHost?: HttpAdapterHost) {}
+  constructor(
+    @Optional() private readonly adapterHost?: HttpAdapterHost,
+    @Optional() private readonly config?: CoreConfigService,
+  ) {}
 
   public onModuleInit(): void {
     const instance = this.adapterHost?.httpAdapter?.getInstance?.() as unknown;
-    configureFastifyEmptyJsonBodyParser(instance);
+    configureFastifyEmptyJsonBodyParser(instance, {
+      jsonBodyLimitBytes: this.config?.gateway.bodyLimits.apiJsonBodyLimitBytes,
+      uploadBodyLimitBytes: this.config?.gateway.bodyLimits.apiMaxBodySizeBytes,
+    });
   }
 }

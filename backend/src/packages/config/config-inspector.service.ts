@@ -54,6 +54,7 @@ export class ConfigInspectorService {
       'metrics',
       'tracing',
       'httpClient',
+      'gateway',
     ];
 
     const results: ConfigItemDto[] = [];

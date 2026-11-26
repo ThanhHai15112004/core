@@ -75,6 +75,7 @@ export interface RateLimitCheckInput {
   readonly method?: string | null | undefined;
   readonly url?: string | null | undefined;
   readonly routeKey?: string | null | undefined;
+  readonly skipIpCheck?: boolean | undefined;
 }
 
 export interface RateLimitCheckResult {
@@ -86,6 +87,8 @@ export interface RateLimitCheckResult {
   readonly resetAtMs: number;
   readonly retryAfterSeconds: number;
   readonly routeKey: string;
+  readonly scope?: 'IP_USER_API' | 'USER_API' | 'GATEWAY_DELEGATED' | undefined;
+  readonly policy?: string | undefined;
 }
 
 /**

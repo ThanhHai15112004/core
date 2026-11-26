@@ -12,4 +12,5 @@ export const trafficKeys = {
   endpoint: (routeId: string, range: TrafficFilters['range']) => ['traffic', 'endpoint', routeId, range] as const,
   errors: (f: TrafficFilters) => ['traffic', 'errors', ...scope(f)] as const,
   insights: (f: TrafficFilters) => ['traffic', 'insights', ...scope(f)] as const,
+  gateway: () => ['traffic', 'gateway'] as const,
 };

@@ -8,6 +8,7 @@ import type {
   Timeseries,
   TimeseriesMetric,
   TrafficFilters,
+  TrafficGatewayConfig,
   TrafficInsights,
   TrafficSummary,
 } from '../types/traffic.types';
@@ -42,4 +43,5 @@ export const trafficApi = {
     fetchApi<EndpointDetail>(T.ENDPOINT_DETAIL(routeId, toQuery({ range: f.range }))),
   errors: (f: TrafficFilters) => fetchApi<ErrorAnalysis>(T.ERRORS(toQuery(scope(f)))),
   insights: (f: TrafficFilters) => fetchApi<TrafficInsights>(T.INSIGHTS(toQuery(scope(f)))),
+  gateway: () => fetchApi<TrafficGatewayConfig>(T.GATEWAY),
 };

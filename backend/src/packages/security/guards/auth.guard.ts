@@ -5,7 +5,9 @@ import {
   ForbiddenAppException,
   HTTP_ERROR_CODE,
   UnauthorizedAppException,
+  resolveForwardedContext,
 } from '@packages/kernel/index.js';
+import { CoreConfigService } from '@packages/config/index.js';
 import {
   IS_PUBLIC_KEY,
   REQUIRED_ANY_PERMISSIONS_KEY,
@@ -24,6 +26,7 @@ export class AuthGuard implements CanActivate {
     private readonly reflector: Reflector,
     private readonly tokenService: TokenService,
     @Optional() private readonly platformSecurityService?: PlatformSecurityService,
+    @Optional() private readonly config?: CoreConfigService,
   ) {}
 
   private attachActorToContext(request: FastifyRequest, user: UserIdentity): void {
@@ -35,8 +38,9 @@ export class AuthGuard implements CanActivate {
     if (!store) return;
     store.actor = user;
     store.userId = String(user.id);
-    if (!store.ipAddress && request.ip) {
-      store.ipAddress = request.ip;
+    const resolvedIp = resolveForwardedContext(request, this.config?.gateway.proxy).clientIp;
+    if (resolvedIp) {
+      store.ipAddress = resolvedIp;
     }
     const ua = request.headers['user-agent'];
     if (!store.userAgent && ua) {
@@ -49,12 +53,40 @@ export class AuthGuard implements CanActivate {
     reply?: FastifyReply,
   ): Promise<void> {
     if (!this.platformSecurityService) return;
-    const forwarded = request.headers['x-forwarded-for'];
-    const rawForwarded = Array.isArray(forwarded) ? forwarded[0] : forwarded;
-    const clientIp =
-      (typeof rawForwarded === 'string' ? rawForwarded.split(',')[0]?.trim() : undefined) ||
-      request.ip ||
-      '127.0.0.1';
+    const forwarded = resolveForwardedContext(request, this.config?.gateway.proxy);
+    const clientIp = forwarded.clientIp || '127.0.0.1';
+    const rateLimitCfg = this.config?.gateway.rateLimit;
+    const layerMode = rateLimitCfg?.layerMode ?? 'backend-only';
+    const rawUrl = (request.url ?? '/').split('?')[0] ?? '/';
+    const isSensitiveRoute = (rateLimitCfg?.alwaysEnforceIpRoutes ?? []).some((route) =>
+      rawUrl.includes(route),
+    );
+    const sourceHeaderName = rateLimitCfg?.gatewaySourceHeader || 'x-ratelimit-source';
+    const rawSourceHeader = request.headers[sourceHeaderName];
+    const sourceHeaderVal = (
+      Array.isArray(rawSourceHeader) ? rawSourceHeader[0] : rawSourceHeader
+    )
+      ?.trim()
+      .toLowerCase();
+    const hasEdgeGatewayMarker =
+      forwarded.trustedProxy &&
+      (!rateLimitCfg?.gatewaySourceValue ||
+        sourceHeaderVal === rateLimitCfg.gatewaySourceValue ||
+        rateLimitCfg.skipBackendIpWhenEdgeApplied);
+
+    if (layerMode === 'gateway-only' && hasEdgeGatewayMarker && !isSensitiveRoute) {
+      reply?.header('x-ratelimit-policy', 'gateway-only');
+      reply?.header('x-ratelimit-scope', 'gateway-edge');
+      return;
+    }
+
+    const skipIpCheck =
+      layerMode === 'edge-ip-backend-business' &&
+      Boolean(rateLimitCfg?.skipBackendIpWhenEdgeApplied) &&
+      hasEdgeGatewayMarker &&
+      !isSensitiveRoute;
+
+    const scopeHeader = skipIpCheck ? 'backend-business' : 'backend-full';
 
     try {
       const rl = await this.platformSecurityService.assertRateLimit({
@@ -62,10 +94,13 @@ export class AuthGuard implements CanActivate {
         userId: request.user?.id ?? null,
         method: request.method,
         url: request.url,
+        skipIpCheck,
       });
       reply?.header('x-ratelimit-limit', String(rl.limit));
       reply?.header('x-ratelimit-remaining', String(rl.remaining));
       reply?.header('x-ratelimit-reset', String(Math.ceil(rl.resetAtMs / 1000)));
+      reply?.header('x-ratelimit-policy', layerMode);
+      reply?.header('x-ratelimit-scope', scopeHeader);
     } catch (err) {
       const details = (err as { details?: Array<{ retryAfterSeconds?: number; limit?: number }> })
         ?.details;
@@ -74,6 +109,8 @@ export class AuthGuard implements CanActivate {
       reply?.header('x-ratelimit-limit', String(limit));
       reply?.header('x-ratelimit-remaining', '0');
       reply?.header('retry-after', String(retryAfter));
+      reply?.header('x-ratelimit-policy', layerMode);
+      reply?.header('x-ratelimit-scope', scopeHeader);
       throw err;
     }
   }
@@ -90,8 +127,9 @@ export class AuthGuard implements CanActivate {
     const reply =
       typeof http.getResponse === 'function' ? http.getResponse<FastifyReply>() : undefined;
     const authHeader = request.headers['authorization'];
+    const resolvedClientIp = resolveForwardedContext(request, this.config?.gateway.proxy).clientIp;
     const resolutionContext = {
-      ipAddress: request.ip ?? null,
+      ipAddress: resolvedClientIp ?? null,
       endpoint: request.url ?? null,
       method: request.method ?? null,
     };

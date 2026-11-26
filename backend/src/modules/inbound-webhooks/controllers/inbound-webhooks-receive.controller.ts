@@ -6,6 +6,7 @@ import {
   Public,
   type RawBodyRequest,
   ValidatedParams,
+  resolveClientIp,
 } from '@packages/http/index.js';
 import { providerCodeParamSchema } from '../requests/inbound-webhooks.requests.js';
 import { INBOUND_WEBHOOKS_ROUTES } from '../routes/inbound-webhooks.routes.js';
@@ -41,12 +42,7 @@ export class InboundWebhooksReceiveController {
             ? JSON.stringify(req.body)
             : '';
 
-    const forwarded = req.headers['x-forwarded-for'];
-    const rawForwarded = Array.isArray(forwarded) ? forwarded[0] : forwarded;
-    const sourceIp =
-      (typeof rawForwarded === 'string' ? rawForwarded.split(',')[0]?.trim() : undefined) ||
-      req.ip ||
-      undefined;
+    const sourceIp = resolveClientIp(req) ?? undefined;
 
     const result = await this.inboundWebhooksService.receiveWebhook({
       providerCode: params.providerCode,

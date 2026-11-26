@@ -11,6 +11,7 @@ import { trafficApi } from '../../services/traffic.api';
 import { errorRateTone } from '../../utils/traffic-format';
 import { TELEMETRY_DISABLED_CODE, TELEMETRY_UNAVAILABLE_STATUS, TRAFFIC_TABS, type TrafficTab } from '../../constants/traffic';
 import { TrafficFilterBar } from '../../components/traffic/TrafficFilterBar';
+import { GatewayEdgePanel } from '../../components/traffic/GatewayEdgePanel';
 import { useTrafficPage } from './useTrafficPage';
 import { trafficKeys } from './traffic-keys';
 import { TrafficOverviewTab } from './TrafficOverviewTab';
@@ -39,6 +40,7 @@ export const TrafficSection: React.FC = () => {
   const unavailable = !data && errorStatus(summary.error) === TELEMETRY_UNAVAILABLE_STATUS;
   const disabled = unavailable && summary.error instanceof ApiError && summary.error.code === TELEMETRY_DISABLED_CODE;
   const isDetail = page.routeId !== null;
+  const isGatewayTab = !isDetail && page.tab === 'gateway';
 
   const tabs: PageTab<TrafficTab>[] = TRAFFIC_TABS.map((id) => ({ id, label: t(`tr.tab.${id}`) }));
   const tone = data ? overallTone(data) : unavailable ? 'crit' : undefined;
@@ -57,6 +59,8 @@ export const TrafficSection: React.FC = () => {
         return <TrafficEndpointsTab page={page} />;
       case 'errors':
         return <TrafficErrorsTab page={page} summary={data} />;
+      case 'gateway':
+        return <GatewayEdgePanel />;
       default:
         return <TrafficOverviewTab page={page} summary={summary} />;
     }
@@ -74,7 +78,7 @@ export const TrafficSection: React.FC = () => {
         }
       />
 
-      {unavailable && (
+      {!isGatewayTab && unavailable && (
         <StatusBanner
           tone="crit"
           title={t(disabled ? 'tr.empty.disabledTitle' : 'tr.empty.unavailableTitle')}
@@ -82,13 +86,13 @@ export const TrafficSection: React.FC = () => {
           actions={retry}
         />
       )}
-      {!unavailable && summary.isError && !data && (
+      {!isGatewayTab && !unavailable && summary.isError && !data && (
         <StatusBanner tone="crit" title={t('tr.empty.errorTitle')} description={errorMessage(summary.error)} actions={retry} />
       )}
-      {data && !data.hasTraffic && <StatusBanner tone="info" title={t('tr.empty.noTrafficTitle')} description={t('tr.empty.noTrafficMessage')} />}
+      {!isGatewayTab && data && !data.hasTraffic && <StatusBanner tone="info" title={t('tr.empty.noTrafficTitle')} description={t('tr.empty.noTrafficMessage')} />}
 
       {!isDetail && <PageTabs tabs={tabs} value={page.tab} onChange={page.go} />}
-      {!isDetail && page.tab !== 'endpoints' && <TrafficFilterBar page={page} />}
+      {!isDetail && page.tab !== 'endpoints' && page.tab !== 'gateway' && <TrafficFilterBar page={page} />}
       {renderTab()}
     </div>
   );

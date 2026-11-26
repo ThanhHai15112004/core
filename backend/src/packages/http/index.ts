@@ -19,3 +19,22 @@ export * from './utils/validation.util.js';
 export * from './utils/openapi-builder.util.js';
 export * from './utils/scalar-ui.util.js';
 export * from './utils/openapi-diff.util.js';
+export * from './utils/service-routing.util.js';
+export * from './utils/gateway-consistency.util.js';
+export {
+  buildFastifyTrustProxyOption,
+  configureDefaultTrustedProxyPolicy,
+  getDefaultTrustedProxyPolicy,
+  isIpInCidr,
+  isTrustedProxyIp,
+  normalizeIp,
+  parseForwardedHeader,
+  resolveClientIp,
+  resolveEffectiveTrustedCidrs,
+  resolveForwardedContext,
+  type ForwardedContext,
+  type ParsedForwardedHeader,
+  type ProxyRequestLike,
+  type ProxyTrustMode,
+  type TrustedProxyPolicy,
+} from '@packages/kernel/index.js';

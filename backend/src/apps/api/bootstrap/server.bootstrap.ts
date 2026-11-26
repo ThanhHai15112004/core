@@ -1,8 +1,13 @@
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
 import { Logger } from '@nestjs/common';
-import { CoreConfigService, appConfig } from '@packages/config/index.js';
-import { normalizeApiPrefix } from '@packages/http/index.js';
+import { CoreConfigService, gatewayConfig } from '@packages/config/index.js';
+import {
+  buildFastifyTrustProxyOption,
+  configureDefaultTrustedProxyPolicy,
+  evaluateGatewayConsistency,
+  normalizeApiPrefix,
+} from '@packages/http/index.js';
 import { PinoNestLogger } from '@packages/logging/index.js';
 import { RuntimeAgentService, installGracefulShutdown } from '@packages/runtime/index.js';
 import { PlatformSecurityService } from '@packages/security/index.js';
@@ -13,16 +18,19 @@ import { setupApiDocs } from './api-docs.bootstrap.js';
 /** Khởi tạo và khởi chạy HTTP API server với NestJS và Fastify */
 export async function bootstrapApi(): Promise<NestFastifyApplication> {
   const logger = new Logger('ApiBootstrap');
-  const bootAppCfg = appConfig();
+  const bootGatewayCfg = gatewayConfig();
+  configureDefaultTrustedProxyPolicy(bootGatewayCfg.proxy);
+
   // Parser JSON chấp nhận body rỗng được thay trong HttpModule.onModuleInit (sau khi Nest
   // đăng ký parser mặc định). KHÔNG gọi trước NestFactory.create → FST_ERR_CTP_ALREADY_PRESENT.
-  // Nâng bodyLimit lên 32 MB để hỗ trợ tải lên theo mảnh tốc độ cao (Chunked Upload 4MB–10MB Base64).
+  // Đồng bộ bodyLimit, trustProxy và timeout với cấu hình Load Balancer / API Gateway.
   const adapter = new FastifyAdapter({
     logger: false,
-    bodyLimit: 32 * 1024 * 1024,
-    maxParamLength: 1024,
-    connectionTimeout: bootAppCfg.connectionTimeoutMs,
-    keepAliveTimeout: bootAppCfg.keepAliveTimeoutMs,
+    trustProxy: buildFastifyTrustProxyOption(bootGatewayCfg.proxy),
+    bodyLimit: bootGatewayCfg.bodyLimits.apiMaxBodySizeBytes,
+    maxParamLength: bootGatewayCfg.bodyLimits.maxParamLength,
+    connectionTimeout: bootGatewayCfg.timeouts.apiConnectionTimeoutMs,
+    keepAliveTimeout: bootGatewayCfg.timeouts.apiKeepAliveTimeoutMs,
   });
 
   const app = await NestFactory.create<NestFastifyApplication>(ApiModule, adapter, {
@@ -33,7 +41,16 @@ export async function bootstrapApi(): Promise<NestFastifyApplication> {
   const agent = app.get(RuntimeAgentService);
   agent.installCrashHandlers();
   const apiContributor = app.get(ApiRuntimeContributor);
-  apiContributor.attachServer(app.getHttpServer());
+  const httpServer = app.getHttpServer();
+  httpServer.keepAliveTimeout = bootGatewayCfg.timeouts.apiKeepAliveTimeoutMs;
+  httpServer.headersTimeout =
+    bootGatewayCfg.timeouts.apiHeadersTimeoutMs > 0
+      ? Math.max(
+          bootGatewayCfg.timeouts.apiHeadersTimeoutMs,
+          bootGatewayCfg.timeouts.apiKeepAliveTimeoutMs + 1_000,
+        )
+      : 0;
+  apiContributor.attachServer(httpServer);
   apiContributor.attachFastifyDrainingHooks(app.getHttpAdapter().getInstance());
 
   const configService = app.get(CoreConfigService);
@@ -42,9 +59,39 @@ export async function bootstrapApi(): Promise<NestFastifyApplication> {
   const host = configService.app.host;
   const prefix = normalizeApiPrefix(configService.app.apiPrefix);
 
+  const consistency = evaluateGatewayConsistency(
+    configService.gateway,
+    configService.app.env,
+    prefix,
+  );
+  for (const check of consistency.checks) {
+    if (check.status === 'fail') {
+      logger.error(`[GatewayConsistency] ${check.id}: ${check.message}`);
+    } else if (check.status === 'warn') {
+      logger.warn(`[GatewayConsistency] ${check.id}: ${check.message}`);
+    }
+  }
+  if (configService.gateway.gateway.strictConsistencyCheck && consistency.status === 'fail') {
+    throw new Error(
+      '[GatewayConsistency] Strict consistency check failed. Fix LB/Gateway timeout or proxy configuration.',
+    );
+  }
+
   app.enableCors({
     origin: platformSecurity.getAllowedOrigins(),
     methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
+    exposedHeaders: [
+      'X-Request-Id',
+      'X-Correlation-Id',
+      'X-Trace-Id',
+      'X-RateLimit-Limit',
+      'X-RateLimit-Remaining',
+      'X-RateLimit-Reset',
+      'X-RateLimit-Policy',
+      'X-RateLimit-Scope',
+      'Retry-After',
+      'X-Api-Version',
+    ],
     credentials: true,
   });
 

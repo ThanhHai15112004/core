@@ -4,7 +4,7 @@ import type { TabAlias } from '../shell/useSectionRoute';
 import type { EndpointStatus, StatusClass, TimeseriesMetric, TrafficRange } from '../types/traffic.types';
 
 /** Tab của HTTP Traffic (chi tiết endpoint là trang con `endpoints/<routeId>`). */
-export const TRAFFIC_TABS = ['overview', 'endpoints', 'errors'] as const;
+export const TRAFFIC_TABS = ['overview', 'endpoints', 'errors', 'gateway'] as const;
 export type TrafficTab = (typeof TRAFFIC_TABS)[number];
 
 /** Link cũ: `requests` (danh sách request đã bỏ) → Endpoints; `slow` → Endpoints sắp theo P95. */

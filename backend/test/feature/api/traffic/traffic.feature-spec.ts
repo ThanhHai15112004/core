@@ -230,11 +230,39 @@ describe('HTTP Traffic (/ops/traffic)', () => {
       expect(pct.body.data.unit).toBe('percent');
 
       const insights = await get<{
-        rateLimit: { configured: boolean };
+        rateLimit: { configured: boolean; mode: string; message: string };
         last24h: { total: number; serverErrors: number };
       }>(`${base}/insights?range=15m`);
-      expect(insights.body.data.rateLimit.configured).toBe(false);
+      expect(insights.body.data.rateLimit.configured).toBe(true);
+      expect(typeof insights.body.data.rateLimit.mode).toBe('string');
       expect(insights.body.data.last24h).toMatchObject({ total: 6, serverErrors: 1 });
+    });
+
+    it('gateway endpoint trả cấu hình LB/Gateway không phụ thuộc Prometheus và không lộ secret (13.5)', async () => {
+      const res = await get<{
+        status: string;
+        proxy: { trustMode: string };
+        timeouts: { apiKeepAliveTimeoutMs: number; lbKeepAliveTimeoutMs: number };
+        bodyLimits: { gatewayMaxBodySizeBytes: number; apiMaxBodySizeBytes: number };
+        rateLimit: { layerMode: string };
+        gateway: { sharedSecretConfigured: boolean; sharedSecret?: string };
+        checks: { id: string; status: string }[];
+        serviceRouting: { valid: boolean; domains: { domain: string }[] };
+      }>(`${base}/gateway`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(['ok', 'warn', 'fail']).toContain(res.body.data.status);
+      expect(res.body.data.timeouts.apiKeepAliveTimeoutMs).toBeGreaterThan(
+        res.body.data.timeouts.lbKeepAliveTimeoutMs,
+      );
+      expect(res.body.data.bodyLimits.gatewayMaxBodySizeBytes).toBe(
+        res.body.data.bodyLimits.apiMaxBodySizeBytes,
+      );
+      expect(typeof res.body.data.rateLimit.layerMode).toBe('string');
+      expect(res.body.data.gateway.sharedSecret).toBeUndefined();
+      expect(res.body.data.serviceRouting.valid).toBe(true);
+      expect(res.body.data.serviceRouting.domains.length).toBeGreaterThan(5);
     });
 
     it('bộ lọc method / route nội bộ được đưa vào PromQL của timeseries', async () => {

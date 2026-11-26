@@ -1,11 +1,18 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import { CoreConfigService } from '@packages/config/index.js';
+import {
+  buildServiceRoutingTable,
+  evaluateGatewayConsistency,
+  normalizeApiPrefix,
+  validateServiceRoutingTable,
+} from '@packages/http/index.js';
 import { CoreI18nService } from '@packages/i18n/index.js';
 import {
   PrometheusQueryClient,
   PrometheusUnavailableError,
   type PromSample,
 } from '@packages/metrics/index.js';
+import { PlatformSecurityService } from '@packages/security/index.js';
 import {
   TrafficEndpointNotFoundException,
   TrafficTelemetryUnavailableException,
@@ -22,6 +29,7 @@ import type {
   TimeseriesDto,
   TimeseriesMetric,
   TrafficComparisonDto,
+  TrafficGatewayConfigDto,
   TrafficInsightsDto,
   TrafficProblemDto,
   TrafficSettingsDto,
@@ -104,6 +112,7 @@ export class TrafficService {
     private readonly prom: PrometheusQueryClient,
     private readonly config: CoreConfigService,
     private readonly i18n: CoreI18nService,
+    @Optional() private readonly platformSecurity?: PlatformSecurityService,
   ) {}
 
   private get cfg() {
@@ -500,11 +509,63 @@ export class TrafficService {
       this.security(q),
       this.last24h(selector),
     ]);
+    const rateLimitMode = this.config.gateway.rateLimit.layerMode;
     return {
       problems,
       security,
-      rateLimit: { configured: false, message: this.i18n.t('traffic.rateLimit.notConfigured') },
+      rateLimit: {
+        configured: true,
+        mode: rateLimitMode,
+        message: this.i18n.t('traffic.rateLimit.configured', { mode: rateLimitMode }),
+      },
       last24h,
+    };
+  }
+
+  /** Cấu hình đồng bộ Load Balancer, API Gateway, Trusted Proxy và Service Routing (không phụ thuộc Prometheus). */
+  public getGatewayConfig(): TrafficGatewayConfigDto {
+    const gw = this.config.gateway;
+    const apiPrefix = normalizeApiPrefix(this.config.app.apiPrefix);
+    const report = evaluateGatewayConsistency(gw, this.config.app.env, apiPrefix);
+    const domains = buildServiceRoutingTable(apiPrefix, gw.gateway.serviceRoutingOverrides);
+    const routingValidation = validateServiceRoutingTable(domains);
+    const rlSummary = this.platformSecurity?.getRateLimitPolicySummary() ?? null;
+
+    return {
+      status: report.status,
+      proxy: {
+        trustMode: gw.proxy.trustMode,
+        trustedCidrs: [...gw.proxy.trustedCidrs],
+        maxHops: gw.proxy.maxHops,
+        ipHeaders: [...gw.proxy.ipHeaders],
+        forwardedPrefixHeader: gw.proxy.forwardedPrefixHeader || 'x-forwarded-prefix',
+      },
+      timeouts: { ...gw.timeouts },
+      bodyLimits: { ...gw.bodyLimits },
+      rateLimit: {
+        layerMode: gw.rateLimit.layerMode,
+        gatewaySourceHeader: gw.rateLimit.gatewaySourceHeader,
+        gatewaySourceValue: gw.rateLimit.gatewaySourceValue,
+        skipBackendIpWhenEdgeApplied: gw.rateLimit.skipBackendIpWhenEdgeApplied,
+        alwaysEnforceIpRoutes: [...gw.rateLimit.alwaysEnforceIpRoutes],
+        gatewayEdgeRps: gw.rateLimit.gatewayEdgeRps,
+        gatewayEdgeBurst: gw.rateLimit.gatewayEdgeBurst,
+        backendDefaultRule: rlSummary ? { ...rlSummary.defaultRule } : null,
+        distributedStoreReady: rlSummary?.distributedStoreReady ?? false,
+      },
+      gateway: {
+        vendor: gw.gateway.vendor,
+        sharedSecretHeader: gw.gateway.sharedSecretHeader,
+        sharedSecretConfigured: gw.gateway.sharedSecret.length > 0,
+        strictConsistencyCheck: gw.gateway.strictConsistencyCheck,
+      },
+      checks: report.checks,
+      serviceRouting: {
+        apiPrefix: `/${apiPrefix}`,
+        valid: routingValidation.valid,
+        collisions: routingValidation.collisions,
+        domains,
+      },
     };
   }
 

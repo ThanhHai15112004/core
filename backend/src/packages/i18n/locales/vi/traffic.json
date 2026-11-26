@@ -14,6 +14,7 @@
   "traffic.problem.endpoint.high_error.title": "Endpoint lỗi cao: {endpoint}",
   "traffic.problem.endpoint.failing.title": "Endpoint đang lỗi: {endpoint}",
   "traffic.problem.none": "Không có baseline",
+  "traffic.rateLimit.configured": "Rate limiting đang bật ở chế độ \"{mode}\" (tách tầng bảo vệ IP ở Gateway và User/Route ở Backend).",
   "traffic.rateLimit.notConfigured": "Chưa cấu hình rate limiting — hệ thống chưa chặn request nào theo tần suất. Response 429 (nếu có) được đếm ở trên.",
   "traffic.error.telemetryUnavailable": "Không kết nối được Prometheus (hoặc chưa đặt PROMETHEUS_URL) nên không có telemetry HTTP.",
   "traffic.error.endpointNotFound": "Không tìm thấy endpoint {id}."

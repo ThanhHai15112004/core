@@ -8,4 +8,5 @@ export const TRAFFIC_ROUTES = {
   ENDPOINT_DETAIL: 'endpoints/:routeId',
   ERRORS: 'errors',
   INSIGHTS: 'insights',
+  GATEWAY: 'gateway',
 } as const;

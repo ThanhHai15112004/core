@@ -47,6 +47,7 @@ export class HealthController {
     @CurrentUser() actor?: UserIdentity | null,
     @Res({ passthrough: true }) reply?: FastifyReply,
   ): Promise<HealthCheckResult | PublicHealthCheckResult> {
+    reply?.header?.('cache-control', 'no-store');
     const result = await this.healthService.getPublicOrAdminHealth(actor);
     if (result.status === 'down') {
       reply?.status?.(HttpStatus.SERVICE_UNAVAILABLE);
@@ -72,6 +73,7 @@ export class HealthController {
   public async liveness(
     @Res({ passthrough: true }) reply?: FastifyReply,
   ): Promise<LivenessCheckResult> {
+    reply?.header?.('cache-control', 'no-store');
     const result = await this.healthService.liveness();
     if (!result.live) {
       reply?.status?.(HttpStatus.SERVICE_UNAVAILABLE);
@@ -104,6 +106,7 @@ export class HealthController {
     @CurrentUser() actor?: UserIdentity | null,
     @Res({ passthrough: true }) reply?: FastifyReply,
   ): Promise<ReadinessCheckResult> {
+    reply?.header?.('cache-control', 'no-store');
     const result = await this.healthService.getPublicOrAdminReadiness(actor);
     if (!result.ready) {
       reply?.status?.(HttpStatus.SERVICE_UNAVAILABLE);

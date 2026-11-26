@@ -148,6 +148,79 @@ export interface TrafficSummary24hDto {
 export interface TrafficInsightsDto {
   problems: TrafficProblemDto[];
   security: SecurityTrafficDto[];
-  rateLimit: { configured: false; message: string };
+  rateLimit: { configured: boolean; mode: string; message: string };
   last24h: TrafficSummary24hDto;
+}
+
+export interface GatewayConsistencyCheckDto {
+  id: string;
+  status: 'pass' | 'warn' | 'fail';
+  message: string;
+  details?: Record<string, unknown>;
+}
+
+export interface GatewayServiceDomainDto {
+  domain: string;
+  serviceName: string;
+  upstreamDefault: string;
+  prefixes: readonly string[];
+  stripPrefix: boolean;
+  stability: 'v1-stable';
+  description: string;
+}
+
+export interface TrafficGatewayConfigDto {
+  status: 'ok' | 'warn' | 'fail';
+  proxy: {
+    trustMode: string;
+    trustedCidrs: readonly string[];
+    maxHops: number;
+    ipHeaders: readonly string[];
+    forwardedPrefixHeader: string;
+  };
+  timeouts: {
+    lbConnectTimeoutMs: number;
+    lbSendTimeoutMs: number;
+    lbReadTimeoutMs: number;
+    lbKeepAliveTimeoutMs: number;
+    apiConnectionTimeoutMs: number;
+    apiRequestTimeoutMs: number;
+    apiKeepAliveTimeoutMs: number;
+    apiHeadersTimeoutMs: number;
+  };
+  bodyLimits: {
+    gatewayMaxBodySizeBytes: number;
+    apiMaxBodySizeBytes: number;
+    apiJsonBodyLimitBytes: number;
+    maxParamLength: number;
+  };
+  rateLimit: {
+    layerMode: string;
+    gatewaySourceHeader: string;
+    gatewaySourceValue: string;
+    skipBackendIpWhenEdgeApplied: boolean;
+    alwaysEnforceIpRoutes: readonly string[];
+    gatewayEdgeRps: number;
+    gatewayEdgeBurst: number;
+    backendDefaultRule: {
+      windowSeconds: number;
+      maxRequestsPerIp: number;
+      maxRequestsPerUser: number;
+      maxRequestsPerApi: number;
+    } | null;
+    distributedStoreReady: boolean;
+  };
+  gateway: {
+    vendor: string;
+    sharedSecretHeader: string;
+    sharedSecretConfigured: boolean;
+    strictConsistencyCheck: boolean;
+  };
+  checks: readonly GatewayConsistencyCheckDto[];
+  serviceRouting: {
+    apiPrefix: string;
+    valid: boolean;
+    collisions: readonly { prefix: string; domains: readonly string[] }[];
+    domains: readonly GatewayServiceDomainDto[];
+  };
 }

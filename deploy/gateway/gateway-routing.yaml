@@ -1,0 +1,124 @@
+# ==============================================================================
+# Core Framework — Vendor-Neutral API Gateway Routing Specification
+# Dùng cho Kong, Apache APISIX, Envoy Gateway, Traefik hoặc Cloud API Gateway.
+# OpenAPI Spec sống đồng bộ tại: GET /docs/openapi.json
+# ==============================================================================
+version: "1.0"
+apiContractPrefix: "/api/v1"
+stripPrefix: false
+
+edgeDefaults:
+  timeouts:
+    connectMs: 10000
+    readMs: 60000
+    sendMs: 60000
+    keepAliveMs: 60000
+  bodyLimits:
+    maxBytes: 33554432 # 32MB == API_MAX_BODY_SIZE_BYTES
+  healthProbe:
+    method: HEAD
+    path: "/api/v1/health/ready"
+    intervalSec: 15
+    timeoutSec: 5
+  rateLimit:
+    layerMode: edge-ip-backend-business
+    edgeIpRps: 30
+    edgeIpBurst: 50
+    markerHeader: "X-RateLimit-Source: gateway"
+    exemptPaths:
+      - "/api/v1/health"
+      - "/api/v1/health/live"
+      - "/api/v1/health/ready"
+  forwardedHeaders:
+    - X-Forwarded-For
+    - X-Forwarded-Proto
+    - X-Forwarded-Host
+    - X-Forwarded-Port
+    - X-Forwarded-Prefix
+    - X-Request-Id
+    - traceparent
+
+services:
+  - domain: health
+    targetService: health-service
+    defaultUpstream: http://backend:3005
+    prefixes: ["/api/v1/health"]
+    rateLimitPolicy: exempt
+
+  - domain: identity
+    targetService: identity-service
+    defaultUpstream: http://backend:3005
+    prefixes:
+      - "/api/v1/auth"
+      - "/api/v1/users"
+      - "/api/v1/roles"
+      - "/api/v1/permissions"
+      - "/api/v1/sessions"
+      - "/api/v1/credentials"
+      - "/api/v1/mfa"
+      - "/api/v1/machine-identities"
+      - "/api/v1/federated-identity"
+    rateLimitPolicy: edge-ip-plus-backend-strict
+
+  - domain: organization
+    targetService: organization-service
+    defaultUpstream: http://backend:3005
+    prefixes: ["/api/v1/organizations", "/api/v1/organization-members"]
+
+  - domain: platform
+    targetService: platform-service
+    defaultUpstream: http://backend:3005
+    prefixes:
+      - "/api/v1/codes"
+      - "/api/v1/settings"
+      - "/api/v1/feature-flags"
+      - "/api/v1/localization"
+      - "/api/v1/sequences"
+      - "/api/v1/navigation"
+      - "/api/v1/custom-fields"
+      - "/api/v1/audit"
+
+  - domain: files
+    targetService: files-service
+    defaultUpstream: http://backend:3005
+    prefixes: ["/api/v1/files"]
+
+  - domain: communications
+    targetService: communications-service
+    defaultUpstream: http://backend:3005
+    prefixes:
+      - "/api/v1/notifications"
+      - "/api/v1/notification-delivery"
+      - "/api/v1/templates"
+      - "/api/v1/comments"
+      - "/api/v1/calendar"
+
+  - domain: workflows
+    targetService: workflows-service
+    defaultUpstream: http://backend:3005
+    prefixes: ["/api/v1/workflows", "/api/v1/approvals"]
+
+  - domain: data-analytics
+    targetService: data-analytics-service
+    defaultUpstream: http://backend:3005
+    prefixes: ["/api/v1/imports", "/api/v1/exports", "/api/v1/reports", "/api/v1/search"]
+
+  - domain: billing
+    targetService: billing-service
+    defaultUpstream: http://backend:3005
+    prefixes: ["/api/v1/payments", "/api/v1/reconciliation"]
+
+  - domain: integrations
+    targetService: integrations-service
+    defaultUpstream: http://backend:3005
+    prefixes:
+      - "/api/v1/webhooks"
+      - "/api/v1/inbound-webhooks"
+      - "/api/v1/provider-registry"
+      - "/api/v1/outbox"
+      - "/api/v1/idempotency"
+
+  - domain: operations
+    targetService: operations-service
+    defaultUpstream: http://backend:3005
+    prefixes: ["/api/v1/ops", "/api/v1/metrics"]
