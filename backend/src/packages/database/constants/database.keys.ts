@@ -22,6 +22,10 @@ export const databaseKeys = (redis: RedisService) => ({
   migrationChecksums: () => redis.key('db', 'migrations', 'checksums'),
   /** Trạng thái kết nối của từng runtime (JSON, TTL). */
   connection: (instance: string) => redis.key('db', 'conn', instance),
+  /** Trạng thái đồng bộ Read Replica mới nhất (JSON). */
+  replicationStatus: () => redis.key('db', 'replication', 'status'),
+  /** Đánh dấu actor vừa ghi dữ liệu để giữ Read-After-Write về Primary (TTL). */
+  writeStickiness: (actorKey: string) => redis.key('db', 'raw_stickiness', actorKey),
   collectLock: () => redis.key('db', 'lock', 'collect'),
   migrateLock: () => redis.key('db', 'lock', 'migrate'),
   seedLock: () => redis.key('db', 'lock', 'seed'),

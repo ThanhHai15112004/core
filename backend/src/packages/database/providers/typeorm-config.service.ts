@@ -165,22 +165,37 @@ export class TypeOrmConfigService implements TypeOrmOptionsFactory {
       database: db.database,
     };
 
-    const replicationConfig = db.readHost
-      ? {
-          replication: {
-            master: masterEndpoint,
-            slaves: [
+    const replicas =
+      Array.isArray(db.readReplicas) && db.readReplicas.length > 0
+        ? db.readReplicas
+        : db.readHost
+          ? [
               {
                 host: db.readHost,
                 port: db.readPort,
-                username: db.username,
-                password: db.password,
-                database: db.database,
+                username: db.readUsername || db.username,
+                password: db.readPassword || db.password,
+                database: db.readDatabase || db.database,
               },
-            ],
-          },
-        }
-      : masterEndpoint;
+            ]
+          : [];
+
+    const replicationConfig =
+      replicas.length > 0
+        ? {
+            replication: {
+              defaultMode: 'master' as const,
+              master: masterEndpoint,
+              slaves: replicas.map((replica) => ({
+                host: replica.host,
+                port: replica.port,
+                username: replica.username,
+                password: replica.password,
+                database: replica.database,
+              })),
+            },
+          }
+        : masterEndpoint;
 
     switch (driver) {
       case DatabaseDriver.POSTGRES:

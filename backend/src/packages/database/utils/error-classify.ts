@@ -132,6 +132,54 @@ const NON_TRANSIENT_CONNECTION_CODES = new Set([
   '28000',
 ]);
 
+const REPLICA_FALLBACK_CODES = new Set([
+  '1290',
+  'ER_OPTION_PREVENTS_STATEMENT',
+  '1836',
+  'ER_SUPER_READ_ONLY',
+  'PROTOCOL_ENQUEUE_AFTER_FATAL_ERROR',
+  'PROTOCOL_ENQUEUE_AFTER_QUIT',
+  'POOL_CLOSED',
+  '57P03',
+  '57P02',
+  '25006',
+  '40001',
+]);
+
+const REPLICA_FALLBACK_MESSAGE_RE =
+  /no slave|replica.*unavailable|cannot connect now|terminating connection due to conflict with recovery|read-only|connection terminated|pool is closed/i;
+
+/**
+ * Kiểm tra lỗi khi thực thi trên Read Replica có phải lỗi kết nối/hạ tầng/chế độ read-only để tự fallback về Primary.
+ * Tuyệt đối KHÔNG fallback lỗi nghiệp vụ, ràng buộc dữ liệu, thao tác bị hủy hay lỗi cú pháp SQL.
+ */
+export function isReplicaFallbackableError(err: unknown): boolean {
+  const kind = classifyDbError(err);
+  if (kind === 'connection' || kind === 'timeout') {
+    return true;
+  }
+  if (
+    kind === 'unique_violation' ||
+    kind === 'foreign_key_violation' ||
+    kind === 'cancelled' ||
+    kind === 'deadlock' ||
+    kind === 'lock_timeout'
+  ) {
+    return false;
+  }
+  const code = errorCodeOf(err);
+  const errno = String(
+    (err as { errno?: unknown; driverError?: { errno?: unknown } })?.driverError?.errno ??
+      (err as { errno?: unknown })?.errno ??
+      '',
+  );
+  if ((code !== null && REPLICA_FALLBACK_CODES.has(code)) || REPLICA_FALLBACK_CODES.has(errno)) {
+    return true;
+  }
+  const message = err instanceof Error ? err.message : String(err ?? '');
+  return REPLICA_FALLBACK_MESSAGE_RE.test(message);
+}
+
 /**
  * Kiểm tra lỗi DB có phải lỗi tạm thời (deadlock, lock_timeout, rớt kết nối tạm thời) để được phép retry hay không.
  * Tuyệt đối KHÔNG retry lỗi ràng buộc (unique/FK), lỗi cú pháp SQL, lỗi phân quyền hay thao tác bị hủy.

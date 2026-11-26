@@ -13,6 +13,7 @@ import {
   type DbTransaction,
   type MonitoringCapability,
   type MonitoringContext,
+  type DbReplicationLagInfo,
   type SessionState,
 } from './monitoring.types.js';
 
@@ -65,6 +66,7 @@ export class MysqlMonitoringProvider implements DatabaseMonitoringProvider {
     'indexUsage',
     'tableIo',
     'storage',
+    'replication',
     'cancel',
     'terminate',
   ]);
@@ -361,6 +363,42 @@ export class MysqlMonitoringProvider implements DatabaseMonitoringProvider {
       dataBytes: data,
       indexBytes: idx,
       tables: Number(row?.['tables'] ?? 0),
+    };
+  }
+
+  /** Đo độ trễ đồng bộ Replication của MySQL/MariaDB (`SHOW REPLICA STATUS` / fallback `SHOW SLAVE STATUS`). */
+  public async replicationLag(ctx: MonitoringContext): Promise<DbReplicationLagInfo> {
+    const rows = await ctx
+      .run('SHOW REPLICA STATUS')
+      .catch(() => ctx.run('SHOW SLAVE STATUS'));
+    const row = rows[0];
+    if (!row) {
+      return {
+        role: 'primary',
+        state: 'standalone',
+        lagMs: null,
+        ioRunning: null,
+        sqlRunning: null,
+        lastError: null,
+      };
+    }
+
+    const ioRaw = str(row['Replica_IO_Running'] ?? row['Slave_IO_Running']);
+    const sqlRaw = str(row['Replica_SQL_Running'] ?? row['Slave_SQL_Running']);
+    const ioRunning = ioRaw === null ? null : ioRaw.toLowerCase() === 'yes';
+    const sqlRunning = sqlRaw === null ? null : sqlRaw.toLowerCase() === 'yes';
+    const secBehind = toNumber(row['Seconds_Behind_Source'] ?? row['Seconds_Behind_Master']);
+    const lagMs = secBehind === null ? null : Math.max(0, Math.round(secBehind * 1000));
+    const lastError =
+      str(row['Last_Error']) || str(row['Last_IO_Error']) || str(row['Last_SQL_Error']) || null;
+
+    return {
+      role: 'replica',
+      state: ioRunning === false || sqlRunning === false ? 'stopped' : 'streaming',
+      lagMs,
+      ioRunning,
+      sqlRunning,
+      lastError: lastError && lastError.trim() ? lastError.trim() : null,
     };
   }
 

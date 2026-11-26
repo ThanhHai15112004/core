@@ -355,17 +355,9 @@ export class UserRepository extends BaseTypeOrmRepository<UserEntity> {
     readonly total: number;
     readonly dataSourceUsed: 'REPLICA' | 'PRIMARY';
   }> {
-    if (!preferReplica) {
-      const result = await this.searchPaginated(filter);
-      return {
-        items: result.items,
-        total: result.total,
-        dataSourceUsed: 'PRIMARY',
-      };
-    }
-
-    const { data, dataSourceUsed } = await this.executeReadOnlyWithMeta((readRepo) =>
-      this.searchPaginated(filter, readRepo),
+    const { data, dataSourceUsed } = await this.executeReadOnlyWithMeta(
+      (readRepo) => this.searchPaginated(filter, readRepo),
+      { intent: 'report', forcePrimary: !preferReplica },
     );
     return {
       items: data.items,

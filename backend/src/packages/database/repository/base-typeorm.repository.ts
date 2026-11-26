@@ -21,7 +21,15 @@ import {
   resolvePagination,
 } from '@packages/kernel/index.js';
 import { TransactionManager } from '../transaction/transaction-manager.service.js';
-import { isUniqueConstraintError } from '../utils/error-classify.js';
+import {
+  DatabaseRoutingService,
+  getActiveDatabaseRouter,
+} from '../routing/database-routing.service.js';
+import type {
+  ReadOnlyExecutionOptions,
+  ReadRoutingReason,
+} from '../routing/database-routing.types.js';
+import { isReplicaFallbackableError, isUniqueConstraintError } from '../utils/error-classify.js';
 import {
   type ApplyDataScopeOptions,
   type DataScopeQueryFilterInput,
@@ -115,7 +123,22 @@ export abstract class BaseTypeOrmRepository<TEntity extends ObjectLiteral> {
     protected readonly entityTarget: EntityTarget<TEntity>,
     protected readonly dataSource: DataSource,
     @Optional() protected readonly transactionManager: TransactionManager | null = null,
+    @Optional() protected readonly routing: DatabaseRoutingService | null = null,
   ) {}
+
+  protected get router(): DatabaseRoutingService {
+    return this.routing ?? getActiveDatabaseRouter();
+  }
+
+  /** Đánh dấu phiên/ngữ cảnh hiện tại vừa ghi dữ liệu để tránh đọc dữ liệu cũ từ Replica. */
+  protected markWrite(actorKey?: string): void {
+    this.router.markWrite(actorKey);
+  }
+
+  /** Ép các thao tác đọc trong `work` đi qua Primary (Read-Your-Own-Writes tường minh). */
+  public async runWithPrimaryRead<TResult>(work: () => Promise<TResult>): Promise<TResult> {
+    return this.router.runWithPrimaryRead(work);
+  }
 
   /**
    * Trả về `EntityManager` của Transaction hiện hành (nếu đang trong `runInTransaction`),
@@ -132,13 +155,8 @@ export abstract class BaseTypeOrmRepository<TEntity extends ObjectLiteral> {
     return this.manager.getRepository(this.entityTarget);
   }
 
-  /**
-   * Kiểm tra xem `DataSource` hiện tại có cấu hình Read Replica (`replication`) sẵn sàng và nằm ngoài Transaction hay không.
-   */
-  public hasReadReplica(): boolean {
-    if (this.transactionManager?.isInTransaction()) {
-      return false;
-    }
+  /** Kiểm tra `DataSource` có cấu hình Read Replica (`replication`) hay không. */
+  public hasReplicationConfigured(): boolean {
     const hasReplication = Boolean(
       (this.dataSource.options as { replication?: unknown } | undefined)?.replication,
     );
@@ -146,35 +164,87 @@ export abstract class BaseTypeOrmRepository<TEntity extends ObjectLiteral> {
   }
 
   /**
-   * Thực thi tác vụ chỉ đọc (Read-Only) và trả về kèm thông tin nguồn dữ liệu thực tế (`'REPLICA' | 'PRIMARY'`).
+   * Kiểm tra xem `DataSource` hiện tại có cấu hình Read Replica (`replication`) sẵn sàng và nằm ngoài Transaction hay không.
+   */
+  public hasReadReplica(): boolean {
+    if (this.transactionManager?.isInTransaction()) {
+      return false;
+    }
+    return this.hasReplicationConfigured();
+  }
+
+  /** Thực thi đọc trực tiếp trên Primary (`'master'` khi replication đang bật). */
+  private async executeOnPrimary<TResult>(
+    work: (repo: Repository<TEntity>, manager: EntityManager) => Promise<TResult>,
+  ): Promise<TResult> {
+    if (this.transactionManager?.isInTransaction() || !this.hasReplicationConfigured()) {
+      return work(this.repository, this.manager);
+    }
+    const masterRunner = this.dataSource.createQueryRunner('master');
+    try {
+      const masterRepo = masterRunner.manager.getRepository(this.entityTarget);
+      return await work(masterRepo, masterRunner.manager);
+    } finally {
+      await masterRunner.release().catch(() => undefined);
+    }
+  }
+
+  /**
+   * Thực thi tác vụ chỉ đọc (Read-Only) có định tuyến thông minh Primary/Replica,
+   * Read-After-Write stickiness và tự fallback về Primary khi Replica lỗi kết nối.
    */
   public async executeReadOnlyWithMeta<TResult>(
     work: (repo: Repository<TEntity>, manager: EntityManager) => Promise<TResult>,
-  ): Promise<{ readonly data: TResult; readonly dataSourceUsed: 'REPLICA' | 'PRIMARY' }> {
-    if (!this.hasReadReplica()) {
-      const data = await work(this.repository, this.manager);
-      return { data, dataSourceUsed: 'PRIMARY' };
+    options?: ReadOnlyExecutionOptions,
+  ): Promise<{
+    readonly data: TResult;
+    readonly dataSourceUsed: 'REPLICA' | 'PRIMARY';
+    readonly routingReason: ReadRoutingReason;
+  }> {
+    const intent = options?.intent ?? 'default';
+    const decision = await this.router.decideReadTarget({
+      hasReplication: this.hasReplicationConfigured(),
+      inTransaction: Boolean(this.transactionManager?.isInTransaction()),
+      options,
+    });
+
+    if (decision.target === 'PRIMARY') {
+      const data = await this.executeOnPrimary(work);
+      this.router.recordReadOutcome('PRIMARY', intent, decision.reason);
+      return { data, dataSourceUsed: 'PRIMARY', routingReason: decision.reason };
     }
 
-    const readRunner = this.dataSource.createQueryRunner('slave');
+    let readRunner: ReturnType<DataSource['createQueryRunner']> | null = null;
     try {
+      readRunner = this.dataSource.createQueryRunner('slave');
       const readRepo = readRunner.manager.getRepository(this.entityTarget);
       const data = await work(readRepo, readRunner.manager);
-      return { data, dataSourceUsed: 'REPLICA' };
+      this.router.recordReplicaSuccess();
+      this.router.recordReadOutcome('REPLICA', intent, 'replica_ok');
+      return { data, dataSourceUsed: 'REPLICA', routingReason: 'replica_ok' };
+    } catch (err: unknown) {
+      if (!isReplicaFallbackableError(err)) {
+        throw err;
+      }
+      this.router.recordReplicaFailure(err);
+      const data = await this.executeOnPrimary(work);
+      this.router.recordReadOutcome('PRIMARY', intent, 'replica_fallback');
+      return { data, dataSourceUsed: 'PRIMARY', routingReason: 'replica_fallback' };
     } finally {
-      await readRunner.release();
+      await readRunner?.release().catch(() => undefined);
     }
   }
 
   /**
    * Thực thi tác vụ chỉ đọc (Read-Only):
-   * - Nếu đang ở trong một Transaction: luôn đọc từ Master/Transaction hiện hành để đảm bảo tính nhất quán (Read-your-own-writes).
-   * - Nếu ngoài Transaction và hệ thống có cấu hình Read Replica (`replication`): mượn kết nối `'slave'` và giải phóng an toàn sau khi đọc xong.
+   * - Trong Transaction / ngay sau khi ghi (Read-After-Write): tự động đọc từ Primary.
+   * - Ngoài Transaction và có Replica khỏe: mượn kết nối `'slave'`; nếu Replica lỗi hạ tầng sẽ tự fallback về Primary.
    */
   public async executeReadOnly<TResult>(
     work: (repo: Repository<TEntity>, manager: EntityManager) => Promise<TResult>,
+    options?: ReadOnlyExecutionOptions,
   ): Promise<TResult> {
-    const result = await this.executeReadOnlyWithMeta(work);
+    const result = await this.executeReadOnlyWithMeta(work, options);
     return result.data;
   }
 
@@ -271,7 +341,9 @@ export abstract class BaseTypeOrmRepository<TEntity extends ObjectLiteral> {
    */
   public async saveEntity(entity: DeepPartial<TEntity>): Promise<TEntity> {
     try {
-      return await this.repository.save(entity);
+      const saved = await this.repository.save(entity);
+      this.markWrite();
+      return saved;
     } catch (err: unknown) {
       if (isUniqueConstraintError(err)) {
         throw new ConflictAppException(
@@ -316,6 +388,7 @@ export abstract class BaseTypeOrmRepository<TEntity extends ObjectLiteral> {
           HTTP_ERROR_CODE.OPTIMISTIC_LOCK_VERSION_MISMATCH,
         );
       }
+      this.markWrite();
     } catch (err: unknown) {
       if (isUniqueConstraintError(err)) {
         throw new ConflictAppException(

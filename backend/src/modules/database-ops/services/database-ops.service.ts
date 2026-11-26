@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import { CoreConfigService } from '@packages/config/index.js';
 import { CoreI18nService } from '@packages/i18n/index.js';
 import {
@@ -7,6 +7,8 @@ import {
   DatabaseMonitoringService,
   DatabaseOperationError,
   DatabaseOperationsService,
+  DatabaseRoutingService,
+  getActiveDatabaseRouter,
   type DbBackupReportRecord,
   type DbBackupRunStatus,
   type DbErrorKind,
@@ -58,6 +60,7 @@ import type {
   DbQueryStatsDto,
   DbRange,
   DbReasonDto,
+  DbReplicationOverviewDto,
   DbReportDto,
   DbSlowQueriesDto,
   DbStorageDto,
@@ -110,6 +113,7 @@ export class DatabaseOpsService {
     private readonly store: DatabaseStoreService,
     private readonly config: CoreConfigService,
     private readonly i18n: CoreI18nService,
+    @Optional() private readonly routing?: DatabaseRoutingService,
   ) {}
 
   private get db() {
@@ -124,7 +128,7 @@ export class DatabaseOpsService {
     const status = this.connection.getStatus();
 
     const sinceToday = Math.max(1, (now - today) / MINUTE);
-    const [stats, todayStats, yesterdayStats, snapshot, events, alerts, runtimes, storage, errors] =
+    const [stats, todayStats, yesterdayStats, snapshot, events, alerts, runtimes, storage, errors, replication] =
       await Promise.all([
         this.metrics.stats(DB_RANGES[range]),
         this.metrics.stats(sinceToday),
@@ -135,6 +139,7 @@ export class DatabaseOpsService {
         this.runtimeConnections(),
         this.store.storageSnapshots().catch(() => [] as StorageSnapshot[]),
         this.errorsSince(today - DAY),
+        this.getReplicationOverview(),
       ]);
     const pool = this.pool(todayStats);
     const sessions = snapshot.sessions;
@@ -200,6 +205,7 @@ export class DatabaseOpsService {
           today,
         ),
       },
+      replication,
       events: events.slice(0, OVERVIEW_EVENTS).map((e) => this.eventDto(e)),
       settings: {
         slowQueryMs: this.db.slowQueryMs,
@@ -789,6 +795,71 @@ export class DatabaseOpsService {
     };
   }
 
+  /** Tổng quan cấu hình, độ trễ đồng bộ và thống kê định tuyến Primary / Read Replica. */
+  public async getReplicationOverview(): Promise<DbReplicationOverviewDto> {
+    const db = this.db;
+    const configured = db.readReplicas.length > 0 || this.connection.hasReadReplica();
+    const router = this.routing ?? getActiveDatabaseRouter();
+    const snap = router.getSnapshot();
+    const stored = this.store.isAvailable()
+      ? await this.store.getReplicationStatus().catch(() => null)
+      : null;
+
+    const lagMs = stored?.lagMs ?? snap.lagMs;
+    const pingMs = stored?.pingMs ?? null;
+    const ioRunning = stored?.ioRunning ?? null;
+    const sqlRunning = stored?.sqlRunning ?? null;
+    const replicaAvailable = stored ? stored.available : snap.replicaAvailable;
+    const lastError = snap.lastError ?? stored?.lastError ?? null;
+    const lastCheckedAt = stored?.checkedAt ?? snap.lastCheckedAt;
+
+    const status: DbReplicationOverviewDto['status'] = !configured
+      ? 'disabled'
+      : snap.circuitState === 'open'
+        ? 'fallback_active'
+        : !replicaAvailable
+          ? 'unavailable'
+          : lagMs !== null && lagMs >= db.replicationLagWarnMs
+            ? 'lagging'
+            : 'healthy';
+
+    return {
+      configured,
+      status,
+      primary: { host: db.host, port: db.port, database: db.database },
+      replicas: db.readReplicas.map((r) => ({
+        host: r.host,
+        port: r.port,
+        database: r.database,
+      })),
+      lagMs,
+      pingMs,
+      ioRunning,
+      sqlRunning,
+      replicaAvailable,
+      circuitState: snap.circuitState,
+      circuitOpenUntil: snap.circuitOpenUntil,
+      lastError,
+      lastCheckedAt,
+      thresholds: {
+        readAfterWriteWindowMs: db.readAfterWriteWindowMs,
+        replicaFallbackCooldownMs: db.replicaFallbackCooldownMs,
+        lagWarnMs: db.replicationLagWarnMs,
+        lagCritMs: db.replicationLagCritMs,
+        fallbackOnCriticalLag: db.fallbackOnCriticalLag,
+      },
+      routing: {
+        totalReads: snap.totalReads,
+        replicaReads: snap.replicaReads,
+        primaryReads: snap.primaryReads,
+        reportReplicaReads: snap.reportReplicaReads,
+        readAfterWritePrimaryReads: snap.readAfterWritePrimaryReads,
+        fallbackCount: snap.fallbackCount,
+        lastFallbackAt: snap.lastFallbackAt,
+      },
+    };
+  }
+
   /** Lấy thông tin cấu hình hoạt động của dịch vụ */
   public getConfig(): DbConfigDto {
     const db = this.db;
@@ -797,6 +868,17 @@ export class DatabaseOpsService {
         { key: 'driver', value: this.connection.driver },
         { key: 'host', value: db.host },
         { key: 'port', value: db.port },
+        {
+          key: 'readReplicas',
+          value: db.readReplicas.length
+            ? db.readReplicas.map((r) => `${r.host}:${r.port}`).join(', ')
+            : null,
+        },
+        { key: 'readAfterWriteWindowMs', value: db.readAfterWriteWindowMs },
+        { key: 'replicaFallbackCooldownMs', value: db.replicaFallbackCooldownMs },
+        { key: 'replicationLagWarnMs', value: db.replicationLagWarnMs },
+        { key: 'replicationLagCritMs', value: db.replicationLagCritMs },
+        { key: 'fallbackOnCriticalLag', value: db.fallbackOnCriticalLag },
         { key: 'database', value: db.database },
         { key: 'username', value: db.username },
         { key: 'password', value: db.password !== '', sensitive: true },

@@ -27,6 +27,18 @@ export interface TableIoRate {
 
 export type ActiveAlertState = StoredAlert;
 
+export interface DbReplicationStatusSnapshot {
+  readonly configured: boolean;
+  readonly available: boolean;
+  readonly state: 'disabled' | 'streaming' | 'lagging' | 'stopped' | 'standalone' | 'unavailable';
+  readonly lagMs: number | null;
+  readonly pingMs: number | null;
+  readonly ioRunning: boolean | null;
+  readonly sqlRunning: boolean | null;
+  readonly lastError: string | null;
+  readonly checkedAt: string;
+}
+
 /** Dữ liệu Database Monitor trong Redis (sự kiện, lỗi, snapshot dung lượng, cảnh báo, trạng thái kết nối). */
 @Injectable()
 export class DatabaseStoreService {
@@ -134,5 +146,18 @@ export class DatabaseStoreService {
       if (status) map.set(instances[i]!, status);
     });
     return map;
+  }
+
+  /** Đọc trạng thái đồng bộ Read Replica gần nhất từ Redis. */
+  public async getReplicationStatus(): Promise<DbReplicationStatusSnapshot | null> {
+    const raw = await this.redis.client.get(this.keys.replicationStatus());
+    return raw ? safeJsonParse<DbReplicationStatusSnapshot>(raw) : null;
+  }
+
+  /** Lưu trạng thái đồng bộ Read Replica mới nhất lên Redis (TTL 5 phút). */
+  public async saveReplicationStatus(snapshot: DbReplicationStatusSnapshot): Promise<void> {
+    await this.redis.client
+      .set(this.keys.replicationStatus(), JSON.stringify(snapshot), 'EX', 300)
+      .catch(() => undefined);
   }
 }

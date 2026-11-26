@@ -27,3 +27,5 @@ export * from './monitoring/postgres.provider.js';
 export * from './monitoring/basic.provider.js';
 export * from './monitoring/database-monitoring.service.js';
 export * from './operations/database-operations.service.js';
+export * from './routing/database-routing.types.js';
+export * from './routing/database-routing.service.js';

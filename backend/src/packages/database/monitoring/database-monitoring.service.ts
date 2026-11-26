@@ -44,11 +44,11 @@ export class DatabaseMonitoringService {
     return this.provider.capabilities.has(capability);
   }
 
-  /** Chạy `fn` trên một connection riêng của pool (các câu trong cùng một lần đọc thấy cùng session). */
+  /** Chạy `fn` trên một connection riêng của pool Primary (các câu trong cùng một lần đọc thấy cùng session). */
   public async withContext<T>(fn: (ctx: MonitoringContext) => Promise<T>): Promise<T> {
     const ds = this.connection.connected();
     if (!ds) throw new DatabaseUnavailableError(this.connection.getStatus().state);
-    const runner = ds.createQueryRunner();
+    const runner = ds.createQueryRunner('master');
     try {
       await runner.connect();
       const ctx: MonitoringContext = {
@@ -57,6 +57,24 @@ export class DatabaseMonitoringService {
         user: this.config.database.username,
       };
       await this.provider.prepare?.(ctx);
+      return await fn(ctx);
+    } finally {
+      await runner.release().catch(() => undefined);
+    }
+  }
+
+  /** Chạy `fn` trên kết nối Read Replica (`'slave'`) để đọc thông số replication lag. */
+  public async withReplicaContext<T>(fn: (ctx: MonitoringContext) => Promise<T>): Promise<T> {
+    const ds = this.connection.connected();
+    if (!ds) throw new DatabaseUnavailableError(this.connection.getStatus().state);
+    const runner = ds.createQueryRunner('slave');
+    try {
+      await runner.connect();
+      const ctx: MonitoringContext = {
+        run: (sql, params) => runner.query(sql, params) as Promise<never[]>,
+        database: this.config.database.readDatabase || this.config.database.database,
+        user: this.config.database.readUsername || this.config.database.username,
+      };
       return await fn(ctx);
     } finally {
       await runner.release().catch(() => undefined);

@@ -10,11 +10,93 @@ const numberOr = (key: string, fallback: number): number => {
 const booleanOr = (key: string, fallback: boolean): boolean =>
   env(key, false) ? env.boolean(key) : fallback;
 
+/** Chuẩn hóa danh sách Read Replica từ `DB_READ_HOST`/`DB_READ_PORT` và `DB_READ_HOSTS`. */
+function parseReadReplicas(params: {
+  readHost: string;
+  readPort: number;
+  readHostsRaw: string;
+  defaultPort: number;
+  username: string;
+  password: string;
+  database: string;
+}): ReadonlyArray<{
+  readonly host: string;
+  readonly port: number;
+  readonly username: string;
+  readonly password: string;
+  readonly database: string;
+}> {
+  const entries: Array<{ host: string; port: number }> = [];
+  const seen = new Set<string>();
+  const addEntry = (hostRaw: string, portCandidate: number) => {
+    const host = hostRaw.trim();
+    if (!host) return;
+    const port =
+      Number.isInteger(portCandidate) && portCandidate > 0 && portCandidate <= 65535
+        ? portCandidate
+        : params.defaultPort;
+    const key = `${host.toLowerCase()}:${port}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    entries.push({ host, port });
+  };
+
+  if (params.readHost.trim()) {
+    addEntry(params.readHost, params.readPort);
+  }
+
+  for (const token of params.readHostsRaw.split(',')) {
+    const item = token.trim();
+    if (!item) continue;
+    const colonIdx = item.lastIndexOf(':');
+    if (colonIdx > 0 && !item.endsWith(']')) {
+      const hostPart = item.slice(0, colonIdx);
+      const portPart = Number(item.slice(colonIdx + 1));
+      if (Number.isInteger(portPart) && portPart > 0) {
+        addEntry(hostPart, portPart);
+        continue;
+      }
+    }
+    addEntry(item, params.readPort || params.defaultPort);
+  }
+
+  return entries.map((entry) => ({
+    host: entry.host,
+    port: entry.port,
+    username: params.username,
+    password: params.password,
+    database: params.database,
+  }));
+}
+
 /** Lấy thông tin cấu hình cơ sở dữ liệu */
 export const databaseConfig = () => {
   const connection = (env('DB_CONNECTION', false) || DatabaseDriver.MYSQL) as DatabaseDriver;
   const defaultPort = DEFAULT_DATABASE_PORTS[connection] ?? 3306;
   const port = env.number('DB_PORT', false) || defaultPort;
+  const database = env('DB_DATABASE', false) || 'core_db';
+  const username = env('DB_USERNAME', false) || 'root';
+  const password = env('DB_PASSWORD', false) || '';
+  const readHost = env('DB_READ_HOST', false) || '';
+  const readPort = env.number('DB_READ_PORT', false) || port;
+  const readUsername = env('DB_READ_USERNAME', false) || username;
+  const readPassword = env('DB_READ_PASSWORD', false) || password;
+  const readDatabase = env('DB_READ_DATABASE', false) || database;
+  const readHostsRaw = env('DB_READ_HOSTS', false) || '';
+  const readReplicas = parseReadReplicas({
+    readHost,
+    readPort,
+    readHostsRaw,
+    defaultPort: port,
+    username: readUsername,
+    password: readPassword,
+    database: readDatabase,
+  });
+  const replicationLagWarnMs = Math.max(100, numberOr('DB_REPLICATION_LAG_WARN_MS', 1_000));
+  const replicationLagCritMs = Math.max(
+    replicationLagWarnMs,
+    Math.max(200, numberOr('DB_REPLICATION_LAG_CRIT_MS', 5_000)),
+  );
 
   return {
     /** Tắt thì không kết nối database (các trang Database hiện "đã tắt"). */
@@ -23,12 +105,27 @@ export const databaseConfig = () => {
     host: env('DB_HOST', false) || '127.0.0.1',
     port,
     /** Host Read Replica khi thật sự cần tách đọc/ghi (để trống = dùng chung node chính). */
-    readHost: env('DB_READ_HOST', false) || '',
+    readHost,
     /** Port Read Replica (mặc định bằng port chính). */
-    readPort: env.number('DB_READ_PORT', false) || port,
-    database: env('DB_DATABASE', false) || 'core_db',
-    username: env('DB_USERNAME', false) || 'root',
-    password: env('DB_PASSWORD', false) || '',
+    readPort,
+    readUsername,
+    readPassword,
+    readDatabase,
+    /** Danh sách Read Replica đã chuẩn hóa từ DB_READ_HOST + DB_READ_HOSTS. */
+    readReplicas,
+    /** Cửa sổ Read-After-Write (ms) giữ luồng đọc về Primary ngay sau khi ghi. */
+    readAfterWriteWindowMs: Math.max(0, numberOr('DB_READ_AFTER_WRITE_WINDOW_MS', 3_000)),
+    /** Thời gian mở mạch fallback về Primary (ms) khi Replica gặp sự cố. */
+    replicaFallbackCooldownMs: Math.max(1_000, numberOr('DB_REPLICA_FALLBACK_COOLDOWN_MS', 30_000)),
+    /** Ngưỡng cảnh báo độ trễ đồng bộ Replica (ms). */
+    replicationLagWarnMs,
+    /** Ngưỡng nghiêm trọng độ trễ đồng bộ Replica (ms). */
+    replicationLagCritMs,
+    /** Tự chuyển luồng đọc thường về Primary khi Replication Lag vượt ngưỡng nghiêm trọng. */
+    fallbackOnCriticalLag: booleanOr('DB_REPLICA_FALLBACK_ON_CRITICAL_LAG', true),
+    database,
+    username,
+    password,
     maxConnections: env.number('DB_MAX_CONNECTIONS', false) || 10,
     /** Số connection nhàn rỗi tối đa giữ trong pool (0 = bằng maxConnections). */
     poolMaxIdle: numberOr('DB_POOL_MAX_IDLE', 0),

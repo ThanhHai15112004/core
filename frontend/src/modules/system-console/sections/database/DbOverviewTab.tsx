@@ -23,6 +23,7 @@ import {
   type ComparisonRow, AvailableView } from '@core/ui/blocks';
 import type { DbOverview, DbReport, DbTable } from '../../types/database.types';
 import { ALERT_TONE, DB_OVERVIEW_EVENTS, DB_PREVIEW_MAX_HEIGHT_PX, EVENT_TONE, POOL_USAGE_THRESHOLDS } from '../../constants/database';
+import { DbReplicationPanel } from '../../components/database/DbReplicationPanel';
 import { SessionTable } from '../../components/database/SessionTable';
 import { DbMetricChart } from './DbMetricChart';
 import type { DatabasePage } from './useDatabasePage';
@@ -68,6 +69,9 @@ export function DbOverviewTab({ page, overview, actions }: { page: DatabasePage;
     if (data.kpis.deadlocks24h === 0) okChecks.push(t('db.alerts.noDeadlocks'));
     if (data.kpis.lockWaits === 0 && !rules.has('LOCK_WAITS')) okChecks.push(t('db.alerts.noLocks'));
     if (data.health.status === 'healthy' || data.health.status === 'degraded') okChecks.push(t('db.alerts.connected'));
+    if (data.replication?.configured && data.replication.status === 'healthy' && !rules.has('REPLICATION_LAG') && !rules.has('REPLICA_UNAVAILABLE')) {
+      okChecks.push(t('db.alerts.replicaHealthy'));
+    }
   }
 
   const events: ActivityItem[] = (data?.events ?? []).slice(0, DB_OVERVIEW_EVENTS).map((e) => ({
@@ -246,6 +250,8 @@ export function DbOverviewTab({ page, overview, actions }: { page: DatabasePage;
           {data ? <ComparisonTable rows={reportRows} /> : pending()}
         </Panel>
       </PanelGrid>
+
+      <DbReplicationPanel replication={data?.replication} />
 
       <Panel
         title={t('db.events.title')}

@@ -10,6 +10,10 @@ import {
 } from '@packages/kernel/index.js';
 import { MetricsRegistryService } from '@packages/metrics/index.js';
 import { DatabaseConnectionService } from '../providers/database-connection.service.js';
+import {
+  DatabaseRoutingService,
+  getActiveDatabaseRouter,
+} from '../routing/database-routing.service.js';
 import { DB_MAX_RETRIES_CAP, classifyDbError, withDbRetry } from '../utils/error-classify.js';
 import type {
   TransactionIsolationLevel,
@@ -68,6 +72,7 @@ export class TransactionManager implements UnitOfWorkContract {
     private readonly connection: DatabaseConnectionService,
     private readonly config: CoreConfigService,
     @Optional() metrics?: MetricsRegistryService,
+    @Optional() private readonly routing?: DatabaseRoutingService,
   ) {
     if (metrics) {
       this.timeoutsCounter = metrics.counter(
@@ -163,7 +168,7 @@ export class TransactionManager implements UnitOfWorkContract {
     if (!ds) {
       throw new Error(`Database is not connected (state: ${this.connection.getStatus().state})`);
     }
-    const runner = ds.createQueryRunner();
+    const runner = ds.createQueryRunner('master');
     await runner.connect();
     await runner.startTransaction(isolationLevel);
     this.manualRunner = runner;
@@ -178,6 +183,7 @@ export class TransactionManager implements UnitOfWorkContract {
     this.manualRunner = null;
     try {
       await runner.commitTransaction();
+      (this.routing ?? getActiveDatabaseRouter()).markWrite();
     } finally {
       await runner.release().catch(() => undefined);
     }
@@ -260,7 +266,7 @@ export class TransactionManager implements UnitOfWorkContract {
     const timeoutMs = Math.floor(
       options?.timeoutMs ?? this.config.database.transactionTimeoutMs ?? 0,
     );
-    const runner = ds.createQueryRunner();
+    const runner = ds.createQueryRunner('master');
     await runner.connect();
     await runner.startTransaction(options?.isolationLevel);
 
@@ -294,6 +300,7 @@ export class TransactionManager implements UnitOfWorkContract {
           : await execPromise;
 
       await runner.commitTransaction();
+      (this.routing ?? getActiveDatabaseRouter()).markWrite();
       return result;
     } catch (err) {
       if (timedOut || err instanceof TransactionTimeoutError) {

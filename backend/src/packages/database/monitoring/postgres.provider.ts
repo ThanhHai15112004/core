@@ -12,6 +12,7 @@ import {
   type DbTransaction,
   type MonitoringCapability,
   type MonitoringContext,
+  type DbReplicationLagInfo,
   type SessionState,
 } from './monitoring.types.js';
 
@@ -42,6 +43,7 @@ export class PostgresMonitoringProvider implements DatabaseMonitoringProvider {
     'indexUsage',
     'tableIo',
     'storage',
+    'replication',
     'cancel',
     'terminate',
   ]);
@@ -271,6 +273,47 @@ export class PostgresMonitoringProvider implements DatabaseMonitoringProvider {
       dataBytes: toNumber(row?.['data']),
       indexBytes: toNumber(row?.['idx']),
       tables: Number(row?.['tables'] ?? 0),
+    };
+  }
+
+  /** Đo độ trễ đồng bộ Replication của PostgreSQL (`pg_is_in_recovery()` / `pg_stat_replication`). */
+  public async replicationLag(ctx: MonitoringContext): Promise<DbReplicationLagInfo> {
+    const [row] = await ctx.run(
+      `SELECT pg_is_in_recovery() AS in_recovery,
+              CASE
+                WHEN pg_is_in_recovery() THEN
+                  CASE
+                    WHEN pg_last_wal_receive_lsn() = pg_last_wal_replay_lsn() THEN 0
+                    ELSE EXTRACT(EPOCH FROM now() - pg_last_xact_replay_timestamp()) * 1000
+                  END
+                ELSE NULL
+              END AS lag_ms`,
+    );
+
+    const inRecovery = row?.['in_recovery'] === true;
+    if (inRecovery) {
+      const rawLag = toNumber(row?.['lag_ms']);
+      return {
+        role: 'replica',
+        state: 'streaming',
+        lagMs: rawLag === null ? null : Math.max(0, Math.round(rawLag)),
+        ioRunning: true,
+        sqlRunning: true,
+        lastError: null,
+      };
+    }
+
+    const repRows = await ctx
+      .run(`SELECT MAX(EXTRACT(EPOCH FROM replay_lag) * 1000) AS lag_ms FROM pg_stat_replication`)
+      .catch(() => [] as Row[]);
+    const primaryObservedLag = toNumber(repRows[0]?.['lag_ms']);
+    return {
+      role: 'primary',
+      state: primaryObservedLag === null ? 'standalone' : 'streaming',
+      lagMs: primaryObservedLag === null ? null : Math.max(0, Math.round(primaryObservedLag)),
+      ioRunning: null,
+      sqlRunning: null,
+      lastError: null,
     };
   }
 

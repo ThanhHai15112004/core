@@ -16,6 +16,7 @@ import type {
   DbQueryDetail,
   DbQueryStat,
   DbRange,
+  DbReplicationOverview,
   DbSession,
   DbSlowQueries,
   DbStorage,
@@ -54,5 +55,6 @@ export const databaseApi = {
   events: (range: DbRange) => fetchApi<DbEvent[]>(D('events', toQuery({ range }))),
   errors: (range: DbRange) => fetchApi<DbErrors>(D('errors', toQuery({ range }))),
   config: () => fetchApi<DbConfig>(D('config')),
+  replication: () => fetchApi<DbReplicationOverview>(D('replication')),
   ping: () => post<DbPing>('ping'),
 };

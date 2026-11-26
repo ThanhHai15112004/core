@@ -102,4 +102,43 @@ describe('Database Monitor (/ops/database) — không có database', () => {
     );
     expect(metrics.status).toBe(200);
   });
+
+  it('replication overview và config trả đầy đủ thông tin Primary / Read Replica', async () => {
+    const rep = await call<{
+      configured: boolean;
+      status: string;
+      primary: { host: string; port: number; database: string };
+      replicas: unknown[];
+      thresholds: { readAfterWriteWindowMs: number; lagWarnMs: number; lagCritMs: number };
+      routing: { totalReads: number; fallbackCount: number };
+    }>('GET', `${base}/replication`);
+    expect(rep.status).toBe(200);
+    expect(rep.body.data).toMatchObject({
+      configured: false,
+      status: 'disabled',
+      replicas: [],
+      routing: { totalReads: 0, fallbackCount: 0 },
+    });
+    expect(rep.body.data.thresholds.readAfterWriteWindowMs).toBeGreaterThanOrEqual(0);
+
+    const overview = await call<{ replication: { status: string } }>(
+      'GET',
+      `${base}/overview?range=15m`,
+    );
+    expect(overview.status).toBe(200);
+    expect(overview.body.data.replication.status).toBe('disabled');
+
+    const cfg = await call<{ items: { key: string; value: unknown }[] }>('GET', `${base}/config`);
+    const keys = cfg.body.data.items.map((i) => i.key);
+    expect(keys).toEqual(
+      expect.arrayContaining([
+        'readReplicas',
+        'readAfterWriteWindowMs',
+        'replicaFallbackCooldownMs',
+        'replicationLagWarnMs',
+        'replicationLagCritMs',
+        'fallbackOnCriticalLag',
+      ]),
+    );
+  });
 });

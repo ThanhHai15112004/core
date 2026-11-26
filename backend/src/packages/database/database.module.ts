@@ -10,6 +10,7 @@ import { TransactionManager } from './transaction/transaction-manager.service.js
 import { UNIT_OF_WORK } from './transaction/unit-of-work.contract.js';
 import { DatabaseSeederService } from './seeding/database-seeder.service.js';
 import { DataRepairRunnerService } from './repair/data-repair-runner.service.js';
+import { DatabaseRoutingService } from './routing/database-routing.service.js';
 
 /**
  * Kết nối database thật qua TypeORM (khởi tạo nền, có retry — app vẫn chạy khi DB chưa sẵn sàng).
@@ -23,6 +24,7 @@ import { DataRepairRunnerService } from './repair/data-repair-runner.service.js'
     DatabaseConnectionService,
     DatabaseMonitoringService,
     DatabaseOperationsService,
+    DatabaseRoutingService,
     TransactionManager,
     {
       provide: UNIT_OF_WORK,
@@ -38,6 +40,7 @@ import { DataRepairRunnerService } from './repair/data-repair-runner.service.js'
     DatabaseConnectionService,
     DatabaseMonitoringService,
     DatabaseOperationsService,
+    DatabaseRoutingService,
     TransactionManager,
     UNIT_OF_WORK,
     DatabaseSeederService,

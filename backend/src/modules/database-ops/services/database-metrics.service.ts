@@ -30,6 +30,7 @@ export const DB_PROM = {
   errors: 'core_db_statement_errors_total',
   pool: 'core_db_pool_connections',
   sessions: 'core_db_sessions',
+  replicationLagMs: 'core_db_replication_lag_ms',
 } as const;
 
 const MAX_POINTS = 120;
@@ -41,6 +42,7 @@ export class DatabaseMetricsService {
   private readonly errors: Counter;
   private readonly pool: Gauge<'state'>;
   private readonly sessions: Gauge;
+  private readonly replicationLag: Gauge;
 
   constructor(
     registry: MetricsRegistryService,
@@ -59,6 +61,10 @@ export class DatabaseMetricsService {
       'state',
     ]);
     this.sessions = registry.gauge(DB_PROM.sessions, 'Database sessions (excluding the monitor)');
+    this.replicationLag = registry.gauge(
+      DB_PROM.replicationLagMs,
+      'Current observed read replica replication lag in milliseconds',
+    );
   }
 
   /** Cộng delta digest của một chu kỳ (`ms` null khi bộ đếm thời gian của DB không tin được). */
@@ -80,6 +86,13 @@ export class DatabaseMetricsService {
   /** Ghi nhận số lượng phiên kết nối cơ sở dữ liệu đang hoạt động */
   public recordSessions(count: number): void {
     this.sessions.set(count);
+  }
+
+  /** Ghi nhận độ trễ đồng bộ Read Replica (ms). */
+  public recordReplicationLag(lagMs: number | null): void {
+    if (lagMs !== null && Number.isFinite(lagMs)) {
+      this.replicationLag.set(Math.max(0, lagMs));
+    }
   }
 
   /** Thống kê `minutes` phút, kết thúc trước hiện tại `offsetMin` phút. */

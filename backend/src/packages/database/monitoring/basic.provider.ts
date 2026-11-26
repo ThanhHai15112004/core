@@ -23,6 +23,7 @@ export class BasicMonitoringProvider implements DatabaseMonitoringProvider {
   public tables = unsupported;
   public tableDetail = unsupported;
   public storage = unsupported;
+  public replicationLag = unsupported;
   public cancel = unsupported;
   public terminate = unsupported;
 }

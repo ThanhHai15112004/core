@@ -68,6 +68,44 @@ export interface DbReportDto {
   growthBytes: number | null;
 }
 
+export interface DbReplicationEndpointDto {
+  host: string;
+  port: number;
+  database: string;
+}
+
+export interface DbReplicationOverviewDto {
+  configured: boolean;
+  status: 'disabled' | 'healthy' | 'lagging' | 'fallback_active' | 'unavailable';
+  primary: DbReplicationEndpointDto;
+  replicas: DbReplicationEndpointDto[];
+  lagMs: number | null;
+  pingMs: number | null;
+  ioRunning: boolean | null;
+  sqlRunning: boolean | null;
+  replicaAvailable: boolean;
+  circuitState: 'closed' | 'open';
+  circuitOpenUntil: string | null;
+  lastError: string | null;
+  lastCheckedAt: string | null;
+  thresholds: {
+    readAfterWriteWindowMs: number;
+    replicaFallbackCooldownMs: number;
+    lagWarnMs: number;
+    lagCritMs: number;
+    fallbackOnCriticalLag: boolean;
+  };
+  routing: {
+    totalReads: number;
+    replicaReads: number;
+    primaryReads: number;
+    reportReplicaReads: number;
+    readAfterWritePrimaryReads: number;
+    fallbackCount: number;
+    lastFallbackAt: string | null;
+  };
+}
+
 export interface DbOverviewDto {
   range: DbRange;
   driver: string;
@@ -104,6 +142,7 @@ export interface DbOverviewDto {
   };
   largestTables: SectionDto<(DbTable & { growthPercent: number | null })[]>;
   report: { today: DbReportDto; yesterday: DbReportDto };
+  replication: DbReplicationOverviewDto;
   events: DbEventDto[];
   settings: {
     slowQueryMs: number;

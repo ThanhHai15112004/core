@@ -109,6 +109,15 @@ export class DatabaseConnectionService implements OnApplicationBootstrap, OnAppl
     return this.status.state === 'connected';
   }
 
+  /** Kiểm tra hệ thống có cấu hình Read Replica hay không. */
+  public hasReadReplica(): boolean {
+    if ((this.config.database.readReplicas?.length ?? 0) > 0 || Boolean(this.config.database.readHost)) {
+      return true;
+    }
+    const opts = this.dataSource?.options as { replication?: { slaves?: unknown[] } } | undefined;
+    return Boolean(opts?.replication?.slaves && opts.replication.slaves.length > 0);
+  }
+
   /** DataSource đã kết nối; `null` khi chưa sẵn sàng. */
   public connected(): DataSource | null {
     return this.dataSource?.isInitialized ? this.dataSource : null;
@@ -171,6 +180,55 @@ export class DatabaseConnectionService implements OnApplicationBootstrap, OnAppl
       };
     } finally {
       if (timeoutId) clearTimeout(timeoutId);
+    }
+  }
+
+  /** Kiểm tra kết nối tới Read Replica (`SELECT 1` trên kết nối `'slave'`). */
+  public async pingReplica(): Promise<{
+    ok: boolean;
+    latencyMs: number | null;
+    error: ConnectionStatus['lastError'];
+  }> {
+    const ds = this.connected();
+    if (!ds || !this.hasReadReplica()) {
+      return { ok: false, latencyMs: null, error: null };
+    }
+    const startedAt = performance.now();
+    const timeoutMs = Math.max(500, Math.min(this.config.database.connectTimeoutMs || 5000, 5000));
+    let timeoutId: NodeJS.Timeout | null = null;
+    let runner: ReturnType<DataSource['createQueryRunner']> | null = null;
+    try {
+      runner = ds.createQueryRunner('slave');
+      const activeRunner = runner;
+      await Promise.race([
+        runWithoutDbTracing(async () => {
+          await activeRunner.connect();
+          await activeRunner.query('SELECT 1');
+        }),
+        new Promise<never>((_, reject) => {
+          timeoutId = setTimeout(
+            () =>
+              reject(
+                Object.assign(new Error(`Replica ping timed out after ${timeoutMs}ms`), {
+                  code: 'ETIMEOUT',
+                }),
+              ),
+            timeoutMs,
+          );
+          timeoutId.unref();
+        }),
+      ]);
+      const latencyMs = Math.round((performance.now() - startedAt) * 10) / 10;
+      return { ok: true, latencyMs, error: null };
+    } catch (err) {
+      return {
+        ok: false,
+        latencyMs: null,
+        error: { code: errorCodeOf(err), message: sanitizeDbMessage(err) },
+      };
+    } finally {
+      if (timeoutId) clearTimeout(timeoutId);
+      await runner?.release().catch(() => undefined);
     }
   }
 

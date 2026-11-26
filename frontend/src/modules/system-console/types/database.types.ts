@@ -13,6 +13,7 @@ export type MonitoringCapability =
   | 'indexUsage'
   | 'tableIo'
   | 'storage'
+  | 'replication'
   | 'cancel'
   | 'terminate';
 
@@ -96,6 +97,44 @@ export interface DbReport {
   growthBytes: number | null;
 }
 
+export interface DbReplicationEndpoint {
+  host: string;
+  port: number;
+  database: string;
+}
+
+export interface DbReplicationOverview {
+  configured: boolean;
+  status: 'disabled' | 'healthy' | 'lagging' | 'fallback_active' | 'unavailable';
+  primary: DbReplicationEndpoint;
+  replicas: DbReplicationEndpoint[];
+  lagMs: number | null;
+  pingMs: number | null;
+  ioRunning: boolean | null;
+  sqlRunning: boolean | null;
+  replicaAvailable: boolean;
+  circuitState: 'closed' | 'open';
+  circuitOpenUntil: string | null;
+  lastError: string | null;
+  lastCheckedAt: string | null;
+  thresholds: {
+    readAfterWriteWindowMs: number;
+    replicaFallbackCooldownMs: number;
+    lagWarnMs: number;
+    lagCritMs: number;
+    fallbackOnCriticalLag: boolean;
+  };
+  routing: {
+    totalReads: number;
+    replicaReads: number;
+    primaryReads: number;
+    reportReplicaReads: number;
+    readAfterWritePrimaryReads: number;
+    fallbackCount: number;
+    lastFallbackAt: string | null;
+  };
+}
+
 export interface DbConnectionError {
   code: string | null;
   message: string;
@@ -141,6 +180,7 @@ export interface DbOverview {
   transactions: { active: number | null; longestSec: number | null };
   largestTables: Section<DbTable[]>;
   report: { today: DbReport; yesterday: DbReport };
+  replication?: DbReplicationOverview;
   events: DbEvent[];
   settings: { slowQueryMs: number; longTransactionSec: number; actionsEnabled: boolean };
 }

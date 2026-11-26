@@ -10,7 +10,9 @@ export type DbRule =
   | 'ERROR_RATE'
   | 'LONG_TRANSACTION'
   | 'LOCK_WAITS'
-  | 'STORAGE';
+  | 'STORAGE'
+  | 'REPLICATION_LAG'
+  | 'REPLICA_UNAVAILABLE';
 
 /** Tab của trang Database để xử lý từng loại cảnh báo. */
 export const RULE_TAB: Record<DbRule, string> = {
@@ -22,6 +24,8 @@ export const RULE_TAB: Record<DbRule, string> = {
   LONG_TRANSACTION: 'transactions',
   LOCK_WAITS: 'transactions',
   STORAGE: 'tables',
+  REPLICATION_LAG: 'overview',
+  REPLICA_UNAVAILABLE: 'overview',
 };
 
 export interface DbRuleInput {
@@ -35,10 +39,12 @@ export interface DbRuleInput {
   longestTransactionSec: number | null;
   lockWaits: { count: number; maxWaitMs: number } | null;
   storage: { bytes: number | null; limitBytes: number | null };
+  replication?: { configured: boolean; available: boolean; lagMs: number | null } | null;
 }
 
 export interface DbRuleConfig {
-  db: Pick<DatabaseConfig, 'longTransactionSec' | 'storageWarnPercent'>;
+  db: Pick<DatabaseConfig, 'longTransactionSec' | 'storageWarnPercent'> &
+    Partial<Pick<DatabaseConfig, 'replicationLagWarnMs' | 'replicationLagCritMs'>>;
   dbAvgMs: RuleLevel;
   dbPoolPercent: RuleLevel;
   errorRatePercent: RuleLevel;
@@ -142,6 +148,23 @@ export function evaluateDbRules(input: DbRuleInput, cfg: DbRuleConfig): DbViolat
     if (percent >= 95) add('STORAGE', 'critical', percent, 95, '%');
     else if (percent >= cfg.db.storageWarnPercent)
       add('STORAGE', 'warning', percent, cfg.db.storageWarnPercent, '%');
+  }
+
+  if (input.replication?.configured) {
+    if (!input.replication.available) {
+      out.push({ id: 'REPLICA_UNAVAILABLE', severity: 'critical', value: 0, threshold: 0, unit: '' });
+    } else if (input.replication.lagMs !== null) {
+      const warnMs = cfg.db.replicationLagWarnMs ?? 1_000;
+      const critMs = cfg.db.replicationLagCritMs ?? 5_000;
+      const lagSev = level(input.replication.lagMs, { warn: warnMs, crit: critMs });
+      add(
+        'REPLICATION_LAG',
+        lagSev,
+        input.replication.lagMs,
+        lagSev === 'critical' ? critMs : warnMs,
+        'ms',
+      );
+    }
   }
 
   return out.sort((a, b) => (a.severity === b.severity ? 0 : a.severity === 'critical' ? -1 : 1));

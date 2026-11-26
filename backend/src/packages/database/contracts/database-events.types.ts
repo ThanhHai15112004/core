@@ -53,6 +53,9 @@ export interface DbBackupReportRecord {
 export type DbEventType =
   | 'connection_lost'
   | 'connection_recovered'
+  | 'replica_fallback'
+  | 'replica_recovered'
+  | 'replication_lag'
   | 'deadlock'
   | 'alert_started'
   | 'alert_recovered'

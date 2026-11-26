@@ -219,6 +219,13 @@ export class DatabaseOpsController {
     return this.db.getConfig();
   }
 
+  /** Lấy trạng thái Primary / Read Replica, độ trễ đồng bộ và thống kê định tuyến */
+  @Public()
+  @Get(R.REPLICATION)
+  public replication() {
+    return this.db.getReplicationOverview();
+  }
+
   /** Kiểm tra trạng thái sẵn sàng và đo độ trễ kết nối */
   @Public()
   @Post(R.PING)

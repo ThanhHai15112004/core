@@ -10,17 +10,23 @@ import { RedisService } from '@packages/redis/index.js';
 import {
   DatabaseConnectionService,
   DatabaseMonitoringService,
+  DatabaseRoutingService,
   STORAGE_SNAPSHOT_LIMIT,
   readPoolStats,
   recordDbEvent,
   type DbDigestStat,
   type DbLockWait,
+  type DbReplicationLagInfo,
   type DbSession,
   type DbTable,
   type DbTransaction,
 } from '@packages/database/index.js';
 import { DatabaseMetricsService } from './database-metrics.service.js';
-import { DatabaseStoreService, type StorageSnapshot } from './database-store.service.js';
+import {
+  DatabaseStoreService,
+  type DbReplicationStatusSnapshot,
+  type StorageSnapshot,
+} from './database-store.service.js';
 import {
   diffAlerts,
   evaluateDbRules,
@@ -41,6 +47,7 @@ interface Snapshot {
   lockWaits: DbLockWait[] | null;
   digests: DbDigestStat[] | null;
   tables: DbTable[] | null;
+  replication: DbReplicationStatusSnapshot | null;
 }
 
 /**
@@ -65,6 +72,7 @@ export class DatabaseMonitorService implements OnApplicationBootstrap, OnModuleD
     private readonly store: DatabaseStoreService,
     private readonly config: CoreConfigService,
     @Optional() private readonly redis?: RedisService,
+    @Optional() private readonly routing?: DatabaseRoutingService,
   ) {}
 
   /** Thực thi tác vụ khởi động sau khi toàn bộ ứng dụng hoàn tất bootstrap */
@@ -127,6 +135,7 @@ export class DatabaseMonitorService implements OnApplicationBootstrap, OnModuleD
         lockWaits: await safe('locks', () => p.lockWaits(ctx)),
         digests: await safe('digestStats', () => p.digestStats(ctx, DIGEST_LIMIT)),
         tables: await safe('tables', () => p.tables(ctx)),
+        replication: await this.collectReplicationStatus(now),
       };
 
       if (snapshot.sessions)
@@ -213,6 +222,80 @@ export class DatabaseMonitorService implements OnApplicationBootstrap, OnModuleD
       .exec();
   }
 
+  /** Kiểm tra kết nối và đo độ trễ đồng bộ của Read Replica nếu đã cấu hình. */
+  private async collectReplicationStatus(now: number): Promise<DbReplicationStatusSnapshot | null> {
+    if (!this.connection.hasReadReplica()) {
+      return null;
+    }
+    const checkedAt = new Date(now).toISOString();
+    const ping = await this.connection.pingReplica();
+    if (!ping.ok) {
+      const error = ping.error?.message ?? 'Replica connection failed';
+      const snap: DbReplicationStatusSnapshot = {
+        configured: true,
+        available: false,
+        state: 'unavailable',
+        lagMs: null,
+        pingMs: null,
+        ioRunning: null,
+        sqlRunning: null,
+        lastError: error,
+        checkedAt,
+      };
+      this.routing?.updateReplicationHealth({
+        available: false,
+        lagMs: null,
+        error,
+        checkedAt,
+        openCircuitOnFailure: true,
+      });
+      await this.store.saveReplicationStatus(snap);
+      return snap;
+    }
+
+    let lagInfo: DbReplicationLagInfo | null = null;
+    if (this.monitoring.supports('replication')) {
+      lagInfo = await this.monitoring
+        .withReplicaContext((ctx) => this.monitoring.provider.replicationLag(ctx))
+        .catch(() => null);
+    }
+
+    const lagMs = lagInfo?.lagMs ?? null;
+    const warnMs = this.config.database.replicationLagWarnMs;
+    const stopped = lagInfo?.state === 'stopped';
+    const available = !stopped;
+    const state: DbReplicationStatusSnapshot['state'] = stopped
+      ? 'stopped'
+      : lagMs !== null && lagMs >= warnMs
+        ? 'lagging'
+        : lagInfo?.state === 'standalone'
+          ? 'standalone'
+          : 'streaming';
+
+    const snap: DbReplicationStatusSnapshot = {
+      configured: true,
+      available,
+      state,
+      lagMs,
+      pingMs: ping.latencyMs,
+      ioRunning: lagInfo?.ioRunning ?? null,
+      sqlRunning: lagInfo?.sqlRunning ?? null,
+      lastError: lagInfo?.lastError ?? null,
+      checkedAt,
+    };
+
+    this.metrics.recordReplicationLag(lagMs);
+    this.routing?.updateReplicationHealth({
+      available,
+      lagMs,
+      error: snap.lastError,
+      checkedAt,
+      openCircuitOnFailure: stopped,
+    });
+    await this.store.saveReplicationStatus(snap);
+    return snap;
+  }
+
   /** Đánh giá các điều kiện và phát hiện cảnh báo bất thường */
   private async evaluate(snapshot: Snapshot | null, now: number): Promise<void> {
     const [stats, active] = await Promise.all([
@@ -248,6 +331,13 @@ export class DatabaseMonitorService implements OnApplicationBootstrap, OnModuleD
         bytes: storageLatest?.totalBytes ?? null,
         limitBytes: limitGb > 0 ? limitGb * 1024 ** 3 : null,
       },
+      replication: snapshot?.replication
+        ? {
+            configured: snapshot.replication.configured,
+            available: snapshot.replication.available,
+            lagMs: snapshot.replication.lagMs,
+          }
+        : null,
     };
     const violations = evaluateDbRules(input, {
       db: this.config.database,

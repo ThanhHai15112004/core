@@ -25,4 +25,5 @@ export const DATABASE_OPS_ROUTES = {
   ERRORS: 'errors',
   CONFIG: 'config',
   PING: 'ping',
+  REPLICATION: 'replication',
 } as const;

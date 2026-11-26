@@ -10,6 +10,7 @@ export type MonitoringCapability =
   | 'indexUsage'
   | 'tableIo'
   | 'storage'
+  | 'replication'
   | 'cancel'
   | 'terminate';
 
@@ -163,6 +164,15 @@ export interface ExplainResult {
   totalCost: number | null;
 }
 
+export interface DbReplicationLagInfo {
+  readonly role: 'replica' | 'primary';
+  readonly state: 'streaming' | 'lagging' | 'stopped' | 'standalone' | 'error';
+  readonly lagMs: number | null;
+  readonly ioRunning: boolean | null;
+  readonly sqlRunning: boolean | null;
+  readonly lastError: string | null;
+}
+
 /** Provider theo driver — mỗi hàm chỉ gọi khi có capability tương ứng. */
 export interface DatabaseMonitoringProvider {
   readonly driver: string;
@@ -178,6 +188,7 @@ export interface DatabaseMonitoringProvider {
   tables(ctx: MonitoringContext): Promise<DbTable[]>;
   tableDetail(ctx: MonitoringContext, name: string): Promise<DbTableDetail | null>;
   storage(ctx: MonitoringContext): Promise<DbStorage>;
+  replicationLag(ctx: MonitoringContext): Promise<DbReplicationLagInfo>;
   cancel(ctx: MonitoringContext, sessionId: string): Promise<void>;
   terminate(ctx: MonitoringContext, sessionId: string): Promise<void>;
 }
