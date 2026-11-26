@@ -190,22 +190,22 @@ export class FederatedAuthFlowService {
     try {
       authorizationUrl = adapter.buildAuthorizationUrlAsync
         ? await adapter.buildAuthorizationUrlAsync({
-            config: adapterConfig,
-            redirectUri,
-            state,
-            nonce,
-            codeChallenge: pkce.codeChallenge,
-            loginHint: input.loginHint,
-            cacheTtlSeconds: runtimeConfig.jwksCacheTtlSeconds,
-          })
+          config: adapterConfig,
+          redirectUri,
+          state,
+          nonce,
+          codeChallenge: pkce.codeChallenge,
+          loginHint: input.loginHint,
+          cacheTtlSeconds: runtimeConfig.jwksCacheTtlSeconds,
+        })
         : adapter.buildAuthorizationUrl({
-            config: adapterConfig,
-            redirectUri,
-            state,
-            nonce,
-            codeChallenge: pkce.codeChallenge,
-            loginHint: input.loginHint,
-          });
+          config: adapterConfig,
+          redirectUri,
+          state,
+          nonce,
+          codeChallenge: pkce.codeChallenge,
+          loginHint: input.loginHint,
+        });
     } catch (err) {
       await this.monitoringService.recordEvent({
         providerId: provider.id,
@@ -352,16 +352,16 @@ export class FederatedAuthFlowService {
     }
 
     if (tx.flowType === FEDERATED_FLOW_TYPE.LINK) {
-      return this.completeExplicitLinkFlow({
+      return this.completeVerifiedProfileLink({
         provider,
-        tx,
+        targetUserId: Number(tx.userId),
         verified,
         context,
         startedAtMs,
       });
     }
 
-    return this.completeLoginFlow({
+    return this.completeVerifiedProfileLogin({
       provider,
       tx,
       verified,
@@ -792,15 +792,14 @@ export class FederatedAuthFlowService {
     return tx;
   }
 
-  private async completeExplicitLinkFlow(params: {
+  public async completeVerifiedProfileLink(params: {
     readonly provider: FederatedIdentityProviderEntity;
-    readonly tx: FederatedAuthTransactionEntity;
+    readonly targetUserId: number;
     readonly verified: VerifiedExternalProfile;
     readonly context: CallbackRequestContext;
     readonly startedAtMs: number;
   }): Promise<OAuthCallbackResult> {
-    const { provider, tx, verified, context, startedAtMs } = params;
-    const targetUserId = Number(tx.userId);
+    const { provider, targetUserId, verified, context, startedAtMs } = params;
     const existing = await this.identityRepo.findByProviderSubject(
       provider.providerCode,
       verified.issuer,
@@ -915,19 +914,20 @@ export class FederatedAuthFlowService {
     };
   }
 
-  private async completeLoginFlow(params: {
+  public async completeVerifiedProfileLogin(params: {
     readonly provider: FederatedIdentityProviderEntity;
-    readonly tx: FederatedAuthTransactionEntity;
+    readonly tx?: FederatedAuthTransactionEntity | null | undefined;
     readonly verified: VerifiedExternalProfile;
     readonly input: {
       readonly deviceName?: string | undefined;
       readonly trustedDeviceToken?: string | undefined;
     };
     readonly context: CallbackRequestContext;
-    readonly runtimeConfig: ReturnType<typeof resolveFederatedRuntimeConfig>;
+    readonly runtimeConfig?: ReturnType<typeof resolveFederatedRuntimeConfig> | undefined;
     readonly startedAtMs: number;
   }): Promise<OAuthCallbackResult> {
-    const { provider, tx, verified, input, context, runtimeConfig, startedAtMs } = params;
+    const { provider, tx, verified, input, context, startedAtMs } = params;
+    const runtimeConfig = params.runtimeConfig ?? resolveFederatedRuntimeConfig(this.settingRegistry);
     const effectivePolicy = resolveEffectiveProviderPolicy(provider, runtimeConfig);
     const extraConfig = parseFederatedExtraConfig(provider.extraConfigJson, provider.driverCode);
     const now = new Date();
@@ -1141,7 +1141,7 @@ export class FederatedAuthFlowService {
         providerCode: provider.providerCode,
         issuer: verified.issuer,
         identityId: Number(identityEntity.id),
-        deviceName: input.deviceName ?? tx.deviceName ?? null,
+        deviceName: input.deviceName ?? tx?.deviceName ?? null,
         trustedDeviceToken: input.trustedDeviceToken ?? null,
         ipAddress: context.ipAddress ?? null,
         userAgent: context.userAgent ?? null,

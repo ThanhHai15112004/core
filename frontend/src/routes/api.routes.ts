@@ -176,6 +176,14 @@ export const API_ROUTES = {
       `/federated-identity/monitoring/summary${qs ? `?${qs}` : ''}`,
     MONITORING_ERRORS: (qs = '') =>
       `/federated-identity/monitoring/errors${qs ? `?${qs}` : ''}`,
+    SAML_METADATA: (providerCode: string) =>
+      `/federated-identity/saml/${encodeURIComponent(providerCode)}/metadata`,
+    SAML_METADATA_IMPORT: (providerCode: string) =>
+      `/federated-identity/saml/${encodeURIComponent(providerCode)}/metadata/import`,
+    SAML_ACS: (providerCode: string) =>
+      `/federated-identity/saml/${encodeURIComponent(providerCode)}/acs`,
+    SAML_EXCHANGE: (providerCode: string) =>
+      `/federated-identity/saml/${encodeURIComponent(providerCode)}/exchange`,
   },
   USERS: {
     LIST: (qs = '') => `/users${qs ? `?${qs}` : ''}`,

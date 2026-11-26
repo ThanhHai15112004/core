@@ -333,6 +333,7 @@ export const AuthManagementPage: React.FC = () => {
           onSaveProvider={federated.saveProvider}
           onTestProvider={federated.testProvider}
           onDiscoverProvider={federated.discoverProvider}
+          onImportSamlMetadata={federated.importSamlMetadata}
           onDeleteProvider={federated.deleteProvider}
           onFilterEvents={federated.loadMonitoringEvents}
           onSaveGlobalPolicy={federated.saveGlobalPolicy}

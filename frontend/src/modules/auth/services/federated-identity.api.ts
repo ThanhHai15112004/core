@@ -1,3 +1,4 @@
+import { frontendConfig } from '../../../config/index';
 import { fetchApi, fetchApiWithMeta } from '../../../core/services/api';
 import { API_ROUTES } from '../../../routes/index';
 import type {
@@ -14,6 +15,9 @@ import type {
   OidcDiscoveryTestResult,
   OidcProviderOptions,
   PublicFederatedProvider,
+  SamlBindingType,
+  SamlCertificateStatus,
+  SamlMetadataImportResult,
   TestFederatedProviderResult,
   UnlinkFederatedIdentityData,
 } from '../types/federated-identity.types';
@@ -140,10 +144,87 @@ export const federatedIdentityApi = {
       oidcOptions?: Partial<OidcProviderOptions>;
       claimMapping?: Partial<OidcClaimMappingConfig>;
       roleSyncPolicy?: Partial<FederatedRoleSyncPolicy>;
+      samlConfig?: {
+        spEntityId?: string;
+        acsUrl?: string;
+        nameIdFormat?: string;
+        idpEntityId?: string | null;
+        idpSsoUrl?: string | null;
+        idpSsoBinding?: SamlBindingType;
+        wantAssertionsSigned?: boolean;
+        authnRequestsSigned?: boolean;
+        allowIdpInitiated?: boolean;
+        clockSkewSeconds?: number;
+        idpCertificates?: readonly {
+          id?: string;
+          label?: string | null;
+          pem: string;
+          status?: SamlCertificateStatus;
+          graceEndsAt?: string | null;
+        }[];
+        attributeMapping?: {
+          emailAttribute?: string;
+          nameAttribute?: string;
+          firstNameAttribute?: string;
+          lastNameAttribute?: string;
+          groupsAttribute?: string;
+          requireEmail?: boolean;
+          requiredAttributes?: readonly string[];
+        };
+      };
     },
   ) =>
     fetchApi<FederatedProviderItem>(API_ROUTES.FEDERATED_IDENTITY.PROVIDER_BY_CODE(providerCode), {
       method: 'PUT',
+      headers: authHeaders(accessToken),
+      body: JSON.stringify(payload),
+    }),
+
+  getSamlMetadataUrl: (providerCode: string) =>
+    `${frontendConfig.apiBaseUrl.replace(/\/+$/, '')}${API_ROUTES.FEDERATED_IDENTITY.SAML_METADATA(providerCode)}`,
+
+  getSamlAcsUrl: (providerCode: string) =>
+    `${frontendConfig.apiBaseUrl.replace(/\/+$/, '')}${API_ROUTES.FEDERATED_IDENTITY.SAML_ACS(providerCode)}`,
+
+  fetchSamlSpMetadataXml: async (providerCode: string): Promise<string> => {
+    const url = `${frontendConfig.apiBaseUrl.replace(/\/+$/, '')}${API_ROUTES.FEDERATED_IDENTITY.SAML_METADATA(providerCode)}`;
+    const res = await fetch(url, { headers: { Accept: 'application/samlmetadata+xml, application/xml' } });
+    if (!res.ok) {
+      throw new Error(`Không thể tải SP Metadata (${res.status})`);
+    }
+    return res.text();
+  },
+
+  importSamlMetadata: (
+    accessToken: string,
+    providerCode: string,
+    payload: {
+      metadataXml?: string;
+      metadataUrl?: string;
+      mergeCertificates?: boolean;
+      transitionGraceDays?: number;
+    },
+  ) =>
+    fetchApi<SamlMetadataImportResult>(
+      API_ROUTES.FEDERATED_IDENTITY.SAML_METADATA_IMPORT(providerCode),
+      {
+        method: 'POST',
+        headers: authHeaders(accessToken),
+        body: JSON.stringify(payload),
+      },
+    ),
+
+  exchangeSamlCode: (
+    providerCode: string,
+    payload: {
+      samlCode: string;
+      deviceName?: string;
+      trustedDeviceToken?: string;
+    },
+    accessToken?: string,
+  ) =>
+    fetchApi<OAuthCallbackResponseData>(API_ROUTES.FEDERATED_IDENTITY.SAML_EXCHANGE(providerCode), {
+      method: 'POST',
       headers: authHeaders(accessToken),
       body: JSON.stringify(payload),
     }),

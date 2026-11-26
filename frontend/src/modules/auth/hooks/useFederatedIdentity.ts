@@ -7,11 +7,37 @@ import type {
   FederatedMonitoringSummaryData,
   FederatedPolicyData,
   FederatedProviderItem,
+  InitiateOAuthAuthorizeData,
   OAuthCallbackResponseData,
   OidcDiscoveryTestResult,
   PublicFederatedProvider,
+  SamlMetadataImportResult,
   TestFederatedProviderResult,
 } from '../types/federated-identity.types';
+
+function submitSamlAuthorize(res: InitiateOAuthAuthorizeData): void {
+  if (res.binding === 'HTTP-POST' && res.samlRequest && typeof document !== 'undefined') {
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = res.authorizationUrl;
+    const reqInput = document.createElement('input');
+    reqInput.type = 'hidden';
+    reqInput.name = 'SAMLRequest';
+    reqInput.value = res.samlRequest;
+    form.appendChild(reqInput);
+    if (res.relayState) {
+      const relayInput = document.createElement('input');
+      relayInput.type = 'hidden';
+      relayInput.name = 'RelayState';
+      relayInput.value = res.relayState;
+      form.appendChild(relayInput);
+    }
+    document.body.appendChild(form);
+    form.submit();
+    return;
+  }
+  window.location.assign(res.authorizationUrl);
+}
 
 const PENDING_OAUTH_STORAGE_KEY = 'core_pending_oauth_tx';
 
@@ -102,7 +128,7 @@ export function useFederatedIdentity(
           createdAtMs: Date.now(),
         };
         window.sessionStorage.setItem(PENDING_OAUTH_STORAGE_KEY, JSON.stringify(pending));
-        window.location.assign(res.authorizationUrl);
+        submitSamlAuthorize(res);
       } catch (err) {
         notify('err', err instanceof Error ? err.message : 'Không thể khởi tạo đăng nhập OAuth');
       } finally {
@@ -131,7 +157,7 @@ export function useFederatedIdentity(
           createdAtMs: Date.now(),
         };
         window.sessionStorage.setItem(PENDING_OAUTH_STORAGE_KEY, JSON.stringify(pending));
-        window.location.assign(res.authorizationUrl);
+        submitSamlAuthorize(res);
       } catch (err) {
         notify('err', err instanceof Error ? err.message : 'Không thể khởi tạo liên kết OAuth');
       } finally {
@@ -148,10 +174,41 @@ export function useFederatedIdentity(
     }): Promise<OAuthCallbackResponseData | null> => {
       if (typeof window === 'undefined') return null;
       const params = new URLSearchParams(window.location.search);
+      const samlCode = params.get('samlCode');
+      const samlProvider = params.get('provider');
+      const samlError = params.get('samlError');
       const code = params.get('code');
       const state = params.get('state');
       const oauthError = params.get('error');
       const oauthErrorDesc = params.get('error_description');
+
+      if (samlCode || samlError) {
+        window.sessionStorage.removeItem(PENDING_OAUTH_STORAGE_KEY);
+        window.history.replaceState({}, document.title, window.location.pathname);
+        if (samlError) {
+          notify('err', `Lỗi đăng nhập SAML (${samlProvider ?? 'saml'}): ${samlError}`);
+          return null;
+        }
+        if (samlCode && samlProvider) {
+          setBusy(true);
+          try {
+            return await federatedIdentityApi.exchangeSamlCode(
+              samlProvider,
+              {
+                samlCode,
+                ...(options?.deviceName ? { deviceName: options.deviceName } : {}),
+                ...(options?.trustedDeviceToken
+                  ? { trustedDeviceToken: options.trustedDeviceToken }
+                  : {}),
+              },
+              accessToken || undefined,
+            );
+          } finally {
+            setBusy(false);
+          }
+        }
+        return null;
+      }
 
       if (!state && !oauthError && !code) return null;
 
@@ -307,6 +364,36 @@ export function useFederatedIdentity(
     [accessToken, notify],
   );
 
+  const importSamlMetadata = useCallback(
+    async (
+      providerCode: string,
+      payload: {
+        metadataXml?: string;
+        metadataUrl?: string;
+        mergeCertificates?: boolean;
+        transitionGraceDays?: number;
+      },
+    ): Promise<SamlMetadataImportResult | null> => {
+      if (!accessToken) return null;
+      setBusy(true);
+      try {
+        const res = await federatedIdentityApi.importSamlMetadata(accessToken, providerCode, payload);
+        notify(
+          'ok',
+          `Đã nhập IdP Metadata (${res.idpEntityId}): ${res.importedCertificatesCount} cert mới, ${res.transitionedCertificatesCount} cert chuyển tiếp.`,
+        );
+        await refreshAllFederatedState();
+        return res;
+      } catch (err) {
+        notify('err', err instanceof Error ? err.message : 'Lỗi nhập IdP Metadata SAML');
+        return null;
+      } finally {
+        setBusy(false);
+      }
+    },
+    [accessToken, notify, refreshAllFederatedState],
+  );
+
   const deleteProvider = useCallback(
     async (providerCode: string) => {
       if (!accessToken) return;
@@ -375,6 +462,7 @@ export function useFederatedIdentity(
     saveProvider,
     testProvider,
     discoverProvider,
+    importSamlMetadata,
     deleteProvider,
     loadMonitoringEvents,
     saveGlobalPolicy,

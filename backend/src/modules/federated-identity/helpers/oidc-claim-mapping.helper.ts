@@ -11,8 +11,10 @@ import type {
   OAuthAdapterResolvedConfig,
   OidcClaimMappingConfig,
   OidcProviderOptions,
+  SamlProviderConfig,
   VerifiedExternalProfile,
 } from '../types/federated-identity.types.js';
+import { parseSamlConfig } from './saml-config.helper.js';
 
 const FORBIDDEN_PATH_SEGMENTS = new Set(['__proto__', 'constructor', 'prototype']);
 
@@ -223,13 +225,26 @@ export function parseFederatedExtraConfig(
         : DEFAULT_ROLE_SYNC_POLICY.requireMatchedGroup,
   };
 
-  return { oidcOptions, claimMapping, roleSyncPolicy };
+  const hasSamlConfig =
+    driverCode?.trim().toLowerCase() === FEDERATED_DRIVER_CODE.SAML ||
+    Boolean(root['samlConfig']);
+  const samlConfig = hasSamlConfig
+    ? parseSamlConfig(root, driverCode ?? FEDERATED_DRIVER_CODE.SAML)
+    : undefined;
+
+  return {
+    oidcOptions,
+    claimMapping,
+    roleSyncPolicy,
+    ...(samlConfig ? { samlConfig } : {}),
+  };
 }
 
 export interface PartialFederatedExtraConfigPatch {
   readonly oidcOptions?: Partial<OidcProviderOptions> | undefined;
   readonly claimMapping?: Partial<OidcClaimMappingConfig> | undefined;
   readonly roleSyncPolicy?: Partial<FederatedRoleSyncPolicy> | undefined;
+  readonly samlConfig?: SamlProviderConfig | undefined;
 }
 
 export function mergeFederatedExtraConfig(
@@ -237,6 +252,7 @@ export function mergeFederatedExtraConfig(
   patch: PartialFederatedExtraConfigPatch,
   driverCode?: string,
 ): FederatedProviderExtraConfig {
+  const nextSaml = patch.samlConfig ?? existing.samlConfig;
   const mergedRaw: Record<string, unknown> = {
     oidcOptions: {
       ...existing.oidcOptions,
@@ -250,6 +266,7 @@ export function mergeFederatedExtraConfig(
       ...existing.roleSyncPolicy,
       ...(patch.roleSyncPolicy ?? {}),
     },
+    ...(nextSaml ? { samlConfig: nextSaml } : {}),
   };
   return parseFederatedExtraConfig(mergedRaw, driverCode);
 }

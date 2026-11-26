@@ -96,7 +96,15 @@ export const AuthGatewayPanel: React.FC<AuthGatewayPanelProps> = ({
     if (handledOAuthCallbackRef.current || !onConsumeOAuthCallback) return;
     if (typeof window === 'undefined') return;
     const params = new URLSearchParams(window.location.search);
-    if (!params.get('state') && !params.get('error') && !params.get('code')) return;
+    if (
+      !params.get('state') &&
+      !params.get('error') &&
+      !params.get('code') &&
+      !params.get('samlCode') &&
+      !params.get('samlError')
+    ) {
+      return;
+    }
 
     handledOAuthCallbackRef.current = true;
     void (async () => {

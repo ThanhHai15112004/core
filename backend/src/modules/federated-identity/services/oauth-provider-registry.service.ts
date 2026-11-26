@@ -5,6 +5,7 @@ import type { FederatedDriverMetadata } from '../types/federated-identity.types.
 import { GenericOidcAdapter } from '../adapters/generic-oidc.adapter.js';
 import { GoogleOAuthAdapter } from '../adapters/google-oauth.adapter.js';
 import { MicrosoftOAuthAdapter } from '../adapters/microsoft-oauth.adapter.js';
+import { SamlProviderAdapter } from '../adapters/saml.adapter.js';
 
 @Injectable()
 export class OAuthProviderRegistryService {
@@ -14,10 +15,12 @@ export class OAuthProviderRegistryService {
     googleAdapter: GoogleOAuthAdapter,
     microsoftAdapter: MicrosoftOAuthAdapter,
     @Optional() genericOidcAdapter?: GenericOidcAdapter,
+    @Optional() samlAdapter?: SamlProviderAdapter,
   ) {
     this.register(googleAdapter);
     this.register(microsoftAdapter);
     this.register(genericOidcAdapter ?? new GenericOidcAdapter());
+    this.register(samlAdapter ?? new SamlProviderAdapter());
   }
 
   public register(adapter: IOAuthProviderAdapter): void {

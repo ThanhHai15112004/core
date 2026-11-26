@@ -16,6 +16,7 @@ export const FEDERATED_DRIVER_CODE = {
   GOOGLE: 'google',
   MICROSOFT: 'microsoft',
   OIDC: 'oidc',
+  SAML: 'saml',
 } as const;
 
 export type FederatedDriverCode =
@@ -32,6 +33,34 @@ export type FederatedRoleSyncMode =
 
 export const FEDERATED_FEATURE_FLAGS = {
   ENTERPRISE_OIDC_SSO: 'federated_identity.enterprise_oidc_sso',
+  ENTERPRISE_SAML_SSO: 'federated_identity.enterprise_saml_sso',
+} as const;
+
+export const SAML_CERT_STATUS = {
+  ACTIVE: 'ACTIVE',
+  TRANSITIONING: 'TRANSITIONING',
+  REVOKED: 'REVOKED',
+} as const;
+
+export type SamlCertStatus = (typeof SAML_CERT_STATUS)[keyof typeof SAML_CERT_STATUS];
+
+export const SAML_BINDING = {
+  HTTP_REDIRECT: 'HTTP-REDIRECT',
+  HTTP_POST: 'HTTP-POST',
+} as const;
+
+export type SamlBinding = (typeof SAML_BINDING)[keyof typeof SAML_BINDING];
+
+export const SAML_DEFAULTS = {
+  DISPLAY_NAME: 'Enterprise SAML 2.0',
+  NAME_ID_FORMAT: 'urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress',
+  BINDING: SAML_BINDING.HTTP_REDIRECT,
+  CLOCK_SKEW_SECONDS: 60,
+  TRANSITION_GRACE_DAYS: 7,
+  EXCHANGE_CODE_TTL_SECONDS: 60,
+  MAX_METADATA_BYTES: 512 * 1024,
+  MAX_RESPONSE_BYTES: 512 * 1024,
+  DEFAULT_BASE_URL: 'http://localhost:3000/api/v1',
 } as const;
 
 export const FEDERATED_PROTECTED_DENIED_ROLES = ['SUPER_ADMIN'] as const;
@@ -45,6 +74,7 @@ export const GENERIC_OIDC_DEFAULTS = {
 export const FEDERATED_FLOW_TYPE = {
   LOGIN: 'LOGIN',
   LINK: 'LINK',
+  SAML_EXCHANGE: 'SAML_EXCHANGE',
 } as const;
 
 export type FederatedFlowType = (typeof FEDERATED_FLOW_TYPE)[keyof typeof FEDERATED_FLOW_TYPE];
@@ -64,6 +94,13 @@ export const FEDERATED_AUTH_STAGE = {
   LINK: 'LINK',
   UNLINK: 'UNLINK',
   TEST_CONNECTION: 'TEST_CONNECTION',
+  SAML_METADATA: 'SAML_METADATA',
+  SAML_AUTHN_REQUEST: 'SAML_AUTHN_REQUEST',
+  SAML_SIGNATURE: 'SAML_SIGNATURE',
+  SAML_ASSERTION_VALIDATION: 'SAML_ASSERTION_VALIDATION',
+  SAML_REPLAY_CHECK: 'SAML_REPLAY_CHECK',
+  SAML_ATTRIBUTE_MAPPING: 'SAML_ATTRIBUTE_MAPPING',
+  SAML_EXCHANGE: 'SAML_EXCHANGE',
 } as const;
 
 export type FederatedAuthStage = (typeof FEDERATED_AUTH_STAGE)[keyof typeof FEDERATED_AUTH_STAGE];
@@ -106,6 +143,7 @@ export const FEDERATED_AUDIT_META = {
   FEATURE_PROVIDER: 'oauth-provider',
   FEATURE_IDENTITY: 'external-identity',
   FEATURE_ROLE_SYNC: 'sso-role-sync',
+  FEATURE_SAML_METADATA: 'saml-metadata',
 } as const;
 
 export const GOOGLE_OIDC_DEFAULTS = {

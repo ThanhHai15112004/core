@@ -5,6 +5,11 @@ import {
 } from '../enum/federated-identity.enum.js';
 import { resolveEffectiveProviderPolicy } from '../helpers/federated-config.helper.js';
 import { parseFederatedExtraConfig } from '../helpers/oidc-claim-mapping.helper.js';
+import {
+  isSamlProviderConfigured,
+  parseSamlConfig,
+  toPublicSamlConfigView,
+} from '../helpers/saml-config.helper.js';
 import type { FederatedAuthEventEntity } from '../entities/federated-auth-event.entity.js';
 import type { FederatedIdentityEntity } from '../entities/federated-identity.entity.js';
 import type { FederatedIdentityProviderEntity } from '../entities/federated-identity-provider.entity.js';
@@ -42,7 +47,11 @@ export class FederatedIdentityResponseMapper {
   ): FederatedProviderView {
     const hasSecret = Boolean(entity.clientSecretEncrypted?.trim());
     const hasClientId = Boolean(entity.clientId?.trim());
+    const isSaml = entity.driverCode === FEDERATED_DRIVER_CODE.SAML;
     const extraConfig = parseFederatedExtraConfig(entity.extraConfigJson, entity.driverCode);
+    const samlConfig = isSaml
+      ? parseSamlConfig(entity.extraConfigJson, entity.providerCode)
+      : undefined;
     const hasOidcEndpoints =
       entity.driverCode !== FEDERATED_DRIVER_CODE.OIDC ||
       Boolean(entity.issuerUrl?.trim()) ||
@@ -51,6 +60,9 @@ export class FederatedIdentityResponseMapper {
           entity.tokenEndpoint?.trim() &&
           entity.jwksUri?.trim(),
       );
+    const isConfigured = isSaml
+      ? isSamlProviderConfigured(samlConfig)
+      : hasClientId && hasSecret && hasOidcEndpoints;
     return {
       id: Number(entity.id),
       providerCode: entity.providerCode,
@@ -60,7 +72,7 @@ export class FederatedIdentityResponseMapper {
       status: entity.status,
       statusName: getFederatedProviderStatusName(entity.status),
       isEnabled: Boolean(entity.isEnabled),
-      isConfigured: hasClientId && hasSecret && hasOidcEndpoints,
+      isConfigured,
       clientId: entity.clientId ?? null,
       hasClientSecret: hasSecret,
       clientSecretHint: entity.clientSecretHint ?? null,
@@ -85,6 +97,7 @@ export class FederatedIdentityResponseMapper {
       oidcOptions: extraConfig.oidcOptions,
       claimMapping: extraConfig.claimMapping,
       roleSyncPolicy: extraConfig.roleSyncPolicy,
+      ...(samlConfig ? { samlConfig: toPublicSamlConfigView(samlConfig) } : {}),
       lastSuccessAt: toIsoOrNull(entity.lastSuccessAt),
       lastErrorAt: toIsoOrNull(entity.lastErrorAt),
       lastErrorCode: entity.lastErrorCode ?? null,

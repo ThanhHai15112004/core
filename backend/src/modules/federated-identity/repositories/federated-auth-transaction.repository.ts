@@ -19,6 +19,13 @@ export class FederatedAuthTransactionRepository extends BaseTypeOrmRepository<Fe
     });
   }
 
+  public async findByNonceHash(nonceHash: string): Promise<FederatedAuthTransactionEntity | null> {
+    if (!this.dataSource?.isInitialized) return null;
+    return this.repository.findOne({
+      where: { nonceHash: nonceHash.trim() },
+    });
+  }
+
   /**
    * Đánh dấu giao dịch đã sử dụng theo cơ chế atomic (`WHERE id = :id AND consumed_at IS NULL`)
    * để đảm bảo tuyệt đối single-use ngay cả khi nhận 2 callback song song (chống replay/race condition).

@@ -66,7 +66,10 @@ function isPublicEndpoint(endpoint: string): boolean {
   if (PUBLIC_HEALTH_PATHS.has(pathOnly)) {
     return true;
   }
-  if (/^\/federated-identity\/providers\/[^/]+\/(authorize|callback)(?:\?|$)/.test(endpoint)) {
+  if (
+    /^\/federated-identity\/providers\/[^/]+\/(authorize|callback)(?:\?|$)/.test(endpoint) ||
+    /^\/federated-identity\/saml\/[^/]+\/(metadata|exchange)(?:\?|$)/.test(endpoint)
+  ) {
     return true;
   }
   return PUBLIC_ENDPOINT_PREFIXES.some(

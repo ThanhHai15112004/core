@@ -1,9 +1,9 @@
 {
   "$schema": "../../packages/kernel/schemas/module.manifest.schema.json",
   "name": "federated-identity",
-  "displayName": "Federated Identity (OAuth / External Login)",
+  "displayName": "Federated Identity (OAuth / OIDC / SAML SSO)",
   "version": "1.0.0",
-  "description": "Module đăng nhập và liên kết tài khoản qua nhà cung cấp ngoài (10.4): Adapter tùy chọn Google & Microsoft, kiểm tra State/Nonce/PKCE, liên kết chống trùng user, bảo vệ chống gỡ phương thức đăng nhập cuối, định danh ổn định theo (provider, issuer, sub) và monitoring lỗi nhà cung cấp.",
+  "description": "Module đăng nhập và liên kết tài khoản qua nhà cung cấp ngoài (10.4, 14.1, 14.2): Google, Microsoft, Enterprise OIDC và Enterprise SAML 2.0 SSO (Metadata import/export, kiểm tra chữ ký XMLDSig, Audience/Time/Anti-Replay, Attribute Mapping, Certificate Rotation và ghi log an toàn).",
   "type": "core",
   "category": "Integrations",
   "author": "Core Platform Team",
@@ -214,6 +214,18 @@
       "targetRoles": [],
       "targetOrganizationUnitIds": [],
       "isSystem": true
+    },
+    {
+      "key": "federated_identity.enterprise_saml_sso",
+      "module": "federated-identity",
+      "name": "Đăng nhập SSO doanh nghiệp (Enterprise SAML 2.0)",
+      "description": "Bật hoặc tắt khả năng đăng nhập qua các nhà cung cấp định danh SAML 2.0 chuẩn doanh nghiệp (Okta, Azure AD, ADFS, Keycloak SAML...)",
+      "isEnabled": true,
+      "rolloutPercentage": 100,
+      "targetUserIds": [],
+      "targetRoles": [],
+      "targetOrganizationUnitIds": [],
+      "isSystem": true
     }
   ],
   "events": {
@@ -232,7 +244,8 @@
       "federated_identity_providers",
       "federated_identities",
       "federated_auth_transactions",
-      "federated_auth_events"
+      "federated_auth_events",
+      "federated_saml_assertion_replays"
     ]
   }
 }

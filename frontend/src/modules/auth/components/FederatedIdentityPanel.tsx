@@ -20,6 +20,7 @@ import type {
   FederatedPolicyData,
   FederatedProviderItem,
   PublicFederatedProvider,
+  SamlMetadataImportResult,
 } from '../types/federated-identity.types';
 
 interface FederatedIdentityPanelProps {
@@ -38,6 +39,15 @@ interface FederatedIdentityPanelProps {
   onSaveProvider: (providerCode: string, payload: SaveProviderPayload) => Promise<void>;
   onTestProvider: (providerCode: string) => Promise<unknown>;
   onDiscoverProvider: (providerCode: string) => Promise<unknown>;
+  onImportSamlMetadata: (
+    providerCode: string,
+    payload: {
+      metadataXml?: string;
+      metadataUrl?: string;
+      mergeCertificates?: boolean;
+      transitionGraceDays?: number;
+    },
+  ) => Promise<SamlMetadataImportResult | null>;
   onDeleteProvider: (providerCode: string) => Promise<void>;
   onFilterEvents: (filters?: {
     providerCode?: string;
@@ -63,6 +73,7 @@ export const FederatedIdentityPanel: React.FC<FederatedIdentityPanelProps> = ({
   onSaveProvider,
   onTestProvider,
   onDiscoverProvider,
+  onImportSamlMetadata,
   onDeleteProvider,
   onFilterEvents,
   onSaveGlobalPolicy,
@@ -349,6 +360,7 @@ export const FederatedIdentityPanel: React.FC<FederatedIdentityPanelProps> = ({
             onSaveProvider={onSaveProvider}
             onTestProvider={onTestProvider}
             onDiscoverProvider={onDiscoverProvider}
+            onImportSamlMetadata={onImportSamlMetadata}
             onDeleteProvider={onDeleteProvider}
           />
         </div>

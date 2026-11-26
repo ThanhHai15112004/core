@@ -62,6 +62,7 @@
     "@opentelemetry/sdk-trace-base": "^2.12.1",
     "@opentelemetry/sdk-trace-node": "^2.12.1",
     "@opentelemetry/semantic-conventions": "^1.45.0",
+    "@xmldom/xmldom": "^0.9.12",
     "bullmq": "^6.3.8",
     "ioredis": "^5.11.1",
     "mysql2": "^3.24.4",
@@ -73,6 +74,7 @@
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
     "typeorm": "^1.1.1",
+    "xml-crypto": "^6.4.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {

@@ -5,8 +5,30 @@ import type {
   FederatedDriverMetadata,
   FederatedProviderItem,
   FederatedRoleSyncMode,
+  SamlIdpCertificateItem,
+  SamlMetadataImportResult,
 } from '../types/federated-identity.types';
 import type { federatedIdentityApi } from '../services/federated-identity.api';
+import {
+  type SamlDraftCertificate,
+  type SamlEditorState,
+  SamlProviderSection,
+} from './SamlProviderSection';
+
+function mapSamlViewToDraftCerts(
+  certs: readonly SamlIdpCertificateItem[],
+): SamlDraftCertificate[] {
+  return certs.map((c) => ({
+    id: c.id,
+    label: c.label ?? null,
+    pem: c.pem,
+    fingerprint256: c.fingerprint256,
+    validFrom: c.validFrom,
+    validTo: c.validTo,
+    status: c.status,
+    graceEndsAt: c.graceEndsAt,
+  }));
+}
 
 type OverrideChoice = 'inherit' | 'true' | 'false';
 
@@ -64,8 +86,38 @@ interface FederatedProviderEditorProps {
   onSaveProvider: (providerCode: string, payload: SaveProviderPayload) => Promise<void>;
   onTestProvider: (providerCode: string) => Promise<unknown>;
   onDiscoverProvider: (providerCode: string) => Promise<unknown>;
+  onImportSamlMetadata: (
+    providerCode: string,
+    payload: {
+      metadataXml?: string;
+      metadataUrl?: string;
+      mergeCertificates?: boolean;
+      transitionGraceDays?: number;
+    },
+  ) => Promise<SamlMetadataImportResult | null>;
   onDeleteProvider: (providerCode: string) => Promise<void>;
 }
+
+const DEFAULT_SAML_EDITOR_STATE: SamlEditorState = {
+  spEntityId: '',
+  acsUrl: '',
+  nameIdFormat: 'urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress',
+  idpEntityId: '',
+  idpSsoUrl: '',
+  idpSsoBinding: 'HTTP-REDIRECT',
+  wantAssertionsSigned: true,
+  authnRequestsSigned: false,
+  allowIdpInitiated: false,
+  clockSkewSeconds: 60,
+  idpCertificates: [],
+  emailAttribute: 'email',
+  nameAttribute: 'displayName',
+  firstNameAttribute: 'firstName',
+  lastNameAttribute: 'lastName',
+  groupsAttribute: 'groups',
+  requireEmail: true,
+  requiredAttributesText: '',
+};
 
 export const FederatedProviderEditor: React.FC<FederatedProviderEditorProps> = ({
   busy,
@@ -74,6 +126,7 @@ export const FederatedProviderEditor: React.FC<FederatedProviderEditorProps> = (
   onSaveProvider,
   onTestProvider,
   onDiscoverProvider,
+  onImportSamlMetadata,
   onDeleteProvider,
 }) => {
   const [selectedCode, setSelectedCode] = useState<string>('google');
@@ -111,6 +164,7 @@ export const FederatedProviderEditor: React.FC<FederatedProviderEditorProps> = (
   const [allowedRoleCodesText, setAllowedRoleCodesText] = useState<string>('');
   const [defaultRoleCodesText, setDefaultRoleCodesText] = useState<string>('');
   const [groupRoleMappingsText, setGroupRoleMappingsText] = useState<string>('');
+  const [samlState, setSamlState] = useState<SamlEditorState>(DEFAULT_SAML_EDITOR_STATE);
 
   const selectableCodes = useMemo(() => {
     const codes = new Set<string>(['google', 'microsoft']);
@@ -164,6 +218,31 @@ export const FederatedProviderEditor: React.FC<FederatedProviderEditorProps> = (
       setGroupRoleMappingsText(
         formatGroupRoleMappings(existing.roleSyncPolicy?.groupRoleMappings ?? {}),
       );
+      if (existing.samlConfig) {
+        setSamlState({
+          spEntityId: existing.samlConfig.spEntityId,
+          acsUrl: existing.samlConfig.acsUrl,
+          nameIdFormat: existing.samlConfig.nameIdFormat,
+          idpEntityId: existing.samlConfig.idpEntityId ?? '',
+          idpSsoUrl: existing.samlConfig.idpSsoUrl ?? '',
+          idpSsoBinding: existing.samlConfig.idpSsoBinding,
+          wantAssertionsSigned: existing.samlConfig.wantAssertionsSigned,
+          authnRequestsSigned: existing.samlConfig.authnRequestsSigned,
+          allowIdpInitiated: existing.samlConfig.allowIdpInitiated,
+          clockSkewSeconds: existing.samlConfig.clockSkewSeconds,
+          idpCertificates: mapSamlViewToDraftCerts(existing.samlConfig.idpCertificates),
+          emailAttribute: existing.samlConfig.attributeMapping.emailAttribute,
+          nameAttribute: existing.samlConfig.attributeMapping.nameAttribute,
+          firstNameAttribute: existing.samlConfig.attributeMapping.firstNameAttribute,
+          lastNameAttribute: existing.samlConfig.attributeMapping.lastNameAttribute,
+          groupsAttribute: existing.samlConfig.attributeMapping.groupsAttribute,
+          requireEmail: existing.samlConfig.attributeMapping.requireEmail,
+          requiredAttributesText:
+            existing.samlConfig.attributeMapping.requiredAttributes.join(', '),
+        });
+      } else {
+        setSamlState(DEFAULT_SAML_EDITOR_STATE);
+      }
     } else {
       setDriverCode(resolvedDriver);
       setDisplayName(meta?.displayName ?? selectedCode);
@@ -194,6 +273,7 @@ export const FederatedProviderEditor: React.FC<FederatedProviderEditorProps> = (
       setAllowedRoleCodesText('');
       setDefaultRoleCodesText('');
       setGroupRoleMappingsText('');
+      setSamlState(DEFAULT_SAML_EDITOR_STATE);
     }
   }, [selectedCode, adminProviders, drivers, newDriverCode]);
 
@@ -252,6 +332,38 @@ export const FederatedProviderEditor: React.FC<FederatedProviderEditorProps> = (
         defaultRoleCodes: parseCsvList(defaultRoleCodesText).map((r) => r.toUpperCase()),
         groupRoleMappings: parseGroupRoleMappingsText(groupRoleMappingsText),
       },
+      ...(driverCode === 'saml'
+        ? {
+            samlConfig: {
+              ...(samlState.spEntityId.trim() ? { spEntityId: samlState.spEntityId.trim() } : {}),
+              ...(samlState.acsUrl.trim() ? { acsUrl: samlState.acsUrl.trim() } : {}),
+              nameIdFormat: samlState.nameIdFormat,
+              idpEntityId: samlState.idpEntityId.trim() || null,
+              idpSsoUrl: samlState.idpSsoUrl.trim() || null,
+              idpSsoBinding: samlState.idpSsoBinding,
+              wantAssertionsSigned: samlState.wantAssertionsSigned,
+              authnRequestsSigned: samlState.authnRequestsSigned,
+              allowIdpInitiated: samlState.allowIdpInitiated,
+              clockSkewSeconds: samlState.clockSkewSeconds,
+              idpCertificates: samlState.idpCertificates.map((c) => ({
+                ...(c.id ? { id: c.id } : {}),
+                label: c.label ?? null,
+                pem: c.pem,
+                status: c.status,
+                graceEndsAt: c.graceEndsAt ?? null,
+              })),
+              attributeMapping: {
+                emailAttribute: samlState.emailAttribute.trim() || 'email',
+                nameAttribute: samlState.nameAttribute.trim() || 'displayName',
+                firstNameAttribute: samlState.firstNameAttribute.trim() || 'firstName',
+                lastNameAttribute: samlState.lastNameAttribute.trim() || 'lastName',
+                groupsAttribute: samlState.groupsAttribute.trim() || 'groups',
+                requireEmail: samlState.requireEmail,
+                requiredAttributes: parseCsvList(samlState.requiredAttributesText),
+              },
+            },
+          }
+        : {}),
     });
     setClientSecret('');
   };
@@ -368,33 +480,43 @@ export const FederatedProviderEditor: React.FC<FederatedProviderEditorProps> = (
           </div>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-          <div>
-            <label style={authStyles.label}>Client ID</label>
-            <input
-              type="text"
-              value={clientId}
-              onChange={(e) => setClientId(e.target.value)}
-              placeholder="Nhập OAuth/OIDC Client ID..."
-              style={authStyles.monoInput}
-            />
+        {driverCode === 'saml' ? (
+          <SamlProviderSection
+            providerCode={selectedCode}
+            busy={busy}
+            state={samlState}
+            onChange={(patch) => setSamlState((prev) => ({ ...prev, ...patch }))}
+            onImportMetadata={onImportSamlMetadata}
+          />
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+            <div>
+              <label style={authStyles.label}>Client ID</label>
+              <input
+                type="text"
+                value={clientId}
+                onChange={(e) => setClientId(e.target.value)}
+                placeholder="Nhập OAuth/OIDC Client ID..."
+                style={authStyles.monoInput}
+              />
+            </div>
+            <div>
+              <label style={authStyles.label}>
+                Client Secret{' '}
+                {activeProviderRecord?.hasClientSecret
+                  ? `(đã lưu: ${activeProviderRecord.clientSecretHint ?? '****'})`
+                  : '(bắt buộc khi bật)'}
+              </label>
+              <input
+                type="password"
+                value={clientSecret}
+                onChange={(e) => setClientSecret(e.target.value)}
+                placeholder="Nhập Client Secret mới..."
+                style={authStyles.monoInput}
+              />
+            </div>
           </div>
-          <div>
-            <label style={authStyles.label}>
-              Client Secret{' '}
-              {activeProviderRecord?.hasClientSecret
-                ? `(đã lưu: ${activeProviderRecord.clientSecretHint ?? '****'})`
-                : '(bắt buộc khi bật)'}
-            </label>
-            <input
-              type="password"
-              value={clientSecret}
-              onChange={(e) => setClientSecret(e.target.value)}
-              placeholder="Nhập Client Secret mới..."
-              style={authStyles.monoInput}
-            />
-          </div>
-        </div>
+        )}
 
         {driverCode === 'microsoft' && (
           <div>
@@ -488,28 +610,34 @@ export const FederatedProviderEditor: React.FC<FederatedProviderEditorProps> = (
           </>
         )}
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-          <div>
-            <label style={authStyles.label}>Scopes (phân cách bằng dấu phẩy)</label>
-            <input
-              type="text"
-              value={scopesText}
-              onChange={(e) => setScopesText(e.target.value)}
-              placeholder="openid, profile, email"
-              style={authStyles.monoInput}
-            />
-          </div>
-          <div>
-            <label style={authStyles.label}>Allowed Email Domains (để trống = cho phép tất cả)</label>
-            <input
-              type="text"
-              value={allowedEmailDomainsText}
-              onChange={(e) => setAllowedEmailDomainsText(e.target.value)}
-              placeholder="corp.vn, subsidiary.com"
-              style={authStyles.monoInput}
-            />
-          </div>
-        </div>
+        {driverCode !== 'saml' && (
+          <>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+              <div>
+                <label style={authStyles.label}>Scopes (phân cách bằng dấu phẩy)</label>
+                <input
+                  type="text"
+                  value={scopesText}
+                  onChange={(e) => setScopesText(e.target.value)}
+                  placeholder="openid, profile, email"
+                  style={authStyles.monoInput}
+                />
+              </div>
+              <div>
+                <label style={authStyles.label}>
+                  Allowed Email Domains (để trống = cho phép tất cả)
+                </label>
+                <input
+                  type="text"
+                  value={allowedEmailDomainsText}
+                  onChange={(e) => setAllowedEmailDomainsText(e.target.value)}
+                  placeholder="corp.vn, subsidiary.com"
+                  style={authStyles.monoInput}
+                />
+              </div>
+            </div>
+          </>
+        )}
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
           <div>
@@ -538,35 +666,37 @@ export const FederatedProviderEditor: React.FC<FederatedProviderEditorProps> = (
           </div>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
-          <div>
-            <label style={authStyles.label}>Claim Email</label>
-            <input
-              type="text"
-              value={emailClaim}
-              onChange={(e) => setEmailClaim(e.target.value)}
-              style={authStyles.monoInput}
-            />
+        {driverCode !== 'saml' && (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
+            <div>
+              <label style={authStyles.label}>Claim Email</label>
+              <input
+                type="text"
+                value={emailClaim}
+                onChange={(e) => setEmailClaim(e.target.value)}
+                style={authStyles.monoInput}
+              />
+            </div>
+            <div>
+              <label style={authStyles.label}>Claim Họ tên</label>
+              <input
+                type="text"
+                value={nameClaim}
+                onChange={(e) => setNameClaim(e.target.value)}
+                style={authStyles.monoInput}
+              />
+            </div>
+            <div>
+              <label style={authStyles.label}>Claim Nhóm (vd: groups, realm_access.roles)</label>
+              <input
+                type="text"
+                value={groupsClaim}
+                onChange={(e) => setGroupsClaim(e.target.value)}
+                style={authStyles.monoInput}
+              />
+            </div>
           </div>
-          <div>
-            <label style={authStyles.label}>Claim Họ tên</label>
-            <input
-              type="text"
-              value={nameClaim}
-              onChange={(e) => setNameClaim(e.target.value)}
-              style={authStyles.monoInput}
-            />
-          </div>
-          <div>
-            <label style={authStyles.label}>Claim Nhóm (vd: groups, realm_access.roles)</label>
-            <input
-              type="text"
-              value={groupsClaim}
-              onChange={(e) => setGroupsClaim(e.target.value)}
-              style={authStyles.monoInput}
-            />
-          </div>
-        </div>
+        )}
 
         <div
           style={{
@@ -674,7 +804,7 @@ export const FederatedProviderEditor: React.FC<FederatedProviderEditorProps> = (
             style={authStyles.btnSecondary}
           >
             <Activity size={14} />
-            <span>Kiểm tra JWKS</span>
+            <span>{driverCode === 'saml' ? 'Kiểm tra SAML & Cert' : 'Kiểm tra JWKS'}</span>
           </button>
           {driverCode === 'oidc' && (
             <button

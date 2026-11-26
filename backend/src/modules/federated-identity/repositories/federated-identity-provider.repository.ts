@@ -1,7 +1,7 @@
 import { Injectable, Optional } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { BaseTypeOrmRepository, TransactionManager } from '@packages/database/index.js';
-import { FEDERATED_PROVIDER_STATUS } from '../enum/federated-identity.enum.js';
+import { FEDERATED_DRIVER_CODE, FEDERATED_PROVIDER_STATUS } from '../enum/federated-identity.enum.js';
 import { FederatedIdentityProviderEntity } from '../entities/federated-identity-provider.entity.js';
 
 @Injectable()
@@ -40,7 +40,9 @@ export class FederatedIdentityProviderRepository extends BaseTypeOrmRepository<F
       },
       order: { id: 'ASC' },
     });
-    return list.filter((p) => Boolean(p.clientId?.trim()));
+    return list.filter(
+      (p) => p.driverCode === FEDERATED_DRIVER_CODE.SAML || Boolean(p.clientId?.trim()),
+    );
   }
 
   public async updateTelemetry(

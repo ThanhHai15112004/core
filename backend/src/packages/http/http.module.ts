@@ -12,8 +12,8 @@ const DEFAULT_UPLOAD_BODY_LIMIT_BYTES = 32 * 1024 * 1024; // 32 MB
 export const MAX_RAW_BODY_CAPTURE_BYTES = 2 * 1024 * 1024; // 2 MB
 
 export interface ConfigureFastifyBodyParserOptions {
-  readonly jsonBodyLimitBytes?: number | undefined;
-  readonly uploadBodyLimitBytes?: number | undefined;
+  readonly jsonBodyLimitBytes?: number;
+  readonly uploadBodyLimitBytes?: number;
 }
 
 export interface RawBodyRequest {
@@ -128,6 +128,48 @@ export function configureFastifyEmptyJsonBodyParser(
       },
     );
 
+    const formBodyLimit = Math.min(jsonBodyLimit, 2 * 1024 * 1024);
+    try {
+      fastify.removeContentTypeParser('application/x-www-form-urlencoded');
+    } catch {
+      // Ignore if not registered yet
+    }
+    fastify.addContentTypeParser(
+      'application/x-www-form-urlencoded',
+      { parseAs: 'string', bodyLimit: formBodyLimit },
+      (
+        req: { headers?: Record<string, unknown>; rawBody?: string },
+        rawBody: unknown,
+        done: (err: Error | null, value?: unknown) => void,
+      ) => {
+        const body = typeof rawBody === 'string' ? rawBody : '';
+        if (
+          req &&
+          typeof req === 'object' &&
+          Buffer.byteLength(body, 'utf8') <= MAX_RAW_BODY_CAPTURE_BYTES
+        ) {
+          req.rawBody = body;
+        }
+        if (!body || body.trim().length === 0) {
+          done(null, {});
+          return;
+        }
+        try {
+          const params = new URLSearchParams(body);
+          const parsed: Record<string, string> = {};
+          for (const [key, val] of params.entries()) {
+            parsed[key] = val;
+          }
+          done(null, parsed);
+        } catch (err) {
+          const parseError =
+            err instanceof Error ? err : new Error('Invalid form-urlencoded body');
+          (parseError as Error & { statusCode?: number }).statusCode = 400;
+          done(parseError, undefined);
+        }
+      },
+    );
+
     fastify[RELAXED_JSON_PARSER_WATERMARK] = true;
   } catch {
     // Ignore if content-type parser is already locked after server ready
@@ -153,13 +195,15 @@ export class HttpModule implements OnModuleInit {
   constructor(
     @Optional() private readonly adapterHost?: HttpAdapterHost,
     @Optional() private readonly config?: CoreConfigService,
-  ) {}
+  ) { }
 
   public onModuleInit(): void {
     const instance = this.adapterHost?.httpAdapter?.getInstance?.() as unknown;
+    const jsonBodyLimitBytes = this.config?.gateway.bodyLimits.apiJsonBodyLimitBytes;
+    const uploadBodyLimitBytes = this.config?.gateway.bodyLimits.apiMaxBodySizeBytes;
     configureFastifyEmptyJsonBodyParser(instance, {
-      jsonBodyLimitBytes: this.config?.gateway.bodyLimits.apiJsonBodyLimitBytes,
-      uploadBodyLimitBytes: this.config?.gateway.bodyLimits.apiMaxBodySizeBytes,
+      ...(jsonBodyLimitBytes !== undefined ? { jsonBodyLimitBytes } : {}),
+      ...(uploadBodyLimitBytes !== undefined ? { uploadBodyLimitBytes } : {}),
     });
   }
 }

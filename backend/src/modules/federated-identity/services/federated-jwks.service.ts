@@ -21,6 +21,7 @@ export class FederatedStageError extends UnauthorizedAppException {
   public readonly providerError: string | null;
   public readonly httpStatus: number | null;
   public readonly diagnosticMessage: string | null;
+  public readonly metadata: Record<string, unknown> | undefined;
 
   constructor(params: {
     readonly i18nKey: string;
@@ -29,6 +30,7 @@ export class FederatedStageError extends UnauthorizedAppException {
     readonly providerError?: string | null | undefined;
     readonly httpStatus?: number | null | undefined;
     readonly diagnosticMessage?: string | null | undefined;
+    readonly metadata?: Record<string, unknown> | undefined;
   }) {
     super(params.i18nKey, [], undefined, params.stageErrorCode);
     this.stage = params.stage;
@@ -36,6 +38,7 @@ export class FederatedStageError extends UnauthorizedAppException {
     this.providerError = params.providerError ?? null;
     this.httpStatus = params.httpStatus ?? null;
     this.diagnosticMessage = sanitizeFederatedErrorMessage(params.diagnosticMessage) ?? null;
+    this.metadata = params.metadata;
   }
 }
 

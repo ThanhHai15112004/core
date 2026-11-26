@@ -1,8 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import type { PaginatedResult } from '@packages/kernel/index.js';
 import type { UserIdentity } from '@packages/security/index.js';
 import type { IFederatedIdentityPublicService } from '../contracts/index.js';
-import { FEDERATED_FLOW_TYPE } from '../enum/federated-identity.enum.js';
+import { FEDERATED_DRIVER_CODE, FEDERATED_FLOW_TYPE } from '../enum/federated-identity.enum.js';
 import type {
   ListMonitoringErrorsQuery,
   UpsertFederatedProviderRequest,
@@ -28,6 +28,7 @@ import {
 } from './federated-auth-flow.service.js';
 import { FederatedMonitoringService } from './federated-monitoring.service.js';
 import { FederatedProvidersService } from './federated-providers.service.js';
+import { SamlSsoService } from './saml-sso.service.js';
 
 @Injectable()
 export class FederatedIdentityService implements IFederatedIdentityPublicService {
@@ -35,6 +36,7 @@ export class FederatedIdentityService implements IFederatedIdentityPublicService
     private readonly providersService: FederatedProvidersService,
     private readonly flowService: FederatedAuthFlowService,
     private readonly monitoringService: FederatedMonitoringService,
+    @Optional() private readonly samlSsoService?: SamlSsoService,
   ) {}
 
   public listDrivers(): FederatedDriverMetadata[] {
@@ -91,6 +93,15 @@ export class FederatedIdentityService implements IFederatedIdentityPublicService
     },
     meta?: AuthorizeRequestContext,
   ): Promise<InitiateOAuthAuthorizeResult> {
+    const provider = await this.providersService.findByCodeOrNull(providerCode);
+    if (provider?.driverCode === FEDERATED_DRIVER_CODE.SAML && this.samlSsoService) {
+      return this.samlSsoService.initiateAuthorize(
+        providerCode,
+        FEDERATED_FLOW_TYPE.LOGIN,
+        input,
+        meta,
+      );
+    }
     return this.flowService.initiateAuthorize(providerCode, FEDERATED_FLOW_TYPE.LOGIN, input, meta);
   }
 
@@ -104,6 +115,13 @@ export class FederatedIdentityService implements IFederatedIdentityPublicService
     },
     meta?: Omit<AuthorizeRequestContext, 'actorUserId'>,
   ): Promise<InitiateOAuthAuthorizeResult> {
+    const provider = await this.providersService.findByCodeOrNull(providerCode);
+    if (provider?.driverCode === FEDERATED_DRIVER_CODE.SAML && this.samlSsoService) {
+      return this.samlSsoService.initiateAuthorize(providerCode, FEDERATED_FLOW_TYPE.LINK, input, {
+        ...meta,
+        actorUserId: userId,
+      });
+    }
     return this.flowService.initiateAuthorize(providerCode, FEDERATED_FLOW_TYPE.LINK, input, {
       ...meta,
       actorUserId: userId,

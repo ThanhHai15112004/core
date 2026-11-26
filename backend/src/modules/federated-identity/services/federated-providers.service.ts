@@ -29,6 +29,11 @@ import {
   mergeFederatedExtraConfig,
   parseFederatedExtraConfig,
 } from '../helpers/oidc-claim-mapping.helper.js';
+import {
+  isSamlProviderConfigured,
+  mergeSamlConfig,
+  parseSamlConfig,
+} from '../helpers/saml-config.helper.js';
 import { FederatedIdentityProviderRepository } from '../repositories/federated-identity-provider.repository.js';
 import type { UpsertFederatedProviderRequest } from '../requests/federated-identity.requests.js';
 import { FederatedIdentityResponseMapper } from '../responses/federated-identity.response.js';
@@ -125,6 +130,11 @@ export class FederatedProvidersService implements OnModuleDestroy {
     const enabled = await this.providerRepo.findEnabledPublicProviders();
     return enabled
       .filter((item) => {
+        if (item.driverCode === FEDERATED_DRIVER_CODE.SAML) {
+          return isSamlProviderConfigured(
+            parseSamlConfig(item.extraConfigJson, item.providerCode),
+          );
+        }
         if (!item.clientSecretEncrypted?.trim()) return false;
         if (item.driverCode === FEDERATED_DRIVER_CODE.OIDC) {
           const hasIssuer = Boolean(item.issuerUrl?.trim());
@@ -138,6 +148,12 @@ export class FederatedProvidersService implements OnModuleDestroy {
         return true;
       })
       .map((item) => FederatedIdentityResponseMapper.toPublicProviderView(item));
+  }
+
+  public async findByCodeOrNull(
+    providerCode: string,
+  ): Promise<FederatedIdentityProviderEntity | null> {
+    return this.providerRepo.findByCode(providerCode.trim().toLowerCase());
   }
 
   public async listProviders(): Promise<FederatedProviderView[]> {
@@ -247,9 +263,19 @@ export class FederatedProvidersService implements OnModuleDestroy {
           : [];
 
     const existingExtra = parseFederatedExtraConfig(existing?.extraConfigJson, driverMeta.driverCode);
+    const existingSaml =
+      driverMeta.driverCode === FEDERATED_DRIVER_CODE.SAML
+        ? parseSamlConfig(existing?.extraConfigJson, providerCode)
+        : existingExtra.samlConfig;
+    const nextSaml =
+      driverMeta.driverCode === FEDERATED_DRIVER_CODE.SAML || input.samlConfig
+        ? mergeSamlConfig(existingSaml, input.samlConfig, providerCode, this.encryptionService)
+        : undefined;
+
     const mergedExtra = mergeFederatedExtraConfig(
       existingExtra,
       {
+        ...(nextSaml ? { samlConfig: nextSaml } : {}),
         oidcOptions: input.oidcOptions
           ? {
               ...(input.oidcOptions.discoveryEnabled !== undefined
@@ -354,7 +380,7 @@ export class FederatedProvidersService implements OnModuleDestroy {
       issuerUrl:
         input.issuerUrl !== undefined
           ? input.issuerUrl?.trim() || null
-          : (existing?.issuerUrl ?? null),
+          : (nextSaml?.idpEntityId ?? existing?.issuerUrl ?? null),
       authorizationEndpoint:
         input.authorizationEndpoint !== undefined
           ? input.authorizationEndpoint?.trim() || null

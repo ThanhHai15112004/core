@@ -3,6 +3,8 @@ import { createPaginationQuerySchema, optionalQueryParam } from '@packages/http/
 import {
   FEDERATED_PROVIDER_STATUS,
   FEDERATED_ROLE_SYNC_MODE,
+  SAML_BINDING,
+  SAML_CERT_STATUS,
   type FederatedProviderStatusCode,
 } from '../enum/federated-identity.enum.js';
 
@@ -112,6 +114,96 @@ export const FederatedRoleSyncPolicySchema = z.object({
   requireMatchedGroup: z.boolean().optional(),
 });
 
+export const SamlIdpCertificateSchema = z.object({
+  id: z.string().trim().min(1).max(64).optional(),
+  label: z.string().trim().max(120).nullable().optional(),
+  pem: z.string().trim().min(32).max(16_384),
+  status: z
+    .enum([SAML_CERT_STATUS.ACTIVE, SAML_CERT_STATUS.TRANSITIONING, SAML_CERT_STATUS.REVOKED])
+    .optional(),
+  graceEndsAt: z.string().trim().max(64).nullable().optional(),
+});
+
+export const SamlSpCertificateSchema = z.object({
+  id: z.string().trim().min(1).max(64).optional(),
+  label: z.string().trim().max(120).nullable().optional(),
+  pem: z.string().trim().min(32).max(16_384),
+  privateKey: z.string().trim().max(16_384).nullable().optional(),
+  status: z
+    .enum([SAML_CERT_STATUS.ACTIVE, SAML_CERT_STATUS.TRANSITIONING, SAML_CERT_STATUS.REVOKED])
+    .optional(),
+  graceEndsAt: z.string().trim().max(64).nullable().optional(),
+});
+
+export const SamlAttributeMappingSchema = z.object({
+  subjectAttribute: z.string().trim().min(1).max(255).nullable().optional(),
+  emailAttribute: z.string().trim().min(1).max(255).optional(),
+  emailVerifiedAttribute: z.string().trim().min(1).max(255).nullable().optional(),
+  nameAttribute: z.string().trim().min(1).max(255).optional(),
+  firstNameAttribute: z.string().trim().min(1).max(255).optional(),
+  lastNameAttribute: z.string().trim().min(1).max(255).optional(),
+  avatarAttribute: z.string().trim().min(1).max(255).nullable().optional(),
+  groupsAttribute: z.string().trim().min(1).max(255).optional(),
+  tenantIdAttribute: z.string().trim().min(1).max(255).nullable().optional(),
+  extraAttributes: z.record(z.string().trim().min(1).max(64), z.string().trim().min(1).max(255)).optional(),
+  requireEmail: z.boolean().optional(),
+  requiredAttributes: z.array(z.string().trim().min(1).max(255)).max(30).optional(),
+  treatEmailAsVerified: z.boolean().optional(),
+});
+
+export const SamlProviderConfigSchema = z.object({
+  spEntityId: z.string().trim().min(1).max(500).optional(),
+  acsUrl: z.string().trim().min(1).max(500).optional(),
+  nameIdFormat: z.string().trim().min(1).max(255).optional(),
+  idpEntityId: z.string().trim().max(500).nullable().optional(),
+  idpSsoUrl: z.string().trim().max(500).nullable().optional(),
+  idpSsoBinding: z.enum([SAML_BINDING.HTTP_REDIRECT, SAML_BINDING.HTTP_POST]).optional(),
+  wantAssertionsSigned: z.boolean().optional(),
+  authnRequestsSigned: z.boolean().optional(),
+  allowIdpInitiated: z.boolean().optional(),
+  clockSkewSeconds: z.coerce.number().int().min(0).max(300).optional(),
+  idpCertificates: z.array(SamlIdpCertificateSchema).max(10).optional(),
+  spCertificates: z.array(SamlSpCertificateSchema).max(5).optional(),
+  attributeMapping: SamlAttributeMappingSchema.optional(),
+});
+
+export const ImportSamlMetadataRequestSchema = z
+  .object({
+    metadataXml: z.string().trim().min(1).max(524_288).optional(),
+    metadataUrl: z.string().trim().url().max(1000).optional(),
+    mergeCertificates: z.boolean().optional(),
+    transitionGraceDays: z.coerce.number().int().min(1).max(90).optional(),
+  })
+  .refine((data) => Boolean(data.metadataXml || data.metadataUrl), {
+    message: 'Either metadataXml or metadataUrl is required',
+  });
+
+export type ImportSamlMetadataRequest = z.infer<typeof ImportSamlMetadataRequestSchema>;
+
+export const SamlAcsRequestSchema = z
+  .object({
+    SAMLResponse: z.string().trim().min(1).max(1_048_576).optional(),
+    samlResponse: z.string().trim().min(1).max(1_048_576).optional(),
+    RelayState: z.string().trim().max(1024).optional(),
+    relayState: z.string().trim().max(1024).optional(),
+    deviceName: z.string().trim().max(255).optional(),
+    trustedDeviceToken: z.string().trim().max(512).optional(),
+    responseMode: z.enum(['redirect', 'json']).optional(),
+  })
+  .refine((data) => Boolean(data.SAMLResponse || data.samlResponse), {
+    message: 'SAMLResponse is required',
+  });
+
+export type SamlAcsRequest = z.infer<typeof SamlAcsRequestSchema>;
+
+export const SamlExchangeRequestSchema = z.object({
+  samlCode: z.string().trim().min(16).max(512),
+  deviceName: z.string().trim().max(255).optional(),
+  trustedDeviceToken: z.string().trim().max(512).optional(),
+});
+
+export type SamlExchangeRequest = z.infer<typeof SamlExchangeRequestSchema>;
+
 export const UpsertFederatedProviderRequestSchema = z.object({
   driverCode: z.string().trim().toLowerCase().min(2).max(64).optional(),
   displayName: z.string().trim().min(1).max(120).optional(),
@@ -133,6 +225,7 @@ export const UpsertFederatedProviderRequestSchema = z.object({
   oidcOptions: OidcProviderOptionsSchema.optional(),
   claimMapping: OidcClaimMappingSchema.optional(),
   roleSyncPolicy: FederatedRoleSyncPolicySchema.optional(),
+  samlConfig: SamlProviderConfigSchema.optional(),
 });
 
 export type UpsertFederatedProviderRequest = z.infer<typeof UpsertFederatedProviderRequestSchema>;

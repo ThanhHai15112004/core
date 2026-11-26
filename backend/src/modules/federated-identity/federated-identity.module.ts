@@ -11,18 +11,22 @@ import { UsersModule } from '@modules/users/index.js';
 import { GenericOidcAdapter } from './adapters/generic-oidc.adapter.js';
 import { GoogleOAuthAdapter } from './adapters/google-oauth.adapter.js';
 import { MicrosoftOAuthAdapter } from './adapters/microsoft-oauth.adapter.js';
+import { SamlProviderAdapter } from './adapters/saml.adapter.js';
 import { FEDERATED_IDENTITY_PUBLIC_SERVICE, OAUTH_PROVIDER_REGISTRY } from './contracts/index.js';
 import { FederatedIdentityController } from './controllers/federated-identity.controller.js';
+import { SamlSsoController } from './controllers/saml-sso.controller.js';
 import { FederatedAuthEventEntity } from './entities/federated-auth-event.entity.js';
 import { FederatedAuthTransactionEntity } from './entities/federated-auth-transaction.entity.js';
 import { FederatedIdentityProviderEntity } from './entities/federated-identity-provider.entity.js';
 import { FederatedIdentityEntity } from './entities/federated-identity.entity.js';
+import { FederatedSamlAssertionReplayEntity } from './entities/federated-saml-assertion-replay.entity.js';
 import enFederatedIdentity from './locales/en/federated-identity.json' with { type: 'json' };
 import viFederatedIdentity from './locales/vi/federated-identity.json' with { type: 'json' };
 import { FederatedAuthEventRepository } from './repositories/federated-auth-event.repository.js';
 import { FederatedAuthTransactionRepository } from './repositories/federated-auth-transaction.repository.js';
 import { FederatedIdentityProviderRepository } from './repositories/federated-identity-provider.repository.js';
 import { FederatedIdentityRepository } from './repositories/federated-identity.repository.js';
+import { FederatedSamlAssertionReplayRepository } from './repositories/federated-saml-assertion-replay.repository.js';
 import { FederatedAuthFlowService } from './services/federated-auth-flow.service.js';
 import { FederatedIdentityService } from './services/federated-identity.service.js';
 import { FederatedJwksService } from './services/federated-jwks.service.js';
@@ -31,6 +35,7 @@ import { FederatedProvidersService } from './services/federated-providers.servic
 import { FederatedRoleSyncService } from './services/federated-role-sync.service.js';
 import { OAuthProviderRegistryService } from './services/oauth-provider-registry.service.js';
 import { OidcDiscoveryService } from './services/oidc-discovery.service.js';
+import { SamlSsoService } from './services/saml-sso.service.js';
 
 new CoreI18nService().registerNamespace('federated-identity', {
   vi: viFederatedIdentity,
@@ -51,24 +56,28 @@ new CoreI18nService().registerNamespace('federated-identity', {
       FederatedIdentityEntity,
       FederatedAuthTransactionEntity,
       FederatedAuthEventEntity,
+      FederatedSamlAssertionReplayEntity,
     ]),
   ],
-  controllers: [FederatedIdentityController],
+  controllers: [FederatedIdentityController, SamlSsoController],
   providers: [
     FederatedIdentityProviderRepository,
     FederatedIdentityRepository,
     FederatedAuthTransactionRepository,
     FederatedAuthEventRepository,
+    FederatedSamlAssertionReplayRepository,
     FederatedJwksService,
     OidcDiscoveryService,
     GoogleOAuthAdapter,
     MicrosoftOAuthAdapter,
     GenericOidcAdapter,
+    SamlProviderAdapter,
     OAuthProviderRegistryService,
     FederatedMonitoringService,
     FederatedProvidersService,
     FederatedRoleSyncService,
     FederatedAuthFlowService,
+    SamlSsoService,
     FederatedIdentityService,
     {
       provide: FEDERATED_IDENTITY_PUBLIC_SERVICE,
@@ -81,6 +90,7 @@ new CoreI18nService().registerNamespace('federated-identity', {
   ],
   exports: [
     FederatedIdentityService,
+    SamlSsoService,
     OAuthProviderRegistryService,
     OidcDiscoveryService,
     FederatedRoleSyncService,

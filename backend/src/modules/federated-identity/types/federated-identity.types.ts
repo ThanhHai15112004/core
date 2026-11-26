@@ -6,6 +6,8 @@ import type {
   FederatedProviderStatusCode,
   FederatedProviderStatusName,
   FederatedRoleSyncMode,
+  SamlBinding,
+  SamlCertStatus,
 } from '../enum/federated-identity.enum.js';
 
 export interface FederatedRuntimeConfig {
@@ -104,10 +106,100 @@ export interface FederatedRoleSyncPolicy {
   readonly requireMatchedGroup: boolean;
 }
 
+export type SamlCertificateStatus = SamlCertStatus;
+export type SamlBindingType = SamlBinding;
+
+export interface SamlIdpCertificateConfig {
+  readonly id: string;
+  readonly label?: string | null | undefined;
+  readonly pem: string;
+  readonly fingerprint256: string;
+  readonly subject: string | null;
+  readonly validFrom: string;
+  readonly validTo: string;
+  readonly status: SamlCertificateStatus;
+  readonly graceEndsAt: string | null;
+}
+
+export interface SamlSpCertificateStoredConfig {
+  readonly id: string;
+  readonly label?: string | null | undefined;
+  readonly pem: string;
+  readonly fingerprint256: string;
+  readonly subject: string | null;
+  readonly validFrom: string;
+  readonly validTo: string;
+  readonly status: SamlCertificateStatus;
+  readonly graceEndsAt: string | null;
+  readonly privateKeyEncrypted: string | null;
+}
+
+export interface SamlSpCertificatePublicView {
+  readonly id: string;
+  readonly label?: string | null | undefined;
+  readonly pem: string;
+  readonly fingerprint256: string;
+  readonly subject: string | null;
+  readonly validFrom: string;
+  readonly validTo: string;
+  readonly status: SamlCertificateStatus;
+  readonly graceEndsAt: string | null;
+  readonly hasPrivateKey: boolean;
+}
+
+export interface SamlAttributeMappingConfig {
+  readonly subjectAttribute: string | null;
+  readonly emailAttribute: string;
+  readonly emailVerifiedAttribute: string | null;
+  readonly nameAttribute: string;
+  readonly firstNameAttribute: string;
+  readonly lastNameAttribute: string;
+  readonly avatarAttribute: string | null;
+  readonly groupsAttribute: string;
+  readonly tenantIdAttribute: string | null;
+  readonly extraAttributes: Readonly<Record<string, string>>;
+  readonly requireEmail: boolean;
+  readonly requiredAttributes: readonly string[];
+  readonly treatEmailAsVerified: boolean;
+}
+
+export interface SamlProviderConfig {
+  readonly spEntityId: string;
+  readonly acsUrl: string;
+  readonly nameIdFormat: string;
+  readonly idpEntityId: string | null;
+  readonly idpSsoUrl: string | null;
+  readonly idpSsoBinding: SamlBindingType;
+  readonly wantAssertionsSigned: boolean;
+  readonly authnRequestsSigned: boolean;
+  readonly allowIdpInitiated: boolean;
+  readonly clockSkewSeconds: number;
+  readonly idpCertificates: readonly SamlIdpCertificateConfig[];
+  readonly spCertificates: readonly SamlSpCertificateStoredConfig[];
+  readonly attributeMapping: SamlAttributeMappingConfig;
+}
+
+export interface SamlProviderConfigView {
+  readonly spEntityId: string;
+  readonly acsUrl: string;
+  readonly nameIdFormat: string;
+  readonly idpEntityId: string | null;
+  readonly idpSsoUrl: string | null;
+  readonly idpSsoBinding: SamlBindingType;
+  readonly wantAssertionsSigned: boolean;
+  readonly authnRequestsSigned: boolean;
+  readonly allowIdpInitiated: boolean;
+  readonly clockSkewSeconds: number;
+  readonly idpCertificates: readonly SamlIdpCertificateConfig[];
+  readonly spCertificates: readonly SamlSpCertificatePublicView[];
+  readonly attributeMapping: SamlAttributeMappingConfig;
+}
+
 export interface FederatedProviderExtraConfig {
   readonly oidcOptions: OidcProviderOptions;
   readonly claimMapping: OidcClaimMappingConfig;
   readonly roleSyncPolicy: FederatedRoleSyncPolicy;
+  readonly samlConfig?: SamlProviderConfig | undefined;
 }
 
 export interface FederatedRoleSyncSummary {
@@ -193,6 +285,7 @@ export interface FederatedProviderView {
   readonly oidcOptions: OidcProviderOptions;
   readonly claimMapping: OidcClaimMappingConfig;
   readonly roleSyncPolicy: FederatedRoleSyncPolicy;
+  readonly samlConfig?: SamlProviderConfigView | undefined;
   readonly lastSuccessAt: string | null;
   readonly lastErrorAt: string | null;
   readonly lastErrorCode: string | null;
@@ -225,6 +318,21 @@ export interface InitiateOAuthAuthorizeResult {
   readonly state: string;
   readonly codeChallengeMethod: 'S256';
   readonly expiresAt: string;
+  readonly binding?: SamlBindingType | undefined;
+  readonly samlRequest?: string | undefined;
+  readonly relayState?: string | undefined;
+  readonly requestId?: string | undefined;
+}
+
+export interface SamlMetadataImportResult {
+  readonly providerCode: string;
+  readonly idpEntityId: string;
+  readonly idpSsoUrl: string;
+  readonly idpSsoBinding: SamlBindingType;
+  readonly importedCertificatesCount: number;
+  readonly transitionedCertificatesCount: number;
+  readonly activeCertificatesCount: number;
+  readonly provider: FederatedProviderView;
 }
 
 export interface OAuthCallbackLoginResult {

@@ -17,4 +17,8 @@ export const FEDERATED_IDENTITY_ROUTES = {
   ADMIN_UNLINK_ACCOUNT: 'users/:userId/accounts/:id',
   MONITORING_SUMMARY: 'monitoring/summary',
   MONITORING_ERRORS: 'monitoring/errors',
+  SAML_METADATA: 'saml/:providerCode/metadata',
+  SAML_METADATA_IMPORT: 'saml/:providerCode/metadata/import',
+  SAML_ACS: 'saml/:providerCode/acs',
+  SAML_EXCHANGE: 'saml/:providerCode/exchange',
 } as const;

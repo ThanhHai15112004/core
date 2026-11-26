@@ -16,6 +16,27 @@ const EXTRA_OAUTH_SENSITIVE_KEYS = new Set([
   'step_up_token',
   'nonce',
   'authorization',
+  'samlresponse',
+  'saml_response',
+  'samlrequest',
+  'saml_request',
+  'assertion',
+  'assertionxml',
+  'assertion_xml',
+  'rawxml',
+  'raw_xml',
+  'signaturevalue',
+  'signature_value',
+  'x509certificate',
+  'x509_certificate',
+  'privatekey',
+  'private_key',
+  'privatekeyencrypted',
+  'private_key_encrypted',
+  'samlcode',
+  'saml_code',
+  'relaystate',
+  'relay_state',
 ]);
 
 function normalizeKey(key: string): string {
@@ -32,7 +53,13 @@ export function sanitizeFederatedErrorMessage(
   if (!raw) return null;
   const trimmed = raw.trim();
   if (!trimmed) return null;
-  const redacted = redactText(trimmed).text;
+  const withoutSamlXml = trimmed
+    .replace(
+      /<[\w:-]*(?:Assertion|SignatureValue|X509Certificate|EncryptedData|EncryptedAssertion|Response|AuthnRequest)\b[\s\S]*?(?:<\/[\w:-]*(?:Assertion|SignatureValue|X509Certificate|EncryptedData|EncryptedAssertion|Response|AuthnRequest)>|\/>)/gi,
+      '[REDACTED_SAML_XML]',
+    )
+    .replace(/[A-Za-z0-9+/=_-]{120,}/g, '[REDACTED_SAML_PAYLOAD]');
+  const redacted = redactText(withoutSamlXml).text;
   return redacted.length <= maxLength ? redacted : `${redacted.slice(0, maxLength)}…`;
 }
 
