@@ -10,11 +10,13 @@ import {
   OidcTokenVerificationError,
   verifyOidcIdToken,
 } from '../helpers/oidc-jwt-verifier.helper.js';
+import { parseFederatedExtraConfig } from '../helpers/oidc-claim-mapping.helper.js';
 import { sanitizeFederatedErrorMessage } from '../helpers/federated-redaction.helper.js';
 import { FederatedJwksService, FederatedStageError } from '../services/federated-jwks.service.js';
 import type {
   FederatedDriverMetadata,
   OAuthAdapterResolvedConfig,
+  OidcResolvedEndpoints,
   TestProviderConnectionResult,
   VerifiedExternalProfile,
 } from '../types/federated-identity.types.js';
@@ -38,16 +40,19 @@ export abstract class BaseOidcOAuthAdapter implements IOAuthProviderAdapter {
 
   public abstract getMetadata(): FederatedDriverMetadata;
 
-  public abstract resolveEndpoints(config: OAuthAdapterResolvedConfig): {
-    readonly issuerUrl: string;
-    readonly authorizationEndpoint: string;
-    readonly tokenEndpoint: string;
-    readonly jwksUri: string;
-    readonly userinfoEndpoint: string | null;
-    readonly scopes: readonly string[];
-  };
+  public abstract resolveEndpoints(config: OAuthAdapterResolvedConfig): OidcResolvedEndpoints;
 
-  protected getExtraAuthorizeParams(): Record<string, string> {
+  public async resolveEndpointsAsync(
+    config: OAuthAdapterResolvedConfig,
+    _options?: {
+      readonly cacheTtlSeconds?: number | undefined;
+      readonly forceRefresh?: boolean | undefined;
+    },
+  ): Promise<OidcResolvedEndpoints> {
+    return this.resolveEndpoints(config);
+  }
+
+  protected getExtraAuthorizeParams(_config?: OAuthAdapterResolvedConfig): Record<string, string> {
     return {};
   }
 
@@ -60,19 +65,22 @@ export abstract class BaseOidcOAuthAdapter implements IOAuthProviderAdapter {
 
   protected abstract mapVerifiedClaimsToProfile(params: {
     readonly claims: Record<string, unknown>;
+    readonly userInfoClaims?: Record<string, unknown> | null | undefined;
     readonly config: OAuthAdapterResolvedConfig;
     readonly resolvedIssuer: string;
   }): VerifiedExternalProfile;
 
-  public buildAuthorizationUrl(params: {
-    readonly config: OAuthAdapterResolvedConfig;
-    readonly redirectUri: string;
-    readonly state: string;
-    readonly nonce: string;
-    readonly codeChallenge: string;
-    readonly loginHint?: string | undefined;
-  }): string {
-    const endpoints = this.resolveEndpoints(params.config);
+  private assembleAuthorizationUrl(
+    endpoints: OidcResolvedEndpoints,
+    params: {
+      readonly config: OAuthAdapterResolvedConfig;
+      readonly redirectUri: string;
+      readonly state: string;
+      readonly nonce: string;
+      readonly codeChallenge: string;
+      readonly loginHint?: string | undefined;
+    },
+  ): string {
     const url = new URL(endpoints.authorizationEndpoint);
     url.searchParams.set('response_type', 'code');
     url.searchParams.set('client_id', params.config.clientId);
@@ -85,10 +93,37 @@ export abstract class BaseOidcOAuthAdapter implements IOAuthProviderAdapter {
     if (params.loginHint?.trim()) {
       url.searchParams.set('login_hint', params.loginHint.trim());
     }
-    for (const [k, v] of Object.entries(this.getExtraAuthorizeParams())) {
+    for (const [k, v] of Object.entries(this.getExtraAuthorizeParams(params.config))) {
       url.searchParams.set(k, v);
     }
     return url.toString();
+  }
+
+  public buildAuthorizationUrl(params: {
+    readonly config: OAuthAdapterResolvedConfig;
+    readonly redirectUri: string;
+    readonly state: string;
+    readonly nonce: string;
+    readonly codeChallenge: string;
+    readonly loginHint?: string | undefined;
+  }): string {
+    const endpoints = this.resolveEndpoints(params.config);
+    return this.assembleAuthorizationUrl(endpoints, params);
+  }
+
+  public async buildAuthorizationUrlAsync(params: {
+    readonly config: OAuthAdapterResolvedConfig;
+    readonly redirectUri: string;
+    readonly state: string;
+    readonly nonce: string;
+    readonly codeChallenge: string;
+    readonly loginHint?: string | undefined;
+    readonly cacheTtlSeconds?: number | undefined;
+  }): Promise<string> {
+    const endpoints = await this.resolveEndpointsAsync(params.config, {
+      cacheTtlSeconds: params.cacheTtlSeconds,
+    });
+    return this.assembleAuthorizationUrl(endpoints, params);
   }
 
   public async exchangeCodeAndVerify(params: {
@@ -100,7 +135,9 @@ export abstract class BaseOidcOAuthAdapter implements IOAuthProviderAdapter {
     readonly jwksCacheTtlSeconds: number;
   }): Promise<VerifiedExternalProfile> {
     const { config } = params;
-    const endpoints = this.resolveEndpoints(config);
+    const endpoints = await this.resolveEndpointsAsync(config, {
+      cacheTtlSeconds: params.jwksCacheTtlSeconds,
+    });
     const serviceName = `oauth-${this.driverCode}`;
 
     const formBody = new URLSearchParams({
@@ -209,8 +246,56 @@ export abstract class BaseOidcOAuthAdapter implements IOAuthProviderAdapter {
       });
     }
 
+    let userInfoClaims: Record<string, unknown> | null = null;
+    const extraConfig = parseFederatedExtraConfig(config.extraConfig, this.driverCode);
+    if (
+      extraConfig.oidcOptions.fetchUserInfo &&
+      endpoints.userinfoEndpoint &&
+      tokenResponse.access_token
+    ) {
+      try {
+        const fetched = await this.httpClient
+          .forService(serviceName)
+          .get<Record<string, unknown>>(endpoints.userinfoEndpoint, {
+            headers: {
+              Authorization: `Bearer ${tokenResponse.access_token}`,
+              Accept: 'application/json',
+            },
+          });
+        if (!fetched || typeof fetched !== 'object' || Array.isArray(fetched)) {
+          throw new FederatedStageError({
+            i18nKey: 'federated-identity.userinfoFetchFailed',
+            stage: FEDERATED_AUTH_STAGE.USERINFO_FETCH,
+            stageErrorCode: 'INVALID_USERINFO_RESPONSE',
+            diagnosticMessage: 'UserInfo endpoint did not return a JSON object',
+          });
+        }
+        const userInfoSub = typeof fetched['sub'] === 'string' ? fetched['sub'].trim() : '';
+        if (!userInfoSub || userInfoSub !== String(claims['sub']).trim()) {
+          throw new FederatedStageError({
+            i18nKey: 'federated-identity.userinfoSubjectMismatch',
+            stage: FEDERATED_AUTH_STAGE.USERINFO_FETCH,
+            stageErrorCode: 'USERINFO_SUB_MISMATCH',
+            diagnosticMessage: 'OIDC UserInfo sub claim does not match ID Token sub claim',
+          });
+        }
+        userInfoClaims = fetched;
+      } catch (err) {
+        if (err instanceof FederatedStageError) throw err;
+        const httpStatus = err instanceof HttpClientError ? err.status : null;
+        throw new FederatedStageError({
+          i18nKey: 'federated-identity.userinfoFetchFailed',
+          stage: FEDERATED_AUTH_STAGE.USERINFO_FETCH,
+          stageErrorCode: err instanceof HttpClientError ? err.code : 'USERINFO_FETCH_FAILED',
+          httpStatus,
+          diagnosticMessage: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+
     return this.mapVerifiedClaimsToProfile({
       claims,
+      userInfoClaims,
       config,
       resolvedIssuer: endpoints.issuerUrl,
     });
@@ -221,11 +306,21 @@ export abstract class BaseOidcOAuthAdapter implements IOAuthProviderAdapter {
     readonly jwksCacheTtlSeconds: number;
   }): Promise<TestProviderConnectionResult> {
     const startMs = Date.now();
-    const endpoints = this.resolveEndpoints(params.config);
     const configured = Boolean(params.config.clientId.trim() && params.config.clientSecret.trim());
     const serviceName = `oauth-${this.driverCode}`;
+    let resolvedJwksUri = params.config.jwksUri?.trim() || '';
+    let resolvedIssuerUrl = params.config.issuerUrl?.trim() || null;
+    let discovered = false;
 
     try {
+      const endpoints = await this.resolveEndpointsAsync(params.config, {
+        cacheTtlSeconds: params.jwksCacheTtlSeconds,
+        forceRefresh: true,
+      });
+      resolvedJwksUri = endpoints.jwksUri;
+      resolvedIssuerUrl = endpoints.issuerUrl;
+      discovered = Boolean(endpoints.discovered);
+
       const doc = await this.jwksService.getJwks(
         serviceName,
         endpoints.jwksUri,
@@ -237,6 +332,8 @@ export abstract class BaseOidcOAuthAdapter implements IOAuthProviderAdapter {
         driverCode: this.driverCode,
         ok: configured,
         configured,
+        issuerUrl: resolvedIssuerUrl,
+        discovered,
         jwksUri: endpoints.jwksUri,
         keyCount: doc.keys.length,
         durationMs: Date.now() - startMs,
@@ -255,7 +352,9 @@ export abstract class BaseOidcOAuthAdapter implements IOAuthProviderAdapter {
         driverCode: this.driverCode,
         ok: false,
         configured,
-        jwksUri: endpoints.jwksUri,
+        issuerUrl: resolvedIssuerUrl,
+        discovered,
+        jwksUri: resolvedJwksUri,
         keyCount: 0,
         durationMs: Date.now() - startMs,
         errorCode,

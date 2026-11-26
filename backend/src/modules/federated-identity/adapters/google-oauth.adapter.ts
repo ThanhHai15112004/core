@@ -5,6 +5,11 @@ import {
   type HttpClientContract,
 } from '@packages/http-client/index.js';
 import { FEDERATED_DRIVER_CODE, GOOGLE_OIDC_DEFAULTS } from '../enum/federated-identity.enum.js';
+import {
+  extractGroupsFromClaimValue,
+  getClaimByPath,
+  parseFederatedExtraConfig,
+} from '../helpers/oidc-claim-mapping.helper.js';
 import { FederatedJwksService } from '../services/federated-jwks.service.js';
 import type {
   FederatedDriverMetadata,
@@ -81,10 +86,11 @@ export class GoogleOAuthAdapter extends BaseOidcOAuthAdapter {
 
   protected mapVerifiedClaimsToProfile(params: {
     readonly claims: Record<string, unknown>;
+    readonly userInfoClaims?: Record<string, unknown> | null | undefined;
     readonly config: OAuthAdapterResolvedConfig;
     readonly resolvedIssuer: string;
   }): VerifiedExternalProfile {
-    const { claims, config, resolvedIssuer } = params;
+    const { claims, userInfoClaims, config, resolvedIssuer } = params;
     const email =
       typeof claims['email'] === 'string' && claims['email'].trim()
         ? claims['email'].trim().toLowerCase()
@@ -107,6 +113,17 @@ export class GoogleOAuthAdapter extends BaseOidcOAuthAdapter {
         ? claims['picture'].trim()
         : null;
     const hd = typeof claims['hd'] === 'string' && claims['hd'].trim() ? claims['hd'].trim() : null;
+    const extra = parseFederatedExtraConfig(config.extraConfig, this.driverCode);
+    const groups = Array.from(
+      new Set([
+        ...extractGroupsFromClaimValue(getClaimByPath(claims, extra.claimMapping.groupsClaim)),
+        ...(userInfoClaims
+          ? extractGroupsFromClaimValue(
+              getClaimByPath(userInfoClaims, extra.claimMapping.groupsClaim),
+            )
+          : []),
+      ]),
+    );
 
     return {
       providerCode: config.providerCode,
@@ -120,9 +137,11 @@ export class GoogleOAuthAdapter extends BaseOidcOAuthAdapter {
       firstName,
       lastName,
       avatarUrl,
+      ...(groups.length > 0 ? { groups } : {}),
       rawClaimsSummary: {
         issuer: String(claims['iss'] ?? resolvedIssuer),
         emailVerified,
+        ...(groups.length > 0 ? { groupsCount: groups.length } : {}),
         ...(hd ? { hostedDomain: hd } : {}),
       },
     };

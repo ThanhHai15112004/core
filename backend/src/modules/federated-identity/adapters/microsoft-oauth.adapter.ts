@@ -5,6 +5,11 @@ import {
   type HttpClientContract,
 } from '@packages/http-client/index.js';
 import { FEDERATED_DRIVER_CODE, MICROSOFT_OIDC_DEFAULTS } from '../enum/federated-identity.enum.js';
+import {
+  extractGroupsFromClaimValue,
+  getClaimByPath,
+  parseFederatedExtraConfig,
+} from '../helpers/oidc-claim-mapping.helper.js';
 import { FederatedJwksService } from '../services/federated-jwks.service.js';
 import type {
   FederatedDriverMetadata,
@@ -97,10 +102,11 @@ export class MicrosoftOAuthAdapter extends BaseOidcOAuthAdapter {
 
   protected mapVerifiedClaimsToProfile(params: {
     readonly claims: Record<string, unknown>;
+    readonly userInfoClaims?: Record<string, unknown> | null | undefined;
     readonly config: OAuthAdapterResolvedConfig;
     readonly resolvedIssuer: string;
   }): VerifiedExternalProfile {
-    const { claims, config, resolvedIssuer } = params;
+    const { claims, userInfoClaims, config, resolvedIssuer } = params;
     const rawEmail =
       typeof claims['email'] === 'string' && claims['email'].trim()
         ? claims['email'].trim().toLowerCase()
@@ -134,6 +140,17 @@ export class MicrosoftOAuthAdapter extends BaseOidcOAuthAdapter {
       typeof claims['iss'] === 'string' && claims['iss'].trim()
         ? claims['iss'].trim()
         : resolvedIssuer;
+    const extra = parseFederatedExtraConfig(config.extraConfig, this.driverCode);
+    const groups = Array.from(
+      new Set([
+        ...extractGroupsFromClaimValue(getClaimByPath(claims, extra.claimMapping.groupsClaim)),
+        ...(userInfoClaims
+          ? extractGroupsFromClaimValue(
+              getClaimByPath(userInfoClaims, extra.claimMapping.groupsClaim),
+            )
+          : []),
+      ]),
+    );
 
     return {
       providerCode: config.providerCode,
@@ -147,9 +164,11 @@ export class MicrosoftOAuthAdapter extends BaseOidcOAuthAdapter {
       firstName,
       lastName,
       avatarUrl: null,
+      ...(groups.length > 0 ? { groups } : {}),
       rawClaimsSummary: {
         issuer: issuerToPersist,
         emailVerified,
+        ...(groups.length > 0 ? { groupsCount: groups.length } : {}),
         ...(tid ? { tenantId: tid } : {}),
         ...(typeof claims['oid'] === 'string' ? { oid: claims['oid'] } : {}),
       },

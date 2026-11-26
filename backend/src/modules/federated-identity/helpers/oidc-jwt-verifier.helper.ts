@@ -158,6 +158,17 @@ export async function verifyOidcIdToken(params: {
     throw new OidcTokenVerificationError('federated-identity.invalidIdToken', 'invalid_audience');
   }
 
+  const rawAzp = claims['azp'];
+  if (Array.isArray(rawAud) && rawAud.length > 1) {
+    if (typeof rawAzp !== 'string' || rawAzp.trim() !== params.expectedAudience) {
+      throw new OidcTokenVerificationError('federated-identity.invalidIdToken', 'invalid_azp');
+    }
+  } else if (rawAzp !== undefined) {
+    if (typeof rawAzp !== 'string' || rawAzp.trim() !== params.expectedAudience) {
+      throw new OidcTokenVerificationError('federated-identity.invalidIdToken', 'invalid_azp');
+    }
+  }
+
   const rawSub = claims['sub'];
   if (typeof rawSub !== 'string' || !rawSub.trim()) {
     throw new OidcTokenVerificationError('federated-identity.missingSubject', 'missing_subject');

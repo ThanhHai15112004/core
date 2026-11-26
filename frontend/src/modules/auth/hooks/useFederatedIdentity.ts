@@ -8,6 +8,7 @@ import type {
   FederatedPolicyData,
   FederatedProviderItem,
   OAuthCallbackResponseData,
+  OidcDiscoveryTestResult,
   PublicFederatedProvider,
   TestFederatedProviderResult,
 } from '../types/federated-identity.types';
@@ -281,6 +282,65 @@ export function useFederatedIdentity(
     [accessToken, notify],
   );
 
+  const discoverProvider = useCallback(
+    async (providerCode: string): Promise<OidcDiscoveryTestResult | null> => {
+      if (!accessToken) return null;
+      setBusy(true);
+      try {
+        const res = await federatedIdentityApi.discoverProvider(accessToken, providerCode);
+        if (res.ok) {
+          notify('ok', `Discovery ${res.providerCode} OK: ${res.jwksUri} (${res.durationMs}ms).`);
+        } else {
+          notify(
+            'err',
+            `Discovery ${res.providerCode} lỗi (${res.errorCode ?? 'ERROR'}): ${res.errorMessage ?? 'Không tải được cấu hình OIDC'}`,
+          );
+        }
+        return res;
+      } catch (err) {
+        notify('err', err instanceof Error ? err.message : 'Lỗi kiểm tra OIDC Discovery');
+        return null;
+      } finally {
+        setBusy(false);
+      }
+    },
+    [accessToken, notify],
+  );
+
+  const deleteProvider = useCallback(
+    async (providerCode: string) => {
+      if (!accessToken) return;
+      setBusy(true);
+      try {
+        await federatedIdentityApi.deleteProvider(accessToken, providerCode);
+        notify('ok', `Đã xóa nhà cung cấp ${providerCode}.`);
+        await refreshAllFederatedState();
+      } catch (err) {
+        notify('err', err instanceof Error ? err.message : 'Lỗi xóa nhà cung cấp');
+      } finally {
+        setBusy(false);
+      }
+    },
+    [accessToken, notify, refreshAllFederatedState],
+  );
+
+  const loadMonitoringEvents = useCallback(
+    async (filters?: { providerCode?: string; outcome?: string; flowType?: string }) => {
+      if (!accessToken) return;
+      try {
+        const res = await federatedIdentityApi.listMonitoringEvents(accessToken, {
+          page: 1,
+          limit: 20,
+          ...filters,
+        });
+        setMonitoringEvents(Array.isArray(res?.data) ? res.data : []);
+      } catch (err) {
+        notify('err', err instanceof Error ? err.message : 'Lỗi tải nhật ký SSO');
+      }
+    },
+    [accessToken, notify],
+  );
+
   const saveGlobalPolicy = useCallback(
     async (items: readonly { key: string; value: unknown }[]) => {
       if (!accessToken) return;
@@ -314,6 +374,9 @@ export function useFederatedIdentity(
     unlinkAccount,
     saveProvider,
     testProvider,
+    discoverProvider,
+    deleteProvider,
+    loadMonitoringEvents,
     saveGlobalPolicy,
   };
 }

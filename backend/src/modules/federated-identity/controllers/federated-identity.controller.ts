@@ -51,6 +51,7 @@ import type {
   FederatedProviderView,
   InitiateOAuthAuthorizeResult,
   OAuthCallbackResult,
+  OidcDiscoveryTestResult,
   PublicFederatedProviderView,
   TestProviderConnectionResult,
   UnlinkFederatedIdentityResult,
@@ -243,6 +244,16 @@ export class FederatedIdentityController {
     @ValidatedParams(providerCodeParamSchema) params: { providerCode: string },
   ): Promise<TestProviderConnectionResult> {
     return this.federatedIdentityService.testProviderConnection(params.providerCode);
+  }
+
+  @Post(FEDERATED_IDENTITY_ROUTES.PROVIDER_DISCOVER)
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions('federated-identity.manage')
+  @ApiDoc({ summary: 'Tải và kiểm tra tài liệu cấu hình OIDC Discovery của nhà cung cấp' })
+  public async discoverProvider(
+    @ValidatedParams(providerCodeParamSchema) params: { providerCode: string },
+  ): Promise<OidcDiscoveryTestResult> {
+    return this.federatedIdentityService.discoverProviderConfiguration(params.providerCode);
   }
 
   @Get(FEDERATED_IDENTITY_ROUTES.USER_ACCOUNTS)

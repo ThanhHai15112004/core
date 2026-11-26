@@ -5,8 +5,10 @@ import { CoreI18nService } from '@packages/i18n/index.js';
 import { SecurityModule } from '@packages/security/index.js';
 import { AuthModule } from '@modules/auth/index.js';
 import { CredentialsModule } from '@modules/credentials/index.js';
+import { RolesModule } from '@modules/roles/index.js';
 import { SessionsModule } from '@modules/sessions/index.js';
 import { UsersModule } from '@modules/users/index.js';
+import { GenericOidcAdapter } from './adapters/generic-oidc.adapter.js';
 import { GoogleOAuthAdapter } from './adapters/google-oauth.adapter.js';
 import { MicrosoftOAuthAdapter } from './adapters/microsoft-oauth.adapter.js';
 import { FEDERATED_IDENTITY_PUBLIC_SERVICE, OAUTH_PROVIDER_REGISTRY } from './contracts/index.js';
@@ -26,7 +28,9 @@ import { FederatedIdentityService } from './services/federated-identity.service.
 import { FederatedJwksService } from './services/federated-jwks.service.js';
 import { FederatedMonitoringService } from './services/federated-monitoring.service.js';
 import { FederatedProvidersService } from './services/federated-providers.service.js';
+import { FederatedRoleSyncService } from './services/federated-role-sync.service.js';
 import { OAuthProviderRegistryService } from './services/oauth-provider-registry.service.js';
+import { OidcDiscoveryService } from './services/oidc-discovery.service.js';
 
 new CoreI18nService().registerNamespace('federated-identity', {
   vi: viFederatedIdentity,
@@ -38,6 +42,7 @@ new CoreI18nService().registerNamespace('federated-identity', {
     DatabaseModule,
     SecurityModule,
     UsersModule,
+    RolesModule,
     CredentialsModule,
     SessionsModule,
     AuthModule,
@@ -55,11 +60,14 @@ new CoreI18nService().registerNamespace('federated-identity', {
     FederatedAuthTransactionRepository,
     FederatedAuthEventRepository,
     FederatedJwksService,
+    OidcDiscoveryService,
     GoogleOAuthAdapter,
     MicrosoftOAuthAdapter,
+    GenericOidcAdapter,
     OAuthProviderRegistryService,
     FederatedMonitoringService,
     FederatedProvidersService,
+    FederatedRoleSyncService,
     FederatedAuthFlowService,
     FederatedIdentityService,
     {
@@ -74,6 +82,8 @@ new CoreI18nService().registerNamespace('federated-identity', {
   exports: [
     FederatedIdentityService,
     OAuthProviderRegistryService,
+    OidcDiscoveryService,
+    FederatedRoleSyncService,
     FEDERATED_IDENTITY_PUBLIC_SERVICE,
     OAUTH_PROVIDER_REGISTRY,
   ],

@@ -332,6 +332,9 @@ export const AuthManagementPage: React.FC = () => {
           onUnlink={federated.unlinkAccount}
           onSaveProvider={federated.saveProvider}
           onTestProvider={federated.testProvider}
+          onDiscoverProvider={federated.discoverProvider}
+          onDeleteProvider={federated.deleteProvider}
+          onFilterEvents={federated.loadMonitoringEvents}
           onSaveGlobalPolicy={federated.saveGlobalPolicy}
         />
       )}

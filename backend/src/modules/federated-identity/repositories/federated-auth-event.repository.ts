@@ -10,6 +10,8 @@ export interface ListFederatedAuthEventsFilter {
   readonly limit?: number | undefined;
   readonly countMode?: 'exact' | 'estimated' | 'none' | undefined;
   readonly providerCode?: string | undefined;
+  readonly flowType?: string | undefined;
+  readonly userId?: number | undefined;
   readonly stage?: string | undefined;
   readonly outcome?: string | undefined;
   readonly errorCode?: string | undefined;
@@ -36,6 +38,18 @@ export class FederatedAuthEventRepository extends BaseTypeOrmRepository<Federate
     if (filter.providerCode?.trim()) {
       qb.andWhere('event.providerCode = :providerCode', {
         providerCode: filter.providerCode.trim().toLowerCase(),
+      });
+    }
+
+    if (filter.flowType?.trim()) {
+      qb.andWhere('event.flowType = :flowType', {
+        flowType: filter.flowType.trim().toUpperCase(),
+      });
+    }
+
+    if (filter.userId !== undefined && Number.isFinite(filter.userId)) {
+      qb.andWhere('event.userId = :userId', {
+        userId: Number(filter.userId),
       });
     }
 

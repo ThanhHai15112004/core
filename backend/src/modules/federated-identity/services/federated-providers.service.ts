@@ -18,11 +18,17 @@ import {
 } from '@packages/security/index.js';
 import {
   FEDERATED_AUDIT_META,
+  FEDERATED_DRIVER_CODE,
   FEDERATED_PROVIDER_STATUS,
   FEDERATED_SETTING_KEYS,
 } from '../enum/federated-identity.enum.js';
 import type { FederatedIdentityProviderEntity } from '../entities/federated-identity-provider.entity.js';
 import { resolveFederatedRuntimeConfig } from '../helpers/federated-config.helper.js';
+import { sanitizeFederatedErrorMessage } from '../helpers/federated-redaction.helper.js';
+import {
+  mergeFederatedExtraConfig,
+  parseFederatedExtraConfig,
+} from '../helpers/oidc-claim-mapping.helper.js';
 import { FederatedIdentityProviderRepository } from '../repositories/federated-identity-provider.repository.js';
 import type { UpsertFederatedProviderRequest } from '../requests/federated-identity.requests.js';
 import { FederatedIdentityResponseMapper } from '../responses/federated-identity.response.js';
@@ -31,10 +37,13 @@ import type {
   FederatedPolicyView,
   FederatedProviderView,
   OAuthAdapterResolvedConfig,
+  OidcDiscoveryTestResult,
   PublicFederatedProviderView,
   TestProviderConnectionResult,
 } from '../types/federated-identity.types.js';
+import { FederatedStageError } from './federated-jwks.service.js';
 import { OAuthProviderRegistryService } from './oauth-provider-registry.service.js';
+import { OidcDiscoveryService } from './oidc-discovery.service.js';
 
 function buildSecretHint(secret: string): string {
   const clean = secret.trim();
@@ -57,6 +66,7 @@ export class FederatedProvidersService implements OnModuleDestroy {
     @Optional() encryptionService?: FieldEncryptionService,
     @Optional() private readonly auditLogService?: AuditLogService,
     @Optional() kernelProviderRegistry?: KernelProviderRegistryService,
+    @Optional() private readonly discoveryService?: OidcDiscoveryService,
   ) {
     this.settingRegistry = settingRegistry ?? defaultSettingRegistry;
     this.encryptionService = encryptionService ?? defaultFieldEncryptionService;
@@ -114,7 +124,19 @@ export class FederatedProvidersService implements OnModuleDestroy {
   public async listPublicProviders(): Promise<PublicFederatedProviderView[]> {
     const enabled = await this.providerRepo.findEnabledPublicProviders();
     return enabled
-      .filter((item) => Boolean(item.clientSecretEncrypted?.trim()))
+      .filter((item) => {
+        if (!item.clientSecretEncrypted?.trim()) return false;
+        if (item.driverCode === FEDERATED_DRIVER_CODE.OIDC) {
+          const hasIssuer = Boolean(item.issuerUrl?.trim());
+          const hasManualEndpoints = Boolean(
+            item.authorizationEndpoint?.trim() &&
+              item.tokenEndpoint?.trim() &&
+              item.jwksUri?.trim(),
+          );
+          return hasIssuer || hasManualEndpoints;
+        }
+        return true;
+      })
       .map((item) => FederatedIdentityResponseMapper.toPublicProviderView(item));
   }
 
@@ -224,6 +246,92 @@ export class FederatedProvidersService implements OnModuleDestroy {
           ? safeJsonParseStringArray(existing.allowedRedirectUrisJson)
           : [];
 
+    const existingExtra = parseFederatedExtraConfig(existing?.extraConfigJson, driverMeta.driverCode);
+    const mergedExtra = mergeFederatedExtraConfig(
+      existingExtra,
+      {
+        oidcOptions: input.oidcOptions
+          ? {
+              ...(input.oidcOptions.discoveryEnabled !== undefined
+                ? { discoveryEnabled: input.oidcOptions.discoveryEnabled }
+                : {}),
+              ...(input.oidcOptions.discoveryUrl !== undefined
+                ? { discoveryUrl: input.oidcOptions.discoveryUrl }
+                : {}),
+              ...(input.oidcOptions.allowedIssuers !== undefined
+                ? { allowedIssuers: input.oidcOptions.allowedIssuers }
+                : {}),
+              ...(input.oidcOptions.fetchUserInfo !== undefined
+                ? { fetchUserInfo: input.oidcOptions.fetchUserInfo }
+                : {}),
+              ...(input.oidcOptions.allowedEmailDomains !== undefined
+                ? { allowedEmailDomains: input.oidcOptions.allowedEmailDomains }
+                : {}),
+              ...(input.oidcOptions.extraAuthorizeParams !== undefined
+                ? { extraAuthorizeParams: input.oidcOptions.extraAuthorizeParams }
+                : {}),
+            }
+          : undefined,
+        claimMapping: input.claimMapping
+          ? {
+              ...(input.claimMapping.emailClaim !== undefined
+                ? { emailClaim: input.claimMapping.emailClaim }
+                : {}),
+              ...(input.claimMapping.emailVerifiedClaim !== undefined
+                ? { emailVerifiedClaim: input.claimMapping.emailVerifiedClaim }
+                : {}),
+              ...(input.claimMapping.nameClaim !== undefined
+                ? { nameClaim: input.claimMapping.nameClaim }
+                : {}),
+              ...(input.claimMapping.firstNameClaim !== undefined
+                ? { firstNameClaim: input.claimMapping.firstNameClaim }
+                : {}),
+              ...(input.claimMapping.lastNameClaim !== undefined
+                ? { lastNameClaim: input.claimMapping.lastNameClaim }
+                : {}),
+              ...(input.claimMapping.avatarClaim !== undefined
+                ? { avatarClaim: input.claimMapping.avatarClaim }
+                : {}),
+              ...(input.claimMapping.groupsClaim !== undefined
+                ? { groupsClaim: input.claimMapping.groupsClaim }
+                : {}),
+              ...(input.claimMapping.tenantIdClaim !== undefined
+                ? { tenantIdClaim: input.claimMapping.tenantIdClaim }
+                : {}),
+              ...(input.claimMapping.extraAttributeClaims !== undefined
+                ? { extraAttributeClaims: input.claimMapping.extraAttributeClaims }
+                : {}),
+            }
+          : undefined,
+        roleSyncPolicy: input.roleSyncPolicy
+          ? {
+              ...(input.roleSyncPolicy.enabled !== undefined
+                ? { enabled: input.roleSyncPolicy.enabled }
+                : {}),
+              ...(input.roleSyncPolicy.mode !== undefined
+                ? { mode: input.roleSyncPolicy.mode }
+                : {}),
+              ...(input.roleSyncPolicy.allowedRoleCodes !== undefined
+                ? { allowedRoleCodes: input.roleSyncPolicy.allowedRoleCodes }
+                : {}),
+              ...(input.roleSyncPolicy.deniedRoleCodes !== undefined
+                ? { deniedRoleCodes: input.roleSyncPolicy.deniedRoleCodes }
+                : {}),
+              ...(input.roleSyncPolicy.defaultRoleCodes !== undefined
+                ? { defaultRoleCodes: input.roleSyncPolicy.defaultRoleCodes }
+                : {}),
+              ...(input.roleSyncPolicy.groupRoleMappings !== undefined
+                ? { groupRoleMappings: input.roleSyncPolicy.groupRoleMappings }
+                : {}),
+              ...(input.roleSyncPolicy.requireMatchedGroup !== undefined
+                ? { requireMatchedGroup: input.roleSyncPolicy.requireMatchedGroup }
+                : {}),
+            }
+          : undefined,
+      },
+      driverMeta.driverCode,
+    );
+
     const payload: Partial<FederatedIdentityProviderEntity> = {
       ...(existing ? { id: existing.id, deletedAt: null } : {}),
       providerCode,
@@ -271,6 +379,7 @@ export class FederatedProvidersService implements OnModuleDestroy {
         input.autoLinkVerifiedEmailOverride !== undefined
           ? input.autoLinkVerifiedEmailOverride
           : (existing?.autoLinkVerifiedEmailOverride ?? null),
+      extraConfigJson: JSON.stringify(mergedExtra),
       createdBy: existing?.createdBy ?? actorUserId,
       updatedBy: actorUserId,
     };
@@ -335,5 +444,81 @@ export class FederatedProvidersService implements OnModuleDestroy {
       config: resolvedConfig,
       jwksCacheTtlSeconds: runtimeConfig.jwksCacheTtlSeconds,
     });
+  }
+
+  public async discoverProviderConfiguration(
+    rawProviderCode: string,
+  ): Promise<OidcDiscoveryTestResult> {
+    const startMs = Date.now();
+    const entity = await this.getProviderEntityOrThrow(rawProviderCode);
+    const resolvedConfig = this.resolveAdapterConfig(entity);
+    const extra = parseFederatedExtraConfig(resolvedConfig.extraConfig, entity.driverCode);
+    const issuerUrl = resolvedConfig.issuerUrl?.trim() ?? '';
+    const discovery = this.discoveryService ?? new OidcDiscoveryService();
+
+    let discoveryUrl = extra.oidcOptions.discoveryUrl ?? '';
+    if (!issuerUrl) {
+      return {
+        providerCode: entity.providerCode,
+        issuerUrl,
+        discoveryUrl,
+        ok: false,
+        discovered: false,
+        authorizationEndpoint: entity.authorizationEndpoint ?? null,
+        tokenEndpoint: entity.tokenEndpoint ?? null,
+        jwksUri: entity.jwksUri ?? null,
+        userinfoEndpoint: entity.userinfoEndpoint ?? null,
+        durationMs: Date.now() - startMs,
+        errorCode: 'MISSING_ISSUER_URL',
+        errorMessage: 'Provider issuerUrl is required for OIDC discovery',
+      };
+    }
+
+    try {
+      discoveryUrl = discovery.buildDiscoveryUrl(issuerUrl, extra.oidcOptions.discoveryUrl);
+      const runtimeConfig = resolveFederatedRuntimeConfig(this.settingRegistry);
+      const doc = await discovery.getDiscoveryDocument({
+        serviceName: `oauth-${entity.driverCode}`,
+        issuerUrl,
+        discoveryUrl: extra.oidcOptions.discoveryUrl,
+        cacheTtlSeconds: runtimeConfig.jwksCacheTtlSeconds,
+        forceRefresh: true,
+      });
+      return {
+        providerCode: entity.providerCode,
+        issuerUrl: doc.issuer,
+        discoveryUrl,
+        ok: true,
+        discovered: true,
+        authorizationEndpoint: doc.authorization_endpoint,
+        tokenEndpoint: doc.token_endpoint,
+        jwksUri: doc.jwks_uri,
+        userinfoEndpoint: doc.userinfo_endpoint ?? null,
+        durationMs: Date.now() - startMs,
+        errorCode: null,
+        errorMessage: null,
+      };
+    } catch (err) {
+      const errorCode =
+        err instanceof FederatedStageError ? err.stageErrorCode : 'DISCOVERY_FETCH_FAILED';
+      const errorMessage =
+        err instanceof FederatedStageError
+          ? err.diagnosticMessage
+          : sanitizeFederatedErrorMessage(err instanceof Error ? err.message : String(err));
+      return {
+        providerCode: entity.providerCode,
+        issuerUrl,
+        discoveryUrl,
+        ok: false,
+        discovered: false,
+        authorizationEndpoint: entity.authorizationEndpoint ?? null,
+        tokenEndpoint: entity.tokenEndpoint ?? null,
+        jwksUri: entity.jwksUri ?? null,
+        userinfoEndpoint: entity.userinfoEndpoint ?? null,
+        durationMs: Date.now() - startMs,
+        errorCode,
+        errorMessage,
+      };
+    }
   }
 }

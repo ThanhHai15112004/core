@@ -16,6 +16,7 @@ import type {
   FederatedProviderView,
   InitiateOAuthAuthorizeResult,
   OAuthCallbackResult,
+  OidcDiscoveryTestResult,
   PublicFederatedProviderView,
   TestProviderConnectionResult,
   UnlinkFederatedIdentityResult,
@@ -73,6 +74,12 @@ export class FederatedIdentityService implements IFederatedIdentityPublicService
 
   public async testProviderConnection(providerCode: string): Promise<TestProviderConnectionResult> {
     return this.providersService.testProviderConnection(providerCode);
+  }
+
+  public async discoverProviderConfiguration(
+    providerCode: string,
+  ): Promise<OidcDiscoveryTestResult> {
+    return this.providersService.discoverProviderConfiguration(providerCode);
   }
 
   public async initiateLoginAuthorize(

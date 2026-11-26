@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { createPaginationQuerySchema, optionalQueryParam } from '@packages/http/index.js';
 import {
   FEDERATED_PROVIDER_STATUS,
+  FEDERATED_ROLE_SYNC_MODE,
   type FederatedProviderStatusCode,
 } from '../enum/federated-identity.enum.js';
 
@@ -72,6 +73,45 @@ export const UnlinkAccountQuerySchema = z.object({
 
 export type UnlinkAccountQuery = z.infer<typeof UnlinkAccountQuerySchema>;
 
+export const OidcProviderOptionsSchema = z.object({
+  discoveryEnabled: z.boolean().optional(),
+  discoveryUrl: z.string().trim().max(500).nullable().optional(),
+  allowedIssuers: z.array(z.string().trim().min(1).max(255)).max(20).optional(),
+  fetchUserInfo: z.boolean().optional(),
+  allowedEmailDomains: z.array(z.string().trim().min(1).max(255)).max(50).optional(),
+  extraAuthorizeParams: z.record(z.string().trim().min(1).max(64), z.string().max(255)).optional(),
+});
+
+export const OidcClaimMappingSchema = z.object({
+  emailClaim: z.string().trim().min(1).max(120).optional(),
+  emailVerifiedClaim: z.string().trim().min(1).max(120).optional(),
+  nameClaim: z.string().trim().min(1).max(120).optional(),
+  firstNameClaim: z.string().trim().min(1).max(120).optional(),
+  lastNameClaim: z.string().trim().min(1).max(120).optional(),
+  avatarClaim: z.string().trim().min(1).max(120).optional(),
+  groupsClaim: z.string().trim().min(1).max(120).optional(),
+  tenantIdClaim: z.string().trim().min(1).max(120).optional(),
+  extraAttributeClaims: z.record(z.string().trim().min(1).max(64), z.string().trim().min(1).max(120)).optional(),
+});
+
+export const FederatedRoleSyncPolicySchema = z.object({
+  enabled: z.boolean().optional(),
+  mode: z
+    .enum([
+      FEDERATED_ROLE_SYNC_MODE.ASSIGN_ON_CREATE,
+      FEDERATED_ROLE_SYNC_MODE.ADDITIVE,
+      FEDERATED_ROLE_SYNC_MODE.SYNC_MANAGED,
+    ])
+    .optional(),
+  allowedRoleCodes: z.array(z.string().trim().min(1).max(64)).max(50).optional(),
+  deniedRoleCodes: z.array(z.string().trim().min(1).max(64)).max(50).optional(),
+  defaultRoleCodes: z.array(z.string().trim().min(1).max(64)).max(20).optional(),
+  groupRoleMappings: z
+    .record(z.string().trim().min(1).max(255), z.array(z.string().trim().min(1).max(64)).max(20))
+    .optional(),
+  requireMatchedGroup: z.boolean().optional(),
+});
+
 export const UpsertFederatedProviderRequestSchema = z.object({
   driverCode: z.string().trim().toLowerCase().min(2).max(64).optional(),
   displayName: z.string().trim().min(1).max(120).optional(),
@@ -90,6 +130,9 @@ export const UpsertFederatedProviderRequestSchema = z.object({
   allowedRedirectUris: z.array(z.string().trim().min(1).max(1000)).max(50).optional(),
   allowAutoRegisterOverride: z.boolean().nullable().optional(),
   autoLinkVerifiedEmailOverride: z.boolean().nullable().optional(),
+  oidcOptions: OidcProviderOptionsSchema.optional(),
+  claimMapping: OidcClaimMappingSchema.optional(),
+  roleSyncPolicy: FederatedRoleSyncPolicySchema.optional(),
 });
 
 export type UpsertFederatedProviderRequest = z.infer<typeof UpsertFederatedProviderRequestSchema>;
@@ -106,6 +149,8 @@ export const ListMonitoringErrorsQuerySchema = createPaginationQuerySchema({
 }).and(
   z.object({
     providerCode: optionalQueryParam(z.string().trim().toLowerCase().max(64)),
+    flowType: optionalQueryParam(z.string().trim().toUpperCase().max(16)),
+    userId: optionalQueryParam(z.coerce.number().int().min(1)),
     stage: optionalQueryParam(z.string().trim().toUpperCase().max(40)),
     outcome: optionalQueryParam(z.string().trim().toUpperCase().max(16)),
     errorCode: optionalQueryParam(z.string().trim().max(80)),

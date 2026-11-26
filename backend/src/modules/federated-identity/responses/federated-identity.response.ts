@@ -1,6 +1,10 @@
-import { safeJsonParseStringArray } from '@packages/kernel/index.js';
-import { getFederatedProviderStatusName } from '../enum/federated-identity.enum.js';
+import { safeJsonParseObject, safeJsonParseStringArray } from '@packages/kernel/index.js';
+import {
+  FEDERATED_DRIVER_CODE,
+  getFederatedProviderStatusName,
+} from '../enum/federated-identity.enum.js';
 import { resolveEffectiveProviderPolicy } from '../helpers/federated-config.helper.js';
+import { parseFederatedExtraConfig } from '../helpers/oidc-claim-mapping.helper.js';
 import type { FederatedAuthEventEntity } from '../entities/federated-auth-event.entity.js';
 import type { FederatedIdentityEntity } from '../entities/federated-identity.entity.js';
 import type { FederatedIdentityProviderEntity } from '../entities/federated-identity-provider.entity.js';
@@ -11,7 +15,6 @@ import type {
   FederatedRuntimeConfig,
   PublicFederatedProviderView,
 } from '../types/federated-identity.types.js';
-import { safeJsonParseObject } from '@packages/kernel/index.js';
 
 function toIsoOrNull(val: Date | string | null | undefined): string | null {
   if (!val) return null;
@@ -39,6 +42,15 @@ export class FederatedIdentityResponseMapper {
   ): FederatedProviderView {
     const hasSecret = Boolean(entity.clientSecretEncrypted?.trim());
     const hasClientId = Boolean(entity.clientId?.trim());
+    const extraConfig = parseFederatedExtraConfig(entity.extraConfigJson, entity.driverCode);
+    const hasOidcEndpoints =
+      entity.driverCode !== FEDERATED_DRIVER_CODE.OIDC ||
+      Boolean(entity.issuerUrl?.trim()) ||
+      Boolean(
+        entity.authorizationEndpoint?.trim() &&
+          entity.tokenEndpoint?.trim() &&
+          entity.jwksUri?.trim(),
+      );
     return {
       id: Number(entity.id),
       providerCode: entity.providerCode,
@@ -48,7 +60,7 @@ export class FederatedIdentityResponseMapper {
       status: entity.status,
       statusName: getFederatedProviderStatusName(entity.status),
       isEnabled: Boolean(entity.isEnabled),
-      isConfigured: hasClientId && hasSecret,
+      isConfigured: hasClientId && hasSecret && hasOidcEndpoints,
       clientId: entity.clientId ?? null,
       hasClientSecret: hasSecret,
       clientSecretHint: entity.clientSecretHint ?? null,
@@ -70,6 +82,9 @@ export class FederatedIdentityResponseMapper {
           ? Boolean(entity.autoLinkVerifiedEmailOverride)
           : null,
       effectivePolicy: resolveEffectiveProviderPolicy(entity, runtimeConfig),
+      oidcOptions: extraConfig.oidcOptions,
+      claimMapping: extraConfig.claimMapping,
+      roleSyncPolicy: extraConfig.roleSyncPolicy,
       lastSuccessAt: toIsoOrNull(entity.lastSuccessAt),
       lastErrorAt: toIsoOrNull(entity.lastErrorAt),
       lastErrorCode: entity.lastErrorCode ?? null,

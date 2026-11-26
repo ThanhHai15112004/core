@@ -169,6 +169,8 @@ export const API_ROUTES = {
       `/federated-identity/providers/${encodeURIComponent(providerCode)}`,
     PROVIDER_TEST: (providerCode: string) =>
       `/federated-identity/providers/${encodeURIComponent(providerCode)}/test`,
+    PROVIDER_DISCOVER: (providerCode: string) =>
+      `/federated-identity/providers/${encodeURIComponent(providerCode)}/discover`,
     USER_ACCOUNTS: (userId: string | number) => `/federated-identity/users/${userId}/accounts`,
     MONITORING_SUMMARY: (qs = '') =>
       `/federated-identity/monitoring/summary${qs ? `?${qs}` : ''}`,

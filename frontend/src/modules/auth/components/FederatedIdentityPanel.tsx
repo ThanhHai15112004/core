@@ -1,8 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
-  Activity,
   CheckCircle2,
-  KeyRound,
   Link2,
   RefreshCw,
   Settings2,
@@ -10,6 +8,10 @@ import {
   Trash2,
 } from 'lucide-react';
 import { authStyles } from './auth-ui.styles';
+import {
+  FederatedProviderEditor,
+  type SaveProviderPayload,
+} from './FederatedProviderEditor';
 import type {
   FederatedAuthEventItem,
   FederatedDriverMetadata,
@@ -33,36 +35,16 @@ interface FederatedIdentityPanelProps {
   onRefresh: () => Promise<void>;
   onStartLink: (providerCode: string) => Promise<void>;
   onUnlink: (id: number, stepUpToken?: string) => Promise<void>;
-  onSaveProvider: (
-    providerCode: string,
-    payload: {
-      driverCode?: string;
-      displayName?: string;
-      isEnabled?: boolean;
-      clientId?: string | null;
-      clientSecret?: string | null;
-      tenantId?: string | null;
-      allowedRedirectUris?: string[];
-      allowAutoRegisterOverride?: boolean | null;
-      autoLinkVerifiedEmailOverride?: boolean | null;
-    },
-  ) => Promise<void>;
+  onSaveProvider: (providerCode: string, payload: SaveProviderPayload) => Promise<void>;
   onTestProvider: (providerCode: string) => Promise<unknown>;
+  onDiscoverProvider: (providerCode: string) => Promise<unknown>;
+  onDeleteProvider: (providerCode: string) => Promise<void>;
+  onFilterEvents: (filters?: {
+    providerCode?: string;
+    outcome?: string;
+    flowType?: string;
+  }) => Promise<void>;
   onSaveGlobalPolicy: (items: readonly { key: string; value: unknown }[]) => Promise<void>;
-}
-
-type OverrideChoice = 'inherit' | 'true' | 'false';
-
-function toOverrideChoice(val: boolean | null | undefined): OverrideChoice {
-  if (val === true) return 'true';
-  if (val === false) return 'false';
-  return 'inherit';
-}
-
-function fromOverrideChoice(choice: OverrideChoice): boolean | null {
-  if (choice === 'true') return true;
-  if (choice === 'false') return false;
-  return null;
 }
 
 export const FederatedIdentityPanel: React.FC<FederatedIdentityPanelProps> = ({
@@ -80,9 +62,14 @@ export const FederatedIdentityPanel: React.FC<FederatedIdentityPanelProps> = ({
   onUnlink,
   onSaveProvider,
   onTestProvider,
+  onDiscoverProvider,
+  onDeleteProvider,
+  onFilterEvents,
   onSaveGlobalPolicy,
 }) => {
   const [stepUpToken, setStepUpToken] = useState('');
+  const [filterProvider, setFilterProvider] = useState('');
+  const [filterOutcome, setFilterOutcome] = useState('');
 
   // Global policy state
   const [autoLinkVerifiedEmail, setAutoLinkVerifiedEmail] = useState(false);
@@ -91,18 +78,6 @@ export const FederatedIdentityPanel: React.FC<FederatedIdentityPanelProps> = ({
   const [requireStepUpForUnlink, setRequireStepUpForUnlink] = useState(false);
   const [transactionTtlSeconds, setTransactionTtlSeconds] = useState(600);
   const [globalRedirectUrisText, setGlobalRedirectUrisText] = useState('');
-
-  // Provider editor state
-  const [selectedCode, setSelectedCode] = useState<string>('google');
-  const [driverCode, setDriverCode] = useState<string>('google');
-  const [displayName, setDisplayName] = useState<string>('Google');
-  const [isEnabled, setIsEnabled] = useState<boolean>(false);
-  const [clientId, setClientId] = useState<string>('');
-  const [clientSecret, setClientSecret] = useState<string>('');
-  const [tenantId, setTenantId] = useState<string>('common');
-  const [providerRedirectUrisText, setProviderRedirectUrisText] = useState<string>('');
-  const [autoRegisterOverride, setAutoRegisterOverride] = useState<OverrideChoice>('inherit');
-  const [autoLinkOverride, setAutoLinkOverride] = useState<OverrideChoice>('inherit');
 
   useEffect(() => {
     if (!policy) return;
@@ -114,34 +89,6 @@ export const FederatedIdentityPanel: React.FC<FederatedIdentityPanelProps> = ({
     setTransactionTtlSeconds(cfg.transactionTtlSeconds);
     setGlobalRedirectUrisText(cfg.allowedRedirectUris.join('\n'));
   }, [policy]);
-
-  useEffect(() => {
-    const existing = adminProviders.find((p) => p.providerCode === selectedCode);
-    const meta = drivers.find((d) => d.driverCode === (existing?.driverCode ?? selectedCode));
-    if (existing) {
-      setDriverCode(existing.driverCode);
-      setDisplayName(existing.displayName);
-      setIsEnabled(existing.isEnabled);
-      setClientId(existing.clientId ?? '');
-      setClientSecret('');
-      setTenantId(existing.tenantId ?? meta?.defaultTenantId ?? '');
-      setProviderRedirectUrisText(existing.allowedRedirectUris.join('\n'));
-      setAutoRegisterOverride(toOverrideChoice(existing.allowAutoRegisterOverride));
-      setAutoLinkOverride(toOverrideChoice(existing.autoLinkVerifiedEmailOverride));
-    } else {
-      const nextDriver = selectedCode === 'microsoft' ? 'microsoft' : 'google';
-      const fallbackMeta = drivers.find((d) => d.driverCode === nextDriver);
-      setDriverCode(nextDriver);
-      setDisplayName(fallbackMeta?.displayName ?? (nextDriver === 'microsoft' ? 'Microsoft' : 'Google'));
-      setIsEnabled(false);
-      setClientId('');
-      setClientSecret('');
-      setTenantId(fallbackMeta?.defaultTenantId ?? '');
-      setProviderRedirectUrisText('');
-      setAutoRegisterOverride('inherit');
-      setAutoLinkOverride('inherit');
-    }
-  }, [selectedCode, adminProviders, drivers]);
 
   const handleSavePolicy = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -165,28 +112,6 @@ export const FederatedIdentityPanel: React.FC<FederatedIdentityPanelProps> = ({
       { key: policy.settingKeys.allowedRedirectUris, value: uris },
     ]);
   };
-
-  const handleSaveProvider = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const redirectUris = providerRedirectUrisText
-      .split(/\r?\n|,/)
-      .map((s) => s.trim())
-      .filter(Boolean);
-    await onSaveProvider(selectedCode, {
-      driverCode,
-      displayName: displayName.trim() || selectedCode,
-      isEnabled,
-      clientId: clientId.trim() || null,
-      ...(clientSecret.trim() ? { clientSecret: clientSecret.trim() } : {}),
-      ...(driverCode === 'microsoft' ? { tenantId: tenantId.trim() || 'common' } : { tenantId: null }),
-      allowedRedirectUris: redirectUris,
-      allowAutoRegisterOverride: fromOverrideChoice(autoRegisterOverride),
-      autoLinkVerifiedEmailOverride: fromOverrideChoice(autoLinkOverride),
-    });
-    setClientSecret('');
-  };
-
-  const activeProviderRecord = adminProviders.find((p) => p.providerCode === selectedCode);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -416,157 +341,16 @@ export const FederatedIdentityPanel: React.FC<FederatedIdentityPanelProps> = ({
             </div>
           </form>
 
-          {/* Cấu hình Provider Google / Microsoft */}
-          <form onSubmit={handleSaveProvider} style={authStyles.card}>
-            <h3 style={authStyles.sectionTitle}>
-              <KeyRound size={18} color="var(--primary)" />
-              <span>Cấu Hình Nhà Cung Cấp (Google / Microsoft)</span>
-            </h3>
-            <p style={authStyles.sectionDesc}>
-              Client Secret được mã hóa AES-256-GCM khi lưu DB; mỗi provider có thể override chính
-              sách tự đăng ký / tự liên kết riêng.
-            </p>
-
-            <div style={{ display: 'flex', gap: '8px', marginBottom: '12px', flexWrap: 'wrap' }}>
-              {['google', 'microsoft'].map((code) => {
-                const active = selectedCode === code;
-                const rec = adminProviders.find((p) => p.providerCode === code);
-                return (
-                  <button
-                    key={code}
-                    type="button"
-                    onClick={() => setSelectedCode(code)}
-                    style={active ? authStyles.btnPrimary : authStyles.btnSecondary}
-                  >
-                    <span>{code === 'google' ? 'Google' : 'Microsoft'}</span>
-                    {rec?.isEnabled && <span style={authStyles.badgeSuccess}>ON</span>}
-                  </button>
-                );
-              })}
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                <div>
-                  <label style={authStyles.label}>Tên hiển thị</label>
-                  <input
-                    type="text"
-                    value={displayName}
-                    onChange={(e) => setDisplayName(e.target.value)}
-                    style={authStyles.input}
-                  />
-                </div>
-                <div style={{ display: 'flex', alignItems: 'flex-end', paddingBottom: '8px' }}>
-                  <label style={{ display: 'flex', gap: '8px', alignItems: 'center', fontSize: '13px' }}>
-                    <input
-                      type="checkbox"
-                      checked={isEnabled}
-                      onChange={(e) => setIsEnabled(e.target.checked)}
-                    />
-                    <span>Bật nhà cung cấp này</span>
-                  </label>
-                </div>
-              </div>
-
-              <div>
-                <label style={authStyles.label}>Client ID</label>
-                <input
-                  type="text"
-                  value={clientId}
-                  onChange={(e) => setClientId(e.target.value)}
-                  placeholder="Nhập OAuth Client ID..."
-                  style={authStyles.monoInput}
-                />
-              </div>
-
-              <div>
-                <label style={authStyles.label}>
-                  Client Secret{' '}
-                  {activeProviderRecord?.hasClientSecret
-                    ? `(đã lưu: ${activeProviderRecord.clientSecretHint ?? '****'} — để trống nếu giữ nguyên)`
-                    : '(bắt buộc khi bật)'}
-                </label>
-                <input
-                  type="password"
-                  value={clientSecret}
-                  onChange={(e) => setClientSecret(e.target.value)}
-                  placeholder="Nhập Client Secret mới..."
-                  style={authStyles.monoInput}
-                />
-              </div>
-
-              {driverCode === 'microsoft' && (
-                <div>
-                  <label style={authStyles.label}>
-                    Microsoft Tenant ID (<code>common</code>, <code>organizations</code>,{' '}
-                    <code>consumers</code> hoặc GUID tenant)
-                  </label>
-                  <input
-                    type="text"
-                    value={tenantId}
-                    onChange={(e) => setTenantId(e.target.value)}
-                    style={authStyles.monoInput}
-                  />
-                </div>
-              )}
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                <div>
-                  <label style={authStyles.label}>Override Tự động liên kết email</label>
-                  <select
-                    value={autoLinkOverride}
-                    onChange={(e) => setAutoLinkOverride(e.target.value as OverrideChoice)}
-                    style={authStyles.input}
-                  >
-                    <option value="inherit">Kế thừa hệ thống</option>
-                    <option value="true">Bắt buộc BẬT</option>
-                    <option value="false">Bắt buộc TẮT</option>
-                  </select>
-                </div>
-                <div>
-                  <label style={authStyles.label}>Override Tự đăng ký mới</label>
-                  <select
-                    value={autoRegisterOverride}
-                    onChange={(e) => setAutoRegisterOverride(e.target.value as OverrideChoice)}
-                    style={authStyles.input}
-                  >
-                    <option value="inherit">Kế thừa hệ thống</option>
-                    <option value="true">Bắt buộc BẬT</option>
-                    <option value="false">Bắt buộc TẮT</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label style={authStyles.label}>
-                  Allowlist Redirect URI riêng (để trống để kế thừa toàn hệ thống)
-                </label>
-                <textarea
-                  rows={2}
-                  value={providerRedirectUrisText}
-                  onChange={(e) => setProviderRedirectUrisText(e.target.value)}
-                  placeholder="http://localhost:5173/auth"
-                  style={authStyles.monoInput}
-                />
-              </div>
-
-              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                <button type="submit" disabled={busy} style={authStyles.btnPrimary}>
-                  <CheckCircle2 size={14} />
-                  <span>Lưu cấu hình {selectedCode}</span>
-                </button>
-                <button
-                  type="button"
-                  disabled={busy || !activeProviderRecord}
-                  onClick={() => void onTestProvider(selectedCode)}
-                  style={authStyles.btnSecondary}
-                >
-                  <Activity size={14} />
-                  <span>Kiểm tra JWKS</span>
-                </button>
-              </div>
-            </div>
-          </form>
+          {/* Cấu hình Provider Google / Microsoft / OIDC */}
+          <FederatedProviderEditor
+            busy={busy}
+            drivers={drivers}
+            adminProviders={adminProviders}
+            onSaveProvider={onSaveProvider}
+            onTestProvider={onTestProvider}
+            onDiscoverProvider={onDiscoverProvider}
+            onDeleteProvider={onDeleteProvider}
+          />
         </div>
       )}
 
@@ -593,7 +377,42 @@ export const FederatedIdentityPanel: React.FC<FederatedIdentityPanelProps> = ({
                 mật).
               </p>
             </div>
-            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+              <select
+                value={filterProvider}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setFilterProvider(val);
+                  void onFilterEvents({
+                    providerCode: val || undefined,
+                    outcome: filterOutcome || undefined,
+                  });
+                }}
+                style={{ ...authStyles.input, width: 'auto' }}
+              >
+                <option value="">Tất cả Provider</option>
+                {adminProviders.map((p) => (
+                  <option key={p.providerCode} value={p.providerCode}>
+                    {p.providerCode}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={filterOutcome}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setFilterOutcome(val);
+                  void onFilterEvents({
+                    providerCode: filterProvider || undefined,
+                    outcome: val || undefined,
+                  });
+                }}
+                style={{ ...authStyles.input, width: 'auto' }}
+              >
+                <option value="">Tất cả kết quả</option>
+                <option value="SUCCESS">SUCCESS</option>
+                <option value="FAILED">FAILED</option>
+              </select>
               <span style={authStyles.badgePrimary}>
                 Tổng lượt: {monitoringSummary.totalAttempts}
               </span>

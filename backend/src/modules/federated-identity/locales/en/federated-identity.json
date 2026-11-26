@@ -21,5 +21,12 @@
   "linkUserMismatch": "Authenticated user does not match the initiated account linking transaction",
   "identityNotFound": "External linked account was not found",
   "cannotUnlinkLastLoginMethod": "Cannot unlink the last external login method when the account has no local password configured",
-  "stepUpRequired": "Unlinking an external account requires Step-Up Authentication"
+  "stepUpRequired": "Unlinking an external account requires Step-Up Authentication",
+  "enterpriseOidcDisabled": "Enterprise OIDC SSO is currently disabled by feature flag",
+  "discoveryFailed": "Failed to load OIDC Discovery document (/.well-known/openid-configuration) from the identity provider",
+  "oidcEndpointsMissing": "OIDC provider is missing issuerUrl (for discovery) or required manual endpoints (authorizationEndpoint, tokenEndpoint, jwksUri)",
+  "userinfoFetchFailed": "Failed to fetch user profile from the OIDC UserInfo endpoint",
+  "userinfoSubjectMismatch": "OIDC UserInfo subject (sub) does not match the ID Token subject",
+  "emailDomainNotAllowed": "Your email domain is not permitted for this SSO identity provider",
+  "ssoGroupNotAllowed": "Your SSO groups do not match any allowed role mapping for this provider"
 }

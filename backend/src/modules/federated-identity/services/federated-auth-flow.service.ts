@@ -4,6 +4,7 @@ import { maskIp } from '@packages/http/index.js';
 import {
   BadRequestAppException,
   ConflictAppException,
+  FeatureFlagRegistryService,
   ForbiddenAppException,
   NotFoundAppException,
   PROVIDER_TYPE,
@@ -43,6 +44,8 @@ import {
   FEDERATED_AUDIT_META,
   FEDERATED_AUTH_OUTCOME,
   FEDERATED_AUTH_STAGE,
+  FEDERATED_DRIVER_CODE,
+  FEDERATED_FEATURE_FLAGS,
   FEDERATED_FLOW_TYPE,
   FEDERATED_PROVIDER_STATUS,
   type FederatedFlowType,
@@ -55,6 +58,10 @@ import {
   resolveFederatedRuntimeConfig,
 } from '../helpers/federated-config.helper.js';
 import {
+  isEmailDomainAllowed,
+  parseFederatedExtraConfig,
+} from '../helpers/oidc-claim-mapping.helper.js';
+import {
   assertRedirectUriAllowed,
   generateOpaqueSecret,
   generatePkcePair,
@@ -66,6 +73,7 @@ import { FederatedIdentityRepository } from '../repositories/federated-identity.
 import { FederatedIdentityResponseMapper } from '../responses/federated-identity.response.js';
 import type {
   FederatedIdentityView,
+  FederatedRoleSyncSummary,
   InitiateOAuthAuthorizeResult,
   OAuthCallbackResult,
   UnlinkFederatedIdentityResult,
@@ -74,6 +82,7 @@ import type {
 import { FederatedStageError } from './federated-jwks.service.js';
 import { FederatedMonitoringService } from './federated-monitoring.service.js';
 import { FederatedProvidersService } from './federated-providers.service.js';
+import { FederatedRoleSyncService } from './federated-role-sync.service.js';
 import { OAuthProviderRegistryService } from './oauth-provider-registry.service.js';
 
 export interface AuthorizeRequestContext {
@@ -117,6 +126,8 @@ export class FederatedAuthFlowService {
     @Optional() private readonly transactionManager?: TransactionManager,
     @Optional() private readonly auditLogService?: AuditLogService,
     @Optional() kernelProviderRegistry?: KernelProviderRegistryService,
+    @Optional() private readonly roleSyncService?: FederatedRoleSyncService,
+    @Optional() private readonly featureFlagRegistry?: FeatureFlagRegistryService,
   ) {
     this.settingRegistry = settingRegistry ?? defaultSettingRegistry;
     this.encryptionService = encryptionService ?? defaultFieldEncryptionService;
@@ -175,6 +186,49 @@ export class FederatedAuthFlowService {
     const pkce = generatePkcePair();
     const expiresAt = new Date(Date.now() + runtimeConfig.transactionTtlSeconds * 1000);
 
+    let authorizationUrl: string;
+    try {
+      authorizationUrl = adapter.buildAuthorizationUrlAsync
+        ? await adapter.buildAuthorizationUrlAsync({
+            config: adapterConfig,
+            redirectUri,
+            state,
+            nonce,
+            codeChallenge: pkce.codeChallenge,
+            loginHint: input.loginHint,
+            cacheTtlSeconds: runtimeConfig.jwksCacheTtlSeconds,
+          })
+        : adapter.buildAuthorizationUrl({
+            config: adapterConfig,
+            redirectUri,
+            state,
+            nonce,
+            codeChallenge: pkce.codeChallenge,
+            loginHint: input.loginHint,
+          });
+    } catch (err) {
+      await this.monitoringService.recordEvent({
+        providerId: provider.id,
+        providerCode,
+        flowType,
+        stage: err instanceof FederatedStageError ? err.stage : FEDERATED_AUTH_STAGE.AUTHORIZE,
+        outcome: FEDERATED_AUTH_OUTCOME.FAILED,
+        errorCode:
+          err instanceof FederatedStageError ? err.stageErrorCode : 'AUTHORIZE_URL_BUILD_FAILED',
+        errorMessage:
+          err instanceof FederatedStageError
+            ? err.diagnosticMessage
+            : err instanceof Error
+              ? err.message
+              : String(err),
+        httpStatus: err instanceof FederatedStageError ? err.httpStatus : null,
+        userId: context.actorUserId ?? null,
+        ipAddress: context.ipAddress,
+        userAgent: context.userAgent,
+      });
+      throw err;
+    }
+
     await this.transactionRepo.saveEntity({
       stateHash: sha256Hex(state),
       providerCode,
@@ -188,15 +242,6 @@ export class FederatedAuthFlowService {
       userAgent: context.userAgent?.slice(0, 500) ?? null,
       expiresAt,
       consumedAt: null,
-    });
-
-    const authorizationUrl = adapter.buildAuthorizationUrl({
-      config: adapterConfig,
-      redirectUri,
-      state,
-      nonce,
-      codeChallenge: pkce.codeChallenge,
-      loginHint: input.loginHint,
     });
 
     return {
@@ -495,6 +540,27 @@ export class FederatedAuthFlowService {
       throw new ForbiddenAppException('federated-identity.providerDisabled', [{ providerCode }], {
         providerCode,
       });
+    }
+    if (provider.driverCode === FEDERATED_DRIVER_CODE.OIDC && this.featureFlagRegistry) {
+      const ffResult = this.featureFlagRegistry.evaluate(
+        FEDERATED_FEATURE_FLAGS.ENTERPRISE_OIDC_SSO,
+        { userId: context.actorUserId ?? undefined },
+      );
+      if (!ffResult.enabled && ffResult.reason !== 'FLAG_NOT_FOUND') {
+        await this.monitoringService.recordEvent({
+          providerId: provider.id,
+          providerCode,
+          flowType,
+          stage: FEDERATED_AUTH_STAGE.AUTHORIZE,
+          outcome: FEDERATED_AUTH_OUTCOME.FAILED,
+          errorCode: 'ENTERPRISE_OIDC_DISABLED',
+          errorMessage: `Enterprise OIDC SSO feature flag is disabled for ${providerCode}`,
+          userId: context.actorUserId ?? null,
+          ipAddress: context.ipAddress,
+          userAgent: context.userAgent,
+        });
+        throw new ForbiddenAppException('federated-identity.enterpriseOidcDisabled');
+      }
     }
     if (!provider.clientId?.trim() || !provider.clientSecretEncrypted?.trim()) {
       await this.monitoringService.recordEvent({
@@ -863,7 +929,26 @@ export class FederatedAuthFlowService {
   }): Promise<OAuthCallbackResult> {
     const { provider, tx, verified, input, context, runtimeConfig, startedAtMs } = params;
     const effectivePolicy = resolveEffectiveProviderPolicy(provider, runtimeConfig);
+    const extraConfig = parseFederatedExtraConfig(provider.extraConfigJson, provider.driverCode);
     const now = new Date();
+
+    if (!isEmailDomainAllowed(verified.email, extraConfig.oidcOptions.allowedEmailDomains)) {
+      await this.monitoringService.recordEvent({
+        providerId: provider.id,
+        providerCode: provider.providerCode,
+        flowType: FEDERATED_FLOW_TYPE.LOGIN,
+        stage: FEDERATED_AUTH_STAGE.ACCOUNT_RESOLUTION,
+        outcome: FEDERATED_AUTH_OUTCOME.FAILED,
+        errorCode: 'EMAIL_DOMAIN_NOT_ALLOWED',
+        errorMessage: 'Email domain is not in provider allowedEmailDomains list',
+        durationMs: Date.now() - startedAtMs,
+        requestId: context.requestId,
+        correlationId: context.correlationId,
+        ipAddress: context.ipAddress,
+        userAgent: context.userAgent,
+      });
+      throw new ForbiddenAppException('federated-identity.emailDomainNotAllowed');
+    }
 
     let identityEntity = await this.identityRepo.findByProviderSubject(
       provider.providerCode,
@@ -1016,6 +1101,39 @@ export class FederatedAuthFlowService {
       throw new NotFoundAppException('federated-identity.identityNotFound');
     }
 
+    let roleSync: FederatedRoleSyncSummary | undefined;
+    if (this.roleSyncService && extraConfig.roleSyncPolicy.enabled) {
+      try {
+        roleSync = await this.roleSyncService.syncRolesForLogin({
+          userId: Number(identityEntity.userId),
+          providerCode: provider.providerCode,
+          isNewUser,
+          groups: verified.groups ?? [],
+          policy: extraConfig.roleSyncPolicy,
+          ipAddress: context.ipAddress,
+        });
+      } catch (err) {
+        const isGroupBlock = err instanceof ForbiddenAppException;
+        await this.monitoringService.recordEvent({
+          providerId: provider.id,
+          providerCode: provider.providerCode,
+          flowType: FEDERATED_FLOW_TYPE.LOGIN,
+          stage: FEDERATED_AUTH_STAGE.ROLE_SYNC,
+          outcome: FEDERATED_AUTH_OUTCOME.FAILED,
+          errorCode: isGroupBlock ? 'SSO_GROUP_NOT_ALLOWED' : 'ROLE_SYNC_FAILED',
+          errorMessage: err instanceof Error ? err.message : String(err),
+          durationMs: Date.now() - startedAtMs,
+          userId: Number(identityEntity.userId),
+          identityId: Number(identityEntity.id),
+          requestId: context.requestId,
+          correlationId: context.correlationId,
+          ipAddress: context.ipAddress,
+          userAgent: context.userAgent,
+        });
+        throw err;
+      }
+    }
+
     let loginResult: LoginResponse;
     try {
       loginResult = await this.authPublicService.completeExternalLogin({
@@ -1107,7 +1225,14 @@ export class FederatedAuthFlowService {
       correlationId: context.correlationId,
       ipAddress: context.ipAddress,
       userAgent: context.userAgent,
-      metadata: { isNewUser, autoLinked },
+      metadata: {
+        isNewUser,
+        autoLinked,
+        driverCode: provider.driverCode,
+        issuer: verified.issuer,
+        groupsCount: verified.groups?.length ?? 0,
+        ...(roleSync ? { roleSync } : {}),
+      },
     });
 
     return {
@@ -1117,6 +1242,7 @@ export class FederatedAuthFlowService {
       autoLinked,
       identity: identityView,
       loginResult,
+      ...(roleSync ? { roleSync } : {}),
     };
   }
 }

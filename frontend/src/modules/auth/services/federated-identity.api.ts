@@ -7,8 +7,12 @@ import type {
   FederatedMonitoringSummaryData,
   FederatedPolicyData,
   FederatedProviderItem,
+  FederatedRoleSyncPolicy,
   InitiateOAuthAuthorizeData,
   OAuthCallbackResponseData,
+  OidcClaimMappingConfig,
+  OidcDiscoveryTestResult,
+  OidcProviderOptions,
   PublicFederatedProvider,
   TestFederatedProviderResult,
   UnlinkFederatedIdentityData,
@@ -124,10 +128,18 @@ export const federatedIdentityApi = {
       clientId?: string | null;
       clientSecret?: string | null;
       tenantId?: string | null;
+      issuerUrl?: string | null;
+      authorizationEndpoint?: string | null;
+      tokenEndpoint?: string | null;
+      jwksUri?: string | null;
+      userinfoEndpoint?: string | null;
       scopes?: string[];
       allowedRedirectUris?: string[];
       allowAutoRegisterOverride?: boolean | null;
       autoLinkVerifiedEmailOverride?: boolean | null;
+      oidcOptions?: Partial<OidcProviderOptions>;
+      claimMapping?: Partial<OidcClaimMappingConfig>;
+      roleSyncPolicy?: Partial<FederatedRoleSyncPolicy>;
     },
   ) =>
     fetchApi<FederatedProviderItem>(API_ROUTES.FEDERATED_IDENTITY.PROVIDER_BY_CODE(providerCode), {
@@ -136,9 +148,28 @@ export const federatedIdentityApi = {
       body: JSON.stringify(payload),
     }),
 
+  deleteProvider: (accessToken: string, providerCode: string) =>
+    fetchApi<{ readonly deleted: true; readonly providerCode: string }>(
+      API_ROUTES.FEDERATED_IDENTITY.PROVIDER_BY_CODE(providerCode),
+      {
+        method: 'DELETE',
+        headers: authHeaders(accessToken),
+      },
+    ),
+
   testProvider: (accessToken: string, providerCode: string) =>
     fetchApi<TestFederatedProviderResult>(
       API_ROUTES.FEDERATED_IDENTITY.PROVIDER_TEST(providerCode),
+      {
+        method: 'POST',
+        headers: authHeaders(accessToken),
+        body: JSON.stringify({}),
+      },
+    ),
+
+  discoverProvider: (accessToken: string, providerCode: string) =>
+    fetchApi<OidcDiscoveryTestResult>(
+      API_ROUTES.FEDERATED_IDENTITY.PROVIDER_DISCOVER(providerCode),
       {
         method: 'POST',
         headers: authHeaders(accessToken),
@@ -157,13 +188,22 @@ export const federatedIdentityApi = {
 
   listMonitoringEvents: (
     accessToken: string,
-    query?: { page?: number; limit?: number; outcome?: string; providerCode?: string },
+    query?: {
+      page?: number;
+      limit?: number;
+      outcome?: string;
+      providerCode?: string;
+      flowType?: string;
+      userId?: number;
+    },
   ) => {
     const qs = new URLSearchParams();
     if (query?.page) qs.set('page', String(query.page));
     if (query?.limit) qs.set('limit', String(query.limit));
     if (query?.outcome) qs.set('outcome', query.outcome);
     if (query?.providerCode) qs.set('providerCode', query.providerCode);
+    if (query?.flowType) qs.set('flowType', query.flowType);
+    if (query?.userId) qs.set('userId', String(query.userId));
     return fetchApiWithMeta<FederatedAuthEventItem[]>(
       API_ROUTES.FEDERATED_IDENTITY.MONITORING_ERRORS(qs.toString()),
       { headers: authHeaders(accessToken) },

@@ -21,5 +21,12 @@
   "linkUserMismatch": "Phiên người dùng hiện tại không khớp với giao dịch liên kết tài khoản đã khởi tạo",
   "identityNotFound": "Không tìm thấy liên kết tài khoản ngoài yêu cầu",
   "cannotUnlinkLastLoginMethod": "Không thể gỡ liên kết tài khoản ngoài cuối cùng khi tài khoản chưa thiết lập mật khẩu đăng nhập cục bộ",
-  "stepUpRequired": "Thao tác gỡ liên kết tài khoản ngoài yêu cầu xác thực tăng cường (Step-Up Authentication)"
+  "stepUpRequired": "Thao tác gỡ liên kết tài khoản ngoài yêu cầu xác thực tăng cường (Step-Up Authentication)",
+  "enterpriseOidcDisabled": "Tính năng đăng nhập SSO OIDC doanh nghiệp hiện đang tắt theo cấu hình Feature Flag",
+  "discoveryFailed": "Không thể tải tài liệu cấu hình OIDC Discovery (/.well-known/openid-configuration) từ nhà cung cấp danh tính",
+  "oidcEndpointsMissing": "Nhà cung cấp OIDC thiếu Issuer URL (để Discovery) hoặc thiếu bộ endpoint thủ công (Authorization, Token, JWKS)",
+  "userinfoFetchFailed": "Không thể lấy thông tin người dùng từ endpoint UserInfo của nhà cung cấp OIDC",
+  "userinfoSubjectMismatch": "Định danh người dùng (sub) tại UserInfo không khớp với ID Token",
+  "emailDomainNotAllowed": "Tên miền Email của bạn không thuộc danh sách được phép đăng nhập qua nhà cung cấp SSO này",
+  "ssoGroupNotAllowed": "Nhóm quyền SSO của bạn chưa khớp với bất kỳ ánh xạ vai trò hợp lệ nào của nhà cung cấp này"
 }

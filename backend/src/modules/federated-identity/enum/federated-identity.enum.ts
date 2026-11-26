@@ -15,10 +15,32 @@ export function getFederatedProviderStatusName(code: number): FederatedProviderS
 export const FEDERATED_DRIVER_CODE = {
   GOOGLE: 'google',
   MICROSOFT: 'microsoft',
+  OIDC: 'oidc',
 } as const;
 
 export type FederatedDriverCode =
   (typeof FEDERATED_DRIVER_CODE)[keyof typeof FEDERATED_DRIVER_CODE];
+
+export const FEDERATED_ROLE_SYNC_MODE = {
+  ASSIGN_ON_CREATE: 'ASSIGN_ON_CREATE',
+  ADDITIVE: 'ADDITIVE',
+  SYNC_MANAGED: 'SYNC_MANAGED',
+} as const;
+
+export type FederatedRoleSyncMode =
+  (typeof FEDERATED_ROLE_SYNC_MODE)[keyof typeof FEDERATED_ROLE_SYNC_MODE];
+
+export const FEDERATED_FEATURE_FLAGS = {
+  ENTERPRISE_OIDC_SSO: 'federated_identity.enterprise_oidc_sso',
+} as const;
+
+export const FEDERATED_PROTECTED_DENIED_ROLES = ['SUPER_ADMIN'] as const;
+
+export const GENERIC_OIDC_DEFAULTS = {
+  DISPLAY_NAME: 'Enterprise OIDC',
+  SCOPES: ['openid', 'profile', 'email'] as readonly string[],
+  DISCOVERY_CACHE_TTL_SECONDS: 3600,
+} as const;
 
 export const FEDERATED_FLOW_TYPE = {
   LOGIN: 'LOGIN',
@@ -29,6 +51,7 @@ export type FederatedFlowType = (typeof FEDERATED_FLOW_TYPE)[keyof typeof FEDERA
 
 export const FEDERATED_AUTH_STAGE = {
   AUTHORIZE: 'AUTHORIZE',
+  DISCOVERY: 'DISCOVERY',
   CALLBACK_VALIDATION: 'CALLBACK_VALIDATION',
   STATE_PKCE: 'STATE_PKCE',
   TOKEN_EXCHANGE: 'TOKEN_EXCHANGE',
@@ -36,6 +59,7 @@ export const FEDERATED_AUTH_STAGE = {
   ID_TOKEN_VERIFY: 'ID_TOKEN_VERIFY',
   USERINFO_FETCH: 'USERINFO_FETCH',
   ACCOUNT_RESOLUTION: 'ACCOUNT_RESOLUTION',
+  ROLE_SYNC: 'ROLE_SYNC',
   LOGIN_COMPLETION: 'LOGIN_COMPLETION',
   LINK: 'LINK',
   UNLINK: 'UNLINK',
@@ -81,6 +105,7 @@ export const FEDERATED_AUDIT_META = {
   MODULE: 'federated-identity',
   FEATURE_PROVIDER: 'oauth-provider',
   FEATURE_IDENTITY: 'external-identity',
+  FEATURE_ROLE_SYNC: 'sso-role-sync',
 } as const;
 
 export const GOOGLE_OIDC_DEFAULTS = {

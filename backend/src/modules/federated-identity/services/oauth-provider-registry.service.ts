@@ -1,7 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import { BadRequestAppException } from '@packages/kernel/index.js';
 import type { IOAuthProviderAdapter } from '../contracts/index.js';
 import type { FederatedDriverMetadata } from '../types/federated-identity.types.js';
+import { GenericOidcAdapter } from '../adapters/generic-oidc.adapter.js';
 import { GoogleOAuthAdapter } from '../adapters/google-oauth.adapter.js';
 import { MicrosoftOAuthAdapter } from '../adapters/microsoft-oauth.adapter.js';
 
@@ -9,9 +10,14 @@ import { MicrosoftOAuthAdapter } from '../adapters/microsoft-oauth.adapter.js';
 export class OAuthProviderRegistryService {
   private readonly adapters = new Map<string, IOAuthProviderAdapter>();
 
-  constructor(googleAdapter: GoogleOAuthAdapter, microsoftAdapter: MicrosoftOAuthAdapter) {
+  constructor(
+    googleAdapter: GoogleOAuthAdapter,
+    microsoftAdapter: MicrosoftOAuthAdapter,
+    @Optional() genericOidcAdapter?: GenericOidcAdapter,
+  ) {
     this.register(googleAdapter);
     this.register(microsoftAdapter);
+    this.register(genericOidcAdapter ?? new GenericOidcAdapter());
   }
 
   public register(adapter: IOAuthProviderAdapter): void {

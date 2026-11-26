@@ -13,6 +13,7 @@
     "security",
     "http-client",
     "users",
+    "roles",
     "credentials",
     "sessions",
     "auth",
@@ -199,6 +200,20 @@
       "allowUnitOverride": false,
       "isSystem": true,
       "sortOrder": 7
+    }
+  ],
+  "featureFlags": [
+    {
+      "key": "federated_identity.enterprise_oidc_sso",
+      "module": "federated-identity",
+      "name": "Đăng nhập SSO doanh nghiệp (Enterprise OIDC)",
+      "description": "Bật hoặc tắt khả năng đăng nhập qua các nhà cung cấp định danh OIDC chuẩn doanh nghiệp (Keycloak, Okta, Auth0...)",
+      "isEnabled": true,
+      "rolloutPercentage": 100,
+      "targetUserIds": [],
+      "targetRoles": [],
+      "targetOrganizationUnitIds": [],
+      "isSystem": true
     }
   ],
   "events": {

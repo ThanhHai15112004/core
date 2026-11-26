@@ -44,6 +44,54 @@ export interface FederatedPolicyData {
   };
 }
 
+export type FederatedRoleSyncMode = 'ASSIGN_ON_CREATE' | 'ADDITIVE' | 'SYNC_MANAGED';
+
+export interface OidcProviderOptions {
+  readonly discoveryEnabled: boolean;
+  readonly discoveryUrl: string | null;
+  readonly allowedIssuers: readonly string[];
+  readonly fetchUserInfo: boolean;
+  readonly allowedEmailDomains: readonly string[];
+  readonly extraAuthorizeParams: Readonly<Record<string, string>>;
+}
+
+export interface OidcClaimMappingConfig {
+  readonly emailClaim: string;
+  readonly emailVerifiedClaim: string;
+  readonly nameClaim: string;
+  readonly firstNameClaim: string;
+  readonly lastNameClaim: string;
+  readonly avatarClaim: string;
+  readonly groupsClaim: string;
+  readonly tenantIdClaim: string;
+  readonly extraAttributeClaims: Readonly<Record<string, string>>;
+}
+
+export interface FederatedRoleSyncPolicy {
+  readonly enabled: boolean;
+  readonly mode: FederatedRoleSyncMode;
+  readonly allowedRoleCodes: readonly string[];
+  readonly deniedRoleCodes: readonly string[];
+  readonly defaultRoleCodes: readonly string[];
+  readonly groupRoleMappings: Readonly<Record<string, readonly string[]>>;
+  readonly requireMatchedGroup: boolean;
+}
+
+export interface OidcDiscoveryTestResult {
+  readonly providerCode: string;
+  readonly issuerUrl: string;
+  readonly discoveryUrl: string;
+  readonly ok: boolean;
+  readonly discovered: boolean;
+  readonly authorizationEndpoint: string | null;
+  readonly tokenEndpoint: string | null;
+  readonly jwksUri: string | null;
+  readonly userinfoEndpoint: string | null;
+  readonly durationMs: number;
+  readonly errorCode: string | null;
+  readonly errorMessage: string | null;
+}
+
 export interface FederatedProviderItem {
   readonly id: number;
   readonly providerCode: string;
@@ -72,6 +120,9 @@ export interface FederatedProviderItem {
     readonly autoLinkVerifiedEmail: boolean;
     readonly requireVerifiedEmailForRegister: boolean;
   };
+  readonly oidcOptions: OidcProviderOptions;
+  readonly claimMapping: OidcClaimMappingConfig;
+  readonly roleSyncPolicy: FederatedRoleSyncPolicy;
   readonly lastSuccessAt: string | null;
   readonly lastErrorAt: string | null;
   readonly lastErrorCode: string | null;
@@ -136,6 +187,8 @@ export interface TestFederatedProviderResult {
   readonly driverCode: string;
   readonly ok: boolean;
   readonly configured: boolean;
+  readonly issuerUrl?: string | null;
+  readonly discovered?: boolean;
   readonly jwksUri: string;
   readonly keyCount: number;
   readonly durationMs: number;

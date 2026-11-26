@@ -9,6 +9,8 @@ import type {
   InitiateOAuthAuthorizeResult,
   OAuthAdapterResolvedConfig,
   OAuthCallbackResult,
+  OidcDiscoveryTestResult,
+  OidcResolvedEndpoints,
   PublicFederatedProviderView,
   TestProviderConnectionResult,
   UnlinkFederatedIdentityResult,
@@ -21,14 +23,14 @@ export * from '../types/federated-identity.types.js';
 export interface IOAuthProviderAdapter {
   readonly driverCode: string;
   getMetadata(): FederatedDriverMetadata;
-  resolveEndpoints(config: OAuthAdapterResolvedConfig): {
-    readonly issuerUrl: string;
-    readonly authorizationEndpoint: string;
-    readonly tokenEndpoint: string;
-    readonly jwksUri: string;
-    readonly userinfoEndpoint: string | null;
-    readonly scopes: readonly string[];
-  };
+  resolveEndpoints(config: OAuthAdapterResolvedConfig): OidcResolvedEndpoints;
+  resolveEndpointsAsync?(
+    config: OAuthAdapterResolvedConfig,
+    options?: {
+      readonly cacheTtlSeconds?: number | undefined;
+      readonly forceRefresh?: boolean | undefined;
+    },
+  ): Promise<OidcResolvedEndpoints>;
   buildAuthorizationUrl(params: {
     readonly config: OAuthAdapterResolvedConfig;
     readonly redirectUri: string;
@@ -37,6 +39,15 @@ export interface IOAuthProviderAdapter {
     readonly codeChallenge: string;
     readonly loginHint?: string | undefined;
   }): string;
+  buildAuthorizationUrlAsync?(params: {
+    readonly config: OAuthAdapterResolvedConfig;
+    readonly redirectUri: string;
+    readonly state: string;
+    readonly nonce: string;
+    readonly codeChallenge: string;
+    readonly loginHint?: string | undefined;
+    readonly cacheTtlSeconds?: number | undefined;
+  }): Promise<string>;
   exchangeCodeAndVerify(params: {
     readonly config: OAuthAdapterResolvedConfig;
     readonly code: string;
@@ -99,6 +110,7 @@ export interface IFederatedIdentityPublicService {
   ): Promise<UnlinkFederatedIdentityResult>;
   listProviders(): Promise<FederatedProviderView[]>;
   getPolicy(): Promise<FederatedPolicyView>;
+  discoverProviderConfiguration?(providerCode: string): Promise<OidcDiscoveryTestResult>;
   getMonitoringSummary(
     windowHours?: number,
     providerCode?: string,
@@ -107,6 +119,8 @@ export interface IFederatedIdentityPublicService {
     readonly page?: number | undefined;
     readonly limit?: number | undefined;
     readonly providerCode?: string | undefined;
+    readonly flowType?: string | undefined;
+    readonly userId?: number | undefined;
     readonly stage?: string | undefined;
     readonly outcome?: string | undefined;
     readonly errorCode?: string | undefined;

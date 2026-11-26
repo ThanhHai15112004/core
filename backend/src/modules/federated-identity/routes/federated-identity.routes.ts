@@ -12,6 +12,7 @@ export const FEDERATED_IDENTITY_ROUTES = {
   PROVIDERS: 'providers',
   PROVIDER_BY_CODE: 'providers/:providerCode',
   PROVIDER_TEST: 'providers/:providerCode/test',
+  PROVIDER_DISCOVER: 'providers/:providerCode/discover',
   USER_ACCOUNTS: 'users/:userId/accounts',
   ADMIN_UNLINK_ACCOUNT: 'users/:userId/accounts/:id',
   MONITORING_SUMMARY: 'monitoring/summary',

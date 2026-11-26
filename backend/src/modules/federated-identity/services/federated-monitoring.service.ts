@@ -281,6 +281,8 @@ export class FederatedMonitoringService {
       limit: query.limit,
       countMode: query.countMode,
       providerCode: query.providerCode,
+      flowType: query.flowType,
+      userId: query.userId,
       stage: query.stage,
       outcome: query.outcome,
       errorCode: query.errorCode,
