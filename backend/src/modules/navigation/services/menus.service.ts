@@ -53,7 +53,6 @@ import type {
 export class MenusService implements INavigationPublicService, OnModuleInit {
   private readonly registry: MenuRegistryService;
   private readonly trackedL2CacheKeys = new Set<string>();
-  private menuSeq = 100;
   private dbHydrated = false;
 
   constructor(
@@ -192,7 +191,7 @@ export class MenusService implements INavigationPublicService, OnModuleInit {
     const level = resolvedParent ? resolvedParent.level + 1 : 1;
     const moduleName = (dto.module ?? 'navigation').trim().toLowerCase();
     const nowIso = new Date().toISOString();
-    let menuId = ++this.menuSeq;
+    let menuId = 0;
 
     if (this.menuRepository) {
       try {

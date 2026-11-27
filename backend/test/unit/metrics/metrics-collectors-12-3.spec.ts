@@ -44,8 +44,10 @@ describe('12.3 Metrics Collectors Unit Tests', () => {
     const adapterHost = {
       httpAdapter: {
         getInstance: () => ({
-          addHook: (_event: string, cb: typeof onResponseCb) => {
-            onResponseCb = cb;
+          addHook: (event: string, cb: typeof onResponseCb) => {
+            if (event === 'onResponse') {
+              onResponseCb = cb;
+            }
           },
         }),
       },
