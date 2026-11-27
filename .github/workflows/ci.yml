@@ -441,6 +441,137 @@ jobs:
           rm -f /tmp/ci-smoke-redis.yml .env.docker.prod
 
   # ============================================================================
+  # Stage 2d: Automated Security Scanning (15.2: Secrets, Deps/SLA, SAST, IaC, License, SBOM)
+  # ============================================================================
+  security-scan:
+    name: Security Scan (Secrets, Deps SLA, SAST, IaC, License & SBOM)
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository (full history for secret scan)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: 15.2.1 Secret Scanning (Gitleaks + Native Policy)
+        run: |
+          node scripts/security/scan-secrets.mjs --all --report reports/security-secrets-report.json --sarif reports/security-secrets.sarif
+
+      - name: 15.2.1b Official Gitleaks Scan
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_CONFIG: .gitleaks.toml
+
+      - name: 15.2.2 Dependency Vulnerability Audit (with SLA Policy)
+        run: node scripts/security/scan-dependencies.mjs --strict-network --report reports/security-deps-report.json --sarif reports/security-deps.sarif
+
+      - name: 15.2.3 SAST Source Code Scan (Native OWASP Rules)
+        run: node scripts/security/scan-sast.mjs --report reports/security-sast-report.json --sarif reports/security-sast.sarif
+
+      - name: 15.2.3b SAST Scan (Semgrep OWASP / TypeScript / Node / React)
+        uses: returntocorp/semgrep-action@v1
+        continue-on-error: true
+        with:
+          config: >-
+            p/owasp-top-ten
+            p/typescript
+            p/nodejs
+            p/react
+          generateSarif: "1"
+
+      - name: 15.2.5 IaC Security Scan (Docker, Compose, K8s & Terraform)
+        run: node scripts/security/scan-iac.mjs --report reports/security-iac-report.json --sarif reports/security-iac.sarif
+
+      - name: 15.2.5b Trivy Config Misconfiguration Scan
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: config
+          scan-ref: .
+          format: sarif
+          output: reports/trivy-iac.sarif
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "1"
+          trivyignores: .trivyignore
+
+      - name: 15.2.6 Dependency License Compliance Check
+        run: node scripts/security/check-licenses.mjs --report reports/security-license-report.json --sarif reports/security-license.sarif
+
+      - name: 15.2.7 Generate Release SBOM (CycloneDX 1.5)
+        run: node scripts/security/generate-sbom.mjs --out-dir reports/sbom --report reports/security-sbom-report.json
+
+      - name: Upload Security Scan Reports & SARIF
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-report-security
+          path: |
+            reports/security-secrets-report.json
+            reports/security-secrets.sarif
+            reports/security-deps-report.json
+            reports/security-deps.sarif
+            reports/security-sast-report.json
+            reports/security-sast.sarif
+            reports/security-iac-report.json
+            reports/security-iac.sarif
+            reports/trivy-iac.sarif
+            reports/security-license-report.json
+            reports/security-license.sarif
+            reports/security-sbom-report.json
+          if-no-files-found: ignore
+
+      - name: Upload CycloneDX SBOM Artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-cyclonedx
+          retention-days: 90
+          path: reports/sbom/
+          if-no-files-found: ignore
+
+  # ============================================================================
+  # Stage 3b: Docker Image Vulnerability Scan & Image SBOM (Nhánh tích hợp / Release)
+  # ============================================================================
+  docker-image-security-scan:
+    name: Docker Image Security Scan & Image SBOM (Trivy)
+    needs:
+      - validate
+      - security-scan
+    if: |
+      always() &&
+      needs.validate.outputs.is_integration_ref == 'true' &&
+      (needs.security-scan.result == 'success' || needs.security-scan.result == 'skipped')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Build & Scan Production Docker Images (Backend, Frontend, Nginx) + Image SBOM
+        run: bash scripts/security/scan-docker-images.sh
+
+      - name: Upload Docker Image Security & SBOM Reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-report-docker-security
+          path: |
+            reports/security-docker-report.json
+            reports/trivy-image-*.json
+            reports/sbom/*-image.cdx.json
+          if-no-files-found: ignore
+
+  # ============================================================================
   # Stage 4: Aggregated CI Quality Report (Step Summary + Downloadable Artifact)
   # ============================================================================
   ci-report:
@@ -450,7 +581,9 @@ jobs:
       - backend-test
       - frontend-test
       - backend-integration-api-test
+      - security-scan
       - docker-smoke-test
+      - docker-image-security-scan
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -477,7 +610,9 @@ jobs:
             --step "Backend Quality, Arch, API Diff & Unit/Feature Tests=${{ needs.backend-test.result }}" \
             --step "Backend Integration & API Tests (Postgres + Redis)=${{ needs.backend-integration-api-test.result }}" \
             --step "Frontend Quality, Typecheck & Build=${{ needs.frontend-test.result }}" \
+            --step "Security Scan (Secrets, Deps SLA, SAST, IaC, License & SBOM)=${{ needs.security-scan.result }}" \
             --step "Docker Multi-Runtime Smoke Test=${{ needs.docker-smoke-test.result }}" \
+            --step "Docker Image Security Scan & Image SBOM=${{ needs.docker-image-security-scan.result }}" \
             --search-dir downloaded-reports \
             --out-dir reports
 

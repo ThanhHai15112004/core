@@ -189,6 +189,7 @@ export const vi = {
       modulesValue: '{{enabled}} / {{total}} đang bật',
       commit: 'Git Commit',
       image: 'Container Image',
+      rollout: 'Chiến lược Rollout',
       buildTime: 'Thời gian build',
       nodeVersion: 'Node.js',
       migration: 'Migration',

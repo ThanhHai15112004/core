@@ -112,7 +112,10 @@ export interface DeploymentInfo {
   commit: string | null;
   shortCommit: string | null;
   image: string | null;
+  imageDigest?: string | null;
   buildTime: string | null;
+  strategy?: string | null;
+  slot?: string | null;
   nodeVersion: string;
 }
 

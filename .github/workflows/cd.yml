@@ -1,0 +1,426 @@
+name: Core CD Build-Once & Staged Deployment (15.3)
+
+on:
+  push:
+    branches:
+      - develop
+      - main
+      - master
+      - 'release/v*'
+      - 'hotfix/v*'
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      target_env:
+        description: "Môi trường triển khai (development | staging | production)"
+        required: false
+        default: "staging"
+        type: choice
+        options:
+          - development
+          - staging
+          - production
+      deploy_strategy:
+        description: "Chiến lược triển khai (rolling | blue-green | canary)"
+        required: false
+        default: "rolling"
+        type: choice
+        options:
+          - rolling
+          - blue-green
+          - canary
+      run_retention:
+        description: "Chạy kiểm tra/dọn dẹp Container Registry Retention"
+        required: false
+        default: false
+        type: boolean
+  schedule:
+    # 03:00 UTC Chủ Nhật hằng tuần: kiểm tra/dọn retention image cũ trên Registry
+    - cron: "0 3 * * 0"
+
+concurrency:
+  group: cd-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  IMAGE_REGISTRY: ${{ vars.IMAGE_REGISTRY || 'ghcr.io' }}
+
+jobs:
+  # ============================================================================
+  # Stage 1: Build ONCE, gắn Version + Commit SHA + OCI Labels & Push Registry
+  # Toàn bộ các môi trường (Dev -> Staging -> Production) tái sử dụng đúng
+  # `release-manifest.json` kèm `@sha256:...` digest từ job này (không build lại).
+  # ============================================================================
+  build-and-push:
+    name: Build Once & Push Immutable Images to Registry
+    if: github.event_name != 'schedule' && !(github.event_name == 'workflow_dispatch' && inputs.run_retention == true)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      short_sha: ${{ steps.meta.outputs.short_sha }}
+      backend_digest: ${{ steps.build-backend.outputs.digest }}
+      frontend_digest: ${{ steps.build-frontend.outputs.digest }}
+      nginx_digest: ${{ steps.build-nginx.outputs.digest }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Compute Version, Commit SHA, Build Timestamp & Tags
+        id: meta
+        run: |
+          SHORT_SHA="${GITHUB_SHA:0:7}"
+          BUILD_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          PKG_VERSION="$(node -e "console.log(JSON.parse(require('fs').readFileSync('backend/package.json','utf8')).version || '1.0.0')")"
+          VERSION="$(node -e "import('./scripts/deploy/release-manifest.mjs').then(m => console.log(m.deriveReleaseVersion({ gitRef: process.env.GITHUB_REF, packageVersion: '${PKG_VERSION}', commitSha: '${GITHUB_SHA}' })))")"
+          NAMESPACE="$(printf '%s' "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')"
+          BRANCH_SLUG="$(printf '%s' "${GITHUB_REF_NAME}" | tr '/_' '-' | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9.-]/-/g')"
+          SOURCE_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}"
+
+          echo "short_sha=${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+          echo "build_time=${BUILD_TIME}" >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "namespace=${NAMESPACE}" >> "$GITHUB_OUTPUT"
+          echo "branch_slug=${BRANCH_SLUG}" >> "$GITHUB_OUTPUT"
+          echo "source_url=${SOURCE_URL}" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Container Registry (Least Privilege)
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.IMAGE_REGISTRY }}
+          username: ${{ secrets.REGISTRY_USERNAME || github.actor }}
+          password: ${{ secrets.REGISTRY_PASSWORD || secrets.GITHUB_TOKEN }}
+
+      - name: Build & Push Backend Image (API + Worker + Scheduler + CLI)
+        id: build-backend
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/backend/Dockerfile.prod
+          push: true
+          cache-from: type=gha,scope=core-backend
+          cache-to: type=gha,mode=max,scope=core-backend
+          tags: |
+            ${{ env.IMAGE_REGISTRY }}/${{ steps.meta.outputs.namespace }}/core-backend:sha-${{ steps.meta.outputs.short_sha }}
+            ${{ env.IMAGE_REGISTRY }}/${{ steps.meta.outputs.namespace }}/core-backend:${{ steps.meta.outputs.version }}
+            ${{ env.IMAGE_REGISTRY }}/${{ steps.meta.outputs.namespace }}/core-backend:${{ steps.meta.outputs.branch_slug }}
+          build-args: |
+            APP_VERSION=${{ steps.meta.outputs.version }}
+            APP_GIT_COMMIT=${{ github.sha }}
+            APP_BUILD_TIME=${{ steps.meta.outputs.build_time }}
+            APP_IMAGE=${{ env.IMAGE_REGISTRY }}/${{ steps.meta.outputs.namespace }}/core-backend:${{ steps.meta.outputs.version }}
+            APP_SOURCE_URL=${{ steps.meta.outputs.source_url }}
+
+      - name: Build & Push Frontend Image (Build-Once Runtime Configurable)
+        id: build-frontend
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/frontend/Dockerfile.prod
+          push: true
+          cache-from: type=gha,scope=core-frontend
+          cache-to: type=gha,mode=max,scope=core-frontend
+          tags: |
+            ${{ env.IMAGE_REGISTRY }}/${{ steps.meta.outputs.namespace }}/core-frontend:sha-${{ steps.meta.outputs.short_sha }}
+            ${{ env.IMAGE_REGISTRY }}/${{ steps.meta.outputs.namespace }}/core-frontend:${{ steps.meta.outputs.version }}
+            ${{ env.IMAGE_REGISTRY }}/${{ steps.meta.outputs.namespace }}/core-frontend:${{ steps.meta.outputs.branch_slug }}
+          build-args: |
+            VITE_API_BASE_URL=/api/v1
+            APP_VERSION=${{ steps.meta.outputs.version }}
+            APP_GIT_COMMIT=${{ github.sha }}
+            APP_BUILD_TIME=${{ steps.meta.outputs.build_time }}
+            APP_SOURCE_URL=${{ steps.meta.outputs.source_url }}
+
+      - name: Build & Push Nginx Edge Proxy Image
+        id: build-nginx
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/nginx/Dockerfile
+          push: true
+          cache-from: type=gha,scope=core-nginx
+          cache-to: type=gha,mode=max,scope=core-nginx
+          tags: |
+            ${{ env.IMAGE_REGISTRY }}/${{ steps.meta.outputs.namespace }}/core-nginx:sha-${{ steps.meta.outputs.short_sha }}
+            ${{ env.IMAGE_REGISTRY }}/${{ steps.meta.outputs.namespace }}/core-nginx:${{ steps.meta.outputs.version }}
+            ${{ env.IMAGE_REGISTRY }}/${{ steps.meta.outputs.namespace }}/core-nginx:${{ steps.meta.outputs.branch_slug }}
+          build-args: |
+            APP_VERSION=${{ steps.meta.outputs.version }}
+            APP_GIT_COMMIT=${{ github.sha }}
+            APP_BUILD_TIME=${{ steps.meta.outputs.build_time }}
+            APP_SOURCE_URL=${{ steps.meta.outputs.source_url }}
+
+      - name: Generate & Validate Immutable Release Manifest
+        run: |
+          node scripts/deploy/release-manifest.mjs --create \
+            --version "${{ steps.meta.outputs.version }}" \
+            --commit "${{ github.sha }}" \
+            --git-ref "${{ github.ref_name }}" \
+            --built-at "${{ steps.meta.outputs.build_time }}" \
+            --registry "${{ env.IMAGE_REGISTRY }}" \
+            --namespace "${{ steps.meta.outputs.namespace }}" \
+            --tag "sha-${{ steps.meta.outputs.short_sha }}" \
+            --source-url "${{ steps.meta.outputs.source_url }}" \
+            --backend-digest "${{ steps.build-backend.outputs.digest }}" \
+            --frontend-digest "${{ steps.build-frontend.outputs.digest }}" \
+            --nginx-digest "${{ steps.build-nginx.outputs.digest }}" \
+            --out reports/release-manifest.json
+          node scripts/deploy/release-manifest.mjs --validate reports/release-manifest.json --require-digest
+
+      - name: Upload Immutable Release Manifest Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-manifest-${{ steps.meta.outputs.short_sha }}
+          retention-days: 90
+          path: reports/release-manifest.json
+
+  # ============================================================================
+  # Stage 2: Tự động triển khai Development sau khi merge vào nhánh `develop`
+  # ============================================================================
+  deploy-development:
+    name: Auto Deploy Development
+    needs: build-and-push
+    if: |
+      (github.event_name == 'push' && github.ref == 'refs/heads/develop') ||
+      (github.event_name == 'workflow_dispatch' && inputs.target_env == 'development' && inputs.run_retention != true)
+    runs-on: ubuntu-latest
+    environment:
+      name: development
+      url: ${{ vars.DEV_BASE_URL }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Download Release Manifest (Build-Once Artifact)
+        uses: actions/download-artifact@v4
+        with:
+          name: release-manifest-${{ needs.build-and-push.outputs.short_sha }}
+          path: reports
+
+      - name: Deploy to Development + Smoke Test + Auto-Rollback
+        env:
+          DEPLOY_ENV: development
+          DEPLOY_TARGET: ${{ vars.DEV_DEPLOY_TARGET || 'compose' }}
+          DEPLOY_STRATEGY: ${{ inputs.deploy_strategy || vars.DEV_DEPLOY_STRATEGY || 'rolling' }}
+          DEPLOY_BASE_URL: ${{ vars.DEV_BASE_URL }}
+          DEPLOY_HOST: ${{ vars.DEV_DEPLOY_HOST }}
+          SMOKE_AUTH_IDENTIFIER: ${{ secrets.DEV_SMOKE_AUTH_IDENTIFIER }}
+          SMOKE_AUTH_PASSWORD: ${{ secrets.DEV_SMOKE_AUTH_PASSWORD }}
+          MAX_ROLLBACK_ATTEMPTS: ${{ vars.MAX_ROLLBACK_ATTEMPTS || '2' }}
+        run: |
+          if [ -z "${DEPLOY_BASE_URL:-}" ]; then
+            echo "ℹ️  DEV_BASE_URL chưa được cấu hình — chạy dry-run kiểm tra manifest & kế hoạch deploy."
+            bash scripts/deploy/deploy.sh \
+              --env development \
+              --manifest reports/release-manifest.json \
+              --strategy "${DEPLOY_STRATEGY}" \
+              --target "${DEPLOY_TARGET}" \
+              --dry-run
+            exit 0
+          fi
+          bash scripts/deploy/deploy.sh \
+            --env development \
+            --manifest reports/release-manifest.json \
+            --strategy "${DEPLOY_STRATEGY}" \
+            --target "${DEPLOY_TARGET}" \
+            --base-url "${DEPLOY_BASE_URL}"
+
+      - name: Upload Development Smoke Test Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: deploy-smoke-development
+          path: reports/deploy-smoke-development.json
+          if-no-files-found: ignore
+
+  # ============================================================================
+  # Stage 3: Tự động triển khai Staging sau khi qua kiểm tra (main / release / tag)
+  # ============================================================================
+  deploy-staging:
+    name: Auto Deploy Staging (Build-Once Promotion)
+    needs: build-and-push
+    if: |
+      (github.event_name == 'push' && (
+        github.ref == 'refs/heads/main' ||
+        github.ref == 'refs/heads/master' ||
+        startsWith(github.ref, 'refs/heads/release/v') ||
+        startsWith(github.ref, 'refs/heads/hotfix/v') ||
+        startsWith(github.ref, 'refs/tags/v')
+      )) ||
+      (github.event_name == 'workflow_dispatch' && (inputs.target_env == 'staging' || inputs.target_env == 'production') && inputs.run_retention != true)
+    runs-on: ubuntu-latest
+    environment:
+      name: staging
+      url: ${{ vars.STAGING_BASE_URL }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Download Release Manifest (Build-Once Artifact)
+        uses: actions/download-artifact@v4
+        with:
+          name: release-manifest-${{ needs.build-and-push.outputs.short_sha }}
+          path: reports
+
+      - name: Deploy to Staging + Post-Deploy Smoke Test + Auto-Rollback
+        env:
+          DEPLOY_ENV: staging
+          DEPLOY_TARGET: ${{ vars.STAGING_DEPLOY_TARGET || 'compose' }}
+          DEPLOY_STRATEGY: ${{ inputs.deploy_strategy || vars.STAGING_DEPLOY_STRATEGY || 'rolling' }}
+          DEPLOY_BASE_URL: ${{ vars.STAGING_BASE_URL }}
+          SMOKE_AUTH_IDENTIFIER: ${{ secrets.STAGING_SMOKE_AUTH_IDENTIFIER }}
+          SMOKE_AUTH_PASSWORD: ${{ secrets.STAGING_SMOKE_AUTH_PASSWORD }}
+          MAX_ROLLBACK_ATTEMPTS: ${{ vars.MAX_ROLLBACK_ATTEMPTS || '2' }}
+        run: |
+          if [ -z "${DEPLOY_BASE_URL:-}" ]; then
+            echo "ℹ️  STAGING_BASE_URL chưa được cấu hình — chạy dry-run kiểm tra manifest & kế hoạch deploy."
+            bash scripts/deploy/deploy.sh \
+              --env staging \
+              --manifest reports/release-manifest.json \
+              --strategy "${DEPLOY_STRATEGY}" \
+              --target "${DEPLOY_TARGET}" \
+              --require-digest \
+              --dry-run
+            exit 0
+          fi
+          bash scripts/deploy/deploy.sh \
+            --env staging \
+            --manifest reports/release-manifest.json \
+            --strategy "${DEPLOY_STRATEGY}" \
+            --target "${DEPLOY_TARGET}" \
+            --base-url "${DEPLOY_BASE_URL}" \
+            --require-digest
+
+      - name: Upload Staging Smoke Test Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: deploy-smoke-staging
+          path: reports/deploy-smoke-staging.json
+          if-no-files-found: ignore
+
+  # ============================================================================
+  # Stage 4: Triển khai Production (Yêu cầu phê duyệt qua GitHub Environment `production`)
+  # Tái sử dụng NGUYÊN VẸN immutable digest đã qua Staging — KHÔNG build lại.
+  # ============================================================================
+  deploy-production:
+    name: Deploy Production (Approval Gate — No Rebuild)
+    needs:
+      - build-and-push
+      - deploy-staging
+    if: |
+      (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) ||
+      (github.event_name == 'workflow_dispatch' && inputs.target_env == 'production' && inputs.run_retention != true)
+    runs-on: ubuntu-latest
+    # Cấu hình Required Reviewers trong Settings -> Environments -> production
+    environment:
+      name: production
+      url: ${{ vars.PRODUCTION_BASE_URL }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Download Verified Release Manifest (Same Digest as Staging)
+        uses: actions/download-artifact@v4
+        with:
+          name: release-manifest-${{ needs.build-and-push.outputs.short_sha }}
+          path: reports
+
+      - name: Deploy to Production + Post-Deploy Smoke Test + Auto-Rollback
+        env:
+          DEPLOY_ENV: production
+          DEPLOY_TARGET: ${{ vars.PROD_DEPLOY_TARGET || 'compose' }}
+          DEPLOY_STRATEGY: ${{ inputs.deploy_strategy || vars.PROD_DEPLOY_STRATEGY || 'blue-green' }}
+          DEPLOY_BASE_URL: ${{ vars.PRODUCTION_BASE_URL }}
+          SMOKE_AUTH_IDENTIFIER: ${{ secrets.PROD_SMOKE_AUTH_IDENTIFIER }}
+          SMOKE_AUTH_PASSWORD: ${{ secrets.PROD_SMOKE_AUTH_PASSWORD }}
+          MAX_ROLLBACK_ATTEMPTS: ${{ vars.MAX_ROLLBACK_ATTEMPTS || '2' }}
+        run: |
+          if [ -z "${DEPLOY_BASE_URL:-}" ]; then
+            echo "ℹ️  PRODUCTION_BASE_URL chưa được cấu hình — chạy dry-run kiểm tra manifest & kế hoạch deploy."
+            bash scripts/deploy/deploy.sh \
+              --env production \
+              --manifest reports/release-manifest.json \
+              --strategy "${DEPLOY_STRATEGY}" \
+              --target "${DEPLOY_TARGET}" \
+              --require-digest \
+              --dry-run
+            exit 0
+          fi
+          bash scripts/deploy/deploy.sh \
+            --env production \
+            --manifest reports/release-manifest.json \
+            --strategy "${DEPLOY_STRATEGY}" \
+            --target "${DEPLOY_TARGET}" \
+            --base-url "${DEPLOY_BASE_URL}" \
+            --require-digest
+
+      - name: Upload Production Smoke Test Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: deploy-smoke-production
+          path: reports/deploy-smoke-production.json
+          if-no-files-found: ignore
+
+  # ============================================================================
+  # Stage 5: Registry Image Retention Policy (Scheduled / Manual)
+  # ============================================================================
+  registry-retention:
+    name: Prune Old Container Images (Retention Policy)
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.run_retention == true)
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Evaluate / Apply Container Registry Retention Policy
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REGISTRY_KEEP_LAST: ${{ vars.REGISTRY_KEEP_LAST || '10' }}
+          REGISTRY_MAX_AGE_DAYS: ${{ vars.REGISTRY_MAX_AGE_DAYS || '30' }}
+          REGISTRY_RETENTION_APPLY: ${{ vars.REGISTRY_RETENTION_APPLY || 'false' }}
+        run: |
+          APPLY_FLAG=""
+          if [ "${REGISTRY_RETENTION_APPLY}" = "true" ]; then
+            APPLY_FLAG="--apply"
+          fi
+          node scripts/deploy/prune-registry.mjs \
+            --provider ghcr \
+            --owner "${GITHUB_REPOSITORY_OWNER}" \
+            --keep-last "${REGISTRY_KEEP_LAST}" \
+            --max-age-days "${REGISTRY_MAX_AGE_DAYS}" \
+            ${APPLY_FLAG}

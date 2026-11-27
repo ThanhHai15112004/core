@@ -35,7 +35,10 @@ export const appConfig = () => ({
   deployment: {
     commit: env('APP_GIT_COMMIT', false) || env('GIT_COMMIT', false) || null,
     image: env('APP_IMAGE', false) || env('DOCKER_IMAGE', false) || null,
+    imageDigest: env('APP_IMAGE_DIGEST', false) || null,
     buildTime: env('APP_BUILD_TIME', false) || env('BUILD_TIME', false) || null,
+    strategy: env('APP_DEPLOY_STRATEGY', false) || null,
+    slot: env('APP_DEPLOY_SLOT', false) || null,
   },
 });
 

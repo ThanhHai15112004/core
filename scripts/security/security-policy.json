@@ -1,0 +1,246 @@
+{
+  "version": "1.0.0",
+  "description": "Chính sách quét bảo mật tự động (Mục 15.2) dùng chung cho Local, GitHub Actions và GitLab CI.",
+  "secrets": {
+    "failOnDetect": true,
+    "allowlistPaths": [
+      "(^|/)package-lock\\.json$",
+      "(^|/)pnpm-lock\\.yaml$",
+      "(^|/)node_modules/",
+      "(^|/)dist/",
+      "(^|/)coverage/",
+      "(^|/)reports/",
+      "(^|/)\\.git/",
+      "(^|/)\\.codegraph/",
+      "(^|/)\\.env(\\.[^/]+)?\\.example$",
+      "^backend/test/",
+      "^frontend/src/.*\\.(test|spec)\\.[jt]sx?$",
+      "^scripts/security/.*\\.test\\.mjs$",
+      "^scripts/security/security-policy\\.json$",
+      "^\\.gitleaks\\.toml$",
+      "^\\.github/workflows/ci\\.yml$",
+      "^\\.gitlab-ci\\.yml$"
+    ],
+    "allowlistValuePatterns": [
+      "(?i)ci_test_",
+      "(?i)example",
+      "(?i)placeholder",
+      "(?i)changeme",
+      "(?i)replace_me",
+      "(?i)your_",
+      "(?i)dummy",
+      "(?i)mock_",
+      "(?i)fake_",
+      "(?i)test_password",
+      "(?i)test_user",
+      "(?i)test_secret",
+      "(?i)secret_key_for_test",
+      "\\$\\{\\{",
+      "\\$\\{[A-Z0-9_]+\\}"
+    ]
+  },
+  "dependencyAudit": {
+    "workspaces": [
+      { "name": "root", "dir": "." },
+      { "name": "backend", "dir": "backend" },
+      { "name": "frontend", "dir": "frontend" }
+    ],
+    "slaDays": {
+      "critical": 1,
+      "high": 7,
+      "moderate": 30,
+      "low": 90
+    },
+    "failOn": ["critical", "high"],
+    "warnOn": ["moderate", "low"],
+    "waivers": []
+  },
+  "sast": {
+    "failOn": ["Critical", "High"],
+    "warnOn": ["Medium", "Low"],
+    "semgrepConfigs": [
+      "p/owasp-top-ten",
+      "p/typescript",
+      "p/nodejs",
+      "p/react"
+    ],
+    "scanDirs": [
+      "backend/src",
+      "frontend/src",
+      "scripts"
+    ],
+    "ignorePaths": [
+      "(^|/)node_modules/",
+      "(^|/)dist/",
+      "(^|/)coverage/",
+      "(^|/)reports/",
+      "\\.(spec|test|integration-spec|feature-spec)\\.[cm]?[jt]sx?$",
+      "^scripts/security/scan-sast\\.mjs$"
+    ]
+  },
+  "iac": {
+    "failOn": ["Critical", "High"],
+    "warnOn": ["Medium", "Low"],
+    "dockerfilePaths": [
+      "Dockerfile",
+      "docker/backend/Dockerfile.prod",
+      "docker/backend/Dockerfile.dev",
+      "docker/frontend/Dockerfile.prod",
+      "docker/frontend/Dockerfile.dev",
+      "docker/nginx/Dockerfile"
+    ],
+    "composePaths": [
+      "docker-compose.yml",
+      "docker-compose.dev.yml",
+      "docker-compose.prod.yml",
+      "docker/dr/docker-compose.dr.yml"
+    ],
+    "kubernetesDirs": [
+      "deploy/k8s",
+      "deploy/gateway"
+    ],
+    "terraformDirs": [
+      "deploy",
+      "infra",
+      "terraform"
+    ]
+  },
+  "dockerImages": {
+    "failOn": ["CRITICAL", "HIGH"],
+    "warnOn": ["MEDIUM", "LOW"],
+    "images": [
+      {
+        "name": "core-backend",
+        "dockerfile": "docker/backend/Dockerfile.prod",
+        "context": "."
+      },
+      {
+        "name": "core-frontend",
+        "dockerfile": "docker/frontend/Dockerfile.prod",
+        "context": "."
+      },
+      {
+        "name": "core-nginx",
+        "dockerfile": "docker/nginx/Dockerfile",
+        "context": "."
+      }
+    ]
+  },
+  "licenses": {
+    "workspaces": [
+      { "name": "root", "dir": "." },
+      { "name": "backend", "dir": "backend" },
+      { "name": "frontend", "dir": "frontend" }
+    ],
+    "allowed": [
+      "MIT",
+      "MIT-0",
+      "Apache-2.0",
+      "Apache-2.0 WITH LLVM-exception",
+      "BSD-2-Clause",
+      "BSD-3-Clause",
+      "BSD-3-Clause-Clear",
+      "ISC",
+      "0BSD",
+      "CC0-1.0",
+      "CC-BY-3.0",
+      "CC-BY-4.0",
+      "Unlicense",
+      "BlueOak-1.0.0",
+      "Python-2.0",
+      "PSF-2.0",
+      "MPL-2.0",
+      "Zlib",
+      "WTFPL",
+      "Artistic-2.0",
+      "AFL-2.1",
+      "OFL-1.1",
+      "Unicode-3.0",
+      "Unicode-DFS-2016",
+      "PostgreSQL"
+    ],
+    "denied": [
+      "GPL-1.0",
+      "GPL-1.0-only",
+      "GPL-1.0-or-later",
+      "GPL-2.0",
+      "GPL-2.0-only",
+      "GPL-2.0-or-later",
+      "GPL-3.0",
+      "GPL-3.0-only",
+      "GPL-3.0-or-later",
+      "AGPL-1.0",
+      "AGPL-3.0",
+      "AGPL-3.0-only",
+      "AGPL-3.0-or-later",
+      "SSPL-1.0",
+      "EUPL-1.2",
+      "CPAL-1.0",
+      "OSL-3.0"
+    ],
+    "warnOn": [
+      "LGPL-2.0",
+      "LGPL-2.1",
+      "LGPL-2.1-only",
+      "LGPL-2.1-or-later",
+      "LGPL-3.0",
+      "LGPL-3.0-only",
+      "LGPL-3.0-or-later",
+      "EPL-1.0",
+      "EPL-2.0",
+      "CDDL-1.0",
+      "CDDL-1.1",
+      "UNKNOWN"
+    ],
+    "allowlistPackages": []
+  },
+  "sbom": {
+    "format": "CycloneDX",
+    "specVersion": "1.5",
+    "outputDir": "reports/sbom",
+    "workspaces": [
+      { "name": "root", "dir": "." },
+      { "name": "backend", "dir": "backend" },
+      { "name": "frontend", "dir": "frontend" }
+    ]
+  },
+  "dast": {
+    "blockedHostPatterns": [
+      "(^|\\.)prod(\\.|$)",
+      "(^|\\.)production(\\.|$)",
+      "(^|\\.)live(\\.|$)",
+      "^api\\.example\\.com$"
+    ],
+    "allowedHostPatterns": [
+      "^localhost$",
+      "^127\\.0\\.0\\.1$",
+      "^::1$",
+      "staging",
+      "stage",
+      "stg",
+      "qa",
+      "uat",
+      "dev",
+      "test",
+      "preview",
+      "\\.local$"
+    ],
+    "requiredSecurityHeaders": [
+      "x-content-type-options",
+      "x-frame-options"
+    ],
+    "recommendedSecurityHeaders": [
+      "strict-transport-security",
+      "content-security-policy",
+      "referrer-policy"
+    ],
+    "protectedEndpoints": [
+      "/api/v1/users",
+      "/api/v1/roles",
+      "/api/v1/settings",
+      "/api/v1/ops/system/overview"
+    ],
+    "healthEndpoint": "/api/v1/health",
+    "timeoutMs": 10000
+  }
+}

@@ -1,0 +1,96 @@
+# ==============================================================================
+# Core Framework — Kubernetes API Deployment (RollingUpdate Zero-Downtime)
+# Sử dụng cùng immutable image `@sha256:...` từ `release-manifest.json`
+# ==============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: core-api
+  namespace: default
+  labels:
+    app.kubernetes.io/name: core-api
+    app.kubernetes.io/component: api
+    app.kubernetes.io/managed-by: core-framework
+spec:
+  replicas: 2
+  revisionHistoryLimit: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: core-api
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: core-api
+        app.kubernetes.io/component: api
+    spec:
+      terminationGracePeriodSeconds: 45
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+        - name: api
+          image: ghcr.io/core/core-backend:1.0.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 3005
+          envFrom:
+            - configMapRef:
+                name: core-app-config
+            - secretRef:
+                name: core-app-secrets
+          env:
+            - name: RUNTIME_SUPERVISOR
+              value: "kubernetes"
+            - name: APP_DEPLOY_STRATEGY
+              value: "rolling"
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+            limits:
+              cpu: "1000m"
+              memory: "512Mi"
+          livenessProbe:
+            httpGet:
+              path: /api/v1/health/live
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /api/v1/health/ready
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop: ["ALL"]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: core-api
+  namespace: default
+  labels:
+    app.kubernetes.io/name: core-api
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: core-api
+  ports:
+    - name: http
+      port: 3005
+      targetPort: http

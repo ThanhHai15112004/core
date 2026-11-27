@@ -314,7 +314,7 @@ Mỗi thư mục con trong `modules/` là một **Bounded Context** độc lập
 Hệ thống sử dụng cơ chế khai báo Manifest dạng JSON để quản lý danh tính, phân quyền, sự kiện và sự phụ thuộc giữa các module độc lập:
 
 1. **`module.manifest.json` (Manifest cấp Module)**:
-   - Bắt buộc phải có trong mỗi module tại `modules/<tên-module>/module.manifest.json` hoặc `project-modules/<tên-module>/module.manifest.json` (tham khảo mẫu chuẩn: [module.manifest.json](file:///home/thanhhai/myProjects/CoreProjects/core/backend/src/modules/health/module.manifest.json)).
+   - Bắt buộc phải có trong mỗi module tại `modules/<tên-module>/module.manifest.json` hoặc `project-modules/<tên-module>/module.manifest.json` (tham khảo mẫu chuẩn: [module.manifest.json](file:///home/thanhhai/Projects/myProjects/CoreProjects/core/backend/src/modules/health/module.manifest.json)).
    - Định nghĩa hợp đồng tự trị của module:
      - `name`: Tên định danh module (kebab-case, ví dụ `health`, `system-ops`, `order`).
      - `displayName` & `version`: Tên hiển thị thân thiện và phiên bản SemVer của module.
@@ -324,12 +324,12 @@ Hệ thống sử dụng cơ chế khai báo Manifest dạng JSON để quản l
      - `permissions`: Danh sách mã quyền do module định nghĩa/yêu cầu (ví dụ: `["health:read"]`).
      - `events`: Danh sách Domain Events mà module phát ra (`publishes`) hoặc lắng nghe (`subscribes`).
      - `database`: Khai báo thực thể TypeORM và migration nếu module sở hữu bảng riêng (`entities`, `migrations`, `seeders`).
-   - Xác thực: Xác thực chặt chẽ lúc runtime bằng Zod schema [manifest.schema.ts](file:///home/thanhhai/myProjects/CoreProjects/core/backend/src/packages/kernel/schemas/manifest.schema.ts) và có JSON Schema [module.manifest.schema.json](file:///home/thanhhai/myProjects/CoreProjects/core/backend/src/packages/kernel/schemas/module.manifest.schema.json) để IDE gợi ý tự động (Intellisense).
+   - Xác thực: Xác thực chặt chẽ lúc runtime bằng Zod schema [manifest.schema.ts](file:///home/thanhhai/Projects/myProjects/CoreProjects/core/backend/src/packages/kernel/schemas/manifest.schema.ts) và có JSON Schema [module.manifest.schema.json](file:///home/thanhhai/Projects/myProjects/CoreProjects/core/backend/src/packages/kernel/schemas/module.manifest.schema.json) để IDE gợi ý tự động (Intellisense).
    - Vai trò Microservices-Ready: Đảm bảo module là một Bounded Context tự chứa đầy đủ metadata, giúp việc trích xuất thành Microservice độc lập diễn ra tức thì trong 5 phút mà không thất thoát định nghĩa phân quyền, event hay dependency.
 
 2. **`project.manifest.json` (Manifest cấp Dự án)**:
-   - Đặt tại thư mục gốc backend: [backend/project.manifest.json](file:///home/thanhhai/myProjects/CoreProjects/core/backend/project.manifest.json).
-   - Xác thực bằng Zod schema và JSON Schema [project.manifest.schema.json](file:///home/thanhhai/myProjects/CoreProjects/core/backend/src/packages/kernel/schemas/project.manifest.schema.json).
+   - Đặt tại thư mục gốc backend: [backend/project.manifest.json](file:///home/thanhhai/Projects/myProjects/CoreProjects/core/backend/project.manifest.json).
+   - Xác thực bằng Zod schema và JSON Schema [project.manifest.schema.json](file:///home/thanhhai/Projects/myProjects/CoreProjects/core/backend/src/packages/kernel/schemas/project.manifest.schema.json).
    - Quản lý danh sách các module đang được kích hoạt nạp vào hệ thống (`enabledModules`), phiên bản dự án (`version`), phiên bản Core tương thích (`coreVersion`), và cài đặt toàn cục (`settings`).
    - Lệnh CLI `module:add <name>` sẽ tự động kiểm tra sự tồn tại và tính hợp lệ của module trước khi kích hoạt vào mảng `enabledModules`.
 

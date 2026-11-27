@@ -1,0 +1,128 @@
+# ==============================================================================
+# Core Framework — Kubernetes Worker & Scheduler Deployments
+# Tái sử dụng NGUYÊN VẸN immutable backend image (khác entrypoint `command`)
+# ==============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: core-worker
+  namespace: default
+  labels:
+    app.kubernetes.io/name: core-worker
+    app.kubernetes.io/component: worker
+spec:
+  replicas: 1
+  revisionHistoryLimit: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: core-worker
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: core-worker
+        app.kubernetes.io/component: worker
+    spec:
+      terminationGracePeriodSeconds: 45
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+      containers:
+        - name: worker
+          image: ghcr.io/core/core-backend:1.0.0
+          command: ["node", "dist/apps/worker/main.js"]
+          ports:
+            - name: metrics
+              containerPort: 9101
+          envFrom:
+            - configMapRef:
+                name: core-app-config
+            - secretRef:
+                name: core-app-secrets
+          env:
+            - name: RUNTIME_SUPERVISOR
+              value: "kubernetes"
+            - name: METRICS_PORT
+              value: "9101"
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+            limits:
+              cpu: "1000m"
+              memory: "512Mi"
+          livenessProbe:
+            httpGet:
+              path: /metrics
+              port: metrics
+            initialDelaySeconds: 20
+            periodSeconds: 20
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: core-scheduler
+  namespace: default
+  labels:
+    app.kubernetes.io/name: core-scheduler
+    app.kubernetes.io/component: scheduler
+spec:
+  replicas: 1
+  revisionHistoryLimit: 5
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: core-scheduler
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: core-scheduler
+        app.kubernetes.io/component: scheduler
+    spec:
+      terminationGracePeriodSeconds: 45
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+      containers:
+        - name: scheduler
+          image: ghcr.io/core/core-backend:1.0.0
+          command: ["node", "dist/apps/scheduler/main.js"]
+          ports:
+            - name: metrics
+              containerPort: 9102
+          envFrom:
+            - configMapRef:
+                name: core-app-config
+            - secretRef:
+                name: core-app-secrets
+          env:
+            - name: RUNTIME_SUPERVISOR
+              value: "kubernetes"
+            - name: METRICS_PORT
+              value: "9102"
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
+          livenessProbe:
+            httpGet:
+              path: /metrics
+              port: metrics
+            initialDelaySeconds: 20
+            periodSeconds: 20
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]

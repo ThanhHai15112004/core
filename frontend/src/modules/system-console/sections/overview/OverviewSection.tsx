@@ -197,7 +197,24 @@ export const OverviewSection: React.FC = () => {
               { label: t('ov.system.projectVersion'), value: `${sys.projectName} · v${sys.projectVersion}`, mono: true },
               { label: t('ov.system.modules'), value: t('ov.system.modulesValue', { enabled: sys.modules.enabled, total: sys.modules.total }), mono: true },
               { label: t('ov.system.commit'), value: sys.deployment.shortCommit ?? NO_VALUE, mono: true },
-              { label: t('ov.system.image'), value: sys.deployment.image ?? NO_VALUE, mono: true },
+              {
+                label: t('ov.system.image'),
+                value: sys.deployment.image
+                  ? sys.deployment.imageDigest
+                    ? `${sys.deployment.image} (${sys.deployment.imageDigest.slice(0, 19)})`
+                    : sys.deployment.image
+                  : NO_VALUE,
+                mono: true,
+              },
+              {
+                label: t('ov.system.rollout'),
+                value: sys.deployment.strategy
+                  ? sys.deployment.slot && sys.deployment.slot !== 'default'
+                    ? `${sys.deployment.strategy} · ${sys.deployment.slot}`
+                    : sys.deployment.strategy
+                  : NO_VALUE,
+                mono: true,
+              },
               { label: t('ov.system.buildTime'), value: sys.deployment.buildTime ? formatTime(sys.deployment.buildTime, true) : NO_VALUE, mono: true },
               {
                 label: t('ov.system.migration'),

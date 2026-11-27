@@ -1,0 +1,99 @@
+# ==============================================================================
+# Core Framework — Kubernetes Canary Rollout Profile (Phase 15.3)
+# Điều phối tỷ lệ traffic qua NGINX Ingress annotation `canary-weight: 10 -> 50 -> 100`.
+# ==============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: core-api-canary
+  namespace: default
+  labels:
+    app.kubernetes.io/name: core-api
+    track: canary
+spec:
+  replicas: 0
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: core-api
+      track: canary
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: core-api
+        track: canary
+    spec:
+      terminationGracePeriodSeconds: 45
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+      containers:
+        - name: api
+          image: ghcr.io/core/core-backend:1.0.0
+          ports:
+            - name: http
+              containerPort: 3005
+          env:
+            - name: APP_DEPLOY_STRATEGY
+              value: "canary"
+            - name: APP_DEPLOY_SLOT
+              value: "canary"
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+            limits:
+              cpu: "1000m"
+              memory: "512Mi"
+          readinessProbe:
+            httpGet:
+              path: /api/v1/health/ready
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api/v1/health/live
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 15
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: core-api-canary
+  namespace: default
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: core-api
+    track: canary
+  ports:
+    - name: http
+      port: 3005
+      targetPort: http
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: core-api-canary
+  namespace: default
+  annotations:
+    nginx.ingress.kubernetes.io/canary: "true"
+    nginx.ingress.kubernetes.io/canary-weight: "0"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: api.yourdomain.com
+      http:
+        paths:
+          - path: /api/v1
+            pathType: Prefix
+            backend:
+              service:
+                name: core-api-canary
+                port:
+                  number: 3005

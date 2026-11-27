@@ -158,7 +158,7 @@ export class SystemInfoService {
     return { summary, items };
   }
 
-  /** Thông tin deployment (commit, image, build time) ưu tiên env, fallback `.git/HEAD`. */
+  /** Thông tin deployment (commit, image, digest, build time, chiến lược rollout) ưu tiên env, fallback `.git/HEAD`. */
   private getDeploymentInfo(): DeploymentInfoDto {
     const deploy = this.configService.app.deployment;
     const commit = deploy?.commit ?? this.resolveGitCommit();
@@ -168,7 +168,10 @@ export class SystemInfoService {
       commit,
       shortCommit,
       image: deploy?.image ?? null,
+      imageDigest: deploy?.imageDigest ?? null,
       buildTime: deploy?.buildTime ?? null,
+      strategy: deploy?.strategy ?? null,
+      slot: deploy?.slot ?? null,
       nodeVersion: process.version,
     };
   }

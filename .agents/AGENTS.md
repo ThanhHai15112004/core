@@ -1,6 +1,6 @@
 # AGENTS.md — Quy Chuẩn & Bản Đồ Điều Hướng Kỹ Thuật (Core Chassis)
 
-Đặc tả đầy đủ (cây thư mục, 15 packages, 4 runtimes, CLI, System Console) lưu tại [architecture-spec.md](file:///home/thanhhai/myProjects/CoreProjects/core/.agents/references/architecture-spec.md) (chỉ đọc On-Demand).
+Đặc tả đầy đủ (cây thư mục, 15 packages, 4 runtimes, CLI, System Console) lưu tại [architecture-spec.md](file:///home/thanhhai/Projects/myProjects/CoreProjects/core/.agents/references/architecture-spec.md) (chỉ đọc On-Demand).
 
 ## 1. HÀM DÙNG CHUNG & MODULE NỀN TẢNG (BẮT BUỘC TÁI SỬ DỤNG)
 
@@ -58,7 +58,7 @@
 6. **Multi-Runtime**: 4 entrypoint độc lập: `apps/api`, `apps/worker`, `apps/scheduler`, `apps/cli`.
 
 ## 3. BẢN ĐỒ TRA CỨU TÀI LIỆU (ON-DEMAND — KHÔNG TỰ Ý NẠP TRƯỚC)
-- Đặc tả 15 Packages / 4 Runtimes / Console Ops: [architecture-spec.md](file:///home/thanhhai/myProjects/CoreProjects/core/.agents/references/architecture-spec.md) (skill `system-architecture-overview`).
-- Quy chuẩn Manifest, CLI & Ranh giới Module: [core-architecture-standards.md](file:///home/thanhhai/myProjects/CoreProjects/core/.agents/rules/core-architecture-standards.md) (skill `architecture-codebase`).
-- Bẫy lỗi cấm kỵ (Pitfalls): [lessons-learned-and-pitfalls.md](file:///home/thanhhai/myProjects/CoreProjects/core/.agents/rules/lessons-learned-and-pitfalls.md).
-- Các câu lệnh thường dùng (Dev, Test, CLI, Docker, CodeGraph): [common-commands.md](file:///home/thanhhai/myProjects/CoreProjects/core/.agents/common-commands.md).
+- Đặc tả 15 Packages / 4 Runtimes / Console Ops: [architecture-spec.md](file:///home/thanhhai/Projects/myProjects/CoreProjects/core/.agents/references/architecture-spec.md) (skill `system-architecture-overview`).
+- Quy chuẩn Manifest, CLI & Ranh giới Module: [core-architecture-standards.md](file:///home/thanhhai/Projects/myProjects/CoreProjects/core/.agents/rules/core-architecture-standards.md) (skill `architecture-codebase`).
+- Bẫy lỗi cấm kỵ (Pitfalls): [lessons-learned-and-pitfalls.md](file:///home/thanhhai/Projects/myProjects/CoreProjects/core/.agents/rules/lessons-learned-and-pitfalls.md).
+- Các câu lệnh thường dùng (Dev, Test, CLI, Docker, CodeGraph): [common-commands.md](file:///home/thanhhai/Projects/myProjects/CoreProjects/core/.agents/common-commands.md).

@@ -14,7 +14,12 @@ SHELL_SCRIPTS=(
   "docker/entrypoint.prod.sh"
   "docker/backend/entrypoint.dev.sh"
   "docker/frontend/entrypoint.dev.sh"
+  "docker/frontend/entrypoint.prod.sh"
   "scripts/ci/validate-configs.sh"
+  "scripts/security/scan-docker-images.sh"
+  "scripts/deploy/build-release.sh"
+  "scripts/deploy/deploy.sh"
+  "scripts/deploy/rollback.sh"
 )
 
 for script in "${SHELL_SCRIPTS[@]}"; do
@@ -25,7 +30,7 @@ for script in "${SHELL_SCRIPTS[@]}"; do
 done
 
 if command -v node >/dev/null 2>&1; then
-  echo "🔍 [validate-configs] 1b. Kiểm tra cú pháp các tệp CI Node scripts (node --check)..."
+  echo "🔍 [validate-configs] 1b. Kiểm tra cú pháp các tệp CI & Security Node scripts (node --check)..."
   CI_NODE_SCRIPTS=(
     "scripts/ci/guard-diff.mjs"
     "scripts/ci/check-lockfiles.mjs"
@@ -33,6 +38,19 @@ if command -v node >/dev/null 2>&1; then
     "scripts/ci/ci-report.mjs"
     "scripts/ci/collect-ci-findings.mjs"
     "scripts/ci/xlsx-writer.mjs"
+    "scripts/security/common.mjs"
+    "scripts/security/scan-secrets.mjs"
+    "scripts/security/scan-dependencies.mjs"
+    "scripts/security/scan-sast.mjs"
+    "scripts/security/scan-iac.mjs"
+    "scripts/security/check-licenses.mjs"
+    "scripts/security/generate-sbom.mjs"
+    "scripts/security/run-dast.mjs"
+    "scripts/security/run-all.mjs"
+    "scripts/deploy/release-manifest.mjs"
+    "scripts/deploy/state-manager.mjs"
+    "scripts/deploy/smoke-test.mjs"
+    "scripts/deploy/prune-registry.mjs"
   )
   for node_script in "${CI_NODE_SCRIPTS[@]}"; do
     if [ -f "$node_script" ]; then
@@ -40,6 +58,10 @@ if command -v node >/dev/null 2>&1; then
       echo "  ✓ $node_script: OK"
     fi
   done
+  if [ -f "scripts/security/security-policy.json" ]; then
+    node -e "JSON.parse(require('node:fs').readFileSync('scripts/security/security-policy.json','utf8'))"
+    echo "  ✓ scripts/security/security-policy.json: OK"
+  fi
 fi
 
 if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
@@ -76,6 +98,18 @@ if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; 
 
   docker compose -f docker-compose.prod.yml config --quiet
   echo "  ✓ docker-compose.prod.yml: OK"
+
+  BACKEND_IMAGE=ghcr.io/core/core-backend:1.0.0 \
+  FRONTEND_IMAGE=ghcr.io/core/core-frontend:1.0.0 \
+  NGINX_IMAGE=ghcr.io/core/core-nginx:1.0.0 \
+  docker compose -f docker-compose.deploy.yml config --quiet
+  echo "  ✓ docker-compose.deploy.yml: OK"
+
+  BACKEND_IMAGE=ghcr.io/core/core-backend:1.0.0 \
+  FRONTEND_IMAGE=ghcr.io/core/core-frontend:1.0.0 \
+  NGINX_IMAGE=ghcr.io/core/core-nginx:1.0.0 \
+  docker compose -f docker-compose.deploy.yml -f docker-compose.bluegreen.yml --profile blue-green --profile canary config --quiet
+  echo "  ✓ docker-compose.bluegreen.yml: OK"
 else
   echo "ℹ️  [validate-configs] Bỏ qua bước kiểm tra Docker Compose (môi trường hiện tại không cài docker compose)."
 fi

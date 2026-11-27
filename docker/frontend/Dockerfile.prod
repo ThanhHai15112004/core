@@ -26,13 +26,31 @@ ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
 RUN npm run build
 
 # ==============================================================================
-# Stage 2: Đồng bộ file tĩnh ra Volume cho Nginx phục vụ
+# Stage 2: Đồng bộ file tĩnh + sinh runtime env-config.js (Build-once cho mọi môi trường)
 # ==============================================================================
 FROM alpine:3.21
+
+ARG APP_VERSION="1.0.0"
+ARG APP_GIT_COMMIT=""
+ARG APP_BUILD_TIME=""
+ARG APP_SOURCE_URL=""
+
+LABEL org.opencontainers.image.title="core-frontend" \
+      org.opencontainers.image.description="Core Framework Frontend Static Bundle (Build-Once Runtime Configurable)" \
+      org.opencontainers.image.version="${APP_VERSION}" \
+      org.opencontainers.image.revision="${APP_GIT_COMMIT}" \
+      org.opencontainers.image.created="${APP_BUILD_TIME}" \
+      org.opencontainers.image.source="${APP_SOURCE_URL}"
+
+ENV APP_VERSION=${APP_VERSION} \
+    APP_GIT_COMMIT=${APP_GIT_COMMIT} \
+    APP_BUILD_TIME=${APP_BUILD_TIME}
 
 WORKDIR /app
 
 COPY --from=builder /app/dist /app/dist
+COPY docker/frontend/entrypoint.prod.sh /app/entrypoint.prod.sh
+RUN chmod +x /app/entrypoint.prod.sh
 
-# Khi container khởi động, copy code build sang volume chia sẻ và duy trì trạng thái
-CMD ["sh", "-c", "echo '📦 Đang đồng bộ Frontend dist ra Nginx volume...' && cp -rf /app/dist/* /var/www/frontend/ && echo '✅ Đồng bộ hoàn tất.' && tail -f /dev/null"]
+# Khi container khởi động: sync dist, tạo env-config.js theo env môi trường hiện tại rồi giữ trạng thái
+ENTRYPOINT ["/app/entrypoint.prod.sh"]

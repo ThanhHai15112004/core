@@ -148,11 +148,18 @@ function suggestFix(gate, rule, message) {
       : 'Breaking change API — giữ trường/endpoint cũ với trạng thái deprecated hoặc nâng phiên bản API (v2).';
   }
   if (gate === 'Lockfile') return 'Chạy `npm install --package-lock-only` trong thư mục tương ứng và commit lại `package-lock.json`.';
+  if (gate === 'Security Secret Scan') return 'Xóa secret khỏi mã nguồn, xoay vòng (rotate) khóa bị lộ và chuyển sang biến môi trường / CI Secrets.';
+  if (gate === 'Security Dependency Audit') return 'Nâng cấp gói bị ảnh hưởng trước hạn SLA (`npm audit fix`) hoặc ghi nhận waiver có ngày hết hạn trong `scripts/security/security-policy.json`.';
+  if (gate === 'Security SAST') return 'Khắc phục lỗi bảo mật tĩnh theo chuẩn OWASP (parameterized query, tránh eval/exec shell, sanitize HTML, bật TLS verify).';
+  if (gate === 'Security IaC') return 'Chỉnh sửa cấu hình Dockerfile/Compose/K8s/Terraform theo nguyên tắc đặc quyền tối thiểu (non-root, không privileged, ghim version).';
+  if (gate === 'Security License') return 'Thay thế gói có license cấm bằng thư viện tương thích (MIT/Apache-2.0/BSD/ISC) hoặc rà soát pháp lý trong `security-policy.json`.';
+  if (gate === 'Security Docker Image') return 'Cập nhật base image hoặc nâng cấp gói OS/thư viện trong Dockerfile để vá lỗ hổng CRITICAL/HIGH.';
+  if (gate === 'Security DAST') return 'Khắc phục lỗ hổng runtime trên Staging (Auth Guard, Security Headers, CORS allowlist, ẩn stack trace).';
   if (gate.includes('Test')) return 'Xem stack trace lỗi, sửa logic hoặc cập nhật fixture/mock rồi chạy lại test suite tương ứng.';
   return message ? `Kiểm tra và xử lý theo thông báo: ${String(message).slice(0, 120)}` : 'Kiểm tra log CI chi tiết.';
 }
 
-function createFinding({ prefix, index, status, severity, gate, file, line, rule, message, extraDetail }) {
+function createFinding({ prefix, index, status, severity, gate, file, line, rule, message, extraDetail, suggestion }) {
   const relPath = file ? normalizeRepoPath(file) : '';
   const lineNum = Number(line) || null;
   const location = relPath ? (lineNum ? `${relPath}:L${lineNum}` : relPath) : '-';
@@ -176,7 +183,7 @@ function createFinding({ prefix, index, status, severity, gate, file, line, rule
     commit: blame.commit,
     commitDate: blame.commitDate,
     commitSummary: blame.commitSummary,
-    suggestion: suggestFix(gate, rule, message),
+    suggestion: suggestion || suggestFix(gate, rule, message),
   };
 }
 
@@ -439,6 +446,41 @@ export function collectNormalizedArtifacts(artifacts) {
   parseTestRunnerJson(artifacts.jestMain, 'Backend Unit/Feature', 'backend');
   parseTestRunnerJson(artifacts.jestLive, 'Backend Live DB+Redis', 'backend');
   parseTestRunnerJson(artifacts.vitest, 'Frontend Vitest', 'frontend');
+
+  // 10. Automated Security Scanning (Mục 15.2: Secrets, Dependencies/SLA, SAST, IaC, Licenses, Docker Images, DAST)
+  const securitySources = [
+    ['securitySecrets', 'SEC', 'Security Secret Scan'],
+    ['securityDeps', 'CVE', 'Security Dependency Audit'],
+    ['securitySast', 'SAST', 'Security SAST'],
+    ['securityIac', 'IAC', 'Security IaC'],
+    ['securityLicenses', 'LIC', 'Security License'],
+    ['securityDocker', 'IMG', 'Security Docker Image'],
+    ['securityDast', 'DAST', 'Security DAST'],
+  ];
+
+  for (const [artifactKey, prefix, gateName] of securitySources) {
+    const rawReport = artifacts[artifactKey];
+    for (const item of rawReport?.findings ?? []) {
+      const extraParts = [];
+      if (item.slaDueDate) extraParts.push(`Hạn xử lý SLA: ${item.slaDueDate} (${item.slaDays ?? '?'} ngày)`);
+      if (item.advisoryUrl) extraParts.push(`Advisory: ${item.advisoryUrl}`);
+      findings.push(
+        createFinding({
+          prefix,
+          index: nextIdx(prefix),
+          status: item.status || 'FAIL',
+          severity: item.severity || 'High',
+          gate: gateName,
+          file: item.file || '',
+          line: item.line ?? 1,
+          rule: item.rule || prefix,
+          message: item.message || item.rule,
+          extraDetail: extraParts.join(' | '),
+          suggestion: item.remediation || undefined,
+        }),
+      );
+    }
+  }
 
   return { findings, testCases };
 }

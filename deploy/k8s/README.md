@@ -42,7 +42,13 @@ kubectl get --raw "/apis/external.metrics.k8s.io/v1beta1/namespaces/default/core
 > **Mẹo đồng bộ cấu hình động**: bạn có thể xuất trực tiếp YAML khớp với cấu hình `AUTOSCALING_*` / System Settings hiện hành qua API:
 > `GET /api/v1/ops/runtimes/autoscaling/hpa?target=api` và `?target=worker`.
 
-## 4. Lưu ý bắt buộc về Database Connection Pool
+## 4. Chiến lược triển khai Build-Once (Phase 15.3)
+- **RollingUpdate (mặc định):** `deployment-api.yaml` (`maxUnavailable: 0, maxSurge: 1`) + `deployment-worker-scheduler.yaml`.
+- **Blue-Green:** `rollout-blue-green.yaml` (`core-api-blue` / `core-api-green`, chuyển Service selector `slot: blue|green`).
+- **Canary:** `rollout-canary.yaml` (`core-api-canary` + NGINX Ingress `canary-weight: 10 -> 50 -> 100`).
+- Triển khai & auto-rollback tự động bằng `scripts/deploy/deploy.sh --target k8s --strategy <rolling|blue-green|canary> --manifest reports/release-manifest.json`.
+
+## 5. Lưu ý bắt buộc về Database Connection Pool
 Công thức kiểm tra trước khi nâng `maxReplicas`:
 ```text
 (api.maxReplicas + worker.maxReplicas) × DB_MAX_CONNECTIONS  <  DB max_connections × 0.8

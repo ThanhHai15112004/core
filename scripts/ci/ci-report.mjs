@@ -175,6 +175,23 @@ function buildMarkdownReport(summary) {
     lines.push('');
   }
 
+  if (summary.details.securitySbom) {
+    const sbom = summary.details.securitySbom;
+    lines.push('## Security & SBOM (15.2)');
+    lines.push(
+      `- **SBOM (${sbom.format} ${sbom.specVersion}):** Release \`v${sbom.releaseVersion}\` — **${sbom.totalUniqueComponents}** unique components (\`${sbom.artifacts?.[0]?.file ?? 'reports/sbom/core-sbom-latest.cdx.json'}\`)`,
+    );
+    if (summary.details.securityLicenses?.summary) {
+      const lic = summary.details.securityLicenses.summary;
+      lines.push(`- **Licenses:** ${lic.totalPackages} packages checked (**${lic.fail}** denied, **${lic.warn}** review)`);
+    }
+    if (summary.details.securityDeps?.summary) {
+      const dep = summary.details.securityDeps.summary;
+      lines.push(`- **Dependency Audit (SLA):** **${dep.fail}** blocking, **${dep.warn}** warnings`);
+    }
+    lines.push('');
+  }
+
   lines.push('> 📊 **Excel Audit Workbook (4 sheets, công thức động + AutoFilter + git blame):** `reports/ci-summary.xlsx`');
   lines.push('');
   return `${lines.join('\n')}\n`;
@@ -798,6 +815,14 @@ async function runMode(outDir) {
       typecheckFe: typecheckFeReport,
       vitest: vitestReport,
       coverage: path.join(backendDir, 'coverage', 'module-coverage-summary.json'),
+      securitySecrets: path.join(outDir, 'security-secrets-report.json'),
+      securityDeps: path.join(outDir, 'security-deps-report.json'),
+      securitySast: path.join(outDir, 'security-sast-report.json'),
+      securityIac: path.join(outDir, 'security-iac-report.json'),
+      securityLicenses: path.join(outDir, 'security-license-report.json'),
+      securityDocker: path.join(outDir, 'security-docker-report.json'),
+      securitySbom: path.join(outDir, 'security-sbom-report.json'),
+      securityDast: path.join(outDir, 'security-dast-report.json'),
     },
   };
 }
@@ -827,6 +852,14 @@ function summarizeMode() {
       typecheckFe: getFlagValue('--typecheck-fe-report') ?? 'reports/typecheck-fe-report.json',
       vitest: getFlagValue('--vitest-report') ?? 'reports/vitest-results.json',
       coverage: getFlagValue('--coverage-report') ?? 'backend/coverage/module-coverage-summary.json',
+      securitySecrets: getFlagValue('--security-secrets-report') ?? 'reports/security-secrets-report.json',
+      securityDeps: getFlagValue('--security-deps-report') ?? 'reports/security-deps-report.json',
+      securitySast: getFlagValue('--security-sast-report') ?? 'reports/security-sast-report.json',
+      securityIac: getFlagValue('--security-iac-report') ?? 'reports/security-iac-report.json',
+      securityLicenses: getFlagValue('--security-license-report') ?? 'reports/security-license-report.json',
+      securityDocker: getFlagValue('--security-docker-report') ?? 'reports/security-docker-report.json',
+      securitySbom: getFlagValue('--security-sbom-report') ?? 'reports/security-sbom-report.json',
+      securityDast: getFlagValue('--security-dast-report') ?? 'reports/security-dast-report.json',
     },
   };
 }
@@ -854,6 +887,14 @@ async function main() {
     typecheckFe: await readJsonSafe(result.detailPaths.typecheckFe, searchDir, 'typecheck-fe-report.json'),
     vitest: await readJsonSafe(result.detailPaths.vitest, searchDir, 'vitest-results.json'),
     coverage: await readJsonSafe(result.detailPaths.coverage, searchDir, 'module-coverage-summary.json'),
+    securitySecrets: await readJsonSafe(result.detailPaths.securitySecrets, searchDir, 'security-secrets-report.json'),
+    securityDeps: await readJsonSafe(result.detailPaths.securityDeps, searchDir, 'security-deps-report.json'),
+    securitySast: await readJsonSafe(result.detailPaths.securitySast, searchDir, 'security-sast-report.json'),
+    securityIac: await readJsonSafe(result.detailPaths.securityIac, searchDir, 'security-iac-report.json'),
+    securityLicenses: await readJsonSafe(result.detailPaths.securityLicenses, searchDir, 'security-license-report.json'),
+    securityDocker: await readJsonSafe(result.detailPaths.securityDocker, searchDir, 'security-docker-report.json'),
+    securitySbom: await readJsonSafe(result.detailPaths.securitySbom, searchDir, 'security-sbom-report.json'),
+    securityDast: await readJsonSafe(result.detailPaths.securityDast, searchDir, 'security-dast-report.json'),
   };
 
   if (args.includes('--infer-from-artifacts') && result.steps.length === 0) {
@@ -882,6 +923,55 @@ async function main() {
       status: details.coverage?.overall ? 'passed' : 'skipped',
       detail: details.coverage?.overall ? `Lines ${Number(details.coverage.overall.lines?.pct ?? 0).toFixed(2)}%` : 'No artifact',
     });
+    if (details.securitySecrets) {
+      result.steps.push({
+        name: 'Security Secret Scan',
+        status: details.securitySecrets.passed ? 'passed' : 'failed',
+        detail: `${details.securitySecrets.findingCount ?? 0} secret finding(s)`,
+      });
+    }
+    if (details.securityDeps) {
+      result.steps.push({
+        name: 'Security Dependency Audit (SLA)',
+        status: details.securityDeps.passed ? 'passed' : 'failed',
+        detail: `${details.securityDeps.summary?.fail ?? 0} blocking, ${details.securityDeps.summary?.warn ?? 0} warn`,
+      });
+    }
+    if (details.securitySast) {
+      result.steps.push({
+        name: 'Security SAST Scan',
+        status: details.securitySast.passed ? 'passed' : 'failed',
+        detail: `${details.securitySast.summary?.fail ?? 0} blocking, ${details.securitySast.summary?.warn ?? 0} warn`,
+      });
+    }
+    if (details.securityIac) {
+      result.steps.push({
+        name: 'Security IaC Config Scan',
+        status: details.securityIac.passed ? 'passed' : 'failed',
+        detail: `${details.securityIac.summary?.fail ?? 0} blocking, ${details.securityIac.summary?.warn ?? 0} warn`,
+      });
+    }
+    if (details.securityLicenses) {
+      result.steps.push({
+        name: 'Security License Compliance',
+        status: details.securityLicenses.passed ? 'passed' : 'failed',
+        detail: `${details.securityLicenses.summary?.totalPackages ?? 0} pkgs (${details.securityLicenses.summary?.fail ?? 0} denied)`,
+      });
+    }
+    if (details.securitySbom) {
+      result.steps.push({
+        name: 'Security SBOM Generation (CycloneDX)',
+        status: details.securitySbom.passed ? 'passed' : 'failed',
+        detail: `v${details.securitySbom.releaseVersion} (${details.securitySbom.totalUniqueComponents ?? 0} components)`,
+      });
+    }
+    if (details.securityDocker) {
+      result.steps.push({
+        name: 'Security Docker Image Scan',
+        status: details.securityDocker.passed ? 'passed' : 'failed',
+        detail: `${details.securityDocker.summary?.fail ?? 0} blocking CVE(s)`,
+      });
+    }
   }
 
   const { findings, testCases } = collectNormalizedArtifacts(details);
@@ -931,6 +1021,9 @@ async function main() {
       architecture: details.architecture,
       openapi: details.openapi,
       coverage: details.coverage,
+      securitySbom: details.securitySbom,
+      securityLicenses: details.securityLicenses,
+      securityDeps: details.securityDeps,
     },
   };
 

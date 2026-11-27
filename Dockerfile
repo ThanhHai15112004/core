@@ -23,12 +23,21 @@ RUN npm --prefix frontend run build
 # ==============================================================================
 FROM node:22-alpine AS runner
 
+ARG APP_VERSION="1.0.0"
 ARG APP_GIT_COMMIT=""
 ARG APP_IMAGE=""
 ARG APP_BUILD_TIME=""
+ARG APP_SOURCE_URL=""
+
+LABEL org.opencontainers.image.title="core-framework" \
+      org.opencontainers.image.version="${APP_VERSION}" \
+      org.opencontainers.image.revision="${APP_GIT_COMMIT}" \
+      org.opencontainers.image.created="${APP_BUILD_TIME}" \
+      org.opencontainers.image.source="${APP_SOURCE_URL}"
 
 WORKDIR /app
 ENV NODE_ENV=production \
+    APP_VERSION=${APP_VERSION} \
     APP_GIT_COMMIT=${APP_GIT_COMMIT} \
     APP_IMAGE=${APP_IMAGE} \
     APP_BUILD_TIME=${APP_BUILD_TIME}

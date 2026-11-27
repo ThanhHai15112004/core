@@ -1,0 +1,216 @@
+name: core-framework-deploy
+
+# ==============================================================================
+# Build-Once, Deploy-Anywhere Compose Stack (Phase 15.3)
+# Tuyệt đối KHÔNG chứa mục `build:` — chỉ kéo immutable pre-built image/digest
+# từ Container Registry để dùng chung giữa Development, Staging và Production.
+# ==============================================================================
+
+services:
+  nginx:
+    container_name: ${NGINX_CONTAINER_NAME:-core-nginx-prod}
+    image: ${NGINX_IMAGE:?NGINX_IMAGE must be set from release-manifest.json}
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+    volumes:
+      - frontend_dist:/var/www/frontend:ro
+      - certbot_www:/var/www/certbot:ro
+      - certbot_conf:/etc/letsencrypt:ro
+      - nginx_logs:/var/log/nginx
+      - ${NGINX_UPSTREAM_FILE:-./docker/nginx/upstreams/backend.conf}:/etc/nginx/upstreams/backend.conf:ro
+    mem_limit: 128m
+    restart: always
+    depends_on:
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_started
+    networks:
+      - core_prod_net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1/api/v1/health >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  backend:
+    container_name: ${BACKEND_CONTAINER_NAME:-core-backend-prod}
+    image: ${BACKEND_IMAGE:?BACKEND_IMAGE must be set from release-manifest.json}
+    environment:
+      - NODE_ENV=${NODE_ENV:-production}
+      - RUNTIME_SUPERVISOR=docker
+      - PROMETHEUS_URL=http://prometheus:9090
+      - APP_VERSION=${APP_VERSION:-1.0.0}
+      - APP_GIT_COMMIT=${APP_GIT_COMMIT:-}
+      - APP_BUILD_TIME=${APP_BUILD_TIME:-}
+      - APP_IMAGE=${BACKEND_IMAGE}
+      - APP_IMAGE_DIGEST=${APP_IMAGE_DIGEST:-}
+      - APP_DEPLOY_STRATEGY=${APP_DEPLOY_STRATEGY:-rolling}
+      - APP_DEPLOY_SLOT=${APP_DEPLOY_SLOT:-default}
+    env_file:
+      - ${DEPLOY_ENV_FILE:-.env.docker.prod}
+    mem_limit: 512m
+    mem_reservation: 256m
+    stop_grace_period: 40s
+    restart: always
+    networks:
+      - core_prod_net
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3005/api/v1/health/ready >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  worker:
+    container_name: ${WORKER_CONTAINER_NAME:-core-worker-prod}
+    image: ${BACKEND_IMAGE:?BACKEND_IMAGE must be set from release-manifest.json}
+    command: ["node", "dist/apps/worker/main.js"]
+    environment:
+      - NODE_ENV=${NODE_ENV:-production}
+      - RUNTIME_SUPERVISOR=docker
+      - METRICS_PORT=9101
+      - APP_VERSION=${APP_VERSION:-1.0.0}
+      - APP_GIT_COMMIT=${APP_GIT_COMMIT:-}
+      - APP_BUILD_TIME=${APP_BUILD_TIME:-}
+      - APP_IMAGE=${BACKEND_IMAGE}
+      - APP_IMAGE_DIGEST=${APP_IMAGE_DIGEST:-}
+      - APP_DEPLOY_STRATEGY=${APP_DEPLOY_STRATEGY:-rolling}
+      - APP_DEPLOY_SLOT=${APP_DEPLOY_SLOT:-default}
+    env_file:
+      - ${DEPLOY_ENV_FILE:-.env.docker.prod}
+    mem_limit: 512m
+    mem_reservation: 256m
+    stop_grace_period: 40s
+    restart: always
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - core_prod_net
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:9101/metrics >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  scheduler:
+    container_name: ${SCHEDULER_CONTAINER_NAME:-core-scheduler-prod}
+    image: ${BACKEND_IMAGE:?BACKEND_IMAGE must be set from release-manifest.json}
+    command: ["node", "dist/apps/scheduler/main.js"]
+    environment:
+      - NODE_ENV=${NODE_ENV:-production}
+      - RUNTIME_SUPERVISOR=docker
+      - METRICS_PORT=9102
+      - APP_VERSION=${APP_VERSION:-1.0.0}
+      - APP_GIT_COMMIT=${APP_GIT_COMMIT:-}
+      - APP_BUILD_TIME=${APP_BUILD_TIME:-}
+      - APP_IMAGE=${BACKEND_IMAGE}
+      - APP_IMAGE_DIGEST=${APP_IMAGE_DIGEST:-}
+      - APP_DEPLOY_STRATEGY=${APP_DEPLOY_STRATEGY:-rolling}
+      - APP_DEPLOY_SLOT=${APP_DEPLOY_SLOT:-default}
+    env_file:
+      - ${DEPLOY_ENV_FILE:-.env.docker.prod}
+    mem_limit: 256m
+    mem_reservation: 128m
+    stop_grace_period: 40s
+    restart: always
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - core_prod_net
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:9102/metrics >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  frontend:
+    container_name: ${FRONTEND_CONTAINER_NAME:-core-frontend-prod}
+    image: ${FRONTEND_IMAGE:?FRONTEND_IMAGE must be set from release-manifest.json}
+    environment:
+      - RUNTIME_APP_ENV=${NODE_ENV:-production}
+      - RUNTIME_API_BASE_URL=${RUNTIME_API_BASE_URL:-/api/v1}
+      - RUNTIME_APP_NAME=${APP_NAME:-Core Framework}
+      - APP_VERSION=${APP_VERSION:-1.0.0}
+      - APP_GIT_COMMIT=${APP_GIT_COMMIT:-}
+      - APP_BUILD_TIME=${APP_BUILD_TIME:-}
+    volumes:
+      - frontend_dist:/var/www/frontend
+    mem_limit: 128m
+    restart: always
+    networks:
+      - core_prod_net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
+
+  prometheus:
+    container_name: ${PROMETHEUS_CONTAINER_NAME:-core-prometheus-prod}
+    image: prom/prometheus:v3.5.0
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=7d
+    volumes:
+      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    mem_limit: 256m
+    restart: always
+    networks:
+      - core_prod_net
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:9090/-/healthy >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
+
+volumes:
+  prometheus_data:
+    name: ${COMPOSE_PROJECT_NAME:-core_prod}_prometheus_data
+  frontend_dist:
+    name: ${COMPOSE_PROJECT_NAME:-core_prod}_frontend_dist
+  certbot_www:
+    name: ${COMPOSE_PROJECT_NAME:-core_prod}_certbot_www
+  certbot_conf:
+    name: ${COMPOSE_PROJECT_NAME:-core_prod}_certbot_conf
+  nginx_logs:
+    name: ${COMPOSE_PROJECT_NAME:-core_prod}_nginx_logs
+
+networks:
+  core_prod_net:
+    name: ${COMPOSE_PROJECT_NAME:-core_prod}_network
+    driver: bridge

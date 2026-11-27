@@ -1,7 +1,10 @@
 stages:
   - validate
   - test
+  - security
   - smoke
+  - build_release
+  - deploy
   - report
 
 workflow:
@@ -286,7 +289,220 @@ docker-smoke-test:
     - rm -f /tmp/ci-smoke-redis.yml .env.docker.prod
 
 # ==============================================================================
-# Stage 4: Aggregated CI Quality Report
+# Stage 2d: Automated Security Scanning (15.2: Secrets, Deps/SLA, SAST, IaC, License & SBOM)
+# ==============================================================================
+security-scan:
+  image: node:22-alpine
+  stage: security
+  variables:
+    GIT_DEPTH: "0"
+  before_script:
+    - apk add --no-cache bash git
+  script:
+    - node scripts/security/scan-secrets.mjs --all --report reports/security-secrets-report.json --sarif reports/security-secrets.sarif
+    - node scripts/security/scan-dependencies.mjs --strict-network --report reports/security-deps-report.json --sarif reports/security-deps.sarif
+    - node scripts/security/scan-sast.mjs --report reports/security-sast-report.json --sarif reports/security-sast.sarif
+    - node scripts/security/scan-iac.mjs --report reports/security-iac-report.json --sarif reports/security-iac.sarif
+    - node scripts/security/check-licenses.mjs --report reports/security-license-report.json --sarif reports/security-license.sarif
+    - node scripts/security/generate-sbom.mjs --out-dir reports/sbom --report reports/security-sbom-report.json
+  artifacts:
+    when: always
+    expire_in: 90 days
+    paths:
+      - reports/security-*.json
+      - reports/security-*.sarif
+      - reports/sbom/
+
+# ==============================================================================
+# Stage 3b: Docker Image Security Scan & Image SBOM (Nhánh tích hợp / Release)
+# ==============================================================================
+docker-image-security-scan:
+  image: docker:27-cli
+  stage: smoke
+  services:
+    - name: docker:27-dind
+  rules:
+    - !reference [.integration-refs, rules]
+  before_script:
+    - apk add --no-cache bash nodejs npm
+    - docker info
+  script:
+    - bash scripts/security/scan-docker-images.sh
+  artifacts:
+    when: always
+    expire_in: 90 days
+    paths:
+      - reports/security-docker-report.json
+      - reports/trivy-image-*.json
+      - reports/sbom/*-image.cdx.json
+
+# ==============================================================================
+# Stage 3c: Staging DAST API Security Scan (Manual / Scheduled)
+# ==============================================================================
+dast-staging:
+  image: node:22-alpine
+  stage: smoke
+  rules:
+    - if: '$STAGING_BASE_URL != null && $STAGING_BASE_URL != ""'
+      when: manual
+      allow_failure: true
+  script:
+    - node scripts/security/run-dast.mjs --target "$STAGING_BASE_URL" --report reports/security-dast-report.json --sarif reports/security-dast.sarif
+  artifacts:
+    when: always
+    expire_in: 30 days
+    paths:
+      - reports/security-dast-report.json
+      - reports/security-dast.sarif
+
+# ==============================================================================
+# Stage 4: Build ONCE & Push Immutable Images to Container Registry (15.3)
+# ==============================================================================
+build-and-push-release:
+  image: docker:27-cli
+  stage: build_release
+  services:
+    - name: docker:27-dind
+  rules:
+    - if: '$CI_REGISTRY_IMAGE != null && $CI_REGISTRY_IMAGE != "" && ($CI_COMMIT_BRANCH == "develop" || $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH || $CI_COMMIT_BRANCH =~ /^(release|hotfix)\/v[0-9]+\.[0-9]+\.[0-9]+$/ || $CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+$/)'
+  before_script:
+    - apk add --no-cache bash nodejs
+    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
+  script:
+    - SHORT_SHA="${CI_COMMIT_SHORT_SHA}"
+    - BUILD_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    - PKG_VERSION="$(node -e "console.log(JSON.parse(require('fs').readFileSync('backend/package.json','utf8')).version || '1.0.0')")"
+    - APP_VERSION="$(node -e "import('./scripts/deploy/release-manifest.mjs').then(m => console.log(m.deriveReleaseVersion({ gitRef: process.env.CI_COMMIT_TAG || process.env.CI_COMMIT_BRANCH, packageVersion: '${PKG_VERSION}', commitSha: '${CI_COMMIT_SHA}' })))")"
+    - TAG="sha-${SHORT_SHA}"
+    - |
+      build_push() {
+        local name="$1" dockerfile="$2"
+        local repo="${CI_REGISTRY_IMAGE}/${name}"
+        docker build -f "$dockerfile" \
+          --build-arg "APP_VERSION=${APP_VERSION}" \
+          --build-arg "APP_GIT_COMMIT=${CI_COMMIT_SHA}" \
+          --build-arg "APP_BUILD_TIME=${BUILD_TIME}" \
+          --build-arg "APP_IMAGE=${repo}:${APP_VERSION}" \
+          --build-arg "APP_SOURCE_URL=${CI_PROJECT_URL}" \
+          -t "${repo}:${TAG}" \
+          -t "${repo}:${APP_VERSION}" .
+        docker push "${repo}:${TAG}"
+        docker push "${repo}:${APP_VERSION}"
+        docker inspect --format='{{index .RepoDigests 0}}' "${repo}:${TAG}" | awk -F'@' '{print $2}'
+      }
+      BACKEND_DIGEST="$(build_push core-backend docker/backend/Dockerfile.prod)"
+      FRONTEND_DIGEST="$(build_push core-frontend docker/frontend/Dockerfile.prod)"
+      NGINX_DIGEST="$(build_push core-nginx docker/nginx/Dockerfile)"
+      node scripts/deploy/release-manifest.mjs --create \
+        --version "${APP_VERSION}" \
+        --commit "${CI_COMMIT_SHA}" \
+        --git-ref "${CI_COMMIT_REF_NAME}" \
+        --built-at "${BUILD_TIME}" \
+        --registry "${CI_REGISTRY}" \
+        --namespace "${CI_PROJECT_PATH}" \
+        --tag "${TAG}" \
+        --source-url "${CI_PROJECT_URL}" \
+        --backend-digest "${BACKEND_DIGEST}" \
+        --frontend-digest "${FRONTEND_DIGEST}" \
+        --nginx-digest "${NGINX_DIGEST}" \
+        --out reports/release-manifest.json
+      node scripts/deploy/release-manifest.mjs --validate reports/release-manifest.json --require-digest
+  artifacts:
+    expire_in: 90 days
+    paths:
+      - reports/release-manifest.json
+
+# ==============================================================================
+# Stage 5a: Tự động triển khai Development (sau khi merge develop)
+# ==============================================================================
+deploy-development:
+  image: node:22-alpine
+  stage: deploy
+  needs:
+    - job: build-and-push-release
+      artifacts: true
+  environment:
+    name: development
+    url: $DEV_BASE_URL
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "develop" && $CI_REGISTRY_IMAGE != null && $CI_REGISTRY_IMAGE != ""'
+  before_script:
+    - apk add --no-cache bash
+  script:
+    - |
+      if [ -z "${DEV_BASE_URL:-}" ]; then
+        bash scripts/deploy/deploy.sh --env development --manifest reports/release-manifest.json --strategy "${DEV_DEPLOY_STRATEGY:-rolling}" --dry-run
+      else
+        bash scripts/deploy/deploy.sh --env development --manifest reports/release-manifest.json --strategy "${DEV_DEPLOY_STRATEGY:-rolling}" --base-url "${DEV_BASE_URL}"
+      fi
+  artifacts:
+    when: always
+    expire_in: 14 days
+    paths:
+      - reports/deploy-smoke-development.json
+
+# ==============================================================================
+# Stage 5b: Tự động triển khai Staging (dùng nguyên artifact build-once)
+# ==============================================================================
+deploy-staging:
+  image: node:22-alpine
+  stage: deploy
+  needs:
+    - job: build-and-push-release
+      artifacts: true
+  environment:
+    name: staging
+    url: $STAGING_BASE_URL
+  rules:
+    - if: '$CI_REGISTRY_IMAGE != null && $CI_REGISTRY_IMAGE != "" && ($CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH || $CI_COMMIT_BRANCH =~ /^(release|hotfix)\/v[0-9]+\.[0-9]+\.[0-9]+$/ || $CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+$/)'
+  before_script:
+    - apk add --no-cache bash
+  script:
+    - |
+      if [ -z "${STAGING_BASE_URL:-}" ]; then
+        bash scripts/deploy/deploy.sh --env staging --manifest reports/release-manifest.json --strategy "${STAGING_DEPLOY_STRATEGY:-rolling}" --require-digest --dry-run
+      else
+        bash scripts/deploy/deploy.sh --env staging --manifest reports/release-manifest.json --strategy "${STAGING_DEPLOY_STRATEGY:-rolling}" --base-url "${STAGING_BASE_URL}" --require-digest
+      fi
+  artifacts:
+    when: always
+    expire_in: 30 days
+    paths:
+      - reports/deploy-smoke-staging.json
+
+# ==============================================================================
+# Stage 5c: Triển khai Production (Yêu cầu phê duyệt manual — KHÔNG build lại)
+# ==============================================================================
+deploy-production:
+  image: node:22-alpine
+  stage: deploy
+  needs:
+    - job: build-and-push-release
+      artifacts: true
+    - job: deploy-staging
+  environment:
+    name: production
+    url: $PRODUCTION_BASE_URL
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+$/ && $CI_REGISTRY_IMAGE != null && $CI_REGISTRY_IMAGE != ""'
+      when: manual
+  before_script:
+    - apk add --no-cache bash
+  script:
+    - |
+      if [ -z "${PRODUCTION_BASE_URL:-}" ]; then
+        bash scripts/deploy/deploy.sh --env production --manifest reports/release-manifest.json --strategy "${PROD_DEPLOY_STRATEGY:-blue-green}" --require-digest --dry-run
+      else
+        bash scripts/deploy/deploy.sh --env production --manifest reports/release-manifest.json --strategy "${PROD_DEPLOY_STRATEGY:-blue-green}" --base-url "${PRODUCTION_BASE_URL}" --require-digest
+      fi
+  artifacts:
+    when: always
+    expire_in: 90 days
+    paths:
+      - reports/deploy-smoke-production.json
+
+# ==============================================================================
+# Stage 6: Aggregated CI Quality Report
 # ==============================================================================
 ci-report:
   image: node:22-alpine
@@ -306,6 +522,12 @@ ci-report:
       optional: true
       artifacts: true
     - job: backend-integration-api-test
+      optional: true
+      artifacts: true
+    - job: security-scan
+      optional: true
+      artifacts: true
+    - job: docker-image-security-scan
       optional: true
       artifacts: true
   script:

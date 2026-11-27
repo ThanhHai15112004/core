@@ -1,0 +1,45 @@
+# ==============================================================================
+# Gitleaks Configuration — Core Framework (15.2 Automated Secret Scanning)
+# Mở rộng bộ rule mặc định của Gitleaks và chỉ allowlist các mẫu/fixture an toàn.
+# ==============================================================================
+title = "Core Framework Secret Scanning Policy"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "core-database-url-with-password"
+description = "Database connection URI chứa mật khẩu cứng (PostgreSQL / MySQL / Redis / MongoDB)"
+regex = '''(?i)(?:postgres(?:ql)?|mysql|redis|rediss|mongodb(?:\+srv)?):\/\/[a-zA-Z0-9._-]+:[^@\s$'"{}<>]{8,}@[a-zA-Z0-9.-]+'''
+keywords = ["postgres://", "postgresql://", "mysql://", "redis://", "rediss://", "mongodb://"]
+
+[[rules]]
+id = "core-hardcoded-jwt-secret"
+description = "Phát hiện khóa ký JWT hoặc Encryption key cứng trong mã nguồn"
+regex = '''(?i)(?:JWT_ACCESS_SECRET|JWT_REFRESH_SECRET|FIELD_ENCRYPTION_KEY|APP_SECRET)\s*[:=]\s*['"][A-Za-z0-9+/=_-]{24,}['"]'''
+keywords = ["JWT_ACCESS_SECRET", "JWT_REFRESH_SECRET", "FIELD_ENCRYPTION_KEY", "APP_SECRET"]
+
+[allowlist]
+description = "Loại trừ lockfile, báo cáo sinh tự động, biến mẫu .example và test fixtures an toàn"
+paths = [
+  '''(^|/)package-lock\.json$''',
+  '''(^|/)pnpm-lock\.yaml$''',
+  '''(^|/)node_modules/''',
+  '''(^|/)dist/''',
+  '''(^|/)coverage/''',
+  '''(^|/)reports/''',
+  '''(^|/)\.env(\.[^/]+)?\.example$''',
+  '''^backend/test/''',
+  '''^frontend/src/.*\.(test|spec)\.[jt]sx?$''',
+  '''^scripts/security/.*\.test\.mjs$''',
+  '''^scripts/security/security-policy\.json$''',
+  '''^\.gitleaks\.toml$'''
+]
+regexTarget = "match"
+regexes = [
+  '''(?i)ci_test_[a-z0-9_]+''',
+  '''(?i)(?:example|sample|placeholder|changeme|replace_me|your_|dummy_|mock_|fake_)[a-z0-9_-]*''',
+  '''(?i)test_(?:user|password|secret|token|key)''',
+  '''gitleaks:allow''',
+  '''secret-scan-ok'''
+]

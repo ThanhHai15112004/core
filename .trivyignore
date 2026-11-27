@@ -1,0 +1,12 @@
+# ==============================================================================
+# Trivy Ignore Policy — Core Framework (15.2 Automated Security Scanning)
+# ==============================================================================
+# Quy tắc bắt buộc khi thêm ngoại lệ (waiver):
+#   1. Ghi rõ lý do kỹ thuật & người phê duyệt ở dòng comment phía trên.
+#   2. BẮT BUỘC gắn ngày hết hạn `exp:YYYY-MM-DD` (tối đa 30 ngày cho HIGH).
+#   3. Không miễn trừ vĩnh viễn cho lỗ hổng CRITICAL có bản vá sẵn.
+#
+# Ví dụ:
+#   # False positive / chờ upstream patch - Approved by Security Lead
+#   CVE-2025-00000 exp:2026-12-31
+# ==============================================================================

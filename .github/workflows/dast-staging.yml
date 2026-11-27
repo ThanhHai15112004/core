@@ -1,0 +1,82 @@
+name: Staging DAST Security Scan (15.2.8)
+
+on:
+  workflow_dispatch:
+    inputs:
+      staging_base_url:
+        description: "Base URL của môi trường Staging (chặn tuyệt đối domain Production)"
+        required: true
+        type: string
+      run_owasp_zap:
+        description: "Chạy thêm OWASP ZAP API/Baseline Scan (container Docker)"
+        required: false
+        default: true
+        type: boolean
+  schedule:
+    # Chạy định kỳ 02:00 UTC thứ Hai hằng tuần khi repo đã khai báo biến STAGING_BASE_URL
+    - cron: "0 2 * * 1"
+
+concurrency:
+  group: dast-staging-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dast-staging:
+    name: Run DAST on Staging API
+    runs-on: ubuntu-latest
+    env:
+      TARGET_URL: ${{ github.event.inputs.staging_base_url || vars.STAGING_BASE_URL }}
+      RUN_ZAP: ${{ github.event.inputs.run_owasp_zap || 'true' }}
+    steps:
+      - name: Verify Staging Target URL is Configured
+        id: check-target
+        run: |
+          if [ -z "${TARGET_URL}" ]; then
+            echo "ℹ️ Không có STAGING_BASE_URL được cấu hình — bỏ qua lượt quét DAST định kỳ."
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout repository
+        if: steps.check-target.outputs.configured == 'true'
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        if: steps.check-target.outputs.configured == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Run Core DAST Safety Gate & Active API Probes
+        if: steps.check-target.outputs.configured == 'true'
+        env:
+          STAGING_BASE_URL: ${{ env.TARGET_URL }}
+          STAGING_DAST_AUTH_TOKEN: ${{ secrets.STAGING_DAST_AUTH_TOKEN }}
+        run: |
+          node scripts/security/run-dast.mjs \
+            --target "$STAGING_BASE_URL" \
+            --report reports/security-dast-report.json \
+            --sarif reports/security-dast.sarif
+
+      - name: Run OWASP ZAP Baseline/API Scan on Staging
+        if: steps.check-target.outputs.configured == 'true' && env.RUN_ZAP == 'true'
+        uses: zaproxy/action-baseline@v0.12.0
+        continue-on-error: true
+        with:
+          target: ${{ env.TARGET_URL }}/api/v1/health
+          allow_issue_writing: false
+          cmd_options: "-I"
+
+      - name: Upload DAST Reports & SARIF
+        if: always() && steps.check-target.outputs.configured == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-dast-staging-report
+          path: |
+            reports/security-dast-report.json
+            reports/security-dast.sarif
+            report_json.json
+            report_md.md
+            report_html.html
+          if-no-files-found: ignore

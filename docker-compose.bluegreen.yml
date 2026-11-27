@@ -1,0 +1,95 @@
+# ==============================================================================
+# Compose Overlay cho chiến lược Blue-Green & Canary (Phase 15.3)
+# Kết hợp: docker compose -f docker-compose.deploy.yml -f docker-compose.bluegreen.yml
+# ==============================================================================
+
+services:
+  backend-blue:
+    container_name: ${BACKEND_BLUE_CONTAINER_NAME:-core-backend-blue}
+    image: ${BACKEND_BLUE_IMAGE:-${BACKEND_IMAGE:?BACKEND_IMAGE must be set}}
+    profiles: ["blue-green", "blue"]
+    environment:
+      - NODE_ENV=${NODE_ENV:-production}
+      - RUNTIME_SUPERVISOR=docker
+      - PROMETHEUS_URL=http://prometheus:9090
+      - APP_VERSION=${APP_VERSION:-1.0.0}
+      - APP_GIT_COMMIT=${APP_GIT_COMMIT:-}
+      - APP_BUILD_TIME=${APP_BUILD_TIME:-}
+      - APP_IMAGE=${BACKEND_BLUE_IMAGE:-${BACKEND_IMAGE}}
+      - APP_IMAGE_DIGEST=${APP_IMAGE_DIGEST:-}
+      - APP_DEPLOY_STRATEGY=blue-green
+      - APP_DEPLOY_SLOT=blue
+    env_file:
+      - ${DEPLOY_ENV_FILE:-.env.docker.prod}
+    mem_limit: 512m
+    mem_reservation: 256m
+    stop_grace_period: 40s
+    restart: always
+    networks:
+      - core_prod_net
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3005/api/v1/health/ready >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 25s
+
+  backend-green:
+    container_name: ${BACKEND_GREEN_CONTAINER_NAME:-core-backend-green}
+    image: ${BACKEND_GREEN_IMAGE:-${BACKEND_IMAGE:?BACKEND_IMAGE must be set}}
+    profiles: ["blue-green", "green"]
+    environment:
+      - NODE_ENV=${NODE_ENV:-production}
+      - RUNTIME_SUPERVISOR=docker
+      - PROMETHEUS_URL=http://prometheus:9090
+      - APP_VERSION=${APP_VERSION:-1.0.0}
+      - APP_GIT_COMMIT=${APP_GIT_COMMIT:-}
+      - APP_BUILD_TIME=${APP_BUILD_TIME:-}
+      - APP_IMAGE=${BACKEND_GREEN_IMAGE:-${BACKEND_IMAGE}}
+      - APP_IMAGE_DIGEST=${APP_IMAGE_DIGEST:-}
+      - APP_DEPLOY_STRATEGY=blue-green
+      - APP_DEPLOY_SLOT=green
+    env_file:
+      - ${DEPLOY_ENV_FILE:-.env.docker.prod}
+    mem_limit: 512m
+    mem_reservation: 256m
+    stop_grace_period: 40s
+    restart: always
+    networks:
+      - core_prod_net
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3005/api/v1/health/ready >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 25s
+
+  backend-canary:
+    container_name: ${BACKEND_CANARY_CONTAINER_NAME:-core-backend-canary}
+    image: ${BACKEND_CANARY_IMAGE:-${BACKEND_IMAGE:?BACKEND_IMAGE must be set}}
+    profiles: ["canary"]
+    environment:
+      - NODE_ENV=${NODE_ENV:-production}
+      - RUNTIME_SUPERVISOR=docker
+      - PROMETHEUS_URL=http://prometheus:9090
+      - APP_VERSION=${APP_VERSION:-1.0.0}
+      - APP_GIT_COMMIT=${APP_GIT_COMMIT:-}
+      - APP_BUILD_TIME=${APP_BUILD_TIME:-}
+      - APP_IMAGE=${BACKEND_CANARY_IMAGE:-${BACKEND_IMAGE}}
+      - APP_IMAGE_DIGEST=${APP_IMAGE_DIGEST:-}
+      - APP_DEPLOY_STRATEGY=canary
+      - APP_DEPLOY_SLOT=canary
+    env_file:
+      - ${DEPLOY_ENV_FILE:-.env.docker.prod}
+    mem_limit: 512m
+    mem_reservation: 256m
+    stop_grace_period: 40s
+    restart: always
+    networks:
+      - core_prod_net
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3005/api/v1/health/ready >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 25s

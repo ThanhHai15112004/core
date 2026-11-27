@@ -39,7 +39,11 @@ describe('Section 12.5 — Operations Console extensions', () => {
     applyTestEnv();
     process.env['APP_GIT_COMMIT'] = 'abcdef1234567890abcdef1234567890abcdef12';
     process.env['APP_IMAGE'] = 'ghcr.io/core/backend:1.2.3';
+    process.env['APP_IMAGE_DIGEST'] =
+      'sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
     process.env['APP_BUILD_TIME'] = '2026-11-25T08:30:00.000Z';
+    process.env['APP_DEPLOY_STRATEGY'] = 'blue-green';
+    process.env['APP_DEPLOY_SLOT'] = 'green';
     process.env['DB_SLOW_QUERY_MS'] = '250';
     process.env['DB_BACKUP_MAX_AGE_HOURS'] = '24';
     process.env['SCHEDULER_SLOW_TASK_MS'] = '5000';
@@ -59,7 +63,12 @@ describe('Section 12.5 — Operations Console extensions', () => {
     expect(info.deployment.commit).toBe('abcdef1234567890abcdef1234567890abcdef12');
     expect(info.deployment.shortCommit).toBe('abcdef1');
     expect(info.deployment.image).toBe('ghcr.io/core/backend:1.2.3');
+    expect(info.deployment.imageDigest).toBe(
+      'sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
+    );
     expect(info.deployment.buildTime).toBe('2026-11-25T08:30:00.000Z');
+    expect(info.deployment.strategy).toBe('blue-green');
+    expect(info.deployment.slot).toBe('green');
     expect(info.modules.total).toBeGreaterThan(0);
     expect(info.modules.enabled).toBeGreaterThan(0);
 

@@ -190,6 +190,7 @@ export const en: TranslationKey = {
       modulesValue: '{{enabled}} / {{total}} enabled',
       commit: 'Git Commit',
       image: 'Container Image',
+      rollout: 'Rollout Strategy',
       buildTime: 'Build Time',
       nodeVersion: 'Node.js',
       migration: 'Migrations',
