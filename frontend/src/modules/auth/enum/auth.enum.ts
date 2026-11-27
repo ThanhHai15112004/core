@@ -5,7 +5,8 @@ export type AuthSubTabId =
   | 'password-policy'
   | 'service-accounts'
   | 'federated-identity'
-  | 'scim-provisioning';
+  | 'scim-provisioning'
+  | 'privileged-access';
 
 export interface AuthSubTabMeta {
   readonly id: AuthSubTabId;
@@ -57,6 +58,13 @@ export const AUTH_MODULE_TABS: readonly AuthSubTabMeta[] = [
     badge: '14.3',
     description:
       'Đồng bộ người dùng & nhóm SCIM 2.0, token & IP allowlist, lịch sử đồng bộ và đối soát IdP',
+  },
+  {
+    id: 'privileged-access',
+    label: 'Quyền Đặc Biệt (PAM)',
+    badge: '14.4',
+    description:
+      'Đánh dấu vai trò/quyền nhạy cảm, MFA Step-Up, cấp quyền tạm thời (JIT), Break-glass, cảnh báo & rà soát định kỳ',
   },
 ] as const;
 

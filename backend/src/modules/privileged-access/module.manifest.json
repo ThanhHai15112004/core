@@ -1,0 +1,406 @@
+{
+  "$schema": "../../packages/kernel/schemas/module.manifest.schema.json",
+  "name": "privileged-access",
+  "displayName": "Privileged Access Management (PAM)",
+  "version": "1.0.0",
+  "description": "Module quản trị quyền đặc biệt (Mục 14.4): đánh dấu vai trò/quyền đặc biệt, bắt buộc MFA Step-Up trước thao tác nhạy cảm, cấp quyền tạm thời có phê duyệt và tự động thu hồi khi hết hạn, tài khoản khẩn cấp Break-glass, cảnh báo sử dụng quyền đặc biệt và rà soát quyền định kỳ.",
+  "type": "core",
+  "category": "Security",
+  "author": "Core Platform Team",
+  "entryModule": "PrivilegedAccessModule",
+  "dependencies": [
+    "database",
+    "security",
+    "users",
+    "roles",
+    "permissions",
+    "sessions",
+    "notifications",
+    "incidents-ops",
+    "settings",
+    "feature-flags",
+    "codes",
+    "audit"
+  ],
+  "permissions": [
+    "privileged-access.read",
+    "privileged-access.request",
+    "privileged-access.approve",
+    "privileged-access.manage",
+    "privileged-access.break_glass.manage"
+  ],
+  "events": {
+    "published": [
+      "privileged-access.target.updated",
+      "privileged-access.grant.requested",
+      "privileged-access.grant.approved",
+      "privileged-access.grant.rejected",
+      "privileged-access.grant.revoked",
+      "privileged-access.grant.expired",
+      "privileged-access.break-glass.created",
+      "privileged-access.break-glass.activated",
+      "privileged-access.break-glass.sealed",
+      "privileged-access.break-glass.auto-sealed",
+      "privileged-access.action.used",
+      "privileged-access.review.created",
+      "privileged-access.review.item.decided",
+      "privileged-access.review.completed"
+    ],
+    "subscribed": []
+  },
+  "database": {
+    "hasMigrations": true,
+    "tables": [
+      "privileged_access_targets",
+      "privileged_access_grants",
+      "privileged_break_glass_accounts",
+      "privileged_usage_alerts",
+      "privileged_access_reviews",
+      "privileged_access_review_items"
+    ]
+  },
+  "codeTypes": [
+    {
+      "code": "privileged_access.grant_status",
+      "name": "Trạng thái cấp quyền tạm thời (JIT)",
+      "description": "Vòng đời yêu cầu cấp quyền đặc biệt tạm thời",
+      "isSystem": true,
+      "allowCustomValues": false,
+      "values": [
+        {
+          "numericCode": 1,
+          "code": "PENDING_APPROVAL",
+          "behaviorCode": "PENDING",
+          "name": "Chờ phê duyệt",
+          "labels": { "vi": "Chờ phê duyệt", "en": "Pending Approval" },
+          "badgeTone": "warning",
+          "sortOrder": 1,
+          "isSystem": true
+        },
+        {
+          "numericCode": 2,
+          "code": "ACTIVE",
+          "behaviorCode": "ACTIVE",
+          "name": "Đang hiệu lực",
+          "labels": { "vi": "Đang hiệu lực", "en": "Active" },
+          "badgeTone": "success",
+          "sortOrder": 2,
+          "isSystem": true
+        },
+        {
+          "numericCode": 3,
+          "code": "REJECTED",
+          "behaviorCode": "REJECTED",
+          "name": "Bị từ chối",
+          "labels": { "vi": "Bị từ chối", "en": "Rejected" },
+          "badgeTone": "danger",
+          "sortOrder": 3,
+          "isSystem": true
+        },
+        {
+          "numericCode": 4,
+          "code": "EXPIRED",
+          "behaviorCode": "EXPIRED",
+          "name": "Đã hết hạn",
+          "labels": { "vi": "Đã hết hạn", "en": "Expired" },
+          "badgeTone": "neutral",
+          "sortOrder": 4,
+          "isSystem": true
+        },
+        {
+          "numericCode": 5,
+          "code": "REVOKED",
+          "behaviorCode": "REVOKED",
+          "name": "Đã thu hồi",
+          "labels": { "vi": "Đã thu hồi", "en": "Revoked" },
+          "badgeTone": "danger",
+          "sortOrder": 5,
+          "isSystem": true
+        },
+        {
+          "numericCode": 6,
+          "code": "CANCELLED",
+          "behaviorCode": "CANCELLED",
+          "name": "Đã hủy",
+          "labels": { "vi": "Đã hủy", "en": "Cancelled" },
+          "badgeTone": "neutral",
+          "sortOrder": 6,
+          "isSystem": true
+        }
+      ]
+    },
+    {
+      "code": "privileged_access.break_glass_status",
+      "name": "Trạng thái tài khoản Break-glass",
+      "description": "Trạng thái niêm phong / kích hoạt khẩn cấp của tài khoản Break-glass",
+      "isSystem": true,
+      "allowCustomValues": false,
+      "values": [
+        {
+          "numericCode": 1,
+          "code": "SEALED",
+          "behaviorCode": "SEALED",
+          "name": "Đã niêm phong",
+          "labels": { "vi": "Đã niêm phong", "en": "Sealed" },
+          "badgeTone": "info",
+          "sortOrder": 1,
+          "isSystem": true
+        },
+        {
+          "numericCode": 2,
+          "code": "ACTIVE",
+          "behaviorCode": "ACTIVE",
+          "name": "Đang kích hoạt khẩn cấp",
+          "labels": { "vi": "Đang kích hoạt khẩn cấp", "en": "Active Emergency" },
+          "badgeTone": "danger",
+          "sortOrder": 2,
+          "isSystem": true
+        },
+        {
+          "numericCode": 3,
+          "code": "LOCKED",
+          "behaviorCode": "LOCKED",
+          "name": "Đang khóa",
+          "labels": { "vi": "Đang khóa", "en": "Locked" },
+          "badgeTone": "warning",
+          "sortOrder": 3,
+          "isSystem": true
+        },
+        {
+          "numericCode": 4,
+          "code": "REVOKED",
+          "behaviorCode": "REVOKED",
+          "name": "Đã thu hồi vĩnh viễn",
+          "labels": { "vi": "Đã thu hồi", "en": "Revoked" },
+          "badgeTone": "neutral",
+          "sortOrder": 4,
+          "isSystem": true
+        }
+      ]
+    },
+    {
+      "code": "privileged_access.review_status",
+      "name": "Trạng thái đợt rà soát quyền đặc biệt",
+      "description": "Trạng thái thực hiện của chiến dịch rà soát quyền định kỳ",
+      "isSystem": true,
+      "allowCustomValues": false,
+      "values": [
+        {
+          "numericCode": 1,
+          "code": "OPEN",
+          "behaviorCode": "OPEN",
+          "name": "Đang mở",
+          "labels": { "vi": "Đang mở", "en": "Open" },
+          "badgeTone": "warning",
+          "sortOrder": 1,
+          "isSystem": true
+        },
+        {
+          "numericCode": 2,
+          "code": "COMPLETED",
+          "behaviorCode": "COMPLETED",
+          "name": "Đã hoàn tất",
+          "labels": { "vi": "Đã hoàn tất", "en": "Completed" },
+          "badgeTone": "success",
+          "sortOrder": 2,
+          "isSystem": true
+        },
+        {
+          "numericCode": 3,
+          "code": "CANCELLED",
+          "behaviorCode": "CANCELLED",
+          "name": "Đã hủy",
+          "labels": { "vi": "Đã hủy", "en": "Cancelled" },
+          "badgeTone": "neutral",
+          "sortOrder": 3,
+          "isSystem": true
+        }
+      ]
+    },
+    {
+      "code": "privileged_access.review_decision",
+      "name": "Quyết định rà soát quyền đặc biệt",
+      "description": "Quyết định giữ lại hoặc thu hồi đối với từng quyền đặc biệt",
+      "isSystem": true,
+      "allowCustomValues": false,
+      "values": [
+        {
+          "numericCode": 1,
+          "code": "PENDING",
+          "behaviorCode": "PENDING",
+          "name": "Chưa quyết định",
+          "labels": { "vi": "Chưa quyết định", "en": "Pending" },
+          "badgeTone": "warning",
+          "sortOrder": 1,
+          "isSystem": true
+        },
+        {
+          "numericCode": 2,
+          "code": "KEEP",
+          "behaviorCode": "KEEP",
+          "name": "Giữ quyền",
+          "labels": { "vi": "Giữ quyền", "en": "Keep" },
+          "badgeTone": "success",
+          "sortOrder": 2,
+          "isSystem": true
+        },
+        {
+          "numericCode": 3,
+          "code": "REVOKE",
+          "behaviorCode": "REVOKE",
+          "name": "Thu hồi",
+          "labels": { "vi": "Thu hồi", "en": "Revoke" },
+          "badgeTone": "danger",
+          "sortOrder": 3,
+          "isSystem": true
+        }
+      ]
+    }
+  ],
+  "settingGroups": [
+    {
+      "code": "privileged_access",
+      "name": "Quyền quản trị đặc biệt (PAM)",
+      "description": "Cấu hình MFA Step-Up, cấp quyền tạm thời, tài khoản khẩn cấp Break-glass, cảnh báo và rà soát định kỳ",
+      "icon": "shield-alert",
+      "sortOrder": 46
+    }
+  ],
+  "settings": [
+    {
+      "key": "privileged_access.enforce_step_up_mfa",
+      "groupCode": "privileged_access",
+      "namespace": "privileged_access",
+      "name": "Bắt buộc MFA Step-Up cho thao tác đặc biệt",
+      "description": "Yêu cầu Step-Up Token xác thực qua MFA trước khi gọi các quyền đặc biệt có bật requireMfaStepUp",
+      "valueType": "BOOLEAN",
+      "defaultValue": "true",
+      "allowUnitOverride": false,
+      "sortOrder": 1
+    },
+    {
+      "key": "privileged_access.require_approval_default",
+      "groupCode": "privileged_access",
+      "namespace": "privileged_access",
+      "name": "Mặc định yêu cầu phê duyệt khi cấp quyền tạm thời",
+      "description": "Khi bật, các yêu cầu cấp quyền tạm thời phải chờ phê duyệt (trừ khi mục tiêu cho phép tự cấp)",
+      "valueType": "BOOLEAN",
+      "defaultValue": "true",
+      "allowUnitOverride": false,
+      "sortOrder": 2
+    },
+    {
+      "key": "privileged_access.max_grant_duration_minutes",
+      "groupCode": "privileged_access",
+      "namespace": "privileged_access",
+      "name": "Thời hạn tối đa cho 1 lần cấp quyền tạm thời (phút)",
+      "description": "Trần thời gian cho phép khi xin nâng quyền tạm thời",
+      "valueType": "NUMBER",
+      "defaultValue": "240",
+      "validationRules": { "min": 5, "max": 10080 },
+      "allowUnitOverride": false,
+      "sortOrder": 3
+    },
+    {
+      "key": "privileged_access.break_glass_max_minutes",
+      "groupCode": "privileged_access",
+      "namespace": "privileged_access",
+      "name": "Thời hạn tối đa mở khóa Break-glass (phút)",
+      "description": "Giới hạn thời gian tài khoản Break-glass được mở trước khi tự động niêm phong lại",
+      "valueType": "NUMBER",
+      "defaultValue": "60",
+      "validationRules": { "min": 5, "max": 480 },
+      "allowUnitOverride": false,
+      "sortOrder": 4
+    },
+    {
+      "key": "privileged_access.alert_role_codes",
+      "groupCode": "privileged_access",
+      "namespace": "privileged_access",
+      "name": "Danh sách vai trò nhận cảnh báo bảo mật",
+      "description": "Các mã vai trò (ví dụ admin_security, super_admin) nhận thông báo khi sử dụng quyền đặc biệt hoặc Break-glass",
+      "valueType": "JSON",
+      "defaultValue": "[\"admin_security\",\"super_admin\"]",
+      "allowUnitOverride": false,
+      "sortOrder": 5
+    },
+    {
+      "key": "privileged_access.alert_cooldown_seconds",
+      "groupCode": "privileged_access",
+      "namespace": "privileged_access",
+      "name": "Thời gian chống lặp cảnh báo (giây)",
+      "description": "Khoảng thời gian gộp cảnh báo giống nhau từ cùng một người dùng và thao tác",
+      "valueType": "NUMBER",
+      "defaultValue": "60",
+      "validationRules": { "min": 0, "max": 3600 },
+      "allowUnitOverride": false,
+      "sortOrder": 6
+    },
+    {
+      "key": "privileged_access.alert_create_incident_for_critical",
+      "groupCode": "privileged_access",
+      "namespace": "privileged_access",
+      "name": "Tạo Incident tự động cho sự kiện Break-glass nghiêm trọng",
+      "description": "Tự động đẩy cảnh báo sang module Incidents & SIEM khi kích hoạt hoặc đăng nhập Break-glass",
+      "valueType": "BOOLEAN",
+      "defaultValue": "true",
+      "allowUnitOverride": false,
+      "sortOrder": 7
+    },
+    {
+      "key": "privileged_access.review_cycle_days",
+      "groupCode": "privileged_access",
+      "namespace": "privileged_access",
+      "name": "Chu kỳ rà soát quyền đặc biệt định kỳ (ngày)",
+      "description": "Số ngày giữa các đợt rà soát quyền đặc biệt tự động",
+      "valueType": "NUMBER",
+      "defaultValue": "90",
+      "validationRules": { "min": 7, "max": 365 },
+      "allowUnitOverride": false,
+      "sortOrder": 8
+    },
+    {
+      "key": "privileged_access.review_due_days",
+      "groupCode": "privileged_access",
+      "namespace": "privileged_access",
+      "name": "Hạn hoàn tất mỗi đợt rà soát (ngày)",
+      "description": "Số ngày tối đa để hoàn thành việc giữ hoặc thu hồi trong một đợt rà soát",
+      "valueType": "NUMBER",
+      "defaultValue": "14",
+      "validationRules": { "min": 1, "max": 90 },
+      "allowUnitOverride": false,
+      "sortOrder": 9
+    },
+    {
+      "key": "privileged_access.revoke_sessions_on_grant_expiry",
+      "groupCode": "privileged_access",
+      "namespace": "privileged_access",
+      "name": "Thu hồi phiên đăng nhập khi quyền tạm thời hết hạn",
+      "description": "Tùy chọn thu hồi toàn bộ phiên của người dùng ngay khi quyền tạm thời tự động hết hạn",
+      "valueType": "BOOLEAN",
+      "defaultValue": "false",
+      "allowUnitOverride": false,
+      "sortOrder": 10
+    }
+  ],
+  "featureFlags": [
+    {
+      "key": "privileged_access.enabled",
+      "name": "Bật Quản trị Quyền Đặc Biệt (PAM — 14.4)",
+      "description": "Công tắc tổng bật/tắt cơ chế kiểm soát quyền đặc biệt theo yêu cầu bảo mật cao",
+      "isEnabled": true
+    },
+    {
+      "key": "privileged_access.break_glass.enabled",
+      "name": "Bật tài khoản khẩn cấp Break-glass",
+      "description": "Cho phép cấu hình và kích hoạt khẩn cấp tài khoản Break-glass",
+      "isEnabled": true
+    },
+    {
+      "key": "privileged_access.periodic_review.enabled",
+      "name": "Bật rà soát quyền đặc biệt định kỳ",
+      "description": "Cho phép tạo đợt rà soát định kỳ tự động và thủ công",
+      "isEnabled": true
+    }
+  ]
+}

@@ -8,7 +8,12 @@ import {
   UnauthorizedAppException,
   defaultSettingRegistry,
 } from '@packages/kernel/index.js';
-import { PasswordHasherService, TokenService } from '@packages/security/index.js';
+import {
+  PasswordHasherService,
+  type StepUpVerifyOptions,
+  TokenService,
+  defaultPrivilegedAccessHookRegistry,
+} from '@packages/security/index.js';
 import { Traced } from '@packages/tracing/index.js';
 import {
   type IUsersPublicService,
@@ -264,14 +269,21 @@ export class AuthService implements IAuthPublicService {
       throw new UnauthorizedAppException('auth.userNotFound');
     }
 
+    const pamLoginPolicy = defaultPrivilegedAccessHookRegistry.getLoginPolicy();
+    const breakGlassCheck = pamLoginPolicy
+      ? await pamLoginPolicy.assertCanLogin(credentials.id, meta)
+      : { isBreakGlass: false, requireMfa: false, breakGlassId: null };
+
     const mfaPolicy = activeSettings?.mfaPolicy ?? 'OPTIONAL';
     const isAdminUser = this.isAdministrativeUser(identity);
     const isPolicyEnforced =
-      mfaPolicy === 'REQUIRED_FOR_ALL' || (mfaPolicy === 'REQUIRED_FOR_ADMINS' && isAdminUser);
+      mfaPolicy === 'REQUIRED_FOR_ALL' ||
+      (mfaPolicy === 'REQUIRED_FOR_ADMINS' && isAdminUser) ||
+      Boolean(breakGlassCheck.requireMfa);
     const mfaRequired = Boolean(credentials.mfaEnabled || isPolicyEnforced);
 
     if (mfaRequired) {
-      if (dto.trustedDeviceToken) {
+      if (dto.trustedDeviceToken && !breakGlassCheck.isBreakGlass) {
         const isTrustedDevice = await this.mfaService.verifyTrustedDevice(
           credentials.id,
           dto.trustedDeviceToken,
@@ -306,7 +318,7 @@ export class AuthService implements IAuthPublicService {
         identity,
         dto,
         meta,
-        mfaPolicy,
+        mfaPolicy: breakGlassCheck.isBreakGlass ? 'BREAK_GLASS_REQUIRED' : mfaPolicy,
         isPolicyEnforced,
         allowedByPolicy,
         mfaService: this.mfaService,
@@ -321,6 +333,15 @@ export class AuthService implements IAuthPublicService {
       userAgent: meta.userAgent ?? null,
       deviceName: dto.deviceName ?? null,
     });
+    if (breakGlassCheck.isBreakGlass && pamLoginPolicy?.onLoginSucceeded) {
+      await pamLoginPolicy
+        .onLoginSucceeded(credentials.id, {
+          ...breakGlassCheck,
+          ipAddress: meta.ipAddress ?? null,
+          userAgent: meta.userAgent ?? null,
+        })
+        .catch(() => undefined);
+    }
 
     return {
       mfaRequired: false,
@@ -548,6 +569,22 @@ export class AuthService implements IAuthPublicService {
       deviceName: dto.deviceName ?? null,
     });
 
+    const pamLoginPolicy = defaultPrivilegedAccessHookRegistry.getLoginPolicy();
+    if (pamLoginPolicy) {
+      const bgCheck = await pamLoginPolicy
+        .assertCanLogin(userId, meta)
+        .catch(() => ({ isBreakGlass: false, requireMfa: false, breakGlassId: null }));
+      if (bgCheck.isBreakGlass && pamLoginPolicy.onLoginSucceeded) {
+        await pamLoginPolicy
+          .onLoginSucceeded(userId, {
+            ...bgCheck,
+            ipAddress: meta.ipAddress ?? null,
+            userAgent: meta.userAgent ?? null,
+          })
+          .catch(() => undefined);
+      }
+    }
+
     return {
       mfaRequired: false,
       accessToken: issued.accessToken,
@@ -642,13 +679,14 @@ export class AuthService implements IAuthPublicService {
     };
   }
 
-  /** Kiểm tra tính hợp lệ của `stepUpToken` cho thao tác nhạy cảm (Mục 3.5.7) */
+  /** Kiểm tra tính hợp lệ của `stepUpToken` cho thao tác nhạy cảm (Mục 3.5.7 & 14.4) */
   public async verifyStepUpToken(
     userId: number,
     stepUpToken: string,
     expectedAction?: string,
+    options?: StepUpVerifyOptions,
   ): Promise<boolean> {
-    return this.tokenService.verifyStepUpActionToken(userId, stepUpToken, expectedAction);
+    return this.tokenService.verifyStepUpActionToken(userId, stepUpToken, expectedAction, options);
   }
 
   /** Tắt MFA có kiểm tra xác thực lại (Step-Up Token, mật khẩu hiện tại hoặc mã MFA — Mục 3.5.7) */

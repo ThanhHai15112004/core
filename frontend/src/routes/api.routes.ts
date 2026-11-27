@@ -198,6 +198,30 @@ export const API_ROUTES = {
     RECONCILIATION_BY_ID: (id: string | number) =>
       `/identity-provisioning/reconciliations/${id}`,
   },
+  PRIVILEGED_ACCESS: {
+    OVERVIEW: '/privileged-access/overview',
+    DIRECTORY_USERS: (qs = '') => `/privileged-access/directory/users${qs ? `?${qs}` : ''}`,
+    DIRECTORY_STANDING_USERS: '/privileged-access/directory/standing-users',
+    TARGETS: (qs = '') => `/privileged-access/targets${qs ? `?${qs}` : ''}`,
+    TARGET_BY_ID: (id: string | number) => `/privileged-access/targets/${id}`,
+    GRANTS: (qs = '') => `/privileged-access/grants${qs ? `?${qs}` : ''}`,
+    GRANT_APPROVE: (id: string | number) => `/privileged-access/grants/${id}/approve`,
+    GRANT_REJECT: (id: string | number) => `/privileged-access/grants/${id}/reject`,
+    GRANT_REVOKE: (id: string | number) => `/privileged-access/grants/${id}/revoke`,
+    GRANT_CANCEL: (id: string | number) => `/privileged-access/grants/${id}/cancel`,
+    GRANTS_SWEEP_EXPIRED: '/privileged-access/grants/sweep-expired',
+    BREAK_GLASS: (qs = '') => `/privileged-access/break-glass${qs ? `?${qs}` : ''}`,
+    BREAK_GLASS_ACTIVATE: (id: string | number) =>
+      `/privileged-access/break-glass/${id}/activate`,
+    BREAK_GLASS_SEAL: (id: string | number) => `/privileged-access/break-glass/${id}/seal`,
+    ALERTS: (qs = '') => `/privileged-access/alerts${qs ? `?${qs}` : ''}`,
+    ALERT_ACKNOWLEDGE: (id: string | number) => `/privileged-access/alerts/${id}/acknowledge`,
+    REVIEWS: (qs = '') => `/privileged-access/reviews${qs ? `?${qs}` : ''}`,
+    REVIEW_BY_ID: (id: string | number) => `/privileged-access/reviews/${id}`,
+    REVIEW_ITEM_DECIDE: (reviewId: string | number, itemId: string | number) =>
+      `/privileged-access/reviews/${reviewId}/items/${itemId}/decide`,
+    REVIEW_CLOSE: (id: string | number) => `/privileged-access/reviews/${id}/close`,
+  },
   USERS: {
     LIST: (qs = '') => `/users${qs ? `?${qs}` : ''}`,
     CREATE: '/users',

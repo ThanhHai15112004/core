@@ -4,9 +4,11 @@ import { CoreConfigService } from '@packages/config/index.js';
 import {
   type IUserIdentityResolver,
   type IdentityResolutionContext,
+  type StepUpVerifyOptions,
   type TokenPayload,
   USER_IDENTITY_RESOLVER,
   type UserIdentity,
+  isMfaStepUpMethod,
 } from '../contracts/auth.contract.js';
 import type { TokenVerificationStrategy } from '../strategies/jwt.strategy.js';
 import { SecretService } from './secret.service.js';
@@ -188,11 +190,12 @@ export class TokenService implements TokenVerificationStrategy {
     return payload;
   }
 
-  /** Kiểm tra tính hợp lệ của Step-Up Token gắn với userId và mã thao tác nhạy cảm (Mục 3.5.7) */
+  /** Kiểm tra tính hợp lệ của Step-Up Token gắn với userId, mã thao tác nhạy cảm và tùy chọn bắt buộc MFA (Mục 3.5.7 & 14.4) */
   public async verifyStepUpActionToken(
     userId: number,
     stepUpToken: string,
     expectedAction?: string,
+    options?: StepUpVerifyOptions,
   ): Promise<boolean> {
     if (!stepUpToken || !stepUpToken.trim()) {
       return false;
@@ -202,6 +205,9 @@ export class TokenService implements TokenVerificationStrategy {
       return false;
     }
     if (userId > 0 && Number(payload.sub) !== Number(userId)) {
+      return false;
+    }
+    if (options?.requireMfa && !isMfaStepUpMethod(payload['method'])) {
       return false;
     }
     if (

@@ -5,6 +5,7 @@ import {
   DR_QUEUE_TOPICS,
   IDEMPOTENCY_QUEUE_TOPICS,
   OUTBOX_QUEUE_TOPICS,
+  PRIVILEGED_ACCESS_QUEUE_TOPICS,
   RECONCILIATION_QUEUE_TOPICS,
 } from '@packages/kernel/index.js';
 import { QUEUES } from '@packages/messaging/index.js';
@@ -169,6 +170,32 @@ export class SystemTask implements OnModuleInit {
       pattern: this.config.dr.drillCron,
       tz: this.config.scheduler.timezone,
       data: { triggeredBy: 'scheduler', module: 'dr-ops' },
+      notifyOnFailure: true,
+      misfirePolicy: 'run_once',
+    });
+
+    this.registry.register({
+      id: 'privileged-access.expiration.sweep',
+      queue: QUEUES.SYSTEM_EVENTS,
+      name: PRIVILEGED_ACCESS_QUEUE_TOPICS.EXPIRATION_SWEEP_TICK,
+      description:
+        'Tự động thu hồi quyền đặc biệt tạm thời (JIT) và tự niêm phong tài khoản Break-glass đã hết hạn (14.4).',
+      pattern: '*/2 * * * *',
+      tz: this.config.scheduler.timezone,
+      data: { triggeredBy: 'scheduler', module: 'privileged-access' },
+      notifyOnFailure: true,
+      misfirePolicy: 'run_once',
+    });
+
+    this.registry.register({
+      id: 'privileged-access.review.schedule',
+      queue: QUEUES.SYSTEM_EVENTS,
+      name: PRIVILEGED_ACCESS_QUEUE_TOPICS.REVIEW_SCHEDULE_TICK,
+      description:
+        'Kiểm tra chu kỳ và tự động khởi tạo đợt rà soát quyền đặc biệt định kỳ nếu đến hạn (14.4).',
+      pattern: '0 2 * * *',
+      tz: this.config.scheduler.timezone,
+      data: { triggeredBy: 'scheduler', module: 'privileged-access' },
       notifyOnFailure: true,
       misfirePolicy: 'run_once',
     });

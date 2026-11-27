@@ -18,6 +18,10 @@ import { LocaleContext } from '@packages/i18n/index.js';
 import { RequestContextService } from '@packages/logging/index.js';
 import { TokenService } from '../providers/token.service.js';
 import { PlatformSecurityService } from '../providers/platform-security.service.js';
+import {
+  PrivilegedAccessHookRegistry,
+  defaultPrivilegedAccessHookRegistry,
+} from '../providers/privileged-access-hook.registry.js';
 import type { UserIdentity } from '../contracts/auth.contract.js';
 
 @Injectable()
@@ -27,6 +31,7 @@ export class AuthGuard implements CanActivate {
     private readonly tokenService: TokenService,
     @Optional() private readonly platformSecurityService?: PlatformSecurityService,
     @Optional() private readonly config?: CoreConfigService,
+    @Optional() private readonly privilegedAccessHooks?: PrivilegedAccessHookRegistry,
   ) {}
 
   private attachActorToContext(request: FastifyRequest, user: UserIdentity): void {
@@ -236,6 +241,45 @@ export class AuthGuard implements CanActivate {
             ]);
           }
         }
+      }
+    }
+
+    const pamEvaluator = (
+      this.privilegedAccessHooks ?? defaultPrivilegedAccessHookRegistry
+    ).getGuardEvaluator();
+    if (pamEvaluator) {
+      const rawStepUpHeader = request.headers['x-step-up-token'];
+      const headerStepUp = Array.isArray(rawStepUpHeader) ? rawStepUpHeader[0] : rawStepUpHeader;
+      const queryObj = (request.query ?? {}) as Record<string, unknown>;
+      const queryStepUp =
+        typeof queryObj['stepUpToken'] === 'string' ? queryObj['stepUpToken'] : undefined;
+      const pamContext = {
+        user,
+        requiredPermissions,
+        requiredRoles,
+        stepUpToken: headerStepUp?.trim() || queryStepUp?.trim() || null,
+        method: request.method ?? 'GET',
+        url: request.url ?? '/',
+        ipAddress: resolvedClientIp ?? null,
+      };
+      const decision = await pamEvaluator.evaluateRequest(pamContext);
+      if (!decision.allowed) {
+        throw new ForbiddenAppException(
+          decision.errorCode ?? 'privileged-access.mfaStepUpRequired',
+          decision.errorDetails ? [...decision.errorDetails] : undefined,
+        );
+      }
+      if (
+        decision.privilegedActionDetected &&
+        pamEvaluator.onPrivilegedAccessAllowed &&
+        decision.matchedTargets
+      ) {
+        void pamEvaluator
+          .onPrivilegedAccessAllowed({
+            ...pamContext,
+            matchedTargets: decision.matchedTargets,
+          })
+          .catch(() => undefined);
       }
     }
 

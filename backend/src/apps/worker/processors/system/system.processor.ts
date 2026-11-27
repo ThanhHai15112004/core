@@ -9,6 +9,7 @@ import {
   ExportRegistryService,
   IDEMPOTENCY_QUEUE_TOPICS,
   OUTBOX_QUEUE_TOPICS,
+  PRIVILEGED_ACCESS_QUEUE_TOPICS,
   RECONCILIATION_QUEUE_TOPICS,
   ReportRegistryService,
   defaultDomainEventBus,
@@ -58,6 +59,10 @@ import {
   DR_OPS_PUBLIC_SERVICE,
   type IDrOpsPublicService,
 } from '@modules/dr-ops/contracts/index.js';
+import {
+  PRIVILEGED_ACCESS_PUBLIC_SERVICE,
+  type IPrivilegedAccessPublicService,
+} from '@modules/privileged-access/contracts/index.js';
 import { BaseQueueProcessor } from '../base-queue.processor.js';
 
 export interface SystemMaintenanceTickPayload {
@@ -110,6 +115,9 @@ export class SystemProcessor extends BaseQueueProcessor {
     @Optional()
     @Inject(DR_OPS_PUBLIC_SERVICE)
     private readonly drOpsService?: IDrOpsPublicService,
+    @Optional()
+    @Inject(PRIVILEGED_ACCESS_PUBLIC_SERVICE)
+    private readonly privilegedAccessService?: IPrivilegedAccessPublicService,
   ) {
     super(config, metrics, progressTracker);
   }
@@ -273,6 +281,20 @@ export class SystemProcessor extends BaseQueueProcessor {
         return { handled: false, skipped: true, reason: 'dr_ops_service_unavailable' };
       }
       return this.drOpsService.runScheduledDrillCheck();
+    }
+
+    if (envelope.topic === PRIVILEGED_ACCESS_QUEUE_TOPICS.EXPIRATION_SWEEP_TICK) {
+      if (!this.privilegedAccessService) {
+        return { handled: false, skipped: true, reason: 'privileged_access_service_unavailable' };
+      }
+      return this.privilegedAccessService.sweepExpiredAccess();
+    }
+
+    if (envelope.topic === PRIVILEGED_ACCESS_QUEUE_TOPICS.REVIEW_SCHEDULE_TICK) {
+      if (!this.privilegedAccessService) {
+        return { handled: false, skipped: true, reason: 'privileged_access_service_unavailable' };
+      }
+      return this.privilegedAccessService.runScheduledReviewCheck();
     }
 
     if (

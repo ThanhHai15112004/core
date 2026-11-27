@@ -14,6 +14,9 @@ export interface UserIdentity {
   readonly dataScopes?: readonly number[];
   readonly preferredLocale?: string | null;
   readonly preferredTimezone?: string | null;
+  readonly isBreakGlass?: boolean;
+  readonly temporaryRoleCodes?: readonly string[];
+  readonly temporaryPermissions?: readonly string[];
 }
 
 export type JwtTokenType = 'access' | 'refresh' | 'mfa_challenge' | 'step_up';
@@ -50,3 +53,20 @@ export interface IUserIdentityResolver {
 }
 
 export const USER_IDENTITY_RESOLVER = Symbol('USER_IDENTITY_RESOLVER');
+
+export interface StepUpVerifyOptions {
+  readonly requireMfa?: boolean | undefined;
+}
+
+export const MFA_STEP_UP_METHODS = new Set([
+  'TOTP',
+  'EMAIL_OTP',
+  'SMS_OTP',
+  'RECOVERY_CODE',
+  'MFA',
+]);
+
+export function isMfaStepUpMethod(method: unknown): boolean {
+  if (typeof method !== 'string') return false;
+  return MFA_STEP_UP_METHODS.has(method.trim().toUpperCase());
+}

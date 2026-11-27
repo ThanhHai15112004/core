@@ -58,6 +58,7 @@
     "inbound-webhooks",
     "federated-identity",
     "identity-provisioning",
+    "privileged-access",
     "payments",
     "provider-registry",
     "outbox",

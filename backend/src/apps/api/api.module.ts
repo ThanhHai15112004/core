@@ -54,6 +54,7 @@ import { WebhooksModule } from '@modules/webhooks/index.js';
 import { InboundWebhooksModule } from '@modules/inbound-webhooks/index.js';
 import { FederatedIdentityModule } from '@modules/federated-identity/index.js';
 import { IdentityProvisioningModule } from '@modules/identity-provisioning/index.js';
+import { PrivilegedAccessModule } from '@modules/privileged-access/index.js';
 import { PaymentsModule } from '@modules/payments/index.js';
 import { ProviderRegistryModule } from '@modules/provider-registry/index.js';
 import { OutboxModule } from '@modules/outbox/index.js';
@@ -119,6 +120,7 @@ import { TracingModule } from '@packages/tracing/index.js';
     InboundWebhooksModule,
     FederatedIdentityModule,
     IdentityProvisioningModule,
+    PrivilegedAccessModule,
     PaymentsModule,
     ProviderRegistryModule,
     OutboxModule,

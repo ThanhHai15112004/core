@@ -5,6 +5,7 @@ import {
   type TokenPayload,
   TokenService,
   type UserIdentity,
+  defaultPrivilegedAccessHookRegistry,
 } from '@packages/security/index.js';
 import {
   type IUsersPublicService,
@@ -86,6 +87,11 @@ export class UserIdentityResolverService implements IUserIdentityResolver {
       return null;
     }
 
+    const pamGrantResolver = defaultPrivilegedAccessHookRegistry.getGrantResolver();
+    const temporaryAccess = pamGrantResolver
+      ? await pamGrantResolver.resolveActiveTemporaryAccess(userId).catch(() => null)
+      : null;
+
     return {
       id: user.id,
       email: user.email,
@@ -97,6 +103,13 @@ export class UserIdentityResolverService implements IUserIdentityResolver {
       organizationUnitIds: user.organizationUnitIds,
       ...(user.dataScope !== undefined ? { dataScope: user.dataScope } : {}),
       ...(user.dataScopes !== undefined ? { dataScopes: user.dataScopes } : {}),
+      ...(temporaryAccess?.isBreakGlassActive ? { isBreakGlass: true } : {}),
+      ...(temporaryAccess && temporaryAccess.roleCodes.length > 0
+        ? { temporaryRoleCodes: temporaryAccess.roleCodes }
+        : {}),
+      ...(temporaryAccess && temporaryAccess.permissions.length > 0
+        ? { temporaryPermissions: temporaryAccess.permissions }
+        : {}),
       preferredLocale: user.preferredLocale ?? user.profile?.preferredLocale ?? 'vi',
       preferredTimezone:
         user.preferredTimezone ?? user.profile?.preferredTimezone ?? 'Asia/Ho_Chi_Minh',

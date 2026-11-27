@@ -11,11 +11,13 @@ import {
   RefreshCw,
   Link2,
   UserCheck,
+  ShieldAlert,
 } from 'lucide-react';
 import { AUTH_MODULE_TABS, type AuthSubTabId } from './enum/auth.enum';
 import { useAuthManagement } from './hooks/useAuthManagement';
 import { useFederatedIdentity } from './hooks/useFederatedIdentity';
 import { useScimProvisioning } from './hooks/useScimProvisioning';
+import { usePrivilegedAccess } from './hooks/usePrivilegedAccess';
 import { AuthGatewayPanel } from './components/AuthGatewayPanel';
 import { MfaAndDevicesPanel } from './components/MfaAndDevicesPanel';
 import { SessionsAndHistoryPanel } from './components/SessionsAndHistoryPanel';
@@ -23,6 +25,7 @@ import { PasswordAndPolicyPanel } from './components/PasswordAndPolicyPanel';
 import { ServiceAccountsPanel } from './components/ServiceAccountsPanel';
 import { FederatedIdentityPanel } from './components/FederatedIdentityPanel';
 import { ScimProvisioningPanel } from './components/ScimProvisioningPanel';
+import { PrivilegedAccessPanel } from './components/privileged-access/PrivilegedAccessPanel';
 import { authStyles } from './components/auth-ui.styles';
 
 export const AuthManagementPage: React.FC = () => {
@@ -52,6 +55,7 @@ export const AuthManagementPage: React.FC = () => {
 
   const federated = useFederatedIdentity(accessToken, notify);
   const scim = useScimProvisioning(accessToken, notify);
+  const pam = usePrivilegedAccess(accessToken, notify);
 
   const resolveTabIcon = (id: AuthSubTabId) => {
     switch (id) {
@@ -69,6 +73,8 @@ export const AuthManagementPage: React.FC = () => {
         return <Link2 size={15} />;
       case 'scim-provisioning':
         return <UserCheck size={15} />;
+      case 'privileged-access':
+        return <ShieldAlert size={15} />;
     }
   };
 
@@ -364,6 +370,39 @@ export const AuthManagementPage: React.FC = () => {
           onDeleteClient={scim.deleteClient}
           onFilterLogs={scim.loadSyncLogs}
           onRunReconciliation={scim.runReconciliation}
+        />
+      )}
+
+      {subTab === 'privileged-access' && (
+        <PrivilegedAccessPanel
+          accessToken={accessToken}
+          busy={pam.busy}
+          stepUpToken={pam.stepUpToken}
+          onChangeStepUpToken={pam.setStepUpToken}
+          overview={pam.overview}
+          directoryUsers={pam.directoryUsers}
+          standingUsers={pam.standingUsers}
+          targets={pam.targets}
+          grants={pam.grants}
+          breakGlassAccounts={pam.breakGlassAccounts}
+          alerts={pam.alerts}
+          reviews={pam.reviews}
+          selectedReview={pam.selectedReview}
+          onRefresh={pam.refreshAll}
+          onUpsertTarget={pam.upsertTarget}
+          onToggleTargetField={pam.toggleTargetField}
+          onRequestGrant={pam.requestGrant}
+          onApproveGrant={pam.approveGrant}
+          onRejectGrant={pam.rejectGrant}
+          onRevokeGrant={pam.revokeGrant}
+          onSweepExpired={pam.sweepExpired}
+          onCreateBreakGlass={pam.createBreakGlass}
+          onActivateBreakGlass={pam.activateBreakGlass}
+          onSealBreakGlass={pam.sealBreakGlass}
+          onAcknowledgeAlert={pam.acknowledgeAlert}
+          onCreateReview={pam.createReview}
+          onLoadReviewDetail={pam.loadReviewDetail}
+          onDecideReviewItem={pam.decideReviewItem}
         />
       )}
     </main>

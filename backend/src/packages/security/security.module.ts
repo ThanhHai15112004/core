@@ -17,6 +17,10 @@ import { TotpService } from './providers/totp.service.js';
 import { DataScopeService } from './providers/data-scope.service.js';
 import { AuditLogService } from './providers/audit-log.service.js';
 import { PlatformSecurityService } from './providers/platform-security.service.js';
+import {
+  PrivilegedAccessHookRegistry,
+  defaultPrivilegedAccessHookRegistry,
+} from './providers/privileged-access-hook.registry.js';
 
 const PLATFORM_SECURITY_HOOKS_WATERMARK = Symbol.for('core:fastify_platform_security_hooks');
 
@@ -182,6 +186,10 @@ export function configureFastifyPlatformSecurityHooks(
     },
     AuthGuard,
     SecurityManageableAdapter,
+    {
+      provide: PrivilegedAccessHookRegistry,
+      useValue: defaultPrivilegedAccessHookRegistry,
+    },
   ],
   exports: [
     SECRET_PROVIDER,
@@ -206,6 +214,7 @@ export function configureFastifyPlatformSecurityHooks(
     },
     AuthGuard,
     SecurityManageableAdapter,
+    PrivilegedAccessHookRegistry,
   ],
 })
 export class SecurityModule implements OnModuleInit {

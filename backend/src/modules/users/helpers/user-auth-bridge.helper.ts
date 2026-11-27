@@ -18,6 +18,7 @@ import {
   type AuditLogService,
   DATA_SCOPE,
   type PasswordHasherService,
+  defaultPrivilegedAccessHookRegistry,
   parseDataScope,
 } from '@packages/security/index.js';
 import { type IRolesPublicService, ROLE_STATUS } from '@modules/roles/contracts/index.js';
@@ -121,12 +122,32 @@ export async function buildUserAuthIdentityView(params: {
     getUserProfile(userId, user),
   ]);
 
-  const roleIds = roleLinks.map((r) => Number(r.roleId));
-  const roleSummaries = roleIds.length > 0 ? await rolesPublicService.findByIds(roleIds) : [];
-  const activeRoles = roleSummaries.filter((r) => Number(r.status) === ROLE_STATUS.ACTIVE);
+  const pamGrantResolver = defaultPrivilegedAccessHookRegistry.getGrantResolver();
+  const tempAccess = pamGrantResolver
+    ? await pamGrantResolver.resolveActiveTemporaryAccess(userId).catch(() => null)
+    : null;
 
-  const roleCodes = activeRoles.map((r) => r.code);
-  const permissions = [...new Set(activeRoles.flatMap((r) => r.permissions))];
+  const standingRoleIds = roleLinks.map((r) => Number(r.roleId));
+  const combinedRoleIds = [
+    ...new Set([...standingRoleIds, ...(tempAccess?.roleIds ?? []).map(Number)]),
+  ];
+  const roleSummaries =
+    combinedRoleIds.length > 0 ? await rolesPublicService.findByIds(combinedRoleIds) : [];
+  const extraTempRoleCodes = (tempAccess?.roleCodes ?? []).filter(
+    (code) => !roleSummaries.some((r) => r.code === code),
+  );
+  const extraRoleSummaries =
+    extraTempRoleCodes.length > 0 ? await rolesPublicService.findByCodes(extraTempRoleCodes) : [];
+  const allRoleSummaries = [...roleSummaries, ...extraRoleSummaries];
+  const activeRoles = allRoleSummaries.filter((r) => Number(r.status) === ROLE_STATUS.ACTIVE);
+
+  const roleCodes = [...new Set([...activeRoles.map((r) => r.code), ...(tempAccess?.roleCodes ?? [])])];
+  const permissions = [
+    ...new Set([
+      ...activeRoles.flatMap((r) => r.permissions),
+      ...(tempAccess?.permissions ?? []),
+    ]),
+  ];
   const primaryOrgId =
     user.primaryOrganizationUnitId !== undefined && user.primaryOrganizationUnitId !== null
       ? Number(user.primaryOrganizationUnitId)
