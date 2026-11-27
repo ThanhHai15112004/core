@@ -2,6 +2,7 @@ import { Injectable, type OnModuleInit } from '@nestjs/common';
 import { CoreConfigService } from '@packages/config/index.js';
 import {
   BACKUP_QUEUE_TOPICS,
+  COMPLIANCE_QUEUE_TOPICS,
   DATA_GOVERNANCE_QUEUE_TOPICS,
   DR_QUEUE_TOPICS,
   IDEMPOTENCY_QUEUE_TOPICS,
@@ -223,6 +224,19 @@ export class SystemTask implements OnModuleInit {
       pattern: '*/15 * * * *',
       tz: this.config.scheduler.timezone,
       data: { triggeredBy: 'scheduler', module: 'data-governance' },
+      notifyOnFailure: true,
+      misfirePolicy: 'run_once',
+    });
+
+    this.registry.register({
+      id: 'compliance.review.reminder.sweep',
+      queue: QUEUES.SYSTEM_EVENTS,
+      name: COMPLIANCE_QUEUE_TOPICS.REVIEW_REMINDER_SWEEP_TICK,
+      description:
+        'Quét nhắc kiểm tra yêu cầu kiểm soát (Control), rà soát nhà cung cấp, hạn hợp đồng và hết hạn bằng chứng (14.6).',
+      pattern: '15 7 * * *',
+      tz: this.config.scheduler.timezone,
+      data: { triggeredBy: 'scheduler', module: 'compliance' },
       notifyOnFailure: true,
       misfirePolicy: 'run_once',
     });

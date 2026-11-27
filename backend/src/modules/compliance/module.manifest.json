@@ -1,0 +1,580 @@
+{
+  "$schema": "../../packages/kernel/schemas/module.manifest.schema.json",
+  "name": "compliance",
+  "displayName": "Compliance & Vendor Risk Management",
+  "version": "1.0.0",
+  "description": "Module tùy chọn Compliance và Quản lý nhà cung cấp (Mục 14.6): danh mục yêu cầu kiểm soát (Control, người phụ trách, tần suất), bằng chứng thực hiện (File/Log/Báo cáo/Link), lịch sử kiểm tra, quản lý nhà cung cấp (Email/SMS/Cloud/Payment/AI), đánh giá phạm vi dữ liệu được phép xử lý, nhắc rà soát hợp đồng/kiểm tra định kỳ, phương án dự phòng/thay thế và báo cáo Compliance trung lập không phụ thuộc một tiêu chuẩn duy nhất.",
+  "type": "core",
+  "category": "Security",
+  "author": "Core Platform Team",
+  "entryModule": "ComplianceModule",
+  "dependencies": [
+    "database",
+    "security",
+    "audit",
+    "files",
+    "reports",
+    "exports",
+    "notifications",
+    "settings",
+    "feature-flags",
+    "codes",
+    "sequences",
+    "users",
+    "organizations"
+  ],
+  "permissions": [
+    "compliance.read",
+    "compliance.manage",
+    "compliance.check",
+    "compliance.vendor.manage",
+    "compliance.report"
+  ],
+  "events": {
+    "published": [
+      "compliance.control.saved",
+      "compliance.control.deleted",
+      "compliance.evidence.added",
+      "compliance.evidence.deleted",
+      "compliance.check.recorded",
+      "compliance.vendor.saved",
+      "compliance.vendor.deleted",
+      "compliance.vendor.data_assessment.saved",
+      "compliance.review.due",
+      "compliance.contract.expiring",
+      "compliance.report.generated"
+    ],
+    "subscribed": []
+  },
+  "database": {
+    "hasMigrations": true,
+    "tables": [
+      "compliance_controls",
+      "compliance_check_histories",
+      "compliance_evidences",
+      "compliance_vendors",
+      "compliance_vendor_data_assessments"
+    ]
+  },
+  "codeTypes": [
+    {
+      "code": "compliance.control_frequency",
+      "name": "Tần suất kiểm tra kiểm soát",
+      "description": "Chu kỳ lặp lại kiểm tra yêu cầu kiểm soát và rà soát nhà cung cấp",
+      "isSystem": true,
+      "allowCustomValues": false,
+      "values": [
+        {
+          "numericCode": 1,
+          "code": "DAILY",
+          "behaviorCode": "DAILY",
+          "name": "Hằng ngày",
+          "labels": { "vi": "Hằng ngày", "en": "Daily" },
+          "badgeTone": "info",
+          "sortOrder": 1,
+          "isSystem": true
+        },
+        {
+          "numericCode": 2,
+          "code": "WEEKLY",
+          "behaviorCode": "WEEKLY",
+          "name": "Hằng tuần",
+          "labels": { "vi": "Hằng tuần", "en": "Weekly" },
+          "badgeTone": "info",
+          "sortOrder": 2,
+          "isSystem": true
+        },
+        {
+          "numericCode": 3,
+          "code": "MONTHLY",
+          "behaviorCode": "MONTHLY",
+          "name": "Hằng tháng",
+          "labels": { "vi": "Hằng tháng", "en": "Monthly" },
+          "badgeTone": "info",
+          "sortOrder": 3,
+          "isSystem": true
+        },
+        {
+          "numericCode": 4,
+          "code": "QUARTERLY",
+          "behaviorCode": "QUARTERLY",
+          "name": "Hằng quý",
+          "labels": { "vi": "Hằng quý", "en": "Quarterly" },
+          "badgeTone": "warning",
+          "sortOrder": 4,
+          "isSystem": true
+        },
+        {
+          "numericCode": 5,
+          "code": "SEMI_ANNUAL",
+          "behaviorCode": "SEMI_ANNUAL",
+          "name": "Nửa năm",
+          "labels": { "vi": "6 tháng / lần", "en": "Semi-Annual" },
+          "badgeTone": "warning",
+          "sortOrder": 5,
+          "isSystem": true
+        },
+        {
+          "numericCode": 6,
+          "code": "ANNUAL",
+          "behaviorCode": "ANNUAL",
+          "name": "Hằng năm",
+          "labels": { "vi": "Hằng năm", "en": "Annual" },
+          "badgeTone": "neutral",
+          "sortOrder": 6,
+          "isSystem": true
+        },
+        {
+          "numericCode": 7,
+          "code": "AD_HOC",
+          "behaviorCode": "AD_HOC",
+          "name": "Đột xuất / Không định kỳ",
+          "labels": { "vi": "Đột xuất", "en": "Ad-hoc" },
+          "badgeTone": "neutral",
+          "sortOrder": 7,
+          "isSystem": true
+        }
+      ]
+    },
+    {
+      "code": "compliance.control_status",
+      "name": "Trạng thái yêu cầu kiểm soát",
+      "description": "Trạng thái vòng đời của một yêu cầu kiểm soát Compliance",
+      "isSystem": true,
+      "allowCustomValues": false,
+      "values": [
+        {
+          "numericCode": 1,
+          "code": "DRAFT",
+          "behaviorCode": "DRAFT",
+          "name": "Bản nháp",
+          "labels": { "vi": "Bản nháp", "en": "Draft" },
+          "badgeTone": "neutral",
+          "sortOrder": 1,
+          "isSystem": true
+        },
+        {
+          "numericCode": 2,
+          "code": "ACTIVE",
+          "behaviorCode": "ACTIVE",
+          "name": "Đang áp dụng",
+          "labels": { "vi": "Đang áp dụng", "en": "Active" },
+          "badgeTone": "success",
+          "sortOrder": 2,
+          "isSystem": true
+        },
+        {
+          "numericCode": 3,
+          "code": "RETIRED",
+          "behaviorCode": "RETIRED",
+          "name": "Ngừng áp dụng",
+          "labels": { "vi": "Ngừng áp dụng", "en": "Retired" },
+          "badgeTone": "neutral",
+          "sortOrder": 3,
+          "isSystem": true
+        }
+      ]
+    },
+    {
+      "code": "compliance.check_result",
+      "name": "Kết quả kiểm tra kiểm soát",
+      "description": "Kết quả đánh giá mức độ tuân thủ sau mỗi lần kiểm tra Control",
+      "isSystem": true,
+      "allowCustomValues": false,
+      "values": [
+        {
+          "numericCode": 1,
+          "code": "PASS",
+          "behaviorCode": "PASS",
+          "name": "Đạt (Pass)",
+          "labels": { "vi": "Đạt", "en": "Pass" },
+          "badgeTone": "success",
+          "sortOrder": 1,
+          "isSystem": true
+        },
+        {
+          "numericCode": 2,
+          "code": "PARTIAL",
+          "behaviorCode": "PARTIAL",
+          "name": "Đạt một phần (Partial)",
+          "labels": { "vi": "Đạt một phần", "en": "Partial" },
+          "badgeTone": "warning",
+          "sortOrder": 2,
+          "isSystem": true
+        },
+        {
+          "numericCode": 3,
+          "code": "FAIL",
+          "behaviorCode": "FAIL",
+          "name": "Không đạt (Fail)",
+          "labels": { "vi": "Không đạt", "en": "Fail" },
+          "badgeTone": "danger",
+          "sortOrder": 3,
+          "isSystem": true
+        },
+        {
+          "numericCode": 4,
+          "code": "NOT_APPLICABLE",
+          "behaviorCode": "NOT_APPLICABLE",
+          "name": "Không áp dụng (N/A)",
+          "labels": { "vi": "Không áp dụng", "en": "Not Applicable" },
+          "badgeTone": "neutral",
+          "sortOrder": 4,
+          "isSystem": true
+        }
+      ]
+    },
+    {
+      "code": "compliance.evidence_type",
+      "name": "Loại bằng chứng kiểm soát",
+      "description": "Nguồn bằng chứng chứng minh việc thực hiện yêu cầu kiểm soát",
+      "isSystem": true,
+      "allowCustomValues": false,
+      "values": [
+        {
+          "numericCode": 1,
+          "code": "FILE",
+          "behaviorCode": "FILE",
+          "name": "Tệp đính kèm (File)",
+          "labels": { "vi": "Tệp đính kèm", "en": "File" },
+          "badgeTone": "info",
+          "sortOrder": 1,
+          "isSystem": true
+        },
+        {
+          "numericCode": 2,
+          "code": "LOG",
+          "behaviorCode": "LOG",
+          "name": "Nhật ký hệ thống (Audit Log)",
+          "labels": { "vi": "Nhật ký hệ thống", "en": "Audit Log" },
+          "badgeTone": "info",
+          "sortOrder": 2,
+          "isSystem": true
+        },
+        {
+          "numericCode": 3,
+          "code": "REPORT",
+          "behaviorCode": "REPORT",
+          "name": "Báo cáo hệ thống (Report)",
+          "labels": { "vi": "Báo cáo hệ thống", "en": "Report" },
+          "badgeTone": "success",
+          "sortOrder": 3,
+          "isSystem": true
+        },
+        {
+          "numericCode": 4,
+          "code": "LINK",
+          "behaviorCode": "LINK",
+          "name": "Liên kết ngoài (External Link)",
+          "labels": { "vi": "Liên kết ngoài", "en": "External Link" },
+          "badgeTone": "neutral",
+          "sortOrder": 4,
+          "isSystem": true
+        }
+      ]
+    },
+    {
+      "code": "compliance.vendor_category",
+      "name": "Nhóm nhà cung cấp (Vendor Category)",
+      "description": "Phân loại nhà cung cấp dịch vụ bên thứ ba (Email, SMS, Cloud, Payment, AI, Khác)",
+      "isSystem": true,
+      "allowCustomValues": false,
+      "values": [
+        {
+          "numericCode": 1,
+          "code": "EMAIL",
+          "behaviorCode": "EMAIL",
+          "name": "Email",
+          "labels": { "vi": "Nhà cung cấp Email", "en": "Email" },
+          "badgeTone": "info",
+          "sortOrder": 1,
+          "isSystem": true
+        },
+        {
+          "numericCode": 2,
+          "code": "SMS",
+          "behaviorCode": "SMS",
+          "name": "SMS",
+          "labels": { "vi": "Nhà cung cấp SMS", "en": "SMS" },
+          "badgeTone": "info",
+          "sortOrder": 2,
+          "isSystem": true
+        },
+        {
+          "numericCode": 3,
+          "code": "CLOUD",
+          "behaviorCode": "CLOUD",
+          "name": "Cloud",
+          "labels": { "vi": "Hạ tầng Cloud", "en": "Cloud" },
+          "badgeTone": "neutral",
+          "sortOrder": 3,
+          "isSystem": true
+        },
+        {
+          "numericCode": 4,
+          "code": "PAYMENT",
+          "behaviorCode": "PAYMENT",
+          "name": "Payment",
+          "labels": { "vi": "Cổng thanh toán", "en": "Payment" },
+          "badgeTone": "success",
+          "sortOrder": 4,
+          "isSystem": true
+        },
+        {
+          "numericCode": 5,
+          "code": "AI",
+          "behaviorCode": "AI",
+          "name": "AI",
+          "labels": { "vi": "Dịch vụ AI", "en": "AI" },
+          "badgeTone": "warning",
+          "sortOrder": 5,
+          "isSystem": true
+        },
+        {
+          "numericCode": 6,
+          "code": "OTHER",
+          "behaviorCode": "OTHER",
+          "name": "Khác",
+          "labels": { "vi": "Khác", "en": "Other" },
+          "badgeTone": "neutral",
+          "sortOrder": 6,
+          "isSystem": true
+        }
+      ]
+    },
+    {
+      "code": "compliance.risk_level",
+      "name": "Mức độ rủi ro / trọng yếu",
+      "description": "Đánh giá mức độ rủi ro hoặc trọng yếu của nhà cung cấp và luồng dữ liệu",
+      "isSystem": true,
+      "allowCustomValues": false,
+      "values": [
+        {
+          "numericCode": 1,
+          "code": "LOW",
+          "behaviorCode": "LOW",
+          "name": "Thấp",
+          "labels": { "vi": "Thấp", "en": "Low" },
+          "badgeTone": "success",
+          "sortOrder": 1,
+          "isSystem": true
+        },
+        {
+          "numericCode": 2,
+          "code": "MEDIUM",
+          "behaviorCode": "MEDIUM",
+          "name": "Trung bình",
+          "labels": { "vi": "Trung bình", "en": "Medium" },
+          "badgeTone": "info",
+          "sortOrder": 2,
+          "isSystem": true
+        },
+        {
+          "numericCode": 3,
+          "code": "HIGH",
+          "behaviorCode": "HIGH",
+          "name": "Cao",
+          "labels": { "vi": "Cao", "en": "High" },
+          "badgeTone": "warning",
+          "sortOrder": 3,
+          "isSystem": true
+        },
+        {
+          "numericCode": 4,
+          "code": "CRITICAL",
+          "behaviorCode": "CRITICAL",
+          "name": "Nghiêm trọng",
+          "labels": { "vi": "Nghiêm trọng", "en": "Critical" },
+          "badgeTone": "danger",
+          "sortOrder": 4,
+          "isSystem": true
+        }
+      ]
+    },
+    {
+      "code": "compliance.vendor_status",
+      "name": "Trạng thái quản lý nhà cung cấp",
+      "description": "Trạng thái hợp tác & rà soát rủi ro của nhà cung cấp",
+      "isSystem": true,
+      "allowCustomValues": false,
+      "values": [
+        {
+          "numericCode": 1,
+          "code": "ACTIVE",
+          "behaviorCode": "ACTIVE",
+          "name": "Đang sử dụng",
+          "labels": { "vi": "Đang sử dụng", "en": "Active" },
+          "badgeTone": "success",
+          "sortOrder": 1,
+          "isSystem": true
+        },
+        {
+          "numericCode": 2,
+          "code": "UNDER_REVIEW",
+          "behaviorCode": "UNDER_REVIEW",
+          "name": "Đang rà soát",
+          "labels": { "vi": "Đang rà soát", "en": "Under Review" },
+          "badgeTone": "warning",
+          "sortOrder": 2,
+          "isSystem": true
+        },
+        {
+          "numericCode": 3,
+          "code": "SUSPENDED",
+          "behaviorCode": "SUSPENDED",
+          "name": "Tạm ngừng",
+          "labels": { "vi": "Tạm ngừng", "en": "Suspended" },
+          "badgeTone": "danger",
+          "sortOrder": 3,
+          "isSystem": true
+        },
+        {
+          "numericCode": 4,
+          "code": "OFFBOARDED",
+          "behaviorCode": "OFFBOARDED",
+          "name": "Đã ngừng hợp tác",
+          "labels": { "vi": "Đã ngừng hợp tác", "en": "Offboarded" },
+          "badgeTone": "neutral",
+          "sortOrder": 4,
+          "isSystem": true
+        }
+      ]
+    }
+  ],
+  "settingGroups": [
+    {
+      "code": "compliance",
+      "name": "Compliance & Quản lý nhà cung cấp (14.6)",
+      "description": "Ngưỡng nhắc rà soát kiểm soát định kỳ, hạn hợp đồng nhà cung cấp, hạn bằng chứng và thời gian lưu file báo cáo",
+      "icon": "clipboard-check",
+      "sortOrder": 46,
+      "isSystem": true
+    }
+  ],
+  "settings": [
+    {
+      "key": "compliance.review.reminder_days_before",
+      "groupCode": "compliance",
+      "name": "Số ngày nhắc trước hạn kiểm tra / rà soát (ngày)",
+      "description": "Số ngày cảnh báo trước khi Control đến hạn kiểm tra hoặc Vendor đến hạn rà soát định kỳ",
+      "valueType": "NUMBER",
+      "defaultValue": 30,
+      "isSystem": true,
+      "sortOrder": 1
+    },
+    {
+      "key": "compliance.contract.expiring_days_before",
+      "groupCode": "compliance",
+      "name": "Số ngày nhắc trước khi hợp đồng nhà cung cấp hết hạn (ngày)",
+      "description": "Số ngày cảnh báo trước ngày kết thúc hợp đồng để chủ động gia hạn hoặc kích hoạt phương án thay thế",
+      "valueType": "NUMBER",
+      "defaultValue": 45,
+      "isSystem": true,
+      "sortOrder": 2
+    },
+    {
+      "key": "compliance.evidence.expiring_days_before",
+      "groupCode": "compliance",
+      "name": "Số ngày nhắc trước khi bằng chứng hết hiệu lực (ngày)",
+      "description": "Số ngày cảnh báo trước khi bằng chứng kiểm soát hết hạn sử dụng",
+      "valueType": "NUMBER",
+      "defaultValue": 30,
+      "isSystem": true,
+      "sortOrder": 3
+    },
+    {
+      "key": "compliance.report.file_ttl_seconds",
+      "groupCode": "compliance",
+      "name": "Thời hạn lưu tệp báo cáo Compliance tạm thời (giây)",
+      "description": "Thời gian sống (TTL) của tệp xuất báo cáo Compliance trước khi tự động hết hạn",
+      "valueType": "NUMBER",
+      "defaultValue": 3600,
+      "isSystem": true,
+      "sortOrder": 4
+    }
+  ],
+  "featureFlags": [
+    {
+      "key": "compliance.enabled",
+      "name": "Bật Module Compliance & Quản lý nhà cung cấp (14.6)",
+      "description": "Bật/tắt toàn bộ chức năng Compliance và Vendor Risk cho dự án doanh nghiệp",
+      "isEnabled": true,
+      "rolloutPercentage": 100,
+      "isSystem": true
+    },
+    {
+      "key": "compliance.controls.enabled",
+      "name": "Bật Quản lý Yêu cầu kiểm soát, Bằng chứng & Lịch sử kiểm tra",
+      "description": "Cho phép tạo Control, lưu bằng chứng File/Log/Report/Link và ghi nhận lịch sử kiểm tra",
+      "isEnabled": true,
+      "rolloutPercentage": 100,
+      "isSystem": true
+    },
+    {
+      "key": "compliance.vendors.enabled",
+      "name": "Bật Quản lý Nhà cung cấp, Đánh giá dữ liệu & Phương án dự phòng",
+      "description": "Cho phép quản lý danh mục nhà cung cấp Email/SMS/Cloud/Payment/AI, hợp đồng và đánh giá dữ liệu",
+      "isEnabled": true,
+      "rolloutPercentage": 100,
+      "isSystem": true
+    },
+    {
+      "key": "compliance.reports.enabled",
+      "name": "Bật Báo cáo Compliance trung lập đa tiêu chuẩn",
+      "description": "Cho phép tổng hợp và xuất báo cáo Compliance không phụ thuộc một tiêu chuẩn duy nhất",
+      "isEnabled": true,
+      "rolloutPercentage": 100,
+      "isSystem": true
+    }
+  ],
+  "sequences": [
+    {
+      "key": "compliance.control_code",
+      "name": "Mã yêu cầu kiểm soát (Control)",
+      "description": "Chuỗi sinh mã tự động cho danh mục yêu cầu kiểm soát Compliance",
+      "prefix": "CTRL",
+      "separator": "-",
+      "dateFormat": "YYYY",
+      "paddingLength": 4,
+      "startValue": 1,
+      "step": 1,
+      "resetPolicy": "YEARLY",
+      "isSystem": true
+    },
+    {
+      "key": "compliance.vendor_code",
+      "name": "Mã nhà cung cấp (Vendor)",
+      "description": "Chuỗi sinh mã tự động cho danh sách nhà cung cấp bên thứ ba",
+      "prefix": "VEND",
+      "separator": "-",
+      "dateFormat": "YYYY",
+      "paddingLength": 4,
+      "startValue": 1,
+      "step": 1,
+      "resetPolicy": "YEARLY",
+      "isSystem": true
+    }
+  ],
+  "reports": [
+    {
+      "code": "compliance.summary_report",
+      "module": "compliance",
+      "name": "Báo cáo tổng hợp Compliance & Rủi ro nhà cung cấp",
+      "description": "Báo cáo tổng hợp trạng thái tuân thủ các yêu cầu kiểm soát, bằng chứng, lịch sử kiểm tra, đánh giá dữ liệu và phương án dự phòng nhà cung cấp (hỗ trợ lọc theo bất kỳ framework tag nào)",
+      "category": "REPORT",
+      "requiredPermission": "compliance.report",
+      "isHeavy": false,
+      "heavyRecordThreshold": 2000,
+      "cacheTtlSeconds": 180,
+      "supportsReadReplica": true,
+      "supportedFormats": ["xlsx", "csv", "pdf"],
+      "parameters": [
+        { "key": "dateRange", "name": "Khoảng ngày kiểm tra", "type": "date-range", "required": false },
+        { "key": "organizationUnitId", "name": "Đơn vị / Phòng ban", "type": "organization-unit", "required": false },
+        { "key": "filters", "name": "Bộ lọc frameworkTag / domain / vendorCategory", "type": "filter", "required": false }
+      ],
+      "isSystem": true,
+      "status": 1
+    }
+  ]
+}

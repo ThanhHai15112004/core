@@ -243,6 +243,26 @@ export const API_ROUTES = {
     LEGAL_HOLDS: (qs = '') => `/data-governance/legal-holds${qs ? `?${qs}` : ''}`,
     LEGAL_HOLD_RELEASE: (id: string | number) => `/data-governance/legal-holds/${id}/release`,
   },
+  COMPLIANCE: {
+    OVERVIEW: '/compliance/overview',
+    REVIEWS_SWEEP: '/compliance/reviews/sweep',
+    CONTROLS: (qs = '') => `/compliance/controls${qs ? `?${qs}` : ''}`,
+    CONTROL_BY_ID: (id: string | number) => `/compliance/controls/${id}`,
+    CONTROL_CHECKS: (id: string | number, qs = '') =>
+      `/compliance/controls/${id}/checks${qs ? `?${qs}` : ''}`,
+    CHECKS: (qs = '') => `/compliance/checks${qs ? `?${qs}` : ''}`,
+    EVIDENCES: (qs = '') => `/compliance/evidences${qs ? `?${qs}` : ''}`,
+    EVIDENCE_BY_ID: (id: string | number) => `/compliance/evidences/${id}`,
+    VENDORS: (qs = '') => `/compliance/vendors${qs ? `?${qs}` : ''}`,
+    VENDOR_BY_ID: (id: string | number) => `/compliance/vendors/${id}`,
+    VENDOR_DATA_ASSESSMENTS: (id: string | number) =>
+      `/compliance/vendors/${id}/data-assessments`,
+    DATA_ASSESSMENT_BY_ID: (id: string | number) => `/compliance/data-assessments/${id}`,
+    REPORTS_SUMMARY: (qs = '') => `/compliance/reports/summary${qs ? `?${qs}` : ''}`,
+    REPORTS_GENERATE: '/compliance/reports/generate',
+    REPORTS_DOWNLOAD: (token: string) =>
+      `/compliance/reports/downloads/${encodeURIComponent(token)}`,
+  },
   USERS: {
     LIST: (qs = '') => `/users${qs ? `?${qs}` : ''}`,
     CREATE: '/users',

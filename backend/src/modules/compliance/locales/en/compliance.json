@@ -1,0 +1,15 @@
+{
+  "moduleDisabled": "The Compliance & Vendor Management module is currently disabled by project configuration.",
+  "controlsDisabled": "Compliance control and evidence management is currently disabled.",
+  "vendorsDisabled": "Vendor risk and data assessment management is currently disabled.",
+  "reportsDisabled": "Compliance reporting functionality is currently disabled.",
+  "controlNotFound": "Requested compliance control was not found.",
+  "controlCodeDuplicate": "Control code already exists.",
+  "evidenceNotFound": "Requested compliance evidence was not found.",
+  "evidencePayloadInvalid": "Evidence payload does not match the selected evidence type (requires valid File ID, Audit Log/reference, Report, or URL).",
+  "checkHistoryNotFound": "Requested compliance check history record was not found.",
+  "vendorNotFound": "Requested compliance vendor was not found.",
+  "vendorCodeDuplicate": "Vendor code already exists.",
+  "dataAssessmentNotFound": "Requested vendor data assessment was not found.",
+  "reportDownloadExpired": "Compliance report download link was not found or has expired."
+}

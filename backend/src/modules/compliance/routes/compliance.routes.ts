@@ -1,0 +1,18 @@
+export const COMPLIANCE_ROUTES = {
+  PREFIX: 'compliance',
+  OVERVIEW: 'overview',
+  REVIEWS_SWEEP: 'reviews/sweep',
+  CONTROLS: 'controls',
+  CONTROL_BY_ID: 'controls/:id',
+  CONTROL_CHECKS: 'controls/:id/checks',
+  CHECKS: 'checks',
+  EVIDENCES: 'evidences',
+  EVIDENCE_BY_ID: 'evidences/:id',
+  VENDORS: 'vendors',
+  VENDOR_BY_ID: 'vendors/:id',
+  VENDOR_DATA_ASSESSMENTS: 'vendors/:id/data-assessments',
+  DATA_ASSESSMENT_BY_ID: 'data-assessments/:id',
+  REPORTS_SUMMARY: 'reports/summary',
+  REPORTS_GENERATE: 'reports/generate',
+  REPORTS_DOWNLOAD: 'reports/downloads/:token',
+} as const;

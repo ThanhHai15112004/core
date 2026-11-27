@@ -3352,6 +3352,1092 @@
       ]
     },
     {
+      "name": "Compliance & Vendor Management (14.6)",
+      "item": [
+        {
+          "name": "Lịch sử kiểm tra yêu cầu kiểm soát trên toàn hệ thống",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/compliance/checks?controlId=1&checkedByUserId=1&result=PASS&fromDate=fromDate_sample&toDate=toDate_sample&page=1&limit=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "compliance",
+                "checks"
+              ],
+              "query": [
+                {
+                  "key": "controlId",
+                  "value": "1"
+                },
+                {
+                  "key": "checkedByUserId",
+                  "value": "1"
+                },
+                {
+                  "key": "result",
+                  "value": "PASS"
+                },
+                {
+                  "key": "fromDate",
+                  "value": "fromDate_sample"
+                },
+                {
+                  "key": "toDate",
+                  "value": "toDate_sample"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `compliance.read`"
+          }
+        },
+        {
+          "name": "Danh sách yêu cầu kiểm soát (Compliance Controls)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/compliance/controls?domain=domain_sample&frameworkTag=frameworkTag_sample&status=DRAFT&frequency=DAILY&ownerUserId=1&organizationUnitId=1&overdueOnly=true&q=q_sample&page=1&limit=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "compliance",
+                "controls"
+              ],
+              "query": [
+                {
+                  "key": "domain",
+                  "value": "domain_sample"
+                },
+                {
+                  "key": "frameworkTag",
+                  "value": "frameworkTag_sample"
+                },
+                {
+                  "key": "status",
+                  "value": "DRAFT"
+                },
+                {
+                  "key": "frequency",
+                  "value": "DAILY"
+                },
+                {
+                  "key": "ownerUserId",
+                  "value": "1"
+                },
+                {
+                  "key": "organizationUnitId",
+                  "value": "1"
+                },
+                {
+                  "key": "overdueOnly",
+                  "value": "true"
+                },
+                {
+                  "key": "q",
+                  "value": "q_sample"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `compliance.read`"
+          }
+        },
+        {
+          "name": "Tạo yêu cầu kiểm soát (Control, người phụ trách, tần suất)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/compliance/controls",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "compliance",
+                "controls"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"controlCode\": \"controlCode_sample\",\n  \"title\": \"title_sample\",\n  \"description\": \"description_sample\",\n  \"domain\": \"GENERAL\",\n  \"frameworkTags\": [\n    \"frameworkTags_sample\"\n  ],\n  \"ownerUserId\": 1,\n  \"organizationUnitId\": 1,\n  \"frequency\": \"QUARTERLY\",\n  \"status\": \"ACTIVE\",\n  \"nextCheckDueAt\": \"2026-10-14T10:00:00.000Z\",\n  \"metadata\": {}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `compliance.manage`"
+          }
+        },
+        {
+          "name": "Chi tiết một yêu cầu kiểm soát",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/compliance/controls/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "compliance",
+                "controls",
+                ":id"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `compliance.read`"
+          }
+        },
+        {
+          "name": "Cập nhật yêu cầu kiểm soát",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/compliance/controls/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "compliance",
+                "controls",
+                ":id"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"controlCode\": \"controlCode_sample\",\n  \"title\": \"title_sample\",\n  \"description\": \"description_sample\",\n  \"domain\": \"GENERAL\",\n  \"frameworkTags\": [\n    \"frameworkTags_sample\"\n  ],\n  \"ownerUserId\": 1,\n  \"organizationUnitId\": 1,\n  \"frequency\": \"QUARTERLY\",\n  \"status\": \"ACTIVE\",\n  \"nextCheckDueAt\": \"2026-10-14T10:00:00.000Z\",\n  \"metadata\": {}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `compliance.manage`"
+          }
+        },
+        {
+          "name": "Xóa mềm yêu cầu kiểm soát",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/compliance/controls/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "compliance",
+                "controls",
+                ":id"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `compliance.manage`"
+          }
+        },
+        {
+          "name": "Lịch sử kiểm tra của một yêu cầu kiểm soát cụ thể",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/compliance/controls/:id/checks?controlId=1&checkedByUserId=1&result=PASS&fromDate=fromDate_sample&toDate=toDate_sample&page=1&limit=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "compliance",
+                "controls",
+                ":id",
+                "checks"
+              ],
+              "query": [
+                {
+                  "key": "controlId",
+                  "value": "1"
+                },
+                {
+                  "key": "checkedByUserId",
+                  "value": "1"
+                },
+                {
+                  "key": "result",
+                  "value": "PASS"
+                },
+                {
+                  "key": "fromDate",
+                  "value": "fromDate_sample"
+                },
+                {
+                  "key": "toDate",
+                  "value": "toDate_sample"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `compliance.read`"
+          }
+        },
+        {
+          "name": "Ghi nhận kết quả kiểm tra kiểm soát (ai kiểm tra, kết quả, khắc phục)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/compliance/controls/:id/checks",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "compliance",
+                "controls",
+                ":id",
+                "checks"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"checkedAt\": \"2026-10-14T10:00:00.000Z\",\n  \"result\": \"PASS\",\n  \"score\": 0,\n  \"findings\": \"findings_sample\",\n  \"remediationPlan\": \"remediationPlan_sample\",\n  \"remediationDueAt\": \"2026-10-14T10:00:00.000Z\",\n  \"nextCheckDueAt\": \"2026-10-14T10:00:00.000Z\",\n  \"evidenceIds\": [\n    1\n  ],\n  \"metadata\": {}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `compliance.check`"
+          }
+        },
+        {
+          "name": "Cập nhật hoặc phê duyệt đánh giá dữ liệu nhà cung cấp",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/compliance/data-assessments/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "compliance",
+                "data-assessments",
+                ":id"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dataCategory\": \"dataCategory_sample\",\n  \"classificationLevel\": \"INTERNAL\",\n  \"allowedDataFields\": [\n    \"allowedDataFields_sample\"\n  ],\n  \"prohibitedDataFields\": [\n    \"prohibitedDataFields_sample\"\n  ],\n  \"processingPurpose\": \"processingPurpose_sample\",\n  \"dataFlowDirection\": \"OUTBOUND\",\n  \"storageRegions\": [\n    \"storageRegions_sample\"\n  ],\n  \"crossBorderTransfer\": false,\n  \"transferMechanism\": \"transferMechanism_sample\",\n  \"retentionDays\": 0,\n  \"encryptionInTransit\": true,\n  \"encryptionAtRest\": true,\n  \"subprocessors\": [\n    \"subprocessors_sample\"\n  ],\n  \"riskLevel\": \"MEDIUM\",\n  \"approvalStatus\": \"PENDING\",\n  \"nextReviewDueAt\": \"2026-10-14T10:00:00.000Z\",\n  \"notes\": \"notes_sample\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `compliance.vendor.manage`"
+          }
+        },
+        {
+          "name": "Xóa mềm đánh giá dữ liệu nhà cung cấp",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/compliance/data-assessments/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "compliance",
+                "data-assessments",
+                ":id"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `compliance.vendor.manage`"
+          }
+        },
+        {
+          "name": "Danh sách bằng chứng thực hiện kiểm soát (File, Log, Report, Link)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/compliance/evidences?controlId=1&vendorId=1&checkHistoryId=1&evidenceType=FILE&status=VALID&q=q_sample&page=1&limit=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "compliance",
+                "evidences"
+              ],
+              "query": [
+                {
+                  "key": "controlId",
+                  "value": "1"
+                },
+                {
+                  "key": "vendorId",
+                  "value": "1"
+                },
+                {
+                  "key": "checkHistoryId",
+                  "value": "1"
+                },
+                {
+                  "key": "evidenceType",
+                  "value": "FILE"
+                },
+                {
+                  "key": "status",
+                  "value": "VALID"
+                },
+                {
+                  "key": "q",
+                  "value": "q_sample"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `compliance.read`"
+          }
+        },
+        {
+          "name": "Lưu bằng chứng thực hiện kiểm soát (File, Log, Báo cáo hoặc Link)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/compliance/evidences",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "compliance",
+                "evidences"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"controlId\": 1,\n  \"checkHistoryId\": 1,\n  \"vendorId\": 1,\n  \"evidenceType\": \"FILE\",\n  \"title\": \"title_sample\",\n  \"description\": \"description_sample\",\n  \"fileId\": 1,\n  \"auditLogId\": 1,\n  \"logReference\": \"logReference_sample\",\n  \"reportHistoryId\": 1,\n  \"reportCode\": \"reportCode_sample\",\n  \"externalUrl\": \"https://example.com/resource\",\n  \"checksumSha256\": \"checksumSha256_sample\",\n  \"collectedAt\": \"2026-10-14T10:00:00.000Z\",\n  \"validUntil\": \"2026-10-14T10:00:00.000Z\",\n  \"metadata\": {}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `compliance.check`"
+          }
+        },
+        {
+          "name": "Xóa mềm bằng chứng kiểm soát",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/compliance/evidences/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "compliance",
+                "evidences",
+                ":id"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `compliance.manage`"
+          }
+        },
+        {
+          "name": "Tổng quan Compliance, độ phủ framework và cảnh báo sắp/quá hạn (14.6)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/compliance/overview",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "compliance",
+                "overview"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `compliance.read`"
+          }
+        },
+        {
+          "name": "Tải xuống tệp báo cáo Compliance tạm thời theo token",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/compliance/reports/downloads/:token",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "compliance",
+                "reports",
+                "downloads",
+                ":token"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `compliance.report`"
+          }
+        },
+        {
+          "name": "Tạo và xuất báo cáo Compliance (JSON / CSV / XLSX / PDF)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/compliance/reports/generate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "compliance",
+                "reports",
+                "generate"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"frameworkTag\": \"frameworkTag_sample\",\n  \"domain\": \"domain_sample\",\n  \"vendorCategory\": \"EMAIL\",\n  \"organizationUnitId\": 1,\n  \"fromDate\": \"fromDate_sample\",\n  \"toDate\": \"toDate_sample\",\n  \"includeControls\": true,\n  \"includeVendors\": true,\n  \"format\": \"json\",\n  \"ttlSeconds\": 60\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `compliance.report`"
+          }
+        },
+        {
+          "name": "Xem tổng hợp báo cáo Compliance trung lập (lọc theo frameworkTag bất kỳ, domain, nhà cung cấp)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/compliance/reports/summary?frameworkTag=frameworkTag_sample&domain=domain_sample&vendorCategory=EMAIL&organizationUnitId=1&fromDate=fromDate_sample&toDate=toDate_sample&includeControls=true&includeVendors=true",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "compliance",
+                "reports",
+                "summary"
+              ],
+              "query": [
+                {
+                  "key": "frameworkTag",
+                  "value": "frameworkTag_sample"
+                },
+                {
+                  "key": "domain",
+                  "value": "domain_sample"
+                },
+                {
+                  "key": "vendorCategory",
+                  "value": "EMAIL"
+                },
+                {
+                  "key": "organizationUnitId",
+                  "value": "1"
+                },
+                {
+                  "key": "fromDate",
+                  "value": "fromDate_sample"
+                },
+                {
+                  "key": "toDate",
+                  "value": "toDate_sample"
+                },
+                {
+                  "key": "includeControls",
+                  "value": "true"
+                },
+                {
+                  "key": "includeVendors",
+                  "value": "true"
+                }
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `compliance.report`"
+          }
+        },
+        {
+          "name": "Quét nhắc rà soát Control định kỳ, rà soát nhà cung cấp, hạn hợp đồng và hết hạn bằng chứng",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/compliance/reviews/sweep",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "compliance",
+                "reviews",
+                "sweep"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dryRun\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `compliance.manage`"
+          }
+        },
+        {
+          "name": "Danh sách nhà cung cấp (Email, SMS, Cloud, Payment, AI, Khác) & hạn hợp đồng",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/compliance/vendors?category=EMAIL&criticality=LOW&status=ACTIVE&missingFallbackOnly=true&expiringContractOnly=true&q=q_sample&page=1&limit=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "compliance",
+                "vendors"
+              ],
+              "query": [
+                {
+                  "key": "category",
+                  "value": "EMAIL"
+                },
+                {
+                  "key": "criticality",
+                  "value": "LOW"
+                },
+                {
+                  "key": "status",
+                  "value": "ACTIVE"
+                },
+                {
+                  "key": "missingFallbackOnly",
+                  "value": "true"
+                },
+                {
+                  "key": "expiringContractOnly",
+                  "value": "true"
+                },
+                {
+                  "key": "q",
+                  "value": "q_sample"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `compliance.read`"
+          }
+        },
+        {
+          "name": "Thêm nhà cung cấp kèm lịch rà soát, hợp đồng và phương án dự phòng",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/compliance/vendors",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "compliance",
+                "vendors"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"vendorCode\": \"vendorCode_sample\",\n  \"name\": \"name_sample\",\n  \"category\": \"EMAIL\",\n  \"criticality\": \"MEDIUM\",\n  \"status\": \"ACTIVE\",\n  \"providerEntryId\": 1,\n  \"websiteUrl\": \"https://example.com/resource\",\n  \"contactEmail\": \"user@example.com\",\n  \"ownerUserId\": 1,\n  \"organizationUnitId\": 1,\n  \"contractStartDate\": \"2026-10-14T10:00:00.000Z\",\n  \"contractEndDate\": \"2026-10-14T10:00:00.000Z\",\n  \"autoRenew\": false,\n  \"reviewFrequency\": \"SEMI_ANNUAL\",\n  \"lastReviewedAt\": \"2026-10-14T10:00:00.000Z\",\n  \"nextReviewDueAt\": \"2026-10-14T10:00:00.000Z\",\n  \"dpaSigned\": false,\n  \"dpaFileId\": 1,\n  \"fallbackVendorName\": \"fallbackVendorName_sample\",\n  \"fallbackStrategy\": \"fallbackStrategy_sample\",\n  \"migrationRunbook\": \"migrationRunbook_sample\",\n  \"rtoHours\": 0,\n  \"exitPlanTestedAt\": \"2026-10-14T10:00:00.000Z\",\n  \"metadata\": {}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `compliance.vendor.manage`"
+          }
+        },
+        {
+          "name": "Chi tiết nhà cung cấp, hợp đồng và phương án dự phòng/thay thế",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/compliance/vendors/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "compliance",
+                "vendors",
+                ":id"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `compliance.read`"
+          }
+        },
+        {
+          "name": "Cập nhật thông tin nhà cung cấp, ngày đánh giá, hợp đồng và dự phòng",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/compliance/vendors/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "compliance",
+                "vendors",
+                ":id"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"vendorCode\": \"vendorCode_sample\",\n  \"name\": \"name_sample\",\n  \"category\": \"EMAIL\",\n  \"criticality\": \"MEDIUM\",\n  \"status\": \"ACTIVE\",\n  \"providerEntryId\": 1,\n  \"websiteUrl\": \"https://example.com/resource\",\n  \"contactEmail\": \"user@example.com\",\n  \"ownerUserId\": 1,\n  \"organizationUnitId\": 1,\n  \"contractStartDate\": \"2026-10-14T10:00:00.000Z\",\n  \"contractEndDate\": \"2026-10-14T10:00:00.000Z\",\n  \"autoRenew\": false,\n  \"reviewFrequency\": \"SEMI_ANNUAL\",\n  \"lastReviewedAt\": \"2026-10-14T10:00:00.000Z\",\n  \"nextReviewDueAt\": \"2026-10-14T10:00:00.000Z\",\n  \"dpaSigned\": false,\n  \"dpaFileId\": 1,\n  \"fallbackVendorName\": \"fallbackVendorName_sample\",\n  \"fallbackStrategy\": \"fallbackStrategy_sample\",\n  \"migrationRunbook\": \"migrationRunbook_sample\",\n  \"rtoHours\": 0,\n  \"exitPlanTestedAt\": \"2026-10-14T10:00:00.000Z\",\n  \"metadata\": {}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `compliance.vendor.manage`"
+          }
+        },
+        {
+          "name": "Xóa mềm nhà cung cấp",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/compliance/vendors/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "compliance",
+                "vendors",
+                ":id"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `compliance.vendor.manage`"
+          }
+        },
+        {
+          "name": "Danh sách đánh giá dữ liệu được phép xử lý của một nhà cung cấp",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/compliance/vendors/:id/data-assessments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "compliance",
+                "vendors",
+                ":id",
+                "data-assessments"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `compliance.read`"
+          }
+        },
+        {
+          "name": "Tạo đánh giá phạm vi dữ liệu nhà cung cấp được phép xử lý",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/compliance/vendors/:id/data-assessments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "compliance",
+                "vendors",
+                ":id",
+                "data-assessments"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dataCategory\": \"dataCategory_sample\",\n  \"classificationLevel\": \"INTERNAL\",\n  \"allowedDataFields\": [\n    \"allowedDataFields_sample\"\n  ],\n  \"prohibitedDataFields\": [\n    \"prohibitedDataFields_sample\"\n  ],\n  \"processingPurpose\": \"processingPurpose_sample\",\n  \"dataFlowDirection\": \"OUTBOUND\",\n  \"storageRegions\": [\n    \"storageRegions_sample\"\n  ],\n  \"crossBorderTransfer\": false,\n  \"transferMechanism\": \"transferMechanism_sample\",\n  \"retentionDays\": 0,\n  \"encryptionInTransit\": true,\n  \"encryptionAtRest\": true,\n  \"subprocessors\": [\n    \"subprocessors_sample\"\n  ],\n  \"riskLevel\": \"MEDIUM\",\n  \"approvalStatus\": \"PENDING\",\n  \"nextReviewDueAt\": \"2026-10-14T10:00:00.000Z\",\n  \"notes\": \"notes_sample\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `compliance.vendor.manage`"
+          }
+        }
+      ]
+    },
+    {
       "name": "Credentials & Password Security",
       "item": [
         {
@@ -3615,6 +4701,1156 @@
               }
             },
             "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Chế độ truy cập**: `Public` (Không yêu cầu đăng nhập)"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Data Privacy & Governance (14.5)",
+      "item": [
+        {
+          "name": "Danh sách phân loại dữ liệu (Public, Internal, Confidential, Restricted) & Retention",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/data-governance/classifications?classificationLevel=PUBLIC&moduleName=moduleName_sample&isEnabled=true&q=q_sample&page=1&limit=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "data-governance",
+                "classifications"
+              ],
+              "query": [
+                {
+                  "key": "classificationLevel",
+                  "value": "PUBLIC"
+                },
+                {
+                  "key": "moduleName",
+                  "value": "moduleName_sample"
+                },
+                {
+                  "key": "isEnabled",
+                  "value": "true"
+                },
+                {
+                  "key": "q",
+                  "value": "q_sample"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `data-governance.read`"
+          }
+        },
+        {
+          "name": "Khởi tạo hoặc cập nhật phân loại dữ liệu & thời gian lưu (Retention)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/data-governance/classifications",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "data-governance",
+                "classifications"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dataTypeCode\": \"dataTypeCode_sample\",\n  \"displayName\": \"displayName_sample\",\n  \"moduleName\": \"moduleName_sample\",\n  \"classificationLevel\": \"PUBLIC\",\n  \"containsPii\": false,\n  \"retentionDays\": 365,\n  \"retentionAction\": \"PURGE\",\n  \"legalBasis\": \"legalBasis_sample\",\n  \"description\": \"description_sample\",\n  \"isEnabled\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `data-governance.manage`"
+          }
+        },
+        {
+          "name": "Cập nhật phân loại dữ liệu hoặc chính sách lưu trữ theo ID",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/data-governance/classifications/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "data-governance",
+                "classifications",
+                ":id"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dataTypeCode\": \"dataTypeCode_sample\",\n  \"displayName\": \"displayName_sample\",\n  \"moduleName\": \"moduleName_sample\",\n  \"classificationLevel\": \"PUBLIC\",\n  \"containsPii\": false,\n  \"retentionDays\": 365,\n  \"retentionAction\": \"PURGE\",\n  \"legalBasis\": \"legalBasis_sample\",\n  \"description\": \"description_sample\",\n  \"isEnabled\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `data-governance.manage`"
+          }
+        },
+        {
+          "name": "Danh mục mục đích và phiên bản đồng ý xử lý dữ liệu",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/data-governance/consents/definitions?purposeCode=purposeCode_sample&isActive=true&page=1&limit=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "data-governance",
+                "consents",
+                "definitions"
+              ],
+              "query": [
+                {
+                  "key": "purposeCode",
+                  "value": "purposeCode_sample"
+                },
+                {
+                  "key": "isActive",
+                  "value": "true"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)"
+          }
+        },
+        {
+          "name": "Tạo hoặc phát hành phiên bản mới cho mục đích đồng ý của người dùng",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/data-governance/consents/definitions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "data-governance",
+                "consents",
+                "definitions"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"purposeCode\": \"purposeCode_sample\",\n  \"policyVersion\": \"policyVersion_sample\",\n  \"title\": \"title_sample\",\n  \"description\": \"description_sample\",\n  \"classificationLevel\": \"INTERNAL\",\n  \"isMandatory\": false,\n  \"validityDays\": 1,\n  \"isActive\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `data-governance.consent.manage`"
+          }
+        },
+        {
+          "name": "Ghi nhận sự đồng ý của người dùng theo mục đích, phiên bản và thời gian",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/data-governance/consents/grant",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "data-governance",
+                "consents",
+                "grant"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": 1,\n  \"purposeCode\": \"purposeCode_sample\",\n  \"policyVersion\": \"policyVersion_sample\",\n  \"collectionSource\": \"PORTAL\",\n  \"metadata\": {}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)"
+          }
+        },
+        {
+          "name": "Danh sách trạng thái đồng ý hiện tại của chính người dùng đang đăng nhập",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/data-governance/consents/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "data-governance",
+                "consents",
+                "me"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)"
+          }
+        },
+        {
+          "name": "Tra cứu lịch sử đồng ý / rút lại của người dùng theo mục đích & phiên bản",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/data-governance/consents/records?userId=1&purposeCode=purposeCode_sample&consentStatus=GRANTED&page=1&limit=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "data-governance",
+                "consents",
+                "records"
+              ],
+              "query": [
+                {
+                  "key": "userId",
+                  "value": "1"
+                },
+                {
+                  "key": "purposeCode",
+                  "value": "purposeCode_sample"
+                },
+                {
+                  "key": "consentStatus",
+                  "value": "GRANTED"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `data-governance.read`"
+          }
+        },
+        {
+          "name": "Rút lại sự đồng ý đã cấp (chặn nếu là mục đích bắt buộc duy trì dịch vụ)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/data-governance/consents/withdraw",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "data-governance",
+                "consents",
+                "withdraw"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": 1,\n  \"purposeCode\": \"purposeCode_sample\",\n  \"reason\": \"reason_sample\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)"
+          }
+        },
+        {
+          "name": "Danh sách yêu cầu dữ liệu cá nhân DSAR (Quản trị xem toàn bộ, User xem của mình)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/data-governance/dsar?requestType=ACCESS&subjectUserId=1&status=1&page=1&limit=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "data-governance",
+                "dsar"
+              ],
+              "query": [
+                {
+                  "key": "requestType",
+                  "value": "ACCESS"
+                },
+                {
+                  "key": "subjectUserId",
+                  "value": "1"
+                },
+                {
+                  "key": "status",
+                  "value": "1"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)"
+          }
+        },
+        {
+          "name": "Tạo yêu cầu Xem (ACCESS), Xuất máy đọc (EXPORT) hoặc Xóa dữ liệu cá nhân (ERASURE)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/data-governance/dsar",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "data-governance",
+                "dsar"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"requestType\": \"ACCESS\",\n  \"subjectUserId\": 1,\n  \"exportFormat\": \"json\",\n  \"reason\": \"reason_sample\",\n  \"excludedDataTypeCodes\": [\n    \"excludedDataTypeCodes_sample\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)"
+          }
+        },
+        {
+          "name": "Tải gói dữ liệu cá nhân định dạng máy đọc được (JSON / CSV)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/data-governance/dsar/downloads/:token",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "data-governance",
+                "dsar",
+                "downloads",
+                ":token"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)"
+          }
+        },
+        {
+          "name": "Danh sách yêu cầu Xem / Xuất / Xóa dữ liệu cá nhân của chính tôi",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/data-governance/dsar/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "data-governance",
+                "dsar",
+                "me"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)"
+          }
+        },
+        {
+          "name": "Chi tiết một yêu cầu dữ liệu cá nhân (bao gồm dữ liệu tổng hợp hoặc ngoại lệ giữ lại)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/data-governance/dsar/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "data-governance",
+                "dsar",
+                ":id"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)"
+          }
+        },
+        {
+          "name": "Phê duyệt và thực thi yêu cầu xóa dữ liệu cá nhân (hỗ trợ khai báo ngoại lệ giữ lại)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/data-governance/dsar/:id/approve",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "data-governance",
+                "dsar",
+                ":id",
+                "approve"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"comment\": \"comment_sample\",\n  \"excludedDataTypeCodes\": [\n    \"excludedDataTypeCodes_sample\"\n  ],\n  \"customExceptions\": [\n    {\n      \"moduleName\": \"moduleName_sample\",\n      \"dataTypeCode\": \"dataTypeCode_sample\",\n      \"reasonCode\": \"LEGAL_EXCEPTION\",\n      \"reason\": \"reason_sample\",\n      \"retainedCount\": 1\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `data-governance.dsar.approve`"
+          }
+        },
+        {
+          "name": "Từ chối yêu cầu xóa dữ liệu cá nhân",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/data-governance/dsar/:id/reject",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "data-governance",
+                "dsar",
+                ":id",
+                "reject"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"comment\": \"comment_sample\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `data-governance.dsar.approve`"
+          }
+        },
+        {
+          "name": "Quét hết hạn các lệnh Legal Hold, Consent và liên kết tải DSAR đã quá hạn",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/data-governance/expiration/sweep",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "data-governance",
+                "expiration",
+                "sweep"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `data-governance.manage`"
+          }
+        },
+        {
+          "name": "Danh sách lệnh tạm giữ dữ liệu pháp lý (Legal Hold)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/data-governance/legal-holds?scopeType=USER&targetUserId=1&holdStatus=1&q=q_sample&page=1&limit=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "data-governance",
+                "legal-holds"
+              ],
+              "query": [
+                {
+                  "key": "scopeType",
+                  "value": "USER"
+                },
+                {
+                  "key": "targetUserId",
+                  "value": "1"
+                },
+                {
+                  "key": "holdStatus",
+                  "value": "1"
+                },
+                {
+                  "key": "q",
+                  "value": "q_sample"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `data-governance.read`"
+          }
+        },
+        {
+          "name": "Áp đặt lệnh tạm giữ dữ liệu không được xóa (Legal Hold)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/data-governance/legal-holds",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "data-governance",
+                "legal-holds"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"title_sample\",\n  \"caseReference\": \"caseReference_sample\",\n  \"reason\": \"reason_sample\",\n  \"scopeType\": \"USER\",\n  \"targetUserId\": 1,\n  \"dataTypeCode\": \"dataTypeCode_sample\",\n  \"resourceType\": \"resourceType_sample\",\n  \"resourceId\": \"550e8400-e29b-41d4-a716-446655440000\",\n  \"expiresAt\": \"2026-10-14T10:00:00.000Z\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `data-governance.legal_hold.manage`"
+          }
+        },
+        {
+          "name": "Kiểm tra một người dùng / loại dữ liệu / tài nguyên có đang bị Legal Hold không",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/data-governance/legal-holds/check?userId=1&dataTypeCode=dataTypeCode_sample&resourceType=resourceType_sample&resourceId=550e8400-e29b-41d4-a716-446655440000",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "data-governance",
+                "legal-holds",
+                "check"
+              ],
+              "query": [
+                {
+                  "key": "userId",
+                  "value": "1"
+                },
+                {
+                  "key": "dataTypeCode",
+                  "value": "dataTypeCode_sample"
+                },
+                {
+                  "key": "resourceType",
+                  "value": "resourceType_sample"
+                },
+                {
+                  "key": "resourceId",
+                  "value": "550e8400-e29b-41d4-a716-446655440000"
+                }
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `data-governance.read`"
+          }
+        },
+        {
+          "name": "Giải phóng lệnh tạm giữ dữ liệu pháp lý (Release Legal Hold)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/data-governance/legal-holds/:id/release",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "data-governance",
+                "legal-holds",
+                ":id",
+                "release"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"reason_sample\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `data-governance.legal_hold.manage`"
+          }
+        },
+        {
+          "name": "Tổng quan trạng thái Quyền riêng tư & Quản trị dữ liệu (14.5)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/data-governance/overview",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "data-governance",
+                "overview"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `data-governance.read`"
+          }
+        },
+        {
+          "name": "Thực thi hoặc chạy thử (dryRun) thu dọn dữ liệu theo chính sách Retention",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/data-governance/retention/sweep",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "data-governance",
+                "retention",
+                "sweep"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dataTypeCode\": \"dataTypeCode_sample\",\n  \"dryRun\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `data-governance.manage`"
+          }
+        },
+        {
+          "name": "Danh sách trường dữ liệu nhạy cảm dùng cho Log, Export và Phân quyền",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/data-governance/sensitive-fields?resourceType=resourceType_sample&classificationLevel=PUBLIC&isEnabled=true&q=q_sample&page=1&limit=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "data-governance",
+                "sensitive-fields"
+              ],
+              "query": [
+                {
+                  "key": "resourceType",
+                  "value": "resourceType_sample"
+                },
+                {
+                  "key": "classificationLevel",
+                  "value": "PUBLIC"
+                },
+                {
+                  "key": "isEnabled",
+                  "value": "true"
+                },
+                {
+                  "key": "q",
+                  "value": "q_sample"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `data-governance.read`"
+          }
+        },
+        {
+          "name": "Đánh dấu hoặc cập nhật trường dữ liệu nhạy cảm",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/data-governance/sensitive-fields",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "data-governance",
+                "sensitive-fields"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"resourceType\": \"resourceType_sample\",\n  \"fieldPath\": \"fieldPath_sample\",\n  \"displayName\": \"displayName_sample\",\n  \"classificationLevel\": \"CONFIDENTIAL\",\n  \"maskStrategy\": \"FULL\",\n  \"redactInLog\": true,\n  \"maskInExport\": true,\n  \"requiredPermission\": \"requiredPermission_sample\",\n  \"description\": \"description_sample\",\n  \"isEnabled\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `data-governance.manage`"
+          }
+        },
+        {
+          "name": "Kiểm tra che giấu (mask/redact) bản ghi theo quyền của người gọi",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/data-governance/sensitive-fields/evaluate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "data-governance",
+                "sensitive-fields",
+                "evaluate"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"resourceType\": \"resourceType_sample\",\n  \"context\": \"read\",\n  \"payload\": {}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `data-governance.read`"
+          }
+        },
+        {
+          "name": "Cập nhật cấu hình trường dữ liệu nhạy cảm theo ID",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/data-governance/sensitive-fields/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "data-governance",
+                "sensitive-fields",
+                ":id"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"resourceType\": \"resourceType_sample\",\n  \"fieldPath\": \"fieldPath_sample\",\n  \"displayName\": \"displayName_sample\",\n  \"classificationLevel\": \"CONFIDENTIAL\",\n  \"maskStrategy\": \"FULL\",\n  \"redactInLog\": true,\n  \"maskInExport\": true,\n  \"requiredPermission\": \"requiredPermission_sample\",\n  \"description\": \"description_sample\",\n  \"isEnabled\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `data-governance.manage`"
           }
         }
       ]
@@ -6755,6 +8991,502 @@
               ]
             },
             "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `idempotency.manage`"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Identity Provisioning — Admin SCIM Management",
+      "item": [
+        {
+          "name": "Danh sách cấu hình SCIM Clients",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/identity-provisioning/clients",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "identity-provisioning",
+                "clients"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `identity-provisioning.read`"
+          }
+        },
+        {
+          "name": "Tạo SCIM Client mới và cấp Bearer Token (hiển thị 1 lần)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/identity-provisioning/clients",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "identity-provisioning",
+                "clients"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"code_sample\",\n  \"name\": \"name_sample\",\n  \"description\": \"description_sample\",\n  \"federatedProviderCode\": \"federatedProviderCode_sample\",\n  \"status\": 1,\n  \"allowedIps\": [\n    \"allowedIps_sample\"\n  ],\n  \"scopes\": [\n    \"scopes_sample\"\n  ],\n  \"deprovisionMode\": \"LOCK_AND_REVOKE\",\n  \"groupRoleMappings\": {},\n  \"allowedRoleCodes\": [\n    \"allowedRoleCodes_sample\"\n  ],\n  \"deniedRoleCodes\": [\n    \"deniedRoleCodes_sample\"\n  ],\n  \"defaultRoleCodes\": [\n    \"defaultRoleCodes_sample\"\n  ],\n  \"requireIfMatch\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `identity-provisioning.manage`"
+          }
+        },
+        {
+          "name": "Chi tiết một SCIM Client",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/identity-provisioning/clients/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "identity-provisioning",
+                "clients",
+                ":id"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `identity-provisioning.read`"
+          }
+        },
+        {
+          "name": "Cập nhật cấu hình SCIM Client (IP allowlist, role mapping, deprovision mode)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/identity-provisioning/clients/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "identity-provisioning",
+                "clients",
+                ":id"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"name_sample\",\n  \"description\": \"description_sample\",\n  \"federatedProviderCode\": \"federatedProviderCode_sample\",\n  \"status\": 1,\n  \"allowedIps\": [\n    \"allowedIps_sample\"\n  ],\n  \"scopes\": [\n    \"scopes_sample\"\n  ],\n  \"deprovisionMode\": \"LOCK_AND_REVOKE\",\n  \"groupRoleMappings\": {},\n  \"allowedRoleCodes\": [\n    \"allowedRoleCodes_sample\"\n  ],\n  \"deniedRoleCodes\": [\n    \"deniedRoleCodes_sample\"\n  ],\n  \"defaultRoleCodes\": [\n    \"defaultRoleCodes_sample\"\n  ],\n  \"requireIfMatch\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `identity-provisioning.manage`"
+          }
+        },
+        {
+          "name": "Xóa mềm cấu hình SCIM Client",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/identity-provisioning/clients/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "identity-provisioning",
+                "clients",
+                ":id"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `identity-provisioning.manage`"
+          }
+        },
+        {
+          "name": "Đối soát dữ liệu User/Group giữa hệ thống nội bộ và snapshot từ IdP",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/identity-provisioning/clients/:id/reconcile",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "identity-provisioning",
+                "clients",
+                ":id",
+                "reconcile"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"mode\": \"DRY_RUN\",\n  \"applyDeprovisionOrphans\": true,\n  \"applySyncMissingAndDrifts\": true,\n  \"idpUsers\": [\n    {\n      \"externalId\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"userName\": \"userName_sample\",\n      \"email\": \"user@example.com\",\n      \"firstName\": \"firstName_sample\",\n      \"lastName\": \"lastName_sample\",\n      \"fullName\": \"fullName_sample\",\n      \"phone\": \"phone_sample\",\n      \"active\": true\n    }\n  ],\n  \"idpGroups\": [\n    {\n      \"externalId\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"displayName\": \"displayName_sample\",\n      \"memberExternalIds\": [\n        \"memberExternalIds_sample\"\n      ]\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `identity-provisioning.manage`"
+          }
+        },
+        {
+          "name": "Xoay vòng Bearer Token mới cho SCIM Client",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/identity-provisioning/clients/:id/rotate-token",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "identity-provisioning",
+                "clients",
+                ":id",
+                "rotate-token"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `identity-provisioning.manage`"
+          }
+        },
+        {
+          "name": "Danh sách nhóm SCIM đã đồng bộ",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/identity-provisioning/groups?clientId=1&active=true&search=search_sample&page=1&limit=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "identity-provisioning",
+                "groups"
+              ],
+              "query": [
+                {
+                  "key": "clientId",
+                  "value": "1"
+                },
+                {
+                  "key": "active",
+                  "value": "true"
+                },
+                {
+                  "key": "search",
+                  "value": "search_sample"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `identity-provisioning.read`"
+          }
+        },
+        {
+          "name": "Lịch sử các lần đối soát dữ liệu SCIM với Identity Provider",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/identity-provisioning/reconciliations?clientId=1&mode=DRY_RUN&page=1&limit=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "identity-provisioning",
+                "reconciliations"
+              ],
+              "query": [
+                {
+                  "key": "clientId",
+                  "value": "1"
+                },
+                {
+                  "key": "mode",
+                  "value": "DRY_RUN"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `identity-provisioning.read`"
+          }
+        },
+        {
+          "name": "Chi tiết một phiên đối soát SCIM",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/identity-provisioning/reconciliations/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "identity-provisioning",
+                "reconciliations",
+                ":id"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `identity-provisioning.read`"
+          }
+        },
+        {
+          "name": "Lịch sử đồng bộ SCIM (request, kết quả, idempotency và lỗi)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/identity-provisioning/sync-logs?clientId=1&resourceType=resourceType_sample&outcome=SUCCESS&operation=operation_sample&externalId=550e8400-e29b-41d4-a716-446655440000&search=search_sample&page=1&limit=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "identity-provisioning",
+                "sync-logs"
+              ],
+              "query": [
+                {
+                  "key": "clientId",
+                  "value": "1"
+                },
+                {
+                  "key": "resourceType",
+                  "value": "resourceType_sample"
+                },
+                {
+                  "key": "outcome",
+                  "value": "SUCCESS"
+                },
+                {
+                  "key": "operation",
+                  "value": "operation_sample"
+                },
+                {
+                  "key": "externalId",
+                  "value": "550e8400-e29b-41d4-a716-446655440000"
+                },
+                {
+                  "key": "search",
+                  "value": "search_sample"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `identity-provisioning.read`"
+          }
+        },
+        {
+          "name": "Danh sách liên kết SCIM User Links theo client",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/identity-provisioning/user-links?clientId=1&active=true&search=search_sample&page=1&limit=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "identity-provisioning",
+                "user-links"
+              ],
+              "query": [
+                {
+                  "key": "clientId",
+                  "value": "1"
+                },
+                {
+                  "key": "active",
+                  "value": "true"
+                },
+                {
+                  "key": "search",
+                  "value": "search_sample"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `identity-provisioning.read`"
           }
         }
       ]
@@ -19058,6 +21790,1038 @@
       ]
     },
     {
+      "name": "Privileged Access Management (PAM — 14.4)",
+      "item": [
+        {
+          "name": "Danh sách cảnh báo sử dụng quyền đặc biệt và Break-glass",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/privileged-access/alerts?eventType=eventType_sample&severity=severity_sample&actorUserId=1&unacknowledgedOnly=true&page=1&limit=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "privileged-access",
+                "alerts"
+              ],
+              "query": [
+                {
+                  "key": "eventType",
+                  "value": "eventType_sample"
+                },
+                {
+                  "key": "severity",
+                  "value": "severity_sample"
+                },
+                {
+                  "key": "actorUserId",
+                  "value": "1"
+                },
+                {
+                  "key": "unacknowledgedOnly",
+                  "value": "true"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `privileged-access.read`"
+          }
+        },
+        {
+          "name": "Xác nhận đã kiểm tra cảnh báo bảo mật (MFA Step-Up)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/privileged-access/alerts/:id/acknowledge",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "privileged-access",
+                "alerts",
+                ":id",
+                "acknowledge"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"note\": \"note_sample\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `privileged-access.manage`"
+          }
+        },
+        {
+          "name": "Danh sách tài khoản khẩn cấp Break-glass",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/privileged-access/break-glass?status=1&page=1&limit=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "privileged-access",
+                "break-glass"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "1"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `privileged-access.read`"
+          }
+        },
+        {
+          "name": "Đăng ký tài khoản khẩn cấp Break-glass (liên kết user admin sẵn có hoặc tạo mới — MFA Step-Up)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/privileged-access/break-glass",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "privileged-access",
+                "break-glass"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"mode\": \"LINK_EXISTING\",\n  \"existingUserId\": 1,\n  \"existingIdentifier\": \"existingIdentifier_sample\",\n  \"username\": \"username_sample\",\n  \"email\": \"user@example.com\",\n  \"password\": \"password_sample\",\n  \"firstName\": \"firstName_sample\",\n  \"lastName\": \"lastName_sample\",\n  \"code\": \"code_sample\",\n  \"label\": \"label_sample\",\n  \"description\": \"description_sample\",\n  \"roleCode\": \"super_admin\",\n  \"requireMfa\": true,\n  \"maxActivationMinutes\": 60,\n  \"alertRecipients\": [\n    \"alertRecipients_sample\"\n  ],\n  \"sealImmediately\": true,\n  \"activationReason\": \"activationReason_sample\",\n  \"durationMinutes\": 5\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `privileged-access.break_glass.manage`"
+          }
+        },
+        {
+          "name": "Kích hoạt khẩn cấp tài khoản Break-glass có thời hạn & lý do (MFA Step-Up)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/privileged-access/break-glass/:id/activate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "privileged-access",
+                "break-glass",
+                ":id",
+                "activate"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"reason_sample\",\n  \"durationMinutes\": 30,\n  \"ticketRef\": \"ticketRef_sample\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `privileged-access.break_glass.manage`"
+          }
+        },
+        {
+          "name": "Niêm phong lại tài khoản Break-glass, khóa user & thu hồi phiên (MFA Step-Up)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/privileged-access/break-glass/:id/seal",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "privileged-access",
+                "break-glass",
+                ":id",
+                "seal"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"reason_sample\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `privileged-access.break_glass.manage`"
+          }
+        },
+        {
+          "name": "Danh sách tài khoản admin đang giữ vai trò đặc biệt cố định từ bảng users",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/privileged-access/directory/standing-users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "privileged-access",
+                "directory",
+                "standing-users"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `privileged-access.read`"
+          }
+        },
+        {
+          "name": "Danh sách người dùng hiện có từ bảng users (hỗ trợ lọc tài khoản admin đặc biệt để liên kết Break-glass hoặc cấp quyền)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/privileged-access/directory/users?q=q_sample&privilegedOnly=true&page=1&limit=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "privileged-access",
+                "directory",
+                "users"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "q_sample"
+                },
+                {
+                  "key": "privilegedOnly",
+                  "value": "true"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `privileged-access.read`"
+          }
+        },
+        {
+          "name": "Danh sách yêu cầu và bản ghi cấp quyền tạm thời (JIT)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/privileged-access/grants?userId=1&status=1&targetType=ROLE&targetCode=targetCode_sample&page=1&limit=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "privileged-access",
+                "grants"
+              ],
+              "query": [
+                {
+                  "key": "userId",
+                  "value": "1"
+                },
+                {
+                  "key": "status",
+                  "value": "1"
+                },
+                {
+                  "key": "targetType",
+                  "value": "ROLE"
+                },
+                {
+                  "key": "targetCode",
+                  "value": "targetCode_sample"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `privileged-access.read`"
+          }
+        },
+        {
+          "name": "Tạo yêu cầu cấp quyền đặc biệt tạm thời có thời hạn và lý do",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/privileged-access/grants",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "privileged-access",
+                "grants"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": 1,\n  \"targetType\": \"ROLE\",\n  \"targetCode\": \"targetCode_sample\",\n  \"reason\": \"reason_sample\",\n  \"ticketRef\": \"ticketRef_sample\",\n  \"durationMinutes\": 60\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `privileged-access.request`"
+          }
+        },
+        {
+          "name": "Quét và thu hồi ngay các quyền tạm thời & Break-glass đã hết hạn",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/privileged-access/grants/sweep-expired",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "privileged-access",
+                "grants",
+                "sweep-expired"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `privileged-access.manage`"
+          }
+        },
+        {
+          "name": "Phê duyệt yêu cầu cấp quyền tạm thời (chặn tự duyệt, MFA Step-Up)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/privileged-access/grants/:id/approve",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "privileged-access",
+                "grants",
+                ":id",
+                "approve"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"comment\": \"comment_sample\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `privileged-access.approve`"
+          }
+        },
+        {
+          "name": "Hủy yêu cầu cấp quyền tạm thời đang chờ duyệt",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/privileged-access/grants/:id/cancel",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "privileged-access",
+                "grants",
+                ":id",
+                "cancel"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `privileged-access.request`"
+          }
+        },
+        {
+          "name": "Từ chối yêu cầu cấp quyền tạm thời (MFA Step-Up)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/privileged-access/grants/:id/reject",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "privileged-access",
+                "grants",
+                ":id",
+                "reject"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"comment\": \"comment_sample\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `privileged-access.approve`"
+          }
+        },
+        {
+          "name": "Thu hồi sớm quyền tạm thời đang hiệu lực (MFA Step-Up)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/privileged-access/grants/:id/revoke",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "privileged-access",
+                "grants",
+                ":id",
+                "revoke"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"comment\": \"comment_sample\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `privileged-access.approve`"
+          }
+        },
+        {
+          "name": "Tổng quan chính sách và trạng thái Privileged Access (14.4)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/privileged-access/overview",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "privileged-access",
+                "overview"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `privileged-access.read`"
+          }
+        },
+        {
+          "name": "Danh sách các đợt rà soát quyền đặc biệt định kỳ",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/privileged-access/reviews?status=1&page=1&limit=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "privileged-access",
+                "reviews"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "1"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `privileged-access.read`"
+          }
+        },
+        {
+          "name": "Khởi tạo đợt rà soát quyền đặc biệt mới (MFA Step-Up)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/privileged-access/reviews",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "privileged-access",
+                "reviews"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"title_sample\",\n  \"description\": \"description_sample\",\n  \"dueDays\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `privileged-access.manage`"
+          }
+        },
+        {
+          "name": "Chi tiết một đợt rà soát quyền đặc biệt và danh sách mục cần duyệt",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/privileged-access/reviews/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "privileged-access",
+                "reviews",
+                ":id"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `privileged-access.read`"
+          }
+        },
+        {
+          "name": "Đóng đợt rà soát quyền đặc biệt (MFA Step-Up)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/privileged-access/reviews/:id/close",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "privileged-access",
+                "reviews",
+                ":id",
+                "close"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `privileged-access.manage`"
+          }
+        },
+        {
+          "name": "Quyết định Giữ hoặc Thu hồi quyền đặc biệt trong đợt rà soát (MFA Step-Up)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/privileged-access/reviews/:id/items/:itemId/decide",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "privileged-access",
+                "reviews",
+                ":id",
+                "items",
+                ":itemId",
+                "decide"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"decision\": \"KEEP\",\n  \"note\": \"note_sample\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `privileged-access.manage`"
+          }
+        },
+        {
+          "name": "Danh sách vai trò và quyền được đánh dấu đặc biệt",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/privileged-access/targets?targetType=ROLE&isEnabled=true&search=search_sample&page=1&limit=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "privileged-access",
+                "targets"
+              ],
+              "query": [
+                {
+                  "key": "targetType",
+                  "value": "ROLE"
+                },
+                {
+                  "key": "isEnabled",
+                  "value": "true"
+                },
+                {
+                  "key": "search",
+                  "value": "search_sample"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `privileged-access.read`"
+          }
+        },
+        {
+          "name": "Đánh dấu hoặc cập nhật chính sách vai trò/quyền đặc biệt (MFA Step-Up)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/privileged-access/targets",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "privileged-access",
+                "targets"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"targetType\": \"ROLE\",\n  \"targetCode\": \"targetCode_sample\",\n  \"displayName\": \"displayName_sample\",\n  \"description\": \"description_sample\",\n  \"sensitivityLevel\": \"HIGH\",\n  \"requireMfaStepUp\": true,\n  \"requireApproval\": true,\n  \"autoApproveAllowed\": false,\n  \"maxGrantMinutes\": 120,\n  \"alertOnUse\": true,\n  \"reviewIntervalDays\": 90,\n  \"isEnabled\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `privileged-access.manage`"
+          }
+        },
+        {
+          "name": "Cập nhật chính sách vai trò/quyền đặc biệt theo ID (MFA Step-Up)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/privileged-access/targets/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "privileged-access",
+                "targets",
+                ":id"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"displayName\": \"displayName_sample\",\n  \"description\": \"description_sample\",\n  \"sensitivityLevel\": \"HIGH\",\n  \"requireMfaStepUp\": true,\n  \"requireApproval\": true,\n  \"autoApproveAllowed\": false,\n  \"maxGrantMinutes\": 120,\n  \"alertOnUse\": true,\n  \"reviewIntervalDays\": 90,\n  \"isEnabled\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `privileged-access.manage`"
+          }
+        },
+        {
+          "name": "Xóa mềm đánh dấu vai trò/quyền đặc biệt (MFA Step-Up)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/privileged-access/targets/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "privileged-access",
+                "targets",
+                ":id"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `privileged-access.manage`"
+          }
+        }
+      ]
+    },
+    {
       "name": "Provider Registry (10.6)",
       "item": [
         {
@@ -21512,6 +25276,409 @@
               ]
             },
             "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Xác thực**: `Bearer JWT Token` (`Authorization: Bearer <token>`)\n- **Quyền hạn yêu cầu (Permissions)**: `roles.read`"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Identity Provisioning — SCIM 2.0 Protocol",
+      "item": [
+        {
+          "name": "Tìm kiếm & liệt kê nhóm SCIM 2.0",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/scim/v2/Groups",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "scim",
+                "v2",
+                "Groups"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Chế độ truy cập**: `Public` (Không yêu cầu đăng nhập)"
+          }
+        },
+        {
+          "name": "Tạo nhóm SCIM 2.0 và đồng bộ thành viên/vai trò theo allowlist",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/scim/v2/Groups",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "scim",
+                "v2",
+                "Groups"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Chế độ truy cập**: `Public` (Không yêu cầu đăng nhập)"
+          }
+        },
+        {
+          "name": "Lấy chi tiết nhóm SCIM 2.0 theo ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/scim/v2/Groups/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "scim",
+                "v2",
+                "Groups",
+                ":id"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Chế độ truy cập**: `Public` (Không yêu cầu đăng nhập)"
+          }
+        },
+        {
+          "name": "Cập nhật toàn bộ nhóm & danh sách thành viên SCIM 2.0",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/scim/v2/Groups/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "scim",
+                "v2",
+                "Groups",
+                ":id"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Chế độ truy cập**: `Public` (Không yêu cầu đăng nhập)"
+          }
+        },
+        {
+          "name": "Cập nhật thành viên nhóm SCIM 2.0 (PATCH add/replace/remove)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/scim/v2/Groups/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "scim",
+                "v2",
+                "Groups",
+                ":id"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Chế độ truy cập**: `Public` (Không yêu cầu đăng nhập)"
+          }
+        },
+        {
+          "name": "Xóa nhóm SCIM 2.0 và gỡ vai trò tương ứng của thành viên",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/scim/v2/Groups/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "scim",
+                "v2",
+                "Groups",
+                ":id"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Chế độ truy cập**: `Public` (Không yêu cầu đăng nhập)"
+          }
+        },
+        {
+          "name": "SCIM 2.0 ResourceTypes",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/scim/v2/ResourceTypes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "scim",
+                "v2",
+                "ResourceTypes"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Chế độ truy cập**: `Public` (Không yêu cầu đăng nhập)"
+          }
+        },
+        {
+          "name": "SCIM 2.0 Schemas",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/scim/v2/Schemas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "scim",
+                "v2",
+                "Schemas"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Chế độ truy cập**: `Public` (Không yêu cầu đăng nhập)"
+          }
+        },
+        {
+          "name": "SCIM 2.0 ServiceProviderConfig",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/scim/v2/ServiceProviderConfig",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "scim",
+                "v2",
+                "ServiceProviderConfig"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Chế độ truy cập**: `Public` (Không yêu cầu đăng nhập)"
+          }
+        },
+        {
+          "name": "Tìm kiếm & liệt kê người dùng qua SCIM 2.0 Users",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/scim/v2/Users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "scim",
+                "v2",
+                "Users"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Chế độ truy cập**: `Public` (Không yêu cầu đăng nhập)"
+          }
+        },
+        {
+          "name": "Tạo người dùng mới qua SCIM 2.0 (Idempotent theo External ID)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/scim/v2/Users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "scim",
+                "v2",
+                "Users"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Chế độ truy cập**: `Public` (Không yêu cầu đăng nhập)"
+          }
+        },
+        {
+          "name": "Lấy chi tiết người dùng SCIM 2.0 theo ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/scim/v2/Users/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "scim",
+                "v2",
+                "Users",
+                ":id"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Chế độ truy cập**: `Public` (Không yêu cầu đăng nhập)"
+          }
+        },
+        {
+          "name": "Cập nhật toàn bộ người dùng SCIM 2.0 (hỗ trợ ETag / If-Match)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/scim/v2/Users/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "scim",
+                "v2",
+                "Users",
+                ":id"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Chế độ truy cập**: `Public` (Không yêu cầu đăng nhập)"
+          }
+        },
+        {
+          "name": "Cập nhật từng phần / khóa / mở khóa người dùng qua SCIM 2.0 PATCH",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/scim/v2/Users/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "scim",
+                "v2",
+                "Users",
+                ":id"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Chế độ truy cập**: `Public` (Không yêu cầu đăng nhập)"
+          }
+        },
+        {
+          "name": "Ngừng cung cấp người dùng qua SCIM 2.0 (khóa tài khoản & thu hồi toàn bộ phiên)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/scim/v2/Users/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "scim",
+                "v2",
+                "Users",
+                ":id"
+              ]
+            },
+            "description": "### 🔐 Xác thực & Phân quyền (Access Control)\n- **Chế độ truy cập**: `Public` (Không yêu cầu đăng nhập)"
           }
         }
       ]

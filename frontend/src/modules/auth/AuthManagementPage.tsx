@@ -13,6 +13,7 @@ import {
   UserCheck,
   ShieldAlert,
   Database,
+  ClipboardCheck,
 } from 'lucide-react';
 import { AUTH_MODULE_TABS, type AuthSubTabId } from './enum/auth.enum';
 import { useAuthManagement } from './hooks/useAuthManagement';
@@ -20,6 +21,7 @@ import { useFederatedIdentity } from './hooks/useFederatedIdentity';
 import { useScimProvisioning } from './hooks/useScimProvisioning';
 import { usePrivilegedAccess } from './hooks/usePrivilegedAccess';
 import { useDataGovernance } from './hooks/useDataGovernance';
+import { useCompliance } from './hooks/useCompliance';
 import { AuthGatewayPanel } from './components/AuthGatewayPanel';
 import { MfaAndDevicesPanel } from './components/MfaAndDevicesPanel';
 import { SessionsAndHistoryPanel } from './components/SessionsAndHistoryPanel';
@@ -29,6 +31,7 @@ import { FederatedIdentityPanel } from './components/FederatedIdentityPanel';
 import { ScimProvisioningPanel } from './components/ScimProvisioningPanel';
 import { PrivilegedAccessPanel } from './components/privileged-access/PrivilegedAccessPanel';
 import { DataGovernancePanel } from './components/data-governance/DataGovernancePanel';
+import { CompliancePanel } from './components/compliance/CompliancePanel';
 import { authStyles } from './components/auth-ui.styles';
 
 export const AuthManagementPage: React.FC = () => {
@@ -60,6 +63,7 @@ export const AuthManagementPage: React.FC = () => {
   const scim = useScimProvisioning(accessToken, notify);
   const pam = usePrivilegedAccess(accessToken, notify);
   const governance = useDataGovernance(accessToken, notify);
+  const compliance = useCompliance(accessToken, notify);
 
   const resolveTabIcon = (id: AuthSubTabId) => {
     switch (id) {
@@ -81,6 +85,8 @@ export const AuthManagementPage: React.FC = () => {
         return <ShieldAlert size={15} />;
       case 'data-governance':
         return <Database size={15} />;
+      case 'compliance':
+        return <ClipboardCheck size={15} />;
     }
   };
 
@@ -438,6 +444,30 @@ export const AuthManagementPage: React.FC = () => {
           onWithdrawConsent={governance.withdrawConsent}
           onCreateLegalHold={governance.createLegalHold}
           onReleaseLegalHold={governance.releaseLegalHold}
+        />
+      )}
+
+      {subTab === 'compliance' && (
+        <CompliancePanel
+          accessToken={accessToken}
+          busy={compliance.busy}
+          overview={compliance.overview}
+          controls={compliance.controls}
+          evidences={compliance.evidences}
+          checkHistories={compliance.checkHistories}
+          vendors={compliance.vendors}
+          selectedVendorId={compliance.selectedVendorId}
+          vendorAssessments={compliance.vendorAssessments}
+          reportResult={compliance.reportResult}
+          onRefresh={compliance.refreshAll}
+          onRunReviewSweep={compliance.runReviewSweep}
+          onSelectVendor={compliance.loadVendorAssessments}
+          onCreateControl={compliance.createControl}
+          onRecordCheck={compliance.recordCheck}
+          onCreateEvidence={compliance.createEvidence}
+          onCreateVendor={compliance.createVendor}
+          onCreateVendorAssessment={compliance.createVendorAssessment}
+          onGenerateReport={compliance.generateReport}
         />
       )}
     </main>

@@ -1,0 +1,15 @@
+{
+  "moduleDisabled": "Mô-đun Compliance & Quản lý nhà cung cấp hiện đang tắt theo cấu hình dự án.",
+  "controlsDisabled": "Chức năng quản lý yêu cầu kiểm soát & bằng chứng hiện đang tắt.",
+  "vendorsDisabled": "Chức năng quản lý nhà cung cấp & đánh giá dữ liệu hiện đang tắt.",
+  "reportsDisabled": "Chức năng báo cáo Compliance hiện đang tắt.",
+  "controlNotFound": "Không tìm thấy yêu cầu kiểm soát (Control) yêu cầu.",
+  "controlCodeDuplicate": "Mã yêu cầu kiểm soát đã tồn tại trong hệ thống.",
+  "evidenceNotFound": "Không tìm thấy bằng chứng thực hiện kiểm soát.",
+  "evidencePayloadInvalid": "Dữ liệu bằng chứng không khớp với loại bằng chứng đã chọn (cần File ID, Audit Log/Tham chiếu, Báo cáo hoặc URL hợp lệ).",
+  "checkHistoryNotFound": "Không tìm thấy bản ghi lịch sử kiểm tra kiểm soát.",
+  "vendorNotFound": "Không tìm thấy thông tin nhà cung cấp yêu cầu.",
+  "vendorCodeDuplicate": "Mã nhà cung cấp đã tồn tại trong hệ thống.",
+  "dataAssessmentNotFound": "Không tìm thấy bản đánh giá dữ liệu nhà cung cấp.",
+  "reportDownloadExpired": "Liên kết tải báo cáo Compliance không tồn tại hoặc đã hết hạn."
+}

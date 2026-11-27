@@ -7,7 +7,8 @@ export type AuthSubTabId =
   | 'federated-identity'
   | 'scim-provisioning'
   | 'privileged-access'
-  | 'data-governance';
+  | 'data-governance'
+  | 'compliance';
 
 export interface AuthSubTabMeta {
   readonly id: AuthSubTabId;
@@ -73,6 +74,13 @@ export const AUTH_MODULE_TABS: readonly AuthSubTabMeta[] = [
     badge: '14.5',
     description:
       'Phân loại dữ liệu, trường nhạy cảm (Log/Export), Retention, DSAR (Xem/Xuất/Xóa có ngoại lệ), Consent & Legal Hold',
+  },
+  {
+    id: 'compliance',
+    label: 'Compliance & Nhà Cung Cấp',
+    badge: '14.6',
+    description:
+      'Yêu cầu kiểm soát (Control), bằng chứng (File/Log/Báo cáo), lịch sử kiểm tra, nhà cung cấp (Email/SMS/Cloud/Payment/AI), đánh giá dữ liệu & báo cáo đa tiêu chuẩn',
   },
 ] as const;
 

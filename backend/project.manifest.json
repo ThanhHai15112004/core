@@ -60,6 +60,7 @@
     "identity-provisioning",
     "privileged-access",
     "data-governance",
+    "compliance",
     "payments",
     "provider-registry",
     "outbox",
