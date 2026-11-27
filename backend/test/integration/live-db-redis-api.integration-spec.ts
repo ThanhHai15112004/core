@@ -74,7 +74,7 @@ describe('Live Integration & API Tests (Real PostgreSQL + Real Redis — Phase 1
     const probeCode = `ci_live_probe_${Date.now()}`;
     const rollbackRun = await withRollbackTransaction(dataSource, async (em) => {
       await em.query(
-        `INSERT INTO roles (code, name, description, is_system) VALUES ($1, $2, $3, false)`,
+        `INSERT INTO roles (id, code, name, description, is_system) VALUES ((SELECT COALESCE(MAX(id), 0) + 1000 FROM roles), $1, $2, $3, false)`,
         [probeCode, 'CI Live Probe Role', 'Temporary role inside rollback transaction'],
       );
       const insideRows = (await em.query(`SELECT code FROM roles WHERE code = $1`, [

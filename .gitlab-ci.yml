@@ -96,9 +96,23 @@ backend-test:
     - npm run lint:check
     - npm run typecheck
     - npm run build
-    - npm run cli -- arch:check --report ../reports/arch-report.json
+    - >
+      APP_NAME=core-ci NODE_ENV=test HOST=127.0.0.1 PORT=3005 API_PREFIX=api/v1
+      DB_ENABLED=false REDIS_HOST=127.0.0.1 REDIS_PORT=1 REDIS_PREFIX=core_ci:
+      STORAGE_DRIVER=local
+      JWT_ACCESS_SECRET=ci_test_access_secret_key_at_least_32_characters_long
+      JWT_REFRESH_SECRET=ci_test_refresh_secret_key_at_least_32_characters_long
+      JWT_ACCESS_EXPIRATION=15m JWT_REFRESH_EXPIRATION=7d
+      npm run cli -- arch:check --report ../reports/arch-report.json
     - cd ..
-    - node scripts/ci/check-api-changes.mjs --report reports/openapi-report.json
+    - >
+      APP_NAME=core-ci NODE_ENV=test HOST=127.0.0.1 PORT=3005 API_PREFIX=api/v1
+      DB_ENABLED=false REDIS_HOST=127.0.0.1 REDIS_PORT=1 REDIS_PREFIX=core_ci:
+      STORAGE_DRIVER=local
+      JWT_ACCESS_SECRET=ci_test_access_secret_key_at_least_32_characters_long
+      JWT_REFRESH_SECRET=ci_test_refresh_secret_key_at_least_32_characters_long
+      JWT_ACCESS_EXPIRATION=15m JWT_REFRESH_EXPIRATION=7d
+      node scripts/ci/check-api-changes.mjs --report reports/openapi-report.json
     - cd backend
     - npm run test:cov:module
   artifacts:

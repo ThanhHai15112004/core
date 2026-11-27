@@ -170,12 +170,41 @@ jobs:
 
       - name: Run Architecture Boundary Tests (arch:check)
         working-directory: backend
+        env:
+          APP_NAME: core-ci
+          NODE_ENV: test
+          HOST: 127.0.0.1
+          PORT: '3005'
+          API_PREFIX: api/v1
+          DB_ENABLED: 'false'
+          REDIS_HOST: 127.0.0.1
+          REDIS_PORT: '1'
+          REDIS_PREFIX: 'core_ci:'
+          STORAGE_DRIVER: local
+          JWT_ACCESS_SECRET: ci_test_access_secret_key_at_least_32_characters_long
+          JWT_REFRESH_SECRET: ci_test_refresh_secret_key_at_least_32_characters_long
+          JWT_ACCESS_EXPIRATION: 15m
+          JWT_REFRESH_EXPIRATION: 7d
         run: npm run cli -- arch:check --report ../reports/arch-report.json
 
       - name: Check API Breaking Changes against Base OpenAPI
         env:
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           BEFORE_SHA: ${{ github.event.before }}
+          APP_NAME: core-ci
+          NODE_ENV: test
+          HOST: 127.0.0.1
+          PORT: '3005'
+          API_PREFIX: api/v1
+          DB_ENABLED: 'false'
+          REDIS_HOST: 127.0.0.1
+          REDIS_PORT: '1'
+          REDIS_PREFIX: 'core_ci:'
+          STORAGE_DRIVER: local
+          JWT_ACCESS_SECRET: ci_test_access_secret_key_at_least_32_characters_long
+          JWT_REFRESH_SECRET: ci_test_refresh_secret_key_at_least_32_characters_long
+          JWT_ACCESS_EXPIRATION: 15m
+          JWT_REFRESH_EXPIRATION: 7d
         run: node scripts/ci/check-api-changes.mjs --report reports/openapi-report.json
 
       - name: Run Unit, Integration (Mock) & Feature/API Tests with Module Coverage
