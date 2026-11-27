@@ -379,6 +379,9 @@ jobs:
           sed -i 's/^DB_ENABLED=.*/DB_ENABLED=false/' .env.docker.prod
           sed -i 's/^REDIS_HOST=.*/REDIS_HOST=redis/' .env.docker.prod
           sed -i 's/^REDIS_PASSWORD=.*/REDIS_PASSWORD=/' .env.docker.prod
+          sed -i 's/^STORAGE_DRIVER=.*/STORAGE_DRIVER=local/' .env.docker.prod
+          sed -i 's/^STORAGE_ALLOW_LOCAL_IN_PRODUCTION=.*/STORAGE_ALLOW_LOCAL_IN_PRODUCTION=true/' .env.docker.prod
+          sed -i 's|^STORAGE_LOCAL_PATH=.*|STORAGE_LOCAL_PATH=/tmp/core-smoke-uploads|' .env.docker.prod
           cat <<'EOF' > /tmp/ci-smoke-redis.yml
           services:
             redis:
