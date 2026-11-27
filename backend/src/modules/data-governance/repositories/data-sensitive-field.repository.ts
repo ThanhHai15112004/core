@@ -57,7 +57,9 @@ export class DataSensitiveFieldRepository extends BaseTypeOrmRepository<DataSens
     }
     const qb = this.repository.createQueryBuilder('f');
     if (filter.resourceType?.trim()) {
-      qb.andWhere('LOWER(f.resourceType) = :res', { res: filter.resourceType.trim().toLowerCase() });
+      qb.andWhere('LOWER(f.resourceType) = :res', {
+        res: filter.resourceType.trim().toLowerCase(),
+      });
     }
     if (filter.classificationLevel) {
       qb.andWhere('f.classificationLevel = :lvl', { lvl: filter.classificationLevel });

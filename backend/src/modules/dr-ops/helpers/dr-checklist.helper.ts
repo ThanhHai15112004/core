@@ -62,8 +62,7 @@ function makeStep(
 
 /** Sinh checklist chuyển hệ thống sang site DR (Failover) theo mô hình DC–DR. */
 export function buildFailoverChecklist(topologyMode: DrTopologyMode): DrChecklistItem[] {
-  const needsBackupRestore =
-    topologyMode === 'BACKUP_RESTORE' || topologyMode === 'PILOT_LIGHT';
+  const needsBackupRestore = topologyMode === 'BACKUP_RESTORE' || topologyMode === 'PILOT_LIGHT';
 
   return [
     makeStep(

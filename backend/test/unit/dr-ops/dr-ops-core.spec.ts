@@ -228,7 +228,10 @@ describe('Unit: Disaster Recovery Core Logic (Section 13.7)', () => {
 
     // Disabled profile blocks LIVE switch when config.dr.enabled=false
     const disabledProfileSvc = new DrSwitchoverService(
-      { ...config, dr: { ...config.dr, enabled: false, liveSwitchEnabled: true } } as CoreConfigService,
+      {
+        ...config,
+        dr: { ...config.dr, enabled: false, liveSwitchEnabled: true },
+      } as CoreConfigService,
       { getOrCreateDefaultProfile: async () => makeProfile({ isEnabled: false }) } as never,
       profileRepo as never,
       switchRepo as never,
@@ -260,9 +263,9 @@ describe('Unit: Disaster Recovery Core Logic (Section 13.7)', () => {
       }),
     ).rejects.toThrow(DrSwitchGuardException);
 
-    await expect(
-      svc.completeSwitch(started.id, { actorName: 'ops-admin' }),
-    ).rejects.toThrow(DrSwitchGuardException);
+    await expect(svc.completeSwitch(started.id, { actorName: 'ops-admin' })).rejects.toThrow(
+      DrSwitchGuardException,
+    );
 
     for (const step of started.checklist) {
       if (step.required) {

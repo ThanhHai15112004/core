@@ -1,7 +1,10 @@
 import { Injectable, Optional } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { BaseTypeOrmRepository, TransactionManager } from '@packages/database/index.js';
-import { FEDERATED_DRIVER_CODE, FEDERATED_PROVIDER_STATUS } from '../enum/federated-identity.enum.js';
+import {
+  FEDERATED_DRIVER_CODE,
+  FEDERATED_PROVIDER_STATUS,
+} from '../enum/federated-identity.enum.js';
 import { FederatedIdentityProviderEntity } from '../entities/federated-identity-provider.entity.js';
 
 @Injectable()

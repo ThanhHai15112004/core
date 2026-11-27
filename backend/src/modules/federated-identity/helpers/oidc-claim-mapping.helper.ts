@@ -145,9 +145,7 @@ export function parseFederatedExtraConfig(
   driverCode?: string,
 ): FederatedProviderExtraConfig {
   const root =
-    typeof raw === 'string'
-      ? safeJsonParseObject<Record<string, unknown>>(raw, {})
-      : asRecord(raw);
+    typeof raw === 'string' ? safeJsonParseObject<Record<string, unknown>>(raw, {}) : asRecord(raw);
 
   const rawOidc = asRecord(root['oidcOptions']);
   const rawMapping = asRecord(root['claimMapping']);
@@ -205,9 +203,7 @@ export function parseFederatedExtraConfig(
   };
 
   const customDenied = normalizeRoleCodes(rawRoleSync['deniedRoleCodes']);
-  const mergedDenied = Array.from(
-    new Set([...FEDERATED_PROTECTED_DENIED_ROLES, ...customDenied]),
-  );
+  const mergedDenied = Array.from(new Set([...FEDERATED_PROTECTED_DENIED_ROLES, ...customDenied]));
 
   const roleSyncPolicy: FederatedRoleSyncPolicy = {
     enabled:
@@ -226,8 +222,7 @@ export function parseFederatedExtraConfig(
   };
 
   const hasSamlConfig =
-    driverCode?.trim().toLowerCase() === FEDERATED_DRIVER_CODE.SAML ||
-    Boolean(root['samlConfig']);
+    driverCode?.trim().toLowerCase() === FEDERATED_DRIVER_CODE.SAML || Boolean(root['samlConfig']);
   const samlConfig = hasSamlConfig
     ? parseSamlConfig(root, driverCode ?? FEDERATED_DRIVER_CODE.SAML)
     : undefined;
@@ -397,9 +392,7 @@ export function mapOidcClaimsWithConfig(params: {
     claimMapping.emailVerifiedClaim,
   );
   const emailVerified =
-    toBooleanClaim(emailVerifiedRaw) ||
-    claims['xms_edov'] === true ||
-    claims['xms_edov'] === 1;
+    toBooleanClaim(emailVerifiedRaw) || claims['xms_edov'] === true || claims['xms_edov'] === 1;
 
   const firstName = toCleanString(
     resolveClaimWithFallback(claims, userInfoClaims, claimMapping.firstNameClaim),
@@ -410,8 +403,7 @@ export function mapOidcClaimsWithConfig(params: {
   const explicitName = toCleanString(
     resolveClaimWithFallback(claims, userInfoClaims, claimMapping.nameClaim),
   );
-  const displayName =
-    explicitName ?? ([lastName, firstName].filter(Boolean).join(' ') || email);
+  const displayName = explicitName ?? ([lastName, firstName].filter(Boolean).join(' ') || email);
 
   const avatarUrl = toCleanString(
     resolveClaimWithFallback(claims, userInfoClaims, claimMapping.avatarClaim),
@@ -421,9 +413,7 @@ export function mapOidcClaimsWithConfig(params: {
     config.tenantId?.trim() ??
     null;
 
-  const tokenGroups = extractGroupsFromClaimValue(
-    getClaimByPath(claims, claimMapping.groupsClaim),
-  );
+  const tokenGroups = extractGroupsFromClaimValue(getClaimByPath(claims, claimMapping.groupsClaim));
   const userInfoGroups = userInfoClaims
     ? extractGroupsFromClaimValue(getClaimByPath(userInfoClaims, claimMapping.groupsClaim))
     : [];
@@ -437,8 +427,9 @@ export function mapOidcClaimsWithConfig(params: {
     }
   }
 
-  const issuerToPersist =
-    toCleanString(claims['iss']) ? String(claims['iss']).trim() : resolvedIssuer;
+  const issuerToPersist = toCleanString(claims['iss'])
+    ? String(claims['iss']).trim()
+    : resolvedIssuer;
 
   return {
     providerCode: config.providerCode,

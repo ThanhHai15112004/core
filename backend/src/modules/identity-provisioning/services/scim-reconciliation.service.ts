@@ -170,7 +170,9 @@ export class ScimReconciliationService {
     const discrepancies: ScimReconciliationDiscrepancy[] = [];
     const summaryMutable = { ...emptySummary() };
     let appliedActionsCount = 0;
-    const internalMeta = buildInternalMeta(`/api/v1/identity-provisioning/clients/${clientId}/reconcile`);
+    const internalMeta = buildInternalMeta(
+      `/api/v1/identity-provisioning/clients/${clientId}/reconcile`,
+    );
 
     // 1. Đối soát IdP Users -> Local SCIM Links & Users
     for (const idpUser of input.idpUsers) {
@@ -195,7 +197,9 @@ export class ScimReconciliationService {
                 familyName: idpUser.lastName,
                 formatted: idpUser.fullName,
               },
-              ...(idpUser.phone ? { phoneNumbers: [{ value: idpUser.phone, type: 'work', primary: true }] } : {}),
+              ...(idpUser.phone
+                ? { phoneNumbers: [{ value: idpUser.phone, type: 'work', primary: true }] }
+                : {}),
             },
             internalMeta,
           );
@@ -254,11 +258,9 @@ export class ScimReconciliationService {
         });
       }
 
-      const emailDiff =
-        localUser.email.trim().toLowerCase() !== idpUser.email.trim().toLowerCase();
+      const emailDiff = localUser.email.trim().toLowerCase() !== idpUser.email.trim().toLowerCase();
       const nameDiff =
-        Boolean(idpUser.fullName) &&
-        localUser.fullName.trim() !== idpUser.fullName!.trim();
+        Boolean(idpUser.fullName) && localUser.fullName.trim() !== idpUser.fullName!.trim();
 
       if (emailDiff || nameDiff) {
         summaryMutable.attributeDrift += 1;
@@ -297,7 +299,9 @@ export class ScimReconciliationService {
           identifier: idpUser.userName,
           details: {
             ...(emailDiff ? { localEmail: localUser.email, idpEmail: idpUser.email } : {}),
-            ...(nameDiff ? { localFullName: localUser.fullName, idpFullName: idpUser.fullName } : {}),
+            ...(nameDiff
+              ? { localFullName: localUser.fullName, idpFullName: idpUser.fullName }
+              : {}),
           },
           resolved,
           ...(resolutionAction ? { resolutionAction } : {}),
@@ -315,7 +319,12 @@ export class ScimReconciliationService {
       let resolutionAction: string | undefined;
 
       if (isApply && input.applyDeprovisionOrphans) {
-        await this.scimUsersService.deleteUser(client, String(link.userId), undefined, internalMeta);
+        await this.scimUsersService.deleteUser(
+          client,
+          String(link.userId),
+          undefined,
+          internalMeta,
+        );
         resolved = true;
         resolutionAction = 'DEPROVISIONED_ORPHAN_USER';
         appliedActionsCount += 1;
@@ -334,7 +343,9 @@ export class ScimReconciliationService {
     }
 
     // Refresh links map after user sync if APPLY created any new users
-    const refreshedLinks = isApply ? await this.userLinkRepository.findByClient(client.id) : localLinks;
+    const refreshedLinks = isApply
+      ? await this.userLinkRepository.findByClient(client.id)
+      : localLinks;
     const refreshedByExt = new Map(refreshedLinks.map((l) => [l.externalId, Number(l.userId)]));
 
     // 3. Đối soát IdP Groups -> Local SCIM Groups & Memberships

@@ -235,16 +235,12 @@ describe('Data Governance Sensitive Masking, Log Redaction & Export Hook Unit Te
         fileName: 'users.csv',
         format: 'csv',
         totalExported: 1,
-        csvContent: 'username,email,identity_number,phone\ntranvanb,tranvanb@company.vn,001099012345,0987654321\n',
+        csvContent:
+          'username,email,identity_number,phone\ntranvanb,tranvanb@company.vn,001099012345,0987654321\n',
       }),
     });
 
-    const exportsService = new ExportsService(
-      undefined,
-      exportRegistry,
-      undefined,
-      hookRegistry,
-    );
+    const exportsService = new ExportsService(undefined, exportRegistry, undefined, hookRegistry);
 
     const staffExport = await exportsService.executeExport(
       'users',

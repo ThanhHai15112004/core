@@ -24,10 +24,7 @@ import {
   resolveComplianceRuntimeConfig,
 } from '../helpers/compliance-config.helper.js';
 import { computeNextDueDate, normalizeFrameworkTags } from '../helpers/compliance.helper.js';
-import {
-  mapDataAssessmentToView,
-  mapVendorToView,
-} from '../helpers/compliance-mapper.helper.js';
+import { mapDataAssessmentToView, mapVendorToView } from '../helpers/compliance-mapper.helper.js';
 import { ComplianceVendorDataAssessmentRepository } from '../repositories/compliance-vendor-data-assessment.repository.js';
 import { ComplianceVendorRepository } from '../repositories/compliance-vendor.repository.js';
 import type {
@@ -37,10 +34,7 @@ import type {
   UpdateVendorDataAssessmentRequest,
   UpdateVendorRequest,
 } from '../requests/compliance.requests.js';
-import type {
-  ComplianceVendorView,
-  VendorDataAssessmentView,
-} from '../types/compliance.types.js';
+import type { ComplianceVendorView, VendorDataAssessmentView } from '../types/compliance.types.js';
 
 @Injectable()
 export class ComplianceVendorService {
@@ -530,7 +524,8 @@ export class ComplianceVendorService {
         normalizeFrameworkTags(dto.prohibitedDataFields),
       );
     }
-    if (dto.processingPurpose !== undefined) entity.processingPurpose = dto.processingPurpose.trim();
+    if (dto.processingPurpose !== undefined)
+      entity.processingPurpose = dto.processingPurpose.trim();
     if (dto.dataFlowDirection !== undefined) entity.dataFlowDirection = dto.dataFlowDirection;
     if (dto.storageRegions !== undefined) {
       entity.storageRegionsJson = JSON.stringify(normalizeFrameworkTags(dto.storageRegions));
@@ -609,7 +604,9 @@ export class ComplianceVendorService {
     return { deleted: true, id };
   }
 
-  public async listAllVendorsForAggregation(now: Date = new Date()): Promise<ComplianceVendorView[]> {
+  public async listAllVendorsForAggregation(
+    now: Date = new Date(),
+  ): Promise<ComplianceVendorView[]> {
     const cfg = resolveComplianceRuntimeConfig(this.settingRegistry, this.featureFlagRegistry);
     const entities = await this.vendorRepo.findAll();
     return entities.map((v) =>

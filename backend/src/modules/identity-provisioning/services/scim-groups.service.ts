@@ -134,7 +134,9 @@ export class ScimGroupsService {
   }
 
   private async filterValidMemberIds(memberUserIds: readonly number[]): Promise<number[]> {
-    const unique = Array.from(new Set(memberUserIds.filter((id) => Number.isInteger(id) && id > 0)));
+    const unique = Array.from(
+      new Set(memberUserIds.filter((id) => Number.isInteger(id) && id > 0)),
+    );
     if (!this.usersPublicService || unique.length === 0) {
       return unique.sort((a, b) => a - b);
     }
@@ -274,11 +276,7 @@ export class ScimGroupsService {
       this.assertScope(client, SCIM_CLIENT_SCOPES.GROUPS_WRITE);
       const extracted = extractScimGroupWriteFields(rawBody);
       if (!extracted.displayName) {
-        throw new ScimProtocolException(
-          400,
-          'SCIM Group requires displayName',
-          'invalidValue',
-        );
+        throw new ScimProtocolException(400, 'SCIM Group requires displayName', 'invalidValue');
       }
 
       const externalId = extracted.externalId?.trim() ?? null;

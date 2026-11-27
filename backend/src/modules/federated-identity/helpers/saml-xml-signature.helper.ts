@@ -1,11 +1,6 @@
 import { createSign, randomBytes } from 'node:crypto';
 import { deflateRawSync } from 'node:zlib';
-import {
-  XMLSerializer,
-  type Document,
-  type Element,
-  type Node,
-} from '@xmldom/xmldom';
+import { XMLSerializer, type Document, type Element, type Node } from '@xmldom/xmldom';
 import { SignedXml } from 'xml-crypto';
 import {
   FEDERATED_AUTH_STAGE,
@@ -102,7 +97,10 @@ function findAllSignatureElements(root: Node): Element[] {
       const child = node.childNodes.item(i);
       if (child && child.nodeType === 1) {
         const el = child as Element;
-        if (getLocalName(el) === 'Signature' && (!el.namespaceURI || el.namespaceURI === XMLDSIG_NS)) {
+        if (
+          getLocalName(el) === 'Signature' &&
+          (!el.namespaceURI || el.namespaceURI === XMLDSIG_NS)
+        ) {
           out.push(el);
         }
         walk(el);
@@ -186,7 +184,10 @@ export function verifySamlXmlSignature(params: {
   const assertions = getDirectChildElements(responseNode, 'Assertion');
   if (assertions.length !== 1 || !assertions[0]) {
     throw new FederatedStageError({
-      i18nKey: assertions.length > 1 ? 'federated-identity.samlXswDetected' : 'federated-identity.samlInvalidResponse',
+      i18nKey:
+        assertions.length > 1
+          ? 'federated-identity.samlXswDetected'
+          : 'federated-identity.samlInvalidResponse',
       stage: FEDERATED_AUTH_STAGE.SAML_SIGNATURE,
       stageErrorCode: assertions.length > 1 ? 'SAML_XSW_DETECTED' : 'SAML_MISSING_ASSERTION',
       diagnosticMessage:
@@ -217,7 +218,8 @@ export function verifySamlXmlSignature(params: {
       i18nKey: 'federated-identity.samlInvalidSignature',
       stage: FEDERATED_AUTH_STAGE.SAML_SIGNATURE,
       stageErrorCode: 'SAML_NO_ELIGIBLE_CERTIFICATE',
-      diagnosticMessage: 'No active or transitioning IdP certificate is eligible to verify signature',
+      diagnosticMessage:
+        'No active or transitioning IdP certificate is eligible to verify signature',
     });
   }
 

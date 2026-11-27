@@ -35,8 +35,7 @@ export function parseScimFilter(filter?: string | null): ScimFilterClause[] {
 
   const clauses: ScimFilterClause[] = [];
   for (const part of parts) {
-    const unwrapped =
-      part.startsWith('(') && part.endsWith(')') ? part.slice(1, -1).trim() : part;
+    const unwrapped = part.startsWith('(') && part.endsWith(')') ? part.slice(1, -1).trim() : part;
     const match = CLAUSE_REGEX.exec(unwrapped);
     if (!match) {
       throw new ScimProtocolException(
@@ -51,7 +50,11 @@ export function parseScimFilter(filter?: string | null): ScimFilterClause[] {
     const primitiveVal = match[4];
 
     if (!rawAttr || !rawOp) {
-      throw new ScimProtocolException(400, `Invalid SCIM filter clause: "${part}"`, 'invalidFilter');
+      throw new ScimProtocolException(
+        400,
+        `Invalid SCIM filter clause: "${part}"`,
+        'invalidFilter',
+      );
     }
 
     if (rawOp !== 'pr' && quotedVal === undefined && primitiveVal === undefined) {
@@ -63,7 +66,9 @@ export function parseScimFilter(filter?: string | null): ScimFilterClause[] {
     }
 
     const unescapedVal =
-      quotedVal !== undefined ? quotedVal.replace(/\\"/g, '"').replace(/\\\\/g, '\\') : primitiveVal;
+      quotedVal !== undefined
+        ? quotedVal.replace(/\\"/g, '"').replace(/\\\\/g, '\\')
+        : primitiveVal;
 
     clauses.push({
       attribute: normalizeScimAttributePath(rawAttr),

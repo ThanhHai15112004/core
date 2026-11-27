@@ -84,10 +84,7 @@ export class BackupRestoreDrillService {
       backupRecordId: Number(record.id),
       backupCode: record.backupCode,
       operationType: RESTORE_OPERATION_TYPE.DRILL_ISOLATED,
-      scope:
-        record.targetType === BACKUP_TARGET_TYPE.STORAGE
-          ? 'STORAGE'
-          : 'DATABASE',
+      scope: record.targetType === BACKUP_TARGET_TYPE.STORAGE ? 'STORAGE' : 'DATABASE',
       targetEnvironment: `${this.config.app.env}-isolated-drill`,
       targetDatabase: this.config.backup.drillDatabase || null,
       status: RESTORE_STATUS.RUNNING,

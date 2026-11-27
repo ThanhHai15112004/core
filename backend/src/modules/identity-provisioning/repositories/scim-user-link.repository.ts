@@ -71,10 +71,9 @@ export class ScimUserLinkRepository extends BaseTypeOrmRepository<ScimUserLinkEn
     }
     if (filter.search?.trim()) {
       const term = `%${filter.search.trim().toLowerCase()}%`;
-      qb.andWhere(
-        '(LOWER(link.externalId) LIKE :term OR LOWER(link.scimUsername) LIKE :term)',
-        { term },
-      );
+      qb.andWhere('(LOWER(link.externalId) LIKE :term OR LOWER(link.scimUsername) LIKE :term)', {
+        term,
+      });
     }
 
     qb.orderBy('link.id', 'DESC');

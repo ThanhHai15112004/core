@@ -16,18 +16,12 @@ import {
 } from '@packages/kernel/index.js';
 import { createPaginatedResult } from '@packages/http/index.js';
 import { AuditLogService, type UserIdentity } from '@packages/security/index.js';
-import {
-  type IRolesPublicService,
-  ROLES_PUBLIC_SERVICE,
-} from '@modules/roles/contracts/index.js';
+import { type IRolesPublicService, ROLES_PUBLIC_SERVICE } from '@modules/roles/contracts/index.js';
 import {
   SESSIONS_PUBLIC_SERVICE,
   type ISessionsPublicService,
 } from '@modules/sessions/contracts/index.js';
-import {
-  type IUsersPublicService,
-  USERS_PUBLIC_SERVICE,
-} from '@modules/users/contracts/index.js';
+import { type IUsersPublicService, USERS_PUBLIC_SERVICE } from '@modules/users/contracts/index.js';
 import {
   ACCESS_REVIEW_DECISION,
   ACCESS_REVIEW_STATUS,
@@ -333,13 +327,8 @@ export class PrivilegedReviewsService {
               throw new ConflictAppException('privileged-access.cannotRevokeLastSuperAdmin');
             }
           }
-          if (
-            this.rolesService.findUserRoleLinksByUserIds &&
-            this.rolesService.replaceUserRoles
-          ) {
-            const links = await this.rolesService.findUserRoleLinksByUserIds([
-              Number(item.userId),
-            ]);
+          if (this.rolesService.findUserRoleLinksByUserIds && this.rolesService.replaceUserRoles) {
+            const links = await this.rolesService.findUserRoleLinksByUserIds([Number(item.userId)]);
             const remaining = links
               .map((l) => Number(l.roleId))
               .filter((rid) => rid !== Number(item.roleId));
@@ -352,10 +341,7 @@ export class PrivilegedReviewsService {
             )
             .catch(() => undefined);
           enforcementApplied = true;
-        } else if (
-          item.grantSource === PRIVILEGED_REVIEW_SOURCE.TEMPORARY_GRANT &&
-          item.grantId
-        ) {
+        } else if (item.grantSource === PRIVILEGED_REVIEW_SOURCE.TEMPORARY_GRANT && item.grantId) {
           await this.grantsService.revokeGrant(
             Number(item.grantId),
             { comment: dto.note ?? `Revoked during review ${review.reviewCode}` },

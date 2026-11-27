@@ -178,11 +178,7 @@ jobs:
           BEFORE_SHA: ${{ github.event.before }}
         run: node scripts/ci/check-api-changes.mjs --report reports/openapi-report.json
 
-      - name: Run Unit Tests
-        working-directory: backend
-        run: npm run test:unit
-
-      - name: Run Feature/API Tests & Module Coverage Report
+      - name: Run Unit, Integration (Mock) & Feature/API Tests with Module Coverage
         working-directory: backend
         run: npm run test:cov:module
 
@@ -285,8 +281,12 @@ jobs:
       OPS_DATABASE_MIGRATIONS_ENABLED: 'true'
       REDIS_HOST: 127.0.0.1
       REDIS_PORT: '6379'
+      REDIS_PREFIX: 'core_ci:'
+      STORAGE_DRIVER: local
       JWT_ACCESS_SECRET: ci_test_access_secret_key_at_least_32_characters_long
       JWT_REFRESH_SECRET: ci_test_refresh_secret_key_at_least_32_characters_long
+      JWT_ACCESS_EXPIRATION: 15m
+      JWT_REFRESH_EXPIRATION: 7d
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -387,7 +387,7 @@ jobs:
         with:
           path: downloaded-reports
 
-      - name: Generate CI Summary & Write GitHub Step Summary
+      - name: Generate CI Summary (Markdown, JSON & Excel .xlsx)
         run: |
           node scripts/ci/ci-report.mjs --summarize --no-fail \
             --step "Validate, Lockfiles & Diff Guard=${{ needs.validate.result }}" \
@@ -395,13 +395,10 @@ jobs:
             --step "Backend Integration & API Tests (Postgres + Redis)=${{ needs.backend-integration-api-test.result }}" \
             --step "Frontend Quality, Typecheck & Build=${{ needs.frontend-test.result }}" \
             --step "Docker Multi-Runtime Smoke Test=${{ needs.docker-smoke-test.result }}" \
-            --lockfile-report downloaded-reports/ci-report-lockfile/lockfile-report.json \
-            --arch-report downloaded-reports/ci-report-backend/reports/arch-report.json \
-            --openapi-report downloaded-reports/ci-report-backend/reports/openapi-report.json \
-            --coverage-report downloaded-reports/ci-report-backend/backend/coverage/module-coverage-summary.json \
+            --search-dir downloaded-reports \
             --out-dir reports
 
-      - name: Upload Aggregated CI Report
+      - name: Upload Aggregated CI Report (Markdown, JSON & Excel)
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -409,4 +406,5 @@ jobs:
           path: |
             reports/ci-summary.md
             reports/ci-summary.json
+            reports/ci-summary.xlsx
           if-no-files-found: ignore

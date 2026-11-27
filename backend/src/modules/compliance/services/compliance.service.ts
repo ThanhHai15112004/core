@@ -150,10 +150,7 @@ export class ComplianceService implements ICompliancePublicService {
         a.approvalStatus !== ASSESSMENT_APPROVAL_STATUS.REJECTED,
     ).length;
 
-    const frameworkStats = new Map<
-      string,
-      { totalControls: number; passingControls: number }
-    >();
+    const frameworkStats = new Map<string, { totalControls: number; passingControls: number }>();
     for (const c of activeControls) {
       for (const tag of c.frameworkTags) {
         const prefix = tag.split(':')[0]?.trim() || tag;
@@ -377,7 +374,9 @@ export class ComplianceService implements ICompliancePublicService {
     return this.controlService.listCheckHistories(query);
   }
 
-  public listEvidences(query: ListEvidencesQuery): Promise<PaginatedResult<ComplianceEvidenceView>> {
+  public listEvidences(
+    query: ListEvidencesQuery,
+  ): Promise<PaginatedResult<ComplianceEvidenceView>> {
     return this.evidenceService.listEvidences(query);
   }
 

@@ -89,14 +89,20 @@ function createComplianceTestHarness() {
     },
     findById: async (id: number) => controls.find((c) => c.id === id && !c.deletedAt) ?? null,
     findByCode: async (code: string) =>
-      controls.find((c) => c.controlCode.toUpperCase() === code.trim().toUpperCase() && !c.deletedAt) ??
-      null,
+      controls.find(
+        (c) => c.controlCode.toUpperCase() === code.trim().toUpperCase() && !c.deletedAt,
+      ) ?? null,
     findAll: async () => controls.filter((c) => !c.deletedAt),
     softDeleteEntity: async (entity: ComplianceControlEntity) => {
       entity.deletedAt = new Date();
       return entity;
     },
-    paginateFiltered: async (filter: { domain?: string; frameworkTag?: string; page?: number; limit?: number }) => {
+    paginateFiltered: async (filter: {
+      domain?: string;
+      frameworkTag?: string;
+      page?: number;
+      limit?: number;
+    }) => {
       const items = controls.filter((c) => {
         if (c.deletedAt) return false;
         if (filter.domain && c.domain.toLowerCase() !== filter.domain.toLowerCase()) return false;
@@ -253,8 +259,9 @@ function createComplianceTestHarness() {
     },
     findById: async (id: number) => vendors.find((v) => v.id === id && !v.deletedAt) ?? null,
     findByCode: async (code: string) =>
-      vendors.find((v) => v.vendorCode.toUpperCase() === code.trim().toUpperCase() && !v.deletedAt) ??
-      null,
+      vendors.find(
+        (v) => v.vendorCode.toUpperCase() === code.trim().toUpperCase() && !v.deletedAt,
+      ) ?? null,
     findAll: async () => vendors.filter((v) => !v.deletedAt),
     softDeleteEntity: async (entity: ComplianceVendorEntity) => {
       entity.deletedAt = new Date();
@@ -335,8 +342,7 @@ function createComplianceTestHarness() {
   });
 
   const filesService = {
-    ensureActiveFilesExist: async (ids: readonly number[]) =>
-      ids.map((id) => ({ id })) as never,
+    ensureActiveFilesExist: async (ids: readonly number[]) => ids.map((id) => ({ id })) as never,
     syncEntityFileUsages: async (params: {
       entityId: string | number;
       fileIds: readonly number[];

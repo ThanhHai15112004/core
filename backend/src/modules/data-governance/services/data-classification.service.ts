@@ -99,7 +99,9 @@ export class DataClassificationService implements ISensitiveFieldPolicyEvaluator
     return [...names];
   }
 
-  public async listRulesForResource(resourceType: string): Promise<readonly SensitiveFieldPolicyRule[]> {
+  public async listRulesForResource(
+    resourceType: string,
+  ): Promise<readonly SensitiveFieldPolicyRule[]> {
     const cfg = resolveDataGovernanceRuntimeConfig(this.settingRegistry, this.featureFlagRegistry);
     if (!cfg.moduleEnabled) return [];
     const enabled = await this.ensureSensitiveCache();
@@ -268,7 +270,8 @@ export class DataClassificationService implements ISensitiveFieldPolicyEvaluator
     }
     if (dto.displayName !== undefined) existing.displayName = dto.displayName.trim();
     if (dto.moduleName !== undefined) existing.moduleName = dto.moduleName.trim().toLowerCase();
-    if (dto.classificationLevel !== undefined) existing.classificationLevel = dto.classificationLevel;
+    if (dto.classificationLevel !== undefined)
+      existing.classificationLevel = dto.classificationLevel;
     if (dto.containsPii !== undefined) existing.containsPii = dto.containsPii;
     if (dto.retentionDays !== undefined) existing.retentionDays = dto.retentionDays;
     if (dto.retentionAction !== undefined) existing.retentionAction = dto.retentionAction;
@@ -403,10 +406,12 @@ export class DataClassificationService implements ISensitiveFieldPolicyEvaluator
     if (!existing) {
       throw new NotFoundAppException('data-governance.sensitiveFieldNotFound', { id });
     }
-    if (dto.resourceType !== undefined) existing.resourceType = dto.resourceType.trim().toLowerCase();
+    if (dto.resourceType !== undefined)
+      existing.resourceType = dto.resourceType.trim().toLowerCase();
     if (dto.fieldPath !== undefined) existing.fieldPath = dto.fieldPath.trim();
     if (dto.displayName !== undefined) existing.displayName = dto.displayName.trim();
-    if (dto.classificationLevel !== undefined) existing.classificationLevel = dto.classificationLevel;
+    if (dto.classificationLevel !== undefined)
+      existing.classificationLevel = dto.classificationLevel;
     if (dto.maskStrategy !== undefined) existing.maskStrategy = dto.maskStrategy;
     if (dto.redactInLog !== undefined) existing.redactInLog = dto.redactInLog;
     if (dto.maskInExport !== undefined) existing.maskInExport = dto.maskInExport;
@@ -453,9 +458,7 @@ export class DataClassificationService implements ISensitiveFieldPolicyEvaluator
 
     const enabledPolicies = await this.classificationRepo.findAllEnabled();
     const targetPolicies = options?.dataTypeCode?.trim()
-      ? enabledPolicies.filter(
-          (p) => p.dataTypeCode === options.dataTypeCode!.trim().toLowerCase(),
-        )
+      ? enabledPolicies.filter((p) => p.dataTypeCode === options.dataTypeCode!.trim().toLowerCase())
       : enabledPolicies;
 
     const holdGuard = this.hookRegistry.getLegalHoldGuard();

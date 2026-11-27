@@ -21,10 +21,7 @@ import {
   type PaginatedResult,
 } from '@packages/kernel/index.js';
 import { AuditLogService, type UserIdentity } from '@packages/security/index.js';
-import {
-  LEGAL_HOLD_SCOPE_TYPE,
-  LEGAL_HOLD_STATUS,
-} from '../enum/data-governance.enum.js';
+import { LEGAL_HOLD_SCOPE_TYPE, LEGAL_HOLD_STATUS } from '../enum/data-governance.enum.js';
 import { nextLegalHoldCode } from '../helpers/code-generator.helper.js';
 import {
   assertDataGovernanceEnabled,

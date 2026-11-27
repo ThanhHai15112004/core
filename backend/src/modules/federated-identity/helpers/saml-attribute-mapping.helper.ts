@@ -1,6 +1,9 @@
 import { FEDERATED_AUTH_STAGE, FEDERATED_DRIVER_CODE } from '../enum/federated-identity.enum.js';
 import { FederatedStageError } from '../services/federated-jwks.service.js';
-import type { SamlProviderConfig, VerifiedExternalProfile } from '../types/federated-identity.types.js';
+import type {
+  SamlProviderConfig,
+  VerifiedExternalProfile,
+} from '../types/federated-identity.types.js';
 import type { ValidatedSamlAssertion } from './saml-assertion.helper.js';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -197,9 +200,9 @@ export function mapAndValidateSamlAttributes(params: {
     : null;
   const emailVerified = Boolean(
     email &&
-      (emailVerifiedVal !== null
-        ? parseBooleanValue(emailVerifiedVal)
-        : mapping.treatEmailAsVerified),
+    (emailVerifiedVal !== null
+      ? parseBooleanValue(emailVerifiedVal)
+      : mapping.treatEmailAsVerified),
   );
 
   const firstName = getSingleValidatedString(

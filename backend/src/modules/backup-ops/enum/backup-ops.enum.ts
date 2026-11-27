@@ -19,8 +19,7 @@ export const BACKUP_RECORD_STATUS = {
   EXPIRED: 'EXPIRED',
   PURGED: 'PURGED',
 } as const;
-export type BackupRecordStatus =
-  (typeof BACKUP_RECORD_STATUS)[keyof typeof BACKUP_RECORD_STATUS];
+export type BackupRecordStatus = (typeof BACKUP_RECORD_STATUS)[keyof typeof BACKUP_RECORD_STATUS];
 
 export const BACKUP_VERIFY_STATUS = {
   PENDING: 'PENDING',
@@ -28,8 +27,7 @@ export const BACKUP_VERIFY_STATUS = {
   FAILED: 'FAILED',
   SKIPPED: 'SKIPPED',
 } as const;
-export type BackupVerifyStatus =
-  (typeof BACKUP_VERIFY_STATUS)[keyof typeof BACKUP_VERIFY_STATUS];
+export type BackupVerifyStatus = (typeof BACKUP_VERIFY_STATUS)[keyof typeof BACKUP_VERIFY_STATUS];
 
 export const RESTORE_OPERATION_TYPE = {
   DRILL_ISOLATED: 'DRILL_ISOLATED',

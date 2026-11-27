@@ -93,7 +93,9 @@ export const OidcClaimMappingSchema = z.object({
   avatarClaim: z.string().trim().min(1).max(120).optional(),
   groupsClaim: z.string().trim().min(1).max(120).optional(),
   tenantIdClaim: z.string().trim().min(1).max(120).optional(),
-  extraAttributeClaims: z.record(z.string().trim().min(1).max(64), z.string().trim().min(1).max(120)).optional(),
+  extraAttributeClaims: z
+    .record(z.string().trim().min(1).max(64), z.string().trim().min(1).max(120))
+    .optional(),
 });
 
 export const FederatedRoleSyncPolicySchema = z.object({
@@ -145,7 +147,9 @@ export const SamlAttributeMappingSchema = z.object({
   avatarAttribute: z.string().trim().min(1).max(255).nullable().optional(),
   groupsAttribute: z.string().trim().min(1).max(255).optional(),
   tenantIdAttribute: z.string().trim().min(1).max(255).nullable().optional(),
-  extraAttributes: z.record(z.string().trim().min(1).max(64), z.string().trim().min(1).max(255)).optional(),
+  extraAttributes: z
+    .record(z.string().trim().min(1).max(64), z.string().trim().min(1).max(255))
+    .optional(),
   requireEmail: z.boolean().optional(),
   requiredAttributes: z.array(z.string().trim().min(1).max(255)).max(30).optional(),
   treatEmailAsVerified: z.boolean().optional(),

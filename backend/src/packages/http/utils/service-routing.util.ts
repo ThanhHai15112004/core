@@ -212,9 +212,7 @@ export function validateServiceRoutingTable(
 export function renderNginxServiceLocations(entries: readonly ServiceRoutingEntry[]): string {
   return entries
     .map((entry) => {
-      const regex = entry.prefixes
-        .map((p) => p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
-        .join('|');
+      const regex = entry.prefixes.map((p) => p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
       return [
         `# Domain: ${entry.domain} (${entry.serviceName})`,
         `location ~ ^(${regex})(/|$) {`,

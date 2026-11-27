@@ -54,8 +54,8 @@ export class DatabaseBackupEngineService {
   ) {}
 
   private sanitizeOutput(raw: string): string {
-    const secrets = [this.config.database.password, this.config.backup.drillPassword].filter(
-      (s) => Boolean(s),
+    const secrets = [this.config.database.password, this.config.backup.drillPassword].filter((s) =>
+      Boolean(s),
     );
     let out = raw;
     for (const s of secrets) {

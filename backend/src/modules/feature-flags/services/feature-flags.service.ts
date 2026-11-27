@@ -1,4 +1,10 @@
-import { Inject, Injectable, type OnModuleDestroy, type OnModuleInit, Optional } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  type OnModuleDestroy,
+  type OnModuleInit,
+  Optional,
+} from '@nestjs/common';
 import { BaseCacheProvider, CacheInvalidationService } from '@packages/cache/index.js';
 import {
   ConflictAppException,
@@ -50,7 +56,9 @@ import type {
 } from '../requests/feature-flags.requests.js';
 
 @Injectable()
-export class FeatureFlagsService implements IFeatureFlagsPublicService, OnModuleInit, OnModuleDestroy {
+export class FeatureFlagsService
+  implements IFeatureFlagsPublicService, OnModuleInit, OnModuleDestroy
+{
   private readonly registry: FeatureFlagRegistryService;
   private readonly evaluationCache = new Map<
     string,

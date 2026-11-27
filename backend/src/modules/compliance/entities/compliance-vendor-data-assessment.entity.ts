@@ -65,7 +65,12 @@ export class ComplianceVendorDataAssessmentEntity extends VersionedTypeOrmEntity
   @Column({ name: 'subprocessors_json', type: 'text', nullable: true })
   public subprocessorsJson!: string | null;
 
-  @Column({ name: 'risk_level', type: 'varchar', length: 24, default: COMPLIANCE_RISK_LEVEL.MEDIUM })
+  @Column({
+    name: 'risk_level',
+    type: 'varchar',
+    length: 24,
+    default: COMPLIANCE_RISK_LEVEL.MEDIUM,
+  })
   public riskLevel!: ComplianceRiskLevel;
 
   @Column({

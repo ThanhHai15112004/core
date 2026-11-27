@@ -1,9 +1,5 @@
 import { z } from 'zod';
-import {
-  booleanQueryParam,
-  intQueryParam,
-  optionalQueryParam,
-} from '@packages/http/index.js';
+import { booleanQueryParam, intQueryParam, optionalQueryParam } from '@packages/http/index.js';
 import {
   ACCESS_REVIEW_DECISION,
   ACCESS_REVIEW_STATUS,
@@ -92,14 +88,7 @@ export const ListPrivilegedGrantsQuerySchema = z.object({
   status: optionalQueryParam(
     z.union([
       intQueryParam({ min: 1, max: 6 }),
-      z.enum([
-        'PENDING_APPROVAL',
-        'ACTIVE',
-        'REJECTED',
-        'EXPIRED',
-        'REVOKED',
-        'CANCELLED',
-      ]),
+      z.enum(['PENDING_APPROVAL', 'ACTIVE', 'REJECTED', 'EXPIRED', 'REVOKED', 'CANCELLED']),
     ]),
   ),
   targetType: optionalQueryParam(
@@ -146,7 +135,8 @@ export const CreateBreakGlassAccountRequestSchema = z
       if (!val.username || !val.email || !val.password) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          message: 'username, email, and password are required when creating a new break-glass user',
+          message:
+            'username, email, and password are required when creating a new break-glass user',
           path: ['username'],
         });
       }

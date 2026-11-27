@@ -431,7 +431,9 @@ export class ComplianceControlService {
     );
   }
 
-  public async listAllControlsForAggregation(now: Date = new Date()): Promise<ComplianceControlView[]> {
+  public async listAllControlsForAggregation(
+    now: Date = new Date(),
+  ): Promise<ComplianceControlView[]> {
     const cfg = resolveComplianceRuntimeConfig(this.settingRegistry, this.featureFlagRegistry);
     const entities = await this.controlRepo.findAll();
     return entities.map((item) => mapControlToView(item, cfg.reviewReminderDaysBefore, now));

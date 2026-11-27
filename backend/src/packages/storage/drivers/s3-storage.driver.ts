@@ -283,7 +283,9 @@ export class S3StorageDriver implements StorageDriver {
           Prefix: `${tempPrefix}.part.`,
         }),
       );
-      const keys = (listed.Contents ?? []).map((item) => item.Key).filter((k): k is string => Boolean(k));
+      const keys = (listed.Contents ?? [])
+        .map((item) => item.Key)
+        .filter((k): k is string => Boolean(k));
       await Promise.all(keys.map((k) => this.delete(k).catch(() => undefined)));
     } catch {
       // Best-effort cleanup

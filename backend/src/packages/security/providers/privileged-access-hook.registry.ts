@@ -28,9 +28,7 @@ export interface PrivilegedAccessGuardDecision {
 }
 
 export interface IPrivilegedAccessRequestEvaluator {
-  evaluateRequest(
-    ctx: PrivilegedAccessGuardRequestContext,
-  ): Promise<PrivilegedAccessGuardDecision>;
+  evaluateRequest(ctx: PrivilegedAccessGuardRequestContext): Promise<PrivilegedAccessGuardDecision>;
   onPrivilegedAccessAllowed?(
     ctx: PrivilegedAccessGuardRequestContext & {
       readonly matchedTargets: readonly PrivilegedMatchedTargetInfo[];

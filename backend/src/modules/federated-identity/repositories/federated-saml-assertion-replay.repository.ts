@@ -5,7 +5,11 @@ import { FederatedSamlAssertionReplayEntity } from '../entities/federated-saml-a
 
 function isUniqueConstraintError(err: unknown): boolean {
   if (!err || typeof err !== 'object') return false;
-  const record = err as { code?: unknown; errno?: unknown; driverError?: { code?: unknown; errno?: unknown } };
+  const record = err as {
+    code?: unknown;
+    errno?: unknown;
+    driverError?: { code?: unknown; errno?: unknown };
+  };
   const code = record.code ?? record.driverError?.code;
   const errno = record.errno ?? record.driverError?.errno;
   return (

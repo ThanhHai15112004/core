@@ -172,7 +172,7 @@ export class DrReconciliationService {
     }
 
     if (scope === DR_SYNC_SCOPE.STORAGE || scope === DR_SYNC_SCOPE.FULL) {
-      let primaryStorage: SnapshotRecord[] = [...(input?.primaryStorageSnapshots ?? [])];
+      const primaryStorage: SnapshotRecord[] = [...(input?.primaryStorageSnapshots ?? [])];
       let drStorage: SnapshotRecord[] = [...(input?.drStorageSnapshots ?? [])];
 
       if (primaryStorage.length === 0 && drStorage.length === 0 && this.storageMonitoring) {
@@ -227,9 +227,7 @@ export class DrReconciliationService {
       storageMismatchCount;
 
     const status: DrReconcileStatus =
-      totalDiscrepancies > 0
-        ? DR_RECONCILE_STATUS.DISCREPANCIES_FOUND
-        : DR_RECONCILE_STATUS.PASSED;
+      totalDiscrepancies > 0 ? DR_RECONCILE_STATUS.DISCREPANCIES_FOUND : DR_RECONCILE_STATUS.PASSED;
 
     const completedAt = new Date();
     const durationMs = Math.max(0, completedAt.getTime() - startedAt.getTime());

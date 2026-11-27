@@ -15,18 +15,12 @@ import {
 } from '@packages/kernel/index.js';
 import { createPaginatedResult } from '@packages/http/index.js';
 import { AuditLogService, type UserIdentity } from '@packages/security/index.js';
-import {
-  type IRolesPublicService,
-  ROLES_PUBLIC_SERVICE,
-} from '@modules/roles/contracts/index.js';
+import { type IRolesPublicService, ROLES_PUBLIC_SERVICE } from '@modules/roles/contracts/index.js';
 import {
   SESSIONS_PUBLIC_SERVICE,
   type ISessionsPublicService,
 } from '@modules/sessions/contracts/index.js';
-import {
-  type IUsersPublicService,
-  USERS_PUBLIC_SERVICE,
-} from '@modules/users/contracts/index.js';
+import { type IUsersPublicService, USERS_PUBLIC_SERVICE } from '@modules/users/contracts/index.js';
 import { getGrantStatusName, parseGrantStatusCode } from '../contracts/index.js';
 import {
   PRIVILEGED_ALERT_EVENT_TYPE,
@@ -127,11 +121,10 @@ export class PrivilegedGrantsService {
 
     const maxAllowedMinutes = Math.min(Number(policy.maxGrantMinutes), cfg.maxGrantDurationMinutes);
     if (dto.durationMinutes > maxAllowedMinutes) {
-      throw new BadRequestAppException(
-        'privileged-access.grantDurationExceedsLimit',
-        [],
-        { requestedMinutes: dto.durationMinutes, maxMinutes: maxAllowedMinutes },
-      );
+      throw new BadRequestAppException('privileged-access.grantDurationExceedsLimit', [], {
+        requestedMinutes: dto.durationMinutes,
+        maxMinutes: maxAllowedMinutes,
+      });
     }
 
     let roleId: number | null = null;
@@ -168,9 +161,7 @@ export class PrivilegedGrantsService {
       approvedAt: requiresApproval ? null : now,
       approvalComment: requiresApproval ? null : 'Auto-approved by policy',
       startsAt: requiresApproval ? null : now,
-      expiresAt: requiresApproval
-        ? null
-        : new Date(now.getTime() + dto.durationMinutes * 60_000),
+      expiresAt: requiresApproval ? null : new Date(now.getTime() + dto.durationMinutes * 60_000),
       stepUpVerified: Boolean(options?.stepUpVerified),
     });
 
@@ -260,7 +251,10 @@ export class PrivilegedGrantsService {
         { status: getGrantStatusName(grant.status) },
       ]);
     }
-    if (Number(grant.requestedBy) === Number(actor.id) || Number(grant.userId) === Number(actor.id)) {
+    if (
+      Number(grant.requestedBy) === Number(actor.id) ||
+      Number(grant.userId) === Number(actor.id)
+    ) {
       throw new ForbiddenAppException('privileged-access.selfApprovalForbidden');
     }
 
@@ -348,7 +342,10 @@ export class PrivilegedGrantsService {
         { status: getGrantStatusName(grant.status) },
       ]);
     }
-    if (Number(grant.requestedBy) === Number(actor.id) || Number(grant.userId) === Number(actor.id)) {
+    if (
+      Number(grant.requestedBy) === Number(actor.id) ||
+      Number(grant.userId) === Number(actor.id)
+    ) {
       throw new ForbiddenAppException('privileged-access.selfApprovalForbidden');
     }
 

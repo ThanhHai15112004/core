@@ -86,9 +86,7 @@ export class DrSwitchoverService {
       timeoutMs: 10_000,
     });
     if (res.status < 200 || res.status >= 300) {
-      throw new DrSwitchGuardException(
-        `DR switch webhook returned HTTP ${res.status}`,
-      );
+      throw new DrSwitchGuardException(`DR switch webhook returned HTTP ${res.status}`);
     }
   }
 
@@ -417,9 +415,7 @@ export class DrSwitchoverService {
       throw new DrSwitchNotFoundException(switchId);
     }
     if (entity.status !== DR_SWITCH_STATUS.IN_PROGRESS) {
-      throw new DrSwitchGuardException(
-        `Cannot abort switch execution in status ${entity.status}`,
-      );
+      throw new DrSwitchGuardException(`Cannot abort switch execution in status ${entity.status}`);
     }
 
     const completedAt = new Date();

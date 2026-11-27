@@ -68,9 +68,7 @@ export class AuthGuard implements CanActivate {
     );
     const sourceHeaderName = rateLimitCfg?.gatewaySourceHeader || 'x-ratelimit-source';
     const rawSourceHeader = request.headers[sourceHeaderName];
-    const sourceHeaderVal = (
-      Array.isArray(rawSourceHeader) ? rawSourceHeader[0] : rawSourceHeader
-    )
+    const sourceHeaderVal = (Array.isArray(rawSourceHeader) ? rawSourceHeader[0] : rawSourceHeader)
       ?.trim()
       .toLowerCase();
     const hasEdgeGatewayMarker =

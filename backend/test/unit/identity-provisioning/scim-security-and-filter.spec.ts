@@ -88,9 +88,9 @@ describe('SCIM 2.0 Security, Fingerprint, ETag & Filter Helpers', () => {
       'userName eq "alice@acme.test" and active eq true and emails[type eq "work"].value sw "alice"',
     );
     expect(matchesScimUserFilter(sampleUser, clauses)).toBe(true);
-    expect(
-      matchesScimUserFilter(sampleUser, parseScimFilter('externalId eq "other-id"')),
-    ).toBe(false);
+    expect(matchesScimUserFilter(sampleUser, parseScimFilter('externalId eq "other-id"'))).toBe(
+      false,
+    );
 
     const sampleGroup: ScimGroupResource = {
       schemas: [SCIM_SCHEMAS.GROUP],
@@ -100,9 +100,9 @@ describe('SCIM 2.0 Security, Fingerprint, ETag & Filter Helpers', () => {
       members: [],
       meta: { resourceType: 'Group', version: 'W/"2"' },
     };
-    expect(
-      matchesScimGroupFilter(sampleGroup, parseScimFilter('displayName co "Engineers"')),
-    ).toBe(true);
+    expect(matchesScimGroupFilter(sampleGroup, parseScimFilter('displayName co "Engineers"'))).toBe(
+      true,
+    );
 
     expect(() => parseScimFilter('invalid filter syntax !!')).toThrow(ScimProtocolException);
   });

@@ -31,6 +31,7 @@ if command -v node >/dev/null 2>&1; then
     "scripts/ci/check-lockfiles.mjs"
     "scripts/ci/check-api-changes.mjs"
     "scripts/ci/ci-report.mjs"
+    "scripts/ci/xlsx-writer.mjs"
   )
   for node_script in "${CI_NODE_SCRIPTS[@]}"; do
     if [ -f "$node_script" ]; then

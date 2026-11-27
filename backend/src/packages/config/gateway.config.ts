@@ -1,10 +1,7 @@
 import type { ProxyTrustMode, TrustedProxyPolicy } from '@packages/kernel/index.js';
 import { env } from './env.js';
 
-export type RateLimitLayerMode =
-  | 'backend-only'
-  | 'edge-ip-backend-business'
-  | 'gateway-only';
+export type RateLimitLayerMode = 'backend-only' | 'edge-ip-backend-business' | 'gateway-only';
 
 const numberOr = (key: string, fallback: number): number => {
   const raw = env(key, false);
@@ -98,20 +95,14 @@ export const gatewayConfig = () => {
     apiHeadersTimeoutMs,
   };
 
-  const apiMaxBodySizeBytes = Math.max(
-    1024,
-    numberOr('API_MAX_BODY_SIZE_BYTES', 32 * 1024 * 1024),
-  );
+  const apiMaxBodySizeBytes = Math.max(1024, numberOr('API_MAX_BODY_SIZE_BYTES', 32 * 1024 * 1024));
   const bodyLimits = {
     gatewayMaxBodySizeBytes: Math.max(
       1024,
       numberOr('GATEWAY_MAX_BODY_SIZE_BYTES', 32 * 1024 * 1024),
     ),
     apiMaxBodySizeBytes,
-    apiJsonBodyLimitBytes: Math.max(
-      1024,
-      numberOr('API_JSON_BODY_LIMIT_BYTES', 16 * 1024 * 1024),
-    ),
+    apiJsonBodyLimitBytes: Math.max(1024, numberOr('API_JSON_BODY_LIMIT_BYTES', 16 * 1024 * 1024)),
     maxParamLength: Math.max(64, numberOr('API_MAX_PARAM_LENGTH', 1024)),
   };
 
@@ -128,7 +119,13 @@ export const gatewayConfig = () => {
     alwaysEnforceIpRoutes:
       parsedSensitiveRoutes.length > 0
         ? parsedSensitiveRoutes
-        : ['/auth/login', '/auth/forgot-password', '/auth/reset-password', '/auth/otp', '/auth/mfa'],
+        : [
+            '/auth/login',
+            '/auth/forgot-password',
+            '/auth/reset-password',
+            '/auth/otp',
+            '/auth/mfa',
+          ],
     gatewayEdgeRps: Math.max(1, numberOr('GATEWAY_RATE_LIMIT_RPS', 30)),
     gatewayEdgeBurst: Math.max(0, numberOr('GATEWAY_RATE_LIMIT_BURST', 50)),
   };

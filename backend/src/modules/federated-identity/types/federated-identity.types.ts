@@ -207,11 +207,7 @@ export interface FederatedRoleSyncSummary {
   readonly applied: boolean;
   readonly mode: FederatedRoleSyncMode;
   readonly action:
-    | 'DISABLED'
-    | 'SKIPPED_EXISTING_USER'
-    | 'UNCHANGED'
-    | 'UPDATED'
-    | 'NO_ROLES_SERVICE';
+    'DISABLED' | 'SKIPPED_EXISTING_USER' | 'UNCHANGED' | 'UPDATED' | 'NO_ROLES_SERVICE';
   readonly matchedGroups: readonly string[];
   readonly appliedRoleCodes: readonly string[];
   readonly blockedRoleCodes: readonly string[];

@@ -1,9 +1,5 @@
 import { z } from 'zod';
-import {
-  booleanQueryParam,
-  intQueryParam,
-  optionalQueryParam,
-} from '@packages/http/index.js';
+import { booleanQueryParam, intQueryParam, optionalQueryParam } from '@packages/http/index.js';
 import {
   DEFAULT_SCIM_CLIENT_SCOPES,
   SCIM_CLIENT_STATUS,
@@ -20,14 +16,9 @@ export const scimResourceIdParamSchema = z.object({
   id: z.string().trim().min(1).max(128),
 });
 
-const roleCodeListSchema = z
-  .array(z.string().trim().min(1).max(64))
-  .max(100);
+const roleCodeListSchema = z.array(z.string().trim().min(1).max(64)).max(100);
 
-const groupRoleMappingsSchema = z.record(
-  z.string().trim().min(1).max(255),
-  roleCodeListSchema,
-);
+const groupRoleMappingsSchema = z.record(z.string().trim().min(1).max(255), roleCodeListSchema);
 
 export const CreateScimClientRequestSchema = z.object({
   code: z

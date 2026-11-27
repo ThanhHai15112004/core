@@ -34,7 +34,8 @@ export class BackupCommand implements ICliCommandProvider {
       {
         name: 'backup:run',
         domain: 'Database',
-        description: 'Chạy sao lưu Database hoặc Object Storage ngay lập tức (có nén + mã hóa AES-256-GCM)',
+        description:
+          'Chạy sao lưu Database hoặc Object Storage ngay lập tức (có nén + mã hóa AES-256-GCM)',
         usage: 'npm run cli -- backup:run [--type=DATABASE|STORAGE] [--policy=<code>]',
         execute: (args) => this.runBackup(args),
       },

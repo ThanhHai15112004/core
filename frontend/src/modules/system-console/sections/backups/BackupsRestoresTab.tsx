@@ -73,7 +73,7 @@ export const BackupsRestoresTab: React.FC<{ restoreExecutionEnabled?: boolean }>
         }
       >
         <QueryView query={query}>
-          {(page) => <DataTable columns={columns} data={page.data} />}
+          {(page) => <DataTable columns={columns} data={page.data} getRowId={(r) => String(r.id)} />}
         </QueryView>
       </Panel>
 

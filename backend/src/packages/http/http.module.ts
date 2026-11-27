@@ -176,8 +176,7 @@ export function configureFastifyEmptyJsonBodyParser(
           }
           done(null, parsed);
         } catch (err) {
-          const parseError =
-            err instanceof Error ? err : new Error('Invalid form-urlencoded body');
+          const parseError = err instanceof Error ? err : new Error('Invalid form-urlencoded body');
           (parseError as Error & { statusCode?: number }).statusCode = 400;
           done(parseError, undefined);
         }
@@ -209,7 +208,7 @@ export class HttpModule implements OnModuleInit {
   constructor(
     @Optional() private readonly adapterHost?: HttpAdapterHost,
     @Optional() private readonly config?: CoreConfigService,
-  ) { }
+  ) {}
 
   public onModuleInit(): void {
     const instance = this.adapterHost?.httpAdapter?.getInstance?.() as unknown;

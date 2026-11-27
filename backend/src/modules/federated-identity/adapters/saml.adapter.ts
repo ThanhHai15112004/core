@@ -1,5 +1,9 @@
 import { Injectable } from '@nestjs/common';
-import { FEDERATED_AUTH_STAGE, FEDERATED_DRIVER_CODE, SAML_DEFAULTS } from '../enum/federated-identity.enum.js';
+import {
+  FEDERATED_AUTH_STAGE,
+  FEDERATED_DRIVER_CODE,
+  SAML_DEFAULTS,
+} from '../enum/federated-identity.enum.js';
 import type { IOAuthProviderAdapter } from '../contracts/index.js';
 import { evaluateCertificatesHealth } from '../helpers/saml-certificate.helper.js';
 import { isSamlProviderConfigured, parseSamlConfig } from '../helpers/saml-config.helper.js';
@@ -86,7 +90,8 @@ export class SamlProviderAdapter implements IOAuthProviderAdapter {
         keyCount: health.eligibleCount,
         durationMs: Date.now() - startedAt,
         errorCode: 'SAML_NOT_CONFIGURED',
-        errorMessage: 'Missing SP Entity ID, ACS URL, IdP Entity ID, IdP SSO URL, or IdP Certificate',
+        errorMessage:
+          'Missing SP Entity ID, ACS URL, IdP Entity ID, IdP SSO URL, or IdP Certificate',
       };
     }
 

@@ -89,7 +89,9 @@ function createPrimaryReplicaHarness(options?: {
         }
         state.masterQueries += 1;
         const target = store.find(
-          (r) => r.id === criteria.id && (criteria.version === undefined || r.version === criteria.version),
+          (r) =>
+            r.id === criteria.id &&
+            (criteria.version === undefined || r.version === criteria.version),
         );
         if (!target) return { affected: 0 };
         Object.assign(target, partial);
@@ -383,10 +385,9 @@ describe('13.3 Primary & Read Replica: Config, Routing, Read-After-Write, Fallba
       expect(scoped.dataSourceUsed).toBe('PRIMARY');
       expect(scoped.routingReason).toBe('forced_primary');
 
-      const forced = await repo.executeReadOnlyWithMeta(
-        (r) => r.findOne({ where: { id: 1 } }),
-        { forcePrimary: true },
-      );
+      const forced = await repo.executeReadOnlyWithMeta((r) => r.findOne({ where: { id: 1 } }), {
+        forcePrimary: true,
+      });
       expect(forced.dataSourceUsed).toBe('PRIMARY');
       expect(forced.routingReason).toBe('forced_primary');
     });
@@ -423,14 +424,12 @@ describe('13.3 Primary & Read Replica: Config, Routing, Read-After-Write, Fallba
       // Kiểm tra UserRepository.searchPaginatedReadOnly tích hợp intent='report' + fallback
       const mockUsersResult = { items: [], total: 0 };
       const userRepo = new UserRepository(harness.ds, null);
-      jest
-        .spyOn(userRepo, 'searchPaginated')
-        .mockImplementation(async (_filter, repoOverride) => {
-          if (repoOverride && harness.state.replicaFailError) {
-            await repoOverride.findOne({ where: { id: 1 } } as never);
-          }
-          return mockUsersResult;
-        });
+      jest.spyOn(userRepo, 'searchPaginated').mockImplementation(async (_filter, repoOverride) => {
+        if (repoOverride && harness.state.replicaFailError) {
+          await repoOverride.findOne({ where: { id: 1 } } as never);
+        }
+        return mockUsersResult;
+      });
 
       const reportRes = await userRepo.searchPaginatedReadOnly({}, true);
       expect(reportRes.dataSourceUsed).toBe('REPLICA');
@@ -656,10 +655,9 @@ describe('13.3 Primary & Read Replica: Config, Routing, Read-After-Write, Fallba
       expect(normal.dataSourceUsed).toBe('PRIMARY');
       expect(normal.routingReason).toBe('replication_lag_critical');
 
-      const report = await repo.executeReadOnlyWithMeta(
-        (r) => r.findOne({ where: { id: 1 } }),
-        { intent: 'report' },
-      );
+      const report = await repo.executeReadOnlyWithMeta((r) => r.findOne({ where: { id: 1 } }), {
+        intent: 'report',
+      });
       expect(report.dataSourceUsed).toBe('REPLICA');
       expect(report.routingReason).toBe('replica_ok');
     });

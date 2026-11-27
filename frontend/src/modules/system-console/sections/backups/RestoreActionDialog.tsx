@@ -108,10 +108,12 @@ export const RestoreActionDialog: React.FC<RestoreActionDialogProps> = ({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="DATABASE">DATABASE</SelectItem>
-                  <SelectItem value="STORAGE">STORAGE</SelectItem>
-                  <SelectItem value="SECRETS_CONFIG">SECRETS_CONFIG</SelectItem>
-                  <SelectItem value="FULL">FULL</SelectItem>
+                  <SelectItem value="DATABASE">{t('backups.restores.scopeDatabase')}</SelectItem>
+                  <SelectItem value="STORAGE">{t('backups.restores.scopeStorage')}</SelectItem>
+                  <SelectItem value="SECRETS_CONFIG">
+                    {t('backups.restores.scopeSecretsConfig')}
+                  </SelectItem>
+                  <SelectItem value="FULL">{t('backups.restores.scopeFull')}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -153,19 +155,19 @@ export const RestoreActionDialog: React.FC<RestoreActionDialogProps> = ({
             <Input
               value={reason}
               onChange={(e) => setReason(e.target.value)}
-              placeholder="e.g. Incident #42 database point-in-time recovery"
+              placeholder={t('backups.restores.reasonPlaceholder')}
             />
           </div>
 
           {mode === 'EXECUTE_LIVE' && (
             <div>
               <label className="mb-1 block text-xs font-medium text-crit-fg">
-                Type RESTORE to confirm live overwrite
+                {t('backups.restores.confirmLiveLabel')}
               </label>
               <Input
                 value={confirmWord}
                 onChange={(e) => setConfirmWord(e.target.value)}
-                placeholder="RESTORE"
+                placeholder={t('backups.restores.confirmLivePlaceholder')}
               />
             </div>
           )}

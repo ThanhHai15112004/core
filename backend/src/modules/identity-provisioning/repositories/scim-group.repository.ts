@@ -82,7 +82,7 @@ export class ScimGroupRepository extends BaseTypeOrmRepository<ScimGroupEntity> 
     if (filter.search?.trim()) {
       const term = `%${filter.search.trim().toLowerCase()}%`;
       qb.andWhere(
-        '(LOWER(grp.displayName) LIKE :term OR LOWER(COALESCE(grp.externalId, \'\')) LIKE :term)',
+        "(LOWER(grp.displayName) LIKE :term OR LOWER(COALESCE(grp.externalId, '')) LIKE :term)",
         { term },
       );
     }

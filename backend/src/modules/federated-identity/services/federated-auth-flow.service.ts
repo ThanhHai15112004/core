@@ -190,22 +190,22 @@ export class FederatedAuthFlowService {
     try {
       authorizationUrl = adapter.buildAuthorizationUrlAsync
         ? await adapter.buildAuthorizationUrlAsync({
-          config: adapterConfig,
-          redirectUri,
-          state,
-          nonce,
-          codeChallenge: pkce.codeChallenge,
-          loginHint: input.loginHint,
-          cacheTtlSeconds: runtimeConfig.jwksCacheTtlSeconds,
-        })
+            config: adapterConfig,
+            redirectUri,
+            state,
+            nonce,
+            codeChallenge: pkce.codeChallenge,
+            loginHint: input.loginHint,
+            cacheTtlSeconds: runtimeConfig.jwksCacheTtlSeconds,
+          })
         : adapter.buildAuthorizationUrl({
-          config: adapterConfig,
-          redirectUri,
-          state,
-          nonce,
-          codeChallenge: pkce.codeChallenge,
-          loginHint: input.loginHint,
-        });
+            config: adapterConfig,
+            redirectUri,
+            state,
+            nonce,
+            codeChallenge: pkce.codeChallenge,
+            loginHint: input.loginHint,
+          });
     } catch (err) {
       await this.monitoringService.recordEvent({
         providerId: provider.id,
@@ -927,7 +927,8 @@ export class FederatedAuthFlowService {
     readonly startedAtMs: number;
   }): Promise<OAuthCallbackResult> {
     const { provider, tx, verified, input, context, startedAtMs } = params;
-    const runtimeConfig = params.runtimeConfig ?? resolveFederatedRuntimeConfig(this.settingRegistry);
+    const runtimeConfig =
+      params.runtimeConfig ?? resolveFederatedRuntimeConfig(this.settingRegistry);
     const effectivePolicy = resolveEffectiveProviderPolicy(provider, runtimeConfig);
     const extraConfig = parseFederatedExtraConfig(provider.extraConfigJson, provider.driverCode);
     const now = new Date();

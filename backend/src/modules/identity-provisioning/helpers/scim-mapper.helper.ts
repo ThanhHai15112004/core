@@ -80,19 +80,13 @@ export function buildScimUserResource(params: {
     },
     displayName: user.fullName,
     active: effectiveActive,
-    emails: user.email
-      ? [{ value: user.email, type: 'work', primary: true }]
-      : [],
-    ...(user.phone
-      ? { phoneNumbers: [{ value: user.phone, type: 'work', primary: true }] }
-      : {}),
+    emails: user.email ? [{ value: user.email, type: 'work', primary: true }] : [],
+    ...(user.phone ? { phoneNumbers: [{ value: user.phone, type: 'work', primary: true }] } : {}),
     groups: groupRefs,
     meta: {
       resourceType: 'User',
       created: link.createdAt ? new Date(link.createdAt).toISOString() : user.createdAt,
-      lastModified: link.lastSyncedAt
-        ? new Date(link.lastSyncedAt).toISOString()
-        : user.updatedAt,
+      lastModified: link.lastSyncedAt ? new Date(link.lastSyncedAt).toISOString() : user.updatedAt,
       location: `${cleanBase}/Users/${user.id}`,
       version,
     },
@@ -101,7 +95,10 @@ export function buildScimUserResource(params: {
 
 export function buildScimGroupResource(params: {
   readonly group: ScimGroupEntity;
-  readonly members: ReadonlyArray<{ readonly userId: number; readonly display?: string | undefined }>;
+  readonly members: ReadonlyArray<{
+    readonly userId: number;
+    readonly display?: string | undefined;
+  }>;
   readonly baseUrl: string;
 }): ScimGroupResource {
   const { group, members, baseUrl } = params;
@@ -124,9 +121,7 @@ export function buildScimGroupResource(params: {
     meta: {
       resourceType: 'Group',
       created: group.createdAt ? new Date(group.createdAt).toISOString() : undefined,
-      lastModified: group.lastSyncedAt
-        ? new Date(group.lastSyncedAt).toISOString()
-        : undefined,
+      lastModified: group.lastSyncedAt ? new Date(group.lastSyncedAt).toISOString() : undefined,
       location: `${cleanBase}/Groups/${group.id}`,
       version,
     },
@@ -151,15 +146,18 @@ export function buildScimListResponse<T>(
 export function extractScimUserWriteFields(rawBody: unknown): NormalizedScimUserInput {
   const body = asRecord(rawBody);
   if (!body) {
-    throw new ScimProtocolException(400, 'SCIM User payload must be a JSON object', 'invalidSyntax');
+    throw new ScimProtocolException(
+      400,
+      'SCIM User payload must be a JSON object',
+      'invalidSyntax',
+    );
   }
 
   const nameObj = asRecord(body['name']);
   const userName = readOptionalString(body['userName']);
   const externalId = readOptionalString(body['externalId']);
   const primaryEmail = extractFirstMultiValued(body['emails']);
-  const fallbackEmail =
-    primaryEmail ?? (userName && userName.includes('@') ? userName : undefined);
+  const fallbackEmail = primaryEmail ?? (userName && userName.includes('@') ? userName : undefined);
   const phone =
     body['phoneNumbers'] !== undefined
       ? (extractFirstMultiValued(body['phoneNumbers']) ?? null)

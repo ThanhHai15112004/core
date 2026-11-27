@@ -1,8 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import {
-  type PaginatedResult,
-  safeJsonParseObject,
-} from '@packages/kernel/index.js';
+import { type PaginatedResult, safeJsonParseObject } from '@packages/kernel/index.js';
 import { createPaginatedResult } from '@packages/http/index.js';
 import type { ScimSyncOutcome } from '../enum/identity-provisioning.enum.js';
 import type { ScimSyncLogEntity } from '../entities/scim-sync-log.entity.js';
@@ -78,7 +75,9 @@ export class ScimSyncLogService {
       errorMessage: entity.errorMessage ?? null,
       ipAddress: entity.ipAddress ?? null,
       durationMs: Number(entity.durationMs ?? 0),
-      createdAt: entity.createdAt ? new Date(entity.createdAt).toISOString() : new Date().toISOString(),
+      createdAt: entity.createdAt
+        ? new Date(entity.createdAt).toISOString()
+        : new Date().toISOString(),
     };
   }
 

@@ -225,7 +225,9 @@ export class LocalStorageDriver implements StorageDriver {
     if (typeof totalChunks === 'number' && totalChunks > 0) {
       await Promise.all(
         Array.from({ length: totalChunks }, async (_, idx) => {
-          const partFull = await this.resolve(this.partKey(tempPrefix, idx), false).catch(() => null);
+          const partFull = await this.resolve(this.partKey(tempPrefix, idx), false).catch(
+            () => null,
+          );
           if (partFull) await fs.rm(partFull, { force: true }).catch(() => undefined);
         }),
       );

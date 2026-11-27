@@ -22,6 +22,7 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { buildMultiSheetXlsxBuffer } from './xlsx-writer.mjs';
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(currentDir, '..', '..');
@@ -43,17 +44,53 @@ function getAllFlagValues(flag) {
   return values;
 }
 
-async function readJsonSafe(relOrAbsPath) {
-  if (!relOrAbsPath) return null;
-  const resolved = path.isAbsolute(relOrAbsPath)
-    ? relOrAbsPath
-    : path.resolve(repoRoot, relOrAbsPath);
+async function findFileRecursive(rootDir, fileName) {
   try {
-    const raw = await fs.readFile(resolved, 'utf8');
-    return JSON.parse(raw);
+    const entries = await fs.readdir(rootDir, { withFileTypes: true });
+    for (const entry of entries) {
+      const fullPath = path.join(rootDir, entry.name);
+      if (entry.isFile() && entry.name === fileName) {
+        return fullPath;
+      }
+      if (entry.isDirectory()) {
+        const nested = await findFileRecursive(fullPath, fileName);
+        if (nested) return nested;
+      }
+    }
   } catch {
     return null;
   }
+  return null;
+}
+
+async function readJsonSafe(relOrAbsPath, searchDir = null, fallbackFileName = null) {
+  if (relOrAbsPath) {
+    const resolved = path.isAbsolute(relOrAbsPath)
+      ? relOrAbsPath
+      : path.resolve(repoRoot, relOrAbsPath);
+    try {
+      const raw = await fs.readFile(resolved, 'utf8');
+      return JSON.parse(raw);
+    } catch {
+      // Fallback sang tìm đệ quy nếu artifact bị rút gọn đường dẫn cha (upload-artifact@v4)
+    }
+  }
+
+  if (searchDir && fallbackFileName) {
+    const resolvedDir = path.isAbsolute(searchDir)
+      ? searchDir
+      : path.resolve(repoRoot, searchDir);
+    const found = await findFileRecursive(resolvedDir, fallbackFileName);
+    if (found) {
+      try {
+        const raw = await fs.readFile(found, 'utf8');
+        return JSON.parse(raw);
+      } catch {
+        return null;
+      }
+    }
+  }
+  return null;
 }
 
 function normalizeStatus(raw) {
@@ -303,19 +340,112 @@ function summarizeMode() {
   };
 }
 
+function buildExcelWorkbook(summary) {
+  const overallText = summary.passed ? 'PASSED' : 'FAILED';
+  const subtitle = `Generated: ${summary.generatedAt} | Mode: ${summary.mode} | Passed: ${summary.counts.passed} | Failed: ${summary.counts.failed} | Skipped: ${summary.counts.skipped}`;
+
+  const summaryRows = summary.steps.map((s, idx) => [
+    idx + 1,
+    s.name,
+    String(s.status ?? 'unknown').toUpperCase(),
+    formatDuration(s.durationMs),
+    s.detail ?? '-',
+  ]);
+
+  const sheets = [
+    {
+      name: 'CI Summary',
+      title: `CORE CI QUALITY REPORT — ${overallText}`,
+      subtitle,
+      headers: ['#', 'Quality Gate / Step', 'Status', 'Duration', 'Notes'],
+      rows: summaryRows.length > 0 ? summaryRows : [[1, 'No steps recorded', 'SKIPPED', '-', '-']],
+      centerCols: [0, 2, 3],
+      statusCols: [2],
+    },
+  ];
+
+  // Sheet 2: Backend Module Coverage (nếu có dữ liệu)
+  const coverage = summary.details.coverage;
+  if (coverage?.overall) {
+    const covRows = (coverage.items ?? []).map((item) => [
+      item.key,
+      item.category,
+      item.fileCount,
+      `${Number(item.statements?.pct ?? 0).toFixed(2)}%`,
+      `${Number(item.branches?.pct ?? 0).toFixed(2)}%`,
+      `${Number(item.functions?.pct ?? 0).toFixed(2)}%`,
+      `${Number(item.lines?.pct ?? 0).toFixed(2)}%`,
+    ]);
+    covRows.push([
+      'TOTAL (ALL MODULES)',
+      'overall',
+      coverage.totalFiles ?? covRows.length,
+      `${Number(coverage.overall.statements?.pct ?? 0).toFixed(2)}%`,
+      `${Number(coverage.overall.branches?.pct ?? 0).toFixed(2)}%`,
+      `${Number(coverage.overall.functions?.pct ?? 0).toFixed(2)}%`,
+      `${Number(coverage.overall.lines?.pct ?? 0).toFixed(2)}%`,
+    ]);
+    sheets.push({
+      name: 'Module Coverage',
+      title: 'BACKEND TEST COVERAGE BY MODULE & PACKAGE',
+      subtitle: `Generated: ${coverage.generatedAt ?? summary.generatedAt} | Total Source Files: ${coverage.totalFiles ?? 0}`,
+      headers: ['Module / Package', 'Category', 'Files', 'Statements %', 'Branches %', 'Functions %', 'Lines %'],
+      rows: covRows,
+      centerCols: [1, 2, 3, 4, 5, 6],
+    });
+  }
+
+  // Sheet 3: Issues & API Contract Changes
+  const issueRows = [];
+  for (const target of summary.details.lockfile?.targets ?? []) {
+    for (const issue of target.issues ?? []) {
+      issueRows.push(['Lockfile', 'FAIL', `${target.dir}/package-lock.json`, 'LOCKFILE_MISMATCH', issue]);
+    }
+  }
+  for (const v of summary.details.architecture?.violations ?? []) {
+    issueRows.push(['Architecture', 'FAIL', `${v.file}${v.line ? `:${v.line}` : ''}`, v.rule, v.message]);
+  }
+  for (const b of summary.details.openapi?.breakingChanges ?? []) {
+    issueRows.push(['OpenAPI', 'BREAKING', `${b.method} ${b.path}${b.field ? ` (${b.field})` : ''}`, b.rule, b.message]);
+  }
+  for (const nb of summary.details.openapi?.nonBreakingChanges ?? []) {
+    issueRows.push(['OpenAPI', 'INFO', `${nb.method} ${nb.path}${nb.field ? ` (${nb.field})` : ''}`, nb.rule, nb.message]);
+  }
+
+  sheets.push({
+    name: 'Issues & API Changes',
+    title: 'LOCKFILE, ARCHITECTURE & OPENAPI CONTRACT DETAILS',
+    subtitle: `Total recorded items: ${issueRows.length}`,
+    headers: ['Category', 'Severity', 'Target / Endpoint', 'Rule', 'Detail'],
+    rows:
+      issueRows.length > 0
+        ? issueRows
+        : [['All Gates', 'PASS', '-', '-', 'No lockfile, architecture, or OpenAPI issues detected.']],
+    centerCols: [0, 1],
+    statusCols: [1],
+  });
+
+  return buildMultiSheetXlsxBuffer(sheets);
+}
+
 async function main() {
   const outDirArg = getFlagValue('--out-dir') ?? 'reports';
   const outDir = path.isAbsolute(outDirArg) ? outDirArg : path.resolve(repoRoot, outDirArg);
+  const searchDir = getFlagValue('--search-dir') ?? null;
   await fs.mkdir(outDir, { recursive: true });
 
   const isRun = args.includes('--run');
   const result = isRun ? await runMode(outDir) : summarizeMode();
 
   const details = {
-    lockfile: await readJsonSafe(result.detailPaths.lockfile),
-    architecture: await readJsonSafe(result.detailPaths.architecture),
-    openapi: await readJsonSafe(result.detailPaths.openapi),
-    coverage: await readJsonSafe(result.detailPaths.coverage),
+    lockfile: await readJsonSafe(result.detailPaths.lockfile, searchDir, 'lockfile-report.json'),
+    architecture: await readJsonSafe(result.detailPaths.architecture, searchDir, 'arch-report.json'),
+    openapi: await readJsonSafe(result.detailPaths.openapi, searchDir, 'openapi-report.json'),
+    coverage: await readJsonSafe(
+      result.detailPaths.coverage,
+      searchDir,
+      'module-coverage-summary.json',
+    ),
   };
 
   if (args.includes('--infer-from-artifacts') && result.steps.length === 0) {
@@ -366,17 +496,22 @@ async function main() {
 
   const jsonPath = path.join(outDir, 'ci-summary.json');
   const mdPath = path.join(outDir, 'ci-summary.md');
+  const xlsxPath = path.join(outDir, 'ci-summary.xlsx');
   const markdown = buildMarkdownReport(summary);
+  const xlsxBuffer = buildExcelWorkbook(summary);
 
   await fs.writeFile(jsonPath, `${JSON.stringify(summary, null, 2)}\n`, 'utf8');
   await fs.writeFile(mdPath, markdown, 'utf8');
+  await fs.writeFile(xlsxPath, xlsxBuffer);
 
   if (process.env.GITHUB_STEP_SUMMARY) {
     await fs.appendFile(process.env.GITHUB_STEP_SUMMARY, markdown, 'utf8');
   }
 
   console.log('\n' + markdown);
-  console.log(`[ci-report] Saved: ${path.relative(repoRoot, mdPath)} & ${path.relative(repoRoot, jsonPath)}`);
+  console.log(
+    `[ci-report] Saved: ${path.relative(repoRoot, mdPath)}, ${path.relative(repoRoot, jsonPath)} & ${path.relative(repoRoot, xlsxPath)}`,
+  );
 
   if (!summary.passed && !args.includes('--no-fail')) {
     process.exit(1);

@@ -19,7 +19,8 @@ const DEFAULT_PRIVILEGED_TARGETS: readonly DefaultPrivilegedTargetSeed[] = [
     targetType: 'ROLE',
     targetCode: 'super_admin',
     displayName: 'Super Administrator (Toàn quyền Hệ thống)',
-    description: 'Vai trò tối cao toàn hệ thống, yêu cầu MFA Step-Up, phê duyệt và rà soát mỗi 30 ngày',
+    description:
+      'Vai trò tối cao toàn hệ thống, yêu cầu MFA Step-Up, phê duyệt và rà soát mỗi 30 ngày',
     sensitivityLevel: 'CRITICAL',
     requireMfaStepUp: true,
     requireApproval: true,
@@ -32,7 +33,8 @@ const DEFAULT_PRIVILEGED_TARGETS: readonly DefaultPrivilegedTargetSeed[] = [
     targetType: 'ROLE',
     targetCode: 'admin_security',
     displayName: 'Security Administrator (Quản trị Bảo mật)',
-    description: 'Vai trò quản trị an toàn thông tin, chính sách MFA, khóa tài khoản và Break-glass',
+    description:
+      'Vai trò quản trị an toàn thông tin, chính sách MFA, khóa tài khoản và Break-glass',
     sensitivityLevel: 'CRITICAL',
     requireMfaStepUp: true,
     requireApproval: true,
@@ -45,7 +47,8 @@ const DEFAULT_PRIVILEGED_TARGETS: readonly DefaultPrivilegedTargetSeed[] = [
     targetType: 'ROLE',
     targetCode: 'admin',
     displayName: 'System Administrator (Quản trị Hệ thống)',
-    description: 'Vai trò quản trị hệ thống tổng hợp, giám sát sử dụng quyền và rà soát mỗi 90 ngày',
+    description:
+      'Vai trò quản trị hệ thống tổng hợp, giám sát sử dụng quyền và rà soát mỗi 90 ngày',
     sensitivityLevel: 'HIGH',
     requireMfaStepUp: true,
     requireApproval: true,

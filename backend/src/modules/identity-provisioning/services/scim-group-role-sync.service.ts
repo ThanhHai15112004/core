@@ -43,10 +43,7 @@ export class ScimGroupRoleSyncService {
     @Optional() private readonly auditLogService?: AuditLogService,
   ) {}
 
-  public resolveMappedRolesForGroupName(
-    client: ScimClientEntity,
-    displayName: string,
-  ): string[] {
+  public resolveMappedRolesForGroupName(client: ScimClientEntity, displayName: string): string[] {
     const rawMappings = safeJsonParseObject(client.groupRoleMappingsJson) ?? {};
     const lowerMap = new Map<string, string[]>();
 
@@ -116,7 +113,11 @@ export class ScimGroupRoleSyncService {
     const permittedCodes: string[] = [];
     const blockedRoleCodes: string[] = [];
     for (const code of candidateCodes) {
-      if (deniedSet.has(code) || (allowedSet.size > 0 && !allowedSet.has(code)) || allowedSet.size === 0) {
+      if (
+        deniedSet.has(code) ||
+        (allowedSet.size > 0 && !allowedSet.has(code)) ||
+        allowedSet.size === 0
+      ) {
         // An toàn mặc định: chỉ cho phép gán các role nằm trong allowedRoleCodes của SCIM client
         blockedRoleCodes.push(code);
       } else {

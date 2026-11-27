@@ -76,7 +76,11 @@ function createPamTestHarness() {
       status: 1,
       statusName: 'ACTIVE',
       permissionIds: [2],
-      permissions: ['privileged-access.read', 'privileged-access.manage', 'privileged-access.approve'],
+      permissions: [
+        'privileged-access.read',
+        'privileged-access.manage',
+        'privileged-access.approve',
+      ],
     },
     {
       id: 6,
@@ -320,13 +324,23 @@ function createPamTestHarness() {
     },
     lockProvisionedUser: async (uid, reason) => {
       const u = usersStore.get(uid)!;
-      const locked = { ...u, status: USER_STATUS.LOCKED, statusName: 'LOCKED', lockReason: reason };
+      const locked = {
+        ...u,
+        status: USER_STATUS.LOCKED,
+        statusName: 'LOCKED' as const,
+        lockReason: reason,
+      };
       usersStore.set(uid, locked);
       return locked;
     },
     unlockProvisionedUser: async (uid) => {
       const u = usersStore.get(uid)!;
-      const active = { ...u, status: USER_STATUS.ACTIVE, statusName: 'ACTIVE', lockReason: null };
+      const active = {
+        ...u,
+        status: USER_STATUS.ACTIVE,
+        statusName: 'ACTIVE' as const,
+        lockReason: null,
+      };
       usersStore.set(uid, active);
       return active;
     },
@@ -340,7 +354,8 @@ function createPamTestHarness() {
   } as unknown as ISessionsPublicService;
 
   const targetRepo = {
-    create: (d: Partial<PrivilegedAccessTargetEntity>) => Object.assign(new PrivilegedAccessTargetEntity(), d),
+    create: (d: Partial<PrivilegedAccessTargetEntity>) =>
+      Object.assign(new PrivilegedAccessTargetEntity(), d),
     saveEntity: async (e: PrivilegedAccessTargetEntity) => {
       if (!e.id) {
         e.id = ++nextId;
@@ -359,11 +374,18 @@ function createPamTestHarness() {
       targets.find((t) => t.targetType === tt && t.targetCode === tc && !t.deletedAt) ?? null,
     findAllEnabled: async () => targets.filter((t) => t.isEnabled && !t.deletedAt),
     findAll: async () => targets.filter((t) => !t.deletedAt),
-    paginateFiltered: async () => createPaginatedResult(targets.filter((t) => !t.deletedAt), targets.length, 1, 50),
+    paginateFiltered: async () =>
+      createPaginatedResult(
+        targets.filter((t) => !t.deletedAt),
+        targets.length,
+        1,
+        50,
+      ),
   };
 
   const grantRepo = {
-    create: (d: Partial<PrivilegedAccessGrantEntity>) => Object.assign(new PrivilegedAccessGrantEntity(), d),
+    create: (d: Partial<PrivilegedAccessGrantEntity>) =>
+      Object.assign(new PrivilegedAccessGrantEntity(), d),
     saveEntity: async (e: PrivilegedAccessGrantEntity) => {
       if (!e.id) {
         e.id = ++nextId;
@@ -385,11 +407,13 @@ function createPamTestHarness() {
       ),
     findAllActive: async (now = new Date()) =>
       grants.filter(
-        (g) => g.status === PRIVILEGED_GRANT_STATUS.ACTIVE && g.expiresAt !== null && g.expiresAt > now,
+        (g) =>
+          g.status === PRIVILEGED_GRANT_STATUS.ACTIVE && g.expiresAt !== null && g.expiresAt > now,
       ),
     findExpiredActive: async (now = new Date()) =>
       grants.filter(
-        (g) => g.status === PRIVILEGED_GRANT_STATUS.ACTIVE && g.expiresAt !== null && g.expiresAt <= now,
+        (g) =>
+          g.status === PRIVILEGED_GRANT_STATUS.ACTIVE && g.expiresAt !== null && g.expiresAt <= now,
       ),
     countByStatus: async (status: number) => grants.filter((g) => g.status === status).length,
     paginateFiltered: async () => createPaginatedResult(grants, grants.length, 1, 20),
@@ -599,7 +623,11 @@ describe('Privileged Access Management (Section 14.4) End-to-End Flows', () => {
     id: 3,
     username: 'admin_security',
     roles: ['admin_security'],
-    permissions: ['privileged-access.read', 'privileged-access.manage', 'privileged-access.approve'],
+    permissions: [
+      'privileged-access.read',
+      'privileged-access.manage',
+      'privileged-access.approve',
+    ],
   };
   const opsEngineerActor: UserIdentity = {
     id: 50,
@@ -739,9 +767,9 @@ describe('Privileged Access Management (Section 14.4) End-to-End Flows', () => {
     expect(gate.requireMfa).toBe(true);
     await h.breakGlassService.onLoginSucceeded(99, { ...gate, ipAddress: '10.0.0.8' });
     expect(h.ingestedIncidents.length).toBeGreaterThanOrEqual(2);
-    expect(h.alerts.some((a) => a.eventType === 'BREAK_GLASS_LOGIN' && a.severity === 'CRITICAL')).toBe(
-      true,
-    );
+    expect(
+      h.alerts.some((a) => a.eventType === 'BREAK_GLASS_LOGIN' && a.severity === 'CRITICAL'),
+    ).toBe(true);
 
     // Auto-seal after emergency window expires
     const afterExpiry = new Date(new Date(activated.expiresAt!).getTime() + 60_000);

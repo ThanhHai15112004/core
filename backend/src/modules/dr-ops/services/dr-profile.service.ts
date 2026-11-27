@@ -132,12 +132,17 @@ export class DrProfileService {
       : entity;
     const after = DrOpsResponseMapper.toProfileView(saved);
 
-    await this.alertService.publishEvent(DR_DOMAIN_EVENTS.PROFILE_UPDATED, 'DrProfile', saved.code, {
-      isEnabled: after.isEnabled,
-      topologyMode: after.topologyMode,
-      rpoTargetSeconds: after.rpoTargetSeconds,
-      rtoTargetSeconds: after.rtoTargetSeconds,
-    });
+    await this.alertService.publishEvent(
+      DR_DOMAIN_EVENTS.PROFILE_UPDATED,
+      'DrProfile',
+      saved.code,
+      {
+        isEnabled: after.isEnabled,
+        topologyMode: after.topologyMode,
+        rpoTargetSeconds: after.rpoTargetSeconds,
+        rtoTargetSeconds: after.rtoTargetSeconds,
+      },
+    );
 
     if (this.auditLog) {
       await this.auditLog

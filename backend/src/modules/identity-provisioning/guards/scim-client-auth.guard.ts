@@ -1,9 +1,4 @@
-import {
-  type CanActivate,
-  type ExecutionContext,
-  Injectable,
-  Optional,
-} from '@nestjs/common';
+import { type CanActivate, type ExecutionContext, Injectable, Optional } from '@nestjs/common';
 import { CoreConfigService } from '@packages/config/index.js';
 import {
   FeatureFlagRegistryService,
@@ -128,12 +123,7 @@ export class ScimClientAuthGuard implements CanActivate {
     }
 
     if (Number(client.status) !== SCIM_CLIENT_STATUS.ACTIVE) {
-      await recordAuthFailure(
-        client.id,
-        403,
-        'SCIM_CLIENT_INACTIVE',
-        'SCIM Client is inactive',
-      );
+      await recordAuthFailure(client.id, 403, 'SCIM_CLIENT_INACTIVE', 'SCIM Client is inactive');
       throw new ScimProtocolException(
         403,
         'SCIM Client is currently inactive',

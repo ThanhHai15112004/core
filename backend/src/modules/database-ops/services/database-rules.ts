@@ -152,7 +152,13 @@ export function evaluateDbRules(input: DbRuleInput, cfg: DbRuleConfig): DbViolat
 
   if (input.replication?.configured) {
     if (!input.replication.available) {
-      out.push({ id: 'REPLICA_UNAVAILABLE', severity: 'critical', value: 0, threshold: 0, unit: '' });
+      out.push({
+        id: 'REPLICA_UNAVAILABLE',
+        severity: 'critical',
+        value: 0,
+        threshold: 0,
+        unit: '',
+      });
     } else if (input.replication.lagMs !== null) {
       const warnMs = cfg.db.replicationLagWarnMs ?? 1_000;
       const critMs = cfg.db.replicationLagCritMs ?? 5_000;

@@ -101,9 +101,7 @@ describe('Feature: Backup & Restore Ops API (/ops/backups)', () => {
     });
 
     expect(res.status).toBe(200);
-    const encItem = res.body.data.find(
-      (i) => i.domain === 'backup' && i.key === 'encryptionKey',
-    );
+    const encItem = res.body.data.find((i) => i.domain === 'backup' && i.key === 'encryptionKey');
     const drillPwdItem = res.body.data.find(
       (i) => i.domain === 'backup' && i.key === 'drillPassword',
     );

@@ -17,10 +17,7 @@ import { DatabaseConnectionService, DatabaseOperationsService } from '@packages/
 import { MessagingConnectionService } from '@packages/messaging/index.js';
 import { QueueMonitoringService } from '@packages/queue/index.js';
 import { RedisService } from '@packages/redis/index.js';
-import {
-  RuntimeAgentService,
-  evaluateStatelessReadiness,
-} from '@packages/runtime/index.js';
+import { RuntimeAgentService, evaluateStatelessReadiness } from '@packages/runtime/index.js';
 import { PlatformSecurityService, type UserIdentity } from '@packages/security/index.js';
 import { StorageConnectionService } from '@packages/storage/index.js';
 import {

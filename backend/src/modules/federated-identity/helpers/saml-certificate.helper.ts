@@ -1,7 +1,10 @@
 import { X509Certificate, createHash } from 'node:crypto';
 import { BadRequestAppException } from '@packages/kernel/index.js';
 import { SAML_CERT_STATUS, SAML_DEFAULTS } from '../enum/federated-identity.enum.js';
-import type { SamlCertificateStatus, SamlIdpCertificateConfig } from '../types/federated-identity.types.js';
+import type {
+  SamlCertificateStatus,
+  SamlIdpCertificateConfig,
+} from '../types/federated-identity.types.js';
 
 export interface InspectedX509Certificate {
   readonly pem: string;
@@ -139,7 +142,10 @@ export function mergeIdpCertificatesForRotation(
 } {
   const now = options.now ?? new Date();
   const merge = options.mergeCertificates ?? true;
-  const graceDays = Math.max(1, Math.min(90, Math.trunc(options.transitionGraceDays ?? SAML_DEFAULTS.TRANSITION_GRACE_DAYS)));
+  const graceDays = Math.max(
+    1,
+    Math.min(90, Math.trunc(options.transitionGraceDays ?? SAML_DEFAULTS.TRANSITION_GRACE_DAYS)),
+  );
   const graceDeadlineMs = now.getTime() + graceDays * 86_400_000;
 
   const incomingByFp = new Map<string, SamlIdpCertificateConfig>();

@@ -46,10 +46,7 @@ function resolveActor(req: FastifyRequest): { userId: number | null; name: strin
       ? reqWithUser.user.id
       : null;
   const name =
-    reqWithUser.user?.email ||
-    reqWithUser.user?.username ||
-    ctx.actor ||
-    'system-console-operator';
+    reqWithUser.user?.email || reqWithUser.user?.username || ctx.actor || 'system-console-operator';
   return { userId, name };
 }
 

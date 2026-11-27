@@ -143,7 +143,7 @@ function isValidIpv4(ip: string): boolean {
 function ipv4ToInt(ip: string): number | null {
   if (!isValidIpv4(ip)) return null;
   const parts = ip.split('.').map((p) => Number(p));
-  return (((parts[0]! << 24) | (parts[1]! << 16) | (parts[2]! << 8) | parts[3]!) >>> 0);
+  return ((parts[0]! << 24) | (parts[1]! << 16) | (parts[2]! << 8) | parts[3]!) >>> 0;
 }
 
 function isValidIpv6(ip: string): boolean {
@@ -164,11 +164,7 @@ function ipv6ToBigInt(ip: string): bigint | null {
   const left = halves[0] ? halves[0].split(':') : [];
   const right = halves[1] ? halves[1].split(':') : [];
   const missing = halves.length === 2 ? 8 - (left.length + right.length) : 0;
-  const groups = [
-    ...left,
-    ...Array.from({ length: missing }, () => '0'),
-    ...right,
-  ];
+  const groups = [...left, ...Array.from({ length: missing }, () => '0'), ...right];
   if (groups.length !== 8) return null;
   let result = 0n;
   for (const g of groups) {
@@ -222,7 +218,7 @@ export function isIpInCidr(ipRaw: string, cidrRaw: string): boolean {
     if (prefixLen > 128) return false;
     if (prefixLen === 0) return true;
     const shift = BigInt(128 - prefixLen);
-    return (ipV6 >> shift) === (netV6 >> shift);
+    return ipV6 >> shift === netV6 >> shift;
   }
 
   return false;
@@ -361,9 +357,9 @@ export function resolveForwardedContext(
     };
   }
 
-  const rawSocketIp =
-    req.raw?.socket?.remoteAddress ?? req.socket?.remoteAddress ?? req.ip ?? null;
-  const socketIp = normalizeIp(rawSocketIp) ?? (typeof rawSocketIp === 'string' ? rawSocketIp : null);
+  const rawSocketIp = req.raw?.socket?.remoteAddress ?? req.socket?.remoteAddress ?? req.ip ?? null;
+  const socketIp =
+    normalizeIp(rawSocketIp) ?? (typeof rawSocketIp === 'string' ? rawSocketIp : null);
   const directProtocol = typeof req.protocol === 'string' ? req.protocol.toLowerCase() : null;
 
   if (!socketIp || !isTrustedProxyIp(socketIp, policy)) {
@@ -405,7 +401,10 @@ export function resolveForwardedContext(
     }
   }
 
-  const rawProto = readHeaderValue(req.headers, 'x-forwarded-proto')?.split(',')[0]?.trim().toLowerCase();
+  const rawProto = readHeaderValue(req.headers, 'x-forwarded-proto')
+    ?.split(',')[0]
+    ?.trim()
+    .toLowerCase();
   const protocol =
     (rawProto === 'http' || rawProto === 'https' ? rawProto : null) ??
     (forwardedParsed.proto === 'http' || forwardedParsed.proto === 'https'

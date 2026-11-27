@@ -62,7 +62,10 @@ export interface ScimUserMutationOutcome {
   readonly created: boolean;
 }
 
-function splitFallbackNameParts(fullName: string, username: string): {
+function splitFallbackNameParts(
+  fullName: string,
+  username: string,
+): {
   readonly firstName: string;
   readonly lastName: string;
   readonly fullName: string;
@@ -165,10 +168,7 @@ export class ScimUsersService {
     }
   }
 
-  private async loadUserGroups(
-    clientId: number,
-    userId: number,
-  ): Promise<ScimGroupEntity[]> {
+  private async loadUserGroups(clientId: number, userId: number): Promise<ScimGroupEntity[]> {
     const memberships = await this.groupMemberRepository.findByClientAndUserId(clientId, userId);
     if (memberships.length === 0) return [];
     const groupIdSet = new Set(memberships.map((m) => Number(m.scimGroupId)));
@@ -311,7 +311,8 @@ export class ScimUsersService {
       const usersPort = this.assertUsersPort();
       const extracted = extractScimUserWriteFields(rawBody);
       const userName = extracted.userName ?? extracted.email;
-      const email = extracted.email ?? (userName?.includes('@') ? userName.toLowerCase() : undefined);
+      const email =
+        extracted.email ?? (userName?.includes('@') ? userName.toLowerCase() : undefined);
 
       if (!userName || !email) {
         throw new ScimProtocolException(
@@ -325,8 +326,7 @@ export class ScimUsersService {
       externalIdForLog = externalId;
       const desiredActive = extracted.active ?? true;
       const nameParts = splitFallbackNameParts(
-        extracted.fullName ??
-          `${extracted.firstName ?? ''} ${extracted.lastName ?? ''}`.trim(),
+        extracted.fullName ?? `${extracted.firstName ?? ''} ${extracted.lastName ?? ''}`.trim(),
         userName,
       );
       const firstName = extracted.firstName ?? nameParts.firstName;

@@ -6,7 +6,8 @@ interface DefaultControlSeed {
   readonly description: string;
   readonly domain: string;
   readonly frameworkTags: readonly string[];
-  readonly frequency: 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'QUARTERLY' | 'SEMI_ANNUAL' | 'ANNUAL' | 'AD_HOC';
+  readonly frequency:
+    'DAILY' | 'WEEKLY' | 'MONTHLY' | 'QUARTERLY' | 'SEMI_ANNUAL' | 'ANNUAL' | 'AD_HOC';
   readonly status: 'DRAFT' | 'ACTIVE' | 'RETIRED';
   readonly lastCheckResult: 'PASS' | 'PARTIAL' | 'FAIL' | 'NOT_APPLICABLE' | null;
   readonly daysSinceLastCheck: number | null;
@@ -118,7 +119,8 @@ const DEFAULT_VENDORS: readonly DefaultVendorSeed[] = [
     fallbackVendorName: 'Postmark / Resend SMTP',
     fallbackStrategy:
       'Chuyển định tuyến EMAIL tại Provider Registry sang nhà cung cấp dự phòng không cần sửa mã nguồn.',
-    migrationRunbook: 'Mở Provider Registry -> Pause AWS SES -> Set Primary Postmark -> Verify SPF/DKIM.',
+    migrationRunbook:
+      'Mở Provider Registry -> Pause AWS SES -> Set Primary Postmark -> Verify SPF/DKIM.',
     rtoHours: 1,
   },
   {
@@ -154,7 +156,8 @@ const DEFAULT_VENDORS: readonly DefaultVendorSeed[] = [
     fallbackVendorName: 'Google Cloud Platform (ap-southeast-1) / MinIO S3 On-Prem',
     fallbackStrategy:
       'Container hóa runtime stateless, sao lưu snapshot DB & Object Storage đa vùng tương thích S3 API.',
-    migrationRunbook: 'Thực thi DR Runbook section 13.7: Restore snapshot lên cụm dự phòng và chuyển DNS.',
+    migrationRunbook:
+      'Thực thi DR Runbook section 13.7: Restore snapshot lên cụm dự phòng và chuyển DNS.',
     rtoHours: 4,
   },
   {
@@ -172,7 +175,8 @@ const DEFAULT_VENDORS: readonly DefaultVendorSeed[] = [
     fallbackVendorName: 'OnePay / Chuyển khoản VietQR đối soát thủ công',
     fallbackStrategy:
       'Sử dụng Payment Port chuẩn hóa để tráo adapter thanh toán mà không đổi luồng đơn hàng.',
-    migrationRunbook: 'Chuyển adapter thanh toán trong Provider Registry và chạy đối soát Reconciliation.',
+    migrationRunbook:
+      'Chuyển adapter thanh toán trong Provider Registry và chạy đối soát Reconciliation.',
     rtoHours: 2,
   },
   {
@@ -190,7 +194,8 @@ const DEFAULT_VENDORS: readonly DefaultVendorSeed[] = [
     fallbackVendorName: 'Azure OpenAI / Self-hosted vLLM Gateway',
     fallbackStrategy:
       'Tách lớp AI Adapter, che toàn bộ PII trước khi gửi prompt và cho phép chuyển sang model nội bộ khi có sự cố.',
-    migrationRunbook: 'Đổi AI endpoint sang gateway dự phòng và tắt tính năng AI gợi ý không thiết yếu.',
+    migrationRunbook:
+      'Đổi AI endpoint sang gateway dự phòng và tắt tính năng AI gợi ý không thiết yếu.',
     rtoHours: 4,
   },
 ];
@@ -266,8 +271,10 @@ export class ComplianceSeeder implements SeederContract {
     let affected = 0;
 
     for (const c of DEFAULT_CONTROLS) {
-      const lastCheckedAt = c.daysSinceLastCheck !== null ? addDays(now, -c.daysSinceLastCheck) : null;
-      const nextCheckDueAt = c.daysUntilNextCheck !== null ? addDays(now, c.daysUntilNextCheck) : null;
+      const lastCheckedAt =
+        c.daysSinceLastCheck !== null ? addDays(now, -c.daysSinceLastCheck) : null;
+      const nextCheckDueAt =
+        c.daysUntilNextCheck !== null ? addDays(now, c.daysUntilNextCheck) : null;
       const tagsJson = JSON.stringify(c.frameworkTags);
 
       if (isPostgres) {

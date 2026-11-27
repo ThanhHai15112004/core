@@ -57,8 +57,8 @@ export class FederatedIdentityResponseMapper {
       Boolean(entity.issuerUrl?.trim()) ||
       Boolean(
         entity.authorizationEndpoint?.trim() &&
-          entity.tokenEndpoint?.trim() &&
-          entity.jwksUri?.trim(),
+        entity.tokenEndpoint?.trim() &&
+        entity.jwksUri?.trim(),
       );
     const isConfigured = isSaml
       ? isSamlProviderConfigured(samlConfig)

@@ -99,10 +99,7 @@ export class ScimProtocolController {
 
   @Get(SCIM_PROTOCOL_ROUTES.RESOURCE_TYPES)
   @ApiDoc({ summary: 'SCIM 2.0 ResourceTypes' })
-  public getResourceTypes(
-    @Req() req: ScimAuthenticatedRequest,
-    @Res() reply: FastifyReply,
-  ): void {
+  public getResourceTypes(@Req() req: ScimAuthenticatedRequest, @Res() reply: FastifyReply): void {
     void reply
       .status(HttpStatus.OK)
       .header('Content-Type', SCIM_CONTENT_TYPE)
@@ -111,10 +108,7 @@ export class ScimProtocolController {
 
   @Get(SCIM_PROTOCOL_ROUTES.SCHEMAS)
   @ApiDoc({ summary: 'SCIM 2.0 Schemas' })
-  public getSchemas(
-    @Req() req: ScimAuthenticatedRequest,
-    @Res() reply: FastifyReply,
-  ): void {
+  public getSchemas(@Req() req: ScimAuthenticatedRequest, @Res() reply: FastifyReply): void {
     void reply
       .status(HttpStatus.OK)
       .header('Content-Type', SCIM_CONTENT_TYPE)
@@ -218,7 +212,9 @@ export class ScimProtocolController {
   }
 
   @Delete(SCIM_PROTOCOL_ROUTES.USER_BY_ID)
-  @ApiDoc({ summary: 'Ngừng cung cấp người dùng qua SCIM 2.0 (khóa tài khoản & thu hồi toàn bộ phiên)' })
+  @ApiDoc({
+    summary: 'Ngừng cung cấp người dùng qua SCIM 2.0 (khóa tài khoản & thu hồi toàn bộ phiên)',
+  })
   public async deleteUser(
     @Param('id') id: string,
     @Req() req: ScimAuthenticatedRequest,

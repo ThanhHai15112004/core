@@ -29,18 +29,14 @@ export class ScimProtocolException extends Error {
   public readonly detail: string;
   public readonly errorCode: string;
 
-  constructor(
-    httpStatus: number,
-    detail: string,
-    scimType?: ScimErrorType,
-    errorCode?: string,
-  ) {
+  constructor(httpStatus: number, detail: string, scimType?: ScimErrorType, errorCode?: string) {
     super(detail);
     this.name = 'ScimProtocolException';
     this.httpStatus = httpStatus;
     this.scimType = scimType;
     this.detail = detail;
-    this.errorCode = errorCode ?? (scimType ? `SCIM_${scimType.toUpperCase()}` : `SCIM_${httpStatus}`);
+    this.errorCode =
+      errorCode ?? (scimType ? `SCIM_${scimType.toUpperCase()}` : `SCIM_${httpStatus}`);
   }
 }
 
@@ -81,7 +77,9 @@ export class ScimExceptionFilter implements ExceptionFilter {
     } else if (exception instanceof ZodError) {
       statusCode = HttpStatus.BAD_REQUEST;
       scimType = 'invalidSyntax';
-      detail = exception.issues.map((i) => `${i.path.join('.') || 'body'}: ${i.message}`).join('; ');
+      detail = exception.issues
+        .map((i) => `${i.path.join('.') || 'body'}: ${i.message}`)
+        .join('; ');
     } else if (exception instanceof HttpException) {
       statusCode = exception.getStatus();
       const raw = exception.getResponse();

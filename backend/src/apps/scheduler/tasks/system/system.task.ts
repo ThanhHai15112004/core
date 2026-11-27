@@ -129,7 +129,8 @@ export class SystemTask implements OnModuleInit {
       id: 'backup.retention.prune',
       queue: QUEUES.SYSTEM_EVENTS,
       name: BACKUP_QUEUE_TOPICS.RETENTION_PRUNE_TICK,
-      description: 'Tự động dọn dẹp các bản backup hết hạn lưu trữ theo chính sách Retention (13.6).',
+      description:
+        'Tự động dọn dẹp các bản backup hết hạn lưu trữ theo chính sách Retention (13.6).',
       pattern: this.config.backup.retentionPruneCron,
       tz: this.config.scheduler.timezone,
       data: { triggeredBy: 'scheduler', module: 'backup-ops' },

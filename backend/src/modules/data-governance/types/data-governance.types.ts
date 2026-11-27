@@ -109,7 +109,8 @@ export interface DsarRequestView {
   readonly approvedAt: string | null;
   readonly decisionComment: string | null;
   readonly retainedExceptions: readonly PersonalDataErasureExceptionItem[];
-  readonly summary: DsarPersonalDataSnapshot | DsarErasureExecutionReport | Record<string, unknown> | null;
+  readonly summary:
+    DsarPersonalDataSnapshot | DsarErasureExecutionReport | Record<string, unknown> | null;
   readonly downloadUrl: string | null;
   readonly exportExpiresAt: string | null;
   readonly dueAt: string;

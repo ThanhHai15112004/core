@@ -314,7 +314,9 @@ export class ChunkedUploadSessionManager {
     storage: StorageContract,
   ): Promise<void> {
     if (typeof storage.abortChunkedParts === 'function') {
-      await storage.abortChunkedParts(session.tempStorageKey, session.totalChunks).catch(() => undefined);
+      await storage
+        .abortChunkedParts(session.tempStorageKey, session.totalChunks)
+        .catch(() => undefined);
     } else {
       await Promise.all(
         Array.from({ length: session.totalChunks }, (_, idx) =>

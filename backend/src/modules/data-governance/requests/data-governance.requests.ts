@@ -1,9 +1,5 @@
 import { z } from 'zod';
-import {
-  booleanQueryParam,
-  intQueryParam,
-  optionalQueryParam,
-} from '@packages/http/index.js';
+import { booleanQueryParam, intQueryParam, optionalQueryParam } from '@packages/http/index.js';
 import {
   CONSENT_STATUS,
   DATA_CLASSIFICATION_LEVEL,
@@ -73,7 +69,8 @@ export const UpsertDataClassificationRequestSchema = z.object({
 });
 export type UpsertDataClassificationRequest = z.infer<typeof UpsertDataClassificationRequestSchema>;
 
-export const UpdateDataClassificationRequestSchema = UpsertDataClassificationRequestSchema.partial();
+export const UpdateDataClassificationRequestSchema =
+  UpsertDataClassificationRequestSchema.partial();
 export type UpdateDataClassificationRequest = z.infer<typeof UpdateDataClassificationRequestSchema>;
 
 export const ListSensitiveFieldsQuerySchema = z.object({

@@ -1,9 +1,6 @@
 import { Column, Entity, Index } from 'typeorm';
 import { VersionedTypeOrmEntity } from '@packages/database/index.js';
-import {
-  BREAK_GLASS_STATUS,
-  type BreakGlassStatusCode,
-} from '../enum/privileged-access.enum.js';
+import { BREAK_GLASS_STATUS, type BreakGlassStatusCode } from '../enum/privileged-access.enum.js';
 
 @Entity({ name: 'privileged_break_glass_accounts' })
 @Index('idx_pam_break_glass_code', ['code'], { unique: true })

@@ -207,7 +207,9 @@ export class ConsentManagementService implements IPersonalDataContributor, IRete
     }
 
     const now = new Date();
-    const expiresAt = def.validityDays ? new Date(now.getTime() + def.validityDays * 86_400_000) : null;
+    const expiresAt = def.validityDays
+      ? new Date(now.getTime() + def.validityDays * 86_400_000)
+      : null;
 
     const entity = this.userConsentRepo.create({
       userId: targetUserId,

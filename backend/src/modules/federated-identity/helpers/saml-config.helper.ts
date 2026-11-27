@@ -167,8 +167,8 @@ export function parseSamlAttributeMapping(raw: unknown): SamlAttributeMappingCon
     subjectAttribute:
       obj['subjectAttribute'] === null
         ? null
-        : cleanOptionalString(obj['subjectAttribute']) ??
-          DEFAULT_SAML_ATTRIBUTE_MAPPING.subjectAttribute,
+        : (cleanOptionalString(obj['subjectAttribute']) ??
+          DEFAULT_SAML_ATTRIBUTE_MAPPING.subjectAttribute),
     emailAttribute: cleanStringOrDefault(
       obj['emailAttribute'],
       DEFAULT_SAML_ATTRIBUTE_MAPPING.emailAttribute,
@@ -216,19 +216,14 @@ export function parseSamlConfig(
   baseUrl?: string,
 ): SamlProviderConfig {
   const root =
-    typeof raw === 'string'
-      ? safeJsonParseObject<Record<string, unknown>>(raw, {})
-      : asRecord(raw);
+    typeof raw === 'string' ? safeJsonParseObject<Record<string, unknown>>(raw, {}) : asRecord(raw);
   const rawSaml = root['samlConfig'] ? asRecord(root['samlConfig']) : root;
 
   const spEntityId = cleanStringOrDefault(
     rawSaml['spEntityId'],
     buildDefaultSpEntityId(providerCode, baseUrl),
   );
-  const acsUrl = cleanStringOrDefault(
-    rawSaml['acsUrl'],
-    buildDefaultAcsUrl(providerCode, baseUrl),
-  );
+  const acsUrl = cleanStringOrDefault(rawSaml['acsUrl'], buildDefaultAcsUrl(providerCode, baseUrl));
   const rawSkew = Number(rawSaml['clockSkewSeconds']);
   const clockSkewSeconds = Number.isFinite(rawSkew)
     ? Math.max(0, Math.min(300, Math.trunc(rawSkew)))
@@ -242,13 +237,9 @@ export function parseSamlConfig(
     idpSsoUrl: cleanOptionalString(rawSaml['idpSsoUrl']),
     idpSsoBinding: normalizeSamlBinding(rawSaml['idpSsoBinding']),
     wantAssertionsSigned:
-      typeof rawSaml['wantAssertionsSigned'] === 'boolean'
-        ? rawSaml['wantAssertionsSigned']
-        : true,
+      typeof rawSaml['wantAssertionsSigned'] === 'boolean' ? rawSaml['wantAssertionsSigned'] : true,
     authnRequestsSigned:
-      typeof rawSaml['authnRequestsSigned'] === 'boolean'
-        ? rawSaml['authnRequestsSigned']
-        : false,
+      typeof rawSaml['authnRequestsSigned'] === 'boolean' ? rawSaml['authnRequestsSigned'] : false,
     allowIdpInitiated:
       typeof rawSaml['allowIdpInitiated'] === 'boolean' ? rawSaml['allowIdpInitiated'] : false,
     clockSkewSeconds,
@@ -282,13 +273,15 @@ export interface SamlConfigPatchInput {
   readonly authnRequestsSigned?: boolean | undefined;
   readonly allowIdpInitiated?: boolean | undefined;
   readonly clockSkewSeconds?: number | undefined;
-  readonly idpCertificates?: readonly {
-    readonly id?: string | undefined;
-    readonly label?: string | null | undefined;
-    readonly pem: string;
-    readonly status?: SamlCertStatus | undefined;
-    readonly graceEndsAt?: string | null | undefined;
-  }[] | undefined;
+  readonly idpCertificates?:
+    | readonly {
+        readonly id?: string | undefined;
+        readonly label?: string | null | undefined;
+        readonly pem: string;
+        readonly status?: SamlCertStatus | undefined;
+        readonly graceEndsAt?: string | null | undefined;
+      }[]
+    | undefined;
   readonly spCertificates?: readonly SamlSpCertificatePatchInput[] | undefined;
   readonly attributeMapping?: SamlAttributeMappingPatchInput | undefined;
 }
@@ -332,7 +325,10 @@ export function mergeSamlConfig(
                 : null;
           }
           return {
-            id: item.id?.trim() || prev?.id || `sp_${inspected.fingerprint256.slice(0, 12).toLowerCase()}`,
+            id:
+              item.id?.trim() ||
+              prev?.id ||
+              `sp_${inspected.fingerprint256.slice(0, 12).toLowerCase()}`,
             label: item.label !== undefined ? item.label : (prev?.label ?? null),
             pem: inspected.pem,
             fingerprint256: inspected.fingerprint256,
@@ -340,7 +336,8 @@ export function mergeSamlConfig(
             validFrom: inspected.validFrom,
             validTo: inspected.validTo,
             status: item.status ?? prev?.status ?? SAML_CERT_STATUS.ACTIVE,
-            graceEndsAt: item.graceEndsAt !== undefined ? item.graceEndsAt : (prev?.graceEndsAt ?? null),
+            graceEndsAt:
+              item.graceEndsAt !== undefined ? item.graceEndsAt : (prev?.graceEndsAt ?? null),
             privateKeyEncrypted,
           };
         })

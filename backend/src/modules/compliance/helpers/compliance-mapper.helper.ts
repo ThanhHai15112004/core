@@ -31,7 +31,10 @@ export function mapControlToView(
     description: entity.description,
     domain: entity.domain,
     frameworkTags: parseJsonStringList(entity.frameworkTagsJson),
-    ownerUserId: entity.ownerUserId !== null && entity.ownerUserId !== undefined ? Number(entity.ownerUserId) : null,
+    ownerUserId:
+      entity.ownerUserId !== null && entity.ownerUserId !== undefined
+        ? Number(entity.ownerUserId)
+        : null,
     organizationUnitId:
       entity.organizationUnitId !== null && entity.organizationUnitId !== undefined
         ? Number(entity.organizationUnitId)
@@ -155,7 +158,8 @@ export function mapVendorToView(
     fallbackVendorName: entity.fallbackVendorName,
     fallbackStrategy: entity.fallbackStrategy,
     migrationRunbook: entity.migrationRunbook,
-    rtoHours: entity.rtoHours !== null && entity.rtoHours !== undefined ? Number(entity.rtoHours) : null,
+    rtoHours:
+      entity.rtoHours !== null && entity.rtoHours !== undefined ? Number(entity.rtoHours) : null,
     exitPlanTestedAt: entity.exitPlanTestedAt ? entity.exitPlanTestedAt.toISOString() : null,
     hasFallbackPlan: hasVendorFallbackPlan(entity),
     metadata: parseJsonObjectOrNull(entity.metadataJson),

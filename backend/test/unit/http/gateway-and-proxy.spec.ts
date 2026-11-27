@@ -124,7 +124,9 @@ describe('Unit: Trusted Proxy, Gateway Consistency, Rate Limit Layering & Servic
       expect(ctx.prefix).toBeNull();
 
       expect(buildFastifyTrustProxyOption({ ...privatePolicy, trustMode: 'off' })).toBe(false);
-      expect(buildFastifyTrustProxyOption({ ...privatePolicy, trustMode: 'hops', maxHops: 2 })).toBe(2);
+      expect(
+        buildFastifyTrustProxyOption({ ...privatePolicy, trustMode: 'hops', maxHops: 2 }),
+      ).toBe(2);
       const fn = buildFastifyTrustProxyOption(privatePolicy);
       expect(typeof fn).toBe('function');
       if (typeof fn === 'function') {

@@ -155,10 +155,7 @@ export class PersonalDataContributorsService {
         },
         eraseOrAnonymizePersonalData: async (opts): Promise<PersonalDataErasureModuleResult> => {
           const revoked = await sessionsSvc
-            .revokeAllUserSessions(
-              opts.subjectUserId,
-              `DSAR Erasure (${opts.requestCode})`,
-            )
+            .revokeAllUserSessions(opts.subjectUserId, `DSAR Erasure (${opts.requestCode})`)
             .catch(() => 0);
           return {
             moduleName: 'sessions',
@@ -327,7 +324,9 @@ export class PersonalDataContributorsService {
             scannedCount: candidates.length,
             affectedCount,
             skippedLegalHoldCount,
-            actionApplied: input.dryRun ? `DRY_RUN_${input.retentionAction}` : input.retentionAction,
+            actionApplied: input.dryRun
+              ? `DRY_RUN_${input.retentionAction}`
+              : input.retentionAction,
           };
         },
       });

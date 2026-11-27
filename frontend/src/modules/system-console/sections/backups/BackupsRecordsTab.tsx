@@ -122,7 +122,7 @@ export const BackupsRecordsTab: React.FC<{ restoreExecutionEnabled?: boolean }> 
     <>
       <Panel title={t('backups.records.title')}>
         <QueryView query={recordsQ}>
-          {(page) => <DataTable columns={columns} data={page.data} />}
+          {(page) => <DataTable columns={columns} data={page.data} getRowId={(r) => String(r.id)} />}
         </QueryView>
       </Panel>
 

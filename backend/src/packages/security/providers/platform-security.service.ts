@@ -509,7 +509,11 @@ export class PlatformSecurityService {
       }
 
       let userBucket: RateLimitBucket | null = null;
-      if (input.userId !== undefined && input.userId !== null && String(input.userId).trim() !== '') {
+      if (
+        input.userId !== undefined &&
+        input.userId !== null &&
+        String(input.userId).trim() !== ''
+      ) {
         const userKey = this.buildRedisKey(
           'sec',
           'rl',

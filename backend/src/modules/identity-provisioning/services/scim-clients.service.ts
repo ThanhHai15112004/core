@@ -54,9 +54,7 @@ function parseGroupRoleMappings(jsonStr?: string | null): Record<string, string[
 
 function normalizeRoleCodeList(codes?: readonly string[]): string[] {
   if (!codes) return [];
-  return Array.from(
-    new Set(codes.map((c) => c.trim().toUpperCase()).filter(Boolean)),
-  );
+  return Array.from(new Set(codes.map((c) => c.trim().toUpperCase()).filter(Boolean)));
 }
 
 @Injectable()
@@ -92,8 +90,12 @@ export class ScimClientsService {
       lastUsedAt: entity.lastUsedAt ? new Date(entity.lastUsedAt).toISOString() : null,
       lastUsedIp: entity.lastUsedIp ?? null,
       rotatedAt: entity.rotatedAt ? new Date(entity.rotatedAt).toISOString() : null,
-      createdAt: entity.createdAt ? new Date(entity.createdAt).toISOString() : new Date().toISOString(),
-      updatedAt: entity.updatedAt ? new Date(entity.updatedAt).toISOString() : new Date().toISOString(),
+      createdAt: entity.createdAt
+        ? new Date(entity.createdAt).toISOString()
+        : new Date().toISOString(),
+      updatedAt: entity.updatedAt
+        ? new Date(entity.updatedAt).toISOString()
+        : new Date().toISOString(),
     };
   }
 
@@ -160,7 +162,9 @@ export class ScimClientsService {
       allowedIpsJson: JSON.stringify(allowedIps),
       scopesJson: JSON.stringify(scopes),
       deprovisionMode: dto.deprovisionMode ?? this.resolveDefaultDeprovisionMode(),
-      groupRoleMappingsJson: JSON.stringify(parseGroupRoleMappings(JSON.stringify(dto.groupRoleMappings ?? {}))),
+      groupRoleMappingsJson: JSON.stringify(
+        parseGroupRoleMappings(JSON.stringify(dto.groupRoleMappings ?? {})),
+      ),
       allowedRoleCodesJson: JSON.stringify(normalizeRoleCodeList(dto.allowedRoleCodes)),
       deniedRoleCodesJson: JSON.stringify(normalizeRoleCodeList(dto.deniedRoleCodes)),
       defaultRoleCodesJson: JSON.stringify(normalizeRoleCodeList(dto.defaultRoleCodes)),

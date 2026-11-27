@@ -76,7 +76,10 @@ export function computeNextDueDate(
   }
 }
 
-export function computeDaysUntil(targetDate: Date | null | undefined, now: Date = new Date()): number | null {
+export function computeDaysUntil(
+  targetDate: Date | null | undefined,
+  now: Date = new Date(),
+): number | null {
   if (!targetDate) return null;
   const diffMs = targetDate.getTime() - now.getTime();
   return Math.ceil(diffMs / MS_PER_DAY);
@@ -111,9 +114,7 @@ export function parseJsonNumberList(raw: string | null | undefined): number[] {
   try {
     const parsed: unknown = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
-    return parsed
-      .map((item) => Number(item))
-      .filter((num) => Number.isInteger(num) && num > 0);
+    return parsed.map((item) => Number(item)).filter((num) => Number.isInteger(num) && num > 0);
   } catch {
     return [];
   }
@@ -191,17 +192,13 @@ export function buildComplianceReportSummary(input: {
   ).length;
 
   const validEvidenceControlIds = new Set(
-    filteredEvidences
-      .filter((ev) => ev.status === EVIDENCE_STATUS.VALID)
-      .map((ev) => ev.controlId),
+    filteredEvidences.filter((ev) => ev.status === EVIDENCE_STATUS.VALID).map((ev) => ev.controlId),
   );
   const controlsWithoutValidEvidence = activeControls.filter(
     (c) => !validEvidenceControlIds.has(c.id),
   ).length;
 
-  const validEvidences = filteredEvidences.filter(
-    (e) => e.status === EVIDENCE_STATUS.VALID,
-  ).length;
+  const validEvidences = filteredEvidences.filter((e) => e.status === EVIDENCE_STATUS.VALID).length;
   const expiredEvidences = filteredEvidences.filter(
     (e) => e.status === EVIDENCE_STATUS.EXPIRED,
   ).length;
@@ -296,7 +293,7 @@ export function buildComplianceReportRows(
       resultOrRisk: v.criticality,
       dueStatus: v.contractDueStatus,
       dueAt: v.contractEndDate ?? '',
-      fallbackReady: v.hasFallbackPlan ? v.fallbackVendorName ?? 'YES' : 'MISSING',
+      fallbackReady: v.hasFallbackPlan ? (v.fallbackVendorName ?? 'YES') : 'MISSING',
     });
   }
   return rows;

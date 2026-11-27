@@ -50,14 +50,8 @@ import {
   getEligibleIdpVerificationCerts,
   mergeIdpCertificatesForRotation,
 } from '../helpers/saml-certificate.helper.js';
-import {
-  isSamlProviderConfigured,
-  parseSamlConfig,
-} from '../helpers/saml-config.helper.js';
-import {
-  buildSpMetadataXml,
-  parseIdpMetadataXml,
-} from '../helpers/saml-metadata.helper.js';
+import { isSamlProviderConfigured, parseSamlConfig } from '../helpers/saml-config.helper.js';
+import { buildSpMetadataXml, parseIdpMetadataXml } from '../helpers/saml-metadata.helper.js';
 import { parseAndValidateSamlAssertion } from '../helpers/saml-assertion.helper.js';
 import { mapAndValidateSamlAttributes } from '../helpers/saml-attribute-mapping.helper.js';
 import {
@@ -432,8 +426,7 @@ export class SamlSsoService {
           relayState,
           now,
         });
-        resolvedFlowType =
-          matchedTx.flowType === FEDERATED_FLOW_TYPE.LINK ? 'LINK' : 'LOGIN';
+        resolvedFlowType = matchedTx.flowType === FEDERATED_FLOW_TYPE.LINK ? 'LINK' : 'LOGIN';
       } else if (!samlConfig.allowIdpInitiated) {
         throw new FederatedStageError({
           i18nKey: 'federated-identity.samlIdpInitiatedDisabled',
@@ -446,7 +439,10 @@ export class SamlSsoService {
 
       // Persistent Anti-Replay check on Assertion ID
       const replayExpiresAt = new Date(
-        Math.max(assertion.notOnOrAfter.getTime() + samlConfig.clockSkewSeconds * 1000, now.getTime() + 60_000),
+        Math.max(
+          assertion.notOnOrAfter.getTime() + samlConfig.clockSkewSeconds * 1000,
+          now.getTime() + 60_000,
+        ),
       );
       const isFresh = await this.replayRepo.recordAssertionIfUnused({
         providerCode,
@@ -904,8 +900,7 @@ export class SamlSsoService {
         i18nKey: 'federated-identity.samlMetadataFetchFailed',
         stage: FEDERATED_AUTH_STAGE.SAML_METADATA,
         stageErrorCode: 'SAML_METADATA_FETCH_FAILED',
-        diagnosticMessage:
-          err instanceof Error ? err.message : 'Failed to fetch SAML metadata XML',
+        diagnosticMessage: err instanceof Error ? err.message : 'Failed to fetch SAML metadata XML',
       });
     }
   }

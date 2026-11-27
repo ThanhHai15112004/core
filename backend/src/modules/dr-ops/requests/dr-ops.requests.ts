@@ -171,11 +171,7 @@ export const ListDrDrillsQuerySchema = createPaginationQuerySchema({
 
 export const RunDrDrillSchema = z.object({
   drillType: z
-    .enum([
-      DR_DRILL_TYPE.MANUAL_SIMULATION,
-      DR_DRILL_TYPE.LIVE_GAME_DAY,
-      DR_DRILL_TYPE.TABLETOP,
-    ])
+    .enum([DR_DRILL_TYPE.MANUAL_SIMULATION, DR_DRILL_TYPE.LIVE_GAME_DAY, DR_DRILL_TYPE.TABLETOP])
     .default(DR_DRILL_TYPE.MANUAL_SIMULATION),
   scenario: z
     .string()

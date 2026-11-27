@@ -1,9 +1,5 @@
 import { z } from 'zod';
-import {
-  booleanQueryParam,
-  intQueryParam,
-  optionalQueryParam,
-} from '@packages/http/index.js';
+import { booleanQueryParam, intQueryParam, optionalQueryParam } from '@packages/http/index.js';
 import { DATA_CLASSIFICATION_LEVEL } from '@packages/kernel/index.js';
 import {
   ASSESSMENT_APPROVAL_STATUS,
@@ -306,6 +302,4 @@ export const GenerateComplianceReportRequestSchema = z.object({
   format: z.enum(['json', 'csv', 'xlsx', 'pdf']).default('json'),
   ttlSeconds: z.coerce.number().int().min(60).max(86400).optional(),
 });
-export type GenerateComplianceReportRequest = z.infer<
-  typeof GenerateComplianceReportRequestSchema
->;
+export type GenerateComplianceReportRequest = z.infer<typeof GenerateComplianceReportRequestSchema>;

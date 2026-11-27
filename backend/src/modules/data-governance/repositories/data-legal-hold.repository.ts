@@ -61,7 +61,7 @@ export class DataLegalHoldRepository extends BaseTypeOrmRepository<DataLegalHold
     if (filter.search?.trim()) {
       const q = `%${filter.search.trim().toLowerCase()}%`;
       qb.andWhere(
-        '(LOWER(h.holdCode) LIKE :q OR LOWER(h.title) LIKE :q OR LOWER(COALESCE(h.caseReference, \'\')) LIKE :q)',
+        "(LOWER(h.holdCode) LIKE :q OR LOWER(h.title) LIKE :q OR LOWER(COALESCE(h.caseReference, '')) LIKE :q)",
         { q },
       );
     }

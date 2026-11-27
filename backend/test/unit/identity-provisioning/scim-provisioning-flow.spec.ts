@@ -1,9 +1,6 @@
 import type { ExecutionContext } from '@nestjs/common';
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
-import {
-  FeatureFlagRegistryService,
-  SettingRegistryService,
-} from '@packages/kernel/index.js';
+import { FeatureFlagRegistryService, SettingRegistryService } from '@packages/kernel/index.js';
 import type { AuditLogService } from '@packages/security/index.js';
 import type {
   IRolesPublicService,
@@ -444,11 +441,7 @@ function createHarness() {
   ]);
 
   const syncLogService = new ScimSyncLogService(syncLogRepository);
-  const clientsService = new ScimClientsService(
-    clientRepository,
-    auditLogService,
-    settingRegistry,
-  );
+  const clientsService = new ScimClientsService(clientRepository, auditLogService, settingRegistry);
   const roleSyncService = new ScimGroupRoleSyncService(
     groupRepository,
     groupMemberRepository,
@@ -556,12 +549,18 @@ describe('SCIM 2.0 Provisioning End-to-End Flows', () => {
     expect(h.clients[0]?.tokenHash).toBe(hashScimToken(created.plainToken));
 
     // Valid token + allowed IP
-    const ok = makeExecutionContext({ authorization: `Bearer ${created.plainToken}` }, '::ffff:10.10.1.25');
+    const ok = makeExecutionContext(
+      { authorization: `Bearer ${created.plainToken}` },
+      '::ffff:10.10.1.25',
+    );
     await expect(h.authGuard.canActivate(ok.ctx)).resolves.toBe(true);
     expect((ok.req['scimClient'] as ScimClientEntity).code).toBe('okta-corp');
 
     // Disallowed IP -> 403 + sync log recorded
-    const badIp = makeExecutionContext({ authorization: `Bearer ${created.plainToken}` }, '203.0.113.9');
+    const badIp = makeExecutionContext(
+      { authorization: `Bearer ${created.plainToken}` },
+      '203.0.113.9',
+    );
     await expect(h.authGuard.canActivate(badIp.ctx)).rejects.toThrow(ScimProtocolException);
     expect(h.syncLogs[h.syncLogs.length - 1]?.errorCode).toBe('SCIM_IP_NOT_ALLOWED');
 
@@ -690,7 +689,12 @@ describe('SCIM 2.0 Provisioning End-to-End Flows', () => {
     expect(h.usersStore.get(userId)?.status).toBe(USER_STATUS.ACTIVE);
 
     // DELETE User -> locks account, revokes sessions, marks link inactive
-    await h.scimUsersService.deleteUser(clientEntity, String(userId), 'W/"4"', createMeta('DELETE'));
+    await h.scimUsersService.deleteUser(
+      clientEntity,
+      String(userId),
+      'W/"4"',
+      createMeta('DELETE'),
+    );
     expect(h.usersStore.get(userId)?.status).toBe(USER_STATUS.LOCKED);
     expect(h.links[0]?.active).toBe(false);
   });

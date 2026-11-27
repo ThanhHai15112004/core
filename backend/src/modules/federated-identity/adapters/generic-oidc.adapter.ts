@@ -111,7 +111,8 @@ export class GenericOidcAdapter extends BaseOidcOAuthAdapter {
       serviceName: `oauth-${this.driverCode}`,
       issuerUrl: rawIssuer,
       discoveryUrl: extra.oidcOptions.discoveryUrl,
-      cacheTtlSeconds: options?.cacheTtlSeconds ?? GENERIC_OIDC_DEFAULTS.DISCOVERY_CACHE_TTL_SECONDS,
+      cacheTtlSeconds:
+        options?.cacheTtlSeconds ?? GENERIC_OIDC_DEFAULTS.DISCOVERY_CACHE_TTL_SECONDS,
       forceRefresh: options?.forceRefresh,
     });
 

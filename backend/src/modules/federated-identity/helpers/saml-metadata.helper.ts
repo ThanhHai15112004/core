@@ -1,9 +1,4 @@
-import {
-  DOMParser,
-  type Document,
-  type Element,
-  type Node,
-} from '@xmldom/xmldom';
+import { DOMParser, type Document, type Element, type Node } from '@xmldom/xmldom';
 import {
   FEDERATED_AUTH_STAGE,
   SAML_BINDING,
@@ -39,7 +34,10 @@ function escapeXml(value: string): string {
     .replace(/'/g, '&apos;');
 }
 
-export function assertSafeXmlPayload(xml: string, maxBytes: number = SAML_DEFAULTS.MAX_RESPONSE_BYTES): void {
+export function assertSafeXmlPayload(
+  xml: string,
+  maxBytes: number = SAML_DEFAULTS.MAX_RESPONSE_BYTES,
+): void {
   if (!xml || xml.trim().length === 0) {
     throw new FederatedStageError({
       i18nKey: 'federated-identity.samlInvalidResponse',
@@ -121,9 +119,7 @@ function findElementsByLocalName(root: Node, localName: string): Element[] {
 }
 
 export function buildSpMetadataXml(config: SamlProviderConfig): string {
-  const signingSpCerts = config.spCertificates.filter(
-    (c) => c.status !== SAML_CERT_STATUS.REVOKED,
-  );
+  const signingSpCerts = config.spCertificates.filter((c) => c.status !== SAML_CERT_STATUS.REVOKED);
   const keyDescriptors = signingSpCerts
     .map((cert) => {
       const certBase64 = stripPemHeaders(cert.pem);
@@ -181,7 +177,8 @@ export function parseIdpMetadataXml(xml: string): ParsedIdpMetadata {
     });
   }
 
-  const idpDescriptor = getChildElementsByLocalName(entityDescriptor!, 'IDPSSODescriptor')[0] ??
+  const idpDescriptor =
+    getChildElementsByLocalName(entityDescriptor!, 'IDPSSODescriptor')[0] ??
     findElementsByLocalName(entityDescriptor!, 'IDPSSODescriptor')[0];
   if (!idpDescriptor) {
     throw new FederatedStageError({

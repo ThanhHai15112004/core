@@ -176,7 +176,8 @@ export class PrivilegedPolicyEvaluatorService implements IPrivilegedAccessReques
       actorUserId: context.user.id,
       actorUsername: context.user.username ?? null,
       targetType:
-        primaryTarget?.targetType ?? (context.requiredPermissions.length > 0 ? 'PERMISSION' : 'ROLE'),
+        primaryTarget?.targetType ??
+        (context.requiredPermissions.length > 0 ? 'PERMISSION' : 'ROLE'),
       targetCode: primaryCode,
       action: `${context.method} ${context.url}`,
       endpoint: context.url,

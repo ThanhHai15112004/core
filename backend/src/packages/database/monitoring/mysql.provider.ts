@@ -368,9 +368,7 @@ export class MysqlMonitoringProvider implements DatabaseMonitoringProvider {
 
   /** Đo độ trễ đồng bộ Replication của MySQL/MariaDB (`SHOW REPLICA STATUS` / fallback `SHOW SLAVE STATUS`). */
   public async replicationLag(ctx: MonitoringContext): Promise<DbReplicationLagInfo> {
-    const rows = await ctx
-      .run('SHOW REPLICA STATUS')
-      .catch(() => ctx.run('SHOW SLAVE STATUS'));
+    const rows = await ctx.run('SHOW REPLICA STATUS').catch(() => ctx.run('SHOW SLAVE STATUS'));
     const row = rows[0];
     if (!row) {
       return {

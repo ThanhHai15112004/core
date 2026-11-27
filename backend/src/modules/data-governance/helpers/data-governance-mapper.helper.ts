@@ -9,10 +9,7 @@ import type { DataSensitiveFieldEntity } from '../entities/data-sensitive-field.
 import type { PrivacyConsentDefinitionEntity } from '../entities/privacy-consent-definition.entity.js';
 import type { PrivacyDsarRequestEntity } from '../entities/privacy-dsar-request.entity.js';
 import type { PrivacyUserConsentEntity } from '../entities/privacy-user-consent.entity.js';
-import {
-  DSAR_STATUS_NAMES,
-  LEGAL_HOLD_STATUS_NAMES,
-} from '../enum/data-governance.enum.js';
+import { DSAR_STATUS_NAMES, LEGAL_HOLD_STATUS_NAMES } from '../enum/data-governance.enum.js';
 import type {
   ConsentDefinitionView,
   DataClassificationView,

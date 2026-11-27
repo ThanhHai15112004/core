@@ -56,7 +56,10 @@ import type { FederatedIdentityRepository } from '../../../src/modules/federated
 import type { FederatedSamlAssertionReplayRepository } from '../../../src/modules/federated-identity/repositories/federated-saml-assertion-replay.repository.js';
 import { FederatedAuthFlowService } from '../../../src/modules/federated-identity/services/federated-auth-flow.service.js';
 import { FederatedIdentityService } from '../../../src/modules/federated-identity/services/federated-identity.service.js';
-import { FederatedJwksService, FederatedStageError } from '../../../src/modules/federated-identity/services/federated-jwks.service.js';
+import {
+  FederatedJwksService,
+  FederatedStageError,
+} from '../../../src/modules/federated-identity/services/federated-jwks.service.js';
 import { FederatedMonitoringService } from '../../../src/modules/federated-identity/services/federated-monitoring.service.js';
 import { FederatedProvidersService } from '../../../src/modules/federated-identity/services/federated-providers.service.js';
 import { OAuthProviderRegistryService } from '../../../src/modules/federated-identity/services/oauth-provider-registry.service.js';
@@ -119,7 +122,8 @@ function buildSamlResponseXml(params: {
   const responseId = params.responseId ?? `_resp_${Math.random().toString(16).slice(2, 10)}`;
   const assertionId = params.assertionId ?? `_assert_${Math.random().toString(16).slice(2, 10)}`;
   const issuer = params.issuer ?? 'https://idp.corp.test/entity';
-  const destination = params.destination ?? 'http://localhost:3000/api/v1/federated-identity/saml/corp-saml/acs';
+  const destination =
+    params.destination ?? 'http://localhost:3000/api/v1/federated-identity/saml/corp-saml/acs';
   const recipient = params.recipient ?? destination;
   const audience =
     params.audience ?? 'http://localhost:3000/api/v1/federated-identity/saml/corp-saml/metadata';
@@ -128,12 +132,12 @@ function buildSamlResponseXml(params: {
   const notOnOrAfter = (params.notOnOrAfter ?? new Date(now.getTime() + 300_000)).toISOString();
   const nameId = params.nameId ?? 'alice.saml@corp.vn';
 
-  const attrXml = Object.entries(params.attributes ?? { email: 'alice.saml@corp.vn', displayName: 'Alice SAML' })
+  const attrXml = Object.entries(
+    params.attributes ?? { email: 'alice.saml@corp.vn', displayName: 'Alice SAML' },
+  )
     .map(([name, val]) => {
       const vals = Array.isArray(val) ? val : [val];
-      const valuesXml = vals
-        .map((v) => `<saml:AttributeValue>${v}</saml:AttributeValue>`)
-        .join('');
+      const valuesXml = vals.map((v) => `<saml:AttributeValue>${v}</saml:AttributeValue>`).join('');
       return `<saml:Attribute Name="${name}">${valuesXml}</saml:Attribute>`;
     })
     .join('');
@@ -476,7 +480,9 @@ function createSamlHarness(options: { samlFlagEnabled?: boolean } = {}) {
   } as unknown as FederatedAuthEventRepository;
 
   const usersPublicService = {
-    findAuthUserByIdentifier: async (identifier: string): Promise<UserAuthCredentialsView | null> => {
+    findAuthUserByIdentifier: async (
+      identifier: string,
+    ): Promise<UserAuthCredentialsView | null> => {
       const clean = identifier.trim().toLowerCase();
       const found = [...users.values()].find(
         (u) => u.email.toLowerCase() === clean || u.username.toLowerCase() === clean,
@@ -567,7 +573,6 @@ function createSamlHarness(options: { samlFlagEnabled?: boolean } = {}) {
             phone: null,
             status: u.status,
             statusName: 'ACTIVE',
-            lockedUntil: null,
             mfaEnabled: false,
             primaryOrganizationUnitId: null,
             organizationUnitIds: [],
@@ -760,7 +765,7 @@ describe('Section 14.2 — Enterprise SAML 2.0 SSO', () => {
     expect(authInit.requestId).toBeTruthy();
 
     const responseXml = buildSamlResponseXml({
-      inResponseTo: authInit.requestId,
+      inResponseTo: authInit.requestId ?? null,
       signAssertionWith: certA,
       attributes: {
         email: 'SamlUser@Corp.vn',
@@ -1010,8 +1015,16 @@ describe('Section 14.2 — Enterprise SAML 2.0 SSO', () => {
     expect(rotated.activeCertificatesCount).toBe(1);
 
     // Both Cert A (TRANSITIONING) and Cert B (ACTIVE) verify cleanly during grace period
-    const signedByA = buildSamlResponseXml({ signAssertionWith: certA, nameId: 'a@corp.vn', attributes: { email: 'a@corp.vn' } });
-    const signedByB = buildSamlResponseXml({ signAssertionWith: certB, nameId: 'b@corp.vn', attributes: { email: 'b@corp.vn' } });
+    const signedByA = buildSamlResponseXml({
+      signAssertionWith: certA,
+      nameId: 'a@corp.vn',
+      attributes: { email: 'a@corp.vn' },
+    });
+    const signedByB = buildSamlResponseXml({
+      signAssertionWith: certB,
+      nameId: 'b@corp.vn',
+      attributes: { email: 'b@corp.vn' },
+    });
 
     const resA = await h.samlSsoService.handleAcs(
       'corp-saml',

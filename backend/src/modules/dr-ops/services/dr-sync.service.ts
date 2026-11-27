@@ -371,9 +371,7 @@ export class DrSyncService {
     });
   }
 
-  public async listSyncRuns(
-    filter: ListDrSyncRunsFilter,
-  ): Promise<PaginatedResult<DrSyncRunView>> {
+  public async listSyncRuns(filter: ListDrSyncRunsFilter): Promise<PaginatedResult<DrSyncRunView>> {
     const page = await this.syncRepo.listPaginated(filter);
     return {
       ...page,

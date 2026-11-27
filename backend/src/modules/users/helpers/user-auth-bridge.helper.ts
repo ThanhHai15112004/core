@@ -141,12 +141,11 @@ export async function buildUserAuthIdentityView(params: {
   const allRoleSummaries = [...roleSummaries, ...extraRoleSummaries];
   const activeRoles = allRoleSummaries.filter((r) => Number(r.status) === ROLE_STATUS.ACTIVE);
 
-  const roleCodes = [...new Set([...activeRoles.map((r) => r.code), ...(tempAccess?.roleCodes ?? [])])];
+  const roleCodes = [
+    ...new Set([...activeRoles.map((r) => r.code), ...(tempAccess?.roleCodes ?? [])]),
+  ];
   const permissions = [
-    ...new Set([
-      ...activeRoles.flatMap((r) => r.permissions),
-      ...(tempAccess?.permissions ?? []),
-    ]),
+    ...new Set([...activeRoles.flatMap((r) => r.permissions), ...(tempAccess?.permissions ?? [])]),
   ];
   const primaryOrgId =
     user.primaryOrganizationUnitId !== undefined && user.primaryOrganizationUnitId !== null

@@ -85,8 +85,7 @@ export function parseAndValidateSamlAssertion(params: {
   }
 
   const expectedIdpEntityId = config.idpEntityId?.trim() ?? '';
-  const responseIssuer =
-    getDirectChildren(responseNode, 'Issuer')[0]?.textContent?.trim() || null;
+  const responseIssuer = getDirectChildren(responseNode, 'Issuer')[0]?.textContent?.trim() || null;
   if (responseIssuer && expectedIdpEntityId && responseIssuer !== expectedIdpEntityId) {
     throw new FederatedStageError({
       i18nKey: 'federated-identity.samlInvalidIssuer',
@@ -108,8 +107,7 @@ export function parseAndValidateSamlAssertion(params: {
   }
   const assertionIdHash = sha256AssertionId(assertionId);
 
-  const assertionIssuer =
-    getDirectChildren(assertionNode, 'Issuer')[0]?.textContent?.trim() ?? '';
+  const assertionIssuer = getDirectChildren(assertionNode, 'Issuer')[0]?.textContent?.trim() ?? '';
   if (!assertionIssuer || (expectedIdpEntityId && assertionIssuer !== expectedIdpEntityId)) {
     throw new FederatedStageError({
       i18nKey: 'federated-identity.samlInvalidIssuer',
@@ -159,7 +157,11 @@ export function parseAndValidateSamlAssertion(params: {
     }
   }
 
-  if (responseInResponseTo && confirmationInResponseTo && responseInResponseTo !== confirmationInResponseTo) {
+  if (
+    responseInResponseTo &&
+    confirmationInResponseTo &&
+    responseInResponseTo !== confirmationInResponseTo
+  ) {
     throw new FederatedStageError({
       i18nKey: 'federated-identity.samlInResponseToMismatch',
       stage: FEDERATED_AUTH_STAGE.SAML_ASSERTION_VALIDATION,

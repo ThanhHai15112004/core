@@ -107,7 +107,11 @@ export function computeNextRunAt(expression: string, fromDate: Date = new Date()
  * - Nếu chưa từng chạy (`lastRunAt === null`), chỉ kích hoạt nếu phút hiện tại khớp cron hoặc đã tạo quá 1 chu kỳ.
  * - Nếu đã có `lastRunAt`, kiểm tra xem có ít nhất 1 tick cron nằm trong `(lastRunAt, now]` (tối đa quét lùi 48h).
  */
-export function isCronDue(expression: string, lastRunAt: Date | null, now: Date = new Date()): boolean {
+export function isCronDue(
+  expression: string,
+  lastRunAt: Date | null,
+  now: Date = new Date(),
+): boolean {
   const parsed = parseCronExpression(expression);
   if (!parsed) return false;
 

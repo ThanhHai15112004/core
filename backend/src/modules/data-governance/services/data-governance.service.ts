@@ -212,10 +212,7 @@ export class DataGovernanceService implements IDataGovernancePublicService {
     return this.dsarService.rejectErasureRequest(id, dto, actor);
   }
 
-  public downloadDsarExport(
-    token: string,
-    actor: UserIdentity,
-  ): Promise<DsarDownloadPayloadView> {
+  public downloadDsarExport(token: string, actor: UserIdentity): Promise<DsarDownloadPayloadView> {
     return this.dsarService.downloadPersonalDataExport(token, actor);
   }
 
@@ -232,9 +229,7 @@ export class DataGovernanceService implements IDataGovernancePublicService {
     return this.consentService.upsertDefinition(dto, actor);
   }
 
-  public listUserConsents(
-    query: ListUserConsentsQuery,
-  ): Promise<PaginatedResult<UserConsentView>> {
+  public listUserConsents(query: ListUserConsentsQuery): Promise<PaginatedResult<UserConsentView>> {
     return this.consentService.listUserConsents(query);
   }
 
@@ -265,10 +260,7 @@ export class DataGovernanceService implements IDataGovernancePublicService {
     return this.legalHoldService.checkLegalHold(query);
   }
 
-  public createLegalHold(
-    dto: CreateLegalHoldRequest,
-    actor: UserIdentity,
-  ): Promise<LegalHoldView> {
+  public createLegalHold(dto: CreateLegalHoldRequest, actor: UserIdentity): Promise<LegalHoldView> {
     return this.legalHoldService.createLegalHold(dto, actor);
   }
 
@@ -280,7 +272,9 @@ export class DataGovernanceService implements IDataGovernancePublicService {
     return this.legalHoldService.releaseLegalHold(id, dto, actor);
   }
 
-  public async runExpirationSweep(now: Date = new Date()): Promise<GovernanceExpirationSweepResult> {
+  public async runExpirationSweep(
+    now: Date = new Date(),
+  ): Promise<GovernanceExpirationSweepResult> {
     const [expiredHoldsCount, expiredConsentsCount, purgedExportTokensCount] = await Promise.all([
       this.legalHoldService.expireElapsedHolds(now),
       this.consentService.expireElapsedConsents(now),

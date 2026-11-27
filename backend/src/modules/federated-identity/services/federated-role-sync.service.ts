@@ -44,9 +44,7 @@ export class FederatedRoleSyncService {
     @Optional() private readonly auditLogService?: AuditLogService,
   ) {}
 
-  public async syncRolesForLogin(
-    input: SyncRolesForLoginInput,
-  ): Promise<FederatedRoleSyncSummary> {
+  public async syncRolesForLogin(input: SyncRolesForLoginInput): Promise<FederatedRoleSyncSummary> {
     const { userId, providerCode, isNewUser, groups, policy } = input;
 
     if (!policy.enabled) {

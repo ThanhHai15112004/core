@@ -100,7 +100,6 @@ backend-test:
     - cd ..
     - node scripts/ci/check-api-changes.mjs --report reports/openapi-report.json
     - cd backend
-    - npm run test:unit
     - npm run test:cov:module
   artifacts:
     when: always
@@ -178,8 +177,12 @@ backend-integration-api-test:
     OPS_DATABASE_MIGRATIONS_ENABLED: "true"
     REDIS_HOST: redis
     REDIS_PORT: "6379"
+    REDIS_PREFIX: "core_ci:"
+    STORAGE_DRIVER: local
     JWT_ACCESS_SECRET: ci_test_access_secret_key_at_least_32_characters_long
     JWT_REFRESH_SECRET: ci_test_refresh_secret_key_at_least_32_characters_long
+    JWT_ACCESS_EXPIRATION: "15m"
+    JWT_REFRESH_EXPIRATION: "7d"
   cache:
     key:
       files:
@@ -256,3 +259,4 @@ ci-report:
     paths:
       - reports/ci-summary.md
       - reports/ci-summary.json
+      - reports/ci-summary.xlsx

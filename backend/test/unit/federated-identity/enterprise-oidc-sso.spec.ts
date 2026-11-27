@@ -272,8 +272,7 @@ function createEnterpriseHarness() {
             issuer: 'https://sso.keycloak.local/realms/corp',
             authorization_endpoint:
               'https://sso.keycloak.local/realms/corp/protocol/openid-connect/auth',
-            token_endpoint:
-              'https://sso.keycloak.local/realms/corp/protocol/openid-connect/token',
+            token_endpoint: 'https://sso.keycloak.local/realms/corp/protocol/openid-connect/token',
             jwks_uri: 'https://sso.keycloak.local/realms/corp/protocol/openid-connect/certs',
             userinfo_endpoint:
               'https://sso.keycloak.local/realms/corp/protocol/openid-connect/userinfo',
@@ -319,7 +318,9 @@ function createEnterpriseHarness() {
             lastCapturedAuthorizeParams.get('nonce') ??
             '';
           const codeVerifier = params.get('code_verifier') ?? '';
-          const expectedChallenge = createHash('sha256').update(codeVerifier, 'ascii').digest('base64url');
+          const expectedChallenge = createHash('sha256')
+            .update(codeVerifier, 'ascii')
+            .digest('base64url');
           if (expectedChallenge !== lastCapturedAuthorizeParams.get('code_challenge')) {
             throw new Error('PKCE verifier mismatch');
           }
@@ -549,7 +550,9 @@ function createEnterpriseHarness() {
   } as unknown as FederatedAuthEventRepository;
 
   const usersPublicService = {
-    findAuthUserByIdentifier: async (identifier: string): Promise<UserAuthCredentialsView | null> => {
+    findAuthUserByIdentifier: async (
+      identifier: string,
+    ): Promise<UserAuthCredentialsView | null> => {
       const clean = identifier.trim().toLowerCase();
       const found = [...users.values()].find((u) => u.email === clean || u.username === clean);
       if (!found) return null;
@@ -697,11 +700,7 @@ function createEnterpriseHarness() {
     roleSyncService,
     featureFlagRegistry,
   );
-  const service = new FederatedIdentityService(
-    providersService,
-    flowService,
-    monitoringService,
-  );
+  const service = new FederatedIdentityService(providersService, flowService, monitoringService);
 
   const runLogin = async (providerCode: string) => {
     const authInit = await service.initiateLoginAuthorize(providerCode, {

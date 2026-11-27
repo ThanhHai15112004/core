@@ -78,12 +78,11 @@ export class OidcDiscoveryService {
 
     let doc: OidcDiscoveryDocument;
     try {
-      doc = await this.httpClient.forService(params.serviceName).get<OidcDiscoveryDocument>(
-        targetUrl,
-        {
+      doc = await this.httpClient
+        .forService(params.serviceName)
+        .get<OidcDiscoveryDocument>(targetUrl, {
           headers: { Accept: 'application/json' },
-        },
-      );
+        });
     } catch (err) {
       if (err instanceof FederatedStageError) throw err;
       const httpStatus = err instanceof HttpClientError ? err.status : null;

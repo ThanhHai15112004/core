@@ -48,7 +48,13 @@ describe('Compliance Helpers (Unit)', () => {
   });
 
   it('normalizes framework tags without duplicates and matches framework-agnostically', () => {
-    const tags = normalizeFrameworkTags([' ISO27001:A.8 ', 'soc2:CC6', 'iso27001:a.8', '', 'INTERNAL']);
+    const tags = normalizeFrameworkTags([
+      ' ISO27001:A.8 ',
+      'soc2:CC6',
+      'iso27001:a.8',
+      '',
+      'INTERNAL',
+    ]);
     expect(tags).toEqual(['ISO27001:A.8', 'soc2:CC6', 'INTERNAL']);
     expect(controlMatchesFrameworkTag(tags, 'iso27001')).toBe(true);
     expect(controlMatchesFrameworkTag(tags, 'SOC2:CC6')).toBe(true);

@@ -124,7 +124,7 @@ export const BackupsOverviewTab: React.FC<{ overview: BackupOverviewDto | undefi
   return (
     <div className="flex flex-col gap-4">
       <Panel title={t('backups.policies.title')}>
-        <DataTable columns={columns} data={overview?.policies ?? []} />
+        <DataTable columns={columns} data={overview?.policies ?? []} getRowId={(r) => String(r.id)} />
       </Panel>
 
       <Panel

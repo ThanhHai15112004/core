@@ -74,7 +74,8 @@ export class DrCommand implements ICliCommandProvider {
       {
         name: 'dr:reconcile',
         domain: 'System',
-        description: 'Đối soát dữ liệu DB & Object Storage giữa DC chính và DR sau khi chuyển hệ thống',
+        description:
+          'Đối soát dữ liệu DB & Object Storage giữa DC chính và DR sau khi chuyển hệ thống',
         usage: 'npm run cli -- dr:reconcile [--scope=FULL|DATABASE|STORAGE] [--switch-id=<id>]',
         execute: (args) => this.runReconcile(args),
       },
@@ -109,9 +110,7 @@ export class DrCommand implements ICliCommandProvider {
   private async runSync(args: string[]): Promise<void> {
     const rawScope = (readFlag(args, 'scope') ?? 'FULL').toUpperCase();
     const scope = (
-      Object.values(DR_SYNC_SCOPE).includes(rawScope as DrSyncScope)
-        ? rawScope
-        : DR_SYNC_SCOPE.FULL
+      Object.values(DR_SYNC_SCOPE).includes(rawScope as DrSyncScope) ? rawScope : DR_SYNC_SCOPE.FULL
     ) as DrSyncScope;
 
     const res = await this.assertService().runSync({
@@ -149,9 +148,7 @@ export class DrCommand implements ICliCommandProvider {
   private async runReconcile(args: string[]): Promise<void> {
     const rawScope = (readFlag(args, 'scope') ?? 'FULL').toUpperCase();
     const scope = (
-      Object.values(DR_SYNC_SCOPE).includes(rawScope as DrSyncScope)
-        ? rawScope
-        : DR_SYNC_SCOPE.FULL
+      Object.values(DR_SYNC_SCOPE).includes(rawScope as DrSyncScope) ? rawScope : DR_SYNC_SCOPE.FULL
     ) as DrSyncScope;
     const switchIdRaw = readFlag(args, 'switch-id');
     const switchExecutionId = switchIdRaw ? Number(switchIdRaw) : null;

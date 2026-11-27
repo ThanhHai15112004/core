@@ -44,7 +44,10 @@ export function installGracefulShutdown(options: GracefulShutdownOptions): () =>
 
     const startedAt = Date.now();
     const totalBudgetMs = Math.max(1000, gracefulTimeoutMs);
-    const effectiveDrainDelayMs = Math.max(0, Math.min(drainDelayMs, Math.max(0, totalBudgetMs - 500)));
+    const effectiveDrainDelayMs = Math.max(
+      0,
+      Math.min(drainDelayMs, Math.max(0, totalBudgetMs - 500)),
+    );
     let exited = false;
 
     const finish = (code: number) => {

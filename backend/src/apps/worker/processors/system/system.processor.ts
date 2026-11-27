@@ -261,11 +261,13 @@ export class SystemProcessor extends BaseQueueProcessor {
       if (!this.backupOpsService) {
         return { handled: false, skipped: true, reason: 'backup_ops_service_unavailable' };
       }
-      return (await this.backupOpsService.runScheduledVerifyDrill()) ?? {
-        handled: true,
-        skipped: true,
-        reason: 'no_backup_candidate_or_drill_disabled',
-      };
+      return (
+        (await this.backupOpsService.runScheduledVerifyDrill()) ?? {
+          handled: true,
+          skipped: true,
+          reason: 'no_backup_candidate_or_drill_disabled',
+        }
+      );
     }
 
     if (envelope.topic === BACKUP_QUEUE_TOPICS.RUN_JOB) {

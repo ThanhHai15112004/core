@@ -130,9 +130,7 @@ describe('Phase 13.1 — Stateless Chunked Upload (Multi-Instance & S3 Driver)',
     s3.on(PutObjectCommand).callsFake(async (input) => {
       const key = String(input.Key);
       const raw = input.Body;
-      const buf = Buffer.isBuffer(raw)
-        ? raw
-        : Buffer.from(raw as Uint8Array);
+      const buf = Buffer.isBuffer(raw) ? raw : Buffer.from(raw as Uint8Array);
       objects.set(key, buf);
       return { ETag: '"mock-etag"' };
     });

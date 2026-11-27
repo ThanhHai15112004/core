@@ -128,19 +128,29 @@ export class DatabaseOpsService {
     const status = this.connection.getStatus();
 
     const sinceToday = Math.max(1, (now - today) / MINUTE);
-    const [stats, todayStats, yesterdayStats, snapshot, events, alerts, runtimes, storage, errors, replication] =
-      await Promise.all([
-        this.metrics.stats(DB_RANGES[range]),
-        this.metrics.stats(sinceToday),
-        this.metrics.stats(24 * 60, sinceToday),
-        this.snapshot(),
-        this.eventsSince(now - DAY),
-        this.alerts(),
-        this.runtimeConnections(),
-        this.store.storageSnapshots().catch(() => [] as StorageSnapshot[]),
-        this.errorsSince(today - DAY),
-        this.getReplicationOverview(),
-      ]);
+    const [
+      stats,
+      todayStats,
+      yesterdayStats,
+      snapshot,
+      events,
+      alerts,
+      runtimes,
+      storage,
+      errors,
+      replication,
+    ] = await Promise.all([
+      this.metrics.stats(DB_RANGES[range]),
+      this.metrics.stats(sinceToday),
+      this.metrics.stats(24 * 60, sinceToday),
+      this.snapshot(),
+      this.eventsSince(now - DAY),
+      this.alerts(),
+      this.runtimeConnections(),
+      this.store.storageSnapshots().catch(() => [] as StorageSnapshot[]),
+      this.errorsSince(today - DAY),
+      this.getReplicationOverview(),
+    ]);
     const pool = this.pool(todayStats);
     const sessions = snapshot.sessions;
     const tx = snapshot.transactions.available ? snapshot.transactions.data : null;

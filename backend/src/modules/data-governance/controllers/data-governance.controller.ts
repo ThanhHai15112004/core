@@ -1,13 +1,4 @@
-import {
-  Controller,
-  Get,
-  HttpCode,
-  HttpStatus,
-  Post,
-  Put,
-  Req,
-  UseGuards,
-} from '@nestjs/common';
+import { Controller, Get, HttpCode, HttpStatus, Post, Put, Req, UseGuards } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 import {
   ApiDoc,
@@ -99,7 +90,9 @@ export class DataGovernanceController {
 
   @Get(DATA_GOVERNANCE_ROUTES.CLASSIFICATIONS)
   @RequirePermissions(DATA_GOVERNANCE_PERMISSIONS.READ)
-  @ApiDoc({ summary: 'Danh sách phân loại dữ liệu (Public, Internal, Confidential, Restricted) & Retention' })
+  @ApiDoc({
+    summary: 'Danh sách phân loại dữ liệu (Public, Internal, Confidential, Restricted) & Retention',
+  })
   public listClassifications(
     @ValidatedQuery(ListDataClassificationsQuerySchema) query: ListDataClassificationsQuery,
   ): Promise<PaginatedResult<DataClassificationView>> {
@@ -198,7 +191,9 @@ export class DataGovernanceController {
   }
 
   @Get(DATA_GOVERNANCE_ROUTES.DSAR)
-  @ApiDoc({ summary: 'Danh sách yêu cầu dữ liệu cá nhân DSAR (Quản trị xem toàn bộ, User xem của mình)' })
+  @ApiDoc({
+    summary: 'Danh sách yêu cầu dữ liệu cá nhân DSAR (Quản trị xem toàn bộ, User xem của mình)',
+  })
   public listDsarRequests(
     @ValidatedQuery(ListDsarRequestsQuerySchema) query: ListDsarRequestsQuery,
     @CurrentUser() actor: UserIdentity,
@@ -213,7 +208,10 @@ export class DataGovernanceController {
   }
 
   @Get(DATA_GOVERNANCE_ROUTES.DSAR_BY_ID)
-  @ApiDoc({ summary: 'Chi tiết một yêu cầu dữ liệu cá nhân (bao gồm dữ liệu tổng hợp hoặc ngoại lệ giữ lại)' })
+  @ApiDoc({
+    summary:
+      'Chi tiết một yêu cầu dữ liệu cá nhân (bao gồm dữ liệu tổng hợp hoặc ngoại lệ giữ lại)',
+  })
   public getDsarRequestById(
     @ValidatedParams(idParamSchema) params: { id: number },
     @CurrentUser() actor: UserIdentity,
@@ -223,7 +221,9 @@ export class DataGovernanceController {
 
   @Post(DATA_GOVERNANCE_ROUTES.DSAR)
   @HttpCode(HttpStatus.CREATED)
-  @ApiDoc({ summary: 'Tạo yêu cầu Xem (ACCESS), Xuất máy đọc (EXPORT) hoặc Xóa dữ liệu cá nhân (ERASURE)' })
+  @ApiDoc({
+    summary: 'Tạo yêu cầu Xem (ACCESS), Xuất máy đọc (EXPORT) hoặc Xóa dữ liệu cá nhân (ERASURE)',
+  })
   public createDsarRequest(
     @ValidatedBody(CreateDsarRequestSchema) body: CreateDsarRequest,
     @CurrentUser() actor: UserIdentity,
@@ -234,7 +234,9 @@ export class DataGovernanceController {
   @Post(DATA_GOVERNANCE_ROUTES.DSAR_APPROVE)
   @HttpCode(HttpStatus.OK)
   @RequirePermissions(DATA_GOVERNANCE_PERMISSIONS.DSAR_APPROVE)
-  @ApiDoc({ summary: 'Phê duyệt và thực thi yêu cầu xóa dữ liệu cá nhân (hỗ trợ khai báo ngoại lệ giữ lại)' })
+  @ApiDoc({
+    summary: 'Phê duyệt và thực thi yêu cầu xóa dữ liệu cá nhân (hỗ trợ khai báo ngoại lệ giữ lại)',
+  })
   public approveDsarRequest(
     @ValidatedParams(idParamSchema) params: { id: number },
     @ValidatedBody(ApproveDsarRequestSchema) body: ApproveDsarRequest,
@@ -333,7 +335,9 @@ export class DataGovernanceController {
 
   @Get(DATA_GOVERNANCE_ROUTES.LEGAL_HOLD_CHECK)
   @RequirePermissions(DATA_GOVERNANCE_PERMISSIONS.READ)
-  @ApiDoc({ summary: 'Kiểm tra một người dùng / loại dữ liệu / tài nguyên có đang bị Legal Hold không' })
+  @ApiDoc({
+    summary: 'Kiểm tra một người dùng / loại dữ liệu / tài nguyên có đang bị Legal Hold không',
+  })
   public checkLegalHold(
     @ValidatedQuery(CheckLegalHoldQuerySchema) query: CheckLegalHoldQuery,
   ): Promise<LegalHoldCheckDecision> {

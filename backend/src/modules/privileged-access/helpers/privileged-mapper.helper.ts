@@ -188,7 +188,8 @@ export function mapReviewItemEntityToView(
     targetType: entity.targetType,
     targetCode: entity.targetCode,
     roleId: entity.roleId !== null && entity.roleId !== undefined ? Number(entity.roleId) : null,
-    grantId: entity.grantId !== null && entity.grantId !== undefined ? Number(entity.grantId) : null,
+    grantId:
+      entity.grantId !== null && entity.grantId !== undefined ? Number(entity.grantId) : null,
     breakGlassId:
       entity.breakGlassId !== null && entity.breakGlassId !== undefined
         ? Number(entity.breakGlassId)

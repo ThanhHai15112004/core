@@ -27,10 +27,7 @@ import { ComplianceCheckHistoryRepository } from '../repositories/compliance-che
 import { ComplianceControlRepository } from '../repositories/compliance-control.repository.js';
 import { ComplianceEvidenceRepository } from '../repositories/compliance-evidence.repository.js';
 import { ComplianceVendorRepository } from '../repositories/compliance-vendor.repository.js';
-import type {
-  CreateEvidenceRequest,
-  ListEvidencesQuery,
-} from '../requests/compliance.requests.js';
+import type { CreateEvidenceRequest, ListEvidencesQuery } from '../requests/compliance.requests.js';
 import type { ComplianceEvidenceView } from '../types/compliance.types.js';
 
 @Injectable()

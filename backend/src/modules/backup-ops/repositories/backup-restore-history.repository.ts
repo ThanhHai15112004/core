@@ -4,11 +4,7 @@ import { BaseTypeOrmRepository, TransactionManager } from '@packages/database/in
 import { createPaginatedResult } from '@packages/http/index.js';
 import type { PaginatedResult } from '@packages/kernel/index.js';
 import { BackupRestoreHistoryEntity } from '../entities/backup-restore-history.entity.js';
-import type {
-  RestoreOperationType,
-  RestoreScope,
-  RestoreStatus,
-} from '../enum/backup-ops.enum.js';
+import type { RestoreOperationType, RestoreScope, RestoreStatus } from '../enum/backup-ops.enum.js';
 
 export interface ListRestoreHistoriesFilter {
   page?: number | undefined;

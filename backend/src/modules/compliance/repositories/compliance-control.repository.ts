@@ -19,9 +19,7 @@ export class ComplianceControlRepository extends BaseTypeOrmRepository<Complianc
     return this.repository.create(data);
   }
 
-  public async softDeleteEntity(
-    entity: ComplianceControlEntity,
-  ): Promise<ComplianceControlEntity> {
+  public async softDeleteEntity(entity: ComplianceControlEntity): Promise<ComplianceControlEntity> {
     return this.repository.softRemove(entity);
   }
 

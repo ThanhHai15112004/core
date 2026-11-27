@@ -82,7 +82,9 @@ export class IdentityProvisioningAdminController {
 
   @Put(IDENTITY_PROVISIONING_ADMIN_ROUTES.CLIENT_BY_ID)
   @RequirePermissions('identity-provisioning.manage')
-  @ApiDoc({ summary: 'Cập nhật cấu hình SCIM Client (IP allowlist, role mapping, deprovision mode)' })
+  @ApiDoc({
+    summary: 'Cập nhật cấu hình SCIM Client (IP allowlist, role mapping, deprovision mode)',
+  })
   public async updateClient(
     @ValidatedParams(clientIdParamSchema) params: { id: number },
     @ValidatedBody(UpdateScimClientRequestSchema) body: UpdateScimClientRequest,

@@ -85,8 +85,7 @@ export class ApiRuntimeContributor implements RuntimeContributor, OnModuleInit {
           req[IN_FLIGHT_TRACKED] = true;
           this.inFlightRequests += 1;
         }
-        const reply =
-          replyOrDone && typeof replyOrDone !== 'function' ? replyOrDone : undefined;
+        const reply = replyOrDone && typeof replyOrDone !== 'function' ? replyOrDone : undefined;
         if (this.agent.isDraining() || this.agent.isShuttingDown()) {
           reply?.header?.('connection', 'close');
         }

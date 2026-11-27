@@ -345,7 +345,10 @@ export class ComplianceReportService {
     };
   }
 
-  public downloadReportArtifact(token: string, now: Date = new Date()): ComplianceReportDownloadView {
+  public downloadReportArtifact(
+    token: string,
+    now: Date = new Date(),
+  ): ComplianceReportDownloadView {
     this.reportRegistry.purgeExpiredReportArtifacts(now);
     const downloaded = this.exportRegistry.formatTemporaryArtifactDownload(token, {
       now,

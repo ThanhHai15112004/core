@@ -72,7 +72,12 @@ export function encryptBackupPayload(
     iv = randomBytes(IV_LEN);
     const key = deriveKey(secretKey, salt);
     const cipher = createCipheriv('aes-256-gcm', key, iv);
-    const headerPrefix = Buffer.concat([MAGIC_HEADER, Buffer.from([FORMAT_VERSION, flags]), salt, iv]);
+    const headerPrefix = Buffer.concat([
+      MAGIC_HEADER,
+      Buffer.from([FORMAT_VERSION, flags]),
+      salt,
+      iv,
+    ]);
     cipher.setAAD(headerPrefix);
     body = Buffer.concat([cipher.update(compressedBuf), cipher.final()]);
     authTag = cipher.getAuthTag();

@@ -1,13 +1,4 @@
-import {
-  Controller,
-  Get,
-  HttpCode,
-  HttpStatus,
-  Post,
-  Req,
-  Res,
-  UseGuards,
-} from '@nestjs/common';
+import { Controller, Get, HttpCode, HttpStatus, Post, Req, Res, UseGuards } from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import {
   ApiDoc,
@@ -127,7 +118,9 @@ export class SamlSsoController {
   @Public()
   @Post(FEDERATED_IDENTITY_ROUTES.SAML_EXCHANGE)
   @HttpCode(HttpStatus.OK)
-  @ApiDoc({ summary: 'Đổi samlCode dùng một lần từ ACS redirect lấy phiên đăng nhập hoặc liên kết' })
+  @ApiDoc({
+    summary: 'Đổi samlCode dùng một lần từ ACS redirect lấy phiên đăng nhập hoặc liên kết',
+  })
   public async exchangeSamlCode(
     @ValidatedParams(providerCodeParamSchema) params: { providerCode: string },
     @ValidatedBody(SamlExchangeRequestSchema) body: SamlExchangeRequest,

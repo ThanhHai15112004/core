@@ -131,17 +131,15 @@ export class FederatedProvidersService implements OnModuleDestroy {
     return enabled
       .filter((item) => {
         if (item.driverCode === FEDERATED_DRIVER_CODE.SAML) {
-          return isSamlProviderConfigured(
-            parseSamlConfig(item.extraConfigJson, item.providerCode),
-          );
+          return isSamlProviderConfigured(parseSamlConfig(item.extraConfigJson, item.providerCode));
         }
         if (!item.clientSecretEncrypted?.trim()) return false;
         if (item.driverCode === FEDERATED_DRIVER_CODE.OIDC) {
           const hasIssuer = Boolean(item.issuerUrl?.trim());
           const hasManualEndpoints = Boolean(
             item.authorizationEndpoint?.trim() &&
-              item.tokenEndpoint?.trim() &&
-              item.jwksUri?.trim(),
+            item.tokenEndpoint?.trim() &&
+            item.jwksUri?.trim(),
           );
           return hasIssuer || hasManualEndpoints;
         }
@@ -262,7 +260,10 @@ export class FederatedProvidersService implements OnModuleDestroy {
           ? safeJsonParseStringArray(existing.allowedRedirectUrisJson)
           : [];
 
-    const existingExtra = parseFederatedExtraConfig(existing?.extraConfigJson, driverMeta.driverCode);
+    const existingExtra = parseFederatedExtraConfig(
+      existing?.extraConfigJson,
+      driverMeta.driverCode,
+    );
     const existingSaml =
       driverMeta.driverCode === FEDERATED_DRIVER_CODE.SAML
         ? parseSamlConfig(existing?.extraConfigJson, providerCode)

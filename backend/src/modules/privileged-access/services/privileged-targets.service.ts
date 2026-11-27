@@ -368,7 +368,9 @@ export class PrivilegedTargetsService {
     const bgByUserId = new Map(breakGlassList.map((bg) => [Number(bg.userId), bg]));
 
     const hydrated = await Promise.all(
-      userIds.map((uid) => this.usersService.getProvisionedUserById!(Number(uid)).catch(() => null)),
+      userIds.map((uid) =>
+        this.usersService.getProvisionedUserById!(Number(uid)).catch(() => null),
+      ),
     );
 
     const result: PrivilegedUserDirectoryItemView[] = [];

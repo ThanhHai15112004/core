@@ -4,11 +4,7 @@ import { BaseTypeOrmRepository, TransactionManager } from '@packages/database/in
 import { createPaginatedResult } from '@packages/http/index.js';
 import type { PaginatedResult } from '@packages/kernel/index.js';
 import { ComplianceVendorEntity } from '../entities/compliance-vendor.entity.js';
-import type {
-  ComplianceRiskLevel,
-  VendorCategory,
-  VendorStatus,
-} from '../enum/compliance.enum.js';
+import type { ComplianceRiskLevel, VendorCategory, VendorStatus } from '../enum/compliance.enum.js';
 
 @Injectable()
 export class ComplianceVendorRepository extends BaseTypeOrmRepository<ComplianceVendorEntity> {

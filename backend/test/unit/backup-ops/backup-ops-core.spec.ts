@@ -4,7 +4,11 @@ import type { DatabaseConnectionService } from '@packages/database/index.js';
 import { BACKUP_DOMAIN_EVENTS, DomainEventBusService } from '@packages/kernel/index.js';
 import type { RedisService } from '@packages/redis/index.js';
 import type { AuditLogService } from '@packages/security/index.js';
-import { BaseStorageProvider, S3StorageDriver, type StorageMonitoringService } from '@packages/storage/index.js';
+import {
+  BaseStorageProvider,
+  S3StorageDriver,
+  type StorageMonitoringService,
+} from '@packages/storage/index.js';
 import {
   BACKUP_RECORD_STATUS,
   BACKUP_TARGET_TYPE,
@@ -176,7 +180,11 @@ function createInMemoryRepos() {
       if (input.id) {
         const idx = policies.findIndex((p) => p.id === input.id);
         if (idx >= 0) {
-          policies[idx] = { ...policies[idx]!, ...input, updatedAt: new Date() } as BackupPolicyEntity;
+          policies[idx] = {
+            ...policies[idx]!,
+            ...input,
+            updatedAt: new Date(),
+          } as BackupPolicyEntity;
           return policies[idx]!;
         }
       }
@@ -198,7 +206,8 @@ function createInMemoryRepos() {
       const sorted = [...records]
         .filter(
           (r) =>
-            r.targetType === targetType && (!onlySuccess || r.status === BACKUP_RECORD_STATUS.SUCCESS),
+            r.targetType === targetType &&
+            (!onlySuccess || r.status === BACKUP_RECORD_STATUS.SUCCESS),
         )
         .sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime() || b.id - a.id);
       return sorted[0] ?? null;
@@ -226,13 +235,18 @@ function createInMemoryRepos() {
           r.verifyStatus === BACKUP_VERIFY_STATUS.PASSED ||
           r.verifyStatus === BACKUP_VERIFY_STATUS.FAILED,
       ).length,
-      drillPassedCount: records.filter((r) => r.verifyStatus === BACKUP_VERIFY_STATUS.PASSED).length,
+      drillPassedCount: records.filter((r) => r.verifyStatus === BACKUP_VERIFY_STATUS.PASSED)
+        .length,
     })),
     saveEntity: jest.fn(async (input: Partial<BackupRecordEntity>) => {
       if (input.id) {
         const idx = records.findIndex((r) => r.id === input.id);
         if (idx >= 0) {
-          records[idx] = { ...records[idx]!, ...input, updatedAt: new Date() } as BackupRecordEntity;
+          records[idx] = {
+            ...records[idx]!,
+            ...input,
+            updatedAt: new Date(),
+          } as BackupRecordEntity;
           return records[idx]!;
         }
       }
@@ -302,9 +316,9 @@ describe('13.6 Backup & Restore Unit Tests', () => {
     expect(decrypted.equals(plain)).toBe(true);
 
     // Reject short/empty encryption key
-    expect(() =>
-      encryptBackupPayload(plain, 'short', { encrypt: true, compress: true }),
-    ).toThrow(BackupEncryptionConfigException);
+    expect(() => encryptBackupPayload(plain, 'short', { encrypt: true, compress: true })).toThrow(
+      BackupEncryptionConfigException,
+    );
 
     // Reject wrong key
     expect(() =>
@@ -317,9 +331,9 @@ describe('13.6 Backup & Restore Unit Tests', () => {
     expect(() => decryptBackupPayload(tampered, TEST_KEY)).toThrow(BackupIntegrityException);
 
     // Reject artifact SHA-256 mismatch
-    expect(() =>
-      decryptBackupPayload(packed.artifact, TEST_KEY, '0'.repeat(64)),
-    ).toThrow(BackupIntegrityException);
+    expect(() => decryptBackupPayload(packed.artifact, TEST_KEY, '0'.repeat(64))).toThrow(
+      BackupIntegrityException,
+    );
   });
 
   it('evaluates 5-field cron schedule due state and computes next run time', () => {
@@ -489,13 +503,14 @@ describe('13.6 Backup & Restore Unit Tests', () => {
     // Latest DB record is never purged
     const remainingSuccessDb = repos.records.filter(
       (r) =>
-        r.targetType === BACKUP_TARGET_TYPE.DATABASE &&
-        r.status === BACKUP_RECORD_STATUS.SUCCESS,
+        r.targetType === BACKUP_TARGET_TYPE.DATABASE && r.status === BACKUP_RECORD_STATUS.SUCCESS,
     );
     expect(remainingSuccessDb.length).toBeGreaterThanOrEqual(1);
 
     // 4. Alerting on backup failure
-    jest.spyOn(dbEngine, 'dumpDatabase').mockRejectedValueOnce(new Error('mysqldump connection lost'));
+    jest
+      .spyOn(dbEngine, 'dumpDatabase')
+      .mockRejectedValueOnce(new Error('mysqldump connection lost'));
     await expect(
       orchestrator.runBackup({
         targetType: BACKUP_TARGET_TYPE.DATABASE,
@@ -580,12 +595,7 @@ describe('13.6 Backup & Restore Unit Tests', () => {
 
     // Runbook covers all 4 pillars: database, storage, secrets, config
     const runbook = buildBackupRunbook();
-    expect(runbook.sections.map((s) => s.id)).toEqual([
-      'database',
-      'storage',
-      'secrets',
-      'config',
-    ]);
+    expect(runbook.sections.map((s) => s.id)).toEqual(['database', 'storage', 'secrets', 'config']);
     expect(runbook.postRestoreChecklist.length).toBeGreaterThanOrEqual(4);
   });
 

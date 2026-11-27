@@ -184,7 +184,8 @@ const DEFAULT_CONSENT_DEFINITIONS: readonly DefaultConsentDefinitionSeed[] = [
     purposeCode: 'marketing_communications',
     policyVersion: '1.0',
     title: 'Nhận bản tin sản phẩm, ưu đãi và sự kiện',
-    description: 'Cho phép gửi email/thông báo giới thiệu tính năng mới và chương trình khuyến mãi.',
+    description:
+      'Cho phép gửi email/thông báo giới thiệu tính năng mới và chương trình khuyến mãi.',
     classificationLevel: 'INTERNAL',
     isMandatory: false,
     validityDays: 365,
@@ -193,7 +194,8 @@ const DEFAULT_CONSENT_DEFINITIONS: readonly DefaultConsentDefinitionSeed[] = [
     purposeCode: 'product_usage_analytics',
     policyVersion: '1.0',
     title: 'Phân tích trải nghiệm và tối ưu hóa hiệu năng',
-    description: 'Thu thập số liệu tương tác ẩn danh/bán định danh để cải thiện chất lượng giao diện.',
+    description:
+      'Thu thập số liệu tương tác ẩn danh/bán định danh để cải thiện chất lượng giao diện.',
     classificationLevel: 'INTERNAL',
     isMandatory: false,
     validityDays: 365,

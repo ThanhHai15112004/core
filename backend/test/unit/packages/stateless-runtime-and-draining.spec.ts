@@ -6,14 +6,8 @@ import {
   CacheInvalidationService,
   DistributedLockService,
 } from '@packages/cache/index.js';
-import {
-  CoreConfigService,
-  assertProductionStatelessConfig,
-} from '@packages/config/index.js';
-import {
-  DatabaseConnectionService,
-  DatabaseOperationsService,
-} from '@packages/database/index.js';
+import { CoreConfigService, assertProductionStatelessConfig } from '@packages/config/index.js';
+import { DatabaseConnectionService } from '@packages/database/index.js';
 import {
   FeatureFlagRegistryService,
   ProviderRegistryService,
@@ -22,7 +16,7 @@ import {
   TooManyRequestsAppException,
 } from '@packages/kernel/index.js';
 import { MessagingConnectionService } from '@packages/messaging/index.js';
-import { QueueMonitoringService, QueueRegistry } from '@packages/queue/index.js';
+import { QueueRegistry } from '@packages/queue/index.js';
 import { RedisService } from '@packages/redis/index.js';
 import {
   RuntimeAgentService,
@@ -150,7 +144,9 @@ describe('Phase 13.1 — Stateless Architecture, Graceful Shutdown & Connection 
         undefined,
         new SettingRegistryService(),
         undefined,
-        { getStatus: () => ({ state: 'connected', lastPingMs: 1 }) } as unknown as MessagingConnectionService,
+        {
+          getStatus: () => ({ state: 'connected', lastPingMs: 1 }),
+        } as unknown as MessagingConnectionService,
         undefined,
         agent,
         new ProviderRegistryService(),
@@ -230,7 +226,11 @@ describe('Phase 13.1 — Stateless Architecture, Graceful Shutdown & Connection 
         const req2: Record<string, unknown> = {};
         const headers2: Record<string, string> = {};
         for (const fn of hooks.get('onRequest') ?? []) {
-          fn(req2, { header: (k: string, v: string) => (headers2[k.toLowerCase()] = v) }, () => undefined);
+          fn(
+            req2,
+            { header: (k: string, v: string) => (headers2[k.toLowerCase()] = v) },
+            () => undefined,
+          );
         }
         expect(headers2['connection']).toBe('close');
         expect(contributor.getInFlightCount()).toBe(2);
@@ -339,9 +339,7 @@ describe('Phase 13.1 — Stateless Architecture, Graceful Shutdown & Connection 
       );
 
       // Khi replica-1 đang giữ lock, replica-2 bỏ qua sync để tránh chạy trùng
-      const fastSyncLockSpy = jest
-        .spyOn(sharedLock, 'acquire')
-        .mockResolvedValueOnce(null);
+      const fastSyncLockSpy = jest.spyOn(sharedLock, 'acquire').mockResolvedValueOnce(null);
       const synced = await syncService.sync();
       expect(synced).toBe(false);
       fastSyncLockSpy.mockRestore();
@@ -451,8 +449,28 @@ describe('Phase 13.1 — Stateless Architecture, Graceful Shutdown & Connection 
       const cache1 = new BaseCacheProvider(cfg1, redis);
       const cache2 = new BaseCacheProvider(cfg2, redis);
 
-      const settings1 = new SettingsService(null, null, null, null, reg1, null, null, cache1, pubSub1);
-      const settings2 = new SettingsService(null, null, null, null, reg2, null, null, cache2, pubSub2);
+      const settings1 = new SettingsService(
+        null,
+        null,
+        null,
+        null,
+        reg1,
+        null,
+        null,
+        cache1,
+        pubSub1,
+      );
+      const settings2 = new SettingsService(
+        null,
+        null,
+        null,
+        null,
+        reg2,
+        null,
+        null,
+        cache2,
+        pubSub2,
+      );
       const flags1 = new FeatureFlagsService(null, null, ffReg1, null, cache1, pubSub1);
       const flags2 = new FeatureFlagsService(null, null, ffReg2, null, cache2, pubSub2);
 

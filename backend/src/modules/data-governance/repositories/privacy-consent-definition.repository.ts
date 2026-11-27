@@ -14,9 +14,7 @@ export class PrivacyConsentDefinitionRepository extends BaseTypeOrmRepository<Pr
     super(PrivacyConsentDefinitionEntity, dataSource as DataSource, transactionManager);
   }
 
-  public create(
-    data: DeepPartial<PrivacyConsentDefinitionEntity>,
-  ): PrivacyConsentDefinitionEntity {
+  public create(data: DeepPartial<PrivacyConsentDefinitionEntity>): PrivacyConsentDefinitionEntity {
     return this.repository.create(data);
   }
 

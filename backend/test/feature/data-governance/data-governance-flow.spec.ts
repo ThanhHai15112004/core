@@ -31,7 +31,10 @@ import { LegalHoldService } from '../../../src/modules/data-governance/services/
 import { PersonalDataContributorsService } from '../../../src/modules/data-governance/services/personal-data-contributors.service.js';
 import type { IExportsPublicService } from '../../../src/modules/exports/contracts/index.js';
 import type { ISessionsPublicService } from '../../../src/modules/sessions/contracts/index.js';
-import { USER_STATUS, type IUsersPublicService } from '../../../src/modules/users/contracts/index.js';
+import {
+  USER_STATUS,
+  type IUsersPublicService,
+} from '../../../src/modules/users/contracts/index.js';
 
 function createGovernanceTestHarness() {
   let nextId = 1;
@@ -129,7 +132,12 @@ function createGovernanceTestHarness() {
 
   const sensitiveFieldRepo = {
     create: (d: Partial<DataSensitiveFieldEntity>) =>
-      ({ id: nextId++, createdAt: new Date(), updatedAt: new Date(), ...d }) as DataSensitiveFieldEntity,
+      ({
+        id: nextId++,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        ...d,
+      }) as DataSensitiveFieldEntity,
     saveEntity: async (e: DataSensitiveFieldEntity) => {
       const idx = sensitiveFields.findIndex((x) => x.id === e.id);
       if (idx >= 0) sensitiveFields[idx] = e;
@@ -147,7 +155,12 @@ function createGovernanceTestHarness() {
 
   const dsarRepo = {
     create: (d: Partial<PrivacyDsarRequestEntity>) =>
-      ({ id: nextId++, createdAt: new Date(), updatedAt: new Date(), ...d }) as PrivacyDsarRequestEntity,
+      ({
+        id: nextId++,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        ...d,
+      }) as PrivacyDsarRequestEntity,
     saveEntity: async (e: PrivacyDsarRequestEntity) => {
       e.updatedAt = new Date();
       const idx = dsarRequests.findIndex((x) => x.id === e.id);
@@ -204,7 +217,12 @@ function createGovernanceTestHarness() {
 
   const userConsentRepo = {
     create: (d: Partial<PrivacyUserConsentEntity>) =>
-      ({ id: nextId++, createdAt: new Date(), updatedAt: new Date(), ...d }) as PrivacyUserConsentEntity,
+      ({
+        id: nextId++,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        ...d,
+      }) as PrivacyUserConsentEntity,
     saveEntity: async (e: PrivacyUserConsentEntity) => {
       e.updatedAt = new Date();
       const idx = userConsents.findIndex((x) => x.id === e.id);
@@ -223,9 +241,7 @@ function createGovernanceTestHarness() {
     findExpiredGrantedConsents: async (now: Date) =>
       userConsents.filter(
         (x) =>
-          x.consentStatus === CONSENT_STATUS.GRANTED &&
-          x.expiresAt !== null &&
-          x.expiresAt <= now,
+          x.consentStatus === CONSENT_STATUS.GRANTED && x.expiresAt !== null && x.expiresAt <= now,
       ),
     findWithdrawnBeforeCutoff: async (cutoff: Date) =>
       userConsents.filter(
@@ -258,9 +274,7 @@ function createGovernanceTestHarness() {
     findExpiredActiveHolds: async (now: Date) =>
       legalHolds.filter(
         (x) =>
-          x.holdStatus === LEGAL_HOLD_STATUS.ACTIVE &&
-          x.expiresAt !== null &&
-          x.expiresAt <= now,
+          x.holdStatus === LEGAL_HOLD_STATUS.ACTIVE && x.expiresAt !== null && x.expiresAt <= now,
       ),
     paginateFiltered: async (f: { page?: number; limit?: number }) =>
       createPaginatedResult(legalHolds, legalHolds.length, f.page ?? 1, f.limit ?? 25),
@@ -742,9 +756,9 @@ describe('Data Privacy & Governance End-to-End Flow Tests (Section 14.5)', () =>
     expect(harness.usersState.get(42)?.anonymized).toBe(true);
     expect(harness.usersState.get(42)?.email).toContain('@anonymized.local');
     expect(harness.getActiveSessionsFor42()).toBe(0);
-    expect(
-      completedErasure.retainedExceptions.some((e) => e.dataTypeCode === 'audit.logs'),
-    ).toBe(true);
+    expect(completedErasure.retainedExceptions.some((e) => e.dataTypeCode === 'audit.logs')).toBe(
+      true,
+    );
     expect(
       completedErasure.retainedExceptions.some((e) => e.dataTypeCode === 'exports.artifacts'),
     ).toBe(true);

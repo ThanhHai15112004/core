@@ -88,14 +88,12 @@ export class BackupOrchestratorService implements IBackupOpsPublicService {
       this.recordRepo.getStatsSnapshot(),
       this.recordRepo.findLatestByTarget(BACKUP_TARGET_TYPE.DATABASE),
       this.recordRepo.findLatestByTarget(BACKUP_TARGET_TYPE.STORAGE),
-      this.storageBackup.getVersioningStatus().catch(
-        (): StorageVersioningStatusView => ({
-          driver: this.storage.driverName,
-          supported: false,
-          status: 'unsupported',
-          bucket: null,
-        }),
-      ),
+      this.storageBackup.getVersioningStatus().catch((): StorageVersioningStatusView => ({
+        driver: this.storage.driverName,
+        supported: false,
+        status: 'unsupported',
+        bucket: null,
+      })),
     ]);
 
     const nowMs = Date.now();
@@ -173,14 +171,21 @@ export class BackupOrchestratorService implements IBackupOpsPublicService {
         action: BACKUP_AUDIT_ACTIONS.POLICY_CREATED,
         resourceType: 'BACKUP_POLICY',
         resourceId: entity.code,
-        afterData: { code: entity.code, targetType: entity.targetType, scheduleCron: entity.scheduleCron },
+        afterData: {
+          code: entity.code,
+          targetType: entity.targetType,
+          scheduleCron: entity.scheduleCron,
+        },
       })
       .catch(() => undefined);
 
     return BackupOpsResponseMapper.toPolicyView(entity);
   }
 
-  public async updatePolicy(id: number, input: UpdateBackupPolicyRequest): Promise<BackupPolicyView> {
+  public async updatePolicy(
+    id: number,
+    input: UpdateBackupPolicyRequest,
+  ): Promise<BackupPolicyView> {
     const entity = await this.policyRepo.findByIdSafe(id);
     if (!entity) {
       throw new BackupPolicyNotFoundException(id);
@@ -194,12 +199,14 @@ export class BackupOrchestratorService implements IBackupOpsPublicService {
     if (input.timezone !== undefined) entity.timezone = input.timezone;
     if (input.isEnabled !== undefined) entity.isEnabled = input.isEnabled;
     if (input.encryptionEnabled !== undefined) entity.encryptionEnabled = input.encryptionEnabled;
-    if (input.compressionEnabled !== undefined) entity.compressionEnabled = input.compressionEnabled;
+    if (input.compressionEnabled !== undefined)
+      entity.compressionEnabled = input.compressionEnabled;
     if (input.retentionDays !== undefined) entity.retentionDays = input.retentionDays;
     if (input.maxKeepCount !== undefined) entity.maxKeepCount = input.maxKeepCount;
     if (input.autoVerifyDrill !== undefined) entity.autoVerifyDrill = input.autoVerifyDrill;
     if (input.alertOnFailure !== undefined) entity.alertOnFailure = input.alertOnFailure;
-    if (input.staleThresholdHours !== undefined) entity.staleThresholdHours = input.staleThresholdHours;
+    if (input.staleThresholdHours !== undefined)
+      entity.staleThresholdHours = input.staleThresholdHours;
     if (input.storagePrefix !== undefined) entity.storagePrefix = input.storagePrefix;
 
     const saved = await this.policyRepo.saveEntity(entity);
@@ -210,7 +217,11 @@ export class BackupOrchestratorService implements IBackupOpsPublicService {
         action: BACKUP_AUDIT_ACTIONS.POLICY_UPDATED,
         resourceType: 'BACKUP_POLICY',
         resourceId: saved.code,
-        afterData: { scheduleCron: saved.scheduleCron, isEnabled: saved.isEnabled, retentionDays: saved.retentionDays },
+        afterData: {
+          scheduleCron: saved.scheduleCron,
+          isEnabled: saved.isEnabled,
+          retentionDays: saved.retentionDays,
+        },
       })
       .catch(() => undefined);
 
@@ -692,7 +703,9 @@ export class BackupOrchestratorService implements IBackupOpsPublicService {
     return this.drillService.runScheduledVerifyDrill();
   }
 
-  public executeOrRecordRestore(input: Parameters<BackupRestoreDrillService['executeOrRecordRestore']>[0]) {
+  public executeOrRecordRestore(
+    input: Parameters<BackupRestoreDrillService['executeOrRecordRestore']>[0],
+  ) {
     return this.drillService.executeOrRecordRestore(input);
   }
 

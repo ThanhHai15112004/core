@@ -26,11 +26,7 @@ new CoreI18nService().registerNamespace('backupOps', {
 @Module({
   imports: [
     DatabaseModule,
-    TypeOrmModule.forFeature([
-      BackupPolicyEntity,
-      BackupRecordEntity,
-      BackupRestoreHistoryEntity,
-    ]),
+    TypeOrmModule.forFeature([BackupPolicyEntity, BackupRecordEntity, BackupRestoreHistoryEntity]),
   ],
   controllers: [BackupOpsController],
   providers: [

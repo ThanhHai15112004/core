@@ -1,10 +1,6 @@
 import { Column, Entity, Index } from 'typeorm';
 import { VersionedTypeOrmEntity } from '@packages/database/index.js';
-import type {
-  RestoreOperationType,
-  RestoreScope,
-  RestoreStatus,
-} from '../enum/backup-ops.enum.js';
+import type { RestoreOperationType, RestoreScope, RestoreStatus } from '../enum/backup-ops.enum.js';
 import { backupNullableBigintTransformer } from '../helpers/backup-bigint.helper.js';
 
 @Entity({ name: 'backup_restore_histories' })

@@ -111,7 +111,10 @@ export class DatabaseConnectionService implements OnApplicationBootstrap, OnAppl
 
   /** Kiểm tra hệ thống có cấu hình Read Replica hay không. */
   public hasReadReplica(): boolean {
-    if ((this.config.database.readReplicas?.length ?? 0) > 0 || Boolean(this.config.database.readHost)) {
+    if (
+      (this.config.database.readReplicas?.length ?? 0) > 0 ||
+      Boolean(this.config.database.readHost)
+    ) {
       return true;
     }
     const opts = this.dataSource?.options as { replication?: { slaves?: unknown[] } } | undefined;

@@ -235,7 +235,11 @@ export class DatabaseRoutingService implements OnModuleInit {
       }
 
       const cfg = this.getConfigSummary();
-      if (cfg.fallbackOnCriticalLag && this.lagMs !== null && this.lagMs >= cfg.replicationLagCritMs) {
+      if (
+        cfg.fallbackOnCriticalLag &&
+        this.lagMs !== null &&
+        this.lagMs >= cfg.replicationLagCritMs
+      ) {
         return { target: 'PRIMARY', reason: 'replication_lag_critical' };
       }
     }

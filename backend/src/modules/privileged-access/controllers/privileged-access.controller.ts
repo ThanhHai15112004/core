@@ -259,7 +259,9 @@ export class PrivilegedAccessController {
   @Post(PRIVILEGED_ACCESS_ROUTES.BREAK_GLASS_SEAL)
   @HttpCode(HttpStatus.OK)
   @RequirePermissions('privileged-access.break_glass.manage')
-  @ApiDoc({ summary: 'Niêm phong lại tài khoản Break-glass, khóa user & thu hồi phiên (MFA Step-Up)' })
+  @ApiDoc({
+    summary: 'Niêm phong lại tài khoản Break-glass, khóa user & thu hồi phiên (MFA Step-Up)',
+  })
   public async sealBreakGlass(
     @ValidatedParams(idParamSchema) params: { id: number },
     @ValidatedBody(SealBreakGlassRequestSchema) body: SealBreakGlassRequest,

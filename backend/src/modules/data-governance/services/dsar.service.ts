@@ -105,7 +105,9 @@ export class DsarService {
     );
   }
 
-  private async collectPersonalDataSnapshot(subjectUserId: number): Promise<DsarPersonalDataSnapshot> {
+  private async collectPersonalDataSnapshot(
+    subjectUserId: number,
+  ): Promise<DsarPersonalDataSnapshot> {
     const contributors = this.hookRegistry.listPersonalDataContributors();
     const policies = await this.classificationRepo.findAllEnabled();
     const levelByType = new Map(policies.map((p) => [p.dataTypeCode, p.classificationLevel]));
@@ -236,7 +238,11 @@ export class DsarService {
           aggregateType: 'privacy_dsar_request',
           aggregateId: String(saved.id),
           actorId: actor.id,
-          payload: { requestCode: saved.requestCode, requestType: saved.requestType, subjectUserId },
+          payload: {
+            requestCode: saved.requestCode,
+            requestType: saved.requestType,
+            subjectUserId,
+          },
         }),
       );
       return mapDsarRequestToView(saved);
@@ -451,9 +457,7 @@ export class DsarService {
       entity.status = DSAR_STATUS.BLOCKED_LEGAL_HOLD;
       entity.decisionComment = `Blocked by active Legal Hold: ${holdDecision.holds.map((h) => h.holdCode).join(', ')}`;
       await this.dsarRepo.saveEntity(entity);
-      throw new ConflictAppException('data-governance.blockedByLegalHold', [
-        ...holdDecision.holds,
-      ]);
+      throw new ConflictAppException('data-governance.blockedByLegalHold', [...holdDecision.holds]);
     }
 
     const policies = await this.classificationRepo.findAllEnabled();
@@ -568,14 +572,13 @@ export class DsarService {
 
     entity.approvedBy = autoApproved ? null : actor.id;
     entity.approvedAt = now;
-    entity.decisionComment = dto.comment?.trim() || (autoApproved ? 'Auto-approved by policy' : null);
+    entity.decisionComment =
+      dto.comment?.trim() || (autoApproved ? 'Auto-approved by policy' : null);
     entity.exceptionsJson = JSON.stringify(retainedExceptions);
     entity.summaryJson = JSON.stringify(report);
     entity.completedAt = now;
     entity.status =
-      retainedExceptions.length > 0
-        ? DSAR_STATUS.PARTIALLY_COMPLETED
-        : DSAR_STATUS.COMPLETED;
+      retainedExceptions.length > 0 ? DSAR_STATUS.PARTIALLY_COMPLETED : DSAR_STATUS.COMPLETED;
 
     const saved = await this.dsarRepo.saveEntity(entity);
     await this.auditLogService?.record({

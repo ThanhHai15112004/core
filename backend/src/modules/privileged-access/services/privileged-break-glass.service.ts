@@ -21,22 +21,13 @@ import {
   type PrivilegedBreakGlassLoginCheckResult,
   type UserIdentity,
 } from '@packages/security/index.js';
-import {
-  type IRolesPublicService,
-  ROLES_PUBLIC_SERVICE,
-} from '@modules/roles/contracts/index.js';
+import { type IRolesPublicService, ROLES_PUBLIC_SERVICE } from '@modules/roles/contracts/index.js';
 import {
   SESSIONS_PUBLIC_SERVICE,
   type ISessionsPublicService,
 } from '@modules/sessions/contracts/index.js';
-import {
-  type IUsersPublicService,
-  USERS_PUBLIC_SERVICE,
-} from '@modules/users/contracts/index.js';
-import {
-  BREAK_GLASS_STATUS,
-  PRIVILEGED_ALERT_EVENT_TYPE,
-} from '../enum/privileged-access.enum.js';
+import { type IUsersPublicService, USERS_PUBLIC_SERVICE } from '@modules/users/contracts/index.js';
+import { BREAK_GLASS_STATUS, PRIVILEGED_ALERT_EVENT_TYPE } from '../enum/privileged-access.enum.js';
 import { resolvePrivilegedAccessRuntimeConfig } from '../helpers/privileged-config.helper.js';
 import {
   type BasicUserSummaryLike,
@@ -99,16 +90,17 @@ export class PrivilegedBreakGlassService implements IPrivilegedLoginPolicyHook {
     return map;
   }
 
-  private async ensureUserHasRole(userId: number, roleCode: string, actorId?: number): Promise<void> {
+  private async ensureUserHasRole(
+    userId: number,
+    roleCode: string,
+    actorId?: number,
+  ): Promise<void> {
     const roles = await this.rolesService.findByCodes([roleCode]);
     const targetRole = roles[0];
     if (!targetRole) {
       throw new NotFoundAppException('privileged-access.roleNotFound', { code: roleCode });
     }
-    if (
-      !this.rolesService.findUserRoleLinksByUserIds ||
-      !this.rolesService.replaceUserRoles
-    ) {
+    if (!this.rolesService.findUserRoleLinksByUserIds || !this.rolesService.replaceUserRoles) {
       return;
     }
     const existingLinks = await this.rolesService.findUserRoleLinksByUserIds([userId]);
@@ -334,11 +326,10 @@ export class PrivilegedBreakGlassService implements IPrivilegedLoginPolicyHook {
 
     const maxAllowed = Math.min(Number(account.maxActivationMinutes), cfg.breakGlassMaxMinutes);
     if (dto.durationMinutes > maxAllowed) {
-      throw new BadRequestAppException(
-        'privileged-access.breakGlassDurationExceedsLimit',
-        [],
-        { requestedMinutes: dto.durationMinutes, maxMinutes: maxAllowed },
-      );
+      throw new BadRequestAppException('privileged-access.breakGlassDurationExceedsLimit', [], {
+        requestedMinutes: dto.durationMinutes,
+        maxMinutes: maxAllowed,
+      });
     }
 
     const now = new Date();
@@ -510,7 +501,11 @@ export class PrivilegedBreakGlassService implements IPrivilegedLoginPolicyHook {
         title: `[PAM] Tài khoản Break-glass ${saved.code} đã được niêm phong lại`,
         content: `Tài khoản Break-glass ${saved.code} (user #${saved.userId}) đã khóa lại và thu hồi toàn bộ phiên. Lý do: ${reason}`,
         extraRecipients: recipients,
-        details: { breakGlassId: saved.id, code: saved.code, autoSealed: Boolean(options?.autoSealed) },
+        details: {
+          breakGlassId: saved.id,
+          code: saved.code,
+          autoSealed: Boolean(options?.autoSealed),
+        },
         bypassCooldown: true,
       })
       .catch(() => undefined);
@@ -561,9 +556,7 @@ export class PrivilegedBreakGlassService implements IPrivilegedLoginPolicyHook {
   }
 
   /** Hook AuthService: chặn đăng nhập nếu tài khoản Break-glass đang bị niêm phong hoặc hết hạn */
-  public async assertCanLogin(
-    userId: number,
-  ): Promise<PrivilegedBreakGlassLoginCheckResult> {
+  public async assertCanLogin(userId: number): Promise<PrivilegedBreakGlassLoginCheckResult> {
     const bg = await this.breakGlassRepository.findByUserId(userId);
     if (!bg) {
       return { isBreakGlass: false, requireMfa: false, breakGlassId: null, code: null };

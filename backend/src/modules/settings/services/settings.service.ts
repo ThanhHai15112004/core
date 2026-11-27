@@ -1,4 +1,10 @@
-import { Inject, Injectable, type OnModuleDestroy, type OnModuleInit, Optional } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  type OnModuleDestroy,
+  type OnModuleInit,
+  Optional,
+} from '@nestjs/common';
 import { BaseCacheProvider, CacheInvalidationService } from '@packages/cache/index.js';
 import {
   ConflictAppException,

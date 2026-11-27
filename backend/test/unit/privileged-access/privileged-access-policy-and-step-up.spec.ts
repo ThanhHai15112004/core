@@ -203,9 +203,7 @@ describe('Privileged Access Policy & MFA Step-Up Unit Tests (14.4)', () => {
 
     // Wait briefly for fire-and-forget alert promise
     await new Promise((r) => setTimeout(r, 20));
-    expect(
-      savedAlerts.some((a) => a['eventType'] === 'PRIVILEGED_ACTION_USED'),
-    ).toBe(true);
+    expect(savedAlerts.some((a) => a['eventType'] === 'PRIVILEGED_ACTION_USED')).toBe(true);
     const firstAlertCount = savedAlerts.length;
 
     // 4. Second immediate identical call is deduplicated by cooldown

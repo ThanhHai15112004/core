@@ -35,14 +35,8 @@ function resolveTopologyMode(raw: string): DrTopologyMode {
 
 /** Cấu hình Disaster Recovery (Mục 13.7 — Opt-in theo dự án). */
 export const drConfig = () => {
-  const rpoTargetSeconds = Math.min(
-    604_800,
-    Math.max(1, numberOr('DR_RPO_TARGET_SECONDS', 900)),
-  );
-  const rtoTargetSeconds = Math.min(
-    604_800,
-    Math.max(1, numberOr('DR_RTO_TARGET_SECONDS', 1800)),
-  );
+  const rpoTargetSeconds = Math.min(604_800, Math.max(1, numberOr('DR_RPO_TARGET_SECONDS', 900)));
+  const rtoTargetSeconds = Math.min(604_800, Math.max(1, numberOr('DR_RTO_TARGET_SECONDS', 1800)));
   const drillIntervalDays = Math.min(365, Math.max(1, numberOr('DR_DRILL_INTERVAL_DAYS', 30)));
   const rawDriver = (env('DR_STORAGE_DRIVER', false) || 'local').trim().toLowerCase();
 

@@ -55,7 +55,12 @@ export class ComplianceVendorEntity extends VersionedTypeOrmEntity {
   @Column({ name: 'auto_renew', type: 'boolean', default: false })
   public autoRenew!: boolean;
 
-  @Column({ name: 'review_frequency', type: 'varchar', length: 24, default: CONTROL_FREQUENCY.SEMI_ANNUAL })
+  @Column({
+    name: 'review_frequency',
+    type: 'varchar',
+    length: 24,
+    default: CONTROL_FREQUENCY.SEMI_ANNUAL,
+  })
   public reviewFrequency!: ControlFrequency;
 
   @Column({ name: 'last_reviewed_at', type: 'timestamp', nullable: true })

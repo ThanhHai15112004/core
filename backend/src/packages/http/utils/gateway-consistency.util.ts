@@ -1,8 +1,5 @@
 import type { GatewayConfig } from '@packages/config/index.js';
-import {
-  buildServiceRoutingTable,
-  validateServiceRoutingTable,
-} from './service-routing.util.js';
+import { buildServiceRoutingTable, validateServiceRoutingTable } from './service-routing.util.js';
 
 export type ConsistencyCheckStatus = 'pass' | 'warn' | 'fail';
 
@@ -117,14 +114,16 @@ export function evaluateGatewayConsistency(
     checks.push({
       id: 'trusted_proxy_safety',
       status: 'fail',
-      message: 'PROXY_TRUSTED_CIDRS contains wildcard (0.0.0.0/0, ::/0 or *) — allows X-Forwarded-For spoofing',
+      message:
+        'PROXY_TRUSTED_CIDRS contains wildcard (0.0.0.0/0, ::/0 or *) — allows X-Forwarded-For spoofing',
       details: { trustMode: proxy.trustMode, trustedCidrs: proxy.trustedCidrs },
     });
   } else if (env === 'production' && proxy.trustMode === 'off') {
     checks.push({
       id: 'trusted_proxy_safety',
       status: 'warn',
-      message: 'PROXY_TRUST_MODE=off in production — real client IP from LB/Gateway headers will be ignored',
+      message:
+        'PROXY_TRUST_MODE=off in production — real client IP from LB/Gateway headers will be ignored',
       details: { trustMode: proxy.trustMode },
     });
   } else {

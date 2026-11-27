@@ -8,7 +8,8 @@ export function buildDrRunbook(): DrRunbookView {
     topologyModes: [
       {
         mode: 'BACKUP_RESTORE',
-        summary: 'Lưu backup mã hóa (13.6) sang vùng DR; dựng lại khi có thảm họa. Chi phí thấp nhất.',
+        summary:
+          'Lưu backup mã hóa (13.6) sang vùng DR; dựng lại khi có thảm họa. Chi phí thấp nhất.',
         typicalRpo: '1 – 24 giờ',
         typicalRto: '2 – 8 giờ',
       },
@@ -20,7 +21,8 @@ export function buildDrRunbook(): DrRunbookView {
       },
       {
         mode: 'WARM_STANDBY',
-        summary: 'DC chính phục vụ traffic; site DR luôn đồng bộ DB/Storage và chạy sẵn bản thu gọn.',
+        summary:
+          'DC chính phục vụ traffic; site DR luôn đồng bộ DB/Storage và chạy sẵn bản thu gọn.',
         typicalRpo: '1 – 15 phút',
         typicalRto: '10 – 30 phút',
       },
@@ -47,8 +49,7 @@ export function buildDrRunbook(): DrRunbookView {
       {
         id: 'replication',
         title: '2. Đồng bộ Database & Storage sang DR',
-        summary:
-          'Đảm bảo dữ liệu Database và Object Storage tại DR luôn bám sát RPO đã chốt.',
+        summary: 'Đảm bảo dữ liệu Database và Object Storage tại DR luôn bám sát RPO đã chốt.',
         steps: [
           'Database: theo dõi Replication Lag tới Replica/Standby DR hoặc tuổi bản sao lưu đã verify gần nhất.',
           'Object Storage: đồng bộ delta các object từ Storage chính sang kho dự phòng DR và kiểm tra kích thước/checksum.',
