@@ -153,16 +153,18 @@ jobs:
         run: npm ci
 
       - name: Check Formatting (Prettier)
-        working-directory: backend
-        run: npm run format:check
+        run: node scripts/ci/collect-ci-findings.mjs --capture prettier --cwd backend --out reports/prettier-report.json -- npx prettier --list-different "src/**/*.ts" "test/**/*.ts"
 
       - name: Check Code Quality (ESLint)
         working-directory: backend
-        run: npm run lint:check
+        run: |
+          mkdir -p ../reports
+          npx eslint "{src,test}/**/*.ts" -f json -o ../reports/eslint-report.json || ESLINT_RC=$?
+          npx eslint "{src,test}/**/*.ts"
+          exit "${ESLINT_RC:-0}"
 
       - name: TypeScript Type Check
-        working-directory: backend
-        run: npm run typecheck
+        run: node scripts/ci/collect-ci-findings.mjs --capture tsc-be --cwd backend --out reports/typecheck-be-report.json -- npx tsc --noEmit -p tsconfig.json
 
       - name: Build Backend (ESM + tsc-alias)
         working-directory: backend
@@ -209,7 +211,10 @@ jobs:
 
       - name: Run Unit, Integration (Mock) & Feature/API Tests with Module Coverage
         working-directory: backend
-        run: npm run test:cov:module
+        run: |
+          mkdir -p ../reports
+          NODE_OPTIONS="--experimental-vm-modules --max-old-space-size=4096" npx jest --coverage --testPathIgnorePatterns="live-db-redis-api\.integration-spec\.ts" --maxWorkers=2 --workerIdleMemoryLimit=512MB --forceExit --json --outputFile=../reports/jest-results.json
+          node scripts/report-module-coverage.mjs
 
       - name: Upload Backend Quality Reports & Coverage
         if: always()
@@ -217,8 +222,12 @@ jobs:
         with:
           name: ci-report-backend
           path: |
+            reports/prettier-report.json
+            reports/eslint-report.json
+            reports/typecheck-be-report.json
             reports/arch-report.json
             reports/openapi-report.json
+            reports/jest-results.json
             backend/coverage/module-coverage-summary.json
             backend/coverage/module-coverage-report.md
           if-no-files-found: ignore
@@ -247,20 +256,34 @@ jobs:
         run: npm ci
 
       - name: Run Oxlint & Hardcode Gate (Theme / i18n)
-        working-directory: frontend
-        run: npm run lint
+        run: |
+          node scripts/ci/collect-ci-findings.mjs --capture fe-oxlint --cwd frontend --out reports/fe-oxlint-report.json -- npx oxlint --format json
+          node scripts/ci/collect-ci-findings.mjs --capture fe-hardcode --cwd frontend --out reports/fe-hardcode-report.json -- node scripts/check-hardcode.mjs
 
       - name: TypeScript Type Check
-        working-directory: frontend
-        run: npm run typecheck
+        run: node scripts/ci/collect-ci-findings.mjs --capture tsc-fe --cwd frontend --out reports/typecheck-fe-report.json -- npx tsc -b --noEmit
 
       - name: Run Vitest Suite
         working-directory: frontend
-        run: npm run test
+        run: |
+          mkdir -p ../reports
+          npx vitest run --reporter=default --reporter=json --outputFile=../reports/vitest-results.json
 
       - name: Build Production Bundle (tsc -b + vite build)
         working-directory: frontend
         run: npm run build
+
+      - name: Upload Frontend Quality Reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-report-frontend
+          path: |
+            reports/fe-oxlint-report.json
+            reports/fe-hardcode-report.json
+            reports/typecheck-fe-report.json
+            reports/vitest-results.json
+          if-no-files-found: ignore
 
   # ============================================================================
   # Stage 2c: Backend Integration & API Tests with Real PostgreSQL + Redis
@@ -350,7 +373,17 @@ jobs:
         env:
           NODE_ENV: test
           OPS_DATABASE_MIGRATIONS_ENABLED: 'false'
-        run: npm run test:integration:live
+        run: |
+          mkdir -p ../reports
+          TEST_USE_REAL_INFRA=true NODE_OPTIONS="--experimental-vm-modules --max-old-space-size=4096" npx jest --testPathPattern="live-db-redis-api\.integration-spec\.ts" --runInBand --forceExit --json --outputFile=../reports/jest-live-results.json
+
+      - name: Upload Live Integration Test Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-report-live-integration
+          path: reports/jest-live-results.json
+          if-no-files-found: ignore
 
   # ============================================================================
   # Stage 3: Docker Multi-Runtime Smoke Test (Chỉ chạy trên nhánh tích hợp develop/main/release)
@@ -421,8 +454,10 @@ jobs:
     if: always()
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
+      - name: Checkout repository (full history for git blame audit)
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Node.js 22
         uses: actions/setup-node@v4

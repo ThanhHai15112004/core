@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 /**
  * Bộ tạo file Excel (.xlsx chuẩn OpenXML) đa sheet thuần Node.js (Zero-Dependency).
- * Dùng chung cho báo cáo CI (GitHub Actions, GitLab CI, Local) mà không cần `backend/dist` hay thư viện ngoài.
- * Hỗ trợ: tiêu đề gộp ô, phụ đề ngày giờ, header xanh đậm (#1E4488) chữ trắng, tô màu PASS/FAIL/SKIPPED,
- * kẻ khung viền, cố định dòng tiêu đề (freeze pane) và tự động tính độ rộng cột.
+ * Hỗ trợ:
+ * - Sheet bảng dữ liệu có AutoFilter, Freeze Pane, tự tính chiều cao dòng cho ô nhiều dòng (code snippet).
+ * - Sheet Dashboard đa khu vực (Banner tiêu đề, KPI Strip có công thức Excel thật COUNTIF/SUM, nhiều bảng thống kê).
+ * - Tô màu trực quan theo Trạng thái (PASS/FAIL/WARN/SKIPPED) & Mức độ (Critical/High/Medium/Low).
  */
 import { deflateRawSync } from 'node:zlib';
 
@@ -28,7 +29,9 @@ function crc32(buf) {
 }
 
 function escapeXml(val) {
+  // Loại bỏ các ký tự điều khiển XML không hợp lệ (0x00-0x08, 0x0B-0x0C, 0x0E-0x1F)
   return String(val ?? '')
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
@@ -36,7 +39,7 @@ function escapeXml(val) {
     .replace(/'/g, '&apos;');
 }
 
-function colLetter(colIdx) {
+export function colLetter(colIdx) {
   let n = colIdx + 1;
   let letters = '';
   while (n > 0) {
@@ -117,135 +120,279 @@ function createZipBuffer(files) {
   return Buffer.concat([...localParts, centralDir, eocd]);
 }
 
-/**
- * Style indices trong styles.xml:
- *   0 = Default
- *   1 = Title (Bold 14pt Navy, center)
- *   2 = Subtitle (Italic 10pt Gray, center)
- *   3 = Table Header (Bold 10pt White on #1E4488, thin border, center)
- *   4 = Data Left (10pt, thin border, left wrap)
- *   5 = Data Center (10pt, thin border, center)
- *   6 = Status PASS (Bold Green #0F5132 on #D1E7DD, thin border, center)
- *   7 = Status FAIL (Bold Red #842029 on #F8D7DA, thin border, center)
- *   8 = Status SKIPPED/INFO (Bold Slate #495057 on #E9ECEF, thin border, center)
- */
+export const XLSX_STYLE = {
+  DEFAULT: 0,
+  TITLE: 1,
+  SUBTITLE: 2,
+  SECTION: 3,
+  HEADER: 4,
+  DATA_LEFT: 5,
+  DATA_CENTER: 6,
+  DATA_CODE: 7,
+  TOTAL_LEFT: 8,
+  TOTAL_CENTER: 9,
+  BADGE_PASS: 10,
+  BADGE_FAIL: 11,
+  BADGE_WARN: 12,
+  BADGE_MED: 13,
+  BADGE_INFO: 14,
+  KPI_LABEL: 15,
+  KPI_VALUE: 16,
+};
+
 function buildStylesXml() {
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-  <fonts count="7">
+  <fonts count="11">
     <font><sz val="10"/><name val="Calibri"/></font>
-    <font><b/><sz val="14"/><color rgb="FF1E4488"/><name val="Calibri"/></font>
-    <font><i/><sz val="10"/><color rgb="FF555555"/><name val="Calibri"/></font>
+    <font><b/><sz val="14"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font>
+    <font><i/><sz val="10"/><color rgb="FF334155"/><name val="Calibri"/></font>
+    <font><b/><sz val="11"/><color rgb="FF1B365D"/><name val="Calibri"/></font>
     <font><b/><sz val="10"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font>
+    <font><sz val="9"/><name val="Consolas"/></font>
+    <font><b/><sz val="10"/><color rgb="FF0F172A"/><name val="Calibri"/></font>
     <font><b/><sz val="10"/><color rgb="FF0F5132"/><name val="Calibri"/></font>
     <font><b/><sz val="10"/><color rgb="FF842029"/><name val="Calibri"/></font>
-    <font><b/><sz val="10"/><color rgb="FF495057"/><name val="Calibri"/></font>
+    <font><b/><sz val="10"/><color rgb="FF664D03"/><name val="Calibri"/></font>
+    <font><b/><sz val="13"/><color rgb="FF1B365D"/><name val="Calibri"/></font>
   </fonts>
-  <fills count="6">
+  <fills count="12">
     <fill><patternFill patternType="none"/></fill>
     <fill><patternFill patternType="gray125"/></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FF1B365D"/><bgColor indexed="64"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FFEDF2F7"/><bgColor indexed="64"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FFD9E2EC"/><bgColor indexed="64"/></patternFill></fill>
     <fill><patternFill patternType="solid"><fgColor rgb="FF1E4488"/><bgColor indexed="64"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FFE2E8F0"/><bgColor indexed="64"/></patternFill></fill>
     <fill><patternFill patternType="solid"><fgColor rgb="FFD1E7DD"/><bgColor indexed="64"/></patternFill></fill>
     <fill><patternFill patternType="solid"><fgColor rgb="FFF8D7DA"/><bgColor indexed="64"/></patternFill></fill>
-    <fill><patternFill patternType="solid"><fgColor rgb="FFE9ECEF"/><bgColor indexed="64"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FFFFF3CD"/><bgColor indexed="64"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FFFFE8CC"/><bgColor indexed="64"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FFF8FAFC"/><bgColor indexed="64"/></patternFill></fill>
   </fills>
   <borders count="2">
     <border><left/><right/><top/><bottom/><diagonal/></border>
     <border>
-      <left style="thin"><color rgb="FFD0D7DE"/></left>
-      <right style="thin"><color rgb="FFD0D7DE"/></right>
-      <top style="thin"><color rgb="FFD0D7DE"/></top>
-      <bottom style="thin"><color rgb="FFD0D7DE"/></bottom>
+      <left style="thin"><color rgb="FFCBD5E1"/></left>
+      <right style="thin"><color rgb="FFCBD5E1"/></right>
+      <top style="thin"><color rgb="FFCBD5E1"/></top>
+      <bottom style="thin"><color rgb="FFCBD5E1"/></bottom>
       <diagonal/>
     </border>
   </borders>
   <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
-  <cellXfs count="9">
+  <cellXfs count="17">
     <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
-    <xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
-    <xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
-    <xf numFmtId="0" fontId="3" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
-    <xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment horizontal="left" vertical="center" wrapText="1"/></xf>
+    <xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="left" vertical="center" wrapText="1"/></xf>
+    <xf numFmtId="0" fontId="2" fillId="3" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="left" vertical="center" wrapText="1"/></xf>
+    <xf numFmtId="0" fontId="3" fillId="4" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="left" vertical="center" wrapText="1"/></xf>
+    <xf numFmtId="0" fontId="4" fillId="5" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
+    <xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment horizontal="left" vertical="top" wrapText="1"/></xf>
     <xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
-    <xf numFmtId="0" fontId="4" fillId="3" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
-    <xf numFmtId="0" fontId="5" fillId="4" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
-    <xf numFmtId="0" fontId="6" fillId="5" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
+    <xf numFmtId="0" fontId="5" fillId="11" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="left" vertical="top" wrapText="1"/></xf>
+    <xf numFmtId="0" fontId="6" fillId="6" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="left" vertical="center" wrapText="1"/></xf>
+    <xf numFmtId="0" fontId="6" fillId="6" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
+    <xf numFmtId="0" fontId="7" fillId="7" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
+    <xf numFmtId="0" fontId="8" fillId="8" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
+    <xf numFmtId="0" fontId="9" fillId="9" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
+    <xf numFmtId="0" fontId="9" fillId="10" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
+    <xf numFmtId="0" fontId="6" fillId="6" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
+    <xf numFmtId="0" fontId="4" fillId="5" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
+    <xf numFmtId="0" fontId="10" fillId="11" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
   </cellXfs>
 </styleSheet>`;
 }
 
-function resolveCellStyle(val, colIdx, centerCols, statusCols) {
-  if (statusCols.has(colIdx)) {
-    const upper = String(val ?? '').toUpperCase();
-    if (upper.includes('PASS') || upper === 'OK') return 6;
-    if (upper.includes('FAIL') || upper.includes('BREAKING') || upper.includes('ERROR')) return 7;
-    if (upper.includes('SKIP') || upper.includes('INFO') || upper.includes('CANCEL')) return 8;
+function resolveBadgeStyle(rawVal) {
+  const upper = String(rawVal ?? '').toUpperCase().trim();
+  if (upper === 'PASS' || upper === 'PASSED' || upper === 'OK' || upper === 'TỐT' || upper === 'ĐẠT') {
+    return XLSX_STYLE.BADGE_PASS;
   }
-  return centerCols.has(colIdx) ? 5 : 4;
+  if (
+    upper === 'FAIL' ||
+    upper === 'FAILED' ||
+    upper === 'CRITICAL' ||
+    upper === 'BREAKING' ||
+    upper === 'ERROR' ||
+    upper === 'CẦN BỔ SUNG'
+  ) {
+    return XLSX_STYLE.BADGE_FAIL;
+  }
+  if (upper === 'WARN' || upper === 'WARNING' || upper === 'HIGH') {
+    return XLSX_STYLE.BADGE_WARN;
+  }
+  if (upper === 'MEDIUM' || upper === 'DEGRADED' || upper === 'TRUNG BÌNH') {
+    return XLSX_STYLE.BADGE_MED;
+  }
+  if (upper === 'LOW' || upper === 'INFO' || upper === 'SKIPPED' || upper === 'CANCELLED') {
+    return XLSX_STYLE.BADGE_INFO;
+  }
+  return null;
 }
 
-function buildWorksheetXml(sheet) {
-  const headers = sheet.headers ?? [];
-  const rows = sheet.rows ?? [];
-  const colCount = Math.max(headers.length, 1);
-  const centerCols = new Set(sheet.centerCols ?? []);
-  const statusCols = new Set(sheet.statusCols ?? []);
+function renderCellXml(ref, cell, defaultStyle) {
+  const isObj = cell !== null && typeof cell === 'object' && !Array.isArray(cell);
+  const styleId = isObj && typeof cell.s === 'number' ? cell.s : defaultStyle;
+  if (isObj && typeof cell.f === 'string') {
+    const cached =
+      typeof cell.v === 'number' && Number.isFinite(cell.v)
+        ? `<v>${cell.v}</v>`
+        : cell.v !== undefined
+          ? `<v>${escapeXml(cell.v)}</v>`
+          : '';
+    return `<c r="${ref}" s="${styleId}"><f>${escapeXml(cell.f)}</f>${cached}</c>`;
+  }
 
-  const widths = headers.map((h, i) => {
-    let maxLen = String(h ?? '').length;
-    for (const r of rows) {
-      const len = String(r[i] ?? '').length;
-      if (len > maxLen) maxLen = len;
+  const val = isObj ? cell.v : cell;
+  if (typeof val === 'number' && Number.isFinite(val)) {
+    return `<c r="${ref}" s="${styleId}"><v>${val}</v></c>`;
+  }
+  return `<c r="${ref}" t="inlineStr" s="${styleId}"><is><t>${escapeXml(val ?? '')}</t></is></c>`;
+}
+
+function estimateRowHeight(cells, colWidths, baseHeight = 20) {
+  let maxLines = 1;
+  for (let i = 0; i < cells.length; i++) {
+    const raw = cells[i];
+    const val = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw.v : raw;
+    if (typeof val !== 'string' || !val) continue;
+    const width = Math.max(colWidths[i] ?? 20, 10);
+    const explicitLines = val.split('\n');
+    let wrapped = 0;
+    for (const line of explicitLines) {
+      wrapped += Math.max(1, Math.ceil(line.length / Math.max(width - 2, 8)));
     }
-    return Math.min(Math.max(maxLen + 4, 12), 68);
-  });
+    if (wrapped > maxLines) maxLines = wrapped;
+  }
+  return Math.min(Math.max(baseHeight, maxLines * 14 + 6), 190);
+}
 
-  const merges = [];
+/**
+ * Dựng worksheet từ định nghĩa dạng `rows` tự do (Dashboard đa khối) HOẶC dạng bảng chuẩn (`headers` + `rows`).
+ */
+function buildWorksheetXml(sheet) {
+  const merges = [...(sheet.merges ?? [])];
   const rowXmls = [];
-  let rowNum = 1;
+  let freezeRow = sheet.freezeRow ?? 0;
+  let autoFilterRef = sheet.autoFilter ?? null;
+  let widths = [];
 
-  if (sheet.title) {
-    const endCol = colLetter(colCount - 1);
-    merges.push(`A${rowNum}:${endCol}${rowNum}`);
-    rowXmls.push(
-      `<row r="${rowNum}" ht="26" customHeight="1"><c r="A${rowNum}" t="inlineStr" s="1"><is><t>${escapeXml(sheet.title)}</t></is></c></row>`,
-    );
-    rowNum++;
-  }
+  if (Array.isArray(sheet.customRows)) {
+    // Chế độ Dashboard tự do: mỗi phần tử là { cells, height?, mergeFullWidth?, style? }
+    const colCount = sheet.colCount ?? Math.max(...sheet.customRows.map((r) => (r.cells ?? []).length), 1);
+    widths = sheet.colWidths
+      ? [...sheet.colWidths]
+      : Array.from({ length: colCount }, () => 18);
 
-  if (sheet.subtitle) {
-    const endCol = colLetter(colCount - 1);
-    merges.push(`A${rowNum}:${endCol}${rowNum}`);
-    rowXmls.push(
-      `<row r="${rowNum}" ht="18" customHeight="1"><c r="A${rowNum}" t="inlineStr" s="2"><is><t>${escapeXml(sheet.subtitle)}</t></is></c></row>`,
-    );
-    rowNum++;
-  }
-
-  const headerRowNum = rowNum;
-  const headerCells = headers
-    .map(
-      (h, idx) =>
-        `<c r="${colLetter(idx)}${headerRowNum}" t="inlineStr" s="3"><is><t>${escapeXml(h)}</t></is></c>`,
-    )
-    .join('');
-  rowXmls.push(`<row r="${headerRowNum}" ht="22" customHeight="1">${headerCells}</row>`);
-  rowNum++;
-
-  for (const r of rows) {
-    const cells = headers
-      .map((_, idx) => {
-        const val = r[idx];
-        const styleId = resolveCellStyle(val, idx, centerCols, statusCols);
-        const ref = `${colLetter(idx)}${rowNum}`;
-        if (typeof val === 'number' && Number.isFinite(val)) {
-          return `<c r="${ref}" s="${styleId}"><v>${val}</v></c>`;
+    let rowNum = 1;
+    for (const rowDef of sheet.customRows) {
+      const cells = rowDef.cells ?? [];
+      if (rowDef.mergeFullWidth && colCount > 1) {
+        merges.push(`A${rowNum}:${colLetter(colCount - 1)}${rowNum}`);
+      }
+      if (Array.isArray(rowDef.merges)) {
+        for (const [startCol, endCol] of rowDef.merges) {
+          merges.push(`${colLetter(startCol)}${rowNum}:${colLetter(endCol)}${rowNum}`);
         }
-        return `<c r="${ref}" t="inlineStr" s="${styleId}"><is><t>${escapeXml(val ?? '')}</t></is></c>`;
-      })
+      }
+      const rowStyle = rowDef.defaultStyle ?? XLSX_STYLE.DATA_LEFT;
+      const cellCount = rowDef.mergeFullWidth ? 1 : Math.max(cells.length, rowDef.padToCols ? colCount : 0);
+      const rendered = [];
+      for (let i = 0; i < cellCount; i++) {
+        const cellVal = i < cells.length ? cells[i] : '';
+        let cellStyle = rowStyle;
+        if (rowDef.centerCols?.includes(i)) cellStyle = XLSX_STYLE.DATA_CENTER;
+        if (rowDef.statusCols?.includes(i)) {
+          const badge = resolveBadgeStyle(
+            cellVal && typeof cellVal === 'object' ? cellVal.v : cellVal,
+          );
+          if (badge !== null) cellStyle = badge;
+        }
+        rendered.push(renderCellXml(`${colLetter(i)}${rowNum}`, cellVal, cellStyle));
+      }
+      const ht = rowDef.height ?? estimateRowHeight(cells, widths, 20);
+      rowXmls.push(`<row r="${rowNum}" ht="${ht}" customHeight="1">${rendered.join('')}</row>`);
+      rowNum++;
+    }
+  } else {
+    // Chế độ bảng chuẩn có Title, Subtitle, Header, AutoFilter & Data Rows
+    const headers = sheet.headers ?? [];
+    const rows = sheet.rows ?? [];
+    const colCount = Math.max(headers.length, 1);
+    const centerCols = new Set(sheet.centerCols ?? []);
+    const statusCols = new Set(sheet.statusCols ?? []);
+    const codeCols = new Set(sheet.codeCols ?? []);
+
+    widths = sheet.colWidths
+      ? [...sheet.colWidths]
+      : headers.map((h, i) => {
+          let maxLen = String(h ?? '').length;
+          for (const r of rows) {
+            const raw = r[i];
+            const val = raw && typeof raw === 'object' ? raw.v : raw;
+            const firstLineLen = String(val ?? '').split('\n')[0]?.length ?? 0;
+            if (firstLineLen > maxLen) maxLen = firstLineLen;
+          }
+          return Math.min(Math.max(maxLen + 4, 12), 54);
+        });
+
+    let rowNum = 1;
+    if (sheet.title) {
+      merges.push(`A${rowNum}:${colLetter(colCount - 1)}${rowNum}`);
+      rowXmls.push(
+        `<row r="${rowNum}" ht="28" customHeight="1">${renderCellXml(`A${rowNum}`, sheet.title, XLSX_STYLE.TITLE)}</row>`,
+      );
+      rowNum++;
+    }
+    if (sheet.subtitle) {
+      merges.push(`A${rowNum}:${colLetter(colCount - 1)}${rowNum}`);
+      rowXmls.push(
+        `<row r="${rowNum}" ht="22" customHeight="1">${renderCellXml(`A${rowNum}`, sheet.subtitle, XLSX_STYLE.SUBTITLE)}</row>`,
+      );
+      rowNum++;
+    }
+
+    const headerRowNum = rowNum;
+    freezeRow = headerRowNum;
+    const headerCells = headers
+      .map((h, idx) => renderCellXml(`${colLetter(idx)}${headerRowNum}`, h, XLSX_STYLE.HEADER))
       .join('');
-    rowXmls.push(`<row r="${rowNum}" ht="20" customHeight="1">${cells}</row>`);
+    rowXmls.push(`<row r="${headerRowNum}" ht="24" customHeight="1">${headerCells}</row>`);
     rowNum++;
+
+    for (let rIdx = 0; rIdx < rows.length; rIdx++) {
+      const r = rows[rIdx];
+      const isTotalRow = Boolean(sheet.totalLastRow && rIdx === rows.length - 1);
+      const rendered = headers
+        .map((_, idx) => {
+          const val = r[idx];
+          let styleId = isTotalRow
+            ? centerCols.has(idx)
+              ? XLSX_STYLE.TOTAL_CENTER
+              : XLSX_STYLE.TOTAL_LEFT
+            : codeCols.has(idx)
+              ? XLSX_STYLE.DATA_CODE
+              : centerCols.has(idx)
+                ? XLSX_STYLE.DATA_CENTER
+                : XLSX_STYLE.DATA_LEFT;
+
+          if (!isTotalRow && statusCols.has(idx)) {
+            const rawVal = val && typeof val === 'object' ? val.v : val;
+            const badge = resolveBadgeStyle(rawVal);
+            if (badge !== null) styleId = badge;
+          }
+          return renderCellXml(`${colLetter(idx)}${rowNum}`, val, styleId);
+        })
+        .join('');
+
+      const ht = estimateRowHeight(r, widths, 20);
+      rowXmls.push(`<row r="${rowNum}" ht="${ht}" customHeight="1">${rendered}</row>`);
+      rowNum++;
+    }
+
+    if (sheet.enableAutoFilter !== false && rows.length > 0) {
+      autoFilterRef = `A${headerRowNum}:${colLetter(colCount - 1)}${rowNum - 1}`;
+    }
   }
 
   const colsXml = widths
@@ -255,24 +402,24 @@ function buildWorksheetXml(sheet) {
     merges.length > 0
       ? `<mergeCells count="${merges.length}">${merges.map((m) => `<mergeCell ref="${m}"/>`).join('')}</mergeCells>`
       : '';
+  const filterXml = autoFilterRef ? `<autoFilter ref="${autoFilterRef}"/>` : '';
+  const paneXml =
+    freezeRow > 0
+      ? `<pane ySplit="${freezeRow}" topLeftCell="A${freezeRow + 1}" activePane="bottomLeft" state="frozen"/>`
+      : '';
 
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
   <sheetViews>
-    <sheetView tabSelected="${sheet.selected ? 1 : 0}" workbookViewId="0">
-      <pane ySplit="${headerRowNum}" topLeftCell="A${headerRowNum + 1}" activePane="bottomLeft" state="frozen"/>
-    </sheetView>
+    <sheetView tabSelected="${sheet.selected ? 1 : 0}" workbookViewId="0">${paneXml}</sheetView>
   </sheetViews>
   <cols>${colsXml}</cols>
   <sheetData>${rowXmls.join('')}</sheetData>
+  ${filterXml}
   ${mergeXml}
 </worksheet>`;
 }
 
-/**
- * Tạo Buffer `.xlsx` hợp lệ gồm nhiều worksheet.
- * @param {Array<{name: string, title?: string, subtitle?: string, headers: string[], rows: any[][], centerCols?: number[], statusCols?: number[]}>} sheets
- */
 export function buildMultiSheetXlsxBuffer(sheets) {
   const normalized = sheets.map((s, idx) => ({
     ...s,
